@@ -11,6 +11,22 @@ if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
+# Check that Node.js is available (required for Chrome DevTools MCP)
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+    Write-Host "Node.js not found. Installing via winget (required for Chrome DevTools MCP)..."
+    winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Error: Failed to install Node.js. Install manually: https://nodejs.org"
+        exit 1
+    }
+    # Refresh PATH so npx is available in this session
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    Write-Host "Node.js installed."
+} else {
+    $nodeVersion = (node --version)
+    Write-Host "Node.js $nodeVersion found."
+}
+
 $claudeJson = Join-Path $env:USERPROFILE ".claude.json"
 
 # --- Chrome DevTools (stdio, needs direct JSON edit on Windows) ---

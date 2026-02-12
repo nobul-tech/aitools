@@ -11,6 +11,19 @@ if ! command -v claude &> /dev/null; then
     exit 1
 fi
 
+# Check that Node.js is available (required for Chrome DevTools MCP)
+if ! command -v node &> /dev/null; then
+    echo "Node.js not found. Installing via Homebrew (required for Chrome DevTools MCP)..."
+    if ! command -v brew &> /dev/null; then
+        echo "Error: Homebrew not found. Install Node.js manually: https://nodejs.org"
+        exit 1
+    fi
+    brew install node@22
+    echo "Node.js installed."
+else
+    echo "Node.js $(node --version) found."
+fi
+
 # MCP servers to configure (name, args)
 # Each server is installed by removing any existing config then re-adding.
 
