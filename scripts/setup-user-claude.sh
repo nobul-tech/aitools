@@ -4,7 +4,8 @@
 
 set -euo pipefail
 
-SHARED_PATH="${1:-$HOME/Google Drive/My Drive/nobul co/ai-tooling/shared/claude-shared.md}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SHARED_PATH="${1:-$SCRIPT_DIR/../shared/claude-shared.md}"
 
 CLAUDE_DIR="$HOME/.claude"
 CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
@@ -32,9 +33,8 @@ ${SHARED_CONTENT}
 
 ## Machine-Specific
 
-- Machine: macOS laptop
-- Shell: zsh, bash, pwsh (when PowerShell needed)
-- Google Drive mount: ~/Google Drive/My Drive/
+- Machine: $(uname -s) $(uname -m) ($(hostname -s))
+- Shell: $(basename "$SHELL")
 EOF
 
 echo "Wrote user-level CLAUDE.md at $CLAUDE_MD"

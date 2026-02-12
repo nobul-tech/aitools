@@ -32,7 +32,7 @@ ai-tooling/
   docs/                 Vendor documentation for offline/RAG use
 ```
 
-The repo syncs between machines via Google Drive. Scripts reference platform-appropriate paths at runtime.
+The repo is git-based — clone to `~/repos/ai-tooling` (macOS) or `C:\repos\ai-tooling` (Windows). Scripts use repo-relative paths at runtime.
 
 ## The Cross-Platform Problem
 

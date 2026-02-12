@@ -10,7 +10,8 @@
 
 set -euo pipefail
 
-USER_RULES_PATH="${1:-$HOME/Google Drive/My Drive/nobul co/ai-tooling/shared/cursor-rules/user-rules.md}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+USER_RULES_PATH="${1:-$SCRIPT_DIR/../shared/cursor-rules/user-rules.md}"
 
 CURSOR_DIR="$HOME/.cursor"
 CLI_CONFIG="$CURSOR_DIR/cli-config.json"

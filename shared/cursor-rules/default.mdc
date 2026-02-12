@@ -18,7 +18,7 @@ alwaysApply: true
 ## Cross-Platform Awareness
 
 Both machines are used for development:
-- **Windows 11** — PowerShell, Git Bash, `G:\My Drive\` for Google Drive
-- **macOS** — zsh/bash, `~/Google Drive/My Drive/` for Google Drive
+- **Windows 11** — PowerShell, Git Bash
+- **macOS** — zsh/bash
 
 When writing paths or scripts, consider both platforms unless the project is platform-specific.

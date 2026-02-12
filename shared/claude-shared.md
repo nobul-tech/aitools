@@ -20,9 +20,8 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 - I work on both Windows 11 and macOS — both are first-class, ensure a seamless experience on either
 - Use forward slashes and `$HOME`/`~` in path references
-- Google Drive syncs between machines at:
-  - Windows: `G:\My Drive\`
-  - macOS: `~/Google Drive/My Drive/`
+- Projects live in git repos under `~/repos/` (macOS) / `C:\repos\` (Windows)
+- Some legacy projects still on Google Drive (`G:\My Drive\` / `~/Google Drive/My Drive/`) — migrate to git repos over time
 - **After creating `.sh` files on Windows**, always run `git update-index --chmod=+x <file>` before committing — Windows doesn't set the Unix executable bit
 
 ## Tools & Workflow

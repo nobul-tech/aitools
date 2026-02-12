@@ -16,7 +16,7 @@ This repo targets two machines equally:
 - **macOS** (zsh/bash)
 
 Key differences:
-- Google Drive: `G:\My Drive\` (Windows) vs `~/Google Drive/My Drive/` (macOS)
+- Repos: `~/repos/` (macOS) vs `C:\repos\` (Windows); some legacy projects still on Google Drive
 - Scripts: always provide both `.ps1` and `.sh` variants
 - Use forward slashes in path references where possible
 - Shell commands: test on both PowerShell and bash

@@ -8,7 +8,7 @@
 #   4. Copies User Rules to clipboard for pasting into Cursor Settings > Rules
 
 param(
-    [string]$UserRulesPath = "G:\My Drive\nobul co\ai-tooling\shared\cursor-rules\user-rules.md"
+    [string]$UserRulesPath = (Join-Path $PSScriptRoot "..\shared\cursor-rules\user-rules.md")
 )
 
 $cursorDir = Join-Path $env:USERPROFILE ".cursor"

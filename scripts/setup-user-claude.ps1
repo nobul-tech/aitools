@@ -2,7 +2,7 @@
 # Safe to re-run — replaces existing file with latest version.
 
 param(
-    [string]$SharedPath = "G:\My Drive\nobul co\ai-tooling\shared\claude-shared.md"
+    [string]$SharedPath = (Join-Path $PSScriptRoot "..\shared\claude-shared.md")
 )
 
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
@@ -34,9 +34,8 @@ $sharedContent
 
 ## Machine-Specific
 
-- Machine: Windows 11 Pro for Workstations
-- Shell: PowerShell, Git Bash, WSL/bash
-- Google Drive mount: G:\My Drive\
+- Machine: $([System.Environment]::OSVersion.VersionString) ($env:COMPUTERNAME)
+- Shell: PowerShell
 "@
 
 Set-Content -Path $claudeMd -Value $content -Encoding UTF8

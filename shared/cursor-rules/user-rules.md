@@ -25,9 +25,8 @@ The `setup-user-cursor` script copies this to your clipboard automatically.
 
 - I work on both Windows 11 and macOS — both are first-class
 - Use forward slashes and `$HOME`/`~` in path references when possible
-- Google Drive syncs between machines:
-  - Windows: `G:\My Drive\`
-  - macOS: `~/Google Drive/My Drive/`
+- Projects live in git repos under `~/repos/` (macOS) / `C:\repos\` (Windows)
+- Some legacy projects still on Google Drive (`G:\My Drive\` / `~/Google Drive/My Drive/`) — migrate to git repos over time
 
 ## Git Conventions
 

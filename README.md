@@ -6,7 +6,7 @@ Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude C
 
 | Directory | Purpose |
 |-----------|---------|
-| `shared/` | Cross-machine configs synced via Google Drive: Claude shared preferences, Cursor rule templates, shell aliases, MCP configs |
+| `shared/` | Source of truth for cross-machine configs: Claude shared preferences, Cursor rule templates, shell aliases, MCP configs |
 | `scripts/` | Setup scripts for Claude Code, Cursor, and MCP configuration on new machines |
 | `.claude/rules/` | Claude Code project rules (git identity, cross-platform, Python style) |
 | `.cursor/rules/` | Cursor project rules (.mdc format) |
@@ -65,7 +65,7 @@ source "/path/to/ai-tooling/shared/shell/aliases.sh"
 
 ```powershell
 # PowerShell — add to $PROFILE
-. "G:\My Drive\nobul co\ai-tooling\shared\shell\aliases.ps1"
+. "$HOME\repos\ai-tooling\shared\shell\aliases.ps1"
 ```
 
 **PDF conversion:**
