@@ -30,8 +30,11 @@ The scripts are safe to re-run — they remove and re-add each server to ensure 
 
 ### Windows
 
+> **Known issue**: `claude mcp add` mangles `cmd /c` on Windows (interprets `/c` as a path).
+> Use the setup script instead, which edits `~/.claude.json` directly for Chrome DevTools.
+
 ```
-claude mcp add chrome-devtools --scope user -- cmd /c npx -y chrome-devtools-mcp@latest
+# Chrome DevTools — use setup script (see above) or edit ~/.claude.json directly
 claude mcp add --transport http --scope user vercel https://mcp.vercel.com
 claude mcp add --transport http --scope user webflow https://mcp.webflow.com/mcp
 ```
@@ -54,7 +57,7 @@ After adding servers, start a Claude Code session and run `/mcp` to:
 
 ## Platform notes
 
-- **Windows**: Chrome DevTools requires `cmd /c` wrapper before `npx` — without it you get "Connection closed" errors
+- **Windows**: Chrome DevTools requires `cmd /c` wrapper before `npx` — without it you get "Connection closed" errors. However, `claude mcp add` mangles `/c` as a path, so the setup script edits `~/.claude.json` directly for this server
 - **macOS**: Chrome DevTools uses `npx` directly
 - Vercel and Webflow are remote HTTP servers — identical config on both platforms
 - OAuth tokens are cached locally and refreshed automatically
