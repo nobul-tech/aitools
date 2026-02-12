@@ -18,17 +18,17 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Cross-Platform Awareness
 
-- I work on Windows 11 (primary) and macOS (secondary)
+- I work on both Windows 11 and macOS — both are first-class, ensure a seamless experience on either
 - Use forward slashes and `$HOME`/`~` in path references
 - Google Drive syncs between machines at:
   - Windows: `G:\My Drive\`
   - macOS: `~/Google Drive/My Drive/`
 - **After creating `.sh` files on Windows**, always run `git update-index --chmod=+x <file>` before committing — Windows doesn't set the Unix executable bit
 
-## Tools
+## Tools & Workflow
 
-- **Claude Code**: Primary AI coding assistant (CLI in VS Code terminal)
-- **Cursor**: AI-native editor (secondary, for exploration)
+- **Cursor**: Primary IDE — used to create projects, open folders, browse files, and use extensions. Provides embeddings and is the main workspace environment
+- **Claude Code**: Primary AI coding assistant, run within the Cursor integrated terminal
 - **Warp**: AI-native terminal (macOS)
 - **Marker**: Preferred PDF-to-markdown converter
 

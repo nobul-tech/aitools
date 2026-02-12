@@ -57,18 +57,18 @@ All levels merge together. More specific wins on conflict.
 
 ## Machines
 
-| Machine | OS | Claude Code | Notes |
-|---------|-----|-------------|-------|
-| Workstation | Windows 11 Pro for Workstations | CLI (VS Code) | Primary |
-| Laptop | macOS | CLI | Secondary |
-| Web | Any browser | claude.ai | Separate sessions |
+| Machine | OS | IDE | Claude Code |
+|---------|-----|-----|-------------|
+| Workstation | Windows 11 Pro for Workstations | Cursor | CLI (in Cursor terminal) |
+| Laptop | macOS | Cursor | CLI (in Cursor terminal) |
+| Web | Any browser | — | claude.ai (separate sessions) |
 
 ---
 
 ## Setup Checklist
 
 - [x] Create `~/.claude/CLAUDE.md` on Windows workstation (via `scripts/setup-user-claude.ps1`)
-- [ ] Create `~/.claude/CLAUDE.md` on Mac laptop (via `scripts/setup-user-claude.sh`)
+- [x] Create `~/.claude/CLAUDE.md` on Mac laptop (via `scripts/setup-user-claude.sh`)
 - [x] Shared rules file in Google Drive with `@import` from both machines (`shared/claude-shared.md`)
 - [x] Shell alias (`cc`) for auto-CLAUDE.md check (see `shared/shell/`)
 - [x] "Home base" directory for general conversations: this repo (`ai-tooling/`)

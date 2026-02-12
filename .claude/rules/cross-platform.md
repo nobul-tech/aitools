@@ -1,8 +1,8 @@
 ## Cross-Platform Awareness
 
-Jose works across two machines:
-- **Windows 11 workstation** (primary): PowerShell, Git Bash, VS Code
-- **macOS laptop** (secondary): zsh, VS Code
+Jose works across two machines (both first-class — ensure seamless experience on either):
+- **Windows 11 workstation**: PowerShell, Git Bash, Cursor
+- **macOS laptop**: zsh, Cursor
 
 When writing scripts or paths:
 - Always provide both `.ps1` and `.sh` variants for setup scripts
