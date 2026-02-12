@@ -1,0 +1,13 @@
+---
+description: Default Cursor rules template — copy to new projects as .cursor/rules/general.mdc
+globs:
+alwaysApply: true
+---
+
+# Project Conventions
+
+- Keep code simple and readable
+- Prefer standard library over third-party dependencies when reasonable
+- Use type annotations (Python type hints, TypeScript types)
+- Write meaningful commit messages in imperative mood
+- Git identity: Jose <jose@nobul.tech>

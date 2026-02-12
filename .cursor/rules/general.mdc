@@ -1,0 +1,13 @@
+---
+description: General conventions for all files in this repo
+globs:
+alwaysApply: true
+---
+
+# General Rules
+
+- This is Jose's AI tooling hub — configs, scripts, and reference docs for Claude Code, Cursor, Warp, and MCP.
+- Keep scripts cross-platform: provide `.ps1` (PowerShell) and `.sh` (bash/zsh) variants.
+- Use forward slashes in path references where possible.
+- Git identity: Jose <jose@nobul.tech>
+- Keep CLAUDE.md under 200 lines. Use imports for detail.

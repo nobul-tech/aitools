@@ -29,3 +29,15 @@ ENV/
 *.tmp
 *.log
 *.bak
+
+# Claude Code local settings
+.claude/settings.local.json
+CLAUDE.local.md
+*.local.md
+
+# Windows artifacts
+nul
+desktop.ini
+
+# Google Drive internal
+.gd/

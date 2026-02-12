@@ -1,0 +1,14 @@
+---
+description: Python file conventions
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Python Rules
+
+- Target Python 3.10+
+- Use `argparse` for CLI tools
+- Use `pathlib.Path` over `os.path`
+- Include type hints on function signatures
+- Use `if __name__ == "__main__":` guard
+- Prefer Marker for PDF-to-markdown conversion (better quality than PyMuPDF alone)
