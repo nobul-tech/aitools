@@ -118,7 +118,7 @@ When **"Include third party skills, subagents and other configs"** is enabled in
 
 **Important:** Cursor does **not** resolve `@import` / `@"path"` directives — it reads the file as-is. Content must be inlined for Cursor to see it.
 
-The `setup-user-claude` scripts handle this automatically: they read `shared/claude-shared.md` and write its contents inline into `~/.claude/CLAUDE.md`. Re-run the script after editing the shared file to propagate changes to both Claude Code and Cursor.
+The deploy scripts handle this automatically: `deploy/setup-user-claude.sh/.ps1` have the shared content embedded at build time. Re-run `scripts/build-deploy.sh` after editing the shared file, then re-deploy to propagate changes.
 
 > **Open question:** Whether Cursor actually reads `~/.claude/CLAUDE.md` at runtime is unverified. Test by asking Cursor about git identity in a project that has no local CLAUDE.md.
 
@@ -137,7 +137,7 @@ We don't use skills yet — this is noted for future reference.
 
 | Machine | Cursor Config |
 |---------|--------------|
-| Windows workstation | `C:\Users\jdpal\.cursor\mcp.json` |
+| Windows workstation | `~/.cursor/mcp.json` |
 | Mac laptop | `~/.cursor/mcp.json` |
 
-Both machines need their own MCP setup (run the platform-appropriate script on each).
+Both machines need their own MCP setup (run `deploy/setup-cursor-mcp.sh` or `.ps1` on each).

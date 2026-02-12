@@ -30,8 +30,8 @@ All levels merge together. More specific wins on conflict.
 - Locations:
   - Windows: `C:\Users\jdpal\.claude\CLAUDE.md`
   - Mac: `~/.claude/CLAUDE.md`
-- For shared rules across machines, use `@import` syntax pointing to a synced location (e.g., Google Drive).
-- Setup scripts: `scripts/setup-user-claude.ps1` (Windows), `scripts/setup-user-claude.sh` (macOS)
+- Shared rules live in `shared/claude-shared.md` and are embedded into deploy scripts by `scripts/build-deploy.sh`.
+- Deploy scripts: `deploy/setup-user-claude.ps1` (Windows), `deploy/setup-user-claude.sh` (macOS) — self-contained, no repo needed at runtime.
 
 ## Session Management Commands
 
@@ -69,6 +69,7 @@ All levels merge together. More specific wins on conflict.
 
 - [x] Create `~/.claude/CLAUDE.md` on Windows workstation (via `scripts/setup-user-claude.ps1`)
 - [x] Create `~/.claude/CLAUDE.md` on Mac laptop (via `scripts/setup-user-claude.sh`)
-- [x] Shared rules file in Google Drive with `@import` from both machines (`shared/claude-shared.md`)
+- [x] Shared rules in repo (`shared/claude-shared.md`), embedded into deploy scripts by `build-deploy.sh`
 - [x] Shell alias (`cc`) for auto-CLAUDE.md check (see `shared/shell/`)
 - [x] "Home base" directory for general conversations: this repo (`ai-tooling/`)
+- [x] Self-contained deploy scripts in `deploy/` — MDM-ready, no repo or Drive dependency

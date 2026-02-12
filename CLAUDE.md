@@ -8,12 +8,14 @@ Jose's cross-machine scaffolding for Claude Code, Cursor, Warp, and MCP across W
 ai-tooling/
 ├── .claude/rules/       # Claude Code project rules (modular)
 ├── .cursor/rules/       # Cursor rules (.mdc format)
-├── shared/              # Cross-machine shared configs (synced via Drive)
-│   ├── claude-shared.md # Inlined into user-level CLAUDE.md by setup scripts
-│   ├── cursor-rules/    # Template rules for scaffolding new projects and User Rules source of truth
+├── shared/              # Source of truth for configs
+│   ├── claude-shared.md #   → embedded into deploy scripts by build
+│   ├── cursor-rules/    # Template rules + User Rules source of truth
 │   ├── shell/           # Shell aliases (bash/zsh + PowerShell)
 │   └── mcp/             # MCP server configuration docs
-├── scripts/             # Setup scripts (Windows + macOS)
+├── scripts/             # Dev/source scripts (read from shared/)
+│   └── build-deploy.sh  # Generates deploy/ from scripts/ + shared/
+├── deploy/              # Self-contained scripts for MDM (generated)
 ├── conversionutils/     # PDF-to-markdown conversion tools
 ├── docs/                # RAG knowledge base (vendor docs)
 └── reference/           # Setup notes and how-tos
@@ -27,29 +29,34 @@ ai-tooling/
 ## Build & Run
 
 ```bash
+# Generate self-contained deploy/ scripts from scripts/ + shared/
+bash scripts/build-deploy.sh
+
+# Deploy to an endpoint (no repo needed — run from deploy/)
+bash deploy/setup-user-claude.sh
+bash deploy/setup-cursor-mcp.sh
+bash deploy/setup-user-cursor.sh
+
 # PDF conversion (requires marker or pymupdf)
 python conversionutils/pdf_to_markdown.py --help
 python conversionutils/pdf_to_man_markdown.py --help
-
-# Setup user-level CLAUDE.md
-# Windows:  .\scripts\setup-user-claude.ps1
-# macOS:    bash scripts/setup-user-claude.sh
 ```
 
 ## Cross-Platform Paths
 
 | Resource | Windows | macOS |
 |----------|---------|-------|
-| This repo | `G:\My Drive\nobul co\ai-tooling` | `~/Google Drive/My Drive/nobul co/ai-tooling` |
-| User CLAUDE.md | `C:\Users\jdpal\.claude\CLAUDE.md` | `~/.claude/CLAUDE.md` |
-| Shared config | `G:\My Drive\nobul co\ai-tooling\shared\claude-shared.md` | Via Google Drive sync |
+| This repo | `C:\repos\ai-tooling` | `~/repos/ai-tooling` |
+| User CLAUDE.md | `~/.claude/CLAUDE.md` | `~/.claude/CLAUDE.md` |
+| Shared config | `shared/claude-shared.md` (in repo) | `shared/claude-shared.md` (in repo) |
 
 ## Key Decisions
 
 - **Marker** is the preferred PDF-to-markdown converter (better output than PyMuPDF alone)
 - This directory is the **"home base"** for general/cross-project AI conversations
 - Session notes are ephemeral; durable knowledge goes in CLAUDE.md or auto-memory
-- Shared preferences live in `shared/claude-shared.md`, inlined into user-level CLAUDE.md by setup scripts
+- Shared preferences live in `shared/claude-shared.md`, embedded into deploy scripts by `build-deploy.sh`
+- `deploy/` scripts are self-contained (zero dependencies beyond bash/PowerShell) — MDM-ready
 
 ## Code Conventions
 
