@@ -6,8 +6,19 @@ alwaysApply: true
 
 # Project Conventions
 
-- Keep code simple and readable
+- Git identity: Jose <jose@nobul.tech>
+- Write meaningful commit messages in imperative mood
+
+## Code Style
+
 - Prefer standard library over third-party dependencies when reasonable
 - Use type annotations (Python type hints, TypeScript types)
-- Write meaningful commit messages in imperative mood
-- Git identity: Jose <jose@nobul.tech>
+- Keep code simple and readable — avoid premature abstraction
+
+## Cross-Platform Awareness
+
+Both machines are used for development:
+- **Windows 11** — PowerShell, Git Bash, `G:\My Drive\` for Google Drive
+- **macOS** — zsh/bash, `~/Google Drive/My Drive/` for Google Drive
+
+When writing paths or scripts, consider both platforms unless the project is platform-specific.

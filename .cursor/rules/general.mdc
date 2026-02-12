@@ -7,7 +7,21 @@ alwaysApply: true
 # General Rules
 
 - This is Jose's AI tooling hub — configs, scripts, and reference docs for Claude Code, Cursor, Warp, and MCP.
-- Keep scripts cross-platform: provide `.ps1` (PowerShell) and `.sh` (bash/zsh) variants.
-- Use forward slashes in path references where possible.
 - Git identity: Jose <jose@nobul.tech>
-- Keep CLAUDE.md under 200 lines. Use imports for detail.
+
+## Cross-Platform
+
+This repo targets two machines equally:
+- **Windows 11 Pro for Workstations** (PowerShell, Git Bash)
+- **macOS** (zsh/bash)
+
+Key differences:
+- Google Drive: `G:\My Drive\` (Windows) vs `~/Google Drive/My Drive/` (macOS)
+- Scripts: always provide both `.ps1` and `.sh` variants
+- Use forward slashes in path references where possible
+- Shell commands: test on both PowerShell and bash
+
+## Code Style
+
+- Python 3.10+, type hints, `argparse` for CLI, `pathlib.Path` over `os.path`
+- Keep configs and docs concise — avoid bloat
