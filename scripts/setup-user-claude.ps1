@@ -20,11 +20,17 @@ if (Test-Path $claudeMd) {
     Write-Host "Removed existing $claudeMd"
 }
 
-# Normalize path for @import (forward slashes)
-$importPath = $SharedPath -replace '\\', '/'
+# Verify shared file exists
+if (-not (Test-Path $SharedPath)) {
+    Write-Error "Shared preferences not found at: $SharedPath"
+    exit 1
+}
+
+# Read shared preferences and write inline (Cursor doesn't resolve @import)
+$sharedContent = Get-Content -Path $SharedPath -Raw
 
 $content = @"
-@"$importPath"
+$sharedContent
 
 ## Machine-Specific
 
@@ -35,4 +41,4 @@ $content = @"
 
 Set-Content -Path $claudeMd -Value $content -Encoding UTF8
 Write-Host "Wrote user-level CLAUDE.md at $claudeMd"
-Write-Host "It imports shared preferences from: $SharedPath"
+Write-Host "Inlined shared preferences from: $SharedPath"

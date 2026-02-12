@@ -12,14 +12,23 @@ CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
 # Ensure ~/.claude/ exists
 mkdir -p "$CLAUDE_DIR"
 
+# Verify shared file exists
+if [ ! -f "$SHARED_PATH" ]; then
+    echo "Error: Shared preferences not found at: $SHARED_PATH" >&2
+    exit 1
+fi
+
 # Remove existing file so we always write the latest version
 if [ -f "$CLAUDE_MD" ]; then
     rm "$CLAUDE_MD"
     echo "Removed existing $CLAUDE_MD"
 fi
 
+# Read shared preferences and write inline (Cursor doesn't resolve @import)
+SHARED_CONTENT=$(cat "$SHARED_PATH")
+
 cat > "$CLAUDE_MD" << EOF
-@"${SHARED_PATH}"
+${SHARED_CONTENT}
 
 ## Machine-Specific
 
@@ -29,4 +38,4 @@ cat > "$CLAUDE_MD" << EOF
 EOF
 
 echo "Wrote user-level CLAUDE.md at $CLAUDE_MD"
-echo "It imports shared preferences from: $SHARED_PATH"
+echo "Inlined shared preferences from: $SHARED_PATH"
