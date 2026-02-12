@@ -1,66 +1,70 @@
 # ai-tooling
 
-Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude Code, Cursor, Warp, and MCP across Windows 11 and macOS.
+Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude Code, Cursor, and MCP across Windows 11 and macOS.
 
 ## What's here
 
 | Directory | Purpose |
 |-----------|---------|
-| `shared/` | Source of truth for cross-machine configs: Claude shared preferences, Cursor rule templates, shell aliases, MCP configs |
-| `scripts/` | Setup scripts for Claude Code, Cursor, and MCP configuration on new machines |
-| `.claude/rules/` | Claude Code project rules (git identity, cross-platform, Python style) |
+| `shared/` | Source of truth: Claude prefs, Cursor rules, shell aliases, MCP docs |
+| `scripts/` | Source setup scripts + `build-deploy.sh` build pipeline |
+| `deploy/` | Generated self-contained scripts (MDM-ready, no repo needed) |
+| `.claude/rules/` | Claude Code project rules |
 | `.cursor/rules/` | Cursor project rules (.mdc format) |
-| `conversionutils/` | PDF-to-markdown conversion utilities (Marker + PyMuPDF) |
-| `docs/` | RAG knowledge base — vendor documentation (Quantum/StorNext) |
-| `reference/` | Setup notes and how-tos for AI tool configuration |
+| `conversionutils/` | PDF-to-markdown conversion utilities |
+| `docs/` | Vendor docs for offline/RAG use |
+| `reference/` | Setup notes, practices, session showcase |
+
+## How it works
+
+`shared/` is the single source of truth for all configuration. `scripts/build-deploy.sh` reads from `shared/` and embeds the content into self-contained deploy scripts in `deploy/`. The workflow is: edit `shared/` → run `build-deploy.sh` → commit `deploy/` → deploy to endpoints. Deploy scripts need only bash or PowerShell on the target machine — no repo clone required.
 
 ## Quick start
 
-**Set up user-level Claude Code config:**
+### Deploy to a machine
+
+Run these from the `deploy/` directory — no repo needed on the target machine:
 
 ```powershell
-# Windows
-.\scripts\setup-user-claude.ps1
+# Claude Code user preferences
+bash deploy/setup-user-claude.sh        # macOS
+.\deploy\setup-user-claude.ps1          # Windows
 
-# macOS
-bash scripts/setup-user-claude.sh
+# Cursor CLI + User Rules
+bash deploy/setup-user-cursor.sh        # macOS
+.\deploy\setup-user-cursor.ps1          # Windows
+
+# Claude Code MCP servers
+bash deploy/setup-user-mcp.sh           # macOS
+.\deploy\setup-user-mcp.ps1             # Windows
+
+# Cursor MCP servers
+bash deploy/setup-cursor-mcp.sh         # macOS
+.\deploy\setup-cursor-mcp.ps1           # Windows
 ```
 
-**Set up Cursor CLI + User Config:**
+### Develop / maintain configs
 
-```powershell
-# Windows
-.\scripts\setup-user-cursor.ps1
+Work inside the repo to update shared configuration:
 
-# macOS
-bash scripts/setup-user-cursor.sh
+```bash
+# Edit shared source files
+vim shared/claude-shared.md
+
+# Rebuild deploy scripts
+bash scripts/build-deploy.sh
+
+# Commit both shared/ and deploy/ changes
+git add shared/ deploy/ && git commit -m "Update shared config"
 ```
 
-**Set up Claude Code MCP servers:**
-
-```powershell
-# Windows
-.\scripts\setup-user-mcp.ps1
-
-# macOS
-bash scripts/setup-user-mcp.sh
-```
-
-**Set up Cursor MCP servers:**
-
-```powershell
-# Windows
-.\scripts\setup-cursor-mcp.ps1
-
-# macOS
-bash scripts/setup-cursor-mcp.sh
-```
+See `reference/` for deeper setup notes and practices.
 
 **Add shell aliases** (optional):
 
 ```bash
 # bash/zsh — add to ~/.bashrc or ~/.zshrc
-source "/path/to/ai-tooling/shared/shell/aliases.sh"
+source ~/repos/ai-tooling/shared/shell/aliases.sh
 ```
 
 ```powershell
