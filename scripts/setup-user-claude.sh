@@ -24,8 +24,8 @@ cat > "$CLAUDE_MD" << EOF
 
 ## Machine-Specific
 
-- Secondary machine: macOS laptop
-- Shell: zsh (primary)
+- Machine: macOS laptop
+- Shell: zsh, bash, pwsh (when PowerShell needed)
 - Google Drive mount: ~/Google Drive/My Drive/
 EOF
 

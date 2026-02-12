@@ -27,8 +27,8 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Tools & Workflow
 
-- **Cursor**: Primary IDE — used to create projects, open folders, browse files, and use extensions. Provides embeddings and is the main workspace environment
-- **Claude Code**: Primary AI coding assistant, run within the Cursor integrated terminal
+- **Cursor**: IDE and workspace environment — used to create projects, open folders, browse files, and use extensions. Provides embeddings
+- **Claude Code**: AI coding assistant, run within Cursor's integrated terminal
 - **Marker**: Preferred PDF-to-markdown converter
 
 ### Per-Platform Tools

@@ -29,8 +29,8 @@ $content = @"
 
 ## Machine-Specific
 
-- Primary machine: Windows 11 Pro for Workstations
-- Shell: PowerShell (primary), Git Bash (secondary)
+- Machine: Windows 11 Pro for Workstations
+- Shell: PowerShell, Git Bash, WSL/bash
 - Google Drive mount: G:\My Drive\
 "@
 

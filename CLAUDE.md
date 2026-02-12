@@ -54,7 +54,7 @@ python conversionutils/pdf_to_man_markdown.py --help
 ## Code Conventions
 
 - Python 3.10+, type hints, `argparse` for CLI, `pathlib.Path` over `os.path`
-- Scripts: always provide both `.ps1` and `.sh` variants
+- Scripts (this repo): provide both `.ps1` and `.sh` variants since this repo is cross-platform
 - Keep this file under 200 lines; use `@reference/` imports for detail
 
 @reference/claude-code-practices.md
