@@ -29,8 +29,12 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 - **Cursor**: Primary IDE — used to create projects, open folders, browse files, and use extensions. Provides embeddings and is the main workspace environment
 - **Claude Code**: Primary AI coding assistant, run within the Cursor integrated terminal
-- **Warp**: AI-native terminal (macOS)
 - **Marker**: Preferred PDF-to-markdown converter
+
+### Per-Platform Tools
+
+- **macOS**: Terminal.app, zsh, bash, Cursor, Warp, Claude Code, pwsh (when PowerShell needed)
+- **Windows**: PowerShell, Cursor, Claude Code, Command Prompt, WSL/bash (when Linux/Unix environment needed)
 
 ## Git Conventions
 
