@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # setup-user-claude.sh — Creates user-level ~/.claude/CLAUDE.md on macOS/Linux
-# Run once per machine. Idempotent (won't overwrite existing file).
+# Safe to re-run — replaces existing file with latest version.
 
 set -euo pipefail
 
@@ -12,11 +12,10 @@ CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
 # Ensure ~/.claude/ exists
 mkdir -p "$CLAUDE_DIR"
 
-# Don't overwrite existing
+# Remove existing file so we always write the latest version
 if [ -f "$CLAUDE_MD" ]; then
-    echo "User-level CLAUDE.md already exists at $CLAUDE_MD"
-    echo "To regenerate, delete it first and re-run this script."
-    exit 0
+    rm "$CLAUDE_MD"
+    echo "Removed existing $CLAUDE_MD"
 fi
 
 cat > "$CLAUDE_MD" << EOF
@@ -29,5 +28,5 @@ cat > "$CLAUDE_MD" << EOF
 - Google Drive mount: ~/Google Drive/My Drive/
 EOF
 
-echo "Created user-level CLAUDE.md at $CLAUDE_MD"
+echo "Wrote user-level CLAUDE.md at $CLAUDE_MD"
 echo "It imports shared preferences from: $SHARED_PATH"

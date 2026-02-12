@@ -21,4 +21,4 @@ Setup and utility scripts for configuring AI tooling across machines.
 bash scripts/setup-user-claude.sh
 ```
 
-Both scripts are idempotent — they won't overwrite an existing `~/.claude/CLAUDE.md`.
+Both scripts are safe to re-run — they replace the existing `~/.claude/CLAUDE.md` with the latest version.

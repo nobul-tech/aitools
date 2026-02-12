@@ -1,5 +1,5 @@
 # setup-user-claude.ps1 — Creates user-level ~/.claude/CLAUDE.md on Windows
-# Run once per machine. Idempotent (won't overwrite existing file).
+# Safe to re-run — replaces existing file with latest version.
 
 param(
     [string]$SharedPath = "G:\My Drive\nobul co\ai-tooling\shared\claude-shared.md"
@@ -14,11 +14,10 @@ if (-not (Test-Path $claudeDir)) {
     Write-Host "Created $claudeDir"
 }
 
-# Don't overwrite existing
+# Remove existing file so we always write the latest version
 if (Test-Path $claudeMd) {
-    Write-Host "User-level CLAUDE.md already exists at $claudeMd"
-    Write-Host "To regenerate, delete it first and re-run this script."
-    exit 0
+    Remove-Item $claudeMd
+    Write-Host "Removed existing $claudeMd"
 }
 
 # Normalize path for @import (forward slashes)
@@ -35,5 +34,5 @@ $content = @"
 "@
 
 Set-Content -Path $claudeMd -Value $content -Encoding UTF8
-Write-Host "Created user-level CLAUDE.md at $claudeMd"
+Write-Host "Wrote user-level CLAUDE.md at $claudeMd"
 Write-Host "It imports shared preferences from: $SharedPath"
