@@ -10,4 +10,3 @@ When writing scripts or paths:
 - Google Drive mount differs: `G:\My Drive\` (Windows) vs `~/Google Drive/My Drive/` (macOS)
 - Use `$HOME` or `~` for user directory references, not hardcoded paths
 - Test commands in both PowerShell and bash/zsh contexts
-- **After creating `.sh` files on Windows**, always run `git update-index --chmod=+x <file>` before committing — Windows doesn't set the Unix executable bit, so macOS/Linux checkouts will lack +x without this

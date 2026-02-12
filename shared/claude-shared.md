@@ -23,6 +23,7 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 - Google Drive syncs between machines at:
   - Windows: `G:\My Drive\`
   - macOS: `~/Google Drive/My Drive/`
+- **After creating `.sh` files on Windows**, always run `git update-index --chmod=+x <file>` before committing — Windows doesn't set the Unix executable bit
 
 ## Tools
 
