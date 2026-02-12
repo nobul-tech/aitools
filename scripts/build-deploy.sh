@@ -501,6 +501,26 @@ echo "Copying deploy/setup-cursor-mcp.ps1 ..."
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
+# 7-8. deploy/setup-user-mcp.sh and .ps1 (copy as-is)
+# ============================================================
+echo "Copying deploy/setup-user-mcp.sh ..."
+{
+    echo '#!/usr/bin/env bash'
+    echo "$HEADER_COMMENT_BASH"
+    # Strip the shebang from source and append the rest
+    tail -n +2 "$SCRIPTS_DIR/setup-user-mcp.sh"
+} > "$DEPLOY_DIR/setup-user-mcp.sh"
+chmod +x "$DEPLOY_DIR/setup-user-mcp.sh"
+GENERATED=$((GENERATED + 1))
+
+echo "Copying deploy/setup-user-mcp.ps1 ..."
+{
+    echo "$HEADER_COMMENT_PS1"
+    cat "$SCRIPTS_DIR/setup-user-mcp.ps1"
+} > "$DEPLOY_DIR/setup-user-mcp.ps1"
+GENERATED=$((GENERATED + 1))
+
+# ============================================================
 # Summary
 # ============================================================
 echo ""
