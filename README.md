@@ -7,7 +7,7 @@ Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude C
 | Directory | Purpose |
 |-----------|---------|
 | `shared/` | Cross-machine configs synced via Google Drive: Claude shared preferences, Cursor rule templates, shell aliases, MCP configs |
-| `scripts/` | Setup scripts for bootstrapping `~/.claude/CLAUDE.md` on new machines |
+| `scripts/` | Setup scripts for Claude Code, Cursor, and MCP configuration on new machines |
 | `.claude/rules/` | Claude Code project rules (git identity, cross-platform, Python style) |
 | `.cursor/rules/` | Cursor project rules (.mdc format) |
 | `conversionutils/` | PDF-to-markdown conversion utilities (Marker + PyMuPDF) |
@@ -24,6 +24,36 @@ Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude C
 
 # macOS
 bash scripts/setup-user-claude.sh
+```
+
+**Set up Cursor CLI + User Config:**
+
+```powershell
+# Windows
+.\scripts\setup-user-cursor.ps1
+
+# macOS
+bash scripts/setup-user-cursor.sh
+```
+
+**Set up Claude Code MCP servers:**
+
+```powershell
+# Windows
+.\scripts\setup-user-mcp.ps1
+
+# macOS
+bash scripts/setup-user-mcp.sh
+```
+
+**Set up Cursor MCP servers:**
+
+```powershell
+# Windows
+.\scripts\setup-cursor-mcp.ps1
+
+# macOS
+bash scripts/setup-cursor-mcp.sh
 ```
 
 **Add shell aliases** (optional):

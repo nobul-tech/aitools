@@ -9,10 +9,10 @@ ai-tooling/
 ├── .claude/rules/       # Claude Code project rules (modular)
 ├── .cursor/rules/       # Cursor rules (.mdc format)
 ├── shared/              # Cross-machine shared configs (synced via Drive)
-│   ├── claude-shared.md # @import target for user-level CLAUDE.md
-│   ├── cursor-rules/    # Template rules for scaffolding new projects
+│   ├── claude-shared.md # Inlined into user-level CLAUDE.md by setup scripts
+│   ├── cursor-rules/    # Template rules for scaffolding new projects and User Rules source of truth
 │   ├── shell/           # Shell aliases (bash/zsh + PowerShell)
-│   └── mcp/             # MCP server configs (placeholder)
+│   └── mcp/             # MCP server configuration docs
 ├── scripts/             # Setup scripts (Windows + macOS)
 ├── conversionutils/     # PDF-to-markdown conversion tools
 ├── docs/                # RAG knowledge base (vendor docs)
@@ -49,7 +49,7 @@ python conversionutils/pdf_to_man_markdown.py --help
 - **Marker** is the preferred PDF-to-markdown converter (better output than PyMuPDF alone)
 - This directory is the **"home base"** for general/cross-project AI conversations
 - Session notes are ephemeral; durable knowledge goes in CLAUDE.md or auto-memory
-- Shared preferences live in `shared/claude-shared.md`, imported via `@` from user-level CLAUDE.md
+- Shared preferences live in `shared/claude-shared.md`, inlined into user-level CLAUDE.md by setup scripts
 
 ## Code Conventions
 
@@ -58,3 +58,4 @@ python conversionutils/pdf_to_man_markdown.py --help
 - Keep this file under 200 lines; use `@reference/` imports for detail
 
 @reference/claude-code-practices.md
+@reference/cursor-practices.md
