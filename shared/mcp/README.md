@@ -2,24 +2,36 @@
 
 MCP servers used across projects. Each AI tool has its own MCP config — they are **not shared**.
 
-| Tool | Config file | Setup script |
-|------|------------|--------------|
-| Claude Code | `~/.claude.json` | `scripts/setup-user-mcp.ps1` / `.sh` |
-| Cursor | `~/.cursor/mcp.json` | `scripts/setup-cursor-mcp.ps1` / `.sh` |
+## Two-Tier Architecture
+
+| Tier | Scope | Servers | Setup |
+|------|-------|---------|-------|
+| **User-level** | All projects | chrome-devtools | `aitools install` (runs setup scripts) |
+| **Project-level** | Per project | vercel, webflow | `aitools --addmcp <name>` |
+
+User-level config reduces context bloat by only loading chrome-devtools globally.
+Vercel and Webflow are added per-project where needed.
+
+## Config Files
+
+| Tool | User-level config | Project-level config |
+|------|------------------|---------------------|
+| Claude Code | `~/.claude.json` | `.mcp.json` (project root) |
+| Cursor | `~/.cursor/mcp.json` | `.cursor/mcp.json` (project root) |
 
 ## Servers
 
-| Server | Package/URL | Transport | Auth |
-|--------|-------------|-----------|------|
-| Chrome DevTools | `chrome-devtools-mcp@latest` (npx) | stdio (local) | None |
-| Vercel | `https://mcp.vercel.com` | HTTP (remote) | OAuth (browser) |
-| Webflow | `https://mcp.webflow.com/mcp` | HTTP (remote) | OAuth (browser) |
-
-All three servers are configured in both Claude Code and Cursor.
+| Server | Package/URL | Transport | Auth | Scope |
+|--------|-------------|-----------|------|-------|
+| Chrome DevTools | `chrome-devtools-mcp@latest` (npx) | stdio (local) | None | User |
+| Vercel | `https://mcp.vercel.com` | HTTP (remote) | OAuth (browser) | Project |
+| Webflow | `https://mcp.webflow.com/mcp` | HTTP (remote) | OAuth (browser) | Project |
 
 ## Setup
 
-### Claude Code
+### User-Level (chrome-devtools)
+
+Configured automatically by `aitools install`, which runs:
 
 ```powershell
 # Windows
@@ -29,56 +41,63 @@ All three servers are configured in both Claude Code and Cursor.
 bash scripts/setup-user-mcp.sh
 ```
 
-The scripts remove and re-add each server via `claude mcp` commands.
+### Project-Level (vercel, webflow)
 
-### Cursor
+Add MCP servers to the current project for all AI tools:
 
-```powershell
-# Windows
-.\scripts\setup-cursor-mcp.ps1
-
-# macOS
-bash scripts/setup-cursor-mcp.sh
+```bash
+cd ~/repos/my-project
+aitools --addmcp vercel
+aitools --addmcp vercel webflow
 ```
 
-The scripts write `~/.cursor/mcp.json` directly (Cursor has no CLI for MCP management).
+This creates/updates both `.mcp.json` (Claude Code) and `.cursor/mcp.json` (Cursor).
+Safe to re-run — merges with existing config.
 
-## Manual commands (Claude Code only)
+### Project-Level Config Format
 
-### Windows
-
-> **Known issue**: `claude mcp add` mangles `cmd /c` on Windows (interprets `/c` as a path).
-> Use the setup script instead, which edits `~/.claude.json` directly for Chrome DevTools.
-
+**Claude Code (`.mcp.json`)**:
+```json
+{
+  "mcpServers": {
+    "vercel": {
+      "type": "http",
+      "url": "https://mcp.vercel.com"
+    }
+  }
+}
 ```
-# Chrome DevTools — use setup script (see above) or edit ~/.claude.json directly
-claude mcp add --transport http --scope user vercel https://mcp.vercel.com
-claude mcp add --transport http --scope user webflow https://mcp.webflow.com/mcp
-```
 
-### macOS
-
-```
-claude mcp add chrome-devtools --scope user -- npx -y chrome-devtools-mcp@latest
-claude mcp add --transport http --scope user vercel https://mcp.vercel.com
-claude mcp add --transport http --scope user webflow https://mcp.webflow.com/mcp
+**Cursor (`.cursor/mcp.json`)**:
+```json
+{
+  "mcpServers": {
+    "vercel": {
+      "url": "https://mcp.vercel.com"
+    }
+  }
+}
 ```
 
 ## Post-setup
 
 ### Claude Code
-1. Start a session and run `/mcp` to verify all three show green status
-2. Authenticate Vercel and Webflow via OAuth browser flow
-3. Chrome DevTools needs no auth
+1. Start a session and run `/mcp` to verify servers show green status
+2. Chrome DevTools needs no auth
+3. Authenticate Vercel/Webflow via OAuth browser flow (if added to project)
 
 ### Cursor
-1. Restart Cursor after running the setup script
-2. Go to **Cursor Settings > Tools & MCP** to see the servers
-3. Authenticate Vercel and Webflow from the Tools & MCP settings page
+1. Restart Cursor after running setup
+2. Go to **Cursor Settings > Tools & MCP** to see servers
+3. Authenticate Vercel/Webflow from the Tools & MCP settings page (if added to project)
 
-## Platform notes
+## Platform Notes
 
-- **Windows**: Chrome DevTools requires `cmd /c` wrapper before `npx` — without it you get "Connection closed" errors. In Claude Code, `claude mcp add` mangles `/c` as a path, so the setup script edits `~/.claude.json` directly. In Cursor, we write the JSON directly so this isn't an issue
-- **macOS**: Chrome DevTools uses `npx` directly on both tools
-- Vercel and Webflow are remote HTTP servers — identical config on both platforms
-- OAuth tokens are cached locally per tool and refreshed automatically
+- **Windows**: Chrome DevTools requires `cmd /c` wrapper before `npx`. In Claude Code, `claude mcp add` mangles `/c` as a path, so the setup script edits `~/.claude.json` directly.
+- **macOS**: Chrome DevTools uses `npx` directly on both tools.
+- Vercel and Webflow are remote HTTP servers — identical config on both platforms.
+- OAuth tokens are cached locally per tool and refreshed automatically.
+
+## Documentation Sources
+
+See `reference/tool-install-sources.md` for official documentation links and verified install commands.

@@ -1,68 +1,68 @@
 # setup-cursor-mcp.ps1 — Installs/updates MCP servers for Cursor on Windows
 # Safe to re-run — replaces ~/.cursor/mcp.json with latest config.
 #
+# User-level MCP: chrome-devtools only.
+# For vercel/webflow, use `aitools --addmcp` at the project level.
+#
 # Cursor uses its own MCP config at ~/.cursor/mcp.json (separate from Claude Code's ~/.claude.json).
 # Remote servers use the "url" key directly. Local stdio servers use "command" + "args".
 
+# --- Logging ---
+$logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
+$logFile = Join-Path $logDir "deploy.log"
+$scriptName = "setup-cursor-mcp"
+if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+
+function Log($msg) {
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $line = "[$ts] [$scriptName] $msg"
+    Write-Host $line
+    Add-Content -Path $logFile -Value $line
+}
+function LogOk($msg)    { Log "OK: $msg" }
+function LogError($msg) { Log "ERROR: $msg" }
+
 # Check that Node.js is available (required for Chrome DevTools MCP)
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    Write-Host "Node.js not found. Installing via winget (required for Chrome DevTools MCP)..."
-    winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Error: Failed to install Node.js. Install manually: https://nodejs.org"
-        exit 1
-    }
-    # Refresh PATH so npx is available in this session
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-    Write-Host "Node.js installed."
+    LogError "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"
+    exit 1
 } else {
     $nodeVersion = (node --version)
-    Write-Host "Node.js $nodeVersion found."
+    LogOk "Node.js $nodeVersion found"
 }
 
 # Ensure ~/.cursor directory exists
 $cursorDir = Join-Path $env:USERPROFILE ".cursor"
 if (-not (Test-Path $cursorDir)) {
     New-Item -ItemType Directory -Path $cursorDir -Force | Out-Null
-    Write-Host "Created $cursorDir"
+    Log "Created $cursorDir"
 }
 
 $mcpJson = Join-Path $cursorDir "mcp.json"
 
-# Build the config
+# Build the config — chrome-devtools only
 $config = @{
     mcpServers = @{
         "chrome-devtools" = @{
             command = "cmd"
             args    = @("/c", "npx", "-y", "chrome-devtools-mcp@latest")
         }
-        vercel = @{
-            url = "https://mcp.vercel.com"
-        }
-        webflow = @{
-            url = "https://mcp.webflow.com/mcp"
-        }
     }
 }
 
 # Write the config (replaces existing file)
 if (Test-Path $mcpJson) {
-    Write-Host "Replacing existing $mcpJson"
+    Log "Replacing existing $mcpJson"
 } else {
-    Write-Host "Creating $mcpJson"
+    Log "Creating $mcpJson"
 }
 
 $config | ConvertTo-Json -Depth 10 | Set-Content $mcpJson -Encoding UTF8
 
-Write-Host ""
-Write-Host "Cursor MCP config written to $mcpJson"
-Write-Host ""
-Write-Host "Servers configured:"
-Write-Host "  - chrome-devtools (stdio via cmd /c npx)"
-Write-Host "  - vercel (remote HTTP)"
-Write-Host "  - webflow (remote HTTP)"
-Write-Host ""
-Write-Host "Next steps:"
-Write-Host "  1. Restart Cursor"
-Write-Host "  2. Go to Cursor Settings > Tools & MCP to see the servers"
-Write-Host "  3. Authenticate Vercel and Webflow from the Tools & MCP settings page"
+LogOk "Cursor MCP config written to $mcpJson"
+Log "Server configured: chrome-devtools (stdio via cmd /c npx)"
+Log "For project-level servers (vercel, webflow): aitools --addmcp <name>"
+Log ""
+Log "Next steps:"
+Log "  1. Restart Cursor"
+Log "  2. Go to Cursor Settings > Tools & MCP to see the servers"

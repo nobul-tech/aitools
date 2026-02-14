@@ -33,7 +33,7 @@ ${SHARED_CONTENT}
 
 ## Machine-Specific
 
-- Machine: $(uname -s) $(uname -m) ($(hostname -s))
+- Machine: $(uname -s) $(uname -m) ($(hostname -s 2>/dev/null || hostname))
 - Shell: $(basename "$SHELL")
 EOF
 

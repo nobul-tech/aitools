@@ -1,79 +1,66 @@
 #!/usr/bin/env bash
 # setup-user-mcp.sh — Installs/updates user-level MCP servers for Claude Code on macOS/Linux
 # Safe to re-run — removes and re-adds each server to ensure latest config.
+#
+# User-level MCP: chrome-devtools only.
+# For vercel/webflow, use `aitools --addmcp` at the project level.
 
 set -euo pipefail
 
+# --- Logging ---
+LOG_DIR="$HOME/Library/Logs/ai-tooling"
+[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ai-tooling"
+LOG_FILE="$LOG_DIR/deploy.log"
+SCRIPT_NAME="setup-user-mcp"
+mkdir -p "$LOG_DIR"
+
+display_path() {
+    if command -v cygpath &>/dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
+log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
+log_ok()    { log "OK: $1"; }
+log_error() { log "ERROR: $1"; }
+
 # Check that claude CLI is available
 if ! command -v claude &> /dev/null; then
-    echo "Error: 'claude' CLI not found in PATH."
-    echo "Install Claude Code first: https://claude.ai/download"
+    log_error "'claude' CLI not found in PATH. Install Claude Code first: https://claude.ai/download"
     exit 1
 fi
 
 # Check that Node.js is available (required for Chrome DevTools MCP)
 if ! command -v node &> /dev/null; then
-    echo "Node.js not found. Installing via Homebrew (required for Chrome DevTools MCP)..."
-    if ! command -v brew &> /dev/null; then
-        echo "Error: Homebrew not found. Install Node.js manually: https://nodejs.org"
-        exit 1
-    fi
-    brew install node@22
-    echo "Node.js installed."
+    log_error "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"
+    exit 1
 else
-    echo "Node.js $(node --version) found."
+    log_ok "Node.js $(node --version) found"
 fi
 
-# MCP servers to configure (name, args)
-# Each server is installed by removing any existing config then re-adding.
+# --- Legacy cleanup: remove vercel/webflow from user scope ---
+for server in vercel webflow; do
+    if claude mcp remove "$server" --scope user 2>/dev/null; then
+        log_ok "Removed legacy $server from user scope (now project-level via --addmcp)"
+    fi
+done
 
+# --- Chrome DevTools (stdio, user scope) ---
 add_stdio_server() {
     local name="$1"
     shift
-    echo ""
-    echo "=== $name ==="
 
     # Remove existing (ignore errors if not found)
     if claude mcp remove "$name" --scope user 2>/dev/null; then
-        echo "  Removed existing $name config"
+        log "Removed existing $name config"
     fi
 
-    echo "  Adding $name..."
+    log "Adding $name..."
     claude mcp add "$name" --scope user -- "$@"
-    echo "  Done."
+    log_ok "$name configured"
 }
 
-add_http_server() {
-    local name="$1"
-    local url="$2"
-    echo ""
-    echo "=== $name ==="
-
-    # Remove existing (ignore errors if not found)
-    if claude mcp remove "$name" --scope user 2>/dev/null; then
-        echo "  Removed existing $name config"
-    fi
-
-    echo "  Adding $name..."
-    claude mcp add --transport http --scope user "$name" "$url"
-    echo "  Done."
-}
-
-echo "Setting up MCP servers for Claude Code (user scope)..."
+log "Setting up MCP servers for Claude Code (user scope)..."
 
 # Chrome DevTools — local stdio server via npx (no cmd /c needed on macOS)
 add_stdio_server "chrome-devtools" npx -y chrome-devtools-mcp@latest
 
-# Vercel — remote HTTP server with OAuth
-add_http_server "vercel" "https://mcp.vercel.com"
-
-# Webflow — remote HTTP server with OAuth
-add_http_server "webflow" "https://mcp.webflow.com/mcp"
-
-echo ""
-echo "All MCP servers configured."
-echo ""
-echo "Next steps:"
-echo "  1. Start a Claude Code session"
-echo "  2. Run /mcp to verify all servers show green status"
-echo "  3. Authenticate Vercel and Webflow via the OAuth browser flow"
+log_ok "User-level MCP configured (chrome-devtools only)"
+log "For project-level servers (vercel, webflow): aitools --addmcp <name>"

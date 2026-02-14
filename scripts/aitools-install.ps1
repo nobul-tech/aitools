@@ -274,9 +274,81 @@ function aitools { & "`$env:ProgramFiles\Git\bin\bash.exe" "`$HOME\.local\bin\ai
 }
 
 # ============================================================
-# 8. Deploy configurations
+# 8. Node.js
 # ============================================================
-Log "Step 8: Deploy configurations"
+# Source: https://nodejs.org
+Log "Step 8: Node.js"
+
+# Helper: refresh PATH from registry (picks up winget/npm installs in same session)
+function Refresh-Path {
+    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $env:Path = "$machinePath;$userPath"
+}
+
+if (Get-Command node -ErrorAction SilentlyContinue) {
+    LogOk "Node.js already installed ($(node --version))"
+} else {
+    Log "Installing Node.js via winget..."
+    winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+    Refresh-Path
+    if (Get-Command node -ErrorAction SilentlyContinue) {
+        LogOk "Node.js installed ($(node --version))"
+    } else {
+        LogError "Node.js install failed (restart terminal and re-run)"
+    }
+}
+
+# ============================================================
+# 9. Claude Code CLI
+# ============================================================
+# Source: https://code.claude.com/docs/en/setup
+Log "Step 9: Claude Code CLI"
+
+if (Get-Command claude -ErrorAction SilentlyContinue) {
+    LogOk "Claude Code already installed ($(claude --version 2>$null | Select-Object -First 1))"
+    Log "Running claude update..."
+    claude update 2>$null
+} else {
+    Log "Installing Claude Code CLI..."
+    try {
+        Invoke-Expression (Invoke-RestMethod 'https://claude.ai/install.ps1')
+        Refresh-Path
+        if (Get-Command claude -ErrorAction SilentlyContinue) {
+            LogOk "Claude Code installed ($(claude --version 2>$null | Select-Object -First 1))"
+        } else {
+            LogWarn "Claude Code installed — restart terminal to use"
+        }
+    } catch {
+        LogError "Claude Code install failed: $_"
+    }
+}
+
+# ============================================================
+# 10. Vercel CLI
+# ============================================================
+# Source: https://vercel.com/docs/cli
+Log "Step 10: Vercel CLI"
+
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+    LogWarn "npm not found — skipping Vercel CLI (install Node.js first)"
+} elseif (Get-Command vercel -ErrorAction SilentlyContinue) {
+    LogOk "Vercel CLI already installed ($(vercel --version 2>$null | Select-Object -First 1))"
+} else {
+    Log "Installing Vercel CLI via npm..."
+    npm install -g vercel 2>$null
+    Refresh-Path
+    if (Get-Command vercel -ErrorAction SilentlyContinue) {
+        LogOk "Vercel CLI installed ($(vercel --version 2>$null | Select-Object -First 1))"
+    } else {
+        LogError "Vercel CLI install failed"
+    }
+}
+
+# ============================================================
+# 11. Deploy configurations
+# ============================================================
+Log "Step 11: Deploy configurations"
 
 $deployScripts = @(
     "setup-user-claude.ps1",

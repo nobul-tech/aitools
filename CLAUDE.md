@@ -32,6 +32,12 @@ ai-tooling/
 # Generate self-contained deploy/ scripts from scripts/ + shared/
 bash scripts/build-deploy.sh
 
+# CLI usage (after install)
+aitools                        # Pull latest + rebuild (self-update)
+aitools install                # Install/update all tools + deploy configs
+aitools --addmcp vercel        # Add MCP server to current project
+aitools --addmcp vercel webflow  # Add multiple MCP servers
+
 # Deploy to an endpoint (no repo needed — run from deploy/)
 bash deploy/setup-user-claude.sh
 bash deploy/setup-cursor-mcp.sh

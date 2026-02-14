@@ -378,9 +378,103 @@ else
 fi
 
 # ============================================================
-# 8. Deploy configurations
+# 8. Node.js
 # ============================================================
-log "Step 8: Deploy configurations"
+log "Step 8: Node.js"
+
+if command -v node &>/dev/null; then
+    log_ok "Node.js already installed ($(node --version))"
+else
+    case "$OS_NAME" in
+        Darwin)
+            if command -v brew &>/dev/null; then
+                log "Installing Node.js via Homebrew..."
+                brew install node@22
+                if command -v node &>/dev/null; then
+                    log_ok "Node.js installed ($(node --version))"
+                else
+                    log_error "brew install completed but 'node' not found in PATH"
+                fi
+            else
+                log_error "Homebrew not found. Install Node.js manually: https://nodejs.org"
+            fi
+            ;;
+        MINGW*|MSYS*)
+            log "Windows detected — install Node.js via winget (use aitools-install.ps1)"
+            ;;
+        *)
+            log_warn "Install Node.js manually: https://nodejs.org"
+            ;;
+    esac
+fi
+
+# ============================================================
+# 9. Claude Code CLI
+# ============================================================
+# Source: https://code.claude.com/docs/en/setup
+log "Step 9: Claude Code CLI"
+
+if command -v claude &>/dev/null; then
+    log_ok "Claude Code already installed ($(claude --version 2>/dev/null | head -1))"
+    log "Running claude update..."
+    claude update 2>/dev/null || log_ok "Already up to date"
+else
+    log "Installing Claude Code CLI..."
+    case "$OS_NAME" in
+        MINGW*|MSYS*)
+            # WinGet works from Git Bash
+            if command -v winget &>/dev/null; then
+                winget install Anthropic.ClaudeCode --accept-package-agreements --accept-source-agreements 2>/dev/null
+                if command -v claude &>/dev/null; then
+                    log_ok "Claude Code installed ($(claude --version 2>/dev/null | head -1))"
+                else
+                    log_warn "Claude Code installed — restart terminal to use"
+                fi
+            else
+                log "winget not available — install manually:"
+                log "  PowerShell: irm https://claude.ai/install.ps1 | iex"
+            fi
+            ;;
+        *)
+            curl -fsSL https://claude.ai/install.sh | bash
+            if command -v claude &>/dev/null; then
+                log_ok "Claude Code installed ($(claude --version 2>/dev/null | head -1))"
+            else
+                log_error "Claude Code install failed"
+            fi
+            ;;
+    esac
+fi
+
+# ============================================================
+# 10. Vercel CLI
+# ============================================================
+# Source: https://vercel.com/docs/cli
+log "Step 10: Vercel CLI"
+
+if ! command -v npm &>/dev/null; then
+    log_warn "npm not found — skipping Vercel CLI (install Node.js first)"
+elif command -v vercel &>/dev/null; then
+    log_ok "Vercel CLI already installed ($(vercel --version 2>/dev/null | head -1))"
+else
+    log "Installing Vercel CLI via npm..."
+    npm install -g vercel 2>/dev/null || {
+        if [ "$OS_NAME" = "Darwin" ]; then
+            log "Retrying with sudo..."
+            sudo npm install -g vercel 2>/dev/null
+        fi
+    }
+    if command -v vercel &>/dev/null; then
+        log_ok "Vercel CLI installed ($(vercel --version 2>/dev/null | head -1))"
+    else
+        log_error "Vercel CLI install failed"
+    fi
+fi
+
+# ============================================================
+# 11. Deploy configurations
+# ============================================================
+log "Step 11: Deploy configurations"
 
 DEPLOY_SCRIPTS="setup-user-claude.sh setup-user-cursor.sh setup-user-mcp.sh setup-cursor-mcp.sh"
 

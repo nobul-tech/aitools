@@ -138,7 +138,7 @@ BLOCK
 # --- Auto-detect machine info ---
 OS_NAME=$(uname -s)
 ARCH=$(uname -m)
-HOSTNAME=$(hostname -s)
+HOSTNAME=$(hostname -s 2>/dev/null || hostname)
 SHELL_NAME=$(basename "${SHELL:-/bin/bash}")
 
 CLAUDE_DIR="$HOME/.claude"
@@ -225,7 +225,7 @@ $sharedContent
 ## Machine-Specific
 
 - Machine: $osInfo ($hostname)
-- Shell: PowerShell
+- Shell: bash (Claude Code requires Git Bash on Windows)
 "@
 
 Set-Content -Path $claudeMd -Value $content -Encoding UTF8

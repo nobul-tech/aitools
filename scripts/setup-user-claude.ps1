@@ -35,7 +35,7 @@ $sharedContent
 ## Machine-Specific
 
 - Machine: $([System.Environment]::OSVersion.VersionString) ($env:COMPUTERNAME)
-- Shell: PowerShell
+- Shell: bash (Claude Code requires Git Bash on Windows)
 "@
 
 Set-Content -Path $claudeMd -Value $content -Encoding UTF8

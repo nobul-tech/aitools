@@ -34,6 +34,7 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 - **macOS**: Terminal.app, zsh, bash, Cursor, Warp, Claude Code, pwsh (when PowerShell needed)
 - **Windows**: PowerShell, Cursor, Claude Code, Command Prompt, WSL/bash (when Linux/Unix environment needed)
+- **Note**: Claude Code on Windows always uses Git Bash (not configurable). Use Unix shell syntax in all Claude Code sessions regardless of platform.
 
 ## Git Conventions
 
