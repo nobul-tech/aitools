@@ -73,7 +73,7 @@ Add-McpServer -Name "webflow" -AddArgs @("--transport", "http", "--scope", "user
 # Vercel and Webflow are disabled by default at user level.
 # Projects enable them via .claude/settings.local.json (aitools --addmcp).
 
-$settingsFile = Join-Path $env:USERPROFILE ".claude" "settings.json"
+$settingsFile = Join-Path (Join-Path $env:USERPROFILE ".claude") "settings.json"
 $settingsDir = Split-Path $settingsFile -Parent
 Log "Merging deny rules into $settingsFile..."
 
