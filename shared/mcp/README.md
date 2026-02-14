@@ -2,98 +2,95 @@
 
 MCP servers used across projects. Each AI tool has its own MCP config — they are **not shared**.
 
-## Two-Tier Architecture
+## Architecture (v3)
 
-| Tier | Scope | Servers | Setup |
-|------|-------|---------|-------|
-| **User-level** | All projects | chrome-devtools | `aitools install` (runs setup scripts) |
-| **Project-level** | Per project | vercel, webflow | `aitools --addmcp <name>` |
+All three servers installed at user level. Chrome DevTools enabled globally; Vercel and Webflow disabled by default. Per-project, use `aitools --addmcp` to enable.
 
-User-level config reduces context bloat by only loading chrome-devtools globally.
-Vercel and Webflow are added per-project where needed.
+| Server | Transport | Default State | Enable per project |
+|--------|-----------|---------------|-------------------|
+| Chrome DevTools | stdio (local) | **Enabled** | N/A (always on) |
+| Vercel | HTTP (remote) | Disabled | `aitools --addmcp vercel` |
+| Webflow | HTTP (remote) | Disabled | `aitools --addmcp webflow` |
 
 ## Config Files
 
-| Tool | User-level config | Project-level config |
-|------|------------------|---------------------|
-| Claude Code | `~/.claude.json` | `.mcp.json` (project root) |
-| Cursor | `~/.cursor/mcp.json` | `.cursor/mcp.json` (project root) |
+| Tool | User-level servers | User-level deny rules | Project enable |
+|------|-------------------|----------------------|----------------|
+| Claude Code | `~/.claude.json` | `~/.claude/settings.json` | `.claude/settings.local.json` |
+| Cursor | `~/.cursor/mcp.json` | `agent mcp disable` | `agent mcp enable` or `.cursor/mcp.json` |
 
-## Servers
+## Enable/Disable Mechanisms
 
-| Server | Package/URL | Transport | Auth | Scope |
-|--------|-------------|-----------|------|-------|
-| Chrome DevTools | `chrome-devtools-mcp@latest` (npx) | stdio (local) | None | User |
-| Vercel | `https://mcp.vercel.com` | HTTP (remote) | OAuth (browser) | Project |
-| Webflow | `https://mcp.webflow.com/mcp` | HTTP (remote) | OAuth (browser) | Project |
+### Claude Code
+
+- **User-level deny** (`~/.claude/settings.json`):
+  ```json
+  { "permissions": { "deny": ["MCP(vercel)", "MCP(webflow)"] } }
+  ```
+- **Project-level allow** (`.claude/settings.local.json`):
+  ```json
+  { "permissions": { "allow": ["MCP(vercel)"] } }
+  ```
+- Project allow overrides user deny for that server in that project only.
+
+### Cursor CLI
+
+- **Disable**: `agent mcp disable vercel`
+- **Enable**: `agent mcp enable vercel`
+- **List**: `agent mcp list`
+- Alternatively, add server to project `.cursor/mcp.json` (project config overrides user-level disabled state).
 
 ## Setup
 
-### User-Level (chrome-devtools)
+### All Servers (user-level)
 
 Configured automatically by `aitools install`, which runs:
 
 ```powershell
 # Windows
-.\scripts\setup-user-mcp.ps1
+.\scripts\setup-user-mcp.ps1    # Claude Code
+.\scripts\setup-cursor-mcp.ps1  # Cursor
 
 # macOS
-bash scripts/setup-user-mcp.sh
+bash scripts/setup-user-mcp.sh    # Claude Code
+bash scripts/setup-cursor-mcp.sh  # Cursor
 ```
 
-### Project-Level (vercel, webflow)
-
-Add MCP servers to the current project for all AI tools:
+### Per-Project Enable
 
 ```bash
 cd ~/repos/my-project
-aitools --addmcp vercel
-aitools --addmcp vercel webflow
+aitools --addmcp vercel            # Enable vercel
+aitools --addmcp vercel webflow    # Enable both
+aitools mcp                        # Check status
 ```
 
-This creates/updates both `.mcp.json` (Claude Code) and `.cursor/mcp.json` (Cursor).
-Safe to re-run — merges with existing config.
+For Claude Code, this creates/merges `.claude/settings.local.json` with allow rules.
+For Cursor, this runs `agent mcp enable` or falls back to project `.cursor/mcp.json`.
 
-### Project-Level Config Format
+## Servers
 
-**Claude Code (`.mcp.json`)**:
-```json
-{
-  "mcpServers": {
-    "vercel": {
-      "type": "http",
-      "url": "https://mcp.vercel.com"
-    }
-  }
-}
-```
-
-**Cursor (`.cursor/mcp.json`)**:
-```json
-{
-  "mcpServers": {
-    "vercel": {
-      "url": "https://mcp.vercel.com"
-    }
-  }
-}
-```
+| Server | Package/URL | Auth |
+|--------|-------------|------|
+| Chrome DevTools | `chrome-devtools-mcp@latest` (npx) | None |
+| Vercel | `https://mcp.vercel.com` | OAuth (browser) |
+| Webflow | `https://mcp.webflow.com/mcp` | OAuth (browser) |
 
 ## Post-setup
 
 ### Claude Code
 1. Start a session and run `/mcp` to verify servers show green status
 2. Chrome DevTools needs no auth
-3. Authenticate Vercel/Webflow via OAuth browser flow (if added to project)
+3. Vercel/Webflow only appear when enabled for the project (via `aitools --addmcp`)
 
 ### Cursor
 1. Restart Cursor after running setup
 2. Go to **Cursor Settings > Tools & MCP** to see servers
-3. Authenticate Vercel/Webflow from the Tools & MCP settings page (if added to project)
+3. Vercel/Webflow can also be toggled in the IDE UI
 
 ## Platform Notes
 
-- **Windows**: Chrome DevTools requires `cmd /c` wrapper before `npx`. In Claude Code, `claude mcp add` mangles `/c` as a path, so the setup script edits `~/.claude.json` directly.
+- **Windows**: Chrome DevTools uses `cmd /c npx` wrapper in Cursor config. Claude Code uses `claude mcp add` directly.
 - **macOS**: Chrome DevTools uses `npx` directly on both tools.
 - Vercel and Webflow are remote HTTP servers — identical config on both platforms.
 - OAuth tokens are cached locally per tool and refreshed automatically.

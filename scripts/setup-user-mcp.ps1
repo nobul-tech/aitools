@@ -1,11 +1,9 @@
 # setup-user-mcp.ps1 — Installs/updates user-level MCP servers for Claude Code on Windows
 # Safe to re-run — removes and re-adds each server to ensure latest config.
 #
-# User-level MCP: chrome-devtools only.
-# For vercel/webflow, use `aitools --addmcp` at the project level.
-#
-# NOTE: Chrome DevTools is added by editing ~/.claude.json directly because
-# `claude mcp add` mangles the `/c` flag in `cmd /c` (interprets it as a path).
+# All three servers at user level. Chrome DevTools enabled globally;
+# Vercel and Webflow are present but disabled by default (deny rules).
+# Use `aitools --addmcp` to enable per project.
 
 # --- Logging ---
 $logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
@@ -28,7 +26,7 @@ if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-# Check that Node.js is available (required for Chrome DevTools MCP)
+# Check that Node.js is available (required for Chrome DevTools MCP and settings merge)
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     LogError "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"
     exit 1
@@ -37,49 +35,77 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     LogOk "Node.js $nodeVersion found"
 }
 
-$claudeJson = Join-Path $env:USERPROFILE ".claude.json"
+# --- Add all three MCP servers at user scope ---
 
-# --- Legacy cleanup: remove vercel/webflow from user scope ---
-if (-not (Test-Path $claudeJson)) {
-    LogError "$claudeJson not found. Run Claude Code at least once first."
-    exit 1
-}
+function Add-McpServer {
+    param(
+        [string]$Name,
+        [string[]]$AddArgs
+    )
 
-$config = Get-Content $claudeJson -Raw | ConvertFrom-Json
+    # Remove existing (ignore errors if not found)
+    $removeResult = claude mcp remove $Name --scope user 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Log "Removed existing $Name config"
+    }
 
-# Ensure top-level mcpServers exists
-if (-not $config.mcpServers) {
-    $config | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([PSCustomObject]@{})
-}
-
-# Remove legacy vercel/webflow from user-level config
-foreach ($server in @("vercel", "webflow")) {
-    if ($config.mcpServers.PSObject.Properties[$server]) {
-        $config.mcpServers.PSObject.Properties.Remove($server)
-        LogOk "Removed legacy $server from user scope (now project-level via --addmcp)"
+    Log "Adding $Name..."
+    $addResult = & claude mcp add @AddArgs 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        LogOk "$Name configured"
+    } else {
+        LogError "Failed to add $Name`: $addResult"
     }
 }
 
-# --- Chrome DevTools (stdio, needs direct JSON edit on Windows) ---
+Log "Setting up MCP servers for Claude Code (user scope)..."
 
-# Remove existing chrome-devtools if present
-if ($config.mcpServers.PSObject.Properties["chrome-devtools"]) {
-    $config.mcpServers.PSObject.Properties.Remove("chrome-devtools")
-    Log "Removed existing chrome-devtools config"
+# Chrome DevTools — local stdio server via npx
+Add-McpServer -Name "chrome-devtools" -AddArgs @("chrome-devtools", "--scope", "user", "npx", "chrome-devtools-mcp@latest")
+
+# Vercel — remote HTTP server (disabled by default via deny rules below)
+Add-McpServer -Name "vercel" -AddArgs @("--transport", "http", "--scope", "user", "vercel", "https://mcp.vercel.com")
+
+# Webflow — remote HTTP server (disabled by default via deny rules below)
+Add-McpServer -Name "webflow" -AddArgs @("--transport", "http", "--scope", "user", "webflow", "https://mcp.webflow.com/mcp")
+
+# --- Merge deny rules into ~/.claude/settings.json ---
+# Vercel and Webflow are disabled by default at user level.
+# Projects enable them via .claude/settings.local.json (aitools --addmcp).
+
+$settingsFile = Join-Path $env:USERPROFILE ".claude" "settings.json"
+$settingsDir = Split-Path $settingsFile -Parent
+Log "Merging deny rules into $settingsFile..."
+
+if (-not (Test-Path $settingsDir)) {
+    New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
 }
 
-# Add chrome-devtools with correct cmd /c args
-$chromeServer = [PSCustomObject]@{
-    type    = "stdio"
-    command = "cmd"
-    args    = @("/c", "npx", "-y", "chrome-devtools-mcp@latest")
-    env     = [PSCustomObject]@{}
+# Read existing settings or start fresh
+$settings = @{}
+if (Test-Path $settingsFile) {
+    try {
+        $settings = Get-Content $settingsFile -Raw | ConvertFrom-Json -AsHashtable
+    } catch {
+        $settings = @{}
+    }
 }
-$config.mcpServers | Add-Member -NotePropertyName "chrome-devtools" -NotePropertyValue $chromeServer
 
-# Write back
-$config | ConvertTo-Json -Depth 20 | Set-Content $claudeJson -Encoding UTF8
-LogOk "chrome-devtools configured in $claudeJson"
+# Ensure permissions.deny exists
+if (-not $settings.ContainsKey("permissions")) { $settings["permissions"] = @{} }
+if (-not $settings["permissions"].ContainsKey("deny")) { $settings["permissions"]["deny"] = @() }
 
-LogOk "User-level MCP configured (chrome-devtools only)"
-Log "For project-level servers (vercel, webflow): aitools --addmcp <name>"
+# Add deny rules if not already present
+$denyRules = @("MCP(vercel)", "MCP(webflow)")
+foreach ($rule in $denyRules) {
+    if ($rule -notin $settings["permissions"]["deny"]) {
+        $settings["permissions"]["deny"] += $rule
+    }
+}
+
+$settings | ConvertTo-Json -Depth 10 | Set-Content $settingsFile -Encoding UTF8
+LogOk "Deny rules set for vercel, webflow in $settingsFile"
+
+LogOk "User-level MCP configured (all servers; vercel/webflow disabled by default)"
+Log "To enable per project: aitools --addmcp vercel"
+Log "To check status: aitools mcp"

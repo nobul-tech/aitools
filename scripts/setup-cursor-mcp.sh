@@ -2,8 +2,9 @@
 # setup-cursor-mcp.sh — Installs/updates MCP servers for Cursor on macOS/Linux
 # Safe to re-run — replaces ~/.cursor/mcp.json with latest config.
 #
-# User-level MCP: chrome-devtools only.
-# For vercel/webflow, use `aitools --addmcp` at the project level.
+# All three servers at user level. Chrome DevTools enabled globally;
+# Vercel and Webflow are present but disabled via `agent mcp disable`.
+# Use `aitools --addmcp` to enable per project.
 #
 # Cursor uses its own MCP config at ~/.cursor/mcp.json (separate from Claude Code's ~/.claude.json).
 # Remote servers use the "url" key directly. Local stdio servers use "command" + "args".
@@ -44,22 +45,44 @@ else
     log "Creating $(display_path "$mcp_json")"
 fi
 
-# Write the config — chrome-devtools only (macOS uses npx directly, no cmd /c wrapper)
+# Write the config — all three servers (macOS uses npx directly, no cmd /c wrapper)
 cat > "$mcp_json" << 'EOF'
 {
   "mcpServers": {
     "chrome-devtools": {
       "command": "npx",
       "args": ["-y", "chrome-devtools-mcp@latest"]
+    },
+    "vercel": {
+      "url": "https://mcp.vercel.com"
+    },
+    "webflow": {
+      "url": "https://mcp.webflow.com/mcp"
     }
   }
 }
 EOF
 
 log_ok "Cursor MCP config written to $(display_path "$mcp_json")"
-log "Server configured: chrome-devtools (stdio via npx)"
-log "For project-level servers (vercel, webflow): aitools --addmcp <name>"
+log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
+
+# --- Disable vercel/webflow via Cursor CLI if available ---
+if command -v agent &>/dev/null; then
+    for server in vercel webflow; do
+        if agent mcp disable "$server" 2>&1; then
+            log_ok "$server disabled in Cursor"
+        else
+            log_error "Failed to disable $server in Cursor"
+        fi
+    done
+else
+    log "Cursor CLI (agent) not found — disable vercel/webflow manually:"
+    log "  Cursor Settings > Features > MCP > toggle off vercel and webflow"
+    log "  Or install Cursor CLI: aitools install"
+fi
+
 log ""
 log "Next steps:"
 log "  1. Restart Cursor"
-log "  2. Go to Cursor Settings > Tools & MCP to see the servers"
+log "  2. Go to Cursor Settings > Tools & MCP to verify servers"
+log "  3. To enable vercel/webflow per project: aitools --addmcp vercel"

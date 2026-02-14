@@ -53,7 +53,7 @@ repo_version() {
 }
 
 # ---------------------------------------------------------------------------
-# MCP server registry (for --addmcp)
+# MCP server registry
 # ---------------------------------------------------------------------------
 
 # Returns URL for a known MCP server name, or empty string if unknown.
@@ -76,9 +76,10 @@ Usage: aitools [COMMAND] [OPTIONS]
 Commands:
   (none)               Pull latest and rebuild deploy scripts (self-update)
   install              Install/update all tools and deploy configurations
+  mcp                  Show MCP server status for current project
 
 Options:
-  --addmcp <name...>   Add MCP server(s) to current project (vercel, webflow)
+  --addmcp <name...>   Enable MCP server(s) for current project (vercel, webflow)
   --version, -v        Show installed and repo version
   --help, -h           Show this help
 
@@ -92,6 +93,7 @@ EOF
 show_version=false
 show_help=false
 do_install=false
+do_mcp_status=false
 addmcp_servers=()
 passthrough=()
 
@@ -100,6 +102,7 @@ while [[ $# -gt 0 ]]; do
         --version|-v) show_version=true; shift ;;
         --help|-h)    show_help=true; shift ;;
         install)      do_install=true; shift ;;
+        mcp)          do_mcp_status=true; shift ;;
         --addmcp)
             shift
             # Collect all following args that don't start with --
@@ -142,7 +145,108 @@ if $show_version; then
 fi
 
 # ---------------------------------------------------------------------------
-# --addmcp (short-circuit — no pull/rebuild/install)
+# mcp — show MCP server status
+# ---------------------------------------------------------------------------
+
+if $do_mcp_status; then
+    if ! command -v node &>/dev/null; then
+        echo "error: node required for mcp status"
+        return 1
+    fi
+
+    node -e '
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+
+const home = os.homedir();
+const cwd = process.cwd();
+
+function readJson(f) {
+    try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; }
+}
+
+// --- Claude Code ---
+const claudeJson = readJson(path.join(home, ".claude.json"));
+const claudeSettings = readJson(path.join(home, ".claude", "settings.json"));
+const projectSettings = readJson(path.join(cwd, ".claude", "settings.json"));
+const projectLocalSettings = readJson(path.join(cwd, ".claude", "settings.local.json"));
+
+const claudeDeny = claudeSettings?.permissions?.deny || [];
+const projectAllow = [
+    ...(projectSettings?.permissions?.allow || []),
+    ...(projectLocalSettings?.permissions?.allow || []),
+];
+
+console.log("MCP Server Status (" + cwd + ")\n");
+
+if (claudeJson?.mcpServers) {
+    console.log("Claude Code:");
+    const servers = claudeJson.mcpServers;
+    for (const [name, cfg] of Object.entries(servers)) {
+        const transport = cfg.type === "http" || cfg.url ? "http" : "stdio";
+        const denyPattern = "MCP(" + name + ")";
+        const denied = claudeDeny.includes(denyPattern);
+        const allowed = projectAllow.includes(denyPattern);
+        const status = denied && !allowed ? "disabled" : "enabled";
+        const pad = name.length < 16 ? " ".repeat(16 - name.length) : " ";
+        console.log("  " + name + pad + status.padEnd(10) + "(user)   " + transport);
+    }
+
+    // Show project overrides if any
+    const overrides = [];
+    for (const rule of projectAllow) {
+        const match = rule.match(/^MCP\((.+)\)$/);
+        if (match) {
+            const source = projectLocalSettings?.permissions?.allow?.includes(rule)
+                ? ".claude/settings.local.json"
+                : ".claude/settings.json";
+            overrides.push({ name: match[1], source });
+        }
+    }
+    if (overrides.length > 0) {
+        console.log("  Project overrides:");
+        for (const o of overrides) {
+            const pad = o.name.length < 16 ? " ".repeat(16 - o.name.length) : " ";
+            console.log("    " + o.name + pad + "enabled   (" + o.source + ")");
+        }
+    }
+} else {
+    console.log("Claude Code: no user-level MCP config found (~/.claude.json)");
+}
+
+console.log("");
+
+// --- Cursor ---
+const cursorJson = readJson(path.join(home, ".cursor", "mcp.json"));
+const projectCursorJson = readJson(path.join(cwd, ".cursor", "mcp.json"));
+
+if (cursorJson?.mcpServers) {
+    console.log("Cursor:");
+    const servers = cursorJson.mcpServers;
+    for (const [name, cfg] of Object.entries(servers)) {
+        const transport = cfg.url ? "http" : "stdio";
+        // We cannot programmatically detect Cursor disable state from JSON alone
+        const pad = name.length < 16 ? " ".repeat(16 - name.length) : " ";
+        console.log("  " + name + pad + "(user)   " + transport);
+    }
+    if (projectCursorJson?.mcpServers) {
+        console.log("  Project overrides (.cursor/mcp.json):");
+        for (const [name, cfg] of Object.entries(projectCursorJson.mcpServers)) {
+            const transport = cfg.url ? "http" : "stdio";
+            const pad = name.length < 16 ? " ".repeat(16 - name.length) : " ";
+            console.log("    " + name + pad + "enabled   " + transport);
+        }
+    }
+} else {
+    console.log("Cursor: no user-level MCP config found (~/.cursor/mcp.json)");
+}
+'
+    return 0
+fi
+
+# ---------------------------------------------------------------------------
+# --addmcp — enable MCP server(s) for current project
 # ---------------------------------------------------------------------------
 
 if [ ${#addmcp_servers[@]} -gt 0 ]; then
@@ -165,58 +269,60 @@ if [ ${#addmcp_servers[@]} -gt 0 ]; then
 
     for name in "${addmcp_servers[@]}"; do
         url=$(mcp_server_url "$name")
-        echo "Adding $name ($url) to project..."
+        echo "Enabling $name for this project..."
 
-        # --- Claude Code: .mcp.json ---
-        mcp_file=".mcp.json"
-        claude_mcp_done=false
-        if command -v claude &>/dev/null; then
-            # Try native CLI — handles merge automatically
-            if claude mcp add --transport http --scope project "$name" "$url" 2>/dev/null; then
-                echo "  Claude Code: $name added to $mcp_file"
-                claude_mcp_done=true
-            fi
-        fi
-        if ! $claude_mcp_done && command -v node &>/dev/null; then
-            # Fallback: direct JSON merge via node
+        # --- Claude Code: .claude/settings.local.json (allow override) ---
+        settings_local=".claude/settings.local.json"
+        if command -v node &>/dev/null; then
+            mkdir -p .claude
             node -e "
 const fs = require('fs');
-const f = '$mcp_file';
-let cfg = {};
-try { cfg = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
-if (!cfg.mcpServers) cfg.mcpServers = {};
-cfg.mcpServers['$name'] = { type: 'http', url: '$url' };
-fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
-"
-            echo "  Claude Code: $name added to $mcp_file"
-            claude_mcp_done=true
-        fi
-        if ! $claude_mcp_done; then
-            echo "  Claude Code: skipped (neither claude nor node found)"
+const f = process.argv[1];
+let settings = {};
+try { settings = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+if (!settings.permissions) settings.permissions = {};
+if (!Array.isArray(settings.permissions.allow)) settings.permissions.allow = [];
+const rule = 'MCP($name)';
+if (!settings.permissions.allow.includes(rule)) {
+    settings.permissions.allow.push(rule);
+}
+fs.writeFileSync(f, JSON.stringify(settings, null, 2) + '\n');
+" "$settings_local"
+            echo "  Claude Code: $name enabled in $settings_local"
+        else
+            echo "  Claude Code: skipped (node not found)"
         fi
 
-        # --- Cursor: .cursor/mcp.json ---
-        cursor_mcp=".cursor/mcp.json"
-        if command -v node &>/dev/null; then
+        # --- Cursor: try agent mcp enable, fall back to project .cursor/mcp.json ---
+        cursor_done=false
+        if command -v agent &>/dev/null; then
+            if agent mcp enable "$name" 2>&1; then
+                echo "  Cursor CLI: $name enabled (agent mcp enable)"
+                cursor_done=true
+            fi
+        fi
+        if ! $cursor_done && command -v node &>/dev/null; then
+            cursor_mcp=".cursor/mcp.json"
             mkdir -p .cursor
             node -e "
 const fs = require('fs');
-const f = '$cursor_mcp';
+const f = process.argv[1];
 let cfg = {};
 try { cfg = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
 if (!cfg.mcpServers) cfg.mcpServers = {};
 cfg.mcpServers['$name'] = { url: '$url' };
 fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
-"
+" "$cursor_mcp"
             echo "  Cursor: $name added to $cursor_mcp"
-        else
-            echo "  Cursor: skipped (node not found)"
+        fi
+        if ! $cursor_done && ! command -v node &>/dev/null; then
+            echo "  Cursor: skipped (neither agent nor node found)"
         fi
 
         echo ""
     done
 
-    echo "Done. MCP servers added to project at $(display_path "$(pwd)")"
+    echo "Done. MCP servers enabled for project at $(display_path "$(pwd)")"
     return 0
 fi
 

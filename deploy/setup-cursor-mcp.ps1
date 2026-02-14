@@ -2,8 +2,9 @@
 # setup-cursor-mcp.ps1 — Installs/updates MCP servers for Cursor on Windows
 # Safe to re-run — replaces ~/.cursor/mcp.json with latest config.
 #
-# User-level MCP: chrome-devtools only.
-# For vercel/webflow, use `aitools --addmcp` at the project level.
+# All three servers at user level. Chrome DevTools enabled globally;
+# Vercel and Webflow are present but disabled via `agent mcp disable`.
+# Use `aitools --addmcp` to enable per project.
 #
 # Cursor uses its own MCP config at ~/.cursor/mcp.json (separate from Claude Code's ~/.claude.json).
 # Remote servers use the "url" key directly. Local stdio servers use "command" + "args".
@@ -41,12 +42,18 @@ if (-not (Test-Path $cursorDir)) {
 
 $mcpJson = Join-Path $cursorDir "mcp.json"
 
-# Build the config — chrome-devtools only
+# Build the config — all three servers
 $config = @{
     mcpServers = @{
         "chrome-devtools" = @{
             command = "cmd"
             args    = @("/c", "npx", "-y", "chrome-devtools-mcp@latest")
+        }
+        "vercel" = @{
+            url = "https://mcp.vercel.com"
+        }
+        "webflow" = @{
+            url = "https://mcp.webflow.com/mcp"
         }
     }
 }
@@ -61,9 +68,26 @@ if (Test-Path $mcpJson) {
 $config | ConvertTo-Json -Depth 10 | Set-Content $mcpJson -Encoding UTF8
 
 LogOk "Cursor MCP config written to $mcpJson"
-Log "Server configured: chrome-devtools (stdio via cmd /c npx)"
-Log "For project-level servers (vercel, webflow): aitools --addmcp <name>"
+Log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
+
+# --- Disable vercel/webflow via Cursor CLI if available ---
+if (Get-Command agent -ErrorAction SilentlyContinue) {
+    foreach ($server in @("vercel", "webflow")) {
+        $result = agent mcp disable $server 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            LogOk "$server disabled in Cursor"
+        } else {
+            LogError "Failed to disable $server in Cursor: $result"
+        }
+    }
+} else {
+    Log "Cursor CLI (agent) not found - disable vercel/webflow manually:"
+    Log "  Cursor Settings > Features > MCP > toggle off vercel and webflow"
+    Log "  Or install Cursor CLI: aitools install"
+}
+
 Log ""
 Log "Next steps:"
 Log "  1. Restart Cursor"
-Log "  2. Go to Cursor Settings > Tools & MCP to see the servers"
+Log "  2. Go to Cursor Settings > Tools & MCP to verify servers"
+Log "  3. To enable vercel/webflow per project: aitools --addmcp vercel"

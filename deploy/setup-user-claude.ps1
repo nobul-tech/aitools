@@ -77,6 +77,15 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 - **Windows**: PowerShell, Cursor, Claude Code, Command Prompt, WSL/bash (when Linux/Unix environment needed)
 - **Note**: Claude Code on Windows always uses Git Bash (not configurable). Use Unix shell syntax in all Claude Code sessions regardless of platform.
 
+## MCP Servers
+
+Three servers at user level. Chrome DevTools enabled globally; Vercel/Webflow disabled by default.
+
+- **Enable for project**: `aitools --addmcp vercel` (or `vercel webflow`)
+- **Check status**: `aitools mcp`
+- **Manual enable** (Claude Code): add `MCP(vercel)` to `.claude/settings.local.json` `permissions.allow`
+- **Manual enable** (Cursor CLI): `agent mcp enable vercel`
+
 ## Git Conventions
 
 - Commit messages: imperative mood, concise

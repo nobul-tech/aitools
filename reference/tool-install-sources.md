@@ -112,30 +112,91 @@ agent --version
 
 ### Chrome DevTools MCP
 
+**Official Docs**: https://github.com/ChromeDevTools/chrome-devtools-mcp
 **Package**: `chrome-devtools-mcp@latest` (npm/npx)
 **Transport**: stdio (local)
 **Auth**: None
+**Scope**: User (enabled by default)
 
-| Platform | Claude Code config | Cursor config |
-|----------|-------------------|---------------|
-| macOS/Linux | `npx -y chrome-devtools-mcp@latest` | `"command": "npx", "args": ["-y", "chrome-devtools-mcp@latest"]` |
-| Windows | `cmd /c npx -y chrome-devtools-mcp@latest` | `"command": "cmd", "args": ["/c", "npx", "-y", "chrome-devtools-mcp@latest"]` |
+**Install (Claude Code)**:
+```bash
+claude mcp add chrome-devtools --scope user npx chrome-devtools-mcp@latest
+```
 
-**Note**: On Windows, `claude mcp add` mangles `/c` flag — edit `~/.claude.json` directly.
+**Install (Cursor)**: Write to `~/.cursor/mcp.json`:
+```json
+{ "command": "npx", "args": ["-y", "chrome-devtools-mcp@latest"] }
+```
+Windows variant uses `"command": "cmd", "args": ["/c", "npx", "-y", "chrome-devtools-mcp@latest"]`.
 
 ### Vercel MCP
 
+**Official Docs**: https://vercel.com/docs/agent-resources/vercel-mcp
 **URL**: `https://mcp.vercel.com`
 **Transport**: HTTP (remote)
 **Auth**: OAuth (browser flow)
-**Scope**: Project-level (via `aitools --addmcp vercel`)
+**Scope**: User (disabled by default)
+
+**Install (Claude Code)**:
+```bash
+claude mcp add --transport http --scope user vercel https://mcp.vercel.com
+```
 
 ### Webflow MCP
 
+**Official Docs**: https://developers.webflow.com/mcp/reference/getting-started
+**GitHub**: https://github.com/webflow/mcp-server
 **URL**: `https://mcp.webflow.com/mcp`
 **Transport**: HTTP (remote)
 **Auth**: OAuth (browser flow)
-**Scope**: Project-level (via `aitools --addmcp webflow`)
+**Scope**: User (disabled by default)
+
+**Install (Claude Code)**:
+```bash
+claude mcp add --transport http --scope user webflow https://mcp.webflow.com/mcp
+```
+
+---
+
+## MCP Management & Configuration
+
+### Claude Code MCP
+
+**Docs**: https://code.claude.com/docs/en/mcp
+
+| Command | What it does |
+|---------|--------------|
+| `claude mcp add <name> --scope user ...` | Add server at user level |
+| `claude mcp remove <name> --scope user` | Remove server from user level |
+| `claude mcp list` | List configured servers |
+| `/mcp` (in session) | Show server status with connection health |
+
+**Scopes**: `user` (all projects), `project` (current repo in `.mcp.json`).
+
+**Disable/Enable via settings** (https://code.claude.com/docs/en/settings):
+- Deny at user level: `~/.claude/settings.json` → `permissions.deny: ["MCP(serverName)"]`
+- Allow per project: `.claude/settings.local.json` → `permissions.allow: ["MCP(serverName)"]`
+- Project allow overrides user deny for that specific server.
+
+### Cursor CLI MCP
+
+**Docs**: https://cursor.com/docs/cli/mcp
+
+| Command | What it does |
+|---------|--------------|
+| `agent mcp list` | List MCP servers and their status |
+| `agent mcp enable <name>` | Enable an MCP server |
+| `agent mcp disable <name>` | Disable an MCP server |
+
+**Config**: `~/.cursor/mcp.json` (user-level), `.cursor/mcp.json` (project-level).
+
+### Cursor IDE MCP
+
+**Docs**: https://cursor.com/docs/context/mcp
+
+- **Settings UI**: Cursor Settings > Features > MCP — toggle servers on/off
+- **Tools & MCP**: Cursor Settings > Tools & MCP — see available tools, authenticate OAuth
+- Not automatable (UI-only toggles); managed manually
 
 ---
 
@@ -151,4 +212,4 @@ agent --version
 | Windows (winget) | `winget install OpenJS.NodeJS.LTS` |
 | Ubuntu/Debian | See NodeSource or nvm |
 
-Required for: Chrome DevTools MCP (npx), Vercel CLI (npm), Cursor CLI JSON merge fallback.
+Required for: Chrome DevTools MCP (npx), Vercel CLI (npm), settings JSON merge in setup scripts.
