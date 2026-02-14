@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+# aitools -- pull latest ai-tooling scaffolding and redeploy
+# Installed to ~/.local/bin/ by scripts/aitools-install.{sh,ps1}
+#
+# The entire script is wrapped in main() so bash reads it fully into memory
+# before executing. This prevents corruption when the installer overwrites
+# this file on disk during Step 6.
+
+AITOOLS_INSTALLED_VERSION="dev"
+
+main() {
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+# Read a top-level string value from a JSON config file.
+# Handles UTF-8 BOM (PowerShell 5.x writes one) and JSON-escaped backslashes.
+read_config_key() {
+    local file="$1" key="$2"
+    [ -f "$file" ] || return 1
+    local val
+    val=$(tr -d '\357\273\277' < "$file" \
+        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
+        | head -1 \
+        | cut -d'"' -f4)
+    [ -n "$val" ] || return 1
+    # Unescape JSON backslashes: \\ -> \
+    printf '%b' "$val"
+}
+
+# Convert a Windows path to Unix-style for Git Bash / MSYS2. No-op elsewhere.
+to_native_path() {
+    if command -v cygpath &>/dev/null; then
+        cygpath -u "$1"
+    else
+        printf '%s' "$1"
+    fi
+}
+
+# Version string from a git repo: "YYYY-MM-DD (hash)"
+repo_version() {
+    git -C "$1" log -1 --format='%cd (%h)' --date=short 2>/dev/null || echo "unknown"
+}
+
+# ---------------------------------------------------------------------------
+# Usage / flags
+# ---------------------------------------------------------------------------
+
+usage() {
+    cat <<'EOF'
+Usage: aitools [OPTIONS]
+
+Update ai-tooling scaffolding: pull latest, rebuild deploy scripts, run installer.
+
+Options:
+  --version, -v    Show installed and repo version
+  --help, -h       Show this help
+
+All other flags are passed through to the installer (e.g. --skip-gh-auth).
+EOF
+}
+
+show_version=false
+show_help=false
+passthrough=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --version|-v) show_version=true; shift ;;
+        --help|-h)    show_help=true; shift ;;
+        *)            passthrough+=("$1"); shift ;;
+    esac
+done
+
+if $show_help; then
+    usage
+    return 0
+fi
+
+# ---------------------------------------------------------------------------
+# Resolve repo path from config
+# ---------------------------------------------------------------------------
+
+config="$HOME/.config/ai-tooling/config.json"
+repo_path=""
+
+if raw=$(read_config_key "$config" "aiToolingRepoPath"); then
+    repo_path=$(to_native_path "$raw")
+fi
+repo_path="${repo_path:-$HOME/repos/ai-tooling}"
+
+if [ ! -d "$repo_path/.git" ]; then
+    echo "error: ai-tooling repo not found at $repo_path"
+    echo "Clone it first, then re-run the installer."
+    return 1
+fi
+
+# ---------------------------------------------------------------------------
+# --version
+# ---------------------------------------------------------------------------
+
+if $show_version; then
+    echo "aitools $AITOOLS_INSTALLED_VERSION"
+    echo "  repo: $(repo_version "$repo_path") @ $repo_path"
+    return 0
+fi
+
+# ---------------------------------------------------------------------------
+# Run update
+# ---------------------------------------------------------------------------
+
+LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ai-tooling"
+[ "$(uname -s)" = "Darwin" ] && LOG_DIR="$HOME/Library/Logs/ai-tooling"
+LOG_FILE="$LOG_DIR/deploy.log"
+mkdir -p "$LOG_DIR"
+
+# Display-friendly path for user-facing messages
+if command -v cygpath &>/dev/null; then
+    LOG_DISPLAY=$(cygpath -w "$LOG_FILE")
+else
+    LOG_DISPLAY="$LOG_FILE"
+fi
+
+export AITOOLS_RUN_ID=$(head -c 6 /dev/urandom | od -An -tx1 | tr -d ' \n')
+
+echo "aitools $AITOOLS_INSTALLED_VERSION"
+echo ""
+
+# [1/3] Pull latest
+echo "[1/3] Pulling latest..."
+if pull_out=$(cd "$repo_path" && git pull origin main 2>&1); then
+    if echo "$pull_out" | grep -q "Already up to date"; then
+        echo "  Already up to date."
+    else
+        echo "  Updated."
+    fi
+else
+    echo "  error: git pull failed" >&2
+    echo "$pull_out" >&2
+    return 1
+fi
+
+# [2/3] Rebuild deploy scripts
+echo "[2/3] Rebuilding deploy scripts..."
+if bash "$repo_path/scripts/build-deploy.sh" >> "$LOG_FILE" 2>&1; then
+    echo "  Done."
+else
+    echo "  error: build failed (see $LOG_DISPLAY)" >&2
+    return 1
+fi
+
+# [3/3] Run installer
+echo "[3/3] Running installer..."
+if bash "$repo_path/scripts/aitools-install.sh" "${passthrough[@]}" > /dev/null 2>&1 < /dev/null; then
+    echo "  Done."
+else
+    echo "  Done (with warnings -- see $LOG_DISPLAY)."
+fi
+
+# Self-update: bake version into installed copy
+if [ -f "$repo_path/scripts/aitools" ]; then
+    new_version=$(repo_version "$repo_path")
+    sed "s/^AITOOLS_INSTALLED_VERSION=.*/AITOOLS_INSTALLED_VERSION=\"$new_version\"/" \
+        "$repo_path/scripts/aitools" > "$HOME/.local/bin/aitools"
+    chmod +x "$HOME/.local/bin/aitools"
+fi
+
+echo ""
+echo "All up to date. ($(repo_version "$repo_path"))"
+unset AITOOLS_RUN_ID
+
+}
+
+main "$@"; exit

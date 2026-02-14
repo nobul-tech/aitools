@@ -1,0 +1,308 @@
+# aitools-install.ps1 -- Install aitools command + configure environment
+# Run once for first-time setup, or re-run via `aitools` to stay current.
+#
+# Installs/updates gh CLI, configures repos directory, auto-detects Google
+# Drive mounts, writes ~/.config/ai-tooling/config.json, installs the
+# aitools command to ~/.local/bin/, adds shell integration, and deploys
+# all configuration scripts.
+
+param(
+    [string]$ReposPath = "",
+    [switch]$SkipDriveDetection,
+    [switch]$SkipGhAuth,
+    [switch]$Help
+)
+
+if ($Help) {
+    @"
+aitools-install.ps1 -- Install aitools command + configure environment
+
+Usage: .\scripts\aitools-install.ps1 [OPTIONS]
+
+Options:
+  -ReposPath <string>       Set repos directory without prompting (default: ~/repos)
+  -SkipDriveDetection       Skip Google Drive auto-detection
+  -SkipGhAuth               Skip gh auth login
+  -Help                     Show this help
+
+Interactive behavior:
+  When stdin is a terminal, prompts for repos path and drive confirmation.
+  When piped or run non-interactively, uses defaults and flags.
+  When config.json already exists, uses saved values without prompting.
+"@
+    exit 0
+}
+
+# --- Logging ---
+$logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
+$logFile = Join-Path $logDir "deploy.log"
+$logJsonl = Join-Path $logDir "deploy.jsonl"
+$scriptName = "aitools-install"
+$runId = if ($env:AITOOLS_RUN_ID) { $env:AITOOLS_RUN_ID } else { -join ((1..6) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) }) }
+$hostName = $env:COMPUTERNAME
+$osName = "Windows"
+$errors = 0
+
+if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+
+function Log($msg, $level = "info") {
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $line = "[$ts] [$scriptName] [$level] $msg"
+    Write-Host $line
+    Add-Content -Path $logFile -Value $line
+    $json = @{ ts=$ts; host=$hostName; os=$osName; script=$scriptName; run_id=$runId; level=$level; msg=$msg } | ConvertTo-Json -Compress
+    Add-Content -Path $logJsonl -Value $json
+}
+function LogOk($msg)    { Log $msg "ok" }
+function LogError($msg) { Log $msg "error"; $script:errors++ }
+function LogWarn($msg)  { Log $msg "warn" }
+
+# --- Config file setup ---
+$configDir = Join-Path $env:USERPROFILE ".config\ai-tooling"
+$configFile = Join-Path $configDir "config.json"
+if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
+
+# Auto-detect ai-tooling repo path from this script's location
+$aiToolingRepo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+
+# ============================================================
+# 1. Install/update gh CLI
+# ============================================================
+Log "Step 1: gh CLI"
+
+$ghInstalled = Get-Command gh -ErrorAction SilentlyContinue
+if ($ghInstalled) {
+    $ghVersion = (gh --version | Select-Object -First 1)
+    LogOk "gh CLI already installed ($ghVersion)"
+    Log "Checking for updates..."
+    winget upgrade GitHub.cli --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        LogOk "gh CLI updated"
+    } else {
+        LogOk "gh CLI already up to date"
+    }
+} else {
+    Log "Installing gh CLI..."
+    winget install GitHub.cli --accept-package-agreements --accept-source-agreements
+    # Refresh PATH so gh is available in this session
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $ghInstalled = Get-Command gh -ErrorAction SilentlyContinue
+    if ($ghInstalled) {
+        LogOk "gh CLI installed ($(gh --version | Select-Object -First 1))"
+    } else {
+        LogError "Failed to install gh CLI"
+    }
+}
+
+# ============================================================
+# 2. Authenticate gh
+# ============================================================
+Log "Step 2: gh authentication"
+
+if ($SkipGhAuth) {
+    Log "Skipping gh auth (-SkipGhAuth)"
+} elseif (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+    LogWarn "gh not installed, skipping auth"
+} else {
+    $authStatus = gh auth status 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        LogOk "gh already authenticated"
+    } elseif ([Environment]::UserInteractive) {
+        Log "Not authenticated. Starting gh auth login..."
+        gh auth login
+        if ($LASTEXITCODE -ne 0) {
+            LogError "gh auth login failed"
+        }
+    } else {
+        LogWarn "Not authenticated and not interactive -- skipping gh auth"
+    }
+}
+
+# ============================================================
+# 3. Configure repos directory
+# ============================================================
+Log "Step 3: repos directory"
+
+$resolvedReposPath = ""
+if ($ReposPath) {
+    $resolvedReposPath = $ReposPath -replace '^~', $env:USERPROFILE
+    Log "Using repos path from flag: $resolvedReposPath"
+} elseif (Test-Path $configFile) {
+    # Config exists -- reuse saved value
+    try {
+        $existingConfig = Get-Content $configFile -Raw | ConvertFrom-Json
+        if ($existingConfig.reposPath) {
+            $resolvedReposPath = $existingConfig.reposPath
+            Log "Using repos path from config: $resolvedReposPath"
+        }
+    } catch {
+        LogWarn "Could not read repos path from config"
+    }
+}
+if (-not $resolvedReposPath) {
+    if ([Environment]::UserInteractive) {
+        $defaultPath = Join-Path $env:USERPROFILE "repos"
+        $userInput = Read-Host "Where should new repos live? [$defaultPath]"
+        if ($userInput) {
+            $resolvedReposPath = $userInput -replace '^~', $env:USERPROFILE
+        } else {
+            $resolvedReposPath = $defaultPath
+        }
+    } else {
+        $resolvedReposPath = Join-Path $env:USERPROFILE "repos"
+    }
+}
+
+if (-not (Test-Path $resolvedReposPath)) {
+    New-Item -ItemType Directory -Path $resolvedReposPath -Force | Out-Null
+}
+LogOk "Repos directory: $resolvedReposPath"
+
+# ============================================================
+# 4. Detect Google Drive mounts
+# ============================================================
+Log "Step 4: Google Drive detection"
+
+$drives = @()
+
+if ($SkipDriveDetection) {
+    Log "Skipping drive detection (-SkipDriveDetection)"
+} else {
+    # Google Drive for Desktop uses a virtual filesystem driver that Get-Volume
+    # cannot see. Get-PSDrive finds them via Description: "<email> - Google Drive"
+    # (or "<email> - Google ..." when truncated for longer emails).
+    $gdDrives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Description -like "* - Google*" }
+    foreach ($gd in $gdDrives) {
+        $email = ($gd.Description -replace ' - Google.*$', '')
+        $myDrive = Join-Path $gd.Root "My Drive"
+        if (Test-Path $myDrive) {
+            $drives += @{
+                path    = $myDrive
+                account = $email
+                label   = ""
+            }
+            LogOk "Detected Google Drive: $email -> $myDrive"
+        }
+    }
+
+    if ($drives.Count -eq 0) {
+        LogWarn "No Google Drive mounts detected"
+    }
+}
+
+# ============================================================
+# 5. Write config file
+# ============================================================
+Log "Step 5: Writing config"
+
+# If config already exists and we didn't detect any drives, preserve existing entries
+if ((Test-Path $configFile) -and ($drives.Count -eq 0)) {
+    try {
+        $existingConfig = Get-Content $configFile -Raw | ConvertFrom-Json
+        if ($existingConfig.googleDrives -and $existingConfig.googleDrives.Count -gt 0) {
+            $drives = @($existingConfig.googleDrives | ForEach-Object {
+                @{ path = $_.path; account = $_.account; label = $_.label }
+            })
+            Log "Preserved existing Google Drive entries from config"
+        }
+    } catch {
+        LogWarn "Failed to read existing config, writing fresh"
+    }
+}
+
+$config = @{
+    version          = 1
+    reposPath        = $resolvedReposPath
+    aiToolingRepoPath = $aiToolingRepo
+    googleDrives     = @($drives | ForEach-Object {
+        [ordered]@{ path = $_.path; account = $_.account; label = $_.label }
+    })
+}
+
+$jsonContent = $config | ConvertTo-Json -Depth 10
+[System.IO.File]::WriteAllText($configFile, $jsonContent, [System.Text.UTF8Encoding]::new($false))
+LogOk "Config written to $configFile"
+
+# ============================================================
+# 6. Install aitools command
+# ============================================================
+Log "Step 6: Install aitools command"
+
+$aitoolsSrc = Join-Path $PSScriptRoot "aitools"
+$localBin = Join-Path $env:USERPROFILE ".local\bin"
+$aitoolsDst = Join-Path $localBin "aitools"
+if (-not (Test-Path $localBin)) { New-Item -ItemType Directory -Path $localBin -Force | Out-Null }
+if (Test-Path $aitoolsSrc) {
+    Copy-Item $aitoolsSrc $aitoolsDst -Force
+    LogOk "Installed aitools to $aitoolsDst"
+} else {
+    LogWarn "aitools source not found (MDM deploy -- skipping)"
+}
+
+# ============================================================
+# 7. Shell integration
+# ============================================================
+Log "Step 7: Shell integration"
+
+$aliasesPath = Join-Path $PSScriptRoot "..\shared\shell\aliases.ps1"
+if (Test-Path $aliasesPath) {
+    $aliasesAbs = (Resolve-Path $aliasesPath).Path
+    $profileDir = Split-Path $PROFILE -Parent
+    if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Path $profileDir -Force | Out-Null }
+    $marker = "# ai-tooling shell integration"
+
+    if (Test-Path $PROFILE) {
+        $content = Get-Content $PROFILE -Raw
+    } else {
+        $content = ""
+    }
+
+    if ($content -notmatch [regex]::Escape($marker)) {
+        $integration = @"
+
+$marker
+. "$aliasesAbs"
+function aitools { & "`$env:ProgramFiles\Git\bin\bash.exe" "`$HOME\.local\bin\aitools" @args; if (`$LASTEXITCODE) { return `$LASTEXITCODE } }
+"@
+        Add-Content -Path $PROFILE -Value $integration
+        LogOk "Added shell integration to $PROFILE"
+    } else {
+        LogOk "Shell integration already in $PROFILE"
+    }
+} else {
+    LogWarn "aliases.ps1 not found -- skipping shell integration (MDM deploy)"
+}
+
+# ============================================================
+# 8. Deploy configurations
+# ============================================================
+Log "Step 8: Deploy configurations"
+
+$deployScripts = @(
+    "setup-user-claude.ps1",
+    "setup-user-cursor.ps1",
+    "setup-user-mcp.ps1",
+    "setup-cursor-mcp.ps1"
+)
+
+foreach ($script in $deployScripts) {
+    $scriptPath = Join-Path $PSScriptRoot $script
+    if (Test-Path $scriptPath) {
+        try {
+            & $scriptPath
+        } catch {
+            LogError "$script failed: $_"
+        }
+    } else {
+        LogWarn "$script not found -- skipping"
+    }
+}
+
+# --- Exit ---
+if ($errors -gt 0) {
+    Log "FAILED with $errors error(s). See log: $logFile"
+    exit 1
+} else {
+    Log "COMPLETED successfully"
+    exit 0
+}
