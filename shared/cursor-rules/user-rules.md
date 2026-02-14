@@ -23,10 +23,10 @@ The `setup-user-cursor` script copies this to your clipboard automatically.
 
 ## Cross-Platform Awareness
 
-- I work on both Windows 11 and macOS — both are first-class
+- I work on both Windows 11 and macOS -- both are first-class
 - Use forward slashes and `$HOME`/`~` in path references when possible
 - Projects live in git repos under `~/repos/` (macOS) / `C:\repos\` (Windows)
-- Some legacy projects still on Google Drive (`G:\My Drive\` / `~/Google Drive/My Drive/`) — migrate to git repos over time
+- Some legacy projects still on Google Drive (`G:\My Drive\` / `~/Google Drive/My Drive/`) -- migrate to git repos over time
 
 ## Git Conventions
 
@@ -36,6 +36,6 @@ The `setup-user-cursor` script copies this to your clipboard automatically.
 
 ## Communication Style
 
-- Be concise — skip filler and caveats
+- Be concise -- skip filler and caveats
 - Explain the "why" behind non-obvious decisions
 - Don't add docstrings, comments, or type annotations to code you didn't change

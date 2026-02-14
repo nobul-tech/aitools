@@ -18,15 +18,15 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Cross-Platform Awareness
 
-- I work on both Windows 11 and macOS — both are first-class, ensure a seamless experience on either
+- I work on both Windows 11 and macOS -- both are first-class, ensure a seamless experience on either
 - Use forward slashes and `$HOME`/`~` in path references
 - Projects live in git repos under `~/repos/` (macOS) / `C:\repos\` (Windows)
-- Some legacy projects still on Google Drive (`G:\My Drive\` / `~/Google Drive/My Drive/`) — migrate to git repos over time
-- **After creating `.sh` files on Windows**, always run `git update-index --chmod=+x <file>` before committing — Windows doesn't set the Unix executable bit
+- Some legacy projects still on Google Drive (`G:\My Drive\` / `~/Google Drive/My Drive/`) -- migrate to git repos over time
+- **After creating `.sh` files on Windows**, always run `git update-index --chmod=+x <file>` before committing -- Windows doesn't set the Unix executable bit
 
 ## Tools & Workflow
 
-- **Cursor**: IDE and workspace environment — used to create projects, open folders, browse files, and use extensions. Provides embeddings
+- **Cursor**: IDE and workspace environment -- used to create projects, open folders, browse files, and use extensions. Provides embeddings
 - **Claude Code**: AI coding assistant, run within Cursor's integrated terminal
 - **Marker**: Preferred PDF-to-markdown converter
 

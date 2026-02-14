@@ -1,5 +1,5 @@
 ---
-description: Default Cursor rules template — copy to new projects as .cursor/rules/general.mdc
+description: Default Cursor rules template -- copy to new projects as .cursor/rules/general.mdc
 globs:
 alwaysApply: true
 ---
@@ -13,12 +13,12 @@ alwaysApply: true
 
 - Prefer standard library over third-party dependencies when reasonable
 - Use type annotations (Python type hints, TypeScript types)
-- Keep code simple and readable — avoid premature abstraction
+- Keep code simple and readable -- avoid premature abstraction
 
 ## Cross-Platform Awareness
 
 Both machines are used for development:
-- **Windows 11** — PowerShell, Git Bash
-- **macOS** — zsh/bash
+- **Windows 11** -- PowerShell, Git Bash
+- **macOS** -- zsh/bash
 
 When writing paths or scripts, consider both platforms unless the project is platform-specific.
