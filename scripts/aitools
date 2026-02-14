@@ -365,10 +365,12 @@ fi
 
 # [1/N] Pull latest
 echo "[1/$STEPS] Pulling latest..."
+pulled_updates=false
 if pull_out=$(cd "$repo_path" && git pull origin main 2>&1); then
     if echo "$pull_out" | grep -q "Already up to date"; then
         echo "  Already up to date."
     else
+        pulled_updates=true
         echo "  Updated."
     fi
 else
@@ -419,8 +421,18 @@ if $do_install; then
     fi
 else
     echo ""
-    echo "Synced. ($(repo_version "$repo_path"))"
-    echo "Run 'aitools install' to deploy configurations."
+    if $pulled_updates; then
+        echo "Updated. ($(repo_version "$repo_path"))"
+        # Show what changed
+        cd "$repo_path" && git log --oneline ORIG_HEAD..HEAD 2>/dev/null | while read -r line; do
+            echo "  $line"
+        done
+        echo ""
+        echo "Run 'aitools install' to apply changes."
+    else
+        echo "Synced. ($(repo_version "$repo_path"))"
+        echo "Run 'aitools install' to deploy configurations."
+    fi
 fi
 
 # Self-update: bake version into installed copy AFTER installer
