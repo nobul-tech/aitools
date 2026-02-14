@@ -317,7 +317,7 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
         if (Get-Command claude -ErrorAction SilentlyContinue) {
             LogOk "Claude Code installed ($(claude --version 2>$null | Select-Object -First 1))"
         } else {
-            LogWarn "Claude Code installed — restart terminal to use"
+            LogWarn "Claude Code installed -- restart terminal to use"
         }
     } catch {
         LogError "Claude Code install failed: $_"
@@ -331,7 +331,7 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
 Log "Step 10: Vercel CLI"
 
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-    LogWarn "npm not found — skipping Vercel CLI (install Node.js first)"
+    LogWarn "npm not found -- skipping Vercel CLI (install Node.js first)"
 } elseif (Get-Command vercel -ErrorAction SilentlyContinue) {
     LogOk "Vercel CLI already installed ($(vercel --version 2>$null | Select-Object -First 1))"
 } else {
