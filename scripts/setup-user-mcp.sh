@@ -49,6 +49,10 @@ add_mcp_server() {
     local name="$1"
     shift
 
+    # Unset CLAUDECODE to allow running inside a Claude Code session
+    local saved_claudecode="${CLAUDECODE:-}"
+    unset CLAUDECODE
+
     # Remove existing (ignore errors if not found)
     if claude mcp remove "$name" --scope user 2>/dev/null; then
         log "Removed existing $name config"
@@ -59,6 +63,11 @@ add_mcp_server() {
         log_ok "$name configured"
     else
         log_error "Failed to add $name"
+    fi
+
+    # Restore CLAUDECODE
+    if [ -n "$saved_claudecode" ]; then
+        export CLAUDECODE="$saved_claudecode"
     fi
 }
 

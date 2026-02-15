@@ -23,12 +23,11 @@ USER_RULES_PATH="${1:-$SCRIPT_DIR/../shared/cursor-rules/user-rules.md}"
 CURSOR_DIR="$HOME/.cursor"
 CLI_CONFIG="$CURSOR_DIR/cli-config.json"
 
-# Track status for summary
-declare -A STATUS
-STATUS[ripgrep]=""
-STATUS[cursorCli]=""
-STATUS[cliConfig]=""
-STATUS[userRules]=""
+# Track status for summary (plain vars -- bash 3.2 compat, no associative arrays)
+STATUS_ripgrep=""
+STATUS_cursorCli=""
+STATUS_cliConfig=""
+STATUS_userRules=""
 
 # --- 1. ripgrep (rg) ---
 
@@ -38,7 +37,7 @@ echo "--- Step 1: ripgrep (rg) ---"
 if command -v rg &>/dev/null; then
     RG_VERSION=$(rg --version | head -1)
     echo "Already installed: $RG_VERSION"
-    STATUS[ripgrep]="already installed ($RG_VERSION)"
+    STATUS_ripgrep="already installed ($RG_VERSION)"
 else
     if command -v brew &>/dev/null; then
         echo "Installing ripgrep via brew..."
@@ -47,18 +46,18 @@ else
         if command -v rg &>/dev/null; then
             RG_VERSION=$(rg --version | head -1)
             echo "Installed: $RG_VERSION"
-            STATUS[ripgrep]="installed ($RG_VERSION)"
+            STATUS_ripgrep="installed ($RG_VERSION)"
         else
             echo "WARNING: brew install completed but 'rg' not found in PATH."
             echo "You may need to restart your terminal."
-            STATUS[ripgrep]="installed (restart terminal to verify)"
+            STATUS_ripgrep="installed (restart terminal to verify)"
         fi
     else
         echo "WARNING: Homebrew not found. Install ripgrep manually:"
         echo "  brew install ripgrep"
         echo "  -- or --"
         echo "  https://github.com/BurntSushi/ripgrep#installation"
-        STATUS[ripgrep]="SKIPPED (brew not found)"
+        STATUS_ripgrep="SKIPPED (brew not found)"
     fi
 fi
 
@@ -70,7 +69,7 @@ echo "--- Step 2: Cursor CLI (agent) ---"
 if command -v agent &>/dev/null; then
     AGENT_VERSION=$(agent --version)
     echo "Already installed: $AGENT_VERSION"
-    STATUS[cursorCli]="already installed ($AGENT_VERSION)"
+    STATUS_cursorCli="already installed ($AGENT_VERSION)"
 else
     echo "Installing Cursor CLI..."
     curl https://cursor.com/install -fsS | bash
@@ -78,11 +77,11 @@ else
     if command -v agent &>/dev/null; then
         AGENT_VERSION=$(agent --version)
         echo "Installed: $AGENT_VERSION"
-        STATUS[cursorCli]="installed ($AGENT_VERSION)"
+        STATUS_cursorCli="installed ($AGENT_VERSION)"
     else
         echo "WARNING: Cursor CLI install completed but 'agent' not found in PATH."
         echo "You may need to restart your terminal."
-        STATUS[cursorCli]="installed (restart terminal to verify)"
+        STATUS_cursorCli="installed (restart terminal to verify)"
     fi
 fi
 
@@ -108,16 +107,16 @@ if [ -f "$CLI_CONFIG" ]; then
     EXISTING_CONFIG=$(cat "$CLI_CONFIG")
     if [ "$EXISTING_CONFIG" = "$EXPECTED_CONFIG" ]; then
         echo "Already up to date: $CLI_CONFIG"
-        STATUS[cliConfig]="already up to date"
+        STATUS_cliConfig="already up to date"
     else
         printf '%s' "$EXPECTED_CONFIG" > "$CLI_CONFIG"
         echo "Updated: $CLI_CONFIG"
-        STATUS[cliConfig]="updated"
+        STATUS_cliConfig="updated"
     fi
 else
     printf '%s' "$EXPECTED_CONFIG" > "$CLI_CONFIG"
     echo "Created: $CLI_CONFIG"
-    STATUS[cliConfig]="created"
+    STATUS_cliConfig="created"
 fi
 
 # --- 4. Copy User Rules to clipboard ---
@@ -140,11 +139,11 @@ if [ -f "$USER_RULES_PATH" ]; then
     echo "--- Preview ---"
     cat "$USER_RULES_PATH"
     echo "--- End ---"
-    STATUS[userRules]="copied to clipboard -- paste into Cursor Settings > Rules"
+    STATUS_userRules="copied to clipboard -- paste into Cursor Settings > Rules"
 else
     echo "WARNING: User Rules file not found at $USER_RULES_PATH"
     echo "Skipping clipboard copy. Check the path and re-run."
-    STATUS[userRules]="SKIPPED (file not found)"
+    STATUS_userRules="SKIPPED (file not found)"
 fi
 
 # --- Summary ---
@@ -152,10 +151,10 @@ fi
 echo ""
 echo "=============================="
 echo "Summary:"
-echo "  ripgrep:       ${STATUS[ripgrep]}"
-echo "  Cursor CLI:    ${STATUS[cursorCli]}"
-echo "  cli-config:    ${STATUS[cliConfig]}"
-echo "  User Rules:    ${STATUS[userRules]}"
+echo "  ripgrep:       ${STATUS_ripgrep}"
+echo "  Cursor CLI:    ${STATUS_cursorCli}"
+echo "  cli-config:    ${STATUS_cliConfig}"
+echo "  User Rules:    ${STATUS_userRules}"
 echo "=============================="
 
 # Open User Rules file so user can see what to paste
