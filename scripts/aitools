@@ -11,6 +11,15 @@ AITOOLS_INSTALLED_VERSION="dev"
 main() {
 
 # ---------------------------------------------------------------------------
+# OS guard -- this script is for macOS/Linux only
+# ---------------------------------------------------------------------------
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        echo "ERROR: This script is for macOS/Linux. On Windows, use aitools.ps1 instead." >&2
+        return 1 ;;
+esac
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -392,26 +401,7 @@ if $do_install; then
     # [3/3] Run installer (output visible to user)
     echo "[3/$STEPS] Running installer..."
     echo ""
-    case "$(uname -s)" in
-        MINGW*|MSYS*)
-            # Windows: use PowerShell installer (runs all 4 deploy scripts)
-            ps_args=()
-            for arg in "${passthrough[@]}"; do
-                case "$arg" in
-                    --skip-gh-auth)         ps_args+=("-SkipGhAuth") ;;
-                    --skip-drive-detection) ps_args+=("-SkipDriveDetection") ;;
-                    --repos-path)           ps_args+=("-ReposPath") ;;
-                    *)                      ps_args+=("$arg") ;;
-                esac
-            done
-            powershell.exe -NoProfile -ExecutionPolicy Bypass \
-                -File "$(cygpath -w "$repo_path/scripts/aitools-install.ps1")" \
-                "${ps_args[@]}"
-            ;;
-        *)
-            bash "$repo_path/scripts/aitools-install.sh" "${passthrough[@]}" < /dev/null
-            ;;
-    esac
+    bash "$repo_path/scripts/aitools-install.sh" "${passthrough[@]}" < /dev/null
     installer_rc=$?
     echo ""
     if [ $installer_rc -eq 0 ]; then

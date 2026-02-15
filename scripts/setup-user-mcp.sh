@@ -22,6 +22,13 @@ log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_
 log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; }
 
+# --- OS guard ---
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        log_error "This script is for macOS/Linux. On Windows, use ${SCRIPT_NAME}.ps1 instead."
+        exit 1 ;;
+esac
+
 # Check that claude CLI is available
 if ! command -v claude &> /dev/null; then
     log_error "'claude' CLI not found in PATH. Install Claude Code first: https://claude.ai/download"

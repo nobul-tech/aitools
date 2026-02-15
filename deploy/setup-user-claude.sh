@@ -6,6 +6,13 @@
 
 set -euo pipefail
 
+
+# --- OS guard ---
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        echo "ERROR: This script is for macOS/Linux. On Windows, use the .ps1 version." >&2
+        exit 1 ;;
+esac
 # --- Logging ---
 LOG_DIR="$HOME/Library/Logs"
 [ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ai-tooling"
@@ -58,15 +65,15 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Cross-Platform Awareness
 
-- I work on both Windows 11 and macOS — both are first-class, ensure a seamless experience on either
+- I work on both Windows 11 and macOS -- both are first-class, ensure a seamless experience on either
 - Use forward slashes and `$HOME`/`~` in path references
 - Projects live in git repos under `~/repos/` (macOS) / `C:\repos\` (Windows)
-- Some legacy projects still on Google Drive (`G:\My Drive\` / `~/Google Drive/My Drive/`) — migrate to git repos over time
-- **After creating `.sh` files on Windows**, always run `git update-index --chmod=+x <file>` before committing — Windows doesn't set the Unix executable bit
+- Some legacy projects still on Google Drive (`G:\My Drive\` / `~/Google Drive/My Drive/`) -- migrate to git repos over time
+- **After creating `.sh` files on Windows**, always run `git update-index --chmod=+x <file>` before committing -- Windows doesn't set the Unix executable bit
 
 ## Tools & Workflow
 
-- **Cursor**: IDE and workspace environment — used to create projects, open folders, browse files, and use extensions. Provides embeddings
+- **Cursor**: IDE and workspace environment -- used to create projects, open folders, browse files, and use extensions. Provides embeddings
 - **Claude Code**: AI coding assistant, run within Cursor's integrated terminal
 - **Marker**: Preferred PDF-to-markdown converter
 
@@ -84,6 +91,12 @@ Three servers at user level. Chrome DevTools enabled globally; Vercel/Webflow di
 - **Check status**: `aitools mcp`
 - **Manual enable** (Claude Code): add `MCP(vercel)` to `.claude/settings.local.json` `permissions.allow`
 - **Manual enable** (Cursor CLI): `agent mcp enable vercel`
+
+## Knowledge Management
+
+- **Strongly prefer CLAUDE.md and project docs over auto memory.** Auto memory (`~/.claude/projects/.../memory/`) is local to each machine and does not sync. Durable project knowledge belongs in git-tracked files: `CLAUDE.md`, `reference/`, or `.claude/rules/`.
+- Auto memory should only hold ephemeral, machine-specific notes (e.g., tool quirks on this OS).
+- **Planning workflow:** When starting a major plan, spot-check auto memory (`MEMORY.md`) and migrate any project knowledge into the repo before proceeding.
 
 ## Git Conventions
 

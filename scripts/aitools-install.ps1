@@ -228,15 +228,27 @@ LogOk "Config written to $configFile"
 # ============================================================
 Log "Step 6: Install aitools command"
 
-$aitoolsSrc = Join-Path $PSScriptRoot "aitools"
 $localBin = Join-Path $env:USERPROFILE ".local\bin"
-$aitoolsDst = Join-Path $localBin "aitools"
 if (-not (Test-Path $localBin)) { New-Item -ItemType Directory -Path $localBin -Force | Out-Null }
+
+# Install bash aitools (for Git Bash compatibility)
+$aitoolsSrc = Join-Path $PSScriptRoot "aitools"
+$aitoolsDst = Join-Path $localBin "aitools"
 if (Test-Path $aitoolsSrc) {
     Copy-Item $aitoolsSrc $aitoolsDst -Force
-    LogOk "Installed aitools to $aitoolsDst"
+    LogOk "Installed aitools (bash) to $aitoolsDst"
 } else {
-    LogWarn "aitools source not found (MDM deploy -- skipping)"
+    LogWarn "aitools bash source not found (MDM deploy -- skipping)"
+}
+
+# Install PowerShell aitools.ps1 (native Windows CLI)
+$aitoolsPs1Src = Join-Path $PSScriptRoot "aitools.ps1"
+$aitoolsPs1Dst = Join-Path $localBin "aitools.ps1"
+if (Test-Path $aitoolsPs1Src) {
+    Copy-Item $aitoolsPs1Src $aitoolsPs1Dst -Force
+    LogOk "Installed aitools.ps1 to $aitoolsPs1Dst"
+} else {
+    LogWarn "aitools.ps1 source not found (MDM deploy -- skipping)"
 }
 
 # ============================================================
@@ -262,7 +274,7 @@ if (Test-Path $aliasesPath) {
 
 $marker
 . "$aliasesAbs"
-function aitools { & "`$env:ProgramFiles\Git\bin\bash.exe" "`$HOME\.local\bin\aitools" @args; if (`$LASTEXITCODE) { return `$LASTEXITCODE } }
+function aitools { & "`$HOME\.local\bin\aitools.ps1" @args }
 "@
         Add-Content -Path $PROFILE -Value $integration
         LogOk "Added shell integration to $PROFILE"

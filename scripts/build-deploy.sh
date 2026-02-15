@@ -117,6 +117,32 @@ EXIT_PS1
 }
 
 # ============================================================
+# OS guard helpers (embedded into template-generated deploy scripts)
+# ============================================================
+bash_os_guard() {
+    cat <<'OS_GUARD_BASH'
+
+# --- OS guard ---
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        echo "ERROR: This script is for macOS/Linux. On Windows, use the .ps1 version." >&2
+        exit 1 ;;
+esac
+OS_GUARD_BASH
+}
+
+ps1_os_guard() {
+    cat <<'OS_GUARD_PS1'
+
+# --- OS guard ---
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    Write-Error "This script is for Windows. On macOS/Linux, use the .sh version."
+    exit 1
+}
+OS_GUARD_PS1
+}
+
+# ============================================================
 # 1. deploy/setup-user-claude.sh
 # ============================================================
 echo "Generating deploy/setup-user-claude.sh ..."
@@ -132,6 +158,7 @@ echo "Generating deploy/setup-user-claude.sh ..."
 set -euo pipefail
 
 BLOCK
+    bash_os_guard
     bash_logging_helpers "setup-user-claude"
     cat <<'BLOCK'
 
@@ -192,6 +219,7 @@ echo "Generating deploy/setup-user-claude.ps1 ..."
 
 BLOCK
     ps1_logging_helpers "setup-user-claude"
+    ps1_os_guard
     cat <<'BLOCK'
 
 # --- Auto-detect machine info ---
@@ -259,6 +287,7 @@ echo "Generating deploy/setup-user-cursor.sh ..."
 set -euo pipefail
 
 BLOCK
+    bash_os_guard
     bash_logging_helpers "setup-user-cursor"
     cat <<'BLOCK'
 
@@ -378,6 +407,7 @@ echo "Generating deploy/setup-user-cursor.ps1 ..."
 
 BLOCK
     ps1_logging_helpers "setup-user-cursor"
+    ps1_os_guard
     cat <<'BLOCK'
 
 # Helper: refresh PATH from registry (picks up winget installs in same session)

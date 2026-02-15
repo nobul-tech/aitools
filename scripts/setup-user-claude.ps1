@@ -5,6 +5,12 @@ param(
     [string]$SharedPath = (Join-Path $PSScriptRoot "..\shared\claude-shared.md")
 )
 
+# --- OS guard ---
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    Write-Error "This script is for Windows. On macOS/Linux, use the .sh version."
+    exit 1
+}
+
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
 $claudeMd = Join-Path $claudeDir "CLAUDE.md"
 

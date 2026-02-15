@@ -4,6 +4,13 @@
 
 set -euo pipefail
 
+# --- OS guard ---
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        echo "ERROR: This script is for macOS/Linux. On Windows, use the .ps1 version." >&2
+        exit 1 ;;
+esac
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SHARED_PATH="${1:-$SCRIPT_DIR/../shared/claude-shared.md}"
 

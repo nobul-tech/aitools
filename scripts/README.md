@@ -2,6 +2,15 @@
 
 Setup and utility scripts for configuring AI tooling across machines.
 
+## CLI Entry Points
+
+| Script | Platform | Purpose |
+|--------|----------|---------|
+| `aitools` | macOS/Linux (bash) | CLI: pull + rebuild, install, --addmcp, mcp status |
+| `aitools.ps1` | Windows (PowerShell) | CLI: same commands, native PowerShell implementation |
+| `aitools-install.sh` | macOS/Linux | Full installer (tools + deploy configs) |
+| `aitools-install.ps1` | Windows | Full installer (tools + deploy configs) |
+
 ## Setup Scripts
 
 | Script | Platform | Purpose |
@@ -14,6 +23,14 @@ Setup and utility scripts for configuring AI tooling across machines.
 | `setup-user-cursor.sh` | macOS/Linux | Installs ripgrep + Cursor CLI, writes `cli-config.json`, copies User Rules to clipboard |
 | `setup-cursor-mcp.ps1` | Windows | Writes `~/.cursor/mcp.json` with MCP servers for Cursor |
 | `setup-cursor-mcp.sh` | macOS/Linux | Writes `~/.cursor/mcp.json` with MCP servers for Cursor |
+
+## OS Guards
+
+All scripts include OS guards that reject wrong-platform execution:
+- `.sh` scripts reject Windows (MINGW/MSYS/CYGWIN) with a message to use `.ps1`
+- `.ps1` scripts reject macOS/Linux (pwsh 6+) with a message to use `.sh`
+
+This prevents `.sh` deploy scripts from accidentally running on Windows via Git Bash.
 
 ## Usage
 

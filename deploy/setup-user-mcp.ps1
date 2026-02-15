@@ -21,6 +21,12 @@ function Log($msg) {
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg" }
 
+# --- OS guard ---
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    LogError "This script is for Windows. On macOS/Linux, use the .sh version."
+    exit 1
+}
+
 # Check that claude CLI is available
 if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
     LogError "'claude' CLI not found in PATH. Install Claude Code first: https://claude.ai/download"
@@ -61,8 +67,8 @@ function Add-McpServer {
 
 Log "Setting up MCP servers for Claude Code (user scope)..."
 
-# Chrome DevTools — local stdio server via npx
-Add-McpServer -Name "chrome-devtools" -AddArgs @("chrome-devtools", "--scope", "user", "npx", "chrome-devtools-mcp@latest")
+# Chrome DevTools — local stdio server via npx (Windows needs cmd /c wrapper)
+Add-McpServer -Name "chrome-devtools" -AddArgs @("chrome-devtools", "--scope", "user", "cmd", "/c", "npx", "chrome-devtools-mcp@latest")
 
 # Vercel — remote HTTP server (disabled by default via deny rules below)
 Add-McpServer -Name "vercel" -AddArgs @("--transport", "http", "--scope", "user", "vercel", "https://mcp.vercel.com")
@@ -74,7 +80,7 @@ Add-McpServer -Name "webflow" -AddArgs @("--transport", "http", "--scope", "user
 # Vercel and Webflow are disabled by default at user level.
 # Projects enable them via .claude/settings.local.json (aitools --addmcp).
 
-$settingsFile = Join-Path $env:USERPROFILE ".claude" "settings.json"
+$settingsFile = Join-Path (Join-Path $env:USERPROFILE ".claude") "settings.json"
 $settingsDir = Split-Path $settingsFile -Parent
 Log "Merging deny rules into $settingsFile..."
 

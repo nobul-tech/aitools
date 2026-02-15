@@ -26,6 +26,13 @@ log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_
 log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; }
 
+# --- OS guard ---
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        log_error "This script is for macOS/Linux. On Windows, use ${SCRIPT_NAME}.ps1 instead."
+        exit 1 ;;
+esac
+
 # Check that Node.js is available (required for Chrome DevTools MCP)
 if ! command -v node &> /dev/null; then
     log_error "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"

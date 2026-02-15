@@ -20,6 +20,12 @@ function Log($msg) {
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg" }
 
+# --- OS guard ---
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    LogError "This script is for Windows. On macOS/Linux, use the .sh version."
+    exit 1
+}
+
 # Check that claude CLI is available
 if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
     LogError "'claude' CLI not found in PATH. Install Claude Code first: https://claude.ai/download"

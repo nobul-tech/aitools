@@ -9,6 +9,13 @@
 
 set -euo pipefail
 
+# --- OS guard -- this script is for macOS/Linux only ---
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        echo "ERROR: This script is for macOS/Linux. On Windows, use aitools-install.ps1 instead." >&2
+        exit 1 ;;
+esac
+
 # --- Defaults ---
 REPOS_PATH=""
 SKIP_DRIVE_DETECTION=false
@@ -477,14 +484,6 @@ fi
 log "Step 11: Deploy configurations"
 
 DEPLOY_SCRIPTS="setup-user-claude.sh setup-user-cursor.sh setup-user-mcp.sh setup-cursor-mcp.sh"
-
-# On Windows (Git Bash / MSYS2), skip scripts that only work on macOS/Linux
-case "$(uname -s)" in
-    MINGW*|MSYS*)
-        DEPLOY_SCRIPTS="setup-user-claude.sh setup-cursor-mcp.sh"
-        log "Windows detected — skipping setup-user-cursor.sh, setup-user-mcp.sh (use .ps1 versions)"
-        ;;
-esac
 
 for script in $DEPLOY_SCRIPTS; do
     script_path="$SCRIPT_DIR/$script"

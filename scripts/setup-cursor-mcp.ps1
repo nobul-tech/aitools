@@ -23,6 +23,12 @@ function Log($msg) {
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg" }
 
+# --- OS guard ---
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    LogError "This script is for Windows. On macOS/Linux, use the .sh version."
+    exit 1
+}
+
 # Check that Node.js is available (required for Chrome DevTools MCP)
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     LogError "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"

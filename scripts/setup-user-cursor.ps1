@@ -11,6 +11,12 @@ param(
     [string]$UserRulesPath = (Join-Path $PSScriptRoot "..\shared\cursor-rules\user-rules.md")
 )
 
+# --- OS guard ---
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    Write-Error "This script is for Windows. On macOS/Linux, use the .sh version."
+    exit 1
+}
+
 $cursorDir = Join-Path $env:USERPROFILE ".cursor"
 $cliConfig = Join-Path $cursorDir "cli-config.json"
 
