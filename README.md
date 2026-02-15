@@ -7,7 +7,7 @@ Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude C
 | Directory | Purpose |
 |-----------|---------|
 | `shared/` | Source of truth: Claude prefs, Cursor rules, shell aliases, MCP docs |
-| `scripts/` | Source setup scripts + `build-deploy.sh` build pipeline |
+| `scripts/` | `aitools` CLI, installers, setup scripts, `build-deploy.sh` pipeline |
 | `deploy/` | Generated self-contained scripts (MDM-ready, no repo needed) |
 | `.claude/rules/` | Claude Code project rules |
 | `.cursor/rules/` | Cursor project rules (.mdc format) |
@@ -21,9 +21,32 @@ Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude C
 
 ## Quick start
 
-### Deploy to a machine
+### Install on a new machine
 
-Run these from the `deploy/` directory — no repo needed on the target machine:
+Clone the repo and run the installer:
+
+```bash
+# macOS/Linux
+git clone https://github.com/<org>/ai-tooling.git ~/repos/ai-tooling
+bash ~/repos/ai-tooling/scripts/aitools-install.sh
+
+# Windows (PowerShell)
+git clone https://github.com/<org>/ai-tooling.git C:\repos\ai-tooling
+C:\repos\ai-tooling\scripts\aitools-install.ps1
+```
+
+After install, the `aitools` command is available:
+
+```bash
+aitools                          # Pull latest + rebuild (self-update)
+aitools install                  # Install/update all tools + deploy configs
+aitools mcp                      # Show MCP server status
+aitools --addmcp vercel          # Enable MCP server for current project
+```
+
+### Deploy to a machine (no repo needed)
+
+Run these from the `deploy/` directory -- self-contained, MDM-ready:
 
 ```powershell
 # Claude Code user preferences
