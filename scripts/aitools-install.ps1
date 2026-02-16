@@ -269,17 +269,31 @@ if (Test-Path $aliasesPath) {
         $content = ""
     }
 
-    if ($content -notmatch [regex]::Escape($marker)) {
-        $integration = @"
-
+    $desiredBlock = @"
 $marker
 . "$aliasesAbs"
 function aitools { & "`$HOME\.local\bin\aitools.ps1" @args }
 "@
-        Add-Content -Path $PROFILE -Value $integration
+
+    if ($content -notmatch [regex]::Escape($marker)) {
+        Add-Content -Path $PROFILE -Value "`n$desiredBlock"
         LogOk "Added shell integration to $PROFILE"
     } else {
-        LogOk "Shell integration already in $PROFILE"
+        # Upgrade: remove old block (marker + following non-empty lines), re-add current
+        $lines = @(Get-Content $PROFILE)
+        $result = @()
+        $i = 0
+        while ($i -lt $lines.Count) {
+            if ($lines[$i] -match [regex]::Escape($marker)) {
+                $i++  # skip marker
+                while ($i -lt $lines.Count -and $lines[$i].Trim() -ne '') { $i++ }
+            } else {
+                $result += $lines[$i]
+                $i++
+            }
+        }
+        Set-Content $PROFILE -Value (($result -join "`n") + "`n`n$desiredBlock`n")
+        LogOk "Updated shell integration in $PROFILE"
     }
 } else {
     LogWarn "aliases.ps1 not found -- skipping shell integration (MDM deploy)"
