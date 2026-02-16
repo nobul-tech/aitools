@@ -531,7 +531,27 @@ echo "Copying deploy/setup-cursor-mcp.ps1 ..."
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
-# 7-8. deploy/setup-user-mcp.sh and .ps1 (copy as-is)
+# 7-8. deploy/setup-vercelcli.sh and .ps1 (copy as-is)
+# ============================================================
+echo "Copying deploy/setup-vercelcli.sh ..."
+{
+    echo '#!/usr/bin/env bash'
+    echo "$HEADER_COMMENT_BASH"
+    # Strip the shebang from source and append the rest
+    tail -n +2 "$SCRIPTS_DIR/setup-vercelcli.sh"
+} > "$DEPLOY_DIR/setup-vercelcli.sh"
+chmod +x "$DEPLOY_DIR/setup-vercelcli.sh"
+GENERATED=$((GENERATED + 1))
+
+echo "Copying deploy/setup-vercelcli.ps1 ..."
+{
+    echo "$HEADER_COMMENT_PS1"
+    cat "$SCRIPTS_DIR/setup-vercelcli.ps1"
+} > "$DEPLOY_DIR/setup-vercelcli.ps1"
+GENERATED=$((GENERATED + 1))
+
+# ============================================================
+# 9-10. deploy/setup-user-mcp.sh and .ps1 (copy as-is)
 # ============================================================
 echo "Copying deploy/setup-user-mcp.sh ..."
 {

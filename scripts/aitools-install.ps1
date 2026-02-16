@@ -353,22 +353,13 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
 # ============================================================
 # 10. Vercel CLI
 # ============================================================
-# Source: https://vercel.com/docs/cli
 Log "Step 10: Vercel CLI"
 
-if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-    LogWarn "npm not found -- skipping Vercel CLI (install Node.js first)"
-} elseif (Get-Command vercel -ErrorAction SilentlyContinue) {
-    LogOk "Vercel CLI already installed ($(vercel --version 2>$null | Select-Object -First 1))"
+$vercelScript = Join-Path $PSScriptRoot "setup-vercelcli.ps1"
+if (Test-Path $vercelScript) {
+    try { & $vercelScript } catch { LogError "setup-vercelcli.ps1 failed: $_" }
 } else {
-    Log "Installing Vercel CLI via npm..."
-    npm install -g vercel 2>$null
-    Refresh-Path
-    if (Get-Command vercel -ErrorAction SilentlyContinue) {
-        LogOk "Vercel CLI installed ($(vercel --version 2>$null | Select-Object -First 1))"
-    } else {
-        LogError "Vercel CLI install failed"
-    }
+    LogWarn "setup-vercelcli.ps1 not found -- skipping (MDM deploy)"
 }
 
 # ============================================================

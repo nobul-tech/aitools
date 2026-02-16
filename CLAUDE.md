@@ -66,8 +66,8 @@ python conversionutils/pdf_to_man_markdown.py --help
 - Session notes are ephemeral; durable knowledge goes in CLAUDE.md or reference/ docs (auto-memory is local to each machine, not shared)
 - Shared preferences live in `shared/claude-shared.md`, embedded into deploy scripts by `build-deploy.sh`
 - `deploy/` scripts are self-contained (zero dependencies beyond bash/PowerShell) -- MDM-ready
-- Each script has `.sh` + `.ps1` pair; OS guards reject wrong-platform execution
-- `aitools` (bash) and `aitools.ps1` (PowerShell) are native per-platform CLIs -- no cross-shell dispatch
+- Each script has `.sh` + `.ps1` pair; deploy scripts use hard OS guards, `aitools` bash forwards to PS1 on Windows
+- Each managed tool gets dedicated `setup-<tool>.sh` + `.ps1` scripts in `scripts/`, copied to `deploy/` by build; `aitools-install` delegates to these
 - `reference/tool-install-sources.md` is the source of truth for install commands -- always check before modifying installer scripts
 - Only use official repos/orgs for docs; verify npm package ownership with `npm view <pkg> repository.url`
 - `claude mcp add` can't run inside nested Claude Code sessions -- `--addmcp` has a node fallback

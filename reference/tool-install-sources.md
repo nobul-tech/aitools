@@ -49,16 +49,18 @@ Last verified: 2026-02-14
 
 ### Install
 
-| Method | Command |
-|--------|---------|
-| npm | `npm i -g vercel` |
-| pnpm | `pnpm i -g vercel` |
-| yarn | `yarn global add vercel` |
-| bun | `bun i -g vercel` |
+| Method | Command | Claude Code compatible? | Notes |
+|--------|---------|------------------------|-------|
+| Homebrew (macOS) | `brew install vercel-cli` | Yes | Preferred on macOS |
+| npm | `npm i -g vercel` | Unreliable on macOS | Works on Windows |
+| pnpm | `pnpm i -g vercel` | Unreliable on macOS | |
+| yarn | `yarn global add vercel` | Unreliable on macOS | |
+| bun | `bun i -g vercel` | Unreliable on macOS | |
 
 ### Update
 
-Re-run the install command. The CLI notifies when updates are available.
+- Homebrew: `brew upgrade vercel-cli`
+- npm/pnpm/yarn/bun: Re-run the install command. The CLI notifies when updates are available.
 
 ### Check Version
 
@@ -66,11 +68,22 @@ Re-run the install command. The CLI notifies when updates are available.
 vercel --version
 ```
 
+### Claude Code PATH Issues
+
+On macOS, `npm install -g` puts binaries in npm's global prefix bin (e.g. `~/.npm-global/bin/`), which Claude Code's Bash tool often doesn't include in its PATH. Homebrew installs to `/opt/homebrew/bin/` (Apple Silicon) or `/usr/local/bin/` (Intel), both reliably in PATH.
+
+On Windows, npm is the only option (no winget package, no standalone binary). The install scripts verify PATH after install and warn if the directory isn't persistent.
+
+Related issues:
+- [#5202](https://github.com/anthropics/claude-code/issues/5202) — Claude Code PATH doesn't include npm global bin
+- [#3838](https://github.com/anthropics/claude-code/issues/3838) — Bash tool PATH limitations
+
 ### Notes
 
 - Official docs show `npm i vercel` (local install). For global CLI usage, add `-g` flag.
 - Permission errors on macOS: see npm's guide on resolving EACCES errors. Avoid `sudo npm install -g`.
 - Has built-in `vercel mcp` command for MCP client configuration.
+- No winget package or standalone binary available for Windows.
 
 ---
 

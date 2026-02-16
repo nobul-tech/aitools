@@ -470,26 +470,13 @@ fi
 # ============================================================
 # 10. Vercel CLI
 # ============================================================
-# Source: https://vercel.com/docs/cli
 log "Step 10: Vercel CLI"
 
-if ! command -v npm &>/dev/null; then
-    log_warn "npm not found — skipping Vercel CLI (install Node.js first)"
-elif command -v vercel &>/dev/null; then
-    log_ok "Vercel CLI already installed ($(vercel --version 2>/dev/null | head -1))"
+vercel_script="$SCRIPT_DIR/setup-vercelcli.sh"
+if [ -f "$vercel_script" ]; then
+    bash "$vercel_script" || log_error "setup-vercelcli.sh failed"
 else
-    log "Installing Vercel CLI via npm..."
-    npm install -g vercel 2>/dev/null || {
-        if [ "$OS_NAME" = "Darwin" ]; then
-            log "Retrying with sudo..."
-            sudo npm install -g vercel 2>/dev/null
-        fi
-    }
-    if command -v vercel &>/dev/null; then
-        log_ok "Vercel CLI installed ($(vercel --version 2>/dev/null | head -1))"
-    else
-        log_error "Vercel CLI install failed"
-    fi
+    log_warn "setup-vercelcli.sh not found — skipping (MDM deploy)"
 fi
 
 # ============================================================
