@@ -79,4 +79,5 @@ python conversionutils/pdf_to_man_markdown.py --help
 - Keep this file under 200 lines; use `@reference/` imports for detail
 
 @reference/claude-code-practices.md
+@reference/claude-code-windows-shell.md
 @reference/cursor-practices.md
