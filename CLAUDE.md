@@ -1,6 +1,6 @@
 # AI Tooling Hub
 
-Jose's cross-machine scaffolding for Claude Code, Cursor, Warp, and MCP across Windows and macOS.
+Jose's cross-machine scaffolding for Claude Code, Cursor, and MCP across Windows and macOS.
 
 ## Project Structure
 
@@ -69,7 +69,7 @@ python conversionutils/pdf_to_man_markdown.py --help
 - Each script has `.sh` + `.ps1` pair; deploy scripts use hard OS guards, `aitools` bash forwards to PS1 on Windows
 - Each managed tool gets dedicated `setup-<tool>.sh` + `.ps1` scripts in `scripts/`, copied to `deploy/` by build; `aitools-install` delegates to these
 - `reference/tool-install-sources.md` is the source of truth for install commands -- always check before modifying installer scripts
-- Only use official repos/orgs for docs; verify npm package ownership with `npm view <pkg> repository.url`
+- **Tool evaluation policy**: Never recommend unverified or abandoned tools — see `reference/tool-evaluation-criteria.md` for the full framework
 - `claude mcp add` can't run inside nested Claude Code sessions -- `--addmcp` has a node fallback
 
 ## Code Conventions
@@ -82,3 +82,4 @@ python conversionutils/pdf_to_man_markdown.py --help
 @reference/claude-code-practices.md
 @reference/claude-code-windows-shell.md
 @reference/cursor-practices.md
+@reference/tool-evaluation-criteria.md

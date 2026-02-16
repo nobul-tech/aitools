@@ -65,6 +65,18 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 - Write CLI tools with `--help` support
 - Shell scripts: use `set -euo pipefail`, structured logging over bare `echo`, UTC timestamps with Z suffix
 
+## Tool & Source Evaluation
+
+Before recommending or installing any tool, extension, or package, evaluate it first.
+Reading/referencing any source is always OK — the gate applies at "install" or "recommend."
+
+- **Hard blocks** (never recommend): unverified publisher, repo inactive 2+ years, known security advisories, personal fork when official exists, typosquatting
+- **Yellow flags** (disclose and let user decide): low adoption, sole maintainer, no release in 12+ months, excessive permissions, no license
+- **Always check**: publisher/org verification, last activity date, adoption metrics, requested permissions
+- **Quick checks**: VS Code → verified badge + install count; npm → `npm view <pkg> repository.url`; PyPI → pypi.org project URL; GitHub → org vs personal account
+- Pre-approved tools in `reference/tool-install-sources.md` don't need re-evaluation
+- Full framework: `reference/tool-evaluation-criteria.md` in ai-tooling repo
+
 ## Cross-Platform Awareness
 
 - I work on both Windows 11 and macOS -- both are first-class, ensure a seamless experience on either
@@ -82,7 +94,7 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ### Per-Platform Tools
 
-- **macOS**: Terminal.app, zsh, bash, Cursor, Warp, Claude Code, pwsh (when PowerShell needed)
+- **macOS**: Terminal.app, zsh, bash, Cursor, Claude Code, pwsh (when PowerShell needed)
 - **Windows**: PowerShell, Cursor, Claude Code, Command Prompt, WSL/bash (when Linux/Unix environment needed)
 - **Note**: Claude Code on Windows always uses Git Bash (not configurable). `CLAUDE_CODE_SHELL` is broken on Windows ([#25558](https://github.com/anthropics/claude-code/issues/25558)). Use Unix shell syntax in all Claude Code sessions. To run PowerShell: `powershell.exe -NoProfile -Command '...'`
 
@@ -108,7 +120,7 @@ Full evaluation and progress log: `reference/claude-code-effectiveness.md` in ai
 
 - **Smaller batches**: Break large plans into 2-3 file chunks with verification between each, rather than 20+ file batches
 - **Test mid-session**: Paste small test runs after each change group, don't wait until the end
-- **Context management**: Use `/compact` or split into new sessions for distinct phases to avoid truncation
+- **Err on the side of caution**: When uncertain (safe tool or not? reversible action or not? compact or not?), default to the cautious path — the cost of being too careful is low, the cost of being wrong is high. Example: use `/compact` or split sessions for distinct phases rather than risking truncation
 - **Hooks**: Explore Claude Code hooks for auto-lint, auto-format, or blocking dangerous commands
 - **`@` references**: Use `@path/to/file` in prompts to pre-load files into context
 

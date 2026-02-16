@@ -6,7 +6,7 @@ alwaysApply: true
 
 # General Rules
 
-- This is Jose's AI tooling hub — configs, scripts, and reference docs for Claude Code, Cursor, Warp, and MCP.
+- This is Jose's AI tooling hub — configs, scripts, and reference docs for Claude Code, Cursor, and MCP.
 - Git identity: Jose <jose@nobul.tech>
 
 ## Cross-Platform
