@@ -94,6 +94,19 @@ if ($Help) {
 $doInstall = $Command -eq "install"
 $doMcpStatus = $Command -eq "mcp"
 
+# Reject unknown commands (typos like "installs", "mcpp", etc.)
+if ($Command -and -not $doInstall -and -not $doMcpStatus) {
+    Write-Host "error: unknown command '$Command'"
+    Write-Host "Run 'aitools --help' for usage."
+    exit 1
+}
+
+# Reject --addmcp with no server names
+if ($PSBoundParameters.ContainsKey('AddMcp') -and $AddMcp.Count -eq 0) {
+    Write-Host "error: --addmcp requires at least one server name (vercel, webflow)"
+    exit 1
+}
+
 # ---------------------------------------------------------------------------
 # Resolve repo path from config
 # ---------------------------------------------------------------------------

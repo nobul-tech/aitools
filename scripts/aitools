@@ -94,6 +94,7 @@ show_version=false
 show_help=false
 do_install=false
 do_mcp_status=false
+addmcp_seen=false
 addmcp_servers=()
 passthrough=()
 
@@ -104,6 +105,7 @@ while [[ $# -gt 0 ]]; do
         install)      do_install=true; shift ;;
         mcp)          do_mcp_status=true; shift ;;
         --addmcp)
+            addmcp_seen=true
             shift
             # Collect all following args that don't start with --
             while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
@@ -114,6 +116,19 @@ while [[ $# -gt 0 ]]; do
         *)            passthrough+=("$1"); shift ;;
     esac
 done
+
+# Reject unknown arguments when not installing (typos like "installs", "mcpp", etc.)
+if ! $do_install && [ ${#passthrough[@]} -gt 0 ]; then
+    echo "error: unknown argument '${passthrough[0]}'"
+    echo "Run 'aitools --help' for usage."
+    return 1
+fi
+
+# Reject --addmcp with no server names
+if $addmcp_seen && [ ${#addmcp_servers[@]} -eq 0 ]; then
+    echo "error: --addmcp requires at least one server name (vercel, webflow)"
+    return 1
+fi
 
 if $show_help; then
     usage
