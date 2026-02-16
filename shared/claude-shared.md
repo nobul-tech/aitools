@@ -53,6 +53,19 @@ Three servers at user level. Chrome DevTools enabled globally; Vercel/Webflow di
 - Auto memory should only hold ephemeral, machine-specific notes (e.g., tool quirks on this OS).
 - **Planning workflow:** When starting a major plan, spot-check auto memory (`MEMORY.md`) and migrate any project knowledge into the repo before proceeding.
 
+## Coaching
+
+Active improvement areas for working with Claude Code more effectively.
+Full evaluation and progress log: `reference/claude-code-effectiveness.md` in ai-tooling repo.
+
+- **Smaller batches**: Break large plans into 2-3 file chunks with verification between each, rather than 20+ file batches
+- **Test mid-session**: Paste small test runs after each change group, don't wait until the end
+- **Context management**: Use `/compact` or split into new sessions for distinct phases to avoid truncation
+- **Hooks**: Explore Claude Code hooks for auto-lint, auto-format, or blocking dangerous commands
+- **`@` references**: Use `@path/to/file` in prompts to pre-load files into context
+
+**In plan mode**: Always review these areas and proactively suggest relevant improvements (e.g., "consider breaking this into smaller batches" or "this would be a good candidate for a hook").
+
 ## Git Conventions
 
 - Commit messages: imperative mood, concise
