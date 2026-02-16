@@ -131,17 +131,23 @@ fi
 log "Step 4: User Rules"
 
 if [ -f "$USER_RULES_PATH" ]; then
+    copied=false
     if command -v pbcopy &>/dev/null; then
         pbcopy < "$USER_RULES_PATH"
+        copied=true
     elif command -v xclip &>/dev/null; then
         xclip -selection clipboard < "$USER_RULES_PATH"
-    else
-        log_warn "No clipboard command found (pbcopy/xclip). Content shown below -- copy manually."
+        copied=true
     fi
 
-    log_ok "Copied to clipboard from: $(display_path "$USER_RULES_PATH")"
-    log "Paste into: Cursor Settings > Rules"
-    STATUS_userRules="copied to clipboard -- paste into Cursor Settings > Rules"
+    if $copied; then
+        log_ok "Copied to clipboard from: $(display_path "$USER_RULES_PATH")"
+        log "Paste into: Cursor Settings > Rules"
+        STATUS_userRules="copied to clipboard -- paste into Cursor Settings > Rules"
+    else
+        log_warn "No clipboard command found (pbcopy/xclip). Copy manually from: $(display_path "$USER_RULES_PATH")"
+        STATUS_userRules="NOT copied (no clipboard tool) -- copy manually"
+    fi
 else
     log_warn "User Rules file not found at $(display_path "$USER_RULES_PATH"). Skipping clipboard copy."
     STATUS_userRules="SKIPPED (file not found)"
