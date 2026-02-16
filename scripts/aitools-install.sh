@@ -9,13 +9,6 @@
 
 set -euo pipefail
 
-# --- OS guard -- this script is for macOS/Linux only ---
-case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*)
-        echo "ERROR: This script is for macOS/Linux. On Windows, use aitools-install.ps1 instead." >&2
-        exit 1 ;;
-esac
-
 # --- Defaults ---
 REPOS_PATH=""
 SKIP_DRIVE_DETECTION=false
@@ -68,6 +61,27 @@ Interactive behavior:
 USAGE
     exit 0
 fi
+
+# --- Windows forwarding (safety net for direct invocation) ---
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        ps1_installer="$(dirname "$0")/aitools-install.ps1"
+        if [ ! -f "$ps1_installer" ]; then
+            echo "error: aitools-install.ps1 not found" >&2
+            exit 1
+        fi
+        ps_args=()
+        if $SKIP_GH_AUTH; then ps_args+=("-SkipGhAuth"); fi
+        if $SKIP_DRIVE_DETECTION; then ps_args+=("-SkipDriveDetection"); fi
+        if [ -n "$REPOS_PATH" ]; then
+            ps_args+=("-ReposPath" "$(cygpath -w "$REPOS_PATH")")
+        fi
+        echo "Windows detected -- forwarding to PowerShell installer..."
+        powershell.exe -NoProfile -ExecutionPolicy Bypass \
+            -File "$(cygpath -w "$ps1_installer")" "${ps_args[@]}"
+        exit $?
+        ;;
+esac
 
 # --- Logging ---
 LOG_DIR="$HOME/Library/Logs/ai-tooling"

@@ -11,15 +11,6 @@ AITOOLS_INSTALLED_VERSION="dev"
 main() {
 
 # ---------------------------------------------------------------------------
-# OS guard -- this script is for macOS/Linux only
-# ---------------------------------------------------------------------------
-case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*)
-        echo "ERROR: This script is for macOS/Linux. On Windows, use aitools.ps1 instead." >&2
-        return 1 ;;
-esac
-
-# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -401,7 +392,32 @@ if $do_install; then
     # [3/3] Run installer (output visible to user)
     echo "[3/$STEPS] Running installer..."
     echo ""
-    bash "$repo_path/scripts/aitools-install.sh" "${passthrough[@]}" < /dev/null
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            # Windows: forward to PowerShell installer with translated flags
+            ps_args=()
+            local i=0
+            while [ $i -lt ${#passthrough[@]} ]; do
+                case "${passthrough[$i]}" in
+                    --skip-gh-auth)         ps_args+=("-SkipGhAuth") ;;
+                    --skip-drive-detection) ps_args+=("-SkipDriveDetection") ;;
+                    --repos-path)
+                        ps_args+=("-ReposPath")
+                        i=$((i + 1))
+                        ps_args+=("$(cygpath -w "${passthrough[$i]}")")
+                        ;;
+                    *) ps_args+=("${passthrough[$i]}") ;;
+                esac
+                i=$((i + 1))
+            done
+            powershell.exe -NoProfile -ExecutionPolicy Bypass \
+                -File "$(cygpath -w "$repo_path/scripts/aitools-install.ps1")" \
+                "${ps_args[@]}"
+            ;;
+        *)
+            bash "$repo_path/scripts/aitools-install.sh" "${passthrough[@]}" < /dev/null
+            ;;
+    esac
     installer_rc=$?
     echo ""
     if [ $installer_rc -eq 0 ]; then
@@ -432,6 +448,16 @@ if [ -f "$repo_path/scripts/aitools" ]; then
     sed "s/^AITOOLS_INSTALLED_VERSION=.*/AITOOLS_INSTALLED_VERSION=\"$new_version\"/" \
         "$repo_path/scripts/aitools" > "$HOME/.local/bin/aitools"
     chmod +x "$HOME/.local/bin/aitools"
+
+    # On Windows, also self-update aitools.ps1
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            if [ -f "$repo_path/scripts/aitools.ps1" ]; then
+                sed 's/^\$AITOOLS_INSTALLED_VERSION = ".*"/$AITOOLS_INSTALLED_VERSION = "'"$new_version"'"/' \
+                    "$repo_path/scripts/aitools.ps1" > "$HOME/.local/bin/aitools.ps1"
+            fi
+            ;;
+    esac
 fi
 
 unset AITOOLS_RUN_ID
