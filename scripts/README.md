@@ -23,14 +23,16 @@ Setup and utility scripts for configuring AI tooling across machines.
 | `setup-user-cursor.sh` | macOS/Linux | Installs ripgrep + Cursor CLI, writes `cli-config.json`, copies User Rules to clipboard |
 | `setup-cursor-mcp.ps1` | Windows | Writes `~/.cursor/mcp.json` with MCP servers for Cursor |
 | `setup-cursor-mcp.sh` | macOS/Linux | Writes `~/.cursor/mcp.json` with MCP servers for Cursor |
+| `setup-vercelcli.ps1` | Windows | Installs/updates Vercel CLI via npm |
+| `setup-vercelcli.sh` | macOS/Linux | Installs/updates Vercel CLI via Homebrew (macOS) or npm (Linux) |
 
 ## OS Guards
 
-All scripts include OS guards that reject wrong-platform execution:
-- `.sh` scripts reject Windows (MINGW/MSYS/CYGWIN) with a message to use `.ps1`
-- `.ps1` scripts reject macOS/Linux (pwsh 6+) with a message to use `.sh`
+All scripts include OS guards:
+- **Setup scripts** (`.sh`/`.ps1`): Hard-block the wrong platform with an error and exit
+- **CLI entry points** (`aitools`, `aitools-install.sh`): Detect Windows and forward to the `.ps1` variant via `powershell.exe -File` instead of hard-blocking
 
-This prevents `.sh` deploy scripts from accidentally running on Windows via Git Bash.
+This prevents deploy scripts from accidentally running on the wrong platform, while the CLI entry points provide a seamless cross-platform experience.
 
 ## Usage
 
@@ -89,3 +91,15 @@ Safe to re-run — replaces `~/.cursor/mcp.json` with the latest config.
 After running, restart Cursor and go to **Cursor Settings > Tools & MCP** to verify servers appear and authenticate Vercel + Webflow.
 
 See `shared/mcp/README.md` for details on each server.
+
+### Vercel CLI
+
+```powershell
+# Windows
+.\scripts\setup-vercelcli.ps1
+
+# macOS
+bash scripts/setup-vercelcli.sh
+```
+
+Safe to re-run — detects existing install and upgrades or migrates as needed. On macOS, uses Homebrew for Claude Code PATH compatibility.

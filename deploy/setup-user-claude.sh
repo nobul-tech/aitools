@@ -10,7 +10,7 @@ set -euo pipefail
 # --- OS guard ---
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
-        echo "ERROR: This script is for macOS/Linux. On Windows, use the .ps1 version." >&2
+        log_error "This script is for macOS/Linux. On Windows, use the .ps1 version."
         exit 1 ;;
 esac
 # --- Logging ---
@@ -22,9 +22,10 @@ ERRORS=0
 
 mkdir -p "$LOG_DIR"
 
-log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%S)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
+log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
 log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
+log_warn()  { log "WARN: $1"; }
 
 # --- Auto-detect machine info ---
 OS_NAME=$(uname -s)
@@ -62,6 +63,7 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 - Use type hints in Python; use TypeScript over plain JS
 - Favor standard library over third-party when the gap is small
 - Write CLI tools with `--help` support
+- Shell scripts: use `set -euo pipefail`, structured logging over bare `echo`, UTC timestamps with Z suffix
 
 ## Cross-Platform Awareness
 
@@ -75,6 +77,7 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 - **Cursor**: IDE and workspace environment -- used to create projects, open folders, browse files, and use extensions. Provides embeddings
 - **Claude Code**: AI coding assistant, run within Cursor's integrated terminal
+- **aitools**: Cross-platform CLI for managing tool installs, configs, and MCP servers. Source: `~/repos/ai-tooling/`
 - **Marker**: Preferred PDF-to-markdown converter
 
 ### Per-Platform Tools

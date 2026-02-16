@@ -5,9 +5,25 @@ param(
     [string]$SharedPath = (Join-Path $PSScriptRoot "..\shared\claude-shared.md")
 )
 
+# --- Logging ---
+$logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
+$logFile = Join-Path $logDir "deploy.log"
+$scriptName = "setup-user-claude"
+if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+
+function Log($msg) {
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $line = "[$ts] [$scriptName] $msg"
+    Write-Host $line
+    Add-Content -Path $logFile -Value $line
+}
+function LogOk($msg)    { Log "OK: $msg" }
+function LogError($msg) { Log "ERROR: $msg" }
+function LogWarn($msg)  { Log "WARN: $msg" }
+
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
-    Write-Error "This script is for Windows. On macOS/Linux, use the .sh version."
+    LogError "This script is for Windows. On macOS/Linux, use the .sh version."
     exit 1
 }
 
@@ -17,18 +33,18 @@ $claudeMd = Join-Path $claudeDir "CLAUDE.md"
 # Ensure ~/.claude/ exists
 if (-not (Test-Path $claudeDir)) {
     New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
-    Write-Host "Created $claudeDir"
+    Log "Created $claudeDir"
 }
 
 # Remove existing file so we always write the latest version
 if (Test-Path $claudeMd) {
     Remove-Item $claudeMd
-    Write-Host "Removed existing $claudeMd"
+    Log "Removed existing $claudeMd"
 }
 
 # Verify shared file exists
 if (-not (Test-Path $SharedPath)) {
-    Write-Error "Shared preferences not found at: $SharedPath"
+    LogError "Shared preferences not found at: $SharedPath"
     exit 1
 }
 
@@ -45,5 +61,5 @@ $sharedContent
 "@
 
 Set-Content -Path $claudeMd -Value $content -Encoding UTF8
-Write-Host "Wrote user-level CLAUDE.md at $claudeMd"
-Write-Host "Inlined shared preferences from: $SharedPath"
+LogOk "Wrote $claudeMd"
+Log "Inlined shared preferences from: $SharedPath"

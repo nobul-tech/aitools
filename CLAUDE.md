@@ -76,6 +76,7 @@ python conversionutils/pdf_to_man_markdown.py --help
 
 - Python 3.10+, type hints, `argparse` for CLI, `pathlib.Path` over `os.path`
 - Scripts (this repo): provide both `.ps1` and `.sh` variants since this repo is cross-platform
+- Script logging: all setup scripts use structured logging — `log`/`log_ok`/`log_error`/`log_warn` (bash) and `Log`/`LogOk`/`LogError`/`LogWarn` (PS1). Block order: logging → OS guard → script body. Gold standard: `scripts/setup-vercelcli.sh/.ps1`
 - Keep this file under 200 lines; use `@reference/` imports for detail
 
 @reference/claude-code-practices.md

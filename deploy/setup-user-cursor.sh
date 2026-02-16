@@ -16,7 +16,7 @@ set -euo pipefail
 # --- OS guard ---
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
-        echo "ERROR: This script is for macOS/Linux. On Windows, use the .ps1 version." >&2
+        log_error "This script is for macOS/Linux. On Windows, use the .ps1 version."
         exit 1 ;;
 esac
 # --- Logging ---
@@ -28,9 +28,10 @@ ERRORS=0
 
 mkdir -p "$LOG_DIR"
 
-log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%S)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
+log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
 log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
+log_warn()  { log "WARN: $1"; }
 
 CURSOR_DIR="$HOME/.cursor"
 CLI_CONFIG="$CURSOR_DIR/cli-config.json"

@@ -21,6 +21,7 @@ display_path() {
 log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
 log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; }
+log_warn()  { log "WARN: $1"; }
 
 # --- OS guard ---
 case "$(uname -s)" in

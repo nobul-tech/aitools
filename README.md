@@ -64,6 +64,10 @@ bash deploy/setup-user-mcp.sh           # macOS
 # Cursor MCP servers
 bash deploy/setup-cursor-mcp.sh         # macOS
 .\deploy\setup-cursor-mcp.ps1           # Windows
+
+# Vercel CLI
+bash deploy/setup-vercelcli.sh          # macOS
+.\deploy\setup-vercelcli.ps1            # Windows
 ```
 
 ### Develop / maintain configs

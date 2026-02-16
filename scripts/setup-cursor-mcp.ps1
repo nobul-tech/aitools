@@ -22,6 +22,7 @@ function Log($msg) {
 }
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg" }
+function LogWarn($msg)  { Log "WARN: $msg" }
 
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {

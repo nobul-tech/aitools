@@ -18,17 +18,18 @@ $errors = 0
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 
 function Log($msg) {
-    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss")
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $line = "[$ts] [$scriptName] $msg"
     Write-Host $line
     Add-Content -Path $logFile -Value $line
 }
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
+function LogWarn($msg)  { Log "WARN: $msg" }
 
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
-    Write-Error "This script is for Windows. On macOS/Linux, use the .sh version."
+    LogError "This script is for Windows. On macOS/Linux, use the .sh version."
     exit 1
 }
 

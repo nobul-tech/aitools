@@ -10,10 +10,25 @@
 
 set -euo pipefail
 
+# --- Logging ---
+LOG_DIR="$HOME/Library/Logs/ai-tooling"
+[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ai-tooling"
+LOG_FILE="$LOG_DIR/deploy.log"
+SCRIPT_NAME="setup-user-cursor"
+mkdir -p "$LOG_DIR"
+
+display_path() {
+    if command -v cygpath &>/dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
+log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
+log_ok()    { log "OK: $1"; }
+log_error() { log "ERROR: $1"; }
+log_warn()  { log "WARN: $1"; }
+
 # --- OS guard ---
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
-        echo "ERROR: This script is for macOS/Linux. On Windows, use the .ps1 version." >&2
+        log_error "This script is for macOS/Linux. On Windows, use ${SCRIPT_NAME}.ps1 instead."
         exit 1 ;;
 esac
 
@@ -31,64 +46,56 @@ STATUS_userRules=""
 
 # --- 1. ripgrep (rg) ---
 
-echo ""
-echo "--- Step 1: ripgrep (rg) ---"
+log "Step 1: ripgrep (rg)"
 
 if command -v rg &>/dev/null; then
     RG_VERSION=$(rg --version | head -1)
-    echo "Already installed: $RG_VERSION"
+    log_ok "Already installed: $RG_VERSION"
     STATUS_ripgrep="already installed ($RG_VERSION)"
 else
     if command -v brew &>/dev/null; then
-        echo "Installing ripgrep via brew..."
+        log "Installing ripgrep via brew..."
         brew install ripgrep
 
         if command -v rg &>/dev/null; then
             RG_VERSION=$(rg --version | head -1)
-            echo "Installed: $RG_VERSION"
+            log_ok "Installed: $RG_VERSION"
             STATUS_ripgrep="installed ($RG_VERSION)"
         else
-            echo "WARNING: brew install completed but 'rg' not found in PATH."
-            echo "You may need to restart your terminal."
+            log_warn "brew install completed but 'rg' not found in PATH. Restart terminal to verify."
             STATUS_ripgrep="installed (restart terminal to verify)"
         fi
     else
-        echo "WARNING: Homebrew not found. Install ripgrep manually:"
-        echo "  brew install ripgrep"
-        echo "  -- or --"
-        echo "  https://github.com/BurntSushi/ripgrep#installation"
+        log_warn "Homebrew not found. Install ripgrep manually: brew install ripgrep"
         STATUS_ripgrep="SKIPPED (brew not found)"
     fi
 fi
 
 # --- 2. Cursor CLI (agent) ---
 
-echo ""
-echo "--- Step 2: Cursor CLI (agent) ---"
+log "Step 2: Cursor CLI (agent)"
 
 if command -v agent &>/dev/null; then
     AGENT_VERSION=$(agent --version)
-    echo "Already installed: $AGENT_VERSION"
+    log_ok "Already installed: $AGENT_VERSION"
     STATUS_cursorCli="already installed ($AGENT_VERSION)"
 else
-    echo "Installing Cursor CLI..."
+    log "Installing Cursor CLI..."
     curl https://cursor.com/install -fsS | bash
 
     if command -v agent &>/dev/null; then
         AGENT_VERSION=$(agent --version)
-        echo "Installed: $AGENT_VERSION"
+        log_ok "Installed: $AGENT_VERSION"
         STATUS_cursorCli="installed ($AGENT_VERSION)"
     else
-        echo "WARNING: Cursor CLI install completed but 'agent' not found in PATH."
-        echo "You may need to restart your terminal."
+        log_warn "Cursor CLI install completed but 'agent' not found in PATH. Restart terminal to verify."
         STATUS_cursorCli="installed (restart terminal to verify)"
     fi
 fi
 
 # --- 3. cli-config.json ---
 
-echo ""
-echo "--- Step 3: cli-config.json ---"
+log "Step 3: cli-config.json"
 
 EXPECTED_CONFIG='{
   "version": 1,
@@ -106,23 +113,22 @@ mkdir -p "$CURSOR_DIR"
 if [ -f "$CLI_CONFIG" ]; then
     EXISTING_CONFIG=$(cat "$CLI_CONFIG")
     if [ "$EXISTING_CONFIG" = "$EXPECTED_CONFIG" ]; then
-        echo "Already up to date: $CLI_CONFIG"
+        log_ok "Already up to date: $(display_path "$CLI_CONFIG")"
         STATUS_cliConfig="already up to date"
     else
         printf '%s' "$EXPECTED_CONFIG" > "$CLI_CONFIG"
-        echo "Updated: $CLI_CONFIG"
+        log_ok "Updated: $(display_path "$CLI_CONFIG")"
         STATUS_cliConfig="updated"
     fi
 else
     printf '%s' "$EXPECTED_CONFIG" > "$CLI_CONFIG"
-    echo "Created: $CLI_CONFIG"
+    log_ok "Created: $(display_path "$CLI_CONFIG")"
     STATUS_cliConfig="created"
 fi
 
 # --- 4. Copy User Rules to clipboard ---
 
-echo ""
-echo "--- Step 4: User Rules ---"
+log "Step 4: User Rules"
 
 if [ -f "$USER_RULES_PATH" ]; then
     if command -v pbcopy &>/dev/null; then
@@ -130,32 +136,26 @@ if [ -f "$USER_RULES_PATH" ]; then
     elif command -v xclip &>/dev/null; then
         xclip -selection clipboard < "$USER_RULES_PATH"
     else
-        echo "WARNING: No clipboard command found (pbcopy/xclip). Content shown below — copy manually."
+        log_warn "No clipboard command found (pbcopy/xclip). Content shown below -- copy manually."
     fi
 
-    echo "Copied to clipboard from: $USER_RULES_PATH"
-    echo "Paste into: Cursor Settings > Rules"
-    echo ""
-    echo "--- Preview ---"
-    cat "$USER_RULES_PATH"
-    echo "--- End ---"
+    log_ok "Copied to clipboard from: $(display_path "$USER_RULES_PATH")"
+    log "Paste into: Cursor Settings > Rules"
     STATUS_userRules="copied to clipboard -- paste into Cursor Settings > Rules"
 else
-    echo "WARNING: User Rules file not found at $USER_RULES_PATH"
-    echo "Skipping clipboard copy. Check the path and re-run."
+    log_warn "User Rules file not found at $(display_path "$USER_RULES_PATH"). Skipping clipboard copy."
     STATUS_userRules="SKIPPED (file not found)"
 fi
 
 # --- Summary ---
 
-echo ""
-echo "=============================="
-echo "Summary:"
-echo "  ripgrep:       ${STATUS_ripgrep}"
-echo "  Cursor CLI:    ${STATUS_cursorCli}"
-echo "  cli-config:    ${STATUS_cliConfig}"
-echo "  User Rules:    ${STATUS_userRules}"
-echo "=============================="
+log "=============================="
+log "Summary:"
+log "  ripgrep:       ${STATUS_ripgrep}"
+log "  Cursor CLI:    ${STATUS_cursorCli}"
+log "  cli-config:    ${STATUS_cliConfig}"
+log "  User Rules:    ${STATUS_userRules}"
+log "=============================="
 
 # Open User Rules file so user can see what to paste
 if [ -f "$USER_RULES_PATH" ]; then

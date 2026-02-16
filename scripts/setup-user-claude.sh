@@ -4,10 +4,25 @@
 
 set -euo pipefail
 
+# --- Logging ---
+LOG_DIR="$HOME/Library/Logs/ai-tooling"
+[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ai-tooling"
+LOG_FILE="$LOG_DIR/deploy.log"
+SCRIPT_NAME="setup-user-claude"
+mkdir -p "$LOG_DIR"
+
+display_path() {
+    if command -v cygpath &>/dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
+log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
+log_ok()    { log "OK: $1"; }
+log_error() { log "ERROR: $1"; }
+log_warn()  { log "WARN: $1"; }
+
 # --- OS guard ---
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
-        echo "ERROR: This script is for macOS/Linux. On Windows, use the .ps1 version." >&2
+        log_error "This script is for macOS/Linux. On Windows, use ${SCRIPT_NAME}.ps1 instead."
         exit 1 ;;
 esac
 
@@ -22,14 +37,14 @@ mkdir -p "$CLAUDE_DIR"
 
 # Verify shared file exists
 if [ ! -f "$SHARED_PATH" ]; then
-    echo "Error: Shared preferences not found at: $SHARED_PATH" >&2
+    log_error "Shared preferences not found at: $(display_path "$SHARED_PATH")"
     exit 1
 fi
 
 # Remove existing file so we always write the latest version
 if [ -f "$CLAUDE_MD" ]; then
     rm "$CLAUDE_MD"
-    echo "Removed existing $CLAUDE_MD"
+    log "Removed existing $(display_path "$CLAUDE_MD")"
 fi
 
 # Read shared preferences and write inline (Cursor doesn't resolve @import)
@@ -44,5 +59,5 @@ ${SHARED_CONTENT}
 - Shell: $(basename "$SHELL")
 EOF
 
-echo "Wrote user-level CLAUDE.md at $CLAUDE_MD"
-echo "Inlined shared preferences from: $SHARED_PATH"
+log_ok "Wrote $(display_path "$CLAUDE_MD")"
+log "Inlined shared preferences from: $(display_path "$SHARED_PATH")"

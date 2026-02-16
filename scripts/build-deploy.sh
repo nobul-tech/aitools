@@ -57,9 +57,10 @@ ERRORS=0
 
 mkdir -p "$LOG_DIR"
 
-log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%S)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
+log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
 log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
+log_warn()  { log "WARN: $1"; }
 LOGGING_BASH
 }
 
@@ -76,13 +77,14 @@ ps1_logging_helpers() {
 if (-not (Test-Path \$logDir)) { New-Item -ItemType Directory -Path \$logDir -Force | Out-Null }
 
 function Log(\$msg) {
-    \$ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss")
+    \$ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     \$line = "[\$ts] [\$scriptName] \$msg"
     Write-Host \$line
     Add-Content -Path \$logFile -Value \$line
 }
 function LogOk(\$msg)    { Log "OK: \$msg" }
 function LogError(\$msg) { Log "ERROR: \$msg"; \$script:errors++ }
+function LogWarn(\$msg)  { Log "WARN: \$msg" }
 LOGGING_PS1
 }
 
@@ -125,7 +127,7 @@ bash_os_guard() {
 # --- OS guard ---
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
-        echo "ERROR: This script is for macOS/Linux. On Windows, use the .ps1 version." >&2
+        log_error "This script is for macOS/Linux. On Windows, use the .ps1 version."
         exit 1 ;;
 esac
 OS_GUARD_BASH
@@ -136,7 +138,7 @@ ps1_os_guard() {
 
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
-    Write-Error "This script is for Windows. On macOS/Linux, use the .sh version."
+    LogError "This script is for Windows. On macOS/Linux, use the .sh version."
     exit 1
 }
 OS_GUARD_PS1

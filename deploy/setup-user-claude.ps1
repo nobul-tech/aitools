@@ -12,17 +12,18 @@ $errors = 0
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 
 function Log($msg) {
-    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss")
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $line = "[$ts] [$scriptName] $msg"
     Write-Host $line
     Add-Content -Path $logFile -Value $line
 }
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
+function LogWarn($msg)  { Log "WARN: $msg" }
 
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
-    Write-Error "This script is for Windows. On macOS/Linux, use the .sh version."
+    LogError "This script is for Windows. On macOS/Linux, use the .sh version."
     exit 1
 }
 
@@ -62,6 +63,7 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 - Use type hints in Python; use TypeScript over plain JS
 - Favor standard library over third-party when the gap is small
 - Write CLI tools with `--help` support
+- Shell scripts: use `set -euo pipefail`, structured logging over bare `echo`, UTC timestamps with Z suffix
 
 ## Cross-Platform Awareness
 
@@ -75,6 +77,7 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 - **Cursor**: IDE and workspace environment -- used to create projects, open folders, browse files, and use extensions. Provides embeddings
 - **Claude Code**: AI coding assistant, run within Cursor's integrated terminal
+- **aitools**: Cross-platform CLI for managing tool installs, configs, and MCP servers. Source: `~/repos/ai-tooling/`
 - **Marker**: Preferred PDF-to-markdown converter
 
 ### Per-Platform Tools
