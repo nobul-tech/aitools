@@ -36,7 +36,7 @@ Single-quote the `-Command` argument so bash doesn't expand `$` variables meant 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "path/to/script.ps1"
 ```
 
-This is the pattern used by `aitools install` (see `scripts/aitools` line 407).
+This is the pattern used by `aitools install` (see the `install` command in `scripts/aitools`).
 
 ### Multi-line PowerShell from the Bash tool
 

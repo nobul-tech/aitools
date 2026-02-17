@@ -47,9 +47,9 @@ bash_logging_helpers() {
     local script_name="$1"
     cat <<'LOGGING_BASH'
 # --- Logging ---
-LOG_DIR="$HOME/Library/Logs"
+LOG_DIR="$HOME/Library/Logs/ai-tooling"
 [ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ai-tooling"
-LOG_FILE="$LOG_DIR/ai-tooling-deploy.log"
+LOG_FILE="$LOG_DIR/deploy.log"
 LOGGING_BASH
     echo "SCRIPT_NAME=\"$script_name\""
     cat <<'LOGGING_BASH'
@@ -200,8 +200,8 @@ echo "Generating deploy/setup-user-claude.sh ..."
 set -euo pipefail
 
 BLOCK
-    bash_os_guard
     bash_logging_helpers "setup-user-claude"
+    bash_os_guard
     bash_backup_helper
     cat <<'BLOCK'
 
@@ -333,8 +333,8 @@ echo "Generating deploy/setup-user-cursor.sh ..."
 set -euo pipefail
 
 BLOCK
-    bash_os_guard
     bash_logging_helpers "setup-user-cursor"
+    bash_os_guard
     cat <<'BLOCK'
 
 CURSOR_DIR="$HOME/.cursor"
@@ -534,11 +534,11 @@ if (Test-Path $cliConfig) {
     if ($existingConfig -eq $expectedConfig) {
         LogOk "Already up to date: $cliConfig"
     } else {
-        Set-Content -Path $cliConfig -Value $expectedConfig -Encoding UTF8 -NoNewline
+        [System.IO.File]::WriteAllText($cliConfig, $expectedConfig, [System.Text.UTF8Encoding]::new($false))
         LogOk "Updated: $cliConfig"
     }
 } else {
-    Set-Content -Path $cliConfig -Value $expectedConfig -Encoding UTF8 -NoNewline
+    [System.IO.File]::WriteAllText($cliConfig, $expectedConfig, [System.Text.UTF8Encoding]::new($false))
     LogOk "Created: $cliConfig"
 }
 

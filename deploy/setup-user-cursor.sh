@@ -12,17 +12,10 @@
 
 set -euo pipefail
 
-
-# --- OS guard ---
-case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*)
-        log_error "This script is for macOS/Linux. On Windows, use the .ps1 version."
-        exit 1 ;;
-esac
 # --- Logging ---
-LOG_DIR="$HOME/Library/Logs"
+LOG_DIR="$HOME/Library/Logs/ai-tooling"
 [ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ai-tooling"
-LOG_FILE="$LOG_DIR/ai-tooling-deploy.log"
+LOG_FILE="$LOG_DIR/deploy.log"
 SCRIPT_NAME="setup-user-cursor"
 ERRORS=0
 
@@ -32,6 +25,13 @@ log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_
 log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
+
+# --- OS guard ---
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        log_error "This script is for macOS/Linux. On Windows, use the .ps1 version."
+        exit 1 ;;
+esac
 
 CURSOR_DIR="$HOME/.cursor"
 CLI_CONFIG="$CURSOR_DIR/cli-config.json"

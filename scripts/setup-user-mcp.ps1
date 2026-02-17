@@ -17,8 +17,9 @@ function Log($msg) {
     Write-Host $line
     Add-Content -Path $logFile -Value $line
 }
+$errors = 0
 function LogOk($msg)    { Log "OK: $msg" }
-function LogError($msg) { Log "ERROR: $msg" }
+function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
 
 # --- OS guard ---
@@ -126,3 +127,12 @@ LogOk "Deny rules set for vercel, webflow in $settingsFile"
 LogOk "User-level MCP configured (all servers; vercel/webflow disabled by default)"
 Log "To enable per project: aitools --addmcp vercel"
 Log "To check status: aitools mcp"
+
+# --- Exit ---
+if ($errors -gt 0) {
+    Log "FAILED with $errors error(s). See log: $logFile"
+    exit 1
+} else {
+    Log "COMPLETED successfully"
+    exit 0
+}

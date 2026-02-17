@@ -1,5 +1,24 @@
 # aitools Release Notes
 
+## v3.2 — Deploy Script Fixes + Error Tracking (2026-02-16)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | BUG | Generated bash deploy scripts now define logging helpers before the OS guard, so `log_error` is available when the guard fires. |
+| 2 | BUG | Generated bash deploy scripts log to `~/Library/Logs/ai-tooling/deploy.log` (matching source scripts and `aitools` CLI), not `~/Library/Logs/ai-tooling-deploy.log`. |
+| 3 | BUG | `setup-cursor-mcp.ps1` and `setup-user-cursor.ps1` now write BOM-free UTF-8 via `[System.IO.File]::WriteAllText` instead of `Set-Content -Encoding UTF8`. Fixes JSON parsing issues on PowerShell 5.1. |
+
+### Improvements
+
+| # | Severity | Change |
+|---|----------|--------|
+| 4 | WARNING | `setup-user-mcp` and `setup-cursor-mcp` (both `.sh` and `.ps1`) now track errors and exit with code 1 on failure, matching the pattern used by other setup scripts. |
+| 5 | STALE | Fixed drifted line-number reference in `reference/claude-code-windows-shell.md`. |
+
+---
+
 ## v3.1 — Cross-Platform Bug Fixes (2026-02-16)
 
 ### Bug fixes

@@ -129,12 +129,12 @@ if (Test-Path $cliConfig) {
         LogOk "Already up to date: $cliConfig"
         $status.cliConfig = "already up to date"
     } else {
-        Set-Content -Path $cliConfig -Value $expectedConfig -Encoding UTF8 -NoNewline
+        [System.IO.File]::WriteAllText($cliConfig, $expectedConfig, [System.Text.UTF8Encoding]::new($false))
         LogOk "Updated: $cliConfig"
         $status.cliConfig = "updated"
     }
 } else {
-    Set-Content -Path $cliConfig -Value $expectedConfig -Encoding UTF8 -NoNewline
+    [System.IO.File]::WriteAllText($cliConfig, $expectedConfig, [System.Text.UTF8Encoding]::new($false))
     LogOk "Created: $cliConfig"
     $status.cliConfig = "created"
 }

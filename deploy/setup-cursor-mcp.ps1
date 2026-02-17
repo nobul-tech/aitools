@@ -21,8 +21,9 @@ function Log($msg) {
     Write-Host $line
     Add-Content -Path $logFile -Value $line
 }
+$errors = 0
 function LogOk($msg)    { Log "OK: $msg" }
-function LogError($msg) { Log "ERROR: $msg" }
+function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
 
 # Backup a file before overwriting. Keeps at most $MaxBackups copies.
@@ -88,7 +89,8 @@ if (Test-Path $mcpJson) {
     Log "Creating $mcpJson"
 }
 
-$config | ConvertTo-Json -Depth 10 | Set-Content $mcpJson -Encoding UTF8
+$json = $config | ConvertTo-Json -Depth 10
+[System.IO.File]::WriteAllText($mcpJson, $json, [System.Text.UTF8Encoding]::new($false))
 
 LogOk "Cursor MCP config written to $mcpJson"
 Log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
@@ -114,3 +116,12 @@ Log "Next steps:"
 Log "  1. Restart Cursor"
 Log "  2. Go to Cursor Settings > Tools & MCP to verify servers"
 Log "  3. To enable vercel/webflow per project: aitools --addmcp vercel"
+
+# --- Exit ---
+if ($errors -gt 0) {
+    Log "FAILED with $errors error(s). See log: $logFile"
+    exit 1
+} else {
+    Log "COMPLETED successfully"
+    exit 0
+}
