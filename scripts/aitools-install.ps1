@@ -57,6 +57,24 @@ function LogOk($msg)    { Log $msg "ok" }
 function LogError($msg) { Log $msg "error"; $script:errors++ }
 function LogWarn($msg)  { Log $msg "warn" }
 
+# --- Script validation helper ---
+# Validates PS1 syntax with ParseFile before executing. Skips with warning on parse errors.
+function Invoke-ValidatedScript {
+    param([string]$ScriptPath)
+    $name = Split-Path $ScriptPath -Leaf
+    $parseErrors = $null
+    $null = [System.Management.Automation.Language.Parser]::ParseFile(
+        $ScriptPath, [ref]$null, [ref]$parseErrors)
+    if ($parseErrors.Count -gt 0) {
+        LogWarn "$name has parse errors on this PowerShell version -- skipping"
+        foreach ($err in $parseErrors) {
+            Log "  line $($err.Extent.StartLineNumber): $($err.Message)" "warn"
+        }
+        return
+    }
+    try { & $ScriptPath } catch { LogError "$name failed: $_" }
+}
+
 # --- Config file setup ---
 $configDir = Join-Path $env:USERPROFILE ".config\ai-tooling"
 $configFile = Join-Path $configDir "config.json"
@@ -357,7 +375,7 @@ Log "Step 10: Vercel CLI"
 
 $vercelScript = Join-Path $PSScriptRoot "setup-vercelcli.ps1"
 if (Test-Path $vercelScript) {
-    try { & $vercelScript } catch { LogError "setup-vercelcli.ps1 failed: $_" }
+    Invoke-ValidatedScript $vercelScript
 } else {
     LogWarn "setup-vercelcli.ps1 not found -- skipping (MDM deploy)"
 }
@@ -369,7 +387,7 @@ Log "Step 11: Pandoc"
 
 $pandocScript = Join-Path $PSScriptRoot "setup-pandoc.ps1"
 if (Test-Path $pandocScript) {
-    try { & $pandocScript } catch { LogError "setup-pandoc.ps1 failed: $_" }
+    Invoke-ValidatedScript $pandocScript
 } else {
     LogWarn "setup-pandoc.ps1 not found -- skipping (MDM deploy)"
 }
@@ -389,11 +407,7 @@ $deployScripts = @(
 foreach ($script in $deployScripts) {
     $scriptPath = Join-Path $PSScriptRoot $script
     if (Test-Path $scriptPath) {
-        try {
-            & $scriptPath
-        } catch {
-            LogError "$script failed: $_"
-        }
+        Invoke-ValidatedScript $scriptPath
     } else {
         LogWarn "$script not found -- skipping"
     }

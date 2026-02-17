@@ -85,6 +85,16 @@ deploy_configs() {
             for script in $deploy_scripts; do
                 local script_path="$script_dir/$script"
                 if [ -f "$script_path" ]; then
+                    # Validate PS1 syntax before executing
+                    if ! powershell.exe -NoProfile -Command "
+                        \$e = \$null
+                        \$null = [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$script_path")', [ref]\$null, [ref]\$e)
+                        if (\$e.Count -gt 0) { exit 1 }
+                    " 2>/dev/null; then
+                        echo "  warning: $script has parse errors -- skipping"
+                        errors=$((errors + 1))
+                        continue
+                    fi
                     if ! powershell.exe -NoProfile -ExecutionPolicy Bypass \
                         -File "$(cygpath -w "$script_path")" > /dev/null 2>> "$LOG_FILE"; then
                         echo "  error: $script failed (see $LOG_DISPLAY)"
@@ -100,6 +110,12 @@ deploy_configs() {
             for script in $deploy_scripts; do
                 local script_path="$script_dir/$script"
                 if [ -f "$script_path" ]; then
+                    # Validate bash syntax before executing
+                    if ! bash -n "$script_path" 2>/dev/null; then
+                        echo "  warning: $script has syntax errors -- skipping"
+                        errors=$((errors + 1))
+                        continue
+                    fi
                     if ! bash "$script_path" > /dev/null 2>> "$LOG_FILE"; then
                         echo "  error: $script failed (see $LOG_DISPLAY)"
                         errors=$((errors + 1))
@@ -585,16 +601,30 @@ fi
 # (installer Step 6 copies the source file, so we must re-stamp after)
 if [ -f "$repo_path/scripts/aitools" ]; then
     new_version=$(repo_version "$repo_path")
-    sed "s/^AITOOLS_INSTALLED_VERSION=.*/AITOOLS_INSTALLED_VERSION=\"$new_version\"/" \
-        "$repo_path/scripts/aitools" > "$HOME/.local/bin/aitools"
-    chmod +x "$HOME/.local/bin/aitools"
 
-    # On Windows, also self-update aitools.ps1
+    # Validate bash syntax before overwriting installed copy
+    if bash -n "$repo_path/scripts/aitools" 2>/dev/null; then
+        sed "s/^AITOOLS_INSTALLED_VERSION=.*/AITOOLS_INSTALLED_VERSION=\"$new_version\"/" \
+            "$repo_path/scripts/aitools" > "$HOME/.local/bin/aitools"
+        chmod +x "$HOME/.local/bin/aitools"
+    else
+        echo "  warning: skipping bash self-update (new aitools has syntax errors)"
+    fi
+
+    # On Windows, also self-update aitools.ps1 (validate with current PS version first)
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
             if [ -f "$repo_path/scripts/aitools.ps1" ]; then
-                sed 's/^\$AITOOLS_INSTALLED_VERSION = ".*"/$AITOOLS_INSTALLED_VERSION = "'"$new_version"'"/' \
-                    "$repo_path/scripts/aitools.ps1" > "$HOME/.local/bin/aitools.ps1"
+                if powershell.exe -NoProfile -Command "
+                    \$e = \$null
+                    [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$repo_path/scripts/aitools.ps1")', [ref]\$null, [ref]\$e)
+                    if (\$e.Count -gt 0) { exit 1 }
+                " 2>/dev/null; then
+                    sed 's/^\$AITOOLS_INSTALLED_VERSION = ".*"/$AITOOLS_INSTALLED_VERSION = "'"$new_version"'"/' \
+                        "$repo_path/scripts/aitools.ps1" > "$HOME/.local/bin/aitools.ps1"
+                else
+                    echo "  warning: skipping PS1 self-update (parse errors on this PowerShell version)"
+                fi
             fi
             ;;
     esac

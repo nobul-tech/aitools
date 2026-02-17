@@ -89,6 +89,15 @@ function Deploy-Configs {
     foreach ($script in $deployScripts) {
         $scriptPath = Join-Path $ScriptDir $script
         if (Test-Path $scriptPath) {
+            # Validate PS1 syntax before executing
+            $parseErrors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile(
+                $scriptPath, [ref]$null, [ref]$parseErrors)
+            if ($parseErrors.Count -gt 0) {
+                Write-Host "  warning: $script has parse errors -- skipping"
+                $errors++
+                continue
+            }
             # Reset exit code before each script (prevents stale values from previous iteration)
             $global:LASTEXITCODE = 0
             try {
@@ -543,13 +552,19 @@ if ($doInstall) {
 # Self-update: bake version into installed copy AFTER installer
 $newVersion = Get-RepoVersion $repoPath
 
-# Update PS1 copy
+# Update PS1 copy (validate syntax on current PS version before overwriting)
 $aitoolsSrc = Join-Path $repoPath "scripts\aitools.ps1"
 $aitoolsDst = Join-Path $env:USERPROFILE ".local\bin\aitools.ps1"
 if (Test-Path $aitoolsSrc) {
-    $srcContent = Get-Content $aitoolsSrc -Raw
-    $stampedContent = $srcContent -replace '^\$AITOOLS_INSTALLED_VERSION = ".*"', "`$AITOOLS_INSTALLED_VERSION = `"$newVersion`""
-    [System.IO.File]::WriteAllText($aitoolsDst, $stampedContent, [System.Text.UTF8Encoding]::new($false))
+    $parseErrors = $null
+    $null = [System.Management.Automation.Language.Parser]::ParseFile($aitoolsSrc, [ref]$null, [ref]$parseErrors)
+    if ($parseErrors.Count -gt 0) {
+        Write-Host "  warning: skipping PS1 self-update (new aitools.ps1 has parse errors on this PowerShell version)" -ForegroundColor Yellow
+    } else {
+        $srcContent = Get-Content $aitoolsSrc -Raw
+        $stampedContent = $srcContent -replace '^\$AITOOLS_INSTALLED_VERSION = ".*"', "`$AITOOLS_INSTALLED_VERSION = `"$newVersion`""
+        [System.IO.File]::WriteAllText($aitoolsDst, $stampedContent, [System.Text.UTF8Encoding]::new($false))
+    }
 }
 
 # Update bash copy (keeps both in sync when PS1 is invoked directly)

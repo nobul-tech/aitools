@@ -12,6 +12,41 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v3.4 -- Graceful Tool Addition & Cross-Platform Safety (2026-02-17)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | BUG | `setup-pandoc.ps1` contained an em-dash (U+2014) in a string literal. PS 5.1 reads BOM-free UTF-8 as Windows-1252, where the em-dash's bytes include `0x94` (right double quotation mark), prematurely terminating the string and causing cascading parse errors. Replaced with `--`. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 2 | **Pre-validation for setup scripts**: `aitools-install.ps1` now validates PS1 scripts with `[Parser]::ParseFile` before executing. Scripts with parse errors are skipped with a warning instead of failing with cascading errors. `aitools-install.sh` does the same with `bash -n`. |
+| 3 | **Pre-validation for deploy configs**: `deploy_configs()` (bash) and `Deploy-Configs` (PS1) in the `aitools` CLI now validate each script before executing, using the same ParseFile/`bash -n` pattern. |
+| 4 | **Build-time PS1 validation** (Windows only): `build-deploy.sh` validates all generated `.ps1` deploy scripts with `ParseFile` after building. Catches encoding and syntax errors at build time. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 5 | Added ASCII-only rule for PS1 executable code to `.claude/rules/cross-platform.md`. |
+| 6 | Added pre-validation convention to `.claude/rules/cross-platform.md`. |
+| 7 | Added tested-platform convention to release notes (see below). |
+
+### Tested-platform convention
+
+Each release section ends with a tested-platform note:
+```
+**Tested on:** Windows. macOS untested for items 2, 3, 4.
+```
+
+**Tested on:** Windows. macOS untested for items 2, 3, 4.
+
+---
+
 ## v3.3 — Pandoc Integration, Tool Lifecycle, PS 5.1 Fix (2026-02-17)
 
 ### New features
@@ -20,19 +55,21 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 |---|--------|
 | 1 | **Pandoc integration**: new `setup-pandoc.sh`/`.ps1` setup scripts, `clip2md` alias for clipboard-to-markdown conversion via pandoc. |
 | 2 | **Tool lifecycle rules**: added source-of-truth review gate (`.claude/rules/sources-of-truth.md`) and tool lifecycle gate (`.claude/rules/tool-lifecycle.md`) to enforce phased tool adoption. |
+| 3 | **Self-update resilience**: `aitools` and `aitools.ps1` now validate syntax (`bash -n` / `[Parser]::ParseFile`) before overwriting the installed copy. If the repo version has parse errors on the current platform, the self-update is skipped with a warning — the working installed copy stays in place. |
 
 ### Bug fixes
 
 | # | Severity | Fix |
 |---|----------|-----|
-| 3 | BUG | `aitools.ps1` path conversion used a `-replace` scriptblock (PowerShell 7+ feature). On Windows PowerShell 5.1, the scriptblock was stringified instead of executed, producing a garbage path that caused `build-deploy.sh` to fail. Replaced with `-match`/`$Matches` which works on all PS versions. |
-| 4 | BUG | `clip2md` output now strips Gmail inline styles and empty pandoc attribute blocks (`{...}`) for cleaner markdown. |
+| 4 | BUG | `aitools.ps1` path conversion used a `-replace` scriptblock (PowerShell 7+ feature). On Windows PowerShell 5.1, the scriptblock was stringified instead of executed, producing a garbage path that caused `build-deploy.sh` to fail. Replaced with `-match`/`$Matches` which works on all PS versions. |
+| 5 | BUG | `clip2md` output now strips Gmail inline styles and empty pandoc attribute blocks (`{...}`) for cleaner markdown. |
 
 ### Documentation
 
 | # | Change |
 |---|--------|
-| 5 | Added release versioning convention to `RELEASE_NOTES.md` and `CLAUDE.md` Key Decisions. |
+| 6 | Added release versioning convention to `RELEASE_NOTES.md` and `CLAUDE.md` Key Decisions. |
+| 7 | Added PowerShell 5.1 compatibility rule to `.claude/rules/cross-platform.md` — documents minimum PS version target and common PS 7+ gotchas. |
 
 ---
 

@@ -36,3 +36,33 @@ This applies during planning (plan mode), not just implementation. If your plan 
 | Script | Why single-language | Approved | Other-platform invocation |
 |--------|-------------------|----------|--------------------------|
 | `scripts/build-deploy.sh` | Build step that produces platform-independent output (both .sh and .ps1 deploy scripts). Runs once, result committed to git. Maintaining a parallel PS1 would double maintenance for no output difference. | 2026-02-17 | `aitools.ps1` calls via Git Bash (guaranteed prerequisite): `& $bashExe "$path/build-deploy.sh"` |
+
+### PowerShell 5.1 compatibility
+
+Windows ships with PowerShell 5.1 (Windows PowerShell). All `.ps1` scripts in this repo must work on PS 5.1.
+
+Common PS 7+ features that break on 5.1:
+- `-replace` with a scriptblock (e.g., `-replace 'pat', { $_.Groups[1] }`) — use `-match`/`$Matches` instead
+- Null-coalescing `??` and null-conditional `?.` operators
+- Ternary `$x ? $a : $b` — use `if/else` instead
+- `Join-Path` with 3+ arguments — chain two calls instead
+- `Set-Content -Encoding UTF8` writes BOM on 5.1 — use `[System.IO.File]::WriteAllText()` instead
+- `[Parser]::ParseFile()` returns the AST object -- always assign to `$null` (i.e., `$null = [Parser]::ParseFile(...)`) or the full AST dumps to stdout
+
+### ASCII-only rule for PS1 executable code
+
+PS 5.1 reads BOM-free UTF-8 files using the system ANSI codepage (Windows-1252). Multi-byte UTF-8 characters (em-dash, curly quotes, ellipsis) can contain bytes that map to quote characters in Windows-1252, breaking string literals. Rules:
+- No non-ASCII characters in PS1 executable code (strings, expressions)
+- Non-ASCII in comments is tolerated but discouraged
+- Use: `--` not em-dash, `"` not smart quotes, `...` not ellipsis
+
+### Pre-validation convention
+
+When creating or modifying any `.ps1` or `.sh` script in this repo:
+- Before committing, validate syntax on the current platform:
+  - PS1: `powershell.exe -NoProfile -Command "[System.Management.Automation.Language.Parser]::ParseFile('path', [ref]$null, [ref]$e); $e"`
+  - Bash: `bash -n path/to/script.sh`
+- On Windows, always validate PS1 files (PS 5.1 catches encoding and syntax issues that PS 7 does not)
+- On macOS, always validate `.sh` files; PS1 validation requires `pwsh` (if installed)
+- If the other platform's script can't be validated locally, note it in the commit message: `(tested: macOS)` or `(tested: Windows)`
+- Note untested items in `RELEASE_NOTES.md` (see tested-platform convention)

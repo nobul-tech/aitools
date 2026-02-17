@@ -655,6 +655,45 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # Summary
 # ============================================================
+# ============================================================
+# Post-build: Validate PS1 syntax (Windows only)
+# ============================================================
+# On Windows (Git Bash), validate all generated .ps1 files with ParseFile.
+# Catches encoding issues (em-dash, smart quotes) and PS 5.1 syntax errors
+# at build time rather than install time.
+# On macOS, skip -- pwsh may not be installed.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        echo ""
+        echo "Validating generated PS1 scripts..."
+        PS1_ERRORS=0
+        for ps1_file in "$DEPLOY_DIR"/*.ps1; do
+            [ -f "$ps1_file" ] || continue
+            ps1_name=$(basename "$ps1_file")
+            if ! powershell.exe -NoProfile -Command "
+                \$e = \$null
+                \$null = [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$ps1_file")', [ref]\$null, [ref]\$e)
+                if (\$e.Count -gt 0) {
+                    foreach (\$err in \$e) { Write-Host \"  line \$(\$err.Extent.StartLineNumber): \$(\$err.Message)\" }
+                    exit 1
+                }
+            " 2>/dev/null; then
+                echo "  FAIL: $ps1_name has parse errors on this PowerShell version"
+                PS1_ERRORS=$((PS1_ERRORS + 1))
+            fi
+        done
+        if [ "$PS1_ERRORS" -gt 0 ]; then
+            echo "ERROR: $PS1_ERRORS PS1 file(s) failed validation" >&2
+            exit 1
+        else
+            echo "  All PS1 files passed validation."
+        fi
+        ;;
+    *)
+        # macOS/Linux: PS1 validation skipped (pwsh may not be installed)
+        ;;
+esac
+
 echo ""
 echo "========================================"
 echo "Build complete: $GENERATED scripts generated in deploy/"

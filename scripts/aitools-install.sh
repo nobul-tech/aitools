@@ -107,6 +107,18 @@ log_ok()    { log "$1" "ok"; }
 log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "$1" "warn"; }
 
+# --- Script validation helper ---
+# Validates bash syntax with bash -n before executing. Skips with warning on errors.
+validate_and_run() {
+    local script="$1"
+    local name; name=$(basename "$script")
+    if ! bash -n "$script" 2>/dev/null; then
+        log_warn "$name has syntax errors -- skipping"
+        return 0
+    fi
+    bash "$script" || log_error "$name failed"
+}
+
 # --- Display path helper ---
 # Convert MSYS/Cygwin paths to native Windows paths for log output. No-op elsewhere.
 display_path() {
@@ -474,7 +486,7 @@ log "Step 10: Vercel CLI"
 
 vercel_script="$SCRIPT_DIR/setup-vercelcli.sh"
 if [ -f "$vercel_script" ]; then
-    bash "$vercel_script" || log_error "setup-vercelcli.sh failed"
+    validate_and_run "$vercel_script"
 else
     log_warn "setup-vercelcli.sh not found — skipping (MDM deploy)"
 fi
@@ -486,7 +498,7 @@ log "Step 11: Pandoc"
 
 pandoc_script="$SCRIPT_DIR/setup-pandoc.sh"
 if [ -f "$pandoc_script" ]; then
-    bash "$pandoc_script" || log_error "setup-pandoc.sh failed"
+    validate_and_run "$pandoc_script"
 else
     log_warn "setup-pandoc.sh not found — skipping (MDM deploy)"
 fi
@@ -501,7 +513,7 @@ DEPLOY_SCRIPTS="setup-user-claude.sh setup-user-cursor.sh setup-user-mcp.sh setu
 for script in $DEPLOY_SCRIPTS; do
     script_path="$SCRIPT_DIR/$script"
     if [ -f "$script_path" ]; then
-        bash "$script_path" || log_error "$script failed"
+        validate_and_run "$script_path"
     else
         log_warn "$script not found — skipping"
     fi

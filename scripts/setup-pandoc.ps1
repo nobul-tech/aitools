@@ -1,5 +1,5 @@
-# setup-pandoc.ps1 — Installs/updates Pandoc on Windows
-# Safe to re-run — detects existing install and upgrades or migrates as needed.
+# setup-pandoc.ps1 -- Installs/updates Pandoc on Windows
+# Safe to re-run -- detects existing install and upgrades or migrates as needed.
 #
 # Windows: Uses winget (preferred). Detects and warns about non-preferred installs
 #          (Chocolatey, Conda, manual installer).
@@ -51,7 +51,7 @@ if (Get-Command pandoc -ErrorAction SilentlyContinue) {
         Refresh-Path
         LogOk "Pandoc updated ($(pandoc --version | Select-Object -First 1))"
     } else {
-        LogWarn "winget upgrade returned non-zero — pandoc may be installed via another method"
+        LogWarn "winget upgrade returned non-zero -- pandoc may be installed via another method"
         # Detect non-preferred installs
         if (Get-Command choco -ErrorAction SilentlyContinue) {
             $chocoList = choco list pandoc 2>$null | Out-String
