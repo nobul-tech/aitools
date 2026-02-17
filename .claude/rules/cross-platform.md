@@ -7,6 +7,7 @@ When writing scripts or paths **in this repo**:
 - Use forward slashes in paths when possible (works on both platforms)
 - Repos live under `~/repos/` (macOS) / `C:\repos\` (Windows); some legacy projects still on Google Drive
 - Use `$HOME` or `~` for user directory references, not hardcoded paths
+- After creating `.sh` files on Windows, always run `git update-index --chmod=+x <file>` -- Windows doesn't set the Unix executable bit
 
 ### OS guard + dispatch rule
 

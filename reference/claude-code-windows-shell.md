@@ -60,6 +60,27 @@ powershell.exe -NoProfile -Command '
 
 **Rule of thumb:** Always single-quote the outer `-Command` string. Use double quotes inside for PowerShell string interpolation.
 
+## Recommended Pattern: Write-then-Execute
+
+For anything beyond a trivial one-liner, **do not use inline `-Command`**. The quoting rules above become unmanageable for multi-statement scripts with variables, loops, or string interpolation.
+
+**Default pattern**: Write the PowerShell code to a temp `.ps1` file using the Write tool, then execute with `-File`:
+
+```bash
+# Step 1: Use the Write tool to create a temp .ps1 file with full PS syntax
+# Step 2: Execute it cleanly — no quoting issues
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "path/to/temp.ps1"
+# Step 3: Delete the temp file when done
+```
+
+Benefits:
+- No escaping between bash and PowerShell
+- Full PowerShell syntax — readable, editable with the Edit tool
+- Same pattern works for validation scripts
+- Tools like pandoc, git, etc. resolve correctly in the script's PATH context
+
+**Only use inline `-Command`** for trivial one-liners where a temp file would be overkill (e.g., `powershell.exe -Command '$PSVersionTable.PSVersion'`).
+
 ## Impact on This Repo
 
 This repo provides both `.ps1` and `.sh` variants of all scripts. On Windows, Claude Code can run `.sh` scripts natively (Git Bash) but must use the `powershell.exe -File` workaround for `.ps1` scripts.
