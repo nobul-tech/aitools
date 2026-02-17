@@ -36,10 +36,13 @@ function clip2md {
     } else {
         $html = $raw
     }
+    # Strip style/class/target attrs and bare div/span wrappers (Gmail noise)
+    $html = $html -replace '\s*(style|class|target|saferedirecturl)="[^"]*"', ''
+    $html = $html -replace '</?(?:div|span)[^>]*>', ''
     if ($OutFile) {
-        $html | pandoc -f html -t markdown -o $OutFile
+        ($html | pandoc -f html -t markdown) -replace '\{=""\}', '' | Set-Content -Path $OutFile -Encoding UTF8
         Write-Host "Saved to $OutFile"
     } else {
-        $html | pandoc -f html -t markdown
+        ($html | pandoc -f html -t markdown) -replace '\{=""\}', ''
     }
 }
