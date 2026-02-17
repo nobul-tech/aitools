@@ -56,9 +56,16 @@ function clip2md {
     }
     # Clean up pandoc output: remove empty attr blocks, stray NBSP
     $md = $md -replace '\{=""\}', '' -replace ([char]0x00A0), ' '
+    if (-not $md -or $md.Trim().Length -eq 0) {
+        Write-Error "clip2md: pandoc produced empty output"
+        return
+    }
     if ($OutFile) {
-        [System.IO.File]::WriteAllText($OutFile, $md, [System.Text.UTF8Encoding]::new($false))
-        Write-Host "Saved to $OutFile"
+        # Resolve relative paths against PowerShell's $PWD, not .NET's CWD
+        # ([IO.File]::WriteAllText uses .NET CWD which doesn't track PS cd)
+        $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutFile)
+        [System.IO.File]::WriteAllText($resolvedPath, $md, [System.Text.UTF8Encoding]::new($false))
+        Write-Host "Saved to $resolvedPath"
     } else {
         $md
     }

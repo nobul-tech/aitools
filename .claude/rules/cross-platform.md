@@ -64,6 +64,16 @@ PowerShell pipes external command output through the console's codepage (often W
 - Use temp files: write input with `[System.IO.File]::WriteAllText()`, run the command with `-o` output flag, read result with `[System.IO.File]::ReadAllText()`
 - Or set `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` before piping (session-wide side effect)
 
+### .NET vs PowerShell working directory
+
+PowerShell's `Set-Location`/`cd` changes `$PWD` but NOT `[Environment]::CurrentDirectory` (the .NET CWD). Any .NET API that takes a relative path (`[IO.File]::WriteAllText`, `[IO.File]::ReadAllText`, etc.) resolves against the .NET CWD, not `$PWD`. This causes files to be written to the wrong location.
+
+**Always resolve to absolute paths before calling .NET file APIs:**
+```powershell
+$resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($relativePath)
+[System.IO.File]::WriteAllText($resolved, $content, ...)
+```
+
 ### Pre-validation convention
 
 When creating or modifying any `.ps1` or `.sh` script in this repo:

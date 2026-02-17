@@ -78,6 +78,25 @@ Each release section ends with a tested-platform note:
 
 ---
 
+## v3.4.3 -- clip2md path resolution and empty output guard (2026-02-17)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | BUG | `clip2md` (PS1) wrote output files relative to the .NET working directory (`[Environment]::CurrentDirectory`) instead of PowerShell's `$PWD`. Files ended up in `$HOME` instead of the current directory. Fixed by resolving paths with `$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath()` before calling `[IO.File]::WriteAllText()`. |
+| 2 | BUG | `clip2md` (PS1) now shows an error if pandoc produces empty output, instead of silently writing an empty file. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 3 | Added .NET vs PowerShell working directory gotcha to `.claude/rules/cross-platform.md`. |
+
+**Tested on:** Windows (PS1 validated). macOS not affected (bash CWD tracks correctly).
+
+---
+
 ## v3.3 — Pandoc Integration, Tool Lifecycle, PS 5.1 Fix (2026-02-17)
 
 ### New features
