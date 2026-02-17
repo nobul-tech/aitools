@@ -463,7 +463,9 @@ if (-not (Test-Path $bashExe)) {
 }
 # Convert Windows path to Unix-style for Git Bash (C:\repos\... → /c/repos/...)
 $unixRepoPath = $repoPath -replace '^([A-Za-z]):\\', '/$1/' -replace '\\', '/'
-$unixRepoPath = $unixRepoPath -replace '^/([A-Za-z])/', { '/' + $_.Groups[1].Value.ToLower() + '/' }
+if ($unixRepoPath -match '^/([A-Za-z])/') {
+    $unixRepoPath = '/' + $Matches[1].ToLower() + $unixRepoPath.Substring(2)
+}
 $buildResult = & $bashExe "$unixRepoPath/scripts/build-deploy.sh" 2>&1 | Out-String
 Add-Content -Path $logFile -Value $buildResult
 if ($LASTEXITCODE -eq 0) {

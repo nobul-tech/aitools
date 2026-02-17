@@ -1,5 +1,41 @@
 # aitools Release Notes
 
+## Versioning
+
+`major.minor.patch` -- not semver (no API contract), but follows the same spirit:
+
+- **Major** (v3 → v4): structural changes to CLI commands, architecture, or project layout
+- **Minor** (v3.3): new features, new managed tools, batches of improvements
+- **Patch** (v3.3.1): isolated bug fixes with no new functionality
+
+Multiple changes on the same day roll into one release. Bug fixes ship alongside features in the same minor if they land together.
+
+---
+
+## v3.3 — Pandoc Integration, Tool Lifecycle, PS 5.1 Fix (2026-02-17)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Pandoc integration**: new `setup-pandoc.sh`/`.ps1` setup scripts, `clip2md` alias for clipboard-to-markdown conversion via pandoc. |
+| 2 | **Tool lifecycle rules**: added source-of-truth review gate (`.claude/rules/sources-of-truth.md`) and tool lifecycle gate (`.claude/rules/tool-lifecycle.md`) to enforce phased tool adoption. |
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 3 | BUG | `aitools.ps1` path conversion used a `-replace` scriptblock (PowerShell 7+ feature). On Windows PowerShell 5.1, the scriptblock was stringified instead of executed, producing a garbage path that caused `build-deploy.sh` to fail. Replaced with `-match`/`$Matches` which works on all PS versions. |
+| 4 | BUG | `clip2md` output now strips Gmail inline styles and empty pandoc attribute blocks (`{...}`) for cleaner markdown. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 5 | Added release versioning convention to `RELEASE_NOTES.md` and `CLAUDE.md` Key Decisions. |
+
+---
+
 ## v3.2 — Deploy Script Fixes + Error Tracking (2026-02-16)
 
 ### Bug fixes
