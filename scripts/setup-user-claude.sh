@@ -19,6 +19,18 @@ log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; }
 log_warn()  { log "WARN: $1"; }
 
+# Backup a file before overwriting. Keeps at most $max_backups copies.
+backup_file() {
+    local file="$1" max_backups=20
+    [ -f "$file" ] || return 0
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
+    cp "$file" "${file}.bak.${ts}"
+    # Prune oldest beyond limit
+    ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1)) | xargs rm -f 2>/dev/null
+    log "Backed up $(display_path "$file")"
+}
+
 # --- OS guard ---
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
@@ -41,7 +53,8 @@ if [ ! -f "$SHARED_PATH" ]; then
     exit 1
 fi
 
-# Remove existing file so we always write the latest version
+# Backup and remove existing file so we always write the latest version
+backup_file "$CLAUDE_MD"
 if [ -f "$CLAUDE_MD" ]; then
     rm "$CLAUDE_MD"
     log "Removed existing $(display_path "$CLAUDE_MD")"

@@ -35,8 +35,9 @@ ai-tooling/
 bash scripts/build-deploy.sh
 
 # CLI usage (after install -- same commands on both platforms)
-aitools                        # Pull latest + rebuild (self-update)
-aitools install                # Install/update all tools + deploy configs
+aitools                        # Sync configs: quiet pull + rebuild + deploy all
+aitools gitpull                # Update source: pull + deploy + changelog + version tag
+aitools install                # Full setup: pull + install tools + deploy configs
 aitools --addmcp vercel        # Add MCP server to current project
 aitools --addmcp vercel webflow  # Add multiple MCP servers
 
@@ -78,6 +79,14 @@ python conversionutils/pdf_to_man_markdown.py --help
 - Scripts (this repo): provide both `.ps1` and `.sh` variants since this repo is cross-platform
 - Script logging: all setup scripts use structured logging — `log`/`log_ok`/`log_error`/`log_warn` (bash) and `Log`/`LogOk`/`LogError`/`LogWarn` (PS1). Block order: logging → OS guard → script body. Gold standard: `scripts/setup-vercelcli.sh/.ps1`
 - Keep this file under 200 lines; use `@reference/` imports for detail
+
+### Windows dispatch in `aitools` (bash)
+
+Every setup script has an OS guard that rejects the wrong platform. The bash `aitools` runs in Git Bash on Windows, so **any code path that calls `.sh` setup scripts must also handle Windows by calling `.ps1` via `powershell.exe`**. This pattern exists in `deploy_configs()` and the `install` command — check both when adding new flows.
+
+Pattern: `case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) powershell.exe -File ... ;; *) bash ... ;; esac`
+
+The PS1 `aitools.ps1` mirrors each bash command. When adding a command to one, add it to both.
 
 @reference/claude-code-practices.md
 @reference/claude-code-windows-shell.md

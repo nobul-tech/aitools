@@ -6,7 +6,7 @@ Setup and utility scripts for configuring AI tooling across machines.
 
 | Script | Platform | Purpose |
 |--------|----------|---------|
-| `aitools` | macOS/Linux (bash) | CLI: pull + rebuild, install, --addmcp, mcp status |
+| `aitools` | macOS/Linux (bash) | CLI: sync configs, gitpull, install, --addmcp, mcp status |
 | `aitools.ps1` | Windows (PowerShell) | CLI: same commands, native PowerShell implementation |
 | `aitools-install.sh` | macOS/Linux | Full installer (tools + deploy configs) |
 | `aitools-install.ps1` | Windows | Full installer (tools + deploy configs) |
@@ -46,7 +46,7 @@ This prevents deploy scripts from accidentally running on the wrong platform, wh
 bash scripts/setup-user-claude.sh
 ```
 
-Safe to re-run — replaces the existing `~/.claude/CLAUDE.md` with the latest version.
+Safe to re-run — backs up the existing file (up to 20 timestamped copies) then replaces with the latest version.
 
 ### Claude Code MCP Servers
 
@@ -86,7 +86,7 @@ After running, paste clipboard contents into **Cursor Settings > Rules**. Source
 bash scripts/setup-cursor-mcp.sh
 ```
 
-Safe to re-run — replaces `~/.cursor/mcp.json` with the latest config.
+Safe to re-run — backs up the existing file then replaces with the latest config.
 
 After running, restart Cursor and go to **Cursor Settings > Tools & MCP** to verify servers appear and authenticate Vercel + Webflow.
 

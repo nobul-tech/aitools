@@ -38,10 +38,12 @@ C:\repos\ai-tooling\scripts\aitools-install.ps1
 After install, the `aitools` command is available:
 
 ```bash
-aitools                          # Pull latest + rebuild (self-update)
-aitools install                  # Install/update all tools + deploy configs
+aitools                          # Sync configs: pull + rebuild + deploy all
+aitools gitpull                  # Update source + deploy + changelog + version tag
+aitools install                  # Full setup: install tools + deploy configs
 aitools mcp                      # Show MCP server status
 aitools --addmcp vercel          # Enable MCP server for current project
+aitools --version                # Show installed and repo version
 ```
 
 ### Deploy to a machine (no repo needed)

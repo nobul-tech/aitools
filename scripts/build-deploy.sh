@@ -119,6 +119,46 @@ EXIT_PS1
 }
 
 # ============================================================
+# Backup helpers (embedded into deploy scripts that overwrite files)
+# ============================================================
+bash_backup_helper() {
+    cat <<'BACKUP_BASH'
+
+# Backup a file before overwriting. Keeps at most $max_backups copies.
+backup_file() {
+    local file="$1" max_backups=20
+    [ -f "$file" ] || return 0
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
+    cp "$file" "${file}.bak.${ts}"
+    # Prune oldest beyond limit
+    ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1)) | xargs rm -f 2>/dev/null
+    log "Backed up $file"
+}
+BACKUP_BASH
+}
+
+ps1_backup_helper() {
+    cat <<'BACKUP_PS1'
+
+# Backup a file before overwriting. Keeps at most $MaxBackups copies.
+function Backup-File {
+    param([string]$FilePath, [int]$MaxBackups = 20)
+    if (-not (Test-Path $FilePath)) { return }
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
+    $backupPath = "${FilePath}.bak.${ts}"
+    Copy-Item -Path $FilePath -Destination $backupPath
+    # Prune oldest beyond limit
+    $backups = Get-ChildItem -Path "${FilePath}.bak.*" | Sort-Object LastWriteTime -Descending
+    if ($backups.Count -gt $MaxBackups) {
+        $backups | Select-Object -Skip $MaxBackups | Remove-Item -Force
+    }
+    Log "Backed up $FilePath"
+}
+BACKUP_PS1
+}
+
+# ============================================================
 # OS guard helpers (embedded into template-generated deploy scripts)
 # ============================================================
 bash_os_guard() {
@@ -162,6 +202,7 @@ set -euo pipefail
 BLOCK
     bash_os_guard
     bash_logging_helpers "setup-user-claude"
+    bash_backup_helper
     cat <<'BLOCK'
 
 # --- Auto-detect machine info ---
@@ -176,6 +217,7 @@ CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
 mkdir -p "$CLAUDE_DIR"
 log "Ensuring $CLAUDE_DIR exists"
 
+backup_file "$CLAUDE_MD"
 if [ -f "$CLAUDE_MD" ]; then
     rm "$CLAUDE_MD"
     log "Removed existing $CLAUDE_MD"
@@ -222,6 +264,7 @@ echo "Generating deploy/setup-user-claude.ps1 ..."
 BLOCK
     ps1_logging_helpers "setup-user-claude"
     ps1_os_guard
+    ps1_backup_helper
     cat <<'BLOCK'
 
 # --- Auto-detect machine info ---
@@ -236,6 +279,7 @@ if (-not (Test-Path $claudeDir)) {
     Log "Created $claudeDir"
 }
 
+Backup-File -FilePath $claudeMd
 if (Test-Path $claudeMd) {
     Remove-Item $claudeMd
     Log "Removed existing $claudeMd"

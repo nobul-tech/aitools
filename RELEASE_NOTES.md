@@ -1,5 +1,44 @@
 # aitools Release Notes
 
+## v3 — Config Sync, Version Tagging, Config Backups (2026-02-16)
+
+### New command structure
+
+| Command | What it does |
+|---------|-------------|
+| `aitools` (no args) | Quiet pull + rebuild + deploy all configs. Warns and continues if offline. |
+| `aitools gitpull` | Pull + rebuild + deploy + date-formatted changelog + version tag. Clones repo if missing. |
+| `aitools install` | Pull + rebuild + install all tools + deploy configs (unchanged). |
+
+**Machine-switching workflow:**
+- Arrive at machine → `aitools` (quick sync) or `aitools gitpull` (verbose changelog)
+- Full setup → `aitools install`
+
+### Version tagging
+
+`aitools gitpull` creates and pushes a version tag: `v<date>.<session>.0` (e.g., `v2026-02-16.1.0`).
+Commits after a tag are shown by `--version` as `2026-02-16.1.3` (3 commits since tag).
+Falls back to `YYYY-MM-DD (hash)` when no tags exist.
+
+### Config file backups
+
+Setup scripts now back up files before overwriting. Keeps at most 20 timestamped copies per file.
+
+| File | Backed up by |
+|------|-------------|
+| `~/.claude/CLAUDE.md` | `setup-user-claude` |
+| `~/.cursor/mcp.json` | `setup-cursor-mcp` |
+
+Backup format: `<file>.bak.<ISO-UTC-timestamp>` (e.g., `CLAUDE.md.bak.2026-02-17T023527Z`)
+
+### Cross-platform fix
+
+The bash `aitools` entry point now correctly dispatches to `.ps1` scripts via `powershell.exe` on Windows for all code paths (no-args, gitpull, install). Previously, only the `install` path had this forwarding — the new `deploy_configs()` function was missing it.
+
+Added dispatch rule documentation to user-level CLAUDE.md, project CLAUDE.md, and `.claude/rules/cross-platform.md` to prevent recurrence.
+
+---
+
 ## v2 — CLI Subcommands, MCP Restructuring, Full Tool Chain (2026-02-14)
 
 ### CLI Subcommands

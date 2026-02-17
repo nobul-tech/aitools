@@ -39,12 +39,54 @@ function Read-ConfigKey {
     return $null
 }
 
+# Version string from a git repo using tag-based scheme.
+# v2026-02-16.2.0           → 2026-02-16.2.0
+# v2026-02-16.2.0-3-gabcdef → 2026-02-16.2.3
 function Get-RepoVersion {
     param([string]$RepoPath)
     try {
+        $desc = git -C $RepoPath describe --tags --match "v*" 2>$null
+        if ($desc) {
+            $base = $desc.TrimStart("v")
+            if ($base -match '^(.+)-(\d+)-g[0-9a-f]+$') {
+                # v2026-02-16.2.0-3-gabcdef → 2026-02-16.2.3
+                $tagPart = $Matches[1]       # 2026-02-16.2.0
+                $commits = $Matches[2]       # 3
+                $prefix = $tagPart.Substring(0, $tagPart.LastIndexOf('.'))  # 2026-02-16.2
+                return "${prefix}.${commits}"
+            } else {
+                return $base                 # 2026-02-16.2.0
+            }
+        }
+        # No tags — fallback
         $log = git -C $RepoPath log -1 --format='%cd (%h)' --date=short 2>$null
         if ($log) { return $log } else { return "unknown" }
     } catch { return "unknown" }
+}
+
+# Deploy all config scripts from the repo's scripts/ directory.
+function Deploy-Configs {
+    param([string]$ScriptDir)
+    $deployScripts = @("setup-user-claude.ps1", "setup-user-mcp.ps1", "setup-cursor-mcp.ps1", "setup-user-cursor.ps1")
+    $errors = 0
+    foreach ($script in $deployScripts) {
+        $scriptPath = Join-Path $ScriptDir $script
+        if (Test-Path $scriptPath) {
+            try {
+                & $scriptPath *>> $logFile
+            } catch {
+                Write-Host "  error: $script failed (see $logFile)"
+                $errors++
+            }
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "  error: $script failed (see $logFile)"
+                $errors++
+            }
+        } else {
+            Write-Host "  warning: $script not found - skipping"
+        }
+    }
+    return $errors
 }
 
 # ---------------------------------------------------------------------------
@@ -69,8 +111,9 @@ function Show-Usage {
 Usage: aitools [COMMAND] [OPTIONS]
 
 Commands:
-  (none)               Pull latest and rebuild deploy scripts (self-update)
-  install              Install/update all tools and deploy configurations
+  (none)               Sync configs: pull + rebuild + deploy all configurations
+  gitpull              Update source: pull + rebuild + deploy + changelog + version tag
+  install              Full setup: pull + rebuild + install tools + deploy configs
   mcp                  Show MCP server status for current project
 
 Options:
@@ -92,10 +135,11 @@ if ($Help) {
 
 # Handle positional command
 $doInstall = $Command -eq "install"
+$doGitpull = $Command -eq "gitpull"
 $doMcpStatus = $Command -eq "mcp"
 
 # Reject unknown commands (typos like "installs", "mcpp", etc.)
-if ($Command -and -not $doInstall -and -not $doMcpStatus) {
+if ($Command -and -not $doInstall -and -not $doGitpull -and -not $doMcpStatus) {
     Write-Host "error: unknown command '$Command'"
     Write-Host "Run 'aitools --help' for usage."
     exit 1
@@ -313,17 +357,31 @@ fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
 }
 
 # ---------------------------------------------------------------------------
-# Verify repo exists
+# Verify repo exists (or clone if gitpull)
 # ---------------------------------------------------------------------------
 
 if (-not (Test-Path (Join-Path $repoPath ".git"))) {
-    Write-Host "error: ai-tooling repo not found at $repoPath"
-    Write-Host "Clone it first, then re-run the installer."
-    exit 1
+    if ($doGitpull) {
+        Write-Host "Repo not found - cloning..."
+        if (Get-Command gh -ErrorAction SilentlyContinue) {
+            gh repo clone nobul-jose/ai-tooling $repoPath
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "error: clone failed"
+                exit 1
+            }
+        } else {
+            Write-Host "error: gh CLI not found. Install GitHub CLI first."
+            exit 1
+        }
+    } else {
+        Write-Host "error: ai-tooling repo not found at $repoPath"
+        Write-Host "Run 'aitools gitpull' to clone the repo first."
+        exit 1
+    }
 }
 
 # ---------------------------------------------------------------------------
-# Run update (pull + rebuild)
+# Run update (pull + rebuild + deploy/install)
 # ---------------------------------------------------------------------------
 
 $logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
@@ -337,8 +395,11 @@ Write-Host ""
 
 if ($doInstall) {
     $steps = 3
+} elseif ($doGitpull) {
+    $steps = 4
 } else {
-    $steps = 2
+    # no-args: quiet pull + rebuild + deploy
+    $steps = 3
 }
 
 # [1/N] Pull latest
@@ -346,13 +407,20 @@ Write-Host "[1/$steps] Pulling latest..."
 $pulledUpdates = $false
 Push-Location $repoPath
 try {
-    $pullOut = git pull origin main 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  error: git pull failed" -ForegroundColor Red
-        Write-Host $pullOut
-        exit 1
+    if ($doGitpull) {
+        $pullOut = git pull --tags origin main 2>&1 | Out-String
+    } else {
+        $pullOut = git pull origin main 2>&1 | Out-String
     }
-    if ($pullOut -match "Already up to date") {
+    if ($LASTEXITCODE -ne 0) {
+        if ($doGitpull) {
+            Write-Host "  error: git pull failed" -ForegroundColor Red
+            Write-Host $pullOut
+            exit 1
+        } else {
+            Write-Host "  Could not reach remote - deploying from local checkout."
+        }
+    } elseif ($pullOut -match "Already up to date") {
         Write-Host "  Already up to date."
     } else {
         $pulledUpdates = $true
@@ -380,7 +448,7 @@ if ($LASTEXITCODE -eq 0) {
 }
 
 if ($doInstall) {
-    # [3/3] Run installer (output visible to user)
+    # --- install: pull + rebuild + run installer (includes deploy) ---
     Write-Host "[3/$steps] Running installer..."
     Write-Host ""
     $installerArgs = @()
@@ -395,20 +463,53 @@ if ($doInstall) {
     } else {
         Write-Host "Completed with errors (see $logFile)."
     }
-} else {
+
+} elseif ($doGitpull) {
+    # --- gitpull: pull + rebuild + deploy + changelog + version tag ---
+    Write-Host "[3/$steps] Deploying configurations..."
+    $deployRc = Deploy-Configs (Join-Path $repoPath "scripts")
+    if ($deployRc -eq 0) {
+        Write-Host "  Done."
+    } else {
+        Write-Host "  Completed with $deployRc error(s)."
+    }
+
+    Write-Host "[4/$steps] Tagging version..."
+    $today = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
+    $existingTags = git -C $repoPath tag -l "v${today}.*" 2>$null
+    $session = if ($existingTags) { @($existingTags).Count + 1 } else { 1 }
+    $tag = "v${today}.${session}.0"
+    git -C $repoPath tag $tag
+    $pushResult = git -C $repoPath push origin $tag 2>&1 | Out-String
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "  Tagged $tag"
+    } else {
+        Write-Host "  Tagged $tag (local only - push failed)"
+    }
+
     Write-Host ""
     if ($pulledUpdates) {
-        Write-Host "Updated. ($(Get-RepoVersion $repoPath))"
-        # Show what changed
+        Write-Host "Updated and deployed. ($tag)"
+        # Show date-formatted changelog (no hashes)
         Push-Location $repoPath
-        git log --oneline ORIG_HEAD..HEAD 2>$null | ForEach-Object { Write-Host "  $_" }
+        git log --format='  %ad  %s' --date=short ORIG_HEAD..HEAD 2>$null | ForEach-Object { Write-Host $_ }
         Pop-Location
-        Write-Host ""
-        Write-Host "Run 'aitools install' to apply changes."
     } else {
-        Write-Host "Synced. ($(Get-RepoVersion $repoPath))"
-        Write-Host "Run 'aitools install' to deploy configurations."
+        Write-Host "Deployed. ($tag)"
     }
+
+} else {
+    # --- no-args: quiet pull + rebuild + deploy ---
+    Write-Host "[3/$steps] Deploying configurations..."
+    $deployRc = Deploy-Configs (Join-Path $repoPath "scripts")
+    if ($deployRc -eq 0) {
+        Write-Host "  Done."
+    } else {
+        Write-Host "  Completed with $deployRc error(s)."
+    }
+
+    Write-Host ""
+    Write-Host "Configs deployed. ($(Get-RepoVersion $repoPath))"
 }
 
 # Self-update: bake version into installed copy AFTER installer

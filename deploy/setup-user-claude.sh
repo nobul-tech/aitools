@@ -27,6 +27,18 @@ log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
 
+# Backup a file before overwriting. Keeps at most $max_backups copies.
+backup_file() {
+    local file="$1" max_backups=20
+    [ -f "$file" ] || return 0
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
+    cp "$file" "${file}.bak.${ts}"
+    # Prune oldest beyond limit
+    ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1)) | xargs rm -f 2>/dev/null
+    log "Backed up $file"
+}
+
 # --- Auto-detect machine info ---
 OS_NAME=$(uname -s)
 ARCH=$(uname -m)
@@ -39,6 +51,7 @@ CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
 mkdir -p "$CLAUDE_DIR"
 log "Ensuring $CLAUDE_DIR exists"
 
+backup_file "$CLAUDE_MD"
 if [ -f "$CLAUDE_MD" ]; then
     rm "$CLAUDE_MD"
     log "Removed existing $CLAUDE_MD"
@@ -84,6 +97,19 @@ Reading/referencing any source is always OK — the gate applies at "install" or
 - Projects live in git repos under `~/repos/` (macOS) / `C:\repos\` (Windows)
 - Some legacy projects still on Google Drive (`G:\My Drive\` / `~/Google Drive/My Drive/`) -- migrate to git repos over time
 - **After creating `.sh` files on Windows**, always run `git update-index --chmod=+x <file>` before committing -- Windows doesn't set the Unix executable bit
+
+### Bash ↔ PowerShell dispatch rule
+
+Claude Code on Windows runs in Git Bash. Any bash code that invokes `.sh` scripts with OS guards (`case "$(uname -s)" in MINGW*...exit 1`) will **fail silently on Windows**. This has caused bugs repeatedly.
+
+**Rule**: When bash code calls platform-specific scripts (`.sh`/`.ps1`), always check `uname -s` and dispatch to the correct variant:
+```bash
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$ps1_path")" ;;
+    *) bash "$sh_path" ;;
+esac
+```
+Before writing a new code path that invokes `.sh` scripts, search the same file for existing `MINGW*|MSYS*` patterns and replicate them.
 
 ## Tools & Workflow
 

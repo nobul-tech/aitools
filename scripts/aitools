@@ -47,9 +47,67 @@ display_path() {
     fi
 }
 
-# Version string from a git repo: "YYYY-MM-DD (hash)"
+# Version string from a git repo using tag-based scheme.
+# v2026-02-16.2.0           → 2026-02-16.2.0
+# v2026-02-16.2.0-3-gabcdef → 2026-02-16.2.3
+# Uses bash regex instead of parameter expansion because the date
+# portion contains dashes that confuse glob-based %% and # operators.
 repo_version() {
-    git -C "$1" log -1 --format='%cd (%h)' --date=short 2>/dev/null || echo "unknown"
+    local desc
+    desc=$(git -C "$1" describe --tags --match "v*" 2>/dev/null) || true
+    if [ -n "$desc" ]; then
+        local base="${desc#v}"              # strip leading v
+        if [[ "$base" =~ ^(.*)-([0-9]+)-g[0-9a-f]+$ ]]; then
+            local tag_part="${BASH_REMATCH[1]}"   # 2026-02-16.2.0
+            local commits="${BASH_REMATCH[2]}"    # 3
+            local prefix="${tag_part%.*}"          # 2026-02-16.2
+            echo "${prefix}.${commits}"
+        else
+            echo "$base"
+        fi
+    else
+        # No tags yet — fallback to date + hash
+        git -C "$1" log -1 --format='%cd (%h)' --date=short 2>/dev/null || echo "unknown"
+    fi
+}
+
+# Deploy all config scripts from the repo's scripts/ directory.
+# On Windows (Git Bash), calls .ps1 variants via powershell.exe.
+deploy_configs() {
+    local script_dir="$1"
+    local errors=0
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            local deploy_scripts="setup-user-claude.ps1 setup-user-mcp.ps1 setup-cursor-mcp.ps1 setup-user-cursor.ps1"
+            for script in $deploy_scripts; do
+                local script_path="$script_dir/$script"
+                if [ -f "$script_path" ]; then
+                    if ! powershell.exe -NoProfile -ExecutionPolicy Bypass \
+                        -File "$(cygpath -w "$script_path")" >> "$LOG_FILE" 2>&1; then
+                        echo "  error: $script failed (see $LOG_DISPLAY)"
+                        errors=$((errors + 1))
+                    fi
+                else
+                    echo "  warning: $script not found — skipping"
+                fi
+            done
+            ;;
+        *)
+            local deploy_scripts="setup-user-claude.sh setup-user-mcp.sh setup-cursor-mcp.sh setup-user-cursor.sh"
+            for script in $deploy_scripts; do
+                local script_path="$script_dir/$script"
+                if [ -f "$script_path" ]; then
+                    if ! bash "$script_path" >> "$LOG_FILE" 2>&1; then
+                        echo "  error: $script failed (see $LOG_DISPLAY)"
+                        errors=$((errors + 1))
+                    fi
+                else
+                    echo "  warning: $script not found — skipping"
+                fi
+            done
+            ;;
+    esac
+    return $errors
 }
 
 # ---------------------------------------------------------------------------
@@ -74,8 +132,9 @@ usage() {
 Usage: aitools [COMMAND] [OPTIONS]
 
 Commands:
-  (none)               Pull latest and rebuild deploy scripts (self-update)
-  install              Install/update all tools and deploy configurations
+  (none)               Sync configs: pull + rebuild + deploy all configurations
+  gitpull              Update source: pull + rebuild + deploy + changelog + version tag
+  install              Full setup: pull + rebuild + install tools + deploy configs
   mcp                  Show MCP server status for current project
 
 Options:
@@ -93,6 +152,7 @@ EOF
 show_version=false
 show_help=false
 do_install=false
+do_gitpull=false
 do_mcp_status=false
 addmcp_seen=false
 addmcp_servers=()
@@ -103,6 +163,7 @@ while [[ $# -gt 0 ]]; do
         --version|-v) show_version=true; shift ;;
         --help|-h)    show_help=true; shift ;;
         install)      do_install=true; shift ;;
+        gitpull)      do_gitpull=true; shift ;;
         mcp)          do_mcp_status=true; shift ;;
         --addmcp)
             addmcp_seen=true
@@ -342,17 +403,30 @@ fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
 fi
 
 # ---------------------------------------------------------------------------
-# Verify repo exists
+# Verify repo exists (or clone if gitpull)
 # ---------------------------------------------------------------------------
 
 if [ ! -d "$repo_path/.git" ]; then
-    echo "error: ai-tooling repo not found at $(display_path "$repo_path")"
-    echo "Clone it first, then re-run the installer."
-    return 1
+    if $do_gitpull; then
+        echo "Repo not found — cloning..."
+        if command -v gh &>/dev/null; then
+            gh repo clone nobul-jose/ai-tooling "$repo_path" || {
+                echo "error: clone failed"
+                return 1
+            }
+        else
+            echo "error: gh CLI not found. Install GitHub CLI first."
+            return 1
+        fi
+    else
+        echo "error: ai-tooling repo not found at $(display_path "$repo_path")"
+        echo "Run 'aitools gitpull' to clone the repo first."
+        return 1
+    fi
 fi
 
 # ---------------------------------------------------------------------------
-# Run update (pull + rebuild)
+# Run update (pull + rebuild + deploy/install)
 # ---------------------------------------------------------------------------
 
 LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ai-tooling"
@@ -369,29 +443,44 @@ echo "aitools $AITOOLS_INSTALLED_VERSION"
 echo ""
 
 if $do_install; then
-    # install: pull + rebuild + run installer
     STEPS=3
-    STEP_LABEL="install"
+elif $do_gitpull; then
+    STEPS=4
 else
-    # default: pull + rebuild only
-    STEPS=2
-    STEP_LABEL="sync"
+    # no-args: quiet pull + rebuild + deploy
+    STEPS=3
 fi
 
 # [1/N] Pull latest
-echo "[1/$STEPS] Pulling latest..."
-pulled_updates=false
-if pull_out=$(cd "$repo_path" && git pull origin main 2>&1); then
-    if echo "$pull_out" | grep -q "Already up to date"; then
-        echo "  Already up to date."
+if $do_gitpull; then
+    echo "[1/$STEPS] Pulling latest..."
+    pulled_updates=false
+    if pull_out=$(cd "$repo_path" && git pull --tags origin main 2>&1); then
+        if echo "$pull_out" | grep -q "Already up to date"; then
+            echo "  Already up to date."
+        else
+            pulled_updates=true
+            echo "  Updated."
+        fi
     else
-        pulled_updates=true
-        echo "  Updated."
+        echo "  error: git pull failed" >&2
+        echo "$pull_out" >&2
+        return 1
     fi
 else
-    echo "  error: git pull failed" >&2
-    echo "$pull_out" >&2
-    return 1
+    # no-args and install: quiet pull (warn on failure, continue from local)
+    echo "[1/$STEPS] Pulling latest..."
+    pulled_updates=false
+    if pull_out=$(cd "$repo_path" && git pull origin main 2>&1); then
+        if echo "$pull_out" | grep -q "Already up to date"; then
+            echo "  Already up to date."
+        else
+            pulled_updates=true
+            echo "  Updated."
+        fi
+    else
+        echo "  Could not reach remote — deploying from local checkout."
+    fi
 fi
 
 # [2/N] Rebuild deploy scripts
@@ -404,7 +493,7 @@ else
 fi
 
 if $do_install; then
-    # [3/3] Run installer (output visible to user)
+    # --- install: pull + rebuild + run installer (includes deploy) ---
     echo "[3/$STEPS] Running installer..."
     echo ""
     case "$(uname -s)" in
@@ -440,20 +529,52 @@ if $do_install; then
     else
         echo "Completed with errors (see $(display_path "$LOG_FILE"))."
     fi
-else
+
+elif $do_gitpull; then
+    # --- gitpull: pull + rebuild + deploy + changelog + version tag ---
+    echo "[3/$STEPS] Deploying configurations..."
+    deploy_configs "$repo_path/scripts"
+    deploy_rc=$?
+    if [ $deploy_rc -eq 0 ]; then
+        echo "  Done."
+    else
+        echo "  Completed with $deploy_rc error(s)."
+    fi
+
+    echo "[4/$STEPS] Tagging version..."
+    today=$(date -u +%Y-%m-%d)
+    session=$(git -C "$repo_path" tag -l "v${today}.*" | wc -l | tr -d ' ')
+    session=$((session + 1))
+    tag="v${today}.${session}.0"
+    git -C "$repo_path" tag "$tag"
+    if git -C "$repo_path" push origin "$tag" 2>/dev/null; then
+        echo "  Tagged $tag"
+    else
+        echo "  Tagged $tag (local only — push failed)"
+    fi
+
     echo ""
     if $pulled_updates; then
-        echo "Updated. ($(repo_version "$repo_path"))"
-        # Show what changed
-        cd "$repo_path" && git log --oneline ORIG_HEAD..HEAD 2>/dev/null | while read -r line; do
-            echo "  $line"
-        done
-        echo ""
-        echo "Run 'aitools install' to apply changes."
+        echo "Updated and deployed. ($tag)"
+        # Show date-formatted changelog (no hashes)
+        cd "$repo_path" && git log --format='  %ad  %s' --date=short ORIG_HEAD..HEAD 2>/dev/null
     else
-        echo "Synced. ($(repo_version "$repo_path"))"
-        echo "Run 'aitools install' to deploy configurations."
+        echo "Deployed. ($tag)"
     fi
+
+else
+    # --- no-args: quiet pull + rebuild + deploy ---
+    echo "[3/$STEPS] Deploying configurations..."
+    deploy_configs "$repo_path/scripts"
+    deploy_rc=$?
+    if [ $deploy_rc -eq 0 ]; then
+        echo "  Done."
+    else
+        echo "  Completed with $deploy_rc error(s)."
+    fi
+
+    echo ""
+    echo "Configs deployed. ($(repo_version "$repo_path"))"
 fi
 
 # Self-update: bake version into installed copy AFTER installer
