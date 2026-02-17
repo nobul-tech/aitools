@@ -56,6 +56,14 @@ PS 5.1 reads BOM-free UTF-8 files using the system ANSI codepage (Windows-1252).
 - Non-ASCII in comments is tolerated but discouraged
 - Use: `--` not em-dash, `"` not smart quotes, `...` not ellipsis
 
+### PowerShell pipeline encoding gotcha
+
+PowerShell pipes external command output through the console's codepage (often Windows-1252), not UTF-8. Non-ASCII bytes from external tools (pandoc, curl, git, etc.) get mangled to `?` (0x3F) in the pipeline. This affects all PS versions on Windows, not just 5.1.
+
+**Never pipe UTF-8 output from external commands through PowerShell when non-ASCII content is expected.** Instead:
+- Use temp files: write input with `[System.IO.File]::WriteAllText()`, run the command with `-o` output flag, read result with `[System.IO.File]::ReadAllText()`
+- Or set `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` before piping (session-wide side effect)
+
 ### Pre-validation convention
 
 When creating or modifying any `.ps1` or `.sh` script in this repo:

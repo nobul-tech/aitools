@@ -59,6 +59,25 @@ Each release section ends with a tested-platform note:
 
 ---
 
+## v3.4.2 -- clip2md pipeline encoding fix (2026-02-17)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | BUG | `clip2md` (PS1) piped pandoc output through PowerShell, which uses the console codepage (not UTF-8). Non-ASCII characters (NBSP, curly quotes, em-dashes) were mangled to `?` (0x3F) before the `-replace` fix could match them. Rewrote to use temp files for pandoc I/O, bypassing the pipeline entirely. Also strips `&nbsp;` entities from HTML before pandoc. |
+| 2 | BUG | `clip2md` (bash) now also strips `&nbsp;` entities at the HTML stage before pandoc, as defense in depth. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 3 | Added PowerShell pipeline encoding gotcha to `.claude/rules/cross-platform.md`. |
+
+**Tested on:** Windows (PS1 validated). macOS untested for item 2.
+
+---
+
 ## v3.3 — Pandoc Integration, Tool Lifecycle, PS 5.1 Fix (2026-02-17)
 
 ### New features

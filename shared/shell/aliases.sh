@@ -38,8 +38,8 @@ clip2md() {
     echo "clip2md: no HTML content on clipboard" >&2
     return 1
   fi
-  # Strip style/class/target attrs and bare div/span wrappers (Gmail noise)
-  html=$(echo "$html" | perl -pe 's/\s*(style|class|target|saferedirecturl)="[^"]*"//gi; s/<\/?(div|span)[^>]*>//gi')
+  # Strip style/class/target attrs, bare div/span wrappers, and &nbsp; entities (Gmail noise)
+  html=$(echo "$html" | perl -pe 's/\s*(style|class|target|saferedirecturl)="[^"]*"//gi; s/<\/?(div|span)[^>]*>//gi; s/&nbsp;/ /g')
   if [ -n "$1" ]; then
     echo "$html" | pandoc -f html -t markdown | perl -pe 's/\{=""\}//g; s/\x{00A0}/ /g' > "$1"
     echo "Saved to $1"

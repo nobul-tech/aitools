@@ -19,6 +19,8 @@ function ccr { claude -c @args }
 function ccs { claude --resume @args }
 
 # Clipboard HTML -> Markdown (requires pandoc)
+# Uses temp files instead of piping to avoid PowerShell pipeline mangling
+# UTF-8 from pandoc (NBSP, curly quotes, em-dashes become ?? on Windows).
 function clip2md {
     param([string]$OutFile)
     if (-not (Get-Command pandoc -ErrorAction SilentlyContinue)) {
@@ -39,13 +41,25 @@ function clip2md {
     # Strip style/class/target attrs and bare div/span wrappers (Gmail noise)
     $html = $html -replace '\s*(style|class|target|saferedirecturl)="[^"]*"', ''
     $html = $html -replace '</?(?:div|span)[^>]*>', ''
-    # Clean up pandoc output: remove empty attr blocks and convert NBSP to regular space
-    # NBSP (U+00A0) comes from Gmail &nbsp; and renders as ?? in raw output
-    $nbsp = [char]0x00A0
+    # Replace &nbsp; entities and raw NBSP in HTML before pandoc
+    $html = $html -replace '&nbsp;', ' ' -replace ([char]0x00A0), ' '
+    # Use temp files to bypass PowerShell pipeline encoding issues
+    # (piping pandoc output through PS mangles non-ASCII UTF-8 bytes)
+    $tempIn = Join-Path ([System.IO.Path]::GetTempPath()) "clip2md_in.html"
+    $tempOut = Join-Path ([System.IO.Path]::GetTempPath()) "clip2md_out.md"
+    try {
+        [System.IO.File]::WriteAllText($tempIn, $html, [System.Text.UTF8Encoding]::new($false))
+        pandoc -f html -t markdown -o $tempOut $tempIn
+        $md = [System.IO.File]::ReadAllText($tempOut, [System.Text.UTF8Encoding]::new($false))
+    } finally {
+        Remove-Item $tempIn, $tempOut -ErrorAction SilentlyContinue
+    }
+    # Clean up pandoc output: remove empty attr blocks, stray NBSP
+    $md = $md -replace '\{=""\}', '' -replace ([char]0x00A0), ' '
     if ($OutFile) {
-        ($html | pandoc -f html -t markdown) -replace '\{=""\}', '' -replace $nbsp, ' ' | Set-Content -Path $OutFile -Encoding UTF8
+        [System.IO.File]::WriteAllText($OutFile, $md, [System.Text.UTF8Encoding]::new($false))
         Write-Host "Saved to $OutFile"
     } else {
-        ($html | pandoc -f html -t markdown) -replace '\{=""\}', '' -replace $nbsp, ' '
+        $md
     }
 }
