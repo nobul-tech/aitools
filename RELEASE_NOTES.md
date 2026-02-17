@@ -47,6 +47,18 @@ Each release section ends with a tested-platform note:
 
 ---
 
+## v3.4.1 -- clip2md NBSP fix (2026-02-17)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | BUG | `clip2md` (both `.sh` and `.ps1`) now converts non-breaking spaces (U+00A0) to regular spaces. Gmail uses `&nbsp;` extensively; pandoc passes these through as raw NBSP bytes, which render as `??` in terminal output and pollute saved markdown files. |
+
+**Tested on:** Windows (PS1 validated). macOS untested for item 1.
+
+---
+
 ## v3.3 — Pandoc Integration, Tool Lifecycle, PS 5.1 Fix (2026-02-17)
 
 ### New features

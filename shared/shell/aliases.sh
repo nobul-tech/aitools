@@ -41,9 +41,9 @@ clip2md() {
   # Strip style/class/target attrs and bare div/span wrappers (Gmail noise)
   html=$(echo "$html" | perl -pe 's/\s*(style|class|target|saferedirecturl)="[^"]*"//gi; s/<\/?(div|span)[^>]*>//gi')
   if [ -n "$1" ]; then
-    echo "$html" | pandoc -f html -t markdown | perl -pe 's/\{=""\}//g' > "$1"
+    echo "$html" | pandoc -f html -t markdown | perl -pe 's/\{=""\}//g; s/\x{00A0}/ /g' > "$1"
     echo "Saved to $1"
   else
-    echo "$html" | pandoc -f html -t markdown | perl -pe 's/\{=""\}//g'
+    echo "$html" | pandoc -f html -t markdown | perl -pe 's/\{=""\}//g; s/\x{00A0}/ /g'
   fi
 }

@@ -39,10 +39,13 @@ function clip2md {
     # Strip style/class/target attrs and bare div/span wrappers (Gmail noise)
     $html = $html -replace '\s*(style|class|target|saferedirecturl)="[^"]*"', ''
     $html = $html -replace '</?(?:div|span)[^>]*>', ''
+    # Clean up pandoc output: remove empty attr blocks and convert NBSP to regular space
+    # NBSP (U+00A0) comes from Gmail &nbsp; and renders as ?? in raw output
+    $nbsp = [char]0x00A0
     if ($OutFile) {
-        ($html | pandoc -f html -t markdown) -replace '\{=""\}', '' | Set-Content -Path $OutFile -Encoding UTF8
+        ($html | pandoc -f html -t markdown) -replace '\{=""\}', '' -replace $nbsp, ' ' | Set-Content -Path $OutFile -Encoding UTF8
         Write-Host "Saved to $OutFile"
     } else {
-        ($html | pandoc -f html -t markdown) -replace '\{=""\}', ''
+        ($html | pandoc -f html -t markdown) -replace '\{=""\}', '' -replace $nbsp, ' '
     }
 }
