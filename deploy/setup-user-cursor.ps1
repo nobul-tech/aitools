@@ -162,9 +162,13 @@ The `setup-user-cursor` script copies this to your clipboard automatically.
 - Don't add docstrings, comments, or type annotations to code you didn't change
 '@
 
-Set-Clipboard -Value $userRulesContent
-LogOk "Copied User Rules to clipboard"
-Log "Paste into: Cursor Settings > Rules"
+if (-not $env:AITOOLS_DEPLOY) {
+    Set-Clipboard -Value $userRulesContent
+    LogOk "Copied User Rules to clipboard"
+    Log "Paste into: Cursor Settings > Rules"
+} else {
+    LogOk "User Rules embedded and ready"
+}
 
 # --- Exit ---
 if ($errors -gt 0) {

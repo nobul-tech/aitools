@@ -144,11 +144,18 @@ if (Test-Path $cliConfig) {
 Log "Step 4: User Rules"
 
 if (Test-Path $UserRulesPath) {
-    $rulesContent = Get-Content -Path $UserRulesPath -Raw
-    Set-Clipboard -Value $rulesContent
-    LogOk "Copied to clipboard from: $UserRulesPath"
-    Log "Paste into: Cursor Settings > Rules"
-    $status.userRules = "copied to clipboard -- paste into Cursor Settings > Rules"
+    if (-not $env:AITOOLS_DEPLOY) {
+        # Interactive: copy to clipboard
+        $rulesContent = Get-Content -Path $UserRulesPath -Raw
+        Set-Clipboard -Value $rulesContent
+        LogOk "Copied to clipboard from: $UserRulesPath"
+        Log "Paste into: Cursor Settings > Rules"
+        $status.userRules = "copied to clipboard -- paste into Cursor Settings > Rules"
+    } else {
+        # Non-interactive (called from deploy_configs): skip clipboard
+        LogOk "User Rules source: $UserRulesPath"
+        $status.userRules = "available (run interactively to copy to clipboard)"
+    }
 } else {
     LogWarn "User Rules file not found at $UserRulesPath. Skipping clipboard copy."
     $status.userRules = "SKIPPED (file not found)"
@@ -164,7 +171,7 @@ Log "  cli-config:    $($status.cliConfig)"
 Log "  User Rules:    $($status.userRules)"
 Log "=============================="
 
-# Open User Rules file so user can see what to paste
-if (Test-Path $UserRulesPath) {
+# Open User Rules file so user can see what to paste (interactive only)
+if (-not $env:AITOOLS_DEPLOY -and (Test-Path $UserRulesPath)) {
     Start-Process $UserRulesPath
 }

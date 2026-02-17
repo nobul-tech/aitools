@@ -73,9 +73,12 @@ repo_version() {
 
 # Deploy all config scripts from the repo's scripts/ directory.
 # On Windows (Git Bash), calls .ps1 variants via powershell.exe.
+# Child scripts log to LOG_FILE themselves (via tee/Add-Content), so we
+# redirect stdout to /dev/null to prevent double-logging.
 deploy_configs() {
     local script_dir="$1"
     local errors=0
+    export AITOOLS_DEPLOY=1
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
             local deploy_scripts="setup-user-claude.ps1 setup-user-mcp.ps1 setup-cursor-mcp.ps1 setup-user-cursor.ps1"
@@ -83,7 +86,7 @@ deploy_configs() {
                 local script_path="$script_dir/$script"
                 if [ -f "$script_path" ]; then
                     if ! powershell.exe -NoProfile -ExecutionPolicy Bypass \
-                        -File "$(cygpath -w "$script_path")" >> "$LOG_FILE" 2>&1; then
+                        -File "$(cygpath -w "$script_path")" > /dev/null 2>> "$LOG_FILE"; then
                         echo "  error: $script failed (see $LOG_DISPLAY)"
                         errors=$((errors + 1))
                     fi
@@ -97,7 +100,7 @@ deploy_configs() {
             for script in $deploy_scripts; do
                 local script_path="$script_dir/$script"
                 if [ -f "$script_path" ]; then
-                    if ! bash "$script_path" >> "$LOG_FILE" 2>&1; then
+                    if ! bash "$script_path" > /dev/null 2>> "$LOG_FILE"; then
                         echo "  error: $script failed (see $LOG_DISPLAY)"
                         errors=$((errors + 1))
                     fi
@@ -107,6 +110,7 @@ deploy_configs() {
             done
             ;;
     esac
+    unset AITOOLS_DEPLOY
     return $errors
 }
 

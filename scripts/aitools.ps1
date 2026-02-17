@@ -11,7 +11,9 @@ param(
     [string[]]$AddMcp,
     [switch]$SkipGhAuth,
     [string]$ReposPath,
-    [switch]$SkipDriveDetection
+    [switch]$SkipDriveDetection,
+    [Parameter(ValueFromRemainingArguments)]
+    [string[]]$Remaining
 )
 
 $AITOOLS_INSTALLED_VERSION = "dev"
@@ -20,6 +22,20 @@ $AITOOLS_INSTALLED_VERSION = "dev"
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     Write-Error "This script is for Windows. On macOS/Linux, use the bash 'aitools' command instead."
     exit 1
+}
+
+# --- PS 5.1 compat: --flag arrives as positional $Command since PS 5.1 doesn't support -- prefix ---
+if ($Command -eq "--addmcp" -or $Command -eq "-addmcp") {
+    $AddMcp = $Remaining
+    $Command = ""
+}
+if ($Command -eq "--version" -or $Command -eq "-v") {
+    $Version = $true
+    $Command = ""
+}
+if ($Command -eq "--help" -or $Command -eq "-h") {
+    $Help = $true
+    $Command = ""
 }
 
 # ---------------------------------------------------------------------------
@@ -69,16 +85,20 @@ function Deploy-Configs {
     param([string]$ScriptDir)
     $deployScripts = @("setup-user-claude.ps1", "setup-user-mcp.ps1", "setup-cursor-mcp.ps1", "setup-user-cursor.ps1")
     $errors = 0
+    $env:AITOOLS_DEPLOY = "1"
     foreach ($script in $deployScripts) {
         $scriptPath = Join-Path $ScriptDir $script
         if (Test-Path $scriptPath) {
+            # Reset exit code before each script (prevents stale values from previous iteration)
+            $global:LASTEXITCODE = 0
             try {
-                & $scriptPath *>> $logFile
+                & $scriptPath *> $null 2>> $logFile
             } catch {
                 Write-Host "  error: $script failed (see $logFile)"
                 $errors++
+                continue
             }
-            if ($LASTEXITCODE -ne 0) {
+            if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
                 Write-Host "  error: $script failed (see $logFile)"
                 $errors++
             }
@@ -86,6 +106,7 @@ function Deploy-Configs {
             Write-Host "  warning: $script not found - skipping"
         }
     }
+    Remove-Item Env:\AITOOLS_DEPLOY -ErrorAction SilentlyContinue
     return $errors
 }
 
@@ -438,7 +459,10 @@ if (-not (Test-Path $bashExe)) {
     Write-Host "  error: Git Bash not found at $bashExe (required for build)" -ForegroundColor Red
     exit 1
 }
-$buildResult = & $bashExe "$repoPath/scripts/build-deploy.sh" 2>&1 | Out-String
+# Convert Windows path to Unix-style for Git Bash (C:\repos\... → /c/repos/...)
+$unixRepoPath = $repoPath -replace '^([A-Za-z]):\\', '/$1/' -replace '\\', '/'
+$unixRepoPath = $unixRepoPath -replace '^/([A-Za-z])/', { '/' + $_.Groups[1].Value.ToLower() + '/' }
+$buildResult = & $bashExe "$unixRepoPath/scripts/build-deploy.sh" 2>&1 | Out-String
 Add-Content -Path $logFile -Value $buildResult
 if ($LASTEXITCODE -eq 0) {
     Write-Host "  Done."
@@ -513,13 +537,24 @@ if ($doInstall) {
 }
 
 # Self-update: bake version into installed copy AFTER installer
+$newVersion = Get-RepoVersion $repoPath
+
+# Update PS1 copy
 $aitoolsSrc = Join-Path $repoPath "scripts\aitools.ps1"
 $aitoolsDst = Join-Path $env:USERPROFILE ".local\bin\aitools.ps1"
 if (Test-Path $aitoolsSrc) {
-    $newVersion = Get-RepoVersion $repoPath
     $srcContent = Get-Content $aitoolsSrc -Raw
     $stampedContent = $srcContent -replace '^\$AITOOLS_INSTALLED_VERSION = ".*"', "`$AITOOLS_INSTALLED_VERSION = `"$newVersion`""
     [System.IO.File]::WriteAllText($aitoolsDst, $stampedContent, [System.Text.UTF8Encoding]::new($false))
+}
+
+# Update bash copy (keeps both in sync when PS1 is invoked directly)
+$bashSrc = Join-Path $repoPath "scripts\aitools"
+$bashDst = Join-Path $env:USERPROFILE ".local\bin\aitools"
+if (Test-Path $bashSrc) {
+    $bashContent = Get-Content $bashSrc -Raw
+    $bashStamped = $bashContent -replace '^AITOOLS_INSTALLED_VERSION=".*"', "AITOOLS_INSTALLED_VERSION=`"$newVersion`""
+    [System.IO.File]::WriteAllText($bashDst, $bashStamped, [System.Text.UTF8Encoding]::new($false))
 }
 
 Remove-Item Env:\AITOOLS_RUN_ID -ErrorAction SilentlyContinue

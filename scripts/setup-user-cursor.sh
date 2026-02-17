@@ -131,22 +131,29 @@ fi
 log "Step 4: User Rules"
 
 if [ -f "$USER_RULES_PATH" ]; then
-    copied=false
-    if command -v pbcopy &>/dev/null; then
-        pbcopy < "$USER_RULES_PATH"
-        copied=true
-    elif command -v xclip &>/dev/null; then
-        xclip -selection clipboard < "$USER_RULES_PATH"
-        copied=true
-    fi
+    if [ -t 1 ]; then
+        # Interactive: copy to clipboard
+        copied=false
+        if command -v pbcopy &>/dev/null; then
+            pbcopy < "$USER_RULES_PATH"
+            copied=true
+        elif command -v xclip &>/dev/null; then
+            xclip -selection clipboard < "$USER_RULES_PATH"
+            copied=true
+        fi
 
-    if $copied; then
-        log_ok "Copied to clipboard from: $(display_path "$USER_RULES_PATH")"
-        log "Paste into: Cursor Settings > Rules"
-        STATUS_userRules="copied to clipboard -- paste into Cursor Settings > Rules"
+        if $copied; then
+            log_ok "Copied to clipboard from: $(display_path "$USER_RULES_PATH")"
+            log "Paste into: Cursor Settings > Rules"
+            STATUS_userRules="copied to clipboard -- paste into Cursor Settings > Rules"
+        else
+            log_warn "No clipboard command found (pbcopy/xclip). Copy manually from: $(display_path "$USER_RULES_PATH")"
+            STATUS_userRules="NOT copied (no clipboard tool) -- copy manually"
+        fi
     else
-        log_warn "No clipboard command found (pbcopy/xclip). Copy manually from: $(display_path "$USER_RULES_PATH")"
-        STATUS_userRules="NOT copied (no clipboard tool) -- copy manually"
+        # Non-interactive (called from deploy_configs): skip clipboard
+        log_ok "User Rules source: $(display_path "$USER_RULES_PATH")"
+        STATUS_userRules="available (run interactively to copy to clipboard)"
     fi
 else
     log_warn "User Rules file not found at $(display_path "$USER_RULES_PATH"). Skipping clipboard copy."
@@ -163,8 +170,8 @@ log "  cli-config:    ${STATUS_cliConfig}"
 log "  User Rules:    ${STATUS_userRules}"
 log "=============================="
 
-# Open User Rules file so user can see what to paste
-if [ -f "$USER_RULES_PATH" ]; then
+# Open User Rules file so user can see what to paste (interactive only)
+if [ -t 1 ] && [ -f "$USER_RULES_PATH" ]; then
     if [[ "$OSTYPE" == darwin* ]]; then
         open "$USER_RULES_PATH"
     else

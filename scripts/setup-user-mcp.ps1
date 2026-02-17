@@ -50,6 +50,10 @@ function Add-McpServer {
         [string[]]$AddArgs
     )
 
+    # Unset CLAUDECODE to allow running inside a Claude Code session
+    $savedClaudeCode = $env:CLAUDECODE
+    Remove-Item Env:\CLAUDECODE -ErrorAction SilentlyContinue
+
     # Remove existing (ignore errors if not found)
     $removeResult = claude mcp remove $Name --scope user 2>&1
     if ($LASTEXITCODE -eq 0) {
@@ -62,6 +66,11 @@ function Add-McpServer {
         LogOk "$Name configured"
     } else {
         LogError "Failed to add $Name`: $addResult"
+    }
+
+    # Restore CLAUDECODE
+    if ($savedClaudeCode) {
+        $env:CLAUDECODE = $savedClaudeCode
     }
 }
 
@@ -110,7 +119,8 @@ foreach ($rule in $denyRules) {
     }
 }
 
-$settings | ConvertTo-Json -Depth 10 | Set-Content $settingsFile -Encoding UTF8
+$json = $settings | ConvertTo-Json -Depth 10
+[System.IO.File]::WriteAllText($settingsFile, $json, [System.Text.UTF8Encoding]::new($false))
 LogOk "Deny rules set for vercel, webflow in $settingsFile"
 
 LogOk "User-level MCP configured (all servers; vercel/webflow disabled by default)"

@@ -149,17 +149,22 @@ The `setup-user-cursor` script copies this to your clipboard automatically.
 - Don't add docstrings, comments, or type annotations to code you didn't change
 __EMBEDDED_USER_RULES__
 
-if command -v pbcopy &>/dev/null; then
-    printf '%s' "$USER_RULES_CONTENT" | pbcopy
-    log_ok "Copied User Rules to clipboard"
-elif command -v xclip &>/dev/null; then
-    printf '%s' "$USER_RULES_CONTENT" | xclip -selection clipboard
-    log_ok "Copied User Rules to clipboard (xclip)"
+if [ -t 1 ]; then
+    # Interactive: copy to clipboard
+    if command -v pbcopy &>/dev/null; then
+        printf '%s' "$USER_RULES_CONTENT" | pbcopy
+        log_ok "Copied User Rules to clipboard"
+    elif command -v xclip &>/dev/null; then
+        printf '%s' "$USER_RULES_CONTENT" | xclip -selection clipboard
+        log_ok "Copied User Rules to clipboard (xclip)"
+    else
+        log_warn "No clipboard command found (pbcopy/xclip). Copy manually from log."
+    fi
+    log "Paste User Rules into: Cursor Settings > Rules"
 else
-    log_error "No clipboard command found (pbcopy/xclip). Copy manually from log."
+    # Non-interactive: skip clipboard
+    log_ok "User Rules embedded and ready"
 fi
-
-log "Paste User Rules into: Cursor Settings > Rules"
 
 # --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then

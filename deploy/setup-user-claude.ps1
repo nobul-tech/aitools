@@ -172,7 +172,7 @@ $sharedContent
 - Shell: bash (Claude Code requires Git Bash on Windows)
 "@
 
-Set-Content -Path $claudeMd -Value $content -Encoding UTF8
+[System.IO.File]::WriteAllText($claudeMd, $content, [System.Text.UTF8Encoding]::new($false))
 LogOk "Wrote $claudeMd"
 Log "Machine: $osInfo ($hostname)"
 

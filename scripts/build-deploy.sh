@@ -302,7 +302,7 @@ $sharedContent
 - Shell: bash (Claude Code requires Git Bash on Windows)
 "@
 
-Set-Content -Path $claudeMd -Value $content -Encoding UTF8
+[System.IO.File]::WriteAllText($claudeMd, $content, [System.Text.UTF8Encoding]::new($false))
 LogOk "Wrote $claudeMd"
 Log "Machine: $osInfo ($hostname)"
 BLOCK
@@ -415,17 +415,22 @@ BLOCK
     echo '__EMBEDDED_USER_RULES__'
     cat <<'BLOCK'
 
-if command -v pbcopy &>/dev/null; then
-    printf '%s' "$USER_RULES_CONTENT" | pbcopy
-    log_ok "Copied User Rules to clipboard"
-elif command -v xclip &>/dev/null; then
-    printf '%s' "$USER_RULES_CONTENT" | xclip -selection clipboard
-    log_ok "Copied User Rules to clipboard (xclip)"
+if [ -t 1 ]; then
+    # Interactive: copy to clipboard
+    if command -v pbcopy &>/dev/null; then
+        printf '%s' "$USER_RULES_CONTENT" | pbcopy
+        log_ok "Copied User Rules to clipboard"
+    elif command -v xclip &>/dev/null; then
+        printf '%s' "$USER_RULES_CONTENT" | xclip -selection clipboard
+        log_ok "Copied User Rules to clipboard (xclip)"
+    else
+        log_warn "No clipboard command found (pbcopy/xclip). Copy manually from log."
+    fi
+    log "Paste User Rules into: Cursor Settings > Rules"
 else
-    log_error "No clipboard command found (pbcopy/xclip). Copy manually from log."
+    # Non-interactive: skip clipboard
+    log_ok "User Rules embedded and ready"
 fi
-
-log "Paste User Rules into: Cursor Settings > Rules"
 BLOCK
     bash_exit_footer
 } > "$DEPLOY_DIR/setup-user-cursor.sh"
@@ -547,9 +552,13 @@ BLOCK
     cat <<'BLOCK'
 '@
 
-Set-Clipboard -Value $userRulesContent
-LogOk "Copied User Rules to clipboard"
-Log "Paste into: Cursor Settings > Rules"
+if (-not $env:AITOOLS_DEPLOY) {
+    Set-Clipboard -Value $userRulesContent
+    LogOk "Copied User Rules to clipboard"
+    Log "Paste into: Cursor Settings > Rules"
+} else {
+    LogOk "User Rules embedded and ready"
+}
 BLOCK
     ps1_exit_footer
 } > "$DEPLOY_DIR/setup-user-cursor.ps1"
