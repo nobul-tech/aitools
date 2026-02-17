@@ -17,3 +17,29 @@ function ccr { claude -c @args }
 
 # Interactive session picker
 function ccs { claude --resume @args }
+
+# Clipboard HTML -> Markdown (requires pandoc)
+function clip2md {
+    param([string]$OutFile)
+    if (-not (Get-Command pandoc -ErrorAction SilentlyContinue)) {
+        Write-Error "clip2md: pandoc not found. Run 'aitools install' or 'winget install --exact --id JohnMacFarlane.Pandoc'"
+        return
+    }
+    Add-Type -AssemblyName System.Windows.Forms
+    $raw = [System.Windows.Forms.Clipboard]::GetData("HTML Format")
+    if (-not $raw) {
+        Write-Error "clip2md: no HTML content on clipboard"
+        return
+    }
+    if ($raw -match '(?s)<!--StartFragment-->(.*)<!--EndFragment-->') {
+        $html = $Matches[1]
+    } else {
+        $html = $raw
+    }
+    if ($OutFile) {
+        $html | pandoc -f html -t markdown -o $OutFile
+        Write-Host "Saved to $OutFile"
+    } else {
+        $html | pandoc -f html -t markdown
+    }
+}

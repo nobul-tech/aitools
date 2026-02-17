@@ -363,9 +363,21 @@ if (Test-Path $vercelScript) {
 }
 
 # ============================================================
-# 11. Deploy configurations
+# 11. Pandoc
 # ============================================================
-Log "Step 11: Deploy configurations"
+Log "Step 11: Pandoc"
+
+$pandocScript = Join-Path $PSScriptRoot "setup-pandoc.ps1"
+if (Test-Path $pandocScript) {
+    try { & $pandocScript } catch { LogError "setup-pandoc.ps1 failed: $_" }
+} else {
+    LogWarn "setup-pandoc.ps1 not found -- skipping (MDM deploy)"
+}
+
+# ============================================================
+# 12. Deploy configurations
+# ============================================================
+Log "Step 12: Deploy configurations"
 
 $deployScripts = @(
     "setup-user-claude.ps1",

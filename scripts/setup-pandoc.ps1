@@ -1,0 +1,84 @@
+# setup-pandoc.ps1 — Installs/updates Pandoc on Windows
+# Safe to re-run — detects existing install and upgrades or migrates as needed.
+#
+# Windows: Uses winget (preferred). Detects and warns about non-preferred installs
+#          (Chocolatey, Conda, manual installer).
+#
+# See reference/tool-install-sources.md for install source details.
+
+# --- Logging ---
+$logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
+$logFile = Join-Path $logDir "deploy.log"
+$scriptName = "setup-pandoc"
+if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+
+function Log($msg) {
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $line = "[$ts] [$scriptName] $msg"
+    Write-Host $line
+    Add-Content -Path $logFile -Value $line
+}
+function LogOk($msg)    { Log "OK: $msg" }
+function LogError($msg) { Log "ERROR: $msg" }
+function LogWarn($msg)  { Log "WARN: $msg" }
+
+# --- OS guard ---
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    LogError "This script is for Windows. On macOS/Linux, use the .sh version."
+    exit 1
+}
+
+# Helper: refresh PATH from registry (picks up winget installs in same session)
+function Refresh-Path {
+    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $env:Path = "$machinePath;$userPath"
+}
+
+# --- Install/update ---
+if (Get-Command pandoc -ErrorAction SilentlyContinue) {
+    $pandocVersion = (pandoc --version | Select-Object -First 1)
+    $pandocPath = (Get-Command pandoc).Source
+    LogOk "Pandoc already installed ($pandocVersion)"
+    Log "Install path: $pandocPath"
+
+    # Check if installed via winget by attempting upgrade
+    Log "Checking for updates via winget..."
+    $upgradeResult = winget upgrade --exact --id JohnMacFarlane.Pandoc --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+    if ($upgradeResult -match "No applicable update found") {
+        LogOk "Pandoc already up to date"
+    } elseif ($LASTEXITCODE -eq 0) {
+        Refresh-Path
+        LogOk "Pandoc updated ($(pandoc --version | Select-Object -First 1))"
+    } else {
+        LogWarn "winget upgrade returned non-zero — pandoc may be installed via another method"
+        # Detect non-preferred installs
+        if (Get-Command choco -ErrorAction SilentlyContinue) {
+            $chocoList = choco list pandoc 2>$null | Out-String
+            if ($chocoList -match "pandoc") {
+                LogWarn "Pandoc appears to be installed via Chocolatey. Prefer winget for managed installs."
+            }
+        }
+    }
+} else {
+    Log "Installing Pandoc via winget..."
+    winget install --source winget --exact --id JohnMacFarlane.Pandoc --accept-package-agreements --accept-source-agreements
+    Refresh-Path
+
+    if (Get-Command pandoc -ErrorAction SilentlyContinue) {
+        $pandocVersion = (pandoc --version | Select-Object -First 1)
+        $pandocPath = (Get-Command pandoc).Source
+        LogOk "Pandoc installed ($pandocVersion)"
+        Log "Install path: $pandocPath"
+
+        # Verify the install directory is in persistent PATH
+        $pandocDir = Split-Path $pandocPath -Parent
+        $persistentPath = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
+        if ($persistentPath -notlike "*$pandocDir*") {
+            LogWarn "Pandoc install dir not in persistent PATH: $pandocDir"
+            LogWarn "Claude Code may not find 'pandoc'. Add this directory to your User PATH."
+        }
+    } else {
+        LogError "Pandoc install failed"
+    }
+}

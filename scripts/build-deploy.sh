@@ -6,6 +6,13 @@
 # be deployed to any endpoint via MDM (Jamf, Intune) or run manually.
 #
 # Usage: bash scripts/build-deploy.sh   (run from repo root)
+#
+# CROSS-PLATFORM NOTE: This script is intentionally bash-only (no .ps1 variant).
+# It's a build step that produces platform-independent output (both .sh and .ps1
+# deploy scripts). The result is committed to git, so both platforms get identical
+# deploy/ contents. A parallel PS1 would double maintenance for no output difference.
+# On Windows, aitools.ps1 invokes this via Git Bash (a prerequisite for Claude Code).
+# See .claude/rules/cross-platform.md "Approved exceptions" for the exception record.
 
 set -euo pipefail
 
@@ -606,7 +613,27 @@ echo "Copying deploy/setup-vercelcli.ps1 ..."
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
-# 9-10. deploy/setup-user-mcp.sh and .ps1 (copy as-is)
+# 9-10. deploy/setup-pandoc.sh and .ps1 (copy as-is)
+# ============================================================
+echo "Copying deploy/setup-pandoc.sh ..."
+{
+    echo '#!/usr/bin/env bash'
+    echo "$HEADER_COMMENT_BASH"
+    # Strip the shebang from source and append the rest
+    tail -n +2 "$SCRIPTS_DIR/setup-pandoc.sh"
+} > "$DEPLOY_DIR/setup-pandoc.sh"
+chmod +x "$DEPLOY_DIR/setup-pandoc.sh"
+GENERATED=$((GENERATED + 1))
+
+echo "Copying deploy/setup-pandoc.ps1 ..."
+{
+    echo "$HEADER_COMMENT_PS1"
+    cat "$SCRIPTS_DIR/setup-pandoc.ps1"
+} > "$DEPLOY_DIR/setup-pandoc.ps1"
+GENERATED=$((GENERATED + 1))
+
+# ============================================================
+# 11-12. deploy/setup-user-mcp.sh and .ps1 (copy as-is)
 # ============================================================
 echo "Copying deploy/setup-user-mcp.sh ..."
 {

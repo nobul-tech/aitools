@@ -480,9 +480,21 @@ else
 fi
 
 # ============================================================
-# 11. Deploy configurations
+# 11. Pandoc
 # ============================================================
-log "Step 11: Deploy configurations"
+log "Step 11: Pandoc"
+
+pandoc_script="$SCRIPT_DIR/setup-pandoc.sh"
+if [ -f "$pandoc_script" ]; then
+    bash "$pandoc_script" || log_error "setup-pandoc.sh failed"
+else
+    log_warn "setup-pandoc.sh not found — skipping (MDM deploy)"
+fi
+
+# ============================================================
+# 12. Deploy configurations
+# ============================================================
+log "Step 12: Deploy configurations"
 
 DEPLOY_SCRIPTS="setup-user-claude.sh setup-user-cursor.sh setup-user-mcp.sh setup-cursor-mcp.sh"
 

@@ -453,7 +453,9 @@ try {
 
 # [2/N] Rebuild deploy scripts
 Write-Host "[2/$steps] Rebuilding deploy scripts..."
-# build-deploy.sh is bash-only -- use Git Bash
+# build-deploy.sh is intentionally bash-only (text-processing-heavy, no .ps1 variant).
+# Invoke via Git Bash, which is a prerequisite for Claude Code on Windows.
+# See .claude/rules/cross-platform.md "Approved exceptions" for why.
 $bashExe = "$env:ProgramFiles\Git\bin\bash.exe"
 if (-not (Test-Path $bashExe)) {
     Write-Host "  error: Git Bash not found at $bashExe (required for build)" -ForegroundColor Red

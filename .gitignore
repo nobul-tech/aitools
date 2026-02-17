@@ -41,3 +41,6 @@ desktop.ini
 
 # Google Drive internal
 .gd/
+
+# Claude Code plan artifacts
+reference/plans/

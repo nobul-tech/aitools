@@ -73,6 +73,9 @@ python conversionutils/pdf_to_man_markdown.py --help
 - **Tool evaluation policy**: Never recommend unverified or abandoned tools — see `reference/tool-evaluation-criteria.md` for the full framework
 - `claude mcp add` can't run inside nested Claude Code sessions -- `--addmcp` has a node fallback
 - **Tool install cleanup**: When a setup script installs a tool via a preferred method (e.g., Homebrew), it should also detect and remove old installs from non-preferred sources (e.g., npm/bun global, manual binary). Prevents stale versions shadowing the preferred one due to PATH order. See `setup-vercelcli` for the pattern.
+- **Cross-platform tool check**: When recommending tools in this project, verify availability on both macOS and Windows. Disclose if a tool is single-platform or has limited support on one OS.
+- **Tool evaluation tracking**: Tools recommended but not yet approved go in the "Under Evaluation" section of `reference/tool-install-sources.md`. Promote or remove after testing.
+- **Tool lifecycle**: Verified official sources must be recorded in `reference/tool-install-sources.md` before any setup code is written. See "Evaluation-to-Support Lifecycle" in `reference/tool-evaluation-criteria.md`.
 
 ## Code Conventions
 

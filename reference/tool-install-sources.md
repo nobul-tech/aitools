@@ -3,7 +3,7 @@
 Official documentation links and verified install commands for all tools managed by `aitools install`.
 **Always check these before modifying install steps.**
 
-Last verified: 2026-02-14
+Last verified: 2026-02-17
 
 ---
 
@@ -226,3 +226,53 @@ claude mcp add --transport http --scope user webflow https://mcp.webflow.com/mcp
 | Ubuntu/Debian | See NodeSource or nvm |
 
 Required for: Chrome DevTools MCP (npx), Vercel CLI (npm), settings JSON merge in setup scripts.
+
+---
+
+## Pandoc
+
+**Source**: https://pandoc.org/installing.html
+
+### Install
+
+| Platform | Method | Command |
+|----------|--------|---------|
+| macOS | Homebrew (preferred) | `brew install pandoc` |
+| Windows | winget (preferred) | `winget install --source winget --exact --id JohnMacFarlane.Pandoc` |
+| Windows | Chocolatey (alt) | `choco install pandoc` |
+| Linux | apt | `sudo apt install pandoc` |
+
+### Update
+
+- Homebrew: `brew upgrade pandoc`
+- winget: `winget upgrade JohnMacFarlane.Pandoc`
+
+### Check Version
+
+```bash
+pandoc --version
+```
+
+### Non-Preferred Install Methods (cleanup targets)
+
+| Method | Detection | Why not preferred |
+|--------|-----------|-------------------|
+| Conda | `conda list pandoc` | Environment isolation issues, stale versions |
+| MacPorts | `port installed pandoc` | Less common than Homebrew on macOS |
+| pip (`pip install pandoc`) | pip wrapper, not pandoc itself | Confusing, incomplete |
+| Cabal | `~/.cabal/bin/pandoc` | Haskell toolchain dependency |
+| Manual binary/installer | `/usr/local/bin/pandoc` not from Homebrew | No auto-update path |
+
+### Notes
+
+- Cross-platform — native packages on macOS, Windows, Linux
+- Single static binary, no runtime dependencies
+- Used by: `clip2md` shell alias (clipboard HTML → Markdown)
+
+---
+
+## Under Evaluation
+
+Tools recommended during sessions but not yet approved for managed install. Try them out, then either promote to a managed tool above or remove.
+
+*No tools currently under evaluation.*

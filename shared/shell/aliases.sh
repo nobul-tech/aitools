@@ -19,3 +19,29 @@ alias ccr='claude -c'
 
 # Interactive session picker
 alias ccs='claude --resume'
+
+# Clipboard HTML → Markdown (requires pandoc)
+clip2md() {
+  if ! command -v pandoc &>/dev/null; then
+    echo "clip2md: pandoc not found. Run 'aitools install' or 'brew install pandoc' (macOS)" >&2
+    return 1
+  fi
+  if [ "$(uname -s)" != "Darwin" ]; then
+    echo "clip2md: clipboard HTML extraction requires macOS (uses osascript)" >&2
+    echo "clip2md: on Windows, use the PowerShell version instead" >&2
+    return 1
+  fi
+  local html
+  html=$(osascript -e 'the clipboard as «class HTML»' 2>/dev/null | \
+    perl -ne 'print chr foreach unpack("C*",pack("H*",substr($_,11,-3)))')
+  if [ -z "$html" ]; then
+    echo "clip2md: no HTML content on clipboard" >&2
+    return 1
+  fi
+  if [ -n "$1" ]; then
+    echo "$html" | pandoc -f html -t markdown -o "$1"
+    echo "Saved to $1"
+  else
+    echo "$html" | pandoc -f html -t markdown
+  fi
+}
