@@ -64,6 +64,19 @@ PowerShell pipes external command output through the console's codepage (often W
 - Use temp files: write input with `[System.IO.File]::WriteAllText()`, run the command with `-o` output flag, read result with `[System.IO.File]::ReadAllText()`
 - Or set `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` before piping (session-wide side effect)
 
+### .NET clipboard encoding gotcha (Windows)
+
+`[System.Windows.Forms.Clipboard]::GetData("HTML Format")` returns a .NET string where the UTF-8 clipboard bytes have been decoded as Windows-1252. This produces mojibake: em-dash (U+2014) becomes `a]S`, NBSP (U+00A0) becomes `A` + NBSP, curly quotes become `a]Y`/`a]o`, etc.
+
+**Fix**: re-encode the string back to bytes via Windows-1252 (reversing the incorrect decode), then decode as UTF-8:
+```powershell
+$win1252 = [System.Text.Encoding]::GetEncoding(1252)
+$rawBytes = $win1252.GetBytes($raw)
+$raw = [System.Text.Encoding]::UTF8.GetString($rawBytes)
+```
+
+This only affects Windows (macOS clipboard access via `osascript` handles encoding correctly).
+
 ### .NET vs PowerShell working directory
 
 PowerShell's `Set-Location`/`cd` changes `$PWD` but NOT `[Environment]::CurrentDirectory` (the .NET CWD). Any .NET API that takes a relative path (`[IO.File]::WriteAllText`, `[IO.File]::ReadAllText`, etc.) resolves against the .NET CWD, not `$PWD`. This causes files to be written to the wrong location.

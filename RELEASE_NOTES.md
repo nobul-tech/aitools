@@ -12,6 +12,25 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v3.4.4 -- clip2md clipboard encoding fix (2026-02-17)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | BUG | `clip2md` (PS1) produced mojibake for em-dashes, curly quotes, and NBSP. Root cause: `[System.Windows.Forms.Clipboard]::GetData("HTML Format")` decodes UTF-8 clipboard bytes as Windows-1252, producing double-encoded characters. Fixed by re-encoding the string back to bytes via Windows-1252, then decoding as UTF-8. |
+| 2 | BUG | `clip2md` (PS1) now also strips narrow no-break space (U+202F) alongside regular NBSP (U+00A0). Gmail uses narrow NBSP around time values. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 3 | Added .NET clipboard encoding gotcha to `.claude/rules/cross-platform.md`. |
+
+**Tested on:** Windows (PS1 validated). macOS not affected (bash clipboard path uses osascript).
+
+---
+
 ## v3.4 -- Graceful Tool Addition & Cross-Platform Safety (2026-02-17)
 
 ### Bug fixes
