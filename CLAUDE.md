@@ -72,6 +72,7 @@ python conversionutils/pdf_to_man_markdown.py --help
 - `reference/tool-install-sources.md` is the source of truth for install commands -- always check before modifying installer scripts
 - **Tool evaluation policy**: Never recommend unverified or abandoned tools — see `reference/tool-evaluation-criteria.md` for the full framework
 - `claude mcp add` can't run inside nested Claude Code sessions -- `--addmcp` has a node fallback
+- **Tool install cleanup**: When a setup script installs a tool via a preferred method (e.g., Homebrew), it should also detect and remove old installs from non-preferred sources (e.g., npm/bun global, manual binary). Prevents stale versions shadowing the preferred one due to PATH order. See `setup-vercelcli` for the pattern.
 
 ## Code Conventions
 
