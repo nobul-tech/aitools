@@ -12,6 +12,34 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v3.5 -- clip2md AI-Powered Naming & Logging (2026-02-18)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **clip2md auto-naming**: Running `clip2md` with no arguments uses the Claude Code CLI (`claude -p`) to generate a descriptive filename and one-line summary. Content-type-aware prompt: emails get `YYMMDD-participant-topic`, articles get `source-topic`, docs get `product-section`. Max 50 chars but compact by default. Writes to hidden temp file, renames on success. Collision avoidance via `-2`, `-3` suffixes. |
+| 2 | **clip2md explicit-name improvements**: `clip2md notes` auto-appends `.md`, prompts before overwriting, shows AI summary when claude is available. |
+| 3 | **clip2md logging**: All operations log to `clip2md.log` (Windows: `%LOCALAPPDATA%\ai-tooling\`, macOS: `~/Library/Logs/ai-tooling/`). Events: saves, errors, temp file lifecycle, overwrite decisions. |
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 4 | BUG | `clip2md` (bash) `.md` extension strip was case-sensitive -- `clip2md notes.MD` produced `notes.MD.md`. Fixed with glob character class `%.[mM][dD]`. |
+
+### Implementation details
+
+| # | Detail |
+|---|--------|
+| 5 | AI helper `_clip2md_ai` sanitizes Claude's response: filename lowercased, non-alnum replaced with hyphens, truncated to 50 chars at word boundary, Windows reserved names prefixed with `clip-`. Summary truncated to 80 chars at word boundary. |
+| 6 | PS1 temp file uses `Get-Random` for uniqueness; bash uses `$$-$RANDOM`. Hidden via dot prefix (`.clip2md-<random>.tmp`). Cleanup via `try/finally` (PS1) or explicit error-path removal (bash). |
+| 7 | PS1 pipes markdown to `claude -p` directly (accepts potential pipeline encoding mangling since Claude only needs topic understanding, not exact content). File content is written from the pre-pipe `$md` variable. |
+
+**Tested on:** Windows only (PS1 validated, bash -n validated, auto-name and explicit-name tested end-to-end). macOS completely untested.
+
+---
+
 ## v3.4.4 -- clip2md clipboard encoding fix (2026-02-17)
 
 ### Bug fixes

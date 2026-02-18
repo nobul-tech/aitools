@@ -50,6 +50,10 @@ bash deploy/setup-user-claude.sh
 # PDF conversion (requires marker or pymupdf)
 python conversionutils/pdf_to_markdown.py --help
 python conversionutils/pdf_to_man_markdown.py --help
+
+# Clipboard to Markdown (requires pandoc; optional: claude CLI for auto-naming)
+clip2md                        # Auto-name via AI: 250324-garcia-budget.md
+clip2md meeting-notes          # Explicit name: meeting-notes.md
 ```
 
 ## Cross-Platform Paths
