@@ -12,6 +12,8 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 | `shared/claude-shared.md` | User-level preferences embedded into deploy scripts (propagates to all machines) |
 | `shared/cursor-rules/user-rules.md` | Cursor User Rules (deployed to clipboard) |
 | `.claude/rules/*.md` | Claude Code behavioral rules (this file included) |
+| `ROADMAP.md` | Active/planned work items — drives project priorities |
+| `plans/*.md` | Detailed implementation plans — referenced by roadmap |
 
 ### The rule
 

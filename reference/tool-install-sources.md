@@ -275,4 +275,30 @@ pandoc --version
 
 Tools recommended during sessions but not yet approved for managed install. Try them out, then either promote to a managed tool above or remove.
 
-*No tools currently under evaluation.*
+### Typst
+
+**Source**: https://typst.app / https://github.com/typst/typst
+**Purpose**: PDF engine for pandoc (`--pdf-engine=typst`). Converts markdown-to-PDF via pandoc without a LaTeX distribution.
+
+| Platform | Method | Command |
+|----------|--------|---------|
+| macOS | Homebrew (preferred) | `brew install typst` |
+| Windows | winget (preferred) | `winget install --id Typst.Typst` |
+
+**Version check**: `typst --version`
+
+**Usage with pandoc**:
+```bash
+pandoc input.md --pdf-engine=typst -o output.pdf
+```
+
+**Why this over alternatives**: Single ~30-50 MB binary (vs ~100 MB+ for TinyTeX, ~4 GB for full TeX Live, ~200-400 MB for Chromium-based tools). Native cross-platform binaries. 45K+ GitHub stars, 350+ contributors, Apache 2.0, active releases (Feb 2026). 27x faster than XeLaTeX.
+
+**Non-preferred alternatives** (cleanup targets if Typst is approved):
+| Alternative | Why not preferred |
+|-------------|-------------------|
+| TinyTeX / TeX Live / MacTeX | 100 MB - 4 GB, complex package management (`tlmgr`) |
+| Tectonic | No winget package, on-demand network downloads |
+| WeasyPrint | Painful Windows install (GTK dependencies) |
+| wkhtmltopdf | Archived/abandoned |
+| md-to-pdf (npm) | Downloads entire Chromium (~200-400 MB) |

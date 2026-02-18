@@ -12,6 +12,33 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v3.6 -- Roadmap System & Typst Evaluation (2026-02-18)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Roadmap tracking system**: `ROADMAP.md` at project root tracks active/planned work items with links to detailed plans in `plans/`. Completed items move to `RELEASE_NOTES.md`. |
+| 2 | **Per-platform tool approval plan filed**: First roadmap item — detailed plan for separating tool approval pipelines per platform (macOS/Windows). Introduces a 3-value status model (`approved`/`pending`/`n/a`) per platform. Plan only, no implementation yet. |
+
+### Tool evaluation
+
+| # | Change |
+|---|--------|
+| 3 | **Typst** added to "Under Evaluation" in `reference/tool-install-sources.md`. PDF engine for pandoc (`--pdf-engine=typst`) — single ~30-50 MB binary vs multi-GB LaTeX distributions. Pending hands-on testing before approval. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 4 | `CLAUDE.md`: added `plans/` to project structure, added roadmap tracking key decision. |
+| 5 | `.claude/rules/sources-of-truth.md`: `ROADMAP.md` and `plans/*.md` added to protected files table. |
+| 6 | Deploy scripts (`setup-user-claude.sh/.ps1`) rebuilt with coaching notes from `shared/claude-shared.md`. |
+
+**Tested on:** macOS. Windows not affected (documentation-only changes; deploy scripts are generated output).
+
+---
+
 ## v3.5.1 -- clip2md macOS fixes (2026-02-18)
 
 ### Bug fixes

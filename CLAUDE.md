@@ -20,6 +20,7 @@ ai-tooling/
 ├── deploy/              # Self-contained scripts for MDM (generated)
 ├── conversionutils/     # PDF-to-markdown conversion tools
 ├── docs/                # RAG knowledge base (vendor docs)
+├── plans/               # Detailed plans for roadmap items
 └── reference/           # Setup notes and how-tos
 ```
 
@@ -81,6 +82,7 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 - **Tool evaluation tracking**: Tools recommended but not yet approved go in the "Under Evaluation" section of `reference/tool-install-sources.md`. Promote or remove after testing.
 - **Tool lifecycle**: Verified official sources must be recorded in `reference/tool-install-sources.md` before any setup code is written. See "Evaluation-to-Support Lifecycle" in `reference/tool-evaluation-criteria.md`.
 - **Release versioning**: `major.minor.patch` scheme documented at the top of `RELEASE_NOTES.md`. Major = structural changes, minor = features/tools, patch = isolated bug fixes.
+- **Roadmap tracking**: `ROADMAP.md` tracks active/planned work. Detailed plans in `plans/`. Completed items move to `RELEASE_NOTES.md`.
 
 ## Code Conventions
 
