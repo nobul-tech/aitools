@@ -93,6 +93,24 @@ These increase confidence (but don't skip the checks above):
 3. Verify GPG signatures or checksums where available
 4. Check GitHub releases for recent activity
 
+## Tool Platform States
+
+Each managed tool has an independent lifecycle state per platform (macOS, Windows):
+
+| State | Meaning | Lifecycle phase |
+|-------|---------|----------------|
+| `evaluating` | Under hands-on evaluation, no user verdict yet | Phase 1-2 |
+| `approved` | User approved on this platform, integration pending | Phase 2 passed |
+| `supported` | Fully integrated -- setup script + installer entry | Phases 3-5 complete |
+| `n/a` | Not available or not applicable on this platform | -- |
+
+Progression: `evaluating` → `approved` → `supported` (or `n/a` at any point).
+
+- A tool in `evaluating` on all platforms stays in "Under Evaluation" in `tool-install-sources.md`
+- First platform reaching `approved` promotes the tool to the main section
+- `approved` vs `supported` distinguishes "user said yes" from "fully scripted"
+- Display format in `tool-install-sources.md`: inline per entry (e.g., `macOS: supported | Windows: supported`)
+
 ## Special Cases
 
 - **Pre-approved tools**: Tools already listed in `reference/tool-install-sources.md` have been evaluated and are pre-approved. No re-evaluation needed unless a concern arises.

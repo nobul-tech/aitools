@@ -12,6 +12,41 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v3.7 -- Tool Lifecycle Terminology & Verified-on Convention (2026-02-18)
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | **4-state tool lifecycle per platform**: Replaced the 3-value model (`approved`/`pending`/`n/a`) with a 4-state lifecycle (`evaluating` → `approved` → `supported`, plus `n/a`). The new intermediate `approved` state distinguishes "user said yes" from "fully scripted with setup scripts." Canonical definition in `reference/tool-evaluation-criteria.md`. |
+| 2 | **"Tested on" → "Verified on" convention**: Renamed `**Tested on:**` to `**Verified on:**` across all release notes (9 instances). Eliminates overloading: "verified" means release changes were checked on this platform; "approved"/"supported" describe tool lifecycle status. Convention section renamed accordingly. |
+
+### Tool status (under new terminology)
+
+| Tool | macOS | Windows |
+|------|-------|---------|
+| Claude Code CLI | supported | supported |
+| Vercel CLI | supported | supported |
+| Cursor Agent CLI | supported | supported |
+| Node.js | supported | supported |
+| Pandoc | supported | supported |
+| MCP servers (chrome-devtools, vercel, webflow) | supported | supported |
+| Typst | evaluating | evaluating |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 3 | `reference/tool-evaluation-criteria.md`: new "Tool Platform States" section defining the 4 states and their mapping to lifecycle phases. |
+| 4 | `CLAUDE.md`: new key decision for tool platform states and verified-on convention. |
+| 5 | `.claude/rules/cross-platform.md`: `tested-platform` → `verified-platform` reference. |
+| 6 | `plans/per-platform-tool-approval.md`: updated from 3-value to 4-state model, resolved open questions (inline status, installer warnings are future scope). |
+| 7 | `RELEASE_NOTES.md` v3.6 item #2: updated to reference 4-state model. |
+
+**Verified on:** macOS. Windows not affected (documentation-only changes).
+
+---
+
 ## v3.6 -- Roadmap System & Typst Evaluation (2026-02-18)
 
 ### New features
@@ -19,7 +54,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | # | Change |
 |---|--------|
 | 1 | **Roadmap tracking system**: `ROADMAP.md` at project root tracks active/planned work items with links to detailed plans in `plans/`. Completed items move to `RELEASE_NOTES.md`. |
-| 2 | **Per-platform tool approval plan filed**: First roadmap item — detailed plan for separating tool approval pipelines per platform (macOS/Windows). Introduces a 3-value status model (`approved`/`pending`/`n/a`) per platform. Plan only, no implementation yet. |
+| 2 | **Per-platform tool approval plan filed**: First roadmap item — detailed plan for separating tool approval pipelines per platform (macOS/Windows). Introduces a 4-state lifecycle model (`evaluating`/`approved`/`supported`/`n/a`) per platform. Plan only, no implementation yet. |
 
 ### Tool evaluation
 
@@ -35,7 +70,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | 5 | `.claude/rules/sources-of-truth.md`: `ROADMAP.md` and `plans/*.md` added to protected files table. |
 | 6 | Deploy scripts (`setup-user-claude.sh/.ps1`) rebuilt with coaching notes from `shared/claude-shared.md`. |
 
-**Tested on:** macOS. Windows not affected (documentation-only changes; deploy scripts are generated output).
+**Verified on:** macOS. Windows not affected (documentation-only changes; deploy scripts are generated output).
 
 ---
 
@@ -54,7 +89,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 |---|--------|
 | 3 | Added coaching notes to `shared/claude-shared.md`: ask the user for help when the environment is broken instead of brute-forcing workarounds; always `cd` back before deleting temp dirs. |
 
-**Tested on:** macOS (bash -n validated, clip2md auto-name and explicit-name tested end-to-end). Windows not affected (PS1 uses native .NET Unicode and `Read-Host`).
+**Verified on:** macOS (bash -n validated, clip2md auto-name and explicit-name tested end-to-end). Windows not affected (PS1 uses native .NET Unicode and `Read-Host`).
 
 ---
 
@@ -82,7 +117,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | 6 | PS1 temp file uses `Get-Random` for uniqueness; bash uses `$$-$RANDOM`. Hidden via dot prefix (`.clip2md-<random>.tmp`). Cleanup via `try/finally` (PS1) or explicit error-path removal (bash). |
 | 7 | PS1 pipes markdown to `claude -p` directly (accepts potential pipeline encoding mangling since Claude only needs topic understanding, not exact content). File content is written from the pre-pipe `$md` variable. |
 
-**Tested on:** Windows (PS1 validated, auto-name and explicit-name tested end-to-end). macOS tested in v3.5.1.
+**Verified on:** Windows (PS1 validated, auto-name and explicit-name tested end-to-end). macOS tested in v3.5.1.
 
 ---
 
@@ -101,7 +136,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 |---|--------|
 | 3 | Added .NET clipboard encoding gotcha to `.claude/rules/cross-platform.md`. |
 
-**Tested on:** Windows (PS1 validated). macOS not affected (bash clipboard path uses osascript).
+**Verified on:** Windows (PS1 validated). macOS not affected (bash clipboard path uses osascript).
 
 ---
 
@@ -127,16 +162,16 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 |---|--------|
 | 5 | Added ASCII-only rule for PS1 executable code to `.claude/rules/cross-platform.md`. |
 | 6 | Added pre-validation convention to `.claude/rules/cross-platform.md`. |
-| 7 | Added tested-platform convention to release notes (see below). |
+| 7 | Added verified-platform convention to release notes (see below). |
 
-### Tested-platform convention
+### Verified-platform convention
 
-Each release section ends with a tested-platform note:
+Each release section ends with a verified-platform note:
 ```
-**Tested on:** Windows. macOS untested for items 2, 3, 4.
+**Verified on:** Windows. macOS untested for items 2, 3, 4.
 ```
 
-**Tested on:** Windows. macOS untested for items 2, 3, 4.
+**Verified on:** Windows. macOS untested for items 2, 3, 4.
 
 ---
 
@@ -148,7 +183,7 @@ Each release section ends with a tested-platform note:
 |---|----------|-----|
 | 1 | BUG | `clip2md` (both `.sh` and `.ps1`) now converts non-breaking spaces (U+00A0) to regular spaces. Gmail uses `&nbsp;` extensively; pandoc passes these through as raw NBSP bytes, which render as `??` in terminal output and pollute saved markdown files. |
 
-**Tested on:** Windows (PS1 validated). macOS untested for item 1.
+**Verified on:** Windows (PS1 validated). macOS untested for item 1.
 
 ---
 
@@ -167,7 +202,7 @@ Each release section ends with a tested-platform note:
 |---|--------|
 | 3 | Added PowerShell pipeline encoding gotcha to `.claude/rules/cross-platform.md`. |
 
-**Tested on:** Windows (PS1 validated). macOS untested for item 2.
+**Verified on:** Windows (PS1 validated). macOS untested for item 2.
 
 ---
 
@@ -186,7 +221,7 @@ Each release section ends with a tested-platform note:
 |---|--------|
 | 3 | Added .NET vs PowerShell working directory gotcha to `.claude/rules/cross-platform.md`. |
 
-**Tested on:** Windows (PS1 validated). macOS not affected (bash CWD tracks correctly).
+**Verified on:** Windows (PS1 validated). macOS not affected (bash CWD tracks correctly).
 
 ---
 

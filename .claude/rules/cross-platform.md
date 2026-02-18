@@ -97,4 +97,4 @@ When creating or modifying any `.ps1` or `.sh` script in this repo:
 - On Windows, always validate PS1 files (PS 5.1 catches encoding and syntax issues that PS 7 does not)
 - On macOS, always validate `.sh` files; PS1 validation requires `pwsh` (if installed)
 - If the other platform's script can't be validated locally, note it in the commit message: `(tested: macOS)` or `(tested: Windows)`
-- Note untested items in `RELEASE_NOTES.md` (see tested-platform convention)
+- Note untested items in `RELEASE_NOTES.md` (see verified-platform convention)

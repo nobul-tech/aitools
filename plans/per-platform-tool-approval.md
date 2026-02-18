@@ -14,22 +14,33 @@ The current tool evaluation system doesn't distinguish between platforms. This c
 
 ## Design
 
-### 3-Value Status Model per Platform
+### 4-State Lifecycle per Platform
 
-Each tool gets an independent approval status on each platform:
+Each tool gets an independent lifecycle state on each platform:
 
-- `approved` -- Tool is fully tested and working on this platform
-- `pending` -- Tool has been evaluated but not yet approved on this platform
-- `n/a` -- Tool is not available or not applicable on this platform
+```
+evaluating → approved → supported    (or n/a)
+```
+
+| State | Meaning | Lifecycle phase |
+|-------|---------|----------------|
+| `evaluating` | Under hands-on evaluation, no user verdict yet | Phase 1-2 |
+| `approved` | User approved on this platform, integration pending | Phase 2 passed |
+| `supported` | Fully integrated -- setup script + installer entry | Phases 3-5 complete |
+| `n/a` | Not available or not applicable on this platform | -- |
+
+**Why 3 active states, not 2**: A tool can be approved on macOS (user said yes after testing) before setup scripts exist. Without the intermediate state, it either stays in "Under Evaluation" (wrong -- gate passed) or claims `supported` (wrong -- no scripts yet).
+
+Canonical definition: `reference/tool-evaluation-criteria.md` ("Tool Platform States" section).
 
 ### Retrofit Existing Tools
 
-All current tool entries in `reference/tool-install-sources.md` will be updated with explicit platform status. Format: `macOS: approved | Windows: approved` (or other status combinations). Eliminates ambiguity about what "no status" means.
+All current tool entries in `reference/tool-install-sources.md` will be updated with explicit platform status. Format: `macOS: supported | Windows: supported` (or other state combinations). Eliminates ambiguity about what "no status" means.
 
 ### Redefine "Under Evaluation" Category
 
-- Tools not approved on **any** platform stay in "Under Evaluation"
-- First platform approval promotes the tool to the main section (with `pending` status on other platforms)
+- Tools `evaluating` on **all** platforms stay in "Under Evaluation"
+- First platform reaching `approved` promotes the tool to the main section (with `evaluating` or `n/a` on other platforms)
 - Prevents tools from living indefinitely in an undefined state
 
 ### No Stub Scripts Required
@@ -42,7 +53,7 @@ The installer (`aitools-install.sh/.ps1`) already skips missing scripts with `lo
 
 | File | Change |
 |------|--------|
-| `reference/tool-install-sources.md` | Add platform status columns to each tool entry |
+| `reference/tool-install-sources.md` | Add platform status lines to each tool entry |
 | `reference/tool-evaluation-criteria.md` | Update Phase 2 to clarify per-platform approval gates |
 | `.claude/rules/tool-lifecycle.md` | Clarify that Phase 2 gates are per-platform |
 | `.claude/rules/sources-of-truth.md` | Already done (roadmap system creation) |
@@ -56,7 +67,7 @@ The installer (`aitools-install.sh/.ps1`) already skips missing scripts with `lo
 - Each platform's Phase 2 gate is evaluated separately
 - Scripts and installer remain unchanged until a platform-specific tool approval requires a new setup script
 
-## Open Questions
+## Resolved Questions
 
-- Should the platform status display inline in tool-install-sources.md entries, or in a separate summary table?
-- Should `aitools install` surface platform-specific warnings (e.g., "tool X is pending on this platform")?
+- **Display format**: Platform status displays inline in each tool's entry in `tool-install-sources.md` (e.g., `macOS: supported | Windows: supported`), not in a separate summary table. Inline keeps the status next to the install commands it describes.
+- **Installer warnings**: `aitools install` surfacing platform-specific warnings (e.g., "tool X is evaluating on this platform") is future scope. The current `log_warn` for missing scripts already covers the common case.
