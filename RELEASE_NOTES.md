@@ -12,6 +12,25 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v3.5.1 -- clip2md macOS fixes (2026-02-18)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | BUG | `clip2md` (bash) crashed with `tr: Illegal byte sequence` on macOS, preventing auto-naming. Root cause: `perl -pe` without `-CSD` flag can't match multi-byte Unicode characters. `\x{00A0}` (NBSP) only replaced the `\xa0` byte, leaving an orphaned `\xc2` that corrupted the output. `\x{202F}` (narrow NBSP) was not matched at all. Fixed by adding `-CSD` (UTF-8 I/O mode) to the perl invocation. |
+| 2 | BUG | `clip2md` and `cc` overwrite/init prompts failed in zsh with `read:NNN: -p: no coprocess`. Root cause: `read -rp "prompt"` is bash-only; in zsh `-p` means coprocess. Fixed by splitting into `printf "prompt"` + `read -r answer`, which works in both shells. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 3 | Added coaching notes to `shared/claude-shared.md`: ask the user for help when the environment is broken instead of brute-forcing workarounds; always `cd` back before deleting temp dirs. |
+
+**Tested on:** macOS (bash -n validated, clip2md auto-name and explicit-name tested end-to-end). Windows not affected (PS1 uses native .NET Unicode and `Read-Host`).
+
+---
+
 ## v3.5 -- clip2md AI-Powered Naming & Logging (2026-02-18)
 
 ### New features
@@ -36,7 +55,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | 6 | PS1 temp file uses `Get-Random` for uniqueness; bash uses `$$-$RANDOM`. Hidden via dot prefix (`.clip2md-<random>.tmp`). Cleanup via `try/finally` (PS1) or explicit error-path removal (bash). |
 | 7 | PS1 pipes markdown to `claude -p` directly (accepts potential pipeline encoding mangling since Claude only needs topic understanding, not exact content). File content is written from the pre-pipe `$md` variable. |
 
-**Tested on:** Windows only (PS1 validated, bash -n validated, auto-name and explicit-name tested end-to-end). macOS completely untested.
+**Tested on:** Windows (PS1 validated, auto-name and explicit-name tested end-to-end). macOS tested in v3.5.1.
 
 ---
 

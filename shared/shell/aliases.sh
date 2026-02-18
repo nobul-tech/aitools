@@ -6,7 +6,8 @@
 cc() {
   if [ ! -f "CLAUDE.md" ] && [ ! -f "CLAUDE.local.md" ]; then
     echo "No CLAUDE.md found in $(pwd)."
-    read -rp "Create one with 'claude /init'? [y/N] " answer
+    printf "Create one with 'claude /init'? [y/N] "
+    read -r answer
     if [[ "$answer" =~ ^[Yy]$ ]]; then
       claude /init
     fi
@@ -155,7 +156,7 @@ clip2md() {
   # 5-6. Convert via pandoc + clean output
   local md
   md=$(printf '%s' "$html" | pandoc -f html -t markdown | \
-    perl -pe 's/\{=""\}//g; s/\x{00A0}/ /g; s/\x{202F}/ /g')
+    perl -CSD -pe 's/\{=""\}//g; s/\x{00A0}/ /g; s/\x{202F}/ /g')
 
   if [ -z "$md" ] || [ -z "$(printf '%s' "$md" | tr -d '[:space:]')" ]; then
     echo "clip2md: pandoc produced empty output" >&2
@@ -230,7 +231,8 @@ clip2md() {
 
     # Check overwrite
     if [ -f "$name" ]; then
-      read -rp "$name exists. Overwrite? [y/N] " answer
+      printf '%s exists. Overwrite? [y/N] ' "$name"
+      read -r answer
       if [[ ! "$answer" =~ ^[Yy]$ ]]; then
         echo "Aborted."
         _clip2md_log "aborted: user declined overwrite of $name"
