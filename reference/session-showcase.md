@@ -8,7 +8,7 @@ Ten setup scripts — five pairs of Windows PowerShell and macOS bash — plus s
 
 - **Claude Code user preferences** — installs a cross-machine config file so every Claude Code session starts with the same identity, code style defaults, and tool preferences, regardless of which machine or project directory it's launched from
 
-- **Cursor CLI and User Rules** — installs dependencies (ripgrep, required at runtime by Cursor's CLI), installs the Cursor CLI itself, writes a standard CLI config, and copies a centrally-managed set of AI behavior rules to the clipboard for pasting into Cursor Settings
+- **Cursor CLI and config** — installs dependencies (ripgrep, required at runtime by Cursor's CLI), installs the Cursor CLI itself, and writes a standard CLI config
 
 - **Claude Code MCP servers** — configures Chrome DevTools (local browser automation), Vercel (deployment platform), and Webflow (site builder) integrations using Claude Code's config format
 
@@ -33,7 +33,6 @@ ai-tooling/
   deploy/               Self-contained scripts (generated, MDM-ready)
   plans/                Detailed implementation plans for roadmap items
   reference/            Setup notes, practices, and this document
-  docs/                 Vendor documentation for offline/RAG use
 ```
 
 The repo is git-based — clone to `~/repos/ai-tooling` (macOS) or `C:\repos\ai-tooling` (Windows).

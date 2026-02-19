@@ -29,19 +29,15 @@ blog_error() { blog "ERROR: $1" >&2; }
 
 # Shared content files
 CLAUDE_SHARED="$SHARED_DIR/claude-shared.md"
-USER_RULES="$SHARED_DIR/cursor-rules/user-rules.md"
 
 # Verify shared files exist
-for f in "$CLAUDE_SHARED" "$USER_RULES"; do
-    if [ ! -f "$f" ]; then
-        blog_error "Required shared file not found: $f"
-        exit 1
-    fi
-done
+if [ ! -f "$CLAUDE_SHARED" ]; then
+    blog_error "Required shared file not found: $CLAUDE_SHARED"
+    exit 1
+fi
 
 # Read shared content
 CLAUDE_SHARED_CONTENT=$(cat "$CLAUDE_SHARED")
-USER_RULES_CONTENT=$(cat "$USER_RULES")
 
 # Clean and recreate deploy/
 rm -rf "$DEPLOY_DIR"
@@ -334,14 +330,13 @@ blog "Generating deploy/setup-user-cursor.sh"
     echo "$HEADER_COMMENT_BASH"
     cat <<'BLOCK'
 # setup-user-cursor.sh — Sets up Cursor CLI + dependencies on macOS/Linux
-# Self-contained: User Rules content is embedded below. No repo or Drive needed.
+# Self-contained. No repo or Drive needed.
 # Safe to re-run — checks each step and skips what's already done.
 #
-# Does four things:
+# Does three things:
 #   1. Installs ripgrep (rg) if not already present (required by Cursor CLI)
 #   2. Installs Cursor CLI (agent command) if not already present
 #   3. Writes ~/.cursor/cli-config.json (skips if already up to date)
-#   4. Copies embedded User Rules to clipboard for pasting into Cursor Settings > Rules
 
 set -euo pipefail
 
@@ -417,33 +412,6 @@ else
     printf '%s' "$EXPECTED_CONFIG" > "$CLI_CONFIG"
     log_ok "Created: $CLI_CONFIG"
 fi
-
-# --- 4. User Rules ---
-log "Step 4: User Rules (embedded)"
-
-# --- Embedded User Rules (from shared/cursor-rules/user-rules.md) ---
-BLOCK
-    echo 'read -r -d "" USER_RULES_CONTENT <<'"'"'__EMBEDDED_USER_RULES__'"'"' || true'
-    echo "$USER_RULES_CONTENT"
-    echo '__EMBEDDED_USER_RULES__'
-    cat <<'BLOCK'
-
-if [ -t 1 ]; then
-    # Interactive: copy to clipboard
-    if command -v pbcopy &>/dev/null; then
-        printf '%s' "$USER_RULES_CONTENT" | pbcopy
-        log_ok "Copied User Rules to clipboard"
-    elif command -v xclip &>/dev/null; then
-        printf '%s' "$USER_RULES_CONTENT" | xclip -selection clipboard
-        log_ok "Copied User Rules to clipboard (xclip)"
-    else
-        log_warn "No clipboard command found (pbcopy/xclip). Copy manually from log."
-    fi
-    log "Paste User Rules into: Cursor Settings > Rules"
-else
-    # Non-interactive: skip clipboard
-    log_ok "User Rules embedded and ready"
-fi
 BLOCK
     bash_exit_footer
 } > "$DEPLOY_DIR/setup-user-cursor.sh"
@@ -460,14 +428,13 @@ blog "Generating deploy/setup-user-cursor.ps1"
     echo "$HEADER_COMMENT_PS1"
     cat <<'BLOCK'
 # setup-user-cursor.ps1 — Sets up Cursor CLI + dependencies on Windows
-# Self-contained: User Rules content is embedded below. No repo or Drive needed.
+# Self-contained. No repo or Drive needed.
 # Safe to re-run — checks each step and skips what's already done.
 #
-# Does four things:
+# Does three things:
 #   1. Installs ripgrep (rg) if not already present (required by Cursor CLI)
 #   2. Installs Cursor CLI (agent command) if not already present
 #   3. Writes ~/.cursor/cli-config.json (skips if already up to date)
-#   4. Copies embedded User Rules to clipboard for pasting into Cursor Settings > Rules
 
 BLOCK
     ps1_logging_helpers "setup-user-cursor"
@@ -553,24 +520,6 @@ if (Test-Path $cliConfig) {
 } else {
     [System.IO.File]::WriteAllText($cliConfig, $expectedConfig, [System.Text.UTF8Encoding]::new($false))
     LogOk "Created: $cliConfig"
-}
-
-# --- 4. User Rules ---
-Log "Step 4: User Rules (embedded)"
-
-# --- Embedded User Rules (from shared/cursor-rules/user-rules.md) ---
-$userRulesContent = @'
-BLOCK
-    echo "$USER_RULES_CONTENT"
-    cat <<'BLOCK'
-'@
-
-if (-not $env:AITOOLS_DEPLOY) {
-    Set-Clipboard -Value $userRulesContent
-    LogOk "Copied User Rules to clipboard"
-    Log "Paste into: Cursor Settings > Rules"
-} else {
-    LogOk "User Rules embedded and ready"
 }
 BLOCK
     ps1_exit_footer

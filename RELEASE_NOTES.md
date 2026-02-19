@@ -12,6 +12,40 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v3.11 -- Cleanup & Deprecations (2026-02-19)
+
+### Deprecated
+
+| # | Change |
+|---|--------|
+| 1 | **Cursor User Rules clipboard workflow removed**: `setup-user-cursor` scripts no longer copy `user-rules.md` to clipboard or open the file. Cursor project rules (`.cursor/rules/*.mdc`) auto-load and cover the same ground. The source file `shared/cursor-rules/user-rules.md` is retained as reference. |
+
+### Removed
+
+| # | Change |
+|---|--------|
+| 2 | **`docs/` folder removed**: Vendor-specific PDFs and markdown conversions (4.7 MB, mostly StorNext/Quantum). Copies exist elsewhere. |
+| 3 | **`conversionutils/` folder removed**: Legacy PDF-to-markdown utilities superseded by Marker. |
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 4 | BUG | `setup-user-cursor.sh/.ps1` now have exit footers that check the error counter and exit with code 1 on failure. Previously, scripts exited 0 regardless of errors. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 5 | `reference/cursor-practices.md`: User Rules section updated to note deprecated workflow. |
+| 6 | `CLAUDE.md`: Removed `docs/` and `conversionutils/` from project structure, removed legacy PDF conversion usage examples, simplified Marker key decision. |
+| 7 | `README.md`: Removed `docs/` and `conversionutils/` directory rows, removed PDF conversion section. |
+| 8 | `reference/session-showcase.md`: Removed `docs/` from repo structure, updated Cursor setup description. |
+
+**Verified on:** macOS (bash -n validated on all .sh scripts, deploy/ rebuilt). Windows: PS1 scripts updated but not validated on this machine.
+
+---
+
 ## v3.10 -- Audit & Governance Rules (2026-02-19)
 
 ### Bug fixes

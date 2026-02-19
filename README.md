@@ -11,8 +11,6 @@ Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude C
 | `deploy/` | Generated self-contained scripts (MDM-ready, no repo needed) |
 | `.claude/rules/` | Claude Code project rules |
 | `.cursor/rules/` | Cursor project rules (.mdc format) |
-| `conversionutils/` | PDF-to-markdown conversion utilities |
-| `docs/` | Vendor docs for offline/RAG use |
 | `reference/` | Setup notes, practices, session showcase |
 | `plans/` | Detailed implementation plans for roadmap items |
 | `shared/hooks/` | Claude Code hooks (session archive) |
@@ -62,7 +60,7 @@ Run these from the `deploy/` directory -- self-contained, MDM-ready:
 bash deploy/setup-user-claude.sh        # macOS
 .\deploy\setup-user-claude.ps1          # Windows
 
-# Cursor CLI + User Rules
+# Cursor CLI + config
 bash deploy/setup-user-cursor.sh        # macOS
 .\deploy\setup-user-cursor.ps1          # Windows
 
@@ -113,14 +111,6 @@ source ~/repos/ai-tooling/shared/shell/aliases.sh
 ```
 
 Key aliases: `cc` (Claude Code with CLAUDE.md check), `ccr`/`ccs` (resume/pick sessions), `clip2md` (clipboard to markdown).
-
-**PDF conversion** (Marker is preferred -- see `conversionutils/COMPARISON_REPORT.md`):
-
-```bash
-# Legacy utilities (still available):
-python conversionutils/pdf_to_markdown.py input.pdf -o output.md
-python conversionutils/pdf_to_man_markdown.py input.pdf -o output.md
-```
 
 **Clipboard to Markdown** (requires pandoc; optional: claude CLI for auto-naming):
 

@@ -1,15 +1,10 @@
 # setup-user-cursor.ps1 — Sets up Cursor CLI + dependencies on Windows
 # Safe to re-run — checks each step and skips what's already done.
 #
-# Does four things:
+# Does three things:
 #   1. Installs ripgrep (rg) if not already present (required by Cursor CLI)
 #   2. Installs Cursor CLI (agent command) if not already present
 #   3. Writes ~/.cursor/cli-config.json (skips if already up to date)
-#   4. Copies User Rules to clipboard for pasting into Cursor Settings > Rules
-
-param(
-    [string]$UserRulesPath = (Join-Path $PSScriptRoot "..\shared\cursor-rules\user-rules.md")
-)
 
 # --- Logging ---
 $logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
@@ -42,7 +37,6 @@ $status = @{
     ripgrep   = ""
     cursorCli = ""
     cliConfig = ""
-    userRules = ""
 }
 
 # Helper: refresh PATH from registry (picks up winget installs in same session)
@@ -140,28 +134,6 @@ if (Test-Path $cliConfig) {
     $status.cliConfig = "created"
 }
 
-# --- 4. Copy User Rules to clipboard ---
-
-Log "Step 4: User Rules"
-
-if (Test-Path $UserRulesPath) {
-    if (-not $env:AITOOLS_DEPLOY) {
-        # Interactive: copy to clipboard
-        $rulesContent = Get-Content -Path $UserRulesPath -Raw
-        Set-Clipboard -Value $rulesContent
-        LogOk "Copied to clipboard from: $UserRulesPath"
-        Log "Paste into: Cursor Settings > Rules"
-        $status.userRules = "copied to clipboard -- paste into Cursor Settings > Rules"
-    } else {
-        # Non-interactive (called from deploy_configs): skip clipboard
-        LogOk "User Rules source: $UserRulesPath"
-        $status.userRules = "available (run interactively to copy to clipboard)"
-    }
-} else {
-    LogWarn "User Rules file not found at $UserRulesPath. Skipping clipboard copy."
-    $status.userRules = "SKIPPED (file not found)"
-}
-
 # --- Summary ---
 
 Log "=============================="
@@ -169,10 +141,13 @@ Log "Summary:"
 Log "  ripgrep:       $($status.ripgrep)"
 Log "  Cursor CLI:    $($status.cursorCli)"
 Log "  cli-config:    $($status.cliConfig)"
-Log "  User Rules:    $($status.userRules)"
 Log "=============================="
 
-# Open User Rules file so user can see what to paste (interactive only)
-if (-not $env:AITOOLS_DEPLOY -and (Test-Path $UserRulesPath)) {
-    Start-Process $UserRulesPath
+# --- Exit ---
+if ($errors -gt 0) {
+    Log "FAILED with $errors error(s). See log: $logFile"
+    exit 1
+} else {
+    Log "COMPLETED successfully"
+    exit 0
 }

@@ -24,8 +24,6 @@ ai-tooling/
 │   ├── aitools.ps1      # CLI entry point (PowerShell, Windows)
 │   └── build-deploy.sh  # Generates deploy/ from scripts/ + shared/
 ├── deploy/              # Self-contained scripts for MDM (generated)
-├── conversionutils/     # PDF-to-markdown conversion tools
-├── docs/                # RAG knowledge base (vendor docs)
 ├── plans/               # Detailed plans for roadmap items
 └── reference/           # Setup notes and how-tos
 ```
@@ -58,10 +56,6 @@ bash deploy/setup-user-claude.sh
 # Windows (PowerShell):
 # .\deploy\setup-user-claude.ps1
 
-# PDF conversion (requires marker or pymupdf)
-python conversionutils/pdf_to_markdown.py --help
-python conversionutils/pdf_to_man_markdown.py --help
-
 # Clipboard to Markdown (requires pandoc; optional: claude CLI for auto-naming)
 clip2md                        # Auto-name via AI: 250324-garcia-budget.md
 clip2md meeting-notes          # Explicit name: meeting-notes.md
@@ -77,7 +71,7 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 
 ## Key Decisions
 
-- **Marker** is the preferred PDF-to-markdown converter (better output than PyMuPDF alone)
+- **Marker** is the preferred PDF-to-markdown converter
 - This directory is the **"home base"** for general/cross-project AI conversations
 - Session notes are ephemeral; durable knowledge goes in CLAUDE.md or reference/ docs (auto-memory is local to each machine, not shared)
 - Shared preferences live in `shared/claude-shared.md`, embedded into deploy scripts by `build-deploy.sh`

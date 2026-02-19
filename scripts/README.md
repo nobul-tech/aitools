@@ -19,8 +19,8 @@ Setup and utility scripts for configuring AI tooling across machines.
 | `setup-user-claude.sh` | macOS/Linux | Creates `~/.claude/CLAUDE.md` with shared import |
 | `setup-user-mcp.ps1` | Windows | Installs/updates user-level MCP servers for Claude Code |
 | `setup-user-mcp.sh` | macOS/Linux | Installs/updates user-level MCP servers for Claude Code |
-| `setup-user-cursor.ps1` | Windows | Installs ripgrep + Cursor CLI, writes `cli-config.json`, copies User Rules to clipboard |
-| `setup-user-cursor.sh` | macOS/Linux | Installs ripgrep + Cursor CLI, writes `cli-config.json`, copies User Rules to clipboard |
+| `setup-user-cursor.ps1` | Windows | Installs ripgrep + Cursor CLI, writes `cli-config.json` |
+| `setup-user-cursor.sh` | macOS/Linux | Installs ripgrep + Cursor CLI, writes `cli-config.json` |
 | `setup-cursor-mcp.ps1` | Windows | Writes `~/.cursor/mcp.json` with MCP servers for Cursor |
 | `setup-cursor-mcp.sh` | macOS/Linux | Writes `~/.cursor/mcp.json` with MCP servers for Cursor |
 | `setup-vercelcli.ps1` | Windows | Installs/updates Vercel CLI via npm |
@@ -82,9 +82,7 @@ After running, start a Claude Code session and run `/mcp` to verify servers and 
 bash scripts/setup-user-cursor.sh
 ```
 
-Safe to re-run — checks each step and skips what's already done. Installs ripgrep (required by Cursor CLI) and the CLI itself if missing, writes `cli-config.json` if changed, and copies User Rules to clipboard.
-
-After running, paste clipboard contents into **Cursor Settings > Rules**. Source of truth for User Rules: `shared/cursor-rules/user-rules.md`.
+Safe to re-run — checks each step and skips what's already done. Installs ripgrep (required by Cursor CLI) and the CLI itself if missing, and writes `cli-config.json` if changed.
 
 ### Cursor MCP Servers
 

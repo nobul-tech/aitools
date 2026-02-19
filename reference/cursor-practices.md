@@ -103,14 +103,11 @@ Config lives at `~/.cursor/cli-config.json`:
 | `agent --version` | Show CLI version |
 | `agent "prompt"` | Start session with initial prompt |
 
-### User Rules
+### User Rules (deprecated workflow)
 
 Cursor User Rules live in **Cursor Settings > Rules** (UI only) — they're stored in a SQLite database (`state.vscdb`), not an accessible file.
 
-To keep rules consistent across machines:
-1. Edit the source of truth: `shared/cursor-rules/user-rules.md`
-2. Run `setup-user-cursor.ps1` / `.sh` to copy to clipboard
-3. Paste into **Cursor Settings > Rules**
+The automated clipboard-copy workflow (via `setup-user-cursor`) has been removed as of v3.11. Cursor project rules (`.cursor/rules/*.mdc`) are auto-loaded and cover the same ground. If manual User Rules are still needed, copy from `shared/cursor-rules/user-rules.md` directly.
 
 ### CLAUDE.md Interop
 
