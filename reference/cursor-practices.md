@@ -136,6 +136,7 @@ Cursor project rules mirror Claude Code rules for consistency. When changing rul
 | `.claude/rules/python-style.md` | `.cursor/rules/general.mdc` | Folded in |
 | `.claude/rules/pre-commit.md` | `.cursor/rules/pre-commit.mdc` | Identical |
 | `.claude/rules/pre-push.md` | `.cursor/rules/pre-push.mdc` | Identical |
+| `.claude/rules/post-push.md` | `.cursor/rules/post-push.mdc` | Identical |
 | `.claude/rules/surface-silent-failures.md` | -- | Claude Code-specific |
 
 ### Changing rules
