@@ -1,0 +1,28 @@
+---
+description: Script standards for setup scripts in this repo
+globs: "*.sh,*.ps1"
+alwaysApply: false
+---
+
+## Script Standards (this repo)
+
+Setup scripts (`scripts/setup-*.sh/.ps1`) must follow these conventions.
+
+### Block order
+
+**Bash:** shebang/header > `set -euo pipefail` > logging block (`ERRORS=0` + helpers) > OS guard > body > exit footer
+**PS1:** header > logging block (`$errors = 0` + helpers) > OS guard > body > exit footer
+
+### Error tracking (required)
+
+- `log_error()` MUST do `ERRORS=$((ERRORS + 1))`
+- `LogError` MUST do `$script:errors++`
+- Missing tracking is a bug -- scripts silently exit 0 on failure.
+
+### Logging helpers
+
+Bash: `log`/`log_ok`/`log_error`/`log_warn`. PS1: `Log`/`LogOk`/`LogError`/`LogWarn`. UTC timestamps with Z suffix.
+
+### Exit footer
+
+Check error counter, exit 1 on failure, exit 0 on success. See gold standards: `scripts/setup-user-mcp.sh/.ps1`.

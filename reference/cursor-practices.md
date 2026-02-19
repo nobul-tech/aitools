@@ -137,6 +137,8 @@ Cursor project rules mirror Claude Code rules for consistency. When changing rul
 | `.claude/rules/pre-commit.md` | `.cursor/rules/pre-commit.mdc` | Identical |
 | `.claude/rules/pre-push.md` | `.cursor/rules/pre-push.mdc` | Identical |
 | `.claude/rules/post-push.md` | `.cursor/rules/post-push.mdc` | Identical |
+| `.claude/rules/script-standards.md` | `.cursor/rules/script-standards.mdc` | Condensed |
+| `.claude/rules/documentation-standards.md` | `.cursor/rules/documentation-standards.mdc` | Condensed |
 | `.claude/rules/surface-silent-failures.md` | -- | Claude Code-specific |
 
 ### Changing rules

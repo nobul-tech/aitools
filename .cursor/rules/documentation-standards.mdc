@@ -1,0 +1,27 @@
+---
+description: Documentation standards for release notes, roadmap, and reference docs
+globs:
+alwaysApply: true
+---
+
+## Documentation Standards (this repo)
+
+### RELEASE_NOTES.md format
+
+Version header: `## vX.Y -- Title (YYYY-MM-DD)`. Standard sections (include only applicable): Bug fixes, New features, Improvements, Documentation, Files created. Each as a table. End with `**Verified on:**` line.
+
+### Version numbering
+
+`major.minor.patch` -- major = structural, minor = features/tools, patch = isolated bug fixes. Multiple changes same day roll into one release.
+
+### ROADMAP.md format
+
+Three sections: In Progress, Planned, Completed. Table: `| Item | Plan | Priority | Summary |`. In Progress must link `plans/*.md`. Completed items move to RELEASE_NOTES.md.
+
+### Reference doc threshold
+
+Content >20 lines of detail goes in `reference/`, not CLAUDE.md. Keep CLAUDE.md under 200 lines.
+
+### When to create a plan
+
+Spans multiple sessions, has phased gates, or needs detailed design beyond a roadmap row.

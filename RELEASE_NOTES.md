@@ -12,6 +12,48 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v3.10 -- Audit & Governance Rules (2026-02-19)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | BUG | `setup-vercelcli.sh/.ps1` and `setup-pandoc.sh/.ps1` now track errors via `ERRORS`/`$errors` counter and exit with code 1 on failure. Previously, `log_error()` only logged -- scripts silently exited 0 even when errors occurred. |
+
+### New rules
+
+| # | Change |
+|---|--------|
+| 2 | **Script standards** (`.claude/rules/script-standards.md` + `.cursor/rules/script-standards.mdc`): Codifies block order, error tracking requirement, logging helpers, exit footer, and gold standard references for all setup scripts. |
+| 3 | **Documentation standards** (`.claude/rules/documentation-standards.md` + `.cursor/rules/documentation-standards.mdc`): Codifies RELEASE_NOTES format, version numbering, ROADMAP format, reference doc threshold, and when to create plans. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 4 | **Pre-commit checklist enhanced** (items 6-7): Added executable bit check (`git ls-files -s '*.sh' | grep -v '^100755'`) and install command consistency check (verify against `tool-install-sources.md`). |
+| 5 | **Tool lifecycle rule enhanced**: Added lifecycle field completeness check (all 4 fields required) and Under Evaluation guard (evaluating-only tools must not have setup scripts, installer entries, aliases, or build pipeline entries). |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 6 | `reference/cursor-practices.md`: Rule Correspondence table updated with 2 new rule pairs. |
+| 7 | `CLAUDE.md`: Gold standard reference updated from setup-vercelcli to setup-user-mcp. Documentation standards key decision added. |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `.claude/rules/script-standards.md` | Script standards rule (Claude Code) |
+| `.cursor/rules/script-standards.mdc` | Script standards rule (Cursor, condensed) |
+| `.claude/rules/documentation-standards.md` | Documentation standards rule (Claude Code) |
+| `.cursor/rules/documentation-standards.mdc` | Documentation standards rule (Cursor, condensed) |
+
+**Verified on:** macOS (bash -n validated on all .sh scripts, deploy/ rebuilt). Windows: PS1 scripts updated but not validated on this machine.
+
+---
+
 ## v3.9 -- MCP Concurrency, Cursor Rule Parity, Tool Lifecycle Fields (2026-02-19)
 
 ### Bug fixes

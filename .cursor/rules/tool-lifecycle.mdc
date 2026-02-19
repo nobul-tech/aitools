@@ -16,3 +16,11 @@ When adding a new managed tool, follow the lifecycle in `reference/tool-evaluati
 - If the user approves: promote to full entry, then proceed to Phase 3+
 
 This applies in plan mode too -- a plan that includes Phases 3-5 must note the Phase 2 gate and flag that implementation is contingent on approval.
+
+### Lifecycle field completeness
+
+Every tool in `reference/tool-install-sources.md` (including Under Evaluation) must have: Platform Status, Concurrency, Post-Install Config, Dependencies. Verify before committing.
+
+### Under Evaluation guard
+
+Tools with `evaluating` on ALL platforms must NOT have: setup scripts, installer entries, aliases, or build pipeline entries. Flag violations as lifecycle errors.

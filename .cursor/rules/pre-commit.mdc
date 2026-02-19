@@ -30,3 +30,11 @@ If any file in `scripts/` or `shared/` was modified, run `bash scripts/build-dep
 ### 5. Platform note
 
 End the commit message with `(tested: macOS)` or `(tested: Windows)`.
+
+### 6. Executable bit on .sh files
+
+`git ls-files -s '*.sh' | grep -v '^100755'` must return nothing. Fix: `git update-index --chmod=+x <file>`. Especially important for files created on Windows.
+
+### 7. Install command consistency
+
+If modifying `scripts/setup-*.sh/.ps1`, verify install commands match `reference/tool-install-sources.md`. Never hardcode from memory.

@@ -96,12 +96,13 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 - **Roadmap tracking**: `ROADMAP.md` tracks active/planned work. Detailed plans in `plans/`. Completed items move to `RELEASE_NOTES.md`.
 - **`--isolated` for stdio MCP servers**: Chrome DevTools MCP uses `--isolated` flag for throwaway temp Chrome profiles, enabling concurrent Claude Code + Cursor sessions without Chrome profile lock conflicts
 - **Tool lifecycle entries require 4 fields**: Platform Status, Concurrency, Post-Install Config, Dependencies -- see `reference/tool-evaluation-criteria.md`
+- **Documentation standards**: RELEASE_NOTES format, version numbering, ROADMAP format, and reference doc threshold are codified in `.claude/rules/documentation-standards.md`
 
 ## Code Conventions
 
 - Python 3.10+, type hints, `argparse` for CLI, `pathlib.Path` over `os.path`
 - Scripts (this repo): provide both `.ps1` and `.sh` variants since this repo is cross-platform
-- Script logging: all setup scripts use structured logging — `log`/`log_ok`/`log_error`/`log_warn` (bash) and `Log`/`LogOk`/`LogError`/`LogWarn` (PS1). Block order: logging → OS guard → script body. Gold standard: `scripts/setup-vercelcli.sh/.ps1`
+- Script logging: all setup scripts use structured logging — `log`/`log_ok`/`log_error`/`log_warn` (bash) and `Log`/`LogOk`/`LogError`/`LogWarn` (PS1). Full conventions in `.claude/rules/script-standards.md`. Gold standard: `scripts/setup-user-mcp.sh/.ps1`
 - Keep this file under 200 lines; use `@reference/` imports for detail
 
 ### Windows dispatch in `aitools` (bash)
