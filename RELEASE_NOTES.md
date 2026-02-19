@@ -28,6 +28,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | 3 | **Cursor project rules parity**: Created 4 new `.cursor/rules/*.mdc` files mirroring Claude Code rules: `sources-of-truth.mdc`, `tool-lifecycle.mdc`, `cross-platform.mdc`, `concurrent-agents.mdc`. Updated `general.mdc` (moved cross-platform to dedicated file). |
 | 4 | **Concurrent agent coordination**: New rule (`.claude/rules/concurrent-agents.md` + `.cursor/rules/concurrent-agents.mdc`) for multi-agent codebase editing awareness. |
 | 5 | **Protected files expanded**: `.cursor/rules/*.mdc` added to source-of-truth protected files table. Agent column added for future ownership restrictions. |
+| 11 | **Pre-commit/pre-push/post-push checklists**: New rules for all three git lifecycle stages (`.claude/rules/` + `.cursor/rules/` mirrors). Pre-commit: identity, syntax, build freshness, line endings, platform note. Pre-push: scratch files, release notes, roadmap, deploy freshness, branch hygiene. Post-push: two tiers (Always + Extensive) with 17 audit items and flag disposition protocol. |
 
 ### Documentation
 
@@ -48,6 +49,12 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | `.cursor/rules/tool-lifecycle.mdc` | Tool lifecycle gate (Cursor) |
 | `.cursor/rules/cross-platform.mdc` | Cross-platform rules (Cursor, condensed) |
 | `.cursor/rules/concurrent-agents.mdc` | Concurrent agent coordination rule (Cursor) |
+| `.claude/rules/pre-commit.md` | Pre-commit checklist (Claude Code) |
+| `.claude/rules/pre-push.md` | Pre-push checklist (Claude Code) |
+| `.claude/rules/post-push.md` | Post-push audit checklist (Claude Code) |
+| `.cursor/rules/pre-commit.mdc` | Pre-commit checklist (Cursor) |
+| `.cursor/rules/pre-push.mdc` | Pre-push checklist (Cursor) |
+| `.cursor/rules/post-push.mdc` | Post-push audit checklist (Cursor) |
 
 **Verified on:** macOS (build validated, all setup scripts syntax-checked). Windows: PS1 MCP setup scripts updated but not validated on this machine.
 

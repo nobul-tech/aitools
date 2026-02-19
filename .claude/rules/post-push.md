@@ -3,6 +3,14 @@
 Two tiers: **Always** runs after every push. **Extensive** runs after significant
 releases (new features, structural changes, new tools) or when requested.
 
+### Flag disposition
+
+When the audit produces flags:
+
+1. **Fix now** -- quick fixes (release notes update, delete scratch files): address in a follow-up commit
+2. **Defer** -- requires planning or user action (e.g., `aitools user init`): add to ROADMAP.md or note in session
+3. **Won't-fix** -- known exception: document why inline and move on
+
 ### Always (after every push)
 
 #### 1. Verify push landed
