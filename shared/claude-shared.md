@@ -90,6 +90,7 @@ Full evaluation and progress log: `reference/claude-code-effectiveness.md` in ai
 - **`@` references**: Use `@path/to/file` in prompts to pre-load files into context
 - **Ask for help when stuck**: When the environment is fundamentally broken (e.g., deleted CWD, corrupted shell state), ask the user to restart the session instead of burning tool calls on workarounds. One message beats a dozen failed attempts.
 - **Clean up before deleting**: Always `cd` back to a stable directory before `rm -rf`'ing temp dirs used during testing
+- **Clarify before complying**: If a user response seems to contradict or reverse a prior recommendation, ask a clarifying question before proceeding. The user may have misunderstood the framing (e.g., reading "Why not X" as a question rather than a justification). A quick "Just to confirm -- did you mean X or Y?" avoids wasted work from miscommunication. Err on the side of asking.
 
 **In plan mode**: Always review these areas and proactively suggest relevant improvements (e.g., "consider breaking this into smaller batches" or "this would be a good candidate for a hook").
 

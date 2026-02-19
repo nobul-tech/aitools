@@ -14,6 +14,9 @@ Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude C
 | `conversionutils/` | PDF-to-markdown conversion utilities |
 | `docs/` | Vendor docs for offline/RAG use |
 | `reference/` | Setup notes, practices, session showcase |
+| `plans/` | Detailed implementation plans for roadmap items |
+| `ROADMAP.md` | Active and planned work items |
+| `RELEASE_NOTES.md` | Version history and changelog |
 
 ## How it works
 
@@ -27,11 +30,11 @@ Clone the repo and run the installer:
 
 ```bash
 # macOS/Linux
-git clone https://github.com/<org>/ai-tooling.git ~/repos/ai-tooling
+git clone https://github.com/nobul-jose/ai-tooling.git ~/repos/ai-tooling
 bash ~/repos/ai-tooling/scripts/aitools-install.sh
 
 # Windows (PowerShell)
-git clone https://github.com/<org>/ai-tooling.git C:\repos\ai-tooling
+git clone https://github.com/nobul-jose/ai-tooling.git C:\repos\ai-tooling
 C:\repos\ai-tooling\scripts\aitools-install.ps1
 ```
 
@@ -70,6 +73,10 @@ bash deploy/setup-cursor-mcp.sh         # macOS
 # Vercel CLI
 bash deploy/setup-vercelcli.sh          # macOS
 .\deploy\setup-vercelcli.ps1            # Windows
+
+# Pandoc
+bash deploy/setup-pandoc.sh             # macOS
+.\deploy\setup-pandoc.ps1               # Windows
 ```
 
 ### Develop / maintain configs
@@ -101,12 +108,26 @@ source ~/repos/ai-tooling/shared/shell/aliases.sh
 . "$HOME\repos\ai-tooling\shared\shell\aliases.ps1"
 ```
 
-**PDF conversion:**
+Key aliases: `cc` (Claude Code with CLAUDE.md check), `ccr`/`ccs` (resume/pick sessions), `clip2md` (clipboard to markdown).
+
+**PDF conversion** (Marker is preferred -- see `conversionutils/COMPARISON_REPORT.md`):
 
 ```bash
+# Legacy utilities (still available):
 python conversionutils/pdf_to_markdown.py input.pdf -o output.md
 python conversionutils/pdf_to_man_markdown.py input.pdf -o output.md
 ```
+
+**Clipboard to Markdown** (requires pandoc; optional: claude CLI for auto-naming):
+
+```bash
+clip2md                          # Auto-name via AI: 250324-garcia-budget.md
+clip2md meeting-notes            # Explicit name: meeting-notes.md
+```
+
+## Version history
+
+See [RELEASE_NOTES.md](RELEASE_NOTES.md) for the full changelog.
 
 ## License
 

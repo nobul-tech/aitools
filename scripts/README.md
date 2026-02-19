@@ -25,6 +25,14 @@ Setup and utility scripts for configuring AI tooling across machines.
 | `setup-cursor-mcp.sh` | macOS/Linux | Writes `~/.cursor/mcp.json` with MCP servers for Cursor |
 | `setup-vercelcli.ps1` | Windows | Installs/updates Vercel CLI via npm |
 | `setup-vercelcli.sh` | macOS/Linux | Installs/updates Vercel CLI via Homebrew (macOS) or npm (Linux) |
+| `setup-pandoc.ps1` | Windows | Installs/updates Pandoc via winget |
+| `setup-pandoc.sh` | macOS/Linux | Installs/updates Pandoc via Homebrew |
+
+## Build Pipeline
+
+| Script | Platform | Purpose |
+|--------|----------|---------|
+| `build-deploy.sh` | macOS/Linux (bash only) | Generates `deploy/` from `scripts/` + `shared/` |
 
 ## OS Guards
 
