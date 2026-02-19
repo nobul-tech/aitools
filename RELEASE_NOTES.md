@@ -12,6 +12,46 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v3.8 -- Session Auto-Archive & User Repo (2026-02-19)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Session auto-archive**: Claude Code `SessionEnd` hook copies session transcripts to a private user repo (`aitools-<username>`) after each session ends. Files are organized by project under `sessions/<project>/<date>_<prefix>.jsonl`. Hook runs silently, never blocks Claude Code, and performs no git operations. |
+| 2 | **`aitools user init`**: Interactive setup for the user repo -- detects GitHub username, creates repo with `profile.json` and `sessions/` structure, optionally creates a private GitHub repo, writes `userRepoPath` to config, and deploys the session archive hook. |
+| 3 | **`aitools sessions list [project]`**: Lists archived sessions with file sizes, optionally filtered by project name. |
+| 4 | **`aitools sessions archive <id>`**: Manually archives a specific session by ID (full UUID or prefix). Reads CWD from the JSONL transcript to derive the correct project name. |
+| 5 | **`aitools sessions move <file> <project>`**: Refiles an archived session under a different project. Handles the case where CWD didn't match the actual project being worked on. |
+| 6 | **Hook auto-deploy**: `setup-user-hooks.sh/.ps1` added to the deploy pipeline. Running `aitools` (no args) now installs/updates the hook in `~/.claude/settings.json` and shows a hint if the user repo isn't set up yet. |
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 7 | BUG | `aitools user init` (bash) now dispatches to `.ps1` on Windows for hook deployment. Previously called `setup-user-hooks.sh` which has an OS guard that rejects Windows. |
+| 8 | BUG | `sessions archive` project derivation: Claude Code stores sessions in directories named by replacing `/` with `-` in the CWD path, which is lossy for project names containing hyphens (e.g., `ai-tooling` became `tooling`). Fixed by reading the actual `cwd` from the JSONL transcript via node instead of parsing the ambiguous directory name. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 9 | New `reference/user-repo.md`: documents the user repo pattern, naming convention, session naming, project derivation, and CLI commands. |
+| 10 | `plans/user-repo-and-session-hooks.md`: status updated to "Phase A implemented", open questions resolved (hook schema, jq dependency, project derivation). |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `shared/hooks/session-archive.sh` | SessionEnd hook script (bash-only, runs on both platforms) |
+| `scripts/setup-user-hooks.sh` | Deploys hook config to `~/.claude/settings.json` (macOS/Linux) |
+| `scripts/setup-user-hooks.ps1` | Same for Windows |
+| `reference/user-repo.md` | User repo pattern documentation |
+
+**Verified on:** macOS (hook, setup, all CLI commands tested end-to-end). Windows untested (PS1 scripts not validated on this machine).
+
+---
+
 ## v3.7 -- Tool Lifecycle Terminology & Verified-on Convention (2026-02-18)
 
 ### Improvements

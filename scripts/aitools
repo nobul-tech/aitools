@@ -81,7 +81,7 @@ deploy_configs() {
     export AITOOLS_DEPLOY=1
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
-            local deploy_scripts="setup-user-claude.ps1 setup-user-mcp.ps1 setup-cursor-mcp.ps1 setup-user-cursor.ps1"
+            local deploy_scripts="setup-user-claude.ps1 setup-user-mcp.ps1 setup-cursor-mcp.ps1 setup-user-cursor.ps1 setup-user-hooks.ps1"
             for script in $deploy_scripts; do
                 local script_path="$script_dir/$script"
                 if [ -f "$script_path" ]; then
@@ -106,7 +106,7 @@ deploy_configs() {
             done
             ;;
         *)
-            local deploy_scripts="setup-user-claude.sh setup-user-mcp.sh setup-cursor-mcp.sh setup-user-cursor.sh"
+            local deploy_scripts="setup-user-claude.sh setup-user-mcp.sh setup-cursor-mcp.sh setup-user-cursor.sh setup-user-hooks.sh"
             for script in $deploy_scripts; do
                 local script_path="$script_dir/$script"
                 if [ -f "$script_path" ]; then
@@ -156,6 +156,10 @@ Commands:
   gitpull              Update source: pull + rebuild + deploy + changelog + version tag
   install              Full setup: pull + rebuild + install tools + deploy configs
   mcp                  Show MCP server status for current project
+  user init            Set up user repo and configure session archiving hook
+  sessions list [proj] List archived sessions (optionally filter by project)
+  sessions archive ID  Manually archive a session by ID (full or prefix)
+  sessions move F proj Refile an archived session under a different project
 
 Options:
   --addmcp <name...>   Enable MCP server(s) for current project (vercel, webflow)
@@ -174,6 +178,11 @@ show_help=false
 do_install=false
 do_gitpull=false
 do_mcp_status=false
+do_user=false
+user_subcmd=""
+do_sessions=false
+sessions_subcmd=""
+sessions_args=()
 addmcp_seen=false
 addmcp_servers=()
 passthrough=()
@@ -185,6 +194,25 @@ while [[ $# -gt 0 ]]; do
         install)      do_install=true; shift ;;
         gitpull)      do_gitpull=true; shift ;;
         mcp)          do_mcp_status=true; shift ;;
+        user)
+            do_user=true
+            shift
+            if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
+                user_subcmd="$1"; shift
+            fi
+            ;;
+        sessions)
+            do_sessions=true
+            shift
+            if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
+                sessions_subcmd="$1"; shift
+            fi
+            # Collect remaining positional args for sessions subcommands
+            while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
+                sessions_args+=("$1")
+                shift
+            done
+            ;;
         --addmcp)
             addmcp_seen=true
             shift
@@ -423,6 +451,331 @@ fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
 fi
 
 # ---------------------------------------------------------------------------
+# user — user repo management
+# ---------------------------------------------------------------------------
+
+if $do_user; then
+    case "$user_subcmd" in
+        init)
+            # Detect GitHub username
+            gh_user=""
+            if command -v gh &>/dev/null; then
+                gh_user=$(gh api user --jq '.login' 2>/dev/null || true)
+            fi
+            if [ -z "$gh_user" ]; then
+                printf "GitHub username: "
+                read -r gh_user < /dev/tty
+            else
+                echo "Detected GitHub user: $gh_user"
+            fi
+
+            if [ -z "$gh_user" ]; then
+                echo "error: GitHub username required"
+                return 1
+            fi
+
+            repo_name="aitools-${gh_user}"
+
+            # Determine repos directory from config
+            repos_dir=""
+            if raw=$(read_config_key "$config" "reposPath"); then
+                repos_dir=$(to_native_path "$raw")
+            fi
+            repos_dir="${repos_dir:-$HOME/repos}"
+
+            user_repo_dir="$repos_dir/$repo_name"
+
+            if [ -d "$user_repo_dir/.git" ]; then
+                echo "User repo already exists: $(display_path "$user_repo_dir")"
+            else
+                echo "Creating user repo: $(display_path "$user_repo_dir")"
+                mkdir -p "$user_repo_dir/sessions"
+
+                # Prompt for profile info
+                printf "Display name [$(whoami)]: "
+                read -r prof_name < /dev/tty
+                prof_name="${prof_name:-$(whoami)}"
+
+                printf "Email: "
+                read -r prof_email < /dev/tty
+
+                printf "Company: "
+                read -r prof_company < /dev/tty
+
+                # Create profile.json
+                node -e "
+const fs = require('fs');
+const profile = {
+    name: process.argv[1],
+    email: process.argv[2],
+    github: process.argv[3],
+    company: process.argv[4],
+    git: { name: process.argv[1], email: process.argv[2] },
+    machines: [{
+        hostname: require('os').hostname(),
+        os: process.platform,
+        arch: process.arch,
+        shell: process.env.SHELL ? require('path').basename(process.env.SHELL) : 'bash'
+    }]
+};
+fs.writeFileSync(process.argv[5], JSON.stringify(profile, null, 2) + '\n');
+" "$prof_name" "$prof_email" "$gh_user" "$prof_company" "$user_repo_dir/profile.json"
+
+                # Create .gitattributes
+                printf '* text=auto eol=lf\n*.jsonl text eol=lf\n' > "$user_repo_dir/.gitattributes"
+
+                # Create README
+                printf '# %s\n\nPrivate user repo for session archives and profile data.\nSee [ai-tooling](https://github.com/%s/ai-tooling) for details.\n' \
+                    "$repo_name" "$gh_user" > "$user_repo_dir/README.md"
+
+                # Git init
+                git -C "$user_repo_dir" init -b main
+                git -C "$user_repo_dir" config user.name "$prof_name"
+                git -C "$user_repo_dir" config user.email "$prof_email"
+                git -C "$user_repo_dir" add -A
+                git -C "$user_repo_dir" commit -m "Initial commit: profile and session archive structure"
+
+                echo "User repo created."
+
+                # Offer to create GitHub repo
+                if command -v gh &>/dev/null; then
+                    printf "Create private GitHub repo '%s'? [y/N]: " "$repo_name"
+                    read -r create_gh < /dev/tty
+                    if [[ "$create_gh" =~ ^[Yy] ]]; then
+                        gh repo create "$repo_name" --private --source "$user_repo_dir" --push
+                        echo "GitHub repo created and pushed."
+                    fi
+                fi
+            fi
+
+            # Write userRepoPath to config
+            if command -v node &>/dev/null; then
+                node -e "
+const fs = require('fs');
+const f = process.argv[1];
+let cfg = {};
+try { cfg = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+cfg.userRepoPath = process.argv[2];
+fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
+" "$config" "$user_repo_dir"
+                echo "Config updated: userRepoPath = $(display_path "$user_repo_dir")"
+            fi
+
+            # Deploy session archive hook
+            echo ""
+            echo "Deploying session archive hook..."
+            case "$(uname -s)" in
+                MINGW*|MSYS*|CYGWIN*)
+                    hook_setup="$repo_path/scripts/setup-user-hooks.ps1"
+                    if [ -f "$hook_setup" ]; then
+                        powershell.exe -NoProfile -ExecutionPolicy Bypass \
+                            -File "$(cygpath -w "$hook_setup")"
+                    fi
+                    ;;
+                *)
+                    hook_setup="$repo_path/scripts/setup-user-hooks.sh"
+                    if [ -f "$hook_setup" ]; then
+                        bash "$hook_setup"
+                    fi
+                    ;;
+            esac
+
+            echo ""
+            echo "Done. Sessions will be archived to $(display_path "$user_repo_dir/sessions/")"
+            ;;
+        "")
+            echo "error: missing subcommand"
+            echo "Usage: aitools user init"
+            return 1
+            ;;
+        *)
+            echo "error: unknown subcommand 'user $user_subcmd'"
+            echo "Usage: aitools user init"
+            return 1
+            ;;
+    esac
+    return 0
+fi
+
+# ---------------------------------------------------------------------------
+# sessions — session archive management
+# ---------------------------------------------------------------------------
+
+if $do_sessions; then
+    # Resolve user repo path
+    user_repo=""
+    if raw=$(read_config_key "$config" "userRepoPath"); then
+        user_repo=$(to_native_path "$raw")
+    fi
+    if [ -z "$user_repo" ] || [ ! -d "$user_repo" ]; then
+        echo "error: user repo not configured. Run 'aitools user init' first."
+        return 1
+    fi
+    sessions_dir="$user_repo/sessions"
+
+    case "$sessions_subcmd" in
+        list)
+            filter="${sessions_args[0]:-}"
+            if [ ! -d "$sessions_dir" ]; then
+                echo "No sessions archived yet."
+                return 0
+            fi
+            found=false
+            # Use a subshell+pipeline to iterate reliably
+            while IFS= read -r file; do
+                [ -z "$file" ] && continue
+                rel="${file#"$sessions_dir/"}"
+                project="${rel%%/*}"
+                if [ -n "$filter" ] && [ "$project" != "$filter" ]; then
+                    continue
+                fi
+                size=$(du -h "$file" | cut -f1 | tr -d ' ')
+                printf '%s  (%s)\n' "$rel" "$size"
+                found=true
+            done < <(find "$sessions_dir" -name "*.jsonl" -type f 2>/dev/null | sort)
+            if ! $found; then
+                if [ -n "$filter" ]; then
+                    echo "No sessions found for project '$filter'."
+                else
+                    echo "No sessions archived yet."
+                fi
+            fi
+            ;;
+        archive)
+            session_id="${sessions_args[0]:-}"
+            if [ -z "$session_id" ]; then
+                echo "error: session ID required"
+                echo "Usage: aitools sessions archive <session-id>"
+                return 1
+            fi
+
+            # Search for matching session in ~/.claude/projects/
+            claude_projects="$HOME/.claude/projects"
+            if [ ! -d "$claude_projects" ]; then
+                echo "error: no Claude Code sessions found at $claude_projects"
+                return 1
+            fi
+
+            # Find matching JSONL file(s)
+            matches=()
+            while IFS= read -r f; do
+                matches+=("$f")
+            done < <(find "$claude_projects" -name "${session_id}*.jsonl" -type f 2>/dev/null)
+
+            if [ ${#matches[@]} -eq 0 ]; then
+                echo "error: no session found matching '$session_id'"
+                echo "Hint: check 'ls ~/.claude/projects/*/' for available sessions"
+                return 1
+            fi
+
+            if [ ${#matches[@]} -gt 1 ]; then
+                echo "Multiple sessions match '$session_id':"
+                for m in "${matches[@]}"; do
+                    echo "  $(basename "$m" .jsonl)"
+                done
+                echo "Provide a longer prefix to disambiguate."
+                return 1
+            fi
+
+            transcript="${matches[0]}"
+            full_id=$(basename "$transcript" .jsonl)
+
+            # Derive project name from CWD recorded in the JSONL transcript
+            # Uses node (already required by other aitools commands)
+            session_cwd=$(node -e "
+const fs = require('fs'), readline = require('readline');
+const rl = readline.createInterface({ input: fs.createReadStream(process.argv[1]) });
+rl.on('line', line => {
+    try {
+        const d = JSON.parse(line);
+        if (d.cwd) { process.stdout.write(d.cwd); rl.close(); }
+    } catch {}
+});
+" "$transcript" 2>/dev/null)
+
+            if [ -n "$session_cwd" ]; then
+                # Use same derivation logic as the hook
+                cwd_repo=$(cd "$session_cwd" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || echo "")
+                if [ -n "$cwd_repo" ]; then
+                    project=$(basename "$cwd_repo")
+                else
+                    project=$(basename "$session_cwd" | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9-]/-/g')
+                fi
+            else
+                # Last resort: basename of the Claude projects directory
+                # Lossy for project names with hyphens (e.g., ai-tooling → tooling)
+                project_dir=$(basename "$(dirname "$transcript")")
+                project=$(echo "$project_dir" | rev | cut -d'-' -f1 | rev)
+            fi
+
+            # Derive date
+            if [ "$(uname -s)" = "Darwin" ]; then
+                archive_date=$(stat -f "%SB" -t "%Y-%m-%d" "$transcript" 2>/dev/null || date -u +%Y-%m-%d)
+            else
+                archive_date=$(date -u +%Y-%m-%d)
+            fi
+
+            prefix=$(echo "$full_id" | cut -c1-8)
+            dest_dir="$sessions_dir/$project"
+            dest_file="$dest_dir/${archive_date}_${prefix}.jsonl"
+
+            if [ -f "$dest_file" ]; then
+                echo "Already archived: ${dest_file#"$user_repo/"}"
+                return 0
+            fi
+
+            mkdir -p "$dest_dir"
+            cp "$transcript" "$dest_file"
+            echo "Archived: ${dest_file#"$user_repo/"}"
+            ;;
+        move)
+            src="${sessions_args[0]:-}"
+            dest_project="${sessions_args[1]:-}"
+            if [ -z "$src" ] || [ -z "$dest_project" ]; then
+                echo "error: source file and destination project required"
+                echo "Usage: aitools sessions move <file> <project>"
+                return 1
+            fi
+
+            # Resolve source path (relative to sessions dir or absolute)
+            if [[ "$src" = /* ]]; then
+                src_file="$src"
+            else
+                src_file="$sessions_dir/$src"
+            fi
+
+            if [ ! -f "$src_file" ]; then
+                echo "error: session file not found: $src"
+                return 1
+            fi
+
+            dest_dir="$sessions_dir/$dest_project"
+            dest_file="$dest_dir/$(basename "$src_file")"
+            mkdir -p "$dest_dir"
+            mv "$src_file" "$dest_file"
+            echo "Moved: $(basename "$src_file") -> $dest_project/"
+
+            # Clean up empty source directory
+            old_dir=$(dirname "$src_file")
+            if [ -d "$old_dir" ] && [ -z "$(ls -A "$old_dir" 2>/dev/null)" ]; then
+                rmdir "$old_dir"
+            fi
+            ;;
+        "")
+            echo "error: missing subcommand"
+            echo "Usage: aitools sessions list|archive|move"
+            return 1
+            ;;
+        *)
+            echo "error: unknown subcommand 'sessions $sessions_subcmd'"
+            echo "Usage: aitools sessions list|archive|move"
+            return 1
+            ;;
+    esac
+    return 0
+fi
+
+# ---------------------------------------------------------------------------
 # Verify repo exists (or clone if gitpull)
 # ---------------------------------------------------------------------------
 
@@ -591,6 +944,16 @@ else
         echo "  Done."
     else
         echo "  Completed with $deploy_rc error(s)."
+    fi
+
+    # Check if session archive hook is installed
+    settings_file="$HOME/.claude/settings.json"
+    if [ -f "$settings_file" ]; then
+        if ! grep -q "session-archive.sh" "$settings_file" 2>/dev/null; then
+            echo "  hint: session archive hook not installed. Run 'aitools user init' to set up."
+        fi
+    else
+        echo "  hint: session archive hook not installed. Run 'aitools user init' to set up."
     fi
 
     echo ""

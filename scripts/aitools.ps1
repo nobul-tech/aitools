@@ -83,7 +83,7 @@ function Get-RepoVersion {
 # Deploy all config scripts from the repo's scripts/ directory.
 function Deploy-Configs {
     param([string]$ScriptDir)
-    $deployScripts = @("setup-user-claude.ps1", "setup-user-mcp.ps1", "setup-cursor-mcp.ps1", "setup-user-cursor.ps1")
+    $deployScripts = @("setup-user-claude.ps1", "setup-user-mcp.ps1", "setup-cursor-mcp.ps1", "setup-user-cursor.ps1", "setup-user-hooks.ps1")
     $errors = 0
     $env:AITOOLS_DEPLOY = "1"
     foreach ($script in $deployScripts) {
@@ -145,6 +145,10 @@ Commands:
   gitpull              Update source: pull + rebuild + deploy + changelog + version tag
   install              Full setup: pull + rebuild + install tools + deploy configs
   mcp                  Show MCP server status for current project
+  user init            Set up user repo and configure session archiving hook
+  sessions list [proj] List archived sessions (optionally filter by project)
+  sessions archive ID  Manually archive a session by ID (full or prefix)
+  sessions move F proj Refile an archived session under a different project
 
 Options:
   --addmcp <name...>   Enable MCP server(s) for current project (vercel, webflow)
@@ -167,9 +171,24 @@ if ($Help) {
 $doInstall = $Command -eq "install"
 $doGitpull = $Command -eq "gitpull"
 $doMcpStatus = $Command -eq "mcp"
+$doUser = $Command -eq "user"
+$doSessions = $Command -eq "sessions"
+
+# Extract subcommand and remaining args for user/sessions
+$subCmd = ""
+$subArgs = @()
+if ($doUser -or $doSessions) {
+    if ($Remaining -and $Remaining.Count -gt 0) {
+        $subCmd = $Remaining[0]
+        if ($Remaining.Count -gt 1) {
+            $subArgs = $Remaining[1..($Remaining.Count - 1)]
+        }
+    }
+}
 
 # Reject unknown commands (typos like "installs", "mcpp", etc.)
-if ($Command -and -not $doInstall -and -not $doGitpull -and -not $doMcpStatus) {
+$knownCommands = @("install", "gitpull", "mcp", "user", "sessions", "")
+if ($Command -and $Command -notin $knownCommands) {
     Write-Host "error: unknown command '$Command'"
     Write-Host "Run 'aitools --help' for usage."
     exit 1
@@ -387,6 +406,310 @@ fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
 }
 
 # ---------------------------------------------------------------------------
+# user -- user repo management
+# ---------------------------------------------------------------------------
+
+if ($doUser) {
+    switch ($subCmd) {
+        "init" {
+            # Detect GitHub username
+            $ghUser = ""
+            if (Get-Command gh -ErrorAction SilentlyContinue) {
+                try { $ghUser = gh api user --jq '.login' 2>$null } catch {}
+            }
+            if (-not $ghUser) {
+                $ghUser = Read-Host "GitHub username"
+            } else {
+                Write-Host "Detected GitHub user: $ghUser"
+            }
+
+            if (-not $ghUser) {
+                Write-Host "error: GitHub username required"
+                exit 1
+            }
+
+            $repoName = "aitools-$ghUser"
+
+            # Determine repos directory from config
+            $reposDir = Read-ConfigKey -File $configFile -Key "reposPath"
+            if (-not $reposDir) { $reposDir = Join-Path $env:USERPROFILE "repos" }
+
+            $userRepoDir = Join-Path $reposDir $repoName
+
+            if (Test-Path (Join-Path $userRepoDir ".git")) {
+                Write-Host "User repo already exists: $userRepoDir"
+            } else {
+                Write-Host "Creating user repo: $userRepoDir"
+                New-Item -ItemType Directory -Path (Join-Path $userRepoDir "sessions") -Force | Out-Null
+
+                # Prompt for profile info
+                $profName = Read-Host "Display name [$env:USERNAME]"
+                if (-not $profName) { $profName = $env:USERNAME }
+                $profEmail = Read-Host "Email"
+                $profCompany = Read-Host "Company"
+
+                # Create profile.json
+                node -e @"
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const profile = {
+    name: process.argv[1],
+    email: process.argv[2],
+    github: process.argv[3],
+    company: process.argv[4],
+    git: { name: process.argv[1], email: process.argv[2] },
+    machines: [{
+        hostname: os.hostname(),
+        os: process.platform,
+        arch: process.arch,
+        shell: 'powershell'
+    }]
+};
+fs.writeFileSync(process.argv[5], JSON.stringify(profile, null, 2) + '\n');
+"@ "$profName" "$profEmail" "$ghUser" "$profCompany" (Join-Path $userRepoDir "profile.json")
+
+                # Create .gitattributes
+                [System.IO.File]::WriteAllText(
+                    (Join-Path $userRepoDir ".gitattributes"),
+                    "* text=auto eol=lf`n*.jsonl text eol=lf`n",
+                    [System.Text.UTF8Encoding]::new($false))
+
+                # Create README
+                [System.IO.File]::WriteAllText(
+                    (Join-Path $userRepoDir "README.md"),
+                    "# $repoName`n`nPrivate user repo for session archives and profile data.`nSee [ai-tooling](https://github.com/$ghUser/ai-tooling) for details.`n",
+                    [System.Text.UTF8Encoding]::new($false))
+
+                # Git init
+                git -C $userRepoDir init -b main
+                git -C $userRepoDir config user.name $profName
+                git -C $userRepoDir config user.email $profEmail
+                git -C $userRepoDir add -A
+                git -C $userRepoDir commit -m "Initial commit: profile and session archive structure"
+
+                Write-Host "User repo created."
+
+                # Offer to create GitHub repo
+                if (Get-Command gh -ErrorAction SilentlyContinue) {
+                    $createGh = Read-Host "Create private GitHub repo '$repoName'? [y/N]"
+                    if ($createGh -match '^[Yy]') {
+                        gh repo create $repoName --private --source $userRepoDir --push
+                        Write-Host "GitHub repo created and pushed."
+                    }
+                }
+            }
+
+            # Write userRepoPath to config
+            if (Get-Command node -ErrorAction SilentlyContinue) {
+                node -e @"
+const fs = require('fs');
+const f = process.argv[1];
+let cfg = {};
+try { cfg = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+cfg.userRepoPath = process.argv[2];
+fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
+"@ "$configFile" "$userRepoDir"
+                Write-Host "Config updated: userRepoPath = $userRepoDir"
+            }
+
+            # Deploy session archive hook
+            $hookSetup = Join-Path $repoPath "scripts\setup-user-hooks.ps1"
+            if (Test-Path $hookSetup) {
+                Write-Host ""
+                Write-Host "Deploying session archive hook..."
+                & $hookSetup
+            }
+
+            Write-Host ""
+            Write-Host "Done. Sessions will be archived to $userRepoDir\sessions\"
+        }
+        "" {
+            Write-Host "error: missing subcommand"
+            Write-Host "Usage: aitools user init"
+            exit 1
+        }
+        default {
+            Write-Host "error: unknown subcommand 'user $subCmd'"
+            Write-Host "Usage: aitools user init"
+            exit 1
+        }
+    }
+    exit 0
+}
+
+# ---------------------------------------------------------------------------
+# sessions -- session archive management
+# ---------------------------------------------------------------------------
+
+if ($doSessions) {
+    # Resolve user repo path
+    $userRepo = Read-ConfigKey -File $configFile -Key "userRepoPath"
+    if (-not $userRepo -or -not (Test-Path $userRepo)) {
+        Write-Host "error: user repo not configured. Run 'aitools user init' first."
+        exit 1
+    }
+    $sessionsDir = Join-Path $userRepo "sessions"
+
+    switch ($subCmd) {
+        "list" {
+            $filter = if ($subArgs.Count -gt 0) { $subArgs[0] } else { "" }
+            if (-not (Test-Path $sessionsDir)) {
+                Write-Host "No sessions archived yet."
+                exit 0
+            }
+            $files = Get-ChildItem -Path $sessionsDir -Filter "*.jsonl" -Recurse -File | Sort-Object FullName
+            $found = $false
+            foreach ($file in $files) {
+                $rel = $file.FullName.Substring($sessionsDir.Length + 1) -replace '\\', '/'
+                $project = $rel.Split('/')[0]
+                if ($filter -and $project -ne $filter) { continue }
+                $size = if ($file.Length -ge 1MB) {
+                    "{0:N1}M" -f ($file.Length / 1MB)
+                } elseif ($file.Length -ge 1KB) {
+                    "{0:N0}K" -f ($file.Length / 1KB)
+                } else {
+                    "{0}B" -f $file.Length
+                }
+                Write-Host "$rel  ($size)"
+                $found = $true
+            }
+            if (-not $found) {
+                if ($filter) {
+                    Write-Host "No sessions found for project '$filter'."
+                } else {
+                    Write-Host "No sessions archived yet."
+                }
+            }
+        }
+        "archive" {
+            $sessionId = if ($subArgs.Count -gt 0) { $subArgs[0] } else { "" }
+            if (-not $sessionId) {
+                Write-Host "error: session ID required"
+                Write-Host "Usage: aitools sessions archive <session-id>"
+                exit 1
+            }
+
+            # Search for matching session
+            $claudeProjects = Join-Path $env:USERPROFILE ".claude\projects"
+            if (-not (Test-Path $claudeProjects)) {
+                Write-Host "error: no Claude Code sessions found at $claudeProjects"
+                exit 1
+            }
+
+            $matches = Get-ChildItem -Path $claudeProjects -Filter "${sessionId}*.jsonl" -Recurse -File
+            if ($matches.Count -eq 0) {
+                Write-Host "error: no session found matching '$sessionId'"
+                exit 1
+            }
+            if ($matches.Count -gt 1) {
+                Write-Host "Multiple sessions match '$sessionId':"
+                foreach ($m in $matches) { Write-Host "  $($m.BaseName)" }
+                Write-Host "Provide a longer prefix to disambiguate."
+                exit 1
+            }
+
+            $transcript = $matches[0]
+            $fullId = $transcript.BaseName
+
+            # Derive project name from CWD recorded in the JSONL transcript
+            # Uses node (already required by other aitools commands)
+            $sessionCwd = node -e @"
+const fs = require('fs'), readline = require('readline');
+const rl = readline.createInterface({ input: fs.createReadStream(process.argv[1]) });
+rl.on('line', line => {
+    try {
+        const d = JSON.parse(line);
+        if (d.cwd) { process.stdout.write(d.cwd); rl.close(); }
+    } catch {}
+});
+"@ $transcript.FullName 2>$null
+
+            if ($sessionCwd) {
+                # Use same derivation logic as the hook
+                $cwdRepo = ""
+                if (Test-Path $sessionCwd) {
+                    try {
+                        Push-Location $sessionCwd
+                        $cwdRepo = git rev-parse --show-toplevel 2>$null
+                    } finally {
+                        Pop-Location
+                    }
+                }
+                if ($cwdRepo) {
+                    $project = Split-Path $cwdRepo -Leaf
+                } else {
+                    $project = (Split-Path $sessionCwd -Leaf).ToLower() -replace '[^a-z0-9-]', '-'
+                }
+            } else {
+                # Last resort: basename of the Claude projects directory
+                # Lossy for project names with hyphens (e.g., ai-tooling -> tooling)
+                $projectDir = $transcript.Directory.Name
+                $project = $projectDir.Split('-')[-1]
+            }
+
+            $archiveDate = $transcript.CreationTime.ToUniversalTime().ToString("yyyy-MM-dd")
+            $prefix = $fullId.Substring(0, [Math]::Min(8, $fullId.Length))
+            $destDir = Join-Path $sessionsDir $project
+            $destFile = Join-Path $destDir "${archiveDate}_${prefix}.jsonl"
+
+            if (Test-Path $destFile) {
+                Write-Host "Already archived: $($destFile.Substring($userRepo.Length + 1))"
+                exit 0
+            }
+
+            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+            Copy-Item -Path $transcript.FullName -Destination $destFile
+            Write-Host "Archived: $($destFile.Substring($userRepo.Length + 1))"
+        }
+        "move" {
+            $src = if ($subArgs.Count -gt 0) { $subArgs[0] } else { "" }
+            $destProject = if ($subArgs.Count -gt 1) { $subArgs[1] } else { "" }
+            if (-not $src -or -not $destProject) {
+                Write-Host "error: source file and destination project required"
+                Write-Host "Usage: aitools sessions move <file> <project>"
+                exit 1
+            }
+
+            # Resolve source path
+            if ([System.IO.Path]::IsPathRooted($src)) {
+                $srcFile = $src
+            } else {
+                $srcFile = Join-Path $sessionsDir $src
+            }
+
+            if (-not (Test-Path $srcFile)) {
+                Write-Host "error: session file not found: $src"
+                exit 1
+            }
+
+            $destDir = Join-Path $sessionsDir $destProject
+            $destFile = Join-Path $destDir (Split-Path $srcFile -Leaf)
+            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+            Move-Item -Path $srcFile -Destination $destFile
+            Write-Host "Moved: $(Split-Path $srcFile -Leaf) -> $destProject/"
+
+            # Clean up empty source directory
+            $oldDir = Split-Path $srcFile -Parent
+            if ((Test-Path $oldDir) -and (Get-ChildItem $oldDir | Measure-Object).Count -eq 0) {
+                Remove-Item $oldDir
+            }
+        }
+        "" {
+            Write-Host "error: missing subcommand"
+            Write-Host "Usage: aitools sessions list|archive|move"
+            exit 1
+        }
+        default {
+            Write-Host "error: unknown subcommand 'sessions $subCmd'"
+            Write-Host "Usage: aitools sessions list|archive|move"
+            exit 1
+        }
+    }
+    exit 0
+}
+
+# ---------------------------------------------------------------------------
 # Verify repo exists (or clone if gitpull)
 # ---------------------------------------------------------------------------
 
@@ -543,6 +866,19 @@ if ($doInstall) {
         Write-Host "  Done."
     } else {
         Write-Host "  Completed with $deployRc error(s)."
+    }
+
+    # Check if session archive hook is installed
+    $settingsFile = Join-Path $env:USERPROFILE ".claude\settings.json"
+    $hookInstalled = $false
+    if (Test-Path $settingsFile) {
+        $settingsContent = Get-Content $settingsFile -Raw -ErrorAction SilentlyContinue
+        if ($settingsContent -and $settingsContent -match "session-archive\.sh") {
+            $hookInstalled = $true
+        }
+    }
+    if (-not $hookInstalled) {
+        Write-Host "  hint: session archive hook not installed. Run 'aitools user init' to set up."
     }
 
     Write-Host ""
