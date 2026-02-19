@@ -21,6 +21,12 @@ SCRIPTS_DIR="$REPO_ROOT/scripts"
 DEPLOY_DIR="$REPO_ROOT/deploy"
 SHARED_DIR="$REPO_ROOT/shared"
 
+# --- Build logging (timestamped) ---
+SCRIPT_NAME="build-deploy"
+blog() { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1"; }
+blog_ok() { blog "OK: $1"; }
+blog_error() { blog "ERROR: $1" >&2; }
+
 # Shared content files
 CLAUDE_SHARED="$SHARED_DIR/claude-shared.md"
 USER_RULES="$SHARED_DIR/cursor-rules/user-rules.md"
@@ -28,7 +34,7 @@ USER_RULES="$SHARED_DIR/cursor-rules/user-rules.md"
 # Verify shared files exist
 for f in "$CLAUDE_SHARED" "$USER_RULES"; do
     if [ ! -f "$f" ]; then
-        echo "Error: Required shared file not found: $f" >&2
+        blog_error "Required shared file not found: $f"
         exit 1
     fi
 done
@@ -194,7 +200,7 @@ OS_GUARD_PS1
 # ============================================================
 # 1. deploy/setup-user-claude.sh
 # ============================================================
-echo "Generating deploy/setup-user-claude.sh ..."
+blog "Generating deploy/setup-user-claude.sh"
 
 {
     echo '#!/usr/bin/env bash'
@@ -259,7 +265,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 2. deploy/setup-user-claude.ps1
 # ============================================================
-echo "Generating deploy/setup-user-claude.ps1 ..."
+blog "Generating deploy/setup-user-claude.ps1"
 
 {
     echo "$HEADER_COMMENT_PS1"
@@ -321,7 +327,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 3. deploy/setup-user-cursor.sh
 # ============================================================
-echo "Generating deploy/setup-user-cursor.sh ..."
+blog "Generating deploy/setup-user-cursor.sh"
 
 {
     echo '#!/usr/bin/env bash'
@@ -448,7 +454,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 4. deploy/setup-user-cursor.ps1
 # ============================================================
-echo "Generating deploy/setup-user-cursor.ps1 ..."
+blog "Generating deploy/setup-user-cursor.ps1"
 
 {
     echo "$HEADER_COMMENT_PS1"
@@ -575,7 +581,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 5-6. deploy/setup-cursor-mcp.sh and .ps1 (copy as-is)
 # ============================================================
-echo "Copying deploy/setup-cursor-mcp.sh ..."
+blog "Copying deploy/setup-cursor-mcp.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -585,7 +591,7 @@ echo "Copying deploy/setup-cursor-mcp.sh ..."
 chmod +x "$DEPLOY_DIR/setup-cursor-mcp.sh"
 GENERATED=$((GENERATED + 1))
 
-echo "Copying deploy/setup-cursor-mcp.ps1 ..."
+blog "Copying deploy/setup-cursor-mcp.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-cursor-mcp.ps1"
@@ -595,7 +601,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 7-8. deploy/setup-vercelcli.sh and .ps1 (copy as-is)
 # ============================================================
-echo "Copying deploy/setup-vercelcli.sh ..."
+blog "Copying deploy/setup-vercelcli.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -605,7 +611,7 @@ echo "Copying deploy/setup-vercelcli.sh ..."
 chmod +x "$DEPLOY_DIR/setup-vercelcli.sh"
 GENERATED=$((GENERATED + 1))
 
-echo "Copying deploy/setup-vercelcli.ps1 ..."
+blog "Copying deploy/setup-vercelcli.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-vercelcli.ps1"
@@ -615,7 +621,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 9-10. deploy/setup-pandoc.sh and .ps1 (copy as-is)
 # ============================================================
-echo "Copying deploy/setup-pandoc.sh ..."
+blog "Copying deploy/setup-pandoc.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -625,7 +631,7 @@ echo "Copying deploy/setup-pandoc.sh ..."
 chmod +x "$DEPLOY_DIR/setup-pandoc.sh"
 GENERATED=$((GENERATED + 1))
 
-echo "Copying deploy/setup-pandoc.ps1 ..."
+blog "Copying deploy/setup-pandoc.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-pandoc.ps1"
@@ -635,7 +641,7 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # 11-12. deploy/setup-user-mcp.sh and .ps1 (copy as-is)
 # ============================================================
-echo "Copying deploy/setup-user-mcp.sh ..."
+blog "Copying deploy/setup-user-mcp.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
@@ -645,7 +651,7 @@ echo "Copying deploy/setup-user-mcp.sh ..."
 chmod +x "$DEPLOY_DIR/setup-user-mcp.sh"
 GENERATED=$((GENERATED + 1))
 
-echo "Copying deploy/setup-user-mcp.ps1 ..."
+blog "Copying deploy/setup-user-mcp.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat "$SCRIPTS_DIR/setup-user-mcp.ps1"
@@ -664,8 +670,7 @@ GENERATED=$((GENERATED + 1))
 # On macOS, skip -- pwsh may not be installed.
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
-        echo ""
-        echo "Validating generated PS1 scripts..."
+        blog "Validating generated PS1 scripts..."
         PS1_ERRORS=0
         for ps1_file in "$DEPLOY_DIR"/*.ps1; do
             [ -f "$ps1_file" ] || continue
@@ -678,15 +683,15 @@ case "$(uname -s)" in
                     exit 1
                 }
             " 2>/dev/null; then
-                echo "  FAIL: $ps1_name has parse errors on this PowerShell version"
+                blog_error "$ps1_name has parse errors on this PowerShell version"
                 PS1_ERRORS=$((PS1_ERRORS + 1))
             fi
         done
         if [ "$PS1_ERRORS" -gt 0 ]; then
-            echo "ERROR: $PS1_ERRORS PS1 file(s) failed validation" >&2
+            blog_error "$PS1_ERRORS PS1 file(s) failed validation"
             exit 1
         else
-            echo "  All PS1 files passed validation."
+            blog_ok "All PS1 files passed validation"
         fi
         ;;
     *)
@@ -694,12 +699,6 @@ case "$(uname -s)" in
         ;;
 esac
 
-echo ""
-echo "========================================"
-echo "Build complete: $GENERATED scripts generated in deploy/"
-echo "========================================"
-echo ""
+blog_ok "Build complete: $GENERATED scripts generated in deploy/"
 ls -la "$DEPLOY_DIR/"
-echo ""
-echo "These scripts are self-contained and ready for MDM deployment."
-echo "No dependencies on this repo, Google Drive, or gh CLI."
+blog "Scripts are self-contained and ready for MDM deployment"

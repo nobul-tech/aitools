@@ -15,6 +15,7 @@ param(
 $logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
 $logFile = Join-Path $logDir "deploy.log"
 $scriptName = "setup-user-cursor"
+$errors = 0
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 
 function Log($msg) {
@@ -24,7 +25,7 @@ function Log($msg) {
     Add-Content -Path $logFile -Value $line
 }
 function LogOk($msg)    { Log "OK: $msg" }
-function LogError($msg) { Log "ERROR: $msg" }
+function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
 
 # --- OS guard ---

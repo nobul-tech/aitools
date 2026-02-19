@@ -17,9 +17,10 @@ mkdir -p "$LOG_DIR"
 display_path() {
     if command -v cygpath &>/dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi
 }
+ERRORS=0
 log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
 log_ok()    { log "OK: $1"; }
-log_error() { log "ERROR: $1"; }
+log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
 
 # --- OS guard ---
@@ -92,3 +93,12 @@ fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
 
 log_ok "SessionEnd hook deployed to $(display_path "$SETTINGS_FILE")"
 log "  Hook: $HOOK_CMD"
+
+# --- Exit ---
+if [ "$ERRORS" -gt 0 ]; then
+    log "FAILED with $ERRORS error(s). See log: $LOG_FILE"
+    exit 1
+else
+    log "COMPLETED successfully"
+    exit 0
+fi

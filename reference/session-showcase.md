@@ -4,7 +4,7 @@ I work across Windows and macOS with multiple AI coding tools — Cursor and Cla
 
 ## What This Covers
 
-Eight setup scripts — four pairs of Windows PowerShell and macOS bash — plus shared configuration files and reference documentation:
+Ten setup scripts — five pairs of Windows PowerShell and macOS bash — plus shared configuration files and reference documentation:
 
 - **Claude Code user preferences** — installs a cross-machine config file so every Claude Code session starts with the same identity, code style defaults, and tool preferences, regardless of which machine or project directory it's launched from
 
@@ -25,11 +25,13 @@ ai-tooling/
   shared/               Source of truth for all configs
     claude-shared.md    Shared preferences, embedded into deploy scripts
     cursor-rules/       User Rules + project rule templates
+    hooks/              Claude Code hooks (session archive)
     mcp/                MCP server documentation
     shell/              Shell aliases for both platforms
   scripts/              Source scripts + build pipeline
     build-deploy.sh     Generates deploy/ from scripts/ + shared/
   deploy/               Self-contained scripts (generated, MDM-ready)
+  plans/                Detailed implementation plans for roadmap items
   reference/            Setup notes, practices, and this document
   docs/                 Vendor documentation for offline/RAG use
 ```

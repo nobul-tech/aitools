@@ -9,6 +9,7 @@ param(
 $logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
 $logFile = Join-Path $logDir "deploy.log"
 $scriptName = "setup-user-claude"
+$errors = 0
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 
 function Log($msg) {
@@ -18,7 +19,7 @@ function Log($msg) {
     Add-Content -Path $logFile -Value $line
 }
 function LogOk($msg)    { Log "OK: $msg" }
-function LogError($msg) { Log "ERROR: $msg" }
+function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
 
 # Backup a file before overwriting. Keeps at most $MaxBackups copies.
@@ -79,3 +80,12 @@ $sharedContent
 [System.IO.File]::WriteAllText($claudeMd, $content, [System.Text.UTF8Encoding]::new($false))
 LogOk "Wrote $claudeMd"
 Log "Inlined shared preferences from: $SharedPath"
+
+# --- Exit ---
+if ($errors -gt 0) {
+    Log "FAILED with $errors error(s). See log: $logFile"
+    exit 1
+} else {
+    Log "COMPLETED successfully"
+    exit 0
+}

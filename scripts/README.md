@@ -27,6 +27,8 @@ Setup and utility scripts for configuring AI tooling across machines.
 | `setup-vercelcli.sh` | macOS/Linux | Installs/updates Vercel CLI via Homebrew (macOS) or npm (Linux) |
 | `setup-pandoc.ps1` | Windows | Installs/updates Pandoc via winget |
 | `setup-pandoc.sh` | macOS/Linux | Installs/updates Pandoc via Homebrew |
+| `setup-user-hooks.ps1` | Windows | Deploys Claude Code SessionEnd hook to `~/.claude/settings.json` |
+| `setup-user-hooks.sh` | macOS/Linux | Deploys Claude Code SessionEnd hook to `~/.claude/settings.json` |
 
 ## Build Pipeline
 

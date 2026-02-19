@@ -13,7 +13,7 @@ Claude Code session transcripts accumulate in `~/.claude/projects/` with opaque 
 
 Two-phase approach:
 
-1. **Phase A** — Session auto-archive via Claude Code Stop hook + CLI commands
+1. **Phase A** — Session auto-archive via Claude Code SessionEnd hook + CLI commands
 2. **Phase B** — Templatize `shared/claude-shared.md` with profile-driven interpolation
 
 The private user repo `aitools-nobul-jose` already exists at `~/repos/aitools-nobul-jose/` (created in session `7cae3cc3`).
@@ -40,19 +40,19 @@ Document the user repo pattern:
 
 **File**: `shared/hooks/session-archive.sh`
 
-Claude Code Stop hook that fires after every session ends. Bash-only (hooks always execute in bash on both platforms — no `.ps1` needed).
+Claude Code SessionEnd hook that fires after every session ends. Bash-only (hooks always execute in bash on both platforms — no `.ps1` needed).
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Claude Code Stop hook — archives session transcript to user repo
+# Claude Code SessionEnd hook — archives session transcript to user repo
 # Input: JSON on stdin with { session_id, cwd, transcript_path, ... }
 
 INPUT=$(cat)
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
-CWD=$(echo "$INPUT" | jq -r '.cwd')
-TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path')
+SESSION_ID=$(json_field "$INPUT" "session_id")
+CWD=$(json_field "$INPUT" "cwd")
+TRANSCRIPT=$(json_field "$INPUT" "transcript_path")
 
 # Read user repo path from ai-tooling config
 CONFIG_FILE="${HOME}/.config/ai-tooling/config.json"
@@ -101,10 +101,10 @@ cp "$TRANSCRIPT" "$DEST_FILE"
 **Important design decisions:**
 - Silent exit on any misconfiguration (hook must never break Claude Code)
 - No git operations inside the hook (user commits/pushes on their own schedule)
-- Uses `jq` for JSON parsing (Claude Code guarantees jq availability? TBD — may need pure-bash fallback)
+- Uses pure-bash JSON extraction (`grep` + `sed`), matching the `read_config_key` pattern in `aitools`
 - Creation date for naming (session start date), not modification date
 
-**Open question:** What fields does Claude Code actually pass to Stop hooks? The schema needs to be verified against Claude Code docs before implementation. Key fields needed: `session_id`, `cwd`, and the path to the JSONL transcript. If the transcript path isn't provided, the hook will need to locate it from `~/.claude/projects/` using the session ID.
+**Resolved:** SessionEnd hooks provide `session_id`, `transcript_path`, `cwd`, `permission_mode`, `hook_event_name`, `reason`.
 
 ### A3. Hook Setup Script
 
@@ -121,7 +121,7 @@ The hook config in `~/.claude/settings.json`:
 ```json
 {
   "hooks": {
-    "Stop": [
+    "SessionEnd": [
       {
         "matcher": "",
         "hooks": [
@@ -154,7 +154,7 @@ Interactive setup for the user repo:
 3. If not, create directory structure + `git init` + `profile.json`
 4. Optionally create private GitHub repo via `gh repo create`
 5. Write `userRepoPath` to `~/.config/ai-tooling/config.json`
-6. Deploy Stop hook via `setup-user-hooks.sh`
+6. Deploy SessionEnd hook via `setup-user-hooks.sh`
 
 #### `aitools sessions list`
 
@@ -173,7 +173,7 @@ ai-tooling/2026-02-19_abc12345.jsonl  (423K)
 
 #### `aitools sessions archive <session-id>`
 
-Manually archive a specific session (same logic as the Stop hook, but triggered manually). Useful for sessions that started before the hook was installed.
+Manually archive a specific session (same logic as the SessionEnd hook, but triggered manually). Useful for sessions that started before the hook was installed.
 
 #### `aitools sessions move <session-file> <project>`
 
@@ -309,9 +309,9 @@ Phase B (follow-on, after Phase A is stable):
 
 ## Open Questions
 
-3. **Subagent transcripts** — Should the hook also archive subagent JSONL files from `<session-id>/subagents/`? Probably yes for completeness, but increases storage.
-4. **Auto-commit** — Should the hook auto-commit to the user repo? Current design says no (user controls commit cadence). But could add `aitools sessions push` for convenience.
-5. **Transcript size** — Large sessions can be 2+ MB. Monitor repo size over time. Consider `.gitattributes` LFS threshold if it grows too large.
+1. **Subagent transcripts** — Should the hook also archive subagent JSONL files from `<session-id>/subagents/`? Probably yes for completeness, but increases storage.
+2. **Auto-commit** — Should the hook auto-commit to the user repo? Current design says no (user controls commit cadence). But could add `aitools sessions push` for convenience.
+3. **Transcript size** — Large sessions can be 2+ MB. Monitor repo size over time. Consider `.gitattributes` LFS threshold if it grows too large.
 
 ## Files Modified/Created
 
@@ -331,7 +331,7 @@ Phase B (follow-on, after Phase A is stable):
 
 ### Phase A
 - [ ] `aitools user init` creates/detects user repo and writes config
-- [ ] Stop hook fires on session end and copies transcript
+- [ ] SessionEnd hook fires on session end and copies transcript
 - [ ] `aitools sessions list` shows archived sessions
 - [ ] `aitools sessions move` refiles correctly
 - [ ] `aitools` (no args) warns if hook not installed

@@ -15,6 +15,7 @@ Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude C
 | `docs/` | Vendor docs for offline/RAG use |
 | `reference/` | Setup notes, practices, session showcase |
 | `plans/` | Detailed implementation plans for roadmap items |
+| `shared/hooks/` | Claude Code hooks (session archive) |
 | `ROADMAP.md` | Active and planned work items |
 | `RELEASE_NOTES.md` | Version history and changelog |
 
@@ -47,6 +48,9 @@ aitools install                  # Full setup: install tools + deploy configs
 aitools mcp                      # Show MCP server status
 aitools --addmcp vercel          # Enable MCP server for current project
 aitools --version                # Show installed and repo version
+aitools user init                # Set up user repo + session archive hook
+aitools sessions list [project]  # List archived sessions
+aitools sessions archive <id>    # Manually archive a session by ID
 ```
 
 ### Deploy to a machine (no repo needed)

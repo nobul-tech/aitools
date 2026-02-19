@@ -144,13 +144,15 @@ Three servers at user level. Chrome DevTools enabled globally; Vercel/Webflow di
 Active improvement areas for working with Claude Code more effectively.
 Full evaluation and progress log: `reference/claude-code-effectiveness.md` in ai-tooling repo.
 
-- **Smaller batches**: Break large plans into 2-3 file chunks with verification between each, rather than 20+ file batches
+- **Smaller batches**: Break large plans into 2-3 file chunks with verification between each, rather than 20+ file batches. Large batches cause rules to be ignored even when they're in context — focus narrows to feature logic and cross-cutting concerns (dispatch patterns, encoding, platform guards) get skipped. After each chunk, re-scan the rules that apply before moving on.
 - **Test mid-session**: Paste small test runs after each change group, don't wait until the end
 - **Err on the side of caution**: When uncertain (safe tool or not? reversible action or not? compact or not?), default to the cautious path — the cost of being too careful is low, the cost of being wrong is high. Example: use `/compact` or split sessions for distinct phases rather than risking truncation
 - **Hooks**: Explore Claude Code hooks for auto-lint, auto-format, or blocking dangerous commands
 - **`@` references**: Use `@path/to/file` in prompts to pre-load files into context
 - **Ask for help when stuck**: When the environment is fundamentally broken (e.g., deleted CWD, corrupted shell state), ask the user to restart the session instead of burning tool calls on workarounds. One message beats a dozen failed attempts.
 - **Clean up before deleting**: Always `cd` back to a stable directory before `rm -rf`'ing temp dirs used during testing
+- **Subagent context gap**: Subagents launched via Task do NOT inherit `.claude/rules/`, `CLAUDE.md`, or `~/.claude/CLAUDE.md`. Never delegate code-writing to subagents in projects with cross-cutting rules (cross-platform, encoding, protected files). Use subagents for research only, or include the critical rules verbatim in the subagent prompt.
+- **Clarify before complying**: If a user response seems to contradict or reverse a prior recommendation, ask a clarifying question before proceeding. The user may have misunderstood the framing (e.g., reading "Why not X" as a question rather than a justification). A quick "Just to confirm -- did you mean X or Y?" avoids wasted work from miscommunication. Err on the side of asking.
 
 **In plan mode**: Always review these areas and proactively suggest relevant improvements (e.g., "consider breaking this into smaller batches" or "this would be a good candidate for a hook").
 

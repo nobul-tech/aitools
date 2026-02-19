@@ -12,6 +12,7 @@ ai-tooling/
 │   ├── claude-shared.md #   → embedded into deploy scripts by build
 │   ├── cursor-rules/    # Template rules + User Rules source of truth
 │   ├── shell/           # Shell aliases (bash/zsh + PowerShell)
+│   ├── hooks/           # Claude Code hooks (session archive)
 │   └── mcp/             # MCP server configuration docs
 ├── scripts/             # Dev/source scripts (read from shared/)
 │   ├── aitools          # CLI entry point (bash, macOS/Linux)
@@ -41,6 +42,10 @@ aitools gitpull                # Update source: pull + deploy + changelog + vers
 aitools install                # Full setup: pull + install tools + deploy configs
 aitools --addmcp vercel        # Add MCP server to current project
 aitools --addmcp vercel webflow  # Add multiple MCP servers
+aitools user init              # Set up user repo + session archive hook
+aitools sessions list [proj]   # List archived sessions
+aitools sessions archive ID    # Manually archive a session by ID
+aitools sessions move F proj   # Refile an archived session under a different project
 
 # Deploy to an endpoint (no repo needed -- run from deploy/)
 # macOS/Linux:
