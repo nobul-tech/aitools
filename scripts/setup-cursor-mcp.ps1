@@ -69,7 +69,7 @@ $config = @{
     mcpServers = @{
         "chrome-devtools" = @{
             command = "cmd"
-            args    = @("/c", "npx", "-y", "chrome-devtools-mcp@latest")
+            args    = @("/c", "npx", "-y", "chrome-devtools-mcp@latest", "--isolated")
         }
         "vercel" = @{
             url = "https://mcp.vercel.com"

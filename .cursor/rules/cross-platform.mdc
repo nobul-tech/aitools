@@ -1,0 +1,39 @@
+---
+description: Cross-platform rules for this dual-platform repo
+globs:
+alwaysApply: true
+---
+
+## Cross-Platform Awareness (this repo)
+
+This repo targets macOS and Windows equally.
+
+### Dual-script rule
+
+- Provide both `.ps1` and `.sh` variants for setup/utility scripts
+- Use forward slashes in paths; `$HOME`/`~` for user directory references
+
+### OS guard + dispatch
+
+Every `.sh` setup script has `case "$(uname -s)" in MINGW*...) exit 1`. The bash `aitools` runs in Git Bash on Windows, so:
+
+- Never call `.sh` setup scripts without a `uname -s` dispatch
+- On Windows, call `.ps1` via `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$path")"`
+
+### Cross-language script calls require explicit approval
+
+Every script gets a native variant for each platform. Crossing languages (e.g., PowerShell calling bash) is an exception -- ask the user first. See approved exceptions in `.claude/rules/cross-platform.md`.
+
+### PowerShell 5.1 compatibility
+
+All `.ps1` scripts must work on PS 5.1. Avoid: `-replace` with scriptblock, `??`/`?.` operators, ternary, `Join-Path` with 3+ args, `Set-Content -Encoding UTF8` (writes BOM).
+
+### ASCII-only rule for PS1 executable code
+
+PS 5.1 reads BOM-free UTF-8 as Windows-1252. No non-ASCII in PS1 strings/expressions. Use `--` not em-dash, `"` not smart quotes, `...` not ellipsis.
+
+### Pre-validation convention
+
+Before committing scripts, validate syntax:
+- PS1: `powershell.exe -NoProfile -Command "[System.Management.Automation.Language.Parser]::ParseFile('path', [ref]$null, [ref]$e); $e"`
+- Bash: `bash -n path/to/script.sh`

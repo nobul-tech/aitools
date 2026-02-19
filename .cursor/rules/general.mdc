@@ -9,19 +9,8 @@ alwaysApply: true
 - This is Jose's AI tooling hub — configs, scripts, and reference docs for Claude Code, Cursor, and MCP.
 - Git identity: Jose <jose@nobul.tech>
 
-## Cross-Platform
-
-This repo targets two machines equally:
-- **Windows 11 Pro for Workstations** (PowerShell, Git Bash)
-- **macOS** (zsh/bash)
-
-Key differences:
-- Repos: `~/repos/` (macOS) vs `C:\repos\` (Windows); some legacy projects still on Google Drive
-- Scripts: always provide both `.ps1` and `.sh` variants
-- Use forward slashes in path references where possible
-- Shell commands: test on both PowerShell and bash
-
 ## Code Style
 
 - Python 3.10+, type hints, `argparse` for CLI, `pathlib.Path` over `os.path`
+- Shell scripts: `set -euo pipefail`, structured logging, UTC timestamps
 - Keep configs and docs concise — avoid bloat

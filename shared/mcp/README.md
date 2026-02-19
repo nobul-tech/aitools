@@ -95,6 +95,27 @@ For Cursor, this runs `agent mcp enable` or falls back to project `.cursor/mcp.j
 - Vercel and Webflow are remote HTTP servers — identical config on both platforms.
 - OAuth tokens are cached locally per tool and refreshed automatically.
 
+## Concurrency
+
+| Server type | Concurrent sessions | Notes |
+|-------------|-------------------|-------|
+| stdio (Chrome DevTools) | **Yes with `--isolated`** | Creates throwaway temp Chrome profile per process, auto-cleaned on exit. Without `--isolated`, Chrome profile lock prevents concurrent sessions. |
+| HTTP remote (Vercel, Webflow) | Yes | Inherently concurrent -- multiple clients connect to the same remote server simultaneously. No local state conflicts. |
+
+All setup scripts (`setup-user-mcp.*`, `setup-cursor-mcp.*`) configure `--isolated` by default.
+
+## Post-Setup Authentication
+
+Some MCP servers require authentication after setup before they are functional:
+
+| Server | Auth required? | How to authenticate |
+|--------|---------------|---------------------|
+| Chrome DevTools | No | Connects to local Chrome instance directly |
+| Vercel | **Yes -- OAuth** | Claude Code: start session, run `/mcp`, click Vercel auth link. Cursor: Settings > Tools & MCP, click Vercel to authenticate. |
+| Webflow | **Yes -- OAuth** | Same process as Vercel. |
+
+**IMPORTANT:** Vercel and Webflow will appear "configured" in `aitools mcp` and server listings, but **all tool calls will fail** until OAuth is completed. This is a one-time setup per machine per tool (Claude Code and Cursor each need their own auth).
+
 ## Documentation Sources
 
 See `reference/tool-install-sources.md` for official documentation links and verified install commands.

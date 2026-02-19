@@ -122,6 +122,29 @@ The deploy scripts handle this automatically: `deploy/setup-user-claude.sh/.ps1`
 
 > **Open question:** Whether Cursor actually reads `~/.claude/CLAUDE.md` at runtime is unverified. Test by asking Cursor about git identity in a project that has no local CLAUDE.md.
 
+## Rule Correspondence
+
+Cursor project rules mirror Claude Code rules for consistency. When changing rules, update both sets.
+
+| Claude Code | Cursor | Notes |
+|------------|--------|-------|
+| `.claude/rules/cross-platform.md` | `.cursor/rules/cross-platform.mdc` | Condensed |
+| `.claude/rules/sources-of-truth.md` | `.cursor/rules/sources-of-truth.mdc` | Near-identical |
+| `.claude/rules/tool-lifecycle.md` | `.cursor/rules/tool-lifecycle.mdc` | Near-identical |
+| `.claude/rules/concurrent-agents.md` | `.cursor/rules/concurrent-agents.mdc` | Identical |
+| `.claude/rules/git-identity.md` | `.cursor/rules/general.mdc` | Folded in |
+| `.claude/rules/python-style.md` | `.cursor/rules/general.mdc` | Folded in |
+| `.claude/rules/pre-commit.md` | `.cursor/rules/pre-commit.mdc` | Identical |
+| `.claude/rules/surface-silent-failures.md` | -- | Claude Code-specific |
+
+### Changing rules
+
+When adding or modifying a rule in either `.claude/rules/` or `.cursor/rules/`:
+
+1. Make the change in the primary file
+2. Mirror or update the corresponding file in the other rules directory
+3. Update the table above if the correspondence changes
+
 ## Skills
 
 Cursor supports a Skills system for reusable AI capabilities:

@@ -12,6 +12,47 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v3.9 -- MCP Concurrency, Cursor Rule Parity, Tool Lifecycle Fields (2026-02-19)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | BUG | Chrome DevTools MCP now uses `--isolated` flag across all setup scripts (Claude Code and Cursor, macOS and Windows). Creates throwaway temp Chrome profiles per process, preventing Chrome profile lock conflicts when Claude Code and Cursor run concurrently. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 2 | **Tool lifecycle entries standardized**: All managed tools in `reference/tool-install-sources.md` now include 4 mandatory fields: Platform Status, Concurrency, Post-Install Config, Dependencies. Phase 1 recording requirements updated in `reference/tool-evaluation-criteria.md`. |
+| 3 | **Cursor project rules parity**: Created 4 new `.cursor/rules/*.mdc` files mirroring Claude Code rules: `sources-of-truth.mdc`, `tool-lifecycle.mdc`, `cross-platform.mdc`, `concurrent-agents.mdc`. Updated `general.mdc` (moved cross-platform to dedicated file). |
+| 4 | **Concurrent agent coordination**: New rule (`.claude/rules/concurrent-agents.md` + `.cursor/rules/concurrent-agents.mdc`) for multi-agent codebase editing awareness. |
+| 5 | **Protected files expanded**: `.cursor/rules/*.mdc` added to source-of-truth protected files table. Agent column added for future ownership restrictions. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 6 | `shared/mcp/README.md`: New "Concurrency" and "Post-Setup Authentication" sections. Prominently notes Vercel/Webflow OAuth requirement. |
+| 7 | `reference/cursor-practices.md`: New "Rule Correspondence" table mapping Claude Code to Cursor rules, with "Changing rules" workflow. |
+| 8 | `reference/tool-install-sources.md`: Chrome DevTools MCP install commands updated to include `--isolated`. All tool entries expanded with lifecycle fields. |
+| 9 | `CLAUDE.md`: Two new key decisions (`--isolated` for stdio MCP, 4 lifecycle fields). Project structure expanded to show `.cursor/rules/` files. |
+| 10 | Deleted `plans/cursor-vs-claude-code-rules-blueprint.md` (absorbed into `reference/cursor-practices.md`). |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `.claude/rules/concurrent-agents.md` | Concurrent agent coordination rule (Claude Code) |
+| `.cursor/rules/sources-of-truth.mdc` | Protected files review gate (Cursor) |
+| `.cursor/rules/tool-lifecycle.mdc` | Tool lifecycle gate (Cursor) |
+| `.cursor/rules/cross-platform.mdc` | Cross-platform rules (Cursor, condensed) |
+| `.cursor/rules/concurrent-agents.mdc` | Concurrent agent coordination rule (Cursor) |
+
+**Verified on:** macOS (build validated, all setup scripts syntax-checked). Windows: PS1 MCP setup scripts updated but not validated on this machine.
+
+---
+
 ## v3.8 -- Session Auto-Archive & User Repo (2026-02-19)
 
 ### New features

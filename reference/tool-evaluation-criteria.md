@@ -137,6 +137,10 @@ When adding a new managed tool, follow these phases in order. Each phase has a g
 2. Record in `reference/tool-install-sources.md` under **"Under Evaluation"**:
    - Official source URL, preferred install command per platform, version check command
    - Non-preferred install methods (cleanup targets for setup scripts)
+   - **Platform Status** per platform (`evaluating` initially)
+   - **Concurrency** -- can multiple instances/sessions run simultaneously? Why/why not?
+   - **Post-Install Config** -- steps required after install before the tool is operational (auth, login, config files). "None" if stateless.
+   - **Dependencies** -- other tools/runtimes required, with version constraints if known
 3. All subsequent phases reference this entry — never hardcode install commands from memory
 
 ### Phase 2: Install, Test & Approve (collaborative)

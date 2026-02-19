@@ -92,6 +92,8 @@ Full evaluation and progress log: `reference/claude-code-effectiveness.md` in ai
 - **Clean up before deleting**: Always `cd` back to a stable directory before `rm -rf`'ing temp dirs used during testing
 - **Subagent context gap**: Subagents launched via Task do NOT inherit `.claude/rules/`, `CLAUDE.md`, or `~/.claude/CLAUDE.md`. Never delegate code-writing to subagents in projects with cross-cutting rules (cross-platform, encoding, protected files). Use subagents for research only, or include the critical rules verbatim in the subagent prompt.
 - **Clarify before complying**: If a user response seems to contradict or reverse a prior recommendation, ask a clarifying question before proceeding. The user may have misunderstood the framing (e.g., reading "Why not X" as a question rather than a justification). A quick "Just to confirm -- did you mean X or Y?" avoids wasted work from miscommunication. Err on the side of asking.
+- **Preserve subagent work product**: When a subagent performs a substantial exploration (multi-file audit, multi-component analysis, architectural survey), write the full findings to a `plans/` or scratch file -- do not condense them into a stub summary that discards the detail. Trivial lookups (single file, quick answer) can stay inline.
+- **STANDING ORDER -- User-reported problems**: When the user reports unexpected behavior, it is real until proven otherwise. Investigate. Do not deflect or speculate. State what you know, what you don't, and what you will do next. Repeated violations will end the working relationship.
 
 **In plan mode**: Always review these areas and proactively suggest relevant improvements (e.g., "consider breaking this into smaller batches" or "this would be a good candidate for a hook").
 

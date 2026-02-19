@@ -77,7 +77,7 @@ add_mcp_server() {
 log "Setting up MCP servers for Claude Code (user scope)..."
 
 # Chrome DevTools — local stdio server via npx
-add_mcp_server "chrome-devtools" chrome-devtools --scope user npx chrome-devtools-mcp@latest
+add_mcp_server "chrome-devtools" chrome-devtools --scope user -- npx chrome-devtools-mcp@latest --isolated
 
 # Vercel — remote HTTP server (disabled by default via deny rules below)
 add_mcp_server "vercel" --transport http --scope user vercel https://mcp.vercel.com

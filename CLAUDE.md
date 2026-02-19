@@ -8,6 +8,11 @@ Jose's cross-machine scaffolding for Claude Code, Cursor, and MCP across Windows
 ai-tooling/
 ├── .claude/rules/       # Claude Code project rules (modular)
 ├── .cursor/rules/       # Cursor rules (.mdc format)
+│   ├── general.mdc      #   Identity, code style
+│   ├── sources-of-truth.mdc  # Protected files review gate
+│   ├── tool-lifecycle.mdc     # Phase 2 gate for new tools
+│   ├── cross-platform.mdc    # Dual-script, OS guards, PS 5.1
+│   └── concurrent-agents.mdc # Multi-agent coordination
 ├── shared/              # Source of truth for configs
 │   ├── claude-shared.md #   → embedded into deploy scripts by build
 │   ├── cursor-rules/    # Template rules + User Rules source of truth
@@ -89,6 +94,8 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 - **Tool lifecycle**: Verified official sources must be recorded in `reference/tool-install-sources.md` before any setup code is written. See "Evaluation-to-Support Lifecycle" in `reference/tool-evaluation-criteria.md`.
 - **Release versioning**: `major.minor.patch` scheme documented at the top of `RELEASE_NOTES.md`. Major = structural changes, minor = features/tools, patch = isolated bug fixes.
 - **Roadmap tracking**: `ROADMAP.md` tracks active/planned work. Detailed plans in `plans/`. Completed items move to `RELEASE_NOTES.md`.
+- **`--isolated` for stdio MCP servers**: Chrome DevTools MCP uses `--isolated` flag for throwaway temp Chrome profiles, enabling concurrent Claude Code + Cursor sessions without Chrome profile lock conflicts
+- **Tool lifecycle entries require 4 fields**: Platform Status, Concurrency, Post-Install Config, Dependencies -- see `reference/tool-evaluation-criteria.md`
 
 ## Code Conventions
 

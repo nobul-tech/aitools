@@ -1,0 +1,18 @@
+---
+description: Tool lifecycle gate for adding new managed tools
+globs:
+alwaysApply: true
+---
+
+## Tool Lifecycle Gate (this repo)
+
+When adding a new managed tool, follow the lifecycle in `reference/tool-evaluation-criteria.md`.
+
+**Hard stop at Phase 2:** After installing the tool and providing a test command, you MUST wait for the user's explicit approval before writing any integration code (aliases, setup scripts, installer steps, build changes).
+
+- Do not plan Phase 3+ implementation until Phase 2 is approved
+- Do not batch Phase 2 approval with Phase 3+ work in a single plan
+- If the user rejects: uninstall, remove the "Under Evaluation" entry, stop
+- If the user approves: promote to full entry, then proceed to Phase 3+
+
+This applies in plan mode too -- a plan that includes Phases 3-5 must note the Phase 2 gate and flag that implementation is contingent on approval.

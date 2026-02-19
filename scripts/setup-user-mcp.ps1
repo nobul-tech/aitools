@@ -78,7 +78,7 @@ function Add-McpServer {
 Log "Setting up MCP servers for Claude Code (user scope)..."
 
 # Chrome DevTools — local stdio server via npx (Windows needs cmd /c wrapper)
-Add-McpServer -Name "chrome-devtools" -AddArgs @("chrome-devtools", "--scope", "user", "cmd", "/c", "npx", "chrome-devtools-mcp@latest")
+Add-McpServer -Name "chrome-devtools" -AddArgs @("chrome-devtools", "--scope", "user", "cmd", "/c", "npx", "chrome-devtools-mcp@latest", "--", "--isolated")
 
 # Vercel — remote HTTP server (disabled by default via deny rules below)
 Add-McpServer -Name "vercel" -AddArgs @("--transport", "http", "--scope", "user", "vercel", "https://mcp.vercel.com")

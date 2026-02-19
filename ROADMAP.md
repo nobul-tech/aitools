@@ -12,7 +12,9 @@ Detailed plans live in `plans/`. See `RELEASE_NOTES.md` for completed work.
 
 ## Planned
 
-*No items currently planned.*
+| Item | Plan | Priority | Summary |
+|------|------|----------|---------|
+| Tool lifecycle gaps | -- | Medium | Security/credential docs, cleanup for all tools, troubleshooting guides, version management, CVE response, deprecation path |
 
 ## Completed
 

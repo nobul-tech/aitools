@@ -3,7 +3,7 @@
 Official documentation links and verified install commands for all tools managed by `aitools install`.
 **Always check these before modifying install steps.**
 
-Last verified: 2026-02-17
+Last verified: 2026-02-19
 
 ---
 
@@ -40,6 +40,13 @@ Last verified: 2026-02-17
 - On Windows Git Bash (MSYS), the bash curl installer works. WinGet also works from Git Bash.
 - `claude doctor` verifies installation type and version
 - Release channels: `latest` (default) or `stable`
+
+### Lifecycle
+
+- **Platform Status:** macOS: supported; Windows: supported
+- **Concurrency:** Yes -- independent sessions per directory
+- **Post-Install Config:** `~/.claude/CLAUDE.md` (via setup script), git identity
+- **Dependencies:** Git, Git Bash (Windows)
 
 ---
 
@@ -85,6 +92,13 @@ Related issues:
 - Has built-in `vercel mcp` command for MCP client configuration.
 - No winget package or standalone binary available for Windows.
 
+### Lifecycle
+
+- **Platform Status:** macOS: supported; Windows: supported
+- **Concurrency:** Yes -- stateless CLI
+- **Post-Install Config:** **`vercel login` required** -- not automated by setup scripts. Tool appears installed but is non-functional until login completes.
+- **Dependencies:** Node.js (npm method only)
+
 ---
 
 ## Cursor Agent CLI
@@ -119,6 +133,13 @@ agent --version
   - macOS: `brew install ripgrep`
   - Windows: `winget install BurntSushi.ripgrep.MSVC`
 
+### Lifecycle
+
+- **Platform Status:** macOS: supported; Windows: supported
+- **Concurrency:** Yes -- independent sessions
+- **Post-Install Config:** `~/.cursor/cli-config.json` (via setup script)
+- **Dependencies:** ripgrep (`rg`)
+
 ---
 
 ## MCP Servers
@@ -133,14 +154,20 @@ agent --version
 
 **Install (Claude Code)**:
 ```bash
-claude mcp add chrome-devtools --scope user npx chrome-devtools-mcp@latest
+claude mcp add chrome-devtools --scope user -- npx chrome-devtools-mcp@latest --isolated
 ```
 
 **Install (Cursor)**: Write to `~/.cursor/mcp.json`:
 ```json
-{ "command": "npx", "args": ["-y", "chrome-devtools-mcp@latest"] }
+{ "command": "npx", "args": ["-y", "chrome-devtools-mcp@latest", "--isolated"] }
 ```
-Windows variant uses `"command": "cmd", "args": ["/c", "npx", "-y", "chrome-devtools-mcp@latest"]`.
+Windows variant uses `"command": "cmd", "args": ["/c", "npx", "-y", "chrome-devtools-mcp@latest", "--isolated"]`.
+
+**Lifecycle:**
+- **Platform Status:** macOS: supported; Windows: supported
+- **Concurrency:** **Yes with `--isolated`**; No without (Chrome profile lock prevents concurrent sessions)
+- **Post-Install Config:** None (no auth)
+- **Dependencies:** Node.js (npx)
 
 ### Vercel MCP
 
@@ -155,6 +182,12 @@ Windows variant uses `"command": "cmd", "args": ["/c", "npx", "-y", "chrome-devt
 claude mcp add --transport http --scope user vercel https://mcp.vercel.com
 ```
 
+**Lifecycle:**
+- **Platform Status:** macOS: supported; Windows: supported
+- **Concurrency:** Yes -- HTTP remote server
+- **Post-Install Config:** **OAuth required** -- authenticate in Claude Code (`/mcp`) or Cursor (Settings > Tools & MCP) on first use. Tool appears configured but is non-functional until OAuth completes.
+- **Dependencies:** None
+
 ### Webflow MCP
 
 **Official Docs**: https://developers.webflow.com/mcp/reference/getting-started
@@ -168,6 +201,12 @@ claude mcp add --transport http --scope user vercel https://mcp.vercel.com
 ```bash
 claude mcp add --transport http --scope user webflow https://mcp.webflow.com/mcp
 ```
+
+**Lifecycle:**
+- **Platform Status:** macOS: supported; Windows: supported
+- **Concurrency:** Yes -- HTTP remote server
+- **Post-Install Config:** **OAuth required** -- authenticate in Claude Code (`/mcp`) or Cursor (Settings > Tools & MCP) on first use. Tool appears configured but is non-functional until OAuth completes.
+- **Dependencies:** None
 
 ---
 
@@ -227,6 +266,13 @@ claude mcp add --transport http --scope user webflow https://mcp.webflow.com/mcp
 
 Required for: Chrome DevTools MCP (npx), Vercel CLI (npm), settings JSON merge in setup scripts.
 
+### Lifecycle
+
+- **Platform Status:** macOS: supported; Windows: supported
+- **Concurrency:** Yes -- runtime
+- **Post-Install Config:** None
+- **Dependencies:** --
+
 ---
 
 ## Pandoc
@@ -268,6 +314,13 @@ pandoc --version
 - Cross-platform — native packages on macOS, Windows, Linux
 - Single static binary, no runtime dependencies
 - Used by: `clip2md` shell alias (clipboard HTML → Markdown)
+
+### Lifecycle
+
+- **Platform Status:** macOS: supported; Windows: supported
+- **Concurrency:** Yes -- stateless CLI
+- **Post-Install Config:** None
+- **Dependencies:** --
 
 ---
 

@@ -73,7 +73,7 @@ cat > "$mcp_json" << 'EOF'
   "mcpServers": {
     "chrome-devtools": {
       "command": "npx",
-      "args": ["-y", "chrome-devtools-mcp@latest"]
+      "args": ["-y", "chrome-devtools-mcp@latest", "--isolated"]
     },
     "vercel": {
       "url": "https://mcp.vercel.com"

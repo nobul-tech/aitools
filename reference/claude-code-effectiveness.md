@@ -36,3 +36,4 @@ Track improvement over time. Add entries when notable changes in workflow are ob
 |------|--------|-------|
 | 2026-02-16 | 8.5 | Baseline. Strong architectural thinking and verification. Main gaps: batch size, hooks, context management. |
 | 2026-02-19 | 8.5 | Session archive feature (v3.8): entry-flow review caught 3 bugs — missing uname dispatch, lossy path splitting, CRLF in .sh file. All preventable: batch size caused cross-cutting rules to be skipped despite being in context. Also discovered subagents don't inherit project rules. Strengthened coaching bullets accordingly. |
+| 2026-02-19 | 8.5 | Post-session audit: subagent findings condensed away, dismissiveness when challenged, silent hook failure buried in summary. Added coaching bullets (preserve work product, standing order on user-reported problems) and surface-silent-failures rule. Technical: userRepoPath missing from config.json -- hook was a no-op. |

@@ -1,0 +1,40 @@
+---
+description: Review gate for protected source-of-truth files
+globs:
+alwaysApply: true
+---
+
+## Source-of-Truth Review Gate (this repo)
+
+Certain files are authoritative references that feed scripts, deploy pipelines, or govern AI agent behavior. Changes to these files propagate across machines and affect real workflows, so they require user review before being written.
+
+### Protected files
+
+| File | What it controls | Agent |
+|------|-----------------|-------|
+| `reference/tool-install-sources.md` | Install commands for all managed tools — setup scripts reference this | Any |
+| `reference/tool-evaluation-criteria.md` | Tool evaluation framework and lifecycle phases | Any |
+| `CLAUDE.md` | Project-level instructions and Key Decisions | Any |
+| `shared/claude-shared.md` | User-level preferences embedded into deploy scripts (propagates to all machines) | Any |
+| `shared/cursor-rules/user-rules.md` | Cursor User Rules (deployed to clipboard) | Any |
+| `.claude/rules/*.md` | Claude Code behavioral rules | Any |
+| `.cursor/rules/*.mdc` | Cursor behavioral rules (this file included) | Any |
+| `ROADMAP.md` | Active/planned work items — drives project priorities | Any |
+| `plans/*.md` | Detailed implementation plans — referenced by roadmap | Any |
+
+### The rule
+
+Before writing, editing, or deleting content in any protected file:
+
+1. **Draft the change** -- prepare the exact content but do not write it yet
+2. **Present for review** -- show the proposed change to the user. Use full content for new sections, diff-style (old -> new) for edits to existing content. When multiple protected files change in one task, present them together as a batch.
+3. **Wait for approval** -- do not write until the user confirms. If the user requests modifications, revise and re-present.
+
+### Exceptions
+
+- **Trivial fixes** (typos, whitespace, markdown formatting) that do not change meaning may be made without review, but mention them in your response so the user is aware.
+- **User-dictated content** -- if the user provides the exact text to write (e.g., "add this bullet to CLAUDE.md: ..."), that counts as pre-approved. Write it directly.
+
+### Why this matters
+
+These files are the "single source of truth" pattern -- downstream scripts and behaviors derive from them. A silent change here can propagate incorrect install commands, alter behavioral rules, or deploy wrong configs across machines. The review step keeps the agent and user in sync.
