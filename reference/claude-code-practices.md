@@ -44,6 +44,35 @@ All levels merge together. More specific wins on conflict.
 | `/rename <name>` | Name the current session for easy recall |
 | `claude --continue --fork-session` | Fork current session into a new one |
 
+## Session Storage Internals
+
+Claude Code stores session transcripts as JSONL files under `~/.claude/projects/`:
+
+```
+~/.claude/projects/
+├── -Users-pepe-repos-ai-tooling/     # sanitized CWD path
+│   ├── <session-uuid>.jsonl
+│   └── <session-uuid>/subagents/     # subagent transcripts
+└── -Users-pepe-repos-mbx-ext/
+    └── ...
+```
+
+### Path Sanitization
+
+The project directory name is the CWD with `/` replaced by `-`. This is **lossy** for project names containing hyphens — you cannot split on `-` to recover the project name.
+
+Example: `/Users/pepe/repos/ai-tooling` becomes `-Users-pepe-repos-ai-tooling`. Naive split yields `tooling`, not `ai-tooling`.
+
+**Correct approach:** Read the `cwd` field from the JSONL transcript, then derive the project name from the real path.
+
+### JSONL Transcript Structure
+
+Each line is a JSON object. Fields available in most entries:
+
+- `type` — message type (`human`, `assistant`)
+- `cwd` — original working directory (absolute path)
+- `sessionId` — full session UUID
+
 ## Best Practices for CLAUDE.md Content
 
 **Include:** build/test/lint commands, code style rules, project architecture, gotchas, tool preferences.

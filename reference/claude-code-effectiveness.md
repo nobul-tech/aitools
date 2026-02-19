@@ -35,3 +35,4 @@ Track improvement over time. Add entries when notable changes in workflow are ob
 | Date | Rating | Notes |
 |------|--------|-------|
 | 2026-02-16 | 8.5 | Baseline. Strong architectural thinking and verification. Main gaps: batch size, hooks, context management. |
+| 2026-02-19 | 8.5 | Session archive feature (v3.8): entry-flow review caught 3 bugs — missing uname dispatch, lossy path splitting, CRLF in .sh file. All preventable: batch size caused cross-cutting rules to be skipped despite being in context. Also discovered subagents don't inherit project rules. Strengthened coaching bullets accordingly. |

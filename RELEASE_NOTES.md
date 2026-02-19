@@ -38,6 +38,15 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 |---|--------|
 | 9 | New `reference/user-repo.md`: documents the user repo pattern, naming convention, session naming, project derivation, and CLI commands. |
 | 10 | `plans/user-repo-and-session-hooks.md`: status updated to "Phase A implemented", open questions resolved (hook schema, jq dependency, project derivation). |
+| 11 | `shared/claude-shared.md`: strengthened "Smaller batches" coaching bullet (rules ignored when batch size causes focus to narrow); added "Subagent context gap" coaching bullet (subagents don't inherit project rules). |
+| 12 | `reference/claude-code-practices.md`: new "Session Storage Internals" section documenting `~/.claude/projects/` storage scheme, lossy path sanitization, and JSONL transcript structure. |
+| 13 | `reference/claude-code-effectiveness.md`: progress log entry for v3.8 implementation lessons. |
+
+### Bug fixes (follow-up)
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 14 | BUG | Restored executable bits on `setup-user-hooks.sh` and `session-archive.sh` — the Write tool dropped them during initial creation. |
 
 ### Files created
 
