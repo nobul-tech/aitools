@@ -1,0 +1,31 @@
+## Pre-Push Checklist (this repo)
+
+Before pushing to remote, verify:
+
+### 1. Pre-commit checklist passed
+
+All items in the pre-commit checklist were satisfied for every commit being pushed.
+
+### 2. No scratch or sensitive files
+
+Confirm nothing was accidentally committed:
+- No scratch files (`chat.txt`, temp notes, `*.tmp`)
+- No secrets (`.env`, credentials, tokens, API keys)
+- `git log --oneline --name-only origin/main..HEAD` to review all files in the push
+
+### 3. Release notes current
+
+If the push includes new features or bug fixes, `RELEASE_NOTES.md` should have a version entry covering the changes. Omit for docs-only or trivial changes.
+
+### 4. Roadmap reflects reality
+
+If the push completes or starts a roadmap item, `ROADMAP.md` should be updated (move to Completed or add to In Progress).
+
+### 5. deploy/ matches source
+
+If `scripts/` or `shared/` changed in any commit being pushed, `deploy/` must have been rebuilt (`bash scripts/build-deploy.sh`) and the output included in the push. Stale deploy scripts on remote means the next machine sync gets old configs.
+
+### 6. Branch hygiene
+
+- Pushing to `main` directly is OK for this single-maintainer repo
+- Force-push to `main` requires explicit user approval -- never do it silently
