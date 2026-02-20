@@ -429,6 +429,7 @@ if ($doUser) {
             }
 
             $repoName = "aitools-$ghUser"
+            $machineAlias = ""
 
             # Determine repos directory from config
             $reposDir = Read-ConfigKey -File $configFile -Key "reposPath"
@@ -437,8 +438,91 @@ if ($doUser) {
             $userRepoDir = Join-Path $reposDir $repoName
 
             if (Test-Path (Join-Path $userRepoDir ".git")) {
+                # --- Path 1: local repo already exists ---
                 Write-Host "User repo already exists: $userRepoDir"
+
+            } elseif ((Get-Command gh -ErrorAction SilentlyContinue) -and
+                      ((gh repo view "$ghUser/$repoName" --json name 2>$null) -ne $null)) {
+                # --- Path 2: GitHub repo exists, no local clone ---
+                Write-Host "GitHub repo exists. Cloning to $userRepoDir..."
+                gh repo clone "$ghUser/$repoName" $userRepoDir
+
+                # Check if machine profile needs adding (v2 schema)
+                $profilePath = Join-Path $userRepoDir "profile.json"
+                if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path $profilePath)) {
+                    # Read defaults from existing profile
+                    $profileDefaults = node -e @"
+const fs = require('fs');
+try {
+    const p = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
+    const ident = p.identity || {};
+    const firstProf = Object.values(p.profiles || {})[0] || {};
+    console.log((ident.git && ident.git.name) || firstProf.name || '');
+    console.log(firstProf.company || '');
+    console.log((ident.git && ident.git.email) || '');
+} catch {}
+"@ $profilePath 2>$null
+                    $defaultLines = @($profileDefaults -split "`n")
+                    $defaultName = if ($defaultLines.Count -ge 1) { $defaultLines[0].Trim() } else { "" }
+                    $defaultCompany = if ($defaultLines.Count -ge 2) { $defaultLines[1].Trim() } else { "" }
+                    $defaultEmail = if ($defaultLines.Count -ge 3) { $defaultLines[2].Trim() } else { "" }
+
+                    $machineAlias = Read-Host "Machine alias (e.g., laptop, workstation)"
+
+                    if ($machineAlias) {
+                        $namePrompt = "Display name"
+                        if ($defaultName) { $namePrompt = "Display name [$defaultName]" }
+                        $profName = Read-Host $namePrompt
+                        if (-not $profName) { $profName = if ($defaultName) { $defaultName } else { $env:USERNAME } }
+
+                        $companyPrompt = "Company"
+                        if ($defaultCompany) { $companyPrompt = "Company [$defaultCompany]" }
+                        $profCompany = Read-Host $companyPrompt
+                        if (-not $profCompany) { $profCompany = $defaultCompany }
+
+                        node -e @"
+const fs = require('fs'), os = require('os');
+const pf = process.argv[1], alias = process.argv[2];
+try {
+    const p = JSON.parse(fs.readFileSync(pf, 'utf8'));
+    if (p.version === 2 && !p.profiles[alias]) {
+        p.profiles[alias] = {
+            name: process.argv[3],
+            company: process.argv[4],
+            machine: {
+                hostname: os.hostname(),
+                os: process.platform,
+                arch: process.arch,
+                shell: 'powershell'
+            }
+        };
+        fs.writeFileSync(pf, JSON.stringify(p, null, 2) + '\n');
+        console.log('Added machine profile: ' + alias);
+    } else if (p.version === 2 && p.profiles[alias]) {
+        console.log('Machine profile already exists: ' + alias);
+    }
+} catch(e) { console.error('warning: could not update profile: ' + e.message); }
+"@ $profilePath $machineAlias $profName $profCompany
+                    }
+
+                    # Set git identity from profile
+                    if ($defaultName -and $defaultEmail) {
+                        git -C $userRepoDir config user.name $defaultName
+                        git -C $userRepoDir config user.email $defaultEmail
+                    }
+
+                    # Commit and push if profile was modified
+                    $status = git -C $userRepoDir status --porcelain 2>$null
+                    if ($status) {
+                        git -C $userRepoDir add -A
+                        git -C $userRepoDir commit -m "Add machine profile: $machineAlias"
+                        git -C $userRepoDir push
+                        Write-Host "Profile updated and pushed."
+                    }
+                }
+
             } else {
+                # --- Path 3: fresh setup ---
                 Write-Host "Creating user repo: $userRepoDir"
                 New-Item -ItemType Directory -Path (Join-Path $userRepoDir "sessions") -Force | Out-Null
 
@@ -447,27 +531,33 @@ if ($doUser) {
                 if (-not $profName) { $profName = $env:USERNAME }
                 $profEmail = Read-Host "Email"
                 $profCompany = Read-Host "Company"
+                $machineAlias = Read-Host "Machine alias (e.g., laptop, workstation)"
 
-                # Create profile.json
+                # Create v2 profile.json
                 node -e @"
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
+const fs = require('fs'), os = require('os');
 const profile = {
+    version: 2,
+    identity: {
+        github: process.argv[3],
+        email: process.argv[2],
+        git: { name: process.argv[1], email: process.argv[2] }
+    },
+    profiles: {}
+};
+const alias = process.argv[6] || 'default';
+profile.profiles[alias] = {
     name: process.argv[1],
-    email: process.argv[2],
-    github: process.argv[3],
     company: process.argv[4],
-    git: { name: process.argv[1], email: process.argv[2] },
-    machines: [{
+    machine: {
         hostname: os.hostname(),
         os: process.platform,
         arch: process.arch,
         shell: 'powershell'
-    }]
+    }
 };
-fs.writeFileSync(process.argv[5], JSON.stringify(profile, null, 2) + '\n');
-"@ "$profName" "$profEmail" "$ghUser" "$profCompany" (Join-Path $userRepoDir "profile.json")
+fs.writeFileSync(process.argv[7], JSON.stringify(profile, null, 2) + '\n');
+"@ "$profName" "$profEmail" "$ghUser" "$profCompany" "powershell" $machineAlias (Join-Path $userRepoDir "profile.json")
 
                 # Create .gitattributes
                 [System.IO.File]::WriteAllText(
@@ -500,7 +590,7 @@ fs.writeFileSync(process.argv[5], JSON.stringify(profile, null, 2) + '\n');
                 }
             }
 
-            # Write userRepoPath to config
+            # Write userRepoPath and machineAlias to config
             if (Get-Command node -ErrorAction SilentlyContinue) {
                 node -e @"
 const fs = require('fs');
@@ -508,9 +598,13 @@ const f = process.argv[1];
 let cfg = {};
 try { cfg = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
 cfg.userRepoPath = process.argv[2];
+if (process.argv[3]) cfg.machineAlias = process.argv[3];
 fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
-"@ "$configFile" "$userRepoDir"
+"@ "$configFile" "$userRepoDir" "$machineAlias"
                 Write-Host "Config updated: userRepoPath = $userRepoDir"
+                if ($machineAlias) {
+                    Write-Host "Config updated: machineAlias = $machineAlias"
+                }
             }
 
             # Deploy session archive hook
@@ -760,6 +854,8 @@ Write-Host "[1/$steps] Pulling latest..."
 $pulledUpdates = $false
 Push-Location $repoPath
 try {
+    # Reset generated deploy/ files before pull (may have line-ending diffs)
+    git checkout -- "deploy/" 2>$null
     if ($doGitpull) {
         $pullOut = git pull --tags origin main 2>&1 | Out-String
     } else {
@@ -771,7 +867,12 @@ try {
             Write-Host $pullOut
             exit 1
         } else {
-            Write-Host "  Could not reach remote - deploying from local checkout."
+            if ($pullOut -match "(?i)(could not resolve|unable to access|connection refused|connection timed out|no route to host)") {
+                Write-Host "  Could not reach remote - deploying from local checkout."
+            } else {
+                Write-Host "  warning: git pull failed - deploying from local checkout." -ForegroundColor Yellow
+                $pullOut.Trim().Split("`n") | Select-Object -First 3 | ForEach-Object { Write-Host "    $_" }
+            }
         }
     } elseif ($pullOut -match "Already up to date") {
         Write-Host "  Already up to date."

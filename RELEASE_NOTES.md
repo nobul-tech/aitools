@@ -12,6 +12,35 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v3.12 -- Bug Fixes, v2 Profiles, Template Interpolation (2026-02-20)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | BUG | **git pull failure misdiagnosis** ([#1](https://github.com/nobul-jose/ai-tooling/issues/1)): Any non-zero `git pull` exit was reported as "Could not reach remote". Real cause (e.g., dirty `deploy/` files) was hidden. Fix: reset generated `deploy/` before pull; distinguish network errors from other failures in both scripts. |
+| 2 | BUG | **user init existing repo failure** ([#2](https://github.com/nobul-jose/ai-tooling/issues/2)): `gh repo create` failed silently when repo already existed on GitHub. Local repo had no remote, no push. Fix: rewritten `user init` with 3-path flow (local exists / GitHub exists / fresh). |
+
+### New features
+
+| # | Change |
+|---|--------|
+| 3 | **v2 profile creation in user init**: Fresh repos now create v2 `profile.json` with `version`, `identity`, and per-machine `profiles` sections. Includes machine alias prompt. |
+| 4 | **Multi-machine user init**: When GitHub repo exists but no local clone, `user init` clones it, prompts for machine alias, adds a new profile entry, commits, and pushes. |
+| 5 | **Phase B template interpolation**: `shared/claude-shared.md` uses `{{PLACEHOLDER}}` tokens for identity fields. `build-deploy.sh` reads `profile.json` via config and interpolates at build time. Fallback to hardcoded defaults if profile unavailable. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 6 | **Windows tool discovery rule**: Added to `shared/claude-shared.md` -- documents that `which`/`command -v` in Git Bash misses Windows PATH tools; use `powershell.exe Get-Command` instead. |
+| 7 | **GitHub issue tracking convention**: Added to `shared/claude-shared.md` -- when bugs are referenced, check the repo's GitHub issues for full context. |
+| 8 | **machineAlias in config**: `user init` now writes `machineAlias` to `~/.config/ai-tooling/config.json` alongside `userRepoPath`. Used by build-deploy.sh to select the correct profile. |
+
+**Verified on:** Windows (bash -n + ParseFile validated on all scripts, deploy/ rebuilt and verified). macOS: scripts updated but not validated on this machine.
+
+---
+
 ## v3.11 -- Cleanup & Deprecations (2026-02-19)
 
 ### Deprecated

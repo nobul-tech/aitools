@@ -39,6 +39,52 @@ fi
 # Read shared content
 CLAUDE_SHARED_CONTENT=$(cat "$CLAUDE_SHARED")
 
+# --- Profile interpolation ---
+# Read profile from user repo, interpolate identity placeholders.
+# Fallback: use defaults if profile not found (build never fails).
+PROFILE_NAME="Jose"
+PROFILE_COMPANY="Nobul"
+IDENTITY_GIT_NAME="Jose"
+IDENTITY_GIT_EMAIL="jose@nobul.tech"
+
+CONFIG="$HOME/.config/ai-tooling/config.json"
+if [ -f "$CONFIG" ] && command -v node &>/dev/null; then
+    PROFILE_VALS=$(node -e "
+const fs = require('fs'), path = require('path'), os = require('os');
+try {
+    const cfg = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
+    const repo = cfg.userRepoPath;
+    const alias = cfg.machineAlias || '';
+    if (!repo) throw new Error('no userRepoPath');
+    const pf = path.join(repo, 'profile.json');
+    const p = JSON.parse(fs.readFileSync(pf, 'utf8'));
+    let prof, ident;
+    if (p.version === 2) {
+        prof = p.profiles[alias]
+            || Object.values(p.profiles).find(pr => pr.machine && pr.machine.hostname === os.hostname())
+            || Object.values(p.profiles)[0];
+        ident = p.identity;
+    } else {
+        prof = { name: p.name, company: p.company || '' };
+        ident = { git: { name: (p.git && p.git.name) || p.name, email: (p.git && p.git.email) || p.email } };
+    }
+    // Output as KEY=VALUE lines for bash eval
+    console.log('PROFILE_NAME=' + JSON.stringify(prof.name));
+    console.log('PROFILE_COMPANY=' + JSON.stringify(prof.company));
+    console.log('IDENTITY_GIT_NAME=' + JSON.stringify(ident.git.name));
+    console.log('IDENTITY_GIT_EMAIL=' + JSON.stringify(ident.git.email));
+} catch(e) { process.exit(1); }
+" "$CONFIG" 2>/dev/null) && eval "$PROFILE_VALS"
+fi
+
+# Interpolate placeholders
+CLAUDE_SHARED_CONTENT="${CLAUDE_SHARED_CONTENT//\{\{PROFILE_NAME\}\}/$PROFILE_NAME}"
+CLAUDE_SHARED_CONTENT="${CLAUDE_SHARED_CONTENT//\{\{PROFILE_COMPANY\}\}/$PROFILE_COMPANY}"
+CLAUDE_SHARED_CONTENT="${CLAUDE_SHARED_CONTENT//\{\{IDENTITY_GIT_NAME\}\}/$IDENTITY_GIT_NAME}"
+CLAUDE_SHARED_CONTENT="${CLAUDE_SHARED_CONTENT//\{\{IDENTITY_GIT_EMAIL\}\}/$IDENTITY_GIT_EMAIL}"
+
+blog "Profile interpolation: name=$PROFILE_NAME company=$PROFILE_COMPANY"
+
 # Clean and recreate deploy/
 rm -rf "$DEPLOY_DIR"
 mkdir -p "$DEPLOY_DIR"

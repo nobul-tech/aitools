@@ -66,9 +66,9 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Identity
 
-- Name: Jose
+- Name: pepe
 - Git: `Jose <jose@nobul.tech>`
-- Company: Nobul
+- Company: nobul.tech
 
 ## Code Style Defaults
 
@@ -97,6 +97,16 @@ Reading/referencing any source is always OK — the gate applies at "install" or
 - Projects live in git repos under `~/repos/` (macOS) / `C:\repos\` (Windows)
 - Some legacy projects still on Google Drive (`G:\My Drive\` / `~/Google Drive/My Drive/`) -- migrate to git repos over time
 - **After creating `.sh` files on Windows**, always run `git update-index --chmod=+x <file>` before committing -- Windows doesn't set the Unix executable bit
+
+### Windows tool discovery in Git Bash
+
+`which` / `command -v` in Git Bash only searches the Git Bash PATH, which is a subset of the Windows PATH. Many Windows-installed tools (aitools, pandoc, etc.) are on the PowerShell PATH but invisible to Git Bash.
+
+**Rule**: To check if a tool is installed on Windows, use:
+```bash
+powershell.exe -NoProfile -Command 'Get-Command <tool> -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source'
+```
+Never use `which <tool>` or `command -v <tool>` on Windows to determine whether a tool is available.
 
 ### Bash ↔ PowerShell dispatch rule
 
@@ -163,6 +173,7 @@ Full evaluation and progress log: `reference/claude-code-effectiveness.md` in ai
 - Commit messages: imperative mood, concise
 - Branch naming: `feature/`, `fix/`, `docs/` prefixes
 - Always set local git identity before first commit in a new repo
+- **Issue tracking**: When I reference bugs or issues in context where documentation is expected (e.g., "fix bugs #1 and #2", "the bugs are filed"), check the project's GitHub repo via `gh issue list` / `gh issue view <number>`. Issues have full repro steps and context -- don't ask me to re-describe them.
 __EMBEDDED_CLAUDE_SHARED__
 
 # --- Write CLAUDE.md ---

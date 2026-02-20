@@ -475,6 +475,7 @@ if $do_user; then
             fi
 
             repo_name="aitools-${gh_user}"
+            machine_alias=""
 
             # Determine repos directory from config
             repos_dir=""
@@ -486,8 +487,88 @@ if $do_user; then
             user_repo_dir="$repos_dir/$repo_name"
 
             if [ -d "$user_repo_dir/.git" ]; then
+                # --- Path 1: local repo already exists ---
                 echo "User repo already exists: $(display_path "$user_repo_dir")"
+
+            elif command -v gh &>/dev/null && gh repo view "$gh_user/$repo_name" --json name &>/dev/null; then
+                # --- Path 2: GitHub repo exists, no local clone ---
+                echo "GitHub repo exists. Cloning to $(display_path "$user_repo_dir")..."
+                gh repo clone "$gh_user/$repo_name" "$user_repo_dir"
+
+                # Check if machine profile needs adding (v2 schema)
+                if command -v node &>/dev/null && [ -f "$user_repo_dir/profile.json" ]; then
+                    # Read defaults from existing profile
+                    profile_defaults=$(node -e "
+const fs = require('fs');
+try {
+    const p = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
+    const ident = p.identity || {};
+    const firstProf = Object.values(p.profiles || {})[0] || {};
+    console.log((ident.git && ident.git.name) || firstProf.name || '');
+    console.log(firstProf.company || '');
+    console.log((ident.git && ident.git.email) || '');
+} catch {}
+" "$user_repo_dir/profile.json" 2>/dev/null)
+                    default_name=$(echo "$profile_defaults" | sed -n '1p')
+                    default_company=$(echo "$profile_defaults" | sed -n '2p')
+                    default_email=$(echo "$profile_defaults" | sed -n '3p')
+
+                    printf "Machine alias (e.g., laptop, workstation): "
+                    read -r machine_alias < /dev/tty
+
+                    if [ -n "$machine_alias" ]; then
+                        printf "Display name [%s]: " "${default_name:-$(whoami)}"
+                        read -r prof_name < /dev/tty
+                        prof_name="${prof_name:-${default_name:-$(whoami)}}"
+
+                        printf "Company [%s]: " "${default_company:-}"
+                        read -r prof_company < /dev/tty
+                        prof_company="${prof_company:-$default_company}"
+
+                        shell_name=$(basename "${SHELL:-/bin/bash}")
+
+                        node -e "
+const fs = require('fs'), os = require('os');
+const pf = process.argv[1], alias = process.argv[2];
+try {
+    const p = JSON.parse(fs.readFileSync(pf, 'utf8'));
+    if (p.version === 2 && !p.profiles[alias]) {
+        p.profiles[alias] = {
+            name: process.argv[3],
+            company: process.argv[4],
+            machine: {
+                hostname: os.hostname(),
+                os: process.platform,
+                arch: process.arch,
+                shell: process.argv[5]
+            }
+        };
+        fs.writeFileSync(pf, JSON.stringify(p, null, 2) + '\n');
+        console.log('Added machine profile: ' + alias);
+    } else if (p.version === 2 && p.profiles[alias]) {
+        console.log('Machine profile already exists: ' + alias);
+    }
+} catch(e) { console.error('warning: could not update profile: ' + e.message); }
+" "$user_repo_dir/profile.json" "$machine_alias" "$prof_name" "$prof_company" "$shell_name"
+                    fi
+
+                    # Set git identity from profile
+                    if [ -n "$default_name" ] && [ -n "$default_email" ]; then
+                        git -C "$user_repo_dir" config user.name "$default_name"
+                        git -C "$user_repo_dir" config user.email "$default_email"
+                    fi
+
+                    # Commit and push if profile was modified
+                    if [ -n "$(git -C "$user_repo_dir" status --porcelain)" ]; then
+                        git -C "$user_repo_dir" add -A
+                        git -C "$user_repo_dir" commit -m "Add machine profile: ${machine_alias}"
+                        git -C "$user_repo_dir" push
+                        echo "Profile updated and pushed."
+                    fi
+                fi
+
             else
+                # --- Path 3: fresh setup ---
                 echo "Creating user repo: $(display_path "$user_repo_dir")"
                 mkdir -p "$user_repo_dir/sessions"
 
@@ -502,24 +583,37 @@ if $do_user; then
                 printf "Company: "
                 read -r prof_company < /dev/tty
 
-                # Create profile.json
+                printf "Machine alias (e.g., laptop, workstation): "
+                read -r machine_alias < /dev/tty
+
+                shell_name=$(basename "${SHELL:-/bin/bash}")
+
+                # Create v2 profile.json
                 node -e "
-const fs = require('fs');
+const fs = require('fs'), os = require('os');
 const profile = {
+    version: 2,
+    identity: {
+        github: process.argv[3],
+        email: process.argv[2],
+        git: { name: process.argv[1], email: process.argv[2] }
+    },
+    profiles: {}
+};
+const alias = process.argv[6] || 'default';
+profile.profiles[alias] = {
     name: process.argv[1],
-    email: process.argv[2],
-    github: process.argv[3],
     company: process.argv[4],
-    git: { name: process.argv[1], email: process.argv[2] },
-    machines: [{
-        hostname: require('os').hostname(),
+    machine: {
+        hostname: os.hostname(),
         os: process.platform,
         arch: process.arch,
-        shell: process.env.SHELL ? require('path').basename(process.env.SHELL) : 'bash'
-    }]
+        shell: process.argv[5]
+    }
 };
-fs.writeFileSync(process.argv[5], JSON.stringify(profile, null, 2) + '\n');
-" "$prof_name" "$prof_email" "$gh_user" "$prof_company" "$user_repo_dir/profile.json"
+fs.writeFileSync(process.argv[7], JSON.stringify(profile, null, 2) + '\n');
+" "$prof_name" "$prof_email" "$gh_user" "$prof_company" "$shell_name" \
+  "$machine_alias" "$user_repo_dir/profile.json"
 
                 # Create .gitattributes
                 printf '* text=auto eol=lf\n*.jsonl text eol=lf\n' > "$user_repo_dir/.gitattributes"
@@ -548,7 +642,7 @@ fs.writeFileSync(process.argv[5], JSON.stringify(profile, null, 2) + '\n');
                 fi
             fi
 
-            # Write userRepoPath to config
+            # Write userRepoPath and machineAlias to config
             if command -v node &>/dev/null; then
                 node -e "
 const fs = require('fs');
@@ -556,9 +650,13 @@ const f = process.argv[1];
 let cfg = {};
 try { cfg = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
 cfg.userRepoPath = process.argv[2];
+if (process.argv[3]) cfg.machineAlias = process.argv[3];
 fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
-" "$config" "$user_repo_dir"
+" "$config" "$user_repo_dir" "${machine_alias:-}"
                 echo "Config updated: userRepoPath = $(display_path "$user_repo_dir")"
+                if [ -n "${machine_alias:-}" ]; then
+                    echo "Config updated: machineAlias = $machine_alias"
+                fi
             fi
 
             # Deploy session archive hook
@@ -844,6 +942,8 @@ else
     # no-args and install: quiet pull (warn on failure, continue from local)
     echo "[1/$STEPS] Pulling latest..."
     pulled_updates=false
+    # Reset generated deploy/ files before pull (may have line-ending diffs)
+    git -C "$repo_path" checkout -- deploy/ 2>/dev/null || true
     if pull_out=$(cd "$repo_path" && git pull origin main 2>&1); then
         if echo "$pull_out" | grep -q "Already up to date"; then
             echo "  Already up to date."
@@ -852,7 +952,12 @@ else
             echo "  Updated."
         fi
     else
-        echo "  Could not reach remote — deploying from local checkout."
+        if echo "$pull_out" | grep -qiE "could not resolve|unable to access|connection refused|connection timed out|no route to host"; then
+            echo "  Could not reach remote — deploying from local checkout."
+        else
+            echo "  warning: git pull failed — deploying from local checkout." >&2
+            echo "$pull_out" | head -3 | sed 's/^/    /' >&2
+        fi
     fi
 fi
 
