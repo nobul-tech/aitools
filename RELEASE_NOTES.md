@@ -12,6 +12,24 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v3.12.1 -- clip2md Plain Text Support (2026-02-20)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **clip2md plain text fallback**: When no HTML is on the clipboard, `clip2md` now falls back to plain text. Plain text skips pandoc entirely -- saved as-is. Useful for terminal output, code snippets, and plain notes. Status messages show source type: `(HTML, ~XXX words)` or `(text, ~XXX words)`. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 2 | **Pandoc check moved inside HTML branch**: `clip2md` no longer requires pandoc when saving plain text. Pandoc is only checked when HTML content is detected. |
+
+**Verified on:** Windows (bash -n + ParseFile validated). macOS: deferred.
+
+---
+
 ## v3.12 -- Bug Fixes, v2 Profiles, Template Interpolation (2026-02-20)
 
 ### Bug fixes

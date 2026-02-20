@@ -22,9 +22,10 @@ alias ccr='claude -c'
 alias ccs='claude --resume'
 
 # ---------------------------------------------------------------------------
-# clip2md -- Clipboard HTML -> Markdown with AI-powered naming
-# Requires pandoc. Optional: Claude Code CLI for auto-naming and summaries.
-# macOS only (uses osascript for clipboard access).
+# clip2md -- Clipboard -> Markdown with AI-powered naming
+# Supports HTML (preferred, requires pandoc) and plain text (no pandoc needed).
+# Optional: Claude Code CLI for auto-naming and summaries.
+# macOS only (uses osascript/pbpaste for clipboard access).
 # ---------------------------------------------------------------------------
 
 # Logging helper: appends to ~/Library/Logs/ai-tooling/clip2md.log
@@ -121,47 +122,55 @@ FILENAME|SUMMARY'
   printf '%s|%s\n' "$name" "$raw_summary"
 }
 
-# Clipboard HTML -> Markdown (requires pandoc)
+# Clipboard -> Markdown (HTML preferred, plain text fallback)
 clip2md() {
-  # 1. Check pandoc
-  if ! command -v pandoc &>/dev/null; then
-    echo "clip2md: pandoc not found. Run 'aitools install' or 'brew install pandoc'" >&2
-    _clip2md_log "error: pandoc not found"
-    return 1
-  fi
-
-  # macOS only (uses osascript for clipboard)
+  # macOS only (uses osascript/pbpaste for clipboard)
   if [ "$(uname -s)" != "Darwin" ]; then
-    echo "clip2md: clipboard HTML extraction requires macOS (uses osascript)" >&2
+    echo "clip2md: clipboard extraction requires macOS (uses osascript/pbpaste)" >&2
     echo "clip2md: on Windows, use the PowerShell version instead" >&2
     return 1
   fi
 
-  # 2. Extract clipboard HTML
+  local md source_type
+
+  # Try HTML first (preferred -- richer formatting)
   local html
   html=$(osascript -e 'the clipboard as «class HTML»' 2>/dev/null | \
     perl -ne 'print chr foreach unpack("C*",pack("H*",substr($_,11,-3)))')
-  if [ -z "$html" ]; then
-    echo "clip2md: no HTML content on clipboard" >&2
-    _clip2md_log "warning: no HTML content on clipboard"
-    return 1
-  fi
 
-  # 4. Strip Gmail noise (attrs, divs, nbsp)
-  html=$(printf '%s' "$html" | perl -pe '
-    s/\s*(style|class|target|saferedirecturl)="[^"]*"//gi;
-    s/<\/?(div|span)[^>]*>//gi;
-    s/&nbsp;/ /g')
+  if [ -n "$html" ]; then
+    # HTML path: requires pandoc
+    if ! command -v pandoc &>/dev/null; then
+      echo "clip2md: pandoc not found (needed for HTML). Run 'aitools install' or 'brew install pandoc'" >&2
+      _clip2md_log "error: pandoc not found"
+      return 1
+    fi
 
-  # 5-6. Convert via pandoc + clean output
-  local md
-  md=$(printf '%s' "$html" | pandoc -f html -t markdown | \
-    perl -CSD -pe 's/\{=""\}//g; s/\x{00A0}/ /g; s/\x{202F}/ /g')
+    # Strip Gmail noise (attrs, divs, nbsp)
+    html=$(printf '%s' "$html" | perl -pe '
+      s/\s*(style|class|target|saferedirecturl)="[^"]*"//gi;
+      s/<\/?(div|span)[^>]*>//gi;
+      s/&nbsp;/ /g')
 
-  if [ -z "$md" ] || [ -z "$(printf '%s' "$md" | tr -d '[:space:]')" ]; then
-    echo "clip2md: pandoc produced empty output" >&2
-    _clip2md_log "error: pandoc produced empty output"
-    return 1
+    # Convert via pandoc + clean output
+    md=$(printf '%s' "$html" | pandoc -f html -t markdown | \
+      perl -CSD -pe 's/\{=""\}//g; s/\x{00A0}/ /g; s/\x{202F}/ /g')
+
+    if [ -z "$md" ] || [ -z "$(printf '%s' "$md" | tr -d '[:space:]')" ]; then
+      echo "clip2md: pandoc produced empty output" >&2
+      _clip2md_log "error: pandoc produced empty output"
+      return 1
+    fi
+    source_type="HTML"
+  else
+    # Plain text fallback (no pandoc needed)
+    md=$(pbpaste 2>/dev/null)
+    if [ -z "$md" ] || [ -z "$(printf '%s' "$md" | tr -d '[:space:]')" ]; then
+      echo "clip2md: no content on clipboard (tried HTML and plain text)" >&2
+      _clip2md_log "warning: no content on clipboard"
+      return 1
+    fi
+    source_type="text"
   fi
 
   # Word count (approximate, rounded to nearest 10)
@@ -219,11 +228,11 @@ clip2md() {
     mv "$temp_name" "$final_name"
     _clip2md_log "renamed $temp_name -> $final_name"
 
-    echo "Saved $final_name (HTML, ~$approx_words words)"
+    echo "Saved $final_name ($source_type, ~$approx_words words)"
     if [ -n "$summary" ]; then
       echo "  $summary"
     fi
-    _clip2md_log "saved $final_name (HTML, ~$approx_words words)"
+    _clip2md_log "saved $final_name ($source_type, ~$approx_words words)"
   else
     # --- EXPLICIT NAME MODE ---
     # Ensure .md extension (strip if present, re-add)
@@ -252,10 +261,10 @@ clip2md() {
       fi
     fi
 
-    echo "Saved $name (HTML, ~$approx_words words)"
+    echo "Saved $name ($source_type, ~$approx_words words)"
     if [ -n "$summary" ]; then
       echo "  $summary"
     fi
-    _clip2md_log "saved $name (HTML, ~$approx_words words)"
+    _clip2md_log "saved $name ($source_type, ~$approx_words words)"
   fi
 }
