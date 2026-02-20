@@ -19,6 +19,38 @@ aitools-<username>/
 └── README.md
 ```
 
+## Profile Schema (v2)
+
+`profile.json` separates global identity from per-machine profiles:
+
+```json
+{
+  "version": 2,
+  "identity": {
+    "github": "<github-username>",
+    "email": "<primary-email>",
+    "git": { "name": "<git-name>", "email": "<git-email>" }
+  },
+  "profiles": {
+    "<alias>": {
+      "name": "<display-name>",
+      "company": "<company>",
+      "machine": {
+        "hostname": "<hostname>",
+        "os": "<platform>",
+        "arch": "<arch>",
+        "shell": "<shell>"
+      }
+    }
+  }
+}
+```
+
+- **`identity`** -- global, shared across all machines. Git identity, GitHub username, primary email.
+- **`profiles`** -- keyed by user-chosen alias (e.g., "laptop", "workstation"). Display name and company can vary per machine.
+- **Machine matching** -- `config.json` stores `"machineAlias"` on each machine. Fallback: hostname match, then first profile.
+- **v1 migration** -- v1 (flat schema) is auto-detected by absence of `"version": 2`. Future `aitools user init` will migrate v1 to v2.
+
 ## Session Naming
 
 `<YYYY-MM-DD>_<session-id-prefix-8>.jsonl`
@@ -41,11 +73,13 @@ The user repo path is stored in `~/.config/ai-tooling/config.json`:
 
 ```json
 {
-  "userRepoPath": "/Users/pepe/repos/aitools-nobul-jose"
+  "userRepoPath": "/Users/pepe/repos/aitools-nobul-jose",
+  "machineAlias": "laptop"
 }
 ```
 
-Set automatically by `aitools user init` or manually.
+- `userRepoPath` -- set by `aitools user init`
+- `machineAlias` -- selects the profile from `profile.json`. Set during `user init` or manually.
 
 ## Archiving Mechanism
 

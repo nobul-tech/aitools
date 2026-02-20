@@ -210,13 +210,13 @@ Add `userRepoPath` key. The installer (`aitools-install.sh/.ps1`) should detect 
 
 ### B1. Templatize shared/claude-shared.md
 
-Replace personal identity with placeholders:
+Replace personal identity with placeholders. Identity fields come from `identity.*`, display fields from the active profile:
 
 ```markdown
 ## Identity
 
 - Name: {{PROFILE_NAME}}
-- Git: `{{PROFILE_GIT_NAME}} <{{PROFILE_GIT_EMAIL}}>`
+- Git: `{{IDENTITY_GIT_NAME}} <{{IDENTITY_GIT_EMAIL}}>`
 - Company: {{PROFILE_COMPANY}}
 ```
 
@@ -232,38 +232,49 @@ Remove coaching section from shared (move to profile.json or a separate personal
 
 ### B2. Profile Values
 
-Source: `aitools-<username>/profile.json` (already created):
+Source: `aitools-<username>/profile.json` (v2 schema, implemented):
 
 ```json
 {
-  "name": "Jose",
-  "email": "jose@nobul.tech",
-  "github": "nobul-jose",
-  "company": "Nobul",
-  "git": {
-    "name": "Jose",
-    "email": "jose@nobul.tech"
+  "version": 2,
+  "identity": {
+    "github": "nobul-jose",
+    "email": "jose@nobul.tech",
+    "git": { "name": "Jose", "email": "jose@nobul.tech" }
   },
-  "machines": [
-    {
-      "hostname": "Joses-MBP",
-      "os": "darwin",
-      "arch": "arm64",
-      "shell": "zsh"
+  "profiles": {
+    "laptop": {
+      "name": "Jose",
+      "company": "Nobul",
+      "machine": { "hostname": "Joses-MBP", "os": "darwin", "arch": "arm64", "shell": "zsh" }
+    },
+    "workstation": {
+      "name": "pepe",
+      "company": "nobul.tech",
+      "machine": { "hostname": "NewcoPC", "os": "win32", "arch": "x64", "shell": "powershell" }
     }
-  ]
+  }
 }
 ```
+
+Machine selection: `config.json` on each machine stores `"machineAlias"`. Build reads alias, selects matching profile. Fallback chain: alias -> hostname match -> first profile.
+
+Template placeholder mapping:
+- `{{IDENTITY_GIT_NAME}}`, `{{IDENTITY_GIT_EMAIL}}` -- from `identity.git`
+- `{{IDENTITY_GITHUB}}` -- from `identity.github`
+- `{{PROFILE_NAME}}`, `{{PROFILE_COMPANY}}` -- from `profiles.<alias>`
+- `{{MACHINE_OS}}`, `{{MACHINE_ARCH}}`, `{{MACHINE_HOSTNAME}}`, `{{MACHINE_SHELL}}` -- from `profiles.<alias>.machine`
 
 ### B3. Build Integration
 
 `build-deploy.sh` changes:
-1. Read `userRepoPath` from config
-2. Read `profile.json` from user repo
-3. Read `shared/claude-shared.md` as template
-4. Interpolate placeholders with profile values
-5. Select machine entry matching current hostname
-6. Embed interpolated content into deploy scripts (same as today)
+1. Read `machineAlias` and `userRepoPath` from config
+2. Read `profile.json` from user repo, detect version
+3. If v2: select profile by alias (fallback: hostname, then first)
+4. If v1: use flat fields directly (backwards compat)
+5. Read `shared/claude-shared.md` as template
+6. Interpolate placeholders with identity + selected profile values
+7. Embed interpolated content into deploy scripts (same as today)
 
 **Fallback**: If no profile.json found, use current hardcoded values and warn. This ensures `build-deploy.sh` doesn't break for users who haven't set up a user repo yet.
 
