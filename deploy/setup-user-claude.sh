@@ -66,9 +66,9 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Identity
 
-- Name: pepe
+- Name: Jose
 - Git: `Jose <jose@nobul.tech>`
-- Company: nobul.tech
+- Company: Nobul
 
 ## Code Style Defaults
 
@@ -142,6 +142,7 @@ Three servers at user level. Chrome DevTools enabled globally; Vercel/Webflow di
 - **Check status**: `aitools mcp`
 - **Manual enable** (Claude Code): add `MCP(vercel)` to `.claude/settings.local.json` `permissions.allow`
 - **Manual enable** (Cursor CLI): `agent mcp enable vercel`
+- **Prefer Chrome DevTools MCP skill for official docs**: When reading web content that will feed into source-of-truth files (install commands, config steps, lifecycle fields), use the Chrome DevTools MCP skill instead of WebFetch. WebFetch summarizes via a smaller model and misses JS-rendered content.
 
 ## Knowledge Management
 

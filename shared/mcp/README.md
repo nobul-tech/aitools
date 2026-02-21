@@ -76,6 +76,11 @@ For Cursor, this runs `agent mcp enable` or falls back to project `.cursor/mcp.j
 | Vercel | `https://mcp.vercel.com` | OAuth (browser) |
 | Webflow | `https://mcp.webflow.com/mcp` | OAuth (browser) |
 
+**Plugin (optional):** `/plugin install chrome-devtools-mcp` adds structured skills
+(browser debugging, a11y auditing). Requires MCP server to be configured first.
+The plugin's bundled server config omits `--isolated` -- our user-scope config
+takes precedence. See `reference/tool-install-sources.md` Overrides section.
+
 ## Post-setup
 
 ### Claude Code

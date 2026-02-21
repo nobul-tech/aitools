@@ -12,6 +12,35 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v3.13 -- Plugin Docs, Overrides Framework, Web Source Rule (2026-02-21)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Overrides framework**: New section in `reference/tool-install-sources.md` documenting intentional deviations from upstream defaults (e.g., `--isolated` flag for Chrome DevTools MCP). Prevents audit false positives. |
+| 2 | **Chrome DevTools MCP plugin docs**: Documented `/plugin install chrome-devtools-mcp` as optional install method that adds structured skills (`chrome-devtools`, `a11y-debugging`). Updated lifecycle Post-Install Config field. |
+| 3 | **Web source reading rule**: New `.claude/rules/web-sources.md` and `.cursor/rules/web-sources.mdc` codifying preference for Chrome DevTools MCP skill over WebFetch when reading official docs for source-of-truth files. |
+| 4 | **Profile v2 overrides schema**: Extended `reference/user-repo.md` with `overrides` key for machine-readable tracking of intentional config deviations. Informational only -- CLI integration deferred. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 5 | **User-level MCP skill preference**: Added Chrome DevTools MCP skill preference bullet to `shared/claude-shared.md`, propagated to deploy scripts. |
+| 6 | **MCP README plugin note**: Added plugin install note to `shared/mcp/README.md` with `--isolated` precedence explanation. |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `.claude/rules/web-sources.md` | Web source reading rule (Claude Code) |
+| `.cursor/rules/web-sources.mdc` | Web source reading rule (Cursor) |
+
+**Verified on:** macOS (bash -n on all deploy scripts, build-deploy.sh rebuilt). Windows: deferred.
+
+---
+
 ## v3.12.1 -- clip2md Plain Text Support (2026-02-20)
 
 ### New features

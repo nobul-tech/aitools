@@ -42,12 +42,21 @@ aitools-<username>/
         "shell": "<shell>"
       }
     }
+  },
+  "overrides": {
+    "<tool-name>": {
+      "<flag-or-setting>": {
+        "reason": "<why this deviates from upstream>",
+        "added": "<YYYY-MM-DD>"
+      }
+    }
   }
 }
 ```
 
 - **`identity`** -- global, shared across all machines. Git identity, GitHub username, primary email.
 - **`profiles`** -- keyed by user-chosen alias (e.g., "laptop", "workstation"). Display name and company can vary per machine.
+- **`overrides`** -- intentional deviations from upstream tool defaults. Informational only -- CLI does not read this yet. Mirrors the Overrides table in `reference/tool-install-sources.md` in machine-readable form. Future `aitools audit` could validate overrides against live config.
 - **Machine matching** -- `config.json` stores `"machineAlias"` on each machine. Fallback: hostname match, then first profile.
 - **v1 migration** -- v1 (flat schema) is auto-detected by absence of `"version": 2`. Future `aitools user init` will migrate v1 to v2.
 

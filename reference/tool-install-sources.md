@@ -163,10 +163,21 @@ claude mcp add chrome-devtools --scope user -- npx chrome-devtools-mcp@latest --
 ```
 Windows variant uses `"command": "cmd", "args": ["/c", "npx", "-y", "chrome-devtools-mcp@latest", "--isolated"]`.
 
+**Install (Claude Code Plugin -- adds skills)**:
+```
+/plugin marketplace add ChromeDevTools/chrome-devtools-mcp
+/plugin install chrome-devtools-mcp
+```
+Skills added: `chrome-devtools` (browser automation/debugging), `a11y-debugging` (accessibility auditing).
+Plugin is additive -- requires the MCP server config above to already be in place.
+
+**Note:** The plugin's bundled server config omits `--isolated`. Our user-scope
+MCP config includes it and takes precedence. See Overrides section below.
+
 **Lifecycle:**
 - **Platform Status:** macOS: supported; Windows: supported
 - **Concurrency:** **Yes with `--isolated`**; No without (Chrome profile lock prevents concurrent sessions)
-- **Post-Install Config:** None (no auth)
+- **Post-Install Config:** Plugin install optional (adds skills for structured workflows). No auth required.
 - **Dependencies:** Node.js (npx)
 
 ### Vercel MCP
@@ -321,6 +332,17 @@ pandoc --version
 - **Concurrency:** Yes -- stateless CLI
 - **Post-Install Config:** None
 - **Dependencies:** --
+
+---
+
+## Overrides
+
+Intentional deviations from upstream defaults. When comparing our install
+commands against official docs, these are expected discrepancies — not bugs.
+
+| Tool | Override | Upstream Default | Our Value | Reason | Added |
+|------|----------|-----------------|-----------|--------|-------|
+| Chrome DevTools MCP | `--isolated` flag | Not included | Added to all install commands | Enables concurrent Claude Code + Cursor sessions by using throwaway temp Chrome profiles | 2026-02-19 |
 
 ---
 
