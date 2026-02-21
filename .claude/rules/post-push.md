@@ -134,3 +134,9 @@ user repo directory exists.
 `git status` should show no untracked files that belong in the repo. Flag
 any untracked `.md`, `.sh`, `.ps1`, or `.mdc` files that look like they
 should have been committed.
+
+#### 19. Config merge audit
+
+For each setup script that writes JSON config files, verify it uses
+read-then-merge (not blind overwrite). Flag any `cat >` or bare
+`WriteAllText` targeting a config file that has non-managed fields.

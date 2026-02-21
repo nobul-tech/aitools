@@ -25,7 +25,7 @@ Scan the push diff before it leaves the machine:
 
 ### 5. Release notes current
 
-If pre-commit step 8 (release notes gate) applied to any commit in this push, confirm `RELEASE_NOTES.md` was updated. This is a verification, not a redo.
+If pre-commit step 9 (release notes gate) applied to any commit in this push, confirm `RELEASE_NOTES.md` was updated. This is a verification, not a redo.
 
 ### 6. Roadmap reflects reality
 
@@ -33,7 +33,7 @@ If the push completes or starts a roadmap item, `ROADMAP.md` should be updated (
 
 ### 7. deploy/ matches source
 
-If pre-commit steps 3+9 (build freshness + deploy drift check) applied to any commit in this push, confirm `deploy/` is included and matches source. This is a verification, not a redo.
+If pre-commit steps 3+10 (build freshness + deploy drift check) applied to any commit in this push, confirm `deploy/` is included and matches source. This is a verification, not a redo.
 
 ### 8. Commit count check
 

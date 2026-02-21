@@ -29,7 +29,7 @@ Scan `git diff origin/main..HEAD` for passwords, tokens, API keys, `.env` conten
 
 ### 5. Release notes current
 
-If pre-commit step 8 applied to any commit in this push, confirm `RELEASE_NOTES.md` was updated. Verification, not a redo.
+If pre-commit step 9 applied to any commit in this push, confirm `RELEASE_NOTES.md` was updated. Verification, not a redo.
 
 ### 6. Roadmap reflects reality
 
@@ -37,7 +37,7 @@ If the push completes or starts a roadmap item, `ROADMAP.md` should be updated.
 
 ### 7. deploy/ matches source
 
-If pre-commit steps 3+9 applied to any commit in this push, confirm `deploy/` is included and matches source. Verification, not a redo.
+If pre-commit steps 3+10 applied to any commit in this push, confirm `deploy/` is included and matches source. Verification, not a redo.
 
 ### 8. Commit count check
 

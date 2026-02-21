@@ -33,16 +33,26 @@ If `.sh` or `.ps1` files are in the commit, end the commit message with `(tested
 
 If modifying `scripts/setup-*.sh` or `.ps1`, verify install commands match the corresponding entry in `reference/tool-install-sources.md`. Never hardcode install commands from memory.
 
-### 8. Release notes
+### 8. Config merge safety
+
+If the commit modifies a setup script that writes JSON config files
+(`config.json`, `settings.json`, `cli-config.json`, `mcp.json`):
+- Verify the script reads the existing file before writing (no blind `cat >` or
+  `ConvertTo-Json | WriteAllText` for shared configs)
+- Verify non-managed fields survive a re-run (check the merge logic)
+- If the script intentionally overwrites (sole owner), verify the script header
+  documents this
+
+### 9. Release notes
 
 If the commit includes new features, bug fixes, or behavioral changes, verify `RELEASE_NOTES.md` has a version entry covering the changes. Omit for docs-only, rule-only, or trivial changes.
 
-### 9. Deploy drift check
+### 10. Deploy drift check
 
 If step 3 ran (build freshness), verify no unstaged deploy/ changes remain after staging:
 `git diff deploy/` must be empty after `git add deploy/`. Catches forgotten build output.
 
-### 10. User repo changes
+### 11. User repo changes
 
 If this session modified files in the user dotfile repo (`userRepoPath` from
 `~/.aitools/config.json`), commit those changes too. Use a commit

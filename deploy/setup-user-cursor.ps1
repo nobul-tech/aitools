@@ -101,7 +101,7 @@ const modelId = 'auto';
 
 // --- Read existing cli-config.json ---
 let config = {};
-try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + f + ' is invalid JSON, starting with empty config'); }
 const before = JSON.stringify(config);
 
 // --- Merge managed fields ---

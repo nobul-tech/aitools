@@ -421,7 +421,7 @@ if [ ${#addmcp_servers[@]} -gt 0 ]; then
 const fs = require('fs');
 const f = process.argv[1];
 let settings = {};
-try { settings = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+try { settings = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + f + ' is invalid JSON, starting with empty config'); }
 if (!settings.permissions) settings.permissions = {};
 if (!Array.isArray(settings.permissions.allow)) settings.permissions.allow = [];
 const rule = 'MCP($name)';
@@ -450,7 +450,7 @@ fs.writeFileSync(f, JSON.stringify(settings, null, 2) + '\n');
 const fs = require('fs');
 const f = process.argv[1];
 let cfg = {};
-try { cfg = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+try { cfg = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + f + ' is invalid JSON, starting with empty config'); }
 if (!cfg.mcpServers) cfg.mcpServers = {};
 cfg.mcpServers['$name'] = { url: '$url' };
 fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
@@ -525,7 +525,7 @@ try {
     console.log((ident.git && ident.git.name) || firstProf.name || '');
     console.log(firstProf.company || '');
     console.log((ident.git && ident.git.email) || '');
-} catch {}
+} catch (e) { if (e.code !== 'ENOENT') console.error('Warning: could not read profile: ' + e.message); }
 " "$user_repo_dir/profile.json" 2>/dev/null)
                     default_name=$(echo "$profile_defaults" | sed -n '1p')
                     default_company=$(echo "$profile_defaults" | sed -n '2p')
@@ -666,7 +666,7 @@ fs.writeFileSync(process.argv[7], JSON.stringify(profile, null, 2) + '\n');
 const fs = require('fs');
 const f = process.argv[1];
 let cfg = {};
-try { cfg = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+try { cfg = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + f + ' is invalid JSON, starting with empty config'); }
 cfg.userRepoPath = process.argv[2];
 if (process.argv[3]) cfg.machineAlias = process.argv[3];
 fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');

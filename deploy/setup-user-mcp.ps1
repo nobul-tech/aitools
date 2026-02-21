@@ -105,6 +105,7 @@ if (Test-Path $settingsFile) {
     try {
         $settings = Get-Content $settingsFile -Raw | ConvertFrom-Json -AsHashtable
     } catch {
+        LogWarn "$settingsFile is invalid JSON, starting with empty config"
         $settings = @{}
     }
 }

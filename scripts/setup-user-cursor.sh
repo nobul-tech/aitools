@@ -121,11 +121,11 @@ try {
             if (typeof pf.cursor.cli.model === 'string') modelId = pf.cursor.cli.model;
         }
     }
-} catch {}
+} catch (e) { if (e.code !== 'ENOENT') console.error('Warning: could not read profile preferences: ' + e.message); }
 
 // --- Read existing cli-config.json ---
 let config = {};
-try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + f + ' is invalid JSON, starting with empty config'); }
 const before = JSON.stringify(config);
 
 // --- Merge managed fields ---

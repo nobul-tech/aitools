@@ -12,6 +12,26 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.15.1 -- Config Write Safety (2026-02-21)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | `setup-cursor-mcp.sh/.ps1` now merges managed servers into `~/.cursor/mcp.json` instead of overwriting. User-added MCP servers are preserved across re-runs. |
+| 2 | Low | Empty `catch {}` blocks in inline Node.js across all setup scripts and CLI now warn on corrupt JSON instead of silently starting with empty config. ENOENT (file missing) still starts fresh silently. |
+
+### New features
+
+| # | Change |
+|---|--------|
+| 3 | **Config write safety rule** (`.claude/rules/config-file-safety.md`): codifies read-then-merge as the default for JSON config writes, documents managed vs preserved fields pattern, and flags empty `catch {}` as an anti-pattern. |
+| 4 | **Pre-commit step 8** (config merge safety): verifies setup scripts use read-then-merge before committing. **Post-push step 19** (config merge audit): flags blind overwrites in extensive audits. |
+
+**Verified on:** macOS
+
+---
+
 ## v0.15 -- Standalone Chrome DevTools Skills (2026-02-21)
 
 ### New features

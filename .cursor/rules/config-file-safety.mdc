@@ -1,0 +1,29 @@
+---
+description: Config file write safety — read-then-merge for JSON configs
+globs:
+alwaysApply: true
+---
+
+## Config File Write Safety (this repo)
+
+Scripts that write JSON config files must use read-then-merge by default.
+Blind overwrites silently drop user data and non-managed fields.
+
+### Rules
+
+1. **Read-then-merge**: Read existing file, set only managed fields, write merged result
+2. **Document ownership**: Script header must list managed vs preserved fields
+3. **Overwrite only if sole owner**: Must be documented in header as `# Overwrites: yes (sole owner)`
+4. **No empty `catch {}`**: Distinguish ENOENT (start fresh) from parse errors (warn user)
+
+### Anti-patterns
+
+- `cat > file << EOF` for shared JSON configs
+- `ConvertTo-Json | WriteAllText` without reading existing content first
+- `try { ... } catch {}` that swallows both missing-file and corrupt-file errors
+
+### Gold standards
+
+- Node.js merge: `scripts/setup-user-cursor.sh` (cli-config.json)
+- PowerShell merge: `scripts/setup-user-mcp.ps1` (settings.json)
+- Hook merge: `scripts/setup-user-hooks.sh` (settings.json hooks)

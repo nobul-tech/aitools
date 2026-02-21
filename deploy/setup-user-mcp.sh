@@ -103,7 +103,7 @@ if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
 // Read existing settings
 let settings = {};
-try { settings = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+try { settings = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + f + ' is invalid JSON, starting with empty config'); }
 
 // Ensure permissions.deny exists
 if (!settings.permissions) settings.permissions = {};

@@ -59,7 +59,7 @@ const settingsFile = process.argv[1];
 const hookCmd = process.argv[2];
 
 let settings = {};
-try { settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')); } catch {}
+try { settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + settingsFile + ' is invalid JSON, starting with empty config'); }
 
 if (!settings.hooks) settings.hooks = {};
 if (!Array.isArray(settings.hooks.SessionEnd)) settings.hooks.SessionEnd = [];
