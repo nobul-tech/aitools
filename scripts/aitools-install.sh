@@ -350,12 +350,27 @@ fi
 REPOS_PATH_JSON=$(printf '%s' "$REPOS_PATH_NATIVE" | sed 's/\\/\\\\/g')
 AI_TOOLING_JSON=$(printf '%s' "$AI_TOOLING_NATIVE" | sed 's/\\/\\\\/g')
 
-# If config already exists, try to preserve existing googleDrives if we didn't detect any
-if [ -f "$CONFIG_FILE" ] && [ "$DRIVES_JSON" = "[]" ]; then
-    EXISTING_DRIVES=$(read_config_drives "$CONFIG_FILE")
-    if [ "$EXISTING_DRIVES" != "[]" ]; then
-        DRIVES_JSON="$EXISTING_DRIVES"
-        log "Preserved existing Google Drive entries from config"
+# If config already exists, preserve fields we don't manage
+USER_REPO_LINE=""
+MACHINE_ALIAS_LINE=""
+if [ -f "$CONFIG_FILE" ]; then
+    # Preserve googleDrives if we didn't detect any
+    if [ "$DRIVES_JSON" = "[]" ]; then
+        EXISTING_DRIVES=$(read_config_drives "$CONFIG_FILE")
+        if [ "$EXISTING_DRIVES" != "[]" ]; then
+            DRIVES_JSON="$EXISTING_DRIVES"
+            log "Preserved existing Google Drive entries from config"
+        fi
+    fi
+    # Preserve userRepoPath (set by 'aitools user init')
+    EXISTING_USER_REPO=$(read_config_key "$CONFIG_FILE" "userRepoPath")
+    if [ -n "$EXISTING_USER_REPO" ]; then
+        USER_REPO_LINE="$(printf '  "userRepoPath": "%s",\n' "$EXISTING_USER_REPO")"
+    fi
+    # Preserve machineAlias (set by 'aitools user init')
+    EXISTING_MACHINE_ALIAS=$(read_config_key "$CONFIG_FILE" "machineAlias")
+    if [ -n "$EXISTING_MACHINE_ALIAS" ]; then
+        MACHINE_ALIAS_LINE="$(printf '  "machineAlias": "%s",\n' "$EXISTING_MACHINE_ALIAS")"
     fi
 fi
 
@@ -364,7 +379,7 @@ cat > "$CONFIG_FILE" << CONFIGEOF
   "version": 1,
   "reposPath": "$REPOS_PATH_JSON",
   "aiToolingRepoPath": "$AI_TOOLING_JSON",
-  "googleDrives": $DRIVES_JSON
+${USER_REPO_LINE}${MACHINE_ALIAS_LINE}  "googleDrives": $DRIVES_JSON
 }
 CONFIGEOF
 

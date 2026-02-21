@@ -213,22 +213,33 @@ if ($SkipDriveDetection) {
 # ============================================================
 Log "Step 5: Writing config"
 
-# If config already exists and we didn't detect any drives, preserve existing entries
-if ((Test-Path $configFile) -and ($drives.Count -eq 0)) {
+# If config already exists, preserve fields we don't manage
+$existingUserRepoPath = $null
+$existingMachineAlias = $null
+if (Test-Path $configFile) {
     try {
         $existingConfig = Get-Content $configFile -Raw | ConvertFrom-Json
-        if ($existingConfig.googleDrives -and $existingConfig.googleDrives.Count -gt 0) {
+        # Preserve googleDrives if we didn't detect any
+        if (($drives.Count -eq 0) -and $existingConfig.googleDrives -and $existingConfig.googleDrives.Count -gt 0) {
             $drives = @($existingConfig.googleDrives | ForEach-Object {
                 @{ path = $_.path; account = $_.account; label = $_.label }
             })
             Log "Preserved existing Google Drive entries from config"
+        }
+        # Preserve userRepoPath (set by 'aitools user init')
+        if ($existingConfig.userRepoPath) {
+            $existingUserRepoPath = $existingConfig.userRepoPath
+        }
+        # Preserve machineAlias (set by 'aitools user init')
+        if ($existingConfig.machineAlias) {
+            $existingMachineAlias = $existingConfig.machineAlias
         }
     } catch {
         LogWarn "Failed to read existing config, writing fresh"
     }
 }
 
-$config = @{
+$config = [ordered]@{
     version          = 1
     reposPath        = $resolvedReposPath
     aiToolingRepoPath = $aiToolingRepo
@@ -236,6 +247,8 @@ $config = @{
         [ordered]@{ path = $_.path; account = $_.account; label = $_.label }
     })
 }
+if ($existingUserRepoPath) { $config["userRepoPath"] = $existingUserRepoPath }
+if ($existingMachineAlias) { $config["machineAlias"] = $existingMachineAlias }
 
 $jsonContent = $config | ConvertTo-Json -Depth 10
 [System.IO.File]::WriteAllText($configFile, $jsonContent, [System.Text.UTF8Encoding]::new($false))

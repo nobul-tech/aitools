@@ -35,6 +35,12 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | 5 | Updated `reference/cursor-practices.md`: skills section now reflects deployed Chrome DevTools skills. |
 | 6 | Updated `shared/mcp/README.md`: plugin section replaced with skills section. |
 
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 7 | Medium | **Installer clobbers `userRepoPath`/`machineAlias`**: `aitools install` step 5 overwrote `config.json` with only 4 managed keys, dropping `userRepoPath` and `machineAlias` set by `aitools user init`. This caused downstream deploys (e.g., `setup-user-cursor`) to lose profile-driven preferences like `vimMode`. Both `.sh` and `.ps1` installers now preserve these keys. |
+
 ### Files created
 
 | File | Purpose |
