@@ -28,7 +28,7 @@ Read-only check -- no setup scripts, no side effects:
 - Verify `--isolated` appears in the chrome-devtools entry in both files
 - `grep -l 'chrome-devtools' ~/.claude.json ~/.cursor/mcp.json` + `grep 'isolated' ~/.claude.json ~/.cursor/mcp.json`
 
-If missing, flag for Extensive tier (#14) or manual fix -- do not run setup scripts here.
+If missing, flag for Extensive tier (#15) or manual fix -- do not run setup scripts here.
 
 #### 4. CLI entry point + version consistency
 
@@ -39,19 +39,26 @@ Also verify version matches the latest tag:
 `git describe --tags --match "v*" --abbrev=0`. Mismatch indicates a
 self-update bug or missed `gitpull` tag.
 
+#### 5. Session archive readiness
+
+If `~/.claude/settings.json` contains the SessionEnd hook (`session-archive.sh`),
+verify `userRepoPath` is set in `~/.config/ai-tooling/config.json`. If hook is
+present but `userRepoPath` is missing, flag as "session archive inactive -- run
+`aitools user init`."
+
 ---
 
 ### Extensive (audits + tests for significant releases)
 
 Run all Always items first, then:
 
-#### 5. Full script syntax validation
+#### 6. Full script syntax validation
 
 `bash -n` on every `.sh` in `scripts/` and `deploy/`. On Windows, also
 `[Parser]::ParseFile` on every `.ps1`. On macOS, if `pwsh` is installed,
 also validate `.ps1` files with `pwsh -NoProfile -Command "[Parser]::ParseFile(...)"`.
 
-#### 6. deploy/ drift audit
+#### 7. deploy/ drift audit
 
 Rebuild and diff:
 ```
@@ -60,13 +67,13 @@ git diff deploy/
 ```
 Any diff means deploy/ was stale at push time. Should be empty.
 
-#### 7. Rule parity audit
+#### 8. Rule parity audit
 
 Verify the Rule Correspondence table in `reference/cursor-practices.md` is
 accurate: every `.claude/rules/*.md` has its documented `.cursor/rules/*.mdc`
 counterpart (or is marked Claude Code-specific). Flag missing or orphaned files.
 
-#### 8. Source-of-truth consistency
+#### 9. Source-of-truth consistency
 
 For each tool in `reference/tool-install-sources.md`:
 - Verify the install command matches what the corresponding `setup-*.sh/.ps1`
@@ -74,53 +81,53 @@ For each tool in `reference/tool-install-sources.md`:
 - Verify all 4 lifecycle fields (Platform Status, Concurrency, Post-Install
   Config, Dependencies) are present.
 
-#### 9. Protected files inventory
+#### 10. Protected files inventory
 
 Every file in the `.claude/rules/sources-of-truth.md` protected table exists on
 disk. Every file matching the glob patterns (`.claude/rules/*.md`,
 `.cursor/rules/*.mdc`, `plans/*.md`) is covered by the table.
 
-#### 10. Cross-platform pairing
+#### 11. Cross-platform pairing
 
 Every `scripts/setup-*.sh` has a matching `.ps1` (and vice versa). Same for
 `deploy/`. Flag unpaired scripts.
 
-#### 11. CLAUDE.md limits
+#### 12. CLAUDE.md limits
 
 `wc -l CLAUDE.md` must be under 200 lines. If over, content must be moved to
 `@reference/` imports.
 
-#### 12. Reference link audit
+#### 13. Reference link audit
 
 Every `@reference/` import in `CLAUDE.md` points to a file that exists.
 Every file in `reference/` that is imported is up to date (not stale or
 contradicting CLAUDE.md).
 
-#### 13. Line ending audit
+#### 14. Line ending audit
 
 All `.sh` files in the repo have LF line endings (not CRLF).
 `file scripts/*.sh deploy/*.sh shared/hooks/*.sh` -- none should report CRLF.
 
-#### 14. MCP config deploy
+#### 15. MCP config deploy
 
 Full setup script run (heavier than Always #3):
 - Run `bash scripts/setup-user-mcp.sh` and `bash scripts/setup-cursor-mcp.sh`
 - Verify chrome-devtools has `--isolated` in both `~/.claude.json` and
   `~/.cursor/mcp.json`
 
-#### 15. Roadmap freshness
+#### 16. Roadmap freshness
 
 Flag any "In Progress" item in `ROADMAP.md` whose plan file hasn't been
 modified in 14+ days. Flag any completed work that's missing from
 `RELEASE_NOTES.md`.
 
-#### 16. Hook verification
+#### 17. Hook verification
 
 Verify `~/.claude/settings.json` contains the SessionEnd hook entry pointing
 to `session-archive.sh`. If `userRepoPath` is set in config, verify the
 user repo directory exists.
 
-#### 17. Untracked file hygiene
+#### 18. Untracked file hygiene
 
 `git status` should show no untracked files that belong in the repo. Flag
 any untracked `.md`, `.sh`, `.ps1`, or `.mdc` files that look like they

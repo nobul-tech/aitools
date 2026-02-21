@@ -1052,11 +1052,15 @@ else
         echo "  Completed with $deploy_rc error(s)."
     fi
 
-    # Check if session archive hook is installed
+    # Check session archive: hook installed + userRepoPath configured
     settings_file="$HOME/.claude/settings.json"
-    if [ -f "$settings_file" ]; then
-        if ! grep -q "session-archive.sh" "$settings_file" 2>/dev/null; then
-            echo "  hint: session archive hook not installed. Run 'aitools user init' to set up."
+    hook_installed=false
+    if [ -f "$settings_file" ] && grep -q "session-archive.sh" "$settings_file" 2>/dev/null; then
+        hook_installed=true
+    fi
+    if [ "$hook_installed" = true ]; then
+        if ! read_config_key "$config" "userRepoPath" >/dev/null 2>&1; then
+            echo "  WARNING: session archive hook installed but inactive -- userRepoPath not configured. Run 'aitools user init'."
         fi
     else
         echo "  hint: session archive hook not installed. Run 'aitools user init' to set up."

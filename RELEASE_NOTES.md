@@ -30,6 +30,9 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | 11 | **Post-push: read-only MCP check**: Always tier #3 changed from running setup scripts to grep-based verification. Full setup scripts moved to Extensive tier #14. |
 | 12 | **Post-push: version consistency**: Always tier #4 now also verifies `aitools --version` matches the latest git tag. |
 | 13 | **Post-push: pwsh validation on macOS**: Extensive #5 now notes that PS1 files can be validated on macOS when `pwsh` is installed. |
+| 14 | **Session archive warnings**: `aitools` (no-args sync) now warns when the session archive hook is installed but `userRepoPath` is not configured. Previously only checked if the hook was installed. Same warning in `aitools.ps1`. |
+| 15 | **Install hint for session archive**: `aitools install` now prints a hint about `aitools user init` when `userRepoPath` is missing. Same hint in `aitools-install.ps1`. |
+| 16 | **Post-push Always #5**: New "Session archive readiness" check promoted to Always tier. Detects inactive session archive without running the full Extensive audit. |
 
 ### Documentation
 

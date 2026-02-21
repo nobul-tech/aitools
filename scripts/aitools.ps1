@@ -970,7 +970,7 @@ if ($doInstall) {
         Write-Host "  Completed with $deployRc error(s)."
     }
 
-    # Check if session archive hook is installed
+    # Check session archive: hook installed + userRepoPath configured
     $settingsFile = Join-Path $env:USERPROFILE ".claude\settings.json"
     $hookInstalled = $false
     if (Test-Path $settingsFile) {
@@ -979,7 +979,12 @@ if ($doInstall) {
             $hookInstalled = $true
         }
     }
-    if (-not $hookInstalled) {
+    if ($hookInstalled) {
+        $userRepo = Read-ConfigKey -File $configFile -Key "userRepoPath"
+        if (-not $userRepo) {
+            Write-Host "  WARNING: session archive hook installed but inactive -- userRepoPath not configured. Run 'aitools user init'."
+        }
+    } else {
         Write-Host "  hint: session archive hook not installed. Run 'aitools user init' to set up."
     }
 
