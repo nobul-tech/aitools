@@ -47,3 +47,7 @@ If pushing >5 commits, pause to review the full list before proceeding.
 
 - Pushing to `main` directly is OK for this single-maintainer repo
 - Force-push to `main` requires explicit user approval -- never do it silently
+
+### 10. User repo push
+
+If the user dotfile repo (`userRepoPath` from `~/.config/ai-tooling/config.json`) has unpushed commits, push them. Pull first if needed (rebase). Skip if `userRepoPath` is not configured or the repo is clean.

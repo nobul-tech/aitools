@@ -41,3 +41,11 @@ If the commit includes new features, bug fixes, or behavioral changes, verify `R
 
 If step 3 ran (build freshness), verify no unstaged deploy/ changes remain after staging:
 `git diff deploy/` must be empty after `git add deploy/`. Catches forgotten build output.
+
+### 10. User repo changes
+
+If this session modified files in the user dotfile repo (`userRepoPath` from
+`~/.config/ai-tooling/config.json`), commit those changes too. Use a commit
+message that references the ai-tooling change (e.g., "Add cursor.cli
+preferences to profile"). Skip if `userRepoPath` is not configured or the
+repo has no uncommitted changes.
