@@ -128,6 +128,37 @@ LogOk "User-level MCP configured (all servers; vercel/webflow disabled by defaul
 Log "To enable per project: aitools --addmcp vercel"
 Log "To check status: aitools mcp"
 
+# --- Deploy Chrome DevTools skills ---
+# Vendored from https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/main/skills
+# These provide structured workflows for browser automation and a11y auditing.
+
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$skillsSrc = Join-Path (Split-Path -Parent $scriptDir) "shared" "skills"
+$skillsDest = Join-Path $env:USERPROFILE ".claude" "skills"
+
+function Deploy-Skill {
+    param([string]$SkillName)
+
+    $src = Join-Path $skillsSrc $SkillName "SKILL.md"
+    $destDir = Join-Path $skillsDest $SkillName
+    $dest = Join-Path $destDir "SKILL.md"
+
+    if (-not (Test-Path $src)) {
+        LogError "Skill source not found: $src"
+        return
+    }
+
+    if (-not (Test-Path $destDir)) {
+        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+    }
+    Copy-Item -Path $src -Destination $dest -Force
+    LogOk "Deployed skill: $SkillName -> $dest"
+}
+
+Log "Deploying Chrome DevTools skills to $skillsDest..."
+Deploy-Skill "chrome-devtools"
+Deploy-Skill "a11y-debugging"
+
 # --- Exit ---
 if ($errors -gt 0) {
     Log "FAILED with $errors error(s). See log: $logFile"

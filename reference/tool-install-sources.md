@@ -163,21 +163,27 @@ claude mcp add chrome-devtools --scope user -- npx chrome-devtools-mcp@latest --
 ```
 Windows variant uses `"command": "cmd", "args": ["/c", "npx", "-y", "chrome-devtools-mcp@latest", "--isolated"]`.
 
-**Install (Claude Code Plugin -- adds skills)**:
-```
-/plugin marketplace add ChromeDevTools/chrome-devtools-mcp
-/plugin install chrome-devtools-mcp
-```
-Skills added: `chrome-devtools` (browser automation/debugging), `a11y-debugging` (accessibility auditing).
-Plugin is additive -- requires the MCP server config above to already be in place.
+**Skills** (deployed by `setup-user-mcp`):
 
-**Note:** The plugin's bundled server config omits `--isolated`. Our user-scope
-MCP config includes it and takes precedence. See Overrides section below.
+Vendored in `shared/skills/` from the upstream repo. Deployed to `~/.claude/skills/`
+by `setup-user-mcp.sh/.ps1`. Deploy scripts embed content inline (self-contained).
+When updating vendored skills, re-fetch from the GitHub repo URLs below.
+
+- `chrome-devtools` -- browser automation & debugging
+- `a11y-debugging` -- accessibility auditing
+
+**Skills source:**
+- https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/skills/chrome-devtools/SKILL.md
+- https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/skills/a11y-debugging/SKILL.md
+
+**Note:** The Claude Code plugin (`/plugin install chrome-devtools-mcp`) is NOT used.
+It bundles its own MCP server config without `--isolated`, causing config conflicts.
+Standalone skills + our user-scope MCP config provide the same functionality without conflicts.
 
 **Lifecycle:**
 - **Platform Status:** macOS: supported; Windows: supported
 - **Concurrency:** **Yes with `--isolated`**; No without (Chrome profile lock prevents concurrent sessions)
-- **Post-Install Config:** Plugin install optional (adds skills for structured workflows). No auth required.
+- **Post-Install Config:** Skills deployed automatically by `setup-user-mcp`. No auth required.
 - **Dependencies:** Node.js (npx)
 
 ### Vercel MCP

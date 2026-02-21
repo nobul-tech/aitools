@@ -12,6 +12,40 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.15 -- Standalone Chrome DevTools Skills (2026-02-21)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Standalone Chrome DevTools skills**: Vendored `chrome-devtools` and `a11y-debugging` SKILL.md files from upstream repo into `shared/skills/`. Deployed to `~/.claude/skills/` by `setup-user-mcp`. Replaces the Claude Code plugin (which bundled MCP config without `--isolated`). |
+| 2 | **Self-contained skill deployment**: `build-deploy.sh` embeds skill content inline in deploy scripts via heredocs. Deploy scripts need no sibling files. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 3 | **Build script CRLF handling**: `build-deploy.sh` now strips CR before sed pattern matching on PS1 source files, fixing broken template extraction on macOS. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 4 | Updated `reference/tool-install-sources.md`: replaced plugin install section with standalone skills, added source URLs. |
+| 5 | Updated `reference/cursor-practices.md`: skills section now reflects deployed Chrome DevTools skills. |
+| 6 | Updated `shared/mcp/README.md`: plugin section replaced with skills section. |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `shared/skills/chrome-devtools/SKILL.md` | Vendored browser automation & debugging skill |
+| `shared/skills/a11y-debugging/SKILL.md` | Vendored accessibility auditing skill |
+
+**Verified on:** macOS (bash -n, build-deploy.sh, setup-user-mcp.sh run, skills deployed to ~/.claude/skills/). Windows: deferred (tested: macOS).
+
+---
+
 ## v0.14 -- Version Scheme Reset, Git Checklist Improvements (2026-02-21)
 
 ### Improvements

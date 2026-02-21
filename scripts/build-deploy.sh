@@ -35,6 +35,12 @@ if [ ! -f "$CLAUDE_SHARED" ]; then
     blog_error "Required shared file not found: $CLAUDE_SHARED"
     exit 1
 fi
+for skill_file in "$SHARED_DIR/skills/chrome-devtools/SKILL.md" "$SHARED_DIR/skills/a11y-debugging/SKILL.md"; do
+    if [ ! -f "$skill_file" ]; then
+        blog_error "Required skill file not found: $skill_file"
+        exit 1
+    fi
+done
 
 # Read shared content
 CLAUDE_SHARED_CONTENT=$(cat "$CLAUDE_SHARED")
@@ -634,22 +640,95 @@ blog "Copying deploy/setup-pandoc.ps1"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
-# 11-12. deploy/setup-user-mcp.sh and .ps1 (copy as-is)
+# 11-12. deploy/setup-user-mcp.sh and .ps1 (template with embedded skills)
 # ============================================================
-blog "Copying deploy/setup-user-mcp.sh"
+# The scripts/ versions read skills from shared/skills/ (repo-relative).
+# The deploy/ versions must be self-contained, so we embed SKILL.md content
+# inline using heredocs, replacing the file-copy deploy_skill() function.
+
+# Read skill content
+SKILL_CHROME_DEVTOOLS=$(cat "$SHARED_DIR/skills/chrome-devtools/SKILL.md")
+SKILL_A11Y_DEBUGGING=$(cat "$SHARED_DIR/skills/a11y-debugging/SKILL.md")
+
+blog "Generating deploy/setup-user-mcp.sh (with embedded skills)"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
-    # Strip the shebang from source and append the rest
-    tail -n +2 "$SCRIPTS_DIR/setup-user-mcp.sh"
+    # Take everything from source up to (but not including) the skills section
+    sed -n '2,/^# --- Deploy Chrome DevTools skills ---$/{ /^# --- Deploy Chrome DevTools skills ---$/!p; }' \
+        "$SCRIPTS_DIR/setup-user-mcp.sh"
+    # Emit self-contained skills deployment using heredocs
+    cat <<'SKILLS_HEADER'
+
+# --- Deploy Chrome DevTools skills (embedded) ---
+# Vendored from https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/main/skills
+# Content embedded at build time by build-deploy.sh for self-contained deployment.
+
+SKILLS_DEST="$HOME/.claude/skills"
+
+SKILLS_HEADER
+    # Embed chrome-devtools skill
+    echo 'mkdir -p "$SKILLS_DEST/chrome-devtools"'
+    echo 'cat > "$SKILLS_DEST/chrome-devtools/SKILL.md" <<'"'"'__SKILL_CHROME_DEVTOOLS__'"'"
+    echo "$SKILL_CHROME_DEVTOOLS"
+    echo '__SKILL_CHROME_DEVTOOLS__'
+    echo 'log_ok "Deployed skill: chrome-devtools"'
+    echo ''
+    # Embed a11y-debugging skill
+    echo 'mkdir -p "$SKILLS_DEST/a11y-debugging"'
+    echo 'cat > "$SKILLS_DEST/a11y-debugging/SKILL.md" <<'"'"'__SKILL_A11Y_DEBUGGING__'"'"
+    echo "$SKILL_A11Y_DEBUGGING"
+    echo '__SKILL_A11Y_DEBUGGING__'
+    echo 'log_ok "Deployed skill: a11y-debugging"'
+    echo ''
+    # Emit exit footer from source
+    sed -n '/^# --- Exit ---$/,$ p' "$SCRIPTS_DIR/setup-user-mcp.sh"
 } > "$DEPLOY_DIR/setup-user-mcp.sh"
 chmod +x "$DEPLOY_DIR/setup-user-mcp.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Copying deploy/setup-user-mcp.ps1"
+blog "Generating deploy/setup-user-mcp.ps1 (with embedded skills)"
 {
     echo "$HEADER_COMMENT_PS1"
-    cat "$SCRIPTS_DIR/setup-user-mcp.ps1"
+    # Take everything from source up to (but not including) the skills section
+    # PS1 files have CRLF -- strip \r for sed matching, then re-add for PS1 output
+    tr -d '\r' < "$SCRIPTS_DIR/setup-user-mcp.ps1" | \
+        sed -n '1,/^# --- Deploy Chrome DevTools skills ---$/{ /^# --- Deploy Chrome DevTools skills ---$/!p; }' | \
+        sed 's/$/'$'\r''/'
+    # Emit self-contained skills deployment using PS1 here-strings
+    cat <<'SKILLS_PS1_HEADER'
+
+# --- Deploy Chrome DevTools skills (embedded) ---
+# Vendored from https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/main/skills
+# Content embedded at build time by build-deploy.sh for self-contained deployment.
+
+$skillsDest = Join-Path $env:USERPROFILE ".claude" "skills"
+
+SKILLS_PS1_HEADER
+    # Embed chrome-devtools skill
+    echo '$chromeDevtoolsDir = Join-Path $skillsDest "chrome-devtools"'
+    echo 'if (-not (Test-Path $chromeDevtoolsDir)) { New-Item -ItemType Directory -Path $chromeDevtoolsDir -Force | Out-Null }'
+    echo '$chromeDevtoolsSkill = @'"'"
+    echo "$SKILL_CHROME_DEVTOOLS"
+    echo "'"'@'
+    echo '$chromeDevtoolsDest = Join-Path $chromeDevtoolsDir "SKILL.md"'
+    echo '[System.IO.File]::WriteAllText($chromeDevtoolsDest, $chromeDevtoolsSkill, [System.Text.UTF8Encoding]::new($false))'
+    echo 'LogOk "Deployed skill: chrome-devtools"'
+    echo ''
+    # Embed a11y-debugging skill
+    echo '$a11yDir = Join-Path $skillsDest "a11y-debugging"'
+    echo 'if (-not (Test-Path $a11yDir)) { New-Item -ItemType Directory -Path $a11yDir -Force | Out-Null }'
+    echo '$a11ySkill = @'"'"
+    echo "$SKILL_A11Y_DEBUGGING"
+    echo "'"'@'
+    echo '$a11yDest = Join-Path $a11yDir "SKILL.md"'
+    echo '[System.IO.File]::WriteAllText($a11yDest, $a11ySkill, [System.Text.UTF8Encoding]::new($false))'
+    echo 'LogOk "Deployed skill: a11y-debugging"'
+    echo ''
+    # Emit exit footer from source (strip \r for matching, re-add for PS1)
+    tr -d '\r' < "$SCRIPTS_DIR/setup-user-mcp.ps1" | \
+        sed -n '/^# --- Exit ---$/,$ p' | \
+        sed 's/$/'$'\r''/'
 } > "$DEPLOY_DIR/setup-user-mcp.ps1"
 GENERATED=$((GENERATED + 1))
 

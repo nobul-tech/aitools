@@ -156,7 +156,9 @@ Cursor supports a Skills system for reusable AI capabilities:
 - Skills can include example code, patterns, and instructions
 - Useful for encoding project-specific workflows (e.g., "how to add a new API endpoint")
 
-We don't use skills yet — this is noted for future reference.
+We deploy Chrome DevTools skills (`chrome-devtools`, `a11y-debugging`) to `~/.claude/skills/`
+via `setup-user-mcp`. These are vendored from the upstream repo in `shared/skills/`.
+Both Claude Code and Cursor read from `~/.claude/skills/`.
 
 ## Machines
 

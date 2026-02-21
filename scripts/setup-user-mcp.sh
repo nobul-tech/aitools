@@ -125,6 +125,34 @@ log_ok "User-level MCP configured (all servers; vercel/webflow disabled by defau
 log "To enable per project: aitools --addmcp vercel"
 log "To check status: aitools mcp"
 
+# --- Deploy Chrome DevTools skills ---
+# Vendored from https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/main/skills
+# These provide structured workflows for browser automation and a11y auditing.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SKILLS_SRC="$SCRIPT_DIR/../shared/skills"
+SKILLS_DEST="$HOME/.claude/skills"
+
+deploy_skill() {
+    local skill_name="$1"
+    local src="$SKILLS_SRC/$skill_name/SKILL.md"
+    local dest_dir="$SKILLS_DEST/$skill_name"
+    local dest="$dest_dir/SKILL.md"
+
+    if [ ! -f "$src" ]; then
+        log_error "Skill source not found: $src"
+        return
+    fi
+
+    mkdir -p "$dest_dir"
+    cp "$src" "$dest"
+    log_ok "Deployed skill: $skill_name -> $(display_path "$dest")"
+}
+
+log "Deploying Chrome DevTools skills to $(display_path "$SKILLS_DEST")..."
+deploy_skill "chrome-devtools"
+deploy_skill "a11y-debugging"
+
 # --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then
     log "FAILED with $ERRORS error(s). See log: $LOG_FILE"
