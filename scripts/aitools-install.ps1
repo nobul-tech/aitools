@@ -413,18 +413,6 @@ foreach ($script in $deployScripts) {
     }
 }
 
-# Hint: session archive setup
-$hasUserRepo = $false
-if (Test-Path $configFile) {
-    $cfgContent = Get-Content $configFile -Raw -ErrorAction SilentlyContinue
-    if ($cfgContent -and $cfgContent -match '"userRepoPath"\s*:\s*"[^"]*"') {
-        $hasUserRepo = $true
-    }
-}
-if (-not $hasUserRepo) {
-    Log "hint: To archive sessions across machines, run 'aitools user init'."
-}
-
 # --- Exit ---
 if ($errors -gt 0) {
     Log "FAILED with $errors error(s). See log: $logFile"

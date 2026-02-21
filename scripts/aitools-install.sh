@@ -519,11 +519,6 @@ for script in $DEPLOY_SCRIPTS; do
     fi
 done
 
-# Hint: session archive setup
-if ! read_config_key "$CONFIG_FILE" "userRepoPath" >/dev/null 2>&1; then
-    log "hint: To archive sessions across machines, run 'aitools user init'."
-fi
-
 # --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then
     log "FAILED with $ERRORS error(s). See log: $(display_path "$LOG_FILE")"

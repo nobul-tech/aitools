@@ -921,6 +921,11 @@ if ($doInstall) {
     Write-Host ""
     if ($installerRc -eq 0) {
         Write-Host "All up to date. ($(Get-RepoVersion $repoPath))"
+        # Session archive hint (after final status line)
+        $userRepo = Read-ConfigKey -File $configFile -Key "userRepoPath"
+        if (-not $userRepo) {
+            Write-Host "hint: To archive sessions across machines, run 'aitools user init'." -ForegroundColor Yellow
+        }
     } else {
         Write-Host "Completed with errors (see $logFile)."
     }
@@ -970,7 +975,10 @@ if ($doInstall) {
         Write-Host "  Completed with $deployRc error(s)."
     }
 
-    # Check session archive: hook installed + userRepoPath configured
+    Write-Host ""
+    Write-Host "Configs deployed. ($(Get-RepoVersion $repoPath))"
+
+    # Session archive hint (after final status line)
     $settingsFile = Join-Path $env:USERPROFILE ".claude\settings.json"
     $hookInstalled = $false
     if (Test-Path $settingsFile) {
@@ -982,14 +990,11 @@ if ($doInstall) {
     if ($hookInstalled) {
         $userRepo = Read-ConfigKey -File $configFile -Key "userRepoPath"
         if (-not $userRepo) {
-            Write-Host "  WARNING: session archive hook installed but inactive -- userRepoPath not configured. Run 'aitools user init'."
+            Write-Host "WARNING: session archive hook installed but inactive -- userRepoPath not configured. Run 'aitools user init'." -ForegroundColor Yellow
         }
     } else {
-        Write-Host "  hint: session archive hook not installed. Run 'aitools user init' to set up."
+        Write-Host "hint: session archive hook not installed. Run 'aitools user init' to set up." -ForegroundColor Yellow
     }
-
-    Write-Host ""
-    Write-Host "Configs deployed. ($(Get-RepoVersion $repoPath))"
 }
 
 # Self-update: bake version into installed copy AFTER installer
