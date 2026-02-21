@@ -23,14 +23,21 @@ When the audit produces flags:
 
 #### 3. MCP config integrity
 
-Run `bash scripts/setup-user-mcp.sh` and `bash scripts/setup-cursor-mcp.sh`.
-Verify chrome-devtools has `--isolated` in both `~/.claude.json` and
-`~/.cursor/mcp.json`.
+Read-only check -- no setup scripts, no side effects:
+- Verify `chrome-devtools` appears in both `~/.claude.json` and `~/.cursor/mcp.json`
+- Verify `--isolated` appears in the chrome-devtools entry in both files
+- `grep -l 'chrome-devtools' ~/.claude.json ~/.cursor/mcp.json` + `grep 'isolated' ~/.claude.json ~/.cursor/mcp.json`
 
-#### 4. CLI entry point
+If missing, flag for Extensive tier (#14) or manual fix -- do not run setup scripts here.
+
+#### 4. CLI entry point + version consistency
 
 `bash scripts/aitools --version` -- confirms the self-update stamp and that
 the entry point parses.
+
+Also verify version matches the latest tag:
+`git describe --tags --match "v*" --abbrev=0`. Mismatch indicates a
+self-update bug or missed `gitpull` tag.
 
 ---
 
@@ -41,7 +48,8 @@ Run all Always items first, then:
 #### 5. Full script syntax validation
 
 `bash -n` on every `.sh` in `scripts/` and `deploy/`. On Windows, also
-`[Parser]::ParseFile` on every `.ps1`.
+`[Parser]::ParseFile` on every `.ps1`. On macOS, if `pwsh` is installed,
+also validate `.ps1` files with `pwsh -NoProfile -Command "[Parser]::ParseFile(...)"`.
 
 #### 6. deploy/ drift audit
 
@@ -93,11 +101,12 @@ contradicting CLAUDE.md).
 All `.sh` files in the repo have LF line endings (not CRLF).
 `file scripts/*.sh deploy/*.sh shared/hooks/*.sh` -- none should report CRLF.
 
-#### 14. Credential / secret scan
+#### 14. MCP config deploy
 
-Grep the full push diff for patterns: passwords, tokens, API keys, `.env`
-contents, hardcoded absolute paths containing usernames.
-`git diff origin/main~N..origin/main` (where N = number of pushed commits).
+Full setup script run (heavier than Always #3):
+- Run `bash scripts/setup-user-mcp.sh` and `bash scripts/setup-cursor-mcp.sh`
+- Verify chrome-devtools has `--isolated` in both `~/.claude.json` and
+  `~/.cursor/mcp.json`
 
 #### 15. Roadmap freshness
 

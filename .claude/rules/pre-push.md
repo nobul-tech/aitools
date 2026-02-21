@@ -13,19 +13,33 @@ Confirm nothing was accidentally committed:
 - No secrets (`.env`, credentials, tokens, API keys)
 - `git log --oneline --name-only origin/main..HEAD` to review all files in the push
 
-### 3. Release notes current
+### 3. Credential / secret scan
 
-If the push includes new features or bug fixes, `RELEASE_NOTES.md` should have a version entry covering the changes. Omit for docs-only or trivial changes.
+Scan the push diff before it leaves the machine:
+- `git diff origin/main..HEAD` -- grep for passwords, tokens, API keys, `.env` contents, hardcoded absolute paths containing usernames
+- Catches secrets while they can still be unstaged (post-push is too late)
 
-### 4. Roadmap reflects reality
+### 4. No WIP commits
+
+`git log --oneline origin/main..HEAD` must not contain `WIP`, `fixup!`, `squash!`, or `TODO` prefixes. Squash or reword before pushing.
+
+### 5. Release notes current
+
+If pre-commit step 8 (release notes gate) applied to any commit in this push, confirm `RELEASE_NOTES.md` was updated. This is a verification, not a redo.
+
+### 6. Roadmap reflects reality
 
 If the push completes or starts a roadmap item, `ROADMAP.md` should be updated (move to Completed or add to In Progress).
 
-### 5. deploy/ matches source
+### 7. deploy/ matches source
 
-If `scripts/` or `shared/` changed in any commit being pushed, `deploy/` must have been rebuilt (`bash scripts/build-deploy.sh`) and the output included in the push. Stale deploy scripts on remote means the next machine sync gets old configs.
+If pre-commit steps 3+9 (build freshness + deploy drift check) applied to any commit in this push, confirm `deploy/` is included and matches source. This is a verification, not a redo.
 
-### 6. Branch hygiene
+### 8. Commit count check
+
+If pushing >5 commits, pause to review the full list (`git log --oneline origin/main..HEAD`) before proceeding. Large pushes are more likely to include unintended changes.
+
+### 9. Branch hygiene
 
 - Pushing to `main` directly is OK for this single-maintainer repo
 - Force-push to `main` requires explicit user approval -- never do it silently

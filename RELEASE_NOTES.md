@@ -12,7 +12,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
-## v0.14 -- Version Scheme Reset, Pre-Commit Improvements (2026-02-21)
+## v0.14 -- Version Scheme Reset, Git Checklist Improvements (2026-02-21)
 
 ### Improvements
 
@@ -23,6 +23,13 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | 3 | **Pre-commit: conditional platform note**: Platform note (`tested: macOS`) now only required when `.sh` or `.ps1` files are in the commit. Pure docs/markdown commits can omit it. |
 | 4 | **Pre-commit: release notes gate**: New step 8 requires a `RELEASE_NOTES.md` entry when committing features, bug fixes, or behavioral changes. |
 | 5 | **Pre-commit: deploy drift check**: New step 9 verifies no unstaged deploy/ changes remain after build freshness step. |
+| 7 | **Pre-push: credential scan**: Moved credential/secret scan from post-push Extensive #14 to pre-push #3. Catches secrets before they leave the machine. |
+| 8 | **Pre-push: WIP commit check**: New step #4 rejects `WIP`, `fixup!`, `squash!`, and `TODO` prefix commits before push. |
+| 9 | **Pre-push: commit count check**: New step #8 pauses for review when pushing >5 commits. |
+| 10 | **Pre-push: simplified cross-references**: Steps 5 (release notes) and 7 (deploy/) now reference pre-commit steps instead of re-describing the check. |
+| 11 | **Post-push: read-only MCP check**: Always tier #3 changed from running setup scripts to grep-based verification. Full setup scripts moved to Extensive tier #14. |
+| 12 | **Post-push: version consistency**: Always tier #4 now also verifies `aitools --version` matches the latest git tag. |
+| 13 | **Post-push: pwsh validation on macOS**: Extensive #5 now notes that PS1 files can be validated on macOS when `pwsh` is installed. |
 
 ### Documentation
 
