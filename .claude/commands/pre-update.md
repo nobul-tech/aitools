@@ -64,7 +64,8 @@ Present three options and ask which command to run:
 | Command | What it does |
 |---------|--------------|
 | `aitools` | Quiet pull + rebuild + deploy configs |
-| `aitools gitpull` | Loud pull + rebuild + deploy + changelog + version tag |
+| `aitools gitpull` | Loud pull + rebuild + deploy + changelog + minor version tag |
+| `aitools gitpull --patch` | Same as gitpull but bumps patch (v0.14.0 -> v0.14.1) |
 | `aitools install` | Quiet pull + rebuild + full installer (tools + configs) |
 
 Do NOT run any of these yet. Wait for the user to choose.

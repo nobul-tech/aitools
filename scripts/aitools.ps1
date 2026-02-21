@@ -8,6 +8,7 @@ param(
     [switch]$Version,
     [Alias("h")]
     [switch]$Help,
+    [switch]$Patch,
     [string[]]$AddMcp,
     [switch]$SkipGhAuth,
     [string]$ReposPath,
@@ -56,8 +57,9 @@ function Read-ConfigKey {
 }
 
 # Version string from a git repo using tag-based scheme.
-# v2026-02-16.2.0           → 2026-02-16.2.0
-# v2026-02-16.2.0-3-gabcdef → 2026-02-16.2.3
+# v0.14.0              -> 0.14.0       (on tag exactly)
+# v0.14.0-5-gabcdef    -> 0.14.0+5    (5 commits ahead of tag)
+# The +N suffix indicates unreleased commits; it is never a real version.
 function Get-RepoVersion {
     param([string]$RepoPath)
     try {
@@ -65,16 +67,14 @@ function Get-RepoVersion {
         if ($desc) {
             $base = $desc.TrimStart("v")
             if ($base -match '^(.+)-(\d+)-g[0-9a-f]+$') {
-                # v2026-02-16.2.0-3-gabcdef → 2026-02-16.2.3
-                $tagPart = $Matches[1]       # 2026-02-16.2.0
-                $commits = $Matches[2]       # 3
-                $prefix = $tagPart.Substring(0, $tagPart.LastIndexOf('.'))  # 2026-02-16.2
-                return "${prefix}.${commits}"
+                $tagPart = $Matches[1]       # 0.14.0
+                $commits = $Matches[2]       # 5
+                return "${tagPart}+${commits}"
             } else {
-                return $base                 # 2026-02-16.2.0
+                return $base                 # 0.14.0
             }
         }
-        # No tags — fallback
+        # No tags -- fallback
         $log = git -C $RepoPath log -1 --format='%cd (%h)' --date=short 2>$null
         if ($log) { return $log } else { return "unknown" }
     } catch { return "unknown" }
@@ -142,7 +142,8 @@ Usage: aitools [COMMAND] [OPTIONS]
 
 Commands:
   (none)               Sync configs: pull + rebuild + deploy all configurations
-  gitpull              Update source: pull + rebuild + deploy + changelog + version tag
+  gitpull [--patch]    Update source: pull + rebuild + deploy + changelog + version tag
+                       --patch: bump patch (v0.14.0 -> v0.14.1) instead of minor
   install              Full setup: pull + rebuild + install tools + deploy configs
   mcp                  Show MCP server status for current project
   user init            Set up user repo and configure session archiving hook
@@ -173,6 +174,16 @@ $doGitpull = $Command -eq "gitpull"
 $doMcpStatus = $Command -eq "mcp"
 $doUser = $Command -eq "user"
 $doSessions = $Command -eq "sessions"
+
+# --patch flag for gitpull (may come via -Patch switch or positional $Remaining)
+$gitpullPatch = $false
+if ($doGitpull) {
+    if ($Patch) { $gitpullPatch = $true }
+    if ($Remaining -and $Remaining -contains "--patch") {
+        $gitpullPatch = $true
+        $Remaining = @($Remaining | Where-Object { $_ -ne "--patch" })
+    }
+}
 
 # Extract subcommand and remaining args for user/sessions
 $subCmd = ""
@@ -941,17 +952,32 @@ if ($doInstall) {
     }
 
     Write-Host "[4/$steps] Tagging version..."
-    $latestTag = git -C $repoPath describe --tags --match "v*" --abbrev=0 2>$null
-    if (-not $latestTag) { $latestTag = "v0.0.0" }
-    $latestMinor = [int](($latestTag -replace '^v0\.(\d+)\..*', '$1'))
-    $nextMinor = $latestMinor + 1
-    $tag = "v0.${nextMinor}.0"
-    git -C $repoPath tag $tag
-    $pushResult = git -C $repoPath push origin $tag 2>&1 | Out-String
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "  Tagged $tag"
+    # Skip if HEAD already has a tag (e.g., re-running gitpull without new commits)
+    $existing = git -C $repoPath describe --tags --match "v*" --exact-match HEAD 2>$null
+    if ($LASTEXITCODE -eq 0 -and $existing) {
+        Write-Host "  HEAD already tagged ($existing) -- skipping"
+        $tag = $existing
     } else {
-        Write-Host "  Tagged $tag (local only - push failed)"
+        $latestTag = git -C $repoPath describe --tags --match "v*" --abbrev=0 2>$null
+        if (-not $latestTag) { $latestTag = "v0.0.0" }
+        if ($gitpullPatch) {
+            # Patch bump: v0.14.0 -> v0.14.1
+            $parts = $latestTag.TrimStart("v").Split(".")
+            $parts[2] = [string]([int]$parts[2] + 1)
+            $tag = "v" + ($parts -join ".")
+        } else {
+            # Minor bump: v0.14.0 -> v0.15.0 (existing default)
+            $latestMinor = [int](($latestTag -replace '^v0\.(\d+)\..*', '$1'))
+            $nextMinor = $latestMinor + 1
+            $tag = "v0.${nextMinor}.0"
+        }
+        git -C $repoPath tag $tag
+        $pushResult = git -C $repoPath push origin $tag 2>&1 | Out-String
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  Tagged $tag"
+        } else {
+            Write-Host "  Tagged $tag (local only -- push failed)"
+        }
     }
 
     Write-Host ""

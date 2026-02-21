@@ -48,20 +48,18 @@ display_path() {
 }
 
 # Version string from a git repo using tag-based scheme.
-# v2026-02-16.2.0           → 2026-02-16.2.0
-# v2026-02-16.2.0-3-gabcdef → 2026-02-16.2.3
-# Uses bash regex instead of parameter expansion because the date
-# portion contains dashes that confuse glob-based %% and # operators.
+# v0.14.0              → 0.14.0       (on tag exactly)
+# v0.14.0-5-gabcdef    → 0.14.0+5    (5 commits ahead of tag)
+# The +N suffix indicates unreleased commits; it is never a real version.
 repo_version() {
     local desc
     desc=$(git -C "$1" describe --tags --match "v*" 2>/dev/null) || true
     if [ -n "$desc" ]; then
         local base="${desc#v}"              # strip leading v
         if [[ "$base" =~ ^(.*)-([0-9]+)-g[0-9a-f]+$ ]]; then
-            local tag_part="${BASH_REMATCH[1]}"   # 2026-02-16.2.0
-            local commits="${BASH_REMATCH[2]}"    # 3
-            local prefix="${tag_part%.*}"          # 2026-02-16.2
-            echo "${prefix}.${commits}"
+            local tag_part="${BASH_REMATCH[1]}"   # 0.14.0
+            local commits="${BASH_REMATCH[2]}"    # 5
+            echo "${tag_part}+${commits}"
         else
             echo "$base"
         fi
@@ -153,7 +151,8 @@ Usage: aitools [COMMAND] [OPTIONS]
 
 Commands:
   (none)               Sync configs: pull + rebuild + deploy all configurations
-  gitpull              Update source: pull + rebuild + deploy + changelog + version tag
+  gitpull [--patch]    Update source: pull + rebuild + deploy + changelog + version tag
+                       --patch: bump patch (v0.14.0 -> v0.14.1) instead of minor
   install              Full setup: pull + rebuild + install tools + deploy configs
   mcp                  Show MCP server status for current project
   user init            Set up user repo and configure session archiving hook
@@ -177,6 +176,7 @@ show_version=false
 show_help=false
 do_install=false
 do_gitpull=false
+gitpull_patch=false
 do_mcp_status=false
 do_user=false
 user_subcmd=""
@@ -192,7 +192,12 @@ while [[ $# -gt 0 ]]; do
         --version|-v) show_version=true; shift ;;
         --help|-h)    show_help=true; shift ;;
         install)      do_install=true; shift ;;
-        gitpull)      do_gitpull=true; shift ;;
+        gitpull)
+            do_gitpull=true; shift
+            if [[ $# -gt 0 && "$1" == "--patch" ]]; then
+                gitpull_patch=true; shift
+            fi
+            ;;
         mcp)          do_mcp_status=true; shift ;;
         user)
             do_user=true
@@ -1024,16 +1029,32 @@ elif $do_gitpull; then
     fi
 
     echo "[4/$STEPS] Tagging version..."
-    latest_tag=$(git -C "$repo_path" describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "v0.0.0")
-    latest_minor=${latest_tag#v0.}
-    latest_minor=${latest_minor%%.*}
-    next_minor=$((latest_minor + 1))
-    tag="v0.${next_minor}.0"
-    git -C "$repo_path" tag "$tag"
-    if git -C "$repo_path" push origin "$tag" 2>/dev/null; then
-        echo "  Tagged $tag"
+    # Skip if HEAD already has a tag (e.g., re-running gitpull without new commits)
+    if git -C "$repo_path" describe --tags --match "v*" --exact-match HEAD >/dev/null 2>&1; then
+        existing=$(git -C "$repo_path" describe --tags --match "v*" --exact-match HEAD 2>/dev/null)
+        echo "  HEAD already tagged ($existing) — skipping"
+        tag="$existing"
     else
-        echo "  Tagged $tag (local only — push failed)"
+        latest_tag=$(git -C "$repo_path" describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "v0.0.0")
+        if $gitpull_patch; then
+            # Patch bump: v0.14.0 → v0.14.1
+            local major minor patch
+            IFS='.' read -r major minor patch <<< "${latest_tag#v}"
+            patch=$((patch + 1))
+            tag="v${major}.${minor}.${patch}"
+        else
+            # Minor bump: v0.14.0 → v0.15.0 (existing default)
+            latest_minor=${latest_tag#v0.}
+            latest_minor=${latest_minor%%.*}
+            next_minor=$((latest_minor + 1))
+            tag="v0.${next_minor}.0"
+        fi
+        git -C "$repo_path" tag "$tag"
+        if git -C "$repo_path" push origin "$tag" 2>/dev/null; then
+            echo "  Tagged $tag"
+        else
+            echo "  Tagged $tag (local only -- push failed)"
+        fi
     fi
 
     echo ""

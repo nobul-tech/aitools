@@ -37,6 +37,7 @@ Read-only check -- no setup scripts, no side effects:
 
 `bash scripts/aitools --version` -- confirms the self-update stamp and that
 the entry point parses. Also verify version matches `git describe --tags --match "v*" --abbrev=0`.
+A `+N` suffix is expected (unreleased commits); clean version should match the tag exactly.
 
 #### 5. Session archive readiness
 

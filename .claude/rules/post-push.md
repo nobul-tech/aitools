@@ -36,8 +36,10 @@ If missing, flag for Extensive tier (#15) or manual fix -- do not run setup scri
 the entry point parses.
 
 Also verify version matches the latest tag:
-`git describe --tags --match "v*" --abbrev=0`. Mismatch indicates a
-self-update bug or missed `gitpull` tag.
+`git describe --tags --match "v*" --abbrev=0`. A `+N` suffix in the reported
+version is expected (unreleased commits after last tag). A clean version
+(no `+`) should match the tag exactly. Mismatch indicates a self-update bug
+or missed `gitpull` tag.
 
 #### 5. Session archive readiness
 
