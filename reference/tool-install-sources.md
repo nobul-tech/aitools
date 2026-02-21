@@ -165,8 +165,9 @@ Windows variant uses `"command": "cmd", "args": ["/c", "npx", "-y", "chrome-devt
 
 **Skills** (deployed by `setup-user-mcp`):
 
-Vendored in `shared/skills/` from the upstream repo. Deployed to `~/.claude/skills/`
-by `setup-user-mcp.sh/.ps1`. Deploy scripts embed content inline (self-contained).
+Vendored in `shared/skills/` from the upstream repo. Deployed to `~/.claude/skills/` (Claude Code)
+and `~/.cursor/skills/` (Cursor Agent CLI) by `setup-user-mcp.sh/.ps1`.
+Deploy scripts embed content inline (self-contained).
 When updating vendored skills, re-fetch from the GitHub repo URLs below.
 
 - `chrome-devtools` -- browser automation & debugging

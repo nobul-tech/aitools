@@ -135,12 +135,13 @@ Log "To check status: aitools mcp"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $skillsSrc = Join-Path (Split-Path -Parent $scriptDir) "shared" "skills"
 $skillsDest = Join-Path $env:USERPROFILE ".claude" "skills"
+$skillsDestCursor = Join-Path $env:USERPROFILE ".cursor" "skills"
 
 function Deploy-Skill {
-    param([string]$SkillName)
+    param([string]$SkillName, [string]$DestBase)
 
     $src = Join-Path $skillsSrc $SkillName "SKILL.md"
-    $destDir = Join-Path $skillsDest $SkillName
+    $destDir = Join-Path $DestBase $SkillName
     $dest = Join-Path $destDir "SKILL.md"
 
     if (-not (Test-Path $src)) {
@@ -156,8 +157,12 @@ function Deploy-Skill {
 }
 
 Log "Deploying Chrome DevTools skills to $skillsDest..."
-Deploy-Skill "chrome-devtools"
-Deploy-Skill "a11y-debugging"
+Deploy-Skill "chrome-devtools" $skillsDest
+Deploy-Skill "a11y-debugging" $skillsDest
+
+Log "Deploying Chrome DevTools skills to $skillsDestCursor..."
+Deploy-Skill "chrome-devtools" $skillsDestCursor
+Deploy-Skill "a11y-debugging" $skillsDestCursor
 
 # --- Exit ---
 if ($errors -gt 0) {

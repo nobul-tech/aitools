@@ -103,6 +103,20 @@ Config lives at `~/.cursor/cli-config.json`:
 | `agent --version` | Show CLI version |
 | `agent "prompt"` | Start session with initial prompt |
 
+### Rule Sources (Agent CLI)
+
+The agent CLI reads rules and context from these locations:
+
+| Source | Location | Notes |
+|--------|----------|-------|
+| Cursor User Rules | Cursor Settings > Rules (SQLite) | Not file-accessible; set via IDE UI |
+| Project CLAUDE.md | `./CLAUDE.md` in project root | Same as Claude Code |
+| Project rules | `.cursor/rules/*.mdc` | Cursor-specific rules |
+| User skills | `~/.cursor/skills/*/SKILL.md` | Our deployed skills land here |
+| Built-in skills | `~/.cursor/skills-cursor/*/SKILL.md` | 5 Cursor-provided skills |
+
+**Not read by agent CLI:** `~/.claude/CLAUDE.md`, `~/.claude/skills/`, `.claude/rules/`.
+
 ### User Rules (deprecated workflow)
 
 Cursor User Rules live in **Cursor Settings > Rules** (UI only) — they're stored in a SQLite database (`state.vscdb`), not an accessible file.
@@ -111,13 +125,13 @@ The automated clipboard-copy workflow (via `setup-user-cursor`) has been removed
 
 ### CLAUDE.md Interop
 
-When **"Include third party skills, subagents and other configs"** is enabled in Cursor Settings, Cursor reads `~/.claude/CLAUDE.md` at the user level (same as Claude Code).
+When **"Include third party skills, subagents and other configs"** is enabled in Cursor Settings, the **Cursor IDE** reads `~/.claude/CLAUDE.md` at the user level (same as Claude Code).
 
-**Important:** Cursor does **not** resolve `@import` / `@"path"` directives — it reads the file as-is. Content must be inlined for Cursor to see it.
+**Important:** The **Cursor Agent CLI** (`agent`) does NOT read `~/.claude/CLAUDE.md`. It uses Cursor User Rules (SQLite) + project `CLAUDE.md` + `.cursor/rules/` only. See "Rule Sources" below.
+
+Cursor does **not** resolve `@import` / `@"path"` directives — it reads the file as-is. Content must be inlined for Cursor to see it.
 
 The deploy scripts handle this automatically: `deploy/setup-user-claude.sh/.ps1` have the shared content embedded at build time. Re-run `scripts/build-deploy.sh` after editing the shared file, then re-deploy to propagate changes.
-
-> **Open question:** Whether Cursor actually reads `~/.claude/CLAUDE.md` at runtime is unverified. Test by asking Cursor about git identity in a project that has no local CLAUDE.md.
 
 ## Rule Correspondence
 
@@ -156,9 +170,15 @@ Cursor supports a Skills system for reusable AI capabilities:
 - Skills can include example code, patterns, and instructions
 - Useful for encoding project-specific workflows (e.g., "how to add a new API endpoint")
 
-We deploy Chrome DevTools skills (`chrome-devtools`, `a11y-debugging`) to `~/.claude/skills/`
+We deploy Chrome DevTools skills (`chrome-devtools`, `a11y-debugging`) to both locations
 via `setup-user-mcp`. These are vendored from the upstream repo in `shared/skills/`.
-Both Claude Code and Cursor read from `~/.claude/skills/`.
+
+| Tool | Skills location |
+|------|----------------|
+| Claude Code | `~/.claude/skills/` |
+| Cursor Agent CLI | `~/.cursor/skills/` |
+
+Cursor also has 5 built-in skills at `~/.cursor/skills-cursor/` (not managed by us).
 
 ## Machines
 

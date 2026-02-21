@@ -77,7 +77,8 @@ For Cursor, this runs `agent mcp enable` or falls back to project `.cursor/mcp.j
 | Webflow | `https://mcp.webflow.com/mcp` | OAuth (browser) |
 
 **Skills:** Chrome DevTools skills (`chrome-devtools`, `a11y-debugging`) are vendored
-in `shared/skills/` and deployed to `~/.claude/skills/` by `setup-user-mcp`.
+in `shared/skills/` and deployed to `~/.claude/skills/` (Claude Code) and
+`~/.cursor/skills/` (Cursor Agent CLI) by `setup-user-mcp`.
 Deploy scripts embed the skill content inline (self-contained, no repo needed).
 Source: https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/main/skills
 

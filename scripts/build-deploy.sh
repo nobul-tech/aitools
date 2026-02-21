@@ -665,21 +665,36 @@ blog "Generating deploy/setup-user-mcp.sh (with embedded skills)"
 # Content embedded at build time by build-deploy.sh for self-contained deployment.
 
 SKILLS_DEST="$HOME/.claude/skills"
+SKILLS_DEST_CURSOR="$HOME/.cursor/skills"
 
 SKILLS_HEADER
-    # Embed chrome-devtools skill
+    # Deploy to ~/.claude/skills/ (Claude Code)
+    echo 'log "Deploying skills to $SKILLS_DEST..."'
     echo 'mkdir -p "$SKILLS_DEST/chrome-devtools"'
     echo 'cat > "$SKILLS_DEST/chrome-devtools/SKILL.md" <<'"'"'__SKILL_CHROME_DEVTOOLS__'"'"
     echo "$SKILL_CHROME_DEVTOOLS"
     echo '__SKILL_CHROME_DEVTOOLS__'
-    echo 'log_ok "Deployed skill: chrome-devtools"'
+    echo 'log_ok "Deployed skill: chrome-devtools -> $SKILLS_DEST/chrome-devtools"'
     echo ''
-    # Embed a11y-debugging skill
     echo 'mkdir -p "$SKILLS_DEST/a11y-debugging"'
     echo 'cat > "$SKILLS_DEST/a11y-debugging/SKILL.md" <<'"'"'__SKILL_A11Y_DEBUGGING__'"'"
     echo "$SKILL_A11Y_DEBUGGING"
     echo '__SKILL_A11Y_DEBUGGING__'
-    echo 'log_ok "Deployed skill: a11y-debugging"'
+    echo 'log_ok "Deployed skill: a11y-debugging -> $SKILLS_DEST/a11y-debugging"'
+    echo ''
+    # Deploy to ~/.cursor/skills/ (Cursor Agent CLI)
+    echo 'log "Deploying skills to $SKILLS_DEST_CURSOR..."'
+    echo 'mkdir -p "$SKILLS_DEST_CURSOR/chrome-devtools"'
+    echo 'cat > "$SKILLS_DEST_CURSOR/chrome-devtools/SKILL.md" <<'"'"'__SKILL_CHROME_DEVTOOLS_CURSOR__'"'"
+    echo "$SKILL_CHROME_DEVTOOLS"
+    echo '__SKILL_CHROME_DEVTOOLS_CURSOR__'
+    echo 'log_ok "Deployed skill: chrome-devtools -> $SKILLS_DEST_CURSOR/chrome-devtools"'
+    echo ''
+    echo 'mkdir -p "$SKILLS_DEST_CURSOR/a11y-debugging"'
+    echo 'cat > "$SKILLS_DEST_CURSOR/a11y-debugging/SKILL.md" <<'"'"'__SKILL_A11Y_DEBUGGING_CURSOR__'"'"
+    echo "$SKILL_A11Y_DEBUGGING"
+    echo '__SKILL_A11Y_DEBUGGING_CURSOR__'
+    echo 'log_ok "Deployed skill: a11y-debugging -> $SKILLS_DEST_CURSOR/a11y-debugging"'
     echo ''
     # Emit exit footer from source
     sed -n '/^# --- Exit ---$/,$ p' "$SCRIPTS_DIR/setup-user-mcp.sh"
@@ -703,9 +718,11 @@ blog "Generating deploy/setup-user-mcp.ps1 (with embedded skills)"
 # Content embedded at build time by build-deploy.sh for self-contained deployment.
 
 $skillsDest = Join-Path $env:USERPROFILE ".claude" "skills"
+$skillsDestCursor = Join-Path $env:USERPROFILE ".cursor" "skills"
 
 SKILLS_PS1_HEADER
-    # Embed chrome-devtools skill
+    # Deploy to ~/.claude/skills/ (Claude Code)
+    echo 'Log "Deploying skills to $skillsDest..."'
     echo '$chromeDevtoolsDir = Join-Path $skillsDest "chrome-devtools"'
     echo 'if (-not (Test-Path $chromeDevtoolsDir)) { New-Item -ItemType Directory -Path $chromeDevtoolsDir -Force | Out-Null }'
     echo '$chromeDevtoolsSkill = @'"'"
@@ -713,9 +730,8 @@ SKILLS_PS1_HEADER
     echo "'"'@'
     echo '$chromeDevtoolsDest = Join-Path $chromeDevtoolsDir "SKILL.md"'
     echo '[System.IO.File]::WriteAllText($chromeDevtoolsDest, $chromeDevtoolsSkill, [System.Text.UTF8Encoding]::new($false))'
-    echo 'LogOk "Deployed skill: chrome-devtools"'
+    echo 'LogOk "Deployed skill: chrome-devtools -> $chromeDevtoolsDest"'
     echo ''
-    # Embed a11y-debugging skill
     echo '$a11yDir = Join-Path $skillsDest "a11y-debugging"'
     echo 'if (-not (Test-Path $a11yDir)) { New-Item -ItemType Directory -Path $a11yDir -Force | Out-Null }'
     echo '$a11ySkill = @'"'"
@@ -723,7 +739,21 @@ SKILLS_PS1_HEADER
     echo "'"'@'
     echo '$a11yDest = Join-Path $a11yDir "SKILL.md"'
     echo '[System.IO.File]::WriteAllText($a11yDest, $a11ySkill, [System.Text.UTF8Encoding]::new($false))'
-    echo 'LogOk "Deployed skill: a11y-debugging"'
+    echo 'LogOk "Deployed skill: a11y-debugging -> $a11yDest"'
+    echo ''
+    # Deploy to ~/.cursor/skills/ (Cursor Agent CLI)
+    echo 'Log "Deploying skills to $skillsDestCursor..."'
+    echo '$chromeDevtoolsDirCursor = Join-Path $skillsDestCursor "chrome-devtools"'
+    echo 'if (-not (Test-Path $chromeDevtoolsDirCursor)) { New-Item -ItemType Directory -Path $chromeDevtoolsDirCursor -Force | Out-Null }'
+    echo '$chromeDevtoolsDestCursor = Join-Path $chromeDevtoolsDirCursor "SKILL.md"'
+    echo '[System.IO.File]::WriteAllText($chromeDevtoolsDestCursor, $chromeDevtoolsSkill, [System.Text.UTF8Encoding]::new($false))'
+    echo 'LogOk "Deployed skill: chrome-devtools -> $chromeDevtoolsDestCursor"'
+    echo ''
+    echo '$a11yDirCursor = Join-Path $skillsDestCursor "a11y-debugging"'
+    echo 'if (-not (Test-Path $a11yDirCursor)) { New-Item -ItemType Directory -Path $a11yDirCursor -Force | Out-Null }'
+    echo '$a11yDestCursor = Join-Path $a11yDirCursor "SKILL.md"'
+    echo '[System.IO.File]::WriteAllText($a11yDestCursor, $a11ySkill, [System.Text.UTF8Encoding]::new($false))'
+    echo 'LogOk "Deployed skill: a11y-debugging -> $a11yDestCursor"'
     echo ''
     # Emit exit footer from source (strip \r for matching, re-add for PS1)
     tr -d '\r' < "$SCRIPTS_DIR/setup-user-mcp.ps1" | \

@@ -132,11 +132,13 @@ log "To check status: aitools mcp"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SKILLS_SRC="$SCRIPT_DIR/../shared/skills"
 SKILLS_DEST="$HOME/.claude/skills"
+SKILLS_DEST_CURSOR="$HOME/.cursor/skills"
 
 deploy_skill() {
     local skill_name="$1"
+    local dest_base="$2"
     local src="$SKILLS_SRC/$skill_name/SKILL.md"
-    local dest_dir="$SKILLS_DEST/$skill_name"
+    local dest_dir="$dest_base/$skill_name"
     local dest="$dest_dir/SKILL.md"
 
     if [ ! -f "$src" ]; then
@@ -150,8 +152,12 @@ deploy_skill() {
 }
 
 log "Deploying Chrome DevTools skills to $(display_path "$SKILLS_DEST")..."
-deploy_skill "chrome-devtools"
-deploy_skill "a11y-debugging"
+deploy_skill "chrome-devtools" "$SKILLS_DEST"
+deploy_skill "a11y-debugging" "$SKILLS_DEST"
+
+log "Deploying Chrome DevTools skills to $(display_path "$SKILLS_DEST_CURSOR")..."
+deploy_skill "chrome-devtools" "$SKILLS_DEST_CURSOR"
+deploy_skill "a11y-debugging" "$SKILLS_DEST_CURSOR"
 
 # --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then

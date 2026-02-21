@@ -135,7 +135,9 @@ Log "To check status: aitools mcp"
 # Content embedded at build time by build-deploy.sh for self-contained deployment.
 
 $skillsDest = Join-Path $env:USERPROFILE ".claude" "skills"
+$skillsDestCursor = Join-Path $env:USERPROFILE ".cursor" "skills"
 
+Log "Deploying skills to $skillsDest..."
 $chromeDevtoolsDir = Join-Path $skillsDest "chrome-devtools"
 if (-not (Test-Path $chromeDevtoolsDir)) { New-Item -ItemType Directory -Path $chromeDevtoolsDir -Force | Out-Null }
 $chromeDevtoolsSkill = @'
@@ -188,7 +190,7 @@ If there are errors launching `chrome-devtools-mcp` or Chrome, refer to https://
 '@
 $chromeDevtoolsDest = Join-Path $chromeDevtoolsDir "SKILL.md"
 [System.IO.File]::WriteAllText($chromeDevtoolsDest, $chromeDevtoolsSkill, [System.Text.UTF8Encoding]::new($false))
-LogOk "Deployed skill: chrome-devtools"
+LogOk "Deployed skill: chrome-devtools -> $chromeDevtoolsDest"
 
 $a11yDir = Join-Path $skillsDest "a11y-debugging"
 if (-not (Test-Path $a11yDir)) { New-Item -ItemType Directory -Path $a11yDir -Force | Out-Null }
@@ -344,7 +346,20 @@ If standard a11y queries fail or the `evaluate_script` snippets return unexpecte
 '@
 $a11yDest = Join-Path $a11yDir "SKILL.md"
 [System.IO.File]::WriteAllText($a11yDest, $a11ySkill, [System.Text.UTF8Encoding]::new($false))
-LogOk "Deployed skill: a11y-debugging"
+LogOk "Deployed skill: a11y-debugging -> $a11yDest"
+
+Log "Deploying skills to $skillsDestCursor..."
+$chromeDevtoolsDirCursor = Join-Path $skillsDestCursor "chrome-devtools"
+if (-not (Test-Path $chromeDevtoolsDirCursor)) { New-Item -ItemType Directory -Path $chromeDevtoolsDirCursor -Force | Out-Null }
+$chromeDevtoolsDestCursor = Join-Path $chromeDevtoolsDirCursor "SKILL.md"
+[System.IO.File]::WriteAllText($chromeDevtoolsDestCursor, $chromeDevtoolsSkill, [System.Text.UTF8Encoding]::new($false))
+LogOk "Deployed skill: chrome-devtools -> $chromeDevtoolsDestCursor"
+
+$a11yDirCursor = Join-Path $skillsDestCursor "a11y-debugging"
+if (-not (Test-Path $a11yDirCursor)) { New-Item -ItemType Directory -Path $a11yDirCursor -Force | Out-Null }
+$a11yDestCursor = Join-Path $a11yDirCursor "SKILL.md"
+[System.IO.File]::WriteAllText($a11yDestCursor, $a11ySkill, [System.Text.UTF8Encoding]::new($false))
+LogOk "Deployed skill: a11y-debugging -> $a11yDestCursor"
 
 # --- Exit ---
 if ($errors -gt 0) {

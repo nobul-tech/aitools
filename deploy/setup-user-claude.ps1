@@ -137,6 +137,10 @@ Before writing a new code path that invokes `.sh` scripts, search the same file 
 - **Windows**: PowerShell, Cursor, Claude Code, Command Prompt, WSL/bash (when Linux/Unix environment needed)
 - **Note**: Claude Code on Windows always uses Git Bash (not configurable). `CLAUDE_CODE_SHELL` is broken on Windows ([#25558](https://github.com/anthropics/claude-code/issues/25558)). Use Unix shell syntax in all Claude Code sessions. To run PowerShell: `powershell.exe -NoProfile -Command '...'`
 
+### Cursor CLI (`agent`)
+
+- Always invoke as `agent --model auto` -- required by current subscription plan
+
 ## MCP Servers
 
 Three servers at user level. Chrome DevTools enabled globally; Vercel/Webflow disabled by default.
