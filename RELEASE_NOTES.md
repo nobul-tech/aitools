@@ -4,11 +4,33 @@
 
 `major.minor.patch` -- not semver (no API contract), but follows the same spirit:
 
-- **Major** (v3 → v4): structural changes to CLI commands, architecture, or project layout
-- **Minor** (v3.3): new features, new managed tools, batches of improvements
-- **Patch** (v3.3.1): isolated bug fixes with no new functionality
+- **Major** (v0 → v1): structural changes to CLI commands, architecture, or project layout
+- **Minor** (v0.14): new features, new managed tools, batches of improvements
+- **Patch** (v0.14.1): isolated bug fixes with no new functionality
 
 Multiple changes on the same day roll into one release. Bug fixes ship alongside features in the same minor if they land together.
+
+---
+
+## v0.14 -- Version Scheme Reset, Pre-Commit Improvements (2026-02-21)
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | **Version scheme reset**: Replaced date-based tags (`v2026-02-17.3.0`) with clean incremental versions (`v0.14.0`, `v0.15.0`). Continuity from v3.13 -- next `gitpull` creates v0.15.0. |
+| 2 | **Pre-commit: PS1 validation on macOS**: When `pwsh` is installed, PS1 scripts are now validated on macOS too, not just Windows. |
+| 3 | **Pre-commit: conditional platform note**: Platform note (`tested: macOS`) now only required when `.sh` or `.ps1` files are in the commit. Pure docs/markdown commits can omit it. |
+| 4 | **Pre-commit: release notes gate**: New step 8 requires a `RELEASE_NOTES.md` entry when committing features, bug fixes, or behavioral changes. |
+| 5 | **Pre-commit: deploy drift check**: New step 9 verifies no unstaged deploy/ changes remain after build freshness step. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 6 | Updated version examples in `RELEASE_NOTES.md`, `.claude/rules/documentation-standards.md`, and `.cursor/rules/documentation-standards.mdc` to reflect new `v0.x` scheme. |
+
+**Verified on:** macOS (bash -n on both scripts, build-deploy.sh rebuilt). Windows: deferred.
 
 ---
 

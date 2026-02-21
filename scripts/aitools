@@ -1020,10 +1020,11 @@ elif $do_gitpull; then
     fi
 
     echo "[4/$STEPS] Tagging version..."
-    today=$(date -u +%Y-%m-%d)
-    session=$(git -C "$repo_path" tag -l "v${today}.*" | wc -l | tr -d ' ')
-    session=$((session + 1))
-    tag="v${today}.${session}.0"
+    latest_tag=$(git -C "$repo_path" describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "v0.0.0")
+    latest_minor=${latest_tag#v0.}
+    latest_minor=${latest_minor%%.*}
+    next_minor=$((latest_minor + 1))
+    tag="v0.${next_minor}.0"
     git -C "$repo_path" tag "$tag"
     if git -C "$repo_path" push origin "$tag" 2>/dev/null; then
         echo "  Tagged $tag"

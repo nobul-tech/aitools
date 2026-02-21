@@ -12,7 +12,7 @@ Version header: `## vX.Y -- Title (YYYY-MM-DD)`. Standard sections (include only
 
 ### Version numbering
 
-`major.minor.patch` -- major = structural, minor = features/tools, patch = isolated bug fixes. Multiple changes same day roll into one release.
+`major.minor.patch` (e.g., v0.14.1) -- major = structural, minor = features/tools, patch = isolated bug fixes. Multiple changes same day roll into one release.
 
 ### ROADMAP.md format
 

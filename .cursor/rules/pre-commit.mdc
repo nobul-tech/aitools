@@ -16,7 +16,7 @@ Confirm local config: `git config user.name` -> Jose, `git config user.email` ->
 
 For every `.sh` or `.ps1` file being committed:
 - Bash: `bash -n path/to/script.sh`
-- PS1 (Windows only): `[Parser]::ParseFile(...)` (see cross-platform rule for full command)
+- PS1: On Windows use `[Parser]::ParseFile(...)` (see cross-platform rule for full command). On macOS, if `pwsh` is installed, use `pwsh -NoProfile -Command "[Parser]::ParseFile(...)"`. If pwsh is unavailable, note in commit message.
 - If the other platform's scripts can't be validated locally, note in commit message: `(tested: macOS)` or `(tested: Windows)`
 
 ### 3. Build freshness
@@ -29,7 +29,7 @@ If any file in `scripts/` or `shared/` was modified, run `bash scripts/build-dep
 
 ### 5. Platform note
 
-End the commit message with `(tested: macOS)` or `(tested: Windows)`.
+If `.sh` or `.ps1` files are in the commit, end the commit message with `(tested: macOS)` or `(tested: Windows)`. Pure docs/markdown commits can omit this.
 
 ### 6. Executable bit on .sh files
 
@@ -38,3 +38,11 @@ End the commit message with `(tested: macOS)` or `(tested: Windows)`.
 ### 7. Install command consistency
 
 If modifying `scripts/setup-*.sh/.ps1`, verify install commands match `reference/tool-install-sources.md`. Never hardcode from memory.
+
+### 8. Release notes
+
+If the commit includes new features, bug fixes, or behavioral changes, verify `RELEASE_NOTES.md` has a version entry. Omit for docs-only, rule-only, or trivial changes.
+
+### 9. Deploy drift check
+
+If step 3 ran (build freshness), verify `git diff deploy/` is empty after `git add deploy/`. Catches forgotten build output.

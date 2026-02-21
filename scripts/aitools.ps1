@@ -936,10 +936,11 @@ if ($doInstall) {
     }
 
     Write-Host "[4/$steps] Tagging version..."
-    $today = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
-    $existingTags = git -C $repoPath tag -l "v${today}.*" 2>$null
-    $session = if ($existingTags) { @($existingTags).Count + 1 } else { 1 }
-    $tag = "v${today}.${session}.0"
+    $latestTag = git -C $repoPath describe --tags --match "v*" --abbrev=0 2>$null
+    if (-not $latestTag) { $latestTag = "v0.0.0" }
+    $latestMinor = [int](($latestTag -replace '^v0\.(\d+)\..*', '$1'))
+    $nextMinor = $latestMinor + 1
+    $tag = "v0.${nextMinor}.0"
     git -C $repoPath tag $tag
     $pushResult = git -C $repoPath push origin $tag 2>&1 | Out-String
     if ($LASTEXITCODE -eq 0) {

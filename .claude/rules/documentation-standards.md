@@ -22,9 +22,9 @@ Sections are optional -- include only those that apply. Number items sequentiall
 
 `major.minor.patch` -- not semver, but follows the same spirit:
 
-- **Major** (v3 -> v4): structural changes to CLI commands, architecture, or project layout
-- **Minor** (v3.10): new features, new managed tools, batches of improvements
-- **Patch** (v3.10.1): isolated bug fixes with no new functionality
+- **Major** (v0 -> v1): structural changes to CLI commands, architecture, or project layout
+- **Minor** (v0.14): new features, new managed tools, batches of improvements
+- **Patch** (v0.14.1): isolated bug fixes with no new functionality
 
 Multiple changes on the same day roll into one release. Bug fixes ship alongside features in the same minor if they land together.
 
