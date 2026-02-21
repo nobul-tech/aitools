@@ -20,6 +20,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 |---|----------|-----|
 | 1 | Medium | `setup-cursor-mcp.sh/.ps1` now merges managed servers into `~/.cursor/mcp.json` instead of overwriting. User-added MCP servers are preserved across re-runs. |
 | 2 | Low | Empty `catch {}` blocks in inline Node.js across all setup scripts and CLI now warn on corrupt JSON instead of silently starting with empty config. ENOENT (file missing) still starts fresh silently. |
+| 5 | Medium | `aitools user init` (Path 1: repo already exists) now auto-detects `machineAlias` from `profile.json` by hostname match instead of leaving it empty. Hostname comparison uses short name (strips DNS suffix) to handle `Joses-MBP` vs `Joses-MBP.lax`. Same fix applied to `build-deploy.sh` profile lookup fallback. |
 
 ### New features
 

@@ -508,6 +508,25 @@ if $do_user; then
                 # --- Path 1: local repo already exists ---
                 echo "User repo already exists: $(display_path "$user_repo_dir")"
 
+                # Detect machineAlias from profile.json by hostname match
+                if command -v node &>/dev/null && [ -f "$user_repo_dir/profile.json" ]; then
+                    machine_alias=$(node -e "
+const fs = require('fs'), os = require('os');
+try {
+    const p = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
+    if (p.version === 2 && p.profiles) {
+        const host = os.hostname().split('.')[0];
+        for (const [alias, prof] of Object.entries(p.profiles)) {
+            if (prof.machine && prof.machine.hostname.split('.')[0] === host) {
+                console.log(alias);
+                break;
+            }
+        }
+    }
+} catch {}
+" "$user_repo_dir/profile.json" 2>/dev/null)
+                fi
+
             elif command -v gh &>/dev/null && gh repo view "$gh_user/$repo_name" --json name &>/dev/null; then
                 # --- Path 2: GitHub repo exists, no local clone ---
                 echo "GitHub repo exists. Cloning to $(display_path "$user_repo_dir")..."

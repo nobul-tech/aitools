@@ -465,6 +465,27 @@ if ($doUser) {
                 # --- Path 1: local repo already exists ---
                 Write-Host "User repo already exists: $userRepoDir"
 
+                # Detect machineAlias from profile.json by hostname match
+                $profilePath = Join-Path $userRepoDir "profile.json"
+                if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path $profilePath)) {
+                    $machineAlias = node -e @"
+const fs = require('fs'), os = require('os');
+try {
+    const p = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
+    if (p.version === 2 && p.profiles) {
+        const host = os.hostname().split('.')[0];
+        for (const [alias, prof] of Object.entries(p.profiles)) {
+            if (prof.machine && prof.machine.hostname.split('.')[0] === host) {
+                console.log(alias);
+                break;
+            }
+        }
+    }
+} catch {}
+"@ $profilePath 2>$null
+                    if ($machineAlias) { $machineAlias = $machineAlias.Trim() }
+                }
+
             } elseif ((Get-Command gh -ErrorAction SilentlyContinue) -and
                       ((gh repo view "$ghUser/$repoName" --json name 2>$null) -ne $null)) {
                 # --- Path 2: GitHub repo exists, no local clone ---

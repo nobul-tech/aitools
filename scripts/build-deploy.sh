@@ -69,7 +69,7 @@ try {
     let prof, ident;
     if (p.version === 2) {
         prof = p.profiles[alias]
-            || Object.values(p.profiles).find(pr => pr.machine && pr.machine.hostname === os.hostname())
+            || Object.values(p.profiles).find(pr => pr.machine && pr.machine.hostname.split('.')[0] === os.hostname().split('.')[0])
             || Object.values(p.profiles)[0];
         ident = p.identity;
     } else {
