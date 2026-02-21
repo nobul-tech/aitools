@@ -383,3 +383,9 @@ pandoc input.md --pdf-engine=typst -o output.pdf
 | WeasyPrint | Painful Windows install (GTK dependencies) |
 | wkhtmltopdf | Archived/abandoned |
 | md-to-pdf (npm) | Downloads entire Chromium (~200-400 MB) |
+
+**Lifecycle:**
+- **Platform Status:** macOS: evaluating; Windows: evaluating
+- **Concurrency:** Yes -- stateless CLI
+- **Post-Install Config:** None
+- **Dependencies:** Pandoc (when used as `--pdf-engine`)
