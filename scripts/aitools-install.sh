@@ -3,7 +3,7 @@
 # Run once for first-time setup, or re-run via `aitools` to stay current.
 #
 # Installs/updates gh CLI, configures repos directory, auto-detects Google
-# Drive mounts, writes ~/.config/ai-tooling/config.json, installs the
+# Drive mounts, writes ~/.aitools/config.json, installs the
 # aitools command to ~/.local/bin/, adds shell integration, and deploys
 # all configuration scripts.
 
@@ -84,8 +84,8 @@ case "$(uname -s)" in
 esac
 
 # --- Logging ---
-LOG_DIR="$HOME/Library/Logs/ai-tooling"
-[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ai-tooling"
+LOG_DIR="$HOME/Library/Logs/aitools"
+[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
 LOG_FILE="$LOG_DIR/deploy.log"
 LOG_JSONL="$LOG_DIR/deploy.jsonl"
 SCRIPT_NAME="aitools-install"
@@ -164,7 +164,7 @@ read_config_drives() {
 }
 
 # --- Config file setup ---
-CONFIG_DIR="$HOME/.config/ai-tooling"
+CONFIG_DIR="$HOME/.aitools"
 CONFIG_FILE="$CONFIG_DIR/config.json"
 mkdir -p "$CONFIG_DIR"
 

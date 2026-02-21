@@ -250,10 +250,23 @@ if $show_help; then
 fi
 
 # ---------------------------------------------------------------------------
+# Migrate config directory: ~/.config/ai-tooling/ -> ~/.aitools/
+# ---------------------------------------------------------------------------
+
+old_config_dir="$HOME/.config/ai-tooling"
+new_config_dir="$HOME/.aitools"
+
+if [ -d "$old_config_dir" ] && [ ! -d "$new_config_dir" ]; then
+    mv "$old_config_dir" "$new_config_dir"
+elif [ -d "$old_config_dir" ] && [ -d "$new_config_dir" ]; then
+    echo "warning: both $old_config_dir and $new_config_dir exist -- using $new_config_dir"
+fi
+
+# ---------------------------------------------------------------------------
 # Resolve repo path from config
 # ---------------------------------------------------------------------------
 
-config="$HOME/.config/ai-tooling/config.json"
+config="$HOME/.aitools/config.json"
 repo_path=""
 
 if raw=$(read_config_key "$config" "aiToolingRepoPath"); then
@@ -905,8 +918,8 @@ fi
 # Run update (pull + rebuild + deploy/install)
 # ---------------------------------------------------------------------------
 
-LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ai-tooling"
-[ "$(uname -s)" = "Darwin" ] && LOG_DIR="$HOME/Library/Logs/ai-tooling"
+LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
+[ "$(uname -s)" = "Darwin" ] && LOG_DIR="$HOME/Library/Logs/aitools"
 LOG_FILE="$LOG_DIR/deploy.log"
 mkdir -p "$LOG_DIR"
 

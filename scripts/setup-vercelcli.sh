@@ -11,8 +11,8 @@
 set -euo pipefail
 
 # --- Logging ---
-LOG_DIR="$HOME/Library/Logs/ai-tooling"
-[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ai-tooling"
+LOG_DIR="$HOME/Library/Logs/aitools"
+[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
 LOG_FILE="$LOG_DIR/deploy.log"
 SCRIPT_NAME="setup-vercelcli"
 mkdir -p "$LOG_DIR"

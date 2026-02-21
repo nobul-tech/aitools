@@ -34,7 +34,7 @@ Document the user repo pattern:
 - Project derivation logic (git toplevel → basename, else sanitized cwd basename)
 - Known limitation: cwd may not match the project being worked on (e.g., working on mbx-ext from ~/scratch)
 - Relationship to ai-tooling (companion, not submodule)
-- Config key: `userRepoPath` in `~/.config/ai-tooling/config.json`
+- Config key: `userRepoPath` in `~/.aitools/config.json`
 
 ### A2. Stop Hook Script
 
@@ -55,9 +55,9 @@ CWD=$(json_field "$INPUT" "cwd")
 TRANSCRIPT=$(json_field "$INPUT" "transcript_path")
 
 # Read user repo path from ai-tooling config
-CONFIG_FILE="${HOME}/.config/ai-tooling/config.json"
+CONFIG_FILE="${HOME}/.aitools/config.json"
 if [ ! -f "$CONFIG_FILE" ]; then
-    exit 0  # Silently skip if ai-tooling not configured
+    exit 0  # Silently skip if aitools not configured
 fi
 
 USER_REPO=$(grep -o '"userRepoPath"[[:space:]]*:[[:space:]]*"[^"]*"' "$CONFIG_FILE" \
@@ -153,7 +153,7 @@ Interactive setup for the user repo:
 2. Check if `aitools-<username>` repo exists locally
 3. If not, create directory structure + `git init` + `profile.json`
 4. Optionally create private GitHub repo via `gh repo create`
-5. Write `userRepoPath` to `~/.config/ai-tooling/config.json`
+5. Write `userRepoPath` to `~/.aitools/config.json`
 6. Deploy SessionEnd hook via `setup-user-hooks.sh`
 
 #### `aitools sessions list`
@@ -186,7 +186,7 @@ This handles the known limitation where cwd doesn't match the actual project.
 
 ### A5. Config Extension
 
-**File**: `~/.config/ai-tooling/config.json`
+**File**: `~/.aitools/config.json`
 
 Add `userRepoPath` key. The installer (`aitools-install.sh/.ps1`) should detect and set this if the user repo exists. Example:
 

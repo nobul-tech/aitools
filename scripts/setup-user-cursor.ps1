@@ -8,7 +8,7 @@
 #   3. Merges preferences into ~/.cursor/cli-config.json (preserves CLI-managed fields)
 
 # --- Logging ---
-$logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
+$logDir = Join-Path $env:LOCALAPPDATA "aitools"
 $logFile = Join-Path $logDir "deploy.log"
 $scriptName = "setup-user-cursor"
 $errors = 0
@@ -124,7 +124,7 @@ const f = process.argv[1];
 let vimMode = false;
 let modelId = 'auto';
 try {
-    const cfgPath = path.join(process.env.HOME || process.env.USERPROFILE, '.config', 'ai-tooling', 'config.json');
+    const cfgPath = path.join(process.env.HOME || process.env.USERPROFILE, '.aitools', 'config.json');
     const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
     if (cfg.userRepoPath) {
         const pf = JSON.parse(fs.readFileSync(path.join(cfg.userRepoPath, 'profile.json'), 'utf8'));

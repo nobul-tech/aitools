@@ -7,7 +7,7 @@
 # Use `aitools --addmcp` to enable per project.
 
 # --- Logging ---
-$logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
+$logDir = Join-Path $env:LOCALAPPDATA "aitools"
 $logFile = Join-Path $logDir "deploy.log"
 $scriptName = "setup-user-mcp"
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }

@@ -8,7 +8,7 @@
 # bash on both platforms). This PS1 script only deploys the hook configuration.
 
 # --- Logging ---
-$logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
+$logDir = Join-Path $env:LOCALAPPDATA "aitools"
 $logFile = Join-Path $logDir "deploy.log"
 $scriptName = "setup-user-hooks"
 $errors = 0

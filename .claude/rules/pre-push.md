@@ -46,6 +46,6 @@ If pushing >5 commits, pause to review the full list (`git log --oneline origin/
 
 ### 10. User repo push
 
-If the user dotfile repo (`userRepoPath` from `~/.config/ai-tooling/config.json`)
+If the user dotfile repo (`userRepoPath` from `~/.aitools/config.json`)
 has unpushed commits, push them. Pull first if needed (rebase). Skip if
 `userRepoPath` is not configured or the repo is clean.

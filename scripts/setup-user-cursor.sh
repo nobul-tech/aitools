@@ -11,8 +11,8 @@
 set -euo pipefail
 
 # --- Logging ---
-LOG_DIR="$HOME/Library/Logs/ai-tooling"
-[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ai-tooling"
+LOG_DIR="$HOME/Library/Logs/aitools"
+[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
 LOG_FILE="$LOG_DIR/deploy.log"
 SCRIPT_NAME="setup-user-cursor"
 mkdir -p "$LOG_DIR"
@@ -112,7 +112,7 @@ const f = process.argv[1];
 let vimMode = false;
 let modelId = 'auto';
 try {
-    const cfgPath = path.join(process.env.HOME || process.env.USERPROFILE, '.config', 'ai-tooling', 'config.json');
+    const cfgPath = path.join(process.env.HOME || process.env.USERPROFILE, '.aitools', 'config.json');
     const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
     if (cfg.userRepoPath) {
         const pf = JSON.parse(fs.readFileSync(path.join(cfg.userRepoPath, 'profile.json'), 'utf8'));

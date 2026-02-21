@@ -148,7 +148,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 |---|--------|
 | 6 | **Windows tool discovery rule**: Added to `shared/claude-shared.md` -- documents that `which`/`command -v` in Git Bash misses Windows PATH tools; use `powershell.exe Get-Command` instead. |
 | 7 | **GitHub issue tracking convention**: Added to `shared/claude-shared.md` -- when bugs are referenced, check the repo's GitHub issues for full context. |
-| 8 | **machineAlias in config**: `user init` now writes `machineAlias` to `~/.config/ai-tooling/config.json` alongside `userRepoPath`. Used by build-deploy.sh to select the correct profile. |
+| 8 | **machineAlias in config**: `user init` now writes `machineAlias` to `~/.aitools/config.json` alongside `userRepoPath`. Used by build-deploy.sh to select the correct profile. |
 
 **Verified on:** Windows (bash -n + ParseFile validated on all scripts, deploy/ rebuilt and verified). macOS: scripts updated but not validated on this machine.
 
@@ -416,7 +416,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 |---|--------|
 | 1 | **clip2md auto-naming**: Running `clip2md` with no arguments uses the Claude Code CLI (`claude -p`) to generate a descriptive filename and one-line summary. Content-type-aware prompt: emails get `YYMMDD-participant-topic`, articles get `source-topic`, docs get `product-section`. Max 50 chars but compact by default. Writes to hidden temp file, renames on success. Collision avoidance via `-2`, `-3` suffixes. |
 | 2 | **clip2md explicit-name improvements**: `clip2md notes` auto-appends `.md`, prompts before overwriting, shows AI summary when claude is available. |
-| 3 | **clip2md logging**: All operations log to `clip2md.log` (Windows: `%LOCALAPPDATA%\ai-tooling\`, macOS: `~/Library/Logs/ai-tooling/`). Events: saves, errors, temp file lifecycle, overwrite decisions. |
+| 3 | **clip2md logging**: All operations log to `clip2md.log` (Windows: `%LOCALAPPDATA%\aitools\`, macOS: `~/Library/Logs/aitools/`). Events: saves, errors, temp file lifecycle, overwrite decisions. |
 
 ### Bug fixes
 
@@ -573,7 +573,7 @@ Each release section ends with a verified-platform note:
 | # | Severity | Fix |
 |---|----------|-----|
 | 1 | BUG | Generated bash deploy scripts now define logging helpers before the OS guard, so `log_error` is available when the guard fires. |
-| 2 | BUG | Generated bash deploy scripts log to `~/Library/Logs/ai-tooling/deploy.log` (matching source scripts and `aitools` CLI), not `~/Library/Logs/ai-tooling-deploy.log`. |
+| 2 | BUG | Generated bash deploy scripts log to `~/Library/Logs/aitools/deploy.log` (matching source scripts and `aitools` CLI), not `~/Library/Logs/ai-tooling-deploy.log`. |
 | 3 | BUG | `setup-cursor-mcp.ps1` and `setup-user-cursor.ps1` now write BOM-free UTF-8 via `[System.IO.File]::WriteAllText` instead of `Set-Content -Encoding UTF8`. Fixes JSON parsing issues on PowerShell 5.1. |
 
 ### Improvements
@@ -700,8 +700,8 @@ Supported servers: `vercel`, `webflow`
 ### Logging Improvements
 
 All MCP setup scripts now include structured logging:
-- macOS: ~/Library/Logs/ai-tooling/deploy.log
-- Windows: %LOCALAPPDATA%\ai-tooling\deploy.log
+- macOS: ~/Library/Logs/aitools/deploy.log
+- Windows: %LOCALAPPDATA%\aitools\deploy.log
 
 All paths in log output use native OS format.
 

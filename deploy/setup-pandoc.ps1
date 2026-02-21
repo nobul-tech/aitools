@@ -8,7 +8,7 @@
 # See reference/tool-install-sources.md for install source details.
 
 # --- Logging ---
-$logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
+$logDir = Join-Path $env:LOCALAPPDATA "aitools"
 $logFile = Join-Path $logDir "deploy.log"
 $scriptName = "setup-pandoc"
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }

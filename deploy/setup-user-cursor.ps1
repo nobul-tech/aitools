@@ -9,7 +9,7 @@
 #   3. Merges preferences into ~/.cursor/cli-config.json (preserves CLI-managed fields)
 
 # --- Logging ---
-$logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
+$logDir = Join-Path $env:LOCALAPPDATA "aitools"
 $logFile = Join-Path $logDir "deploy.log"
 $scriptName = "setup-user-cursor"
 $errors = 0

@@ -4,7 +4,7 @@
 # Safe to re-run — replaces existing file with latest version.
 
 # --- Logging ---
-$logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
+$logDir = Join-Path $env:LOCALAPPDATA "aitools"
 $logFile = Join-Path $logDir "deploy.log"
 $scriptName = "setup-user-claude"
 $errors = 0

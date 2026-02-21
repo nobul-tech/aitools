@@ -2,7 +2,7 @@
 # Run once for first-time setup, or re-run via `aitools` to stay current.
 #
 # Installs/updates gh CLI, configures repos directory, auto-detects Google
-# Drive mounts, writes ~/.config/ai-tooling/config.json, installs the
+# Drive mounts, writes ~/.aitools/config.json, installs the
 # aitools command to ~/.local/bin/, adds shell integration, and deploys
 # all configuration scripts.
 
@@ -34,7 +34,7 @@ Interactive behavior:
 }
 
 # --- Logging ---
-$logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
+$logDir = Join-Path $env:LOCALAPPDATA "aitools"
 $logFile = Join-Path $logDir "deploy.log"
 $logJsonl = Join-Path $logDir "deploy.jsonl"
 $scriptName = "aitools-install"
@@ -76,7 +76,7 @@ function Invoke-ValidatedScript {
 }
 
 # --- Config file setup ---
-$configDir = Join-Path $env:USERPROFILE ".config\ai-tooling"
+$configDir = Join-Path $env:USERPROFILE ".aitools"
 $configFile = Join-Path $configDir "config.json"
 if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
 

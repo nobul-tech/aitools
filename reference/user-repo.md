@@ -78,7 +78,7 @@ Sessions are filed under a project name derived from the working directory:
 
 ## Configuration
 
-The user repo path is stored in `~/.config/ai-tooling/config.json`:
+The user repo path is stored in `~/.aitools/config.json`:
 
 ```json
 {

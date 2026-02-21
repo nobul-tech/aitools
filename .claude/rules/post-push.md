@@ -44,7 +44,7 @@ or missed `gitpull` tag.
 #### 5. Session archive readiness
 
 If `~/.claude/settings.json` contains the SessionEnd hook (`session-archive.sh`),
-verify `userRepoPath` is set in `~/.config/ai-tooling/config.json`. If hook is
+verify `userRepoPath` is set in `~/.aitools/config.json`. If hook is
 present but `userRepoPath` is missing, flag as "session archive inactive -- run
 `aitools user init`."
 

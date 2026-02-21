@@ -212,10 +212,23 @@ if ($PSBoundParameters.ContainsKey('AddMcp') -and $AddMcp.Count -eq 0) {
 }
 
 # ---------------------------------------------------------------------------
+# Migrate config directory: ~\.config\ai-tooling\ -> ~\.aitools\
+# ---------------------------------------------------------------------------
+
+$oldConfigDir = Join-Path $env:USERPROFILE ".config\ai-tooling"
+$newConfigDir = Join-Path $env:USERPROFILE ".aitools"
+
+if ((Test-Path $oldConfigDir) -and -not (Test-Path $newConfigDir)) {
+    Move-Item -Path $oldConfigDir -Destination $newConfigDir
+} elseif ((Test-Path $oldConfigDir) -and (Test-Path $newConfigDir)) {
+    Write-Host "warning: both $oldConfigDir and $newConfigDir exist -- using $newConfigDir"
+}
+
+# ---------------------------------------------------------------------------
 # Resolve repo path from config
 # ---------------------------------------------------------------------------
 
-$configFile = Join-Path $env:USERPROFILE ".config\ai-tooling\config.json"
+$configFile = Join-Path $env:USERPROFILE ".aitools\config.json"
 $repoPath = ""
 
 $raw = Read-ConfigKey -File $configFile -Key "aiToolingRepoPath"
@@ -842,7 +855,7 @@ if (-not (Test-Path (Join-Path $repoPath ".git"))) {
 # Run update (pull + rebuild + deploy/install)
 # ---------------------------------------------------------------------------
 
-$logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
+$logDir = Join-Path $env:LOCALAPPDATA "aitools"
 $logFile = Join-Path $logDir "deploy.log"
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 

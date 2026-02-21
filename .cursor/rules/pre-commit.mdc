@@ -49,4 +49,4 @@ If step 3 ran (build freshness), verify `git diff deploy/` is empty after `git a
 
 ### 10. User repo changes
 
-If this session modified files in the user dotfile repo (`userRepoPath` from `~/.config/ai-tooling/config.json`), commit those changes too. Use a commit message referencing the ai-tooling change. Skip if `userRepoPath` is not configured or the repo has no uncommitted changes.
+If this session modified files in the user dotfile repo (`userRepoPath` from `~/.aitools/config.json`), commit those changes too. Use a commit message referencing the ai-tooling change. Skip if `userRepoPath` is not configured or the repo has no uncommitted changes.

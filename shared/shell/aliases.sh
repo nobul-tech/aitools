@@ -28,9 +28,9 @@ alias ccs='claude --resume'
 # macOS only (uses osascript/pbpaste for clipboard access).
 # ---------------------------------------------------------------------------
 
-# Logging helper: appends to ~/Library/Logs/ai-tooling/clip2md.log
+# Logging helper: appends to ~/Library/Logs/aitools/clip2md.log
 _clip2md_log() {
-  local logdir="$HOME/Library/Logs/ai-tooling"
+  local logdir="$HOME/Library/Logs/aitools"
   mkdir -p "$logdir" 2>/dev/null || return 0
   local ts
   ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")

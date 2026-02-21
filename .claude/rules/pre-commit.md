@@ -45,7 +45,7 @@ If step 3 ran (build freshness), verify no unstaged deploy/ changes remain after
 ### 10. User repo changes
 
 If this session modified files in the user dotfile repo (`userRepoPath` from
-`~/.config/ai-tooling/config.json`), commit those changes too. Use a commit
+`~/.aitools/config.json`), commit those changes too. Use a commit
 message that references the ai-tooling change (e.g., "Add cursor.cli
 preferences to profile"). Skip if `userRepoPath` is not configured or the
 repo has no uncommitted changes.

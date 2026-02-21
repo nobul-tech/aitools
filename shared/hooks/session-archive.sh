@@ -43,10 +43,10 @@ if [ ! -f "$TRANSCRIPT" ]; then
     exit 0
 fi
 
-# --- Read user repo path from ai-tooling config ---
-CONFIG_FILE="${HOME}/.config/ai-tooling/config.json"
+# --- Read user repo path from aitools config ---
+CONFIG_FILE="${HOME}/.aitools/config.json"
 if [ ! -f "$CONFIG_FILE" ]; then
-    exit 0  # ai-tooling not configured
+    exit 0  # aitools not configured
 fi
 
 USER_REPO=$(json_field "$(cat "$CONFIG_FILE")" "userRepoPath")

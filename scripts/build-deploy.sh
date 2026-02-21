@@ -55,7 +55,7 @@ IDENTITY_GIT_EMAIL="jose@nobul.tech"
 CURSOR_CLI_VIMMODE=false
 CURSOR_CLI_MODEL="auto"
 
-CONFIG="$HOME/.config/ai-tooling/config.json"
+CONFIG="$HOME/.aitools/config.json"
 if [ -f "$CONFIG" ] && command -v node &>/dev/null; then
     PROFILE_VALS=$(node -e "
 const fs = require('fs'), path = require('path'), os = require('os');
@@ -119,8 +119,8 @@ bash_logging_helpers() {
     local script_name="$1"
     cat <<'LOGGING_BASH'
 # --- Logging ---
-LOG_DIR="$HOME/Library/Logs/ai-tooling"
-[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ai-tooling"
+LOG_DIR="$HOME/Library/Logs/aitools"
+[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
 LOG_FILE="$LOG_DIR/deploy.log"
 LOGGING_BASH
     echo "SCRIPT_NAME=\"$script_name\""
@@ -141,7 +141,7 @@ ps1_logging_helpers() {
     local script_name="$1"
     cat <<LOGGING_PS1
 # --- Logging ---
-\$logDir = Join-Path \$env:LOCALAPPDATA "ai-tooling"
+\$logDir = Join-Path \$env:LOCALAPPDATA "aitools"
 \$logFile = Join-Path \$logDir "deploy.log"
 \$scriptName = "$script_name"
 \$errors = 0
