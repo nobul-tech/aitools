@@ -49,12 +49,13 @@ If HEAD is already up to date with origin/main, say so and skip the diff analysi
 
 ## 3. Clear deploy log
 
-Truncate the deploy log so post-update output is isolated:
+Truncate the deploy log so post-update output is isolated.
+Use `truncate -s 0` (not shell `>` redirect, which can hang in Claude Code):
 
-- macOS: `> ~/Library/Logs/ai-tooling/deploy.log`
+- macOS: `truncate -s 0 ~/Library/Logs/ai-tooling/deploy.log`
 - Windows: `powershell.exe -Command 'Set-Content -Path "$env:LOCALAPPDATA\ai-tooling\deploy.log" -Value $null'`
 
-Detect the current platform and use the correct path.
+Detect the current platform and use the correct command.
 
 ## 4. Wait for user instruction
 
