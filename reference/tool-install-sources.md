@@ -137,7 +137,7 @@ agent --version
 
 - **Platform Status:** macOS: supported; Windows: supported
 - **Concurrency:** Yes -- independent sessions
-- **Post-Install Config:** `~/.cursor/cli-config.json` (via setup script)
+- **Post-Install Config:** `~/.cursor/cli-config.json` (merged from profile by setup script; preferences in `profile.json` under `cursor.cli`)
 - **Dependencies:** ripgrep (`rg`)
 
 ---

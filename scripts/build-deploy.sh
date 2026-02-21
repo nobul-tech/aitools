@@ -52,6 +52,8 @@ PROFILE_NAME="Jose"
 PROFILE_COMPANY="Nobul"
 IDENTITY_GIT_NAME="Jose"
 IDENTITY_GIT_EMAIL="jose@nobul.tech"
+CURSOR_CLI_VIMMODE=false
+CURSOR_CLI_MODEL="auto"
 
 CONFIG="$HOME/.config/ai-tooling/config.json"
 if [ -f "$CONFIG" ] && command -v node &>/dev/null; then
@@ -74,11 +76,19 @@ try {
         prof = { name: p.name, company: p.company || '' };
         ident = { git: { name: (p.git && p.git.name) || p.name, email: (p.git && p.git.email) || p.email } };
     }
+    // Cursor CLI preferences
+    let cursorCli = { vimMode: false, model: 'auto' };
+    if (p.cursor && p.cursor.cli) {
+        if (typeof p.cursor.cli.vimMode === 'boolean') cursorCli.vimMode = p.cursor.cli.vimMode;
+        if (typeof p.cursor.cli.model === 'string') cursorCli.model = p.cursor.cli.model;
+    }
     // Output as KEY=VALUE lines for bash eval
     console.log('PROFILE_NAME=' + JSON.stringify(prof.name));
     console.log('PROFILE_COMPANY=' + JSON.stringify(prof.company));
     console.log('IDENTITY_GIT_NAME=' + JSON.stringify(ident.git.name));
     console.log('IDENTITY_GIT_EMAIL=' + JSON.stringify(ident.git.email));
+    console.log('CURSOR_CLI_VIMMODE=' + JSON.stringify(cursorCli.vimMode));
+    console.log('CURSOR_CLI_MODEL=' + JSON.stringify(cursorCli.model));
 } catch(e) { process.exit(1); }
 " "$CONFIG" 2>/dev/null) && eval "$PROFILE_VALS"
 fi
@@ -90,6 +100,7 @@ CLAUDE_SHARED_CONTENT="${CLAUDE_SHARED_CONTENT//\{\{IDENTITY_GIT_NAME\}\}/$IDENT
 CLAUDE_SHARED_CONTENT="${CLAUDE_SHARED_CONTENT//\{\{IDENTITY_GIT_EMAIL\}\}/$IDENTITY_GIT_EMAIL}"
 
 blog "Profile interpolation: name=$PROFILE_NAME company=$PROFILE_COMPANY"
+blog "Cursor CLI prefs: vimMode=$CURSOR_CLI_VIMMODE model=$CURSOR_CLI_MODEL"
 
 # Clean and recreate deploy/
 rm -rf "$DEPLOY_DIR"
@@ -388,7 +399,7 @@ blog "Generating deploy/setup-user-cursor.sh"
 # Does three things:
 #   1. Installs ripgrep (rg) if not already present (required by Cursor CLI)
 #   2. Installs Cursor CLI (agent command) if not already present
-#   3. Writes ~/.cursor/cli-config.json (skips if already up to date)
+#   3. Merges preferences into ~/.cursor/cli-config.json (preserves CLI-managed fields)
 
 set -euo pipefail
 
@@ -436,35 +447,70 @@ else
     fi
 fi
 
-# --- 3. cli-config.json ---
+# --- 3. cli-config.json (merge, not overwrite) ---
 log "Step 3: cli-config.json"
-
-EXPECTED_CONFIG='{
-  "version": 1,
-  "editor": {
-    "vimMode": false
-  },
-  "permissions": {
-    "allow": [],
-    "deny": []
-  }
-}'
 
 mkdir -p "$CURSOR_DIR"
 
-if [ -f "$CLI_CONFIG" ]; then
-    EXISTING_CONFIG=$(cat "$CLI_CONFIG")
-    if [ "$EXISTING_CONFIG" = "$EXPECTED_CONFIG" ]; then
-        log_ok "Already up to date: $CLI_CONFIG"
-    else
-        printf '%s' "$EXPECTED_CONFIG" > "$CLI_CONFIG"
-        log_ok "Updated: $CLI_CONFIG"
-    fi
+if ! command -v node &>/dev/null; then
+    log_warn "node not found -- skipping cli-config.json merge"
 else
-    printf '%s' "$EXPECTED_CONFIG" > "$CLI_CONFIG"
-    log_ok "Created: $CLI_CONFIG"
-fi
 BLOCK
+    # Emit the node merge with embedded defaults from profile
+    cat <<BLOCK_INTERP
+    MERGE_RESULT=\$(node -e "
+const fs = require('fs');
+const f = process.argv[1];
+
+// --- Embedded preferences (from profile.json at build time) ---
+const vimMode = $CURSOR_CLI_VIMMODE;
+const modelId = '$CURSOR_CLI_MODEL';
+
+// --- Read existing cli-config.json ---
+let config = {};
+try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+const before = JSON.stringify(config);
+
+// --- Merge managed fields ---
+config.version = 1;
+if (!config.editor) config.editor = {};
+config.editor.vimMode = vimMode;
+if (!config.permissions) config.permissions = {};
+if (!Array.isArray(config.permissions.allow)) config.permissions.allow = [];
+if (!Array.isArray(config.permissions.deny)) config.permissions.deny = [];
+
+if (modelId === 'auto') {
+    config.model = {
+        modelId: 'default',
+        displayModelId: 'auto',
+        displayName: 'Auto',
+        displayNameShort: 'Auto',
+        aliases: ['auto'],
+        maxMode: false
+    };
+    config.hasChangedDefaultModel = true;
+}
+
+// All other fields (authInfo, privacyCache, network, statsigBootstrap, maxMode, etc.)
+// are preserved -- we never delete keys we don't manage.
+
+const after = JSON.stringify(config);
+if (before === after) {
+    console.log('unchanged');
+} else {
+    fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\\\\n');
+    console.log(before === '{}' ? 'created' : 'merged');
+}
+" "\$CLI_CONFIG")
+
+    case "\$MERGE_RESULT" in
+        unchanged) log_ok "Already up to date: \$CLI_CONFIG" ;;
+        created)   log_ok "Created: \$CLI_CONFIG" ;;
+        merged)    log_ok "Merged preferences into: \$CLI_CONFIG" ;;
+        *)         log_error "Unexpected merge result: \$MERGE_RESULT" ;;
+    esac
+fi
+BLOCK_INTERP
     bash_exit_footer
 } > "$DEPLOY_DIR/setup-user-cursor.sh"
 
@@ -486,7 +532,7 @@ blog "Generating deploy/setup-user-cursor.ps1"
 # Does three things:
 #   1. Installs ripgrep (rg) if not already present (required by Cursor CLI)
 #   2. Installs Cursor CLI (agent command) if not already present
-#   3. Writes ~/.cursor/cli-config.json (skips if already up to date)
+#   3. Merges preferences into ~/.cursor/cli-config.json (preserves CLI-managed fields)
 
 BLOCK
     ps1_logging_helpers "setup-user-cursor"
@@ -540,40 +586,75 @@ if ($agentCmd) {
     }
 }
 
-# --- 3. cli-config.json ---
+# --- 3. cli-config.json (merge, not overwrite) ---
 Log "Step 3: cli-config.json"
-
-$expectedConfig = @'
-{
-  "version": 1,
-  "editor": {
-    "vimMode": false
-  },
-  "permissions": {
-    "allow": [],
-    "deny": []
-  }
-}
-'@
 
 if (-not (Test-Path $cursorDir)) {
     New-Item -ItemType Directory -Path $cursorDir -Force | Out-Null
     Log "Created $cursorDir"
 }
 
-if (Test-Path $cliConfig) {
-    $existingConfig = (Get-Content -Path $cliConfig -Raw).TrimEnd()
-    if ($existingConfig -eq $expectedConfig) {
-        LogOk "Already up to date: $cliConfig"
-    } else {
-        [System.IO.File]::WriteAllText($cliConfig, $expectedConfig, [System.Text.UTF8Encoding]::new($false))
-        LogOk "Updated: $cliConfig"
-    }
+$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+if (-not $nodeCmd) {
+    LogWarn "node not found -- skipping cli-config.json merge"
 } else {
-    [System.IO.File]::WriteAllText($cliConfig, $expectedConfig, [System.Text.UTF8Encoding]::new($false))
-    LogOk "Created: $cliConfig"
-}
 BLOCK
+    # Emit the node merge with embedded defaults from profile
+    # Use PS1 here-string (@'...'@) for the JS code to avoid quoting issues
+    cat <<BLOCK_INTERP
+    \$mergeResult = & node -e @'
+const fs = require('fs');
+const f = process.argv[1];
+
+// --- Embedded preferences (from profile.json at build time) ---
+const vimMode = $CURSOR_CLI_VIMMODE;
+const modelId = '$CURSOR_CLI_MODEL';
+
+// --- Read existing cli-config.json ---
+let config = {};
+try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+const before = JSON.stringify(config);
+
+// --- Merge managed fields ---
+config.version = 1;
+if (!config.editor) config.editor = {};
+config.editor.vimMode = vimMode;
+if (!config.permissions) config.permissions = {};
+if (!Array.isArray(config.permissions.allow)) config.permissions.allow = [];
+if (!Array.isArray(config.permissions.deny)) config.permissions.deny = [];
+
+if (modelId === 'auto') {
+    config.model = {
+        modelId: 'default',
+        displayModelId: 'auto',
+        displayName: 'Auto',
+        displayNameShort: 'Auto',
+        aliases: ['auto'],
+        maxMode: false
+    };
+    config.hasChangedDefaultModel = true;
+}
+
+// All other fields (authInfo, privacyCache, network, statsigBootstrap, maxMode, etc.)
+// are preserved -- we never delete keys we don't manage.
+
+const after = JSON.stringify(config);
+if (before === after) {
+    console.log('unchanged');
+} else {
+    fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\n');
+    console.log(before === '{}' ? 'created' : 'merged');
+}
+'@ \$cliConfig
+
+    switch (\$mergeResult) {
+        "unchanged" { LogOk "Already up to date: \$cliConfig" }
+        "created"   { LogOk "Created: \$cliConfig" }
+        "merged"    { LogOk "Merged preferences into: \$cliConfig" }
+        default     { LogError "Unexpected merge result: \$mergeResult" }
+    }
+}
+BLOCK_INTERP
     ps1_exit_footer
 } > "$DEPLOY_DIR/setup-user-cursor.ps1"
 

@@ -7,7 +7,7 @@
 # Does three things:
 #   1. Installs ripgrep (rg) if not already present (required by Cursor CLI)
 #   2. Installs Cursor CLI (agent command) if not already present
-#   3. Writes ~/.cursor/cli-config.json (skips if already up to date)
+#   3. Merges preferences into ~/.cursor/cli-config.json (preserves CLI-managed fields)
 
 set -euo pipefail
 
@@ -71,33 +71,65 @@ else
     fi
 fi
 
-# --- 3. cli-config.json ---
+# --- 3. cli-config.json (merge, not overwrite) ---
 log "Step 3: cli-config.json"
-
-EXPECTED_CONFIG='{
-  "version": 1,
-  "editor": {
-    "vimMode": false
-  },
-  "permissions": {
-    "allow": [],
-    "deny": []
-  }
-}'
 
 mkdir -p "$CURSOR_DIR"
 
-if [ -f "$CLI_CONFIG" ]; then
-    EXISTING_CONFIG=$(cat "$CLI_CONFIG")
-    if [ "$EXISTING_CONFIG" = "$EXPECTED_CONFIG" ]; then
-        log_ok "Already up to date: $CLI_CONFIG"
-    else
-        printf '%s' "$EXPECTED_CONFIG" > "$CLI_CONFIG"
-        log_ok "Updated: $CLI_CONFIG"
-    fi
+if ! command -v node &>/dev/null; then
+    log_warn "node not found -- skipping cli-config.json merge"
 else
-    printf '%s' "$EXPECTED_CONFIG" > "$CLI_CONFIG"
-    log_ok "Created: $CLI_CONFIG"
+    MERGE_RESULT=$(node -e "
+const fs = require('fs');
+const f = process.argv[1];
+
+// --- Embedded preferences (from profile.json at build time) ---
+const vimMode = true;
+const modelId = 'auto';
+
+// --- Read existing cli-config.json ---
+let config = {};
+try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+const before = JSON.stringify(config);
+
+// --- Merge managed fields ---
+config.version = 1;
+if (!config.editor) config.editor = {};
+config.editor.vimMode = vimMode;
+if (!config.permissions) config.permissions = {};
+if (!Array.isArray(config.permissions.allow)) config.permissions.allow = [];
+if (!Array.isArray(config.permissions.deny)) config.permissions.deny = [];
+
+if (modelId === 'auto') {
+    config.model = {
+        modelId: 'default',
+        displayModelId: 'auto',
+        displayName: 'Auto',
+        displayNameShort: 'Auto',
+        aliases: ['auto'],
+        maxMode: false
+    };
+    config.hasChangedDefaultModel = true;
+}
+
+// All other fields (authInfo, privacyCache, network, statsigBootstrap, maxMode, etc.)
+// are preserved -- we never delete keys we don't manage.
+
+const after = JSON.stringify(config);
+if (before === after) {
+    console.log('unchanged');
+} else {
+    fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\\n');
+    console.log(before === '{}' ? 'created' : 'merged');
+}
+" "$CLI_CONFIG")
+
+    case "$MERGE_RESULT" in
+        unchanged) log_ok "Already up to date: $CLI_CONFIG" ;;
+        created)   log_ok "Created: $CLI_CONFIG" ;;
+        merged)    log_ok "Merged preferences into: $CLI_CONFIG" ;;
+        *)         log_error "Unexpected merge result: $MERGE_RESULT" ;;
+    esac
 fi
 
 # --- Exit ---

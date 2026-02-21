@@ -6,7 +6,7 @@
 # Does three things:
 #   1. Installs ripgrep (rg) if not already present (required by Cursor CLI)
 #   2. Installs Cursor CLI (agent command) if not already present
-#   3. Writes ~/.cursor/cli-config.json (skips if already up to date)
+#   3. Merges preferences into ~/.cursor/cli-config.json (preserves CLI-managed fields)
 
 # --- Logging ---
 $logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
@@ -79,38 +79,69 @@ if ($agentCmd) {
     }
 }
 
-# --- 3. cli-config.json ---
+# --- 3. cli-config.json (merge, not overwrite) ---
 Log "Step 3: cli-config.json"
-
-$expectedConfig = @'
-{
-  "version": 1,
-  "editor": {
-    "vimMode": false
-  },
-  "permissions": {
-    "allow": [],
-    "deny": []
-  }
-}
-'@
 
 if (-not (Test-Path $cursorDir)) {
     New-Item -ItemType Directory -Path $cursorDir -Force | Out-Null
     Log "Created $cursorDir"
 }
 
-if (Test-Path $cliConfig) {
-    $existingConfig = (Get-Content -Path $cliConfig -Raw).TrimEnd()
-    if ($existingConfig -eq $expectedConfig) {
-        LogOk "Already up to date: $cliConfig"
-    } else {
-        [System.IO.File]::WriteAllText($cliConfig, $expectedConfig, [System.Text.UTF8Encoding]::new($false))
-        LogOk "Updated: $cliConfig"
-    }
+$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+if (-not $nodeCmd) {
+    LogWarn "node not found -- skipping cli-config.json merge"
 } else {
-    [System.IO.File]::WriteAllText($cliConfig, $expectedConfig, [System.Text.UTF8Encoding]::new($false))
-    LogOk "Created: $cliConfig"
+    $mergeResult = & node -e @'
+const fs = require('fs');
+const f = process.argv[1];
+
+// --- Embedded preferences (from profile.json at build time) ---
+const vimMode = true;
+const modelId = 'auto';
+
+// --- Read existing cli-config.json ---
+let config = {};
+try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+const before = JSON.stringify(config);
+
+// --- Merge managed fields ---
+config.version = 1;
+if (!config.editor) config.editor = {};
+config.editor.vimMode = vimMode;
+if (!config.permissions) config.permissions = {};
+if (!Array.isArray(config.permissions.allow)) config.permissions.allow = [];
+if (!Array.isArray(config.permissions.deny)) config.permissions.deny = [];
+
+if (modelId === 'auto') {
+    config.model = {
+        modelId: 'default',
+        displayModelId: 'auto',
+        displayName: 'Auto',
+        displayNameShort: 'Auto',
+        aliases: ['auto'],
+        maxMode: false
+    };
+    config.hasChangedDefaultModel = true;
+}
+
+// All other fields (authInfo, privacyCache, network, statsigBootstrap, maxMode, etc.)
+// are preserved -- we never delete keys we don't manage.
+
+const after = JSON.stringify(config);
+if (before === after) {
+    console.log('unchanged');
+} else {
+    fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\n');
+    console.log(before === '{}' ? 'created' : 'merged');
+}
+'@ $cliConfig
+
+    switch ($mergeResult) {
+        "unchanged" { LogOk "Already up to date: $cliConfig" }
+        "created"   { LogOk "Created: $cliConfig" }
+        "merged"    { LogOk "Merged preferences into: $cliConfig" }
+        default     { LogError "Unexpected merge result: $mergeResult" }
+    }
 }
 
 # --- Exit ---

@@ -1,10 +1,11 @@
 # setup-user-cursor.ps1 — Sets up Cursor CLI + dependencies on Windows
 # Safe to re-run — checks each step and skips what's already done.
+# Install commands reference: reference/tool-install-sources.md
 #
 # Does three things:
 #   1. Installs ripgrep (rg) if not already present (required by Cursor CLI)
 #   2. Installs Cursor CLI (agent command) if not already present
-#   3. Writes ~/.cursor/cli-config.json (skips if already up to date)
+#   3. Merges preferences into ~/.cursor/cli-config.json (preserves CLI-managed fields)
 
 # --- Logging ---
 $logDir = Join-Path $env:LOCALAPPDATA "ai-tooling"
@@ -95,22 +96,9 @@ if ($agentCmd) {
     }
 }
 
-# --- 3. cli-config.json ---
+# --- 3. cli-config.json (merge, not overwrite) ---
 
 Log "Step 3: cli-config.json"
-
-$expectedConfig = @'
-{
-  "version": 1,
-  "editor": {
-    "vimMode": false
-  },
-  "permissions": {
-    "allow": [],
-    "deny": []
-  }
-}
-'@
 
 # Ensure ~/.cursor/ exists
 if (-not (Test-Path $cursorDir)) {
@@ -118,20 +106,91 @@ if (-not (Test-Path $cursorDir)) {
     Log "Created $cursorDir"
 }
 
-if (Test-Path $cliConfig) {
-    $existingConfig = (Get-Content -Path $cliConfig -Raw).TrimEnd()
-    if ($existingConfig -eq $expectedConfig) {
-        LogOk "Already up to date: $cliConfig"
-        $status.cliConfig = "already up to date"
-    } else {
-        [System.IO.File]::WriteAllText($cliConfig, $expectedConfig, [System.Text.UTF8Encoding]::new($false))
-        LogOk "Updated: $cliConfig"
-        $status.cliConfig = "updated"
-    }
+$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+if (-not $nodeCmd) {
+    LogWarn "node not found -- skipping cli-config.json merge"
+    $status.cliConfig = "SKIPPED (node not found)"
 } else {
-    [System.IO.File]::WriteAllText($cliConfig, $expectedConfig, [System.Text.UTF8Encoding]::new($false))
-    LogOk "Created: $cliConfig"
-    $status.cliConfig = "created"
+    # Read cursor.cli preferences from profile.json (via config.json -> userRepoPath).
+    # Falls back to defaults if profile not found. Uses node for JSON merge
+    # (same pattern as setup-user-mcp.ps1 settings merge).
+
+    $mergeResult = & node -e @'
+const fs = require('fs');
+const path = require('path');
+const f = process.argv[1];
+
+// --- Read profile preferences ---
+let vimMode = false;
+let modelId = 'auto';
+try {
+    const cfgPath = path.join(process.env.HOME || process.env.USERPROFILE, '.config', 'ai-tooling', 'config.json');
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    if (cfg.userRepoPath) {
+        const pf = JSON.parse(fs.readFileSync(path.join(cfg.userRepoPath, 'profile.json'), 'utf8'));
+        if (pf.cursor && pf.cursor.cli) {
+            if (typeof pf.cursor.cli.vimMode === 'boolean') vimMode = pf.cursor.cli.vimMode;
+            if (typeof pf.cursor.cli.model === 'string') modelId = pf.cursor.cli.model;
+        }
+    }
+} catch {}
+
+// --- Read existing cli-config.json ---
+let config = {};
+try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+const before = JSON.stringify(config);
+
+// --- Merge managed fields ---
+config.version = 1;
+if (!config.editor) config.editor = {};
+config.editor.vimMode = vimMode;
+if (!config.permissions) config.permissions = {};
+if (!Array.isArray(config.permissions.allow)) config.permissions.allow = [];
+if (!Array.isArray(config.permissions.deny)) config.permissions.deny = [];
+
+// Model: only set if profile specifies 'auto' (the only supported value for now)
+if (modelId === 'auto') {
+    config.model = {
+        modelId: 'default',
+        displayModelId: 'auto',
+        displayName: 'Auto',
+        displayNameShort: 'Auto',
+        aliases: ['auto'],
+        maxMode: false
+    };
+    config.hasChangedDefaultModel = true;
+}
+
+// All other fields (authInfo, privacyCache, network, statsigBootstrap, maxMode, etc.)
+// are preserved -- we never delete keys we don't manage.
+
+const after = JSON.stringify(config);
+if (before === after) {
+    console.log('unchanged');
+} else {
+    fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\n');
+    console.log(before === '{}' ? 'created' : 'merged');
+}
+'@ $cliConfig
+
+    switch ($mergeResult) {
+        "unchanged" {
+            LogOk "Already up to date: $cliConfig"
+            $status.cliConfig = "already up to date"
+        }
+        "created" {
+            LogOk "Created: $cliConfig"
+            $status.cliConfig = "created"
+        }
+        "merged" {
+            LogOk "Merged preferences into: $cliConfig"
+            $status.cliConfig = "merged"
+        }
+        default {
+            LogError "Unexpected merge result: $mergeResult"
+            $status.cliConfig = "ERROR"
+        }
+    }
 }
 
 # --- Summary ---

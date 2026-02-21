@@ -85,15 +85,30 @@ Or use `scripts/setup-user-cursor.ps1` / `.sh` which handles this automatically.
 
 ### CLI Config
 
-Config lives at `~/.cursor/cli-config.json`:
+Config lives at `~/.cursor/cli-config.json`. Schema documented at
+https://cursor.com/docs/cli/reference/configuration.
+
+**Managed fields** (set by `setup-user-cursor` from `profile.json` preferences):
+- `version` (always 1), `editor.vimMode`, `model`, `hasChangedDefaultModel`
+- `permissions` (structure ensured, existing entries preserved)
+
+**Runtime fields** (set by the CLI itself, always preserved during merge):
+- `authInfo`, `privacyCache`, `network`, `statsigBootstrap`, `maxMode`
+
+The setup scripts **merge** preferences into the existing file rather than
+overwriting. Profile preferences live in `profile.json` under `cursor.cli`:
 
 ```json
-{
-  "version": 1,
-  "editor": { "vimMode": false },
-  "permissions": { "allow": [], "deny": [] }
+"cursor": {
+  "cli": {
+    "vimMode": true,
+    "model": "auto"
+  }
 }
 ```
+
+The `scripts/` version reads profile at runtime; `deploy/` scripts have
+preferences embedded at build time.
 
 ### Key Commands
 

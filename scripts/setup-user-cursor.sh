@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # setup-user-cursor.sh — Sets up Cursor CLI + dependencies on macOS/Linux
 # Safe to re-run — checks each step and skips what's already done.
+# Install commands reference: reference/tool-install-sources.md
 #
 # Does three things:
 #   1. Installs ripgrep (rg) if not already present (required by Cursor CLI)
 #   2. Installs Cursor CLI (agent command) if not already present
-#   3. Writes ~/.cursor/cli-config.json (skips if already up to date)
+#   3. Merges preferences into ~/.cursor/cli-config.json (preserves CLI-managed fields)
 
 set -euo pipefail
 
@@ -89,37 +90,91 @@ else
     fi
 fi
 
-# --- 3. cli-config.json ---
+# --- 3. cli-config.json (merge, not overwrite) ---
 
 log "Step 3: cli-config.json"
 
-EXPECTED_CONFIG='{
-  "version": 1,
-  "editor": {
-    "vimMode": false
-  },
-  "permissions": {
-    "allow": [],
-    "deny": []
-  }
-}'
-
 mkdir -p "$CURSOR_DIR"
 
-if [ -f "$CLI_CONFIG" ]; then
-    EXISTING_CONFIG=$(cat "$CLI_CONFIG")
-    if [ "$EXISTING_CONFIG" = "$EXPECTED_CONFIG" ]; then
-        log_ok "Already up to date: $(display_path "$CLI_CONFIG")"
-        STATUS_cliConfig="already up to date"
-    else
-        printf '%s' "$EXPECTED_CONFIG" > "$CLI_CONFIG"
-        log_ok "Updated: $(display_path "$CLI_CONFIG")"
-        STATUS_cliConfig="updated"
-    fi
+if ! command -v node &>/dev/null; then
+    log_warn "node not found -- skipping cli-config.json merge"
+    STATUS_cliConfig="SKIPPED (node not found)"
 else
-    printf '%s' "$EXPECTED_CONFIG" > "$CLI_CONFIG"
-    log_ok "Created: $(display_path "$CLI_CONFIG")"
-    STATUS_cliConfig="created"
+    # Read cursor.cli preferences from profile.json (via config.json -> userRepoPath).
+    # Falls back to defaults if profile not found.
+
+    MERGE_RESULT=$(node -e "
+const fs = require('fs');
+const path = require('path');
+const f = process.argv[1];
+
+// --- Read profile preferences ---
+let vimMode = false;
+let modelId = 'auto';
+try {
+    const cfgPath = path.join(process.env.HOME || process.env.USERPROFILE, '.config', 'ai-tooling', 'config.json');
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    if (cfg.userRepoPath) {
+        const pf = JSON.parse(fs.readFileSync(path.join(cfg.userRepoPath, 'profile.json'), 'utf8'));
+        if (pf.cursor && pf.cursor.cli) {
+            if (typeof pf.cursor.cli.vimMode === 'boolean') vimMode = pf.cursor.cli.vimMode;
+            if (typeof pf.cursor.cli.model === 'string') modelId = pf.cursor.cli.model;
+        }
+    }
+} catch {}
+
+// --- Read existing cli-config.json ---
+let config = {};
+try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+const before = JSON.stringify(config);
+
+// --- Merge managed fields ---
+config.version = 1;
+if (!config.editor) config.editor = {};
+config.editor.vimMode = vimMode;
+if (!config.permissions) config.permissions = {};
+if (!Array.isArray(config.permissions.allow)) config.permissions.allow = [];
+if (!Array.isArray(config.permissions.deny)) config.permissions.deny = [];
+
+// Model: only set if profile specifies 'auto' (the only supported value for now)
+if (modelId === 'auto') {
+    config.model = {
+        modelId: 'default',
+        displayModelId: 'auto',
+        displayName: 'Auto',
+        displayNameShort: 'Auto',
+        aliases: ['auto'],
+        maxMode: false
+    };
+    config.hasChangedDefaultModel = true;
+}
+
+// All other fields (authInfo, privacyCache, network, statsigBootstrap, maxMode, etc.)
+// are preserved -- we never delete keys we don't manage.
+
+const after = JSON.stringify(config);
+if (before === after) {
+    console.log('unchanged');
+} else {
+    fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\n');
+    console.log(before === '{}' ? 'created' : 'merged');
+}
+" "$CLI_CONFIG")
+
+    case "$MERGE_RESULT" in
+        unchanged)
+            log_ok "Already up to date: $(display_path "$CLI_CONFIG")"
+            STATUS_cliConfig="already up to date" ;;
+        created)
+            log_ok "Created: $(display_path "$CLI_CONFIG")"
+            STATUS_cliConfig="created" ;;
+        merged)
+            log_ok "Merged preferences into: $(display_path "$CLI_CONFIG")"
+            STATUS_cliConfig="merged" ;;
+        *)
+            log_error "Unexpected merge result: $MERGE_RESULT"
+            STATUS_cliConfig="ERROR" ;;
+    esac
 fi
 
 # --- Summary ---
