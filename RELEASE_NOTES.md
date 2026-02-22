@@ -12,6 +12,24 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.16.2 -- Config.json Version Bump to v2 (2026-02-22)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Low | **config.json stuck at v1**: `aitools-install.sh/.ps1` wrote `"version": 1` even after `userRepoPath` and `machineAlias` fields were added in v0.15. Bumped to `"version": 2` to match actual schema. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 2 | **Config schema documented**: `reference/user-repo.md` now has a full Config Schema section (v1 and v2) with field descriptions and migration notes. Follows the same pattern as the Profile Schema section. |
+
+**Verified on:** macOS (bash -n, pwsh parse). Windows: PS1 syntax validated via pwsh, functional test deferred (tested: macOS).
+
+---
+
 ## v0.16.1 -- User-Scope CLAUDE.md Migration (2026-02-22)
 
 ### Bug fixes

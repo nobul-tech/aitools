@@ -267,7 +267,7 @@ if (Test-Path $configFile) {
 }
 
 $config = [ordered]@{
-    version          = 1
+    version          = 2
     reposPath        = $resolvedReposPath
     aiToolingRepoPath = $aiToolingRepo
     googleDrives     = @($drives | ForEach-Object {

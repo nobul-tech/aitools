@@ -76,19 +76,43 @@ Sessions are filed under a project name derived from the working directory:
 
 **Known limitation:** cwd may not match the project being worked on (e.g., running Claude Code from `~/scratch` while working on `mbx-ext`). Use `aitools sessions move` to refile.
 
-## Configuration
+## Config Schema
 
-The user repo path is stored in `~/.aitools/config.json`:
+`~/.aitools/config.json` stores per-machine aitools configuration.
+
+### v2 (current)
+
+Added `userRepoPath` and `machineAlias` fields for user repo support.
 
 ```json
 {
+  "version": 2,
+  "reposPath": "/Users/pepe/repos",
+  "aiToolingRepoPath": "/Users/pepe/repos/ai-tooling",
   "userRepoPath": "/Users/pepe/repos/aitools-nobul-jose",
-  "machineAlias": "laptop"
+  "machineAlias": "laptop",
+  "googleDrives": [
+    { "path": "...", "account": "user@example.com", "label": "" }
+  ]
 }
 ```
 
-- `userRepoPath` -- set by `aitools user init`
-- `machineAlias` -- selects the profile from `profile.json`. Set during `user init` or manually.
+- **`version`** -- schema version. Bump when fields are added, removed, or semantically changed.
+- **`reposPath`** -- base directory for git repos. Set by `aitools install`.
+- **`aiToolingRepoPath`** -- path to the ai-tooling repo. Set by `aitools install`.
+- **`userRepoPath`** -- path to the user's private companion repo. Set by `aitools user init`.
+- **`machineAlias`** -- selects the profile from `profile.json`. Set during `user init` or manually.
+- **`googleDrives`** -- auto-detected Google Drive mount points. Set by `aitools install`.
+
+All fields use read-then-merge: re-running the installer preserves existing values and adds new ones.
+
+### v1 (original)
+
+Only `reposPath`, `aiToolingRepoPath`, and `googleDrives`. No user repo support.
+
+### Migration (v1 to v2)
+
+v1 configs are additive-compatible -- existing fields are preserved. The installer detects existing `userRepoPath` and `machineAlias` and preserves them during re-runs. Running `aitools install` on a v1 config upgrades it to v2.
 
 ## Archiving Mechanism
 

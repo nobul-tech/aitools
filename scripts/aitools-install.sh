@@ -437,7 +437,7 @@ fi
 
 cat > "$CONFIG_FILE" << CONFIGEOF
 {
-  "version": 1,
+  "version": 2,
   "reposPath": "$REPOS_PATH_JSON",
   "aiToolingRepoPath": "$AI_TOOLING_JSON",
 ${USER_REPO_LINE}${MACHINE_ALIAS_LINE}  "googleDrives": $DRIVES_JSON
