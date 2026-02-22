@@ -918,6 +918,21 @@ fs.writeFileSync(process.argv[7], JSON.stringify(profile, null, 2) + '\n');
                 fi
             fi
 
+            # Scaffold claude/CLAUDE.md in user repo if missing
+            claude_md_dest="$user_repo_dir/claude/CLAUDE.md"
+            if [ ! -f "$claude_md_dest" ] && [ -f "$repo_path/shared/claude-shared.md" ]; then
+                mkdir -p "$user_repo_dir/claude"
+                cp "$repo_path/shared/claude-shared.md" "$claude_md_dest"
+                echo "Created claude/CLAUDE.md in user repo (template with placeholders)"
+                if [ -d "$user_repo_dir/.git" ]; then
+                    git -C "$user_repo_dir" add claude/CLAUDE.md
+                    if [ -n "$(git -C "$user_repo_dir" status --porcelain)" ]; then
+                        git -C "$user_repo_dir" commit -m "Add claude/CLAUDE.md template"
+                        git -C "$user_repo_dir" push 2>/dev/null || true
+                    fi
+                fi
+            fi
+
             # Write userRepoPath and machineAlias to config
             if command -v node &>/dev/null; then
                 node -e "

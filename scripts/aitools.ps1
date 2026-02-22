@@ -850,6 +850,26 @@ fs.writeFileSync(process.argv[7], JSON.stringify(profile, null, 2) + '\n');
                 }
             }
 
+            # Scaffold claude/CLAUDE.md in user repo if missing
+            $claudeMdDest = Join-Path $userRepoDir "claude\CLAUDE.md"
+            $sharedTemplate = Join-Path $repoPath "shared\claude-shared.md"
+            if (-not (Test-Path $claudeMdDest) -and (Test-Path $sharedTemplate)) {
+                $claudeDestDir = Join-Path $userRepoDir "claude"
+                if (-not (Test-Path $claudeDestDir)) {
+                    New-Item -ItemType Directory -Path $claudeDestDir -Force | Out-Null
+                }
+                Copy-Item -Path $sharedTemplate -Destination $claudeMdDest
+                Write-Host "Created claude/CLAUDE.md in user repo (template with placeholders)"
+                if (Test-Path (Join-Path $userRepoDir ".git")) {
+                    git -C $userRepoDir add "claude/CLAUDE.md"
+                    $status = git -C $userRepoDir status --porcelain 2>$null
+                    if ($status) {
+                        git -C $userRepoDir commit -m "Add claude/CLAUDE.md template"
+                        git -C $userRepoDir push 2>$null
+                    }
+                }
+            }
+
             # Write userRepoPath and machineAlias to config
             if (Get-Command node -ErrorAction SilentlyContinue) {
                 node -e @"

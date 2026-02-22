@@ -12,6 +12,31 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.16.1 -- User-Scope CLAUDE.md Migration (2026-02-22)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | **Placeholder bug**: `scripts/setup-user-claude.sh/.ps1` read `shared/claude-shared.md` raw without interpolating `{{PLACEHOLDER}}` tokens. `~/.claude/CLAUDE.md` contained literal `{{PROFILE_NAME}}` etc. Fixed by adding profile.json interpolation (same pattern as `build-deploy.sh`). |
+
+### New features
+
+| # | Change |
+|---|--------|
+| 2 | **User repo CLAUDE.md template**: Personal preferences now live in `<userRepoPath>/claude/CLAUDE.md` (dotfile repo), synced across machines via git. Setup scripts read from user repo first, fall back to `shared/claude-shared.md`. |
+| 3 | **Scaffold in `user init`**: `aitools user init` copies `shared/claude-shared.md` to `<userRepoPath>/claude/CLAUDE.md` if missing, keeping placeholders for per-machine interpolation at deploy time. |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `<userRepoPath>/claude/CLAUDE.md` | Personal CLAUDE.md template with `{{PLACEHOLDER}}` tokens |
+
+**Verified on:** macOS (bash -n, pwsh parse, setup-user-claude.sh live run with resolved placeholders). Windows: PS1 syntax validated via pwsh, functional test deferred (tested: macOS).
+
+---
+
 ## v0.16 -- Profile Validation & v1 Migration (2026-02-22)
 
 ### New features

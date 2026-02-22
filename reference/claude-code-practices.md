@@ -30,8 +30,17 @@ All levels merge together. More specific wins on conflict.
 - Locations:
   - Windows: `C:\Users\jdpal\.claude\CLAUDE.md`
   - Mac: `~/.claude/CLAUDE.md`
-- Shared rules live in `shared/claude-shared.md` and are embedded into deploy scripts by `scripts/build-deploy.sh`.
-- Deploy scripts: `deploy/setup-user-claude.ps1` (Windows), `deploy/setup-user-claude.sh` (macOS) — self-contained, no repo needed at runtime.
+- **Template source** (priority order):
+  1. `<userRepoPath>/claude/CLAUDE.md` -- personal copy in the user's dotfile repo (syncs across machines via git). Contains `{{PLACEHOLDER}}` tokens.
+  2. `shared/claude-shared.md` -- fallback template in the ai-tooling repo.
+- **Deploy flow** (`scripts/setup-user-claude.sh/.ps1`):
+  1. Read template from user repo (fallback: shared template)
+  2. Read `profile.json` from user repo to get identity values for current machine
+  3. Interpolate `{{PLACEHOLDER}}` tokens (`PROFILE_NAME`, `PROFILE_COMPANY`, `IDENTITY_GIT_NAME`, `IDENTITY_GIT_EMAIL`)
+  4. Append `## Machine-Specific` footer (OS, hostname, shell)
+  5. Write to `~/.claude/CLAUDE.md`
+- **MDM deploy** (`deploy/setup-user-claude.sh/.ps1`): Self-contained with build-time embedded content. No repo or profile needed.
+- **Scaffolding**: `aitools user init` copies `shared/claude-shared.md` to `<userRepoPath>/claude/CLAUDE.md` if missing.
 
 ## Session Management Commands
 

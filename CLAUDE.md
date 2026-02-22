@@ -74,7 +74,7 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 - **Marker** is the preferred PDF-to-markdown converter
 - This directory is the **"home base"** for general/cross-project AI conversations
 - Session notes are ephemeral; durable knowledge goes in CLAUDE.md or reference/ docs (auto-memory is local to each machine, not shared)
-- Shared preferences live in `shared/claude-shared.md`, embedded into deploy scripts by `build-deploy.sh`
+- Shared preferences live in `shared/claude-shared.md` (template). User's personal copy lives in `<userRepoPath>/claude/CLAUDE.md` (syncs across machines). `scripts/setup-user-claude.sh/.ps1` reads from user repo first (fallback: shared template), interpolates `{{PLACEHOLDER}}` tokens from `profile.json`, and writes to `~/.claude/CLAUDE.md`. `deploy/` scripts use build-time embedded content (self-contained).
 - `deploy/` scripts are self-contained (zero dependencies beyond bash/PowerShell) -- MDM-ready
 - Each script has `.sh` + `.ps1` pair; deploy scripts use hard OS guards, `aitools` bash forwards to PS1 on Windows
 - Each managed tool gets dedicated `setup-<tool>.sh` + `.ps1` scripts in `scripts/`, copied to `deploy/` by build; `aitools-install` delegates to these
