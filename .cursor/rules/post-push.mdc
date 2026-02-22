@@ -37,7 +37,8 @@ Read-only check -- no setup scripts, no side effects:
 
 `bash scripts/aitools --version` -- confirms the self-update stamp and that
 the entry point parses. Also verify version matches `git describe --tags --match "v*" --abbrev=0`.
-A `+N` suffix is expected (unreleased commits); clean version should match the tag exactly.
+A `+N` suffix indicates unreleased commits -- the version tag step (below)
+will resolve this after all checks pass. Clean version should match the tag exactly.
 
 #### 5. Session archive readiness
 
@@ -137,3 +138,28 @@ should have been committed.
 For each setup script that writes JSON config files, verify it uses
 read-then-merge (not blind overwrite). Flag any `cat >` or bare
 `WriteAllText` targeting a config file that has non-managed fields.
+
+---
+
+### Version tag (after all checks pass)
+
+Runs after the applicable tier (Always or Extensive) completes with no
+unresolved flags.
+
+**Skip if:** `git describe --tags --match "v*" --exact-match HEAD` succeeds
+(HEAD is already tagged) or no `RELEASE_NOTES.md` entry was added in this push.
+
+**Steps:**
+
+1. Confirm the latest `RELEASE_NOTES.md` version entry (e.g., `v0.15.1`)
+2. Ask the user: **minor bump**, **patch bump**, or **skip**
+   - Default suggestion based on release notes: features/tools = minor,
+     bug fixes only = patch
+3. Verify the chosen tag matches the RELEASE_NOTES.md version. Mismatch = stop
+   and resolve before tagging.
+4. Create and push the tag:
+   ```
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+5. Verify: `aitools --version` should report a clean version (no `+N` suffix)
