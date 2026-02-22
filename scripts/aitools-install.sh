@@ -300,7 +300,7 @@ else
         for dir in "$HOME/Library/CloudStorage"/GoogleDrive-*/; do
             [ -d "$dir" ] || continue
             account=$(basename "$dir" | sed 's/^GoogleDrive-//')
-            my_drive="$dir/My Drive"
+            my_drive="${dir%/}/My Drive"
             if [ -d "$my_drive" ]; then
                 DRIVE_LIST="${DRIVE_LIST}${account}|${my_drive}\n"
                 log_ok "Detected Google Drive: $account → $my_drive"
@@ -365,12 +365,13 @@ if [ -f "$CONFIG_FILE" ]; then
     # Preserve userRepoPath (set by 'aitools user init')
     EXISTING_USER_REPO=$(read_config_key "$CONFIG_FILE" "userRepoPath")
     if [ -n "$EXISTING_USER_REPO" ]; then
-        USER_REPO_LINE="$(printf '  "userRepoPath": "%s",\n' "$EXISTING_USER_REPO")"
+        # printf -v preserves trailing \n ($() command substitution strips it)
+        printf -v USER_REPO_LINE '  "userRepoPath": "%s",\n' "$EXISTING_USER_REPO"
     fi
     # Preserve machineAlias (set by 'aitools user init')
     EXISTING_MACHINE_ALIAS=$(read_config_key "$CONFIG_FILE" "machineAlias")
     if [ -n "$EXISTING_MACHINE_ALIAS" ]; then
-        MACHINE_ALIAS_LINE="$(printf '  "machineAlias": "%s",\n' "$EXISTING_MACHINE_ALIAS")"
+        printf -v MACHINE_ALIAS_LINE '  "machineAlias": "%s",\n' "$EXISTING_MACHINE_ALIAS"
     fi
 fi
 
