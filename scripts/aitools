@@ -47,6 +47,209 @@ display_path() {
     fi
 }
 
+# Check profile.json for issues and optionally prompt for fixes.
+# Usage: check_profile <warn|interactive>
+# Requires: node, $repo_path, $config
+check_profile() {
+    local mode="${1:-warn}"
+    command -v node &>/dev/null || return 0
+    [ -d "$repo_path" ] || return 0
+
+    local check_script="$repo_path/scripts/profile-check.js"
+    [ -f "$check_script" ] || return 0
+
+    local result
+    result=$(node "$check_script" --config "$config" 2>/dev/null) || return 0
+
+    local status
+    status=$(printf '%s' "$result" | node -e "
+        let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
+            try{console.log(JSON.parse(d).status)}catch{console.log('error')}
+        })
+    " 2>/dev/null)
+
+    case "$status" in
+        ok|unconfigured) return 0 ;;
+        error)
+            local msg
+            msg=$(printf '%s' "$result" | node -e "
+                let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
+                    try{const r=JSON.parse(d);console.log((r.issues[0]&&r.issues[0].message)||'profile.json has issues')}catch{console.log('profile.json has issues')}
+                })
+            " 2>/dev/null)
+            printf '\033[33mprofile: %s\033[0m\n' "$msg"
+            ;;
+        warn)
+            # Print each issue as a warning
+            printf '%s' "$result" | node -e "
+                let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
+                    try{const r=JSON.parse(d);r.issues.forEach(i=>console.log(i.message))}catch{}
+                })
+            " 2>/dev/null | while IFS= read -r line; do
+                printf '\033[33mprofile: %s\033[0m\n' "$line"
+            done
+            if [ "$mode" = "interactive" ] && [ -t 0 ]; then
+                printf '\033[33mRun '\''aitools user init'\'' to fix.\033[0m\n'
+            fi
+            ;;
+        migrate)
+            printf '\033[33mprofile: profile.json is v1 (legacy). Migration to v2 recommended.\033[0m\n'
+            if [ "$mode" = "interactive" ] && [ -t 0 ]; then
+                printf "Migrate profile.json to v2 now? [y/N]: "
+                read -r answer < /dev/tty
+                if [[ "$answer" =~ ^[Yy] ]]; then
+                    migrate_profile_v1_to_v2 "$result"
+                fi
+            fi
+            ;;
+    esac
+}
+
+# Migrate a v1 profile.json to v2 format.
+# Usage: migrate_profile_v1_to_v2 <profile-check-json-output>
+# Prompts for machineAlias (only field not in v1). Preserves non-v1 sections
+# (e.g., cursor). Commits + pushes user repo.
+migrate_profile_v1_to_v2() {
+    local check_result="$1"
+
+    # Extract migration defaults
+    local defaults
+    defaults=$(printf '%s' "$check_result" | node -e "
+        let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
+            try{
+                const r=JSON.parse(d);
+                const m=r.migrationData||{};
+                console.log(m.name||'');
+                console.log(m.email||'');
+                console.log(m.github||'');
+                console.log(m.company||'');
+                console.log(r.profilePath||'');
+            }catch{}
+        })
+    " 2>/dev/null)
+
+    local mig_name mig_email mig_github mig_company profile_path
+    mig_name=$(echo "$defaults" | sed -n '1p')
+    mig_email=$(echo "$defaults" | sed -n '2p')
+    mig_github=$(echo "$defaults" | sed -n '3p')
+    mig_company=$(echo "$defaults" | sed -n '4p')
+    profile_path=$(echo "$defaults" | sed -n '5p')
+
+    if [ -z "$profile_path" ] || [ ! -f "$profile_path" ]; then
+        printf '\033[33mprofile: cannot locate profile.json for migration\033[0m\n'
+        return 1
+    fi
+
+    local user_repo_dir
+    user_repo_dir=$(dirname "$profile_path")
+
+    # Prompt for machine alias (not in v1)
+    printf "Machine alias for this machine (e.g., laptop, workstation): "
+    read -r machine_alias < /dev/tty
+
+    if [ -z "$machine_alias" ]; then
+        echo "Migration cancelled (alias required)."
+        return 1
+    fi
+
+    local shell_name
+    shell_name=$(basename "${SHELL:-/bin/bash}")
+
+    # Write v2 profile, preserving non-v1 sections
+    node -e "
+const fs = require('fs'), os = require('os');
+const profilePath = process.argv[1];
+const alias = process.argv[2];
+const migName = process.argv[3];
+const migEmail = process.argv[4];
+const migGithub = process.argv[5];
+const migCompany = process.argv[6];
+const shellName = process.argv[7];
+
+let old = {};
+try { old = JSON.parse(fs.readFileSync(profilePath, 'utf8')); } catch {}
+
+// Build v2 profile
+const v2 = {
+    version: 2,
+    identity: {
+        github: migGithub,
+        email: migEmail,
+        git: { name: migName, email: migEmail }
+    },
+    profiles: {}
+};
+
+v2.profiles[alias] = {
+    name: migName,
+    company: migCompany,
+    machine: {
+        hostname: os.hostname(),
+        os: process.platform,
+        arch: process.arch,
+        shell: shellName
+    }
+};
+
+// Preserve non-v1 sections (e.g., cursor)
+const v1Keys = ['name', 'email', 'github', 'company', 'git', 'machines', 'version'];
+for (const key of Object.keys(old)) {
+    if (!v1Keys.includes(key) && !(key in v2)) {
+        v2[key] = old[key];
+    }
+}
+
+// Handle multiple machines from v1 (add non-current ones with generated aliases)
+if (Array.isArray(old.machines)) {
+    const currentHost = os.hostname().split('.')[0];
+    let counter = 1;
+    for (const m of old.machines) {
+        const mHost = (m.hostname || '').split('.')[0];
+        if (mHost === currentHost) continue;
+        const mAlias = 'machine' + counter;
+        counter++;
+        if (!v2.profiles[mAlias]) {
+            v2.profiles[mAlias] = {
+                name: migName,
+                company: migCompany,
+                machine: m
+            };
+        }
+    }
+}
+
+fs.writeFileSync(profilePath, JSON.stringify(v2, null, 2) + '\n');
+console.log('Migrated profile.json to v2 (alias: ' + alias + ')');
+" "$profile_path" "$machine_alias" "$mig_name" "$mig_email" "$mig_github" "$mig_company" "$shell_name"
+
+    # Update machineAlias in config.json
+    node -e "
+const fs = require('fs');
+const f = process.argv[1];
+let cfg = {};
+try { cfg = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + f + ' is invalid JSON, starting with empty config'); }
+cfg.machineAlias = process.argv[2];
+fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
+" "$config" "$machine_alias"
+
+    # Commit and push user repo
+    if [ -d "$user_repo_dir/.git" ]; then
+        if [ -n "$(git -C "$user_repo_dir" status --porcelain)" ]; then
+            local git_name git_email
+            git_name=$(node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.identity.git.name||'')}catch{}" "$profile_path" 2>/dev/null)
+            git_email=$(node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.identity.git.email||'')}catch{}" "$profile_path" 2>/dev/null)
+            if [ -n "$git_name" ] && [ -n "$git_email" ]; then
+                git -C "$user_repo_dir" config user.name "$git_name"
+                git -C "$user_repo_dir" config user.email "$git_email"
+            fi
+            git -C "$user_repo_dir" add -A
+            git -C "$user_repo_dir" commit -m "Migrate profile.json from v1 to v2"
+            git -C "$user_repo_dir" push 2>/dev/null || echo "  (push failed -- run 'git push' manually in $(display_path "$user_repo_dir"))"
+            echo "Profile migrated and committed."
+        fi
+    fi
+}
+
 # Version string from a git repo using tag-based scheme.
 # v0.14.0              → 0.14.0       (on tag exactly)
 # v0.14.0-5-gabcdef    → 0.14.0+5    (5 commits ahead of tag)
@@ -531,10 +734,42 @@ try {
 " "$user_repo_dir/profile.json" 2>/dev/null)
                 fi
 
+                # Detect v1 profile and offer migration
+                if command -v node &>/dev/null && [ -f "$user_repo_dir/profile.json" ]; then
+                    local prof_version
+                    prof_version=$(node -e "
+try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.version||'')}catch{}
+" "$user_repo_dir/profile.json" 2>/dev/null)
+                    if [ "$prof_version" != "2" ]; then
+                        echo "profile.json is v1 (legacy). Migrating to v2..."
+                        local check_result
+                        check_result=$(node "$repo_path/scripts/profile-check.js" --config "$config" 2>/dev/null)
+                        if [ -n "$check_result" ]; then
+                            migrate_profile_v1_to_v2 "$check_result"
+                        fi
+                    fi
+                fi
+
             elif command -v gh &>/dev/null && gh repo view "$gh_user/$repo_name" --json name &>/dev/null; then
                 # --- Path 2: GitHub repo exists, no local clone ---
                 echo "GitHub repo exists. Cloning to $(display_path "$user_repo_dir")..."
                 gh repo clone "$gh_user/$repo_name" "$user_repo_dir"
+
+                # Detect v1 profile and offer migration
+                if command -v node &>/dev/null && [ -f "$user_repo_dir/profile.json" ]; then
+                    local prof_version
+                    prof_version=$(node -e "
+try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.version||'')}catch{}
+" "$user_repo_dir/profile.json" 2>/dev/null)
+                    if [ "$prof_version" != "2" ]; then
+                        echo "profile.json is v1 (legacy). Migrating to v2..."
+                        local check_result
+                        check_result=$(node "$repo_path/scripts/profile-check.js" --config "$config" 2>/dev/null)
+                        if [ -n "$check_result" ]; then
+                            migrate_profile_v1_to_v2 "$check_result"
+                        fi
+                    fi
+                fi
 
                 # Check if machine profile needs adding (v2 schema)
                 if command -v node &>/dev/null && [ -f "$user_repo_dir/profile.json" ]; then
@@ -1054,6 +1289,7 @@ if $do_install; then
         if ! read_config_key "$config" "userRepoPath" >/dev/null 2>&1; then
             printf '\033[33mhint: To archive sessions across machines, run '\''aitools user init'\''.\033[0m\n'
         fi
+        check_profile interactive
     else
         echo "Completed with errors (see $(display_path "$LOG_FILE"))."
     fi
@@ -1120,6 +1356,8 @@ else
 
     echo ""
     echo "Configs deployed. ($(repo_version "$repo_path"))"
+
+    check_profile interactive
 
     # Session archive hint (after final status line)
     settings_file="$HOME/.claude/settings.json"

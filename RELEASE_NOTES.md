@@ -12,6 +12,33 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.16 -- Profile Validation & v1 Migration (2026-02-22)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Profile validation**: `scripts/profile-check.js` -- standalone Node.js script that reads `config.json`, locates `profile.json`, validates v2 fields (identity, profiles, machine match), and outputs structured JSON. Detects v1 profiles needing migration, missing fields, corrupt JSON, and alias mismatches. |
+| 2 | **Profile check in sync/install flows**: `aitools` (no-args sync) and `aitools install` now run profile validation after deploy. Healthy v2 profiles produce no output. Issues show yellow warnings. v1 profiles prompt for interactive migration. Non-interactive terminals fall back to warn-only. |
+| 3 | **v1-to-v2 interactive migration**: When a v1 profile is detected, the user is prompted for a machine alias (the only field not in v1). Migration preserves non-v1 sections (e.g., `cursor` preferences), handles multiple v1 machines, commits and pushes the user repo. Available in `aitools` sync, `aitools install`, and `aitools user init`. |
+| 4 | **v1 detection in `user init`**: Paths 1 (repo exists) and 2 (GitHub clone) now detect v1 profiles and auto-trigger migration before proceeding with the existing v2 machine-addition flow. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 5 | **Standing order for dedicated tools**: Added to `shared/claude-shared.md` -- Use Read/Edit/Write/Grep/Glob for all file operations, never Bash equivalents. Elevated from coaching to standing order. |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `scripts/profile-check.js` | Standalone profile validation script (read-only, JSON output) |
+
+**Verified on:** macOS (bash -n, pwsh parse, profile-check.js with live v2 profile, aitools sync smoke test). Windows: PS1 syntax validated via pwsh, functional test deferred (tested: macOS).
+
+---
+
 ## v0.15.2 -- Post-Write Config Validation (2026-02-21)
 
 ### New features

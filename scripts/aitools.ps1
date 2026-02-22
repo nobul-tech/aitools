@@ -56,6 +56,181 @@ function Read-ConfigKey {
     return $null
 }
 
+# Check profile.json for issues and optionally prompt for fixes.
+# Usage: Invoke-ProfileCheck -Mode "warn" or "interactive"
+# Requires: node, $repoPath, $configFile
+function Invoke-ProfileCheck {
+    param([string]$Mode = "warn")
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return }
+    if (-not (Test-Path $repoPath)) { return }
+
+    $checkScript = Join-Path $repoPath "scripts\profile-check.js"
+    if (-not (Test-Path $checkScript)) { return }
+
+    try {
+        $resultJson = node $checkScript --config $configFile 2>$null
+    } catch { return }
+    if (-not $resultJson) { return }
+
+    try {
+        $result = $resultJson | ConvertFrom-Json
+    } catch { return }
+
+    switch ($result.status) {
+        "ok" { return }
+        "unconfigured" { return }
+        "error" {
+            $msg = if ($result.issues -and $result.issues.Count -gt 0) { $result.issues[0].message } else { "profile.json has issues" }
+            Write-Host "profile: $msg" -ForegroundColor Yellow
+        }
+        "warn" {
+            foreach ($issue in $result.issues) {
+                Write-Host "profile: $($issue.message)" -ForegroundColor Yellow
+            }
+            if ($Mode -eq "interactive" -and [Environment]::UserInteractive) {
+                Write-Host "Run 'aitools user init' to fix." -ForegroundColor Yellow
+            }
+        }
+        "migrate" {
+            Write-Host "profile: profile.json is v1 (legacy). Migration to v2 recommended." -ForegroundColor Yellow
+            if ($Mode -eq "interactive" -and [Environment]::UserInteractive) {
+                $answer = Read-Host "Migrate profile.json to v2 now? [y/N]"
+                if ($answer -match '^[Yy]') {
+                    Invoke-ProfileMigration -CheckResult $result
+                }
+            }
+        }
+    }
+}
+
+# Migrate a v1 profile.json to v2 format.
+# Prompts for machineAlias. Preserves non-v1 sections (e.g., cursor).
+# Commits + pushes user repo.
+function Invoke-ProfileMigration {
+    param($CheckResult)
+
+    $migData = $CheckResult.migrationData
+    if (-not $migData) {
+        Write-Host "profile: no migration data available" -ForegroundColor Yellow
+        return
+    }
+
+    $profilePath = $CheckResult.profilePath
+    if (-not $profilePath -or -not (Test-Path $profilePath)) {
+        Write-Host "profile: cannot locate profile.json for migration" -ForegroundColor Yellow
+        return
+    }
+
+    $userRepoDir = Split-Path $profilePath -Parent
+    $machAlias = Read-Host "Machine alias for this machine (e.g., laptop, workstation)"
+    if (-not $machAlias) {
+        Write-Host "Migration cancelled (alias required)."
+        return
+    }
+
+    $migName = if ($migData.name) { $migData.name } else { "" }
+    $migEmail = if ($migData.email) { $migData.email } else { "" }
+    $migGithub = if ($migData.github) { $migData.github } else { "" }
+    $migCompany = if ($migData.company) { $migData.company } else { "" }
+
+    # Write v2 profile, preserving non-v1 sections
+    node -e @"
+const fs = require('fs'), os = require('os');
+const profilePath = process.argv[1];
+const alias = process.argv[2];
+const migName = process.argv[3];
+const migEmail = process.argv[4];
+const migGithub = process.argv[5];
+const migCompany = process.argv[6];
+
+let old = {};
+try { old = JSON.parse(fs.readFileSync(profilePath, 'utf8')); } catch {}
+
+const v2 = {
+    version: 2,
+    identity: {
+        github: migGithub,
+        email: migEmail,
+        git: { name: migName, email: migEmail }
+    },
+    profiles: {}
+};
+
+v2.profiles[alias] = {
+    name: migName,
+    company: migCompany,
+    machine: {
+        hostname: os.hostname(),
+        os: process.platform,
+        arch: process.arch,
+        shell: 'powershell'
+    }
+};
+
+// Preserve non-v1 sections (e.g., cursor)
+const v1Keys = ['name', 'email', 'github', 'company', 'git', 'machines', 'version'];
+for (const key of Object.keys(old)) {
+    if (!v1Keys.includes(key) && !(key in v2)) {
+        v2[key] = old[key];
+    }
+}
+
+// Handle multiple machines from v1
+if (Array.isArray(old.machines)) {
+    const currentHost = os.hostname().split('.')[0];
+    let counter = 1;
+    for (const m of old.machines) {
+        const mHost = (m.hostname || '').split('.')[0];
+        if (mHost === currentHost) continue;
+        const mAlias = 'machine' + counter;
+        counter++;
+        if (!v2.profiles[mAlias]) {
+            v2.profiles[mAlias] = {
+                name: migName,
+                company: migCompany,
+                machine: m
+            };
+        }
+    }
+}
+
+fs.writeFileSync(profilePath, JSON.stringify(v2, null, 2) + '\n');
+console.log('Migrated profile.json to v2 (alias: ' + alias + ')');
+"@ $profilePath $machAlias $migName $migEmail $migGithub $migCompany
+
+    # Update machineAlias in config.json
+    node -e @"
+const fs = require('fs');
+const f = process.argv[1];
+let cfg = {};
+try { cfg = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + f + ' is invalid JSON, starting with empty config'); }
+cfg.machineAlias = process.argv[2];
+fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
+"@ $configFile $machAlias
+
+    # Commit and push user repo
+    if (Test-Path (Join-Path $userRepoDir ".git")) {
+        $status = git -C $userRepoDir status --porcelain 2>$null
+        if ($status) {
+            $gitName = node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.identity.git.name||'')}catch{}" $profilePath 2>$null
+            $gitEmail = node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.identity.git.email||'')}catch{}" $profilePath 2>$null
+            if ($gitName) { $gitName = $gitName.Trim() }
+            if ($gitEmail) { $gitEmail = $gitEmail.Trim() }
+            if ($gitName -and $gitEmail) {
+                git -C $userRepoDir config user.name $gitName
+                git -C $userRepoDir config user.email $gitEmail
+            }
+            git -C $userRepoDir add -A
+            git -C $userRepoDir commit -m "Migrate profile.json from v1 to v2"
+            $pushResult = git -C $userRepoDir push 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "  (push failed -- run 'git push' manually in $userRepoDir)"
+            }
+            Write-Host "Profile migrated and committed."
+        }
+    }
+}
+
 # Version string from a git repo using tag-based scheme.
 # v0.14.0              -> 0.14.0       (on tag exactly)
 # v0.14.0-5-gabcdef    -> 0.14.0+5    (5 commits ahead of tag)
@@ -490,11 +665,47 @@ try {
                     if ($machineAlias) { $machineAlias = $machineAlias.Trim() }
                 }
 
+                # Detect v1 profile and offer migration
+                $profilePath = Join-Path $userRepoDir "profile.json"
+                if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path $profilePath)) {
+                    $profVersion = node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.version||'')}catch{}" $profilePath 2>$null
+                    if ($profVersion) { $profVersion = $profVersion.Trim() }
+                    if ($profVersion -ne "2") {
+                        Write-Host "profile.json is v1 (legacy). Migrating to v2..."
+                        $checkScript = Join-Path $repoPath "scripts\profile-check.js"
+                        if (Test-Path $checkScript) {
+                            $checkResult = node $checkScript --config $configFile 2>$null
+                            if ($checkResult) {
+                                $parsed = $checkResult | ConvertFrom-Json
+                                Invoke-ProfileMigration -CheckResult $parsed
+                            }
+                        }
+                    }
+                }
+
             } elseif ((Get-Command gh -ErrorAction SilentlyContinue) -and
                       ((gh repo view "$ghUser/$repoName" --json name 2>$null) -ne $null)) {
                 # --- Path 2: GitHub repo exists, no local clone ---
                 Write-Host "GitHub repo exists. Cloning to $userRepoDir..."
                 gh repo clone "$ghUser/$repoName" $userRepoDir
+
+                # Detect v1 profile and offer migration
+                $profilePath = Join-Path $userRepoDir "profile.json"
+                if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path $profilePath)) {
+                    $profVersion = node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.version||'')}catch{}" $profilePath 2>$null
+                    if ($profVersion) { $profVersion = $profVersion.Trim() }
+                    if ($profVersion -ne "2") {
+                        Write-Host "profile.json is v1 (legacy). Migrating to v2..."
+                        $checkScript = Join-Path $repoPath "scripts\profile-check.js"
+                        if (Test-Path $checkScript) {
+                            $checkResult = node $checkScript --config $configFile 2>$null
+                            if ($checkResult) {
+                                $parsed = $checkResult | ConvertFrom-Json
+                                Invoke-ProfileMigration -CheckResult $parsed
+                            }
+                        }
+                    }
+                }
 
                 # Check if machine profile needs adding (v2 schema)
                 $profilePath = Join-Path $userRepoDir "profile.json"
@@ -980,6 +1191,7 @@ if ($doInstall) {
         if (-not $userRepo) {
             Write-Host "hint: To archive sessions across machines, run 'aitools user init'." -ForegroundColor Yellow
         }
+        Invoke-ProfileCheck -Mode "interactive"
     } else {
         Write-Host "Completed with errors (see $logFile)."
     }
@@ -1046,6 +1258,8 @@ if ($doInstall) {
 
     Write-Host ""
     Write-Host "Configs deployed. ($(Get-RepoVersion $repoPath))"
+
+    Invoke-ProfileCheck -Mode "interactive"
 
     # Session archive hint (after final status line)
     $settingsFile = Join-Path $env:USERPROFILE ".claude\settings.json"
