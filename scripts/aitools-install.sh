@@ -129,6 +129,66 @@ display_path() {
     fi
 }
 
+# --- Post-write JSON validation ---
+# Validates a JSON config file after writing: checks non-empty, valid JSON,
+# required keys present, and no double-slash paths (excluding protocol prefixes).
+validate_json_config() {
+    local file="$1"; shift
+    local required_keys=("$@")
+    if [ ! -s "$file" ]; then
+        log_error "Validation failed: $file is empty or missing"
+        return 1
+    fi
+    local validator=""
+    if command -v python3 &>/dev/null; then validator="python3"
+    elif command -v node &>/dev/null; then validator="node"
+    fi
+    if [ -z "$validator" ]; then
+        log_warn "Cannot validate JSON (no python3 or node)"
+        return 0
+    fi
+    # Valid JSON check
+    if [ "$validator" = "python3" ]; then
+        if ! python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$file" 2>/dev/null; then
+            log_error "Validation failed: $file is not valid JSON"
+            return 1
+        fi
+    else
+        if ! node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "$file" 2>/dev/null; then
+            log_error "Validation failed: $file is not valid JSON"
+            return 1
+        fi
+    fi
+    # Required fields check
+    for key in "${required_keys[@]}"; do
+        if ! grep -q "\"$key\"" "$file"; then
+            log_error "Validation failed: $file missing required field '$key'"
+            return 1
+        fi
+    done
+    # Double-slash path check (skip protocol prefixes like https://)
+    if [ "$validator" = "python3" ]; then
+        local ds_result
+        ds_result=$(python3 -c "
+import json,sys
+def check(o,p=''):
+    if isinstance(o,str):
+        s=o.replace('https://','').replace('http://','')
+        if '//' in s: print(f'double-slash at {p}: {o}',file=sys.stderr); sys.exit(1)
+    elif isinstance(o,dict):
+        for k,v in o.items(): check(v,f'{p}.{k}')
+    elif isinstance(o,list):
+        for i,v in enumerate(o): check(v,f'{p}[{i}]')
+check(json.load(open(sys.argv[1])))
+" "$file" 2>&1)
+        if [ $? -ne 0 ]; then
+            log_error "Validation failed: $file contains double-slash in path value"
+            return 1
+        fi
+    fi
+    return 0
+}
+
 # --- Config helpers (pure-bash, no python3 dependency) ---
 
 # Read a top-level string value from a JSON config file.
@@ -385,6 +445,7 @@ ${USER_REPO_LINE}${MACHINE_ALIAS_LINE}  "googleDrives": $DRIVES_JSON
 CONFIGEOF
 
 log_ok "Config written to $(display_path "$CONFIG_FILE")"
+validate_json_config "$CONFIG_FILE" version reposPath aiToolingRepoPath || true
 
 # ============================================================
 # 6. Install aitools command

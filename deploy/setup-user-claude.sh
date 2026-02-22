@@ -194,6 +194,13 @@ CLAUDE_EOF
 log_ok "Wrote $CLAUDE_MD"
 log "Machine: $OS_NAME $ARCH ($HOSTNAME), Shell: $SHELL_NAME"
 
+# Post-write validation
+if [ ! -s "$CLAUDE_MD" ]; then
+    log_error "Validation failed: $CLAUDE_MD is empty or missing"
+elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
+    log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
+fi
+
 # --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then
     log "FAILED with $ERRORS error(s). See log: $LOG_FILE"

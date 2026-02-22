@@ -101,6 +101,17 @@ $config["mcpServers"]["webflow"] = @{
 $json = $config | ConvertTo-Json -Depth 10
 [System.IO.File]::WriteAllText($mcpJson, $json, [System.Text.UTF8Encoding]::new($false))
 
+# Post-write validation
+try {
+    $vContent = [System.IO.File]::ReadAllText($mcpJson)
+    $vParsed = $vContent | ConvertFrom-Json
+    if (-not ($vParsed.PSObject.Properties.Name -contains "mcpServers")) {
+        LogError "Validation failed: $mcpJson missing required field 'mcpServers'"
+    }
+} catch {
+    LogError "Validation failed: $mcpJson is not valid JSON -- $_"
+}
+
 LogOk "Cursor MCP config written to $mcpJson"
 Log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
 

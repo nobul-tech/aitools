@@ -75,6 +75,33 @@ function Invoke-ValidatedScript {
     try { & $ScriptPath } catch { LogError "$name failed: $_" }
 }
 
+# --- Post-write JSON validation ---
+# Validates a JSON config file after writing: checks non-empty, valid JSON,
+# required keys present, and no double-slash paths (excluding protocol prefixes).
+function ValidateJsonConfig {
+    param([string]$File, [string[]]$RequiredKeys)
+    if (-not (Test-Path $File) -or (Get-Item $File).Length -eq 0) {
+        LogError "Validation failed: $File is empty or missing"
+        return
+    }
+    try {
+        $content = [System.IO.File]::ReadAllText($File)
+        $parsed = $content | ConvertFrom-Json
+    } catch {
+        LogError "Validation failed: $File is not valid JSON -- $_"
+        return
+    }
+    foreach ($key in $RequiredKeys) {
+        if (-not ($parsed.PSObject.Properties.Name -contains $key)) {
+            LogError "Validation failed: $File missing required field '$key'"
+        }
+    }
+    # Double-slash path check (skip protocol prefixes)
+    if ($content -match '"[^"]*(?<!https?:)//[^"]*"') {
+        LogError "Validation failed: $File contains double-slash in path value"
+    }
+}
+
 # --- Config file setup ---
 $configDir = Join-Path $env:USERPROFILE ".aitools"
 $configFile = Join-Path $configDir "config.json"
@@ -253,6 +280,7 @@ if ($existingMachineAlias) { $config["machineAlias"] = $existingMachineAlias }
 $jsonContent = $config | ConvertTo-Json -Depth 10
 [System.IO.File]::WriteAllText($configFile, $jsonContent, [System.Text.UTF8Encoding]::new($false))
 LogOk "Config written to $configFile"
+ValidateJsonConfig -File $configFile -RequiredKeys @("version", "reposPath", "aiToolingRepoPath")
 
 # ============================================================
 # 6. Install aitools command

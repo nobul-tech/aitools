@@ -73,6 +73,13 @@ ${SHARED_CONTENT}
 - Shell: $(basename "$SHELL")
 EOF
 
+# Post-write validation
+if [ ! -s "$CLAUDE_MD" ]; then
+    log_error "Validation failed: $CLAUDE_MD is empty or missing"
+elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
+    log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
+fi
+
 log_ok "Wrote $(display_path "$CLAUDE_MD")"
 log "Inlined shared preferences from: $(display_path "$SHARED_PATH")"
 

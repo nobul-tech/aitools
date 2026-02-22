@@ -132,6 +132,12 @@ if (before === after) {
     console.log('unchanged');
 } else {
     fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\n');
+
+    // Post-write validation
+    const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
+    const _missing = ['version'].filter(k => !(k in _v));
+    if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+
     console.log(before === '{}' ? 'created' : 'merged');
 }
 '@ $cliConfig

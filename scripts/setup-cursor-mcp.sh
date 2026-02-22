@@ -99,6 +99,10 @@ config.mcpServers['vercel'] = { url: 'https://mcp.vercel.com' };
 config.mcpServers['webflow'] = { url: 'https://mcp.webflow.com/mcp' };
 
 fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\n');
+
+// Post-write validation
+const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
+if (!_v.mcpServers) { console.error('Validation failed: missing mcpServers'); process.exit(1); }
 " "$mcp_json"
 
 log_ok "Cursor MCP config written to $(display_path "$mcp_json")"

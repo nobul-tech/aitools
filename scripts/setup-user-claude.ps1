@@ -78,6 +78,14 @@ $sharedContent
 "@
 
 [System.IO.File]::WriteAllText($claudeMd, $content, [System.Text.UTF8Encoding]::new($false))
+
+# Post-write validation
+if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
+    LogError "Validation failed: $claudeMd is empty or missing"
+} elseif (-not ((Get-Content $claudeMd -Raw) -match '## Machine-Specific')) {
+    LogError "Validation failed: $claudeMd missing Machine-Specific section"
+}
+
 LogOk "Wrote $claudeMd"
 Log "Inlined shared preferences from: $SharedPath"
 

@@ -49,8 +49,48 @@ try {
 - `ConvertTo-Json | WriteAllText` without reading existing content first
 - `try { ... } catch {}` that swallows both ENOENT and parse errors
 
+### Post-write validation
+
+Every config-writing script must validate output immediately after writing.
+A successful write that produces malformed content is worse than a visible error.
+
+#### JSON configs (bash)
+
+Use `validate_json_config` for standalone scripts that write JSON. The function
+checks: non-empty file, valid JSON (via `python3` or `node`), required keys,
+double-slash paths. Defined inline in each script (deploy scripts must be
+self-contained).
+
+Call site: `validate_json_config "$FILE" key1 key2 key3 || true`
+
+The `|| true` prevents `set -e` from exiting; `log_error` already incremented
+`ERRORS`.
+
+For scripts that write JSON via `node -e`, add inline validation inside the
+existing Node.js block after `fs.writeFileSync`:
+
+```javascript
+const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
+const _missing = ['key1','key2'].filter(k => !(k in _v));
+if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+```
+
+#### JSON configs (PowerShell)
+
+Use `ValidateJsonConfig` for PS1 scripts. Checks: non-empty file,
+`ConvertFrom-Json` parse, required keys, double-slash regex.
+
+Call site: `ValidateJsonConfig -File $file -RequiredKeys @("key1", "key2")`
+
+#### Markdown configs (CLAUDE.md)
+
+Check non-empty file and required sections (e.g., `## Machine-Specific`).
+
 ### Gold standard references
 
 - Node.js merge: `scripts/setup-user-cursor.sh` (cli-config.json)
 - PowerShell merge: `scripts/setup-user-mcp.ps1` (settings.json read-then-merge)
 - Hook merge: `scripts/setup-user-hooks.sh` (settings.json hooks array)
+- Bash `validate_json_config`: `scripts/aitools-install.sh`
+- PS1 `ValidateJsonConfig`: `scripts/aitools-install.ps1`
+- Inline Node.js validation: `scripts/setup-user-mcp.sh`

@@ -22,8 +22,20 @@ Blind overwrites silently drop user data and non-managed fields.
 - `ConvertTo-Json | WriteAllText` without reading existing content first
 - `try { ... } catch {}` that swallows both missing-file and corrupt-file errors
 
+### Post-write validation
+
+Every config-writing script must validate output after writing:
+
+1. **JSON**: Check non-empty, valid JSON parse, required keys present, no double-slash paths
+2. **Markdown** (CLAUDE.md): Check non-empty, required sections present
+3. **Bash**: Use `validate_json_config` function or inline Node.js validation after `fs.writeFileSync`
+4. **PowerShell**: Use `ValidateJsonConfig` function or inline try/catch after write
+
 ### Gold standards
 
 - Node.js merge: `scripts/setup-user-cursor.sh` (cli-config.json)
 - PowerShell merge: `scripts/setup-user-mcp.ps1` (settings.json)
 - Hook merge: `scripts/setup-user-hooks.sh` (settings.json hooks)
+- Bash `validate_json_config`: `scripts/aitools-install.sh`
+- PS1 `ValidateJsonConfig`: `scripts/aitools-install.ps1`
+- Inline Node.js validation: `scripts/setup-user-mcp.sh`

@@ -124,6 +124,18 @@ foreach ($rule in $denyRules) {
 
 $json = $settings | ConvertTo-Json -Depth 10
 [System.IO.File]::WriteAllText($settingsFile, $json, [System.Text.UTF8Encoding]::new($false))
+
+# Post-write validation
+try {
+    $vContent = [System.IO.File]::ReadAllText($settingsFile)
+    $vParsed = $vContent | ConvertFrom-Json
+    if (-not ($vParsed.PSObject.Properties.Name -contains "permissions")) {
+        LogError "Validation failed: $settingsFile missing required field 'permissions'"
+    }
+} catch {
+    LogError "Validation failed: $settingsFile is not valid JSON -- $_"
+}
+
 LogOk "Deny rules set for vercel, webflow in $settingsFile"
 
 LogOk "User-level MCP configured (all servers; vercel/webflow disabled by default)"

@@ -389,6 +389,10 @@ if (!settings.permissions.allow.includes(rule)) {
     settings.permissions.allow.push(rule);
 }
 fs.writeFileSync(f, JSON.stringify(settings, null, 2) + '\n');
+
+// Post-write validation
+const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
+if (!_v.permissions) { console.error('Validation failed: missing permissions'); process.exit(1); }
 "@ "$settingsLocal"
             Write-Host "  Claude Code: $name enabled in $settingsLocal"
         } else {
@@ -645,6 +649,11 @@ try { cfg = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !==
 cfg.userRepoPath = process.argv[2];
 if (process.argv[3]) cfg.machineAlias = process.argv[3];
 fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
+
+// Post-write validation
+const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
+const _missing = ['version','reposPath','userRepoPath'].filter(k => !(k in _v));
+if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
 "@ "$configFile" "$userRepoDir" "$machineAlias"
                 Write-Host "Config updated: userRepoPath = $userRepoDir"
                 if ($machineAlias) {

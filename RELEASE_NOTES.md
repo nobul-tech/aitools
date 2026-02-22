@@ -12,6 +12,45 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.15.2 -- Post-Write Config Validation (2026-02-21)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Post-write validation for all config writers**: Every script that writes a config file now validates output immediately after writing. JSON configs are checked for valid parse, required keys, and double-slash paths. CLAUDE.md is checked for non-empty content and required sections. Catches malformed output at write time instead of by manual inspection. |
+| 2 | **`validate_json_config` (bash) / `ValidateJsonConfig` (PS1)**: Reusable validation functions added to `aitools-install.sh/.ps1`. Uses `python3` (primary) or `node` (fallback) for JSON parsing, plus `grep` for required keys and a Python walker for double-slash path detection. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 3 | **Config write safety rule updated**: `.claude/rules/config-file-safety.md` and `.cursor/rules/config-file-safety.mdc` now document post-write validation as a requirement alongside read-then-merge, with gold standard references. |
+
+### Files modified (17 write sites across 14 scripts)
+
+| Script | Config validated | Method |
+|--------|----------------|--------|
+| `scripts/aitools-install.sh` | `config.json` | `validate_json_config` function |
+| `scripts/aitools-install.ps1` | `config.json` | `ValidateJsonConfig` function |
+| `scripts/setup-user-mcp.sh` | `settings.json` | Inline Node.js |
+| `scripts/setup-user-mcp.ps1` | `settings.json` | Inline PS1 try/catch |
+| `scripts/setup-user-hooks.sh` | `settings.json` | Inline Node.js |
+| `scripts/setup-user-hooks.ps1` | `settings.json` | Inline Node.js |
+| `scripts/setup-cursor-mcp.sh` | `mcp.json` | Inline Node.js |
+| `scripts/setup-cursor-mcp.ps1` | `mcp.json` | Inline PS1 try/catch |
+| `scripts/setup-user-cursor.sh` | `cli-config.json` | Inline Node.js |
+| `scripts/setup-user-cursor.ps1` | `cli-config.json` | Inline Node.js |
+| `scripts/setup-user-claude.sh` | `CLAUDE.md` | Inline bash checks |
+| `scripts/setup-user-claude.ps1` | `CLAUDE.md` | Inline PS1 checks |
+| `scripts/aitools` | `config.json`, `settings.local.json` | Inline Node.js |
+| `scripts/aitools.ps1` | `config.json`, `settings.local.json` | Inline Node.js |
+| `scripts/build-deploy.sh` | Generated deploy scripts | Embedded validation in templates |
+
+**Verified on:** macOS (bash -n on all scripts, deploy/ rebuilt and verified)
+
+---
+
 ## v0.15.1 -- Config Write Safety (2026-02-21)
 
 ### Bug fixes

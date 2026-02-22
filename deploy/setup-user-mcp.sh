@@ -118,6 +118,10 @@ for (const rule of denyRules) {
 }
 
 fs.writeFileSync(f, JSON.stringify(settings, null, 2) + '\n');
+
+// Post-write validation
+const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
+if (!_v.permissions) { console.error('Validation failed: missing permissions'); process.exit(1); }
 " "$settings_file"
 
 log_ok "Deny rules set for vercel, webflow in $(display_path "$settings_file")"

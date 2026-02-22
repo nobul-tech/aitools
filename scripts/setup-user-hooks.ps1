@@ -92,6 +92,10 @@ if (existing) {
 }
 
 fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+
+// Post-write validation
+const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+if (!_v.hooks) { console.error('Validation failed: missing hooks'); process.exit(1); }
 "@ "$settingsFile" "$hookCmd"
 
 LogOk "SessionEnd hook deployed to $settingsFile"
