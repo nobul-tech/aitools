@@ -12,6 +12,7 @@ Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude C
 | `.claude/rules/` | Claude Code project rules |
 | `.cursor/rules/` | Cursor project rules (.mdc format) |
 | `reference/` | Setup notes, practices, session showcase |
+| `scripts/check-*.sh/.ps1` | Automated pre-commit, pre-push, and post-push checklists |
 | `plans/` | Detailed implementation plans for roadmap items |
 | `shared/hooks/` | Claude Code hooks (session archive) |
 | `ROADMAP.md` | Active and planned work items |
@@ -95,6 +96,19 @@ bash scripts/build-deploy.sh
 # Commit both shared/ and deploy/ changes
 git add shared/ deploy/ && git commit -m "Update shared config"
 ```
+
+### Verification checklists
+
+Run before commit, push, and after push — replaces ad-hoc bash commands:
+
+```bash
+bash scripts/check-pre-commit.sh         # 12 steps; or --fix to auto-repair
+bash scripts/check-pre-push.sh           # 10 steps, read-only
+bash scripts/check-post-push.sh          # 5 always-tier steps
+bash scripts/check-post-push.sh --extensive  # all 20 steps
+```
+
+PowerShell equivalents: `check-pre-commit.ps1 [-Fix]`, `check-pre-push.ps1`, `check-post-push.ps1 [-Extensive]`.
 
 See `reference/` for deeper setup notes and practices.
 

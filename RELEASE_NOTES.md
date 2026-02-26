@@ -12,6 +12,44 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.19 -- Checklist Verification Scripts (2026-02-26)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Automated checklist scripts**: `check-pre-commit.sh/.ps1` (12 steps, `--fix` mode), `check-pre-push.sh/.ps1` (10 steps, read-only), `check-post-push.sh/.ps1` (5 always + 15 extensive steps, `--extensive` flag). Shared library `check-lib.sh/.ps1` provides colored output, counters, and summary. Replaces ad-hoc bash commands with single-command checklists. |
+| 2 | **pwsh as managed tool**: Added to `tool-install-sources.md` (macOS: supported, Windows: n/a). PS1 validation in check scripts and `build-deploy.sh` now uses pwsh on macOS. Rule files updated to treat pwsh as required. |
+| 3 | **macOS PS1 validation in build pipeline**: `build-deploy.sh` now validates all generated `.ps1` files via `pwsh` on macOS (previously skipped). |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 4 | **Invocation lifecycle field**: Added 5th required field to tool entries in `tool-install-sources.md`. Documents direct CLI command and anti-patterns per tool. |
+| 5 | **Dual deployment path rules**: New `.claude/rules/deploy-paths.md` and `.cursor/rules/deploy-paths.mdc` codify the dev/repo vs MDM path equivalence requirement. |
+| 6 | **3 coaching standing orders**: Checklist scripts (not ad-hoc commands), scratch files for complex bash, Perl for string manipulation. |
+| 7 | **Script reference notes in rules**: Pre-commit, pre-push, and post-push rule files now reference the check scripts at the top. |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `scripts/check-lib.sh` | Shared library: colors, counters, step formatters, config reader |
+| `scripts/check-lib.ps1` | PS1 equivalent |
+| `scripts/check-pre-commit.sh` | 12 pre-commit steps with `--fix` mode |
+| `scripts/check-pre-commit.ps1` | PS1 equivalent |
+| `scripts/check-pre-push.sh` | 10 pre-push steps, read-only |
+| `scripts/check-pre-push.ps1` | PS1 equivalent |
+| `scripts/check-post-push.sh` | 5 always + 15 extensive steps |
+| `scripts/check-post-push.ps1` | PS1 equivalent |
+| `.claude/rules/deploy-paths.md` | Dual deployment path rules |
+| `.cursor/rules/deploy-paths.mdc` | Cursor equivalent |
+
+**Verified on:** macOS (bash -n, pwsh ParseFile, all check scripts executed). Windows: PS1 validated via pwsh on macOS (not tested natively).
+
+---
+
 ## v0.18 -- Release Notes Gate for Version Tagging (2026-02-26)
 
 ### New features

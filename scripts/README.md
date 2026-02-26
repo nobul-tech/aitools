@@ -30,6 +30,19 @@ Setup and utility scripts for configuring AI tooling across machines.
 | `setup-user-hooks.ps1` | Windows | Deploys Claude Code SessionEnd hook to `~/.claude/settings.json` |
 | `setup-user-hooks.sh` | macOS/Linux | Deploys Claude Code SessionEnd hook to `~/.claude/settings.json` |
 
+## Verification Scripts
+
+| Script | Platform | Purpose |
+|--------|----------|---------|
+| `check-lib.sh` | macOS/Linux | Shared library: colors, counters, step formatters (sourced) |
+| `check-lib.ps1` | Windows | Shared library (dot-sourced) |
+| `check-pre-commit.sh` | macOS/Linux | 12 pre-commit steps; `--fix` auto-repairs line endings, exec bits, build |
+| `check-pre-commit.ps1` | Windows | 12 pre-commit steps; `-Fix` switch |
+| `check-pre-push.sh` | macOS/Linux | 10 pre-push steps, read-only |
+| `check-pre-push.ps1` | Windows | 10 pre-push steps, read-only |
+| `check-post-push.sh` | macOS/Linux | 5 always-tier + 15 extensive steps; `--extensive` flag |
+| `check-post-push.ps1` | Windows | 5 always-tier + 15 extensive steps; `-Extensive` switch |
+
 ## Build Pipeline
 
 | Script | Platform | Purpose |

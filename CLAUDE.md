@@ -50,6 +50,11 @@ aitools sessions list [proj]   # List archived sessions
 aitools sessions archive ID    # Manually archive a session by ID
 aitools sessions move F proj   # Refile an archived session under a different project
 
+# Verification checklists (replaces ad-hoc commands)
+bash scripts/check-pre-commit.sh       # or --fix (auto-fix line endings, exec bits, build)
+bash scripts/check-pre-push.sh         # read-only
+bash scripts/check-post-push.sh        # or --extensive (all 20 steps)
+
 # Deploy to an endpoint (no repo needed -- run from deploy/)
 # macOS/Linux:
 bash deploy/setup-user-claude.sh
