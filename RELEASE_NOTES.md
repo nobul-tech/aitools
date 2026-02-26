@@ -12,6 +12,50 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.17.1 -- Deploy Hooks to ~/.claude/hooks/ (2026-02-26)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **deploy/ variant for setup-user-hooks**: `build-deploy.sh` now generates `deploy/setup-user-hooks.sh` and `.ps1` with embedded hook script and claude preferences. MDM-only machines (no repo) now get session archive hooks and preferences. Build produces 14 scripts (was 12). |
+| 2 | **Hook deployed to ~/.claude/hooks/**: Setup scripts copy `shared/hooks/session-archive.sh` to `~/.claude/hooks/session-archive.sh` and point the `settings.json` hook command to the deployed copy. Follows the same deployed-copy pattern as skills and CLAUDE.md. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 3 | **user-repo.md updated**: Archiving Mechanism section now documents the deployed-copy pattern for hooks. |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `deploy/setup-user-hooks.sh` | Self-contained hook + preferences deploy (macOS/Linux) |
+| `deploy/setup-user-hooks.ps1` | Self-contained hook + preferences deploy (Windows) |
+
+**Verified on:** macOS (bash -n, both variants run, identical settings.json output). Windows: PS1 syntax not validated (pwsh not available), functional test deferred (tested: macOS).
+
+---
+
+## v0.17.0 -- CC Version Tracking Registry (2026-02-24)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Claude Code version dependency registry**: `reference/claude-code-version-deps.md` tracks version-dependent workarounds with severity tiers (CRITICAL/HIGH/MEDIUM/LOW), baseline versions, and upstream issue links. Post-push checklist #20 triggers review on CC upgrades. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 2 | **user-repo.md expanded**: Added Config Schema section (v2), session archive hook contract, template resolution docs. |
+
+**Verified on:** macOS. Documentation only -- no scripts modified.
+
+---
+
 ## v0.16.2 -- Config.json Version Bump to v2 (2026-02-22)
 
 ### Bug fixes
