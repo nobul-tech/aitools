@@ -94,7 +94,7 @@ step_warn "6" "Roadmap reflects reality" "check if push completes or starts a ro
 # ---------------------------------------------------------------------------
 # 7. deploy/ matches source
 # ---------------------------------------------------------------------------
-scripts_shared_changed=$(echo "$PUSH_FILES" | grep -E '^(scripts/|shared/)' || true)
+scripts_shared_changed=$(echo "$PUSH_FILES" | grep -E '^(scripts/|shared/).*\.(sh|ps1)$' || true)
 deploy_changed=$(echo "$PUSH_FILES" | grep -E '^deploy/' || true)
 if [ -z "$scripts_shared_changed" ]; then
     step_skip "7" "deploy/ matches source" "no scripts/shared changes"

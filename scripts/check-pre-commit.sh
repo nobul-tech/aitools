@@ -114,7 +114,7 @@ fi
 # 3. Build freshness
 # ---------------------------------------------------------------------------
 build_needed=false
-if echo "$STAGED_FILES" | grep -qE '^(scripts/|shared/)'; then
+if echo "$STAGED_FILES" | grep -E '^(scripts/|shared/)' | grep -qvE 'README\.md$'; then
     build_needed=true
 fi
 

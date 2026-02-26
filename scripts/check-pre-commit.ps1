@@ -93,7 +93,7 @@ if ($stagedSh.Count -eq 0 -and $stagedPs1.Count -eq 0) {
 # ---------------------------------------------------------------------------
 $buildNeeded = $false
 foreach ($f in $stagedFiles) {
-    if ($f -match '^(scripts/|shared/)') { $buildNeeded = $true; break }
+    if ($f -match '^(scripts/|shared/)' -and $f -notmatch 'README\.md$') { $buildNeeded = $true; break }
 }
 
 if ($buildNeeded) {
