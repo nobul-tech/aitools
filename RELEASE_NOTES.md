@@ -12,6 +12,25 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.18 -- Release Notes Gate for Version Tagging (2026-02-26)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Release notes enforcement in gitpull**: `aitools gitpull` now checks RELEASE_NOTES.md for a matching `## vX.Y` heading before creating a version tag. If no entry exists, tagging is skipped with a yellow warning and instructions. Prevents tags without release notes (as happened with v0.17.0). Both bash and PowerShell entry points enforce the gate. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 2 | **Pre-update command warns about missing release notes**: `/pre-update` now flags when remote commits would trigger a tag but RELEASE_NOTES.md has no matching entry. Options table notes the requirement. |
+| 3 | **Pre-commit and post-push rules updated**: Step 9 (release notes) strengthened to reference the automated enforcement. Post-push version tag section notes that gitpull now handles this automatically. Mirrored in `.cursor/rules/`. |
+
+**Verified on:** macOS (bash -n, deploy syntax OK). Windows: PS1 not validated locally (tested: macOS).
+
+---
+
 ## v0.17.1 -- Deploy Hooks to ~/.claude/hooks/ (2026-02-26)
 
 ### New features
