@@ -1246,12 +1246,28 @@ if ($doInstall) {
             $nextMinor = $latestMinor + 1
             $tag = "v0.${nextMinor}.0"
         }
-        git -C $repoPath tag $tag
-        $pushResult = git -C $repoPath push origin $tag 2>&1 | Out-String
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  Tagged $tag"
+        # Release notes gate: require a matching entry before tagging
+        $tagShort = $tag -replace '\.0$', ''  # v0.18.0 -> v0.18, v0.18.1 stays v0.18.1
+        $rnFile = Join-Path $repoPath "RELEASE_NOTES.md"
+        $tagEsc = [regex]::Escape($tag)
+        $tagShortEsc = [regex]::Escape($tagShort)
+        $rnMatch = $false
+        if (Test-Path $rnFile) {
+            $rnMatch = (Select-String -Path $rnFile -Pattern "^## $tagEsc |^## $tagShortEsc " -Quiet) -eq $true
+        }
+        if (-not $rnMatch) {
+            $today = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
+            Write-Host "  RELEASE_NOTES.md has no entry for $tag -- skipping tag." -ForegroundColor Yellow
+            Write-Host "  Add a '## $tag -- Title ($today)' section first."
+            $tag = "(skipped)"
         } else {
-            Write-Host "  Tagged $tag (local only -- push failed)"
+            git -C $repoPath tag $tag
+            $pushResult = git -C $repoPath push origin $tag 2>&1 | Out-String
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  Tagged $tag"
+            } else {
+                Write-Host "  Tagged $tag (local only -- push failed)"
+            }
         }
     }
 

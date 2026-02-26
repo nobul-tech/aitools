@@ -1341,11 +1341,19 @@ elif $do_gitpull; then
             next_minor=$((latest_minor + 1))
             tag="v0.${next_minor}.0"
         fi
-        git -C "$repo_path" tag "$tag"
-        if git -C "$repo_path" push origin "$tag" 2>/dev/null; then
-            echo "  Tagged $tag"
+        # Release notes gate: require a matching entry before tagging
+        tag_short="${tag%%.0}"  # v0.18.0 -> v0.18, v0.18.1 stays v0.18.1
+        if ! grep -q "^## ${tag} \|^## ${tag_short} " "$repo_path/RELEASE_NOTES.md" 2>/dev/null; then
+            printf '\033[33m  RELEASE_NOTES.md has no entry for %s -- skipping tag.\033[0m\n' "$tag"
+            echo "  Add a '## ${tag} -- Title ($(date -u +%Y-%m-%d))' section first."
+            tag="(skipped)"
         else
-            echo "  Tagged $tag (local only -- push failed)"
+            git -C "$repo_path" tag "$tag"
+            if git -C "$repo_path" push origin "$tag" 2>/dev/null; then
+                echo "  Tagged $tag"
+            else
+                echo "  Tagged $tag (local only -- push failed)"
+            fi
         fi
     fi
 

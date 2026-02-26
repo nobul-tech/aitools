@@ -51,7 +51,7 @@ If the commit modifies a setup script that writes JSON config files
 
 ### 9. Release notes
 
-If the commit includes new features, bug fixes, or behavioral changes, verify `RELEASE_NOTES.md` has a version entry. Omit for docs-only, rule-only, or trivial changes.
+If the commit includes new features, bug fixes, or behavioral changes, `RELEASE_NOTES.md` **must** have a version entry covering the changes. `aitools gitpull` will refuse to tag without one. Omit for docs-only, rule-only, or trivial changes that won't be tagged.
 
 ### 10. Deploy drift check
 

@@ -45,6 +45,12 @@ Based on the diffs, provide a summary covering:
 - **Deploy behavior changes**: which deploy scripts will behave differently
 - **Potential failure points**: new scripts, changed build logic, new dependencies
 
+**Release notes gate**: If remote has commits beyond the latest tag, check whether
+RELEASE_NOTES.md on remote contains a version entry that would match the next tag
+(minor or patch). If not, warn: "`aitools gitpull` will skip tagging because
+RELEASE_NOTES.md has no entry for vX.Y.Z. Add release notes on the source machine
+before pulling."
+
 If HEAD is already up to date with origin/main, say so and skip the diff analysis.
 
 ## 3. Clear deploy log
@@ -64,8 +70,8 @@ Present three options and ask which command to run:
 | Command | What it does |
 |---------|--------------|
 | `aitools` | Quiet pull + rebuild + deploy configs |
-| `aitools gitpull` | Loud pull + rebuild + deploy + changelog + minor version tag |
-| `aitools gitpull --patch` | Same as gitpull but bumps patch (v0.14.0 -> v0.14.1) |
+| `aitools gitpull` | Loud pull + rebuild + deploy + changelog + minor version tag **(requires RELEASE_NOTES.md entry)** |
+| `aitools gitpull --patch` | Same as gitpull but bumps patch (v0.14.0 -> v0.14.1) **(requires RELEASE_NOTES.md entry)** |
 | `aitools install` | Quiet pull + rebuild + full installer (tools + configs) |
 
 Do NOT run any of these yet. Wait for the user to choose.
