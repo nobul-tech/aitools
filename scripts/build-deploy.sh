@@ -41,9 +41,14 @@ for skill_file in "$SHARED_DIR/skills/chrome-devtools/SKILL.md" "$SHARED_DIR/ski
         exit 1
     fi
 done
+if [ ! -f "$SHARED_DIR/hooks/session-archive.sh" ]; then
+    blog_error "Required hook file not found: $SHARED_DIR/hooks/session-archive.sh"
+    exit 1
+fi
 
 # Read shared content
 CLAUDE_SHARED_CONTENT=$(cat "$CLAUDE_SHARED")
+HOOK_SESSION_ARCHIVE=$(cat "$SHARED_DIR/hooks/session-archive.sh")
 
 # --- Profile interpolation ---
 # Read profile from user repo, interpolate identity placeholders.
@@ -54,6 +59,8 @@ IDENTITY_GIT_NAME="Jose"
 IDENTITY_GIT_EMAIL="jose@nobul.tech"
 CURSOR_CLI_VIMMODE=false
 CURSOR_CLI_MODEL="auto"
+CLAUDE_AUTO_MEMORY=true
+CLAUDE_ALWAYS_THINKING=true
 
 CONFIG="$HOME/.aitools/config.json"
 if [ -f "$CONFIG" ] && command -v node &>/dev/null; then
@@ -82,6 +89,12 @@ try {
         if (typeof p.cursor.cli.vimMode === 'boolean') cursorCli.vimMode = p.cursor.cli.vimMode;
         if (typeof p.cursor.cli.model === 'string') cursorCli.model = p.cursor.cli.model;
     }
+    // Claude preferences
+    let claudePrefs = { autoMemory: true, alwaysThinking: true };
+    if (p.claude) {
+        if (typeof p.claude.autoMemory === 'boolean') claudePrefs.autoMemory = p.claude.autoMemory;
+        if (typeof p.claude.alwaysThinking === 'boolean') claudePrefs.alwaysThinking = p.claude.alwaysThinking;
+    }
     // Output as KEY=VALUE lines for bash eval
     console.log('PROFILE_NAME=' + JSON.stringify(prof.name));
     console.log('PROFILE_COMPANY=' + JSON.stringify(prof.company));
@@ -89,6 +102,8 @@ try {
     console.log('IDENTITY_GIT_EMAIL=' + JSON.stringify(ident.git.email));
     console.log('CURSOR_CLI_VIMMODE=' + JSON.stringify(cursorCli.vimMode));
     console.log('CURSOR_CLI_MODEL=' + JSON.stringify(cursorCli.model));
+    console.log('CLAUDE_AUTO_MEMORY=' + JSON.stringify(claudePrefs.autoMemory));
+    console.log('CLAUDE_ALWAYS_THINKING=' + JSON.stringify(claudePrefs.alwaysThinking));
 } catch(e) { process.exit(1); }
 " "$CONFIG" 2>/dev/null) && eval "$PROFILE_VALS"
 fi
@@ -101,6 +116,7 @@ CLAUDE_SHARED_CONTENT="${CLAUDE_SHARED_CONTENT//\{\{IDENTITY_GIT_EMAIL\}\}/$IDEN
 
 blog "Profile interpolation: name=$PROFILE_NAME company=$PROFILE_COMPANY"
 blog "Cursor CLI prefs: vimMode=$CURSOR_CLI_VIMMODE model=$CURSOR_CLI_MODEL"
+blog "Claude prefs: autoMemory=$CLAUDE_AUTO_MEMORY alwaysThinking=$CLAUDE_ALWAYS_THINKING"
 
 # Clean and recreate deploy/
 rm -rf "$DEPLOY_DIR"
@@ -868,6 +884,242 @@ SKILLS_PS1_HEADER
         sed -n '/^# --- Exit ---$/,$ p' | \
         sed 's/$/'$'\r''/'
 } > "$DEPLOY_DIR/setup-user-mcp.ps1"
+GENERATED=$((GENERATED + 1))
+
+# ============================================================
+# 13. deploy/setup-user-hooks.sh (template with embedded hook + prefs)
+# ============================================================
+blog "Generating deploy/setup-user-hooks.sh (with embedded hook + prefs)"
+
+{
+    echo '#!/usr/bin/env bash'
+    echo "$HEADER_COMMENT_BASH"
+    cat <<'BLOCK'
+# setup-user-hooks.sh -- Deploys Claude Code hooks and preferences to ~/.claude/settings.json
+# Self-contained: hook script and preferences are embedded below. No repo needed.
+# Safe to re-run -- merges managed fields without clobbering existing settings.
+#
+# Managed fields: hooks.SessionEnd, autoMemoryEnabled, alwaysThinkingEnabled
+# Preserved: permissions, enabledPlugins, all other fields
+
+set -euo pipefail
+
+BLOCK
+    bash_logging_helpers "setup-user-hooks"
+    bash_os_guard
+    cat <<'BLOCK'
+
+# --- Require node for JSON manipulation ---
+if ! command -v node &>/dev/null; then
+    log_error "node required for JSON manipulation"
+    exit 1
+fi
+
+# --- Deploy embedded hook script to ~/.claude/hooks/ ---
+HOOK_DEST="$HOME/.claude/hooks/session-archive.sh"
+mkdir -p "$HOME/.claude/hooks"
+
+BLOCK
+    # Embed the hook script content via heredoc
+    echo 'cat > "$HOOK_DEST" <<'"'"'__EMBEDDED_HOOK__'"'"
+    echo "$HOOK_SESSION_ARCHIVE"
+    echo '__EMBEDDED_HOOK__'
+    cat <<'BLOCK'
+
+chmod +x "$HOOK_DEST"
+log_ok "Deployed hook: $HOOK_DEST"
+
+# --- Merge hook + preferences into ~/.claude/settings.json ---
+SETTINGS_FILE="$HOME/.claude/settings.json"
+mkdir -p "$HOME/.claude"
+
+HOOK_CMD="bash \"$HOOK_DEST\""
+
+BLOCK
+    # Emit the node merge block with build-time embedded preference constants
+    cat <<BLOCK_INTERP
+node -e "
+const fs = require('fs');
+const settingsFile = process.argv[1];
+const hookCmd = process.argv[2];
+
+// --- Embedded preferences (from profile.json at build time) ---
+const autoMemory = $CLAUDE_AUTO_MEMORY;
+const alwaysThinking = $CLAUDE_ALWAYS_THINKING;
+
+// --- Read existing settings.json ---
+let settings = {};
+try { settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + settingsFile + ' is invalid JSON, starting with empty config'); }
+
+// --- Merge hook ---
+if (!settings.hooks) settings.hooks = {};
+if (!Array.isArray(settings.hooks.SessionEnd)) settings.hooks.SessionEnd = [];
+
+const hookId = 'session-archive.sh';
+const existing = settings.hooks.SessionEnd.find(rule =>
+    rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId))
+);
+
+if (existing) {
+    existing.hooks.forEach(h => {
+        if (h.command && h.command.includes(hookId)) {
+            h.command = hookCmd;
+        }
+    });
+} else {
+    settings.hooks.SessionEnd.push({
+        matcher: '',
+        hooks: [{
+            type: 'command',
+            command: hookCmd
+        }]
+    });
+}
+
+// --- Merge claude preferences ---
+settings.autoMemoryEnabled = autoMemory;
+settings.alwaysThinkingEnabled = alwaysThinking;
+
+fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+
+// Post-write validation
+const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+const _missing = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'].filter(k => !(k in _v));
+if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+" "\$SETTINGS_FILE" "\$HOOK_CMD"
+BLOCK_INTERP
+    cat <<'BLOCK'
+
+log_ok "Settings deployed to $SETTINGS_FILE"
+log "  Hook: $HOOK_CMD"
+log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"
+log "  alwaysThinkingEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).alwaysThinkingEnabled)")"
+BLOCK
+    bash_exit_footer
+} > "$DEPLOY_DIR/setup-user-hooks.sh"
+
+chmod +x "$DEPLOY_DIR/setup-user-hooks.sh"
+GENERATED=$((GENERATED + 1))
+
+# ============================================================
+# 14. deploy/setup-user-hooks.ps1 (template with embedded hook + prefs)
+# ============================================================
+blog "Generating deploy/setup-user-hooks.ps1 (with embedded hook + prefs)"
+
+{
+    echo "$HEADER_COMMENT_PS1"
+    cat <<'BLOCK'
+# setup-user-hooks.ps1 -- Deploys Claude Code hooks and preferences to ~/.claude/settings.json
+# Self-contained: hook script and preferences are embedded below. No repo needed.
+# Safe to re-run -- merges managed fields without clobbering existing settings.
+#
+# Managed fields: hooks.SessionEnd, autoMemoryEnabled, alwaysThinkingEnabled
+# Preserved: permissions, enabledPlugins, all other fields
+#
+# Note: The hook script itself is bash-only (Claude Code hooks always run in
+# bash on both platforms). This PS1 script only deploys the hook configuration.
+
+BLOCK
+    ps1_logging_helpers "setup-user-hooks"
+    ps1_os_guard
+    cat <<'BLOCK'
+
+# --- Require node for JSON manipulation ---
+$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+if (-not $nodeCmd) {
+    LogError "node required for JSON manipulation"
+    exit 1
+}
+
+# --- Deploy embedded hook script to ~/.claude/hooks/ ---
+$claudeDir = Join-Path $env:USERPROFILE ".claude"
+$hooksDir = Join-Path $claudeDir "hooks"
+if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }
+
+$hookDest = Join-Path $hooksDir "session-archive.sh"
+
+$hookContent = @'
+BLOCK
+    echo "$HOOK_SESSION_ARCHIVE"
+    cat <<'BLOCK'
+'@
+
+[System.IO.File]::WriteAllText($hookDest, $hookContent, [System.Text.UTF8Encoding]::new($false))
+LogOk "Deployed hook: $hookDest"
+
+# --- Merge hook + preferences into ~/.claude/settings.json ---
+$settingsFile = Join-Path $claudeDir "settings.json"
+if (-not (Test-Path $claudeDir)) { New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null }
+
+# Hook command uses Unix-style path (hooks run in bash even on Windows)
+$hookDestUnix = $hookDest -replace '\\', '/'
+$hookCmd = "bash `"$hookDestUnix`""
+
+BLOCK
+    # Emit node merge block with embedded prefs
+    cat <<BLOCK_INTERP
+node -e @'
+const fs = require('fs');
+const settingsFile = process.argv[1];
+const hookCmd = process.argv[2];
+
+// --- Embedded preferences (from profile.json at build time) ---
+const autoMemory = $CLAUDE_AUTO_MEMORY;
+const alwaysThinking = $CLAUDE_ALWAYS_THINKING;
+
+// --- Read existing settings.json ---
+let settings = {};
+try { settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + settingsFile + ' is invalid JSON, starting with empty config'); }
+
+// --- Merge hook ---
+if (!settings.hooks) settings.hooks = {};
+if (!Array.isArray(settings.hooks.SessionEnd)) settings.hooks.SessionEnd = [];
+
+const hookId = 'session-archive.sh';
+const existing = settings.hooks.SessionEnd.find(rule =>
+    rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId))
+);
+
+if (existing) {
+    existing.hooks.forEach(h => {
+        if (h.command && h.command.includes(hookId)) {
+            h.command = hookCmd;
+        }
+    });
+} else {
+    settings.hooks.SessionEnd.push({
+        matcher: '',
+        hooks: [{
+            type: 'command',
+            command: hookCmd
+        }]
+    });
+}
+
+// --- Merge claude preferences ---
+settings.autoMemoryEnabled = autoMemory;
+settings.alwaysThinkingEnabled = alwaysThinking;
+
+fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+
+// Post-write validation
+const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+const _missing = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'].filter(k => !(k in _v));
+if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+'@ \$settingsFile \$hookCmd
+BLOCK_INTERP
+    cat <<'BLOCK'
+
+LogOk "Settings deployed to $settingsFile"
+Log "  Hook: $hookCmd"
+# Log preference values
+$_s = Get-Content $settingsFile -Raw | ConvertFrom-Json
+Log "  autoMemoryEnabled: $($_s.autoMemoryEnabled)"
+Log "  alwaysThinkingEnabled: $($_s.alwaysThinkingEnabled)"
+BLOCK
+    ps1_exit_footer
+} > "$DEPLOY_DIR/setup-user-hooks.ps1"
+
 GENERATED=$((GENERATED + 1))
 
 # ============================================================

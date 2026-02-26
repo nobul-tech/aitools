@@ -33,6 +33,13 @@ aitools-<username>/
     "email": "<primary-email>",
     "git": { "name": "<git-name>", "email": "<git-email>" }
   },
+  "cursor": {
+    "cli": { "vimMode": true, "model": "auto" }
+  },
+  "claude": {
+    "autoMemory": false,
+    "alwaysThinking": true
+  },
   "profiles": {
     "<alias>": {
       "name": "<display-name>",
@@ -57,6 +64,8 @@ aitools-<username>/
 ```
 
 - **`identity`** -- global, shared across all machines. Git identity, GitHub username, primary email.
+- **`cursor`** -- Cursor CLI preferences. Read by `setup-user-cursor`.
+- **`claude`** -- Claude Code settings preferences. Read by `setup-user-hooks`. Keys: `autoMemory` (default true), `alwaysThinking` (default true). Maps to `autoMemoryEnabled` / `alwaysThinkingEnabled` in `~/.claude/settings.json`.
 - **`profiles`** -- keyed by user-chosen alias (e.g., "laptop", "workstation"). Display name and company can vary per machine.
 - **`overrides`** -- intentional deviations from upstream tool defaults. Informational only -- CLI does not read this yet. Mirrors the Overrides table in `reference/tool-install-sources.md` in machine-readable form. Future `aitools audit` could validate overrides against live config.
 - **Machine matching** -- `config.json` stores `"machineAlias"` on each machine. Fallback: hostname match, then first profile.
@@ -118,7 +127,10 @@ v1 configs are additive-compatible -- existing fields are preserved. The install
 
 ## Archiving Mechanism
 
-A Claude Code `SessionEnd` hook (`shared/hooks/session-archive.sh`) copies transcript files to the user repo after each session ends. The hook:
+A Claude Code `SessionEnd` hook copies transcript files to the user repo after each session ends.
+The hook source lives at `shared/hooks/session-archive.sh` in the ai-tooling repo. Setup scripts
+(`scripts/` and `deploy/` variants) copy it to `~/.claude/hooks/session-archive.sh` and point
+the `settings.json` hook command to the deployed copy. The hook:
 
 - Reads `userRepoPath` from config
 - Derives project name from the session's working directory
@@ -151,7 +163,7 @@ User repos hold personal data only. This boundary is intentional:
 | ai-tooling/shared/ | Purpose | Why not user repo |
 |--------------------|---------|-------------------|
 | `claude-shared.md` | Fallback CLAUDE.md template | Bootstrap for new users; user repo takes priority |
-| `hooks/session-archive.sh` | SessionEnd hook script | Framework code operating on user data |
+| `hooks/session-archive.sh` | SessionEnd hook source (deployed to `~/.claude/hooks/`) | Framework code operating on user data |
 | `shell/aliases.sh` + `.ps1` | Cross-platform shell aliases | Shared tooling, not personal |
 | `skills/` | Chrome DevTools / a11y skills | Vendored from upstream |
 | `mcp/` | MCP server config docs | Reference docs |
