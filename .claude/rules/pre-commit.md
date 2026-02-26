@@ -59,3 +59,9 @@ If this session modified files in the user dotfile repo (`userRepoPath` from
 message that references the ai-tooling change (e.g., "Add cursor.cli
 preferences to profile"). Skip if `userRepoPath` is not configured or the
 repo has no uncommitted changes.
+
+### 12. Template sync
+
+If `shared/claude-shared.md` was modified, also update the user repo template
+(`<userRepoPath>/claude/CLAUDE.md`) with the same changes. The user repo copy
+takes priority at runtime -- a stale copy means dev/repo deployments miss the update.

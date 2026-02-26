@@ -60,3 +60,7 @@ If step 3 ran (build freshness), verify `git diff deploy/` is empty after `git a
 ### 11. User repo changes
 
 If this session modified files in the user dotfile repo (`userRepoPath` from `~/.aitools/config.json`), commit those changes too. Use a commit message referencing the ai-tooling change. Skip if `userRepoPath` is not configured or the repo has no uncommitted changes.
+
+### 12. Template sync
+
+If `shared/claude-shared.md` was modified, also update the user repo template (`<userRepoPath>/claude/CLAUDE.md`) with the same changes. User repo copy takes priority at runtime.

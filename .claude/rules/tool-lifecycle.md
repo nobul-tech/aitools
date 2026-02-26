@@ -13,13 +13,14 @@ This applies in plan mode too — a plan that includes Phases 3-5 must note the 
 
 ### Lifecycle field completeness
 
-Every tool entry in `reference/tool-install-sources.md` (including Under Evaluation) must have all 4 fields:
+Every tool entry in `reference/tool-install-sources.md` (including Under Evaluation) must have all 5 fields:
 - **Platform Status** (per platform: `evaluating`/`approved`/`supported`/`n/a`)
 - **Concurrency** (can multiple instances run simultaneously?)
 - **Post-Install Config** (steps required after install, or "None")
 - **Dependencies** (other tools/runtimes required)
+- **Invocation** (direct CLI command and anti-patterns, or "N/A" for non-CLI)
 
-Verify all 4 fields are present before committing changes to tool entries.
+Verify all 5 fields are present before committing changes to tool entries.
 
 ### Under Evaluation guard
 
@@ -28,5 +29,6 @@ Tools with `evaluating` status on ALL platforms must NOT have:
 - Entries in `aitools-install.sh/.ps1`
 - Aliases in `shared/shell/`
 - Build pipeline entries in `build-deploy.sh`
+- Entry in CLAUDE.md Managed CLI Tools table
 
 If any of these exist for an `evaluating`-only tool, flag it as a lifecycle error.

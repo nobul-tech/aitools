@@ -128,6 +128,16 @@ Before writing a new code path that invokes `.sh` scripts, search the same file 
 - **aitools**: Cross-platform CLI for managing tool installs, configs, and MCP servers. Source: `~/repos/ai-tooling/`
 - **Marker**: Preferred PDF-to-markdown converter
 
+### Managed CLI Tools
+
+All CLI tools below are globally installed. Invoke directly by name -- never
+use `npx`, `bunx`, or other package runners.
+
+| Tool | Command |
+|------|---------|
+| Vercel CLI | `vercel` |
+| Pandoc | `pandoc` |
+
 ### Per-Platform Tools
 
 - **macOS**: Terminal.app, zsh, bash, Cursor, Claude Code, pwsh (when PowerShell needed)

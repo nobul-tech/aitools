@@ -141,6 +141,7 @@ When adding a new managed tool, follow these phases in order. Each phase has a g
    - **Concurrency** -- can multiple instances/sessions run simultaneously? Why/why not?
    - **Post-Install Config** -- steps required after install before the tool is operational (auth, login, config files). "None" if stateless.
    - **Dependencies** -- other tools/runtimes required, with version constraints if known
+   - **Invocation** -- direct CLI command and anti-patterns (e.g., "never `npx`"). "N/A" for non-CLI entries (runtimes, MCP servers).
 3. All subsequent phases reference this entry — never hardcode install commands from memory
 
 ### Phase 2: Install, Test & Approve (collaborative)
@@ -164,7 +165,7 @@ Add aliases/functions to `shared/shell/aliases.sh` + `.ps1`. These must check fo
 Create `scripts/setup-<tool>.sh` + `.ps1` following setup-vercelcli as the gold standard. Install commands come from the tool-install-sources.md entry (not memory). Include cleanup of non-preferred install methods.
 
 ### Phase 5: Installer & Build Integration
-Add step to `aitools-install.sh/.ps1`. Add copy-as-is block to `build-deploy.sh`. Promote from "Under Evaluation" to full entry if not already done.
+Add step to `aitools-install.sh/.ps1`. Add copy-as-is block to `build-deploy.sh`. Promote from "Under Evaluation" to full entry if not already done. If the tool is a CLI tool, add it to the Managed CLI Tools table in `shared/claude-shared.md` (and mirror to user repo template). Run `build-deploy.sh` to propagate to MDM path.
 
 ### Backtracking
 Each phase is independently revertible. Later phases never modify earlier artifacts — the source-of-truth entry is written once and only updated if official docs change.

@@ -77,6 +77,7 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 - Session notes are ephemeral; durable knowledge goes in CLAUDE.md or reference/ docs (auto-memory is local to each machine, not shared)
 - Shared preferences live in `shared/claude-shared.md` (template). User's personal copy lives in `<userRepoPath>/claude/CLAUDE.md` (syncs across machines). `scripts/setup-user-claude.sh/.ps1` reads from user repo first (fallback: shared template), interpolates `{{PLACEHOLDER}}` tokens from `profile.json`, and writes to `~/.claude/CLAUDE.md`. `deploy/` scripts use build-time embedded content (self-contained).
 - `deploy/` scripts are self-contained (zero dependencies beyond bash/PowerShell) -- MDM-ready
+- **Dual deployment path equivalence**: Changes to `shared/` must flow through both the dev/repo path (runtime) and MDM path (build-time embed via `build-deploy.sh`). Template changes also require syncing the user repo copy. See `.claude/rules/deploy-paths.md`.
 - Each script has `.sh` + `.ps1` pair; deploy scripts use hard OS guards, `aitools` bash forwards to PS1 on Windows
 - Each managed tool gets dedicated `setup-<tool>.sh` + `.ps1` scripts in `scripts/`, copied to `deploy/` by build; `aitools-install` delegates to these
 - `reference/tool-install-sources.md` is the source of truth for install commands -- always check before modifying installer scripts
@@ -90,7 +91,7 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 - **Release versioning**: `major.minor.patch` scheme documented at the top of `RELEASE_NOTES.md`. Major = structural changes, minor = features/tools, patch = isolated bug fixes.
 - **Roadmap tracking**: `ROADMAP.md` tracks active/planned work. Detailed plans in `plans/`. Completed items move to `RELEASE_NOTES.md`.
 - **`--isolated` for stdio MCP servers**: Chrome DevTools MCP uses `--isolated` flag for throwaway temp Chrome profiles, enabling concurrent Claude Code + Cursor sessions without Chrome profile lock conflicts
-- **Tool lifecycle entries require 4 fields**: Platform Status, Concurrency, Post-Install Config, Dependencies -- see `reference/tool-evaluation-criteria.md`
+- **Tool lifecycle entries require 5 fields**: Platform Status, Concurrency, Post-Install Config, Dependencies, Invocation -- see `reference/tool-evaluation-criteria.md`
 - **Documentation standards**: RELEASE_NOTES format, version numbering, ROADMAP format, and reference doc threshold are codified in `.claude/rules/documentation-standards.md`
 - **Claude Code version tracking**: Version-dependent workarounds tracked in `reference/claude-code-version-deps.md`. Review on CC version bumps via post-push checklist (#20).
 

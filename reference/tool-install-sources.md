@@ -47,6 +47,7 @@ Last verified: 2026-02-26 (Claude Code 2.1.59)
 - **Concurrency:** Yes -- independent sessions per directory
 - **Post-Install Config:** `~/.claude/CLAUDE.md` (via setup script), git identity
 - **Dependencies:** Git, Git Bash (Windows)
+- **Invocation:** `claude` (direct)
 
 ---
 
@@ -98,6 +99,7 @@ Related issues:
 - **Concurrency:** Yes -- stateless CLI
 - **Post-Install Config:** **`vercel login` required** -- not automated by setup scripts. Tool appears installed but is non-functional until login completes.
 - **Dependencies:** Node.js (npm method only)
+- **Invocation:** `vercel` (direct; never `npx vercel`)
 
 ---
 
@@ -139,6 +141,7 @@ agent --version
 - **Concurrency:** Yes -- independent sessions
 - **Post-Install Config:** `~/.cursor/cli-config.json` (merged from profile by setup script; preferences in `profile.json` under `cursor.cli`)
 - **Dependencies:** ripgrep (`rg`)
+- **Invocation:** `agent` (direct)
 
 ---
 
@@ -186,6 +189,7 @@ Standalone skills + our user-scope MCP config provide the same functionality wit
 - **Concurrency:** **Yes with `--isolated`**; No without (Chrome profile lock prevents concurrent sessions)
 - **Post-Install Config:** Skills deployed automatically by `setup-user-mcp`. No auth required.
 - **Dependencies:** Node.js (npx)
+- **Invocation:** N/A (MCP server; launched via npx in server config)
 
 ### Vercel MCP
 
@@ -205,6 +209,7 @@ claude mcp add --transport http --scope user vercel https://mcp.vercel.com
 - **Concurrency:** Yes -- HTTP remote server
 - **Post-Install Config:** **OAuth required** -- authenticate in Claude Code (`/mcp`) or Cursor (Settings > Tools & MCP) on first use. Tool appears configured but is non-functional until OAuth completes.
 - **Dependencies:** None
+- **Invocation:** N/A (MCP server; HTTP remote)
 
 ### Webflow MCP
 
@@ -225,6 +230,7 @@ claude mcp add --transport http --scope user webflow https://mcp.webflow.com/mcp
 - **Concurrency:** Yes -- HTTP remote server
 - **Post-Install Config:** **OAuth required** -- authenticate in Claude Code (`/mcp`) or Cursor (Settings > Tools & MCP) on first use. Tool appears configured but is non-functional until OAuth completes.
 - **Dependencies:** None
+- **Invocation:** N/A (MCP server; HTTP remote)
 
 ---
 
@@ -290,6 +296,7 @@ Required for: Chrome DevTools MCP (npx), Vercel CLI (npm), settings JSON merge i
 - **Concurrency:** Yes -- runtime
 - **Post-Install Config:** None
 - **Dependencies:** --
+- **Invocation:** N/A (runtime)
 
 ---
 
@@ -339,6 +346,7 @@ pandoc --version
 - **Concurrency:** Yes -- stateless CLI
 - **Post-Install Config:** None
 - **Dependencies:** --
+- **Invocation:** `pandoc` (direct)
 
 ---
 
@@ -390,3 +398,4 @@ pandoc input.md --pdf-engine=typst -o output.pdf
 - **Concurrency:** Yes -- stateless CLI
 - **Post-Install Config:** None
 - **Dependencies:** Pandoc (when used as `--pdf-engine`)
+- **Invocation:** `typst` (pending approval)

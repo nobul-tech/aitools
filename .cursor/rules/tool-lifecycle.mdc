@@ -19,8 +19,8 @@ This applies in plan mode too -- a plan that includes Phases 3-5 must note the P
 
 ### Lifecycle field completeness
 
-Every tool in `reference/tool-install-sources.md` (including Under Evaluation) must have: Platform Status, Concurrency, Post-Install Config, Dependencies. Verify before committing.
+Every tool in `reference/tool-install-sources.md` (including Under Evaluation) must have: Platform Status, Concurrency, Post-Install Config, Dependencies, Invocation. Verify before committing.
 
 ### Under Evaluation guard
 
-Tools with `evaluating` on ALL platforms must NOT have: setup scripts, installer entries, aliases, or build pipeline entries. Flag violations as lifecycle errors.
+Tools with `evaluating` on ALL platforms must NOT have: setup scripts, installer entries, aliases, build pipeline entries, or CLAUDE.md Managed CLI Tools entries. Flag violations as lifecycle errors.
