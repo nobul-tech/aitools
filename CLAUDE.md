@@ -68,6 +68,7 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 | This repo | `C:\repos\ai-tooling` | `~/repos/ai-tooling` |
 | User CLAUDE.md | `~/.claude/CLAUDE.md` | `~/.claude/CLAUDE.md` |
 | Shared config | `shared/claude-shared.md` (in repo) | `shared/claude-shared.md` (in repo) |
+| User repo | `C:\repos\aitools-<username>` | `~/repos/aitools-<username>` |
 
 ## Key Decisions
 
@@ -91,6 +92,7 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 - **`--isolated` for stdio MCP servers**: Chrome DevTools MCP uses `--isolated` flag for throwaway temp Chrome profiles, enabling concurrent Claude Code + Cursor sessions without Chrome profile lock conflicts
 - **Tool lifecycle entries require 4 fields**: Platform Status, Concurrency, Post-Install Config, Dependencies -- see `reference/tool-evaluation-criteria.md`
 - **Documentation standards**: RELEASE_NOTES format, version numbering, ROADMAP format, and reference doc threshold are codified in `.claude/rules/documentation-standards.md`
+- **Claude Code version tracking**: Version-dependent workarounds tracked in `reference/claude-code-version-deps.md`. Review on CC version bumps via post-push checklist (#20).
 
 ## Code Conventions
 
@@ -109,5 +111,7 @@ The PS1 `aitools.ps1` mirrors each bash command. When adding a command to one, a
 
 @reference/claude-code-practices.md
 @reference/claude-code-windows-shell.md
+@reference/claude-code-version-deps.md
 @reference/cursor-practices.md
 @reference/tool-evaluation-criteria.md
+@reference/user-repo.md

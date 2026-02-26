@@ -3,7 +3,7 @@
 Official documentation links and verified install commands for all tools managed by `aitools install`.
 **Always check these before modifying install steps.**
 
-Last verified: 2026-02-19
+Last verified: 2026-02-26 (Claude Code 2.1.59)
 
 ---
 

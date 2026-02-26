@@ -1,5 +1,7 @@
 # Claude Code Practices & Setup Notes
 
+Baseline: Claude Code 2.1.51 (2026-02-16)
+
 Reference notes extracted from session setup work. For project instructions, see the root `CLAUDE.md`.
 
 ---

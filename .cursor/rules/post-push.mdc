@@ -139,6 +139,15 @@ For each setup script that writes JSON config files, verify it uses
 read-then-merge (not blind overwrite). Flag any `cat >` or bare
 `WriteAllText` targeting a config file that has non-managed fields.
 
+#### 20. Claude Code version-dep review
+
+Check `claude --version` against the "Current version" in
+`reference/claude-code-version-deps.md`. If they differ:
+- Update "Current version" in the registry
+- Walk CRITICAL items: check upstream GitHub issues (are they still open?)
+- Walk HIGH items if the version bump is major (e.g., 2.1 -> 2.2 or 3.0)
+- Update "Last verified" for any re-checked items
+
 ---
 
 ### Version tag (after all checks pass)

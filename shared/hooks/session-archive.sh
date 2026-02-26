@@ -2,6 +2,7 @@
 # session-archive.sh — Claude Code SessionEnd hook
 # Archives session transcript to user repo after each session ends.
 #
+# Baseline: Claude Code 2.1.51 -- hook schema (session_id, cwd, transcript_path)
 # Hook input: JSON on stdin with session_id, cwd, transcript_path, etc.
 # See reference/user-repo.md for the archiving pattern.
 #

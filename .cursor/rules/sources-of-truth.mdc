@@ -21,6 +21,8 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 | `.cursor/rules/*.mdc` | Cursor behavioral rules (this file included) | Any |
 | `ROADMAP.md` | Active/planned work items — drives project priorities | Any |
 | `plans/*.md` | Detailed implementation plans — referenced by roadmap | Any |
+| `reference/claude-code-version-deps.md` | Version-dependent workarounds registry — triggers review on CC upgrades | Any |
+| `reference/user-repo.md` | User repo pattern, template resolution, session archive — scripts reference this | Any |
 
 ### The rule
 
