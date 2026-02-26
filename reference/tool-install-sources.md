@@ -350,6 +350,49 @@ pandoc --version
 
 ---
 
+## PowerShell (pwsh)
+
+**Source**: https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell
+
+### Install
+
+| Platform | Method | Command |
+|----------|--------|---------|
+| macOS | Homebrew -- Microsoft tap (preferred) | `brew install powershell/tap/powershell` |
+| Windows | Built-in | Windows PowerShell 5.1 ships with Windows 10+ |
+
+### Update
+
+- Homebrew: `brew upgrade powershell/tap/powershell`
+
+### Check Version
+
+```bash
+pwsh --version
+```
+
+### Non-Preferred Install Methods (cleanup targets)
+
+| Method | Detection | Why not preferred |
+|--------|-----------|-------------------|
+| Homebrew cask (deprecated) | `brew list --cask powershell` | Deprecated by Microsoft 2026-09-01, Gatekeeper signing issues |
+
+### Notes
+
+- On macOS, the binary is `pwsh` (not `powershell`)
+- On Windows, `powershell.exe` (PS 5.1) is built-in; `pwsh` is only needed for PS 7+
+- Used by: PS1 syntax validation in check scripts and build-deploy.sh
+
+### Lifecycle
+
+- **Platform Status:** macOS: supported; Windows: n/a (Windows PowerShell 5.1 built-in)
+- **Concurrency:** Yes -- independent sessions
+- **Post-Install Config:** None
+- **Dependencies:** Homebrew (macOS install only)
+- **Invocation:** `pwsh` (direct; never `brew install --cask powershell` -- use Microsoft tap)
+
+---
+
 ## Overrides
 
 Intentional deviations from upstream defaults. When comparing our install

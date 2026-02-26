@@ -1159,7 +1159,35 @@ case "$(uname -s)" in
         fi
         ;;
     *)
-        # macOS/Linux: PS1 validation skipped (pwsh may not be installed)
+        # macOS/Linux: Validate PS1 via pwsh (managed tool)
+        if command -v pwsh &>/dev/null; then
+            blog "Validating generated PS1 scripts via pwsh..."
+            PS1_ERRORS=0
+            for ps1_file in "$DEPLOY_DIR"/*.ps1; do
+                [ -f "$ps1_file" ] || continue
+                ps1_name=$(basename "$ps1_file")
+                errors_output=$(pwsh -NoProfile -Command "
+                    \$e = \$null
+                    \$null = [System.Management.Automation.Language.Parser]::ParseFile('$ps1_file', [ref]\$null, [ref]\$e)
+                    if (\$e.Count -gt 0) {
+                        foreach (\$err in \$e) { Write-Host \"  line \$(\$err.Extent.StartLineNumber): \$(\$err.Message)\" }
+                        exit 1
+                    }
+                " 2>&1) || {
+                    blog_error "$ps1_name has parse errors:"
+                    echo "$errors_output"
+                    PS1_ERRORS=$((PS1_ERRORS + 1))
+                }
+            done
+            if [ "$PS1_ERRORS" -gt 0 ]; then
+                blog_error "$PS1_ERRORS PS1 file(s) failed validation"
+                exit 1
+            else
+                blog_ok "All PS1 files passed validation (pwsh)"
+            fi
+        else
+            blog_warn "pwsh not found -- PS1 validation skipped (install: brew install powershell/tap/powershell)"
+        fi
         ;;
 esac
 

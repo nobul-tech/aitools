@@ -6,6 +6,9 @@ alwaysApply: true
 
 ## Pre-Commit Checklist (this repo)
 
+> **Script**: `bash scripts/check-pre-commit.sh` (check) or `--fix` (auto-fix).
+> Automates steps below. Steps marked PARTIAL or MANUAL still need human judgment.
+
 Before every commit, verify:
 
 ### 1. Git identity
@@ -16,7 +19,7 @@ Confirm local config: `git config user.name` -> Jose, `git config user.email` ->
 
 For every `.sh` or `.ps1` file being committed:
 - Bash: `bash -n path/to/script.sh`
-- PS1: On Windows use `[Parser]::ParseFile(...)` (see cross-platform rule for full command). On macOS, if `pwsh` is installed, use `pwsh -NoProfile -Command "[Parser]::ParseFile(...)"`. If pwsh is unavailable, note in commit message.
+- PS1: On Windows use `[Parser]::ParseFile(...)` (see cross-platform rule for full command). On macOS, use `pwsh -NoProfile -Command "[Parser]::ParseFile(...)"` (pwsh is a managed tool).
 - If the other platform's scripts can't be validated locally, note in commit message: `(tested: macOS)` or `(tested: Windows)`
 
 ### 3. Build freshness

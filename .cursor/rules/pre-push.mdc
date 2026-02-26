@@ -6,6 +6,9 @@ alwaysApply: true
 
 ## Pre-Push Checklist (this repo)
 
+> **Script**: `bash scripts/check-pre-push.sh` (read-only, no --fix).
+> Automates steps below. Steps marked PARTIAL or MANUAL still need human judgment.
+
 Before pushing to remote, verify:
 
 ### 1. Pre-commit checklist passed

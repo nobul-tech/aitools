@@ -1,5 +1,8 @@
 ## Post-Push Checklist (this repo)
 
+> **Script**: `bash scripts/check-post-push.sh` (always tier) or `--extensive` (all 20 steps).
+> Automates steps below. Steps marked PARTIAL or MANUAL still need human judgment.
+
 Two tiers: **Always** runs after every push. **Extensive** runs after significant
 releases (new features, structural changes, new tools) or when requested.
 
@@ -56,8 +59,8 @@ Run all Always items first, then:
 #### 6. Full script syntax validation
 
 `bash -n` on every `.sh` in `scripts/` and `deploy/`. On Windows, also
-`[Parser]::ParseFile` on every `.ps1`. On macOS, if `pwsh` is installed,
-also validate `.ps1` files with `pwsh -NoProfile -Command "[Parser]::ParseFile(...)"`.
+`[Parser]::ParseFile` on every `.ps1`. On macOS, also validate `.ps1`
+files with `pwsh -NoProfile -Command "[Parser]::ParseFile(...)"` (pwsh is a managed tool).
 
 #### 7. deploy/ drift audit
 

@@ -137,6 +137,7 @@ use `npx`, `bunx`, or other package runners.
 |------|---------|
 | Vercel CLI | `vercel` |
 | Pandoc | `pandoc` |
+| pwsh (macOS) | `pwsh` |
 
 ### Per-Platform Tools
 

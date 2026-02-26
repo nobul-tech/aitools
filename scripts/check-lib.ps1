@@ -1,0 +1,108 @@
+# check-lib.ps1 -- shared library for check-pre-commit/pre-push/post-push scripts
+# Dot-sourced, not executed directly. PS 5.1 compatible.
+
+# ---------------------------------------------------------------------------
+# Counters
+# ---------------------------------------------------------------------------
+$script:PassCount = 0
+$script:FailCount = 0
+$script:WarnCount = 0
+$script:SkipCount = 0
+
+# ---------------------------------------------------------------------------
+# Step formatters
+# ---------------------------------------------------------------------------
+function StepPass {
+    param([string]$Num, [string]$Label)
+    $padded = $Label.PadRight(42)
+    Write-Host ("{0,3}. {1}" -f $Num, $padded) -NoNewline
+    Write-Host "[PASS]" -ForegroundColor Green
+    $script:PassCount++
+}
+
+function StepFail {
+    param([string]$Num, [string]$Label, [string]$Detail = "")
+    $padded = $Label.PadRight(42)
+    Write-Host ("{0,3}. {1}" -f $Num, $padded) -NoNewline
+    Write-Host "[FAIL]" -ForegroundColor Red -NoNewline
+    if ($Detail) { Write-Host " $Detail" -NoNewline }
+    Write-Host ""
+    $script:FailCount++
+}
+
+function StepWarn {
+    param([string]$Num, [string]$Label, [string]$Detail = "")
+    $padded = $Label.PadRight(42)
+    Write-Host ("{0,3}. {1}" -f $Num, $padded) -NoNewline
+    Write-Host "[WARN]" -ForegroundColor Yellow -NoNewline
+    if ($Detail) { Write-Host " $Detail" -NoNewline }
+    Write-Host ""
+    $script:WarnCount++
+}
+
+function StepSkip {
+    param([string]$Num, [string]$Label, [string]$Detail = "")
+    $padded = $Label.PadRight(42)
+    Write-Host ("{0,3}. {1}" -f $Num, $padded) -NoNewline
+    Write-Host "[SKIP]" -ForegroundColor DarkGray -NoNewline
+    if ($Detail) { Write-Host " $Detail" -NoNewline }
+    Write-Host ""
+    $script:SkipCount++
+}
+
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
+function PrintSummary {
+    Write-Host ""
+    Write-Host "=== SUMMARY: " -NoNewline
+    Write-Host "$($script:PassCount) PASS" -ForegroundColor Green -NoNewline
+    Write-Host ", " -NoNewline
+    Write-Host "$($script:SkipCount) SKIP" -ForegroundColor DarkGray -NoNewline
+    Write-Host ", " -NoNewline
+    Write-Host "$($script:WarnCount) WARN" -ForegroundColor Yellow -NoNewline
+    Write-Host ", " -NoNewline
+    Write-Host "$($script:FailCount) FAIL" -ForegroundColor Red -NoNewline
+    Write-Host " ==="
+}
+
+# ---------------------------------------------------------------------------
+# Config reader (PS 5.1 compatible)
+# ---------------------------------------------------------------------------
+function ReadConfigKey {
+    param([string]$File, [string]$Key)
+    if (-not (Test-Path $File)) { return $null }
+    try {
+        $json = Get-Content $File -Raw -ErrorAction Stop | ConvertFrom-Json
+        $val = $json.$Key
+        if ($val) { return $val }
+    } catch {
+        # Parse error or missing key
+    }
+    return $null
+}
+
+# ---------------------------------------------------------------------------
+# Repo root and config resolution
+# ---------------------------------------------------------------------------
+# $script:RepoRoot must be set by the sourcing script (via $PSScriptRoot).
+
+function ResolveConfig {
+    $script:ConfigFile = Join-Path $HOME ".aitools/config.json"
+    $script:UserRepoPath = ""
+    if (Test-Path $script:ConfigFile) {
+        $val = ReadConfigKey -File $script:ConfigFile -Key "userRepoPath"
+        if ($val) { $script:UserRepoPath = $val }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Platform detection
+# ---------------------------------------------------------------------------
+$script:IsMacOS = ($PSVersionTable.PSEdition -eq "Core") -and $IsMacOS
+$script:IsWindowsOS = (-not $script:IsMacOS)
+# On PS 5.1 (Windows only), $IsMacOS doesn't exist, so IsWindowsOS defaults to true
+if ($PSVersionTable.PSVersion.Major -le 5) {
+    $script:IsWindowsOS = $true
+    $script:IsMacOS = $false
+}
