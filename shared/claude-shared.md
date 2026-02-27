@@ -124,6 +124,7 @@ Full evaluation and progress log: `reference/claude-code-effectiveness.md` in ai
 - **STANDING ORDER -- Checklist scripts, not ad-hoc commands**: For recurring verification checklists (pre-commit, pre-push, post-push), write reusable scripts in the project and call those -- don't re-invent 10+ individual bash commands every time. Ad-hoc commands are OK for novel one-off checks that don't fit an existing script.
 - **STANDING ORDER -- Scratch files for complex bash**: Never inline long or complicated commands in the Bash tool. Write to a temp file, execute it, clean up after. Inline is fine only for simple one-liners (git status, bash -n, single grep, etc.).
 - **STANDING ORDER -- Perl for string manipulation**: Use Perl (not sed/awk) for any non-trivial string manipulation in bash contexts. Write a small Perl script to a temp file and call it with `perl`. sed is fine for trivial single substitutions only.
+- **STANDING ORDER -- Platform-native script dispatch**: When running project scripts that have `.sh` and `.ps1` variants (check scripts, setup scripts, etc.), dispatch to the platform-native variant: `.ps1` via `powershell.exe -File` on Windows, `.sh` via `bash` on macOS. Never default to `.sh` on Windows just because the Bash tool is available -- `.ps1` scripts exercise Windows-specific code paths and catch Windows-only issues.
 
 **In plan mode**: Always review these areas and proactively suggest relevant improvements (e.g., "consider breaking this into smaller batches" or "this would be a good candidate for a hook").
 
