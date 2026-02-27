@@ -25,6 +25,18 @@ log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
 
+# Backup a file before overwriting. Keeps at most $max_backups copies.
+backup_file() {
+    local file="$1" max_backups=20
+    [ -f "$file" ] || return 0
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
+    cp "$file" "${file}.bak.${ts}"
+    # Prune oldest beyond limit
+    ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1)) | xargs rm -f 2>/dev/null
+    log "Backed up $file"
+}
+
 # --- OS guard ---
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
@@ -74,6 +86,8 @@ fi
 # --- 3. cli-config.json (merge, not overwrite) ---
 log "Step 3: cli-config.json"
 
+backup_file "$CLI_CONFIG"
+
 mkdir -p "$CURSOR_DIR"
 
 if ! command -v node &>/dev/null; then
@@ -84,7 +98,7 @@ const fs = require('fs');
 const f = process.argv[1];
 
 // --- Embedded preferences (from profile.json at build time) ---
-const vimMode = true;
+const vimMode = false;
 const modelId = 'auto';
 
 // --- Read existing cli-config.json ---

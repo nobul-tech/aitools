@@ -12,6 +12,29 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.20 -- PS 5.1 Compatibility Fixes and Config Safety (2026-02-27)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | CRITICAL | **`ConvertFrom-Json -AsHashtable` (PS 6+ only)**: Replaced with `ConvertPSObjectToHashtable` helper in `setup-user-mcp.ps1` and `setup-cursor-mcp.ps1`. On PS 5.1, the parameter error was caught as "invalid JSON", starting with empty `@{}` and silently clobbering all existing `settings.json`/`mcp.json` data. |
+| 2 | CRITICAL | **`Join-Path` 3+ arguments (PS 6+ only)**: Chained to 2-arg calls in `setup-user-mcp.ps1` (4 instances) and `build-deploy.sh` heredoc (2 instances). Caused `A positional parameter cannot be found that accepts argument 'skills'` on PS 5.1. |
+| 3 | HIGH | **`setup-user-hooks` missing from install flow**: Added to `aitools-install.ps1` and `.sh` deploy lists. Previously only deployed via `aitools` default command, not `aitools install`. |
+| 4 | HIGH | **Empty `catch {}` in `setup-user-claude.sh`**: Replaced with ENOENT check to surface parse errors from malformed `config.json`. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 5 | **Config backup coverage**: Added 20-rotating backup (`Backup-File`/`backup_file`) to `setup-user-mcp` (settings.json) and `setup-user-cursor` (cli-config.json). Previously only `setup-user-claude` and `setup-cursor-mcp` had backups. |
+| 6 | **User repo auto-pull**: `aitools` default command and `aitools gitpull` now pull the user repo (quiet, non-blocking) before deploying configs. Prevents stale profile data when switching machines. |
+| 7 | **Improved catch block messages**: All PS1 config merge catch blocks now report the actual exception instead of generic "invalid JSON" message. |
+
+**Verified on:** Windows (PS 5.1 native, all setup scripts executed, merge preservation confirmed). macOS: not tested.
+
+---
+
 ## v0.19 -- Checklist Verification Scripts (2026-02-26)
 
 ### New features

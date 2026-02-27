@@ -436,6 +436,7 @@ set -euo pipefail
 
 BLOCK
     bash_logging_helpers "setup-user-cursor"
+    bash_backup_helper
     bash_os_guard
     cat <<'BLOCK'
 
@@ -480,6 +481,8 @@ fi
 
 # --- 3. cli-config.json (merge, not overwrite) ---
 log "Step 3: cli-config.json"
+
+backup_file "$CLI_CONFIG"
 
 mkdir -p "$CURSOR_DIR"
 
@@ -573,6 +576,7 @@ blog "Generating deploy/setup-user-cursor.ps1"
 
 BLOCK
     ps1_logging_helpers "setup-user-cursor"
+    ps1_backup_helper
     ps1_os_guard
     cat <<'BLOCK'
 
@@ -625,6 +629,8 @@ if ($agentCmd) {
 
 # --- 3. cli-config.json (merge, not overwrite) ---
 Log "Step 3: cli-config.json"
+
+Backup-File -FilePath $cliConfig
 
 if (-not (Test-Path $cursorDir)) {
     New-Item -ItemType Directory -Path $cursorDir -Force | Out-Null
@@ -841,8 +847,8 @@ blog "Generating deploy/setup-user-mcp.ps1 (with embedded skills)"
 # Vendored from https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/main/skills
 # Content embedded at build time by build-deploy.sh for self-contained deployment.
 
-$skillsDest = Join-Path $env:USERPROFILE ".claude" "skills"
-$skillsDestCursor = Join-Path $env:USERPROFILE ".cursor" "skills"
+$skillsDest = Join-Path (Join-Path $env:USERPROFILE ".claude") "skills"
+$skillsDestCursor = Join-Path (Join-Path $env:USERPROFILE ".cursor") "skills"
 
 SKILLS_PS1_HEADER
     # Deploy to ~/.claude/skills/ (Claude Code)

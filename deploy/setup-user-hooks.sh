@@ -151,7 +151,7 @@ const settingsFile = process.argv[1];
 const hookCmd = process.argv[2];
 
 // --- Embedded preferences (from profile.json at build time) ---
-const autoMemory = false;
+const autoMemory = true;
 const alwaysThinking = true;
 
 // --- Read existing settings.json ---

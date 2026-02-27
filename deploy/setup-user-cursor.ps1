@@ -26,6 +26,21 @@ function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
 
+# Backup a file before overwriting. Keeps at most $MaxBackups copies.
+function Backup-File {
+    param([string]$FilePath, [int]$MaxBackups = 20)
+    if (-not (Test-Path $FilePath)) { return }
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
+    $backupPath = "${FilePath}.bak.${ts}"
+    Copy-Item -Path $FilePath -Destination $backupPath
+    # Prune oldest beyond limit
+    $backups = Get-ChildItem -Path "${FilePath}.bak.*" | Sort-Object LastWriteTime -Descending
+    if ($backups.Count -gt $MaxBackups) {
+        $backups | Select-Object -Skip $MaxBackups | Remove-Item -Force
+    }
+    Log "Backed up $FilePath"
+}
+
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     LogError "This script is for Windows. On macOS/Linux, use the .sh version."
@@ -82,6 +97,8 @@ if ($agentCmd) {
 # --- 3. cli-config.json (merge, not overwrite) ---
 Log "Step 3: cli-config.json"
 
+Backup-File -FilePath $cliConfig
+
 if (-not (Test-Path $cursorDir)) {
     New-Item -ItemType Directory -Path $cursorDir -Force | Out-Null
     Log "Created $cursorDir"
@@ -96,7 +113,7 @@ const fs = require('fs');
 const f = process.argv[1];
 
 // --- Embedded preferences (from profile.json at build time) ---
-const vimMode = true;
+const vimMode = false;
 const modelId = 'auto';
 
 // --- Read existing cli-config.json ---

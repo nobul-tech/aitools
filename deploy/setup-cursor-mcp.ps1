@@ -44,6 +44,22 @@ function Backup-File {
     Log "Backed up $FilePath"
 }
 
+# --- PS 5.1 compatibility helper ---
+# ConvertFrom-Json -AsHashtable is PS 6+ only. This converts PSCustomObject trees
+# to nested hashtables so .ContainsKey() and bracket indexing work on PS 5.1.
+function ConvertPSObjectToHashtable($obj) {
+    if ($null -eq $obj) { return @{} }
+    $ht = @{}
+    foreach ($prop in $obj.PSObject.Properties) {
+        if ($prop.Value -is [System.Management.Automation.PSCustomObject]) {
+            $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
+        } else {
+            $ht[$prop.Name] = $prop.Value
+        }
+    }
+    return $ht
+}
+
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     LogError "This script is for Windows. On macOS/Linux, use the .sh version."
@@ -73,9 +89,10 @@ Backup-File -FilePath $mcpJson
 if (Test-Path $mcpJson) {
     Log "Merging managed servers into $mcpJson"
     try {
-        $config = Get-Content $mcpJson -Raw | ConvertFrom-Json -AsHashtable
+        $raw = Get-Content $mcpJson -Raw
+        $config = ConvertPSObjectToHashtable ($raw | ConvertFrom-Json)
     } catch {
-        LogWarn "$mcpJson is invalid JSON, starting with empty config"
+        LogWarn "$mcpJson could not be parsed ($_), starting with empty config"
         $config = @{}
     }
 } else {

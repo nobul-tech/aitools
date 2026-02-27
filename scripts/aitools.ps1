@@ -1169,6 +1169,15 @@ try {
     Pop-Location
 }
 
+# Pull user repo (quiet, non-blocking -- stale local data is better than failing)
+$userRepoPath = Read-ConfigKey -File $configFile -Key "userRepoPath"
+if ($userRepoPath -and (Test-Path (Join-Path $userRepoPath ".git"))) {
+    $urPull = git -C $userRepoPath pull --ff-only --quiet 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  warning: user repo pull failed -- using local copy." -ForegroundColor Yellow
+    }
+}
+
 # [2/N] Rebuild deploy scripts
 Write-Host "[2/$steps] Rebuilding deploy scripts..."
 # build-deploy.sh is intentionally bash-only (text-processing-heavy, no .ps1 variant).

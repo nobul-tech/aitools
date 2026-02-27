@@ -1257,6 +1257,16 @@ else
     fi
 fi
 
+# Pull user repo (quiet, non-blocking — stale local data is better than failing)
+if raw=$(read_config_key "$config" "userRepoPath"); then
+    user_repo_path=$(to_native_path "$raw")
+    if [ -d "$user_repo_path/.git" ]; then
+        if ! git -C "$user_repo_path" pull --ff-only --quiet 2>/dev/null; then
+            echo "  warning: user repo pull failed — using local copy." >&2
+        fi
+    fi
+fi
+
 # [2/N] Rebuild deploy scripts
 echo "[2/$STEPS] Rebuilding deploy scripts..."
 if bash "$repo_path/scripts/build-deploy.sh" >> "$LOG_FILE" 2>&1; then

@@ -69,9 +69,9 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Identity
 
-- Name: Jose
+- Name: pepe
 - Git: `Jose <jose@nobul.tech>`
-- Company: Nobul
+- Company: nobul.tech
 
 ## Code Style Defaults
 

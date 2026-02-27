@@ -22,6 +22,37 @@ function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
 
+# Backup a file before overwriting. Keeps at most $MaxBackups copies.
+function Backup-File {
+    param([string]$FilePath, [int]$MaxBackups = 20)
+    if (-not (Test-Path $FilePath)) { return }
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
+    $backupPath = "${FilePath}.bak.${ts}"
+    Copy-Item -Path $FilePath -Destination $backupPath
+    # Prune oldest beyond limit
+    $backups = Get-ChildItem -Path "${FilePath}.bak.*" | Sort-Object LastWriteTime -Descending
+    if ($backups.Count -gt $MaxBackups) {
+        $backups | Select-Object -Skip $MaxBackups | Remove-Item -Force
+    }
+    Log "Backed up $FilePath"
+}
+
+# --- PS 5.1 compatibility helper ---
+# ConvertFrom-Json -AsHashtable is PS 6+ only. This converts PSCustomObject trees
+# to nested hashtables so .ContainsKey() and bracket indexing work on PS 5.1.
+function ConvertPSObjectToHashtable($obj) {
+    if ($null -eq $obj) { return @{} }
+    $ht = @{}
+    foreach ($prop in $obj.PSObject.Properties) {
+        if ($prop.Value -is [System.Management.Automation.PSCustomObject]) {
+            $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
+        } else {
+            $ht[$prop.Name] = $prop.Value
+        }
+    }
+    return $ht
+}
+
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     LogError "This script is for Windows. On macOS/Linux, use the .sh version."
@@ -98,13 +129,17 @@ if (-not (Test-Path $settingsDir)) {
     New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
 }
 
+# Back up before merge
+Backup-File -FilePath $settingsFile
+
 # Read existing settings or start fresh
 $settings = @{}
 if (Test-Path $settingsFile) {
     try {
-        $settings = Get-Content $settingsFile -Raw | ConvertFrom-Json -AsHashtable
+        $raw = Get-Content $settingsFile -Raw
+        $settings = ConvertPSObjectToHashtable ($raw | ConvertFrom-Json)
     } catch {
-        LogWarn "$settingsFile is invalid JSON, starting with empty config"
+        LogWarn "$settingsFile could not be parsed ($_), starting with empty config"
         $settings = @{}
     }
 }
@@ -146,14 +181,14 @@ Log "To check status: aitools mcp"
 # These provide structured workflows for browser automation and a11y auditing.
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$skillsSrc = Join-Path (Split-Path -Parent $scriptDir) "shared" "skills"
-$skillsDest = Join-Path $env:USERPROFILE ".claude" "skills"
-$skillsDestCursor = Join-Path $env:USERPROFILE ".cursor" "skills"
+$skillsSrc = Join-Path (Join-Path (Split-Path -Parent $scriptDir) "shared") "skills"
+$skillsDest = Join-Path (Join-Path $env:USERPROFILE ".claude") "skills"
+$skillsDestCursor = Join-Path (Join-Path $env:USERPROFILE ".cursor") "skills"
 
 function Deploy-Skill {
     param([string]$SkillName, [string]$DestBase)
 
-    $src = Join-Path $skillsSrc $SkillName "SKILL.md"
+    $src = Join-Path (Join-Path $skillsSrc $SkillName) "SKILL.md"
     $destDir = Join-Path $DestBase $SkillName
     $dest = Join-Path $destDir "SKILL.md"
 

@@ -68,7 +68,7 @@ if [ -f "$CONFIG" ] && command -v node &>/dev/null; then
 try {
     const cfg = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
     if (cfg.userRepoPath) console.log(cfg.userRepoPath);
-} catch {}
+} catch (e) { if (e.code !== 'ENOENT') console.error('Warning: could not read config: ' + e.message); }
 " "$CONFIG" 2>/dev/null)
 
     if [ -n "$USER_REPO_PATH" ] && [ -f "$USER_REPO_PATH/claude/CLAUDE.md" ]; then

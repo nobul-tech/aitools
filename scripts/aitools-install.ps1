@@ -442,7 +442,8 @@ $deployScripts = @(
     "setup-user-claude.ps1",
     "setup-user-cursor.ps1",
     "setup-user-mcp.ps1",
-    "setup-cursor-mcp.ps1"
+    "setup-cursor-mcp.ps1",
+    "setup-user-hooks.ps1"
 )
 
 foreach ($script in $deployScripts) {
