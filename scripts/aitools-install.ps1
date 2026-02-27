@@ -442,9 +442,21 @@ if (Test-Path $pandocScript) {
 }
 
 # ============================================================
-# 12. Deploy configurations
+# 12. Rust (cargo)
 # ============================================================
-Log "Step 12: Deploy configurations"
+Log "Step 12: Rust (cargo)"
+
+$rustScript = Join-Path $PSScriptRoot "setup-rust.ps1"
+if (Test-Path $rustScript) {
+    Invoke-ValidatedScript $rustScript
+} else {
+    LogWarn "setup-rust.ps1 not found -- skipping (MDM deploy)"
+}
+
+# ============================================================
+# 13. Deploy configurations
+# ============================================================
+Log "Step 13: Deploy configurations"
 
 $deployScripts = @(
     "setup-user-claude.ps1",

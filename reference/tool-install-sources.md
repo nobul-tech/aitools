@@ -393,6 +393,61 @@ pwsh --version
 
 ---
 
+## Rust (cargo)
+
+**Source**: https://www.rust-lang.org/tools/install
+**Purpose**: Rust toolchain — compiler (`rustc`), package manager/build tool (`cargo`), toolchain manager (`rustup`).
+
+### Install
+
+| Platform | Method | Command |
+|----------|--------|---------|
+| macOS/Linux | rustup (preferred) | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| Windows | winget (preferred) | `winget install -e --id Rustlang.Rustup` |
+| Windows | rustup-init.exe (alt) | Download from https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe |
+| macOS | Homebrew (alt) | `brew install rustup` then `rustup default stable` |
+
+### Update
+
+```
+rustup update
+```
+
+### Check Version
+
+```bash
+cargo --version
+rustc --version
+rustup --version
+```
+
+### Prerequisites (Windows)
+
+MSVC Build Tools required for linking. `rustup-init` offers to install automatically. Manual: install **Visual Studio Build Tools** with the **"Desktop Development with C++"** workload.
+
+### Non-Preferred Install Methods (cleanup targets)
+
+| Method | Detection | Why not preferred |
+|--------|-----------|-------------------|
+| `brew install rust` | `brew list rust` | Brew-managed toolchain, not rustup-managed — can't use `rustup update` |
+| System package manager | `apt list --installed rustc` | Usually outdated versions |
+
+### Notes
+
+- All tools install to `~/.cargo/bin` (added to PATH by rustup automatically)
+- Homebrew `rustup` requires manual PATH setup: add `$(brew --prefix rustup)/bin` to PATH
+- winget package (`Rustlang.Rustup`) installs rustup, which then manages the toolchain
+
+### Lifecycle
+
+- **Platform Status:** macOS: supported; Windows: supported
+- **Concurrency:** Yes — independent cargo invocations
+- **Post-Install Config:** None (rustup configures toolchain automatically). Windows: MSVC Build Tools must be present.
+- **Dependencies:** C linker (Xcode CLT on macOS, MSVC Build Tools on Windows)
+- **Invocation:** `cargo` (direct; `rustc` and `rustup` also available)
+
+---
+
 ## Overrides
 
 Intentional deviations from upstream defaults. When comparing our install

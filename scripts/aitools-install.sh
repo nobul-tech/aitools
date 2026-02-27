@@ -593,9 +593,21 @@ else
 fi
 
 # ============================================================
-# 12. Deploy configurations
+# 12. Rust (cargo)
 # ============================================================
-log "Step 12: Deploy configurations"
+log "Step 12: Rust (cargo)"
+
+rust_script="$SCRIPT_DIR/setup-rust.sh"
+if [ -f "$rust_script" ]; then
+    validate_and_run "$rust_script"
+else
+    log_warn "setup-rust.sh not found — skipping (MDM deploy)"
+fi
+
+# ============================================================
+# 13. Deploy configurations
+# ============================================================
+log "Step 13: Deploy configurations"
 
 DEPLOY_SCRIPTS="setup-user-claude.sh setup-user-cursor.sh setup-user-mcp.sh setup-cursor-mcp.sh setup-user-hooks.sh"
 

@@ -961,7 +961,27 @@ blog "Copying deploy/setup-pandoc.ps1"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
-# 11-12. deploy/setup-user-mcp.sh and .ps1 (template with embedded skills)
+# 11-12. deploy/setup-rust.sh and .ps1 (copy as-is)
+# ============================================================
+blog "Copying deploy/setup-rust.sh"
+{
+    echo '#!/usr/bin/env bash'
+    echo "$HEADER_COMMENT_BASH"
+    # Strip the shebang from source and append the rest
+    tail -n +2 "$SCRIPTS_DIR/setup-rust.sh"
+} > "$DEPLOY_DIR/setup-rust.sh"
+chmod +x "$DEPLOY_DIR/setup-rust.sh"
+GENERATED=$((GENERATED + 1))
+
+blog "Copying deploy/setup-rust.ps1"
+{
+    echo "$HEADER_COMMENT_PS1"
+    cat "$SCRIPTS_DIR/setup-rust.ps1"
+} > "$DEPLOY_DIR/setup-rust.ps1"
+GENERATED=$((GENERATED + 1))
+
+# ============================================================
+# 13-14. deploy/setup-user-mcp.sh and .ps1 (template with embedded skills)
 # ============================================================
 # The scripts/ versions read skills from shared/skills/ (repo-relative).
 # The deploy/ versions must be self-contained, so we embed SKILL.md content
