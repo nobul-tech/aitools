@@ -4,7 +4,7 @@ I work across Windows and macOS with multiple AI coding tools — Cursor and Cla
 
 ## What This Covers
 
-Ten setup scripts — five pairs of Windows PowerShell and macOS bash — plus shared configuration files and reference documentation:
+Sixteen setup scripts — eight pairs of Windows PowerShell and macOS bash — plus shared configuration files and reference documentation:
 
 - **Claude Code user preferences** — installs a cross-machine config file so every Claude Code session starts with the same identity, code style defaults, and tool preferences, regardless of which machine or project directory it's launched from
 

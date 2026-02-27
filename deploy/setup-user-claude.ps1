@@ -173,7 +173,7 @@ Three servers at user level. Chrome DevTools enabled globally; Vercel/Webflow di
 
 - **Strongly prefer CLAUDE.md and project docs over auto memory.** Auto memory (`~/.claude/projects/.../memory/`) is local to each machine and does not sync. Durable project knowledge belongs in git-tracked files: `CLAUDE.md`, `reference/`, or `.claude/rules/`.
 - Auto memory should only hold ephemeral, machine-specific notes (e.g., tool quirks on this OS).
-- **Planning workflow:** When starting a major plan, spot-check auto memory (`MEMORY.md`) and migrate any project knowledge into the repo before proceeding.
+- **Planning workflow:** When starting a major plan, spot-check auto memory (`~/.claude/projects/.../memory/`) and migrate any project knowledge into the repo before proceeding.
 
 ## Coaching
 

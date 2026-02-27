@@ -6,7 +6,7 @@
 #   2. shared/claude-shared.md          (fallback template from ai-tooling repo)
 #
 # {{PLACEHOLDER}} tokens are interpolated at deploy time using the current
-# machine's profile from profile.json. See reference/tool-install-sources.md.
+# machine's profile from profile.json. See reference/user-repo.md.
 #
 # Overwrites: yes (sole owner of ~/.claude/CLAUDE.md)
 

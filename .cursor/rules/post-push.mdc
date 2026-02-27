@@ -82,8 +82,8 @@ counterpart (or is marked Claude Code-specific). Flag missing or orphaned files.
 For each tool in `reference/tool-install-sources.md`:
 - Verify the install command matches what the corresponding `setup-*.sh/.ps1`
   script actually runs.
-- Verify all 4 lifecycle fields (Platform Status, Concurrency, Post-Install
-  Config, Dependencies) are present.
+- Verify all 5 lifecycle fields (Platform Status, Concurrency, Post-Install
+  Config, Dependencies, Invocation) are present.
 
 #### 10. Protected files inventory
 

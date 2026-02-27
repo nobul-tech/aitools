@@ -12,6 +12,42 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.22 -- Error Handling Audit & Rust Support (2026-02-27)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Rust (cargo) as managed tool**: Full lifecycle -- setup scripts (`setup-rust.sh/.ps1`), installer integration, deploy scripts, shell aliases. Installs via `rustup` with non-preferred source cleanup. |
+| 2 | **Error handling rules**: New `.claude/rules/error-handling.md` with project-level requirements. Full audit of all scripts for silent failures -- 5 violations fixed, 4 logic bugs caught, 1 missing error path added. |
+| 3 | **File logging for check scripts**: All check scripts (`check-pre-commit`, `check-pre-push`, `check-post-push`) now write structured logs to `checks.log` and JSONL to `checks.jsonl` alongside existing `deploy.log`. Shared logging via `check-lib.sh/.ps1`. |
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 4 | MEDIUM | **winget upgrade match string**: `setup-pandoc.ps1` used wrong match string for `winget upgrade`, causing silent no-op on Windows. |
+| 5 | MEDIUM | **5 error suppression violations**: Scripts using `-ErrorAction SilentlyContinue`, `2>/dev/null`, or `|| true` without result checks. Each now has an immediate null/empty guard. |
+| 6 | MEDIUM | **4 logic bugs from audit**: False passes in check scripts from unguarded `Get-ChildItem`/`Get-Content`, `StepPass` missing `$Detail` parameter, and step counts feeding into summaries without error handling. |
+| 7 | LOW | **Missing error path**: One code path had no error handling for template read failure. Added content validation before write. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 8 | **OS guards for check scripts**: `.sh` check scripts now reject Windows (Git Bash) with a clear message directing to the `.ps1` variant. |
+| 9 | **`StepPass` detail support**: `StepPass` in `check-lib.ps1` now accepts and displays a `$Detail` parameter, matching `StepFail`/`StepWarn`/`StepSkip`. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 10 | **gh-issue-7490 comment reference**: Added `reference/gh-issue-7490-comment.md` documenting the upstream GitHub comment for Windows shell tracking. |
+
+**Verified on:** Windows (PS 5.1, all scripts syntax-validated). macOS: not tested.
+
+---
+
 ## v0.21 -- Interactive Clobber Protection (2026-02-27)
 
 ### New features

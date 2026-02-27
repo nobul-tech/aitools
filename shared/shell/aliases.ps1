@@ -200,7 +200,7 @@ function clip2md {
     $approxWords = [math]::Round($wordCount / 10) * 10
     if ($approxWords -eq 0 -and $wordCount -gt 0) { $approxWords = $wordCount }
 
-    # 7. Determine mode
+    # Determine output mode
     if (-not $OutFile) {
         # --- AUTO-NAME MODE ---
         if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {

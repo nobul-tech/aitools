@@ -187,7 +187,7 @@ clip2md() {
     outfile="$*"
   fi
 
-  # 7. Determine mode
+  # Determine output mode
   if [ -z "$outfile" ]; then
     # --- AUTO-NAME MODE ---
     if ! command -v claude &>/dev/null; then

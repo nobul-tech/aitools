@@ -10,7 +10,7 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 | `reference/tool-evaluation-criteria.md` | Tool evaluation framework and lifecycle phases | Any |
 | `CLAUDE.md` | Project-level instructions and Key Decisions | Any |
 | `shared/claude-shared.md` | User-level preferences embedded into deploy scripts (propagates to all machines) | Any |
-| `shared/cursor-rules/user-rules.md` | Cursor User Rules (deployed to clipboard) | Any |
+| `shared/cursor-rules/user-rules.md` | Cursor User Rules template (manual copy if needed) | Any |
 | `.claude/rules/*.md` | Claude Code behavioral rules (this file included) | Any |
 | `.cursor/rules/*.mdc` | Cursor behavioral rules | Any |
 | `ROADMAP.md` | Active/planned work items — drives project priorities | Any |

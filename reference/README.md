@@ -11,4 +11,6 @@ Setup notes, how-tos, and knowledge base for AI tooling practices.
 | `claude-code-effectiveness.md` | Self-assessment tracker for Claude Code usage effectiveness |
 | `claude-code-windows-shell.md` | Windows shell limitations and workarounds for Claude Code |
 | `user-repo.md` | User repo pattern: session archive naming, project derivation, CLI commands |
+| `claude-code-version-deps.md` | Registry of version-dependent workarounds and behaviors |
+| `gh-issue-7490-comment.md` | Upstream GitHub comment for Windows shell configuration tracking |
 | `session-showcase.md` | Case study: cross-platform AI tooling setup and automation |

@@ -226,7 +226,7 @@ fi
 # ---------------------------------------------------------------------------
 # 9. Release notes
 # ---------------------------------------------------------------------------
-# Check if non-docs changes are staged (anything other than .md, .mdc, .mdc files)
+# Check if non-docs changes are staged (anything other than .md, .mdc files)
 non_docs=$(echo "$STAGED_FILES" | grep -vE '\.(md|mdc)$' || true)
 rn_staged=$(echo "$STAGED_FILES" | grep -q 'RELEASE_NOTES.md' && echo "yes" || echo "no")
 if [ -z "$non_docs" ]; then

@@ -140,6 +140,6 @@ Any script that intentionally suppresses errors without a result check must:
 
 - Setup (bash): `scripts/setup-user-mcp.sh`
 - Setup (PS1): `scripts/setup-user-mcp.ps1`
-- Check (PS1): `scripts/check-pre-commit.ps1` *(after Phase 2 remediation)*
+- Check (PS1): `scripts/check-pre-commit.ps1`
 
 When creating a new script, copy the logging block and exit footer from the appropriate gold standard.

@@ -80,6 +80,10 @@ bash deploy/setup-vercelcli.sh          # macOS
 # Pandoc
 bash deploy/setup-pandoc.sh             # macOS
 .\deploy\setup-pandoc.ps1               # Windows
+
+# Rust (cargo)
+bash deploy/setup-rust.sh               # macOS
+.\deploy\setup-rust.ps1                 # Windows
 ```
 
 ### Develop / maintain configs
