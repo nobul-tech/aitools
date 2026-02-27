@@ -205,11 +205,14 @@ ${SHARED_CONTENT}
 - Shell: $(basename "$SHELL")
 EOF
 
-    # Post-write validation
+    # Post-write validation: check structure AND content (not just a marker)
     if [ ! -s "$CLAUDE_MD" ]; then
         log_error "Validation failed: $CLAUDE_MD is empty or missing"
     elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
         log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
+    elif ! grep -qE "## (Coaching|Code Style|Tool)" "$CLAUDE_MD"; then
+        # Template body must be present -- a file with only the footer is corrupt
+        log_error "Validation failed: $CLAUDE_MD missing template body (only footer present?)"
     fi
 
     log_ok "Wrote $(display_path "$CLAUDE_MD")"

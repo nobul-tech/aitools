@@ -118,7 +118,16 @@ if (-not $sourcePath) {
 Log "Template source: $sourcePath ($sourceLabel)"
 
 # --- Read template content ---
-$sharedContent = Get-Content -Path $sourcePath -Raw
+try {
+    $sharedContent = Get-Content -Path $sourcePath -Raw -ErrorAction Stop
+} catch {
+    LogError "Cannot read template: $sourcePath ($_)"
+    exit 1
+}
+if (-not $sharedContent) {
+    LogError "Template is empty: $sourcePath"
+    exit 1
+}
 
 # --- Profile interpolation ---
 # Read profile.json and replace {{PLACEHOLDER}} tokens.
@@ -249,11 +258,18 @@ if ($DryRun) {
     $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($claudeMd)
     [System.IO.File]::WriteAllText($resolvedPath, $content, [System.Text.UTF8Encoding]::new($false))
 
-    # Post-write validation
+    # Post-write validation: check structure AND content (not just a marker)
     if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
         LogError "Validation failed: $claudeMd is empty or missing"
-    } elseif (-not ((Get-Content $claudeMd -Raw) -match '## Machine-Specific')) {
-        LogError "Validation failed: $claudeMd missing Machine-Specific section"
+    } else {
+        $written = Get-Content $claudeMd -Raw
+        if ($written -notmatch '## Machine-Specific') {
+            LogError "Validation failed: $claudeMd missing Machine-Specific section"
+        }
+        # Template body must be present -- a file with only the footer is corrupt
+        if ($written -notmatch '## Coaching|## Code Style|## Tool') {
+            LogError "Validation failed: $claudeMd missing template body (only footer present?)"
+        }
     }
 
     LogOk "Wrote $claudeMd"

@@ -77,6 +77,11 @@ foreach ($cfg in @($claudeJson, $cursorMcp)) {
         continue
     }
     $content = Get-Content $cfg -Raw -ErrorAction SilentlyContinue
+    if (-not $content) {
+        Write-Host "      cannot read: $(Split-Path -Leaf $cfg)"
+        $mcpOk = $false
+        continue
+    }
     if ($content -notmatch 'chrome-devtools') {
         Write-Host "      chrome-devtools missing in $(Split-Path -Leaf $cfg)"
         $mcpOk = $false
@@ -114,6 +119,8 @@ $settingsFile = Join-Path (Join-Path $HOME ".claude") "settings.json"
 $hookPresent = $false
 if (Test-Path $settingsFile) {
     $settingsContent = Get-Content $settingsFile -Raw -ErrorAction SilentlyContinue
+    # Null guard: if file is unreadable (locked/corrupt), treat as not configured
+    # rather than reporting misleading "not configured" vs "cannot read" distinction
     if ($settingsContent -match 'session-archive') { $hookPresent = $true }
 }
 if ($hookPresent) {
@@ -439,28 +446,61 @@ $overwriteCount = 0
 $setupScripts = @()
 $setupScripts += Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "setup-*.sh" -ErrorAction SilentlyContinue
 $setupScripts += Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "setup-*.ps1" -ErrorAction SilentlyContinue
-foreach ($f in $setupScripts) {
-    $content = Get-Content $f.FullName -Raw -ErrorAction SilentlyContinue
-    if ($content -match 'cat\s*>') {
-        $header = Get-Content $f.FullName -TotalCount 5 -ErrorAction SilentlyContinue
-        $headerStr = $header -join " "
-        if ($headerStr -notmatch 'sole owner') {
-            Write-Host "      potential blind overwrite: $($f.Name)"
+if (-not $setupScripts -or $setupScripts.Count -eq 0) {
+    StepFail "19" "Config merge audit" "no setup scripts found in scripts/"
+} else {
+    foreach ($f in $setupScripts) {
+        $content = Get-Content $f.FullName -Raw -ErrorAction SilentlyContinue
+        if (-not $content) {
+            Write-Host "      cannot read: $($f.Name)"
             $overwriteCount++
+            continue
+        }
+        # Detect blind-overwrite patterns per language
+        $hasOverwrite = $false
+        if ($f.Extension -eq ".sh") {
+            # Bash: cat > file (without prior read)
+            if ($content -match 'cat\s*>') { $hasOverwrite = $true }
+        } else {
+            # PS1: WriteAllText or Set-Content without prior Get-Content/ReadAllText
+            if ($content -match 'WriteAllText|Set-Content') {
+                if ($content -notmatch 'Get-Content|ReadAllText|ConvertFrom-Json') {
+                    $hasOverwrite = $true
+                }
+            }
+        }
+        if ($hasOverwrite) {
+            # Check first 15 lines for "sole owner" exemption (header may be multi-line)
+            $header = Get-Content $f.FullName -TotalCount 15 -ErrorAction SilentlyContinue
+            if (-not $header) {
+                Write-Host "      cannot read header: $($f.Name)"
+                $overwriteCount++
+                continue
+            }
+            $headerStr = $header -join " "
+            if ($headerStr -notmatch 'sole owner') {
+                Write-Host "      potential blind overwrite: $($f.Name)"
+                $overwriteCount++
+            }
         }
     }
-}
-if ($overwriteCount -eq 0) {
-    StepPass "19" "Config merge audit"
-} else {
-    StepWarn "19" "Config merge audit" "$overwriteCount script(s) with potential blind overwrite"
+    if ($overwriteCount -eq 0) {
+        StepPass "19" "Config merge audit"
+    } else {
+        StepWarn "19" "Config merge audit" "$overwriteCount script(s) with potential blind overwrite"
+    }
 }
 
 # ---------------------------------------------------------------------------
 # 20. CC version-dep review
 # ---------------------------------------------------------------------------
 $ccVersion = "unknown"
-try { $ccVersion = claude --version 2>$null | Select-Object -First 1 } catch {}
+try {
+    $ccVersion = claude --version 2>$null | Select-Object -First 1
+} catch {
+    # claude CLI not found or errored -- $ccVersion stays "unknown",
+    # handled by StepSkip below
+}
 $registryFile = Join-Path (Join-Path $script:RepoRoot "reference") "claude-code-version-deps.md"
 $registryVersion = "unknown"
 if (Test-Path $registryFile) {

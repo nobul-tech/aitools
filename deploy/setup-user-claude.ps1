@@ -190,6 +190,8 @@ Full evaluation and progress log: `reference/claude-code-effectiveness.md` in ai
 - **Subagent context gap**: Subagents launched via Task do NOT inherit `.claude/rules/`, `CLAUDE.md`, or `~/.claude/CLAUDE.md`. Never delegate code-writing to subagents in projects with cross-cutting rules (cross-platform, encoding, protected files). Use subagents for research only, or include the critical rules verbatim in the subagent prompt.
 - **Clarify before complying**: If a user response seems to contradict or reverse a prior recommendation, ask a clarifying question before proceeding. The user may have misunderstood the framing (e.g., reading "Why not X" as a question rather than a justification). A quick "Just to confirm -- did you mean X or Y?" avoids wasted work from miscommunication. Err on the side of asking.
 - **Preserve subagent work product**: When a subagent performs a substantial exploration (multi-file audit, multi-component analysis, architectural survey), write the full findings to a `plans/` or scratch file -- do not condense them into a stub summary that discards the detail. Trivial lookups (single file, quick answer) can stay inline.
+- **Verify subagent audit results**: When subagents perform audits (code review, pattern scanning, compliance checks), spot-check their results. Read at least one file reported "clean" and verify. Subagents miss things due to context gaps -- treat their results as leads, not conclusions.
+- **Audit broadly**: When auditing error handling, check both suppressed errors (SilentlyContinue, 2>/dev/null) AND missing error handling (no try/catch, no -ErrorAction, bare Get-Content on untrusted input). Pattern matching finds suppressions; "what happens if this fails?" finds gaps.
 ### Standing Orders
 
 These are non-negotiable. Repeated violations of any standing order will end the working relationship.
@@ -252,11 +254,18 @@ if ($DryRun) {
     $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($claudeMd)
     [System.IO.File]::WriteAllText($resolvedPath, $content, [System.Text.UTF8Encoding]::new($false))
 
-    # Post-write validation
+    # Post-write validation: check structure AND content (not just a marker)
     if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
         LogError "Validation failed: $claudeMd is empty or missing"
-    } elseif (-not ((Get-Content $claudeMd -Raw) -match '## Machine-Specific')) {
-        LogError "Validation failed: $claudeMd missing Machine-Specific section"
+    } else {
+        $written = Get-Content $claudeMd -Raw
+        if ($written -notmatch '## Machine-Specific') {
+            LogError "Validation failed: $claudeMd missing Machine-Specific section"
+        }
+        # Template body must be present -- a file with only the footer is corrupt
+        if ($written -notmatch '## Coaching|## Code Style|## Tool') {
+            LogError "Validation failed: $claudeMd missing template body (only footer present?)"
+        }
     }
 
     LogOk "Wrote $claudeMd"

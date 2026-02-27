@@ -37,7 +37,7 @@ Post-push checklist #20 triggers this review automatically.
 | # | Item | Baseline | Last verified | Files | Upstream |
 |---|------|----------|---------------|-------|----------|
 | 4 | Session path sanitization (CWD -> JSONL directory name uses `-` replacement) | 2.1.51 | 2.1.51 | `reference/claude-code-practices.md`, `shared/hooks/session-archive.sh` | -- |
-| 5 | Subagent context gap (rules/CLAUDE.md not inherited by Task subagents) | 2.1.51 | 2.1.51 | `shared/claude-shared.md` (coaching items) | -- |
+| 5 | Subagent context gap (rules/CLAUDE.md not inherited by Task subagents) | 2.1.51 | 2.1.62 (2026-02-27) | `shared/claude-shared.md` (coaching items) | [#29423](https://github.com/anthropics/claude-code/issues/29423) |
 | 6 | CLAUDE.md hierarchy & merge behavior (5 levels, more-specific wins) | 2.1.51 | 2.1.51 | `reference/claude-code-practices.md`, `scripts/setup-user-claude.sh/.ps1` | -- |
 | 7 | Session management commands (claude -c, --resume, /resume, /rename) | 2.1.51 | 2.1.51 | `reference/claude-code-practices.md` | -- |
 | 8 | Hook execution context (hooks run in bash, not configurable) | 2.1.51 | 2.1.51 | `shared/hooks/session-archive.sh`, `scripts/setup-user-hooks.sh` | -- |

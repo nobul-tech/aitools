@@ -28,6 +28,13 @@ Every `.sh` and `.ps1` in `scripts/`, `deploy/`, `shared/hooks/`, and `shared/sh
    is never acceptable. If a catch block intentionally swallows an error, it must log what
    was swallowed and why.
 
+6. **Missing error handling** -- Critical operations (file reads that feed into output,
+   config parsing, template rendering) must have explicit error handling even when no
+   suppression pattern is present. If `Get-Content` or `cat` feeds into content written
+   to disk, validate the result is non-null/non-empty before proceeding. In bash scripts
+   with `set -e`, the shell covers command failures, but still validate content before
+   writing to prevent empty-output corruption.
+
 ### Cross-references
 
 - Standing order #7 in `shared/claude-shared.md` (user-level, applies to all projects)

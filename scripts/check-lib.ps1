@@ -13,10 +13,12 @@ $script:SkipCount = 0
 # Step formatters
 # ---------------------------------------------------------------------------
 function StepPass {
-    param([string]$Num, [string]$Label)
+    param([string]$Num, [string]$Label, [string]$Detail = "")
     $padded = $Label.PadRight(42)
     Write-Host ("{0,3}. {1}" -f $Num, $padded) -NoNewline
-    Write-Host "[PASS]" -ForegroundColor Green
+    Write-Host "[PASS]" -ForegroundColor Green -NoNewline
+    if ($Detail) { Write-Host " $Detail" -NoNewline }
+    Write-Host ""
     $script:PassCount++
 }
 
@@ -77,7 +79,9 @@ function ReadConfigKey {
         $val = $json.$Key
         if ($val) { return $val }
     } catch {
-        # Parse error or missing key
+        # File exists but is invalid JSON -- warn so callers know the null
+        # return means "corrupt", not "missing key"
+        Write-Host "      WARN: could not parse $File" -ForegroundColor Yellow
     }
     return $null
 }

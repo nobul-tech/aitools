@@ -111,6 +111,15 @@ Scripts following the `check-*.sh/.ps1` pattern have additional requirements:
   silent skip that counts as a pass
 - When a step queries a directory or file, test for existence before processing; on failure,
   report it as the step result
+- `StepPass` must accept and display a `$Detail` parameter, same as
+  `StepFail`/`StepWarn`/`StepSkip`. Callers passing detail context must have that
+  context displayed.
+
+### Post-write validation
+
+Setup scripts that generate files from templates must validate CONTENT correctness,
+not just structural markers. If a file is assembled from template + footer, validate
+that the template portion is non-empty, not just that the footer exists.
 
 ### Exemptions
 
@@ -125,6 +134,7 @@ Any script that intentionally suppresses errors without a result check must:
 | `setup-rust.sh` | 44 | `2>/dev/null \|\| log_warn` | Cleanup: brew formula may not be fully installed; warned on failure |
 | `aitools-install.sh` | 273 | `2>/dev/null \|\| true` | Update: apt-get may need sudo; gh already works at current version |
 | `check-lib.ps1` | 110 | `2>$null` (InvokeGit) | Git stderr triggers PS ErrorActionPreference=Stop; caller checks result |
+| `check-lib.ps1` | 79-81 | `try/catch` (ReadConfigKey) | Config parse: catch logs warning; callers handle null return via ResolveConfig |
 
 ### Gold standard references
 

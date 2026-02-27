@@ -44,6 +44,11 @@ Every error-suppression pattern requires an immediate result check:
 - `StepPass`/`StepFail`/`StepWarn` must handle internal errors
 - `Get-ChildItem`/`Get-Content` failures -- `StepFail` or `StepWarn`, never silent skip
 - Test file/directory existence before processing
+- `StepPass` must accept `$Detail` parameter matching `StepFail`/`StepWarn`/`StepSkip`
+
+### Post-write validation
+
+Template-generated files: validate content correctness, not just structural markers.
 
 ### Exemptions
 

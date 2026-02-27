@@ -421,11 +421,14 @@ CLAUDE_EOF
     log_ok "Wrote $CLAUDE_MD"
     log "Machine: $OS_NAME $ARCH ($HOSTNAME), Shell: $SHELL_NAME"
 
-    # Post-write validation
+    # Post-write validation: check structure AND content (not just a marker)
     if [ ! -s "$CLAUDE_MD" ]; then
         log_error "Validation failed: $CLAUDE_MD is empty or missing"
     elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
         log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
+    elif ! grep -qE "## (Coaching|Code Style|Tool)" "$CLAUDE_MD"; then
+        # Template body must be present -- a file with only the footer is corrupt
+        log_error "Validation failed: $CLAUDE_MD missing template body (only footer present?)"
     fi
 fi
 BLOCK
@@ -516,11 +519,18 @@ if ($DryRun) {
     $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($claudeMd)
     [System.IO.File]::WriteAllText($resolvedPath, $content, [System.Text.UTF8Encoding]::new($false))
 
-    # Post-write validation
+    # Post-write validation: check structure AND content (not just a marker)
     if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
         LogError "Validation failed: $claudeMd is empty or missing"
-    } elseif (-not ((Get-Content $claudeMd -Raw) -match '## Machine-Specific')) {
-        LogError "Validation failed: $claudeMd missing Machine-Specific section"
+    } else {
+        $written = Get-Content $claudeMd -Raw
+        if ($written -notmatch '## Machine-Specific') {
+            LogError "Validation failed: $claudeMd missing Machine-Specific section"
+        }
+        # Template body must be present -- a file with only the footer is corrupt
+        if ($written -notmatch '## Coaching|## Code Style|## Tool') {
+            LogError "Validation failed: $claudeMd missing template body (only footer present?)"
+        }
     }
 
     LogOk "Wrote $claudeMd"
