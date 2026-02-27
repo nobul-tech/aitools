@@ -30,8 +30,23 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | 5 | **PS1 scripts node-free**: `setup-user-cursor.ps1`, `setup-user-hooks.ps1`, and `setup-user-claude.ps1` no longer require Node.js. Converted from `node -e` to native PowerShell using `ConvertPSObjectToHashtable`. |
 | 6 | **Deploy scripts updated**: `build-deploy.sh` regenerates deploy scripts with native PS merge and flag support. Deploy `setup-user-cursor.ps1` and `setup-user-hooks.ps1` are now node-free. |
 | 7 | **New build emitters**: `ps1_hashtable_helper()`, `bash_flag_helpers()`, `ps1_param_block()`, `ps1_flag_helpers()` in `build-deploy.sh` for consistent flag/helper generation. |
+| 8 | **Standing orders consolidated**: Grouped 6 standing order bullets under `### Standing Orders` heading with single enforcement note in `shared/claude-shared.md`. |
+| 9 | **Platform dispatch in checklists**: Pre-commit, pre-push, and post-push rule blockquotes now show both macOS and Windows commands with "never run `.sh` on Windows" reminder. |
 
-**Verified on:** Windows (PS 5.1 native, all scripts syntax-validated, build pipeline clean). macOS: not tested.
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 10 | HIGH | **Git stderr crash in PS1 check scripts**: `$ErrorActionPreference = "Stop"` caused CRLF warnings from `git diff` to terminate the script. Added `InvokeGit` wrapper to `check-lib.ps1` that temporarily lowers the preference around git calls. |
+| 11 | LOW | **Reference link audit false positive**: Step 13 regex captured trailing backticks from markdown-formatted `@reference/` mentions (e.g., `` `@reference/` ``). Stripped trailing punctuation from matches. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 12 | **CC version registry**: Updated to 2.1.62. All CRITICAL upstream issues (Windows shell) still open. |
+
+**Verified on:** Windows (PS 5.1 native, all scripts syntax-validated, extensive post-push 19 PASS / 0 FAIL). macOS: not tested.
 
 ---
 
