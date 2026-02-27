@@ -198,6 +198,7 @@ These are non-negotiable. Repeated violations of any standing order will end the
 4. **Scratch files for complex bash** -- Never inline long commands in the Bash tool. Write a temp file, execute, clean up. Inline only for simple one-liners.
 5. **Perl for string manipulation** -- Use Perl (not sed/awk) for non-trivial string manipulation. sed is fine for trivial single substitutions only.
 6. **Platform-native dispatch** -- Run `.ps1` via `powershell.exe -File` on Windows, `.sh` via `bash` on macOS. Never run `.sh` scripts on Windows -- they skip PS1 validation and miss Windows-only issues.
+7. **No silent failures in reusable code** -- In any code meant to run more than once (scripts, services, hooks, CLI tools), never suppress errors without checking the result and logging/failing. `-ErrorAction SilentlyContinue`, `2>/dev/null`, `|| true`, `try/catch` are fine IF the result is immediately checked. Command-existence checks with explicit fallback are exempt. Applies when the project has a logging framework, is production code, or has reliability expectations. Does NOT apply to scratch/temp/throwaway work.
 
 **In plan mode**: Always review these areas and proactively suggest relevant improvements (e.g., "consider breaking this into smaller batches" or "this would be a good candidate for a hook").
 

@@ -1,0 +1,19 @@
+---
+description: Error handling requirements for all reusable scripts
+globs: "*.sh,*.ps1"
+alwaysApply: false
+---
+
+## Error Handling (this repo)
+
+Every `.sh`/`.ps1` in `scripts/`, `deploy/`, `shared/hooks/`, `shared/shell/` must follow these rules:
+
+1. **Logging framework** -- Use `log`/`log_error`/`LogError`. No raw `echo`/`Write-Host`.
+2. **`-ErrorAction SilentlyContinue`** -- null/empty check within 3 lines.
+3. **`2>/dev/null` / `|| true`** -- comment explaining why + result check.
+4. **Check scripts** -- `Get-ChildItem`/`Get-Content` failures produce `StepFail`/`StepWarn`, not silent skip.
+5. **`try/catch`** -- catch must log or re-throw. Empty `catch {}` never OK.
+
+Exception: command-existence checks (`Get-Command`, `command -v`) with explicit fallback.
+
+Cross-references: standing order #7 (`shared/claude-shared.md`), `script-standards.md` error handling + exemptions.

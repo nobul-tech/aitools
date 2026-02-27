@@ -1,14 +1,14 @@
 ---
-description: Script standards for setup scripts in this repo
+description: Script standards for all reusable scripts in this repo
 globs: "*.sh,*.ps1"
 alwaysApply: false
 ---
 
 ## Script Standards (this repo)
 
-Setup scripts (`scripts/setup-*.sh/.ps1`) must follow these conventions.
+All reusable scripts must follow these conventions: setup, check/audit, installer, deploy, hooks, shell aliases.
 
-### Block order
+### Block order (setup scripts)
 
 **Bash:** shebang/header > `set -euo pipefail` > logging block (`ERRORS=0` + helpers) > OS guard > body > exit footer
 **PS1:** header > logging block (`$errors = 0` + helpers) > OS guard > body > exit footer
@@ -26,3 +26,25 @@ Bash: `log`/`log_ok`/`log_error`/`log_warn`. PS1: `Log`/`LogOk`/`LogError`/`LogW
 ### Exit footer
 
 Check error counter, exit 1 on failure, exit 0 on success. See gold standards: `scripts/setup-user-mcp.sh/.ps1`.
+
+### Error handling (all scripts)
+
+Every error-suppression pattern requires an immediate result check:
+
+- `-ErrorAction SilentlyContinue` -- null/empty check within 3 lines
+- `2>/dev/null`, `|| true` -- comment + result check
+- `try/catch` -- catch must log or re-throw; empty `catch {}` is never OK
+
+**Exception:** Command-existence checks (`Get-Command`, `command -v`) with explicit fallback.
+
+**Anti-pattern:** Suppressed errors feeding into counts/loops with no null guard (false pass).
+
+### Check/audit scripts
+
+- `StepPass`/`StepFail`/`StepWarn` must handle internal errors
+- `Get-ChildItem`/`Get-Content` failures -- `StepFail` or `StepWarn`, never silent skip
+- Test file/directory existence before processing
+
+### Exemptions
+
+Intentional suppression without result check requires: header comment + entry in exemptions table in `.claude/rules/script-standards.md` (protected file, user approval needed).

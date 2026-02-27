@@ -65,14 +65,17 @@ case "$OS_NAME" in
                 # Detect and clean up known non-preferred installs
                 if command -v conda &>/dev/null && conda list pandoc 2>/dev/null | grep -q pandoc; then
                     log_warn "Removing conda pandoc..."
+                    # Cleanup: conda remove may fail if partially removed; non-blocking
                     conda remove -y pandoc 2>/dev/null || true
                 fi
                 if command -v port &>/dev/null && port installed pandoc 2>/dev/null | grep -q pandoc; then
                     log_warn "Removing MacPorts pandoc..."
+                    # Cleanup: port uninstall may fail if partially removed; non-blocking
                     sudo port uninstall pandoc 2>/dev/null || true
                 fi
                 if [ -f "$HOME/.cabal/bin/pandoc" ]; then
                     log_warn "Removing Cabal pandoc..."
+                    # Cleanup: cabal binary may already be gone; non-blocking
                     rm -f "$HOME/.cabal/bin/pandoc" 2>/dev/null || true
                 fi
 

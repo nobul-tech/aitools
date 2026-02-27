@@ -690,6 +690,7 @@ if $do_user; then
             # Detect GitHub username
             gh_user=""
             if command -v gh &>/dev/null; then
+                # gh api may fail if not authenticated; fallback to manual input below
                 gh_user=$(gh api user --jq '.login' 2>/dev/null || true)
             fi
             if [ -z "$gh_user" ]; then
@@ -1031,6 +1032,7 @@ if $do_sessions; then
                 size=$(du -h "$file" | cut -f1 | tr -d ' ')
                 printf '%s  (%s)\n' "$rel" "$size"
                 found=true
+            # sessions_dir may not exist; suppress find errors, checked via $found
             done < <(find "$sessions_dir" -name "*.jsonl" -type f 2>/dev/null | sort)
             if ! $found; then
                 if [ -n "$filter" ]; then
@@ -1059,6 +1061,7 @@ if $do_sessions; then
             matches=()
             while IFS= read -r f; do
                 matches+=("$f")
+            # claude_projects dir may not exist; suppress find errors, checked via matches count
             done < <(find "$claude_projects" -name "${session_id}*.jsonl" -type f 2>/dev/null)
 
             if [ ${#matches[@]} -eq 0 ]; then

@@ -66,6 +66,7 @@ case "$OS_NAME" in
                 log_warn "Vercel CLI installed via npm at $vercel_path"
                 log "Migrating to Homebrew for Claude Code PATH compatibility..."
 
+                # Cleanup: npm uninstall may fail if partially removed; non-blocking
                 npm uninstall -g vercel 2>/dev/null || true
                 brew install vercel-cli
 

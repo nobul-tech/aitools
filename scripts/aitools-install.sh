@@ -269,6 +269,7 @@ case "$OS_NAME" in
                 fi
             else
                 if command -v apt-get &>/dev/null; then
+                    # Update: may fail if no sudo; non-blocking (gh already works at current version)
                     sudo apt-get update -qq && sudo apt-get install -y gh 2>/dev/null || true
                 fi
             fi
@@ -546,6 +547,7 @@ else
         MINGW*|MSYS*)
             # WinGet works from Git Bash
             if command -v winget &>/dev/null; then
+                # Suppress winget progress noise; install success checked via command -v below
                 winget install Anthropic.ClaudeCode --accept-package-agreements --accept-source-agreements 2>/dev/null
                 if command -v claude &>/dev/null; then
                     log_ok "Claude Code installed ($(claude --version 2>/dev/null | head -1))"

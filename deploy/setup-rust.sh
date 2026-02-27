@@ -41,6 +41,7 @@ export PATH="$HOME/.cargo/bin:$PATH"
 # Homebrew "rust" formula is a brew-managed toolchain that conflicts with rustup
 if command -v brew &>/dev/null && brew list rust &>/dev/null 2>&1; then
     log_warn "Found Homebrew-managed rust (conflicts with rustup). Removing..."
+    # Cleanup: brew uninstall may fail if formula not fully installed; log warning only
     brew uninstall rust 2>/dev/null || log_warn "Failed to uninstall brew rust"
 fi
 

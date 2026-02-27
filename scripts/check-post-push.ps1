@@ -43,17 +43,21 @@ $deployErrors = 0
 $bashExe = (Get-Command bash -ErrorAction SilentlyContinue).Source
 if ($bashExe) {
     $deployFiles = Get-ChildItem (Join-Path $script:RepoRoot "deploy") -Filter "*.sh" -ErrorAction SilentlyContinue
-    foreach ($f in $deployFiles) {
-        & $bashExe -n $f.FullName 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "      FAIL: $($f.Name)"
-            $deployErrors++
-        }
-    }
-    if ($deployErrors -eq 0) {
-        StepPass "2" "Smoke-test deploy scripts"
+    if (-not $deployFiles) {
+        StepFail "2" "Smoke-test deploy scripts" "no .sh files found in deploy/"
     } else {
-        StepFail "2" "Smoke-test deploy scripts" "$deployErrors file(s) failed bash -n"
+        foreach ($f in $deployFiles) {
+            & $bashExe -n $f.FullName 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "      FAIL: $($f.Name)"
+                $deployErrors++
+            }
+        }
+        if ($deployErrors -eq 0) {
+            StepPass "2" "Smoke-test deploy scripts"
+        } else {
+            StepFail "2" "Smoke-test deploy scripts" "$deployErrors file(s) failed bash -n"
+        }
     }
 } else {
     StepSkip "2" "Smoke-test deploy scripts" "bash not found"
@@ -147,18 +151,24 @@ if ($bashExe) {
     if (Test-Path $hooksDir) {
         $allSh += Get-ChildItem $hooksDir -Filter "*.sh" -ErrorAction SilentlyContinue
     }
-    foreach ($f in $allSh) {
-        & $bashExe -n $f.FullName 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "      FAIL: $($f.FullName)"
-            $shErrors++
+    if ($allSh.Count -eq 0) {
+        StepFail "6" "Full syntax (.sh)" "no .sh files found in scripts/, deploy/, or shared/hooks/"
+    } else {
+        foreach ($f in $allSh) {
+            & $bashExe -n $f.FullName 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "      FAIL: $($f.FullName)"
+                $shErrors++
+            }
+        }
+        if ($shErrors -eq 0) {
+            StepPass "6" "Full syntax (.sh)"
+        } else {
+            StepFail "6" "Full syntax (.sh)" "$shErrors file(s) failed"
         }
     }
-}
-if ($shErrors -eq 0) {
-    StepPass "6" "Full syntax (.sh)"
 } else {
-    StepFail "6" "Full syntax (.sh)" "$shErrors file(s) failed"
+    StepSkip "6" "Full syntax (.sh)" "bash not found"
 }
 
 # .ps1 validation (native on Windows)
@@ -166,21 +176,25 @@ $ps1Errors = 0
 $allPs1 = @()
 $allPs1 += Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "*.ps1" -ErrorAction SilentlyContinue
 $allPs1 += Get-ChildItem (Join-Path $script:RepoRoot "deploy") -Filter "*.ps1" -ErrorAction SilentlyContinue
-foreach ($f in $allPs1) {
-    $e = $null
-    $null = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$e)
-    if ($e.Count -gt 0) {
-        Write-Host "      FAIL: $($f.Name)"
-        foreach ($err in $e) {
-            Write-Host "        line $($err.Extent.StartLineNumber): $($err.Message)"
-        }
-        $ps1Errors++
-    }
-}
-if ($ps1Errors -eq 0) {
-    StepPass "6" "Full syntax (.ps1)"
+if ($allPs1.Count -eq 0) {
+    StepFail "6" "Full syntax (.ps1)" "no .ps1 files found in scripts/ or deploy/"
 } else {
-    StepFail "6" "Full syntax (.ps1)" "$ps1Errors file(s) failed"
+    foreach ($f in $allPs1) {
+        $e = $null
+        $null = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$e)
+        if ($e.Count -gt 0) {
+            Write-Host "      FAIL: $($f.Name)"
+            foreach ($err in $e) {
+                Write-Host "        line $($err.Extent.StartLineNumber): $($err.Message)"
+            }
+            $ps1Errors++
+        }
+    }
+    if ($ps1Errors -eq 0) {
+        StepPass "6" "Full syntax (.ps1)"
+    } else {
+        StepFail "6" "Full syntax (.ps1)" "$ps1Errors file(s) failed"
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -207,19 +221,23 @@ $parityErrors = 0
 $claudeRulesDir = Join-Path (Join-Path $script:RepoRoot ".claude") "rules"
 $cursorRulesDir = Join-Path (Join-Path $script:RepoRoot ".cursor") "rules"
 $claudeRules = Get-ChildItem $claudeRulesDir -Filter "*.md" -ErrorAction SilentlyContinue
-foreach ($f in $claudeRules) {
-    $base = $f.BaseName
-    if ($claudeOnly -contains $base) { continue }
-    $cursorFile = Join-Path $cursorRulesDir "$base.mdc"
-    if (-not (Test-Path $cursorFile)) {
-        Write-Host "      missing cursor counterpart: .cursor/rules/$base.mdc"
-        $parityErrors++
-    }
-}
-if ($parityErrors -eq 0) {
-    StepPass "8" "Rule parity audit"
+if (-not $claudeRules) {
+    StepFail "8" "Rule parity audit" "no rules found in .claude/rules/"
 } else {
-    StepFail "8" "Rule parity audit" "$parityErrors missing counterpart(s)"
+    foreach ($f in $claudeRules) {
+        $base = $f.BaseName
+        if ($claudeOnly -contains $base) { continue }
+        $cursorFile = Join-Path $cursorRulesDir "$base.mdc"
+        if (-not (Test-Path $cursorFile)) {
+            Write-Host "      missing cursor counterpart: .cursor/rules/$base.mdc"
+            $parityErrors++
+        }
+    }
+    if ($parityErrors -eq 0) {
+        StepPass "8" "Rule parity audit"
+    } else {
+        StepFail "8" "Rule parity audit" "$parityErrors missing counterpart(s)"
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -268,25 +286,33 @@ if ($inventoryErrors -eq 0) {
 # ---------------------------------------------------------------------------
 $pairingErrors = 0
 $setupSh = Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "setup-*.sh" -ErrorAction SilentlyContinue
-foreach ($f in $setupSh) {
-    $ps1Name = $f.BaseName + ".ps1"
-    if (-not (Test-Path (Join-Path $f.DirectoryName $ps1Name))) {
-        Write-Host "      unpaired: scripts/$($f.Name) (no .ps1)"
-        $pairingErrors++
-    }
-}
 $setupPs1 = Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "setup-*.ps1" -ErrorAction SilentlyContinue
-foreach ($f in $setupPs1) {
-    $shName = $f.BaseName + ".sh"
-    if (-not (Test-Path (Join-Path $f.DirectoryName $shName))) {
-        Write-Host "      unpaired: scripts/$($f.Name) (no .sh)"
-        $pairingErrors++
-    }
-}
-if ($pairingErrors -eq 0) {
-    StepPass "11" "Cross-platform pairing"
+if ((-not $setupSh) -and (-not $setupPs1)) {
+    StepFail "11" "Cross-platform pairing" "no setup scripts found in scripts/"
 } else {
-    StepFail "11" "Cross-platform pairing" "$pairingErrors unpaired script(s)"
+    if ($setupSh) {
+        foreach ($f in $setupSh) {
+            $ps1Name = $f.BaseName + ".ps1"
+            if (-not (Test-Path (Join-Path $f.DirectoryName $ps1Name))) {
+                Write-Host "      unpaired: scripts/$($f.Name) (no .ps1)"
+                $pairingErrors++
+            }
+        }
+    }
+    if ($setupPs1) {
+        foreach ($f in $setupPs1) {
+            $shName = $f.BaseName + ".sh"
+            if (-not (Test-Path (Join-Path $f.DirectoryName $shName))) {
+                Write-Host "      unpaired: scripts/$($f.Name) (no .sh)"
+                $pairingErrors++
+            }
+        }
+    }
+    if ($pairingErrors -eq 0) {
+        StepPass "11" "Cross-platform pairing"
+    } else {
+        StepFail "11" "Cross-platform pairing" "$pairingErrors unpaired script(s)"
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -331,17 +357,21 @@ $hooksDir2 = Join-Path (Join-Path $script:RepoRoot "shared") "hooks"
 if (Test-Path $hooksDir2) {
     $allShFiles += Get-ChildItem $hooksDir2 -Filter "*.sh" -ErrorAction SilentlyContinue
 }
-foreach ($f in $allShFiles) {
-    $content = [System.IO.File]::ReadAllText($f.FullName)
-    if ($content -match "`r`n") {
-        Write-Host "      CRLF: $($f.FullName)"
-        $crlfCount++
-    }
-}
-if ($crlfCount -eq 0) {
-    StepPass "14" "Line ending audit"
+if ($allShFiles.Count -eq 0) {
+    StepFail "14" "Line ending audit" "no .sh files found"
 } else {
-    StepFail "14" "Line ending audit" "$crlfCount file(s) with CRLF"
+    foreach ($f in $allShFiles) {
+        $content = [System.IO.File]::ReadAllText($f.FullName)
+        if ($content -match "`r`n") {
+            Write-Host "      CRLF: $($f.FullName)"
+            $crlfCount++
+        }
+    }
+    if ($crlfCount -eq 0) {
+        StepPass "14" "Line ending audit"
+    } else {
+        StepFail "14" "Line ending audit" "$crlfCount file(s) with CRLF"
+    }
 }
 
 # ---------------------------------------------------------------------------

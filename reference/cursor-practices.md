@@ -166,6 +166,7 @@ Cursor project rules mirror Claude Code rules for consistency. When changing rul
 | `.claude/rules/script-standards.md` | `.cursor/rules/script-standards.mdc` | Condensed |
 | `.claude/rules/documentation-standards.md` | `.cursor/rules/documentation-standards.mdc` | Condensed |
 | `.claude/rules/surface-silent-failures.md` | -- | Claude Code-specific |
+| `.claude/rules/error-handling.md` | `.cursor/rules/error-handling.mdc` | Condensed |
 | `.claude/rules/web-sources.md` | `.cursor/rules/web-sources.mdc` | Identical |
 | `.claude/rules/config-file-safety.md` | `.cursor/rules/config-file-safety.mdc` | Condensed |
 | `.claude/rules/deploy-paths.md` | `.cursor/rules/deploy-paths.mdc` | Near-identical |

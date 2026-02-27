@@ -1,8 +1,11 @@
 ## Script Standards (this repo)
 
-All setup scripts (`scripts/setup-*.sh` and `scripts/setup-*.ps1`) must follow these conventions.
+All reusable scripts in the repo must follow these conventions. This covers:
+setup scripts (`scripts/setup-*.sh/.ps1`), check/audit scripts (`scripts/check-*.sh/.ps1`),
+installer scripts (`scripts/aitools-install.*`, `scripts/aitools.*`), deploy scripts
+(`deploy/*.sh/.ps1`), hooks (`shared/hooks/*.sh`), and shell aliases (`shared/shell/*`).
 
-### Block order (bash)
+### Block order (bash setup scripts)
 
 1. Shebang + header comment (name, purpose, "safe to re-run", platform, reference to `tool-install-sources.md`)
 2. `set -euo pipefail`
@@ -11,7 +14,7 @@ All setup scripts (`scripts/setup-*.sh` and `scripts/setup-*.ps1`) must follow t
 5. Script body
 6. Exit footer (check `$ERRORS`, exit 1 on failure)
 
-### Block order (PowerShell)
+### Block order (PowerShell setup scripts)
 
 1. Header comment (name, purpose, "safe to re-run", platform, reference to `tool-install-sources.md`)
 2. Logging block: `$logDir`, `$logFile`, `$scriptName`, dir creation, `Log`/`LogOk`/`LogError`/`LogWarn`, `$errors = 0`
@@ -62,9 +65,71 @@ if ($errors -gt 0) {
 }
 ```
 
+### Error handling requirements
+
+These apply to ALL reusable scripts in the repo, not just setup scripts.
+
+Every error-suppression pattern must have an immediate result check that logs or fails:
+
+| Pattern | Requirement |
+|---------|-------------|
+| `-ErrorAction SilentlyContinue` | Null/empty check within 3 lines |
+| `2>/dev/null` | Comment explaining why + result check |
+| `\|\| true` | Comment explaining why + result check |
+| `try/catch` with empty catch | Catch must log or re-throw; empty `catch {}` is never acceptable |
+
+**Acceptable exception:** Command-existence checks (`Get-Command`, `command -v`, `which`)
+with an explicit fallback (e.g., if-else branch, default value assignment). These are
+inherently expected to fail and the fallback IS the error handling.
+
+**Anti-pattern:** Suppressed errors feeding into counts, loops, or conditional logic with
+no null guard. This produces false passes (counts as 0 instead of erroring) or silently
+skips work.
+
+Example -- **wrong:**
+```powershell
+$files = Get-ChildItem -Path $dir -ErrorAction SilentlyContinue
+foreach ($f in $files) { ... }  # silently iterates 0 items if $dir doesn't exist
+```
+
+Example -- **correct:**
+```powershell
+$files = Get-ChildItem -Path $dir -ErrorAction SilentlyContinue
+if (-not $files) {
+    LogError "Cannot read directory: $dir"
+    # or StepFail for check scripts
+}
+```
+
+### Check/audit script requirements
+
+Scripts following the `check-*.sh/.ps1` pattern have additional requirements:
+
+- Step functions (`StepPass`/`StepFail`/`StepWarn`) must handle internal errors -- a step
+  that fails to execute is NOT a pass
+- `Get-ChildItem`/`Get-Content` failures must produce `StepFail` or `StepWarn`, never a
+  silent skip that counts as a pass
+- When a step queries a directory or file, test for existence before processing; on failure,
+  report it as the step result
+
+### Exemptions
+
+Any script that intentionally suppresses errors without a result check must:
+1. Document the exemption in its header comment with a reason
+2. Be listed in the table below (protected -- requires user approval to modify)
+
+| Script | Line(s) | Pattern | Reason |
+|--------|---------|---------|--------|
+| `setup-vercelcli.sh` | 69 | `2>/dev/null \|\| true` | Cleanup: npm uninstall may fail if not installed; brew install follows |
+| `setup-pandoc.sh` | 68, 73, 77 | `2>/dev/null \|\| true` | Cleanup: non-preferred package managers may not be installed |
+| `setup-rust.sh` | 44 | `2>/dev/null \|\| log_warn` | Cleanup: brew formula may not be fully installed; warned on failure |
+| `aitools-install.sh` | 273 | `2>/dev/null \|\| true` | Update: apt-get may need sudo; gh already works at current version |
+| `check-lib.ps1` | 110 | `2>$null` (InvokeGit) | Git stderr triggers PS ErrorActionPreference=Stop; caller checks result |
+
 ### Gold standard references
 
-- Bash: `scripts/setup-user-mcp.sh`
-- PS1: `scripts/setup-user-mcp.ps1`
+- Setup (bash): `scripts/setup-user-mcp.sh`
+- Setup (PS1): `scripts/setup-user-mcp.ps1`
+- Check (PS1): `scripts/check-pre-commit.ps1` *(after Phase 2 remediation)*
 
-When creating a new setup script, copy the logging block and exit footer from the gold standard.
+When creating a new script, copy the logging block and exit footer from the appropriate gold standard.
