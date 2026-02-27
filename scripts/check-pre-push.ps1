@@ -9,7 +9,14 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:RepoRoot = Split-Path -Parent $scriptDir
 
 . (Join-Path $scriptDir "check-lib.ps1")
+
+# OS guard: use .sh on macOS/Linux
+if ($PSVersionTable.PSEdition -eq "Core" -and $IsMacOS) {
+    Write-Host "Use check-pre-push.sh on macOS"; exit 1
+}
+
 ResolveConfig
+CheckLogInit "pre-push"
 
 Set-Location $script:RepoRoot
 

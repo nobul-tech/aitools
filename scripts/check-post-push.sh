@@ -9,7 +9,14 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # shellcheck source=scripts/check-lib.sh
 source "$SCRIPT_DIR/check-lib.sh"
+
+# OS guard: use .ps1 on Windows
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) echo "Use check-post-push.ps1 on Windows"; exit 1 ;;
+esac
+
 resolve_config
+check_log_init "post-push"
 
 EXTENSIVE=false
 [ "${1:-}" = "--extensive" ] && EXTENSIVE=true

@@ -10,6 +10,43 @@ $script:WarnCount = 0
 $script:SkipCount = 0
 
 # ---------------------------------------------------------------------------
+# File logging (checks.log + checks.jsonl)
+# ---------------------------------------------------------------------------
+$script:CheckLogDir = ""
+$script:CheckLog = ""
+$script:CheckJsonl = ""
+$script:CheckName = ""
+
+function CheckLogInit {
+    param([string]$Name)
+    $script:CheckName = $Name
+    $script:CheckLogDir = Join-Path $env:LOCALAPPDATA "aitools"
+    $script:CheckLog = Join-Path $script:CheckLogDir "checks.log"
+    $script:CheckJsonl = Join-Path $script:CheckLogDir "checks.jsonl"
+    if (-not (Test-Path $script:CheckLogDir)) {
+        New-Item -ItemType Directory -Path $script:CheckLogDir -Force | Out-Null
+    }
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $hostName = $env:COMPUTERNAME
+    if (-not $hostName) { $hostName = hostname }
+    Add-Content -Path $script:CheckLog -Value "[$ts] [$Name] === RUN START ==="
+    Add-Content -Path $script:CheckJsonl -Value "{`"ts`":`"$ts`",`"check`":`"$Name`",`"event`":`"run_start`",`"host`":`"$hostName`",`"os`":`"Windows`"}"
+}
+
+function CheckLogStep {
+    param([string]$Num, [string]$Label, [string]$Result, [string]$Detail = "")
+    if (-not $script:CheckLog) { return }
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $padded = $Label.PadRight(42)
+    $line = "[$ts] [$($script:CheckName)] $("{0,3}" -f $Num). $padded [$Result]"
+    if ($Detail) { $line += " $Detail" }
+    Add-Content -Path $script:CheckLog -Value $line
+    # Escape detail for JSON
+    $jsonDetail = $Detail -replace '\\', '\\' -replace '"', '\"'
+    Add-Content -Path $script:CheckJsonl -Value "{`"ts`":`"$ts`",`"check`":`"$($script:CheckName)`",`"step`":`"$Num`",`"label`":`"$Label`",`"result`":`"$Result`",`"detail`":`"$jsonDetail`"}"
+}
+
+# ---------------------------------------------------------------------------
 # Step formatters
 # ---------------------------------------------------------------------------
 function StepPass {
@@ -20,6 +57,7 @@ function StepPass {
     if ($Detail) { Write-Host " $Detail" -NoNewline }
     Write-Host ""
     $script:PassCount++
+    CheckLogStep $Num $Label "PASS" $Detail
 }
 
 function StepFail {
@@ -30,6 +68,7 @@ function StepFail {
     if ($Detail) { Write-Host " $Detail" -NoNewline }
     Write-Host ""
     $script:FailCount++
+    CheckLogStep $Num $Label "FAIL" $Detail
 }
 
 function StepWarn {
@@ -40,6 +79,7 @@ function StepWarn {
     if ($Detail) { Write-Host " $Detail" -NoNewline }
     Write-Host ""
     $script:WarnCount++
+    CheckLogStep $Num $Label "WARN" $Detail
 }
 
 function StepSkip {
@@ -50,6 +90,7 @@ function StepSkip {
     if ($Detail) { Write-Host " $Detail" -NoNewline }
     Write-Host ""
     $script:SkipCount++
+    CheckLogStep $Num $Label "SKIP" $Detail
 }
 
 # ---------------------------------------------------------------------------
@@ -66,6 +107,14 @@ function PrintSummary {
     Write-Host ", " -NoNewline
     Write-Host "$($script:FailCount) FAIL" -ForegroundColor Red -NoNewline
     Write-Host " ==="
+    # Log summary to files
+    if ($script:CheckLog) {
+        $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+        $summaryLine = "[$ts] [$($script:CheckName)] === SUMMARY: $($script:PassCount) PASS, $($script:SkipCount) SKIP, $($script:WarnCount) WARN, $($script:FailCount) FAIL ==="
+        Add-Content -Path $script:CheckLog -Value $summaryLine
+        $jsonLine = "{`"ts`":`"$ts`",`"check`":`"$($script:CheckName)`",`"event`":`"run_end`",`"pass`":$($script:PassCount),`"skip`":$($script:SkipCount),`"warn`":$($script:WarnCount),`"fail`":$($script:FailCount)}"
+        Add-Content -Path $script:CheckJsonl -Value $jsonLine
+    }
 }
 
 # ---------------------------------------------------------------------------
