@@ -1,7 +1,8 @@
 ## Pre-Push Checklist (this repo)
 
-> **Script**: `bash scripts/check-pre-push.sh` (read-only, no --fix).
-> Automates steps below. Steps marked PARTIAL or MANUAL still need human judgment.
+> **Script**: On macOS: `bash scripts/check-pre-push.sh`.
+> On Windows: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/check-pre-push.ps1`.
+> Always use the platform-native variant. Never run the `.sh` version on Windows.
 
 Before pushing to remote, verify:
 

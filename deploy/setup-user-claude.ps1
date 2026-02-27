@@ -189,12 +189,16 @@ Full evaluation and progress log: `reference/claude-code-effectiveness.md` in ai
 - **Subagent context gap**: Subagents launched via Task do NOT inherit `.claude/rules/`, `CLAUDE.md`, or `~/.claude/CLAUDE.md`. Never delegate code-writing to subagents in projects with cross-cutting rules (cross-platform, encoding, protected files). Use subagents for research only, or include the critical rules verbatim in the subagent prompt.
 - **Clarify before complying**: If a user response seems to contradict or reverse a prior recommendation, ask a clarifying question before proceeding. The user may have misunderstood the framing (e.g., reading "Why not X" as a question rather than a justification). A quick "Just to confirm -- did you mean X or Y?" avoids wasted work from miscommunication. Err on the side of asking.
 - **Preserve subagent work product**: When a subagent performs a substantial exploration (multi-file audit, multi-component analysis, architectural survey), write the full findings to a `plans/` or scratch file -- do not condense them into a stub summary that discards the detail. Trivial lookups (single file, quick answer) can stay inline.
-- **STANDING ORDER -- Use dedicated tools for file operations**: Use Read (not cat/head/tail), Edit (not sed/awk), Write (not echo/heredoc), Grep/Glob (not grep/find) for all file operations. Bash is exclusively for shell execution (git, running scripts, build commands). Repeated violations will end the working relationship.
-- **STANDING ORDER -- User-reported problems**: When the user reports unexpected behavior, it is real until proven otherwise. Investigate. Do not deflect or speculate. State what you know, what you don't, and what you will do next. Repeated violations will end the working relationship.
-- **STANDING ORDER -- Checklist scripts, not ad-hoc commands**: For recurring verification checklists (pre-commit, pre-push, post-push), write reusable scripts in the project and call those -- don't re-invent 10+ individual bash commands every time. Ad-hoc commands are OK for novel one-off checks that don't fit an existing script.
-- **STANDING ORDER -- Scratch files for complex bash**: Never inline long or complicated commands in the Bash tool. Write to a temp file, execute it, clean up after. Inline is fine only for simple one-liners (git status, bash -n, single grep, etc.).
-- **STANDING ORDER -- Perl for string manipulation**: Use Perl (not sed/awk) for any non-trivial string manipulation in bash contexts. Write a small Perl script to a temp file and call it with `perl`. sed is fine for trivial single substitutions only.
-- **STANDING ORDER -- Platform-native script dispatch**: When running project scripts that have `.sh` and `.ps1` variants (check scripts, setup scripts, etc.), dispatch to the platform-native variant: `.ps1` via `powershell.exe -File` on Windows, `.sh` via `bash` on macOS. Never default to `.sh` on Windows just because the Bash tool is available -- `.ps1` scripts exercise Windows-specific code paths and catch Windows-only issues.
+### Standing Orders
+
+These are non-negotiable. Repeated violations of any standing order will end the working relationship.
+
+1. **Dedicated tools for file ops** -- Use Read/Edit/Write/Grep/Glob for file operations. Bash is for shell execution only (git, scripts, build commands).
+2. **Investigate user-reported problems** -- When the user reports unexpected behavior, it is real. Investigate first; do not deflect or speculate.
+3. **Checklist scripts, not ad-hoc** -- Use the project's check scripts (`check-pre-commit`, `check-pre-push`, `check-post-push`) instead of ad-hoc commands. Ad-hoc is OK for novel one-off checks only.
+4. **Scratch files for complex bash** -- Never inline long commands in the Bash tool. Write a temp file, execute, clean up. Inline only for simple one-liners.
+5. **Perl for string manipulation** -- Use Perl (not sed/awk) for non-trivial string manipulation. sed is fine for trivial single substitutions only.
+6. **Platform-native dispatch** -- Run `.ps1` via `powershell.exe -File` on Windows, `.sh` via `bash` on macOS. Never run `.sh` scripts on Windows -- they skip PS1 validation and miss Windows-only issues.
 
 **In plan mode**: Always review these areas and proactively suggest relevant improvements (e.g., "consider breaking this into smaller batches" or "this would be a good candidate for a hook").
 

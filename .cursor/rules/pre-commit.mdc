@@ -6,8 +6,9 @@ alwaysApply: true
 
 ## Pre-Commit Checklist (this repo)
 
-> **Script**: `bash scripts/check-pre-commit.sh` (check) or `--fix` (auto-fix).
-> Automates steps below. Steps marked PARTIAL or MANUAL still need human judgment.
+> **Script**: On macOS: `bash scripts/check-pre-commit.sh` (or `--fix`).
+> On Windows: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/check-pre-commit.ps1` (or `-Fix`).
+> Always use the platform-native variant. Never run the `.sh` version on Windows.
 
 Before every commit, verify:
 
