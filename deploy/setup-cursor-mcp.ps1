@@ -12,6 +12,14 @@
 # Cursor uses its own MCP config at ~/.cursor/mcp.json (separate from Claude Code's ~/.claude.json).
 # Remote servers use the "url" key directly. Local stdio servers use "command" + "args".
 
+param(
+    [switch]$DryRun,
+    [switch]$Force
+)
+
+# Env passthrough from parent (aitools CLI)
+if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
+
 # --- Logging ---
 $logDir = Join-Path $env:LOCALAPPDATA "aitools"
 $logFile = Join-Path $logDir "deploy.log"
@@ -66,6 +74,8 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     exit 1
 }
 
+if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
+
 # Check that Node.js is available (required for Chrome DevTools MCP)
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     LogError "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"
@@ -85,20 +95,24 @@ if (-not (Test-Path $cursorDir)) {
 $mcpJson = Join-Path $cursorDir "mcp.json"
 
 # Read existing config or start fresh (merge, not overwrite)
-Backup-File -FilePath $mcpJson
+if (-not $DryRun) {
+    Backup-File -FilePath $mcpJson
+}
+$config = @{}
+$corrupt = $false
 if (Test-Path $mcpJson) {
     Log "Merging managed servers into $mcpJson"
     try {
         $raw = Get-Content $mcpJson -Raw
         $config = ConvertPSObjectToHashtable ($raw | ConvertFrom-Json)
     } catch {
-        LogWarn "$mcpJson could not be parsed ($_), starting with empty config"
-        $config = @{}
+        $corrupt = $true
+        LogWarn "$mcpJson could not be parsed ($_)"
     }
 } else {
     Log "Creating $mcpJson"
-    $config = @{}
 }
+$beforeKeys = @($config.Keys)
 
 # Ensure mcpServers exists
 if (-not $config.ContainsKey("mcpServers")) { $config["mcpServers"] = @{} }
@@ -115,25 +129,50 @@ $config["mcpServers"]["webflow"] = @{
     url = "https://mcp.webflow.com/mcp"
 }
 
-$json = $config | ConvertTo-Json -Depth 10
-[System.IO.File]::WriteAllText($mcpJson, $json, [System.Text.UTF8Encoding]::new($false))
+# Clobber detection
+$managedKeys = @("mcpServers")
+$lostKeys = @($beforeKeys | Where-Object { $_ -notin $config.Keys })
 
-# Post-write validation
-try {
-    $vContent = [System.IO.File]::ReadAllText($mcpJson)
-    $vParsed = $vContent | ConvertFrom-Json
-    if (-not ($vParsed.PSObject.Properties.Name -contains "mcpServers")) {
-        LogError "Validation failed: $mcpJson missing required field 'mcpServers'"
+if ($DryRun) {
+    Log "[DRY RUN] $mcpJson`: merge MCP servers"
+    Log "  Managed fields: mcpServers.chrome-devtools, mcpServers.vercel, mcpServers.webflow"
+    if ($lostKeys.Count -gt 0) {
+        LogWarn "[DRY RUN] CLOBBER: would lose non-managed fields: $($lostKeys -join ', ')"
     }
-} catch {
-    LogError "Validation failed: $mcpJson is not valid JSON -- $_"
+    if ($corrupt) {
+        LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
+    }
+} elseif ($corrupt -and -not $Force) {
+    LogError "$mcpJson is corrupt. Use -Force to overwrite, or fix manually."
+} elseif ($lostKeys.Count -gt 0 -and -not $Force) {
+    LogError "$mcpJson merge would lose fields: $($lostKeys -join ', '). Use -Force to proceed."
+} else {
+    if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
+    if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
+
+    $json = $config | ConvertTo-Json -Depth 10
+    $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($mcpJson)
+    [System.IO.File]::WriteAllText($resolvedPath, $json, [System.Text.UTF8Encoding]::new($false))
+
+    # Post-write validation
+    try {
+        $vContent = [System.IO.File]::ReadAllText($resolvedPath)
+        $vParsed = $vContent | ConvertFrom-Json
+        if (-not ($vParsed.PSObject.Properties.Name -contains "mcpServers")) {
+            LogError "Validation failed: $mcpJson missing required field 'mcpServers'"
+        }
+    } catch {
+        LogError "Validation failed: $mcpJson is not valid JSON -- $_"
+    }
+
+    LogOk "Cursor MCP config written to $mcpJson"
+    Log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
 }
 
-LogOk "Cursor MCP config written to $mcpJson"
-Log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
-
 # --- Disable vercel/webflow via Cursor CLI if available ---
-if (Get-Command agent -ErrorAction SilentlyContinue) {
+if ($DryRun) {
+    Log "[DRY RUN] Would disable vercel/webflow via Cursor CLI (if available)"
+} elseif (Get-Command agent -ErrorAction SilentlyContinue) {
     foreach ($server in @("vercel", "webflow")) {
         $result = agent mcp disable $server 2>&1
         if ($LASTEXITCODE -eq 0) {

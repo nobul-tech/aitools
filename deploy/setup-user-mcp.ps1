@@ -6,6 +6,14 @@
 # Vercel and Webflow are present but disabled by default (deny rules).
 # Use `aitools --addmcp` to enable per project.
 
+param(
+    [switch]$DryRun,
+    [switch]$Force
+)
+
+# Env passthrough from parent (aitools CLI)
+if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
+
 # --- Logging ---
 $logDir = Join-Path $env:LOCALAPPDATA "aitools"
 $logFile = Join-Path $logDir "deploy.log"
@@ -60,6 +68,8 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     exit 1
 }
 
+if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
+
 # Check that claude CLI is available
 if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
     LogError "'claude' CLI not found in PATH. Install Claude Code first: https://claude.ai/download"
@@ -109,14 +119,20 @@ function Add-McpServer {
 
 Log "Setting up MCP servers for Claude Code (user scope)..."
 
-# Chrome DevTools — local stdio server via npx (Windows needs cmd /c wrapper)
-Add-McpServer -Name "chrome-devtools" -AddArgs @("chrome-devtools", "--scope", "user", "cmd", "/c", "npx", "chrome-devtools-mcp@latest", "--", "--isolated")
+if ($DryRun) {
+    Log "[DRY RUN] Would add MCP server: chrome-devtools (stdio, --isolated)"
+    Log "[DRY RUN] Would add MCP server: vercel (http)"
+    Log "[DRY RUN] Would add MCP server: webflow (http)"
+} else {
+    # Chrome DevTools -- local stdio server via npx (Windows needs cmd /c wrapper)
+    Add-McpServer -Name "chrome-devtools" -AddArgs @("chrome-devtools", "--scope", "user", "cmd", "/c", "npx", "chrome-devtools-mcp@latest", "--", "--isolated")
 
-# Vercel — remote HTTP server (disabled by default via deny rules below)
-Add-McpServer -Name "vercel" -AddArgs @("--transport", "http", "--scope", "user", "vercel", "https://mcp.vercel.com")
+    # Vercel -- remote HTTP server (disabled by default via deny rules below)
+    Add-McpServer -Name "vercel" -AddArgs @("--transport", "http", "--scope", "user", "vercel", "https://mcp.vercel.com")
 
-# Webflow — remote HTTP server (disabled by default via deny rules below)
-Add-McpServer -Name "webflow" -AddArgs @("--transport", "http", "--scope", "user", "webflow", "https://mcp.webflow.com/mcp")
+    # Webflow -- remote HTTP server (disabled by default via deny rules below)
+    Add-McpServer -Name "webflow" -AddArgs @("--transport", "http", "--scope", "user", "webflow", "https://mcp.webflow.com/mcp")
+}
 
 # --- Merge deny rules into ~/.claude/settings.json ---
 # Vercel and Webflow are disabled by default at user level.
@@ -127,23 +143,29 @@ $settingsDir = Split-Path $settingsFile -Parent
 Log "Merging deny rules into $settingsFile..."
 
 if (-not (Test-Path $settingsDir)) {
-    New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
+    if (-not $DryRun) {
+        New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
+    }
 }
 
 # Back up before merge
-Backup-File -FilePath $settingsFile
+if (-not $DryRun) {
+    Backup-File -FilePath $settingsFile
+}
 
 # Read existing settings or start fresh
 $settings = @{}
+$corrupt = $false
 if (Test-Path $settingsFile) {
     try {
         $raw = Get-Content $settingsFile -Raw
         $settings = ConvertPSObjectToHashtable ($raw | ConvertFrom-Json)
     } catch {
-        LogWarn "$settingsFile could not be parsed ($_), starting with empty config"
-        $settings = @{}
+        $corrupt = $true
+        LogWarn "$settingsFile could not be parsed ($_)"
     }
 }
+$beforeKeys = @($settings.Keys)
 
 # Ensure permissions.deny exists
 if (-not $settings.ContainsKey("permissions")) { $settings["permissions"] = @{} }
@@ -157,23 +179,50 @@ foreach ($rule in $denyRules) {
     }
 }
 
-$json = $settings | ConvertTo-Json -Depth 10
-[System.IO.File]::WriteAllText($settingsFile, $json, [System.Text.UTF8Encoding]::new($false))
+# Clobber detection
+$managedKeys = @("permissions")
+$lostKeys = @($beforeKeys | Where-Object { $_ -notin $settings.Keys })
 
-# Post-write validation
-try {
-    $vContent = [System.IO.File]::ReadAllText($settingsFile)
-    $vParsed = $vContent | ConvertFrom-Json
-    if (-not ($vParsed.PSObject.Properties.Name -contains "permissions")) {
-        LogError "Validation failed: $settingsFile missing required field 'permissions'"
+if ($DryRun) {
+    Log "[DRY RUN] $settingsFile`: merge deny rules"
+    Log "  Managed fields: permissions.deny"
+    if ($lostKeys.Count -gt 0) {
+        LogWarn "[DRY RUN] CLOBBER: would lose non-managed fields: $($lostKeys -join ', ')"
     }
-} catch {
-    LogError "Validation failed: $settingsFile is not valid JSON -- $_"
+    if ($corrupt) {
+        LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
+    }
+} elseif ($corrupt -and -not $Force) {
+    LogError "$settingsFile is corrupt. Use -Force to overwrite, or fix manually."
+} elseif ($lostKeys.Count -gt 0 -and -not $Force) {
+    LogError "$settingsFile merge would lose fields: $($lostKeys -join ', '). Use -Force to proceed."
+} else {
+    if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
+    if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
+
+    $json = $settings | ConvertTo-Json -Depth 10
+    $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($settingsFile)
+    [System.IO.File]::WriteAllText($resolvedPath, $json, [System.Text.UTF8Encoding]::new($false))
+
+    # Post-write validation
+    try {
+        $vContent = [System.IO.File]::ReadAllText($resolvedPath)
+        $vParsed = $vContent | ConvertFrom-Json
+        if (-not ($vParsed.PSObject.Properties.Name -contains "permissions")) {
+            LogError "Validation failed: $settingsFile missing required field 'permissions'"
+        }
+    } catch {
+        LogError "Validation failed: $settingsFile is not valid JSON -- $_"
+    }
+
+    LogOk "Deny rules set for vercel, webflow in $settingsFile"
 }
 
-LogOk "Deny rules set for vercel, webflow in $settingsFile"
-
-LogOk "User-level MCP configured (all servers; vercel/webflow disabled by default)"
+if ($DryRun) {
+    Log "[DRY RUN] Would configure user-level MCP (all servers; vercel/webflow disabled by default)"
+} else {
+    LogOk "User-level MCP configured (all servers; vercel/webflow disabled by default)"
+}
 Log "To enable per project: aitools --addmcp vercel"
 Log "To check status: aitools mcp"
 

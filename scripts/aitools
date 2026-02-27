@@ -280,6 +280,7 @@ deploy_configs() {
     local script_dir="$1"
     local errors=0
     export AITOOLS_DEPLOY=1
+    if $dry_run; then export AITOOLS_DRY_RUN=1; fi
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
             local deploy_scripts="setup-user-claude.ps1 setup-user-mcp.ps1 setup-cursor-mcp.ps1 setup-user-cursor.ps1 setup-user-hooks.ps1"
@@ -328,6 +329,7 @@ deploy_configs() {
             ;;
     esac
     unset AITOOLS_DEPLOY
+    unset AITOOLS_DRY_RUN
     return $errors
 }
 
@@ -365,6 +367,7 @@ Commands:
 
 Options:
   --addmcp <name...>   Enable MCP server(s) for current project (vercel, webflow)
+  --dry-run            Preview what would change without writing any files
   --version, -v        Show installed and repo version
   --help, -h           Show this help
 
@@ -388,12 +391,14 @@ sessions_subcmd=""
 sessions_args=()
 addmcp_seen=false
 addmcp_servers=()
+dry_run=false
 passthrough=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --version|-v) show_version=true; shift ;;
         --help|-h)    show_help=true; shift ;;
+        --dry-run)    dry_run=true; shift ;;
         install)      do_install=true; shift ;;
         gitpull)
             do_gitpull=true; shift

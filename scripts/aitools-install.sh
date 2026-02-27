@@ -13,6 +13,7 @@ set -euo pipefail
 REPOS_PATH=""
 SKIP_DRIVE_DETECTION=false
 SKIP_GH_AUTH=false
+DRY_RUN=false
 SHOW_HELP=false
 
 # --- Parse flags ---
@@ -30,6 +31,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_GH_AUTH=true
             shift
             ;;
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
         --help|-h)
             SHOW_HELP=true
             shift
@@ -41,6 +46,7 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+[ "${AITOOLS_DRY_RUN:-}" = "1" ] && DRY_RUN=true
 
 if $SHOW_HELP; then
     cat <<'USAGE'
@@ -52,6 +58,7 @@ Options:
   --repos-path PATH         Set repos directory without prompting (default: ~/repos)
   --skip-drive-detection    Skip Google Drive auto-detection
   --skip-gh-auth            Skip gh auth login
+  --dry-run                 Preview mode -- show what would change without writing
   --help, -h                Show this help
 
 Interactive behavior:
@@ -73,6 +80,7 @@ case "$(uname -s)" in
         ps_args=()
         if $SKIP_GH_AUTH; then ps_args+=("-SkipGhAuth"); fi
         if $SKIP_DRIVE_DETECTION; then ps_args+=("-SkipDriveDetection"); fi
+        if $DRY_RUN; then ps_args+=("-DryRun"); fi
         if [ -n "$REPOS_PATH" ]; then
             ps_args+=("-ReposPath" "$(cygpath -w "$REPOS_PATH")")
         fi
@@ -95,6 +103,8 @@ OS_NAME="$(uname -s)"
 ERRORS=0
 
 mkdir -p "$LOG_DIR"
+
+if $DRY_RUN; then export AITOOLS_DRY_RUN=1; fi
 
 log() {
     local level="${2:-info}"
@@ -132,6 +142,8 @@ display_path() {
 # --- Post-write JSON validation ---
 # Validates a JSON config file after writing: checks non-empty, valid JSON,
 # required keys present, and no double-slash paths (excluding protocol prefixes).
+$DRY_RUN && log "[DRY RUN] Preview mode -- no files will be written"
+
 validate_json_config() {
     local file="$1"; shift
     local required_keys=("$@")

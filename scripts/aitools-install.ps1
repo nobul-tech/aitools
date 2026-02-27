@@ -10,6 +10,7 @@ param(
     [string]$ReposPath = "",
     [switch]$SkipDriveDetection,
     [switch]$SkipGhAuth,
+    [switch]$DryRun,
     [switch]$Help
 )
 
@@ -23,6 +24,7 @@ Options:
   -ReposPath <string>       Set repos directory without prompting (default: ~/repos)
   -SkipDriveDetection       Skip Google Drive auto-detection
   -SkipGhAuth               Skip gh auth login
+  -DryRun                   Preview mode -- show what would change without writing
   -Help                     Show this help
 
 Interactive behavior:
@@ -44,6 +46,10 @@ $osName = "Windows"
 $errors = 0
 
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+
+# Env passthrough from parent (aitools CLI)
+if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
+if ($DryRun) { $env:AITOOLS_DRY_RUN = "1" }
 
 function Log($msg, $level = "info") {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
@@ -109,6 +115,8 @@ if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir
 
 # Auto-detect ai-tooling repo path from this script's location
 $aiToolingRepo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+
+if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
 # ============================================================
 # 1. Install/update gh CLI
@@ -454,6 +462,9 @@ foreach ($script in $deployScripts) {
         LogWarn "$script not found -- skipping"
     }
 }
+
+# --- Cleanup ---
+if ($DryRun) { Remove-Item Env:\AITOOLS_DRY_RUN -ErrorAction SilentlyContinue }
 
 # --- Exit ---
 if ($errors -gt 0) {

@@ -11,6 +11,14 @@
 # Note: The hook script itself is bash-only (Claude Code hooks always run in
 # bash on both platforms). This PS1 script only deploys the hook configuration.
 
+param(
+    [switch]$DryRun,
+    [switch]$Force
+)
+
+# Env passthrough from parent (aitools CLI)
+if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
+
 # --- Logging ---
 $logDir = Join-Path $env:LOCALAPPDATA "aitools"
 $logFile = Join-Path $logDir "deploy.log"
@@ -28,11 +36,27 @@ function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
 
+# --- PS 5.1 compatibility helper ---
+function ConvertPSObjectToHashtable($obj) {
+    if ($null -eq $obj) { return @{} }
+    $ht = @{}
+    foreach ($prop in $obj.PSObject.Properties) {
+        if ($prop.Value -is [System.Management.Automation.PSCustomObject]) {
+            $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
+        } else {
+            $ht[$prop.Name] = $prop.Value
+        }
+    }
+    return $ht
+}
+
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     LogError "This script is for Windows. On macOS/Linux, use the .sh version."
     exit 1
 }
+
+if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
 # --- Resolve repo path ---
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -44,98 +68,170 @@ if (-not (Test-Path $hookScript)) {
     exit 1
 }
 
-# --- Require node for JSON manipulation ---
-if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    LogError "node required for JSON manipulation"
-    exit 1
-}
-
 # --- Deploy hook script to ~/.claude/hooks/ ---
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
 $hooksDir = Join-Path $claudeDir "hooks"
-if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }
 
-$hookDest = Join-Path $hooksDir "session-archive.sh"
-Copy-Item -Path $hookScript -Destination $hookDest -Force
-LogOk "Deployed hook: $hookDest"
-
-# --- Merge hook into ~/.claude/settings.json ---
-$settingsFile = Join-Path $claudeDir "settings.json"
-if (-not (Test-Path $claudeDir)) { New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null }
-
-# Hook command uses Unix-style path (hooks run in bash even on Windows)
-# Convert backslashes to forward slashes for the bash command
-$hookDestUnix = $hookDest -replace '\\', '/'
-$hookCmd = "bash `"$hookDestUnix`""
-
-node -e @"
-const fs = require('fs');
-const path = require('path');
-const settingsFile = process.argv[1];
-const hookCmd = process.argv[2];
-
-// --- Read claude preferences from profile.json ---
-let autoMemory = true;
-let alwaysThinking = true;
-try {
-    const cfgPath = path.join(process.env.HOME || process.env.USERPROFILE, '.aitools', 'config.json');
-    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-    if (cfg.userRepoPath) {
-        const pf = JSON.parse(fs.readFileSync(path.join(cfg.userRepoPath, 'profile.json'), 'utf8'));
-        if (pf.claude) {
-            if (typeof pf.claude.autoMemory === 'boolean') autoMemory = pf.claude.autoMemory;
-            if (typeof pf.claude.alwaysThinking === 'boolean') alwaysThinking = pf.claude.alwaysThinking;
-        }
-    }
-} catch (e) { if (e.code !== 'ENOENT') console.error('Warning: could not read profile preferences: ' + e.message); }
-
-// --- Read existing settings.json ---
-let settings = {};
-try { settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + settingsFile + ' is invalid JSON, starting with empty config'); }
-
-// --- Merge hook ---
-if (!settings.hooks) settings.hooks = {};
-if (!Array.isArray(settings.hooks.SessionEnd)) settings.hooks.SessionEnd = [];
-
-const hookId = 'session-archive.sh';
-const existing = settings.hooks.SessionEnd.find(rule =>
-    rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId))
-);
-
-if (existing) {
-    existing.hooks.forEach(h => {
-        if (h.command && h.command.includes(hookId)) {
-            h.command = hookCmd;
-        }
-    });
+if ($DryRun) {
+    Log "[DRY RUN] Would deploy hook: $hookScript -> $(Join-Path $hooksDir 'session-archive.sh')"
 } else {
-    settings.hooks.SessionEnd.push({
-        matcher: '',
-        hooks: [{
-            type: 'command',
-            command: hookCmd
-        }]
-    });
+    if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }
+
+    $hookDest = Join-Path $hooksDir "session-archive.sh"
+    Copy-Item -Path $hookScript -Destination $hookDest -Force
+    LogOk "Deployed hook: $hookDest"
 }
 
-// --- Merge claude preferences ---
-settings.autoMemoryEnabled = autoMemory;
-settings.alwaysThinkingEnabled = alwaysThinking;
+# --- Read claude preferences from profile.json ---
+$autoMemory = $true
+$alwaysThinking = $true
 
-fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+$configFile = Join-Path $env:USERPROFILE ".aitools\config.json"
+if (Test-Path $configFile) {
+    try {
+        $cfg = ConvertPSObjectToHashtable (Get-Content $configFile -Raw | ConvertFrom-Json)
+        if ($cfg.ContainsKey("userRepoPath") -and $cfg["userRepoPath"]) {
+            $profilePath = Join-Path $cfg["userRepoPath"] "profile.json"
+            if (Test-Path $profilePath) {
+                $pf = ConvertPSObjectToHashtable (Get-Content $profilePath -Raw | ConvertFrom-Json)
+                if ($pf.ContainsKey("claude")) {
+                    $claudePrefs = $pf["claude"]
+                    if ($claudePrefs.ContainsKey("autoMemory")) { $autoMemory = [bool]$claudePrefs["autoMemory"] }
+                    if ($claudePrefs.ContainsKey("alwaysThinking")) { $alwaysThinking = [bool]$claudePrefs["alwaysThinking"] }
+                }
+            }
+        }
+    } catch {
+        LogWarn "Could not read profile preferences: $_"
+    }
+}
 
-// Post-write validation
-const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-const _missing = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'].filter(k => !(k in _v));
-if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
-"@ "$settingsFile" "$hookCmd"
+# --- Merge hook + preferences into ~/.claude/settings.json ---
+$settingsFile = Join-Path $claudeDir "settings.json"
+if (-not (Test-Path $claudeDir)) {
+    if (-not $DryRun) {
+        New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
+    }
+}
 
-LogOk "Settings deployed to $settingsFile"
-Log "  Hook: $hookCmd"
-# Log preference values
-$_s = Get-Content $settingsFile -Raw | ConvertFrom-Json
-Log "  autoMemoryEnabled: $($_s.autoMemoryEnabled)"
-Log "  alwaysThinkingEnabled: $($_s.alwaysThinkingEnabled)"
+# Hook command uses Unix-style path (hooks run in bash even on Windows)
+$hookDestPath = Join-Path $hooksDir "session-archive.sh"
+$hookDestUnix = $hookDestPath -replace '\\', '/'
+$hookCmd = "bash `"$hookDestUnix`""
+
+# Read existing settings
+$settings = @{}
+$corrupt = $false
+if (Test-Path $settingsFile) {
+    try {
+        $raw = Get-Content $settingsFile -Raw
+        $settings = ConvertPSObjectToHashtable ($raw | ConvertFrom-Json)
+    } catch {
+        $corrupt = $true
+        LogWarn "$settingsFile could not be parsed ($_)"
+    }
+}
+$beforeKeys = @($settings.Keys)
+
+# --- Merge hook ---
+if (-not $settings.ContainsKey("hooks")) { $settings["hooks"] = @{} }
+if (-not $settings["hooks"].ContainsKey("SessionEnd")) { $settings["hooks"]["SessionEnd"] = @() }
+
+$hookId = "session-archive.sh"
+$existingIdx = -1
+$sessionEndArr = @($settings["hooks"]["SessionEnd"])
+for ($i = 0; $i -lt $sessionEndArr.Count; $i++) {
+    $rule = $sessionEndArr[$i]
+    if ($rule -is [System.Collections.Hashtable] -and $rule.ContainsKey("hooks")) {
+        $hooksArr = @($rule["hooks"])
+        foreach ($h in $hooksArr) {
+            if ($h -is [System.Collections.Hashtable] -and $h.ContainsKey("command") -and $h["command"] -match $hookId) {
+                $existingIdx = $i
+                break
+            }
+        }
+    }
+    if ($existingIdx -ge 0) { break }
+}
+
+if ($existingIdx -ge 0) {
+    # Update existing hook command
+    $rule = $sessionEndArr[$existingIdx]
+    $hooksArr = @($rule["hooks"])
+    for ($i = 0; $i -lt $hooksArr.Count; $i++) {
+        $h = $hooksArr[$i]
+        if ($h -is [System.Collections.Hashtable] -and $h.ContainsKey("command") -and $h["command"] -match $hookId) {
+            $h["command"] = $hookCmd
+        }
+    }
+} else {
+    # Add new hook entry
+    $newEntry = @{
+        matcher = ""
+        hooks   = @(
+            @{
+                type    = "command"
+                command = $hookCmd
+            }
+        )
+    }
+    $sessionEndArr += $newEntry
+    $settings["hooks"]["SessionEnd"] = $sessionEndArr
+}
+
+# --- Merge claude preferences ---
+$settings["autoMemoryEnabled"] = $autoMemory
+$settings["alwaysThinkingEnabled"] = $alwaysThinking
+
+# --- Clobber detection ---
+$managedKeys = @("hooks", "autoMemoryEnabled", "alwaysThinkingEnabled")
+$lostKeys = @($beforeKeys | Where-Object { $_ -notin $settings.Keys })
+
+if ($DryRun) {
+    Log "[DRY RUN] $settingsFile`: merge"
+    Log "  Managed fields: $($managedKeys -join ', ')"
+    if ($lostKeys.Count -gt 0) {
+        LogWarn "[DRY RUN] CLOBBER: would lose non-managed fields: $($lostKeys -join ', ')"
+    }
+    if ($corrupt) {
+        LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
+    }
+    Log "[DRY RUN] Hook: $hookCmd"
+    Log "[DRY RUN] autoMemoryEnabled: $autoMemory"
+    Log "[DRY RUN] alwaysThinkingEnabled: $alwaysThinking"
+} else {
+    if ($corrupt -and -not $Force) {
+        LogError "$settingsFile is corrupt. Use -Force to overwrite, or fix manually."
+    } elseif ($lostKeys.Count -gt 0 -and -not $Force) {
+        LogError "$settingsFile merge would lose fields: $($lostKeys -join ', '). Use -Force to proceed."
+    } else {
+        if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
+        if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
+
+        $json = $settings | ConvertTo-Json -Depth 10
+        $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($settingsFile)
+        [System.IO.File]::WriteAllText($resolvedPath, $json, [System.Text.UTF8Encoding]::new($false))
+
+        # Post-write validation
+        try {
+            $vContent = [System.IO.File]::ReadAllText($resolvedPath)
+            $vParsed = $vContent | ConvertFrom-Json
+            $requiredKeys = @("hooks", "autoMemoryEnabled", "alwaysThinkingEnabled")
+            foreach ($rk in $requiredKeys) {
+                if (-not ($vParsed.PSObject.Properties.Name -contains $rk)) {
+                    LogError "Validation failed: $settingsFile missing required field '$rk'"
+                }
+            }
+        } catch {
+            LogError "Validation failed: $settingsFile is not valid JSON -- $_"
+        }
+
+        LogOk "Settings deployed to $settingsFile"
+        Log "  Hook: $hookCmd"
+        Log "  autoMemoryEnabled: $autoMemory"
+        Log "  alwaysThinkingEnabled: $alwaysThinking"
+    }
+}
 
 # --- Exit ---
 if ($errors -gt 0) {

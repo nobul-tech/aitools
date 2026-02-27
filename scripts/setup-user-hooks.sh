@@ -11,6 +11,17 @@
 
 set -euo pipefail
 
+# --- Flag parsing ---
+DRY_RUN=false
+FORCE=false
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=true ;;
+        --force)   FORCE=true ;;
+    esac
+done
+[ "${AITOOLS_DRY_RUN:-}" = "1" ] && DRY_RUN=true
+
 # --- Logging ---
 LOG_DIR="$HOME/Library/Logs/aitools"
 [ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
@@ -34,6 +45,8 @@ case "$(uname -s)" in
         exit 1 ;;
 esac
 
+[ "$DRY_RUN" = "true" ] && log "[DRY RUN] Preview mode -- no files will be written"
+
 # --- Resolve repo path ---
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -52,10 +65,15 @@ fi
 
 # --- Deploy hook script to ~/.claude/hooks/ ---
 HOOK_DEST="$HOME/.claude/hooks/session-archive.sh"
-mkdir -p "$HOME/.claude/hooks"
-cp "$HOOK_SCRIPT" "$HOOK_DEST"
-chmod +x "$HOOK_DEST"
-log_ok "Deployed hook: $(display_path "$HOOK_DEST")"
+
+if [ "$DRY_RUN" = "true" ]; then
+    log "[DRY RUN] Would deploy hook: $(display_path "$HOOK_SCRIPT") -> $(display_path "$HOOK_DEST")"
+else
+    mkdir -p "$HOME/.claude/hooks"
+    cp "$HOOK_SCRIPT" "$HOOK_DEST"
+    chmod +x "$HOOK_DEST"
+    log_ok "Deployed hook: $(display_path "$HOOK_DEST")"
+fi
 
 # --- Merge hook into ~/.claude/settings.json ---
 SETTINGS_FILE="$HOME/.claude/settings.json"
@@ -64,11 +82,13 @@ mkdir -p "$HOME/.claude"
 # The hook command — uses deployed copy in ~/.claude/hooks/
 HOOK_CMD="bash \"$HOOK_DEST\""
 
-node -e "
+MERGE_RESULT=$(node -e "
 const fs = require('fs');
 const path = require('path');
 const settingsFile = process.argv[1];
 const hookCmd = process.argv[2];
+const dryRun = process.argv[3] === 'true';
+const force = process.argv[4] === 'true';
 
 // --- Read claude preferences from profile.json ---
 let autoMemory = true;
@@ -87,7 +107,16 @@ try {
 
 // --- Read existing settings.json ---
 let settings = {};
-try { settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + settingsFile + ' is invalid JSON, starting with empty config'); }
+let corrupt = false;
+try {
+    settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+} catch (e) {
+    if (e.code !== 'ENOENT') {
+        corrupt = true;
+        console.error('Warning: ' + settingsFile + ' is invalid JSON');
+    }
+}
+const beforeKeys = Object.keys(settings);
 
 // --- Merge hook ---
 if (!settings.hooks) settings.hooks = {};
@@ -118,18 +147,60 @@ if (existing) {
 settings.autoMemoryEnabled = autoMemory;
 settings.alwaysThinkingEnabled = alwaysThinking;
 
-fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+// --- Clobber detection ---
+const managedKeys = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'];
+const afterKeys = Object.keys(settings);
+const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
 
-// Post-write validation
-const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-const _missing = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'].filter(k => !(k in _v));
-if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
-" "$SETTINGS_FILE" "$HOOK_CMD"
+if (dryRun) {
+    console.error('[DRY RUN] ' + settingsFile + ': merge');
+    console.error('  Managed fields: ' + managedKeys.join(', '));
+    if (lostKeys.length > 0) console.error('  CLOBBER WARNING: would lose: ' + lostKeys.join(', '));
+    if (corrupt) console.error('  File is corrupt -- --force required');
+    console.error('  Hook: ' + hookCmd);
+    console.error('  autoMemoryEnabled: ' + autoMemory);
+    console.error('  alwaysThinkingEnabled: ' + alwaysThinking);
+    console.log('dry-run');
+} else if (corrupt && !force) {
+    console.error('ERROR: ' + settingsFile + ' is corrupt. Use --force to overwrite, or fix manually.');
+    console.log('error-corrupt');
+} else if (lostKeys.length > 0 && !force) {
+    console.error('ERROR: merge would lose fields: ' + lostKeys.join(', ') + '. Use --force to proceed.');
+    console.log('error-clobber');
+} else {
+    if (corrupt) console.error('Warning: proceeding with --force on corrupt file');
+    if (lostKeys.length > 0) console.error('Warning: proceeding with --force, losing fields: ' + lostKeys.join(', '));
+    fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
 
-log_ok "Settings deployed to $(display_path "$SETTINGS_FILE")"
-log "  Hook: $HOOK_CMD"
-log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"
-log "  alwaysThinkingEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).alwaysThinkingEnabled)")"
+    // Post-write validation
+    const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+    const _missing = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'].filter(k => !(k in _v));
+    if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+
+    console.log('ok');
+}
+" "$SETTINGS_FILE" "$HOOK_CMD" "$DRY_RUN" "$FORCE")
+
+case "$MERGE_RESULT" in
+    ok)
+        log_ok "Settings deployed to $(display_path "$SETTINGS_FILE")"
+        log "  Hook: $HOOK_CMD"
+        log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"
+        log "  alwaysThinkingEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).alwaysThinkingEnabled)")"
+        ;;
+    dry-run)
+        log "[DRY RUN] Would merge settings (see above)"
+        ;;
+    error-corrupt)
+        log_error "$(display_path "$SETTINGS_FILE") is corrupt. Use --force to overwrite."
+        ;;
+    error-clobber)
+        log_error "$(display_path "$SETTINGS_FILE") merge would lose fields. Use --force to proceed."
+        ;;
+    *)
+        log_error "Unexpected merge result: $MERGE_RESULT"
+        ;;
+esac
 
 # --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then

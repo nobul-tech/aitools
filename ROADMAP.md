@@ -23,3 +23,7 @@ Detailed plans live in `plans/`. See `RELEASE_NOTES.md` for completed work.
 ## Completed
 
 *Completed items move to RELEASE_NOTES.md.*
+
+| Item | Version | Summary |
+|------|---------|---------|
+| Interactive clobber protection | v0.21 | `--dry-run`/`--force` flags, clobber detection, corrupt file handling, PS1 node-free conversion |

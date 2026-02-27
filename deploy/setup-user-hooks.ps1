@@ -9,6 +9,11 @@
 # Note: The hook script itself is bash-only (Claude Code hooks always run in
 # bash on both platforms). This PS1 script only deploys the hook configuration.
 
+param(
+    [switch]$DryRun,
+    [switch]$Force
+)
+
 # --- Logging ---
 $logDir = Join-Path $env:LOCALAPPDATA "aitools"
 $logFile = Join-Path $logDir "deploy.log"
@@ -33,12 +38,39 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     exit 1
 }
 
-# --- Require node for JSON manipulation ---
-$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
-if (-not $nodeCmd) {
-    LogError "node required for JSON manipulation"
-    exit 1
+# --- PS 5.1 compatibility helper ---
+function ConvertPSObjectToHashtable($obj) {
+    if ($null -eq $obj) { return @{} }
+    $ht = @{}
+    foreach ($prop in $obj.PSObject.Properties) {
+        if ($prop.Value -is [System.Management.Automation.PSCustomObject]) {
+            $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
+        } else {
+            $ht[$prop.Name] = $prop.Value
+        }
+    }
+    return $ht
 }
+
+# Backup a file before overwriting. Keeps at most $MaxBackups copies.
+function Backup-File {
+    param([string]$FilePath, [int]$MaxBackups = 20)
+    if (-not (Test-Path $FilePath)) { return }
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
+    $backupPath = "${FilePath}.bak.${ts}"
+    Copy-Item -Path $FilePath -Destination $backupPath
+    # Prune oldest beyond limit
+    $backups = Get-ChildItem -Path "${FilePath}.bak.*" | Sort-Object LastWriteTime -Descending
+    if ($backups.Count -gt $MaxBackups) {
+        $backups | Select-Object -Skip $MaxBackups | Remove-Item -Force
+    }
+    Log "Backed up $FilePath"
+}
+
+# Env passthrough from parent (aitools CLI)
+if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
+
+if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
 # --- Deploy embedded hook script to ~/.claude/hooks/ ---
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
@@ -143,8 +175,13 @@ mkdir -p "$DEST_DIR"
 cp "$TRANSCRIPT" "$DEST_FILE"
 '@
 
-[System.IO.File]::WriteAllText($hookDest, $hookContent, [System.Text.UTF8Encoding]::new($false))
-LogOk "Deployed hook: $hookDest"
+if ($DryRun) {
+    Log "[DRY RUN] Would deploy hook to $hookDest"
+} else {
+    $resolvedHook = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($hookDest)
+    [System.IO.File]::WriteAllText($resolvedHook, $hookContent, [System.Text.UTF8Encoding]::new($false))
+    LogOk "Deployed hook: $hookDest"
+}
 
 # --- Merge hook + preferences into ~/.claude/settings.json ---
 $settingsFile = Join-Path $claudeDir "settings.json"
@@ -154,62 +191,102 @@ if (-not (Test-Path $claudeDir)) { New-Item -ItemType Directory -Path $claudeDir
 $hookDestUnix = $hookDest -replace '\\', '/'
 $hookCmd = "bash `"$hookDestUnix`""
 
-node -e @'
-const fs = require('fs');
-const settingsFile = process.argv[1];
-const hookCmd = process.argv[2];
+# --- Embedded preferences (from profile.json at build time) ---
+$autoMemory = $false
+$alwaysThinking = $true
 
-// --- Embedded preferences (from profile.json at build time) ---
-const autoMemory = true;
-const alwaysThinking = true;
+# --- Read existing settings.json ---
+$settings = @{}
+$corrupt = $false
+if (Test-Path $settingsFile) {
+    try {
+        $settings = ConvertPSObjectToHashtable (Get-Content $settingsFile -Raw | ConvertFrom-Json)
+    } catch {
+        $corrupt = $true
+        LogWarn "$settingsFile could not be parsed ($_)"
+    }
+}
+$beforeKeys = @($settings.Keys)
 
-// --- Read existing settings.json ---
-let settings = {};
-try { settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + settingsFile + ' is invalid JSON, starting with empty config'); }
+# --- Merge hook ---
+if (-not $settings.ContainsKey("hooks")) { $settings["hooks"] = @{} }
+if (-not $settings["hooks"].ContainsKey("SessionEnd")) { $settings["hooks"]["SessionEnd"] = @() }
 
-// --- Merge hook ---
-if (!settings.hooks) settings.hooks = {};
-if (!Array.isArray(settings.hooks.SessionEnd)) settings.hooks.SessionEnd = [];
-
-const hookId = 'session-archive.sh';
-const existing = settings.hooks.SessionEnd.find(rule =>
-    rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId))
-);
-
-if (existing) {
-    existing.hooks.forEach(h => {
-        if (h.command && h.command.includes(hookId)) {
-            h.command = hookCmd;
+$sessionEndArr = @($settings["hooks"]["SessionEnd"])
+$hookId = "session-archive.sh"
+$foundHook = $false
+for ($i = 0; $i -lt $sessionEndArr.Count; $i++) {
+    $rule = $sessionEndArr[$i]
+    if ($rule -is [System.Collections.Hashtable] -and $rule.ContainsKey("hooks")) {
+        $ruleHooks = @($rule["hooks"])
+        for ($j = 0; $j -lt $ruleHooks.Count; $j++) {
+            $h = $ruleHooks[$j]
+            if ($h -is [System.Collections.Hashtable] -and $h.ContainsKey("command") -and $h["command"] -match $hookId) {
+                $h["command"] = $hookCmd
+                $foundHook = $true
+            }
         }
-    });
-} else {
-    settings.hooks.SessionEnd.push({
-        matcher: '',
-        hooks: [{
-            type: 'command',
-            command: hookCmd
-        }]
-    });
+    }
+}
+if (-not $foundHook) {
+    $newRule = @{
+        matcher = ""
+        hooks = @(
+            @{ type = "command"; command = $hookCmd }
+        )
+    }
+    $sessionEndArr += $newRule
+    $settings["hooks"]["SessionEnd"] = $sessionEndArr
 }
 
-// --- Merge claude preferences ---
-settings.autoMemoryEnabled = autoMemory;
-settings.alwaysThinkingEnabled = alwaysThinking;
+# --- Merge preferences ---
+$settings["autoMemoryEnabled"] = $autoMemory
+$settings["alwaysThinkingEnabled"] = $alwaysThinking
 
-fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+# Clobber detection
+$lostKeys = @($beforeKeys | Where-Object { $_ -notin $settings.Keys })
 
-// Post-write validation
-const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-const _missing = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'].filter(k => !(k in _v));
-if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
-'@ $settingsFile $hookCmd
+if ($DryRun) {
+    Log "[DRY RUN] $settingsFile`: merge managed fields"
+    Log "  Managed: hooks.SessionEnd, autoMemoryEnabled, alwaysThinkingEnabled"
+    if ($lostKeys.Count -gt 0) {
+        LogWarn "[DRY RUN] CLOBBER: would lose: $($lostKeys -join ', ')"
+    }
+    if ($corrupt) {
+        LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
+    }
+} elseif ($corrupt -and -not $Force) {
+    LogError "$settingsFile is corrupt. Use -Force to overwrite, or fix manually."
+} elseif ($lostKeys.Count -gt 0 -and -not $Force) {
+    LogError "$settingsFile merge would lose fields: $($lostKeys -join ', '). Use -Force to proceed."
+} else {
+    if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
+    if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
 
-LogOk "Settings deployed to $settingsFile"
-Log "  Hook: $hookCmd"
-# Log preference values
-$_s = Get-Content $settingsFile -Raw | ConvertFrom-Json
-Log "  autoMemoryEnabled: $($_s.autoMemoryEnabled)"
-Log "  alwaysThinkingEnabled: $($_s.alwaysThinkingEnabled)"
+    Backup-File -FilePath $settingsFile
+    $json = $settings | ConvertTo-Json -Depth 10
+    $resolvedSettings = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($settingsFile)
+    [System.IO.File]::WriteAllText($resolvedSettings, $json, [System.Text.UTF8Encoding]::new($false))
+
+    # Post-write validation
+    try {
+        $vContent = [System.IO.File]::ReadAllText($resolvedSettings)
+        $vParsed = $vContent | ConvertFrom-Json
+        $requiredKeys = @("hooks", "autoMemoryEnabled", "alwaysThinkingEnabled")
+        foreach ($k in $requiredKeys) {
+            if (-not ($vParsed.PSObject.Properties.Name -contains $k)) {
+                LogError "Validation failed: $settingsFile missing required field '$k'"
+            }
+        }
+    } catch {
+        LogError "Validation failed: $settingsFile is not valid JSON -- $_"
+    }
+
+    LogOk "Settings deployed to $settingsFile"
+    Log "  Hook: $hookCmd"
+    Log "  autoMemoryEnabled: $autoMemory"
+    Log "  alwaysThinkingEnabled: $alwaysThinking"
+}
 
 # --- Exit ---
 if ($errors -gt 0) {

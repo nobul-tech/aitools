@@ -9,6 +9,7 @@ param(
     [Alias("h")]
     [switch]$Help,
     [switch]$Patch,
+    [switch]$DryRun,
     [string[]]$AddMcp,
     [switch]$SkipGhAuth,
     [string]$ReposPath,
@@ -37,6 +38,15 @@ if ($Command -eq "--version" -or $Command -eq "-v") {
 if ($Command -eq "--help" -or $Command -eq "-h") {
     $Help = $true
     $Command = ""
+}
+if ($Command -eq "--dry-run" -or $Command -eq "-dry-run") {
+    $DryRun = [switch]::Present
+    $Command = ""
+}
+# Also check Remaining for --dry-run (may come after a command)
+if ($Remaining -and $Remaining -contains "--dry-run") {
+    $DryRun = [switch]::Present
+    $Remaining = @($Remaining | Where-Object { $_ -ne "--dry-run" })
 }
 
 # ---------------------------------------------------------------------------
@@ -261,6 +271,7 @@ function Deploy-Configs {
     $deployScripts = @("setup-user-claude.ps1", "setup-user-mcp.ps1", "setup-cursor-mcp.ps1", "setup-user-cursor.ps1", "setup-user-hooks.ps1")
     $errors = 0
     $env:AITOOLS_DEPLOY = "1"
+    if ($DryRun) { $env:AITOOLS_DRY_RUN = "1" }
     foreach ($script in $deployScripts) {
         $scriptPath = Join-Path $ScriptDir $script
         if (Test-Path $scriptPath) {
@@ -291,6 +302,7 @@ function Deploy-Configs {
         }
     }
     Remove-Item Env:\AITOOLS_DEPLOY -ErrorAction SilentlyContinue
+    Remove-Item Env:\AITOOLS_DRY_RUN -ErrorAction SilentlyContinue
     return $errors
 }
 
@@ -328,6 +340,7 @@ Commands:
 
 Options:
   --addmcp <name...>   Enable MCP server(s) for current project (vercel, webflow)
+  --dry-run            Preview what would change without writing any files
   --version, -v        Show installed and repo version
   --help, -h           Show this help
 

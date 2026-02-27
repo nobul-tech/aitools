@@ -39,6 +39,19 @@ backup_file() {
     log "Backed up $file"
 }
 
+# --- Flag parsing ---
+DRY_RUN=false
+FORCE=false
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=true ;;
+        --force)   FORCE=true ;;
+    esac
+done
+[ "${AITOOLS_DRY_RUN:-}" = "1" ] && DRY_RUN=true
+
+[ "$DRY_RUN" = "true" ] && log "[DRY RUN] Preview mode -- no files will be written"
+
 # --- Auto-detect machine info ---
 OS_NAME=$(uname -s)
 ARCH=$(uname -m)
@@ -50,12 +63,6 @@ CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
 
 mkdir -p "$CLAUDE_DIR"
 log "Ensuring $CLAUDE_DIR exists"
-
-backup_file "$CLAUDE_MD"
-if [ -f "$CLAUDE_MD" ]; then
-    rm "$CLAUDE_MD"
-    log "Removed existing $CLAUDE_MD"
-fi
 
 # --- Embedded shared preferences (from shared/claude-shared.md) ---
 read -r -d "" SHARED_CONTENT <<'__EMBEDDED_CLAUDE_SHARED__' || true
@@ -197,8 +204,40 @@ Full evaluation and progress log: `reference/claude-code-effectiveness.md` in ai
 - **Issue tracking**: When I reference bugs or issues in context where documentation is expected (e.g., "fix bugs #1 and #2", "the bugs are filed"), check the project's GitHub repo via `gh issue list` / `gh issue view <number>`. Issues have full repro steps and context -- don't ask me to re-describe them.
 __EMBEDDED_CLAUDE_SHARED__
 
-# --- Write CLAUDE.md ---
-cat > "$CLAUDE_MD" << CLAUDE_EOF
+# --- Build content ---
+NEW_CONTENT="${SHARED_CONTENT}
+
+## Machine-Specific
+
+- Machine: ${OS_NAME} ${ARCH} (${HOSTNAME})
+- Shell: ${SHELL_NAME}"
+
+if [ "$DRY_RUN" = "true" ]; then
+    EXISTING_LINES=0
+    [ -f "$CLAUDE_MD" ] && EXISTING_LINES=$(wc -l < "$CLAUDE_MD")
+    NEW_LINES=$(echo "$NEW_CONTENT" | wc -l)
+    log "[DRY RUN] $CLAUDE_MD: overwrite (sole owner)"
+    log "  Template source: embedded (build-time)"
+    log "  Existing: ${EXISTING_LINES} lines"
+    log "  New: ${NEW_LINES} lines"
+    if [ -f "$CLAUDE_MD" ]; then
+        if [ "$(cat "$CLAUDE_MD")" = "$NEW_CONTENT" ]; then
+            log "[DRY RUN] Content unchanged"
+        else
+            log "[DRY RUN] Content differs -- would overwrite"
+        fi
+    else
+        log "[DRY RUN] File does not exist -- would create"
+    fi
+else
+    backup_file "$CLAUDE_MD"
+    if [ -f "$CLAUDE_MD" ]; then
+        rm "$CLAUDE_MD"
+        log "Removed existing $CLAUDE_MD"
+    fi
+
+    # --- Write CLAUDE.md ---
+    cat > "$CLAUDE_MD" << CLAUDE_EOF
 ${SHARED_CONTENT}
 
 ## Machine-Specific
@@ -207,14 +246,15 @@ ${SHARED_CONTENT}
 - Shell: ${SHELL_NAME}
 CLAUDE_EOF
 
-log_ok "Wrote $CLAUDE_MD"
-log "Machine: $OS_NAME $ARCH ($HOSTNAME), Shell: $SHELL_NAME"
+    log_ok "Wrote $CLAUDE_MD"
+    log "Machine: $OS_NAME $ARCH ($HOSTNAME), Shell: $SHELL_NAME"
 
-# Post-write validation
-if [ ! -s "$CLAUDE_MD" ]; then
-    log_error "Validation failed: $CLAUDE_MD is empty or missing"
-elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
-    log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
+    # Post-write validation
+    if [ ! -s "$CLAUDE_MD" ]; then
+        log_error "Validation failed: $CLAUDE_MD is empty or missing"
+    elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
+        log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
+    fi
 fi
 
 # --- Exit ---

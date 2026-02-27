@@ -11,8 +11,13 @@
 # Overwrites: yes (sole owner of ~/.claude/CLAUDE.md)
 
 param(
-    [string]$SharedPath = (Join-Path $PSScriptRoot "..\shared\claude-shared.md")
+    [string]$SharedPath = (Join-Path $PSScriptRoot "..\shared\claude-shared.md"),
+    [switch]$DryRun,
+    [switch]$Force
 )
+
+# Env passthrough from parent (aitools CLI)
+if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
 
 # --- Logging ---
 $logDir = Join-Path $env:LOCALAPPDATA "aitools"
@@ -46,11 +51,27 @@ function Backup-File {
     Log "Backed up $FilePath"
 }
 
+# --- PS 5.1 compatibility helper ---
+function ConvertPSObjectToHashtable($obj) {
+    if ($null -eq $obj) { return @{} }
+    $ht = @{}
+    foreach ($prop in $obj.PSObject.Properties) {
+        if ($prop.Value -is [System.Management.Automation.PSCustomObject]) {
+            $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
+        } else {
+            $ht[$prop.Name] = $prop.Value
+        }
+    }
+    return $ht
+}
+
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     LogError "This script is for Windows. On macOS/Linux, use the .sh version."
     exit 1
 }
+
+if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
 $configFile = Join-Path $env:USERPROFILE ".aitools\config.json"
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
@@ -58,8 +79,10 @@ $claudeMd = Join-Path $claudeDir "CLAUDE.md"
 
 # Ensure ~/.claude/ exists
 if (-not (Test-Path $claudeDir)) {
-    New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
-    Log "Created $claudeDir"
+    if (-not $DryRun) {
+        New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
+        Log "Created $claudeDir"
+    }
 }
 
 # --- Resolve template source ---
@@ -67,22 +90,18 @@ if (-not (Test-Path $claudeDir)) {
 $sourcePath = ""
 $sourceLabel = ""
 
-$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
-if ((Test-Path $configFile) -and $nodeCmd) {
-    $userRepoPath = node -e @'
-try {
-    const cfg = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
-    if (cfg.userRepoPath) console.log(cfg.userRepoPath);
-} catch {}
-'@ $configFile 2>$null
-    if ($userRepoPath) { $userRepoPath = $userRepoPath.Trim() }
-
-    if ($userRepoPath) {
-        $userClaudeMd = Join-Path $userRepoPath "claude\CLAUDE.md"
-        if (Test-Path $userClaudeMd) {
-            $sourcePath = $userClaudeMd
-            $sourceLabel = "user repo"
+if (Test-Path $configFile) {
+    try {
+        $cfg = ConvertPSObjectToHashtable (Get-Content $configFile -Raw | ConvertFrom-Json)
+        if ($cfg.ContainsKey("userRepoPath") -and $cfg["userRepoPath"]) {
+            $userClaudeMd = Join-Path $cfg["userRepoPath"] "claude\CLAUDE.md"
+            if (Test-Path $userClaudeMd) {
+                $sourcePath = $userClaudeMd
+                $sourceLabel = "user repo"
+            }
         }
+    } catch {
+        LogWarn "Could not read config: $_"
     }
 }
 
@@ -103,44 +122,71 @@ $sharedContent = Get-Content -Path $sourcePath -Raw
 
 # --- Profile interpolation ---
 # Read profile.json and replace {{PLACEHOLDER}} tokens.
-# Reuses the same pattern as build-deploy.sh.
 $profileName = ""
 $profileCompany = ""
 $identityGitName = ""
 $identityGitEmail = ""
 
-if ((Test-Path $configFile) -and $nodeCmd) {
-    $profileVals = node -e @'
-const fs = require('fs'), path = require('path'), os = require('os');
-try {
-    const cfg = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
-    const repo = cfg.userRepoPath;
-    const alias = cfg.machineAlias || '';
-    if (!repo) throw new Error('no userRepoPath');
-    const pf = path.join(repo, 'profile.json');
-    const p = JSON.parse(fs.readFileSync(pf, 'utf8'));
-    let prof, ident;
-    if (p.version === 2) {
-        prof = p.profiles[alias]
-            || Object.values(p.profiles).find(pr => pr.machine && pr.machine.hostname.split('.')[0] === os.hostname().split('.')[0])
-            || Object.values(p.profiles)[0];
-        ident = p.identity;
-    } else {
-        prof = { name: p.name, company: p.company || '' };
-        ident = { git: { name: (p.git && p.git.name) || p.name, email: (p.git && p.git.email) || p.email } };
-    }
-    console.log(prof.name);
-    console.log(prof.company);
-    console.log(ident.git.name);
-    console.log(ident.git.email);
-} catch(e) { process.exit(1); }
-'@ $configFile 2>$null
-    if ($LASTEXITCODE -eq 0 -and $profileVals) {
-        $lines = @($profileVals -split "`n")
-        $profileName = if ($lines.Count -ge 1) { $lines[0].Trim() } else { "" }
-        $profileCompany = if ($lines.Count -ge 2) { $lines[1].Trim() } else { "" }
-        $identityGitName = if ($lines.Count -ge 3) { $lines[2].Trim() } else { "" }
-        $identityGitEmail = if ($lines.Count -ge 4) { $lines[3].Trim() } else { "" }
+if (Test-Path $configFile) {
+    try {
+        $cfg = ConvertPSObjectToHashtable (Get-Content $configFile -Raw | ConvertFrom-Json)
+        if ($cfg.ContainsKey("userRepoPath") -and $cfg["userRepoPath"]) {
+            $profilePath = Join-Path $cfg["userRepoPath"] "profile.json"
+            if (Test-Path $profilePath) {
+                $pf = ConvertPSObjectToHashtable (Get-Content $profilePath -Raw | ConvertFrom-Json)
+                $alias = ""
+                if ($cfg.ContainsKey("machineAlias")) { $alias = $cfg["machineAlias"] }
+
+                $prof = $null
+                $ident = $null
+                if ($pf.ContainsKey("version") -and $pf["version"] -eq 2) {
+                    # v2: profiles + identity
+                    if ($pf.ContainsKey("profiles")) {
+                        $profiles = $pf["profiles"]
+                        if ($alias -and $profiles.ContainsKey($alias)) {
+                            $prof = $profiles[$alias]
+                        } else {
+                            # Fallback: hostname match, then first profile
+                            $hn = $env:COMPUTERNAME
+                            foreach ($key in $profiles.Keys) {
+                                $p = $profiles[$key]
+                                if ($p.ContainsKey("machine") -and $p["machine"].ContainsKey("hostname")) {
+                                    $phn = ($p["machine"]["hostname"] -split '\.')[0]
+                                    if ($phn -eq $hn) { $prof = $p; break }
+                                }
+                            }
+                            if (-not $prof) {
+                                $firstKey = @($profiles.Keys)[0]
+                                if ($firstKey) { $prof = $profiles[$firstKey] }
+                            }
+                        }
+                    }
+                    if ($pf.ContainsKey("identity")) { $ident = $pf["identity"] }
+                } else {
+                    # v1: flat schema
+                    $prof = @{}
+                    if ($pf.ContainsKey("name")) { $prof["name"] = $pf["name"] }
+                    if ($pf.ContainsKey("company")) { $prof["company"] = $pf["company"] }
+                    $ident = @{ git = @{} }
+                    if ($pf.ContainsKey("git")) {
+                        $ident["git"] = $pf["git"]
+                    } else {
+                        if ($pf.ContainsKey("name")) { $ident["git"]["name"] = $pf["name"] }
+                        if ($pf.ContainsKey("email")) { $ident["git"]["email"] = $pf["email"] }
+                    }
+                }
+
+                if ($prof -and $prof.ContainsKey("name")) { $profileName = $prof["name"] }
+                if ($prof -and $prof.ContainsKey("company")) { $profileCompany = $prof["company"] }
+                if ($ident -and $ident.ContainsKey("git")) {
+                    $gitIdent = $ident["git"]
+                    if ($gitIdent.ContainsKey("name")) { $identityGitName = $gitIdent["name"] }
+                    if ($gitIdent.ContainsKey("email")) { $identityGitEmail = $gitIdent["email"] }
+                }
+            }
+        }
+    } catch {
+        LogWarn "Could not read profile: $_"
     }
 }
 
@@ -154,14 +200,7 @@ if ($profileName) {
     LogWarn "Profile not available -- {{PLACEHOLDER}} tokens will not be resolved"
 }
 
-# Backup and remove existing file so we always write the latest version
-Backup-File -FilePath $claudeMd
-if (Test-Path $claudeMd) {
-    Remove-Item $claudeMd
-    Log "Removed existing $claudeMd"
-}
-
-# --- Write CLAUDE.md ---
+# --- Write or preview CLAUDE.md ---
 $osInfo = (Get-CimInstance Win32_OperatingSystem).Caption
 $hostname = $env:COMPUTERNAME
 
@@ -174,16 +213,51 @@ $sharedContent
 - Shell: bash (Claude Code requires Git Bash on Windows)
 "@
 
-[System.IO.File]::WriteAllText($claudeMd, $content, [System.Text.UTF8Encoding]::new($false))
+if ($DryRun) {
+    $existingLines = 0
+    if (Test-Path $claudeMd) {
+        $existingLines = (Get-Content $claudeMd).Count
+    }
+    $newLines = ($content -split "`n").Count
+    Log "[DRY RUN] $claudeMd`: overwrite (sole owner)"
+    Log "  Template source: $sourcePath ($sourceLabel)"
+    if ($profileName) {
+        Log "  Profile interpolation: name=$profileName company=$profileCompany"
+    } else {
+        Log "  Profile interpolation: none (tokens unresolved)"
+    }
+    Log "  Existing: $existingLines lines"
+    Log "  New: $newLines lines"
+    if (Test-Path $claudeMd) {
+        $existingContent = Get-Content $claudeMd -Raw
+        if ($existingContent -eq $content) {
+            Log "[DRY RUN] Content unchanged"
+        } else {
+            Log "[DRY RUN] Content differs -- would overwrite"
+        }
+    } else {
+        Log "[DRY RUN] File does not exist -- would create"
+    }
+} else {
+    # Backup and remove existing file so we always write the latest version
+    Backup-File -FilePath $claudeMd
+    if (Test-Path $claudeMd) {
+        Remove-Item $claudeMd
+        Log "Removed existing $claudeMd"
+    }
 
-# Post-write validation
-if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
-    LogError "Validation failed: $claudeMd is empty or missing"
-} elseif (-not ((Get-Content $claudeMd -Raw) -match '## Machine-Specific')) {
-    LogError "Validation failed: $claudeMd missing Machine-Specific section"
+    $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($claudeMd)
+    [System.IO.File]::WriteAllText($resolvedPath, $content, [System.Text.UTF8Encoding]::new($false))
+
+    # Post-write validation
+    if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
+        LogError "Validation failed: $claudeMd is empty or missing"
+    } elseif (-not ((Get-Content $claudeMd -Raw) -match '## Machine-Specific')) {
+        LogError "Validation failed: $claudeMd missing Machine-Specific section"
+    }
+
+    LogOk "Wrote $claudeMd"
 }
-
-LogOk "Wrote $claudeMd"
 
 # --- Exit ---
 if ($errors -gt 0) {

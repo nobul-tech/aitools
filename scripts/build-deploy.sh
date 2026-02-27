@@ -273,6 +273,69 @@ OS_GUARD_PS1
 }
 
 # ============================================================
+# PS 5.1 compatibility helper (ConvertPSObjectToHashtable)
+# ============================================================
+ps1_hashtable_helper() {
+    cat <<'HASHTABLE_PS1'
+
+# --- PS 5.1 compatibility helper ---
+function ConvertPSObjectToHashtable($obj) {
+    if ($null -eq $obj) { return @{} }
+    $ht = @{}
+    foreach ($prop in $obj.PSObject.Properties) {
+        if ($prop.Value -is [System.Management.Automation.PSCustomObject]) {
+            $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
+        } else {
+            $ht[$prop.Name] = $prop.Value
+        }
+    }
+    return $ht
+}
+HASHTABLE_PS1
+}
+
+# ============================================================
+# Flag parsing helpers (--dry-run / --force support in deploy scripts)
+# ============================================================
+bash_flag_helpers() {
+    cat <<'FLAG_BASH'
+
+# --- Flag parsing ---
+DRY_RUN=false
+FORCE=false
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=true ;;
+        --force)   FORCE=true ;;
+    esac
+done
+[ "${AITOOLS_DRY_RUN:-}" = "1" ] && DRY_RUN=true
+
+[ "$DRY_RUN" = "true" ] && log "[DRY RUN] Preview mode -- no files will be written"
+FLAG_BASH
+}
+
+ps1_param_block() {
+    cat <<'PARAM_PS1'
+param(
+    [switch]$DryRun,
+    [switch]$Force
+)
+
+PARAM_PS1
+}
+
+ps1_flag_helpers() {
+    cat <<'FLAG_PS1'
+
+# Env passthrough from parent (aitools CLI)
+if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
+
+if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
+FLAG_PS1
+}
+
+# ============================================================
 # 1. deploy/setup-user-claude.sh
 # ============================================================
 blog "Generating deploy/setup-user-claude.sh"
@@ -291,6 +354,7 @@ BLOCK
     bash_logging_helpers "setup-user-claude"
     bash_os_guard
     bash_backup_helper
+    bash_flag_helpers
     cat <<'BLOCK'
 
 # --- Auto-detect machine info ---
@@ -305,12 +369,6 @@ CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
 mkdir -p "$CLAUDE_DIR"
 log "Ensuring $CLAUDE_DIR exists"
 
-backup_file "$CLAUDE_MD"
-if [ -f "$CLAUDE_MD" ]; then
-    rm "$CLAUDE_MD"
-    log "Removed existing $CLAUDE_MD"
-fi
-
 # --- Embedded shared preferences (from shared/claude-shared.md) ---
 BLOCK
     echo 'read -r -d "" SHARED_CONTENT <<'"'"'__EMBEDDED_CLAUDE_SHARED__'"'"' || true'
@@ -318,8 +376,40 @@ BLOCK
     echo '__EMBEDDED_CLAUDE_SHARED__'
     cat <<'BLOCK'
 
-# --- Write CLAUDE.md ---
-cat > "$CLAUDE_MD" << CLAUDE_EOF
+# --- Build content ---
+NEW_CONTENT="${SHARED_CONTENT}
+
+## Machine-Specific
+
+- Machine: ${OS_NAME} ${ARCH} (${HOSTNAME})
+- Shell: ${SHELL_NAME}"
+
+if [ "$DRY_RUN" = "true" ]; then
+    EXISTING_LINES=0
+    [ -f "$CLAUDE_MD" ] && EXISTING_LINES=$(wc -l < "$CLAUDE_MD")
+    NEW_LINES=$(echo "$NEW_CONTENT" | wc -l)
+    log "[DRY RUN] $CLAUDE_MD: overwrite (sole owner)"
+    log "  Template source: embedded (build-time)"
+    log "  Existing: ${EXISTING_LINES} lines"
+    log "  New: ${NEW_LINES} lines"
+    if [ -f "$CLAUDE_MD" ]; then
+        if [ "$(cat "$CLAUDE_MD")" = "$NEW_CONTENT" ]; then
+            log "[DRY RUN] Content unchanged"
+        else
+            log "[DRY RUN] Content differs -- would overwrite"
+        fi
+    else
+        log "[DRY RUN] File does not exist -- would create"
+    fi
+else
+    backup_file "$CLAUDE_MD"
+    if [ -f "$CLAUDE_MD" ]; then
+        rm "$CLAUDE_MD"
+        log "Removed existing $CLAUDE_MD"
+    fi
+
+    # --- Write CLAUDE.md ---
+    cat > "$CLAUDE_MD" << CLAUDE_EOF
 ${SHARED_CONTENT}
 
 ## Machine-Specific
@@ -328,14 +418,15 @@ ${SHARED_CONTENT}
 - Shell: ${SHELL_NAME}
 CLAUDE_EOF
 
-log_ok "Wrote $CLAUDE_MD"
-log "Machine: $OS_NAME $ARCH ($HOSTNAME), Shell: $SHELL_NAME"
+    log_ok "Wrote $CLAUDE_MD"
+    log "Machine: $OS_NAME $ARCH ($HOSTNAME), Shell: $SHELL_NAME"
 
-# Post-write validation
-if [ ! -s "$CLAUDE_MD" ]; then
-    log_error "Validation failed: $CLAUDE_MD is empty or missing"
-elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
-    log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
+    # Post-write validation
+    if [ ! -s "$CLAUDE_MD" ]; then
+        log_error "Validation failed: $CLAUDE_MD is empty or missing"
+    elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
+        log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
+    fi
 fi
 BLOCK
     bash_exit_footer
@@ -357,9 +448,11 @@ blog "Generating deploy/setup-user-claude.ps1"
 # Safe to re-run — replaces existing file with latest version.
 
 BLOCK
+    ps1_param_block
     ps1_logging_helpers "setup-user-claude"
     ps1_os_guard
     ps1_backup_helper
+    ps1_flag_helpers
     cat <<'BLOCK'
 
 # --- Auto-detect machine info ---
@@ -370,14 +463,10 @@ $claudeDir = Join-Path $env:USERPROFILE ".claude"
 $claudeMd = Join-Path $claudeDir "CLAUDE.md"
 
 if (-not (Test-Path $claudeDir)) {
-    New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
-    Log "Created $claudeDir"
-}
-
-Backup-File -FilePath $claudeMd
-if (Test-Path $claudeMd) {
-    Remove-Item $claudeMd
-    Log "Removed existing $claudeMd"
+    if (-not $DryRun) {
+        New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
+        Log "Created $claudeDir"
+    }
 }
 
 # --- Embedded shared preferences (from shared/claude-shared.md) ---
@@ -387,7 +476,7 @@ BLOCK
     cat <<'BLOCK'
 '@
 
-# --- Write CLAUDE.md ---
+# --- Build content ---
 $content = @"
 $sharedContent
 
@@ -397,17 +486,46 @@ $sharedContent
 - Shell: bash (Claude Code requires Git Bash on Windows)
 "@
 
-[System.IO.File]::WriteAllText($claudeMd, $content, [System.Text.UTF8Encoding]::new($false))
+if ($DryRun) {
+    $existingLines = 0
+    if (Test-Path $claudeMd) {
+        $existingLines = (Get-Content $claudeMd).Count
+    }
+    $newLines = ($content -split "`n").Count
+    Log "[DRY RUN] $claudeMd`: overwrite (sole owner)"
+    Log "  Template source: embedded (build-time)"
+    Log "  Existing: $existingLines lines"
+    Log "  New: $newLines lines"
+    if (Test-Path $claudeMd) {
+        $existingContent = Get-Content $claudeMd -Raw
+        if ($existingContent -eq $content) {
+            Log "[DRY RUN] Content unchanged"
+        } else {
+            Log "[DRY RUN] Content differs -- would overwrite"
+        }
+    } else {
+        Log "[DRY RUN] File does not exist -- would create"
+    }
+} else {
+    Backup-File -FilePath $claudeMd
+    if (Test-Path $claudeMd) {
+        Remove-Item $claudeMd
+        Log "Removed existing $claudeMd"
+    }
 
-# Post-write validation
-if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
-    LogError "Validation failed: $claudeMd is empty or missing"
-} elseif (-not ((Get-Content $claudeMd -Raw) -match '## Machine-Specific')) {
-    LogError "Validation failed: $claudeMd missing Machine-Specific section"
+    $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($claudeMd)
+    [System.IO.File]::WriteAllText($resolvedPath, $content, [System.Text.UTF8Encoding]::new($false))
+
+    # Post-write validation
+    if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
+        LogError "Validation failed: $claudeMd is empty or missing"
+    } elseif (-not ((Get-Content $claudeMd -Raw) -match '## Machine-Specific')) {
+        LogError "Validation failed: $claudeMd missing Machine-Specific section"
+    }
+
+    LogOk "Wrote $claudeMd"
+    Log "Machine: $osInfo ($hostname)"
 }
-
-LogOk "Wrote $claudeMd"
-Log "Machine: $osInfo ($hostname)"
 BLOCK
     ps1_exit_footer
 } > "$DEPLOY_DIR/setup-user-claude.ps1"
@@ -438,6 +556,7 @@ BLOCK
     bash_logging_helpers "setup-user-cursor"
     bash_backup_helper
     bash_os_guard
+    bash_flag_helpers
     cat <<'BLOCK'
 
 CURSOR_DIR="$HOME/.cursor"
@@ -446,43 +565,57 @@ CLI_CONFIG="$CURSOR_DIR/cli-config.json"
 # --- 1. ripgrep (rg) ---
 log "Step 1: ripgrep (rg)"
 
-if command -v rg &>/dev/null; then
-    RG_VERSION=$(rg --version | head -1)
-    log_ok "Already installed: $RG_VERSION"
-else
-    if command -v brew &>/dev/null; then
-        log "Installing ripgrep via brew..."
-        brew install ripgrep
-        if command -v rg &>/dev/null; then
-            log_ok "Installed: $(rg --version | head -1)"
-        else
-            log_error "brew install completed but 'rg' not found in PATH"
-        fi
+if [ "$DRY_RUN" = "true" ]; then
+    if command -v rg &>/dev/null; then
+        log "[DRY RUN] ripgrep already installed: $(rg --version | head -1)"
     else
-        log_error "Homebrew not found. Install ripgrep manually: brew install ripgrep"
+        log "[DRY RUN] Would install ripgrep via brew"
+    fi
+else
+    if command -v rg &>/dev/null; then
+        RG_VERSION=$(rg --version | head -1)
+        log_ok "Already installed: $RG_VERSION"
+    else
+        if command -v brew &>/dev/null; then
+            log "Installing ripgrep via brew..."
+            brew install ripgrep
+            if command -v rg &>/dev/null; then
+                log_ok "Installed: $(rg --version | head -1)"
+            else
+                log_error "brew install completed but 'rg' not found in PATH"
+            fi
+        else
+            log_error "Homebrew not found. Install ripgrep manually: brew install ripgrep"
+        fi
     fi
 fi
 
 # --- 2. Cursor CLI (agent) ---
 log "Step 2: Cursor CLI (agent)"
 
-if command -v agent &>/dev/null; then
-    AGENT_VERSION=$(agent --version)
-    log_ok "Already installed: $AGENT_VERSION"
-else
-    log "Installing Cursor CLI..."
-    curl https://cursor.com/install -fsS | bash
+if [ "$DRY_RUN" = "true" ]; then
     if command -v agent &>/dev/null; then
-        log_ok "Installed: $(agent --version)"
+        log "[DRY RUN] Cursor CLI already installed: $(agent --version)"
     else
-        log_error "Cursor CLI install completed but 'agent' not found in PATH (restart terminal)"
+        log "[DRY RUN] Would install Cursor CLI via curl"
+    fi
+else
+    if command -v agent &>/dev/null; then
+        AGENT_VERSION=$(agent --version)
+        log_ok "Already installed: $AGENT_VERSION"
+    else
+        log "Installing Cursor CLI..."
+        curl https://cursor.com/install -fsS | bash
+        if command -v agent &>/dev/null; then
+            log_ok "Installed: $(agent --version)"
+        else
+            log_error "Cursor CLI install completed but 'agent' not found in PATH (restart terminal)"
+        fi
     fi
 fi
 
 # --- 3. cli-config.json (merge, not overwrite) ---
 log "Step 3: cli-config.json"
-
-backup_file "$CLI_CONFIG"
 
 mkdir -p "$CURSOR_DIR"
 
@@ -492,9 +625,12 @@ else
 BLOCK
     # Emit the node merge with embedded defaults from profile
     cat <<BLOCK_INTERP
+    backup_file "\$CLI_CONFIG"
     MERGE_RESULT=\$(node -e "
 const fs = require('fs');
 const f = process.argv[1];
+const dryRun = process.argv[2] === 'true';
+const force = process.argv[3] === 'true';
 
 // --- Embedded preferences (from profile.json at build time) ---
 const vimMode = $CURSOR_CLI_VIMMODE;
@@ -502,8 +638,14 @@ const modelId = '$CURSOR_CLI_MODEL';
 
 // --- Read existing cli-config.json ---
 let config = {};
-try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + f + ' is invalid JSON, starting with empty config'); }
-const before = JSON.stringify(config);
+let corrupt = false;
+try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) {
+    if (e.code !== 'ENOENT') {
+        corrupt = true;
+        console.error('Warning: ' + f + ' is invalid JSON');
+    }
+}
+const beforeKeys = Object.keys(config);
 
 // --- Merge managed fields ---
 config.version = 1;
@@ -525,13 +667,21 @@ if (modelId === 'auto') {
     config.hasChangedDefaultModel = true;
 }
 
-// All other fields (authInfo, privacyCache, network, statsigBootstrap, maxMode, etc.)
-// are preserved -- we never delete keys we don't manage.
+// Clobber detection
+const afterKeys = Object.keys(config);
+const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
 
-const after = JSON.stringify(config);
-if (before === after) {
-    console.log('unchanged');
+if (dryRun) {
+    console.log('would-merge');
+    if (corrupt) console.error('[DRY RUN] File is corrupt -- --force required');
+    if (lostKeys.length) console.error('[DRY RUN] CLOBBER: would lose: ' + lostKeys.join(', '));
+} else if (corrupt && !force) {
+    console.log('error-corrupt');
+} else if (lostKeys.length && !force) {
+    console.log('error-clobber');
+    console.error('Would lose fields: ' + lostKeys.join(', '));
 } else {
+    const before = JSON.stringify(config);
     fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\\\\n');
 
     // Post-write validation
@@ -539,15 +689,18 @@ if (before === after) {
     const _missing = ['version'].filter(k => !(k in _v));
     if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
 
-    console.log(before === '{}' ? 'created' : 'merged');
+    console.log(beforeKeys.length === 0 ? 'created' : 'merged');
 }
-" "\$CLI_CONFIG")
+" "\$CLI_CONFIG" "\$DRY_RUN" "\$FORCE")
 
     case "\$MERGE_RESULT" in
-        unchanged) log_ok "Already up to date: \$CLI_CONFIG" ;;
-        created)   log_ok "Created: \$CLI_CONFIG" ;;
-        merged)    log_ok "Merged preferences into: \$CLI_CONFIG" ;;
-        *)         log_error "Unexpected merge result: \$MERGE_RESULT" ;;
+        unchanged)     log_ok "Already up to date: \$CLI_CONFIG" ;;
+        created)       log_ok "Created: \$CLI_CONFIG" ;;
+        merged)        log_ok "Merged preferences into: \$CLI_CONFIG" ;;
+        would-merge)   log "[DRY RUN] \$CLI_CONFIG: merge managed fields" ;;
+        error-corrupt) log_error "\$CLI_CONFIG is corrupt. Use --force to overwrite, or fix manually." ;;
+        error-clobber) log_error "\$CLI_CONFIG merge would lose fields. Use --force to proceed." ;;
+        *)             log_error "Unexpected merge result: \$MERGE_RESULT" ;;
     esac
 fi
 BLOCK_INTERP
@@ -573,11 +726,17 @@ blog "Generating deploy/setup-user-cursor.ps1"
 #   1. Installs ripgrep (rg) if not already present (required by Cursor CLI)
 #   2. Installs Cursor CLI (agent command) if not already present
 #   3. Merges preferences into ~/.cursor/cli-config.json (preserves CLI-managed fields)
+#
+# Managed fields: version, editor.vimMode, permissions, model, hasChangedDefaultModel
+# Preserved: authInfo, privacyCache, network, statsigBootstrap, maxMode, all other fields
 
 BLOCK
+    ps1_param_block
     ps1_logging_helpers "setup-user-cursor"
     ps1_backup_helper
     ps1_os_guard
+    ps1_hashtable_helper
+    ps1_flag_helpers
     cat <<'BLOCK'
 
 # Helper: refresh PATH from registry (picks up winget installs in same session)
@@ -593,114 +752,146 @@ $cliConfig = Join-Path $cursorDir "cli-config.json"
 # --- 1. ripgrep (rg) ---
 Log "Step 1: ripgrep (rg)"
 
-$rgCmd = Get-Command rg -ErrorAction SilentlyContinue
-if ($rgCmd) {
-    $rgVersion = (rg --version | Select-Object -First 1)
-    LogOk "Already installed: $rgVersion"
-} else {
-    Log "Installing ripgrep via winget..."
-    winget install BurntSushi.ripgrep.MSVC --accept-package-agreements --accept-source-agreements
-    Refresh-Path
+if ($DryRun) {
     $rgCmd = Get-Command rg -ErrorAction SilentlyContinue
     if ($rgCmd) {
-        LogOk "Installed: $(rg --version | Select-Object -First 1)"
+        Log "[DRY RUN] ripgrep already installed: $(rg --version | Select-Object -First 1)"
     } else {
-        LogError "winget install completed but 'rg' not found in PATH (restart terminal)"
+        Log "[DRY RUN] Would install ripgrep via winget"
+    }
+} else {
+    $rgCmd = Get-Command rg -ErrorAction SilentlyContinue
+    if ($rgCmd) {
+        $rgVersion = (rg --version | Select-Object -First 1)
+        LogOk "Already installed: $rgVersion"
+    } else {
+        Log "Installing ripgrep via winget..."
+        winget install BurntSushi.ripgrep.MSVC --accept-package-agreements --accept-source-agreements
+        Refresh-Path
+        $rgCmd = Get-Command rg -ErrorAction SilentlyContinue
+        if ($rgCmd) {
+            LogOk "Installed: $(rg --version | Select-Object -First 1)"
+        } else {
+            LogError "winget install completed but 'rg' not found in PATH (restart terminal)"
+        }
     }
 }
 
 # --- 2. Cursor CLI (agent) ---
 Log "Step 2: Cursor CLI (agent)"
 
-$agentCmd = Get-Command agent -ErrorAction SilentlyContinue
-if ($agentCmd) {
-    $agentVersion = agent --version
-    LogOk "Already installed: $agentVersion"
-} else {
-    Log "Installing Cursor CLI..."
-    Invoke-Expression (Invoke-RestMethod 'https://cursor.com/install?win32=true')
+if ($DryRun) {
     $agentCmd = Get-Command agent -ErrorAction SilentlyContinue
     if ($agentCmd) {
-        LogOk "Installed: $(agent --version)"
+        Log "[DRY RUN] Cursor CLI already installed: $(agent --version)"
     } else {
-        LogError "Cursor CLI install completed but 'agent' not found in PATH (restart terminal)"
+        Log "[DRY RUN] Would install Cursor CLI"
+    }
+} else {
+    $agentCmd = Get-Command agent -ErrorAction SilentlyContinue
+    if ($agentCmd) {
+        $agentVersion = agent --version
+        LogOk "Already installed: $agentVersion"
+    } else {
+        Log "Installing Cursor CLI..."
+        Invoke-Expression (Invoke-RestMethod 'https://cursor.com/install?win32=true')
+        $agentCmd = Get-Command agent -ErrorAction SilentlyContinue
+        if ($agentCmd) {
+            LogOk "Installed: $(agent --version)"
+        } else {
+            LogError "Cursor CLI install completed but 'agent' not found in PATH (restart terminal)"
+        }
     }
 }
 
 # --- 3. cli-config.json (merge, not overwrite) ---
 Log "Step 3: cli-config.json"
 
-Backup-File -FilePath $cliConfig
-
 if (-not (Test-Path $cursorDir)) {
     New-Item -ItemType Directory -Path $cursorDir -Force | Out-Null
     Log "Created $cursorDir"
 }
 
-$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
-if (-not $nodeCmd) {
-    LogWarn "node not found -- skipping cli-config.json merge"
-} else {
 BLOCK
-    # Emit the node merge with embedded defaults from profile
-    # Use PS1 here-string (@'...'@) for the JS code to avoid quoting issues
+    # Emit native PS merge with embedded build-time preferences
     cat <<BLOCK_INTERP
-    \$mergeResult = & node -e @'
-const fs = require('fs');
-const f = process.argv[1];
+# --- Embedded preferences (from profile.json at build time) ---
+\$vimMode = \$$CURSOR_CLI_VIMMODE
+\$modelId = "$CURSOR_CLI_MODEL"
 
-// --- Embedded preferences (from profile.json at build time) ---
-const vimMode = $CURSOR_CLI_VIMMODE;
-const modelId = '$CURSOR_CLI_MODEL';
+# --- Read existing cli-config.json ---
+\$config = @{}
+\$corrupt = \$false
+if (Test-Path \$cliConfig) {
+    try {
+        \$config = ConvertPSObjectToHashtable (Get-Content \$cliConfig -Raw | ConvertFrom-Json)
+    } catch {
+        \$corrupt = \$true
+        LogWarn "\$cliConfig could not be parsed (\$_)"
+    }
+}
+\$beforeKeys = @(\$config.Keys)
 
-// --- Read existing cli-config.json ---
-let config = {};
-try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + f + ' is invalid JSON, starting with empty config'); }
-const before = JSON.stringify(config);
+# --- Merge managed fields ---
+\$config["version"] = 1
+if (-not \$config.ContainsKey("editor")) { \$config["editor"] = @{} }
+\$config["editor"]["vimMode"] = \$vimMode
+if (-not \$config.ContainsKey("permissions")) { \$config["permissions"] = @{} }
+if (-not \$config["permissions"].ContainsKey("allow")) { \$config["permissions"]["allow"] = @() }
+if (-not \$config["permissions"].ContainsKey("deny")) { \$config["permissions"]["deny"] = @() }
 
-// --- Merge managed fields ---
-config.version = 1;
-if (!config.editor) config.editor = {};
-config.editor.vimMode = vimMode;
-if (!config.permissions) config.permissions = {};
-if (!Array.isArray(config.permissions.allow)) config.permissions.allow = [];
-if (!Array.isArray(config.permissions.deny)) config.permissions.deny = [];
-
-if (modelId === 'auto') {
-    config.model = {
-        modelId: 'default',
-        displayModelId: 'auto',
-        displayName: 'Auto',
-        displayNameShort: 'Auto',
-        aliases: ['auto'],
-        maxMode: false
-    };
-    config.hasChangedDefaultModel = true;
+if (\$modelId -eq "auto") {
+    \$config["model"] = @{
+        modelId = "default"
+        displayModelId = "auto"
+        displayName = "Auto"
+        displayNameShort = "Auto"
+        aliases = @("auto")
+        maxMode = \$false
+    }
+    \$config["hasChangedDefaultModel"] = \$true
 }
 
-// All other fields (authInfo, privacyCache, network, statsigBootstrap, maxMode, etc.)
-// are preserved -- we never delete keys we don't manage.
+# Clobber detection
+\$lostKeys = @(\$beforeKeys | Where-Object { \$_ -notin \$config.Keys })
 
-const after = JSON.stringify(config);
-if (before === after) {
-    console.log('unchanged');
+if (\$DryRun) {
+    Log "[DRY RUN] \$cliConfig\`: merge managed fields"
+    Log "  Managed: version, editor.vimMode, permissions, model, hasChangedDefaultModel"
+    if (\$lostKeys.Count -gt 0) {
+        LogWarn "[DRY RUN] CLOBBER: would lose: \$(\$lostKeys -join ', ')"
+    }
+    if (\$corrupt) {
+        LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
+    }
+} elseif (\$corrupt -and -not \$Force) {
+    LogError "\$cliConfig is corrupt. Use -Force to overwrite, or fix manually."
+} elseif (\$lostKeys.Count -gt 0 -and -not \$Force) {
+    LogError "\$cliConfig merge would lose fields: \$(\$lostKeys -join ', '). Use -Force to proceed."
 } else {
-    fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\n');
+    if (\$corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
+    if (\$lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: \$(\$lostKeys -join ', ')" }
 
-    // Post-write validation
-    const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
-    const _missing = ['version'].filter(k => !(k in _v));
-    if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+    Backup-File -FilePath \$cliConfig
+    \$json = \$config | ConvertTo-Json -Depth 10
+    \$resolvedPath = \$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath(\$cliConfig)
+    [System.IO.File]::WriteAllText(\$resolvedPath, \$json, [System.Text.UTF8Encoding]::new(\$false))
 
-    console.log(before === '{}' ? 'created' : 'merged');
-}
-'@ \$cliConfig
+    # Post-write validation
+    try {
+        \$vContent = [System.IO.File]::ReadAllText(\$resolvedPath)
+        \$vParsed = \$vContent | ConvertFrom-Json
+        if (-not (\$vParsed.PSObject.Properties.Name -contains "version")) {
+            LogError "Validation failed: \$cliConfig missing required field 'version'"
+        }
+    } catch {
+        LogError "Validation failed: \$cliConfig is not valid JSON -- \$_"
+    }
 
-    switch (\$mergeResult) {
-        "unchanged" { LogOk "Already up to date: \$cliConfig" }
-        "created"   { LogOk "Created: \$cliConfig" }
-        "merged"    { LogOk "Merged preferences into: \$cliConfig" }
-        default     { LogError "Unexpected merge result: \$mergeResult" }
+    if (\$beforeKeys.Count -eq 0) {
+        LogOk "Created: \$cliConfig"
+    } else {
+        LogOk "Merged preferences into: \$cliConfig"
     }
 }
 BLOCK_INTERP
@@ -913,6 +1104,7 @@ set -euo pipefail
 BLOCK
     bash_logging_helpers "setup-user-hooks"
     bash_os_guard
+    bash_flag_helpers
     cat <<'BLOCK'
 
 # --- Require node for JSON manipulation ---
@@ -927,13 +1119,19 @@ mkdir -p "$HOME/.claude/hooks"
 
 BLOCK
     # Embed the hook script content via heredoc
+    cat <<'BLOCK'
+if [ "$DRY_RUN" = "true" ]; then
+    log "[DRY RUN] Would deploy hook to $HOOK_DEST"
+else
+BLOCK
     echo 'cat > "$HOOK_DEST" <<'"'"'__EMBEDDED_HOOK__'"'"
     echo "$HOOK_SESSION_ARCHIVE"
     echo '__EMBEDDED_HOOK__'
     cat <<'BLOCK'
 
-chmod +x "$HOOK_DEST"
-log_ok "Deployed hook: $HOOK_DEST"
+    chmod +x "$HOOK_DEST"
+    log_ok "Deployed hook: $HOOK_DEST"
+fi
 
 # --- Merge hook + preferences into ~/.claude/settings.json ---
 SETTINGS_FILE="$HOME/.claude/settings.json"
@@ -944,10 +1142,12 @@ HOOK_CMD="bash \"$HOOK_DEST\""
 BLOCK
     # Emit the node merge block with build-time embedded preference constants
     cat <<BLOCK_INTERP
-node -e "
+MERGE_RESULT=\$(node -e "
 const fs = require('fs');
 const settingsFile = process.argv[1];
 const hookCmd = process.argv[2];
+const dryRun = process.argv[3] === 'true';
+const force = process.argv[4] === 'true';
 
 // --- Embedded preferences (from profile.json at build time) ---
 const autoMemory = $CLAUDE_AUTO_MEMORY;
@@ -955,7 +1155,14 @@ const alwaysThinking = $CLAUDE_ALWAYS_THINKING;
 
 // --- Read existing settings.json ---
 let settings = {};
-try { settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + settingsFile + ' is invalid JSON, starting with empty config'); }
+let corrupt = false;
+try { settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')); } catch (e) {
+    if (e.code !== 'ENOENT') {
+        corrupt = true;
+        console.error('Warning: ' + settingsFile + ' is invalid JSON');
+    }
+}
+const beforeKeys = Object.keys(settings);
 
 // --- Merge hook ---
 if (!settings.hooks) settings.hooks = {};
@@ -986,20 +1193,47 @@ if (existing) {
 settings.autoMemoryEnabled = autoMemory;
 settings.alwaysThinkingEnabled = alwaysThinking;
 
-fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+// Clobber detection
+const afterKeys = Object.keys(settings);
+const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
 
-// Post-write validation
-const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-const _missing = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'].filter(k => !(k in _v));
-if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
-" "\$SETTINGS_FILE" "\$HOOK_CMD"
+if (dryRun) {
+    console.log('dry-run');
+    if (corrupt) console.error('[DRY RUN] File is corrupt -- --force required');
+    if (lostKeys.length) console.error('[DRY RUN] CLOBBER: would lose: ' + lostKeys.join(', '));
+} else if (corrupt && !force) {
+    console.log('error-corrupt');
+} else if (lostKeys.length && !force) {
+    console.log('error-clobber');
+    console.error('Would lose fields: ' + lostKeys.join(', '));
+} else {
+    fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+
+    // Post-write validation
+    const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+    const _missing = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'].filter(k => !(k in _v));
+    if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+
+    console.log('ok');
+}
+" "\$SETTINGS_FILE" "\$HOOK_CMD" "\$DRY_RUN" "\$FORCE")
+
+case "\$MERGE_RESULT" in
+    ok)            log_ok "Settings deployed to \$SETTINGS_FILE" ;;
+    dry-run)       log "[DRY RUN] \$SETTINGS_FILE: merge managed fields"
+                   log "  Managed: hooks.SessionEnd, autoMemoryEnabled, alwaysThinkingEnabled" ;;
+    error-corrupt) log_error "\$SETTINGS_FILE is corrupt. Use --force to overwrite, or fix manually." ;;
+    error-clobber) log_error "\$SETTINGS_FILE merge would lose fields. Use --force to proceed." ;;
+    *)             log_error "Unexpected merge result: \$MERGE_RESULT" ;;
+esac
 BLOCK_INTERP
     cat <<'BLOCK'
 
-log_ok "Settings deployed to $SETTINGS_FILE"
-log "  Hook: $HOOK_CMD"
-log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"
-log "  alwaysThinkingEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).alwaysThinkingEnabled)")"
+if [ "$DRY_RUN" != "true" ]; then
+    log "  Hook: $HOOK_CMD"
+    log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"
+    log "  alwaysThinkingEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).alwaysThinkingEnabled)")"
+fi
 BLOCK
     bash_exit_footer
 } > "$DEPLOY_DIR/setup-user-hooks.sh"
@@ -1026,16 +1260,13 @@ blog "Generating deploy/setup-user-hooks.ps1 (with embedded hook + prefs)"
 # bash on both platforms). This PS1 script only deploys the hook configuration.
 
 BLOCK
+    ps1_param_block
     ps1_logging_helpers "setup-user-hooks"
     ps1_os_guard
+    ps1_hashtable_helper
+    ps1_backup_helper
+    ps1_flag_helpers
     cat <<'BLOCK'
-
-# --- Require node for JSON manipulation ---
-$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
-if (-not $nodeCmd) {
-    LogError "node required for JSON manipulation"
-    exit 1
-}
 
 # --- Deploy embedded hook script to ~/.claude/hooks/ ---
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
@@ -1050,8 +1281,13 @@ BLOCK
     cat <<'BLOCK'
 '@
 
-[System.IO.File]::WriteAllText($hookDest, $hookContent, [System.Text.UTF8Encoding]::new($false))
-LogOk "Deployed hook: $hookDest"
+if ($DryRun) {
+    Log "[DRY RUN] Would deploy hook to $hookDest"
+} else {
+    $resolvedHook = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($hookDest)
+    [System.IO.File]::WriteAllText($resolvedHook, $hookContent, [System.Text.UTF8Encoding]::new($false))
+    LogOk "Deployed hook: $hookDest"
+}
 
 # --- Merge hook + preferences into ~/.claude/settings.json ---
 $settingsFile = Join-Path $claudeDir "settings.json"
@@ -1062,67 +1298,105 @@ $hookDestUnix = $hookDest -replace '\\', '/'
 $hookCmd = "bash `"$hookDestUnix`""
 
 BLOCK
-    # Emit node merge block with embedded prefs
+    # Emit native PS merge with embedded build-time preferences
     cat <<BLOCK_INTERP
-node -e @'
-const fs = require('fs');
-const settingsFile = process.argv[1];
-const hookCmd = process.argv[2];
+# --- Embedded preferences (from profile.json at build time) ---
+\$autoMemory = \$$CLAUDE_AUTO_MEMORY
+\$alwaysThinking = \$$CLAUDE_ALWAYS_THINKING
 
-// --- Embedded preferences (from profile.json at build time) ---
-const autoMemory = $CLAUDE_AUTO_MEMORY;
-const alwaysThinking = $CLAUDE_ALWAYS_THINKING;
+# --- Read existing settings.json ---
+\$settings = @{}
+\$corrupt = \$false
+if (Test-Path \$settingsFile) {
+    try {
+        \$settings = ConvertPSObjectToHashtable (Get-Content \$settingsFile -Raw | ConvertFrom-Json)
+    } catch {
+        \$corrupt = \$true
+        LogWarn "\$settingsFile could not be parsed (\$_)"
+    }
+}
+\$beforeKeys = @(\$settings.Keys)
 
-// --- Read existing settings.json ---
-let settings = {};
-try { settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + settingsFile + ' is invalid JSON, starting with empty config'); }
+# --- Merge hook ---
+if (-not \$settings.ContainsKey("hooks")) { \$settings["hooks"] = @{} }
+if (-not \$settings["hooks"].ContainsKey("SessionEnd")) { \$settings["hooks"]["SessionEnd"] = @() }
 
-// --- Merge hook ---
-if (!settings.hooks) settings.hooks = {};
-if (!Array.isArray(settings.hooks.SessionEnd)) settings.hooks.SessionEnd = [];
-
-const hookId = 'session-archive.sh';
-const existing = settings.hooks.SessionEnd.find(rule =>
-    rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId))
-);
-
-if (existing) {
-    existing.hooks.forEach(h => {
-        if (h.command && h.command.includes(hookId)) {
-            h.command = hookCmd;
+\$sessionEndArr = @(\$settings["hooks"]["SessionEnd"])
+\$hookId = "session-archive.sh"
+\$foundHook = \$false
+for (\$i = 0; \$i -lt \$sessionEndArr.Count; \$i++) {
+    \$rule = \$sessionEndArr[\$i]
+    if (\$rule -is [System.Collections.Hashtable] -and \$rule.ContainsKey("hooks")) {
+        \$ruleHooks = @(\$rule["hooks"])
+        for (\$j = 0; \$j -lt \$ruleHooks.Count; \$j++) {
+            \$h = \$ruleHooks[\$j]
+            if (\$h -is [System.Collections.Hashtable] -and \$h.ContainsKey("command") -and \$h["command"] -match \$hookId) {
+                \$h["command"] = \$hookCmd
+                \$foundHook = \$true
+            }
         }
-    });
-} else {
-    settings.hooks.SessionEnd.push({
-        matcher: '',
-        hooks: [{
-            type: 'command',
-            command: hookCmd
-        }]
-    });
+    }
+}
+if (-not \$foundHook) {
+    \$newRule = @{
+        matcher = ""
+        hooks = @(
+            @{ type = "command"; command = \$hookCmd }
+        )
+    }
+    \$sessionEndArr += \$newRule
+    \$settings["hooks"]["SessionEnd"] = \$sessionEndArr
 }
 
-// --- Merge claude preferences ---
-settings.autoMemoryEnabled = autoMemory;
-settings.alwaysThinkingEnabled = alwaysThinking;
+# --- Merge preferences ---
+\$settings["autoMemoryEnabled"] = \$autoMemory
+\$settings["alwaysThinkingEnabled"] = \$alwaysThinking
 
-fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+# Clobber detection
+\$lostKeys = @(\$beforeKeys | Where-Object { \$_ -notin \$settings.Keys })
 
-// Post-write validation
-const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-const _missing = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'].filter(k => !(k in _v));
-if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
-'@ \$settingsFile \$hookCmd
+if (\$DryRun) {
+    Log "[DRY RUN] \$settingsFile\`: merge managed fields"
+    Log "  Managed: hooks.SessionEnd, autoMemoryEnabled, alwaysThinkingEnabled"
+    if (\$lostKeys.Count -gt 0) {
+        LogWarn "[DRY RUN] CLOBBER: would lose: \$(\$lostKeys -join ', ')"
+    }
+    if (\$corrupt) {
+        LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
+    }
+} elseif (\$corrupt -and -not \$Force) {
+    LogError "\$settingsFile is corrupt. Use -Force to overwrite, or fix manually."
+} elseif (\$lostKeys.Count -gt 0 -and -not \$Force) {
+    LogError "\$settingsFile merge would lose fields: \$(\$lostKeys -join ', '). Use -Force to proceed."
+} else {
+    if (\$corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
+    if (\$lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: \$(\$lostKeys -join ', ')" }
+
+    Backup-File -FilePath \$settingsFile
+    \$json = \$settings | ConvertTo-Json -Depth 10
+    \$resolvedSettings = \$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath(\$settingsFile)
+    [System.IO.File]::WriteAllText(\$resolvedSettings, \$json, [System.Text.UTF8Encoding]::new(\$false))
+
+    # Post-write validation
+    try {
+        \$vContent = [System.IO.File]::ReadAllText(\$resolvedSettings)
+        \$vParsed = \$vContent | ConvertFrom-Json
+        \$requiredKeys = @("hooks", "autoMemoryEnabled", "alwaysThinkingEnabled")
+        foreach (\$k in \$requiredKeys) {
+            if (-not (\$vParsed.PSObject.Properties.Name -contains \$k)) {
+                LogError "Validation failed: \$settingsFile missing required field '\$k'"
+            }
+        }
+    } catch {
+        LogError "Validation failed: \$settingsFile is not valid JSON -- \$_"
+    }
+
+    LogOk "Settings deployed to \$settingsFile"
+    Log "  Hook: \$hookCmd"
+    Log "  autoMemoryEnabled: \$autoMemory"
+    Log "  alwaysThinkingEnabled: \$alwaysThinking"
+}
 BLOCK_INTERP
-    cat <<'BLOCK'
-
-LogOk "Settings deployed to $settingsFile"
-Log "  Hook: $hookCmd"
-# Log preference values
-$_s = Get-Content $settingsFile -Raw | ConvertFrom-Json
-Log "  autoMemoryEnabled: $($_s.autoMemoryEnabled)"
-Log "  alwaysThinkingEnabled: $($_s.alwaysThinkingEnabled)"
-BLOCK
     ps1_exit_footer
 } > "$DEPLOY_DIR/setup-user-hooks.ps1"
 

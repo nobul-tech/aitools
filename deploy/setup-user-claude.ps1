@@ -3,6 +3,11 @@
 # Self-contained: shared preferences are embedded below. No repo or Drive needed.
 # Safe to re-run — replaces existing file with latest version.
 
+param(
+    [switch]$DryRun,
+    [switch]$Force
+)
+
 # --- Logging ---
 $logDir = Join-Path $env:LOCALAPPDATA "aitools"
 $logFile = Join-Path $logDir "deploy.log"
@@ -42,6 +47,11 @@ function Backup-File {
     Log "Backed up $FilePath"
 }
 
+# Env passthrough from parent (aitools CLI)
+if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
+
+if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
+
 # --- Auto-detect machine info ---
 $osInfo = (Get-CimInstance Win32_OperatingSystem).Caption
 $hostname = $env:COMPUTERNAME
@@ -50,14 +60,10 @@ $claudeDir = Join-Path $env:USERPROFILE ".claude"
 $claudeMd = Join-Path $claudeDir "CLAUDE.md"
 
 if (-not (Test-Path $claudeDir)) {
-    New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
-    Log "Created $claudeDir"
-}
-
-Backup-File -FilePath $claudeMd
-if (Test-Path $claudeMd) {
-    Remove-Item $claudeMd
-    Log "Removed existing $claudeMd"
+    if (-not $DryRun) {
+        New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
+        Log "Created $claudeDir"
+    }
 }
 
 # --- Embedded shared preferences (from shared/claude-shared.md) ---
@@ -200,7 +206,7 @@ Full evaluation and progress log: `reference/claude-code-effectiveness.md` in ai
 - **Issue tracking**: When I reference bugs or issues in context where documentation is expected (e.g., "fix bugs #1 and #2", "the bugs are filed"), check the project's GitHub repo via `gh issue list` / `gh issue view <number>`. Issues have full repro steps and context -- don't ask me to re-describe them.
 '@
 
-# --- Write CLAUDE.md ---
+# --- Build content ---
 $content = @"
 $sharedContent
 
@@ -210,17 +216,46 @@ $sharedContent
 - Shell: bash (Claude Code requires Git Bash on Windows)
 "@
 
-[System.IO.File]::WriteAllText($claudeMd, $content, [System.Text.UTF8Encoding]::new($false))
+if ($DryRun) {
+    $existingLines = 0
+    if (Test-Path $claudeMd) {
+        $existingLines = (Get-Content $claudeMd).Count
+    }
+    $newLines = ($content -split "`n").Count
+    Log "[DRY RUN] $claudeMd`: overwrite (sole owner)"
+    Log "  Template source: embedded (build-time)"
+    Log "  Existing: $existingLines lines"
+    Log "  New: $newLines lines"
+    if (Test-Path $claudeMd) {
+        $existingContent = Get-Content $claudeMd -Raw
+        if ($existingContent -eq $content) {
+            Log "[DRY RUN] Content unchanged"
+        } else {
+            Log "[DRY RUN] Content differs -- would overwrite"
+        }
+    } else {
+        Log "[DRY RUN] File does not exist -- would create"
+    }
+} else {
+    Backup-File -FilePath $claudeMd
+    if (Test-Path $claudeMd) {
+        Remove-Item $claudeMd
+        Log "Removed existing $claudeMd"
+    }
 
-# Post-write validation
-if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
-    LogError "Validation failed: $claudeMd is empty or missing"
-} elseif (-not ((Get-Content $claudeMd -Raw) -match '## Machine-Specific')) {
-    LogError "Validation failed: $claudeMd missing Machine-Specific section"
+    $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($claudeMd)
+    [System.IO.File]::WriteAllText($resolvedPath, $content, [System.Text.UTF8Encoding]::new($false))
+
+    # Post-write validation
+    if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
+        LogError "Validation failed: $claudeMd is empty or missing"
+    } elseif (-not ((Get-Content $claudeMd -Raw) -match '## Machine-Specific')) {
+        LogError "Validation failed: $claudeMd missing Machine-Specific section"
+    }
+
+    LogOk "Wrote $claudeMd"
+    Log "Machine: $osInfo ($hostname)"
 }
-
-LogOk "Wrote $claudeMd"
-Log "Machine: $osInfo ($hostname)"
 
 # --- Exit ---
 if ($errors -gt 0) {

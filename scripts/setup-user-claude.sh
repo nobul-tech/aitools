@@ -13,6 +13,17 @@
 
 set -euo pipefail
 
+# --- Flag parsing ---
+DRY_RUN=false
+FORCE=false
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=true ;;
+        --force)   FORCE=true ;;
+    esac
+done
+[ "${AITOOLS_DRY_RUN:-}" = "1" ] && DRY_RUN=true
+
 # --- Logging ---
 LOG_DIR="$HOME/Library/Logs/aitools"
 [ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
@@ -48,8 +59,17 @@ case "$(uname -s)" in
         exit 1 ;;
 esac
 
+[ "$DRY_RUN" = "true" ] && log "[DRY RUN] Preview mode -- no files will be written"
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SHARED_PATH="${1:-$SCRIPT_DIR/../shared/claude-shared.md}"
+# SharedPath can be passed as first non-flag arg; default to shared/claude-shared.md
+SHARED_PATH="$SCRIPT_DIR/../shared/claude-shared.md"
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run|--force) ;; # skip flags
+        *) SHARED_PATH="$arg"; break ;;
+    esac
+done
 CONFIG="$HOME/.aitools/config.json"
 
 CLAUDE_DIR="$HOME/.claude"
@@ -138,15 +158,45 @@ else
     log_warn "Profile not available -- {{PLACEHOLDER}} tokens will not be resolved"
 fi
 
-# Backup and remove existing file so we always write the latest version
-backup_file "$CLAUDE_MD"
-if [ -f "$CLAUDE_MD" ]; then
-    rm "$CLAUDE_MD"
-    log "Removed existing $(display_path "$CLAUDE_MD")"
-fi
+if [ "$DRY_RUN" = "true" ]; then
+    # Show what would happen without writing
+    EXISTING_LINES=0
+    [ -f "$CLAUDE_MD" ] && EXISTING_LINES=$(wc -l < "$CLAUDE_MD")
+    NEW_CONTENT="${SHARED_CONTENT}
 
-# --- Write CLAUDE.md ---
-cat > "$CLAUDE_MD" << EOF
+## Machine-Specific
+
+- Machine: $(uname -s) $(uname -m) ($(hostname -s 2>/dev/null || hostname))
+- Shell: $(basename "$SHELL")"
+    NEW_LINES=$(echo "$NEW_CONTENT" | wc -l)
+    log "[DRY RUN] $(display_path "$CLAUDE_MD"): overwrite (sole owner)"
+    log "  Template source: $(display_path "$SOURCE_PATH") ($SOURCE_LABEL)"
+    if [ -n "$PROFILE_NAME" ]; then
+        log "  Profile interpolation: name=$PROFILE_NAME company=$PROFILE_COMPANY"
+    else
+        log "  Profile interpolation: none (tokens unresolved)"
+    fi
+    log "  Existing: ${EXISTING_LINES} lines"
+    log "  New: ${NEW_LINES} lines"
+    if [ -f "$CLAUDE_MD" ]; then
+        if [ "$(cat "$CLAUDE_MD")" = "$NEW_CONTENT" ]; then
+            log "[DRY RUN] Content unchanged"
+        else
+            log "[DRY RUN] Content differs -- would overwrite"
+        fi
+    else
+        log "[DRY RUN] File does not exist -- would create"
+    fi
+else
+    # Backup and remove existing file so we always write the latest version
+    backup_file "$CLAUDE_MD"
+    if [ -f "$CLAUDE_MD" ]; then
+        rm "$CLAUDE_MD"
+        log "Removed existing $(display_path "$CLAUDE_MD")"
+    fi
+
+    # --- Write CLAUDE.md ---
+    cat > "$CLAUDE_MD" << EOF
 ${SHARED_CONTENT}
 
 ## Machine-Specific
@@ -155,14 +205,15 @@ ${SHARED_CONTENT}
 - Shell: $(basename "$SHELL")
 EOF
 
-# Post-write validation
-if [ ! -s "$CLAUDE_MD" ]; then
-    log_error "Validation failed: $CLAUDE_MD is empty or missing"
-elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
-    log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
-fi
+    # Post-write validation
+    if [ ! -s "$CLAUDE_MD" ]; then
+        log_error "Validation failed: $CLAUDE_MD is empty or missing"
+    elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
+        log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
+    fi
 
-log_ok "Wrote $(display_path "$CLAUDE_MD")"
+    log_ok "Wrote $(display_path "$CLAUDE_MD")"
+fi
 
 # --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then

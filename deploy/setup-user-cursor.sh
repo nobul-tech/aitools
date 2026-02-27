@@ -44,67 +44,103 @@ case "$(uname -s)" in
         exit 1 ;;
 esac
 
+# --- Flag parsing ---
+DRY_RUN=false
+FORCE=false
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=true ;;
+        --force)   FORCE=true ;;
+    esac
+done
+[ "${AITOOLS_DRY_RUN:-}" = "1" ] && DRY_RUN=true
+
+[ "$DRY_RUN" = "true" ] && log "[DRY RUN] Preview mode -- no files will be written"
+
 CURSOR_DIR="$HOME/.cursor"
 CLI_CONFIG="$CURSOR_DIR/cli-config.json"
 
 # --- 1. ripgrep (rg) ---
 log "Step 1: ripgrep (rg)"
 
-if command -v rg &>/dev/null; then
-    RG_VERSION=$(rg --version | head -1)
-    log_ok "Already installed: $RG_VERSION"
-else
-    if command -v brew &>/dev/null; then
-        log "Installing ripgrep via brew..."
-        brew install ripgrep
-        if command -v rg &>/dev/null; then
-            log_ok "Installed: $(rg --version | head -1)"
-        else
-            log_error "brew install completed but 'rg' not found in PATH"
-        fi
+if [ "$DRY_RUN" = "true" ]; then
+    if command -v rg &>/dev/null; then
+        log "[DRY RUN] ripgrep already installed: $(rg --version | head -1)"
     else
-        log_error "Homebrew not found. Install ripgrep manually: brew install ripgrep"
+        log "[DRY RUN] Would install ripgrep via brew"
+    fi
+else
+    if command -v rg &>/dev/null; then
+        RG_VERSION=$(rg --version | head -1)
+        log_ok "Already installed: $RG_VERSION"
+    else
+        if command -v brew &>/dev/null; then
+            log "Installing ripgrep via brew..."
+            brew install ripgrep
+            if command -v rg &>/dev/null; then
+                log_ok "Installed: $(rg --version | head -1)"
+            else
+                log_error "brew install completed but 'rg' not found in PATH"
+            fi
+        else
+            log_error "Homebrew not found. Install ripgrep manually: brew install ripgrep"
+        fi
     fi
 fi
 
 # --- 2. Cursor CLI (agent) ---
 log "Step 2: Cursor CLI (agent)"
 
-if command -v agent &>/dev/null; then
-    AGENT_VERSION=$(agent --version)
-    log_ok "Already installed: $AGENT_VERSION"
-else
-    log "Installing Cursor CLI..."
-    curl https://cursor.com/install -fsS | bash
+if [ "$DRY_RUN" = "true" ]; then
     if command -v agent &>/dev/null; then
-        log_ok "Installed: $(agent --version)"
+        log "[DRY RUN] Cursor CLI already installed: $(agent --version)"
     else
-        log_error "Cursor CLI install completed but 'agent' not found in PATH (restart terminal)"
+        log "[DRY RUN] Would install Cursor CLI via curl"
+    fi
+else
+    if command -v agent &>/dev/null; then
+        AGENT_VERSION=$(agent --version)
+        log_ok "Already installed: $AGENT_VERSION"
+    else
+        log "Installing Cursor CLI..."
+        curl https://cursor.com/install -fsS | bash
+        if command -v agent &>/dev/null; then
+            log_ok "Installed: $(agent --version)"
+        else
+            log_error "Cursor CLI install completed but 'agent' not found in PATH (restart terminal)"
+        fi
     fi
 fi
 
 # --- 3. cli-config.json (merge, not overwrite) ---
 log "Step 3: cli-config.json"
 
-backup_file "$CLI_CONFIG"
-
 mkdir -p "$CURSOR_DIR"
 
 if ! command -v node &>/dev/null; then
     log_warn "node not found -- skipping cli-config.json merge"
 else
+    backup_file "$CLI_CONFIG"
     MERGE_RESULT=$(node -e "
 const fs = require('fs');
 const f = process.argv[1];
+const dryRun = process.argv[2] === 'true';
+const force = process.argv[3] === 'true';
 
 // --- Embedded preferences (from profile.json at build time) ---
-const vimMode = false;
+const vimMode = true;
 const modelId = 'auto';
 
 // --- Read existing cli-config.json ---
 let config = {};
-try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + f + ' is invalid JSON, starting with empty config'); }
-const before = JSON.stringify(config);
+let corrupt = false;
+try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) {
+    if (e.code !== 'ENOENT') {
+        corrupt = true;
+        console.error('Warning: ' + f + ' is invalid JSON');
+    }
+}
+const beforeKeys = Object.keys(config);
 
 // --- Merge managed fields ---
 config.version = 1;
@@ -126,13 +162,21 @@ if (modelId === 'auto') {
     config.hasChangedDefaultModel = true;
 }
 
-// All other fields (authInfo, privacyCache, network, statsigBootstrap, maxMode, etc.)
-// are preserved -- we never delete keys we don't manage.
+// Clobber detection
+const afterKeys = Object.keys(config);
+const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
 
-const after = JSON.stringify(config);
-if (before === after) {
-    console.log('unchanged');
+if (dryRun) {
+    console.log('would-merge');
+    if (corrupt) console.error('[DRY RUN] File is corrupt -- --force required');
+    if (lostKeys.length) console.error('[DRY RUN] CLOBBER: would lose: ' + lostKeys.join(', '));
+} else if (corrupt && !force) {
+    console.log('error-corrupt');
+} else if (lostKeys.length && !force) {
+    console.log('error-clobber');
+    console.error('Would lose fields: ' + lostKeys.join(', '));
 } else {
+    const before = JSON.stringify(config);
     fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\\n');
 
     // Post-write validation
@@ -140,15 +184,18 @@ if (before === after) {
     const _missing = ['version'].filter(k => !(k in _v));
     if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
 
-    console.log(before === '{}' ? 'created' : 'merged');
+    console.log(beforeKeys.length === 0 ? 'created' : 'merged');
 }
-" "$CLI_CONFIG")
+" "$CLI_CONFIG" "$DRY_RUN" "$FORCE")
 
     case "$MERGE_RESULT" in
-        unchanged) log_ok "Already up to date: $CLI_CONFIG" ;;
-        created)   log_ok "Created: $CLI_CONFIG" ;;
-        merged)    log_ok "Merged preferences into: $CLI_CONFIG" ;;
-        *)         log_error "Unexpected merge result: $MERGE_RESULT" ;;
+        unchanged)     log_ok "Already up to date: $CLI_CONFIG" ;;
+        created)       log_ok "Created: $CLI_CONFIG" ;;
+        merged)        log_ok "Merged preferences into: $CLI_CONFIG" ;;
+        would-merge)   log "[DRY RUN] $CLI_CONFIG: merge managed fields" ;;
+        error-corrupt) log_error "$CLI_CONFIG is corrupt. Use --force to overwrite, or fix manually." ;;
+        error-clobber) log_error "$CLI_CONFIG merge would lose fields. Use --force to proceed." ;;
+        *)             log_error "Unexpected merge result: $MERGE_RESULT" ;;
     esac
 fi
 

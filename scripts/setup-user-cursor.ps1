@@ -6,6 +6,17 @@
 #   1. Installs ripgrep (rg) if not already present (required by Cursor CLI)
 #   2. Installs Cursor CLI (agent command) if not already present
 #   3. Merges preferences into ~/.cursor/cli-config.json (preserves CLI-managed fields)
+#
+# Managed fields: version, editor, permissions, model, hasChangedDefaultModel
+# Preserved: authInfo, privacyCache, network, statsigBootstrap, maxMode, all other fields
+
+param(
+    [switch]$DryRun,
+    [switch]$Force
+)
+
+# Env passthrough from parent (aitools CLI)
+if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
 
 # --- Logging ---
 $logDir = Join-Path $env:LOCALAPPDATA "aitools"
@@ -39,11 +50,29 @@ function Backup-File {
     Log "Backed up $FilePath"
 }
 
+# --- PS 5.1 compatibility helper ---
+# ConvertFrom-Json -AsHashtable is PS 6+ only. This converts PSCustomObject trees
+# to nested hashtables so .ContainsKey() and bracket indexing work on PS 5.1.
+function ConvertPSObjectToHashtable($obj) {
+    if ($null -eq $obj) { return @{} }
+    $ht = @{}
+    foreach ($prop in $obj.PSObject.Properties) {
+        if ($prop.Value -is [System.Management.Automation.PSCustomObject]) {
+            $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
+        } else {
+            $ht[$prop.Name] = $prop.Value
+        }
+    }
+    return $ht
+}
+
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     LogError "This script is for Windows. On macOS/Linux, use the .sh version."
     exit 1
 }
+
+if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
 $cursorDir = Join-Path $env:USERPROFILE ".cursor"
 $cliConfig = Join-Path $cursorDir "cli-config.json"
@@ -66,24 +95,36 @@ function Refresh-Path {
 
 Log "Step 1: ripgrep (rg)"
 
-$rgCmd = Get-Command rg -ErrorAction SilentlyContinue
-if ($rgCmd) {
-    $rgVersion = (rg --version | Select-Object -First 1)
-    LogOk "Already installed: $rgVersion"
-    $status.ripgrep = "already installed ($rgVersion)"
-} else {
-    Log "Installing ripgrep via winget..."
-    winget install BurntSushi.ripgrep.MSVC --accept-package-agreements --accept-source-agreements
-    Refresh-Path
-
+if ($DryRun) {
     $rgCmd = Get-Command rg -ErrorAction SilentlyContinue
     if ($rgCmd) {
         $rgVersion = (rg --version | Select-Object -First 1)
-        LogOk "Installed: $rgVersion"
-        $status.ripgrep = "installed ($rgVersion)"
+        Log "[DRY RUN] ripgrep already installed: $rgVersion"
+        $status.ripgrep = "already installed ($rgVersion)"
     } else {
-        LogWarn "winget install completed but 'rg' not found in PATH. Restart terminal to verify."
-        $status.ripgrep = "installed (restart terminal to verify)"
+        Log "[DRY RUN] Would install ripgrep via winget"
+        $status.ripgrep = "would install"
+    }
+} else {
+    $rgCmd = Get-Command rg -ErrorAction SilentlyContinue
+    if ($rgCmd) {
+        $rgVersion = (rg --version | Select-Object -First 1)
+        LogOk "Already installed: $rgVersion"
+        $status.ripgrep = "already installed ($rgVersion)"
+    } else {
+        Log "Installing ripgrep via winget..."
+        winget install BurntSushi.ripgrep.MSVC --accept-package-agreements --accept-source-agreements
+        Refresh-Path
+
+        $rgCmd = Get-Command rg -ErrorAction SilentlyContinue
+        if ($rgCmd) {
+            $rgVersion = (rg --version | Select-Object -First 1)
+            LogOk "Installed: $rgVersion"
+            $status.ripgrep = "installed ($rgVersion)"
+        } else {
+            LogWarn "winget install completed but 'rg' not found in PATH. Restart terminal to verify."
+            $status.ripgrep = "installed (restart terminal to verify)"
+        }
     }
 }
 
@@ -91,23 +132,35 @@ if ($rgCmd) {
 
 Log "Step 2: Cursor CLI (agent)"
 
-$agentCmd = Get-Command agent -ErrorAction SilentlyContinue
-if ($agentCmd) {
-    $agentVersion = agent --version
-    LogOk "Already installed: $agentVersion"
-    $status.cursorCli = "already installed ($agentVersion)"
-} else {
-    Log "Installing Cursor CLI..."
-    Invoke-Expression (Invoke-RestMethod 'https://cursor.com/install?win32=true')
-
+if ($DryRun) {
     $agentCmd = Get-Command agent -ErrorAction SilentlyContinue
     if ($agentCmd) {
         $agentVersion = agent --version
-        LogOk "Installed: $agentVersion"
-        $status.cursorCli = "installed ($agentVersion)"
+        Log "[DRY RUN] Cursor CLI already installed: $agentVersion"
+        $status.cursorCli = "already installed ($agentVersion)"
     } else {
-        LogWarn "Cursor CLI install completed but 'agent' not found in PATH. Restart terminal to verify."
-        $status.cursorCli = "installed (restart terminal to verify)"
+        Log "[DRY RUN] Would install Cursor CLI"
+        $status.cursorCli = "would install"
+    }
+} else {
+    $agentCmd = Get-Command agent -ErrorAction SilentlyContinue
+    if ($agentCmd) {
+        $agentVersion = agent --version
+        LogOk "Already installed: $agentVersion"
+        $status.cursorCli = "already installed ($agentVersion)"
+    } else {
+        Log "Installing Cursor CLI..."
+        Invoke-Expression (Invoke-RestMethod 'https://cursor.com/install?win32=true')
+
+        $agentCmd = Get-Command agent -ErrorAction SilentlyContinue
+        if ($agentCmd) {
+            $agentVersion = agent --version
+            LogOk "Installed: $agentVersion"
+            $status.cursorCli = "installed ($agentVersion)"
+        } else {
+            LogWarn "Cursor CLI install completed but 'agent' not found in PATH. Restart terminal to verify."
+            $status.cursorCli = "installed (restart terminal to verify)"
+        }
     }
 }
 
@@ -115,104 +168,143 @@ if ($agentCmd) {
 
 Log "Step 3: cli-config.json"
 
+# --- Read profile preferences ---
+# config.json -> userRepoPath -> profile.json -> cursor.cli prefs
+$vimMode = $false
+$modelId = "auto"
+
+$configFile = Join-Path $env:USERPROFILE ".aitools\config.json"
+if (Test-Path $configFile) {
+    try {
+        $cfg = ConvertPSObjectToHashtable (Get-Content $configFile -Raw | ConvertFrom-Json)
+        if ($cfg.ContainsKey("userRepoPath") -and $cfg["userRepoPath"]) {
+            $profilePath = Join-Path $cfg["userRepoPath"] "profile.json"
+            if (Test-Path $profilePath) {
+                $pf = ConvertPSObjectToHashtable (Get-Content $profilePath -Raw | ConvertFrom-Json)
+                if ($pf.ContainsKey("cursor") -and $pf["cursor"].ContainsKey("cli")) {
+                    $cli = $pf["cursor"]["cli"]
+                    if ($cli.ContainsKey("vimMode")) { $vimMode = [bool]$cli["vimMode"] }
+                    if ($cli.ContainsKey("model")) { $modelId = [string]$cli["model"] }
+                }
+            }
+        }
+    } catch {
+        LogWarn "Could not read profile preferences: $_"
+    }
+}
+
 # Back up before merge
-Backup-File -FilePath $cliConfig
+if (-not $DryRun) {
+    Backup-File -FilePath $cliConfig
+}
 
 # Ensure ~/.cursor/ exists
 if (-not (Test-Path $cursorDir)) {
-    New-Item -ItemType Directory -Path $cursorDir -Force | Out-Null
-    Log "Created $cursorDir"
-}
-
-$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
-if (-not $nodeCmd) {
-    LogWarn "node not found -- skipping cli-config.json merge"
-    $status.cliConfig = "SKIPPED (node not found)"
-} else {
-    # Read cursor.cli preferences from profile.json (via config.json -> userRepoPath).
-    # Falls back to defaults if profile not found. Uses node for JSON merge
-    # (same pattern as setup-user-mcp.ps1 settings merge).
-
-    $mergeResult = & node -e @'
-const fs = require('fs');
-const path = require('path');
-const f = process.argv[1];
-
-// --- Read profile preferences ---
-let vimMode = false;
-let modelId = 'auto';
-try {
-    const cfgPath = path.join(process.env.HOME || process.env.USERPROFILE, '.aitools', 'config.json');
-    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-    if (cfg.userRepoPath) {
-        const pf = JSON.parse(fs.readFileSync(path.join(cfg.userRepoPath, 'profile.json'), 'utf8'));
-        if (pf.cursor && pf.cursor.cli) {
-            if (typeof pf.cursor.cli.vimMode === 'boolean') vimMode = pf.cursor.cli.vimMode;
-            if (typeof pf.cursor.cli.model === 'string') modelId = pf.cursor.cli.model;
-        }
+    if (-not $DryRun) {
+        New-Item -ItemType Directory -Path $cursorDir -Force | Out-Null
+        Log "Created $cursorDir"
     }
-} catch (e) { if (e.code !== 'ENOENT') console.error('Warning: could not read profile preferences: ' + e.message); }
-
-// --- Read existing cli-config.json ---
-let config = {};
-try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + f + ' is invalid JSON, starting with empty config'); }
-const before = JSON.stringify(config);
-
-// --- Merge managed fields ---
-config.version = 1;
-if (!config.editor) config.editor = {};
-config.editor.vimMode = vimMode;
-if (!config.permissions) config.permissions = {};
-if (!Array.isArray(config.permissions.allow)) config.permissions.allow = [];
-if (!Array.isArray(config.permissions.deny)) config.permissions.deny = [];
-
-// Model: only set if profile specifies 'auto' (the only supported value for now)
-if (modelId === 'auto') {
-    config.model = {
-        modelId: 'default',
-        displayModelId: 'auto',
-        displayName: 'Auto',
-        displayNameShort: 'Auto',
-        aliases: ['auto'],
-        maxMode: false
-    };
-    config.hasChangedDefaultModel = true;
 }
 
-// All other fields (authInfo, privacyCache, network, statsigBootstrap, maxMode, etc.)
-// are preserved -- we never delete keys we don't manage.
+# --- Read existing cli-config.json ---
+$config = @{}
+$corrupt = $false
+if (Test-Path $cliConfig) {
+    try {
+        $config = ConvertPSObjectToHashtable (Get-Content $cliConfig -Raw | ConvertFrom-Json)
+    } catch {
+        $corrupt = $true
+        LogWarn "$cliConfig could not be parsed ($_)"
+    }
+}
+$beforeKeys = @($config.Keys)
+$beforeJson = $config | ConvertTo-Json -Depth 10
 
-const after = JSON.stringify(config);
-if (before === after) {
-    console.log('unchanged');
+# --- Merge managed fields ---
+$config["version"] = 1
+if (-not $config.ContainsKey("editor")) { $config["editor"] = @{} }
+$config["editor"]["vimMode"] = $vimMode
+if (-not $config.ContainsKey("permissions")) { $config["permissions"] = @{} }
+if (-not $config["permissions"].ContainsKey("allow")) { $config["permissions"]["allow"] = @() }
+if (-not $config["permissions"].ContainsKey("deny")) { $config["permissions"]["deny"] = @() }
+
+# Model: only set if profile specifies 'auto' (the only supported value for now)
+if ($modelId -eq "auto") {
+    $config["model"] = @{
+        modelId          = "default"
+        displayModelId   = "auto"
+        displayName      = "Auto"
+        displayNameShort = "Auto"
+        aliases          = @("auto")
+        maxMode          = $false
+    }
+    $config["hasChangedDefaultModel"] = $true
+}
+
+# --- Clobber detection ---
+$managedKeys = @("version", "editor", "permissions", "model", "hasChangedDefaultModel")
+$lostKeys = @($beforeKeys | Where-Object { $_ -notin $config.Keys })
+
+$afterJson = $config | ConvertTo-Json -Depth 10
+
+if ($DryRun) {
+    # --- Dry-run output ---
+    Log "[DRY RUN] $cliConfig`: merge"
+    Log "  Managed fields: $($managedKeys -join ', ')"
+    if ($lostKeys.Count -gt 0) {
+        LogWarn "[DRY RUN] CLOBBER: would lose non-managed fields: $($lostKeys -join ', ')"
+    }
+    if ($corrupt) {
+        LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
+    }
+    if ($beforeJson -eq $afterJson -and -not $corrupt) {
+        Log "[DRY RUN] No changes needed (already up to date)"
+        $status.cliConfig = "already up to date (dry-run)"
+    } else {
+        Log "[DRY RUN] Would write merged config"
+        $status.cliConfig = "would merge (dry-run)"
+    }
 } else {
-    fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\n');
+    # --- Normal mode ---
+    if ($corrupt -and -not $Force) {
+        LogError "$cliConfig is corrupt. Use -Force to overwrite, or fix manually."
+        $status.cliConfig = "ERROR (corrupt, needs -Force)"
+    } elseif ($lostKeys.Count -gt 0 -and -not $Force) {
+        LogError "$cliConfig merge would lose fields: $($lostKeys -join ', '). Use -Force to proceed."
+        $status.cliConfig = "ERROR (clobber, needs -Force)"
+    } elseif ($beforeJson -eq $afterJson -and -not $corrupt) {
+        LogOk "Already up to date: $cliConfig"
+        $status.cliConfig = "already up to date"
+    } else {
+        if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
+        if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
 
-    // Post-write validation
-    const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
-    const _missing = ['version'].filter(k => !(k in _v));
-    if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+        $json = $config | ConvertTo-Json -Depth 10
+        [System.IO.File]::WriteAllText(
+            $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($cliConfig),
+            $json,
+            [System.Text.UTF8Encoding]::new($false)
+        )
 
-    console.log(before === '{}' ? 'created' : 'merged');
-}
-'@ $cliConfig
-
-    switch ($mergeResult) {
-        "unchanged" {
-            LogOk "Already up to date: $cliConfig"
-            $status.cliConfig = "already up to date"
+        # Post-write validation
+        try {
+            $vContent = [System.IO.File]::ReadAllText(
+                $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($cliConfig)
+            )
+            $vParsed = $vContent | ConvertFrom-Json
+            if (-not ($vParsed.PSObject.Properties.Name -contains "version")) {
+                LogError "Validation failed: $cliConfig missing required field 'version'"
+            }
+        } catch {
+            LogError "Validation failed: $cliConfig is not valid JSON -- $_"
         }
-        "created" {
+
+        if ($beforeKeys.Count -eq 0) {
             LogOk "Created: $cliConfig"
             $status.cliConfig = "created"
-        }
-        "merged" {
+        } else {
             LogOk "Merged preferences into: $cliConfig"
             $status.cliConfig = "merged"
-        }
-        default {
-            LogError "Unexpected merge result: $mergeResult"
-            $status.cliConfig = "ERROR"
         }
     }
 }

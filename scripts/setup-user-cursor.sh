@@ -7,8 +7,22 @@
 #   1. Installs ripgrep (rg) if not already present (required by Cursor CLI)
 #   2. Installs Cursor CLI (agent command) if not already present
 #   3. Merges preferences into ~/.cursor/cli-config.json (preserves CLI-managed fields)
+#
+# Managed fields: version, editor, permissions, model, hasChangedDefaultModel
+# Preserved: authInfo, privacyCache, network, statsigBootstrap, maxMode, all other fields
 
 set -euo pipefail
+
+# --- Flag parsing ---
+DRY_RUN=false
+FORCE=false
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=true ;;
+        --force)   FORCE=true ;;
+    esac
+done
+[ "${AITOOLS_DRY_RUN:-}" = "1" ] && DRY_RUN=true
 
 # --- Logging ---
 LOG_DIR="$HOME/Library/Logs/aitools"
@@ -44,6 +58,8 @@ case "$(uname -s)" in
         exit 1 ;;
 esac
 
+[ "$DRY_RUN" = "true" ] && log "[DRY RUN] Preview mode -- no files will be written"
+
 CURSOR_DIR="$HOME/.cursor"
 CLI_CONFIG="$CURSOR_DIR/cli-config.json"
 
@@ -56,26 +72,37 @@ STATUS_cliConfig=""
 
 log "Step 1: ripgrep (rg)"
 
-if command -v rg &>/dev/null; then
-    RG_VERSION=$(rg --version | head -1)
-    log_ok "Already installed: $RG_VERSION"
-    STATUS_ripgrep="already installed ($RG_VERSION)"
-else
-    if command -v brew &>/dev/null; then
-        log "Installing ripgrep via brew..."
-        brew install ripgrep
-
-        if command -v rg &>/dev/null; then
-            RG_VERSION=$(rg --version | head -1)
-            log_ok "Installed: $RG_VERSION"
-            STATUS_ripgrep="installed ($RG_VERSION)"
-        else
-            log_warn "brew install completed but 'rg' not found in PATH. Restart terminal to verify."
-            STATUS_ripgrep="installed (restart terminal to verify)"
-        fi
+if [ "$DRY_RUN" = "true" ]; then
+    if command -v rg &>/dev/null; then
+        RG_VERSION=$(rg --version | head -1)
+        log "[DRY RUN] ripgrep already installed: $RG_VERSION"
+        STATUS_ripgrep="already installed ($RG_VERSION)"
     else
-        log_warn "Homebrew not found. Install ripgrep manually: brew install ripgrep"
-        STATUS_ripgrep="SKIPPED (brew not found)"
+        log "[DRY RUN] Would install ripgrep via brew"
+        STATUS_ripgrep="would install"
+    fi
+else
+    if command -v rg &>/dev/null; then
+        RG_VERSION=$(rg --version | head -1)
+        log_ok "Already installed: $RG_VERSION"
+        STATUS_ripgrep="already installed ($RG_VERSION)"
+    else
+        if command -v brew &>/dev/null; then
+            log "Installing ripgrep via brew..."
+            brew install ripgrep
+
+            if command -v rg &>/dev/null; then
+                RG_VERSION=$(rg --version | head -1)
+                log_ok "Installed: $RG_VERSION"
+                STATUS_ripgrep="installed ($RG_VERSION)"
+            else
+                log_warn "brew install completed but 'rg' not found in PATH. Restart terminal to verify."
+                STATUS_ripgrep="installed (restart terminal to verify)"
+            fi
+        else
+            log_warn "Homebrew not found. Install ripgrep manually: brew install ripgrep"
+            STATUS_ripgrep="SKIPPED (brew not found)"
+        fi
     fi
 fi
 
@@ -83,21 +110,32 @@ fi
 
 log "Step 2: Cursor CLI (agent)"
 
-if command -v agent &>/dev/null; then
-    AGENT_VERSION=$(agent --version)
-    log_ok "Already installed: $AGENT_VERSION"
-    STATUS_cursorCli="already installed ($AGENT_VERSION)"
-else
-    log "Installing Cursor CLI..."
-    curl https://cursor.com/install -fsS | bash
-
+if [ "$DRY_RUN" = "true" ]; then
     if command -v agent &>/dev/null; then
         AGENT_VERSION=$(agent --version)
-        log_ok "Installed: $AGENT_VERSION"
-        STATUS_cursorCli="installed ($AGENT_VERSION)"
+        log "[DRY RUN] Cursor CLI already installed: $AGENT_VERSION"
+        STATUS_cursorCli="already installed ($AGENT_VERSION)"
     else
-        log_warn "Cursor CLI install completed but 'agent' not found in PATH. Restart terminal to verify."
-        STATUS_cursorCli="installed (restart terminal to verify)"
+        log "[DRY RUN] Would install Cursor CLI"
+        STATUS_cursorCli="would install"
+    fi
+else
+    if command -v agent &>/dev/null; then
+        AGENT_VERSION=$(agent --version)
+        log_ok "Already installed: $AGENT_VERSION"
+        STATUS_cursorCli="already installed ($AGENT_VERSION)"
+    else
+        log "Installing Cursor CLI..."
+        curl https://cursor.com/install -fsS | bash
+
+        if command -v agent &>/dev/null; then
+            AGENT_VERSION=$(agent --version)
+            log_ok "Installed: $AGENT_VERSION"
+            STATUS_cursorCli="installed ($AGENT_VERSION)"
+        else
+            log_warn "Cursor CLI install completed but 'agent' not found in PATH. Restart terminal to verify."
+            STATUS_cursorCli="installed (restart terminal to verify)"
+        fi
     fi
 fi
 
@@ -105,7 +143,9 @@ fi
 
 log "Step 3: cli-config.json"
 
-backup_file "$CLI_CONFIG"
+if [ "$DRY_RUN" != "true" ]; then
+    backup_file "$CLI_CONFIG"
+fi
 
 mkdir -p "$CURSOR_DIR"
 
@@ -120,6 +160,8 @@ else
 const fs = require('fs');
 const path = require('path');
 const f = process.argv[1];
+const dryRun = process.argv[2] === 'true';
+const force = process.argv[3] === 'true';
 
 // --- Read profile preferences ---
 let vimMode = false;
@@ -138,7 +180,16 @@ try {
 
 // --- Read existing cli-config.json ---
 let config = {};
-try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + f + ' is invalid JSON, starting with empty config'); }
+let corrupt = false;
+try {
+    config = JSON.parse(fs.readFileSync(f, 'utf8'));
+} catch (e) {
+    if (e.code !== 'ENOENT') {
+        corrupt = true;
+        console.error('Warning: ' + f + ' is invalid JSON');
+    }
+}
+const beforeKeys = Object.keys(config);
 const before = JSON.stringify(config);
 
 // --- Merge managed fields ---
@@ -162,23 +213,42 @@ if (modelId === 'auto') {
     config.hasChangedDefaultModel = true;
 }
 
-// All other fields (authInfo, privacyCache, network, statsigBootstrap, maxMode, etc.)
-// are preserved -- we never delete keys we don't manage.
+// --- Clobber detection ---
+const managedKeys = ['version', 'editor', 'permissions', 'model', 'hasChangedDefaultModel'];
+const afterKeys = Object.keys(config);
+const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
 
 const after = JSON.stringify(config);
-if (before === after) {
-    console.log('unchanged');
+
+if (dryRun) {
+    console.error('[DRY RUN] ' + f + ': merge');
+    console.error('  Managed fields: ' + managedKeys.join(', '));
+    if (lostKeys.length > 0) console.error('  CLOBBER WARNING: would lose: ' + lostKeys.join(', '));
+    if (corrupt) console.error('  File is corrupt -- --force required');
+    console.log(before === after && !corrupt ? 'unchanged' : 'would-merge');
+} else if (corrupt && !force) {
+    console.error('ERROR: ' + f + ' is corrupt. Use --force to overwrite, or fix manually.');
+    console.log('error-corrupt');
+} else if (lostKeys.length > 0 && !force) {
+    console.error('ERROR: merge would lose fields: ' + lostKeys.join(', ') + '. Use --force to proceed.');
+    console.log('error-clobber');
 } else {
-    fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\n');
+    if (before === after) {
+        console.log('unchanged');
+    } else {
+        if (corrupt) console.error('Warning: proceeding with --force on corrupt file');
+        if (lostKeys.length > 0) console.error('Warning: proceeding with --force, losing fields: ' + lostKeys.join(', '));
+        fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\n');
 
-    // Post-write validation
-    const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
-    const _missing = ['version'].filter(k => !(k in _v));
-    if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+        // Post-write validation
+        const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
+        const _missing = ['version'].filter(k => !(k in _v));
+        if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
 
-    console.log(before === '{}' ? 'created' : 'merged');
+        console.log(before === '{}' ? 'created' : 'merged');
+    }
 }
-" "$CLI_CONFIG")
+" "$CLI_CONFIG" "$DRY_RUN" "$FORCE")
 
     case "$MERGE_RESULT" in
         unchanged)
@@ -190,6 +260,15 @@ if (before === after) {
         merged)
             log_ok "Merged preferences into: $(display_path "$CLI_CONFIG")"
             STATUS_cliConfig="merged" ;;
+        would-merge)
+            log "[DRY RUN] Would write merged config"
+            STATUS_cliConfig="would merge (dry-run)" ;;
+        error-corrupt)
+            log_error "$(display_path "$CLI_CONFIG") is corrupt. Use --force to overwrite."
+            STATUS_cliConfig="ERROR (corrupt, needs --force)" ;;
+        error-clobber)
+            log_error "$(display_path "$CLI_CONFIG") merge would lose fields. Use --force to proceed."
+            STATUS_cliConfig="ERROR (clobber, needs --force)" ;;
         *)
             log_error "Unexpected merge result: $MERGE_RESULT"
             STATUS_cliConfig="ERROR" ;;

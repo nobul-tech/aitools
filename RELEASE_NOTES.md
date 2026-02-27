@@ -12,6 +12,29 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.21 -- Interactive Clobber Protection (2026-02-27)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **`--dry-run` for all setup scripts**: Every setup script (.sh/.ps1) and the `aitools` CLI now support `--dry-run`/`-DryRun`. Preview mode shows what would change without writing files. Env passthrough via `AITOOLS_DRY_RUN=1`. |
+| 2 | **Clobber detection**: Config-writing scripts detect when a merge would lose non-managed fields. Warns in dry-run, refuses in normal mode (requires `--force` to proceed). |
+| 3 | **Corrupt file handling**: Config-writing scripts now refuse to proceed on corrupt/unparseable JSON (instead of silently starting fresh). Use `--force` to override. |
+| 4 | **`--dry-run` for `aitools install`**: Both `aitools-install.sh` and `.ps1` support `--dry-run` flag, passing through to all child scripts. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 5 | **PS1 scripts node-free**: `setup-user-cursor.ps1`, `setup-user-hooks.ps1`, and `setup-user-claude.ps1` no longer require Node.js. Converted from `node -e` to native PowerShell using `ConvertPSObjectToHashtable`. |
+| 6 | **Deploy scripts updated**: `build-deploy.sh` regenerates deploy scripts with native PS merge and flag support. Deploy `setup-user-cursor.ps1` and `setup-user-hooks.ps1` are now node-free. |
+| 7 | **New build emitters**: `ps1_hashtable_helper()`, `bash_flag_helpers()`, `ps1_param_block()`, `ps1_flag_helpers()` in `build-deploy.sh` for consistent flag/helper generation. |
+
+**Verified on:** Windows (PS 5.1 native, all scripts syntax-validated, build pipeline clean). macOS: not tested.
+
+---
+
 ## v0.20 -- PS 5.1 Compatibility Fixes and Config Safety (2026-02-27)
 
 ### Bug fixes
