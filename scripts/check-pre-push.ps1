@@ -18,7 +18,7 @@ Write-Host "=== PRE-PUSH CHECKLIST ===" -ForegroundColor White
 Write-Host ""
 
 # Commits in this push
-$commitsRaw = git log --oneline origin/main..HEAD 2>$null
+$commitsRaw = InvokeGit log --oneline origin/main..HEAD
 $commits = @()
 if ($commitsRaw) { $commits = @($commitsRaw -split "`n" | Where-Object { $_ }) }
 $commitCount = $commits.Count
@@ -31,7 +31,7 @@ if ($commitCount -eq 0) {
 }
 
 # Files changed in this push
-$pushFilesRaw = git log --name-only --pretty=format: origin/main..HEAD 2>$null
+$pushFilesRaw = InvokeGit log --name-only --pretty=format: origin/main..HEAD
 $pushFiles = @()
 if ($pushFilesRaw) {
     $pushFiles = @($pushFilesRaw -split "`n" | Where-Object { $_ } | Sort-Object -Unique)
@@ -56,7 +56,7 @@ if ($badFiles.Count -eq 0) {
 # ---------------------------------------------------------------------------
 # 3. Secret scan
 # ---------------------------------------------------------------------------
-$pushDiff = git diff origin/main..HEAD 2>$null
+$pushDiff = InvokeGit diff origin/main..HEAD
 $secretPattern = '^\+.*(password|secret|api_key|api-key|apikey|token|bearer|private_key|AWS_ACCESS|ANTHROPIC_API)\s*[=:]'
 $secretsFound = @()
 if ($pushDiff) {
@@ -121,7 +121,7 @@ if ($commitCount -gt 5) {
 # ---------------------------------------------------------------------------
 # 9. Branch hygiene
 # ---------------------------------------------------------------------------
-$currentBranch = git rev-parse --abbrev-ref HEAD 2>$null
+$currentBranch = InvokeGit rev-parse --abbrev-ref HEAD
 if ($currentBranch -eq "main") {
     StepPass "9" "Branch hygiene" "pushing to main (OK for single-maintainer)"
 } else {
@@ -132,7 +132,7 @@ if ($currentBranch -eq "main") {
 # 10. User repo push
 # ---------------------------------------------------------------------------
 if ($script:UserRepoPath -and (Test-Path $script:UserRepoPath)) {
-    $unpushedRaw = git -C $script:UserRepoPath log --oneline origin/main..HEAD 2>$null
+    $unpushedRaw = InvokeGit -C $script:UserRepoPath log --oneline origin/main..HEAD
     $unpushed = @()
     if ($unpushedRaw) { $unpushed = @($unpushedRaw -split "`n" | Where-Object { $_ }) }
     if ($unpushed.Count -gt 0) {

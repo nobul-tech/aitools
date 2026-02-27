@@ -19,7 +19,7 @@ Write-Host "=== PRE-COMMIT CHECKLIST ===" -ForegroundColor White
 Write-Host ""
 
 # Collect staged files once
-$stagedRaw = git diff --cached --name-only --diff-filter=ACMR 2>$null
+$stagedRaw = InvokeGit diff --cached --name-only --diff-filter=ACMR
 $stagedFiles = @()
 if ($stagedRaw) { $stagedFiles = @($stagedRaw -split "`n" | Where-Object { $_ }) }
 
@@ -29,8 +29,8 @@ $stagedPs1 = @($stagedFiles | Where-Object { $_ -match '\.ps1$' })
 # ---------------------------------------------------------------------------
 # 1. Git identity
 # ---------------------------------------------------------------------------
-$gitName = git config user.name 2>$null
-$gitEmail = git config user.email 2>$null
+$gitName = InvokeGit config user.name
+$gitEmail = InvokeGit config user.email
 if ($gitName -eq "Jose" -and $gitEmail -eq "jose@nobul.tech") {
     StepPass "1" "Git identity"
 } else {
@@ -101,7 +101,7 @@ if ($buildNeeded) {
         $bashExe = (Get-Command bash -ErrorAction SilentlyContinue).Source
         if ($bashExe) {
             & $bashExe "$script:RepoRoot/scripts/build-deploy.sh" 2>$null | Out-Null
-            git add deploy/ 2>$null
+            InvokeGit add deploy/
             StepPass "3" "Build freshness" "(rebuilt + staged)"
         } else {
             StepFail "3" "Build freshness" "bash not found for build-deploy.sh"
@@ -133,7 +133,7 @@ if ($stagedSh.Count -eq 0) {
             $content = $content -replace "`r`n", "`n"
             $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
             [System.IO.File]::WriteAllText($fullPath, $content, $utf8NoBom)
-            git add $f 2>$null
+            InvokeGit add $f
         }
         StepPass "4" "Line endings (.sh)" "(fixed CRLF)"
     } else {
@@ -153,14 +153,14 @@ if ($stagedSh.Count -gt 0 -or $stagedPs1.Count -gt 0) {
 # ---------------------------------------------------------------------------
 # 6. Executable bit on .sh files
 # ---------------------------------------------------------------------------
-$nonExec = git ls-files -s '*.sh' 2>$null | Where-Object { $_ -notmatch '^100755' }
+$nonExec = InvokeGit ls-files -s '*.sh' | Where-Object { $_ -notmatch '^100755' }
 if (-not $nonExec) {
     StepPass "6" "Executable bit (.sh)"
 } else {
     $badFiles = @($nonExec | ForEach-Object { ($_ -split '\s+')[3] })
     if ($Fix) {
         foreach ($f in $badFiles) {
-            git update-index --chmod=+x $f 2>$null
+            InvokeGit update-index --chmod=+x $f
         }
         StepPass "6" "Executable bit (.sh)" "(fixed)"
     } else {
@@ -184,7 +184,7 @@ if ($setupStaged.Count -eq 0) {
 if ($setupStaged.Count -eq 0) {
     StepSkip "8" "Config merge safety" "no setup scripts staged"
 } else {
-    $diffOutput = git diff --cached -- $setupStaged 2>$null
+    $diffOutput = InvokeGit diff --cached -- $setupStaged
     $overwriteFound = $false
     if ($diffOutput -match '\+.*cat\s*>' -or $diffOutput -match '\+.*WriteAllText.*ConvertTo-Json') {
         $overwriteFound = $true
@@ -213,7 +213,7 @@ if ($nonDocs.Count -eq 0) {
 # 10. Deploy drift check
 # ---------------------------------------------------------------------------
 if ($buildNeeded) {
-    $deployDiff = git diff deploy/ 2>$null
+    $deployDiff = InvokeGit diff deploy/
     if (-not $deployDiff) {
         StepPass "10" "Deploy drift"
     } else {
@@ -227,7 +227,7 @@ if ($buildNeeded) {
 # 11. User repo changes
 # ---------------------------------------------------------------------------
 if ($script:UserRepoPath -and (Test-Path $script:UserRepoPath)) {
-    $userDirty = git -C $script:UserRepoPath status --porcelain 2>$null
+    $userDirty = InvokeGit -C $script:UserRepoPath status --porcelain
     if ($userDirty) {
         StepWarn "11" "User repo changes" "uncommitted changes in $($script:UserRepoPath)"
     } else {

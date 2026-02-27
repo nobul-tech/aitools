@@ -26,11 +26,11 @@ Write-Host ""
 # ---------------------------------------------------------------------------
 # 1. Verify push landed
 # ---------------------------------------------------------------------------
-git fetch origin main --quiet 2>$null
-$localHead = git rev-parse HEAD 2>$null
-$remoteHead = git rev-parse origin/main 2>$null
+InvokeGit fetch origin main --quiet
+$localHead = InvokeGit rev-parse HEAD
+$remoteHead = InvokeGit rev-parse origin/main
 if ($localHead -eq $remoteHead) {
-    $short = git log --oneline -1 HEAD 2>$null
+    $short = InvokeGit log --oneline -1 HEAD
     StepPass "1" "Verify push landed" $short
 } else {
     StepFail "1" "Verify push landed" "HEAD != origin/main"
@@ -95,7 +95,7 @@ $aitoolsVersion = "FAILED"
 if ($bashExe) {
     $aitoolsVersion = & $bashExe (Join-Path $scriptDir "aitools") --version 2>$null
 }
-$tagVersion = git describe --tags --match "v*" --abbrev=0 2>$null
+$tagVersion = InvokeGit describe --tags --match "v*" --abbrev=0
 if (-not $tagVersion) { $tagVersion = "none" }
 if ($aitoolsVersion -ne "FAILED") {
     StepPass "4" "CLI entry point + version" "$aitoolsVersion (tag: $tagVersion)"
@@ -188,12 +188,12 @@ if ($ps1Errors -eq 0) {
 # ---------------------------------------------------------------------------
 if ($bashExe) {
     & $bashExe (Join-Path $scriptDir "build-deploy.sh") 2>$null | Out-Null
-    $drift = git diff deploy/ 2>$null
+    $drift = InvokeGit diff deploy/
     if (-not $drift) {
         StepPass "7" "deploy/ drift audit"
     } else {
         StepFail "7" "deploy/ drift audit" "deploy/ is stale -- rebuild needed"
-        git checkout -- deploy/ 2>$null
+        InvokeGit checkout -- deploy/
     }
 } else {
     StepSkip "7" "deploy/ drift audit" "bash not found"
@@ -391,7 +391,7 @@ if ($hookPresent) {
 # ---------------------------------------------------------------------------
 # 18. Untracked file hygiene
 # ---------------------------------------------------------------------------
-$untrackedRaw = git status --porcelain 2>$null
+$untrackedRaw = InvokeGit status --porcelain
 $untracked = @()
 if ($untrackedRaw) {
     $untracked = @($untrackedRaw -split "`n" | Where-Object { $_ -match '^\?\?' -and $_ -match '\.(md|sh|ps1|mdc)$' })

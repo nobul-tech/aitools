@@ -97,6 +97,24 @@ function ResolveConfig {
 }
 
 # ---------------------------------------------------------------------------
+# Git wrapper (suppress stderr warnings under $ErrorActionPreference = Stop)
+# ---------------------------------------------------------------------------
+# PowerShell treats ANY stderr output from native commands as a terminating
+# error when $ErrorActionPreference is 'Stop'. Git emits harmless warnings
+# (CRLF conversion, etc.) to stderr, which crashes the script. This wrapper
+# temporarily lowers the preference so git can run without blowing up.
+function InvokeGit {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = & git @args 2>$null
+        return $output
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Platform detection
 # ---------------------------------------------------------------------------
 $script:IsMacOS = ($PSVersionTable.PSEdition -eq "Core") -and $IsMacOS
