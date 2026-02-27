@@ -47,7 +47,7 @@ if (Get-Command pandoc -ErrorAction SilentlyContinue) {
     # Check if installed via winget by attempting upgrade
     Log "Checking for updates via winget..."
     $upgradeResult = winget upgrade --exact --id JohnMacFarlane.Pandoc --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    if ($upgradeResult -match "No applicable update found") {
+    if ($upgradeResult -match "No available upgrade found|No newer package versions") {
         LogOk "Pandoc already up to date"
     } elseif ($LASTEXITCODE -eq 0) {
         Refresh-Path
