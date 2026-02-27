@@ -307,7 +307,7 @@ $refErrors = 0
 $claudeContent = Get-Content $claudeMd -Raw
 $refs = [regex]::Matches($claudeContent, '@reference/[^\s]+')
 foreach ($ref in $refs) {
-    $refPath = $ref.Value -replace '^@', ''
+    $refPath = ($ref.Value -replace '^@', '') -replace '[`''")\]]+$', ''
     $fullPath = Join-Path $script:RepoRoot $refPath
     if (-not (Test-Path $fullPath)) {
         Write-Host "      broken @import: $refPath"

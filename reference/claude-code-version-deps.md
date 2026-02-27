@@ -2,7 +2,7 @@
 
 Registry of version-dependent workarounds, behaviors, and assumptions in this repo.
 
-- **Current version**: 2.1.59
+- **Current version**: 2.1.62
 - **Baseline version**: 2.1.51 (2026-02-16) -- version when most workarounds were written
 
 ## How to use
@@ -23,8 +23,8 @@ Post-push checklist #20 triggers this review automatically.
 
 | # | Item | Baseline | Last verified | Files | Upstream |
 |---|------|----------|---------------|-------|----------|
-| 1 | Windows shell hardcoded to Git Bash (CLAUDE_CODE_SHELL broken) | 2.1.51 | 2.1.59 (2026-02-26) | `reference/claude-code-windows-shell.md`, `.claude/rules/cross-platform.md`, `CLAUDE.md` (Windows dispatch) | [#7490](https://github.com/anthropics/claude-code/issues/7490), [#25558](https://github.com/anthropics/claude-code/issues/25558), [#5049](https://github.com/anthropics/claude-code/issues/5049), [#16225](https://github.com/anthropics/claude-code/issues/16225), [#20453](https://github.com/anthropics/claude-code/issues/20453) |
-| 2 | SessionEnd hook API contract (session_id, cwd, transcript_path on stdin) | 2.1.51 | 2.1.59 (2026-02-26) | `shared/hooks/session-archive.sh`, `reference/user-repo.md` | -- |
+| 1 | Windows shell hardcoded to Git Bash (CLAUDE_CODE_SHELL broken) | 2.1.51 | 2.1.62 (2026-02-27) | `reference/claude-code-windows-shell.md`, `.claude/rules/cross-platform.md`, `CLAUDE.md` (Windows dispatch) | [#7490](https://github.com/anthropics/claude-code/issues/7490), [#25558](https://github.com/anthropics/claude-code/issues/25558), [#5049](https://github.com/anthropics/claude-code/issues/5049), [#16225](https://github.com/anthropics/claude-code/issues/16225), [#20453](https://github.com/anthropics/claude-code/issues/20453) |
+| 2 | SessionEnd hook API contract (session_id, cwd, transcript_path on stdin) | 2.1.51 | 2.1.62 (2026-02-27) | `shared/hooks/session-archive.sh`, `reference/user-repo.md` | -- |
 
 ## NOTE -- Not a CC dependency
 

@@ -2,7 +2,7 @@
 
 Claude Code's Bash tool is **hardcoded to Git Bash on Windows**. The `CLAUDE_CODE_SHELL` environment variable exists but is **broken on Windows** -- it is silently ignored regardless of how it's set.
 
-Baseline: Claude Code 2.1.51 | Last verified: 2.1.59 (2026-02-26)
+Baseline: Claude Code 2.1.51 | Last verified: 2.1.62 (2026-02-27)
 
 ## Upstream Issues
 
