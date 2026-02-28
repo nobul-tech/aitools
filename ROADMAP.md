@@ -12,6 +12,7 @@ Detailed plans live in `plans/`. See `RELEASE_NOTES.md` for completed work.
 
 | Item | Plan | Priority | Summary |
 |------|------|----------|---------|
+| Eliminate deploy template duplication | -- | High | Refactor `build-deploy.sh` to extract setup logic from `scripts/` at build time (sentinel comments + sed) instead of maintaining hardcoded parallel copies. Eliminates recurring I6 pattern. Same approach already works for `shared/hooks/` and `shared/skills/`. |
 | Chrome DevTools research subagent | -- | Medium | Custom subagent type for web doc reading tasks. Passes proper context (rules, CLAUDE.md) and uses Chrome DevTools MCP skill. Enables parallel doc fetches without losing project rules. |
 | Tool lifecycle gaps | -- | Medium | Security/credential docs, cleanup for all tools, troubleshooting guides, ~~version management~~, CVE response, deprecation path |
 | Log location discoverability | -- | Medium | Document log paths (`deploy.log`, `clip2md.log`, `checks.log`, `checks.jsonl`) in CLAUDE.md, README, and rules. Add `aitools logs` command to open/tail/clear logs. Assess log rotation and management. |

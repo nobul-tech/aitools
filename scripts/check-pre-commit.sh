@@ -275,6 +275,28 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 13. Deploy template logic sync
+# ---------------------------------------------------------------------------
+HAS_SETUP_USER=false
+HAS_BUILD_DEPLOY=false
+for f in $STAGED_FILES; do
+    case "$f" in
+        scripts/setup-user-claude.*|scripts/setup-user-cursor.*|scripts/setup-user-mcp.*|scripts/setup-user-hooks.*)
+            HAS_SETUP_USER=true ;;
+        scripts/build-deploy.sh)
+            HAS_BUILD_DEPLOY=true ;;
+    esac
+done
+
+if [ "$HAS_SETUP_USER" = true ] && [ "$HAS_BUILD_DEPLOY" = false ]; then
+    step_warn "13" "Deploy template sync" "scripts/setup-user-* changed without build-deploy.sh -- verify deploy template is up to date"
+elif [ "$HAS_SETUP_USER" = true ]; then
+    step_pass "13" "Deploy template sync" "both scripts/ and build-deploy.sh modified"
+else
+    step_skip "13" "Deploy template sync" "no setup-user-* scripts modified"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------
 print_summary

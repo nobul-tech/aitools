@@ -26,3 +26,35 @@ Two deployment methods must produce equivalent results:
 `shared/claude-shared.md` and `<userRepoPath>/claude/CLAUDE.md` must stay in sync.
 When one changes, update the other. The user repo template takes priority at runtime
 (scripts/ path reads it first, falls back to shared/).
+
+### Scripts with deploy templates (duplication risk)
+
+Four script pairs have **duplicated setup logic** between `scripts/` and
+`build-deploy.sh`. Fixing a bug in one requires manually porting to the other.
+Running `build-deploy.sh` does NOT auto-fix stale template logic — it faithfully
+reproduces whatever is hardcoded in the template.
+
+| Script | Template in build-deploy.sh | What's duplicated |
+|--------|---------------------------|-------------------|
+| `setup-user-claude.sh/.ps1` | Sections 5-6 | Template interpolation, footer generation |
+| `setup-user-cursor.sh/.ps1` | Sections 7-8 | CLI config merge logic (Node.js/PS1) |
+| `setup-user-mcp.sh/.ps1` | Sections 11-12 | Settings.json merge, validation |
+| `setup-user-hooks.sh/.ps1` | Sections 13-14 | Settings.json hook merge, dedup, validation |
+
+**What IS auto-embedded** (safe — single source of truth):
+- `shared/hooks/*.sh` → read via `cat` at build time
+- `shared/skills/*.md` → read via `cat` at build time
+- `shared/claude-shared.md` → read via `cat` at build time
+
+**When changing setup logic in any of the 4 scripts above**:
+
+1. Fix the bug in `scripts/setup-*.sh` and/or `.ps1`
+2. **Find and fix the same logic in `build-deploy.sh`** (search for the function
+   name, variable name, or pattern)
+3. Run `bash scripts/build-deploy.sh`
+4. Verify `deploy/` output contains the fix (not just the old template output)
+5. Pre-commit step 13 will warn if step 2 was missed
+
+This duplication is a known technical debt item (incident I6, see ROADMAP.md).
+The structural fix is to refactor `build-deploy.sh` to extract setup logic from
+`scripts/` at build time instead of maintaining parallel copies.

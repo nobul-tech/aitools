@@ -12,6 +12,44 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.25 -- Standing Order Enforcement & Incident Tracking (2026-02-28)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **PreToolUse hook** (`standing-order-guard.sh`): Real-time blocking of SO #1 (file ops in Bash) and SO #4 (long inline commands). Runs on every Bash tool call. |
+| 2 | **Transcript analyzer** (`scripts/analyze-session.sh`): Post-hoc detection of SO #1, SO #4, and batch size violations in session JSONL files. |
+| 3 | **Incident tracker**: Structured tracking of standing order violations with status stages (Observed → RCA → Remediated/Mitigated/Accepted → Verified) in `reference/claude-code-effectiveness.md`. 5 backfilled incidents (I1-I5). |
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 4 | High | **Duplicate hook bug**: `ConvertPSObjectToHashtable` didn't recurse into arrays — `ConvertFrom-Json` returns `Object[]` of `PSCustomObject`, causing find() to never match existing entries. Root cause of 13 duplicate SessionEnd hooks accumulating on re-runs. |
+| 5 | Medium | **PowerShell array unwrapping**: Functions returning `@(single_item)` lose array wrapping. Fixed with comma operator `,@(...)`. |
+| 6 | Medium | **Array normalization**: Existing corrupt data (from prior buggy writes) read as single object not array. Added normalization pass to force `[{}]` structure. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 7 | `setup-user-hooks.sh/.ps1`: `mergeHookEntry`/`MergeHookEntry` helpers with dedup, replacing brittle find/update. Manages both SessionEnd and PreToolUse hooks. |
+| 8 | `check-post-push` step #5: Now verifies session archive health — directory exists, has .jsonl files, most recent within 7 days. |
+| 9 | `build-deploy.sh`: `ps1_hashtable_helper` updated with array recursion fix. Deploy templates include standing-order-guard embed + mergeHookEntry with dedup. |
+| 10 | Pre-commit step 13: Deploy template logic sync warning when `scripts/setup-user-*` changes without `build-deploy.sh`. |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `shared/hooks/standing-order-guard.sh` | PreToolUse hook source (deployed to `~/.claude/hooks/`) |
+| `scripts/analyze-session.sh` | Standalone transcript analysis tool |
+
+**Verified on:** Windows
+
+---
+
 ## v0.24 -- Repo Rename: ai-tooling to aitools (2026-02-28)
 
 ### New features

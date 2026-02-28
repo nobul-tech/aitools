@@ -26,3 +26,16 @@ Two deployment methods must produce equivalent results:
 ### Template sync
 
 `shared/claude-shared.md` and `<userRepoPath>/claude/CLAUDE.md` must stay in sync. User repo template takes priority at runtime.
+
+### Scripts with deploy templates (duplication risk)
+
+Four script pairs have **duplicated setup logic** between `scripts/` and `build-deploy.sh`. Running `build-deploy.sh` does NOT auto-fix stale template logic.
+
+| Script | What's duplicated |
+|--------|-------------------|
+| `setup-user-claude.sh/.ps1` | Template interpolation, footer generation |
+| `setup-user-cursor.sh/.ps1` | CLI config merge logic |
+| `setup-user-mcp.sh/.ps1` | Settings.json merge, validation |
+| `setup-user-hooks.sh/.ps1` | Settings.json hook merge, dedup, validation |
+
+When changing logic in any of these: fix `scripts/`, fix `build-deploy.sh`, run build, verify `deploy/` output. Pre-commit step 13 warns if `build-deploy.sh` wasn't touched.

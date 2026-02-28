@@ -68,3 +68,7 @@ If this session modified files in the user dotfile repo (`userRepoPath` from `~/
 ### 12. Template sync
 
 If `shared/claude-shared.md` was modified, also update the user repo template (`<userRepoPath>/claude/CLAUDE.md`) with the same changes. User repo copy takes priority at runtime.
+
+### 13. Deploy template logic sync
+
+If the commit modifies `scripts/setup-user-{claude,cursor,mcp,hooks}.*` AND does NOT modify `scripts/build-deploy.sh`, **warn**: the deploy template may need the same fix. Heuristic -- not all changes need it, but logic changes almost always do.

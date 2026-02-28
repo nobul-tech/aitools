@@ -254,6 +254,22 @@ if ($stagedFiles -contains 'shared/claude-shared.md') {
 }
 
 # ---------------------------------------------------------------------------
+# 13. Deploy template logic sync
+# ---------------------------------------------------------------------------
+$hasSetupUser = $stagedFiles | Where-Object {
+    $_ -match '^scripts/setup-user-(claude|cursor|mcp|hooks)\.'
+}
+$hasBuildDeploy = $stagedFiles -contains 'scripts/build-deploy.sh'
+
+if ($hasSetupUser -and -not $hasBuildDeploy) {
+    StepWarn "13" "Deploy template sync" "scripts/setup-user-* changed without build-deploy.sh -- verify deploy template is up to date"
+} elseif ($hasSetupUser) {
+    StepPass "13" "Deploy template sync" "both scripts/ and build-deploy.sh modified"
+} else {
+    StepSkip "13" "Deploy template sync" "no setup-user-* scripts modified"
+}
+
+# ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------
 PrintSummary

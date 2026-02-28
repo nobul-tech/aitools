@@ -69,3 +69,15 @@ repo has no uncommitted changes.
 If `shared/claude-shared.md` was modified, also update the user repo template
 (`<userRepoPath>/claude/CLAUDE.md`) with the same changes. The user repo copy
 takes priority at runtime -- a stale copy means dev/repo deployments miss the update.
+
+### 13. Deploy template logic sync
+
+If the commit modifies `scripts/setup-user-claude.*`, `scripts/setup-user-cursor.*`,
+`scripts/setup-user-mcp.*`, or `scripts/setup-user-hooks.*` AND does NOT modify
+`scripts/build-deploy.sh`, this is a **warning** (not a block): the corresponding
+deploy template in `build-deploy.sh` may need the same fix. See
+`.claude/rules/deploy-paths.md` "Scripts with deploy templates" for the full list.
+
+This check is a heuristic — not all `scripts/` changes need template updates (e.g.,
+comments, variable renames that only exist in the scripts/ flow). But logic changes
+(merge functions, validation, error handling) almost always do.
