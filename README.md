@@ -28,12 +28,14 @@ Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude C
 
 Clone the repo and run the installer:
 
+macOS/Linux:
 ```bash
-# macOS/Linux
 git clone https://github.com/nobul-jose/ai-tooling.git ~/repos/ai-tooling
 bash ~/repos/ai-tooling/scripts/aitools-install.sh
+```
 
-# Windows (PowerShell)
+Windows (PowerShell):
+```powershell
 git clone https://github.com/nobul-jose/ai-tooling.git C:\repos\ai-tooling
 C:\repos\ai-tooling\scripts\aitools-install.ps1
 ```
@@ -56,55 +58,51 @@ aitools sessions archive <id>    # Manually archive a session by ID
 
 Run these from the `deploy/` directory -- self-contained, MDM-ready:
 
+macOS/Linux:
+```bash
+bash deploy/setup-user-claude.sh        # Claude Code user preferences
+bash deploy/setup-user-cursor.sh        # Cursor CLI + config
+bash deploy/setup-user-mcp.sh           # Claude Code MCP servers
+bash deploy/setup-cursor-mcp.sh         # Cursor MCP servers
+bash deploy/setup-vercelcli.sh          # Vercel CLI
+bash deploy/setup-pandoc.sh             # Pandoc
+bash deploy/setup-rust.sh               # Rust (cargo)
+```
+
+Windows (PowerShell):
 ```powershell
-# Claude Code user preferences
-bash deploy/setup-user-claude.sh        # macOS
-.\deploy\setup-user-claude.ps1          # Windows
-
-# Cursor CLI + config
-bash deploy/setup-user-cursor.sh        # macOS
-.\deploy\setup-user-cursor.ps1          # Windows
-
-# Claude Code MCP servers
-bash deploy/setup-user-mcp.sh           # macOS
-.\deploy\setup-user-mcp.ps1             # Windows
-
-# Cursor MCP servers
-bash deploy/setup-cursor-mcp.sh         # macOS
-.\deploy\setup-cursor-mcp.ps1           # Windows
-
-# Vercel CLI
-bash deploy/setup-vercelcli.sh          # macOS
-.\deploy\setup-vercelcli.ps1            # Windows
-
-# Pandoc
-bash deploy/setup-pandoc.sh             # macOS
-.\deploy\setup-pandoc.ps1               # Windows
-
-# Rust (cargo)
-bash deploy/setup-rust.sh               # macOS
-.\deploy\setup-rust.ps1                 # Windows
+.\deploy\setup-user-claude.ps1          # Claude Code user preferences
+.\deploy\setup-user-cursor.ps1          # Cursor CLI + config
+.\deploy\setup-user-mcp.ps1             # Claude Code MCP servers
+.\deploy\setup-cursor-mcp.ps1           # Cursor MCP servers
+.\deploy\setup-vercelcli.ps1            # Vercel CLI
+.\deploy\setup-pandoc.ps1               # Pandoc
+.\deploy\setup-rust.ps1                 # Rust (cargo)
 ```
 
 ### Develop / maintain configs
 
 Work inside the repo to update shared configuration:
 
+macOS/Linux:
 ```bash
-# Edit shared source files
 vim shared/claude-shared.md
-
-# Rebuild deploy scripts
 bash scripts/build-deploy.sh
-
-# Commit both shared/ and deploy/ changes
 git add shared/ deploy/ && git commit -m "Update shared config"
+```
+
+Windows (PowerShell):
+```powershell
+# Edit shared source files in your editor, then rebuild deploy scripts:
+bash scripts/build-deploy.sh             # bash-only build step (uses Git Bash on Windows)
+git add shared/ deploy/; git commit -m "Update shared config"
 ```
 
 ### Verification checklists
 
-Run before commit, push, and after push — replaces ad-hoc bash commands:
+Run before commit, push, and after push -- replaces ad-hoc commands:
 
+macOS/Linux:
 ```bash
 bash scripts/check-pre-commit.sh         # 12 steps; or --fix to auto-repair
 bash scripts/check-pre-push.sh           # 10 steps, read-only
@@ -112,7 +110,13 @@ bash scripts/check-post-push.sh          # 5 always-tier steps
 bash scripts/check-post-push.sh --extensive  # all 20 steps
 ```
 
-PowerShell equivalents: `check-pre-commit.ps1 [-Fix]`, `check-pre-push.ps1`, `check-post-push.ps1 [-Extensive]`.
+Windows (PowerShell):
+```powershell
+.\scripts\check-pre-commit.ps1           # 12 steps; or -Fix to auto-repair
+.\scripts\check-pre-push.ps1             # 10 steps, read-only
+.\scripts\check-post-push.ps1            # 5 always-tier steps
+.\scripts\check-post-push.ps1 -Extensive # all 20 steps
+```
 
 See `reference/` for deeper setup notes and practices.
 

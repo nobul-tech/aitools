@@ -47,7 +47,9 @@ Setup and utility scripts for configuring AI tooling across machines.
 
 | Script | Platform | Purpose |
 |--------|----------|---------|
-| `build-deploy.sh` | macOS/Linux (bash only) | Generates `deploy/` from `scripts/` + `shared/` |
+| `build-deploy.sh` | bash (cross-platform*) | Generates `deploy/` from `scripts/` + `shared/` |
+
+\* On Windows, invoke via `bash scripts/build-deploy.sh` (Git Bash) or let `aitools` handle dispatch. Approved single-language exception -- see `.claude/rules/cross-platform.md`.
 
 ## OS Guards
 
