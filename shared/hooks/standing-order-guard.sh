@@ -12,12 +12,42 @@
 #   - Exit 2 = block (stderr becomes Claude's feedback)
 #   - Must never crash or hang (would break Claude Code)
 #
+# Rollout mode:
+#   MODE="observe"  — log what would be blocked, always exit 0
+#   MODE="enforce"  — block violations (exit 2)
+#   See .claude/rules/hook-rollout.md for the observe-then-enforce practice.
+#
 # Design decisions:
 #   - Pure-bash JSON parsing (jq not guaranteed in hook environment)
 #   - Conservative matching: only flag clear violations, allow ambiguous cases
 #   - Helpful feedback: tell Claude which tool to use instead
+#   - Pipeline exemption: cat/head/tail in pipelines (cmd | ...) are allowed
+#     because the Read tool cannot pipe output into other commands
 
 set -euo pipefail
+
+# --- Mode and logging ---
+MODE="observe"  # observe = log only, enforce = block
+
+LOG_DIR="$HOME/.claude/hooks/logs"
+LOG_FILE="$LOG_DIR/standing-order-guard.log"
+
+# violation() — dispatch based on MODE
+# In enforce mode: write message to stderr, exit 2 (block)
+# In observe mode: append to log file, exit 0 (allow)
+violation() {
+    local message="$1"
+    if [ "$MODE" = "enforce" ]; then
+        echo "$message" >&2
+        exit 2
+    else
+        mkdir -p "$LOG_DIR"
+        printf '%s [WOULD-BLOCK] %s | cmd: %s\n' \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$message" "$COMMAND" \
+            >> "$LOG_FILE"
+        exit 0
+    fi
+}
 
 INPUT=$(cat)
 
@@ -53,8 +83,7 @@ NEWLINE_COUNT=$(( (CMD_LEN - STRIPPED_LEN) / 2 ))
 # 5+ lines (4+ newlines) = too complex for inline. Write a temp file instead.
 if [ "$NEWLINE_COUNT" -ge 4 ]; then
     LINE_COUNT=$((NEWLINE_COUNT + 1))
-    echo "SO #4 violation: This command is ~${LINE_COUNT} lines long. Write it to a temp .sh or .ps1 file using the Write tool, execute with Bash, then clean up. Standing order: never inline long commands in the Bash tool." >&2
-    exit 2
+    violation "SO #4 violation: This command is ~${LINE_COUNT} lines long. Write it to a temp .sh or .ps1 file using the Write tool, execute with Bash, then clean up. Standing order: never inline long commands in the Bash tool."
 fi
 
 # --- SO #1: Dedicated tools for file operations ---
@@ -71,34 +100,39 @@ case "$FIRST_TOKEN" in
 esac
 
 # Check for standalone file-reading commands (should use Read tool)
+# Allow in pipelines (cmd | ...) — Read tool can't pipe output into other commands.
 case "$FIRST_TOKEN" in
     cat)
-        echo "SO #1 violation: Use the Read tool instead of 'cat' to read files. The Read tool provides line numbers and handles large files better." >&2
-        exit 2
+        case "$COMMAND" in
+            *\|*) ;;  # Pipeline — legitimate shell use
+            *) violation "SO #1 violation: Use the Read tool instead of 'cat' to read files. The Read tool provides line numbers and handles large files better." ;;
+        esac
         ;;
     head)
-        echo "SO #1 violation: Use the Read tool with offset/limit parameters instead of 'head'. Example: Read with limit=20 for the first 20 lines." >&2
-        exit 2
+        case "$COMMAND" in
+            *\|*) ;;
+            *) violation "SO #1 violation: Use the Read tool with offset/limit parameters instead of 'head'. Example: Read with limit=20 for the first 20 lines." ;;
+        esac
         ;;
     tail)
-        echo "SO #1 violation: Use the Read tool with offset parameter instead of 'tail'. Example: Read with offset=100 to start from line 100." >&2
-        exit 2
+        case "$COMMAND" in
+            *\|*) ;;
+            *) violation "SO #1 violation: Use the Read tool with offset parameter instead of 'tail'. Example: Read with offset=100 to start from line 100." ;;
+        esac
         ;;
 esac
 
 # Check for standalone file-search commands (should use Grep tool)
 case "$FIRST_TOKEN" in
     grep|rg|egrep|fgrep)
-        echo "SO #1 violation: Use the Grep tool instead of '$FIRST_TOKEN' to search file contents. The Grep tool supports regex, file filtering, and multiple output modes." >&2
-        exit 2
+        violation "SO #1 violation: Use the Grep tool instead of '$FIRST_TOKEN' to search file contents. The Grep tool supports regex, file filtering, and multiple output modes."
         ;;
 esac
 
 # Check for file-finding commands (should use Glob tool)
 case "$FIRST_TOKEN" in
     find)
-        echo "SO #1 violation: Use the Glob tool instead of 'find' to locate files. Example: Glob with pattern '**/*.sh' instead of 'find . -name \"*.sh\"'." >&2
-        exit 2
+        violation "SO #1 violation: Use the Glob tool instead of 'find' to locate files. Example: Glob with pattern '**/*.sh' instead of 'find . -name \"*.sh\"'."
         ;;
     ls)
         # ls is borderline -- block when clearly used to list directory contents
@@ -112,12 +146,10 @@ esac
 # Check for file-editing commands (should use Edit tool)
 case "$FIRST_TOKEN" in
     sed)
-        echo "SO #1 violation: Use the Edit tool instead of 'sed' to modify files. For non-trivial string manipulation, use Perl (standing order #5)." >&2
-        exit 2
+        violation "SO #1 violation: Use the Edit tool instead of 'sed' to modify files. For non-trivial string manipulation, use Perl (standing order #5)."
         ;;
     awk)
-        echo "SO #1 violation: Use the Read tool instead of 'awk' to process files. For string manipulation, use Perl (standing order #5)." >&2
-        exit 2
+        violation "SO #1 violation: Use the Read tool instead of 'awk' to process files. For string manipulation, use Perl (standing order #5)."
         ;;
 esac
 
@@ -128,8 +160,7 @@ FIRST_LINE=$(printf '%s' "$COMMAND" | head -1)
 case "$FIRST_LINE" in
     echo*\>*|printf*\>*)
         # echo/printf redirecting to a file
-        echo "SO #1 violation: Use the Write tool instead of echo/printf redirection to create files. The Write tool handles encoding and permissions correctly." >&2
-        exit 2
+        violation "SO #1 violation: Use the Write tool instead of echo/printf redirection to create files. The Write tool handles encoding and permissions correctly."
         ;;
 esac
 

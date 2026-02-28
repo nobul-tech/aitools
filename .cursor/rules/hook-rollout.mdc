@@ -1,0 +1,14 @@
+---
+description: Hook rollout practice -- observe before enforce
+alwaysApply: true
+---
+
+## Hook Rollout Practice
+
+PreToolUse hooks must go through observe-then-enforce:
+
+1. **Observe** (1+ week): `MODE="observe"`, log only, exit 0
+2. **Review**: Audit logs for false positives, fix matching
+3. **Enforce**: `MODE="enforce"`, block violations (exit 2)
+
+Reset to observe after adding new rules, changing matching logic, or CC version upgrades.
