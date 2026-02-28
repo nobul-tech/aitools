@@ -49,6 +49,7 @@ fi
 # Read shared content
 CLAUDE_SHARED_CONTENT=$(cat "$CLAUDE_SHARED")
 HOOK_SESSION_ARCHIVE=$(cat "$SHARED_DIR/hooks/session-archive.sh")
+HOOK_STANDING_ORDER_GUARD=$(cat "$SHARED_DIR/hooks/standing-order-guard.sh")
 
 # --- Profile interpolation ---
 # Read profile from user repo, interpolate identity placeholders.
@@ -293,13 +294,15 @@ ps1_hashtable_helper() {
 # --- PS 5.1 compatibility helper ---
 function ConvertPSObjectToHashtable($obj) {
     if ($null -eq $obj) { return @{} }
+    # Recurse into arrays (ConvertFrom-Json returns Object[] of PSCustomObject)
+    # Leading comma prevents PowerShell from unwrapping single-element arrays
+    if ($obj -is [array]) {
+        return ,@($obj | ForEach-Object { ConvertPSObjectToHashtable $_ })
+    }
+    if ($obj -isnot [System.Management.Automation.PSCustomObject]) { return $obj }
     $ht = @{}
     foreach ($prop in $obj.PSObject.Properties) {
-        if ($prop.Value -is [System.Management.Automation.PSCustomObject]) {
-            $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
-        } else {
-            $ht[$prop.Name] = $prop.Value
-        }
+        $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
     }
     return $ht
 }
@@ -1140,8 +1143,12 @@ blog "Generating deploy/setup-user-hooks.sh (with embedded hook + prefs)"
 # Self-contained: hook script and preferences are embedded below. No repo needed.
 # Safe to re-run -- merges managed fields without clobbering existing settings.
 #
-# Managed fields: hooks.SessionEnd, autoMemoryEnabled, alwaysThinkingEnabled
+# Managed fields: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled
 # Preserved: permissions, enabledPlugins, all other fields
+#
+# Hooks deployed:
+#   SessionEnd: session-archive.sh (archives transcripts to user repo)
+#   PreToolUse[Bash]: standing-order-guard.sh (enforces standing orders on Bash commands)
 
 set -euo pipefail
 
@@ -1157,31 +1164,38 @@ if ! command -v node &>/dev/null; then
     exit 1
 fi
 
-# --- Deploy embedded hook script to ~/.claude/hooks/ ---
+# --- Deploy embedded hook scripts to ~/.claude/hooks/ ---
 HOOK_DEST="$HOME/.claude/hooks/session-archive.sh"
+GUARD_DEST="$HOME/.claude/hooks/standing-order-guard.sh"
 mkdir -p "$HOME/.claude/hooks"
 
 BLOCK
-    # Embed the hook script content via heredoc
+    # Embed both hook scripts via heredoc
     cat <<'BLOCK'
 if [ "$DRY_RUN" = "true" ]; then
-    log "[DRY RUN] Would deploy hook to $HOOK_DEST"
+    log "[DRY RUN] Would deploy hooks to ~/.claude/hooks/"
 else
 BLOCK
     echo 'cat > "$HOOK_DEST" <<'"'"'__EMBEDDED_HOOK__'"'"
     echo "$HOOK_SESSION_ARCHIVE"
     echo '__EMBEDDED_HOOK__'
+    echo 'cat > "$GUARD_DEST" <<'"'"'__EMBEDDED_GUARD__'"'"
+    echo "$HOOK_STANDING_ORDER_GUARD"
+    echo '__EMBEDDED_GUARD__'
     cat <<'BLOCK'
 
     chmod +x "$HOOK_DEST"
     log_ok "Deployed hook: $HOOK_DEST"
+    chmod +x "$GUARD_DEST"
+    log_ok "Deployed hook: $GUARD_DEST"
 fi
 
-# --- Merge hook + preferences into ~/.claude/settings.json ---
+# --- Merge hooks + preferences into ~/.claude/settings.json ---
 SETTINGS_FILE="$HOME/.claude/settings.json"
 mkdir -p "$HOME/.claude"
 
 HOOK_CMD="bash \"$HOOK_DEST\""
+GUARD_CMD="bash \"$GUARD_DEST\""
 
 BLOCK
     # Emit the node merge block with build-time embedded preference constants
@@ -1190,8 +1204,9 @@ MERGE_RESULT=\$(node -e "
 const fs = require('fs');
 const settingsFile = process.argv[1];
 const hookCmd = process.argv[2];
-const dryRun = process.argv[3] === 'true';
-const force = process.argv[4] === 'true';
+const guardCmd = process.argv[3];
+const dryRun = process.argv[4] === 'true';
+const force = process.argv[5] === 'true';
 
 // --- Embedded preferences (from profile.json at build time) ---
 const autoMemory = $CLAUDE_AUTO_MEMORY;
@@ -1208,30 +1223,34 @@ try { settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')); } catch (e) 
 }
 const beforeKeys = Object.keys(settings);
 
-// --- Merge hook ---
+// --- Merge hooks (with dedup) ---
 if (!settings.hooks) settings.hooks = {};
-if (!Array.isArray(settings.hooks.SessionEnd)) settings.hooks.SessionEnd = [];
 
-const hookId = 'session-archive.sh';
-const existing = settings.hooks.SessionEnd.find(rule =>
-    rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId))
-);
-
-if (existing) {
-    existing.hooks.forEach(h => {
-        if (h.command && h.command.includes(hookId)) {
-            h.command = hookCmd;
+function mergeHookEntry(eventName, hookId, matcher, cmd) {
+    if (!Array.isArray(settings.hooks[eventName])) settings.hooks[eventName] = [];
+    const arr = settings.hooks[eventName];
+    let found = false;
+    for (const rule of arr) {
+        if (rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId))) {
+            if (!found) {
+                rule.hooks.forEach(h => { if (h.command && h.command.includes(hookId)) h.command = cmd; });
+                rule.matcher = matcher;
+                found = true;
+            }
         }
-    });
-} else {
-    settings.hooks.SessionEnd.push({
-        matcher: '',
-        hooks: [{
-            type: 'command',
-            command: hookCmd
-        }]
+    }
+    if (!found) arr.push({ matcher, hooks: [{ type: 'command', command: cmd }] });
+    // Deduplicate
+    let seen = false;
+    settings.hooks[eventName] = arr.filter(rule => {
+        const m = rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId));
+        if (m) { if (seen) return false; seen = true; }
+        return true;
     });
 }
+
+mergeHookEntry('SessionEnd', 'session-archive.sh', '', hookCmd);
+mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
 
 // --- Merge claude preferences ---
 settings.autoMemoryEnabled = autoMemory;
@@ -1257,15 +1276,19 @@ if (dryRun) {
     const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
     const _missing = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'].filter(k => !(k in _v));
     if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+    const seCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('session-archive.sh'))).length;
+    const ptCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('standing-order-guard.sh'))).length;
+    if (seCount !== 1) { console.error('Validation: expected 1 SessionEnd, got ' + seCount); process.exit(1); }
+    if (ptCount !== 1) { console.error('Validation: expected 1 PreToolUse, got ' + ptCount); process.exit(1); }
 
     console.log('ok');
 }
-" "\$SETTINGS_FILE" "\$HOOK_CMD" "\$DRY_RUN" "\$FORCE")
+" "\$SETTINGS_FILE" "\$HOOK_CMD" "\$GUARD_CMD" "\$DRY_RUN" "\$FORCE")
 
 case "\$MERGE_RESULT" in
     ok)            log_ok "Settings deployed to \$SETTINGS_FILE" ;;
     dry-run)       log "[DRY RUN] \$SETTINGS_FILE: merge managed fields"
-                   log "  Managed: hooks.SessionEnd, autoMemoryEnabled, alwaysThinkingEnabled" ;;
+                   log "  Managed: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled" ;;
     error-corrupt) log_error "\$SETTINGS_FILE is corrupt. Use --force to overwrite, or fix manually." ;;
     error-clobber) log_error "\$SETTINGS_FILE merge would lose fields. Use --force to proceed." ;;
     *)             log_error "Unexpected merge result: \$MERGE_RESULT" ;;
@@ -1274,7 +1297,8 @@ BLOCK_INTERP
     cat <<'BLOCK'
 
 if [ "$DRY_RUN" != "true" ]; then
-    log "  Hook: $HOOK_CMD"
+    log "  SessionEnd hook: $HOOK_CMD"
+    log "  PreToolUse hook: $GUARD_CMD"
     log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"
     log "  alwaysThinkingEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).alwaysThinkingEnabled)")"
 fi
@@ -1294,14 +1318,18 @@ blog "Generating deploy/setup-user-hooks.ps1 (with embedded hook + prefs)"
     echo "$HEADER_COMMENT_PS1"
     cat <<'BLOCK'
 # setup-user-hooks.ps1 -- Deploys Claude Code hooks and preferences to ~/.claude/settings.json
-# Self-contained: hook script and preferences are embedded below. No repo needed.
+# Self-contained: hook scripts and preferences are embedded below. No repo needed.
 # Safe to re-run -- merges managed fields without clobbering existing settings.
 #
-# Managed fields: hooks.SessionEnd, autoMemoryEnabled, alwaysThinkingEnabled
+# Managed fields: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled
 # Preserved: permissions, enabledPlugins, all other fields
 #
-# Note: The hook script itself is bash-only (Claude Code hooks always run in
-# bash on both platforms). This PS1 script only deploys the hook configuration.
+# Hooks deployed:
+#   SessionEnd: session-archive.sh (archives transcripts to user repo)
+#   PreToolUse[Bash]: standing-order-guard.sh (enforces standing orders on Bash commands)
+#
+# Note: Hook scripts are bash-only (Claude Code hooks always run in bash on
+# both platforms). This PS1 script only deploys the hook configuration.
 
 BLOCK
     ps1_param_block
@@ -1313,12 +1341,13 @@ BLOCK
     ps1_flag_helpers
     cat <<'BLOCK'
 
-# --- Deploy embedded hook script to ~/.claude/hooks/ ---
+# --- Deploy embedded hook scripts to ~/.claude/hooks/ ---
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
 $hooksDir = Join-Path $claudeDir "hooks"
 if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }
 
 $hookDest = Join-Path $hooksDir "session-archive.sh"
+$guardDest = Join-Path $hooksDir "standing-order-guard.sh"
 
 $hookContent = @'
 BLOCK
@@ -1326,21 +1355,32 @@ BLOCK
     cat <<'BLOCK'
 '@
 
+$guardContent = @'
+BLOCK
+    echo "$HOOK_STANDING_ORDER_GUARD"
+    cat <<'BLOCK'
+'@
+
 if ($DryRun) {
-    Log "[DRY RUN] Would deploy hook to $hookDest"
+    Log "[DRY RUN] Would deploy hooks to ~/.claude/hooks/"
 } else {
     $resolvedHook = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($hookDest)
     [System.IO.File]::WriteAllText($resolvedHook, $hookContent, [System.Text.UTF8Encoding]::new($false))
     LogOk "Deployed hook: $hookDest"
+    $resolvedGuard = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($guardDest)
+    [System.IO.File]::WriteAllText($resolvedGuard, $guardContent, [System.Text.UTF8Encoding]::new($false))
+    LogOk "Deployed hook: $guardDest"
 }
 
-# --- Merge hook + preferences into ~/.claude/settings.json ---
+# --- Merge hooks + preferences into ~/.claude/settings.json ---
 $settingsFile = Join-Path $claudeDir "settings.json"
 if (-not (Test-Path $claudeDir)) { New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null }
 
-# Hook command uses Unix-style path (hooks run in bash even on Windows)
+# Hook commands use Unix-style paths (hooks run in bash even on Windows)
 $hookDestUnix = $hookDest -replace '\\', '/'
 $hookCmd = "bash `"$hookDestUnix`""
+$guardDestUnix = $guardDest -replace '\\', '/'
+$guardCmd = "bash `"$guardDestUnix`""
 
 BLOCK
     # Emit native PS merge with embedded build-time preferences
@@ -1362,36 +1402,58 @@ if (Test-Path \$settingsFile) {
 }
 \$beforeKeys = @(\$settings.Keys)
 
-# --- Merge hook ---
+# --- Merge hooks (with dedup) ---
 if (-not \$settings.ContainsKey("hooks")) { \$settings["hooks"] = @{} }
-if (-not \$settings["hooks"].ContainsKey("SessionEnd")) { \$settings["hooks"]["SessionEnd"] = @() }
 
-\$sessionEndArr = @(\$settings["hooks"]["SessionEnd"])
-\$hookId = "session-archive.sh"
-\$foundHook = \$false
-for (\$i = 0; \$i -lt \$sessionEndArr.Count; \$i++) {
-    \$rule = \$sessionEndArr[\$i]
-    if (\$rule -is [System.Collections.Hashtable] -and \$rule.ContainsKey("hooks")) {
-        \$ruleHooks = @(\$rule["hooks"])
-        for (\$j = 0; \$j -lt \$ruleHooks.Count; \$j++) {
-            \$h = \$ruleHooks[\$j]
-            if (\$h -is [System.Collections.Hashtable] -and \$h.ContainsKey("command") -and \$h["command"] -match \$hookId) {
-                \$h["command"] = \$hookCmd
-                \$foundHook = \$true
+function MergeHookEntry(\$eventName, \$hookIdentifier, \$matcherValue, \$cmd) {
+    if (-not \$settings["hooks"].ContainsKey(\$eventName)) {
+        \$settings["hooks"][\$eventName] = @()
+    }
+    \$arr = @(\$settings["hooks"][\$eventName])
+    \$found = \$false
+    foreach (\$rule in \$arr) {
+        if (\$rule -is [System.Collections.Hashtable] -and \$rule.ContainsKey("hooks")) {
+            foreach (\$h in @(\$rule["hooks"])) {
+                if (\$h -is [System.Collections.Hashtable] -and \$h.ContainsKey("command") -and \$h["command"] -match [regex]::Escape(\$hookIdentifier)) {
+                    if (-not \$found) {
+                        \$h["command"] = \$cmd
+                        \$rule["matcher"] = \$matcherValue
+                        \$found = \$true
+                    }
+                }
             }
         }
     }
-}
-if (-not \$foundHook) {
-    \$newRule = @{
-        matcher = ""
-        hooks = @(
-            @{ type = "command"; command = \$hookCmd }
-        )
+    if (-not \$found) {
+        \$arr += @{ matcher = \$matcherValue; hooks = @(@{ type = "command"; command = \$cmd }) }
     }
-    \$sessionEndArr += \$newRule
-    \$settings["hooks"]["SessionEnd"] = \$sessionEndArr
+    # Normalize: ensure hooks field is always an array (fix for prior corruption)
+    foreach (\$rule in \$arr) {
+        if (\$rule -is [System.Collections.Hashtable] -and \$rule.ContainsKey("hooks") -and \$rule["hooks"] -isnot [array]) {
+            \$rule["hooks"] = @(\$rule["hooks"])
+        }
+    }
+    # Deduplicate
+    \$seen = \$false
+    \$deduped = @()
+    foreach (\$rule in \$arr) {
+        \$isMatch = \$false
+        if (\$rule -is [System.Collections.Hashtable] -and \$rule.ContainsKey("hooks")) {
+            foreach (\$h in @(\$rule["hooks"])) {
+                if (\$h -is [System.Collections.Hashtable] -and \$h.ContainsKey("command") -and \$h["command"] -match [regex]::Escape(\$hookIdentifier)) {
+                    \$isMatch = \$true; break
+                }
+            }
+        }
+        if (\$isMatch -and \$seen) { continue }
+        if (\$isMatch) { \$seen = \$true }
+        \$deduped += \$rule
+    }
+    \$settings["hooks"][\$eventName] = \$deduped
 }
+
+MergeHookEntry "SessionEnd" "session-archive.sh" "" \$hookCmd
+MergeHookEntry "PreToolUse" "standing-order-guard.sh" "Bash" \$guardCmd
 
 # --- Merge preferences ---
 \$settings["autoMemoryEnabled"] = \$autoMemory
@@ -1402,7 +1464,7 @@ if (-not \$foundHook) {
 
 if (\$DryRun) {
     Log "[DRY RUN] \$settingsFile\`: merge managed fields"
-    Log "  Managed: hooks.SessionEnd, autoMemoryEnabled, alwaysThinkingEnabled"
+    Log "  Managed: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled"
     if (\$lostKeys.Count -gt 0) {
         LogWarn "[DRY RUN] CLOBBER: would lose: \$(\$lostKeys -join ', ')"
     }
@@ -1432,12 +1494,18 @@ if (\$DryRun) {
                 LogError "Validation failed: \$settingsFile missing required field '\$k'"
             }
         }
+        # Validate hook deduplication
+        \$seCount = @(\$vParsed.hooks.SessionEnd | Where-Object { \$_.hooks.command -match 'session-archive\.sh' }).Count
+        \$ptCount = @(\$vParsed.hooks.PreToolUse | Where-Object { \$_.hooks.command -match 'standing-order-guard\.sh' }).Count
+        if (\$seCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd hook, got \$seCount" }
+        if (\$ptCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse hook, got \$ptCount" }
     } catch {
         LogError "Validation failed: \$settingsFile is not valid JSON -- \$_"
     }
 
     LogOk "Settings deployed to \$settingsFile"
-    Log "  Hook: \$hookCmd"
+    Log "  SessionEnd hook: \$hookCmd"
+    Log "  PreToolUse hook: \$guardCmd"
     Log "  autoMemoryEnabled: \$autoMemory"
     Log "  alwaysThinkingEnabled: \$alwaysThinking"
 }

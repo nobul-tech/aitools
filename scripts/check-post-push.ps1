@@ -131,10 +131,26 @@ if (Test-Path $settingsFile) {
     if ($settingsContent -match 'session-archive') { $hookPresent = $true }
 }
 if ($hookPresent) {
-    if ($script:UserRepoPath -and (Test-Path $script:UserRepoPath)) {
-        StepPass "5" "Session archive readiness"
-    } else {
+    if (-not $script:UserRepoPath -or -not (Test-Path $script:UserRepoPath)) {
         StepWarn "5" "Session archive readiness" "hook present but userRepoPath missing -- run aitools user init"
+    } else {
+        $sessionsDir = Join-Path $script:UserRepoPath "sessions"
+        if (-not (Test-Path $sessionsDir)) {
+            StepWarn "5" "Session archive readiness" "hook configured but sessions/ dir missing -- hook may have never fired"
+        } else {
+            $jsonlFiles = Get-ChildItem -Path $sessionsDir -Recurse -Filter "*.jsonl" -File -ErrorAction SilentlyContinue
+            if (-not $jsonlFiles -or $jsonlFiles.Count -eq 0) {
+                StepWarn "5" "Session archive readiness" "sessions/ exists but has no .jsonl files -- hook may be failing silently"
+            } else {
+                $newest = $jsonlFiles | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+                $ageDays = [math]::Floor(((Get-Date).ToUniversalTime() - $newest.LastWriteTimeUtc).TotalDays)
+                if ($ageDays -gt 7) {
+                    StepWarn "5" "Session archive readiness" "last archive is ${ageDays}d old -- hook may have stopped working"
+                } else {
+                    StepPass "5" "Session archive readiness" "$($jsonlFiles.Count) archives, last within 7d"
+                }
+            }
+        }
     }
 } else {
     StepSkip "5" "Session archive readiness" "SessionEnd hook not configured"

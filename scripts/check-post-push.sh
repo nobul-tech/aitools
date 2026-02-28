@@ -111,10 +111,30 @@ if [ -f "$settings_file" ] && grep -q 'session-archive' "$settings_file" 2>/dev/
 fi
 
 if $hook_present; then
-    if [ -n "$USER_REPO_PATH" ] && [ -d "$USER_REPO_PATH" ]; then
-        step_pass "5" "Session archive readiness"
-    else
+    if [ -z "$USER_REPO_PATH" ] || [ ! -d "$USER_REPO_PATH" ]; then
         step_warn "5" "Session archive readiness" "hook present but userRepoPath missing -- run aitools user init"
+    else
+        sessions_dir="$USER_REPO_PATH/sessions"
+        if [ ! -d "$sessions_dir" ]; then
+            step_warn "5" "Session archive readiness" "hook configured but sessions/ dir missing -- hook may have never fired"
+        else
+            # Check for .jsonl files and recency
+            newest=$(find "$sessions_dir" -name '*.jsonl' -type f -printf '%T@\n' 2>/dev/null | sort -rn | head -1)
+            if [ -z "$newest" ]; then
+                step_warn "5" "Session archive readiness" "sessions/ exists but has no .jsonl files -- hook may be failing silently"
+            else
+                # Check if newest file is within last 7 days (604800 seconds)
+                now=$(date +%s)
+                age=$(( now - ${newest%.*} ))
+                if [ "$age" -gt 604800 ]; then
+                    days_ago=$(( age / 86400 ))
+                    step_warn "5" "Session archive readiness" "last archive is ${days_ago}d old -- hook may have stopped working"
+                else
+                    file_count=$(find "$sessions_dir" -name '*.jsonl' -type f 2>/dev/null | wc -l)
+                    step_pass "5" "Session archive readiness" "${file_count} archives, last within 7d"
+                fi
+            fi
+        fi
     fi
 else
     step_skip "5" "Session archive readiness" "SessionEnd hook not configured"

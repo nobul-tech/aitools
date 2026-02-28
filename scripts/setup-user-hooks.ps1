@@ -1,15 +1,18 @@
 # setup-user-hooks.ps1 -- Deploys Claude Code hooks and preferences to ~/.claude/settings.json
 # Safe to re-run -- merges managed fields without clobbering existing settings.
 #
-# Managed fields: hooks.SessionEnd, autoMemoryEnabled, alwaysThinkingEnabled
+# Managed fields: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled
 # Preserved: permissions, enabledPlugins, all other fields
 #
-# Adds a SessionEnd hook that archives session transcripts to the user repo.
-# Reads claude preferences from profile.json (via config.json -> userRepoPath).
-# See reference/user-repo.md and shared/hooks/session-archive.sh for details.
+# Hooks deployed:
+#   SessionEnd: session-archive.sh (archives transcripts to user repo)
+#   PreToolUse[Bash]: standing-order-guard.sh (enforces standing orders on Bash commands)
 #
-# Note: The hook script itself is bash-only (Claude Code hooks always run in
-# bash on both platforms). This PS1 script only deploys the hook configuration.
+# Reads claude preferences from profile.json (via config.json -> userRepoPath).
+# See reference/user-repo.md and shared/hooks/ for details.
+#
+# Note: Hook scripts are bash-only (Claude Code hooks always run in bash on
+# both platforms). This PS1 script only deploys the hook configuration.
 
 param(
     [switch]$DryRun,
@@ -37,15 +40,18 @@ function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
 
 # --- PS 5.1 compatibility helper ---
+# Recursively converts PSCustomObject (from ConvertFrom-Json) to Hashtable.
+# Also recurses into arrays so nested objects in JSON arrays become hashtables.
 function ConvertPSObjectToHashtable($obj) {
     if ($null -eq $obj) { return @{} }
+    if ($obj -is [array]) {
+        # Leading comma prevents PowerShell from unwrapping single-element arrays
+        return ,@($obj | ForEach-Object { ConvertPSObjectToHashtable $_ })
+    }
+    if ($obj -isnot [System.Management.Automation.PSCustomObject]) { return $obj }
     $ht = @{}
     foreach ($prop in $obj.PSObject.Properties) {
-        if ($prop.Value -is [System.Management.Automation.PSCustomObject]) {
-            $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
-        } else {
-            $ht[$prop.Name] = $prop.Value
-        }
+        $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
     }
     return $ht
 }
@@ -63,23 +69,31 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoDir = Split-Path -Parent $scriptDir
 
 $hookScript = Join-Path $repoDir "shared\hooks\session-archive.sh"
-if (-not (Test-Path $hookScript)) {
-    LogError "Hook script not found: $hookScript"
-    exit 1
+$guardScript = Join-Path $repoDir "shared\hooks\standing-order-guard.sh"
+foreach ($src in @($hookScript, $guardScript)) {
+    if (-not (Test-Path $src)) {
+        LogError "Hook script not found: $src"
+        exit 1
+    }
 }
 
 # --- Deploy hook script to ~/.claude/hooks/ ---
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
 $hooksDir = Join-Path $claudeDir "hooks"
 
+$hookDest = Join-Path $hooksDir "session-archive.sh"
+$guardDest = Join-Path $hooksDir "standing-order-guard.sh"
+
 if ($DryRun) {
-    Log "[DRY RUN] Would deploy hook: $hookScript -> $(Join-Path $hooksDir 'session-archive.sh')"
+    Log "[DRY RUN] Would deploy hook: $hookScript -> $hookDest"
+    Log "[DRY RUN] Would deploy hook: $guardScript -> $guardDest"
 } else {
     if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }
 
-    $hookDest = Join-Path $hooksDir "session-archive.sh"
     Copy-Item -Path $hookScript -Destination $hookDest -Force
     LogOk "Deployed hook: $hookDest"
+    Copy-Item -Path $guardScript -Destination $guardDest -Force
+    LogOk "Deployed hook: $guardDest"
 }
 
 # --- Read claude preferences from profile.json ---
@@ -133,51 +147,74 @@ if (Test-Path $settingsFile) {
 }
 $beforeKeys = @($settings.Keys)
 
-# --- Merge hook ---
+# --- Merge hooks ---
 if (-not $settings.ContainsKey("hooks")) { $settings["hooks"] = @{} }
-if (-not $settings["hooks"].ContainsKey("SessionEnd")) { $settings["hooks"]["SessionEnd"] = @() }
 
-$hookId = "session-archive.sh"
-$existingIdx = -1
-$sessionEndArr = @($settings["hooks"]["SessionEnd"])
-for ($i = 0; $i -lt $sessionEndArr.Count; $i++) {
-    $rule = $sessionEndArr[$i]
-    if ($rule -is [System.Collections.Hashtable] -and $rule.ContainsKey("hooks")) {
-        $hooksArr = @($rule["hooks"])
-        foreach ($h in $hooksArr) {
-            if ($h -is [System.Collections.Hashtable] -and $h.ContainsKey("command") -and $h["command"] -match $hookId) {
-                $existingIdx = $i
-                break
+# Helper: ensure exactly one entry for a hookId in an event array.
+# Updates the command if found, adds if not, deduplicates extras.
+function MergeHookEntry($eventName, $hookIdentifier, $matcherValue, $cmd) {
+    if (-not $settings["hooks"].ContainsKey($eventName)) {
+        $settings["hooks"][$eventName] = @()
+    }
+    $arr = @($settings["hooks"][$eventName])
+
+    # Find first matching entry and update it
+    $found = $false
+    foreach ($rule in $arr) {
+        if ($rule -is [System.Collections.Hashtable] -and $rule.ContainsKey("hooks")) {
+            foreach ($h in @($rule["hooks"])) {
+                if ($h -is [System.Collections.Hashtable] -and $h.ContainsKey("command") -and $h["command"] -match [regex]::Escape($hookIdentifier)) {
+                    if (-not $found) {
+                        $h["command"] = $cmd
+                        $rule["matcher"] = $matcherValue
+                        $found = $true
+                    }
+                }
             }
         }
     }
-    if ($existingIdx -ge 0) { break }
-}
-
-if ($existingIdx -ge 0) {
-    # Update existing hook command
-    $rule = $sessionEndArr[$existingIdx]
-    $hooksArr = @($rule["hooks"])
-    for ($i = 0; $i -lt $hooksArr.Count; $i++) {
-        $h = $hooksArr[$i]
-        if ($h -is [System.Collections.Hashtable] -and $h.ContainsKey("command") -and $h["command"] -match $hookId) {
-            $h["command"] = $hookCmd
+    if (-not $found) {
+        $arr += @{
+            matcher = $matcherValue
+            hooks   = @(@{ type = "command"; command = $cmd })
         }
     }
-} else {
-    # Add new hook entry
-    $newEntry = @{
-        matcher = ""
-        hooks   = @(
-            @{
-                type    = "command"
-                command = $hookCmd
-            }
-        )
+
+    # Normalize: ensure hooks field in each rule is always an array
+    # (fixes corruption from prior buggy writes where ConvertTo-Json unwrapped single-element arrays)
+    foreach ($rule in $arr) {
+        if ($rule -is [System.Collections.Hashtable] -and $rule.ContainsKey("hooks") -and $rule["hooks"] -isnot [array]) {
+            $rule["hooks"] = @($rule["hooks"])
+        }
     }
-    $sessionEndArr += $newEntry
-    $settings["hooks"]["SessionEnd"] = $sessionEndArr
+
+    # Deduplicate: keep only the first entry matching hookIdentifier
+    $seen = $false
+    $deduped = @()
+    foreach ($rule in $arr) {
+        $isMatch = $false
+        if ($rule -is [System.Collections.Hashtable] -and $rule.ContainsKey("hooks")) {
+            foreach ($h in @($rule["hooks"])) {
+                if ($h -is [System.Collections.Hashtable] -and $h.ContainsKey("command") -and $h["command"] -match [regex]::Escape($hookIdentifier)) {
+                    $isMatch = $true
+                    break
+                }
+            }
+        }
+        if ($isMatch -and $seen) { continue }
+        if ($isMatch) { $seen = $true }
+        $deduped += $rule
+    }
+    $settings["hooks"][$eventName] = $deduped
 }
+
+# SessionEnd: session archive
+MergeHookEntry "SessionEnd" "session-archive.sh" "" $hookCmd
+
+# PreToolUse: standing order guard
+$guardDestUnix = $guardDest -replace '\\', '/'
+$guardCmd = "bash `"$guardDestUnix`""
+MergeHookEntry "PreToolUse" "standing-order-guard.sh" "Bash" $guardCmd
 
 # --- Merge claude preferences ---
 $settings["autoMemoryEnabled"] = $autoMemory
@@ -196,7 +233,8 @@ if ($DryRun) {
     if ($corrupt) {
         LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
     }
-    Log "[DRY RUN] Hook: $hookCmd"
+    Log "[DRY RUN] SessionEnd hook: $hookCmd"
+    Log "[DRY RUN] PreToolUse hook: $guardCmd"
     Log "[DRY RUN] autoMemoryEnabled: $autoMemory"
     Log "[DRY RUN] alwaysThinkingEnabled: $alwaysThinking"
 } else {
@@ -226,8 +264,15 @@ if ($DryRun) {
             LogError "Validation failed: $settingsFile is not valid JSON -- $_"
         }
 
+        # Validate hook deduplication
+        $seCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'session-archive\.sh' }).Count
+        $ptCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'standing-order-guard\.sh' }).Count
+        if ($seCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd hook, got $seCount" }
+        if ($ptCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse hook, got $ptCount" }
+
         LogOk "Settings deployed to $settingsFile"
-        Log "  Hook: $hookCmd"
+        Log "  SessionEnd hook: $hookCmd"
+        Log "  PreToolUse hook: $guardCmd"
         Log "  autoMemoryEnabled: $autoMemory"
         Log "  alwaysThinkingEnabled: $alwaysThinking"
     }

@@ -4,8 +4,12 @@
 # Self-contained: hook script and preferences are embedded below. No repo needed.
 # Safe to re-run -- merges managed fields without clobbering existing settings.
 #
-# Managed fields: hooks.SessionEnd, autoMemoryEnabled, alwaysThinkingEnabled
+# Managed fields: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled
 # Preserved: permissions, enabledPlugins, all other fields
+#
+# Hooks deployed:
+#   SessionEnd: session-archive.sh (archives transcripts to user repo)
+#   PreToolUse[Bash]: standing-order-guard.sh (enforces standing orders on Bash commands)
 
 set -euo pipefail
 
@@ -49,12 +53,13 @@ if ! command -v node &>/dev/null; then
     exit 1
 fi
 
-# --- Deploy embedded hook script to ~/.claude/hooks/ ---
+# --- Deploy embedded hook scripts to ~/.claude/hooks/ ---
 HOOK_DEST="$HOME/.claude/hooks/session-archive.sh"
+GUARD_DEST="$HOME/.claude/hooks/standing-order-guard.sh"
 mkdir -p "$HOME/.claude/hooks"
 
 if [ "$DRY_RUN" = "true" ]; then
-    log "[DRY RUN] Would deploy hook to $HOOK_DEST"
+    log "[DRY RUN] Would deploy hooks to ~/.claude/hooks/"
 else
 cat > "$HOOK_DEST" <<'__EMBEDDED_HOOK__'
 #!/usr/bin/env bash
@@ -151,23 +156,166 @@ fi
 mkdir -p "$DEST_DIR"
 cp "$TRANSCRIPT" "$DEST_FILE"
 __EMBEDDED_HOOK__
+cat > "$GUARD_DEST" <<'__EMBEDDED_GUARD__'
+#!/usr/bin/env bash
+# standing-order-guard.sh — Claude Code PreToolUse hook
+# Enforces standing orders by inspecting tool calls before execution.
+#
+# Currently enforces:
+#   SO #1: Dedicated tools for file ops (Read/Edit/Write/Grep/Glob, not Bash)
+#   SO #4: Scratch files for complex bash (no long inline commands)
+#
+# Hook contract:
+#   - Receives JSON on stdin (tool_name, tool_input.command, etc.)
+#   - Exit 0 = allow
+#   - Exit 2 = block (stderr becomes Claude's feedback)
+#   - Must never crash or hang (would break Claude Code)
+#
+# Design decisions:
+#   - Pure-bash JSON parsing (jq not guaranteed in hook environment)
+#   - Conservative matching: only flag clear violations, allow ambiguous cases
+#   - Helpful feedback: tell Claude which tool to use instead
+
+set -euo pipefail
+
+INPUT=$(cat)
+
+# --- Pure-bash JSON field extraction ---
+# Same pattern as session-archive.sh. Handles simple top-level string values.
+json_field() {
+    local json="$1" key="$2"
+    printf '%s' "$json" \
+        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
+        | head -1 \
+        | sed 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"//' \
+        | sed 's/"$//'
+}
+
+# Extract tool_input.command — it's nested, so we need the command field
+# from within tool_input. Since our JSON parser is simple, we can grep for
+# the "command" key directly (it appears at the tool_input level).
+COMMAND=$(json_field "$INPUT" "command")
+
+# If no command found (shouldn't happen for Bash tool), allow
+if [ -z "$COMMAND" ]; then
+    exit 0
+fi
+
+# --- SO #4: Scratch files for complex bash ---
+# In JSON, newlines in strings are escaped as \n (literal two-char sequence).
+# Count occurrences by measuring string length before/after removing \n sequences.
+# This avoids grep exit-code issues with set -euo pipefail when no matches exist.
+STRIPPED=$(printf '%s' "$COMMAND" | sed 's/\\n//g')
+CMD_LEN=${#COMMAND}
+STRIPPED_LEN=${#STRIPPED}
+NEWLINE_COUNT=$(( (CMD_LEN - STRIPPED_LEN) / 2 ))
+# 5+ lines (4+ newlines) = too complex for inline. Write a temp file instead.
+if [ "$NEWLINE_COUNT" -ge 4 ]; then
+    LINE_COUNT=$((NEWLINE_COUNT + 1))
+    echo "SO #4 violation: This command is ~${LINE_COUNT} lines long. Write it to a temp .sh or .ps1 file using the Write tool, execute with Bash, then clean up. Standing order: never inline long commands in the Bash tool." >&2
+    exit 2
+fi
+
+# --- SO #1: Dedicated tools for file operations ---
+# Pattern: command starts with a file-op utility that has a dedicated tool.
+# We check the first token of the command (before any arguments).
+FIRST_TOKEN=$(printf '%s' "$COMMAND" | head -1 | awk '{print $1}')
+
+# Allowlist: commands that look like file ops but are legitimate shell use.
+# pwsh wrapping, git operations, npm/node, etc. are always OK.
+case "$FIRST_TOKEN" in
+    pwsh|powershell|git|npm|node|python*|pip*|cargo|rustup|brew|winget|choco)
+        exit 0
+        ;;
+esac
+
+# Check for standalone file-reading commands (should use Read tool)
+case "$FIRST_TOKEN" in
+    cat)
+        echo "SO #1 violation: Use the Read tool instead of 'cat' to read files. The Read tool provides line numbers and handles large files better." >&2
+        exit 2
+        ;;
+    head)
+        echo "SO #1 violation: Use the Read tool with offset/limit parameters instead of 'head'. Example: Read with limit=20 for the first 20 lines." >&2
+        exit 2
+        ;;
+    tail)
+        echo "SO #1 violation: Use the Read tool with offset parameter instead of 'tail'. Example: Read with offset=100 to start from line 100." >&2
+        exit 2
+        ;;
+esac
+
+# Check for standalone file-search commands (should use Grep tool)
+case "$FIRST_TOKEN" in
+    grep|rg|egrep|fgrep)
+        echo "SO #1 violation: Use the Grep tool instead of '$FIRST_TOKEN' to search file contents. The Grep tool supports regex, file filtering, and multiple output modes." >&2
+        exit 2
+        ;;
+esac
+
+# Check for file-finding commands (should use Glob tool)
+case "$FIRST_TOKEN" in
+    find)
+        echo "SO #1 violation: Use the Glob tool instead of 'find' to locate files. Example: Glob with pattern '**/*.sh' instead of 'find . -name \"*.sh\"'." >&2
+        exit 2
+        ;;
+    ls)
+        # ls is borderline -- block when clearly used to list directory contents
+        # for exploration (should use Glob or Bash 'ls' for quick checks).
+        # Allow: ls is commonly used for quick verification before mkdir, etc.
+        # Decision: allow ls, it's a gray area and commonly used in workflows.
+        exit 0
+        ;;
+esac
+
+# Check for file-editing commands (should use Edit tool)
+case "$FIRST_TOKEN" in
+    sed)
+        echo "SO #1 violation: Use the Edit tool instead of 'sed' to modify files. For non-trivial string manipulation, use Perl (standing order #5)." >&2
+        exit 2
+        ;;
+    awk)
+        echo "SO #1 violation: Use the Read tool instead of 'awk' to process files. For string manipulation, use Perl (standing order #5)." >&2
+        exit 2
+        ;;
+esac
+
+# Check for file-writing patterns (should use Write tool)
+# These are harder to detect by first token alone. Check the full first line
+# for redirection patterns that indicate file creation.
+FIRST_LINE=$(printf '%s' "$COMMAND" | head -1)
+case "$FIRST_LINE" in
+    echo*\>*|printf*\>*)
+        # echo/printf redirecting to a file
+        echo "SO #1 violation: Use the Write tool instead of echo/printf redirection to create files. The Write tool handles encoding and permissions correctly." >&2
+        exit 2
+        ;;
+esac
+
+# All checks passed — allow the command
+exit 0
+__EMBEDDED_GUARD__
 
     chmod +x "$HOOK_DEST"
     log_ok "Deployed hook: $HOOK_DEST"
+    chmod +x "$GUARD_DEST"
+    log_ok "Deployed hook: $GUARD_DEST"
 fi
 
-# --- Merge hook + preferences into ~/.claude/settings.json ---
+# --- Merge hooks + preferences into ~/.claude/settings.json ---
 SETTINGS_FILE="$HOME/.claude/settings.json"
 mkdir -p "$HOME/.claude"
 
 HOOK_CMD="bash \"$HOOK_DEST\""
+GUARD_CMD="bash \"$GUARD_DEST\""
 
 MERGE_RESULT=$(node -e "
 const fs = require('fs');
 const settingsFile = process.argv[1];
 const hookCmd = process.argv[2];
-const dryRun = process.argv[3] === 'true';
-const force = process.argv[4] === 'true';
+const guardCmd = process.argv[3];
+const dryRun = process.argv[4] === 'true';
+const force = process.argv[5] === 'true';
 
 // --- Embedded preferences (from profile.json at build time) ---
 const autoMemory = false;
@@ -184,30 +332,34 @@ try { settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')); } catch (e) 
 }
 const beforeKeys = Object.keys(settings);
 
-// --- Merge hook ---
+// --- Merge hooks (with dedup) ---
 if (!settings.hooks) settings.hooks = {};
-if (!Array.isArray(settings.hooks.SessionEnd)) settings.hooks.SessionEnd = [];
 
-const hookId = 'session-archive.sh';
-const existing = settings.hooks.SessionEnd.find(rule =>
-    rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId))
-);
-
-if (existing) {
-    existing.hooks.forEach(h => {
-        if (h.command && h.command.includes(hookId)) {
-            h.command = hookCmd;
+function mergeHookEntry(eventName, hookId, matcher, cmd) {
+    if (!Array.isArray(settings.hooks[eventName])) settings.hooks[eventName] = [];
+    const arr = settings.hooks[eventName];
+    let found = false;
+    for (const rule of arr) {
+        if (rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId))) {
+            if (!found) {
+                rule.hooks.forEach(h => { if (h.command && h.command.includes(hookId)) h.command = cmd; });
+                rule.matcher = matcher;
+                found = true;
+            }
         }
-    });
-} else {
-    settings.hooks.SessionEnd.push({
-        matcher: '',
-        hooks: [{
-            type: 'command',
-            command: hookCmd
-        }]
+    }
+    if (!found) arr.push({ matcher, hooks: [{ type: 'command', command: cmd }] });
+    // Deduplicate
+    let seen = false;
+    settings.hooks[eventName] = arr.filter(rule => {
+        const m = rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId));
+        if (m) { if (seen) return false; seen = true; }
+        return true;
     });
 }
+
+mergeHookEntry('SessionEnd', 'session-archive.sh', '', hookCmd);
+mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
 
 // --- Merge claude preferences ---
 settings.autoMemoryEnabled = autoMemory;
@@ -233,22 +385,27 @@ if (dryRun) {
     const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
     const _missing = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'].filter(k => !(k in _v));
     if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+    const seCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('session-archive.sh'))).length;
+    const ptCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('standing-order-guard.sh'))).length;
+    if (seCount !== 1) { console.error('Validation: expected 1 SessionEnd, got ' + seCount); process.exit(1); }
+    if (ptCount !== 1) { console.error('Validation: expected 1 PreToolUse, got ' + ptCount); process.exit(1); }
 
     console.log('ok');
 }
-" "$SETTINGS_FILE" "$HOOK_CMD" "$DRY_RUN" "$FORCE")
+" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$DRY_RUN" "$FORCE")
 
 case "$MERGE_RESULT" in
     ok)            log_ok "Settings deployed to $SETTINGS_FILE" ;;
     dry-run)       log "[DRY RUN] $SETTINGS_FILE: merge managed fields"
-                   log "  Managed: hooks.SessionEnd, autoMemoryEnabled, alwaysThinkingEnabled" ;;
+                   log "  Managed: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled" ;;
     error-corrupt) log_error "$SETTINGS_FILE is corrupt. Use --force to overwrite, or fix manually." ;;
     error-clobber) log_error "$SETTINGS_FILE merge would lose fields. Use --force to proceed." ;;
     *)             log_error "Unexpected merge result: $MERGE_RESULT" ;;
 esac
 
 if [ "$DRY_RUN" != "true" ]; then
-    log "  Hook: $HOOK_CMD"
+    log "  SessionEnd hook: $HOOK_CMD"
+    log "  PreToolUse hook: $GUARD_CMD"
     log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"
     log "  alwaysThinkingEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).alwaysThinkingEnabled)")"
 fi

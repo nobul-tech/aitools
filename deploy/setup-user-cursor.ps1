@@ -65,13 +65,15 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 # --- PS 5.1 compatibility helper ---
 function ConvertPSObjectToHashtable($obj) {
     if ($null -eq $obj) { return @{} }
+    # Recurse into arrays (ConvertFrom-Json returns Object[] of PSCustomObject)
+    # Leading comma prevents PowerShell from unwrapping single-element arrays
+    if ($obj -is [array]) {
+        return ,@($obj | ForEach-Object { ConvertPSObjectToHashtable $_ })
+    }
+    if ($obj -isnot [System.Management.Automation.PSCustomObject]) { return $obj }
     $ht = @{}
     foreach ($prop in $obj.PSObject.Properties) {
-        if ($prop.Value -is [System.Management.Automation.PSCustomObject]) {
-            $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
-        } else {
-            $ht[$prop.Name] = $prop.Value
-        }
+        $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
     }
     return $ht
 }

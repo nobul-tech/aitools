@@ -2,12 +2,15 @@
 # setup-user-hooks.sh — Deploys Claude Code hooks and preferences to ~/.claude/settings.json
 # Safe to re-run — merges managed fields without clobbering existing settings.
 #
-# Managed fields: hooks.SessionEnd, autoMemoryEnabled, alwaysThinkingEnabled
+# Managed fields: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled
 # Preserved: permissions, enabledPlugins, all other fields
 #
-# Adds a SessionEnd hook that archives session transcripts to the user repo.
+# Hooks deployed:
+#   SessionEnd: session-archive.sh (archives transcripts to user repo)
+#   PreToolUse[Bash]: standing-order-guard.sh (enforces standing orders on Bash commands)
+#
 # Reads claude preferences from profile.json (via config.json -> userRepoPath).
-# See reference/user-repo.md and shared/hooks/session-archive.sh for details.
+# See reference/user-repo.md and shared/hooks/ for details.
 
 set -euo pipefail
 
@@ -52,10 +55,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 HOOK_SCRIPT="$REPO_DIR/shared/hooks/session-archive.sh"
-if [ ! -f "$HOOK_SCRIPT" ]; then
-    log_error "Hook script not found: $HOOK_SCRIPT"
-    exit 1
-fi
+GUARD_SCRIPT="$REPO_DIR/shared/hooks/standing-order-guard.sh"
+for src in "$HOOK_SCRIPT" "$GUARD_SCRIPT"; do
+    if [ ! -f "$src" ]; then
+        log_error "Hook script not found: $src"
+        exit 1
+    fi
+done
 
 # --- Require node for JSON manipulation ---
 if ! command -v node &>/dev/null; then
@@ -63,16 +69,21 @@ if ! command -v node &>/dev/null; then
     exit 1
 fi
 
-# --- Deploy hook script to ~/.claude/hooks/ ---
+# --- Deploy hook scripts to ~/.claude/hooks/ ---
 HOOK_DEST="$HOME/.claude/hooks/session-archive.sh"
+GUARD_DEST="$HOME/.claude/hooks/standing-order-guard.sh"
 
 if [ "$DRY_RUN" = "true" ]; then
     log "[DRY RUN] Would deploy hook: $(display_path "$HOOK_SCRIPT") -> $(display_path "$HOOK_DEST")"
+    log "[DRY RUN] Would deploy hook: $(display_path "$GUARD_SCRIPT") -> $(display_path "$GUARD_DEST")"
 else
     mkdir -p "$HOME/.claude/hooks"
     cp "$HOOK_SCRIPT" "$HOOK_DEST"
     chmod +x "$HOOK_DEST"
     log_ok "Deployed hook: $(display_path "$HOOK_DEST")"
+    cp "$GUARD_SCRIPT" "$GUARD_DEST"
+    chmod +x "$GUARD_DEST"
+    log_ok "Deployed hook: $(display_path "$GUARD_DEST")"
 fi
 
 # --- Merge hook into ~/.claude/settings.json ---
@@ -118,30 +129,50 @@ try {
 }
 const beforeKeys = Object.keys(settings);
 
-// --- Merge hook ---
+// --- Merge hooks ---
 if (!settings.hooks) settings.hooks = {};
-if (!Array.isArray(settings.hooks.SessionEnd)) settings.hooks.SessionEnd = [];
 
-const hookId = 'session-archive.sh';
-const existing = settings.hooks.SessionEnd.find(rule =>
-    rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId))
-);
+// Helper: ensure exactly one entry for a hookId in an event array.
+// Updates the command if found, adds if not, deduplicates extras.
+function mergeHookEntry(eventName, hookId, matcher, cmd) {
+    if (!Array.isArray(settings.hooks[eventName])) settings.hooks[eventName] = [];
+    const arr = settings.hooks[eventName];
 
-if (existing) {
-    existing.hooks.forEach(h => {
-        if (h.command && h.command.includes(hookId)) {
-            h.command = hookCmd;
+    // Find first matching entry and update it
+    let found = false;
+    for (const rule of arr) {
+        if (rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId))) {
+            if (!found) {
+                rule.hooks.forEach(h => {
+                    if (h.command && h.command.includes(hookId)) h.command = cmd;
+                });
+                rule.matcher = matcher;
+                found = true;
+            }
         }
-    });
-} else {
-    settings.hooks.SessionEnd.push({
-        matcher: '',
-        hooks: [{
-            type: 'command',
-            command: hookCmd
-        }]
+    }
+    if (!found) {
+        arr.push({ matcher, hooks: [{ type: 'command', command: cmd }] });
+    }
+
+    // Deduplicate: keep only the first entry matching hookId
+    let seen = false;
+    settings.hooks[eventName] = arr.filter(rule => {
+        const isMatch = rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId));
+        if (isMatch) {
+            if (seen) return false;
+            seen = true;
+        }
+        return true;
     });
 }
+
+mergeHookEntry('SessionEnd', 'session-archive.sh', '', hookCmd);
+
+// PreToolUse: standing order guard
+const guardPath = path.join(process.env.HOME || process.env.USERPROFILE, '.claude', 'hooks', 'standing-order-guard.sh').replace(/\\\\/g, '/');
+const guardCmd = 'bash \"' + guardPath + '\"';
+mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
 
 // --- Merge claude preferences ---
 settings.autoMemoryEnabled = autoMemory;
@@ -157,7 +188,8 @@ if (dryRun) {
     console.error('  Managed fields: ' + managedKeys.join(', '));
     if (lostKeys.length > 0) console.error('  CLOBBER WARNING: would lose: ' + lostKeys.join(', '));
     if (corrupt) console.error('  File is corrupt -- --force required');
-    console.error('  Hook: ' + hookCmd);
+    console.error('  SessionEnd hook: ' + hookCmd);
+    console.error('  PreToolUse hook: ' + guardCmd);
     console.error('  autoMemoryEnabled: ' + autoMemory);
     console.error('  alwaysThinkingEnabled: ' + alwaysThinking);
     console.log('dry-run');
@@ -176,6 +208,11 @@ if (dryRun) {
     const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
     const _missing = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'].filter(k => !(k in _v));
     if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+    // Validate hook arrays have exactly one entry per managed hook
+    const seCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('session-archive.sh'))).length;
+    const ptCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('standing-order-guard.sh'))).length;
+    if (seCount !== 1) { console.error('Validation failed: expected 1 SessionEnd hook, got ' + seCount); process.exit(1); }
+    if (ptCount !== 1) { console.error('Validation failed: expected 1 PreToolUse hook, got ' + ptCount); process.exit(1); }
 
     console.log('ok');
 }
@@ -184,7 +221,9 @@ if (dryRun) {
 case "$MERGE_RESULT" in
     ok)
         log_ok "Settings deployed to $(display_path "$SETTINGS_FILE")"
-        log "  Hook: $HOOK_CMD"
+        log "  SessionEnd hook: $HOOK_CMD"
+        GUARD_CMD_LOG="bash \"$(echo "$HOME/.claude/hooks/standing-order-guard.sh" | sed 's|\\|/|g')\""
+        log "  PreToolUse hook: $GUARD_CMD_LOG"
         log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"
         log "  alwaysThinkingEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).alwaysThinkingEnabled)")"
         ;;
