@@ -11,6 +11,9 @@ LOG_DIR="$HOME/Library/Logs/aitools"
 [ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
 LOG_FILE="$LOG_DIR/deploy.log"
 SCRIPT_NAME="setup-user-claude"
+display_path() {
+    if command -v cygpath &>/dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 ERRORS=0
 
 mkdir -p "$LOG_DIR"
@@ -254,9 +257,6 @@ ${SHARED_CONTENT}
 - Shell: ${SHELL_NAME}
 CLAUDE_EOF
 
-    log_ok "Wrote $CLAUDE_MD"
-    log "Machine: $OS_NAME $ARCH ($HOSTNAME), Shell: $SHELL_NAME"
-
     # Post-write validation: check structure AND content (not just a marker)
     if [ ! -s "$CLAUDE_MD" ]; then
         log_error "Validation failed: $CLAUDE_MD is empty or missing"
@@ -266,9 +266,10 @@ CLAUDE_EOF
         # Template body must be present -- a file with only the footer is corrupt
         log_error "Validation failed: $CLAUDE_MD missing template body (only footer present?)"
     fi
-fi
 
-# --- Exit ---
+    log_ok "Wrote $(display_path "$CLAUDE_MD")"
+    log "Machine: $OS_NAME $ARCH ($HOSTNAME), Shell: $SHELL_NAME"
+fi
 if [ "$ERRORS" -gt 0 ]; then
     log "FAILED with $ERRORS error(s). See log: $LOG_FILE"
     exit 1

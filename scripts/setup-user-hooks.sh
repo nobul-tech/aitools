@@ -12,6 +12,7 @@
 # Reads claude preferences from profile.json (via config.json -> userRepoPath).
 # See reference/user-repo.md and shared/hooks/ for details.
 
+# --- BEGIN hooks body (extracted by build-deploy) ---
 set -euo pipefail
 
 # --- Flag parsing ---
@@ -50,6 +51,13 @@ esac
 
 [ "$DRY_RUN" = "true" ] && log "[DRY RUN] Preview mode -- no files will be written"
 
+# --- Require node for JSON manipulation ---
+if ! command -v node &>/dev/null; then
+    log_error "node required for JSON manipulation"
+    exit 1
+fi
+
+# --- BEGIN hook deployment (replaced by build-deploy) ---
 # --- Resolve repo path ---
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -62,12 +70,6 @@ for src in "$HOOK_SCRIPT" "$GUARD_SCRIPT"; do
         exit 1
     fi
 done
-
-# --- Require node for JSON manipulation ---
-if ! command -v node &>/dev/null; then
-    log_error "node required for JSON manipulation"
-    exit 1
-fi
 
 # --- Deploy hook scripts to ~/.claude/hooks/ ---
 HOOK_DEST="$HOME/.claude/hooks/session-archive.sh"
@@ -85,23 +87,26 @@ else
     chmod +x "$GUARD_DEST"
     log_ok "Deployed hook: $(display_path "$GUARD_DEST")"
 fi
+# --- END hook deployment (replaced by build-deploy) ---
 
 # --- Merge hook into ~/.claude/settings.json ---
 SETTINGS_FILE="$HOME/.claude/settings.json"
 mkdir -p "$HOME/.claude"
 
-# The hook command — uses deployed copy in ~/.claude/hooks/
+# The hook commands — use deployed copies in ~/.claude/hooks/
 HOOK_CMD="bash \"$HOOK_DEST\""
+GUARD_CMD="bash \"$GUARD_DEST\""
 
 MERGE_RESULT=$(node -e "
 const fs = require('fs');
 const path = require('path');
 const settingsFile = process.argv[1];
 const hookCmd = process.argv[2];
-const dryRun = process.argv[3] === 'true';
-const force = process.argv[4] === 'true';
+const guardCmd = process.argv[3];
+const dryRun = process.argv[4] === 'true';
+const force = process.argv[5] === 'true';
 
-// --- Read claude preferences from profile.json ---
+// --- BEGIN claude preferences (replaced by build-deploy) ---
 let autoMemory = true;
 let alwaysThinking = true;
 try {
@@ -115,6 +120,7 @@ try {
         }
     }
 } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: could not read profile preferences: ' + e.message); }
+// --- END claude preferences (replaced by build-deploy) ---
 
 // --- Read existing settings.json ---
 let settings = {};
@@ -168,10 +174,6 @@ function mergeHookEntry(eventName, hookId, matcher, cmd) {
 }
 
 mergeHookEntry('SessionEnd', 'session-archive.sh', '', hookCmd);
-
-// PreToolUse: standing order guard
-const guardPath = path.join(process.env.HOME || process.env.USERPROFILE, '.claude', 'hooks', 'standing-order-guard.sh').replace(/\\\\/g, '/');
-const guardCmd = 'bash \"' + guardPath + '\"';
 mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
 
 // --- Merge claude preferences ---
@@ -216,14 +218,13 @@ if (dryRun) {
 
     console.log('ok');
 }
-" "$SETTINGS_FILE" "$HOOK_CMD" "$DRY_RUN" "$FORCE")
+" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$DRY_RUN" "$FORCE")
 
 case "$MERGE_RESULT" in
     ok)
         log_ok "Settings deployed to $(display_path "$SETTINGS_FILE")"
         log "  SessionEnd hook: $HOOK_CMD"
-        GUARD_CMD_LOG="bash \"$(echo "$HOME/.claude/hooks/standing-order-guard.sh" | sed 's|\\|/|g')\""
-        log "  PreToolUse hook: $GUARD_CMD_LOG"
+        log "  PreToolUse hook: $GUARD_CMD"
         log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"
         log "  alwaysThinkingEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).alwaysThinkingEnabled)")"
         ;;
@@ -240,8 +241,9 @@ case "$MERGE_RESULT" in
         log_error "Unexpected merge result: $MERGE_RESULT"
         ;;
 esac
+# --- END hooks body (extracted by build-deploy) ---
 
-# --- Exit ---
+# --- BEGIN exit (extracted by build-deploy) ---
 if [ "$ERRORS" -gt 0 ]; then
     log "FAILED with $ERRORS error(s). See log: $LOG_FILE"
     exit 1
@@ -249,3 +251,4 @@ else
     log "COMPLETED successfully"
     exit 0
 fi
+# --- END exit (extracted by build-deploy) ---

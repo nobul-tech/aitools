@@ -11,6 +11,7 @@
 # Managed fields: version, editor, permissions, model, hasChangedDefaultModel
 # Preserved: authInfo, privacyCache, network, statsigBootstrap, maxMode, all other fields
 
+# --- BEGIN cursor body (extracted by build-deploy) ---
 set -euo pipefail
 
 # --- Flag parsing ---
@@ -163,7 +164,7 @@ const f = process.argv[1];
 const dryRun = process.argv[2] === 'true';
 const force = process.argv[3] === 'true';
 
-// --- Read profile preferences ---
+// --- BEGIN profile preferences (replaced by build-deploy) ---
 let vimMode = false;
 let modelId = 'auto';
 try {
@@ -177,6 +178,7 @@ try {
         }
     }
 } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: could not read profile preferences: ' + e.message); }
+// --- END profile preferences (replaced by build-deploy) ---
 
 // --- Read existing cli-config.json ---
 let config = {};
@@ -283,8 +285,9 @@ log "  ripgrep:       ${STATUS_ripgrep}"
 log "  Cursor CLI:    ${STATUS_cursorCli}"
 log "  cli-config:    ${STATUS_cliConfig}"
 log "=============================="
+# --- END cursor body (extracted by build-deploy) ---
 
-# --- Exit ---
+# --- BEGIN exit (extracted by build-deploy) ---
 if [ "$ERRORS" -gt 0 ]; then
     log "FAILED with $ERRORS error(s). See log: $LOG_FILE"
     exit 1
@@ -292,3 +295,4 @@ else
     log "COMPLETED successfully"
     exit 0
 fi
+# --- END exit (extracted by build-deploy) ---

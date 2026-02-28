@@ -13,27 +13,6 @@
 
 set -euo pipefail
 
-# --- Logging ---
-LOG_DIR="$HOME/Library/Logs/aitools"
-[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
-LOG_FILE="$LOG_DIR/deploy.log"
-SCRIPT_NAME="setup-user-hooks"
-ERRORS=0
-
-mkdir -p "$LOG_DIR"
-
-log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
-log_ok()    { log "OK: $1"; }
-log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
-log_warn()  { log "WARN: $1"; }
-
-# --- OS guard ---
-case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*)
-        log_error "This script is for macOS/Linux. On Windows, use the .ps1 version."
-        exit 1 ;;
-esac
-
 # --- Flag parsing ---
 DRY_RUN=false
 FORCE=false
@@ -45,6 +24,29 @@ for arg in "$@"; do
 done
 [ "${AITOOLS_DRY_RUN:-}" = "1" ] && DRY_RUN=true
 
+# --- Logging ---
+LOG_DIR="$HOME/Library/Logs/aitools"
+[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
+LOG_FILE="$LOG_DIR/deploy.log"
+SCRIPT_NAME="setup-user-hooks"
+mkdir -p "$LOG_DIR"
+
+display_path() {
+    if command -v cygpath &>/dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
+ERRORS=0
+log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
+log_ok()    { log "OK: $1"; }
+log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
+log_warn()  { log "WARN: $1"; }
+
+# --- OS guard ---
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        log_error "This script is for macOS/Linux. On Windows, use ${SCRIPT_NAME}.ps1 instead."
+        exit 1 ;;
+esac
+
 [ "$DRY_RUN" = "true" ] && log "[DRY RUN] Preview mode -- no files will be written"
 
 # --- Require node for JSON manipulation ---
@@ -52,7 +54,6 @@ if ! command -v node &>/dev/null; then
     log_error "node required for JSON manipulation"
     exit 1
 fi
-
 # --- Deploy embedded hook scripts to ~/.claude/hooks/ ---
 HOOK_DEST="$HOME/.claude/hooks/session-archive.sh"
 GUARD_DEST="$HOME/.claude/hooks/standing-order-guard.sh"
@@ -302,21 +303,23 @@ __EMBEDDED_GUARD__
     log_ok "Deployed hook: $GUARD_DEST"
 fi
 
-# --- Merge hooks + preferences into ~/.claude/settings.json ---
+
+# --- Merge hook into ~/.claude/settings.json ---
 SETTINGS_FILE="$HOME/.claude/settings.json"
 mkdir -p "$HOME/.claude"
 
+# The hook commands — use deployed copies in ~/.claude/hooks/
 HOOK_CMD="bash \"$HOOK_DEST\""
 GUARD_CMD="bash \"$GUARD_DEST\""
 
 MERGE_RESULT=$(node -e "
 const fs = require('fs');
+const path = require('path');
 const settingsFile = process.argv[1];
 const hookCmd = process.argv[2];
 const guardCmd = process.argv[3];
 const dryRun = process.argv[4] === 'true';
 const force = process.argv[5] === 'true';
-
 // --- Embedded preferences (from profile.json at build time) ---
 const autoMemory = false;
 const alwaysThinking = true;
@@ -324,7 +327,9 @@ const alwaysThinking = true;
 // --- Read existing settings.json ---
 let settings = {};
 let corrupt = false;
-try { settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')); } catch (e) {
+try {
+    settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+} catch (e) {
     if (e.code !== 'ENOENT') {
         corrupt = true;
         console.error('Warning: ' + settingsFile + ' is invalid JSON');
@@ -332,28 +337,40 @@ try { settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')); } catch (e) 
 }
 const beforeKeys = Object.keys(settings);
 
-// --- Merge hooks (with dedup) ---
+// --- Merge hooks ---
 if (!settings.hooks) settings.hooks = {};
 
+// Helper: ensure exactly one entry for a hookId in an event array.
+// Updates the command if found, adds if not, deduplicates extras.
 function mergeHookEntry(eventName, hookId, matcher, cmd) {
     if (!Array.isArray(settings.hooks[eventName])) settings.hooks[eventName] = [];
     const arr = settings.hooks[eventName];
+
+    // Find first matching entry and update it
     let found = false;
     for (const rule of arr) {
         if (rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId))) {
             if (!found) {
-                rule.hooks.forEach(h => { if (h.command && h.command.includes(hookId)) h.command = cmd; });
+                rule.hooks.forEach(h => {
+                    if (h.command && h.command.includes(hookId)) h.command = cmd;
+                });
                 rule.matcher = matcher;
                 found = true;
             }
         }
     }
-    if (!found) arr.push({ matcher, hooks: [{ type: 'command', command: cmd }] });
-    // Deduplicate
+    if (!found) {
+        arr.push({ matcher, hooks: [{ type: 'command', command: cmd }] });
+    }
+
+    // Deduplicate: keep only the first entry matching hookId
     let seen = false;
     settings.hooks[eventName] = arr.filter(rule => {
-        const m = rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId));
-        if (m) { if (seen) return false; seen = true; }
+        const isMatch = rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId));
+        if (isMatch) {
+            if (seen) return false;
+            seen = true;
+        }
         return true;
     });
 }
@@ -365,52 +382,67 @@ mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
 settings.autoMemoryEnabled = autoMemory;
 settings.alwaysThinkingEnabled = alwaysThinking;
 
-// Clobber detection
+// --- Clobber detection ---
+const managedKeys = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'];
 const afterKeys = Object.keys(settings);
 const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
 
 if (dryRun) {
+    console.error('[DRY RUN] ' + settingsFile + ': merge');
+    console.error('  Managed fields: ' + managedKeys.join(', '));
+    if (lostKeys.length > 0) console.error('  CLOBBER WARNING: would lose: ' + lostKeys.join(', '));
+    if (corrupt) console.error('  File is corrupt -- --force required');
+    console.error('  SessionEnd hook: ' + hookCmd);
+    console.error('  PreToolUse hook: ' + guardCmd);
+    console.error('  autoMemoryEnabled: ' + autoMemory);
+    console.error('  alwaysThinkingEnabled: ' + alwaysThinking);
     console.log('dry-run');
-    if (corrupt) console.error('[DRY RUN] File is corrupt -- --force required');
-    if (lostKeys.length) console.error('[DRY RUN] CLOBBER: would lose: ' + lostKeys.join(', '));
 } else if (corrupt && !force) {
+    console.error('ERROR: ' + settingsFile + ' is corrupt. Use --force to overwrite, or fix manually.');
     console.log('error-corrupt');
-} else if (lostKeys.length && !force) {
+} else if (lostKeys.length > 0 && !force) {
+    console.error('ERROR: merge would lose fields: ' + lostKeys.join(', ') + '. Use --force to proceed.');
     console.log('error-clobber');
-    console.error('Would lose fields: ' + lostKeys.join(', '));
 } else {
+    if (corrupt) console.error('Warning: proceeding with --force on corrupt file');
+    if (lostKeys.length > 0) console.error('Warning: proceeding with --force, losing fields: ' + lostKeys.join(', '));
     fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
 
     // Post-write validation
     const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
     const _missing = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'].filter(k => !(k in _v));
     if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+    // Validate hook arrays have exactly one entry per managed hook
     const seCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('session-archive.sh'))).length;
     const ptCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('standing-order-guard.sh'))).length;
-    if (seCount !== 1) { console.error('Validation: expected 1 SessionEnd, got ' + seCount); process.exit(1); }
-    if (ptCount !== 1) { console.error('Validation: expected 1 PreToolUse, got ' + ptCount); process.exit(1); }
+    if (seCount !== 1) { console.error('Validation failed: expected 1 SessionEnd hook, got ' + seCount); process.exit(1); }
+    if (ptCount !== 1) { console.error('Validation failed: expected 1 PreToolUse hook, got ' + ptCount); process.exit(1); }
 
     console.log('ok');
 }
 " "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$DRY_RUN" "$FORCE")
 
 case "$MERGE_RESULT" in
-    ok)            log_ok "Settings deployed to $SETTINGS_FILE" ;;
-    dry-run)       log "[DRY RUN] $SETTINGS_FILE: merge managed fields"
-                   log "  Managed: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled" ;;
-    error-corrupt) log_error "$SETTINGS_FILE is corrupt. Use --force to overwrite, or fix manually." ;;
-    error-clobber) log_error "$SETTINGS_FILE merge would lose fields. Use --force to proceed." ;;
-    *)             log_error "Unexpected merge result: $MERGE_RESULT" ;;
+    ok)
+        log_ok "Settings deployed to $(display_path "$SETTINGS_FILE")"
+        log "  SessionEnd hook: $HOOK_CMD"
+        log "  PreToolUse hook: $GUARD_CMD"
+        log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"
+        log "  alwaysThinkingEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).alwaysThinkingEnabled)")"
+        ;;
+    dry-run)
+        log "[DRY RUN] Would merge settings (see above)"
+        ;;
+    error-corrupt)
+        log_error "$(display_path "$SETTINGS_FILE") is corrupt. Use --force to overwrite."
+        ;;
+    error-clobber)
+        log_error "$(display_path "$SETTINGS_FILE") merge would lose fields. Use --force to proceed."
+        ;;
+    *)
+        log_error "Unexpected merge result: $MERGE_RESULT"
+        ;;
 esac
-
-if [ "$DRY_RUN" != "true" ]; then
-    log "  SessionEnd hook: $HOOK_CMD"
-    log "  PreToolUse hook: $GUARD_CMD"
-    log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"
-    log "  alwaysThinkingEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).alwaysThinkingEnabled)")"
-fi
-
-# --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then
     log "FAILED with $ERRORS error(s). See log: $LOG_FILE"
     exit 1

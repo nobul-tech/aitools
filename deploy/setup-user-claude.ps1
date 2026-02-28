@@ -278,8 +278,6 @@ if ($DryRun) {
     LogOk "Wrote $claudeMd"
     Log "Machine: $osInfo ($hostname)"
 }
-
-# --- Exit ---
 if ($errors -gt 0) {
     Log "FAILED with $errors error(s). See log: $logFile"
     exit 1

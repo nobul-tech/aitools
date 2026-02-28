@@ -14,6 +14,7 @@
 # Note: Hook scripts are bash-only (Claude Code hooks always run in bash on
 # both platforms). This PS1 script only deploys the hook configuration.
 
+# --- BEGIN hooks body (extracted by build-deploy) ---
 param(
     [switch]$DryRun,
     [switch]$Force
@@ -64,6 +65,7 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
+# --- BEGIN hook deployment (replaced by build-deploy) ---
 # --- Resolve repo path ---
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoDir = Split-Path -Parent $scriptDir
@@ -95,8 +97,9 @@ if ($DryRun) {
     Copy-Item -Path $guardScript -Destination $guardDest -Force
     LogOk "Deployed hook: $guardDest"
 }
+# --- END hook deployment (replaced by build-deploy) ---
 
-# --- Read claude preferences from profile.json ---
+# --- BEGIN claude preferences (replaced by build-deploy) ---
 $autoMemory = $true
 $alwaysThinking = $true
 
@@ -119,6 +122,7 @@ if (Test-Path $configFile) {
         LogWarn "Could not read profile preferences: $_"
     }
 }
+# --- END claude preferences (replaced by build-deploy) ---
 
 # --- Merge hook + preferences into ~/.claude/settings.json ---
 $settingsFile = Join-Path $claudeDir "settings.json"
@@ -277,8 +281,9 @@ if ($DryRun) {
         Log "  alwaysThinkingEnabled: $alwaysThinking"
     }
 }
+# --- END hooks body (extracted by build-deploy) ---
 
-# --- Exit ---
+# --- BEGIN exit (extracted by build-deploy) ---
 if ($errors -gt 0) {
     Log "FAILED with $errors error(s). See log: $logFile"
     exit 1
@@ -286,3 +291,4 @@ if ($errors -gt 0) {
     Log "COMPLETED successfully"
     exit 0
 }
+# --- END exit (extracted by build-deploy) ---

@@ -50,6 +50,30 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.25.1 -- Eliminate Deploy Template Duplication (2026-02-28)
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | **`extract_between()` helper**: Perl-based sentinel extraction in `build-deploy.sh`. Extracts code between `# --- BEGIN/END ...` markers, with `--crlf` flag for PS1 output. Uses `m!...!` delimiter for JS sentinel compatibility. |
+| 2 | **setup-user-cursor**: Replaced ~355 hardcoded template lines with 3 extraction zones + 1 preference replacement per platform. Sentinel markers in `.sh` and `.ps1`. |
+| 3 | **setup-user-hooks**: Replaced ~375 hardcoded template lines with 4 extraction zones + 2 replacement zones per platform. Normalized `guardCmd` in `.sh` to match deploy pattern. Sentinel markers in `.sh` and `.ps1`. |
+| 4 | **setup-user-claude**: Replaced hardcoded validation with extraction (2 zones per platform). Improved validation order (validate before declaring success). |
+| 5 | **setup-user-mcp**: Migrated from sed to `extract_between()` for consistency. |
+| 6 | **Incident I6 remediated**: Deploy template drift eliminated -- `build-deploy.sh` now reads setup logic from `scripts/` sources instead of maintaining parallel hardcoded copies. ~507 lines removed from `build-deploy.sh` (1588 → 1081). |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 7 | Updated I6 status to Remediated in `reference/claude-code-effectiveness.md`. |
+| 8 | Moved "Eliminate deploy template duplication" from ROADMAP Planned to Completed. |
+
+**Verified on:** Windows
+
+---
+
 ## v0.24 -- Repo Rename: ai-tooling to aitools (2026-02-28)
 
 ### New features

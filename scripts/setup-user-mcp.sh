@@ -6,6 +6,7 @@
 # Vercel and Webflow are present but disabled by default (deny rules).
 # Use `aitools --addmcp` to enable per project.
 
+# --- BEGIN mcp body (extracted by build-deploy) ---
 set -euo pipefail
 
 # --- Flag parsing ---
@@ -210,6 +211,8 @@ fi
 log "To enable per project: aitools --addmcp vercel"
 log "To check status: aitools mcp"
 
+# --- END mcp body (extracted by build-deploy) ---
+
 # --- Deploy Chrome DevTools skills ---
 # Vendored from https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/main/skills
 # These provide structured workflows for browser automation and a11y auditing.
@@ -248,7 +251,7 @@ log "Deploying Chrome DevTools skills to $(display_path "$SKILLS_DEST_CURSOR")..
 deploy_skill "chrome-devtools" "$SKILLS_DEST_CURSOR"
 deploy_skill "a11y-debugging" "$SKILLS_DEST_CURSOR"
 
-# --- Exit ---
+# --- BEGIN exit (extracted by build-deploy) ---
 if [ "$ERRORS" -gt 0 ]; then
     log "FAILED with $ERRORS error(s). See log: $LOG_FILE"
     exit 1
@@ -256,3 +259,4 @@ else
     log "COMPLETED successfully"
     exit 0
 fi
+# --- END exit (extracted by build-deploy) ---

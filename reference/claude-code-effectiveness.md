@@ -63,7 +63,7 @@ incidents. Each incident gets RCA and remediation tracking.
 | I3 | 2026-02-19 | SO #2 | Dismissiveness when user challenged subagent results; deflected instead of investigating | Remediated | Investigate user-reported problems | -- |
 | I4 | 2026-02-19 | Coaching | Subagent work product condensed to stub summary, discarding detail | Remediated | -- | -- |
 | I5 | 2026-02-19 | SO #7 | Silent hook failure: session-archive hook was no-op due to missing userRepoPath, buried in summary | Remediated | No silent failures | -- |
-| I6 | 2026-02-28 | Process | Deploy template logic not updated when scripts/ source fixed — recurring pattern (3+ occurrences) | RCA | -- | -- |
+| I6 | 2026-02-28 | Process | Deploy template logic not updated when scripts/ source fixed — recurring pattern (3+ occurrences) | Remediated | -- | v0.25.1 |
 
 ### Incident Details
 
@@ -116,10 +116,9 @@ incidents. Each incident gets RCA and remediation tracking.
 
 - **Observed**: When fixing bugs in `scripts/setup-user-hooks.sh/.ps1` (ConvertPSObjectToHashtable array fix, mergeHookEntry logic), the corresponding template in `build-deploy.sh` was not updated. User had to remind. This is the 3rd+ occurrence of this pattern.
 - **RCA**: Generated deploy scripts (`setup-user-{claude,cursor,mcp,hooks}`) have setup logic hardcoded in `build-deploy.sh` templates, duplicated from `scripts/`. Running `build-deploy.sh` faithfully reproduces stale templates — existing pre-commit checks (step 3+10) catch stale builds but not stale template logic.
-- **Remediation (partial)**:
+- **Remediation**:
   - Added pre-commit step 13: heuristic warning when `scripts/setup-user-*` changes without `build-deploy.sh`
   - Updated `deploy-paths.md` rule with explicit template sync table
-  - Roadmap item: structural refactoring to eliminate duplication (read logic from scripts/ instead of hardcoding)
-- **Status**: RCA (structural fix planned, heuristic detection in place)
-- **Detection gap**: Heuristic check catches the symptom (missing build-deploy.sh change) but not the root cause (duplicated logic). Structural refactoring is the real fix.
-- **Next step**: Plan and execute build-deploy.sh refactoring to extract shared logic from scripts/ sources at build time
+  - **Structural fix (v0.25.1)**: Refactored `build-deploy.sh` to extract setup logic from `scripts/` at build time via sentinel-based Perl extraction (`extract_between()` helper). Eliminated ~507 lines of duplicated template logic. All 4 script pairs (claude, cursor, mcp, hooks) now use single source of truth.
+- **Status**: Remediated (v0.25.1)
+- **Verification**: `build-deploy.sh` now fails loudly if sentinels are missing. Pre-commit step 13 remains as a secondary safety net.

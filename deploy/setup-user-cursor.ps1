@@ -16,12 +16,14 @@ param(
     [switch]$Force
 )
 
+# Env passthrough from parent (aitools CLI)
+if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
+
 # --- Logging ---
 $logDir = Join-Path $env:LOCALAPPDATA "aitools"
 $logFile = Join-Path $logDir "deploy.log"
 $scriptName = "setup-user-cursor"
 $errors = 0
-
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 
 function Log($msg) {
@@ -49,39 +51,39 @@ function Backup-File {
     Log "Backed up $FilePath"
 }
 
+# --- PS 5.1 compatibility helper ---
+# ConvertFrom-Json -AsHashtable is PS 6+ only. This converts PSCustomObject trees
+# to nested hashtables so .ContainsKey() and bracket indexing work on PS 5.1.
+function ConvertPSObjectToHashtable($obj) {
+    if ($null -eq $obj) { return @{} }
+    $ht = @{}
+    foreach ($prop in $obj.PSObject.Properties) {
+        if ($prop.Value -is [System.Management.Automation.PSCustomObject]) {
+            $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
+        } else {
+            $ht[$prop.Name] = $prop.Value
+        }
+    }
+    return $ht
+}
+
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     LogError "This script is for Windows. On macOS/Linux, use the .sh version."
     exit 1
 }
 
-# --- PS 7 version guard ---
-if ($PSVersionTable.PSVersion.Major -lt 7) {
-    Write-Host "ERROR: This script requires PowerShell 7+. Current: $($PSVersionTable.PSVersion)" -ForegroundColor Red
-    Write-Host "Install: winget install --id Microsoft.PowerShell --source winget" -ForegroundColor Yellow
-    exit 1
-}
-
-# --- PS 5.1 compatibility helper ---
-function ConvertPSObjectToHashtable($obj) {
-    if ($null -eq $obj) { return @{} }
-    # Recurse into arrays (ConvertFrom-Json returns Object[] of PSCustomObject)
-    # Leading comma prevents PowerShell from unwrapping single-element arrays
-    if ($obj -is [array]) {
-        return ,@($obj | ForEach-Object { ConvertPSObjectToHashtable $_ })
-    }
-    if ($obj -isnot [System.Management.Automation.PSCustomObject]) { return $obj }
-    $ht = @{}
-    foreach ($prop in $obj.PSObject.Properties) {
-        $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
-    }
-    return $ht
-}
-
-# Env passthrough from parent (aitools CLI)
-if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
-
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
+
+$cursorDir = Join-Path $env:USERPROFILE ".cursor"
+$cliConfig = Join-Path $cursorDir "cli-config.json"
+
+# Track status for summary
+$status = @{
+    ripgrep   = ""
+    cursorCli = ""
+    cliConfig = ""
+}
 
 # Helper: refresh PATH from registry (picks up winget installs in same session)
 function Refresh-Path {
@@ -90,75 +92,98 @@ function Refresh-Path {
     $env:Path = "$machinePath;$userPath"
 }
 
-$cursorDir = Join-Path $env:USERPROFILE ".cursor"
-$cliConfig = Join-Path $cursorDir "cli-config.json"
-
 # --- 1. ripgrep (rg) ---
+
 Log "Step 1: ripgrep (rg)"
 
 if ($DryRun) {
     $rgCmd = Get-Command rg -ErrorAction SilentlyContinue
     if ($rgCmd) {
-        Log "[DRY RUN] ripgrep already installed: $(rg --version | Select-Object -First 1)"
+        $rgVersion = (rg --version | Select-Object -First 1)
+        Log "[DRY RUN] ripgrep already installed: $rgVersion"
+        $status.ripgrep = "already installed ($rgVersion)"
     } else {
         Log "[DRY RUN] Would install ripgrep via winget"
+        $status.ripgrep = "would install"
     }
 } else {
     $rgCmd = Get-Command rg -ErrorAction SilentlyContinue
     if ($rgCmd) {
         $rgVersion = (rg --version | Select-Object -First 1)
         LogOk "Already installed: $rgVersion"
+        $status.ripgrep = "already installed ($rgVersion)"
     } else {
         Log "Installing ripgrep via winget..."
         winget install BurntSushi.ripgrep.MSVC --accept-package-agreements --accept-source-agreements
         Refresh-Path
+
         $rgCmd = Get-Command rg -ErrorAction SilentlyContinue
         if ($rgCmd) {
-            LogOk "Installed: $(rg --version | Select-Object -First 1)"
+            $rgVersion = (rg --version | Select-Object -First 1)
+            LogOk "Installed: $rgVersion"
+            $status.ripgrep = "installed ($rgVersion)"
         } else {
-            LogError "winget install completed but 'rg' not found in PATH (restart terminal)"
+            LogWarn "winget install completed but 'rg' not found in PATH. Restart terminal to verify."
+            $status.ripgrep = "installed (restart terminal to verify)"
         }
     }
 }
 
 # --- 2. Cursor CLI (agent) ---
+
 Log "Step 2: Cursor CLI (agent)"
 
 if ($DryRun) {
     $agentCmd = Get-Command agent -ErrorAction SilentlyContinue
     if ($agentCmd) {
-        Log "[DRY RUN] Cursor CLI already installed: $(agent --version)"
+        $agentVersion = agent --version
+        Log "[DRY RUN] Cursor CLI already installed: $agentVersion"
+        $status.cursorCli = "already installed ($agentVersion)"
     } else {
         Log "[DRY RUN] Would install Cursor CLI"
+        $status.cursorCli = "would install"
     }
 } else {
     $agentCmd = Get-Command agent -ErrorAction SilentlyContinue
     if ($agentCmd) {
         $agentVersion = agent --version
         LogOk "Already installed: $agentVersion"
+        $status.cursorCli = "already installed ($agentVersion)"
     } else {
         Log "Installing Cursor CLI..."
         Invoke-Expression (Invoke-RestMethod 'https://cursor.com/install?win32=true')
+
         $agentCmd = Get-Command agent -ErrorAction SilentlyContinue
         if ($agentCmd) {
-            LogOk "Installed: $(agent --version)"
+            $agentVersion = agent --version
+            LogOk "Installed: $agentVersion"
+            $status.cursorCli = "installed ($agentVersion)"
         } else {
-            LogError "Cursor CLI install completed but 'agent' not found in PATH (restart terminal)"
+            LogWarn "Cursor CLI install completed but 'agent' not found in PATH. Restart terminal to verify."
+            $status.cursorCli = "installed (restart terminal to verify)"
         }
     }
 }
 
 # --- 3. cli-config.json (merge, not overwrite) ---
+
 Log "Step 3: cli-config.json"
-
-if (-not (Test-Path $cursorDir)) {
-    New-Item -ItemType Directory -Path $cursorDir -Force | Out-Null
-    Log "Created $cursorDir"
-}
-
 # --- Embedded preferences (from profile.json at build time) ---
 $vimMode = $true
 $modelId = "auto"
+
+# Back up before merge
+if (-not $DryRun) {
+    Backup-File -FilePath $cliConfig
+}
+
+# Ensure ~/.cursor/ exists
+if (-not (Test-Path $cursorDir)) {
+    if (-not $DryRun) {
+        New-Item -ItemType Directory -Path $cursorDir -Force | Out-Null
+        Log "Created $cursorDir"
+    }
+}
 
 # --- Read existing cli-config.json ---
 $config = @{}
@@ -172,6 +197,7 @@ if (Test-Path $cliConfig) {
     }
 }
 $beforeKeys = @($config.Keys)
+$beforeJson = $config | ConvertTo-Json -Depth 10
 
 # --- Merge managed fields ---
 $config["version"] = 1
@@ -181,62 +207,95 @@ if (-not $config.ContainsKey("permissions")) { $config["permissions"] = @{} }
 if (-not $config["permissions"].ContainsKey("allow")) { $config["permissions"]["allow"] = @() }
 if (-not $config["permissions"].ContainsKey("deny")) { $config["permissions"]["deny"] = @() }
 
+# Model: only set if profile specifies 'auto' (the only supported value for now)
 if ($modelId -eq "auto") {
     $config["model"] = @{
-        modelId = "default"
-        displayModelId = "auto"
-        displayName = "Auto"
+        modelId          = "default"
+        displayModelId   = "auto"
+        displayName      = "Auto"
         displayNameShort = "Auto"
-        aliases = @("auto")
-        maxMode = $false
+        aliases          = @("auto")
+        maxMode          = $false
     }
     $config["hasChangedDefaultModel"] = $true
 }
 
-# Clobber detection
+# --- Clobber detection ---
+$managedKeys = @("version", "editor", "permissions", "model", "hasChangedDefaultModel")
 $lostKeys = @($beforeKeys | Where-Object { $_ -notin $config.Keys })
 
+$afterJson = $config | ConvertTo-Json -Depth 10
+
 if ($DryRun) {
-    Log "[DRY RUN] $cliConfig`: merge managed fields"
-    Log "  Managed: version, editor.vimMode, permissions, model, hasChangedDefaultModel"
+    # --- Dry-run output ---
+    Log "[DRY RUN] $cliConfig`: merge"
+    Log "  Managed fields: $($managedKeys -join ', ')"
     if ($lostKeys.Count -gt 0) {
-        LogWarn "[DRY RUN] CLOBBER: would lose: $($lostKeys -join ', ')"
+        LogWarn "[DRY RUN] CLOBBER: would lose non-managed fields: $($lostKeys -join ', ')"
     }
     if ($corrupt) {
         LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
     }
-} elseif ($corrupt -and -not $Force) {
-    LogError "$cliConfig is corrupt. Use -Force to overwrite, or fix manually."
-} elseif ($lostKeys.Count -gt 0 -and -not $Force) {
-    LogError "$cliConfig merge would lose fields: $($lostKeys -join ', '). Use -Force to proceed."
-} else {
-    if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
-    if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
-
-    Backup-File -FilePath $cliConfig
-    $json = $config | ConvertTo-Json -Depth 10
-    $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($cliConfig)
-    [System.IO.File]::WriteAllText($resolvedPath, $json, [System.Text.UTF8Encoding]::new($false))
-
-    # Post-write validation
-    try {
-        $vContent = [System.IO.File]::ReadAllText($resolvedPath)
-        $vParsed = $vContent | ConvertFrom-Json
-        if (-not ($vParsed.PSObject.Properties.Name -contains "version")) {
-            LogError "Validation failed: $cliConfig missing required field 'version'"
-        }
-    } catch {
-        LogError "Validation failed: $cliConfig is not valid JSON -- $_"
-    }
-
-    if ($beforeKeys.Count -eq 0) {
-        LogOk "Created: $cliConfig"
+    if ($beforeJson -eq $afterJson -and -not $corrupt) {
+        Log "[DRY RUN] No changes needed (already up to date)"
+        $status.cliConfig = "already up to date (dry-run)"
     } else {
-        LogOk "Merged preferences into: $cliConfig"
+        Log "[DRY RUN] Would write merged config"
+        $status.cliConfig = "would merge (dry-run)"
+    }
+} else {
+    # --- Normal mode ---
+    if ($corrupt -and -not $Force) {
+        LogError "$cliConfig is corrupt. Use -Force to overwrite, or fix manually."
+        $status.cliConfig = "ERROR (corrupt, needs -Force)"
+    } elseif ($lostKeys.Count -gt 0 -and -not $Force) {
+        LogError "$cliConfig merge would lose fields: $($lostKeys -join ', '). Use -Force to proceed."
+        $status.cliConfig = "ERROR (clobber, needs -Force)"
+    } elseif ($beforeJson -eq $afterJson -and -not $corrupt) {
+        LogOk "Already up to date: $cliConfig"
+        $status.cliConfig = "already up to date"
+    } else {
+        if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
+        if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
+
+        $json = $config | ConvertTo-Json -Depth 10
+        [System.IO.File]::WriteAllText(
+            $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($cliConfig),
+            $json,
+            [System.Text.UTF8Encoding]::new($false)
+        )
+
+        # Post-write validation
+        try {
+            $vContent = [System.IO.File]::ReadAllText(
+                $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($cliConfig)
+            )
+            $vParsed = $vContent | ConvertFrom-Json
+            if (-not ($vParsed.PSObject.Properties.Name -contains "version")) {
+                LogError "Validation failed: $cliConfig missing required field 'version'"
+            }
+        } catch {
+            LogError "Validation failed: $cliConfig is not valid JSON -- $_"
+        }
+
+        if ($beforeKeys.Count -eq 0) {
+            LogOk "Created: $cliConfig"
+            $status.cliConfig = "created"
+        } else {
+            LogOk "Merged preferences into: $cliConfig"
+            $status.cliConfig = "merged"
+        }
     }
 }
 
-# --- Exit ---
+# --- Summary ---
+
+Log "=============================="
+Log "Summary:"
+Log "  ripgrep:       $($status.ripgrep)"
+Log "  Cursor CLI:    $($status.cursorCli)"
+Log "  cli-config:    $($status.cliConfig)"
+Log "=============================="
 if ($errors -gt 0) {
     Log "FAILED with $errors error(s). See log: $logFile"
     exit 1

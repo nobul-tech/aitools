@@ -142,6 +142,9 @@ LOG_FILE="$LOG_DIR/deploy.log"
 LOGGING_BASH
     echo "SCRIPT_NAME=\"$script_name\""
     cat <<'LOGGING_BASH'
+display_path() {
+    if command -v cygpath &>/dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
 ERRORS=0
 
 mkdir -p "$LOG_DIR"
@@ -351,6 +354,37 @@ FLAG_PS1
 }
 
 # ============================================================
+# Sentinel-based extraction helper (Perl)
+# ============================================================
+# Extracts lines between two sentinel markers (exclusive of markers themselves).
+# Uses Perl flip-flop operator for clean range extraction.
+# Usage: extract_between FILE START_REGEX END_REGEX [--crlf]
+#   --crlf: convert LF output to CRLF (for PS1 deploy scripts)
+extract_between() {
+    local file="$1" start="$2" end="$3" crlf="${4:-}"
+    local result
+    # Use m!...! as Perl regex delimiter to avoid conflicts with / in sentinels
+    if [ "$crlf" = "--crlf" ]; then
+        result=$(perl -ne '
+            s/\r\n?$/\n/;
+            if (m!'"$start"'! .. m!'"$end"'!) {
+                next if m!'"$start"'! || m!'"$end"'!;
+                s/\n$/\r\n/; print;
+            }' "$file")
+    else
+        result=$(perl -ne '
+            if (m!'"$start"'! .. m!'"$end"'!) {
+                print unless m!'"$start"'! || m!'"$end"'!;
+            }' "$file")
+    fi
+    if [ -z "$result" ]; then
+        blog_error "Extraction failed: sentinels not found in $(basename "$file") (start: $start, end: $end)"
+        exit 1
+    fi
+    printf '%s\n' "$result"
+}
+
+# ============================================================
 # 1. deploy/setup-user-claude.sh
 # ============================================================
 blog "Generating deploy/setup-user-claude.sh"
@@ -433,21 +467,18 @@ ${SHARED_CONTENT}
 - Shell: ${SHELL_NAME}
 CLAUDE_EOF
 
-    log_ok "Wrote $CLAUDE_MD"
-    log "Machine: $OS_NAME $ARCH ($HOSTNAME), Shell: $SHELL_NAME"
+BLOCK
+    # Extract: post-write validation from scripts/ (single source of truth)
+    extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
+        '^    # --- BEGIN post-write validation' '^    # --- END post-write validation'
+    cat <<'BLOCK'
 
-    # Post-write validation: check structure AND content (not just a marker)
-    if [ ! -s "$CLAUDE_MD" ]; then
-        log_error "Validation failed: $CLAUDE_MD is empty or missing"
-    elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
-        log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
-    elif ! grep -qE "## (Coaching|Code Style|Tool)" "$CLAUDE_MD"; then
-        # Template body must be present -- a file with only the footer is corrupt
-        log_error "Validation failed: $CLAUDE_MD missing template body (only footer present?)"
-    fi
+    log_ok "Wrote $(display_path "$CLAUDE_MD")"
+    log "Machine: $OS_NAME $ARCH ($HOSTNAME), Shell: $SHELL_NAME"
 fi
 BLOCK
-    bash_exit_footer
+    extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
+        '^# --- BEGIN exit' '^# --- END exit'
 } > "$DEPLOY_DIR/setup-user-claude.sh"
 
 chmod +x "$DEPLOY_DIR/setup-user-claude.sh"
@@ -535,25 +566,18 @@ if ($DryRun) {
     $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($claudeMd)
     [System.IO.File]::WriteAllText($resolvedPath, $content, [System.Text.UTF8Encoding]::new($false))
 
-    # Post-write validation: check structure AND content (not just a marker)
-    if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
-        LogError "Validation failed: $claudeMd is empty or missing"
-    } else {
-        $written = Get-Content $claudeMd -Raw
-        if ($written -notmatch '## Machine-Specific') {
-            LogError "Validation failed: $claudeMd missing Machine-Specific section"
-        }
-        # Template body must be present -- a file with only the footer is corrupt
-        if ($written -notmatch '## Coaching|## Code Style|## Tool') {
-            LogError "Validation failed: $claudeMd missing template body (only footer present?)"
-        }
-    }
+BLOCK
+    # Extract: post-write validation from scripts/ (single source of truth)
+    extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
+        '^    # --- BEGIN post-write validation' '^    # --- END post-write validation' --crlf
+    cat <<'BLOCK'
 
     LogOk "Wrote $claudeMd"
     Log "Machine: $osInfo ($hostname)"
 }
 BLOCK
-    ps1_exit_footer
+    extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
+        '^# --- BEGIN exit' '^# --- END exit' --crlf
 } > "$DEPLOY_DIR/setup-user-claude.ps1"
 
 GENERATED=$((GENERATED + 1))
@@ -576,161 +600,22 @@ blog "Generating deploy/setup-user-cursor.sh"
 #   2. Installs Cursor CLI (agent command) if not already present
 #   3. Merges preferences into ~/.cursor/cli-config.json (preserves CLI-managed fields)
 
-set -euo pipefail
-
 BLOCK
-    bash_logging_helpers "setup-user-cursor"
-    bash_backup_helper
-    bash_os_guard
-    bash_flag_helpers
-    cat <<'BLOCK'
-
-CURSOR_DIR="$HOME/.cursor"
-CLI_CONFIG="$CURSOR_DIR/cli-config.json"
-
-# --- 1. ripgrep (rg) ---
-log "Step 1: ripgrep (rg)"
-
-if [ "$DRY_RUN" = "true" ]; then
-    if command -v rg &>/dev/null; then
-        log "[DRY RUN] ripgrep already installed: $(rg --version | head -1)"
-    else
-        log "[DRY RUN] Would install ripgrep via brew"
-    fi
-else
-    if command -v rg &>/dev/null; then
-        RG_VERSION=$(rg --version | head -1)
-        log_ok "Already installed: $RG_VERSION"
-    else
-        if command -v brew &>/dev/null; then
-            log "Installing ripgrep via brew..."
-            brew install ripgrep
-            if command -v rg &>/dev/null; then
-                log_ok "Installed: $(rg --version | head -1)"
-            else
-                log_error "brew install completed but 'rg' not found in PATH"
-            fi
-        else
-            log_error "Homebrew not found. Install ripgrep manually: brew install ripgrep"
-        fi
-    fi
-fi
-
-# --- 2. Cursor CLI (agent) ---
-log "Step 2: Cursor CLI (agent)"
-
-if [ "$DRY_RUN" = "true" ]; then
-    if command -v agent &>/dev/null; then
-        log "[DRY RUN] Cursor CLI already installed: $(agent --version)"
-    else
-        log "[DRY RUN] Would install Cursor CLI via curl"
-    fi
-else
-    if command -v agent &>/dev/null; then
-        AGENT_VERSION=$(agent --version)
-        log_ok "Already installed: $AGENT_VERSION"
-    else
-        log "Installing Cursor CLI..."
-        curl https://cursor.com/install -fsS | bash
-        if command -v agent &>/dev/null; then
-            log_ok "Installed: $(agent --version)"
-        else
-            log_error "Cursor CLI install completed but 'agent' not found in PATH (restart terminal)"
-        fi
-    fi
-fi
-
-# --- 3. cli-config.json (merge, not overwrite) ---
-log "Step 3: cli-config.json"
-
-mkdir -p "$CURSOR_DIR"
-
-if ! command -v node &>/dev/null; then
-    log_warn "node not found -- skipping cli-config.json merge"
-else
-BLOCK
-    # Emit the node merge with embedded defaults from profile
+    # Extract body from scripts/ source up to profile preferences sentinel
+    extract_between "$SCRIPTS_DIR/setup-user-cursor.sh" \
+        '^# --- BEGIN cursor body' '^// --- BEGIN profile preferences'
+    # Emit build-time embedded preferences (replacing runtime profile reading)
     cat <<BLOCK_INTERP
-    backup_file "\$CLI_CONFIG"
-    MERGE_RESULT=\$(node -e "
-const fs = require('fs');
-const f = process.argv[1];
-const dryRun = process.argv[2] === 'true';
-const force = process.argv[3] === 'true';
-
 // --- Embedded preferences (from profile.json at build time) ---
 const vimMode = $CURSOR_CLI_VIMMODE;
 const modelId = '$CURSOR_CLI_MODEL';
-
-// --- Read existing cli-config.json ---
-let config = {};
-let corrupt = false;
-try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) {
-    if (e.code !== 'ENOENT') {
-        corrupt = true;
-        console.error('Warning: ' + f + ' is invalid JSON');
-    }
-}
-const beforeKeys = Object.keys(config);
-
-// --- Merge managed fields ---
-config.version = 1;
-if (!config.editor) config.editor = {};
-config.editor.vimMode = vimMode;
-if (!config.permissions) config.permissions = {};
-if (!Array.isArray(config.permissions.allow)) config.permissions.allow = [];
-if (!Array.isArray(config.permissions.deny)) config.permissions.deny = [];
-
-if (modelId === 'auto') {
-    config.model = {
-        modelId: 'default',
-        displayModelId: 'auto',
-        displayName: 'Auto',
-        displayNameShort: 'Auto',
-        aliases: ['auto'],
-        maxMode: false
-    };
-    config.hasChangedDefaultModel = true;
-}
-
-// Clobber detection
-const afterKeys = Object.keys(config);
-const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
-
-if (dryRun) {
-    console.log('would-merge');
-    if (corrupt) console.error('[DRY RUN] File is corrupt -- --force required');
-    if (lostKeys.length) console.error('[DRY RUN] CLOBBER: would lose: ' + lostKeys.join(', '));
-} else if (corrupt && !force) {
-    console.log('error-corrupt');
-} else if (lostKeys.length && !force) {
-    console.log('error-clobber');
-    console.error('Would lose fields: ' + lostKeys.join(', '));
-} else {
-    const before = JSON.stringify(config);
-    fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\\\\n');
-
-    // Post-write validation
-    const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
-    const _missing = ['version'].filter(k => !(k in _v));
-    if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
-
-    console.log(beforeKeys.length === 0 ? 'created' : 'merged');
-}
-" "\$CLI_CONFIG" "\$DRY_RUN" "\$FORCE")
-
-    case "\$MERGE_RESULT" in
-        unchanged)     log_ok "Already up to date: \$CLI_CONFIG" ;;
-        created)       log_ok "Created: \$CLI_CONFIG" ;;
-        merged)        log_ok "Merged preferences into: \$CLI_CONFIG" ;;
-        would-merge)   log "[DRY RUN] \$CLI_CONFIG: merge managed fields" ;;
-        error-corrupt) log_error "\$CLI_CONFIG is corrupt. Use --force to overwrite, or fix manually." ;;
-        error-clobber) log_error "\$CLI_CONFIG merge would lose fields. Use --force to proceed." ;;
-        *)             log_error "Unexpected merge result: \$MERGE_RESULT" ;;
-    esac
-fi
 BLOCK_INTERP
-    bash_exit_footer
+    # Extract from end of profile preferences to end of cursor body
+    extract_between "$SCRIPTS_DIR/setup-user-cursor.sh" \
+        '^// --- END profile preferences' '^# --- END cursor body'
+    # Exit footer
+    extract_between "$SCRIPTS_DIR/setup-user-cursor.sh" \
+        '^# --- BEGIN exit' '^# --- END exit'
 } > "$DEPLOY_DIR/setup-user-cursor.sh"
 
 chmod +x "$DEPLOY_DIR/setup-user-cursor.sh"
@@ -757,172 +642,19 @@ blog "Generating deploy/setup-user-cursor.ps1"
 # Preserved: authInfo, privacyCache, network, statsigBootstrap, maxMode, all other fields
 
 BLOCK
-    ps1_param_block
-    ps1_logging_helpers "setup-user-cursor"
-    ps1_backup_helper
-    ps1_os_guard
-    ps1_version_guard
-    ps1_hashtable_helper
-    ps1_flag_helpers
-    cat <<'BLOCK'
-
-# Helper: refresh PATH from registry (picks up winget installs in same session)
-function Refresh-Path {
-    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $env:Path = "$machinePath;$userPath"
-}
-
-$cursorDir = Join-Path $env:USERPROFILE ".cursor"
-$cliConfig = Join-Path $cursorDir "cli-config.json"
-
-# --- 1. ripgrep (rg) ---
-Log "Step 1: ripgrep (rg)"
-
-if ($DryRun) {
-    $rgCmd = Get-Command rg -ErrorAction SilentlyContinue
-    if ($rgCmd) {
-        Log "[DRY RUN] ripgrep already installed: $(rg --version | Select-Object -First 1)"
-    } else {
-        Log "[DRY RUN] Would install ripgrep via winget"
-    }
-} else {
-    $rgCmd = Get-Command rg -ErrorAction SilentlyContinue
-    if ($rgCmd) {
-        $rgVersion = (rg --version | Select-Object -First 1)
-        LogOk "Already installed: $rgVersion"
-    } else {
-        Log "Installing ripgrep via winget..."
-        winget install BurntSushi.ripgrep.MSVC --accept-package-agreements --accept-source-agreements
-        Refresh-Path
-        $rgCmd = Get-Command rg -ErrorAction SilentlyContinue
-        if ($rgCmd) {
-            LogOk "Installed: $(rg --version | Select-Object -First 1)"
-        } else {
-            LogError "winget install completed but 'rg' not found in PATH (restart terminal)"
-        }
-    }
-}
-
-# --- 2. Cursor CLI (agent) ---
-Log "Step 2: Cursor CLI (agent)"
-
-if ($DryRun) {
-    $agentCmd = Get-Command agent -ErrorAction SilentlyContinue
-    if ($agentCmd) {
-        Log "[DRY RUN] Cursor CLI already installed: $(agent --version)"
-    } else {
-        Log "[DRY RUN] Would install Cursor CLI"
-    }
-} else {
-    $agentCmd = Get-Command agent -ErrorAction SilentlyContinue
-    if ($agentCmd) {
-        $agentVersion = agent --version
-        LogOk "Already installed: $agentVersion"
-    } else {
-        Log "Installing Cursor CLI..."
-        Invoke-Expression (Invoke-RestMethod 'https://cursor.com/install?win32=true')
-        $agentCmd = Get-Command agent -ErrorAction SilentlyContinue
-        if ($agentCmd) {
-            LogOk "Installed: $(agent --version)"
-        } else {
-            LogError "Cursor CLI install completed but 'agent' not found in PATH (restart terminal)"
-        }
-    }
-}
-
-# --- 3. cli-config.json (merge, not overwrite) ---
-Log "Step 3: cli-config.json"
-
-if (-not (Test-Path $cursorDir)) {
-    New-Item -ItemType Directory -Path $cursorDir -Force | Out-Null
-    Log "Created $cursorDir"
-}
-
-BLOCK
-    # Emit native PS merge with embedded build-time preferences
-    cat <<BLOCK_INTERP
-# --- Embedded preferences (from profile.json at build time) ---
-\$vimMode = \$$CURSOR_CLI_VIMMODE
-\$modelId = "$CURSOR_CLI_MODEL"
-
-# --- Read existing cli-config.json ---
-\$config = @{}
-\$corrupt = \$false
-if (Test-Path \$cliConfig) {
-    try {
-        \$config = ConvertPSObjectToHashtable (Get-Content \$cliConfig -Raw | ConvertFrom-Json)
-    } catch {
-        \$corrupt = \$true
-        LogWarn "\$cliConfig could not be parsed (\$_)"
-    }
-}
-\$beforeKeys = @(\$config.Keys)
-
-# --- Merge managed fields ---
-\$config["version"] = 1
-if (-not \$config.ContainsKey("editor")) { \$config["editor"] = @{} }
-\$config["editor"]["vimMode"] = \$vimMode
-if (-not \$config.ContainsKey("permissions")) { \$config["permissions"] = @{} }
-if (-not \$config["permissions"].ContainsKey("allow")) { \$config["permissions"]["allow"] = @() }
-if (-not \$config["permissions"].ContainsKey("deny")) { \$config["permissions"]["deny"] = @() }
-
-if (\$modelId -eq "auto") {
-    \$config["model"] = @{
-        modelId = "default"
-        displayModelId = "auto"
-        displayName = "Auto"
-        displayNameShort = "Auto"
-        aliases = @("auto")
-        maxMode = \$false
-    }
-    \$config["hasChangedDefaultModel"] = \$true
-}
-
-# Clobber detection
-\$lostKeys = @(\$beforeKeys | Where-Object { \$_ -notin \$config.Keys })
-
-if (\$DryRun) {
-    Log "[DRY RUN] \$cliConfig\`: merge managed fields"
-    Log "  Managed: version, editor.vimMode, permissions, model, hasChangedDefaultModel"
-    if (\$lostKeys.Count -gt 0) {
-        LogWarn "[DRY RUN] CLOBBER: would lose: \$(\$lostKeys -join ', ')"
-    }
-    if (\$corrupt) {
-        LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
-    }
-} elseif (\$corrupt -and -not \$Force) {
-    LogError "\$cliConfig is corrupt. Use -Force to overwrite, or fix manually."
-} elseif (\$lostKeys.Count -gt 0 -and -not \$Force) {
-    LogError "\$cliConfig merge would lose fields: \$(\$lostKeys -join ', '). Use -Force to proceed."
-} else {
-    if (\$corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
-    if (\$lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: \$(\$lostKeys -join ', ')" }
-
-    Backup-File -FilePath \$cliConfig
-    \$json = \$config | ConvertTo-Json -Depth 10
-    \$resolvedPath = \$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath(\$cliConfig)
-    [System.IO.File]::WriteAllText(\$resolvedPath, \$json, [System.Text.UTF8Encoding]::new(\$false))
-
-    # Post-write validation
-    try {
-        \$vContent = [System.IO.File]::ReadAllText(\$resolvedPath)
-        \$vParsed = \$vContent | ConvertFrom-Json
-        if (-not (\$vParsed.PSObject.Properties.Name -contains "version")) {
-            LogError "Validation failed: \$cliConfig missing required field 'version'"
-        }
-    } catch {
-        LogError "Validation failed: \$cliConfig is not valid JSON -- \$_"
-    }
-
-    if (\$beforeKeys.Count -eq 0) {
-        LogOk "Created: \$cliConfig"
-    } else {
-        LogOk "Merged preferences into: \$cliConfig"
-    }
-}
-BLOCK_INTERP
-    ps1_exit_footer
+    # Extract body from scripts/ source up to profile preferences sentinel (CRLF for PS1)
+    extract_between "$SCRIPTS_DIR/setup-user-cursor.ps1" \
+        '^# --- BEGIN cursor body' '^# --- BEGIN profile preferences' --crlf
+    # Emit build-time embedded preferences (replacing runtime profile reading)
+    printf '# --- Embedded preferences (from profile.json at build time) ---\r\n'
+    printf '$vimMode = $%s\r\n' "$CURSOR_CLI_VIMMODE"
+    printf '$modelId = "%s"\r\n' "$CURSOR_CLI_MODEL"
+    # Extract from end of profile preferences to end of cursor body (CRLF for PS1)
+    extract_between "$SCRIPTS_DIR/setup-user-cursor.ps1" \
+        '^# --- END profile preferences' '^# --- END cursor body' --crlf
+    # Exit footer
+    extract_between "$SCRIPTS_DIR/setup-user-cursor.ps1" \
+        '^# --- BEGIN exit' '^# --- END exit' --crlf
 } > "$DEPLOY_DIR/setup-user-cursor.ps1"
 
 GENERATED=$((GENERATED + 1))
@@ -1022,9 +754,9 @@ blog "Generating deploy/setup-user-mcp.sh (with embedded skills)"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
-    # Take everything from source up to (but not including) the skills section
-    sed -n '2,/^# --- Deploy Chrome DevTools skills ---$/{ /^# --- Deploy Chrome DevTools skills ---$/!p; }' \
-        "$SCRIPTS_DIR/setup-user-mcp.sh"
+    # Extract everything from script body start to skills section
+    extract_between "$SCRIPTS_DIR/setup-user-mcp.sh" \
+        '^# --- BEGIN mcp body' '^# --- END mcp body'
     # Emit self-contained skills deployment using heredocs
     cat <<'SKILLS_HEADER'
 
@@ -1065,7 +797,8 @@ SKILLS_HEADER
     echo 'log_ok "Deployed skill: a11y-debugging -> $SKILLS_DEST_CURSOR/a11y-debugging"'
     echo ''
     # Emit exit footer from source
-    sed -n '/^# --- Exit ---$/,$ p' "$SCRIPTS_DIR/setup-user-mcp.sh"
+    extract_between "$SCRIPTS_DIR/setup-user-mcp.sh" \
+        '^# --- BEGIN exit' '^# --- END exit'
 } > "$DEPLOY_DIR/setup-user-mcp.sh"
 chmod +x "$DEPLOY_DIR/setup-user-mcp.sh"
 GENERATED=$((GENERATED + 1))
@@ -1073,11 +806,9 @@ GENERATED=$((GENERATED + 1))
 blog "Generating deploy/setup-user-mcp.ps1 (with embedded skills)"
 {
     echo "$HEADER_COMMENT_PS1"
-    # Take everything from source up to (but not including) the skills section
-    # PS1 files have CRLF -- strip \r for sed matching, then re-add for PS1 output
-    tr -d '\r' < "$SCRIPTS_DIR/setup-user-mcp.ps1" | \
-        sed -n '1,/^# --- Deploy Chrome DevTools skills ---$/{ /^# --- Deploy Chrome DevTools skills ---$/!p; }' | \
-        sed 's/$/'$'\r''/'
+    # Extract everything from script body start to skills section (CRLF for PS1)
+    extract_between "$SCRIPTS_DIR/setup-user-mcp.ps1" \
+        '^# --- BEGIN mcp body' '^# --- END mcp body' --crlf
     # Emit self-contained skills deployment using PS1 here-strings
     cat <<'SKILLS_PS1_HEADER'
 
@@ -1123,17 +854,16 @@ SKILLS_PS1_HEADER
     echo '[System.IO.File]::WriteAllText($a11yDestCursor, $a11ySkill, [System.Text.UTF8Encoding]::new($false))'
     echo 'LogOk "Deployed skill: a11y-debugging -> $a11yDestCursor"'
     echo ''
-    # Emit exit footer from source (strip \r for matching, re-add for PS1)
-    tr -d '\r' < "$SCRIPTS_DIR/setup-user-mcp.ps1" | \
-        sed -n '/^# --- Exit ---$/,$ p' | \
-        sed 's/$/'$'\r''/'
+    # Emit exit footer from source (CRLF for PS1)
+    extract_between "$SCRIPTS_DIR/setup-user-mcp.ps1" \
+        '^# --- BEGIN exit' '^# --- END exit' --crlf
 } > "$DEPLOY_DIR/setup-user-mcp.ps1"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
-# 13. deploy/setup-user-hooks.sh (template with embedded hook + prefs)
+# 13. deploy/setup-user-hooks.sh (extracted from scripts/ + embedded hooks)
 # ============================================================
-blog "Generating deploy/setup-user-hooks.sh (with embedded hook + prefs)"
+blog "Generating deploy/setup-user-hooks.sh (extracted + embedded hooks)"
 
 {
     echo '#!/usr/bin/env bash'
@@ -1150,28 +880,18 @@ blog "Generating deploy/setup-user-hooks.sh (with embedded hook + prefs)"
 #   SessionEnd: session-archive.sh (archives transcripts to user repo)
 #   PreToolUse[Bash]: standing-order-guard.sh (enforces standing orders on Bash commands)
 
-set -euo pipefail
-
 BLOCK
-    bash_logging_helpers "setup-user-hooks"
-    bash_os_guard
-    bash_flag_helpers
+    # Extract: set -euo pipefail, flag parsing, logging, OS guard, DRY_RUN, require node
+    extract_between "$SCRIPTS_DIR/setup-user-hooks.sh" \
+        '^# --- BEGIN hooks body' '^# --- BEGIN hook deployment'
+
+    # REPLACE: hook deployment (deploy embeds scripts via heredoc instead of cp from repo)
     cat <<'BLOCK'
-
-# --- Require node for JSON manipulation ---
-if ! command -v node &>/dev/null; then
-    log_error "node required for JSON manipulation"
-    exit 1
-fi
-
 # --- Deploy embedded hook scripts to ~/.claude/hooks/ ---
 HOOK_DEST="$HOME/.claude/hooks/session-archive.sh"
 GUARD_DEST="$HOME/.claude/hooks/standing-order-guard.sh"
 mkdir -p "$HOME/.claude/hooks"
 
-BLOCK
-    # Embed both hook scripts via heredoc
-    cat <<'BLOCK'
 if [ "$DRY_RUN" = "true" ]; then
     log "[DRY RUN] Would deploy hooks to ~/.claude/hooks/"
 else
@@ -1190,129 +910,36 @@ BLOCK
     log_ok "Deployed hook: $GUARD_DEST"
 fi
 
-# --- Merge hooks + preferences into ~/.claude/settings.json ---
-SETTINGS_FILE="$HOME/.claude/settings.json"
-mkdir -p "$HOME/.claude"
-
-HOOK_CMD="bash \"$HOOK_DEST\""
-GUARD_CMD="bash \"$GUARD_DEST\""
-
 BLOCK
-    # Emit the node merge block with build-time embedded preference constants
-    cat <<BLOCK_INTERP
-MERGE_RESULT=\$(node -e "
-const fs = require('fs');
-const settingsFile = process.argv[1];
-const hookCmd = process.argv[2];
-const guardCmd = process.argv[3];
-const dryRun = process.argv[4] === 'true';
-const force = process.argv[5] === 'true';
 
+    # Extract: merge setup (SETTINGS_FILE, mkdir, HOOK_CMD, GUARD_CMD, node block start)
+    # up to the profile preference reading inside the node block
+    extract_between "$SCRIPTS_DIR/setup-user-hooks.sh" \
+        '^# --- END hook deployment' '^// --- BEGIN claude preferences'
+
+    # REPLACE: embedded preferences (from profile.json at build time)
+    cat <<BLOCK_INTERP
 // --- Embedded preferences (from profile.json at build time) ---
 const autoMemory = $CLAUDE_AUTO_MEMORY;
 const alwaysThinking = $CLAUDE_ALWAYS_THINKING;
-
-// --- Read existing settings.json ---
-let settings = {};
-let corrupt = false;
-try { settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8')); } catch (e) {
-    if (e.code !== 'ENOENT') {
-        corrupt = true;
-        console.error('Warning: ' + settingsFile + ' is invalid JSON');
-    }
-}
-const beforeKeys = Object.keys(settings);
-
-// --- Merge hooks (with dedup) ---
-if (!settings.hooks) settings.hooks = {};
-
-function mergeHookEntry(eventName, hookId, matcher, cmd) {
-    if (!Array.isArray(settings.hooks[eventName])) settings.hooks[eventName] = [];
-    const arr = settings.hooks[eventName];
-    let found = false;
-    for (const rule of arr) {
-        if (rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId))) {
-            if (!found) {
-                rule.hooks.forEach(h => { if (h.command && h.command.includes(hookId)) h.command = cmd; });
-                rule.matcher = matcher;
-                found = true;
-            }
-        }
-    }
-    if (!found) arr.push({ matcher, hooks: [{ type: 'command', command: cmd }] });
-    // Deduplicate
-    let seen = false;
-    settings.hooks[eventName] = arr.filter(rule => {
-        const m = rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId));
-        if (m) { if (seen) return false; seen = true; }
-        return true;
-    });
-}
-
-mergeHookEntry('SessionEnd', 'session-archive.sh', '', hookCmd);
-mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
-
-// --- Merge claude preferences ---
-settings.autoMemoryEnabled = autoMemory;
-settings.alwaysThinkingEnabled = alwaysThinking;
-
-// Clobber detection
-const afterKeys = Object.keys(settings);
-const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
-
-if (dryRun) {
-    console.log('dry-run');
-    if (corrupt) console.error('[DRY RUN] File is corrupt -- --force required');
-    if (lostKeys.length) console.error('[DRY RUN] CLOBBER: would lose: ' + lostKeys.join(', '));
-} else if (corrupt && !force) {
-    console.log('error-corrupt');
-} else if (lostKeys.length && !force) {
-    console.log('error-clobber');
-    console.error('Would lose fields: ' + lostKeys.join(', '));
-} else {
-    fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
-
-    // Post-write validation
-    const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-    const _missing = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'].filter(k => !(k in _v));
-    if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
-    const seCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('session-archive.sh'))).length;
-    const ptCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('standing-order-guard.sh'))).length;
-    if (seCount !== 1) { console.error('Validation: expected 1 SessionEnd, got ' + seCount); process.exit(1); }
-    if (ptCount !== 1) { console.error('Validation: expected 1 PreToolUse, got ' + ptCount); process.exit(1); }
-
-    console.log('ok');
-}
-" "\$SETTINGS_FILE" "\$HOOK_CMD" "\$GUARD_CMD" "\$DRY_RUN" "\$FORCE")
-
-case "\$MERGE_RESULT" in
-    ok)            log_ok "Settings deployed to \$SETTINGS_FILE" ;;
-    dry-run)       log "[DRY RUN] \$SETTINGS_FILE: merge managed fields"
-                   log "  Managed: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled" ;;
-    error-corrupt) log_error "\$SETTINGS_FILE is corrupt. Use --force to overwrite, or fix manually." ;;
-    error-clobber) log_error "\$SETTINGS_FILE merge would lose fields. Use --force to proceed." ;;
-    *)             log_error "Unexpected merge result: \$MERGE_RESULT" ;;
-esac
 BLOCK_INTERP
-    cat <<'BLOCK'
 
-if [ "$DRY_RUN" != "true" ]; then
-    log "  SessionEnd hook: $HOOK_CMD"
-    log "  PreToolUse hook: $GUARD_CMD"
-    log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"
-    log "  alwaysThinkingEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).alwaysThinkingEnabled)")"
-fi
-BLOCK
-    bash_exit_footer
+    # Extract: rest of node block (merge logic, clobber, validation) + case statement
+    extract_between "$SCRIPTS_DIR/setup-user-hooks.sh" \
+        '^// --- END claude preferences' '^# --- END hooks body'
+
+    # Extract: exit footer
+    extract_between "$SCRIPTS_DIR/setup-user-hooks.sh" \
+        '^# --- BEGIN exit' '^# --- END exit'
 } > "$DEPLOY_DIR/setup-user-hooks.sh"
 
 chmod +x "$DEPLOY_DIR/setup-user-hooks.sh"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
-# 14. deploy/setup-user-hooks.ps1 (template with embedded hook + prefs)
+# 14. deploy/setup-user-hooks.ps1 (extracted from scripts/ + embedded hooks)
 # ============================================================
-blog "Generating deploy/setup-user-hooks.ps1 (with embedded hook + prefs)"
+blog "Generating deploy/setup-user-hooks.ps1 (extracted + embedded hooks)"
 
 {
     echo "$HEADER_COMMENT_PS1"
@@ -1332,185 +959,52 @@ blog "Generating deploy/setup-user-hooks.ps1 (with embedded hook + prefs)"
 # both platforms). This PS1 script only deploys the hook configuration.
 
 BLOCK
-    ps1_param_block
-    ps1_logging_helpers "setup-user-hooks"
-    ps1_os_guard
-    ps1_version_guard
-    ps1_hashtable_helper
-    ps1_backup_helper
-    ps1_flag_helpers
-    cat <<'BLOCK'
+    # Extract: param(), logging, OS guard, ConvertPSObjectToHashtable, DRY_RUN
+    extract_between "$SCRIPTS_DIR/setup-user-hooks.ps1" \
+        '^# --- BEGIN hooks body' '^# --- BEGIN hook deployment' --crlf
 
-# --- Deploy embedded hook scripts to ~/.claude/hooks/ ---
-$claudeDir = Join-Path $env:USERPROFILE ".claude"
-$hooksDir = Join-Path $claudeDir "hooks"
-if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }
+    # REPLACE: hook deployment (deploy embeds scripts via here-string instead of Copy-Item from repo)
+    printf '# --- Deploy embedded hook scripts to ~/.claude/hooks/ ---\r\n'
+    printf '$claudeDir = Join-Path $env:USERPROFILE ".claude"\r\n'
+    printf '$hooksDir = Join-Path $claudeDir "hooks"\r\n'
+    printf 'if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }\r\n'
+    printf '\r\n'
+    printf '$hookDest = Join-Path $hooksDir "session-archive.sh"\r\n'
+    printf '$guardDest = Join-Path $hooksDir "standing-order-guard.sh"\r\n'
+    printf '\r\n'
+    # Embed hook content via PS here-strings
+    printf '$hookContent = @'"'"'\r\n'
+    echo "$HOOK_SESSION_ARCHIVE" | perl -pe 's/\r?\n$/\r\n/'
+    printf ''"'"'@\r\n'
+    printf '\r\n'
+    printf '$guardContent = @'"'"'\r\n'
+    echo "$HOOK_STANDING_ORDER_GUARD" | perl -pe 's/\r?\n$/\r\n/'
+    printf ''"'"'@\r\n'
+    printf '\r\n'
+    printf 'if ($DryRun) {\r\n'
+    printf '    Log "[DRY RUN] Would deploy hooks to ~/.claude/hooks/"\r\n'
+    printf '} else {\r\n'
+    printf '    $resolvedHook = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($hookDest)\r\n'
+    printf '    [System.IO.File]::WriteAllText($resolvedHook, $hookContent, [System.Text.UTF8Encoding]::new($false))\r\n'
+    printf '    LogOk "Deployed hook: $hookDest"\r\n'
+    printf '    $resolvedGuard = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($guardDest)\r\n'
+    printf '    [System.IO.File]::WriteAllText($resolvedGuard, $guardContent, [System.Text.UTF8Encoding]::new($false))\r\n'
+    printf '    LogOk "Deployed hook: $guardDest"\r\n'
+    printf '}\r\n'
 
-$hookDest = Join-Path $hooksDir "session-archive.sh"
-$guardDest = Join-Path $hooksDir "standing-order-guard.sh"
+    # REPLACE: embedded preferences (no extraction between — sentinels are adjacent in PS1)
+    printf '\r\n'
+    printf '# --- Embedded preferences (from profile.json at build time) ---\r\n'
+    printf '$autoMemory = $%s\r\n' "$CLAUDE_AUTO_MEMORY"
+    printf '$alwaysThinking = $%s\r\n' "$CLAUDE_ALWAYS_THINKING"
 
-$hookContent = @'
-BLOCK
-    echo "$HOOK_SESSION_ARCHIVE"
-    cat <<'BLOCK'
-'@
+    # Extract: merge section (settings.json merge, MergeHookEntry, clobber, validation)
+    extract_between "$SCRIPTS_DIR/setup-user-hooks.ps1" \
+        '^# --- END claude preferences' '^# --- END hooks body' --crlf
 
-$guardContent = @'
-BLOCK
-    echo "$HOOK_STANDING_ORDER_GUARD"
-    cat <<'BLOCK'
-'@
-
-if ($DryRun) {
-    Log "[DRY RUN] Would deploy hooks to ~/.claude/hooks/"
-} else {
-    $resolvedHook = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($hookDest)
-    [System.IO.File]::WriteAllText($resolvedHook, $hookContent, [System.Text.UTF8Encoding]::new($false))
-    LogOk "Deployed hook: $hookDest"
-    $resolvedGuard = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($guardDest)
-    [System.IO.File]::WriteAllText($resolvedGuard, $guardContent, [System.Text.UTF8Encoding]::new($false))
-    LogOk "Deployed hook: $guardDest"
-}
-
-# --- Merge hooks + preferences into ~/.claude/settings.json ---
-$settingsFile = Join-Path $claudeDir "settings.json"
-if (-not (Test-Path $claudeDir)) { New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null }
-
-# Hook commands use Unix-style paths (hooks run in bash even on Windows)
-$hookDestUnix = $hookDest -replace '\\', '/'
-$hookCmd = "bash `"$hookDestUnix`""
-$guardDestUnix = $guardDest -replace '\\', '/'
-$guardCmd = "bash `"$guardDestUnix`""
-
-BLOCK
-    # Emit native PS merge with embedded build-time preferences
-    cat <<BLOCK_INTERP
-# --- Embedded preferences (from profile.json at build time) ---
-\$autoMemory = \$$CLAUDE_AUTO_MEMORY
-\$alwaysThinking = \$$CLAUDE_ALWAYS_THINKING
-
-# --- Read existing settings.json ---
-\$settings = @{}
-\$corrupt = \$false
-if (Test-Path \$settingsFile) {
-    try {
-        \$settings = ConvertPSObjectToHashtable (Get-Content \$settingsFile -Raw | ConvertFrom-Json)
-    } catch {
-        \$corrupt = \$true
-        LogWarn "\$settingsFile could not be parsed (\$_)"
-    }
-}
-\$beforeKeys = @(\$settings.Keys)
-
-# --- Merge hooks (with dedup) ---
-if (-not \$settings.ContainsKey("hooks")) { \$settings["hooks"] = @{} }
-
-function MergeHookEntry(\$eventName, \$hookIdentifier, \$matcherValue, \$cmd) {
-    if (-not \$settings["hooks"].ContainsKey(\$eventName)) {
-        \$settings["hooks"][\$eventName] = @()
-    }
-    \$arr = @(\$settings["hooks"][\$eventName])
-    \$found = \$false
-    foreach (\$rule in \$arr) {
-        if (\$rule -is [System.Collections.Hashtable] -and \$rule.ContainsKey("hooks")) {
-            foreach (\$h in @(\$rule["hooks"])) {
-                if (\$h -is [System.Collections.Hashtable] -and \$h.ContainsKey("command") -and \$h["command"] -match [regex]::Escape(\$hookIdentifier)) {
-                    if (-not \$found) {
-                        \$h["command"] = \$cmd
-                        \$rule["matcher"] = \$matcherValue
-                        \$found = \$true
-                    }
-                }
-            }
-        }
-    }
-    if (-not \$found) {
-        \$arr += @{ matcher = \$matcherValue; hooks = @(@{ type = "command"; command = \$cmd }) }
-    }
-    # Normalize: ensure hooks field is always an array (fix for prior corruption)
-    foreach (\$rule in \$arr) {
-        if (\$rule -is [System.Collections.Hashtable] -and \$rule.ContainsKey("hooks") -and \$rule["hooks"] -isnot [array]) {
-            \$rule["hooks"] = @(\$rule["hooks"])
-        }
-    }
-    # Deduplicate
-    \$seen = \$false
-    \$deduped = @()
-    foreach (\$rule in \$arr) {
-        \$isMatch = \$false
-        if (\$rule -is [System.Collections.Hashtable] -and \$rule.ContainsKey("hooks")) {
-            foreach (\$h in @(\$rule["hooks"])) {
-                if (\$h -is [System.Collections.Hashtable] -and \$h.ContainsKey("command") -and \$h["command"] -match [regex]::Escape(\$hookIdentifier)) {
-                    \$isMatch = \$true; break
-                }
-            }
-        }
-        if (\$isMatch -and \$seen) { continue }
-        if (\$isMatch) { \$seen = \$true }
-        \$deduped += \$rule
-    }
-    \$settings["hooks"][\$eventName] = \$deduped
-}
-
-MergeHookEntry "SessionEnd" "session-archive.sh" "" \$hookCmd
-MergeHookEntry "PreToolUse" "standing-order-guard.sh" "Bash" \$guardCmd
-
-# --- Merge preferences ---
-\$settings["autoMemoryEnabled"] = \$autoMemory
-\$settings["alwaysThinkingEnabled"] = \$alwaysThinking
-
-# Clobber detection
-\$lostKeys = @(\$beforeKeys | Where-Object { \$_ -notin \$settings.Keys })
-
-if (\$DryRun) {
-    Log "[DRY RUN] \$settingsFile\`: merge managed fields"
-    Log "  Managed: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled"
-    if (\$lostKeys.Count -gt 0) {
-        LogWarn "[DRY RUN] CLOBBER: would lose: \$(\$lostKeys -join ', ')"
-    }
-    if (\$corrupt) {
-        LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
-    }
-} elseif (\$corrupt -and -not \$Force) {
-    LogError "\$settingsFile is corrupt. Use -Force to overwrite, or fix manually."
-} elseif (\$lostKeys.Count -gt 0 -and -not \$Force) {
-    LogError "\$settingsFile merge would lose fields: \$(\$lostKeys -join ', '). Use -Force to proceed."
-} else {
-    if (\$corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
-    if (\$lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: \$(\$lostKeys -join ', ')" }
-
-    Backup-File -FilePath \$settingsFile
-    \$json = \$settings | ConvertTo-Json -Depth 10
-    \$resolvedSettings = \$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath(\$settingsFile)
-    [System.IO.File]::WriteAllText(\$resolvedSettings, \$json, [System.Text.UTF8Encoding]::new(\$false))
-
-    # Post-write validation
-    try {
-        \$vContent = [System.IO.File]::ReadAllText(\$resolvedSettings)
-        \$vParsed = \$vContent | ConvertFrom-Json
-        \$requiredKeys = @("hooks", "autoMemoryEnabled", "alwaysThinkingEnabled")
-        foreach (\$k in \$requiredKeys) {
-            if (-not (\$vParsed.PSObject.Properties.Name -contains \$k)) {
-                LogError "Validation failed: \$settingsFile missing required field '\$k'"
-            }
-        }
-        # Validate hook deduplication
-        \$seCount = @(\$vParsed.hooks.SessionEnd | Where-Object { \$_.hooks.command -match 'session-archive\.sh' }).Count
-        \$ptCount = @(\$vParsed.hooks.PreToolUse | Where-Object { \$_.hooks.command -match 'standing-order-guard\.sh' }).Count
-        if (\$seCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd hook, got \$seCount" }
-        if (\$ptCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse hook, got \$ptCount" }
-    } catch {
-        LogError "Validation failed: \$settingsFile is not valid JSON -- \$_"
-    }
-
-    LogOk "Settings deployed to \$settingsFile"
-    Log "  SessionEnd hook: \$hookCmd"
-    Log "  PreToolUse hook: \$guardCmd"
-    Log "  autoMemoryEnabled: \$autoMemory"
-    Log "  alwaysThinkingEnabled: \$alwaysThinking"
-}
-BLOCK_INTERP
-    ps1_exit_footer
+    # Extract: exit footer
+    extract_between "$SCRIPTS_DIR/setup-user-hooks.ps1" \
+        '^# --- BEGIN exit' '^# --- END exit' --crlf
 } > "$DEPLOY_DIR/setup-user-hooks.ps1"
 
 GENERATED=$((GENERATED + 1))

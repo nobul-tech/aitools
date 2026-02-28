@@ -258,6 +258,7 @@ if ($DryRun) {
     $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($claudeMd)
     [System.IO.File]::WriteAllText($resolvedPath, $content, [System.Text.UTF8Encoding]::new($false))
 
+    # --- BEGIN post-write validation (extracted by build-deploy) ---
     # Post-write validation: check structure AND content (not just a marker)
     if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
         LogError "Validation failed: $claudeMd is empty or missing"
@@ -271,11 +272,12 @@ if ($DryRun) {
             LogError "Validation failed: $claudeMd missing template body (only footer present?)"
         }
     }
+    # --- END post-write validation (extracted by build-deploy) ---
 
     LogOk "Wrote $claudeMd"
 }
 
-# --- Exit ---
+# --- BEGIN exit (extracted by build-deploy) ---
 if ($errors -gt 0) {
     Log "FAILED with $errors error(s). See log: $logFile"
     exit 1
@@ -283,3 +285,4 @@ if ($errors -gt 0) {
     Log "COMPLETED successfully"
     exit 0
 }
+# --- END exit (extracted by build-deploy) ---

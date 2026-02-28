@@ -205,6 +205,7 @@ ${SHARED_CONTENT}
 - Shell: $(basename "$SHELL")
 EOF
 
+    # --- BEGIN post-write validation (extracted by build-deploy) ---
     # Post-write validation: check structure AND content (not just a marker)
     if [ ! -s "$CLAUDE_MD" ]; then
         log_error "Validation failed: $CLAUDE_MD is empty or missing"
@@ -214,11 +215,12 @@ EOF
         # Template body must be present -- a file with only the footer is corrupt
         log_error "Validation failed: $CLAUDE_MD missing template body (only footer present?)"
     fi
+    # --- END post-write validation (extracted by build-deploy) ---
 
     log_ok "Wrote $(display_path "$CLAUDE_MD")"
 fi
 
-# --- Exit ---
+# --- BEGIN exit (extracted by build-deploy) ---
 if [ "$ERRORS" -gt 0 ]; then
     log "FAILED with $ERRORS error(s). See log: $LOG_FILE"
     exit 1
@@ -226,3 +228,4 @@ else
     log "COMPLETED successfully"
     exit 0
 fi
+# --- END exit (extracted by build-deploy) ---

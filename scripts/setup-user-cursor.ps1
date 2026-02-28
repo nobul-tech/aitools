@@ -10,6 +10,7 @@
 # Managed fields: version, editor, permissions, model, hasChangedDefaultModel
 # Preserved: authInfo, privacyCache, network, statsigBootstrap, maxMode, all other fields
 
+# --- BEGIN cursor body (extracted by build-deploy) ---
 param(
     [switch]$DryRun,
     [switch]$Force
@@ -168,7 +169,7 @@ if ($DryRun) {
 
 Log "Step 3: cli-config.json"
 
-# --- Read profile preferences ---
+# --- BEGIN profile preferences (replaced by build-deploy) ---
 # config.json -> userRepoPath -> profile.json -> cursor.cli prefs
 $vimMode = $false
 $modelId = "auto"
@@ -192,6 +193,7 @@ if (Test-Path $configFile) {
         LogWarn "Could not read profile preferences: $_"
     }
 }
+# --- END profile preferences (replaced by build-deploy) ---
 
 # Back up before merge
 if (-not $DryRun) {
@@ -317,8 +319,9 @@ Log "  ripgrep:       $($status.ripgrep)"
 Log "  Cursor CLI:    $($status.cursorCli)"
 Log "  cli-config:    $($status.cliConfig)"
 Log "=============================="
+# --- END cursor body (extracted by build-deploy) ---
 
-# --- Exit ---
+# --- BEGIN exit (extracted by build-deploy) ---
 if ($errors -gt 0) {
     Log "FAILED with $errors error(s). See log: $logFile"
     exit 1
@@ -326,3 +329,4 @@ if ($errors -gt 0) {
     Log "COMPLETED successfully"
     exit 0
 }
+# --- END exit (extracted by build-deploy) ---

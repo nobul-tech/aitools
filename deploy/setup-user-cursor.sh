@@ -11,39 +11,6 @@
 
 set -euo pipefail
 
-# --- Logging ---
-LOG_DIR="$HOME/Library/Logs/aitools"
-[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
-LOG_FILE="$LOG_DIR/deploy.log"
-SCRIPT_NAME="setup-user-cursor"
-ERRORS=0
-
-mkdir -p "$LOG_DIR"
-
-log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
-log_ok()    { log "OK: $1"; }
-log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
-log_warn()  { log "WARN: $1"; }
-
-# Backup a file before overwriting. Keeps at most $max_backups copies.
-backup_file() {
-    local file="$1" max_backups=20
-    [ -f "$file" ] || return 0
-    local ts
-    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
-    cp "$file" "${file}.bak.${ts}"
-    # Prune oldest beyond limit
-    ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1)) | xargs rm -f 2>/dev/null
-    log "Backed up $file"
-}
-
-# --- OS guard ---
-case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*)
-        log_error "This script is for macOS/Linux. On Windows, use the .ps1 version."
-        exit 1 ;;
-esac
-
 # --- Flag parsing ---
 DRY_RUN=false
 FORCE=false
@@ -55,78 +22,144 @@ for arg in "$@"; do
 done
 [ "${AITOOLS_DRY_RUN:-}" = "1" ] && DRY_RUN=true
 
+# --- Logging ---
+LOG_DIR="$HOME/Library/Logs/aitools"
+[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
+LOG_FILE="$LOG_DIR/deploy.log"
+SCRIPT_NAME="setup-user-cursor"
+mkdir -p "$LOG_DIR"
+
+display_path() {
+    if command -v cygpath &>/dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
+ERRORS=0
+log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
+log_ok()    { log "OK: $1"; }
+log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
+log_warn()  { log "WARN: $1"; }
+
+backup_file() {
+    local file="$1" max_backups=20
+    [ -f "$file" ] || return 0
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
+    cp "$file" "${file}.bak.${ts}"
+    # Prune oldest beyond limit
+    ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1)) | xargs rm -f 2>/dev/null
+    log "Backed up $(display_path "$file")"
+}
+
+# --- OS guard ---
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        log_error "This script is for macOS/Linux. On Windows, use ${SCRIPT_NAME}.ps1 instead."
+        exit 1 ;;
+esac
+
 [ "$DRY_RUN" = "true" ] && log "[DRY RUN] Preview mode -- no files will be written"
 
 CURSOR_DIR="$HOME/.cursor"
 CLI_CONFIG="$CURSOR_DIR/cli-config.json"
 
+# Track status for summary (plain vars -- bash 3.2 compat, no associative arrays)
+STATUS_ripgrep=""
+STATUS_cursorCli=""
+STATUS_cliConfig=""
+
 # --- 1. ripgrep (rg) ---
+
 log "Step 1: ripgrep (rg)"
 
 if [ "$DRY_RUN" = "true" ]; then
     if command -v rg &>/dev/null; then
-        log "[DRY RUN] ripgrep already installed: $(rg --version | head -1)"
+        RG_VERSION=$(rg --version | head -1)
+        log "[DRY RUN] ripgrep already installed: $RG_VERSION"
+        STATUS_ripgrep="already installed ($RG_VERSION)"
     else
         log "[DRY RUN] Would install ripgrep via brew"
+        STATUS_ripgrep="would install"
     fi
 else
     if command -v rg &>/dev/null; then
         RG_VERSION=$(rg --version | head -1)
         log_ok "Already installed: $RG_VERSION"
+        STATUS_ripgrep="already installed ($RG_VERSION)"
     else
         if command -v brew &>/dev/null; then
             log "Installing ripgrep via brew..."
             brew install ripgrep
+
             if command -v rg &>/dev/null; then
-                log_ok "Installed: $(rg --version | head -1)"
+                RG_VERSION=$(rg --version | head -1)
+                log_ok "Installed: $RG_VERSION"
+                STATUS_ripgrep="installed ($RG_VERSION)"
             else
-                log_error "brew install completed but 'rg' not found in PATH"
+                log_warn "brew install completed but 'rg' not found in PATH. Restart terminal to verify."
+                STATUS_ripgrep="installed (restart terminal to verify)"
             fi
         else
-            log_error "Homebrew not found. Install ripgrep manually: brew install ripgrep"
+            log_warn "Homebrew not found. Install ripgrep manually: brew install ripgrep"
+            STATUS_ripgrep="SKIPPED (brew not found)"
         fi
     fi
 fi
 
 # --- 2. Cursor CLI (agent) ---
+
 log "Step 2: Cursor CLI (agent)"
 
 if [ "$DRY_RUN" = "true" ]; then
     if command -v agent &>/dev/null; then
-        log "[DRY RUN] Cursor CLI already installed: $(agent --version)"
+        AGENT_VERSION=$(agent --version)
+        log "[DRY RUN] Cursor CLI already installed: $AGENT_VERSION"
+        STATUS_cursorCli="already installed ($AGENT_VERSION)"
     else
-        log "[DRY RUN] Would install Cursor CLI via curl"
+        log "[DRY RUN] Would install Cursor CLI"
+        STATUS_cursorCli="would install"
     fi
 else
     if command -v agent &>/dev/null; then
         AGENT_VERSION=$(agent --version)
         log_ok "Already installed: $AGENT_VERSION"
+        STATUS_cursorCli="already installed ($AGENT_VERSION)"
     else
         log "Installing Cursor CLI..."
         curl https://cursor.com/install -fsS | bash
+
         if command -v agent &>/dev/null; then
-            log_ok "Installed: $(agent --version)"
+            AGENT_VERSION=$(agent --version)
+            log_ok "Installed: $AGENT_VERSION"
+            STATUS_cursorCli="installed ($AGENT_VERSION)"
         else
-            log_error "Cursor CLI install completed but 'agent' not found in PATH (restart terminal)"
+            log_warn "Cursor CLI install completed but 'agent' not found in PATH. Restart terminal to verify."
+            STATUS_cursorCli="installed (restart terminal to verify)"
         fi
     fi
 fi
 
 # --- 3. cli-config.json (merge, not overwrite) ---
+
 log "Step 3: cli-config.json"
+
+if [ "$DRY_RUN" != "true" ]; then
+    backup_file "$CLI_CONFIG"
+fi
 
 mkdir -p "$CURSOR_DIR"
 
 if ! command -v node &>/dev/null; then
     log_warn "node not found -- skipping cli-config.json merge"
+    STATUS_cliConfig="SKIPPED (node not found)"
 else
-    backup_file "$CLI_CONFIG"
+    # Read cursor.cli preferences from profile.json (via config.json -> userRepoPath).
+    # Falls back to defaults if profile not found.
+
     MERGE_RESULT=$(node -e "
 const fs = require('fs');
+const path = require('path');
 const f = process.argv[1];
 const dryRun = process.argv[2] === 'true';
 const force = process.argv[3] === 'true';
-
 // --- Embedded preferences (from profile.json at build time) ---
 const vimMode = true;
 const modelId = 'auto';
@@ -134,13 +167,16 @@ const modelId = 'auto';
 // --- Read existing cli-config.json ---
 let config = {};
 let corrupt = false;
-try { config = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) {
+try {
+    config = JSON.parse(fs.readFileSync(f, 'utf8'));
+} catch (e) {
     if (e.code !== 'ENOENT') {
         corrupt = true;
         console.error('Warning: ' + f + ' is invalid JSON');
     }
 }
 const beforeKeys = Object.keys(config);
+const before = JSON.stringify(config);
 
 // --- Merge managed fields ---
 config.version = 1;
@@ -150,6 +186,7 @@ if (!config.permissions) config.permissions = {};
 if (!Array.isArray(config.permissions.allow)) config.permissions.allow = [];
 if (!Array.isArray(config.permissions.deny)) config.permissions.deny = [];
 
+// Model: only set if profile specifies 'auto' (the only supported value for now)
 if (modelId === 'auto') {
     config.model = {
         modelId: 'default',
@@ -162,44 +199,76 @@ if (modelId === 'auto') {
     config.hasChangedDefaultModel = true;
 }
 
-// Clobber detection
+// --- Clobber detection ---
+const managedKeys = ['version', 'editor', 'permissions', 'model', 'hasChangedDefaultModel'];
 const afterKeys = Object.keys(config);
 const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
 
+const after = JSON.stringify(config);
+
 if (dryRun) {
-    console.log('would-merge');
-    if (corrupt) console.error('[DRY RUN] File is corrupt -- --force required');
-    if (lostKeys.length) console.error('[DRY RUN] CLOBBER: would lose: ' + lostKeys.join(', '));
+    console.error('[DRY RUN] ' + f + ': merge');
+    console.error('  Managed fields: ' + managedKeys.join(', '));
+    if (lostKeys.length > 0) console.error('  CLOBBER WARNING: would lose: ' + lostKeys.join(', '));
+    if (corrupt) console.error('  File is corrupt -- --force required');
+    console.log(before === after && !corrupt ? 'unchanged' : 'would-merge');
 } else if (corrupt && !force) {
+    console.error('ERROR: ' + f + ' is corrupt. Use --force to overwrite, or fix manually.');
     console.log('error-corrupt');
-} else if (lostKeys.length && !force) {
+} else if (lostKeys.length > 0 && !force) {
+    console.error('ERROR: merge would lose fields: ' + lostKeys.join(', ') + '. Use --force to proceed.');
     console.log('error-clobber');
-    console.error('Would lose fields: ' + lostKeys.join(', '));
 } else {
-    const before = JSON.stringify(config);
-    fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\\n');
+    if (before === after) {
+        console.log('unchanged');
+    } else {
+        if (corrupt) console.error('Warning: proceeding with --force on corrupt file');
+        if (lostKeys.length > 0) console.error('Warning: proceeding with --force, losing fields: ' + lostKeys.join(', '));
+        fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\n');
 
-    // Post-write validation
-    const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
-    const _missing = ['version'].filter(k => !(k in _v));
-    if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+        // Post-write validation
+        const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
+        const _missing = ['version'].filter(k => !(k in _v));
+        if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
 
-    console.log(beforeKeys.length === 0 ? 'created' : 'merged');
+        console.log(before === '{}' ? 'created' : 'merged');
+    }
 }
 " "$CLI_CONFIG" "$DRY_RUN" "$FORCE")
 
     case "$MERGE_RESULT" in
-        unchanged)     log_ok "Already up to date: $CLI_CONFIG" ;;
-        created)       log_ok "Created: $CLI_CONFIG" ;;
-        merged)        log_ok "Merged preferences into: $CLI_CONFIG" ;;
-        would-merge)   log "[DRY RUN] $CLI_CONFIG: merge managed fields" ;;
-        error-corrupt) log_error "$CLI_CONFIG is corrupt. Use --force to overwrite, or fix manually." ;;
-        error-clobber) log_error "$CLI_CONFIG merge would lose fields. Use --force to proceed." ;;
-        *)             log_error "Unexpected merge result: $MERGE_RESULT" ;;
+        unchanged)
+            log_ok "Already up to date: $(display_path "$CLI_CONFIG")"
+            STATUS_cliConfig="already up to date" ;;
+        created)
+            log_ok "Created: $(display_path "$CLI_CONFIG")"
+            STATUS_cliConfig="created" ;;
+        merged)
+            log_ok "Merged preferences into: $(display_path "$CLI_CONFIG")"
+            STATUS_cliConfig="merged" ;;
+        would-merge)
+            log "[DRY RUN] Would write merged config"
+            STATUS_cliConfig="would merge (dry-run)" ;;
+        error-corrupt)
+            log_error "$(display_path "$CLI_CONFIG") is corrupt. Use --force to overwrite."
+            STATUS_cliConfig="ERROR (corrupt, needs --force)" ;;
+        error-clobber)
+            log_error "$(display_path "$CLI_CONFIG") merge would lose fields. Use --force to proceed."
+            STATUS_cliConfig="ERROR (clobber, needs --force)" ;;
+        *)
+            log_error "Unexpected merge result: $MERGE_RESULT"
+            STATUS_cliConfig="ERROR" ;;
     esac
 fi
 
-# --- Exit ---
+# --- Summary ---
+
+log "=============================="
+log "Summary:"
+log "  ripgrep:       ${STATUS_ripgrep}"
+log "  Cursor CLI:    ${STATUS_cursorCli}"
+log "  cli-config:    ${STATUS_cliConfig}"
+log "=============================="
 if [ "$ERRORS" -gt 0 ]; then
     log "FAILED with $ERRORS error(s). See log: $LOG_FILE"
     exit 1
