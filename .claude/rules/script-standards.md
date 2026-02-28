@@ -1,8 +1,9 @@
 ## Script Standards (this repo)
 
-All reusable scripts in the repo must follow these conventions. This covers:
-setup scripts (`scripts/setup-*.sh/.ps1`), check/audit scripts (`scripts/check-*.sh/.ps1`),
-installer scripts (`scripts/aitools-install.*`, `scripts/aitools.*`), deploy scripts
+All plans you propose and all reusable code you write must follow these conventions.
+A plan that drafts code with violations is itself a violation. This covers: setup scripts
+(`scripts/setup-*.sh/.ps1`), check/audit scripts (`scripts/check-*.sh/.ps1`), installer
+scripts (`scripts/aitools-install.*`, `scripts/aitools.*`), deploy scripts
 (`deploy/*.sh/.ps1`), hooks (`shared/hooks/*.sh`), and shell aliases (`shared/shell/*`).
 
 ### Block order (bash setup scripts)

@@ -6,7 +6,7 @@ alwaysApply: false
 
 ## Error Handling (this repo)
 
-Every `.sh`/`.ps1` in `scripts/`, `deploy/`, `shared/hooks/`, `shared/shell/` must follow these rules:
+All plans you propose and all code you write must follow these rules. Plans with violations are violations. Scope: every `.sh`/`.ps1` in `scripts/`, `deploy/`, `shared/hooks/`, `shared/shell/`, and pseudocode in `plans/*.md`.
 
 1. **Logging framework** -- Use `log`/`log_error`/`LogError`. No raw `echo`/`Write-Host`.
 2. **`-ErrorAction SilentlyContinue`** -- null/empty check within 3 lines.

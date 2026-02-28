@@ -1,11 +1,14 @@
 ## Error Handling (this repo)
 
-Project-level error handling requirements for all reusable scripts in the aitools repo.
-Complements standing order #7 (user-level) and the error handling section in `script-standards.md`.
+Project-level error handling requirements for all plans you propose and all reusable
+code you write in the aitools repo. A plan that drafts code with violations is itself
+a violation. Complements standing order #7 (user-level) and the error handling section
+in `script-standards.md`.
 
 ### Scope
 
 Every `.sh` and `.ps1` in `scripts/`, `deploy/`, `shared/hooks/`, and `shared/shell/`.
+Plans and pseudocode in `plans/*.md` are held to the same standard.
 
 ### Requirements
 

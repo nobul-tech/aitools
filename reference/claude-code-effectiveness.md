@@ -64,6 +64,7 @@ incidents. Each incident gets RCA and remediation tracking.
 | I4 | 2026-02-19 | Coaching | Subagent work product condensed to stub summary, discarding detail | Remediated | -- | -- |
 | I5 | 2026-02-19 | SO #7 | Silent hook failure: session-archive hook was no-op due to missing userRepoPath, buried in summary | Remediated | No silent failures | -- |
 | I6 | 2026-02-28 | Process | Deploy template logic not updated when scripts/ source fixed — recurring pattern (3+ occurrences) | Remediated | -- | v0.25.1 |
+| I7 | 2026-02-28 | SO #7 | Plan drafted with unguarded `2>/dev/null \|\| true` cleanup patterns and missing exemption entries -- caught only after user requested re-audit | RCA | No silent failures | -- |
 
 ### Incident Details
 
@@ -122,3 +123,10 @@ incidents. Each incident gets RCA and remediation tracking.
   - **Structural fix (v0.25.1)**: Refactored `build-deploy.sh` to extract setup logic from `scripts/` at build time via sentinel-based Perl extraction (`extract_between()` helper). Eliminated ~507 lines of duplicated template logic. All 4 script pairs (claude, cursor, mcp, hooks) now use single source of truth.
 - **Status**: Remediated (v0.25.1)
 - **Verification**: `build-deploy.sh` now fails loudly if sentinels are missing. Pre-commit step 13 remains as a secondary safety net.
+
+#### I7: Plan-phase rule violations — Typst setup (2026-02-28)
+
+- **Observed**: Initial plan for setup-typst.sh included `cargo uninstall typst-cli 2>/dev/null || true` and `npm uninstall -g typst 2>/dev/null || true` without the required explanatory comments, without noting the need for exemption table entries, and with vague pseudocode that omitted required logging block elements (display_path, tool-install-sources.md header reference). User had to request a re-audit to surface these issues.
+- **RCA**: Rules were treated as applying only to committed code. Plan-phase pseudocode was given "draft quality" latitude, allowing violations to be deferred to implementation. This is wrong -- the plan is the blueprint, and a blueprint with violations produces violations.
+- **Remediation**: Broadened scope in error-handling.md and script-standards.md to explicitly cover plans and pseudocode. Violations in plans are equivalent to violations in committed code and must be documented as incidents.
+- **Status**: RCA (rule updates applied)
