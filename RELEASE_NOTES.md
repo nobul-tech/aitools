@@ -12,6 +12,18 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.23.1 -- PS1 First-Class Documentation (2026-02-28)
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 1 | **PS1 shown as full equal in all docs**: README.md, CLAUDE.md, scripts/README.md -- split mixed/bash-only blocks into labeled macOS/Linux + Windows (PowerShell) pairs. PS1 is never summarized, footnoted, or commented out. |
+
+**Verified on:** Windows (extensive post-push checklist: 20 PASS, 1 SKIP).
+
+---
+
 ## v0.23 -- PowerShell 7 Baseline (2026-02-28)
 
 ### New features
