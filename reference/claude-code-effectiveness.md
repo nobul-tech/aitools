@@ -65,6 +65,7 @@ incidents. Each incident gets RCA and remediation tracking.
 | I5 | 2026-02-19 | SO #7 | Silent hook failure: session-archive hook was no-op due to missing userRepoPath, buried in summary | Remediated | No silent failures | -- |
 | I6 | 2026-02-28 | Process | Deploy template logic not updated when scripts/ source fixed — recurring pattern (3+ occurrences) | Remediated | -- | v0.25.1 |
 | I7 | 2026-02-28 | SO #7 | Plan drafted with unguarded `2>/dev/null \|\| true` cleanup patterns and missing exemption entries -- caught only after user requested re-audit | RCA | No silent failures | -- |
+| I8 | 2026-02-28 | Coaching | Plan revision uses grep-for-keywords instead of full re-read; misses scope/order changes from user feedback during review | Observed | -- | -- |
 
 ### Incident Details
 
@@ -130,3 +131,14 @@ incidents. Each incident gets RCA and remediation tracking.
 - **RCA**: Rules were treated as applying only to committed code. Plan-phase pseudocode was given "draft quality" latitude, allowing violations to be deferred to implementation. This is wrong -- the plan is the blueprint, and a blueprint with violations produces violations.
 - **Remediation**: Broadened scope in error-handling.md and script-standards.md to explicitly cover plans and pseudocode. Violations in plans are equivalent to violations in committed code and must be documented as incidents.
 - **Status**: RCA (rule updates applied)
+
+#### I8: Plan revision shallow -- keyword grep instead of full re-read (2026-02-28)
+
+- **Observed**: When user provides feedback during plan review that alters scope or
+  order of operations, the revision approach defaults to grepping the plan for specific
+  keywords or phrases rather than re-reading and regenerating from scratch. This misses
+  structural changes that the feedback implies. Multiple occurrences in Typst plan review
+  cycle (gold standard removal altered the "Based on" references and audit framing, but
+  revision only grep-replaced the phrase "gold standard").
+- **RCA**: Pending investigation
+- **Status**: Observed

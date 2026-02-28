@@ -12,6 +12,25 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.26 -- Typst PDF Engine (2026-02-28)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Typst** added as managed tool: `setup-typst.sh` + `.ps1` (Homebrew on macOS, winget on Windows), cleanup of cargo/npm non-preferred installs, `aitools install` step 13, deploy scripts |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `scripts/setup-typst.sh` | macOS: Homebrew install/upgrade + cleanup |
+| `scripts/setup-typst.ps1` | Windows: winget install/upgrade + cleanup |
+
+**Verified on:** Windows
+
+---
+
 ## v0.25 -- Standing Order Enforcement & Incident Tracking (2026-02-28)
 
 ### New features
@@ -45,6 +64,20 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 |------|---------|
 | `shared/hooks/standing-order-guard.sh` | PreToolUse hook source (deployed to `~/.claude/hooks/`) |
 | `scripts/analyze-session.sh` | Standalone transcript analysis tool |
+
+**Verified on:** Windows
+
+---
+
+## v0.25.2 -- Rule Hardening (2026-02-28)
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | **Remove "gold standard" concept**: Existing scripts are reference examples, not authoritative. All references across 6 files (CLAUDE.md, script-standards, config-file-safety, tool-evaluation-criteria, + Cursor mirrors) replaced with "reference examples" language and explicit warning: "Do not assume existing scripts are violation-free." |
+| 2 | **Broaden rule scope to plans and pseudocode**: script-standards.md and error-handling.md now state "all plans you propose and all reusable code you write" -- a plan that drafts code with violations is itself a violation. Incident I7 documented. |
+| 3 | **PATH refresh rule**: tool-lifecycle.md now requires asking the user to relaunch Claude Code after package manager installs instead of invoking tools via hardcoded package manager paths. |
 
 **Verified on:** Windows
 

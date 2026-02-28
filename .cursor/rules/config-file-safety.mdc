@@ -31,7 +31,9 @@ Every config-writing script must validate output after writing:
 3. **Bash**: Use `validate_json_config` function or inline Node.js validation after `fs.writeFileSync`
 4. **PowerShell**: Use `ValidateJsonConfig` function or inline try/catch after write
 
-### Gold standards
+### Reference examples
+
+Do not assume these are violation-free -- verify copied code against the rules.
 
 - Node.js merge: `scripts/setup-user-cursor.sh` (cli-config.json)
 - PowerShell merge: `scripts/setup-user-mcp.ps1` (settings.json)

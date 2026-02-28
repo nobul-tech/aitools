@@ -77,6 +77,7 @@ use `npx`, `bunx`, or other package runners.
 | Vercel CLI | `vercel` |
 | Pandoc | `pandoc` |
 | Rust (cargo) | `cargo` |
+| Typst | `typst` |
 | pwsh | `pwsh` |
 
 ### Per-Platform Tools

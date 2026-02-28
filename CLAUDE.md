@@ -109,7 +109,7 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 
 - Python 3.10+, type hints, `argparse` for CLI, `pathlib.Path` over `os.path`
 - Scripts (this repo): provide both `.ps1` and `.sh` variants since this repo is cross-platform
-- Script logging: all setup scripts use structured logging — `log`/`log_ok`/`log_error`/`log_warn` (bash) and `Log`/`LogOk`/`LogError`/`LogWarn` (PS1). Full conventions in `.claude/rules/script-standards.md`. Gold standard: `scripts/setup-user-mcp.sh/.ps1`
+- Script logging: all setup scripts use structured logging — `log`/`log_ok`/`log_error`/`log_warn` (bash) and `Log`/`LogOk`/`LogError`/`LogWarn` (PS1). Full conventions in `.claude/rules/script-standards.md`.
 - Keep this file under 200 lines; use `@reference/` imports for detail
 
 ### Windows dispatch in `aitools` (bash)

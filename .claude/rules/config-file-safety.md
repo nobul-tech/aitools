@@ -86,7 +86,10 @@ Call site: `ValidateJsonConfig -File $file -RequiredKeys @("key1", "key2")`
 
 Check non-empty file and required sections (e.g., `## Machine-Specific`).
 
-### Gold standard references
+### Reference examples
+
+These scripts demonstrate the patterns above. Do not assume they are
+violation-free -- always verify copied code against these rules.
 
 - Node.js merge: `scripts/setup-user-cursor.sh` (cli-config.json)
 - PowerShell merge: `scripts/setup-user-mcp.ps1` (settings.json read-then-merge)

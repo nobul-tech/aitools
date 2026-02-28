@@ -740,7 +740,27 @@ blog "Copying deploy/setup-rust.ps1"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
-# 13-14. deploy/setup-user-mcp.sh and .ps1 (template with embedded skills)
+# 13-14. deploy/setup-typst.sh and .ps1 (copy as-is)
+# ============================================================
+blog "Copying deploy/setup-typst.sh"
+{
+    echo '#!/usr/bin/env bash'
+    echo "$HEADER_COMMENT_BASH"
+    # Strip the shebang from source and append the rest
+    tail -n +2 "$SCRIPTS_DIR/setup-typst.sh"
+} > "$DEPLOY_DIR/setup-typst.sh"
+chmod +x "$DEPLOY_DIR/setup-typst.sh"
+GENERATED=$((GENERATED + 1))
+
+blog "Copying deploy/setup-typst.ps1"
+{
+    echo "$HEADER_COMMENT_PS1"
+    cat "$SCRIPTS_DIR/setup-typst.ps1"
+} > "$DEPLOY_DIR/setup-typst.ps1"
+GENERATED=$((GENERATED + 1))
+
+# ============================================================
+# 15-16. deploy/setup-user-mcp.sh and .ps1 (template with embedded skills)
 # ============================================================
 # The scripts/ versions read skills from shared/skills/ (repo-relative).
 # The deploy/ versions must be self-contained, so we embed SKILL.md content
@@ -861,7 +881,7 @@ SKILLS_PS1_HEADER
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
-# 13. deploy/setup-user-hooks.sh (extracted from scripts/ + embedded hooks)
+# 15. deploy/setup-user-hooks.sh (extracted from scripts/ + embedded hooks)
 # ============================================================
 blog "Generating deploy/setup-user-hooks.sh (extracted + embedded hooks)"
 
@@ -937,7 +957,7 @@ chmod +x "$DEPLOY_DIR/setup-user-hooks.sh"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
-# 14. deploy/setup-user-hooks.ps1 (extracted from scripts/ + embedded hooks)
+# 16. deploy/setup-user-hooks.ps1 (extracted from scripts/ + embedded hooks)
 # ============================================================
 blog "Generating deploy/setup-user-hooks.ps1 (extracted + embedded hooks)"
 

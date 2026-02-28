@@ -624,9 +624,21 @@ else
 fi
 
 # ============================================================
-# 13. Deploy configurations
+# 13. Typst
 # ============================================================
-log "Step 13: Deploy configurations"
+log "Step 13: Typst"
+
+typst_script="$SCRIPT_DIR/setup-typst.sh"
+if [ -f "$typst_script" ]; then
+    validate_and_run "$typst_script"
+else
+    log_warn "setup-typst.sh not found — skipping (MDM deploy)"
+fi
+
+# ============================================================
+# 14. Deploy configurations
+# ============================================================
+log "Step 14: Deploy configurations"
 
 DEPLOY_SCRIPTS="setup-user-claude.sh setup-user-cursor.sh setup-user-mcp.sh setup-cursor-mcp.sh setup-user-hooks.sh"
 

@@ -162,7 +162,7 @@ This phase is a collaboration between Claude and the user. Claude automates the 
 Add aliases/functions to `shared/shell/aliases.sh` + `.ps1`. These must check for the tool's existence and fail with a helpful error pointing to `aitools install`.
 
 ### Phase 4: Setup Script
-Create `scripts/setup-<tool>.sh` + `.ps1` following setup-vercelcli as the gold standard. Install commands come from the tool-install-sources.md entry (not memory). Include cleanup of non-preferred install methods.
+Create `scripts/setup-<tool>.sh` + `.ps1` following the conventions in `.claude/rules/script-standards.md`. Install commands come from the tool-install-sources.md entry (not memory). Include cleanup of non-preferred install methods.
 
 ### Phase 5: Installer & Build Integration
 Add step to `aitools-install.sh/.ps1`. Add copy-as-is block to `build-deploy.sh`. Promote from "Under Evaluation" to full entry if not already done. If the tool is a CLI tool, add it to the Managed CLI Tools table in `shared/claude-shared.md` (and mirror to user repo template). Run `build-deploy.sh` to propagate to MDM path.

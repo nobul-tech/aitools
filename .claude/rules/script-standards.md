@@ -136,11 +136,11 @@ Any script that intentionally suppresses errors without a result check must:
 | `aitools-install.sh` | 273 | `2>/dev/null \|\| true` | Update: apt-get may need sudo; gh already works at current version |
 | `check-lib.ps1` | 110 | `2>$null` (InvokeGit) | Git stderr triggers PS ErrorActionPreference=Stop; caller checks result |
 | `check-lib.ps1` | 79-81 | `try/catch` (ReadConfigKey) | Config parse: catch logs warning; callers handle null return via ResolveConfig |
+| `setup-typst.sh` | 38, 43 | `2>/dev/null \|\| true` | Cleanup: cargo/npm may not have typst installed; Homebrew install follows |
+| `setup-typst.ps1` | 45, 53 | `2>$null` | Cleanup: cargo/npm stderr noise; non-blocking, winget install follows |
 
-### Gold standard references
+### Reference examples
 
-- Setup (bash): `scripts/setup-user-mcp.sh`
-- Setup (PS1): `scripts/setup-user-mcp.ps1`
-- Check (PS1): `scripts/check-pre-commit.ps1`
-
-When creating a new script, copy the logging block and exit footer from the appropriate gold standard.
+When creating a new script, copy the logging block and exit footer from an existing
+script that follows the conventions above. Do not assume existing scripts are
+violation-free -- always verify the copied code against these rules.

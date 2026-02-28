@@ -474,9 +474,21 @@ if (Test-Path $rustScript) {
 }
 
 # ============================================================
-# 13. Deploy configurations
+# 13. Typst
 # ============================================================
-Log "Step 13: Deploy configurations"
+Log "Step 13: Typst"
+
+$typstScript = Join-Path $PSScriptRoot "setup-typst.ps1"
+if (Test-Path $typstScript) {
+    Invoke-ValidatedScript $typstScript
+} else {
+    LogWarn "setup-typst.ps1 not found -- skipping (MDM deploy)"
+}
+
+# ============================================================
+# 14. Deploy configurations
+# ============================================================
+Log "Step 14: Deploy configurations"
 
 $deployScripts = @(
     "setup-user-claude.ps1",
