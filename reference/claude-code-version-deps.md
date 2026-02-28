@@ -40,7 +40,7 @@ Post-push checklist #20 triggers this review automatically.
 | 5 | Subagent context gap (rules/CLAUDE.md not inherited by Task subagents) | 2.1.51 | 2.1.62 (2026-02-27) | `shared/claude-shared.md` (coaching items) | [#29423](https://github.com/anthropics/claude-code/issues/29423) |
 | 6 | CLAUDE.md hierarchy & merge behavior (5 levels, more-specific wins) | 2.1.51 | 2.1.51 | `reference/claude-code-practices.md`, `scripts/setup-user-claude.sh/.ps1` | -- |
 | 7 | Session management commands (claude -c, --resume, /resume, /rename) | 2.1.51 | 2.1.51 | `reference/claude-code-practices.md` | -- |
-| 8 | Hook execution context (hooks run in bash, not configurable) | 2.1.51 | 2.1.51 | `shared/hooks/session-archive.sh`, `scripts/setup-user-hooks.sh` | -- |
+| 8 | Hook execution context (hooks run in bash or HTTP, not configurable shell) | 2.1.51 | 2.1.63 (2026-02-28) | `shared/hooks/session-archive.sh`, `scripts/setup-user-hooks.sh` | -- (2.1.63 adds HTTP hooks as alternative to shell) |
 | 9 | Coaching items tied to CC capabilities (subagent gap, auto-memory locality) | 2.1.51 | 2.1.51 | `shared/claude-shared.md` | -- |
 
 ## MEDIUM -- Affects developer experience or specific features
@@ -60,3 +60,20 @@ Post-push checklist #20 triggers this review automatically.
 | 15 | Session sync not possible (CLI sessions are local per machine + directory) | 2.1.51 | 2.1.51 | `reference/claude-code-practices.md` | -- |
 | 16 | Session storage internals (JSONL under ~/.claude/projects/) | 2.1.51 | 2.1.51 | `reference/claude-code-practices.md`, `shared/hooks/session-archive.sh` | -- |
 | 17 | JSONL transcript fields (type, cwd, sessionId) | 2.1.51 | 2.1.51 | `reference/claude-code-practices.md`, `shared/hooks/session-archive.sh` | -- |
+
+## Filed issues -- Tracking our upstream reports
+
+| # | Issue | Title | Filed | Status | Related items |
+|---|-------|-------|-------|--------|---------------|
+| F1 | [#29423](https://github.com/anthropics/claude-code/issues/29423) | Task subagents do not load project CLAUDE.md or .claude/rules/ | 2026-02-27 | Open (duplicate bot challenged, differentiation posted 2026-02-28) | Item #5 |
+
+## Release notes watch
+
+Notable changes in CC releases that may affect this registry.
+
+### 2.1.63 (2026-02-28)
+
+- **HTTP hooks added**: Hooks can now POST JSON to a URL instead of running a shell command. May affect item #8 (hook execution context) -- hooks are no longer bash-only.
+- **Project configs shared across git worktrees**: `CLAUDE.md` and auto-memory now shared across worktrees of the same repo. Affects item #6 (hierarchy behavior).
+- **`/simplify` and `/batch` bundled slash commands**: New built-in commands.
+- No changes to Windows shell configuration (#1) or subagent context loading (#5).
