@@ -1,4 +1,4 @@
-# check-pre-commit.ps1 -- automated pre-commit checklist for ai-tooling
+# check-pre-commit.ps1 -- automated pre-commit checklist for aitools
 # Usage: .\scripts\check-pre-commit.ps1 [-Fix]
 # -Fix: auto-fix line endings, exec bits, and build freshness
 # Platform: Windows (PS 5.1 compatible)

@@ -5,7 +5,7 @@ Jose's cross-machine scaffolding for Claude Code, Cursor, and MCP across Windows
 ## Project Structure
 
 ```
-ai-tooling/
+aitools/
 ├── .claude/rules/       # Claude Code project rules (modular)
 ├── .cursor/rules/       # Cursor rules (.mdc format)
 │   ├── general.mdc      #   Identity, code style
@@ -75,10 +75,10 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 
 | Resource | Windows | macOS |
 |----------|---------|-------|
-| This repo | `C:\repos\ai-tooling` | `~/repos/ai-tooling` |
+| This repo | `~\repos\aitools` | `~/repos/aitools` |
 | User CLAUDE.md | `~/.claude/CLAUDE.md` | `~/.claude/CLAUDE.md` |
 | Shared config | `shared/claude-shared.md` (in repo) | `shared/claude-shared.md` (in repo) |
-| User repo | `C:\repos\aitools-<username>` | `~/repos/aitools-<username>` |
+| User repo | `~\repos\aitools-<username>` | `~/repos/aitools-<username>` |
 
 ## Key Decisions
 

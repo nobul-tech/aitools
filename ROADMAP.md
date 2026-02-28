@@ -1,6 +1,6 @@
 # Roadmap
 
-Active and planned work items for the ai-tooling project.
+Active and planned work items for the aitools project.
 Detailed plans live in `plans/`. See `RELEASE_NOTES.md` for completed work.
 
 ## In Progress
@@ -15,9 +15,9 @@ Detailed plans live in `plans/`. See `RELEASE_NOTES.md` for completed work.
 | Chrome DevTools research subagent | -- | Medium | Custom subagent type for web doc reading tasks. Passes proper context (rules, CLAUDE.md) and uses Chrome DevTools MCP skill. Enables parallel doc fetches without losing project rules. |
 | Tool lifecycle gaps | -- | Medium | Security/credential docs, cleanup for all tools, troubleshooting guides, ~~version management~~, CVE response, deprecation path |
 | Log location discoverability | -- | Medium | Document log paths (`deploy.log`, `clip2md.log`, `checks.log`, `checks.jsonl`) in CLAUDE.md, README, and rules. Add `aitools logs` command to open/tail/clear logs. Assess log rotation and management. |
-| Conditional template blocks | [#5](https://github.com/nobul-jose/ai-tooling/issues/5) | Medium | Platform-gated sections in CLAUDE.md templates (e.g., `{{#if WINDOWS}}...{{/if}}`). Enables Windows-only or macOS-only coaching/rules without auto-memory. |
-| clip2: unified clipboard command | [#3](https://github.com/nobul-jose/ai-tooling/issues/3) | Medium | Refactor `clip2md` into `clip2` with format subcommands (`md`, `pdf`). Requires PDF tool evaluation. |
-| Session search & view | [#4](https://github.com/nobul-jose/ai-tooling/issues/4) | Low | `aitools sessions search <query>` and `sessions view <file>` for working with archived transcripts |
+| Conditional template blocks | [#5](https://github.com/nobul-jose/aitools/issues/5) | Medium | Platform-gated sections in CLAUDE.md templates (e.g., `{{#if WINDOWS}}...{{/if}}`). Enables Windows-only or macOS-only coaching/rules without auto-memory. |
+| clip2: unified clipboard command | [#3](https://github.com/nobul-jose/aitools/issues/3) | Medium | Refactor `clip2md` into `clip2` with format subcommands (`md`, `pdf`). Requires PDF tool evaluation. |
+| Session search & view | [#4](https://github.com/nobul-jose/aitools/issues/4) | Low | `aitools sessions search <query>` and `sessions view <file>` for working with archived transcripts |
 
 ## Completed
 

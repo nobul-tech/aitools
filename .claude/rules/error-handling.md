@@ -1,6 +1,6 @@
 ## Error Handling (this repo)
 
-Project-level error handling requirements for all reusable scripts in the ai-tooling repo.
+Project-level error handling requirements for all reusable scripts in the aitools repo.
 Complements standing order #7 (user-level) and the error handling section in `script-standards.md`.
 
 ### Scope

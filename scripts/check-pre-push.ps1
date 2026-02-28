@@ -1,4 +1,4 @@
-# check-pre-push.ps1 -- automated pre-push checklist for ai-tooling
+# check-pre-push.ps1 -- automated pre-push checklist for aitools
 # Usage: .\scripts\check-pre-push.ps1
 # Read-only -- no -Fix mode (all checks are verification or reminders)
 # Platform: Windows (PS 5.1 compatible)

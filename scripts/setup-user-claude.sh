@@ -4,7 +4,7 @@
 #
 # Sources (in priority order):
 #   1. <userRepoPath>/claude/CLAUDE.md  (user's personal template from dotfile repo)
-#   2. shared/claude-shared.md          (fallback template from ai-tooling repo)
+#   2. shared/claude-shared.md          (fallback template from aitools repo)
 #
 # {{PLACEHOLDER}} tokens are interpolated at deploy time using the current
 # machine's profile from profile.json. See reference/user-repo.md.

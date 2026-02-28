@@ -34,7 +34,7 @@ All levels merge together. More specific wins on conflict.
   - Mac: `~/.claude/CLAUDE.md`
 - **Template source** (priority order):
   1. `<userRepoPath>/claude/CLAUDE.md` -- personal copy in the user's dotfile repo (syncs across machines via git). Contains `{{PLACEHOLDER}}` tokens.
-  2. `shared/claude-shared.md` -- fallback template in the ai-tooling repo.
+  2. `shared/claude-shared.md` -- fallback template in the aitools repo.
 - **Deploy flow** (`scripts/setup-user-claude.sh/.ps1`):
   1. Read template from user repo (fallback: shared template)
   2. Read `profile.json` from user repo to get identity values for current machine
@@ -111,5 +111,5 @@ Each line is a JSON object. Fields available in most entries:
 - [x] Create `~/.claude/CLAUDE.md` on Mac laptop (via `scripts/setup-user-claude.sh`)
 - [x] Shared rules in repo (`shared/claude-shared.md`), embedded into deploy scripts by `build-deploy.sh`
 - [x] Shell alias (`cc`) for auto-CLAUDE.md check (see `shared/shell/`)
-- [x] "Home base" directory for general conversations: this repo (`ai-tooling/`)
+- [x] "Home base" directory for general conversations: this repo (`aitools/`)
 - [x] Self-contained deploy scripts in `deploy/` — MDM-ready, no repo or Drive dependency

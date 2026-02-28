@@ -119,7 +119,7 @@ Progression: `evaluating` → `approved` → `supported` (or `n/a` at any point)
 
 ## Cross-Platform Requirements (This Project)
 
-The ai-tooling project supports both macOS and Windows as first-class platforms. When evaluating a tool for use in this project:
+The aitools project supports both macOS and Windows as first-class platforms. When evaluating a tool for use in this project:
 
 - **Check availability on both platforms** — Homebrew/curl for macOS, winget/choco/npm for Windows
 - **Note platform gaps** — If a tool is macOS-only or Windows-only, disclose this upfront

@@ -1,4 +1,4 @@
-# aitools.ps1 -- pull latest ai-tooling scaffolding and manage dev tools
+# aitools.ps1 -- pull latest aitools scaffolding and manage dev tools
 # Installed to ~/.local/bin/ by scripts/aitools-install.ps1
 # Native PowerShell CLI -- Windows counterpart to scripts/aitools (bash).
 
@@ -419,9 +419,10 @@ if ((Test-Path $oldConfigDir) -and -not (Test-Path $newConfigDir)) {
 $configFile = Join-Path $env:USERPROFILE ".aitools\config.json"
 $repoPath = ""
 
-$raw = Read-ConfigKey -File $configFile -Key "aiToolingRepoPath"
+$raw = Read-ConfigKey -File $configFile -Key "repoPath"
+if (-not $raw) { $raw = Read-ConfigKey -File $configFile -Key "aiToolingRepoPath" }
 if ($raw) { $repoPath = $raw }
-if (-not $repoPath) { $repoPath = Join-Path $env:USERPROFILE "repos\ai-tooling" }
+if (-not $repoPath) { $repoPath = Join-Path $env:USERPROFILE "repos\aitools" }
 
 # ---------------------------------------------------------------------------
 # --version
@@ -841,7 +842,7 @@ fs.writeFileSync(process.argv[7], JSON.stringify(profile, null, 2) + '\n');
                 # Create README
                 [System.IO.File]::WriteAllText(
                     (Join-Path $userRepoDir "README.md"),
-                    "# $repoName`n`nPrivate user repo for session archives and profile data.`nSee [ai-tooling](https://github.com/$ghUser/ai-tooling) for details.`n",
+                    "# $repoName`n`nPrivate user repo for session archives and profile data.`nSee [aitools](https://github.com/$ghUser/aitools) for details.`n",
                     [System.Text.UTF8Encoding]::new($false))
 
                 # Git init
@@ -1109,7 +1110,7 @@ if (-not (Test-Path (Join-Path $repoPath ".git"))) {
     if ($doGitpull) {
         Write-Host "Repo not found - cloning..."
         if (Get-Command gh -ErrorAction SilentlyContinue) {
-            gh repo clone nobul-jose/ai-tooling $repoPath
+            gh repo clone nobul-jose/aitools $repoPath
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "error: clone failed"
                 exit 1
@@ -1119,7 +1120,7 @@ if (-not (Test-Path (Join-Path $repoPath ".git"))) {
             exit 1
         }
     } else {
-        Write-Host "error: ai-tooling repo not found at $repoPath"
+        Write-Host "error: aitools repo not found at $repoPath"
         Write-Host "Run 'aitools gitpull' to clone the repo first."
         exit 1
     }

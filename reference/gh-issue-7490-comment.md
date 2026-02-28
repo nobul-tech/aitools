@@ -1,6 +1,6 @@
 ## Real-world cost of no PowerShell tool on Windows: a cross-platform repo's workaround inventory
 
-I maintain [aitools](https://github.com/nobul-jose/ai-tooling), a cross-platform CLI and deployment framework for managing AI development tooling, configs, and context across Windows 11 and macOS. It covers tool lifecycle management (evaluation, install, config, update), MDM-ready deployment scripts, Claude Code and Cursor configuration, MCP server setup, shell integration, auxiliary CLI tools, and cross-tool interoperability. macOS is supported with bash, Windows with native PowerShell (5.1 -- the version that ships with Windows). The repo serves both a dev-install path (runtime) and an MDM path (self-contained deploy scripts with build-time embedded content). Claude Code is my primary development tool.
+I maintain [aitools](https://github.com/nobul-jose/aitools), a cross-platform CLI and deployment framework for managing AI development tooling, configs, and context across Windows 11 and macOS. It covers tool lifecycle management (evaluation, install, config, update), MDM-ready deployment scripts, Claude Code and Cursor configuration, MCP server setup, shell integration, auxiliary CLI tools, and cross-tool interoperability. macOS is supported with bash, Windows with native PowerShell (5.1 -- the version that ships with Windows). The repo serves both a dev-install path (runtime) and an MDM path (self-contained deploy scripts with build-time embedded content). Claude Code is my primary development tool.
 
 What aitools manages today:
 

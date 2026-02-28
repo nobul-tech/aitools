@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-pre-commit.sh -- automated pre-commit checklist for ai-tooling
+# check-pre-commit.sh -- automated pre-commit checklist for aitools
 # Usage: bash scripts/check-pre-commit.sh [--fix]
 # --fix: auto-fix line endings, exec bits, and build freshness
 set -euo pipefail

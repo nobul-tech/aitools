@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # AI Tooling shell aliases — source from ~/.bashrc or ~/.zshrc
-# Usage: source "/path/to/ai-tooling/shared/shell/aliases.sh"
+# Usage: source "/path/to/aitools/shared/shell/aliases.sh"
 
 # Claude Code launcher with CLAUDE.md check
 cc() {

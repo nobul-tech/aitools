@@ -12,6 +12,27 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.24 -- Repo Rename: ai-tooling to aitools (2026-02-28)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Repo renamed from `ai-tooling` to `aitools`**: Aligns repo name with CLI brand, eliminates the hyphen that caused a real bug in session path sanitization (v0.16 #8), and simplifies all paths. |
+| 2 | **Config key renamed `aiToolingRepoPath` to `repoPath`**: Both CLI entry points (`aitools` bash + PS1) read `repoPath` first with fallback to `aiToolingRepoPath` for migration. Installer writes the new key. |
+| 3 | **Shell marker updated to `# aitools shell integration`**: Installer detects and removes old `# ai-tooling shell integration` marker block before adding the new one. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 4 | Updated ~30 files: README, CLAUDE.md, ROADMAP, shared/claude-shared.md, reference docs, rules, plans, check scripts, setup scripts, and RELEASE_NOTES GitHub issue URLs. |
+| 5 | Cross-platform paths table in CLAUDE.md now uses tilde notation (`~/repos/aitools`, `~\repos\aitools`) instead of hardcoded `C:\repos\`. |
+
+**Verified on:** Windows
+
+---
+
 ## v0.23.1 -- PS1 First-Class Documentation (2026-02-28)
 
 ### Documentation
@@ -506,8 +527,8 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 | # | Severity | Fix |
 |---|----------|-----|
-| 1 | BUG | **git pull failure misdiagnosis** ([#1](https://github.com/nobul-jose/ai-tooling/issues/1)): Any non-zero `git pull` exit was reported as "Could not reach remote". Real cause (e.g., dirty `deploy/` files) was hidden. Fix: reset generated `deploy/` before pull; distinguish network errors from other failures in both scripts. |
-| 2 | BUG | **user init existing repo failure** ([#2](https://github.com/nobul-jose/ai-tooling/issues/2)): `gh repo create` failed silently when repo already existed on GitHub. Local repo had no remote, no push. Fix: rewritten `user init` with 3-path flow (local exists / GitHub exists / fresh). |
+| 1 | BUG | **git pull failure misdiagnosis** ([#1](https://github.com/nobul-jose/aitools/issues/1)): Any non-zero `git pull` exit was reported as "Could not reach remote". Real cause (e.g., dirty `deploy/` files) was hidden. Fix: reset generated `deploy/` before pull; distinguish network errors from other failures in both scripts. |
+| 2 | BUG | **user init existing repo failure** ([#2](https://github.com/nobul-jose/aitools/issues/2)): `gh repo create` failed silently when repo already existed on GitHub. Local repo had no remote, no push. Fix: rewritten `user init` with 3-path flow (local exists / GitHub exists / fresh). |
 
 ### New features
 

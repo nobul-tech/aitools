@@ -33,7 +33,7 @@ Document the user repo pattern:
 - Session naming: `<YYYY-MM-DD>_<session-id-prefix-8>.jsonl`
 - Project derivation logic (git toplevel → basename, else sanitized cwd basename)
 - Known limitation: cwd may not match the project being worked on (e.g., working on mbx-ext from ~/scratch)
-- Relationship to ai-tooling (companion, not submodule)
+- Relationship to aitools (companion, not submodule)
 - Config key: `userRepoPath` in `~/.aitools/config.json`
 
 ### A2. Stop Hook Script
@@ -54,7 +54,7 @@ SESSION_ID=$(json_field "$INPUT" "session_id")
 CWD=$(json_field "$INPUT" "cwd")
 TRANSCRIPT=$(json_field "$INPUT" "transcript_path")
 
-# Read user repo path from ai-tooling config
+# Read user repo path from aitools config
 CONFIG_FILE="${HOME}/.aitools/config.json"
 if [ ! -f "$CONFIG_FILE" ]; then
     exit 0  # Silently skip if aitools not configured
@@ -110,7 +110,7 @@ cp "$TRANSCRIPT" "$DEST_FILE"
 
 **Files**: `scripts/setup-user-hooks.sh` + `scripts/setup-user-hooks.ps1`
 
-Deploys hook configuration to `~/.claude/settings.json`. Following ai-tooling conventions:
+Deploys hook configuration to `~/.claude/settings.json`. Following aitools conventions:
 
 - OS guard at top
 - Structured logging
@@ -127,7 +127,7 @@ The hook config in `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "bash /path/to/ai-tooling/shared/hooks/session-archive.sh"
+            "command": "bash /path/to/aitools/shared/hooks/session-archive.sh"
           }
         ]
       }
@@ -168,7 +168,7 @@ Output:
 ```
 mbx-ext/2026-02-17_e065274c.jsonl  (787K)
 mbx-ext/2026-02-17_7cae3cc3.jsonl  (1.5M)
-ai-tooling/2026-02-19_abc12345.jsonl  (423K)
+aitools/2026-02-19_abc12345.jsonl  (423K)
 ```
 
 #### `aitools sessions archive <session-id>`
@@ -192,7 +192,7 @@ Add `userRepoPath` key. The installer (`aitools-install.sh/.ps1`) should detect 
 
 ```json
 {
-  "aiToolingRepoPath": "/Users/pepe/repos/ai-tooling",
+  "repoPath": "/Users/pepe/repos/aitools",
   "userRepoPath": "/Users/pepe/repos/aitools-nobul-jose",
   "googleDrives": ["/Users/pepe/Library/CloudStorage/GoogleDrive-jose@strat-accs.com"]
 }

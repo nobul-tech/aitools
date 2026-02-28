@@ -113,8 +113,8 @@ $configDir = Join-Path $env:USERPROFILE ".aitools"
 $configFile = Join-Path $configDir "config.json"
 if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
 
-# Auto-detect ai-tooling repo path from this script's location
-$aiToolingRepo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+# Auto-detect aitools repo path from this script's location
+$aitoolsRepo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
@@ -277,7 +277,7 @@ if (Test-Path $configFile) {
 $config = [ordered]@{
     version          = 2
     reposPath        = $resolvedReposPath
-    aiToolingRepoPath = $aiToolingRepo
+    repoPath          = $aitoolsRepo
     googleDrives     = @($drives | ForEach-Object {
         [ordered]@{ path = $_.path; account = $_.account; label = $_.label }
     })
@@ -288,7 +288,7 @@ if ($existingMachineAlias) { $config["machineAlias"] = $existingMachineAlias }
 $jsonContent = $config | ConvertTo-Json -Depth 10
 [System.IO.File]::WriteAllText($configFile, $jsonContent, [System.Text.UTF8Encoding]::new($false))
 LogOk "Config written to $configFile"
-ValidateJsonConfig -File $configFile -RequiredKeys @("version", "reposPath", "aiToolingRepoPath")
+ValidateJsonConfig -File $configFile -RequiredKeys @("version", "reposPath", "repoPath")
 
 # ============================================================
 # 6. Install aitools command
@@ -328,12 +328,32 @@ if (Test-Path $aliasesPath) {
     $aliasesAbs = (Resolve-Path $aliasesPath).Path
     $profileDir = Split-Path $PROFILE -Parent
     if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Path $profileDir -Force | Out-Null }
-    $marker = "# ai-tooling shell integration"
+    $oldMarker = "# ai-tooling shell integration"
+    $marker = "# aitools shell integration"
 
     if (Test-Path $PROFILE) {
         $content = Get-Content $PROFILE -Raw
     } else {
         $content = ""
+    }
+
+    # Remove old marker block if present
+    if ($content -match [regex]::Escape($oldMarker)) {
+        $lines = @(Get-Content $PROFILE)
+        $result = @()
+        $i = 0
+        while ($i -lt $lines.Count) {
+            if ($lines[$i] -match [regex]::Escape($oldMarker)) {
+                $i++  # skip marker
+                while ($i -lt $lines.Count -and $lines[$i].Trim() -ne '') { $i++ }
+            } else {
+                $result += $lines[$i]
+                $i++
+            }
+        }
+        Set-Content $PROFILE -Value ($result -join "`n")
+        $content = Get-Content $PROFILE -Raw
+        Log "Removed old shell integration marker from $PROFILE"
     }
 
     $desiredBlock = @"

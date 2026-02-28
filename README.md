@@ -1,4 +1,4 @@
-# ai-tooling
+# aitools
 
 Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude Code, Cursor, and MCP across Windows 11 and macOS.
 
@@ -30,14 +30,14 @@ Clone the repo and run the installer:
 
 macOS/Linux:
 ```bash
-git clone https://github.com/nobul-jose/ai-tooling.git ~/repos/ai-tooling
-bash ~/repos/ai-tooling/scripts/aitools-install.sh
+git clone https://github.com/nobul-jose/aitools.git ~/repos/aitools
+bash ~/repos/aitools/scripts/aitools-install.sh
 ```
 
 Windows (PowerShell):
 ```powershell
-git clone https://github.com/nobul-jose/ai-tooling.git C:\repos\ai-tooling
-C:\repos\ai-tooling\scripts\aitools-install.ps1
+git clone https://github.com/nobul-jose/aitools.git ~\repos\aitools
+~\repos\aitools\scripts\aitools-install.ps1
 ```
 
 After install, the `aitools` command is available:
@@ -124,12 +124,12 @@ See `reference/` for deeper setup notes and practices.
 
 ```bash
 # bash/zsh — add to ~/.bashrc or ~/.zshrc
-source ~/repos/ai-tooling/shared/shell/aliases.sh
+source ~/repos/aitools/shared/shell/aliases.sh
 ```
 
 ```powershell
 # PowerShell — add to $PROFILE
-. "$HOME\repos\ai-tooling\shared\shell\aliases.ps1"
+. "$HOME\repos\aitools\shared\shell\aliases.ps1"
 ```
 
 Key aliases: `cc` (Claude Code with CLAUDE.md check), `ccr`/`ccs` (resume/pick sessions), `clip2md` (clipboard to markdown).

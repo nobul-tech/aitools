@@ -3,7 +3,7 @@
 **How to apply:** Copy everything below the `---` line and paste it into
 **Cursor Settings > Rules** on each machine.
 
-Source of truth: `shared/cursor-rules/user-rules.md` in the ai-tooling repo.
+Source of truth: `shared/cursor-rules/user-rules.md` in the aitools repo.
 The `setup-user-cursor` script copies this to your clipboard automatically.
 
 ---

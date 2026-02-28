@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-pre-push.sh -- automated pre-push checklist for ai-tooling
+# check-pre-push.sh -- automated pre-push checklist for aitools
 # Usage: bash scripts/check-pre-push.sh
 # Read-only -- no --fix mode (all checks are verification or reminders)
 set -euo pipefail

@@ -14,7 +14,7 @@ aitools-<username>/
 ├── claude/
 │   └── CLAUDE.md          # Personal CLAUDE.md template ({{PLACEHOLDER}} tokens)
 ├── sessions/             # Archived Claude Code transcripts
-│   ├── ai-tooling/       # One directory per project
+│   ├── aitools/          # One directory per project
 │   │   └── 2026-02-19_abc12345.jsonl
 │   └── mbx-ext/
 │       └── 2026-02-17_e065274c.jsonl
@@ -99,7 +99,7 @@ Added `userRepoPath` and `machineAlias` fields for user repo support.
 {
   "version": 2,
   "reposPath": "/Users/pepe/repos",
-  "aiToolingRepoPath": "/Users/pepe/repos/ai-tooling",
+  "repoPath": "/Users/pepe/repos/aitools",
   "userRepoPath": "/Users/pepe/repos/aitools-nobul-jose",
   "machineAlias": "laptop",
   "googleDrives": [
@@ -110,7 +110,7 @@ Added `userRepoPath` and `machineAlias` fields for user repo support.
 
 - **`version`** -- schema version. Bump when fields are added, removed, or semantically changed.
 - **`reposPath`** -- base directory for git repos. Set by `aitools install`.
-- **`aiToolingRepoPath`** -- path to the ai-tooling repo. Set by `aitools install`.
+- **`repoPath`** -- path to the aitools repo. Set by `aitools install`.
 - **`userRepoPath`** -- path to the user's private companion repo. Set by `aitools user init`.
 - **`machineAlias`** -- selects the profile from `profile.json`. Set during `user init` or manually.
 - **`googleDrives`** -- auto-detected Google Drive mount points. Set by `aitools install`.
@@ -119,7 +119,7 @@ All fields use read-then-merge: re-running the installer preserves existing valu
 
 ### v1 (original)
 
-Only `reposPath`, `aiToolingRepoPath`, and `googleDrives`. No user repo support.
+Only `reposPath`, `repoPath` (originally `aiToolingRepoPath`), and `googleDrives`. No user repo support.
 
 ### Migration (v1 to v2)
 
@@ -128,7 +128,7 @@ v1 configs are additive-compatible -- existing fields are preserved. The install
 ## Archiving Mechanism
 
 A Claude Code `SessionEnd` hook copies transcript files to the user repo after each session ends.
-The hook source lives at `shared/hooks/session-archive.sh` in the ai-tooling repo. Setup scripts
+The hook source lives at `shared/hooks/session-archive.sh` in the aitools repo. Setup scripts
 (`scripts/` and `deploy/` variants) copy it to `~/.claude/hooks/session-archive.sh` and point
 the `settings.json` hook command to the deployed copy. The hook:
 
@@ -143,7 +143,7 @@ the `settings.json` hook command to the deployed copy. The hook:
 Setup scripts read CLAUDE.md templates in priority order:
 
 1. `<userRepoPath>/claude/CLAUDE.md` -- personal template (syncs across machines via git)
-2. `ai-tooling/shared/claude-shared.md` -- fallback for users without a companion repo
+2. `aitools/shared/claude-shared.md` -- fallback for users without a companion repo
 
 Both templates use `{{PLACEHOLDER}}` tokens interpolated from `profile.json`:
 - `{{PROFILE_NAME}}`, `{{PROFILE_COMPANY}}`, `{{IDENTITY_GIT_NAME}}`, `{{IDENTITY_GIT_EMAIL}}`
@@ -151,16 +151,16 @@ Both templates use `{{PLACEHOLDER}}` tokens interpolated from `profile.json`:
 The deployed file at `~/.claude/CLAUDE.md` includes an auto-appended `## Machine-Specific`
 footer with OS, hostname, and shell from the current machine's profile.
 
-## Relationship to ai-tooling
+## Relationship to aitools
 
-The user repo is a companion to `ai-tooling`, not a submodule. It contains personal data (session transcripts, profile) that shouldn't be in the shared repo. The `ai-tooling` repo provides the hook script and CLI commands that operate on the user repo.
+The user repo is a companion to `aitools`, not a submodule. It contains personal data (session transcripts, profile) that shouldn't be in the shared repo. The `aitools` repo provides the hook script and CLI commands that operate on the user repo.
 
-## What Stays in ai-tooling/shared/
+## What Stays in aitools/shared/
 
 The `shared/` directory contains framework content shared across all users.
 User repos hold personal data only. This boundary is intentional:
 
-| ai-tooling/shared/ | Purpose | Why not user repo |
+| aitools/shared/ | Purpose | Why not user repo |
 |--------------------|---------|-------------------|
 | `claude-shared.md` | Fallback CLAUDE.md template | Bootstrap for new users; user repo takes priority |
 | `hooks/session-archive.sh` | SessionEnd hook source (deployed to `~/.claude/hooks/`) | Framework code operating on user data |

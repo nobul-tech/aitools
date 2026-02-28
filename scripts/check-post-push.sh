@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-post-push.sh -- automated post-push checklist for ai-tooling
+# check-post-push.sh -- automated post-push checklist for aitools
 # Usage: bash scripts/check-post-push.sh [--extensive]
 # Default: 5 always-tier steps. --extensive: all 20 steps.
 set -euo pipefail

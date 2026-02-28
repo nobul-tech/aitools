@@ -104,7 +104,7 @@ Reading/referencing any source is always OK — the gate applies at "install" or
 - **Always check**: publisher/org verification, last activity date, adoption metrics, requested permissions
 - **Quick checks**: VS Code → verified badge + install count; npm → `npm view <pkg> repository.url`; PyPI → pypi.org project URL; GitHub → org vs personal account
 - Pre-approved tools in `reference/tool-install-sources.md` don't need re-evaluation
-- Full framework: `reference/tool-evaluation-criteria.md` in ai-tooling repo
+- Full framework: `reference/tool-evaluation-criteria.md` in aitools repo
 
 ## Cross-Platform Awareness
 
@@ -141,7 +141,7 @@ Before writing a new code path that invokes `.sh` scripts, search the same file 
 
 - **Cursor**: IDE and workspace environment -- used to create projects, open folders, browse files, and use extensions. Provides embeddings
 - **Claude Code**: AI coding assistant, run within Cursor's integrated terminal
-- **aitools**: Cross-platform CLI for managing tool installs, configs, and MCP servers. Source: `~/repos/ai-tooling/`
+- **aitools**: Cross-platform CLI for managing tool installs, configs, and MCP servers. Source: `~/repos/aitools/`
 - **Marker**: Preferred PDF-to-markdown converter
 
 ### Managed CLI Tools
@@ -185,7 +185,7 @@ Three servers at user level. Chrome DevTools enabled globally; Vercel/Webflow di
 ## Coaching
 
 Active improvement areas for working with Claude Code more effectively.
-Full evaluation and progress log: `reference/claude-code-effectiveness.md` in ai-tooling repo.
+Full evaluation and progress log: `reference/claude-code-effectiveness.md` in aitools repo.
 
 - **Smaller batches**: Break large plans into 2-3 file chunks with verification between each, rather than 20+ file batches. Large batches cause rules to be ignored even when they're in context — focus narrows to feature logic and cross-cutting concerns (dispatch patterns, encoding, platform guards) get skipped. After each chunk, re-scan the rules that apply before moving on.
 - **Test mid-session**: Paste small test runs after each change group, don't wait until the end

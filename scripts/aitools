@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# aitools -- pull latest ai-tooling scaffolding and manage dev tools
+# aitools -- pull latest aitools scaffolding and manage dev tools
 # Installed to ~/.local/bin/ by scripts/aitools-install.{sh,ps1}
 #
 # The entire script is wrapped in main() so bash reads it fully into memory
@@ -481,10 +481,10 @@ fi
 config="$HOME/.aitools/config.json"
 repo_path=""
 
-if raw=$(read_config_key "$config" "aiToolingRepoPath"); then
+if raw=$(read_config_key "$config" "repoPath") || raw=$(read_config_key "$config" "aiToolingRepoPath"); then
     repo_path=$(to_native_path "$raw")
 fi
-repo_path="${repo_path:-$HOME/repos/ai-tooling}"
+repo_path="${repo_path:-$HOME/repos/aitools}"
 
 # ---------------------------------------------------------------------------
 # --version
@@ -905,7 +905,7 @@ fs.writeFileSync(process.argv[7], JSON.stringify(profile, null, 2) + '\n');
                 printf '* text=auto eol=lf\n*.jsonl text eol=lf\n' > "$user_repo_dir/.gitattributes"
 
                 # Create README
-                printf '# %s\n\nPrivate user repo for session archives and profile data.\nSee [ai-tooling](https://github.com/%s/ai-tooling) for details.\n' \
+                printf '# %s\n\nPrivate user repo for session archives and profile data.\nSee [aitools](https://github.com/%s/aitools) for details.\n' \
                     "$repo_name" "$gh_user" > "$user_repo_dir/README.md"
 
                 # Git init
@@ -1189,7 +1189,7 @@ if [ ! -d "$repo_path/.git" ]; then
     if $do_gitpull; then
         echo "Repo not found — cloning..."
         if command -v gh &>/dev/null; then
-            gh repo clone nobul-jose/ai-tooling "$repo_path" || {
+            gh repo clone nobul-jose/aitools "$repo_path" || {
                 echo "error: clone failed"
                 return 1
             }
@@ -1198,7 +1198,7 @@ if [ ! -d "$repo_path/.git" ]; then
             return 1
         fi
     else
-        echo "error: ai-tooling repo not found at $(display_path "$repo_path")"
+        echo "error: aitools repo not found at $(display_path "$repo_path")"
         echo "Run 'aitools gitpull' to clone the repo first."
         return 1
     fi

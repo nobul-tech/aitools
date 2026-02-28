@@ -251,9 +251,9 @@ CONFIG_DIR="$HOME/.aitools"
 CONFIG_FILE="$CONFIG_DIR/config.json"
 mkdir -p "$CONFIG_DIR"
 
-# Auto-detect ai-tooling repo path from this script's location
+# Auto-detect aitools repo path from this script's location
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-AI_TOOLING_REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+AITOOLS_REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # ============================================================
 # 1. Install/update gh CLI
@@ -424,15 +424,15 @@ log "Step 5: Writing config"
 # Convert MSYS paths to native Windows paths for config.json
 if command -v cygpath &>/dev/null; then
     REPOS_PATH_NATIVE=$(cygpath -w "$REPOS_PATH")
-    AI_TOOLING_NATIVE=$(cygpath -w "$AI_TOOLING_REPO")
+    AITOOLS_NATIVE=$(cygpath -w "$AITOOLS_REPO")
 else
     REPOS_PATH_NATIVE="$REPOS_PATH"
-    AI_TOOLING_NATIVE="$AI_TOOLING_REPO"
+    AITOOLS_NATIVE="$AITOOLS_REPO"
 fi
 
 # Escape backslashes for JSON
 REPOS_PATH_JSON=$(printf '%s' "$REPOS_PATH_NATIVE" | sed 's/\\/\\\\/g')
-AI_TOOLING_JSON=$(printf '%s' "$AI_TOOLING_NATIVE" | sed 's/\\/\\\\/g')
+AITOOLS_JSON=$(printf '%s' "$AITOOLS_NATIVE" | sed 's/\\/\\\\/g')
 
 # If config already exists, preserve fields we don't manage
 USER_REPO_LINE=""
@@ -463,13 +463,13 @@ cat > "$CONFIG_FILE" << CONFIGEOF
 {
   "version": 2,
   "reposPath": "$REPOS_PATH_JSON",
-  "aiToolingRepoPath": "$AI_TOOLING_JSON",
+  "repoPath": "$AITOOLS_JSON",
 ${USER_REPO_LINE}${MACHINE_ALIAS_LINE}  "googleDrives": $DRIVES_JSON
 }
 CONFIGEOF
 
 log_ok "Config written to $(display_path "$CONFIG_FILE")"
-validate_json_config "$CONFIG_FILE" version reposPath aiToolingRepoPath || true
+validate_json_config "$CONFIG_FILE" version reposPath repoPath || true
 
 # ============================================================
 # 6. Install aitools command
@@ -495,10 +495,16 @@ log "Step 7: Shell integration"
 ALIASES_PATH="$SCRIPT_DIR/../shared/shell/aliases.sh"
 if [ -f "$ALIASES_PATH" ]; then
     ALIASES_ABS=$(cd "$(dirname "$ALIASES_PATH")" && pwd)/$(basename "$ALIASES_PATH")
-    MARKER="# ai-tooling shell integration"
+    OLD_MARKER="# ai-tooling shell integration"
+    MARKER="# aitools shell integration"
     for rcfile in "$HOME/.bashrc" "$HOME/.zshrc"; do
         # Only add to files that exist OR create .bashrc as fallback
         if [ "$rcfile" = "$HOME/.bashrc" ] || [ -f "$rcfile" ]; then
+            # Remove old marker block if present
+            if grep -qF "$OLD_MARKER" "$rcfile" 2>/dev/null; then
+                perl -i -0777 -pe 's/\n?# ai-tooling shell integration\nsource "[^\n]*"\n?//g' "$rcfile"
+                log "Removed old shell integration marker from $(display_path "$rcfile")"
+            fi
             if ! grep -qF "$MARKER" "$rcfile" 2>/dev/null; then
                 printf '\n%s\nsource "%s"\n' "$MARKER" "$ALIASES_ABS" >> "$rcfile"
                 log_ok "Added shell integration to $(display_path "$rcfile")"

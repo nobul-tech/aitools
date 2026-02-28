@@ -1,4 +1,4 @@
-# check-post-push.ps1 -- automated post-push checklist for ai-tooling
+# check-post-push.ps1 -- automated post-push checklist for aitools
 # Usage: .\scripts\check-post-push.ps1 [-Extensive]
 # Default: 5 always-tier steps. -Extensive: all 20 steps.
 # Platform: Windows (PS 5.1 compatible)

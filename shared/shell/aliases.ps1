@@ -1,5 +1,5 @@
 # AI Tooling PowerShell aliases -- dot-source from $PROFILE
-# Usage: . "$HOME\repos\ai-tooling\shared\shell\aliases.ps1"
+# Usage: . "$HOME\repos\aitools\shared\shell\aliases.ps1"
 
 function cc {
     if (-not (Test-Path "CLAUDE.md") -and -not (Test-Path "CLAUDE.local.md")) {
