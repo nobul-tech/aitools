@@ -177,3 +177,13 @@ User repos hold personal data only. This boundary is intentional:
 | `aitools sessions list [project]` | List archived sessions |
 | `aitools sessions archive <session-id>` | Manually archive a session |
 | `aitools sessions move <file> <project>` | Refile a session under a different project |
+
+## Known Limitations
+
+### `sessions move` is archive-only
+
+`aitools sessions move` refiles the archived transcript in the user repo's `sessions/`
+directory. It does **not** affect Claude Code's internal session resolution, which is
+tied to the sanitized CWD path in `~/.claude/projects/`. A session started from
+`/Users/pepe/repos/ai-tooling` will always resolve to the `-Users-pepe-repos-ai-tooling/`
+directory -- `sessions move` only changes where the archive copy lives.

@@ -22,6 +22,21 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | 2 | **Config key renamed `aiToolingRepoPath` to `repoPath`**: Both CLI entry points (`aitools` bash + PS1) read `repoPath` first with fallback to `aiToolingRepoPath` for migration. Installer writes the new key. |
 | 3 | **Shell marker updated to `# aitools shell integration`**: Installer detects and removes old `# ai-tooling shell integration` marker block before adding the new one. |
 
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 6 | High | Config migration gap: rename left stale `aiToolingRepoPath` in config.json; added auto-migration to both CLI entry points |
+| 7 | Medium | Install resilience: all commands now clone fresh if repo path doesn't exist on disk (was gitpull-only) |
+| 8 | Low | `sessions move` documented as archive-only (doesn't affect Claude Code session resolution) |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 9 | Structured logging in CLI entry points (`scripts/aitools` + `.ps1`): `log`/`log_error`/`log_warn` helpers, error/warning messages logged to `deploy.log` |
+| 10 | Fixed 6 pre-existing empty `catch{}` violations in node-e one-liners (standing order #7) |
+
 ### Documentation
 
 | # | Change |

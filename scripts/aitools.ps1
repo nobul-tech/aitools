@@ -66,6 +66,20 @@ function Read-ConfigKey {
     return $null
 }
 
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+$logDir = Join-Path $env:LOCALAPPDATA "aitools"
+$logFile = Join-Path $logDir "deploy.log"
+if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+$script:errors = 0
+
+function Log      { param([string]$Msg) $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"); Add-Content -Path $logFile -Value "[$ts] [aitools] $Msg" }
+function LogOk    { param([string]$Msg) Log "OK: $Msg" }
+function LogError { param([string]$Msg) Log "ERROR: $Msg"; Write-Host "error: $Msg" -ForegroundColor Red; $script:errors++ }
+function LogWarn  { param([string]$Msg) Log "WARN: $Msg"; Write-Host "warning: $Msg" -ForegroundColor Yellow }
+
 # Check profile.json for issues and optionally prompt for fixes.
 # Usage: Invoke-ProfileCheck -Mode "warn" or "interactive"
 # Requires: node, $repoPath, $configFile
@@ -280,7 +294,7 @@ function Deploy-Configs {
             $null = [System.Management.Automation.Language.Parser]::ParseFile(
                 $scriptPath, [ref]$null, [ref]$parseErrors)
             if ($parseErrors.Count -gt 0) {
-                Write-Host "  warning: $script has parse errors -- skipping"
+                LogWarn "$script has parse errors -- skipping"
                 $errors++
                 continue
             }
@@ -289,16 +303,16 @@ function Deploy-Configs {
             try {
                 & $scriptPath *> $null 2>> $logFile
             } catch {
-                Write-Host "  error: $script failed (see $logFile)"
+                LogError "$script failed (see $logFile)"
                 $errors++
                 continue
             }
             if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
-                Write-Host "  error: $script failed (see $logFile)"
+                LogError "$script failed (see $logFile)"
                 $errors++
             }
         } else {
-            Write-Host "  warning: $script not found - skipping"
+            LogWarn "$script not found -- skipping"
         }
     }
     Remove-Item Env:\AITOOLS_DEPLOY -ErrorAction SilentlyContinue
@@ -388,14 +402,14 @@ if ($doUser -or $doSessions) {
 # Reject unknown commands (typos like "installs", "mcpp", etc.)
 $knownCommands = @("install", "gitpull", "mcp", "user", "sessions", "")
 if ($Command -and $Command -notin $knownCommands) {
-    Write-Host "error: unknown command '$Command'"
+    LogError "unknown command '$Command'"
     Write-Host "Run 'aitools --help' for usage."
     exit 1
 }
 
 # Reject --addmcp with no server names
 if ($PSBoundParameters.ContainsKey('AddMcp') -and $AddMcp.Count -eq 0) {
-    Write-Host "error: --addmcp requires at least one server name (vercel, webflow)"
+    LogError "--addmcp requires at least one server name (vercel, webflow)"
     exit 1
 }
 
@@ -409,7 +423,7 @@ $newConfigDir = Join-Path $env:USERPROFILE ".aitools"
 if ((Test-Path $oldConfigDir) -and -not (Test-Path $newConfigDir)) {
     Move-Item -Path $oldConfigDir -Destination $newConfigDir
 } elseif ((Test-Path $oldConfigDir) -and (Test-Path $newConfigDir)) {
-    Write-Host "warning: both $oldConfigDir and $newConfigDir exist -- using $newConfigDir"
+    LogWarn "both $oldConfigDir and $newConfigDir exist -- using $newConfigDir"
 }
 
 # ---------------------------------------------------------------------------
@@ -423,6 +437,28 @@ $raw = Read-ConfigKey -File $configFile -Key "repoPath"
 if (-not $raw) { $raw = Read-ConfigKey -File $configFile -Key "aiToolingRepoPath" }
 if ($raw) { $repoPath = $raw }
 if (-not $repoPath) { $repoPath = Join-Path $env:USERPROFILE "repos\aitools" }
+
+# Auto-migrate: aiToolingRepoPath -> repoPath (repo renamed ai-tooling -> aitools)
+$oldKey = Read-ConfigKey -File $configFile -Key "aiToolingRepoPath"
+if ($oldKey) {
+    try {
+        $cfgObj = Get-Content $configFile -Raw | ConvertFrom-Json
+        if (-not $cfgObj.repoPath -and $cfgObj.aiToolingRepoPath) {
+            $newVal = $cfgObj.aiToolingRepoPath -replace 'ai-tooling', 'aitools'
+            $cfgObj | Add-Member -NotePropertyName "repoPath" -NotePropertyValue $newVal -Force
+        }
+        $cfgObj.PSObject.Properties.Remove("aiToolingRepoPath")
+        $json = $cfgObj | ConvertTo-Json -Depth 10
+        $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($configFile)
+        [System.IO.File]::WriteAllText($resolved, $json + "`n", [System.Text.UTF8Encoding]::new($false))
+        Log "Migrated config: aiToolingRepoPath -> repoPath"
+        # Re-read after migration
+        $repoPath = Read-ConfigKey -File $configFile -Key "repoPath"
+    } catch {
+        LogWarn "Config key migration failed: $_"
+        # Non-fatal: continue with whatever repoPath was already resolved
+    }
+}
 
 # ---------------------------------------------------------------------------
 # --version
@@ -442,7 +478,7 @@ if ($Version) {
 
 if ($doMcpStatus) {
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-        Write-Host "error: node required for mcp status"
+        LogError "node required for mcp status"
         exit 1
     }
 
@@ -545,7 +581,7 @@ if ($AddMcp -and $AddMcp.Count -gt 0) {
     foreach ($name in $AddMcp) {
         $url = Get-McpServerUrl $name
         if (-not $url) {
-            Write-Host "error: unknown MCP server '$name'"
+            LogError "unknown MCP server '$name'"
             Write-Host "Supported servers: vercel, webflow"
             exit 1
         }
@@ -553,7 +589,7 @@ if ($AddMcp -and $AddMcp.Count -gt 0) {
 
     # Warn if cwd doesn't look like a project
     if (-not (Test-Path ".git") -and -not (Test-Path "package.json") -and -not (Test-Path "pyproject.toml")) {
-        Write-Host "warning: current directory doesn't look like a project root"
+        LogWarn "current directory doesn't look like a project root"
         Write-Host "  cwd: $(Get-Location)"
         Write-Host ""
     }
@@ -641,7 +677,7 @@ if ($doUser) {
             }
 
             if (-not $ghUser) {
-                Write-Host "error: GitHub username required"
+                LogError "GitHub username required"
                 exit 1
             }
 
@@ -918,12 +954,12 @@ if (_missing.length) { console.error('Validation failed: missing ' + _missing.jo
             Write-Host "Done. Sessions will be archived to $userRepoDir\sessions\"
         }
         "" {
-            Write-Host "error: missing subcommand"
+            LogError "missing subcommand"
             Write-Host "Usage: aitools user init"
             exit 1
         }
         default {
-            Write-Host "error: unknown subcommand 'user $subCmd'"
+            LogError "unknown subcommand 'user $subCmd'"
             Write-Host "Usage: aitools user init"
             exit 1
         }
@@ -939,7 +975,7 @@ if ($doSessions) {
     # Resolve user repo path
     $userRepo = Read-ConfigKey -File $configFile -Key "userRepoPath"
     if (-not $userRepo -or -not (Test-Path $userRepo)) {
-        Write-Host "error: user repo not configured. Run 'aitools user init' first."
+        LogError "user repo not configured. Run 'aitools user init' first."
         exit 1
     }
     $sessionsDir = Join-Path $userRepo "sessions"
@@ -978,7 +1014,7 @@ if ($doSessions) {
         "archive" {
             $sessionId = if ($subArgs.Count -gt 0) { $subArgs[0] } else { "" }
             if (-not $sessionId) {
-                Write-Host "error: session ID required"
+                LogError "session ID required"
                 Write-Host "Usage: aitools sessions archive <session-id>"
                 exit 1
             }
@@ -986,13 +1022,13 @@ if ($doSessions) {
             # Search for matching session
             $claudeProjects = Join-Path $env:USERPROFILE ".claude\projects"
             if (-not (Test-Path $claudeProjects)) {
-                Write-Host "error: no Claude Code sessions found at $claudeProjects"
+                LogError "no Claude Code sessions found at $claudeProjects"
                 exit 1
             }
 
             $matches = Get-ChildItem -Path $claudeProjects -Filter "${sessionId}*.jsonl" -Recurse -File
             if ($matches.Count -eq 0) {
-                Write-Host "error: no session found matching '$sessionId'"
+                LogError "no session found matching '$sessionId'"
                 exit 1
             }
             if ($matches.Count -gt 1) {
@@ -1059,7 +1095,7 @@ rl.on('line', line => {
             $src = if ($subArgs.Count -gt 0) { $subArgs[0] } else { "" }
             $destProject = if ($subArgs.Count -gt 1) { $subArgs[1] } else { "" }
             if (-not $src -or -not $destProject) {
-                Write-Host "error: source file and destination project required"
+                LogError "source file and destination project required"
                 Write-Host "Usage: aitools sessions move <file> <project>"
                 exit 1
             }
@@ -1072,7 +1108,7 @@ rl.on('line', line => {
             }
 
             if (-not (Test-Path $srcFile)) {
-                Write-Host "error: session file not found: $src"
+                LogError "session file not found: $src"
                 exit 1
             }
 
@@ -1081,6 +1117,7 @@ rl.on('line', line => {
             New-Item -ItemType Directory -Path $destDir -Force | Out-Null
             Move-Item -Path $srcFile -Destination $destFile
             Write-Host "Moved: $(Split-Path $srcFile -Leaf) -> $destProject/"
+            Write-Host "Note: Claude Code sessions are tied to the original working directory and cannot be moved."
 
             # Clean up empty source directory
             $oldDir = Split-Path $srcFile -Parent
@@ -1089,12 +1126,12 @@ rl.on('line', line => {
             }
         }
         "" {
-            Write-Host "error: missing subcommand"
+            LogError "missing subcommand"
             Write-Host "Usage: aitools sessions list|archive|move"
             exit 1
         }
         default {
-            Write-Host "error: unknown subcommand 'sessions $subCmd'"
+            LogError "unknown subcommand 'sessions $subCmd'"
             Write-Host "Usage: aitools sessions list|archive|move"
             exit 1
         }
@@ -1103,36 +1140,24 @@ rl.on('line', line => {
 }
 
 # ---------------------------------------------------------------------------
-# Verify repo exists (or clone if gitpull)
+# Verify repo exists (clone fresh if missing)
 # ---------------------------------------------------------------------------
 
 if (-not (Test-Path (Join-Path $repoPath ".git"))) {
-    if ($doGitpull) {
-        Write-Host "Repo not found - cloning..."
-        if (Get-Command gh -ErrorAction SilentlyContinue) {
-            gh repo clone nobul-jose/aitools $repoPath
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "error: clone failed"
-                exit 1
-            }
-        } else {
-            Write-Host "error: gh CLI not found. Install GitHub CLI first."
-            exit 1
-        }
-    } else {
-        Write-Host "error: aitools repo not found at $repoPath"
-        Write-Host "Run 'aitools gitpull' to clone the repo first."
+    LogWarn "Repo not found at $repoPath -- cloning fresh..."
+    $reposDir = Split-Path $repoPath -Parent
+    if (-not (Test-Path $reposDir)) { New-Item -ItemType Directory -Path $reposDir -Force | Out-Null }
+    git clone https://github.com/nobul-jose/aitools.git $repoPath
+    if ($LASTEXITCODE -ne 0) {
+        LogError "Failed to clone repo to $repoPath"
         exit 1
     }
+    LogOk "Clone successful"
 }
 
 # ---------------------------------------------------------------------------
 # Run update (pull + rebuild + deploy/install)
 # ---------------------------------------------------------------------------
-
-$logDir = Join-Path $env:LOCALAPPDATA "aitools"
-$logFile = Join-Path $logDir "deploy.log"
-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 
 $env:AITOOLS_RUN_ID = -join ((1..6) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) })
 
@@ -1162,14 +1187,14 @@ try {
     }
     if ($LASTEXITCODE -ne 0) {
         if ($doGitpull) {
-            Write-Host "  error: git pull failed" -ForegroundColor Red
+            LogError "git pull failed"
             Write-Host $pullOut
             exit 1
         } else {
             if ($pullOut -match "(?i)(could not resolve|unable to access|connection refused|connection timed out|no route to host)") {
                 Write-Host "  Could not reach remote - deploying from local checkout."
             } else {
-                Write-Host "  warning: git pull failed - deploying from local checkout." -ForegroundColor Yellow
+                LogWarn "git pull failed -- deploying from local checkout."
                 $pullOut.Trim().Split("`n") | Select-Object -First 3 | ForEach-Object { Write-Host "    $_" }
             }
         }
@@ -1188,7 +1213,7 @@ $userRepoPath = Read-ConfigKey -File $configFile -Key "userRepoPath"
 if ($userRepoPath -and (Test-Path (Join-Path $userRepoPath ".git"))) {
     $urPull = git -C $userRepoPath pull --ff-only --quiet 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  warning: user repo pull failed -- using local copy." -ForegroundColor Yellow
+        LogWarn "user repo pull failed -- using local copy."
     }
 }
 
@@ -1199,7 +1224,7 @@ Write-Host "[2/$steps] Rebuilding deploy scripts..."
 # See .claude/rules/cross-platform.md "Approved exceptions" for why.
 $bashExe = "$env:ProgramFiles\Git\bin\bash.exe"
 if (-not (Test-Path $bashExe)) {
-    Write-Host "  error: Git Bash not found at $bashExe (required for build)" -ForegroundColor Red
+    LogError "Git Bash not found at $bashExe (required for build)"
     exit 1
 }
 # Convert Windows path to Unix-style for Git Bash (C:\repos\... → /c/repos/...)
@@ -1212,7 +1237,7 @@ Add-Content -Path $logFile -Value $buildResult
 if ($LASTEXITCODE -eq 0) {
     Write-Host "  Done."
 } else {
-    Write-Host "  error: build failed (see $logFile)" -ForegroundColor Red
+    LogError "build failed (see $logFile)"
     exit 1
 }
 
@@ -1349,7 +1374,7 @@ if (Test-Path $aitoolsSrc) {
     $parseErrors = $null
     $null = [System.Management.Automation.Language.Parser]::ParseFile($aitoolsSrc, [ref]$null, [ref]$parseErrors)
     if ($parseErrors.Count -gt 0) {
-        Write-Host "  warning: skipping PS1 self-update (new aitools.ps1 has parse errors on this PowerShell version)" -ForegroundColor Yellow
+        LogWarn "skipping PS1 self-update (new aitools.ps1 has parse errors on this PowerShell version)"
     } else {
         $srcContent = Get-Content $aitoolsSrc -Raw
         $stampedContent = $srcContent -replace '^\$AITOOLS_INSTALLED_VERSION = ".*"', "`$AITOOLS_INSTALLED_VERSION = `"$newVersion`""

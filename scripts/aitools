@@ -47,6 +47,22 @@ display_path() {
     fi
 }
 
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
+[ "$(uname -s)" = "Darwin" ] && LOG_DIR="$HOME/Library/Logs/aitools"
+LOG_FILE="$LOG_DIR/deploy.log"
+mkdir -p "$LOG_DIR"
+LOG_DISPLAY=$(display_path "$LOG_FILE")
+ERRORS=0
+
+log()       { printf '[%s] [aitools] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >> "$LOG_FILE"; }
+log_ok()    { log "OK: $1"; }
+log_error() { log "ERROR: $1"; printf 'error: %s\n' "$1" >&2; ERRORS=$((ERRORS + 1)); }
+log_warn()  { log "WARN: $1"; printf 'warning: %s\n' "$1" >&2; }
+
 # Check profile.json for issues and optionally prompt for fixes.
 # Usage: check_profile <warn|interactive>
 # Requires: node, $repo_path, $config
@@ -83,7 +99,7 @@ check_profile() {
             # Print each issue as a warning
             printf '%s' "$result" | node -e "
                 let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
-                    try{const r=JSON.parse(d);r.issues.forEach(i=>console.log(i.message))}catch{}
+                    try{const r=JSON.parse(d);r.issues.forEach(i=>console.log(i.message))}catch(e){console.error('profile parse error: '+e.message)}
                 })
             " 2>/dev/null | while IFS= read -r line; do
                 printf '\033[33mprofile: %s\033[0m\n' "$line"
@@ -124,7 +140,7 @@ migrate_profile_v1_to_v2() {
                 console.log(m.github||'');
                 console.log(m.company||'');
                 console.log(r.profilePath||'');
-            }catch{}
+            }catch(e){console.error('migration data parse error: '+e.message)}
         })
     " 2>/dev/null)
 
@@ -236,8 +252,8 @@ fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
     if [ -d "$user_repo_dir/.git" ]; then
         if [ -n "$(git -C "$user_repo_dir" status --porcelain)" ]; then
             local git_name git_email
-            git_name=$(node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.identity.git.name||'')}catch{}" "$profile_path" 2>/dev/null)
-            git_email=$(node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.identity.git.email||'')}catch{}" "$profile_path" 2>/dev/null)
+            git_name=$(node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.identity.git.name||'')}catch(e){console.error('profile read error: '+e.message)}" "$profile_path" 2>/dev/null)
+            git_email=$(node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.identity.git.email||'')}catch(e){console.error('profile read error: '+e.message)}" "$profile_path" 2>/dev/null)
             if [ -n "$git_name" ] && [ -n "$git_email" ]; then
                 git -C "$user_repo_dir" config user.name "$git_name"
                 git -C "$user_repo_dir" config user.email "$git_email"
@@ -284,7 +300,7 @@ deploy_configs() {
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
             if ! command -v pwsh &>/dev/null; then
-                echo "  error: pwsh (PowerShell 7) not found. Install: winget install --id Microsoft.PowerShell --source winget"
+                log_error "pwsh (PowerShell 7) not found. Install: winget install --id Microsoft.PowerShell --source winget"
                 return 1
             fi
             local deploy_scripts="setup-user-claude.ps1 setup-user-mcp.ps1 setup-cursor-mcp.ps1 setup-user-cursor.ps1 setup-user-hooks.ps1"
@@ -297,17 +313,17 @@ deploy_configs() {
                         \$null = [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$script_path")', [ref]\$null, [ref]\$e)
                         if (\$e.Count -gt 0) { exit 1 }
                     " 2>/dev/null; then
-                        echo "  warning: $script has parse errors -- skipping"
+                        log_warn "$script has parse errors -- skipping"
                         errors=$((errors + 1))
                         continue
                     fi
                     if ! pwsh -NoProfile -ExecutionPolicy Bypass \
                         -File "$(cygpath -w "$script_path")" > /dev/null 2>> "$LOG_FILE"; then
-                        echo "  error: $script failed (see $LOG_DISPLAY)"
+                        log_error "$script failed (see $LOG_DISPLAY)"
                         errors=$((errors + 1))
                     fi
                 else
-                    echo "  warning: $script not found — skipping"
+                    log_warn "$script not found -- skipping"
                 fi
             done
             ;;
@@ -318,16 +334,16 @@ deploy_configs() {
                 if [ -f "$script_path" ]; then
                     # Validate bash syntax before executing
                     if ! bash -n "$script_path" 2>/dev/null; then
-                        echo "  warning: $script has syntax errors -- skipping"
+                        log_warn "$script has syntax errors -- skipping"
                         errors=$((errors + 1))
                         continue
                     fi
                     if ! bash "$script_path" > /dev/null 2>> "$LOG_FILE"; then
-                        echo "  error: $script failed (see $LOG_DISPLAY)"
+                        log_error "$script failed (see $LOG_DISPLAY)"
                         errors=$((errors + 1))
                     fi
                 else
-                    echo "  warning: $script not found — skipping"
+                    log_warn "$script not found -- skipping"
                 fi
             done
             ;;
@@ -445,14 +461,14 @@ done
 
 # Reject unknown arguments when not installing (typos like "installs", "mcpp", etc.)
 if ! $do_install && [ ${#passthrough[@]} -gt 0 ]; then
-    echo "error: unknown argument '${passthrough[0]}'"
+    log_error "unknown argument '${passthrough[0]}'"
     echo "Run 'aitools --help' for usage."
     return 1
 fi
 
 # Reject --addmcp with no server names
 if $addmcp_seen && [ ${#addmcp_servers[@]} -eq 0 ]; then
-    echo "error: --addmcp requires at least one server name (vercel, webflow)"
+    log_error "--addmcp requires at least one server name (vercel, webflow)"
     return 1
 fi
 
@@ -471,7 +487,7 @@ new_config_dir="$HOME/.aitools"
 if [ -d "$old_config_dir" ] && [ ! -d "$new_config_dir" ]; then
     mv "$old_config_dir" "$new_config_dir"
 elif [ -d "$old_config_dir" ] && [ -d "$new_config_dir" ]; then
-    echo "warning: both $old_config_dir and $new_config_dir exist -- using $new_config_dir"
+    log_warn "both $old_config_dir and $new_config_dir exist -- using $new_config_dir"
 fi
 
 # ---------------------------------------------------------------------------
@@ -485,6 +501,32 @@ if raw=$(read_config_key "$config" "repoPath") || raw=$(read_config_key "$config
     repo_path=$(to_native_path "$raw")
 fi
 repo_path="${repo_path:-$HOME/repos/aitools}"
+
+# Auto-migrate: aiToolingRepoPath -> repoPath (repo renamed ai-tooling -> aitools)
+if read_config_key "$config" "aiToolingRepoPath" >/dev/null 2>&1; then
+    if command -v node &>/dev/null; then
+        migrate_out=$(node -e "
+const fs = require('fs');
+const f = process.argv[1];
+try {
+    const cfg = JSON.parse(fs.readFileSync(f, 'utf8'));
+    if (!cfg.repoPath && cfg.aiToolingRepoPath) {
+        cfg.repoPath = cfg.aiToolingRepoPath.replace(/ai-tooling/g, 'aitools');
+    }
+    delete cfg.aiToolingRepoPath;
+    fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
+    console.log('migrated');
+} catch (e) {
+    console.error('config migration failed: ' + e.message);
+    process.exit(1);
+}
+" "$config" 2>&1) || log_warn "config key migration failed: $migrate_out"
+        # Re-read repo_path after migration
+        if raw=$(read_config_key "$config" "repoPath"); then
+            repo_path=$(to_native_path "$raw")
+        fi
+    fi
+fi
 
 # ---------------------------------------------------------------------------
 # --version
@@ -504,7 +546,7 @@ fi
 
 if $do_mcp_status; then
     if ! command -v node &>/dev/null; then
-        echo "error: node required for mcp status"
+        log_error "node required for mcp status"
         return 1
     fi
 
@@ -608,7 +650,7 @@ if [ ${#addmcp_servers[@]} -gt 0 ]; then
     for name in "${addmcp_servers[@]}"; do
         url=$(mcp_server_url "$name")
         if [ -z "$url" ]; then
-            echo "error: unknown MCP server '$name'"
+            log_error "unknown MCP server '$name'"
             echo "Supported servers: vercel, webflow"
             return 1
         fi
@@ -616,7 +658,7 @@ if [ ${#addmcp_servers[@]} -gt 0 ]; then
 
     # Warn if cwd doesn't look like a project
     if [ ! -d ".git" ] && [ ! -f "package.json" ] && [ ! -f "pyproject.toml" ]; then
-        echo "warning: current directory doesn't look like a project root"
+        log_warn "current directory doesn't look like a project root"
         echo "  cwd: $(display_path "$(pwd)")"
         echo ""
     fi
@@ -705,7 +747,7 @@ if $do_user; then
             fi
 
             if [ -z "$gh_user" ]; then
-                echo "error: GitHub username required"
+                log_error "GitHub username required"
                 return 1
             fi
 
@@ -748,7 +790,7 @@ try {
                 if command -v node &>/dev/null && [ -f "$user_repo_dir/profile.json" ]; then
                     local prof_version
                     prof_version=$(node -e "
-try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.version||'')}catch{}
+try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.version||'')}catch(e){console.error('profile read error: '+e.message)}
 " "$user_repo_dir/profile.json" 2>/dev/null)
                     if [ "$prof_version" != "2" ]; then
                         echo "profile.json is v1 (legacy). Migrating to v2..."
@@ -769,7 +811,7 @@ try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));conso
                 if command -v node &>/dev/null && [ -f "$user_repo_dir/profile.json" ]; then
                     local prof_version
                     prof_version=$(node -e "
-try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.version||'')}catch{}
+try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.version||'')}catch(e){console.error('profile read error: '+e.message)}
 " "$user_repo_dir/profile.json" 2>/dev/null)
                     if [ "$prof_version" != "2" ]; then
                         echo "profile.json is v1 (legacy). Migrating to v2..."
@@ -988,12 +1030,12 @@ if (_missing.length) { console.error('Validation failed: missing ' + _missing.jo
             echo "Done. Sessions will be archived to $(display_path "$user_repo_dir/sessions/")"
             ;;
         "")
-            echo "error: missing subcommand"
+            log_error "missing subcommand"
             echo "Usage: aitools user init"
             return 1
             ;;
         *)
-            echo "error: unknown subcommand 'user $user_subcmd'"
+            log_error "unknown subcommand 'user $user_subcmd'"
             echo "Usage: aitools user init"
             return 1
             ;;
@@ -1012,7 +1054,7 @@ if $do_sessions; then
         user_repo=$(to_native_path "$raw")
     fi
     if [ -z "$user_repo" ] || [ ! -d "$user_repo" ]; then
-        echo "error: user repo not configured. Run 'aitools user init' first."
+        log_error "user repo not configured. Run 'aitools user init' first."
         return 1
     fi
     sessions_dir="$user_repo/sessions"
@@ -1049,7 +1091,7 @@ if $do_sessions; then
         archive)
             session_id="${sessions_args[0]:-}"
             if [ -z "$session_id" ]; then
-                echo "error: session ID required"
+                log_error "session ID required"
                 echo "Usage: aitools sessions archive <session-id>"
                 return 1
             fi
@@ -1057,7 +1099,7 @@ if $do_sessions; then
             # Search for matching session in ~/.claude/projects/
             claude_projects="$HOME/.claude/projects"
             if [ ! -d "$claude_projects" ]; then
-                echo "error: no Claude Code sessions found at $claude_projects"
+                log_error "no Claude Code sessions found at $claude_projects"
                 return 1
             fi
 
@@ -1069,7 +1111,7 @@ if $do_sessions; then
             done < <(find "$claude_projects" -name "${session_id}*.jsonl" -type f 2>/dev/null)
 
             if [ ${#matches[@]} -eq 0 ]; then
-                echo "error: no session found matching '$session_id'"
+                log_error "no session found matching '$session_id'"
                 echo "Hint: check 'ls ~/.claude/projects/*/' for available sessions"
                 return 1
             fi
@@ -1138,7 +1180,7 @@ rl.on('line', line => {
             src="${sessions_args[0]:-}"
             dest_project="${sessions_args[1]:-}"
             if [ -z "$src" ] || [ -z "$dest_project" ]; then
-                echo "error: source file and destination project required"
+                log_error "source file and destination project required"
                 echo "Usage: aitools sessions move <file> <project>"
                 return 1
             fi
@@ -1151,7 +1193,7 @@ rl.on('line', line => {
             fi
 
             if [ ! -f "$src_file" ]; then
-                echo "error: session file not found: $src"
+                log_error "session file not found: $src"
                 return 1
             fi
 
@@ -1160,6 +1202,7 @@ rl.on('line', line => {
             mkdir -p "$dest_dir"
             mv "$src_file" "$dest_file"
             echo "Moved: $(basename "$src_file") -> $dest_project/"
+            echo "Note: Claude Code sessions are tied to the original working directory and cannot be moved."
 
             # Clean up empty source directory
             old_dir=$(dirname "$src_file")
@@ -1168,12 +1211,12 @@ rl.on('line', line => {
             fi
             ;;
         "")
-            echo "error: missing subcommand"
+            log_error "missing subcommand"
             echo "Usage: aitools sessions list|archive|move"
             return 1
             ;;
         *)
-            echo "error: unknown subcommand 'sessions $sessions_subcmd'"
+            log_error "unknown subcommand 'sessions $sessions_subcmd'"
             echo "Usage: aitools sessions list|archive|move"
             return 1
             ;;
@@ -1182,24 +1225,17 @@ rl.on('line', line => {
 fi
 
 # ---------------------------------------------------------------------------
-# Verify repo exists (or clone if gitpull)
+# Verify repo exists (clone fresh if missing)
 # ---------------------------------------------------------------------------
 
 if [ ! -d "$repo_path/.git" ]; then
-    if $do_gitpull; then
-        echo "Repo not found — cloning..."
-        if command -v gh &>/dev/null; then
-            gh repo clone nobul-jose/aitools "$repo_path" || {
-                echo "error: clone failed"
-                return 1
-            }
-        else
-            echo "error: gh CLI not found. Install GitHub CLI first."
-            return 1
-        fi
+    log_warn "Repo not found at $(display_path "$repo_path") -- cloning fresh..."
+    repos_dir=$(dirname "$repo_path")
+    mkdir -p "$repos_dir"
+    if git clone https://github.com/nobul-jose/aitools.git "$repo_path"; then
+        log_ok "Clone successful"
     else
-        echo "error: aitools repo not found at $(display_path "$repo_path")"
-        echo "Run 'aitools gitpull' to clone the repo first."
+        log_error "Failed to clone repo to $(display_path "$repo_path")"
         return 1
     fi
 fi
@@ -1207,14 +1243,6 @@ fi
 # ---------------------------------------------------------------------------
 # Run update (pull + rebuild + deploy/install)
 # ---------------------------------------------------------------------------
-
-LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
-[ "$(uname -s)" = "Darwin" ] && LOG_DIR="$HOME/Library/Logs/aitools"
-LOG_FILE="$LOG_DIR/deploy.log"
-mkdir -p "$LOG_DIR"
-
-# Display-friendly path for user-facing messages
-LOG_DISPLAY=$(display_path "$LOG_FILE")
 
 export AITOOLS_RUN_ID=$(head -c 6 /dev/urandom | od -An -tx1 | tr -d ' \n')
 
@@ -1242,7 +1270,7 @@ if $do_gitpull; then
             echo "  Updated."
         fi
     else
-        echo "  error: git pull failed" >&2
+        log_error "git pull failed"
         echo "$pull_out" >&2
         return 1
     fi
@@ -1263,7 +1291,7 @@ else
         if echo "$pull_out" | grep -qiE "could not resolve|unable to access|connection refused|connection timed out|no route to host"; then
             echo "  Could not reach remote — deploying from local checkout."
         else
-            echo "  warning: git pull failed — deploying from local checkout." >&2
+            log_warn "git pull failed -- deploying from local checkout."
             echo "$pull_out" | head -3 | sed 's/^/    /' >&2
         fi
     fi
@@ -1274,7 +1302,7 @@ if raw=$(read_config_key "$config" "userRepoPath"); then
     user_repo_path=$(to_native_path "$raw")
     if [ -d "$user_repo_path/.git" ]; then
         if ! git -C "$user_repo_path" pull --ff-only --quiet 2>/dev/null; then
-            echo "  warning: user repo pull failed — using local copy." >&2
+            log_warn "user repo pull failed -- using local copy."
         fi
     fi
 fi
@@ -1284,7 +1312,7 @@ echo "[2/$STEPS] Rebuilding deploy scripts..."
 if bash "$repo_path/scripts/build-deploy.sh" >> "$LOG_FILE" 2>&1; then
     echo "  Done."
 else
-    echo "  error: build failed (see $LOG_DISPLAY)" >&2
+    log_error "build failed (see $LOG_DISPLAY)"
     return 1
 fi
 
@@ -1430,7 +1458,7 @@ if [ -f "$repo_path/scripts/aitools" ]; then
             "$repo_path/scripts/aitools" > "$HOME/.local/bin/aitools"
         chmod +x "$HOME/.local/bin/aitools"
     else
-        echo "  warning: skipping bash self-update (new aitools has syntax errors)"
+        log_warn "skipping bash self-update (new aitools has syntax errors)"
     fi
 
     # On Windows, also self-update aitools.ps1 (validate with current PS version first)
@@ -1445,7 +1473,7 @@ if [ -f "$repo_path/scripts/aitools" ]; then
                     sed 's/^\$AITOOLS_INSTALLED_VERSION = ".*"/$AITOOLS_INSTALLED_VERSION = "'"$new_version"'"/' \
                         "$repo_path/scripts/aitools.ps1" > "$HOME/.local/bin/aitools.ps1"
                 else
-                    echo "  warning: skipping PS1 self-update (parse errors on this PowerShell version)"
+                    log_warn "skipping PS1 self-update (parse errors on this PowerShell version)"
                 fi
             fi
             ;;
