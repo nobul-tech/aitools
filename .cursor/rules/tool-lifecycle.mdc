@@ -17,6 +17,10 @@ When adding a new managed tool, follow the lifecycle in `reference/tool-evaluati
 
 This applies in plan mode too -- a plan that includes Phases 3-5 must note the Phase 2 gate and flag that implementation is contingent on approval.
 
+### PATH refresh after install
+
+When a tool is installed via a package manager (winget, brew, npm), the new binary may not be on PATH in the current shell. Do not invoke via hardcoded package paths. Instead: install, ask user to relaunch Claude Code for PATH refresh, then verify and test.
+
 ### Lifecycle field completeness
 
 Every tool in `reference/tool-install-sources.md` (including Under Evaluation) must have: Platform Status, Concurrency, Post-Install Config, Dependencies, Invocation. Verify before committing.
