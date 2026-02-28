@@ -12,6 +12,35 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.23 -- PowerShell 7 Baseline (2026-02-28)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **pwsh as managed tool on Windows**: Added to `tool-install-sources.md` (Windows: `supported`). Install via `winget install --id Microsoft.PowerShell --source winget`. |
+| 2 | **PS 7 version guard in deploy scripts**: Generated deploy `.ps1` files (`setup-user-claude`, `setup-user-cursor`, `setup-user-hooks`) now error on PS 5.1 with install instructions. |
+| 3 | **Bootstrap exception in `aitools-install.sh`**: On Windows, tries `pwsh` first; falls back to `powershell.exe` only to install pwsh via winget on fresh machines. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 4 | **All bash→PS dispatch migrated to `pwsh`**: `scripts/aitools`, `scripts/aitools-install.sh`, `scripts/check-pre-commit.sh`, `scripts/check-post-push.sh`, `scripts/build-deploy.sh` -- every `powershell.exe` dispatch call now uses `pwsh`. |
+| 5 | **pwsh availability check**: `deploy_configs()` in `scripts/aitools` now validates pwsh is installed before dispatching, with a clear error message and install command. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 6 | **Rules updated for PS 7 baseline**: `.claude/rules/cross-platform.md` + `.cursor/rules/cross-platform.mdc` -- dispatch pattern uses `pwsh`, new "PS 7 baseline" section documents retained PS 5.1 workarounds as harmless, ASCII-only relaxed to preference, pipeline encoding downgraded to advisory. |
+| 7 | **Checklist rules updated**: All 6 checklist rule files (pre-commit, pre-push, post-push in both `.claude/` and `.cursor/`) -- Windows invocation commands use `pwsh`. |
+| 8 | **Shared content + project docs**: `shared/claude-shared.md`, `CLAUDE.md`, `reference/claude-code-windows-shell.md`, `.claude/commands/pre-update.md`, `scripts/README.md` -- all `powershell.exe` references updated to `pwsh`. |
+
+**Verified on:** Windows (pwsh 7.5.4, all scripts syntax-validated via build-deploy.sh). macOS: not tested.
+
+---
+
 ## v0.22 -- Error Handling Audit & Rust Support (2026-02-27)
 
 ### New features

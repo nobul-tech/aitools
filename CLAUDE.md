@@ -11,7 +11,7 @@ ai-tooling/
 │   ├── general.mdc      #   Identity, code style
 │   ├── sources-of-truth.mdc  # Protected files review gate
 │   ├── tool-lifecycle.mdc     # Phase 2 gate for new tools
-│   ├── cross-platform.mdc    # Dual-script, OS guards, PS 5.1
+│   ├── cross-platform.mdc    # Dual-script, OS guards, PS 7
 │   └── concurrent-agents.mdc # Multi-agent coordination
 ├── shared/              # Source of truth for configs
 │   ├── claude-shared.md #   → embedded into deploy scripts by build
@@ -109,9 +109,9 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 
 ### Windows dispatch in `aitools` (bash)
 
-Every setup script has an OS guard that rejects the wrong platform. The bash `aitools` runs in Git Bash on Windows, so **any code path that calls `.sh` setup scripts must also handle Windows by calling `.ps1` via `powershell.exe`**. This pattern exists in `deploy_configs()` and the `install` command — check both when adding new flows.
+Every setup script has an OS guard that rejects the wrong platform. The bash `aitools` runs in Git Bash on Windows, so **any code path that calls `.sh` setup scripts must also handle Windows by calling `.ps1` via `pwsh`**. This pattern exists in `deploy_configs()` and the `install` command — check both when adding new flows.
 
-Pattern: `case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) powershell.exe -File ... ;; *) bash ... ;; esac`
+Pattern: `case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) pwsh -File ... ;; *) bash ... ;; esac`
 
 The PS1 `aitools.ps1` mirrors each bash command. When adding a command to one, add it to both.
 

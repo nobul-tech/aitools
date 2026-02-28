@@ -13,7 +13,7 @@ When writing scripts or paths **in this repo**:
 
 Every `.sh` setup script has `case "$(uname -s)" in MINGW*...) exit 1`. The bash `aitools` entry point runs in Git Bash on Windows. So:
 
-- **Never call `.sh` setup scripts without a `uname -s` dispatch.** On Windows, call the `.ps1` variant via `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$path")"`.
+- **Never call `.sh` setup scripts without a `uname -s` dispatch.** On Windows, call the `.ps1` variant via `pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$path")"`.
 - When adding a new code path that invokes setup scripts, search the file for existing `MINGW*|MSYS*|CYGWIN*` blocks and replicate the pattern.
 - When adding a command to `scripts/aitools`, add the equivalent to `scripts/aitools.ps1`.
 
@@ -23,7 +23,7 @@ Note: The dual-script rule is specific to this repo. Most projects are platform-
 
 **Default**: Every script gets a native variant for each platform (`.sh` + `.ps1`). Both Windows/PowerShell and macOS/bash are first-class citizens.
 
-**Crossing languages** (e.g., PowerShell calling a bash script via Git Bash, or bash calling PowerShell via `powershell.exe`) **is an exception, not the default.** Before planning any cross-language call:
+**Crossing languages** (e.g., PowerShell calling a bash script via Git Bash, or bash calling PowerShell via `pwsh`) **is an exception, not the default.** Before planning any cross-language call:
 
 1. **Stop and ask the user** — explain what you're proposing, why a native variant isn't feasible, and what the trade-off is
 2. **Get explicit approval** — do not proceed without it
@@ -38,32 +38,32 @@ This applies during planning (plan mode), not just implementation. If your plan 
 |--------|-------------------|----------|--------------------------|
 | `scripts/build-deploy.sh` | Build step that produces platform-independent output (both .sh and .ps1 deploy scripts). Runs once, result committed to git. Maintaining a parallel PS1 would double maintenance for no output difference. | 2026-02-17 | `aitools.ps1` calls via Git Bash (guaranteed prerequisite): `& $bashExe "$path/build-deploy.sh"` |
 
-### PowerShell 5.1 compatibility
+### PowerShell 7 baseline
 
-Windows ships with PowerShell 5.1 (Windows PowerShell). All `.ps1` scripts in this repo must work on PS 5.1.
+PS 7 (`pwsh`) is the project baseline on both platforms. Deploy scripts enforce
+this with a version guard that errors on PS 5.1.
 
-Common PS 7+ features that break on 5.1:
-- `-replace` with a scriptblock (e.g., `-replace 'pat', { $_.Groups[1] }`) — use `-match`/`$Matches` instead
-- Null-coalescing `??` and null-conditional `?.` operators
-- Ternary `$x ? $a : $b` — use `if/else` instead
-- `Join-Path` with 3+ arguments — chain two calls instead
-- `Set-Content -Encoding UTF8` writes BOM on 5.1 — use `[System.IO.File]::WriteAllText()` instead
-- `[Parser]::ParseFile()` returns the AST object -- always assign to `$null` (i.e., `$null = [Parser]::ParseFile(...)`) or the full AST dumps to stdout
+Existing PS 5.1 workarounds remain in scripts -- they are harmless on PS 7 and
+will be cleaned up in a future pass. Common patterns you'll see:
+- `if/else` instead of ternary `$x ? $a : $b`
+- Chained `Join-Path` calls instead of 3+ arguments
+- `[System.IO.File]::WriteAllText()` instead of `Set-Content -Encoding UTF8`
+- `$null = [Parser]::ParseFile(...)` to suppress AST dump
+- `ConvertPSObjectToHashtable` helper for JSON round-tripping
 
-### ASCII-only rule for PS1 executable code
+### ASCII preference for PS1 executable code
 
-PS 5.1 reads BOM-free UTF-8 files using the system ANSI codepage (Windows-1252). Multi-byte UTF-8 characters (em-dash, curly quotes, ellipsis) can contain bytes that map to quote characters in Windows-1252, breaking string literals. Rules:
-- No non-ASCII characters in PS1 executable code (strings, expressions)
-- Non-ASCII in comments is tolerated but discouraged
-- Use: `--` not em-dash, `"` not smart quotes, `...` not ellipsis
+Prefer ASCII in PS1 strings and expressions. PS 7 handles BOM-free UTF-8
+natively, so this is a preference for consistency, not a hard requirement.
+Existing ASCII workarounds (e.g., `--` instead of em-dash) are harmless.
 
-### PowerShell pipeline encoding gotcha
+### PowerShell pipeline encoding (advisory)
 
-PowerShell pipes external command output through the console's codepage (often Windows-1252), not UTF-8. Non-ASCII bytes from external tools (pandoc, curl, git, etc.) get mangled to `?` (0x3F) in the pipeline. This affects all PS versions on Windows, not just 5.1.
-
-**Never pipe UTF-8 output from external commands through PowerShell when non-ASCII content is expected.** Instead:
-- Use temp files: write input with `[System.IO.File]::WriteAllText()`, run the command with `-o` output flag, read result with `[System.IO.File]::ReadAllText()`
-- Or set `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` before piping (session-wide side effect)
+On Windows, PowerShell can mangle non-ASCII bytes from external commands
+(pandoc, curl, git) when piping through the console codepage. PS 7 improves
+this but doesn't fully eliminate it. When non-ASCII content is expected:
+- Prefer temp files over piping (`-o` flag, `[IO.File]::ReadAllText()`)
+- Or set `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`
 
 ### .NET clipboard encoding gotcha (Windows)
 
@@ -92,9 +92,9 @@ $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSP
 
 When creating or modifying any `.ps1` or `.sh` script in this repo:
 - Before committing, validate syntax on the current platform:
-  - PS1: `powershell.exe -NoProfile -Command "[System.Management.Automation.Language.Parser]::ParseFile('path', [ref]$null, [ref]$e); $e"`
+  - PS1: `pwsh -NoProfile -Command "[System.Management.Automation.Language.Parser]::ParseFile('path', [ref]$null, [ref]$e); $e"`
   - Bash: `bash -n path/to/script.sh`
-- On Windows, always validate PS1 files (PS 5.1 catches encoding and syntax issues that PS 7 does not)
+- On Windows, always validate PS1 files with pwsh
 - On macOS, always validate `.sh` files; PS1 validation requires `pwsh` (managed tool -- install via `brew install powershell/tap/powershell`)
 - If the other platform's script can't be validated locally, note it in the commit message: `(tested: macOS)` or `(tested: Windows)`
 - Note untested items in `RELEASE_NOTES.md` (see verified-platform convention)

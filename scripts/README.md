@@ -53,7 +53,7 @@ Setup and utility scripts for configuring AI tooling across machines.
 
 All scripts include OS guards:
 - **Setup scripts** (`.sh`/`.ps1`): Hard-block the wrong platform with an error and exit
-- **CLI entry points** (`aitools`, `aitools-install.sh`): Detect Windows and forward to the `.ps1` variant via `powershell.exe -File` instead of hard-blocking
+- **CLI entry points** (`aitools`, `aitools-install.sh`): Detect Windows and forward to the `.ps1` variant via `pwsh -File` instead of hard-blocking
 
 This prevents deploy scripts from accidentally running on the wrong platform, while the CLI entry points provide a seamless cross-platform experience.
 

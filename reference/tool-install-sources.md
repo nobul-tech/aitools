@@ -359,7 +359,7 @@ pandoc --version
 | Platform | Method | Command |
 |----------|--------|---------|
 | macOS | Homebrew -- Microsoft tap (preferred) | `brew install powershell/tap/powershell` |
-| Windows | Built-in | Windows PowerShell 5.1 ships with Windows 10+ |
+| Windows | winget (preferred) | `winget install --id Microsoft.PowerShell --source winget` |
 
 ### Update
 
@@ -379,17 +379,17 @@ pwsh --version
 
 ### Notes
 
-- On macOS, the binary is `pwsh` (not `powershell`)
-- On Windows, `powershell.exe` (PS 5.1) is built-in; `pwsh` is only needed for PS 7+
-- Used by: PS1 syntax validation in check scripts and build-deploy.sh
+- Binary is `pwsh` on both platforms (not `powershell` or `powershell.exe`)
+- Windows also ships `powershell.exe` (PS 5.1) -- not used by this project except as bootstrap fallback in `aitools-install.sh`
+- Used by: PS1 syntax validation in check scripts and build-deploy.sh, all Windows dispatch from bash scripts
 
 ### Lifecycle
 
-- **Platform Status:** macOS: supported; Windows: n/a (Windows PowerShell 5.1 built-in)
+- **Platform Status:** macOS: supported; Windows: supported
 - **Concurrency:** Yes -- independent sessions
 - **Post-Install Config:** None
-- **Dependencies:** Homebrew (macOS install only)
-- **Invocation:** `pwsh` (direct; never `brew install --cask powershell` -- use Microsoft tap)
+- **Dependencies:** Homebrew (macOS), winget (Windows)
+- **Invocation:** `pwsh` (direct; never `powershell.exe` except bootstrap)
 
 ---
 

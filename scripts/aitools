@@ -273,7 +273,7 @@ repo_version() {
 }
 
 # Deploy all config scripts from the repo's scripts/ directory.
-# On Windows (Git Bash), calls .ps1 variants via powershell.exe.
+# On Windows (Git Bash), calls .ps1 variants via pwsh.
 # Child scripts log to LOG_FILE themselves (via tee/Add-Content), so we
 # redirect stdout to /dev/null to prevent double-logging.
 deploy_configs() {
@@ -283,12 +283,16 @@ deploy_configs() {
     if $dry_run; then export AITOOLS_DRY_RUN=1; fi
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
+            if ! command -v pwsh &>/dev/null; then
+                echo "  error: pwsh (PowerShell 7) not found. Install: winget install --id Microsoft.PowerShell --source winget"
+                return 1
+            fi
             local deploy_scripts="setup-user-claude.ps1 setup-user-mcp.ps1 setup-cursor-mcp.ps1 setup-user-cursor.ps1 setup-user-hooks.ps1"
             for script in $deploy_scripts; do
                 local script_path="$script_dir/$script"
                 if [ -f "$script_path" ]; then
                     # Validate PS1 syntax before executing
-                    if ! powershell.exe -NoProfile -Command "
+                    if ! pwsh -NoProfile -Command "
                         \$e = \$null
                         \$null = [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$script_path")', [ref]\$null, [ref]\$e)
                         if (\$e.Count -gt 0) { exit 1 }
@@ -297,7 +301,7 @@ deploy_configs() {
                         errors=$((errors + 1))
                         continue
                     fi
-                    if ! powershell.exe -NoProfile -ExecutionPolicy Bypass \
+                    if ! pwsh -NoProfile -ExecutionPolicy Bypass \
                         -File "$(cygpath -w "$script_path")" > /dev/null 2>> "$LOG_FILE"; then
                         echo "  error: $script failed (see $LOG_DISPLAY)"
                         errors=$((errors + 1))
@@ -968,7 +972,7 @@ if (_missing.length) { console.error('Validation failed: missing ' + _missing.jo
                 MINGW*|MSYS*|CYGWIN*)
                     hook_setup="$repo_path/scripts/setup-user-hooks.ps1"
                     if [ -f "$hook_setup" ]; then
-                        powershell.exe -NoProfile -ExecutionPolicy Bypass \
+                        pwsh -NoProfile -ExecutionPolicy Bypass \
                             -File "$(cygpath -w "$hook_setup")"
                     fi
                     ;;
@@ -1306,7 +1310,7 @@ if $do_install; then
                 esac
                 i=$((i + 1))
             done
-            powershell.exe -NoProfile -ExecutionPolicy Bypass \
+            pwsh -NoProfile -ExecutionPolicy Bypass \
                 -File "$(cygpath -w "$repo_path/scripts/aitools-install.ps1")" \
                 "${ps_args[@]}"
             ;;
@@ -1433,7 +1437,7 @@ if [ -f "$repo_path/scripts/aitools" ]; then
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
             if [ -f "$repo_path/scripts/aitools.ps1" ]; then
-                if powershell.exe -NoProfile -Command "
+                if pwsh -NoProfile -Command "
                     \$e = \$null
                     [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$repo_path/scripts/aitools.ps1")', [ref]\$null, [ref]\$e)
                     if (\$e.Count -gt 0) { exit 1 }

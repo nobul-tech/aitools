@@ -38,6 +38,13 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     exit 1
 }
 
+# --- PS 7 version guard ---
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    Write-Host "ERROR: This script requires PowerShell 7+. Current: $($PSVersionTable.PSVersion)" -ForegroundColor Red
+    Write-Host "Install: winget install --id Microsoft.PowerShell --source winget" -ForegroundColor Yellow
+    exit 1
+}
+
 # --- PS 5.1 compatibility helper ---
 function ConvertPSObjectToHashtable($obj) {
     if ($null -eq $obj) { return @{} }

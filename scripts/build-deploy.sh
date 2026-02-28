@@ -272,6 +272,18 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 OS_GUARD_PS1
 }
 
+ps1_version_guard() {
+    cat <<'VERSION_GUARD_PS1'
+
+# --- PS 7 version guard ---
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    Write-Host "ERROR: This script requires PowerShell 7+. Current: $($PSVersionTable.PSVersion)" -ForegroundColor Red
+    Write-Host "Install: winget install --id Microsoft.PowerShell --source winget" -ForegroundColor Yellow
+    exit 1
+}
+VERSION_GUARD_PS1
+}
+
 # ============================================================
 # PS 5.1 compatibility helper (ConvertPSObjectToHashtable)
 # ============================================================
@@ -454,6 +466,7 @@ BLOCK
     ps1_param_block
     ps1_logging_helpers "setup-user-claude"
     ps1_os_guard
+    ps1_version_guard
     ps1_backup_helper
     ps1_flag_helpers
     cat <<'BLOCK'
@@ -745,6 +758,7 @@ BLOCK
     ps1_logging_helpers "setup-user-cursor"
     ps1_backup_helper
     ps1_os_guard
+    ps1_version_guard
     ps1_hashtable_helper
     ps1_flag_helpers
     cat <<'BLOCK'
@@ -1293,6 +1307,7 @@ BLOCK
     ps1_param_block
     ps1_logging_helpers "setup-user-hooks"
     ps1_os_guard
+    ps1_version_guard
     ps1_hashtable_helper
     ps1_backup_helper
     ps1_flag_helpers
@@ -1439,9 +1454,7 @@ GENERATED=$((GENERATED + 1))
 # Post-build: Validate PS1 syntax (Windows only)
 # ============================================================
 # On Windows (Git Bash), validate all generated .ps1 files with ParseFile.
-# Catches encoding issues (em-dash, smart quotes) and PS 5.1 syntax errors
-# at build time rather than install time.
-# On macOS, skip -- pwsh may not be installed.
+# Catches encoding issues and syntax errors at build time rather than install time.
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
         blog "Validating generated PS1 scripts..."
@@ -1449,7 +1462,7 @@ case "$(uname -s)" in
         for ps1_file in "$DEPLOY_DIR"/*.ps1; do
             [ -f "$ps1_file" ] || continue
             ps1_name=$(basename "$ps1_file")
-            if ! powershell.exe -NoProfile -Command "
+            if ! pwsh -NoProfile -Command "
                 \$e = \$null
                 \$null = [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$ps1_file")', [ref]\$null, [ref]\$e)
                 if (\$e.Count -gt 0) {

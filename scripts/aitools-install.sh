@@ -85,7 +85,18 @@ case "$(uname -s)" in
             ps_args+=("-ReposPath" "$(cygpath -w "$REPOS_PATH")")
         fi
         echo "Windows detected -- forwarding to PowerShell installer..."
-        powershell.exe -NoProfile -ExecutionPolicy Bypass \
+        # Bootstrap: if pwsh not installed, use powershell.exe to install it via winget
+        if ! command -v pwsh &>/dev/null; then
+            echo "pwsh (PowerShell 7) not found -- installing via winget..."
+            powershell.exe -NoProfile -Command 'winget install --id Microsoft.PowerShell --source winget --accept-package-agreements --accept-source-agreements'
+            # Refresh PATH hash so pwsh is found
+            hash -r
+            if ! command -v pwsh &>/dev/null; then
+                echo "error: pwsh install succeeded but not in PATH. Restart terminal and re-run." >&2
+                exit 1
+            fi
+        fi
+        pwsh -NoProfile -ExecutionPolicy Bypass \
             -File "$(cygpath -w "$ps1_installer")" "${ps_args[@]}"
         exit $?
         ;;

@@ -43,7 +43,7 @@ Reading/referencing any source is always OK — the gate applies at "install" or
 
 **Rule**: To check if a tool is installed on Windows, use:
 ```bash
-powershell.exe -NoProfile -Command 'Get-Command <tool> -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source'
+pwsh -NoProfile -Command 'Get-Command <tool> -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source'
 ```
 Never use `which <tool>` or `command -v <tool>` on Windows to determine whether a tool is available.
 
@@ -54,7 +54,7 @@ Claude Code on Windows runs in Git Bash. Any bash code that invokes `.sh` script
 **Rule**: When bash code calls platform-specific scripts (`.sh`/`.ps1`), always check `uname -s` and dispatch to the correct variant:
 ```bash
 case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*) powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$ps1_path")" ;;
+    MINGW*|MSYS*|CYGWIN*) pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$ps1_path")" ;;
     *) bash "$sh_path" ;;
 esac
 ```
@@ -77,13 +77,13 @@ use `npx`, `bunx`, or other package runners.
 | Vercel CLI | `vercel` |
 | Pandoc | `pandoc` |
 | Rust (cargo) | `cargo` |
-| pwsh (macOS) | `pwsh` |
+| pwsh | `pwsh` |
 
 ### Per-Platform Tools
 
 - **macOS**: Terminal.app, zsh, bash, Cursor, Claude Code, pwsh (when PowerShell needed)
-- **Windows**: PowerShell, Cursor, Claude Code, Command Prompt, WSL/bash (when Linux/Unix environment needed)
-- **Note**: Claude Code on Windows always uses Git Bash (not configurable). `CLAUDE_CODE_SHELL` is broken on Windows ([#25558](https://github.com/anthropics/claude-code/issues/25558)). Use Unix shell syntax in all Claude Code sessions. To run PowerShell: `powershell.exe -NoProfile -Command '...'`
+- **Windows**: pwsh, Cursor, Claude Code, Command Prompt, WSL/bash (when Linux/Unix environment needed)
+- **Note**: Claude Code on Windows always uses Git Bash (not configurable). `CLAUDE_CODE_SHELL` is broken on Windows ([#25558](https://github.com/anthropics/claude-code/issues/25558)). Use Unix shell syntax in all Claude Code sessions. To run PowerShell: `pwsh -NoProfile -Command '...'`
 
 ### Cursor CLI (`agent`)
 
@@ -131,7 +131,7 @@ These are non-negotiable. Repeated violations of any standing order will end the
 3. **Checklist scripts, not ad-hoc** -- Use the project's check scripts (`check-pre-commit`, `check-pre-push`, `check-post-push`) instead of ad-hoc commands. Ad-hoc is OK for novel one-off checks only.
 4. **Scratch files for complex bash** -- Never inline long commands in the Bash tool. Write a temp file, execute, clean up. Inline only for simple one-liners.
 5. **Perl for string manipulation** -- Use Perl (not sed/awk) for non-trivial string manipulation. sed is fine for trivial single substitutions only.
-6. **Platform-native dispatch** -- Run `.ps1` via `powershell.exe -File` on Windows, `.sh` via `bash` on macOS. Never run `.sh` scripts on Windows -- they skip PS1 validation and miss Windows-only issues.
+6. **Platform-native dispatch** -- Run `.ps1` via `pwsh -File` on Windows, `.sh` via `bash` on macOS. Never run `.sh` scripts on Windows -- they skip PS1 validation and miss Windows-only issues.
 7. **No silent failures in reusable code** -- In any code meant to run more than once (scripts, services, hooks, CLI tools), never suppress errors without checking the result and logging/failing. `-ErrorAction SilentlyContinue`, `2>/dev/null`, `|| true`, `try/catch` are fine IF the result is immediately checked. Command-existence checks with explicit fallback are exempt. Applies when the project has a logging framework, is production code, or has reliability expectations. Does NOT apply to scratch/temp/throwaway work.
 
 **In plan mode**: Always review these areas and proactively suggest relevant improvements (e.g., "consider breaking this into smaller batches" or "this would be a good candidate for a hook").

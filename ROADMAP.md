@@ -12,6 +12,7 @@ Detailed plans live in `plans/`. See `RELEASE_NOTES.md` for completed work.
 
 | Item | Plan | Priority | Summary |
 |------|------|----------|---------|
+| Chrome DevTools research subagent | -- | Medium | Custom subagent type for web doc reading tasks. Passes proper context (rules, CLAUDE.md) and uses Chrome DevTools MCP skill. Enables parallel doc fetches without losing project rules. |
 | Tool lifecycle gaps | -- | Medium | Security/credential docs, cleanup for all tools, troubleshooting guides, ~~version management~~, CVE response, deprecation path |
 | Log location discoverability | -- | Medium | Document log paths (`deploy.log`, `clip2md.log`, `checks.log`, `checks.jsonl`) in CLAUDE.md, README, and rules. Add `aitools logs` command to open/tail/clear logs. Assess log rotation and management. |
 | Conditional template blocks | [#5](https://github.com/nobul-jose/ai-tooling/issues/5) | Medium | Platform-gated sections in CLAUDE.md templates (e.g., `{{#if WINDOWS}}...{{/if}}`). Enables Windows-only or macOS-only coaching/rules without auto-memory. |

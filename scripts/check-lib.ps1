@@ -170,10 +170,6 @@ function InvokeGit {
 # ---------------------------------------------------------------------------
 # Platform detection
 # ---------------------------------------------------------------------------
-$script:IsMacOS = ($PSVersionTable.PSEdition -eq "Core") -and $IsMacOS
-$script:IsWindowsOS = (-not $script:IsMacOS)
-# On PS 5.1 (Windows only), $IsMacOS doesn't exist, so IsWindowsOS defaults to true
-if ($PSVersionTable.PSVersion.Major -le 5) {
-    $script:IsWindowsOS = $true
-    $script:IsMacOS = $false
-}
+# PS 7+ provides $IsMacOS and $IsWindows as read-only automatic variables.
+# PS 5.1 (Windows only) lacks these -- $IsMacOS is $null (falsy), which is correct.
+# Consumer scripts use $IsMacOS / $IsWindows directly; no custom variables needed.

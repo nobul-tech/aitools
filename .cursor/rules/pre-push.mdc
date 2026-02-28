@@ -7,7 +7,7 @@ alwaysApply: true
 ## Pre-Push Checklist (this repo)
 
 > **Script**: On macOS: `bash scripts/check-pre-push.sh`.
-> On Windows: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/check-pre-push.ps1`.
+> On Windows: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/check-pre-push.ps1`.
 > Always use the platform-native variant. Never run the `.sh` version on Windows.
 
 Before pushing to remote, verify:

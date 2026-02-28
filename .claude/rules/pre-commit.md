@@ -1,7 +1,7 @@
 ## Pre-Commit Checklist (this repo)
 
 > **Script**: On macOS: `bash scripts/check-pre-commit.sh` (or `--fix`).
-> On Windows: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/check-pre-commit.ps1` (or `-Fix`).
+> On Windows: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/check-pre-commit.ps1` (or `-Fix`).
 > Always use the platform-native variant. Never run the `.sh` version on Windows.
 
 Before every commit, verify:

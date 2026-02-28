@@ -18,22 +18,22 @@ This repo targets macOS and Windows equally.
 Every `.sh` setup script has `case "$(uname -s)" in MINGW*...) exit 1`. The bash `aitools` runs in Git Bash on Windows, so:
 
 - Never call `.sh` setup scripts without a `uname -s` dispatch
-- On Windows, call `.ps1` via `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$path")"`
+- On Windows, call `.ps1` via `pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$path")"`
 
 ### Cross-language script calls require explicit approval
 
 Every script gets a native variant for each platform. Crossing languages (e.g., PowerShell calling bash) is an exception -- ask the user first. See approved exceptions in `.claude/rules/cross-platform.md`.
 
-### PowerShell 5.1 compatibility
+### PowerShell 7 baseline
 
-All `.ps1` scripts must work on PS 5.1. Avoid: `-replace` with scriptblock, `??`/`?.` operators, ternary, `Join-Path` with 3+ args, `Set-Content -Encoding UTF8` (writes BOM).
+PS 7 (`pwsh`) is the project baseline on both platforms. Existing PS 5.1 workarounds remain in scripts -- harmless on PS 7, cleanup deferred.
 
-### ASCII-only rule for PS1 executable code
+### ASCII preference for PS1 executable code
 
-PS 5.1 reads BOM-free UTF-8 as Windows-1252. No non-ASCII in PS1 strings/expressions. Use `--` not em-dash, `"` not smart quotes, `...` not ellipsis.
+Prefer ASCII in PS1 strings and expressions for consistency. PS 7 handles UTF-8 natively, so this is a preference, not a hard rule.
 
 ### Pre-validation convention
 
 Before committing scripts, validate syntax:
-- PS1: `powershell.exe -NoProfile -Command "[System.Management.Automation.Language.Parser]::ParseFile('path', [ref]$null, [ref]$e); $e"`
+- PS1: `pwsh -NoProfile -Command "[System.Management.Automation.Language.Parser]::ParseFile('path', [ref]$null, [ref]$e); $e"`
 - Bash: `bash -n path/to/script.sh`

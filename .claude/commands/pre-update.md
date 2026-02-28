@@ -59,7 +59,7 @@ Truncate the deploy log so post-update output is isolated.
 Use `truncate -s 0` (not shell `>` redirect, which can hang in Claude Code):
 
 - macOS: `truncate -s 0 ~/Library/Logs/aitools/deploy.log`
-- Windows: `powershell.exe -Command 'Set-Content -Path "$env:LOCALAPPDATA\aitools\deploy.log" -Value $null'`
+- Windows: `pwsh -Command 'Set-Content -Path "$env:LOCALAPPDATA\aitools\deploy.log" -Value $null'`
 
 Detect the current platform and use the correct command.
 

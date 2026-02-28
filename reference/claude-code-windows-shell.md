@@ -16,7 +16,7 @@ Baseline: Claude Code 2.1.51 | Last verified: 2.1.62 (2026-02-27)
 
 ## What Does NOT Work
 
-- `CLAUDE_CODE_SHELL=powershell.exe` as an environment variable -- ignored
+- `CLAUDE_CODE_SHELL=pwsh` as an environment variable -- ignored
 - `env.CLAUDE_CODE_SHELL` in `settings.json` -- ignored
 - No setting, extension, or MCP server can change the Bash tool's shell on Windows
 
@@ -25,7 +25,7 @@ Baseline: Claude Code 2.1.51 | Last verified: 2.1.62 (2026-02-27)
 ### Run a PowerShell command from the Bash tool
 
 ```bash
-powershell.exe -NoProfile -Command 'Your-Command Here'
+pwsh -NoProfile -Command 'Your-Command Here'
 ```
 
 Single-quote the `-Command` argument so bash doesn't expand `$` variables meant for PowerShell.
@@ -33,7 +33,7 @@ Single-quote the `-Command` argument so bash doesn't expand `$` variables meant 
 ### Run a .ps1 script from the Bash tool
 
 ```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "path/to/script.ps1"
+pwsh -NoProfile -ExecutionPolicy Bypass -File "path/to/script.ps1"
 ```
 
 This is the pattern used by `aitools install` (see the `install` command in `scripts/aitools`).
@@ -41,7 +41,7 @@ This is the pattern used by `aitools install` (see the `install` command in `scr
 ### Multi-line PowerShell from the Bash tool
 
 ```bash
-powershell.exe -NoProfile -Command '
+pwsh -NoProfile -Command '
   $items = Get-ChildItem -Path .
   foreach ($item in $items) {
     Write-Host $item.Name
@@ -53,10 +53,10 @@ powershell.exe -NoProfile -Command '
 
 | Pattern | Works? | Why |
 |---------|--------|-----|
-| `powershell.exe -Command 'Write-Host $env:PATH'` | Yes | Single quotes prevent bash expansion |
-| `powershell.exe -Command "Write-Host $env:PATH"` | No | Bash expands `$env` (empty), PowerShell gets broken command |
-| `powershell.exe -Command 'Write-Host "hello world"'` | Yes | Inner double quotes are fine inside outer single quotes |
-| `powershell.exe -Command "Write-Host 'hello world'"` | Risky | Bash may expand special chars in the outer double quotes |
+| `pwsh -Command 'Write-Host $env:PATH'` | Yes | Single quotes prevent bash expansion |
+| `pwsh -Command "Write-Host $env:PATH"` | No | Bash expands `$env` (empty), PowerShell gets broken command |
+| `pwsh -Command 'Write-Host "hello world"'` | Yes | Inner double quotes are fine inside outer single quotes |
+| `pwsh -Command "Write-Host 'hello world'"` | Risky | Bash may expand special chars in the outer double quotes |
 
 **Rule of thumb:** Always single-quote the outer `-Command` string. Use double quotes inside for PowerShell string interpolation.
 
@@ -69,7 +69,7 @@ For anything beyond a trivial one-liner, **do not use inline `-Command`**. The q
 ```bash
 # Step 1: Use the Write tool to create a temp .ps1 file with full PS syntax
 # Step 2: Execute it cleanly — no quoting issues
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "path/to/temp.ps1"
+pwsh -NoProfile -ExecutionPolicy Bypass -File "path/to/temp.ps1"
 # Step 3: Delete the temp file when done
 ```
 
@@ -79,10 +79,10 @@ Benefits:
 - Same pattern works for validation scripts
 - Tools like pandoc, git, etc. resolve correctly in the script's PATH context
 
-**Only use inline `-Command`** for trivial one-liners where a temp file would be overkill (e.g., `powershell.exe -Command '$PSVersionTable.PSVersion'`).
+**Only use inline `-Command`** for trivial one-liners where a temp file would be overkill (e.g., `pwsh -Command '$PSVersionTable.PSVersion'`).
 
 ## Impact on This Repo
 
-This repo provides both `.ps1` and `.sh` variants of all scripts. On Windows, Claude Code can run `.sh` scripts natively (Git Bash) but must use the `powershell.exe -File` workaround for `.ps1` scripts.
+This repo provides both `.ps1` and `.sh` variants of all scripts. On Windows, Claude Code can run `.sh` scripts natively (Git Bash) but must use the `pwsh -File` workaround for `.ps1` scripts. PS 7 (`pwsh`) is the project baseline -- all dispatch uses `pwsh`, not `powershell.exe`.
 
-Once Anthropic fixes the upstream issues, we can simplify by setting `CLAUDE_CODE_SHELL` and running `.ps1` scripts directly.
+Once Anthropic fixes the upstream issues, we can simplify by setting `CLAUDE_CODE_SHELL=pwsh` and running `.ps1` scripts directly.

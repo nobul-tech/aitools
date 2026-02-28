@@ -97,7 +97,7 @@ else
             while IFS= read -r f; do
                 [ -n "$f" ] || continue
                 win_path=$(cygpath -w "$REPO_ROOT/$f")
-                if ! powershell.exe -NoProfile -Command "
+                if ! pwsh -NoProfile -Command "
                     \$e = \$null
                     \$null = [System.Management.Automation.Language.Parser]::ParseFile('$win_path', [ref]\$null, [ref]\$e)
                     if (\$e.Count -gt 0) { \$e | ForEach-Object { Write-Host \"  line \$(\$_.Extent.StartLineNumber): \$(\$_.Message)\" }; exit 1 }
