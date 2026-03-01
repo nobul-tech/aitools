@@ -12,6 +12,32 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.26.1 -- Hook Observe Mode & Bug Fixes (2026-03-01)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Hook observe/enforce mode**: `standing-order-guard.sh` now supports `MODE="observe"` (log-only, default) and `MODE="enforce"` (blocking). New `violation()` helper dispatches based on mode. Logs to `~/.claude/hooks/logs/`. |
+| 2 | **Pipeline exemption**: `cat`, `head`, `tail` as first token are allowed when the command contains a pipe (`|`), since the Read tool can't pipe output. |
+| 3 | **Hook rollout rule**: New `.claude/rules/hook-rollout.md` + `.cursor/rules/hook-rollout.mdc` codifying the observe-then-enforce practice. |
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 4 | High | **Post-push step 5 crash on macOS**: `find -printf '%T@'` is GNU-only; replaced with `find -print0` + `stat` loop for cross-platform file mtime lookup. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 5 | **Hook hot-path efficiency**: Moved `mkdir -p` from `violation()` to script init; replaced `sed`-based newline counting and `head\|awk` token extraction with pure bash. Cuts ~4 external process spawns per invocation. |
+
+**Verified on:** macOS
+
+---
+
 ## v0.26 -- Typst PDF Engine (2026-02-28)
 
 ### New features
