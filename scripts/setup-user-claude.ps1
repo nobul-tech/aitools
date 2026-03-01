@@ -284,6 +284,15 @@ if ($DryRun) {
 } else {
     # Backup and remove existing file so we always write the latest version
     Backup-File -FilePath $claudeMd
+    # Capture existing content for post-write comparison
+    $oldContent = ""
+    if (Test-Path $claudeMd) {
+        try {
+            $oldContent = Get-Content $claudeMd -Raw -ErrorAction Stop
+        } catch {
+            LogWarn "Cannot read existing CLAUDE.md for comparison: $_"
+        }
+    }
     if (Test-Path $claudeMd) {
         Remove-Item $claudeMd
         Log "Removed existing $claudeMd"
@@ -309,6 +318,26 @@ if ($DryRun) {
     # --- END post-write validation (extracted by build-deploy) ---
 
     LogOk "Wrote $claudeMd"
+    # Log whether content actually changed
+    if (-not $oldContent) {
+        Log "Content: new file"
+    } elseif ($oldContent -eq $content) {
+        Log "Content unchanged (no differences)"
+    } else {
+        Log "Content updated"
+        # Log diff to deploy log (not console)
+        $oldLines = @($oldContent -split "`n")
+        $newLines = @($content -split "`n")
+        $diffResult = Compare-Object $oldLines $newLines -PassThru
+        if ($diffResult) {
+            Add-Content -Path $logFile -Value "  --- previous/CLAUDE.md"
+            Add-Content -Path $logFile -Value "  +++ new/CLAUDE.md"
+            foreach ($line in $diffResult) {
+                $side = if ($line.SideIndicator -eq '<=') { '-' } else { '+' }
+                Add-Content -Path $logFile -Value "  $side $line"
+            }
+        }
+    }
 }
 
 # --- BEGIN rules deployment (extracted by build-deploy) ---
@@ -389,7 +418,7 @@ if ($rulesSrc) {
                     continue
                 }
                 if ($oldContent -eq $newContent) {
-                    Log "Unchanged: $($rf.Name)"
+                    Log "Unchanged: $($rf.Name) (no differences)"
                     $unchanged++
                     continue
                 }

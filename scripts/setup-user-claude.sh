@@ -224,6 +224,11 @@ if [ "$DRY_RUN" = "true" ]; then
 else
     # Backup and remove existing file so we always write the latest version
     backup_file "$CLAUDE_MD"
+    # Capture existing content for post-write comparison
+    OLD_CONTENT=""
+    if [ -f "$CLAUDE_MD" ]; then
+        OLD_CONTENT=$(cat "$CLAUDE_MD")
+    fi
     if [ -f "$CLAUDE_MD" ]; then
         rm "$CLAUDE_MD"
         log "Removed existing $(display_path "$CLAUDE_MD")"
@@ -252,6 +257,19 @@ EOF
     # --- END post-write validation (extracted by build-deploy) ---
 
     log_ok "Wrote $(display_path "$CLAUDE_MD")"
+    # Log whether content actually changed
+    NEW_WRITTEN=$(cat "$CLAUDE_MD")
+    if [ -z "$OLD_CONTENT" ]; then
+        log "Content: new file"
+    elif [ "$OLD_CONTENT" = "$NEW_WRITTEN" ]; then
+        log "Content unchanged (no differences)"
+    else
+        log "Content updated"
+        # Log unified diff to deploy log (not console)
+        diff -u <(echo "$OLD_CONTENT") <(echo "$NEW_WRITTEN") \
+            --label "previous/CLAUDE.md" --label "new/CLAUDE.md" \
+            >> "$LOG_FILE" 2>&1 || true  # diff exits 1 on differences (expected)
+    fi
 fi
 
 # --- BEGIN rules deployment (extracted by build-deploy) ---
@@ -311,7 +329,7 @@ if [ -n "$RULES_SRC" ]; then
             if [ -f "$RULES_DEST/$rule_name" ]; then
                 # diff -q: exits 0 if identical, 1 if different (expected behavior)
                 if diff -q "$RULES_DEST/$rule_name" "$rule_file" >/dev/null 2>&1; then
-                    log "Unchanged: $rule_name"
+                    log "Unchanged: $rule_name (no differences)"
                     UNCHANGED=$((UNCHANGED + 1))
                     continue
                 fi

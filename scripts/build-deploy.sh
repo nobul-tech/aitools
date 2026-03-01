@@ -502,6 +502,11 @@ if [ "$DRY_RUN" = "true" ]; then
     fi
 else
     backup_file "$CLAUDE_MD"
+    # Capture existing content for post-write comparison
+    OLD_CONTENT=""
+    if [ -f "$CLAUDE_MD" ]; then
+        OLD_CONTENT=$(cat "$CLAUDE_MD")
+    fi
     if [ -f "$CLAUDE_MD" ]; then
         rm "$CLAUDE_MD"
         log "Removed existing $CLAUDE_MD"
@@ -525,6 +530,18 @@ BLOCK
 
     log_ok "Wrote $(display_path "$CLAUDE_MD")"
     log "Machine: $OS_NAME $ARCH ($HOSTNAME), Shell: $SHELL_NAME"
+    # Log whether content actually changed
+    if [ -z "$OLD_CONTENT" ]; then
+        log "Content: new file"
+    elif [ "$OLD_CONTENT" = "$NEW_CONTENT" ]; then
+        log "Content unchanged (no differences)"
+    else
+        log "Content updated"
+        # Log unified diff to deploy log (not console)
+        diff -u <(echo "$OLD_CONTENT") <(echo "$NEW_CONTENT") \
+            --label "previous/CLAUDE.md" --label "new/CLAUDE.md" \
+            >> "$LOG_FILE" 2>&1 || true  # diff exits 1 on differences (expected)
+    fi
 fi
 
 BLOCK
@@ -649,6 +666,15 @@ if ($DryRun) {
     }
 } else {
     Backup-File -FilePath $claudeMd
+    # Capture existing content for post-write comparison
+    $oldContent = ""
+    if (Test-Path $claudeMd) {
+        try {
+            $oldContent = Get-Content $claudeMd -Raw -ErrorAction Stop
+        } catch {
+            LogWarn "Cannot read existing CLAUDE.md for comparison: $_"
+        }
+    }
     if (Test-Path $claudeMd) {
         Remove-Item $claudeMd
         Log "Removed existing $claudeMd"
@@ -665,6 +691,26 @@ BLOCK
 
     LogOk "Wrote $claudeMd"
     Log "Machine: $osInfo ($hostname)"
+    # Log whether content actually changed
+    if (-not $oldContent) {
+        Log "Content: new file"
+    } elseif ($oldContent -eq $content) {
+        Log "Content unchanged (no differences)"
+    } else {
+        Log "Content updated"
+        # Log diff to deploy log (not console)
+        $oldLines = @($oldContent -split "`n")
+        $newLines = @($content -split "`n")
+        $diffResult = Compare-Object $oldLines $newLines -PassThru
+        if ($diffResult) {
+            Add-Content -Path $logFile -Value "  --- previous/CLAUDE.md"
+            Add-Content -Path $logFile -Value "  +++ new/CLAUDE.md"
+            foreach ($line in $diffResult) {
+                $side = if ($line.SideIndicator -eq '<=') { '-' } else { '+' }
+                Add-Content -Path $logFile -Value "  $side $line"
+            }
+        }
+    }
 }
 
 BLOCK
