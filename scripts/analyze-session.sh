@@ -4,8 +4,8 @@
 # Usage: bash scripts/analyze-session.sh <transcript.jsonl> [--verbose]
 #
 # Detects:
-#   SO #1: Bash tool used for file operations (cat, grep, sed, find, etc.)
-#   SO #4: Long inline Bash commands (5+ lines)
+#   USO: Dedicated tools -- Bash tool used for file operations (cat, grep, sed, find, etc.)
+#   USO: Scratch files -- Long inline Bash commands (5+ lines)
 #   Batch size: Many consecutive write/edit operations without verification steps
 #
 # Requires: node (for JSON parsing of JSONL)
@@ -42,7 +42,7 @@ const lines = fs.readFileSync(file, "utf8").trim().split("\n");
 
 // --- Detection patterns ---
 
-// SO #1: file-op commands in Bash tool
+// USO: Dedicated tools -- file-op commands in Bash tool
 const fileOpPatterns = [
     { regex: /^cat\s/, tool: "Read", cmd: "cat" },
     { regex: /^head\s/, tool: "Read (with limit)", cmd: "head" },
@@ -59,7 +59,7 @@ const fileOpPatterns = [
 ];
 
 // Results
-const violations = { so1: [], so4: [], batch: [] };
+const violations = { dedicatedTools: [], scratchFiles: [], batch: [] };
 let toolCalls = [];
 let lineNum = 0;
 
@@ -80,14 +80,14 @@ for (const line of lines) {
         // Track tool call sequence for batch analysis
         toolCalls.push({ tool: toolName, line: lineNum, input });
 
-        // SO #1: Bash used for file ops
+        // USO: Dedicated tools -- Bash used for file ops
         if (toolName === "Bash" && input.command) {
             const cmd = input.command;
             const firstToken = cmd.split(/\s/)[0];
 
             for (const pat of fileOpPatterns) {
                 if (pat.regex.test(cmd)) {
-                    violations.so1.push({
+                    violations.dedicatedTools.push({
                         line: lineNum,
                         cmd: firstToken,
                         shouldUse: pat.tool,
@@ -97,10 +97,10 @@ for (const line of lines) {
                 }
             }
 
-            // SO #4: Long inline commands (5+ lines)
+            // USO: Scratch files -- Long inline commands (5+ lines)
             const nlCount = (cmd.match(/\n/g) || []).length;
             if (nlCount >= 4) {
-                violations.so4.push({
+                violations.scratchFiles.push({
                     line: lineNum,
                     lines: nlCount + 1,
                     snippet: cmd.substring(0, 80) + (cmd.length > 80 ? "..." : ""),
@@ -149,24 +149,24 @@ console.log("File: " + path.basename(file));
 console.log("Tool calls: " + totalTools + " (Bash: " + bashCalls + ")");
 console.log("");
 
-// SO #1
-console.log("--- SO #1: File ops in Bash (" + violations.so1.length + " violations) ---");
-if (violations.so1.length === 0) {
+// USO: Dedicated tools
+console.log("--- USO: Dedicated tools (" + violations.dedicatedTools.length + " violations) ---");
+if (violations.dedicatedTools.length === 0) {
     console.log("  None found.");
 } else {
-    for (const v of violations.so1) {
+    for (const v of violations.dedicatedTools) {
         console.log("  L" + v.line + ": " + v.cmd + " -> should use " + v.shouldUse);
         if (verbose) console.log("    " + v.snippet);
     }
 }
 console.log("");
 
-// SO #4
-console.log("--- SO #4: Long inline commands (" + violations.so4.length + " violations) ---");
-if (violations.so4.length === 0) {
+// USO: Scratch files
+console.log("--- USO: Scratch files (" + violations.scratchFiles.length + " violations) ---");
+if (violations.scratchFiles.length === 0) {
     console.log("  None found.");
 } else {
-    for (const v of violations.so4) {
+    for (const v of violations.scratchFiles) {
         console.log("  L" + v.line + ": " + v.lines + " lines");
         if (verbose) console.log("    " + v.snippet);
     }
@@ -185,7 +185,7 @@ if (violations.batch.length === 0) {
 console.log("");
 
 // Summary
-const total = violations.so1.length + violations.so4.length + violations.batch.length;
+const total = violations.dedicatedTools.length + violations.scratchFiles.length + violations.batch.length;
 if (total === 0) {
     console.log("CLEAN: No violations detected.");
 } else {

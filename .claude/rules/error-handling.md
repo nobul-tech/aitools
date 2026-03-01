@@ -2,7 +2,7 @@
 
 Project-level error handling requirements for all plans you propose and all reusable
 code you write in the aitools repo. A plan that drafts code with violations is itself
-a violation. Complements standing order #7 (user-level) and the error handling section
+a violation. Complements USO: No silent failures (user-level) and the error handling section
 in `script-standards.md`.
 
 ### Scope
@@ -40,6 +40,6 @@ Plans and pseudocode in `plans/*.md` are held to the same standard.
 
 ### Cross-references
 
-- Standing order #7 in `shared/claude-shared.md` (user-level, applies to all projects)
+- USO: No silent failures in `shared/claude-shared.md` (user-level, applies to all projects)
 - Error handling section in `.claude/rules/script-standards.md` (repo-level conventions)
 - Exemptions table in `.claude/rules/script-standards.md` (approved deviations)

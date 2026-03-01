@@ -17,4 +17,4 @@ All plans you propose and all code you write must follow these rules. Plans with
 
 Exception: command-existence checks (`Get-Command`, `command -v`) with explicit fallback.
 
-Cross-references: standing order #7 (`shared/claude-shared.md`), `script-standards.md` error handling + exemptions.
+Cross-references: USO: No silent failures (`shared/claude-shared.md`), `script-standards.md` error handling + exemptions.

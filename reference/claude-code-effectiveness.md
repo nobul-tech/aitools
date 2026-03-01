@@ -66,6 +66,7 @@ incidents. Each incident gets RCA and remediation tracking.
 | I6 | 2026-02-28 | Process | Deploy template logic not updated when scripts/ source fixed — recurring pattern (3+ occurrences) | Remediated | -- | v0.25.1 |
 | I7 | 2026-02-28 | SO #7 | Plan drafted with unguarded `2>/dev/null \|\| true` cleanup patterns and missing exemption entries -- caught only after user requested re-audit | RCA | No silent failures | -- |
 | I8 | 2026-02-28 | Coaching | Plan revision uses grep-for-keywords instead of full re-read; misses scope/order changes from user feedback during review | Observed | -- | -- |
+| I9 | 2026-03-01 | Process | Unnecessary @import of reference/claude-code-version-deps.md in CLAUDE.md -- added 85 lines of maintenance-only context to every session. File already triggered by post-push checklist #20. | RCA | -- | -- |
 
 ### Incident Details
 

@@ -20,6 +20,6 @@ Code you write in this repo must not introduce silent failure patterns. Specific
 1. **Never suppress errors without checking the result.** `-ErrorAction SilentlyContinue`,
    `2>/dev/null`, `|| true`, and `try/catch` are fine IF the result is immediately checked
    and logged/failed on error.
-2. **Follow standing order #7** and the requirements in `.claude/rules/error-handling.md`.
+2. **Follow USO: No silent failures** and the requirements in `.claude/rules/error-handling.md`.
 3. **Check scripts are not exempt.** A check step that silently skips on error is a false
    pass -- worse than a visible failure.

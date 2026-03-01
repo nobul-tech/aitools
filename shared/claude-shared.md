@@ -26,8 +26,8 @@ Reading/referencing any source is always OK — the gate applies at "install" or
 - **Yellow flags** (disclose and let user decide): low adoption, sole maintainer, no release in 12+ months, excessive permissions, no license
 - **Always check**: publisher/org verification, last activity date, adoption metrics, requested permissions
 - **Quick checks**: VS Code → verified badge + install count; npm → `npm view <pkg> repository.url`; PyPI → pypi.org project URL; GitHub → org vs personal account
-- Pre-approved tools in `reference/tool-install-sources.md` don't need re-evaluation
-- Full framework: `reference/tool-evaluation-criteria.md` in aitools repo
+- Tool governance lives in [`nobul-jose/aitools`](https://github.com/nobul-jose/aitools) -- pre-approved tools in [`reference/tool-install-sources.md`](https://github.com/nobul-jose/aitools/blob/main/reference/tool-install-sources.md), full evaluation framework in [`reference/tool-evaluation-criteria.md`](https://github.com/nobul-jose/aitools/blob/main/reference/tool-evaluation-criteria.md)
+- When working outside aitools: add a row to `docs/aitools-requests.md` in the repo (see [RFC 0001](https://github.com/nobul-jose/aitools/blob/main/rfcs/RFC-0001-workspace-tool-requests.md)) or open an issue on `nobul-jose/aitools` via `gh`
 
 ## Cross-Platform Awareness
 
@@ -108,32 +108,29 @@ Three servers at user level. Chrome DevTools enabled globally; Vercel/Webflow di
 
 ## Coaching
 
-Active improvement areas for working with Claude Code more effectively.
-Full evaluation and progress log: `reference/claude-code-effectiveness.md` in aitools repo.
+Active improvement areas. UCI (User) apply everywhere; PCI (Project) apply to a specific repo.
+Full evaluation and progress log: `claude/effectiveness.md` in your user repo.
 
-- **Smaller batches**: Break large plans into 2-3 file chunks with verification between each, rather than 20+ file batches. Large batches cause rules to be ignored even when they're in context — focus narrows to feature logic and cross-cutting concerns (dispatch patterns, encoding, platform guards) get skipped. After each chunk, re-scan the rules that apply before moving on.
-- **Test mid-session**: Paste small test runs after each change group, don't wait until the end
-- **Err on the side of caution**: When uncertain (safe tool or not? reversible action or not? compact or not?), default to the cautious path — the cost of being too careful is low, the cost of being wrong is high. Example: use `/compact` or split sessions for distinct phases rather than risking truncation
-- **Hooks**: Explore Claude Code hooks for auto-lint, auto-format, or blocking dangerous commands
-- **`@` references**: Use `@path/to/file` in prompts to pre-load files into context
-- **Ask for help when stuck**: When the environment is fundamentally broken (e.g., deleted CWD, corrupted shell state), ask the user to restart the session instead of burning tool calls on workarounds. One message beats a dozen failed attempts.
-- **Clean up before deleting**: Always `cd` back to a stable directory before `rm -rf`'ing temp dirs used during testing
-- **Subagent context gap**: Subagents launched via Task do NOT inherit `.claude/rules/`, `CLAUDE.md`, or `~/.claude/CLAUDE.md`. Never delegate code-writing to subagents in projects with cross-cutting rules (cross-platform, encoding, protected files). Use subagents for research only, or include the critical rules verbatim in the subagent prompt.
-- **Clarify before complying**: If a user response seems to contradict or reverse a prior recommendation, ask a clarifying question before proceeding. The user may have misunderstood the framing (e.g., reading "Why not X" as a question rather than a justification). A quick "Just to confirm -- did you mean X or Y?" avoids wasted work from miscommunication. Err on the side of asking.
-- **Preserve subagent work product**: When a subagent performs a substantial exploration (multi-file audit, multi-component analysis, architectural survey), write the full findings to a `plans/` or scratch file -- do not condense them into a stub summary that discards the detail. Trivial lookups (single file, quick answer) can stay inline.
-- **Verify subagent audit results**: When subagents perform audits (code review, pattern scanning, compliance checks), spot-check their results. Read at least one file reported "clean" and verify. Subagents miss things due to context gaps -- treat their results as leads, not conclusions.
-- **Audit broadly**: When auditing error handling, check both suppressed errors (SilentlyContinue, 2>/dev/null) AND missing error handling (no try/catch, no -ErrorAction, bare Get-Content on untrusted input). Pattern matching finds suppressions; "what happens if this fails?" finds gaps.
+- **UCI: Smaller batches** -- Break large plans into 2-3 file chunks with verification between each, rather than 20+ file batches. Large batches cause rules to be ignored even when they're in context. After each chunk, re-scan the rules that apply before moving on.
+- **UCI: Test mid-session** -- Paste small test runs after each change group, don't wait until the end.
+- **UCI: Err on the side of caution** -- When uncertain (safe tool or not? reversible action or not? compact or not?), default to the cautious path. The cost of being too careful is low, the cost of being wrong is high.
+- **UCI: Hooks** -- Leverage Claude Code hooks beyond guardrails -- subagent context injection (PreToolUse on Agent to close the context gap), auto-format on Write/Edit, auto-test after code changes, completion notifications.
+- **UCI: Ask for help when stuck** -- When the environment is fundamentally broken (e.g., deleted CWD, corrupted shell state), ask the user to restart the session instead of burning tool calls on workarounds.
+- **UCI: Clean up before deleting** -- Always `cd` back to a stable directory before `rm -rf`'ing temp dirs used during testing.
+- **UCI: Subagent context gap** -- Subagents launched via Task do NOT inherit project rules or CLAUDE.md files. Prefer subagents for research; for code-writing in projects with cross-cutting rules, consider including critical rules in the subagent prompt.
+- **UCI: Clarify before complying** -- If a user response seems to contradict or reverse a prior recommendation, ask a clarifying question before proceeding. A quick "Just to confirm -- did you mean X or Y?" avoids wasted work from miscommunication.
+- **UCI: Preserve subagent work product** -- When a subagent performs a substantial exploration (multi-file audit, multi-component analysis), write the full findings to a scratch file -- do not condense them into a stub summary that discards the detail. Trivial lookups can stay inline.
+- **UCI: Verify subagent audit results** -- When subagents perform audits (code review, pattern scanning, compliance checks), spot-check their results. Read at least one file reported "clean" and verify. Treat subagent results as leads, not conclusions.
 ### Standing Orders
 
-These are non-negotiable. Repeated violations of any standing order will end the working relationship.
+Standing orders are non-negotiable rules. USO (User) apply everywhere; PSO (Project) apply to a specific repo.
+Repeated violations will end the working relationship.
 
-1. **Dedicated tools for file ops** -- Use Read/Edit/Write/Grep/Glob for file operations. Bash is for shell execution only (git, scripts, build commands).
-2. **Investigate user-reported problems** -- When the user reports unexpected behavior, it is real. Investigate first; do not deflect or speculate.
-3. **Checklist scripts, not ad-hoc** -- Use the project's check scripts (`check-pre-commit`, `check-pre-push`, `check-post-push`) instead of ad-hoc commands. Ad-hoc is OK for novel one-off checks only.
-4. **Scratch files for complex bash** -- Never inline long commands in the Bash tool. Write a temp file, execute, clean up. Inline only for simple one-liners.
-5. **Perl for string manipulation** -- Use Perl (not sed/awk) for non-trivial string manipulation. sed is fine for trivial single substitutions only.
-6. **Platform-native dispatch** -- Run `.ps1` via `pwsh -File` on Windows, `.sh` via `bash` on macOS. Never run `.sh` scripts on Windows -- they skip PS1 validation and miss Windows-only issues.
-7. **No silent failures in reusable code** -- In any code meant to run more than once (scripts, services, hooks, CLI tools), never suppress errors without checking the result and logging/failing. `-ErrorAction SilentlyContinue`, `2>/dev/null`, `|| true`, `try/catch` are fine IF the result is immediately checked. Command-existence checks with explicit fallback are exempt. Applies when the project has a logging framework, is production code, or has reliability expectations. Does NOT apply to scratch/temp/throwaway work.
+- **USO: Dedicated tools for file ops** -- Use Read/Edit/Write/Grep/Glob for file operations. Bash is for shell execution only (git, scripts, build commands).
+- **USO: Investigate user-reported problems** -- When the user reports unexpected behavior, it is real. Investigate first; do not deflect or speculate.
+- **USO: Scratch files for complex scripting** -- Never inline long commands in the Bash tool. Write a temp file (bash/pwsh/perl/other), execute, clean up. Inline only for simple one-liners.
+- **USO: Perl for string manipulation** -- Use Perl (not sed/awk) for non-trivial string manipulation. sed is fine for trivial single substitutions only.
+- **USO: No silent failures in reusable code** -- In any code meant to run more than once (scripts, services, hooks, CLI tools), never suppress errors without checking the result and logging/failing. `-ErrorAction SilentlyContinue`, `2>/dev/null`, `|| true`, `try/catch` are fine IF the result is immediately checked. Command-existence checks with explicit fallback are exempt. Applies when the project has a logging framework, is production code, or has reliability expectations. Does NOT apply to scratch/temp/throwaway work.
 
 **In plan mode**: Always review these areas and proactively suggest relevant improvements (e.g., "consider breaking this into smaller batches" or "this would be a good candidate for a hook").
 

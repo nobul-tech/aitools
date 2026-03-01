@@ -158,7 +158,6 @@ Cursor project rules mirror Claude Code rules for consistency. When changing rul
 | `.claude/rules/sources-of-truth.md` | `.cursor/rules/sources-of-truth.mdc` | Near-identical |
 | `.claude/rules/tool-lifecycle.md` | `.cursor/rules/tool-lifecycle.mdc` | Near-identical |
 | `.claude/rules/concurrent-agents.md` | `.cursor/rules/concurrent-agents.mdc` | Identical |
-| `.claude/rules/git-identity.md` | `.cursor/rules/general.mdc` | Folded in |
 | `.claude/rules/python-style.md` | `.cursor/rules/general.mdc` | Folded in |
 | `.claude/rules/pre-commit.md` | `.cursor/rules/pre-commit.mdc` | Identical |
 | `.claude/rules/pre-push.md` | `.cursor/rules/pre-push.mdc` | Identical |
