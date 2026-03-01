@@ -12,6 +12,19 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.27.4 -- Pre-Push Deploy Source Detection Fix (2026-03-01)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Low | **Pre-push step 7 false positives**: regex `^(scripts/|shared/).*\.(sh|ps1)$` matched non-deploy scripts (`check-*.sh/.ps1`, `aitools`, `analyze-session.sh`) triggering false "deploy/ not updated" warnings. Narrowed to `scripts/(setup-|build-deploy\.)` only. |
+| 2 | Low | **Pre-push step 7 false negatives**: regex filtered `shared/` by `.sh/.ps1` extension, missing `shared/*.md` files (`claude-shared.md`, `SKILL.md`) that `build-deploy.sh` embeds into deploy scripts. Removed extension filter for `shared/`. |
+
+**Verified**: macOS
+
+---
+
 ## v0.27.3 -- Config Merge Audit Parity Fix (2026-03-01)
 
 ### Bug fixes

@@ -106,7 +106,8 @@ StepWarn "6" "Roadmap reflects reality" "check if push completes or starts a roa
 # ---------------------------------------------------------------------------
 # 7. deploy/ matches source
 # ---------------------------------------------------------------------------
-$scriptsSharedChanged = @($pushFiles | Where-Object { $_ -match '^(scripts/|shared/).*\.(sh|ps1)$' })
+# Match only deploy-relevant sources: setup scripts, build script, and all shared/ content
+$scriptsSharedChanged = @($pushFiles | Where-Object { $_ -match '^(scripts/(setup-|build-deploy\.).*\.(sh|ps1)$|shared/)' })
 $deployChanged = @($pushFiles | Where-Object { $_ -match '^deploy/' })
 if ($scriptsSharedChanged.Count -eq 0) {
     StepSkip "7" "deploy/ matches source" "no scripts/shared changes"
