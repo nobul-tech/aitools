@@ -12,6 +12,37 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.27.1 -- Rules Deployment & Deploy Logging (2026-03-01)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **User-level rules deployment**: `setup-user-claude` now deploys `~/.claude/rules/*.md` from user repo with additive semantics (add new, update changed, preserve unmanaged). Includes backup, diff logging, and post-write validation. |
+| 2 | **Directory deployment pattern**: `config-file-safety.md` gains backup-before-overwrite for directories, diff logging on overwrite, and additive deploy conventions. |
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 3 | Low | Hook `json_field()` parser simplified from 4-process pipeline to pure bash regex (`BASH_REMATCH`), fixing fragile grep/sed chain. |
+| 4 | Low | Standing-order-guard hook: missing colon after `--` in sed/awk violation messages now matches all other "USO: Dedicated tools --:" messages. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 5 | **Deploy logging: CLAUDE.md diff on change**: Actual mode now compares old vs new content -- logs "Content unchanged (no differences)", "Content updated" with unified diff to deploy.log, or "Content: new file". Closes #7. |
+| 6 | **Deploy logging: rules unchanged clarity**: Rules unchanged message now includes "(no differences)" suffix. |
+| 7 | **check-lib.sh: `get_mtime` helper**: Extracted duplicate macOS/Linux stat patterns from check-post-push.sh into shared library. |
+| 8 | **CLAUDE.md streamlined**: Project tree restructured, Key Decisions simplified, Deploy using MDM section added. Shared template streamlined. |
+| 9 | **Tool lifecycle additions**: Install cleanup, cross-platform vetting, and MCP server isolation rules added. |
+| 10 | **Equal platform visibility**: Cross-platform rule now enforces showing both macOS and Windows in docs. |
+
+**Verified on:** macOS (Darwin arm64)
+
+---
+
 ## v0.27 -- CLAUDE.md Restructure & RFC 0001 (2026-03-01)
 
 ### New features
