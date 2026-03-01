@@ -1,3 +1,19 @@
+---
+paths:
+  - scripts/**
+  - deploy/**
+  - shared/**
+  - reference/**
+  - plans/**
+  - rfcs/**
+  - .claude/rules/**
+  - .cursor/rules/**
+  - CLAUDE.md
+  - RELEASE_NOTES.md
+  - ROADMAP.md
+  - README.md
+---
+
 ## Web Source Reading (this repo)
 
 When reading web content that will feed into source-of-truth files

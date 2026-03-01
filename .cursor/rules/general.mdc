@@ -10,6 +10,6 @@ alwaysApply: true
 
 ## Code Style
 
-- Python 3.10+, type hints, `argparse` for CLI, `pathlib.Path` over `os.path`
+- Python 3.10+, type hints, `argparse` for CLI with `--help`, `pathlib.Path` over `os.path`, `if __name__ == "__main__":` guard
 - Shell scripts: `set -euo pipefail`, structured logging, UTC timestamps
 - Keep configs and docs concise — avoid bloat

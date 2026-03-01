@@ -1,3 +1,19 @@
+---
+paths:
+  - scripts/**
+  - deploy/**
+  - shared/**
+  - reference/**
+  - plans/**
+  - rfcs/**
+  - .claude/rules/**
+  - .cursor/rules/**
+  - CLAUDE.md
+  - RELEASE_NOTES.md
+  - ROADMAP.md
+  - README.md
+---
+
 ## Dual Deployment Paths (this repo)
 
 Two deployment methods must produce equivalent results:

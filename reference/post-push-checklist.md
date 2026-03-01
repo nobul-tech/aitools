@@ -1,4 +1,4 @@
-## Post-Push Checklist (this repo)
+# Post-Push Checklist (this repo)
 
 > **Script**: On macOS: `bash scripts/check-post-push.sh` (or `--extensive`).
 > On Windows: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/check-post-push.ps1` (or `-Extensive`).
@@ -7,7 +7,7 @@
 Two tiers: **Always** runs after every push. **Extensive** runs after significant
 releases (new features, structural changes, new tools) or when requested.
 
-### Flag disposition
+## Flag disposition
 
 When the audit produces flags:
 
@@ -15,17 +15,17 @@ When the audit produces flags:
 2. **Defer** -- requires planning or user action (e.g., `aitools user init`): add to ROADMAP.md or note in session
 3. **Won't-fix** -- known exception: document why inline and move on
 
-### Always (after every push)
+## Always (after every push)
 
-#### 1. Verify push landed
+### 1. Verify push landed
 
 `git log --oneline origin/main -1` -- confirm the expected commit is on remote.
 
-#### 2. Smoke-test deploy scripts
+### 2. Smoke-test deploy scripts
 
 `bash -n deploy/*.sh` -- catches build corruption or stale copies. Fast (<1s).
 
-#### 3. MCP config integrity
+### 3. MCP config integrity
 
 Read-only check -- no setup scripts, no side effects:
 - Verify `chrome-devtools` appears in both `~/.claude.json` and `~/.cursor/mcp.json`
@@ -34,7 +34,7 @@ Read-only check -- no setup scripts, no side effects:
 
 If missing, flag for Extensive tier (#15) or manual fix -- do not run setup scripts here.
 
-#### 4. CLI entry point + version consistency
+### 4. CLI entry point + version consistency
 
 `bash scripts/aitools --version` -- confirms the self-update stamp and that
 the entry point parses.
@@ -44,7 +44,7 @@ Also verify version matches the latest tag:
 unreleased commits -- the version tag step (below) will resolve this after
 all checks pass. A clean version (no `+`) should match the tag exactly.
 
-#### 5. Session archive readiness
+### 5. Session archive readiness
 
 If `~/.claude/settings.json` contains the SessionEnd hook (`session-archive.sh`),
 verify `userRepoPath` is set in `~/.aitools/config.json`. If hook is
@@ -53,17 +53,18 @@ present but `userRepoPath` is missing, flag as "session archive inactive -- run
 
 ---
 
-### Extensive (audits + tests for significant releases)
+## Extensive (audits + tests for significant releases)
 
 Run all Always items first, then:
 
-#### 6. Full script syntax validation
+### 6. Full script syntax validation
 
 `bash -n` on every `.sh` in `scripts/` and `deploy/`. On Windows, also
 `[Parser]::ParseFile` on every `.ps1`. On macOS, also validate `.ps1`
-files with `pwsh -NoProfile -Command "[Parser]::ParseFile(...)"` (pwsh is a managed tool).
+files -- see `.claude/rules/cross-platform.md` Pre-validation convention for the
+full ParseFile command (pwsh is a managed tool).
 
-#### 7. deploy/ drift audit
+### 7. deploy/ drift audit
 
 Rebuild and diff:
 ```
@@ -72,13 +73,13 @@ git diff deploy/
 ```
 Any diff means deploy/ was stale at push time. Should be empty.
 
-#### 8. Rule parity audit
+### 8. Rule parity audit
 
 Verify the Rule Correspondence table in `reference/cursor-practices.md` is
 accurate: every `.claude/rules/*.md` has its documented `.cursor/rules/*.mdc`
 counterpart (or is marked Claude Code-specific). Flag missing or orphaned files.
 
-#### 9. Source-of-truth consistency
+### 9. Source-of-truth consistency
 
 For each tool in `reference/tool-install-sources.md`:
 - Verify the install command matches what the corresponding `setup-*.sh/.ps1`
@@ -86,65 +87,65 @@ For each tool in `reference/tool-install-sources.md`:
 - Verify all 5 lifecycle fields (Platform Status, Concurrency, Post-Install
   Config, Dependencies, Invocation) are present.
 
-#### 10. Protected files inventory
+### 10. Protected files inventory
 
 Every file in the `.claude/rules/sources-of-truth.md` protected table exists on
 disk. Every file matching the glob patterns (`.claude/rules/*.md`,
 `.cursor/rules/*.mdc`, `plans/*.md`) is covered by the table.
 
-#### 11. Cross-platform pairing
+### 11. Cross-platform pairing
 
 Every `scripts/setup-*.sh` has a matching `.ps1` (and vice versa). Same for
 `deploy/`. Flag unpaired scripts.
 
-#### 12. CLAUDE.md limits
+### 12. CLAUDE.md limits
 
 `wc -l CLAUDE.md` must be under 200 lines. If over, content must be moved to
 `@reference/` imports.
 
-#### 13. Reference link audit
+### 13. Reference link audit
 
 Every `@reference/` import in `CLAUDE.md` points to a file that exists.
 Every file in `reference/` that is imported is up to date (not stale or
 contradicting CLAUDE.md).
 
-#### 14. Line ending audit
+### 14. Line ending audit
 
 All `.sh` files in the repo have LF line endings (not CRLF).
 `file scripts/*.sh deploy/*.sh shared/hooks/*.sh` -- none should report CRLF.
 
-#### 15. MCP config deploy
+### 15. MCP config deploy
 
 Full setup script run (heavier than Always #3):
 - Run `bash scripts/setup-user-mcp.sh` and `bash scripts/setup-cursor-mcp.sh`
 - Verify chrome-devtools has `--isolated` in both `~/.claude.json` and
   `~/.cursor/mcp.json`
 
-#### 16. Roadmap freshness
+### 16. Roadmap freshness
 
 Flag any "In Progress" item in `ROADMAP.md` whose plan file hasn't been
 modified in 14+ days. Flag any completed work that's missing from
 `RELEASE_NOTES.md`.
 
-#### 17. Hook verification
+### 17. Hook verification
 
 Verify `~/.claude/settings.json` contains the SessionEnd hook entry pointing
 to `session-archive.sh`. If `userRepoPath` is set in config, verify the
 user repo directory exists.
 
-#### 18. Untracked file hygiene
+### 18. Untracked file hygiene
 
 `git status` should show no untracked files that belong in the repo. Flag
 any untracked `.md`, `.sh`, `.ps1`, or `.mdc` files that look like they
 should have been committed.
 
-#### 19. Config merge audit
+### 19. Config merge audit
 
 For each setup script that writes JSON config files, verify it uses
 read-then-merge (not blind overwrite). Flag any `cat >` or bare
 `WriteAllText` targeting a config file that has non-managed fields.
 
-#### 20. Claude Code version-dep review
+### 20. Claude Code version-dep review
 
 Check `claude --version` against the "Current version" in
 `reference/claude-code-version-deps.md`. If they differ:
@@ -155,7 +156,7 @@ Check `claude --version` against the "Current version" in
 
 ---
 
-### Version tag (after all checks pass)
+## Version tag (after all checks pass)
 
 Runs after the applicable tier (Always or Extensive) completes with no
 unresolved flags.

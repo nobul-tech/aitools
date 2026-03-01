@@ -4,7 +4,8 @@ All plans you propose and all reusable code you write must follow these conventi
 A plan that drafts code with violations is itself a violation. This covers: setup scripts
 (`scripts/setup-*.sh/.ps1`), check/audit scripts (`scripts/check-*.sh/.ps1`), installer
 scripts (`scripts/aitools-install.*`, `scripts/aitools.*`), deploy scripts
-(`deploy/*.sh/.ps1`), hooks (`shared/hooks/*.sh`), and shell aliases (`shared/shell/*`).
+(`deploy/*.sh/.ps1`), hooks (`shared/hooks/*.sh`), shell aliases (`shared/shell/*`),
+and pseudocode in `plans/*.md`.
 
 ### Block order (bash setup scripts)
 
@@ -40,31 +41,12 @@ scripts (`scripts/aitools-install.*`, `scripts/aitools.*`), deploy scripts
 
 All timestamps must be UTC with Z suffix (`date -u +%Y-%m-%dT%H:%M:%SZ` / `.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")`).
 
+Logging framework is required -- raw `echo` or `Write-Host` without structured logging is not acceptable in reusable scripts.
+
 ### Exit footer
 
-Every setup script must end with an exit footer that checks the error counter:
-
-```bash
-# --- Exit ---
-if [ "$ERRORS" -gt 0 ]; then
-    log "FAILED with $ERRORS error(s). See log: $LOG_FILE"
-    exit 1
-else
-    log "COMPLETED successfully"
-    exit 0
-fi
-```
-
-```powershell
-# --- Exit ---
-if ($errors -gt 0) {
-    Log "FAILED with $errors error(s). See log: $logFile"
-    exit 1
-} else {
-    Log "COMPLETED successfully"
-    exit 0
-}
-```
+Every setup script must end with an exit footer that checks the error counter.
+See `@reference/script-standards-detail.md` for exact code patterns.
 
 ### Error handling requirements
 
@@ -84,63 +66,25 @@ with an explicit fallback (e.g., if-else branch, default value assignment). Thes
 inherently expected to fail and the fallback IS the error handling.
 
 **Anti-pattern:** Suppressed errors feeding into counts, loops, or conditional logic with
-no null guard. This produces false passes (counts as 0 instead of erroring) or silently
-skips work.
+no null guard. This produces false passes or silently skips work.
 
-Example -- **wrong:**
-```powershell
-$files = Get-ChildItem -Path $dir -ErrorAction SilentlyContinue
-foreach ($f in $files) { ... }  # silently iterates 0 items if $dir doesn't exist
-```
-
-Example -- **correct:**
-```powershell
-$files = Get-ChildItem -Path $dir -ErrorAction SilentlyContinue
-if (-not $files) {
-    LogError "Cannot read directory: $dir"
-    # or StepFail for check scripts
-}
-```
-
-### Check/audit script requirements
-
-Scripts following the `check-*.sh/.ps1` pattern have additional requirements:
-
-- Step functions (`StepPass`/`StepFail`/`StepWarn`) must handle internal errors -- a step
-  that fails to execute is NOT a pass
-- `Get-ChildItem`/`Get-Content` failures must produce `StepFail` or `StepWarn`, never a
-  silent skip that counts as a pass
-- When a step queries a directory or file, test for existence before processing; on failure,
-  report it as the step result
-- `StepPass` must accept and display a `$Detail` parameter, same as
-  `StepFail`/`StepWarn`/`StepSkip`. Callers passing detail context must have that
-  context displayed.
-
-### Post-write validation
-
-Setup scripts that generate files from templates must validate CONTENT correctness,
-not just structural markers. If a file is assembled from template + footer, validate
-that the template portion is non-empty, not just that the footer exists.
+**Missing error handling:** Critical operations (file reads that feed into output, config
+parsing, template rendering) must have explicit error handling even when no suppression
+pattern is present. Validate content is non-null/non-empty before writing to disk.
 
 ### Exemptions
 
 Any script that intentionally suppresses errors without a result check must:
 1. Document the exemption in its header comment with a reason
-2. Be listed in the table below (protected -- requires user approval to modify)
+2. Be listed in `@reference/script-standards-detail.md` exemptions table (protected -- requires user approval to modify)
 
-| Script | Line(s) | Pattern | Reason |
-|--------|---------|---------|--------|
-| `setup-vercelcli.sh` | 69 | `2>/dev/null \|\| true` | Cleanup: npm uninstall may fail if not installed; brew install follows |
-| `setup-pandoc.sh` | 68, 73, 77 | `2>/dev/null \|\| true` | Cleanup: non-preferred package managers may not be installed |
-| `setup-rust.sh` | 44 | `2>/dev/null \|\| log_warn` | Cleanup: brew formula may not be fully installed; warned on failure |
-| `aitools-install.sh` | 273 | `2>/dev/null \|\| true` | Update: apt-get may need sudo; gh already works at current version |
-| `check-lib.ps1` | 110 | `2>$null` (InvokeGit) | Git stderr triggers PS ErrorActionPreference=Stop; caller checks result |
-| `check-lib.ps1` | 79-81 | `try/catch` (ReadConfigKey) | Config parse: catch logs warning; callers handle null return via ResolveConfig |
-| `setup-typst.sh` | 38, 43 | `2>/dev/null \|\| true` | Cleanup: cargo/npm may not have typst installed; Homebrew install follows |
-| `setup-typst.ps1` | 45, 53 | `2>$null` | Cleanup: cargo/npm stderr noise; non-blocking, winget install follows |
+### When analyzing code
 
-### Reference examples
+1. **If a feature is a no-op due to a missing config key, say so at the top of any summary
+   or plan** -- not buried in a table row. Use "FEATURE X IS CURRENTLY INACTIVE" framing.
+2. **Do not describe a feature as "working" if it has never fired in production.** Distinguish
+   "code is correct" from "feature is operational."
+3. **Name the exact fix command** -- e.g., "run `aitools user init` to write userRepoPath" --
+   not just "needs configuration."
 
-When creating a new script, copy the logging block and exit footer from an existing
-script that follows the conventions above. Do not assume existing scripts are
-violation-free -- always verify the copied code against these rules.
+Details: `@reference/script-standards-detail.md`

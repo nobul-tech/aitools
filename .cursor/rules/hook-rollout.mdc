@@ -1,6 +1,7 @@
 ---
 description: Hook rollout practice -- observe before enforce
-alwaysApply: true
+globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+alwaysApply: false
 ---
 
 ## Hook Rollout Practice

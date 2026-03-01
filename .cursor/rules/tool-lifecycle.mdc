@@ -1,7 +1,7 @@
 ---
 description: Tool lifecycle gate for adding new managed tools
-globs:
-alwaysApply: true
+globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+alwaysApply: false
 ---
 
 ## Tool Lifecycle Gate (this repo)

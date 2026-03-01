@@ -1,3 +1,19 @@
+---
+paths:
+  - scripts/**
+  - deploy/**
+  - shared/**
+  - reference/**
+  - plans/**
+  - rfcs/**
+  - .claude/rules/**
+  - .cursor/rules/**
+  - CLAUDE.md
+  - RELEASE_NOTES.md
+  - ROADMAP.md
+  - README.md
+---
+
 ## Config File Write Safety (this repo)
 
 Scripts that write JSON config files (`config.json`, `settings.json`, `cli-config.json`,

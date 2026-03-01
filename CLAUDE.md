@@ -60,6 +60,13 @@ clip2md                        # Auto-name via AI: 250324-garcia-budget.md
 clip2md meeting-notes          # Explicit name: meeting-notes.md
 ```
 
+### Verification Details
+
+- Pre-commit checklist: @reference/pre-commit-checklist.md
+- Pre-push checklist: @reference/pre-push-checklist.md
+- Post-push checklist: @reference/post-push-checklist.md
+- Script standards detail (exemptions, examples, check-script rules): @reference/script-standards-detail.md
+
 ### Deploy using MDM
 
 `build-deploy.sh` generates self-contained scripts in `deploy/` (`.sh` + `.ps1` pairs) -- config scripts (`setup-user-claude`, `-mcp`, `-hooks`, `setup-cursor-mcp`, `setup-user-cursor`) and tool scripts (`setup-vercelcli`, `-pandoc`, `-rust`, `-typst`). No repo needed -- run directly on any endpoint.
@@ -82,7 +89,7 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 
 ## Code Conventions
 
-- Python 3.10+, type hints, `argparse` for CLI, `pathlib.Path` over `os.path`
+- Python 3.10+, type hints, `argparse` for CLI with `--help`, `pathlib.Path` over `os.path`, `if __name__ == "__main__":` guard
 - Scripts (this repo): provide both `.ps1` and `.sh` variants since this repo is cross-platform
 - Script logging: all setup scripts use structured logging -- `log`/`log_ok`/`log_error`/`log_warn` (bash) and `Log`/`LogOk`/`LogError`/`LogWarn` (PS1)
 - Keep this file under 200 lines

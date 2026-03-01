@@ -1,6 +1,7 @@
 ---
 description: Prefer Chrome DevTools MCP over WebFetch for reading web content that feeds into source-of-truth files
-alwaysApply: true
+globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+alwaysApply: false
 ---
 
 ## Web Source Reading (this repo)

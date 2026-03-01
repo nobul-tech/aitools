@@ -101,7 +101,7 @@ $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSP
 
 When creating or modifying any `.ps1` or `.sh` script in this repo:
 - Before committing, validate syntax on the current platform:
-  - PS1: `pwsh -NoProfile -Command "[System.Management.Automation.Language.Parser]::ParseFile('path', [ref]$null, [ref]$e); $e"`
+  - PS1: `pwsh -NoProfile -Command '$e = $null; $null = [System.Management.Automation.Language.Parser]::ParseFile("path", [ref]$null, [ref]$e); if ($e) { $e }'`
   - Bash: `bash -n path/to/script.sh`
 - On Windows, always validate PS1 files with pwsh
 - On macOS, always validate `.sh` files; PS1 validation requires `pwsh` (managed tool -- install via `brew install powershell/tap/powershell`)

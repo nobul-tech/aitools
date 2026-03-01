@@ -6,7 +6,7 @@ alwaysApply: false
 
 ## Script Standards (this repo)
 
-All plans you propose and all reusable code you write must follow these conventions. A plan that drafts code with violations is itself a violation. Covers: setup, check/audit, installer, deploy, hooks, shell aliases.
+All plans you propose and all reusable code you write must follow these conventions. A plan that drafts code with violations is itself a violation. Covers: setup, check/audit, installer, deploy, hooks, shell aliases, and pseudocode in plans/*.md.
 
 ### Block order (setup scripts)
 
@@ -21,11 +21,11 @@ All plans you propose and all reusable code you write must follow these conventi
 
 ### Logging helpers
 
-Bash: `log`/`log_ok`/`log_error`/`log_warn`. PS1: `Log`/`LogOk`/`LogError`/`LogWarn`. UTC timestamps with Z suffix.
+Bash: `log`/`log_ok`/`log_error`/`log_warn`. PS1: `Log`/`LogOk`/`LogError`/`LogWarn`. UTC timestamps with Z suffix. Raw `echo`/`Write-Host` without structured logging is not acceptable.
 
 ### Exit footer
 
-Check error counter, exit 1 on failure, exit 0 on success. See `.claude/rules/script-standards.md` for exact pattern.
+Check error counter, exit 1 on failure, exit 0 on success. See `reference/script-standards-detail.md` for exact patterns.
 
 ### Error handling (all scripts)
 
@@ -38,6 +38,8 @@ Every error-suppression pattern requires an immediate result check:
 **Exception:** Command-existence checks (`Get-Command`, `command -v`) with explicit fallback.
 
 **Anti-pattern:** Suppressed errors feeding into counts/loops with no null guard (false pass).
+
+**Missing error handling:** Critical file reads feeding output/disk writes need explicit error handling. Validate non-null before writing.
 
 ### Check/audit scripts
 
@@ -52,4 +54,10 @@ Template-generated files: validate content correctness, not just structural mark
 
 ### Exemptions
 
-Intentional suppression without result check requires: header comment + entry in exemptions table in `.claude/rules/script-standards.md` (protected file, user approval needed).
+Intentional suppression without result check requires: header comment + entry in `reference/script-standards-detail.md` exemptions table (protected file, user approval needed).
+
+### When analyzing code
+
+1. If a feature is a no-op due to missing config, say so prominently -- not buried in a table
+2. Distinguish "code is correct" from "feature is operational"
+3. Name the exact fix command, not just "needs configuration"

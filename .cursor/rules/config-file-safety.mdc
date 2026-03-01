@@ -1,7 +1,7 @@
 ---
 description: Config file write safety — read-then-merge for JSON configs
-globs:
-alwaysApply: true
+globs: "scripts/**,deploy/**,shared/**,reference/**,plans/**,rfcs/**,.claude/rules/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+alwaysApply: false
 ---
 
 ## Config File Write Safety (this repo)

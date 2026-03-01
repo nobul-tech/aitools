@@ -1,3 +1,19 @@
+---
+paths:
+  - scripts/**
+  - deploy/**
+  - shared/**
+  - reference/**
+  - plans/**
+  - rfcs/**
+  - .claude/rules/**
+  - .cursor/rules/**
+  - CLAUDE.md
+  - RELEASE_NOTES.md
+  - ROADMAP.md
+  - README.md
+---
+
 ## Documentation Standards (this repo)
 
 ### RELEASE_NOTES.md format

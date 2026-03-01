@@ -35,5 +35,5 @@ Prefer ASCII in PS1 strings and expressions for consistency. PS 7 handles UTF-8 
 ### Pre-validation convention
 
 Before committing scripts, validate syntax:
-- PS1: `pwsh -NoProfile -Command "[System.Management.Automation.Language.Parser]::ParseFile('path', [ref]$null, [ref]$e); $e"`
+- PS1: `pwsh -NoProfile -Command '$e = $null; $null = [System.Management.Automation.Language.Parser]::ParseFile("path", [ref]$null, [ref]$e); if ($e) { $e }'`
 - Bash: `bash -n path/to/script.sh`

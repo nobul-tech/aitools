@@ -1,3 +1,19 @@
+---
+paths:
+  - scripts/**
+  - deploy/**
+  - shared/**
+  - reference/**
+  - plans/**
+  - rfcs/**
+  - .claude/rules/**
+  - .cursor/rules/**
+  - CLAUDE.md
+  - RELEASE_NOTES.md
+  - ROADMAP.md
+  - README.md
+---
+
 ## Hook Rollout Practice (this repo)
 
 All PreToolUse hooks must go through an observe-then-enforce cycle before blocking.

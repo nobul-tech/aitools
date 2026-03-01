@@ -158,14 +158,9 @@ Cursor project rules mirror Claude Code rules for consistency. When changing rul
 | `.claude/rules/sources-of-truth.md` | `.cursor/rules/sources-of-truth.mdc` | Near-identical |
 | `.claude/rules/tool-lifecycle.md` | `.cursor/rules/tool-lifecycle.mdc` | Near-identical |
 | `.claude/rules/cursor-rule-parity.md` | `.cursor/rules/cursor-rule-parity.mdc` | Identical |
-| `.claude/rules/python-style.md` | `.cursor/rules/general.mdc` | Folded in |
-| `.claude/rules/pre-commit.md` | `.cursor/rules/pre-commit.mdc` | Identical |
-| `.claude/rules/pre-push.md` | `.cursor/rules/pre-push.mdc` | Identical |
-| `.claude/rules/post-push.md` | `.cursor/rules/post-push.mdc` | Identical |
-| `.claude/rules/script-standards.md` | `.cursor/rules/script-standards.mdc` | Condensed |
+| (CLAUDE.md Code Conventions) | `.cursor/rules/general.mdc` | Python style folded in |
+| `.claude/rules/script-standards.md` | `.cursor/rules/script-standards.mdc` | Condensed; absorbed error-handling + surface-silent-failures |
 | `.claude/rules/documentation-standards.md` | `.cursor/rules/documentation-standards.mdc` | Condensed |
-| `.claude/rules/surface-silent-failures.md` | -- | Claude Code-specific |
-| `.claude/rules/error-handling.md` | `.cursor/rules/error-handling.mdc` | Condensed |
 | `.claude/rules/web-sources.md` | `.cursor/rules/web-sources.mdc` | Identical |
 | `.claude/rules/config-file-safety.md` | `.cursor/rules/config-file-safety.mdc` | Condensed |
 | `.claude/rules/deploy-paths.md` | `.cursor/rules/deploy-paths.mdc` | Near-identical |

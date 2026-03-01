@@ -1,4 +1,4 @@
-## Pre-Commit Checklist (this repo)
+# Pre-Commit Checklist (this repo)
 
 > **Script**: On macOS: `bash scripts/check-pre-commit.sh` (or `--fix`).
 > On Windows: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/check-pre-commit.ps1` (or `-Fix`).
@@ -6,38 +6,38 @@
 
 Before every commit, verify:
 
-### 1. Git identity
+## 1. Git identity
 
 Confirm local config: `git config user.name` -> Jose, `git config user.email` -> jose@nobul.tech
 
-### 2. Script syntax validation
+## 2. Script syntax validation
 
 For every `.sh` or `.ps1` file being committed:
 - Bash: `bash -n path/to/script.sh`
-- PS1: On Windows use `[Parser]::ParseFile(...)` (see cross-platform rule for full command). On macOS, use `pwsh -NoProfile -Command "[Parser]::ParseFile(...)"` (pwsh is a managed tool).
+- PS1: See `.claude/rules/cross-platform.md` Pre-validation convention for the full ParseFile command. Note: `$e` must be declared before `[ref]$e` -- undeclared variables cause `[ref]` to error.
 - If the other platform's scripts can't be validated locally, note in commit message: `(tested: macOS)` or `(tested: Windows)`
 
-### 3. Build freshness
+## 3. Build freshness
 
 If any file in `scripts/` or `shared/` was modified, run `bash scripts/build-deploy.sh` and include the regenerated `deploy/` in the commit.
 
-### 4. Line endings
+## 4. Line endings
 
 `.sh` files must have LF. The Write tool on macOS produces CRLF -- run `sed -i '' 's/\r$//' <file>` on any `.sh` file created or modified by the Write tool.
 
-### 5. Platform note
+## 5. Platform note
 
 If `.sh` or `.ps1` files are in the commit, end the commit message with `(tested: macOS)` or `(tested: Windows)`. Pure docs/markdown commits can omit this.
 
-### 6. Executable bit on .sh files
+## 6. Executable bit on .sh files
 
 `git ls-files -s '*.sh' | grep -v '^100755'` must return nothing. Fix: `git update-index --chmod=+x <file>`. Especially important for files created on Windows (Windows doesn't set Unix executable bit).
 
-### 7. Install command consistency
+## 7. Install command consistency
 
 If modifying `scripts/setup-*.sh` or `.ps1`, verify install commands match the corresponding entry in `reference/tool-install-sources.md`. Never hardcode install commands from memory.
 
-### 8. Config merge safety
+## 8. Config merge safety
 
 If the commit modifies a setup script that writes JSON config files
 (`config.json`, `settings.json`, `cli-config.json`, `mcp.json`):
@@ -47,16 +47,16 @@ If the commit modifies a setup script that writes JSON config files
 - If the script intentionally overwrites (sole owner), verify the script header
   documents this
 
-### 9. Release notes
+## 9. Release notes
 
 If the commit includes new features, bug fixes, or behavioral changes, `RELEASE_NOTES.md` **must** have a version entry covering the changes. `aitools gitpull` will refuse to tag without one. Omit for docs-only, rule-only, or trivial changes that won't be tagged.
 
-### 10. Deploy drift check
+## 10. Deploy drift check
 
 If step 3 ran (build freshness), verify no unstaged deploy/ changes remain after staging:
 `git diff deploy/` must be empty after `git add deploy/`. Catches forgotten build output.
 
-### 11. User repo changes
+## 11. User repo changes
 
 If this session modified files in the user dotfile repo (`userRepoPath` from
 `~/.aitools/config.json`), commit those changes too. Use a commit
@@ -64,13 +64,13 @@ message that references the aitools change (e.g., "Add cursor.cli
 preferences to profile"). Skip if `userRepoPath` is not configured or the
 repo has no uncommitted changes.
 
-### 12. Template sync
+## 12. Template sync
 
 If `shared/claude-shared.md` was modified, also update the user repo template
 (`<userRepoPath>/claude/CLAUDE.md`) with the same changes. The user repo copy
 takes priority at runtime -- a stale copy means dev/repo deployments miss the update.
 
-### 13. Deploy template logic sync
+## 13. Deploy template logic sync
 
 If the commit modifies `scripts/setup-user-claude.*`, `scripts/setup-user-cursor.*`,
 `scripts/setup-user-mcp.*`, or `scripts/setup-user-hooks.*` AND does NOT modify
@@ -78,6 +78,6 @@ If the commit modifies `scripts/setup-user-claude.*`, `scripts/setup-user-cursor
 deploy template in `build-deploy.sh` may need the same fix. See
 `.claude/rules/deploy-paths.md` "Scripts with deploy templates" for the full list.
 
-This check is a heuristic — not all `scripts/` changes need template updates (e.g.,
+This check is a heuristic -- not all `scripts/` changes need template updates (e.g.,
 comments, variable renames that only exist in the scripts/ flow). But logic changes
 (merge functions, validation, error handling) almost always do.
