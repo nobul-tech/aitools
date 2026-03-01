@@ -119,18 +119,29 @@ if $hook_present; then
             step_warn "5" "Session archive readiness" "hook configured but sessions/ dir missing -- hook may have never fired"
         else
             # Check for .jsonl files and recency
-            newest=$(find "$sessions_dir" -name '*.jsonl' -type f -printf '%T@\n' 2>/dev/null | sort -rn | head -1)
+            # Use find + stat (macOS) or find + stat (Linux) — find -printf is GNU-only
+            newest=""
+            while IFS= read -r -d '' jf; do
+                if $IS_MACOS; then
+                    mtime=$(stat -f %m "$jf" 2>/dev/null || echo 0)
+                else
+                    mtime=$(stat -c %Y "$jf" 2>/dev/null || echo 0)
+                fi
+                if [ -z "$newest" ] || [ "$mtime" -gt "$newest" ]; then
+                    newest="$mtime"
+                fi
+            done < <(find "$sessions_dir" -name '*.jsonl' -type f -print0 2>/dev/null || true)
             if [ -z "$newest" ]; then
                 step_warn "5" "Session archive readiness" "sessions/ exists but has no .jsonl files -- hook may be failing silently"
             else
                 # Check if newest file is within last 7 days (604800 seconds)
                 now=$(date +%s)
-                age=$(( now - ${newest%.*} ))
+                age=$(( now - newest ))
                 if [ "$age" -gt 604800 ]; then
                     days_ago=$(( age / 86400 ))
                     step_warn "5" "Session archive readiness" "last archive is ${days_ago}d old -- hook may have stopped working"
                 else
-                    file_count=$(find "$sessions_dir" -name '*.jsonl' -type f 2>/dev/null | wc -l)
+                    file_count=$(find "$sessions_dir" -name '*.jsonl' -type f 2>/dev/null | wc -l | tr -d ' ')
                     step_pass "5" "Session archive readiness" "${file_count} archives, last within 7d"
                 fi
             fi
