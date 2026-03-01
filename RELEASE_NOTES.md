@@ -12,6 +12,18 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.27.5 -- Pre-Push Regex Regression Fix (2026-03-01)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Low | **v0.27.4 regression**: `build-deploy.sh` not matched by pre-push step 7. Regex `build-deploy\.` consumed the extension dot, leaving `sh` with no `.` for `.*\.(sh|ps1)$`. Restructured to `(setup-.*|build-deploy)\.(sh|ps1)$`. |
+
+**Verified**: macOS
+
+---
+
 ## v0.27.4 -- Pre-Push Deploy Source Detection Fix (2026-03-01)
 
 ### Bug fixes
