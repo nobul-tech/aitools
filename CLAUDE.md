@@ -68,15 +68,11 @@ aitools sessions list [proj]   # List archived sessions
 aitools sessions archive ID    # Manually archive a session by ID
 aitools sessions move <file> <project>  # Refile an archived session
 
-# Verification checklists (replaces ad-hoc commands)
+# Verification checklists when working with git actions (replaces ad-hoc commands)
 # macOS/Linux:
-bash scripts/check-pre-commit.sh       # or --fix (auto-fix line endings, exec bits, build)
-bash scripts/check-pre-push.sh         # read-only
-bash scripts/check-post-push.sh        # or --extensive (all 20 steps)
+bash scripts/check*.sh       # or --fix (auto-fix line endings, exec bits, build)
 # Windows (PowerShell):
-.\scripts\check-pre-commit.ps1         # or -Fix
-.\scripts\check-pre-push.ps1           # read-only
-.\scripts\check-post-push.ps1          # or -Extensive (all 20 steps)
+.\scripts\check*.ps1         # or -Fix
 
 # Clipboard to Markdown (requires pandoc; optional: claude CLI for auto-naming)
 clip2md                        # Auto-name via AI: 250324-garcia-budget.md
@@ -128,6 +124,8 @@ esac
 
 **PowerShell from Bash**: Always single-quote the outer `-Command` string. Use double quotes inside for PS interpolation. For anything beyond a one-liner, use the write-then-execute pattern instead.
 
+### Project git conventions
+When performing commit and push actions with git, before and after, you must look for any pre or post reference files, load those instructions into context, and follow them exactly
 
 ### Project Standing Orders
 
@@ -136,4 +134,4 @@ esac
 - **PSO: Equal platform visibility** -- When showing usage examples, commands, or invocations in docs, always show both macOS/bash and Windows/PowerShell. Never abbreviate one platform as "same but .ps1" or similar.
 - **PSO: Audit broadly** -- When auditing error handling, check both suppressed errors (`SilentlyContinue`, `2>/dev/null`) AND missing error handling (no `try/catch`, no `-ErrorAction`, bare `Get-Content` on untrusted input). Pattern matching finds suppressions; "what happens if this fails?" finds gaps.
 - **PSO: Dual-script rule** -- Every setup script gets both `.sh` and `.ps1` with OS guards. Shell-only scripts (no `.ps1` pair) are exceptions that must be documented in `.claude/rules/cross-platform.md` with rationale. Current exceptions: hooks (bash on all platforms by CC design) and `build-deploy.sh` (produces platform-independent output via sentinel markers).
-- **PSO: Script logging: all deploy, setup, check and all other reusable scripts use structured logging -- `log`/`log_ok`/`log_error`/`log_warn` (bash) and `Log`/`LogOk`/`LogError`/`LogWarn` (PS1). Never suggest, plan nor implement re-usable scripts without structured logging
+- **PSO: Script logging** -- all deploy, setup, check and all other reusable scripts use structured logging -- `log`/`log_ok`/`log_error`/`log_warn` (bash) and `Log`/`LogOk`/`LogError`/`LogWarn` (PS1). Never suggest, plan nor implement re-usable scripts without structured logging
