@@ -165,6 +165,7 @@ cat > "$GUARD_DEST" <<'__EMBEDDED_GUARD__'
 # Currently enforces:
 #   USO: Dedicated tools for file ops (Read/Edit/Write/Grep/Glob, not Bash)
 #   USO: Scratch files for complex scripting (no long inline commands)
+#   USO: Simple Bash commands only (no &&, ||, ;, $(...), backticks)
 #
 # Hook contract:
 #   - Receives JSON on stdin (tool_name, tool_input.command, etc.)
@@ -249,6 +250,22 @@ if [ "$NEWLINE_COUNT" -ge 4 ]; then
     LINE_COUNT=$((NEWLINE_COUNT + 1))
     violation "USO: Scratch files --: This command is ~${LINE_COUNT} lines long. Write it to a temp .sh or .ps1 file using the Write tool, execute with Bash, then clean up. USO: never inline long commands in the Bash tool."
 fi
+
+# --- USO: Simple Bash commands only ---
+# Block compound operators and command substitution that trigger permission prompts.
+# Pipelines (|) are explicitly OK per the USO.
+# Checked before the first-token allowlist because compound commands like
+# `git tag && git push` have `git` as first token and would exit early.
+# Known gap: $(...) after quoted segments (e.g., git commit -m "$(...)") is
+# invisible due to json_field truncation at \". Mitigated by the USO itself
+# (use git commit -F) and by CC's permission system (which prompts anyway).
+case "$COMMAND" in
+    *'&&'*) violation "USO: Simple Bash commands only --: Don't use '&&' to chain commands. Make separate Bash tool calls instead. For git in another repo, use 'git -C /path' instead of 'cd /path && git'." ;;
+    *'||'*) violation "USO: Simple Bash commands only --: Don't use '||' to chain commands. Make separate Bash tool calls instead." ;;
+    *';'*)  violation "USO: Simple Bash commands only --: Don't use ';' to chain commands. Make separate Bash tool calls instead." ;;
+    *'$('*) violation "USO: Simple Bash commands only --: Don't use '\$(...)' command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." ;;
+    *'`'*)  violation "USO: Simple Bash commands only --: Don't use backtick command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." ;;
+esac
 
 # --- USO: Dedicated tools for file operations ---
 # Pattern: command starts with a file-op utility that has a dedicated tool.

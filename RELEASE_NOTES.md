@@ -12,6 +12,18 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.27.6 -- Simple Bash Commands Hook Guard (2026-03-01)
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | **PreToolUse hook: Simple Bash commands guard**: `standing-order-guard.sh` now detects `&&`, `||`, `;`, `$(...)`, and backticks in Bash tool calls (observe mode). Suggests `git -C` for cross-repo commands and `git commit -F` for commit messages. Known gap: `$(...)` after quoted segments invisible to json_field parser -- mitigated by the USO itself. |
+
+**Verified**: macOS
+
+---
+
 ## v0.27.5 -- Pre-Push Regex Regression Fix (2026-03-01)
 
 ### Bug fixes
