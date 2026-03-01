@@ -9,6 +9,15 @@ When writing scripts or paths **in this repo**:
 - Use `$HOME` or `~` for user directory references, not hardcoded paths
 - After creating `.sh` files on Windows, always run `git update-index --chmod=+x <file>` -- Windows doesn't set the Unix executable bit
 
+### Equal platform visibility
+
+When showing usage examples, commands, or invocations in documentation
+(CLAUDE.md, reference/, plans/), always show both macOS/bash and
+Windows/PowerShell. Never abbreviate one platform as "same but .ps1"
+or treat either platform as the obvious default.
+
+This is enforced as a Project Standing Order (PSO) in CLAUDE.md.
+
 ### OS guard + dispatch rule
 
 Every `.sh` setup script has `case "$(uname -s)" in MINGW*...) exit 1`. The bash `aitools` entry point runs in Git Bash on Windows. So:

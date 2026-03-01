@@ -9,7 +9,9 @@
 # {{PLACEHOLDER}} tokens are interpolated at deploy time using the current
 # machine's profile from profile.json. See reference/user-repo.md.
 #
-# Overwrites: yes (sole owner of ~/.claude/CLAUDE.md)
+# Managed: ~/.claude/CLAUDE.md (sole owner, overwrite)
+# Managed: ~/.claude/rules/*.md matching <userRepoPath>/claude/rules/ (additive deploy)
+# Preserved: ~/.claude/rules/ files not in user repo source
 
 set -euo pipefail
 
@@ -51,6 +53,38 @@ backup_file() {
     ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1)) | xargs rm -f 2>/dev/null
     log "Backed up $(display_path "$file")"
 }
+
+# --- BEGIN backup_dir (extracted by build-deploy) ---
+# Backup a directory before modifying managed files. Keeps at most $max_backups copies.
+backup_dir() {
+    local dir="$1" max_backups=5
+    [ -d "$dir" ] || return 0
+    # Count managed files; skip backup if none exist yet
+    local file_count
+    file_count=$(find "$dir" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')
+    if [ "$file_count" -eq 0 ]; then
+        return 0
+    fi
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
+    if ! cp -R "$dir" "${dir}.bak.${ts}"; then
+        log_warn "Could not back up $(display_path "$dir") -- proceeding without backup"
+        return 0
+    fi
+    # Prune old backups beyond limit.
+    # find lists backup dirs; sort -r puts newest first; tail skips the keepers.
+    local old_backups
+    old_backups=$(find "$(dirname "$dir")" -maxdepth 1 -name "$(basename "$dir").bak.*" -type d \
+        | sort -r | tail -n +$((max_backups + 1)))
+    if [ -n "$old_backups" ]; then
+        echo "$old_backups" | while IFS= read -r old_dir; do
+            rm -rf "$old_dir"
+            log "Pruned old backup: $(display_path "$old_dir")"
+        done
+    fi
+    log "Backed up $(display_path "$dir") ($file_count managed files)"
+}
+# --- END backup_dir (extracted by build-deploy) ---
 
 # --- OS guard ---
 case "$(uname -s)" in
@@ -219,6 +253,110 @@ EOF
 
     log_ok "Wrote $(display_path "$CLAUDE_MD")"
 fi
+
+# --- BEGIN rules deployment (extracted by build-deploy) ---
+# Deploy user rules: additive (add/update managed, preserve unmanaged, log diffs).
+RULES_SRC=""
+if [ -n "${USER_REPO_PATH:-}" ] && [ -d "$USER_REPO_PATH/claude/rules" ]; then
+    RULES_SRC="$USER_REPO_PATH/claude/rules"
+fi
+
+RULES_DEST="$CLAUDE_DIR/rules"
+
+# --- BEGIN rules deploy logic (extracted by build-deploy) ---
+if [ -n "$RULES_SRC" ]; then
+    RULE_COUNT=$(find "$RULES_SRC" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')
+    if [ "$RULE_COUNT" -eq 0 ]; then
+        log "User repo claude/rules/ exists but has no .md files -- skipping"
+    elif [ "$DRY_RUN" = "true" ]; then
+        EXISTING_COUNT=0
+        if [ -d "$RULES_DEST" ]; then
+            EXISTING_COUNT=$(find "$RULES_DEST" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')
+        fi
+        log "[DRY RUN] $(display_path "$RULES_DEST"): additive deploy"
+        log "  Source: $(display_path "$RULES_SRC") ($RULE_COUNT rule files)"
+        log "  Existing: $EXISTING_COUNT rule files"
+        for rule_file in "$RULES_SRC"/*.md; do
+            [ -f "$rule_file" ] || continue
+            rule_name=$(basename "$rule_file")
+            if [ -f "$RULES_DEST/$rule_name" ]; then
+                # diff -q: exits 0 if identical, 1 if different (expected, not an error)
+                if diff -q "$RULES_DEST/$rule_name" "$rule_file" >/dev/null 2>&1; then
+                    log "  Would skip (unchanged): $rule_name"
+                else
+                    log "  Would update (changed): $rule_name"
+                fi
+            else
+                log "  Would add (new): $rule_name"
+            fi
+        done
+        # Show files that would be preserved
+        if [ -d "$RULES_DEST" ]; then
+            for existing in "$RULES_DEST"/*.md; do
+                [ -f "$existing" ] || continue
+                exist_name=$(basename "$existing")
+                if [ ! -f "$RULES_SRC/$exist_name" ]; then
+                    log "  Would preserve (unmanaged): $exist_name"
+                fi
+            done
+        fi
+    else
+        backup_dir "$RULES_DEST"
+        mkdir -p "$RULES_DEST"
+
+        ADDED=0; UPDATED=0; UNCHANGED=0
+        for rule_file in "$RULES_SRC"/*.md; do
+            [ -f "$rule_file" ] || continue
+            rule_name=$(basename "$rule_file")
+            if [ -f "$RULES_DEST/$rule_name" ]; then
+                # diff -q: exits 0 if identical, 1 if different (expected behavior)
+                if diff -q "$RULES_DEST/$rule_name" "$rule_file" >/dev/null 2>&1; then
+                    log "Unchanged: $rule_name"
+                    UNCHANGED=$((UNCHANGED + 1))
+                    continue
+                fi
+                # Log unified diff before overwriting. diff exits 1 on differences (expected).
+                log "Updating: $rule_name"
+                diff -u "$RULES_DEST/$rule_name" "$rule_file" \
+                    --label "deployed/$rule_name" --label "source/$rule_name" \
+                    >> "$LOG_FILE" 2>&1 || true  # diff exits 1 on differences; diff appended to deploy log
+                UPDATED=$((UPDATED + 1))
+            else
+                log "Adding: $rule_name (new)"
+                ADDED=$((ADDED + 1))
+            fi
+            cp "$rule_file" "$RULES_DEST/$rule_name"
+        done
+
+        # Log preserved files (in target but not in source)
+        PRESERVED=0
+        if [ -d "$RULES_DEST" ]; then
+            for existing in "$RULES_DEST"/*.md; do
+                [ -f "$existing" ] || continue
+                exist_name=$(basename "$existing")
+                if [ ! -f "$RULES_SRC/$exist_name" ]; then
+                    log "Preserved unmanaged rule: $exist_name"
+                    PRESERVED=$((PRESERVED + 1))
+                fi
+            done
+        fi
+
+        # Post-write validation: each deployed file is non-empty
+        for rule_file in "$RULES_SRC"/*.md; do
+            [ -f "$rule_file" ] || continue
+            rule_name=$(basename "$rule_file")
+            if [ ! -s "$RULES_DEST/$rule_name" ]; then
+                log_error "Validation failed: $rule_name is empty after deploy"
+            fi
+        done
+
+        log_ok "Rules: $ADDED added, $UPDATED updated, $UNCHANGED unchanged, $PRESERVED preserved in $(display_path "$RULES_DEST")"
+    fi
+else
+    log "No user rules to deploy (no claude/rules/ in user repo)"
+fi
+# --- END rules deploy logic (extracted by build-deploy) ---
+# --- END rules deployment (extracted by build-deploy) ---
 
 # --- BEGIN exit (extracted by build-deploy) ---
 if [ "$ERRORS" -gt 0 ]; then

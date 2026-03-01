@@ -157,7 +157,7 @@ Cursor project rules mirror Claude Code rules for consistency. When changing rul
 | `.claude/rules/cross-platform.md` | `.cursor/rules/cross-platform.mdc` | Condensed |
 | `.claude/rules/sources-of-truth.md` | `.cursor/rules/sources-of-truth.mdc` | Near-identical |
 | `.claude/rules/tool-lifecycle.md` | `.cursor/rules/tool-lifecycle.mdc` | Near-identical |
-| `.claude/rules/concurrent-agents.md` | `.cursor/rules/concurrent-agents.mdc` | Identical |
+| `.claude/rules/cursor-rule-parity.md` | `.cursor/rules/cursor-rule-parity.mdc` | Identical |
 | `.claude/rules/python-style.md` | `.cursor/rules/general.mdc` | Folded in |
 | `.claude/rules/pre-commit.md` | `.cursor/rules/pre-commit.mdc` | Identical |
 | `.claude/rules/pre-push.md` | `.cursor/rules/pre-push.mdc` | Identical |

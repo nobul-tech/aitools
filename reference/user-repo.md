@@ -12,7 +12,9 @@ Private per-user companion repo for session archives and profile data.
 aitools-<username>/
 ├── profile.json          # User identity and machine inventory
 ├── claude/
-│   └── CLAUDE.md          # Personal CLAUDE.md template ({{PLACEHOLDER}} tokens)
+│   ├── CLAUDE.md          # Personal CLAUDE.md template ({{PLACEHOLDER}} tokens)
+│   └── rules/             # User-level Claude Code rules (deployed to ~/.claude/rules/)
+│       └── concurrent-agents.md
 ├── sessions/             # Archived Claude Code transcripts
 │   ├── aitools/          # One directory per project
 │   │   └── 2026-02-19_abc12345.jsonl
@@ -150,6 +152,22 @@ Both templates use `{{PLACEHOLDER}}` tokens interpolated from `profile.json`:
 
 The deployed file at `~/.claude/CLAUDE.md` includes an auto-appended `## Machine-Specific`
 footer with OS, hostname, and shell from the current machine's profile.
+
+## User Rules Deployment
+
+Setup scripts deploy user-level Claude Code rules from `<userRepoPath>/claude/rules/` to `~/.claude/rules/`.
+
+**Semantics**: additive deploy — managed files are added/updated, unmanaged files in the target are preserved.
+
+- **Source**: `<userRepoPath>/claude/rules/*.md`
+- **Target**: `~/.claude/rules/*.md`
+- **Backup**: full directory copy (`rules.bak.<TIMESTAMP>/`), max 5, auto-prune
+- **Diff logging**: unified diff of changes logged to deploy log; console shows summary
+- **Managed vs preserved**: files matching a source file are managed; all other files in the target are preserved and logged
+
+**Scope guidance**: user-level rules should be universal conventions that apply across all projects. Project-specific rules belong in `.claude/rules/` within the project repo.
+
+**Build-time embedding**: `build-deploy.sh` reads user rules at build time and embeds them in deploy scripts via heredocs. If no rules exist at build time, deploy scripts skip rules deployment.
 
 ## Relationship to aitools
 

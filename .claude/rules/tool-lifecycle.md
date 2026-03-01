@@ -42,3 +42,21 @@ Tools with `evaluating` status on ALL platforms must NOT have:
 - Entry in CLAUDE.md Managed CLI Tools table
 
 If any of these exist for an `evaluating`-only tool, flag it as a lifecycle error.
+
+### Install cleanup
+
+When a setup script installs a tool via a preferred method (e.g., Homebrew), it should
+also detect and remove old installs from non-preferred sources (e.g., npm/bun global,
+manual binary). Prevents stale versions shadowing the preferred one due to PATH order.
+See `setup-vercelcli` for the pattern.
+
+### Cross-platform vetting
+
+When recommending tools in this project, verify availability on both macOS and Windows.
+Disclose if a tool is single-platform or has limited support on one OS.
+
+### MCP server isolation
+
+Chrome DevTools MCP uses `--isolated` flag for throwaway temp Chrome profiles, enabling
+concurrent Claude Code + Cursor sessions without Chrome profile lock conflicts. Apply
+the same pattern to any future stdio MCP server that creates persistent local state.

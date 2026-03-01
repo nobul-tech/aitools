@@ -39,7 +39,7 @@ Each section uses a table: `| Item | Plan | Priority | Summary |`
 
 ### Reference doc threshold
 
-Content exceeding ~20 lines of detail belongs in `reference/`, not `CLAUDE.md`. Keep `CLAUDE.md` under 200 lines. Use `@reference/` imports for detail.
+Content exceeding ~20 lines of detail belongs in `reference/`, not `CLAUDE.md`. Keep `CLAUDE.md` under 200 lines.
 
 ### When to create a plan
 

@@ -49,6 +49,45 @@ try {
 - `ConvertTo-Json | WriteAllText` without reading existing content first
 - `try { ... } catch {}` that swallows both ENOENT and parse errors
 
+### Backup before overwrite
+
+Scripts must back up targets before writing, regardless of ownership model.
+
+- **Single files**: `<file>.bak.<TIMESTAMP>`, keep at most 20, auto-prune oldest
+- **Directories**: `<dir>.bak.<TIMESTAMP>/`, keep at most 5, auto-prune oldest
+- Skip if target doesn't exist (first run — nothing to back up)
+
+Backup failures are non-fatal (warn and proceed) — a failed backup should not
+block deployment.
+
+### Diff logging on overwrite
+
+Before overwriting an existing file, compare old and new content:
+
+- **Identical**: skip the write, log "unchanged"
+- **Different**: log unified diff to deploy log, then overwrite
+- **New file** (no target): log "added", no diff needed
+
+This applies to both single-file overwrites and directory deployments.
+Console shows summary counts; the deploy log captures full diffs.
+
+### Directory deployment (additive pattern)
+
+When a script manages a directory of files (not a single file), use the additive
+pattern — deploy managed files, preserve everything else:
+
+1. Declare managed scope in script header (e.g., `# Managed: ~/.claude/rules/*.md
+   matching <userRepoPath>/claude/rules/`)
+2. Back up target directory (see "Backup before overwrite")
+3. For each source file: compare with target, add new, update changed (with diff
+   logging), skip unchanged
+4. Preserve unmanaged files (in target but not in source), log each
+5. Validate each deployed file (non-empty)
+6. Log counts: added, updated, unchanged, preserved
+7. If source directory is empty or missing: log info, leave target untouched
+
+This is the directory-level equivalent of read-then-merge for config files.
+
 ### Post-write validation
 
 Every config-writing script must validate output immediately after writing.

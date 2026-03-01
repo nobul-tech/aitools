@@ -26,15 +26,15 @@ Reading/referencing any source is always OK — the gate applies at "install" or
 - **Yellow flags** (disclose and let user decide): low adoption, sole maintainer, no release in 12+ months, excessive permissions, no license
 - **Always check**: publisher/org verification, last activity date, adoption metrics, requested permissions
 - **Quick checks**: VS Code → verified badge + install count; npm → `npm view <pkg> repository.url`; PyPI → pypi.org project URL; GitHub → org vs personal account
-- Tool governance lives in [`nobul-jose/aitools`](https://github.com/nobul-jose/aitools) -- pre-approved tools in [`reference/tool-install-sources.md`](https://github.com/nobul-jose/aitools/blob/main/reference/tool-install-sources.md), full evaluation framework in [`reference/tool-evaluation-criteria.md`](https://github.com/nobul-jose/aitools/blob/main/reference/tool-evaluation-criteria.md)
-- When working outside aitools: add a row to `docs/aitools-requests.md` in the repo (see [RFC 0001](https://github.com/nobul-jose/aitools/blob/main/rfcs/RFC-0001-workspace-tool-requests.md)) or open an issue on `nobul-jose/aitools` via `gh`
+- Tool governance lives in [`nobul-jose/aitools`](https://github.com/nobul-jose/aitools) -- pre-approved tools, evaluation framework, and lifecycle phases documented there
+- When working outside aitools: open an issue on `nobul-jose/aitools` via `gh` (see [RFC 0001](https://github.com/nobul-jose/aitools/blob/main/rfcs/RFC-0001-workspace-tool-requests.md))
 
 ## Cross-Platform Awareness
 
 - I work on both Windows 11 and macOS -- both are first-class, ensure a seamless experience on either
-- Use forward slashes and `$HOME`/`~` in path references
-- Projects live in git repos under `~/repos/` (macOS) / `C:\repos\` (Windows)
-- Some legacy projects still on Google Drive (`G:\My Drive\` / `~/Google Drive/My Drive/`) -- migrate to git repos over time
+- Use `~/` with forward slashes on macOS, `%USERPROFILE%\` with backslashes on Windows
+- Projects live in git repos under `~/repos/` (macOS) / `%USERPROFILE%\repos\` (Windows)
+- Google Drive paths are auto-discovered by `aitools install` and stored in `~/.aitools/config.json` (`googleDrives` array) -- do not hardcode them
 - **After creating `.sh` files on Windows**, always run `git update-index --chmod=+x <file>` before committing -- Windows doesn't set the Unix executable bit
 
 ### Windows tool discovery in Git Bash
@@ -47,25 +47,9 @@ pwsh -NoProfile -Command 'Get-Command <tool> -ErrorAction SilentlyContinue | Sel
 ```
 Never use `which <tool>` or `command -v <tool>` on Windows to determine whether a tool is available.
 
-### Bash ↔ PowerShell dispatch rule
-
-Claude Code on Windows runs in Git Bash. Any bash code that invokes `.sh` scripts with OS guards (`case "$(uname -s)" in MINGW*...exit 1`) will **fail silently on Windows**. This has caused bugs repeatedly.
-
-**Rule**: When bash code calls platform-specific scripts (`.sh`/`.ps1`), always check `uname -s` and dispatch to the correct variant:
-```bash
-case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*) pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$ps1_path")" ;;
-    *) bash "$sh_path" ;;
-esac
-```
-Before writing a new code path that invokes `.sh` scripts, search the same file for existing `MINGW*|MSYS*` patterns and replicate them.
-
 ## Tools & Workflow
 
-- **Cursor**: IDE and workspace environment -- used to create projects, open folders, browse files, and use extensions. Provides embeddings
-- **Claude Code**: AI coding assistant, run within Cursor's integrated terminal
-- **aitools**: Cross-platform CLI for managing tool installs, configs, and MCP servers. Source: `~/repos/aitools/`
-- **Marker**: Preferred PDF-to-markdown converter
+**aitools** (`~/repos/aitools/`) is the central CLI for managing tool installs, configs, and MCP servers. Long-term goal: single workflow management tool across all machines. Not there yet -- current tooling still includes Cursor, Claude Code, and others as the stack evolves.
 
 ### Managed CLI Tools
 
@@ -74,6 +58,8 @@ use `npx`, `bunx`, or other package runners.
 
 | Tool | Command |
 |------|---------|
+| Claude Code | `claude` |
+| Cursor CLI | `agent` |
 | Vercel CLI | `vercel` |
 | Pandoc | `pandoc` |
 | Rust (cargo) | `cargo` |
@@ -86,10 +72,6 @@ use `npx`, `bunx`, or other package runners.
 - **Windows**: pwsh, Cursor, Claude Code, Command Prompt, WSL/bash (when Linux/Unix environment needed)
 - **Note**: Claude Code on Windows always uses Git Bash (not configurable). `CLAUDE_CODE_SHELL` is broken on Windows ([#25558](https://github.com/anthropics/claude-code/issues/25558)). Use Unix shell syntax in all Claude Code sessions. To run PowerShell: `pwsh -NoProfile -Command '...'`
 
-### Cursor CLI (`agent`)
-
-- Always invoke as `agent --model auto` -- required by current subscription plan
-
 ## MCP Servers
 
 Three servers at user level. Chrome DevTools enabled globally; Vercel/Webflow disabled by default.
@@ -98,13 +80,12 @@ Three servers at user level. Chrome DevTools enabled globally; Vercel/Webflow di
 - **Check status**: `aitools mcp`
 - **Manual enable** (Claude Code): add `MCP(vercel)` to `.claude/settings.local.json` `permissions.allow`
 - **Manual enable** (Cursor CLI): `agent mcp enable vercel`
-- **Prefer Chrome DevTools MCP skill for official docs**: When reading web content that will feed into source-of-truth files (install commands, config steps, lifecycle fields), use the Chrome DevTools MCP skill instead of WebFetch. WebFetch summarizes via a smaller model and misses JS-rendered content.
+- **Prefer chrome-devtools skill for official docs**: When reading web content that will be recorded verbatim (install commands, config steps, API references), use the chrome-devtools skill instead of WebFetch. WebFetch summarizes via a smaller model and misses JS-rendered content. WebFetch is fine for general research, blog posts, and quick fact-checks.
 
 ## Knowledge Management
 
-- **Strongly prefer CLAUDE.md and project docs over auto memory.** Auto memory (`~/.claude/projects/.../memory/`) is local to each machine and does not sync. Durable project knowledge belongs in git-tracked files: `CLAUDE.md`, `reference/`, or `.claude/rules/`.
-- Auto memory should only hold ephemeral, machine-specific notes (e.g., tool quirks on this OS).
-- **Planning workflow:** When starting a major plan, spot-check auto memory (`~/.claude/projects/.../memory/`) and migrate any project knowledge into the repo before proceeding.
+- **Auto memory is disabled** via `profile.json` (`autoMemory: false`), deployed by `setup-user-hooks`. Durable knowledge belongs in git-tracked files: `CLAUDE.md`, `.claude/rules/`, or project docs.
+- **Planning workflow:** When starting a major plan, check for stale auto memory files (`~/.claude/projects/.../memory/`) from before the disable and migrate any useful content into the repo.
 
 ## Coaching
 

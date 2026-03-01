@@ -45,6 +45,7 @@ reproduces whatever is hardcoded in the template.
 - `shared/hooks/*.sh` → read via `cat` at build time
 - `shared/skills/*.md` → read via `cat` at build time
 - `shared/claude-shared.md` → read via `cat` at build time
+- `<userRepoPath>/claude/rules/*.md` → read via `cat` at build time
 
 **When changing setup logic in any of the 4 scripts above**:
 

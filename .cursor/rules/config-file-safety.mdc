@@ -22,6 +22,22 @@ Blind overwrites silently drop user data and non-managed fields.
 - `ConvertTo-Json | WriteAllText` without reading existing content first
 - `try { ... } catch {}` that swallows both missing-file and corrupt-file errors
 
+### Backup before overwrite
+
+Back up targets before writing. Single files: `.bak.TIMESTAMP` (max 20). Directories: `.bak.TIMESTAMP/` (max 5). Skip if target doesn't exist. Backup failures are non-fatal.
+
+### Diff logging on overwrite
+
+Compare old and new before overwriting. Identical: skip, log "unchanged". Different: log diff to deploy log, then write. New: log "added".
+
+### Directory deployment
+
+Additive pattern for directory-level deploys:
+1. Declare managed scope in header
+2. Back up directory, compare+deploy (add/update/skip), preserve unmanaged files
+3. Validate each deployed file, log counts
+4. If source empty/missing: log info, leave target untouched
+
 ### Post-write validation
 
 Every config-writing script must validate output after writing:

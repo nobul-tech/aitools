@@ -8,7 +8,9 @@
 # {{PLACEHOLDER}} tokens are interpolated at deploy time using the current
 # machine's profile from profile.json. See reference/user-repo.md.
 #
-# Overwrites: yes (sole owner of ~/.claude/CLAUDE.md)
+# Managed: ~/.claude/CLAUDE.md (sole owner, overwrite)
+# Managed: ~/.claude/rules/*.md matching <userRepoPath>/claude/rules/ (additive deploy)
+# Preserved: ~/.claude/rules/ files not in user repo source
 
 param(
     [string]$SharedPath = (Join-Path $PSScriptRoot "..\shared\claude-shared.md"),
@@ -51,6 +53,36 @@ function Backup-File {
     Log "Backed up $FilePath"
 }
 
+# --- BEGIN Backup-Dir (extracted by build-deploy) ---
+function Backup-Dir {
+    param([string]$DirPath, [int]$MaxBackups = 5)
+    if (-not (Test-Path $DirPath)) { return }
+    # Count managed files; skip if none
+    $mdFiles = Get-ChildItem -Path $DirPath -Filter "*.md" -File -ErrorAction Stop
+    if (-not $mdFiles -or $mdFiles.Count -eq 0) { return }
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
+    $backupPath = "${DirPath}.bak.${ts}"
+    try {
+        Copy-Item -Path $DirPath -Destination $backupPath -Recurse -ErrorAction Stop
+    } catch {
+        LogWarn "Could not back up $DirPath -- proceeding without backup: $_"
+        return
+    }
+    # Prune old backups beyond limit
+    $parentDir = Split-Path $DirPath -Parent
+    $dirName = Split-Path $DirPath -Leaf
+    $backups = Get-ChildItem -Path $parentDir -Directory -Filter "${dirName}.bak.*" -ErrorAction Stop |
+        Sort-Object LastWriteTime -Descending
+    if ($backups.Count -gt $MaxBackups) {
+        $backups | Select-Object -Skip $MaxBackups | ForEach-Object {
+            Remove-Item $_.FullName -Recurse -Force
+            Log "Pruned old backup: $($_.FullName)"
+        }
+    }
+    Log "Backed up $DirPath ($($mdFiles.Count) managed files)"
+}
+# --- END Backup-Dir (extracted by build-deploy) ---
+
 # --- PS 5.1 compatibility helper ---
 function ConvertPSObjectToHashtable($obj) {
     if ($null -eq $obj) { return @{} }
@@ -89,12 +121,14 @@ if (-not (Test-Path $claudeDir)) {
 # Priority: user repo claude/CLAUDE.md > shared/claude-shared.md
 $sourcePath = ""
 $sourceLabel = ""
+$userRepoPath = ""
 
 if (Test-Path $configFile) {
     try {
         $cfg = ConvertPSObjectToHashtable (Get-Content $configFile -Raw | ConvertFrom-Json)
         if ($cfg.ContainsKey("userRepoPath") -and $cfg["userRepoPath"]) {
-            $userClaudeMd = Join-Path $cfg["userRepoPath"] "claude\CLAUDE.md"
+            $userRepoPath = $cfg["userRepoPath"]
+            $userClaudeMd = Join-Path $userRepoPath "claude\CLAUDE.md"
             if (Test-Path $userClaudeMd) {
                 $sourcePath = $userClaudeMd
                 $sourceLabel = "user repo"
@@ -276,6 +310,136 @@ if ($DryRun) {
 
     LogOk "Wrote $claudeMd"
 }
+
+# --- BEGIN rules deployment (extracted by build-deploy) ---
+# Deploy user rules: additive (add/update managed, preserve unmanaged, log diffs).
+$rulesSrc = ""
+if ($userRepoPath) {
+    $candidateRules = Join-Path $userRepoPath "claude\rules"
+    if (Test-Path $candidateRules) {
+        $rulesSrc = $candidateRules
+    }
+}
+
+$rulesDest = Join-Path $claudeDir "rules"
+
+# --- BEGIN rules deploy logic (extracted by build-deploy) ---
+if ($rulesSrc) {
+    $sourceRules = Get-ChildItem -Path $rulesSrc -Filter "*.md" -File -ErrorAction Stop
+    if (-not $sourceRules -or $sourceRules.Count -eq 0) {
+        Log "User repo claude/rules/ exists but has no .md files -- skipping"
+    } elseif ($DryRun) {
+        $existingCount = 0
+        if (Test-Path $rulesDest) {
+            $existingFiles = Get-ChildItem -Path $rulesDest -Filter "*.md" -File -ErrorAction Stop
+            if ($existingFiles) { $existingCount = $existingFiles.Count }
+        }
+        Log "[DRY RUN] $rulesDest`: additive deploy"
+        Log "  Source: $rulesSrc ($($sourceRules.Count) rule files)"
+        Log "  Existing: $existingCount rule files"
+        foreach ($rf in $sourceRules) {
+            $destFile = Join-Path $rulesDest $rf.Name
+            if (Test-Path $destFile) {
+                try {
+                    $oldContent = Get-Content $destFile -Raw -ErrorAction Stop
+                    $newContent = Get-Content $rf.FullName -Raw -ErrorAction Stop
+                } catch {
+                    LogWarn "Cannot compare $($rf.Name): $_"
+                    Log "  Would update (cannot compare): $($rf.Name)"
+                    continue
+                }
+                if ($oldContent -eq $newContent) {
+                    Log "  Would skip (unchanged): $($rf.Name)"
+                } else {
+                    Log "  Would update (changed): $($rf.Name)"
+                }
+            } else {
+                Log "  Would add (new): $($rf.Name)"
+            }
+        }
+        # Show preserved files
+        if (Test-Path $rulesDest) {
+            $existingFiles = Get-ChildItem -Path $rulesDest -Filter "*.md" -File -ErrorAction Stop
+            foreach ($ef in $existingFiles) {
+                $srcMatch = Join-Path $rulesSrc $ef.Name
+                if (-not (Test-Path $srcMatch)) {
+                    Log "  Would preserve (unmanaged): $($ef.Name)"
+                }
+            }
+        }
+    } else {
+        Backup-Dir -DirPath $rulesDest
+        if (-not (Test-Path $rulesDest)) {
+            New-Item -ItemType Directory -Path $rulesDest -Force | Out-Null
+        }
+
+        $added = 0; $updated = 0; $unchanged = 0
+        foreach ($rf in $sourceRules) {
+            $destFile = Join-Path $rulesDest $rf.Name
+            if (Test-Path $destFile) {
+                try {
+                    $oldContent = Get-Content $destFile -Raw -ErrorAction Stop
+                    $newContent = Get-Content $rf.FullName -Raw -ErrorAction Stop
+                } catch {
+                    LogWarn "Cannot read files for comparison ($($rf.Name)): $_"
+                    # Proceed with overwrite since we can't compare
+                    Log "Updating: $($rf.Name) (comparison failed, overwriting)"
+                    $updated++
+                    Copy-Item -Path $rf.FullName -Destination $destFile -Force -ErrorAction Stop
+                    continue
+                }
+                if ($oldContent -eq $newContent) {
+                    Log "Unchanged: $($rf.Name)"
+                    $unchanged++
+                    continue
+                }
+                # Log diff before overwriting
+                Log "Updating: $($rf.Name)"
+                $oldLines = @($oldContent -split "`n")
+                $newLines = @($newContent -split "`n")
+                $diffResult = Compare-Object $oldLines $newLines -PassThru
+                if ($diffResult) {
+                    foreach ($line in $diffResult) {
+                        $side = if ($line.SideIndicator -eq '<=') { '-' } else { '+' }
+                        Add-Content -Path $logFile -Value "  $side $line"
+                    }
+                }
+                $updated++
+            } else {
+                Log "Adding: $($rf.Name) (new)"
+                $added++
+            }
+            Copy-Item -Path $rf.FullName -Destination $destFile -Force -ErrorAction Stop
+        }
+
+        # Log preserved files (in target but not in source)
+        $preserved = 0
+        if (Test-Path $rulesDest) {
+            $existingFiles = Get-ChildItem -Path $rulesDest -Filter "*.md" -File -ErrorAction Stop
+            foreach ($ef in $existingFiles) {
+                $srcMatch = Join-Path $rulesSrc $ef.Name
+                if (-not (Test-Path $srcMatch)) {
+                    Log "Preserved unmanaged rule: $($ef.Name)"
+                    $preserved++
+                }
+            }
+        }
+
+        # Post-write validation: each deployed file is non-empty
+        foreach ($rf in $sourceRules) {
+            $destFile = Join-Path $rulesDest $rf.Name
+            if ((Test-Path $destFile) -and (Get-Item $destFile).Length -eq 0) {
+                LogError "Validation failed: $($rf.Name) is empty after deploy"
+            }
+        }
+
+        LogOk "Rules: $added added, $updated updated, $unchanged unchanged, $preserved preserved in $rulesDest"
+    }
+} else {
+    Log "No user rules to deploy (no claude/rules/ in user repo)"
+}
+# --- END rules deploy logic (extracted by build-deploy) ---
+# --- END rules deployment (extracted by build-deploy) ---
 
 # --- BEGIN exit (extracted by build-deploy) ---
 if ($errors -gt 0) {

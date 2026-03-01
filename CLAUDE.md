@@ -6,26 +6,24 @@ Jose's cross-machine scaffolding for Claude Code, Cursor, and MCP across Windows
 
 ```
 aitools/
-├── .claude/rules/       # Claude Code project rules (modular)
+├── .claude/
+│   ├── commands/        # Claude Code slash commands
+│   └── rules/           # Claude Code project rules (modular)
 ├── .cursor/rules/       # Cursor rules (.mdc format)
-│   ├── general.mdc      #   Identity, code style
-│   ├── sources-of-truth.mdc  # Protected files review gate
-│   ├── tool-lifecycle.mdc     # Phase 2 gate for new tools
-│   ├── cross-platform.mdc    # Dual-script, OS guards, PS 7
-│   └── concurrent-agents.mdc # Multi-agent coordination
 ├── shared/              # Source of truth for configs
 │   ├── claude-shared.md #   → embedded into deploy scripts by build
 │   ├── cursor-rules/    # Template rules + User Rules source of truth
+│   ├── hooks/           # Claude Code hooks
+│   ├── mcp/             # MCP server configuration docs
 │   ├── shell/           # Shell aliases (bash/zsh + PowerShell)
-│   ├── hooks/           # Claude Code hooks (session archive)
-│   └── mcp/             # MCP server configuration docs
+│   └── skills/          # Claude Code skill definitions
 ├── scripts/             # Dev/source scripts (read from shared/)
-│   ├── aitools          # CLI entry point (bash, macOS/Linux)
-│   ├── aitools.ps1      # CLI entry point (PowerShell, Windows)
-│   └── build-deploy.sh  # Generates deploy/ from scripts/ + shared/
 ├── deploy/              # Self-contained scripts for MDM (generated)
 ├── plans/               # Detailed plans for roadmap items
-└── reference/           # Setup notes and how-tos
+├── reference/           # Setup notes and how-tos
+├── rfcs/                # Design proposals
+├── RELEASE_NOTES.md
+└── ROADMAP.md
 ```
 
 ## Build & Run
@@ -36,14 +34,16 @@ bash scripts/build-deploy.sh
 
 # CLI usage (after install -- same commands on both platforms)
 aitools                        # Sync configs: quiet pull + rebuild + deploy all
-aitools gitpull                # Update source: pull + deploy + changelog + version tag
+aitools gitpull [--patch]      # Update source: pull + deploy + changelog + version tag
 aitools install                # Full setup: pull + install tools + deploy configs
+aitools mcp                    # Show MCP server status for current project
 aitools --addmcp vercel        # Add MCP server to current project
 aitools --addmcp vercel webflow  # Add multiple MCP servers
+aitools --dry-run              # Preview changes without writing files
 aitools user init              # Set up user repo + session archive hook
 aitools sessions list [proj]   # List archived sessions
 aitools sessions archive ID    # Manually archive a session by ID
-aitools sessions move F proj   # Refile an archived session under a different project
+aitools sessions move <file> <project>  # Refile an archived session
 
 # Verification checklists (replaces ad-hoc commands)
 # macOS/Linux:
@@ -55,60 +55,37 @@ bash scripts/check-post-push.sh        # or --extensive (all 20 steps)
 .\scripts\check-pre-push.ps1           # read-only
 .\scripts\check-post-push.ps1          # or -Extensive (all 20 steps)
 
-# Deploy to an endpoint (no repo needed -- run from deploy/)
-# macOS/Linux:
-bash deploy/setup-user-claude.sh
-# Windows (PowerShell):
-.\deploy\setup-user-claude.ps1
-
 # Clipboard to Markdown (requires pandoc; optional: claude CLI for auto-naming)
 clip2md                        # Auto-name via AI: 250324-garcia-budget.md
 clip2md meeting-notes          # Explicit name: meeting-notes.md
 ```
 
+### Deploy using MDM
+
+`build-deploy.sh` generates self-contained scripts in `deploy/` (`.sh` + `.ps1` pairs) -- config scripts (`setup-user-claude`, `-mcp`, `-hooks`, `setup-cursor-mcp`, `setup-user-cursor`) and tool scripts (`setup-vercelcli`, `-pandoc`, `-rust`, `-typst`). No repo needed -- run directly on any endpoint.
+
 ## Cross-Platform Paths
 
 | Resource | Windows | macOS |
 |----------|---------|-------|
-| This repo | `~\repos\aitools` | `~/repos/aitools` |
-| User CLAUDE.md | `~/.claude/CLAUDE.md` | `~/.claude/CLAUDE.md` |
-| Shared config | `shared/claude-shared.md` (in repo) | `shared/claude-shared.md` (in repo) |
-| User repo | `~\repos\aitools-<username>` | `~/repos/aitools-<username>` |
+| This repo | `%USERPROFILE%\repos\aitools` | `~/repos/aitools` |
+| User CLAUDE.md | `%USERPROFILE%\.claude\CLAUDE.md` | `~/.claude/CLAUDE.md` |
+| Shared config | `shared\claude-shared.md` (in repo) | `shared/claude-shared.md` (in repo) |
+| User repo | `%USERPROFILE%\repos\aitools-<username>` | `~/repos/aitools-<username>` |
 
 ## Key Decisions
 
-- **Marker** is the preferred PDF-to-markdown converter
 - This directory is the **"home base"** for general/cross-project AI conversations
-- Session notes are ephemeral; durable knowledge goes in CLAUDE.md or reference/ docs (auto-memory is local to each machine, not shared)
 - Shared preferences live in `shared/claude-shared.md` (template). User's personal copy lives in `<userRepoPath>/claude/CLAUDE.md` (syncs across machines). `scripts/setup-user-claude.sh/.ps1` reads from user repo first (fallback: shared template), interpolates `{{PLACEHOLDER}}` tokens from `profile.json`, and writes to `~/.claude/CLAUDE.md`. `deploy/` scripts use build-time embedded content (self-contained).
-- `deploy/` scripts are self-contained (zero dependencies beyond bash/PowerShell) -- MDM-ready
-- **Dual deployment path equivalence**: Changes to `shared/` must flow through both the dev/repo path (runtime) and MDM path (build-time embed via `build-deploy.sh`). Template changes also require syncing the user repo copy. See `.claude/rules/deploy-paths.md`.
-- Each script has `.sh` + `.ps1` pair; deploy scripts use hard OS guards, `aitools` bash forwards to PS1 on Windows
-- Each managed tool gets dedicated `setup-<tool>.sh` + `.ps1` scripts in `scripts/`, copied to `deploy/` by build; `aitools-install` delegates to these
 - `reference/tool-install-sources.md` is the source of truth for install commands -- always check before modifying installer scripts
-- **Tool evaluation policy**: Never recommend unverified or abandoned tools — see `reference/tool-evaluation-criteria.md` for the full framework
-- `claude mcp add` can't run inside nested Claude Code sessions -- `--addmcp` has a node fallback
-- **Tool install cleanup**: When a setup script installs a tool via a preferred method (e.g., Homebrew), it should also detect and remove old installs from non-preferred sources (e.g., npm/bun global, manual binary). Prevents stale versions shadowing the preferred one due to PATH order. See `setup-vercelcli` for the pattern.
-- **Cross-platform tool check**: When recommending tools in this project, verify availability on both macOS and Windows. Disclose if a tool is single-platform or has limited support on one OS.
-- **Tool evaluation tracking**: Tools recommended but not yet approved go in the "Under Evaluation" section of `reference/tool-install-sources.md`. Promote or remove after testing.
-- **Tool platform states**: `evaluating → approved → supported` per platform, plus `n/a`. Defined in `reference/tool-evaluation-criteria.md`. Release notes use `**Verified on:**` for release verification -- distinct from tool approval status.
-- **Tool lifecycle**: Verified official sources must be recorded in `reference/tool-install-sources.md` before any setup code is written. See "Evaluation-to-Support Lifecycle" in `reference/tool-evaluation-criteria.md`.
-- **Release versioning**: `major.minor.patch` scheme documented at the top of `RELEASE_NOTES.md`. Major = structural changes, minor = features/tools, patch = isolated bug fixes.
-- **Roadmap tracking**: `ROADMAP.md` tracks active/planned work. Detailed plans in `plans/`. Completed items move to `RELEASE_NOTES.md`.
-- **`--isolated` for stdio MCP servers**: Chrome DevTools MCP uses `--isolated` flag for throwaway temp Chrome profiles, enabling concurrent Claude Code + Cursor sessions without Chrome profile lock conflicts
-- **Tool lifecycle entries require 5 fields**: Platform Status, Concurrency, Post-Install Config, Dependencies, Invocation -- see `reference/tool-evaluation-criteria.md`
-- **Documentation standards**: RELEASE_NOTES format, version numbering, ROADMAP format, and reference doc threshold are codified in `.claude/rules/documentation-standards.md`
-- **Claude Code version tracking**: Version-dependent workarounds tracked in `reference/claude-code-version-deps.md`. Review on CC version bumps via post-push checklist (#20).
+- **`claude mcp add` and nested sessions**: `claude mcp add` fails inside nested Claude Code sessions (`CLAUDECODE` env var blocks it). `--addmcp` avoids this by writing `.claude/settings.local.json` directly via Node.js. `setup-user-mcp.sh/.ps1` unsets the var as a workaround.
 
 ## Code Conventions
 
 - Python 3.10+, type hints, `argparse` for CLI, `pathlib.Path` over `os.path`
 - Scripts (this repo): provide both `.ps1` and `.sh` variants since this repo is cross-platform
-- Script logging: all setup scripts use structured logging — `log`/`log_ok`/`log_error`/`log_warn` (bash) and `Log`/`LogOk`/`LogError`/`LogWarn` (PS1). Full conventions in `.claude/rules/script-standards.md`.
-- Keep this file under 200 lines; use `@reference/` imports for detail
-- For Cursor rule correspondence, skills deployment, MCP setup, and CLI config, see `reference/cursor-practices.md`
-- For tool evaluation framework and lifecycle phases, see `reference/tool-evaluation-criteria.md`
-- For the workspace tool-requests convention, see `rfcs/RFC-0001-workspace-tool-requests.md`
+- Script logging: all setup scripts use structured logging -- `log`/`log_ok`/`log_error`/`log_warn` (bash) and `Log`/`LogOk`/`LogError`/`LogWarn` (PS1)
+- Keep this file under 200 lines
 
 ### Script Execution Patterns
 
@@ -136,5 +113,4 @@ esac
 
 - **PSO: Checklist scripts, not ad-hoc** -- Use the project's check scripts (`check-pre-commit`, `check-pre-push`, `check-post-push`) instead of ad-hoc commands. Ad-hoc is OK for novel one-off checks only.
 - **PSO: Platform-native dispatch** -- Run `.ps1` via `pwsh -File` on Windows, `.sh` via `bash` on macOS. Never run `.sh` setup scripts on Windows -- they skip PS1 validation and miss Windows-only issues. **Exceptions:** hooks (Claude Code runs hooks in bash on all platforms) and `build-deploy.sh` (approved single-language exception -- produces platform-independent output).
-
-- For user repo pattern, profile schema, session archiving, and config schema, see `reference/user-repo.md`
+- **PSO: Equal platform visibility** -- When showing usage examples, commands, or invocations in docs, always show both macOS/bash and Windows/PowerShell. Never abbreviate one platform as "same but .ps1" or similar.

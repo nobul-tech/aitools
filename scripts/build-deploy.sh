@@ -51,6 +51,40 @@ CLAUDE_SHARED_CONTENT=$(cat "$CLAUDE_SHARED")
 HOOK_SESSION_ARCHIVE=$(cat "$SHARED_DIR/hooks/session-archive.sh")
 HOOK_STANDING_ORDER_GUARD=$(cat "$SHARED_DIR/hooks/standing-order-guard.sh")
 
+# --- Read user rules for embedding ---
+# User rules are embedded at build time into deploy scripts.
+# At runtime, deploy scripts write embedded rules to a temp dir, then use the
+# same additive deploy logic extracted from scripts/setup-user-claude.sh/.ps1.
+USER_RULES_DIR=""
+USER_RULE_COUNT=0
+declare -a USER_RULE_NAMES=()
+declare -a USER_RULE_CONTENTS=()
+
+CONFIG="$HOME/.aitools/config.json"
+if [ -f "$CONFIG" ] && command -v node &>/dev/null; then
+    _urp=$(node -e "
+try {
+    const cfg = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+    if (cfg.userRepoPath) console.log(cfg.userRepoPath);
+} catch(e) {}
+" "$CONFIG" 2>/dev/null) || true  # node failure is non-fatal; _urp stays empty
+    if [ -n "$_urp" ] && [ -d "$_urp/claude/rules" ]; then
+        USER_RULES_DIR="$_urp/claude/rules"
+        for rf in "$USER_RULES_DIR"/*.md; do
+            [ -f "$rf" ] || continue
+            USER_RULE_NAMES+=("$(basename "$rf")")
+            USER_RULE_CONTENTS+=("$(cat "$rf")")
+            USER_RULE_COUNT=$((USER_RULE_COUNT + 1))
+        done
+    fi
+fi
+
+if [ "$USER_RULE_COUNT" -gt 0 ]; then
+    blog "User rules: $USER_RULE_COUNT files from $USER_RULES_DIR"
+else
+    blog "WARN: No user rules found at build time -- deploy scripts will not manage ~/.claude/rules/"
+fi
+
 # --- Profile interpolation ---
 # Read profile from user repo, interpolate identity placeholders.
 # Fallback: use defaults if profile not found (build never fails).
@@ -250,6 +284,17 @@ function Backup-File {
 BACKUP_PS1
 }
 
+# Backup dir helpers (extracted from scripts/ via sentinels)
+bash_backup_dir_helper() {
+    extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
+        '^# --- BEGIN backup_dir' '^# --- END backup_dir'
+}
+
+ps1_backup_dir_helper() {
+    extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
+        '^# --- BEGIN Backup-Dir' '^# --- END Backup-Dir' --crlf
+}
+
 # ============================================================
 # OS guard helpers (embedded into template-generated deploy scripts)
 # ============================================================
@@ -393,9 +438,13 @@ blog "Generating deploy/setup-user-claude.sh"
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
     cat <<'BLOCK'
-# setup-user-claude.sh — Creates user-level ~/.claude/CLAUDE.md
-# Self-contained: shared preferences are embedded below. No repo or Drive needed.
+# setup-user-claude.sh — Creates user-level ~/.claude/CLAUDE.md and deploys user rules
+# Self-contained: shared preferences and user rules are embedded below. No repo needed.
 # Safe to re-run — replaces existing file with latest version.
+#
+# Managed: ~/.claude/CLAUDE.md (sole owner, overwrite)
+# Managed: ~/.claude/rules/*.md (additive deploy from embedded rules)
+# Preserved: ~/.claude/rules/ files not in embedded source
 
 set -euo pipefail
 
@@ -403,6 +452,7 @@ BLOCK
     bash_logging_helpers "setup-user-claude"
     bash_os_guard
     bash_backup_helper
+    bash_backup_dir_helper
     bash_flag_helpers
     cat <<'BLOCK'
 
@@ -476,7 +526,43 @@ BLOCK
     log_ok "Wrote $(display_path "$CLAUDE_MD")"
     log "Machine: $OS_NAME $ARCH ($HOSTNAME), Shell: $SHELL_NAME"
 fi
+
 BLOCK
+    # --- Embedded user rules deployment ---
+    if [ "$USER_RULE_COUNT" -gt 0 ]; then
+        # Set up embedded rules: write to temp dir, then use extracted deploy logic
+        cat <<'BLOCK'
+# --- Embedded user rules (from user repo at build time) ---
+RULES_SRC=$(mktemp -d)
+_cleanup_rules() { rm -rf "$RULES_SRC"; }
+trap _cleanup_rules EXIT
+BLOCK
+        # Emit heredocs for each embedded rule file
+        for i in $(seq 0 $((USER_RULE_COUNT - 1))); do
+            local_name="${USER_RULE_NAMES[$i]}"
+            # Sanitize name for heredoc delimiter: replace - and . with _
+            safe_name=$(echo "$local_name" | perl -pe 's/[^a-zA-Z0-9]/_/g')
+            echo "cat > \"\$RULES_SRC/$local_name\" <<'__RULE_${safe_name}__'"
+            echo "${USER_RULE_CONTENTS[$i]}"
+            echo "__RULE_${safe_name}__"
+        done
+        cat <<'BLOCK'
+RULES_DEST="$CLAUDE_DIR/rules"
+BLOCK
+        # Extract deploy logic from scripts/ (single source of truth)
+        extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
+            '^# --- BEGIN rules deploy logic' '^# --- END rules deploy logic'
+        cat <<'BLOCK'
+
+# Clean up temp source dir
+rm -rf "$RULES_SRC"
+trap - EXIT
+BLOCK
+    else
+        cat <<'BLOCK'
+log "No user rules embedded at build time -- ~/.claude/rules/ not managed by this script"
+BLOCK
+    fi
     extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
         '^# --- BEGIN exit' '^# --- END exit'
 } > "$DEPLOY_DIR/setup-user-claude.sh"
@@ -492,9 +578,13 @@ blog "Generating deploy/setup-user-claude.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
     cat <<'BLOCK'
-# setup-user-claude.ps1 — Creates user-level ~/.claude/CLAUDE.md on Windows
-# Self-contained: shared preferences are embedded below. No repo or Drive needed.
+# setup-user-claude.ps1 — Creates user-level ~/.claude/CLAUDE.md and deploys user rules
+# Self-contained: shared preferences and user rules are embedded below. No repo needed.
 # Safe to re-run — replaces existing file with latest version.
+#
+# Managed: ~/.claude/CLAUDE.md (sole owner, overwrite)
+# Managed: ~/.claude/rules/*.md (additive deploy from embedded rules)
+# Preserved: ~/.claude/rules/ files not in embedded source
 
 BLOCK
     ps1_param_block
@@ -502,6 +592,7 @@ BLOCK
     ps1_os_guard
     ps1_version_guard
     ps1_backup_helper
+    ps1_backup_dir_helper
     ps1_flag_helpers
     cat <<'BLOCK'
 
@@ -575,7 +666,35 @@ BLOCK
     LogOk "Wrote $claudeMd"
     Log "Machine: $osInfo ($hostname)"
 }
+
 BLOCK
+    # --- Embedded user rules deployment (PS1) ---
+    if [ "$USER_RULE_COUNT" -gt 0 ]; then
+        # Set up embedded rules: write to temp dir, then use extracted deploy logic
+        printf '# --- Embedded user rules (from user repo at build time) ---\r\n'
+        printf '$rulesSrc = Join-Path $env:TEMP "aitools-rules-$(Get-Random)"\r\n'
+        printf 'New-Item -ItemType Directory -Path $rulesSrc -Force | Out-Null\r\n'
+        # Emit here-strings for each embedded rule file
+        for i in $(seq 0 $((USER_RULE_COUNT - 1))); do
+            local_name="${USER_RULE_NAMES[$i]}"
+            safe_name=$(echo "$local_name" | perl -pe 's/[^a-zA-Z0-9]/_/g')
+            printf '$_rule_%s = @'"'"'\r\n' "$safe_name"
+            echo "${USER_RULE_CONTENTS[$i]}" | perl -pe 's/\r?\n$/\r\n/'
+            printf ''"'"'@\r\n'
+            printf '$_ruleDest_%s = Join-Path $rulesSrc "%s"\r\n' "$safe_name" "$local_name"
+            printf '[System.IO.File]::WriteAllText($_ruleDest_%s, $_rule_%s, [System.Text.UTF8Encoding]::new($false))\r\n' "$safe_name" "$safe_name"
+        done
+        printf '$rulesDest = Join-Path $claudeDir "rules"\r\n'
+        printf '\r\n'
+        # Extract deploy logic from scripts/ (single source of truth)
+        extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
+            '^# --- BEGIN rules deploy logic' '^# --- END rules deploy logic' --crlf
+        printf '\r\n'
+        printf '# Clean up temp source dir\r\n'
+        printf 'Remove-Item $rulesSrc -Recurse -Force -ErrorAction SilentlyContinue\r\n'
+    else
+        printf 'Log "No user rules embedded at build time -- ~/.claude/rules/ not managed by this script"\r\n'
+    fi
     extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
         '^# --- BEGIN exit' '^# --- END exit' --crlf
 } > "$DEPLOY_DIR/setup-user-claude.ps1"
