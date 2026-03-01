@@ -424,8 +424,8 @@ for f in "$REPO_ROOT"/scripts/setup-*.sh "$REPO_ROOT"/scripts/setup-*.ps1; do
     [ -f "$f" ] || continue
     if grep -qE 'cat[[:space:]]*>' "$f" 2>/dev/null; then
         fname=$(basename "$f")
-        # Skip if header says "sole owner"
-        if ! head -5 "$f" | grep -qi 'sole owner'; then
+        # Skip if header says "sole owner" (check first 15 lines, matching PS1 TotalCount 15)
+        if ! head -15 "$f" | grep -qi 'sole owner'; then
             echo "      potential blind overwrite: $fname"
             overwrite_count=$((overwrite_count + 1))
         fi

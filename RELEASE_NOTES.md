@@ -12,6 +12,18 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.27.3 -- Config Merge Audit Parity Fix (2026-03-01)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Low | **Post-push step 19 false positive**: `check-post-push.sh` scanned only 5 header lines for "sole owner" exemption, missing the comment on line 12 of `setup-user-claude.sh`. PS1 equivalent already used 15 lines. Widened bash to `head -15` to match. |
+
+**Verified**: macOS
+
+---
+
 ## v0.27.2 -- Dotprofile Docs & @ Reference Tracking (2026-03-01)
 
 ### Improvements
