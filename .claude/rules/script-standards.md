@@ -1,13 +1,13 @@
 ## Script Standards (this repo)
 
 All plans you propose and all reusable code you write must follow these conventions.
-A plan that drafts code with violations is itself a violation. This covers: setup scripts
+A plan that drafts code with violations is itself a violation. This covers all reusable scripts including: setup scripts
 (`scripts/setup-*.sh/.ps1`), check/audit scripts (`scripts/check-*.sh/.ps1`), installer
-scripts (`scripts/aitools-install.*`, `scripts/aitools.*`), deploy scripts
+scripts (`scripts/aitools-install.*`, `scripts/aitools*`), deploy scripts
 (`deploy/*.sh/.ps1`), hooks (`shared/hooks/*.sh`), shell aliases (`shared/shell/*`),
-and pseudocode in `plans/*.md`.
+pseudocode in `plans/*.md`, and any code you propose in conversation.
 
-### Block order (bash setup scripts)
+### Block order (bash reusable scripts)
 
 1. Shebang + header comment (name, purpose, "safe to re-run", platform, reference to `tool-install-sources.md`)
 2. `set -euo pipefail`
@@ -16,7 +16,7 @@ and pseudocode in `plans/*.md`.
 5. Script body
 6. Exit footer (check `$ERRORS`, exit 1 on failure)
 
-### Block order (PowerShell setup scripts)
+### Block order (PowerShell reusable scripts)
 
 1. Header comment (name, purpose, "safe to re-run", platform, reference to `tool-install-sources.md`)
 2. Logging block: `$logDir`, `$logFile`, `$scriptName`, dir creation, `Log`/`LogOk`/`LogError`/`LogWarn`, `$errors = 0`

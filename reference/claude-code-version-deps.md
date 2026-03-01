@@ -51,6 +51,7 @@ Post-push checklist #20 triggers this review automatically.
 | 11 | PATH limitations (npm global bin not always visible to CC) | 2.1.51 | 2.1.51 | `scripts/setup-user-mcp.sh` (node fallback for `claude mcp add`) | [#5202](https://github.com/anthropics/claude-code/issues/5202), [#3838](https://github.com/anthropics/claude-code/issues/3838) |
 | 12 | PowerShell-from-Bash quoting patterns (single-quote outer, double-quote inner) | 2.1.51 | 2.1.51 | `reference/claude-code-windows-shell.md` | -- |
 | 13 | Cursor Agent CLI rule sources (does NOT read ~/.claude/CLAUDE.md) | 2.1.51 | 2.1.51 | `reference/cursor-practices.md` | -- |
+| 18 | `@file` references resolved in CLAUDE.md but NOT in `.claude/rules/*.md` | 2.1.63 | 2.1.63 (2026-03-01) | `shared/claude-shared.md` (Knowledge Management), dotprofile `claude/CLAUDE.md` | -- |
 
 ## LOW -- Architectural constraints unlikely to change soon
 

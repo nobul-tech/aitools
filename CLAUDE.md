@@ -1,6 +1,6 @@
 # AI Tooling Hub
 
-Jose's cross-machine scaffolding for Claude Code, Cursor, and MCP across Windows and macOS.
+Jose's cross-machine scaffolding for Claude Code, Cursor, MCP across Windows and macOS. Automates lifecycle management of supported tools, context and configuration files.  Supports multiple users with dotprofile repos
 
 ## Project Structure
 
@@ -25,6 +25,29 @@ aitools/
 ├── RELEASE_NOTES.md
 └── ROADMAP.md
 ```
+
+## Dotprofile Repos
+
+Per-user companion repos store personal preferences, rules, and session archives. Named `aitools-<github-username>` (e.g., `aitools-nobul-jose`). Full spec: `reference/user-repo.md`.
+
+```
+aitools-<username>/
+├── profile.json              # User identity, machine profiles, tool preferences
+├── claude/
+│   ├── CLAUDE.md             # Personal CLAUDE.md template ({{PLACEHOLDER}} tokens)
+│   ├── effectiveness.md      # Claude Code effectiveness tracker
+│   └── rules/                # User-level rules (deployed to ~/.claude/rules/)
+│       └── concurrent-agents.md
+├── sessions/                 # Archived Claude Code transcripts
+│   └── <project>/            # One directory per project
+│       └── YYYY-MM-DD_<id>.jsonl
+└── README.md
+```
+
+- **Template priority**: `<userRepoPath>/claude/CLAUDE.md` wins over `shared/claude-shared.md`
+- **Rules deployment**: additive -- managed files updated, unmanaged files preserved
+- **Session archiving**: automatic via `SessionEnd` hook (reads `userRepoPath` from `~/.aitools/config.json`)
+- **Setup**: `aitools user init` creates the repo and configures the hook
 
 ## Build & Run
 
@@ -62,10 +85,10 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 
 ### Verification Details
 
-- Pre-commit checklist: @reference/pre-commit-checklist.md
-- Pre-push checklist: @reference/pre-push-checklist.md
-- Post-push checklist: @reference/post-push-checklist.md
-- Script standards detail (exemptions, examples, check-script rules): @reference/script-standards-detail.md
+- Pre-commit checklist: reference/pre-commit-checklist.md
+- Pre-push checklist: reference/pre-push-checklist.md
+- Post-push checklist: reference/post-push-checklist.md
+- Script standards detail (exemptions, examples, check-script rules): reference/script-standards-detail.md
 
 ### Deploy using MDM
 
@@ -90,13 +113,10 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 ## Code Conventions
 
 - Python 3.10+, type hints, `argparse` for CLI with `--help`, `pathlib.Path` over `os.path`, `if __name__ == "__main__":` guard
-- Scripts (this repo): provide both `.ps1` and `.sh` variants since this repo is cross-platform
-- Script logging: all setup scripts use structured logging -- `log`/`log_ok`/`log_error`/`log_warn` (bash) and `Log`/`LogOk`/`LogError`/`LogWarn` (PS1)
 - Keep this file under 200 lines
 
 ### Script Execution Patterns
 
-**Dual-script rule**: Every setup script gets both `.sh` and `.ps1` with OS guards. Shell-only scripts (no `.ps1` pair) are exceptions that must be documented in `.claude/rules/cross-platform.md` with rationale. Current exceptions: hooks (bash on all platforms by CC design) and `build-deploy.sh` (produces platform-independent output via sentinel markers).
 
 **Windows dispatch**: Claude Code on Windows uses Git Bash. `CLAUDE_CODE_SHELL` is broken ([#25558](https://github.com/anthropics/claude-code/issues/25558)). Any code path calling setup scripts must dispatch by platform:
 ```bash
@@ -108,16 +128,12 @@ esac
 
 **PowerShell from Bash**: Always single-quote the outer `-Command` string. Use double quotes inside for PS interpolation. For anything beyond a one-liner, use the write-then-execute pattern instead.
 
-**Write-then-execute**: For complex bash or PowerShell, write to a temp file (Write tool), execute (`bash` or `pwsh -File`), clean up. Avoids quoting hell and keeps code readable/editable. This applies to both languages (see USO: Scratch files for complex scripting).
-
-**String manipulation**: Use Perl for non-trivial transforms (see USO: Perl for string manipulation). sed is fine for trivial single substitutions only.
-
-### Project Coaching Items
-
-- **PCI: Audit broadly** -- When auditing error handling, check both suppressed errors (`SilentlyContinue`, `2>/dev/null`) AND missing error handling (no `try/catch`, no `-ErrorAction`, bare `Get-Content` on untrusted input). Pattern matching finds suppressions; "what happens if this fails?" finds gaps.
 
 ### Project Standing Orders
 
 - **PSO: Checklist scripts, not ad-hoc** -- Use the project's check scripts (`check-pre-commit`, `check-pre-push`, `check-post-push`) instead of ad-hoc commands. Ad-hoc is OK for novel one-off checks only.
 - **PSO: Platform-native dispatch** -- Run `.ps1` via `pwsh -File` on Windows, `.sh` via `bash` on macOS. Never run `.sh` setup scripts on Windows -- they skip PS1 validation and miss Windows-only issues. **Exceptions:** hooks (Claude Code runs hooks in bash on all platforms) and `build-deploy.sh` (approved single-language exception -- produces platform-independent output).
 - **PSO: Equal platform visibility** -- When showing usage examples, commands, or invocations in docs, always show both macOS/bash and Windows/PowerShell. Never abbreviate one platform as "same but .ps1" or similar.
+- **PSO: Audit broadly** -- When auditing error handling, check both suppressed errors (`SilentlyContinue`, `2>/dev/null`) AND missing error handling (no `try/catch`, no `-ErrorAction`, bare `Get-Content` on untrusted input). Pattern matching finds suppressions; "what happens if this fails?" finds gaps.
+- **PSO: Dual-script rule** -- Every setup script gets both `.sh` and `.ps1` with OS guards. Shell-only scripts (no `.ps1` pair) are exceptions that must be documented in `.claude/rules/cross-platform.md` with rationale. Current exceptions: hooks (bash on all platforms by CC design) and `build-deploy.sh` (produces platform-independent output via sentinel markers).
+- **PSO: Script logging: all deploy, setup, check and all other reusable scripts use structured logging -- `log`/`log_ok`/`log_error`/`log_warn` (bash) and `Log`/`LogOk`/`LogError`/`LogWarn` (PS1). Never suggest, plan nor implement re-usable scripts without structured logging

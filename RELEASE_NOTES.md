@@ -12,6 +12,20 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.27.2 -- Dotprofile Docs & @ Reference Tracking (2026-03-01)
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | **Dotprofile structure in CLAUDE.md**: Project CLAUDE.md now documents dotprofile repo layout (directory tree, template priority, rules deployment, session archiving) alongside the main repo structure. |
+| 2 | **@ reference behavior documented**: `@file` references resolve in `CLAUDE.md` (pulled into context) but NOT in `.claude/rules/*.md` (remain as plain text). Added to dotprofile CLAUDE.md template under Knowledge Management. |
+| 3 | **Version-deps tracking**: Added item #18 to `reference/claude-code-version-deps.md` tracking `@` reference resolution behavior across CC versions. |
+
+**Verified**: macOS
+
+---
+
 ## v0.27.1 -- Rules Deployment & Deploy Logging (2026-03-01)
 
 ### New features
