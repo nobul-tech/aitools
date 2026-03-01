@@ -122,11 +122,7 @@ if $hook_present; then
             # Use find + stat (macOS) or find + stat (Linux) — find -printf is GNU-only
             newest=""
             while IFS= read -r -d '' jf; do
-                if $IS_MACOS; then
-                    mtime=$(stat -f %m "$jf" 2>/dev/null || echo 0)
-                else
-                    mtime=$(stat -c %Y "$jf" 2>/dev/null || echo 0)
-                fi
+                mtime=$(get_mtime "$jf")
                 if [ -z "$newest" ] || [ "$mtime" -gt "$newest" ]; then
                     newest="$mtime"
                 fi
@@ -380,11 +376,7 @@ if [ -f "$REPO_ROOT/ROADMAP.md" ]; then
         plan_path="$REPO_ROOT/$plan_file"
         if [ -f "$plan_path" ]; then
             # Check if modified in last 14 days
-            if $IS_MACOS; then
-                mtime=$(stat -f %m "$plan_path" 2>/dev/null || echo 0)
-            else
-                mtime=$(stat -c %Y "$plan_path" 2>/dev/null || echo 0)
-            fi
+            mtime=$(get_mtime "$plan_path")
             now=$(date +%s)
             age_days=$(( (now - mtime) / 86400 ))
             if [ "$age_days" -gt 14 ]; then

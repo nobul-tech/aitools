@@ -57,13 +57,13 @@ INPUT=$(cat)
 
 # --- Pure-bash JSON field extraction ---
 # Same pattern as session-archive.sh. Handles simple top-level string values.
+# Uses bash regex (zero external process forks) since this is a hot-path hook.
 json_field() {
     local json="$1" key="$2"
-    printf '%s' "$json" \
-        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
-        | head -1 \
-        | sed 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"//' \
-        | sed 's/"$//'
+    local pattern="\"${key}\"[[:space:]]*:[[:space:]]*\"([^\"]*)\""
+    if [[ "$json" =~ $pattern ]]; then
+        printf '%s' "${BASH_REMATCH[1]}"
+    fi
 }
 
 # Extract tool_input.command — it's nested, so we need the command field
@@ -150,10 +150,10 @@ esac
 # Check for file-editing commands (should use Edit tool)
 case "$FIRST_TOKEN" in
     sed)
-        violation "USO: Dedicated tools -- Use the Edit tool instead of 'sed' to modify files. For non-trivial string manipulation, use Perl (USO: Perl for string manipulation)."
+        violation "USO: Dedicated tools --: Use the Edit tool instead of 'sed' to modify files. For non-trivial string manipulation, use Perl (USO: Perl for string manipulation)."
         ;;
     awk)
-        violation "USO: Dedicated tools -- Use the Read tool instead of 'awk' to process files. For string manipulation, use Perl (USO: Perl for string manipulation)."
+        violation "USO: Dedicated tools --: Use the Read tool instead of 'awk' to process files. For string manipulation, use Perl (USO: Perl for string manipulation)."
         ;;
 esac
 
