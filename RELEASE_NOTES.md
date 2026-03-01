@@ -12,6 +12,38 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.27 -- CLAUDE.md Restructure & RFC 0001 (2026-03-01)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **USO/PSO/UCI/PCI naming**: Standing orders split into USO (user) and PSO (project). Coaching items split into UCI (user) and PCI (project). Numbers removed for stability across reordering. |
+| 2 | **RFC 0001 adopted**: Workspace tool-requests convention (`docs/aitools-requests.md`). GitHub-centric consumption via `gh` CLI. |
+| 3 | **Tool governance signposts**: User-level CLAUDE.md now references aitools GitHub URLs for tool evaluation framework and install sources. Cross-project agents directed to RFC 0001 or `gh issue create`. |
+| 4 | **Effectiveness log in user repo**: Coaching evaluation log moved from `reference/claude-code-effectiveness.md` to user repo `claude/effectiveness.md`. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 5 | **Context reduction**: Dropped all 6 `@reference/` imports from project CLAUDE.md (~870 lines). Replaced with signpost references that Claude reads on demand. |
+| 6 | **Git identity dedup**: Removed from project CLAUDE.md, `.claude/rules/git-identity.md`, and `.cursor/rules/general.mdc` -- user-level covers all projects. |
+| 7 | **Hooks coaching broadened**: From "explore hooks for auto-lint" to full hook pattern inventory (subagent context injection, auto-format, auto-test, notifications). |
+| 8 | **Subagent context gap softened**: Changed from hard rule ("never delegate") to advisory ("prefer research; consider including rules"). |
+| 9 | **Standing order references updated**: All `SO #N` references in hooks, scripts, and rules updated to `USO: Name` format. |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `rfcs/README.md` | RFC index |
+| `rfcs/RFC-0001-workspace-tool-requests.md` | Workspace tool-requests convention |
+
+**Verified on:** macOS (Darwin arm64)
+
+---
+
 ## v0.26.1 -- Hook Observe Mode & Bug Fixes (2026-03-01)
 
 ### New features
