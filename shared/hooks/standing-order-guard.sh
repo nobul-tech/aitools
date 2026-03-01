@@ -32,6 +32,11 @@ MODE="observe"  # observe = log only, enforce = block
 LOG_DIR="$HOME/.claude/hooks/logs"
 LOG_FILE="$LOG_DIR/standing-order-guard.log"
 
+# Ensure log directory exists once (not per-violation)
+if [ "$MODE" = "observe" ]; then
+    mkdir -p "$LOG_DIR"
+fi
+
 # violation() — dispatch based on MODE
 # In enforce mode: write message to stderr, exit 2 (block)
 # In observe mode: append to log file, exit 0 (allow)
@@ -41,7 +46,6 @@ violation() {
         echo "$message" >&2
         exit 2
     else
-        mkdir -p "$LOG_DIR"
         printf '%s [WOULD-BLOCK] %s | cmd: %s\n' \
             "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$message" "$COMMAND" \
             >> "$LOG_FILE"
@@ -76,7 +80,7 @@ fi
 # In JSON, newlines in strings are escaped as \n (literal two-char sequence).
 # Count occurrences by measuring string length before/after removing \n sequences.
 # This avoids grep exit-code issues with set -euo pipefail when no matches exist.
-STRIPPED=$(printf '%s' "$COMMAND" | sed 's/\\n//g')
+STRIPPED="${COMMAND//\\n/}"
 CMD_LEN=${#COMMAND}
 STRIPPED_LEN=${#STRIPPED}
 NEWLINE_COUNT=$(( (CMD_LEN - STRIPPED_LEN) / 2 ))
@@ -89,7 +93,7 @@ fi
 # --- SO #1: Dedicated tools for file operations ---
 # Pattern: command starts with a file-op utility that has a dedicated tool.
 # We check the first token of the command (before any arguments).
-FIRST_TOKEN=$(printf '%s' "$COMMAND" | head -1 | awk '{print $1}')
+read -r FIRST_TOKEN _ <<< "$COMMAND"
 
 # Allowlist: commands that look like file ops but are legitimate shell use.
 # pwsh wrapping, git operations, npm/node, etc. are always OK.
