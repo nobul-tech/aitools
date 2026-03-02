@@ -69,6 +69,8 @@ incidents. Each incident gets RCA and remediation tracking.
 | I9 | 2026-03-01 | Process | Unnecessary @import of reference/claude-code-maintenance.md in CLAUDE.md -- added 85 lines of maintenance-only context to every session. File already triggered by post-push checklist #20. | RCA | -- | -- |
 | I10 | 2026-03-02 | SO #5 | Chained version-check commands (`&&`/`;`) in single Bash tool call; plan contained inline version checks because I8 plan revision left Batch 4 uncorrected when fixing Batch 2 | RCA | Simple Bash commands only | -- |
 | I11 | 2026-03-02 | SO #5 | Used `cd /path && git status` as a compound Bash tool call during commit/push workflow — same session as I10 RCA, main agent, rule in context | RCA | Simple Bash commands only | -- |
+| I12 | 2026-03-02 | Process | Hook crashed on every Bash call after MODE→per-check refactor: stale `$MODE` reference with `set -euo pipefail -u` caused immediate exit before any check ran | Remediated | -- | v0.29.2 |
+| I13 | 2026-03-02 | SO #5 | Newline-separated two-command sequence in single Bash tool call (`echo ... | bash ...\necho "exit: $?"`); CC flagged "newlines that could separate multiple commands" | Observed | Simple Bash commands only | -- |
 
 ### Incident Details
 
@@ -205,3 +207,45 @@ incidents. Each incident gets RCA and remediation tracking.
   Perl one-liners including the USO-prescribed pattern.
   `&&` and `||` checks have zero false positives in the log and could enforce independently.
   Fix: exempt `;` when it appears inside a `-Command '...'` or `-e '...'` argument before promoting.
+
+#### I13: Newline-separated commands in single Bash tool call (2026-03-02)
+
+- **Observed**: Attempted to run two commands in one Bash tool call separated by a newline:
+  `echo '{"tool_name":"Bash",...}' | bash shared/hooks/standing-order-guard.sh` followed by
+  `echo "clean exit: $?"`. CC flagged "Command contains newlines that could separate multiple
+  commands." User blocked it.
+- **RCA**: Newline is a shell command separator, equivalent in effect to `;`. The USO ("Simple Bash
+  commands only") prohibits `;` and `&&` for exactly this reason — they chain independent commands in
+  a single call. A newline between two commands is the same violation. The correct pattern is the
+  write-and-execute pattern: write both commands to a temp script, run the script.
+- **Relationship to hook**: The `standing-order-guard.sh` hook does NOT detect newlines as command
+  separators. It checks `&&`, `||`, `;` explicitly, and has a "scratch files" threshold of 4+
+  newlines (`\n` in JSON). A 2-command sequence (1 newline) falls below that threshold and passes
+  undetected. This is a gap: the same logical violation (multiple commands in one call) has three
+  forms — `&&`, `;`, newline — and the hook only catches two of them. CC's own permission system
+  caught this one.
+- **Status**: Observed
+- **Detection gap**: Hook's newline detection threshold (4+) is too high to catch short
+  multi-command sequences. Adding a newline-as-separator check (distinct from the scratch-files
+  length check) would close this. Needs careful scoping to avoid false positives on heredocs and
+  multi-line strings passed as arguments.
+
+#### I12: Hook crash after per-check mode refactor (2026-03-02)
+
+- **Observed**: Every Bash tool call produced "PreToolUse:Bash hook error" immediately after deploying
+  the `&&`/`$()` enforcement changes. Hook was crashing before running any check.
+- **RCA**: The refactor renamed `MODE="observe"` to `MODE_AND`, `MODE_SUBSHELL`, `MODE_REST`. The
+  `mkdir -p "$LOG_DIR"` guard on line 40 still referenced `if [ "$MODE" = "observe" ]`. With
+  `set -euo pipefail`, the `-u` flag treats unset variables as errors — `$MODE` was unset, so the
+  script exited fatally on every invocation before reaching any check logic. `bash -n` syntax
+  validation passed because `-n` only checks syntax, not runtime variable bindings.
+- **RCA**: Two gaps: (1) the refactor didn't search for all remaining uses of the old variable name
+  (`$MODE` appeared in the guard but not in the case statement, so it wasn't obvious); (2) no
+  smoke-test was run against a sample input before deploying — `bash -n` is insufficient for hooks
+  that use `-u` and reference variables dynamically.
+- **Remediation**: Fixed in v0.29.2 — `mkdir -p "$LOG_DIR"` now runs unconditionally (both modes
+  need the log dir). Added smoke-test recommendation to hook rollout practice: run
+  `echo '{"tool_name":"Bash","tool_input":{"command":"git status"}}' | bash <hook>` before deploying.
+- **Status**: Remediated (v0.29.2)
+- **Detection gap**: `bash -n` does not catch unset variable errors under `-u`. Smoke-test with
+  representative input is required for any hook using `set -euo pipefail`. Added to `hook-rollout.md`.

@@ -17,4 +17,11 @@ independently. `violation "message" "$MODE_VAR"` — second arg drives observe v
 
 Reset a check to observe after adding new patterns, changing matching logic, or CC version upgrades.
 
+**Pre-deploy verification** (required before any hook change goes live):
+1. `bash -n <hook>.sh` — syntax only, insufficient alone
+2. Smoke-test clean input: `echo '{"tool_name":"Bash","tool_input":{"command":"git status"}}' | bash <hook>` → must exit 0
+3. Violation test: same with a known-bad command → must exit 2 (enforce) or log entry (observe)
+
+`bash -n` cannot catch `-u` unset variable errors. Always smoke-test. (I12: stale `$MODE` caused crash-on-every-call.)
+
 **Current state (standing-order-guard.sh):** `&&` and `$()` enforcing; `||`, `;`, backticks observing.

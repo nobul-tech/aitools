@@ -25,6 +25,29 @@ All PreToolUse hooks must go through an observe-then-enforce cycle before blocki
 2. **Review**: Audit the log for false positives. Fix matching logic.
 3. **Enforce**: Switch to `MODE="enforce"`. Hook blocks violations (exit 2).
 
+### Pre-deploy verification
+
+Before deploying any hook change (new rule, mode promotion, or matching logic fix):
+
+1. **Syntax check**: `bash -n shared/hooks/<hook>.sh` — catches parse errors only
+2. **Smoke-test**: run the hook against a clean input and verify exit 0:
+   ```bash
+   echo '{"tool_name":"Bash","tool_input":{"command":"git status"}}' \
+     | bash shared/hooks/standing-order-guard.sh
+   echo "exit: $?"
+   ```
+3. **Violation test**: run against a known-bad input and verify the expected outcome
+   (exit 2 in enforce, log entry in observe):
+   ```bash
+   echo '{"tool_name":"Bash","tool_input":{"command":"git status && git log"}}' \
+     | bash shared/hooks/standing-order-guard.sh
+   echo "exit: $?"
+   ```
+
+`bash -n` is not sufficient for hooks using `set -euo pipefail` — it passes syntax
+but cannot catch unset variable errors (`-u`) or runtime failures. Always smoke-test.
+(I12: stale `$MODE` reference caused crash-on-every-call after a refactor; `bash -n` passed.)
+
 ### When to reset to observe
 
 - After adding new rules or patterns to an existing hook
