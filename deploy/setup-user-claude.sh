@@ -216,6 +216,7 @@ Repeated violations will end the working relationship.
 - **USO: Scratch files for complex scripting** -- Never inline long commands in the Bash tool. Write a temp file (bash/pwsh/perl/other), execute, clean up. Inline only for simple one-liners.
 - **USO: Perl for string manipulation** -- Use Perl (not sed/awk) for non-trivial string manipulation. sed is fine for trivial single substitutions only.
 - **USO: No silent failures in reusable code** -- In any code meant to run more than once (scripts, services, hooks, CLI tools), never suppress errors without checking the result and logging/failing. `-ErrorAction SilentlyContinue`, `2>/dev/null`, `|| true`, `try/catch` are fine IF the result is immediately checked. Command-existence checks with explicit fallback are exempt. Applies when the project has a logging framework, is production code, or has reliability expectations. Does NOT apply to scratch/temp/throwaway work.
+- **USO: Simple Bash commands only** -- Never use `$(...)`, backticks, `&&`, `||`, `;`, or glob patterns (`*`, `?`) in destructive commands (`rm`) in Bash tool calls -- these trigger permission prompts that block the user. For commit messages, write to a temp file with Write and use `git commit -F`. For sequential commands, make separate Bash calls. For cleanup, write a cleanup script and execute it. Pipelines (`|`) are OK.
 
 **In plan mode**: Always review these areas and proactively suggest relevant improvements (e.g., "consider breaking this into smaller batches" or "this would be a good candidate for a hook").
 

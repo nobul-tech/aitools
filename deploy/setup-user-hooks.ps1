@@ -175,7 +175,7 @@ $guardContent = @'
 # Currently enforces:
 #   USO: Dedicated tools for file ops (Read/Edit/Write/Grep/Glob, not Bash)
 #   USO: Scratch files for complex scripting (no long inline commands)
-#   USO: Simple Bash commands only (no &&, ||, ;, $(...), backticks)
+#   USO: Simple Bash commands only (no &&, ||, ;, $(...), backticks, globs in rm)
 #
 # Hook contract:
 #   - Receives JSON on stdin (tool_name, tool_input.command, etc.)
@@ -287,6 +287,18 @@ read -r FIRST_TOKEN _ <<< "$COMMAND"
 case "$FIRST_TOKEN" in
     pwsh|powershell|git|npm|node|python*|pip*|cargo|rustup|brew|winget|choco)
         exit 0
+        ;;
+esac
+
+# --- USO: Simple Bash commands only (glob in destructive operations) ---
+# Glob patterns in rm can expand unexpectedly. Write a cleanup script instead.
+case "$FIRST_TOKEN" in
+    rm)
+        case "$COMMAND" in
+            *'*'*|*'?'*)
+                violation "USO: Simple Bash commands only --: Don't use glob patterns (*, ?) with 'rm'. Write a cleanup script listing the specific files, execute it, then clean up the script."
+                ;;
+        esac
         ;;
 esac
 

@@ -12,6 +12,19 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.28.1 -- Hook: Glob Pattern Guard for rm (2026-03-01)
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | **PreToolUse hook: glob guard for rm**: `standing-order-guard.sh` now detects glob patterns (`*`, `?`) in `rm` commands (observe mode). Suggests writing a cleanup script instead. |
+| 2 | **USO: Simple Bash commands only**: Added glob-in-rm restriction to both `shared/claude-shared.md` and user repo CLAUDE.md. |
+
+**Verified**: macOS
+
+---
+
 ## v0.28.0 -- MCP Auth Preservation + Cloud Server Detection (2026-03-01)
 
 ### Improvements
