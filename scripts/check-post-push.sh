@@ -148,7 +148,7 @@ else
 fi
 
 # ===================================================================
-# EXTENSIVE TIER (steps 6-20, only with --extensive)
+# EXTENSIVE TIER (steps 6-21, only with --extensive)
 # ===================================================================
 if ! $EXTENSIVE; then
     print_summary
@@ -274,6 +274,7 @@ inventory_errors=0
 for pf in \
     "reference/tool-registry.md" \
     "reference/tool-evaluation-criteria.md" \
+    "reference/tool-versions.json" \
     "CLAUDE.md" \
     "shared/claude-shared.md" \
     "ROADMAP.md" \
@@ -460,19 +461,22 @@ elif ! command -v python3 >/dev/null 2>&1; then
     step_skip "21" "Tool version freshness" "python3 not available"
 else
     ver21_warns=0
-    while IFS='|' read -r v21_status v21_tool v21_detail; do
+    ver21_ok=0
+    ver21_skip=0
+    ver21_details=""
+    while IFS='|' read -r v21_status v21_tool v21_msg; do
         case "$v21_status" in
-            WARNS) ver21_warns="$v21_tool" ;;
-            OK)    printf "      OK   %s: %s\n" "$v21_tool" "$v21_detail" ;;
-            SKIP)  printf "      SKIP %s: %s\n" "$v21_tool" "$v21_detail" ;;
-            WARN)  printf "      WARN %s: %s\n" "$v21_tool" "$v21_detail" ;;
+            OK)   ver21_ok=$((ver21_ok + 1)) ;;
+            SKIP) ver21_skip=$((ver21_skip + 1))
+                  ver21_details="${ver21_details}      SKIP ${v21_tool}: ${v21_msg}\n" ;;
+            WARN) ver21_warns=$((ver21_warns + 1))
+                  ver21_details="${ver21_details}      WARN ${v21_tool}: ${v21_msg}\n" ;;
         esac
     done < <(python3 - "$versions_json" <<'PYEOF'
 import json, sys, subprocess, datetime
 with open(sys.argv[1]) as f:
     data = json.load(f)
 today = datetime.date.today()
-warns = 0
 TOOL_CMDS = {
     'vercel-cli':       ['vercel', '--version'],
     'cursor-agent-cli': ['agent', '--version'],
@@ -491,15 +495,13 @@ for key, val in data['tools'].items():
         last_reviewed = val.get('lastReviewed')
         if not last_reviewed:
             print(f"WARN|{key}|lastReviewed not set")
-            warns += 1
         else:
             reviewed = datetime.date.fromisoformat(last_reviewed)
             days = (today - reviewed).days
             if days > 30:
                 print(f"WARN|{key}|lastReviewed {last_reviewed} ({days}d ago, >30d)")
-                warns += 1
             else:
-                print(f"OK|{key}|lastReviewed {last_reviewed} ({days}d ago)")
+                print(f"OK|{key}|")
     else:
         macos_ver = (val.get('macos') or {}).get('lastVerifiedVersion')
         if not macos_ver:
@@ -513,22 +515,20 @@ for key, val in data['tools'].items():
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
             out = (r.stdout or r.stderr).strip().split('\n')[0]
             if macos_ver in out:
-                print(f"OK|{key}|{macos_ver}")
+                print(f"OK|{key}|")
             else:
                 print(f"WARN|{key}|installed='{out}' manifest='{macos_ver}'")
-                warns += 1
         except FileNotFoundError:
             print(f"SKIP|{key}|not installed (manifest: {macos_ver})")
         except subprocess.TimeoutExpired:
             print(f"WARN|{key}|version check timed out (manifest: {macos_ver})")
-            warns += 1
-print(f"WARNS|{warns}|")
 PYEOF
     )
+    [ -n "$ver21_details" ] && printf "%b" "$ver21_details"
     if [ "$ver21_warns" -eq 0 ]; then
-        step_pass "21" "Tool version freshness"
+        step_pass "21" "Tool version freshness" "${ver21_ok} OK, ${ver21_skip} skipped"
     else
-        step_warn "21" "Tool version freshness" "$ver21_warns tool(s) out of date or need review"
+        step_warn "21" "Tool version freshness" "$ver21_warns tool(s) out of date; ${ver21_ok} OK, ${ver21_skip} skipped"
     fi
 fi
 

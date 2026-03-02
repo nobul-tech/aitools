@@ -157,7 +157,7 @@ if ($hookPresent) {
 }
 
 # ===================================================================
-# EXTENSIVE TIER (steps 6-20)
+# EXTENSIVE TIER (steps 6-21)
 # ===================================================================
 if (-not $Extensive) {
     PrintSummary
@@ -292,6 +292,7 @@ $inventoryErrors = 0
 $protectedFiles = @(
     "reference/tool-registry.md",
     "reference/tool-evaluation-criteria.md",
+    "reference/tool-versions.json",
     "CLAUDE.md",
     "shared/claude-shared.md",
     "ROADMAP.md",
@@ -549,7 +550,9 @@ if (-not (Test-Path $versionsJson)) {
 } else {
     $toolData = Get-Content $versionsJson -Raw | ConvertFrom-Json
     $today = [datetime]::UtcNow.Date
-    $ver21Warns = 0
+    $ver21Warns = 0; $ver21Ok = 0; $ver21Skip = 0
+    $ver21Details = @()
+    $platformKey = if ($IsMacOS) { 'macos' } elseif ($IsLinux) { 'linux' } else { 'windows' }
     $toolCmds = @{
         'vercel-cli'       = @('vercel', '--version')
         'cursor-agent-cli' = @('agent', '--version')
@@ -569,51 +572,57 @@ if (-not (Test-Path $versionsJson)) {
         } elseif ($val.PSObject.Properties['pinned']) {
             $lastReviewed = $val.lastReviewed
             if (-not $lastReviewed) {
-                Write-Host ("      WARN {0}: lastReviewed not set" -f $key)
+                $ver21Details += ("      WARN {0}: lastReviewed not set" -f $key)
                 $ver21Warns++
             } else {
                 $reviewedDate = [datetime]::ParseExact($lastReviewed, 'yyyy-MM-dd', $null)
                 $days = ($today - $reviewedDate).Days
                 if ($days -gt 30) {
-                    Write-Host ("      WARN {0}: lastReviewed {1} ({2}d ago, >30d)" -f $key, $lastReviewed, $days)
+                    $ver21Details += ("      WARN {0}: lastReviewed {1} ({2}d ago, >30d)" -f $key, $lastReviewed, $days)
                     $ver21Warns++
                 } else {
-                    Write-Host ("      OK   {0}: lastReviewed {1} ({2}d ago)" -f $key, $lastReviewed, $days)
+                    $ver21Ok++
                 }
             }
         } else {
-            $macosVer = $null
-            if ($val.PSObject.Properties['macos'] -and $val.macos.lastVerifiedVersion) {
-                $macosVer = $val.macos.lastVerifiedVersion
+            $platformVer = $null
+            $platformProp = $val.PSObject.Properties[$platformKey]
+            if ($platformProp -and $platformProp.Value -and $platformProp.Value.lastVerifiedVersion) {
+                $platformVer = $platformProp.Value.lastVerifiedVersion
             }
-            if (-not $macosVer) {
-                Write-Host ("      SKIP {0}: no Windows version in manifest" -f $key)
+            if (-not $platformVer) {
+                $ver21Details += ("      SKIP {0}: no {1} version in manifest" -f $key, $platformKey)
+                $ver21Skip++
                 continue
             }
             $cmd = $toolCmds[$key]
             if (-not $cmd) {
-                Write-Host ("      SKIP {0}: no version command defined" -f $key)
+                $ver21Details += ("      SKIP {0}: no version command defined" -f $key)
+                $ver21Skip++
                 continue
             }
             try {
                 $out = (& $cmd[0] $cmd[1..($cmd.Length-1)] 2>&1 | Select-Object -First 1) -as [string]
-                if ($out -and $out.Contains($macosVer)) {
-                    Write-Host ("      OK   {0}: {1}" -f $key, $macosVer)
+                if ($out -and $out.Contains($platformVer)) {
+                    $ver21Ok++
                 } elseif ($out) {
-                    Write-Host ("      WARN {0}: installed='{1}' manifest='{2}'" -f $key, $out, $macosVer)
+                    $ver21Details += ("      WARN {0}: installed='{1}' manifest='{2}'" -f $key, $out, $platformVer)
                     $ver21Warns++
                 } else {
-                    Write-Host ("      SKIP {0}: not installed (manifest: {1})" -f $key, $macosVer)
+                    $ver21Details += ("      SKIP {0}: not installed (manifest: {1})" -f $key, $platformVer)
+                    $ver21Skip++
                 }
             } catch {
-                Write-Host ("      SKIP {0}: not installed (manifest: {1})" -f $key, $macosVer)
+                $ver21Details += ("      SKIP {0}: not installed (manifest: {1})" -f $key, $platformVer)
+                $ver21Skip++
             }
         }
     }
+    foreach ($line in $ver21Details) { Write-Host $line }
     if ($ver21Warns -eq 0) {
-        StepPass "21" "Tool version freshness"
+        StepPass "21" "Tool version freshness" "$ver21Ok OK, $ver21Skip skipped"
     } else {
-        StepWarn "21" "Tool version freshness" "$ver21Warns tool(s) out of date or need review"
+        StepWarn "21" "Tool version freshness" "$ver21Warns tool(s) out of date; $ver21Ok OK, $ver21Skip skipped"
     }
 }
 
