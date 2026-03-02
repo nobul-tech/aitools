@@ -88,7 +88,7 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 
 ### Deploy using MDM
 
-`build-deploy.sh` generates self-contained scripts in `deploy/` (`.sh` + `.ps1` pairs) -- config scripts (`setup-user-claude`, `-mcp`, `-hooks`, `setup-cursor-mcp`, `setup-user-cursor`) and tool scripts (`setup-vercelcli`, `-pandoc`, `-rust`, `-typst`). No repo needed -- run directly on any endpoint.
+`build-deploy.sh` generates self-contained scripts in `deploy/` (`.sh` + `.ps1` pairs) -- config scripts (`setup-user-claude`, `-mcp`, `-hooks`, `setup-cursor-mcp`, `setup-user-cursor`) and tool scripts (`setup-vercelcli`, `-pandoc`, `-rust`, `-typst`, `-gh-cli`). No repo needed -- run directly on any endpoint.
 
 ## Cross-Platform Paths
 
@@ -102,7 +102,7 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 ## Key Decisions
 
 - This directory is the **"home base"** for general/cross-project AI conversations
-- Shared preferences live in `shared/claude-shared.md` (template). User's personal copy lives in `<userRepoPath>/claude/CLAUDE.md` (syncs across machines). `scripts/setup-user-claude.sh/.ps1` reads from user repo first (fallback: shared template), interpolates `{{PLACEHOLDER}}` tokens from `profile.json`, and writes to `~/.claude/CLAUDE.md`. `deploy/` scripts use build-time embedded content (self-contained).
+- Shared preferences live in `shared/claude-shared.md` (template). User's personal copy lives in `<userRepoPath>/claude/CLAUDE.md` (syncs across machines). `scripts/setup-user-claude.sh/.ps1` reads from user repo first (dotprofile wins if present; fallback: shared template). Both files must be kept in sync — shared template is the fallback and the MDM deploy source. Interpolates `{{PLACEHOLDER}}` tokens from `profile.json`, and writes to `~/.claude/CLAUDE.md`. `deploy/` scripts use build-time embedded content (self-contained).
 - `reference/tool-registry.md` is the source of truth for install commands -- always check before modifying installer scripts
 - **`claude mcp add` and nested sessions**: `claude mcp add` fails inside nested Claude Code sessions (`CLAUDECODE` env var blocks it). `--addmcp` avoids this by writing `.claude/settings.local.json` directly via Node.js. `setup-user-mcp.sh/.ps1` unsets the var as a workaround.
 

@@ -60,6 +60,7 @@ use `npx`, `bunx`, or other package runners.
 |------|---------|
 | Claude Code | `claude` |
 | Cursor CLI | `agent` |
+| GitHub CLI | `gh` |
 | Vercel CLI | `vercel` |
 | Pandoc | `pandoc` |
 | Rust (cargo) | `cargo` |

@@ -260,63 +260,12 @@ AITOOLS_REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 # ============================================================
 log "Step 1: gh CLI"
 
-case "$OS_NAME" in
-    MINGW*|MSYS*)
-        # Windows (Git Bash) — gh is managed by winget via the PS1 installer
-        if command -v gh &>/dev/null; then
-            log_ok "gh CLI already installed ($(gh --version | head -1))"
-        else
-            log "gh CLI not found — install via winget or run aitools-install.ps1"
-        fi
-        ;;
-    *)
-        if command -v gh &>/dev/null; then
-            GH_VERSION=$(gh --version | head -1)
-            log_ok "gh CLI already installed ($GH_VERSION)"
-            log "Checking for updates..."
-            if [ "$OS_NAME" = "Darwin" ]; then
-                if command -v brew &>/dev/null; then
-                    brew upgrade gh 2>/dev/null || log_ok "gh CLI already up to date"
-                fi
-            else
-                if command -v apt-get &>/dev/null; then
-                    # Update: may fail if no sudo; non-blocking (gh already works at current version)
-                    sudo apt-get update -qq && sudo apt-get install -y gh 2>/dev/null || true
-                fi
-            fi
-        else
-            log "Installing gh CLI..."
-            if [ "$OS_NAME" = "Darwin" ]; then
-                if command -v brew &>/dev/null; then
-                    brew install gh
-                    if command -v gh &>/dev/null; then
-                        log_ok "gh CLI installed ($(gh --version | head -1))"
-                    else
-                        log_error "brew install completed but 'gh' not found in PATH"
-                    fi
-                else
-                    log_error "Homebrew not found. Install gh manually: brew install gh"
-                fi
-            else
-                if command -v apt-get &>/dev/null; then
-                    (type -p wget >/dev/null || sudo apt-get install -y wget) \
-                        && sudo mkdir -p -m 755 /etc/apt/keyrings \
-                        && wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
-                        && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-                        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-                        && sudo apt-get update -qq && sudo apt-get install -y gh
-                    if command -v gh &>/dev/null; then
-                        log_ok "gh CLI installed ($(gh --version | head -1))"
-                    else
-                        log_error "Failed to install gh CLI"
-                    fi
-                else
-                    log_error "No supported package manager found. Install gh manually: https://cli.github.com"
-                fi
-            fi
-        fi
-        ;;
-esac
+gh_script="$SCRIPT_DIR/setup-gh-cli.sh"
+if [ -f "$gh_script" ]; then
+    validate_and_run "$gh_script"
+else
+    log_warn "setup-gh-cli.sh not found — skipping (MDM deploy)"
+fi
 
 # ============================================================
 # 2. Authenticate gh

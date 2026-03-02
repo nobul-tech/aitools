@@ -62,6 +62,43 @@ Tools with `evaluating` status on ALL platforms must NOT have:
 
 If any of these exist for an `evaluating`-only tool, flag it as a lifecycle error.
 
+### New tool onboarding checklist
+
+When a tool is approved (Phase 2 gate passed), complete ALL of these steps in order.
+Missing any causes drift between the pipeline, documentation, and deployed configs.
+
+#### Non-protected (implement directly)
+- `scripts/setup-<tool>.sh` — install/update (macOS+Linux; OS guard exits on Windows)
+- `scripts/setup-<tool>.ps1` — install/update (Windows; OS guard exits on macOS/Linux)
+- `scripts/aitools-install.sh` — add `validate_and_run "$SCRIPT_DIR/setup-<tool>.sh"` step
+- `scripts/aitools-install.ps1` — add `Invoke-ValidatedScript $toolScript` step
+- `scripts/build-deploy.sh` — add numbered copy-as-is block pair after last tool block
+
+#### Protected (present for review before writing)
+- `reference/tool-registry.md` — full entry with all 6 lifecycle fields
+- `shared/claude-shared.md` — add row to Managed CLI Tools table (shared template + MDM source)
+- `<userRepoPath>/claude/CLAUDE.md` (dotprofile repo) — same row addition; commit + push dotprofile repo separately
+- `reference/tool-versions.json` — add tool entry with per-platform version tracking
+- `CLAUDE.md` — add `setup-<tool>` to "Deploy using MDM" tool scripts list
+- `.claude/rules/tool-lifecycle.md` + `.cursor/rules/tool-lifecycle.mdc` — update this checklist if pattern changes
+
+#### Rebuild + propagate
+1. `bash scripts/build-deploy.sh` — verify count increments by 2
+2. `bash scripts/setup-user-claude.sh` — propagate dotprofile CLAUDE.md → `~/.claude/CLAUDE.md`
+3. `bash scripts/check-post-push.sh --extensive` — all checks pass
+4. Commit + push both repos (aitools + dotprofile)
+
+### Dotprofile priority
+
+`setup-user-claude.sh/.ps1` reads the user's dotprofile `<userRepoPath>/claude/CLAUDE.md` first.
+If `userRepoPath` is configured in `~/.aitools/config.json` and the file exists, it wins over
+`shared/claude-shared.md`. This means any Managed CLI Tools row (or other shared preference) added
+to `shared/claude-shared.md` must ALSO be added to the dotprofile file — otherwise the live
+`~/.claude/CLAUDE.md` will not reflect the change.
+
+Longer-term: a future `aitools user sync` command will merge shared template sections into the
+dotprofile automatically (see ROADMAP.md).
+
 ### Install cleanup
 
 When a setup script installs a tool via a preferred method (e.g., Homebrew), it should

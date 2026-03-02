@@ -19,9 +19,26 @@ Detailed plans live in `plans/`. See `RELEASE_NOTES.md` for completed work.
 | Conditional template blocks | [#5](https://github.com/nobul-jose/aitools/issues/5) | Medium | Platform-gated sections in CLAUDE.md templates (e.g., `{{#if WINDOWS}}...{{/if}}`). Enables Windows-only or macOS-only coaching/rules without auto-memory. |
 | clip2: unified clipboard command | [#3](https://github.com/nobul-jose/aitools/issues/3) | Medium | Refactor `clip2md` into `clip2` with format subcommands (`md`, `pdf`). Requires PDF tool evaluation. |
 | Session search & view | [#4](https://github.com/nobul-jose/aitools/issues/4) | Low | `aitools sessions search <query>` and `sessions view <file>` for working with archived transcripts |
+| aitools user sync | -- | Near-term | Merge `shared/claude-shared.md` managed sections (Managed CLI Tools table, etc.) into dotprofile CLAUDE.md automatically. Prevents silent drift when shared template is updated but dotprofile is not. `--dry-run` flag; structured log of added/updated/flagged rows. |
 | aitools install version capture | -- | Near-term | Capture installed versions per platform → `~/.aitools/versions.json`; compare against `reference/tool-versions.json`; flag drift at end of install; new `aitools versions` command; telemetry consent on first run; version blocking via `blocked[]` |
 | aitools.nobul.tech + Modal compute | -- | Near-term | Vercel + Next.js docs/dashboard (friends/family → open source); GitHub OAuth → dotprofile repo → one-liner install; log/version ingest API (anonymized telemetry); drift → PR automation via Claude API; Modal as compute backend for Claude API calls and batch processing |
 | aitools inside Modal containers | -- | Future | `aitools install` / setup scripts provision Modal environments; configure managed tools (pandoc, typst, etc.) in Modal images |
+
+### aitools user sync — managed CLAUDE.md merging (near-term)
+
+Currently `setup-user-claude.sh` uses a priority-override model: if the user's dotprofile
+`<userRepoPath>/claude/CLAUDE.md` exists, it wins over `shared/claude-shared.md`. This means
+any update to the shared template (e.g., adding a new managed tool row) must be manually replicated
+to every dotprofile — a silent divergence risk.
+
+**Planned:** `aitools user sync` performs a structured merge:
+- Shared-template sections (Managed CLI Tools table, etc.) are reconciled into the dotprofile
+- User-customized sections (Coaching, Standing Orders, etc.) are preserved untouched
+- Stale or removed shared entries are flagged with log warnings (not silently deleted)
+- Output: structured log of added / updated / flagged rows
+- `--dry-run` flag shows diff without writing
+
+This removes the manual "update both files" requirement and eliminates dotprofile drift.
 
 ## Completed
 

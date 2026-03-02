@@ -123,28 +123,11 @@ if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 # ============================================================
 Log "Step 1: gh CLI"
 
-$ghInstalled = Get-Command gh -ErrorAction SilentlyContinue
-if ($ghInstalled) {
-    $ghVersion = (gh --version | Select-Object -First 1)
-    LogOk "gh CLI already installed ($ghVersion)"
-    Log "Checking for updates..."
-    winget upgrade GitHub.cli --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        LogOk "gh CLI updated"
-    } else {
-        LogOk "gh CLI already up to date"
-    }
+$ghScript = Join-Path $PSScriptRoot "setup-gh-cli.ps1"
+if (Test-Path $ghScript) {
+    Invoke-ValidatedScript $ghScript
 } else {
-    Log "Installing gh CLI..."
-    winget install GitHub.cli --accept-package-agreements --accept-source-agreements
-    # Refresh PATH so gh is available in this session
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-    $ghInstalled = Get-Command gh -ErrorAction SilentlyContinue
-    if ($ghInstalled) {
-        LogOk "gh CLI installed ($(gh --version | Select-Object -First 1))"
-    } else {
-        LogError "Failed to install gh CLI"
-    }
+    LogWarn "setup-gh-cli.ps1 not found -- skipping (MDM deploy)"
 }
 
 # ============================================================

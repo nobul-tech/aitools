@@ -83,7 +83,7 @@
       "linux":   { "lastVerifiedVersion": null,     "lastVerified": null },
       "minVersion": null,
       "blocked": [],
-      "notes": "TODO: officially support -- installed by aitools-install but not in Managed CLI Tools table"
+      "notes": ""
     },
     "modal-cli": {
       "macos":   { "lastVerifiedVersion": null, "lastVerified": null },
