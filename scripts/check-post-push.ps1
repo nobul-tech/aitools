@@ -1,6 +1,6 @@
 # check-post-push.ps1 -- automated post-push checklist for aitools
 # Usage: .\scripts\check-post-push.ps1 [-Extensive]
-# Default: 5 always-tier steps. -Extensive: all 20 steps.
+# Default: 5 always-tier steps. -Extensive: all 21 steps.
 # Platform: Windows (PS 5.1 compatible)
 param([switch]$Extensive)
 
@@ -538,6 +538,83 @@ if ($ccVersion -eq "unknown") {
     StepPass "20" "CC version-dep review" "v$registryVersion"
 } else {
     StepWarn "20" "CC version-dep review" "CLI: $ccVersion vs registry: $registryVersion"
+}
+
+# ---------------------------------------------------------------------------
+# 21. Tool version freshness
+# ---------------------------------------------------------------------------
+$versionsJson = Join-Path (Join-Path $script:RepoRoot "reference") "tool-versions.json"
+if (-not (Test-Path $versionsJson)) {
+    StepSkip "21" "Tool version freshness" "tool-versions.json not found"
+} else {
+    $toolData = Get-Content $versionsJson -Raw | ConvertFrom-Json
+    $today = [datetime]::UtcNow.Date
+    $ver21Warns = 0
+    $toolCmds = @{
+        'vercel-cli'       = @('vercel', '--version')
+        'cursor-agent-cli' = @('agent', '--version')
+        'node'             = @('node', '--version')
+        'pandoc'           = @('pandoc', '--version')
+        'pwsh'             = @('pwsh', '--version')
+        'rust-cargo'       = @('cargo', '--version')
+        'typst'            = @('typst', '--version')
+        'gh-cli'           = @('gh', '--version')
+        'modal-cli'        = @('modal', '--version')
+    }
+    foreach ($entry in $toolData.tools.PSObject.Properties) {
+        $key = $entry.Name
+        $val = $entry.Value
+        if ($val.PSObject.Properties['maintenanceFile']) {
+            continue  # covered by step 20
+        } elseif ($val.PSObject.Properties['pinned']) {
+            $lastReviewed = $val.lastReviewed
+            if (-not $lastReviewed) {
+                Write-Host ("      WARN {0}: lastReviewed not set" -f $key)
+                $ver21Warns++
+            } else {
+                $reviewedDate = [datetime]::ParseExact($lastReviewed, 'yyyy-MM-dd', $null)
+                $days = ($today - $reviewedDate).Days
+                if ($days -gt 30) {
+                    Write-Host ("      WARN {0}: lastReviewed {1} ({2}d ago, >30d)" -f $key, $lastReviewed, $days)
+                    $ver21Warns++
+                } else {
+                    Write-Host ("      OK   {0}: lastReviewed {1} ({2}d ago)" -f $key, $lastReviewed, $days)
+                }
+            }
+        } else {
+            $macosVer = $null
+            if ($val.PSObject.Properties['macos'] -and $val.macos.lastVerifiedVersion) {
+                $macosVer = $val.macos.lastVerifiedVersion
+            }
+            if (-not $macosVer) {
+                Write-Host ("      SKIP {0}: no Windows version in manifest" -f $key)
+                continue
+            }
+            $cmd = $toolCmds[$key]
+            if (-not $cmd) {
+                Write-Host ("      SKIP {0}: no version command defined" -f $key)
+                continue
+            }
+            try {
+                $out = (& $cmd[0] $cmd[1..($cmd.Length-1)] 2>&1 | Select-Object -First 1) -as [string]
+                if ($out -and $out.Contains($macosVer)) {
+                    Write-Host ("      OK   {0}: {1}" -f $key, $macosVer)
+                } elseif ($out) {
+                    Write-Host ("      WARN {0}: installed='{1}' manifest='{2}'" -f $key, $out, $macosVer)
+                    $ver21Warns++
+                } else {
+                    Write-Host ("      SKIP {0}: not installed (manifest: {1})" -f $key, $macosVer)
+                }
+            } catch {
+                Write-Host ("      SKIP {0}: not installed (manifest: {1})" -f $key, $macosVer)
+            }
+        }
+    }
+    if ($ver21Warns -eq 0) {
+        StepPass "21" "Tool version freshness"
+    } else {
+        StepWarn "21" "Tool version freshness" "$ver21Warns tool(s) out of date or need review"
+    }
 }
 
 # ---------------------------------------------------------------------------

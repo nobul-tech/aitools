@@ -12,6 +12,18 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.29.3 -- Post-push step 21: Tool version freshness (2026-03-02)
+
+### Changes
+
+| # | Change |
+|---|--------|
+| 1 | **Post-push step 21: Tool version freshness**: `check-post-push.sh/.ps1` now implements the step documented in v0.29.0. Checks all 9 versioned tools against `tool-versions.json` (substring match on `--version` output); checks 3 @latest MCP tools for `lastReviewed` staleness (>30d = WARN). `modal-cli` skipped when manifest version is null. |
+
+**Verified**: macOS
+
+---
+
 ## v0.29.2 -- Hook: Fix crash on unset $MODE variable (2026-03-02)
 
 ### Bug fixes

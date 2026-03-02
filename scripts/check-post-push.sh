@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # check-post-push.sh -- automated post-push checklist for aitools
 # Usage: bash scripts/check-post-push.sh [--extensive]
-# Default: 5 always-tier steps. --extensive: all 20 steps.
+# Default: 5 always-tier steps. --extensive: all 21 steps.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -448,6 +448,88 @@ elif echo "$cc_version" | grep -q "$registry_version"; then
     step_pass "20" "CC version-dep review" "v$registry_version"
 else
     step_warn "20" "CC version-dep review" "CLI: $cc_version vs registry: $registry_version"
+fi
+
+# ---------------------------------------------------------------------------
+# 21. Tool version freshness
+# ---------------------------------------------------------------------------
+versions_json="$REPO_ROOT/reference/tool-versions.json"
+if [ ! -f "$versions_json" ]; then
+    step_skip "21" "Tool version freshness" "tool-versions.json not found"
+elif ! command -v python3 >/dev/null 2>&1; then
+    step_skip "21" "Tool version freshness" "python3 not available"
+else
+    ver21_warns=0
+    while IFS='|' read -r v21_status v21_tool v21_detail; do
+        case "$v21_status" in
+            WARNS) ver21_warns="$v21_tool" ;;
+            OK)    printf "      OK   %s: %s\n" "$v21_tool" "$v21_detail" ;;
+            SKIP)  printf "      SKIP %s: %s\n" "$v21_tool" "$v21_detail" ;;
+            WARN)  printf "      WARN %s: %s\n" "$v21_tool" "$v21_detail" ;;
+        esac
+    done < <(python3 - "$versions_json" <<'PYEOF'
+import json, sys, subprocess, datetime
+with open(sys.argv[1]) as f:
+    data = json.load(f)
+today = datetime.date.today()
+warns = 0
+TOOL_CMDS = {
+    'vercel-cli':       ['vercel', '--version'],
+    'cursor-agent-cli': ['agent', '--version'],
+    'node':             ['node', '--version'],
+    'pandoc':           ['pandoc', '--version'],
+    'pwsh':             ['pwsh', '--version'],
+    'rust-cargo':       ['cargo', '--version'],
+    'typst':            ['typst', '--version'],
+    'gh-cli':           ['gh', '--version'],
+    'modal-cli':        ['modal', '--version'],
+}
+for key, val in data['tools'].items():
+    if 'maintenanceFile' in val:
+        continue  # covered by step 20
+    elif 'pinned' in val:
+        last_reviewed = val.get('lastReviewed')
+        if not last_reviewed:
+            print(f"WARN|{key}|lastReviewed not set")
+            warns += 1
+        else:
+            reviewed = datetime.date.fromisoformat(last_reviewed)
+            days = (today - reviewed).days
+            if days > 30:
+                print(f"WARN|{key}|lastReviewed {last_reviewed} ({days}d ago, >30d)")
+                warns += 1
+            else:
+                print(f"OK|{key}|lastReviewed {last_reviewed} ({days}d ago)")
+    else:
+        macos_ver = (val.get('macos') or {}).get('lastVerifiedVersion')
+        if not macos_ver:
+            print(f"SKIP|{key}|no macOS version in manifest")
+            continue
+        cmd = TOOL_CMDS.get(key)
+        if not cmd:
+            print(f"SKIP|{key}|no version command defined")
+            continue
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            out = (r.stdout or r.stderr).strip().split('\n')[0]
+            if macos_ver in out:
+                print(f"OK|{key}|{macos_ver}")
+            else:
+                print(f"WARN|{key}|installed='{out}' manifest='{macos_ver}'")
+                warns += 1
+        except FileNotFoundError:
+            print(f"SKIP|{key}|not installed (manifest: {macos_ver})")
+        except subprocess.TimeoutExpired:
+            print(f"WARN|{key}|version check timed out (manifest: {macos_ver})")
+            warns += 1
+print(f"WARNS|{warns}|")
+PYEOF
+    )
+    if [ "$ver21_warns" -eq 0 ]; then
+        step_pass "21" "Tool version freshness"
+    else
+        step_warn "21" "Tool version freshness" "$ver21_warns tool(s) out of date or need review"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
