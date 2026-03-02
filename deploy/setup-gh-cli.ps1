@@ -24,6 +24,9 @@ $errors = 0
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
+function Write-Summary($cat, $msg) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+}
 
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
@@ -49,11 +52,15 @@ if (Get-Command gh -ErrorAction SilentlyContinue) {
     $upgradeResult = winget upgrade --exact --id GitHub.cli --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     if ($upgradeResult -match "No available upgrade found|No newer package versions") {
         LogOk "gh CLI already up to date"
+        Write-Summary "OK" "gh CLI    $ghVersion"
     } elseif ($LASTEXITCODE -eq 0) {
         Refresh-Path
-        LogOk "gh CLI updated ($(gh --version | Select-Object -First 1))"
+        $ghVersion = (gh --version | Select-Object -First 1)
+        LogOk "gh CLI updated ($ghVersion)"
+        Write-Summary "OK" "gh CLI    $ghVersion"
     } else {
         LogWarn "winget upgrade returned non-zero -- gh CLI may be installed via another method"
+        Write-Summary "OK" "gh CLI    $ghVersion"
     }
 } else {
     Log "Installing gh CLI via winget..."
@@ -65,6 +72,7 @@ if (Get-Command gh -ErrorAction SilentlyContinue) {
         $ghPath = (Get-Command gh).Source
         LogOk "gh CLI installed ($ghVersion)"
         Log "Install path: $ghPath"
+        Write-Summary "OK" "gh CLI    $ghVersion"
 
         # Verify the install directory is in persistent PATH
         $ghDir = Split-Path $ghPath -Parent

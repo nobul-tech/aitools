@@ -36,6 +36,9 @@ $errors = 0
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
+function Write-Summary($cat, $msg) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+}
 
 # Backup a file before overwriting. Keeps at most $MaxBackups copies.
 function Backup-File {
@@ -167,6 +170,7 @@ if ($DryRun) {
 
     LogOk "Cursor MCP config written to $mcpJson"
     Log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
+    Write-Summary "OK" "cursor MCP    merged"
 }
 
 # --- Disable vercel/webflow via Cursor CLI if available ---

@@ -580,7 +580,7 @@ modal --version
 
 ### Lifecycle
 
-- **Platform Status:** macOS: evaluating | Windows: evaluating | Linux: evaluating
+- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
 - **Concurrency:** Yes -- stateless CLI
 - **Post-Install Config:** `modal setup` required (not automated)
 - **Dependencies:** Python 3.10+

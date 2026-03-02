@@ -25,6 +25,10 @@ log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_
 log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
+write_summary() {
+    local cat="$1" msg="$2"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+}
 
 # --- OS guard ---
 case "$(uname -s)" in
@@ -60,6 +64,7 @@ case "$OS_NAME" in
                 log "Already installed via Homebrew — upgrading..."
                 brew upgrade vercel-cli 2>/dev/null || log_ok "Vercel CLI already up to date"
                 log_ok "Vercel CLI $(vercel --version 2>/dev/null | head -1)"
+                write_summary OK "vercel CLI    $(vercel --version 2>/dev/null | head -1)"
             else
                 # Not Homebrew — migrate from npm to Homebrew
                 log_warn "Vercel CLI installed via npm at $vercel_path"
@@ -72,6 +77,7 @@ case "$OS_NAME" in
                 if command -v vercel &>/dev/null; then
                     log_ok "Migrated to Homebrew: Vercel CLI $(vercel --version 2>/dev/null | head -1)"
                     log_ok "Install path: $(command -v vercel)"
+                    write_summary OK "vercel CLI    $(vercel --version 2>/dev/null | head -1)"
                 else
                     log_error "Homebrew install succeeded but 'vercel' not found in PATH"
                 fi
@@ -84,6 +90,7 @@ case "$OS_NAME" in
             if command -v vercel &>/dev/null; then
                 log_ok "Vercel CLI installed ($(vercel --version 2>/dev/null | head -1))"
                 log_ok "Install path: $(command -v vercel)"
+                write_summary OK "vercel CLI    $(vercel --version 2>/dev/null | head -1)"
             else
                 log_error "brew install completed but 'vercel' not found in PATH"
             fi
@@ -99,18 +106,23 @@ case "$OS_NAME" in
 
         if command -v vercel &>/dev/null; then
             log_ok "Vercel CLI already installed ($(vercel --version 2>/dev/null | head -1))"
+            write_summary OK "vercel CLI    $(vercel --version 2>/dev/null | head -1)"
         else
             log "Installing Vercel CLI via npm..."
             npm install -g vercel 2>/dev/null
 
             if command -v vercel &>/dev/null; then
                 log_ok "Vercel CLI installed ($(vercel --version 2>/dev/null | head -1))"
+                write_summary OK "vercel CLI    $(vercel --version 2>/dev/null | head -1)"
             else
                 log_error "Vercel CLI install failed"
             fi
         fi
         ;;
 esac
+
+write_summary ACTION "vercel login -- authenticate vercel CLI"
+log_warn "Authentication required: run 'vercel login' to authenticate"
 
 # --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then

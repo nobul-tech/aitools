@@ -27,6 +27,10 @@ log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_
 log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
+write_summary() {
+    local cat="$1" msg="$2"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+}
 
 # --- OS guard ---
 case "$(uname -s)" in
@@ -53,6 +57,7 @@ case "$OS_NAME" in
             log "Checking for updates via Homebrew..."
             brew upgrade gh 2>/dev/null || log_ok "gh CLI already up to date"
             log_ok "gh CLI $(gh --version | head -1)"
+            write_summary OK "gh CLI    $(gh --version | head -1)"
         else
             log "Installing gh CLI via Homebrew..."
             brew install gh
@@ -60,6 +65,7 @@ case "$OS_NAME" in
             if command -v gh &>/dev/null; then
                 log_ok "gh CLI installed ($(gh --version | head -1))"
                 log_ok "Install path: $(command -v gh)"
+                write_summary OK "gh CLI    $(gh --version | head -1)"
             else
                 log_error "brew install completed but 'gh' not found in PATH"
             fi
@@ -76,6 +82,7 @@ case "$OS_NAME" in
                 sudo apt-get update -qq && sudo apt-get install -y gh
                 if command -v gh &>/dev/null; then
                     log_ok "gh CLI updated/confirmed ($(gh --version | head -1))"
+                    write_summary OK "gh CLI    $(gh --version | head -1)"
                 else
                     log_error "apt-get completed but 'gh' not found in PATH"
                 fi
@@ -90,6 +97,7 @@ case "$OS_NAME" in
 
                 if command -v gh &>/dev/null; then
                     log_ok "gh CLI installed ($(gh --version | head -1))"
+                    write_summary OK "gh CLI    $(gh --version | head -1)"
                 else
                     log_error "Failed to install gh CLI via apt"
                 fi

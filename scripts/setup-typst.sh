@@ -23,6 +23,10 @@ log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_
 log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
+write_summary() {
+    local cat="$1" msg="$2"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+}
 
 # --- OS guard ---
 case "$(uname -s)" in
@@ -51,12 +55,14 @@ if command -v typst &>/dev/null; then
         # brew upgrade outputs progress to stderr; returns non-zero when already up to date
         brew upgrade typst 2>/dev/null || log_ok "Typst already up to date"
         log_ok "$(typst --version)"
+        write_summary OK "typst    $(typst --version)"
     else
         log_warn "Typst installed via non-preferred method at $typst_path"
         log "Migrating to Homebrew..."
         brew install typst
         if command -v typst &>/dev/null; then
             log_ok "Migrated to Homebrew: $(typst --version)"
+            write_summary OK "typst    $(typst --version)"
         else
             log_error "brew install succeeded but 'typst' not found in PATH"
         fi
@@ -66,6 +72,7 @@ else
     brew install typst
     if command -v typst &>/dev/null; then
         log_ok "Typst installed ($(typst --version))"
+        write_summary OK "typst    $(typst --version)"
     else
         log_error "brew install completed but 'typst' not found in PATH"
     fi

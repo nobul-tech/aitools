@@ -37,6 +37,9 @@ function Log($msg) {
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
+function Write-Summary($cat, $msg) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+}
 
 # Backup a file before overwriting. Keeps at most $MaxBackups copies.
 function Backup-File {
@@ -241,6 +244,7 @@ if ($profileName) {
     Log "Profile interpolation: name=$profileName company=$profileCompany"
 } else {
     LogWarn "Profile not available -- {{PLACEHOLDER}} tokens will not be resolved"
+    Write-Summary "WARN" "CLAUDE.md template tokens unresolved"
 }
 
 # --- Write or preview CLAUDE.md ---
@@ -318,6 +322,7 @@ if ($DryRun) {
     # --- END post-write validation (extracted by build-deploy) ---
 
     LogOk "Wrote $claudeMd"
+    Write-Summary "OK" "CLAUDE.md    deployed"
     # Log whether content actually changed
     if (-not $oldContent) {
         Log "Content: new file"

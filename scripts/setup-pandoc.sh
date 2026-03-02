@@ -25,6 +25,10 @@ log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_
 log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
+write_summary() {
+    local cat="$1" msg="$2"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+}
 
 # --- OS guard ---
 case "$(uname -s)" in
@@ -56,6 +60,7 @@ case "$OS_NAME" in
                 log "Already installed via Homebrew — upgrading..."
                 brew upgrade pandoc 2>/dev/null || log_ok "Pandoc already up to date"
                 log_ok "Pandoc $(pandoc --version | head -1)"
+                write_summary OK "pandoc    $(pandoc --version | head -1)"
             else
                 # Not Homebrew — migrate
                 log_warn "Pandoc installed via non-preferred method at $pandoc_path"
@@ -83,6 +88,7 @@ case "$OS_NAME" in
                 if command -v pandoc &>/dev/null; then
                     log_ok "Migrated to Homebrew: Pandoc $(pandoc --version | head -1)"
                     log_ok "Install path: $(command -v pandoc)"
+                    write_summary OK "pandoc    $(pandoc --version | head -1)"
                 else
                     log_error "Homebrew install succeeded but 'pandoc' not found in PATH"
                 fi
@@ -95,6 +101,7 @@ case "$OS_NAME" in
             if command -v pandoc &>/dev/null; then
                 log_ok "Pandoc installed ($(pandoc --version | head -1))"
                 log_ok "Install path: $(command -v pandoc)"
+                write_summary OK "pandoc    $(pandoc --version | head -1)"
             else
                 log_error "brew install completed but 'pandoc' not found in PATH"
             fi
@@ -106,11 +113,13 @@ case "$OS_NAME" in
         if command -v apt-get &>/dev/null; then
             if command -v pandoc &>/dev/null; then
                 log_ok "Pandoc already installed ($(pandoc --version | head -1))"
+                write_summary OK "pandoc    $(pandoc --version | head -1)"
             else
                 log "Installing Pandoc via apt..."
                 sudo apt-get update -qq && sudo apt-get install -y pandoc
                 if command -v pandoc &>/dev/null; then
                     log_ok "Pandoc installed ($(pandoc --version | head -1))"
+                    write_summary OK "pandoc    $(pandoc --version | head -1)"
                 else
                     log_error "apt install completed but 'pandoc' not found in PATH"
                 fi

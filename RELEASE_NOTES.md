@@ -12,6 +12,23 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.31.0 -- End-of-run summary panel + Modal CLI setup scripts (2026-03-02)
+
+### New
+
+| # | Change |
+|---|--------|
+| 1 | **End-of-run summary panel**: Every aitools run (`install`, no-args, `gitpull`) now ends with a structured panel showing `[ok]` (green), `[!]` (yellow warnings), and `ACTION REQUIRED` (yellow) items. Motivating case: `modal setup` auth step was buried mid-install and invisible by run end. |
+| 2 | **`show_summary`**: Three-pass display function (OK → WARN → ACTION) in `scripts/aitools` and `scripts/aitools-install.sh/.ps1`. Reads `AITOOLS_SUMMARY_FILE` temp file; silent no-op if unset (standalone script runs). |
+| 3 | **`write_summary` in all 11 setup scripts**: Every tool and config setup script now calls `write_summary OK/WARN/ACTION` at the verify point. Tool scripts: gh-cli, pandoc, rust, typst, vercelcli, modal. Config scripts: user-claude, user-cursor, user-mcp, cursor-mcp, user-hooks. |
+| 4 | **`setup-modal.sh/.ps1`**: Dedicated install/update scripts for Modal CLI (pip install, Python 3.10+ guard, `modal setup` ACTION item). MDM-deployable copies generated. Deploy count 20 → 22. |
+| 5 | **Script standards rule**: End-of-run summary section added to `.claude/rules/script-standards.md`; code patterns in `reference/script-standards-detail.md`. `write_summary` is now a repo requirement for all setup scripts. |
+| 6 | **Modal CLI promoted to supported**: `tool-registry.md` platform status updated from evaluating to supported on all three platforms. |
+
+**Verified**: macOS
+
+---
+
 ## v0.30.0 -- Onboard gh-cli as managed tool (2026-03-02)
 
 ### New

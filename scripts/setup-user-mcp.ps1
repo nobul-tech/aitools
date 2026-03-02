@@ -30,6 +30,9 @@ $errors = 0
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
+function Write-Summary($cat, $msg) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+}
 
 # Backup a file before overwriting. Keeps at most $MaxBackups copies.
 function Backup-File {
@@ -297,6 +300,7 @@ if ($DryRun) {
     Log "[DRY RUN] Would configure user-level MCP (all servers; vercel/webflow disabled by default)"
 } else {
     LogOk "User-level MCP configured (all servers; vercel/webflow disabled by default)"
+    Write-Summary "OK" "MCP servers    configured"
 }
 Log "To enable per project: aitools --addmcp vercel"
 Log "To check status: aitools mcp"

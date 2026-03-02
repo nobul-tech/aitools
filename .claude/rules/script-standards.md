@@ -48,6 +48,19 @@ Logging framework is required -- raw `echo` or `Write-Host` without structured l
 Every setup script must end with an exit footer that checks the error counter.
 See `@reference/script-standards-detail.md` for exact code patterns.
 
+### End-of-run summary
+
+Every setup script MUST call `write_summary` to contribute to the end-of-run panel:
+
+- `write_summary OK "tool    version"` — tool verified installed / config deployed
+- `write_summary WARN "message"` — non-fatal issue, PATH warning, migration
+- `write_summary ACTION "command -- description"` — required user action post-install
+
+For ACTION items: always pair with a `log_warn` carrying the same text.
+When `AITOOLS_SUMMARY_FILE` is not set (standalone run), `write_summary` is a no-op.
+
+See `@reference/script-standards-detail.md` for code patterns.
+
 ### Error handling requirements
 
 These apply to ALL reusable scripts in the repo, not just setup scripts.

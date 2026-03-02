@@ -945,7 +945,27 @@ blog "Copying deploy/setup-gh-cli.ps1"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
-# 17-18. deploy/setup-user-mcp.sh and .ps1 (template with embedded skills)
+# 17-18. deploy/setup-modal.sh and .ps1 (copy as-is)
+# ============================================================
+blog "Copying deploy/setup-modal.sh"
+{
+    echo '#!/usr/bin/env bash'
+    echo "$HEADER_COMMENT_BASH"
+    # Strip the shebang from source and append the rest
+    tail -n +2 "$SCRIPTS_DIR/setup-modal.sh"
+} > "$DEPLOY_DIR/setup-modal.sh"
+chmod +x "$DEPLOY_DIR/setup-modal.sh"
+GENERATED=$((GENERATED + 1))
+
+blog "Copying deploy/setup-modal.ps1"
+{
+    echo "$HEADER_COMMENT_PS1"
+    cat "$SCRIPTS_DIR/setup-modal.ps1"
+} > "$DEPLOY_DIR/setup-modal.ps1"
+GENERATED=$((GENERATED + 1))
+
+# ============================================================
+# 19-20. deploy/setup-user-mcp.sh and .ps1 (template with embedded skills)
 # ============================================================
 # The scripts/ versions read skills from shared/skills/ (repo-relative).
 # The deploy/ versions must be self-contained, so we embed SKILL.md content

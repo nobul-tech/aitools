@@ -30,6 +30,33 @@ if ($errors -gt 0) {
 }
 ```
 
+## End-of-run summary patterns
+
+### Bash
+
+```bash
+write_summary() {
+    local cat="$1" msg="$2"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+}
+```
+
+### PowerShell
+
+```powershell
+function Write-Summary($cat, $msg) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+}
+```
+
+Call at the point where the tool/config is verified present:
+
+```bash
+write_summary OK "pandoc    $(pandoc --version | head -1)"
+write_summary WARN "MSVC Build Tools not detected -- cargo build will fail"
+write_summary ACTION "modal setup -- authenticate modal (browser flow)"
+```
+
 ## Anti-pattern examples
 
 **Wrong** -- suppressed error feeds into loop with no guard:

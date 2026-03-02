@@ -23,6 +23,9 @@ $errors = 0
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
+function Write-Summary($cat, $msg) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+}
 
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
@@ -49,9 +52,12 @@ if (Get-Command pandoc -ErrorAction SilentlyContinue) {
     $upgradeResult = winget upgrade --exact --id JohnMacFarlane.Pandoc --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     if ($upgradeResult -match "No available upgrade found|No newer package versions") {
         LogOk "Pandoc already up to date"
+        Write-Summary "OK" "pandoc    $pandocVersion"
     } elseif ($LASTEXITCODE -eq 0) {
         Refresh-Path
-        LogOk "Pandoc updated ($(pandoc --version | Select-Object -First 1))"
+        $pandocVersion = (pandoc --version | Select-Object -First 1)
+        LogOk "Pandoc updated ($pandocVersion)"
+        Write-Summary "OK" "pandoc    $pandocVersion"
     } else {
         LogWarn "winget upgrade returned non-zero -- pandoc may be installed via another method"
         # Detect non-preferred installs
@@ -61,6 +67,7 @@ if (Get-Command pandoc -ErrorAction SilentlyContinue) {
                 LogWarn "Pandoc appears to be installed via Chocolatey. Prefer winget for managed installs."
             }
         }
+        Write-Summary "OK" "pandoc    $pandocVersion"
     }
 } else {
     Log "Installing Pandoc via winget..."
@@ -72,6 +79,7 @@ if (Get-Command pandoc -ErrorAction SilentlyContinue) {
         $pandocPath = (Get-Command pandoc).Source
         LogOk "Pandoc installed ($pandocVersion)"
         Log "Install path: $pandocPath"
+        Write-Summary "OK" "pandoc    $pandocVersion"
 
         # Verify the install directory is in persistent PATH
         $pandocDir = Split-Path $pandocPath -Parent

@@ -22,6 +22,9 @@ $errors = 0
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
+function Write-Summary($cat, $msg) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+}
 
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
@@ -48,6 +51,7 @@ if (Test-Path $cargoPath) {
     $rustcVersion = (& $rustcPath --version 2>$null)
     LogOk "cargo $cargoVersion"
     LogOk "rustc $rustcVersion"
+    Write-Summary "OK" "rust/cargo    $cargoVersion"
 } else {
     Log "Installing Rust toolchain via winget..."
     winget install -e --id Rustlang.Rustup --accept-package-agreements --accept-source-agreements 2>&1 | ForEach-Object { Log $_ }
@@ -60,6 +64,7 @@ if (Test-Path $cargoPath) {
         LogOk "Rust toolchain installed"
         LogOk "cargo $cargoVersion"
         LogOk "rustc $rustcVersion"
+        Write-Summary "OK" "rust/cargo    $cargoVersion"
     } else {
         LogError "winget install completed but cargo not found at $cargoPath"
     }
@@ -81,6 +86,7 @@ if ($hasMSVC) {
     LogWarn "MSVC Build Tools not detected -- cargo build will fail without a C linker"
     LogWarn "Install: winget install Microsoft.VisualStudio.2022.BuildTools"
     LogWarn "  Then add workload: Desktop Development with C++"
+    Write-Summary "WARN" "MSVC Build Tools not detected -- cargo build will fail without a C linker"
 }
 
 # --- Verify PATH persistence ---

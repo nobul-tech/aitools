@@ -21,6 +21,9 @@ $errors = 0
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
+function Write-Summary($cat, $msg) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+}
 
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
@@ -65,6 +68,7 @@ if ($typstCmd) {
     $version = (typst --version 2>$null)
     if ($version) {
         LogOk $version
+        Write-Summary "OK" "typst    $version"
     } else {
         LogWarn "typst --version failed after upgrade"
     }
@@ -77,7 +81,9 @@ if ($typstCmd) {
     # Get-Command exempt: command-existence check with if/else fallback
     if ($typstCmd) {
         # Suppress stderr: typst may emit warnings on some configs; result used in log
-        LogOk "Typst installed ($( typst --version 2>$null ))"
+        $version = (typst --version 2>$null)
+        LogOk "Typst installed ($version)"
+        Write-Summary "OK" "typst    $version"
     } else {
         LogError "winget install completed but 'typst' not found in PATH"
     }

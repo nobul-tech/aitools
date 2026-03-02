@@ -41,6 +41,10 @@ log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_
 log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
+write_summary() {
+    local cat="$1" msg="$2"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+}
 
 # Backup a file before overwriting. Keeps at most $max_backups copies.
 backup_file() {
@@ -190,6 +194,7 @@ if [ -n "$PROFILE_NAME" ]; then
     log "Profile interpolation: name=$PROFILE_NAME company=$PROFILE_COMPANY"
 else
     log_warn "Profile not available -- {{PLACEHOLDER}} tokens will not be resolved"
+    write_summary WARN "CLAUDE.md template tokens unresolved"
 fi
 
 if [ "$DRY_RUN" = "true" ]; then
@@ -257,6 +262,7 @@ EOF
     # --- END post-write validation (extracted by build-deploy) ---
 
     log_ok "Wrote $(display_path "$CLAUDE_MD")"
+    write_summary OK "CLAUDE.md    deployed"
     # Log whether content actually changed
     NEW_WRITTEN=$(cat "$CLAUDE_MD")
     if [ -z "$OLD_CONTENT" ]; then

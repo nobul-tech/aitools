@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# setup-modal.sh — Installs/updates Modal CLI
+# Safe to re-run — detects existing install and upgrades as needed.
+#
+# macOS/Linux: Uses pip/pip3 (pip install modal). Requires Python 3.10+.
+#
+# Authentication (modal setup) is interactive and must be run separately
+# after install — not automated by this script.
+#
+# See reference/tool-registry.md for install source details.
+
+set -euo pipefail
+
+# --- Logging ---
+LOG_DIR="$HOME/Library/Logs/aitools"
+[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
+LOG_FILE="$LOG_DIR/deploy.log"
+SCRIPT_NAME="setup-modal"
+mkdir -p "$LOG_DIR"
+
+display_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
+ERRORS=0
+log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
+log_ok()    { log "OK: $1"; }
+log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
+log_warn()  { log "WARN: $1"; }
+write_summary() {
+    local cat="$1" msg="$2"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+}
+
+# --- OS guard ---
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        log_error "This script is for macOS/Linux. On Windows, use ${SCRIPT_NAME}.ps1 instead."
+        exit 1 ;;
+esac
+
+# --- Python/pip check ---
+PIP_CMD=""
+if command -v pip3 >/dev/null 2>&1; then
+    PIP_CMD="pip3"
+elif command -v pip >/dev/null 2>&1; then
+    PIP_CMD="pip"
+else
+    log_error "pip not found. Install Python 3.10+ first: https://python.org"
+    exit 1
+fi
+
+# Verify Python 3.10+
+PYTHON_CMD=""
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON_CMD="python3"
+elif command -v python >/dev/null 2>&1; then
+    PYTHON_CMD="python"
+fi
+
+if [ -n "$PYTHON_CMD" ]; then
+    PY_VERSION=$("$PYTHON_CMD" -c "import sys; print(str(sys.version_info.major) + '.' + str(sys.version_info.minor))" 2>/dev/null)
+    PY_MAJOR=$(printf '%s' "$PY_VERSION" | cut -d. -f1)
+    PY_MINOR=$(printf '%s' "$PY_VERSION" | cut -d. -f2)
+    if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]; }; then
+        log_error "Python 3.10+ required. Found Python $PY_VERSION"
+        exit 1
+    fi
+    log "Python $PY_VERSION found ($PYTHON_CMD)"
+fi
+
+# --- Install/update ---
+if command -v modal >/dev/null 2>&1; then
+    MODAL_VERSION=$(modal --version 2>/dev/null || echo "version unknown")
+    log "Modal CLI already installed ($MODAL_VERSION)"
+    log "Upgrading via $PIP_CMD..."
+    "$PIP_CMD" install --upgrade modal
+    if command -v modal >/dev/null 2>&1; then
+        MODAL_VERSION=$(modal --version 2>/dev/null || echo "version unknown")
+        log_ok "Modal CLI upgraded ($MODAL_VERSION)"
+        write_summary OK "modal CLI    $MODAL_VERSION"
+    else
+        log_error "$PIP_CMD upgrade completed but 'modal' not found in PATH"
+    fi
+else
+    log "Installing Modal CLI via $PIP_CMD..."
+    "$PIP_CMD" install modal
+    if command -v modal >/dev/null 2>&1; then
+        MODAL_VERSION=$(modal --version 2>/dev/null || echo "version unknown")
+        log_ok "Modal CLI installed ($MODAL_VERSION)"
+        log_ok "Install path: $(command -v modal)"
+        write_summary OK "modal CLI    $MODAL_VERSION"
+    else
+        log_warn "Modal installed but 'modal' not found in PATH"
+        log_warn "You may need to add Python's bin directory to PATH."
+        log_warn "Try: $PYTHON_CMD -m modal --version"
+    fi
+fi
+
+log_warn "Authentication required: run 'modal setup' to authenticate (browser flow)"
+write_summary ACTION "modal setup -- authenticate modal (browser flow)"
+
+# --- Exit ---
+if [ "$ERRORS" -gt 0 ]; then
+    log "FAILED with $ERRORS error(s). See log: $(display_path "$LOG_FILE")"
+    exit 1
+else
+    log "COMPLETED successfully"
+    exit 0
+fi

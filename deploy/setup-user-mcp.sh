@@ -28,6 +28,10 @@ log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_
 log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
+write_summary() {
+    local cat="$1" msg="$2"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+}
 
 backup_file() {
     local file="$1" max_backups=20
@@ -278,6 +282,7 @@ esac
 
 if [ "$DRY_RUN" != "true" ]; then
     log_ok "User-level MCP configured (all servers; vercel/webflow disabled by default)"
+    write_summary OK "MCP servers    configured"
 else
     log "[DRY RUN] Would configure user-level MCP (all servers; vercel/webflow disabled by default)"
 fi

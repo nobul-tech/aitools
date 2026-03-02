@@ -25,6 +25,10 @@ log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_
 log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
+write_summary() {
+    local cat="$1" msg="$2"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+}
 
 # --- OS guard ---
 case "$(uname -s)" in
@@ -50,6 +54,7 @@ if command -v rustup &>/dev/null; then
     rustup update 2>&1 | tail -3
     log_ok "cargo $(cargo --version 2>/dev/null)"
     log_ok "rustc $(rustc --version 2>/dev/null)"
+    write_summary OK "rust/cargo    $(cargo --version 2>/dev/null)"
 else
     log "Installing Rust toolchain via rustup..."
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y 2>&1
@@ -62,6 +67,7 @@ else
         log_ok "cargo $(cargo --version 2>/dev/null)"
         log_ok "rustc $(rustc --version 2>/dev/null)"
         log_ok "rustup $(rustup --version 2>/dev/null | head -1)"
+        write_summary OK "rust/cargo    $(cargo --version 2>/dev/null)"
     else
         log_error "rustup install completed but 'cargo' not found in PATH"
         log_error "Expected location: ~/.cargo/bin"

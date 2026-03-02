@@ -63,6 +63,48 @@ function LogOk($msg)    { Log $msg "ok" }
 function LogError($msg) { Log $msg "error"; $script:errors++ }
 function LogWarn($msg)  { Log $msg "warn" }
 
+function Write-Summary($cat, $msg) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+}
+
+function Show-Summary {
+    $sfile = $env:AITOOLS_SUMMARY_FILE
+    if (-not $sfile -or -not (Test-Path $sfile)) { return }
+    $lines = Get-Content $sfile -ErrorAction SilentlyContinue
+    if (-not $lines) { Remove-Item $sfile -ErrorAction SilentlyContinue; return }
+    Write-Host ""
+    Write-Host "────────────────────────────────────────────────────────"
+    foreach ($line in $lines) {
+        $parts = $line -split '\|', 2
+        if ($parts[0] -eq 'OK') { Write-Host "  [ok]  $($parts[1])" -ForegroundColor Green }
+    }
+    foreach ($line in $lines) {
+        $parts = $line -split '\|', 2
+        if ($parts[0] -eq 'WARN') { Write-Host "  [!]   $($parts[1])" -ForegroundColor Yellow }
+    }
+    $firstAction = $true
+    foreach ($line in $lines) {
+        $parts = $line -split '\|', 2
+        if ($parts[0] -eq 'ACTION') {
+            if ($firstAction) {
+                Write-Host ""
+                Write-Host "  ACTION REQUIRED -- run before tools are ready:" -ForegroundColor Yellow
+                $firstAction = $false
+            }
+            Write-Host "  >>  $($parts[1])" -ForegroundColor Yellow
+        }
+    }
+    Write-Host "────────────────────────────────────────────────────────"
+    Remove-Item $sfile -ErrorAction SilentlyContinue
+}
+
+# --- Summary file init (if not already set by parent aitools invocation) ---
+if (-not $env:AITOOLS_SUMMARY_FILE) {
+    $env:AITOOLS_SUMMARY_FILE = Join-Path $env:USERPROFILE ".aitools\run-summary.txt"
+    Remove-Item $env:AITOOLS_SUMMARY_FILE -ErrorAction SilentlyContinue
+    New-Item -ItemType File -Path $env:AITOOLS_SUMMARY_FILE -Force | Out-Null
+}
+
 # --- Script validation helper ---
 # Validates PS1 syntax with ParseFile before executing. Skips with warning on parse errors.
 function Invoke-ValidatedScript {
@@ -384,12 +426,14 @@ function Refresh-Path {
 
 if (Get-Command node -ErrorAction SilentlyContinue) {
     LogOk "Node.js already installed ($(node --version))"
+    Write-Summary "OK" "node    $(node --version)"
 } else {
     Log "Installing Node.js via winget..."
     winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
     Refresh-Path
     if (Get-Command node -ErrorAction SilentlyContinue) {
         LogOk "Node.js installed ($(node --version))"
+        Write-Summary "OK" "node    $(node --version)"
     } else {
         LogError "Node.js install failed (restart terminal and re-run)"
     }
@@ -403,6 +447,7 @@ Log "Step 9: Claude Code CLI"
 
 if (Get-Command claude -ErrorAction SilentlyContinue) {
     LogOk "Claude Code already installed ($(claude --version 2>$null | Select-Object -First 1))"
+    Write-Summary "OK" "claude    $(claude --version 2>$null | Select-Object -First 1)"
     Log "Running claude update..."
     claude update 2>$null
 } else {
@@ -412,6 +457,7 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
         Refresh-Path
         if (Get-Command claude -ErrorAction SilentlyContinue) {
             LogOk "Claude Code installed ($(claude --version 2>$null | Select-Object -First 1))"
+            Write-Summary "OK" "claude    $(claude --version 2>$null | Select-Object -First 1)"
         } else {
             LogWarn "Claude Code installed -- restart terminal to use"
         }
@@ -469,9 +515,21 @@ if (Test-Path $typstScript) {
 }
 
 # ============================================================
-# 14. Deploy configurations
+# 14. Modal CLI
 # ============================================================
-Log "Step 14: Deploy configurations"
+Log "Step 14: Modal CLI"
+
+$modalScript = Join-Path $PSScriptRoot "setup-modal.ps1"
+if (Test-Path $modalScript) {
+    Invoke-ValidatedScript $modalScript
+} else {
+    LogWarn "setup-modal.ps1 not found -- skipping (MDM deploy)"
+}
+
+# ============================================================
+# 15. Deploy configurations
+# ============================================================
+Log "Step 15: Deploy configurations"
 
 $deployScripts = @(
     "setup-user-claude.ps1",
@@ -492,6 +550,8 @@ foreach ($script in $deployScripts) {
 
 # --- Cleanup ---
 if ($DryRun) { Remove-Item Env:\AITOOLS_DRY_RUN -ErrorAction SilentlyContinue }
+
+if (-not $env:AITOOLS_SUPPRESS_SUMMARY_DISPLAY) { Show-Summary }
 
 # --- Exit ---
 if ($errors -gt 0) {

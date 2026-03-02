@@ -128,6 +128,47 @@ log_ok()    { log "$1" "ok"; }
 log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "$1" "warn"; }
 
+write_summary() {
+    local cat="$1" msg="$2"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+}
+
+show_summary() {
+    local sfile="${AITOOLS_SUMMARY_FILE:-}"
+    [ -n "$sfile" ] || return 0
+    [ -f "$sfile" ] || return 0
+    [ -s "$sfile" ] || { rm -f "$sfile"; return 0; }
+    echo ""
+    echo "────────────────────────────────────────────────────────"
+    while IFS='|' read -r cat msg; do
+        [ "$cat" = "OK"   ] && printf '\033[32m  [ok]  %s\033[0m\n' "$msg"
+    done < "$sfile"
+    while IFS='|' read -r cat msg; do
+        [ "$cat" = "WARN" ] && printf '\033[33m  [!]   %s\033[0m\n' "$msg"
+    done < "$sfile"
+    local first_action=true
+    while IFS='|' read -r cat msg; do
+        if [ "$cat" = "ACTION" ]; then
+            if [ "$first_action" = true ]; then
+                echo ""
+                printf '\033[33m  ACTION REQUIRED -- run before tools are ready:\033[0m\n'
+                first_action=false
+            fi
+            printf '\033[33m  >>  %s\033[0m\n' "$msg"
+        fi
+    done < "$sfile"
+    echo "────────────────────────────────────────────────────────"
+    rm -f "$sfile"
+}
+
+# --- Summary file init (if not already set by parent aitools invocation) ---
+if [ -z "${AITOOLS_SUMMARY_FILE:-}" ]; then
+    AITOOLS_SUMMARY_FILE="$HOME/.aitools/run-summary.txt"
+    rm -f "$AITOOLS_SUMMARY_FILE"
+    touch "$AITOOLS_SUMMARY_FILE"
+    export AITOOLS_SUMMARY_FILE
+fi
+
 # --- Script validation helper ---
 # Validates bash syntax with bash -n before executing. Skips with warning on errors.
 validate_and_run() {
@@ -473,6 +514,7 @@ log "Step 8: Node.js"
 
 if command -v node &>/dev/null; then
     log_ok "Node.js already installed ($(node --version))"
+    write_summary OK "node    $(node --version)"
 else
     case "$OS_NAME" in
         Darwin)
@@ -481,6 +523,7 @@ else
                 brew install node@22
                 if command -v node &>/dev/null; then
                     log_ok "Node.js installed ($(node --version))"
+                    write_summary OK "node    $(node --version)"
                 else
                     log_error "brew install completed but 'node' not found in PATH"
                 fi
@@ -505,6 +548,7 @@ log "Step 9: Claude Code CLI"
 
 if command -v claude &>/dev/null; then
     log_ok "Claude Code already installed ($(claude --version 2>/dev/null | head -1))"
+    write_summary OK "claude    $(claude --version 2>/dev/null | head -1)"
     log "Running claude update..."
     claude update 2>/dev/null || log_ok "Already up to date"
 else
@@ -517,6 +561,7 @@ else
                 winget install Anthropic.ClaudeCode --accept-package-agreements --accept-source-agreements 2>/dev/null
                 if command -v claude &>/dev/null; then
                     log_ok "Claude Code installed ($(claude --version 2>/dev/null | head -1))"
+                    write_summary OK "claude    $(claude --version 2>/dev/null | head -1)"
                 else
                     log_warn "Claude Code installed — restart terminal to use"
                 fi
@@ -529,6 +574,7 @@ else
             curl -fsSL https://claude.ai/install.sh | bash
             if command -v claude &>/dev/null; then
                 log_ok "Claude Code installed ($(claude --version 2>/dev/null | head -1))"
+                write_summary OK "claude    $(claude --version 2>/dev/null | head -1)"
             else
                 log_error "Claude Code install failed"
             fi
@@ -585,9 +631,21 @@ else
 fi
 
 # ============================================================
-# 14. Deploy configurations
+# 14. Modal CLI
 # ============================================================
-log "Step 14: Deploy configurations"
+log "Step 14: Modal CLI"
+
+modal_script="$SCRIPT_DIR/setup-modal.sh"
+if [ -f "$modal_script" ]; then
+    validate_and_run "$modal_script"
+else
+    log_warn "setup-modal.sh not found — skipping (MDM deploy)"
+fi
+
+# ============================================================
+# 15. Deploy configurations
+# ============================================================
+log "Step 15: Deploy configurations"
 
 DEPLOY_SCRIPTS="setup-user-claude.sh setup-user-cursor.sh setup-user-mcp.sh setup-cursor-mcp.sh setup-user-hooks.sh"
 
@@ -599,6 +657,8 @@ for script in $DEPLOY_SCRIPTS; do
         log_warn "$script not found — skipping"
     fi
 done
+
+[ -z "${AITOOLS_SUPPRESS_SUMMARY_DISPLAY:-}" ] && show_summary
 
 # --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then

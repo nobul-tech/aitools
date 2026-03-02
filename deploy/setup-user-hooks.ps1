@@ -37,6 +37,9 @@ function Log($msg) {
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
+function Write-Summary($cat, $msg) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+}
 
 # --- PS 5.1 compatibility helper ---
 # Recursively converts PSCustomObject (from ConvertFrom-Json) to Hashtable.
@@ -547,6 +550,7 @@ if ($DryRun) {
         if ($ptCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse hook, got $ptCount" }
 
         LogOk "Settings deployed to $settingsFile"
+        Write-Summary "OK" "hooks    deployed"
         Log "  SessionEnd hook: $hookCmd"
         Log "  PreToolUse hook: $guardCmd"
         Log "  autoMemoryEnabled: $autoMemory"

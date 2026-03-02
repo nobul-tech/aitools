@@ -23,6 +23,9 @@ $errors = 0
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
+function Write-Summary($cat, $msg) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+}
 
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
@@ -47,6 +50,7 @@ if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
 if (Get-Command vercel -ErrorAction SilentlyContinue) {
     $vercelVersion = (vercel --version 2>$null | Select-Object -First 1)
     LogOk "Vercel CLI already installed ($vercelVersion)"
+    Write-Summary "OK" "vercel CLI    $vercelVersion"
 } else {
     Log "Installing Vercel CLI via npm..."
     npm install -g vercel 2>$null
@@ -57,6 +61,7 @@ if (Get-Command vercel -ErrorAction SilentlyContinue) {
         $vercelPath = (Get-Command vercel).Source
         LogOk "Vercel CLI installed ($vercelVersion)"
         Log "Install path: $vercelPath"
+        Write-Summary "OK" "vercel CLI    $vercelVersion"
 
         # Verify the install directory is in persistent PATH (not just this session)
         $vercelDir = Split-Path $vercelPath -Parent
@@ -72,6 +77,9 @@ if (Get-Command vercel -ErrorAction SilentlyContinue) {
         Log "Check that $npmPrefix is in your PATH"
     }
 }
+
+Write-Summary "ACTION" "vercel login -- authenticate vercel CLI"
+LogWarn "Authentication required: run 'vercel login' to authenticate"
 
 # --- Exit ---
 if ($errors -gt 0) {

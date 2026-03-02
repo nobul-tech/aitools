@@ -407,6 +407,36 @@ show_cloud_mcp() {
     printf '%s\n' "$parsed"
 }
 
+# Display the end-of-run summary panel (reads AITOOLS_SUMMARY_FILE).
+# Silent no-op if file unset, missing, or empty.
+show_summary() {
+    local sfile="${AITOOLS_SUMMARY_FILE:-}"
+    [ -n "$sfile" ] || return 0
+    [ -f "$sfile" ] || return 0
+    [ -s "$sfile" ] || { rm -f "$sfile"; return 0; }
+    echo ""
+    echo "────────────────────────────────────────────────────────"
+    while IFS='|' read -r cat msg; do
+        [ "$cat" = "OK"   ] && printf '\033[32m  [ok]  %s\033[0m\n' "$msg"
+    done < "$sfile"
+    while IFS='|' read -r cat msg; do
+        [ "$cat" = "WARN" ] && printf '\033[33m  [!]   %s\033[0m\n' "$msg"
+    done < "$sfile"
+    local first_action=true
+    while IFS='|' read -r cat msg; do
+        if [ "$cat" = "ACTION" ]; then
+            if [ "$first_action" = true ]; then
+                echo ""
+                printf '\033[33m  ACTION REQUIRED -- run before tools are ready:\033[0m\n'
+                first_action=false
+            fi
+            printf '\033[33m  >>  %s\033[0m\n' "$msg"
+        fi
+    done < "$sfile"
+    echo "────────────────────────────────────────────────────────"
+    rm -f "$sfile"
+}
+
 # ---------------------------------------------------------------------------
 # Usage / flags
 # ---------------------------------------------------------------------------
@@ -1288,6 +1318,14 @@ fi
 
 export AITOOLS_RUN_ID=$(head -c 6 /dev/urandom | od -An -tx1 | tr -d ' \n')
 
+# Init summary file for this run; child scripts append via AITOOLS_SUMMARY_FILE.
+# SUPPRESS=1 tells aitools-install.sh not to display it (we display after it returns).
+AITOOLS_SUMMARY_FILE="$HOME/.aitools/run-summary.txt"
+rm -f "$AITOOLS_SUMMARY_FILE"
+touch "$AITOOLS_SUMMARY_FILE"
+export AITOOLS_SUMMARY_FILE
+export AITOOLS_SUPPRESS_SUMMARY_DISPLAY=1
+
 echo "aitools $AITOOLS_INSTALLED_VERSION"
 echo ""
 
@@ -1523,7 +1561,11 @@ if [ -f "$repo_path/scripts/aitools" ]; then
     esac
 fi
 
+show_summary
+
 unset AITOOLS_RUN_ID
+unset AITOOLS_SUMMARY_FILE
+unset AITOOLS_SUPPRESS_SUMMARY_DISPLAY
 
 }
 

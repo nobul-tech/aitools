@@ -66,6 +66,7 @@ use `npx`, `bunx`, or other package runners.
 | Rust (cargo) | `cargo` |
 | Typst | `typst` |
 | pwsh | `pwsh` |
+| Modal CLI | `modal` |
 
 ### Per-Platform Tools
 
