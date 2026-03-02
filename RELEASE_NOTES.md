@@ -12,6 +12,18 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.29.2 -- Hook: Fix crash on unset $MODE variable (2026-03-02)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | High | **Hook crash on every Bash call**: `standing-order-guard.sh` referenced deleted `$MODE` variable (stale from MODE→per-check refactor). `set -euo pipefail` with `-u` caused the hook to crash before any check ran, producing "PreToolUse:Bash hook error" on every Bash tool call. Fix: unconditional `mkdir -p "$LOG_DIR"` replaces the dead conditional. |
+
+**Verified**: macOS
+
+---
+
 ## v0.29.1 -- Hook: Enforce && and $() (2026-03-02)
 
 ### Changes

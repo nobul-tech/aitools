@@ -36,10 +36,8 @@ MODE_REST="observe"     # ||, ;, backticks — false positives or low sample; ob
 LOG_DIR="$HOME/.claude/hooks/logs"
 LOG_FILE="$LOG_DIR/standing-order-guard.log"
 
-# Ensure log directory exists once (not per-violation)
-if [ "$MODE" = "observe" ]; then
-    mkdir -p "$LOG_DIR"
-fi
+# Ensure log directory exists (needed for observe logging; harmless in enforce-only runs)
+mkdir -p "$LOG_DIR"
 
 # violation() — dispatch based on per-check mode
 # $1: message  $2: mode variable value (enforce or observe; defaults to MODE_REST)
