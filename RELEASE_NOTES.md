@@ -12,6 +12,21 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.29.1 -- Hook: Enforce && and $() (2026-03-02)
+
+### Changes
+
+| # | Change |
+|---|--------|
+| 1 | **PreToolUse hook: promote `&&` and `$()` to enforce**: `standing-order-guard.sh` now blocks `&&` and `$()` (exit 2). `\|\|`, `;`, and backticks remain in observe mode. Log analysis (35 entries) showed zero false positives for both promoted checks. |
+| 2 | **Hook: `;` false-positive exemption**: `;` inside `pwsh -Command` and `perl -e` arguments is now correctly identified as a language-internal separator and skipped, not flagged as a shell chain. Keeps `;` detection clean for eventual enforce promotion. |
+| 3 | **Hook rollout rule: per-check modes**: `hook-rollout.md` updated to document `MODE_AND`/`MODE_SUBSHELL`/`MODE_REST` pattern and current enforcement state table. Replaces single `MODE` variable model. |
+| 4 | **I11 RCA**: `cd /path && git status` in same session as I10 documentation. Root cause: mode-switch amnesia + `cd && cmd` muscle memory. Hook correctly detected it but observe mode allowed through. |
+
+**Verified**: macOS
+
+---
+
 ## v0.29.0 -- Tool Registry: Renames, Linux Platform, Version Tracking (2026-03-02)
 
 ### Changes

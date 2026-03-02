@@ -68,6 +68,7 @@ incidents. Each incident gets RCA and remediation tracking.
 | I8 | 2026-02-28 | Coaching | Plan revision uses grep-for-keywords instead of full re-read; misses scope/order changes from user feedback during review | RCA | -- | -- |
 | I9 | 2026-03-01 | Process | Unnecessary @import of reference/claude-code-maintenance.md in CLAUDE.md -- added 85 lines of maintenance-only context to every session. File already triggered by post-push checklist #20. | RCA | -- | -- |
 | I10 | 2026-03-02 | SO #5 | Chained version-check commands (`&&`/`;`) in single Bash tool call; plan contained inline version checks because I8 plan revision left Batch 4 uncorrected when fixing Batch 2 | RCA | Simple Bash commands only | -- |
+| I11 | 2026-03-02 | SO #5 | Used `cd /path && git status` as a compound Bash tool call during commit/push workflow — same session as I10 RCA, main agent, rule in context | RCA | Simple Bash commands only | -- |
 
 ### Incident Details
 
@@ -165,3 +166,42 @@ incidents. Each incident gets RCA and remediation tracking.
 - **Remediation**: (1) I8 remediation (re-scan full plan after pattern-change feedback) prevents the Batch 4 block from surviving to implementation. (2) When a plan batch shows multi-command sequences inline, apply the write-and-execute pattern regardless — the inline form in the plan is not authorization to run them inline in the Bash tool.
 - **Status**: RCA
 - **Detection gap**: No automated check. Could be caught at plan-review time by scanning prescribed Bash blocks for `&&`/`;` and flagging them for conversion to write-and-execute.
+
+#### I11: `cd /path && git status` compound Bash call (2026-03-02)
+
+- **Observed**: During commit/push workflow, issued `cd /Users/pepe/repos/aitools-nobul-jose && git status`
+  as a single Bash tool call. User blocked it. Occurred in the same session as I10 RCA documentation —
+  the USO was actively in context.
+- **Was the rule in context?** Yes. USO #5 is in `~/.claude/CLAUDE.md` (loaded every session). I10 was
+  just documented in this same session. The rule was not only in context but under active discussion.
+- **Was it a subagent?** No. Main agent. No subagent context gap involved.
+- **Hook behavior**: The `standing-order-guard.sh` hook fired and correctly detected the `&&` (line 103).
+  The hook's own feedback message names the fix: `"use 'git -C /path' instead of 'cd /path && git'"`.
+  However the hook is in `MODE="observe"` — it logs violations and exits 0. The call was allowed through
+  to CC's permission UI, where the user manually rejected it.
+- **RCA**: Three contributing factors:
+  1. **Mode-switch amnesia**: I10 was documented as a completed incident. When switching from
+     documentation mode to execution mode, the constraint was treated as "resolved/historical" rather
+     than "actively in force right now." The lesson was filed, not carried forward.
+  2. **Salient vs. convenience `&&`**: I10 involved chaining 9 commands (obviously a multi-command
+     sequence). I11 used `&&` as a convenience shortcut for a single conceptual operation (check git
+     status in another repo). The USO violation isn't more acceptable in the second case, but it
+     registered differently — `cd && cmd` feels like one operation, not two chained commands.
+  3. **Unfired alternative**: `git -C /path status` is the correct form for cross-repo git calls but
+     is less automatic than `cd && cmd`. It requires active recall; `cd && cmd` fires from habit.
+- **Remediation**: `git -C /path <command>` must be internalized as the default for cross-repo git
+  operations — as automatic as `git status` itself. Before any Bash call containing a path component,
+  ask: "does this use `cd` + another command? If so, use `git -C` or make two separate calls."
+- **Hook remediation**: The hook correctly detected this but couldn't block it. Moving the hook from
+  `observe` to `enforce` mode would have blocked it before the user had to intervene. This is a signal
+  that the observe phase for USO #5 `&&`/`;` detection has produced enough confirmed catches (I10, I11)
+  to justify promoting to enforce.
+- **Status**: RCA
+- **Detection gap**: Hook is functional but in observe mode. Log analysis (35 entries) shows two false
+  positive categories that must be fixed before promoting `;` detection to enforce:
+  (1) `pwsh -NoProfile -Command '$e = $null; $null = ...'` — PS1 statement separator inside `-Command`
+  string; would block the prescribed pre-validation convention from `cross-platform.md`.
+  (2) `perl -e 'alarm(10); exec(...)'` — Perl statement separator inside `-e` string; would block
+  Perl one-liners including the USO-prescribed pattern.
+  `&&` and `||` checks have zero false positives in the log and could enforce independently.
+  Fix: exempt `;` when it appears inside a `-Command '...'` or `-e '...'` argument before promoting.

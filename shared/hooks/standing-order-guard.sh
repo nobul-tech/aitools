@@ -13,9 +13,10 @@
 #   - Exit 2 = block (stderr becomes Claude's feedback)
 #   - Must never crash or hang (would break Claude Code)
 #
-# Rollout mode:
-#   MODE="observe"  — log what would be blocked, always exit 0
-#   MODE="enforce"  — block violations (exit 2)
+# Rollout mode (per-check):
+#   MODE_AND="enforce"      — && : zero false positives confirmed, blocking
+#   MODE_SUBSHELL="enforce" — $(): zero false positives confirmed, blocking
+#   MODE_REST="observe"     — ||, ;, backticks: false positives exist or low sample count
 #   See .claude/rules/hook-rollout.md for the observe-then-enforce practice.
 #
 # Design decisions:
@@ -28,7 +29,9 @@
 set -euo pipefail
 
 # --- Mode and logging ---
-MODE="observe"  # observe = log only, enforce = block
+MODE_AND="enforce"      # &&  — zero false positives confirmed; blocking
+MODE_SUBSHELL="enforce" # $() — zero false positives confirmed; blocking
+MODE_REST="observe"     # ||, ;, backticks — false positives or low sample; observe only
 
 LOG_DIR="$HOME/.claude/hooks/logs"
 LOG_FILE="$LOG_DIR/standing-order-guard.log"
@@ -38,12 +41,14 @@ if [ "$MODE" = "observe" ]; then
     mkdir -p "$LOG_DIR"
 fi
 
-# violation() — dispatch based on MODE
+# violation() — dispatch based on per-check mode
+# $1: message  $2: mode variable value (enforce or observe; defaults to MODE_REST)
 # In enforce mode: write message to stderr, exit 2 (block)
 # In observe mode: append to log file, exit 0 (allow)
 violation() {
     local message="$1"
-    if [ "$MODE" = "enforce" ]; then
+    local mode="${2:-$MODE_REST}"
+    if [ "$mode" = "enforce" ]; then
         echo "$message" >&2
         exit 2
     else
@@ -100,11 +105,18 @@ fi
 # invisible due to json_field truncation at \". Mitigated by the USO itself
 # (use git commit -F) and by CC's permission system (which prompts anyway).
 case "$COMMAND" in
-    *'&&'*) violation "USO: Simple Bash commands only --: Don't use '&&' to chain commands. Make separate Bash tool calls instead. For git in another repo, use 'git -C /path' instead of 'cd /path && git'." ;;
-    *'||'*) violation "USO: Simple Bash commands only --: Don't use '||' to chain commands. Make separate Bash tool calls instead." ;;
-    *';'*)  violation "USO: Simple Bash commands only --: Don't use ';' to chain commands. Make separate Bash tool calls instead." ;;
-    *'$('*) violation "USO: Simple Bash commands only --: Don't use '\$(...)' command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." ;;
-    *'`'*)  violation "USO: Simple Bash commands only --: Don't use backtick command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." ;;
+    *'&&'*) violation "USO: Simple Bash commands only --: Don't use '&&' to chain commands. Make separate Bash tool calls instead. For git in another repo, use 'git -C /path' instead of 'cd /path && git'." "$MODE_AND" ;;
+    *'||'*) violation "USO: Simple Bash commands only --: Don't use '||' to chain commands. Make separate Bash tool calls instead." "$MODE_REST" ;;
+    *';'*)
+        # Exempt ; inside scripting-language arguments: pwsh -Command '...;...' and perl -e '...;...'
+        # The ; is a language-internal statement separator, not a shell command separator.
+        case "$COMMAND" in
+            pwsh\ *|powershell\ *|'perl -e'*|'perl -E'*) ;;
+            *) violation "USO: Simple Bash commands only --: Don't use ';' to chain commands. Make separate Bash tool calls instead." "$MODE_REST" ;;
+        esac
+        ;;
+    *'$('*) violation "USO: Simple Bash commands only --: Don't use '\$(...)' command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_SUBSHELL" ;;
+    *'`'*)  violation "USO: Simple Bash commands only --: Don't use backtick command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_REST" ;;
 esac
 
 # --- USO: Dedicated tools for file operations ---

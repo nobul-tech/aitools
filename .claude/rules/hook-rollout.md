@@ -33,9 +33,22 @@ All PreToolUse hooks must go through an observe-then-enforce cycle before blocki
 
 ### Implementation
 
-Every PreToolUse hook must have a `MODE` variable and use the `violation()` helper:
-- `MODE="observe"` at the top of the script
-- `violation "message"` instead of direct `echo >&2; exit 2`
+Every PreToolUse hook uses the `violation()` helper and declares mode variables:
+- `violation "message" "$MODE_VAR"` — mode drives observe vs. enforce
 - Log location: `~/.claude/hooks/logs/`
+- Global default `MODE_REST="observe"` covers all checks not yet promoted
+- Per-check overrides (`MODE_AND`, `MODE_SUBSHELL`, etc.) allow granular rollout:
+  - `"enforce"` — zero false positives confirmed in log; blocks violations (exit 2)
+  - `"observe"` — logs what would be blocked; always exits 0
+
+**Current enforcement state (standing-order-guard.sh):**
+
+| Check | Variable | State | Notes |
+|-------|----------|-------|-------|
+| `&&` | `MODE_AND` | enforce | Zero false positives in log |
+| `$()` | `MODE_SUBSHELL` | enforce | Zero false positives in log |
+| `\|\|` | `MODE_REST` | observe | No false positives but low sample count |
+| `;` | `MODE_REST` | observe | False positives: pwsh `-Command`, `perl -e` — fix matching before promoting |
+| backticks | `MODE_REST` | observe | No false positives but low sample count |
 
 Review logs with: `cat ~/.claude/hooks/logs/standing-order-guard.log`
