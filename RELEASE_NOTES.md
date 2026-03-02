@@ -12,6 +12,27 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.29.4 -- Fix step 21 logging and audit findings (2026-03-02)
+
+### Bug fixes
+
+| # | Severity | Fix |
+|---|----------|-----|
+| 1 | Medium | **Step 21: suppress OK noise**: per-tool OK lines were printed before the step header, inconsistent with all other steps. Now only WARN/SKIP detail lines print; step header shows count summary (`11 OK, 1 skipped`). |
+| 2 | Medium | **PS1 step 21: wrong platform key**: script always read `macos.lastVerifiedVersion` and printed `"no Windows version in manifest"` — wrong on both counts. Now uses `$IsMacOS`/`$IsLinux`/`windows` to select the correct platform key. |
+| 3 | Low | **Step 21: remove WARNS sentinel**: Python emitted a `WARNS\|count\|` sentinel line consumed by the bash loop. Replaced with a per-line bash counter; cleaner and removes implicit coupling. |
+
+### Other fixes
+
+| # | Fix |
+|---|-----|
+| 1 | Extensive tier comment "steps 6-20" corrected to "steps 6-21" in both scripts. |
+| 2 | Step 10 protected files inventory was missing `reference/tool-versions.json` (added as protected in v0.29.0 but never added to the check). Both scripts updated. |
+
+**Verified**: macOS
+
+---
+
 ## v0.29.3 -- Post-push step 21: Tool version freshness (2026-03-02)
 
 ### Changes
