@@ -63,6 +63,42 @@ else
     log_ok "Node.js $(node --version) found"
 fi
 
+# --- Check existing MCP server configs via claude mcp list ---
+declare -A mcp_current
+
+saved_claudecode="${CLAUDECODE:-}"
+unset CLAUDECODE
+
+mcp_list_rc=0
+mcp_list_output=$(claude mcp list 2>/dev/null) || mcp_list_rc=$?
+
+if [ -n "$saved_claudecode" ]; then
+    export CLAUDECODE="$saved_claudecode"
+fi
+
+if [ $mcp_list_rc -eq 0 ] && [ -n "$mcp_list_output" ]; then
+    while IFS='=' read -r name details; do
+        [ -n "$name" ] && mcp_current["$name"]="$details"
+    done < <(printf '%s\n' "$mcp_list_output" | perl -ne '
+        s/\e\[[0-9;]*m//g;
+        next unless /^(.+?):\s+(.+)\s+-\s+.+$/;
+        my ($name, $details) = ($1, $2);
+        $details =~ s/\s+\(HTTP\)$//;
+        $details =~ s/\s+$//;
+        print "$name=$details\n";
+    ')
+    log_ok "Checked existing MCP config (${#mcp_current[@]} servers found)"
+else
+    log_warn "Could not check existing MCP config; will re-add all servers"
+fi
+
+# Check if a server's current config matches expected.
+server_config_matches() {
+    local name="$1" expected="$2"
+    local current="${mcp_current[$name]:-}"
+    [ -n "$current" ] && [ "$current" = "$expected" ]
+}
+
 # --- Add all three MCP servers at user scope ---
 
 add_mcp_server() {
@@ -93,19 +129,55 @@ add_mcp_server() {
 
 log "Setting up MCP servers for Claude Code (user scope)..."
 
-if [ "$DRY_RUN" = "true" ]; then
-    log "[DRY RUN] Would add MCP server: chrome-devtools (stdio, --isolated)"
-    log "[DRY RUN] Would add MCP server: vercel (http)"
-    log "[DRY RUN] Would add MCP server: webflow (http)"
+# Chrome DevTools — local stdio server via npx
+if [ "$FORCE" = "true" ]; then
+    if [ "$DRY_RUN" = "true" ]; then
+        log "[DRY RUN] Would re-add MCP server: chrome-devtools (--force)"
+    else
+        add_mcp_server "chrome-devtools" chrome-devtools --scope user -- npx chrome-devtools-mcp@latest --isolated
+    fi
+elif server_config_matches "chrome-devtools" "npx chrome-devtools-mcp@latest --isolated"; then
+    log_ok "chrome-devtools already configured, skipping (use --force to re-add)"
 else
-    # Chrome DevTools — local stdio server via npx
-    add_mcp_server "chrome-devtools" chrome-devtools --scope user -- npx chrome-devtools-mcp@latest --isolated
+    if [ "$DRY_RUN" = "true" ]; then
+        log "[DRY RUN] Would add MCP server: chrome-devtools (stdio, --isolated)"
+    else
+        add_mcp_server "chrome-devtools" chrome-devtools --scope user -- npx chrome-devtools-mcp@latest --isolated
+    fi
+fi
 
-    # Vercel — remote HTTP server (disabled by default via deny rules below)
-    add_mcp_server "vercel" --transport http --scope user vercel https://mcp.vercel.com
+# Vercel — remote HTTP server (disabled by default via deny rules below)
+if [ "$FORCE" = "true" ]; then
+    if [ "$DRY_RUN" = "true" ]; then
+        log "[DRY RUN] Would re-add MCP server: vercel (--force)"
+    else
+        add_mcp_server "vercel" --transport http --scope user vercel https://mcp.vercel.com
+    fi
+elif server_config_matches "vercel" "https://mcp.vercel.com"; then
+    log_ok "vercel already configured, skipping (use --force to re-add)"
+else
+    if [ "$DRY_RUN" = "true" ]; then
+        log "[DRY RUN] Would add MCP server: vercel (http)"
+    else
+        add_mcp_server "vercel" --transport http --scope user vercel https://mcp.vercel.com
+    fi
+fi
 
-    # Webflow — remote HTTP server (disabled by default via deny rules below)
-    add_mcp_server "webflow" --transport http --scope user webflow https://mcp.webflow.com/mcp
+# Webflow — remote HTTP server (disabled by default via deny rules below)
+if [ "$FORCE" = "true" ]; then
+    if [ "$DRY_RUN" = "true" ]; then
+        log "[DRY RUN] Would re-add MCP server: webflow (--force)"
+    else
+        add_mcp_server "webflow" --transport http --scope user webflow https://mcp.webflow.com/mcp
+    fi
+elif server_config_matches "webflow" "https://mcp.webflow.com/mcp"; then
+    log_ok "webflow already configured, skipping (use --force to re-add)"
+else
+    if [ "$DRY_RUN" = "true" ]; then
+        log "[DRY RUN] Would add MCP server: webflow (http)"
+    else
+        add_mcp_server "webflow" --transport http --scope user webflow https://mcp.webflow.com/mcp
+    fi
 fi
 
 # --- Merge deny rules into ~/.claude/settings.json ---

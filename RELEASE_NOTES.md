@@ -12,6 +12,19 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.28.0 -- MCP Auth Preservation + Cloud Server Detection (2026-03-01)
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | **MCP auth preservation**: `setup-user-mcp` now checks existing server configs via `claude mcp list` before re-adding. Servers whose config already matches are skipped, preserving OAuth tokens for HTTP servers (vercel, webflow). Use `--force` / `-Force` to re-add unconditionally. |
+| 2 | **Cloud MCP detection**: `aitools mcp` and `aitools install` now display cloud MCP servers configured via claude.ai (e.g., Gmail, Google Calendar). Silent no-op when no cloud servers or `claude` CLI is unavailable. |
+
+**Verified**: macOS
+
+---
+
 ## v0.27.6 -- Simple Bash Commands Hook Guard (2026-03-01)
 
 ### Improvements

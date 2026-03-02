@@ -333,6 +333,56 @@ function Get-McpServerUrl {
     }
 }
 
+# Display cloud MCP servers from claude.ai configuration.
+# Usage: Show-CloudMcp -Context "mcp" or "install"
+# Silent no-op if claude CLI unavailable or no cloud servers found.
+function Show-CloudMcp {
+    param([string]$Context = "mcp")
+    if (-not (Get-Command claude -ErrorAction SilentlyContinue)) { return }
+
+    $savedClaudeCode = $env:CLAUDECODE
+    Remove-Item Env:\CLAUDECODE -ErrorAction SilentlyContinue
+
+    try {
+        $raw = claude mcp list 2>$null
+    } catch {
+        $raw = $null
+    }
+
+    if ($savedClaudeCode) {
+        $env:CLAUDECODE = $savedClaudeCode
+    }
+
+    if (-not $raw) { return }
+
+    $entries = @()
+    foreach ($line in $raw) {
+        $clean = $line -replace '\e\[[0-9;]*m', ''
+        if ($clean -match '^claude\.ai\s+(.+?):\s+.+\s+-\s+(.+)$') {
+            $name = $Matches[1].Trim()
+            $status = $Matches[2].Trim()
+            $entries += [PSCustomObject]@{ Name = $name; Status = $status }
+        }
+    }
+
+    if ($entries.Count -eq 0) { return }
+
+    Write-Host ""
+    if ($Context -eq "install") {
+        Write-Host "Cloud MCP servers (configured at claude.ai):"
+    } else {
+        Write-Host "Cloud (claude.ai):"
+    }
+    foreach ($entry in $entries) {
+        if ($entry.Name.Length -lt 24) {
+            $pad = " " * (24 - $entry.Name.Length)
+        } else {
+            $pad = " "
+        }
+        Write-Host "  $($entry.Name)$pad$($entry.Status)"
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Usage / flags
 # ---------------------------------------------------------------------------
@@ -569,6 +619,7 @@ if (cursorJson?.mcpServers) {
     console.log("Cursor: no user-level MCP config found (~/.cursor/mcp.json)");
 }
 '@
+    Show-CloudMcp -Context "mcp"
     exit 0
 }
 
@@ -1260,6 +1311,7 @@ if ($doInstall) {
             Write-Host "hint: To archive sessions across machines, run 'aitools user init'." -ForegroundColor Yellow
         }
         Invoke-ProfileCheck -Mode "interactive"
+        Show-CloudMcp -Context "install"
     } else {
         Write-Host "Completed with errors (see $logFile)."
     }

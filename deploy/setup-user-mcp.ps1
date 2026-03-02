@@ -78,6 +78,45 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     LogOk "Node.js $nodeVersion found"
 }
 
+# --- Check existing MCP server configs via claude mcp list ---
+$mcpCurrent = @{}
+
+$savedClaudeCode = $env:CLAUDECODE
+Remove-Item Env:\CLAUDECODE -ErrorAction SilentlyContinue
+
+try {
+    $mcpListOutput = claude mcp list 2>$null
+    $mcpListRc = $LASTEXITCODE
+} catch {
+    $mcpListOutput = $null
+    $mcpListRc = 1
+}
+
+if ($savedClaudeCode) {
+    $env:CLAUDECODE = $savedClaudeCode
+}
+
+if ($mcpListRc -eq 0 -and $mcpListOutput) {
+    foreach ($line in $mcpListOutput) {
+        $clean = $line -replace '\e\[[0-9;]*m', ''
+        if ($clean -match '^(.+?):\s+(.+)\s+-\s+.+$') {
+            $name = $Matches[1]
+            $details = $Matches[2] -replace '\s+\(HTTP\)$', ''
+            $details = $details.TrimEnd()
+            $mcpCurrent[$name] = $details
+        }
+    }
+    LogOk "Checked existing MCP config ($($mcpCurrent.Count) servers found)"
+} else {
+    LogWarn "Could not check existing MCP config; will re-add all servers"
+}
+
+function Test-ServerConfigMatches {
+    param([string]$Name, [string]$Expected)
+    $current = $mcpCurrent[$Name]
+    return ($null -ne $current -and $current -eq $Expected)
+}
+
 # --- Add all three MCP servers at user scope ---
 
 function Add-McpServer {
@@ -112,19 +151,55 @@ function Add-McpServer {
 
 Log "Setting up MCP servers for Claude Code (user scope)..."
 
-if ($DryRun) {
-    Log "[DRY RUN] Would add MCP server: chrome-devtools (stdio, --isolated)"
-    Log "[DRY RUN] Would add MCP server: vercel (http)"
-    Log "[DRY RUN] Would add MCP server: webflow (http)"
+# Chrome DevTools -- local stdio server via npx (Windows needs cmd /c wrapper)
+if ($Force) {
+    if ($DryRun) {
+        Log "[DRY RUN] Would re-add MCP server: chrome-devtools (-Force)"
+    } else {
+        Add-McpServer -Name "chrome-devtools" -AddArgs @("chrome-devtools", "--scope", "user", "cmd", "/c", "npx", "chrome-devtools-mcp@latest", "--", "--isolated")
+    }
+} elseif (Test-ServerConfigMatches "chrome-devtools" "npx chrome-devtools-mcp@latest --isolated") {
+    LogOk "chrome-devtools already configured, skipping (use -Force to re-add)"
 } else {
-    # Chrome DevTools -- local stdio server via npx (Windows needs cmd /c wrapper)
-    Add-McpServer -Name "chrome-devtools" -AddArgs @("chrome-devtools", "--scope", "user", "cmd", "/c", "npx", "chrome-devtools-mcp@latest", "--", "--isolated")
+    if ($DryRun) {
+        Log "[DRY RUN] Would add MCP server: chrome-devtools (stdio, --isolated)"
+    } else {
+        Add-McpServer -Name "chrome-devtools" -AddArgs @("chrome-devtools", "--scope", "user", "cmd", "/c", "npx", "chrome-devtools-mcp@latest", "--", "--isolated")
+    }
+}
 
-    # Vercel -- remote HTTP server (disabled by default via deny rules below)
-    Add-McpServer -Name "vercel" -AddArgs @("--transport", "http", "--scope", "user", "vercel", "https://mcp.vercel.com")
+# Vercel -- remote HTTP server (disabled by default via deny rules below)
+if ($Force) {
+    if ($DryRun) {
+        Log "[DRY RUN] Would re-add MCP server: vercel (-Force)"
+    } else {
+        Add-McpServer -Name "vercel" -AddArgs @("--transport", "http", "--scope", "user", "vercel", "https://mcp.vercel.com")
+    }
+} elseif (Test-ServerConfigMatches "vercel" "https://mcp.vercel.com") {
+    LogOk "vercel already configured, skipping (use -Force to re-add)"
+} else {
+    if ($DryRun) {
+        Log "[DRY RUN] Would add MCP server: vercel (http)"
+    } else {
+        Add-McpServer -Name "vercel" -AddArgs @("--transport", "http", "--scope", "user", "vercel", "https://mcp.vercel.com")
+    }
+}
 
-    # Webflow -- remote HTTP server (disabled by default via deny rules below)
-    Add-McpServer -Name "webflow" -AddArgs @("--transport", "http", "--scope", "user", "webflow", "https://mcp.webflow.com/mcp")
+# Webflow -- remote HTTP server (disabled by default via deny rules below)
+if ($Force) {
+    if ($DryRun) {
+        Log "[DRY RUN] Would re-add MCP server: webflow (-Force)"
+    } else {
+        Add-McpServer -Name "webflow" -AddArgs @("--transport", "http", "--scope", "user", "webflow", "https://mcp.webflow.com/mcp")
+    }
+} elseif (Test-ServerConfigMatches "webflow" "https://mcp.webflow.com/mcp") {
+    LogOk "webflow already configured, skipping (use -Force to re-add)"
+} else {
+    if ($DryRun) {
+        Log "[DRY RUN] Would add MCP server: webflow (http)"
+    } else {
+        Add-McpServer -Name "webflow" -AddArgs @("--transport", "http", "--scope", "user", "webflow", "https://mcp.webflow.com/mcp")
+    }
 }
 
 # --- Merge deny rules into ~/.claude/settings.json ---

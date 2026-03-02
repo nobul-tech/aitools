@@ -366,6 +366,47 @@ mcp_server_url() {
     esac
 }
 
+# Display cloud MCP servers from claude.ai configuration.
+# Usage: show_cloud_mcp <context>
+#   context: "mcp" (concise header) or "install" (descriptive header)
+# Silent no-op if claude CLI unavailable or no cloud servers found.
+show_cloud_mcp() {
+    local context="${1:-mcp}"
+    command -v claude &>/dev/null || return 0
+
+    local saved_claudecode="${CLAUDECODE:-}"
+    unset CLAUDECODE
+
+    local raw
+    raw=$(claude mcp list 2>/dev/null) || true
+
+    if [ -n "$saved_claudecode" ]; then
+        export CLAUDECODE="$saved_claudecode"
+    fi
+
+    [ -n "$raw" ] || return 0
+
+    local parsed
+    parsed=$(printf '%s\n' "$raw" | perl -ne '
+        s/\e\[[0-9;]*m//g;
+        next unless /^claude\.ai\s+(.+?):\s+.+\s+-\s+(.+)$/;
+        my ($name, $status) = ($1, $2);
+        $status =~ s/\s+$//;
+        my $pad = length($name) < 24 ? " " x (24 - length($name)) : " ";
+        printf "  %s%s%s\n", $name, $pad, $status;
+    ')
+
+    [ -n "$parsed" ] || return 0
+
+    echo ""
+    if [ "$context" = "install" ]; then
+        echo "Cloud MCP servers (configured at claude.ai):"
+    else
+        echo "Cloud (claude.ai):"
+    fi
+    printf '%s\n' "$parsed"
+}
+
 # ---------------------------------------------------------------------------
 # Usage / flags
 # ---------------------------------------------------------------------------
@@ -638,6 +679,7 @@ if (cursorJson?.mcpServers) {
     console.log("Cursor: no user-level MCP config found (~/.cursor/mcp.json)");
 }
 '
+    show_cloud_mcp mcp
     return 0
 fi
 
@@ -1355,6 +1397,7 @@ if $do_install; then
             printf '\033[33mhint: To archive sessions across machines, run '\''aitools user init'\''.\033[0m\n'
         fi
         check_profile interactive
+        show_cloud_mcp install
     else
         echo "Completed with errors (see $(display_path "$LOG_FILE"))."
     fi
