@@ -103,7 +103,7 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 
 - This directory is the **"home base"** for general/cross-project AI conversations
 - Shared preferences live in `shared/claude-shared.md` (template). User's personal copy lives in `<userRepoPath>/claude/CLAUDE.md` (syncs across machines). `scripts/setup-user-claude.sh/.ps1` reads from user repo first (fallback: shared template), interpolates `{{PLACEHOLDER}}` tokens from `profile.json`, and writes to `~/.claude/CLAUDE.md`. `deploy/` scripts use build-time embedded content (self-contained).
-- `reference/tool-install-sources.md` is the source of truth for install commands -- always check before modifying installer scripts
+- `reference/tool-registry.md` is the source of truth for install commands -- always check before modifying installer scripts
 - **`claude mcp add` and nested sessions**: `claude mcp add` fails inside nested Claude Code sessions (`CLAUDECODE` env var blocks it). `--addmcp` avoids this by writing `.claude/settings.local.json` directly via Node.js. `setup-user-mcp.sh/.ps1` unsets the var as a workaround.
 
 ## Code Conventions

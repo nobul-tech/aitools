@@ -1,7 +1,7 @@
-# Tool Installation Sources of Truth
+# Tool Registry
 
-Official documentation links and verified install commands for all tools managed by `aitools install`.
-**Always check these before modifying install steps.**
+Registry of managed tools — install commands, lifecycle, and per-platform version tracking.
+**Always check this before modifying install steps.**
 
 Last verified: 2026-02-27 (Claude Code 2.1.62)
 
@@ -43,11 +43,12 @@ Last verified: 2026-02-27 (Claude Code 2.1.62)
 
 ### Lifecycle
 
-- **Platform Status:** macOS: supported; Windows: supported
+- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
 - **Concurrency:** Yes -- independent sessions per directory
 - **Post-Install Config:** `~/.claude/CLAUDE.md` (via setup script), git identity
 - **Dependencies:** Git, Git Bash (Windows)
 - **Invocation:** `claude` (direct)
+- **Last verified version:** See claude-code-maintenance.md
 
 ---
 
@@ -95,11 +96,12 @@ Related issues:
 
 ### Lifecycle
 
-- **Platform Status:** macOS: supported; Windows: supported
+- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
 - **Concurrency:** Yes -- stateless CLI
 - **Post-Install Config:** **`vercel login` required** -- not automated by setup scripts. Tool appears installed but is non-functional until login completes.
 - **Dependencies:** Node.js (npm method only)
 - **Invocation:** `vercel` (direct; never `npx vercel`)
+- **Last verified version:** macOS: 50.23.2 (2026-03-02) | Windows: pending | Linux: pending
 
 ---
 
@@ -137,11 +139,12 @@ agent --version
 
 ### Lifecycle
 
-- **Platform Status:** macOS: supported; Windows: supported
+- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
 - **Concurrency:** Yes -- independent sessions
 - **Post-Install Config:** `~/.cursor/cli-config.json` (merged from profile by setup script; preferences in `profile.json` under `cursor.cli`)
 - **Dependencies:** ripgrep (`rg`)
 - **Invocation:** `agent` (direct)
+- **Last verified version:** macOS: 2026.02.27-e7d2ef6 (2026-03-02) | Windows: pending | Linux: pending
 
 ---
 
@@ -185,11 +188,12 @@ It bundles its own MCP server config without `--isolated`, causing config confli
 Standalone skills + our user-scope MCP config provide the same functionality without conflicts.
 
 **Lifecycle:**
-- **Platform Status:** macOS: supported; Windows: supported
+- **Platform Status:** macOS: supported | Windows: supported | Linux: evaluating
 - **Concurrency:** **Yes with `--isolated`**; No without (Chrome profile lock prevents concurrent sessions)
 - **Post-Install Config:** Skills deployed automatically by `setup-user-mcp`. No auth required.
 - **Dependencies:** Node.js (npx)
 - **Invocation:** N/A (MCP server; launched via npx in server config)
+- **Last reviewed:** 2026-03-02
 
 ### Vercel MCP
 
@@ -205,11 +209,12 @@ claude mcp add --transport http --scope user vercel https://mcp.vercel.com
 ```
 
 **Lifecycle:**
-- **Platform Status:** macOS: supported; Windows: supported
+- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
 - **Concurrency:** Yes -- HTTP remote server
 - **Post-Install Config:** **OAuth required** -- authenticate in Claude Code (`/mcp`) or Cursor (Settings > Tools & MCP) on first use. Tool appears configured but is non-functional until OAuth completes.
 - **Dependencies:** None
 - **Invocation:** N/A (MCP server; HTTP remote)
+- **Last reviewed:** 2026-03-02
 
 ### Webflow MCP
 
@@ -226,11 +231,12 @@ claude mcp add --transport http --scope user webflow https://mcp.webflow.com/mcp
 ```
 
 **Lifecycle:**
-- **Platform Status:** macOS: supported; Windows: supported
+- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
 - **Concurrency:** Yes -- HTTP remote server
 - **Post-Install Config:** **OAuth required** -- authenticate in Claude Code (`/mcp`) or Cursor (Settings > Tools & MCP) on first use. Tool appears configured but is non-functional until OAuth completes.
 - **Dependencies:** None
 - **Invocation:** N/A (MCP server; HTTP remote)
+- **Last reviewed:** 2026-03-02
 
 ---
 
@@ -292,11 +298,12 @@ Required for: Chrome DevTools MCP (npx), Vercel CLI (npm), settings JSON merge i
 
 ### Lifecycle
 
-- **Platform Status:** macOS: supported; Windows: supported
+- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
 - **Concurrency:** Yes -- runtime
 - **Post-Install Config:** None
 - **Dependencies:** --
 - **Invocation:** N/A (runtime)
+- **Last verified version:** macOS: 24.1.0 (2026-03-02) | Windows: pending | Linux: pending
 
 ---
 
@@ -342,11 +349,12 @@ pandoc --version
 
 ### Lifecycle
 
-- **Platform Status:** macOS: supported; Windows: supported
+- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
 - **Concurrency:** Yes -- stateless CLI
 - **Post-Install Config:** None
 - **Dependencies:** --
 - **Invocation:** `pandoc` (direct)
+- **Last verified version:** macOS: 3.9 (2026-03-02) | Windows: pending | Linux: pending
 
 ---
 
@@ -385,11 +393,12 @@ pwsh --version
 
 ### Lifecycle
 
-- **Platform Status:** macOS: supported; Windows: supported
+- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
 - **Concurrency:** Yes -- independent sessions
 - **Post-Install Config:** None
 - **Dependencies:** Homebrew (macOS), winget (Windows)
 - **Invocation:** `pwsh` (direct; never `powershell.exe` except bootstrap)
+- **Last verified version:** macOS: 7.5.4 (2026-03-02) | Windows: pending | Linux: pending
 
 ---
 
@@ -440,11 +449,12 @@ MSVC Build Tools required for linking. `rustup-init` offers to install automatic
 
 ### Lifecycle
 
-- **Platform Status:** macOS: supported; Windows: supported
+- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
 - **Concurrency:** Yes — independent cargo invocations
 - **Post-Install Config:** None (rustup configures toolchain automatically). Windows: MSVC Build Tools must be present.
 - **Dependencies:** C linker (Xcode CLT on macOS, MSVC Build Tools on Windows)
 - **Invocation:** `cargo` (direct; `rustc` and `rustup` also available)
+- **Last verified version:** macOS: 1.93.1 (2026-03-02) | Windows: pending | Linux: pending
 
 ---
 
@@ -487,11 +497,54 @@ typst --version
 
 ### Lifecycle
 
-- **Platform Status:** macOS: supported; Windows: supported
+- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
 - **Concurrency:** Yes -- stateless CLI
 - **Post-Install Config:** None
 - **Dependencies:** Pandoc (when used as `--pdf-engine`)
 - **Invocation:** `typst` (direct; never `npx typst`)
+- **Last verified version:** macOS: 0.14.2 (2026-03-02) | Windows: pending | Linux: pending
+
+---
+
+## Modal CLI
+
+**Source**: https://modal.com/docs/guide
+**Purpose**: Serverless Python compute platform (Debian Linux containers). GPU workloads,
+  batch jobs, scheduled functions. Planned compute backend for aitools.nobul.tech (Layer 3).
+
+### Install
+
+| Platform | Method | Command |
+|----------|--------|---------|
+| macOS | pip (preferred) | `pip install modal` |
+| Windows | pip (preferred) | `pip install modal` |
+| Linux | pip (preferred) | `pip install modal` |
+
+### Update
+
+```bash
+pip install --upgrade modal
+```
+
+### Check Version
+
+```bash
+modal --version
+```
+
+### Prerequisites
+
+- Python 3.10+
+- `modal setup` (one-time auth, browser flow) required after install
+
+### Lifecycle
+
+- **Platform Status:** macOS: evaluating | Windows: evaluating | Linux: evaluating
+- **Concurrency:** Yes -- stateless CLI
+- **Post-Install Config:** `modal setup` required (not automated)
+- **Dependencies:** Python 3.10+
+- **Invocation:** `modal` (direct)
+- **Last verified version:** macOS: pending | Windows: pending | Linux: pending
 
 ---
 
@@ -500,7 +553,7 @@ typst --version
 Intentional deviations from upstream defaults. When comparing our install
 commands against official docs, these are expected discrepancies — not bugs.
 
-| Tool | Override | Upstream Default | Our Value | Reason | Added |
-|------|----------|-----------------|-----------|--------|-------|
-| Chrome DevTools MCP | `--isolated` flag | Not included | Added to all install commands | Enables concurrent Claude Code + Cursor sessions by using throwaway temp Chrome profiles | 2026-02-19 |
+| Tool | Override | Upstream Default | Our Value | Reason | Added | Last verified |
+|------|----------|-----------------|-----------|--------|-------|---------------|
+| Chrome DevTools MCP | `--isolated` flag | Not included | Added to all install commands | Enables concurrent Claude Code + Cursor sessions by using throwaway temp Chrome profiles | 2026-02-19 | 2026-02-27 |
 

@@ -1,0 +1,115 @@
+{
+  "_meta": {
+    "title": "aitools Tool Version Manifest",
+    "description": "Per-platform version manifest for all tools managed by aitools. Used by aitools install to detect drift and by aitools.nobul.tech for version tracking and PR automation.",
+    "schemaVersion": "1.0",
+    "updated": "2026-03-02",
+    "repositories": {
+      "primary":      "https://github.com/nobul-jose/aitools",
+      "userTemplate": "https://github.com/nobul-jose/aitools-{username}"
+    },
+    "relatedDocs": {
+      "toolRegistry":          "reference/tool-registry.md",
+      "toolEvaluation":        "reference/tool-evaluation-criteria.md",
+      "sourcesOfTruth":        ".claude/rules/sources-of-truth.md",
+      "claudeCodeMaintenance": "reference/claude-code-maintenance.md",
+      "userRepo":              "reference/user-repo.md",
+      "verificationChecklist": "reference/post-push-checklist.md"
+    }
+  },
+  "tools": {
+    "claude-code": {
+      "maintenanceFile": "claude-code-maintenance.md"
+    },
+    "vercel-cli": {
+      "macos":   { "lastVerifiedVersion": "50.23.2",           "lastVerified": "2026-03-02" },
+      "windows": { "lastVerifiedVersion": null,                "lastVerified": null },
+      "linux":   { "lastVerifiedVersion": null,                "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": ""
+    },
+    "cursor-agent-cli": {
+      "macos":   { "lastVerifiedVersion": "2026.02.27-e7d2ef6", "lastVerified": "2026-03-02" },
+      "windows": { "lastVerifiedVersion": null,                 "lastVerified": null },
+      "linux":   { "lastVerifiedVersion": null,                 "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": ""
+    },
+    "node": {
+      "macos":   { "lastVerifiedVersion": "24.1.0", "lastVerified": "2026-03-02" },
+      "windows": { "lastVerifiedVersion": null,     "lastVerified": null },
+      "linux":   { "lastVerifiedVersion": null,     "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": ""
+    },
+    "pandoc": {
+      "macos":   { "lastVerifiedVersion": "3.9",  "lastVerified": "2026-03-02" },
+      "windows": { "lastVerifiedVersion": null,   "lastVerified": null },
+      "linux":   { "lastVerifiedVersion": null,   "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": ""
+    },
+    "pwsh": {
+      "macos":   { "lastVerifiedVersion": "7.5.4", "lastVerified": "2026-03-02" },
+      "windows": { "lastVerifiedVersion": null,    "lastVerified": null },
+      "linux":   { "lastVerifiedVersion": null,    "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": ""
+    },
+    "rust-cargo": {
+      "macos":   { "lastVerifiedVersion": "1.93.1", "lastVerified": "2026-03-02" },
+      "windows": { "lastVerifiedVersion": null,     "lastVerified": null },
+      "linux":   { "lastVerifiedVersion": null,     "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": ""
+    },
+    "typst": {
+      "macos":   { "lastVerifiedVersion": "0.14.2", "lastVerified": "2026-03-02" },
+      "windows": { "lastVerifiedVersion": null,     "lastVerified": null },
+      "linux":   { "lastVerifiedVersion": null,     "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": ""
+    },
+    "gh-cli": {
+      "macos":   { "lastVerifiedVersion": "2.87.3", "lastVerified": "2026-03-02" },
+      "windows": { "lastVerifiedVersion": null,     "lastVerified": null },
+      "linux":   { "lastVerifiedVersion": null,     "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": "TODO: officially support -- installed by aitools-install but not in Managed CLI Tools table"
+    },
+    "modal-cli": {
+      "macos":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "windows": { "lastVerifiedVersion": null, "lastVerified": null },
+      "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": "evaluating -- pip install modal; requires Python 3.10+"
+    },
+    "chrome-devtools-mcp": {
+      "pinned": false,
+      "lastReviewed": "2026-03-02",
+      "assumptions": ["--isolated flag required for concurrent Claude Code + Cursor sessions"],
+      "notes": ""
+    },
+    "vercel-mcp": {
+      "pinned": false,
+      "lastReviewed": "2026-03-02",
+      "assumptions": [],
+      "notes": ""
+    },
+    "webflow-mcp": {
+      "pinned": false,
+      "lastReviewed": "2026-03-02",
+      "assumptions": [],
+      "notes": ""
+    }
+  }
+}

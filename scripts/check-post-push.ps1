@@ -273,7 +273,7 @@ if (-not $claudeRules) {
 # ---------------------------------------------------------------------------
 # 9. Source-of-truth consistency
 # ---------------------------------------------------------------------------
-$toolSourcesFile = Join-Path (Join-Path $script:RepoRoot "reference") "tool-install-sources.md"
+$toolSourcesFile = Join-Path (Join-Path $script:RepoRoot "reference") "tool-registry.md"
 $lifecycleCount = 0
 if (Test-Path $toolSourcesFile) {
     $lines = Get-Content $toolSourcesFile
@@ -290,12 +290,12 @@ if ($lifecycleCount -gt 0) {
 # ---------------------------------------------------------------------------
 $inventoryErrors = 0
 $protectedFiles = @(
-    "reference/tool-install-sources.md",
+    "reference/tool-registry.md",
     "reference/tool-evaluation-criteria.md",
     "CLAUDE.md",
     "shared/claude-shared.md",
     "ROADMAP.md",
-    "reference/claude-code-version-deps.md",
+    "reference/claude-code-maintenance.md",
     "reference/user-repo.md"
 )
 foreach ($pf in $protectedFiles) {
@@ -524,7 +524,7 @@ try {
     # claude CLI not found or errored -- $ccVersion stays "unknown",
     # handled by StepSkip below
 }
-$registryFile = Join-Path (Join-Path $script:RepoRoot "reference") "claude-code-version-deps.md"
+$registryFile = Join-Path (Join-Path $script:RepoRoot "reference") "claude-code-maintenance.md"
 $registryVersion = "unknown"
 if (Test-Path $registryFile) {
     $regContent = Get-Content $registryFile -Raw

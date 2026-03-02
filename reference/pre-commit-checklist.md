@@ -35,7 +35,7 @@ If `.sh` or `.ps1` files are in the commit, end the commit message with `(tested
 
 ## 7. Install command consistency
 
-If modifying `scripts/setup-*.sh` or `.ps1`, verify install commands match the corresponding entry in `reference/tool-install-sources.md`. Never hardcode install commands from memory.
+If modifying `scripts/setup-*.sh` or `.ps1`, verify install commands match the corresponding entry in `reference/tool-registry.md`. Never hardcode install commands from memory.
 
 ## 8. Config merge safety
 

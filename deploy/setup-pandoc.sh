@@ -7,7 +7,7 @@
 #        If pandoc was previously installed via a non-preferred method, migrates to Homebrew.
 # Linux: Uses apt install pandoc (Debian/Ubuntu). Skips with warning on other distros.
 #
-# See reference/tool-install-sources.md for install source details.
+# See reference/tool-registry.md for install source details.
 
 set -euo pipefail
 

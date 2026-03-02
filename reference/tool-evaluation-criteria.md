@@ -106,14 +106,14 @@ Each managed tool has an independent lifecycle state per platform (macOS, Window
 
 Progression: `evaluating` → `approved` → `supported` (or `n/a` at any point).
 
-- A tool in `evaluating` on all platforms stays in "Under Evaluation" in `tool-install-sources.md`
+- A tool in `evaluating` on all platforms stays in "Under Evaluation" in `tool-registry.md`
 - First platform reaching `approved` promotes the tool to the main section
 - `approved` vs `supported` distinguishes "user said yes" from "fully scripted"
-- Display format in `tool-install-sources.md`: inline per entry (e.g., `macOS: supported | Windows: supported`)
+- Display format in `tool-registry.md`: inline per entry (e.g., `macOS: supported | Windows: supported`)
 
 ## Special Cases
 
-- **Pre-approved tools**: Tools already listed in `reference/tool-install-sources.md` have been evaluated and are pre-approved. No re-evaluation needed unless a concern arises.
+- **Pre-approved tools**: Tools already listed in `reference/tool-registry.md` have been evaluated and are pre-approved. No re-evaluation needed unless a concern arises.
 - **Time-sensitive situations**: When live checks aren't possible (no network, rate-limited), state that evaluation is incomplete and recommend the user verify before installing.
 - **Internal/private tools**: Company-internal tools skip public adoption checks but still need permission and security review.
 
@@ -124,7 +124,7 @@ The aitools project supports both macOS and Windows as first-class platforms. Wh
 - **Check availability on both platforms** — Homebrew/curl for macOS, winget/choco/npm for Windows
 - **Note platform gaps** — If a tool is macOS-only or Windows-only, disclose this upfront
 - **Prefer tools with native support on both** — over tools that require WSL or emulation layers
-- **Document install commands for both platforms** when adding to tool-install-sources.md
+- **Document install commands for both platforms** when adding to tool-registry.md
 
 ## Evaluation-to-Support Lifecycle
 
@@ -134,7 +134,7 @@ When adding a new managed tool, follow these phases in order. Each phase has a g
 **Gate: Official install docs verified and recorded in "Under Evaluation."**
 
 1. Fetch the tool's official installation page
-2. Record in `reference/tool-install-sources.md` under **"Under Evaluation"**:
+2. Record in `reference/tool-registry.md` under **"Under Evaluation"**:
    - Official source URL, preferred install command per platform, version check command
    - Non-preferred install methods (cleanup targets for setup scripts)
    - **Platform Status** per platform (`evaluating` initially)
@@ -153,8 +153,8 @@ This phase is a collaboration between Claude and the user. Claude automates the 
 2. **Claude provides a test command** — a concrete pipeline or invocation the user can run to evaluate whether the tool meets the need (e.g., `echo '<h1>Test</h1>' | pandoc -f html -t markdown`)
 3. **User tests** — runs the command, evaluates output quality, tries their real use case
 4. **User gives verdict** — Claude asks explicitly: approve or reject?
-   - **If rejected**: Claude uninstalls the tool (using the preferred package manager's remove command), removes the "Under Evaluation" entry from tool-install-sources.md, and stops. No further phases.
-   - **If approved**: Claude promotes the entry from "Under Evaluation" to a full entry in tool-install-sources.md, then proceeds to Phase 3.
+   - **If rejected**: Claude uninstalls the tool (using the preferred package manager's remove command), removes the "Under Evaluation" entry from tool-registry.md, and stops. No further phases.
+   - **If approved**: Claude promotes the entry from "Under Evaluation" to a full entry in tool-registry.md, then proceeds to Phase 3.
 
 **Do not skip this gate.** Even if the plan includes later phases, stop here and wait for the user's verdict before writing any integration code (aliases, setup scripts, installer steps).
 
@@ -162,7 +162,7 @@ This phase is a collaboration between Claude and the user. Claude automates the 
 Add aliases/functions to `shared/shell/aliases.sh` + `.ps1`. These must check for the tool's existence and fail with a helpful error pointing to `aitools install`.
 
 ### Phase 4: Setup Script
-Create `scripts/setup-<tool>.sh` + `.ps1` following the conventions in `.claude/rules/script-standards.md`. Install commands come from the tool-install-sources.md entry (not memory). Include cleanup of non-preferred install methods.
+Create `scripts/setup-<tool>.sh` + `.ps1` following the conventions in `.claude/rules/script-standards.md`. Install commands come from the tool-registry.md entry (not memory). Include cleanup of non-preferred install methods.
 
 ### Phase 5: Installer & Build Integration
 Add step to `aitools-install.sh/.ps1`. Add copy-as-is block to `build-deploy.sh`. Promote from "Under Evaluation" to full entry if not already done. If the tool is a CLI tool, add it to the Managed CLI Tools table in `shared/claude-shared.md` (and mirror to user repo template). Run `build-deploy.sh` to propagate to MDM path.
@@ -172,4 +172,4 @@ Each phase is independently revertible. Later phases never modify earlier artifa
 
 ## Updating This Policy
 
-When a new tool is evaluated and approved for regular use, add it to `reference/tool-install-sources.md` with its official source URL. This serves as the pre-approved list.
+When a new tool is evaluated and approved for regular use, add it to `reference/tool-registry.md` with its official source URL. This serves as the pre-approved list.

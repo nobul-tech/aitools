@@ -1,6 +1,6 @@
 # setup-user-cursor.ps1 — Sets up Cursor CLI + dependencies on Windows
 # Safe to re-run — checks each step and skips what's already done.
-# Install commands reference: reference/tool-install-sources.md
+# Install commands reference: reference/tool-registry.md
 #
 # Does three things:
 #   1. Installs ripgrep (rg) if not already present (required by Cursor CLI)

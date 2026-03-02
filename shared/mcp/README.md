@@ -124,4 +124,4 @@ Some MCP servers require authentication after setup before they are functional:
 
 ## Documentation Sources
 
-See `reference/tool-install-sources.md` for official documentation links and verified install commands.
+See `reference/tool-registry.md` for official documentation links and verified install commands.

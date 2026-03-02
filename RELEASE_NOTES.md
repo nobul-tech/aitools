@@ -12,6 +12,25 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.29.0 -- Tool Registry: Renames, Linux Platform, Version Tracking (2026-03-02)
+
+### Changes
+
+| # | Change |
+|---|--------|
+| 1 | **File renames**: `reference/tool-install-sources.md` → `reference/tool-registry.md`; `reference/claude-code-version-deps.md` → `reference/claude-code-maintenance.md`. All references updated across scripts, rules, plans, and docs. |
+| 2 | **Linux as third platform**: All tool entries in `tool-registry.md` now carry 3-platform Platform Status (`macOS \| Windows \| Linux`). Linux status per tool reflects Modal container targets (Debian). |
+| 3 | **6th lifecycle field**: `Last verified version` added to all tool entries in `tool-registry.md`. macOS populated from live version checks (2026-03-02); Windows/Linux start as `pending`. |
+| 4 | **`reference/tool-versions.json`** (new): Machine-readable per-platform version manifest for all 13 managed tools. Three patterns: A (maintenanceFile), B (versioned per-platform), C (@latest/remote). `_meta` block includes RFC 6570 URI Template for user repo, related doc paths, schema version. |
+| 5 | **Modal CLI** (evaluating): New tool section in `tool-registry.md`. Cross-platform pip install; requires Python 3.10+; planned compute backend for aitools.nobul.tech. |
+| 6 | **Post-push checklist item #21**: Tool version freshness — compare `<tool> --version` against `tool-versions.json` per platform; review @latest tools for assumption drift. |
+| 7 | **Roadmap**: Three new planned items — aitools install version capture, aitools.nobul.tech + Modal compute, aitools inside Modal containers. |
+| 8 | **I8 RCA complete**: Plan revision shallow (keyword grep vs. full re-read) — two confirmed occurrences, root cause identified, remediation documented. I10 RCA updated to reflect I8 as upstream cause. |
+
+**Verified**: macOS
+
+---
+
 ## v0.28.1 -- Hook: Glob Pattern Guard for rm (2026-03-01)
 
 ### Improvements

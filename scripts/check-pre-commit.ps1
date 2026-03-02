@@ -182,7 +182,7 @@ $setupStaged = @($stagedFiles | Where-Object { $_ -match '^scripts/setup-' })
 if ($setupStaged.Count -eq 0) {
     StepSkip "7" "Install cmd consistency" "no setup-* staged"
 } else {
-    StepWarn "7" "Install cmd consistency" "verify against reference/tool-install-sources.md"
+    StepWarn "7" "Install cmd consistency" "verify against reference/tool-registry.md"
 }
 
 # ---------------------------------------------------------------------------

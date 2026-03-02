@@ -23,7 +23,7 @@ When a tool is installed via a package manager (winget, brew, npm), the new bina
 
 ### Lifecycle field completeness
 
-Every tool in `reference/tool-install-sources.md` (including Under Evaluation) must have: Platform Status, Concurrency, Post-Install Config, Dependencies, Invocation. Verify before committing.
+Every tool in `reference/tool-registry.md` (including Under Evaluation) must have all 6 fields: Platform Status, Concurrency, Post-Install Config, Dependencies, Invocation, and Last verified version. Last verified version format: `macOS: X.Y.Z (YYYY-MM-DD) | Windows: X.Y.Z | Linux: X.Y.Z` (use `pending` for unverified). Tools with `maintenanceFile` in `tool-versions.json`: `See <filename>`. `@latest`/remote: `Last reviewed: YYYY-MM-DD`. Verify all 6 before committing.
 
 ### Under Evaluation guard
 

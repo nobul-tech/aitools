@@ -35,7 +35,7 @@ Canonical definition: `reference/tool-evaluation-criteria.md` ("Tool Platform St
 
 ### Retrofit Existing Tools
 
-All current tool entries in `reference/tool-install-sources.md` will be updated with explicit platform status. Format: `macOS: supported | Windows: supported` (or other state combinations). Eliminates ambiguity about what "no status" means.
+All current tool entries in `reference/tool-registry.md` will be updated with explicit platform status. Format: `macOS: supported | Windows: supported` (or other state combinations). Eliminates ambiguity about what "no status" means.
 
 ### Redefine "Under Evaluation" Category
 
@@ -53,7 +53,7 @@ The installer (`aitools-install.sh/.ps1`) already skips missing scripts with `lo
 
 | File | Change |
 |------|--------|
-| `reference/tool-install-sources.md` | Add platform status lines to each tool entry |
+| `reference/tool-registry.md` | Add platform status lines to each tool entry |
 | `reference/tool-evaluation-criteria.md` | Update Phase 2 to clarify per-platform approval gates |
 | `.claude/rules/tool-lifecycle.md` | Clarify that Phase 2 gates are per-platform |
 | `.claude/rules/sources-of-truth.md` | Already done (roadmap system creation) |
@@ -69,5 +69,5 @@ The installer (`aitools-install.sh/.ps1`) already skips missing scripts with `lo
 
 ## Resolved Questions
 
-- **Display format**: Platform status displays inline in each tool's entry in `tool-install-sources.md` (e.g., `macOS: supported | Windows: supported`), not in a separate summary table. Inline keeps the status next to the install commands it describes.
+- **Display format**: Platform status displays inline in each tool's entry in `tool-registry.md` (e.g., `macOS: supported | Windows: supported`), not in a separate summary table. Inline keeps the status next to the install commands it describes.
 - **Installer warnings**: `aitools install` surfacing platform-specific warnings (e.g., "tool X is evaluating on this platform") is future scope. The current `log_warn` for missing scripts already covers the common case.

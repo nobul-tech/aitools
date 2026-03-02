@@ -256,8 +256,8 @@ fi
 # 9. Source-of-truth consistency
 # ---------------------------------------------------------------------------
 # Count tool sections (## headings between --- separators) vs lifecycle field count
-tool_sections=$(grep -c '^## ' "$REPO_ROOT/reference/tool-install-sources.md" 2>/dev/null || echo 0)
-lifecycle_fields=$(grep -c '^\- \*\*Platform Status' "$REPO_ROOT/reference/tool-install-sources.md" 2>/dev/null || echo 0)
+tool_sections=$(grep -c '^## ' "$REPO_ROOT/reference/tool-registry.md" 2>/dev/null || echo 0)
+lifecycle_fields=$(grep -c '^\- \*\*Platform Status' "$REPO_ROOT/reference/tool-registry.md" 2>/dev/null || echo 0)
 # Subtract non-tool headings (Overrides, Under Evaluation, MCP Management)
 # Approximate: each tool should have exactly one Platform Status line
 if [ "$lifecycle_fields" -gt 0 ]; then
@@ -272,12 +272,12 @@ fi
 inventory_errors=0
 # Check that key protected files exist
 for pf in \
-    "reference/tool-install-sources.md" \
+    "reference/tool-registry.md" \
     "reference/tool-evaluation-criteria.md" \
     "CLAUDE.md" \
     "shared/claude-shared.md" \
     "ROADMAP.md" \
-    "reference/claude-code-version-deps.md" \
+    "reference/claude-code-maintenance.md" \
     "reference/user-repo.md"; do
     if [ ! -f "$REPO_ROOT/$pf" ]; then
         echo "      missing: $pf"
@@ -441,7 +441,7 @@ fi
 # 20. CC version-dep review
 # ---------------------------------------------------------------------------
 cc_version=$(claude --version 2>/dev/null | head -1 || echo "unknown")
-registry_version=$(grep -E 'Current version' "$REPO_ROOT/reference/claude-code-version-deps.md" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
+registry_version=$(grep -E 'Current version' "$REPO_ROOT/reference/claude-code-maintenance.md" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
 if [ "$cc_version" = "unknown" ]; then
     step_skip "20" "CC version-dep review" "claude CLI not found"
 elif echo "$cc_version" | grep -q "$registry_version"; then

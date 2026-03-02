@@ -5,7 +5,7 @@
 # Windows: Uses npm install -g vercel (no winget package or standalone binary available).
 # Verifies PATH after install so Claude Code's Bash tool can find the binary.
 #
-# See reference/tool-install-sources.md for install source details.
+# See reference/tool-registry.md for install source details.
 
 # --- Logging ---
 $logDir = Join-Path $env:LOCALAPPDATA "aitools"

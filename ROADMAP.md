@@ -19,6 +19,9 @@ Detailed plans live in `plans/`. See `RELEASE_NOTES.md` for completed work.
 | Conditional template blocks | [#5](https://github.com/nobul-jose/aitools/issues/5) | Medium | Platform-gated sections in CLAUDE.md templates (e.g., `{{#if WINDOWS}}...{{/if}}`). Enables Windows-only or macOS-only coaching/rules without auto-memory. |
 | clip2: unified clipboard command | [#3](https://github.com/nobul-jose/aitools/issues/3) | Medium | Refactor `clip2md` into `clip2` with format subcommands (`md`, `pdf`). Requires PDF tool evaluation. |
 | Session search & view | [#4](https://github.com/nobul-jose/aitools/issues/4) | Low | `aitools sessions search <query>` and `sessions view <file>` for working with archived transcripts |
+| aitools install version capture | -- | Near-term | Capture installed versions per platform → `~/.aitools/versions.json`; compare against `reference/tool-versions.json`; flag drift at end of install; new `aitools versions` command; telemetry consent on first run; version blocking via `blocked[]` |
+| aitools.nobul.tech + Modal compute | -- | Near-term | Vercel + Next.js docs/dashboard (friends/family → open source); GitHub OAuth → dotprofile repo → one-liner install; log/version ingest API (anonymized telemetry); drift → PR automation via Claude API; Modal as compute backend for Claude API calls and batch processing |
+| aitools inside Modal containers | -- | Future | `aitools install` / setup scripts provision Modal environments; configure managed tools (pandoc, typst, etc.) in Modal images |
 
 ## Completed
 

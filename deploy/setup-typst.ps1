@@ -4,7 +4,7 @@
 #
 # Windows: Uses winget (preferred). Removes non-preferred installs (cargo, npm).
 #
-# See reference/tool-install-sources.md for install source details.
+# See reference/tool-registry.md for install source details.
 
 # --- Logging ---
 $logDir = Join-Path $env:LOCALAPPDATA "aitools"

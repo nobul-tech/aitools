@@ -65,8 +65,9 @@ incidents. Each incident gets RCA and remediation tracking.
 | I5 | 2026-02-19 | SO #7 | Silent hook failure: session-archive hook was no-op due to missing userRepoPath, buried in summary | Remediated | No silent failures | -- |
 | I6 | 2026-02-28 | Process | Deploy template logic not updated when scripts/ source fixed — recurring pattern (3+ occurrences) | Remediated | -- | v0.25.1 |
 | I7 | 2026-02-28 | SO #7 | Plan drafted with unguarded `2>/dev/null \|\| true` cleanup patterns and missing exemption entries -- caught only after user requested re-audit | RCA | No silent failures | -- |
-| I8 | 2026-02-28 | Coaching | Plan revision uses grep-for-keywords instead of full re-read; misses scope/order changes from user feedback during review | Observed | -- | -- |
-| I9 | 2026-03-01 | Process | Unnecessary @import of reference/claude-code-version-deps.md in CLAUDE.md -- added 85 lines of maintenance-only context to every session. File already triggered by post-push checklist #20. | RCA | -- | -- |
+| I8 | 2026-02-28 | Coaching | Plan revision uses grep-for-keywords instead of full re-read; misses scope/order changes from user feedback during review | RCA | -- | -- |
+| I9 | 2026-03-01 | Process | Unnecessary @import of reference/claude-code-maintenance.md in CLAUDE.md -- added 85 lines of maintenance-only context to every session. File already triggered by post-push checklist #20. | RCA | -- | -- |
+| I10 | 2026-03-02 | SO #5 | Chained version-check commands (`&&`/`;`) in single Bash tool call; plan contained inline version checks because I8 plan revision left Batch 4 uncorrected when fixing Batch 2 | RCA | Simple Bash commands only | -- |
 
 ### Incident Details
 
@@ -128,7 +129,7 @@ incidents. Each incident gets RCA and remediation tracking.
 
 #### I7: Plan-phase rule violations — Typst setup (2026-02-28)
 
-- **Observed**: Initial plan for setup-typst.sh included `cargo uninstall typst-cli 2>/dev/null || true` and `npm uninstall -g typst 2>/dev/null || true` without the required explanatory comments, without noting the need for exemption table entries, and with vague pseudocode that omitted required logging block elements (display_path, tool-install-sources.md header reference). User had to request a re-audit to surface these issues.
+- **Observed**: Initial plan for setup-typst.sh included `cargo uninstall typst-cli 2>/dev/null || true` and `npm uninstall -g typst 2>/dev/null || true` without the required explanatory comments, without noting the need for exemption table entries, and with vague pseudocode that omitted required logging block elements (display_path, tool-registry.md header reference). User had to request a re-audit to surface these issues.
 - **RCA**: Rules were treated as applying only to committed code. Plan-phase pseudocode was given "draft quality" latitude, allowing violations to be deferred to implementation. This is wrong -- the plan is the blueprint, and a blueprint with violations produces violations.
 - **Remediation**: Broadened scope in error-handling.md and script-standards.md to explicitly cover plans and pseudocode. Violations in plans are equivalent to violations in committed code and must be documented as incidents.
 - **Status**: RCA (rule updates applied)
@@ -138,8 +139,29 @@ incidents. Each incident gets RCA and remediation tracking.
 - **Observed**: When user provides feedback during plan review that alters scope or
   order of operations, the revision approach defaults to grepping the plan for specific
   keywords or phrases rather than re-reading and regenerating from scratch. This misses
-  structural changes that the feedback implies. Multiple occurrences in Typst plan review
-  cycle (gold standard removal altered the "Based on" references and audit framing, but
-  revision only grep-replaced the phrase "gold standard").
-- **RCA**: Pending investigation
-- **Status**: Observed
+  structural changes that the feedback implies. Two confirmed occurrences:
+  - Typst plan (2026-02-28): removing "gold standard" altered audit framing and "Based on" references,
+    but revision only grep-replaced the phrase itself.
+  - File rename / version-tracking plan (2026-03-02): user asked to make the stale-reference check
+    a write-and-execute script. Fix applied to Batch 2 (check-rename.sh). Batch 4 version checks had
+    the identical violation (`;`-separated inline commands) but were not corrected — targeted edit,
+    not full re-scan. I10 is a downstream consequence.
+- **RCA**: Plan revision is performed as a targeted find-and-replace rather than a full re-read of
+  the revised plan. When feedback implies a cross-cutting change (a pattern, a style, a constraint),
+  the correct response is to re-read every batch/section and apply the change wherever it applies —
+  not just at the location the user pointed to.
+- **Remediation**: After any user feedback that alters a pattern or constraint (not just a specific
+  line), scan every batch/section of the plan before finalizing. If the corrected pattern applies
+  elsewhere, update those locations too. Present the full revised plan or a summary of all locations
+  changed, not just the immediate fix.
+- **Status**: RCA
+- **Detection gap**: Hard to automate. Could be caught at plan-review time by asking: "does this
+  feedback imply a pattern change? If so, where else in the plan does the same pattern appear?"
+
+#### I10: Chained version-check commands in Bash tool call (2026-03-02)
+
+- **Observed**: During Batch 4 (version checks), attempted to run 9 tool version commands chained with `&&` and `echo "---"` separators in a single Bash tool call. User blocked it and asked for a script.
+- **RCA**: Two-layer failure. (1) **I8 (plan revision)**: During plan review, user asked to make the stale-reference check a write-and-execute script. Fix was applied to Batch 2's `check-rename.sh` block but not generalized — Batch 4 still had `;`-separated inline version commands. User also missed it during review. (2) **Implementation**: Batch 4's inline commands were carried into implementation as `&&`-chained Bash tool calls instead of a script, despite the Batch 2 template being immediately available.
+- **Remediation**: (1) I8 remediation (re-scan full plan after pattern-change feedback) prevents the Batch 4 block from surviving to implementation. (2) When a plan batch shows multi-command sequences inline, apply the write-and-execute pattern regardless — the inline form in the plan is not authorization to run them inline in the Bash tool.
+- **Status**: RCA
+- **Detection gap**: No automated check. Could be caught at plan-review time by scanning prescribed Bash blocks for `&&`/`;` and flagging them for conversion to write-and-execute.

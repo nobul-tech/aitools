@@ -39,14 +39,17 @@ using hardcoded package manager paths. Instead:
 
 ### Lifecycle field completeness
 
-Every tool entry in `reference/tool-install-sources.md` (including Under Evaluation) must have all 5 fields:
+Every tool entry in `reference/tool-registry.md` (including Under Evaluation) must have all 6 fields:
 - **Platform Status** (per platform: `evaluating`/`approved`/`supported`/`n/a`)
 - **Concurrency** (can multiple instances run simultaneously?)
 - **Post-Install Config** (steps required after install, or "None")
 - **Dependencies** (other tools/runtimes required)
 - **Invocation** (direct CLI command and anti-patterns, or "N/A" for non-CLI)
+- **Last verified version** — versioned tools: `macOS: X.Y.Z (YYYY-MM-DD) | Windows: X.Y.Z | Linux: X.Y.Z`.
+  Use `pending` for unverified platforms. Tools with `maintenanceFile` in `tool-versions.json`: use `See <filename>`.
+  `@latest`/remote tools: `Last reviewed: YYYY-MM-DD` (platform-agnostic). Missing = flag.
 
-Verify all 5 fields are present before committing changes to tool entries.
+Verify all 6 fields are present before committing changes to tool entries.
 
 ### Under Evaluation guard
 

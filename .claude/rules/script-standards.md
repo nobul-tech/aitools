@@ -9,7 +9,7 @@ pseudocode in `plans/*.md`, and any code you propose in conversation.
 
 ### Block order (bash reusable scripts)
 
-1. Shebang + header comment (name, purpose, "safe to re-run", platform, reference to `tool-install-sources.md`)
+1. Shebang + header comment (name, purpose, "safe to re-run", platform, reference to `tool-registry.md`)
 2. `set -euo pipefail`
 3. Logging block: `LOG_DIR`, `LOG_FILE`, `SCRIPT_NAME`, `mkdir -p`, `display_path()`, `ERRORS=0`, logging helpers
 4. OS guard (`case "$(uname -s)" in MINGW*...) exit 1`)
@@ -18,7 +18,7 @@ pseudocode in `plans/*.md`, and any code you propose in conversation.
 
 ### Block order (PowerShell reusable scripts)
 
-1. Header comment (name, purpose, "safe to re-run", platform, reference to `tool-install-sources.md`)
+1. Header comment (name, purpose, "safe to re-run", platform, reference to `tool-registry.md`)
 2. Logging block: `$logDir`, `$logFile`, `$scriptName`, dir creation, `Log`/`LogOk`/`LogError`/`LogWarn`, `$errors = 0`
 3. OS guard (`if $PSVersionTable... -and -not $IsWindows`)
 4. Script body

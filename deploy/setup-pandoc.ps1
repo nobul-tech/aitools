@@ -5,7 +5,7 @@
 # Windows: Uses winget (preferred). Detects and warns about non-preferred installs
 #          (Chocolatey, Conda, manual installer).
 #
-# See reference/tool-install-sources.md for install source details.
+# See reference/tool-registry.md for install source details.
 
 # --- Logging ---
 $logDir = Join-Path $env:LOCALAPPDATA "aitools"

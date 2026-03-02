@@ -200,7 +200,7 @@ setup_staged=$(echo "$STAGED_FILES" | grep -E '^scripts/setup-' || true)
 if [ -z "$setup_staged" ]; then
     step_skip "7" "Install cmd consistency" "no setup-* staged"
 else
-    step_warn "7" "Install cmd consistency" "verify against reference/tool-install-sources.md"
+    step_warn "7" "Install cmd consistency" "verify against reference/tool-registry.md"
 fi
 
 # ---------------------------------------------------------------------------

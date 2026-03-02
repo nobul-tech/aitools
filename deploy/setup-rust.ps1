@@ -5,7 +5,7 @@
 # Windows: Uses winget to install rustup, which manages the Rust toolchain.
 # Checks for MSVC Build Tools (required for linking) and warns if missing.
 #
-# See reference/tool-install-sources.md for install source details.
+# See reference/tool-registry.md for install source details.
 
 # --- Logging ---
 $logDir = Join-Path $env:LOCALAPPDATA "aitools"

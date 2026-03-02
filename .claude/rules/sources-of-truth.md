@@ -6,7 +6,7 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 
 | File | What it controls | Agent |
 |------|-----------------|-------|
-| `reference/tool-install-sources.md` | Install commands for all managed tools — setup scripts reference this | Any |
+| `reference/tool-registry.md` | Registry of managed tools — install commands, lifecycle, per-platform version tracking | Any |
 | `reference/tool-evaluation-criteria.md` | Tool evaluation framework and lifecycle phases | Any |
 | `CLAUDE.md` | Project-level instructions and Key Decisions | Any |
 | `shared/claude-shared.md` | User-level preferences embedded into deploy scripts (propagates to all machines) | Any |
@@ -15,7 +15,8 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 | `.cursor/rules/*.mdc` | Cursor behavioral rules | Any |
 | `ROADMAP.md` | Active/planned work items — drives project priorities | Any |
 | `plans/*.md` | Detailed implementation plans — referenced by roadmap | Any |
-| `reference/claude-code-version-deps.md` | Version-dependent workarounds registry — triggers review on CC upgrades | Any |
+| `reference/claude-code-maintenance.md` | Claude Code maintenance tracker — version deps, workarounds, upstream issues | Any |
+| `reference/tool-versions.json` | Machine-readable per-platform version manifest for all managed tools | Any |
 | `reference/user-repo.md` | User repo pattern, template resolution, session archive — scripts reference this | Any |
 
 ### The rule

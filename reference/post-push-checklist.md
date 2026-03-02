@@ -81,11 +81,13 @@ counterpart (or is marked Claude Code-specific). Flag missing or orphaned files.
 
 ### 9. Source-of-truth consistency
 
-For each tool in `reference/tool-install-sources.md`:
+For each tool in `reference/tool-registry.md`:
 - Verify the install command matches what the corresponding `setup-*.sh/.ps1`
   script actually runs.
-- Verify all 5 lifecycle fields (Platform Status, Concurrency, Post-Install
-  Config, Dependencies, Invocation) are present.
+- Verify all 6 lifecycle fields (Platform Status, Concurrency, Post-Install
+  Config, Dependencies, Invocation, Last verified version) are present.
+- Verify Platform Status uses 3-platform format (`macOS: ... | Windows: ... | Linux: ...`).
+- Verify Last verified version is populated for the current platform (not `pending` indefinitely).
 
 ### 10. Protected files inventory
 
@@ -145,14 +147,26 @@ For each setup script that writes JSON config files, verify it uses
 read-then-merge (not blind overwrite). Flag any `cat >` or bare
 `WriteAllText` targeting a config file that has non-managed fields.
 
-### 20. Claude Code version-dep review
+### 20. Claude Code maintenance review
 
 Check `claude --version` against the "Current version" in
-`reference/claude-code-version-deps.md`. If they differ:
+`reference/claude-code-maintenance.md`. If they differ:
 - Update "Current version" in the registry
 - Walk CRITICAL items: check upstream GitHub issues (are they still open?)
 - Walk HIGH items if the version bump is major (e.g., 2.1 -> 2.2 or 3.0)
 - Update "Last verified" for any re-checked items
+
+### 21. Tool version freshness
+
+For each versioned tool in `reference/tool-registry.md`:
+- Run `<tool> --version` and compare against the current platform's entry in
+  `reference/tool-versions.json`. Flag any tool where installed version differs.
+- If different: update `tool-versions.json` for this platform, update `Last verified version`
+  in `tool-registry.md`, and review upstream changelog for breaking changes.
+
+For `@latest` / remote tools:
+- Check `lastReviewed` in `tool-versions.json`. Flag if older than 30 days.
+- Review upstream for changes to flags, config options, or behavior affecting `assumptions`.
 
 ---
 
