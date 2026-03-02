@@ -64,7 +64,10 @@ else
 fi
 
 # --- Check existing MCP server configs via claude mcp list ---
-declare -A mcp_current
+# Stores parsed output as newline-separated "name=details" pairs.
+# Avoids bash 4+ associative arrays for macOS compatibility (bash 3.2).
+mcp_current_data=""
+mcp_current_count=0
 
 saved_claudecode="${CLAUDECODE:-}"
 unset CLAUDECODE
@@ -77,9 +80,7 @@ if [ -n "$saved_claudecode" ]; then
 fi
 
 if [ $mcp_list_rc -eq 0 ] && [ -n "$mcp_list_output" ]; then
-    while IFS='=' read -r name details; do
-        [ -n "$name" ] && mcp_current["$name"]="$details"
-    done < <(printf '%s\n' "$mcp_list_output" | perl -ne '
+    mcp_current_data=$(printf '%s\n' "$mcp_list_output" | perl -ne '
         s/\e\[[0-9;]*m//g;
         next unless /^(.+?):\s+(.+)\s+-\s+.+$/;
         my ($name, $details) = ($1, $2);
@@ -87,7 +88,10 @@ if [ $mcp_list_rc -eq 0 ] && [ -n "$mcp_list_output" ]; then
         $details =~ s/\s+$//;
         print "$name=$details\n";
     ')
-    log_ok "Checked existing MCP config (${#mcp_current[@]} servers found)"
+    if [ -n "$mcp_current_data" ]; then
+        mcp_current_count=$(printf '%s\n' "$mcp_current_data" | wc -l | tr -d ' ')
+    fi
+    log_ok "Checked existing MCP config ($mcp_current_count servers found)"
 else
     log_warn "Could not check existing MCP config; will re-add all servers"
 fi
@@ -95,8 +99,12 @@ fi
 # Check if a server's current config matches expected.
 server_config_matches() {
     local name="$1" expected="$2"
-    local current="${mcp_current[$name]:-}"
-    [ -n "$current" ] && [ "$current" = "$expected" ]
+    [ -n "$mcp_current_data" ] || return 1
+    local line
+    line=$(printf '%s\n' "$mcp_current_data" | grep "^${name}=" | head -1)
+    [ -n "$line" ] || return 1
+    local current="${line#*=}"
+    [ "$current" = "$expected" ]
 }
 
 # --- Add all three MCP servers at user scope ---
