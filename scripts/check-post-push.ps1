@@ -647,33 +647,33 @@ if ($badWingetFiles.Count -gt 0) {
     StepPass "22a" "Winget output filtering" "all setup-*.ps1 filter winget progress chars"
 }
 
-# 22b: Cloud MCP in install path -- verify both entry points call show_cloud_mcp /
-#      Show-CloudMcp in the install success block
+# 22b: Cloud MCP in install path -- verify both installer scripts call
+#      show_cloud_mcp / Show-CloudMcp before the COMPLETED line
 $step22bFail = 0
-# PS1 entry point: extract install runner block (anchored on unique $installerRc)
-$aitoolsPs1 = Get-Content (Join-Path $script:RepoRoot "scripts" "aitools.ps1") -Raw
+# PS1 installer: extract from Show-Summary to COMPLETED
+$installerPs1 = Get-Content (Join-Path $script:RepoRoot "scripts" "aitools-install.ps1") -Raw
 $installBlockPs1 = ""
-if ($aitoolsPs1 -match '(?s)\$installerRc(.+?)\} elseif ') {
+if ($installerPs1 -match '(?s)Show-Summary(.+?)COMPLETED successfully') {
     $installBlockPs1 = $Matches[1]
 }
 if ($installBlockPs1 -notmatch 'Show-CloudMcp') {
     $step22bFail = 1
-    Write-Host "      FAIL: scripts/aitools.ps1 missing Show-CloudMcp in install path"
+    Write-Host "      FAIL: scripts/aitools-install.ps1 missing Show-CloudMcp before COMPLETED"
 }
-# Bash entry point: extract install runner block (anchored on unique installer_rc)
-$aitoolsBash = Get-Content (Join-Path $script:RepoRoot "scripts" "aitools") -Raw
+# Bash installer: extract from show_summary to COMPLETED
+$installerBash = Get-Content (Join-Path $script:RepoRoot "scripts" "aitools-install.sh") -Raw
 $installBlockBash = ""
-if ($aitoolsBash -match '(?s)installer_rc=(.+?)elif ') {
+if ($installerBash -match '(?s)show_summary(.+?)COMPLETED successfully') {
     $installBlockBash = $Matches[1]
 }
 if ($installBlockBash -notmatch 'show_cloud_mcp') {
     $step22bFail = 1
-    Write-Host "      FAIL: scripts/aitools missing show_cloud_mcp in install path"
+    Write-Host "      FAIL: scripts/aitools-install.sh missing show_cloud_mcp before COMPLETED"
 }
 if ($step22bFail -eq 0) {
-    StepPass "22b" "Cloud MCP in install path" "both entry points call show_cloud_mcp"
+    StepPass "22b" "Cloud MCP in install path" "both installer scripts call show_cloud_mcp"
 } else {
-    StepFail "22b" "Cloud MCP in install path" "missing from one or both entry points"
+    StepFail "22b" "Cloud MCP in install path" "missing from one or both installer scripts"
     $step22Fail = 1
 }
 

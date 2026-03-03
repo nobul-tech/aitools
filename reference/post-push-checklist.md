@@ -177,10 +177,10 @@ For `@latest` / remote tools:
 - FAIL: One or more files still log winget progress characters (`-`, `\`, `|`, `/`) verbatim.
 
 **22b -- Cloud MCP in install path:**
-- Verify that `scripts/aitools` calls `show_cloud_mcp` in the `do_install` success block.
-- Verify that `scripts/aitools.ps1` calls `Show-CloudMcp` in the `$doInstall` success block.
-- PASS: Both entry points include the call.
-- FAIL: Missing from one or both entry points.
+- Verify that `scripts/aitools-install.sh` calls `show_cloud_mcp` between `show_summary` and `COMPLETED successfully`.
+- Verify that `scripts/aitools-install.ps1` calls `Show-CloudMcp` between `Show-Summary` and `COMPLETED successfully`.
+- PASS: Both installer scripts include the call.
+- FAIL: Missing from one or both installer scripts.
 
 ---
 

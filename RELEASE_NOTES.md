@@ -19,13 +19,13 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | # | Change |
 |---|--------|
 | 1 | **Winget progress noise** (`setup-uv.ps1`, `setup-python.ps1`, `setup-typst.ps1`, `setup-gh-cli.ps1`, `setup-pandoc.ps1`, `setup-rust.ps1`): Filter winget progress bar characters (`-`, `\`, `|`, `/`) and blank lines from structured log output. 9 locations across 6 scripts. |
-| 2 | **Cloud MCP missing from install** (`scripts/aitools`, `scripts/aitools.ps1`): `show_cloud_mcp`/`Show-CloudMcp` now called after successful `aitools install`, matching the no-args and gitpull paths. |
+| 2 | **Cloud MCP in install path** (`aitools-install.sh/.ps1`): Cloud MCP server status now displays inside the installer output with `[setup-user-mcp]` tag, right before `COMPLETED successfully` -- matching the structured logging style of the no-args/gitpull deploy sequence. Previously missing from install entirely; v0.34.2 initial fix placed it after `All up to date` without tagging. |
 
 ### Added
 
 | # | Change |
 |---|--------|
-| 1 | **Post-push step 22: Logging hygiene audit** (`check-post-push.sh/.ps1`): Extensive-tier check with two sub-steps -- 22a verifies all setup-*.ps1 filter winget progress chars, 22b verifies both entry points call show_cloud_mcp in the install path. |
+| 1 | **Post-push step 22: Logging hygiene audit** (`check-post-push.sh/.ps1`): Extensive-tier check with two sub-steps -- 22a verifies all setup-*.ps1 filter winget progress chars, 22b verifies both installer scripts call show_cloud_mcp before COMPLETED. |
 
 **Verified**: Windows
 

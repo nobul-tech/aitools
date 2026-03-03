@@ -1327,7 +1327,6 @@ if ($doInstall) {
     Write-Host ""
     if ($installerRc -eq 0) {
         Write-Host "All up to date. ($(Get-RepoVersion $repoPath))"
-        Show-CloudMcp
         # Session archive hint (after final status line)
         $userRepo = Read-ConfigKey -File $configFile -Key "userRepoPath"
         if (-not $userRepo) {

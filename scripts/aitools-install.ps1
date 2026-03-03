@@ -593,6 +593,42 @@ if ($DryRun) { Remove-Item Env:\AITOOLS_DRY_RUN -ErrorAction SilentlyContinue }
 
 if (-not $env:AITOOLS_SUPPRESS_SUMMARY_DISPLAY) { Show-Summary }
 
+# --- Cloud MCP status (tagged as setup-user-mcp) ---
+# Shows cloud MCP server status from claude.ai, if any are configured.
+# Silent no-op if claude CLI unavailable or no cloud servers found.
+function Show-CloudMcp {
+    if (-not (Get-Command claude -ErrorAction SilentlyContinue)) { return }
+    $savedClaudeCode = $env:CLAUDECODE
+    Remove-Item Env:\CLAUDECODE -ErrorAction SilentlyContinue
+    try {
+        $savedEncoding = [Console]::OutputEncoding
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+        $raw = claude mcp list 2>$null
+        [Console]::OutputEncoding = $savedEncoding
+    } catch { $raw = $null }
+    if ($savedClaudeCode) { $env:CLAUDECODE = $savedClaudeCode }
+    if (-not $raw) { return }
+    $entries = @()
+    foreach ($line in $raw) {
+        $clean = $line -replace '\e\[[0-9;]*m', ''
+        if ($clean -match '^claude\.ai\s+(.+?):\s+.+\s+-\s+(.+)$') {
+            $name = $Matches[1].Trim()
+            $status = $Matches[2].Trim()
+            $entries += [PSCustomObject]@{ Name = $name; Status = $status }
+        }
+    }
+    if ($entries.Count -eq 0) { return }
+    $tag = "setup-user-mcp"
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    Write-Host "[$ts] [$tag] Cloud MCP servers (configured at claude.ai):"
+    foreach ($entry in $entries) {
+        $pad = if ($entry.Name.Length -lt 24) { " " * (24 - $entry.Name.Length) } else { " " }
+        $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+        Write-Host "[$ts] [$tag]   $($entry.Name)$pad$($entry.Status)"
+    }
+}
+Show-CloudMcp
+
 # --- Exit ---
 if ($errors -gt 0) {
     Log "FAILED with $errors error(s). See log: $logFile"

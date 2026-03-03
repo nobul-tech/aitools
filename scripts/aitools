@@ -1449,7 +1449,6 @@ if $do_install; then
     echo ""
     if [ $installer_rc -eq 0 ]; then
         echo "All up to date. ($(repo_version "$repo_path"))"
-        show_cloud_mcp
         # Session archive hint (after final status line)
         if ! read_config_key "$config" "userRepoPath" >/dev/null 2>&1; then
             printf '\033[33mhint: To archive sessions across machines, run '\''aitools user init'\''.\033[0m\n'

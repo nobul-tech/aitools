@@ -554,25 +554,25 @@ else
     step_pass "22a" "Winget output filtering" "all setup-*.ps1 filter winget progress chars"
 fi
 
-# 22b: Cloud MCP in install path -- verify both entry points call show_cloud_mcp /
-#      Show-CloudMcp in the install success block
+# 22b: Cloud MCP in install path -- verify both installer scripts call
+#      show_cloud_mcp / Show-CloudMcp before the COMPLETED line
 step22b_fail=0
-# Bash entry point: extract install runner block (anchored on unique installer_rc)
-install_block_bash=$(sed -n '/installer_rc=/,/^elif /p' "$REPO_ROOT/scripts/aitools")
+# Bash installer: extract from show_summary to COMPLETED
+install_block_bash=$(sed -n '/show_summary/,/COMPLETED successfully/p' "$REPO_ROOT/scripts/aitools-install.sh")
 if ! echo "$install_block_bash" | grep -q 'show_cloud_mcp'; then
     step22b_fail=1
-    echo "      FAIL: scripts/aitools missing show_cloud_mcp in install path"
+    echo "      FAIL: scripts/aitools-install.sh missing show_cloud_mcp before COMPLETED"
 fi
-# PS1 entry point: extract install runner block (anchored on unique installerRc)
-install_block_ps1=$(sed -n '/\$installerRc/,/^} elseif /p' "$REPO_ROOT/scripts/aitools.ps1")
+# PS1 installer: extract from Show-Summary to COMPLETED
+install_block_ps1=$(sed -n '/Show-Summary/,/COMPLETED successfully/p' "$REPO_ROOT/scripts/aitools-install.ps1")
 if ! echo "$install_block_ps1" | grep -q 'Show-CloudMcp'; then
     step22b_fail=1
-    echo "      FAIL: scripts/aitools.ps1 missing Show-CloudMcp in install path"
+    echo "      FAIL: scripts/aitools-install.ps1 missing Show-CloudMcp before COMPLETED"
 fi
 if [ "$step22b_fail" -eq 0 ]; then
-    step_pass "22b" "Cloud MCP in install path" "both entry points call show_cloud_mcp"
+    step_pass "22b" "Cloud MCP in install path" "both installer scripts call show_cloud_mcp"
 else
-    step_fail "22b" "Cloud MCP in install path" "missing from one or both entry points"
+    step_fail "22b" "Cloud MCP in install path" "missing from one or both installer scripts"
     step22_fail=1
 fi
 
