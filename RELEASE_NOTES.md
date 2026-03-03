@@ -39,8 +39,10 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | 1 | **Python MSIX alias stub** (`setup-python.ps1`): After removing Microsoft Store Python, `Get-Command python` still found the stale WindowsApps alias stub. Script now tests `python --version` to distinguish real Python from stale aliases, and falls through to fresh install when needed. |
 | 2 | **uv `--system` flag** (`setup-modal.sh/.ps1`): `uv pip install` requires `--system` to install into the system Python (not a virtualenv). Added `INSTALL_FLAGS`/`$installFlags` variable to the uv-first pattern. Updated `reference/script-standards-detail.md` examples. |
 | 3 | **Modal PATH refresh** (`setup-modal.sh/.ps1`): Added `Refresh-Path`/`hash -r` at script start to pick up Python and uv installed by prior steps in the same installer run. |
+| 4 | **Python/uv idempotent PATH refresh** (`setup-python.ps1`, `setup-uv.ps1`): Added `Refresh-Path` before install/update check so child pwsh processes find tools installed by prior runs. Without this, `Get-Command` found stale WindowsApps stubs instead of the real Python. |
+| 5 | **winget "already installed" false failure** (`setup-python.ps1`, `setup-uv.ps1`): `winget install` exits with -1978335189 when the package is already installed with no upgrade available. Scripts now detect "already installed" + "No available upgrade" output and treat it as success instead of error. |
 
-**Verified**: Windows (tested: setup-python, setup-uv, setup-modal end-to-end). macOS: pending.
+**Verified**: Windows (tested: setup-python, setup-uv, setup-modal end-to-end, plus idempotent re-runs). macOS: pending.
 
 ---
 

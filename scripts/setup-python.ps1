@@ -61,6 +61,9 @@ if ($msixPackages) {
     Log "No Microsoft Store Python found (OK)"
 }
 
+# Refresh PATH to pick up tools installed by prior steps or previous runs
+Refresh-Path
+
 # --- Install/update ---
 # After MSIX removal, check if a real (non-stub) python exists.
 # The WindowsApps alias stub survives MSIX removal until PATH refreshes.
@@ -106,7 +109,9 @@ if ($needsInstall) {
     Log "Installing Python via winget ($pythonWingetId)..."
     $wingetOutput = winget install $pythonWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
-    if ($LASTEXITCODE -ne 0) {
+    if ($wingetOutput -match 'already installed' -and $wingetOutput -match 'No available upgrade|No newer package versions') {
+        LogOk "Python already up to date (winget)"
+    } elseif ($LASTEXITCODE -ne 0) {
         LogError "winget install python failed (exit code $LASTEXITCODE)"
         Write-Summary "ERROR" "python" "winget install failed (exit $LASTEXITCODE)"
     }

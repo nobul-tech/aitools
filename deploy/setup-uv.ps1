@@ -39,6 +39,9 @@ function Refresh-Path {
     $env:Path = "$machinePath;$userPath"
 }
 
+# Refresh PATH to pick up tools installed by prior steps or previous runs
+Refresh-Path
+
 # --- Install/update ---
 # Get-Command exempt: command-existence check with if/else fallback
 $uvCmd = Get-Command uv -ErrorAction SilentlyContinue
@@ -65,7 +68,9 @@ if ($uvCmd) {
     Log "Installing uv via winget..."
     $wingetOutput = winget install --id=astral-sh.uv -e --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
-    if ($LASTEXITCODE -ne 0) {
+    if ($wingetOutput -match 'already installed' -and $wingetOutput -match 'No available upgrade|No newer package versions') {
+        LogOk "uv already up to date (winget)"
+    } elseif ($LASTEXITCODE -ne 0) {
         LogError "winget install uv failed (exit code $LASTEXITCODE)"
         Write-Summary "ERROR" "uv" "winget install failed (exit $LASTEXITCODE)"
     }
