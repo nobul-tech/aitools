@@ -12,6 +12,18 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.34.1 -- Move Cloud MCP status into deploy sequence (2026-03-03)
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 1 | **Cloud MCP status display** (`scripts/aitools`, `scripts/aitools.ps1`): Moved from end-of-run (after summary panel) into `deploy_configs()`/`Deploy-Configs()`, displayed immediately after `setup-user-mcp` runs. Uses structured logging with `[timestamp] [setup-user-mcp]` prefix to match surrounding deploy output. Standalone `aitools mcp` display unchanged. |
+
+**Verified**: Windows
+
+---
+
 ## v0.34.0 -- Onboard Python, pip, and uv as managed tools (2026-03-03)
 
 ### Added

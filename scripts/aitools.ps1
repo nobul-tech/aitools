@@ -314,6 +314,10 @@ function Deploy-Configs {
         } else {
             LogWarn "$script not found -- skipping"
         }
+        # Show cloud MCP status after setup-user-mcp
+        if ($script -eq "setup-user-mcp.ps1") {
+            Show-CloudMcp -Context "install" -ScriptName "setup-user-mcp"
+        }
     }
     Remove-Item Env:\AITOOLS_DEPLOY -ErrorAction SilentlyContinue
     Remove-Item Env:\AITOOLS_DRY_RUN -ErrorAction SilentlyContinue
@@ -334,10 +338,14 @@ function Get-McpServerUrl {
 }
 
 # Display cloud MCP servers from claude.ai configuration.
-# Usage: Show-CloudMcp -Context "mcp" or "install"
+# Usage: Show-CloudMcp -Context "mcp" or "install" [-ScriptName "setup-user-mcp"]
+# When ScriptName is provided, uses structured logging format for deploy sequence.
 # Silent no-op if claude CLI unavailable or no cloud servers found.
 function Show-CloudMcp {
-    param([string]$Context = "mcp")
+    param(
+        [string]$Context = "mcp",
+        [string]$ScriptName = ""
+    )
     if (-not (Get-Command claude -ErrorAction SilentlyContinue)) { return }
 
     $savedClaudeCode = $env:CLAUDECODE
@@ -370,19 +378,30 @@ function Show-CloudMcp {
 
     if ($entries.Count -eq 0) { return }
 
-    Write-Host ""
-    if ($Context -eq "install") {
-        Write-Host "Cloud MCP servers (configured at claude.ai):"
-    } else {
-        Write-Host "Cloud (claude.ai):"
-    }
-    foreach ($entry in $entries) {
-        if ($entry.Name.Length -lt 24) {
-            $pad = " " * (24 - $entry.Name.Length)
-        } else {
-            $pad = " "
+    if ($ScriptName) {
+        # Structured logging for deploy sequence
+        $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+        Write-Host "[$ts] [$ScriptName] Cloud MCP servers (configured at claude.ai):"
+        foreach ($entry in $entries) {
+            if ($entry.Name.Length -lt 24) {
+                $pad = " " * (24 - $entry.Name.Length)
+            } else {
+                $pad = " "
+            }
+            $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            Write-Host "[$ts] [$ScriptName]   $($entry.Name)$pad$($entry.Status)"
         }
-        Write-Host "  $($entry.Name)$pad$($entry.Status)"
+    } else {
+        Write-Host ""
+        Write-Host "Cloud (claude.ai):"
+        foreach ($entry in $entries) {
+            if ($entry.Name.Length -lt 24) {
+                $pad = " " * (24 - $entry.Name.Length)
+            } else {
+                $pad = " "
+            }
+            Write-Host "  $($entry.Name)$pad$($entry.Status)"
+        }
     }
 }
 
@@ -1314,7 +1333,6 @@ if ($doInstall) {
             Write-Host "hint: To archive sessions across machines, run 'aitools user init'." -ForegroundColor Yellow
         }
         Invoke-ProfileCheck -Mode "interactive"
-        Show-CloudMcp -Context "install"
     } else {
         Write-Host "Completed with errors (see $logFile)."
     }

@@ -325,6 +325,10 @@ deploy_configs() {
                 else
                     log_warn "$script not found -- skipping"
                 fi
+                # Show cloud MCP status after setup-user-mcp
+                case "$script" in
+                    setup-user-mcp.*) show_cloud_mcp install setup-user-mcp ;;
+                esac
             done
             ;;
         *)
@@ -345,6 +349,10 @@ deploy_configs() {
                 else
                     log_warn "$script not found -- skipping"
                 fi
+                # Show cloud MCP status after setup-user-mcp
+                case "$script" in
+                    setup-user-mcp.*) show_cloud_mcp install setup-user-mcp ;;
+                esac
             done
             ;;
     esac
@@ -367,11 +375,13 @@ mcp_server_url() {
 }
 
 # Display cloud MCP servers from claude.ai configuration.
-# Usage: show_cloud_mcp <context>
+# Usage: show_cloud_mcp <context> [script_name]
 #   context: "mcp" (concise header) or "install" (descriptive header)
+#   script_name: if set, uses structured logging with [timestamp] [script_name] prefix
 # Silent no-op if claude CLI unavailable or no cloud servers found.
 show_cloud_mcp() {
     local context="${1:-mcp}"
+    local script_name="${2:-}"
     command -v claude &>/dev/null || return 0
 
     local saved_claudecode="${CLAUDECODE:-}"
@@ -398,13 +408,19 @@ show_cloud_mcp() {
 
     [ -n "$parsed" ] || return 0
 
-    echo ""
-    if [ "$context" = "install" ]; then
-        echo "Cloud MCP servers (configured at claude.ai):"
+    if [ -n "$script_name" ]; then
+        # Structured logging for deploy sequence
+        local ts
+        ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        printf '[%s] [%s] Cloud MCP servers (configured at claude.ai):\n' "$ts" "$script_name"
+        while IFS= read -r line; do
+            printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$script_name" "$line"
+        done <<< "$parsed"
     else
+        echo ""
         echo "Cloud (claude.ai):"
+        printf '%s\n' "$parsed"
     fi
-    printf '%s\n' "$parsed"
 }
 
 # Display the end-of-run summary panel (reads AITOOLS_SUMMARY_FILE).
@@ -1438,7 +1454,6 @@ if $do_install; then
             printf '\033[33mhint: To archive sessions across machines, run '\''aitools user init'\''.\033[0m\n'
         fi
         check_profile interactive
-        show_cloud_mcp install
     else
         echo "Completed with errors (see $(display_path "$LOG_FILE"))."
     fi
