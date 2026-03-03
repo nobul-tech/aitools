@@ -28,8 +28,7 @@ log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
 write_summary() {
-    local cat="$1" msg="$2"
-    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
 }
 
 # --- OS guard ---
@@ -55,19 +54,32 @@ case "$OS_NAME" in
         if command -v gh &>/dev/null; then
             log "gh CLI already installed ($(gh --version | head -1))"
             log "Checking for updates via Homebrew..."
-            brew upgrade gh 2>/dev/null || log_ok "gh CLI already up to date"
+            UPGRADE_OUTPUT=$(brew upgrade gh 2>&1) || true
+            if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+                log_ok "gh CLI already up to date"
+            else
+                printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
+                if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+                    log_error "brew upgrade gh failed (see log above)"
+                    write_summary ERROR "gh cli" "brew upgrade failed"
+                fi
+            fi
             log_ok "gh CLI $(gh --version | head -1)"
-            write_summary OK "gh CLI    $(gh --version | head -1)"
+            write_summary OK "gh cli" "$(gh --version | head -1)"
         else
             log "Installing gh CLI via Homebrew..."
-            brew install gh
+            if ! brew install gh 2>&1 | while IFS= read -r line; do log "$line"; done; then
+                log_error "brew install gh failed"
+                write_summary ERROR "gh cli" "brew install failed"
+            fi
 
             if command -v gh &>/dev/null; then
                 log_ok "gh CLI installed ($(gh --version | head -1))"
                 log_ok "Install path: $(command -v gh)"
-                write_summary OK "gh CLI    $(gh --version | head -1)"
+                write_summary OK "gh cli" "$(gh --version | head -1)"
             else
                 log_error "brew install completed but 'gh' not found in PATH"
+                write_summary ERROR "gh cli" "installed but not on PATH"
             fi
         fi
         ;;
@@ -79,31 +91,40 @@ case "$OS_NAME" in
                 log "gh CLI already installed ($(gh --version | head -1))"
                 log "Updating via apt..."
                 # apt handles idempotency; keyring was added on first install
-                sudo apt-get update -qq && sudo apt-get install -y gh
+                if ! { sudo apt-get update -qq && sudo apt-get install -y gh; } 2>&1 | while IFS= read -r line; do log "$line"; done; then
+                    log_error "apt-get install gh failed"
+                    write_summary ERROR "gh cli" "apt-get install failed"
+                fi
                 if command -v gh &>/dev/null; then
                     log_ok "gh CLI updated/confirmed ($(gh --version | head -1))"
-                    write_summary OK "gh CLI    $(gh --version | head -1)"
+                    write_summary OK "gh cli" "$(gh --version | head -1)"
                 else
                     log_error "apt-get completed but 'gh' not found in PATH"
+                    write_summary ERROR "gh cli" "installed but not on PATH"
                 fi
             else
                 log "Installing gh CLI via apt + GitHub keyring..."
-                (type -p wget >/dev/null || sudo apt-get install -y wget) \
+                if ! { (type -p wget >/dev/null || sudo apt-get install -y wget) \
                     && sudo mkdir -p -m 755 /etc/apt/keyrings \
                     && wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
                     && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
                     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-                    && sudo apt-get update -qq && sudo apt-get install -y gh
+                    && sudo apt-get update -qq && sudo apt-get install -y gh; } 2>&1 | while IFS= read -r line; do log "$line"; done; then
+                    log_error "apt keyring + install failed for gh CLI"
+                    write_summary ERROR "gh cli" "apt install failed"
+                fi
 
                 if command -v gh &>/dev/null; then
                     log_ok "gh CLI installed ($(gh --version | head -1))"
-                    write_summary OK "gh CLI    $(gh --version | head -1)"
+                    write_summary OK "gh cli" "$(gh --version | head -1)"
                 else
                     log_error "Failed to install gh CLI via apt"
+                    write_summary ERROR "gh cli" "install failed"
                 fi
             fi
         else
-            log_warn "No supported package manager found (apt). Install gh manually: https://cli.github.com"
+            log_error "No supported package manager found (apt). Install gh manually: https://cli.github.com"
+            write_summary ERROR "gh cli" "no supported package manager"
         fi
         ;;
 esac

@@ -129,8 +129,7 @@ log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "$1" "warn"; }
 
 write_summary() {
-    local cat="$1" msg="$2"
-    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
 }
 
 show_summary() {
@@ -514,21 +513,26 @@ log "Step 8: Node.js"
 
 if command -v node &>/dev/null; then
     log_ok "Node.js already installed ($(node --version))"
-    write_summary OK "node    $(node --version)"
+    write_summary OK "node.js" "$(node --version)"
 else
     case "$OS_NAME" in
         Darwin)
             if command -v brew &>/dev/null; then
                 log "Installing Node.js via Homebrew..."
-                brew install node@22
+                if ! brew install node@22 2>&1 | while IFS= read -r line; do log "$line"; done; then
+                    log_error "brew install node@22 failed"
+                    write_summary ERROR "node.js" "brew install failed"
+                fi
                 if command -v node &>/dev/null; then
                     log_ok "Node.js installed ($(node --version))"
-                    write_summary OK "node    $(node --version)"
+                    write_summary OK "node.js" "$(node --version)"
                 else
                     log_error "brew install completed but 'node' not found in PATH"
+                    write_summary ERROR "node.js" "installed but not on PATH"
                 fi
             else
                 log_error "Homebrew not found. Install Node.js manually: https://nodejs.org"
+                write_summary ERROR "node.js" "Homebrew not found"
             fi
             ;;
         MINGW*|MSYS*)
@@ -536,6 +540,7 @@ else
             ;;
         *)
             log_warn "Install Node.js manually: https://nodejs.org"
+            write_summary WARN "node.js" "install manually (https://nodejs.org)"
             ;;
     esac
 fi
@@ -548,9 +553,17 @@ log "Step 9: Claude Code CLI"
 
 if command -v claude &>/dev/null; then
     log_ok "Claude Code already installed ($(claude --version 2>/dev/null | head -1))"
-    write_summary OK "claude    $(claude --version 2>/dev/null | head -1)"
+    write_summary OK "claude code" "$(claude --version 2>/dev/null | head -1)"
     log "Running claude update..."
-    claude update 2>/dev/null || log_ok "Already up to date"
+    UPDATE_OUTPUT=$(claude update 2>&1) || true
+    if printf '%s\n' "$UPDATE_OUTPUT" | grep -qi 'already.*up.to.date\|no update'; then
+        log_ok "Already up to date"
+    else
+        printf '%s\n' "$UPDATE_OUTPUT" | while IFS= read -r line; do log "$line"; done
+        if printf '%s\n' "$UPDATE_OUTPUT" | grep -qi 'error\|fatal'; then
+            log_warn "claude update returned unexpected output (see log above)"
+        fi
+    fi
 else
     log "Installing Claude Code CLI..."
     case "$OS_NAME" in
@@ -561,9 +574,10 @@ else
                 winget install Anthropic.ClaudeCode --accept-package-agreements --accept-source-agreements 2>/dev/null
                 if command -v claude &>/dev/null; then
                     log_ok "Claude Code installed ($(claude --version 2>/dev/null | head -1))"
-                    write_summary OK "claude    $(claude --version 2>/dev/null | head -1)"
+                    write_summary OK "claude code" "$(claude --version 2>/dev/null | head -1)"
                 else
                     log_warn "Claude Code installed — restart terminal to use"
+                    write_summary WARN "claude code" "installed -- restart terminal to use"
                 fi
             else
                 log "winget not available — install manually:"
@@ -571,12 +585,16 @@ else
             fi
             ;;
         *)
-            curl -fsSL https://claude.ai/install.sh | bash
+            if ! curl -fsSL https://claude.ai/install.sh | bash 2>&1 | while IFS= read -r line; do log "$line"; done; then
+                log_error "Claude Code install script failed"
+                write_summary ERROR "claude code" "install failed"
+            fi
             if command -v claude &>/dev/null; then
                 log_ok "Claude Code installed ($(claude --version 2>/dev/null | head -1))"
-                write_summary OK "claude    $(claude --version 2>/dev/null | head -1)"
+                write_summary OK "claude code" "$(claude --version 2>/dev/null | head -1)"
             else
                 log_error "Claude Code install failed"
+                write_summary ERROR "claude code" "install failed"
             fi
             ;;
     esac

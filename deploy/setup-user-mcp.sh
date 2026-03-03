@@ -29,8 +29,7 @@ log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
 write_summary() {
-    local cat="$1" msg="$2"
-    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
 }
 
 backup_file() {
@@ -282,7 +281,7 @@ esac
 
 if [ "$DRY_RUN" != "true" ]; then
     log_ok "User-level MCP configured (all servers; vercel/webflow disabled by default)"
-    write_summary OK "MCP servers    configured"
+    write_summary OK "claude mcp" "configured"
 else
     log "[DRY RUN] Would configure user-level MCP (all servers; vercel/webflow disabled by default)"
 fi
@@ -500,6 +499,7 @@ If standard a11y queries fail or the `evaluate_script` snippets return unexpecte
 - **Visual Inspection**: If automated scripts cannot determine contrast (e.g., text over gradient images or complex backgrounds), use `take_screenshot` to capture the element. While models cannot measure exact contrast ratios from images, they can visually assess legibility and identifying obvious issues.
 __SKILL_A11Y_DEBUGGING__
 log_ok "Deployed skill: a11y-debugging -> $SKILLS_DEST/a11y-debugging"
+write_summary OK "claude skills" "deployed"
 
 log "Deploying skills to $SKILLS_DEST_CURSOR..."
 mkdir -p "$SKILLS_DEST_CURSOR/chrome-devtools"
@@ -705,6 +705,7 @@ If standard a11y queries fail or the `evaluate_script` snippets return unexpecte
 - **Visual Inspection**: If automated scripts cannot determine contrast (e.g., text over gradient images or complex backgrounds), use `take_screenshot` to capture the element. While models cannot measure exact contrast ratios from images, they can visually assess legibility and identifying obvious issues.
 __SKILL_A11Y_DEBUGGING_CURSOR__
 log_ok "Deployed skill: a11y-debugging -> $SKILLS_DEST_CURSOR/a11y-debugging"
+write_summary OK "cursor skills" "deployed"
 
 if [ "$ERRORS" -gt 0 ]; then
     log "FAILED with $ERRORS error(s). See log: $LOG_FILE"

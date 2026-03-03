@@ -27,8 +27,7 @@ log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
 write_summary() {
-    local cat="$1" msg="$2"
-    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
 }
 
 # --- OS guard ---
@@ -52,13 +51,21 @@ fi
 # --- Install/update ---
 if command -v rustup &>/dev/null; then
     log "rustup found — updating toolchain..."
-    rustup update 2>&1 | tail -3
+    RUSTUP_OUTPUT=$(rustup update 2>&1) || true
+    printf '%s\n' "$RUSTUP_OUTPUT" | tail -3 | while IFS= read -r line; do log "$line"; done
+    if printf '%s\n' "$RUSTUP_OUTPUT" | grep -qi 'error\|fatal'; then
+        log_error "rustup update reported errors (see log above)"
+        write_summary ERROR "rust/cargo" "rustup update failed"
+    fi
     log_ok "cargo $(cargo --version 2>/dev/null)"
     log_ok "rustc $(rustc --version 2>/dev/null)"
-    write_summary OK "rust/cargo    $(cargo --version 2>/dev/null)"
+    write_summary OK "rust/cargo" "$(cargo --version 2>/dev/null)"
 else
     log "Installing Rust toolchain via rustup..."
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y 2>&1
+    if ! curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y 2>&1 | while IFS= read -r line; do log "$line"; done; then
+        log_error "rustup installer failed"
+        write_summary ERROR "rust/cargo" "rustup install failed"
+    fi
 
     # Re-source env in case PATH was just configured
     [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
@@ -68,10 +75,11 @@ else
         log_ok "cargo $(cargo --version 2>/dev/null)"
         log_ok "rustc $(rustc --version 2>/dev/null)"
         log_ok "rustup $(rustup --version 2>/dev/null | head -1)"
-        write_summary OK "rust/cargo    $(cargo --version 2>/dev/null)"
+        write_summary OK "rust/cargo" "$(cargo --version 2>/dev/null)"
     else
         log_error "rustup install completed but 'cargo' not found in PATH"
         log_error "Expected location: ~/.cargo/bin"
+        write_summary ERROR "rust/cargo" "installed but cargo not on PATH"
     fi
 fi
 

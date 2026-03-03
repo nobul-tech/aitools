@@ -42,8 +42,7 @@ log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
 write_summary() {
-    local cat="$1" msg="$2"
-    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
 }
 
 # --- OS guard ---
@@ -227,7 +226,7 @@ if (dryRun) {
 case "$MERGE_RESULT" in
     ok)
         log_ok "Settings deployed to $(display_path "$SETTINGS_FILE")"
-        write_summary OK "hooks    deployed"
+        write_summary OK "claude hooks" "deployed"
         log "  SessionEnd hook: $HOOK_CMD"
         log "  PreToolUse hook: $GUARD_CMD"
         log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"

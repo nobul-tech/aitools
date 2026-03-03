@@ -22,8 +22,8 @@ $errors = 0
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
-function Write-Summary($cat, $msg) {
-    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+function Write-Summary($cat, $tool, $detail) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}" }
 }
 
 # --- OS guard ---
@@ -51,14 +51,14 @@ if (Get-Command pandoc -ErrorAction SilentlyContinue) {
     $upgradeResult = winget upgrade --exact --id JohnMacFarlane.Pandoc --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     if ($upgradeResult -match "No available upgrade found|No newer package versions") {
         LogOk "Pandoc already up to date"
-        Write-Summary "OK" "pandoc    $pandocVersion"
+        Write-Summary "OK" "pandoc" "$pandocVersion"
     } elseif ($LASTEXITCODE -eq 0) {
         Refresh-Path
         $pandocVersion = (pandoc --version | Select-Object -First 1)
         LogOk "Pandoc updated ($pandocVersion)"
-        Write-Summary "OK" "pandoc    $pandocVersion"
+        Write-Summary "OK" "pandoc" "$pandocVersion"
     } else {
-        LogWarn "winget upgrade returned non-zero -- pandoc may be installed via another method"
+        LogWarn "winget upgrade returned non-zero (exit $LASTEXITCODE) -- pandoc may be installed via another method"
         # Detect non-preferred installs
         if (Get-Command choco -ErrorAction SilentlyContinue) {
             $chocoList = choco list pandoc 2>$null | Out-String
@@ -66,11 +66,16 @@ if (Get-Command pandoc -ErrorAction SilentlyContinue) {
                 LogWarn "Pandoc appears to be installed via Chocolatey. Prefer winget for managed installs."
             }
         }
-        Write-Summary "OK" "pandoc    $pandocVersion"
+        Write-Summary "WARN" "pandoc" "$pandocVersion (upgrade check failed)"
     }
 } else {
     Log "Installing Pandoc via winget..."
-    winget install --source winget --exact --id JohnMacFarlane.Pandoc --accept-package-agreements --accept-source-agreements
+    $wingetOutput = winget install --source winget --exact --id JohnMacFarlane.Pandoc --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+    $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    if ($LASTEXITCODE -ne 0) {
+        LogError "winget install failed (exit code $LASTEXITCODE)"
+        Write-Summary "ERROR" "pandoc" "winget install failed (exit $LASTEXITCODE)"
+    }
     Refresh-Path
 
     if (Get-Command pandoc -ErrorAction SilentlyContinue) {
@@ -78,17 +83,20 @@ if (Get-Command pandoc -ErrorAction SilentlyContinue) {
         $pandocPath = (Get-Command pandoc).Source
         LogOk "Pandoc installed ($pandocVersion)"
         Log "Install path: $pandocPath"
-        Write-Summary "OK" "pandoc    $pandocVersion"
+        Write-Summary "OK" "pandoc" "$pandocVersion"
 
         # Verify the install directory is in persistent PATH
         $pandocDir = Split-Path $pandocPath -Parent
         $persistentPath = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
         if ($persistentPath -notlike "*$pandocDir*") {
-            LogWarn "Pandoc install dir not in persistent PATH: $pandocDir"
-            LogWarn "Claude Code may not find 'pandoc'. Add this directory to your User PATH."
+            LogError "Pandoc install dir not in persistent PATH: $pandocDir"
+            Write-Summary "ERROR" "pandoc" "installed but not on PATH"
+            LogWarn "Add $pandocDir to PATH -- tool not accessible to Claude Code"
+            Write-Summary "ACTION" "" "Add $pandocDir to PATH -- pandoc not accessible"
         }
     } else {
         LogError "Pandoc install failed"
+        Write-Summary "ERROR" "pandoc" "install failed"
     }
 }
 

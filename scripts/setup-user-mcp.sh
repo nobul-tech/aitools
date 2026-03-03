@@ -36,8 +36,7 @@ log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
 write_summary() {
-    local cat="$1" msg="$2"
-    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
 }
 
 backup_file() {
@@ -289,7 +288,7 @@ esac
 
 if [ "$DRY_RUN" != "true" ]; then
     log_ok "User-level MCP configured (all servers; vercel/webflow disabled by default)"
-    write_summary OK "MCP servers    configured"
+    write_summary OK "claude mcp" "configured"
 else
     log "[DRY RUN] Would configure user-level MCP (all servers; vercel/webflow disabled by default)"
 fi
@@ -331,10 +330,12 @@ deploy_skill() {
 log "Deploying Chrome DevTools skills to $(display_path "$SKILLS_DEST")..."
 deploy_skill "chrome-devtools" "$SKILLS_DEST"
 deploy_skill "a11y-debugging" "$SKILLS_DEST"
+write_summary OK "claude skills" "deployed"
 
 log "Deploying Chrome DevTools skills to $(display_path "$SKILLS_DEST_CURSOR")..."
 deploy_skill "chrome-devtools" "$SKILLS_DEST_CURSOR"
 deploy_skill "a11y-debugging" "$SKILLS_DEST_CURSOR"
+write_summary OK "cursor skills" "deployed"
 
 # --- BEGIN exit (extracted by build-deploy) ---
 if [ "$ERRORS" -gt 0 ]; then

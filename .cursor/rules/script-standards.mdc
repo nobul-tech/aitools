@@ -27,6 +27,14 @@ Bash: `log`/`log_ok`/`log_error`/`log_warn`. PS1: `Log`/`LogOk`/`LogError`/`LogW
 
 Check error counter, exit 1 on failure, exit 0 on success. See `reference/script-standards-detail.md` for exact patterns.
 
+### End-of-run summary
+
+Every setup script calls `write_summary` (3-arg: category, tool_name, detail) to report to the end-of-run panel. Categories: OK (tool works), WARN (advisory), ERROR (failure), ACTION (user must act). Every code path -- success and failure -- must produce a `write_summary` call. See `reference/script-standards-detail.md` for severity guide, tool names, and code patterns.
+
+### External command error handling
+
+External install/upgrade commands must have output captured and exit codes checked. Never fire-and-forget. Distinguish "already up to date" from real failures. PATH issues are errors, not warnings. See `reference/script-standards-detail.md` for patterns.
+
 ### Error handling (all scripts)
 
 Every error-suppression pattern requires an immediate result check:

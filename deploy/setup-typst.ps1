@@ -22,8 +22,8 @@ $errors = 0
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
-function Write-Summary($cat, $msg) {
-    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+function Write-Summary($cat, $tool, $detail) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}" }
 }
 
 # --- OS guard ---
@@ -62,21 +62,30 @@ $typstCmd = Get-Command typst -ErrorAction SilentlyContinue
 # Get-Command exempt: command-existence check with if/else fallback
 if ($typstCmd) {
     Log "Typst found -- upgrading via winget..."
-    winget upgrade --id Typst.Typst --accept-package-agreements --accept-source-agreements 2>&1 |
-        ForEach-Object { Log $_ }
+    $wingetOutput = winget upgrade --id Typst.Typst --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+    $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    if ($LASTEXITCODE -ne 0) {
+        LogError "winget upgrade typst failed (exit code $LASTEXITCODE)"
+        Write-Summary "ERROR" "typst" "winget upgrade failed (exit $LASTEXITCODE)"
+    }
     Refresh-Path
     # Suppress stderr: typst may emit warnings on some configs; result checked immediately
     $version = (typst --version 2>$null)
     if ($version) {
         LogOk $version
-        Write-Summary "OK" "typst    $version"
+        Write-Summary "OK" "typst" "$version"
     } else {
-        LogWarn "typst --version failed after upgrade"
+        LogError "typst --version failed after upgrade"
+        Write-Summary "ERROR" "typst" "version check failed after upgrade"
     }
 } else {
     Log "Installing Typst via winget..."
-    winget install --id Typst.Typst --accept-package-agreements --accept-source-agreements 2>&1 |
-        ForEach-Object { Log $_ }
+    $wingetOutput = winget install --id Typst.Typst --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+    $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    if ($LASTEXITCODE -ne 0) {
+        LogError "winget install typst failed (exit code $LASTEXITCODE)"
+        Write-Summary "ERROR" "typst" "winget install failed (exit $LASTEXITCODE)"
+    }
     Refresh-Path
     $typstCmd = Get-Command typst -ErrorAction SilentlyContinue
     # Get-Command exempt: command-existence check with if/else fallback
@@ -84,9 +93,10 @@ if ($typstCmd) {
         # Suppress stderr: typst may emit warnings on some configs; result used in log
         $version = (typst --version 2>$null)
         LogOk "Typst installed ($version)"
-        Write-Summary "OK" "typst    $version"
+        Write-Summary "OK" "typst" "$version"
     } else {
         LogError "winget install completed but 'typst' not found in PATH"
+        Write-Summary "ERROR" "typst" "install failed (not on PATH)"
     }
 }
 

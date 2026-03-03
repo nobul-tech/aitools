@@ -22,8 +22,8 @@ $errors = 0
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
-function Write-Summary($cat, $msg) {
-    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+function Write-Summary($cat, $tool, $detail) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}" }
 }
 
 # --- OS guard ---
@@ -45,16 +45,26 @@ $cargoPath = Join-Path $env:USERPROFILE ".cargo\bin\cargo.exe"
 if (Test-Path $cargoPath) {
     Log "rustup found -- updating toolchain..."
     $rustupExe = Join-Path $env:USERPROFILE ".cargo\bin\rustup.exe"
-    & $rustupExe update 2>&1 | Select-Object -Last 3 | ForEach-Object { Log $_ }
+    $rustupOutput = & $rustupExe update 2>&1 | Out-String
+    $rustupOutput.Trim().Split("`n") | Select-Object -Last 3 | ForEach-Object { Log $_.TrimEnd() }
+    if ($LASTEXITCODE -ne 0) {
+        LogError "rustup update failed (exit code $LASTEXITCODE)"
+        Write-Summary "ERROR" "rust/cargo" "rustup update failed (exit $LASTEXITCODE)"
+    }
     $cargoVersion = (& $cargoPath --version 2>$null)
     $rustcPath = Join-Path $env:USERPROFILE ".cargo\bin\rustc.exe"
     $rustcVersion = (& $rustcPath --version 2>$null)
     LogOk "cargo $cargoVersion"
     LogOk "rustc $rustcVersion"
-    Write-Summary "OK" "rust/cargo    $cargoVersion"
+    Write-Summary "OK" "rust/cargo" "$cargoVersion"
 } else {
     Log "Installing Rust toolchain via winget..."
-    winget install -e --id Rustlang.Rustup --accept-package-agreements --accept-source-agreements 2>&1 | ForEach-Object { Log $_ }
+    $wingetOutput = winget install -e --id Rustlang.Rustup --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+    $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    if ($LASTEXITCODE -ne 0) {
+        LogError "winget install rustup failed (exit code $LASTEXITCODE)"
+        Write-Summary "ERROR" "rust/cargo" "winget install failed (exit $LASTEXITCODE)"
+    }
     Refresh-Path
 
     if (Test-Path $cargoPath) {
@@ -64,9 +74,10 @@ if (Test-Path $cargoPath) {
         LogOk "Rust toolchain installed"
         LogOk "cargo $cargoVersion"
         LogOk "rustc $rustcVersion"
-        Write-Summary "OK" "rust/cargo    $cargoVersion"
+        Write-Summary "OK" "rust/cargo" "$cargoVersion"
     } else {
         LogError "winget install completed but cargo not found at $cargoPath"
+        Write-Summary "ERROR" "rust/cargo" "install failed (cargo not found)"
     }
 }
 
@@ -86,15 +97,17 @@ if ($hasMSVC) {
     LogWarn "MSVC Build Tools not detected -- cargo build will fail without a C linker"
     LogWarn "Install: winget install Microsoft.VisualStudio.2022.BuildTools"
     LogWarn "  Then add workload: Desktop Development with C++"
-    Write-Summary "WARN" "MSVC Build Tools not detected -- cargo build will fail without a C linker"
+    Write-Summary "WARN" "rust/cargo" "MSVC Build Tools not detected -- cargo build will fail without a C linker"
 }
 
 # --- Verify PATH persistence ---
 $cargoBinDir = Join-Path $env:USERPROFILE ".cargo\bin"
 $persistentPath = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
 if ($persistentPath -notlike "*$cargoBinDir*") {
-    LogWarn "~/.cargo/bin not in persistent PATH: $cargoBinDir"
-    LogWarn "Claude Code may not find 'cargo'. Add this directory to your User PATH."
+    LogError "~/.cargo/bin not in persistent PATH: $cargoBinDir"
+    Write-Summary "ERROR" "rust/cargo" "installed but not on PATH"
+    LogWarn "Add $cargoBinDir to PATH -- tool not accessible to Claude Code"
+    Write-Summary "ACTION" "" "Add $cargoBinDir to PATH -- cargo not accessible"
 }
 
 # --- Exit ---

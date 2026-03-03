@@ -25,8 +25,8 @@ $errors = 0
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
-function Write-Summary($cat, $msg) {
-    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+function Write-Summary($cat, $tool, $detail) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}" }
 }
 
 # --- OS guard ---
@@ -73,42 +73,64 @@ if (Get-Command modal -ErrorAction SilentlyContinue) {
     if (-not $modalVersion) { $modalVersion = "version unknown" }
     LogOk "Modal CLI already installed ($modalVersion)"
     Log "Upgrading via $pipCmd..."
-    & $pipCmd install --upgrade modal
+    $pipOutput = & $pipCmd install --upgrade modal 2>&1 | Out-String
+    $pipOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    if ($LASTEXITCODE -ne 0) {
+        LogError "pip upgrade failed (exit code $LASTEXITCODE)"
+        Write-Summary "ERROR" "modal cli" "pip upgrade failed (exit $LASTEXITCODE)"
+    }
+    if ($pipOutput -match '(?m)^ERROR:') {
+        LogError "pip reported errors during upgrade (see log above)"
+        Write-Summary "ERROR" "modal cli" "pip dependency conflict (see log)"
+    }
     if (Get-Command modal -ErrorAction SilentlyContinue) {
         $modalVersion = & modal --version 2>$null
         if (-not $modalVersion) { $modalVersion = "version unknown" }
         LogOk "Modal CLI upgraded ($modalVersion)"
-        Write-Summary "OK" "modal CLI    $modalVersion"
+        Write-Summary "OK" "modal cli" "$modalVersion"
     } else {
         LogError "$pipCmd upgrade completed but 'modal' not found in PATH"
+        Write-Summary "ERROR" "modal cli" "upgrade succeeded but not on PATH"
     }
 } else {
     Log "Installing Modal CLI via $pipCmd..."
-    & $pipCmd install modal
+    $pipOutput = & $pipCmd install modal 2>&1 | Out-String
+    $pipOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    if ($LASTEXITCODE -ne 0) {
+        LogError "pip install failed (exit code $LASTEXITCODE)"
+        Write-Summary "ERROR" "modal cli" "pip install failed (exit $LASTEXITCODE)"
+    }
+    if ($pipOutput -match '(?m)^ERROR:') {
+        LogError "pip reported errors during install (see log above)"
+        Write-Summary "ERROR" "modal cli" "pip dependency conflict (see log)"
+    }
     if (Get-Command modal -ErrorAction SilentlyContinue) {
         $modalVersion = & modal --version 2>$null
         if (-not $modalVersion) { $modalVersion = "version unknown" }
         $modalPath = (Get-Command modal).Source
         LogOk "Modal CLI installed ($modalVersion)"
         Log "Install path: $modalPath"
-        Write-Summary "OK" "modal CLI    $modalVersion"
+        Write-Summary "OK" "modal cli" "$modalVersion"
 
         # Verify the install directory is in persistent PATH
         $modalDir = Split-Path $modalPath -Parent
         $persistentPath = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
         if ($persistentPath -notlike "*$modalDir*") {
-            LogWarn "Modal install dir not in persistent PATH: $modalDir"
-            LogWarn "Claude Code may not find 'modal'. Add this directory to your User PATH."
+            LogError "Modal install dir not in persistent PATH: $modalDir"
+            Write-Summary "ERROR" "modal cli" "installed but not on PATH"
+            LogWarn "Add $modalDir to PATH -- tool not accessible to Claude Code"
+            Write-Summary "ACTION" "" "Add $modalDir to PATH -- modal not accessible"
         }
     } else {
-        LogWarn "Modal installed but 'modal' not found in PATH"
+        LogError "Modal installed but 'modal' not found in PATH"
+        Write-Summary "ERROR" "modal cli" "installed but not on PATH"
         LogWarn "You may need to add Python's Scripts directory to PATH."
         if ($pythonCmd) { LogWarn "Try: $pythonCmd -m modal --version" }
     }
 }
 
 LogWarn "Authentication required: run 'modal setup' to authenticate (browser flow)"
-Write-Summary "ACTION" "modal setup -- authenticate modal (browser flow)"
+Write-Summary "ACTION" "" "modal setup -- authenticate modal (browser flow)"
 
 # --- Exit ---
 if ($errors -gt 0) {

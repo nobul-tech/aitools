@@ -30,8 +30,8 @@ $errors = 0
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
-function Write-Summary($cat, $msg) {
-    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+function Write-Summary($cat, $tool, $detail) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}" }
 }
 
 # Backup a file before overwriting. Keeps at most $MaxBackups copies.
@@ -300,7 +300,7 @@ if ($DryRun) {
     Log "[DRY RUN] Would configure user-level MCP (all servers; vercel/webflow disabled by default)"
 } else {
     LogOk "User-level MCP configured (all servers; vercel/webflow disabled by default)"
-    Write-Summary "OK" "MCP servers    configured"
+    Write-Summary "OK" "claude mcp" "configured"
 }
 Log "To enable per project: aitools --addmcp vercel"
 Log "To check status: aitools mcp"
@@ -342,10 +342,12 @@ function Deploy-Skill {
 Log "Deploying Chrome DevTools skills to $skillsDest..."
 Deploy-Skill "chrome-devtools" $skillsDest
 Deploy-Skill "a11y-debugging" $skillsDest
+Write-Summary "OK" "claude skills" "deployed"
 
 Log "Deploying Chrome DevTools skills to $skillsDestCursor..."
 Deploy-Skill "chrome-devtools" $skillsDestCursor
 Deploy-Skill "a11y-debugging" $skillsDestCursor
+Write-Summary "OK" "cursor skills" "deployed"
 
 # --- BEGIN exit (extracted by build-deploy) ---
 if ($errors -gt 0) {

@@ -35,8 +35,8 @@ function Log($msg) {
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
-function Write-Summary($cat, $msg) {
-    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+function Write-Summary($cat, $tool, $detail) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}" }
 }
 
 # Backup a file before overwriting. Keeps at most $MaxBackups copies.
@@ -280,7 +280,7 @@ if ($DryRun) {
     } elseif ($beforeJson -eq $afterJson -and -not $corrupt) {
         LogOk "Already up to date: $cliConfig"
         $status.cliConfig = "already up to date"
-        Write-Summary "OK" "cursor config    merged"
+        Write-Summary "OK" "cursor rules" "merged"
     } else {
         if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
         if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
@@ -308,11 +308,11 @@ if ($DryRun) {
         if ($beforeKeys.Count -eq 0) {
             LogOk "Created: $cliConfig"
             $status.cliConfig = "created"
-            Write-Summary "OK" "cursor config    merged"
+            Write-Summary "OK" "cursor rules" "merged"
         } else {
             LogOk "Merged preferences into: $cliConfig"
             $status.cliConfig = "merged"
-            Write-Summary "OK" "cursor config    merged"
+            Write-Summary "OK" "cursor rules" "merged"
         }
     }
 }

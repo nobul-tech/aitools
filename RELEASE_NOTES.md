@@ -12,6 +12,24 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.32.0 -- 3-field summary format + external command standards (2026-03-03)
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 1 | **3-field summary format**: All `write_summary` calls converted from 2-arg (`CAT\|msg`) to 3-arg (`CAT\|tool_name\|detail`). Renderer updated with left-aligned columns. Canonical tool name table in `reference/script-standards-detail.md`. |
+| 2 | **Tool name standardization**: Inconsistent names (`vercel CLI`, `modal CLI`, `cursor config`, `hooks`, `MCP servers`) normalized to lowercase canonical names (`vercel cli`, `modal cli`, `cursor rules`, `claude hooks`, `claude mcp`). |
+| 3 | **Missing summary entries added**: `claude rules` (setup-user-claude), `claude skills` + `cursor skills` (setup-user-mcp), `cursor mcp` (setup-cursor-mcp) now appear in the end-of-run panel. |
+| 4 | **External command error handling standards**: New section in script-standards rule and detail reference. Four standards: capture output, check exit codes, distinguish "up to date" from failure, PATH = error not warning. |
+| 5 | **`reference/script-standards-detail.md` rewrite**: Full reference with severity categories, decision guide, summary coverage rule, ACTION item format, anti-pattern examples, and external command patterns. |
+| 6 | **Build-deploy skills write_summary**: `build-deploy.sh` updated to emit `write_summary` calls in embedded skills sections, so deploy/ scripts include skills in the summary panel. |
+
+**Verified**: Windows
+**Closes**: [#8](https://github.com/nobul-jose/aitools/issues/8) (remaining steps), [#9](https://github.com/nobul-jose/aitools/issues/9) (build-deploy standardization landed in prior batch; summary format was last dependency)
+
+---
+
 ## v0.31.0 -- End-of-run summary panel + Modal CLI setup scripts (2026-03-02)
 
 ### New

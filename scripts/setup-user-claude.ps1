@@ -18,6 +18,8 @@ param(
     [switch]$Force
 )
 
+# --- BEGIN preamble (extracted by build-deploy) ---
+
 # Env passthrough from parent (aitools CLI)
 if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
 
@@ -37,8 +39,8 @@ function Log($msg) {
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
-function Write-Summary($cat, $msg) {
-    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+function Write-Summary($cat, $tool, $detail) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}" }
 }
 
 # Backup a file before overwriting. Keeps at most $MaxBackups copies.
@@ -106,7 +108,16 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     exit 1
 }
 
+# --- PS 7 version guard ---
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    Write-Host "ERROR: This script requires PowerShell 7+. Current: $($PSVersionTable.PSVersion)" -ForegroundColor Red
+    Write-Host "Install: winget install --id Microsoft.PowerShell --source winget" -ForegroundColor Yellow
+    exit 1
+}
+
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
+
+# --- END preamble (extracted by build-deploy) ---
 
 $configFile = Join-Path $env:USERPROFILE ".aitools\config.json"
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
@@ -244,7 +255,7 @@ if ($profileName) {
     Log "Profile interpolation: name=$profileName company=$profileCompany"
 } else {
     LogWarn "Profile not available -- {{PLACEHOLDER}} tokens will not be resolved"
-    Write-Summary "WARN" "CLAUDE.md template tokens unresolved"
+    Write-Summary "WARN" "claude.md" "template tokens unresolved"
 }
 
 # --- Write or preview CLAUDE.md ---
@@ -322,7 +333,7 @@ if ($DryRun) {
     # --- END post-write validation (extracted by build-deploy) ---
 
     LogOk "Wrote $claudeMd"
-    Write-Summary "OK" "CLAUDE.md    deployed"
+    Write-Summary "OK" "claude.md" "deployed"
     # Log whether content actually changed
     if (-not $oldContent) {
         Log "Content: new file"
@@ -468,6 +479,7 @@ if ($rulesSrc) {
         }
 
         LogOk "Rules: $added added, $updated updated, $unchanged unchanged, $preserved preserved in $rulesDest"
+        Write-Summary "OK" "claude rules" "$added added, $updated updated, $unchanged unchanged"
     }
 } else {
     Log "No user rules to deploy (no claude/rules/ in user repo)"

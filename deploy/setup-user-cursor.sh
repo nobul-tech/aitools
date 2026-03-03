@@ -38,8 +38,7 @@ log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
 write_summary() {
-    local cat="$1" msg="$2"
-    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
 }
 
 backup_file() {
@@ -244,15 +243,15 @@ if (dryRun) {
         unchanged)
             log_ok "Already up to date: $(display_path "$CLI_CONFIG")"
             STATUS_cliConfig="already up to date"
-            write_summary OK "cursor config    merged" ;;
+            write_summary OK "cursor rules" "merged" ;;
         created)
             log_ok "Created: $(display_path "$CLI_CONFIG")"
             STATUS_cliConfig="created"
-            write_summary OK "cursor config    merged" ;;
+            write_summary OK "cursor rules" "merged" ;;
         merged)
             log_ok "Merged preferences into: $(display_path "$CLI_CONFIG")"
             STATUS_cliConfig="merged"
-            write_summary OK "cursor config    merged" ;;
+            write_summary OK "cursor rules" "merged" ;;
         would-merge)
             log "[DRY RUN] Would write merged config"
             STATUS_cliConfig="would merge (dry-run)" ;;

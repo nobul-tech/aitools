@@ -37,8 +37,8 @@ function Log($msg) {
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
-function Write-Summary($cat, $msg) {
-    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+function Write-Summary($cat, $tool, $detail) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}" }
 }
 
 # --- PS 5.1 compatibility helper ---
@@ -65,7 +65,6 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 }
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
-
 # --- Deploy embedded hook scripts to ~/.claude/hooks/ ---
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
 $hooksDir = Join-Path $claudeDir "hooks"
@@ -550,7 +549,7 @@ if ($DryRun) {
         if ($ptCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse hook, got $ptCount" }
 
         LogOk "Settings deployed to $settingsFile"
-        Write-Summary "OK" "hooks    deployed"
+        Write-Summary "OK" "claude hooks" "deployed"
         Log "  SessionEnd hook: $hookCmd"
         Log "  PreToolUse hook: $guardCmd"
         Log "  autoMemoryEnabled: $autoMemory"

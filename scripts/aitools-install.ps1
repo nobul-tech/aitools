@@ -63,8 +63,8 @@ function LogOk($msg)    { Log $msg "ok" }
 function LogError($msg) { Log $msg "error"; $script:errors++ }
 function LogWarn($msg)  { Log $msg "warn" }
 
-function Write-Summary($cat, $msg) {
-    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+function Write-Summary($cat, $tool, $detail) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}" }
 }
 
 function Show-Summary {
@@ -426,16 +426,22 @@ function Refresh-Path {
 
 if (Get-Command node -ErrorAction SilentlyContinue) {
     LogOk "Node.js already installed ($(node --version))"
-    Write-Summary "OK" "node    $(node --version)"
+    Write-Summary "OK" "node.js" "$(node --version)"
 } else {
     Log "Installing Node.js via winget..."
-    winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+    $wingetOutput = winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+    $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    if ($LASTEXITCODE -ne 0) {
+        LogError "winget install node failed (exit code $LASTEXITCODE)"
+        Write-Summary "ERROR" "node.js" "winget install failed (exit $LASTEXITCODE)"
+    }
     Refresh-Path
     if (Get-Command node -ErrorAction SilentlyContinue) {
         LogOk "Node.js installed ($(node --version))"
-        Write-Summary "OK" "node    $(node --version)"
+        Write-Summary "OK" "node.js" "$(node --version)"
     } else {
         LogError "Node.js install failed (restart terminal and re-run)"
+        Write-Summary "ERROR" "node.js" "install failed (restart terminal)"
     }
 }
 
@@ -447,9 +453,13 @@ Log "Step 9: Claude Code CLI"
 
 if (Get-Command claude -ErrorAction SilentlyContinue) {
     LogOk "Claude Code already installed ($(claude --version 2>$null | Select-Object -First 1))"
-    Write-Summary "OK" "claude    $(claude --version 2>$null | Select-Object -First 1)"
+    Write-Summary "OK" "claude code" "$(claude --version 2>$null | Select-Object -First 1)"
     Log "Running claude update..."
-    claude update 2>$null
+    $claudeOutput = claude update 2>&1 | Out-String
+    $claudeOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    if ($LASTEXITCODE -ne 0) {
+        LogWarn "claude update returned non-zero (exit $LASTEXITCODE)"
+    }
 } else {
     Log "Installing Claude Code CLI..."
     try {
@@ -457,12 +467,14 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
         Refresh-Path
         if (Get-Command claude -ErrorAction SilentlyContinue) {
             LogOk "Claude Code installed ($(claude --version 2>$null | Select-Object -First 1))"
-            Write-Summary "OK" "claude    $(claude --version 2>$null | Select-Object -First 1)"
+            Write-Summary "OK" "claude code" "$(claude --version 2>$null | Select-Object -First 1)"
         } else {
             LogWarn "Claude Code installed -- restart terminal to use"
+            Write-Summary "WARN" "claude code" "installed -- restart terminal to use"
         }
     } catch {
         LogError "Claude Code install failed: $_"
+        Write-Summary "ERROR" "claude code" "install failed"
     }
 }
 

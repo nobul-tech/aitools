@@ -28,8 +28,7 @@ log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
 write_summary() {
-    local cat="$1" msg="$2"
-    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
 }
 
 # --- OS guard ---
@@ -74,31 +73,43 @@ if command -v modal >/dev/null 2>&1; then
     MODAL_VERSION=$(modal --version 2>/dev/null || echo "version unknown")
     log "Modal CLI already installed ($MODAL_VERSION)"
     log "Upgrading via $PIP_CMD..."
-    "$PIP_CMD" install --upgrade modal
+    PIP_OUTPUT=$("$PIP_CMD" install --upgrade modal 2>&1) || true
+    printf '%s\n' "$PIP_OUTPUT" | while IFS= read -r line; do log "$line"; done
+    if printf '%s\n' "$PIP_OUTPUT" | grep -qi '^ERROR:'; then
+        log_error "pip reported errors during upgrade (see log above)"
+        write_summary ERROR "modal cli" "pip dependency conflict (see log)"
+    fi
     if command -v modal >/dev/null 2>&1; then
         MODAL_VERSION=$(modal --version 2>/dev/null || echo "version unknown")
         log_ok "Modal CLI upgraded ($MODAL_VERSION)"
-        write_summary OK "modal CLI    $MODAL_VERSION"
+        write_summary OK "modal cli" "$MODAL_VERSION"
     else
         log_error "$PIP_CMD upgrade completed but 'modal' not found in PATH"
+        write_summary ERROR "modal cli" "upgrade succeeded but not on PATH"
     fi
 else
     log "Installing Modal CLI via $PIP_CMD..."
-    "$PIP_CMD" install modal
+    PIP_OUTPUT=$("$PIP_CMD" install modal 2>&1) || true
+    printf '%s\n' "$PIP_OUTPUT" | while IFS= read -r line; do log "$line"; done
+    if printf '%s\n' "$PIP_OUTPUT" | grep -qi '^ERROR:'; then
+        log_error "pip reported errors during install (see log above)"
+        write_summary ERROR "modal cli" "pip dependency conflict (see log)"
+    fi
     if command -v modal >/dev/null 2>&1; then
         MODAL_VERSION=$(modal --version 2>/dev/null || echo "version unknown")
         log_ok "Modal CLI installed ($MODAL_VERSION)"
         log_ok "Install path: $(command -v modal)"
-        write_summary OK "modal CLI    $MODAL_VERSION"
+        write_summary OK "modal cli" "$MODAL_VERSION"
     else
-        log_warn "Modal installed but 'modal' not found in PATH"
+        log_error "Modal installed but 'modal' not found in PATH"
+        write_summary ERROR "modal cli" "installed but not on PATH"
         log_warn "You may need to add Python's bin directory to PATH."
         log_warn "Try: $PYTHON_CMD -m modal --version"
     fi
 fi
 
 log_warn "Authentication required: run 'modal setup' to authenticate (browser flow)"
-write_summary ACTION "modal setup -- authenticate modal (browser flow)"
+write_summary ACTION "" "modal setup -- authenticate modal (browser flow)"
 
 # --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then

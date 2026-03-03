@@ -27,8 +27,7 @@ log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
 write_summary() {
-    local cat="$1" msg="$2"
-    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
 }
 
 # --- OS guard ---
@@ -59,9 +58,18 @@ case "$OS_NAME" in
             # Check if installed via Homebrew (path contains /opt/homebrew/ or /usr/local/)
             if [[ "$pandoc_path" == /opt/homebrew/* ]] || [[ "$pandoc_path" == /usr/local/* ]]; then
                 log "Already installed via Homebrew — upgrading..."
-                brew upgrade pandoc 2>/dev/null || log_ok "Pandoc already up to date"
+                UPGRADE_OUTPUT=$(brew upgrade pandoc 2>&1) || true
+                if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+                    log_ok "Pandoc already up to date"
+                else
+                    printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
+                    if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+                        log_error "brew upgrade pandoc failed (see log above)"
+                        write_summary ERROR "pandoc" "brew upgrade failed"
+                    fi
+                fi
                 log_ok "Pandoc $(pandoc --version | head -1)"
-                write_summary OK "pandoc    $(pandoc --version | head -1)"
+                write_summary OK "pandoc" "$(pandoc --version | head -1)"
             else
                 # Not Homebrew — migrate
                 log_warn "Pandoc installed via non-preferred method at $pandoc_path"
@@ -84,27 +92,35 @@ case "$OS_NAME" in
                     rm -f "$HOME/.cabal/bin/pandoc" 2>/dev/null || true
                 fi
 
-                brew install pandoc
+                if ! brew install pandoc 2>&1 | while IFS= read -r line; do log "$line"; done; then
+                    log_error "brew install pandoc failed"
+                    write_summary ERROR "pandoc" "brew install failed"
+                fi
 
                 if command -v pandoc &>/dev/null; then
                     log_ok "Migrated to Homebrew: Pandoc $(pandoc --version | head -1)"
                     log_ok "Install path: $(command -v pandoc)"
-                    write_summary OK "pandoc    $(pandoc --version | head -1)"
+                    write_summary OK "pandoc" "$(pandoc --version | head -1)"
                 else
                     log_error "Homebrew install succeeded but 'pandoc' not found in PATH"
+                    write_summary ERROR "pandoc" "installed but not on PATH"
                 fi
             fi
         else
             # Fresh install
             log "Installing Pandoc via Homebrew..."
-            brew install pandoc
+            if ! brew install pandoc 2>&1 | while IFS= read -r line; do log "$line"; done; then
+                log_error "brew install pandoc failed"
+                write_summary ERROR "pandoc" "brew install failed"
+            fi
 
             if command -v pandoc &>/dev/null; then
                 log_ok "Pandoc installed ($(pandoc --version | head -1))"
                 log_ok "Install path: $(command -v pandoc)"
-                write_summary OK "pandoc    $(pandoc --version | head -1)"
+                write_summary OK "pandoc" "$(pandoc --version | head -1)"
             else
                 log_error "brew install completed but 'pandoc' not found in PATH"
+                write_summary ERROR "pandoc" "installed but not on PATH"
             fi
         fi
         ;;
@@ -114,19 +130,24 @@ case "$OS_NAME" in
         if command -v apt-get &>/dev/null; then
             if command -v pandoc &>/dev/null; then
                 log_ok "Pandoc already installed ($(pandoc --version | head -1))"
-                write_summary OK "pandoc    $(pandoc --version | head -1)"
+                write_summary OK "pandoc" "$(pandoc --version | head -1)"
             else
                 log "Installing Pandoc via apt..."
-                sudo apt-get update -qq && sudo apt-get install -y pandoc
+                if ! { sudo apt-get update -qq && sudo apt-get install -y pandoc; } 2>&1 | while IFS= read -r line; do log "$line"; done; then
+                    log_error "apt-get install pandoc failed"
+                    write_summary ERROR "pandoc" "apt-get install failed"
+                fi
                 if command -v pandoc &>/dev/null; then
                     log_ok "Pandoc installed ($(pandoc --version | head -1))"
-                    write_summary OK "pandoc    $(pandoc --version | head -1)"
+                    write_summary OK "pandoc" "$(pandoc --version | head -1)"
                 else
                     log_error "apt install completed but 'pandoc' not found in PATH"
+                    write_summary ERROR "pandoc" "installed but not on PATH"
                 fi
             fi
         else
-            log_warn "No supported package manager found (apt). Install pandoc manually: https://pandoc.org/installing.html"
+            log_error "No supported package manager found (apt). Install pandoc manually: https://pandoc.org/installing.html"
+            write_summary ERROR "pandoc" "no supported package manager"
         fi
         ;;
 esac

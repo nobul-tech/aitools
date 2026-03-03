@@ -26,8 +26,7 @@ log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
 write_summary() {
-    local cat="$1" msg="$2"
-    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
 }
 
 # --- OS guard ---
@@ -62,9 +61,18 @@ case "$OS_NAME" in
             # Check if installed via Homebrew (path contains /opt/homebrew/ or /usr/local/)
             if [[ "$vercel_path" == /opt/homebrew/* ]] || [[ "$vercel_path" == /usr/local/* ]]; then
                 log "Already installed via Homebrew — upgrading..."
-                brew upgrade vercel-cli 2>/dev/null || log_ok "Vercel CLI already up to date"
+                UPGRADE_OUTPUT=$(brew upgrade vercel-cli 2>&1) || true
+                if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+                    log_ok "Vercel CLI already up to date"
+                else
+                    printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
+                    if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+                        log_error "brew upgrade vercel-cli failed (see log above)"
+                        write_summary ERROR "vercel cli" "brew upgrade failed"
+                    fi
+                fi
                 log_ok "Vercel CLI $(vercel --version 2>/dev/null | head -1)"
-                write_summary OK "vercel CLI    $(vercel --version 2>/dev/null | head -1)"
+                write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
             else
                 # Not Homebrew — migrate from npm to Homebrew
                 log_warn "Vercel CLI installed via npm at $vercel_path"
@@ -72,27 +80,35 @@ case "$OS_NAME" in
 
                 # Cleanup: npm uninstall may fail if partially removed; non-blocking
                 npm uninstall -g vercel 2>/dev/null || true
-                brew install vercel-cli
+                if ! brew install vercel-cli 2>&1 | while IFS= read -r line; do log "$line"; done; then
+                    log_error "brew install vercel-cli failed"
+                    write_summary ERROR "vercel cli" "brew install failed"
+                fi
 
                 if command -v vercel &>/dev/null; then
                     log_ok "Migrated to Homebrew: Vercel CLI $(vercel --version 2>/dev/null | head -1)"
                     log_ok "Install path: $(command -v vercel)"
-                    write_summary OK "vercel CLI    $(vercel --version 2>/dev/null | head -1)"
+                    write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
                 else
                     log_error "Homebrew install succeeded but 'vercel' not found in PATH"
+                    write_summary ERROR "vercel cli" "installed but not on PATH"
                 fi
             fi
         else
             # Fresh install
             log "Installing Vercel CLI via Homebrew..."
-            brew install vercel-cli
+            if ! brew install vercel-cli 2>&1 | while IFS= read -r line; do log "$line"; done; then
+                log_error "brew install vercel-cli failed"
+                write_summary ERROR "vercel cli" "brew install failed"
+            fi
 
             if command -v vercel &>/dev/null; then
                 log_ok "Vercel CLI installed ($(vercel --version 2>/dev/null | head -1))"
                 log_ok "Install path: $(command -v vercel)"
-                write_summary OK "vercel CLI    $(vercel --version 2>/dev/null | head -1)"
+                write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
             else
                 log_error "brew install completed but 'vercel' not found in PATH"
+                write_summary ERROR "vercel cli" "installed but not on PATH"
             fi
         fi
         ;;
@@ -101,27 +117,34 @@ case "$OS_NAME" in
         # Linux: npm is the only option
         if ! command -v npm &>/dev/null; then
             log_error "npm not found — install Node.js first"
+            write_summary ERROR "vercel cli" "npm not found (install Node.js)"
             exit 1
         fi
 
         if command -v vercel &>/dev/null; then
             log_ok "Vercel CLI already installed ($(vercel --version 2>/dev/null | head -1))"
-            write_summary OK "vercel CLI    $(vercel --version 2>/dev/null | head -1)"
+            write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
         else
             log "Installing Vercel CLI via npm..."
-            npm install -g vercel 2>/dev/null
+            NPM_OUTPUT=$(npm install -g vercel 2>&1) || true
+            printf '%s\n' "$NPM_OUTPUT" | while IFS= read -r line; do log "$line"; done
+            if printf '%s\n' "$NPM_OUTPUT" | grep -qi 'ERR!\|error'; then
+                log_error "npm install vercel reported errors (see log above)"
+                write_summary ERROR "vercel cli" "npm install failed"
+            fi
 
             if command -v vercel &>/dev/null; then
                 log_ok "Vercel CLI installed ($(vercel --version 2>/dev/null | head -1))"
-                write_summary OK "vercel CLI    $(vercel --version 2>/dev/null | head -1)"
+                write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
             else
                 log_error "Vercel CLI install failed"
+                write_summary ERROR "vercel cli" "install failed"
             fi
         fi
         ;;
 esac
 
-write_summary ACTION "vercel login -- authenticate vercel CLI"
+write_summary ACTION "" "vercel login -- authenticate vercel CLI"
 log_warn "Authentication required: run 'vercel login' to authenticate"
 
 # --- Exit ---

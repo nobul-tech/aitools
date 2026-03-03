@@ -23,8 +23,8 @@ $errors = 0
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
-function Write-Summary($cat, $msg) {
-    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+function Write-Summary($cat, $tool, $detail) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}" }
 }
 
 # Backup a file before overwriting. Keeps at most $MaxBackups copies.
@@ -293,11 +293,10 @@ if ($DryRun) {
     Log "[DRY RUN] Would configure user-level MCP (all servers; vercel/webflow disabled by default)"
 } else {
     LogOk "User-level MCP configured (all servers; vercel/webflow disabled by default)"
-    Write-Summary "OK" "MCP servers    configured"
+    Write-Summary "OK" "claude mcp" "configured"
 }
 Log "To enable per project: aitools --addmcp vercel"
 Log "To check status: aitools mcp"
-
 
 # --- Deploy Chrome DevTools skills (embedded) ---
 # Vendored from https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/main/skills
@@ -516,6 +515,7 @@ If standard a11y queries fail or the `evaluate_script` snippets return unexpecte
 $a11yDest = Join-Path $a11yDir "SKILL.md"
 [System.IO.File]::WriteAllText($a11yDest, $a11ySkill, [System.Text.UTF8Encoding]::new($false))
 LogOk "Deployed skill: a11y-debugging -> $a11yDest"
+Write-Summary "OK" "claude skills" "deployed"
 
 Log "Deploying skills to $skillsDestCursor..."
 $chromeDevtoolsDirCursor = Join-Path $skillsDestCursor "chrome-devtools"
@@ -529,6 +529,7 @@ if (-not (Test-Path $a11yDirCursor)) { New-Item -ItemType Directory -Path $a11yD
 $a11yDestCursor = Join-Path $a11yDirCursor "SKILL.md"
 [System.IO.File]::WriteAllText($a11yDestCursor, $a11ySkill, [System.Text.UTF8Encoding]::new($false))
 LogOk "Deployed skill: a11y-debugging -> $a11yDestCursor"
+Write-Summary "OK" "cursor skills" "deployed"
 
 if ($errors -gt 0) {
     Log "FAILED with $errors error(s). See log: $logFile"

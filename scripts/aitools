@@ -416,21 +416,24 @@ show_summary() {
     [ -s "$sfile" ] || { rm -f "$sfile"; return 0; }
     echo ""
     echo "────────────────────────────────────────────────────────"
-    while IFS='|' read -r cat msg; do
-        [ "$cat" = "OK"   ] && printf '\033[32m  [ok]  %s\033[0m\n' "$msg"
+    while IFS='|' read -r cat tool detail; do
+        [ "$cat" = "OK"   ] && printf '\033[32m  [ok]  %-16s %s\033[0m\n' "$tool" "$detail"
     done < "$sfile"
-    while IFS='|' read -r cat msg; do
-        [ "$cat" = "WARN" ] && printf '\033[33m  [!]   %s\033[0m\n' "$msg"
+    while IFS='|' read -r cat tool detail; do
+        [ "$cat" = "WARN" ] && printf '\033[33m  [!]   %-16s %s\033[0m\n' "$tool" "$detail"
+    done < "$sfile"
+    while IFS='|' read -r cat tool detail; do
+        [ "$cat" = "ERROR" ] && printf '\033[31m  [ERR] %-16s %s\033[0m\n' "$tool" "$detail"
     done < "$sfile"
     local first_action=true
-    while IFS='|' read -r cat msg; do
+    while IFS='|' read -r cat tool detail; do
         if [ "$cat" = "ACTION" ]; then
             if [ "$first_action" = true ]; then
                 echo ""
-                printf '\033[33m  ACTION REQUIRED -- run before tools are ready:\033[0m\n'
+                printf '\033[1;35m  ACTION REQUIRED -- run before tools are ready:\033[0m\n'
                 first_action=false
             fi
-            printf '\033[33m  >>  %s\033[0m\n' "$msg"
+            printf '\033[1;35m  >>  %s\033[0m\n' "$detail"
         fi
     done < "$sfile"
     echo "────────────────────────────────────────────────────────"

@@ -50,16 +50,39 @@ See `@reference/script-standards-detail.md` for exact code patterns.
 
 ### End-of-run summary
 
-Every setup script MUST call `write_summary` to contribute to the end-of-run panel:
+Every setup script MUST call `write_summary` (3-arg) to contribute to the end-of-run panel:
 
-- `write_summary OK "tool    version"` — tool verified installed / config deployed
-- `write_summary WARN "message"` — non-fatal issue, PATH warning, migration
-- `write_summary ACTION "command -- description"` — required user action post-install
+```bash
+write_summary OK    "tool_name" "version or status"
+write_summary WARN  "tool_name" "advisory message"
+write_summary ERROR "tool_name" "failure description"
+write_summary ACTION ""         "instruction for user"
+```
 
-For ACTION items: always pair with a `log_warn` carrying the same text.
-When `AITOOLS_SUMMARY_FILE` is not set (standalone run), `write_summary` is a no-op.
+| Category | Meaning |
+|----------|---------|
+| OK | Tool installed and usable |
+| WARN | Advisory -- tool works but something is off |
+| ERROR | Functional failure -- tool not usable |
+| ACTION | User must act before tool is ready |
 
-See `@reference/script-standards-detail.md` for code patterns.
+Every code path (success AND failure) must call `write_summary`. A tool that fails
+must appear as ERROR, not be silently absent.
+
+See `@reference/script-standards-detail.md` for severity definitions, renderer colors,
+tool name table, function signatures, and platform-specific patterns.
+
+### External command error handling
+
+External install/upgrade commands (pip, npm, winget, brew, cargo, apt-get) MUST:
+
+1. **Capture output** -- never fire-and-forget an install command
+2. **Check exit codes** -- `$LASTEXITCODE` (PS1) or wrap to prevent `set -e` abort (bash)
+3. **Distinguish "up to date" from failure** -- inspect output messages, not just exit codes
+4. **Treat PATH issues as errors** -- tool installed but not on PATH = functional failure
+
+See `@reference/script-standards-detail.md` for platform-specific code patterns and
+anti-patterns.
 
 ### Error handling requirements
 

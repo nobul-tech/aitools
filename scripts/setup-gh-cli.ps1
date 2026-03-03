@@ -23,8 +23,8 @@ $errors = 0
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
-function Write-Summary($cat, $msg) {
-    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+function Write-Summary($cat, $tool, $detail) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}" }
 }
 
 # --- OS guard ---
@@ -51,19 +51,24 @@ if (Get-Command gh -ErrorAction SilentlyContinue) {
     $upgradeResult = winget upgrade --exact --id GitHub.cli --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     if ($upgradeResult -match "No available upgrade found|No newer package versions") {
         LogOk "gh CLI already up to date"
-        Write-Summary "OK" "gh CLI    $ghVersion"
+        Write-Summary "OK" "gh cli" "$ghVersion"
     } elseif ($LASTEXITCODE -eq 0) {
         Refresh-Path
         $ghVersion = (gh --version | Select-Object -First 1)
         LogOk "gh CLI updated ($ghVersion)"
-        Write-Summary "OK" "gh CLI    $ghVersion"
+        Write-Summary "OK" "gh cli" "$ghVersion"
     } else {
-        LogWarn "winget upgrade returned non-zero -- gh CLI may be installed via another method"
-        Write-Summary "OK" "gh CLI    $ghVersion"
+        LogWarn "winget upgrade returned non-zero (exit $LASTEXITCODE) -- gh CLI may be installed via another method"
+        Write-Summary "WARN" "gh cli" "$ghVersion (upgrade check failed)"
     }
 } else {
     Log "Installing gh CLI via winget..."
-    winget install --source winget --exact --id GitHub.cli --accept-package-agreements --accept-source-agreements
+    $wingetOutput = winget install --source winget --exact --id GitHub.cli --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+    $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    if ($LASTEXITCODE -ne 0) {
+        LogError "winget install failed (exit code $LASTEXITCODE)"
+        Write-Summary "ERROR" "gh cli" "winget install failed (exit $LASTEXITCODE)"
+    }
     Refresh-Path
 
     if (Get-Command gh -ErrorAction SilentlyContinue) {
@@ -71,17 +76,20 @@ if (Get-Command gh -ErrorAction SilentlyContinue) {
         $ghPath = (Get-Command gh).Source
         LogOk "gh CLI installed ($ghVersion)"
         Log "Install path: $ghPath"
-        Write-Summary "OK" "gh CLI    $ghVersion"
+        Write-Summary "OK" "gh cli" "$ghVersion"
 
         # Verify the install directory is in persistent PATH
         $ghDir = Split-Path $ghPath -Parent
         $persistentPath = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
         if ($persistentPath -notlike "*$ghDir*") {
-            LogWarn "gh CLI install dir not in persistent PATH: $ghDir"
-            LogWarn "Claude Code may not find 'gh'. Add this directory to your User PATH."
+            LogError "gh CLI install dir not in persistent PATH: $ghDir"
+            Write-Summary "ERROR" "gh cli" "installed but not on PATH"
+            LogWarn "Add $ghDir to PATH -- tool not accessible to Claude Code"
+            Write-Summary "ACTION" "" "Add $ghDir to PATH -- gh not accessible"
         }
     } else {
         LogError "gh CLI install failed"
+        Write-Summary "ERROR" "gh cli" "install failed"
     }
 }
 

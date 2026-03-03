@@ -10,29 +10,36 @@
 
 set -euo pipefail
 
+
+# --- Flag parsing ---
+DRY_RUN=false
+FORCE=false
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=true ;;
+        --force)   FORCE=true ;;
+    esac
+done
+[ "${AITOOLS_DRY_RUN:-}" = "1" ] && DRY_RUN=true
+
 # --- Logging ---
 LOG_DIR="$HOME/Library/Logs/aitools"
 [ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
 LOG_FILE="$LOG_DIR/deploy.log"
 SCRIPT_NAME="setup-user-claude"
+mkdir -p "$LOG_DIR"
+
 display_path() {
     if command -v cygpath &>/dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi
 }
 ERRORS=0
-
-mkdir -p "$LOG_DIR"
-
 log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
 log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
-
-# --- OS guard ---
-case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*)
-        log_error "This script is for macOS/Linux. On Windows, use the .ps1 version."
-        exit 1 ;;
-esac
+write_summary() {
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
+}
 
 # Backup a file before overwriting. Keeps at most $max_backups copies.
 backup_file() {
@@ -43,8 +50,10 @@ backup_file() {
     cp "$file" "${file}.bak.${ts}"
     # Prune oldest beyond limit
     ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1)) | xargs rm -f 2>/dev/null
-    log "Backed up $file"
+    log "Backed up $(display_path "$file")"
 }
+
+# --- BEGIN backup_dir (extracted by build-deploy) ---
 # Backup a directory before modifying managed files. Keeps at most $max_backups copies.
 backup_dir() {
     local dir="$1" max_backups=5
@@ -74,17 +83,14 @@ backup_dir() {
     fi
     log "Backed up $(display_path "$dir") ($file_count managed files)"
 }
+# --- END backup_dir (extracted by build-deploy) ---
 
-# --- Flag parsing ---
-DRY_RUN=false
-FORCE=false
-for arg in "$@"; do
-    case "$arg" in
-        --dry-run) DRY_RUN=true ;;
-        --force)   FORCE=true ;;
-    esac
-done
-[ "${AITOOLS_DRY_RUN:-}" = "1" ] && DRY_RUN=true
+# --- OS guard ---
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        log_error "This script is for macOS/Linux. On Windows, use ${SCRIPT_NAME}.ps1 instead."
+        exit 1 ;;
+esac
 
 [ "$DRY_RUN" = "true" ] && log "[DRY RUN] Preview mode -- no files will be written"
 
@@ -109,9 +115,9 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Identity
 
-- Name: Jose
+- Name: pepe
 - Git: `Jose <jose@nobul.tech>`
-- Company: Nobul
+- Company: nobul.tech
 
 ## Code Style Defaults
 
@@ -402,6 +408,7 @@ if [ -n "$RULES_SRC" ]; then
         done
 
         log_ok "Rules: $ADDED added, $UPDATED updated, $UNCHANGED unchanged, $PRESERVED preserved in $(display_path "$RULES_DEST")"
+        write_summary OK "claude rules" "$ADDED added, $UPDATED updated, $UNCHANGED unchanged"
     fi
 else
     log "No user rules to deploy (no claude/rules/ in user repo)"

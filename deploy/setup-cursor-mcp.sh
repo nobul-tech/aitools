@@ -42,8 +42,7 @@ log_ok()    { log "OK: $1"; }
 log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "WARN: $1"; }
 write_summary() {
-    local cat="$1" msg="$2"
-    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s\n' "$cat" "$msg" >> "$AITOOLS_SUMMARY_FILE"
+    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
 }
 
 # Backup a file before overwriting. Keeps at most $max_backups copies.
@@ -156,7 +155,7 @@ case "$MERGE_RESULT" in
     ok)
         log_ok "Cursor MCP config written to $(display_path "$mcp_json")"
         log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
-        write_summary OK "cursor MCP    merged" ;;
+        write_summary OK "cursor mcp" "merged" ;;
     dry-run)
         log "[DRY RUN] Would write Cursor MCP config"
         log "  Servers: chrome-devtools (stdio), vercel (http), webflow (http)" ;;

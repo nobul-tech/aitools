@@ -22,8 +22,8 @@ $errors = 0
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
-function Write-Summary($cat, $msg) {
-    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${msg}" }
+function Write-Summary($cat, $tool, $detail) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}" }
 }
 
 # --- OS guard ---
@@ -49,10 +49,15 @@ if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
 if (Get-Command vercel -ErrorAction SilentlyContinue) {
     $vercelVersion = (vercel --version 2>$null | Select-Object -First 1)
     LogOk "Vercel CLI already installed ($vercelVersion)"
-    Write-Summary "OK" "vercel CLI    $vercelVersion"
+    Write-Summary "OK" "vercel cli" "$vercelVersion"
 } else {
     Log "Installing Vercel CLI via npm..."
-    npm install -g vercel 2>$null
+    $npmOutput = npm install -g vercel 2>&1 | Out-String
+    $npmOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    if ($LASTEXITCODE -ne 0) {
+        LogError "npm install failed (exit code $LASTEXITCODE)"
+        Write-Summary "ERROR" "vercel cli" "npm install failed (exit $LASTEXITCODE)"
+    }
     Refresh-Path
 
     if (Get-Command vercel -ErrorAction SilentlyContinue) {
@@ -60,24 +65,27 @@ if (Get-Command vercel -ErrorAction SilentlyContinue) {
         $vercelPath = (Get-Command vercel).Source
         LogOk "Vercel CLI installed ($vercelVersion)"
         Log "Install path: $vercelPath"
-        Write-Summary "OK" "vercel CLI    $vercelVersion"
+        Write-Summary "OK" "vercel cli" "$vercelVersion"
 
         # Verify the install directory is in persistent PATH (not just this session)
         $vercelDir = Split-Path $vercelPath -Parent
         $persistentPath = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
         if ($persistentPath -notlike "*$vercelDir*") {
-            LogWarn "Vercel install dir not in persistent PATH: $vercelDir"
-            LogWarn "Claude Code may not find 'vercel'. Add this directory to your User PATH."
+            LogError "Vercel install dir not in persistent PATH: $vercelDir"
+            Write-Summary "ERROR" "vercel cli" "installed but not on PATH"
+            LogWarn "Add $vercelDir to PATH -- tool not accessible to Claude Code"
+            Write-Summary "ACTION" "" "Add $vercelDir to PATH -- vercel not accessible"
         }
     } else {
         LogError "Vercel CLI install failed"
+        Write-Summary "ERROR" "vercel cli" "install failed"
         $npmPrefix = (npm config get prefix 2>$null)
         Log "npm global prefix: $npmPrefix"
         Log "Check that $npmPrefix is in your PATH"
     }
 }
 
-Write-Summary "ACTION" "vercel login -- authenticate vercel CLI"
+Write-Summary "ACTION" "" "vercel login -- authenticate vercel CLI"
 LogWarn "Authentication required: run 'vercel login' to authenticate"
 
 # --- Exit ---

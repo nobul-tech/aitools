@@ -12,12 +12,15 @@ param(
     [switch]$Force
 )
 
+
+# Env passthrough from parent (aitools CLI)
+if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
+
 # --- Logging ---
 $logDir = Join-Path $env:LOCALAPPDATA "aitools"
 $logFile = Join-Path $logDir "deploy.log"
 $scriptName = "setup-user-claude"
 $errors = 0
-
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 
 function Log($msg) {
@@ -29,18 +32,8 @@ function Log($msg) {
 function LogOk($msg)    { Log "OK: $msg" }
 function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
 function LogWarn($msg)  { Log "WARN: $msg" }
-
-# --- OS guard ---
-if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
-    LogError "This script is for Windows. On macOS/Linux, use the .sh version."
-    exit 1
-}
-
-# --- PS 7 version guard ---
-if ($PSVersionTable.PSVersion.Major -lt 7) {
-    Write-Host "ERROR: This script requires PowerShell 7+. Current: $($PSVersionTable.PSVersion)" -ForegroundColor Red
-    Write-Host "Install: winget install --id Microsoft.PowerShell --source winget" -ForegroundColor Yellow
-    exit 1
+function Write-Summary($cat, $tool, $detail) {
+    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}" }
 }
 
 # Backup a file before overwriting. Keeps at most $MaxBackups copies.
@@ -57,6 +50,8 @@ function Backup-File {
     }
     Log "Backed up $FilePath"
 }
+
+# --- BEGIN Backup-Dir (extracted by build-deploy) ---
 function Backup-Dir {
     param([string]$DirPath, [int]$MaxBackups = 5)
     if (-not (Test-Path $DirPath)) { return }
@@ -84,9 +79,34 @@ function Backup-Dir {
     }
     Log "Backed up $DirPath ($($mdFiles.Count) managed files)"
 }
+# --- END Backup-Dir (extracted by build-deploy) ---
 
-# Env passthrough from parent (aitools CLI)
-if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
+# --- PS 5.1 compatibility helper ---
+function ConvertPSObjectToHashtable($obj) {
+    if ($null -eq $obj) { return @{} }
+    $ht = @{}
+    foreach ($prop in $obj.PSObject.Properties) {
+        if ($prop.Value -is [System.Management.Automation.PSCustomObject]) {
+            $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
+        } else {
+            $ht[$prop.Name] = $prop.Value
+        }
+    }
+    return $ht
+}
+
+# --- OS guard ---
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    LogError "This script is for Windows. On macOS/Linux, use the .sh version."
+    exit 1
+}
+
+# --- PS 7 version guard ---
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    Write-Host "ERROR: This script requires PowerShell 7+. Current: $($PSVersionTable.PSVersion)" -ForegroundColor Red
+    Write-Host "Install: winget install --id Microsoft.PowerShell --source winget" -ForegroundColor Yellow
+    exit 1
+}
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
@@ -113,9 +133,9 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Identity
 
-- Name: Jose
+- Name: pepe
 - Git: `Jose <jose@nobul.tech>`
-- Company: Nobul
+- Company: nobul.tech
 
 ## Code Style Defaults
 
@@ -445,6 +465,7 @@ if ($rulesSrc) {
         }
 
         LogOk "Rules: $added added, $updated updated, $unchanged unchanged, $preserved preserved in $rulesDest"
+        Write-Summary "OK" "claude rules" "$added added, $updated updated, $unchanged unchanged"
     }
 } else {
     Log "No user rules to deploy (no claude/rules/ in user repo)"
