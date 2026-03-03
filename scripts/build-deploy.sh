@@ -73,7 +73,7 @@ try {
         for rf in "$USER_RULES_DIR"/*.md; do
             [ -f "$rf" ] || continue
             USER_RULE_NAMES+=("$(basename "$rf")")
-            USER_RULE_CONTENTS+=("$(cat "$rf")")
+            USER_RULE_CONTENTS+=("$(tr -d '\r' < "$rf")")
             USER_RULE_COUNT=$((USER_RULE_COUNT + 1))
         done
     fi
