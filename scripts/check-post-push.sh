@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # check-post-push.sh -- automated post-push checklist for aitools
 # Usage: bash scripts/check-post-push.sh [--extensive]
-# Default: 5 always-tier steps. --extensive: all 21 steps.
+# Default: 5 always-tier steps. --extensive: all 22 steps.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -148,7 +148,7 @@ else
 fi
 
 # ===================================================================
-# EXTENSIVE TIER (steps 6-21, only with --extensive)
+# EXTENSIVE TIER (steps 6-22, only with --extensive)
 # ===================================================================
 if ! $EXTENSIVE; then
     print_summary
@@ -530,6 +530,50 @@ PYEOF
     else
         step_warn "21" "Tool version freshness" "$ver21_warns tool(s) out of date; ${ver21_ok} OK, ${ver21_skip} skipped"
     fi
+fi
+
+# ---------------------------------------------------------------------------
+# Step 22: Logging hygiene audit
+# ---------------------------------------------------------------------------
+step22_fail=0
+
+# 22a: Winget output filtering -- check that no setup-*.ps1 has unfiltered
+#      winget Split/ForEach logging (single-line ForEach without a filter guard)
+bad_winget_files=""
+for ps1 in "$REPO_ROOT"/scripts/setup-*.ps1; do
+    [ -f "$ps1" ] || continue
+    # Bad pattern: single-line ForEach piping wingetOutput Split to Log without filter
+    if grep -Pq '\$wingetOutput\.Trim\(\)\.Split\([^)]+\)\s*\|\s*ForEach-Object\s*\{\s*Log\s+\$_\.TrimEnd\(\)\s*\}' "$ps1"; then
+        bad_winget_files="$bad_winget_files $(basename "$ps1")"
+    fi
+done
+if [ -n "$bad_winget_files" ]; then
+    step_fail "22a" "Winget output filtering" "unfiltered logging in:$bad_winget_files"
+    step22_fail=1
+else
+    step_pass "22a" "Winget output filtering" "all setup-*.ps1 filter winget progress chars"
+fi
+
+# 22b: Cloud MCP in install path -- verify both entry points call show_cloud_mcp /
+#      Show-CloudMcp in the install success block
+step22b_fail=0
+# Bash entry point: extract install runner block (anchored on unique installer_rc)
+install_block_bash=$(sed -n '/installer_rc=/,/^elif /p' "$REPO_ROOT/scripts/aitools")
+if ! echo "$install_block_bash" | grep -q 'show_cloud_mcp'; then
+    step22b_fail=1
+    echo "      FAIL: scripts/aitools missing show_cloud_mcp in install path"
+fi
+# PS1 entry point: extract install runner block (anchored on unique installerRc)
+install_block_ps1=$(sed -n '/\$installerRc/,/^} elseif /p' "$REPO_ROOT/scripts/aitools.ps1")
+if ! echo "$install_block_ps1" | grep -q 'Show-CloudMcp'; then
+    step22b_fail=1
+    echo "      FAIL: scripts/aitools.ps1 missing Show-CloudMcp in install path"
+fi
+if [ "$step22b_fail" -eq 0 ]; then
+    step_pass "22b" "Cloud MCP in install path" "both entry points call show_cloud_mcp"
+else
+    step_fail "22b" "Cloud MCP in install path" "missing from one or both entry points"
+    step22_fail=1
 fi
 
 # ---------------------------------------------------------------------------

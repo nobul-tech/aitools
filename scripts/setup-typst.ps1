@@ -62,7 +62,10 @@ $typstCmd = Get-Command typst -ErrorAction SilentlyContinue
 if ($typstCmd) {
     Log "Typst found -- upgrading via winget..."
     $wingetOutput = winget upgrade --id Typst.Typst --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    $wingetOutput.Trim().Split("`n") | ForEach-Object {
+        $l = $_.TrimEnd()
+        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$') { Log $l }
+    }
     if ($wingetOutput -match 'No available upgrade|No newer package versions') {
         LogOk "Typst already up to date"
     } elseif ($LASTEXITCODE -ne 0) {
@@ -82,7 +85,10 @@ if ($typstCmd) {
 } else {
     Log "Installing Typst via winget..."
     $wingetOutput = winget install --id Typst.Typst --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    $wingetOutput.Trim().Split("`n") | ForEach-Object {
+        $l = $_.TrimEnd()
+        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$') { Log $l }
+    }
     if ($LASTEXITCODE -ne 0) {
         LogError "winget install typst failed (exit code $LASTEXITCODE)"
         Write-Summary "ERROR" "typst" "winget install failed (exit $LASTEXITCODE)"

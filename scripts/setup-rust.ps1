@@ -60,7 +60,10 @@ if (Test-Path $cargoPath) {
 } else {
     Log "Installing Rust toolchain via winget..."
     $wingetOutput = winget install -e --id Rustlang.Rustup --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    $wingetOutput.Trim().Split("`n") | ForEach-Object {
+        $l = $_.TrimEnd()
+        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$') { Log $l }
+    }
     if ($LASTEXITCODE -ne 0) {
         LogError "winget install rustup failed (exit code $LASTEXITCODE)"
         Write-Summary "ERROR" "rust/cargo" "winget install failed (exit $LASTEXITCODE)"

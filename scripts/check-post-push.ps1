@@ -1,6 +1,6 @@
 # check-post-push.ps1 -- automated post-push checklist for aitools
 # Usage: .\scripts\check-post-push.ps1 [-Extensive]
-# Default: 5 always-tier steps. -Extensive: all 21 steps.
+# Default: 5 always-tier steps. -Extensive: all 22 steps.
 # Platform: Windows (PS 5.1 compatible)
 param([switch]$Extensive)
 
@@ -157,7 +157,7 @@ if ($hookPresent) {
 }
 
 # ===================================================================
-# EXTENSIVE TIER (steps 6-21)
+# EXTENSIVE TIER (steps 6-22)
 # ===================================================================
 if (-not $Extensive) {
     PrintSummary
@@ -624,6 +624,57 @@ if (-not (Test-Path $versionsJson)) {
     } else {
         StepWarn "21" "Tool version freshness" "$ver21Warns tool(s) out of date; $ver21Ok OK, $ver21Skip skipped"
     }
+}
+
+# ---------------------------------------------------------------------------
+# Step 22: Logging hygiene audit
+# ---------------------------------------------------------------------------
+$step22Fail = 0
+
+# 22a: Winget output filtering -- check that no setup-*.ps1 has unfiltered
+#      winget Split/ForEach logging (single-line ForEach without a filter guard)
+$badWingetFiles = @()
+foreach ($ps1 in Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "setup-*.ps1") {
+    $content = Get-Content $ps1.FullName -Raw
+    if ($content -match '\$wingetOutput\.Trim\(\)\.Split\([^)]+\)\s*\|\s*ForEach-Object\s*\{\s*Log\s+\$_\.TrimEnd\(\)\s*\}') {
+        $badWingetFiles += $ps1.Name
+    }
+}
+if ($badWingetFiles.Count -gt 0) {
+    StepFail "22a" "Winget output filtering" "unfiltered logging in: $($badWingetFiles -join ', ')"
+    $step22Fail = 1
+} else {
+    StepPass "22a" "Winget output filtering" "all setup-*.ps1 filter winget progress chars"
+}
+
+# 22b: Cloud MCP in install path -- verify both entry points call show_cloud_mcp /
+#      Show-CloudMcp in the install success block
+$step22bFail = 0
+# PS1 entry point: extract install runner block (anchored on unique $installerRc)
+$aitoolsPs1 = Get-Content (Join-Path $script:RepoRoot "scripts" "aitools.ps1") -Raw
+$installBlockPs1 = ""
+if ($aitoolsPs1 -match '(?s)\$installerRc(.+?)\} elseif ') {
+    $installBlockPs1 = $Matches[1]
+}
+if ($installBlockPs1 -notmatch 'Show-CloudMcp') {
+    $step22bFail = 1
+    Write-Host "      FAIL: scripts/aitools.ps1 missing Show-CloudMcp in install path"
+}
+# Bash entry point: extract install runner block (anchored on unique installer_rc)
+$aitoolsBash = Get-Content (Join-Path $script:RepoRoot "scripts" "aitools") -Raw
+$installBlockBash = ""
+if ($aitoolsBash -match '(?s)installer_rc=(.+?)elif ') {
+    $installBlockBash = $Matches[1]
+}
+if ($installBlockBash -notmatch 'show_cloud_mcp') {
+    $step22bFail = 1
+    Write-Host "      FAIL: scripts/aitools missing show_cloud_mcp in install path"
+}
+if ($step22bFail -eq 0) {
+    StepPass "22b" "Cloud MCP in install path" "both entry points call show_cloud_mcp"
+} else {
+    StepFail "22b" "Cloud MCP in install path" "missing from one or both entry points"
+    $step22Fail = 1
 }
 
 # ---------------------------------------------------------------------------

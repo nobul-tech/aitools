@@ -48,7 +48,10 @@ $uvCmd = Get-Command uv -ErrorAction SilentlyContinue
 if ($uvCmd) {
     Log "uv found -- upgrading via winget..."
     $wingetOutput = winget upgrade --id=astral-sh.uv --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    $wingetOutput.Trim().Split("`n") | ForEach-Object {
+        $l = $_.TrimEnd()
+        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$') { Log $l }
+    }
     if ($wingetOutput -match 'No available upgrade|No newer package versions|No installed package') {
         LogOk "uv already up to date"
     } elseif ($LASTEXITCODE -ne 0) {
@@ -67,7 +70,10 @@ if ($uvCmd) {
 } else {
     Log "Installing uv via winget..."
     $wingetOutput = winget install --id=astral-sh.uv -e --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    $wingetOutput.Trim().Split("`n") | ForEach-Object {
+        $l = $_.TrimEnd()
+        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$') { Log $l }
+    }
     if ($wingetOutput -match 'already installed' -and $wingetOutput -match 'No available upgrade|No newer package versions') {
         LogOk "uv already up to date (winget)"
     } elseif ($LASTEXITCODE -ne 0) {

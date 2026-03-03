@@ -168,6 +168,20 @@ For `@latest` / remote tools:
 - Check `lastReviewed` in `tool-versions.json`. Flag if older than 30 days.
 - Review upstream for changes to flags, config options, or behavior affecting `assumptions`.
 
+### 22. Logging hygiene audit
+
+**22a -- Winget output filtering:**
+- Scan all `scripts/setup-*.ps1` for the bad pattern: `$wingetOutput.Trim().Split(...)` piped
+  to `ForEach-Object { Log $_.TrimEnd() }` on a single line without a filter guard.
+- PASS: No files match the unfiltered pattern.
+- FAIL: One or more files still log winget progress characters (`-`, `\`, `|`, `/`) verbatim.
+
+**22b -- Cloud MCP in install path:**
+- Verify that `scripts/aitools` calls `show_cloud_mcp` in the `do_install` success block.
+- Verify that `scripts/aitools.ps1` calls `Show-CloudMcp` in the `$doInstall` success block.
+- PASS: Both entry points include the call.
+- FAIL: Missing from one or both entry points.
+
 ---
 
 ## Version tag (after all checks pass)

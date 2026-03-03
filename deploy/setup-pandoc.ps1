@@ -72,7 +72,10 @@ if (Get-Command pandoc -ErrorAction SilentlyContinue) {
 } else {
     Log "Installing Pandoc via winget..."
     $wingetOutput = winget install --source winget --exact --id JohnMacFarlane.Pandoc --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    $wingetOutput.Trim().Split("`n") | ForEach-Object {
+        $l = $_.TrimEnd()
+        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$') { Log $l }
+    }
     if ($LASTEXITCODE -ne 0) {
         LogError "winget install failed (exit code $LASTEXITCODE)"
         Write-Summary "ERROR" "pandoc" "winget install failed (exit $LASTEXITCODE)"

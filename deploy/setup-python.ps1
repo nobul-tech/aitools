@@ -78,7 +78,10 @@ if ($pythonCheck) {
         $needsInstall = $false
         Log "Python found ($pyVersion) -- upgrading via winget..."
         $wingetOutput = winget upgrade $pythonWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-        $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+        $wingetOutput.Trim().Split("`n") | ForEach-Object {
+            $l = $_.TrimEnd()
+            if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$') { Log $l }
+        }
         if ($wingetOutput -match 'No installed package') {
             # winget doesn't know about this python (e.g., from another source) -- fresh install
             Log "winget has no record of $pythonWingetId -- performing fresh install"
@@ -109,7 +112,10 @@ if ($pythonCheck) {
 if ($needsInstall) {
     Log "Installing Python via winget ($pythonWingetId)..."
     $wingetOutput = winget install $pythonWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    $wingetOutput.Trim().Split("`n") | ForEach-Object {
+        $l = $_.TrimEnd()
+        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$') { Log $l }
+    }
     if ($wingetOutput -match 'already installed' -and $wingetOutput -match 'No available upgrade|No newer package versions') {
         LogOk "Python already up to date (winget)"
     } elseif ($LASTEXITCODE -ne 0) {
