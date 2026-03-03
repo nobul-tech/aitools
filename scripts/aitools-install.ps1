@@ -75,23 +75,27 @@ function Show-Summary {
     Write-Host ""
     Write-Host "────────────────────────────────────────────────────────"
     foreach ($line in $lines) {
-        $parts = $line -split '\|', 2
-        if ($parts[0] -eq 'OK') { Write-Host "  [ok]  $($parts[1])" -ForegroundColor Green }
+        $parts = $line -split '\|', 3
+        if ($parts[0] -eq 'OK') { Write-Host ("  [ok]  {0,-16} {1}" -f $parts[1], $parts[2]) -ForegroundColor Green }
     }
     foreach ($line in $lines) {
-        $parts = $line -split '\|', 2
-        if ($parts[0] -eq 'WARN') { Write-Host "  [!]   $($parts[1])" -ForegroundColor Yellow }
+        $parts = $line -split '\|', 3
+        if ($parts[0] -eq 'WARN') { Write-Host ("  [!]   {0,-16} {1}" -f $parts[1], $parts[2]) -ForegroundColor Yellow }
+    }
+    foreach ($line in $lines) {
+        $parts = $line -split '\|', 3
+        if ($parts[0] -eq 'ERROR') { Write-Host ("  [ERR] {0,-16} {1}" -f $parts[1], $parts[2]) -ForegroundColor Red }
     }
     $firstAction = $true
     foreach ($line in $lines) {
-        $parts = $line -split '\|', 2
+        $parts = $line -split '\|', 3
         if ($parts[0] -eq 'ACTION') {
             if ($firstAction) {
                 Write-Host ""
-                Write-Host "  ACTION REQUIRED -- run before tools are ready:" -ForegroundColor Yellow
+                Write-Host "  ACTION REQUIRED -- run before tools are ready:" -ForegroundColor Magenta
                 $firstAction = $false
             }
-            Write-Host "  >>  $($parts[1])" -ForegroundColor Yellow
+            Write-Host "  >>  $($parts[2])" -ForegroundColor Magenta
         }
     }
     Write-Host "────────────────────────────────────────────────────────"
