@@ -547,6 +547,99 @@ typst --version
 
 ---
 
+## Python
+
+**Source**: https://www.python.org/downloads/
+**Purpose**: Python runtime. Required by: Modal CLI, uv, pip-installed tools.
+
+### Install
+
+| Platform | Method | Command |
+|----------|--------|---------|
+| macOS | Homebrew (preferred) | `brew install python` |
+| Windows | winget (preferred) | `winget install Python.Python.3.13` |
+
+**Note (Windows)**: The winget package ID is version-specific. `Python.Python.3.13` tracks
+the latest 3.13.x patch. To target a different minor version, change the ID (e.g.,
+`Python.Python.3.14`).
+
+### Update
+
+- Homebrew: `brew upgrade python`
+- winget: `winget upgrade Python.Python.3.13`
+
+### Check Version
+
+```bash
+python3 --version   # macOS
+python --version    # Windows
+```
+
+### Non-Preferred Install Methods (cleanup targets)
+
+| Method | Detection | Why not preferred |
+|--------|-----------|-------------------|
+| Microsoft Store (MSIX) | `Get-AppxPackage *PythonSoftwareFoundation*` | PATH conflicts with winget install, can't be managed by winget upgrade |
+| Conda | `conda list python` | Environment isolation issues, conflicts with system Python |
+| pyenv | `pyenv versions` | Extra layer of indirection, not needed for our use case |
+
+### Notes
+
+- pip is bundled with Python -- no separate install needed
+- On macOS, `python3` and `pip3` are the correct commands (Homebrew convention)
+- On Windows, `python` and `pip` are the correct commands (winget install adds to PATH)
+
+### Lifecycle
+
+- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
+- **Concurrency:** Yes -- runtime
+- **Post-Install Config:** None
+- **Dependencies:** --
+- **Invocation:** `python3` (macOS) / `python` (Windows); `pip3` (macOS) / `pip` (Windows)
+- **Last verified version:** macOS: pending | Windows: pending | Linux: pending
+
+---
+
+## uv
+
+**Source**: https://docs.astral.sh/uv/getting-started/installation/
+**Purpose**: Fast Python package installer and resolver. Preferred over pip for package installs.
+
+### Install
+
+| Platform | Method | Command |
+|----------|--------|---------|
+| macOS | Homebrew (preferred) | `brew install uv` |
+| Windows | winget (preferred) | `winget install --id=astral-sh.uv -e` |
+
+### Update
+
+- Homebrew: `brew upgrade uv`
+- winget: `winget upgrade --id=astral-sh.uv`
+
+### Check Version
+
+```bash
+uv --version
+```
+
+### Notes
+
+- 50x-100x faster than pip for package resolution and installation
+- Drop-in replacement for `pip install`: use `uv pip install`
+- 50K+ GitHub stars, Astral (official org), MIT license, very active releases
+
+### Lifecycle
+
+- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
+- **Concurrency:** Yes -- stateless CLI
+- **Post-Install Config:** None
+- **Dependencies:** --
+- **Invocation:** `uv` (direct)
+- **Last verified version:** macOS: pending | Windows: pending | Linux: pending
+
+---
+
 ## Modal CLI
 
 **Source**: https://modal.com/docs/guide
@@ -583,7 +676,7 @@ modal --version
 - **Platform Status:** macOS: supported | Windows: supported | Linux: supported
 - **Concurrency:** Yes -- stateless CLI
 - **Post-Install Config:** `modal setup` required (not automated)
-- **Dependencies:** Python 3.10+
+- **Dependencies:** Python 3.10+, uv (preferred) or pip
 - **Invocation:** `modal` (direct)
 - **Last verified version:** macOS: pending | Windows: pending | Linux: pending
 

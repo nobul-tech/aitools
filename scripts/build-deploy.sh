@@ -709,7 +709,47 @@ blog "Copying deploy/setup-gh-cli.ps1"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
-# 17-18. deploy/setup-modal.sh and .ps1 (copy as-is)
+# 17-18. deploy/setup-python.sh and .ps1 (copy as-is)
+# ============================================================
+blog "Copying deploy/setup-python.sh"
+{
+    echo '#!/usr/bin/env bash'
+    echo "$HEADER_COMMENT_BASH"
+    # Strip the shebang from source and append the rest
+    tail -n +2 "$SCRIPTS_DIR/setup-python.sh"
+} > "$DEPLOY_DIR/setup-python.sh"
+chmod +x "$DEPLOY_DIR/setup-python.sh"
+GENERATED=$((GENERATED + 1))
+
+blog "Copying deploy/setup-python.ps1"
+{
+    echo "$HEADER_COMMENT_PS1"
+    cat "$SCRIPTS_DIR/setup-python.ps1"
+} > "$DEPLOY_DIR/setup-python.ps1"
+GENERATED=$((GENERATED + 1))
+
+# ============================================================
+# 19-20. deploy/setup-uv.sh and .ps1 (copy as-is)
+# ============================================================
+blog "Copying deploy/setup-uv.sh"
+{
+    echo '#!/usr/bin/env bash'
+    echo "$HEADER_COMMENT_BASH"
+    # Strip the shebang from source and append the rest
+    tail -n +2 "$SCRIPTS_DIR/setup-uv.sh"
+} > "$DEPLOY_DIR/setup-uv.sh"
+chmod +x "$DEPLOY_DIR/setup-uv.sh"
+GENERATED=$((GENERATED + 1))
+
+blog "Copying deploy/setup-uv.ps1"
+{
+    echo "$HEADER_COMMENT_PS1"
+    cat "$SCRIPTS_DIR/setup-uv.ps1"
+} > "$DEPLOY_DIR/setup-uv.ps1"
+GENERATED=$((GENERATED + 1))
+
+# ============================================================
+# 21-22. deploy/setup-modal.sh and .ps1 (copy as-is)
 # ============================================================
 blog "Copying deploy/setup-modal.sh"
 {
@@ -729,7 +769,7 @@ blog "Copying deploy/setup-modal.ps1"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
-# 19-20. deploy/setup-user-mcp.sh and .ps1 (template with embedded skills)
+# 23-24. deploy/setup-user-mcp.sh and .ps1 (template with embedded skills)
 # ============================================================
 # The scripts/ versions read skills from shared/skills/ (repo-relative).
 # The deploy/ versions must be self-contained, so we embed SKILL.md content

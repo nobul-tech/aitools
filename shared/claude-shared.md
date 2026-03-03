@@ -67,6 +67,9 @@ use `npx`, `bunx`, or other package runners.
 | Typst | `typst` |
 | pwsh | `pwsh` |
 | Modal CLI | `modal` |
+| Python | `python3` (macOS) / `python` (Windows) |
+| pip | `pip3` (macOS) / `pip` (Windows) |
+| uv | `uv` |
 
 ### Per-Platform Tools
 

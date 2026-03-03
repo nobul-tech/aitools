@@ -2,7 +2,7 @@
 # setup-modal.sh — Installs/updates Modal CLI
 # Safe to re-run — detects existing install and upgrades as needed.
 #
-# macOS/Linux: Uses pip/pip3 (pip install modal). Requires Python 3.10+.
+# macOS/Linux: Uses uv (preferred) or pip/pip3. Requires Python 3.10+.
 #
 # Authentication (modal setup) is interactive and must be run separately
 # after install — not automated by this script.
@@ -37,14 +37,24 @@ case "$(uname -s)" in
         exit 1 ;;
 esac
 
-# --- Python/pip check ---
-PIP_CMD=""
-if command -v pip3 >/dev/null 2>&1; then
-    PIP_CMD="pip3"
+# --- Python package installer check (uv-first) ---
+INSTALL_CMD=""
+INSTALL_LABEL=""
+if command -v uv >/dev/null 2>&1; then
+    INSTALL_CMD="uv pip"
+    INSTALL_LABEL="uv"
+    log "Using uv for package install"
+elif command -v pip3 >/dev/null 2>&1; then
+    INSTALL_CMD="pip3"
+    INSTALL_LABEL="pip3"
+    log "Using pip3 for package install (uv not found)"
 elif command -v pip >/dev/null 2>&1; then
-    PIP_CMD="pip"
+    INSTALL_CMD="pip"
+    INSTALL_LABEL="pip"
+    log "Using pip for package install (uv not found)"
 else
-    log_error "pip not found. Install Python 3.10+ first: https://python.org"
+    log_error "No Python package installer found. Install uv or pip first."
+    write_summary ERROR "modal cli" "no package installer (uv/pip) found"
     exit 1
 fi
 
@@ -71,8 +81,8 @@ fi
 if command -v modal >/dev/null 2>&1; then
     MODAL_VERSION=$(modal --version 2>/dev/null || echo "version unknown")
     log "Modal CLI already installed ($MODAL_VERSION)"
-    log "Upgrading via $PIP_CMD..."
-    PIP_OUTPUT=$("$PIP_CMD" install --upgrade modal 2>&1) || true
+    log "Upgrading via $INSTALL_LABEL..."
+    PIP_OUTPUT=$($INSTALL_CMD install --upgrade modal 2>&1) || true
     printf '%s\n' "$PIP_OUTPUT" | while IFS= read -r line; do log "$line"; done
     pip_notice=$(printf '%s\n' "$PIP_OUTPUT" | grep -o '\[notice\] A new release of pip is available: .*' | head -1)
     if [ -n "$pip_notice" ]; then
@@ -89,12 +99,12 @@ if command -v modal >/dev/null 2>&1; then
         log_ok "Modal CLI upgraded ($MODAL_VERSION)"
         write_summary OK "modal cli" "$MODAL_VERSION"
     else
-        log_error "$PIP_CMD upgrade completed but 'modal' not found in PATH"
+        log_error "$INSTALL_LABEL upgrade completed but 'modal' not found in PATH"
         write_summary ERROR "modal cli" "upgrade succeeded but not on PATH"
     fi
 else
-    log "Installing Modal CLI via $PIP_CMD..."
-    PIP_OUTPUT=$("$PIP_CMD" install modal 2>&1) || true
+    log "Installing Modal CLI via $INSTALL_LABEL..."
+    PIP_OUTPUT=$($INSTALL_CMD install modal 2>&1) || true
     printf '%s\n' "$PIP_OUTPUT" | while IFS= read -r line; do log "$line"; done
     pip_notice=$(printf '%s\n' "$PIP_OUTPUT" | grep -o '\[notice\] A new release of pip is available: .*' | head -1)
     if [ -n "$pip_notice" ]; then
@@ -115,17 +125,22 @@ else
         log_error "Modal installed but 'modal' not found in PATH"
         write_summary ERROR "modal cli" "installed but not on PATH"
         log_warn "You may need to add Python's bin directory to PATH."
-        log_warn "Try: $PYTHON_CMD -m modal --version"
+        if [ -n "$PYTHON_CMD" ]; then
+            log_warn "Try: $PYTHON_CMD -m modal --version"
+        fi
     fi
 fi
 
-# --- pip dependency check ---
-pip_check_output=$("$PIP_CMD" check 2>&1) || true
+# --- pip dependency check (only when using pip, not uv) ---
+if [ "$INSTALL_LABEL" != "uv" ]; then
+PIP_CHECK_CMD="$INSTALL_CMD"
+pip_check_output=$($PIP_CHECK_CMD check 2>&1) || true
 if [ -n "$pip_check_output" ]; then
     printf '%s\n' "$pip_check_output" | while IFS= read -r line; do
         [ -n "$line" ] && log_warn "pip conflict: $line"
     done
     write_summary WARN "pip" "dependency conflicts found (see log)"
+fi
 fi
 
 log_warn "Authentication required: run 'modal setup' to authenticate (browser flow)"

@@ -531,9 +531,33 @@ if (Test-Path $typstScript) {
 }
 
 # ============================================================
-# 14. Modal CLI
+# 14. Python
 # ============================================================
-Log "Step 14: Modal CLI"
+Log "Step 14: Python"
+
+$pythonScript = Join-Path $PSScriptRoot "setup-python.ps1"
+if (Test-Path $pythonScript) {
+    Invoke-ValidatedScript $pythonScript
+} else {
+    LogWarn "setup-python.ps1 not found -- skipping (MDM deploy)"
+}
+
+# ============================================================
+# 15. uv
+# ============================================================
+Log "Step 15: uv"
+
+$uvScript = Join-Path $PSScriptRoot "setup-uv.ps1"
+if (Test-Path $uvScript) {
+    Invoke-ValidatedScript $uvScript
+} else {
+    LogWarn "setup-uv.ps1 not found -- skipping (MDM deploy)"
+}
+
+# ============================================================
+# 16. Modal CLI
+# ============================================================
+Log "Step 16: Modal CLI"
 
 $modalScript = Join-Path $PSScriptRoot "setup-modal.ps1"
 if (Test-Path $modalScript) {
@@ -543,9 +567,9 @@ if (Test-Path $modalScript) {
 }
 
 # ============================================================
-# 15. Deploy configurations
+# 17. Deploy configurations
 # ============================================================
-Log "Step 15: Deploy configurations"
+Log "Step 17: Deploy configurations"
 
 $deployScripts = @(
     "setup-user-claude.ps1",

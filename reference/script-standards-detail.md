@@ -89,6 +89,8 @@ These are the canonical tool names for field 2. Always use these exact strings.
 | `cursor rules` | setup-user-cursor |
 | `cursor skills` | setup-user-mcp |
 | `cursor ide mcp` | setup-cursor-ide-mcp |
+| `python` | setup-python |
+| `uv` | setup-uv |
 
 ### Severity categories
 
@@ -204,6 +206,56 @@ LogError "tool install dir not in persistent PATH: $dir"
 Write-Summary "ERROR" "tool" "installed but not on PATH"
 LogWarn "Add $dir to PATH -- tool not accessible to Claude Code"
 Write-Summary "ACTION" "" "Add $dir to PATH -- tool not accessible"
+```
+
+## Python package install pattern (uv-first)
+
+When installing Python packages, check for `uv` first, fall back to `pip`. This provides
+faster installs when uv is available while maintaining compatibility.
+
+### Bash
+
+```bash
+# Determine install command: uv (preferred) > pip3 > pip
+INSTALL_CMD=""
+if command -v uv >/dev/null 2>&1; then
+    INSTALL_CMD="uv pip"
+    log "Using uv for package install"
+elif command -v pip3 >/dev/null 2>&1; then
+    INSTALL_CMD="pip3"
+    log "Using pip3 for package install (uv not found)"
+elif command -v pip >/dev/null 2>&1; then
+    INSTALL_CMD="pip"
+    log "Using pip for package install (uv not found)"
+else
+    log_error "No Python package installer found. Install uv or pip first."
+fi
+
+# Usage: $INSTALL_CMD install <package>
+```
+
+### PowerShell
+
+```powershell
+# Determine install command: uv (preferred) > pip > pip3
+$installCmd = $null
+$installArgs = @()
+# Get-Command exempt: command-existence check with if/else fallback
+if (Get-Command uv -ErrorAction SilentlyContinue) {
+    $installCmd = "uv"
+    $installArgs = @("pip")
+    Log "Using uv for package install"
+} elseif (Get-Command pip -ErrorAction SilentlyContinue) {
+    $installCmd = "pip"
+    Log "Using pip for package install (uv not found)"
+} elseif (Get-Command pip3 -ErrorAction SilentlyContinue) {
+    $installCmd = "pip3"
+    Log "Using pip3 for package install (uv not found)"
+} else {
+    LogError "No Python package installer found. Install uv or pip first."
+}
+
+# Usage: & $installCmd @installArgs install <package>
 ```
 
 ## Anti-pattern examples

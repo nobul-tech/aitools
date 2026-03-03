@@ -12,6 +12,30 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.34.0 -- Onboard Python, pip, and uv as managed tools (2026-03-03)
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **Python setup scripts** (`setup-python.sh/.ps1`): New managed tool. macOS: `brew install python`. Windows: `winget install Python.Python.3.13` with automatic Microsoft Store (MSIX) Python removal via `Get-AppxPackage`. Winget ID stored in `$pythonWingetId` variable for easy version bumps. pip verified as bundled. |
+| 2 | **uv setup scripts** (`setup-uv.sh/.ps1`): New managed tool. macOS: `brew install uv`. Windows: `winget install --id=astral-sh.uv`. Fast Python package installer (50-100x faster than pip). |
+| 3 | **uv-first package install pattern**: Documented in `reference/script-standards-detail.md` with bash and PowerShell examples. All Python package installs now check uv > pip3 > pip. |
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 1 | **Modal CLI uv-first** (`setup-modal.sh/.ps1`): Package installs now use uv when available, falling back to pip. `pip check` only runs when pip is the backend. Header comments updated to reflect uv-first. |
+| 2 | **Installer ordering** (`aitools-install.sh/.ps1`): Python (Step 14) and uv (Step 15) added before Modal (renumbered Step 16). Deploy configs renumbered to Step 17. |
+| 3 | **Build pipeline** (`build-deploy.sh`): Copy-as-is blocks added for `setup-python` and `setup-uv` (blocks 17-20). Modal renumbered to 21-22, MCP to 23-24. |
+| 4 | **Tool registry** (`reference/tool-registry.md`): Python and uv entries added with install commands, lifecycle, and non-preferred method cleanup targets. Modal dependencies updated to include uv. |
+| 5 | **Managed CLI Tools table**: Python, pip, and uv added to `shared/claude-shared.md`, user dotprofile `CLAUDE.md`, and project `CLAUDE.md` MDM deploy line. |
+
+**Verified**: Windows (syntax validation + build). macOS: pending.
+
+---
+
 ## v0.33.0 -- Installer improvements: pip health, MCP idempotency, cursor IDE rename, hooks skip (2026-03-03)
 
 ### Changed

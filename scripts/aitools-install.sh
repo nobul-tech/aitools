@@ -652,9 +652,33 @@ else
 fi
 
 # ============================================================
-# 14. Modal CLI
+# 14. Python
 # ============================================================
-log "Step 14: Modal CLI"
+log "Step 14: Python"
+
+python_script="$SCRIPT_DIR/setup-python.sh"
+if [ -f "$python_script" ]; then
+    validate_and_run "$python_script"
+else
+    log_warn "setup-python.sh not found — skipping (MDM deploy)"
+fi
+
+# ============================================================
+# 15. uv
+# ============================================================
+log "Step 15: uv"
+
+uv_script="$SCRIPT_DIR/setup-uv.sh"
+if [ -f "$uv_script" ]; then
+    validate_and_run "$uv_script"
+else
+    log_warn "setup-uv.sh not found — skipping (MDM deploy)"
+fi
+
+# ============================================================
+# 16. Modal CLI
+# ============================================================
+log "Step 16: Modal CLI"
 
 modal_script="$SCRIPT_DIR/setup-modal.sh"
 if [ -f "$modal_script" ]; then
@@ -664,9 +688,9 @@ else
 fi
 
 # ============================================================
-# 15. Deploy configurations
+# 17. Deploy configurations
 # ============================================================
-log "Step 15: Deploy configurations"
+log "Step 17: Deploy configurations"
 
 DEPLOY_SCRIPTS="setup-user-claude.sh setup-user-cursor.sh setup-user-mcp.sh setup-cursor-ide-mcp.sh setup-user-hooks.sh"
 

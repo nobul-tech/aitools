@@ -93,6 +93,22 @@
       "blocked": [],
       "notes": "evaluating -- pip install modal; requires Python 3.10+"
     },
+    "python": {
+      "macos":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "windows": { "lastVerifiedVersion": null, "lastVerified": null },
+      "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "minVersion": "3.10",
+      "blocked": [],
+      "notes": "winget ID is version-specific: Python.Python.3.13"
+    },
+    "uv": {
+      "macos":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "windows": { "lastVerifiedVersion": null, "lastVerified": null },
+      "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": ""
+    },
     "chrome-devtools-mcp": {
       "pinned": false,
       "lastReviewed": "2026-03-02",

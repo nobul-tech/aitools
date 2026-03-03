@@ -2,7 +2,7 @@
 # setup-modal.ps1 -- Installs/updates Modal CLI on Windows
 # Safe to re-run -- detects existing install and upgrades as needed.
 #
-# Windows: Uses pip (pip install modal). Requires Python 3.10+.
+# Windows: Uses uv (preferred) or pip. Requires Python 3.10+.
 #
 # Authentication (modal setup) is interactive and must be run separately
 # after install -- not automated by this script.
@@ -58,14 +58,27 @@ function Ensure-PythonUserScriptsOnPath {
     }
 }
 
-# --- Python/pip check ---
-$pipCmd = $null
-if (Get-Command pip -ErrorAction SilentlyContinue) {
-    $pipCmd = "pip"
+# --- Python package installer check (uv-first) ---
+$installCmd = $null
+$installArgs = @()
+$installLabel = ""
+# Get-Command exempt: command-existence check with if/else fallback
+if (Get-Command uv -ErrorAction SilentlyContinue) {
+    $installCmd = "uv"
+    $installArgs = @("pip")
+    $installLabel = "uv"
+    Log "Using uv for package install"
+} elseif (Get-Command pip -ErrorAction SilentlyContinue) {
+    $installCmd = "pip"
+    $installLabel = "pip"
+    Log "Using pip for package install (uv not found)"
 } elseif (Get-Command pip3 -ErrorAction SilentlyContinue) {
-    $pipCmd = "pip3"
+    $installCmd = "pip3"
+    $installLabel = "pip3"
+    Log "Using pip3 for package install (uv not found)"
 } else {
-    LogError "pip not found. Install Python 3.10+ first: https://python.org"
+    LogError "No Python package installer found. Install uv or pip first."
+    Write-Summary "ERROR" "modal cli" "no package installer (uv/pip) found"
     exit 1
 }
 
@@ -95,8 +108,8 @@ if (Get-Command modal -ErrorAction SilentlyContinue) {
     $modalVersion = & modal --version 2>$null
     if (-not $modalVersion) { $modalVersion = "version unknown" }
     LogOk "Modal CLI already installed ($modalVersion)"
-    Log "Upgrading via $pipCmd..."
-    $pipOutput = & $pipCmd install --upgrade modal 2>&1 | Out-String
+    Log "Upgrading via $installLabel..."
+    $pipOutput = & $installCmd @installArgs install --upgrade modal 2>&1 | Out-String
     $pipOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
     if ($pipOutput -match '\[notice\] A new release of pip is available: (.+)') {
         LogWarn "pip upgrade available: $($Matches[1])"
@@ -116,12 +129,12 @@ if (Get-Command modal -ErrorAction SilentlyContinue) {
         LogOk "Modal CLI upgraded ($modalVersion)"
         Write-Summary "OK" "modal cli" "$modalVersion"
     } else {
-        LogError "$pipCmd upgrade completed but 'modal' not found in PATH"
+        LogError "$installLabel upgrade completed but 'modal' not found in PATH"
         Write-Summary "ERROR" "modal cli" "upgrade succeeded but not on PATH"
     }
 } else {
-    Log "Installing Modal CLI via $pipCmd..."
-    $pipOutput = & $pipCmd install modal 2>&1 | Out-String
+    Log "Installing Modal CLI via $installLabel..."
+    $pipOutput = & $installCmd @installArgs install modal 2>&1 | Out-String
     $pipOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
     if ($pipOutput -match '\[notice\] A new release of pip is available: (.+)') {
         LogWarn "pip upgrade available: $($Matches[1])"
@@ -166,9 +179,9 @@ if (Get-Command modal -ErrorAction SilentlyContinue) {
     }
 }
 
-# --- pip dependency check ---
-if ($pipCmd) {
-    $pipCheckOutput = & $pipCmd check 2>&1 | Out-String
+# --- pip dependency check (only when using pip, not uv) ---
+if ($installLabel -ne "uv" -and $installCmd) {
+    $pipCheckOutput = & $installCmd check 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0 -and $pipCheckOutput.Trim()) {
         $pipCheckOutput.Trim().Split("`n") | ForEach-Object {
             $line = $_.TrimEnd()
