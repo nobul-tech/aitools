@@ -58,6 +58,9 @@ function Ensure-PythonUserScriptsOnPath {
     }
 }
 
+# Refresh PATH to pick up tools installed by prior steps (e.g., setup-python, setup-uv)
+Refresh-Path
+
 # --- Python package installer check (uv-first) ---
 $installCmd = $null
 $installArgs = @()
@@ -66,14 +69,19 @@ $installLabel = ""
 if (Get-Command uv -ErrorAction SilentlyContinue) {
     $installCmd = "uv"
     $installArgs = @("pip")
+    $installFlags = @("--system")
     $installLabel = "uv"
     Log "Using uv for package install"
 } elseif (Get-Command pip -ErrorAction SilentlyContinue) {
     $installCmd = "pip"
+    $installArgs = @()
+    $installFlags = @()
     $installLabel = "pip"
     Log "Using pip for package install (uv not found)"
 } elseif (Get-Command pip3 -ErrorAction SilentlyContinue) {
     $installCmd = "pip3"
+    $installArgs = @()
+    $installFlags = @()
     $installLabel = "pip3"
     Log "Using pip3 for package install (uv not found)"
 } else {
@@ -109,7 +117,7 @@ if (Get-Command modal -ErrorAction SilentlyContinue) {
     if (-not $modalVersion) { $modalVersion = "version unknown" }
     LogOk "Modal CLI already installed ($modalVersion)"
     Log "Upgrading via $installLabel..."
-    $pipOutput = & $installCmd @installArgs install --upgrade modal 2>&1 | Out-String
+    $pipOutput = & $installCmd @installArgs install @installFlags --upgrade modal 2>&1 | Out-String
     $pipOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
     if ($pipOutput -match '\[notice\] A new release of pip is available: (.+)') {
         LogWarn "pip upgrade available: $($Matches[1])"
@@ -134,7 +142,7 @@ if (Get-Command modal -ErrorAction SilentlyContinue) {
     }
 } else {
     Log "Installing Modal CLI via $installLabel..."
-    $pipOutput = & $installCmd @installArgs install modal 2>&1 | Out-String
+    $pipOutput = & $installCmd @installArgs install @installFlags modal 2>&1 | Out-String
     $pipOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
     if ($pipOutput -match '\[notice\] A new release of pip is available: (.+)') {
         LogWarn "pip upgrade available: $($Matches[1])"

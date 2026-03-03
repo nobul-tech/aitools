@@ -38,11 +38,16 @@ case "$(uname -s)" in
         exit 1 ;;
 esac
 
+# Refresh PATH hash to pick up tools installed by prior steps (e.g., setup-python, setup-uv)
+hash -r
+
 # --- Python package installer check (uv-first) ---
 INSTALL_CMD=""
+INSTALL_FLAGS=""
 INSTALL_LABEL=""
 if command -v uv >/dev/null 2>&1; then
     INSTALL_CMD="uv pip"
+    INSTALL_FLAGS="--system"
     INSTALL_LABEL="uv"
     log "Using uv for package install"
 elif command -v pip3 >/dev/null 2>&1; then
@@ -83,7 +88,7 @@ if command -v modal >/dev/null 2>&1; then
     MODAL_VERSION=$(modal --version 2>/dev/null || echo "version unknown")
     log "Modal CLI already installed ($MODAL_VERSION)"
     log "Upgrading via $INSTALL_LABEL..."
-    PIP_OUTPUT=$($INSTALL_CMD install --upgrade modal 2>&1) || true
+    PIP_OUTPUT=$($INSTALL_CMD install $INSTALL_FLAGS --upgrade modal 2>&1) || true
     printf '%s\n' "$PIP_OUTPUT" | while IFS= read -r line; do log "$line"; done
     pip_notice=$(printf '%s\n' "$PIP_OUTPUT" | grep -o '\[notice\] A new release of pip is available: .*' | head -1)
     if [ -n "$pip_notice" ]; then
@@ -105,7 +110,7 @@ if command -v modal >/dev/null 2>&1; then
     fi
 else
     log "Installing Modal CLI via $INSTALL_LABEL..."
-    PIP_OUTPUT=$($INSTALL_CMD install modal 2>&1) || true
+    PIP_OUTPUT=$($INSTALL_CMD install $INSTALL_FLAGS modal 2>&1) || true
     printf '%s\n' "$PIP_OUTPUT" | while IFS= read -r line; do log "$line"; done
     pip_notice=$(printf '%s\n' "$PIP_OUTPUT" | grep -o '\[notice\] A new release of pip is available: .*' | head -1)
     if [ -n "$pip_notice" ]; then

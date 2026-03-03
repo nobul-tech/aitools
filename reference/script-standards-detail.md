@@ -218,8 +218,10 @@ faster installs when uv is available while maintaining compatibility.
 ```bash
 # Determine install command: uv (preferred) > pip3 > pip
 INSTALL_CMD=""
+INSTALL_FLAGS=""
 if command -v uv >/dev/null 2>&1; then
     INSTALL_CMD="uv pip"
+    INSTALL_FLAGS="--system"
     log "Using uv for package install"
 elif command -v pip3 >/dev/null 2>&1; then
     INSTALL_CMD="pip3"
@@ -231,7 +233,8 @@ else
     log_error "No Python package installer found. Install uv or pip first."
 fi
 
-# Usage: $INSTALL_CMD install <package>
+# Usage: $INSTALL_CMD install $INSTALL_FLAGS <package>
+# --system is required for uv (installs into system Python, not a virtualenv)
 ```
 
 ### PowerShell
@@ -244,18 +247,24 @@ $installArgs = @()
 if (Get-Command uv -ErrorAction SilentlyContinue) {
     $installCmd = "uv"
     $installArgs = @("pip")
+    $installFlags = @("--system")
     Log "Using uv for package install"
 } elseif (Get-Command pip -ErrorAction SilentlyContinue) {
     $installCmd = "pip"
+    $installArgs = @()
+    $installFlags = @()
     Log "Using pip for package install (uv not found)"
 } elseif (Get-Command pip3 -ErrorAction SilentlyContinue) {
     $installCmd = "pip3"
+    $installArgs = @()
+    $installFlags = @()
     Log "Using pip3 for package install (uv not found)"
 } else {
     LogError "No Python package installer found. Install uv or pip first."
 }
 
-# Usage: & $installCmd @installArgs install <package>
+# Usage: & $installCmd @installArgs install @installFlags <package>
+# --system is required for uv (installs into system Python, not a virtualenv)
 ```
 
 ## Anti-pattern examples

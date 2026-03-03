@@ -63,29 +63,47 @@ if ($msixPackages) {
 }
 
 # --- Install/update ---
+# After MSIX removal, check if a real (non-stub) python exists.
+# The WindowsApps alias stub survives MSIX removal until PATH refreshes.
+$needsInstall = $true
 # Get-Command exempt: command-existence check with if/else fallback
-if (Get-Command python -ErrorAction SilentlyContinue) {
-    $pyVersion = python --version 2>$null
-    if (-not $pyVersion) { $pyVersion = "version unknown" }
-    Log "Python found ($pyVersion) -- upgrading via winget..."
-    $wingetOutput = winget upgrade $pythonWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
-    if ($wingetOutput -match 'No available upgrade|No newer package versions|No installed package') {
-        LogOk "Python already up to date"
-    } elseif ($LASTEXITCODE -ne 0) {
-        LogError "winget upgrade python failed (exit code $LASTEXITCODE)"
-        Write-Summary "ERROR" "python" "winget upgrade failed (exit $LASTEXITCODE)"
-    }
-    Refresh-Path
+$pythonCheck = Get-Command python -ErrorAction SilentlyContinue
+if ($pythonCheck) {
     $pyVersion = python --version 2>$null
     if ($pyVersion) {
-        LogOk $pyVersion
-        Write-Summary "OK" "python" "$pyVersion"
+        # Real python found -- try upgrade
+        $needsInstall = $false
+        Log "Python found ($pyVersion) -- upgrading via winget..."
+        $wingetOutput = winget upgrade $pythonWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+        $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+        if ($wingetOutput -match 'No installed package') {
+            # winget doesn't know about this python (e.g., from another source) -- fresh install
+            Log "winget has no record of $pythonWingetId -- performing fresh install"
+            $needsInstall = $true
+        } elseif ($wingetOutput -match 'No available upgrade|No newer package versions') {
+            LogOk "Python already up to date"
+        } elseif ($LASTEXITCODE -ne 0) {
+            LogError "winget upgrade python failed (exit code $LASTEXITCODE)"
+            Write-Summary "ERROR" "python" "winget upgrade failed (exit $LASTEXITCODE)"
+        }
+        if (-not $needsInstall) {
+            Refresh-Path
+            $pyVersion = python --version 2>$null
+            if ($pyVersion) {
+                LogOk $pyVersion
+                Write-Summary "OK" "python" "$pyVersion"
+            } else {
+                LogError "python --version failed after upgrade"
+                Write-Summary "ERROR" "python" "version check failed after upgrade"
+            }
+        }
     } else {
-        LogError "python --version failed after upgrade"
-        Write-Summary "ERROR" "python" "version check failed after upgrade"
+        # Get-Command found python but --version fails (stale alias stub)
+        Log "python found on PATH but --version failed (likely stale WindowsApps alias)"
     }
-} else {
+}
+
+if ($needsInstall) {
     Log "Installing Python via winget ($pythonWingetId)..."
     $wingetOutput = winget install $pythonWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
