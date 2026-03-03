@@ -344,7 +344,10 @@ function Show-CloudMcp {
     Remove-Item Env:\CLAUDECODE -ErrorAction SilentlyContinue
 
     try {
+        $savedEncoding = [Console]::OutputEncoding
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
         $raw = claude mcp list 2>$null
+        [Console]::OutputEncoding = $savedEncoding
     } catch {
         $raw = $null
     }
