@@ -35,6 +35,29 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     exit 1
 }
 
+# Helper: refresh PATH from registry (picks up pip installs in same session)
+function Refresh-Path {
+    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $env:Path = "$machinePath;$userPath"
+}
+
+# Helper: find Python user scripts directory and add to PATH if needed
+function Ensure-PythonUserScriptsOnPath {
+    if (-not $pythonCmd) { return }
+    # nt_user scheme gives the user-install scripts directory on Windows
+    $scriptsDir = & $pythonCmd -c "import sysconfig; print(sysconfig.get_path('scripts', 'nt_user'))" 2>$null
+    if (-not $scriptsDir -or -not (Test-Path $scriptsDir)) { return }
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($userPath -notlike "*$scriptsDir*") {
+        [Environment]::SetEnvironmentVariable("Path", "$userPath;$scriptsDir", "User")
+        Log "Added Python user Scripts to persistent PATH: $scriptsDir"
+    }
+    if ($env:Path -notlike "*$scriptsDir*") {
+        $env:Path = "$scriptsDir;$env:Path"
+    }
+}
+
 # --- Python/pip check ---
 $pipCmd = $null
 if (Get-Command pip -ErrorAction SilentlyContinue) {
@@ -104,6 +127,12 @@ if (Get-Command modal -ErrorAction SilentlyContinue) {
         LogError "pip reported errors during install (see log above)"
         Write-Summary "ERROR" "modal cli" "pip dependency conflict (see log)"
     }
+    Refresh-Path
+    # Get-Command exempt: command-existence check with if/else fallback
+    if (-not (Get-Command modal -ErrorAction SilentlyContinue)) {
+        Ensure-PythonUserScriptsOnPath
+    }
+    # Get-Command exempt: command-existence check with if/else fallback
     if (Get-Command modal -ErrorAction SilentlyContinue) {
         $modalVersion = & modal --version 2>$null
         if (-not $modalVersion) { $modalVersion = "version unknown" }

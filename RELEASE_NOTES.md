@@ -12,6 +12,19 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.32.1 -- Fix typst + modal installer false failures (2026-03-03)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Typst winget "already up to date" handling** (`setup-typst.ps1`): winget returns non-zero exit code (`-1978335189` / `APPINSTALLER_CLI_UPDATE_NOT_APPLICABLE`) when no upgrade is available. Script now checks output for "No available upgrade" before checking exit code, matching the pattern already used by `setup-gh-cli.ps1`. Was: `[ERR] typst winget upgrade failed`. |
+| 2 | **Modal CLI PATH resolution** (`setup-modal.ps1`): Windows Store Python's `pip install --user` places the `modal` binary in a Scripts directory not on PATH. Script now refreshes PATH from registry after pip install, and if `modal` still not found, discovers the Python user Scripts directory via `sysconfig` and adds it to both session and persistent user PATH. Was: `[ERR] modal cli installed but not on PATH`. |
+
+**Verified**: Windows
+
+---
+
 ## v0.32.0 -- 3-field summary format + external command standards (2026-03-03)
 
 ### Changed

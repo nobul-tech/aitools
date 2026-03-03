@@ -64,7 +64,9 @@ if ($typstCmd) {
     Log "Typst found -- upgrading via winget..."
     $wingetOutput = winget upgrade --id Typst.Typst --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $wingetOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
-    if ($LASTEXITCODE -ne 0) {
+    if ($wingetOutput -match 'No available upgrade|No newer package versions') {
+        LogOk "Typst already up to date"
+    } elseif ($LASTEXITCODE -ne 0) {
         LogError "winget upgrade typst failed (exit code $LASTEXITCODE)"
         Write-Summary "ERROR" "typst" "winget upgrade failed (exit $LASTEXITCODE)"
     }
