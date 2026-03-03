@@ -483,30 +483,40 @@ if (dryRun) {
 } else {
     if (corrupt) console.error('Warning: proceeding with --force on corrupt file');
     if (lostKeys.length > 0) console.error('Warning: proceeding with --force, losing fields: ' + lostKeys.join(', '));
-    fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+    const newJson = JSON.stringify(settings, null, 2) + '\n';
+    let existingJson = '';
+    try { existingJson = fs.readFileSync(settingsFile, 'utf8'); } catch(e) { /* file may not exist */ }
+    if (newJson.trim() === existingJson.trim()) {
+        console.log('unchanged');
+    } else {
+        fs.writeFileSync(settingsFile, newJson);
 
-    // Post-write validation
-    const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-    const _missing = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'].filter(k => !(k in _v));
-    if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
-    // Validate hook arrays have exactly one entry per managed hook
-    const seCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('session-archive.sh'))).length;
-    const ptCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('standing-order-guard.sh'))).length;
-    if (seCount !== 1) { console.error('Validation failed: expected 1 SessionEnd hook, got ' + seCount); process.exit(1); }
-    if (ptCount !== 1) { console.error('Validation failed: expected 1 PreToolUse hook, got ' + ptCount); process.exit(1); }
+        // Post-write validation
+        const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+        const _missing = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'].filter(k => !(k in _v));
+        if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+        // Validate hook arrays have exactly one entry per managed hook
+        const seCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('session-archive.sh'))).length;
+        const ptCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('standing-order-guard.sh'))).length;
+        if (seCount !== 1) { console.error('Validation failed: expected 1 SessionEnd hook, got ' + seCount); process.exit(1); }
+        if (ptCount !== 1) { console.error('Validation failed: expected 1 PreToolUse hook, got ' + ptCount); process.exit(1); }
 
-    console.log('ok');
+        console.log('ok');
+    }
 }
 " "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$DRY_RUN" "$FORCE")
 
 case "$MERGE_RESULT" in
     ok)
         log_ok "Settings deployed to $(display_path "$SETTINGS_FILE")"
-        write_summary OK "claude hooks" "deployed"
+        HOOKS_CHANGED=true
         log "  SessionEnd hook: $HOOK_CMD"
         log "  PreToolUse hook: $GUARD_CMD"
         log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"
         log "  alwaysThinkingEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).alwaysThinkingEnabled)")"
+        ;;
+    unchanged)
+        log_ok "Settings unchanged: $(display_path "$SETTINGS_FILE")"
         ;;
     dry-run)
         log "[DRY RUN] Would merge settings (see above)"
@@ -521,6 +531,12 @@ case "$MERGE_RESULT" in
         log_error "Unexpected merge result: $MERGE_RESULT"
         ;;
 esac
+
+if [ "$HOOKS_CHANGED" = "true" ]; then
+    write_summary OK "claude hooks" "deployed"
+else
+    write_summary OK "claude hooks" "unchanged"
+fi
 if [ "$ERRORS" -gt 0 ]; then
     log "FAILED with $ERRORS error(s). See log: $LOG_FILE"
     exit 1

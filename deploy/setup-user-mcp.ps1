@@ -161,7 +161,7 @@ if ($Force) {
     } else {
         Add-McpServer -Name "chrome-devtools" -AddArgs @("chrome-devtools", "--scope", "user", "cmd", "/c", "npx", "chrome-devtools-mcp@latest", "--", "--isolated")
     }
-} elseif (Test-ServerConfigMatches "chrome-devtools" "npx chrome-devtools-mcp@latest --isolated") {
+} elseif (Test-ServerConfigMatches "chrome-devtools" "cmd /c npx chrome-devtools-mcp@latest --isolated") {
     LogOk "chrome-devtools already configured, skipping (use -Force to re-add)"
 } else {
     if ($DryRun) {

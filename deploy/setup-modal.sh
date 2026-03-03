@@ -75,6 +75,12 @@ if command -v modal >/dev/null 2>&1; then
     log "Upgrading via $PIP_CMD..."
     PIP_OUTPUT=$("$PIP_CMD" install --upgrade modal 2>&1) || true
     printf '%s\n' "$PIP_OUTPUT" | while IFS= read -r line; do log "$line"; done
+    pip_notice=$(printf '%s\n' "$PIP_OUTPUT" | grep -o '\[notice\] A new release of pip is available: .*' | head -1)
+    if [ -n "$pip_notice" ]; then
+        pip_versions="${pip_notice#*: }"
+        log_warn "pip upgrade available: $pip_versions"
+        write_summary WARN "pip" "upgrade available: $pip_versions"
+    fi
     if printf '%s\n' "$PIP_OUTPUT" | grep -qi '^ERROR:'; then
         log_error "pip reported errors during upgrade (see log above)"
         write_summary ERROR "modal cli" "pip dependency conflict (see log)"
@@ -91,6 +97,12 @@ else
     log "Installing Modal CLI via $PIP_CMD..."
     PIP_OUTPUT=$("$PIP_CMD" install modal 2>&1) || true
     printf '%s\n' "$PIP_OUTPUT" | while IFS= read -r line; do log "$line"; done
+    pip_notice=$(printf '%s\n' "$PIP_OUTPUT" | grep -o '\[notice\] A new release of pip is available: .*' | head -1)
+    if [ -n "$pip_notice" ]; then
+        pip_versions="${pip_notice#*: }"
+        log_warn "pip upgrade available: $pip_versions"
+        write_summary WARN "pip" "upgrade available: $pip_versions"
+    fi
     if printf '%s\n' "$PIP_OUTPUT" | grep -qi '^ERROR:'; then
         log_error "pip reported errors during install (see log above)"
         write_summary ERROR "modal cli" "pip dependency conflict (see log)"
@@ -106,6 +118,15 @@ else
         log_warn "You may need to add Python's bin directory to PATH."
         log_warn "Try: $PYTHON_CMD -m modal --version"
     fi
+fi
+
+# --- pip dependency check ---
+pip_check_output=$("$PIP_CMD" check 2>&1) || true
+if [ -n "$pip_check_output" ]; then
+    printf '%s\n' "$pip_check_output" | while IFS= read -r line; do
+        [ -n "$line" ] && log_warn "pip conflict: $line"
+    done
+    write_summary WARN "pip" "dependency conflicts found (see log)"
 fi
 
 log_warn "Authentication required: run 'modal setup' to authenticate (browser flow)"

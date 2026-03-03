@@ -49,11 +49,11 @@ Configured automatically by `aitools install`, which runs:
 ```powershell
 # Windows
 .\scripts\setup-user-mcp.ps1    # Claude Code
-.\scripts\setup-cursor-mcp.ps1  # Cursor
+.\scripts\setup-cursor-ide-mcp.ps1  # Cursor
 
 # macOS
 bash scripts/setup-user-mcp.sh    # Claude Code
-bash scripts/setup-cursor-mcp.sh  # Cursor
+bash scripts/setup-cursor-ide-mcp.sh  # Cursor
 ```
 
 ### Per-Project Enable
@@ -108,7 +108,7 @@ Source: https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/main/skills
 | stdio (Chrome DevTools) | **Yes with `--isolated`** | Creates throwaway temp Chrome profile per process, auto-cleaned on exit. Without `--isolated`, Chrome profile lock prevents concurrent sessions. |
 | HTTP remote (Vercel, Webflow) | Yes | Inherently concurrent -- multiple clients connect to the same remote server simultaneously. No local state conflicts. |
 
-All setup scripts (`setup-user-mcp.*`, `setup-cursor-mcp.*`) configure `--isolated` by default.
+All setup scripts (`setup-user-mcp.*`, `setup-cursor-ide-mcp.*`) configure `--isolated` by default.
 
 ## Post-Setup Authentication
 

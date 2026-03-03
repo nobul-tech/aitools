@@ -88,7 +88,7 @@ These are the canonical tool names for field 2. Always use these exact strings.
 | `claude skills` | setup-user-mcp |
 | `cursor rules` | setup-user-cursor |
 | `cursor skills` | setup-user-mcp |
-| `cursor mcp` | setup-cursor-mcp |
+| `cursor ide mcp` | setup-cursor-ide-mcp |
 
 ### Severity categories
 

@@ -524,36 +524,46 @@ if ($DryRun) {
         if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
         if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
 
-        $json = $settings | ConvertTo-Json -Depth 10
-        $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($settingsFile)
-        [System.IO.File]::WriteAllText($resolvedPath, $json, [System.Text.UTF8Encoding]::new($false))
+        $mergedJson = $settings | ConvertTo-Json -Depth 10
+        $existingJson = if (Test-Path $settingsFile) { Get-Content $settingsFile -Raw -ErrorAction Stop } else { $null }
+        if ($mergedJson.TrimEnd() -eq ($existingJson -replace '\r','').TrimEnd()) {
+            LogOk "Settings unchanged: $settingsFile"
+        } else {
+            $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($settingsFile)
+            [System.IO.File]::WriteAllText($resolvedPath, $mergedJson, [System.Text.UTF8Encoding]::new($false))
+            $hooksChanged = $true
 
-        # Post-write validation
-        try {
-            $vContent = [System.IO.File]::ReadAllText($resolvedPath)
-            $vParsed = $vContent | ConvertFrom-Json
-            $requiredKeys = @("hooks", "autoMemoryEnabled", "alwaysThinkingEnabled")
-            foreach ($rk in $requiredKeys) {
-                if (-not ($vParsed.PSObject.Properties.Name -contains $rk)) {
-                    LogError "Validation failed: $settingsFile missing required field '$rk'"
+            # Post-write validation
+            try {
+                $vContent = [System.IO.File]::ReadAllText($resolvedPath)
+                $vParsed = $vContent | ConvertFrom-Json
+                $requiredKeys = @("hooks", "autoMemoryEnabled", "alwaysThinkingEnabled")
+                foreach ($rk in $requiredKeys) {
+                    if (-not ($vParsed.PSObject.Properties.Name -contains $rk)) {
+                        LogError "Validation failed: $settingsFile missing required field '$rk'"
+                    }
                 }
+            } catch {
+                LogError "Validation failed: $settingsFile is not valid JSON -- $_"
             }
-        } catch {
-            LogError "Validation failed: $settingsFile is not valid JSON -- $_"
+
+            # Validate hook deduplication
+            $seCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'session-archive\.sh' }).Count
+            $ptCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'standing-order-guard\.sh' }).Count
+            if ($seCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd hook, got $seCount" }
+            if ($ptCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse hook, got $ptCount" }
+
+            LogOk "Settings deployed to $settingsFile"
+            Log "  SessionEnd hook: $hookCmd"
+            Log "  PreToolUse hook: $guardCmd"
+            Log "  autoMemoryEnabled: $autoMemory"
+            Log "  alwaysThinkingEnabled: $alwaysThinking"
         }
-
-        # Validate hook deduplication
-        $seCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'session-archive\.sh' }).Count
-        $ptCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'standing-order-guard\.sh' }).Count
-        if ($seCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd hook, got $seCount" }
-        if ($ptCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse hook, got $ptCount" }
-
-        LogOk "Settings deployed to $settingsFile"
-        Write-Summary "OK" "claude hooks" "deployed"
-        Log "  SessionEnd hook: $hookCmd"
-        Log "  PreToolUse hook: $guardCmd"
-        Log "  autoMemoryEnabled: $autoMemory"
-        Log "  alwaysThinkingEnabled: $alwaysThinking"
+        if ($hooksChanged) {
+            Write-Summary "OK" "claude hooks" "deployed"
+        } else {
+            Write-Summary "OK" "claude hooks" "unchanged"
+        }
     }
 }
 if ($errors -gt 0) {

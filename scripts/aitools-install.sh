@@ -668,7 +668,7 @@ fi
 # ============================================================
 log "Step 15: Deploy configurations"
 
-DEPLOY_SCRIPTS="setup-user-claude.sh setup-user-cursor.sh setup-user-mcp.sh setup-cursor-mcp.sh setup-user-hooks.sh"
+DEPLOY_SCRIPTS="setup-user-claude.sh setup-user-cursor.sh setup-user-mcp.sh setup-cursor-ide-mcp.sh setup-user-hooks.sh"
 
 for script in $DEPLOY_SCRIPTS; do
     script_path="$SCRIPT_DIR/$script"

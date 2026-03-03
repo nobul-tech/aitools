@@ -12,6 +12,21 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.33.0 -- Installer improvements: pip health, MCP idempotency, cursor IDE rename, hooks skip (2026-03-03)
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 1 | **Rename `setup-cursor-mcp` to `setup-cursor-ide-mcp`**: Disambiguates Cursor IDE MCP setup from Claude Code MCP setup. Updated across 17 files (scripts, docs, references). Summary tool name now `cursor ide mcp`. "Next steps" log replaced with `write_summary ACTION` for end-of-run panel visibility. |
+| 2 | **Hooks idempotency** (`setup-user-hooks`): Hook files and `settings.json` now compared before writing. Skips copy/write when content is unchanged. Summary shows "deployed" or "unchanged" accordingly. |
+| 3 | **Chrome-devtools MCP idempotency** (`setup-user-mcp.ps1`): Fixed Windows config match to include `cmd /c` prefix. Was: remove+re-add every run. Now: "already configured, skipping" on subsequent runs. |
+| 4 | **Modal pip health** (`setup-modal`): Pip upgrade notice (`[notice] A new release of pip is available`) now surfaced as WARN in summary panel. Post-install `pip check` detects and warns about dependency conflicts (e.g., protobuf version mismatch). |
+
+**Verified**: Windows
+
+---
+
 ## v0.32.1 -- Fix typst + modal installer false failures (2026-03-03)
 
 ### Fixed
@@ -33,7 +48,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 |---|--------|
 | 1 | **3-field summary format**: All `write_summary` calls converted from 2-arg (`CAT\|msg`) to 3-arg (`CAT\|tool_name\|detail`). Renderer updated with left-aligned columns. Canonical tool name table in `reference/script-standards-detail.md`. |
 | 2 | **Tool name standardization**: Inconsistent names (`vercel CLI`, `modal CLI`, `cursor config`, `hooks`, `MCP servers`) normalized to lowercase canonical names (`vercel cli`, `modal cli`, `cursor rules`, `claude hooks`, `claude mcp`). |
-| 3 | **Missing summary entries added**: `claude rules` (setup-user-claude), `claude skills` + `cursor skills` (setup-user-mcp), `cursor mcp` (setup-cursor-mcp) now appear in the end-of-run panel. |
+| 3 | **Missing summary entries added**: `claude rules` (setup-user-claude), `claude skills` + `cursor skills` (setup-user-mcp), `cursor mcp` (setup-cursor-ide-mcp) now appear in the end-of-run panel. |
 | 4 | **External command error handling standards**: New section in script-standards rule and detail reference. Four standards: capture output, check exit codes, distinguish "up to date" from failure, PATH = error not warning. |
 | 5 | **`reference/script-standards-detail.md` rewrite**: Full reference with severity categories, decision guide, summary coverage rule, ACTION item format, anti-pattern examples, and external command patterns. |
 | 6 | **Build-deploy skills write_summary**: `build-deploy.sh` updated to emit `write_summary` calls in embedded skills sections, so deploy/ scripts include skills in the summary panel. |
@@ -587,7 +602,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 | # | Severity | Fix |
 |---|----------|-----|
-| 1 | CRITICAL | **`ConvertFrom-Json -AsHashtable` (PS 6+ only)**: Replaced with `ConvertPSObjectToHashtable` helper in `setup-user-mcp.ps1` and `setup-cursor-mcp.ps1`. On PS 5.1, the parameter error was caught as "invalid JSON", starting with empty `@{}` and silently clobbering all existing `settings.json`/`mcp.json` data. |
+| 1 | CRITICAL | **`ConvertFrom-Json -AsHashtable` (PS 6+ only)**: Replaced with `ConvertPSObjectToHashtable` helper in `setup-user-mcp.ps1` and `setup-cursor-ide-mcp.ps1`. On PS 5.1, the parameter error was caught as "invalid JSON", starting with empty `@{}` and silently clobbering all existing `settings.json`/`mcp.json` data. |
 | 2 | CRITICAL | **`Join-Path` 3+ arguments (PS 6+ only)**: Chained to 2-arg calls in `setup-user-mcp.ps1` (4 instances) and `build-deploy.sh` heredoc (2 instances). Caused `A positional parameter cannot be found that accepts argument 'skills'` on PS 5.1. |
 | 3 | HIGH | **`setup-user-hooks` missing from install flow**: Added to `aitools-install.ps1` and `.sh` deploy lists. Previously only deployed via `aitools` default command, not `aitools install`. |
 | 4 | HIGH | **Empty `catch {}` in `setup-user-claude.sh`**: Replaced with ENOENT check to surface parse errors from malformed `config.json`. |
@@ -596,7 +611,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 | # | Change |
 |---|--------|
-| 5 | **Config backup coverage**: Added 20-rotating backup (`Backup-File`/`backup_file`) to `setup-user-mcp` (settings.json) and `setup-user-cursor` (cli-config.json). Previously only `setup-user-claude` and `setup-cursor-mcp` had backups. |
+| 5 | **Config backup coverage**: Added 20-rotating backup (`Backup-File`/`backup_file`) to `setup-user-mcp` (settings.json) and `setup-user-cursor` (cli-config.json). Previously only `setup-user-claude` and `setup-cursor-ide-mcp` had backups. |
 | 6 | **User repo auto-pull**: `aitools` default command and `aitools gitpull` now pull the user repo (quiet, non-blocking) before deploying configs. Prevents stale profile data when switching machines. |
 | 7 | **Improved catch block messages**: All PS1 config merge catch blocks now report the actual exception instead of generic "invalid JSON" message. |
 
@@ -800,8 +815,8 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | `scripts/setup-user-mcp.ps1` | `settings.json` | Inline PS1 try/catch |
 | `scripts/setup-user-hooks.sh` | `settings.json` | Inline Node.js |
 | `scripts/setup-user-hooks.ps1` | `settings.json` | Inline Node.js |
-| `scripts/setup-cursor-mcp.sh` | `mcp.json` | Inline Node.js |
-| `scripts/setup-cursor-mcp.ps1` | `mcp.json` | Inline PS1 try/catch |
+| `scripts/setup-cursor-ide-mcp.sh` | `mcp.json` | Inline Node.js |
+| `scripts/setup-cursor-ide-mcp.ps1` | `mcp.json` | Inline PS1 try/catch |
 | `scripts/setup-user-cursor.sh` | `cli-config.json` | Inline Node.js |
 | `scripts/setup-user-cursor.ps1` | `cli-config.json` | Inline Node.js |
 | `scripts/setup-user-claude.sh` | `CLAUDE.md` | Inline bash checks |
@@ -820,7 +835,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 | # | Severity | Fix |
 |---|----------|-----|
-| 1 | Medium | `setup-cursor-mcp.sh/.ps1` now merges managed servers into `~/.cursor/mcp.json` instead of overwriting. User-added MCP servers are preserved across re-runs. |
+| 1 | Medium | `setup-cursor-ide-mcp.sh/.ps1` now merges managed servers into `~/.cursor/mcp.json` instead of overwriting. User-added MCP servers are preserved across re-runs. |
 | 2 | Low | Empty `catch {}` blocks in inline Node.js across all setup scripts and CLI now warn on corrupt JSON instead of silently starting with empty config. ENOENT (file missing) still starts fresh silently. |
 | 5 | Medium | `aitools user init` (Path 1: repo already exists) now auto-detects `machineAlias` from `profile.json` by hostname match instead of leaving it empty. Hostname comparison uses short name (strips DNS suffix) to handle `Joses-MBP` vs `Joses-MBP.lax`. Same fix applied to `build-deploy.sh` profile lookup fallback. |
 
@@ -1403,13 +1418,13 @@ Each release section ends with a verified-platform note:
 |---|----------|-----|
 | 1 | BUG | Generated bash deploy scripts now define logging helpers before the OS guard, so `log_error` is available when the guard fires. |
 | 2 | BUG | Generated bash deploy scripts log to `~/Library/Logs/aitools/deploy.log` (matching source scripts and `aitools` CLI), not `~/Library/Logs/ai-tooling-deploy.log`. |
-| 3 | BUG | `setup-cursor-mcp.ps1` and `setup-user-cursor.ps1` now write BOM-free UTF-8 via `[System.IO.File]::WriteAllText` instead of `Set-Content -Encoding UTF8`. Fixes JSON parsing issues on PowerShell 5.1. |
+| 3 | BUG | `setup-cursor-ide-mcp.ps1` and `setup-user-cursor.ps1` now write BOM-free UTF-8 via `[System.IO.File]::WriteAllText` instead of `Set-Content -Encoding UTF8`. Fixes JSON parsing issues on PowerShell 5.1. |
 
 ### Improvements
 
 | # | Severity | Change |
 |---|----------|--------|
-| 4 | WARNING | `setup-user-mcp` and `setup-cursor-mcp` (both `.sh` and `.ps1`) now track errors and exit with code 1 on failure, matching the pattern used by other setup scripts. |
+| 4 | WARNING | `setup-user-mcp` and `setup-cursor-ide-mcp` (both `.sh` and `.ps1`) now track errors and exit with code 1 on failure, matching the pattern used by other setup scripts. |
 | 5 | STALE | Fixed drifted line-number reference in `reference/claude-code-windows-shell.md`. |
 
 ---
@@ -1467,7 +1482,7 @@ Setup scripts now back up files before overwriting. Keeps at most 20 timestamped
 | File | Backed up by |
 |------|-------------|
 | `~/.claude/CLAUDE.md` | `setup-user-claude` |
-| `~/.cursor/mcp.json` | `setup-cursor-mcp` |
+| `~/.cursor/mcp.json` | `setup-cursor-ide-mcp` |
 
 Backup format: `<file>.bak.<ISO-UTC-timestamp>` (e.g., `CLAUDE.md.bak.2026-02-17T023527Z`)
 

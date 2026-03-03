@@ -303,7 +303,7 @@ deploy_configs() {
                 log_error "pwsh (PowerShell 7) not found. Install: winget install --id Microsoft.PowerShell --source winget"
                 return 1
             fi
-            local deploy_scripts="setup-user-claude.ps1 setup-user-mcp.ps1 setup-cursor-mcp.ps1 setup-user-cursor.ps1 setup-user-hooks.ps1"
+            local deploy_scripts="setup-user-claude.ps1 setup-user-mcp.ps1 setup-cursor-ide-mcp.ps1 setup-user-cursor.ps1 setup-user-hooks.ps1"
             for script in $deploy_scripts; do
                 local script_path="$script_dir/$script"
                 if [ -f "$script_path" ]; then
@@ -328,7 +328,7 @@ deploy_configs() {
             done
             ;;
         *)
-            local deploy_scripts="setup-user-claude.sh setup-user-mcp.sh setup-cursor-mcp.sh setup-user-cursor.sh setup-user-hooks.sh"
+            local deploy_scripts="setup-user-claude.sh setup-user-mcp.sh setup-cursor-ide-mcp.sh setup-user-cursor.sh setup-user-hooks.sh"
             for script in $deploy_scripts; do
                 local script_path="$script_dir/$script"
                 if [ -f "$script_path" ]; then

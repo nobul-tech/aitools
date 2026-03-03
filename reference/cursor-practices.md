@@ -52,10 +52,10 @@ Cursor has its own MCP configuration, **separate from Claude Code**.
 
 ```powershell
 # Windows
-.\scripts\setup-cursor-mcp.ps1
+.\scripts\setup-cursor-ide-mcp.ps1
 
 # macOS
-bash scripts/setup-cursor-mcp.sh
+bash scripts/setup-cursor-ide-mcp.sh
 ```
 
 After running, restart Cursor and go to **Cursor Settings > Tools & MCP** to verify servers appear and authenticate Vercel + Webflow.
@@ -200,4 +200,4 @@ Cursor also has 5 built-in skills at `~/.cursor/skills-cursor/` (not managed by 
 | Windows workstation | `~/.cursor/mcp.json` |
 | Mac laptop | `~/.cursor/mcp.json` |
 
-Both machines need their own MCP setup (run `deploy/setup-cursor-mcp.sh` or `.ps1` on each).
+Both machines need their own MCP setup (run `deploy/setup-cursor-ide-mcp.sh` or `.ps1` on each).

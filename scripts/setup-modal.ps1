@@ -97,6 +97,10 @@ if (Get-Command modal -ErrorAction SilentlyContinue) {
     Log "Upgrading via $pipCmd..."
     $pipOutput = & $pipCmd install --upgrade modal 2>&1 | Out-String
     $pipOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    if ($pipOutput -match '\[notice\] A new release of pip is available: (.+)') {
+        LogWarn "pip upgrade available: $($Matches[1])"
+        Write-Summary "WARN" "pip" "upgrade available: $($Matches[1])"
+    }
     if ($LASTEXITCODE -ne 0) {
         LogError "pip upgrade failed (exit code $LASTEXITCODE)"
         Write-Summary "ERROR" "modal cli" "pip upgrade failed (exit $LASTEXITCODE)"
@@ -118,6 +122,10 @@ if (Get-Command modal -ErrorAction SilentlyContinue) {
     Log "Installing Modal CLI via $pipCmd..."
     $pipOutput = & $pipCmd install modal 2>&1 | Out-String
     $pipOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    if ($pipOutput -match '\[notice\] A new release of pip is available: (.+)') {
+        LogWarn "pip upgrade available: $($Matches[1])"
+        Write-Summary "WARN" "pip" "upgrade available: $($Matches[1])"
+    }
     if ($LASTEXITCODE -ne 0) {
         LogError "pip install failed (exit code $LASTEXITCODE)"
         Write-Summary "ERROR" "modal cli" "pip install failed (exit $LASTEXITCODE)"
@@ -154,6 +162,18 @@ if (Get-Command modal -ErrorAction SilentlyContinue) {
         Write-Summary "ERROR" "modal cli" "installed but not on PATH"
         LogWarn "You may need to add Python's Scripts directory to PATH."
         if ($pythonCmd) { LogWarn "Try: $pythonCmd -m modal --version" }
+    }
+}
+
+# --- pip dependency check ---
+if ($pipCmd) {
+    $pipCheckOutput = & $pipCmd check 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0 -and $pipCheckOutput.Trim()) {
+        $pipCheckOutput.Trim().Split("`n") | ForEach-Object {
+            $line = $_.TrimEnd()
+            if ($line) { LogWarn "pip conflict: $line" }
+        }
+        Write-Summary "WARN" "pip" "dependency conflicts found (see log)"
     }
 }
 

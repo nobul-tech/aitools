@@ -63,7 +63,7 @@ macOS/Linux:
 bash deploy/setup-user-claude.sh        # Claude Code user preferences
 bash deploy/setup-user-cursor.sh        # Cursor CLI + config
 bash deploy/setup-user-mcp.sh           # Claude Code MCP servers
-bash deploy/setup-cursor-mcp.sh         # Cursor MCP servers
+bash deploy/setup-cursor-ide-mcp.sh         # Cursor MCP servers
 bash deploy/setup-vercelcli.sh          # Vercel CLI
 bash deploy/setup-pandoc.sh             # Pandoc
 bash deploy/setup-rust.sh               # Rust (cargo)
@@ -74,7 +74,7 @@ Windows (PowerShell):
 .\deploy\setup-user-claude.ps1          # Claude Code user preferences
 .\deploy\setup-user-cursor.ps1          # Cursor CLI + config
 .\deploy\setup-user-mcp.ps1             # Claude Code MCP servers
-.\deploy\setup-cursor-mcp.ps1           # Cursor MCP servers
+.\deploy\setup-cursor-ide-mcp.ps1           # Cursor MCP servers
 .\deploy\setup-vercelcli.ps1            # Vercel CLI
 .\deploy\setup-pandoc.ps1               # Pandoc
 .\deploy\setup-rust.ps1                 # Rust (cargo)

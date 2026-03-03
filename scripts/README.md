@@ -21,8 +21,8 @@ Setup and utility scripts for configuring AI tooling across machines.
 | `setup-user-mcp.sh` | macOS/Linux | Installs/updates user-level MCP servers for Claude Code |
 | `setup-user-cursor.ps1` | Windows | Installs ripgrep + Cursor CLI, writes `cli-config.json` |
 | `setup-user-cursor.sh` | macOS/Linux | Installs ripgrep + Cursor CLI, writes `cli-config.json` |
-| `setup-cursor-mcp.ps1` | Windows | Writes `~/.cursor/mcp.json` with MCP servers for Cursor |
-| `setup-cursor-mcp.sh` | macOS/Linux | Writes `~/.cursor/mcp.json` with MCP servers for Cursor |
+| `setup-cursor-ide-mcp.ps1` | Windows | Writes `~/.cursor/mcp.json` with MCP servers for Cursor |
+| `setup-cursor-ide-mcp.sh` | macOS/Linux | Writes `~/.cursor/mcp.json` with MCP servers for Cursor |
 | `setup-vercelcli.ps1` | Windows | Installs/updates Vercel CLI via npm |
 | `setup-vercelcli.sh` | macOS/Linux | Installs/updates Vercel CLI via Homebrew (macOS) or npm (Linux) |
 | `setup-pandoc.ps1` | Windows | Installs/updates Pandoc via winget |
@@ -103,10 +103,10 @@ Safe to re-run — checks each step and skips what's already done. Installs ripg
 
 ```powershell
 # Windows
-.\scripts\setup-cursor-mcp.ps1
+.\scripts\setup-cursor-ide-mcp.ps1
 
 # macOS
-bash scripts/setup-cursor-mcp.sh
+bash scripts/setup-cursor-ide-mcp.sh
 ```
 
 Safe to re-run — backs up the existing file then replaces with the latest config.

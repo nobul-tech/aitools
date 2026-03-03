@@ -119,7 +119,7 @@ All `.sh` files in the repo have LF line endings (not CRLF).
 ### 15. MCP config deploy
 
 Full setup script run (heavier than Always #3):
-- Run `bash scripts/setup-user-mcp.sh` and `bash scripts/setup-cursor-mcp.sh`
+- Run `bash scripts/setup-user-mcp.sh` and `bash scripts/setup-cursor-ide-mcp.sh`
 - Verify chrome-devtools has `--isolated` in both `~/.claude.json` and
   `~/.cursor/mcp.json`
 
