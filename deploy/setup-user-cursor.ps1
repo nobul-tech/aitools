@@ -56,8 +56,8 @@ function ReadConfigKey {
 # ---------------------------------------------------------------------------
 # Logging init
 # ---------------------------------------------------------------------------
-# Sets $script:scriptName, $script:logDir, $script:logFile, $script:errors.
-# Creates log directory.
+# Sets $script:scriptName, $script:logDir, $script:logFile; resets
+# $script:errors, $script:warnings. Creates log directory.
 # Usage: Initialize-Logging "setup-foo"
 function Initialize-Logging {
     param([Parameter(Mandatory)][string]$Name)
@@ -74,20 +74,25 @@ function Initialize-Logging {
         New-Item -ItemType Directory -Path $script:logDir -Force | Out-Null
     }
     $script:errors = 0
+    $script:warnings = 0
 }
 
 # ---------------------------------------------------------------------------
-# Standard logging (console + log file)
+# Standard logging (console + log file, with [level] tag)
 # ---------------------------------------------------------------------------
-function Log($msg) {
+function Log($msg, $level = "info") {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-    $line = "[$ts] [$scriptName] $msg"
-    Write-Host $line
+    $line = "[$ts] [$scriptName] [$level] $msg"
     Add-Content -Path $logFile -Value $line
+    switch ($level) {
+        "error" { Write-Host $line -ForegroundColor Red }
+        "warn"  { Write-Host $line -ForegroundColor Yellow }
+        default { Write-Host $line }
+    }
 }
-function LogOk($msg)    { Log "OK: $msg" }
-function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
-function LogWarn($msg)  { Log "WARN: $msg" }
+function LogOk($msg)    { Log $msg "ok" }
+function LogError($msg) { Log $msg "error"; $script:errors++ }
+function LogWarn($msg)  { Log $msg "warn"; $script:warnings++ }
 
 # ---------------------------------------------------------------------------
 # Summary writer (3-arg: category, tool, detail)
@@ -404,9 +409,12 @@ Log "  Cursor CLI:    $($status.cursorCli)"
 Log "  cli-config:    $($status.cliConfig)"
 Log "=============================="
 if ($errors -gt 0) {
-    Log "FAILED with $errors error(s). See log: $logFile"
+    Log "FAILED with $errors error(s). See log: $logFile" "error"
     exit 1
+} elseif ($warnings -gt 0) {
+    Log "COMPLETED with $warnings warning(s)" "warn"
+    exit 0
 } else {
-    Log "COMPLETED successfully"
+    Log "COMPLETED successfully" "ok"
     exit 0
 }

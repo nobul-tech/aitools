@@ -3,19 +3,48 @@
 Comprehensive reference for `.claude/rules/script-standards.md`.
 Defines exact specifications, code patterns, and exemptions.
 
+## Log line format
+
+Every log line must follow this format:
+
+```
+[timestamp] [script-name] [level] message
+```
+
+- **Timestamp**: UTC with Z suffix -- `date -u +%Y-%m-%dT%H:%M:%SZ` (bash) / `.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")` (PS1)
+- **Script name**: set by `logging_init` / `Initialize-Logging`
+- **Level**: one of `info`, `ok`, `warn`, `error`
+
+### Console colors
+
+| Level | Bash ANSI | PS1 `-ForegroundColor` |
+|-------|-----------|----------------------|
+| `error` | `\033[31m` (red) | `Red` |
+| `warn` | `\033[33m` (yellow) | `Yellow` |
+| `info` | (none) | (none) |
+| `ok` | (none) | (none) |
+
+### Log file
+
+Log file output is plain text only -- no ANSI escape codes. The `log()` function writes
+plain text to `$LOG_FILE` and colored text to the console separately.
+
 ## Exit footer
 
-Every reusable script ends with an exit footer that checks the error counter.
+Every reusable script ends with an exit footer that checks both error and warning counters.
 
 ### Bash
 
 ```bash
 # --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then
-    log "FAILED with $ERRORS error(s). See log: $LOG_FILE"
+    log "FAILED with $ERRORS error(s)" "error"
     exit 1
+elif [ "$WARNINGS" -gt 0 ]; then
+    log "COMPLETED with $WARNINGS warning(s)" "warn"
+    exit 0
 else
-    log "COMPLETED successfully"
+    log "COMPLETED successfully" "ok"
     exit 0
 fi
 ```
@@ -25,10 +54,13 @@ fi
 ```powershell
 # --- Exit ---
 if ($errors -gt 0) {
-    Log "FAILED with $errors error(s). See log: $logFile"
+    Log "FAILED with $errors error(s). See log: $logFile" "error"
     exit 1
+} elseif ($warnings -gt 0) {
+    Log "COMPLETED with $warnings warning(s)" "warn"
+    exit 0
 } else {
-    Log "COMPLETED successfully"
+    Log "COMPLETED successfully" "ok"
     exit 0
 }
 ```
@@ -47,8 +79,9 @@ Check scripts source `check-lib.sh`/`.ps1` which in turn sources `aitools-lib.sh
 | Log directory | `AITOOLS_LOG_DIR` | via `Initialize-Logging` | Platform-aware log path |
 | `display_path` | `display_path()` | (not needed) | cygpath wrapper for Windows |
 | Config reader | `read_config_key()` | `ReadConfigKey` | JSON key extraction (BOM-safe) |
-| Logging init | `logging_init "name"` | `Initialize-Logging "name"` | Sets SCRIPT_NAME, LOG_DIR, LOG_FILE, ERRORS |
-| Standard logging | `log`/`log_ok`/`log_error`/`log_warn` | `Log`/`LogOk`/`LogError`/`LogWarn` | Timestamped structured logging |
+| Module-level counters | `ERRORS=0`, `WARNINGS=0` | n/a (set in `Initialize-Logging`) | Safe defaults for scripts that source without `logging_init` |
+| Logging init | `logging_init "name"` | `Initialize-Logging "name"` | Sets SCRIPT_NAME, LOG_DIR, LOG_FILE; resets ERRORS, WARNINGS |
+| Standard logging | `log`/`log_ok`/`log_error`/`log_warn` | `Log`/`LogOk`/`LogError`/`LogWarn` | `[ts] [script] [level] msg` with console colors |
 | Summary writer | `write_summary` | `Write-Summary` | 3-arg append to summary file |
 | Summary renderer | `show_summary` | `Show-Summary` | Colored panel display |
 
@@ -75,9 +108,12 @@ Bash:
 source "$repo_path/scripts/aitools-lib.sh"
 logging_init "aitools"
 # Override: file-only logging, errors/warns to stderr
-log() { printf '[%s] [aitools] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >> "$LOG_FILE"; }
-log_error() { log "ERROR: $1"; printf 'error: %s\n' "$1" >&2; ERRORS=$((ERRORS + 1)); }
-log_warn()  { log "WARN: $1"; printf 'warning: %s\n' "$1" >&2; }
+log() {
+    local level="${2:-info}"
+    printf '[%s] [%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$level" "$1" >> "$LOG_FILE"
+}
+log_error() { log "$1" "error"; printf 'error: %s\n' "$1" >&2; ERRORS=$((ERRORS + 1)); }
+log_warn()  { log "$1" "warn"; printf 'warning: %s\n' "$1" >&2; WARNINGS=$((WARNINGS + 1)); }
 ```
 
 PowerShell:
@@ -85,9 +121,11 @@ PowerShell:
 . (Join-Path $repoPath "scripts" "aitools-lib.ps1")
 Initialize-Logging "aitools"
 # Override: file-only logging, errors/warns to stderr
-function Log($msg) { Add-Content -Path $logFile -Value "[$([DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'))] [aitools] $msg" }
-function LogError($msg) { Log "ERROR: $msg"; Write-Host "error: $msg" -ForegroundColor Red; $script:errors++ }
-function LogWarn($msg)  { Log "WARN: $msg"; Write-Host "warning: $msg" -ForegroundColor Yellow }
+function Log($msg, $level = "info") {
+    Add-Content -Path $logFile -Value "[$([DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'))] [aitools] [$level] $msg"
+}
+function LogError($msg) { Log $msg "error"; Write-Host "error: $msg" -ForegroundColor Red; $script:errors++ }
+function LogWarn($msg)  { Log $msg "warn"; Write-Host "warning: $msg" -ForegroundColor Yellow; $script:warnings++ }
 ```
 
 ### Logging overrides
@@ -99,6 +137,7 @@ Setup scripts and check scripts use the defaults -- no overrides.
 |--------|---------------|---------------|--------|
 | `scripts/aitools` | `log`, `log_error`, `log_warn` | `Log`, `LogError`, `LogWarn` | File-only logging (no tee to stdout); errors/warns to stderr |
 | `scripts/aitools-install` | `log`, `log_ok`, `log_error`, `log_warn` | `Log`, `LogOk`, `LogError`, `LogWarn` | JSONL dual-format (human-readable + structured JSON) |
+| `scripts/build-deploy.sh` | `blog`, `blog_ok`, `blog_error` | n/a | Standalone build tool; doesn't source aitools-lib.sh; defines own logging functions |
 
 ## End-of-run summary
 

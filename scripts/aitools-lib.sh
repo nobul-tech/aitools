@@ -28,6 +28,12 @@ AITOOLS_LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
 $IS_MACOS && AITOOLS_LOG_DIR="$HOME/Library/Logs/aitools"
 
 # ---------------------------------------------------------------------------
+# Module-level counters (safe for sourcing without logging_init under set -u)
+# ---------------------------------------------------------------------------
+ERRORS=0
+WARNINGS=0
+
+# ---------------------------------------------------------------------------
 # Display-friendly path (native Windows on MSYS, no-op elsewhere)
 # ---------------------------------------------------------------------------
 display_path() {
@@ -59,7 +65,7 @@ read_config_key() {
 # ---------------------------------------------------------------------------
 # Logging init
 # ---------------------------------------------------------------------------
-# Sets SCRIPT_NAME, LOG_DIR, LOG_FILE, ERRORS, creates log dir.
+# Sets SCRIPT_NAME, LOG_DIR, LOG_FILE; resets ERRORS, WARNINGS; creates log dir.
 # Usage: logging_init "setup-foo"
 logging_init() {
     SCRIPT_NAME="${1:?logging_init requires a script name}"
@@ -67,15 +73,26 @@ logging_init() {
     LOG_FILE="$LOG_DIR/deploy.log"
     mkdir -p "$LOG_DIR"
     ERRORS=0
+    WARNINGS=0
 }
 
 # ---------------------------------------------------------------------------
-# Standard logging (Pattern A: tee to stdout + log file)
+# Standard logging (Pattern A: console + log file, with [level] tag)
 # ---------------------------------------------------------------------------
-log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
-log_ok()    { log "OK: $1"; }
-log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
-log_warn()  { log "WARN: $1"; }
+log() {
+    local level="${2:-info}"
+    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    local line="[$ts] [$SCRIPT_NAME] [$level] $1"
+    printf '%s\n' "$line" >> "$LOG_FILE"
+    case "$level" in
+        error) printf '\033[31m%s\033[0m\n' "$line" ;;
+        warn)  printf '\033[33m%s\033[0m\n' "$line" ;;
+        *)     printf '%s\n' "$line" ;;
+    esac
+}
+log_ok()    { log "$1" "ok"; }
+log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
+log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
 
 # ---------------------------------------------------------------------------
 # Summary writer (3-arg: category, tool, detail)

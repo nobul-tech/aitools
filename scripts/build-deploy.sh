@@ -21,11 +21,11 @@ SCRIPTS_DIR="$REPO_ROOT/scripts"
 DEPLOY_DIR="$REPO_ROOT/deploy"
 SHARED_DIR="$REPO_ROOT/shared"
 
-# --- Build logging (timestamped) ---
+# --- Build logging (standalone -- does not source aitools-lib.sh) ---
 SCRIPT_NAME="build-deploy"
-blog() { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1"; }
-blog_ok() { blog "OK: $1"; }
-blog_error() { blog "ERROR: $1" >&2; }
+blog()       { printf '[%s] [%s] [info] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1"; }
+blog_ok()    { printf '[%s] [%s] [ok] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1"; }
+blog_error() { printf '\033[31m[%s] [%s] [error] %s\033[0m\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" >&2; }
 
 # Shared content files
 CLAUDE_SHARED="$SHARED_DIR/claude-shared.md"

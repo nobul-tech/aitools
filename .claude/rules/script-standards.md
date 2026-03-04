@@ -11,33 +11,42 @@ pseudocode in `plans/*.md`, and any code you propose in conversation.
 
 1. Shebang + header comment (name, purpose, "safe to re-run", platform, reference to `tool-registry.md`)
 2. `set -euo pipefail`
-3. `source aitools-lib.sh` + `logging_init "script-name"` (provides platform detection, display_path, read_config_key, log/log_ok/log_error/log_warn, write_summary, ERRORS counter)
+3. `source aitools-lib.sh` + `logging_init "script-name"` (provides platform detection, display_path, read_config_key, log/log_ok/log_error/log_warn, write_summary, ERRORS/WARNINGS counters)
 4. OS guard (`case "$(uname -s)" in MINGW*...) exit 1`)
 5. Script body
-6. Exit footer (check `$ERRORS`, exit 1 on failure)
+6. Exit footer (check `$ERRORS` + `$WARNINGS`, exit 1 on errors)
 
 ### Block order (PowerShell reusable scripts)
 
 1. Header comment (name, purpose, "safe to re-run", platform, reference to `tool-registry.md`)
-2. `. aitools-lib.ps1` + `Initialize-Logging "script-name"` (provides ReadConfigKey, Log/LogOk/LogError/LogWarn, Write-Summary, $errors counter)
+2. `. aitools-lib.ps1` + `Initialize-Logging "script-name"` (provides ReadConfigKey, Log/LogOk/LogError/LogWarn, Write-Summary, $errors/$warnings counters)
 3. OS guard (`if $PSVersionTable... -and -not $IsWindows`)
 4. Script body
-5. Exit footer (check `$errors`, exit 1 on failure)
+5. Exit footer (check `$errors` + `$warnings`, exit 1 on errors)
 
-### Error tracking requirement
+### Error and warning tracking requirement
 
-- Bash: `log_error()` MUST increment `ERRORS` -- i.e., `ERRORS=$((ERRORS + 1))`
-- PS1: `LogError` MUST increment `$script:errors` -- i.e., `$script:errors++`
-- Missing error tracking is a bug. Scripts that only log errors without counting them silently exit 0 on failure.
+- Bash: `log_error()` MUST increment `ERRORS`; `log_warn()` MUST increment `WARNINGS`
+- PS1: `LogError` MUST increment `$script:errors`; `LogWarn` MUST increment `$script:warnings`
+- Missing tracking is a bug. Scripts that only log without counting silently misreport exit status.
+
+### Log line format
+
+Every log line must follow: `[timestamp] [script-name] [level] message`
+
+Valid levels: `info`, `ok`, `warn`, `error`
+
+Console output uses ANSI colors: red for `[error]`, yellow for `[warn]`, plain for `[info]`/`[ok]`.
+Log file output is plain text only (no ANSI codes).
 
 ### Required logging helpers
 
-| Bash | PowerShell | Purpose |
-|------|-----------|---------|
-| `log` | `Log` | General info |
-| `log_ok` | `LogOk` | Success |
-| `log_error` | `LogError` | Error (must increment counter) |
-| `log_warn` | `LogWarn` | Warning (non-fatal) |
+| Bash | PowerShell | Level | Purpose |
+|------|-----------|-------|---------|
+| `log` | `Log` | `info` | General info |
+| `log_ok` | `LogOk` | `ok` | Success |
+| `log_error` | `LogError` | `error` | Error (must increment ERRORS) |
+| `log_warn` | `LogWarn` | `warn` | Warning (must increment WARNINGS) |
 
 All timestamps must be UTC with Z suffix (`date -u +%Y-%m-%dT%H:%M:%SZ` / `.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")`).
 
@@ -47,8 +56,14 @@ All helpers are defined in `scripts/aitools-lib.sh` (bash) / `.ps1`. Scripts sou
 
 ### Exit footer
 
-Every setup script must end with an exit footer that checks the error counter.
+Every setup script must end with an exit footer that checks both ERRORS and WARNINGS counters.
 See `@reference/script-standards-detail.md` for exact code patterns.
+
+### Standalone build logging
+
+`build-deploy.sh` defines its own `blog`/`blog_ok`/`blog_error` (doesn't source aitools-lib.sh).
+These must also follow the `[timestamp] [script] [level] message` format.
+Documented as a logging override exception in `reference/script-standards-detail.md`.
 
 ### End-of-run summary
 

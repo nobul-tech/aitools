@@ -62,7 +62,7 @@ function Log($msg, $level = "info") {
 }
 function LogOk($msg)    { Log $msg "ok" }
 function LogError($msg) { Log $msg "error"; $script:errors++ }
-function LogWarn($msg)  { Log $msg "warn" }
+function LogWarn($msg)  { Log $msg "warn"; $script:warnings++ }
 
 # --- Summary file init (if not already set by parent aitools invocation) ---
 if (-not $env:AITOOLS_SUMMARY_FILE) {
@@ -557,9 +557,12 @@ if (-not $env:AITOOLS_SUPPRESS_SUMMARY_DISPLAY) { Show-Summary }
 
 # --- Exit ---
 if ($errors -gt 0) {
-    Log "FAILED with $errors error(s). See log: $logFile"
+    Log "FAILED with $errors error(s). See log: $logFile" "error"
     exit 1
+} elseif ($warnings -gt 0) {
+    Log "COMPLETED with $warnings warning(s)" "warn"
+    exit 0
 } else {
-    Log "COMPLETED successfully"
+    Log "COMPLETED successfully" "ok"
     exit 0
 }

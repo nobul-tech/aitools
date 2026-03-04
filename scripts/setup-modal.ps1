@@ -88,6 +88,7 @@ if ($pythonCmd) {
         $pyMinor = [int]$Matches[2]
         if ($pyMajor -lt 3 -or ($pyMajor -eq 3 -and $pyMinor -lt 10)) {
             LogError "Python 3.10+ required. Found Python $pyVersionStr"
+            Write-Summary "ERROR" "modal cli" "Python 3.10+ required (found $pyVersionStr)"
             exit 1
         }
         Log "Python $pyVersionStr found ($pythonCmd)"
@@ -187,9 +188,12 @@ Write-Summary "ACTION" "" "modal setup -- authenticate modal (browser flow)"
 
 # --- Exit ---
 if ($errors -gt 0) {
-    Log "FAILED with $errors error(s). See log: $logFile"
+    Log "FAILED with $errors error(s). See log: $logFile" "error"
     exit 1
+} elseif ($warnings -gt 0) {
+    Log "COMPLETED with $warnings warning(s)" "warn"
+    exit 0
 } else {
-    Log "COMPLETED successfully"
+    Log "COMPLETED successfully" "ok"
     exit 0
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # check-post-push.sh -- automated post-push checklist for aitools
 # Usage: bash scripts/check-post-push.sh [--extensive]
-# Default: 5 always-tier steps. --extensive: all 22 steps.
+# Default: 5 always-tier steps. --extensive: all 23 steps.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -574,6 +574,23 @@ if [ "$step22b_fail" -eq 0 ]; then
 else
     step_fail "22b" "Cloud MCP in setup-user-mcp" "missing from one or both source scripts"
     step22_fail=1
+fi
+
+# ---------------------------------------------------------------------------
+# 23. Script standards compliance (extensive only)
+# ---------------------------------------------------------------------------
+if $EXTENSIVE; then
+    if [ -f "$REPO_ROOT/scripts/check-script-compliance.sh" ]; then
+        echo ""
+        echo "${BOLD}--- Step 23: Script standards compliance ---${RESET}"
+        if bash "$REPO_ROOT/scripts/check-script-compliance.sh"; then
+            step_pass "23" "Script standards compliance" "all checks passed"
+        else
+            step_fail "23" "Script standards compliance" "one or more checks failed"
+        fi
+    else
+        step_skip "23" "Script standards compliance" "check-script-compliance.sh not found"
+    fi
 fi
 
 # ---------------------------------------------------------------------------

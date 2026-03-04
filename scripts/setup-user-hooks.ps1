@@ -293,10 +293,13 @@ if ($DryRun) {
 
 # --- BEGIN exit (extracted by build-deploy) ---
 if ($errors -gt 0) {
-    Log "FAILED with $errors error(s). See log: $logFile"
+    Log "FAILED with $errors error(s). See log: $logFile" "error"
     exit 1
+} elseif ($warnings -gt 0) {
+    Log "COMPLETED with $warnings warning(s)" "warn"
+    exit 0
 } else {
-    Log "COMPLETED successfully"
+    Log "COMPLETED successfully" "ok"
     exit 0
 }
 # --- END exit (extracted by build-deploy) ---

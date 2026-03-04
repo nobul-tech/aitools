@@ -69,9 +69,12 @@ fi
 
 # --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then
-    log "FAILED with $ERRORS error(s). See log: $LOG_FILE"
+    log "FAILED with $ERRORS error(s)" "error"
     exit 1
+elif [ "$WARNINGS" -gt 0 ]; then
+    log "COMPLETED with $WARNINGS warning(s)" "warn"
+    exit 0
 else
-    log "COMPLETED successfully"
+    log "COMPLETED successfully" "ok"
     exit 0
 fi

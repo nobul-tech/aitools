@@ -43,6 +43,12 @@ AITOOLS_LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
 $IS_MACOS && AITOOLS_LOG_DIR="$HOME/Library/Logs/aitools"
 
 # ---------------------------------------------------------------------------
+# Module-level counters (safe for sourcing without logging_init under set -u)
+# ---------------------------------------------------------------------------
+ERRORS=0
+WARNINGS=0
+
+# ---------------------------------------------------------------------------
 # Display-friendly path (native Windows on MSYS, no-op elsewhere)
 # ---------------------------------------------------------------------------
 display_path() {
@@ -74,7 +80,7 @@ read_config_key() {
 # ---------------------------------------------------------------------------
 # Logging init
 # ---------------------------------------------------------------------------
-# Sets SCRIPT_NAME, LOG_DIR, LOG_FILE, ERRORS, creates log dir.
+# Sets SCRIPT_NAME, LOG_DIR, LOG_FILE; resets ERRORS, WARNINGS; creates log dir.
 # Usage: logging_init "setup-foo"
 logging_init() {
     SCRIPT_NAME="${1:?logging_init requires a script name}"
@@ -82,15 +88,26 @@ logging_init() {
     LOG_FILE="$LOG_DIR/deploy.log"
     mkdir -p "$LOG_DIR"
     ERRORS=0
+    WARNINGS=0
 }
 
 # ---------------------------------------------------------------------------
-# Standard logging (Pattern A: tee to stdout + log file)
+# Standard logging (Pattern A: console + log file, with [level] tag)
 # ---------------------------------------------------------------------------
-log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
-log_ok()    { log "OK: $1"; }
-log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
-log_warn()  { log "WARN: $1"; }
+log() {
+    local level="${2:-info}"
+    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    local line="[$ts] [$SCRIPT_NAME] [$level] $1"
+    printf '%s\n' "$line" >> "$LOG_FILE"
+    case "$level" in
+        error) printf '\033[31m%s\033[0m\n' "$line" ;;
+        warn)  printf '\033[33m%s\033[0m\n' "$line" ;;
+        *)     printf '%s\n' "$line" ;;
+    esac
+}
+log_ok()    { log "$1" "ok"; }
+log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
+log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
 
 # ---------------------------------------------------------------------------
 # Summary writer (3-arg: category, tool, detail)
@@ -183,6 +200,7 @@ if [ -n "$PYTHON_CMD" ]; then
     PY_MINOR=$(printf '%s' "$PY_VERSION" | cut -d. -f2)
     if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]; }; then
         log_error "Python 3.10+ required. Found Python $PY_VERSION"
+        write_summary ERROR "modal cli" "Python 3.10+ required (found $PY_VERSION)"
         exit 1
     fi
     log "Python $PY_VERSION found ($PYTHON_CMD)"
@@ -195,7 +213,7 @@ if command -v modal >/dev/null 2>&1; then
     log "Upgrading via $INSTALL_LABEL..."
     PIP_OUTPUT=$($INSTALL_CMD install $INSTALL_FLAGS --upgrade modal 2>&1) || true
     printf '%s\n' "$PIP_OUTPUT" | while IFS= read -r line; do log "$line"; done
-    pip_notice=$(printf '%s\n' "$PIP_OUTPUT" | grep -o '\[notice\] A new release of pip is available: .*' | head -1)
+    pip_notice=$(printf '%s\n' "$PIP_OUTPUT" | grep -o '\[notice\] A new release of pip is available: .*' | head -1 || true)
     if [ -n "$pip_notice" ]; then
         pip_versions="${pip_notice#*: }"
         log_warn "pip upgrade available: $pip_versions"
@@ -217,7 +235,7 @@ else
     log "Installing Modal CLI via $INSTALL_LABEL..."
     PIP_OUTPUT=$($INSTALL_CMD install $INSTALL_FLAGS modal 2>&1) || true
     printf '%s\n' "$PIP_OUTPUT" | while IFS= read -r line; do log "$line"; done
-    pip_notice=$(printf '%s\n' "$PIP_OUTPUT" | grep -o '\[notice\] A new release of pip is available: .*' | head -1)
+    pip_notice=$(printf '%s\n' "$PIP_OUTPUT" | grep -o '\[notice\] A new release of pip is available: .*' | head -1 || true)
     if [ -n "$pip_notice" ]; then
         pip_versions="${pip_notice#*: }"
         log_warn "pip upgrade available: $pip_versions"
@@ -259,9 +277,12 @@ write_summary ACTION "" "modal setup -- authenticate modal (browser flow)"
 
 # --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then
-    log "FAILED with $ERRORS error(s). See log: $(display_path "$LOG_FILE")"
+    log "FAILED with $ERRORS error(s)" "error"
     exit 1
+elif [ "$WARNINGS" -gt 0 ]; then
+    log "COMPLETED with $WARNINGS warning(s)" "warn"
+    exit 0
 else
-    log "COMPLETED successfully"
+    log "COMPLETED successfully" "ok"
     exit 0
 fi

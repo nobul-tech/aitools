@@ -62,6 +62,7 @@ if [ -n "$PYTHON_CMD" ]; then
     PY_MINOR=$(printf '%s' "$PY_VERSION" | cut -d. -f2)
     if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]; }; then
         log_error "Python 3.10+ required. Found Python $PY_VERSION"
+        write_summary ERROR "modal cli" "Python 3.10+ required (found $PY_VERSION)"
         exit 1
     fi
     log "Python $PY_VERSION found ($PYTHON_CMD)"
@@ -74,7 +75,7 @@ if command -v modal >/dev/null 2>&1; then
     log "Upgrading via $INSTALL_LABEL..."
     PIP_OUTPUT=$($INSTALL_CMD install $INSTALL_FLAGS --upgrade modal 2>&1) || true
     printf '%s\n' "$PIP_OUTPUT" | while IFS= read -r line; do log "$line"; done
-    pip_notice=$(printf '%s\n' "$PIP_OUTPUT" | grep -o '\[notice\] A new release of pip is available: .*' | head -1)
+    pip_notice=$(printf '%s\n' "$PIP_OUTPUT" | grep -o '\[notice\] A new release of pip is available: .*' | head -1 || true)
     if [ -n "$pip_notice" ]; then
         pip_versions="${pip_notice#*: }"
         log_warn "pip upgrade available: $pip_versions"
@@ -96,7 +97,7 @@ else
     log "Installing Modal CLI via $INSTALL_LABEL..."
     PIP_OUTPUT=$($INSTALL_CMD install $INSTALL_FLAGS modal 2>&1) || true
     printf '%s\n' "$PIP_OUTPUT" | while IFS= read -r line; do log "$line"; done
-    pip_notice=$(printf '%s\n' "$PIP_OUTPUT" | grep -o '\[notice\] A new release of pip is available: .*' | head -1)
+    pip_notice=$(printf '%s\n' "$PIP_OUTPUT" | grep -o '\[notice\] A new release of pip is available: .*' | head -1 || true)
     if [ -n "$pip_notice" ]; then
         pip_versions="${pip_notice#*: }"
         log_warn "pip upgrade available: $pip_versions"
@@ -138,9 +139,12 @@ write_summary ACTION "" "modal setup -- authenticate modal (browser flow)"
 
 # --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then
-    log "FAILED with $ERRORS error(s). See log: $(display_path "$LOG_FILE")"
+    log "FAILED with $ERRORS error(s)" "error"
     exit 1
+elif [ "$WARNINGS" -gt 0 ]; then
+    log "COMPLETED with $WARNINGS warning(s)" "warn"
+    exit 0
 else
-    log "COMPLETED successfully"
+    log "COMPLETED successfully" "ok"
     exit 0
 fi

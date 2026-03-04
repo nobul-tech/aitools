@@ -74,11 +74,15 @@ $logDir = Join-Path $env:LOCALAPPDATA "aitools"
 $logFile = Join-Path $logDir "deploy.log"
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 $script:errors = 0
+$script:warnings = 0
 
-function Log      { param([string]$Msg) $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"); Add-Content -Path $logFile -Value "[$ts] [aitools] $Msg" }
-function LogOk    { param([string]$Msg) Log "OK: $Msg" }
-function LogError { param([string]$Msg) Log "ERROR: $Msg"; Write-Host "error: $Msg" -ForegroundColor Red; $script:errors++ }
-function LogWarn  { param([string]$Msg) Log "WARN: $Msg"; Write-Host "warning: $Msg" -ForegroundColor Yellow }
+function Log($msg, $level = "info") {
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    Add-Content -Path $logFile -Value "[$ts] [aitools] [$level] $msg"
+}
+function LogOk($msg)    { Log $msg "ok" }
+function LogError($msg) { Log $msg "error"; Write-Host "error: $msg" -ForegroundColor Red; $script:errors++ }
+function LogWarn($msg)  { Log $msg "warn"; Write-Host "warning: $msg" -ForegroundColor Yellow; $script:warnings++ }
 
 # Check profile.json for issues and optionally prompt for fixes.
 # Usage: Invoke-ProfileCheck -Mode "warn" or "interactive"
@@ -1245,10 +1249,13 @@ $env:AITOOLS_SUPPRESS_SUMMARY_DISPLAY = "1"
 . (Join-Path $repoPath "scripts" "aitools-lib.ps1")
 Initialize-Logging "aitools"
 # Override: file-only logging, errors/warns to stderr (no console echo)
-function Log($msg) { $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"); Add-Content -Path $logFile -Value "[$ts] [aitools] $msg" }
-function LogOk($msg) { Log "OK: $msg" }
-function LogError($msg) { Log "ERROR: $msg"; Write-Host "error: $msg" -ForegroundColor Red; $script:errors++ }
-function LogWarn($msg) { Log "WARN: $msg"; Write-Host "warning: $msg" -ForegroundColor Yellow }
+function Log($msg, $level = "info") {
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    Add-Content -Path $logFile -Value "[$ts] [aitools] [$level] $msg"
+}
+function LogOk($msg)    { Log $msg "ok" }
+function LogError($msg) { Log $msg "error"; Write-Host "error: $msg" -ForegroundColor Red; $script:errors++ }
+function LogWarn($msg)  { Log $msg "warn"; Write-Host "warning: $msg" -ForegroundColor Yellow; $script:warnings++ }
 
 Write-Host "aitools $AITOOLS_INSTALLED_VERSION"
 Write-Host ""

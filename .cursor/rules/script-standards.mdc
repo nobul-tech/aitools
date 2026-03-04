@@ -13,19 +13,34 @@ All plans you propose and all reusable code you write must follow these conventi
 **Bash:** shebang/header > `set -euo pipefail` > `source aitools-lib.sh` + `logging_init "name"` > OS guard > body > exit footer
 **PS1:** header > `. aitools-lib.ps1` + `Initialize-Logging "name"` > OS guard > body > exit footer
 
-### Error tracking (required)
+### Error and warning tracking (required)
 
-- `log_error()` MUST do `ERRORS=$((ERRORS + 1))`
-- `LogError` MUST do `$script:errors++`
-- Missing tracking is a bug -- scripts silently exit 0 on failure.
+- `log_error()` MUST do `ERRORS=$((ERRORS + 1))`; `log_warn()` MUST do `WARNINGS=$((WARNINGS + 1))`
+- `LogError` MUST do `$script:errors++`; `LogWarn` MUST do `$script:warnings++`
+- Missing tracking is a bug -- scripts silently misreport exit status.
+
+### Log line format
+
+Every log line: `[timestamp] [script] [level] message`. Valid levels: `info`, `ok`, `warn`, `error`. Console: red for `[error]`, yellow for `[warn]`, plain for `[info]`/`[ok]`. Log file: plain text only (no ANSI codes).
 
 ### Logging helpers
 
-Bash: `log`/`log_ok`/`log_error`/`log_warn`. PS1: `Log`/`LogOk`/`LogError`/`LogWarn`. UTC timestamps with Z suffix. Raw `echo`/`Write-Host` without structured logging is not acceptable. All helpers are defined in `scripts/aitools-lib.sh` / `.ps1` -- do not define inline copies.
+| Bash | PS1 | Level | Purpose |
+|------|-----|-------|---------|
+| `log` | `Log` | `info` | General info |
+| `log_ok` | `LogOk` | `ok` | Success |
+| `log_error` | `LogError` | `error` | Error (must increment ERRORS) |
+| `log_warn` | `LogWarn` | `warn` | Warning (must increment WARNINGS) |
+
+UTC timestamps with Z suffix. Raw `echo`/`Write-Host` without structured logging is not acceptable. All helpers are defined in `scripts/aitools-lib.sh` / `.ps1` -- do not define inline copies.
 
 ### Exit footer
 
-Check error counter, exit 1 on failure, exit 0 on success. See `reference/script-standards-detail.md` for exact patterns.
+Check both error and warning counters. Errors: exit 1 (FAILED). Warnings but no errors: exit 0 ("COMPLETED with N warning(s)"). Clean: exit 0 ("COMPLETED successfully"). See `reference/script-standards-detail.md` for exact patterns.
+
+### Standalone build logging
+
+`build-deploy.sh` defines own `blog`/`blog_ok`/`blog_error` (doesn't source aitools-lib.sh). Must follow `[timestamp] [script] [level] message` format. Documented in `reference/script-standards-detail.md` logging overrides.
 
 ### End-of-run summary
 

@@ -12,6 +12,38 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.36.0 -- Logging standards overhaul + compliance check (2026-03-04)
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **Log line format standard**: Every log line now follows `[timestamp] [script] [level] message` with valid levels: `info`, `ok`, `warn`, `error`. Console output uses ANSI colors (red for errors, yellow for warnings). Log file output is plain text only. |
+| 2 | **Warning counter** (`scripts/aitools-lib.sh/.ps1`): `log_warn`/`LogWarn` now increments `WARNINGS`/`$script:warnings`. Exit footers check both ERRORS and WARNINGS -- scripts with warnings report "COMPLETED with N warning(s)" instead of "COMPLETED successfully". |
+| 3 | **Script compliance checker** (`scripts/check-script-compliance.sh/.ps1`): New 10-step automated audit -- log format, exit footers, write_summary coverage, counter tracking, raw echo/Write-Host, grep pipefail safety, OS guards, logging init, cross-platform pairing. Integrated as step 23 in `check-post-push` (extensive mode). |
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **setup-modal.sh grep pipefail crash** (`scripts/setup-modal.sh`): `grep -o '\[notice\]...' \| head -1` returns exit 1 when no match; `set -euo pipefail` kills the script before `write_summary` runs, causing Modal to disappear from the summary panel. Added `\|\| true`. Fixes [#12](https://github.com/nobul-jose/aitools/issues/12). |
+| 2 | **setup-modal missing write_summary on Python check** (`scripts/setup-modal.sh/.ps1`): Early `exit 1` when Python < 3.10 had no `write_summary`, so Modal vanished from the summary panel on version failure. |
+| 3 | **Exit footer reports success despite warnings** (`scripts/aitools-lib.sh/.ps1`, all setup scripts): No WARNINGS counter existed; `log_warn` didn't affect exit status. Fixes [#13](https://github.com/nobul-jose/aitools/issues/13). |
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 1 | **All setup script exit footers** (28 files: 14 `.sh` + 14 `.ps1`): Updated to check both ERRORS and WARNINGS counters with level-tagged log messages. |
+| 2 | **Entry point logging overrides** (`scripts/aitools`, `scripts/aitools.ps1`, `scripts/aitools-install.sh/.ps1`): Updated to `[level]` format and WARNINGS tracking. |
+| 3 | **Build script logging** (`scripts/build-deploy.sh`): `blog`/`blog_ok`/`blog_error` now include `[level]` tag. |
+| 4 | **Module-level counter initialization** (`scripts/aitools-lib.sh`): `ERRORS=0` and `WARNINGS=0` set at module level (safe for scripts that source without calling `logging_init`, e.g., via `check-lib.sh`). |
+| 5 | **Rules and documentation** (`.claude/rules/script-standards.md`, `.cursor/rules/script-standards.mdc`, `reference/script-standards-detail.md`): Added log line format spec, warning counter requirement, console color spec, standalone build logging exception. |
+
+**Verified**: macOS
+
+---
+
 ## v0.35.0 -- Shared helper library + git pull resilience (2026-03-03)
 
 ### Added

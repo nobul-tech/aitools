@@ -1,6 +1,6 @@
 # check-post-push.ps1 -- automated post-push checklist for aitools
 # Usage: .\scripts\check-post-push.ps1 [-Extensive]
-# Default: 5 always-tier steps. -Extensive: all 22 steps.
+# Default: 5 always-tier steps. -Extensive: all 23 steps.
 # Platform: Windows (PS 5.1 compatible)
 param([switch]$Extensive)
 
@@ -675,6 +675,29 @@ if ($step22bFail -eq 0) {
 } else {
     StepFail "22b" "Cloud MCP in setup-user-mcp" "missing from one or both source scripts"
     $step22Fail = 1
+}
+
+# ---------------------------------------------------------------------------
+# 23. Script standards compliance (extensive only)
+# ---------------------------------------------------------------------------
+if ($Extensive) {
+    $complianceScript = Join-Path $repoRoot "scripts/check-script-compliance.ps1"
+    if (Test-Path $complianceScript) {
+        Write-Host ""
+        Write-Host "--- Step 23: Script standards compliance ---" -ForegroundColor White
+        try {
+            & $complianceScript
+            if ($LASTEXITCODE -eq 0) {
+                StepPass "23" "Script standards compliance" "all checks passed"
+            } else {
+                StepFail "23" "Script standards compliance" "one or more checks failed"
+            }
+        } catch {
+            StepFail "23" "Script standards compliance" "script error: $_"
+        }
+    } else {
+        StepSkip "23" "Script standards compliance" "check-script-compliance.ps1 not found"
+    }
 }
 
 # ---------------------------------------------------------------------------
