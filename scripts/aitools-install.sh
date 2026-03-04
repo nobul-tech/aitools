@@ -705,37 +705,6 @@ done
 
 [ -z "${AITOOLS_SUPPRESS_SUMMARY_DISPLAY:-}" ] && show_summary
 
-# --- Cloud MCP status (tagged as setup-user-mcp) ---
-# Shows cloud MCP server status from claude.ai, if any are configured.
-# Silent no-op if claude CLI unavailable or no cloud servers found.
-show_cloud_mcp() {
-    command -v claude &>/dev/null || return 0
-    local saved_claudecode="${CLAUDECODE:-}"
-    unset CLAUDECODE
-    local raw
-    raw=$(claude mcp list 2>/dev/null) || true
-    if [ -n "$saved_claudecode" ]; then export CLAUDECODE="$saved_claudecode"; fi
-    [ -n "$raw" ] || return 0
-    local parsed
-    parsed=$(printf '%s\n' "$raw" | perl -ne '
-        s/\e\[[0-9;]*m//g;
-        next unless /^claude\.ai\s+(.+?):\s+.+\s+-\s+(.+)$/;
-        my ($name, $status) = ($1, $2);
-        $status =~ s/\s+$//;
-        my $pad = length($name) < 24 ? " " x (24 - length($name)) : " ";
-        printf "  %s%s%s\n", $name, $pad, $status;
-    ')
-    [ -n "$parsed" ] || return 0
-    local tag="setup-user-mcp"
-    local ts
-    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    printf '[%s] [%s] Cloud MCP servers (configured at claude.ai):\n' "$ts" "$tag"
-    while IFS= read -r line; do
-        printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$tag" "$line"
-    done <<< "$parsed"
-}
-show_cloud_mcp
-
 # --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then
     log "FAILED with $ERRORS error(s). See log: $(display_path "$LOG_FILE")"

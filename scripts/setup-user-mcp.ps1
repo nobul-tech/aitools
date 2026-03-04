@@ -305,6 +305,37 @@ if ($DryRun) {
 Log "To enable per project: aitools --addmcp vercel"
 Log "To check status: aitools mcp"
 
+# Display cloud MCP servers configured at claude.ai.
+# Silent no-op if claude CLI unavailable or no cloud servers found.
+function Show-CloudMcpStatus {
+    if (-not (Get-Command claude -ErrorAction SilentlyContinue)) { return }
+    $savedClaudeCode = $env:CLAUDECODE
+    Remove-Item Env:\CLAUDECODE -ErrorAction SilentlyContinue
+    try {
+        $savedEncoding = [Console]::OutputEncoding
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+        $raw = claude mcp list 2>$null
+        [Console]::OutputEncoding = $savedEncoding
+    } catch { $raw = $null }
+    if ($savedClaudeCode) { $env:CLAUDECODE = $savedClaudeCode }
+    if (-not $raw) { return }
+    $entries = @()
+    foreach ($line in $raw) {
+        $clean = $line -replace '\e\[[0-9;]*m', ''
+        if ($clean -match '^claude\.ai\s+(.+?):\s+.+\s+-\s+(.+)$') {
+            $name = $Matches[1].Trim()
+            $status = $Matches[2].Trim()
+            $entries += [PSCustomObject]@{ Name = $name; Status = $status }
+        }
+    }
+    if ($entries.Count -eq 0) { return }
+    Log "Cloud MCP servers (configured at claude.ai):"
+    foreach ($entry in $entries) {
+        $pad = if ($entry.Name.Length -lt 24) { " " * (24 - $entry.Name.Length) } else { " " }
+        Log "  $($entry.Name)$pad$($entry.Status)"
+    }
+}
+
 # --- END mcp body (extracted by build-deploy) ---
 
 # --- Deploy Chrome DevTools skills ---
@@ -354,6 +385,7 @@ if ($errors -gt 0) {
     Log "FAILED with $errors error(s). See log: $logFile"
     exit 1
 } else {
+    Show-CloudMcpStatus
     Log "COMPLETED successfully"
     exit 0
 }

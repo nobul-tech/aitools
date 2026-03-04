@@ -647,33 +647,33 @@ if ($badWingetFiles.Count -gt 0) {
     StepPass "22a" "Winget output filtering" "all setup-*.ps1 filter winget progress chars"
 }
 
-# 22b: Cloud MCP in install path -- verify both installer scripts call
-#      show_cloud_mcp / Show-CloudMcp before the COMPLETED line
+# 22b: Cloud MCP in setup-user-mcp -- verify both source scripts define
+#      show_cloud_mcp_status / Show-CloudMcpStatus and call it in exit section
 $step22bFail = 0
-# PS1 installer: extract from Show-Summary to COMPLETED
-$installerPs1 = Get-Content (Join-Path $script:RepoRoot "scripts" "aitools-install.ps1") -Raw
-$installBlockPs1 = ""
-if ($installerPs1 -match '(?s)Show-Summary(.+?)COMPLETED successfully') {
-    $installBlockPs1 = $Matches[1]
+# PS1: check exit section calls Show-CloudMcpStatus
+$mcpPs1 = Get-Content (Join-Path $script:RepoRoot "scripts" "setup-user-mcp.ps1") -Raw
+$mcpExitPs1 = ""
+if ($mcpPs1 -match '(?s)BEGIN exit(.+?)END exit') {
+    $mcpExitPs1 = $Matches[1]
 }
-if ($installBlockPs1 -notmatch 'Show-CloudMcp') {
+if ($mcpExitPs1 -notmatch 'Show-CloudMcpStatus') {
     $step22bFail = 1
-    Write-Host "      FAIL: scripts/aitools-install.ps1 missing Show-CloudMcp before COMPLETED"
+    Write-Host "      FAIL: scripts/setup-user-mcp.ps1 missing Show-CloudMcpStatus in exit section"
 }
-# Bash installer: extract from show_summary to COMPLETED
-$installerBash = Get-Content (Join-Path $script:RepoRoot "scripts" "aitools-install.sh") -Raw
-$installBlockBash = ""
-if ($installerBash -match '(?s)show_summary(.+?)COMPLETED successfully') {
-    $installBlockBash = $Matches[1]
+# Bash: check exit section calls show_cloud_mcp_status
+$mcpBash = Get-Content (Join-Path $script:RepoRoot "scripts" "setup-user-mcp.sh") -Raw
+$mcpExitBash = ""
+if ($mcpBash -match '(?s)BEGIN exit(.+?)END exit') {
+    $mcpExitBash = $Matches[1]
 }
-if ($installBlockBash -notmatch 'show_cloud_mcp') {
+if ($mcpExitBash -notmatch 'show_cloud_mcp_status') {
     $step22bFail = 1
-    Write-Host "      FAIL: scripts/aitools-install.sh missing show_cloud_mcp before COMPLETED"
+    Write-Host "      FAIL: scripts/setup-user-mcp.sh missing show_cloud_mcp_status in exit section"
 }
 if ($step22bFail -eq 0) {
-    StepPass "22b" "Cloud MCP in install path" "both installer scripts call show_cloud_mcp"
+    StepPass "22b" "Cloud MCP in setup-user-mcp" "both source scripts call show_cloud_mcp_status in exit"
 } else {
-    StepFail "22b" "Cloud MCP in install path" "missing from one or both installer scripts"
+    StepFail "22b" "Cloud MCP in setup-user-mcp" "missing from one or both source scripts"
     $step22Fail = 1
 }
 

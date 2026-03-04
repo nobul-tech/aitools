@@ -554,25 +554,25 @@ else
     step_pass "22a" "Winget output filtering" "all setup-*.ps1 filter winget progress chars"
 fi
 
-# 22b: Cloud MCP in install path -- verify both installer scripts call
-#      show_cloud_mcp / Show-CloudMcp before the COMPLETED line
+# 22b: Cloud MCP in setup-user-mcp -- verify both source scripts define
+#      show_cloud_mcp_status / Show-CloudMcpStatus and call it in exit section
 step22b_fail=0
-# Bash installer: extract from show_summary to COMPLETED
-install_block_bash=$(sed -n '/show_summary/,/COMPLETED successfully/p' "$REPO_ROOT/scripts/aitools-install.sh")
-if ! echo "$install_block_bash" | grep -q 'show_cloud_mcp'; then
+# Bash: check exit section calls show_cloud_mcp_status
+mcp_exit_bash=$(sed -n '/BEGIN exit/,/END exit/p' "$REPO_ROOT/scripts/setup-user-mcp.sh")
+if ! echo "$mcp_exit_bash" | grep -q 'show_cloud_mcp_status'; then
     step22b_fail=1
-    echo "      FAIL: scripts/aitools-install.sh missing show_cloud_mcp before COMPLETED"
+    echo "      FAIL: scripts/setup-user-mcp.sh missing show_cloud_mcp_status in exit section"
 fi
-# PS1 installer: extract from Show-Summary to COMPLETED
-install_block_ps1=$(sed -n '/Show-Summary/,/COMPLETED successfully/p' "$REPO_ROOT/scripts/aitools-install.ps1")
-if ! echo "$install_block_ps1" | grep -q 'Show-CloudMcp'; then
+# PS1: check exit section calls Show-CloudMcpStatus
+mcp_exit_ps1=$(sed -n '/BEGIN exit/,/END exit/p' "$REPO_ROOT/scripts/setup-user-mcp.ps1")
+if ! echo "$mcp_exit_ps1" | grep -q 'Show-CloudMcpStatus'; then
     step22b_fail=1
-    echo "      FAIL: scripts/aitools-install.ps1 missing Show-CloudMcp before COMPLETED"
+    echo "      FAIL: scripts/setup-user-mcp.ps1 missing Show-CloudMcpStatus in exit section"
 fi
 if [ "$step22b_fail" -eq 0 ]; then
-    step_pass "22b" "Cloud MCP in install path" "both installer scripts call show_cloud_mcp"
+    step_pass "22b" "Cloud MCP in setup-user-mcp" "both source scripts call show_cloud_mcp_status in exit"
 else
-    step_fail "22b" "Cloud MCP in install path" "missing from one or both installer scripts"
+    step_fail "22b" "Cloud MCP in setup-user-mcp" "missing from one or both source scripts"
     step22_fail=1
 fi
 

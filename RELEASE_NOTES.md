@@ -12,6 +12,24 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.34.3 -- Move Cloud MCP status into setup-user-mcp (2026-03-03)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Cloud MCP display location** (`setup-user-mcp.sh/.ps1`): Moved cloud MCP status display from `aitools-install` orchestrator into `setup-user-mcp` itself, so it appears with proper `[setup-user-mcp]` tag right before `COMPLETED successfully`. Previously displayed after the summary panel in the orchestrator with manual tag formatting. |
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 1 | **Post-push step 22b** (`check-post-push.sh/.ps1`, `post-push-checklist.md`): Now checks `setup-user-mcp` source scripts for `show_cloud_mcp_status`/`Show-CloudMcpStatus` in exit section instead of checking `aitools-install` for `show_cloud_mcp`/`Show-CloudMcp`. |
+
+**Verified**: Windows
+
+---
+
 ## v0.34.2 -- Fix winget logging noise + Cloud MCP in install + post-push audit (2026-03-03)
 
 ### Fixed
