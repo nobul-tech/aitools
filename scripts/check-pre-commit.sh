@@ -147,7 +147,7 @@ else
     crlf_files=""
     while IFS= read -r f; do
         [ -n "$f" ] || continue
-        if grep -Prl '\r$' "$f" >/dev/null 2>&1; then
+        if grep -rl $'\r' "$f" >/dev/null 2>&1; then
             crlf_files="$crlf_files $f"
         fi
     done <<< "$staged_sh_files"

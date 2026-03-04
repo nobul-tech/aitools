@@ -351,7 +351,7 @@ fi
 crlf_count=0
 for f in "$REPO_ROOT"/scripts/*.sh "$REPO_ROOT"/deploy/*.sh "$REPO_ROOT"/shared/hooks/*.sh; do
     [ -f "$f" ] || continue
-    if grep -Prl '\r$' "$f" >/dev/null 2>&1; then
+    if grep -rl $'\r' "$f" >/dev/null 2>&1; then
         echo "      CRLF: $f"
         crlf_count=$((crlf_count + 1))
     fi
@@ -543,7 +543,7 @@ bad_winget_files=""
 for ps1 in "$REPO_ROOT"/scripts/setup-*.ps1; do
     [ -f "$ps1" ] || continue
     # Bad pattern: single-line ForEach piping wingetOutput Split to Log without filter
-    if grep -Pq '\$wingetOutput\.Trim\(\)\.Split\([^)]+\)\s*\|\s*ForEach-Object\s*\{\s*Log\s+\$_\.TrimEnd\(\)\s*\}' "$ps1"; then
+    if perl -0777 -ne 'exit 0 if /\$wingetOutput\.Trim\(\)\.Split\([^)]+\)\s*\|\s*ForEach-Object\s*\{\s*Log\s+\$_\.TrimEnd\(\)\s*\}/; exit 1' "$ps1"; then
         bad_winget_files="$bad_winget_files $(basename "$ps1")"
     fi
 done
