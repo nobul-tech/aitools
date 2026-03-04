@@ -288,6 +288,32 @@ fi
 log "To enable per project: aitools --addmcp vercel"
 log "To check status: aitools mcp"
 
+# Display cloud MCP servers configured at claude.ai.
+# Silent no-op if claude CLI unavailable or no cloud servers found.
+show_cloud_mcp_status() {
+    command -v claude &>/dev/null || return 0
+    local saved_claudecode="${CLAUDECODE:-}"
+    unset CLAUDECODE
+    local raw
+    raw=$(claude mcp list 2>/dev/null) || true
+    if [ -n "$saved_claudecode" ]; then export CLAUDECODE="$saved_claudecode"; fi
+    [ -n "$raw" ] || return 0
+    local parsed
+    parsed=$(printf '%s\n' "$raw" | perl -ne '
+        s/\e\[[0-9;]*m//g;
+        next unless /^claude\.ai\s+(.+?):\s+.+\s+-\s+(.+)$/;
+        my ($name, $status) = ($1, $2);
+        $status =~ s/\s+$//;
+        my $pad = length($name) < 24 ? " " x (24 - length($name)) : " ";
+        printf "  %s%s%s\n", $name, $pad, $status;
+    ')
+    [ -n "$parsed" ] || return 0
+    log "Cloud MCP servers (configured at claude.ai):"
+    while IFS= read -r line; do
+        log "$line"
+    done <<< "$parsed"
+}
+
 # --- Deploy Chrome DevTools skills (embedded) ---
 # Vendored from https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/main/skills
 # Content embedded at build time by build-deploy.sh for self-contained deployment.
@@ -711,6 +737,7 @@ if [ "$ERRORS" -gt 0 ]; then
     log "FAILED with $ERRORS error(s). See log: $LOG_FILE"
     exit 1
 else
+    show_cloud_mcp_status
     log "COMPLETED successfully"
     exit 0
 fi
