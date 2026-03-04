@@ -23,6 +23,9 @@ Detailed plans live in `plans/`. See `RELEASE_NOTES.md` for completed work.
 | aitools install version capture | -- | Near-term | Capture installed versions per platform → `~/.aitools/versions.json`; compare against `reference/tool-versions.json`; flag drift at end of install; new `aitools versions` command; telemetry consent on first run; version blocking via `blocked[]` |
 | aitools.nobul.tech + Modal compute | -- | Near-term | Vercel + Next.js docs/dashboard (friends/family → open source); GitHub OAuth → dotprofile repo → one-liner install; log/version ingest API (anonymized telemetry); drift → PR automation via Claude API; Modal as compute backend for Claude API calls and batch processing |
 | aitools inside Modal containers | -- | Future | `aitools install` / setup scripts provision Modal environments; configure managed tools (pandoc, typst, etc.) in Modal images |
+| setup-typst raw npm output | [#14](https://github.com/nobul-jose/aitools/issues/14) | Low | Raw `up to date in 209ms` npm output leaks before structured log lines |
+| setup-cursor-ide-mcp raw agent output | [#15](https://github.com/nobul-jose/aitools/issues/15) | Low | `agent mcp disable` output not captured into structured logging |
+| setup-rust blank log line | [#16](https://github.com/nobul-jose/aitools/issues/16) | Low | Empty rustup output lines produce `[info] ` with blank message |
 
 ### aitools user sync — managed CLAUDE.md merging (near-term)
 
