@@ -59,6 +59,12 @@ All helpers are defined in `scripts/aitools-lib.sh` (bash) / `.ps1`. Scripts sou
 Every setup script must end with an exit footer that checks both ERRORS and WARNINGS counters.
 See `@reference/script-standards-detail.md` for exact code patterns.
 
+### Cross-platform grep portability
+
+Never use `grep -P` (Perl regex) in bash scripts -- macOS BSD `grep` doesn't support it.
+Use `perl -ne` for Perl regex, `grep -E` for extended regex, or `grep -F` for literals.
+See `@reference/script-standards-detail.md` for the full portability table.
+
 ### Standalone build logging
 
 `build-deploy.sh` defines its own `blog`/`blog_ok`/`blog_error` (doesn't source aitools-lib.sh).

@@ -29,6 +29,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | 1 | **setup-modal.sh grep pipefail crash** (`scripts/setup-modal.sh`): `grep -o '\[notice\]...' \| head -1` returns exit 1 when no match; `set -euo pipefail` kills the script before `write_summary` runs, causing Modal to disappear from the summary panel. Added `\|\| true`. Fixes [#12](https://github.com/nobul-jose/aitools/issues/12). |
 | 2 | **setup-modal missing write_summary on Python check** (`scripts/setup-modal.sh/.ps1`): Early `exit 1` when Python < 3.10 had no `write_summary`, so Modal vanished from the summary panel on version failure. |
 | 3 | **Exit footer reports success despite warnings** (`scripts/aitools-lib.sh/.ps1`, all setup scripts): No WARNINGS counter existed; `log_warn` didn't affect exit status. Fixes [#13](https://github.com/nobul-jose/aitools/issues/13). |
+| 4 | **`grep -P` fails on macOS** (`scripts/check-post-push.sh`, `scripts/check-pre-commit.sh`): macOS BSD `grep` lacks `-P`. Replaced with `grep -rl $'\r'` (CRLF detection) and `perl -0777 -ne` (Perl regex matching). Added cross-platform grep portability rule to script standards. |
 
 ### Changed
 
@@ -38,7 +39,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | 2 | **Entry point logging overrides** (`scripts/aitools`, `scripts/aitools.ps1`, `scripts/aitools-install.sh/.ps1`): Updated to `[level]` format and WARNINGS tracking. |
 | 3 | **Build script logging** (`scripts/build-deploy.sh`): `blog`/`blog_ok`/`blog_error` now include `[level]` tag. |
 | 4 | **Module-level counter initialization** (`scripts/aitools-lib.sh`): `ERRORS=0` and `WARNINGS=0` set at module level (safe for scripts that source without calling `logging_init`, e.g., via `check-lib.sh`). |
-| 5 | **Rules and documentation** (`.claude/rules/script-standards.md`, `.cursor/rules/script-standards.mdc`, `reference/script-standards-detail.md`): Added log line format spec, warning counter requirement, console color spec, standalone build logging exception. |
+| 5 | **Rules and documentation** (`.claude/rules/script-standards.md`, `.cursor/rules/script-standards.mdc`, `reference/script-standards-detail.md`): Added log line format spec, warning counter requirement, console color spec, standalone build logging exception, cross-platform grep portability rule. |
 
 **Verified**: macOS
 

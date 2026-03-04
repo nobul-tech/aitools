@@ -38,6 +38,10 @@ UTC timestamps with Z suffix. Raw `echo`/`Write-Host` without structured logging
 
 Check both error and warning counters. Errors: exit 1 (FAILED). Warnings but no errors: exit 0 ("COMPLETED with N warning(s)"). Clean: exit 0 ("COMPLETED successfully"). See `reference/script-standards-detail.md` for exact patterns.
 
+### Cross-platform grep portability
+
+Never use `grep -P` in bash scripts -- macOS BSD `grep` doesn't support it. Use `perl -ne` for Perl regex, `grep -E` for extended regex, `grep -F` for literals. See `reference/script-standards-detail.md`.
+
 ### Standalone build logging
 
 `build-deploy.sh` defines own `blog`/`blog_ok`/`blog_error` (doesn't source aitools-lib.sh). Must follow `[timestamp] [script] [level] message` format. Documented in `reference/script-standards-detail.md` logging overrides.

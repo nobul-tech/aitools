@@ -431,6 +431,41 @@ Scripts following the `check-*.sh/.ps1` pattern have additional requirements:
   `StepFail`/`StepWarn`/`StepSkip`. Callers passing detail context must have that
   context displayed.
 
+## Cross-platform grep portability
+
+macOS ships BSD `grep` which does not support `-P` (Perl-compatible regular expressions).
+Linux `grep` (GNU) supports `-P` via libpcre. Scripts using `grep -P` fail on macOS
+with `grep: invalid option -- P`.
+
+### Rule: Never use `grep -P` in bash scripts
+
+| Need | Portable alternative | Notes |
+|------|---------------------|-------|
+| Perl regex match | `perl -ne 'exit 0 if /pattern/; END { exit 1 }'` | Available on both platforms |
+| Perl regex (multiline) | `perl -0777 -ne 'exit 0 if /pattern/; exit 1'` | `-0777` slurps entire file |
+| Extended regex | `grep -E 'pattern'` | ERE works on both BSD and GNU grep |
+| CRLF detection | `grep -rl $'\r' file` | Bash ANSI-C quoting; no `-P` needed |
+| Fixed string | `grep -F 'literal'` | Fastest; no regex engine |
+
+### Examples
+
+**Wrong** -- fails on macOS:
+
+```bash
+grep -Pq '\$wingetOutput\.Trim\(\)' "$file"
+grep -Prl '\r$' "$file"
+```
+
+**Correct** -- portable:
+
+```bash
+perl -0777 -ne 'exit 0 if /\$wingetOutput\.Trim\(\)/; exit 1' "$file"
+grep -rl $'\r' "$file"
+```
+
+This aligns with the user-level USO "Perl for string manipulation" -- use `perl`
+(not `sed`/`awk`/`grep -P`) for non-trivial string operations.
+
 ## Post-write validation
 
 Setup scripts that generate files from templates must validate CONTENT correctness,
