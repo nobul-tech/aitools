@@ -67,7 +67,7 @@ function Read-ConfigKey {
 }
 
 # ---------------------------------------------------------------------------
-# Logging
+# Logging (bootstrap -- overridden after lib is sourced below)
 # ---------------------------------------------------------------------------
 
 $logDir = Join-Path $env:LOCALAPPDATA "aitools"
@@ -1234,6 +1234,22 @@ if (-not (Test-Path (Join-Path $repoPath ".git"))) {
 
 $env:AITOOLS_RUN_ID = -join ((1..6) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) })
 
+# Init summary file for this run; child scripts append via AITOOLS_SUMMARY_FILE.
+# SUPPRESS=1 tells aitools-install.ps1 not to display it (we display after it returns).
+$env:AITOOLS_SUMMARY_FILE = Join-Path $env:USERPROFILE ".aitools\run-summary.txt"
+Remove-Item $env:AITOOLS_SUMMARY_FILE -ErrorAction SilentlyContinue
+New-Item -ItemType File -Path $env:AITOOLS_SUMMARY_FILE -Force | Out-Null
+$env:AITOOLS_SUPPRESS_SUMMARY_DISPLAY = "1"
+
+# Source shared lib (provides Write-Summary, Show-Summary)
+. (Join-Path $repoPath "scripts" "aitools-lib.ps1")
+Initialize-Logging "aitools"
+# Override: file-only logging, errors/warns to stderr (no console echo)
+function Log($msg) { $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"); Add-Content -Path $logFile -Value "[$ts] [aitools] $msg" }
+function LogOk($msg) { Log "OK: $msg" }
+function LogError($msg) { Log "ERROR: $msg"; Write-Host "error: $msg" -ForegroundColor Red; $script:errors++ }
+function LogWarn($msg) { Log "WARN: $msg"; Write-Host "warning: $msg" -ForegroundColor Yellow }
+
 Write-Host "aitools $AITOOLS_INSTALLED_VERSION"
 Write-Host ""
 
@@ -1252,7 +1268,7 @@ $pulledUpdates = $false
 Push-Location $repoPath
 try {
     # Reset generated deploy/ files before pull (may have line-ending diffs)
-    git checkout -- "deploy/" 2>$null
+    git checkout HEAD -- "deploy/" 2>$null
     if ($doGitpull) {
         $pullOut = git pull --tags origin main 2>&1 | Out-String
     } else {
@@ -1270,6 +1286,7 @@ try {
                 LogWarn "git pull failed -- deploying from local checkout."
                 $pullOut.Trim().Split("`n") | Select-Object -First 3 | ForEach-Object { Write-Host "    $_" }
             }
+            Write-Summary "WARN" "source" "stale local checkout (git pull failed)"
         }
     } elseif ($pullOut -match "Already up to date") {
         Write-Host "  Already up to date."
@@ -1464,4 +1481,8 @@ if (Test-Path $bashSrc) {
     [System.IO.File]::WriteAllText($bashDst, $bashStamped, [System.Text.UTF8Encoding]::new($false))
 }
 
+Show-Summary
+
 Remove-Item Env:\AITOOLS_RUN_ID -ErrorAction SilentlyContinue
+Remove-Item Env:\AITOOLS_SUMMARY_FILE -ErrorAction SilentlyContinue
+Remove-Item Env:\AITOOLS_SUPPRESS_SUMMARY_DISPLAY -ErrorAction SilentlyContinue

@@ -11,7 +11,7 @@ pseudocode in `plans/*.md`, and any code you propose in conversation.
 
 1. Shebang + header comment (name, purpose, "safe to re-run", platform, reference to `tool-registry.md`)
 2. `set -euo pipefail`
-3. Logging block: `LOG_DIR`, `LOG_FILE`, `SCRIPT_NAME`, `mkdir -p`, `display_path()`, `ERRORS=0`, logging helpers
+3. `source aitools-lib.sh` + `logging_init "script-name"` (provides platform detection, display_path, read_config_key, log/log_ok/log_error/log_warn, write_summary, ERRORS counter)
 4. OS guard (`case "$(uname -s)" in MINGW*...) exit 1`)
 5. Script body
 6. Exit footer (check `$ERRORS`, exit 1 on failure)
@@ -19,7 +19,7 @@ pseudocode in `plans/*.md`, and any code you propose in conversation.
 ### Block order (PowerShell reusable scripts)
 
 1. Header comment (name, purpose, "safe to re-run", platform, reference to `tool-registry.md`)
-2. Logging block: `$logDir`, `$logFile`, `$scriptName`, dir creation, `Log`/`LogOk`/`LogError`/`LogWarn`, `$errors = 0`
+2. `. aitools-lib.ps1` + `Initialize-Logging "script-name"` (provides ReadConfigKey, Log/LogOk/LogError/LogWarn, Write-Summary, $errors counter)
 3. OS guard (`if $PSVersionTable... -and -not $IsWindows`)
 4. Script body
 5. Exit footer (check `$errors`, exit 1 on failure)
@@ -43,6 +43,8 @@ All timestamps must be UTC with Z suffix (`date -u +%Y-%m-%dT%H:%M:%SZ` / `.ToUn
 
 Logging framework is required -- raw `echo` or `Write-Host` without structured logging is not acceptable in reusable scripts.
 
+All helpers are defined in `scripts/aitools-lib.sh` (bash) / `.ps1`. Scripts source the lib and call `logging_init` / `Initialize-Logging`. Entry points with specialized logging override the functions after sourcing. Do not define inline copies.
+
 ### Exit footer
 
 Every setup script must end with an exit footer that checks the error counter.
@@ -50,13 +52,20 @@ See `@reference/script-standards-detail.md` for exact code patterns.
 
 ### End-of-run summary
 
-Every setup script MUST call `write_summary` (3-arg) to contribute to the end-of-run panel:
+Every setup script MUST call `write_summary` / `Write-Summary` (3-arg, from `aitools-lib`) to contribute to the end-of-run panel:
 
 ```bash
 write_summary OK    "tool_name" "version or status"
 write_summary WARN  "tool_name" "advisory message"
 write_summary ERROR "tool_name" "failure description"
 write_summary ACTION ""         "instruction for user"
+```
+
+```powershell
+Write-Summary "OK"     "tool_name" "version or status"
+Write-Summary "WARN"   "tool_name" "advisory message"
+Write-Summary "ERROR"  "tool_name" "failure description"
+Write-Summary "ACTION" ""          "instruction for user"
 ```
 
 | Category | Meaning |

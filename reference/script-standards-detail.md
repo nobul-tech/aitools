@@ -33,28 +33,79 @@ if ($errors -gt 0) {
 }
 ```
 
+## Shared library (`scripts/aitools-lib.sh` / `.ps1`)
+
+Single source of truth for common helpers. Sourced by all scripts at dev time.
+`build-deploy.sh` inlines the content into deploy/ scripts for self-containment.
+Check scripts source `check-lib.sh`/`.ps1` which in turn sources `aitools-lib.sh`/`.ps1`.
+
+### Contents
+
+| Function | Bash | PowerShell | Purpose |
+|----------|------|-----------|---------|
+| Platform detection | `IS_MACOS`, `IS_WINDOWS` | (built-in) | OS branching |
+| Log directory | `AITOOLS_LOG_DIR` | via `Initialize-Logging` | Platform-aware log path |
+| `display_path` | `display_path()` | (not needed) | cygpath wrapper for Windows |
+| Config reader | `read_config_key()` | `ReadConfigKey` | JSON key extraction (BOM-safe) |
+| Logging init | `logging_init "name"` | `Initialize-Logging "name"` | Sets SCRIPT_NAME, LOG_DIR, LOG_FILE, ERRORS |
+| Standard logging | `log`/`log_ok`/`log_error`/`log_warn` | `Log`/`LogOk`/`LogError`/`LogWarn` | Timestamped structured logging |
+| Summary writer | `write_summary` | `Write-Summary` | 3-arg append to summary file |
+| Summary renderer | `show_summary` | `Show-Summary` | Colored panel display |
+
+### Usage
+
+**Setup scripts** (standard):
+
+Bash:
+```bash
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/aitools-lib.sh"
+logging_init "setup-toolname"
+```
+
+PowerShell:
+```powershell
+. (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
+Initialize-Logging "setup-toolname"
+```
+
+**Entry points** (override logging after sourcing):
+
+Bash:
+```bash
+source "$repo_path/scripts/aitools-lib.sh"
+logging_init "aitools"
+# Override: file-only logging, errors/warns to stderr
+log() { printf '[%s] [aitools] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >> "$LOG_FILE"; }
+log_error() { log "ERROR: $1"; printf 'error: %s\n' "$1" >&2; ERRORS=$((ERRORS + 1)); }
+log_warn()  { log "WARN: $1"; printf 'warning: %s\n' "$1" >&2; }
+```
+
+PowerShell:
+```powershell
+. (Join-Path $repoPath "scripts" "aitools-lib.ps1")
+Initialize-Logging "aitools"
+# Override: file-only logging, errors/warns to stderr
+function Log($msg) { Add-Content -Path $logFile -Value "[$([DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'))] [aitools] $msg" }
+function LogError($msg) { Log "ERROR: $msg"; Write-Host "error: $msg" -ForegroundColor Red; $script:errors++ }
+function LogWarn($msg)  { Log "WARN: $msg"; Write-Host "warning: $msg" -ForegroundColor Yellow }
+```
+
+### Logging overrides
+
+Entry points override the lib's default logging functions after sourcing.
+Setup scripts and check scripts use the defaults -- no overrides.
+
+| Script | Bash overrides | PS1 overrides | Reason |
+|--------|---------------|---------------|--------|
+| `scripts/aitools` | `log`, `log_error`, `log_warn` | `Log`, `LogError`, `LogWarn` | File-only logging (no tee to stdout); errors/warns to stderr |
+| `scripts/aitools-install` | `log`, `log_ok`, `log_error`, `log_warn` | `Log`, `LogOk`, `LogError`, `LogWarn` | JSONL dual-format (human-readable + structured JSON) |
+
 ## End-of-run summary
 
 ### Function definition
 
-The `write_summary` function appends a pipe-delimited line to `$AITOOLS_SUMMARY_FILE`.
-When the env var is unset (standalone run), the function is a silent no-op.
-
-**Bash** (3-arg):
-
-```bash
-write_summary() {
-    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
-}
-```
-
-**PowerShell** (3-arg):
-
-```powershell
-function Write-Summary($cat, $tool, $detail) {
-    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}" }
-}
-```
+The canonical `write_summary` / `Write-Summary` definition lives in
+`scripts/aitools-lib.sh` / `.ps1`. All scripts source the lib -- no inline copies.
 
 ### Summary file format
 

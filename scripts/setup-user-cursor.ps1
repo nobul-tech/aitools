@@ -19,25 +19,9 @@ param(
 # Env passthrough from parent (aitools CLI)
 if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
 
-# --- Logging ---
-$logDir = Join-Path $env:LOCALAPPDATA "aitools"
-$logFile = Join-Path $logDir "deploy.log"
-$scriptName = "setup-user-cursor"
-$errors = 0
-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
-
-function Log($msg) {
-    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-    $line = "[$ts] [$scriptName] $msg"
-    Write-Host $line
-    Add-Content -Path $logFile -Value $line
-}
-function LogOk($msg)    { Log "OK: $msg" }
-function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
-function LogWarn($msg)  { Log "WARN: $msg" }
-function Write-Summary($cat, $tool, $detail) {
-    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}" }
-}
+# --- Shared library ---
+. (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
+Initialize-Logging "setup-user-cursor"
 
 # Backup a file before overwriting. Keeps at most $MaxBackups copies.
 function Backup-File {

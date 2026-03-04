@@ -35,15 +35,15 @@ Interactive behavior:
     exit 0
 }
 
-# --- Logging ---
-$logDir = Join-Path $env:LOCALAPPDATA "aitools"
-$logFile = Join-Path $logDir "deploy.log"
+# --- Shared library ---
+. (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
+Initialize-Logging "aitools-install"
+
+# JSONL logging (extends standard pattern with structured JSON)
 $logJsonl = Join-Path $logDir "deploy.jsonl"
-$scriptName = "aitools-install"
 $runId = if ($env:AITOOLS_RUN_ID) { $env:AITOOLS_RUN_ID } else { -join ((1..6) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) }) }
 $hostName = $env:COMPUTERNAME
 $osName = "Windows"
-$errors = 0
 
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 
@@ -51,6 +51,7 @@ if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Forc
 if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
 if ($DryRun) { $env:AITOOLS_DRY_RUN = "1" }
 
+# Override: JSONL dual-format (human-readable + structured JSON)
 function Log($msg, $level = "info") {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $line = "[$ts] [$scriptName] [$level] $msg"
@@ -62,45 +63,6 @@ function Log($msg, $level = "info") {
 function LogOk($msg)    { Log $msg "ok" }
 function LogError($msg) { Log $msg "error"; $script:errors++ }
 function LogWarn($msg)  { Log $msg "warn" }
-
-function Write-Summary($cat, $tool, $detail) {
-    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}" }
-}
-
-function Show-Summary {
-    $sfile = $env:AITOOLS_SUMMARY_FILE
-    if (-not $sfile -or -not (Test-Path $sfile)) { return }
-    $lines = Get-Content $sfile -ErrorAction SilentlyContinue
-    if (-not $lines) { Remove-Item $sfile -ErrorAction SilentlyContinue; return }
-    Write-Host ""
-    Write-Host "────────────────────────────────────────────────────────"
-    foreach ($line in $lines) {
-        $parts = $line -split '\|', 3
-        if ($parts[0] -eq 'OK') { Write-Host ("  [ok]  {0,-16} {1}" -f $parts[1], $parts[2]) -ForegroundColor Green }
-    }
-    foreach ($line in $lines) {
-        $parts = $line -split '\|', 3
-        if ($parts[0] -eq 'WARN') { Write-Host ("  [!]   {0,-16} {1}" -f $parts[1], $parts[2]) -ForegroundColor Yellow }
-    }
-    foreach ($line in $lines) {
-        $parts = $line -split '\|', 3
-        if ($parts[0] -eq 'ERROR') { Write-Host ("  [ERR] {0,-16} {1}" -f $parts[1], $parts[2]) -ForegroundColor Red }
-    }
-    $firstAction = $true
-    foreach ($line in $lines) {
-        $parts = $line -split '\|', 3
-        if ($parts[0] -eq 'ACTION') {
-            if ($firstAction) {
-                Write-Host ""
-                Write-Host "  ACTION REQUIRED -- run before tools are ready:" -ForegroundColor Magenta
-                $firstAction = $false
-            }
-            Write-Host "  >>  $($parts[2])" -ForegroundColor Magenta
-        }
-    }
-    Write-Host "────────────────────────────────────────────────────────"
-    Remove-Item $sfile -ErrorAction SilentlyContinue
-}
 
 # --- Summary file init (if not already set by parent aitools invocation) ---
 if (-not $env:AITOOLS_SUMMARY_FILE) {

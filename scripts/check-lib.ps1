@@ -1,6 +1,9 @@
 # check-lib.ps1 -- shared library for check-pre-commit/pre-push/post-push scripts
 # Dot-sourced, not executed directly. PS 5.1 compatible.
 
+# Source base lib (provides ReadConfigKey)
+. (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
+
 # ---------------------------------------------------------------------------
 # Counters
 # ---------------------------------------------------------------------------
@@ -117,23 +120,7 @@ function PrintSummary {
     }
 }
 
-# ---------------------------------------------------------------------------
-# Config reader (PS 5.1 compatible)
-# ---------------------------------------------------------------------------
-function ReadConfigKey {
-    param([string]$File, [string]$Key)
-    if (-not (Test-Path $File)) { return $null }
-    try {
-        $json = Get-Content $File -Raw -ErrorAction Stop | ConvertFrom-Json
-        $val = $json.$Key
-        if ($val) { return $val }
-    } catch {
-        # File exists but is invalid JSON -- warn so callers know the null
-        # return means "corrupt", not "missing key"
-        Write-Host "      WARN: could not parse $File" -ForegroundColor Yellow
-    }
-    return $null
-}
+# ReadConfigKey is provided by aitools-lib.ps1
 
 # ---------------------------------------------------------------------------
 # Repo root and config resolution
@@ -167,9 +154,4 @@ function InvokeGit {
     }
 }
 
-# ---------------------------------------------------------------------------
-# Platform detection
-# ---------------------------------------------------------------------------
-# PS 7+ provides $IsMacOS and $IsWindows as read-only automatic variables.
-# PS 5.1 (Windows only) lacks these -- $IsMacOS is $null (falsy), which is correct.
-# Consumer scripts use $IsMacOS / $IsWindows directly; no custom variables needed.
+# Platform detection ($IsMacOS, $IsWindows) is built-in to PS 7+.

@@ -423,38 +423,7 @@ show_cloud_mcp() {
     fi
 }
 
-# Display the end-of-run summary panel (reads AITOOLS_SUMMARY_FILE).
-# Silent no-op if file unset, missing, or empty.
-show_summary() {
-    local sfile="${AITOOLS_SUMMARY_FILE:-}"
-    [ -n "$sfile" ] || return 0
-    [ -f "$sfile" ] || return 0
-    [ -s "$sfile" ] || { rm -f "$sfile"; return 0; }
-    echo ""
-    echo "────────────────────────────────────────────────────────"
-    while IFS='|' read -r cat tool detail; do
-        [ "$cat" = "OK"   ] && printf '\033[32m  [ok]  %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
-    while IFS='|' read -r cat tool detail; do
-        [ "$cat" = "WARN" ] && printf '\033[33m  [!]   %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
-    while IFS='|' read -r cat tool detail; do
-        [ "$cat" = "ERROR" ] && printf '\033[31m  [ERR] %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
-    local first_action=true
-    while IFS='|' read -r cat tool detail; do
-        if [ "$cat" = "ACTION" ]; then
-            if [ "$first_action" = true ]; then
-                echo ""
-                printf '\033[1;35m  ACTION REQUIRED -- run before tools are ready:\033[0m\n'
-                first_action=false
-            fi
-            printf '\033[1;35m  >>  %s\033[0m\n' "$detail"
-        fi
-    done < "$sfile"
-    echo "────────────────────────────────────────────────────────"
-    rm -f "$sfile"
-}
+# show_summary is provided by aitools-lib.sh (sourced after repo_path is resolved)
 
 # ---------------------------------------------------------------------------
 # Usage / flags
@@ -1345,6 +1314,15 @@ touch "$AITOOLS_SUMMARY_FILE"
 export AITOOLS_SUMMARY_FILE
 export AITOOLS_SUPPRESS_SUMMARY_DISPLAY=1
 
+# Source shared lib (provides write_summary, show_summary)
+source "$repo_path/scripts/aitools-lib.sh"
+logging_init "aitools"
+# Override: file-only logging, errors/warns to stderr (no tee to stdout)
+log()       { printf '[%s] [aitools] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >> "$LOG_FILE"; }
+log_ok()    { log "OK: $1"; }
+log_error() { log "ERROR: $1"; printf 'error: %s\n' "$1" >&2; ERRORS=$((ERRORS + 1)); }
+log_warn()  { log "WARN: $1"; printf 'warning: %s\n' "$1" >&2; }
+
 echo "aitools $AITOOLS_INSTALLED_VERSION"
 echo ""
 
@@ -1361,6 +1339,8 @@ fi
 if $do_gitpull; then
     echo "[1/$STEPS] Pulling latest..."
     pulled_updates=false
+    # Reset generated deploy/ files before pull (may have line-ending diffs)
+    git -C "$repo_path" checkout HEAD -- deploy/ 2>/dev/null || true
     if pull_out=$(cd "$repo_path" && git pull --tags origin main 2>&1); then
         if echo "$pull_out" | grep -q "Already up to date"; then
             echo "  Already up to date."
@@ -1378,7 +1358,7 @@ else
     echo "[1/$STEPS] Pulling latest..."
     pulled_updates=false
     # Reset generated deploy/ files before pull (may have line-ending diffs)
-    git -C "$repo_path" checkout -- deploy/ 2>/dev/null || true
+    git -C "$repo_path" checkout HEAD -- deploy/ 2>/dev/null || true
     if pull_out=$(cd "$repo_path" && git pull origin main 2>&1); then
         if echo "$pull_out" | grep -q "Already up to date"; then
             echo "  Already up to date."
@@ -1393,6 +1373,7 @@ else
             log_warn "git pull failed -- deploying from local checkout."
             echo "$pull_out" | head -3 | sed 's/^/    /' >&2
         fi
+        write_summary WARN "source" "stale local checkout (git pull failed)"
     fi
 fi
 

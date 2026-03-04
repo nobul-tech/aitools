@@ -10,8 +10,8 @@ All plans you propose and all reusable code you write must follow these conventi
 
 ### Block order (setup scripts)
 
-**Bash:** shebang/header > `set -euo pipefail` > logging block (`ERRORS=0` + helpers) > OS guard > body > exit footer
-**PS1:** header > logging block (`$errors = 0` + helpers) > OS guard > body > exit footer
+**Bash:** shebang/header > `set -euo pipefail` > `source aitools-lib.sh` + `logging_init "name"` > OS guard > body > exit footer
+**PS1:** header > `. aitools-lib.ps1` + `Initialize-Logging "name"` > OS guard > body > exit footer
 
 ### Error tracking (required)
 
@@ -21,7 +21,7 @@ All plans you propose and all reusable code you write must follow these conventi
 
 ### Logging helpers
 
-Bash: `log`/`log_ok`/`log_error`/`log_warn`. PS1: `Log`/`LogOk`/`LogError`/`LogWarn`. UTC timestamps with Z suffix. Raw `echo`/`Write-Host` without structured logging is not acceptable.
+Bash: `log`/`log_ok`/`log_error`/`log_warn`. PS1: `Log`/`LogOk`/`LogError`/`LogWarn`. UTC timestamps with Z suffix. Raw `echo`/`Write-Host` without structured logging is not acceptable. All helpers are defined in `scripts/aitools-lib.sh` / `.ps1` -- do not define inline copies.
 
 ### Exit footer
 
@@ -29,7 +29,7 @@ Check error counter, exit 1 on failure, exit 0 on success. See `reference/script
 
 ### End-of-run summary
 
-Every setup script calls `write_summary` (3-arg: category, tool_name, detail) to report to the end-of-run panel. Categories: OK (tool works), WARN (advisory), ERROR (failure), ACTION (user must act). Every code path -- success and failure -- must produce a `write_summary` call. See `reference/script-standards-detail.md` for severity guide, tool names, and code patterns.
+Every setup script calls `write_summary` / `Write-Summary` (3-arg from `aitools-lib`: category, tool_name, detail) to report to the end-of-run panel. Categories: OK (tool works), WARN (advisory), ERROR (failure), ACTION (user must act). Every code path -- success and failure -- must produce a `write_summary` call. See `reference/script-standards-detail.md` for severity guide, tool names, and code patterns.
 
 ### External command error handling
 

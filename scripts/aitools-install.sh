@@ -102,21 +102,20 @@ case "$(uname -s)" in
         ;;
 esac
 
-# --- Logging ---
-LOG_DIR="$HOME/Library/Logs/aitools"
-[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
-LOG_FILE="$LOG_DIR/deploy.log"
+# --- Shared library ---
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/aitools-lib.sh"
+logging_init "aitools-install"
+
+# JSONL logging (extends standard pattern with structured JSON)
 LOG_JSONL="$LOG_DIR/deploy.jsonl"
-SCRIPT_NAME="aitools-install"
 RUN_ID="${AITOOLS_RUN_ID:-$(head -c 6 /dev/urandom | od -An -tx1 | tr -d ' \n')}"
 HOST_NAME="$(hostname -s 2>/dev/null || hostname)"
 OS_NAME="$(uname -s)"
-ERRORS=0
-
-mkdir -p "$LOG_DIR"
 
 if $DRY_RUN; then export AITOOLS_DRY_RUN=1; fi
 
+# Override: JSONL dual-format (human-readable + structured JSON)
 log() {
     local level="${2:-info}"
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -127,41 +126,6 @@ log() {
 log_ok()    { log "$1" "ok"; }
 log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "$1" "warn"; }
-
-write_summary() {
-    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
-}
-
-show_summary() {
-    local sfile="${AITOOLS_SUMMARY_FILE:-}"
-    [ -n "$sfile" ] || return 0
-    [ -f "$sfile" ] || return 0
-    [ -s "$sfile" ] || { rm -f "$sfile"; return 0; }
-    echo ""
-    echo "────────────────────────────────────────────────────────"
-    while IFS='|' read -r cat tool detail; do
-        [ "$cat" = "OK"   ] && printf '\033[32m  [ok]  %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
-    while IFS='|' read -r cat tool detail; do
-        [ "$cat" = "WARN" ] && printf '\033[33m  [!]   %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
-    while IFS='|' read -r cat tool detail; do
-        [ "$cat" = "ERROR" ] && printf '\033[31m  [ERR] %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
-    local first_action=true
-    while IFS='|' read -r cat tool detail; do
-        if [ "$cat" = "ACTION" ]; then
-            if [ "$first_action" = true ]; then
-                echo ""
-                printf '\033[1;35m  ACTION REQUIRED -- run before tools are ready:\033[0m\n'
-                first_action=false
-            fi
-            printf '\033[1;35m  >>  %s\033[0m\n' "$detail"
-        fi
-    done < "$sfile"
-    echo "────────────────────────────────────────────────────────"
-    rm -f "$sfile"
-}
 
 # --- Summary file init (if not already set by parent aitools invocation) ---
 if [ -z "${AITOOLS_SUMMARY_FILE:-}" ]; then
@@ -183,15 +147,7 @@ validate_and_run() {
     bash "$script" || log_error "$name failed"
 }
 
-# --- Display path helper ---
-# Convert MSYS/Cygwin paths to native Windows paths for log output. No-op elsewhere.
-display_path() {
-    if command -v cygpath &>/dev/null; then
-        cygpath -w "$1"
-    else
-        printf '%s' "$1"
-    fi
-}
+# display_path is provided by aitools-lib.sh
 
 # --- Post-write JSON validation ---
 # Validates a JSON config file after writing: checks non-empty, valid JSON,
@@ -295,7 +251,7 @@ CONFIG_FILE="$CONFIG_DIR/config.json"
 mkdir -p "$CONFIG_DIR"
 
 # Auto-detect aitools repo path from this script's location
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# SCRIPT_DIR is set at top (lib sourcing)
 AITOOLS_REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # ============================================================

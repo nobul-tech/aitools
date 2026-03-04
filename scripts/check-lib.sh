@@ -1,6 +1,10 @@
 # check-lib.sh -- shared library for check-pre-commit/pre-push/post-push scripts
 # Sourced, not executed directly. No shebang, no set -euo pipefail (caller sets it).
 
+# Source base lib (provides IS_MACOS, IS_WINDOWS, AITOOLS_LOG_DIR, read_config_key, display_path)
+_CHECK_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$_CHECK_LIB_DIR/aitools-lib.sh"
+
 # ---------------------------------------------------------------------------
 # Colors (disabled if not a terminal)
 # ---------------------------------------------------------------------------
@@ -30,11 +34,8 @@ _CHECK_NAME=""
 
 check_log_init() {
     _CHECK_NAME="${1:?check_log_init requires a check name}"
-    # Platform log directory (matches setup script pattern)
-    case "$(uname -s)" in
-        Darwin*)          _CHECK_LOG_DIR="$HOME/Library/Logs/aitools" ;;
-        *)                _CHECK_LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools" ;;
-    esac
+    # Log directory from base lib (AITOOLS_LOG_DIR)
+    _CHECK_LOG_DIR="$AITOOLS_LOG_DIR"
     _CHECK_LOG="$_CHECK_LOG_DIR/checks.log"
     _CHECK_JSONL="$_CHECK_LOG_DIR/checks.jsonl"
     mkdir -p "$_CHECK_LOG_DIR"
@@ -128,20 +129,7 @@ print_summary() {
     fi
 }
 
-# ---------------------------------------------------------------------------
-# Config reader (pure bash, handles UTF-8 BOM)
-# ---------------------------------------------------------------------------
-read_config_key() {
-    local file="$1" key="$2"
-    [ -f "$file" ] || return 1
-    local val
-    val=$(tr -d '\357\273\277' < "$file" \
-        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
-        | head -1 \
-        | cut -d'"' -f4)
-    [ -n "$val" ] || return 1
-    printf '%b' "$val"
-}
+# read_config_key is provided by aitools-lib.sh
 
 # ---------------------------------------------------------------------------
 # Repo root and config resolution
@@ -157,15 +145,7 @@ resolve_config() {
     fi
 }
 
-# ---------------------------------------------------------------------------
-# Platform detection
-# ---------------------------------------------------------------------------
-IS_MACOS=false
-IS_WINDOWS=false
-case "$(uname -s)" in
-    Darwin*)          IS_MACOS=true ;;
-    MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=true ;;
-esac
+# Platform detection (IS_MACOS, IS_WINDOWS) provided by aitools-lib.sh
 
 # ---------------------------------------------------------------------------
 # Cross-platform file mtime (epoch seconds)

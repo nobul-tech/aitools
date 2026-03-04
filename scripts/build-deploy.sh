@@ -51,6 +51,34 @@ CLAUDE_SHARED_CONTENT=$(cat "$CLAUDE_SHARED")
 HOOK_SESSION_ARCHIVE=$(cat "$SHARED_DIR/hooks/session-archive.sh")
 HOOK_STANDING_ORDER_GUARD=$(cat "$SHARED_DIR/hooks/standing-order-guard.sh")
 
+# Read shared library content for inlining into deploy scripts
+AITOOLS_LIB_BASH=$(cat "$SCRIPTS_DIR/aitools-lib.sh")
+AITOOLS_LIB_PS1=$(cat "$SCRIPTS_DIR/aitools-lib.ps1")
+
+# inline_lib_bash: replaces `source.*aitools-lib.sh` line with lib content (stdin -> stdout)
+inline_lib_bash() {
+    local line
+    while IFS= read -r line; do
+        if echo "$line" | grep -q 'source.*aitools-lib\.sh'; then
+            printf '%s\n' "$AITOOLS_LIB_BASH"
+        else
+            printf '%s\n' "$line"
+        fi
+    done
+}
+
+# inline_lib_ps1: replaces `. .*aitools-lib.ps1` line with lib content (stdin -> stdout)
+inline_lib_ps1() {
+    local line
+    while IFS= read -r line; do
+        if echo "$line" | grep -q 'aitools-lib\.ps1'; then
+            printf '%s\n' "$AITOOLS_LIB_PS1"
+        else
+            printf '%s\n' "$line"
+        fi
+    done
+}
+
 # --- Read user rules for embedding ---
 # User rules are embedded at build time into deploy scripts.
 # At runtime, deploy scripts write embedded rules to a temp dir, then use the
@@ -344,7 +372,7 @@ BLOCK
     fi
     extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
         '^# --- BEGIN exit' '^# --- END exit'
-} > "$DEPLOY_DIR/setup-user-claude.sh"
+} | inline_lib_bash > "$DEPLOY_DIR/setup-user-claude.sh"
 
 chmod +x "$DEPLOY_DIR/setup-user-claude.sh"
 GENERATED=$((GENERATED + 1))
@@ -507,7 +535,7 @@ BLOCK
     fi
     extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
         '^# --- BEGIN exit' '^# --- END exit' --crlf
-} > "$DEPLOY_DIR/setup-user-claude.ps1"
+} | inline_lib_ps1 > "$DEPLOY_DIR/setup-user-claude.ps1"
 
 GENERATED=$((GENERATED + 1))
 
@@ -545,7 +573,7 @@ BLOCK_INTERP
     # Exit footer
     extract_between "$SCRIPTS_DIR/setup-user-cursor.sh" \
         '^# --- BEGIN exit' '^# --- END exit'
-} > "$DEPLOY_DIR/setup-user-cursor.sh"
+} | inline_lib_bash > "$DEPLOY_DIR/setup-user-cursor.sh"
 
 chmod +x "$DEPLOY_DIR/setup-user-cursor.sh"
 GENERATED=$((GENERATED + 1))
@@ -584,7 +612,7 @@ BLOCK
     # Exit footer
     extract_between "$SCRIPTS_DIR/setup-user-cursor.ps1" \
         '^# --- BEGIN exit' '^# --- END exit' --crlf
-} > "$DEPLOY_DIR/setup-user-cursor.ps1"
+} | inline_lib_ps1 > "$DEPLOY_DIR/setup-user-cursor.ps1"
 
 GENERATED=$((GENERATED + 1))
 
@@ -595,8 +623,8 @@ blog "Copying deploy/setup-cursor-ide-mcp.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
-    # Strip the shebang from source and append the rest
-    tail -n +2 "$SCRIPTS_DIR/setup-cursor-ide-mcp.sh"
+    # Strip the shebang from source and inline lib
+    tail -n +2 "$SCRIPTS_DIR/setup-cursor-ide-mcp.sh" | inline_lib_bash
 } > "$DEPLOY_DIR/setup-cursor-ide-mcp.sh"
 chmod +x "$DEPLOY_DIR/setup-cursor-ide-mcp.sh"
 GENERATED=$((GENERATED + 1))
@@ -604,7 +632,7 @@ GENERATED=$((GENERATED + 1))
 blog "Copying deploy/setup-cursor-ide-mcp.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
-    cat "$SCRIPTS_DIR/setup-cursor-ide-mcp.ps1"
+    cat "$SCRIPTS_DIR/setup-cursor-ide-mcp.ps1" | inline_lib_ps1
 } > "$DEPLOY_DIR/setup-cursor-ide-mcp.ps1"
 GENERATED=$((GENERATED + 1))
 
@@ -615,8 +643,7 @@ blog "Copying deploy/setup-vercelcli.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
-    # Strip the shebang from source and append the rest
-    tail -n +2 "$SCRIPTS_DIR/setup-vercelcli.sh"
+    tail -n +2 "$SCRIPTS_DIR/setup-vercelcli.sh" | inline_lib_bash
 } > "$DEPLOY_DIR/setup-vercelcli.sh"
 chmod +x "$DEPLOY_DIR/setup-vercelcli.sh"
 GENERATED=$((GENERATED + 1))
@@ -624,7 +651,7 @@ GENERATED=$((GENERATED + 1))
 blog "Copying deploy/setup-vercelcli.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
-    cat "$SCRIPTS_DIR/setup-vercelcli.ps1"
+    cat "$SCRIPTS_DIR/setup-vercelcli.ps1" | inline_lib_ps1
 } > "$DEPLOY_DIR/setup-vercelcli.ps1"
 GENERATED=$((GENERATED + 1))
 
@@ -635,8 +662,7 @@ blog "Copying deploy/setup-pandoc.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
-    # Strip the shebang from source and append the rest
-    tail -n +2 "$SCRIPTS_DIR/setup-pandoc.sh"
+    tail -n +2 "$SCRIPTS_DIR/setup-pandoc.sh" | inline_lib_bash
 } > "$DEPLOY_DIR/setup-pandoc.sh"
 chmod +x "$DEPLOY_DIR/setup-pandoc.sh"
 GENERATED=$((GENERATED + 1))
@@ -644,7 +670,7 @@ GENERATED=$((GENERATED + 1))
 blog "Copying deploy/setup-pandoc.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
-    cat "$SCRIPTS_DIR/setup-pandoc.ps1"
+    cat "$SCRIPTS_DIR/setup-pandoc.ps1" | inline_lib_ps1
 } > "$DEPLOY_DIR/setup-pandoc.ps1"
 GENERATED=$((GENERATED + 1))
 
@@ -655,8 +681,7 @@ blog "Copying deploy/setup-rust.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
-    # Strip the shebang from source and append the rest
-    tail -n +2 "$SCRIPTS_DIR/setup-rust.sh"
+    tail -n +2 "$SCRIPTS_DIR/setup-rust.sh" | inline_lib_bash
 } > "$DEPLOY_DIR/setup-rust.sh"
 chmod +x "$DEPLOY_DIR/setup-rust.sh"
 GENERATED=$((GENERATED + 1))
@@ -664,7 +689,7 @@ GENERATED=$((GENERATED + 1))
 blog "Copying deploy/setup-rust.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
-    cat "$SCRIPTS_DIR/setup-rust.ps1"
+    cat "$SCRIPTS_DIR/setup-rust.ps1" | inline_lib_ps1
 } > "$DEPLOY_DIR/setup-rust.ps1"
 GENERATED=$((GENERATED + 1))
 
@@ -675,8 +700,7 @@ blog "Copying deploy/setup-typst.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
-    # Strip the shebang from source and append the rest
-    tail -n +2 "$SCRIPTS_DIR/setup-typst.sh"
+    tail -n +2 "$SCRIPTS_DIR/setup-typst.sh" | inline_lib_bash
 } > "$DEPLOY_DIR/setup-typst.sh"
 chmod +x "$DEPLOY_DIR/setup-typst.sh"
 GENERATED=$((GENERATED + 1))
@@ -684,7 +708,7 @@ GENERATED=$((GENERATED + 1))
 blog "Copying deploy/setup-typst.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
-    cat "$SCRIPTS_DIR/setup-typst.ps1"
+    cat "$SCRIPTS_DIR/setup-typst.ps1" | inline_lib_ps1
 } > "$DEPLOY_DIR/setup-typst.ps1"
 GENERATED=$((GENERATED + 1))
 
@@ -695,8 +719,7 @@ blog "Copying deploy/setup-gh-cli.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
-    # Strip the shebang from source and append the rest
-    tail -n +2 "$SCRIPTS_DIR/setup-gh-cli.sh"
+    tail -n +2 "$SCRIPTS_DIR/setup-gh-cli.sh" | inline_lib_bash
 } > "$DEPLOY_DIR/setup-gh-cli.sh"
 chmod +x "$DEPLOY_DIR/setup-gh-cli.sh"
 GENERATED=$((GENERATED + 1))
@@ -704,7 +727,7 @@ GENERATED=$((GENERATED + 1))
 blog "Copying deploy/setup-gh-cli.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
-    cat "$SCRIPTS_DIR/setup-gh-cli.ps1"
+    cat "$SCRIPTS_DIR/setup-gh-cli.ps1" | inline_lib_ps1
 } > "$DEPLOY_DIR/setup-gh-cli.ps1"
 GENERATED=$((GENERATED + 1))
 
@@ -715,8 +738,7 @@ blog "Copying deploy/setup-python.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
-    # Strip the shebang from source and append the rest
-    tail -n +2 "$SCRIPTS_DIR/setup-python.sh"
+    tail -n +2 "$SCRIPTS_DIR/setup-python.sh" | inline_lib_bash
 } > "$DEPLOY_DIR/setup-python.sh"
 chmod +x "$DEPLOY_DIR/setup-python.sh"
 GENERATED=$((GENERATED + 1))
@@ -724,7 +746,7 @@ GENERATED=$((GENERATED + 1))
 blog "Copying deploy/setup-python.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
-    cat "$SCRIPTS_DIR/setup-python.ps1"
+    cat "$SCRIPTS_DIR/setup-python.ps1" | inline_lib_ps1
 } > "$DEPLOY_DIR/setup-python.ps1"
 GENERATED=$((GENERATED + 1))
 
@@ -735,8 +757,7 @@ blog "Copying deploy/setup-uv.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
-    # Strip the shebang from source and append the rest
-    tail -n +2 "$SCRIPTS_DIR/setup-uv.sh"
+    tail -n +2 "$SCRIPTS_DIR/setup-uv.sh" | inline_lib_bash
 } > "$DEPLOY_DIR/setup-uv.sh"
 chmod +x "$DEPLOY_DIR/setup-uv.sh"
 GENERATED=$((GENERATED + 1))
@@ -744,7 +765,7 @@ GENERATED=$((GENERATED + 1))
 blog "Copying deploy/setup-uv.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
-    cat "$SCRIPTS_DIR/setup-uv.ps1"
+    cat "$SCRIPTS_DIR/setup-uv.ps1" | inline_lib_ps1
 } > "$DEPLOY_DIR/setup-uv.ps1"
 GENERATED=$((GENERATED + 1))
 
@@ -755,8 +776,7 @@ blog "Copying deploy/setup-modal.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
-    # Strip the shebang from source and append the rest
-    tail -n +2 "$SCRIPTS_DIR/setup-modal.sh"
+    tail -n +2 "$SCRIPTS_DIR/setup-modal.sh" | inline_lib_bash
 } > "$DEPLOY_DIR/setup-modal.sh"
 chmod +x "$DEPLOY_DIR/setup-modal.sh"
 GENERATED=$((GENERATED + 1))
@@ -764,7 +784,7 @@ GENERATED=$((GENERATED + 1))
 blog "Copying deploy/setup-modal.ps1"
 {
     echo "$HEADER_COMMENT_PS1"
-    cat "$SCRIPTS_DIR/setup-modal.ps1"
+    cat "$SCRIPTS_DIR/setup-modal.ps1" | inline_lib_ps1
 } > "$DEPLOY_DIR/setup-modal.ps1"
 GENERATED=$((GENERATED + 1))
 
@@ -830,7 +850,7 @@ SKILLS_HEADER
     # Emit exit footer from source
     extract_between "$SCRIPTS_DIR/setup-user-mcp.sh" \
         '^# --- BEGIN exit' '^# --- END exit'
-} > "$DEPLOY_DIR/setup-user-mcp.sh"
+} | inline_lib_bash > "$DEPLOY_DIR/setup-user-mcp.sh"
 chmod +x "$DEPLOY_DIR/setup-user-mcp.sh"
 GENERATED=$((GENERATED + 1))
 
@@ -890,7 +910,7 @@ SKILLS_PS1_HEADER
     # Emit exit footer from source (CRLF for PS1)
     extract_between "$SCRIPTS_DIR/setup-user-mcp.ps1" \
         '^# --- BEGIN exit' '^# --- END exit' --crlf
-} > "$DEPLOY_DIR/setup-user-mcp.ps1"
+} | inline_lib_ps1 > "$DEPLOY_DIR/setup-user-mcp.ps1"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
@@ -964,7 +984,7 @@ BLOCK_INTERP
     # Extract: exit footer
     extract_between "$SCRIPTS_DIR/setup-user-hooks.sh" \
         '^# --- BEGIN exit' '^# --- END exit'
-} > "$DEPLOY_DIR/setup-user-hooks.sh"
+} | inline_lib_bash > "$DEPLOY_DIR/setup-user-hooks.sh"
 
 chmod +x "$DEPLOY_DIR/setup-user-hooks.sh"
 GENERATED=$((GENERATED + 1))
@@ -1038,7 +1058,7 @@ BLOCK
     # Extract: exit footer
     extract_between "$SCRIPTS_DIR/setup-user-hooks.ps1" \
         '^# --- BEGIN exit' '^# --- END exit' --crlf
-} > "$DEPLOY_DIR/setup-user-hooks.ps1"
+} | inline_lib_ps1 > "$DEPLOY_DIR/setup-user-hooks.ps1"
 
 GENERATED=$((GENERATED + 1))
 

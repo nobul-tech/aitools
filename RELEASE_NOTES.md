@@ -12,6 +12,36 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.35.0 -- Shared helper library + git pull resilience (2026-03-03)
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **Shared helper library** (`scripts/aitools-lib.sh`, `scripts/aitools-lib.ps1`): New single source of truth for common helpers -- platform detection, log directory, `display_path`, `read_config_key`/`ReadConfigKey`, `logging_init`/`Initialize-Logging`, `log`/`log_ok`/`log_error`/`log_warn` + PS1 equivalents, `write_summary`/`Write-Summary`, `show_summary`/`Show-Summary`. Previously copy-pasted across 14+ setup scripts (~50 lines each in .sh, ~40 in .ps1). |
+| 2 | **PS1 summary panel parity** (`scripts/aitools.ps1`): Added `Show-Summary` call and summary file init. PS1 entry point was missing end-of-run summary panel entirely -- now matches bash behavior. |
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **git pull line-ending failure** (`scripts/aitools`, `scripts/aitools.ps1`): `git checkout -- deploy/` resets from index (which may have line-ending diffs staged), not HEAD. Changed to `git checkout HEAD -- deploy/` on both quiet-pull and gitpull-strict paths. Fixes [#11](https://github.com/nobul-jose/aitools/issues/11). |
+| 2 | **git pull failure visibility** (`scripts/aitools`, `scripts/aitools.ps1`): Pull failures now emit `write_summary WARN "source" "stale local checkout (git pull failed)"` so they appear in the end-of-run summary panel instead of being silently logged. |
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 1 | **All setup scripts consolidated** (26 files: 13 `.sh` + 13 `.ps1`): Replaced ~15 lines of inline logging boilerplate with 2-line lib source + `logging_init`/`Initialize-Logging`. |
+| 2 | **Entry points source lib** (`scripts/aitools`, `scripts/aitools.ps1`, `scripts/aitools-install.sh/.ps1`): Source shared lib then override logging for specialized behavior (file-only, JSONL). Bootstrap helpers (`read_config_key`, `display_path`) remain inline in `scripts/aitools` (needed before repo path is known). |
+| 3 | **Check-lib sources base lib** (`scripts/check-lib.sh`, `scripts/check-lib.ps1`): Removed duplicated `read_config_key`/`ReadConfigKey`, platform detection, and log directory computation -- now inherited from `aitools-lib`. |
+| 4 | **Build pipeline inlines lib** (`scripts/build-deploy.sh`): Added `inline_lib_bash()`/`inline_lib_ps1()` filters. Deploy scripts remain self-contained -- lib content is inlined at build time. |
+| 5 | **Documentation updates** (`CLAUDE.md`, `.claude/rules/script-standards.md`, `.cursor/rules/script-standards.mdc`, `reference/script-standards-detail.md`): Updated project structure tree, block order, logging helpers reference, and added shared library section with contents table, usage examples, and override documentation. |
+
+**Verified**: macOS
+
+---
+
 ## v0.34.3 -- Move Cloud MCP status into setup-user-mcp (2026-03-03)
 
 ### Fixed

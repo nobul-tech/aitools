@@ -18,6 +18,10 @@ aitools/
 │   ├── shell/           # Shell aliases (bash/zsh + PowerShell)
 │   └── skills/          # Claude Code skill definitions
 ├── scripts/             # Dev/source scripts (read from shared/)
+│   ├── aitools-lib.sh   #   Shared helpers (sourced; inlined into deploy/ by build)
+│   ├── aitools-lib.ps1  #   PowerShell equivalent
+│   ├── check-lib.sh     #   Check-script helpers (sources aitools-lib)
+│   ├── check-lib.ps1    #   PowerShell equivalent
 ├── deploy/              # Self-contained scripts for MDM (generated)
 ├── plans/               # Detailed plans for roadmap items
 ├── reference/           # Setup notes and how-tos
@@ -88,7 +92,7 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 
 ### Deploy using MDM
 
-`build-deploy.sh` generates self-contained scripts in `deploy/` (`.sh` + `.ps1` pairs) -- config scripts (`setup-user-claude`, `-mcp`, `-hooks`, `setup-cursor-ide-mcp`, `setup-user-cursor`) and tool scripts (`setup-vercelcli`, `-pandoc`, `-rust`, `-typst`, `-gh-cli`, `-python`, `-uv`). No repo needed -- run directly on any endpoint.
+`build-deploy.sh` generates self-contained scripts in `deploy/` (`.sh` + `.ps1` pairs) -- config scripts (`setup-user-claude`, `-mcp`, `-hooks`, `setup-cursor-ide-mcp`, `setup-user-cursor`) and tool scripts (`setup-vercelcli`, `-pandoc`, `-rust`, `-typst`, `-gh-cli`, `-python`, `-uv`). Shared helpers from `scripts/aitools-lib.sh/.ps1` are inlined into deploy scripts at build time -- deploy scripts have no runtime dependency on the repo.
 
 ## Cross-Platform Paths
 

@@ -10,24 +10,9 @@
 
 set -euo pipefail
 
-# --- Logging ---
-LOG_DIR="$HOME/Library/Logs/aitools"
-[ "$(uname -s)" != "Darwin" ] && LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
-LOG_FILE="$LOG_DIR/deploy.log"
-SCRIPT_NAME="setup-pandoc"
-mkdir -p "$LOG_DIR"
-
-display_path() {
-    if command -v cygpath &>/dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi
-}
-ERRORS=0
-log()       { printf '[%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" | tee -a "$LOG_FILE"; }
-log_ok()    { log "OK: $1"; }
-log_error() { log "ERROR: $1"; ERRORS=$((ERRORS + 1)); }
-log_warn()  { log "WARN: $1"; }
-write_summary() {
-    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
-}
+# --- Shared library ---
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/aitools-lib.sh"
+logging_init "setup-pandoc"
 
 # --- OS guard ---
 case "$(uname -s)" in

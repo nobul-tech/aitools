@@ -7,25 +7,9 @@
 #
 # See reference/tool-registry.md for install source details.
 
-# --- Logging ---
-$logDir = Join-Path $env:LOCALAPPDATA "aitools"
-$logFile = Join-Path $logDir "deploy.log"
-$scriptName = "setup-gh-cli"
-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
-
-function Log($msg) {
-    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-    $line = "[$ts] [$scriptName] $msg"
-    Write-Host $line
-    Add-Content -Path $logFile -Value $line
-}
-$errors = 0
-function LogOk($msg)    { Log "OK: $msg" }
-function LogError($msg) { Log "ERROR: $msg"; $script:errors++ }
-function LogWarn($msg)  { Log "WARN: $msg" }
-function Write-Summary($cat, $tool, $detail) {
-    if ($env:AITOOLS_SUMMARY_FILE) { Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}" }
-}
+# --- Shared library ---
+. (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
+Initialize-Logging "setup-gh-cli"
 
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
