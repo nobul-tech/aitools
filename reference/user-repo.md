@@ -40,7 +40,8 @@ aitools-<username>/
   },
   "claude": {
     "autoMemory": false,
-    "alwaysThinking": true
+    "alwaysThinking": true,
+    "effortLevel": "high"
   },
   "profiles": {
     "<alias>": {
@@ -67,7 +68,7 @@ aitools-<username>/
 
 - **`identity`** -- global, shared across all machines. Git identity, GitHub username, primary email.
 - **`cursor`** -- Cursor CLI preferences. Read by `setup-user-cursor`.
-- **`claude`** -- Claude Code settings preferences. Read by `setup-user-hooks`. Keys: `autoMemory` (default true), `alwaysThinking` (default true). Maps to `autoMemoryEnabled` / `alwaysThinkingEnabled` in `~/.claude/settings.json`.
+- **`claude`** -- Claude Code settings preferences. Read by `setup-user-hooks`. Keys: `autoMemory` (default true), `alwaysThinking` (default true), `effortLevel` (optional, `"low"`/`"medium"`/`"high"`). Maps to `autoMemoryEnabled` / `alwaysThinkingEnabled` / `effortLevel` in `~/.claude/settings.json`.
 - **`profiles`** -- keyed by user-chosen alias (e.g., "laptop", "workstation"). Display name and company can vary per machine.
 - **`overrides`** -- intentional deviations from upstream tool defaults. Informational only -- CLI does not read this yet. Mirrors the Overrides table in `reference/tool-registry.md` in machine-readable form. Future `aitools audit` could validate overrides against live config.
 - **Machine matching** -- `config.json` stores `"machineAlias"` on each machine. Fallback: hostname match, then first profile.

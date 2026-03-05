@@ -3,7 +3,7 @@
 # Usage: bash scripts/check-script-compliance.sh
 # Checks: log format, exit footers, write_summary coverage, counter tracking,
 #          raw echo/Write-Host, grep pipefail safety, OS guards, logging init,
-#          cross-platform pairing.
+#          cross-platform pairing, SilentlyContinue result checks, summary categories.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -247,6 +247,73 @@ if [ "$step10_fail" -eq 0 ]; then
     step_pass "10" "Cross-platform pairing" "all .sh have .ps1 and vice versa"
 else
     step_fail "10" "Cross-platform pairing" "${step10_fail} unpaired:${step10_details}"
+fi
+
+# ---------------------------------------------------------------------------
+# 11. -ErrorAction SilentlyContinue has result check (PS1 scripts)
+# ---------------------------------------------------------------------------
+step11_fail=0
+step11_details=""
+for f in "${PS1_SCRIPTS[@]}"; do
+    # Find lines with -ErrorAction SilentlyContinue (not in comments)
+    sc_lines=$(grep -n 'ErrorAction SilentlyContinue' "$f" 2>/dev/null | grep -v '^\s*#' || true)
+    while IFS= read -r sc_line; do
+        [ -z "$sc_line" ] && continue
+        lineno=$(echo "$sc_line" | cut -d: -f1)
+        # Check next 3 lines for a null/result check
+        check_start=$((lineno + 1))
+        check_end=$((lineno + 3))
+        total_lines=$(wc -l < "$f" | tr -d ' ')
+        [ "$check_end" -gt "$total_lines" ] && check_end=$total_lines
+        nearby=$(sed -n "${check_start},${check_end}p" "$f")
+        # Look for result checks: -not, if, .Count, .Length, null, catch
+        if echo "$nearby" | grep -qE '\-not|\bif\b|\.Count|\.Length|null|catch' 2>/dev/null; then
+            continue
+        fi
+        # Exempt: command-existence checks (Get-Command with explicit fallback)
+        preceding_start=$((lineno > 3 ? lineno - 3 : 1))
+        preceding=$(sed -n "${preceding_start},${lineno}p" "$f")
+        if echo "$preceding" | grep -q 'Get-Command' 2>/dev/null; then continue; fi
+        # Also exempt if same line has a result check comment
+        if echo "$sc_line" | grep -q 'checked on' 2>/dev/null; then continue; fi
+        step11_fail=$((step11_fail + 1))
+        step11_details="${step11_details} $(basename "$f"):${lineno}"
+    done <<< "$sc_lines"
+done
+
+if [ "$step11_fail" -eq 0 ]; then
+    step_pass "11" "SilentlyContinue has result check" "all occurrences verified"
+else
+    step_fail "11" "SilentlyContinue has result check" "${step11_fail} unchecked:${step11_details}"
+fi
+
+# ---------------------------------------------------------------------------
+# 12. write_summary uses valid categories
+# ---------------------------------------------------------------------------
+step12_fail=0
+step12_details=""
+valid_cats="OK|WARN|ERROR|ACTION|DETAIL"
+for f in "${SH_SCRIPTS[@]}"; do
+    bad_cats=$(grep -n 'write_summary' "$f" 2>/dev/null | grep -v '^\s*#' | grep -vE "write_summary (${valid_cats}) " || true)
+    if [ -n "$bad_cats" ]; then
+        count=$(echo "$bad_cats" | wc -l | tr -d ' ')
+        step12_fail=$((step12_fail + count))
+        step12_details="${step12_details} $(basename "$f")(${count})"
+    fi
+done
+for f in "${PS1_SCRIPTS[@]}"; do
+    bad_cats=$(grep -n 'Write-Summary' "$f" 2>/dev/null | grep -v '^\s*#' | grep -vE "Write-Summary \"(${valid_cats})\"" || true)
+    if [ -n "$bad_cats" ]; then
+        count=$(echo "$bad_cats" | wc -l | tr -d ' ')
+        step12_fail=$((step12_fail + count))
+        step12_details="${step12_details} $(basename "$f")(${count})"
+    fi
+done
+
+if [ "$step12_fail" -eq 0 ]; then
+    step_pass "12" "write_summary valid categories" "all use OK/WARN/ERROR/ACTION/DETAIL"
+else
+    step_fail "12" "write_summary valid categories" "${step12_fail} invalid:${step12_details}"
 fi
 
 # ---------------------------------------------------------------------------

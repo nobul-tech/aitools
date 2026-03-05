@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # check-post-push.sh -- automated post-push checklist for aitools
 # Usage: bash scripts/check-post-push.sh [--extensive]
-# Default: 5 always-tier steps. --extensive: all 23 steps.
+# Default: 5 always-tier steps. --extensive: all 24 steps.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -590,6 +590,32 @@ if $EXTENSIVE; then
         fi
     else
         step_skip "23" "Script standards compliance" "check-script-compliance.sh not found"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# 24. Summary panel DETAIL support (extensive only)
+# ---------------------------------------------------------------------------
+if $EXTENSIVE; then
+    step24_ok=true
+    # Verify show_summary in aitools-lib.sh handles DETAIL category
+    if ! grep -q 'DETAIL' scripts/aitools-lib.sh 2>/dev/null; then
+        step24_ok=false
+    fi
+    # Verify Show-Summary in aitools-lib.ps1 handles DETAIL category
+    if ! grep -q 'DETAIL' scripts/aitools-lib.ps1 2>/dev/null; then
+        step24_ok=false
+    fi
+    # Verify write_summary accepts DETAIL (check for documentation or usage)
+    detail_usage=$(grep -r 'write_summary DETAIL\|Write-Summary.*DETAIL' scripts/ 2>/dev/null | grep -v '^\s*#' || true)
+    if [ -z "$detail_usage" ]; then
+        step24_ok=false
+    fi
+
+    if $step24_ok; then
+        step_pass "24" "Summary panel DETAIL support" "DETAIL category in lib + scripts"
+    else
+        step_fail "24" "Summary panel DETAIL support" "DETAIL not fully implemented"
     fi
 fi
 

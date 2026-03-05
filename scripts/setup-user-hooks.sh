@@ -2,7 +2,7 @@
 # setup-user-hooks.sh — Deploys Claude Code hooks and preferences to ~/.claude/settings.json
 # Safe to re-run — merges managed fields without clobbering existing settings.
 #
-# Managed fields: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled
+# Managed fields: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
 # Preserved: permissions, enabledPlugins, all other fields
 #
 # Hooks deployed:
@@ -70,6 +70,7 @@ if [ "$DRY_RUN" = "true" ]; then
     log "[DRY RUN] Would deploy hook: $(display_path "$GUARD_SCRIPT") -> $(display_path "$GUARD_DEST")"
 else
     mkdir -p "$HOME/.claude/hooks"
+    HOOKS_UPDATED=0
     for hook_pair in "$HOOK_SCRIPT|$HOOK_DEST" "$GUARD_SCRIPT|$GUARD_DEST"; do
         hook_src="${hook_pair%%|*}"
         hook_dst="${hook_pair##*|}"
@@ -78,10 +79,19 @@ else
         if [ -f "$hook_dst" ] && diff -q "$hook_src" "$hook_dst" >/dev/null 2>&1; then
             log_ok "Hook unchanged: $hook_name"
         else
+            # Log unified diff when updating existing hook
+            if [ -f "$hook_dst" ]; then
+                diff_exit=0
+                diff -u "$hook_dst" "$hook_src" >> "$LOG_FILE" 2>&1 || diff_exit=$?
+                # diff exits 1 for differences (expected), 2+ for errors
+                [ "$diff_exit" -le 1 ] || log_warn "diff failed for $hook_name (exit $diff_exit)"
+            fi
             cp "$hook_src" "$hook_dst"
             chmod +x "$hook_dst"
             log_ok "Deployed hook: $(display_path "$hook_dst")"
             HOOKS_CHANGED=true
+            HOOKS_UPDATED=$((HOOKS_UPDATED + 1))
+            write_summary DETAIL "claude hooks" "hook updated: $hook_name"
         fi
     done
 fi
@@ -107,6 +117,8 @@ const force = process.argv[5] === 'true';
 // --- BEGIN claude preferences (replaced by build-deploy) ---
 let autoMemory = true;
 let alwaysThinking = true;
+let effortLevel = null;
+const validEffortLevels = ['low', 'medium', 'high'];
 try {
     const cfgPath = path.join(process.env.HOME || process.env.USERPROFILE, '.aitools', 'config.json');
     const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
@@ -115,6 +127,11 @@ try {
         if (pf.claude) {
             if (typeof pf.claude.autoMemory === 'boolean') autoMemory = pf.claude.autoMemory;
             if (typeof pf.claude.alwaysThinking === 'boolean') alwaysThinking = pf.claude.alwaysThinking;
+            if (typeof pf.claude.effortLevel === 'string' && validEffortLevels.includes(pf.claude.effortLevel)) {
+                effortLevel = pf.claude.effortLevel;
+            } else if (pf.claude.effortLevel !== undefined) {
+                console.error('Warning: invalid effortLevel "' + pf.claude.effortLevel + '" (valid: ' + validEffortLevels.join(', ') + ')');
+            }
         }
     }
 } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: could not read profile preferences: ' + e.message); }
@@ -174,12 +191,24 @@ function mergeHookEntry(eventName, hookId, matcher, cmd) {
 mergeHookEntry('SessionEnd', 'session-archive.sh', '', hookCmd);
 mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
 
+// --- Track old values for change reporting ---
+const oldAutoMemory = settings.autoMemoryEnabled;
+const oldAlwaysThinking = settings.alwaysThinkingEnabled;
+const oldEffortLevel = settings.effortLevel;
+
 // --- Merge claude preferences ---
 settings.autoMemoryEnabled = autoMemory;
 settings.alwaysThinkingEnabled = alwaysThinking;
+if (effortLevel) settings.effortLevel = effortLevel;
+
+// --- Detect preference changes ---
+const prefChanges = [];
+if (oldAutoMemory !== settings.autoMemoryEnabled) prefChanges.push('CHANGED: autoMemoryEnabled: ' + (oldAutoMemory !== undefined ? oldAutoMemory : '(not set)') + ' -> ' + settings.autoMemoryEnabled);
+if (oldAlwaysThinking !== settings.alwaysThinkingEnabled) prefChanges.push('CHANGED: alwaysThinkingEnabled: ' + (oldAlwaysThinking !== undefined ? oldAlwaysThinking : '(not set)') + ' -> ' + settings.alwaysThinkingEnabled);
+if (effortLevel && oldEffortLevel !== settings.effortLevel) prefChanges.push('CHANGED: effortLevel: ' + (oldEffortLevel || '(not set)') + ' -> ' + settings.effortLevel);
 
 // --- Clobber detection ---
-const managedKeys = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'];
+const managedKeys = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled', 'effortLevel'];
 const afterKeys = Object.keys(settings);
 const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
 
@@ -192,6 +221,7 @@ if (dryRun) {
     console.error('  PreToolUse hook: ' + guardCmd);
     console.error('  autoMemoryEnabled: ' + autoMemory);
     console.error('  alwaysThinkingEnabled: ' + alwaysThinking);
+    if (effortLevel) console.error('  effortLevel: ' + effortLevel);
     console.log('dry-run');
 } else if (corrupt && !force) {
     console.error('ERROR: ' + settingsFile + ' is corrupt. Use --force to overwrite, or fix manually.');
@@ -212,7 +242,9 @@ if (dryRun) {
 
         // Post-write validation
         const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-        const _missing = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'].filter(k => !(k in _v));
+        const _required = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'];
+        if (effortLevel) _required.push('effortLevel');
+        const _missing = _required.filter(k => !(k in _v));
         if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
         // Validate hook arrays have exactly one entry per managed hook
         const seCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('session-archive.sh'))).length;
@@ -221,11 +253,16 @@ if (dryRun) {
         if (ptCount !== 1) { console.error('Validation failed: expected 1 PreToolUse hook, got ' + ptCount); process.exit(1); }
 
         console.log('ok');
+        prefChanges.forEach(c => console.log(c));
     }
 }
 " "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$DRY_RUN" "$FORCE")
 
-case "$MERGE_RESULT" in
+# Parse merge result: first line is status, CHANGED: lines are key changes
+MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)
+CHANGED_KEYS=$(echo "$MERGE_RESULT" | perl -ne 'print if s/^CHANGED: //')
+
+case "$MERGE_STATUS" in
     ok)
         log_ok "Settings deployed to $(display_path "$SETTINGS_FILE")"
         HOOKS_CHANGED=true
@@ -233,6 +270,13 @@ case "$MERGE_RESULT" in
         log "  PreToolUse hook: $GUARD_CMD"
         log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"
         log "  alwaysThinkingEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).alwaysThinkingEnabled)")"
+        log "  effortLevel: $(node -e "const s=JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')); console.log(s.effortLevel || '(not set)')")"
+        if [ -n "$CHANGED_KEYS" ]; then
+            while IFS= read -r key_change; do
+                log "  $key_change"
+                write_summary DETAIL "claude hooks" "$key_change"
+            done <<< "$CHANGED_KEYS"
+        fi
         ;;
     unchanged)
         log_ok "Settings unchanged: $(display_path "$SETTINGS_FILE")"

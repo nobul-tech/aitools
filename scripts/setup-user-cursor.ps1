@@ -258,15 +258,15 @@ if ($DryRun) {
     if ($corrupt -and -not $Force) {
         LogError "$cliConfig is corrupt. Use -Force to overwrite, or fix manually."
         $status.cliConfig = "ERROR (corrupt, needs -Force)"
-        Write-Summary "ERROR" "cursor rules" "config corrupt"
+        Write-Summary "ERROR" "cursor cli" "config corrupt"
     } elseif ($lostKeys.Count -gt 0 -and -not $Force) {
         LogError "$cliConfig merge would lose fields: $($lostKeys -join ', '). Use -Force to proceed."
         $status.cliConfig = "ERROR (clobber, needs -Force)"
-        Write-Summary "ERROR" "cursor rules" "merge would lose fields"
+        Write-Summary "ERROR" "cursor cli" "merge would lose fields"
     } elseif ($beforeJson -eq $afterJson -and -not $corrupt) {
         LogOk "Already up to date: $cliConfig"
         $status.cliConfig = "already up to date"
-        Write-Summary "OK" "cursor rules" "merged"
+        Write-Summary "OK" "cursor cli" "unchanged"
     } else {
         if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
         if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
@@ -294,11 +294,11 @@ if ($DryRun) {
         if ($beforeKeys.Count -eq 0) {
             LogOk "Created: $cliConfig"
             $status.cliConfig = "created"
-            Write-Summary "OK" "cursor rules" "merged"
+            Write-Summary "OK" "cursor cli" "created"
         } else {
             LogOk "Merged preferences into: $cliConfig"
             $status.cliConfig = "merged"
-            Write-Summary "OK" "cursor rules" "merged"
+            Write-Summary "OK" "cursor cli" "updated"
         }
     }
 }

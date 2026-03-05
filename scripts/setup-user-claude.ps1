@@ -317,18 +317,16 @@ if ($DryRun) {
     # --- END post-write validation (extracted by build-deploy) ---
 
     LogOk "Wrote $claudeMd"
-    if ($errors -eq 0 -and $warnings -eq 0) {
-        Write-Summary "OK" "claude.md" "deployed"
-    } elseif ($errors -gt 0) {
-        Write-Summary "ERROR" "claude.md" "validation failed"
-    }
-    # Log whether content actually changed
+    # Determine what changed for summary detail
     if (-not $oldContent) {
         Log "Content: new file"
+        $claudeMdDetail = "created"
     } elseif ($oldContent -eq $content) {
         Log "Content unchanged (no differences)"
+        $claudeMdDetail = "unchanged"
     } else {
         Log "Content updated"
+        $claudeMdDetail = "updated"
         # Log diff to deploy log (not console)
         $oldLines = @($oldContent -split "`n")
         $newLines = @($content -split "`n")
@@ -341,6 +339,11 @@ if ($DryRun) {
                 Add-Content -Path $logFile -Value "  $side $line"
             }
         }
+    }
+    if ($errors -eq 0 -and $warnings -eq 0) {
+        Write-Summary "OK" "claude.md" "$claudeMdDetail"
+    } elseif ($errors -gt 0) {
+        Write-Summary "ERROR" "claude.md" "validation failed"
     }
 }
 
@@ -438,9 +441,11 @@ if ($rulesSrc) {
                     }
                 }
                 $updated++
+                Write-Summary "DETAIL" "claude rules" "updated: $($rf.Name)"
             } else {
                 Log "Adding: $($rf.Name) (new)"
                 $added++
+                Write-Summary "DETAIL" "claude rules" "added: $($rf.Name)"
             }
             Copy-Item -Path $rf.FullName -Destination $destFile -Force -ErrorAction Stop
         }

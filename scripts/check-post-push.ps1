@@ -1,6 +1,6 @@
 # check-post-push.ps1 -- automated post-push checklist for aitools
 # Usage: .\scripts\check-post-push.ps1 [-Extensive]
-# Default: 5 always-tier steps. -Extensive: all 23 steps.
+# Default: 5 always-tier steps. -Extensive: all 24 steps.
 # Platform: Windows (PS 5.1 compatible)
 param([switch]$Extensive)
 
@@ -697,6 +697,38 @@ if ($Extensive) {
         }
     } else {
         StepSkip "23" "Script standards compliance" "check-script-compliance.ps1 not found"
+    }
+}
+
+# ---------------------------------------------------------------------------
+# 24. Summary panel DETAIL support (extensive only)
+# ---------------------------------------------------------------------------
+if ($Extensive) {
+    $step24Ok = $true
+    # Verify show_summary in aitools-lib.sh handles DETAIL
+    $libSh = Join-Path $repoRoot "scripts/aitools-lib.sh"
+    if (Test-Path $libSh) {
+        $content = Get-Content $libSh -Raw -ErrorAction Stop
+        if ($content -notmatch 'DETAIL') { $step24Ok = $false }
+    } else { $step24Ok = $false }
+
+    # Verify Show-Summary in aitools-lib.ps1 handles DETAIL
+    $libPs1 = Join-Path $repoRoot "scripts/aitools-lib.ps1"
+    if (Test-Path $libPs1) {
+        $content = Get-Content $libPs1 -Raw -ErrorAction Stop
+        if ($content -notmatch 'DETAIL') { $step24Ok = $false }
+    } else { $step24Ok = $false }
+
+    # Verify write_summary DETAIL is used in scripts
+    $detailUsage = Get-ChildItem (Join-Path $repoRoot "scripts") -Filter "*.sh" -ErrorAction Stop |
+        ForEach-Object { Select-String -Path $_.FullName -Pattern 'write_summary DETAIL' -ErrorAction Stop } |
+        Where-Object { $_.Line -notmatch '^\s*#' }
+    if (-not $detailUsage) { $step24Ok = $false }
+
+    if ($step24Ok) {
+        StepPass "24" "Summary panel DETAIL support" "DETAIL category in lib + scripts"
+    } else {
+        StepFail "24" "Summary panel DETAIL support" "DETAIL not fully implemented"
     }
 }
 

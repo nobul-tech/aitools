@@ -89,7 +89,10 @@ Three servers at user level. Chrome DevTools enabled globally; Vercel/Webflow di
 
 ## Knowledge Management
 
-- **Auto memory is disabled** via `profile.json` (`autoMemory: false`), deployed by `setup-user-hooks`. Durable knowledge belongs in git-tracked files: `CLAUDE.md`, `.claude/rules/`, or project docs.
+- **Claude Code preferences** are managed via `profile.json` and deployed by `setup-user-hooks` to `~/.claude/settings.json`:
+  - `autoMemory: false` -- auto memory disabled. Durable knowledge belongs in git-tracked files: `CLAUDE.md`, `.claude/rules/`, or project docs.
+  - `alwaysThinking: true` -- extended thinking enabled by default for all sessions.
+  - `effortLevel: "high"` -- reasoning effort level (low/medium/high). CC 2.1.68+ defaults to medium for Opus 4.6; "ultrathink" keyword forces high for one turn.
 - **Planning workflow:** When starting a major plan, check for stale auto memory files (`~/.claude/projects/.../memory/`) from before the disable and migrate any useful content into the repo.
 
 ## Coaching

@@ -102,6 +102,14 @@ must appear as ERROR, not be silently absent.
 See `@reference/script-standards-detail.md` for severity definitions, renderer colors,
 tool name table, function signatures, and platform-specific patterns.
 
+### Config and file update reporting
+
+Setup scripts that write config files, .md files, hooks, or skills must follow the
+three-outcome pattern (unchanged/updated/failed) with file-type-specific change logging.
+Summary detail text is max 30 chars. JSON configs log changed keys and emit DETAIL
+summary lines; text files log diffs to deploy.log.
+See `@reference/script-standards-detail.md` for patterns and examples.
+
 ### External command error handling
 
 External install/upgrade commands (pip, npm, winget, brew, cargo, apt-get) MUST:

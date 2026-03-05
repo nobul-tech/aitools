@@ -165,7 +165,7 @@ if ($DryRun) {
 
         LogOk "Cursor MCP config written to $mcpJson"
         Log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
-        Write-Summary "OK" "cursor ide mcp" "merged"
+        Write-Summary "OK" "cursor ide mcp" "updated"
     }
 }
 

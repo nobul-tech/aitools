@@ -1,7 +1,8 @@
 # check-script-compliance.ps1 -- Verify setup scripts follow script-standards.md
 # Usage: pwsh -File scripts/check-script-compliance.ps1
 # Checks: log format, exit footers, write_summary coverage, counter tracking,
-#          raw echo/Write-Host, OS guards, logging init, cross-platform pairing.
+#          raw echo/Write-Host, OS guards, logging init, cross-platform pairing,
+#          SilentlyContinue result checks, summary categories.
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptDir
@@ -211,6 +212,75 @@ if ($step10Fail -eq 0) {
     StepPass "10" "Cross-platform pairing" "all .sh have .ps1 and vice versa"
 } else {
     StepFail "10" "Cross-platform pairing" "$step10Fail unpaired: $($step10Details -join ', ')"
+}
+
+# ---------------------------------------------------------------------------
+# 11. -ErrorAction SilentlyContinue has result check (PS1 scripts)
+# ---------------------------------------------------------------------------
+$step11Fail = 0
+$step11Details = @()
+foreach ($f in $ps1Scripts) {
+    $lines = Get-Content $f -ErrorAction Stop
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match 'ErrorAction SilentlyContinue' -and $lines[$i] -notmatch '^\s*#') {
+            $lineno = $i + 1
+            # Check next 3 lines for a null/result check
+            $checkEnd = [Math]::Min($i + 3, $lines.Count - 1)
+            $nearby = ($lines[($i+1)..$checkEnd]) -join "`n"
+            if ($nearby -match '-not|if\s|\bif\(|\.Count|\.Length|null|catch') { continue }
+            # Exempt: Get-Command checks (command existence)
+            $checkStart = [Math]::Max($i - 3, 0)
+            $preceding = ($lines[$checkStart..$i]) -join "`n"
+            if ($preceding -match 'Get-Command') { continue }
+            # Exempt: result check comment on same line
+            if ($lines[$i] -match 'checked on') { continue }
+            $step11Fail++
+            $step11Details += "$(Split-Path $f -Leaf):$lineno"
+        }
+    }
+}
+
+if ($step11Fail -eq 0) {
+    StepPass "11" "SilentlyContinue has result check" "all occurrences verified"
+} else {
+    StepFail "11" "SilentlyContinue has result check" "$step11Fail unchecked: $($step11Details -join ', ')"
+}
+
+# ---------------------------------------------------------------------------
+# 12. Write-Summary uses valid categories
+# ---------------------------------------------------------------------------
+$step12Fail = 0
+$step12Details = @()
+$validCats = @('OK', 'WARN', 'ERROR', 'ACTION', 'DETAIL')
+foreach ($f in $ps1Scripts) {
+    $lines = Get-Content $f -ErrorAction Stop
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match 'Write-Summary\s+"(\w+)"' -and $lines[$i] -notmatch '^\s*#') {
+            $cat = $Matches[1]
+            if ($cat -notin $validCats) {
+                $step12Fail++
+                $step12Details += "$(Split-Path $f -Leaf):$($i+1)($cat)"
+            }
+        }
+    }
+}
+foreach ($f in $shScripts) {
+    $lines = Get-Content $f -ErrorAction Stop
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match 'write_summary\s+(\w+)\s' -and $lines[$i] -notmatch '^\s*#') {
+            $cat = $Matches[1]
+            if ($cat -notin $validCats) {
+                $step12Fail++
+                $step12Details += "$(Split-Path $f -Leaf):$($i+1)($cat)"
+            }
+        }
+    }
+}
+
+if ($step12Fail -eq 0) {
+    StepPass "12" "write_summary valid categories" "all use OK/WARN/ERROR/ACTION/DETAIL"
+} else {
+    StepFail "12" "write_summary valid categories" "$step12Fail invalid: $($step12Details -join ', ')"
 }
 
 # ---------------------------------------------------------------------------

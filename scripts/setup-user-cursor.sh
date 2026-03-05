@@ -244,30 +244,30 @@ if (dryRun) {
         unchanged)
             log_ok "Already up to date: $(display_path "$CLI_CONFIG")"
             STATUS_cliConfig="already up to date"
-            write_summary OK "cursor rules" "merged" ;;
+            write_summary OK "cursor cli" "unchanged" ;;
         created)
             log_ok "Created: $(display_path "$CLI_CONFIG")"
             STATUS_cliConfig="created"
-            write_summary OK "cursor rules" "merged" ;;
+            write_summary OK "cursor cli" "created" ;;
         merged)
             log_ok "Merged preferences into: $(display_path "$CLI_CONFIG")"
             STATUS_cliConfig="merged"
-            write_summary OK "cursor rules" "merged" ;;
+            write_summary OK "cursor cli" "updated" ;;
         would-merge)
             log "[DRY RUN] Would write merged config"
             STATUS_cliConfig="would merge (dry-run)" ;;
         error-corrupt)
             log_error "$(display_path "$CLI_CONFIG") is corrupt. Use --force to overwrite."
             STATUS_cliConfig="ERROR (corrupt, needs --force)"
-            write_summary ERROR "cursor rules" "config corrupt" ;;
+            write_summary ERROR "cursor cli" "config corrupt" ;;
         error-clobber)
             log_error "$(display_path "$CLI_CONFIG") merge would lose fields. Use --force to proceed."
             STATUS_cliConfig="ERROR (clobber, needs --force)"
-            write_summary ERROR "cursor rules" "merge would lose fields" ;;
+            write_summary ERROR "cursor cli" "merge would lose fields" ;;
         *)
             log_error "Unexpected merge result: $MERGE_RESULT"
             STATUS_cliConfig="ERROR"
-            write_summary ERROR "cursor rules" "unexpected error" ;;
+            write_summary ERROR "cursor cli" "unexpected error" ;;
     esac
 fi
 

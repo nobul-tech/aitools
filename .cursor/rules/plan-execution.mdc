@@ -1,0 +1,12 @@
+---
+description: Plan execution pattern for large code changes
+globs: "*.sh,*.ps1"
+alwaysApply: false
+---
+
+## Plan Execution with Sub-Agents (this repo)
+
+Plans modifying 3+ code files (or any shared library) use sub-agent execution:
+verbatim code in plan, error-handling audit per block, fresh sub-agent per batch
+with rules injected, main agent verification between batches.
+See `reference/plan-execution-detail.md` for the rule injection template.

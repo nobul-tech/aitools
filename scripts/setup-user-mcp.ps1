@@ -336,8 +336,9 @@ $skillsSrc = Join-Path (Join-Path (Split-Path -Parent $scriptDir) "shared") "ski
 $skillsDest = Join-Path (Join-Path $env:USERPROFILE ".claude") "skills"
 $skillsDestCursor = Join-Path (Join-Path $env:USERPROFILE ".cursor") "skills"
 
+$script:skillChanges = 0
 function Deploy-Skill {
-    param([string]$SkillName, [string]$DestBase)
+    param([string]$SkillName, [string]$DestBase, [string]$ToolName)
 
     $src = Join-Path (Join-Path $skillsSrc $SkillName) "SKILL.md"
     $destDir = Join-Path $DestBase $SkillName
@@ -350,31 +351,58 @@ function Deploy-Skill {
 
     if ($DryRun) {
         Log "[DRY RUN] Would deploy skill: $SkillName -> $dest"
-    } else {
-        if (-not (Test-Path $destDir)) {
-            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+        return
+    }
+
+    if (-not (Test-Path $destDir)) {
+        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+    }
+
+    if (Test-Path $dest) {
+        $srcContent = Get-Content $src -Raw -ErrorAction Stop
+        $dstContent = Get-Content $dest -Raw -ErrorAction Stop
+        if ($srcContent -eq $dstContent) {
+            LogOk "Skill unchanged: $SkillName"
+        } else {
+            Copy-Item -Path $src -Destination $dest -Force
+            LogOk "Skill updated: $SkillName -> $dest"
+            Write-Summary "DETAIL" $ToolName "updated: $SkillName"
+            $script:skillChanges++
         }
+    } else {
         Copy-Item -Path $src -Destination $dest -Force
-        LogOk "Deployed skill: $SkillName -> $dest"
+        LogOk "Skill created: $SkillName -> $dest"
+        Write-Summary "DETAIL" $ToolName "added: $SkillName"
+        $script:skillChanges++
     }
 }
 
 Log "Deploying Chrome DevTools skills to $skillsDest..."
 $errorsBeforeClaudeSkills = $errors
-Deploy-Skill "chrome-devtools" $skillsDest
-Deploy-Skill "a11y-debugging" $skillsDest
+$script:skillChanges = 0
+Deploy-Skill "chrome-devtools" $skillsDest "claude skills"
+Deploy-Skill "a11y-debugging" $skillsDest "claude skills"
 if ($errors -eq $errorsBeforeClaudeSkills) {
-    Write-Summary "OK" "claude skills" "deployed"
+    if ($script:skillChanges -gt 0) {
+        Write-Summary "OK" "claude skills" "updated"
+    } else {
+        Write-Summary "OK" "claude skills" "unchanged"
+    }
 } else {
     Write-Summary "ERROR" "claude skills" "deploy failed"
 }
 
 Log "Deploying Chrome DevTools skills to $skillsDestCursor..."
 $errorsBeforeCursorSkills = $errors
-Deploy-Skill "chrome-devtools" $skillsDestCursor
-Deploy-Skill "a11y-debugging" $skillsDestCursor
+$script:skillChanges = 0
+Deploy-Skill "chrome-devtools" $skillsDestCursor "cursor skills"
+Deploy-Skill "a11y-debugging" $skillsDestCursor "cursor skills"
 if ($errors -eq $errorsBeforeCursorSkills) {
-    Write-Summary "OK" "cursor skills" "deployed"
+    if ($script:skillChanges -gt 0) {
+        Write-Summary "OK" "cursor skills" "updated"
+    } else {
+        Write-Summary "OK" "cursor skills" "unchanged"
+    }
 } else {
     Write-Summary "ERROR" "cursor skills" "deploy failed"
 }

@@ -222,6 +222,212 @@ write_summary ACTION "" "modal setup -- authenticate modal (browser flow)"
 Write-Summary "ACTION" "" "modal setup -- authenticate modal (browser flow)"
 ```
 
+## Config and file update reporting
+
+### Three outcomes
+
+Every file write in a setup script must distinguish one of three outcomes:
+
+| Outcome | Log level | Log message | Summary detail (max 30 chars) |
+|---------|-----------|-------------|-------------------------------|
+| **Unchanged** | `log_ok` / `LogOk` | `"Unchanged: <filepath>"` | `"unchanged"` |
+| **Updated** | `log_ok` / `LogOk` | `"Updated: <filepath>"` + change detail | Concise description |
+| **Failed** | `log_error` / `LogError` | `"Failed: <filepath>: <reason>"` | `"<failure reason>"` |
+
+### Change detail by file type
+
+| File type | Log detail | Summary detail example |
+|-----------|-----------|----------------------|
+| **Text files** (.md, .mdc, SKILL.md) | Unified diff to `$LOG_FILE` / `$logFile` | `"updated"`, `"2 added, 1 updated"` |
+| **JSON config** | Log each changed key: `"  key: old -> new"` | `"effortLevel: high"` or `"3 keys updated"` |
+| **Hook scripts** | Unified diff to `$LOG_FILE` / `$logFile` | `"hook updated"` or `"2 hooks updated"` |
+
+### Summary detail text rules
+
+- Max 30 characters (compliance-checked)
+- No file paths (those go in log lines)
+- Present tense: "updated", "unchanged", "failed", "created"
+- Multi-item tools: counts (`"2 added, 1 updated"`)
+- JSON configs: 0 keys changed -> `"unchanged"` / 1 key -> key + short value / 2-3 -> comma-joined names / 4+ -> `"N keys updated"`
+
+### DETAIL lines in summary panel
+
+When a config update changes keys, scripts write `DETAIL` entries after the main entry.
+These render left-aligned with the detail column (position 25).
+
+**Summary file format** -- new `DETAIL` category:
+
+```
+OK|claude hooks|3 keys updated
+DETAIL|claude hooks|effortLevel: medium -> high
+DETAIL|claude hooks|autoMemoryEnabled: false -> true
+DETAIL|claude hooks|hooks: updated
+```
+
+**Rendered output:**
+
+```
+────────────────────────────────────────────────────────
+  [ok]  claude hooks      3 keys updated
+                          effortLevel: medium -> high
+                          autoMemoryEnabled: false -> true
+                          hooks: updated
+  [ok]  claude.md         updated
+  [ok]  claude rules      unchanged
+────────────────────────────────────────────────────────
+```
+
+DETAIL lines:
+- Follow their parent entry (same tool name)
+- Left-aligned at position 25 (2 + tag(4) + 2 + tool(16) + 1)
+- Inherit parent's color
+- Never deduped, always shown
+- Optional -- only emitted when there are specific changes to report
+
+**write_summary / Write-Summary** -- no API change. DETAIL is a new category value:
+
+Bash:
+```bash
+write_summary DETAIL "claude hooks" "effortLevel: medium -> high"
+```
+
+PowerShell:
+```powershell
+Write-Summary "DETAIL" "claude hooks" "effortLevel: medium -> high"
+```
+
+### Canonical patterns by file type
+
+**Text files (.md, .mdc, SKILL.md):**
+
+Bash:
+```bash
+if [ ! -f "$dest" ]; then
+    cp "$src" "$dest"
+    log_ok "Created: $(display_path "$dest")"
+elif diff -q "$src" "$dest" >/dev/null 2>&1; then
+    log_ok "Unchanged: $(display_path "$dest")"
+else
+    diff -u "$dest" "$src" \
+        --label "deployed/$(basename "$dest")" --label "source/$(basename "$src")" \
+        >> "$LOG_FILE" 2>&1 || true
+    cp "$src" "$dest"
+    log_ok "Updated: $(display_path "$dest")"
+fi
+```
+
+PowerShell:
+```powershell
+if (-not (Test-Path $dest)) {
+    Copy-Item -Path $src -Destination $dest -Force
+    LogOk "Created: $dest"
+} else {
+    $srcContent = Get-Content $src -Raw -ErrorAction Stop
+    $dstContent = Get-Content $dest -Raw -ErrorAction Stop
+    if ($srcContent -eq $dstContent) {
+        LogOk "Unchanged: $dest"
+    } else {
+        $srcLines = Get-Content $src -ErrorAction Stop
+        $dstLines = Get-Content $dest -ErrorAction Stop
+        $diffOutput = Compare-Object $dstLines $srcLines -PassThru | Out-String
+        Add-Content -Path $logFile -Value "--- deployed/$(Split-Path $dest -Leaf)"
+        Add-Content -Path $logFile -Value "+++ source/$(Split-Path $src -Leaf)"
+        Add-Content -Path $logFile -Value $diffOutput
+        Copy-Item -Path $src -Destination $dest -Force
+        LogOk "Updated: $dest"
+    }
+}
+```
+
+**JSON config -- node.js merge blocks (used by .sh and .ps1 wrappers):**
+
+```javascript
+// Before merge: snapshot managed keys
+const before = {};
+for (const key of managedKeys) before[key] = JSON.stringify(settings[key]);
+// ... merge logic ...
+// After merge: detect changes
+const changed = [];
+for (const key of managedKeys) {
+    const oldVal = before[key];
+    const newVal = JSON.stringify(settings[key]);
+    if (oldVal !== newVal) changed.push(key + ': ' + (oldVal || '(unset)') + ' -> ' + newVal);
+}
+if (changed.length) {
+    for (const c of changed) console.error('CHANGED:' + c);
+    console.log('ok');
+} else {
+    console.log('unchanged');
+}
+```
+
+Shell wrapper reads `CHANGED:` lines and writes DETAIL entries:
+
+Bash:
+```bash
+MERGE_OUTPUT=$(node -e "..." "$@" 2>&1)
+MERGE_RESULT=$(echo "$MERGE_OUTPUT" | tail -1)
+CHANGED_KEYS=$(echo "$MERGE_OUTPUT" | perl -ne 'print "$1\n" if /^CHANGED:(.+)/')
+# After write_summary OK:
+if [ -n "$CHANGED_KEYS" ]; then
+    while IFS= read -r key_change; do
+        log "  $key_change"
+        write_summary DETAIL "tool_name" "$key_change"
+    done <<< "$CHANGED_KEYS"
+fi
+```
+
+PowerShell:
+```powershell
+foreach ($change in $changedKeys) {
+    Log "  $change"
+    Write-Summary "DETAIL" "tool_name" "$change"
+}
+```
+
+**Hook scripts:**
+
+Bash:
+```bash
+if [ -f "$hook_dst" ] && diff -q "$hook_src" "$hook_dst" >/dev/null 2>&1; then
+    log_ok "Unchanged: $hook_name"
+else
+    if [ -f "$hook_dst" ]; then
+        diff -u "$hook_dst" "$hook_src" \
+            --label "deployed/$hook_name" --label "source/$hook_name" \
+            >> "$LOG_FILE" 2>&1 || true
+    fi
+    cp "$hook_src" "$hook_dst"
+    chmod +x "$hook_dst"
+    log_ok "Updated: $hook_name"
+fi
+```
+
+PowerShell:
+```powershell
+$srcContent = Get-Content $src -Raw -ErrorAction Stop
+$dstContent = if (Test-Path $dst) { Get-Content $dst -Raw -ErrorAction Stop } else { $null }
+if ($srcContent -eq $dstContent) {
+    LogOk "Unchanged: $hookName"
+} else {
+    if ($dstContent) {
+        $srcLines = Get-Content $src -ErrorAction Stop
+        $dstLines = Get-Content $dst -ErrorAction Stop
+        $diffOutput = Compare-Object $dstLines $srcLines -PassThru | Out-String
+        Add-Content -Path $logFile -Value "--- deployed/$hookName"
+        Add-Content -Path $logFile -Value "+++ source/$hookName"
+        Add-Content -Path $logFile -Value $diffOutput
+    }
+    Copy-Item -Path $src -Destination $dst -Force
+    LogOk "Updated: $hookName"
+}
+```
+
+### Logging-summary pairing rule
+
+Every `log_error` / `LogError` for a file write failure MUST be paired with
+`write_summary ERROR` / `Write-Summary "ERROR"` in the same code block.
+
 ## External command error handling
 
 Setup scripts invoke external package managers (pip, npm, winget, brew, cargo, apt-get,

@@ -2,7 +2,7 @@
 
 Registry of version-dependent workarounds, behaviors, and assumptions in this repo.
 
-- **Current version**: 2.1.63
+- **Current version**: 2.1.69
 - **Baseline version**: 2.1.51 (2026-02-16) -- version when most workarounds were written
 
 ## How to use
@@ -23,8 +23,8 @@ Post-push checklist #20 triggers this review automatically.
 
 | # | Item | Baseline | Last verified | Files | Upstream |
 |---|------|----------|---------------|-------|----------|
-| 1 | Windows shell hardcoded to Git Bash (CLAUDE_CODE_SHELL broken) | 2.1.51 | 2.1.63 (2026-02-28) | `reference/claude-code-windows-shell.md`, `.claude/rules/cross-platform.md`, `CLAUDE.md` (Windows dispatch) | [#7490](https://github.com/anthropics/claude-code/issues/7490), [#25558](https://github.com/anthropics/claude-code/issues/25558), [#5049](https://github.com/anthropics/claude-code/issues/5049), [#16225](https://github.com/anthropics/claude-code/issues/16225), [#20453](https://github.com/anthropics/claude-code/issues/20453) |
-| 2 | SessionEnd hook API contract (session_id, cwd, transcript_path on stdin) | 2.1.51 | 2.1.63 (2026-02-28) | `shared/hooks/session-archive.sh`, `reference/user-repo.md` | -- |
+| 1 | Windows shell hardcoded to Git Bash (CLAUDE_CODE_SHELL broken) | 2.1.51 | 2.1.69 (2026-03-05) | `reference/claude-code-windows-shell.md`, `.claude/rules/cross-platform.md`, `CLAUDE.md` (Windows dispatch) | [#7490](https://github.com/anthropics/claude-code/issues/7490), [#25558](https://github.com/anthropics/claude-code/issues/25558), [#5049](https://github.com/anthropics/claude-code/issues/5049), [#16225](https://github.com/anthropics/claude-code/issues/16225), [#20453](https://github.com/anthropics/claude-code/issues/20453) |
+| 2 | SessionEnd hook API contract (session_id, cwd, transcript_path on stdin) | 2.1.51 | 2.1.69 (2026-03-05) | `shared/hooks/session-archive.sh`, `reference/user-repo.md` | -- |
 
 ## NOTE -- Not a CC dependency
 
@@ -37,11 +37,12 @@ Post-push checklist #20 triggers this review automatically.
 | # | Item | Baseline | Last verified | Files | Upstream |
 |---|------|----------|---------------|-------|----------|
 | 4 | Session path sanitization (CWD -> JSONL directory name uses `-` replacement) | 2.1.51 | 2.1.51 | `reference/claude-code-practices.md`, `shared/hooks/session-archive.sh` | -- |
-| 5 | Subagent context gap (rules/CLAUDE.md not inherited by Task subagents) | 2.1.51 | 2.1.62 (2026-02-27) | `shared/claude-shared.md` (coaching items) | [#29423](https://github.com/anthropics/claude-code/issues/29423) |
+| 5 | Subagent context gap (rules/CLAUDE.md not inherited by Task subagents) | 2.1.51 | 2.1.69 (2026-03-05) | `shared/claude-shared.md` (coaching items) | [#29423](https://github.com/anthropics/claude-code/issues/29423) |
 | 6 | CLAUDE.md hierarchy & merge behavior (5 levels, more-specific wins) | 2.1.51 | 2.1.51 | `reference/claude-code-practices.md`, `scripts/setup-user-claude.sh/.ps1` | -- |
 | 7 | Session management commands (claude -c, --resume, /resume, /rename) | 2.1.51 | 2.1.51 | `reference/claude-code-practices.md` | -- |
-| 8 | Hook execution context (hooks run in bash or HTTP, not configurable shell) | 2.1.51 | 2.1.63 (2026-02-28) | `shared/hooks/session-archive.sh`, `scripts/setup-user-hooks.sh` | -- (2.1.63 adds HTTP hooks as alternative to shell) |
+| 8 | Hook execution context (hooks run in bash or HTTP, not configurable shell) | 2.1.51 | 2.1.69 (2026-03-05) | `shared/hooks/session-archive.sh`, `scripts/setup-user-hooks.sh` | -- (2.1.63 adds HTTP hooks as alternative to shell) |
 | 9 | Coaching items tied to CC capabilities (subagent gap, auto-memory locality) | 2.1.51 | 2.1.51 | `shared/claude-shared.md` | -- |
+| 19 | `effortLevel` setting (`settings.json` key controlling reasoning effort) | 2.1.68 | 2.1.69 (2026-03-05) | `scripts/setup-user-hooks.sh/.ps1`, `reference/user-repo.md`, `shared/claude-shared.md` | -- |
 
 ## MEDIUM -- Affects developer experience or specific features
 
@@ -52,6 +53,8 @@ Post-push checklist #20 triggers this review automatically.
 | 12 | PowerShell-from-Bash quoting patterns (single-quote outer, double-quote inner) | 2.1.51 | 2.1.51 | `reference/claude-code-windows-shell.md` | -- |
 | 13 | Cursor Agent CLI rule sources (does NOT read ~/.claude/CLAUDE.md) | 2.1.51 | 2.1.51 | `reference/cursor-practices.md` | -- |
 | 18 | `@file` references resolved in CLAUDE.md but NOT in `.claude/rules/*.md` | 2.1.63 | 2.1.63 (2026-03-01) | `shared/claude-shared.md` (Knowledge Management), dotprofile `claude/CLAUDE.md` | -- |
+| 20 | `InstructionsLoaded` hook event (fires after CLAUDE.md and rules load) | 2.1.68 | 2.1.69 (2026-03-05) | -- (not yet used) | -- |
+| 21 | `agent_id`/`agent_type` in hook events (distinguishes main vs subagent) | 2.1.68 | 2.1.69 (2026-03-05) | -- (not yet used) | -- |
 
 ## LOW -- Architectural constraints unlikely to change soon
 
@@ -61,6 +64,7 @@ Post-push checklist #20 triggers this review automatically.
 | 15 | Session sync not possible (CLI sessions are local per machine + directory) | 2.1.51 | 2.1.51 | `reference/claude-code-practices.md` | -- |
 | 16 | Session storage internals (JSONL under ~/.claude/projects/) | 2.1.51 | 2.1.51 | `reference/claude-code-practices.md`, `shared/hooks/session-archive.sh` | -- |
 | 17 | JSONL transcript fields (type, cwd, sessionId) | 2.1.51 | 2.1.51 | `reference/claude-code-practices.md`, `shared/hooks/session-archive.sh` | -- |
+| 22 | `includeGitInstructions` setting (controls whether git context is injected into system prompt) | 2.1.68 | 2.1.69 (2026-03-05) | -- (not yet used) | -- |
 
 ## Filed issues -- Tracking our upstream reports
 
@@ -78,3 +82,20 @@ Notable changes in CC releases that may affect this registry.
 - **Project configs shared across git worktrees**: `CLAUDE.md` and auto-memory now shared across worktrees of the same repo. Affects item #6 (hierarchy behavior).
 - **`/simplify` and `/batch` bundled slash commands**: New built-in commands.
 - No changes to Windows shell configuration (#1) or subagent context loading (#5).
+
+### 2.1.59 (2026-03-01)
+
+- **Reasoning effort modes**: New `effortLevel` setting in `settings.json` (`"low"`, `"medium"`, `"high"`). Controls reasoning depth per session. "ultrathink" keyword forces high for one turn.
+- No changes to Windows shell configuration (#1) or subagent context loading (#5).
+
+### 2.1.68 (2026-03-04)
+
+- **`effortLevel` defaults to medium for Opus 4.6**: Previously unset (implicit high). Scripts that manage `settings.json` should handle this key. See item #19.
+- **`InstructionsLoaded` hook event**: New hook event fires after CLAUDE.md and rules are loaded. See item #20.
+- **`agent_id`/`agent_type` in hook events**: Hook stdin JSON now includes agent context. See item #21.
+- **`includeGitInstructions` setting**: Controls git context injection into system prompt. See item #22.
+- No changes to Windows shell configuration (#1) or subagent context loading (#5).
+
+### 2.1.69 (2026-03-05)
+
+- Patch release. No new features affecting this registry.

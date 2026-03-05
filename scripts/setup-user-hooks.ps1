@@ -1,7 +1,7 @@
 # setup-user-hooks.ps1 -- Deploys Claude Code hooks and preferences to ~/.claude/settings.json
 # Safe to re-run -- merges managed fields without clobbering existing settings.
 #
-# Managed fields: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled
+# Managed fields: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
 # Preserved: permissions, enabledPlugins, all other fields
 #
 # Hooks deployed:
@@ -80,6 +80,7 @@ if ($DryRun) {
     Log "[DRY RUN] Would deploy hook: $guardScript -> $guardDest"
 } else {
     if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }
+    $hooksUpdated = 0
     foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest))) {
         $src = $pair[0]; $dst = $pair[1]
         $hookName = Split-Path $dst -Leaf
@@ -88,9 +89,15 @@ if ($DryRun) {
         if ($srcContent -eq $dstContent) {
             LogOk "Hook unchanged: $hookName"
         } else {
+            # Log change notice to deploy.log when updating existing hook
+            if ($dstContent) {
+                Add-Content -Path $script:logFile -Value "Hook $hookName changed (updated by setup-user-hooks)"
+            }
             Copy-Item -Path $src -Destination $dst -Force
             LogOk "Deployed hook: $dst"
             $hooksChanged = $true
+            $hooksUpdated++
+            Write-Summary "DETAIL" "claude hooks" "hook updated: $hookName"
         }
     }
 }
@@ -99,6 +106,8 @@ if ($DryRun) {
 # --- BEGIN claude preferences (replaced by build-deploy) ---
 $autoMemory = $true
 $alwaysThinking = $true
+$effortLevel = $null
+$validEffortLevels = @("low", "medium", "high")
 
 $configFile = Join-Path $env:USERPROFILE ".aitools\config.json"
 if (Test-Path $configFile) {
@@ -112,6 +121,14 @@ if (Test-Path $configFile) {
                     $claudePrefs = $pf["claude"]
                     if ($claudePrefs.ContainsKey("autoMemory")) { $autoMemory = [bool]$claudePrefs["autoMemory"] }
                     if ($claudePrefs.ContainsKey("alwaysThinking")) { $alwaysThinking = [bool]$claudePrefs["alwaysThinking"] }
+                    if ($claudePrefs.ContainsKey("effortLevel")) {
+                        $val = $claudePrefs["effortLevel"]
+                        if ($val -is [string] -and $val -in $validEffortLevels) {
+                            $effortLevel = $val
+                        } else {
+                            LogWarn "Invalid effortLevel '$val' in profile (valid: $($validEffortLevels -join ', '))"
+                        }
+                    }
                 }
             }
         }
@@ -217,12 +234,33 @@ $guardDestUnix = $guardDest -replace '\\', '/'
 $guardCmd = "bash `"$guardDestUnix`""
 MergeHookEntry "PreToolUse" "standing-order-guard.sh" "Bash" $guardCmd
 
+# --- Track old values for change reporting ---
+$oldAutoMemory = $settings["autoMemoryEnabled"]
+$oldAlwaysThinking = $settings["alwaysThinkingEnabled"]
+$oldEffortLevel = $settings["effortLevel"]
+
 # --- Merge claude preferences ---
 $settings["autoMemoryEnabled"] = $autoMemory
 $settings["alwaysThinkingEnabled"] = $alwaysThinking
+if ($effortLevel) { $settings["effortLevel"] = $effortLevel }
+
+# --- Detect preference changes ---
+$prefChanges = @()
+if ($oldAutoMemory -ne $settings["autoMemoryEnabled"]) {
+    $oldVal = if ($null -ne $oldAutoMemory) { $oldAutoMemory } else { "(not set)" }
+    $prefChanges += "autoMemoryEnabled: $oldVal -> $($settings['autoMemoryEnabled'])"
+}
+if ($oldAlwaysThinking -ne $settings["alwaysThinkingEnabled"]) {
+    $oldVal = if ($null -ne $oldAlwaysThinking) { $oldAlwaysThinking } else { "(not set)" }
+    $prefChanges += "alwaysThinkingEnabled: $oldVal -> $($settings['alwaysThinkingEnabled'])"
+}
+if ($effortLevel -and $oldEffortLevel -ne $settings["effortLevel"]) {
+    $oldEL = if ($oldEffortLevel) { $oldEffortLevel } else { "(not set)" }
+    $prefChanges += "effortLevel: $oldEL -> $($settings['effortLevel'])"
+}
 
 # --- Clobber detection ---
-$managedKeys = @("hooks", "autoMemoryEnabled", "alwaysThinkingEnabled")
+$managedKeys = @("hooks", "autoMemoryEnabled", "alwaysThinkingEnabled", "effortLevel")
 $lostKeys = @($beforeKeys | Where-Object { $_ -notin $settings.Keys })
 
 if ($DryRun) {
@@ -238,6 +276,7 @@ if ($DryRun) {
     Log "[DRY RUN] PreToolUse hook: $guardCmd"
     Log "[DRY RUN] autoMemoryEnabled: $autoMemory"
     Log "[DRY RUN] alwaysThinkingEnabled: $alwaysThinking"
+    if ($effortLevel) { Log "[DRY RUN] effortLevel: $effortLevel" }
 } else {
     if ($corrupt -and -not $Force) {
         LogError "$settingsFile is corrupt. Use -Force to overwrite, or fix manually."
@@ -263,6 +302,7 @@ if ($DryRun) {
                 $vContent = [System.IO.File]::ReadAllText($resolvedPath)
                 $vParsed = $vContent | ConvertFrom-Json
                 $requiredKeys = @("hooks", "autoMemoryEnabled", "alwaysThinkingEnabled")
+                if ($effortLevel) { $requiredKeys += "effortLevel" }
                 foreach ($rk in $requiredKeys) {
                     if (-not ($vParsed.PSObject.Properties.Name -contains $rk)) {
                         LogError "Validation failed: $settingsFile missing required field '$rk'"
@@ -283,6 +323,12 @@ if ($DryRun) {
             Log "  PreToolUse hook: $guardCmd"
             Log "  autoMemoryEnabled: $autoMemory"
             Log "  alwaysThinkingEnabled: $alwaysThinking"
+            $effortDisplay = if ($effortLevel) { $effortLevel } else { "(not set)" }
+            Log "  effortLevel: $effortDisplay"
+            foreach ($change in $prefChanges) {
+                Log "  $change"
+                Write-Summary "DETAIL" "claude hooks" "$change"
+            }
         }
         if ($errors -eq 0) {
             if ($hooksChanged) {

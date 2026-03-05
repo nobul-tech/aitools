@@ -108,15 +108,22 @@ function Write-Summary($cat, $tool, $detail) {
 function Show-Summary {
     $sfile = $env:AITOOLS_SUMMARY_FILE
     if (-not $sfile -or -not (Test-Path $sfile)) { return }
+    # Read summary file; -ErrorAction SilentlyContinue checked on next line
     $lines = Get-Content $sfile -ErrorAction SilentlyContinue
-    if (-not $lines) { Remove-Item $sfile -ErrorAction SilentlyContinue; return }
+    if (-not $lines) {
+        # Summary file empty or unreadable; clean up and return
+        try { Remove-Item $sfile -Force -ErrorAction Stop }
+        catch { Write-Host "  note: could not remove empty summary file" -ForegroundColor Gray }
+        return
+    }
 
     # Dedup by tool name: highest severity wins (ERROR > WARN > OK).
-    # ACTIONs (empty tool name) are never deduped.
+    # ACTIONs (empty tool name) are never deduped. DETAIL lines collected separately.
     $rank = @{ 'OK' = 1; 'WARN' = 2; 'ERROR' = 3 }
     $order = [System.Collections.Generic.List[string]]::new()
     $best = @{}
     $bestDetail = @{}
+    $detailMap = @{}
     $actions = [System.Collections.Generic.List[string]]::new()
 
     foreach ($line in $lines) {
@@ -124,6 +131,11 @@ function Show-Summary {
         $cat = $parts[0]
         $tool = $parts[1]
         $det = $parts[2]
+        if ($cat -eq 'DETAIL') {
+            if (-not $detailMap.ContainsKey($tool)) { $detailMap[$tool] = [System.Collections.Generic.List[string]]::new() }
+            $detailMap[$tool].Add($det)
+            continue
+        }
         if ($cat -eq 'ACTION' -or $tool -eq '') {
             $actions.Add($line)
             continue
@@ -139,33 +151,42 @@ function Show-Summary {
         }
     }
 
-    # Build deduped lines
+    # Build deduped lines, pre-sorted: OK+details, WARN+details, ERROR+details, ACTIONs
     $deduped = [System.Collections.Generic.List[string]]::new()
-    foreach ($t in $order) {
-        $deduped.Add("$($best[$t])|$t|$($bestDetail[$t])")
+    foreach ($sev in @('OK', 'WARN', 'ERROR')) {
+        foreach ($t in $order) {
+            if ($best[$t] -ne $sev) { continue }
+            $deduped.Add("$sev|$t|$($bestDetail[$t])")
+            if ($detailMap.ContainsKey($t)) {
+                foreach ($d in $detailMap[$t]) { $deduped.Add("DETAIL|$t|$d") }
+            }
+        }
     }
-    foreach ($a in $actions) {
-        $deduped.Add($a)
-    }
+    foreach ($a in $actions) { $deduped.Add($a) }
 
+    # Color and tag maps for severity categories
+    $colorMap = @{ 'OK' = 'Green'; 'WARN' = 'Yellow'; 'ERROR' = 'Red' }
+    $tagMap = @{ 'OK' = '  [ok]  '; 'WARN' = '  [!]   '; 'ERROR' = '  [ERR] ' }
+
+    # Single-pass display: deduped list is pre-sorted by severity.
+    # DETAIL lines inherit the color of their preceding parent entry.
     Write-Host ""
     Write-Host "------------------------------------------------------------"
-    foreach ($line in $deduped) {
-        $parts = $line -split '\|', 3
-        if ($parts[0] -eq 'OK') { Write-Host ("  [ok]  {0,-16} {1}" -f $parts[1], $parts[2]) -ForegroundColor Green }
-    }
-    foreach ($line in $deduped) {
-        $parts = $line -split '\|', 3
-        if ($parts[0] -eq 'WARN') { Write-Host ("  [!]   {0,-16} {1}" -f $parts[1], $parts[2]) -ForegroundColor Yellow }
-    }
-    foreach ($line in $deduped) {
-        $parts = $line -split '\|', 3
-        if ($parts[0] -eq 'ERROR') { Write-Host ("  [ERR] {0,-16} {1}" -f $parts[1], $parts[2]) -ForegroundColor Red }
-    }
+    $lastColor = 'Green'
     $firstAction = $true
     foreach ($line in $deduped) {
         $parts = $line -split '\|', 3
-        if ($parts[0] -eq 'ACTION') {
+        $cat = $parts[0]
+        if ($cat -eq 'DETAIL') {
+            Write-Host ("                          {0}" -f $parts[2]) -ForegroundColor $lastColor
+            continue
+        }
+        if ($colorMap.ContainsKey($cat)) {
+            $lastColor = $colorMap[$cat]
+            Write-Host ("{0}{1,-16} {2}" -f $tagMap[$cat], $parts[1], $parts[2]) -ForegroundColor $lastColor
+            continue
+        }
+        if ($cat -eq 'ACTION') {
             if ($firstAction) {
                 Write-Host ""
                 Write-Host "  ACTION REQUIRED -- run before tools are ready:" -ForegroundColor Magenta
@@ -175,7 +196,19 @@ function Show-Summary {
         }
     }
     Write-Host "------------------------------------------------------------"
-    Remove-Item $sfile -ErrorAction SilentlyContinue
+
+    # Preserve summary for log compliance checks
+    if ($env:AITOOLS_PRESERVE_SUMMARY -eq "1") {
+        $preserveDest = Join-Path $script:logDir "last-summary.txt"
+        try { Copy-Item $sfile $preserveDest -Force -ErrorAction Stop }
+        catch {
+            # Non-blocking: summary already displayed; preservation is for compliance checks
+            Write-Host "  warning: could not preserve summary: $_" -ForegroundColor Yellow
+        }
+    }
+    # Summary file cleanup (already displayed; next run creates a fresh one)
+    try { Remove-Item $sfile -Force -ErrorAction Stop }
+    catch { Write-Host "  note: could not remove summary file" -ForegroundColor Gray }
 }
 Initialize-Logging "setup-user-claude"
 
@@ -361,7 +394,10 @@ Three servers at user level. Chrome DevTools enabled globally; Vercel/Webflow di
 
 ## Knowledge Management
 
-- **Auto memory is disabled** via `profile.json` (`autoMemory: false`), deployed by `setup-user-hooks`. Durable knowledge belongs in git-tracked files: `CLAUDE.md`, `.claude/rules/`, or project docs.
+- **Claude Code preferences** are managed via `profile.json` and deployed by `setup-user-hooks` to `~/.claude/settings.json`:
+  - `autoMemory: false` -- auto memory disabled. Durable knowledge belongs in git-tracked files: `CLAUDE.md`, `.claude/rules/`, or project docs.
+  - `alwaysThinking: true` -- extended thinking enabled by default for all sessions.
+  - `effortLevel: "high"` -- reasoning effort level (low/medium/high). CC 2.1.68+ defaults to medium for Opus 4.6; "ultrathink" keyword forces high for one turn.
 - **Planning workflow:** When starting a major plan, check for stale auto memory files (`~/.claude/projects/.../memory/`) from before the disable and migrate any useful content into the repo.
 
 ## Coaching
@@ -588,9 +624,11 @@ if ($rulesSrc) {
                     }
                 }
                 $updated++
+                Write-Summary "DETAIL" "claude rules" "updated: $($rf.Name)"
             } else {
                 Log "Adding: $($rf.Name) (new)"
                 $added++
+                Write-Summary "DETAIL" "claude rules" "added: $($rf.Name)"
             }
             Copy-Item -Path $rf.FullName -Destination $destFile -Force -ErrorAction Stop
         }

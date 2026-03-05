@@ -96,7 +96,7 @@ server_config_matches() {
     local name="$1" expected="$2"
     [ -n "$mcp_current_data" ] || return 1
     local line
-    line=$(printf '%s\n' "$mcp_current_data" | grep "^${name}=" | head -1)
+    line=$(printf '%s\n' "$mcp_current_data" | grep "^${name}=" | head -1 || true)
     [ -n "$line" ] || return 1
     local current="${line#*=}"
     [ "$current" = "$expected" ]
@@ -323,9 +323,11 @@ SKILLS_SRC="$SCRIPT_DIR/../shared/skills"
 SKILLS_DEST="$HOME/.claude/skills"
 SKILLS_DEST_CURSOR="$HOME/.cursor/skills"
 
+SKILL_CHANGES=0
 deploy_skill() {
     local skill_name="$1"
     local dest_base="$2"
+    local tool_name="$3"
     local src="$SKILLS_SRC/$skill_name/SKILL.md"
     local dest_dir="$dest_base/$skill_name"
     local dest="$dest_dir/SKILL.md"
@@ -337,29 +339,59 @@ deploy_skill() {
 
     if [ "$DRY_RUN" = "true" ]; then
         log "[DRY RUN] Would deploy skill: $skill_name -> $(display_path "$dest")"
+        return
+    fi
+
+    mkdir -p "$dest_dir"
+    if [ -f "$dest" ]; then
+        # diff -q exits 0 when files are identical; suppress output (we only care about result)
+        if diff -q "$src" "$dest" >/dev/null 2>&1; then
+            log_ok "Skill unchanged: $skill_name"
+        else
+            # Log diff to deploy log; diff exits 1 for differences (expected)
+            diff_exit=0
+            diff -u "$dest" "$src" >> "$LOG_FILE" 2>&1 || diff_exit=$?
+            # diff exits 1 for differences (expected), 2+ for errors
+            [ "$diff_exit" -le 1 ] || log_warn "diff failed for $skill_name (exit $diff_exit)"
+            cp "$src" "$dest"
+            log_ok "Skill updated: $skill_name -> $(display_path "$dest")"
+            write_summary DETAIL "$tool_name" "updated: $skill_name"
+            SKILL_CHANGES=$((SKILL_CHANGES + 1))
+        fi
     else
-        mkdir -p "$dest_dir"
         cp "$src" "$dest"
-        log_ok "Deployed skill: $skill_name -> $(display_path "$dest")"
+        log_ok "Skill created: $skill_name -> $(display_path "$dest")"
+        write_summary DETAIL "$tool_name" "added: $skill_name"
+        SKILL_CHANGES=$((SKILL_CHANGES + 1))
     fi
 }
 
 log "Deploying Chrome DevTools skills to $(display_path "$SKILLS_DEST")..."
 ERRORS_BEFORE_CLAUDE_SKILLS=$ERRORS
-deploy_skill "chrome-devtools" "$SKILLS_DEST"
-deploy_skill "a11y-debugging" "$SKILLS_DEST"
+SKILL_CHANGES=0
+deploy_skill "chrome-devtools" "$SKILLS_DEST" "claude skills"
+deploy_skill "a11y-debugging" "$SKILLS_DEST" "claude skills"
 if [ "$ERRORS" -eq "$ERRORS_BEFORE_CLAUDE_SKILLS" ]; then
-    write_summary OK "claude skills" "deployed"
+    if [ "$SKILL_CHANGES" -gt 0 ]; then
+        write_summary OK "claude skills" "updated"
+    else
+        write_summary OK "claude skills" "unchanged"
+    fi
 else
     write_summary ERROR "claude skills" "deploy failed"
 fi
 
 log "Deploying Chrome DevTools skills to $(display_path "$SKILLS_DEST_CURSOR")..."
 ERRORS_BEFORE_CURSOR_SKILLS=$ERRORS
-deploy_skill "chrome-devtools" "$SKILLS_DEST_CURSOR"
-deploy_skill "a11y-debugging" "$SKILLS_DEST_CURSOR"
+SKILL_CHANGES=0
+deploy_skill "chrome-devtools" "$SKILLS_DEST_CURSOR" "cursor skills"
+deploy_skill "a11y-debugging" "$SKILLS_DEST_CURSOR" "cursor skills"
 if [ "$ERRORS" -eq "$ERRORS_BEFORE_CURSOR_SKILLS" ]; then
-    write_summary OK "cursor skills" "deployed"
+    if [ "$SKILL_CHANGES" -gt 0 ]; then
+        write_summary OK "cursor skills" "updated"
+    else
+        write_summary OK "cursor skills" "unchanged"
+    fi
 else
     write_summary ERROR "cursor skills" "deploy failed"
 fi

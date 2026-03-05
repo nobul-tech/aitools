@@ -220,9 +220,7 @@ read_config_key() {
     [ -f "$file" ] || return 1
     local val
     val=$(tr -d '\357\273\277' < "$file" \
-        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
-        | head -1 \
-        | cut -d'"' -f4)
+        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -1 | cut -d'"' -f4 || true)
     [ -n "$val" ] || return 1
     # Unescape JSON backslashes: \\ -> \
     printf '%b' "$val"

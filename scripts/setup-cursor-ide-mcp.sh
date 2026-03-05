@@ -148,7 +148,7 @@ case "$MERGE_RESULT" in
         MCP_CHANGED=true
         log_ok "Cursor MCP config written to $(display_path "$mcp_json")"
         log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
-        write_summary OK "cursor ide mcp" "merged" ;;
+        write_summary OK "cursor ide mcp" "updated" ;;
     unchanged)
         log_ok "Cursor MCP config already up to date"
         write_summary OK "cursor ide mcp" "unchanged" ;;

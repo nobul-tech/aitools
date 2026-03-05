@@ -153,10 +153,14 @@ try {
         if (typeof p.cursor.cli.model === 'string') cursorCli.model = p.cursor.cli.model;
     }
     // Claude preferences
-    let claudePrefs = { autoMemory: true, alwaysThinking: true };
+    let claudePrefs = { autoMemory: true, alwaysThinking: true, effortLevel: null };
+    const validEffortLevels = ['low', 'medium', 'high'];
     if (p.claude) {
         if (typeof p.claude.autoMemory === 'boolean') claudePrefs.autoMemory = p.claude.autoMemory;
         if (typeof p.claude.alwaysThinking === 'boolean') claudePrefs.alwaysThinking = p.claude.alwaysThinking;
+        if (typeof p.claude.effortLevel === 'string' && validEffortLevels.includes(p.claude.effortLevel)) {
+            claudePrefs.effortLevel = p.claude.effortLevel;
+        }
     }
     // Output as KEY=VALUE lines for bash eval
     console.log('PROFILE_NAME=' + JSON.stringify(prof.name));
@@ -167,6 +171,7 @@ try {
     console.log('CURSOR_CLI_MODEL=' + JSON.stringify(cursorCli.model));
     console.log('CLAUDE_AUTO_MEMORY=' + JSON.stringify(claudePrefs.autoMemory));
     console.log('CLAUDE_ALWAYS_THINKING=' + JSON.stringify(claudePrefs.alwaysThinking));
+    console.log('CLAUDE_EFFORT_LEVEL=' + JSON.stringify(claudePrefs.effortLevel || ''));
 } catch(e) { process.exit(1); }
 " "$CONFIG" 2>/dev/null) && eval "$PROFILE_VALS"
 fi
@@ -179,7 +184,7 @@ CLAUDE_SHARED_CONTENT="${CLAUDE_SHARED_CONTENT//\{\{IDENTITY_GIT_EMAIL\}\}/$IDEN
 
 blog "Profile interpolation: name=$PROFILE_NAME company=$PROFILE_COMPANY"
 blog "Cursor CLI prefs: vimMode=$CURSOR_CLI_VIMMODE model=$CURSOR_CLI_MODEL"
-blog "Claude prefs: autoMemory=$CLAUDE_AUTO_MEMORY alwaysThinking=$CLAUDE_ALWAYS_THINKING"
+blog "Claude prefs: autoMemory=$CLAUDE_AUTO_MEMORY alwaysThinking=$CLAUDE_ALWAYS_THINKING effortLevel=${CLAUDE_EFFORT_LEVEL:-}"
 
 # Clean and recreate deploy/
 rm -rf "$DEPLOY_DIR"
@@ -956,7 +961,7 @@ blog "Generating deploy/setup-user-hooks.sh (extracted + embedded hooks)"
 # Self-contained: hook script and preferences are embedded below. No repo needed.
 # Safe to re-run -- merges managed fields without clobbering existing settings.
 #
-# Managed fields: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled
+# Managed fields: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
 # Preserved: permissions, enabledPlugins, all other fields
 #
 # Hooks deployed:
@@ -1005,6 +1010,8 @@ BLOCK
 // --- Embedded preferences (from profile.json at build time) ---
 const autoMemory = $CLAUDE_AUTO_MEMORY;
 const alwaysThinking = $CLAUDE_ALWAYS_THINKING;
+const effortLevel = $([ -n "$CLAUDE_EFFORT_LEVEL" ] && echo "\"$CLAUDE_EFFORT_LEVEL\"" || echo "null");
+const validEffortLevels = ['low', 'medium', 'high'];
 BLOCK_INTERP
 
     # Extract: rest of node block (merge logic, clobber, validation) + case statement
@@ -1031,7 +1038,7 @@ blog "Generating deploy/setup-user-hooks.ps1 (extracted + embedded hooks)"
 # Self-contained: hook scripts and preferences are embedded below. No repo needed.
 # Safe to re-run -- merges managed fields without clobbering existing settings.
 #
-# Managed fields: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled
+# Managed fields: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
 # Preserved: permissions, enabledPlugins, all other fields
 #
 # Hooks deployed:
@@ -1080,6 +1087,12 @@ BLOCK
     printf '# --- Embedded preferences (from profile.json at build time) ---\r\n'
     printf '$autoMemory = $%s\r\n' "$CLAUDE_AUTO_MEMORY"
     printf '$alwaysThinking = $%s\r\n' "$CLAUDE_ALWAYS_THINKING"
+    if [ -n "$CLAUDE_EFFORT_LEVEL" ]; then
+        printf '$effortLevel = "%s"\r\n' "$CLAUDE_EFFORT_LEVEL"
+    else
+        printf '$effortLevel = $null\r\n'
+    fi
+    printf '$validEffortLevels = @("low", "medium", "high")\r\n'
 
     # Extract: merge section (settings.json merge, MergeHookEntry, clobber, validation)
     extract_between "$SCRIPTS_DIR/setup-user-hooks.ps1" \

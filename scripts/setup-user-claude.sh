@@ -67,7 +67,7 @@ backup_dir() {
     old_backups=$(find "$(dirname "$dir")" -maxdepth 1 -name "$(basename "$dir").bak.*" -type d \
         | sort -r | tail -n +$((max_backups + 1)))
     if [ -n "$old_backups" ]; then
-        echo "$old_backups" | while IFS= read -r old_dir; do
+        printf '%s\n' "$old_backups" | while IFS= read -r old_dir; do
             rm -rf "$old_dir"
             log "Pruned old backup: $(display_path "$old_dir")"
         done
@@ -250,23 +250,26 @@ EOF
     # --- END post-write validation (extracted by build-deploy) ---
 
     log_ok "Wrote $(display_path "$CLAUDE_MD")"
-    if [ "$ERRORS" -eq 0 ] && [ "$WARNINGS" -eq 0 ]; then
-        write_summary OK "claude.md" "deployed"
-    elif [ "$ERRORS" -gt 0 ]; then
-        write_summary ERROR "claude.md" "validation failed"
-    fi
-    # Log whether content actually changed
+    # Determine what changed for summary detail
     NEW_WRITTEN=$(cat "$CLAUDE_MD")
     if [ -z "$OLD_CONTENT" ]; then
         log "Content: new file"
+        CLAUDE_MD_DETAIL="created"
     elif [ "$OLD_CONTENT" = "$NEW_WRITTEN" ]; then
         log "Content unchanged (no differences)"
+        CLAUDE_MD_DETAIL="unchanged"
     else
         log "Content updated"
+        CLAUDE_MD_DETAIL="updated"
         # Log unified diff to deploy log (not console)
         diff -u <(echo "$OLD_CONTENT") <(echo "$NEW_WRITTEN") \
             --label "previous/CLAUDE.md" --label "new/CLAUDE.md" \
             >> "$LOG_FILE" 2>&1 || true  # diff exits 1 on differences (expected)
+    fi
+    if [ "$ERRORS" -eq 0 ] && [ "$WARNINGS" -eq 0 ]; then
+        write_summary OK "claude.md" "$CLAUDE_MD_DETAIL"
+    elif [ "$ERRORS" -gt 0 ]; then
+        write_summary ERROR "claude.md" "validation failed"
     fi
 fi
 
@@ -337,9 +340,11 @@ if [ -n "$RULES_SRC" ]; then
                     --label "deployed/$rule_name" --label "source/$rule_name" \
                     >> "$LOG_FILE" 2>&1 || true  # diff exits 1 on differences; diff appended to deploy log
                 UPDATED=$((UPDATED + 1))
+                write_summary DETAIL "claude rules" "updated: $rule_name"
             else
                 log "Adding: $rule_name (new)"
                 ADDED=$((ADDED + 1))
+                write_summary DETAIL "claude rules" "added: $rule_name"
             fi
             cp "$rule_file" "$RULES_DEST/$rule_name"
         done

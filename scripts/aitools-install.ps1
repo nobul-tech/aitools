@@ -67,7 +67,10 @@ function LogWarn($msg)  { Log $msg "warn"; $script:warnings++ }
 # --- Summary file init (if not already set by parent aitools invocation) ---
 if (-not $env:AITOOLS_SUMMARY_FILE) {
     $env:AITOOLS_SUMMARY_FILE = Join-Path $env:USERPROFILE ".aitools\run-summary.txt"
-    Remove-Item $env:AITOOLS_SUMMARY_FILE -ErrorAction SilentlyContinue
+    # Remove stale summary file before creating fresh one; may not exist (expected)
+    if (Test-Path $env:AITOOLS_SUMMARY_FILE) {
+        Remove-Item $env:AITOOLS_SUMMARY_FILE -Force
+    }
     New-Item -ItemType File -Path $env:AITOOLS_SUMMARY_FILE -Force | Out-Null
 }
 

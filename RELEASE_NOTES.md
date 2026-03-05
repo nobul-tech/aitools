@@ -12,6 +12,36 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.38.0 -- Plan execution rules, DETAIL summary, effortLevel, config reporting (2026-03-05)
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **Plan execution rule** (`.claude/rules/plan-execution.md`, `.cursor/rules/plan-execution.mdc`, `reference/plan-execution-detail.md`): New project rule requiring sub-agent execution pattern for plans modifying 3+ code files or any shared library. Includes error-handling audit checklist, sub-agent prompt template, and verification protocol. Addresses root cause I17 (rule fade during long sessions). |
+| 2 | **DETAIL summary category** (`aitools-lib.sh`, `aitools-lib.ps1`): `write_summary DETAIL "tool" "message"` renders indented under its parent entry, inheriting the parent's color. Summary renderer rewritten as single-pass with pre-sorted output (OK+details, WARN+details, ERROR+details, ACTIONs). |
+| 3 | **effortLevel preference** (`build-deploy.sh`, `setup-user-hooks` .sh + .ps1): New `claudePrefs.effortLevel` in `profile.json` (low/medium/high). Deployed to `~/.claude/settings.json` via preferences merge. Validated against allowed values; displayed in dry-run and success logs. |
+| 4 | **Config update reporting** (`setup-user-hooks`, `setup-user-claude`, `setup-user-cursor`, `setup-user-mcp`, `setup-cursor-ide-mcp` .sh + .ps1): Three-outcome pattern (unchanged/updated/created) with DETAIL summary entries for individual changes. Hook deployment shows per-hook diffs in log. Preferences merge tracks old→new values and emits `CHANGED:` lines. |
+| 5 | **New compliance checks** (`check-script-compliance` .sh + .ps1): Step 11 scans PS1 for `-ErrorAction SilentlyContinue` without result check. Step 12 validates `write_summary` categories against valid set. |
+| 6 | **Post-push DETAIL verification** (`check-post-push` .sh + .ps1): Step 24 (extensive only) verifies DETAIL category in both lib files and usage in scripts. |
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Compliance warnings cleared**: Raw `echo` in `setup-user-claude.sh` backup pruning → `printf`. Unsafe grep pipelines in `setup-user-mcp.sh` and `aitools-install.sh` → `|| true`. Bare `Remove-Item -ErrorAction SilentlyContinue` in `aitools-install.ps1` → `Test-Path` guard. |
+| 2 | **Summary preserve/cleanup** (`aitools-lib.sh`, `aitools-lib.ps1`): `AITOOLS_PRESERVE_SUMMARY` support with proper error handling on copy. |
+
+### Notes
+
+- Plan v3 implemented using the sub-agent execution pattern it codifies (batches 0, 3, 4, 5a-e, 6a+6c).
+- Batch 6b (check-log-compliance script pair) deferred as follow-up.
+- Verified: `check-script-compliance.sh` 12 PASS, 0 WARN, 0 FAIL.
+- Verified: `build-deploy.sh` succeeds (26 deploy scripts). All bash syntax checks pass.
+- Not tested (Windows): PS1 changes syntactically validated via `pwsh -NoProfile` but not end-to-end tested.
+
+---
+
 ## v0.37.1 -- Fix summary panel: missing ERROR entries in config scripts (2026-03-05)
 
 ### Fixed
@@ -29,7 +59,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 ### Notes
 
 - All 7 bugs followed the same pattern: error paths called `log_error` (which increments ERRORS) but never called `write_summary ERROR`, so the tool vanished from the end-of-run summary panel on failure instead of showing red.
-- Verified: `check-script-compliance.sh` shows no regressions (same 2 pre-existing WARNs).
+- Verified: `check-script-compliance.sh` shows no regressions (2 pre-existing WARNs, fixed in v0.38.0).
 - Verified: `build-deploy.sh` builds successfully; all PS1 scripts pass pwsh syntax validation.
 - Not tested (Windows): PS1 changes are syntactically validated via `pwsh -NoProfile` but not end-to-end tested.
 
@@ -49,7 +79,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 ### Notes
 
 - Renderer dedup is a safety net -- source scripts now emit correct severity, but the renderer protects against future regressions.
-- Verified: `check-script-compliance.sh` shows no regressions (same 2 pre-existing WARNs).
+- Verified: `check-script-compliance.sh` shows no regressions (2 pre-existing WARNs, fixed in v0.38.0).
 - Tested (macOS): dedup verified with mock summary file containing duplicate entries at all severity levels.
 - Not tested (Windows): PS1 changes are syntactically validated via `pwsh -NoProfile` but not end-to-end tested.
 
