@@ -12,6 +12,16 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.39.1 -- Fix multi-line MERGE_RESULT case dispatch (2026-03-05)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **setup-cursor-ide-mcp.sh, setup-user-cursor.sh**: CHANGED: lines appended to node output made `$MERGE_RESULT` multi-line, causing `case "$MERGE_RESULT"` to fall through to the catch-all error branch. Now extracts `MERGE_STATUS=$(head -1)` before the `case`, matching the pattern already used in `setup-user-hooks.sh`. |
+
+---
+
 ## v0.39.0 -- Config change-detail library helpers + script dedup (2026-03-05)
 
 ### Added

@@ -477,7 +477,8 @@ if (dryRun) {
 }
 " "$CLI_CONFIG" "$DRY_RUN" "$FORCE")
 
-    case "$MERGE_RESULT" in
+    MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)
+    case "$MERGE_STATUS" in
         unchanged)
             log_ok "Already up to date: $(display_path "$CLI_CONFIG")"
             STATUS_cliConfig="already up to date"
@@ -504,7 +505,7 @@ if (dryRun) {
             STATUS_cliConfig="ERROR (clobber, needs --force)"
             write_summary ERROR "cursor cli" "merge would lose fields" ;;
         *)
-            log_error "Unexpected merge result: $MERGE_RESULT"
+            log_error "Unexpected merge result: $MERGE_STATUS"
             STATUS_cliConfig="ERROR"
             write_summary ERROR "cursor cli" "unexpected error" ;;
     esac

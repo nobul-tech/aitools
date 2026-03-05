@@ -397,7 +397,8 @@ if (dryRun) {
 " "$mcp_json" "$DRY_RUN" "$FORCE")
 
 MCP_CHANGED=false
-case "$MERGE_RESULT" in
+MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)
+case "$MERGE_STATUS" in
     ok)
         MCP_CHANGED=true
         log_ok "Cursor MCP config written to $(display_path "$mcp_json")"
@@ -417,7 +418,7 @@ case "$MERGE_RESULT" in
         log_error "$(display_path "$mcp_json") merge would lose fields. Use --force to proceed."
         write_summary ERROR "cursor ide mcp" "merge would lose fields" ;;
     *)
-        log_error "Unexpected merge result: $MERGE_RESULT"
+        log_error "Unexpected merge result: $MERGE_STATUS"
         write_summary ERROR "cursor ide mcp" "unexpected error" ;;
 esac
 
