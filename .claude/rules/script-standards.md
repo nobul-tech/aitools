@@ -11,7 +11,7 @@ pseudocode in `plans/*.md`, and any code you propose in conversation.
 
 1. Shebang + header comment (name, purpose, "safe to re-run", platform, reference to `tool-registry.md`)
 2. `set -euo pipefail`
-3. `source aitools-lib.sh` + `logging_init "script-name"` (provides platform detection, display_path, read_config_key, log/log_ok/log_error/log_warn, write_summary, ERRORS/WARNINGS counters)
+3. `source aitools-lib.sh` + `logging_init "script-name"` (provides platform detection, display_path, read_config_key, log/log_ok/log_error/log_warn, write_summary, backup_file, backup_dir, emit_merge_details, ERRORS/WARNINGS counters)
 4. OS guard (`case "$(uname -s)" in MINGW*...) exit 1`)
 5. Script body
 6. Exit footer (check `$ERRORS` + `$WARNINGS`, exit 1 on errors)
@@ -19,7 +19,7 @@ pseudocode in `plans/*.md`, and any code you propose in conversation.
 ### Block order (PowerShell reusable scripts)
 
 1. Header comment (name, purpose, "safe to re-run", platform, reference to `tool-registry.md`)
-2. `. aitools-lib.ps1` + `Initialize-Logging "script-name"` (provides ReadConfigKey, Log/LogOk/LogError/LogWarn, Write-Summary, $errors/$warnings counters)
+2. `. aitools-lib.ps1` + `Initialize-Logging "script-name"` (provides ReadConfigKey, Log/LogOk/LogError/LogWarn, Write-Summary, Backup-File, Backup-Dir, ConvertPSObjectToHashtable, Emit-MergeDetails, $errors/$warnings counters)
 3. OS guard (`if $PSVersionTable... -and -not $IsWindows`)
 4. Script body
 5. Exit footer (check `$errors` + `$warnings`, exit 1 on errors)

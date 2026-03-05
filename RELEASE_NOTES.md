@@ -12,6 +12,35 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.39.0 -- Config change-detail library helpers + script dedup (2026-03-05)
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **Library helpers** (`aitools-lib.sh`, `aitools-lib.ps1`): `backup_file`/`Backup-File`, `backup_dir`/`Backup-Dir`, `ConvertPSObjectToHashtable`, `emit_merge_details`/`Emit-MergeDetails` moved from inline duplicates to shared library. All 26 deploy scripts get them via build-time inlining. |
+| 2 | **Key-level CHANGED: tracking** (`setup-cursor-ide-mcp`, `setup-user-cursor` .sh + .ps1): JSON config merges now snapshot managed keys before write, detect per-key changes, and emit `CHANGED:` lines that become DETAIL summary entries. Fixes the triggering issue where `--isolated` → `--autoConnect` was silently corrected with no detail logged. |
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Removed 15 inline duplicates** across 7 setup scripts: `backup_file` (4× bash), `Backup-File` (4× PS1), `ConvertPSObjectToHashtable` (4× PS1), `backup_dir` (1× bash), `Backup-Dir` (1× PS1). All now use the library version. |
+| 2 | **setup-user-hooks refactored** (.sh + .ps1): inline CHANGED: parsing replaced with `emit_merge_details`/`Emit-MergeDetails` library calls. |
+
+### Docs
+
+| # | Change |
+|---|--------|
+| 1 | `reference/script-standards-detail.md`: Contents table updated with 4 new library entries. |
+| 2 | `.claude/rules/script-standards.md`, `.cursor/rules/script-standards.mdc`: Block order lib descriptions updated to list all provided helpers. |
+
+### Untested (Windows)
+
+PS1 scripts validated via `pwsh Parser::ParseFile` on macOS. Functional testing on Windows pending.
+
+---
+
 ## v0.38.0 -- Plan execution rules, DETAIL summary, effortLevel, config reporting (2026-03-05)
 
 ### Added

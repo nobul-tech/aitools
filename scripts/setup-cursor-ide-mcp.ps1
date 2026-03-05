@@ -23,37 +23,6 @@ if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
 . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
 Initialize-Logging "setup-cursor-ide-mcp"
 
-# Backup a file before overwriting. Keeps at most $MaxBackups copies.
-function Backup-File {
-    param([string]$FilePath, [int]$MaxBackups = 20)
-    if (-not (Test-Path $FilePath)) { return }
-    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
-    $backupPath = "${FilePath}.bak.${ts}"
-    Copy-Item -Path $FilePath -Destination $backupPath
-    # Prune oldest beyond limit
-    $backups = Get-ChildItem -Path "${FilePath}.bak.*" | Sort-Object LastWriteTime -Descending
-    if ($backups.Count -gt $MaxBackups) {
-        $backups | Select-Object -Skip $MaxBackups | Remove-Item -Force
-    }
-    Log "Backed up $FilePath"
-}
-
-# --- PS 5.1 compatibility helper ---
-# ConvertFrom-Json -AsHashtable is PS 6+ only. This converts PSCustomObject trees
-# to nested hashtables so .ContainsKey() and bracket indexing work on PS 5.1.
-function ConvertPSObjectToHashtable($obj) {
-    if ($null -eq $obj) { return @{} }
-    $ht = @{}
-    foreach ($prop in $obj.PSObject.Properties) {
-        if ($prop.Value -is [System.Management.Automation.PSCustomObject]) {
-            $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
-        } else {
-            $ht[$prop.Name] = $prop.Value
-        }
-    }
-    return $ht
-}
-
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     LogError "This script is for Windows. On macOS/Linux, use the .sh version."
@@ -104,6 +73,17 @@ $beforeKeys = @($config.Keys)
 
 # Ensure mcpServers exists
 if (-not $config.ContainsKey("mcpServers")) { $config["mcpServers"] = @{} }
+
+# Snapshot managed server entries before merge for change tracking
+$managedServers = @("chrome-devtools", "vercel", "webflow")
+$beforeServers = @{}
+foreach ($s in $managedServers) {
+    if ($config["mcpServers"].ContainsKey($s)) {
+        $beforeServers[$s] = $config["mcpServers"][$s] | ConvertTo-Json -Depth 5 -Compress
+    } else {
+        $beforeServers[$s] = $null
+    }
+}
 
 # Set managed servers (Windows uses cmd /c wrapper for npx)
 $config["mcpServers"]["chrome-devtools"] = @{
@@ -163,8 +143,21 @@ if ($DryRun) {
             LogError "Validation failed: $mcpJson is not valid JSON -- $_"
         }
 
+        # Detect per-server changes and emit DETAIL lines
+        $serverChanges = @()
+        foreach ($s in $managedServers) {
+            $newVal = $config["mcpServers"][$s] | ConvertTo-Json -Depth 5 -Compress
+            if ($beforeServers[$s] -ne $newVal) {
+                $oldDisplay = if ($beforeServers[$s]) { $beforeServers[$s] } else { "(unset)" }
+                $serverChanges += "${s}: $oldDisplay -> $newVal"
+            }
+        }
+
         LogOk "Cursor MCP config written to $mcpJson"
         Log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
+        if ($serverChanges.Count -gt 0) {
+            Emit-MergeDetails -Changes $serverChanges -ToolName "cursor ide mcp"
+        }
         Write-Summary "OK" "cursor ide mcp" "updated"
     }
 }

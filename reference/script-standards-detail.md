@@ -84,6 +84,10 @@ Check scripts source `check-lib.sh`/`.ps1` which in turn sources `aitools-lib.sh
 | Standard logging | `log`/`log_ok`/`log_error`/`log_warn` | `Log`/`LogOk`/`LogError`/`LogWarn` | `[ts] [script] [level] msg` with console colors |
 | Summary writer | `write_summary` | `Write-Summary` | 3-arg append to summary file |
 | Summary renderer | `show_summary` | `Show-Summary` | Colored panel display |
+| File backup | `backup_file()` | `Backup-File` | Timestamped backup with pruning |
+| Dir backup | `backup_dir()` | `Backup-Dir` | Directory backup for managed files |
+| JSON hashtable | n/a | `ConvertPSObjectToHashtable` | PSCustomObject to Hashtable (recursive, array-aware) |
+| DETAIL emitter | `emit_merge_details()` | `Emit-MergeDetails` | Parse CHANGED: lines / emit DETAIL summary entries |
 
 ### Usage
 

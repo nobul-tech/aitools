@@ -260,7 +260,6 @@ if (dryRun) {
 
 # Parse merge result: first line is status, CHANGED: lines are key changes
 MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)
-CHANGED_KEYS=$(echo "$MERGE_RESULT" | perl -ne 'print if s/^CHANGED: //')
 
 case "$MERGE_STATUS" in
     ok)
@@ -271,12 +270,7 @@ case "$MERGE_STATUS" in
         log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"
         log "  alwaysThinkingEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).alwaysThinkingEnabled)")"
         log "  effortLevel: $(node -e "const s=JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')); console.log(s.effortLevel || '(not set)')")"
-        if [ -n "$CHANGED_KEYS" ]; then
-            while IFS= read -r key_change; do
-                log "  $key_change"
-                write_summary DETAIL "claude hooks" "$key_change"
-            done <<< "$CHANGED_KEYS"
-        fi
+        emit_merge_details "$MERGE_RESULT" "claude hooks"
         ;;
     unchanged)
         log_ok "Settings unchanged: $(display_path "$SETTINGS_FILE")"

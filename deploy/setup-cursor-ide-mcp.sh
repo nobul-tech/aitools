@@ -133,6 +133,66 @@ write_summary() {
 }
 
 # ---------------------------------------------------------------------------
+# Backup a file before overwriting. Keeps at most $max_backups copies.
+# ---------------------------------------------------------------------------
+backup_file() {
+    local file="$1" max_backups=20
+    [ -f "$file" ] || return 0
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
+    cp "$file" "${file}.bak.${ts}"
+    # Prune oldest beyond limit
+    ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1)) | xargs rm -f 2>/dev/null
+    log "Backed up $(display_path "$file")"
+}
+
+# ---------------------------------------------------------------------------
+# Backup a directory before modifying managed files. Keeps at most $max_backups copies.
+# ---------------------------------------------------------------------------
+backup_dir() {
+    local dir="$1" max_backups=5
+    [ -d "$dir" ] || return 0
+    local file_count
+    file_count=$(find "$dir" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')
+    if [ "$file_count" -eq 0 ]; then
+        return 0
+    fi
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
+    if ! cp -R "$dir" "${dir}.bak.${ts}"; then
+        log_warn "Could not back up $(display_path "$dir") -- proceeding without backup"
+        return 0
+    fi
+    local old_backups
+    old_backups=$(find "$(dirname "$dir")" -maxdepth 1 -name "$(basename "$dir").bak.*" -type d \
+        | sort -r | tail -n +$((max_backups + 1)))
+    if [ -n "$old_backups" ]; then
+        printf '%s\n' "$old_backups" | while IFS= read -r old_dir; do
+            rm -rf "$old_dir"
+            log "Pruned old backup: $(display_path "$old_dir")"
+        done
+    fi
+    log "Backed up $(display_path "$dir") ($file_count managed files)"
+}
+
+# ---------------------------------------------------------------------------
+# Parse CHANGED: lines from a node merge result and emit DETAIL summary entries.
+# Usage: emit_merge_details "$MERGE_RESULT" "tool_name"
+# Only processes lines prefixed with "CHANGED: " -- ignores status and other output.
+# ---------------------------------------------------------------------------
+emit_merge_details() {
+    local merge_result="$1" tool_name="$2"
+    local changed_keys
+    changed_keys=$(echo "$merge_result" | perl -ne 'print if s/^CHANGED: //')
+    if [ -n "$changed_keys" ]; then
+        while IFS= read -r key_change; do
+            log "  $key_change"
+            write_summary DETAIL "$tool_name" "$key_change"
+        done <<< "$changed_keys"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Summary panel renderer
 # ---------------------------------------------------------------------------
 # Reads AITOOLS_SUMMARY_FILE, displays colored panel, cleans up.
@@ -222,18 +282,6 @@ show_summary() {
 }
 logging_init "setup-cursor-ide-mcp"
 
-# Backup a file before overwriting. Keeps at most $max_backups copies.
-backup_file() {
-    local file="$1" max_backups=20
-    [ -f "$file" ] || return 0
-    local ts
-    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
-    cp "$file" "${file}.bak.${ts}"
-    # Prune oldest beyond limit
-    ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1)) | xargs rm -f 2>/dev/null
-    log "Backed up $(display_path "$file")"
-}
-
 # --- OS guard ---
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
@@ -294,6 +342,11 @@ if (!config.mcpServers || typeof config.mcpServers !== 'object') {
     config.mcpServers = {};
 }
 
+// Snapshot managed server entries before merge
+const managedServers = ['chrome-devtools', 'vercel', 'webflow'];
+const serversBefore = {};
+for (const s of managedServers) serversBefore[s] = JSON.stringify(config.mcpServers[s]);
+
 // Set managed servers (macOS uses npx directly, no cmd /c wrapper)
 config.mcpServers['chrome-devtools'] = {
     command: 'npx',
@@ -330,7 +383,15 @@ if (dryRun) {
         // Post-write validation
         const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
         if (!_v.mcpServers) { console.error('Validation failed: missing mcpServers'); process.exit(1); }
+        // Detect per-server changes
+        const changed = [];
+        for (const s of managedServers) {
+            const oldVal = serversBefore[s];
+            const newVal = JSON.stringify(config.mcpServers[s]);
+            if (oldVal !== newVal) changed.push(s + ': ' + (oldVal || '(unset)') + ' -> ' + newVal);
+        }
         console.log('ok');
+        changed.forEach(c => console.log('CHANGED: ' + c));
     }
 }
 " "$mcp_json" "$DRY_RUN" "$FORCE")
@@ -341,6 +402,7 @@ case "$MERGE_RESULT" in
         MCP_CHANGED=true
         log_ok "Cursor MCP config written to $(display_path "$mcp_json")"
         log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
+        emit_merge_details "$MERGE_RESULT" "cursor ide mcp"
         write_summary OK "cursor ide mcp" "updated" ;;
     unchanged)
         log_ok "Cursor MCP config already up to date"

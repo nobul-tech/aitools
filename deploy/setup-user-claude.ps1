@@ -101,6 +101,83 @@ function Write-Summary($cat, $tool, $detail) {
 }
 
 # ---------------------------------------------------------------------------
+# Backup a file before overwriting. Keeps at most $MaxBackups copies.
+# ---------------------------------------------------------------------------
+function Backup-File {
+    param([string]$FilePath, [int]$MaxBackups = 20)
+    if (-not (Test-Path $FilePath)) { return }
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
+    $backupPath = "${FilePath}.bak.${ts}"
+    Copy-Item -Path $FilePath -Destination $backupPath
+    # Prune oldest beyond limit
+    $backups = Get-ChildItem -Path "${FilePath}.bak.*" | Sort-Object LastWriteTime -Descending
+    if ($backups.Count -gt $MaxBackups) {
+        $backups | Select-Object -Skip $MaxBackups | Remove-Item -Force
+    }
+    Log "Backed up $FilePath"
+}
+
+# ---------------------------------------------------------------------------
+# Backup a directory before modifying managed files. Keeps at most $MaxBackups copies.
+# ---------------------------------------------------------------------------
+function Backup-Dir {
+    param([string]$DirPath, [int]$MaxBackups = 5)
+    if (-not (Test-Path $DirPath)) { return }
+    $mdFiles = Get-ChildItem -Path $DirPath -Filter "*.md" -File -ErrorAction SilentlyContinue
+    if (-not $mdFiles -or $mdFiles.Count -eq 0) { return }
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
+    $backupPath = "${DirPath}.bak.${ts}"
+    try {
+        Copy-Item -Path $DirPath -Destination $backupPath -Recurse -ErrorAction Stop
+    } catch {
+        LogWarn "Could not back up $DirPath -- proceeding without backup: $_"
+        return
+    }
+    $parentDir = Split-Path $DirPath -Parent
+    $dirName = Split-Path $DirPath -Leaf
+    $backups = Get-ChildItem -Path $parentDir -Directory -Filter "${dirName}.bak.*" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending
+    if ($backups -and $backups.Count -gt $MaxBackups) {
+        $backups | Select-Object -Skip $MaxBackups | ForEach-Object {
+            Remove-Item $_.FullName -Recurse -Force
+            Log "Pruned old backup: $($_.FullName)"
+        }
+    }
+    Log "Backed up $DirPath ($($mdFiles.Count) managed files)"
+}
+
+# ---------------------------------------------------------------------------
+# PS 5.1 compatibility: ConvertFrom-Json -> Hashtable (recursive, array-aware)
+# ---------------------------------------------------------------------------
+function ConvertPSObjectToHashtable($obj) {
+    if ($null -eq $obj) { return @{} }
+    if ($obj -is [array]) {
+        return ,@($obj | ForEach-Object { ConvertPSObjectToHashtable $_ })
+    }
+    if ($obj -isnot [System.Management.Automation.PSCustomObject]) { return $obj }
+    $ht = @{}
+    foreach ($prop in $obj.PSObject.Properties) {
+        $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
+    }
+    return $ht
+}
+
+# ---------------------------------------------------------------------------
+# Emit DETAIL summary entries from a list of change descriptions.
+# Usage: Emit-MergeDetails -Changes @("key: old -> new") -ToolName "tool_name"
+# ---------------------------------------------------------------------------
+function Emit-MergeDetails {
+    param(
+        [string[]]$Changes,
+        [string]$ToolName
+    )
+    foreach ($change in $Changes) {
+        Log "  $change"
+        Write-Summary "DETAIL" $ToolName "$change"
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Summary panel renderer
 # ---------------------------------------------------------------------------
 # Reads AITOOLS_SUMMARY_FILE, displays colored panel, cleans up.
@@ -211,65 +288,6 @@ function Show-Summary {
     catch { Write-Host "  note: could not remove summary file" -ForegroundColor Gray }
 }
 Initialize-Logging "setup-user-claude"
-
-# Backup a file before overwriting. Keeps at most $MaxBackups copies.
-function Backup-File {
-    param([string]$FilePath, [int]$MaxBackups = 20)
-    if (-not (Test-Path $FilePath)) { return }
-    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
-    $backupPath = "${FilePath}.bak.${ts}"
-    Copy-Item -Path $FilePath -Destination $backupPath
-    # Prune oldest beyond limit
-    $backups = Get-ChildItem -Path "${FilePath}.bak.*" | Sort-Object LastWriteTime -Descending
-    if ($backups.Count -gt $MaxBackups) {
-        $backups | Select-Object -Skip $MaxBackups | Remove-Item -Force
-    }
-    Log "Backed up $FilePath"
-}
-
-# --- BEGIN Backup-Dir (extracted by build-deploy) ---
-function Backup-Dir {
-    param([string]$DirPath, [int]$MaxBackups = 5)
-    if (-not (Test-Path $DirPath)) { return }
-    # Count managed files; skip if none
-    $mdFiles = Get-ChildItem -Path $DirPath -Filter "*.md" -File -ErrorAction Stop
-    if (-not $mdFiles -or $mdFiles.Count -eq 0) { return }
-    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
-    $backupPath = "${DirPath}.bak.${ts}"
-    try {
-        Copy-Item -Path $DirPath -Destination $backupPath -Recurse -ErrorAction Stop
-    } catch {
-        LogWarn "Could not back up $DirPath -- proceeding without backup: $_"
-        return
-    }
-    # Prune old backups beyond limit
-    $parentDir = Split-Path $DirPath -Parent
-    $dirName = Split-Path $DirPath -Leaf
-    $backups = Get-ChildItem -Path $parentDir -Directory -Filter "${dirName}.bak.*" -ErrorAction Stop |
-        Sort-Object LastWriteTime -Descending
-    if ($backups.Count -gt $MaxBackups) {
-        $backups | Select-Object -Skip $MaxBackups | ForEach-Object {
-            Remove-Item $_.FullName -Recurse -Force
-            Log "Pruned old backup: $($_.FullName)"
-        }
-    }
-    Log "Backed up $DirPath ($($mdFiles.Count) managed files)"
-}
-# --- END Backup-Dir (extracted by build-deploy) ---
-
-# --- PS 5.1 compatibility helper ---
-function ConvertPSObjectToHashtable($obj) {
-    if ($null -eq $obj) { return @{} }
-    $ht = @{}
-    foreach ($prop in $obj.PSObject.Properties) {
-        if ($prop.Value -is [System.Management.Automation.PSCustomObject]) {
-            $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
-        } else {
-            $ht[$prop.Name] = $prop.Value
-        }
-    }
-    return $ht
-}
 
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {

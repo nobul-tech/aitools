@@ -29,17 +29,6 @@ done
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/aitools-lib.sh"
 logging_init "setup-user-cursor"
 
-backup_file() {
-    local file="$1" max_backups=20
-    [ -f "$file" ] || return 0
-    local ts
-    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
-    cp "$file" "${file}.bak.${ts}"
-    # Prune oldest beyond limit
-    ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1)) | xargs rm -f 2>/dev/null
-    log "Backed up $(display_path "$file")"
-}
-
 # --- OS guard ---
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
@@ -182,6 +171,11 @@ try {
 const beforeKeys = Object.keys(config);
 const before = JSON.stringify(config);
 
+// Snapshot managed keys before merge for CHANGED: tracking
+const snapshotKeys = ['version', 'editor', 'permissions', 'model', 'hasChangedDefaultModel'];
+const beforeManaged = {};
+for (const k of snapshotKeys) beforeManaged[k] = JSON.stringify(config[k]);
+
 // --- Merge managed fields ---
 config.version = 1;
 if (!config.editor) config.editor = {};
@@ -235,7 +229,14 @@ if (dryRun) {
         const _missing = ['version'].filter(k => !(k in _v));
         if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
 
+        const changed = [];
+        for (const k of snapshotKeys) {
+            const oldVal = beforeManaged[k];
+            const newVal = JSON.stringify(config[k]);
+            if (oldVal !== newVal) changed.push(k + ': ' + (oldVal || '(unset)') + ' -> ' + (newVal || '(removed)'));
+        }
         console.log(before === '{}' ? 'created' : 'merged');
+        changed.forEach(c => console.log('CHANGED: ' + c));
     }
 }
 " "$CLI_CONFIG" "$DRY_RUN" "$FORCE")
@@ -248,10 +249,12 @@ if (dryRun) {
         created)
             log_ok "Created: $(display_path "$CLI_CONFIG")"
             STATUS_cliConfig="created"
+            emit_merge_details "$MERGE_RESULT" "cursor cli"
             write_summary OK "cursor cli" "created" ;;
         merged)
             log_ok "Merged preferences into: $(display_path "$CLI_CONFIG")"
             STATUS_cliConfig="merged"
+            emit_merge_details "$MERGE_RESULT" "cursor cli"
             write_summary OK "cursor cli" "updated" ;;
         would-merge)
             log "[DRY RUN] Would write merged config"

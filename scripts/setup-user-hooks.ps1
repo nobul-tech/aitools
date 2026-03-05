@@ -27,23 +27,6 @@ if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
 . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
 Initialize-Logging "setup-user-hooks"
 
-# --- PS 5.1 compatibility helper ---
-# Recursively converts PSCustomObject (from ConvertFrom-Json) to Hashtable.
-# Also recurses into arrays so nested objects in JSON arrays become hashtables.
-function ConvertPSObjectToHashtable($obj) {
-    if ($null -eq $obj) { return @{} }
-    if ($obj -is [array]) {
-        # Leading comma prevents PowerShell from unwrapping single-element arrays
-        return ,@($obj | ForEach-Object { ConvertPSObjectToHashtable $_ })
-    }
-    if ($obj -isnot [System.Management.Automation.PSCustomObject]) { return $obj }
-    $ht = @{}
-    foreach ($prop in $obj.PSObject.Properties) {
-        $ht[$prop.Name] = ConvertPSObjectToHashtable $prop.Value
-    }
-    return $ht
-}
-
 # --- OS guard ---
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     LogError "This script is for Windows. On macOS/Linux, use the .sh version."
@@ -325,9 +308,8 @@ if ($DryRun) {
             Log "  alwaysThinkingEnabled: $alwaysThinking"
             $effortDisplay = if ($effortLevel) { $effortLevel } else { "(not set)" }
             Log "  effortLevel: $effortDisplay"
-            foreach ($change in $prefChanges) {
-                Log "  $change"
-                Write-Summary "DETAIL" "claude hooks" "$change"
+            if ($prefChanges.Count -gt 0) {
+                Emit-MergeDetails -Changes $prefChanges -ToolName "claude hooks"
             }
         }
         if ($errors -eq 0) {

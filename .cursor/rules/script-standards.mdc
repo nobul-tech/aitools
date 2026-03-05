@@ -10,8 +10,8 @@ All plans you propose and all reusable code you write must follow these conventi
 
 ### Block order (setup scripts)
 
-**Bash:** shebang/header > `set -euo pipefail` > `source aitools-lib.sh` + `logging_init "name"` > OS guard > body > exit footer
-**PS1:** header > `. aitools-lib.ps1` + `Initialize-Logging "name"` > OS guard > body > exit footer
+**Bash:** shebang/header > `set -euo pipefail` > `source aitools-lib.sh` + `logging_init "name"` (provides platform detection, display_path, read_config_key, log/log_ok/log_error/log_warn, write_summary, backup_file, backup_dir, emit_merge_details, ERRORS/WARNINGS counters) > OS guard > body > exit footer
+**PS1:** header > `. aitools-lib.ps1` + `Initialize-Logging "name"` (provides ReadConfigKey, Log/LogOk/LogError/LogWarn, Write-Summary, Backup-File, Backup-Dir, ConvertPSObjectToHashtable, Emit-MergeDetails, $errors/$warnings counters) > OS guard > body > exit footer
 
 ### Error and warning tracking (required)
 

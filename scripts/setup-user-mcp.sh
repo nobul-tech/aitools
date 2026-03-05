@@ -24,17 +24,6 @@ done
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/aitools-lib.sh"
 logging_init "setup-user-mcp"
 
-backup_file() {
-    local file="$1" max_backups=20
-    [ -f "$file" ] || return 0
-    local ts
-    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
-    cp "$file" "${file}.bak.${ts}"
-    # Prune oldest beyond limit
-    ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1)) | xargs rm -f 2>/dev/null
-    log "Backed up $(display_path "$file")"
-}
-
 # --- OS guard ---
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)

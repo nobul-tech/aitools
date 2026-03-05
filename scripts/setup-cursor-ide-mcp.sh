@@ -29,18 +29,6 @@ done
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/aitools-lib.sh"
 logging_init "setup-cursor-ide-mcp"
 
-# Backup a file before overwriting. Keeps at most $max_backups copies.
-backup_file() {
-    local file="$1" max_backups=20
-    [ -f "$file" ] || return 0
-    local ts
-    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
-    cp "$file" "${file}.bak.${ts}"
-    # Prune oldest beyond limit
-    ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1)) | xargs rm -f 2>/dev/null
-    log "Backed up $(display_path "$file")"
-}
-
 # --- OS guard ---
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
@@ -101,6 +89,11 @@ if (!config.mcpServers || typeof config.mcpServers !== 'object') {
     config.mcpServers = {};
 }
 
+// Snapshot managed server entries before merge
+const managedServers = ['chrome-devtools', 'vercel', 'webflow'];
+const serversBefore = {};
+for (const s of managedServers) serversBefore[s] = JSON.stringify(config.mcpServers[s]);
+
 // Set managed servers (macOS uses npx directly, no cmd /c wrapper)
 config.mcpServers['chrome-devtools'] = {
     command: 'npx',
@@ -137,7 +130,15 @@ if (dryRun) {
         // Post-write validation
         const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
         if (!_v.mcpServers) { console.error('Validation failed: missing mcpServers'); process.exit(1); }
+        // Detect per-server changes
+        const changed = [];
+        for (const s of managedServers) {
+            const oldVal = serversBefore[s];
+            const newVal = JSON.stringify(config.mcpServers[s]);
+            if (oldVal !== newVal) changed.push(s + ': ' + (oldVal || '(unset)') + ' -> ' + newVal);
+        }
         console.log('ok');
+        changed.forEach(c => console.log('CHANGED: ' + c));
     }
 }
 " "$mcp_json" "$DRY_RUN" "$FORCE")
@@ -148,6 +149,7 @@ case "$MERGE_RESULT" in
         MCP_CHANGED=true
         log_ok "Cursor MCP config written to $(display_path "$mcp_json")"
         log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
+        emit_merge_details "$MERGE_RESULT" "cursor ide mcp"
         write_summary OK "cursor ide mcp" "updated" ;;
     unchanged)
         log_ok "Cursor MCP config already up to date"
