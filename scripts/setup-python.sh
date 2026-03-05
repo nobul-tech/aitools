@@ -36,16 +36,19 @@ if [ -n "$BREW_PY" ]; then
     UPGRADE_OUTPUT=$(brew upgrade python 2>&1) || true
     if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
         log_ok "Python already up to date"
+        PY_VERSION=$("$BREW_PY" --version 2>/dev/null || echo "version unknown")
+        write_summary OK "python" "$PY_VERSION"
     else
         printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
         if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
             log_error "brew upgrade python failed (see log above)"
             write_summary ERROR "python" "brew upgrade failed"
+        else
+            PY_VERSION=$("$BREW_PY" --version 2>/dev/null || echo "version unknown")
+            log_ok "$PY_VERSION"
+            write_summary OK "python" "$PY_VERSION"
         fi
     fi
-    PY_VERSION=$("$BREW_PY" --version 2>/dev/null || echo "version unknown")
-    log_ok "$PY_VERSION"
-    write_summary OK "python" "$PY_VERSION"
 else
     log "Installing Python via Homebrew..."
     if ! brew install python 2>&1 | while IFS= read -r line; do log "$line"; done; then

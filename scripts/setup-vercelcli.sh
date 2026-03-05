@@ -49,15 +49,17 @@ case "$OS_NAME" in
                 UPGRADE_OUTPUT=$(brew upgrade vercel-cli 2>&1) || true
                 if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
                     log_ok "Vercel CLI already up to date"
+                    write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
                 else
                     printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
                     if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
                         log_error "brew upgrade vercel-cli failed (see log above)"
                         write_summary ERROR "vercel cli" "brew upgrade failed"
+                    else
+                        log_ok "Vercel CLI $(vercel --version 2>/dev/null | head -1)"
+                        write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
                     fi
                 fi
-                log_ok "Vercel CLI $(vercel --version 2>/dev/null | head -1)"
-                write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
             else
                 # Not Homebrew — migrate from npm to Homebrew
                 log_warn "Vercel CLI installed via npm at $vercel_path"

@@ -129,17 +129,40 @@ show_summary() {
     [ -n "$sfile" ] || return 0
     [ -f "$sfile" ] || return 0
     [ -s "$sfile" ] || { rm -f "$sfile"; return 0; }
+
+    # Dedup by tool name: highest severity wins (ERROR > WARN > OK).
+    # ACTIONs (empty tool name) are never deduped.
+    local deduped
+    deduped=$(perl -F'\|' -lane '
+        BEGIN { %rank = (OK => 1, WARN => 2, ERROR => 3); }
+        $cat = $F[0]; $tool = $F[1]; $det = join("|", @F[2..$#F]);
+        if ($cat eq "ACTION" || $tool eq "") {
+            push @actions, $_; next;
+        }
+        $r = $rank{$cat} // 0;
+        if (!exists $best{$tool}) {
+            push @order, $tool;
+            $best{$tool} = $cat; $detail{$tool} = $det;
+        } elsif ($r > ($rank{$best{$tool}} // 0)) {
+            $best{$tool} = $cat; $detail{$tool} = $det;
+        }
+        END {
+            for my $t (@order) { print "$best{$t}|$t|$detail{$t}"; }
+            for my $a (@actions) { print $a; }
+        }
+    ' "$sfile")
+
     echo ""
     echo "────────────────────────────────────────────────────────"
     while IFS='|' read -r cat tool detail; do
         [ "$cat" = "OK"   ] && printf '\033[32m  [ok]  %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
+    done <<< "$deduped"
     while IFS='|' read -r cat tool detail; do
         [ "$cat" = "WARN" ] && printf '\033[33m  [!]   %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
+    done <<< "$deduped"
     while IFS='|' read -r cat tool detail; do
         [ "$cat" = "ERROR" ] && printf '\033[31m  [ERR] %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
+    done <<< "$deduped"
     local first_action=true
     while IFS='|' read -r cat tool detail; do
         if [ "$cat" = "ACTION" ]; then
@@ -150,7 +173,7 @@ show_summary() {
             fi
             printf '\033[1;35m  >>  %s\033[0m\n' "$detail"
         fi
-    done < "$sfile"
+    done <<< "$deduped"
     echo "────────────────────────────────────────────────────────"
     rm -f "$sfile"
 }
@@ -405,7 +428,9 @@ esac
 
 if [ "$DRY_RUN" != "true" ]; then
     log_ok "User-level MCP configured (all servers; vercel/webflow disabled by default)"
-    write_summary OK "claude mcp" "configured"
+    if [ "$ERRORS" -eq 0 ]; then
+        write_summary OK "claude mcp" "configured"
+    fi
 else
     log "[DRY RUN] Would configure user-level MCP (all servers; vercel/webflow disabled by default)"
 fi
@@ -649,7 +674,9 @@ If standard a11y queries fail or the `evaluate_script` snippets return unexpecte
 - **Visual Inspection**: If automated scripts cannot determine contrast (e.g., text over gradient images or complex backgrounds), use `take_screenshot` to capture the element. While models cannot measure exact contrast ratios from images, they can visually assess legibility and identifying obvious issues.
 __SKILL_A11Y_DEBUGGING__
 log_ok "Deployed skill: a11y-debugging -> $SKILLS_DEST/a11y-debugging"
-write_summary OK "claude skills" "deployed"
+if [ "$ERRORS" -eq 0 ]; then
+    write_summary OK "claude skills" "deployed"
+fi
 
 log "Deploying skills to $SKILLS_DEST_CURSOR..."
 mkdir -p "$SKILLS_DEST_CURSOR/chrome-devtools"
@@ -855,7 +882,9 @@ If standard a11y queries fail or the `evaluate_script` snippets return unexpecte
 - **Visual Inspection**: If automated scripts cannot determine contrast (e.g., text over gradient images or complex backgrounds), use `take_screenshot` to capture the element. While models cannot measure exact contrast ratios from images, they can visually assess legibility and identifying obvious issues.
 __SKILL_A11Y_DEBUGGING_CURSOR__
 log_ok "Deployed skill: a11y-debugging -> $SKILLS_DEST_CURSOR/a11y-debugging"
-write_summary OK "cursor skills" "deployed"
+if [ "$ERRORS" -eq 0 ]; then
+    write_summary OK "cursor skills" "deployed"
+fi
 
 if [ "$ERRORS" -gt 0 ]; then
     log "FAILED with $ERRORS error(s)" "error"

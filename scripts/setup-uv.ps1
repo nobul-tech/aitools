@@ -42,13 +42,15 @@ if ($uvCmd) {
         Write-Summary "ERROR" "uv" "winget upgrade failed (exit $LASTEXITCODE)"
     }
     Refresh-Path
-    $version = (uv --version 2>$null)
-    if ($version) {
-        LogOk $version
-        Write-Summary "OK" "uv" "$version"
-    } else {
-        LogError "uv --version failed after upgrade"
-        Write-Summary "ERROR" "uv" "version check failed after upgrade"
+    if ($errors -eq 0) {
+        $version = (uv --version 2>$null)
+        if ($version) {
+            LogOk $version
+            Write-Summary "OK" "uv" "$version"
+        } else {
+            LogError "uv --version failed after upgrade"
+            Write-Summary "ERROR" "uv" "version check failed after upgrade"
+        }
     }
 } else {
     Log "Installing uv via winget..."

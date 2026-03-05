@@ -282,10 +282,12 @@ if ($DryRun) {
             Log "  autoMemoryEnabled: $autoMemory"
             Log "  alwaysThinkingEnabled: $alwaysThinking"
         }
-        if ($hooksChanged) {
-            Write-Summary "OK" "claude hooks" "deployed"
-        } else {
-            Write-Summary "OK" "claude hooks" "unchanged"
+        if ($errors -eq 0) {
+            if ($hooksChanged) {
+                Write-Summary "OK" "claude hooks" "deployed"
+            } else {
+                Write-Summary "OK" "claude hooks" "unchanged"
+            }
         }
     }
 }

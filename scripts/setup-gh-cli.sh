@@ -42,15 +42,17 @@ case "$OS_NAME" in
             UPGRADE_OUTPUT=$(brew upgrade gh 2>&1) || true
             if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
                 log_ok "gh CLI already up to date"
+                write_summary OK "gh cli" "$(gh --version | head -1)"
             else
                 printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
                 if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
                     log_error "brew upgrade gh failed (see log above)"
                     write_summary ERROR "gh cli" "brew upgrade failed"
+                else
+                    log_ok "gh CLI $(gh --version | head -1)"
+                    write_summary OK "gh cli" "$(gh --version | head -1)"
                 fi
             fi
-            log_ok "gh CLI $(gh --version | head -1)"
-            write_summary OK "gh cli" "$(gh --version | head -1)"
         else
             log "Installing gh CLI via Homebrew..."
             if ! brew install gh 2>&1 | while IFS= read -r line; do log "$line"; done; then

@@ -45,15 +45,17 @@ case "$OS_NAME" in
                 UPGRADE_OUTPUT=$(brew upgrade pandoc 2>&1) || true
                 if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
                     log_ok "Pandoc already up to date"
+                    write_summary OK "pandoc" "$(pandoc --version | head -1)"
                 else
                     printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
                     if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
                         log_error "brew upgrade pandoc failed (see log above)"
                         write_summary ERROR "pandoc" "brew upgrade failed"
+                    else
+                        log_ok "Pandoc $(pandoc --version | head -1)"
+                        write_summary OK "pandoc" "$(pandoc --version | head -1)"
                     fi
                 fi
-                log_ok "Pandoc $(pandoc --version | head -1)"
-                write_summary OK "pandoc" "$(pandoc --version | head -1)"
             else
                 # Not Homebrew — migrate
                 log_warn "Pandoc installed via non-preferred method at $pandoc_path"

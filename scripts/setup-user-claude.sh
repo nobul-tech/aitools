@@ -250,7 +250,9 @@ EOF
     # --- END post-write validation (extracted by build-deploy) ---
 
     log_ok "Wrote $(display_path "$CLAUDE_MD")"
-    write_summary OK "claude.md" "deployed"
+    if [ "$ERRORS" -eq 0 ] && [ "$WARNINGS" -eq 0 ]; then
+        write_summary OK "claude.md" "deployed"
+    fi
     # Log whether content actually changed
     NEW_WRITTEN=$(cat "$CLAUDE_MD")
     if [ -z "$OLD_CONTENT" ]; then

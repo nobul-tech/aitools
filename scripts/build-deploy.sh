@@ -830,7 +830,9 @@ SKILLS_HEADER
     echo "$SKILL_A11Y_DEBUGGING"
     echo '__SKILL_A11Y_DEBUGGING__'
     echo 'log_ok "Deployed skill: a11y-debugging -> $SKILLS_DEST/a11y-debugging"'
-    echo 'write_summary OK "claude skills" "deployed"'
+    echo 'if [ "$ERRORS" -eq 0 ]; then'
+    echo '    write_summary OK "claude skills" "deployed"'
+    echo 'fi'
     echo ''
     # Deploy to ~/.cursor/skills/ (Cursor Agent CLI)
     echo 'log "Deploying skills to $SKILLS_DEST_CURSOR..."'
@@ -845,7 +847,9 @@ SKILLS_HEADER
     echo "$SKILL_A11Y_DEBUGGING"
     echo '__SKILL_A11Y_DEBUGGING_CURSOR__'
     echo 'log_ok "Deployed skill: a11y-debugging -> $SKILLS_DEST_CURSOR/a11y-debugging"'
-    echo 'write_summary OK "cursor skills" "deployed"'
+    echo 'if [ "$ERRORS" -eq 0 ]; then'
+    echo '    write_summary OK "cursor skills" "deployed"'
+    echo 'fi'
     echo ''
     # Emit exit footer from source
     extract_between "$SCRIPTS_DIR/setup-user-mcp.sh" \
@@ -890,7 +894,9 @@ SKILLS_PS1_HEADER
     echo '$a11yDest = Join-Path $a11yDir "SKILL.md"'
     echo '[System.IO.File]::WriteAllText($a11yDest, $a11ySkill, [System.Text.UTF8Encoding]::new($false))'
     echo 'LogOk "Deployed skill: a11y-debugging -> $a11yDest"'
-    echo 'Write-Summary "OK" "claude skills" "deployed"'
+    echo 'if ($errors -eq 0) {'
+    echo '    Write-Summary "OK" "claude skills" "deployed"'
+    echo '}'
     echo ''
     # Deploy to ~/.cursor/skills/ (Cursor Agent CLI)
     echo 'Log "Deploying skills to $skillsDestCursor..."'
@@ -905,7 +911,9 @@ SKILLS_PS1_HEADER
     echo '$a11yDestCursor = Join-Path $a11yDirCursor "SKILL.md"'
     echo '[System.IO.File]::WriteAllText($a11yDestCursor, $a11ySkill, [System.Text.UTF8Encoding]::new($false))'
     echo 'LogOk "Deployed skill: a11y-debugging -> $a11yDestCursor"'
-    echo 'Write-Summary "OK" "cursor skills" "deployed"'
+    echo 'if ($errors -eq 0) {'
+    echo '    Write-Summary "OK" "cursor skills" "deployed"'
+    echo '}'
     echo ''
     # Emit exit footer from source (CRLF for PS1)
     extract_between "$SCRIPTS_DIR/setup-user-mcp.ps1" \

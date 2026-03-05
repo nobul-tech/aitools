@@ -284,7 +284,9 @@ if ($DryRun) {
     Log "[DRY RUN] Would configure user-level MCP (all servers; vercel/webflow disabled by default)"
 } else {
     LogOk "User-level MCP configured (all servers; vercel/webflow disabled by default)"
-    Write-Summary "OK" "claude mcp" "configured"
+    if ($errors -eq 0) {
+        Write-Summary "OK" "claude mcp" "configured"
+    }
 }
 Log "To enable per project: aitools --addmcp vercel"
 Log "To check status: aitools mcp"
@@ -357,12 +359,16 @@ function Deploy-Skill {
 Log "Deploying Chrome DevTools skills to $skillsDest..."
 Deploy-Skill "chrome-devtools" $skillsDest
 Deploy-Skill "a11y-debugging" $skillsDest
-Write-Summary "OK" "claude skills" "deployed"
+if ($errors -eq 0) {
+    Write-Summary "OK" "claude skills" "deployed"
+}
 
 Log "Deploying Chrome DevTools skills to $skillsDestCursor..."
 Deploy-Skill "chrome-devtools" $skillsDestCursor
 Deploy-Skill "a11y-debugging" $skillsDestCursor
-Write-Summary "OK" "cursor skills" "deployed"
+if ($errors -eq 0) {
+    Write-Summary "OK" "cursor skills" "deployed"
+}
 
 # --- BEGIN exit (extracted by build-deploy) ---
 if ($errors -gt 0) {

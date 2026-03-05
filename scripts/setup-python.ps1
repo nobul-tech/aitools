@@ -75,7 +75,7 @@ if ($pythonCheck) {
             LogError "winget upgrade python failed (exit code $LASTEXITCODE)"
             Write-Summary "ERROR" "python" "winget upgrade failed (exit $LASTEXITCODE)"
         }
-        if (-not $needsInstall) {
+        if (-not $needsInstall -and $errors -eq 0) {
             Refresh-Path
             $pyVersion = python --version 2>$null
             if ($pyVersion) {

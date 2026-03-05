@@ -273,7 +273,9 @@ esac
 
 if [ "$DRY_RUN" != "true" ]; then
     log_ok "User-level MCP configured (all servers; vercel/webflow disabled by default)"
-    write_summary OK "claude mcp" "configured"
+    if [ "$ERRORS" -eq 0 ]; then
+        write_summary OK "claude mcp" "configured"
+    fi
 else
     log "[DRY RUN] Would configure user-level MCP (all servers; vercel/webflow disabled by default)"
 fi
@@ -341,12 +343,16 @@ deploy_skill() {
 log "Deploying Chrome DevTools skills to $(display_path "$SKILLS_DEST")..."
 deploy_skill "chrome-devtools" "$SKILLS_DEST"
 deploy_skill "a11y-debugging" "$SKILLS_DEST"
-write_summary OK "claude skills" "deployed"
+if [ "$ERRORS" -eq 0 ]; then
+    write_summary OK "claude skills" "deployed"
+fi
 
 log "Deploying Chrome DevTools skills to $(display_path "$SKILLS_DEST_CURSOR")..."
 deploy_skill "chrome-devtools" "$SKILLS_DEST_CURSOR"
 deploy_skill "a11y-debugging" "$SKILLS_DEST_CURSOR"
-write_summary OK "cursor skills" "deployed"
+if [ "$ERRORS" -eq 0 ]; then
+    write_summary OK "cursor skills" "deployed"
+fi
 
 # --- BEGIN exit (extracted by build-deploy) ---
 if [ "$ERRORS" -gt 0 ]; then

@@ -40,10 +40,11 @@ if command -v rustup &>/dev/null; then
     if printf '%s\n' "$RUSTUP_OUTPUT" | grep -qi 'error\|fatal'; then
         log_error "rustup update reported errors (see log above)"
         write_summary ERROR "rust/cargo" "rustup update failed"
+    else
+        log_ok "cargo $(cargo --version 2>/dev/null)"
+        log_ok "rustc $(rustc --version 2>/dev/null)"
+        write_summary OK "rust/cargo" "$(cargo --version 2>/dev/null)"
     fi
-    log_ok "cargo $(cargo --version 2>/dev/null)"
-    log_ok "rustc $(rustc --version 2>/dev/null)"
-    write_summary OK "rust/cargo" "$(cargo --version 2>/dev/null)"
 else
     log "Installing Rust toolchain via rustup..."
     if ! curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y 2>&1 | while IFS= read -r line; do log "$line"; done; then

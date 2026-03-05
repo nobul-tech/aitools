@@ -129,17 +129,40 @@ show_summary() {
     [ -n "$sfile" ] || return 0
     [ -f "$sfile" ] || return 0
     [ -s "$sfile" ] || { rm -f "$sfile"; return 0; }
+
+    # Dedup by tool name: highest severity wins (ERROR > WARN > OK).
+    # ACTIONs (empty tool name) are never deduped.
+    local deduped
+    deduped=$(perl -F'\|' -lane '
+        BEGIN { %rank = (OK => 1, WARN => 2, ERROR => 3); }
+        $cat = $F[0]; $tool = $F[1]; $det = join("|", @F[2..$#F]);
+        if ($cat eq "ACTION" || $tool eq "") {
+            push @actions, $_; next;
+        }
+        $r = $rank{$cat} // 0;
+        if (!exists $best{$tool}) {
+            push @order, $tool;
+            $best{$tool} = $cat; $detail{$tool} = $det;
+        } elsif ($r > ($rank{$best{$tool}} // 0)) {
+            $best{$tool} = $cat; $detail{$tool} = $det;
+        }
+        END {
+            for my $t (@order) { print "$best{$t}|$t|$detail{$t}"; }
+            for my $a (@actions) { print $a; }
+        }
+    ' "$sfile")
+
     echo ""
     echo "────────────────────────────────────────────────────────"
     while IFS='|' read -r cat tool detail; do
         [ "$cat" = "OK"   ] && printf '\033[32m  [ok]  %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
+    done <<< "$deduped"
     while IFS='|' read -r cat tool detail; do
         [ "$cat" = "WARN" ] && printf '\033[33m  [!]   %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
+    done <<< "$deduped"
     while IFS='|' read -r cat tool detail; do
         [ "$cat" = "ERROR" ] && printf '\033[31m  [ERR] %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
+    done <<< "$deduped"
     local first_action=true
     while IFS='|' read -r cat tool detail; do
         if [ "$cat" = "ACTION" ]; then
@@ -150,7 +173,7 @@ show_summary() {
             fi
             printf '\033[1;35m  >>  %s\033[0m\n' "$detail"
         fi
-    done < "$sfile"
+    done <<< "$deduped"
     echo "────────────────────────────────────────────────────────"
     rm -f "$sfile"
 }
@@ -182,15 +205,17 @@ case "$OS_NAME" in
             UPGRADE_OUTPUT=$(brew upgrade gh 2>&1) || true
             if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
                 log_ok "gh CLI already up to date"
+                write_summary OK "gh cli" "$(gh --version | head -1)"
             else
                 printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
                 if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
                     log_error "brew upgrade gh failed (see log above)"
                     write_summary ERROR "gh cli" "brew upgrade failed"
+                else
+                    log_ok "gh CLI $(gh --version | head -1)"
+                    write_summary OK "gh cli" "$(gh --version | head -1)"
                 fi
             fi
-            log_ok "gh CLI $(gh --version | head -1)"
-            write_summary OK "gh cli" "$(gh --version | head -1)"
         else
             log "Installing gh CLI via Homebrew..."
             if ! brew install gh 2>&1 | while IFS= read -r line; do log "$line"; done; then

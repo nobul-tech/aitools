@@ -251,10 +251,12 @@ case "$MERGE_RESULT" in
         ;;
 esac
 
-if [ "$HOOKS_CHANGED" = "true" ]; then
-    write_summary OK "claude hooks" "deployed"
-else
-    write_summary OK "claude hooks" "unchanged"
+if [ "$ERRORS" -eq 0 ]; then
+    if [ "$HOOKS_CHANGED" = "true" ]; then
+        write_summary OK "claude hooks" "deployed"
+    else
+        write_summary OK "claude hooks" "unchanged"
+    fi
 fi
 # --- END hooks body (extracted by build-deploy) ---
 

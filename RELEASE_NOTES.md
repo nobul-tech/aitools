@@ -12,6 +12,26 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.37.0 -- Fix summary panel: dedup + correct severity reporting (2026-03-04)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Summary panel dedup** (`scripts/aitools-lib.sh`, `scripts/aitools-lib.ps1`): `show_summary()`/`Show-Summary` now deduplicates by tool name before rendering -- highest severity wins (ERROR > WARN > OK). Previously, a tool could show both green OK and red ERROR when a script wrote both. ACTION entries (empty tool name) are never deduplicated. Bash uses perl for dedup; PS1 uses hashtable. |
+| 2 | **Error-then-unconditional-OK in 7 tool installers** (`setup-gh-cli`, `setup-rust`, `setup-uv`, `setup-pandoc`, `setup-typst`, `setup-vercelcli`, `setup-python` .sh + .ps1): Upgrade-failure paths called `write_summary ERROR` then fell through to `write_summary OK`. Wrapped final OK in `else` branch of error check (bash) or guarded with `$errors -eq 0` (PS1). |
+| 3 | **Warn-then-unconditional-OK in user config scripts** (`setup-user-claude`, `setup-user-hooks`, `setup-user-mcp` .sh + .ps1): `write_summary OK` ran unconditionally after warn/error paths. Guarded with error/warning counter checks. |
+| 4 | **Deploy template sync** (`scripts/build-deploy.sh`): Skills deployment `write_summary OK` in hardcoded template blocks (not extracted from source) synced with the same `$ERRORS`/`$errors` guard applied to source scripts. |
+
+### Notes
+
+- Renderer dedup is a safety net -- source scripts now emit correct severity, but the renderer protects against future regressions.
+- Verified: `check-script-compliance.sh` shows no regressions (same 2 pre-existing WARNs).
+- Tested (macOS): dedup verified with mock summary file containing duplicate entries at all severity levels.
+- Not tested (Windows): PS1 changes are syntactically validated via `pwsh -NoProfile` but not end-to-end tested.
+
+---
+
 ## v0.36.2 -- Fix Modal install + smart ACTION detection (2026-03-04)
 
 ### Fixed

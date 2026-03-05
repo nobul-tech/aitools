@@ -57,14 +57,16 @@ if ($typstCmd) {
         Write-Summary "ERROR" "typst" "winget upgrade failed (exit $LASTEXITCODE)"
     }
     Refresh-Path
-    # Suppress stderr: typst may emit warnings on some configs; result checked immediately
-    $version = (typst --version 2>$null)
-    if ($version) {
-        LogOk $version
-        Write-Summary "OK" "typst" "$version"
-    } else {
-        LogError "typst --version failed after upgrade"
-        Write-Summary "ERROR" "typst" "version check failed after upgrade"
+    if ($errors -eq 0) {
+        # Suppress stderr: typst may emit warnings on some configs; result checked immediately
+        $version = (typst --version 2>$null)
+        if ($version) {
+            LogOk $version
+            Write-Summary "OK" "typst" "$version"
+        } else {
+            LogError "typst --version failed after upgrade"
+            Write-Summary "ERROR" "typst" "version check failed after upgrade"
+        }
     }
 } else {
     Log "Installing Typst via winget..."

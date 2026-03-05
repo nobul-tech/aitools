@@ -2,7 +2,7 @@
 # setup-modal.ps1 -- Installs/updates Modal CLI on Windows
 # Safe to re-run -- detects existing install and upgrades as needed.
 #
-# Windows: Uses uv (preferred) or pip. Requires Python 3.10+.
+# Windows: Uses uv tool (preferred) or pip --user (fallback). Requires Python 3.10+.
 #
 # Authentication (modal setup) is interactive and must be run separately
 # after install -- not automated by this script.
@@ -103,22 +103,60 @@ function Show-Summary {
     if (-not $sfile -or -not (Test-Path $sfile)) { return }
     $lines = Get-Content $sfile -ErrorAction SilentlyContinue
     if (-not $lines) { Remove-Item $sfile -ErrorAction SilentlyContinue; return }
+
+    # Dedup by tool name: highest severity wins (ERROR > WARN > OK).
+    # ACTIONs (empty tool name) are never deduped.
+    $rank = @{ 'OK' = 1; 'WARN' = 2; 'ERROR' = 3 }
+    $order = [System.Collections.Generic.List[string]]::new()
+    $best = @{}
+    $bestDetail = @{}
+    $actions = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($line in $lines) {
+        $parts = $line -split '\|', 3
+        $cat = $parts[0]
+        $tool = $parts[1]
+        $det = $parts[2]
+        if ($cat -eq 'ACTION' -or $tool -eq '') {
+            $actions.Add($line)
+            continue
+        }
+        $r = if ($rank.ContainsKey($cat)) { $rank[$cat] } else { 0 }
+        if (-not $best.ContainsKey($tool)) {
+            $order.Add($tool)
+            $best[$tool] = $cat
+            $bestDetail[$tool] = $det
+        } elseif ($r -gt $rank[$best[$tool]]) {
+            $best[$tool] = $cat
+            $bestDetail[$tool] = $det
+        }
+    }
+
+    # Build deduped lines
+    $deduped = [System.Collections.Generic.List[string]]::new()
+    foreach ($t in $order) {
+        $deduped.Add("$($best[$t])|$t|$($bestDetail[$t])")
+    }
+    foreach ($a in $actions) {
+        $deduped.Add($a)
+    }
+
     Write-Host ""
     Write-Host "------------------------------------------------------------"
-    foreach ($line in $lines) {
+    foreach ($line in $deduped) {
         $parts = $line -split '\|', 3
         if ($parts[0] -eq 'OK') { Write-Host ("  [ok]  {0,-16} {1}" -f $parts[1], $parts[2]) -ForegroundColor Green }
     }
-    foreach ($line in $lines) {
+    foreach ($line in $deduped) {
         $parts = $line -split '\|', 3
         if ($parts[0] -eq 'WARN') { Write-Host ("  [!]   {0,-16} {1}" -f $parts[1], $parts[2]) -ForegroundColor Yellow }
     }
-    foreach ($line in $lines) {
+    foreach ($line in $deduped) {
         $parts = $line -split '\|', 3
         if ($parts[0] -eq 'ERROR') { Write-Host ("  [ERR] {0,-16} {1}" -f $parts[1], $parts[2]) -ForegroundColor Red }
     }
     $firstAction = $true
-    foreach ($line in $lines) {
+    foreach ($line in $deduped) {
         $parts = $line -split '\|', 3
         if ($parts[0] -eq 'ACTION') {
             if ($firstAction) {

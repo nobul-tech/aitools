@@ -317,7 +317,9 @@ if ($DryRun) {
     # --- END post-write validation (extracted by build-deploy) ---
 
     LogOk "Wrote $claudeMd"
-    Write-Summary "OK" "claude.md" "deployed"
+    if ($errors -eq 0 -and $warnings -eq 0) {
+        Write-Summary "OK" "claude.md" "deployed"
+    }
     # Log whether content actually changed
     if (-not $oldContent) {
         Log "Content: new file"

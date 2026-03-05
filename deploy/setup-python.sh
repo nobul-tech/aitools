@@ -125,17 +125,40 @@ show_summary() {
     [ -n "$sfile" ] || return 0
     [ -f "$sfile" ] || return 0
     [ -s "$sfile" ] || { rm -f "$sfile"; return 0; }
+
+    # Dedup by tool name: highest severity wins (ERROR > WARN > OK).
+    # ACTIONs (empty tool name) are never deduped.
+    local deduped
+    deduped=$(perl -F'\|' -lane '
+        BEGIN { %rank = (OK => 1, WARN => 2, ERROR => 3); }
+        $cat = $F[0]; $tool = $F[1]; $det = join("|", @F[2..$#F]);
+        if ($cat eq "ACTION" || $tool eq "") {
+            push @actions, $_; next;
+        }
+        $r = $rank{$cat} // 0;
+        if (!exists $best{$tool}) {
+            push @order, $tool;
+            $best{$tool} = $cat; $detail{$tool} = $det;
+        } elsif ($r > ($rank{$best{$tool}} // 0)) {
+            $best{$tool} = $cat; $detail{$tool} = $det;
+        }
+        END {
+            for my $t (@order) { print "$best{$t}|$t|$detail{$t}"; }
+            for my $a (@actions) { print $a; }
+        }
+    ' "$sfile")
+
     echo ""
     echo "────────────────────────────────────────────────────────"
     while IFS='|' read -r cat tool detail; do
         [ "$cat" = "OK"   ] && printf '\033[32m  [ok]  %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
+    done <<< "$deduped"
     while IFS='|' read -r cat tool detail; do
         [ "$cat" = "WARN" ] && printf '\033[33m  [!]   %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
+    done <<< "$deduped"
     while IFS='|' read -r cat tool detail; do
         [ "$cat" = "ERROR" ] && printf '\033[31m  [ERR] %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
+    done <<< "$deduped"
     local first_action=true
     while IFS='|' read -r cat tool detail; do
         if [ "$cat" = "ACTION" ]; then
@@ -146,7 +169,7 @@ show_summary() {
             fi
             printf '\033[1;35m  >>  %s\033[0m\n' "$detail"
         fi
-    done < "$sfile"
+    done <<< "$deduped"
     echo "────────────────────────────────────────────────────────"
     rm -f "$sfile"
 }
@@ -176,16 +199,19 @@ if [ -n "$BREW_PY" ]; then
     UPGRADE_OUTPUT=$(brew upgrade python 2>&1) || true
     if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
         log_ok "Python already up to date"
+        PY_VERSION=$("$BREW_PY" --version 2>/dev/null || echo "version unknown")
+        write_summary OK "python" "$PY_VERSION"
     else
         printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
         if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
             log_error "brew upgrade python failed (see log above)"
             write_summary ERROR "python" "brew upgrade failed"
+        else
+            PY_VERSION=$("$BREW_PY" --version 2>/dev/null || echo "version unknown")
+            log_ok "$PY_VERSION"
+            write_summary OK "python" "$PY_VERSION"
         fi
     fi
-    PY_VERSION=$("$BREW_PY" --version 2>/dev/null || echo "version unknown")
-    log_ok "$PY_VERSION"
-    write_summary OK "python" "$PY_VERSION"
 else
     log "Installing Python via Homebrew..."
     if ! brew install python 2>&1 | while IFS= read -r line; do log "$line"; done; then

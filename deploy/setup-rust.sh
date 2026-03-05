@@ -127,17 +127,40 @@ show_summary() {
     [ -n "$sfile" ] || return 0
     [ -f "$sfile" ] || return 0
     [ -s "$sfile" ] || { rm -f "$sfile"; return 0; }
+
+    # Dedup by tool name: highest severity wins (ERROR > WARN > OK).
+    # ACTIONs (empty tool name) are never deduped.
+    local deduped
+    deduped=$(perl -F'\|' -lane '
+        BEGIN { %rank = (OK => 1, WARN => 2, ERROR => 3); }
+        $cat = $F[0]; $tool = $F[1]; $det = join("|", @F[2..$#F]);
+        if ($cat eq "ACTION" || $tool eq "") {
+            push @actions, $_; next;
+        }
+        $r = $rank{$cat} // 0;
+        if (!exists $best{$tool}) {
+            push @order, $tool;
+            $best{$tool} = $cat; $detail{$tool} = $det;
+        } elsif ($r > ($rank{$best{$tool}} // 0)) {
+            $best{$tool} = $cat; $detail{$tool} = $det;
+        }
+        END {
+            for my $t (@order) { print "$best{$t}|$t|$detail{$t}"; }
+            for my $a (@actions) { print $a; }
+        }
+    ' "$sfile")
+
     echo ""
     echo "────────────────────────────────────────────────────────"
     while IFS='|' read -r cat tool detail; do
         [ "$cat" = "OK"   ] && printf '\033[32m  [ok]  %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
+    done <<< "$deduped"
     while IFS='|' read -r cat tool detail; do
         [ "$cat" = "WARN" ] && printf '\033[33m  [!]   %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
+    done <<< "$deduped"
     while IFS='|' read -r cat tool detail; do
         [ "$cat" = "ERROR" ] && printf '\033[31m  [ERR] %-16s %s\033[0m\n' "$tool" "$detail"
-    done < "$sfile"
+    done <<< "$deduped"
     local first_action=true
     while IFS='|' read -r cat tool detail; do
         if [ "$cat" = "ACTION" ]; then
@@ -148,7 +171,7 @@ show_summary() {
             fi
             printf '\033[1;35m  >>  %s\033[0m\n' "$detail"
         fi
-    done < "$sfile"
+    done <<< "$deduped"
     echo "────────────────────────────────────────────────────────"
     rm -f "$sfile"
 }
@@ -180,10 +203,11 @@ if command -v rustup &>/dev/null; then
     if printf '%s\n' "$RUSTUP_OUTPUT" | grep -qi 'error\|fatal'; then
         log_error "rustup update reported errors (see log above)"
         write_summary ERROR "rust/cargo" "rustup update failed"
+    else
+        log_ok "cargo $(cargo --version 2>/dev/null)"
+        log_ok "rustc $(rustc --version 2>/dev/null)"
+        write_summary OK "rust/cargo" "$(cargo --version 2>/dev/null)"
     fi
-    log_ok "cargo $(cargo --version 2>/dev/null)"
-    log_ok "rustc $(rustc --version 2>/dev/null)"
-    write_summary OK "rust/cargo" "$(cargo --version 2>/dev/null)"
 else
     log "Installing Rust toolchain via rustup..."
     if ! curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y 2>&1 | while IFS= read -r line; do log "$line"; done; then

@@ -34,13 +34,14 @@ if (Test-Path $cargoPath) {
     if ($LASTEXITCODE -ne 0) {
         LogError "rustup update failed (exit code $LASTEXITCODE)"
         Write-Summary "ERROR" "rust/cargo" "rustup update failed (exit $LASTEXITCODE)"
+    } else {
+        $cargoVersion = (& $cargoPath --version 2>$null)
+        $rustcPath = Join-Path $env:USERPROFILE ".cargo\bin\rustc.exe"
+        $rustcVersion = (& $rustcPath --version 2>$null)
+        LogOk "cargo $cargoVersion"
+        LogOk "rustc $rustcVersion"
+        Write-Summary "OK" "rust/cargo" "$cargoVersion"
     }
-    $cargoVersion = (& $cargoPath --version 2>$null)
-    $rustcPath = Join-Path $env:USERPROFILE ".cargo\bin\rustc.exe"
-    $rustcVersion = (& $rustcPath --version 2>$null)
-    LogOk "cargo $cargoVersion"
-    LogOk "rustc $rustcVersion"
-    Write-Summary "OK" "rust/cargo" "$cargoVersion"
 } else {
     Log "Installing Rust toolchain via winget..."
     $wingetOutput = winget install -e --id Rustlang.Rustup --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
