@@ -404,13 +404,16 @@ if (dryRun) {
             STATUS_cliConfig="would merge (dry-run)" ;;
         error-corrupt)
             log_error "$(display_path "$CLI_CONFIG") is corrupt. Use --force to overwrite."
-            STATUS_cliConfig="ERROR (corrupt, needs --force)" ;;
+            STATUS_cliConfig="ERROR (corrupt, needs --force)"
+            write_summary ERROR "cursor rules" "config corrupt" ;;
         error-clobber)
             log_error "$(display_path "$CLI_CONFIG") merge would lose fields. Use --force to proceed."
-            STATUS_cliConfig="ERROR (clobber, needs --force)" ;;
+            STATUS_cliConfig="ERROR (clobber, needs --force)"
+            write_summary ERROR "cursor rules" "merge would lose fields" ;;
         *)
             log_error "Unexpected merge result: $MERGE_RESULT"
-            STATUS_cliConfig="ERROR" ;;
+            STATUS_cliConfig="ERROR"
+            write_summary ERROR "cursor rules" "unexpected error" ;;
     esac
 fi
 

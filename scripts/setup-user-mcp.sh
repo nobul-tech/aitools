@@ -122,6 +122,7 @@ add_mcp_server() {
         log_ok "$name configured"
     else
         log_error "Failed to add $name"
+        write_summary ERROR "claude mcp" "failed to add $name"
     fi
 
     # Restore CLAUDECODE
@@ -264,11 +265,14 @@ case "$DENY_RESULT" in
     dry-run)
         log "[DRY RUN] Would set deny rules for vercel, webflow" ;;
     error-corrupt)
-        log_error "$(display_path "$settings_file") is corrupt. Use --force to overwrite." ;;
+        log_error "$(display_path "$settings_file") is corrupt. Use --force to overwrite."
+        write_summary ERROR "claude mcp" "settings corrupt" ;;
     error-clobber)
-        log_error "$(display_path "$settings_file") merge would lose fields. Use --force to proceed." ;;
+        log_error "$(display_path "$settings_file") merge would lose fields. Use --force to proceed."
+        write_summary ERROR "claude mcp" "merge would lose fields" ;;
     *)
-        log_error "Unexpected deny merge result: $DENY_RESULT" ;;
+        log_error "Unexpected deny merge result: $DENY_RESULT"
+        write_summary ERROR "claude mcp" "unexpected error" ;;
 esac
 
 if [ "$DRY_RUN" != "true" ]; then
@@ -341,17 +345,23 @@ deploy_skill() {
 }
 
 log "Deploying Chrome DevTools skills to $(display_path "$SKILLS_DEST")..."
+ERRORS_BEFORE_CLAUDE_SKILLS=$ERRORS
 deploy_skill "chrome-devtools" "$SKILLS_DEST"
 deploy_skill "a11y-debugging" "$SKILLS_DEST"
-if [ "$ERRORS" -eq 0 ]; then
+if [ "$ERRORS" -eq "$ERRORS_BEFORE_CLAUDE_SKILLS" ]; then
     write_summary OK "claude skills" "deployed"
+else
+    write_summary ERROR "claude skills" "deploy failed"
 fi
 
 log "Deploying Chrome DevTools skills to $(display_path "$SKILLS_DEST_CURSOR")..."
+ERRORS_BEFORE_CURSOR_SKILLS=$ERRORS
 deploy_skill "chrome-devtools" "$SKILLS_DEST_CURSOR"
 deploy_skill "a11y-debugging" "$SKILLS_DEST_CURSOR"
-if [ "$ERRORS" -eq 0 ]; then
+if [ "$ERRORS" -eq "$ERRORS_BEFORE_CURSOR_SKILLS" ]; then
     write_summary OK "cursor skills" "deployed"
+else
+    write_summary ERROR "cursor skills" "deploy failed"
 fi
 
 # --- BEGIN exit (extracted by build-deploy) ---

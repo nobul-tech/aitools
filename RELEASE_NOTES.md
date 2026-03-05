@@ -12,6 +12,29 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.37.1 -- Fix summary panel: missing ERROR entries in config scripts (2026-03-05)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Guard "claude rules" OK** (`setup-user-claude` .sh + .ps1): `write_summary OK "claude rules"` was unconditional after rules deployment. Now guarded with `$ERRORS -eq 0` check; writes `ERROR` on validation failure. |
+| 2 | **Add ERROR for "claude.md" validation** (`setup-user-claude` .sh + .ps1, `build-deploy.sh`): Post-write validation failures incremented ERRORS but never wrote `write_summary ERROR "claude.md"` -- tool vanished from summary. Added `elif` branch. Also fixed deploy template in `build-deploy.sh` which was missing `write_summary` for "claude.md" entirely. |
+| 3 | **Add ERROR for "cursor rules"** (`setup-user-cursor` .sh + .ps1): Corrupt/clobber error branches called `log_error` but no `write_summary ERROR` -- tool vanished. Added `write_summary ERROR "cursor rules"` in all error branches. |
+| 4 | **Add ERROR for "cursor ide mcp"** (`setup-cursor-ide-mcp` .sh + .ps1): Corrupt/clobber error branches and disable failures called `log_error` but no `write_summary ERROR` -- tool vanished. Added `write_summary ERROR "cursor ide mcp"` in all error branches. |
+| 5 | **Add ERROR for "claude mcp"** (`setup-user-mcp` .sh + .ps1): `add_mcp_server` failure and deny merge error branches called `log_error` but no `write_summary ERROR` -- tool vanished. Added `write_summary ERROR "claude mcp"` in all error branches. |
+| 6 | **Add ERROR for "claude hooks"** (`setup-user-hooks` .sh + .ps1): Corrupt/clobber error branches called `log_error` but no `write_summary ERROR` -- tool vanished. Added `write_summary ERROR "claude hooks"` in all error branches. |
+| 7 | **Skills snapshot pattern** (`setup-user-mcp` .sh + .ps1, `build-deploy.sh`): Skills `write_summary OK` used cumulative `$ERRORS` -- an MCP add failure would hide skills OK even though skills deployed fine. Now uses `ERRORS_BEFORE_*_SKILLS` snapshot to isolate skills errors from earlier MCP errors. Also writes `ERROR` on skills deploy failure. |
+
+### Notes
+
+- All 7 bugs followed the same pattern: error paths called `log_error` (which increments ERRORS) but never called `write_summary ERROR`, so the tool vanished from the end-of-run summary panel on failure instead of showing red.
+- Verified: `check-script-compliance.sh` shows no regressions (same 2 pre-existing WARNs).
+- Verified: `build-deploy.sh` builds successfully; all PS1 scripts pass pwsh syntax validation.
+- Not tested (Windows): PS1 changes are syntactically validated via `pwsh -NoProfile` but not end-to-end tested.
+
+---
+
 ## v0.37.0 -- Fix summary panel: dedup + correct severity reporting (2026-03-04)
 
 ### Fixed

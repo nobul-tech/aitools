@@ -156,11 +156,14 @@ case "$MERGE_RESULT" in
         log "[DRY RUN] Would write Cursor MCP config"
         log "  Servers: chrome-devtools (stdio), vercel (http), webflow (http)" ;;
     error-corrupt)
-        log_error "$(display_path "$mcp_json") is corrupt. Use --force to overwrite." ;;
+        log_error "$(display_path "$mcp_json") is corrupt. Use --force to overwrite."
+        write_summary ERROR "cursor ide mcp" "config corrupt" ;;
     error-clobber)
-        log_error "$(display_path "$mcp_json") merge would lose fields. Use --force to proceed." ;;
+        log_error "$(display_path "$mcp_json") merge would lose fields. Use --force to proceed."
+        write_summary ERROR "cursor ide mcp" "merge would lose fields" ;;
     *)
-        log_error "Unexpected merge result: $MERGE_RESULT" ;;
+        log_error "Unexpected merge result: $MERGE_RESULT"
+        write_summary ERROR "cursor ide mcp" "unexpected error" ;;
 esac
 
 # --- Disable vercel/webflow via Cursor CLI if available ---
@@ -172,6 +175,7 @@ elif command -v agent &>/dev/null; then
             log_ok "$server disabled in Cursor"
         else
             log_error "Failed to disable $server in Cursor"
+            write_summary ERROR "cursor ide mcp" "failed to disable $server"
         fi
     done
 else

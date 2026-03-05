@@ -662,8 +662,10 @@ if ($DryRun) {
 } else {
     if ($corrupt -and -not $Force) {
         LogError "$settingsFile is corrupt. Use -Force to overwrite, or fix manually."
+        Write-Summary "ERROR" "claude hooks" "settings corrupt"
     } elseif ($lostKeys.Count -gt 0 -and -not $Force) {
         LogError "$settingsFile merge would lose fields: $($lostKeys -join ', '). Use -Force to proceed."
+        Write-Summary "ERROR" "claude hooks" "merge would lose fields"
     } else {
         if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
         if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }

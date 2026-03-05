@@ -395,9 +395,11 @@ if ($DryRun) {
     if ($corrupt -and -not $Force) {
         LogError "$cliConfig is corrupt. Use -Force to overwrite, or fix manually."
         $status.cliConfig = "ERROR (corrupt, needs -Force)"
+        Write-Summary "ERROR" "cursor rules" "config corrupt"
     } elseif ($lostKeys.Count -gt 0 -and -not $Force) {
         LogError "$cliConfig merge would lose fields: $($lostKeys -join ', '). Use -Force to proceed."
         $status.cliConfig = "ERROR (clobber, needs -Force)"
+        Write-Summary "ERROR" "cursor rules" "merge would lose fields"
     } elseif ($beforeJson -eq $afterJson -and -not $corrupt) {
         LogOk "Already up to date: $cliConfig"
         $status.cliConfig = "already up to date"

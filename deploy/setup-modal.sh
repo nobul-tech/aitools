@@ -265,6 +265,7 @@ fi
 if command -v modal >/dev/null 2>&1; then
     if [ ! -f "$HOME/.modal.toml" ]; then
         log_warn "Authentication required: run 'modal setup' to authenticate (browser flow)"
+        write_summary WARN "modal cli" "not authenticated"
         write_summary ACTION "" "modal setup -- authenticate modal (browser flow)"
     fi
 fi

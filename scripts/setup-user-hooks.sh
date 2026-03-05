@@ -242,12 +242,15 @@ case "$MERGE_RESULT" in
         ;;
     error-corrupt)
         log_error "$(display_path "$SETTINGS_FILE") is corrupt. Use --force to overwrite."
+        write_summary ERROR "claude hooks" "settings corrupt"
         ;;
     error-clobber)
         log_error "$(display_path "$SETTINGS_FILE") merge would lose fields. Use --force to proceed."
+        write_summary ERROR "claude hooks" "merge would lose fields"
         ;;
     *)
         log_error "Unexpected merge result: $MERGE_RESULT"
+        write_summary ERROR "claude hooks" "unexpected error"
         ;;
 esac
 

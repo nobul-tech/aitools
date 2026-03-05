@@ -319,6 +319,11 @@ BLOCK
     cat <<'BLOCK'
 
     log_ok "Wrote $(display_path "$CLAUDE_MD")"
+    if [ "$ERRORS" -eq 0 ]; then
+        write_summary OK "claude.md" "deployed"
+    else
+        write_summary ERROR "claude.md" "validation failed"
+    fi
     log "Machine: $OS_NAME $ARCH ($HOSTNAME), Shell: $SHELL_NAME"
     # Log whether content actually changed
     if [ -z "$OLD_CONTENT" ]; then
@@ -482,6 +487,11 @@ BLOCK
     cat <<'BLOCK'
 
     LogOk "Wrote $claudeMd"
+    if ($errors -eq 0) {
+        Write-Summary "OK" "claude.md" "deployed"
+    } else {
+        Write-Summary "ERROR" "claude.md" "validation failed"
+    }
     Log "Machine: $osInfo ($hostname)"
     # Log whether content actually changed
     if (-not $oldContent) {
@@ -819,6 +829,7 @@ SKILLS_DEST_CURSOR="$HOME/.cursor/skills"
 SKILLS_HEADER
     # Deploy to ~/.claude/skills/ (Claude Code)
     echo 'log "Deploying skills to $SKILLS_DEST..."'
+    echo 'ERRORS_BEFORE_CLAUDE_SKILLS=$ERRORS'
     echo 'mkdir -p "$SKILLS_DEST/chrome-devtools"'
     echo 'cat > "$SKILLS_DEST/chrome-devtools/SKILL.md" <<'"'"'__SKILL_CHROME_DEVTOOLS__'"'"
     echo "$SKILL_CHROME_DEVTOOLS"
@@ -830,12 +841,15 @@ SKILLS_HEADER
     echo "$SKILL_A11Y_DEBUGGING"
     echo '__SKILL_A11Y_DEBUGGING__'
     echo 'log_ok "Deployed skill: a11y-debugging -> $SKILLS_DEST/a11y-debugging"'
-    echo 'if [ "$ERRORS" -eq 0 ]; then'
+    echo 'if [ "$ERRORS" -eq "$ERRORS_BEFORE_CLAUDE_SKILLS" ]; then'
     echo '    write_summary OK "claude skills" "deployed"'
+    echo 'else'
+    echo '    write_summary ERROR "claude skills" "deploy failed"'
     echo 'fi'
     echo ''
     # Deploy to ~/.cursor/skills/ (Cursor Agent CLI)
     echo 'log "Deploying skills to $SKILLS_DEST_CURSOR..."'
+    echo 'ERRORS_BEFORE_CURSOR_SKILLS=$ERRORS'
     echo 'mkdir -p "$SKILLS_DEST_CURSOR/chrome-devtools"'
     echo 'cat > "$SKILLS_DEST_CURSOR/chrome-devtools/SKILL.md" <<'"'"'__SKILL_CHROME_DEVTOOLS_CURSOR__'"'"
     echo "$SKILL_CHROME_DEVTOOLS"
@@ -847,8 +861,10 @@ SKILLS_HEADER
     echo "$SKILL_A11Y_DEBUGGING"
     echo '__SKILL_A11Y_DEBUGGING_CURSOR__'
     echo 'log_ok "Deployed skill: a11y-debugging -> $SKILLS_DEST_CURSOR/a11y-debugging"'
-    echo 'if [ "$ERRORS" -eq 0 ]; then'
+    echo 'if [ "$ERRORS" -eq "$ERRORS_BEFORE_CURSOR_SKILLS" ]; then'
     echo '    write_summary OK "cursor skills" "deployed"'
+    echo 'else'
+    echo '    write_summary ERROR "cursor skills" "deploy failed"'
     echo 'fi'
     echo ''
     # Emit exit footer from source
@@ -877,6 +893,7 @@ $skillsDestCursor = Join-Path (Join-Path $env:USERPROFILE ".cursor") "skills"
 SKILLS_PS1_HEADER
     # Deploy to ~/.claude/skills/ (Claude Code)
     echo 'Log "Deploying skills to $skillsDest..."'
+    echo '$errorsBeforeClaudeSkills = $errors'
     echo '$chromeDevtoolsDir = Join-Path $skillsDest "chrome-devtools"'
     echo 'if (-not (Test-Path $chromeDevtoolsDir)) { New-Item -ItemType Directory -Path $chromeDevtoolsDir -Force | Out-Null }'
     echo '$chromeDevtoolsSkill = @'"'"
@@ -894,12 +911,15 @@ SKILLS_PS1_HEADER
     echo '$a11yDest = Join-Path $a11yDir "SKILL.md"'
     echo '[System.IO.File]::WriteAllText($a11yDest, $a11ySkill, [System.Text.UTF8Encoding]::new($false))'
     echo 'LogOk "Deployed skill: a11y-debugging -> $a11yDest"'
-    echo 'if ($errors -eq 0) {'
+    echo 'if ($errors -eq $errorsBeforeClaudeSkills) {'
     echo '    Write-Summary "OK" "claude skills" "deployed"'
+    echo '} else {'
+    echo '    Write-Summary "ERROR" "claude skills" "deploy failed"'
     echo '}'
     echo ''
     # Deploy to ~/.cursor/skills/ (Cursor Agent CLI)
     echo 'Log "Deploying skills to $skillsDestCursor..."'
+    echo '$errorsBeforeCursorSkills = $errors'
     echo '$chromeDevtoolsDirCursor = Join-Path $skillsDestCursor "chrome-devtools"'
     echo 'if (-not (Test-Path $chromeDevtoolsDirCursor)) { New-Item -ItemType Directory -Path $chromeDevtoolsDirCursor -Force | Out-Null }'
     echo '$chromeDevtoolsDestCursor = Join-Path $chromeDevtoolsDirCursor "SKILL.md"'
@@ -911,8 +931,10 @@ SKILLS_PS1_HEADER
     echo '$a11yDestCursor = Join-Path $a11yDirCursor "SKILL.md"'
     echo '[System.IO.File]::WriteAllText($a11yDestCursor, $a11ySkill, [System.Text.UTF8Encoding]::new($false))'
     echo 'LogOk "Deployed skill: a11y-debugging -> $a11yDestCursor"'
-    echo 'if ($errors -eq 0) {'
+    echo 'if ($errors -eq $errorsBeforeCursorSkills) {'
     echo '    Write-Summary "OK" "cursor skills" "deployed"'
+    echo '} else {'
+    echo '    Write-Summary "ERROR" "cursor skills" "deploy failed"'
     echo '}'
     echo ''
     # Emit exit footer from source (CRLF for PS1)

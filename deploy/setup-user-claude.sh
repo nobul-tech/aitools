@@ -444,6 +444,11 @@ CLAUDE_EOF
     fi
 
     log_ok "Wrote $(display_path "$CLAUDE_MD")"
+    if [ "$ERRORS" -eq 0 ]; then
+        write_summary OK "claude.md" "deployed"
+    else
+        write_summary ERROR "claude.md" "validation failed"
+    fi
     log "Machine: $OS_NAME $ARCH ($HOSTNAME), Shell: $SHELL_NAME"
     # Log whether content actually changed
     if [ -z "$OLD_CONTENT" ]; then
@@ -557,8 +562,12 @@ if [ -n "$RULES_SRC" ]; then
             fi
         done
 
-        log_ok "Rules: $ADDED added, $UPDATED updated, $UNCHANGED unchanged, $PRESERVED preserved in $(display_path "$RULES_DEST")"
-        write_summary OK "claude rules" "$ADDED added, $UPDATED updated, $UNCHANGED unchanged"
+        if [ "$ERRORS" -eq 0 ]; then
+            log_ok "Rules: $ADDED added, $UPDATED updated, $UNCHANGED unchanged, $PRESERVED preserved in $(display_path "$RULES_DEST")"
+            write_summary OK "claude rules" "$ADDED added, $UPDATED updated, $UNCHANGED unchanged"
+        else
+            write_summary ERROR "claude rules" "validation failed"
+        fi
     fi
 else
     log "No user rules to deploy (no claude/rules/ in user repo)"

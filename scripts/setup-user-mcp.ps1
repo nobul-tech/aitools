@@ -135,6 +135,7 @@ function Add-McpServer {
         LogOk "$Name configured"
     } else {
         LogError "Failed to add $Name`: $addResult"
+        Write-Summary "ERROR" "claude mcp" "failed to add $Name"
     }
 
     # Restore CLAUDECODE
@@ -256,8 +257,10 @@ if ($DryRun) {
     }
 } elseif ($corrupt -and -not $Force) {
     LogError "$settingsFile is corrupt. Use -Force to overwrite, or fix manually."
+    Write-Summary "ERROR" "claude mcp" "settings corrupt"
 } elseif ($lostKeys.Count -gt 0 -and -not $Force) {
     LogError "$settingsFile merge would lose fields: $($lostKeys -join ', '). Use -Force to proceed."
+    Write-Summary "ERROR" "claude mcp" "merge would lose fields"
 } else {
     if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
     if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
@@ -357,17 +360,23 @@ function Deploy-Skill {
 }
 
 Log "Deploying Chrome DevTools skills to $skillsDest..."
+$errorsBeforeClaudeSkills = $errors
 Deploy-Skill "chrome-devtools" $skillsDest
 Deploy-Skill "a11y-debugging" $skillsDest
-if ($errors -eq 0) {
+if ($errors -eq $errorsBeforeClaudeSkills) {
     Write-Summary "OK" "claude skills" "deployed"
+} else {
+    Write-Summary "ERROR" "claude skills" "deploy failed"
 }
 
 Log "Deploying Chrome DevTools skills to $skillsDestCursor..."
+$errorsBeforeCursorSkills = $errors
 Deploy-Skill "chrome-devtools" $skillsDestCursor
 Deploy-Skill "a11y-debugging" $skillsDestCursor
-if ($errors -eq 0) {
+if ($errors -eq $errorsBeforeCursorSkills) {
     Write-Summary "OK" "cursor skills" "deployed"
+} else {
+    Write-Summary "ERROR" "cursor skills" "deploy failed"
 }
 
 # --- BEGIN exit (extracted by build-deploy) ---

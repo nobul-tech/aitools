@@ -293,8 +293,10 @@ if ($DryRun) {
     }
 } elseif ($corrupt -and -not $Force) {
     LogError "$mcpJson is corrupt. Use -Force to overwrite, or fix manually."
+    Write-Summary "ERROR" "cursor ide mcp" "config corrupt"
 } elseif ($lostKeys.Count -gt 0 -and -not $Force) {
     LogError "$mcpJson merge would lose fields: $($lostKeys -join ', '). Use -Force to proceed."
+    Write-Summary "ERROR" "cursor ide mcp" "merge would lose fields"
 } else {
     if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
     if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
@@ -337,6 +339,7 @@ if ($DryRun) {
             LogOk "$server disabled in Cursor"
         } else {
             LogError "Failed to disable $server in Cursor: $result"
+            Write-Summary "ERROR" "cursor ide mcp" "failed to disable $server"
         }
     }
 } else {

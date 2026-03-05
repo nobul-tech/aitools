@@ -287,6 +287,7 @@ function Add-McpServer {
         LogOk "$Name configured"
     } else {
         LogError "Failed to add $Name`: $addResult"
+        Write-Summary "ERROR" "claude mcp" "failed to add $Name"
     }
 
     # Restore CLAUDECODE
@@ -408,8 +409,10 @@ if ($DryRun) {
     }
 } elseif ($corrupt -and -not $Force) {
     LogError "$settingsFile is corrupt. Use -Force to overwrite, or fix manually."
+    Write-Summary "ERROR" "claude mcp" "settings corrupt"
 } elseif ($lostKeys.Count -gt 0 -and -not $Force) {
     LogError "$settingsFile merge would lose fields: $($lostKeys -join ', '). Use -Force to proceed."
+    Write-Summary "ERROR" "claude mcp" "merge would lose fields"
 } else {
     if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
     if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
@@ -483,6 +486,7 @@ $skillsDest = Join-Path (Join-Path $env:USERPROFILE ".claude") "skills"
 $skillsDestCursor = Join-Path (Join-Path $env:USERPROFILE ".cursor") "skills"
 
 Log "Deploying skills to $skillsDest..."
+$errorsBeforeClaudeSkills = $errors
 $chromeDevtoolsDir = Join-Path $skillsDest "chrome-devtools"
 if (-not (Test-Path $chromeDevtoolsDir)) { New-Item -ItemType Directory -Path $chromeDevtoolsDir -Force | Out-Null }
 $chromeDevtoolsSkill = @'
@@ -692,11 +696,14 @@ If standard a11y queries fail or the `evaluate_script` snippets return unexpecte
 $a11yDest = Join-Path $a11yDir "SKILL.md"
 [System.IO.File]::WriteAllText($a11yDest, $a11ySkill, [System.Text.UTF8Encoding]::new($false))
 LogOk "Deployed skill: a11y-debugging -> $a11yDest"
-if ($errors -eq 0) {
+if ($errors -eq $errorsBeforeClaudeSkills) {
     Write-Summary "OK" "claude skills" "deployed"
+} else {
+    Write-Summary "ERROR" "claude skills" "deploy failed"
 }
 
 Log "Deploying skills to $skillsDestCursor..."
+$errorsBeforeCursorSkills = $errors
 $chromeDevtoolsDirCursor = Join-Path $skillsDestCursor "chrome-devtools"
 if (-not (Test-Path $chromeDevtoolsDirCursor)) { New-Item -ItemType Directory -Path $chromeDevtoolsDirCursor -Force | Out-Null }
 $chromeDevtoolsDestCursor = Join-Path $chromeDevtoolsDirCursor "SKILL.md"
@@ -708,8 +715,10 @@ if (-not (Test-Path $a11yDirCursor)) { New-Item -ItemType Directory -Path $a11yD
 $a11yDestCursor = Join-Path $a11yDirCursor "SKILL.md"
 [System.IO.File]::WriteAllText($a11yDestCursor, $a11ySkill, [System.Text.UTF8Encoding]::new($false))
 LogOk "Deployed skill: a11y-debugging -> $a11yDestCursor"
-if ($errors -eq 0) {
+if ($errors -eq $errorsBeforeCursorSkills) {
     Write-Summary "OK" "cursor skills" "deployed"
+} else {
+    Write-Summary "ERROR" "cursor skills" "deploy failed"
 }
 
 if ($errors -gt 0) {

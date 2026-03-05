@@ -277,6 +277,7 @@ add_mcp_server() {
         log_ok "$name configured"
     else
         log_error "Failed to add $name"
+        write_summary ERROR "claude mcp" "failed to add $name"
     fi
 
     # Restore CLAUDECODE
@@ -419,11 +420,14 @@ case "$DENY_RESULT" in
     dry-run)
         log "[DRY RUN] Would set deny rules for vercel, webflow" ;;
     error-corrupt)
-        log_error "$(display_path "$settings_file") is corrupt. Use --force to overwrite." ;;
+        log_error "$(display_path "$settings_file") is corrupt. Use --force to overwrite."
+        write_summary ERROR "claude mcp" "settings corrupt" ;;
     error-clobber)
-        log_error "$(display_path "$settings_file") merge would lose fields. Use --force to proceed." ;;
+        log_error "$(display_path "$settings_file") merge would lose fields. Use --force to proceed."
+        write_summary ERROR "claude mcp" "merge would lose fields" ;;
     *)
-        log_error "Unexpected deny merge result: $DENY_RESULT" ;;
+        log_error "Unexpected deny merge result: $DENY_RESULT"
+        write_summary ERROR "claude mcp" "unexpected error" ;;
 esac
 
 if [ "$DRY_RUN" != "true" ]; then
@@ -471,6 +475,7 @@ SKILLS_DEST="$HOME/.claude/skills"
 SKILLS_DEST_CURSOR="$HOME/.cursor/skills"
 
 log "Deploying skills to $SKILLS_DEST..."
+ERRORS_BEFORE_CLAUDE_SKILLS=$ERRORS
 mkdir -p "$SKILLS_DEST/chrome-devtools"
 cat > "$SKILLS_DEST/chrome-devtools/SKILL.md" <<'__SKILL_CHROME_DEVTOOLS__'
 ---
@@ -674,11 +679,14 @@ If standard a11y queries fail or the `evaluate_script` snippets return unexpecte
 - **Visual Inspection**: If automated scripts cannot determine contrast (e.g., text over gradient images or complex backgrounds), use `take_screenshot` to capture the element. While models cannot measure exact contrast ratios from images, they can visually assess legibility and identifying obvious issues.
 __SKILL_A11Y_DEBUGGING__
 log_ok "Deployed skill: a11y-debugging -> $SKILLS_DEST/a11y-debugging"
-if [ "$ERRORS" -eq 0 ]; then
+if [ "$ERRORS" -eq "$ERRORS_BEFORE_CLAUDE_SKILLS" ]; then
     write_summary OK "claude skills" "deployed"
+else
+    write_summary ERROR "claude skills" "deploy failed"
 fi
 
 log "Deploying skills to $SKILLS_DEST_CURSOR..."
+ERRORS_BEFORE_CURSOR_SKILLS=$ERRORS
 mkdir -p "$SKILLS_DEST_CURSOR/chrome-devtools"
 cat > "$SKILLS_DEST_CURSOR/chrome-devtools/SKILL.md" <<'__SKILL_CHROME_DEVTOOLS_CURSOR__'
 ---
@@ -882,8 +890,10 @@ If standard a11y queries fail or the `evaluate_script` snippets return unexpecte
 - **Visual Inspection**: If automated scripts cannot determine contrast (e.g., text over gradient images or complex backgrounds), use `take_screenshot` to capture the element. While models cannot measure exact contrast ratios from images, they can visually assess legibility and identifying obvious issues.
 __SKILL_A11Y_DEBUGGING_CURSOR__
 log_ok "Deployed skill: a11y-debugging -> $SKILLS_DEST_CURSOR/a11y-debugging"
-if [ "$ERRORS" -eq 0 ]; then
+if [ "$ERRORS" -eq "$ERRORS_BEFORE_CURSOR_SKILLS" ]; then
     write_summary OK "cursor skills" "deployed"
+else
+    write_summary ERROR "cursor skills" "deploy failed"
 fi
 
 if [ "$ERRORS" -gt 0 ]; then

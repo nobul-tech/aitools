@@ -301,6 +301,7 @@ if (Get-Command modal -ErrorAction SilentlyContinue) {
     $modalToml = Join-Path $HOME ".modal.toml"
     if (-not (Test-Path $modalToml)) {
         LogWarn "Authentication required: run 'modal setup' to authenticate (browser flow)"
+        Write-Summary "WARN" "modal cli" "not authenticated"
         Write-Summary "ACTION" "" "modal setup -- authenticate modal (browser flow)"
     }
 }

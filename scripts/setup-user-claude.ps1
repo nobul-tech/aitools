@@ -319,6 +319,8 @@ if ($DryRun) {
     LogOk "Wrote $claudeMd"
     if ($errors -eq 0 -and $warnings -eq 0) {
         Write-Summary "OK" "claude.md" "deployed"
+    } elseif ($errors -gt 0) {
+        Write-Summary "ERROR" "claude.md" "validation failed"
     }
     # Log whether content actually changed
     if (-not $oldContent) {
@@ -464,8 +466,12 @@ if ($rulesSrc) {
             }
         }
 
-        LogOk "Rules: $added added, $updated updated, $unchanged unchanged, $preserved preserved in $rulesDest"
-        Write-Summary "OK" "claude rules" "$added added, $updated updated, $unchanged unchanged"
+        if ($errors -eq 0) {
+            LogOk "Rules: $added added, $updated updated, $unchanged unchanged, $preserved preserved in $rulesDest"
+            Write-Summary "OK" "claude rules" "$added added, $updated updated, $unchanged unchanged"
+        } else {
+            Write-Summary "ERROR" "claude rules" "validation failed"
+        }
     }
 } else {
     Log "No user rules to deploy (no claude/rules/ in user repo)"

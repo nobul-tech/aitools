@@ -252,6 +252,8 @@ EOF
     log_ok "Wrote $(display_path "$CLAUDE_MD")"
     if [ "$ERRORS" -eq 0 ] && [ "$WARNINGS" -eq 0 ]; then
         write_summary OK "claude.md" "deployed"
+    elif [ "$ERRORS" -gt 0 ]; then
+        write_summary ERROR "claude.md" "validation failed"
     fi
     # Log whether content actually changed
     NEW_WRITTEN=$(cat "$CLAUDE_MD")
@@ -364,8 +366,12 @@ if [ -n "$RULES_SRC" ]; then
             fi
         done
 
-        log_ok "Rules: $ADDED added, $UPDATED updated, $UNCHANGED unchanged, $PRESERVED preserved in $(display_path "$RULES_DEST")"
-        write_summary OK "claude rules" "$ADDED added, $UPDATED updated, $UNCHANGED unchanged"
+        if [ "$ERRORS" -eq 0 ]; then
+            log_ok "Rules: $ADDED added, $UPDATED updated, $UNCHANGED unchanged, $PRESERVED preserved in $(display_path "$RULES_DEST")"
+            write_summary OK "claude rules" "$ADDED added, $UPDATED updated, $UNCHANGED unchanged"
+        else
+            write_summary ERROR "claude rules" "validation failed"
+        fi
     fi
 else
     log "No user rules to deploy (no claude/rules/ in user repo)"
