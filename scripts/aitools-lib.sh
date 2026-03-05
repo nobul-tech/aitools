@@ -98,7 +98,9 @@ log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
 # Summary writer (3-arg: category, tool, detail)
 # ---------------------------------------------------------------------------
 write_summary() {
-    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
+    if [ -n "${AITOOLS_SUMMARY_FILE:-}" ]; then
+        printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
+    fi
 }
 
 # ---------------------------------------------------------------------------

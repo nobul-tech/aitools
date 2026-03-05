@@ -110,7 +110,9 @@ log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
 # Summary writer (3-arg: category, tool, detail)
 # ---------------------------------------------------------------------------
 write_summary() {
-    [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
+    if [ -n "${AITOOLS_SUMMARY_FILE:-}" ]; then
+        printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -157,53 +159,52 @@ case "$(uname -s)" in
         exit 1 ;;
 esac
 
+# --- Detect Homebrew Python ---
+# Check known Homebrew paths directly (avoids shims like pyenv shadowing PATH)
+BREW_PY=""
+for candidate in /opt/homebrew/bin/python3 /usr/local/bin/python3; do
+    if [ -x "$candidate" ]; then
+        BREW_PY="$candidate"
+        break
+    fi
+done
+
 # --- Install/update ---
-if command -v python3 >/dev/null 2>&1; then
-    PY_VERSION=$(python3 --version 2>/dev/null || echo "version unknown")
-    python3_path=$(command -v python3)
-    if [[ "$python3_path" == /opt/homebrew/* ]] || [[ "$python3_path" == /usr/local/* ]]; then
-        log "Python already installed via Homebrew ($PY_VERSION) -- upgrading..."
-        UPGRADE_OUTPUT=$(brew upgrade python 2>&1) || true
-        if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
-            log_ok "Python already up to date"
-        else
-            printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
-            if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
-                log_error "brew upgrade python failed (see log above)"
-                write_summary ERROR "python" "brew upgrade failed"
-            fi
-        fi
-        PY_VERSION=$(python3 --version 2>/dev/null || echo "version unknown")
-        log_ok "$PY_VERSION"
-        write_summary OK "python" "$PY_VERSION"
+if [ -n "$BREW_PY" ]; then
+    PY_VERSION=$("$BREW_PY" --version 2>/dev/null || echo "version unknown")
+    log "Python already installed via Homebrew ($PY_VERSION) -- upgrading..."
+    UPGRADE_OUTPUT=$(brew upgrade python 2>&1) || true
+    if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+        log_ok "Python already up to date"
     else
-        log_warn "Python installed via non-preferred method at $python3_path"
-        log "Installing via Homebrew (will take precedence on PATH)..."
-        if ! brew install python 2>&1 | while IFS= read -r line; do log "$line"; done; then
-            log_error "brew install python failed"
-            write_summary ERROR "python" "brew install failed"
-        fi
-        if command -v python3 >/dev/null 2>&1; then
-            PY_VERSION=$(python3 --version 2>/dev/null || echo "version unknown")
-            log_ok "Python installed via Homebrew ($PY_VERSION)"
-            write_summary OK "python" "$PY_VERSION"
-        else
-            log_error "brew install completed but 'python3' not found in PATH"
-            write_summary ERROR "python" "installed but not on PATH"
+        printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
+        if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+            log_error "brew upgrade python failed (see log above)"
+            write_summary ERROR "python" "brew upgrade failed"
         fi
     fi
+    PY_VERSION=$("$BREW_PY" --version 2>/dev/null || echo "version unknown")
+    log_ok "$PY_VERSION"
+    write_summary OK "python" "$PY_VERSION"
 else
     log "Installing Python via Homebrew..."
     if ! brew install python 2>&1 | while IFS= read -r line; do log "$line"; done; then
         log_error "brew install python failed"
         write_summary ERROR "python" "brew install failed"
     fi
-    if command -v python3 >/dev/null 2>&1; then
-        PY_VERSION=$(python3 --version 2>/dev/null || echo "version unknown")
+    # Re-check after install
+    for candidate in /opt/homebrew/bin/python3 /usr/local/bin/python3; do
+        if [ -x "$candidate" ]; then
+            BREW_PY="$candidate"
+            break
+        fi
+    done
+    if [ -n "$BREW_PY" ]; then
+        PY_VERSION=$("$BREW_PY" --version 2>/dev/null || echo "version unknown")
         log_ok "Python installed ($PY_VERSION)"
         write_summary OK "python" "$PY_VERSION"
     else
-        log_error "brew install completed but 'python3' not found in PATH"
+        log_error "brew install completed but python3 not found at Homebrew paths"
         write_summary ERROR "python" "installed but not on PATH"
     fi
 fi

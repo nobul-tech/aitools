@@ -12,6 +12,17 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.36.1 -- Fix Python detection + write_summary set -e bug (2026-03-04)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **setup-python.sh false positive warning** (`scripts/setup-python.sh`): Replaced `command -v python3` detection with direct Homebrew binary checks at `/opt/homebrew/bin/python3` and `/usr/local/bin/python3`. Prevents pyenv shims (or other PATH-shadowing tools) from triggering "installed via non-preferred method" warnings and unnecessary reinstall attempts. |
+| 2 | **write_summary set -e abort** (`scripts/aitools-lib.sh`): `[ -n "" ] && printf ...` returns exit code 1 when `AITOOLS_SUMMARY_FILE` is unset; under `set -euo pipefail` this silently aborts the calling script. Changed to `if/then`. Affected all deploy scripts run standalone (outside `aitools install`). |
+
+---
+
 ## v0.36.0 -- Logging standards overhaul + compliance check (2026-03-04)
 
 ### Added
