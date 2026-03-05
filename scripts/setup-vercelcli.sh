@@ -129,8 +129,13 @@ case "$OS_NAME" in
         ;;
 esac
 
-write_summary ACTION "" "vercel login -- authenticate vercel CLI"
-log_warn "Authentication required: run 'vercel login' to authenticate"
+# Only suggest auth if vercel is installed but not authenticated
+if command -v vercel >/dev/null 2>&1; then
+    if ! vercel whoami >/dev/null 2>&1; then
+        log_warn "Authentication required: run 'vercel login' to authenticate"
+        write_summary ACTION "" "vercel login -- authenticate vercel CLI"
+    fi
+fi
 
 # --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then

@@ -12,6 +12,24 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.36.2 -- Fix Modal install + smart ACTION detection (2026-03-04)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Modal CLI install broken on Homebrew Python** (`scripts/setup-modal.sh/.ps1`): `uv pip install --system` blocked by PEP 668 ("externally managed environment") after switching from pyenv to Homebrew Python 3.14. Switched to `uv tool install modal` which manages its own venv. Falls back to `pip install --user modal` when uv is unavailable. |
+| 2 | **Unconditional "modal setup" ACTION** (`scripts/setup-modal.sh/.ps1`): Nagged every run even when already authenticated. Now checks for `~/.modal.toml` before suggesting auth. |
+| 3 | **Unconditional "vercel login" ACTION** (`scripts/setup-vercelcli.sh/.ps1`): Nagged every run even when already authenticated. Now checks via `vercel whoami` before suggesting auth. |
+| 4 | **Unconditional "Restart Cursor" ACTION** (`scripts/setup-cursor-ide-mcp.sh/.ps1`): Nagged every run even when config was unchanged. Now detects unchanged content and skips the restart suggestion. |
+| 5 | **tool-registry.md**: Updated Modal CLI install method from `pip install modal` to `uv tool install modal`. |
+
+### Notes
+
+- Terminal title flickers with "pwsh" during `aitools install` on macOS -- this is `build-deploy.sh` validating 13 PS1 files individually via `pwsh`. Expected behavior, not a bug (could batch later).
+
+---
+
 ## v0.36.1 -- Fix Python detection + write_summary set -e bug (2026-03-04)
 
 ### Fixed

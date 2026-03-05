@@ -233,6 +233,7 @@ try {
         console.error('Warning: ' + f + ' is invalid JSON');
     }
 }
+const beforeJson = JSON.stringify(config);
 const beforeKeys = Object.keys(config);
 
 // Ensure mcpServers exists
@@ -268,20 +269,29 @@ if (dryRun) {
 } else {
     if (corrupt) console.error('Warning: proceeding with --force on corrupt file');
     if (lostKeys.length > 0) console.error('Warning: proceeding with --force, losing fields: ' + lostKeys.join(', '));
-    fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\n');
-
-    // Post-write validation
-    const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
-    if (!_v.mcpServers) { console.error('Validation failed: missing mcpServers'); process.exit(1); }
-    console.log('ok');
+    const afterJson = JSON.stringify(config, null, 2) + '\n';
+    if (!corrupt && lostKeys.length === 0 && beforeJson === JSON.stringify(JSON.parse(afterJson))) {
+        console.log('unchanged');
+    } else {
+        fs.writeFileSync(f, afterJson);
+        // Post-write validation
+        const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
+        if (!_v.mcpServers) { console.error('Validation failed: missing mcpServers'); process.exit(1); }
+        console.log('ok');
+    }
 }
 " "$mcp_json" "$DRY_RUN" "$FORCE")
 
+MCP_CHANGED=false
 case "$MERGE_RESULT" in
     ok)
+        MCP_CHANGED=true
         log_ok "Cursor MCP config written to $(display_path "$mcp_json")"
         log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
         write_summary OK "cursor ide mcp" "merged" ;;
+    unchanged)
+        log_ok "Cursor MCP config already up to date"
+        write_summary OK "cursor ide mcp" "unchanged" ;;
     dry-run)
         log "[DRY RUN] Would write Cursor MCP config"
         log "  Servers: chrome-devtools (stdio), vercel (http), webflow (http)" ;;
@@ -310,7 +320,10 @@ else
     log "  Or install Cursor CLI: aitools install"
 fi
 
-write_summary ACTION "" "Restart Cursor IDE to apply MCP changes"
+# Only suggest restart if config actually changed
+if [ "$MCP_CHANGED" = "true" ]; then
+    write_summary ACTION "" "Restart Cursor IDE to apply MCP changes"
+fi
 
 # --- Exit ---
 if [ "$ERRORS" -gt 0 ]; then

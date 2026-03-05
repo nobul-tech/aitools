@@ -191,8 +191,15 @@ if (Get-Command vercel -ErrorAction SilentlyContinue) {
     }
 }
 
-Write-Summary "ACTION" "" "vercel login -- authenticate vercel CLI"
-LogWarn "Authentication required: run 'vercel login' to authenticate"
+# Only suggest auth if vercel is installed but not authenticated
+# Get-Command exempt: command-existence check with if/else fallback
+if (Get-Command vercel -ErrorAction SilentlyContinue) {
+    $vercelWhoami = & vercel whoami 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        LogWarn "Authentication required: run 'vercel login' to authenticate"
+        Write-Summary "ACTION" "" "vercel login -- authenticate vercel CLI"
+    }
+}
 
 # --- Exit ---
 if ($errors -gt 0) {

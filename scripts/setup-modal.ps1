@@ -1,7 +1,7 @@
 # setup-modal.ps1 -- Installs/updates Modal CLI on Windows
 # Safe to re-run -- detects existing install and upgrades as needed.
 #
-# Windows: Uses uv (preferred) or pip. Requires Python 3.10+.
+# Windows: Uses uv tool (preferred) or pip --user (fallback). Requires Python 3.10+.
 #
 # Authentication (modal setup) is interactive and must be run separately
 # after install -- not automated by this script.
@@ -44,35 +44,6 @@ function Ensure-PythonUserScriptsOnPath {
 # Refresh PATH to pick up tools installed by prior steps (e.g., setup-python, setup-uv)
 Refresh-Path
 
-# --- Python package installer check (uv-first) ---
-$installCmd = $null
-$installArgs = @()
-$installLabel = ""
-# Get-Command exempt: command-existence check with if/else fallback
-if (Get-Command uv -ErrorAction SilentlyContinue) {
-    $installCmd = "uv"
-    $installArgs = @("pip")
-    $installFlags = @("--system")
-    $installLabel = "uv"
-    Log "Using uv for package install"
-} elseif (Get-Command pip -ErrorAction SilentlyContinue) {
-    $installCmd = "pip"
-    $installArgs = @()
-    $installFlags = @()
-    $installLabel = "pip"
-    Log "Using pip for package install (uv not found)"
-} elseif (Get-Command pip3 -ErrorAction SilentlyContinue) {
-    $installCmd = "pip3"
-    $installArgs = @()
-    $installFlags = @()
-    $installLabel = "pip3"
-    Log "Using pip3 for package install (uv not found)"
-} else {
-    LogError "No Python package installer found. Install uv or pip first."
-    Write-Summary "ERROR" "modal cli" "no package installer (uv/pip) found"
-    exit 1
-}
-
 # Verify Python 3.10+
 $pythonCmd = $null
 if (Get-Command python -ErrorAction SilentlyContinue) {
@@ -96,95 +67,83 @@ if ($pythonCmd) {
 }
 
 # --- Install/update ---
-if (Get-Command modal -ErrorAction SilentlyContinue) {
-    $modalVersion = & modal --version 2>$null
-    if (-not $modalVersion) { $modalVersion = "version unknown" }
-    LogOk "Modal CLI already installed ($modalVersion)"
-    Log "Upgrading via $installLabel..."
-    $pipOutput = & $installCmd @installArgs install @installFlags --upgrade modal 2>&1 | Out-String
-    $pipOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
-    if ($pipOutput -match '\[notice\] A new release of pip is available: (.+)') {
-        LogWarn "pip upgrade available: $($Matches[1])"
-        Write-Summary "WARN" "pip" "upgrade available: $($Matches[1])"
-    }
-    if ($LASTEXITCODE -ne 0) {
-        LogError "pip upgrade failed (exit code $LASTEXITCODE)"
-        Write-Summary "ERROR" "modal cli" "pip upgrade failed (exit $LASTEXITCODE)"
-    }
-    if ($pipOutput -match '(?m)^ERROR:') {
-        LogError "pip reported errors during upgrade (see log above)"
-        Write-Summary "ERROR" "modal cli" "pip dependency conflict (see log)"
-    }
+# Get-Command exempt: command-existence check with if/else fallback
+if (Get-Command uv -ErrorAction SilentlyContinue) {
+    # Get-Command exempt: command-existence check with if/else fallback
     if (Get-Command modal -ErrorAction SilentlyContinue) {
         $modalVersion = & modal --version 2>$null
         if (-not $modalVersion) { $modalVersion = "version unknown" }
-        LogOk "Modal CLI upgraded ($modalVersion)"
-        Write-Summary "OK" "modal cli" "$modalVersion"
+        LogOk "Modal CLI already installed ($modalVersion)"
+        Log "Upgrading via uv tool..."
+        $toolOutput = & uv tool upgrade modal 2>&1 | Out-String
+        $toolOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+        if ($LASTEXITCODE -ne 0) {
+            LogError "uv tool upgrade modal failed (exit code $LASTEXITCODE)"
+            Write-Summary "ERROR" "modal cli" "uv tool upgrade failed"
+        } elseif (Get-Command modal -ErrorAction SilentlyContinue) {
+            $modalVersion = & modal --version 2>$null
+            if (-not $modalVersion) { $modalVersion = "version unknown" }
+            LogOk "Modal CLI upgraded ($modalVersion)"
+            Write-Summary "OK" "modal cli" "$modalVersion"
+        }
     } else {
-        LogError "$installLabel upgrade completed but 'modal' not found in PATH"
-        Write-Summary "ERROR" "modal cli" "upgrade succeeded but not on PATH"
+        Log "Installing Modal CLI via uv tool..."
+        $toolOutput = & uv tool install modal 2>&1 | Out-String
+        $toolOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+        if ($LASTEXITCODE -ne 0) {
+            LogError "uv tool install modal failed (exit code $LASTEXITCODE)"
+            Write-Summary "ERROR" "modal cli" "uv tool install failed"
+        }
+        Refresh-Path
+        # Get-Command exempt: command-existence check with if/else fallback
+        if (Get-Command modal -ErrorAction SilentlyContinue) {
+            $modalVersion = & modal --version 2>$null
+            if (-not $modalVersion) { $modalVersion = "version unknown" }
+            $modalPath = (Get-Command modal).Source
+            LogOk "Modal CLI installed ($modalVersion)"
+            Log "Install path: $modalPath"
+            Write-Summary "OK" "modal cli" "$modalVersion"
+        } else {
+            LogError "uv tool install completed but 'modal' not found in PATH"
+            LogWarn "Ensure ~/.local/bin is in PATH"
+            Write-Summary "ERROR" "modal cli" "installed but not on PATH"
+        }
     }
-} else {
-    Log "Installing Modal CLI via $installLabel..."
-    $pipOutput = & $installCmd @installArgs install @installFlags modal 2>&1 | Out-String
+} elseif (Get-Command pip -ErrorAction SilentlyContinue) {
+    $pipCmd = "pip"
+    Log "uv not found -- installing Modal CLI via pip (--user)..."
+    $pipOutput = & $pipCmd install --user modal 2>&1 | Out-String
     $pipOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
-    if ($pipOutput -match '\[notice\] A new release of pip is available: (.+)') {
-        LogWarn "pip upgrade available: $($Matches[1])"
-        Write-Summary "WARN" "pip" "upgrade available: $($Matches[1])"
-    }
-    if ($LASTEXITCODE -ne 0) {
-        LogError "pip install failed (exit code $LASTEXITCODE)"
-        Write-Summary "ERROR" "modal cli" "pip install failed (exit $LASTEXITCODE)"
-    }
-    if ($pipOutput -match '(?m)^ERROR:') {
-        LogError "pip reported errors during install (see log above)"
-        Write-Summary "ERROR" "modal cli" "pip dependency conflict (see log)"
+    if ($LASTEXITCODE -ne 0 -or $pipOutput -match '(?m)^ERROR:') {
+        LogError "pip install --user modal failed (see log above)"
+        Write-Summary "ERROR" "modal cli" "pip install failed"
     }
     Refresh-Path
-    # Get-Command exempt: command-existence check with if/else fallback
-    if (-not (Get-Command modal -ErrorAction SilentlyContinue)) {
-        Ensure-PythonUserScriptsOnPath
-    }
+    Ensure-PythonUserScriptsOnPath
     # Get-Command exempt: command-existence check with if/else fallback
     if (Get-Command modal -ErrorAction SilentlyContinue) {
         $modalVersion = & modal --version 2>$null
         if (-not $modalVersion) { $modalVersion = "version unknown" }
-        $modalPath = (Get-Command modal).Source
         LogOk "Modal CLI installed ($modalVersion)"
-        Log "Install path: $modalPath"
         Write-Summary "OK" "modal cli" "$modalVersion"
-
-        # Verify the install directory is in persistent PATH
-        $modalDir = Split-Path $modalPath -Parent
-        $persistentPath = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
-        if ($persistentPath -notlike "*$modalDir*") {
-            LogError "Modal install dir not in persistent PATH: $modalDir"
-            Write-Summary "ERROR" "modal cli" "installed but not on PATH"
-            LogWarn "Add $modalDir to PATH -- tool not accessible to Claude Code"
-            Write-Summary "ACTION" "" "Add $modalDir to PATH -- modal not accessible"
-        }
     } else {
-        LogError "Modal installed but 'modal' not found in PATH"
+        LogError "pip install completed but 'modal' not found in PATH"
         Write-Summary "ERROR" "modal cli" "installed but not on PATH"
-        LogWarn "You may need to add Python's Scripts directory to PATH."
-        if ($pythonCmd) { LogWarn "Try: $pythonCmd -m modal --version" }
     }
+} else {
+    LogError "No package installer found. Install uv or pip first."
+    Write-Summary "ERROR" "modal cli" "no package installer (uv/pip) found"
 }
 
-# --- pip dependency check (only when using pip, not uv) ---
-if ($installLabel -ne "uv" -and $installCmd) {
-    $pipCheckOutput = & $installCmd check 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 0 -and $pipCheckOutput.Trim()) {
-        $pipCheckOutput.Trim().Split("`n") | ForEach-Object {
-            $line = $_.TrimEnd()
-            if ($line) { LogWarn "pip conflict: $line" }
-        }
-        Write-Summary "WARN" "pip" "dependency conflicts found (see log)"
+# Only suggest auth if modal is installed but not yet authenticated
+# Get-Command exempt: command-existence check with if/else fallback
+if (Get-Command modal -ErrorAction SilentlyContinue) {
+    $modalToml = Join-Path $HOME ".modal.toml"
+    if (-not (Test-Path $modalToml)) {
+        LogWarn "Authentication required: run 'modal setup' to authenticate (browser flow)"
+        Write-Summary "ACTION" "" "modal setup -- authenticate modal (browser flow)"
     }
 }
-
-LogWarn "Authentication required: run 'modal setup' to authenticate (browser flow)"
-Write-Summary "ACTION" "" "modal setup -- authenticate modal (browser flow)"
 
 # --- Exit ---
 if ($errors -gt 0) {

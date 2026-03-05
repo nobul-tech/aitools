@@ -243,6 +243,7 @@ $config["mcpServers"]["webflow"] = @{
 $managedKeys = @("mcpServers")
 $lostKeys = @($beforeKeys | Where-Object { $_ -notin $config.Keys })
 
+$mcpChanged = $false
 if ($DryRun) {
     Log "[DRY RUN] $mcpJson`: merge MCP servers"
     Log "  Managed fields: mcpServers.chrome-devtools, mcpServers.vercel, mcpServers.webflow"
@@ -260,24 +261,32 @@ if ($DryRun) {
     if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
     if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
 
-    $json = $config | ConvertTo-Json -Depth 10
-    $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($mcpJson)
-    [System.IO.File]::WriteAllText($resolvedPath, $json, [System.Text.UTF8Encoding]::new($false))
+    $afterJson = $config | ConvertTo-Json -Depth 10
+    # Compare serialized content to detect actual changes
+    if (-not $corrupt -and $lostKeys.Count -eq 0 -and $raw -and $afterJson -eq ($raw | ConvertFrom-Json | ConvertTo-Json -Depth 10)) {
+        $mcpChanged = $false
+        LogOk "Cursor MCP config already up to date"
+        Write-Summary "OK" "cursor ide mcp" "unchanged"
+    } else {
+        $mcpChanged = $true
+        $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($mcpJson)
+        [System.IO.File]::WriteAllText($resolvedPath, $afterJson, [System.Text.UTF8Encoding]::new($false))
 
-    # Post-write validation
-    try {
-        $vContent = [System.IO.File]::ReadAllText($resolvedPath)
-        $vParsed = $vContent | ConvertFrom-Json
-        if (-not ($vParsed.PSObject.Properties.Name -contains "mcpServers")) {
-            LogError "Validation failed: $mcpJson missing required field 'mcpServers'"
+        # Post-write validation
+        try {
+            $vContent = [System.IO.File]::ReadAllText($resolvedPath)
+            $vParsed = $vContent | ConvertFrom-Json
+            if (-not ($vParsed.PSObject.Properties.Name -contains "mcpServers")) {
+                LogError "Validation failed: $mcpJson missing required field 'mcpServers'"
+            }
+        } catch {
+            LogError "Validation failed: $mcpJson is not valid JSON -- $_"
         }
-    } catch {
-        LogError "Validation failed: $mcpJson is not valid JSON -- $_"
-    }
 
-    LogOk "Cursor MCP config written to $mcpJson"
-    Log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
-    Write-Summary "OK" "cursor ide mcp" "merged"
+        LogOk "Cursor MCP config written to $mcpJson"
+        Log "Servers configured: chrome-devtools (stdio), vercel (http), webflow (http)"
+        Write-Summary "OK" "cursor ide mcp" "merged"
+    }
 }
 
 # --- Disable vercel/webflow via Cursor CLI if available ---
@@ -298,7 +307,10 @@ if ($DryRun) {
     Log "  Or install Cursor CLI: aitools install"
 }
 
-Write-Summary "ACTION" "" "Restart Cursor IDE to apply MCP changes"
+# Only suggest restart if config actually changed
+if ($mcpChanged) {
+    Write-Summary "ACTION" "" "Restart Cursor IDE to apply MCP changes"
+}
 
 # --- Exit ---
 if ($errors -gt 0) {

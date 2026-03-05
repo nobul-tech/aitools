@@ -650,14 +650,13 @@ uv --version
 
 | Platform | Method | Command |
 |----------|--------|---------|
-| macOS | pip (preferred) | `pip install modal` |
-| Windows | pip (preferred) | `pip install modal` |
-| Linux | pip (preferred) | `pip install modal` |
+| All | uv tool (preferred) | `uv tool install modal` |
+| All | pip (fallback) | `pip install --user modal` |
 
 ### Update
 
 ```bash
-pip install --upgrade modal
+uv tool upgrade modal
 ```
 
 ### Check Version
