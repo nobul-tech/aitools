@@ -53,9 +53,11 @@ if ($msixPackages) {
 Refresh-Path
 
 # --- Detect legacy Python.Python.3.x winget install ---
+$legacyDetected = $false
 $legacyOutput = winget list --id Python.Python --accept-source-agreements 2>&1 | Out-String
 if ($legacyOutput -match 'Python\.Python\.3\.(\d+)') {
     $legacyMinor = $Matches[1]
+    $legacyDetected = $true
     LogWarn "Legacy winget Python install detected (Python.Python.3.$legacyMinor)"
     LogWarn "pymanager will manage Python runtimes going forward"
     LogWarn "To uninstall legacy: winget uninstall Python.Python.3.$legacyMinor"
@@ -72,7 +74,7 @@ if ($hasPymanager) {
     $wingetOutput = winget upgrade $pymanagerWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $wingetOutput.Trim().Split("`n") | ForEach-Object {
         $l = $_.TrimEnd()
-        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$') { Log $l }
+        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$' -and $l -notmatch '\d+(\.\d+)?\s*(KB|MB|GB)\s*/\s*\d+') { Log $l }
     }
     if ($wingetOutput -match 'No available upgrade|No newer package versions') {
         LogOk "pymanager already up to date"
@@ -93,7 +95,7 @@ if ($hasPymanager) {
     $wingetOutput = winget install $pymanagerWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $wingetOutput.Trim().Split("`n") | ForEach-Object {
         $l = $_.TrimEnd()
-        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$') { Log $l }
+        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$' -and $l -notmatch '\d+(\.\d+)?\s*(KB|MB|GB)\s*/\s*\d+') { Log $l }
     }
     if ($wingetOutput -match 'already installed') {
         LogOk "pymanager already installed (winget)"
@@ -146,12 +148,18 @@ if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
         if ($pyVersion) {
             LogOk "$pyVersion (via pymanager)"
             Log "Install path: $($pythonCheck.Source)"
-            Write-Summary "OK" "python" "$pyVersion"
 
             # Warn if legacy install is shadowing pymanager
             if ($pyVersion -notmatch $targetPyVersion) {
                 LogWarn "python --version reports $pyVersion (expected $targetPyVersion)"
                 LogWarn "Legacy Python install may be shadowing pymanager on PATH"
+            }
+
+            # Summary reflects accumulated warnings (legacy install, version mismatch)
+            if ($warnings -gt 0) {
+                Write-Summary "WARN" "python" "$pyVersion (legacy present)"
+            } else {
+                Write-Summary "OK" "python" "$pyVersion"
             }
         } else {
             LogError "python found on PATH but --version failed"

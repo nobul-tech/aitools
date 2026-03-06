@@ -304,12 +304,12 @@ esac
 # Cargo typst-cli conflicts with Homebrew typst (different binary paths)
 if command -v cargo &>/dev/null; then
     # Cleanup: cargo package may not be installed; non-blocking -- Homebrew install follows
-    cargo uninstall typst-cli 2>/dev/null || true
+    cargo uninstall typst-cli >/dev/null 2>&1 || true
 fi
 # npm typst is a third-party wrapper, not official
 if command -v npm &>/dev/null; then
     # Cleanup: npm package may not be installed; non-blocking -- Homebrew install follows
-    npm uninstall -g typst 2>/dev/null || true
+    npm uninstall -g typst >/dev/null 2>&1 || true
 fi
 
 # --- Install/update ---

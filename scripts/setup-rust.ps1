@@ -30,7 +30,7 @@ if (Test-Path $cargoPath) {
     Log "rustup found -- updating toolchain..."
     $rustupExe = Join-Path $env:USERPROFILE ".cargo\bin\rustup.exe"
     $rustupOutput = & $rustupExe update 2>&1 | Out-String
-    $rustupOutput.Trim().Split("`n") | Select-Object -Last 3 | ForEach-Object { Log $_.TrimEnd() }
+    $rustupOutput.Trim().Split("`n") | Select-Object -Last 3 | ForEach-Object { $l = $_.TrimEnd(); if ($l.Trim()) { Log $l } }
     if ($LASTEXITCODE -ne 0) {
         LogError "rustup update failed (exit code $LASTEXITCODE)"
         Write-Summary "ERROR" "rust/cargo" "rustup update failed (exit $LASTEXITCODE)"
@@ -47,7 +47,7 @@ if (Test-Path $cargoPath) {
     $wingetOutput = winget install -e --id Rustlang.Rustup --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $wingetOutput.Trim().Split("`n") | ForEach-Object {
         $l = $_.TrimEnd()
-        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$') { Log $l }
+        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$' -and $l -notmatch '\d+(\.\d+)?\s*(KB|MB|GB)\s*/\s*\d+') { Log $l }
     }
     if ($LASTEXITCODE -ne 0) {
         LogError "winget install rustup failed (exit code $LASTEXITCODE)"

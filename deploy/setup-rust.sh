@@ -317,7 +317,7 @@ fi
 if command -v rustup &>/dev/null; then
     log "rustup found — updating toolchain..."
     RUSTUP_OUTPUT=$(rustup update 2>&1) || true
-    printf '%s\n' "$RUSTUP_OUTPUT" | tail -3 | while IFS= read -r line; do log "$line"; done
+    printf '%s\n' "$RUSTUP_OUTPUT" | tail -3 | while IFS= read -r line; do [ -n "${line// /}" ] && log "$line"; done
     if printf '%s\n' "$RUSTUP_OUTPUT" | grep -qi 'error\|fatal'; then
         log_error "rustup update reported errors (see log above)"
         write_summary ERROR "rust/cargo" "rustup update failed"

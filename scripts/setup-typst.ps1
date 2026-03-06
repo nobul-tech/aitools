@@ -29,7 +29,7 @@ $cargoCmd = Get-Command cargo -ErrorAction SilentlyContinue
 if ($cargoCmd) {
     Log "Checking for cargo typst-cli..."
     # Cleanup: cargo stderr may contain "not installed" msg; non-blocking, winget install follows
-    & cargo uninstall typst-cli 2>$null
+    & cargo uninstall typst-cli 2>$null | Out-Null
 }
 # npm typst: third-party wrapper, not official
 $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
@@ -37,7 +37,7 @@ $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
 if ($npmCmd) {
     Log "Checking for npm typst..."
     # Cleanup: npm stderr may contain "not installed" msg; non-blocking, winget install follows
-    & npm uninstall -g typst 2>$null
+    & npm uninstall -g typst 2>$null | Out-Null
 }
 
 # --- Install/update ---
@@ -48,7 +48,7 @@ if ($typstCmd) {
     $wingetOutput = winget upgrade --id Typst.Typst --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $wingetOutput.Trim().Split("`n") | ForEach-Object {
         $l = $_.TrimEnd()
-        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$') { Log $l }
+        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$' -and $l -notmatch '\d+(\.\d+)?\s*(KB|MB|GB)\s*/\s*\d+') { Log $l }
     }
     if ($wingetOutput -match 'No available upgrade|No newer package versions') {
         LogOk "Typst already up to date"
@@ -73,7 +73,7 @@ if ($typstCmd) {
     $wingetOutput = winget install --id Typst.Typst --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $wingetOutput.Trim().Split("`n") | ForEach-Object {
         $l = $_.TrimEnd()
-        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$') { Log $l }
+        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$' -and $l -notmatch '\d+(\.\d+)?\s*(KB|MB|GB)\s*/\s*\d+') { Log $l }
     }
     if ($LASTEXITCODE -ne 0) {
         LogError "winget install typst failed (exit code $LASTEXITCODE)"

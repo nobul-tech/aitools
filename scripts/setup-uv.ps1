@@ -33,7 +33,7 @@ if ($uvCmd) {
     $wingetOutput = winget upgrade --id=astral-sh.uv --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $wingetOutput.Trim().Split("`n") | ForEach-Object {
         $l = $_.TrimEnd()
-        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$') { Log $l }
+        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$' -and $l -notmatch '\d+(\.\d+)?\s*(KB|MB|GB)\s*/\s*\d+') { Log $l }
     }
     if ($wingetOutput -match 'No available upgrade|No newer package versions|No installed package') {
         LogOk "uv already up to date"
@@ -57,7 +57,7 @@ if ($uvCmd) {
     $wingetOutput = winget install --id=astral-sh.uv -e --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $wingetOutput.Trim().Split("`n") | ForEach-Object {
         $l = $_.TrimEnd()
-        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$') { Log $l }
+        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$' -and $l -notmatch '\d+(\.\d+)?\s*(KB|MB|GB)\s*/\s*\d+') { Log $l }
     }
     if ($wingetOutput -match 'already installed' -and $wingetOutput -match 'No available upgrade|No newer package versions') {
         LogOk "uv already up to date (winget)"

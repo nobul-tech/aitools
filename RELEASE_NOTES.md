@@ -12,6 +12,21 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.41.1 -- Fix logging noise across setup scripts (2026-03-06)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Python summary reports WARN when legacy install present** (`setup-python.ps1`): Summary line now checks accumulated warnings before choosing OK vs WARN. Previously showed green `[ok]` even when legacy `Python.Python.3.x` was detected. |
+| 2 | **Suppress npm/cargo cleanup stdout** (`setup-typst.ps1`, `setup-typst.sh`): `npm uninstall -g typst` and `cargo uninstall typst-cli` stdout now piped to null. Previously leaked unstructured "up to date in Xms" lines to console. |
+| 3 | **Filter winget download progress bar** (all `setup-*.ps1` with winget): Added `KB/MB/GB` regex to winget output filter. Prevents mojibaked Unicode block characters from appearing in structured log lines during package downloads. |
+| 4 | **Filter rustup empty lines** (`setup-rust.ps1`, `setup-rust.sh`): Empty lines from `rustup update` output now skipped instead of logged as blank `[info]` entries. |
+
+(tested: Windows)
+
+---
+
 ## v0.41.0 -- Migrate Windows Python to pymanager (2026-03-06)
 
 ### Changed

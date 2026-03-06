@@ -50,7 +50,7 @@ if (Get-Command gh -ErrorAction SilentlyContinue) {
     $wingetOutput = winget install --source winget --exact --id GitHub.cli --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
     $wingetOutput.Trim().Split("`n") | ForEach-Object {
         $l = $_.TrimEnd()
-        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$') { Log $l }
+        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$' -and $l -notmatch '\d+(\.\d+)?\s*(KB|MB|GB)\s*/\s*\d+') { Log $l }
     }
     if ($LASTEXITCODE -ne 0) {
         LogError "winget install failed (exit code $LASTEXITCODE)"
