@@ -57,6 +57,12 @@ if ($legacyOutput -match 'Python\.Python\.3\.(\d+)') {
     Write-Summary "ACTION" "" "winget uninstall Python.Python.3.$legacyMinor -- remove legacy Python"
 }
 
+# --- Clean up orphaned Python directories ---
+$orphansRemoved = Remove-OrphanedPythonDirs
+if ($orphansRemoved -gt 0) {
+    LogOk "Cleaned up $orphansRemoved orphaned Python directory(ies)"
+}
+
 # --- Install/update pymanager ---
 # Get-Command exempt: command-existence check with if/else fallback
 $hasPymanager = (Get-Command pymanager -ErrorAction SilentlyContinue) -ne $null

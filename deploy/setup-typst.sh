@@ -160,6 +160,56 @@ backup_dir() {
 }
 
 # ---------------------------------------------------------------------------
+# Repair broken uv tool environment (cross-platform)
+# ---------------------------------------------------------------------------
+# When `uv tool upgrade <tool>` fails with "missing a valid environment",
+# find a working Python via `uv python find` (fallback: system python/python3)
+# and reinstall with --force --python <path>.
+# Returns 0 if repaired, 1 if not applicable or failed.
+repair_uv_tool_env() {
+    local tool_name="$1"
+    local upgrade_output="${2:-}"
+
+    if ! printf '%s\n' "$upgrade_output" | grep -q 'missing a valid environment'; then
+        return 1
+    fi
+
+    log_warn "$tool_name uv environment is broken (Python removed?) -- repairing..."
+
+    # Find a working Python -- uv's own Pythons first, then system
+    local working_python=""
+    local uv_python
+    uv_python=$(uv python find 2>/dev/null) || true
+    if [ -n "$uv_python" ] && [ -x "$uv_python" ]; then
+        working_python="$uv_python"
+    elif command -v python3 >/dev/null 2>&1; then
+        working_python=$(command -v python3)
+    elif command -v python >/dev/null 2>&1; then
+        working_python=$(command -v python)
+    fi
+
+    if [ -z "$working_python" ]; then
+        log_error "Cannot repair $tool_name -- no working Python found"
+        return 1
+    fi
+
+    log "Repairing with: uv tool install --force --python $working_python $tool_name"
+    local repair_output
+    repair_output=$(uv tool install --force --python "$working_python" "$tool_name" 2>&1) || true
+    printf '%s\n' "$repair_output" | while IFS= read -r line; do
+        [ -n "$line" ] && log "$line"
+    done
+
+    if printf '%s\n' "$repair_output" | grep -qi 'error.*failed'; then
+        log_error "$tool_name environment repair failed"
+        return 1
+    fi
+
+    log_ok "Repaired $tool_name uv environment"
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Parse CHANGED: lines from a node merge result and emit DETAIL summary entries.
 # Usage: emit_merge_details "$MERGE_RESULT" "tool_name"
 # Only processes lines prefixed with "CHANGED: " -- ignores status and other output.

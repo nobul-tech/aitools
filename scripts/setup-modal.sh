@@ -54,6 +54,10 @@ if command -v uv >/dev/null 2>&1; then
         if printf '%s\n' "$TOOL_OUTPUT" | grep -q 'is not installed'; then
             log_warn "Modal was not installed via uv -- migrating to uv tool..."
             TOOL_OUTPUT=$(uv tool install modal 2>&1) || true
+        elif printf '%s\n' "$TOOL_OUTPUT" | grep -q 'missing a valid environment'; then
+            if repair_uv_tool_env "modal" "$TOOL_OUTPUT"; then
+                TOOL_OUTPUT="Repaired"
+            fi
         fi
         printf '%s\n' "$TOOL_OUTPUT" | while IFS= read -r line; do log "$line"; done
         if printf '%s\n' "$TOOL_OUTPUT" | grep -qi 'error\|failed'; then

@@ -72,6 +72,8 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
         if ($LASTEXITCODE -ne 0 -and $toolOutput -match 'is not installed') {
             LogWarn "Modal was not installed via uv -- migrating to uv tool..."
             $toolOutput = & uv tool install modal 2>&1 | Out-String
+        } elseif ($LASTEXITCODE -ne 0 -and (Repair-UvToolEnv -ToolName "modal" -UpgradeOutput $toolOutput)) {
+            $toolOutput = ""
         }
         $toolOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
         if ($LASTEXITCODE -ne 0) {

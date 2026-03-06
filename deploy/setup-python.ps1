@@ -15,7 +15,7 @@
 #
 # Provides: ReadConfigKey, Initialize-Logging, Log/LogOk/LogError/LogWarn,
 # Write-Summary, Show-Summary, Refresh-Path, Log-WingetOutput,
-# Normalize-JsonForComparison.
+# Repair-UvToolEnv, Remove-OrphanedPythonDirs, Normalize-JsonForComparison.
 #
 # Usage:
 #   . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
@@ -162,6 +162,131 @@ function Log-WingetOutput([string]$Output) {
             Log $l
         }
     }
+}
+
+# ---------------------------------------------------------------------------
+# Repair broken uv tool environment (cross-platform)
+# ---------------------------------------------------------------------------
+# When `uv tool upgrade <tool>` fails with "missing a valid environment",
+# find a working Python via `uv python find` (fallback: system python/python3)
+# and reinstall with --force --python <path>.
+# Returns $true if repaired, $false if not applicable or failed.
+function Repair-UvToolEnv {
+    param(
+        [Parameter(Mandatory)][string]$ToolName,
+        [string]$UpgradeOutput = ""
+    )
+
+    if ($UpgradeOutput -notmatch 'missing a valid environment') { return $false }
+
+    LogWarn "$ToolName uv environment is broken (Python removed?) -- repairing..."
+
+    # Find a working Python -- uv's own Pythons first, then system
+    # Get-Command exempt: command-existence check with fallback chain
+    $workingPython = $null
+    $uvPython = & uv python find 2>$null
+    if ($LASTEXITCODE -eq 0 -and $uvPython -and (Test-Path $uvPython)) {
+        $workingPython = $uvPython
+    } elseif (Get-Command python -ErrorAction SilentlyContinue) {
+        $workingPython = (Get-Command python).Source
+    } elseif (Get-Command python3 -ErrorAction SilentlyContinue) {
+        $workingPython = (Get-Command python3).Source
+    }
+
+    if (-not $workingPython) {
+        LogError "Cannot repair $ToolName -- no working Python found"
+        return $false
+    }
+
+    Log "Repairing with: uv tool install --force --python $workingPython $ToolName"
+    $repairOutput = & uv tool install --force --python $workingPython $ToolName 2>&1 | Out-String
+    $repairOutput.Trim().Split("`n") | ForEach-Object {
+        $l = $_.TrimEnd(); if ($l.Trim()) { Log $l }
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        LogError "$ToolName environment repair failed (exit $LASTEXITCODE)"
+        return $false
+    }
+
+    LogOk "Repaired $ToolName uv environment"
+    return $true
+}
+
+# ---------------------------------------------------------------------------
+# Remove orphaned Python directories (Windows only)
+# ---------------------------------------------------------------------------
+# Scans %LOCALAPPDATA%\Programs\Python\ for PythonXYZ\ directories where
+# python.exe is gone (uninstalled). Removes the orphaned directory tree and
+# cleans stale entries from User PATH.
+# Returns count of directories removed (0 = nothing to clean).
+function Remove-OrphanedPythonDirs {
+    if (-not $IsWindows) { return 0 }
+
+    $pythonBase = Join-Path $env:LOCALAPPDATA "Programs\Python"
+    if (-not (Test-Path $pythonBase)) { return 0 }
+
+    $removedCount = 0
+    $candidates = Get-ChildItem -Path $pythonBase -Directory -ErrorAction SilentlyContinue
+    if (-not $candidates) { return 0 }
+
+    foreach ($dir in $candidates) {
+        # Skip the Launcher directory (belongs to pymanager)
+        if ($dir.Name -eq "Launcher") { continue }
+
+        # Orphaned = python.exe is gone
+        $pythonExe = Join-Path $dir.FullName "python.exe"
+        if (Test-Path $pythonExe) { continue }
+
+        # Log stale executables for visibility
+        $scriptsDir = Join-Path $dir.FullName "Scripts"
+        if (Test-Path $scriptsDir) {
+            $staleExes = Get-ChildItem $scriptsDir -Filter "*.exe" -File -ErrorAction SilentlyContinue
+            if ($staleExes) {
+                $names = ($staleExes | Select-Object -First 5 | ForEach-Object { $_.Name }) -join ", "
+                LogWarn "Orphaned Python dir with stale executables: $($dir.Name) ($names)"
+            }
+        }
+
+        try {
+            Remove-Item -Path $dir.FullName -Recurse -Force -ErrorAction Stop
+            LogOk "Removed orphaned directory: $($dir.FullName)"
+            $removedCount++
+        } catch {
+            LogError "Failed to remove $($dir.FullName): $_"
+        }
+    }
+
+    # Clean stale User PATH entries pointing to removed Python dirs
+    if ($removedCount -gt 0) {
+        $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+        if ($userPath) {
+            $entries = $userPath -split ";"
+            $cleanEntries = @()
+            $removedEntries = @()
+
+            foreach ($entry in $entries) {
+                $trimmed = $entry.TrimEnd("\", "/")
+                if ($trimmed -match '\\Programs\\Python\\Python\d+' -and -not (Test-Path $trimmed)) {
+                    $removedEntries += $trimmed
+                } else {
+                    $cleanEntries += $entry
+                }
+            }
+
+            if ($removedEntries.Count -gt 0) {
+                $newPath = $cleanEntries -join ";"
+                [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+                foreach ($re in $removedEntries) {
+                    LogOk "Removed stale User PATH entry: $re"
+                }
+            }
+        }
+
+        Refresh-Path
+    }
+
+    return $removedCount
 }
 
 # ---------------------------------------------------------------------------
@@ -390,6 +515,12 @@ if ($legacyOutput -match 'Python\.Python\.3\.(\d+)') {
     LogWarn "pymanager will manage Python runtimes going forward"
     LogWarn "To uninstall legacy: winget uninstall Python.Python.3.$legacyMinor"
     Write-Summary "ACTION" "" "winget uninstall Python.Python.3.$legacyMinor -- remove legacy Python"
+}
+
+# --- Clean up orphaned Python directories ---
+$orphansRemoved = Remove-OrphanedPythonDirs
+if ($orphansRemoved -gt 0) {
+    LogOk "Cleaned up $orphansRemoved orphaned Python directory(ies)"
 }
 
 # --- Install/update pymanager ---

@@ -12,6 +12,26 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.42.1 -- Python cleanup and uv tool repair library functions (2026-03-06)
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **`Repair-UvToolEnv` (PS1) / `repair_uv_tool_env` (bash)**: New shared library function that detects broken uv tool environments ("missing a valid environment") and automatically repairs them by finding a working Python via `uv python find` (fallback: system python) and reinstalling with `--force --python`. |
+| 2 | **`Remove-OrphanedPythonDirs` (PS1, Windows only)**: New shared library function that scans `%LOCALAPPDATA%\Programs\Python\` for directories where `python.exe` is gone (legacy uninstall), removes them, and cleans stale User PATH entries. |
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 1 | **`setup-modal.ps1/.sh`**: Replaced inline broken-environment repair with `Repair-UvToolEnv` / `repair_uv_tool_env` call. |
+| 2 | **`setup-python.ps1`**: Added `Remove-OrphanedPythonDirs` call after legacy Python detection to clean up stale directories and PATH entries. |
+
+(tested: Windows)
+
+---
+
 ## v0.42.0 -- Extract Refresh-Path and winget output filter into shared library (2026-03-06)
 
 ### Changed
