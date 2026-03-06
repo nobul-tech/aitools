@@ -1274,8 +1274,8 @@ Write-Host "[1/$steps] Pulling latest..."
 $pulledUpdates = $false
 Push-Location $repoPath
 try {
-    # Reset generated deploy/ files before pull (may have line-ending diffs)
-    git checkout HEAD -- "deploy/" 2>$null
+    # Reset generated files before pull (line-ending diffs, mode changes)
+    git checkout HEAD -- "deploy/" "scripts/" 2>$null
     if ($doGitpull) {
         $pullOut = git pull --tags origin main 2>&1 | Out-String
     } else {

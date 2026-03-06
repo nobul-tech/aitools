@@ -1346,8 +1346,8 @@ fi
 if $do_gitpull; then
     echo "[1/$STEPS] Pulling latest..."
     pulled_updates=false
-    # Reset generated deploy/ files before pull (may have line-ending diffs)
-    git -C "$repo_path" checkout HEAD -- deploy/ 2>/dev/null || true
+    # Reset generated files before pull (line-ending diffs, mode changes)
+    git -C "$repo_path" checkout HEAD -- deploy/ scripts/ 2>/dev/null || true
     if pull_out=$(cd "$repo_path" && git pull --tags origin main 2>&1); then
         if echo "$pull_out" | grep -q "Already up to date"; then
             echo "  Already up to date."
@@ -1364,8 +1364,8 @@ else
     # no-args and install: quiet pull (warn on failure, continue from local)
     echo "[1/$STEPS] Pulling latest..."
     pulled_updates=false
-    # Reset generated deploy/ files before pull (may have line-ending diffs)
-    git -C "$repo_path" checkout HEAD -- deploy/ 2>/dev/null || true
+    # Reset generated files before pull (line-ending diffs, mode changes)
+    git -C "$repo_path" checkout HEAD -- deploy/ scripts/ 2>/dev/null || true
     if pull_out=$(cd "$repo_path" && git pull origin main 2>&1); then
         if echo "$pull_out" | grep -q "Already up to date"; then
             echo "  Already up to date."

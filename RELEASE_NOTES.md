@@ -12,6 +12,20 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.45.1 -- Fix git pull failure from build artifacts (line endings, file modes) (2026-03-06)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **git pull blocked by stale build artifacts**: `aitools install` step [1/3] failed with "local changes would be overwritten by merge" when `deploy/*.ps1` had LF (should be CRLF per `.gitattributes`) or `scripts/*.sh` lost executable bit (Write tool creates 100644, `git update-index --chmod=+x` only fixes index). |
+| 2 | **build-deploy.sh post-build fixup**: New step after PS1 validation — `chmod +x` all `.sh` files in `deploy/` and `scripts/`, CRLF conversion for all `deploy/*.ps1`. Prevents drift at source. |
+| 3 | **Pre-pull checkout expanded**: `git checkout HEAD -- deploy/ scripts/` (was `deploy/` only) in both `aitools` and `aitools.ps1`. Defense-in-depth for any remaining drift. |
+
+**Verified on:** macOS (build-deploy pass, previously dirty files now clean). Windows: not tested.
+
+---
+
 ## v0.45.0 -- Fix Datadog CLI install, add long paths + install verification gate (2026-03-06)
 
 ### Fixed

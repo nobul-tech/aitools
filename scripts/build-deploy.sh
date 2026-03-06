@@ -1220,6 +1220,18 @@ case "$(uname -s)" in
         ;;
 esac
 
+# ============================================================
+# Post-build: Fix file permissions and line endings
+# ============================================================
+# 1. Ensure all .sh files are executable on disk (Write tool creates 100644)
+chmod +x "$DEPLOY_DIR"/*.sh "$SCRIPTS_DIR"/*.sh 2>/dev/null || true
+blog_ok "Set +x on all .sh files in deploy/ and scripts/"
+
+# 2. Convert deploy/*.ps1 to CRLF (.gitattributes requires eol=crlf)
+#    build-deploy.sh writes LF; without this, git sees them as modified
+perl -pi -e 's/(?<!\r)\n/\r\n/' "$DEPLOY_DIR"/*.ps1
+blog_ok "Converted deploy/*.ps1 to CRLF"
+
 blog_ok "Build complete: $GENERATED scripts generated in deploy/"
 ls -la "$DEPLOY_DIR/"
 blog "Scripts are self-contained and ready for MDM deployment"

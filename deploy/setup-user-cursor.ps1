@@ -610,6 +610,7 @@ if ($DryRun) {
 # --- 3. cli-config.json (merge, not overwrite) ---
 
 Log "Step 3: cli-config.json"
+
 # --- Embedded preferences (from profile.json at build time) ---
 $vimMode = $true
 $modelId = "auto"

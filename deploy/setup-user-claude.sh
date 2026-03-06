@@ -423,9 +423,9 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Identity
 
-- Name: pepe
+- Name: Jose
 - Git: `Jose <jose@nobul.tech>`
-- Company: nobul.tech
+- Company: Nobul
 
 ## Code Style Defaults
 
