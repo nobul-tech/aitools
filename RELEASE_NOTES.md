@@ -12,6 +12,27 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.41.0 -- Migrate Windows Python to pymanager (2026-03-06)
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 1 | **Windows Python install via pymanager** (`setup-python.ps1`): Replaced version-specific `winget install Python.Python.3.13` with Python Install Manager (pymanager, PEP 773). Uses version-agnostic `winget install Python.PythonInstallManager` + `py install 3.14` for runtime management. Detects legacy `Python.Python.3.x` installs and warns with uninstall instructions. |
+| 2 | **pip invocation on Windows** (`setup-modal.ps1`, `shared/claude-shared.md`, dotprofile): Standalone `pip` deprecated per PEP 773. Added `python -m pip` fallback in Modal CLI installer. Updated managed CLI table: `pip` (Windows) -> `python -m pip` (Windows). |
+
+### Docs
+
+| # | Change |
+|---|--------|
+| 1 | `reference/tool-registry.md`: Rewrote Python section for pymanager -- new install/update commands, added winget `Python.Python.3.x` and old py.exe launcher to non-preferred methods, updated invocation to include `py` for runtime management. |
+| 2 | `reference/tool-versions.json`: Updated python notes field to reflect pymanager. |
+| 3 | `scripts/setup-python.sh`: Added comment noting Windows uses pymanager. |
+
+(tested: Windows)
+
+---
+
 ## v0.40.0 -- JSON normalization, false-positive fix, modal migration, build speed (2026-03-06)
 
 ### Added

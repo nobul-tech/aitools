@@ -444,6 +444,27 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
         LogError "pip install completed but 'modal' not found in PATH"
         Write-Summary "ERROR" "modal cli" "installed but not on PATH"
     }
+} elseif ($pythonCmd) {
+    # PEP 773: standalone pip deprecated on Windows; try python -m pip
+    Log "uv and pip not found -- trying python -m pip (--user)..."
+    $pipOutput = & $pythonCmd -m pip install --user modal 2>&1 | Out-String
+    $pipOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+    if ($LASTEXITCODE -ne 0 -or $pipOutput -match '(?m)^ERROR:') {
+        LogError "python -m pip install --user modal failed (see log above)"
+        Write-Summary "ERROR" "modal cli" "pip module install failed"
+    }
+    Refresh-Path
+    Ensure-PythonUserScriptsOnPath
+    # Get-Command exempt: command-existence check with if/else fallback
+    if (Get-Command modal -ErrorAction SilentlyContinue) {
+        $modalVersion = & modal --version 2>$null
+        if (-not $modalVersion) { $modalVersion = "version unknown" }
+        LogOk "Modal CLI installed ($modalVersion)"
+        Write-Summary "OK" "modal cli" "$modalVersion"
+    } else {
+        LogError "python -m pip install completed but 'modal' not found in PATH"
+        Write-Summary "ERROR" "modal cli" "installed but not on PATH"
+    }
 } else {
     LogError "No package installer found. Install uv or pip first."
     Write-Summary "ERROR" "modal cli" "no package installer (uv/pip) found"

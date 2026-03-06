@@ -99,7 +99,7 @@
       "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
       "minVersion": "3.10",
       "blocked": [],
-      "notes": "winget ID is version-specific: Python.Python.3.13"
+      "notes": "Windows: pymanager (Python.PythonInstallManager) + py install 3.14. macOS: brew install python"
     },
     "uv": {
       "macos":   { "lastVerifiedVersion": null, "lastVerified": null },

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# setup-python.sh -- Installs/updates Python via Homebrew
+# setup-python.sh -- Installs/updates Python via Homebrew (macOS)
 # Safe to re-run -- detects existing install and upgrades as needed.
 #
 # macOS: Uses Homebrew (preferred). pip is bundled with Python.
+# Windows: Uses pymanager (Python Install Manager) -- see setup-python.ps1.
 #
 # See reference/tool-registry.md for install source details.
 
