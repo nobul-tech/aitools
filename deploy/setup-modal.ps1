@@ -14,7 +14,8 @@
 # Dot-sourced, not executed directly.
 #
 # Provides: ReadConfigKey, Initialize-Logging, Log/LogOk/LogError/LogWarn,
-# Write-Summary, Show-Summary, Normalize-JsonForComparison.
+# Write-Summary, Show-Summary, Refresh-Path, Log-WingetOutput,
+# Normalize-JsonForComparison.
 #
 # Usage:
 #   . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
@@ -137,6 +138,30 @@ function Backup-Dir {
         }
     }
     Log "Backed up $DirPath ($($mdFiles.Count) managed files)"
+}
+
+# ---------------------------------------------------------------------------
+# PATH helpers
+# ---------------------------------------------------------------------------
+
+# Refresh-Path: Reload $env:Path from Machine + User registry values.
+# Call after winget install/upgrade to pick up PATH changes in same session.
+function Refresh-Path {
+    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $env:Path = "$machinePath;$userPath"
+}
+
+# Log-WingetOutput: Filter and log captured winget command output.
+# Strips spinner characters (- \ | /), download progress bars (KB/MB/GB),
+# and empty lines. Remaining lines are logged at info level.
+function Log-WingetOutput([string]$Output) {
+    $Output.Trim().Split("`n") | ForEach-Object {
+        $l = $_.TrimEnd()
+        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$' -and $l -notmatch '\d+(\.\d+)?\s*(KB|MB|GB)\s*/\s*\d+') {
+            Log $l
+        }
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -326,13 +351,6 @@ Initialize-Logging "setup-modal"
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     LogError "This script is for Windows. On macOS/Linux, use the .sh version."
     exit 1
-}
-
-# Helper: refresh PATH from registry (picks up pip installs in same session)
-function Refresh-Path {
-    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $env:Path = "$machinePath;$userPath"
 }
 
 # Helper: find Python user scripts directory and add to PATH if needed

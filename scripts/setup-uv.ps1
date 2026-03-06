@@ -15,13 +15,6 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     exit 1
 }
 
-# Helper: refresh PATH from registry (picks up winget installs in same session)
-function Refresh-Path {
-    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $env:Path = "$machinePath;$userPath"
-}
-
 # Refresh PATH to pick up tools installed by prior steps or previous runs
 Refresh-Path
 
@@ -31,10 +24,7 @@ $uvCmd = Get-Command uv -ErrorAction SilentlyContinue
 if ($uvCmd) {
     Log "uv found -- upgrading via winget..."
     $wingetOutput = winget upgrade --id=astral-sh.uv --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    $wingetOutput.Trim().Split("`n") | ForEach-Object {
-        $l = $_.TrimEnd()
-        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$' -and $l -notmatch '\d+(\.\d+)?\s*(KB|MB|GB)\s*/\s*\d+') { Log $l }
-    }
+    Log-WingetOutput $wingetOutput
     if ($wingetOutput -match 'No available upgrade|No newer package versions|No installed package') {
         LogOk "uv already up to date"
     } elseif ($LASTEXITCODE -ne 0) {
@@ -55,10 +45,7 @@ if ($uvCmd) {
 } else {
     Log "Installing uv via winget..."
     $wingetOutput = winget install --id=astral-sh.uv -e --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    $wingetOutput.Trim().Split("`n") | ForEach-Object {
-        $l = $_.TrimEnd()
-        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$' -and $l -notmatch '\d+(\.\d+)?\s*(KB|MB|GB)\s*/\s*\d+') { Log $l }
-    }
+    Log-WingetOutput $wingetOutput
     if ($wingetOutput -match 'already installed' -and $wingetOutput -match 'No available upgrade|No newer package versions') {
         LogOk "uv already up to date (winget)"
     } elseif ($LASTEXITCODE -ne 0) {

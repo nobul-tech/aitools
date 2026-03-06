@@ -41,13 +41,6 @@ $status = @{
     cliConfig = ""
 }
 
-# Helper: refresh PATH from registry (picks up winget installs in same session)
-function Refresh-Path {
-    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $env:Path = "$machinePath;$userPath"
-}
-
 # --- 1. ripgrep (rg) ---
 
 Log "Step 1: ripgrep (rg)"

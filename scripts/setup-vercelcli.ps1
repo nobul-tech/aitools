@@ -16,13 +16,6 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     exit 1
 }
 
-# Helper: refresh PATH from registry (picks up npm installs in same session)
-function Refresh-Path {
-    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $env:Path = "$machinePath;$userPath"
-}
-
 # --- Check npm ---
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
     LogError "npm not found -- install Node.js first (aitools install handles this)"

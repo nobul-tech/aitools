@@ -14,7 +14,8 @@
 # Dot-sourced, not executed directly.
 #
 # Provides: ReadConfigKey, Initialize-Logging, Log/LogOk/LogError/LogWarn,
-# Write-Summary, Show-Summary, Normalize-JsonForComparison.
+# Write-Summary, Show-Summary, Refresh-Path, Log-WingetOutput,
+# Normalize-JsonForComparison.
 #
 # Usage:
 #   . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
@@ -137,6 +138,30 @@ function Backup-Dir {
         }
     }
     Log "Backed up $DirPath ($($mdFiles.Count) managed files)"
+}
+
+# ---------------------------------------------------------------------------
+# PATH helpers
+# ---------------------------------------------------------------------------
+
+# Refresh-Path: Reload $env:Path from Machine + User registry values.
+# Call after winget install/upgrade to pick up PATH changes in same session.
+function Refresh-Path {
+    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $env:Path = "$machinePath;$userPath"
+}
+
+# Log-WingetOutput: Filter and log captured winget command output.
+# Strips spinner characters (- \ | /), download progress bars (KB/MB/GB),
+# and empty lines. Remaining lines are logged at info level.
+function Log-WingetOutput([string]$Output) {
+    $Output.Trim().Split("`n") | ForEach-Object {
+        $l = $_.TrimEnd()
+        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$' -and $l -notmatch '\d+(\.\d+)?\s*(KB|MB|GB)\s*/\s*\d+') {
+            Log $l
+        }
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -334,13 +359,6 @@ $pymanagerWingetId = "Python.PythonInstallManager"
 # Target Python runtime version (bump here for future upgrades)
 $targetPyVersion = "3.14"
 
-# Helper: refresh PATH from registry (picks up winget installs in same session)
-function Refresh-Path {
-    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $env:Path = "$machinePath;$userPath"
-}
-
 # --- Remove Microsoft Store (MSIX) Python if present ---
 $msixPackages = Get-AppxPackage *PythonSoftwareFoundation* -ErrorAction SilentlyContinue
 if ($msixPackages) {
@@ -382,10 +400,7 @@ if ($hasPymanager) {
     # Pymanager already installed -- upgrade via winget
     Log "pymanager found -- checking for updates via winget..."
     $wingetOutput = winget upgrade $pymanagerWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    $wingetOutput.Trim().Split("`n") | ForEach-Object {
-        $l = $_.TrimEnd()
-        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$' -and $l -notmatch '\d+(\.\d+)?\s*(KB|MB|GB)\s*/\s*\d+') { Log $l }
-    }
+    Log-WingetOutput $wingetOutput
     if ($wingetOutput -match 'No available upgrade|No newer package versions') {
         LogOk "pymanager already up to date"
     } elseif ($wingetOutput -match 'No installed package') {
@@ -403,10 +418,7 @@ if ($hasPymanager) {
     # Pymanager not present (may have old py.exe launcher or nothing)
     Log "Installing pymanager via winget ($pymanagerWingetId)..."
     $wingetOutput = winget install $pymanagerWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    $wingetOutput.Trim().Split("`n") | ForEach-Object {
-        $l = $_.TrimEnd()
-        if ($l.Trim() -and $l.Trim() -notmatch '^[-\\|/]+$' -and $l -notmatch '\d+(\.\d+)?\s*(KB|MB|GB)\s*/\s*\d+') { Log $l }
-    }
+    Log-WingetOutput $wingetOutput
     if ($wingetOutput -match 'already installed') {
         LogOk "pymanager already installed (winget)"
     } elseif ($LASTEXITCODE -ne 0) {

@@ -12,6 +12,19 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.42.0 -- Extract Refresh-Path and winget output filter into shared library (2026-03-06)
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 1 | **`Refresh-Path` extracted to `aitools-lib.ps1`**: Removed 9 identical inline definitions across setup scripts. Function now provided by the shared library (auto-inlined into deploy scripts by build). |
+| 2 | **`Log-WingetOutput` extracted to `aitools-lib.ps1`**: Replaced 9 identical 4-line winget output filter blocks across 6 scripts with a single shared function call. |
+
+(tested: Windows)
+
+---
+
 ## v0.41.1 -- Fix logging noise across setup scripts (2026-03-06)
 
 ### Fixed

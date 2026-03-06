@@ -18,13 +18,6 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     exit 1
 }
 
-# Helper: refresh PATH from registry (picks up pip installs in same session)
-function Refresh-Path {
-    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $env:Path = "$machinePath;$userPath"
-}
-
 # Helper: find Python user scripts directory and add to PATH if needed
 function Ensure-PythonUserScriptsOnPath {
     if (-not $pythonCmd) { return }
