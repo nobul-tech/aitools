@@ -25,6 +25,12 @@ When the audit produces flags:
 
 `bash -n deploy/*.sh` -- catches build corruption or stale copies. Fast (<1s).
 
+### 2b. Functional smoke test (when requested or after significant changes)
+
+Run modified setup scripts to verify they work end-to-end. Use the
+redirect-and-check pattern from `.claude/rules/smoke-test-pattern.md` —
+never parse setup script output inline from the Bash tool.
+
 ### 3. MCP config integrity
 
 Read-only check -- no setup scripts, no side effects:

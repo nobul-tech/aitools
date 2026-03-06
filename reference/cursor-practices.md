@@ -166,6 +166,7 @@ Cursor project rules mirror Claude Code rules for consistency. When changing rul
 | `.claude/rules/deploy-paths.md` | `.cursor/rules/deploy-paths.mdc` | Near-identical |
 | `.claude/rules/hook-rollout.md` | `.cursor/rules/hook-rollout.mdc` | Condensed |
 | `.claude/rules/plan-execution.md` | `.cursor/rules/plan-execution.mdc` | Condensed |
+| `.claude/rules/smoke-test-pattern.md` | — | Claude Code-specific (Bash tool pattern) |
 
 ### Changing rules
 
