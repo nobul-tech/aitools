@@ -3,7 +3,7 @@
     "title": "aitools Tool Version Manifest",
     "description": "Per-platform version manifest for all tools managed by aitools. Used by aitools install to detect drift and by aitools.nobul.tech for version tracking and PR automation.",
     "schemaVersion": "1.0",
-    "updated": "2026-03-02",
+    "updated": "2026-03-06",
     "repositories": {
       "primary":      "https://github.com/nobul-jose/aitools",
       "userTemplate": "https://github.com/nobul-jose/aitools-{username}"
@@ -22,7 +22,7 @@
       "maintenanceFile": "claude-code-maintenance.md"
     },
     "vercel-cli": {
-      "macos":   { "lastVerifiedVersion": "50.23.2",           "lastVerified": "2026-03-02" },
+      "macos":   { "lastVerifiedVersion": "50.28.0",           "lastVerified": "2026-03-06" },
       "windows": { "lastVerifiedVersion": null,                "lastVerified": null },
       "linux":   { "lastVerifiedVersion": null,                "lastVerified": null },
       "minVersion": null,
@@ -62,7 +62,7 @@
       "notes": ""
     },
     "rust-cargo": {
-      "macos":   { "lastVerifiedVersion": "1.93.1", "lastVerified": "2026-03-02" },
+      "macos":   { "lastVerifiedVersion": "1.94.0", "lastVerified": "2026-03-06" },
       "windows": { "lastVerifiedVersion": null,     "lastVerified": null },
       "linux":   { "lastVerifiedVersion": null,     "lastVerified": null },
       "minVersion": null,
@@ -86,15 +86,15 @@
       "notes": ""
     },
     "modal-cli": {
-      "macos":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "macos":   { "lastVerifiedVersion": "1.3.5", "lastVerified": "2026-03-06" },
       "windows": { "lastVerifiedVersion": null, "lastVerified": null },
       "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
       "minVersion": null,
       "blocked": [],
-      "notes": "evaluating -- pip install modal; requires Python 3.10+"
+      "notes": "uv tool install modal; requires Python 3.10+"
     },
     "python": {
-      "macos":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "macos":   { "lastVerifiedVersion": "3.14.3", "lastVerified": "2026-03-06" },
       "windows": { "lastVerifiedVersion": null, "lastVerified": null },
       "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
       "minVersion": "3.10",
@@ -102,12 +102,20 @@
       "notes": "Windows: pymanager (Python.PythonInstallManager) + py install 3.14. macOS: brew install python"
     },
     "uv": {
-      "macos":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "macos":   { "lastVerifiedVersion": "0.10.8", "lastVerified": "2026-03-06" },
       "windows": { "lastVerifiedVersion": null, "lastVerified": null },
       "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
       "minVersion": null,
       "blocked": [],
       "notes": ""
+    },
+    "go": {
+      "macos":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "windows": { "lastVerifiedVersion": null, "lastVerified": null },
+      "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": "brew install go (macOS), winget install GoLang.Go (Windows)"
     },
     "chrome-devtools-mcp": {
       "pinned": false,
@@ -126,6 +134,20 @@
       "lastReviewed": "2026-03-02",
       "assumptions": [],
       "notes": ""
+    },
+    "datadog-pup": {
+      "macos":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "windows": { "lastVerifiedVersion": null, "lastVerified": null },
+      "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": "brew install datadog/pack/pup; Go-based CLI, OAuth2 auth"
+    },
+    "datadog-mcp": {
+      "pinned": false,
+      "lastReviewed": "2026-03-06",
+      "assumptions": ["Requires DD_API_KEY and DD_APP_KEY env vars"],
+      "notes": "Official Datadog MCP server -- Preview status"
     }
   }
 }

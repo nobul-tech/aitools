@@ -40,8 +40,8 @@ Setup and utility scripts for configuring AI tooling across machines.
 | `check-pre-commit.ps1` | Windows | 12 pre-commit steps; `-Fix` switch |
 | `check-pre-push.sh` | macOS/Linux | 10 pre-push steps, read-only |
 | `check-pre-push.ps1` | Windows | 10 pre-push steps, read-only |
-| `check-post-push.sh` | macOS/Linux | 5 always-tier + 15 extensive steps; `--extensive` flag |
-| `check-post-push.ps1` | Windows | 5 always-tier + 15 extensive steps; `-Extensive` switch |
+| `check-post-push.sh` | macOS/Linux | 26 steps |
+| `check-post-push.ps1` | Windows | 26 steps |
 
 ## Build Pipeline
 

@@ -373,6 +373,40 @@ function Normalize-JsonForComparison {
 }
 
 # ---------------------------------------------------------------------------
+# Go install provenance detection (Windows)
+# Returns: "winget", "chocolatey", "scoop", "msi", "none", or "unknown"
+# ---------------------------------------------------------------------------
+function Get-GoProvenance {
+    # Get-Command exempt: command-existence check with explicit fallback
+    $goCmd = Get-Command go -ErrorAction SilentlyContinue
+    if (-not $goCmd) { return "none" }
+    $goSource = $goCmd.Source
+    if ($goSource -like '*\Program Files\Go\*') {
+        $wingetCheck = winget list --id GoLang.Go --accept-source-agreements 2>&1 | Out-String
+        if ($wingetCheck -match 'GoLang\.Go') { return "winget" }
+        return "msi"
+    }
+    if ($goSource -like '*\chocolatey\*') { return "chocolatey" }
+    if ($goSource -like '*\scoop\*') { return "scoop" }
+    return "unknown"
+}
+
+# ---------------------------------------------------------------------------
+# Ensure GOPATH\bin is on persistent User PATH (Windows)
+# Returns $true if already present, $false if added
+# ---------------------------------------------------------------------------
+function Ensure-GopathBinOnPath {
+    $gopath = $env:GOPATH
+    if (-not $gopath) { $gopath = Join-Path $env:USERPROFILE "go" }
+    $gopathBin = Join-Path $gopath "bin"
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($userPath -like "*$gopathBin*") { return $true }
+    [Environment]::SetEnvironmentVariable("Path", "$userPath;$gopathBin", "User")
+    Refresh-Path
+    return $false
+}
+
+# ---------------------------------------------------------------------------
 # Summary panel renderer
 # ---------------------------------------------------------------------------
 # Reads AITOOLS_SUMMARY_FILE, displays colored panel, cleans up.
@@ -491,6 +525,7 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 }
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
+
 # --- Deploy embedded hook scripts to ~/.claude/hooks/ ---
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
 $hooksDir = Join-Path $claudeDir "hooks"

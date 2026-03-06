@@ -3,14 +3,14 @@
 ## Single script (Windows / PS1)
 
 ```bash
-pwsh -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jdpal\repos\aitools\scripts\setup-foo.ps1" > /tmp/smoke-foo.log 2>&1
+pwsh -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jdpal\repos\aitools\scripts\setup-foo.ps1" > .scratch/smoke-foo.log 2>&1
 echo "exit: $?"
 ```
 
 ## Single script (macOS / bash)
 
 ```bash
-bash scripts/setup-foo.sh > /tmp/smoke-foo.log 2>&1
+bash scripts/setup-foo.sh > .scratch/smoke-foo.log 2>&1
 echo "exit: $?"
 ```
 
@@ -27,30 +27,25 @@ installed (managed tool).
 If exit != 0, read the log with the Read tool.
 If exit == 0 and you need to verify specific output, use Grep on the log file.
 
-**Windows path note**: Git Bash `/tmp/` maps to `%LOCALAPPDATA%\Temp\` (e.g.,
-`C:\Users\<user>\AppData\Local\Temp\`). The Read and Grep tools need the
-Windows path. Use `cygpath -w /tmp/smoke-foo.log` to get it, or use the
-known mapping directly.
-
 ## Full install
 
 ```bash
 # Windows
-pwsh -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jdpal\repos\aitools\scripts\aitools-install.ps1" > /tmp/smoke-install.log 2>&1
+pwsh -NoProfile -ExecutionPolicy Bypass -File "C:\Users\jdpal\repos\aitools\scripts\aitools-install.ps1" > .scratch/smoke-install.log 2>&1
 echo "exit: $?"
 
 # macOS
-bash scripts/aitools-install.sh > /tmp/smoke-install.log 2>&1
+bash scripts/aitools-install.sh > .scratch/smoke-install.log 2>&1
 echo "exit: $?"
 ```
 
 Then verify with Grep:
-- `grep -c '\[error\]' /tmp/smoke-install.log` — should be 0
-- `grep '\[ERR\]' /tmp/smoke-install.log` — summary panel errors
+- `grep -c '\[error\]' .scratch/smoke-install.log` — should be 0
+- `grep '\[ERR\]' .scratch/smoke-install.log` — summary panel errors
 
 ## Cleanup
 
-Delete log files after reading: `rm /tmp/smoke-*.log`
+Delete log files after reading: `rm .scratch/smoke-*.log`
 
 ## Why not inline?
 

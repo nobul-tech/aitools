@@ -538,9 +538,21 @@ if (Test-Path $modalScript) {
 }
 
 # ============================================================
-# 17. Deploy configurations
+# 17. Go
 # ============================================================
-Log "Step 17: Deploy configurations"
+Log "Step 17: Go"
+
+$goScript = Join-Path $PSScriptRoot "setup-go.ps1"
+if (Test-Path $goScript) {
+    Invoke-ValidatedScript $goScript
+} else {
+    LogWarn "setup-go.ps1 not found -- skipping (MDM deploy)"
+}
+
+# ============================================================
+# 18. Deploy configurations
+# ============================================================
+Log "Step 18: Deploy configurations"
 
 $deployScripts = @(
     "setup-user-claude.ps1",

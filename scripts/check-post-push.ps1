@@ -1,8 +1,6 @@
 # check-post-push.ps1 -- automated post-push checklist for aitools
-# Usage: .\scripts\check-post-push.ps1 [-Extensive]
-# Default: 5 always-tier steps. -Extensive: all 24 steps.
+# Usage: .\scripts\check-post-push.ps1
 # Platform: Windows (PS 5.1 compatible)
-param([switch]$Extensive)
 
 $ErrorActionPreference = "Stop"
 
@@ -159,10 +157,7 @@ if ($hookPresent) {
 # ===================================================================
 # EXTENSIVE TIER (steps 6-22)
 # ===================================================================
-if (-not $Extensive) {
-    PrintSummary
-    if ($script:FailCount -gt 0) { exit 1 } else { exit 0 }
-}
+$Extensive = $true
 
 Write-Host ""
 Write-Host "--- Extensive tier ---" -ForegroundColor White
@@ -729,6 +724,91 @@ if ($Extensive) {
         StepPass "24" "Summary panel DETAIL support" "DETAIL category in lib + scripts"
     } else {
         StepFail "24" "Summary panel DETAIL support" "DETAIL not fully implemented"
+    }
+}
+
+# ---------------------------------------------------------------------------
+# 25. CLI tools table sync
+# ---------------------------------------------------------------------------
+# Extract direct invocation commands from tool-registry.md
+$registryFile = Join-Path $script:RepoRoot "reference" "tool-registry.md"
+$sharedFile = Join-Path $script:RepoRoot "shared" "claude-shared.md"
+$registryCmds = @()
+if (Test-Path $registryFile) {
+    $registryLines = Get-Content $registryFile -ErrorAction Stop
+    foreach ($line in $registryLines) {
+        if ($line -match '\*\*Invocation:\*\*\s*`([^`]+)`.*\(direct\)') {
+            $registryCmds += $Matches[1]
+        }
+    }
+}
+if ($registryCmds.Count -eq 0) {
+    StepSkip "25" "CLI tools table sync" "could not parse registry invocations"
+} else {
+    $sharedCmds = @()
+    if (Test-Path $sharedFile) {
+        $sharedLines = Get-Content $sharedFile -ErrorAction Stop
+        foreach ($line in $sharedLines) {
+            if ($line -match '^\|[^|]+\|\s*`([^`]+)`') {
+                $cmd = $Matches[1] -replace '\s*\(.*?\)', ''
+                $sharedCmds += $cmd
+            }
+        }
+    }
+    $missing = @()
+    foreach ($cmd in $registryCmds) {
+        if ($cmd -notin $sharedCmds) {
+            $missing += $cmd
+        }
+    }
+    if ($missing.Count -eq 0) {
+        StepPass "25" "CLI tools table sync" "shared/claude-shared.md matches registry"
+    } else {
+        StepWarn "25" "CLI tools table sync" "missing from Managed CLI Tools: $($missing -join ', ')"
+    }
+}
+
+# ---------------------------------------------------------------------------
+# 26. Deploy scripts list sync
+# ---------------------------------------------------------------------------
+$buildScript = Join-Path $script:RepoRoot "scripts" "build-deploy.sh"
+if (-not (Test-Path $buildScript)) {
+    StepSkip "26" "Deploy scripts list sync" "build-deploy.sh not found"
+} else {
+    $buildContent = Get-Content $buildScript -ErrorAction Stop
+    $deployBases = @()
+    foreach ($line in $buildContent) {
+        if ($line -match 'blog "(Copying|Generating) deploy/([^"]+)"') {
+            $scriptName = $Matches[2] -replace '\.sh$', '' -replace '\.ps1$', '' -replace ' \(.*$', ''
+            if ($scriptName -notin $deployBases) {
+                $deployBases += $scriptName
+            }
+        }
+    }
+    $claudeMdPath = Join-Path $script:RepoRoot "CLAUDE.md"
+    $claudeContent = Get-Content $claudeMdPath -Raw -ErrorAction Stop
+    $deployLine = ""
+    if ($claudeContent -match '(?m)^.*build-deploy\.sh.*generates.*$') {
+        $deployLine = $Matches[0]
+    }
+    if (-not $deployLine) {
+        StepSkip "26" "Deploy scripts list sync" "could not find deploy reference in CLAUDE.md"
+    } else {
+        $missingDeploy = @()
+        foreach ($base in $deployBases) {
+            if ($deployLine -notmatch [regex]::Escape($base)) {
+                # Check abbreviated: setup-go -> -go
+                $short = $base -replace '^setup-', ''
+                if ($deployLine -notmatch [regex]::Escape("-$short") -and $deployLine -notmatch [regex]::Escape($short)) {
+                    $missingDeploy += $base
+                }
+            }
+        }
+        if ($missingDeploy.Count -eq 0) {
+            StepPass "26" "Deploy scripts list sync" "CLAUDE.md lists all deploy scripts"
+        } else {
+            StepWarn "26" "Deploy scripts list sync" "missing from CLAUDE.md: $($missingDeploy -join ', ')"
+        }
     }
 }
 

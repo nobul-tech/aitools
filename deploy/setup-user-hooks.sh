@@ -269,6 +269,43 @@ normalize_json() {
 }
 
 # ---------------------------------------------------------------------------
+# Go install provenance detection (macOS)
+# Returns: "homebrew", "pkg-installer", "goenv", "manual", "none", or "unknown"
+# ---------------------------------------------------------------------------
+detect_go_provenance() {
+    local go_path
+    go_path=$(command -v go 2>/dev/null) || { echo "none"; return; }
+    case "$go_path" in
+        /opt/homebrew/*/go|/usr/local/Cellar/*/go)
+            echo "homebrew" ;;
+        /usr/local/go/bin/go)
+            # Check if installed via macOS .pkg installer (pkgutil) or manual tarball
+            if pkgutil --pkg-info=org.golang.go >/dev/null 2>&1; then
+                echo "pkg-installer"
+            else
+                echo "manual"
+            fi ;;
+        */.goenv/*)
+            echo "goenv" ;;
+        *)
+            echo "unknown" ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------
+# Ensure GOPATH/bin is on PATH for current session
+# Returns 0 if already on PATH, 1 if added (caller should warn re persistence)
+# ---------------------------------------------------------------------------
+ensure_gopath_bin_on_path() {
+    local gopath_bin="${GOPATH:-$HOME/go}/bin"
+    case ":$PATH:" in
+        *":$gopath_bin:"*) return 0 ;;
+    esac
+    export PATH="$gopath_bin:$PATH"
+    return 1
+}
+
+# ---------------------------------------------------------------------------
 # Summary panel renderer
 # ---------------------------------------------------------------------------
 # Reads AITOOLS_SUMMARY_FILE, displays colored panel, cleans up.

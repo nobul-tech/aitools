@@ -175,7 +175,7 @@ if [ "$DRY_RUN" = "true" ]; then
     log "[DRY RUN] Would disable vercel/webflow via Cursor CLI (if available)"
 elif command -v agent &>/dev/null; then
     for server in vercel webflow; do
-        if agent mcp disable "$server" 2>&1; then
+        if disable_output=$(agent mcp disable "$server" 2>&1); then
             log_ok "$server disabled in Cursor"
         else
             log_error "Failed to disable $server in Cursor"

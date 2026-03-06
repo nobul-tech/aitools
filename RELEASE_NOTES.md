@@ -12,6 +12,40 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.43.0 -- Add Go as managed tool, fix invocation table drift (2026-03-06)
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **Go managed tool**: New `setup-go.sh` (Homebrew) and `setup-go.ps1` (winget) setup scripts. Detects install provenance (homebrew, winget, pkg-installer, chocolatey, goenv, scoop, manual), cleans up non-preferred installs, ensures GOPATH/bin on PATH. |
+| 2 | **Library functions**: `detect_go_provenance` / `Get-GoProvenance` (install method detection), `ensure_gopath_bin_on_path` / `Ensure-GopathBinOnPath` (PATH management) added to `aitools-lib.sh/.ps1`. |
+| 3 | **Drift prevention checks**: `check-post-push` Steps 25 (CLI tools table sync) and 26 (deploy scripts list sync) verify `shared/claude-shared.md` and `CLAUDE.md` stay in sync with `tool-registry.md` and `build-deploy.sh`. |
+| 4 | **`.scratch/` convention**: Project-local scratch directory (gitignored) replaces `/tmp/` for smoke test logs, scratch files, and subagent work product. Avoids permission prompts in Claude Code. |
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 1 | **`check-post-push` always runs all steps**: Removed `--extensive`/`-Extensive` flag -- all 26 steps run by default. |
+| 2 | **Invocation table drift fixed**: Added Go and Datadog CLI (`pup`) to Managed CLI Tools table in `shared/claude-shared.md` and dotprofile `CLAUDE.md`. |
+| 3 | **Deploy scripts list fixed**: Added `-modal` and `-go` to `CLAUDE.md` deploy scripts reference. |
+| 4 | **Go added to tool registry**: Full `reference/tool-registry.md` section with install, update, non-preferred methods, lifecycle. Entry added to `tool-versions.json`. |
+| 5 | **USO/UCI rules updated**: Scratch files, commit messages, and subagent work product now specify `.scratch/` instead of `/tmp/` or generic "temp file". |
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `scripts/setup-go.sh` | macOS Go setup via Homebrew |
+| `scripts/setup-go.ps1` | Windows Go setup via winget |
+| `deploy/setup-go.sh` | Self-contained deploy variant |
+| `deploy/setup-go.ps1` | Self-contained deploy variant |
+
+**Verified on:** macOS (smoke test: Go upgraded 1.26.0 -> 1.26.1, post-push steps 25-26 PASS). Windows: not tested.
+
+---
+
 ## v0.42.1 -- Python cleanup and uv tool repair library functions (2026-03-06)
 
 ### Added

@@ -642,9 +642,21 @@ else
 fi
 
 # ============================================================
-# 17. Deploy configurations
+# 17. Go
 # ============================================================
-log "Step 17: Deploy configurations"
+log "Step 17: Go"
+
+go_script="$SCRIPT_DIR/setup-go.sh"
+if [ -f "$go_script" ]; then
+    validate_and_run "$go_script"
+else
+    log_warn "setup-go.sh not found — skipping (MDM deploy)"
+fi
+
+# ============================================================
+# 18. Deploy configurations
+# ============================================================
+log "Step 18: Deploy configurations"
 
 DEPLOY_SCRIPTS="setup-user-claude.sh setup-user-cursor.sh setup-user-mcp.sh setup-cursor-ide-mcp.sh setup-user-hooks.sh"
 

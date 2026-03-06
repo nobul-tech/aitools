@@ -85,7 +85,7 @@ Missing any causes drift between the pipeline, documentation, and deployed confi
 #### Rebuild + propagate
 1. `bash scripts/build-deploy.sh` — verify count increments by 2
 2. `bash scripts/setup-user-claude.sh` — propagate dotprofile CLAUDE.md → `~/.claude/CLAUDE.md`
-3. `bash scripts/check-post-push.sh --extensive` — all checks pass
+3. `bash scripts/check-post-push.sh` — all checks pass
 4. Commit + push both repos (aitools + dotprofile)
 
 ### Dotprofile priority

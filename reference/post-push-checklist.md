@@ -1,11 +1,8 @@
 # Post-Push Checklist (this repo)
 
-> **Script**: On macOS: `bash scripts/check-post-push.sh` (or `--extensive`).
-> On Windows: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/check-post-push.ps1` (or `-Extensive`).
+> **Script**: On macOS: `bash scripts/check-post-push.sh`.
+> On Windows: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/check-post-push.ps1`.
 > Always use the platform-native variant. Never run the `.sh` version on Windows.
-
-Two tiers: **Always** runs after every push. **Extensive** runs after significant
-releases (new features, structural changes, new tools) or when requested.
 
 ## Flag disposition
 

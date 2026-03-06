@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # check-post-push.sh -- automated post-push checklist for aitools
-# Usage: bash scripts/check-post-push.sh [--extensive]
-# Default: 5 always-tier steps. --extensive: all 24 steps.
+# Usage: bash scripts/check-post-push.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,8 +17,7 @@ esac
 resolve_config
 check_log_init "post-push"
 
-EXTENSIVE=false
-[ "${1:-}" = "--extensive" ] && EXTENSIVE=true
+EXTENSIVE=true
 
 cd "$REPO_ROOT"
 
@@ -148,15 +146,11 @@ else
 fi
 
 # ===================================================================
-# EXTENSIVE TIER (steps 6-22, only with --extensive)
+# Steps 6+
 # ===================================================================
-if ! $EXTENSIVE; then
-    print_summary
-    if [ "$FAIL_COUNT" -gt 0 ]; then exit 1; else exit 0; fi
-fi
 
 echo ""
-echo "${BOLD}--- Extensive tier ---${RESET}"
+echo "${BOLD}--- Extended checks ---${RESET}"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -616,6 +610,75 @@ if $EXTENSIVE; then
         step_pass "24" "Summary panel DETAIL support" "DETAIL category in lib + scripts"
     else
         step_fail "24" "Summary panel DETAIL support" "DETAIL not fully implemented"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# 25. CLI tools table sync
+# ---------------------------------------------------------------------------
+# Extract direct invocation commands from tool-registry.md
+# Lines like: - **Invocation:** `go` (direct)
+registry_cmds=$(perl -ne 'print "$1\n" if /\*\*Invocation:\*\*\s*`([^`]+)`.*\(direct\)/' \
+    "$REPO_ROOT/reference/tool-registry.md" | sort -u)
+# Fallback: if no matches, skip
+if [ -z "$registry_cmds" ]; then
+    step_skip "25" "CLI tools table sync" "could not parse registry invocations"
+else
+    # Extract commands from shared/claude-shared.md table
+    # Lines like: | Go | `go` |
+    shared_cmds=$(perl -ne 'print "$1\n" if /^\|[^|]+\|\s*`([^`]+)`/' \
+        "$REPO_ROOT/shared/claude-shared.md" \
+        | perl -pe 's/ \(.*?\)//' | sort -u)
+    missing=""
+    while IFS= read -r cmd; do
+        [ -z "$cmd" ] && continue
+        if ! echo "$shared_cmds" | grep -qxF "$cmd"; then
+            missing="$missing $cmd"
+        fi
+    done <<< "$registry_cmds"
+    if [ -z "$missing" ]; then
+        step_pass "25" "CLI tools table sync" "shared/claude-shared.md matches registry"
+    else
+        step_warn "25" "CLI tools table sync" "missing from Managed CLI Tools:$missing"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# 26. Deploy scripts list sync
+# ---------------------------------------------------------------------------
+# Extract unique script basenames from build-deploy.sh blog lines
+# Lines like: blog "Copying deploy/setup-go.sh" or blog "Generating deploy/setup-user-claude.ps1"
+build_script="$REPO_ROOT/scripts/build-deploy.sh"
+if [ ! -f "$build_script" ]; then
+    step_skip "26" "Deploy scripts list sync" "build-deploy.sh not found"
+else
+    # Get unique base script names (without .sh/.ps1 extension)
+    deploy_bases=$(perl -ne 'print "$1\n" if m{blog "(?:Copying|Generating) deploy/(\S+)"}' \
+        "$build_script" | perl -pe 's/\.sh$//; s/\.ps1$//' | sort -u)
+    # Read CLAUDE.md deploy line
+    # grep may not match; || true prevents set -e abort
+    claude_deploy=$(grep 'build-deploy.sh.*generates' "$REPO_ROOT/CLAUDE.md" || true)
+    if [ -z "$claude_deploy" ]; then
+        step_skip "26" "Deploy scripts list sync" "could not find deploy reference in CLAUDE.md"
+    else
+        missing_deploy=""
+        while IFS= read -r base; do
+            [ -z "$base" ] && continue
+            # Check if the base name appears in CLAUDE.md (full name or abbreviated -suffix)
+            if ! echo "$claude_deploy" | grep -qF "$base"; then
+                short=$(echo "$base" | perl -pe 's/^setup-//')
+                if ! echo "$claude_deploy" | grep -qF -- "-$short"; then
+                    if ! echo "$claude_deploy" | grep -qF "$short"; then
+                        missing_deploy="$missing_deploy $base"
+                    fi
+                fi
+            fi
+        done <<< "$deploy_bases"
+        if [ -z "$missing_deploy" ]; then
+            step_pass "26" "Deploy scripts list sync" "CLAUDE.md lists all deploy scripts"
+        else
+            step_warn "26" "Deploy scripts list sync" "missing from CLAUDE.md:$missing_deploy"
+        fi
     fi
 fi
 

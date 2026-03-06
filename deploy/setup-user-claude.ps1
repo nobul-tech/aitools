@@ -368,6 +368,40 @@ function Normalize-JsonForComparison {
 }
 
 # ---------------------------------------------------------------------------
+# Go install provenance detection (Windows)
+# Returns: "winget", "chocolatey", "scoop", "msi", "none", or "unknown"
+# ---------------------------------------------------------------------------
+function Get-GoProvenance {
+    # Get-Command exempt: command-existence check with explicit fallback
+    $goCmd = Get-Command go -ErrorAction SilentlyContinue
+    if (-not $goCmd) { return "none" }
+    $goSource = $goCmd.Source
+    if ($goSource -like '*\Program Files\Go\*') {
+        $wingetCheck = winget list --id GoLang.Go --accept-source-agreements 2>&1 | Out-String
+        if ($wingetCheck -match 'GoLang\.Go') { return "winget" }
+        return "msi"
+    }
+    if ($goSource -like '*\chocolatey\*') { return "chocolatey" }
+    if ($goSource -like '*\scoop\*') { return "scoop" }
+    return "unknown"
+}
+
+# ---------------------------------------------------------------------------
+# Ensure GOPATH\bin is on persistent User PATH (Windows)
+# Returns $true if already present, $false if added
+# ---------------------------------------------------------------------------
+function Ensure-GopathBinOnPath {
+    $gopath = $env:GOPATH
+    if (-not $gopath) { $gopath = Join-Path $env:USERPROFILE "go" }
+    $gopathBin = Join-Path $gopath "bin"
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($userPath -like "*$gopathBin*") { return $true }
+    [Environment]::SetEnvironmentVariable("Path", "$userPath;$gopathBin", "User")
+    Refresh-Path
+    return $false
+}
+
+# ---------------------------------------------------------------------------
 # Summary panel renderer
 # ---------------------------------------------------------------------------
 # Reads AITOOLS_SUMMARY_FILE, displays colored panel, cleans up.
@@ -494,6 +528,7 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
+
 # --- Auto-detect machine info ---
 $osInfo = (Get-CimInstance Win32_OperatingSystem).Caption
 $hostname = $env:COMPUTERNAME
@@ -517,9 +552,9 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Identity
 
-- Name: pepe
+- Name: Jose
 - Git: `Jose <jose@nobul.tech>`
-- Company: nobul.tech
+- Company: Nobul
 
 ## Code Style Defaults
 
@@ -582,6 +617,8 @@ use `npx`, `bunx`, or other package runners.
 | Python | `python3` (macOS) / `python` (Windows) |
 | pip | `pip3` (macOS) / `python -m pip` (Windows) |
 | uv | `uv` |
+| Go | `go` |
+| Datadog CLI | `pup` |
 
 ### Per-Platform Tools
 
@@ -620,7 +657,7 @@ Full evaluation and progress log: `claude/effectiveness.md` in your user repo.
 - **UCI: Clean up before deleting** -- Always `cd` back to a stable directory before `rm -rf`'ing temp dirs used during testing.
 - **UCI: Subagent context gap** -- Subagents launched via Task do NOT inherit project rules or CLAUDE.md files. Prefer subagents for research; for code-writing in projects with cross-cutting rules, consider including critical rules in the subagent prompt.
 - **UCI: Clarify before complying** -- If a user response seems to contradict or reverse a prior recommendation, ask a clarifying question before proceeding. A quick "Just to confirm -- did you mean X or Y?" avoids wasted work from miscommunication.
-- **UCI: Preserve subagent work product** -- When a subagent performs a substantial exploration (multi-file audit, multi-component analysis), write the full findings to a scratch file -- do not condense them into a stub summary that discards the detail. Trivial lookups can stay inline.
+- **UCI: Preserve subagent work product** -- When a subagent performs a substantial exploration (multi-file audit, multi-component analysis), write the full findings to `.scratch/` in the current project -- do not condense them into a stub summary that discards the detail. Trivial lookups can stay inline.
 - **UCI: Verify subagent audit results** -- When subagents perform audits (code review, pattern scanning, compliance checks), spot-check their results. Read at least one file reported "clean" and verify. Treat subagent results as leads, not conclusions.
 ### Standing Orders
 
@@ -629,10 +666,10 @@ Repeated violations will end the working relationship.
 
 - **USO: Dedicated tools for file ops** -- Use Read/Edit/Write/Grep/Glob for file operations. Bash is for shell execution only (git, scripts, build commands).
 - **USO: Investigate user-reported problems** -- When the user reports unexpected behavior, it is real. Investigate first; do not deflect or speculate.
-- **USO: Scratch files for complex scripting** -- Never inline long commands in the Bash tool. Write a temp file (bash/pwsh/perl/other), execute, clean up. Inline only for simple one-liners.
+- **USO: Scratch files for complex scripting** -- Never inline long commands in the Bash tool. Write to `.scratch/` in the current project (gitignored), execute, clean up. Inline only for simple one-liners.
 - **USO: Perl for string manipulation** -- Use Perl (not sed/awk) for non-trivial string manipulation. sed is fine for trivial single substitutions only.
 - **USO: No silent failures in reusable code** -- In any code meant to run more than once (scripts, services, hooks, CLI tools), never suppress errors without checking the result and logging/failing. `-ErrorAction SilentlyContinue`, `2>/dev/null`, `|| true`, `try/catch` are fine IF the result is immediately checked. Command-existence checks with explicit fallback are exempt. Applies when the project has a logging framework, is production code, or has reliability expectations. Does NOT apply to scratch/temp/throwaway work.
-- **USO: Simple Bash commands only** -- Never use `$(...)`, backticks, `&&`, `||`, `;`, or glob patterns (`*`, `?`) in destructive commands (`rm`) in Bash tool calls -- these trigger permission prompts that block the user. For commit messages, write to a temp file with Write and use `git commit -F`. For sequential commands, make separate Bash calls. For cleanup, write a cleanup script and execute it. Pipelines (`|`) are OK.
+- **USO: Simple Bash commands only** -- Never use `$(...)`, backticks, `&&`, `||`, `;`, or glob patterns (`*`, `?`) in destructive commands (`rm`) in Bash tool calls -- these trigger permission prompts that block the user. For commit messages, write to `.scratch/` and use `git commit -F`. For sequential commands, make separate Bash calls. For cleanup, write a cleanup script and execute it. Pipelines (`|`) are OK.
 
 **In plan mode**: Always review these areas and proactively suggest relevant improvements (e.g., "consider breaking this into smaller batches" or "this would be a good candidate for a hook").
 

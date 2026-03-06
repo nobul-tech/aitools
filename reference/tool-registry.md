@@ -238,6 +238,30 @@ claude mcp add --transport http --scope user webflow https://mcp.webflow.com/mcp
 - **Invocation:** N/A (MCP server; HTTP remote)
 - **Last reviewed:** 2026-03-02
 
+### Datadog MCP
+
+**Official Docs**: https://docs.datadoghq.com/bits_ai/mcp_server/
+**Blog**: https://www.datadoghq.com/blog/datadog-remote-mcp-server/
+**Transport**: HTTP (remote) or stdio (local binary)
+**Auth**: OAuth (browser flow) for remote; API key for local
+**Scope**: User (disabled by default)
+**Status**: Preview (may require allowlisting by Datadog)
+
+**Install (Claude Code)**:
+```bash
+claude mcp add --transport http --scope user datadog https://mcp.datadoghq.com/mcp
+```
+
+**Toolsets**: core (logs, metrics, traces, dashboards, monitors, incidents, hosts, services, events, notebooks), alerting, apm, dbm, error-tracking, feature-flags, llmobs, product-analytics. Toolsets are selectable to save context window space.
+
+**Lifecycle:**
+- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
+- **Concurrency:** Yes -- HTTP remote server
+- **Post-Install Config:** **OAuth required** for remote transport. Tool appears configured but is non-functional until OAuth completes. Preview access may require Datadog allowlisting.
+- **Dependencies:** Active Datadog account (startup program or paid plan)
+- **Invocation:** N/A (MCP server; HTTP remote)
+- **Last reviewed:** 2026-03-06
+
 ---
 
 ## MCP Management & Configuration
@@ -643,6 +667,57 @@ uv --version
 
 ---
 
+## Go
+
+**Source**: https://go.dev
+**Purpose**: Go programming language toolchain. Required by `go install` for tools like Datadog Pup CLI.
+
+### Install
+
+| Platform | Method | Command |
+|----------|--------|---------|
+| macOS | Homebrew (preferred) | `brew install go` |
+| Windows | winget (preferred) | `winget install GoLang.Go` |
+
+### Update
+
+- Homebrew: `brew upgrade go`
+- winget: `winget upgrade GoLang.Go`
+
+### Check Version
+
+```bash
+go version
+```
+
+### Non-Preferred Install Methods
+
+| Method | Platform | Notes |
+|--------|----------|-------|
+| macOS .pkg installer | macOS | Installs to /usr/local/go; setup-go.sh removes and replaces with Homebrew |
+| MSI installer | Windows | setup-go.ps1 detects and proceeds with winget |
+| Chocolatey | Windows | setup-go.ps1 attempts `choco uninstall golang` then installs via winget |
+| goenv | macOS/Linux | Warn-only; user-managed, not removed |
+| Scoop | Windows | Warn-only; user-managed, not removed |
+| Manual tarball | macOS/Linux | setup-go.sh removes /usr/local/go/ and replaces with Homebrew |
+
+### Notes
+
+- GOPATH/bin must be on PATH for `go install` binaries to be accessible
+- Default GOPATH: `~/go` (macOS) / `%USERPROFILE%\go` (Windows)
+- `go install` used by Datadog Pup as alternative install method
+
+### Lifecycle
+
+- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
+- **Concurrency:** Yes -- stateless CLI
+- **Post-Install Config:** GOPATH/bin on PATH (automated by setup script)
+- **Dependencies:** --
+- **Invocation:** `go` (direct)
+- **Last verified version:** macOS: pending | Windows: pending | Linux: pending
+
+---
+
 ## Modal CLI
 
 **Source**: https://modal.com/docs/guide
@@ -681,6 +756,50 @@ modal --version
 - **Dependencies:** Python 3.10+, uv (preferred) or pip
 - **Invocation:** `modal` (direct)
 - **Last verified version:** macOS: pending | Windows: pending | Linux: pending
+
+---
+
+## Datadog CLI (Pup)
+
+**Source**: https://github.com/datadog-labs/pup
+**Purpose**: Datadog CLI -- query logs, manage monitors, dashboards, incidents, metrics across 33+ products. 200+ commands.
+
+### Install
+
+| Platform | Method | Command |
+|----------|--------|---------|
+| macOS | Homebrew (preferred) | `brew install datadog/pack/pup` |
+| All | Go install (alt) | `go install github.com/DataDog/pup@latest` |
+
+### Update
+
+- Homebrew: `brew upgrade datadog/pack/pup`
+- Go: re-run `go install`
+
+### Check Version
+
+```bash
+pup version
+```
+
+### Prerequisites
+
+- `pup auth login` (one-time OAuth, browser flow) required after install
+
+### Notes
+
+- Published under `datadog-labs` (not main `DataDog` org) -- yellow flag per tool evaluation criteria. Officially maintained by Datadog employees.
+- OAuth2 auth model -- no API key management needed for interactive use
+- Useful for querying logs and managing monitors from the command line
+
+### Lifecycle
+
+- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
+- **Concurrency:** Yes -- stateless CLI
+- **Post-Install Config:** `pup auth login` required (not automated)
+- **Dependencies:** None (Homebrew) or Go toolchain (go install)
+- **Invocation:** `pup` (direct)
+- **Last verified version:** pending
 
 ---
 
