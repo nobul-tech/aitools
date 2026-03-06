@@ -2,7 +2,7 @@
 # Dot-sourced, not executed directly.
 #
 # Provides: ReadConfigKey, Initialize-Logging, Log/LogOk/LogError/LogWarn,
-# Write-Summary, Show-Summary.
+# Write-Summary, Show-Summary, Normalize-JsonForComparison.
 #
 # Usage:
 #   . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
@@ -156,6 +156,46 @@ function Emit-MergeDetails {
         Log "  $change"
         Write-Summary "DETAIL" $ToolName "$change"
     }
+}
+
+# ---------------------------------------------------------------------------
+# JSON normalization for comparison (sorted keys, deterministic output)
+# ---------------------------------------------------------------------------
+# PowerShell hashtable key ordering is non-deterministic. ConvertTo-Json
+# produces different strings for semantically identical objects, causing
+# false-positive change detection. These functions recursively sort keys
+# before serializing, ensuring identical content produces identical JSON.
+#
+# Usage:
+#   $norm = Normalize-JsonForComparison $hashtable
+#   $norm = Normalize-JsonForComparison $hashtable -Depth 5 -Compress
+function ConvertTo-CanonicalObject($obj) {
+    if ($null -eq $obj) { return $null }
+    if ($obj -is [array]) {
+        return ,@($obj | ForEach-Object { ConvertTo-CanonicalObject $_ })
+    }
+    if ($obj -is [hashtable]) {
+        $ordered = [ordered]@{}
+        foreach ($key in ($obj.Keys | Sort-Object)) {
+            $ordered[$key] = ConvertTo-CanonicalObject $obj[$key]
+        }
+        return [PSCustomObject]$ordered
+    }
+    if ($obj -is [System.Management.Automation.PSCustomObject]) {
+        $ordered = [ordered]@{}
+        foreach ($prop in ($obj.PSObject.Properties | Sort-Object Name)) {
+            $ordered[$prop.Name] = ConvertTo-CanonicalObject $prop.Value
+        }
+        return [PSCustomObject]$ordered
+    }
+    return $obj
+}
+
+function Normalize-JsonForComparison {
+    param($Value, [int]$Depth = 10, [switch]$Compress)
+    if ($null -eq $Value) { return "null" }
+    $canonical = ConvertTo-CanonicalObject $Value
+    $canonical | ConvertTo-Json -Depth $Depth -Compress:$Compress
 }
 
 # ---------------------------------------------------------------------------

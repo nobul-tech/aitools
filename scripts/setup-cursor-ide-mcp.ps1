@@ -79,7 +79,7 @@ $managedServers = @("chrome-devtools", "vercel", "webflow")
 $beforeServers = @{}
 foreach ($s in $managedServers) {
     if ($config["mcpServers"].ContainsKey($s)) {
-        $beforeServers[$s] = $config["mcpServers"][$s] | ConvertTo-Json -Depth 5 -Compress
+        $beforeServers[$s] = Normalize-JsonForComparison $config["mcpServers"][$s] -Depth 5 -Compress
     } else {
         $beforeServers[$s] = $null
     }
@@ -122,8 +122,9 @@ if ($DryRun) {
     if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
 
     $afterJson = $config | ConvertTo-Json -Depth 10
-    # Compare serialized content to detect actual changes
-    if (-not $corrupt -and $lostKeys.Count -eq 0 -and $raw -and $afterJson -eq ($raw | ConvertFrom-Json | ConvertTo-Json -Depth 10)) {
+    $afterNorm = Normalize-JsonForComparison $config -Depth 10
+    $existingNorm = if ($raw -and -not $corrupt) { Normalize-JsonForComparison (ConvertPSObjectToHashtable ($raw | ConvertFrom-Json)) -Depth 10 } else { $null }
+    if (-not $corrupt -and $lostKeys.Count -eq 0 -and $afterNorm -eq $existingNorm) {
         $mcpChanged = $false
         LogOk "Cursor MCP config already up to date"
         Write-Summary "OK" "cursor ide mcp" "unchanged"
@@ -146,7 +147,7 @@ if ($DryRun) {
         # Detect per-server changes and emit DETAIL lines
         $serverChanges = @()
         foreach ($s in $managedServers) {
-            $newVal = $config["mcpServers"][$s] | ConvertTo-Json -Depth 5 -Compress
+            $newVal = Normalize-JsonForComparison $config["mcpServers"][$s] -Depth 5 -Compress
             if ($beforeServers[$s] -ne $newVal) {
                 $oldDisplay = if ($beforeServers[$s]) { $beforeServers[$s] } else { "(unset)" }
                 $serverChanges += "${s}: $oldDisplay -> $newVal"

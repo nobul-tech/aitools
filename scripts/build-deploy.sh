@@ -56,27 +56,37 @@ AITOOLS_LIB_BASH=$(cat "$SCRIPTS_DIR/aitools-lib.sh")
 AITOOLS_LIB_PS1=$(cat "$SCRIPTS_DIR/aitools-lib.ps1")
 
 # inline_lib_bash: replaces `source.*aitools-lib.sh` line with lib content (stdin -> stdout)
+# Uses perl for performance (single process vs ~2 subprocesses per line with while-read)
 inline_lib_bash() {
-    local line
-    while IFS= read -r line; do
-        if echo "$line" | grep -q 'source.*aitools-lib\.sh'; then
-            printf '%s\n' "$AITOOLS_LIB_BASH"
-        else
-            printf '%s\n' "$line"
-        fi
-    done
+    perl -e '
+        open my $lib, "<", $ARGV[0] or die "Cannot open lib: $!";
+        my $content = do { local $/; <$lib> };
+        close $lib;
+        while (<STDIN>) {
+            if (/source.*aitools-lib\.sh/) {
+                print $content;
+            } else {
+                print;
+            }
+        }
+    ' "$SCRIPTS_DIR/aitools-lib.sh"
 }
 
 # inline_lib_ps1: replaces `. .*aitools-lib.ps1` line with lib content (stdin -> stdout)
+# Uses perl for performance (single process vs ~2 subprocesses per line with while-read)
 inline_lib_ps1() {
-    local line
-    while IFS= read -r line; do
-        if echo "$line" | grep -q 'aitools-lib\.ps1'; then
-            printf '%s\n' "$AITOOLS_LIB_PS1"
-        else
-            printf '%s\n' "$line"
-        fi
-    done
+    perl -e '
+        open my $lib, "<", $ARGV[0] or die "Cannot open lib: $!";
+        my $content = do { local $/; <$lib> };
+        close $lib;
+        while (<STDIN>) {
+            if (/aitools-lib\.ps1/) {
+                print $content;
+            } else {
+                print;
+            }
+        }
+    ' "$SCRIPTS_DIR/aitools-lib.ps1"
 }
 
 # --- Read user rules for embedding ---

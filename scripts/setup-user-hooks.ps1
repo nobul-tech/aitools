@@ -272,8 +272,12 @@ if ($DryRun) {
         if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
 
         $mergedJson = $settings | ConvertTo-Json -Depth 10
-        $existingJson = if (Test-Path $settingsFile) { Get-Content $settingsFile -Raw -ErrorAction Stop } else { $null }
-        if ($mergedJson.TrimEnd() -eq ($existingJson -replace '\r','').TrimEnd()) {
+        $mergedNorm = Normalize-JsonForComparison $settings -Depth 10
+        $existingNorm = if (Test-Path $settingsFile) {
+            try { Normalize-JsonForComparison (ConvertPSObjectToHashtable (Get-Content $settingsFile -Raw -ErrorAction Stop | ConvertFrom-Json)) -Depth 10 }
+            catch { $null }
+        } else { $null }
+        if ($mergedNorm -eq $existingNorm) {
             LogOk "Settings unchanged: $settingsFile"
         } else {
             $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($settingsFile)

@@ -51,10 +51,14 @@ if command -v uv >/dev/null 2>&1; then
         MODAL_VERSION=$(modal --version 2>/dev/null || echo "version unknown")
         log "Modal CLI already installed ($MODAL_VERSION) -- upgrading via uv..."
         TOOL_OUTPUT=$(uv tool upgrade modal 2>&1) || true
+        if printf '%s\n' "$TOOL_OUTPUT" | grep -q 'is not installed'; then
+            log_warn "Modal was not installed via uv -- migrating to uv tool..."
+            TOOL_OUTPUT=$(uv tool install modal 2>&1) || true
+        fi
         printf '%s\n' "$TOOL_OUTPUT" | while IFS= read -r line; do log "$line"; done
         if printf '%s\n' "$TOOL_OUTPUT" | grep -qi 'error\|failed'; then
-            log_error "uv tool upgrade modal failed (see log above)"
-            write_summary ERROR "modal cli" "uv tool upgrade failed"
+            log_error "uv tool install/upgrade modal failed (see log above)"
+            write_summary ERROR "modal cli" "uv tool install/upgrade failed"
         elif command -v modal >/dev/null 2>&1; then
             MODAL_VERSION=$(modal --version 2>/dev/null || echo "version unknown")
             log_ok "Modal CLI upgraded ($MODAL_VERSION)"

@@ -25,7 +25,7 @@ if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
 # Dot-sourced, not executed directly.
 #
 # Provides: ReadConfigKey, Initialize-Logging, Log/LogOk/LogError/LogWarn,
-# Write-Summary, Show-Summary.
+# Write-Summary, Show-Summary, Normalize-JsonForComparison.
 #
 # Usage:
 #   . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
@@ -179,6 +179,46 @@ function Emit-MergeDetails {
         Log "  $change"
         Write-Summary "DETAIL" $ToolName "$change"
     }
+}
+
+# ---------------------------------------------------------------------------
+# JSON normalization for comparison (sorted keys, deterministic output)
+# ---------------------------------------------------------------------------
+# PowerShell hashtable key ordering is non-deterministic. ConvertTo-Json
+# produces different strings for semantically identical objects, causing
+# false-positive change detection. These functions recursively sort keys
+# before serializing, ensuring identical content produces identical JSON.
+#
+# Usage:
+#   $norm = Normalize-JsonForComparison $hashtable
+#   $norm = Normalize-JsonForComparison $hashtable -Depth 5 -Compress
+function ConvertTo-CanonicalObject($obj) {
+    if ($null -eq $obj) { return $null }
+    if ($obj -is [array]) {
+        return ,@($obj | ForEach-Object { ConvertTo-CanonicalObject $_ })
+    }
+    if ($obj -is [hashtable]) {
+        $ordered = [ordered]@{}
+        foreach ($key in ($obj.Keys | Sort-Object)) {
+            $ordered[$key] = ConvertTo-CanonicalObject $obj[$key]
+        }
+        return [PSCustomObject]$ordered
+    }
+    if ($obj -is [System.Management.Automation.PSCustomObject]) {
+        $ordered = [ordered]@{}
+        foreach ($prop in ($obj.PSObject.Properties | Sort-Object Name)) {
+            $ordered[$prop.Name] = ConvertTo-CanonicalObject $prop.Value
+        }
+        return [PSCustomObject]$ordered
+    }
+    return $obj
+}
+
+function Normalize-JsonForComparison {
+    param($Value, [int]$Depth = 10, [switch]$Compress)
+    if ($null -eq $Value) { return "null" }
+    $canonical = ConvertTo-CanonicalObject $Value
+    $canonical | ConvertTo-Json -Depth $Depth -Compress:$Compress
 }
 
 # ---------------------------------------------------------------------------
@@ -349,7 +389,7 @@ $managedServers = @("chrome-devtools", "vercel", "webflow")
 $beforeServers = @{}
 foreach ($s in $managedServers) {
     if ($config["mcpServers"].ContainsKey($s)) {
-        $beforeServers[$s] = $config["mcpServers"][$s] | ConvertTo-Json -Depth 5 -Compress
+        $beforeServers[$s] = Normalize-JsonForComparison $config["mcpServers"][$s] -Depth 5 -Compress
     } else {
         $beforeServers[$s] = $null
     }
@@ -392,8 +432,9 @@ if ($DryRun) {
     if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
 
     $afterJson = $config | ConvertTo-Json -Depth 10
-    # Compare serialized content to detect actual changes
-    if (-not $corrupt -and $lostKeys.Count -eq 0 -and $raw -and $afterJson -eq ($raw | ConvertFrom-Json | ConvertTo-Json -Depth 10)) {
+    $afterNorm = Normalize-JsonForComparison $config -Depth 10
+    $existingNorm = if ($raw -and -not $corrupt) { Normalize-JsonForComparison (ConvertPSObjectToHashtable ($raw | ConvertFrom-Json)) -Depth 10 } else { $null }
+    if (-not $corrupt -and $lostKeys.Count -eq 0 -and $afterNorm -eq $existingNorm) {
         $mcpChanged = $false
         LogOk "Cursor MCP config already up to date"
         Write-Summary "OK" "cursor ide mcp" "unchanged"
@@ -416,7 +457,7 @@ if ($DryRun) {
         # Detect per-server changes and emit DETAIL lines
         $serverChanges = @()
         foreach ($s in $managedServers) {
-            $newVal = $config["mcpServers"][$s] | ConvertTo-Json -Depth 5 -Compress
+            $newVal = Normalize-JsonForComparison $config["mcpServers"][$s] -Depth 5 -Compress
             if ($beforeServers[$s] -ne $newVal) {
                 $oldDisplay = if ($beforeServers[$s]) { $beforeServers[$s] } else { "(unset)" }
                 $serverChanges += "${s}: $oldDisplay -> $newVal"

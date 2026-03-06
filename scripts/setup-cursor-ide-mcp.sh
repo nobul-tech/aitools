@@ -65,6 +65,7 @@ fi
 
 # Merge managed servers — preserves user-added servers and other keys
 MERGE_RESULT=$(node -e "
+$SORT_KEYS_JS
 const fs = require('fs');
 const f = process.argv[1];
 const dryRun = process.argv[2] === 'true';
@@ -81,7 +82,7 @@ try {
         console.error('Warning: ' + f + ' is invalid JSON');
     }
 }
-const beforeJson = JSON.stringify(config);
+const beforeJson = JSON.stringify(sortKeys(config));
 const beforeKeys = Object.keys(config);
 
 // Ensure mcpServers exists
@@ -92,7 +93,7 @@ if (!config.mcpServers || typeof config.mcpServers !== 'object') {
 // Snapshot managed server entries before merge
 const managedServers = ['chrome-devtools', 'vercel', 'webflow'];
 const serversBefore = {};
-for (const s of managedServers) serversBefore[s] = JSON.stringify(config.mcpServers[s]);
+for (const s of managedServers) serversBefore[s] = JSON.stringify(sortKeys(config.mcpServers[s]));
 
 // Set managed servers (macOS uses npx directly, no cmd /c wrapper)
 config.mcpServers['chrome-devtools'] = {
@@ -123,7 +124,7 @@ if (dryRun) {
     if (corrupt) console.error('Warning: proceeding with --force on corrupt file');
     if (lostKeys.length > 0) console.error('Warning: proceeding with --force, losing fields: ' + lostKeys.join(', '));
     const afterJson = JSON.stringify(config, null, 2) + '\n';
-    if (!corrupt && lostKeys.length === 0 && beforeJson === JSON.stringify(JSON.parse(afterJson))) {
+    if (!corrupt && lostKeys.length === 0 && beforeJson === JSON.stringify(sortKeys(JSON.parse(afterJson)))) {
         console.log('unchanged');
     } else {
         fs.writeFileSync(f, afterJson);
@@ -134,7 +135,7 @@ if (dryRun) {
         const changed = [];
         for (const s of managedServers) {
             const oldVal = serversBefore[s];
-            const newVal = JSON.stringify(config.mcpServers[s]);
+            const newVal = JSON.stringify(sortKeys(config.mcpServers[s]));
             if (oldVal !== newVal) changed.push(s + ': ' + (oldVal || '(unset)') + ' -> ' + newVal);
         }
         console.log('ok');

@@ -12,6 +12,32 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.40.0 -- JSON normalization, false-positive fix, modal migration, build speed (2026-03-06)
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **JSON normalization library** (`aitools-lib.sh`, `aitools-lib.ps1`): `SORT_KEYS_JS`/`normalize_json` (bash) and `Normalize-JsonForComparison`/`ConvertTo-CanonicalObject` (PS1). Recursively sorts keys before serializing, ensuring identical objects produce identical JSON regardless of hashtable key ordering or JS property insertion order. |
+| 2 | **setup-user-mcp three-outcomes** (`.sh` + `.ps1`): Deny rules merge now detects unchanged state and skips the write, matching the three-outcomes pattern (unchanged/updated/failed) required by config-file-safety rules. |
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **False-positive change detection** (`setup-user-cursor`, `setup-cursor-ide-mcp`, `setup-user-hooks`, `setup-user-mcp` -- all .sh + .ps1): All JSON comparison sites now use normalized (sorted-key) serialization. Eliminates false "updated" reports caused by non-deterministic hashtable key ordering (PS1) and insertion-order differences (JS). Cursor IDE MCP no longer emits spurious "Restart Cursor IDE" action on every run. |
+| 2 | **Modal CLI pip-to-uv migration** (`setup-modal.sh`, `setup-modal.ps1`): When `uv tool upgrade modal` fails with "is not installed" (pip-installed modal), falls back to `uv tool install modal` instead of reporting an error. |
+| 3 | **Build speed** (`build-deploy.sh`): Replaced while-read + echo + grep loops with single perl invocations for lib inlining. Reduces subprocess spawns from ~15,600 to 26 on Windows. |
+
+### Docs
+
+| # | Change |
+|---|--------|
+| 1 | `reference/script-standards-detail.md`: Added JSON normalization row to library contents table. Updated canonical JSON config pattern to use `sortKeys()`. |
+| 2 | `reference/claude-code-maintenance.md`: Updated to CC 2.1.70, added release notes section. |
+
+---
+
 ## v0.39.1 -- Fix multi-line MERGE_RESULT case dispatch (2026-03-05)
 
 ### Fixed

@@ -24,7 +24,7 @@ if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
 # Dot-sourced, not executed directly.
 #
 # Provides: ReadConfigKey, Initialize-Logging, Log/LogOk/LogError/LogWarn,
-# Write-Summary, Show-Summary.
+# Write-Summary, Show-Summary, Normalize-JsonForComparison.
 #
 # Usage:
 #   . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
@@ -178,6 +178,46 @@ function Emit-MergeDetails {
         Log "  $change"
         Write-Summary "DETAIL" $ToolName "$change"
     }
+}
+
+# ---------------------------------------------------------------------------
+# JSON normalization for comparison (sorted keys, deterministic output)
+# ---------------------------------------------------------------------------
+# PowerShell hashtable key ordering is non-deterministic. ConvertTo-Json
+# produces different strings for semantically identical objects, causing
+# false-positive change detection. These functions recursively sort keys
+# before serializing, ensuring identical content produces identical JSON.
+#
+# Usage:
+#   $norm = Normalize-JsonForComparison $hashtable
+#   $norm = Normalize-JsonForComparison $hashtable -Depth 5 -Compress
+function ConvertTo-CanonicalObject($obj) {
+    if ($null -eq $obj) { return $null }
+    if ($obj -is [array]) {
+        return ,@($obj | ForEach-Object { ConvertTo-CanonicalObject $_ })
+    }
+    if ($obj -is [hashtable]) {
+        $ordered = [ordered]@{}
+        foreach ($key in ($obj.Keys | Sort-Object)) {
+            $ordered[$key] = ConvertTo-CanonicalObject $obj[$key]
+        }
+        return [PSCustomObject]$ordered
+    }
+    if ($obj -is [System.Management.Automation.PSCustomObject]) {
+        $ordered = [ordered]@{}
+        foreach ($prop in ($obj.PSObject.Properties | Sort-Object Name)) {
+            $ordered[$prop.Name] = ConvertTo-CanonicalObject $prop.Value
+        }
+        return [PSCustomObject]$ordered
+    }
+    return $obj
+}
+
+function Normalize-JsonForComparison {
+    param($Value, [int]$Depth = 10, [switch]$Compress)
+    if ($null -eq $Value) { return "null" }
+    $canonical = ConvertTo-CanonicalObject $Value
+    $canonical | ConvertTo-Json -Depth $Depth -Compress:$Compress
 }
 
 # ---------------------------------------------------------------------------
@@ -393,7 +433,6 @@ if ($DryRun) {
 # --- 3. cli-config.json (merge, not overwrite) ---
 
 Log "Step 3: cli-config.json"
-
 # --- Embedded preferences (from profile.json at build time) ---
 $vimMode = $true
 $modelId = "auto"
@@ -423,14 +462,14 @@ if (Test-Path $cliConfig) {
     }
 }
 $beforeKeys = @($config.Keys)
-$beforeJson = $config | ConvertTo-Json -Depth 10
+$beforeJson = Normalize-JsonForComparison $config -Depth 10
 
 # Snapshot managed keys before merge for change tracking
 $managedKeysList = @("version", "editor", "permissions", "model", "hasChangedDefaultModel")
 $beforeManaged = @{}
 foreach ($k in $managedKeysList) {
     if ($config.ContainsKey($k)) {
-        $beforeManaged[$k] = $config[$k] | ConvertTo-Json -Depth 5 -Compress
+        $beforeManaged[$k] = Normalize-JsonForComparison $config[$k] -Depth 5 -Compress
     } else {
         $beforeManaged[$k] = $null
     }
@@ -461,7 +500,7 @@ if ($modelId -eq "auto") {
 $managedKeys = @("version", "editor", "permissions", "model", "hasChangedDefaultModel")
 $lostKeys = @($beforeKeys | Where-Object { $_ -notin $config.Keys })
 
-$afterJson = $config | ConvertTo-Json -Depth 10
+$afterJson = Normalize-JsonForComparison $config -Depth 10
 
 if ($DryRun) {
     # --- Dry-run output ---
@@ -521,7 +560,7 @@ if ($DryRun) {
         # Detect per-key changes and emit DETAIL lines
         $keyChanges = @()
         foreach ($k in $managedKeysList) {
-            $newVal = if ($config.ContainsKey($k)) { $config[$k] | ConvertTo-Json -Depth 5 -Compress } else { $null }
+            $newVal = if ($config.ContainsKey($k)) { Normalize-JsonForComparison $config[$k] -Depth 5 -Compress } else { $null }
             if ($beforeManaged[$k] -ne $newVal) {
                 $oldDisplay = if ($beforeManaged[$k]) { $beforeManaged[$k] } else { "(unset)" }
                 $newDisplay = if ($newVal) { $newVal } else { "(removed)" }

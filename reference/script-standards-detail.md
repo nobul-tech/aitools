@@ -88,6 +88,7 @@ Check scripts source `check-lib.sh`/`.ps1` which in turn sources `aitools-lib.sh
 | Dir backup | `backup_dir()` | `Backup-Dir` | Directory backup for managed files |
 | JSON hashtable | n/a | `ConvertPSObjectToHashtable` | PSCustomObject to Hashtable (recursive, array-aware) |
 | DETAIL emitter | `emit_merge_details()` | `Emit-MergeDetails` | Parse CHANGED: lines / emit DETAIL summary entries |
+| JSON normalization | `SORT_KEYS_JS`, `normalize_json()` | `Normalize-JsonForComparison`, `ConvertTo-CanonicalObject` | Sorted-key JSON for deterministic comparison |
 
 ### Usage
 
@@ -346,15 +347,18 @@ if (-not (Test-Path $dest)) {
 **JSON config -- node.js merge blocks (used by .sh and .ps1 wrappers):**
 
 ```javascript
-// Before merge: snapshot managed keys
+// sortKeys() from SORT_KEYS_JS (embedded via $SORT_KEYS_JS in node -e blocks)
+// Ensures deterministic key ordering for comparison across runs.
+
+// Before merge: snapshot managed keys (sorted for comparison)
 const before = {};
-for (const key of managedKeys) before[key] = JSON.stringify(settings[key]);
+for (const key of managedKeys) before[key] = JSON.stringify(sortKeys(settings[key]));
 // ... merge logic ...
-// After merge: detect changes
+// After merge: detect changes (sorted for comparison)
 const changed = [];
 for (const key of managedKeys) {
     const oldVal = before[key];
-    const newVal = JSON.stringify(settings[key]);
+    const newVal = JSON.stringify(sortKeys(settings[key]));
     if (oldVal !== newVal) changed.push(key + ': ' + (oldVal || '(unset)') + ' -> ' + newVal);
 }
 if (changed.length) {

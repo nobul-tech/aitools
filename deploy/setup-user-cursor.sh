@@ -27,7 +27,8 @@ done
 # Sourced, not executed directly. No shebang, no set -euo pipefail (caller sets it).
 #
 # Provides: platform detection, display_path, read_config_key, logging_init,
-# log/log_ok/log_error/log_warn, write_summary, show_summary.
+# log/log_ok/log_error/log_warn, write_summary, show_summary,
+# SORT_KEYS_JS, normalize_json.
 #
 # Usage:
 #   source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/aitools-lib.sh"
@@ -186,6 +187,33 @@ emit_merge_details() {
             write_summary DETAIL "$tool_name" "$key_change"
         done <<< "$changed_keys"
     fi
+}
+
+# ---------------------------------------------------------------------------
+# JSON normalization for comparison (sorted keys, deterministic output)
+# ---------------------------------------------------------------------------
+# JavaScript JSON.stringify preserves insertion order, which may differ
+# between runs or between PS1/bash variants writing the same file. Sorting
+# keys before comparison ensures identical content produces identical JSON.
+#
+# SORT_KEYS_JS: minified sortKeys function for embedding in node -e blocks.
+#   Usage: node -e "$SORT_KEYS_JS; ..."
+#
+# normalize_json: pipe-based wrapper for standalone use.
+#   Usage: NORMALIZED=$(echo "$json_string" | normalize_json)
+SORT_KEYS_JS='function sortKeys(o){if(o===null||typeof o!=="object")return o;if(Array.isArray(o))return o.map(sortKeys);var s={};Object.keys(o).sort().forEach(function(k){s[k]=sortKeys(o[k])});return s}'
+
+normalize_json() {
+    node -e "
+        var input = require('fs').readFileSync('/dev/stdin', 'utf8');
+        $SORT_KEYS_JS
+        try {
+            console.log(JSON.stringify(sortKeys(JSON.parse(input)), null, 2));
+        } catch(e) {
+            process.stderr.write('normalize_json: ' + e.message + '\n');
+            process.exit(1);
+        }
+    "
 }
 
 # ---------------------------------------------------------------------------
@@ -384,6 +412,7 @@ else
     # Falls back to defaults if profile not found.
 
     MERGE_RESULT=$(node -e "
+$SORT_KEYS_JS
 const fs = require('fs');
 const path = require('path');
 const f = process.argv[1];
@@ -405,12 +434,12 @@ try {
     }
 }
 const beforeKeys = Object.keys(config);
-const before = JSON.stringify(config);
+const before = JSON.stringify(sortKeys(config));
 
 // Snapshot managed keys before merge for CHANGED: tracking
 const snapshotKeys = ['version', 'editor', 'permissions', 'model', 'hasChangedDefaultModel'];
 const beforeManaged = {};
-for (const k of snapshotKeys) beforeManaged[k] = JSON.stringify(config[k]);
+for (const k of snapshotKeys) beforeManaged[k] = JSON.stringify(sortKeys(config[k]));
 
 // --- Merge managed fields ---
 config.version = 1;
@@ -438,7 +467,7 @@ const managedKeys = ['version', 'editor', 'permissions', 'model', 'hasChangedDef
 const afterKeys = Object.keys(config);
 const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
 
-const after = JSON.stringify(config);
+const after = JSON.stringify(sortKeys(config));
 
 if (dryRun) {
     console.error('[DRY RUN] ' + f + ': merge');
@@ -468,7 +497,7 @@ if (dryRun) {
         const changed = [];
         for (const k of snapshotKeys) {
             const oldVal = beforeManaged[k];
-            const newVal = JSON.stringify(config[k]);
+            const newVal = JSON.stringify(sortKeys(config[k]));
             if (oldVal !== newVal) changed.push(k + ': ' + (oldVal || '(unset)') + ' -> ' + (newVal || '(removed)'));
         }
         console.log(before === '{}' ? 'created' : 'merged');

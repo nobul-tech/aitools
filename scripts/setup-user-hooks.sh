@@ -106,6 +106,7 @@ HOOK_CMD="bash \"$HOOK_DEST\""
 GUARD_CMD="bash \"$GUARD_DEST\""
 
 MERGE_RESULT=$(node -e "
+$SORT_KEYS_JS
 const fs = require('fs');
 const path = require('path');
 const settingsFile = process.argv[1];
@@ -232,10 +233,12 @@ if (dryRun) {
 } else {
     if (corrupt) console.error('Warning: proceeding with --force on corrupt file');
     if (lostKeys.length > 0) console.error('Warning: proceeding with --force, losing fields: ' + lostKeys.join(', '));
-    const newJson = JSON.stringify(settings, null, 2) + '\n';
+    const newJson = JSON.stringify(sortKeys(settings), null, 2) + '\n';
     let existingJson = '';
     try { existingJson = fs.readFileSync(settingsFile, 'utf8'); } catch(e) { /* file may not exist */ }
-    if (newJson.trim() === existingJson.trim()) {
+    const existingNorm = existingJson ? JSON.stringify(sortKeys(JSON.parse(existingJson))) : '';
+    const mergedNorm = JSON.stringify(sortKeys(settings));
+    if (mergedNorm === existingNorm) {
         console.log('unchanged');
     } else {
         fs.writeFileSync(settingsFile, newJson);

@@ -234,22 +234,31 @@ if ($DryRun) {
     if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
     if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
 
-    $json = $settings | ConvertTo-Json -Depth 10
-    $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($settingsFile)
-    [System.IO.File]::WriteAllText($resolvedPath, $json, [System.Text.UTF8Encoding]::new($false))
+    $mergedNorm = Normalize-JsonForComparison $settings -Depth 10
+    $existingNorm = if ($raw -and -not $corrupt) {
+        Normalize-JsonForComparison (ConvertPSObjectToHashtable ($raw | ConvertFrom-Json)) -Depth 10
+    } else { $null }
 
-    # Post-write validation
-    try {
-        $vContent = [System.IO.File]::ReadAllText($resolvedPath)
-        $vParsed = $vContent | ConvertFrom-Json
-        if (-not ($vParsed.PSObject.Properties.Name -contains "permissions")) {
-            LogError "Validation failed: $settingsFile missing required field 'permissions'"
+    if (-not $corrupt -and $lostKeys.Count -eq 0 -and $mergedNorm -eq $existingNorm) {
+        LogOk "Deny rules unchanged in $settingsFile"
+    } else {
+        $json = $settings | ConvertTo-Json -Depth 10
+        $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($settingsFile)
+        [System.IO.File]::WriteAllText($resolvedPath, $json, [System.Text.UTF8Encoding]::new($false))
+
+        # Post-write validation
+        try {
+            $vContent = [System.IO.File]::ReadAllText($resolvedPath)
+            $vParsed = $vContent | ConvertFrom-Json
+            if (-not ($vParsed.PSObject.Properties.Name -contains "permissions")) {
+                LogError "Validation failed: $settingsFile missing required field 'permissions'"
+            }
+        } catch {
+            LogError "Validation failed: $settingsFile is not valid JSON -- $_"
         }
-    } catch {
-        LogError "Validation failed: $settingsFile is not valid JSON -- $_"
-    }
 
-    LogOk "Deny rules set for vercel, webflow in $settingsFile"
+        LogOk "Deny rules set for vercel, webflow in $settingsFile"
+    }
 }
 
 if ($DryRun) {

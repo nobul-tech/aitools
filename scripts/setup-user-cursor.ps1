@@ -176,14 +176,14 @@ if (Test-Path $cliConfig) {
     }
 }
 $beforeKeys = @($config.Keys)
-$beforeJson = $config | ConvertTo-Json -Depth 10
+$beforeJson = Normalize-JsonForComparison $config -Depth 10
 
 # Snapshot managed keys before merge for change tracking
 $managedKeysList = @("version", "editor", "permissions", "model", "hasChangedDefaultModel")
 $beforeManaged = @{}
 foreach ($k in $managedKeysList) {
     if ($config.ContainsKey($k)) {
-        $beforeManaged[$k] = $config[$k] | ConvertTo-Json -Depth 5 -Compress
+        $beforeManaged[$k] = Normalize-JsonForComparison $config[$k] -Depth 5 -Compress
     } else {
         $beforeManaged[$k] = $null
     }
@@ -214,7 +214,7 @@ if ($modelId -eq "auto") {
 $managedKeys = @("version", "editor", "permissions", "model", "hasChangedDefaultModel")
 $lostKeys = @($beforeKeys | Where-Object { $_ -notin $config.Keys })
 
-$afterJson = $config | ConvertTo-Json -Depth 10
+$afterJson = Normalize-JsonForComparison $config -Depth 10
 
 if ($DryRun) {
     # --- Dry-run output ---
@@ -274,7 +274,7 @@ if ($DryRun) {
         # Detect per-key changes and emit DETAIL lines
         $keyChanges = @()
         foreach ($k in $managedKeysList) {
-            $newVal = if ($config.ContainsKey($k)) { $config[$k] | ConvertTo-Json -Depth 5 -Compress } else { $null }
+            $newVal = if ($config.ContainsKey($k)) { Normalize-JsonForComparison $config[$k] -Depth 5 -Compress } else { $null }
             if ($beforeManaged[$k] -ne $newVal) {
                 $oldDisplay = if ($beforeManaged[$k]) { $beforeManaged[$k] } else { "(unset)" }
                 $newDisplay = if ($newVal) { $newVal } else { "(removed)" }

@@ -14,7 +14,7 @@
 # Dot-sourced, not executed directly.
 #
 # Provides: ReadConfigKey, Initialize-Logging, Log/LogOk/LogError/LogWarn,
-# Write-Summary, Show-Summary.
+# Write-Summary, Show-Summary, Normalize-JsonForComparison.
 #
 # Usage:
 #   . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
@@ -168,6 +168,46 @@ function Emit-MergeDetails {
         Log "  $change"
         Write-Summary "DETAIL" $ToolName "$change"
     }
+}
+
+# ---------------------------------------------------------------------------
+# JSON normalization for comparison (sorted keys, deterministic output)
+# ---------------------------------------------------------------------------
+# PowerShell hashtable key ordering is non-deterministic. ConvertTo-Json
+# produces different strings for semantically identical objects, causing
+# false-positive change detection. These functions recursively sort keys
+# before serializing, ensuring identical content produces identical JSON.
+#
+# Usage:
+#   $norm = Normalize-JsonForComparison $hashtable
+#   $norm = Normalize-JsonForComparison $hashtable -Depth 5 -Compress
+function ConvertTo-CanonicalObject($obj) {
+    if ($null -eq $obj) { return $null }
+    if ($obj -is [array]) {
+        return ,@($obj | ForEach-Object { ConvertTo-CanonicalObject $_ })
+    }
+    if ($obj -is [hashtable]) {
+        $ordered = [ordered]@{}
+        foreach ($key in ($obj.Keys | Sort-Object)) {
+            $ordered[$key] = ConvertTo-CanonicalObject $obj[$key]
+        }
+        return [PSCustomObject]$ordered
+    }
+    if ($obj -is [System.Management.Automation.PSCustomObject]) {
+        $ordered = [ordered]@{}
+        foreach ($prop in ($obj.PSObject.Properties | Sort-Object Name)) {
+            $ordered[$prop.Name] = ConvertTo-CanonicalObject $prop.Value
+        }
+        return [PSCustomObject]$ordered
+    }
+    return $obj
+}
+
+function Normalize-JsonForComparison {
+    param($Value, [int]$Depth = 10, [switch]$Compress)
+    if ($null -eq $Value) { return "null" }
+    $canonical = ConvertTo-CanonicalObject $Value
+    $canonical | ConvertTo-Json -Depth $Depth -Compress:$Compress
 }
 
 # ---------------------------------------------------------------------------
@@ -346,10 +386,14 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
         LogOk "Modal CLI already installed ($modalVersion)"
         Log "Upgrading via uv tool..."
         $toolOutput = & uv tool upgrade modal 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0 -and $toolOutput -match 'is not installed') {
+            LogWarn "Modal was not installed via uv -- migrating to uv tool..."
+            $toolOutput = & uv tool install modal 2>&1 | Out-String
+        }
         $toolOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
         if ($LASTEXITCODE -ne 0) {
-            LogError "uv tool upgrade modal failed (exit code $LASTEXITCODE)"
-            Write-Summary "ERROR" "modal cli" "uv tool upgrade failed"
+            LogError "uv tool install/upgrade modal failed (exit code $LASTEXITCODE)"
+            Write-Summary "ERROR" "modal cli" "uv tool install/upgrade failed"
         } elseif (Get-Command modal -ErrorAction SilentlyContinue) {
             $modalVersion = & modal --version 2>$null
             if (-not $modalVersion) { $modalVersion = "version unknown" }

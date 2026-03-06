@@ -184,6 +184,7 @@ fi
 log "Merging deny rules into $(display_path "$settings_file")..."
 
 DENY_RESULT=$(node -e "
+$SORT_KEYS_JS
 const fs = require('fs');
 const path = require('path');
 const f = process.argv[1];
@@ -239,16 +240,27 @@ if (dryRun) {
 } else {
     if (corrupt) console.error('Warning: proceeding with --force on corrupt file');
     if (lostKeys.length > 0) console.error('Warning: proceeding with --force, losing fields: ' + lostKeys.join(', '));
-    fs.writeFileSync(f, JSON.stringify(settings, null, 2) + '\n');
+    const newJson = JSON.stringify(sortKeys(settings), null, 2) + '\n';
+    let existingJson = '';
+    try { existingJson = fs.readFileSync(f, 'utf8'); } catch(e) { /* may not exist yet */ }
+    const mergedNorm = JSON.stringify(sortKeys(settings));
+    const existingNorm = existingJson ? JSON.stringify(sortKeys(JSON.parse(existingJson))) : '';
+    if (!corrupt && lostKeys.length === 0 && mergedNorm === existingNorm) {
+        console.log('unchanged');
+    } else {
+        fs.writeFileSync(f, newJson);
 
-    // Post-write validation
-    const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
-    if (!_v.permissions) { console.error('Validation failed: missing permissions'); process.exit(1); }
-    console.log('ok');
+        // Post-write validation
+        const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
+        if (!_v.permissions) { console.error('Validation failed: missing permissions'); process.exit(1); }
+        console.log('ok');
+    }
 }
 " "$settings_file" "$DRY_RUN" "$FORCE")
 
 case "$DENY_RESULT" in
+    unchanged)
+        log_ok "Deny rules unchanged in $(display_path "$settings_file")" ;;
     ok)
         log_ok "Deny rules set for vercel, webflow in $(display_path "$settings_file")" ;;
     dry-run)
