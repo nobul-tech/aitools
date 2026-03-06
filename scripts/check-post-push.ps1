@@ -558,6 +558,10 @@ if (-not (Test-Path $versionsJson)) {
         'typst'            = @('typst', '--version')
         'gh-cli'           = @('gh', '--version')
         'modal-cli'        = @('modal', '--version')
+        'python'           = @($(if ($IsMacOS) { 'python3' } else { 'python' }), '--version')
+        'uv'               = @('uv', '--version')
+        'go'               = @('go', 'version')
+        'datadog-pup'      = @('pup', 'version')
     }
     foreach ($entry in $toolData.tools.PSObject.Properties) {
         $key = $entry.Name

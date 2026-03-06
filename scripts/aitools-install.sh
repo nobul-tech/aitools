@@ -654,9 +654,21 @@ else
 fi
 
 # ============================================================
-# 18. Deploy configurations
+# 18. Datadog CLI
 # ============================================================
-log "Step 18: Deploy configurations"
+log "Step 18: Datadog CLI"
+
+datadog_script="$SCRIPT_DIR/setup-datadog.sh"
+if [ -f "$datadog_script" ]; then
+    validate_and_run "$datadog_script"
+else
+    log_warn "setup-datadog.sh not found — skipping (MDM deploy)"
+fi
+
+# ============================================================
+# 19. Deploy configurations
+# ============================================================
+log "Step 19: Deploy configurations"
 
 DEPLOY_SCRIPTS="setup-user-claude.sh setup-user-cursor.sh setup-user-mcp.sh setup-cursor-ide-mcp.sh setup-user-hooks.sh"
 

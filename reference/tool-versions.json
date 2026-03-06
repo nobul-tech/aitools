@@ -110,7 +110,7 @@
       "notes": ""
     },
     "go": {
-      "macos":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "macos":   { "lastVerifiedVersion": "go1.26.1", "lastVerified": "2026-03-06" },
       "windows": { "lastVerifiedVersion": null, "lastVerified": null },
       "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
       "minVersion": null,
@@ -136,7 +136,7 @@
       "notes": ""
     },
     "datadog-pup": {
-      "macos":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "macos":   { "lastVerifiedVersion": "Pup 0.26.0", "lastVerified": "2026-03-06" },
       "windows": { "lastVerifiedVersion": null, "lastVerified": null },
       "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
       "minVersion": null,

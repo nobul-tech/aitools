@@ -186,6 +186,9 @@ These are the canonical tool names for field 2. Always use these exact strings.
 | `cursor ide mcp` | setup-cursor-ide-mcp |
 | `python` | setup-python |
 | `uv` | setup-uv |
+| `go` | setup-go |
+| `datadog cli` | setup-datadog |
+| `cursor cli` | setup-user-cursor |
 
 ### Severity categories
 

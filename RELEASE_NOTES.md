@@ -12,6 +12,37 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.44.0 -- Add Datadog CLI (pup) as managed tool (2026-03-06)
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **Datadog CLI (pup) managed tool**: New `setup-datadog.sh` (Homebrew tap `datadog/pack`) and `setup-datadog.ps1` (`go install`) setup scripts. Emits ACTION summary for `pup auth login` on fresh install. |
+| 2 | **Version check completeness**: Added `python`, `uv`, `go`, `datadog-pup` to `check-post-push` TOOL_CMDS -- eliminates "SKIP: no version command defined" for these tools. |
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 1 | **Installer step 18**: Datadog CLI runs after Go (step 17), deploy configurations renumbered to step 19. |
+| 2 | **Build-deploy**: Generates `deploy/setup-datadog.sh/.ps1` (steps 25-26), user-mcp renumbered to 27-28. |
+| 3 | **Tool name table**: Added `go`, `datadog cli`, `cursor cli` to `script-standards-detail.md`. |
+| 4 | **Tool versions**: Updated `go` (1.26.1) and `datadog-pup` (0.26.0) macOS verified versions. |
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `scripts/setup-datadog.sh` | macOS Pup setup via Homebrew tap |
+| `scripts/setup-datadog.ps1` | Windows Pup setup via go install |
+| `deploy/setup-datadog.sh` | Self-contained deploy variant |
+| `deploy/setup-datadog.ps1` | Self-contained deploy variant |
+
+**Verified on:** macOS (smoke test: Pup 0.26.0 installed, build-deploy pass). Windows: not tested.
+
+---
+
 ## v0.43.0 -- Add Go as managed tool, fix invocation table drift (2026-03-06)
 
 ### Added

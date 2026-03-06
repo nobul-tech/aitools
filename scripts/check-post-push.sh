@@ -481,6 +481,10 @@ TOOL_CMDS = {
     'typst':            ['typst', '--version'],
     'gh-cli':           ['gh', '--version'],
     'modal-cli':        ['modal', '--version'],
+    'python':           ['python3', '--version'],
+    'uv':               ['uv', '--version'],
+    'go':               ['go', 'version'],
+    'datadog-pup':      ['pup', 'version'],
 }
 for key, val in data['tools'].items():
     if 'maintenanceFile' in val:

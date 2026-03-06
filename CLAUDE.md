@@ -92,7 +92,7 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 
 ### Deploy using MDM
 
-`build-deploy.sh` generates self-contained scripts in `deploy/` (`.sh` + `.ps1` pairs) -- config scripts (`setup-user-claude`, `-mcp`, `-hooks`, `setup-cursor-ide-mcp`, `setup-user-cursor`) and tool scripts (`setup-vercelcli`, `-pandoc`, `-rust`, `-typst`, `-gh-cli`, `-python`, `-uv`, `-modal`, `-go`). Shared helpers from `scripts/aitools-lib.sh/.ps1` are inlined into deploy scripts at build time -- deploy scripts have no runtime dependency on the repo.
+`build-deploy.sh` generates self-contained scripts in `deploy/` (`.sh` + `.ps1` pairs) -- config scripts (`setup-user-claude`, `-mcp`, `-hooks`, `setup-cursor-ide-mcp`, `setup-user-cursor`) and tool scripts (`setup-vercelcli`, `-pandoc`, `-rust`, `-typst`, `-gh-cli`, `-python`, `-uv`, `-modal`, `-go`, `-datadog`). Shared helpers from `scripts/aitools-lib.sh/.ps1` are inlined into deploy scripts at build time -- deploy scripts have no runtime dependency on the repo.
 
 ## Cross-Platform Paths
 

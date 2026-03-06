@@ -550,9 +550,21 @@ if (Test-Path $goScript) {
 }
 
 # ============================================================
-# 18. Deploy configurations
+# 18. Datadog CLI
 # ============================================================
-Log "Step 18: Deploy configurations"
+Log "Step 18: Datadog CLI"
+
+$datadogScript = Join-Path $PSScriptRoot "setup-datadog.ps1"
+if (Test-Path $datadogScript) {
+    Invoke-ValidatedScript $datadogScript
+} else {
+    LogWarn "setup-datadog.ps1 not found -- skipping (MDM deploy)"
+}
+
+# ============================================================
+# 19. Deploy configurations
+# ============================================================
+Log "Step 19: Deploy configurations"
 
 $deployScripts = @(
     "setup-user-claude.ps1",

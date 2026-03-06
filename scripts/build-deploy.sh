@@ -833,7 +833,26 @@ blog "Copying deploy/setup-go.ps1"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
-# 25-26. deploy/setup-user-mcp.sh and .ps1 (template with embedded skills)
+# 25-26. deploy/setup-datadog.sh and .ps1 (copy as-is)
+# ============================================================
+blog "Copying deploy/setup-datadog.sh"
+{
+    echo '#!/usr/bin/env bash'
+    echo "$HEADER_COMMENT_BASH"
+    tail -n +2 "$SCRIPTS_DIR/setup-datadog.sh" | inline_lib_bash
+} > "$DEPLOY_DIR/setup-datadog.sh"
+chmod +x "$DEPLOY_DIR/setup-datadog.sh"
+GENERATED=$((GENERATED + 1))
+
+blog "Copying deploy/setup-datadog.ps1"
+{
+    echo "$HEADER_COMMENT_PS1"
+    cat "$SCRIPTS_DIR/setup-datadog.ps1" | inline_lib_ps1
+} > "$DEPLOY_DIR/setup-datadog.ps1"
+GENERATED=$((GENERATED + 1))
+
+# ============================================================
+# 27-28. deploy/setup-user-mcp.sh and .ps1 (template with embedded skills)
 # ============================================================
 # The scripts/ versions read skills from shared/skills/ (repo-relative).
 # The deploy/ versions must be self-contained, so we embed SKILL.md content
