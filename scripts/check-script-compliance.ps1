@@ -284,6 +284,25 @@ if ($step12Fail -eq 0) {
 }
 
 # ---------------------------------------------------------------------------
+# 13. write_summary auto-promotion -- OK promoted to WARN when warnings > 0
+# ---------------------------------------------------------------------------
+$step13Ok = $true
+$shLib = Get-Content "scripts/aitools-lib.sh" -Raw -ErrorAction SilentlyContinue
+if (-not $shLib -or $shLib -notmatch '(?ms)write_summary\(\)\s*\{.*?WARNINGS.*?^}') {
+    $step13Ok = $false
+}
+$ps1Lib = Get-Content "scripts/aitools-lib.ps1" -Raw -ErrorAction SilentlyContinue
+if (-not $ps1Lib -or $ps1Lib -notmatch '(?ms)function Write-Summary.*?\{.*?warnings.*?^}') {
+    $step13Ok = $false
+}
+
+if ($step13Ok) {
+    StepPass "13" "write_summary auto-promotion" "OK->WARN when warnings > 0"
+} else {
+    StepFail "13" "write_summary auto-promotion" "write_summary missing warnings auto-promotion"
+}
+
+# ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------
 PrintSummary

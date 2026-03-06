@@ -100,7 +100,12 @@ log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
 # ---------------------------------------------------------------------------
 write_summary() {
     if [ -n "${AITOOLS_SUMMARY_FILE:-}" ]; then
-        printf '%s|%s|%s\n' "$1" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
+        local cat="$1"
+        # Auto-promote OK to WARN when warnings have been logged
+        if [ "$cat" = "OK" ] && [ "${WARNINGS:-0}" -gt 0 ]; then
+            cat="WARN"
+        fi
+        printf '%s|%s|%s\n' "$cat" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
     fi
 }
 

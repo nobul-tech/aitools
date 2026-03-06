@@ -317,6 +317,25 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 13. write_summary auto-promotion -- OK promoted to WARN when WARNINGS > 0
+# ---------------------------------------------------------------------------
+step13_ok=true
+ws_body_sh=$(perl -0777 -ne 'print $1 if /^write_summary\(\)\s*\{(.*?)^\}/sm' scripts/aitools-lib.sh)
+if [ -z "$ws_body_sh" ] || ! printf '%s' "$ws_body_sh" | grep -q 'WARNINGS'; then
+    step13_ok=false
+fi
+ws_body_ps1=$(perl -0777 -ne 'print $1 if /^function Write-Summary.*?\{(.*?)^\}/sm' scripts/aitools-lib.ps1)
+if [ -z "$ws_body_ps1" ] || ! printf '%s' "$ws_body_ps1" | grep -q 'warnings'; then
+    step13_ok=false
+fi
+
+if $step13_ok; then
+    step_pass "13" "write_summary auto-promotion" "OK->WARN when WARNINGS > 0"
+else
+    step_fail "13" "write_summary auto-promotion" "write_summary missing WARNINGS auto-promotion"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------
 print_summary

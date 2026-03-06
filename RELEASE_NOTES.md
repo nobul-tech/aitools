@@ -12,6 +12,20 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.45.2 -- Fix write_summary OK ignoring WARNINGS counter (2026-03-06)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **write_summary OK ignores warnings**: When a setup script called `log_warn` (incrementing `$WARNINGS`) but ended with `write_summary OK`, the summary panel showed `[ok]` (green) instead of `[!]` (yellow). Triggered on `aitools install` first run — Datadog old-tap migration logged `[warn]` but summary showed `[ok] datadog cli`. |
+| 2 | **Library-level auto-promotion**: `write_summary` / `Write-Summary` in `aitools-lib.sh/.ps1` now auto-promotes `OK` → `WARN` when `$WARNINGS > 0`. Fixes all 106 call sites across 33 files — no call-site changes needed. |
+| 3 | **Compliance guard**: New step 13 in `check-script-compliance.sh/.ps1` verifies the auto-promotion logic exists in both libs, preventing regression. |
+
+**Verified on:** macOS (compliance check 13/13 PASS, deploy rebuild clean). Windows: not tested.
+
+---
+
 ## v0.45.1 -- Fix git pull failure from build artifacts (line endings, file modes) (2026-03-06)
 
 ### Fixed

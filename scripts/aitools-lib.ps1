@@ -78,6 +78,10 @@ function LogWarn($msg)  { Log $msg "warn"; $script:warnings++ }
 # ---------------------------------------------------------------------------
 function Write-Summary($cat, $tool, $detail) {
     if ($env:AITOOLS_SUMMARY_FILE) {
+        # Auto-promote OK to WARN when warnings have been logged
+        if ($cat -eq "OK" -and $script:warnings -gt 0) {
+            $cat = "WARN"
+        }
         Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}"
     }
 }
