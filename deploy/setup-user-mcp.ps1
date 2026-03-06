@@ -792,7 +792,6 @@ function Show-CloudMcpStatus {
     }
 }
 
-
 # --- Deploy Chrome DevTools skills (embedded) ---
 # Vendored from https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/main/skills
 # Content embedded at build time by build-deploy.sh for self-contained deployment.

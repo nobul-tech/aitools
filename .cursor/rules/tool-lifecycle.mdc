@@ -33,6 +33,10 @@ Tools with `evaluating` on ALL platforms must NOT have: setup scripts, installer
 
 When a tool is approved (Phase 2 gate passed), complete ALL of these steps in order. Missing any causes drift between the pipeline, documentation, and deployed configs.
 
+#### Prerequisite
+- Verify upstream install method via Chrome DevTools MCP skill (see "Install command verification gate")
+- Record verified install commands in `reference/tool-registry.md` (protected -- present for review)
+
 #### Non-protected (implement directly)
 - `scripts/setup-<tool>.sh` — install/update (macOS+Linux; OS guard exits on Windows)
 - `scripts/setup-<tool>.ps1` — install/update (Windows; OS guard exits on macOS/Linux)
@@ -57,3 +61,19 @@ When a tool is approved (Phase 2 gate passed), complete ALL of these steps in or
 ### Dotprofile priority
 
 `setup-user-claude.sh/.ps1` reads the user's dotprofile `<userRepoPath>/claude/CLAUDE.md` first. If `userRepoPath` is configured in `~/.aitools/config.json` and the file exists, it wins over `shared/claude-shared.md`. This means any Managed CLI Tools row added to `shared/claude-shared.md` must ALSO be added to the dotprofile — otherwise the live `~/.claude/CLAUDE.md` will not reflect the change. Future: `aitools user sync` will automate this (see ROADMAP.md).
+
+### Install command verification gate
+
+Before writing or modifying setup scripts for ANY managed tool, verify the current upstream install method using the Chrome DevTools MCP skill (`chrome-devtools`). Do not rely on cached knowledge or existing script commands -- upstream projects change languages, package managers, and release methods without notice.
+
+This gate applies to:
+- New tool onboarding (Phase 2+)
+- Modifying existing setup scripts (bug fixes, upgrades, platform additions)
+- Investigating install failures (RCA)
+
+Required checks (via chrome-devtools):
+1. Official README install section (repo root or docs site)
+2. GitHub releases page -- available platforms, architectures, asset formats
+3. Package manager presence (Homebrew formula/tap, crates.io, npm, winget ID, etc.)
+
+Record findings in `reference/tool-registry.md` before modifying scripts. Include the verification date and source URL. If the upstream method has changed, update tool-registry first, then update scripts to match.

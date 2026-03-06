@@ -253,6 +253,12 @@ mkdir -p "$CONFIG_DIR"
 AITOOLS_REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # ============================================================
+# 0. System prerequisites
+# ============================================================
+# Windows long path check is in aitools-install.ps1 (Step 0).
+# macOS/Linux have no path length limit -- nothing to do here.
+
+# ============================================================
 # 1. Install/update gh CLI
 # ============================================================
 log "Step 1: gh CLI"

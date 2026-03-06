@@ -67,6 +67,10 @@ If any of these exist for an `evaluating`-only tool, flag it as a lifecycle erro
 When a tool is approved (Phase 2 gate passed), complete ALL of these steps in order.
 Missing any causes drift between the pipeline, documentation, and deployed configs.
 
+#### Prerequisite
+- Verify upstream install method via Chrome DevTools MCP skill (see "Install command verification gate")
+- Record verified install commands in `reference/tool-registry.md` (protected -- present for review)
+
 #### Non-protected (implement directly)
 - `scripts/setup-<tool>.sh` — install/update (macOS+Linux; OS guard exits on Windows)
 - `scripts/setup-<tool>.ps1` — install/update (Windows; OS guard exits on macOS/Linux)
@@ -105,6 +109,27 @@ When a setup script installs a tool via a preferred method (e.g., Homebrew), it 
 also detect and remove old installs from non-preferred sources (e.g., npm/bun global,
 manual binary). Prevents stale versions shadowing the preferred one due to PATH order.
 See `setup-vercelcli` for the pattern.
+
+### Install command verification gate
+
+Before writing or modifying setup scripts for ANY managed tool, verify the current
+upstream install method using the Chrome DevTools MCP skill (`chrome-devtools`).
+Do not rely on cached knowledge or existing script commands -- upstream projects
+change languages, package managers, and release methods without notice.
+
+This gate applies to:
+- New tool onboarding (Phase 2+)
+- Modifying existing setup scripts (bug fixes, upgrades, platform additions)
+- Investigating install failures (RCA)
+
+Required checks (via chrome-devtools):
+1. Official README install section (repo root or docs site)
+2. GitHub releases page -- available platforms, architectures, asset formats
+3. Package manager presence (Homebrew formula/tap, crates.io, npm, winget ID, etc.)
+
+Record findings in `reference/tool-registry.md` before modifying scripts. Include
+the verification date and source URL. If the upstream method has changed, update
+tool-registry first, then update scripts to match.
 
 ### Cross-platform vetting
 

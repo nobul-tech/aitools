@@ -12,6 +12,34 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.45.0 -- Fix Datadog CLI install, add long paths + install verification gate (2026-03-06)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Datadog CLI install broken**: Pup was rewritten from Go to Rust (circa v0.24+). `go install github.com/DataDog/pup@latest` no longer works. macOS: fixed Homebrew tap `datadog/pack` -> `datadog-labs/pack`, added old-tap migration. Windows: replaced `go install` with `cargo install --git`. |
+| 2 | **Install error output silently dropped**: `setup-datadog.ps1` captured `$goOutput` but never logged it on failure. Now logs cargo output on error. |
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **Windows long path support** (Step 0 in `aitools-install.ps1`): Checks `LongPathsEnabled` registry key, emits ACTION if disabled. Sets `git config --global core.longpaths true` automatically. Required for cargo builds with deep dependency trees. |
+| 2 | **Install command verification gate**: New rule in `tool-lifecycle.md/.mdc` requiring Chrome DevTools MCP verification of upstream install methods before writing/modifying any setup script. Applies to new onboarding, script modifications, and RCA. |
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 1 | **tool-registry.md**: Datadog CLI install table updated -- Homebrew `datadog-labs/pack/pup` (macOS), `cargo install --git` (Windows). Added Rust rewrite note, verification date. |
+| 2 | **tool-versions.json**: Updated datadog-pup notes to reflect Rust-based CLI and correct tap. |
+| 3 | **Onboarding checklist**: New "Prerequisite" step requires upstream install verification via chrome-devtools before writing setup scripts. |
+
+**Verified on:** Windows (smoke test: Pup 0.26.0 installed via cargo, long path check works). macOS: not tested (Homebrew tap change, old-tap migration).
+
+---
+
 ## v0.44.0 -- Add Datadog CLI (pup) as managed tool (2026-03-06)
 
 ### Added

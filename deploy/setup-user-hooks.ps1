@@ -525,7 +525,6 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 }
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
-
 # --- Deploy embedded hook scripts to ~/.claude/hooks/ ---
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
 $hooksDir = Join-Path $claudeDir "hooks"

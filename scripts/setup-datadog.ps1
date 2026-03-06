@@ -1,8 +1,8 @@
-# setup-datadog.ps1 -- Installs/updates Datadog CLI (pup) on Windows via go install
+# setup-datadog.ps1 -- Installs/updates Datadog CLI (pup) on Windows via cargo install
 # Safe to re-run -- detects existing install and upgrades as needed.
 #
-# Windows: Uses go install (no winget/chocolatey package available).
-#          Requires Go to be installed first (Step 17 in aitools-install).
+# Windows: Uses cargo install (Rust-based CLI; no winget/chocolatey package available).
+#          Requires Rust/cargo to be installed first (Step 12 in aitools-install).
 # macOS/Linux: Uses Homebrew -- see setup-datadog.sh.
 #
 # See reference/tool-registry.md for install source details.
@@ -19,12 +19,12 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 
 $freshInstall = $false
 
-# --- Check Go is available ---
+# --- Check cargo is available ---
 # Get-Command exempt: command-existence check with explicit fallback
-$goCheck = Get-Command go -ErrorAction SilentlyContinue
-if (-not $goCheck) {
-    LogError "Go is not installed -- required for Datadog CLI on Windows. Run setup-go.ps1 first."
-    Write-Summary "ERROR" "datadog cli" "Go not installed (prerequisite)"
+$cargoCheck = Get-Command cargo -ErrorAction SilentlyContinue
+if (-not $cargoCheck) {
+    LogError "Rust (cargo) is not installed -- required for Datadog CLI on Windows. Run setup-rust.ps1 first."
+    Write-Summary "ERROR" "datadog cli" "Rust not installed (prerequisite)"
 } else {
     # --- Detect existing install ---
     # Get-Command exempt: command-existence check with explicit fallback
@@ -33,14 +33,15 @@ if (-not $goCheck) {
     if ($pupCheck) {
         $pupVersion = pup version 2>$null
         if ($pupVersion) {
-            Log "Pup already installed ($pupVersion) -- upgrading via go install..."
+            Log "Pup already installed ($pupVersion) -- upgrading via cargo install..."
         } else {
-            Log "Pup found but version check failed -- upgrading via go install..."
+            Log "Pup found but version check failed -- upgrading via cargo install..."
         }
-        $goOutput = go install github.com/DataDog/pup@latest 2>&1 | Out-String
+        $cargoOutput = cargo install --git https://github.com/datadog-labs/pup 2>&1 | Out-String
         if ($LASTEXITCODE -ne 0) {
-            LogError "go install pup@latest failed (exit code $LASTEXITCODE)"
-            Write-Summary "ERROR" "datadog cli" "go install failed"
+            $cargoOutput.Trim().Split("`n") | ForEach-Object { $l = $_.TrimEnd(); if ($l.Trim()) { Log $l } }
+            LogError "cargo install pup failed (exit code $LASTEXITCODE)"
+            Write-Summary "ERROR" "datadog cli" "cargo install failed"
         } else {
             Refresh-Path
             $pupVersion = pup version 2>$null
@@ -48,18 +49,19 @@ if (-not $goCheck) {
                 LogOk "Pup upgraded ($pupVersion)"
                 Write-Summary "OK" "datadog cli" "$pupVersion"
             } else {
-                LogError "go install completed but 'pup version' failed"
+                LogError "cargo install completed but 'pup version' failed"
                 Write-Summary "ERROR" "datadog cli" "version check failed after upgrade"
             }
         }
     } else {
         # Fresh install
         $freshInstall = $true
-        Log "Installing Pup via go install..."
-        $goOutput = go install github.com/DataDog/pup@latest 2>&1 | Out-String
+        Log "Installing Pup via cargo install..."
+        $cargoOutput = cargo install --git https://github.com/datadog-labs/pup 2>&1 | Out-String
         if ($LASTEXITCODE -ne 0) {
-            LogError "go install pup@latest failed (exit code $LASTEXITCODE)"
-            Write-Summary "ERROR" "datadog cli" "go install failed"
+            $cargoOutput.Trim().Split("`n") | ForEach-Object { $l = $_.TrimEnd(); if ($l.Trim()) { Log $l } }
+            LogError "cargo install pup failed (exit code $LASTEXITCODE)"
+            Write-Summary "ERROR" "datadog cli" "cargo install failed"
         }
         Refresh-Path
 
@@ -75,7 +77,7 @@ if (-not $goCheck) {
                 Write-Summary "ERROR" "datadog cli" "version check failed"
             }
         } elseif ($errors -eq 0) {
-            LogError "go install completed but 'pup' not found in PATH"
+            LogError "cargo install completed but 'pup' not found in PATH"
             Write-Summary "ERROR" "datadog cli" "installed but not on PATH"
         }
     }

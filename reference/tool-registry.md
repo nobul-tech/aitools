@@ -768,13 +768,14 @@ modal --version
 
 | Platform | Method | Command |
 |----------|--------|---------|
-| macOS | Homebrew (preferred) | `brew install datadog/pack/pup` |
-| All | Go install (alt) | `go install github.com/DataDog/pup@latest` |
+| macOS/Linux | Homebrew (preferred) | `brew install datadog-labs/pack/pup` |
+| Windows | cargo install (source) | `cargo install --git https://github.com/datadog-labs/pup` |
+| macOS/Linux | Manual download | Pre-built binaries from [latest release](https://github.com/datadog-labs/pup/releases/latest) |
 
 ### Update
 
-- Homebrew: `brew upgrade datadog/pack/pup`
-- Go: re-run `go install`
+- Homebrew: `brew upgrade datadog-labs/pack/pup`
+- cargo: re-run `cargo install --git https://github.com/datadog-labs/pup`
 
 ### Check Version
 
@@ -788,18 +789,20 @@ pup version
 
 ### Notes
 
+- Rewritten from Go to Rust (circa v0.24+). No pre-built Windows binaries as of v0.26.0.
 - Published under `datadog-labs` (not main `DataDog` org) -- yellow flag per tool evaluation criteria. Officially maintained by Datadog employees.
 - OAuth2 auth model -- no API key management needed for interactive use
 - Useful for querying logs and managing monitors from the command line
+- Install verified via chrome-devtools: 2026-03-06 (GitHub README + releases page)
 
 ### Lifecycle
 
-- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
+- **Platform Status:** macOS: supported | Windows: supported (source build) | Linux: supported
 - **Concurrency:** Yes -- stateless CLI
 - **Post-Install Config:** `pup auth login` required (not automated)
-- **Dependencies:** None (Homebrew) or Go toolchain (go install)
+- **Dependencies:** None (Homebrew) or Rust toolchain (cargo install)
 - **Invocation:** `pup` (direct)
-- **Last verified version:** pending
+- **Last verified version:** macOS: Pup 0.26.0 (2026-03-06) | Windows: pending | Linux: pending
 
 ---
 

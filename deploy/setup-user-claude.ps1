@@ -528,7 +528,6 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
-
 # --- Auto-detect machine info ---
 $osInfo = (Get-CimInstance Win32_OperatingSystem).Caption
 $hostname = $env:COMPUTERNAME
@@ -552,9 +551,9 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Identity
 
-- Name: Jose
+- Name: pepe
 - Git: `Jose <jose@nobul.tech>`
-- Company: Nobul
+- Company: nobul.tech
 
 ## Code Style Defaults
 

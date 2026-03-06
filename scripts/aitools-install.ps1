@@ -136,6 +136,38 @@ $aitoolsRepo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
 # ============================================================
+# 0. System prerequisites (Windows long paths)
+# ============================================================
+# Windows has a 260-char path limit by default. Many tools (git, cargo, node)
+# need longer paths. Enable both the OS-level setting and git's own flag.
+$longPathsKey = "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem"
+$longPathsEnabled = $false
+try {
+    $val = Get-ItemProperty $longPathsKey -Name LongPathsEnabled -ErrorAction SilentlyContinue
+    if ($val -and $val.LongPathsEnabled -eq 1) { $longPathsEnabled = $true }
+} catch {
+    # Registry read failed -- treat as disabled
+}
+
+if ($longPathsEnabled) {
+    LogOk "Windows long paths enabled"
+} else {
+    LogWarn "Windows long paths disabled (LongPathsEnabled=0) -- cargo/git may fail on deep paths"
+    LogWarn "Fix (run as admin): Set-ItemProperty '$longPathsKey' -Name LongPathsEnabled -Value 1"
+    Write-Summary "ACTION" "" "Enable long paths (admin): Set-ItemProperty '$longPathsKey' -Name LongPathsEnabled -Value 1"
+}
+
+# git core.longpaths -- can set without elevation
+$gitLongPaths = git config --global core.longpaths 2>$null
+if ($gitLongPaths -ne "true") {
+    Log "Setting git config --global core.longpaths true..."
+    git config --global core.longpaths true
+    LogOk "git core.longpaths enabled"
+} else {
+    LogOk "git core.longpaths already enabled"
+}
+
+# ============================================================
 # 1. Install/update gh CLI
 # ============================================================
 Log "Step 1: gh CLI"
