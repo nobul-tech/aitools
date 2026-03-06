@@ -382,6 +382,7 @@ add_mcp_server() {
     log "Adding $name..."
     if claude mcp add "$@"; then
         log_ok "$name configured"
+        MCP_CHANGED=true
     else
         log_error "Failed to add $name"
         write_summary ERROR "claude mcp" "failed to add $name"
@@ -393,6 +394,7 @@ add_mcp_server() {
     fi
 }
 
+MCP_CHANGED=false
 log "Setting up MCP servers for Claude Code (user scope)..."
 
 # Chrome DevTools — local stdio server via npx
@@ -535,7 +537,8 @@ case "$DENY_RESULT" in
     unchanged)
         log_ok "Deny rules unchanged in $(display_path "$settings_file")" ;;
     ok)
-        log_ok "Deny rules set for vercel, webflow in $(display_path "$settings_file")" ;;
+        log_ok "Deny rules set for vercel, webflow in $(display_path "$settings_file")"
+        MCP_CHANGED=true ;;
     dry-run)
         log "[DRY RUN] Would set deny rules for vercel, webflow" ;;
     error-corrupt)
@@ -552,7 +555,11 @@ esac
 if [ "$DRY_RUN" != "true" ]; then
     log_ok "User-level MCP configured (all servers; vercel/webflow disabled by default)"
     if [ "$ERRORS" -eq 0 ]; then
-        write_summary OK "claude mcp" "configured"
+        if [ "$MCP_CHANGED" = "true" ]; then
+            write_summary OK "claude mcp" "configured"
+        else
+            write_summary OK "claude mcp" "unchanged"
+        fi
     fi
 else
     log "[DRY RUN] Would configure user-level MCP (all servers; vercel/webflow disabled by default)"

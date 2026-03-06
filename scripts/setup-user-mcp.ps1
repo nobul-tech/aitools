@@ -102,6 +102,7 @@ function Add-McpServer {
     $addResult = & claude mcp add @AddArgs 2>&1
     if ($LASTEXITCODE -eq 0) {
         LogOk "$Name configured"
+        $script:mcpChanged = $true
     } else {
         LogError "Failed to add $Name`: $addResult"
         Write-Summary "ERROR" "claude mcp" "failed to add $Name"
@@ -113,6 +114,7 @@ function Add-McpServer {
     }
 }
 
+$mcpChanged = $false
 Log "Setting up MCP servers for Claude Code (user scope)..."
 
 # Chrome DevTools -- local stdio server via npx (Windows needs cmd /c wrapper)
@@ -258,6 +260,7 @@ if ($DryRun) {
         }
 
         LogOk "Deny rules set for vercel, webflow in $settingsFile"
+        $mcpChanged = $true
     }
 }
 
@@ -266,7 +269,7 @@ if ($DryRun) {
 } else {
     LogOk "User-level MCP configured (all servers; vercel/webflow disabled by default)"
     if ($errors -eq 0) {
-        Write-Summary "OK" "claude mcp" "configured"
+        Write-Summary "OK" "claude mcp" $(if ($mcpChanged) { "configured" } else { "unchanged" })
     }
 }
 Log "To enable per project: aitools --addmcp vercel"
