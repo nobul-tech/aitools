@@ -337,8 +337,8 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 
 # --- PS 7 version guard ---
 if ($PSVersionTable.PSVersion.Major -lt 7) {
-    Write-Host "ERROR: This script requires PowerShell 7+. Current: $($PSVersionTable.PSVersion)" -ForegroundColor Red
-    Write-Host "Install: winget install --id Microsoft.PowerShell --source winget" -ForegroundColor Yellow
+    LogError "This script requires PowerShell 7+. Current: $($PSVersionTable.PSVersion)"
+    LogWarn "Install: winget install --id Microsoft.PowerShell --source winget"
     exit 1
 }
 

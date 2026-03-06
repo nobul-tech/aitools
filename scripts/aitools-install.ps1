@@ -39,6 +39,12 @@ Interactive behavior:
 . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
 Initialize-Logging "aitools-install"
 
+# --- OS guard ---
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    LogError "This script is for Windows. On macOS/Linux, use the .sh version."
+    exit 1
+}
+
 # JSONL logging (extends standard pattern with structured JSON)
 $logJsonl = Join-Path $logDir "deploy.jsonl"
 $runId = if ($env:AITOOLS_RUN_ID) { $env:AITOOLS_RUN_ID } else { -join ((1..6) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) }) }
