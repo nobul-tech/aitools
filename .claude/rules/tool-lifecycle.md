@@ -77,6 +77,7 @@ Missing any causes drift between the pipeline, documentation, and deployed confi
 - `scripts/aitools-install.sh` — add `validate_and_run "$SCRIPT_DIR/setup-<tool>.sh"` step
 - `scripts/aitools-install.ps1` — add `Invoke-ValidatedScript $toolScript` step
 - `scripts/build-deploy.sh` — add numbered copy-as-is block pair after last tool block
+- If tool requires auth: add auth status check in both setup scripts (see script-standards "Post-install authentication check") and document auth commands in `reference/tool-registry.md` Authentication section
 
 #### Protected (present for review before writing)
 - `reference/tool-registry.md` — full entry with all 6 lifecycle fields

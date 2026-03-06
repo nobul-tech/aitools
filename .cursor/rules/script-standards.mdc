@@ -58,6 +58,10 @@ Setup scripts that write config files, .md files, hooks, or skills must follow t
 
 External install/upgrade commands must have output captured and exit codes checked. Never fire-and-forget. Distinguish "already up to date" from real failures. PATH issues are errors, not warnings. See `reference/script-standards-detail.md` for patterns.
 
+### Post-install authentication check
+
+Setup scripts for tools requiring auth must check auth status on every run (not just fresh install). After successful install/upgrade: check via tool command or config file presence. Not authenticated: `log_warn` + `write_summary WARN` + `write_summary ACTION`. Authenticated: silent. Auth commands documented per-tool in `reference/tool-registry.md` Authentication section. See `reference/script-standards-detail.md` for code patterns.
+
 ### Error handling (all scripts)
 
 Every error-suppression pattern requires an immediate result check:

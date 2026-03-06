@@ -515,8 +515,6 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     exit 1
 }
 
-$freshInstall = $false
-
 # --- Check cargo is available ---
 # Get-Command exempt: command-existence check with explicit fallback
 $cargoCheck = Get-Command cargo -ErrorAction SilentlyContinue
@@ -553,7 +551,6 @@ if (-not $cargoCheck) {
         }
     } else {
         # Fresh install
-        $freshInstall = $true
         Log "Installing Pup via cargo install..."
         $cargoOutput = cargo install --git https://github.com/datadog-labs/pup 2>&1 | Out-String
         if ($LASTEXITCODE -ne 0) {
@@ -581,9 +578,16 @@ if (-not $cargoCheck) {
     }
 }
 
-# --- Auth reminder on fresh install ---
-if ($freshInstall -and $errors -eq 0) {
-    Write-Summary "ACTION" "" "Run: pup auth login (one-time OAuth)"
+# --- Auth status check ---
+# pup auth status exits 0 regardless; check output content for auth state
+# Get-Command exempt: command-existence check with explicit fallback
+if ((Get-Command pup -ErrorAction SilentlyContinue) -and $errors -eq 0) {
+    $authOutput = pup auth status 2>&1 | Out-String
+    if ($authOutput -match 'Not authenticated|"authenticated":\s*false') {
+        LogWarn "Not authenticated: run 'pup auth login' (one-time OAuth)"
+        Write-Summary "WARN" "datadog cli" "not authenticated"
+        Write-Summary "ACTION" "" "pup auth login -- authenticate Datadog CLI"
+    }
 }
 
 # --- Exit ---

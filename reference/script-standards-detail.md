@@ -574,6 +574,122 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
 # --system is required for uv (installs into system Python, not a virtualenv)
 ```
 
+## Post-install authentication check
+
+Setup scripts for tools requiring authentication must check auth status on every run,
+not just fresh installs. This surfaces the ACTION line whenever auth is missing —
+including after reinstalls, credential expiry, or machine migrations.
+
+### Pattern: command exit code
+
+Use when the tool's status command returns non-zero when not authenticated (e.g., `vercel whoami`).
+
+**Bash:**
+
+```bash
+# --- Auth status check ---
+if command -v toolname >/dev/null 2>&1 && [ "$ERRORS" -eq 0 ]; then
+    AUTH_EC=0
+    AUTH_OUTPUT=$(toolname auth status 2>&1) || AUTH_EC=$?
+    if [ "$AUTH_EC" -ne 0 ]; then
+        log_warn "Not authenticated: run 'toolname auth login' (one-time OAuth)"
+        write_summary WARN "tool name" "not authenticated"
+        write_summary ACTION "" "toolname auth login -- authenticate tool"
+    fi
+fi
+```
+
+**PowerShell:**
+
+```powershell
+# --- Auth status check ---
+# Get-Command exempt: command-existence check with explicit fallback
+if ((Get-Command toolname -ErrorAction SilentlyContinue) -and $errors -eq 0) {
+    $authOutput = toolname auth status 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        LogWarn "Not authenticated: run 'toolname auth login' (one-time OAuth)"
+        Write-Summary "WARN" "tool name" "not authenticated"
+        Write-Summary "ACTION" "" "toolname auth login -- authenticate tool"
+    }
+}
+```
+
+### Pattern: command output content
+
+Use when the tool's status command always exits 0 and reports auth state in output
+(e.g., `pup auth status` prints `Not authenticated` or `"authenticated": false`).
+
+**Bash:**
+
+```bash
+# --- Auth status check ---
+# toolname auth status exits 0 regardless; check output content for auth state
+if command -v toolname >/dev/null 2>&1 && [ "$ERRORS" -eq 0 ]; then
+    AUTH_OUTPUT=$(toolname auth status 2>&1) || true
+    if printf '%s\n' "$AUTH_OUTPUT" | grep -qi 'not authenticated'; then
+        log_warn "Not authenticated: run 'toolname auth login' (one-time OAuth)"
+        write_summary WARN "tool name" "not authenticated"
+        write_summary ACTION "" "toolname auth login -- authenticate tool"
+    fi
+fi
+```
+
+**PowerShell:**
+
+```powershell
+# --- Auth status check ---
+# toolname auth status exits 0 regardless; check output content for auth state
+# Get-Command exempt: command-existence check with explicit fallback
+if ((Get-Command toolname -ErrorAction SilentlyContinue) -and $errors -eq 0) {
+    $authOutput = toolname auth status 2>&1 | Out-String
+    if ($authOutput -match 'Not authenticated|"authenticated":\s*false') {
+        LogWarn "Not authenticated: run 'toolname auth login' (one-time OAuth)"
+        Write-Summary "WARN" "tool name" "not authenticated"
+        Write-Summary "ACTION" "" "toolname auth login -- authenticate tool"
+    }
+}
+```
+
+### Pattern: config file presence
+
+Use when the tool stores auth in a known file (e.g., `~/.modal.toml`) and has no status command.
+
+**Bash:**
+
+```bash
+# --- Auth status check ---
+if command -v toolname >/dev/null 2>&1 && [ "$ERRORS" -eq 0 ]; then
+    if [ ! -f "$HOME/.toolname.toml" ]; then
+        log_warn "Authentication required: run 'toolname setup' (browser flow)"
+        write_summary WARN "tool name" "not authenticated"
+        write_summary ACTION "" "toolname setup -- authenticate tool"
+    fi
+fi
+```
+
+**PowerShell:**
+
+```powershell
+# --- Auth status check ---
+# Get-Command exempt: command-existence check with explicit fallback
+if ((Get-Command toolname -ErrorAction SilentlyContinue) -and $errors -eq 0) {
+    $authFile = Join-Path $HOME ".toolname.toml"
+    if (-not (Test-Path $authFile)) {
+        LogWarn "Authentication required: run 'toolname setup' (browser flow)"
+        Write-Summary "WARN" "tool name" "not authenticated"
+        Write-Summary "ACTION" "" "toolname setup -- authenticate tool"
+    }
+}
+```
+
+### Key rules
+
+- Runs AFTER install/upgrade, BEFORE exit footer
+- Only runs when `$ERRORS -eq 0` / `$errors -eq 0` (skip if install itself failed)
+- Always pairs: `log_warn` + `write_summary WARN` + `write_summary ACTION`
+- Prefer command exit code over file presence when the tool provides a status command
+- Auth check method documented per-tool in `reference/tool-registry.md` (Authentication section)
+
 ## Anti-pattern examples
 
 **Wrong** -- suppressed error feeds into loop with no guard:

@@ -787,6 +787,20 @@ pup version
 
 - `pup auth login` (one-time OAuth, browser flow) required after install
 
+### Authentication
+
+| Command | Purpose |
+|---------|---------|
+| `pup auth login` | OAuth2 + PKCE browser flow (one-time) |
+| `pup auth status` | Check auth (always exits 0; check output for `"authenticated": false`) |
+| `pup auth refresh` | Refresh access token |
+| `pup auth logout` | Clear stored tokens |
+
+- **Token storage**: System keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service). Set `DD_TOKEN_STORAGE=file` for file-based fallback.
+- **Auth priority**: `DD_ACCESS_TOKEN` (bearer) > OAuth2 tokens (from `pup auth login`) > API keys (`DD_API_KEY` + `DD_APP_KEY`)
+- **Auth check for setup scripts**: `pup auth status` output content (exits 0 regardless — check for `Not authenticated` or `"authenticated": false`)
+- **Agent mode**: Auto-detected when `CLAUDECODE` env var is set — structured JSON output, auto-approves confirmations
+
 ### Notes
 
 - Rewritten from Go to Rust (circa v0.24+). No pre-built Windows binaries as of v0.26.0.
@@ -799,10 +813,10 @@ pup version
 
 - **Platform Status:** macOS: supported | Windows: supported (source build) | Linux: supported
 - **Concurrency:** Yes -- stateless CLI
-- **Post-Install Config:** `pup auth login` required (not automated)
+- **Post-Install Config:** `pup auth login` required (not automated); check with `pup auth status`
 - **Dependencies:** None (Homebrew) or Rust toolchain (cargo install)
 - **Invocation:** `pup` (direct)
-- **Last verified version:** macOS: Pup 0.26.0 (2026-03-06) | Windows: pending | Linux: pending
+- **Last verified version:** macOS: Pup 0.26.0 (2026-03-06) | Windows: Pup 0.26.0 (2026-03-06) | Linux: pending
 
 ---
 

@@ -122,6 +122,25 @@ External install/upgrade commands (pip, npm, winget, brew, cargo, apt-get) MUST:
 See `@reference/script-standards-detail.md` for platform-specific code patterns and
 anti-patterns.
 
+### Post-install authentication check
+
+Setup scripts for tools requiring authentication MUST check auth status on every run —
+not just fresh installs. After successful install/upgrade:
+
+1. Check auth using the tool's own command or config file presence
+2. Not authenticated: `log_warn` + `write_summary WARN` + `write_summary ACTION`
+3. Authenticated: no extra output (silent success)
+
+Auth check commands are documented per-tool in `reference/tool-registry.md` (Authentication section).
+
+| Tool | Check method | Type |
+|------|-------------|------|
+| Modal CLI | `$HOME/.modal.toml` exists | File presence |
+| Datadog CLI | `pup auth status` output content | Command output |
+| Vercel CLI | `vercel whoami` exit code | Command exit code |
+
+See `@reference/script-standards-detail.md` for code patterns.
+
 ### Error handling requirements
 
 These apply to ALL reusable scripts in the repo, not just setup scripts.

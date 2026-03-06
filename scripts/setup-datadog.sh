@@ -21,8 +21,6 @@ case "$(uname -s)" in
         exit 1 ;;
 esac
 
-FRESH_INSTALL=false
-
 # --- Detect existing install ---
 PUP_PATH=$(command -v pup 2>/dev/null) || PUP_PATH=""
 
@@ -83,7 +81,6 @@ if [ -n "$PUP_PATH" ]; then
     fi
 else
     # Fresh install
-    FRESH_INSTALL=true
     log "Installing Pup via Homebrew (datadog-labs/pack tap)..."
     # brew install can exit non-zero for non-fatal warnings; check output for real errors
     INSTALL_OUTPUT=$(brew install datadog-labs/pack/pup 2>&1) || true
@@ -118,9 +115,15 @@ else
     fi
 fi
 
-# --- Auth reminder on fresh install ---
-if [ "$FRESH_INSTALL" = true ] && [ "$ERRORS" -eq 0 ]; then
-    write_summary ACTION "" "Run: pup auth login (one-time OAuth)"
+# --- Auth status check ---
+# pup auth status exits 0 regardless; check output content for auth state
+if command -v pup >/dev/null 2>&1 && [ "$ERRORS" -eq 0 ]; then
+    AUTH_OUTPUT=$(pup auth status 2>&1) || true
+    if printf '%s\n' "$AUTH_OUTPUT" | grep -qi 'not authenticated'; then
+        log_warn "Not authenticated: run 'pup auth login' (one-time OAuth)"
+        write_summary WARN "datadog cli" "not authenticated"
+        write_summary ACTION "" "pup auth login -- authenticate Datadog CLI"
+    fi
 fi
 
 # --- Exit ---

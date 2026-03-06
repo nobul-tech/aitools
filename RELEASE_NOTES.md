@@ -12,6 +12,27 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.46.0 -- Add post-install auth check pattern, pup auth status (2026-03-06)
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **Post-install auth check standard**: New script-standards section requiring setup scripts to check auth status on every run (not just fresh install). Three patterns documented: command exit code, command output content, and config file presence. |
+| 2 | **Pup auth documentation**: `reference/tool-registry.md` now has full Authentication section for Datadog CLI — commands, token storage locations, auth priority, agent mode. |
+| 3 | **Tool onboarding checklist**: Auth check step added to both `.claude/rules/tool-lifecycle.md` and `.cursor/rules/tool-lifecycle.mdc` — tools requiring auth must implement the check and document auth commands. |
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Pup auth check on every run**: `setup-datadog.sh/.ps1` now checks `pup auth status` output on every run, not just fresh installs. Shows WARN + ACTION in summary panel when not authenticated. |
+| 2 | **Pup auth status exit code**: `pup auth status` always exits 0 regardless of auth state — scripts check output content (`Not authenticated` / `"authenticated": false`) instead of exit code. |
+
+**Verified on:** Windows (syntax validation, build 30/30, smoke test confirms auth warning fires). macOS: not tested.
+
+---
+
 ## v0.45.2 -- Fix write_summary OK ignoring WARNINGS counter (2026-03-06)
 
 ### Fixed
