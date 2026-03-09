@@ -356,6 +356,29 @@ deploy_skill() {
         if diff -q "$src" "$dest" >/dev/null 2>&1; then
             log_ok "Skill unchanged: $skill_name"
         else
+            # File differs -- backup and review before overwriting
+            backup_file "$dest"
+            _adopt_label=""
+            # Adopt target: copy deployed file back to source in shared/
+            if [ -f "$src" ]; then
+                _adopt_label="shared/"
+            fi
+            prompt_diff_review "$dest" "$(cat "$src")" "$_adopt_label"
+            case "$DIFF_REVIEW_RESULT" in
+                adopt)
+                    # Copy deployed version back to repo source
+                    cp "$dest" "$src"
+                    log_ok "Adopted skill to shared/: $skill_name"
+                    write_summary DETAIL "$tool_name" "adopted: $skill_name"
+                    return
+                    ;;
+                skip)
+                    log_warn "Skill skipped: $skill_name"
+                    write_summary DETAIL "$tool_name" "skipped: $skill_name"
+                    return
+                    ;;
+            esac
+            # overwrite: proceed with update
             # Log diff to deploy log; diff exits 1 for differences (expected)
             diff_exit=0
             diff -u "$dest" "$src" >> "$LOG_FILE" 2>&1 || diff_exit=$?

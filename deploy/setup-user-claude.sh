@@ -178,6 +178,83 @@ backup_dir() {
 }
 
 # ---------------------------------------------------------------------------
+# Prompt user before overwriting a managed file with different content.
+# Shows a unified diff and offers: Adopt / Overwrite / Skip / Abort.
+#
+# Args:
+#   $1 = file path (deployed file on disk)
+#   $2 = new content that would be written (from source template)
+#   $3 = adopt target label (e.g., "profile", "shared/") or "" to hide adopt
+#
+# Sets global DIFF_REVIEW_RESULT to: "overwrite", "adopt", or "skip"
+# Exits with code 2 on abort.
+# Non-interactive / --force: sets "overwrite" and returns.
+# ---------------------------------------------------------------------------
+DIFF_REVIEW_RESULT=""
+prompt_diff_review() {
+    local file_path="$1"
+    local new_content="$2"
+    local adopt_label="${3:-}"
+
+    DIFF_REVIEW_RESULT="overwrite"
+
+    # --force or AITOOLS_FORCE: auto-overwrite
+    if [ "${AITOOLS_FORCE:-}" = "1" ] || [ "${FORCE:-}" = "true" ]; then
+        log_warn "Diff in $(display_path "$file_path") -- overwriting (--force)"
+        return 0
+    fi
+
+    # Non-interactive: auto-overwrite (preserves current behavior)
+    if ! [ -c /dev/tty ]; then
+        log_warn "Diff in $(display_path "$file_path") -- overwriting (non-interactive)"
+        return 0
+    fi
+
+    # Show diff via /dev/tty (bypasses stdout/stderr redirection in deploy_configs)
+    printf '\n\033[33m[REVIEW]\033[0m %s differs from source.\n' \
+        "$(display_path "$file_path")" > /dev/tty
+    local diff_output
+    # diff exits 1 on differences (expected), suppress set -e abort
+    diff_output=$(diff -u <(printf '%s' "$new_content") "$file_path" \
+        --label "source (would deploy)" --label "current (on disk)" 2>&1) || true
+    local diff_lines
+    diff_lines=$(printf '%s\n' "$diff_output" | wc -l | tr -d ' ')
+    if [ "$diff_lines" -le 40 ]; then
+        printf '%s\n' "$diff_output" > /dev/tty
+    else
+        printf '%s\n' "$diff_output" | head -30 > /dev/tty
+        printf '  ... (%d more lines -- full diff in deploy log)\n' \
+            "$((diff_lines - 30))" > /dev/tty
+        printf '%s\n' "$diff_output" >> "${LOG_FILE:-/dev/null}"
+    fi
+
+    # Build prompt with conditional adopt option
+    printf '\n' > /dev/tty
+    if [ -n "$adopt_label" ]; then
+        printf '  [A]dopt to %s  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' \
+            "$adopt_label" > /dev/tty
+        printf '  Choice [a/O/s/x]: ' > /dev/tty
+    else
+        printf '  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' > /dev/tty
+        printf '  Choice [O/s/x]: ' > /dev/tty
+    fi
+    local choice
+    read -r choice < /dev/tty
+    case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
+        a)  if [ -n "$adopt_label" ]; then
+                DIFF_REVIEW_RESULT="adopt"
+            else
+                DIFF_REVIEW_RESULT="overwrite"
+            fi ;;
+        s)  DIFF_REVIEW_RESULT="skip" ;;
+        x)  log_error "Aborted by user"
+            exit 2 ;;
+        *)  DIFF_REVIEW_RESULT="overwrite" ;;
+    esac
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Repair broken uv tool environment (cross-platform)
 # ---------------------------------------------------------------------------
 # When `uv tool upgrade <tool>` fails with "missing a valid environment",
@@ -428,9 +505,9 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Identity
 
-- Name: pepe
+- Name: Jose
 - Git: `Jose <jose@nobul.tech>`
-- Company: nobul.tech
+- Company: Nobul
 
 ## Code Style Defaults
 
@@ -687,7 +764,7 @@ if [ -n "$RULES_SRC" ]; then
         backup_dir "$RULES_DEST"
         mkdir -p "$RULES_DEST"
 
-        ADDED=0; UPDATED=0; UNCHANGED=0
+        ADDED=0; UPDATED=0; UNCHANGED=0; ADOPTED=0; SKIPPED=0
         for rule_file in "$RULES_SRC"/*.md; do
             [ -f "$rule_file" ] || continue
             rule_name=$(basename "$rule_file")
@@ -698,7 +775,27 @@ if [ -n "$RULES_SRC" ]; then
                     UNCHANGED=$((UNCHANGED + 1))
                     continue
                 fi
-                # Log unified diff before overwriting. diff exits 1 on differences (expected).
+                # File differs from source -- review before overwriting
+                _adopt_label=""
+                if [ -n "${USER_REPO_PATH:-}" ]; then
+                    _adopt_label="profile"
+                fi
+                prompt_diff_review "$RULES_DEST/$rule_name" "$(cat "$rule_file")" "$_adopt_label"
+                case "$DIFF_REVIEW_RESULT" in
+                    adopt)
+                        mkdir -p "$USER_REPO_PATH/claude/rules"
+                        cp "$RULES_DEST/$rule_name" "$USER_REPO_PATH/claude/rules/$rule_name"
+                        log_ok "Adopted rule to profile: $rule_name"
+                        ADOPTED=$((ADOPTED + 1))
+                        continue
+                        ;;
+                    skip)
+                        log_warn "Skipped rule: $rule_name"
+                        SKIPPED=$((SKIPPED + 1))
+                        continue
+                        ;;
+                esac
+                # overwrite: proceed with update
                 log "Updating: $rule_name"
                 diff -u "$RULES_DEST/$rule_name" "$rule_file" \
                     --label "deployed/$rule_name" --label "source/$rule_name" \
@@ -736,8 +833,12 @@ if [ -n "$RULES_SRC" ]; then
         done
 
         if [ "$ERRORS" -eq 0 ]; then
-            log_ok "Rules: $ADDED added, $UPDATED updated, $UNCHANGED unchanged, $PRESERVED preserved in $(display_path "$RULES_DEST")"
-            write_summary OK "claude rules" "$ADDED added, $UPDATED updated, $UNCHANGED unchanged"
+            log_ok "Rules: $ADDED added, $UPDATED updated, $UNCHANGED unchanged, $ADOPTED adopted, $SKIPPED skipped, $PRESERVED preserved in $(display_path "$RULES_DEST")"
+            if [ "$SKIPPED" -gt 0 ]; then
+                write_summary WARN "claude rules" "$SKIPPED skipped (user review)"
+            else
+                write_summary OK "claude rules" "$ADDED added, $UPDATED updated, $UNCHANGED unchanged"
+            fi
         else
             write_summary ERROR "claude rules" "validation failed"
         fi

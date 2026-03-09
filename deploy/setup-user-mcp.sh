@@ -169,6 +169,83 @@ backup_dir() {
 }
 
 # ---------------------------------------------------------------------------
+# Prompt user before overwriting a managed file with different content.
+# Shows a unified diff and offers: Adopt / Overwrite / Skip / Abort.
+#
+# Args:
+#   $1 = file path (deployed file on disk)
+#   $2 = new content that would be written (from source template)
+#   $3 = adopt target label (e.g., "profile", "shared/") or "" to hide adopt
+#
+# Sets global DIFF_REVIEW_RESULT to: "overwrite", "adopt", or "skip"
+# Exits with code 2 on abort.
+# Non-interactive / --force: sets "overwrite" and returns.
+# ---------------------------------------------------------------------------
+DIFF_REVIEW_RESULT=""
+prompt_diff_review() {
+    local file_path="$1"
+    local new_content="$2"
+    local adopt_label="${3:-}"
+
+    DIFF_REVIEW_RESULT="overwrite"
+
+    # --force or AITOOLS_FORCE: auto-overwrite
+    if [ "${AITOOLS_FORCE:-}" = "1" ] || [ "${FORCE:-}" = "true" ]; then
+        log_warn "Diff in $(display_path "$file_path") -- overwriting (--force)"
+        return 0
+    fi
+
+    # Non-interactive: auto-overwrite (preserves current behavior)
+    if ! [ -c /dev/tty ]; then
+        log_warn "Diff in $(display_path "$file_path") -- overwriting (non-interactive)"
+        return 0
+    fi
+
+    # Show diff via /dev/tty (bypasses stdout/stderr redirection in deploy_configs)
+    printf '\n\033[33m[REVIEW]\033[0m %s differs from source.\n' \
+        "$(display_path "$file_path")" > /dev/tty
+    local diff_output
+    # diff exits 1 on differences (expected), suppress set -e abort
+    diff_output=$(diff -u <(printf '%s' "$new_content") "$file_path" \
+        --label "source (would deploy)" --label "current (on disk)" 2>&1) || true
+    local diff_lines
+    diff_lines=$(printf '%s\n' "$diff_output" | wc -l | tr -d ' ')
+    if [ "$diff_lines" -le 40 ]; then
+        printf '%s\n' "$diff_output" > /dev/tty
+    else
+        printf '%s\n' "$diff_output" | head -30 > /dev/tty
+        printf '  ... (%d more lines -- full diff in deploy log)\n' \
+            "$((diff_lines - 30))" > /dev/tty
+        printf '%s\n' "$diff_output" >> "${LOG_FILE:-/dev/null}"
+    fi
+
+    # Build prompt with conditional adopt option
+    printf '\n' > /dev/tty
+    if [ -n "$adopt_label" ]; then
+        printf '  [A]dopt to %s  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' \
+            "$adopt_label" > /dev/tty
+        printf '  Choice [a/O/s/x]: ' > /dev/tty
+    else
+        printf '  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' > /dev/tty
+        printf '  Choice [O/s/x]: ' > /dev/tty
+    fi
+    local choice
+    read -r choice < /dev/tty
+    case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
+        a)  if [ -n "$adopt_label" ]; then
+                DIFF_REVIEW_RESULT="adopt"
+            else
+                DIFF_REVIEW_RESULT="overwrite"
+            fi ;;
+        s)  DIFF_REVIEW_RESULT="skip" ;;
+        x)  log_error "Aborted by user"
+            exit 2 ;;
+        *)  DIFF_REVIEW_RESULT="overwrite" ;;
+    esac
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Repair broken uv tool environment (cross-platform)
 # ---------------------------------------------------------------------------
 # When `uv tool upgrade <tool>` fails with "missing a valid environment",
@@ -692,10 +769,60 @@ show_cloud_mcp_status() {
 SKILLS_DEST="$HOME/.claude/skills"
 SKILLS_DEST_CURSOR="$HOME/.cursor/skills"
 
-log "Deploying skills to $SKILLS_DEST..."
-ERRORS_BEFORE_CLAUDE_SKILLS=$ERRORS
-mkdir -p "$SKILLS_DEST/chrome-devtools"
-cat > "$SKILLS_DEST/chrome-devtools/SKILL.md" <<'__SKILL_CHROME_DEVTOOLS__'
+deploy_embedded_skill() {
+    local skill_name="$1"
+    local dest_base="$2"
+    local tool_name="$3"
+    local content_file="$4"
+
+    local dest_dir="$dest_base/$skill_name"
+    local dest="$dest_dir/SKILL.md"
+
+    if [ "$DRY_RUN" = "true" ]; then
+        log "[DRY RUN] Would deploy skill: $skill_name -> $(display_path "$dest")"
+        return
+    fi
+
+    mkdir -p "$dest_dir"
+
+    if [ -f "$dest" ]; then
+        # diff -q: exits 0 if identical, 1 if different (expected, not an error)
+        if diff -q "$content_file" "$dest" >/dev/null 2>&1; then
+            log_ok "Skill unchanged: $skill_name"
+            return
+        fi
+        # File differs -- backup and review
+        backup_file "$dest"
+        _adopt_label=""
+        _repo_path=$(read_config_key "$HOME/.aitools/config.json" "repoPath")
+        if [ -n "$_repo_path" ]; then
+            _adopt_label="shared/"
+        fi
+        prompt_diff_review "$dest" "$(cat "$content_file")" "$_adopt_label"
+        case "$DIFF_REVIEW_RESULT" in
+            adopt)
+                if [ -n "$_repo_path" ]; then
+                    mkdir -p "$_repo_path/shared/skills/$skill_name"
+                    cp "$dest" "$_repo_path/shared/skills/$skill_name/SKILL.md"
+                    log_ok "Adopted skill to shared/: $skill_name"
+                    write_summary DETAIL "$tool_name" "adopted: $skill_name"
+                fi
+                return
+                ;;
+            skip)
+                log_warn "Skill skipped: $skill_name"
+                write_summary DETAIL "$tool_name" "skipped: $skill_name"
+                return
+                ;;
+        esac
+    fi
+    # Write content (new file or overwrite after review)
+    cp "$content_file" "$dest"
+    log_ok "Deployed skill: $skill_name -> $(display_path "$dest")"
+}
+
+_skill_tmp=$(mktemp -d)
+cat > "$_skill_tmp/chrome-devtools.md" <<'__SKILL_CHROME_DEVTOOLS__'
 ---
 name: chrome-devtools
 description: Uses Chrome DevTools via MCP for efficient debugging, troubleshooting and browser automation. Use when debugging web pages, automating browser interactions, analyzing performance, or inspecting network requests.
@@ -743,10 +870,8 @@ If `chrome-devtools-mcp` is insufficient, guide users to use Chrome DevTools UI:
 
 If there are errors launching `chrome-devtools-mcp` or Chrome, refer to https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/troubleshooting.md.
 __SKILL_CHROME_DEVTOOLS__
-log_ok "Deployed skill: chrome-devtools -> $SKILLS_DEST/chrome-devtools"
 
-mkdir -p "$SKILLS_DEST/a11y-debugging"
-cat > "$SKILLS_DEST/a11y-debugging/SKILL.md" <<'__SKILL_A11Y_DEBUGGING__'
+cat > "$_skill_tmp/a11y-debugging.md" <<'__SKILL_A11Y_DEBUGGING__'
 ---
 name: a11y-debugging
 description: Uses Chrome DevTools MCP for accessibility (a11y) debugging and auditing based on web.dev guidelines. Use when testing semantic HTML, ARIA labels, focus states, keyboard navigation, tap targets, and color contrast.
@@ -896,7 +1021,11 @@ If standard a11y queries fail or the `evaluate_script` snippets return unexpecte
 
 - **Visual Inspection**: If automated scripts cannot determine contrast (e.g., text over gradient images or complex backgrounds), use `take_screenshot` to capture the element. While models cannot measure exact contrast ratios from images, they can visually assess legibility and identifying obvious issues.
 __SKILL_A11Y_DEBUGGING__
-log_ok "Deployed skill: a11y-debugging -> $SKILLS_DEST/a11y-debugging"
+
+log "Deploying skills to $SKILLS_DEST..."
+ERRORS_BEFORE_CLAUDE_SKILLS=$ERRORS
+deploy_embedded_skill "chrome-devtools" "$SKILLS_DEST" "claude skills" "$_skill_tmp/chrome-devtools.md"
+deploy_embedded_skill "a11y-debugging" "$SKILLS_DEST" "claude skills" "$_skill_tmp/a11y-debugging.md"
 if [ "$ERRORS" -eq "$ERRORS_BEFORE_CLAUDE_SKILLS" ]; then
     write_summary OK "claude skills" "deployed"
 else
@@ -905,214 +1034,15 @@ fi
 
 log "Deploying skills to $SKILLS_DEST_CURSOR..."
 ERRORS_BEFORE_CURSOR_SKILLS=$ERRORS
-mkdir -p "$SKILLS_DEST_CURSOR/chrome-devtools"
-cat > "$SKILLS_DEST_CURSOR/chrome-devtools/SKILL.md" <<'__SKILL_CHROME_DEVTOOLS_CURSOR__'
----
-name: chrome-devtools
-description: Uses Chrome DevTools via MCP for efficient debugging, troubleshooting and browser automation. Use when debugging web pages, automating browser interactions, analyzing performance, or inspecting network requests.
----
-
-## Core Concepts
-
-**Browser lifecycle**: Browser starts automatically on first tool call using a persistent Chrome profile. Configure via CLI args in the MCP server configuration: `npx chrome-devtools-mcp@latest --help`.
-
-**Page selection**: Tools operate on the currently selected page. Use `list_pages` to see available pages, then `select_page` to switch context.
-
-**Element interaction**: Use `take_snapshot` to get page structure with element `uid`s. Each element has a unique `uid` for interaction. If an element isn't found, take a fresh snapshot - the element may have been removed or the page changed.
-
-## Workflow Patterns
-
-### Before interacting with a page
-
-1. Navigate: `navigate_page` or `new_page`
-2. Wait: `wait_for` to ensure content is loaded if you know what you look for.
-3. Snapshot: `take_snapshot` to understand page structure
-4. Interact: Use element `uid`s from snapshot for `click`, `fill`, etc.
-
-### Efficient data retrieval
-
-- Use `filePath` parameter for large outputs (screenshots, snapshots, traces)
-- Use pagination (`pageIdx`, `pageSize`) and filtering (`types`) to minimize data
-- Set `includeSnapshot: false` on input actions unless you need updated page state
-
-### Tool selection
-
-- **Automation/interaction**: `take_snapshot` (text-based, faster, better for automation)
-- **Visual inspection**: `take_screenshot` (when user needs to see visual state)
-- **Additional details**: `evaluate_script` for data not in accessibility tree
-
-### Parallel execution
-
-You can send multiple tool calls in parallel, but maintain correct order: navigate → wait → snapshot → interact.
-
-## Troubleshooting
-
-If `chrome-devtools-mcp` is insufficient, guide users to use Chrome DevTools UI:
-
-- https://developer.chrome.com/docs/devtools
-- https://developer.chrome.com/docs/devtools/ai-assistance
-
-If there are errors launching `chrome-devtools-mcp` or Chrome, refer to https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/troubleshooting.md.
-__SKILL_CHROME_DEVTOOLS_CURSOR__
-log_ok "Deployed skill: chrome-devtools -> $SKILLS_DEST_CURSOR/chrome-devtools"
-
-mkdir -p "$SKILLS_DEST_CURSOR/a11y-debugging"
-cat > "$SKILLS_DEST_CURSOR/a11y-debugging/SKILL.md" <<'__SKILL_A11Y_DEBUGGING_CURSOR__'
----
-name: a11y-debugging
-description: Uses Chrome DevTools MCP for accessibility (a11y) debugging and auditing based on web.dev guidelines. Use when testing semantic HTML, ARIA labels, focus states, keyboard navigation, tap targets, and color contrast.
----
-
-## Core Concepts
-
-**Accessibility Tree vs DOM**: Visually hiding an element (e.g., `CSS opacity: 0`) behaves differently for screen readers than `display: none` or `aria-hidden="true"`. The `take_snapshot` tool returns the accessibility tree of the page, which represents what assistive technologies "see", making it the most reliable source of truth for semantic structure.
-
-**Reading web.dev documentation**: If you need to research specific accessibility guidelines (like `https://web.dev/articles/accessible-tap-targets`), you can append `.md.txt` to the URL (e.g., `https://web.dev/articles/accessible-tap-targets.md.txt`) to fetch the clean, raw markdown version. This is much easier to read!
-
-## Workflow Patterns
-
-### 1. Browser Issues & Audits
-
-Chrome automatically checks for common accessibility problems. Use `list_console_messages` to check for these native audits first:
-
-- `types`: `["issue"]`
-- `includePreservedMessages`: `true` (to catch issues that occurred during page load)
-
-This often reveals missing labels, invalid ARIA attributes, and other critical errors without manual investigation.
-
-### 2. Semantics & Structure
-
-The accessibility tree exposes the heading hierarchy and semantic landmarks.
-
-1.  Navigate to the page.
-2.  Use `take_snapshot` to capture the accessibility tree.
-3.  **Check Heading Levels**: Ensure heading levels (`h1`, `h2`, `h3`, etc.) are logical and do not skip levels. The snapshot will include heading roles.
-4.  **Content Reordering**: Verify that the DOM order (which drives the accessibility tree) matches the visual reading order. Use `take_screenshot` to inspect the visual layout and compare it against the snapshot structure to catch CSS floats or absolute positioning that jumbles the logical flow.
-
-### 3. Labels, Forms & Text Alternatives
-
-1.  Locate buttons, inputs, and images in the `take_snapshot` output.
-2.  Ensure interactive elements have an accessible name (e.g., a button should not just say `""` if it only contains an icon).
-3.  **Orphaned Inputs**: Verify that all form inputs have associated labels. Use `evaluate_script` to check for inputs missing `id` (for `label[for]`) or `aria-label`:
-    ```js
-    () =>
-      Array.from(document.querySelectorAll('input, select, textarea'))
-        .filter(i => {
-          const hasId = i.id && document.querySelector(`label[for="${i.id}"]`);
-          const hasAria =
-            i.getAttribute('aria-label') || i.getAttribute('aria-labelledby');
-          return !hasId && !hasAria && !i.closest('label');
-        })
-        .map(i => ({
-          tag: i.tagName,
-          id: i.id,
-          name: i.name,
-          placeholder: i.placeholder,
-        }));
-    ```
-
-4.  Check images for `alt` text.
-
-### 4. Focus & Keyboard Navigation
-
-Testing "keyboard traps" and proper focus management without visual feedback relies on tracking the focused element.
-
-1.  Use the `press_key` tool with `"Tab"` or `"Shift+Tab"` to move focus.
-2.  Use `take_snapshot` to capture the updated accessibility tree.
-3.  Locate the element marked as focused in the snapshot to verify focus moved to the expected interactive element.
-4.  If a modal opens, focus must move into the modal and "trap" within it until closed.
-
-### 5. Tap Targets and Visuals
-
-According to web.dev, tap targets should be at least 48x48 pixels with sufficient spacing. Since the accessibility tree doesn't show sizes, use `evaluate_script`:
-
-```js
-// Usage in console: copy, paste, and call with element: fn(element)
-el => {
- const rect = el.getBoundingClientRect();
- return {width: rect.width, height: rect.height};
-};
-```
-
-_Pass the element's `uid` from the snapshot as an argument to `evaluate_script`._
-
-### 6. Color Contrast
-
-To verify color contrast ratios, start by checking for native accessibility issues:
-
-1.  Call `list_console_messages` with `types: ["issue"]`.
-2.  Look for "Low Contrast" issues in the output.
-
-If native audits do not report issues (which may happen in some headless environments) or if you need to check a specific element manually, you can use the following script as a fallback approximation.
-
-**Note**: This script uses a simplified algorithm and may not account for transparency, gradients, or background images. For production-grade auditing, consider injecting `axe-core`.
-
-```js
-el => {
-  function getRGB(colorStr) {
-    const match = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-    return match
-      ? [parseInt(match[1]), parseInt(match[2]), parseInt(match[3])]
-      : [255, 255, 255];
-  }
-  function luminance(r, g, b) {
-    const a = [r, g, b].map(function (v) {
-      v /= 255;
-      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-    });
-    return a[0] * 0.2126 + a[1] * 0.7152 + a[2] * 0.0722;
-  }
-
-  const style = window.getComputedStyle(el);
-  const fg = getRGB(style.color);
-  let bg = getRGB(style.backgroundColor);
-
-  // Basic contrast calculation (Note: Doesn't account for transparency over background images)
-  const l1 = luminance(fg[0], fg[1], fg[2]);
-  const l2 = luminance(bg[0], bg[1], bg[2]);
-  const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
-
-  return {
-    color: style.color,
-    bg: style.backgroundColor,
-    contrastRatio: ratio.toFixed(2),
-  };
-};
-```
-
-_Pass the element's `uid` to test the contrast against WCAG AA (4.5:1 for normal text, 3:1 for large text)._
-
-### 7. Global Page Checks
-
-Verify document-level accessibility settings often missed in component testing:
-
-```js
-() => ({
-  lang:
-    document.documentElement.lang ||
-    'MISSING - Screen readers need this for pronunciation',
-  title: document.title || 'MISSING - Required for context',
-  viewport:
-    document.querySelector('meta[name="viewport"]')?.content ||
-    'MISSING - Check for user-scalable=no (bad practice)',
-  reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ? 'Enabled'
-    : 'Disabled',
-});
-```
-
-## Troubleshooting
-
-If standard a11y queries fail or the `evaluate_script` snippets return unexpected results:
-
-- **Visual Inspection**: If automated scripts cannot determine contrast (e.g., text over gradient images or complex backgrounds), use `take_screenshot` to capture the element. While models cannot measure exact contrast ratios from images, they can visually assess legibility and identifying obvious issues.
-__SKILL_A11Y_DEBUGGING_CURSOR__
-log_ok "Deployed skill: a11y-debugging -> $SKILLS_DEST_CURSOR/a11y-debugging"
+deploy_embedded_skill "chrome-devtools" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/chrome-devtools.md"
+deploy_embedded_skill "a11y-debugging" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/a11y-debugging.md"
 if [ "$ERRORS" -eq "$ERRORS_BEFORE_CURSOR_SKILLS" ]; then
     write_summary OK "cursor skills" "deployed"
 else
     write_summary ERROR "cursor skills" "deploy failed"
 fi
+
+rm -rf "$_skill_tmp"
 
 if [ "$ERRORS" -gt 0 ]; then
     log "FAILED with $ERRORS error(s)" "error"

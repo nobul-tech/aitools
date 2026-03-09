@@ -2,6 +2,9 @@
 # AI Tooling shell aliases — source from ~/.bashrc or ~/.zshrc
 # Usage: source "/path/to/aitools/shared/shell/aliases.sh"
 
+# Datadog site (region-specific)
+export DD_SITE="us5.datadoghq.com"
+
 # Claude Code launcher with CLAUDE.md check
 cc() {
   if [ ! -f "CLAUDE.md" ] && [ ! -f "CLAUDE.local.md" ]; then

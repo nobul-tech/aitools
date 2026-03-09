@@ -141,16 +141,52 @@ else
     write_summary WARN "claude.md" "template tokens unresolved"
 fi
 
-if [ "$DRY_RUN" = "true" ]; then
-    # Show what would happen without writing
-    EXISTING_LINES=0
-    [ -f "$CLAUDE_MD" ] && EXISTING_LINES=$(wc -l < "$CLAUDE_MD")
-    NEW_CONTENT="${SHARED_CONTENT}
+# Construct final content (used by both dry-run preview and actual write)
+NEW_CONTENT="${SHARED_CONTENT}
 
 ## Machine-Specific
 
 - Machine: $(uname -s) $(uname -m) ($(hostname -s 2>/dev/null || hostname))
 - Shell: $(basename "$SHELL")"
+
+# ---------------------------------------------------------------------------
+# Adopt deployed CLAUDE.md back to profile template.
+# Strips machine-specific footer and reverse-tokenizes profile values.
+# ---------------------------------------------------------------------------
+adopt_claude_md() {
+    local deployed="$1"
+    local dest="$2"
+
+    # Read deployed content, strip ## Machine-Specific section to end
+    local content
+    content=$(perl -pe 'last if /^## Machine-Specific/' "$deployed")
+    # Remove trailing blank lines
+    content=$(printf '%s' "$content" | perl -0777 -pe 's/\n+$/\n/')
+
+    # Reverse-substitute profile values back to {{PLACEHOLDER}} tokens
+    if [ -n "${PROFILE_NAME:-}" ]; then
+        content=$(printf '%s' "$content" | perl -pe "
+            s/\\Q${PROFILE_NAME}\\E/{{PROFILE_NAME}}/g;
+            s/\\Q${PROFILE_COMPANY}\\E/{{PROFILE_COMPANY}}/g;
+            s/\\Q${IDENTITY_GIT_NAME}\\E/{{IDENTITY_GIT_NAME}}/g;
+            s/\\Q${IDENTITY_GIT_EMAIL}\\E/{{IDENTITY_GIT_EMAIL}}/g;
+        ")
+    fi
+
+    mkdir -p "$(dirname "$dest")"
+    backup_file "$dest"
+    printf '%s\n' "$content" > "$dest"
+    log_ok "Adopted CLAUDE.md to profile: $(display_path "$dest")"
+    if [ -c /dev/tty ]; then
+        printf '  Review: cd %s && git diff\n' \
+            "$(display_path "$(dirname "$dest")/..")" > /dev/tty
+    fi
+}
+
+if [ "$DRY_RUN" = "true" ]; then
+    # Show what would happen without writing
+    EXISTING_LINES=0
+    [ -f "$CLAUDE_MD" ] && EXISTING_LINES=$(wc -l < "$CLAUDE_MD")
     NEW_LINES=$(echo "$NEW_CONTENT" | wc -l)
     log "[DRY RUN] $(display_path "$CLAUDE_MD"): overwrite (sole owner)"
     log "  Template source: $(display_path "$SOURCE_PATH") ($SOURCE_LABEL)"
@@ -171,6 +207,29 @@ if [ "$DRY_RUN" = "true" ]; then
         log "[DRY RUN] File does not exist -- would create"
     fi
 else
+    # --- Diff review before overwrite ---
+    CLAUDE_MD_SKIPPED=""
+    if [ -f "$CLAUDE_MD" ] && [ "$(cat "$CLAUDE_MD")" != "$NEW_CONTENT" ]; then
+        _adopt_label=""
+        if [ -n "${USER_REPO_PATH:-}" ]; then
+            _adopt_label="profile"
+        fi
+        prompt_diff_review "$CLAUDE_MD" "$NEW_CONTENT" "$_adopt_label"
+        case "$DIFF_REVIEW_RESULT" in
+            adopt)
+                adopt_claude_md "$CLAUDE_MD" "$USER_REPO_PATH/claude/CLAUDE.md"
+                write_summary OK "claude.md" "adopted to profile"
+                CLAUDE_MD_SKIPPED=1
+                ;;
+            skip)
+                log_warn "Skipped CLAUDE.md (user chose skip)"
+                write_summary WARN "claude.md" "skipped (user review)"
+                CLAUDE_MD_SKIPPED=1
+                ;;
+        esac
+    fi
+
+    if [ -z "$CLAUDE_MD_SKIPPED" ]; then
     # Backup and remove existing file so we always write the latest version
     backup_file "$CLAUDE_MD"
     # Capture existing content for post-write comparison
@@ -184,14 +243,7 @@ else
     fi
 
     # --- Write CLAUDE.md ---
-    cat > "$CLAUDE_MD" << EOF
-${SHARED_CONTENT}
-
-## Machine-Specific
-
-- Machine: $(uname -s) $(uname -m) ($(hostname -s 2>/dev/null || hostname))
-- Shell: $(basename "$SHELL")
-EOF
+    printf '%s\n' "$NEW_CONTENT" > "$CLAUDE_MD"
 
     # --- BEGIN post-write validation (extracted by build-deploy) ---
     # Post-write validation: check structure AND content (not just a marker)
@@ -227,6 +279,7 @@ EOF
     elif [ "$ERRORS" -gt 0 ]; then
         write_summary ERROR "claude.md" "validation failed"
     fi
+    fi  # end CLAUDE_MD_SKIPPED check
 fi
 
 # --- BEGIN rules deployment (extracted by build-deploy) ---
@@ -279,7 +332,7 @@ if [ -n "$RULES_SRC" ]; then
         backup_dir "$RULES_DEST"
         mkdir -p "$RULES_DEST"
 
-        ADDED=0; UPDATED=0; UNCHANGED=0
+        ADDED=0; UPDATED=0; UNCHANGED=0; ADOPTED=0; SKIPPED=0
         for rule_file in "$RULES_SRC"/*.md; do
             [ -f "$rule_file" ] || continue
             rule_name=$(basename "$rule_file")
@@ -290,7 +343,27 @@ if [ -n "$RULES_SRC" ]; then
                     UNCHANGED=$((UNCHANGED + 1))
                     continue
                 fi
-                # Log unified diff before overwriting. diff exits 1 on differences (expected).
+                # File differs from source -- review before overwriting
+                _adopt_label=""
+                if [ -n "${USER_REPO_PATH:-}" ]; then
+                    _adopt_label="profile"
+                fi
+                prompt_diff_review "$RULES_DEST/$rule_name" "$(cat "$rule_file")" "$_adopt_label"
+                case "$DIFF_REVIEW_RESULT" in
+                    adopt)
+                        mkdir -p "$USER_REPO_PATH/claude/rules"
+                        cp "$RULES_DEST/$rule_name" "$USER_REPO_PATH/claude/rules/$rule_name"
+                        log_ok "Adopted rule to profile: $rule_name"
+                        ADOPTED=$((ADOPTED + 1))
+                        continue
+                        ;;
+                    skip)
+                        log_warn "Skipped rule: $rule_name"
+                        SKIPPED=$((SKIPPED + 1))
+                        continue
+                        ;;
+                esac
+                # overwrite: proceed with update
                 log "Updating: $rule_name"
                 diff -u "$RULES_DEST/$rule_name" "$rule_file" \
                     --label "deployed/$rule_name" --label "source/$rule_name" \
@@ -328,8 +401,12 @@ if [ -n "$RULES_SRC" ]; then
         done
 
         if [ "$ERRORS" -eq 0 ]; then
-            log_ok "Rules: $ADDED added, $UPDATED updated, $UNCHANGED unchanged, $PRESERVED preserved in $(display_path "$RULES_DEST")"
-            write_summary OK "claude rules" "$ADDED added, $UPDATED updated, $UNCHANGED unchanged"
+            log_ok "Rules: $ADDED added, $UPDATED updated, $UNCHANGED unchanged, $ADOPTED adopted, $SKIPPED skipped, $PRESERVED preserved in $(display_path "$RULES_DEST")"
+            if [ "$SKIPPED" -gt 0 ]; then
+                write_summary WARN "claude rules" "$SKIPPED skipped (user review)"
+            else
+                write_summary OK "claude rules" "$ADDED added, $UPDATED updated, $UNCHANGED unchanged"
+            fi
         else
             write_summary ERROR "claude rules" "validation failed"
         fi

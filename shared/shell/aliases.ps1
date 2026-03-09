@@ -1,6 +1,9 @@
 # AI Tooling PowerShell aliases -- dot-source from $PROFILE
 # Usage: . "$HOME\repos\aitools\shared\shell\aliases.ps1"
 
+# Datadog site (region-specific)
+$env:DD_SITE = "us5.datadoghq.com"
+
 function cc {
     if (-not (Test-Path "CLAUDE.md") -and -not (Test-Path "CLAUDE.local.md")) {
         Write-Host "No CLAUDE.md found in $(Get-Location)."

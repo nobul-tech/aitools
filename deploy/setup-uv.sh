@@ -165,6 +165,83 @@ backup_dir() {
 }
 
 # ---------------------------------------------------------------------------
+# Prompt user before overwriting a managed file with different content.
+# Shows a unified diff and offers: Adopt / Overwrite / Skip / Abort.
+#
+# Args:
+#   $1 = file path (deployed file on disk)
+#   $2 = new content that would be written (from source template)
+#   $3 = adopt target label (e.g., "profile", "shared/") or "" to hide adopt
+#
+# Sets global DIFF_REVIEW_RESULT to: "overwrite", "adopt", or "skip"
+# Exits with code 2 on abort.
+# Non-interactive / --force: sets "overwrite" and returns.
+# ---------------------------------------------------------------------------
+DIFF_REVIEW_RESULT=""
+prompt_diff_review() {
+    local file_path="$1"
+    local new_content="$2"
+    local adopt_label="${3:-}"
+
+    DIFF_REVIEW_RESULT="overwrite"
+
+    # --force or AITOOLS_FORCE: auto-overwrite
+    if [ "${AITOOLS_FORCE:-}" = "1" ] || [ "${FORCE:-}" = "true" ]; then
+        log_warn "Diff in $(display_path "$file_path") -- overwriting (--force)"
+        return 0
+    fi
+
+    # Non-interactive: auto-overwrite (preserves current behavior)
+    if ! [ -c /dev/tty ]; then
+        log_warn "Diff in $(display_path "$file_path") -- overwriting (non-interactive)"
+        return 0
+    fi
+
+    # Show diff via /dev/tty (bypasses stdout/stderr redirection in deploy_configs)
+    printf '\n\033[33m[REVIEW]\033[0m %s differs from source.\n' \
+        "$(display_path "$file_path")" > /dev/tty
+    local diff_output
+    # diff exits 1 on differences (expected), suppress set -e abort
+    diff_output=$(diff -u <(printf '%s' "$new_content") "$file_path" \
+        --label "source (would deploy)" --label "current (on disk)" 2>&1) || true
+    local diff_lines
+    diff_lines=$(printf '%s\n' "$diff_output" | wc -l | tr -d ' ')
+    if [ "$diff_lines" -le 40 ]; then
+        printf '%s\n' "$diff_output" > /dev/tty
+    else
+        printf '%s\n' "$diff_output" | head -30 > /dev/tty
+        printf '  ... (%d more lines -- full diff in deploy log)\n' \
+            "$((diff_lines - 30))" > /dev/tty
+        printf '%s\n' "$diff_output" >> "${LOG_FILE:-/dev/null}"
+    fi
+
+    # Build prompt with conditional adopt option
+    printf '\n' > /dev/tty
+    if [ -n "$adopt_label" ]; then
+        printf '  [A]dopt to %s  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' \
+            "$adopt_label" > /dev/tty
+        printf '  Choice [a/O/s/x]: ' > /dev/tty
+    else
+        printf '  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' > /dev/tty
+        printf '  Choice [O/s/x]: ' > /dev/tty
+    fi
+    local choice
+    read -r choice < /dev/tty
+    case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
+        a)  if [ -n "$adopt_label" ]; then
+                DIFF_REVIEW_RESULT="adopt"
+            else
+                DIFF_REVIEW_RESULT="overwrite"
+            fi ;;
+        s)  DIFF_REVIEW_RESULT="skip" ;;
+        x)  log_error "Aborted by user"
+            exit 2 ;;
+        *)  DIFF_REVIEW_RESULT="overwrite" ;;
+    esac
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Repair broken uv tool environment (cross-platform)
 # ---------------------------------------------------------------------------
 # When `uv tool upgrade <tool>` fails with "missing a valid environment",

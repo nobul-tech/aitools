@@ -880,20 +880,79 @@ SKILLS_DEST="$HOME/.claude/skills"
 SKILLS_DEST_CURSOR="$HOME/.cursor/skills"
 
 SKILLS_HEADER
+    # Emit helper function for diff-reviewed skill deployment.
+    # Takes a content FILE path (not a string) to avoid bash 3.2
+    # parsing issues with $(cat <<'EOF') command substitution.
+    cat <<'DEPLOY_SKILL_FUNC'
+deploy_embedded_skill() {
+    local skill_name="$1"
+    local dest_base="$2"
+    local tool_name="$3"
+    local content_file="$4"
+
+    local dest_dir="$dest_base/$skill_name"
+    local dest="$dest_dir/SKILL.md"
+
+    if [ "$DRY_RUN" = "true" ]; then
+        log "[DRY RUN] Would deploy skill: $skill_name -> $(display_path "$dest")"
+        return
+    fi
+
+    mkdir -p "$dest_dir"
+
+    if [ -f "$dest" ]; then
+        # diff -q: exits 0 if identical, 1 if different (expected, not an error)
+        if diff -q "$content_file" "$dest" >/dev/null 2>&1; then
+            log_ok "Skill unchanged: $skill_name"
+            return
+        fi
+        # File differs -- backup and review
+        backup_file "$dest"
+        _adopt_label=""
+        _repo_path=$(read_config_key "$HOME/.aitools/config.json" "repoPath")
+        if [ -n "$_repo_path" ]; then
+            _adopt_label="shared/"
+        fi
+        prompt_diff_review "$dest" "$(cat "$content_file")" "$_adopt_label"
+        case "$DIFF_REVIEW_RESULT" in
+            adopt)
+                if [ -n "$_repo_path" ]; then
+                    mkdir -p "$_repo_path/shared/skills/$skill_name"
+                    cp "$dest" "$_repo_path/shared/skills/$skill_name/SKILL.md"
+                    log_ok "Adopted skill to shared/: $skill_name"
+                    write_summary DETAIL "$tool_name" "adopted: $skill_name"
+                fi
+                return
+                ;;
+            skip)
+                log_warn "Skill skipped: $skill_name"
+                write_summary DETAIL "$tool_name" "skipped: $skill_name"
+                return
+                ;;
+        esac
+    fi
+    # Write content (new file or overwrite after review)
+    cp "$content_file" "$dest"
+    log_ok "Deployed skill: $skill_name -> $(display_path "$dest")"
+}
+
+DEPLOY_SKILL_FUNC
+    # Write skill content to temp files (cat > file <<'EOF' works in bash 3.2;
+    # $(cat <<'EOF') variable assignment does not)
+    echo '_skill_tmp=$(mktemp -d)'
+    echo 'cat > "$_skill_tmp/chrome-devtools.md" <<'"'"'__SKILL_CHROME_DEVTOOLS__'"'"
+    echo "$SKILL_CHROME_DEVTOOLS"
+    echo '__SKILL_CHROME_DEVTOOLS__'
+    echo ''
+    echo 'cat > "$_skill_tmp/a11y-debugging.md" <<'"'"'__SKILL_A11Y_DEBUGGING__'"'"
+    echo "$SKILL_A11Y_DEBUGGING"
+    echo '__SKILL_A11Y_DEBUGGING__'
+    echo ''
     # Deploy to ~/.claude/skills/ (Claude Code)
     echo 'log "Deploying skills to $SKILLS_DEST..."'
     echo 'ERRORS_BEFORE_CLAUDE_SKILLS=$ERRORS'
-    echo 'mkdir -p "$SKILLS_DEST/chrome-devtools"'
-    echo 'cat > "$SKILLS_DEST/chrome-devtools/SKILL.md" <<'"'"'__SKILL_CHROME_DEVTOOLS__'"'"
-    echo "$SKILL_CHROME_DEVTOOLS"
-    echo '__SKILL_CHROME_DEVTOOLS__'
-    echo 'log_ok "Deployed skill: chrome-devtools -> $SKILLS_DEST/chrome-devtools"'
-    echo ''
-    echo 'mkdir -p "$SKILLS_DEST/a11y-debugging"'
-    echo 'cat > "$SKILLS_DEST/a11y-debugging/SKILL.md" <<'"'"'__SKILL_A11Y_DEBUGGING__'"'"
-    echo "$SKILL_A11Y_DEBUGGING"
-    echo '__SKILL_A11Y_DEBUGGING__'
-    echo 'log_ok "Deployed skill: a11y-debugging -> $SKILLS_DEST/a11y-debugging"'
+    echo 'deploy_embedded_skill "chrome-devtools" "$SKILLS_DEST" "claude skills" "$_skill_tmp/chrome-devtools.md"'
+    echo 'deploy_embedded_skill "a11y-debugging" "$SKILLS_DEST" "claude skills" "$_skill_tmp/a11y-debugging.md"'
     echo 'if [ "$ERRORS" -eq "$ERRORS_BEFORE_CLAUDE_SKILLS" ]; then'
     echo '    write_summary OK "claude skills" "deployed"'
     echo 'else'
@@ -903,22 +962,15 @@ SKILLS_HEADER
     # Deploy to ~/.cursor/skills/ (Cursor Agent CLI)
     echo 'log "Deploying skills to $SKILLS_DEST_CURSOR..."'
     echo 'ERRORS_BEFORE_CURSOR_SKILLS=$ERRORS'
-    echo 'mkdir -p "$SKILLS_DEST_CURSOR/chrome-devtools"'
-    echo 'cat > "$SKILLS_DEST_CURSOR/chrome-devtools/SKILL.md" <<'"'"'__SKILL_CHROME_DEVTOOLS_CURSOR__'"'"
-    echo "$SKILL_CHROME_DEVTOOLS"
-    echo '__SKILL_CHROME_DEVTOOLS_CURSOR__'
-    echo 'log_ok "Deployed skill: chrome-devtools -> $SKILLS_DEST_CURSOR/chrome-devtools"'
-    echo ''
-    echo 'mkdir -p "$SKILLS_DEST_CURSOR/a11y-debugging"'
-    echo 'cat > "$SKILLS_DEST_CURSOR/a11y-debugging/SKILL.md" <<'"'"'__SKILL_A11Y_DEBUGGING_CURSOR__'"'"
-    echo "$SKILL_A11Y_DEBUGGING"
-    echo '__SKILL_A11Y_DEBUGGING_CURSOR__'
-    echo 'log_ok "Deployed skill: a11y-debugging -> $SKILLS_DEST_CURSOR/a11y-debugging"'
+    echo 'deploy_embedded_skill "chrome-devtools" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/chrome-devtools.md"'
+    echo 'deploy_embedded_skill "a11y-debugging" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/a11y-debugging.md"'
     echo 'if [ "$ERRORS" -eq "$ERRORS_BEFORE_CURSOR_SKILLS" ]; then'
     echo '    write_summary OK "cursor skills" "deployed"'
     echo 'else'
     echo '    write_summary ERROR "cursor skills" "deploy failed"'
     echo 'fi'
+    echo ''
+    echo 'rm -rf "$_skill_tmp"'
     echo ''
     # Emit exit footer from source
     extract_between "$SCRIPTS_DIR/setup-user-mcp.sh" \
@@ -944,26 +996,82 @@ $skillsDest = Join-Path (Join-Path $env:USERPROFILE ".claude") "skills"
 $skillsDestCursor = Join-Path (Join-Path $env:USERPROFILE ".cursor") "skills"
 
 SKILLS_PS1_HEADER
-    # Deploy to ~/.claude/skills/ (Claude Code)
-    echo 'Log "Deploying skills to $skillsDest..."'
-    echo '$errorsBeforeClaudeSkills = $errors'
-    echo '$chromeDevtoolsDir = Join-Path $skillsDest "chrome-devtools"'
-    echo 'if (-not (Test-Path $chromeDevtoolsDir)) { New-Item -ItemType Directory -Path $chromeDevtoolsDir -Force | Out-Null }'
+    # Emit helper function for diff-reviewed skill deployment
+    cat <<'DEPLOY_SKILL_PS1_FUNC'
+function Deploy-EmbeddedSkill {
+    param([string]$SkillName, [string]$DestBase, [string]$ToolName, [string]$Content)
+
+    $destDir = Join-Path $DestBase $SkillName
+    $dest = Join-Path $destDir "SKILL.md"
+
+    if ($DryRun) {
+        Log "[DRY RUN] Would deploy skill: $SkillName -> $dest"
+        return
+    }
+
+    if (-not (Test-Path $destDir)) {
+        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+    }
+
+    if ((Test-Path $dest)) {
+        try {
+            $existing = Get-Content $dest -Raw -ErrorAction Stop
+        } catch {
+            LogWarn "Cannot read $dest for diff: $_"
+            $existing = ""
+        }
+        if ($existing -eq $Content) {
+            LogOk "Skill unchanged: $SkillName"
+            return
+        }
+        # File differs -- backup and review
+        Backup-File -FilePath $dest
+        $adoptLabel = ""
+        $cfgFile = Join-Path $env:USERPROFILE ".aitools\config.json"
+        $repoPath = ReadConfigKey -File $cfgFile -Key "repoPath"
+        if ($repoPath) { $adoptLabel = "shared/" }
+        $result = Prompt-DiffReview -FilePath $dest -NewContent $Content -AdoptLabel $adoptLabel
+        switch ($result) {
+            "adopt" {
+                if ($repoPath) {
+                    $adoptDir = Join-Path (Join-Path $repoPath "shared\skills") $SkillName
+                    if (-not (Test-Path $adoptDir)) {
+                        New-Item -ItemType Directory -Path $adoptDir -Force | Out-Null
+                    }
+                    $adoptDest = Join-Path $adoptDir "SKILL.md"
+                    Copy-Item -Path $dest -Destination $adoptDest -Force -ErrorAction Stop
+                    LogOk "Adopted skill to shared/: $SkillName"
+                    Write-Summary "DETAIL" $ToolName "adopted: $SkillName"
+                }
+                return
+            }
+            "skip" {
+                LogWarn "Skill skipped: $SkillName"
+                Write-Summary "DETAIL" $ToolName "skipped: $SkillName"
+                return
+            }
+        }
+    }
+    # Write content (new file or overwrite after review)
+    [System.IO.File]::WriteAllText($dest, $Content, [System.Text.UTF8Encoding]::new($false))
+    LogOk "Deployed skill: $SkillName -> $dest"
+}
+
+DEPLOY_SKILL_PS1_FUNC
+    # Store skill content in variables (PS1 here-strings)
     echo '$chromeDevtoolsSkill = @'"'"
     echo "$SKILL_CHROME_DEVTOOLS"
     echo "'"'@'
-    echo '$chromeDevtoolsDest = Join-Path $chromeDevtoolsDir "SKILL.md"'
-    echo '[System.IO.File]::WriteAllText($chromeDevtoolsDest, $chromeDevtoolsSkill, [System.Text.UTF8Encoding]::new($false))'
-    echo 'LogOk "Deployed skill: chrome-devtools -> $chromeDevtoolsDest"'
     echo ''
-    echo '$a11yDir = Join-Path $skillsDest "a11y-debugging"'
-    echo 'if (-not (Test-Path $a11yDir)) { New-Item -ItemType Directory -Path $a11yDir -Force | Out-Null }'
     echo '$a11ySkill = @'"'"
     echo "$SKILL_A11Y_DEBUGGING"
     echo "'"'@'
-    echo '$a11yDest = Join-Path $a11yDir "SKILL.md"'
-    echo '[System.IO.File]::WriteAllText($a11yDest, $a11ySkill, [System.Text.UTF8Encoding]::new($false))'
-    echo 'LogOk "Deployed skill: a11y-debugging -> $a11yDest"'
+    echo ''
+    # Deploy to ~/.claude/skills/ (Claude Code)
+    echo 'Log "Deploying skills to $skillsDest..."'
+    echo '$errorsBeforeClaudeSkills = $errors'
+    echo 'Deploy-EmbeddedSkill "chrome-devtools" $skillsDest "claude skills" $chromeDevtoolsSkill'
+    echo 'Deploy-EmbeddedSkill "a11y-debugging" $skillsDest "claude skills" $a11ySkill'
     echo 'if ($errors -eq $errorsBeforeClaudeSkills) {'
     echo '    Write-Summary "OK" "claude skills" "deployed"'
     echo '} else {'
@@ -973,17 +1081,8 @@ SKILLS_PS1_HEADER
     # Deploy to ~/.cursor/skills/ (Cursor Agent CLI)
     echo 'Log "Deploying skills to $skillsDestCursor..."'
     echo '$errorsBeforeCursorSkills = $errors'
-    echo '$chromeDevtoolsDirCursor = Join-Path $skillsDestCursor "chrome-devtools"'
-    echo 'if (-not (Test-Path $chromeDevtoolsDirCursor)) { New-Item -ItemType Directory -Path $chromeDevtoolsDirCursor -Force | Out-Null }'
-    echo '$chromeDevtoolsDestCursor = Join-Path $chromeDevtoolsDirCursor "SKILL.md"'
-    echo '[System.IO.File]::WriteAllText($chromeDevtoolsDestCursor, $chromeDevtoolsSkill, [System.Text.UTF8Encoding]::new($false))'
-    echo 'LogOk "Deployed skill: chrome-devtools -> $chromeDevtoolsDestCursor"'
-    echo ''
-    echo '$a11yDirCursor = Join-Path $skillsDestCursor "a11y-debugging"'
-    echo 'if (-not (Test-Path $a11yDirCursor)) { New-Item -ItemType Directory -Path $a11yDirCursor -Force | Out-Null }'
-    echo '$a11yDestCursor = Join-Path $a11yDirCursor "SKILL.md"'
-    echo '[System.IO.File]::WriteAllText($a11yDestCursor, $a11ySkill, [System.Text.UTF8Encoding]::new($false))'
-    echo 'LogOk "Deployed skill: a11y-debugging -> $a11yDestCursor"'
+    echo 'Deploy-EmbeddedSkill "chrome-devtools" $skillsDestCursor "cursor skills" $chromeDevtoolsSkill'
+    echo 'Deploy-EmbeddedSkill "a11y-debugging" $skillsDestCursor "cursor skills" $a11ySkill'
     echo 'if ($errors -eq $errorsBeforeCursorSkills) {'
     echo '    Write-Summary "OK" "cursor skills" "deployed"'
     echo '} else {'

@@ -157,6 +157,94 @@ function Backup-Dir {
 }
 
 # ---------------------------------------------------------------------------
+# Prompt user before overwriting a managed file with different content.
+# Shows diff and offers: Adopt / Overwrite / Skip / Abort.
+#
+# Returns: "overwrite", "adopt", or "skip"
+# Exits with code 2 on abort.
+# Non-interactive / -Force: returns "overwrite".
+# ---------------------------------------------------------------------------
+function Prompt-DiffReview {
+    param(
+        [string]$FilePath,
+        [string]$NewContent,
+        [string]$AdoptLabel = ""
+    )
+
+    # -Force or AITOOLS_FORCE: auto-overwrite
+    if ($env:AITOOLS_FORCE -eq "1" -or $Force) {
+        LogWarn "Diff in $FilePath -- overwriting (-Force)"
+        return "overwrite"
+    }
+
+    # Non-interactive: auto-overwrite (preserves current behavior)
+    if (-not [Environment]::UserInteractive) {
+        LogWarn "Diff in $FilePath -- overwriting (non-interactive)"
+        return "overwrite"
+    }
+
+    # Show diff via [Console] (bypasses *> $null redirection in Deploy-Configs)
+    [Console]::WriteLine("")
+    [Console]::WriteLine("[REVIEW] $FilePath differs from source.")
+    [Console]::WriteLine("")
+
+    # Generate line-level diff
+    $srcLines = @($NewContent -split "`n")
+    try {
+        $curContent = Get-Content $FilePath -Raw -ErrorAction Stop
+    } catch {
+        LogWarn "Cannot read $FilePath for diff: $_"
+        return "overwrite"
+    }
+    $curLines = @($curContent -split "`n")
+    $diffs = Compare-Object $srcLines $curLines
+    $diffCount = 0
+    if ($diffs) { $diffCount = @($diffs).Count }
+
+    if ($diffCount -eq 0) {
+        # Whitespace-only difference
+        [Console]::WriteLine("  (whitespace-only differences)")
+    } elseif ($diffCount -le 40) {
+        foreach ($d in $diffs) {
+            $indicator = if ($d.SideIndicator -eq "=>") { "+ " } else { "- " }
+            [Console]::WriteLine("  $indicator$($d.InputObject)")
+        }
+    } else {
+        $shown = 0
+        foreach ($d in $diffs) {
+            if ($shown -ge 30) { break }
+            $indicator = if ($d.SideIndicator -eq "=>") { "+ " } else { "- " }
+            [Console]::WriteLine("  $indicator$($d.InputObject)")
+            $shown++
+        }
+        [Console]::WriteLine("  ... ($($diffCount - 30) more lines -- see deploy log)")
+    }
+
+    # Build prompt with conditional adopt option
+    [Console]::WriteLine("")
+    if ($AdoptLabel) {
+        [Console]::WriteLine("  [A]dopt to $AdoptLabel  [O]verwrite (backup kept)  [S]kip  [X] Abort")
+        [Console]::Write("  Choice [a/O/s/x]: ")
+    } else {
+        [Console]::WriteLine("  [O]verwrite (backup kept)  [S]kip  [X] Abort")
+        [Console]::Write("  Choice [O/s/x]: ")
+    }
+    $choice = [Console]::ReadLine()
+    switch ($choice.ToLower()) {
+        "a" {
+            if ($AdoptLabel) { return "adopt" }
+            return "overwrite"
+        }
+        "s" { return "skip" }
+        "x" {
+            LogError "Aborted by user"
+            exit 2
+        }
+        default { return "overwrite" }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # PATH helpers
 # ---------------------------------------------------------------------------
 
@@ -529,6 +617,7 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 }
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
+
 # --- Deploy embedded hook scripts to ~/.claude/hooks/ ---
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
 $hooksDir = Join-Path $claudeDir "hooks"

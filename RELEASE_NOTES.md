@@ -12,6 +12,24 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.47.0 -- Diff review + adopt for managed file deployment (2026-03-09)
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **Diff review before overwrite**: When `aitools` deploys a managed text file (`~/.claude/CLAUDE.md`, rules, skills) and the deployed file differs from source, shows a unified diff and prompts: **Adopt** (merge local edits back to source), **Overwrite** (backup + deploy), **Skip** (keep local), or **Abort**. Non-interactive and `--force` mode auto-overwrite (preserves current behavior). |
+| 2 | **Adopt to profile**: CLAUDE.md adopt strips the Machine-Specific footer and reverse-tokenizes `{{PLACEHOLDER}}` values back into the dotprofile template. Rules adopt copies the deployed file verbatim to the user repo. |
+| 3 | **Adopt to shared/**: Skills adopt copies the deployed SKILL.md back to `shared/skills/` in the aitools repo, so local session edits survive future deploys. |
+| 4 | **`--force` flag**: `aitools --force` / `aitools install --force` skips all diff-review prompts and overwrites unconditionally. Passed through as `AITOOLS_FORCE=1` to child scripts. |
+| 5 | **`prompt_diff_review` / `Prompt-DiffReview` library functions**: New helpers in `aitools-lib.sh/.ps1` for interactive diff review with `/dev/tty` (bash) and `[Console]` (PS1) I/O to bypass deploy_configs redirection. |
+| 6 | **Deploy script diff review**: Self-contained deploy scripts (MDM) now include `deploy_embedded_skill()` / `Deploy-EmbeddedSkill` helper functions with the same diff-review pattern. Uses temp files for bash 3.2 compatibility. |
+| 7 | **DD_SITE env var**: Shell aliases now export `DD_SITE=us5.datadoghq.com` for Datadog CLI region selection. |
+
+**Verified on:** macOS (syntax validation, build 30/30, dry-run smoke tests pass). Windows: not tested.
+
+---
+
 ## v0.46.0 -- Add post-install auth check pattern, pup auth status (2026-03-06)
 
 ### Added

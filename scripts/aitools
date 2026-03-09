@@ -301,6 +301,7 @@ deploy_configs() {
     local errors=0
     export AITOOLS_DEPLOY=1
     if $dry_run; then export AITOOLS_DRY_RUN=1; fi
+    if $force; then export AITOOLS_FORCE=1; fi
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
             if ! command -v pwsh &>/dev/null; then
@@ -362,6 +363,7 @@ deploy_configs() {
     esac
     unset AITOOLS_DEPLOY
     unset AITOOLS_DRY_RUN
+    unset AITOOLS_FORCE
     return $errors
 }
 
@@ -451,6 +453,7 @@ Commands:
 Options:
   --addmcp <name...>   Enable MCP server(s) for current project (vercel, webflow)
   --dry-run            Preview what would change without writing any files
+  --force              Overwrite all files without prompting for review
   --version, -v        Show installed and repo version
   --help, -h           Show this help
 
@@ -475,6 +478,7 @@ sessions_args=()
 addmcp_seen=false
 addmcp_servers=()
 dry_run=false
+force=false
 passthrough=()
 
 while [[ $# -gt 0 ]]; do
@@ -482,6 +486,7 @@ while [[ $# -gt 0 ]]; do
         --version|-v) show_version=true; shift ;;
         --help|-h)    show_help=true; shift ;;
         --dry-run)    dry_run=true; shift ;;
+        --force)      force=true; shift ;;
         install)      do_install=true; shift ;;
         gitpull)
             do_gitpull=true; shift

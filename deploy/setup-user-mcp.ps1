@@ -143,6 +143,94 @@ function Backup-Dir {
 }
 
 # ---------------------------------------------------------------------------
+# Prompt user before overwriting a managed file with different content.
+# Shows diff and offers: Adopt / Overwrite / Skip / Abort.
+#
+# Returns: "overwrite", "adopt", or "skip"
+# Exits with code 2 on abort.
+# Non-interactive / -Force: returns "overwrite".
+# ---------------------------------------------------------------------------
+function Prompt-DiffReview {
+    param(
+        [string]$FilePath,
+        [string]$NewContent,
+        [string]$AdoptLabel = ""
+    )
+
+    # -Force or AITOOLS_FORCE: auto-overwrite
+    if ($env:AITOOLS_FORCE -eq "1" -or $Force) {
+        LogWarn "Diff in $FilePath -- overwriting (-Force)"
+        return "overwrite"
+    }
+
+    # Non-interactive: auto-overwrite (preserves current behavior)
+    if (-not [Environment]::UserInteractive) {
+        LogWarn "Diff in $FilePath -- overwriting (non-interactive)"
+        return "overwrite"
+    }
+
+    # Show diff via [Console] (bypasses *> $null redirection in Deploy-Configs)
+    [Console]::WriteLine("")
+    [Console]::WriteLine("[REVIEW] $FilePath differs from source.")
+    [Console]::WriteLine("")
+
+    # Generate line-level diff
+    $srcLines = @($NewContent -split "`n")
+    try {
+        $curContent = Get-Content $FilePath -Raw -ErrorAction Stop
+    } catch {
+        LogWarn "Cannot read $FilePath for diff: $_"
+        return "overwrite"
+    }
+    $curLines = @($curContent -split "`n")
+    $diffs = Compare-Object $srcLines $curLines
+    $diffCount = 0
+    if ($diffs) { $diffCount = @($diffs).Count }
+
+    if ($diffCount -eq 0) {
+        # Whitespace-only difference
+        [Console]::WriteLine("  (whitespace-only differences)")
+    } elseif ($diffCount -le 40) {
+        foreach ($d in $diffs) {
+            $indicator = if ($d.SideIndicator -eq "=>") { "+ " } else { "- " }
+            [Console]::WriteLine("  $indicator$($d.InputObject)")
+        }
+    } else {
+        $shown = 0
+        foreach ($d in $diffs) {
+            if ($shown -ge 30) { break }
+            $indicator = if ($d.SideIndicator -eq "=>") { "+ " } else { "- " }
+            [Console]::WriteLine("  $indicator$($d.InputObject)")
+            $shown++
+        }
+        [Console]::WriteLine("  ... ($($diffCount - 30) more lines -- see deploy log)")
+    }
+
+    # Build prompt with conditional adopt option
+    [Console]::WriteLine("")
+    if ($AdoptLabel) {
+        [Console]::WriteLine("  [A]dopt to $AdoptLabel  [O]verwrite (backup kept)  [S]kip  [X] Abort")
+        [Console]::Write("  Choice [a/O/s/x]: ")
+    } else {
+        [Console]::WriteLine("  [O]verwrite (backup kept)  [S]kip  [X] Abort")
+        [Console]::Write("  Choice [O/s/x]: ")
+    }
+    $choice = [Console]::ReadLine()
+    switch ($choice.ToLower()) {
+        "a" {
+            if ($AdoptLabel) { return "adopt" }
+            return "overwrite"
+        }
+        "s" { return "skip" }
+        "x" {
+            LogError "Aborted by user"
+            exit 2
+        }
+        default { return "overwrite" }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # PATH helpers
 # ---------------------------------------------------------------------------
 
@@ -796,6 +884,7 @@ function Show-CloudMcpStatus {
     }
 }
 
+
 # --- Deploy Chrome DevTools skills (embedded) ---
 # Vendored from https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/main/skills
 # Content embedded at build time by build-deploy.sh for self-contained deployment.
@@ -803,10 +892,65 @@ function Show-CloudMcpStatus {
 $skillsDest = Join-Path (Join-Path $env:USERPROFILE ".claude") "skills"
 $skillsDestCursor = Join-Path (Join-Path $env:USERPROFILE ".cursor") "skills"
 
-Log "Deploying skills to $skillsDest..."
-$errorsBeforeClaudeSkills = $errors
-$chromeDevtoolsDir = Join-Path $skillsDest "chrome-devtools"
-if (-not (Test-Path $chromeDevtoolsDir)) { New-Item -ItemType Directory -Path $chromeDevtoolsDir -Force | Out-Null }
+function Deploy-EmbeddedSkill {
+    param([string]$SkillName, [string]$DestBase, [string]$ToolName, [string]$Content)
+
+    $destDir = Join-Path $DestBase $SkillName
+    $dest = Join-Path $destDir "SKILL.md"
+
+    if ($DryRun) {
+        Log "[DRY RUN] Would deploy skill: $SkillName -> $dest"
+        return
+    }
+
+    if (-not (Test-Path $destDir)) {
+        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+    }
+
+    if ((Test-Path $dest)) {
+        try {
+            $existing = Get-Content $dest -Raw -ErrorAction Stop
+        } catch {
+            LogWarn "Cannot read $dest for diff: $_"
+            $existing = ""
+        }
+        if ($existing -eq $Content) {
+            LogOk "Skill unchanged: $SkillName"
+            return
+        }
+        # File differs -- backup and review
+        Backup-File -FilePath $dest
+        $adoptLabel = ""
+        $cfgFile = Join-Path $env:USERPROFILE ".aitools\config.json"
+        $repoPath = ReadConfigKey -File $cfgFile -Key "repoPath"
+        if ($repoPath) { $adoptLabel = "shared/" }
+        $result = Prompt-DiffReview -FilePath $dest -NewContent $Content -AdoptLabel $adoptLabel
+        switch ($result) {
+            "adopt" {
+                if ($repoPath) {
+                    $adoptDir = Join-Path (Join-Path $repoPath "shared\skills") $SkillName
+                    if (-not (Test-Path $adoptDir)) {
+                        New-Item -ItemType Directory -Path $adoptDir -Force | Out-Null
+                    }
+                    $adoptDest = Join-Path $adoptDir "SKILL.md"
+                    Copy-Item -Path $dest -Destination $adoptDest -Force -ErrorAction Stop
+                    LogOk "Adopted skill to shared/: $SkillName"
+                    Write-Summary "DETAIL" $ToolName "adopted: $SkillName"
+                }
+                return
+            }
+            "skip" {
+                LogWarn "Skill skipped: $SkillName"
+                Write-Summary "DETAIL" $ToolName "skipped: $SkillName"
+                return
+            }
+        }
+    }
+    # Write content (new file or overwrite after review)
+    [System.IO.File]::WriteAllText($dest, $Content, [System.Text.UTF8Encoding]::new($false))
+    LogOk "Deployed skill: $SkillName -> $dest"
+}
+
 $chromeDevtoolsSkill = @'
 ---
 name: chrome-devtools
@@ -855,12 +999,7 @@ If `chrome-devtools-mcp` is insufficient, guide users to use Chrome DevTools UI:
 
 If there are errors launching `chrome-devtools-mcp` or Chrome, refer to https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/troubleshooting.md.
 '@
-$chromeDevtoolsDest = Join-Path $chromeDevtoolsDir "SKILL.md"
-[System.IO.File]::WriteAllText($chromeDevtoolsDest, $chromeDevtoolsSkill, [System.Text.UTF8Encoding]::new($false))
-LogOk "Deployed skill: chrome-devtools -> $chromeDevtoolsDest"
 
-$a11yDir = Join-Path $skillsDest "a11y-debugging"
-if (-not (Test-Path $a11yDir)) { New-Item -ItemType Directory -Path $a11yDir -Force | Out-Null }
 $a11ySkill = @'
 ---
 name: a11y-debugging
@@ -1011,9 +1150,11 @@ If standard a11y queries fail or the `evaluate_script` snippets return unexpecte
 
 - **Visual Inspection**: If automated scripts cannot determine contrast (e.g., text over gradient images or complex backgrounds), use `take_screenshot` to capture the element. While models cannot measure exact contrast ratios from images, they can visually assess legibility and identifying obvious issues.
 '@
-$a11yDest = Join-Path $a11yDir "SKILL.md"
-[System.IO.File]::WriteAllText($a11yDest, $a11ySkill, [System.Text.UTF8Encoding]::new($false))
-LogOk "Deployed skill: a11y-debugging -> $a11yDest"
+
+Log "Deploying skills to $skillsDest..."
+$errorsBeforeClaudeSkills = $errors
+Deploy-EmbeddedSkill "chrome-devtools" $skillsDest "claude skills" $chromeDevtoolsSkill
+Deploy-EmbeddedSkill "a11y-debugging" $skillsDest "claude skills" $a11ySkill
 if ($errors -eq $errorsBeforeClaudeSkills) {
     Write-Summary "OK" "claude skills" "deployed"
 } else {
@@ -1022,17 +1163,8 @@ if ($errors -eq $errorsBeforeClaudeSkills) {
 
 Log "Deploying skills to $skillsDestCursor..."
 $errorsBeforeCursorSkills = $errors
-$chromeDevtoolsDirCursor = Join-Path $skillsDestCursor "chrome-devtools"
-if (-not (Test-Path $chromeDevtoolsDirCursor)) { New-Item -ItemType Directory -Path $chromeDevtoolsDirCursor -Force | Out-Null }
-$chromeDevtoolsDestCursor = Join-Path $chromeDevtoolsDirCursor "SKILL.md"
-[System.IO.File]::WriteAllText($chromeDevtoolsDestCursor, $chromeDevtoolsSkill, [System.Text.UTF8Encoding]::new($false))
-LogOk "Deployed skill: chrome-devtools -> $chromeDevtoolsDestCursor"
-
-$a11yDirCursor = Join-Path $skillsDestCursor "a11y-debugging"
-if (-not (Test-Path $a11yDirCursor)) { New-Item -ItemType Directory -Path $a11yDirCursor -Force | Out-Null }
-$a11yDestCursor = Join-Path $a11yDirCursor "SKILL.md"
-[System.IO.File]::WriteAllText($a11yDestCursor, $a11ySkill, [System.Text.UTF8Encoding]::new($false))
-LogOk "Deployed skill: a11y-debugging -> $a11yDestCursor"
+Deploy-EmbeddedSkill "chrome-devtools" $skillsDestCursor "cursor skills" $chromeDevtoolsSkill
+Deploy-EmbeddedSkill "a11y-debugging" $skillsDestCursor "cursor skills" $a11ySkill
 if ($errors -eq $errorsBeforeCursorSkills) {
     Write-Summary "OK" "cursor skills" "deployed"
 } else {

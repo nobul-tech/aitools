@@ -196,6 +196,48 @@ $sharedContent
 - Shell: bash (Claude Code requires Git Bash on Windows)
 "@
 
+# ---------------------------------------------------------------------------
+# Adopt deployed CLAUDE.md back to profile template.
+# Strips machine-specific footer and reverse-tokenizes profile values.
+# ---------------------------------------------------------------------------
+function Adopt-ClaudeMd {
+    param([string]$DeployedPath, [string]$DestPath)
+
+    try {
+        $deployed = Get-Content $DeployedPath -Raw -ErrorAction Stop
+    } catch {
+        LogError "Cannot read deployed CLAUDE.md: $_"
+        return $false
+    }
+
+    # Strip ## Machine-Specific section to end
+    $idx = $deployed.IndexOf("`n## Machine-Specific")
+    if ($idx -ge 0) {
+        $deployed = $deployed.Substring(0, $idx).TrimEnd() + "`n"
+    }
+
+    # Reverse-substitute profile values back to {{PLACEHOLDER}} tokens
+    if ($profileName) {
+        $deployed = $deployed -replace [regex]::Escape($profileName), '{{PROFILE_NAME}}'
+        $deployed = $deployed -replace [regex]::Escape($profileCompany), '{{PROFILE_COMPANY}}'
+        $deployed = $deployed -replace [regex]::Escape($identityGitName), '{{IDENTITY_GIT_NAME}}'
+        $deployed = $deployed -replace [regex]::Escape($identityGitEmail), '{{IDENTITY_GIT_EMAIL}}'
+    }
+
+    $destDir = Split-Path -Parent $DestPath
+    if (-not (Test-Path $destDir)) {
+        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+    }
+    Backup-File -FilePath $DestPath
+    $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
+    [System.IO.File]::WriteAllText($resolved, $deployed, [System.Text.UTF8Encoding]::new($false))
+    LogOk "Adopted CLAUDE.md to profile: $DestPath"
+    if ([Environment]::UserInteractive) {
+        [Console]::WriteLine("  Review: cd $(Split-Path -Parent $destDir) && git diff")
+    }
+    return $true
+}
+
 if ($DryRun) {
     $existingLines = 0
     if (Test-Path $claudeMd) {
@@ -222,6 +264,38 @@ if ($DryRun) {
         Log "[DRY RUN] File does not exist -- would create"
     }
 } else {
+    # --- Diff review before overwrite ---
+    $claudeMdSkipped = $false
+    if ((Test-Path $claudeMd)) {
+        try {
+            $existingCheck = Get-Content $claudeMd -Raw -ErrorAction Stop
+        } catch {
+            $existingCheck = ""
+        }
+        if ($existingCheck -and $existingCheck -ne $content) {
+            $adoptLabel = ""
+            if ($userRepoPath) { $adoptLabel = "profile" }
+            $reviewResult = Prompt-DiffReview -FilePath $claudeMd -NewContent $content -AdoptLabel $adoptLabel
+            switch ($reviewResult) {
+                "adopt" {
+                    $adoptDest = Join-Path $userRepoPath "claude\CLAUDE.md"
+                    if (Adopt-ClaudeMd -DeployedPath $claudeMd -DestPath $adoptDest) {
+                        Write-Summary "OK" "claude.md" "adopted to profile"
+                    } else {
+                        Write-Summary "ERROR" "claude.md" "adopt failed"
+                    }
+                    $claudeMdSkipped = $true
+                }
+                "skip" {
+                    LogWarn "Skipped CLAUDE.md (user chose skip)"
+                    Write-Summary "WARN" "claude.md" "skipped (user review)"
+                    $claudeMdSkipped = $true
+                }
+            }
+        }
+    }
+
+    if (-not $claudeMdSkipped) {
     # Backup and remove existing file so we always write the latest version
     Backup-File -FilePath $claudeMd
     # Capture existing content for post-write comparison
@@ -286,6 +360,7 @@ if ($DryRun) {
     } elseif ($errors -gt 0) {
         Write-Summary "ERROR" "claude.md" "validation failed"
     }
+    }  # end claudeMdSkipped check
 }
 
 # --- BEGIN rules deployment (extracted by build-deploy) ---
@@ -350,7 +425,7 @@ if ($rulesSrc) {
             New-Item -ItemType Directory -Path $rulesDest -Force | Out-Null
         }
 
-        $added = 0; $updated = 0; $unchanged = 0
+        $added = 0; $updated = 0; $unchanged = 0; $adopted = 0; $skipped = 0
         foreach ($rf in $sourceRules) {
             $destFile = Join-Path $rulesDest $rf.Name
             if (Test-Path $destFile) {
@@ -370,7 +445,29 @@ if ($rulesSrc) {
                     $unchanged++
                     continue
                 }
-                # Log diff before overwriting
+                # File differs from source -- review before overwriting
+                $ruleAdoptLabel = ""
+                if ($userRepoPath) { $ruleAdoptLabel = "profile" }
+                $ruleReview = Prompt-DiffReview -FilePath $destFile -NewContent $newContent -AdoptLabel $ruleAdoptLabel
+                switch ($ruleReview) {
+                    "adopt" {
+                        $adoptRuleDest = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name
+                        $adoptRuleDir = Split-Path -Parent $adoptRuleDest
+                        if (-not (Test-Path $adoptRuleDir)) {
+                            New-Item -ItemType Directory -Path $adoptRuleDir -Force | Out-Null
+                        }
+                        Copy-Item -Path $destFile -Destination $adoptRuleDest -Force -ErrorAction Stop
+                        LogOk "Adopted rule to profile: $($rf.Name)"
+                        $adopted++
+                        continue
+                    }
+                    "skip" {
+                        LogWarn "Skipped rule: $($rf.Name)"
+                        $skipped++
+                        continue
+                    }
+                }
+                # overwrite: proceed with update
                 Log "Updating: $($rf.Name)"
                 $oldLines = @($oldContent -split "`n")
                 $newLines = @($newContent -split "`n")
@@ -413,8 +510,12 @@ if ($rulesSrc) {
         }
 
         if ($errors -eq 0) {
-            LogOk "Rules: $added added, $updated updated, $unchanged unchanged, $preserved preserved in $rulesDest"
-            Write-Summary "OK" "claude rules" "$added added, $updated updated, $unchanged unchanged"
+            LogOk "Rules: $added added, $updated updated, $unchanged unchanged, $adopted adopted, $skipped skipped, $preserved preserved in $rulesDest"
+            if ($skipped -gt 0) {
+                Write-Summary "WARN" "claude rules" "$skipped skipped (user review)"
+            } else {
+                Write-Summary "OK" "claude rules" "$added added, $updated updated, $unchanged unchanged"
+            }
         } else {
             Write-Summary "ERROR" "claude rules" "validation failed"
         }

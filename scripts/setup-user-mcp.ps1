@@ -345,6 +345,26 @@ function Deploy-Skill {
         if ($srcContent -eq $dstContent) {
             LogOk "Skill unchanged: $SkillName"
         } else {
+            # File differs -- backup and review before overwriting
+            Backup-File -FilePath $dest
+            $skillAdoptLabel = ""
+            if (Test-Path $src) { $skillAdoptLabel = "shared/" }
+            $skillReview = Prompt-DiffReview -FilePath $dest -NewContent $srcContent -AdoptLabel $skillAdoptLabel
+            switch ($skillReview) {
+                "adopt" {
+                    # Copy deployed version back to repo source
+                    Copy-Item -Path $dest -Destination $src -Force -ErrorAction Stop
+                    LogOk "Adopted skill to shared/: $SkillName"
+                    Write-Summary "DETAIL" $ToolName "adopted: $SkillName"
+                    return
+                }
+                "skip" {
+                    LogWarn "Skill skipped: $SkillName"
+                    Write-Summary "DETAIL" $ToolName "skipped: $SkillName"
+                    return
+                }
+            }
+            # overwrite: proceed with update
             Copy-Item -Path $src -Destination $dest -Force
             LogOk "Skill updated: $SkillName -> $dest"
             Write-Summary "DETAIL" $ToolName "updated: $SkillName"
