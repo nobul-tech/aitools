@@ -193,8 +193,11 @@ prompt_diff_review() {
         return 0
     fi
 
-    # Non-interactive: auto-overwrite (preserves current behavior)
-    if ! [ -c /dev/tty ]; then
+    # Non-interactive: auto-overwrite (preserves current behavior).
+    # [ -c /dev/tty ] is insufficient -- macOS reports the device exists even
+    # when no controlling terminal is attached ("Device not configured").
+    # Test with an actual write to catch both cases.
+    if ! (printf '' > /dev/tty) 2>/dev/null; then
         log_warn "Diff in $(display_path "$file_path") -- overwriting (non-interactive)"
         return 0
     fi

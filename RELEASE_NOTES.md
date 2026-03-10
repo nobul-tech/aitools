@@ -12,6 +12,18 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.47.1 -- Fix /dev/tty non-interactive detection on macOS (2026-03-09)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Non-interactive detection**: `[ -c /dev/tty ]` passes on macOS even without a controlling terminal (device exists but is "not configured", causing `set -e` abort). Replaced with actual write test: `(printf '' > /dev/tty) 2>/dev/null`. |
+
+**Verified on:** macOS (non-interactive auto-overwrite, --force, dry-run all pass). Windows: not tested.
+
+---
+
 ## v0.47.0 -- Diff review + adopt for managed file deployment (2026-03-09)
 
 ### Added
