@@ -24,58 +24,89 @@ if (-not $cargoCheck) {
     LogError "Rust (cargo) is not installed -- required for Datadog CLI on Windows. Run setup-rust.ps1 first."
     Write-Summary "ERROR" "datadog cli" "Rust not installed (prerequisite)"
 } else {
-    # --- Detect existing install ---
-    # Get-Command exempt: command-existence check with explicit fallback
-    $pupCheck = Get-Command pup -ErrorAction SilentlyContinue
-
-    if ($pupCheck) {
-        $pupVersion = pup version 2>$null
-        if ($pupVersion) {
-            Log "Pup already installed ($pupVersion) -- upgrading via cargo install..."
-        } else {
-            Log "Pup found but version check failed -- upgrading via cargo install..."
+    # --- Check build prerequisites before expensive source build ---
+    $missingPrereqs = Check-BuildPrereqs "cargo"
+    if ($missingPrereqs.Count -gt 0) {
+        foreach ($p in $missingPrereqs) {
+            LogError "$($p.Name) not installed -- required to build pup from source"
+            LogError "Fix: $($p.Install)"
         }
-        $cargoOutput = cargo install --git https://github.com/datadog-labs/pup 2>&1 | Out-String
-        if ($LASTEXITCODE -ne 0) {
-            $cargoOutput.Trim().Split("`n") | ForEach-Object { $l = $_.TrimEnd(); if ($l.Trim()) { Log $l } }
-            LogError "cargo install pup failed (exit code $LASTEXITCODE)"
-            Write-Summary "ERROR" "datadog cli" "cargo install failed"
-        } else {
-            Refresh-Path
-            $pupVersion = pup version 2>$null
-            if ($pupVersion) {
-                LogOk "Pup upgraded ($pupVersion)"
-                Write-Summary "OK" "datadog cli" "$pupVersion"
-            } else {
-                LogError "cargo install completed but 'pup version' failed"
-                Write-Summary "ERROR" "datadog cli" "version check failed after upgrade"
-            }
+        Write-Summary "ERROR" "datadog cli" "missing build prereqs: $(($missingPrereqs | ForEach-Object { $_.Name }) -join ', ')"
+        foreach ($p in $missingPrereqs) {
+            Write-Summary "ACTION" "" "$($p.Install) -- build prerequisite for pup"
         }
     } else {
-        # Fresh install
-        Log "Installing Pup via cargo install..."
-        $cargoOutput = cargo install --git https://github.com/datadog-labs/pup 2>&1 | Out-String
-        if ($LASTEXITCODE -ne 0) {
-            $cargoOutput.Trim().Split("`n") | ForEach-Object { $l = $_.TrimEnd(); if ($l.Trim()) { Log $l } }
-            LogError "cargo install pup failed (exit code $LASTEXITCODE)"
-            Write-Summary "ERROR" "datadog cli" "cargo install failed"
-        }
-        Refresh-Path
-
+        # --- Detect existing install ---
         # Get-Command exempt: command-existence check with explicit fallback
         $pupCheck = Get-Command pup -ErrorAction SilentlyContinue
+
         if ($pupCheck) {
             $pupVersion = pup version 2>$null
             if ($pupVersion) {
-                LogOk "Pup installed ($pupVersion)"
-                Write-Summary "OK" "datadog cli" "$pupVersion"
+                Log "Pup already installed ($pupVersion) -- upgrading via cargo install..."
             } else {
-                LogError "pup found but version check failed"
-                Write-Summary "ERROR" "datadog cli" "version check failed"
+                Log "Pup found but version check failed -- upgrading via cargo install..."
             }
-        } elseif ($errors -eq 0) {
-            LogError "cargo install completed but 'pup' not found in PATH"
-            Write-Summary "ERROR" "datadog cli" "installed but not on PATH"
+            $cargoOutput = cargo install --git https://github.com/datadog-labs/pup 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) {
+                $cargoOutput.Trim().Split("`n") | ForEach-Object { $l = $_.TrimEnd(); if ($l.Trim()) { Log $l } }
+                # Diagnose: scan output for known failure signatures
+                $diagnosis = Diagnose-BuildFailure $cargoOutput
+                if ($diagnosis) {
+                    LogError "Build failed: $($diagnosis.Name) not available"
+                    LogError "Fix: $($diagnosis.Remedy)"
+                    Write-Summary "ERROR" "datadog cli" "build failed: $($diagnosis.Name) missing"
+                    Write-Summary "ACTION" "" "$($diagnosis.Remedy) -- then re-run aitools install"
+                } else {
+                    LogError "cargo install pup failed (exit code $LASTEXITCODE)"
+                    Write-Summary "ERROR" "datadog cli" "cargo install failed"
+                }
+            } else {
+                Refresh-Path
+                $pupVersion = pup version 2>$null
+                if ($pupVersion) {
+                    LogOk "Pup upgraded ($pupVersion)"
+                    Write-Summary "OK" "datadog cli" "$pupVersion"
+                } else {
+                    LogError "cargo install completed but 'pup version' failed"
+                    Write-Summary "ERROR" "datadog cli" "version check failed after upgrade"
+                }
+            }
+        } else {
+            # Fresh install
+            Log "Installing Pup via cargo install..."
+            $cargoOutput = cargo install --git https://github.com/datadog-labs/pup 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) {
+                $cargoOutput.Trim().Split("`n") | ForEach-Object { $l = $_.TrimEnd(); if ($l.Trim()) { Log $l } }
+                # Diagnose: scan output for known failure signatures
+                $diagnosis = Diagnose-BuildFailure $cargoOutput
+                if ($diagnosis) {
+                    LogError "Build failed: $($diagnosis.Name) not available"
+                    LogError "Fix: $($diagnosis.Remedy)"
+                    Write-Summary "ERROR" "datadog cli" "build failed: $($diagnosis.Name) missing"
+                    Write-Summary "ACTION" "" "$($diagnosis.Remedy) -- then re-run aitools install"
+                } else {
+                    LogError "cargo install pup failed (exit code $LASTEXITCODE)"
+                    Write-Summary "ERROR" "datadog cli" "cargo install failed"
+                }
+            }
+            Refresh-Path
+
+            # Get-Command exempt: command-existence check with explicit fallback
+            $pupCheck = Get-Command pup -ErrorAction SilentlyContinue
+            if ($pupCheck) {
+                $pupVersion = pup version 2>$null
+                if ($pupVersion) {
+                    LogOk "Pup installed ($pupVersion)"
+                    Write-Summary "OK" "datadog cli" "$pupVersion"
+                } else {
+                    LogError "pup found but version check failed"
+                    Write-Summary "ERROR" "datadog cli" "version check failed"
+                }
+            } elseif ($errors -eq 0) {
+                LogError "cargo install completed but 'pup' not found in PATH"
+                Write-Summary "ERROR" "datadog cli" "installed but not on PATH"
+            }
         }
     }
 }

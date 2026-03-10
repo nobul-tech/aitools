@@ -480,6 +480,75 @@ show_summary() {
     # Cleanup summary file (already displayed; rm -f ignores nonexistent files)
     rm -f "$sfile"
 }
+
+# ---------------------------------------------------------------------------
+# Build prerequisite checking
+# ---------------------------------------------------------------------------
+
+# Check known build prerequisites for an ecosystem.
+# Usage: check_build_prereqs "cargo"
+#   Outputs missing prereq info to stdout (one per line: NAME|INSTALL_INSTRUCTION).
+#   Returns 0 if all present, 1 if any missing.
+check_build_prereqs() {
+    local ecosystem="$1"
+    local missing=0
+
+    case "$ecosystem" in
+        cargo)
+            # NASM -- required by aws-lc-sys on x86_64
+            if [ "$(uname -m)" = "x86_64" ] && ! command -v nasm >/dev/null 2>&1; then
+                echo "NASM|brew install nasm (macOS) or apt-get install nasm (Linux)"
+                missing=1
+            fi
+            # cmake -- required by some crates
+            if ! command -v cmake >/dev/null 2>&1; then
+                echo "CMake|brew install cmake (macOS) or apt-get install cmake (Linux)"
+                missing=1
+            fi
+            ;;
+        pip)
+            # Add pip-specific prereqs here as discovered
+            ;;
+        go)
+            # Add go-specific prereqs here as discovered
+            ;;
+    esac
+
+    return $missing
+}
+
+# ---------------------------------------------------------------------------
+# Build failure diagnosis
+# ---------------------------------------------------------------------------
+
+# Scan build output for known failure signatures.
+# Usage: diagnose_build_failure "$output"
+#   Prints "NAME|REMEDY" if a known signature is found.
+#   Returns 0 if found, 1 if no match.
+diagnose_build_failure() {
+    local output="$1"
+
+    # Table of known failure patterns -> remediation
+    # Add new entries here when new build failures are discovered.
+    local -a patterns=(
+        "NASM command not found|NASM|brew install nasm / apt-get install nasm"
+        "linker.*not found|Linker|Install build-essential (Linux) or Xcode CLI tools (macOS)"
+        "cmake.*not found|CMake|brew install cmake / apt-get install cmake"
+        "pkg-config.*not found|pkg-config|brew install pkg-config / apt-get install pkg-config"
+        "Python\.h.*not found|Python headers|Install python3-dev or python3-devel"
+        "openssl.*not found|OpenSSL|brew install openssl / apt-get install libssl-dev"
+    )
+
+    for entry in "${patterns[@]}"; do
+        local pattern="${entry%%|*}"
+        local rest="${entry#*|}"
+        if printf '%s\n' "$output" | grep -qiE "$pattern"; then
+            echo "$rest"
+            return 0
+        fi
+    done
+    return 1
+}
 logging_init "setup-cursor-ide-mcp"
 
 # --- OS guard ---

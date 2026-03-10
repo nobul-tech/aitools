@@ -88,12 +88,30 @@ else
     if printf '%s\n' "$INSTALL_OUTPUT" | grep -qi 'error\|fatal'; then
         log_warn "brew install datadog-labs/pack/pup failed -- trying cargo install fallback..."
         if command -v cargo >/dev/null 2>&1; then
+            # Pre-flight: check build prerequisites
+            PREREQ_MISSING=$(check_build_prereqs "cargo") || true
+            if [ -n "$PREREQ_MISSING" ]; then
+                while IFS='|' read -r prereq_name prereq_install; do
+                    log_warn "$prereq_name not found -- $prereq_install"
+                done <<< "$PREREQ_MISSING"
+            fi
             CARGO_EC=0
             CARGO_OUTPUT=$(cargo install --git https://github.com/datadog-labs/pup 2>&1) || CARGO_EC=$?
             printf '%s\n' "$CARGO_OUTPUT" | while IFS= read -r line; do [ -n "$line" ] && log "$line"; done
             if [ "$CARGO_EC" -ne 0 ]; then
-                log_error "cargo install pup also failed (exit code $CARGO_EC)"
-                write_summary ERROR "datadog cli" "install failed (brew + cargo)"
+                # Diagnose: scan for known failure signatures
+                DIAGNOSIS=$(diagnose_build_failure "$CARGO_OUTPUT") || true
+                if [ -n "$DIAGNOSIS" ]; then
+                    DIAG_NAME="${DIAGNOSIS%%|*}"
+                    DIAG_REMEDY="${DIAGNOSIS#*|}"
+                    log_error "Build failed: $DIAG_NAME not available"
+                    log_error "Fix: $DIAG_REMEDY"
+                    write_summary ERROR "datadog cli" "build failed: $DIAG_NAME missing"
+                    write_summary ACTION "" "$DIAG_REMEDY -- then re-run"
+                else
+                    log_error "cargo install pup also failed (exit code $CARGO_EC)"
+                    write_summary ERROR "datadog cli" "install failed (brew + cargo)"
+                fi
             else
                 log_ok "Pup installed via cargo install fallback"
             fi

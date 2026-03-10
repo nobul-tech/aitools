@@ -497,7 +497,18 @@ rustup --version
 
 ### Prerequisites (Windows)
 
-MSVC Build Tools required for linking. `rustup-init` offers to install automatically. Manual: install **Visual Studio Build Tools** with the **"Desktop Development with C++"** workload.
+- **MSVC Build Tools**: Required for linking. `setup-rust.ps1` checks and warns if missing.
+  Manual: `winget install Microsoft.VisualStudio.2022.BuildTools` (add "Desktop Development
+  with C++" workload).
+- **NASM**: Required by `aws-lc-sys` (crypto library used by rustls, reqwest, and many crates).
+  `setup-rust.ps1` auto-installs via `winget install NASM.NASM`. Without NASM, `cargo install`
+  for any crate using `aws-lc-rs` panics: `NASM command not found! Build cannot continue.`
+- **CMake**: Required by some crates. `winget install Kitware.CMake`.
+
+All known build prerequisites are tracked in `aitools-lib.ps1` (`$script:BuildPrereqs`)
+and `aitools-lib.sh` (`check_build_prereqs`). When a new prerequisite is discovered,
+add it to both files — see "Adding a new build prerequisite" in
+`reference/script-standards-detail.md`.
 
 ### Non-Preferred Install Methods (cleanup targets)
 
@@ -786,6 +797,11 @@ pup version
 ### Prerequisites
 
 - `pup auth login` (one-time OAuth, browser flow) required after install
+- **Windows build prerequisites**: Rust toolchain + build tools (MSVC, NASM) are checked
+  automatically by `setup-datadog.ps1` via `Check-BuildPrereqs`. If any are missing, the
+  script fails early with remediation instructions (no wasted compilation time).
+- **macOS cargo fallback**: If Homebrew install fails, the cargo fallback path checks
+  prerequisites via `check_build_prereqs` and diagnoses failures via `diagnose_build_failure`.
 
 ### Authentication
 

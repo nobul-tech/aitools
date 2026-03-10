@@ -687,6 +687,28 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 27. Build prerequisites installed
+# ---------------------------------------------------------------------------
+if command -v cargo >/dev/null 2>&1; then
+    PREREQ_MISSING=false
+    if [ "$(uname -m)" = "x86_64" ] && ! command -v nasm >/dev/null 2>&1; then
+        echo "      Missing: NASM -- brew install nasm / apt-get install nasm"
+        PREREQ_MISSING=true
+    fi
+    if ! command -v cmake >/dev/null 2>&1; then
+        echo "      Missing: CMake -- brew install cmake / apt-get install cmake"
+        PREREQ_MISSING=true
+    fi
+    if $PREREQ_MISSING; then
+        step_warn "27" "Build prerequisites installed" "some build tools missing (see above)"
+    else
+        step_pass "27" "Build prerequisites installed"
+    fi
+else
+    step_skip "27" "Build prerequisites installed" "cargo not installed"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------
 print_summary

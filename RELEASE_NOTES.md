@@ -12,6 +12,26 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.48.0 -- Build prerequisite validation framework (2026-03-10)
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **Two-layer build prerequisite framework**: Layer 1 (preventive) checks known prerequisites before source builds via `Check-BuildPrereqs`/`check_build_prereqs` in aitools-lib. Layer 2 (reactive) diagnoses build failures via `Diagnose-BuildFailure`/`diagnose_build_failure` by scanning output for known error signatures. Both use centralized data tables — adding a new prerequisite = one table entry. |
+| 2 | **NASM auto-install in setup-rust.ps1**: Detects missing NASM (required by `aws-lc-sys` crypto crates) and installs via `winget install NASM.NASM`. Fixes `aitools install` failing at Step 18 (pup) with `NASM command not found! Build cannot continue.` after 2 min of wasted compilation. |
+| 3 | **setup-datadog.ps1 prereq gate**: Calls `Check-BuildPrereqs "cargo"` before any cargo build. Missing prerequisites (MSVC, NASM, CMake) produce `ERROR` + `ACTION` summary lines and skip the build entirely. Both cargo failure blocks (upgrade + fresh install) now call `Diagnose-BuildFailure` for targeted remediation. |
+| 4 | **setup-datadog.sh cargo fallback diagnosis**: Cargo install fallback path now checks prerequisites before build and diagnoses failures with known signatures. |
+| 5 | **Pre-commit check step 14**: "Build prereq framework" audit verifies all setup scripts using `cargo install` reference the framework functions. |
+| 6 | **Post-push check step 27**: "Build prerequisites installed" verifies NASM and CMake are present on the current machine when cargo is installed. |
+| 7 | **Script standards update**: New "Build prerequisite validation" section in `.claude/rules/script-standards.md` and `.cursor/rules/script-standards.mdc`. Canonical patterns and "Adding a new build prerequisite" process in `reference/script-standards-detail.md`. |
+
+**Verified on:** Windows (syntax validation, pre-commit step 14 pass, NASM install + setup-rust smoke test). macOS: not tested.
+
+**Closes:** #19
+
+---
+
 ## v0.47.1 -- Fix /dev/tty non-interactive detection on macOS (2026-03-09)
 
 ### Fixed

@@ -78,6 +78,36 @@ if ($hasMSVC) {
     Write-Summary "WARN" "rust/cargo" "MSVC Build Tools not detected -- cargo build will fail without a C linker"
 }
 
+# --- Build tool prerequisites (NASM, CMake, etc.) ---
+# These are not needed by Rust itself, but by commonly used crates (aws-lc-sys, etc.)
+# Get-Command exempt: command-existence check with explicit fallback
+$nasmCheck = Get-Command nasm -ErrorAction SilentlyContinue
+if ($nasmCheck) {
+    $nasmVer = (nasm --version 2>$null)
+    if ($nasmVer) { $nasmVer = ($nasmVer -split '\s+' | Select-Object -Index 2) }
+    LogOk "NASM found ($nasmVer)"
+} else {
+    Log "NASM not found -- installing via winget (needed by crypto crates like aws-lc-sys)..."
+    $wingetOutput = winget install -e --id NASM.NASM --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+    Log-WingetOutput $wingetOutput
+    if ($LASTEXITCODE -ne 0) {
+        LogWarn "winget install NASM failed (exit $LASTEXITCODE)"
+        Write-Summary "WARN" "rust/cargo" "NASM not installed -- some cargo builds will fail"
+        Write-Summary "ACTION" "" "winget install NASM.NASM -- needed for aws-lc-sys crypto crates"
+    } else {
+        Refresh-Path
+        # Get-Command exempt: command-existence check with explicit fallback
+        $nasmCheck = Get-Command nasm -ErrorAction SilentlyContinue
+        if ($nasmCheck) {
+            LogOk "NASM installed"
+        } else {
+            LogWarn "NASM installed but not on PATH -- restart terminal"
+            Write-Summary "WARN" "rust/cargo" "NASM installed but not on PATH"
+            Write-Summary "ACTION" "" "Restart terminal -- NASM needs PATH refresh"
+        }
+    }
+}
+
 # --- Verify PATH persistence ---
 $cargoBinDir = Join-Path $env:USERPROFILE ".cargo\bin"
 $persistentPath = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")

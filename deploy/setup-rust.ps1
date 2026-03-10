@@ -594,6 +594,109 @@ function Show-Summary {
     try { Remove-Item $sfile -Force -ErrorAction Stop }
     catch { Write-Host "  note: could not remove summary file" -ForegroundColor Gray }
 }
+
+# ---------------------------------------------------------------------------
+# Build prerequisite checking
+# ---------------------------------------------------------------------------
+
+# Known build prerequisites by ecosystem.
+# To add a new prerequisite: add an entry to the appropriate ecosystem array.
+# Fields: Name (display), Check (scriptblock), Install (remediation), Platform (win/mac/all)
+$script:BuildPrereqs = @{
+    "cargo" = @(
+        @{
+            Name    = "MSVC Build Tools"
+            Check   = {
+                $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+                if (Test-Path $vsWhere) {
+                    $installs = & $vsWhere -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
+                    return [bool]$installs
+                }
+                return $false
+            }
+            Install = "winget install Microsoft.VisualStudio.2022.BuildTools (add 'Desktop Development with C++' workload)"
+            Platform = "win"
+        },
+        @{
+            Name    = "NASM"
+            # Get-Command exempt: command-existence check with explicit fallback
+            Check   = { [bool](Get-Command nasm -ErrorAction SilentlyContinue) }
+            Install = "winget install NASM.NASM"
+            Platform = "win"
+        },
+        @{
+            Name    = "CMake"
+            # Get-Command exempt: command-existence check with explicit fallback
+            Check   = { [bool](Get-Command cmake -ErrorAction SilentlyContinue) }
+            Install = "winget install Kitware.CMake"
+            Platform = "win"
+        }
+    )
+}
+
+function Check-BuildPrereqs {
+    <#
+    .SYNOPSIS
+    Checks known build prerequisites for an ecosystem (cargo, pip, go).
+    Returns array of missing prerequisites. Empty array = all present.
+    Callers decide whether to abort or warn.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Ecosystem
+    )
+
+    $prereqs = $script:BuildPrereqs[$Ecosystem]
+    if (-not $prereqs) { return @() }
+
+    $missing = @()
+    foreach ($p in $prereqs) {
+        # Filter by platform
+        if ($p.Platform -eq "win" -and -not $IsWindows) { continue }
+        if ($p.Platform -eq "mac" -and $IsWindows) { continue }
+
+        $present = & $p.Check
+        if (-not $present) {
+            $missing += $p
+        }
+    }
+    return $missing
+}
+
+# ---------------------------------------------------------------------------
+# Build failure diagnosis
+# ---------------------------------------------------------------------------
+
+# Known build failure signatures.
+# To add a new signature: add an entry to this array.
+# When a user reports a new build failure, add the error pattern + remedy here.
+$script:BuildFailureSignatures = @(
+    @{ Pattern = "NASM command not found";                Remedy = "winget install NASM.NASM";                     Name = "NASM (assembler)" }
+    @{ Pattern = "linker.*not found|link\.exe.*not found"; Remedy = "Install MSVC Build Tools with C++ workload";  Name = "MSVC linker" }
+    @{ Pattern = "cmake.*not found|Could not find cmake"; Remedy = "winget install Kitware.CMake";                 Name = "CMake" }
+    @{ Pattern = "pkg-config.*not found";                 Remedy = "Install pkg-config";                           Name = "pkg-config" }
+    @{ Pattern = "Python\.h.*not found|python.*dev";      Remedy = "Install Python development headers";           Name = "Python headers" }
+    @{ Pattern = "C compiler.*not found|cc.*not found";   Remedy = "Install a C compiler (MSVC/gcc/clang)";        Name = "C compiler" }
+    @{ Pattern = "openssl.*not found|OPENSSL_DIR";        Remedy = "Install OpenSSL or set OPENSSL_DIR";           Name = "OpenSSL" }
+)
+
+function Diagnose-BuildFailure {
+    <#
+    .SYNOPSIS
+    Scans build output for known failure signatures and returns actionable remediation.
+    Call this after a build command fails to surface the real cause.
+    Returns $null if no known signature matches (generic failure).
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Output
+    )
+
+    foreach ($sig in $script:BuildFailureSignatures) {
+        if ($Output -match $sig.Pattern) {
+            return $sig
+        }
+    }
+    return $null
+}
 Initialize-Logging "setup-rust"
 
 # --- OS guard ---
@@ -662,6 +765,36 @@ if ($hasMSVC) {
     LogWarn "Install: winget install Microsoft.VisualStudio.2022.BuildTools"
     LogWarn "  Then add workload: Desktop Development with C++"
     Write-Summary "WARN" "rust/cargo" "MSVC Build Tools not detected -- cargo build will fail without a C linker"
+}
+
+# --- Build tool prerequisites (NASM, CMake, etc.) ---
+# These are not needed by Rust itself, but by commonly used crates (aws-lc-sys, etc.)
+# Get-Command exempt: command-existence check with explicit fallback
+$nasmCheck = Get-Command nasm -ErrorAction SilentlyContinue
+if ($nasmCheck) {
+    $nasmVer = (nasm --version 2>$null)
+    if ($nasmVer) { $nasmVer = ($nasmVer -split '\s+' | Select-Object -Index 2) }
+    LogOk "NASM found ($nasmVer)"
+} else {
+    Log "NASM not found -- installing via winget (needed by crypto crates like aws-lc-sys)..."
+    $wingetOutput = winget install -e --id NASM.NASM --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+    Log-WingetOutput $wingetOutput
+    if ($LASTEXITCODE -ne 0) {
+        LogWarn "winget install NASM failed (exit $LASTEXITCODE)"
+        Write-Summary "WARN" "rust/cargo" "NASM not installed -- some cargo builds will fail"
+        Write-Summary "ACTION" "" "winget install NASM.NASM -- needed for aws-lc-sys crypto crates"
+    } else {
+        Refresh-Path
+        # Get-Command exempt: command-existence check with explicit fallback
+        $nasmCheck = Get-Command nasm -ErrorAction SilentlyContinue
+        if ($nasmCheck) {
+            LogOk "NASM installed"
+        } else {
+            LogWarn "NASM installed but not on PATH -- restart terminal"
+            Write-Summary "WARN" "rust/cargo" "NASM installed but not on PATH"
+            Write-Summary "ACTION" "" "Restart terminal -- NASM needs PATH refresh"
+        }
+    }
 }
 
 # --- Verify PATH persistence ---

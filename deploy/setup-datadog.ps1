@@ -595,6 +595,109 @@ function Show-Summary {
     try { Remove-Item $sfile -Force -ErrorAction Stop }
     catch { Write-Host "  note: could not remove summary file" -ForegroundColor Gray }
 }
+
+# ---------------------------------------------------------------------------
+# Build prerequisite checking
+# ---------------------------------------------------------------------------
+
+# Known build prerequisites by ecosystem.
+# To add a new prerequisite: add an entry to the appropriate ecosystem array.
+# Fields: Name (display), Check (scriptblock), Install (remediation), Platform (win/mac/all)
+$script:BuildPrereqs = @{
+    "cargo" = @(
+        @{
+            Name    = "MSVC Build Tools"
+            Check   = {
+                $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+                if (Test-Path $vsWhere) {
+                    $installs = & $vsWhere -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
+                    return [bool]$installs
+                }
+                return $false
+            }
+            Install = "winget install Microsoft.VisualStudio.2022.BuildTools (add 'Desktop Development with C++' workload)"
+            Platform = "win"
+        },
+        @{
+            Name    = "NASM"
+            # Get-Command exempt: command-existence check with explicit fallback
+            Check   = { [bool](Get-Command nasm -ErrorAction SilentlyContinue) }
+            Install = "winget install NASM.NASM"
+            Platform = "win"
+        },
+        @{
+            Name    = "CMake"
+            # Get-Command exempt: command-existence check with explicit fallback
+            Check   = { [bool](Get-Command cmake -ErrorAction SilentlyContinue) }
+            Install = "winget install Kitware.CMake"
+            Platform = "win"
+        }
+    )
+}
+
+function Check-BuildPrereqs {
+    <#
+    .SYNOPSIS
+    Checks known build prerequisites for an ecosystem (cargo, pip, go).
+    Returns array of missing prerequisites. Empty array = all present.
+    Callers decide whether to abort or warn.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Ecosystem
+    )
+
+    $prereqs = $script:BuildPrereqs[$Ecosystem]
+    if (-not $prereqs) { return @() }
+
+    $missing = @()
+    foreach ($p in $prereqs) {
+        # Filter by platform
+        if ($p.Platform -eq "win" -and -not $IsWindows) { continue }
+        if ($p.Platform -eq "mac" -and $IsWindows) { continue }
+
+        $present = & $p.Check
+        if (-not $present) {
+            $missing += $p
+        }
+    }
+    return $missing
+}
+
+# ---------------------------------------------------------------------------
+# Build failure diagnosis
+# ---------------------------------------------------------------------------
+
+# Known build failure signatures.
+# To add a new signature: add an entry to this array.
+# When a user reports a new build failure, add the error pattern + remedy here.
+$script:BuildFailureSignatures = @(
+    @{ Pattern = "NASM command not found";                Remedy = "winget install NASM.NASM";                     Name = "NASM (assembler)" }
+    @{ Pattern = "linker.*not found|link\.exe.*not found"; Remedy = "Install MSVC Build Tools with C++ workload";  Name = "MSVC linker" }
+    @{ Pattern = "cmake.*not found|Could not find cmake"; Remedy = "winget install Kitware.CMake";                 Name = "CMake" }
+    @{ Pattern = "pkg-config.*not found";                 Remedy = "Install pkg-config";                           Name = "pkg-config" }
+    @{ Pattern = "Python\.h.*not found|python.*dev";      Remedy = "Install Python development headers";           Name = "Python headers" }
+    @{ Pattern = "C compiler.*not found|cc.*not found";   Remedy = "Install a C compiler (MSVC/gcc/clang)";        Name = "C compiler" }
+    @{ Pattern = "openssl.*not found|OPENSSL_DIR";        Remedy = "Install OpenSSL or set OPENSSL_DIR";           Name = "OpenSSL" }
+)
+
+function Diagnose-BuildFailure {
+    <#
+    .SYNOPSIS
+    Scans build output for known failure signatures and returns actionable remediation.
+    Call this after a build command fails to surface the real cause.
+    Returns $null if no known signature matches (generic failure).
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Output
+    )
+
+    foreach ($sig in $script:BuildFailureSignatures) {
+        if ($Output -match $sig.Pattern) {
+            return $sig
+        }
+    }
+    return $null
+}
 Initialize-Logging "setup-datadog"
 
 # --- OS guard ---
@@ -610,58 +713,89 @@ if (-not $cargoCheck) {
     LogError "Rust (cargo) is not installed -- required for Datadog CLI on Windows. Run setup-rust.ps1 first."
     Write-Summary "ERROR" "datadog cli" "Rust not installed (prerequisite)"
 } else {
-    # --- Detect existing install ---
-    # Get-Command exempt: command-existence check with explicit fallback
-    $pupCheck = Get-Command pup -ErrorAction SilentlyContinue
-
-    if ($pupCheck) {
-        $pupVersion = pup version 2>$null
-        if ($pupVersion) {
-            Log "Pup already installed ($pupVersion) -- upgrading via cargo install..."
-        } else {
-            Log "Pup found but version check failed -- upgrading via cargo install..."
+    # --- Check build prerequisites before expensive source build ---
+    $missingPrereqs = Check-BuildPrereqs "cargo"
+    if ($missingPrereqs.Count -gt 0) {
+        foreach ($p in $missingPrereqs) {
+            LogError "$($p.Name) not installed -- required to build pup from source"
+            LogError "Fix: $($p.Install)"
         }
-        $cargoOutput = cargo install --git https://github.com/datadog-labs/pup 2>&1 | Out-String
-        if ($LASTEXITCODE -ne 0) {
-            $cargoOutput.Trim().Split("`n") | ForEach-Object { $l = $_.TrimEnd(); if ($l.Trim()) { Log $l } }
-            LogError "cargo install pup failed (exit code $LASTEXITCODE)"
-            Write-Summary "ERROR" "datadog cli" "cargo install failed"
-        } else {
-            Refresh-Path
-            $pupVersion = pup version 2>$null
-            if ($pupVersion) {
-                LogOk "Pup upgraded ($pupVersion)"
-                Write-Summary "OK" "datadog cli" "$pupVersion"
-            } else {
-                LogError "cargo install completed but 'pup version' failed"
-                Write-Summary "ERROR" "datadog cli" "version check failed after upgrade"
-            }
+        Write-Summary "ERROR" "datadog cli" "missing build prereqs: $(($missingPrereqs | ForEach-Object { $_.Name }) -join ', ')"
+        foreach ($p in $missingPrereqs) {
+            Write-Summary "ACTION" "" "$($p.Install) -- build prerequisite for pup"
         }
     } else {
-        # Fresh install
-        Log "Installing Pup via cargo install..."
-        $cargoOutput = cargo install --git https://github.com/datadog-labs/pup 2>&1 | Out-String
-        if ($LASTEXITCODE -ne 0) {
-            $cargoOutput.Trim().Split("`n") | ForEach-Object { $l = $_.TrimEnd(); if ($l.Trim()) { Log $l } }
-            LogError "cargo install pup failed (exit code $LASTEXITCODE)"
-            Write-Summary "ERROR" "datadog cli" "cargo install failed"
-        }
-        Refresh-Path
-
+        # --- Detect existing install ---
         # Get-Command exempt: command-existence check with explicit fallback
         $pupCheck = Get-Command pup -ErrorAction SilentlyContinue
+
         if ($pupCheck) {
             $pupVersion = pup version 2>$null
             if ($pupVersion) {
-                LogOk "Pup installed ($pupVersion)"
-                Write-Summary "OK" "datadog cli" "$pupVersion"
+                Log "Pup already installed ($pupVersion) -- upgrading via cargo install..."
             } else {
-                LogError "pup found but version check failed"
-                Write-Summary "ERROR" "datadog cli" "version check failed"
+                Log "Pup found but version check failed -- upgrading via cargo install..."
             }
-        } elseif ($errors -eq 0) {
-            LogError "cargo install completed but 'pup' not found in PATH"
-            Write-Summary "ERROR" "datadog cli" "installed but not on PATH"
+            $cargoOutput = cargo install --git https://github.com/datadog-labs/pup 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) {
+                $cargoOutput.Trim().Split("`n") | ForEach-Object { $l = $_.TrimEnd(); if ($l.Trim()) { Log $l } }
+                # Diagnose: scan output for known failure signatures
+                $diagnosis = Diagnose-BuildFailure $cargoOutput
+                if ($diagnosis) {
+                    LogError "Build failed: $($diagnosis.Name) not available"
+                    LogError "Fix: $($diagnosis.Remedy)"
+                    Write-Summary "ERROR" "datadog cli" "build failed: $($diagnosis.Name) missing"
+                    Write-Summary "ACTION" "" "$($diagnosis.Remedy) -- then re-run aitools install"
+                } else {
+                    LogError "cargo install pup failed (exit code $LASTEXITCODE)"
+                    Write-Summary "ERROR" "datadog cli" "cargo install failed"
+                }
+            } else {
+                Refresh-Path
+                $pupVersion = pup version 2>$null
+                if ($pupVersion) {
+                    LogOk "Pup upgraded ($pupVersion)"
+                    Write-Summary "OK" "datadog cli" "$pupVersion"
+                } else {
+                    LogError "cargo install completed but 'pup version' failed"
+                    Write-Summary "ERROR" "datadog cli" "version check failed after upgrade"
+                }
+            }
+        } else {
+            # Fresh install
+            Log "Installing Pup via cargo install..."
+            $cargoOutput = cargo install --git https://github.com/datadog-labs/pup 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) {
+                $cargoOutput.Trim().Split("`n") | ForEach-Object { $l = $_.TrimEnd(); if ($l.Trim()) { Log $l } }
+                # Diagnose: scan output for known failure signatures
+                $diagnosis = Diagnose-BuildFailure $cargoOutput
+                if ($diagnosis) {
+                    LogError "Build failed: $($diagnosis.Name) not available"
+                    LogError "Fix: $($diagnosis.Remedy)"
+                    Write-Summary "ERROR" "datadog cli" "build failed: $($diagnosis.Name) missing"
+                    Write-Summary "ACTION" "" "$($diagnosis.Remedy) -- then re-run aitools install"
+                } else {
+                    LogError "cargo install pup failed (exit code $LASTEXITCODE)"
+                    Write-Summary "ERROR" "datadog cli" "cargo install failed"
+                }
+            }
+            Refresh-Path
+
+            # Get-Command exempt: command-existence check with explicit fallback
+            $pupCheck = Get-Command pup -ErrorAction SilentlyContinue
+            if ($pupCheck) {
+                $pupVersion = pup version 2>$null
+                if ($pupVersion) {
+                    LogOk "Pup installed ($pupVersion)"
+                    Write-Summary "OK" "datadog cli" "$pupVersion"
+                } else {
+                    LogError "pup found but version check failed"
+                    Write-Summary "ERROR" "datadog cli" "version check failed"
+                }
+            } elseif ($errors -eq 0) {
+                LogError "cargo install completed but 'pup' not found in PATH"
+                Write-Summary "ERROR" "datadog cli" "installed but not on PATH"
+            }
         }
     }
 }

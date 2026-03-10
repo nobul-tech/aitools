@@ -805,6 +805,88 @@ Setup scripts that generate files from templates must validate CONTENT correctne
 not just structural markers. If a file is assembled from template + footer, validate
 that the template portion is non-empty, not just that the footer exists.
 
+## Build prerequisite validation
+
+### Two-layer framework
+
+Setup scripts that compile from source must validate prerequisites before building:
+
+**Layer 1 — preventive (fast, pre-flight):**
+```powershell
+# PowerShell
+$missingPrereqs = Check-BuildPrereqs "cargo"
+if ($missingPrereqs.Count -gt 0) {
+    foreach ($p in $missingPrereqs) {
+        LogError "$($p.Name) not installed -- required to build <tool> from source"
+        LogError "Fix: $($p.Install)"
+    }
+    Write-Summary "ERROR" "<tool>" "missing build prereqs: $(($missingPrereqs | ForEach-Object { $_.Name }) -join ', ')"
+    # Skip the build entirely
+}
+```
+
+```bash
+# Bash
+PREREQ_MISSING=$(check_build_prereqs "cargo") || true
+if [ -n "$PREREQ_MISSING" ]; then
+    while IFS='|' read -r prereq_name prereq_install; do
+        log_warn "$prereq_name not found -- $prereq_install"
+    done <<< "$PREREQ_MISSING"
+fi
+```
+
+**Layer 2 — diagnostic (after failure):**
+```powershell
+# PowerShell
+$diagnosis = Diagnose-BuildFailure $cargoOutput
+if ($diagnosis) {
+    LogError "Build failed: $($diagnosis.Name) not available"
+    LogError "Fix: $($diagnosis.Remedy)"
+    Write-Summary "ERROR" "<tool>" "build failed: $($diagnosis.Name) missing"
+    Write-Summary "ACTION" "" "$($diagnosis.Remedy) -- then re-run aitools install"
+} else {
+    LogError "cargo install <tool> failed (exit code $LASTEXITCODE)"
+    Write-Summary "ERROR" "<tool>" "cargo install failed"
+}
+```
+
+```bash
+# Bash
+DIAGNOSIS=$(diagnose_build_failure "$CARGO_OUTPUT") || true
+if [ -n "$DIAGNOSIS" ]; then
+    DIAG_NAME="${DIAGNOSIS%%|*}"
+    DIAG_REMEDY="${DIAGNOSIS#*|}"
+    log_error "Build failed: $DIAG_NAME not available"
+    log_error "Fix: $DIAG_REMEDY"
+    write_summary ERROR "<tool>" "build failed: $DIAG_NAME missing"
+    write_summary ACTION "" "$DIAG_REMEDY -- then re-run"
+else
+    log_error "cargo install <tool> failed (exit code $CARGO_EC)"
+    write_summary ERROR "<tool>" "install failed"
+fi
+```
+
+### Anti-pattern: build first, diagnose after
+
+Do NOT skip Layer 1 and rely only on Layer 2. Layer 1 catches known issues in milliseconds;
+Layer 2 only fires after minutes of wasted compilation.
+
+### Adding a new build prerequisite
+
+When a user reports a new build failure:
+
+1. **File a GitHub issue** with the full error output
+2. **Identify the error pattern** — the grep-able string from the build output
+3. **Add to `aitools-lib.ps1`:**
+   - Entry in `$script:BuildPrereqs` (if it's a checkable command)
+   - Entry in `$script:BuildFailureSignatures` (the error pattern + remedy)
+4. **Add to `aitools-lib.sh`:**
+   - Entry in `check_build_prereqs()` case block
+   - Entry in `diagnose_build_failure()` patterns array
+5. **Document** in `reference/tool-registry.md` under the relevant tool's Prerequisites section
+6. **Run** `bash scripts/build-deploy.sh` to propagate to deploy scripts
+7. **Verify** with `check-pre-commit` (framework audit passes) and smoke test
+
 ## Exemptions table
 
 Protected -- requires user approval to modify.

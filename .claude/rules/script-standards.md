@@ -141,6 +141,23 @@ Auth check commands are documented per-tool in `reference/tool-registry.md` (Aut
 
 See `@reference/script-standards-detail.md` for code patterns.
 
+### Build prerequisite validation
+
+Setup scripts that compile from source (`cargo install`, `pip install` with C extensions,
+`go install` with cgo) MUST use the two-layer prerequisite framework:
+
+**Layer 1 (preventive):** Call `Check-BuildPrereqs` / `check_build_prereqs` before the build.
+If any prerequisites are missing, `log_error` + `write_summary ERROR/ACTION` and skip the build.
+Don't waste minutes on a doomed compilation.
+
+**Layer 2 (diagnostic):** If the build fails, call `Diagnose-BuildFailure` /
+`diagnose_build_failure` on the captured output. If a known signature matches, surface the
+specific remedy. If no signature matches, log the generic failure.
+
+Both layers use centralized data tables in `aitools-lib.ps1`/`.sh`. Adding a new prerequisite
+or failure signature = one entry in the table. See `reference/script-standards-detail.md` for
+the process.
+
 ### Error handling requirements
 
 These apply to ALL reusable scripts in the repo, not just setup scripts.

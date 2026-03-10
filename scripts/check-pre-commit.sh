@@ -297,6 +297,38 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 14. Build prerequisite framework
+# ---------------------------------------------------------------------------
+PREREQ_FAIL=false
+
+# Check: any script using 'cargo install' must call Check-BuildPrereqs or check_build_prereqs
+for script in "$REPO_ROOT"/scripts/setup-*.ps1; do
+    [ -f "$script" ] || continue
+    if grep -q 'cargo install' "$script" 2>/dev/null; then
+        if ! grep -q 'Check-BuildPrereqs\|Diagnose-BuildFailure' "$script" 2>/dev/null; then
+            echo "      $(basename "$script") uses 'cargo install' without build prereq framework"
+            PREREQ_FAIL=true
+        fi
+    fi
+done
+for script in "$REPO_ROOT"/scripts/setup-*.sh; do
+    [ -f "$script" ] || continue
+    if grep -q 'cargo install' "$script" 2>/dev/null; then
+        if ! grep -q 'check_build_prereqs\|diagnose_build_failure' "$script" 2>/dev/null; then
+            echo "      $(basename "$script") uses 'cargo install' without build prereq framework"
+            PREREQ_FAIL=true
+        fi
+    fi
+done
+
+if $PREREQ_FAIL; then
+    step_fail "14" "Build prereq framework" \
+        "setup scripts with source builds missing prereq checks -- see script-standards.md"
+else
+    step_pass "14" "Build prereq framework"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------
 print_summary

@@ -817,6 +817,32 @@ if (-not (Test-Path $buildScript)) {
 }
 
 # ---------------------------------------------------------------------------
+# 27. Build prerequisites installed
+# ---------------------------------------------------------------------------
+# Get-Command exempt: command-existence check with explicit fallback
+$cargoInstalled = Get-Command cargo -ErrorAction SilentlyContinue
+if ($cargoInstalled) {
+    $prereqMissing = $false
+    # Get-Command exempt: command-existence check with explicit fallback
+    if (-not (Get-Command nasm -ErrorAction SilentlyContinue)) {
+        Write-Host "      Missing: NASM -- winget install NASM.NASM"
+        $prereqMissing = $true
+    }
+    # Get-Command exempt: command-existence check with explicit fallback
+    if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
+        Write-Host "      Missing: CMake -- winget install Kitware.CMake"
+        $prereqMissing = $true
+    }
+    if ($prereqMissing) {
+        StepWarn "27" "Build prerequisites installed" "some build tools missing (see above)"
+    } else {
+        StepPass "27" "Build prerequisites installed"
+    }
+} else {
+    StepSkip "27" "Build prerequisites installed" "cargo not installed"
+}
+
+# ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------
 PrintSummary

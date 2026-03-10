@@ -270,6 +270,37 @@ if ($hasSetupUser -and -not $hasBuildDeploy) {
 }
 
 # ---------------------------------------------------------------------------
+# 14. Build prerequisite framework
+# ---------------------------------------------------------------------------
+$prereqFail = $false
+
+# Check: any script using 'cargo install' must call Check-BuildPrereqs or Diagnose-BuildFailure
+foreach ($script in Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "setup-*.ps1" -ErrorAction SilentlyContinue) {
+    $content = Get-Content $script.FullName -Raw -ErrorAction SilentlyContinue
+    if ($content -match 'cargo install') {
+        if ($content -notmatch 'Check-BuildPrereqs|Diagnose-BuildFailure') {
+            Write-Host "      $($script.Name) uses 'cargo install' without build prereq framework"
+            $prereqFail = $true
+        }
+    }
+}
+foreach ($script in Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "setup-*.sh" -ErrorAction SilentlyContinue) {
+    $content = Get-Content $script.FullName -Raw -ErrorAction SilentlyContinue
+    if ($content -match 'cargo install') {
+        if ($content -notmatch 'check_build_prereqs|diagnose_build_failure') {
+            Write-Host "      $($script.Name) uses 'cargo install' without build prereq framework"
+            $prereqFail = $true
+        }
+    }
+}
+
+if ($prereqFail) {
+    StepFail "14" "Build prereq framework" "setup scripts with source builds missing prereq checks -- see script-standards.md"
+} else {
+    StepPass "14" "Build prereq framework"
+}
+
+# ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------
 PrintSummary
