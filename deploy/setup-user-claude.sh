@@ -965,6 +965,14 @@ cat > "$RULES_SRC/concurrent-agents.md" <<'__RULE_concurrent_agents_md___'
 Multiple AI agents (Claude Code, Cursor Agent CLI) may edit a codebase concurrently.
 
 Before editing a file, run `git diff` to check for unexpected changes from another agent session.
+
+### Conflict Resolution
+
+If `git diff` reveals unexpected changes:
+1. Read the changed sections to understand intent
+2. If changes are complementary, preserve both
+3. If changes conflict, ask the user which to keep
+4. Never silently overwrite another agent's work
 __RULE_concurrent_agents_md___
 RULES_DEST="$CLAUDE_DIR/rules"
 if [ -n "$RULES_SRC" ]; then

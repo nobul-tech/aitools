@@ -1140,6 +1140,14 @@ $_rule_concurrent_agents_md_ = @'
 Multiple AI agents (Claude Code, Cursor Agent CLI) may edit a codebase concurrently.
 
 Before editing a file, run `git diff` to check for unexpected changes from another agent session.
+
+### Conflict Resolution
+
+If `git diff` reveals unexpected changes:
+1. Read the changed sections to understand intent
+2. If changes are complementary, preserve both
+3. If changes conflict, ask the user which to keep
+4. Never silently overwrite another agent's work
 '@
 $_ruleDest_concurrent_agents_md_ = Join-Path $rulesSrc "concurrent-agents.md"
 [System.IO.File]::WriteAllText($_ruleDest_concurrent_agents_md_, $_rule_concurrent_agents_md_, [System.Text.UTF8Encoding]::new($false))
