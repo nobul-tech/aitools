@@ -12,6 +12,33 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.50.0 -- Fix build prerequisite detection false negatives (2026-03-11)
+
+Closes #20.
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **`Ensure-ToolOnPath` / `ensure_tool_on_path`**: New reusable lib functions with 3-step detection: PATH check, registry/cache refresh (`Refresh-Path` / `hash -r`), known filesystem paths fallback with session PATH update. |
+| 2 | **`KnownPaths` + `ToolName` fields** on `$script:BuildPrereqs` entries (PS1): enables `Check-BuildPrereqs` to fall back to filesystem detection when `Get-Command` fails. |
+| 3 | **`check-prereq-detection.ps1` / `.sh`**: New check script pair verifying KnownPaths coverage, function availability, and consumer script integration. |
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 4 | **NASM false negative in setup-datadog** (#20): `Check-BuildPrereqs` now falls back to known install paths when `Get-Command` / `command -v` fails (tool installed but not on PATH in current session). |
+| 5 | **setup-rust.ps1 "restart terminal" eliminated**: After NASM install, uses `Ensure-ToolOnPath` to find NASM at known locations and add to session PATH instead of giving up with a restart warning. |
+| 6 | **setup-datadog belt-and-suspenders**: Both `.ps1` and `.sh` now call `Refresh-Path` / `hash -r` before `Check-BuildPrereqs` to pick up tools installed by earlier steps in the same session. |
+
+### Verified
+
+- Windows: all changes tested (syntax, check-prereq-detection 9/9 PASS, check-pre-commit 0 FAIL)
+- macOS: not tested -- `ensure_tool_on_path` (bash) and `check-prereq-detection.sh` need verification (tested: Windows)
+
+---
+
 ## v0.49.0 -- Centralize diff review deploy flow into lib functions (2026-03-11)
 
 ### Added

@@ -597,6 +597,36 @@ show_summary() {
 # Build prerequisite checking
 # ---------------------------------------------------------------------------
 
+# ensure_tool_on_path: Verify a tool is findable after installation.
+# Tries: 1) command -v (current PATH), 2) hash -r (cache refresh),
+# 3) known paths fallback (filesystem check + session PATH update).
+# Usage: ensure_tool_on_path "nasm" "/usr/local/bin/nasm" "/opt/homebrew/bin/nasm"
+# Returns 0 if tool is now on PATH, 1 otherwise.
+ensure_tool_on_path() {
+    local tool_name="$1"
+    shift
+    local known_paths=("$@")
+
+    # Already on PATH?
+    if command -v "$tool_name" >/dev/null 2>&1; then return 0; fi
+
+    # Refresh command cache (picks up tools installed earlier in the same session)
+    hash -r 2>/dev/null  # expected to succeed; some shells don't support it
+    if command -v "$tool_name" >/dev/null 2>&1; then return 0; fi
+
+    # Fallback: check known install locations on disk
+    for kp in "${known_paths[@]}"; do
+        if [ -x "$kp" ]; then
+            local parent_dir
+            parent_dir=$(dirname "$kp")
+            export PATH="$parent_dir:$PATH"
+            log "$tool_name found at $kp (added to session PATH)"
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Check known build prerequisites for an ecosystem.
 # Usage: check_build_prereqs "cargo"
 #   Outputs missing prereq info to stdout (one per line: NAME|INSTALL_INSTRUCTION).
@@ -605,17 +635,29 @@ check_build_prereqs() {
     local ecosystem="$1"
     local missing=0
 
+    # Refresh shell command cache (picks up tools installed earlier in the same session)
+    hash -r 2>/dev/null  # expected to succeed; some shells don't support it
+
     case "$ecosystem" in
         cargo)
             # NASM -- required by aws-lc-sys on x86_64
             if [ "$(uname -m)" = "x86_64" ] && ! command -v nasm >/dev/null 2>&1; then
-                echo "NASM|brew install nasm (macOS) or apt-get install nasm (Linux)"
-                missing=1
+                # Fallback: check known install locations
+                if ensure_tool_on_path "nasm" /usr/local/bin/nasm /opt/homebrew/bin/nasm /usr/bin/nasm; then
+                    : # Found via fallback -- ensure_tool_on_path already added to PATH
+                else
+                    echo "NASM|brew install nasm (macOS) or apt-get install nasm (Linux)"
+                    missing=1
+                fi
             fi
             # cmake -- required by some crates
             if ! command -v cmake >/dev/null 2>&1; then
-                echo "CMake|brew install cmake (macOS) or apt-get install cmake (Linux)"
-                missing=1
+                if ensure_tool_on_path "cmake" /usr/local/bin/cmake /opt/homebrew/bin/cmake /usr/bin/cmake /Applications/CMake.app/Contents/bin/cmake; then
+                    : # Found via fallback
+                else
+                    echo "CMake|brew install cmake (macOS) or apt-get install cmake (Linux)"
+                    missing=1
+                fi
             fi
             ;;
         pip)

@@ -749,20 +749,53 @@ $script:BuildPrereqs = @{
             Platform = "win"
         },
         @{
-            Name    = "NASM"
+            Name       = "NASM"
+            ToolName   = "nasm"
             # Get-Command exempt: command-existence check with explicit fallback
-            Check   = { [bool](Get-Command nasm -ErrorAction SilentlyContinue) }
-            Install = "winget install NASM.NASM"
-            Platform = "win"
+            Check      = { [bool](Get-Command nasm -ErrorAction SilentlyContinue) }
+            KnownPaths = @("$env:ProgramFiles\NASM\nasm.exe", "${env:ProgramFiles(x86)}\NASM\nasm.exe")
+            Install    = "winget install NASM.NASM"
+            Platform   = "win"
         },
         @{
-            Name    = "CMake"
+            Name       = "CMake"
+            ToolName   = "cmake"
             # Get-Command exempt: command-existence check with explicit fallback
-            Check   = { [bool](Get-Command cmake -ErrorAction SilentlyContinue) }
-            Install = "winget install Kitware.CMake"
-            Platform = "win"
+            Check      = { [bool](Get-Command cmake -ErrorAction SilentlyContinue) }
+            KnownPaths = @("$env:ProgramFiles\CMake\bin\cmake.exe")
+            Install    = "winget install Kitware.CMake"
+            Platform   = "win"
         }
     )
+}
+
+# Ensure-ToolOnPath: Verify a tool is findable after installation.
+# Tries: 1) Get-Command (current PATH), 2) Refresh-Path (registry reload),
+# 3) KnownPaths fallback (filesystem check + session PATH update).
+# Returns $true if tool is now on PATH, $false otherwise.
+# Callers: setup scripts after winget install, Check-BuildPrereqs fallback.
+function Ensure-ToolOnPath {
+    param(
+        [Parameter(Mandatory)][string]$ToolName,
+        [Parameter(Mandatory)][string[]]$KnownPaths
+    )
+    # Get-Command exempt: command-existence check with explicit fallback
+    if (Get-Command $ToolName -ErrorAction SilentlyContinue) { return $true }
+
+    # Reload PATH from registry (picks up changes from winget installers)
+    Refresh-Path
+    if (Get-Command $ToolName -ErrorAction SilentlyContinue) { return $true }
+
+    # Fallback: check known install locations on disk
+    foreach ($kp in $KnownPaths) {
+        if (Test-Path $kp) {
+            $parentDir = Split-Path $kp -Parent
+            $env:Path = "$parentDir;$env:Path"
+            Log "$ToolName found at $kp (added to session PATH)"
+            return $true
+        }
+    }
+    return $false
 }
 
 function Check-BuildPrereqs {
@@ -771,6 +804,12 @@ function Check-BuildPrereqs {
     Checks known build prerequisites for an ecosystem (cargo, pip, go).
     Returns array of missing prerequisites. Empty array = all present.
     Callers decide whether to abort or warn.
+
+    Detection order per prerequisite:
+    1. Run the Check scriptblock (typically Get-Command / PATH-based)
+    2. If Check fails AND entry has KnownPaths + ToolName, call Ensure-ToolOnPath
+       which tries Refresh-Path then filesystem fallback
+    3. If still not found, add to missing array
     #>
     param(
         [Parameter(Mandatory)][string]$Ecosystem
@@ -786,6 +825,9 @@ function Check-BuildPrereqs {
         if ($p.Platform -eq "mac" -and $IsWindows) { continue }
 
         $present = & $p.Check
+        if (-not $present -and $p.KnownPaths -and $p.ToolName) {
+            $present = Ensure-ToolOnPath -ToolName $p.ToolName -KnownPaths $p.KnownPaths
+        }
         if (-not $present) {
             $missing += $p
         }
@@ -845,7 +887,6 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
-
 # --- Auto-detect machine info ---
 $osInfo = (Get-CimInstance Win32_OperatingSystem).Caption
 $hostname = $env:COMPUTERNAME
@@ -869,9 +910,9 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Identity
 
-- Name: Jose
+- Name: pepe
 - Git: `Jose <jose@nobul.tech>`
-- Company: Nobul
+- Company: nobul.tech
 
 ## Code Style Defaults
 
@@ -1099,14 +1140,6 @@ $_rule_concurrent_agents_md_ = @'
 Multiple AI agents (Claude Code, Cursor Agent CLI) may edit a codebase concurrently.
 
 Before editing a file, run `git diff` to check for unexpected changes from another agent session.
-
-### Conflict Resolution
-
-If `git diff` reveals unexpected changes:
-1. Read the changed sections to understand intent
-2. If changes are complementary, preserve both
-3. If changes conflict, ask the user which to keep
-4. Never silently overwrite another agent's work
 '@
 $_ruleDest_concurrent_agents_md_ = Join-Path $rulesSrc "concurrent-agents.md"
 [System.IO.File]::WriteAllText($_ruleDest_concurrent_agents_md_, $_rule_concurrent_agents_md_, [System.Text.UTF8Encoding]::new($false))

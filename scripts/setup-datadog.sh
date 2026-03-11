@@ -89,6 +89,7 @@ else
         log_warn "brew install datadog-labs/pack/pup failed -- trying cargo install fallback..."
         if command -v cargo >/dev/null 2>&1; then
             # Pre-flight: check build prerequisites
+            hash -r 2>/dev/null  # Refresh command cache -- picks up tools installed by earlier steps
             PREREQ_MISSING=$(check_build_prereqs "cargo") || true
             if [ -n "$PREREQ_MISSING" ]; then
                 while IFS='|' read -r prereq_name prereq_install; do

@@ -25,6 +25,7 @@ if (-not $cargoCheck) {
     Write-Summary "ERROR" "datadog cli" "Rust not installed (prerequisite)"
 } else {
     # --- Check build prerequisites before expensive source build ---
+    Refresh-Path  # Pick up tools installed earlier in the same aitools-install session
     $missingPrereqs = Check-BuildPrereqs "cargo"
     if ($missingPrereqs.Count -gt 0) {
         foreach ($p in $missingPrereqs) {

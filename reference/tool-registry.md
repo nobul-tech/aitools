@@ -510,6 +510,26 @@ and `aitools-lib.sh` (`check_build_prereqs`). When a new prerequisite is discove
 add it to both files — see "Adding a new build prerequisite" in
 `reference/script-standards-detail.md`.
 
+### Known Install Paths
+
+Used by `Ensure-ToolOnPath` / `ensure_tool_on_path` and `Check-BuildPrereqs` /
+`check_build_prereqs` fallback when `Get-Command` / `command -v` fails (tool
+installed but not on PATH in current session).
+
+**Windows (winget):**
+
+| Tool | Winget ID | Standard path | Notes |
+|------|-----------|--------------|-------|
+| NASM | NASM.NASM | `C:\Program Files\NASM\nasm.exe` | Nullsoft installer; also check `(x86)` variant |
+| CMake | Kitware.CMake | `C:\Program Files\CMake\bin\cmake.exe` | WiX MSI installer |
+
+**macOS/Linux:**
+
+| Tool | Known paths |
+|------|------------|
+| NASM | `/usr/local/bin/nasm`, `/opt/homebrew/bin/nasm`, `/usr/bin/nasm` |
+| CMake | `/usr/local/bin/cmake`, `/opt/homebrew/bin/cmake`, `/usr/bin/cmake`, `/Applications/CMake.app/Contents/bin/cmake` |
+
 ### Non-Preferred Install Methods (cleanup targets)
 
 | Method | Detection | Why not preferred |

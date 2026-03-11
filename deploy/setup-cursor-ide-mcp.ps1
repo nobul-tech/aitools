@@ -753,20 +753,53 @@ $script:BuildPrereqs = @{
             Platform = "win"
         },
         @{
-            Name    = "NASM"
+            Name       = "NASM"
+            ToolName   = "nasm"
             # Get-Command exempt: command-existence check with explicit fallback
-            Check   = { [bool](Get-Command nasm -ErrorAction SilentlyContinue) }
-            Install = "winget install NASM.NASM"
-            Platform = "win"
+            Check      = { [bool](Get-Command nasm -ErrorAction SilentlyContinue) }
+            KnownPaths = @("$env:ProgramFiles\NASM\nasm.exe", "${env:ProgramFiles(x86)}\NASM\nasm.exe")
+            Install    = "winget install NASM.NASM"
+            Platform   = "win"
         },
         @{
-            Name    = "CMake"
+            Name       = "CMake"
+            ToolName   = "cmake"
             # Get-Command exempt: command-existence check with explicit fallback
-            Check   = { [bool](Get-Command cmake -ErrorAction SilentlyContinue) }
-            Install = "winget install Kitware.CMake"
-            Platform = "win"
+            Check      = { [bool](Get-Command cmake -ErrorAction SilentlyContinue) }
+            KnownPaths = @("$env:ProgramFiles\CMake\bin\cmake.exe")
+            Install    = "winget install Kitware.CMake"
+            Platform   = "win"
         }
     )
+}
+
+# Ensure-ToolOnPath: Verify a tool is findable after installation.
+# Tries: 1) Get-Command (current PATH), 2) Refresh-Path (registry reload),
+# 3) KnownPaths fallback (filesystem check + session PATH update).
+# Returns $true if tool is now on PATH, $false otherwise.
+# Callers: setup scripts after winget install, Check-BuildPrereqs fallback.
+function Ensure-ToolOnPath {
+    param(
+        [Parameter(Mandatory)][string]$ToolName,
+        [Parameter(Mandatory)][string[]]$KnownPaths
+    )
+    # Get-Command exempt: command-existence check with explicit fallback
+    if (Get-Command $ToolName -ErrorAction SilentlyContinue) { return $true }
+
+    # Reload PATH from registry (picks up changes from winget installers)
+    Refresh-Path
+    if (Get-Command $ToolName -ErrorAction SilentlyContinue) { return $true }
+
+    # Fallback: check known install locations on disk
+    foreach ($kp in $KnownPaths) {
+        if (Test-Path $kp) {
+            $parentDir = Split-Path $kp -Parent
+            $env:Path = "$parentDir;$env:Path"
+            Log "$ToolName found at $kp (added to session PATH)"
+            return $true
+        }
+    }
+    return $false
 }
 
 function Check-BuildPrereqs {
@@ -775,6 +808,12 @@ function Check-BuildPrereqs {
     Checks known build prerequisites for an ecosystem (cargo, pip, go).
     Returns array of missing prerequisites. Empty array = all present.
     Callers decide whether to abort or warn.
+
+    Detection order per prerequisite:
+    1. Run the Check scriptblock (typically Get-Command / PATH-based)
+    2. If Check fails AND entry has KnownPaths + ToolName, call Ensure-ToolOnPath
+       which tries Refresh-Path then filesystem fallback
+    3. If still not found, add to missing array
     #>
     param(
         [Parameter(Mandatory)][string]$Ecosystem
@@ -790,6 +829,9 @@ function Check-BuildPrereqs {
         if ($p.Platform -eq "mac" -and $IsWindows) { continue }
 
         $present = & $p.Check
+        if (-not $present -and $p.KnownPaths -and $p.ToolName) {
+            $present = Ensure-ToolOnPath -ToolName $p.ToolName -KnownPaths $p.KnownPaths
+        }
         if (-not $present) {
             $missing += $p
         }

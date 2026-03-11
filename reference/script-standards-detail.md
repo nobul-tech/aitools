@@ -887,6 +887,68 @@ When a user reports a new build failure:
 6. **Run** `bash scripts/build-deploy.sh` to propagate to deploy scripts
 7. **Verify** with `check-pre-commit` (framework audit passes) and smoke test
 
+### Ensure-ToolOnPath / ensure_tool_on_path
+
+Reusable helper that verifies a tool is findable after installation. Three-step
+detection: PATH check -> registry/cache refresh -> known filesystem paths fallback.
+
+**When to use**: After any `winget install`, `brew install`, `cargo install`, or
+similar command where the tool may not be immediately visible on PATH.
+
+**PowerShell** (`Ensure-ToolOnPath` in `aitools-lib.ps1`):
+```powershell
+$knownPaths = @("$env:ProgramFiles\NASM\nasm.exe")
+if (Ensure-ToolOnPath -ToolName "nasm" -KnownPaths $knownPaths) {
+    LogOk "NASM installed and on PATH"
+} else {
+    LogWarn "NASM not found"
+}
+```
+
+**Bash** (`ensure_tool_on_path` in `aitools-lib.sh`):
+```bash
+if ensure_tool_on_path "nasm" /usr/local/bin/nasm /opt/homebrew/bin/nasm; then
+    log_ok "NASM installed and on PATH"
+else
+    log_warn "NASM not found"
+fi
+```
+
+### Known-paths fallback in Check-BuildPrereqs
+
+When `Get-Command` / `command -v` fails (tool installed but not on PATH in current
+session), the framework falls back to checking known filesystem install locations
+via `Ensure-ToolOnPath` / `ensure_tool_on_path`.
+
+**PowerShell**: Each entry in `$script:BuildPrereqs` may include `KnownPaths` (array
+of absolute paths) and `ToolName` (executable name). `Check-BuildPrereqs` runs the
+`Check` scriptblock first; if it fails, calls `Ensure-ToolOnPath` with the entry's
+`KnownPaths`. If found, adds the parent directory to `$env:Path` for the session.
+
+**Bash**: `check_build_prereqs()` calls `hash -r` to clear the shell command cache,
+then uses `ensure_tool_on_path` with known paths if `command -v` fails.
+
+**Adding known paths for a new prerequisite:**
+1. Determine the standard install location(s) for the tool on each platform
+2. PS1: add `ToolName` and `KnownPaths` to the `$script:BuildPrereqs` entry
+3. Bash: add paths to the `ensure_tool_on_path` call in `check_build_prereqs()`
+4. Document the paths in `reference/tool-registry.md` under the tool's Prerequisites section
+
+**Standard install locations (Windows via winget):**
+
+| Tool | winget ID | Install path |
+|------|-----------|-------------|
+| NASM | NASM.NASM | `C:\Program Files\NASM\nasm.exe` |
+| CMake | Kitware.CMake | `C:\Program Files\CMake\bin\cmake.exe` |
+| MSVC Build Tools | (detected via vswhere.exe) | N/A |
+
+**Standard install locations (macOS/Linux):**
+
+| Tool | Install paths |
+|------|--------------|
+| NASM | `/usr/local/bin/nasm`, `/opt/homebrew/bin/nasm`, `/usr/bin/nasm` |
+| CMake | `/usr/local/bin/cmake`, `/opt/homebrew/bin/cmake`, `/usr/bin/cmake`, `/Applications/CMake.app/Contents/bin/cmake` |
+
 ## Exemptions table
 
 Protected -- requires user approval to modify.
