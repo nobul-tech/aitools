@@ -897,7 +897,7 @@ similar command where the tool may not be immediately visible on PATH.
 
 **PowerShell** (`Ensure-ToolOnPath` in `aitools-lib.ps1`):
 ```powershell
-$knownPaths = @("$env:ProgramFiles\NASM\nasm.exe")
+$knownPaths = @("$env:LOCALAPPDATA\bin\NASM\nasm.exe", "$env:ProgramFiles\NASM\nasm.exe")
 if (Ensure-ToolOnPath -ToolName "nasm" -KnownPaths $knownPaths) {
     LogOk "NASM installed and on PATH"
 } else {
@@ -936,11 +936,11 @@ then uses `ensure_tool_on_path` with known paths if `command -v` fails.
 
 **Standard install locations (Windows via winget):**
 
-| Tool | winget ID | Install path |
-|------|-----------|-------------|
-| NASM | NASM.NASM | `C:\Program Files\NASM\nasm.exe` |
-| CMake | Kitware.CMake | `C:\Program Files\CMake\bin\cmake.exe` |
-| MSVC Build Tools | (detected via vswhere.exe) | N/A |
+| Tool | winget ID | Install path | Verified |
+|------|-----------|-------------|----------|
+| NASM | NASM.NASM | `%LOCALAPPDATA%\bin\NASM\nasm.exe` | 2026-03-11 (v3.01) |
+| CMake | Kitware.CMake | `C:\Program Files\CMake\bin\cmake.exe` | UNVERIFIED |
+| MSVC Build Tools | (detected via vswhere.exe) | N/A | N/A |
 
 **Standard install locations (macOS/Linux):**
 
@@ -948,6 +948,12 @@ then uses `ensure_tool_on_path` with known paths if `command -v` fails.
 |------|--------------|
 | NASM | `/usr/local/bin/nasm`, `/opt/homebrew/bin/nasm`, `/usr/bin/nasm` |
 | CMake | `/usr/local/bin/cmake`, `/opt/homebrew/bin/cmake`, `/usr/bin/cmake`, `/Applications/CMake.app/Contents/bin/cmake` |
+
+**Empirical verification requirement:** All KnownPaths MUST be verified on an
+actual machine with the tool installed. Document verification date and version.
+Unverified paths must be marked `UNVERIFIED` in code comments and docs. This
+applies to all tools and their build dependencies (e.g., NASM is a dependency
+of Rust/cargo, not a directly managed tool -- same verification standard applies).
 
 ## Exemptions table
 

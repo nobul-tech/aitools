@@ -164,6 +164,94 @@ if (Test-Path $ddScript) {
 }
 
 # ---------------------------------------------------------------------------
+# 10. KnownPaths empirical verification: installed tools must match KnownPath
+# ---------------------------------------------------------------------------
+$unverifiedPaths = @()
+foreach ($ecosystem in $prereqTable.Keys) {
+    foreach ($entry in $prereqTable[$ecosystem]) {
+        if (-not $entry.KnownPaths -or -not $entry.ToolName) { continue }
+        if ($entry.Platform -eq "mac") { continue }
+
+        # Get-Command exempt: testing presence for conditional validation
+        $installed = Get-Command $entry.ToolName -ErrorAction SilentlyContinue
+        if (-not $installed) { continue }
+
+        $anyMatch = $false
+        foreach ($kp in $entry.KnownPaths) {
+            if (Test-Path $kp) { $anyMatch = $true; break }
+        }
+        if (-not $anyMatch) {
+            $unverifiedPaths += "$($entry.Name): installed at $($installed.Source) but no KnownPath matches"
+        }
+    }
+}
+if ($unverifiedPaths.Count -eq 0) {
+    StepPass "10" "KnownPaths match installed tools" "all installed tools found via KnownPaths"
+} else {
+    StepFail "10" "KnownPaths match installed tools" ($unverifiedPaths -join '; ')
+}
+
+# ---------------------------------------------------------------------------
+# 11. KnownPaths vs tool-registry.md: code paths must match documented paths
+# ---------------------------------------------------------------------------
+$registryPath = Join-Path $scriptDir "..\reference\tool-registry.md"
+if (Test-Path $registryPath) {
+    $regContent = Get-Content $registryPath -Raw
+    $mismatches = @()
+    foreach ($ecosystem in $prereqTable.Keys) {
+        foreach ($entry in $prereqTable[$ecosystem]) {
+            if (-not $entry.KnownPaths -or -not $entry.Name) { continue }
+            if ($entry.Platform -eq "mac") { continue }
+            foreach ($kp in $entry.KnownPaths) {
+                # KnownPaths are expanded at runtime -- reverse-map to doc formats
+                $searchVariants = @($kp)
+                if ($env:LOCALAPPDATA -and $kp.StartsWith($env:LOCALAPPDATA, [StringComparison]::OrdinalIgnoreCase)) {
+                    $searchVariants += $kp -replace [regex]::Escape($env:LOCALAPPDATA), '%LOCALAPPDATA%'
+                }
+                if ($env:ProgramFiles -and $kp.StartsWith($env:ProgramFiles, [StringComparison]::OrdinalIgnoreCase)) {
+                    $searchVariants += $kp -replace [regex]::Escape($env:ProgramFiles), 'C:\Program Files'
+                }
+                $found = $false
+                foreach ($variant in $searchVariants) {
+                    $escaped = [regex]::Escape($variant)
+                    if ($regContent -match $escaped) { $found = $true; break }
+                }
+                if (-not $found) {
+                    $mismatches += "$($entry.Name): $kp not in tool-registry.md"
+                }
+            }
+        }
+    }
+    if ($mismatches.Count -eq 0) {
+        StepPass "11" "KnownPaths match tool-registry.md" "all code paths documented"
+    } else {
+        StepWarn "11" "KnownPaths match tool-registry.md" ($mismatches -join '; ')
+    }
+} else {
+    StepSkip "11" "KnownPaths match tool-registry.md" "tool-registry.md not found"
+}
+
+# ---------------------------------------------------------------------------
+# 12. KnownPaths verification status: entries must have Verified/UNVERIFIED
+# ---------------------------------------------------------------------------
+$libContent = Get-Content (Join-Path $scriptDir "aitools-lib.ps1") -Raw
+$libLines = $libContent -split "`n"
+$unmarked = @()
+for ($i = 0; $i -lt $libLines.Count; $i++) {
+    if ($libLines[$i] -match 'KnownPaths\s*=') {
+        $prevLine = if ($i -ge 1) { $libLines[$i - 1] } else { "" }
+        if ($prevLine -notmatch 'Verified|UNVERIFIED') {
+            $unmarked += "line $($i + 1): missing verification status comment"
+        }
+    }
+}
+if ($unmarked.Count -eq 0) {
+    StepPass "12" "KnownPaths verification status" "all entries have Verified/UNVERIFIED"
+} else {
+    StepWarn "12" "KnownPaths verification status" ($unmarked -join '; ')
+}
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 PrintSummary

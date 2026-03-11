@@ -66,6 +66,11 @@ Setup scripts for tools requiring auth must check auth status on every run (not 
 
 Setup scripts compiling from source (`cargo install`, `pip install` with C extensions, `go install` with cgo) MUST use the two-layer prerequisite framework: **Layer 1 (preventive):** `Check-BuildPrereqs`/`check_build_prereqs` before build — missing prereqs → `log_error` + `write_summary ERROR/ACTION` + skip build. **Layer 2 (diagnostic):** `Diagnose-BuildFailure`/`diagnose_build_failure` on captured output after failure — surface specific remedy or fall back to generic error. Both layers use centralized tables in `aitools-lib.ps1`/`.sh`. See `reference/script-standards-detail.md`.
 
+### KnownPaths empirical verification
+All KnownPaths entries must be verified on the actual platform. Document date +
+version. Unverified = marked `UNVERIFIED`. No guessing from installer type (#22).
+Applies to managed tools AND build dependencies (NASM, CMake, etc.).
+
 ### Error handling (all scripts)
 
 Every error-suppression pattern requires an immediate result check:

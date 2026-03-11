@@ -114,6 +114,71 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 9. KnownPaths empirical verification
+# ---------------------------------------------------------------------------
+if command -v nasm >/dev/null 2>&1; then
+    nasm_found=false
+    for kp in /usr/local/bin/nasm /opt/homebrew/bin/nasm /usr/bin/nasm; do
+        if [ -x "$kp" ]; then nasm_found=true; break; fi
+    done
+    if [ "$nasm_found" = "true" ]; then
+        step_pass "9a" "NASM KnownPaths match" "path confirmed"
+    else
+        actual=$(command -v nasm)
+        step_fail "9a" "NASM KnownPaths match" "installed at $actual but no KnownPath matches"
+    fi
+else
+    step_skip "9a" "NASM KnownPaths match" "nasm not installed"
+fi
+
+if command -v cmake >/dev/null 2>&1; then
+    cmake_found=false
+    for kp in /usr/local/bin/cmake /opt/homebrew/bin/cmake /usr/bin/cmake /Applications/CMake.app/Contents/bin/cmake; do
+        if [ -x "$kp" ]; then cmake_found=true; break; fi
+    done
+    if [ "$cmake_found" = "true" ]; then
+        step_pass "9b" "CMake KnownPaths match" "path confirmed"
+    else
+        actual=$(command -v cmake)
+        step_fail "9b" "CMake KnownPaths match" "installed at $actual but no KnownPath matches"
+    fi
+else
+    step_skip "9b" "CMake KnownPaths match" "cmake not installed"
+fi
+
+# ---------------------------------------------------------------------------
+# 10. KnownPaths verification status in code comments
+# ---------------------------------------------------------------------------
+lib_file="$SCRIPT_DIR/aitools-lib.sh"
+if [ -f "$lib_file" ]; then
+    # Check that ensure_tool_on_path calls in check_build_prereqs have nearby comments
+    unverified=$(grep -n 'ensure_tool_on_path' "$lib_file" | head -5)
+    verified_count=0
+    total_count=0
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        total_count=$((total_count + 1))
+        lineno=$(printf '%s' "$line" | cut -d: -f1)
+        # Check 3 lines before for Verified/UNVERIFIED comment
+        prev_start=$((lineno - 3))
+        if [ "$prev_start" -lt 1 ]; then prev_start=1; fi
+        context=$(sed -n "${prev_start},${lineno}p" "$lib_file")
+        if printf '%s' "$context" | grep -q 'Verified\|UNVERIFIED'; then
+            verified_count=$((verified_count + 1))
+        fi
+    done <<< "$unverified"
+    if [ "$total_count" -eq 0 ]; then
+        step_skip "10" "KnownPaths verification status" "no ensure_tool_on_path calls found"
+    elif [ "$verified_count" -eq "$total_count" ]; then
+        step_pass "10" "KnownPaths verification status" "all entries annotated"
+    else
+        step_warn "10" "KnownPaths verification status" "$((total_count - verified_count)) of $total_count entries lack Verified/UNVERIFIED"
+    fi
+else
+    step_skip "10" "KnownPaths verification status" "aitools-lib.sh not found"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 print_summary

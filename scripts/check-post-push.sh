@@ -709,6 +709,33 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 28. Deploy state integrity
+# ---------------------------------------------------------------------------
+deploy_state_dir="$HOME/.aitools/deploy-state"
+manifest_path="$deploy_state_dir/manifest.json"
+if [ -f "$manifest_path" ]; then
+    # node parses manifest and checks shadow files exist; output = missing keys
+    shadow_check=$(node -e "
+        const fs = require('fs');
+        const m = JSON.parse(fs.readFileSync('$manifest_path','utf8'));
+        const f = m.files || {};
+        const missing = [];
+        for (const k of Object.keys(f)) {
+            const s = '$deploy_state_dir/shadows/' + k;
+            if (!fs.existsSync(s)) missing.push(k);
+        }
+        if (missing.length) console.log(missing.join('; '));
+    " 2>/dev/null) || true
+    if [ -n "$shadow_check" ]; then
+        step_warn "28" "Deploy state integrity" "missing shadows: $shadow_check"
+    else
+        step_pass "28" "Deploy state integrity" "manifest and shadows consistent"
+    fi
+else
+    step_skip "28" "Deploy state integrity" "no deploy state yet"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------
 print_summary

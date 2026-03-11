@@ -518,10 +518,10 @@ installed but not on PATH in current session).
 
 **Windows (winget):**
 
-| Tool | Winget ID | Standard path | Notes |
-|------|-----------|--------------|-------|
-| NASM | NASM.NASM | `C:\Program Files\NASM\nasm.exe` | Nullsoft installer; also check `(x86)` variant |
-| CMake | Kitware.CMake | `C:\Program Files\CMake\bin\cmake.exe` | WiX MSI installer |
+| Tool | Winget ID | Standard path | Verified | Notes |
+|------|-----------|--------------|----------|-------|
+| NASM | NASM.NASM | `%LOCALAPPDATA%\bin\NASM\nasm.exe` | 2026-03-11 (v3.01) | Per-user Nullsoft installer; `Program Files` as secondary |
+| CMake | Kitware.CMake | `C:\Program Files\CMake\bin\cmake.exe` | UNVERIFIED | Assumed MSI behavior -- verify after install |
 
 **macOS/Linux:**
 

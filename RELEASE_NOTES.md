@@ -12,6 +12,41 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.50.1 -- Fix NASM detection, deploy UX overhaul (2026-03-11)
+
+Closes #22, #23.
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **NASM KnownPaths corrected** (#22): winget NASM.NASM installs to `%LOCALAPPDATA%\bin\NASM\`, not `C:\Program Files\NASM\`. Primary path updated; Program Files kept as secondary. |
+| 2 | **CMake paths marked UNVERIFIED**: documented as assumed, pending empirical verification. |
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 3 | **Deploy state tracking**: new manifest + shadow system eliminates unnecessary prompts. Auto-deploys when user hasn't edited the local file (handles profile.json interpolation changes silently). |
+| 4 | **Deploy diff review UX** (#23): lowercase options, directional labels (`source wins -> local`, `local wins -> profile`), context header, clear outcome messages. |
+| 5 | **Non-agentic merge** via `diff3`: automatic 3-way merge using deploy shadow as common ancestor. Clean merges shown for confirmation; conflicts fall through to AI merge. |
+| 6 | **AI merge** via `claude -p`: agentic fallback with preview and confirmation. Falls back gracefully if claude CLI unavailable. |
+
+### Added
+
+| # | Change |
+|---|--------|
+| 7 | **KnownPaths empirical verification rule**: new rule requiring all KnownPaths to be verified on actual machines. Applies to tools AND build dependencies. |
+| 8 | **check-prereq-detection steps 10-12** (PS1) / **9-10** (bash): empirical path verification, tool-registry cross-reference, verification status audit. |
+| 9 | **check-post-push**: deploy state integrity step (manifest/shadow consistency). |
+
+### Verified
+
+- Windows: all changes tested (tested: Windows)
+- macOS: bash changes not tested (tested: Windows)
+
+---
+
 ## v0.50.0 -- Fix build prerequisite detection false negatives (2026-03-11)
 
 Closes #20.

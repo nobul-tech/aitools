@@ -158,6 +158,27 @@ Both layers use centralized data tables in `aitools-lib.ps1`/`.sh`. Adding a new
 or failure signature = one entry in the table. See `reference/script-standards-detail.md` for
 the process.
 
+### KnownPaths empirical verification
+
+All `KnownPaths` entries in `$script:BuildPrereqs`, `ensure_tool_on_path` calls,
+and any other hardcoded install-path arrays MUST be empirically verified on the
+actual platform before shipping. This applies to:
+
+- **Directly managed tools** from `reference/tool-registry.md`
+- **Build dependencies** discovered during installation (NASM, CMake, etc.)
+- **Any tool** where we specify filesystem paths for fallback detection
+
+Verification process:
+
+1. **Install the tool** via the documented method (winget, brew, etc.)
+2. **Record the actual path** on disk -- do not guess from installer type
+3. **Document verification** in code: `# Verified: YYYY-MM-DD (vX.Y.Z)`
+4. **Unverified paths** must be marked `# UNVERIFIED` in code and docs
+
+Guessing paths from installer type (e.g., "Nullsoft installs to Program Files")
+is a process violation (#22). Check scripts (`check-prereq-detection`) enforce
+this via empirical path matching and verification status audit.
+
 ### Error handling requirements
 
 These apply to ALL reusable scripts in the repo, not just setup scripts.

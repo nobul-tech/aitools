@@ -165,15 +165,209 @@ backup_dir() {
 }
 
 # ---------------------------------------------------------------------------
+# Deploy state tracking: manifest + shadow copies for auto-deploy detection.
+# Tracks what was last deployed to each managed file.
+# ---------------------------------------------------------------------------
+_DEPLOY_STATE_DIR="$HOME/.aitools/deploy-state"
+_DEPLOY_MANIFEST=""
+
+get_content_hash() {
+    printf '%s' "$1" | sha256sum | cut -d' ' -f1
+}
+
+_deploy_state_key() {
+    local file_path="$1"
+    # Normalize: strip $HOME prefix, use forward slashes
+    printf '%s' "$file_path" | perl -pe "s{^\Q$HOME\E/}{}"
+}
+
+initialize_deploy_state() {
+    local manifest_path="$_DEPLOY_STATE_DIR/manifest.json"
+    if [ -f "$manifest_path" ]; then
+        _DEPLOY_MANIFEST=$(cat "$manifest_path")
+    else
+        _DEPLOY_MANIFEST='{"version":1,"files":{}}'
+    fi
+}
+
+get_deploy_state_hash() {
+    local file_path="$1"
+    if [ -z "$_DEPLOY_MANIFEST" ]; then initialize_deploy_state; fi
+    local key
+    key=$(_deploy_state_key "$file_path")
+    # node is already a dependency (used by read_config_key)
+    printf '%s' "$_DEPLOY_MANIFEST" | node -e "
+        const m = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+        const f = m.files || {};
+        const e = f[process.argv[1]];
+        if (e && e.hash) process.stdout.write(e.hash);
+    " "$key" 2>/dev/null
+}
+
+update_deploy_state() {
+    local file_path="$1"
+    local content="$2"
+    if [ -z "$_DEPLOY_MANIFEST" ]; then initialize_deploy_state; fi
+    local key hash ts
+    key=$(_deploy_state_key "$file_path")
+    hash=$(get_content_hash "$content")
+    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    mkdir -p "$_DEPLOY_STATE_DIR"
+
+    # Update manifest via node
+    _DEPLOY_MANIFEST=$(printf '%s' "$_DEPLOY_MANIFEST" | node -e "
+        const m = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+        if (!m.files) m.files = {};
+        m.files[process.argv[1]] = { hash: process.argv[2], deployedAt: process.argv[3] };
+        process.stdout.write(JSON.stringify(m, null, 2));
+    " "$key" "$hash" "$ts" 2>/dev/null)
+
+    printf '%s\n' "$_DEPLOY_MANIFEST" > "$_DEPLOY_STATE_DIR/manifest.json"
+
+    # Write shadow copy
+    local shadow_path="$_DEPLOY_STATE_DIR/shadows/$key"
+    mkdir -p "$(dirname "$shadow_path")"
+    printf '%s' "$content" > "$shadow_path"
+}
+
+get_deploy_shadow() {
+    local file_path="$1"
+    local key
+    key=$(_deploy_state_key "$file_path")
+    local shadow_path="$_DEPLOY_STATE_DIR/shadows/$key"
+    if [ -f "$shadow_path" ]; then
+        cat "$shadow_path"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Non-agentic merge via diff3.
+# Sets DIFF3_MERGED_CONTENT on clean merge. Returns 0 on success, 1 on failure.
+# ---------------------------------------------------------------------------
+DIFF3_MERGED_CONTENT=""
+try_diff3_merge() {
+    local local_content="$1"
+    local ancestor_content="$2"
+    local source_content="$3"
+    DIFF3_MERGED_CONTENT=""
+
+    if ! command -v diff3 >/dev/null 2>&1; then return 1; fi
+
+    local tmp_local tmp_ancestor tmp_source
+    tmp_local=$(mktemp)
+    tmp_ancestor=$(mktemp)
+    tmp_source=$(mktemp)
+    printf '%s' "$local_content" > "$tmp_local"
+    printf '%s' "$ancestor_content" > "$tmp_ancestor"
+    printf '%s' "$source_content" > "$tmp_source"
+
+    local merged
+    merged=$(diff3 -m "$tmp_local" "$tmp_ancestor" "$tmp_source" 2>/dev/null)
+    local rc=$?
+    rm -f "$tmp_local" "$tmp_ancestor" "$tmp_source"
+
+    if [ "$rc" -eq 0 ]; then
+        DIFF3_MERGED_CONTENT="$merged"
+        return 0
+    fi
+    return 1
+}
+
+# ---------------------------------------------------------------------------
+# Agentic merge via claude CLI.
+# Sets DIFF_REVIEW_RESULT="merge" + MERGED_CONTENT, or falls back.
+# ---------------------------------------------------------------------------
+MERGED_CONTENT=""
+_invoke_ai_merge() {
+    local file_path="$1"
+    local source_content="$2"
+    local local_content
+    local_content=$(cat "$file_path")
+
+    if ! command -v claude >/dev/null 2>&1; then
+        printf '  >> claude CLI not found -- merge unavailable, falling back to overwrite\n' > /dev/tty
+        log_warn "AI merge unavailable (claude CLI not found)"
+        DIFF_REVIEW_RESULT="overwrite"
+        return 0
+    fi
+
+    printf '  >> merging via AI...\n' > /dev/tty
+
+    local tmp_source tmp_local tmp_prompt
+    tmp_source=$(mktemp)
+    tmp_local=$(mktemp)
+    tmp_prompt=$(mktemp)
+    printf '%s' "$source_content" > "$tmp_source"
+    printf '%s' "$local_content" > "$tmp_local"
+    cat > "$tmp_prompt" <<PROMPT_EOF
+Merge these two versions of a configuration file.
+
+SOURCE ($tmp_source) is the new template being deployed.
+LOCAL ($tmp_local) is the user's current file with their customizations.
+
+Rules:
+- Preserve all user customizations from LOCAL that are intentional
+- Include all new content from SOURCE (new sections, updated tables, structural changes)
+- When both sides modify the same line, prefer LOCAL unless SOURCE adds new information
+- Output ONLY the merged file content, no commentary, no markdown fences
+PROMPT_EOF
+
+    local merged
+    # claude -p exit code checked below; suppress set -e abort
+    merged=$(claude -p < "$tmp_prompt" 2>&1) || true
+    rm -f "$tmp_source" "$tmp_local" "$tmp_prompt"
+
+    if [ -z "$merged" ]; then
+        printf '  >> AI merge failed -- choose another option\n' > /dev/tty
+        log_warn "AI merge returned empty output"
+        printf '  fallback [o]verwrite / [s]kip: ' > /dev/tty
+        local fb
+        read -r fb < /dev/tty
+        case "$(printf '%s' "$fb" | tr '[:upper:]' '[:lower:]')" in
+            s) DIFF_REVIEW_RESULT="skip" ;;
+            *) DIFF_REVIEW_RESULT="overwrite" ;;
+        esac
+        return 0
+    fi
+
+    # Show merge preview
+    printf '\n  --- merged result preview (first 30 lines) ---\n' > /dev/tty
+    printf '%s\n' "$merged" | head -30 | while IFS= read -r line; do
+        printf '  | %s\n' "$line" > /dev/tty
+    done
+    local total_lines
+    total_lines=$(printf '%s\n' "$merged" | wc -l | tr -d ' ')
+    if [ "$total_lines" -gt 30 ]; then
+        printf '  | ... (%d more lines)\n' "$((total_lines - 30))" > /dev/tty
+    fi
+    printf '\n  accept merge? [y]es / [n]o (falls back to overwrite): ' > /dev/tty
+    local accept
+    read -r accept < /dev/tty
+    if [ "$(printf '%s' "$accept" | tr '[:upper:]' '[:lower:]')" = "y" ]; then
+        MERGED_CONTENT="$merged"
+        DIFF_REVIEW_RESULT="merge"
+        printf '  >> merged: AI-merged content deployed\n' > /dev/tty
+    else
+        printf '  >> merge rejected, falling back to overwrite\n' > /dev/tty
+        DIFF_REVIEW_RESULT="overwrite"
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Prompt user before overwriting a managed file with different content.
-# Shows a unified diff and offers: Adopt / Overwrite / Skip / Abort.
+# Shows diff, attempts diff3 auto-merge, offers interactive options.
 #
 # Args:
 #   $1 = file path (deployed file on disk)
 #   $2 = new content that would be written (from source template)
 #   $3 = adopt target label (e.g., "profile", "shared/") or "" to hide adopt
+#   $4 = current content of local file (optional, read from disk if empty)
+#   $5 = ancestor content from shadow (optional, enables diff3 merge)
 #
-# Sets global DIFF_REVIEW_RESULT to: "overwrite", "adopt", or "skip"
+# Sets global DIFF_REVIEW_RESULT to: "overwrite", "adopt", "merge", or "skip"
+# When "merge": also sets MERGED_CONTENT with the merged result.
 # Exits with code 2 on abort.
 # Non-interactive / --force: sets "overwrite" and returns.
 # ---------------------------------------------------------------------------
@@ -182,8 +376,11 @@ prompt_diff_review() {
     local file_path="$1"
     local new_content="$2"
     local adopt_label="${3:-}"
+    local cur_content="${4:-}"
+    local ancestor_content="${5:-}"
 
     DIFF_REVIEW_RESULT="overwrite"
+    MERGED_CONTENT=""
 
     # --force or AITOOLS_FORCE: auto-overwrite
     if [ "${AITOOLS_FORCE:-}" = "1" ] || [ "${FORCE:-}" = "true" ]; then
@@ -191,22 +388,28 @@ prompt_diff_review() {
         return 0
     fi
 
-    # Non-interactive: auto-overwrite (preserves current behavior).
-    # [ -c /dev/tty ] is insufficient -- macOS reports the device exists even
-    # when no controlling terminal is attached ("Device not configured").
-    # Test with an actual write to catch both cases.
+    # Non-interactive: auto-overwrite
     if ! (printf '' > /dev/tty) 2>/dev/null; then
         log_warn "Diff in $(display_path "$file_path") -- overwriting (non-interactive)"
         return 0
     fi
 
-    # Show diff via /dev/tty (bypasses stdout/stderr redirection in deploy_configs)
+    # Read current file if not provided
+    if [ -z "$cur_content" ] && [ -f "$file_path" ]; then
+        cur_content=$(cat "$file_path")
+    fi
+
+    # Context header
     printf '\n\033[33m[REVIEW]\033[0m %s differs from source.\n' \
         "$(display_path "$file_path")" > /dev/tty
+    printf '  source = template (would deploy)\n' > /dev/tty
+    printf '  local  = current file on disk\n\n' > /dev/tty
+
+    # Show diff
     local diff_output
     # diff exits 1 on differences (expected), suppress set -e abort
-    diff_output=$(diff -u <(printf '%s' "$new_content") "$file_path" \
-        --label "source (would deploy)" --label "current (on disk)" 2>&1) || true
+    diff_output=$(diff -u <(printf '%s' "$new_content") <(printf '%s' "$cur_content") \
+        --label "source (would deploy)" --label "local (on disk)" 2>&1) || true
     local diff_lines
     diff_lines=$(printf '%s\n' "$diff_output" | wc -l | tr -d ' ')
     if [ "$diff_lines" -le 40 ]; then
@@ -218,35 +421,106 @@ prompt_diff_review() {
         printf '%s\n' "$diff_output" >> "${LOG_FILE:-/dev/null}"
     fi
 
-    # Build prompt with conditional adopt option
+    # Attempt diff3 auto-merge if ancestor available
+    if [ -n "$ancestor_content" ]; then
+        printf '\n  Attempting automatic merge...\n' > /dev/tty
+        if try_diff3_merge "$cur_content" "$ancestor_content" "$new_content"; then
+            printf '  Clean merge -- no conflicts.\n\n' > /dev/tty
+            local total_m_lines preview_count
+            total_m_lines=$(printf '%s\n' "$DIFF3_MERGED_CONTENT" | wc -l | tr -d ' ')
+            preview_count=$total_m_lines
+            if [ "$preview_count" -gt 30 ]; then preview_count=30; fi
+            printf '  --- merged result preview (first %d lines) ---\n' "$preview_count" > /dev/tty
+            printf '%s\n' "$DIFF3_MERGED_CONTENT" | head -"$preview_count" | while IFS= read -r line; do
+                printf '  | %s\n' "$line" > /dev/tty
+            done
+            if [ "$total_m_lines" -gt 30 ]; then
+                printf '  | ... (%d more lines)\n' "$((total_m_lines - 30))" > /dev/tty
+            fi
+            printf '\n' > /dev/tty
+            if [ -n "$adopt_label" ]; then
+                printf '  [y]es       : accept merge result\n' > /dev/tty
+                printf '  [o]verwrite : source wins -> deploy to local (backup kept)\n' > /dev/tty
+                printf '  [a]dopt     : local wins -> copy back to %s\n' "$adopt_label" > /dev/tty
+                printf '  [s]kip      : keep local as-is (no changes)\n' > /dev/tty
+                printf '  [x]abort    : stop deployment\n' > /dev/tty
+                printf '  choice [y/o/a/s/x]: ' > /dev/tty
+            else
+                printf '  [y]es       : accept merge result\n' > /dev/tty
+                printf '  [o]verwrite : source wins -> deploy to local (backup kept)\n' > /dev/tty
+                printf '  [s]kip      : keep local as-is (no changes)\n' > /dev/tty
+                printf '  [x]abort    : stop deployment\n' > /dev/tty
+                printf '  choice [y/o/s/x]: ' > /dev/tty
+            fi
+            local merge_choice
+            read -r merge_choice < /dev/tty
+            case "$(printf '%s' "$merge_choice" | tr '[:upper:]' '[:lower:]')" in
+                y)  MERGED_CONTENT="$DIFF3_MERGED_CONTENT"
+                    DIFF_REVIEW_RESULT="merge"
+                    printf '  >> merged: diff3 merge deployed\n' > /dev/tty
+                    return 0 ;;
+                a)  if [ -n "$adopt_label" ]; then
+                        printf '  >> adopted: local version copied back to %s\n' "$adopt_label" > /dev/tty
+                        DIFF_REVIEW_RESULT="adopt"
+                        return 0
+                    fi ;;
+                s)  printf '  >> skipped: local file unchanged\n' > /dev/tty
+                    DIFF_REVIEW_RESULT="skip"
+                    return 0 ;;
+                x)  log_error "Aborted by user"
+                    exit 2 ;;
+            esac
+            # Fall through to overwrite on 'o' or default
+            printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
+            DIFF_REVIEW_RESULT="overwrite"
+            return 0
+        else
+            printf '  Merge has conflicts -- manual choice required.\n' > /dev/tty
+        fi
+    fi
+
+    # Options (no auto-merge or merge had conflicts)
     printf '\n' > /dev/tty
     if [ -n "$adopt_label" ]; then
-        printf '  [A]dopt to %s  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' \
-            "$adopt_label" > /dev/tty
-        printf '  Choice [A/O/S/X]: ' > /dev/tty
+        printf '  [o]verwrite : source wins -> deploy to local (backup kept)\n' > /dev/tty
+        printf '  [a]dopt     : local wins -> copy back to %s\n' "$adopt_label" > /dev/tty
+        printf '  [m]erge     : AI-assisted merge of source + local\n' > /dev/tty
+        printf '  [s]kip      : keep local as-is (no changes)\n' > /dev/tty
+        printf '  [x]abort    : stop deployment\n' > /dev/tty
+        printf '  choice [o/a/m/s/x]: ' > /dev/tty
     else
-        printf '  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' > /dev/tty
-        printf '  Choice [O/S/X]: ' > /dev/tty
+        printf '  [o]verwrite : source wins -> deploy to local (backup kept)\n' > /dev/tty
+        printf '  [m]erge     : AI-assisted merge of source + local\n' > /dev/tty
+        printf '  [s]kip      : keep local as-is (no changes)\n' > /dev/tty
+        printf '  [x]abort    : stop deployment\n' > /dev/tty
+        printf '  choice [o/m/s/x]: ' > /dev/tty
     fi
+
     local choice
     read -r choice < /dev/tty
     case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
         a)  if [ -n "$adopt_label" ]; then
+                printf '  >> adopted: local version copied back to %s\n' "$adopt_label" > /dev/tty
                 DIFF_REVIEW_RESULT="adopt"
             else
+                printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
                 DIFF_REVIEW_RESULT="overwrite"
             fi ;;
-        s)  DIFF_REVIEW_RESULT="skip" ;;
+        m)  _invoke_ai_merge "$file_path" "$new_content" ;;
+        s)  printf '  >> skipped: local file unchanged\n' > /dev/tty
+            DIFF_REVIEW_RESULT="skip" ;;
         x)  log_error "Aborted by user"
             exit 2 ;;
-        *)  DIFF_REVIEW_RESULT="overwrite" ;;
+        *)  printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
+            DIFF_REVIEW_RESULT="overwrite" ;;
     esac
     return 0
 }
 
 # ---------------------------------------------------------------------------
-# Deploy a managed file with diff review. Handles compare, backup, prompt,
-# and write. Caller handles the adopt action (varies by file type).
+# Deploy a managed file with diff review and deploy state tracking.
+# Uses manifest to auto-deploy when user hasn't edited the local file.
+# Falls back to interactive review with merge options when both sides differ.
 #
 # Args:
 #   $1 = source content (string to deploy)
@@ -258,7 +532,7 @@ prompt_diff_review() {
 # Sets MANAGED_FILE_RESULT to: "created", "updated", "unchanged", "adopted", "skipped"
 # Exits with code 2 on abort (from prompt_diff_review).
 # On "adopted"/"skipped": does NOT write the file (caller decides).
-# On "created"/"updated": writes src_content to dest.
+# On "created"/"updated": writes src_content to dest + updates deploy state.
 # ---------------------------------------------------------------------------
 MANAGED_FILE_RESULT=""
 deploy_managed_file() {
@@ -290,12 +564,33 @@ deploy_managed_file() {
         local existing
         existing=$(cat "$dest")
         if [ "$existing" = "$src_content" ]; then
+            # Content identical — update deploy state (bootstraps manifest)
+            update_deploy_state "$dest" "$src_content"
             MANAGED_FILE_RESULT="unchanged"
             return 0
         fi
-        # File differs — backup + prompt
+
+        # Content differs — check deploy state for auto-deploy eligibility
+        local state_hash existing_hash
+        state_hash=$(get_deploy_state_hash "$dest")
+        if [ -n "$state_hash" ]; then
+            existing_hash=$(get_content_hash "$existing")
+            if [ "$existing_hash" = "$state_hash" ]; then
+                # User didn't edit since last deploy → auto-deploy silently
+                backup_file "$dest"
+                printf '%s\n' "$src_content" > "$dest"
+                update_deploy_state "$dest" "$src_content"
+                log "Auto-deployed: $item_name (no local edits detected)"
+                MANAGED_FILE_RESULT="updated"
+                return 0
+            fi
+        fi
+
+        # User edited AND source changed — backup + interactive review
         backup_file "$dest"
-        prompt_diff_review "$dest" "$src_content" "$adopt_label"
+        local ancestor_content
+        ancestor_content=$(get_deploy_shadow "$dest")
+        prompt_diff_review "$dest" "$src_content" "$adopt_label" "$existing" "$ancestor_content"
         case "$DIFF_REVIEW_RESULT" in
             adopt)
                 MANAGED_FILE_RESULT="adopted"
@@ -306,14 +601,19 @@ deploy_managed_file() {
                 MANAGED_FILE_RESULT="skipped"
                 return 0
                 ;;
+            merge)
+                src_content="$MERGED_CONTENT"
+                ;;
         esac
-        # overwrite: write source content to dest
+        # overwrite or merge: write content to dest
         printf '%s\n' "$src_content" > "$dest"
+        update_deploy_state "$dest" "$src_content"
         MANAGED_FILE_RESULT="updated"
         log_ok "Updated: $item_name -> $(display_path "$dest")"
     else
         # New file — create
         printf '%s\n' "$src_content" > "$dest"
+        update_deploy_state "$dest" "$src_content"
         MANAGED_FILE_RESULT="created"
         log_ok "Created: $item_name -> $(display_path "$dest")"
     fi

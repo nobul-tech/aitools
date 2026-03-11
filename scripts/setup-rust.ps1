@@ -95,7 +95,7 @@ if ($nasmCheck) {
         Write-Summary "WARN" "rust/cargo" "NASM not installed -- some cargo builds will fail"
         Write-Summary "ACTION" "" "winget install NASM.NASM -- needed for aws-lc-sys crypto crates"
     } else {
-        $nasmKnownPaths = @("$env:ProgramFiles\NASM\nasm.exe", "${env:ProgramFiles(x86)}\NASM\nasm.exe")
+        $nasmKnownPaths = @("$env:LOCALAPPDATA\bin\NASM\nasm.exe", "$env:ProgramFiles\NASM\nasm.exe", "${env:ProgramFiles(x86)}\NASM\nasm.exe")
         if (Ensure-ToolOnPath -ToolName "nasm" -KnownPaths $nasmKnownPaths) {
             LogOk "NASM installed and on PATH"
         } else {

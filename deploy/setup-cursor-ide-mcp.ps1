@@ -156,19 +156,266 @@ function Backup-Dir {
 }
 
 # ---------------------------------------------------------------------------
+# Deploy state tracking: manifest + shadow copies for auto-deploy detection.
+# Tracks what was last deployed to each managed file. When the local file
+# matches the last-deployed hash, content changes are auto-deployed without
+# prompting (user didn't edit). Shadows provide the common ancestor for diff3.
+# ---------------------------------------------------------------------------
+$script:DeployManifest = $null
+$script:DeployStateDir = if ($IsWindows) { "$env:USERPROFILE\.aitools\deploy-state" } else { "$HOME/.aitools/deploy-state" }
+
+function Get-ContentHash {
+    param([string]$Content)
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($Content)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $sha.ComputeHash($bytes)
+        return [BitConverter]::ToString($hash) -replace '-'
+    } finally {
+        $sha.Dispose()
+    }
+}
+
+function Initialize-DeployState {
+    $manifestPath = Join-Path $script:DeployStateDir "manifest.json"
+    if (Test-Path $manifestPath) {
+        try {
+            $raw = Get-Content $manifestPath -Raw -ErrorAction Stop
+            $script:DeployManifest = ($raw | ConvertFrom-Json)
+            if (-not $script:DeployManifest.files) {
+                $script:DeployManifest | Add-Member -NotePropertyName files -NotePropertyValue @{} -Force
+            }
+        } catch {
+            LogWarn "Corrupt deploy manifest, resetting: $_"
+            $script:DeployManifest = [PSCustomObject]@{ version = 1; files = @{} }
+        }
+    } else {
+        $script:DeployManifest = [PSCustomObject]@{ version = 1; files = @{} }
+    }
+}
+
+function Get-DeployStateKey {
+    param([string]$FilePath)
+    $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($FilePath)
+    $homeDir = if ($IsWindows) { $env:USERPROFILE } else { $env:HOME }
+    if ($resolved.StartsWith($homeDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $resolved.Substring($homeDir.Length).Replace('\', '/').TrimStart('/')
+    }
+    return $resolved.Replace('\', '/')
+}
+
+function Get-DeployState {
+    param([string]$FilePath)
+    if (-not $script:DeployManifest) { Initialize-DeployState }
+    $key = Get-DeployStateKey $FilePath
+    $files = $script:DeployManifest.files
+    if ($files -is [hashtable]) {
+        if ($files.ContainsKey($key)) { return $files[$key] }
+    } else {
+        $val = $files.$key
+        if ($val) { return $val }
+    }
+    return $null
+}
+
+function Update-DeployState {
+    param([string]$FilePath, [string]$Content)
+    if (-not $script:DeployManifest) { Initialize-DeployState }
+    $key = Get-DeployStateKey $FilePath
+    $hash = Get-ContentHash $Content
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+
+    $entry = [PSCustomObject]@{ hash = $hash; deployedAt = $ts }
+    $files = $script:DeployManifest.files
+    if ($files -is [hashtable]) {
+        $files[$key] = $entry
+    } else {
+        $ht = @{}
+        $files.PSObject.Properties | ForEach-Object { $ht[$_.Name] = $_.Value }
+        $ht[$key] = $entry
+        $script:DeployManifest | Add-Member -NotePropertyName files -NotePropertyValue $ht -Force
+    }
+
+    $manifestDir = $script:DeployStateDir
+    if (-not (Test-Path $manifestDir)) {
+        New-Item -ItemType Directory -Path $manifestDir -Force | Out-Null
+    }
+    $manifestPath = Join-Path $manifestDir "manifest.json"
+    $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($manifestPath)
+    $json = $script:DeployManifest | ConvertTo-Json -Depth 5
+    [System.IO.File]::WriteAllText($resolved, $json, [System.Text.UTF8Encoding]::new($false))
+
+    $shadowPath = Join-Path $manifestDir "shadows" $key
+    $shadowDir = Split-Path $shadowPath -Parent
+    if (-not (Test-Path $shadowDir)) {
+        New-Item -ItemType Directory -Path $shadowDir -Force | Out-Null
+    }
+    $resolvedShadow = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($shadowPath)
+    [System.IO.File]::WriteAllText($resolvedShadow, $Content, [System.Text.UTF8Encoding]::new($false))
+}
+
+function Get-DeployShadow {
+    param([string]$FilePath)
+    $key = Get-DeployStateKey $FilePath
+    $shadowPath = Join-Path $script:DeployStateDir "shadows" $key
+    if (Test-Path $shadowPath) {
+        try {
+            return Get-Content $shadowPath -Raw -ErrorAction Stop
+        } catch {
+            return $null
+        }
+    }
+    return $null
+}
+
+# ---------------------------------------------------------------------------
+# Non-agentic merge via diff3 (3-way merge using shadow as common ancestor).
+# Returns merged content string on clean merge, $null on conflicts/error.
+# ---------------------------------------------------------------------------
+function Find-Diff3 {
+    # Get-Command exempt: command-existence check with explicit fallback
+    $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+    if ($gitCmd) {
+        $gitDir = Split-Path (Split-Path $gitCmd.Source)
+        $diff3Path = Join-Path $gitDir "usr\bin\diff3.exe"
+        if (Test-Path $diff3Path) { return $diff3Path }
+    }
+    return $null
+}
+
+function Try-Diff3Merge {
+    param(
+        [string]$LocalContent,
+        [string]$AncestorContent,
+        [string]$SourceContent
+    )
+    $diff3 = Find-Diff3
+    if (-not $diff3) { return $null }
+
+    $tmpLocal = [System.IO.Path]::GetTempFileName()
+    $tmpAncestor = [System.IO.Path]::GetTempFileName()
+    $tmpSource = [System.IO.Path]::GetTempFileName()
+    try {
+        [IO.File]::WriteAllText($tmpLocal, $LocalContent)
+        [IO.File]::WriteAllText($tmpAncestor, $AncestorContent)
+        [IO.File]::WriteAllText($tmpSource, $SourceContent)
+
+        $merged = & $diff3 -m $tmpLocal $tmpAncestor $tmpSource 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            return ($merged -join "`n")
+        }
+        return $null
+    } catch {
+        return $null
+    } finally {
+        Remove-Item $tmpLocal, $tmpAncestor, $tmpSource -ErrorAction SilentlyContinue
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Agentic merge via claude CLI. Returns "merge" (sets $script:MergedContent)
+# or falls back to "overwrite"/"skip".
+# ---------------------------------------------------------------------------
+function Invoke-AiMerge {
+    param(
+        [string]$FilePath,
+        [string]$SourceContent,
+        [string]$LocalContent
+    )
+
+    # Get-Command exempt: command-existence check with explicit fallback
+    if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
+        [Console]::WriteLine("  >> claude CLI not found -- merge unavailable, falling back to overwrite")
+        LogWarn "AI merge unavailable (claude CLI not found)"
+        return "overwrite"
+    }
+
+    [Console]::WriteLine("  >> merging via AI...")
+
+    $tmpSource = [System.IO.Path]::GetTempFileName()
+    $tmpLocal = [System.IO.Path]::GetTempFileName()
+    $tmpPrompt = [System.IO.Path]::GetTempFileName()
+    try {
+        [IO.File]::WriteAllText($tmpSource, $SourceContent)
+        [IO.File]::WriteAllText($tmpLocal, $LocalContent)
+
+        $promptText = @"
+Merge these two versions of a configuration file.
+
+SOURCE ($tmpSource) is the new template being deployed.
+LOCAL ($tmpLocal) is the user's current file with their customizations.
+
+Rules:
+- Preserve all user customizations from LOCAL that are intentional
+- Include all new content from SOURCE (new sections, updated tables, structural changes)
+- When both sides modify the same line, prefer LOCAL unless SOURCE adds new information
+- Output ONLY the merged file content, no commentary, no markdown fences
+"@
+        [IO.File]::WriteAllText($tmpPrompt, $promptText)
+
+        $merged = Get-Content $tmpPrompt -Raw | claude -p 2>&1
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($merged)) {
+            [Console]::WriteLine("  >> AI merge failed -- choose another option")
+            LogWarn "AI merge failed (exit $LASTEXITCODE)"
+            [Console]::Write("  fallback [o]verwrite / [s]kip: ")
+            $fb = [Console]::ReadLine()
+            if ($fb.ToLower() -eq "s") { return "skip" }
+            return "overwrite"
+        }
+    } catch {
+        [Console]::WriteLine("  >> AI merge error: $_ -- choose another option")
+        LogWarn "AI merge error: $_"
+        [Console]::Write("  fallback [o]verwrite / [s]kip: ")
+        $fb = [Console]::ReadLine()
+        if ($fb.ToLower() -eq "s") { return "skip" }
+        return "overwrite"
+    } finally {
+        Remove-Item $tmpSource, $tmpLocal, $tmpPrompt -ErrorAction SilentlyContinue
+    }
+
+    # Show merge preview
+    [Console]::WriteLine("")
+    [Console]::WriteLine("  --- merged result preview (first 30 lines) ---")
+    $mergedLines = $merged -split "`n"
+    $previewCount = [Math]::Min(30, $mergedLines.Count)
+    for ($i = 0; $i -lt $previewCount; $i++) {
+        [Console]::WriteLine("  | $($mergedLines[$i])")
+    }
+    if ($mergedLines.Count -gt 30) {
+        [Console]::WriteLine("  | ... ($($mergedLines.Count - 30) more lines)")
+    }
+    [Console]::WriteLine("")
+    [Console]::Write("  accept merge? [y]es / [n]o (falls back to overwrite): ")
+    $accept = [Console]::ReadLine()
+    if ($accept.ToLower() -eq "y") {
+        $script:MergedContent = $merged
+        [Console]::WriteLine("  >> merged: AI-merged content deployed")
+        return "merge"
+    }
+    [Console]::WriteLine("  >> merge rejected, falling back to overwrite")
+    return "overwrite"
+}
+
+# ---------------------------------------------------------------------------
 # Prompt user before overwriting a managed file with different content.
-# Shows diff and offers: Adopt / Overwrite / Skip / Abort.
+# Shows diff, attempts diff3 auto-merge, offers interactive options.
 #
-# Returns: "overwrite", "adopt", or "skip"
+# Returns: "overwrite", "adopt", "merge", or "skip"
 # Exits with code 2 on abort.
 # Non-interactive / -Force: returns "overwrite".
+# When returning "merge", sets $script:MergedContent with the merged result.
 # ---------------------------------------------------------------------------
+$script:MergedContent = $null
 function Prompt-DiffReview {
     param(
         [string]$FilePath,
         [string]$NewContent,
+        [string]$CurrentContent = "",
+        [string]$AncestorContent = "",
         [string]$AdoptLabel = ""
     )
+
+    $script:MergedContent = $null
 
     # -Force or AITOOLS_FORCE: auto-overwrite
     if ($env:AITOOLS_FORCE -eq "1" -or $Force) {
@@ -176,81 +423,174 @@ function Prompt-DiffReview {
         return "overwrite"
     }
 
-    # Non-interactive: auto-overwrite (preserves current behavior)
+    # Non-interactive: auto-overwrite
     if (-not [Environment]::UserInteractive) {
         LogWarn "Diff in $FilePath -- overwriting (non-interactive)"
         return "overwrite"
     }
 
-    # Show diff via [Console] (bypasses *> $null redirection in Deploy-Configs)
+    # Read current file if not provided
+    if (-not $CurrentContent) {
+        try {
+            $CurrentContent = Get-Content $FilePath -Raw -ErrorAction Stop
+        } catch {
+            LogWarn "Cannot read $FilePath for diff: $_"
+            return "overwrite"
+        }
+    }
+
+    # Context header
     [Console]::WriteLine("")
     [Console]::WriteLine("[REVIEW] $FilePath differs from source.")
+    [Console]::WriteLine("  source = template (would deploy)")
+    [Console]::WriteLine("  local  = current file on disk")
     [Console]::WriteLine("")
 
     # Generate line-level diff
     $srcLines = @($NewContent -split "`n")
-    try {
-        $curContent = Get-Content $FilePath -Raw -ErrorAction Stop
-    } catch {
-        LogWarn "Cannot read $FilePath for diff: $_"
-        return "overwrite"
-    }
-    $curLines = @($curContent -split "`n")
+    $curLines = @($CurrentContent -split "`n")
     $diffs = Compare-Object $srcLines $curLines
     $diffCount = 0
     if ($diffs) { $diffCount = @($diffs).Count }
 
     if ($diffCount -eq 0) {
-        # Whitespace-only difference
         [Console]::WriteLine("  (whitespace-only differences)")
     } elseif ($diffCount -le 40) {
         foreach ($d in $diffs) {
-            $indicator = if ($d.SideIndicator -eq "=>") { "+ " } else { "- " }
+            $indicator = if ($d.SideIndicator -eq "=>") { "+ local  " } else { "- source " }
             [Console]::WriteLine("  $indicator$($d.InputObject)")
         }
     } else {
         $shown = 0
         foreach ($d in $diffs) {
             if ($shown -ge 30) { break }
-            $indicator = if ($d.SideIndicator -eq "=>") { "+ " } else { "- " }
+            $indicator = if ($d.SideIndicator -eq "=>") { "+ local  " } else { "- source " }
             [Console]::WriteLine("  $indicator$($d.InputObject)")
             $shown++
         }
         [Console]::WriteLine("  ... ($($diffCount - 30) more lines -- see deploy log)")
     }
 
-    # Build prompt with conditional adopt option
+    # Attempt diff3 auto-merge if ancestor available
+    if ($AncestorContent) {
+        [Console]::WriteLine("")
+        [Console]::WriteLine("  Attempting automatic merge...")
+        $autoMerged = Try-Diff3Merge -LocalContent $CurrentContent `
+            -AncestorContent $AncestorContent -SourceContent $NewContent
+        if ($autoMerged) {
+            [Console]::WriteLine("  Clean merge -- no conflicts.")
+            [Console]::WriteLine("")
+            $mergedLines = $autoMerged -split "`n"
+            $previewCount = [Math]::Min(30, $mergedLines.Count)
+            [Console]::WriteLine("  --- merged result preview (first $previewCount lines) ---")
+            for ($i = 0; $i -lt $previewCount; $i++) {
+                [Console]::WriteLine("  | $($mergedLines[$i])")
+            }
+            if ($mergedLines.Count -gt 30) {
+                [Console]::WriteLine("  | ... ($($mergedLines.Count - 30) more lines)")
+            }
+            [Console]::WriteLine("")
+            if ($AdoptLabel) {
+                [Console]::WriteLine("  [y]es       : accept merge result")
+                [Console]::WriteLine("  [o]verwrite : source wins -> deploy to local (backup kept)")
+                [Console]::WriteLine("  [a]dopt     : local wins -> copy back to $AdoptLabel")
+                [Console]::WriteLine("  [s]kip      : keep local as-is (no changes)")
+                [Console]::WriteLine("  [x]abort    : stop deployment")
+                [Console]::Write("  choice [y/o/a/s/x]: ")
+            } else {
+                [Console]::WriteLine("  [y]es       : accept merge result")
+                [Console]::WriteLine("  [o]verwrite : source wins -> deploy to local (backup kept)")
+                [Console]::WriteLine("  [s]kip      : keep local as-is (no changes)")
+                [Console]::WriteLine("  [x]abort    : stop deployment")
+                [Console]::Write("  choice [y/o/s/x]: ")
+            }
+            $choice = [Console]::ReadLine()
+            switch ($choice.ToLower()) {
+                "y" {
+                    $script:MergedContent = $autoMerged
+                    [Console]::WriteLine("  >> merged: diff3 merge deployed")
+                    return "merge"
+                }
+                "a" {
+                    if ($AdoptLabel) {
+                        [Console]::WriteLine("  >> adopted: local version copied back to $AdoptLabel")
+                        return "adopt"
+                    }
+                    [Console]::WriteLine("  >> overwritten: source deployed to local (backup kept)")
+                    return "overwrite"
+                }
+                "s" {
+                    [Console]::WriteLine("  >> skipped: local file unchanged")
+                    return "skip"
+                }
+                "x" {
+                    LogError "Aborted by user"
+                    exit 2
+                }
+                default {
+                    [Console]::WriteLine("  >> overwritten: source deployed to local (backup kept)")
+                    return "overwrite"
+                }
+            }
+        } else {
+            [Console]::WriteLine("  Merge has conflicts -- manual choice required.")
+        }
+    }
+
+    # Options (no auto-merge available or merge had conflicts)
     [Console]::WriteLine("")
     if ($AdoptLabel) {
-        [Console]::WriteLine("  [A]dopt to $AdoptLabel  [O]verwrite (backup kept)  [S]kip  [X] Abort")
-        [Console]::Write("  Choice [A/O/S/X]: ")
+        [Console]::WriteLine("  [o]verwrite : source wins -> deploy to local (backup kept)")
+        [Console]::WriteLine("  [a]dopt     : local wins -> copy back to $AdoptLabel")
+        [Console]::WriteLine("  [m]erge     : AI-assisted merge of source + local")
+        [Console]::WriteLine("  [s]kip      : keep local as-is (no changes)")
+        [Console]::WriteLine("  [x]abort    : stop deployment")
+        [Console]::Write("  choice [o/a/m/s/x]: ")
     } else {
-        [Console]::WriteLine("  [O]verwrite (backup kept)  [S]kip  [X] Abort")
-        [Console]::Write("  Choice [O/S/X]: ")
+        [Console]::WriteLine("  [o]verwrite : source wins -> deploy to local (backup kept)")
+        [Console]::WriteLine("  [m]erge     : AI-assisted merge of source + local")
+        [Console]::WriteLine("  [s]kip      : keep local as-is (no changes)")
+        [Console]::WriteLine("  [x]abort    : stop deployment")
+        [Console]::Write("  choice [o/m/s/x]: ")
     }
+
     $choice = [Console]::ReadLine()
     switch ($choice.ToLower()) {
         "a" {
-            if ($AdoptLabel) { return "adopt" }
+            if ($AdoptLabel) {
+                [Console]::WriteLine("  >> adopted: local version copied back to $AdoptLabel")
+                return "adopt"
+            }
+            [Console]::WriteLine("  >> overwritten: source deployed to local (backup kept)")
             return "overwrite"
         }
-        "s" { return "skip" }
+        "m" {
+            return (Invoke-AiMerge -FilePath $FilePath -SourceContent $NewContent -LocalContent $CurrentContent)
+        }
+        "s" {
+            [Console]::WriteLine("  >> skipped: local file unchanged")
+            return "skip"
+        }
         "x" {
             LogError "Aborted by user"
             exit 2
         }
-        default { return "overwrite" }
+        default {
+            [Console]::WriteLine("  >> overwritten: source deployed to local (backup kept)")
+            return "overwrite"
+        }
     }
 }
 
 # ---------------------------------------------------------------------------
-# Deploy a managed file with diff review. Handles compare, backup, prompt,
-# and write. Caller handles the adopt action (varies by file type).
+# Deploy a managed file with diff review and deploy state tracking.
+# Uses manifest to auto-deploy when user hasn't edited the local file.
+# Falls back to interactive review with merge options when both sides differ.
 #
 # Returns: "created", "updated", "unchanged", "adopted", or "skipped"
 # Exits with code 2 on abort.
 # On "adopted"/"skipped": does NOT write the file.
-# On "created"/"updated": writes content to dest.
+# On "created"/"updated": writes content to dest + updates deploy state.
 # ---------------------------------------------------------------------------
 function Deploy-ManagedFile {
     param(
@@ -293,27 +633,53 @@ function Deploy-ManagedFile {
             $existing = ""
         }
         if ($existing -eq $Content) {
+            # Content identical — update deploy state (bootstraps manifest)
+            Update-DeployState -FilePath $DestPath -Content $Content
             return "unchanged"
         }
-        # File differs -- backup + prompt
+
+        # Content differs — check deploy state for auto-deploy eligibility
+        $state = Get-DeployState -FilePath $DestPath
+        if ($state -and $state.hash) {
+            $existingHash = Get-ContentHash $existing
+            if ($existingHash -eq $state.hash) {
+                # User didn't edit since last deploy → auto-deploy silently
+                Backup-File -FilePath $DestPath
+                $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
+                [System.IO.File]::WriteAllText($resolved, $Content, [System.Text.UTF8Encoding]::new($false))
+                Update-DeployState -FilePath $DestPath -Content $Content
+                Log "Auto-deployed: $ItemName (no local edits detected)"
+                return "updated"
+            }
+        }
+
+        # User edited AND source changed — backup + interactive review
         Backup-File -FilePath $DestPath
-        $result = Prompt-DiffReview -FilePath $DestPath -NewContent $Content -AdoptLabel $AdoptLabel
+        $ancestorContent = Get-DeployShadow -FilePath $DestPath
+        $result = Prompt-DiffReview -FilePath $DestPath -NewContent $Content `
+            -CurrentContent $existing -AncestorContent $ancestorContent `
+            -AdoptLabel $AdoptLabel
         switch ($result) {
             "adopt" { return "adopted" }
             "skip" {
                 LogWarn "Skipped: $ItemName"
                 return "skipped"
             }
+            "merge" {
+                $Content = $script:MergedContent
+            }
         }
-        # overwrite: write source content to dest
+        # overwrite or merge: write content to dest
         $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
         [System.IO.File]::WriteAllText($resolved, $Content, [System.Text.UTF8Encoding]::new($false))
+        Update-DeployState -FilePath $DestPath -Content $Content
         LogOk "Updated: $ItemName -> $DestPath"
         return "updated"
     } else {
-        # New file -- create
+        # New file — create
         $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
         [System.IO.File]::WriteAllText($resolved, $Content, [System.Text.UTF8Encoding]::new($false))
+        Update-DeployState -FilePath $DestPath -Content $Content
         LogOk "Created: $ItemName -> $DestPath"
         return "created"
     }
@@ -757,7 +1123,8 @@ $script:BuildPrereqs = @{
             ToolName   = "nasm"
             # Get-Command exempt: command-existence check with explicit fallback
             Check      = { [bool](Get-Command nasm -ErrorAction SilentlyContinue) }
-            KnownPaths = @("$env:ProgramFiles\NASM\nasm.exe", "${env:ProgramFiles(x86)}\NASM\nasm.exe")
+            # Verified: 2026-03-11 (winget NASM.NASM v3.01, per-user Nullsoft installer)
+            KnownPaths = @("$env:LOCALAPPDATA\bin\NASM\nasm.exe", "$env:ProgramFiles\NASM\nasm.exe", "${env:ProgramFiles(x86)}\NASM\nasm.exe")
             Install    = "winget install NASM.NASM"
             Platform   = "win"
         },
@@ -766,6 +1133,7 @@ $script:BuildPrereqs = @{
             ToolName   = "cmake"
             # Get-Command exempt: command-existence check with explicit fallback
             Check      = { [bool](Get-Command cmake -ErrorAction SilentlyContinue) }
+            # UNVERIFIED: assumed MSI behavior -- verify after install (#22)
             KnownPaths = @("$env:ProgramFiles\CMake\bin\cmake.exe")
             Install    = "winget install Kitware.CMake"
             Platform   = "win"
