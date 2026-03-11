@@ -210,10 +210,10 @@ function Prompt-DiffReview {
     [Console]::WriteLine("")
     if ($AdoptLabel) {
         [Console]::WriteLine("  [A]dopt to $AdoptLabel  [O]verwrite (backup kept)  [S]kip  [X] Abort")
-        [Console]::Write("  Choice [A/O/s/x]: ")
+        [Console]::Write("  Choice [A/O/S/X]: ")
     } else {
         [Console]::WriteLine("  [O]verwrite (backup kept)  [S]kip  [X] Abort")
-        [Console]::Write("  Choice [O/s/x]: ")
+        [Console]::Write("  Choice [O/S/X]: ")
     }
     $choice = [Console]::ReadLine()
     switch ($choice.ToLower()) {
@@ -227,6 +227,128 @@ function Prompt-DiffReview {
             exit 2
         }
         default { return "overwrite" }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Deploy a managed file with diff review. Handles compare, backup, prompt,
+# and write. Caller handles the adopt action (varies by file type).
+#
+# Returns: "created", "updated", "unchanged", "adopted", or "skipped"
+# Exits with code 2 on abort.
+# On "adopted"/"skipped": does NOT write the file.
+# On "created"/"updated": writes content to dest.
+# ---------------------------------------------------------------------------
+function Deploy-ManagedFile {
+    param(
+        [string]$Content,
+        [string]$DestPath,
+        [string]$ToolName,
+        [string]$ItemName,
+        [string]$AdoptLabel = ""
+    )
+
+    # Dry run: report what would happen without writing
+    if ($DryRun) {
+        if (Test-Path $DestPath) {
+            try {
+                $existing = Get-Content $DestPath -Raw -ErrorAction Stop
+            } catch {
+                $existing = ""
+            }
+            if ($existing -eq $Content) {
+                Log "[DRY RUN] Unchanged: $ItemName"
+            } else {
+                Log "[DRY RUN] Would update: $ItemName -> $DestPath"
+            }
+        } else {
+            Log "[DRY RUN] Would create: $ItemName -> $DestPath"
+        }
+        return "unchanged"
+    }
+
+    $destDir = Split-Path -Parent $DestPath
+    if (-not (Test-Path $destDir)) {
+        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+    }
+
+    if (Test-Path $DestPath) {
+        try {
+            $existing = Get-Content $DestPath -Raw -ErrorAction Stop
+        } catch {
+            LogWarn "Cannot read $DestPath for comparison: $_"
+            $existing = ""
+        }
+        if ($existing -eq $Content) {
+            return "unchanged"
+        }
+        # File differs -- backup + prompt
+        Backup-File -FilePath $DestPath
+        $result = Prompt-DiffReview -FilePath $DestPath -NewContent $Content -AdoptLabel $AdoptLabel
+        switch ($result) {
+            "adopt" { return "adopted" }
+            "skip" {
+                LogWarn "Skipped: $ItemName"
+                return "skipped"
+            }
+        }
+        # overwrite: write source content to dest
+        $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
+        [System.IO.File]::WriteAllText($resolved, $Content, [System.Text.UTF8Encoding]::new($false))
+        LogOk "Updated: $ItemName -> $DestPath"
+        return "updated"
+    } else {
+        # New file -- create
+        $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
+        [System.IO.File]::WriteAllText($resolved, $Content, [System.Text.UTF8Encoding]::new($false))
+        LogOk "Created: $ItemName -> $DestPath"
+        return "created"
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Deploy tracker: centralizes outcome counting and summary writing for
+# loops that deploy multiple managed files (rules, skills, hooks).
+# ---------------------------------------------------------------------------
+
+$script:dtAdded = 0; $script:dtUpdated = 0; $script:dtUnchanged = 0
+$script:dtAdopted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0
+$script:deployTrackerText = ""
+
+function Initialize-DeployTracker {
+    $script:dtAdded = 0; $script:dtUpdated = 0; $script:dtUnchanged = 0
+    $script:dtAdopted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0
+    $script:deployTrackerText = ""
+}
+
+# Record a single file outcome. Increments counter and writes DETAIL summary.
+function Record-DeployOutcome {
+    param([string]$Outcome, [string]$ToolName, [string]$ItemName)
+    switch ($Outcome) {
+        { $_ -eq "added" -or $_ -eq "created" } { $script:dtAdded++;     Write-Summary "DETAIL" $ToolName "added: $ItemName" }
+        "updated"   { $script:dtUpdated++;   Write-Summary "DETAIL" $ToolName "updated: $ItemName" }
+        "adopted"   { $script:dtAdopted++;   Write-Summary "DETAIL" $ToolName "adopted: $ItemName" }
+        "skipped"   { $script:dtSkipped++;   Write-Summary "DETAIL" $ToolName "skipped: $ItemName" }
+        "unchanged" { $script:dtUnchanged++ }
+        "preserved" { $script:dtPreserved++ }
+    }
+}
+
+# Write aggregate summary for a deploy loop. Uses non-zero counts.
+function Write-DeployTrackerSummary {
+    param([string]$ToolName)
+    $parts = @()
+    if ($script:dtAdded -gt 0)     { $parts += "$($script:dtAdded) added" }
+    if ($script:dtUpdated -gt 0)   { $parts += "$($script:dtUpdated) updated" }
+    if ($script:dtAdopted -gt 0)   { $parts += "$($script:dtAdopted) adopted" }
+    if ($script:dtUnchanged -gt 0) { $parts += "$($script:dtUnchanged) unchanged" }
+    $text = if ($parts.Count -gt 0) { $parts -join ", " } else { "unchanged" }
+    $script:deployTrackerText = $text
+
+    if ($script:dtSkipped -gt 0) {
+        Write-Summary "WARN" $ToolName "$($script:dtSkipped) skipped (user review)"
+    } else {
+        Write-Summary "OK" $ToolName $text
     }
 }
 
@@ -1001,68 +1123,34 @@ function Deploy-EmbeddedSkill {
 
     $destDir = Join-Path $DestBase $SkillName
     $dest = Join-Path $destDir "SKILL.md"
+    $adoptLabel = ""
+    $cfgFile = Join-Path $env:USERPROFILE ".aitools\config.json"
+    $repoPath = ReadConfigKey -File $cfgFile -Key "repoPath"
+    if ($repoPath) { $adoptLabel = "shared/" }
 
-    if ($DryRun) {
-        Log "[DRY RUN] Would deploy skill: $SkillName -> $dest"
-        return
-    }
+    $skillResult = Deploy-ManagedFile -Content $Content -DestPath $dest -ToolName $ToolName -ItemName $SkillName -AdoptLabel $adoptLabel
 
-    if (-not (Test-Path $destDir)) {
-        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-    }
-
-    if ((Test-Path $dest)) {
-        try {
-            $existing = Get-Content $dest -Raw -ErrorAction Stop
-        } catch {
-            LogWarn "Cannot read $dest for diff: $_"
-            $existing = ""
-        }
-        if ($existing -eq $Content) {
-            LogOk "Skill unchanged: $SkillName"
-            return
-        }
-        # File differs -- backup and review
-        Backup-File -FilePath $dest
-        $adoptLabel = ""
-        $cfgFile = Join-Path $env:USERPROFILE ".aitools\config.json"
-        $repoPath = ReadConfigKey -File $cfgFile -Key "repoPath"
-        if ($repoPath) { $adoptLabel = "shared/" }
-        $result = Prompt-DiffReview -FilePath $dest -NewContent $Content -AdoptLabel $adoptLabel
-        switch ($result) {
-            "adopt" {
-                if ($repoPath) {
-                    $adoptDir = Join-Path (Join-Path $repoPath "shared\skills") $SkillName
-                    if (-not (Test-Path $adoptDir)) {
-                        New-Item -ItemType Directory -Path $adoptDir -Force | Out-Null
-                    }
-                    $adoptDest = Join-Path $adoptDir "SKILL.md"
-                    Copy-Item -Path $dest -Destination $adoptDest -Force -ErrorAction Stop
-                    LogOk "Adopted skill to shared/: $SkillName"
-                    Write-Summary "DETAIL" $ToolName "adopted: $SkillName"
-                }
-                # Sync adopted content to all other deploy targets so
-                # subsequent deploy loops see no diff (prevents clobber)
-                foreach ($otherBase in $allSkillDests) {
-                    if ($otherBase -eq $DestBase) { continue }
-                    $otherDir = Join-Path $otherBase $SkillName
-                    if (-not (Test-Path $otherDir)) {
-                        New-Item -ItemType Directory -Path $otherDir -Force | Out-Null
-                    }
-                    Copy-Item -Path $dest -Destination (Join-Path $otherDir "SKILL.md") -Force
-                }
-                return
+    if ($skillResult -eq "adopted") {
+        if ($repoPath) {
+            $adoptDir = Join-Path (Join-Path $repoPath "shared\skills") $SkillName
+            if (-not (Test-Path $adoptDir)) {
+                New-Item -ItemType Directory -Path $adoptDir -Force | Out-Null
             }
-            "skip" {
-                LogWarn "Skill skipped: $SkillName"
-                Write-Summary "DETAIL" $ToolName "skipped: $SkillName"
-                return
+            $adoptDest = Join-Path $adoptDir "SKILL.md"
+            Copy-Item -Path $dest -Destination $adoptDest -Force -ErrorAction Stop
+            LogOk "Adopted skill to shared/: $SkillName"
+        }
+        # Sync to all other deploy targets (prevents clobber)
+        foreach ($otherBase in $allSkillDests) {
+            if ($otherBase -eq $DestBase) { continue }
+            $otherDir = Join-Path $otherBase $SkillName
+            if (-not (Test-Path $otherDir)) {
+                New-Item -ItemType Directory -Path $otherDir -Force | Out-Null
             }
+            Copy-Item -Path $dest -Destination (Join-Path $otherDir "SKILL.md") -Force
         }
     }
-    # Write content (new file or overwrite after review)
-    [System.IO.File]::WriteAllText($dest, $Content, [System.Text.UTF8Encoding]::new($false))
-    LogOk "Deployed skill: $SkillName -> $dest"
+    Record-DeployOutcome -Outcome $skillResult -ToolName $ToolName -ItemName $SkillName
 }
 
 $chromeDevtoolsSkill = @'
@@ -1274,6 +1362,20 @@ Verify document-level accessibility settings often missed in component testing:
 });
 ```
 
+### 8. ARIA Live Regions
+
+Live regions announce dynamic content updates to screen readers. Verify they work correctly:
+
+1. Use `take_snapshot` to identify elements with `aria-live`, `role="alert"`, `role="status"`, or `role="log"`
+2. Trigger the dynamic update (e.g., form submission, async load)
+3. `take_snapshot` again — check that the live region content changed
+4. Verify `aria-live` politeness: `"polite"` for non-urgent updates, `"assertive"` for critical alerts
+
+**Common mistakes:**
+- Adding `aria-live` to an element that already has content (screen readers only announce *changes*)
+- Using `aria-live="assertive"` for non-critical notifications (interrupts the user)
+- Nesting live regions (unpredictable behavior across screen readers)
+
 ## Troubleshooting
 
 If standard a11y queries fail or the `evaluate_script` snippets return unexpected results:
@@ -1283,20 +1385,22 @@ If standard a11y queries fail or the `evaluate_script` snippets return unexpecte
 
 Log "Deploying skills to $skillsDest..."
 $errorsBeforeClaudeSkills = $errors
+Initialize-DeployTracker
 Deploy-EmbeddedSkill "chrome-devtools" $skillsDest "claude skills" $chromeDevtoolsSkill
 Deploy-EmbeddedSkill "a11y-debugging" $skillsDest "claude skills" $a11ySkill
 if ($errors -eq $errorsBeforeClaudeSkills) {
-    Write-Summary "OK" "claude skills" "deployed"
+    Write-DeployTrackerSummary -ToolName "claude skills"
 } else {
     Write-Summary "ERROR" "claude skills" "deploy failed"
 }
 
 Log "Deploying skills to $skillsDestCursor..."
 $errorsBeforeCursorSkills = $errors
+Initialize-DeployTracker
 Deploy-EmbeddedSkill "chrome-devtools" $skillsDestCursor "cursor skills" $chromeDevtoolsSkill
 Deploy-EmbeddedSkill "a11y-debugging" $skillsDestCursor "cursor skills" $a11ySkill
 if ($errors -eq $errorsBeforeCursorSkills) {
-    Write-Summary "OK" "cursor skills" "deployed"
+    Write-DeployTrackerSummary -ToolName "cursor skills"
 } else {
     Write-Summary "ERROR" "cursor skills" "deploy failed"
 }

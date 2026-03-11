@@ -332,90 +332,53 @@ function Deploy-Skill {
         return
     }
 
-    if ($DryRun) {
-        Log "[DRY RUN] Would deploy skill: $SkillName -> $dest"
+    try {
+        $srcContent = Get-Content $src -Raw -ErrorAction Stop
+    } catch {
+        LogError "Cannot read skill source $SkillName`: $_"
         return
     }
 
-    if (-not (Test-Path $destDir)) {
-        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-    }
+    $skillResult = Deploy-ManagedFile -Content $srcContent -DestPath $dest -ToolName $ToolName -ItemName $SkillName -AdoptLabel "shared/"
 
-    if (Test-Path $dest) {
-        $srcContent = Get-Content $src -Raw -ErrorAction Stop
-        $dstContent = Get-Content $dest -Raw -ErrorAction Stop
-        if ($srcContent -eq $dstContent) {
-            LogOk "Skill unchanged: $SkillName"
-        } else {
-            # File differs -- backup and review before overwriting
-            Backup-File -FilePath $dest
-            $skillAdoptLabel = ""
-            if (Test-Path $src) { $skillAdoptLabel = "shared/" }
-            $skillReview = Prompt-DiffReview -FilePath $dest -NewContent $srcContent -AdoptLabel $skillAdoptLabel
-            switch ($skillReview) {
-                "adopt" {
-                    # Copy deployed version back to repo source
-                    Copy-Item -Path $dest -Destination $src -Force -ErrorAction Stop
-                    LogOk "Adopted skill to shared/: $SkillName"
-                    Write-Summary "DETAIL" $ToolName "adopted: $SkillName"
-                    # Sync adopted content to all other deploy targets so
-                    # subsequent deploy loops see no diff (prevents clobber)
-                    foreach ($otherBase in $allSkillDests) {
-                        if ($otherBase -eq $DestBase) { continue }
-                        $otherDir = Join-Path $otherBase $SkillName
-                        if (-not (Test-Path $otherDir)) {
-                            New-Item -ItemType Directory -Path $otherDir -Force | Out-Null
-                        }
-                        Copy-Item -Path $dest -Destination (Join-Path $otherDir "SKILL.md") -Force
-                    }
-                    return
-                }
-                "skip" {
-                    LogWarn "Skill skipped: $SkillName"
-                    Write-Summary "DETAIL" $ToolName "skipped: $SkillName"
-                    return
-                }
+    if ($skillResult -eq "adopted") {
+        # Copy deployed version back to repo source
+        Copy-Item -Path $dest -Destination $src -Force -ErrorAction Stop
+        LogOk "Adopted skill to shared/: $SkillName"
+        # Sync adopted content to all other deploy targets (prevents clobber)
+        foreach ($otherBase in $allSkillDests) {
+            if ($otherBase -eq $DestBase) { continue }
+            $otherDir = Join-Path $otherBase $SkillName
+            if (-not (Test-Path $otherDir)) {
+                New-Item -ItemType Directory -Path $otherDir -Force | Out-Null
             }
-            # overwrite: proceed with update
-            Copy-Item -Path $src -Destination $dest -Force
-            LogOk "Skill updated: $SkillName -> $dest"
-            Write-Summary "DETAIL" $ToolName "updated: $SkillName"
-            $script:skillChanges++
+            Copy-Item -Path $dest -Destination (Join-Path $otherDir "SKILL.md") -Force
         }
-    } else {
-        Copy-Item -Path $src -Destination $dest -Force
-        LogOk "Skill created: $SkillName -> $dest"
-        Write-Summary "DETAIL" $ToolName "added: $SkillName"
+    }
+    if ($skillResult -eq "created" -or $skillResult -eq "updated") {
         $script:skillChanges++
     }
+    Record-DeployOutcome -Outcome $skillResult -ToolName $ToolName -ItemName $SkillName
 }
 
 Log "Deploying Chrome DevTools skills to $skillsDest..."
 $errorsBeforeClaudeSkills = $errors
-$script:skillChanges = 0
+Initialize-DeployTracker
 Deploy-Skill "chrome-devtools" $skillsDest "claude skills"
 Deploy-Skill "a11y-debugging" $skillsDest "claude skills"
 if ($errors -eq $errorsBeforeClaudeSkills) {
-    if ($script:skillChanges -gt 0) {
-        Write-Summary "OK" "claude skills" "updated"
-    } else {
-        Write-Summary "OK" "claude skills" "unchanged"
-    }
+    Write-DeployTrackerSummary -ToolName "claude skills"
 } else {
     Write-Summary "ERROR" "claude skills" "deploy failed"
 }
 
 Log "Deploying Chrome DevTools skills to $skillsDestCursor..."
 $errorsBeforeCursorSkills = $errors
-$script:skillChanges = 0
+Initialize-DeployTracker
 Deploy-Skill "chrome-devtools" $skillsDestCursor "cursor skills"
 Deploy-Skill "a11y-debugging" $skillsDestCursor "cursor skills"
 if ($errors -eq $errorsBeforeCursorSkills) {
-    if ($script:skillChanges -gt 0) {
-        Write-Summary "OK" "cursor skills" "updated"
-    } else {
-        Write-Summary "OK" "cursor skills" "unchanged"
-    }
+    Write-DeployTrackerSummary -ToolName "cursor skills"
 } else {
     Write-Summary "ERROR" "cursor skills" "deploy failed"
 }

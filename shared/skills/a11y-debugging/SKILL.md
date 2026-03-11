@@ -141,6 +141,20 @@ Verify document-level accessibility settings often missed in component testing:
 });
 ```
 
+### 8. ARIA Live Regions
+
+Live regions announce dynamic content updates to screen readers. Verify they work correctly:
+
+1. Use `take_snapshot` to identify elements with `aria-live`, `role="alert"`, `role="status"`, or `role="log"`
+2. Trigger the dynamic update (e.g., form submission, async load)
+3. `take_snapshot` again — check that the live region content changed
+4. Verify `aria-live` politeness: `"polite"` for non-urgent updates, `"assertive"` for critical alerts
+
+**Common mistakes:**
+- Adding `aria-live` to an element that already has content (screen readers only announce *changes*)
+- Using `aria-live="assertive"` for non-critical notifications (interrupts the user)
+- Nesting live regions (unpredictable behavior across screen readers)
+
 ## Troubleshooting
 
 If standard a11y queries fail or the `evaluate_script` snippets return unexpected results:

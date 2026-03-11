@@ -264,103 +264,50 @@ if ($DryRun) {
         Log "[DRY RUN] File does not exist -- would create"
     }
 } else {
-    # --- Diff review before overwrite ---
-    $claudeMdSkipped = $false
-    if ((Test-Path $claudeMd)) {
-        try {
-            $existingCheck = Get-Content $claudeMd -Raw -ErrorAction Stop
-        } catch {
-            $existingCheck = ""
-        }
-        if ($existingCheck -and $existingCheck -ne $content) {
-            $adoptLabel = ""
-            if ($userRepoPath) { $adoptLabel = "profile" }
-            $reviewResult = Prompt-DiffReview -FilePath $claudeMd -NewContent $content -AdoptLabel $adoptLabel
-            switch ($reviewResult) {
-                "adopt" {
-                    $adoptDest = Join-Path $userRepoPath "claude\CLAUDE.md"
-                    if (Adopt-ClaudeMd -DeployedPath $claudeMd -DestPath $adoptDest) {
-                        Write-Summary "OK" "claude.md" "adopted to profile"
-                    } else {
-                        Write-Summary "ERROR" "claude.md" "adopt failed"
-                    }
-                    $claudeMdSkipped = $true
-                }
-                "skip" {
-                    LogWarn "Skipped CLAUDE.md (user chose skip)"
-                    Write-Summary "WARN" "claude.md" "skipped (user review)"
-                    $claudeMdSkipped = $true
-                }
+    # --- Deploy CLAUDE.md via managed-file flow ---
+    $adoptLabel = ""
+    if ($userRepoPath) { $adoptLabel = "profile" }
+    $claudeResult = Deploy-ManagedFile -Content $content -DestPath $claudeMd -ToolName "claude.md" -ItemName "CLAUDE.md" -AdoptLabel $adoptLabel
+
+    switch ($claudeResult) {
+        "adopted" {
+            $adoptDest = Join-Path $userRepoPath "claude\CLAUDE.md"
+            if (Adopt-ClaudeMd -DeployedPath $claudeMd -DestPath $adoptDest) {
+                Write-Summary "OK" "claude.md" "adopted to profile"
+            } else {
+                Write-Summary "ERROR" "claude.md" "adopt failed"
             }
         }
-    }
-
-    if (-not $claudeMdSkipped) {
-    # Backup and remove existing file so we always write the latest version
-    Backup-File -FilePath $claudeMd
-    # Capture existing content for post-write comparison
-    $oldContent = ""
-    if (Test-Path $claudeMd) {
-        try {
-            $oldContent = Get-Content $claudeMd -Raw -ErrorAction Stop
-        } catch {
-            LogWarn "Cannot read existing CLAUDE.md for comparison: $_"
+        "skipped" {
+            Write-Summary "WARN" "claude.md" "skipped (user review)"
         }
-    }
-    if (Test-Path $claudeMd) {
-        Remove-Item $claudeMd
-        Log "Removed existing $claudeMd"
-    }
-
-    $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($claudeMd)
-    [System.IO.File]::WriteAllText($resolvedPath, $content, [System.Text.UTF8Encoding]::new($false))
-
-    # --- BEGIN post-write validation (extracted by build-deploy) ---
-    # Post-write validation: check structure AND content (not just a marker)
-    if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
-        LogError "Validation failed: $claudeMd is empty or missing"
-    } else {
-        $written = Get-Content $claudeMd -Raw
-        if ($written -notmatch '## Machine-Specific') {
-            LogError "Validation failed: $claudeMd missing Machine-Specific section"
-        }
-        # Template body must be present -- a file with only the footer is corrupt
-        if ($written -notmatch '## Coaching|## Code Style|## Tool') {
-            LogError "Validation failed: $claudeMd missing template body (only footer present?)"
-        }
-    }
-    # --- END post-write validation (extracted by build-deploy) ---
-
-    LogOk "Wrote $claudeMd"
-    # Determine what changed for summary detail
-    if (-not $oldContent) {
-        Log "Content: new file"
-        $claudeMdDetail = "created"
-    } elseif ($oldContent -eq $content) {
-        Log "Content unchanged (no differences)"
-        $claudeMdDetail = "unchanged"
-    } else {
-        Log "Content updated"
-        $claudeMdDetail = "updated"
-        # Log diff to deploy log (not console)
-        $oldLines = @($oldContent -split "`n")
-        $newLines = @($content -split "`n")
-        $diffResult = Compare-Object $oldLines $newLines -PassThru
-        if ($diffResult) {
-            Add-Content -Path $logFile -Value "  --- previous/CLAUDE.md"
-            Add-Content -Path $logFile -Value "  +++ new/CLAUDE.md"
-            foreach ($line in $diffResult) {
-                $side = if ($line.SideIndicator -eq '<=') { '-' } else { '+' }
-                Add-Content -Path $logFile -Value "  $side $line"
+        { $_ -eq "created" -or $_ -eq "updated" } {
+            # --- BEGIN post-write validation (extracted by build-deploy) ---
+            # Post-write validation: check structure AND content (not just a marker)
+            if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
+                LogError "Validation failed: $claudeMd is empty or missing"
+            } else {
+                $written = Get-Content $claudeMd -Raw
+                if ($written -notmatch '## Machine-Specific') {
+                    LogError "Validation failed: $claudeMd missing Machine-Specific section"
+                }
+                # Template body must be present -- a file with only the footer is corrupt
+                if ($written -notmatch '## Coaching|## Code Style|## Tool') {
+                    LogError "Validation failed: $claudeMd missing template body (only footer present?)"
+                }
+            }
+            # --- END post-write validation (extracted by build-deploy) ---
+            if ($errors -eq 0) {
+                Write-Summary "OK" "claude.md" "$claudeResult"
+            } else {
+                Write-Summary "ERROR" "claude.md" "validation failed"
             }
         }
+        "unchanged" {
+            Log "CLAUDE.md unchanged (no differences)"
+            Write-Summary "OK" "claude.md" "unchanged"
+        }
     }
-    if ($errors -eq 0 -and $warnings -eq 0) {
-        Write-Summary "OK" "claude.md" "$claudeMdDetail"
-    } elseif ($errors -gt 0) {
-        Write-Summary "ERROR" "claude.md" "validation failed"
-    }
-    }  # end claudeMdSkipped check
 }
 
 # --- BEGIN rules deployment (extracted by build-deploy) ---
@@ -425,78 +372,41 @@ if ($rulesSrc) {
             New-Item -ItemType Directory -Path $rulesDest -Force | Out-Null
         }
 
-        $added = 0; $updated = 0; $unchanged = 0; $adopted = 0; $skipped = 0
+        Initialize-DeployTracker
+        $errorsBefore = $errors
         foreach ($rf in $sourceRules) {
             $destFile = Join-Path $rulesDest $rf.Name
-            if (Test-Path $destFile) {
-                try {
-                    $oldContent = Get-Content $destFile -Raw -ErrorAction Stop
-                    $newContent = Get-Content $rf.FullName -Raw -ErrorAction Stop
-                } catch {
-                    LogWarn "Cannot read files for comparison ($($rf.Name)): $_"
-                    # Proceed with overwrite since we can't compare
-                    Log "Updating: $($rf.Name) (comparison failed, overwriting)"
-                    $updated++
-                    Copy-Item -Path $rf.FullName -Destination $destFile -Force -ErrorAction Stop
-                    continue
-                }
-                if ($oldContent -eq $newContent) {
-                    Log "Unchanged: $($rf.Name) (no differences)"
-                    $unchanged++
-                    continue
-                }
-                # File differs from source -- review before overwriting
-                $ruleAdoptLabel = ""
-                if ($userRepoPath) { $ruleAdoptLabel = "profile" }
-                $ruleReview = Prompt-DiffReview -FilePath $destFile -NewContent $newContent -AdoptLabel $ruleAdoptLabel
-                switch ($ruleReview) {
-                    "adopt" {
-                        $adoptRuleDest = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name
-                        $adoptRuleDir = Split-Path -Parent $adoptRuleDest
-                        if (-not (Test-Path $adoptRuleDir)) {
-                            New-Item -ItemType Directory -Path $adoptRuleDir -Force | Out-Null
-                        }
-                        Copy-Item -Path $destFile -Destination $adoptRuleDest -Force -ErrorAction Stop
-                        LogOk "Adopted rule to profile: $($rf.Name)"
-                        $adopted++
-                        continue
-                    }
-                    "skip" {
-                        LogWarn "Skipped rule: $($rf.Name)"
-                        $skipped++
-                        continue
-                    }
-                }
-                # overwrite: proceed with update
-                Log "Updating: $($rf.Name)"
-                $oldLines = @($oldContent -split "`n")
-                $newLines = @($newContent -split "`n")
-                $diffResult = Compare-Object $oldLines $newLines -PassThru
-                if ($diffResult) {
-                    foreach ($line in $diffResult) {
-                        $side = if ($line.SideIndicator -eq '<=') { '-' } else { '+' }
-                        Add-Content -Path $logFile -Value "  $side $line"
-                    }
-                }
-                $updated++
-                Write-Summary "DETAIL" "claude rules" "updated: $($rf.Name)"
-            } else {
-                Log "Adding: $($rf.Name) (new)"
-                $added++
-                Write-Summary "DETAIL" "claude rules" "added: $($rf.Name)"
+            $ruleAdoptLabel = ""
+            if ($userRepoPath) { $ruleAdoptLabel = "profile" }
+
+            try {
+                $ruleContent = Get-Content $rf.FullName -Raw -ErrorAction Stop
+            } catch {
+                LogWarn "Cannot read source rule $($rf.Name): $_"
+                continue
             }
-            Copy-Item -Path $rf.FullName -Destination $destFile -Force -ErrorAction Stop
+            $ruleResult = Deploy-ManagedFile -Content $ruleContent -DestPath $destFile -ToolName "claude rules" -ItemName $rf.Name -AdoptLabel $ruleAdoptLabel
+
+            if ($ruleResult -eq "adopted") {
+                $adoptRuleDest = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name
+                $adoptRuleDir = Split-Path -Parent $adoptRuleDest
+                if (-not (Test-Path $adoptRuleDir)) {
+                    New-Item -ItemType Directory -Path $adoptRuleDir -Force | Out-Null
+                }
+                Copy-Item -Path $destFile -Destination $adoptRuleDest -Force -ErrorAction Stop
+                LogOk "Adopted rule to profile: $($rf.Name)"
+            }
+            Record-DeployOutcome -Outcome $ruleResult -ToolName "claude rules" -ItemName $rf.Name
         }
 
         # Log preserved files (in target but not in source)
-        $preserved = 0
         if (Test-Path $rulesDest) {
             $existingFiles = Get-ChildItem -Path $rulesDest -Filter "*.md" -File -ErrorAction Stop
             foreach ($ef in $existingFiles) {
                 $srcMatch = Join-Path $rulesSrc $ef.Name
                 if (-not (Test-Path $srcMatch)) {
                     Log "Preserved unmanaged rule: $($ef.Name)"
-                    $preserved++
+                    Record-DeployOutcome -Outcome "preserved" -ToolName "claude rules" -ItemName $ef.Name
                 }
             }
         }
@@ -509,13 +419,9 @@ if ($rulesSrc) {
             }
         }
 
-        if ($errors -eq 0) {
-            LogOk "Rules: $added added, $updated updated, $unchanged unchanged, $adopted adopted, $skipped skipped, $preserved preserved in $rulesDest"
-            if ($skipped -gt 0) {
-                Write-Summary "WARN" "claude rules" "$skipped skipped (user review)"
-            } else {
-                Write-Summary "OK" "claude rules" "$added added, $updated updated, $unchanged unchanged"
-            }
+        if ($errors -eq $errorsBefore) {
+            LogOk "Rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $rulesDest"
+            Write-DeployTrackerSummary -ToolName "claude rules"
         } else {
             Write-Summary "ERROR" "claude rules" "validation failed"
         }

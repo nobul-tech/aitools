@@ -236,10 +236,10 @@ prompt_diff_review() {
     if [ -n "$adopt_label" ]; then
         printf '  [A]dopt to %s  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' \
             "$adopt_label" > /dev/tty
-        printf '  Choice [A/O/s/x]: ' > /dev/tty
+        printf '  Choice [A/O/S/X]: ' > /dev/tty
     else
         printf '  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' > /dev/tty
-        printf '  Choice [O/s/x]: ' > /dev/tty
+        printf '  Choice [O/S/X]: ' > /dev/tty
     fi
     local choice
     read -r choice < /dev/tty
@@ -255,6 +255,135 @@ prompt_diff_review() {
         *)  DIFF_REVIEW_RESULT="overwrite" ;;
     esac
     return 0
+}
+
+# ---------------------------------------------------------------------------
+# Deploy a managed file with diff review. Handles compare, backup, prompt,
+# and write. Caller handles the adopt action (varies by file type).
+#
+# Args:
+#   $1 = source content (string to deploy)
+#   $2 = dest file path (deployed location)
+#   $3 = tool name (for summary, e.g., "claude rules")
+#   $4 = item name (for DETAIL summary, e.g., "concurrent-agents.md")
+#   $5 = adopt label ("profile", "shared/", or "" to hide adopt option)
+#
+# Sets MANAGED_FILE_RESULT to: "created", "updated", "unchanged", "adopted", "skipped"
+# Exits with code 2 on abort (from prompt_diff_review).
+# On "adopted"/"skipped": does NOT write the file (caller decides).
+# On "created"/"updated": writes src_content to dest.
+# ---------------------------------------------------------------------------
+MANAGED_FILE_RESULT=""
+deploy_managed_file() {
+    local src_content="$1"
+    local dest="$2"
+    local tool_name="$3"
+    local item_name="$4"
+    local adopt_label="${5:-}"
+
+    MANAGED_FILE_RESULT="unchanged"
+
+    # Dry run: report what would happen without writing
+    if [ "${DRY_RUN:-}" = "true" ]; then
+        if [ -f "$dest" ]; then
+            if [ "$(cat "$dest")" = "$src_content" ]; then
+                log "[DRY RUN] Unchanged: $item_name"
+            else
+                log "[DRY RUN] Would update: $item_name -> $(display_path "$dest")"
+            fi
+        else
+            log "[DRY RUN] Would create: $item_name -> $(display_path "$dest")"
+        fi
+        return 0
+    fi
+
+    mkdir -p "$(dirname "$dest")"
+
+    if [ -f "$dest" ]; then
+        local existing
+        existing=$(cat "$dest")
+        if [ "$existing" = "$src_content" ]; then
+            MANAGED_FILE_RESULT="unchanged"
+            return 0
+        fi
+        # File differs — backup + prompt
+        backup_file "$dest"
+        prompt_diff_review "$dest" "$src_content" "$adopt_label"
+        case "$DIFF_REVIEW_RESULT" in
+            adopt)
+                MANAGED_FILE_RESULT="adopted"
+                return 0
+                ;;
+            skip)
+                log_warn "Skipped: $item_name"
+                MANAGED_FILE_RESULT="skipped"
+                return 0
+                ;;
+        esac
+        # overwrite: write source content to dest
+        printf '%s\n' "$src_content" > "$dest"
+        MANAGED_FILE_RESULT="updated"
+        log_ok "Updated: $item_name -> $(display_path "$dest")"
+    else
+        # New file — create
+        printf '%s\n' "$src_content" > "$dest"
+        MANAGED_FILE_RESULT="created"
+        log_ok "Created: $item_name -> $(display_path "$dest")"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Deploy tracker: centralizes outcome counting and summary writing for
+# loops that deploy multiple managed files (rules, skills, hooks).
+# ---------------------------------------------------------------------------
+
+# Reset all deploy tracker counters. Call before a deploy loop.
+_DT_ADDED=0; _DT_UPDATED=0; _DT_UNCHANGED=0
+_DT_ADOPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0
+DEPLOY_TRACKER_TEXT=""
+
+deploy_tracker_init() {
+    _DT_ADDED=0; _DT_UPDATED=0; _DT_UNCHANGED=0
+    _DT_ADOPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0
+    DEPLOY_TRACKER_TEXT=""
+}
+
+# Record a single file outcome. Increments counter and writes DETAIL summary.
+# Args: $1=outcome $2=tool_name $3=item_name
+deploy_tracker_record() {
+    local outcome="$1" tool_name="$2" item_name="$3"
+    case "$outcome" in
+        added|created) _DT_ADDED=$((_DT_ADDED + 1))
+                   write_summary DETAIL "$tool_name" "added: $item_name" ;;
+        updated)   _DT_UPDATED=$((_DT_UPDATED + 1))
+                   write_summary DETAIL "$tool_name" "updated: $item_name" ;;
+        adopted)   _DT_ADOPTED=$((_DT_ADOPTED + 1))
+                   write_summary DETAIL "$tool_name" "adopted: $item_name" ;;
+        skipped)   _DT_SKIPPED=$((_DT_SKIPPED + 1))
+                   write_summary DETAIL "$tool_name" "skipped: $item_name" ;;
+        unchanged) _DT_UNCHANGED=$((_DT_UNCHANGED + 1)) ;;
+        preserved) _DT_PRESERVED=$((_DT_PRESERVED + 1)) ;;
+    esac
+}
+
+# Write aggregate summary for a deploy loop. Uses non-zero counts.
+# Sets DEPLOY_TRACKER_TEXT for use in log lines.
+# Args: $1=tool_name
+deploy_tracker_summary() {
+    local tool_name="$1"
+    local parts=""
+    [ "$_DT_ADDED" -gt 0 ]     && parts="$_DT_ADDED added"
+    [ "$_DT_UPDATED" -gt 0 ]   && parts="${parts:+$parts, }$_DT_UPDATED updated"
+    [ "$_DT_ADOPTED" -gt 0 ]   && parts="${parts:+$parts, }$_DT_ADOPTED adopted"
+    [ "$_DT_UNCHANGED" -gt 0 ] && parts="${parts:+$parts, }$_DT_UNCHANGED unchanged"
+    [ -z "$parts" ] && parts="unchanged"
+    DEPLOY_TRACKER_TEXT="$parts"
+
+    if [ "$_DT_SKIPPED" -gt 0 ]; then
+        write_summary WARN "$tool_name" "$_DT_SKIPPED skipped (user review)"
+    else
+        write_summary OK "$tool_name" "$parts"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -753,15 +882,15 @@ ${SHARED_CONTENT}
 - Shell: ${SHELL_NAME}
 CLAUDE_EOF
 
-    # Post-write validation: check structure AND content (not just a marker)
-    if [ ! -s "$CLAUDE_MD" ]; then
-        log_error "Validation failed: $CLAUDE_MD is empty or missing"
-    elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
-        log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
-    elif ! grep -qE "## (Coaching|Code Style|Tool)" "$CLAUDE_MD"; then
-        # Template body must be present -- a file with only the footer is corrupt
-        log_error "Validation failed: $CLAUDE_MD missing template body (only footer present?)"
-    fi
+            # Post-write validation: check structure AND content (not just a marker)
+            if [ ! -s "$CLAUDE_MD" ]; then
+                log_error "Validation failed: $CLAUDE_MD is empty or missing"
+            elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
+                log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
+            elif ! grep -qE "## (Coaching|Code Style|Tool)" "$CLAUDE_MD"; then
+                # Template body must be present -- a file with only the footer is corrupt
+                log_error "Validation failed: $CLAUDE_MD missing template body (only footer present?)"
+            fi
 
     log_ok "Wrote $(display_path "$CLAUDE_MD")"
     if [ "$ERRORS" -eq 0 ]; then
@@ -794,6 +923,14 @@ cat > "$RULES_SRC/concurrent-agents.md" <<'__RULE_concurrent_agents_md___'
 Multiple AI agents (Claude Code, Cursor Agent CLI) may edit a codebase concurrently.
 
 Before editing a file, run `git diff` to check for unexpected changes from another agent session.
+
+### Conflict Resolution
+
+If `git diff` reveals unexpected changes:
+1. Read the changed sections to understand intent
+2. If changes are complementary, preserve both
+3. If changes conflict, ask the user which to keep
+4. Never silently overwrite another agent's work
 __RULE_concurrent_agents_md___
 RULES_DEST="$CLAUDE_DIR/rules"
 if [ -n "$RULES_SRC" ]; then
@@ -836,61 +973,35 @@ if [ -n "$RULES_SRC" ]; then
         backup_dir "$RULES_DEST"
         mkdir -p "$RULES_DEST"
 
-        ADDED=0; UPDATED=0; UNCHANGED=0; ADOPTED=0; SKIPPED=0
+        deploy_tracker_init
+        ERRORS_BEFORE_RULES=$ERRORS
         for rule_file in "$RULES_SRC"/*.md; do
             [ -f "$rule_file" ] || continue
             rule_name=$(basename "$rule_file")
-            if [ -f "$RULES_DEST/$rule_name" ]; then
-                # diff -q: exits 0 if identical, 1 if different (expected behavior)
-                if diff -q "$RULES_DEST/$rule_name" "$rule_file" >/dev/null 2>&1; then
-                    log "Unchanged: $rule_name (no differences)"
-                    UNCHANGED=$((UNCHANGED + 1))
-                    continue
-                fi
-                # File differs from source -- review before overwriting
-                _adopt_label=""
-                if [ -n "${USER_REPO_PATH:-}" ]; then
-                    _adopt_label="profile"
-                fi
-                prompt_diff_review "$RULES_DEST/$rule_name" "$(cat "$rule_file")" "$_adopt_label"
-                case "$DIFF_REVIEW_RESULT" in
-                    adopt)
-                        mkdir -p "$USER_REPO_PATH/claude/rules"
-                        cp "$RULES_DEST/$rule_name" "$USER_REPO_PATH/claude/rules/$rule_name"
-                        log_ok "Adopted rule to profile: $rule_name"
-                        ADOPTED=$((ADOPTED + 1))
-                        continue
-                        ;;
-                    skip)
-                        log_warn "Skipped rule: $rule_name"
-                        SKIPPED=$((SKIPPED + 1))
-                        continue
-                        ;;
-                esac
-                # overwrite: proceed with update
-                log "Updating: $rule_name"
-                diff -u "$RULES_DEST/$rule_name" "$rule_file" \
-                    --label "deployed/$rule_name" --label "source/$rule_name" \
-                    >> "$LOG_FILE" 2>&1 || true  # diff exits 1 on differences; diff appended to deploy log
-                UPDATED=$((UPDATED + 1))
-                write_summary DETAIL "claude rules" "updated: $rule_name"
-            else
-                log "Adding: $rule_name (new)"
-                ADDED=$((ADDED + 1))
-                write_summary DETAIL "claude rules" "added: $rule_name"
+            _adopt_label=""
+            if [ -n "${USER_REPO_PATH:-}" ]; then
+                _adopt_label="profile"
             fi
-            cp "$rule_file" "$RULES_DEST/$rule_name"
+            deploy_managed_file "$(cat "$rule_file")" "$RULES_DEST/$rule_name" "claude rules" "$rule_name" "$_adopt_label"
+
+            case "$MANAGED_FILE_RESULT" in
+                adopted)
+                    mkdir -p "$USER_REPO_PATH/claude/rules"
+                    cp "$RULES_DEST/$rule_name" "$USER_REPO_PATH/claude/rules/$rule_name"
+                    log_ok "Adopted rule to profile: $rule_name"
+                    ;;
+            esac
+            deploy_tracker_record "$MANAGED_FILE_RESULT" "claude rules" "$rule_name"
         done
 
         # Log preserved files (in target but not in source)
-        PRESERVED=0
         if [ -d "$RULES_DEST" ]; then
             for existing in "$RULES_DEST"/*.md; do
                 [ -f "$existing" ] || continue
                 exist_name=$(basename "$existing")
                 if [ ! -f "$RULES_SRC/$exist_name" ]; then
                     log "Preserved unmanaged rule: $exist_name"
-                    PRESERVED=$((PRESERVED + 1))
+                    deploy_tracker_record "preserved" "claude rules" "$exist_name"
                 fi
             done
         fi
@@ -904,13 +1015,9 @@ if [ -n "$RULES_SRC" ]; then
             fi
         done
 
-        if [ "$ERRORS" -eq 0 ]; then
-            log_ok "Rules: $ADDED added, $UPDATED updated, $UNCHANGED unchanged, $ADOPTED adopted, $SKIPPED skipped, $PRESERVED preserved in $(display_path "$RULES_DEST")"
-            if [ "$SKIPPED" -gt 0 ]; then
-                write_summary WARN "claude rules" "$SKIPPED skipped (user review)"
-            else
-                write_summary OK "claude rules" "$ADDED added, $UPDATED updated, $UNCHANGED unchanged"
-            fi
+        if [ "$ERRORS" -eq "$ERRORS_BEFORE_RULES" ]; then
+            log_ok "Rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$RULES_DEST")"
+            deploy_tracker_summary "claude rules"
         else
             write_summary ERROR "claude rules" "validation failed"
         fi

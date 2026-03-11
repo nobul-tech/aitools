@@ -12,6 +12,37 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.49.0 -- Centralize diff review deploy flow into lib functions (2026-03-11)
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **`deploy_managed_file` / `Deploy-ManagedFile`**: New lib function centralizing the full compare→backup→prompt→write flow for managed file deployment. Callers handle adopt action (varies by file type). Available in all deploy scripts via build-time inlining. |
+| 2 | **Deploy tracker functions**: `deploy_tracker_init/record/summary` (bash) and `Initialize-DeployTracker/Record-DeployOutcome/Write-DeployTrackerSummary` (PS1) centralize outcome counting and aggregate summary writing for deploy loops. |
+| 3 | **ARIA Live Regions audit step**: Added section 8 to `a11y-debugging/SKILL.md` covering `aria-live`, `role="alert"`, `role="status"` verification. |
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 4 | **setup-user-claude refactored**: CLAUDE.md deploy and rules deploy loop now use `deploy_managed_file` and deploy tracker instead of inline diff/backup/write logic. Reduces code duplication and ensures consistent summary reporting. |
+| 5 | **setup-user-mcp skills refactored**: `deploy_skill` / `Deploy-Skill` now delegates to `deploy_managed_file`. Deploy loops use tracker for granular outcome summaries (e.g., "1 added, 1 unchanged" instead of just "deployed"). |
+| 6 | **build-deploy.sh skills refactored**: `deploy_embedded_skill` / `Deploy-EmbeddedSkill` in generated deploy scripts use `deploy_managed_file` and deploy tracker. |
+| 7 | **Sentinel regex relaxed**: `build-deploy.sh` `extract_between` patterns for post-write validation now use `\s*` instead of fixed 4-space indent, accommodating refactored code structure. |
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 8 | **Adopt missing from summary**: Rules and skills adopt now emits `write_summary DETAIL` lines and includes adopted count in aggregate summary (was silently omitted). |
+| 9 | **Case inconsistency fully fixed**: Diff review prompt hint now `[A/O/S/X]` (all uppercase). v0.48.1 partially fixed to `[A/O/s/x]` — this completes the fix. |
+| 10 | **created/added mismatch**: Deploy tracker now accepts both `"created"` and `"added"` as outcomes, preventing silent count misses for newly created files. |
+
+**Verified on:** macOS (syntax validation, build 30/30, pre-commit 0 FAIL, dry-run smoke tests). Windows: not tested (PS1 syntax validated).
+
+---
+
 ## v0.48.1 -- Fix adopt clobber, case inconsistency, add accordion skill (2026-03-11)
 
 ### Fixed

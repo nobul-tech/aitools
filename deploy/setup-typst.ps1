@@ -209,10 +209,10 @@ function Prompt-DiffReview {
     [Console]::WriteLine("")
     if ($AdoptLabel) {
         [Console]::WriteLine("  [A]dopt to $AdoptLabel  [O]verwrite (backup kept)  [S]kip  [X] Abort")
-        [Console]::Write("  Choice [A/O/s/x]: ")
+        [Console]::Write("  Choice [A/O/S/X]: ")
     } else {
         [Console]::WriteLine("  [O]verwrite (backup kept)  [S]kip  [X] Abort")
-        [Console]::Write("  Choice [O/s/x]: ")
+        [Console]::Write("  Choice [O/S/X]: ")
     }
     $choice = [Console]::ReadLine()
     switch ($choice.ToLower()) {
@@ -226,6 +226,128 @@ function Prompt-DiffReview {
             exit 2
         }
         default { return "overwrite" }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Deploy a managed file with diff review. Handles compare, backup, prompt,
+# and write. Caller handles the adopt action (varies by file type).
+#
+# Returns: "created", "updated", "unchanged", "adopted", or "skipped"
+# Exits with code 2 on abort.
+# On "adopted"/"skipped": does NOT write the file.
+# On "created"/"updated": writes content to dest.
+# ---------------------------------------------------------------------------
+function Deploy-ManagedFile {
+    param(
+        [string]$Content,
+        [string]$DestPath,
+        [string]$ToolName,
+        [string]$ItemName,
+        [string]$AdoptLabel = ""
+    )
+
+    # Dry run: report what would happen without writing
+    if ($DryRun) {
+        if (Test-Path $DestPath) {
+            try {
+                $existing = Get-Content $DestPath -Raw -ErrorAction Stop
+            } catch {
+                $existing = ""
+            }
+            if ($existing -eq $Content) {
+                Log "[DRY RUN] Unchanged: $ItemName"
+            } else {
+                Log "[DRY RUN] Would update: $ItemName -> $DestPath"
+            }
+        } else {
+            Log "[DRY RUN] Would create: $ItemName -> $DestPath"
+        }
+        return "unchanged"
+    }
+
+    $destDir = Split-Path -Parent $DestPath
+    if (-not (Test-Path $destDir)) {
+        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+    }
+
+    if (Test-Path $DestPath) {
+        try {
+            $existing = Get-Content $DestPath -Raw -ErrorAction Stop
+        } catch {
+            LogWarn "Cannot read $DestPath for comparison: $_"
+            $existing = ""
+        }
+        if ($existing -eq $Content) {
+            return "unchanged"
+        }
+        # File differs -- backup + prompt
+        Backup-File -FilePath $DestPath
+        $result = Prompt-DiffReview -FilePath $DestPath -NewContent $Content -AdoptLabel $AdoptLabel
+        switch ($result) {
+            "adopt" { return "adopted" }
+            "skip" {
+                LogWarn "Skipped: $ItemName"
+                return "skipped"
+            }
+        }
+        # overwrite: write source content to dest
+        $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
+        [System.IO.File]::WriteAllText($resolved, $Content, [System.Text.UTF8Encoding]::new($false))
+        LogOk "Updated: $ItemName -> $DestPath"
+        return "updated"
+    } else {
+        # New file -- create
+        $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
+        [System.IO.File]::WriteAllText($resolved, $Content, [System.Text.UTF8Encoding]::new($false))
+        LogOk "Created: $ItemName -> $DestPath"
+        return "created"
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Deploy tracker: centralizes outcome counting and summary writing for
+# loops that deploy multiple managed files (rules, skills, hooks).
+# ---------------------------------------------------------------------------
+
+$script:dtAdded = 0; $script:dtUpdated = 0; $script:dtUnchanged = 0
+$script:dtAdopted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0
+$script:deployTrackerText = ""
+
+function Initialize-DeployTracker {
+    $script:dtAdded = 0; $script:dtUpdated = 0; $script:dtUnchanged = 0
+    $script:dtAdopted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0
+    $script:deployTrackerText = ""
+}
+
+# Record a single file outcome. Increments counter and writes DETAIL summary.
+function Record-DeployOutcome {
+    param([string]$Outcome, [string]$ToolName, [string]$ItemName)
+    switch ($Outcome) {
+        { $_ -eq "added" -or $_ -eq "created" } { $script:dtAdded++;     Write-Summary "DETAIL" $ToolName "added: $ItemName" }
+        "updated"   { $script:dtUpdated++;   Write-Summary "DETAIL" $ToolName "updated: $ItemName" }
+        "adopted"   { $script:dtAdopted++;   Write-Summary "DETAIL" $ToolName "adopted: $ItemName" }
+        "skipped"   { $script:dtSkipped++;   Write-Summary "DETAIL" $ToolName "skipped: $ItemName" }
+        "unchanged" { $script:dtUnchanged++ }
+        "preserved" { $script:dtPreserved++ }
+    }
+}
+
+# Write aggregate summary for a deploy loop. Uses non-zero counts.
+function Write-DeployTrackerSummary {
+    param([string]$ToolName)
+    $parts = @()
+    if ($script:dtAdded -gt 0)     { $parts += "$($script:dtAdded) added" }
+    if ($script:dtUpdated -gt 0)   { $parts += "$($script:dtUpdated) updated" }
+    if ($script:dtAdopted -gt 0)   { $parts += "$($script:dtAdopted) adopted" }
+    if ($script:dtUnchanged -gt 0) { $parts += "$($script:dtUnchanged) unchanged" }
+    $text = if ($parts.Count -gt 0) { $parts -join ", " } else { "unchanged" }
+    $script:deployTrackerText = $text
+
+    if ($script:dtSkipped -gt 0) {
+        Write-Summary "WARN" $ToolName "$($script:dtSkipped) skipped (user review)"
+    } else {
+        Write-Summary "OK" $ToolName $text
     }
 }
 

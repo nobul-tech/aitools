@@ -219,10 +219,10 @@ function Prompt-DiffReview {
     [Console]::WriteLine("")
     if ($AdoptLabel) {
         [Console]::WriteLine("  [A]dopt to $AdoptLabel  [O]verwrite (backup kept)  [S]kip  [X] Abort")
-        [Console]::Write("  Choice [A/O/s/x]: ")
+        [Console]::Write("  Choice [A/O/S/X]: ")
     } else {
         [Console]::WriteLine("  [O]verwrite (backup kept)  [S]kip  [X] Abort")
-        [Console]::Write("  Choice [O/s/x]: ")
+        [Console]::Write("  Choice [O/S/X]: ")
     }
     $choice = [Console]::ReadLine()
     switch ($choice.ToLower()) {
@@ -236,6 +236,128 @@ function Prompt-DiffReview {
             exit 2
         }
         default { return "overwrite" }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Deploy a managed file with diff review. Handles compare, backup, prompt,
+# and write. Caller handles the adopt action (varies by file type).
+#
+# Returns: "created", "updated", "unchanged", "adopted", or "skipped"
+# Exits with code 2 on abort.
+# On "adopted"/"skipped": does NOT write the file.
+# On "created"/"updated": writes content to dest.
+# ---------------------------------------------------------------------------
+function Deploy-ManagedFile {
+    param(
+        [string]$Content,
+        [string]$DestPath,
+        [string]$ToolName,
+        [string]$ItemName,
+        [string]$AdoptLabel = ""
+    )
+
+    # Dry run: report what would happen without writing
+    if ($DryRun) {
+        if (Test-Path $DestPath) {
+            try {
+                $existing = Get-Content $DestPath -Raw -ErrorAction Stop
+            } catch {
+                $existing = ""
+            }
+            if ($existing -eq $Content) {
+                Log "[DRY RUN] Unchanged: $ItemName"
+            } else {
+                Log "[DRY RUN] Would update: $ItemName -> $DestPath"
+            }
+        } else {
+            Log "[DRY RUN] Would create: $ItemName -> $DestPath"
+        }
+        return "unchanged"
+    }
+
+    $destDir = Split-Path -Parent $DestPath
+    if (-not (Test-Path $destDir)) {
+        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+    }
+
+    if (Test-Path $DestPath) {
+        try {
+            $existing = Get-Content $DestPath -Raw -ErrorAction Stop
+        } catch {
+            LogWarn "Cannot read $DestPath for comparison: $_"
+            $existing = ""
+        }
+        if ($existing -eq $Content) {
+            return "unchanged"
+        }
+        # File differs -- backup + prompt
+        Backup-File -FilePath $DestPath
+        $result = Prompt-DiffReview -FilePath $DestPath -NewContent $Content -AdoptLabel $AdoptLabel
+        switch ($result) {
+            "adopt" { return "adopted" }
+            "skip" {
+                LogWarn "Skipped: $ItemName"
+                return "skipped"
+            }
+        }
+        # overwrite: write source content to dest
+        $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
+        [System.IO.File]::WriteAllText($resolved, $Content, [System.Text.UTF8Encoding]::new($false))
+        LogOk "Updated: $ItemName -> $DestPath"
+        return "updated"
+    } else {
+        # New file -- create
+        $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
+        [System.IO.File]::WriteAllText($resolved, $Content, [System.Text.UTF8Encoding]::new($false))
+        LogOk "Created: $ItemName -> $DestPath"
+        return "created"
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Deploy tracker: centralizes outcome counting and summary writing for
+# loops that deploy multiple managed files (rules, skills, hooks).
+# ---------------------------------------------------------------------------
+
+$script:dtAdded = 0; $script:dtUpdated = 0; $script:dtUnchanged = 0
+$script:dtAdopted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0
+$script:deployTrackerText = ""
+
+function Initialize-DeployTracker {
+    $script:dtAdded = 0; $script:dtUpdated = 0; $script:dtUnchanged = 0
+    $script:dtAdopted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0
+    $script:deployTrackerText = ""
+}
+
+# Record a single file outcome. Increments counter and writes DETAIL summary.
+function Record-DeployOutcome {
+    param([string]$Outcome, [string]$ToolName, [string]$ItemName)
+    switch ($Outcome) {
+        { $_ -eq "added" -or $_ -eq "created" } { $script:dtAdded++;     Write-Summary "DETAIL" $ToolName "added: $ItemName" }
+        "updated"   { $script:dtUpdated++;   Write-Summary "DETAIL" $ToolName "updated: $ItemName" }
+        "adopted"   { $script:dtAdopted++;   Write-Summary "DETAIL" $ToolName "adopted: $ItemName" }
+        "skipped"   { $script:dtSkipped++;   Write-Summary "DETAIL" $ToolName "skipped: $ItemName" }
+        "unchanged" { $script:dtUnchanged++ }
+        "preserved" { $script:dtPreserved++ }
+    }
+}
+
+# Write aggregate summary for a deploy loop. Uses non-zero counts.
+function Write-DeployTrackerSummary {
+    param([string]$ToolName)
+    $parts = @()
+    if ($script:dtAdded -gt 0)     { $parts += "$($script:dtAdded) added" }
+    if ($script:dtUpdated -gt 0)   { $parts += "$($script:dtUpdated) updated" }
+    if ($script:dtAdopted -gt 0)   { $parts += "$($script:dtAdopted) adopted" }
+    if ($script:dtUnchanged -gt 0) { $parts += "$($script:dtUnchanged) unchanged" }
+    $text = if ($parts.Count -gt 0) { $parts -join ", " } else { "unchanged" }
+    $script:deployTrackerText = $text
+
+    if ($script:dtSkipped -gt 0) {
+        Write-Summary "WARN" $ToolName "$($script:dtSkipped) skipped (user review)"
+    } else {
+        Write-Summary "OK" $ToolName $text
     }
 }
 
@@ -925,19 +1047,19 @@ if ($DryRun) {
     $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($claudeMd)
     [System.IO.File]::WriteAllText($resolvedPath, $content, [System.Text.UTF8Encoding]::new($false))
 
-    # Post-write validation: check structure AND content (not just a marker)
-    if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
-        LogError "Validation failed: $claudeMd is empty or missing"
-    } else {
-        $written = Get-Content $claudeMd -Raw
-        if ($written -notmatch '## Machine-Specific') {
-            LogError "Validation failed: $claudeMd missing Machine-Specific section"
-        }
-        # Template body must be present -- a file with only the footer is corrupt
-        if ($written -notmatch '## Coaching|## Code Style|## Tool') {
-            LogError "Validation failed: $claudeMd missing template body (only footer present?)"
-        }
-    }
+            # Post-write validation: check structure AND content (not just a marker)
+            if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
+                LogError "Validation failed: $claudeMd is empty or missing"
+            } else {
+                $written = Get-Content $claudeMd -Raw
+                if ($written -notmatch '## Machine-Specific') {
+                    LogError "Validation failed: $claudeMd missing Machine-Specific section"
+                }
+                # Template body must be present -- a file with only the footer is corrupt
+                if ($written -notmatch '## Coaching|## Code Style|## Tool') {
+                    LogError "Validation failed: $claudeMd missing template body (only footer present?)"
+                }
+            }
 
     LogOk "Wrote $claudeMd"
     if ($errors -eq 0) {
@@ -977,6 +1099,14 @@ $_rule_concurrent_agents_md_ = @'
 Multiple AI agents (Claude Code, Cursor Agent CLI) may edit a codebase concurrently.
 
 Before editing a file, run `git diff` to check for unexpected changes from another agent session.
+
+### Conflict Resolution
+
+If `git diff` reveals unexpected changes:
+1. Read the changed sections to understand intent
+2. If changes are complementary, preserve both
+3. If changes conflict, ask the user which to keep
+4. Never silently overwrite another agent's work
 '@
 $_ruleDest_concurrent_agents_md_ = Join-Path $rulesSrc "concurrent-agents.md"
 [System.IO.File]::WriteAllText($_ruleDest_concurrent_agents_md_, $_rule_concurrent_agents_md_, [System.Text.UTF8Encoding]::new($false))
@@ -1031,78 +1161,41 @@ if ($rulesSrc) {
             New-Item -ItemType Directory -Path $rulesDest -Force | Out-Null
         }
 
-        $added = 0; $updated = 0; $unchanged = 0; $adopted = 0; $skipped = 0
+        Initialize-DeployTracker
+        $errorsBefore = $errors
         foreach ($rf in $sourceRules) {
             $destFile = Join-Path $rulesDest $rf.Name
-            if (Test-Path $destFile) {
-                try {
-                    $oldContent = Get-Content $destFile -Raw -ErrorAction Stop
-                    $newContent = Get-Content $rf.FullName -Raw -ErrorAction Stop
-                } catch {
-                    LogWarn "Cannot read files for comparison ($($rf.Name)): $_"
-                    # Proceed with overwrite since we can't compare
-                    Log "Updating: $($rf.Name) (comparison failed, overwriting)"
-                    $updated++
-                    Copy-Item -Path $rf.FullName -Destination $destFile -Force -ErrorAction Stop
-                    continue
-                }
-                if ($oldContent -eq $newContent) {
-                    Log "Unchanged: $($rf.Name) (no differences)"
-                    $unchanged++
-                    continue
-                }
-                # File differs from source -- review before overwriting
-                $ruleAdoptLabel = ""
-                if ($userRepoPath) { $ruleAdoptLabel = "profile" }
-                $ruleReview = Prompt-DiffReview -FilePath $destFile -NewContent $newContent -AdoptLabel $ruleAdoptLabel
-                switch ($ruleReview) {
-                    "adopt" {
-                        $adoptRuleDest = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name
-                        $adoptRuleDir = Split-Path -Parent $adoptRuleDest
-                        if (-not (Test-Path $adoptRuleDir)) {
-                            New-Item -ItemType Directory -Path $adoptRuleDir -Force | Out-Null
-                        }
-                        Copy-Item -Path $destFile -Destination $adoptRuleDest -Force -ErrorAction Stop
-                        LogOk "Adopted rule to profile: $($rf.Name)"
-                        $adopted++
-                        continue
-                    }
-                    "skip" {
-                        LogWarn "Skipped rule: $($rf.Name)"
-                        $skipped++
-                        continue
-                    }
-                }
-                # overwrite: proceed with update
-                Log "Updating: $($rf.Name)"
-                $oldLines = @($oldContent -split "`n")
-                $newLines = @($newContent -split "`n")
-                $diffResult = Compare-Object $oldLines $newLines -PassThru
-                if ($diffResult) {
-                    foreach ($line in $diffResult) {
-                        $side = if ($line.SideIndicator -eq '<=') { '-' } else { '+' }
-                        Add-Content -Path $logFile -Value "  $side $line"
-                    }
-                }
-                $updated++
-                Write-Summary "DETAIL" "claude rules" "updated: $($rf.Name)"
-            } else {
-                Log "Adding: $($rf.Name) (new)"
-                $added++
-                Write-Summary "DETAIL" "claude rules" "added: $($rf.Name)"
+            $ruleAdoptLabel = ""
+            if ($userRepoPath) { $ruleAdoptLabel = "profile" }
+
+            try {
+                $ruleContent = Get-Content $rf.FullName -Raw -ErrorAction Stop
+            } catch {
+                LogWarn "Cannot read source rule $($rf.Name): $_"
+                continue
             }
-            Copy-Item -Path $rf.FullName -Destination $destFile -Force -ErrorAction Stop
+            $ruleResult = Deploy-ManagedFile -Content $ruleContent -DestPath $destFile -ToolName "claude rules" -ItemName $rf.Name -AdoptLabel $ruleAdoptLabel
+
+            if ($ruleResult -eq "adopted") {
+                $adoptRuleDest = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name
+                $adoptRuleDir = Split-Path -Parent $adoptRuleDest
+                if (-not (Test-Path $adoptRuleDir)) {
+                    New-Item -ItemType Directory -Path $adoptRuleDir -Force | Out-Null
+                }
+                Copy-Item -Path $destFile -Destination $adoptRuleDest -Force -ErrorAction Stop
+                LogOk "Adopted rule to profile: $($rf.Name)"
+            }
+            Record-DeployOutcome -Outcome $ruleResult -ToolName "claude rules" -ItemName $rf.Name
         }
 
         # Log preserved files (in target but not in source)
-        $preserved = 0
         if (Test-Path $rulesDest) {
             $existingFiles = Get-ChildItem -Path $rulesDest -Filter "*.md" -File -ErrorAction Stop
             foreach ($ef in $existingFiles) {
                 $srcMatch = Join-Path $rulesSrc $ef.Name
                 if (-not (Test-Path $srcMatch)) {
                     Log "Preserved unmanaged rule: $($ef.Name)"
-                    $preserved++
+                    Record-DeployOutcome -Outcome "preserved" -ToolName "claude rules" -ItemName $ef.Name
                 }
             }
         }
@@ -1115,13 +1208,9 @@ if ($rulesSrc) {
             }
         }
 
-        if ($errors -eq 0) {
-            LogOk "Rules: $added added, $updated updated, $unchanged unchanged, $adopted adopted, $skipped skipped, $preserved preserved in $rulesDest"
-            if ($skipped -gt 0) {
-                Write-Summary "WARN" "claude rules" "$skipped skipped (user review)"
-            } else {
-                Write-Summary "OK" "claude rules" "$added added, $updated updated, $unchanged unchanged"
-            }
+        if ($errors -eq $errorsBefore) {
+            LogOk "Rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $rulesDest"
+            Write-DeployTrackerSummary -ToolName "claude rules"
         } else {
             Write-Summary "ERROR" "claude rules" "validation failed"
         }

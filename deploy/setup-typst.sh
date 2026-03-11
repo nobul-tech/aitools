@@ -223,10 +223,10 @@ prompt_diff_review() {
     if [ -n "$adopt_label" ]; then
         printf '  [A]dopt to %s  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' \
             "$adopt_label" > /dev/tty
-        printf '  Choice [A/O/s/x]: ' > /dev/tty
+        printf '  Choice [A/O/S/X]: ' > /dev/tty
     else
         printf '  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' > /dev/tty
-        printf '  Choice [O/s/x]: ' > /dev/tty
+        printf '  Choice [O/S/X]: ' > /dev/tty
     fi
     local choice
     read -r choice < /dev/tty
@@ -242,6 +242,135 @@ prompt_diff_review() {
         *)  DIFF_REVIEW_RESULT="overwrite" ;;
     esac
     return 0
+}
+
+# ---------------------------------------------------------------------------
+# Deploy a managed file with diff review. Handles compare, backup, prompt,
+# and write. Caller handles the adopt action (varies by file type).
+#
+# Args:
+#   $1 = source content (string to deploy)
+#   $2 = dest file path (deployed location)
+#   $3 = tool name (for summary, e.g., "claude rules")
+#   $4 = item name (for DETAIL summary, e.g., "concurrent-agents.md")
+#   $5 = adopt label ("profile", "shared/", or "" to hide adopt option)
+#
+# Sets MANAGED_FILE_RESULT to: "created", "updated", "unchanged", "adopted", "skipped"
+# Exits with code 2 on abort (from prompt_diff_review).
+# On "adopted"/"skipped": does NOT write the file (caller decides).
+# On "created"/"updated": writes src_content to dest.
+# ---------------------------------------------------------------------------
+MANAGED_FILE_RESULT=""
+deploy_managed_file() {
+    local src_content="$1"
+    local dest="$2"
+    local tool_name="$3"
+    local item_name="$4"
+    local adopt_label="${5:-}"
+
+    MANAGED_FILE_RESULT="unchanged"
+
+    # Dry run: report what would happen without writing
+    if [ "${DRY_RUN:-}" = "true" ]; then
+        if [ -f "$dest" ]; then
+            if [ "$(cat "$dest")" = "$src_content" ]; then
+                log "[DRY RUN] Unchanged: $item_name"
+            else
+                log "[DRY RUN] Would update: $item_name -> $(display_path "$dest")"
+            fi
+        else
+            log "[DRY RUN] Would create: $item_name -> $(display_path "$dest")"
+        fi
+        return 0
+    fi
+
+    mkdir -p "$(dirname "$dest")"
+
+    if [ -f "$dest" ]; then
+        local existing
+        existing=$(cat "$dest")
+        if [ "$existing" = "$src_content" ]; then
+            MANAGED_FILE_RESULT="unchanged"
+            return 0
+        fi
+        # File differs — backup + prompt
+        backup_file "$dest"
+        prompt_diff_review "$dest" "$src_content" "$adopt_label"
+        case "$DIFF_REVIEW_RESULT" in
+            adopt)
+                MANAGED_FILE_RESULT="adopted"
+                return 0
+                ;;
+            skip)
+                log_warn "Skipped: $item_name"
+                MANAGED_FILE_RESULT="skipped"
+                return 0
+                ;;
+        esac
+        # overwrite: write source content to dest
+        printf '%s\n' "$src_content" > "$dest"
+        MANAGED_FILE_RESULT="updated"
+        log_ok "Updated: $item_name -> $(display_path "$dest")"
+    else
+        # New file — create
+        printf '%s\n' "$src_content" > "$dest"
+        MANAGED_FILE_RESULT="created"
+        log_ok "Created: $item_name -> $(display_path "$dest")"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Deploy tracker: centralizes outcome counting and summary writing for
+# loops that deploy multiple managed files (rules, skills, hooks).
+# ---------------------------------------------------------------------------
+
+# Reset all deploy tracker counters. Call before a deploy loop.
+_DT_ADDED=0; _DT_UPDATED=0; _DT_UNCHANGED=0
+_DT_ADOPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0
+DEPLOY_TRACKER_TEXT=""
+
+deploy_tracker_init() {
+    _DT_ADDED=0; _DT_UPDATED=0; _DT_UNCHANGED=0
+    _DT_ADOPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0
+    DEPLOY_TRACKER_TEXT=""
+}
+
+# Record a single file outcome. Increments counter and writes DETAIL summary.
+# Args: $1=outcome $2=tool_name $3=item_name
+deploy_tracker_record() {
+    local outcome="$1" tool_name="$2" item_name="$3"
+    case "$outcome" in
+        added|created) _DT_ADDED=$((_DT_ADDED + 1))
+                   write_summary DETAIL "$tool_name" "added: $item_name" ;;
+        updated)   _DT_UPDATED=$((_DT_UPDATED + 1))
+                   write_summary DETAIL "$tool_name" "updated: $item_name" ;;
+        adopted)   _DT_ADOPTED=$((_DT_ADOPTED + 1))
+                   write_summary DETAIL "$tool_name" "adopted: $item_name" ;;
+        skipped)   _DT_SKIPPED=$((_DT_SKIPPED + 1))
+                   write_summary DETAIL "$tool_name" "skipped: $item_name" ;;
+        unchanged) _DT_UNCHANGED=$((_DT_UNCHANGED + 1)) ;;
+        preserved) _DT_PRESERVED=$((_DT_PRESERVED + 1)) ;;
+    esac
+}
+
+# Write aggregate summary for a deploy loop. Uses non-zero counts.
+# Sets DEPLOY_TRACKER_TEXT for use in log lines.
+# Args: $1=tool_name
+deploy_tracker_summary() {
+    local tool_name="$1"
+    local parts=""
+    [ "$_DT_ADDED" -gt 0 ]     && parts="$_DT_ADDED added"
+    [ "$_DT_UPDATED" -gt 0 ]   && parts="${parts:+$parts, }$_DT_UPDATED updated"
+    [ "$_DT_ADOPTED" -gt 0 ]   && parts="${parts:+$parts, }$_DT_ADOPTED adopted"
+    [ "$_DT_UNCHANGED" -gt 0 ] && parts="${parts:+$parts, }$_DT_UNCHANGED unchanged"
+    [ -z "$parts" ] && parts="unchanged"
+    DEPLOY_TRACKER_TEXT="$parts"
+
+    if [ "$_DT_SKIPPED" -gt 0 ]; then
+        write_summary WARN "$tool_name" "$_DT_SKIPPED skipped (user review)"
+    else
+        write_summary OK "$tool_name" "$parts"
+    fi
 }
 
 # ---------------------------------------------------------------------------

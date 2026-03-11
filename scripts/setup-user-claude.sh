@@ -207,80 +207,46 @@ if [ "$DRY_RUN" = "true" ]; then
         log "[DRY RUN] File does not exist -- would create"
     fi
 else
-    # --- Diff review before overwrite ---
-    CLAUDE_MD_SKIPPED=""
-    if [ -f "$CLAUDE_MD" ] && [ "$(cat "$CLAUDE_MD")" != "$NEW_CONTENT" ]; then
-        _adopt_label=""
-        if [ -n "${USER_REPO_PATH:-}" ]; then
-            _adopt_label="profile"
-        fi
-        prompt_diff_review "$CLAUDE_MD" "$NEW_CONTENT" "$_adopt_label"
-        case "$DIFF_REVIEW_RESULT" in
-            adopt)
-                adopt_claude_md "$CLAUDE_MD" "$USER_REPO_PATH/claude/CLAUDE.md"
-                write_summary OK "claude.md" "adopted to profile"
-                CLAUDE_MD_SKIPPED=1
-                ;;
-            skip)
-                log_warn "Skipped CLAUDE.md (user chose skip)"
-                write_summary WARN "claude.md" "skipped (user review)"
-                CLAUDE_MD_SKIPPED=1
-                ;;
-        esac
+    # --- Deploy CLAUDE.md via managed-file flow ---
+    _adopt_label=""
+    if [ -n "${USER_REPO_PATH:-}" ]; then
+        _adopt_label="profile"
     fi
+    deploy_managed_file "$NEW_CONTENT" "$CLAUDE_MD" "claude.md" "CLAUDE.md" "$_adopt_label"
 
-    if [ -z "$CLAUDE_MD_SKIPPED" ]; then
-    # Backup and remove existing file so we always write the latest version
-    backup_file "$CLAUDE_MD"
-    # Capture existing content for post-write comparison
-    OLD_CONTENT=""
-    if [ -f "$CLAUDE_MD" ]; then
-        OLD_CONTENT=$(cat "$CLAUDE_MD")
-    fi
-    if [ -f "$CLAUDE_MD" ]; then
-        rm "$CLAUDE_MD"
-        log "Removed existing $(display_path "$CLAUDE_MD")"
-    fi
-
-    # --- Write CLAUDE.md ---
-    printf '%s\n' "$NEW_CONTENT" > "$CLAUDE_MD"
-
-    # --- BEGIN post-write validation (extracted by build-deploy) ---
-    # Post-write validation: check structure AND content (not just a marker)
-    if [ ! -s "$CLAUDE_MD" ]; then
-        log_error "Validation failed: $CLAUDE_MD is empty or missing"
-    elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
-        log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
-    elif ! grep -qE "## (Coaching|Code Style|Tool)" "$CLAUDE_MD"; then
-        # Template body must be present -- a file with only the footer is corrupt
-        log_error "Validation failed: $CLAUDE_MD missing template body (only footer present?)"
-    fi
-    # --- END post-write validation (extracted by build-deploy) ---
-
-    log_ok "Wrote $(display_path "$CLAUDE_MD")"
-    # Determine what changed for summary detail
-    NEW_WRITTEN=$(cat "$CLAUDE_MD")
-    if [ -z "$OLD_CONTENT" ]; then
-        log "Content: new file"
-        CLAUDE_MD_DETAIL="created"
-    elif [ "$OLD_CONTENT" = "$NEW_WRITTEN" ]; then
-        log "Content unchanged (no differences)"
-        CLAUDE_MD_DETAIL="unchanged"
-    else
-        log "Content updated"
-        CLAUDE_MD_DETAIL="updated"
-        # Log unified diff to deploy log (not console)
-        diff -u <(echo "$OLD_CONTENT") <(echo "$NEW_WRITTEN") \
-            --label "previous/CLAUDE.md" --label "new/CLAUDE.md" \
-            >> "$LOG_FILE" 2>&1 || true  # diff exits 1 on differences (expected)
-    fi
-    if [ "$ERRORS" -eq 0 ] && [ "$WARNINGS" -eq 0 ]; then
-        write_summary OK "claude.md" "$CLAUDE_MD_DETAIL"
-    elif [ "$ERRORS" -gt 0 ]; then
-        write_summary ERROR "claude.md" "validation failed"
-    fi
-    fi  # end CLAUDE_MD_SKIPPED check
+    case "$MANAGED_FILE_RESULT" in
+        adopted)
+            adopt_claude_md "$CLAUDE_MD" "$USER_REPO_PATH/claude/CLAUDE.md"
+            write_summary OK "claude.md" "adopted to profile"
+            ;;
+        skipped)
+            write_summary WARN "claude.md" "skipped (user review)"
+            ;;
+        created|updated)
+            # --- BEGIN post-write validation (extracted by build-deploy) ---
+            # Post-write validation: check structure AND content (not just a marker)
+            if [ ! -s "$CLAUDE_MD" ]; then
+                log_error "Validation failed: $CLAUDE_MD is empty or missing"
+            elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
+                log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
+            elif ! grep -qE "## (Coaching|Code Style|Tool)" "$CLAUDE_MD"; then
+                # Template body must be present -- a file with only the footer is corrupt
+                log_error "Validation failed: $CLAUDE_MD missing template body (only footer present?)"
+            fi
+            # --- END post-write validation (extracted by build-deploy) ---
+            if [ "$ERRORS" -eq 0 ]; then
+                write_summary OK "claude.md" "$MANAGED_FILE_RESULT"
+            else
+                write_summary ERROR "claude.md" "validation failed"
+            fi
+            ;;
+        unchanged)
+            log "CLAUDE.md unchanged (no differences)"
+            write_summary OK "claude.md" "unchanged"
+            ;;
+    esac
 fi
+
 
 # --- BEGIN rules deployment (extracted by build-deploy) ---
 # Deploy user rules: additive (add/update managed, preserve unmanaged, log diffs).
@@ -332,61 +298,35 @@ if [ -n "$RULES_SRC" ]; then
         backup_dir "$RULES_DEST"
         mkdir -p "$RULES_DEST"
 
-        ADDED=0; UPDATED=0; UNCHANGED=0; ADOPTED=0; SKIPPED=0
+        deploy_tracker_init
+        ERRORS_BEFORE_RULES=$ERRORS
         for rule_file in "$RULES_SRC"/*.md; do
             [ -f "$rule_file" ] || continue
             rule_name=$(basename "$rule_file")
-            if [ -f "$RULES_DEST/$rule_name" ]; then
-                # diff -q: exits 0 if identical, 1 if different (expected behavior)
-                if diff -q "$RULES_DEST/$rule_name" "$rule_file" >/dev/null 2>&1; then
-                    log "Unchanged: $rule_name (no differences)"
-                    UNCHANGED=$((UNCHANGED + 1))
-                    continue
-                fi
-                # File differs from source -- review before overwriting
-                _adopt_label=""
-                if [ -n "${USER_REPO_PATH:-}" ]; then
-                    _adopt_label="profile"
-                fi
-                prompt_diff_review "$RULES_DEST/$rule_name" "$(cat "$rule_file")" "$_adopt_label"
-                case "$DIFF_REVIEW_RESULT" in
-                    adopt)
-                        mkdir -p "$USER_REPO_PATH/claude/rules"
-                        cp "$RULES_DEST/$rule_name" "$USER_REPO_PATH/claude/rules/$rule_name"
-                        log_ok "Adopted rule to profile: $rule_name"
-                        ADOPTED=$((ADOPTED + 1))
-                        continue
-                        ;;
-                    skip)
-                        log_warn "Skipped rule: $rule_name"
-                        SKIPPED=$((SKIPPED + 1))
-                        continue
-                        ;;
-                esac
-                # overwrite: proceed with update
-                log "Updating: $rule_name"
-                diff -u "$RULES_DEST/$rule_name" "$rule_file" \
-                    --label "deployed/$rule_name" --label "source/$rule_name" \
-                    >> "$LOG_FILE" 2>&1 || true  # diff exits 1 on differences; diff appended to deploy log
-                UPDATED=$((UPDATED + 1))
-                write_summary DETAIL "claude rules" "updated: $rule_name"
-            else
-                log "Adding: $rule_name (new)"
-                ADDED=$((ADDED + 1))
-                write_summary DETAIL "claude rules" "added: $rule_name"
+            _adopt_label=""
+            if [ -n "${USER_REPO_PATH:-}" ]; then
+                _adopt_label="profile"
             fi
-            cp "$rule_file" "$RULES_DEST/$rule_name"
+            deploy_managed_file "$(cat "$rule_file")" "$RULES_DEST/$rule_name" "claude rules" "$rule_name" "$_adopt_label"
+
+            case "$MANAGED_FILE_RESULT" in
+                adopted)
+                    mkdir -p "$USER_REPO_PATH/claude/rules"
+                    cp "$RULES_DEST/$rule_name" "$USER_REPO_PATH/claude/rules/$rule_name"
+                    log_ok "Adopted rule to profile: $rule_name"
+                    ;;
+            esac
+            deploy_tracker_record "$MANAGED_FILE_RESULT" "claude rules" "$rule_name"
         done
 
         # Log preserved files (in target but not in source)
-        PRESERVED=0
         if [ -d "$RULES_DEST" ]; then
             for existing in "$RULES_DEST"/*.md; do
                 [ -f "$existing" ] || continue
                 exist_name=$(basename "$existing")
                 if [ ! -f "$RULES_SRC/$exist_name" ]; then
                     log "Preserved unmanaged rule: $exist_name"
-                    PRESERVED=$((PRESERVED + 1))
+                    deploy_tracker_record "preserved" "claude rules" "$exist_name"
                 fi
             done
         fi
@@ -400,13 +340,9 @@ if [ -n "$RULES_SRC" ]; then
             fi
         done
 
-        if [ "$ERRORS" -eq 0 ]; then
-            log_ok "Rules: $ADDED added, $UPDATED updated, $UNCHANGED unchanged, $ADOPTED adopted, $SKIPPED skipped, $PRESERVED preserved in $(display_path "$RULES_DEST")"
-            if [ "$SKIPPED" -gt 0 ]; then
-                write_summary WARN "claude rules" "$SKIPPED skipped (user review)"
-            else
-                write_summary OK "claude rules" "$ADDED added, $UPDATED updated, $UNCHANGED unchanged"
-            fi
+        if [ "$ERRORS" -eq "$ERRORS_BEFORE_RULES" ]; then
+            log_ok "Rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$RULES_DEST")"
+            deploy_tracker_summary "claude rules"
         else
             write_summary ERROR "claude rules" "validation failed"
         fi

@@ -227,10 +227,10 @@ prompt_diff_review() {
     if [ -n "$adopt_label" ]; then
         printf '  [A]dopt to %s  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' \
             "$adopt_label" > /dev/tty
-        printf '  Choice [A/O/s/x]: ' > /dev/tty
+        printf '  Choice [A/O/S/X]: ' > /dev/tty
     else
         printf '  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' > /dev/tty
-        printf '  Choice [O/s/x]: ' > /dev/tty
+        printf '  Choice [O/S/X]: ' > /dev/tty
     fi
     local choice
     read -r choice < /dev/tty
@@ -246,6 +246,135 @@ prompt_diff_review() {
         *)  DIFF_REVIEW_RESULT="overwrite" ;;
     esac
     return 0
+}
+
+# ---------------------------------------------------------------------------
+# Deploy a managed file with diff review. Handles compare, backup, prompt,
+# and write. Caller handles the adopt action (varies by file type).
+#
+# Args:
+#   $1 = source content (string to deploy)
+#   $2 = dest file path (deployed location)
+#   $3 = tool name (for summary, e.g., "claude rules")
+#   $4 = item name (for DETAIL summary, e.g., "concurrent-agents.md")
+#   $5 = adopt label ("profile", "shared/", or "" to hide adopt option)
+#
+# Sets MANAGED_FILE_RESULT to: "created", "updated", "unchanged", "adopted", "skipped"
+# Exits with code 2 on abort (from prompt_diff_review).
+# On "adopted"/"skipped": does NOT write the file (caller decides).
+# On "created"/"updated": writes src_content to dest.
+# ---------------------------------------------------------------------------
+MANAGED_FILE_RESULT=""
+deploy_managed_file() {
+    local src_content="$1"
+    local dest="$2"
+    local tool_name="$3"
+    local item_name="$4"
+    local adopt_label="${5:-}"
+
+    MANAGED_FILE_RESULT="unchanged"
+
+    # Dry run: report what would happen without writing
+    if [ "${DRY_RUN:-}" = "true" ]; then
+        if [ -f "$dest" ]; then
+            if [ "$(cat "$dest")" = "$src_content" ]; then
+                log "[DRY RUN] Unchanged: $item_name"
+            else
+                log "[DRY RUN] Would update: $item_name -> $(display_path "$dest")"
+            fi
+        else
+            log "[DRY RUN] Would create: $item_name -> $(display_path "$dest")"
+        fi
+        return 0
+    fi
+
+    mkdir -p "$(dirname "$dest")"
+
+    if [ -f "$dest" ]; then
+        local existing
+        existing=$(cat "$dest")
+        if [ "$existing" = "$src_content" ]; then
+            MANAGED_FILE_RESULT="unchanged"
+            return 0
+        fi
+        # File differs — backup + prompt
+        backup_file "$dest"
+        prompt_diff_review "$dest" "$src_content" "$adopt_label"
+        case "$DIFF_REVIEW_RESULT" in
+            adopt)
+                MANAGED_FILE_RESULT="adopted"
+                return 0
+                ;;
+            skip)
+                log_warn "Skipped: $item_name"
+                MANAGED_FILE_RESULT="skipped"
+                return 0
+                ;;
+        esac
+        # overwrite: write source content to dest
+        printf '%s\n' "$src_content" > "$dest"
+        MANAGED_FILE_RESULT="updated"
+        log_ok "Updated: $item_name -> $(display_path "$dest")"
+    else
+        # New file — create
+        printf '%s\n' "$src_content" > "$dest"
+        MANAGED_FILE_RESULT="created"
+        log_ok "Created: $item_name -> $(display_path "$dest")"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Deploy tracker: centralizes outcome counting and summary writing for
+# loops that deploy multiple managed files (rules, skills, hooks).
+# ---------------------------------------------------------------------------
+
+# Reset all deploy tracker counters. Call before a deploy loop.
+_DT_ADDED=0; _DT_UPDATED=0; _DT_UNCHANGED=0
+_DT_ADOPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0
+DEPLOY_TRACKER_TEXT=""
+
+deploy_tracker_init() {
+    _DT_ADDED=0; _DT_UPDATED=0; _DT_UNCHANGED=0
+    _DT_ADOPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0
+    DEPLOY_TRACKER_TEXT=""
+}
+
+# Record a single file outcome. Increments counter and writes DETAIL summary.
+# Args: $1=outcome $2=tool_name $3=item_name
+deploy_tracker_record() {
+    local outcome="$1" tool_name="$2" item_name="$3"
+    case "$outcome" in
+        added|created) _DT_ADDED=$((_DT_ADDED + 1))
+                   write_summary DETAIL "$tool_name" "added: $item_name" ;;
+        updated)   _DT_UPDATED=$((_DT_UPDATED + 1))
+                   write_summary DETAIL "$tool_name" "updated: $item_name" ;;
+        adopted)   _DT_ADOPTED=$((_DT_ADOPTED + 1))
+                   write_summary DETAIL "$tool_name" "adopted: $item_name" ;;
+        skipped)   _DT_SKIPPED=$((_DT_SKIPPED + 1))
+                   write_summary DETAIL "$tool_name" "skipped: $item_name" ;;
+        unchanged) _DT_UNCHANGED=$((_DT_UNCHANGED + 1)) ;;
+        preserved) _DT_PRESERVED=$((_DT_PRESERVED + 1)) ;;
+    esac
+}
+
+# Write aggregate summary for a deploy loop. Uses non-zero counts.
+# Sets DEPLOY_TRACKER_TEXT for use in log lines.
+# Args: $1=tool_name
+deploy_tracker_summary() {
+    local tool_name="$1"
+    local parts=""
+    [ "$_DT_ADDED" -gt 0 ]     && parts="$_DT_ADDED added"
+    [ "$_DT_UPDATED" -gt 0 ]   && parts="${parts:+$parts, }$_DT_UPDATED updated"
+    [ "$_DT_ADOPTED" -gt 0 ]   && parts="${parts:+$parts, }$_DT_ADOPTED adopted"
+    [ "$_DT_UNCHANGED" -gt 0 ] && parts="${parts:+$parts, }$_DT_UNCHANGED unchanged"
+    [ -z "$parts" ] && parts="unchanged"
+    DEPLOY_TRACKER_TEXT="$parts"
+
+    if [ "$_DT_SKIPPED" -gt 0 ]; then
+        write_summary WARN "$tool_name" "$_DT_SKIPPED skipped (user review)"
+    else
+        write_summary OK "$tool_name" "$parts"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -850,55 +979,31 @@ deploy_embedded_skill() {
 
     local dest_dir="$dest_base/$skill_name"
     local dest="$dest_dir/SKILL.md"
-
-    if [ "$DRY_RUN" = "true" ]; then
-        log "[DRY RUN] Would deploy skill: $skill_name -> $(display_path "$dest")"
-        return
+    local _adopt_label=""
+    local _repo_path
+    _repo_path=$(read_config_key "$HOME/.aitools/config.json" "repoPath")
+    if [ -n "$_repo_path" ]; then
+        _adopt_label="shared/"
     fi
 
-    mkdir -p "$dest_dir"
+    deploy_managed_file "$(cat "$content_file")" "$dest" "$tool_name" "$skill_name" "$_adopt_label"
 
-    if [ -f "$dest" ]; then
-        # diff -q: exits 0 if identical, 1 if different (expected, not an error)
-        if diff -q "$content_file" "$dest" >/dev/null 2>&1; then
-            log_ok "Skill unchanged: $skill_name"
-            return
-        fi
-        # File differs -- backup and review
-        backup_file "$dest"
-        _adopt_label=""
-        _repo_path=$(read_config_key "$HOME/.aitools/config.json" "repoPath")
-        if [ -n "$_repo_path" ]; then
-            _adopt_label="shared/"
-        fi
-        prompt_diff_review "$dest" "$(cat "$content_file")" "$_adopt_label"
-        case "$DIFF_REVIEW_RESULT" in
-            adopt)
-                if [ -n "$_repo_path" ]; then
-                    mkdir -p "$_repo_path/shared/skills/$skill_name"
-                    cp "$dest" "$_repo_path/shared/skills/$skill_name/SKILL.md"
-                    log_ok "Adopted skill to shared/: $skill_name"
-                    write_summary DETAIL "$tool_name" "adopted: $skill_name"
-                fi
-                # Sync adopted content to all other deploy targets so
-                # subsequent deploy loops see no diff (prevents clobber)
-                for _other_base in $ALL_SKILL_DESTS; do
-                    [ "$_other_base" = "$dest_base" ] && continue
-                    mkdir -p "$_other_base/$skill_name"
-                    cp "$dest" "$_other_base/$skill_name/SKILL.md"
-                done
-                return
-                ;;
-            skip)
-                log_warn "Skill skipped: $skill_name"
-                write_summary DETAIL "$tool_name" "skipped: $skill_name"
-                return
-                ;;
-        esac
-    fi
-    # Write content (new file or overwrite after review)
-    cp "$content_file" "$dest"
-    log_ok "Deployed skill: $skill_name -> $(display_path "$dest")"
+    case "$MANAGED_FILE_RESULT" in
+        adopted)
+            if [ -n "$_repo_path" ]; then
+                mkdir -p "$_repo_path/shared/skills/$skill_name"
+                cp "$dest" "$_repo_path/shared/skills/$skill_name/SKILL.md"
+                log_ok "Adopted skill to shared/: $skill_name"
+            fi
+            # Sync to all other deploy targets (prevents clobber)
+            for _other_base in $ALL_SKILL_DESTS; do
+                [ "$_other_base" = "$dest_base" ] && continue
+                mkdir -p "$_other_base/$skill_name"
+                cp "$dest" "$_other_base/$skill_name/SKILL.md"
+            done
+            ;;
+    esac
+    deploy_tracker_record "$MANAGED_FILE_RESULT" "$tool_name" "$skill_name"
 }
 
 _skill_tmp=$(mktemp -d)
@@ -1111,6 +1216,20 @@ Verify document-level accessibility settings often missed in component testing:
 });
 ```
 
+### 8. ARIA Live Regions
+
+Live regions announce dynamic content updates to screen readers. Verify they work correctly:
+
+1. Use `take_snapshot` to identify elements with `aria-live`, `role="alert"`, `role="status"`, or `role="log"`
+2. Trigger the dynamic update (e.g., form submission, async load)
+3. `take_snapshot` again — check that the live region content changed
+4. Verify `aria-live` politeness: `"polite"` for non-urgent updates, `"assertive"` for critical alerts
+
+**Common mistakes:**
+- Adding `aria-live` to an element that already has content (screen readers only announce *changes*)
+- Using `aria-live="assertive"` for non-critical notifications (interrupts the user)
+- Nesting live regions (unpredictable behavior across screen readers)
+
 ## Troubleshooting
 
 If standard a11y queries fail or the `evaluate_script` snippets return unexpected results:
@@ -1120,20 +1239,22 @@ __SKILL_A11Y_DEBUGGING__
 
 log "Deploying skills to $SKILLS_DEST..."
 ERRORS_BEFORE_CLAUDE_SKILLS=$ERRORS
+deploy_tracker_init
 deploy_embedded_skill "chrome-devtools" "$SKILLS_DEST" "claude skills" "$_skill_tmp/chrome-devtools.md"
 deploy_embedded_skill "a11y-debugging" "$SKILLS_DEST" "claude skills" "$_skill_tmp/a11y-debugging.md"
 if [ "$ERRORS" -eq "$ERRORS_BEFORE_CLAUDE_SKILLS" ]; then
-    write_summary OK "claude skills" "deployed"
+    deploy_tracker_summary "claude skills"
 else
     write_summary ERROR "claude skills" "deploy failed"
 fi
 
 log "Deploying skills to $SKILLS_DEST_CURSOR..."
 ERRORS_BEFORE_CURSOR_SKILLS=$ERRORS
+deploy_tracker_init
 deploy_embedded_skill "chrome-devtools" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/chrome-devtools.md"
 deploy_embedded_skill "a11y-debugging" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/a11y-debugging.md"
 if [ "$ERRORS" -eq "$ERRORS_BEFORE_CURSOR_SKILLS" ]; then
-    write_summary OK "cursor skills" "deployed"
+    deploy_tracker_summary "cursor skills"
 else
     write_summary ERROR "cursor skills" "deploy failed"
 fi

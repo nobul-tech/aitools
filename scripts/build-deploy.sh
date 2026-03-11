@@ -330,7 +330,7 @@ CLAUDE_EOF
 BLOCK
     # Extract: post-write validation from scripts/ (single source of truth)
     extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
-        '^    # --- BEGIN post-write validation' '^    # --- END post-write validation'
+        '^\s*# --- BEGIN post-write validation' '^\s*# --- END post-write validation'
     cat <<'BLOCK'
 
     log_ok "Wrote $(display_path "$CLAUDE_MD")"
@@ -498,7 +498,7 @@ if ($DryRun) {
 BLOCK
     # Extract: post-write validation from scripts/ (single source of truth)
     extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
-        '^    # --- BEGIN post-write validation' '^    # --- END post-write validation' --crlf
+        '^\s*# --- BEGIN post-write validation' '^\s*# --- END post-write validation' --crlf
     cat <<'BLOCK'
 
     LogOk "Wrote $claudeMd"
@@ -893,55 +893,31 @@ deploy_embedded_skill() {
 
     local dest_dir="$dest_base/$skill_name"
     local dest="$dest_dir/SKILL.md"
-
-    if [ "$DRY_RUN" = "true" ]; then
-        log "[DRY RUN] Would deploy skill: $skill_name -> $(display_path "$dest")"
-        return
+    local _adopt_label=""
+    local _repo_path
+    _repo_path=$(read_config_key "$HOME/.aitools/config.json" "repoPath")
+    if [ -n "$_repo_path" ]; then
+        _adopt_label="shared/"
     fi
 
-    mkdir -p "$dest_dir"
+    deploy_managed_file "$(cat "$content_file")" "$dest" "$tool_name" "$skill_name" "$_adopt_label"
 
-    if [ -f "$dest" ]; then
-        # diff -q: exits 0 if identical, 1 if different (expected, not an error)
-        if diff -q "$content_file" "$dest" >/dev/null 2>&1; then
-            log_ok "Skill unchanged: $skill_name"
-            return
-        fi
-        # File differs -- backup and review
-        backup_file "$dest"
-        _adopt_label=""
-        _repo_path=$(read_config_key "$HOME/.aitools/config.json" "repoPath")
-        if [ -n "$_repo_path" ]; then
-            _adopt_label="shared/"
-        fi
-        prompt_diff_review "$dest" "$(cat "$content_file")" "$_adopt_label"
-        case "$DIFF_REVIEW_RESULT" in
-            adopt)
-                if [ -n "$_repo_path" ]; then
-                    mkdir -p "$_repo_path/shared/skills/$skill_name"
-                    cp "$dest" "$_repo_path/shared/skills/$skill_name/SKILL.md"
-                    log_ok "Adopted skill to shared/: $skill_name"
-                    write_summary DETAIL "$tool_name" "adopted: $skill_name"
-                fi
-                # Sync adopted content to all other deploy targets so
-                # subsequent deploy loops see no diff (prevents clobber)
-                for _other_base in $ALL_SKILL_DESTS; do
-                    [ "$_other_base" = "$dest_base" ] && continue
-                    mkdir -p "$_other_base/$skill_name"
-                    cp "$dest" "$_other_base/$skill_name/SKILL.md"
-                done
-                return
-                ;;
-            skip)
-                log_warn "Skill skipped: $skill_name"
-                write_summary DETAIL "$tool_name" "skipped: $skill_name"
-                return
-                ;;
-        esac
-    fi
-    # Write content (new file or overwrite after review)
-    cp "$content_file" "$dest"
-    log_ok "Deployed skill: $skill_name -> $(display_path "$dest")"
+    case "$MANAGED_FILE_RESULT" in
+        adopted)
+            if [ -n "$_repo_path" ]; then
+                mkdir -p "$_repo_path/shared/skills/$skill_name"
+                cp "$dest" "$_repo_path/shared/skills/$skill_name/SKILL.md"
+                log_ok "Adopted skill to shared/: $skill_name"
+            fi
+            # Sync to all other deploy targets (prevents clobber)
+            for _other_base in $ALL_SKILL_DESTS; do
+                [ "$_other_base" = "$dest_base" ] && continue
+                mkdir -p "$_other_base/$skill_name"
+                cp "$dest" "$_other_base/$skill_name/SKILL.md"
+            done
+            ;;
+    esac
+    deploy_tracker_record "$MANAGED_FILE_RESULT" "$tool_name" "$skill_name"
 }
 
 DEPLOY_SKILL_FUNC
@@ -959,10 +935,11 @@ DEPLOY_SKILL_FUNC
     # Deploy to ~/.claude/skills/ (Claude Code)
     echo 'log "Deploying skills to $SKILLS_DEST..."'
     echo 'ERRORS_BEFORE_CLAUDE_SKILLS=$ERRORS'
+    echo 'deploy_tracker_init'
     echo 'deploy_embedded_skill "chrome-devtools" "$SKILLS_DEST" "claude skills" "$_skill_tmp/chrome-devtools.md"'
     echo 'deploy_embedded_skill "a11y-debugging" "$SKILLS_DEST" "claude skills" "$_skill_tmp/a11y-debugging.md"'
     echo 'if [ "$ERRORS" -eq "$ERRORS_BEFORE_CLAUDE_SKILLS" ]; then'
-    echo '    write_summary OK "claude skills" "deployed"'
+    echo '    deploy_tracker_summary "claude skills"'
     echo 'else'
     echo '    write_summary ERROR "claude skills" "deploy failed"'
     echo 'fi'
@@ -970,10 +947,11 @@ DEPLOY_SKILL_FUNC
     # Deploy to ~/.cursor/skills/ (Cursor Agent CLI)
     echo 'log "Deploying skills to $SKILLS_DEST_CURSOR..."'
     echo 'ERRORS_BEFORE_CURSOR_SKILLS=$ERRORS'
+    echo 'deploy_tracker_init'
     echo 'deploy_embedded_skill "chrome-devtools" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/chrome-devtools.md"'
     echo 'deploy_embedded_skill "a11y-debugging" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/a11y-debugging.md"'
     echo 'if [ "$ERRORS" -eq "$ERRORS_BEFORE_CURSOR_SKILLS" ]; then'
-    echo '    write_summary OK "cursor skills" "deployed"'
+    echo '    deploy_tracker_summary "cursor skills"'
     echo 'else'
     echo '    write_summary ERROR "cursor skills" "deploy failed"'
     echo 'fi'
@@ -1012,68 +990,34 @@ function Deploy-EmbeddedSkill {
 
     $destDir = Join-Path $DestBase $SkillName
     $dest = Join-Path $destDir "SKILL.md"
+    $adoptLabel = ""
+    $cfgFile = Join-Path $env:USERPROFILE ".aitools\config.json"
+    $repoPath = ReadConfigKey -File $cfgFile -Key "repoPath"
+    if ($repoPath) { $adoptLabel = "shared/" }
 
-    if ($DryRun) {
-        Log "[DRY RUN] Would deploy skill: $SkillName -> $dest"
-        return
-    }
+    $skillResult = Deploy-ManagedFile -Content $Content -DestPath $dest -ToolName $ToolName -ItemName $SkillName -AdoptLabel $adoptLabel
 
-    if (-not (Test-Path $destDir)) {
-        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-    }
-
-    if ((Test-Path $dest)) {
-        try {
-            $existing = Get-Content $dest -Raw -ErrorAction Stop
-        } catch {
-            LogWarn "Cannot read $dest for diff: $_"
-            $existing = ""
-        }
-        if ($existing -eq $Content) {
-            LogOk "Skill unchanged: $SkillName"
-            return
-        }
-        # File differs -- backup and review
-        Backup-File -FilePath $dest
-        $adoptLabel = ""
-        $cfgFile = Join-Path $env:USERPROFILE ".aitools\config.json"
-        $repoPath = ReadConfigKey -File $cfgFile -Key "repoPath"
-        if ($repoPath) { $adoptLabel = "shared/" }
-        $result = Prompt-DiffReview -FilePath $dest -NewContent $Content -AdoptLabel $adoptLabel
-        switch ($result) {
-            "adopt" {
-                if ($repoPath) {
-                    $adoptDir = Join-Path (Join-Path $repoPath "shared\skills") $SkillName
-                    if (-not (Test-Path $adoptDir)) {
-                        New-Item -ItemType Directory -Path $adoptDir -Force | Out-Null
-                    }
-                    $adoptDest = Join-Path $adoptDir "SKILL.md"
-                    Copy-Item -Path $dest -Destination $adoptDest -Force -ErrorAction Stop
-                    LogOk "Adopted skill to shared/: $SkillName"
-                    Write-Summary "DETAIL" $ToolName "adopted: $SkillName"
-                }
-                # Sync adopted content to all other deploy targets so
-                # subsequent deploy loops see no diff (prevents clobber)
-                foreach ($otherBase in $allSkillDests) {
-                    if ($otherBase -eq $DestBase) { continue }
-                    $otherDir = Join-Path $otherBase $SkillName
-                    if (-not (Test-Path $otherDir)) {
-                        New-Item -ItemType Directory -Path $otherDir -Force | Out-Null
-                    }
-                    Copy-Item -Path $dest -Destination (Join-Path $otherDir "SKILL.md") -Force
-                }
-                return
+    if ($skillResult -eq "adopted") {
+        if ($repoPath) {
+            $adoptDir = Join-Path (Join-Path $repoPath "shared\skills") $SkillName
+            if (-not (Test-Path $adoptDir)) {
+                New-Item -ItemType Directory -Path $adoptDir -Force | Out-Null
             }
-            "skip" {
-                LogWarn "Skill skipped: $SkillName"
-                Write-Summary "DETAIL" $ToolName "skipped: $SkillName"
-                return
+            $adoptDest = Join-Path $adoptDir "SKILL.md"
+            Copy-Item -Path $dest -Destination $adoptDest -Force -ErrorAction Stop
+            LogOk "Adopted skill to shared/: $SkillName"
+        }
+        # Sync to all other deploy targets (prevents clobber)
+        foreach ($otherBase in $allSkillDests) {
+            if ($otherBase -eq $DestBase) { continue }
+            $otherDir = Join-Path $otherBase $SkillName
+            if (-not (Test-Path $otherDir)) {
+                New-Item -ItemType Directory -Path $otherDir -Force | Out-Null
             }
+            Copy-Item -Path $dest -Destination (Join-Path $otherDir "SKILL.md") -Force
         }
     }
-    # Write content (new file or overwrite after review)
-    [System.IO.File]::WriteAllText($dest, $Content, [System.Text.UTF8Encoding]::new($false))
-    LogOk "Deployed skill: $SkillName -> $dest"
+    Record-DeployOutcome -Outcome $skillResult -ToolName $ToolName -ItemName $SkillName
 }
 
 DEPLOY_SKILL_PS1_FUNC
@@ -1089,10 +1033,11 @@ DEPLOY_SKILL_PS1_FUNC
     # Deploy to ~/.claude/skills/ (Claude Code)
     echo 'Log "Deploying skills to $skillsDest..."'
     echo '$errorsBeforeClaudeSkills = $errors'
+    echo 'Initialize-DeployTracker'
     echo 'Deploy-EmbeddedSkill "chrome-devtools" $skillsDest "claude skills" $chromeDevtoolsSkill'
     echo 'Deploy-EmbeddedSkill "a11y-debugging" $skillsDest "claude skills" $a11ySkill'
     echo 'if ($errors -eq $errorsBeforeClaudeSkills) {'
-    echo '    Write-Summary "OK" "claude skills" "deployed"'
+    echo '    Write-DeployTrackerSummary -ToolName "claude skills"'
     echo '} else {'
     echo '    Write-Summary "ERROR" "claude skills" "deploy failed"'
     echo '}'
@@ -1100,10 +1045,11 @@ DEPLOY_SKILL_PS1_FUNC
     # Deploy to ~/.cursor/skills/ (Cursor Agent CLI)
     echo 'Log "Deploying skills to $skillsDestCursor..."'
     echo '$errorsBeforeCursorSkills = $errors'
+    echo 'Initialize-DeployTracker'
     echo 'Deploy-EmbeddedSkill "chrome-devtools" $skillsDestCursor "cursor skills" $chromeDevtoolsSkill'
     echo 'Deploy-EmbeddedSkill "a11y-debugging" $skillsDestCursor "cursor skills" $a11ySkill'
     echo 'if ($errors -eq $errorsBeforeCursorSkills) {'
-    echo '    Write-Summary "OK" "cursor skills" "deployed"'
+    echo '    Write-DeployTrackerSummary -ToolName "cursor skills"'
     echo '} else {'
     echo '    Write-Summary "ERROR" "cursor skills" "deploy failed"'
     echo '}'

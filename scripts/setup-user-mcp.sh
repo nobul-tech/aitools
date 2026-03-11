@@ -347,92 +347,46 @@ deploy_skill() {
         return
     fi
 
-    if [ "$DRY_RUN" = "true" ]; then
-        log "[DRY RUN] Would deploy skill: $skill_name -> $(display_path "$dest")"
-        return
-    fi
+    local _adopt_label="shared/"
+    deploy_managed_file "$(cat "$src")" "$dest" "$tool_name" "$skill_name" "$_adopt_label"
 
-    mkdir -p "$dest_dir"
-    if [ -f "$dest" ]; then
-        # diff -q exits 0 when files are identical; suppress output (we only care about result)
-        if diff -q "$src" "$dest" >/dev/null 2>&1; then
-            log_ok "Skill unchanged: $skill_name"
-        else
-            # File differs -- backup and review before overwriting
-            backup_file "$dest"
-            _adopt_label=""
-            # Adopt target: copy deployed file back to source in shared/
-            if [ -f "$src" ]; then
-                _adopt_label="shared/"
-            fi
-            prompt_diff_review "$dest" "$(cat "$src")" "$_adopt_label"
-            case "$DIFF_REVIEW_RESULT" in
-                adopt)
-                    # Copy deployed version back to repo source
-                    cp "$dest" "$src"
-                    log_ok "Adopted skill to shared/: $skill_name"
-                    write_summary DETAIL "$tool_name" "adopted: $skill_name"
-                    # Sync adopted content to all other deploy targets so
-                    # subsequent deploy loops see no diff (prevents clobber)
-                    for _other_base in $ALL_SKILL_DESTS; do
-                        [ "$_other_base" = "$dest_base" ] && continue
-                        local _other_dir="$_other_base/$skill_name"
-                        mkdir -p "$_other_dir"
-                        cp "$dest" "$_other_dir/SKILL.md"
-                    done
-                    return
-                    ;;
-                skip)
-                    log_warn "Skill skipped: $skill_name"
-                    write_summary DETAIL "$tool_name" "skipped: $skill_name"
-                    return
-                    ;;
-            esac
-            # overwrite: proceed with update
-            # Log diff to deploy log; diff exits 1 for differences (expected)
-            diff_exit=0
-            diff -u "$dest" "$src" >> "$LOG_FILE" 2>&1 || diff_exit=$?
-            # diff exits 1 for differences (expected), 2+ for errors
-            [ "$diff_exit" -le 1 ] || log_warn "diff failed for $skill_name (exit $diff_exit)"
-            cp "$src" "$dest"
-            log_ok "Skill updated: $skill_name -> $(display_path "$dest")"
-            write_summary DETAIL "$tool_name" "updated: $skill_name"
+    case "$MANAGED_FILE_RESULT" in
+        adopted)
+            # Copy deployed version back to repo source
+            cp "$dest" "$src"
+            log_ok "Adopted skill to shared/: $skill_name"
+            # Sync adopted content to all other deploy targets (prevents clobber)
+            for _other_base in $ALL_SKILL_DESTS; do
+                [ "$_other_base" = "$dest_base" ] && continue
+                mkdir -p "$_other_base/$skill_name"
+                cp "$dest" "$_other_base/$skill_name/SKILL.md"
+            done
+            ;;
+        created|updated)
             SKILL_CHANGES=$((SKILL_CHANGES + 1))
-        fi
-    else
-        cp "$src" "$dest"
-        log_ok "Skill created: $skill_name -> $(display_path "$dest")"
-        write_summary DETAIL "$tool_name" "added: $skill_name"
-        SKILL_CHANGES=$((SKILL_CHANGES + 1))
-    fi
+            ;;
+    esac
+    deploy_tracker_record "$MANAGED_FILE_RESULT" "$tool_name" "$skill_name"
 }
 
 log "Deploying Chrome DevTools skills to $(display_path "$SKILLS_DEST")..."
 ERRORS_BEFORE_CLAUDE_SKILLS=$ERRORS
-SKILL_CHANGES=0
+deploy_tracker_init
 deploy_skill "chrome-devtools" "$SKILLS_DEST" "claude skills"
 deploy_skill "a11y-debugging" "$SKILLS_DEST" "claude skills"
 if [ "$ERRORS" -eq "$ERRORS_BEFORE_CLAUDE_SKILLS" ]; then
-    if [ "$SKILL_CHANGES" -gt 0 ]; then
-        write_summary OK "claude skills" "updated"
-    else
-        write_summary OK "claude skills" "unchanged"
-    fi
+    deploy_tracker_summary "claude skills"
 else
     write_summary ERROR "claude skills" "deploy failed"
 fi
 
 log "Deploying Chrome DevTools skills to $(display_path "$SKILLS_DEST_CURSOR")..."
 ERRORS_BEFORE_CURSOR_SKILLS=$ERRORS
-SKILL_CHANGES=0
+deploy_tracker_init
 deploy_skill "chrome-devtools" "$SKILLS_DEST_CURSOR" "cursor skills"
 deploy_skill "a11y-debugging" "$SKILLS_DEST_CURSOR" "cursor skills"
 if [ "$ERRORS" -eq "$ERRORS_BEFORE_CURSOR_SKILLS" ]; then
-    if [ "$SKILL_CHANGES" -gt 0 ]; then
-        write_summary OK "cursor skills" "updated"
-    else
-        write_summary OK "cursor skills" "unchanged"
-    fi
+    deploy_tracker_summary "cursor skills"
 else
     write_summary ERROR "cursor skills" "deploy failed"
 fi
