@@ -317,6 +317,8 @@ $skillsSrc = Join-Path (Join-Path (Split-Path -Parent $scriptDir) "shared") "ski
 $skillsDest = Join-Path (Join-Path $env:USERPROFILE ".claude") "skills"
 $skillsDestCursor = Join-Path (Join-Path $env:USERPROFILE ".cursor") "skills"
 
+$allSkillDests = @($skillsDest, $skillsDestCursor)
+
 $script:skillChanges = 0
 function Deploy-Skill {
     param([string]$SkillName, [string]$DestBase, [string]$ToolName)
@@ -356,6 +358,16 @@ function Deploy-Skill {
                     Copy-Item -Path $dest -Destination $src -Force -ErrorAction Stop
                     LogOk "Adopted skill to shared/: $SkillName"
                     Write-Summary "DETAIL" $ToolName "adopted: $SkillName"
+                    # Sync adopted content to all other deploy targets so
+                    # subsequent deploy loops see no diff (prevents clobber)
+                    foreach ($otherBase in $allSkillDests) {
+                        if ($otherBase -eq $DestBase) { continue }
+                        $otherDir = Join-Path $otherBase $SkillName
+                        if (-not (Test-Path $otherDir)) {
+                            New-Item -ItemType Directory -Path $otherDir -Force | Out-Null
+                        }
+                        Copy-Item -Path $dest -Destination (Join-Path $otherDir "SKILL.md") -Force
+                    }
                     return
                 }
                 "skip" {

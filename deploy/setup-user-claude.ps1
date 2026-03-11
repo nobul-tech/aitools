@@ -219,7 +219,7 @@ function Prompt-DiffReview {
     [Console]::WriteLine("")
     if ($AdoptLabel) {
         [Console]::WriteLine("  [A]dopt to $AdoptLabel  [O]verwrite (backup kept)  [S]kip  [X] Abort")
-        [Console]::Write("  Choice [a/O/s/x]: ")
+        [Console]::Write("  Choice [A/O/s/x]: ")
     } else {
         [Console]::WriteLine("  [O]verwrite (backup kept)  [S]kip  [X] Abort")
         [Console]::Write("  Choice [O/s/x]: ")
@@ -723,6 +723,7 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
+
 # --- Auto-detect machine info ---
 $osInfo = (Get-CimInstance Win32_OperatingSystem).Caption
 $hostname = $env:COMPUTERNAME
@@ -746,9 +747,9 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Identity
 
-- Name: pepe
+- Name: Jose
 - Git: `Jose <jose@nobul.tech>`
-- Company: nobul.tech
+- Company: Nobul
 
 ## Code Style Defaults
 

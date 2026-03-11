@@ -227,7 +227,7 @@ prompt_diff_review() {
     if [ -n "$adopt_label" ]; then
         printf '  [A]dopt to %s  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' \
             "$adopt_label" > /dev/tty
-        printf '  Choice [a/O/s/x]: ' > /dev/tty
+        printf '  Choice [A/O/s/x]: ' > /dev/tty
     else
         printf '  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' > /dev/tty
         printf '  Choice [O/s/x]: ' > /dev/tty
@@ -840,6 +840,7 @@ show_cloud_mcp_status() {
 
 SKILLS_DEST="$HOME/.claude/skills"
 SKILLS_DEST_CURSOR="$HOME/.cursor/skills"
+ALL_SKILL_DESTS="$SKILLS_DEST $SKILLS_DEST_CURSOR"
 
 deploy_embedded_skill() {
     local skill_name="$1"
@@ -879,6 +880,13 @@ deploy_embedded_skill() {
                     log_ok "Adopted skill to shared/: $skill_name"
                     write_summary DETAIL "$tool_name" "adopted: $skill_name"
                 fi
+                # Sync adopted content to all other deploy targets so
+                # subsequent deploy loops see no diff (prevents clobber)
+                for _other_base in $ALL_SKILL_DESTS; do
+                    [ "$_other_base" = "$dest_base" ] && continue
+                    mkdir -p "$_other_base/$skill_name"
+                    cp "$dest" "$_other_base/$skill_name/SKILL.md"
+                done
                 return
                 ;;
             skip)
@@ -928,6 +936,22 @@ description: Uses Chrome DevTools via MCP for efficient debugging, troubleshooti
 - **Automation/interaction**: `take_snapshot` (text-based, faster, better for automation)
 - **Visual inspection**: `take_screenshot` (when user needs to see visual state)
 - **Additional details**: `evaluate_script` for data not in accessibility tree
+
+### Expanding accordions, tabs, and FAQs
+
+Many pages use JS-rendered accordions/tabs (e.g., FAQ sections) whose content is hidden until clicked. The a11y tree shows them as `tab` or `button` elements with `expandable` state but no inner content until expanded.
+
+**Pattern:**
+1. `take_snapshot` — identify the collapsed elements (look for `tab`/`button` with `expandable` but NOT `expanded`)
+2. `click` on the element `uid` to expand it
+3. `take_snapshot` again — the expanded content now appears inline in the tab/button's accessible name or as child nodes
+4. Repeat for each accordion item
+
+**Tips:**
+- Only one accordion panel may be open at a time (clicking the next may collapse the previous) — snapshot after each click
+- The expanded content often appears directly in the element's accessible name text, not as separate child nodes
+- Save each snapshot to `filePath` to avoid flooding context when extracting large amounts of content
+- If clicking doesn't expand (some require user interaction), ask the user to expand manually, then snapshot
 
 ### Parallel execution
 

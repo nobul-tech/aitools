@@ -878,6 +878,7 @@ blog "Generating deploy/setup-user-mcp.sh (with embedded skills)"
 
 SKILLS_DEST="$HOME/.claude/skills"
 SKILLS_DEST_CURSOR="$HOME/.cursor/skills"
+ALL_SKILL_DESTS="$SKILLS_DEST $SKILLS_DEST_CURSOR"
 
 SKILLS_HEADER
     # Emit helper function for diff-reviewed skill deployment.
@@ -922,6 +923,13 @@ deploy_embedded_skill() {
                     log_ok "Adopted skill to shared/: $skill_name"
                     write_summary DETAIL "$tool_name" "adopted: $skill_name"
                 fi
+                # Sync adopted content to all other deploy targets so
+                # subsequent deploy loops see no diff (prevents clobber)
+                for _other_base in $ALL_SKILL_DESTS; do
+                    [ "$_other_base" = "$dest_base" ] && continue
+                    mkdir -p "$_other_base/$skill_name"
+                    cp "$dest" "$_other_base/$skill_name/SKILL.md"
+                done
                 return
                 ;;
             skip)
@@ -994,6 +1002,7 @@ blog "Generating deploy/setup-user-mcp.ps1 (with embedded skills)"
 
 $skillsDest = Join-Path (Join-Path $env:USERPROFILE ".claude") "skills"
 $skillsDestCursor = Join-Path (Join-Path $env:USERPROFILE ".cursor") "skills"
+$allSkillDests = @($skillsDest, $skillsDestCursor)
 
 SKILLS_PS1_HEADER
     # Emit helper function for diff-reviewed skill deployment
@@ -1042,6 +1051,16 @@ function Deploy-EmbeddedSkill {
                     Copy-Item -Path $dest -Destination $adoptDest -Force -ErrorAction Stop
                     LogOk "Adopted skill to shared/: $SkillName"
                     Write-Summary "DETAIL" $ToolName "adopted: $SkillName"
+                }
+                # Sync adopted content to all other deploy targets so
+                # subsequent deploy loops see no diff (prevents clobber)
+                foreach ($otherBase in $allSkillDests) {
+                    if ($otherBase -eq $DestBase) { continue }
+                    $otherDir = Join-Path $otherBase $SkillName
+                    if (-not (Test-Path $otherDir)) {
+                        New-Item -ItemType Directory -Path $otherDir -Force | Out-Null
+                    }
+                    Copy-Item -Path $dest -Destination (Join-Path $otherDir "SKILL.md") -Force
                 }
                 return
             }

@@ -209,7 +209,7 @@ function Prompt-DiffReview {
     [Console]::WriteLine("")
     if ($AdoptLabel) {
         [Console]::WriteLine("  [A]dopt to $AdoptLabel  [O]verwrite (backup kept)  [S]kip  [X] Abort")
-        [Console]::Write("  Choice [a/O/s/x]: ")
+        [Console]::Write("  Choice [A/O/s/x]: ")
     } else {
         [Console]::WriteLine("  [O]verwrite (backup kept)  [S]kip  [X] Abort")
         [Console]::Write("  Choice [O/s/x]: ")

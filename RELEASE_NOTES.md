@@ -12,6 +12,25 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.48.1 -- Fix adopt clobber, case inconsistency, add accordion skill (2026-03-11)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Sequential adopt clobber bug**: When a skill was adopted from `~/.claude/skills/` to `shared/`, the subsequent deploy to `~/.cursor/skills/` saw a reversed diff and a second adopt would overwrite `shared/` with the old content. Fix: after adopt, sync the adopted content to all other deploy targets so the next loop sees no diff. |
+| 2 | **Prompt case inconsistency**: Diff review prompt showed `[A]dopt` but hint showed `[a/O/s/x]`. Now consistent: `[A/O/s/x]`. |
+
+### Added
+
+| # | Change |
+|---|--------|
+| 3 | **Accordion skill content**: Restored "Expanding accordions, tabs, and FAQs" section to `chrome-devtools/SKILL.md` (lost during a previous deploy overwrite). Documents the pattern for extracting content from JS-rendered collapsible elements. |
+
+**Verified on:** macOS (syntax validation, build, functional test of adopt flow). Windows: not tested (PS1 syntax validated).
+
+---
+
 ## v0.48.0 -- Build prerequisite validation framework (2026-03-10)
 
 ### Added

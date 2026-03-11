@@ -210,7 +210,7 @@ function Prompt-DiffReview {
     [Console]::WriteLine("")
     if ($AdoptLabel) {
         [Console]::WriteLine("  [A]dopt to $AdoptLabel  [O]verwrite (backup kept)  [S]kip  [X] Abort")
-        [Console]::Write("  Choice [a/O/s/x]: ")
+        [Console]::Write("  Choice [A/O/s/x]: ")
     } else {
         [Console]::WriteLine("  [O]verwrite (backup kept)  [S]kip  [X] Abort")
         [Console]::Write("  Choice [O/s/x]: ")
@@ -987,12 +987,14 @@ function Show-CloudMcpStatus {
     }
 }
 
+
 # --- Deploy Chrome DevTools skills (embedded) ---
 # Vendored from https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/main/skills
 # Content embedded at build time by build-deploy.sh for self-contained deployment.
 
 $skillsDest = Join-Path (Join-Path $env:USERPROFILE ".claude") "skills"
 $skillsDestCursor = Join-Path (Join-Path $env:USERPROFILE ".cursor") "skills"
+$allSkillDests = @($skillsDest, $skillsDestCursor)
 
 function Deploy-EmbeddedSkill {
     param([string]$SkillName, [string]$DestBase, [string]$ToolName, [string]$Content)
@@ -1038,6 +1040,16 @@ function Deploy-EmbeddedSkill {
                     Copy-Item -Path $dest -Destination $adoptDest -Force -ErrorAction Stop
                     LogOk "Adopted skill to shared/: $SkillName"
                     Write-Summary "DETAIL" $ToolName "adopted: $SkillName"
+                }
+                # Sync adopted content to all other deploy targets so
+                # subsequent deploy loops see no diff (prevents clobber)
+                foreach ($otherBase in $allSkillDests) {
+                    if ($otherBase -eq $DestBase) { continue }
+                    $otherDir = Join-Path $otherBase $SkillName
+                    if (-not (Test-Path $otherDir)) {
+                        New-Item -ItemType Directory -Path $otherDir -Force | Out-Null
+                    }
+                    Copy-Item -Path $dest -Destination (Join-Path $otherDir "SKILL.md") -Force
                 }
                 return
             }
@@ -1087,6 +1099,22 @@ description: Uses Chrome DevTools via MCP for efficient debugging, troubleshooti
 - **Automation/interaction**: `take_snapshot` (text-based, faster, better for automation)
 - **Visual inspection**: `take_screenshot` (when user needs to see visual state)
 - **Additional details**: `evaluate_script` for data not in accessibility tree
+
+### Expanding accordions, tabs, and FAQs
+
+Many pages use JS-rendered accordions/tabs (e.g., FAQ sections) whose content is hidden until clicked. The a11y tree shows them as `tab` or `button` elements with `expandable` state but no inner content until expanded.
+
+**Pattern:**
+1. `take_snapshot` — identify the collapsed elements (look for `tab`/`button` with `expandable` but NOT `expanded`)
+2. `click` on the element `uid` to expand it
+3. `take_snapshot` again — the expanded content now appears inline in the tab/button's accessible name or as child nodes
+4. Repeat for each accordion item
+
+**Tips:**
+- Only one accordion panel may be open at a time (clicking the next may collapse the previous) — snapshot after each click
+- The expanded content often appears directly in the element's accessible name text, not as separate child nodes
+- Save each snapshot to `filePath` to avoid flooding context when extracting large amounts of content
+- If clicking doesn't expand (some require user interaction), ask the user to expand manually, then snapshot
 
 ### Parallel execution
 

@@ -236,7 +236,7 @@ prompt_diff_review() {
     if [ -n "$adopt_label" ]; then
         printf '  [A]dopt to %s  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' \
             "$adopt_label" > /dev/tty
-        printf '  Choice [a/O/s/x]: ' > /dev/tty
+        printf '  Choice [A/O/s/x]: ' > /dev/tty
     else
         printf '  [O]verwrite (backup kept)  [S]kip  [X] Abort\n' > /dev/tty
         printf '  Choice [O/s/x]: ' > /dev/tty
@@ -577,9 +577,9 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Identity
 
-- Name: pepe
+- Name: Jose
 - Git: `Jose <jose@nobul.tech>`
-- Company: nobul.tech
+- Company: Nobul
 
 ## Code Style Defaults
 

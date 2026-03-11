@@ -32,6 +32,22 @@ description: Uses Chrome DevTools via MCP for efficient debugging, troubleshooti
 - **Visual inspection**: `take_screenshot` (when user needs to see visual state)
 - **Additional details**: `evaluate_script` for data not in accessibility tree
 
+### Expanding accordions, tabs, and FAQs
+
+Many pages use JS-rendered accordions/tabs (e.g., FAQ sections) whose content is hidden until clicked. The a11y tree shows them as `tab` or `button` elements with `expandable` state but no inner content until expanded.
+
+**Pattern:**
+1. `take_snapshot` — identify the collapsed elements (look for `tab`/`button` with `expandable` but NOT `expanded`)
+2. `click` on the element `uid` to expand it
+3. `take_snapshot` again — the expanded content now appears inline in the tab/button's accessible name or as child nodes
+4. Repeat for each accordion item
+
+**Tips:**
+- Only one accordion panel may be open at a time (clicking the next may collapse the previous) — snapshot after each click
+- The expanded content often appears directly in the element's accessible name text, not as separate child nodes
+- Save each snapshot to `filePath` to avoid flooding context when extracting large amounts of content
+- If clicking doesn't expand (some require user interaction), ask the user to expand manually, then snapshot
+
 ### Parallel execution
 
 You can send multiple tool calls in parallel, but maintain correct order: navigate → wait → snapshot → interact.

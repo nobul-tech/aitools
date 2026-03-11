@@ -331,6 +331,8 @@ SKILLS_SRC="$SCRIPT_DIR/../shared/skills"
 SKILLS_DEST="$HOME/.claude/skills"
 SKILLS_DEST_CURSOR="$HOME/.cursor/skills"
 
+ALL_SKILL_DESTS="$SKILLS_DEST $SKILLS_DEST_CURSOR"
+
 SKILL_CHANGES=0
 deploy_skill() {
     local skill_name="$1"
@@ -370,6 +372,14 @@ deploy_skill() {
                     cp "$dest" "$src"
                     log_ok "Adopted skill to shared/: $skill_name"
                     write_summary DETAIL "$tool_name" "adopted: $skill_name"
+                    # Sync adopted content to all other deploy targets so
+                    # subsequent deploy loops see no diff (prevents clobber)
+                    for _other_base in $ALL_SKILL_DESTS; do
+                        [ "$_other_base" = "$dest_base" ] && continue
+                        local _other_dir="$_other_base/$skill_name"
+                        mkdir -p "$_other_dir"
+                        cp "$dest" "$_other_dir/SKILL.md"
+                    done
                     return
                     ;;
                 skip)
