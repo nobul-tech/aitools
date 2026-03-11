@@ -89,6 +89,8 @@ Check scripts source `check-lib.sh`/`.ps1` which in turn sources `aitools-lib.sh
 | JSON hashtable | n/a | `ConvertPSObjectToHashtable` | PSCustomObject to Hashtable (recursive, array-aware) |
 | DETAIL emitter | `emit_merge_details()` | `Emit-MergeDetails` | Parse CHANGED: lines / emit DETAIL summary entries |
 | JSON normalization | `SORT_KEYS_JS`, `normalize_json()` | `Normalize-JsonForComparison`, `ConvertTo-CanonicalObject` | Sorted-key JSON for deterministic comparison |
+| Check logging init | `check_log_init()` | `CheckLogInit` | Sets check log paths + bridges aitools-lib logging vars |
+| Check step functions | `step_pass`/`step_fail`/`step_warn`/`step_skip` | `StepPass`/`StepFail`/`StepWarn`/`StepSkip` | `[PASS]`/`[FAIL]`/`[WARN]`/`[SKIP]` with console colors |
 
 ### Usage
 
@@ -763,6 +765,45 @@ Scripts following the `check-*.sh/.ps1` pattern have additional requirements:
 - `StepPass` must accept and display a `$Detail` parameter, same as
   `StepFail`/`StepWarn`/`StepSkip`. Callers passing detail context must have that
   context displayed.
+
+## Logging architecture: setup vs check
+
+The project maintains **two deliberately separated logging systems**. They must not
+be unified -- each serves a distinct purpose with different semantics and audiences.
+
+### Setup/deploy logging (aitools-lib)
+
+- **Init**: `logging_init "name"` / `Initialize-Logging "name"`
+- **Functions**: `log`/`log_ok`/`log_error`/`log_warn` (bash), `Log`/`LogOk`/`LogError`/`LogWarn` (PS1)
+- **Destination**: `deploy.log`
+- **Semantics**: Tool installation status (OK/WARN/ERROR)
+- **Counters**: `ERRORS`/`WARNINGS` (bash), `$script:errors`/`$script:warnings` (PS1)
+- **Summary**: `write_summary`/`Write-Summary` → end-of-run panel
+
+### Check/audit logging (check-lib)
+
+- **Init**: `check_log_init "name"` / `CheckLogInit "name"`
+- **Functions**: `step_pass`/`step_fail`/`step_warn`/`step_skip` (bash), `StepPass`/`StepFail`/`StepWarn`/`StepSkip` (PS1)
+- **Destination**: `checks.log` + `checks.jsonl`
+- **Semantics**: Validation results (PASS/FAIL/WARN/SKIP)
+- **Counters**: `PASS_COUNT`/`FAIL_COUNT`/`WARN_COUNT`/`SKIP_COUNT` (separate namespace)
+- **Summary**: `print_summary`/`PrintSummary` → colored counters
+
+### Bridge pattern (check scripts exercising lib functions)
+
+Check scripts source `check-lib` which sources `aitools-lib`. When check steps
+exercise lib functions (e.g., `Check-BuildPrereqs` → `Ensure-ToolOnPath` → `Log`),
+those functions expect setup logging to be initialized.
+
+`CheckLogInit`/`check_log_init` bridges this by also initializing the aitools-lib
+logging variables (`logFile`/`LOG_FILE`, `scriptName`/`SCRIPT_NAME`, counters).
+Operational messages from lib functions go to `deploy.log` — they're lib output,
+not check step results.
+
+**Why not call `Initialize-Logging`/`logging_init` directly?** Because check-lib
+needs to control the init sequence (its own counters, log files, directory) and
+adding a second init call would be fragile. The bridge sets only the variables
+that lib log functions need.
 
 ## Cross-platform grep portability
 

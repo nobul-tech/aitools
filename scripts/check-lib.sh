@@ -53,6 +53,15 @@ check_log_init() {
     printf '[%s] [%s] === RUN START ===\n' "$ts" "$_CHECK_NAME" >> "$_CHECK_LOG"
     printf '{"ts":"%s","check":"%s","event":"run_start","host":"%s","os":"%s"}\n' \
         "$ts" "$_CHECK_NAME" "$host" "$os_name" >> "$_CHECK_JSONL"
+
+    # Bridge: initialize aitools-lib logging vars so lib functions
+    # (log, ensure_tool_on_path, deploy_managed_file, etc.) work in check context.
+    # Operational messages go to deploy.log alongside setup script output.
+    SCRIPT_NAME="$_CHECK_NAME"
+    LOG_DIR="$_CHECK_LOG_DIR"
+    LOG_FILE="$_CHECK_LOG_DIR/deploy.log"
+    ERRORS=0
+    WARNINGS=0
 }
 
 # Internal: log one step result to both files

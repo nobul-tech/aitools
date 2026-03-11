@@ -34,6 +34,15 @@ function CheckLogInit {
     if (-not $hostName) { $hostName = hostname }
     Add-Content -Path $script:CheckLog -Value "[$ts] [$Name] === RUN START ==="
     Add-Content -Path $script:CheckJsonl -Value "{`"ts`":`"$ts`",`"check`":`"$Name`",`"event`":`"run_start`",`"host`":`"$hostName`",`"os`":`"Windows`"}"
+
+    # Bridge: initialize aitools-lib logging vars so lib functions
+    # (Log, Ensure-ToolOnPath, Deploy-ManagedFile, etc.) work in check context.
+    # Operational messages go to deploy.log alongside setup script output.
+    $script:scriptName = $Name
+    $script:logDir = $script:CheckLogDir
+    $script:logFile = Join-Path $script:CheckLogDir "deploy.log"
+    $script:errors = 0
+    $script:warnings = 0
 }
 
 function CheckLogStep {

@@ -46,6 +46,12 @@ Never use `grep -P` in bash scripts -- macOS BSD `grep` doesn't support it. Use 
 
 `build-deploy.sh` defines own `blog`/`blog_ok`/`blog_error` (doesn't source aitools-lib.sh). Must follow `[timestamp] [script] [level] message` format. Documented in `reference/script-standards-detail.md` logging overrides.
 
+### Check script logging
+
+Check scripts use separate logging (check-lib, not aitools-lib). Step functions
+(StepPass/step_pass) write to checks.log/checks.jsonl. CheckLogInit bridges
+aitools-lib vars so lib functions work in check context.
+
 ### End-of-run summary
 
 Every setup script calls `write_summary` / `Write-Summary` (3-arg from `aitools-lib`: category, tool_name, detail) to report to the end-of-run panel. Categories: OK (tool works), WARN (advisory), ERROR (failure), ACTION (user must act). Every code path -- success and failure -- must produce a `write_summary` call. See `reference/script-standards-detail.md` for severity guide, tool names, and code patterns.

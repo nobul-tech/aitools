@@ -22,6 +22,7 @@ Closes #22, #23.
 |---|--------|
 | 1 | **NASM KnownPaths corrected** (#22): winget NASM.NASM installs to `%LOCALAPPDATA%\bin\NASM\`, not `C:\Program Files\NASM\`. Primary path updated; Program Files kept as secondary. |
 | 2 | **CMake paths marked UNVERIFIED**: documented as assumed, pending empirical verification. |
+| 10 | **check-prereq-detection step 6 crash**: `CheckLogInit`/`check_log_init` didn't initialize aitools-lib logging vars (`logFile`/`LOG_FILE`, etc.), so lib functions called from check steps (e.g., `Check-BuildPrereqs` → `Ensure-ToolOnPath` → `Log`) threw null-path errors under strict mode. Fixed with a bridge pattern in both check-lib files. |
 
 ### Changed
 
@@ -39,6 +40,7 @@ Closes #22, #23.
 | 7 | **KnownPaths empirical verification rule**: new rule requiring all KnownPaths to be verified on actual machines. Applies to tools AND build dependencies. |
 | 8 | **check-prereq-detection steps 10-12** (PS1) / **9-10** (bash): empirical path verification, tool-registry cross-reference, verification status audit. |
 | 9 | **check-post-push**: deploy state integrity step (manifest/shadow consistency). |
+| 11 | **Logging architecture documented**: new section in `script-standards-detail.md` describing setup vs check vs build logging systems and the bridge pattern. Rules updated in `.claude/rules/` and `.cursor/rules/`. |
 
 ### Verified
 

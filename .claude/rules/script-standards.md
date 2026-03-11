@@ -71,6 +71,20 @@ See `@reference/script-standards-detail.md` for the full portability table.
 These must also follow the `[timestamp] [script] [level] message` format.
 Documented as a logging override exception in `reference/script-standards-detail.md`.
 
+### Check script logging
+
+Check/audit scripts (`check-*.sh/.ps1`) use a separate logging system from setup
+scripts. Check scripts source `check-lib` (which sources `aitools-lib`) and call
+`CheckLogInit`/`check_log_init` — NOT `Initialize-Logging`/`logging_init`.
+
+- **Step functions**: `StepPass`/`step_pass`, `StepFail`/`step_fail`, etc.
+- **Destinations**: `checks.log` + `checks.jsonl` (not `deploy.log`)
+- **Semantics**: PASS/FAIL/WARN/SKIP (not OK/WARN/ERROR)
+
+`CheckLogInit`/`check_log_init` bridges the gap by also setting aitools-lib
+logging variables, so lib functions called from check steps can write to
+`deploy.log`. See `reference/script-standards-detail.md` for details.
+
 ### End-of-run summary
 
 Every setup script MUST call `write_summary` / `Write-Summary` (3-arg, from `aitools-lib`) to contribute to the end-of-run panel:
