@@ -341,8 +341,8 @@ if [ -n "$RULES_SRC" ]; then
         done
 
         if [ "$ERRORS" -eq "$ERRORS_BEFORE_RULES" ]; then
-            log_ok "Rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$RULES_DEST")"
             deploy_tracker_summary "claude rules"
+            log_ok "Rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$RULES_DEST")"
         else
             write_summary ERROR "claude rules" "validation failed"
         fi

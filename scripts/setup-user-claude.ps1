@@ -420,8 +420,8 @@ if ($rulesSrc) {
         }
 
         if ($errors -eq $errorsBefore) {
-            LogOk "Rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $rulesDest"
             Write-DeployTrackerSummary -ToolName "claude rules"
+            LogOk "Rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $rulesDest"
         } else {
             Write-Summary "ERROR" "claude rules" "validation failed"
         }

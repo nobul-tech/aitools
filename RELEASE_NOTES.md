@@ -38,6 +38,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | 8 | **Adopt missing from summary**: Rules and skills adopt now emits `write_summary DETAIL` lines and includes adopted count in aggregate summary (was silently omitted). |
 | 9 | **Case inconsistency fully fixed**: Diff review prompt hint now `[A/O/S/X]` (all uppercase). v0.48.1 partially fixed to `[A/O/s/x]` — this completes the fix. |
 | 10 | **created/added mismatch**: Deploy tracker now accepts both `"created"` and `"added"` as outcomes, preventing silent count misses for newly created files. |
+| 11 | **Tracker text ordering**: `deploy_tracker_summary` now called before the log line that uses `DEPLOY_TRACKER_TEXT`, fixing empty tracker text in rules summary output. |
 
 **Verified on:** macOS (syntax validation, build 30/30, pre-commit 0 FAIL, dry-run smoke tests). Windows: not tested (PS1 syntax validated).
 
