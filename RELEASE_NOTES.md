@@ -12,6 +12,19 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.52.1 -- Fix post-push check false positives (steps 26, 27) (2026-03-12)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Step 26 PS1**: Replace `-replace` chain with Perl extraction -- fixes false-positive WARN from ordering bug (`.sh$` stripped before parenthetical suffix). |
+| 2 | **Step 26 both**: Add `setup-user-X` → `-X` abbreviation matching (was only stripping `setup-`). |
+| 3 | **Step 27 both**: Delegate to `Check-BuildPrereqs`/`check_build_prereqs` framework instead of bare `Get-Command`/`command -v` -- gets KnownPaths fallback, architecture filtering, correct install instructions from single source of truth. |
+| 4 | **pre-update command**: Add build prerequisite failure mode to known failures table; recommend `aitools install` when prereqs missing. |
+
+---
+
 ## v0.52.0 -- Agentic framework, merge overhaul, clip2md refactor (2026-03-12)
 
 ### Added

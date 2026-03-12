@@ -671,7 +671,7 @@ else
             [ -z "$base" ] && continue
             # Check if the base name appears in CLAUDE.md (full name or abbreviated -suffix)
             if ! echo "$claude_deploy" | grep -qF "$base"; then
-                short=$(echo "$base" | perl -pe 's/^setup-//')
+                short=$(echo "$base" | perl -pe 's/^setup-user-//; s/^setup-//')
                 if ! echo "$claude_deploy" | grep -qF -- "-$short"; then
                     if ! echo "$claude_deploy" | grep -qF "$short"; then
                         missing_deploy="$missing_deploy $base"
@@ -691,17 +691,15 @@ fi
 # 27. Build prerequisites installed
 # ---------------------------------------------------------------------------
 if command -v cargo >/dev/null 2>&1; then
-    PREREQ_MISSING=false
-    if [ "$(uname -m)" = "x86_64" ] && ! command -v nasm >/dev/null 2>&1; then
-        echo "      Missing: NASM -- brew install nasm / apt-get install nasm"
-        PREREQ_MISSING=true
-    fi
-    if ! command -v cmake >/dev/null 2>&1; then
-        echo "      Missing: CMake -- brew install cmake / apt-get install cmake"
-        PREREQ_MISSING=true
-    fi
-    if $PREREQ_MISSING; then
-        step_warn "27" "Build prerequisites installed" "some build tools missing (see above)"
+    # check_build_prereqs outputs NAME|INSTALL per line, returns 1 if any missing
+    prereq_output=$(check_build_prereqs "cargo") || true
+    if [ -n "$prereq_output" ]; then
+        while IFS='|' read -r pname pinstall; do
+            [ -z "$pname" ] && continue
+            echo "      Missing: $pname -- $pinstall"
+        done <<< "$prereq_output"
+        prereq_names=$(echo "$prereq_output" | cut -d'|' -f1 | paste -sd ', ')
+        step_warn "27" "Build prerequisites installed" "missing: $prereq_names"
     else
         step_pass "27" "Build prerequisites installed"
     fi

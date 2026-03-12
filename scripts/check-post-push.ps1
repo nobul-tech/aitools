@@ -781,15 +781,12 @@ if (-not (Test-Path $buildScript)) {
     StepSkip "26" "Deploy scripts list sync" "build-deploy.sh not found"
 } else {
     $buildContent = Get-Content $buildScript -ErrorAction Stop
-    $deployBases = @()
-    foreach ($line in $buildContent) {
-        if ($line -match 'blog "(Copying|Generating) deploy/([^"]+)"') {
-            $scriptName = $Matches[2] -replace '\.sh$', '' -replace '\.ps1$', '' -replace ' \(.*$', ''
-            if ($scriptName -notin $deployBases) {
-                $deployBases += $scriptName
-            }
-        }
-    }
+    # Use Perl for extraction (USO: Perl for non-trivial string manipulation)
+    # Matches bash approach: \S+ stops at whitespace (handles parenthetical suffixes),
+    # then strip .sh/.ps1 extensions
+    $deployBases = ($buildContent | Out-String | perl -ne 'print "$1\n" if m{blog "(?:Copying|Generating) deploy/(\S+)"}' |
+        perl -pe 's/\.sh$//; s/\.ps1$//' | Sort-Object -Unique)
+    if (-not $deployBases) { $deployBases = @() }
     $claudeMdPath = Join-Path $script:RepoRoot "CLAUDE.md"
     $claudeContent = Get-Content $claudeMdPath -Raw -ErrorAction Stop
     $deployLine = ""
@@ -802,8 +799,10 @@ if (-not (Test-Path $buildScript)) {
         $missingDeploy = @()
         foreach ($base in $deployBases) {
             if ($deployLine -notmatch [regex]::Escape($base)) {
-                # Check abbreviated: setup-go -> -go
-                $short = $base -replace '^setup-', ''
+                # Check abbreviated forms used in CLAUDE.md:
+                #   setup-go -> -go (strip setup-)
+                #   setup-user-mcp -> -mcp (strip setup-user-)
+                $short = ($base | perl -pe 's/^setup-user-//; s/^setup-//')
                 if ($deployLine -notmatch [regex]::Escape("-$short") -and $deployLine -notmatch [regex]::Escape($short)) {
                     $missingDeploy += $base
                 }
@@ -823,19 +822,12 @@ if (-not (Test-Path $buildScript)) {
 # Get-Command exempt: command-existence check with explicit fallback
 $cargoInstalled = Get-Command cargo -ErrorAction SilentlyContinue
 if ($cargoInstalled) {
-    $prereqMissing = $false
-    # Get-Command exempt: command-existence check with explicit fallback
-    if (-not (Get-Command nasm -ErrorAction SilentlyContinue)) {
-        Write-Host "      Missing: NASM -- winget install NASM.NASM"
-        $prereqMissing = $true
-    }
-    # Get-Command exempt: command-existence check with explicit fallback
-    if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
-        Write-Host "      Missing: CMake -- winget install Kitware.CMake"
-        $prereqMissing = $true
-    }
-    if ($prereqMissing) {
-        StepWarn "27" "Build prerequisites installed" "some build tools missing (see above)"
+    $missingPrereqs = Check-BuildPrereqs "cargo"
+    if ($missingPrereqs.Count -gt 0) {
+        foreach ($p in $missingPrereqs) {
+            Write-Host "      Missing: $($p.Name) -- $($p.Install)"
+        }
+        StepWarn "27" "Build prerequisites installed" "missing: $(($missingPrereqs | ForEach-Object { $_.Name }) -join ', ')"
     } else {
         StepPass "27" "Build prerequisites installed"
     }

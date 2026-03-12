@@ -74,6 +74,10 @@ Present three options and ask which command to run:
 | `aitools gitpull --patch` | Same as gitpull but bumps patch (v0.14.0 -> v0.14.1) **(requires RELEASE_NOTES.md entry)** |
 | `aitools install` | Quiet pull + rebuild + full installer (tools + configs) |
 
+**Recommendation**: If pre-update state (step 1) or prior `check-post-push` results
+show missing build prerequisites (NASM, CMake), recommend `aitools install` -- it runs
+the full installer including setup-rust which invokes the build prerequisite framework.
+
 Do NOT run any of these yet. Wait for the user to choose.
 
 ## 5. Post-update verification
@@ -110,3 +114,4 @@ If anything fails at any point:
 | Stale deploy/ after update | `build-deploy.sh` wasn't run or output wasn't committed | `bash scripts/build-deploy.sh && git diff deploy/` |
 | Network error on pull | Git remote unreachable | Check connectivity, try `git fetch` manually |
 | Hook errors during pull | Pre/post hooks failing | Read hook output, check `.claude/settings.json` |
+| `cargo install` fails: NASM/CMake not found | Build prerequisite missing | Run `aitools install` (setup-rust checks prereqs). Check `check-post-push` step 27 |
