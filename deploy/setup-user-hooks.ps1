@@ -1284,7 +1284,7 @@ $script:BuildPrereqs = @{
                 "$env:APPDATA\Python\Scripts\cmake.exe",       # UNVERIFIED: pip install --user
                 "$env:ProgramFiles\CMake\bin\cmake.exe"        # UNVERIFIED: MSI fallback
             )
-            Install    = "uv pip install cmake"
+            Install    = "uv pip install --system cmake"
             Platform   = "win"
         }
     )
@@ -1366,7 +1366,7 @@ function Check-BuildPrereqs {
 $script:BuildFailureSignatures = @(
     @{ Pattern = "NASM command not found";                Remedy = "winget install NASM.NASM";                     Name = "NASM (assembler)" }
     @{ Pattern = "linker.*not found|link\.exe.*not found"; Remedy = "Install MSVC Build Tools with C++ workload";  Name = "MSVC linker" }
-    @{ Pattern = "cmake.*not found|Could not find cmake"; Remedy = "uv pip install cmake (or see cmake.org/download)"; Name = "CMake" }
+    @{ Pattern = "cmake.*not found|Could not find cmake"; Remedy = "uv pip install --system cmake (or see cmake.org/download)"; Name = "CMake" }
     @{ Pattern = "pkg-config.*not found";                 Remedy = "Install pkg-config";                           Name = "pkg-config" }
     @{ Pattern = "Python\.h.*not found|python.*dev";      Remedy = "Install Python development headers";           Name = "Python headers" }
     @{ Pattern = "C compiler.*not found|cc.*not found";   Remedy = "Install a C compiler (MSVC/gcc/clang)";        Name = "C compiler" }

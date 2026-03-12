@@ -120,16 +120,16 @@ Source: https://pypi.org/project/cmake/
 
 | Method | Official? | Elevation | Update | PATH | Toolchain |
 |--------|-----------|-----------|--------|------|-----------|
-| `uv pip install cmake` | Yes (cmake.org) | No (user-level) | `uv pip install --upgrade cmake` | UNVERIFIED | uv already managed |
+| `uv pip install --system cmake` | Yes (cmake.org) | No (user-level) | `uv pip install --upgrade cmake` | UNVERIFIED | uv already managed |
 | `winget install Kitware.CMake` | No (not on cmake.org) | Yes (admin) | winget upgrade | Auto | winget already managed |
 | MSI installer | Yes (cmake.org) | Yes (admin) | Manual | Auto | -- |
 | ZIP archive | Yes (cmake.org) | No | Manual | Manual | -- |
 
-**Chosen:** `uv pip install cmake` (Windows), `brew install cmake` (macOS)
+**Chosen:** `uv pip install --system cmake` (Windows), `brew install cmake` (macOS)
 **Rationale:** Official method per cmake.org, user-level install, uv already managed,
 winget not listed on cmake.org and requires admin.
 
-**Trial (Windows):** PENDING -- user will run `uv pip install cmake` and report
+**Trial (Windows):** PENDING -- user will run `uv pip install --system cmake` and report
 installed path, version, and any issues.
 
 ### NASM (2026-03-11)

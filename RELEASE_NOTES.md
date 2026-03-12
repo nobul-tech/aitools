@@ -27,8 +27,8 @@ Closes #25, #26, #27.
 
 | # | Change |
 |---|--------|
-| 3 | **CMake prereq: pip instead of winget** (#26): Changed from `winget install Kitware.CMake` (needs admin) to `uv pip install cmake` (user-level). Decision based on cmake.org/download which lists pip as an official method (winget not mentioned). PyPI package maintained by Kitware. |
-| 4 | **CMake auto-install in setup-datadog**: When CMake missing, attempts `uv pip install cmake` before falling back to ACTION item. |
+| 3 | **CMake prereq: pip instead of winget** (#26): Changed from `winget install Kitware.CMake` (needs admin) to `uv pip install --system cmake` (user-level). Decision based on cmake.org/download which lists pip as an official method (winget not mentioned). PyPI package maintained by Kitware. |
+| 4 | **CMake auto-install in setup-datadog**: When CMake missing, attempts `uv pip install --system cmake` before falling back to ACTION item. |
 
 ### Added
 

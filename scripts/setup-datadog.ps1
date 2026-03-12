@@ -33,7 +33,7 @@ if (-not $cargoCheck) {
             # Get-Command exempt: command-existence check with explicit fallback
             if ($p.Name -eq "CMake" -and (Get-Command uv -ErrorAction SilentlyContinue)) {
                 Log "Attempting CMake install via uv pip (per cmake.org/download)..."
-                $uvOutput = uv pip install cmake 2>&1 | Out-String
+                $uvOutput = uv pip install --system cmake 2>&1 | Out-String
                 Log-WingetOutput $uvOutput
                 Refresh-Path
                 # Get-Command exempt: command-existence check with explicit fallback
@@ -45,7 +45,7 @@ if (-not $cargoCheck) {
                         LogOk "CMake found after uv install (added to session PATH)"
                         $missingPrereqs = @($missingPrereqs | Where-Object { $_.Name -ne "CMake" })
                     } else {
-                        LogWarn "uv pip install cmake succeeded but cmake not on PATH"
+                        LogWarn "uv pip install --system cmake succeeded but cmake not on PATH"
                     }
                 }
             }

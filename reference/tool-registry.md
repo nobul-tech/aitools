@@ -504,7 +504,7 @@ rustup --version
   `setup-rust.ps1` auto-installs via `winget install NASM.NASM`. Without NASM, `cargo install`
   for any crate using `aws-lc-rs` panics: `NASM command not found! Build cannot continue.`
 - **CMake**: Required by some crates. Official: cmake.org/download lists pip, ZIP, MSI
-  (not winget). Windows: `uv pip install cmake` (user-level, PyPI package maintained by
+  (not winget). Windows: `uv pip install --system cmake` (user-level, PyPI package maintained by
   Kitware). macOS: `brew install cmake`. See `reference/tool-evaluation-playbook.md`.
 
 All known build prerequisites are tracked in `aitools-lib.ps1` (`$script:BuildPrereqs`)

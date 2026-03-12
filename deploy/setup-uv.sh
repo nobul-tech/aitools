@@ -1103,12 +1103,12 @@ check_build_prereqs() {
             # cmake -- required by some crates
             # Official: cmake.org/download lists pip, ZIP, MSI (not winget)
             # macOS: brew install cmake (user-level, no sudo)
-            # Windows: uv pip install cmake (user-level, see reference/tool-evaluation-playbook.md)
+            # Windows: uv pip install --system cmake (user-level, see reference/tool-evaluation-playbook.md)
             if ! command -v cmake >/dev/null 2>&1; then
                 if ensure_tool_on_path "cmake" /usr/local/bin/cmake /opt/homebrew/bin/cmake /usr/bin/cmake /Applications/CMake.app/Contents/bin/cmake; then
                     : # Found via fallback
                 else
-                    echo "CMake|brew install cmake (macOS) / uv pip install cmake (Windows) -- see cmake.org/download"
+                    echo "CMake|brew install cmake (macOS) / uv pip install --system cmake (Windows) -- see cmake.org/download"
                     missing=1
                 fi
             fi
@@ -1140,7 +1140,7 @@ diagnose_build_failure() {
     local -a patterns=(
         "NASM command not found|NASM|brew install nasm / apt-get install nasm"
         "linker.*not found|Linker|Install build-essential (Linux) or Xcode CLI tools (macOS)"
-        "cmake.*not found|CMake|brew install cmake / uv pip install cmake (see cmake.org/download)"
+        "cmake.*not found|CMake|brew install cmake / uv pip install --system cmake (see cmake.org/download)"
         "pkg-config.*not found|pkg-config|brew install pkg-config / apt-get install pkg-config"
         "Python\.h.*not found|Python headers|Install python3-dev or python3-devel"
         "openssl.*not found|OpenSSL|brew install openssl / apt-get install libssl-dev"
