@@ -12,6 +12,24 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.52.3 -- Auto-merge engine swap, NASM detection, pup messaging, log locking (2026-03-12)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Merge engine (#38, CRITICAL)**: Replace `diff3` with `git merge-file -p` -- `Find-Diff3` computed wrong path on Windows (2 levels up instead of 3), so 3-way merge never worked. Rename to implementation-agnostic names (`try_auto_merge`/`Try-AutoMerge`). |
+| 2 | **NASM detection (#39)**: Check known install paths before declaring "not found" -- winget user-scope install at `%LOCALAPPDATA%\bin\NASM\` not on session PATH. |
+| 3 | **Pup messaging (#40)**: Compare version before/after `cargo install` -- show "already up to date" instead of "upgraded" when unchanged. |
+| 4 | **Log file locking (#41)**: Replace `Add-Content` with `[IO.File]::AppendAllText()` in PS1 logging -- prevents exclusive lock contention between concurrent `aitools` instances. |
+
+### Platform testing
+
+- Windows: tested
+- macOS: not tested (tested: Windows)
+
+---
+
 ## v0.52.2 -- Fix pre-pull checkout data loss, resume merge fixes (2026-03-12)
 
 ### Fixed
@@ -22,7 +40,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | 2 | **Build chmod**: Remove `scripts/` from `chmod +x` in `build-deploy.sh` -- eliminates the mode noise source. |
 | 3 | **Error severity (#34)**: `log_warn` -> `log_error` for AI merge failure (user-requested operation). |
 | 4 | **Start telemetry (#36)**: Add invocation start log line before CLI call in `invoke_ai`/`Invoke-AI` retry loop. |
-| 5 | **Shadow bootstrap (#32)**: Seed deploy shadow from existing content when empty -- enables diff3 for pre-existing files. |
+| 5 | **Shadow bootstrap (#32)**: Seed deploy shadow from existing content when empty -- enables auto-merge for pre-existing files. |
 | 6 | **Prompt fences (#33)**: ALL-CAPS anti-fence rule + defense-in-depth stripping of code fences from AI output. |
 | 7 | **Spinner + transparency (#35)**: Show backend/tier/filename before AI merge; animated spinner during invocation. |
 

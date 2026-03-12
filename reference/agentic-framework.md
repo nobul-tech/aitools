@@ -171,8 +171,8 @@ _merge_validate() {
 
 Any file-tracking system with shadows/ancestors must handle pre-existing files
 that were deployed before the tracking was introduced. Bootstrap shadow from
-current deployed content -- this makes the first post-bootstrap diff3 process
+current deployed content -- this makes the first post-bootstrap auto-merge process
 only the NEW template changes, which is correct.
 
 Pattern: when `get_deploy_shadow` returns empty but file exists on disk, seed
-shadow with current content before attempting diff3.
+shadow with current content before attempting auto-merge.

@@ -404,17 +404,16 @@ get_deploy_shadow() {
 }
 
 # ---------------------------------------------------------------------------
-# Non-agentic merge via diff3.
-# Sets DIFF3_MERGED_CONTENT on clean merge. Returns 0 on success, 1 on failure.
+# Non-agentic 3-way merge using shadow as common ancestor.
+# Backend: git merge-file (guaranteed prerequisite -- no discovery needed).
+# Sets AUTO_MERGED_CONTENT on clean merge. Returns 0 on success, 1 on failure.
 # ---------------------------------------------------------------------------
-DIFF3_MERGED_CONTENT=""
-try_diff3_merge() {
+AUTO_MERGED_CONTENT=""
+try_auto_merge() {
     local local_content="$1"
     local ancestor_content="$2"
     local source_content="$3"
-    DIFF3_MERGED_CONTENT=""
-
-    if ! command -v diff3 >/dev/null 2>&1; then return 1; fi
+    AUTO_MERGED_CONTENT=""
 
     local tmp_local tmp_ancestor tmp_source
     tmp_local=$(mktemp)
@@ -425,12 +424,14 @@ try_diff3_merge() {
     printf '%s' "$source_content" > "$tmp_source"
 
     local merged
-    merged=$(diff3 -m "$tmp_local" "$tmp_ancestor" "$tmp_source" 2>/dev/null)
+    # 2>/dev/null: git merge-file writes conflict markers to stderr on exit 1;
+    # we only want stdout. Exit code checked via $rc immediately below.
+    merged=$(git merge-file -p "$tmp_local" "$tmp_ancestor" "$tmp_source" 2>/dev/null)
     local rc=$?
     rm -f "$tmp_local" "$tmp_ancestor" "$tmp_source"
 
     if [ "$rc" -eq 0 ]; then
-        DIFF3_MERGED_CONTENT="$merged"
+        AUTO_MERGED_CONTENT="$merged"
         return 0
     fi
     return 1
@@ -824,17 +825,17 @@ prompt_diff_review() {
         printf '%s\n' "$diff_output" >> "${LOG_FILE:-/dev/null}"
     fi
 
-    # Attempt diff3 auto-merge if ancestor available
+    # Attempt automatic merge if ancestor available
     if [ -n "$ancestor_content" ]; then
         printf '\n  Attempting automatic merge...\n' > /dev/tty
-        if try_diff3_merge "$cur_content" "$ancestor_content" "$new_content"; then
+        if try_auto_merge "$cur_content" "$ancestor_content" "$new_content"; then
             printf '  Clean merge -- no conflicts.\n\n' > /dev/tty
             local total_m_lines preview_count
-            total_m_lines=$(printf '%s\n' "$DIFF3_MERGED_CONTENT" | wc -l | tr -d ' ')
+            total_m_lines=$(printf '%s\n' "$AUTO_MERGED_CONTENT" | wc -l | tr -d ' ')
             preview_count=$total_m_lines
             if [ "$preview_count" -gt 30 ]; then preview_count=30; fi
             printf '  --- merged result preview (first %d lines) ---\n' "$preview_count" > /dev/tty
-            printf '%s\n' "$DIFF3_MERGED_CONTENT" | head -"$preview_count" | while IFS= read -r line; do
+            printf '%s\n' "$AUTO_MERGED_CONTENT" | head -"$preview_count" | while IFS= read -r line; do
                 printf '  | %s\n' "$line" > /dev/tty
             done
             if [ "$total_m_lines" -gt 30 ]; then
@@ -858,9 +859,9 @@ prompt_diff_review() {
             local merge_choice
             read -r merge_choice < /dev/tty
             case "$(printf '%s' "$merge_choice" | tr '[:upper:]' '[:lower:]')" in
-                y)  MERGED_CONTENT="$DIFF3_MERGED_CONTENT"
+                y)  MERGED_CONTENT="$AUTO_MERGED_CONTENT"
                     DIFF_REVIEW_RESULT="merge"
-                    printf '  >> merged: diff3 merge deployed\n' > /dev/tty
+                    printf '  >> merged: auto-merge deployed\n' > /dev/tty
                     return 0 ;;
                 a)  if [ -n "$adopt_label" ]; then
                         printf '  >> adopted: local version copied back to %s\n' "$adopt_label" > /dev/tty

@@ -66,11 +66,11 @@ if (-not $cargoCheck) {
         $pupCheck = Get-Command pup -ErrorAction SilentlyContinue
 
         if ($pupCheck) {
-            $pupVersion = pup version 2>$null
-            if ($pupVersion) {
-                Log "Pup already installed ($pupVersion) -- upgrading via cargo install..."
+            $pupVersionBefore = pup version 2>$null
+            if ($pupVersionBefore) {
+                Log "Pup already installed ($pupVersionBefore) -- checking for updates via cargo install..."
             } else {
-                Log "Pup found but version check failed -- upgrading via cargo install..."
+                Log "Pup found but version check failed -- reinstalling via cargo install..."
             }
             $cargoOutput = cargo install --git https://github.com/datadog-labs/pup 2>&1 | Out-String
             if ($LASTEXITCODE -ne 0) {
@@ -88,10 +88,14 @@ if (-not $cargoCheck) {
                 }
             } else {
                 Refresh-Path
-                $pupVersion = pup version 2>$null
-                if ($pupVersion) {
-                    LogOk "Pup upgraded ($pupVersion)"
-                    Write-Summary "OK" "datadog cli" "$pupVersion"
+                $pupVersionAfter = pup version 2>$null
+                if ($pupVersionAfter) {
+                    if ($pupVersionBefore -eq $pupVersionAfter) {
+                        LogOk "Pup already up to date ($pupVersionAfter)"
+                    } else {
+                        LogOk "Pup upgraded ($pupVersionBefore -> $pupVersionAfter)"
+                    }
+                    Write-Summary "OK" "datadog cli" "$pupVersionAfter"
                 } else {
                     LogError "cargo install completed but 'pup version' failed"
                     Write-Summary "ERROR" "datadog cli" "version check failed after upgrade"

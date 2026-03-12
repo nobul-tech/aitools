@@ -82,6 +82,24 @@ if ($hasMSVC) {
 # These are not needed by Rust itself, but by commonly used crates (aws-lc-sys, etc.)
 # Get-Command exempt: command-existence check with explicit fallback
 $nasmCheck = Get-Command nasm -ErrorAction SilentlyContinue
+if (-not $nasmCheck) {
+    # NASM may be installed but not on session PATH (winget user-scope install).
+    # Check known paths before declaring "not found" -- same paths used post-install.
+    # Verified: 2026-03-12 (NASM 3.01, winget user-scope)
+    $nasmKnownPaths = @(
+        "$env:LOCALAPPDATA\bin\NASM\nasm.exe",
+        "$env:ProgramFiles\NASM\nasm.exe",
+        "${env:ProgramFiles(x86)}\NASM\nasm.exe"
+    )
+    foreach ($p in $nasmKnownPaths) {
+        if (Test-Path $p) {
+            $env:PATH = "$(Split-Path $p);$env:PATH"
+            Log "nasm found at $p (added to session PATH)"
+            $nasmCheck = Get-Command nasm -ErrorAction SilentlyContinue
+            break
+        }
+    }
+}
 if ($nasmCheck) {
     $nasmVer = (nasm --version 2>$null)
     if ($nasmVer) { $nasmVer = ($nasmVer -split '\s+' | Select-Object -Index 2) }

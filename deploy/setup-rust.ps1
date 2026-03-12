@@ -73,7 +73,8 @@ function Initialize-Logging {
 function Log($msg, $level = "info") {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $line = "[$ts] [$scriptName] [$level] $msg"
-    Add-Content -Path $logFile -Value $line
+    $resolvedLog = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($logFile)
+    [IO.File]::AppendAllText($resolvedLog, "$line`n", [System.Text.UTF8Encoding]::new($false))
     switch ($level) {
         "error" { Write-Host $line -ForegroundColor Red }
         "warn"  { Write-Host $line -ForegroundColor Yellow }
@@ -85,7 +86,8 @@ function LogError($msg) { Log $msg "error"; $script:errors++ }
 function LogWarn($msg)  { Log $msg "warn"; $script:warnings++ }
 function LogDetail($msg) {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-    Add-Content -Path $logFile -Value "[$ts] [$scriptName] [detail] $msg"
+    $resolvedLog = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($logFile)
+    [IO.File]::AppendAllText($resolvedLog, "[$ts] [$scriptName] [detail] $msg`n", [System.Text.UTF8Encoding]::new($false))
 }
 
 # ---------------------------------------------------------------------------
@@ -237,7 +239,8 @@ function Write-Summary($cat, $tool, $detail) {
         if ($cat -eq "OK" -and $script:warnings -gt 0) {
             $cat = "WARN"
         }
-        Add-Content -Path $env:AITOOLS_SUMMARY_FILE -Value "${cat}|${tool}|${detail}"
+        $resolvedSummary = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:AITOOLS_SUMMARY_FILE)
+        [IO.File]::AppendAllText($resolvedSummary, "${cat}|${tool}|${detail}`n", [System.Text.UTF8Encoding]::new($false))
     }
 }
 
@@ -401,29 +404,16 @@ function Get-DeployShadow {
 }
 
 # ---------------------------------------------------------------------------
-# Non-agentic merge via diff3 (3-way merge using shadow as common ancestor).
+# Non-agentic 3-way merge using shadow as common ancestor.
+# Backend: git merge-file (guaranteed prerequisite -- no discovery needed).
 # Returns merged content string on clean merge, $null on conflicts/error.
 # ---------------------------------------------------------------------------
-function Find-Diff3 {
-    # Get-Command exempt: command-existence check with explicit fallback
-    $gitCmd = Get-Command git -ErrorAction SilentlyContinue
-    if ($gitCmd) {
-        $gitDir = Split-Path (Split-Path $gitCmd.Source)
-        $diff3Path = Join-Path $gitDir "usr\bin\diff3.exe"
-        if (Test-Path $diff3Path) { return $diff3Path }
-    }
-    return $null
-}
-
-function Try-Diff3Merge {
+function Try-AutoMerge {
     param(
         [string]$LocalContent,
         [string]$AncestorContent,
         [string]$SourceContent
     )
-    $diff3 = Find-Diff3
-    if (-not $diff3) { return $null }
-
     $tmpLocal = [System.IO.Path]::GetTempFileName()
     $tmpAncestor = [System.IO.Path]::GetTempFileName()
     $tmpSource = [System.IO.Path]::GetTempFileName()
@@ -432,7 +422,7 @@ function Try-Diff3Merge {
         [IO.File]::WriteAllText($tmpAncestor, $AncestorContent)
         [IO.File]::WriteAllText($tmpSource, $SourceContent)
 
-        $merged = & $diff3 -m $tmpLocal $tmpAncestor $tmpSource 2>&1
+        $merged = git merge-file -p $tmpLocal $tmpAncestor $tmpSource 2>&1
         if ($LASTEXITCODE -eq 0) {
             return ($merged -join "`n")
         }
@@ -441,6 +431,7 @@ function Try-Diff3Merge {
         return $null
     } finally {
         Remove-Item $tmpLocal, $tmpAncestor, $tmpSource -ErrorAction SilentlyContinue
+        # ErrorAction exempt: temp file cleanup; files may already be gone
     }
 }
 
@@ -848,11 +839,11 @@ function Prompt-DiffReview {
         [Console]::WriteLine("  ... ($($diffCount - 30) more lines -- see deploy log)")
     }
 
-    # Attempt diff3 auto-merge if ancestor available
+    # Attempt automatic merge if ancestor available
     if ($AncestorContent) {
         [Console]::WriteLine("")
         [Console]::WriteLine("  Attempting automatic merge...")
-        $autoMerged = Try-Diff3Merge -LocalContent $CurrentContent `
+        $autoMerged = Try-AutoMerge -LocalContent $CurrentContent `
             -AncestorContent $AncestorContent -SourceContent $NewContent
         if ($autoMerged) {
             [Console]::WriteLine("  Clean merge -- no conflicts.")
@@ -885,7 +876,7 @@ function Prompt-DiffReview {
             switch ($choice.ToLower()) {
                 "y" {
                     $script:MergedContent = $autoMerged
-                    [Console]::WriteLine("  >> merged: diff3 merge deployed")
+                    [Console]::WriteLine("  >> merged: auto-merge deployed")
                     return "merge"
                 }
                 "a" {
@@ -1711,6 +1702,24 @@ if ($hasMSVC) {
 # These are not needed by Rust itself, but by commonly used crates (aws-lc-sys, etc.)
 # Get-Command exempt: command-existence check with explicit fallback
 $nasmCheck = Get-Command nasm -ErrorAction SilentlyContinue
+if (-not $nasmCheck) {
+    # NASM may be installed but not on session PATH (winget user-scope install).
+    # Check known paths before declaring "not found" -- same paths used post-install.
+    # Verified: 2026-03-12 (NASM 3.01, winget user-scope)
+    $nasmKnownPaths = @(
+        "$env:LOCALAPPDATA\bin\NASM\nasm.exe",
+        "$env:ProgramFiles\NASM\nasm.exe",
+        "${env:ProgramFiles(x86)}\NASM\nasm.exe"
+    )
+    foreach ($p in $nasmKnownPaths) {
+        if (Test-Path $p) {
+            $env:PATH = "$(Split-Path $p);$env:PATH"
+            Log "nasm found at $p (added to session PATH)"
+            $nasmCheck = Get-Command nasm -ErrorAction SilentlyContinue
+            break
+        }
+    }
+}
 if ($nasmCheck) {
     $nasmVer = (nasm --version 2>$null)
     if ($nasmVer) { $nasmVer = ($nasmVer -split '\s+' | Select-Object -Index 2) }
