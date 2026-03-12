@@ -97,6 +97,18 @@ $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSP
 [System.IO.File]::WriteAllText($resolved, $content, ...)
 ```
 
+### Refresh-Path behavior (Windows)
+
+`Refresh-Path` (aitools-lib.ps1) merges new PATH entries from the Windows
+registry into the current session PATH after package manager installs. It is
+**additive** — it preserves existing PATH entries (including those inherited
+from the parent process or added by `Ensure-ToolOnPath`) and only adds
+directories found in the registry that are missing from the current PATH.
+
+Setup scripts call `Refresh-Path` after winget/MSI installs to pick up new
+binaries without restarting the shell. The function is safe to call multiple
+times — duplicate directories are filtered.
+
 ### Pre-validation convention
 
 When creating or modifying any `.ps1` or `.sh` script in this repo:

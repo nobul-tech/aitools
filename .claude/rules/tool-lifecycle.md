@@ -37,6 +37,18 @@ using hardcoded package manager paths. Instead:
 2. Ask the user to relaunch Claude Code to pick up the new PATH
 3. After relaunch, verify with the version check command and proceed with testing
 
+### Bundled dependencies
+
+Some tools used by this project ship inside a managed tool (e.g., pip ships
+with Python, rg ships with Cursor Agent CLI). Previously, Perl was bundled
+with Git for Windows — it is now independently managed.
+
+Bundled tools that are only used incidentally (not USO-mandated) may remain
+as bundled dependencies without full lifecycle tracking. If a bundled tool
+becomes a project requirement (USO, standing order, or widespread script
+dependency), it must graduate to a full managed tool via the standard
+lifecycle phases.
+
 ### Lifecycle field completeness
 
 Every tool entry in `reference/tool-registry.md` (including Under Evaluation) must have all 6 fields:

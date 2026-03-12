@@ -594,9 +594,21 @@ if (Test-Path $datadogScript) {
 }
 
 # ============================================================
-# 19. Deploy configurations
+# 19. Perl
 # ============================================================
-Log "Step 19: Deploy configurations"
+Log "Step 19: Perl"
+
+$perlScript = Join-Path $PSScriptRoot "setup-perl.ps1"
+if (Test-Path $perlScript) {
+    Invoke-ValidatedScript $perlScript
+} else {
+    LogWarn "setup-perl.ps1 not found -- skipping (MDM deploy)"
+}
+
+# ============================================================
+# 20. Deploy configurations
+# ============================================================
+Log "Step 20: Deploy configurations"
 
 $deployScripts = @(
     "setup-user-claude.ps1",

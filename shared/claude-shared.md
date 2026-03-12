@@ -72,6 +72,7 @@ use `npx`, `bunx`, or other package runners.
 | uv | `uv` |
 | Go | `go` |
 | Datadog CLI | `pup` |
+| Perl | `perl` |
 
 ### Per-Platform Tools
 

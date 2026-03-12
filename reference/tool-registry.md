@@ -423,6 +423,43 @@ pandoc --version
 
 ---
 
+## Perl
+
+**Source**: https://strawberryperl.com (Windows) / system (macOS/Linux)
+
+### Install
+
+| Platform | Method | Command |
+|----------|--------|---------|
+| Windows | WinGet (preferred) | `winget install StrawberryPerl.StrawberryPerl` |
+| macOS | System | Pre-installed (`/usr/bin/perl`) |
+| macOS | Homebrew | `brew install perl` |
+| Linux | System | Pre-installed (`/usr/bin/perl`) |
+
+### Check Version
+
+`perl --version`
+
+### Use Cases
+
+Simple one-liner text processing (USO mandate):
+- `perl -ne 'print "$1\n" if /pattern/'` — regex extraction
+- `perl -pe 's/foo/bar/'` — substitution
+- `perl -0777 -pe 's/[\r\n]+$/\n/'` — trailing whitespace normalization
+
+No CPAN modules required. Minimum version: 5.10+.
+
+### Lifecycle
+
+- **Platform Status:** macOS: supported | Windows: supported | Linux: supported
+- **Concurrency:** Yes — stateless CLI
+- **Post-Install Config:** None
+- **Dependencies:** None (Windows: standalone; macOS/Linux: system)
+- **Invocation:** `perl` (direct). Anti-pattern: `sed`/`awk` for non-trivial string manipulation
+- **Last verified version:** Windows: 5.42.0.1 (2026-03-12) | macOS: pending | Linux: pending
+
+---
+
 ## PowerShell (pwsh)
 
 **Source**: https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell

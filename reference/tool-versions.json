@@ -148,6 +148,14 @@
       "lastReviewed": "2026-03-06",
       "assumptions": ["Requires DD_API_KEY and DD_APP_KEY env vars"],
       "notes": "Official Datadog MCP server -- Preview status"
+    },
+    "perl": {
+      "macos":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "windows": { "lastVerifiedVersion": "5.42.0.1", "lastVerified": "2026-03-12" },
+      "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "minVersion": "5.010",
+      "blocked": [],
+      "notes": "USO-mandated. Windows: winget install StrawberryPerl; macOS/Linux: system perl. Verified: 2026-03-12"
     }
   }
 }

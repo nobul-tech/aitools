@@ -12,6 +12,30 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.52.5 -- Refresh-Path fix, managed Perl lifecycle (2026-03-12)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Refresh-Path drops runtime PATH entries (#45)**: Changed from destructive replace to additive merge -- preserves entries inherited from parent process and added by `Ensure-ToolOnPath`. All 33 callers benefit. |
+| 2 | **check-lib.ps1 Git tools PATH**: Explicitly add Git's `usr/bin` to PATH at init as safety net for bundled tools. |
+
+### Added
+
+| # | Change |
+|---|--------|
+| 3 | **Perl as managed tool**: Full lifecycle -- setup-perl.ps1/.sh, installer integration, build pipeline, tool-registry entry. Replaces fragile dependency on Git for Windows bundled perl. |
+| 4 | **Bundled dependencies** section in `.claude/rules/tool-lifecycle.md`: defines graduation path for tools that ship inside other tools. |
+| 5 | **Refresh-Path documentation** in `.claude/rules/cross-platform.md`. |
+
+### Platform testing
+
+- Windows: tested
+- macOS: not tested (PS1-only changes; bash unaffected)
+
+---
+
 ## v0.52.4 -- Merge UX fixes + deployment flow documentation (2026-03-12)
 
 ### Fixed

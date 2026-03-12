@@ -1120,12 +1120,21 @@ function Write-DeployTrackerSummary {
 # PATH helpers
 # ---------------------------------------------------------------------------
 
-# Refresh-Path: Reload $env:Path from Machine + User registry values.
+# Refresh-Path: Merge registry PATH entries into current PATH (additive).
+# Preserves runtime additions from Ensure-ToolOnPath and entries inherited
+# from the parent process (e.g., Git Bash usr/bin). Only ADDS directories
+# found in registry but missing from current PATH.
 # Call after winget install/upgrade to pick up PATH changes in same session.
 function Refresh-Path {
-    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $env:Path = "$machinePath;$userPath"
+    $registryPath = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
+                    [Environment]::GetEnvironmentVariable("Path", "User")
+    $currentDirs = ($env:Path -split ';') | Where-Object { $_ }
+    $currentSet = [System.Collections.Generic.HashSet[string]]::new(
+        [string[]]$currentDirs, [System.StringComparer]::OrdinalIgnoreCase)
+    $newDirs = ($registryPath -split ';') | Where-Object { $_ -and -not $currentSet.Contains($_) }
+    if ($newDirs) {
+        $env:Path = $env:Path + ";" + ($newDirs -join ';')
+    }
 }
 
 function Test-IsAdmin {

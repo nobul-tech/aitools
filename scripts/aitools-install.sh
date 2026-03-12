@@ -672,9 +672,21 @@ else
 fi
 
 # ============================================================
-# 19. Deploy configurations
+# 19. Perl
 # ============================================================
-log "Step 19: Deploy configurations"
+log "Step 19: Perl"
+
+perl_script="$SCRIPT_DIR/setup-perl.sh"
+if [ -f "$perl_script" ]; then
+    validate_and_run "$perl_script"
+else
+    log_warn "setup-perl.sh not found -- skipping (MDM deploy)"
+fi
+
+# ============================================================
+# 20. Deploy configurations
+# ============================================================
+log "Step 20: Deploy configurations"
 
 DEPLOY_SCRIPTS="setup-user-claude.sh setup-user-cursor.sh setup-user-mcp.sh setup-cursor-ide-mcp.sh setup-user-hooks.sh"
 

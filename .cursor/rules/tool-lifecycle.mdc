@@ -21,6 +21,12 @@ This applies in plan mode too -- a plan that includes Phases 3-5 must note the P
 
 When a tool is installed via a package manager (winget, brew, npm), the new binary may not be on PATH in the current shell. Do not invoke via hardcoded package paths. Instead: install, ask user to relaunch Claude Code for PATH refresh, then verify and test.
 
+### Bundled dependencies
+
+Bundled tools (pip via Python, rg via Cursor) that become project requirements
+must graduate to full managed tools via the standard lifecycle. See
+tool-lifecycle.md Bundled dependencies section.
+
 ### Lifecycle field completeness
 
 Every tool in `reference/tool-registry.md` (including Under Evaluation) must have all 6 fields: Platform Status, Concurrency, Post-Install Config, Dependencies, Invocation, and Last verified version. Last verified version format: `macOS: X.Y.Z (YYYY-MM-DD) | Windows: X.Y.Z | Linux: X.Y.Z` (use `pending` for unverified). Tools with `maintenanceFile` in `tool-versions.json`: `See <filename>`. `@latest`/remote: `Last reviewed: YYYY-MM-DD`. Verify all 6 before committing.

@@ -4,6 +4,15 @@
 # Source base lib (provides ReadConfigKey)
 . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
 
+# Ensure Git bundled tools (perl, etc.) are on PATH.
+# Git Bash inherits these automatically; PowerShell needs explicit addition.
+# Safety net: adds Git's usr/bin for bundled tools (perl, etc.).
+# Perl is also independently managed via setup-perl.ps1.
+$_gitUsrBin = Join-Path $env:ProgramFiles "Git\usr\bin"
+if ((Test-Path $_gitUsrBin) -and ($env:Path -notmatch [regex]::Escape($_gitUsrBin))) {
+    $env:Path = "$_gitUsrBin;$env:Path"
+}
+
 # ---------------------------------------------------------------------------
 # Counters
 # ---------------------------------------------------------------------------
