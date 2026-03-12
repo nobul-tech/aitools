@@ -308,9 +308,71 @@ function Try-Diff3Merge {
     }
 }
 
+$script:MergeRejectReason = ""
+
 # ---------------------------------------------------------------------------
-# Agentic merge via claude CLI. Returns "merge" (sets $script:MergedContent)
-# or falls back to "overwrite"/"skip".
+# Validate AI merge output before accepting it.
+# Returns $true if valid, $false if invalid. Sets $script:MergeRejectReason.
+# ---------------------------------------------------------------------------
+function Test-AiMergeOutput {
+    param(
+        [string]$Output,
+        [string]$SourceContent,
+        [string]$LocalContent
+    )
+    $script:MergeRejectReason = ""
+
+    # Check 1: conversational patterns (first non-empty line)
+    $firstLine = ($Output -split "`n" | Where-Object { $_.Trim() } | Select-Object -First 1)
+    if ($firstLine -and $firstLine -match '(?i)^(I |Here|Sure|Certainly|Let me)') {
+        $truncated = $firstLine.Substring(0, [Math]::Min(60, $firstLine.Length))
+        $script:MergeRejectReason = "Conversational text: $truncated"
+        return $false
+    }
+
+    # Check 2: markdown code fences
+    if ($Output -match '(?m)^```') {
+        $script:MergeRejectReason = "Contains markdown code fences"
+        return $false
+    }
+
+    # Check 3: permission/access language
+    if ($Output -match '(?i)\b(permission|approve|access denied)\b') {
+        $script:MergeRejectReason = "Contains permission/access language"
+        return $false
+    }
+
+    # Check 4: minimum length (output >= 50% of shorter input when shorter > 40 chars)
+    $outLen = $Output.Length
+    $minInputLen = [Math]::Min($SourceContent.Length, $LocalContent.Length)
+    $threshold = [Math]::Floor($minInputLen / 2)
+    if ($minInputLen -gt 40 -and $outLen -lt $threshold) {
+        $script:MergeRejectReason = "Too short ($outLen chars vs minimum $threshold)"
+        return $false
+    }
+
+    # Check 5: structural overlap
+    $hasOverlap = $false
+    foreach ($line in ($Output -split "`n")) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.Length -lt 8) { continue }
+        if ($SourceContent.Contains($trimmed) -or $LocalContent.Contains($trimmed)) {
+            $hasOverlap = $true
+            break
+        }
+    }
+    if (-not $hasOverlap) {
+        $script:MergeRejectReason = "No structural overlap with source or local"
+        return $false
+    }
+
+    return $true
+}
+
+# ---------------------------------------------------------------------------
+# Agentic merge via claude CLI with refinement loop.
+# Self-contained prompt — all content inlined, no tool use needed.
+# Returns "merge" (sets $script:MergedContent) or "overwrite"/"skip".
 # ---------------------------------------------------------------------------
 function Invoke-AiMerge {
     param(
@@ -328,68 +390,134 @@ function Invoke-AiMerge {
 
     [Console]::WriteLine("  >> merging via AI...")
 
-    $tmpSource = [System.IO.Path]::GetTempFileName()
-    $tmpLocal = [System.IO.Path]::GetTempFileName()
-    $tmpPrompt = [System.IO.Path]::GetTempFileName()
-    try {
-        [IO.File]::WriteAllText($tmpSource, $SourceContent)
-        [IO.File]::WriteAllText($tmpLocal, $LocalContent)
+    $currentMerge = ""
+    $iteration = 0
 
-        $promptText = @"
-Merge these two versions of a configuration file.
+    while ($true) {
+        $iteration++
 
-SOURCE ($tmpSource) is the new template being deployed.
-LOCAL ($tmpLocal) is the user's current file with their customizations.
+        if (-not $currentMerge) {
+            # Initial merge prompt
+            $promptText = @"
+You are a file merge tool. Output ONLY the merged result -- no commentary, no code fences, no explanation.
 
-Rules:
+## Context
+A deploy system detected that SOURCE (updated template) and LOCAL (user's
+current file with customizations) have diverged. Merge them.
+
+## SOURCE (new template being deployed)
+<SOURCE>
+$SourceContent
+</SOURCE>
+
+## LOCAL (user's current file with their customizations)
+<LOCAL>
+$LocalContent
+</LOCAL>
+
+## Rules
 - Preserve all user customizations from LOCAL that are intentional
 - Include all new content from SOURCE (new sections, updated tables, structural changes)
 - When both sides modify the same line, prefer LOCAL unless SOURCE adds new information
-- Output ONLY the merged file content, no commentary, no markdown fences
+- Output the merged file content ONLY -- no preamble, no explanation, no markdown fences
 "@
-        [IO.File]::WriteAllText($tmpPrompt, $promptText)
+        } else {
+            # Refinement prompt
+            [Console]::Write("  refinement feedback: ")
+            $feedback = [Console]::ReadLine()
+            $promptText = @"
+You are a file merge tool. Output ONLY the revised merged result -- no commentary, no code fences, no explanation.
 
-        $merged = Get-Content $tmpPrompt -Raw | claude -p 2>&1
-        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($merged)) {
-            [Console]::WriteLine("  >> AI merge failed -- choose another option")
-            LogWarn "AI merge failed (exit $LASTEXITCODE)"
+## Context
+A previous merge produced CURRENT_MERGE from SOURCE + LOCAL. The user wants refinements.
+
+## SOURCE (original template)
+<SOURCE>
+$SourceContent
+</SOURCE>
+
+## LOCAL (original user file)
+<LOCAL>
+$LocalContent
+</LOCAL>
+
+## CURRENT MERGE (previous result)
+<CURRENT_MERGE>
+$currentMerge
+</CURRENT_MERGE>
+
+## User Feedback
+$feedback
+
+## Rules
+- Apply the user's feedback to CURRENT_MERGE
+- Keep all content from CURRENT_MERGE not affected by the feedback
+- Output the revised merged file content ONLY -- no preamble, no explanation, no markdown fences
+"@
+        }
+
+        $merged = $null
+        try {
+            $merged = $promptText | claude -p --allowedTools "" --no-session-persistence 2>&1
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($merged)) {
+                [Console]::WriteLine("  >> AI merge failed (exit $LASTEXITCODE, iteration $iteration) -- choose another option")
+                LogWarn "AI merge failed (exit $LASTEXITCODE, iteration $iteration)"
+                [Console]::Write("  fallback [o]verwrite / [s]kip: ")
+                $fb = [Console]::ReadLine()
+                if ($fb.ToLower() -eq "s") { return "skip" }
+                return "overwrite"
+            }
+        } catch {
+            [Console]::WriteLine("  >> AI merge error: $_ -- choose another option")
+            LogWarn "AI merge error (iteration $iteration): $_"
             [Console]::Write("  fallback [o]verwrite / [s]kip: ")
             $fb = [Console]::ReadLine()
             if ($fb.ToLower() -eq "s") { return "skip" }
             return "overwrite"
         }
-    } catch {
-        [Console]::WriteLine("  >> AI merge error: $_ -- choose another option")
-        LogWarn "AI merge error: $_"
-        [Console]::Write("  fallback [o]verwrite / [s]kip: ")
-        $fb = [Console]::ReadLine()
-        if ($fb.ToLower() -eq "s") { return "skip" }
-        return "overwrite"
-    } finally {
-        Remove-Item $tmpSource, $tmpLocal, $tmpPrompt -ErrorAction SilentlyContinue
-    }
 
-    # Show merge preview
-    [Console]::WriteLine("")
-    [Console]::WriteLine("  --- merged result preview (first 30 lines) ---")
-    $mergedLines = $merged -split "`n"
-    $previewCount = [Math]::Min(30, $mergedLines.Count)
-    for ($i = 0; $i -lt $previewCount; $i++) {
-        [Console]::WriteLine("  | $($mergedLines[$i])")
+        # Validate output before showing preview
+        if (-not (Test-AiMergeOutput -Output $merged -SourceContent $SourceContent -LocalContent $LocalContent)) {
+            [Console]::WriteLine("  >> AI merge output rejected (iteration $iteration): $($script:MergeRejectReason)")
+            LogWarn "AI merge output rejected (iteration $iteration): $($script:MergeRejectReason)"
+            Log "Rejected AI merge output: $merged"
+            [Console]::Write("  fallback [o]verwrite / [s]kip: ")
+            $fb = [Console]::ReadLine()
+            if ($fb.ToLower() -eq "s") { return "skip" }
+            return "overwrite"
+        }
+
+        # Show merge preview
+        [Console]::WriteLine("")
+        [Console]::WriteLine("  --- merged result preview (first 30 lines) ---")
+        $mergedLines = $merged -split "`n"
+        $previewCount = [Math]::Min(30, $mergedLines.Count)
+        for ($i = 0; $i -lt $previewCount; $i++) {
+            [Console]::WriteLine("  | $($mergedLines[$i])")
+        }
+        if ($mergedLines.Count -gt 30) {
+            [Console]::WriteLine("  | ... ($($mergedLines.Count - 30) more lines)")
+        }
+        [Console]::WriteLine("")
+        [Console]::Write("  [y]es accept / [r]efine / [n]o reject: ")
+        $accept = [Console]::ReadLine()
+        switch ($accept.ToLower()) {
+            "y" {
+                $script:MergedContent = $merged
+                [Console]::WriteLine("  >> merged: AI-merged content accepted (iteration $iteration)")
+                return "merge"
+            }
+            "r" {
+                $currentMerge = $merged
+                [Console]::WriteLine("  >> refining merge (iteration $iteration)...")
+                # continue loop
+            }
+            default {
+                [Console]::WriteLine("  >> merge rejected, falling back to overwrite")
+                return "overwrite"
+            }
+        }
     }
-    if ($mergedLines.Count -gt 30) {
-        [Console]::WriteLine("  | ... ($($mergedLines.Count - 30) more lines)")
-    }
-    [Console]::WriteLine("")
-    [Console]::Write("  accept merge? [y]es / [n]o (falls back to overwrite): ")
-    $accept = [Console]::ReadLine()
-    if ($accept.ToLower() -eq "y") {
-        $script:MergedContent = $merged
-        [Console]::WriteLine("  >> merged: AI-merged content deployed")
-        return "merge"
-    }
-    [Console]::WriteLine("  >> merge rejected, falling back to overwrite")
-    return "overwrite"
 }
 
 # ---------------------------------------------------------------------------
@@ -1255,6 +1383,7 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
+
 # --- Auto-detect machine info ---
 $osInfo = (Get-CimInstance Win32_OperatingSystem).Caption
 $hostname = $env:COMPUTERNAME
@@ -1278,9 +1407,9 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Identity
 
-- Name: pepe
+- Name: Jose
 - Git: `Jose <jose@nobul.tech>`
-- Company: nobul.tech
+- Company: Nobul
 
 ## Code Style Defaults
 
@@ -1508,6 +1637,14 @@ $_rule_concurrent_agents_md_ = @'
 Multiple AI agents (Claude Code, Cursor Agent CLI) may edit a codebase concurrently.
 
 Before editing a file, run `git diff` to check for unexpected changes from another agent session.
+
+### Conflict Resolution
+
+If `git diff` reveals unexpected changes:
+1. Read the changed sections to understand intent
+2. If changes are complementary, preserve both
+3. If changes conflict, ask the user which to keep
+4. Never silently overwrite another agent's work
 '@
 $_ruleDest_concurrent_agents_md_ = Join-Path $rulesSrc "concurrent-agents.md"
 [System.IO.File]::WriteAllText($_ruleDest_concurrent_agents_md_, $_rule_concurrent_agents_md_, [System.Text.UTF8Encoding]::new($false))
@@ -1587,6 +1724,36 @@ if ($rulesSrc) {
                 LogOk "Adopted rule to profile: $($rf.Name)"
             }
             Record-DeployOutcome -Outcome $ruleResult -ToolName "claude rules" -ItemName $rf.Name
+            # Write-back: sync merged content to dotprofile repo
+            if ($script:DiffReviewResult -eq "merge" -and $script:MergedContent -and $userRepoPath) {
+                $wbDest = Join-Path $userRepoPath "claude\rules\$($rf.Name)"
+                $wbDir = Split-Path -Parent $wbDest
+                if (-not (Test-Path $wbDir)) { New-Item -ItemType Directory -Path $wbDir -Force | Out-Null }
+                $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($wbDest)
+                [System.IO.File]::WriteAllText($resolved, "$($script:MergedContent)`n")
+                Log "Wrote merged $($rf.Name) back to $(Display-Path $wbDest)"
+                # Auto commit+push to keep dotprofile in sync
+                try {
+                    Push-Location $userRepoPath
+                    & git add "claude/rules/$($rf.Name)"
+                    # Suppress git stderr noise; LASTEXITCODE checked on next line
+                    & git diff --cached --quiet "claude/rules/$($rf.Name)" 2>$null
+                    if ($LASTEXITCODE -ne 0) {
+                        # Has staged changes — commit and push
+                        & git commit -m "Sync merged $($rf.Name) from deploy"
+                        if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
+                        & git push
+                        if ($LASTEXITCODE -ne 0) { throw "git push failed" }
+                        LogOk "Pushed merged $($rf.Name) to user repo"
+                    } else {
+                        Log "No diff to commit in user repo for $($rf.Name)"
+                    }
+                } catch {
+                    LogWarn "Failed to push merged $($rf.Name) to user repo: $_"
+                } finally {
+                    Pop-Location
+                }
+            }
         }
 
         # Log preserved files (in target but not in source)

@@ -12,6 +12,30 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.50.2 -- Fix AI merge prompt corruption (2026-03-11)
+
+Closes #24.
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **AI merge prompt corruption** (#24): `_invoke_ai_merge` / `Invoke-AiMerge` referenced temp file paths in prompts instead of inlining content. Claude CLI with `--allowedTools ""` couldn't read the files, responded conversationally, and the response was written to disk as "merged" content. Prompt now inlines all content using XML delimiters (`<SOURCE>`, `<LOCAL>`). |
+
+### Added
+
+| # | Change |
+|---|--------|
+| 2 | **AI merge output validation**: `validate_ai_merge_output` (bash) / `Test-AiMergeOutput` (PS1) rejects conversational text, code fences, permission language, truncated output, and content with no structural overlap. |
+| 3 | **AI merge refinement loop**: after merge preview, user can `[r]efine` with feedback for iterative improvement, or `[y]es` accept / `[n]o` reject. |
+| 4 | **Merge write-back**: accepted merges sync to dotprofile repo with auto commit/push. |
+| 5 | **Agentic prompt patterns doc**: `reference/agentic-prompt-patterns.md` documents safe `claude -p` usage in aitools scripts. |
+
+### Platform testing
+
+- macOS: tested
+- Windows: not tested (tested: macOS)
+
 ## v0.50.1 -- Fix NASM detection, deploy UX overhaul (2026-03-11)
 
 Closes #22, #23.

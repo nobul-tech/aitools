@@ -317,6 +317,31 @@ if [ -n "$RULES_SRC" ]; then
                     ;;
             esac
             deploy_tracker_record "$MANAGED_FILE_RESULT" "claude rules" "$rule_name"
+            # Write-back: sync merged content to dotprofile repo
+            if [ "$DIFF_REVIEW_RESULT" = "merge" ] && [ -n "$MERGED_CONTENT" ] && [ -n "${USER_REPO_PATH:-}" ]; then
+                local wb_dest="$USER_REPO_PATH/claude/rules/$rule_name"
+                mkdir -p "$(dirname "$wb_dest")"
+                printf '%s\n' "$MERGED_CONTENT" > "$wb_dest"
+                log "Wrote merged $rule_name back to $(display_path "$wb_dest")"
+                # Auto commit+push to keep dotprofile in sync
+                # Suppress git stderr noise; failure handled by if/else branches
+                if (cd "$USER_REPO_PATH" && \
+                    git add "claude/rules/$rule_name" && \
+                    git diff --cached --quiet "claude/rules/$rule_name") 2>/dev/null; then
+                    # git diff --cached --quiet exits 0 = no staged changes
+                    log "No diff to commit in user repo for $rule_name"
+                else
+                    # Suppress git stderr noise; failure handled by if/else branches
+                    if (cd "$USER_REPO_PATH" && \
+                        git add "claude/rules/$rule_name" && \
+                        git commit -m "Sync merged $rule_name from deploy" && \
+                        git push) 2>/dev/null; then
+                        log_ok "Pushed merged $rule_name to user repo"
+                    else
+                        log_warn "Failed to push merged $rule_name to user repo"
+                    fi
+                fi
+            fi
         done
 
         # Log preserved files (in target but not in source)

@@ -276,17 +276,91 @@ try_diff3_merge() {
     return 1
 }
 
+MERGE_REJECT_REASON=""
+
 # ---------------------------------------------------------------------------
-# Agentic merge via claude CLI.
+# Validate AI merge output before accepting it.
+# Returns 0 if valid, 1 if invalid. Sets MERGE_REJECT_REASON on failure.
+# ---------------------------------------------------------------------------
+validate_ai_merge_output() {
+    local output="$1"
+    local source_content="$2"
+    local local_content="$3"
+    MERGE_REJECT_REASON=""
+
+    # Check 1: conversational patterns (first non-empty line)
+    local first_line
+    first_line=$(printf '%s' "$output" | perl -ne 'if (/\S/) { print; exit }')
+    if printf '%s' "$first_line" | perl -ne 'exit 0 if /^(I |Here|Sure|Certainly|Let me)/i; exit 1'; then
+        MERGE_REJECT_REASON="Conversational text: $(printf '%.60s' "$first_line")"
+        return 1
+    fi
+
+    # Check 2: markdown code fences
+    if printf '%s\n' "$output" | perl -ne 'exit 0 if /^```/; END { exit 1 }'; then
+        MERGE_REJECT_REASON="Contains markdown code fences"
+        return 1
+    fi
+
+    # Check 3: permission/access language
+    if printf '%s' "$output" | perl -ne 'exit 0 if /\b(permission|approve|access denied)\b/i; END { exit 1 }'; then
+        MERGE_REJECT_REASON="Contains permission/access language"
+        return 1
+    fi
+
+    # Check 4: minimum length (output >= 50% of shorter input when shorter > 40 chars)
+    local out_len src_len local_len min_input_len threshold
+    out_len=$(printf '%s' "$output" | wc -c | tr -d ' ')
+    src_len=$(printf '%s' "$source_content" | wc -c | tr -d ' ')
+    local_len=$(printf '%s' "$local_content" | wc -c | tr -d ' ')
+    if [ "$src_len" -le "$local_len" ]; then min_input_len=$src_len; else min_input_len=$local_len; fi
+    threshold=$((min_input_len / 2))
+    if [ "$min_input_len" -gt 40 ] && [ "$out_len" -lt "$threshold" ]; then
+        MERGE_REJECT_REASON="Too short ($out_len chars vs minimum $threshold)"
+        return 1
+    fi
+
+    # Check 5: structural overlap — at least one non-trivial line from output
+    # appears verbatim in source or local content
+    local has_overlap=false
+    while IFS= read -r line; do
+        local trimmed
+        trimmed=$(printf '%s' "$line" | perl -pe 's/^\s+|\s+$//g')
+        [ -z "$trimmed" ] && continue
+        [ "${#trimmed}" -lt 8 ] && continue
+        if printf '%s' "$source_content" | grep -qF "$trimmed"; then
+            has_overlap=true; break
+        fi
+        if printf '%s' "$local_content" | grep -qF "$trimmed"; then
+            has_overlap=true; break
+        fi
+    done <<< "$output"
+    if [ "$has_overlap" = "false" ]; then
+        MERGE_REJECT_REASON="No structural overlap with source or local"
+        return 1
+    fi
+
+    return 0
+}
+
+MERGED_CONTENT=""
+
+# ---------------------------------------------------------------------------
+# Agentic merge via claude CLI with refinement loop.
+# Self-contained prompt — all content inlined, no tool use needed.
 # Sets DIFF_REVIEW_RESULT="merge" + MERGED_CONTENT, or falls back.
 # ---------------------------------------------------------------------------
-MERGED_CONTENT=""
 _invoke_ai_merge() {
     local file_path="$1"
     local source_content="$2"
-    local local_content
-    local_content=$(cat "$file_path")
+    local local_content="${3:-}"
 
+    # Read local from disk if not provided (backward compat)
+    if [ -z "$local_content" ] && [ -f "$file_path" ]; then
+        local_content=$(cat "$file_path")
+    fi
+
+    # command -v exempt: existence check with explicit fallback
     if ! command -v claude >/dev/null 2>&1; then
         printf '  >> claude CLI not found -- merge unavailable, falling back to overwrite\n' > /dev/tty
         log_warn "AI merge unavailable (claude CLI not found)"
@@ -296,65 +370,134 @@ _invoke_ai_merge() {
 
     printf '  >> merging via AI...\n' > /dev/tty
 
-    local tmp_source tmp_local tmp_prompt
-    tmp_source=$(mktemp)
-    tmp_local=$(mktemp)
-    tmp_prompt=$(mktemp)
-    printf '%s' "$source_content" > "$tmp_source"
-    printf '%s' "$local_content" > "$tmp_local"
-    cat > "$tmp_prompt" <<PROMPT_EOF
-Merge these two versions of a configuration file.
+    local current_merge=""
+    local iteration=0
 
-SOURCE ($tmp_source) is the new template being deployed.
-LOCAL ($tmp_local) is the user's current file with their customizations.
+    while true; do
+        iteration=$((iteration + 1))
+        local prompt_text
 
-Rules:
+        if [ -z "$current_merge" ]; then
+            # Initial merge prompt
+            prompt_text="You are a file merge tool. Output ONLY the merged result — no commentary, no code fences, no explanation.
+
+## Context
+A deploy system detected that SOURCE (updated template) and LOCAL (user's
+current file with customizations) have diverged. Merge them.
+
+## SOURCE (new template being deployed)
+<SOURCE>
+${source_content}
+</SOURCE>
+
+## LOCAL (user's current file with their customizations)
+<LOCAL>
+${local_content}
+</LOCAL>
+
+## Rules
 - Preserve all user customizations from LOCAL that are intentional
 - Include all new content from SOURCE (new sections, updated tables, structural changes)
 - When both sides modify the same line, prefer LOCAL unless SOURCE adds new information
-- Output ONLY the merged file content, no commentary, no markdown fences
-PROMPT_EOF
+- Output the merged file content ONLY — no preamble, no explanation, no markdown fences"
+        else
+            # Refinement prompt
+            local feedback
+            printf '  refinement feedback: ' > /dev/tty
+            IFS= read -r feedback < /dev/tty
+            prompt_text="You are a file merge tool. Output ONLY the revised merged result — no commentary, no code fences, no explanation.
 
-    local merged
-    # claude -p exit code checked below; suppress set -e abort
-    merged=$(claude -p < "$tmp_prompt" 2>&1) || true
-    rm -f "$tmp_source" "$tmp_local" "$tmp_prompt"
+## Context
+A previous merge produced CURRENT_MERGE from SOURCE + LOCAL. The user wants refinements.
 
-    if [ -z "$merged" ]; then
-        printf '  >> AI merge failed -- choose another option\n' > /dev/tty
-        log_warn "AI merge returned empty output"
-        printf '  fallback [o]verwrite / [s]kip: ' > /dev/tty
-        local fb
-        read -r fb < /dev/tty
-        case "$(printf '%s' "$fb" | tr '[:upper:]' '[:lower:]')" in
-            s) DIFF_REVIEW_RESULT="skip" ;;
-            *) DIFF_REVIEW_RESULT="overwrite" ;;
+## SOURCE (original template)
+<SOURCE>
+${source_content}
+</SOURCE>
+
+## LOCAL (original user file)
+<LOCAL>
+${local_content}
+</LOCAL>
+
+## CURRENT MERGE (previous result)
+<CURRENT_MERGE>
+${current_merge}
+</CURRENT_MERGE>
+
+## User Feedback
+${feedback}
+
+## Rules
+- Apply the user's feedback to CURRENT_MERGE
+- Keep all content from CURRENT_MERGE not affected by the feedback
+- Output the revised merged file content ONLY — no preamble, no explanation, no markdown fences"
+        fi
+
+        local merged
+        # claude -p exit code checked below; suppress set -e abort
+        merged=$(printf '%s' "$prompt_text" | claude -p --allowedTools "" --no-session-persistence 2>&1) || true
+
+        if [ -z "$merged" ]; then
+            printf '  >> AI merge failed (empty output, iteration %d) -- choose another option\n' "$iteration" > /dev/tty
+            log_warn "AI merge returned empty output (iteration $iteration)"
+            printf '  fallback [o]verwrite / [s]kip: ' > /dev/tty
+            local fb
+            read -r fb < /dev/tty
+            case "$(printf '%s' "$fb" | tr '[:upper:]' '[:lower:]')" in
+                s) DIFF_REVIEW_RESULT="skip" ;;
+                *) DIFF_REVIEW_RESULT="overwrite" ;;
+            esac
+            return 0
+        fi
+
+        # Validate output before showing preview
+        if ! validate_ai_merge_output "$merged" "$source_content" "$local_content"; then
+            printf '  >> AI merge output rejected (iteration %d): %s\n' "$iteration" "$MERGE_REJECT_REASON" > /dev/tty
+            log_warn "AI merge output rejected (iteration $iteration): $MERGE_REJECT_REASON"
+            log "Rejected AI merge output: $merged"
+            printf '  fallback [o]verwrite / [s]kip: ' > /dev/tty
+            local fb
+            read -r fb < /dev/tty
+            case "$(printf '%s' "$fb" | tr '[:upper:]' '[:lower:]')" in
+                s) DIFF_REVIEW_RESULT="skip" ;;
+                *) DIFF_REVIEW_RESULT="overwrite" ;;
+            esac
+            return 0
+        fi
+
+        # Show merge preview
+        printf '\n  --- merged result preview (first 30 lines) ---\n' > /dev/tty
+        printf '%s\n' "$merged" | head -30 | while IFS= read -r line; do
+            printf '  | %s\n' "$line" > /dev/tty
+        done
+        local total_lines
+        total_lines=$(printf '%s\n' "$merged" | wc -l | tr -d ' ')
+        if [ "$total_lines" -gt 30 ]; then
+            printf '  | ... (%d more lines)\n' "$((total_lines - 30))" > /dev/tty
+        fi
+        printf '\n  [y]es accept / [r]efine / [n]o reject: ' > /dev/tty
+        local accept
+        read -r accept < /dev/tty
+        case "$(printf '%s' "$accept" | tr '[:upper:]' '[:lower:]')" in
+            y)
+                MERGED_CONTENT="$merged"
+                DIFF_REVIEW_RESULT="merge"
+                printf '  >> merged: AI-merged content accepted (iteration %d)\n' "$iteration" > /dev/tty
+                return 0
+                ;;
+            r)
+                current_merge="$merged"
+                printf '  >> refining merge (iteration %d)...\n' "$iteration" > /dev/tty
+                continue
+                ;;
+            *)
+                printf '  >> merge rejected, falling back to overwrite\n' > /dev/tty
+                DIFF_REVIEW_RESULT="overwrite"
+                return 0
+                ;;
         esac
-        return 0
-    fi
-
-    # Show merge preview
-    printf '\n  --- merged result preview (first 30 lines) ---\n' > /dev/tty
-    printf '%s\n' "$merged" | head -30 | while IFS= read -r line; do
-        printf '  | %s\n' "$line" > /dev/tty
     done
-    local total_lines
-    total_lines=$(printf '%s\n' "$merged" | wc -l | tr -d ' ')
-    if [ "$total_lines" -gt 30 ]; then
-        printf '  | ... (%d more lines)\n' "$((total_lines - 30))" > /dev/tty
-    fi
-    printf '\n  accept merge? [y]es / [n]o (falls back to overwrite): ' > /dev/tty
-    local accept
-    read -r accept < /dev/tty
-    if [ "$(printf '%s' "$accept" | tr '[:upper:]' '[:lower:]')" = "y" ]; then
-        MERGED_CONTENT="$merged"
-        DIFF_REVIEW_RESULT="merge"
-        printf '  >> merged: AI-merged content deployed\n' > /dev/tty
-    else
-        printf '  >> merge rejected, falling back to overwrite\n' > /dev/tty
-        DIFF_REVIEW_RESULT="overwrite"
-    fi
-    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -508,7 +651,7 @@ prompt_diff_review() {
                 printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
                 DIFF_REVIEW_RESULT="overwrite"
             fi ;;
-        m)  _invoke_ai_merge "$file_path" "$new_content" ;;
+        m)  _invoke_ai_merge "$file_path" "$new_content" "$cur_content" ;;
         s)  printf '  >> skipped: local file unchanged\n' > /dev/tty
             DIFF_REVIEW_RESULT="skip" ;;
         x)  log_error "Aborted by user"

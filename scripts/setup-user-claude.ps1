@@ -397,6 +397,36 @@ if ($rulesSrc) {
                 LogOk "Adopted rule to profile: $($rf.Name)"
             }
             Record-DeployOutcome -Outcome $ruleResult -ToolName "claude rules" -ItemName $rf.Name
+            # Write-back: sync merged content to dotprofile repo
+            if ($script:DiffReviewResult -eq "merge" -and $script:MergedContent -and $userRepoPath) {
+                $wbDest = Join-Path $userRepoPath "claude\rules\$($rf.Name)"
+                $wbDir = Split-Path -Parent $wbDest
+                if (-not (Test-Path $wbDir)) { New-Item -ItemType Directory -Path $wbDir -Force | Out-Null }
+                $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($wbDest)
+                [System.IO.File]::WriteAllText($resolved, "$($script:MergedContent)`n")
+                Log "Wrote merged $($rf.Name) back to $(Display-Path $wbDest)"
+                # Auto commit+push to keep dotprofile in sync
+                try {
+                    Push-Location $userRepoPath
+                    & git add "claude/rules/$($rf.Name)"
+                    # Suppress git stderr noise; LASTEXITCODE checked on next line
+                    & git diff --cached --quiet "claude/rules/$($rf.Name)" 2>$null
+                    if ($LASTEXITCODE -ne 0) {
+                        # Has staged changes — commit and push
+                        & git commit -m "Sync merged $($rf.Name) from deploy"
+                        if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
+                        & git push
+                        if ($LASTEXITCODE -ne 0) { throw "git push failed" }
+                        LogOk "Pushed merged $($rf.Name) to user repo"
+                    } else {
+                        Log "No diff to commit in user repo for $($rf.Name)"
+                    }
+                } catch {
+                    LogWarn "Failed to push merged $($rf.Name) to user repo: $_"
+                } finally {
+                    Pop-Location
+                }
+            }
         }
 
         # Log preserved files (in target but not in source)
