@@ -209,6 +209,8 @@ invoke_ai() {
     while [ "$attempt" -le "$max_retries" ]; do
         attempt=$((attempt + 1))
 
+        _ai_log "AI invocation: speed=$speed backend=$cli_cmd attempt=$attempt"
+
         local full_prompt
         full_prompt=$(printf '%b%s' "$speed_prefix" "$current_prompt")
 
@@ -483,7 +485,8 @@ ${local_content}
 3. If a change conflicts with a local customization (contradicts its intent), keep local
 4. If a change adds new content not in LOCAL, add it in the appropriate location
 5. If a change updates content the user hasn't customized, apply it
-6. Output the complete merged file -- no commentary, no code fences, no explanation"
+6. CRITICAL: Do NOT wrap your output in markdown code fences (\`\`\`). Output raw file content ONLY
+7. No commentary, no explanation, no preamble -- just the merged file content"
 }
 
 # ---------------------------------------------------------------------------
@@ -609,6 +612,34 @@ validate_ai_merge_output() {
 MERGED_CONTENT=""
 
 # ---------------------------------------------------------------------------
+# Spinner for AI operations (visual progress indicator)
+# ---------------------------------------------------------------------------
+_AI_SPINNER_PID=""
+
+_start_spinner() {
+    local msg="${1:-working...}"
+    (
+        local chars='/-\|'
+        local i=0
+        while true; do
+            printf '\r  %s %s' "${chars:$((i % 4)):1}" "$msg" > /dev/tty
+            i=$((i + 1))
+            sleep 0.2
+        done
+    ) &
+    _AI_SPINNER_PID=$!
+}
+
+_stop_spinner() {
+    if [ -n "$_AI_SPINNER_PID" ] && kill -0 "$_AI_SPINNER_PID" 2>/dev/null; then
+        kill "$_AI_SPINNER_PID" 2>/dev/null
+        wait "$_AI_SPINNER_PID" 2>/dev/null || true  # reap; exit code irrelevant for spinner
+    fi
+    _AI_SPINNER_PID=""
+    printf '\r  \033[K' > /dev/tty  # clear spinner line
+}
+
+# ---------------------------------------------------------------------------
 # Agentic merge via invoke_ai with refinement loop.
 # Uses structured prompts from _ai_prompt_merge / _ai_prompt_merge_refine.
 # Sets DIFF_REVIEW_RESULT="merge" + MERGED_CONTENT, or falls back.
@@ -624,7 +655,16 @@ _invoke_ai_merge() {
         local_content=$(cat "$file_path")
     fi
 
-    printf '  >> merging via AI...\n' > /dev/tty
+    # Detect backend for transparency display
+    local ai_backend="unknown"
+    if command -v claude >/dev/null 2>&1; then
+        ai_backend="claude"
+    elif command -v agent >/dev/null 2>&1; then
+        ai_backend="agent"
+    fi
+    local display_name
+    display_name=$(basename "$file_path")
+    printf '  >> AI merge: %s (balanced) -- merging %s...\n' "$ai_backend" "$display_name" > /dev/tty
 
     # Set validation context for _merge_validate wrapper
     _MERGE_VALIDATE_SOURCE="$source_content"
@@ -647,12 +687,19 @@ _invoke_ai_merge() {
         fi
 
         local merged
+        _start_spinner "merging $display_name (attempt $iteration)..."
         # invoke_ai returns 1 on failure with no stdout; || true suppresses set -e abort
         merged=$(printf '%s' "$prompt_text" | invoke_ai balanced none _merge_validate 1) || true
+        _stop_spinner
+
+        # Defense-in-depth: strip leading/trailing code fences if AI ignored instructions
+        if [ -n "$merged" ]; then
+            merged=$(printf '%s' "$merged" | perl -0777 -pe 's/\A```[^\n]*\n//; s/\n```\s*\z//')
+        fi
 
         if [ -z "$merged" ]; then
             printf '  >> AI merge failed (iteration %d): %s\n' "$iteration" "${AI_REJECT_REASON:-unknown error}" > /dev/tty
-            log_warn "AI merge failed (iteration $iteration): ${AI_REJECT_REASON:-unknown error}"
+            log_error "AI merge failed (iteration $iteration): ${AI_REJECT_REASON:-unknown error}"
             printf '  fallback [o]verwrite / [s]kip: ' > /dev/tty
             local fb
             read -r fb < /dev/tty
@@ -932,6 +979,11 @@ deploy_managed_file() {
         backup_file "$dest"
         local ancestor_content
         ancestor_content=$(get_deploy_shadow "$dest")
+        # Bootstrap: seed shadow from current deployed content if empty
+        if [ -z "$ancestor_content" ]; then
+            log "Bootstrapping deploy shadow from existing: $(display_path "$dest")"
+            ancestor_content="$existing"
+        fi
         prompt_diff_review "$dest" "$src_content" "$adopt_label" "$existing" "$ancestor_content"
         case "$DIFF_REVIEW_RESULT" in
             adopt)

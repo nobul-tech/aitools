@@ -74,4 +74,15 @@ Speed hints via prompt prefix only. Update when explicit models available.
 - Suppressing AI errors without logging (`2>/dev/null` without result check)
 - Prompts tested only manually -- write `.scratch/` test scripts
 
+### User-facing AI invocations
+
+When an AI invocation is visible to the user (interactive prompt, not background):
+
+1. **Transparency**: Display the backend (claude/agent), speed tier, and purpose
+   before the invocation starts
+2. **Progress**: Show an animated spinner for operations expected to take >3 seconds
+3. **Failure severity**: When the user explicitly requested the AI operation and it
+   fails after retries, log_error (not log_warn). log_warn is for
+   background/optional AI operations with automatic fallbacks
+
 Details: `@reference/agentic-framework.md`

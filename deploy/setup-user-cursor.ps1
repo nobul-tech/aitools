@@ -187,6 +187,8 @@ function Invoke-AI {
     # Retry loop
     $currentPrompt = $Prompt
     for ($attempt = 1; $attempt -le ($MaxRetries + 1); $attempt++) {
+        Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt"
+
         $fullPrompt = "${speedPrefix}${currentPrompt}"
 
         $output = $null
@@ -517,7 +519,8 @@ $LocalContent
 3. If a change conflicts with a local customization (contradicts its intent), keep local
 4. If a change adds new content not in LOCAL, add it in the appropriate location
 5. If a change updates content the user hasn't customized, apply it
-6. Output the complete merged file -- no commentary, no code fences, no explanation
+6. CRITICAL: Do NOT wrap your output in markdown code fences (``````). Output raw file content ONLY
+7. No commentary, no explanation, no preamble -- just the merged file content
 "@
 }
 
@@ -646,6 +649,36 @@ function Test-AiMergeOutput {
 }
 
 # ---------------------------------------------------------------------------
+# Spinner for AI operations (visual progress indicator)
+# ---------------------------------------------------------------------------
+$script:_aiSpinnerJob = $null
+
+function Start-AiSpinner {
+    param([string]$Message = "working...")
+    $script:_aiSpinnerJob = Start-Job -ScriptBlock {
+        param($msg)
+        $chars = '/-\|'
+        $i = 0
+        while ($true) {
+            $c = $chars[$i % 4]
+            [Console]::Write("`r  $c $msg")
+            $i++
+            Start-Sleep -Milliseconds 200
+        }
+    } -ArgumentList $Message
+}
+
+function Stop-AiSpinner {
+    if ($script:_aiSpinnerJob) {
+        Stop-Job $script:_aiSpinnerJob -ErrorAction SilentlyContinue
+        Remove-Job $script:_aiSpinnerJob -Force -ErrorAction SilentlyContinue
+        # ErrorAction exempt: spinner cleanup; job may already be stopped
+        $script:_aiSpinnerJob = $null
+        [Console]::Write("`r  `e[K")  # clear spinner line
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Agentic merge via Invoke-AI with refinement loop.
 # Uses structured prompts from Get-AiMergePrompt / Get-AiMergeRefinePrompt.
 # Returns "merge" (sets $script:MergedContent) or "overwrite"/"skip".
@@ -658,7 +691,16 @@ function Invoke-AiMerge {
         [string]$DiffOutput = ""
     )
 
-    [Console]::WriteLine("  >> merging via AI...")
+    # Detect backend for transparency display
+    # Get-Command exempt: command-existence check with explicit fallback
+    $aiBackend = "unknown"
+    if (Get-Command claude -ErrorAction SilentlyContinue) {
+        $aiBackend = "claude"
+    } elseif (Get-Command agent -ErrorAction SilentlyContinue) {
+        $aiBackend = "agent"
+    }
+    $displayName = Split-Path -Leaf $FilePath
+    [Console]::WriteLine("  >> AI merge: $aiBackend (balanced) -- merging $displayName...")
 
     # Set validation context for _MergeValidateWrapper
     $script:_mergeValidateSource = $SourceContent
@@ -680,13 +722,20 @@ function Invoke-AiMerge {
                 -LocalContent $LocalContent -CurrentMerge $currentMerge -Feedback $feedback
         }
 
+        Start-AiSpinner "merging $displayName (attempt $iteration)..."
         $merged = $promptText | Invoke-AI -Speed "balanced" -Permissions "none" `
             -ValidateFn "_MergeValidateWrapper" -MaxRetries 1
+        Stop-AiSpinner
+
+        # Defense-in-depth: strip leading/trailing code fences if AI ignored instructions
+        if ($merged) {
+            $merged = $merged -replace '(?s)\A```[^\n]*\n', '' -replace '\n```\s*\z', ''
+        }
 
         if (-not $merged) {
             $reason = if ($script:AIRejectReason) { $script:AIRejectReason } else { "unknown error" }
             [Console]::WriteLine("  >> AI merge failed (iteration $iteration): $reason")
-            LogWarn "AI merge failed (iteration $iteration): $reason"
+            LogError "AI merge failed (iteration $iteration): $reason"
             [Console]::Write("  fallback [o]verwrite / [s]kip: ")
             $fb = [Console]::ReadLine()
             if ($fb.ToLower() -eq "s") { return "skip" }
@@ -996,6 +1045,11 @@ function Deploy-ManagedFile {
         # User edited AND source changed — backup + interactive review
         Backup-File -FilePath $DestPath
         $ancestorContent = Get-DeployShadow -FilePath $DestPath
+        # Bootstrap: seed shadow from current deployed content if empty
+        if (-not $ancestorContent) {
+            Log "Bootstrapping deploy shadow from existing: $DestPath"
+            $ancestorContent = $existing
+        }
         $result = Prompt-DiffReview -FilePath $DestPath -NewContent $Content `
             -CurrentContent $existing -AncestorContent $ancestorContent `
             -AdoptLabel $AdoptLabel

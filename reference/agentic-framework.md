@@ -157,6 +157,7 @@ _merge_validate() {
 - **Incident #25**: Check 3 matched bare "permission" keyword in config content. Fix: sentence-level refusal patterns.
 - **Incident #27**: Rejected output dumped to console as wall of text. Fix: `log_detail` per-line (file-only).
 - **Check 5 false reject**: Verbatim 8-char line match was too strict for files with short lines. Fix: header preservation (60% threshold).
+- **Incident #32**: Code fence wrapping despite "no code fences" instruction. Prompt saying "no code fences" in a numbered list is insufficient; models treat numbered constraints as suggestions. Fix: ALL-CAPS emphasis in output format rules + explicit negative example + defense-in-depth strip in merge function.
 
 ## Future extensions
 
@@ -165,3 +166,13 @@ _merge_validate() {
 - Modal compute backend for batch processing
 - Budget control (per-invocation cost tracking)
 - Structured JSON output mode with schema validation
+
+## Deploy state migration
+
+Any file-tracking system with shadows/ancestors must handle pre-existing files
+that were deployed before the tracking was introduced. Bootstrap shadow from
+current deployed content -- this makes the first post-bootstrap diff3 process
+only the NEW template changes, which is correct.
+
+Pattern: when `get_deploy_shadow` returns empty but file exists on disk, seed
+shadow with current content before attempting diff3.

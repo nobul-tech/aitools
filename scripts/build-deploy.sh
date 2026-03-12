@@ -1288,8 +1288,8 @@ esac
 # Post-build: Fix file permissions and line endings
 # ============================================================
 # 1. Ensure all .sh files are executable on disk (Write tool creates 100644)
-chmod +x "$DEPLOY_DIR"/*.sh "$SCRIPTS_DIR"/*.sh 2>/dev/null || true
-blog_ok "Set +x on all .sh files in deploy/ and scripts/"
+chmod +x "$DEPLOY_DIR"/*.sh 2>/dev/null || true
+blog_ok "Set +x on all .sh files in deploy/"
 
 # 2. Convert deploy/*.ps1 to CRLF (.gitattributes requires eol=crlf)
 #    build-deploy.sh writes LF; without this, git sees them as modified
