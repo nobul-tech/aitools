@@ -984,12 +984,12 @@ then uses `ensure_tool_on_path` with known paths if `command -v` fails.
 3. Bash: add paths to the `ensure_tool_on_path` call in `check_build_prereqs()`
 4. Document the paths in `reference/tool-registry.md` under the tool's Prerequisites section
 
-**Standard install locations (Windows via winget):**
+**Standard install locations (Windows):**
 
-| Tool | winget ID | Install path | Verified |
-|------|-----------|-------------|----------|
-| NASM | NASM.NASM | `%LOCALAPPDATA%\bin\NASM\nasm.exe` | 2026-03-11 (v3.01) |
-| CMake | Kitware.CMake | `C:\Program Files\CMake\bin\cmake.exe` | UNVERIFIED |
+| Tool | Install method | Install path | Verified |
+|------|---------------|-------------|----------|
+| NASM | winget (NASM.NASM) | `%LOCALAPPDATA%\bin\NASM\nasm.exe` | 2026-03-11 (v3.01) |
+| CMake | uv tool install cmake | `%USERPROFILE%\.local\bin\cmake.exe` | 2026-03-12 (v4.2.3) |
 | MSVC Build Tools | (detected via vswhere.exe) | N/A | N/A |
 
 **Standard install locations (macOS/Linux):**

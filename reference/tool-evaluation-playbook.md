@@ -120,17 +120,25 @@ Source: https://pypi.org/project/cmake/
 
 | Method | Official? | Elevation | Update | PATH | Toolchain |
 |--------|-----------|-----------|--------|------|-----------|
-| `uv pip install --system cmake` | Yes (cmake.org) | No (user-level) | `uv pip install --upgrade cmake` | UNVERIFIED | uv already managed |
+| `uv tool install cmake` | Yes (cmake.org) | No (user-level) | `uv tool upgrade cmake` | `~/.local/bin` (on PATH) | uv already managed |
 | `winget install Kitware.CMake` | No (not on cmake.org) | Yes (admin) | winget upgrade | Auto | winget already managed |
 | MSI installer | Yes (cmake.org) | Yes (admin) | Manual | Auto | -- |
 | ZIP archive | Yes (cmake.org) | No | Manual | Manual | -- |
 
-**Chosen:** `uv pip install --system cmake` (Windows), `brew install cmake` (macOS)
+**Chosen:** `uv tool install cmake` (Windows), `brew install cmake` (macOS)
 **Rationale:** Official method per cmake.org, user-level install, uv already managed,
-winget not listed on cmake.org and requires admin.
+winget not listed on cmake.org and requires admin. `uv tool` preferred over `uv pip`
+because it installs to `~/.local/bin` (already on PATH) vs Python Scripts dir (not on PATH).
 
-**Trial (Windows):** PENDING -- user will run `uv pip install --system cmake` and report
-installed path, version, and any issues.
+**Trial (Windows, 2026-03-12):**
+- Method: `uv tool install cmake`
+- Result: success
+- Installed path: `%USERPROFILE%\.local\bin\cmake.exe`
+- Version: cmake 4.2.3
+- Elevation: no
+- PATH integration: automatic (`~/.local/bin` on user PATH)
+- Note: `uv pip install --system cmake` installs to Python Scripts dir which is NOT
+  on PATH with pymanager. `uv tool install` is the correct approach.
 
 ### NASM (2026-03-11)
 

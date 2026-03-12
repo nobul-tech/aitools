@@ -1267,11 +1267,11 @@ $script:BuildPrereqs = @{
             # Source: https://cmake.org/download/ + https://pypi.org/project/cmake/
             # Verified source: 2026-03-12 via chrome-devtools
             KnownPaths = @(
-                "$env:USERPROFILE\.local\bin\cmake.exe",       # UNVERIFIED: uv tool install
+                "$env:USERPROFILE\.local\bin\cmake.exe",       # Verified: 2026-03-12 (v4.2.3, uv tool install)
                 "$env:APPDATA\Python\Scripts\cmake.exe",       # UNVERIFIED: pip install --user
                 "$env:ProgramFiles\CMake\bin\cmake.exe"        # UNVERIFIED: MSI fallback
             )
-            Install    = "uv pip install --system cmake"
+            Install    = "uv tool install cmake"
             Platform   = "win"
         }
     )
@@ -1353,7 +1353,7 @@ function Check-BuildPrereqs {
 $script:BuildFailureSignatures = @(
     @{ Pattern = "NASM command not found";                Remedy = "winget install NASM.NASM";                     Name = "NASM (assembler)" }
     @{ Pattern = "linker.*not found|link\.exe.*not found"; Remedy = "Install MSVC Build Tools with C++ workload";  Name = "MSVC linker" }
-    @{ Pattern = "cmake.*not found|Could not find cmake"; Remedy = "uv pip install --system cmake (or see cmake.org/download)"; Name = "CMake" }
+    @{ Pattern = "cmake.*not found|Could not find cmake"; Remedy = "uv tool install cmake (or see cmake.org/download)"; Name = "CMake" }
     @{ Pattern = "pkg-config.*not found";                 Remedy = "Install pkg-config";                           Name = "pkg-config" }
     @{ Pattern = "Python\.h.*not found|python.*dev";      Remedy = "Install Python development headers";           Name = "Python headers" }
     @{ Pattern = "C compiler.*not found|cc.*not found";   Remedy = "Install a C compiler (MSVC/gcc/clang)";        Name = "C compiler" }

@@ -504,8 +504,9 @@ rustup --version
   `setup-rust.ps1` auto-installs via `winget install NASM.NASM`. Without NASM, `cargo install`
   for any crate using `aws-lc-rs` panics: `NASM command not found! Build cannot continue.`
 - **CMake**: Required by some crates. Official: cmake.org/download lists pip, ZIP, MSI
-  (not winget). Windows: `uv pip install --system cmake` (user-level, PyPI package maintained by
-  Kitware). macOS: `brew install cmake`. See `reference/tool-evaluation-playbook.md`.
+  (not winget). Windows: `uv tool install cmake` (user-level, installs to `~/.local/bin`,
+  PyPI package maintained by Kitware). macOS: `brew install cmake`.
+  See `reference/tool-evaluation-playbook.md`.
 
 All known build prerequisites are tracked in `aitools-lib.ps1` (`$script:BuildPrereqs`)
 and `aitools-lib.sh` (`check_build_prereqs`). When a new prerequisite is discovered,
@@ -518,12 +519,12 @@ Used by `Ensure-ToolOnPath` / `ensure_tool_on_path` and `Check-BuildPrereqs` /
 `check_build_prereqs` fallback when `Get-Command` / `command -v` fails (tool
 installed but not on PATH in current session).
 
-**Windows (winget):**
+**Windows:**
 
-| Tool | Winget ID | Standard path | Verified | Notes |
-|------|-----------|--------------|----------|-------|
-| NASM | NASM.NASM | `%LOCALAPPDATA%\bin\NASM\nasm.exe` | 2026-03-11 (v3.01) | Per-user Nullsoft installer; `Program Files` as secondary |
-| CMake | N/A (pip via uv) | PENDING (trial install) | UNVERIFIED | Install method changed from winget to uv pip per cmake.org/download (2026-03-12) |
+| Tool | Install method | Standard path | Verified | Notes |
+|------|---------------|--------------|----------|-------|
+| NASM | winget (NASM.NASM) | `%LOCALAPPDATA%\bin\NASM\nasm.exe` | 2026-03-11 (v3.01) | Per-user Nullsoft installer; `Program Files` as secondary |
+| CMake | uv tool install cmake | `%USERPROFILE%\.local\bin\cmake.exe` | 2026-03-12 (v4.2.3) | PyPI package via uv tool; `~/.local/bin` on user PATH |
 
 **macOS/Linux:**
 

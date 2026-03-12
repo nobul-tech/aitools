@@ -1267,11 +1267,11 @@ $script:BuildPrereqs = @{
             # Source: https://cmake.org/download/ + https://pypi.org/project/cmake/
             # Verified source: 2026-03-12 via chrome-devtools
             KnownPaths = @(
-                "$env:USERPROFILE\.local\bin\cmake.exe",       # UNVERIFIED: uv tool install
+                "$env:USERPROFILE\.local\bin\cmake.exe",       # Verified: 2026-03-12 (v4.2.3, uv tool install)
                 "$env:APPDATA\Python\Scripts\cmake.exe",       # UNVERIFIED: pip install --user
                 "$env:ProgramFiles\CMake\bin\cmake.exe"        # UNVERIFIED: MSI fallback
             )
-            Install    = "uv pip install --system cmake"
+            Install    = "uv tool install cmake"
             Platform   = "win"
         }
     )
@@ -1353,7 +1353,7 @@ function Check-BuildPrereqs {
 $script:BuildFailureSignatures = @(
     @{ Pattern = "NASM command not found";                Remedy = "winget install NASM.NASM";                     Name = "NASM (assembler)" }
     @{ Pattern = "linker.*not found|link\.exe.*not found"; Remedy = "Install MSVC Build Tools with C++ workload";  Name = "MSVC linker" }
-    @{ Pattern = "cmake.*not found|Could not find cmake"; Remedy = "uv pip install --system cmake (or see cmake.org/download)"; Name = "CMake" }
+    @{ Pattern = "cmake.*not found|Could not find cmake"; Remedy = "uv tool install cmake (or see cmake.org/download)"; Name = "CMake" }
     @{ Pattern = "pkg-config.*not found";                 Remedy = "Install pkg-config";                           Name = "pkg-config" }
     @{ Pattern = "Python\.h.*not found|python.*dev";      Remedy = "Install Python development headers";           Name = "Python headers" }
     @{ Pattern = "C compiler.*not found|cc.*not found";   Remedy = "Install a C compiler (MSVC/gcc/clang)";        Name = "C compiler" }
@@ -1401,20 +1401,20 @@ if (-not $cargoCheck) {
         foreach ($p in $missingPrereqs) {
             # Get-Command exempt: command-existence check with explicit fallback
             if ($p.Name -eq "CMake" -and (Get-Command uv -ErrorAction SilentlyContinue)) {
-                Log "Attempting CMake install via uv pip (per cmake.org/download)..."
-                $uvOutput = uv pip install --system cmake 2>&1 | Out-String
+                Log "Attempting CMake install via uv tool (per cmake.org/download)..."
+                $uvOutput = uv tool install cmake 2>&1 | Out-String
                 Log-WingetOutput $uvOutput
                 Refresh-Path
                 # Get-Command exempt: command-existence check with explicit fallback
                 if (Get-Command cmake -ErrorAction SilentlyContinue) {
-                    LogOk "CMake installed via uv pip (user-level, no admin)"
+                    LogOk "CMake installed via uv tool (user-level, no admin)"
                     $missingPrereqs = @($missingPrereqs | Where-Object { $_.Name -ne "CMake" })
                 } else {
                     if (Ensure-ToolOnPath -ToolName "cmake" -KnownPaths $p.KnownPaths) {
                         LogOk "CMake found after uv install (added to session PATH)"
                         $missingPrereqs = @($missingPrereqs | Where-Object { $_.Name -ne "CMake" })
                     } else {
-                        LogWarn "uv pip install --system cmake succeeded but cmake not on PATH"
+                        LogWarn "uv tool install cmake succeeded but cmake not on PATH"
                     }
                 }
             }
