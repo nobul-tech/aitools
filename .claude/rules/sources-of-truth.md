@@ -20,6 +20,7 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 | `reference/tool-versions.json` | Machine-readable per-platform version manifest for all managed tools | Any |
 | `reference/user-repo.md` | User repo pattern, template resolution, session archive — scripts reference this | Any |
 | `reference/agentic-framework.md` | Agentic AI invocation spec — speed/permission tiers, prompt design, validation patterns | Any |
+| `reference/managed-file-deployment.md` | Managed file deployment state machine -- menus, return values, caller contracts | Any |
 
 ### The rule
 

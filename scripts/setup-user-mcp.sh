@@ -351,7 +351,7 @@ deploy_skill() {
     deploy_managed_file "$(cat "$src")" "$dest" "$tool_name" "$skill_name" "$_adopt_label"
 
     case "$MANAGED_FILE_RESULT" in
-        adopted)
+        adopted|merge-adopted)
             # Copy deployed version back to repo source
             cp "$dest" "$src"
             log_ok "Adopted skill to shared/: $skill_name"

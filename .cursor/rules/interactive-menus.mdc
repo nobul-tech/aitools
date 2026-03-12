@@ -1,0 +1,18 @@
+---
+description: Interactive deploy menu conventions for managed file deployment
+globs: "scripts/**,deploy/**"
+alwaysApply: false
+---
+
+## Interactive Deploy Menus (this repo)
+
+PS1 and bash menus MUST show identical options in identical order. Every return
+value from `Deploy-ManagedFile` / `deploy_managed_file` MUST be handled by
+every caller. Non-interactive fallback required (`AITOOLS_FORCE`, non-terminal).
+
+PS1 console I/O: `[Console]::ReadLine/WriteLine`. Read external command output
+via temp file + `[IO.File]::ReadAllText(..., UTF8)` (not pipeline capture).
+
+Bash: `read -r < /dev/tty` / `printf ... > /dev/tty`.
+
+Full spec: `reference/managed-file-deployment.md`.

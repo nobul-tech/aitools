@@ -858,41 +858,35 @@ prompt_diff_review() {
             fi
             printf '\n' > /dev/tty
             if [ -n "$adopt_label" ]; then
-                printf '  [y]es       : accept merge result\n' > /dev/tty
-                printf '  [o]verwrite : source wins -> deploy to local (backup kept)\n' > /dev/tty
-                printf '  [a]dopt     : local wins -> copy back to %s\n' "$adopt_label" > /dev/tty
-                printf '  [s]kip      : keep local as-is (no changes)\n' > /dev/tty
-                printf '  [x]abort    : stop deployment\n' > /dev/tty
-                printf '  choice [y/o/a/s/x]: ' > /dev/tty
+                printf '  [a]ccept    : deploy merge + update %s\n' "$adopt_label" > /dev/tty
             else
-                printf '  [y]es       : accept merge result\n' > /dev/tty
-                printf '  [o]verwrite : source wins -> deploy to local (backup kept)\n' > /dev/tty
-                printf '  [s]kip      : keep local as-is (no changes)\n' > /dev/tty
-                printf '  [x]abort    : stop deployment\n' > /dev/tty
-                printf '  choice [y/o/s/x]: ' > /dev/tty
+                printf '  [a]ccept\n' > /dev/tty
             fi
+            printf '  [o]verwrite\n' > /dev/tty
+            printf '  [s]kip\n' > /dev/tty
+            printf '  [x]abort\n' > /dev/tty
+            printf '  choice [a/o/s/x]: ' > /dev/tty
             local merge_choice
             read -r merge_choice < /dev/tty
             case "$(printf '%s' "$merge_choice" | tr '[:upper:]' '[:lower:]')" in
-                y)  MERGED_CONTENT="$AUTO_MERGED_CONTENT"
-                    DIFF_REVIEW_RESULT="merge"
-                    printf '  >> merged: auto-merge deployed\n' > /dev/tty
+                a)  MERGED_CONTENT="$AUTO_MERGED_CONTENT"
+                    if [ -n "$adopt_label" ]; then
+                        printf '  >> accepted: merge deployed + %s updated\n' "$adopt_label" > /dev/tty
+                        DIFF_REVIEW_RESULT="merge-adopt"
+                    else
+                        printf '  >> accepted: merge deployed\n' > /dev/tty
+                        DIFF_REVIEW_RESULT="merge"
+                    fi
                     return 0 ;;
-                a)  if [ -n "$adopt_label" ]; then
-                        printf '  >> adopted: local version copied back to %s\n' "$adopt_label" > /dev/tty
-                        DIFF_REVIEW_RESULT="adopt"
-                        return 0
-                    fi ;;
                 s)  printf '  >> skipped: local file unchanged\n' > /dev/tty
                     DIFF_REVIEW_RESULT="skip"
                     return 0 ;;
                 x)  log_error "Aborted by user"
                     exit 2 ;;
+                *)  printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
+                    DIFF_REVIEW_RESULT="overwrite"
+                    return 0 ;;
             esac
-            # Fall through to overwrite on 'o' or default
-            printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
-            DIFF_REVIEW_RESULT="overwrite"
-            return 0
         else
             printf '  Merge has conflicts -- manual choice required.\n' > /dev/tty
         fi
@@ -961,12 +955,19 @@ deploy_managed_file() {
     local item_name="$4"
     local adopt_label="${5:-}"
 
+    # Normalize trailing whitespace for consistent comparison.
+    # Prevents round-trip diff noise (deploy -> adopt strips trailing blanks -> deploy sees diff).
+    src_content=$(printf '%s' "$src_content" | perl -0777 -pe 's/[\r\n]+$/\n/')
+
     MANAGED_FILE_RESULT="unchanged"
 
     # Dry run: report what would happen without writing
     if [ "${DRY_RUN:-}" = "true" ]; then
         if [ -f "$dest" ]; then
-            if [ "$(cat "$dest")" = "$src_content" ]; then
+            local _dr_existing
+            _dr_existing=$(cat "$dest")
+            _dr_existing=$(printf '%s' "$_dr_existing" | perl -0777 -pe 's/[\r\n]+$/\n/')
+            if [ "$_dr_existing" = "$src_content" ]; then
                 log "[DRY RUN] Unchanged: $item_name"
             else
                 log "[DRY RUN] Would update: $item_name -> $(display_path "$dest")"
@@ -982,6 +983,7 @@ deploy_managed_file() {
     if [ -f "$dest" ]; then
         local existing
         existing=$(cat "$dest")
+        existing=$(printf '%s' "$existing" | perl -0777 -pe 's/[\r\n]+$/\n/')
         if [ "$existing" = "$src_content" ]; then
             # Content identical — update deploy state (bootstraps manifest)
             update_deploy_state "$dest" "$src_content"
@@ -1023,6 +1025,14 @@ deploy_managed_file() {
             skip)
                 log_warn "Skipped: $item_name"
                 MANAGED_FILE_RESULT="skipped"
+                return 0
+                ;;
+            merge-adopt)
+                src_content="$MERGED_CONTENT"
+                printf '%s' "$src_content" > "$dest"
+                update_deploy_state "$dest" "$src_content"
+                log_ok "Updated (merge-adopt): $item_name"
+                MANAGED_FILE_RESULT="merge-adopted"
                 return 0
                 ;;
             merge)
@@ -1068,8 +1078,10 @@ deploy_tracker_record() {
                    write_summary DETAIL "$tool_name" "added: $item_name" ;;
         updated)   _DT_UPDATED=$((_DT_UPDATED + 1))
                    write_summary DETAIL "$tool_name" "updated: $item_name" ;;
-        adopted)   _DT_ADOPTED=$((_DT_ADOPTED + 1))
-                   write_summary DETAIL "$tool_name" "adopted: $item_name" ;;
+        adopted)       _DT_ADOPTED=$((_DT_ADOPTED + 1))
+                       write_summary DETAIL "$tool_name" "adopted: $item_name" ;;
+        merge-adopted) _DT_UPDATED=$((_DT_UPDATED + 1))
+                       write_summary DETAIL "$tool_name" "merge-adopted: $item_name" ;;
         skipped)   _DT_SKIPPED=$((_DT_SKIPPED + 1))
                    write_summary DETAIL "$tool_name" "skipped: $item_name" ;;
         unchanged) _DT_UNCHANGED=$((_DT_UNCHANGED + 1)) ;;

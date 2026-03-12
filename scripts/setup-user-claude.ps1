@@ -278,6 +278,31 @@ if ($DryRun) {
                 Write-Summary "ERROR" "claude.md" "adopt failed"
             }
         }
+        "merge-adopted" {
+            # Validate (same as created/updated)
+            if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
+                LogError "Validation failed: $claudeMd is empty or missing"
+            } else {
+                $written = Get-Content $claudeMd -Raw
+                if ($written -notmatch '## Machine-Specific') {
+                    LogError "Validation failed: $claudeMd missing Machine-Specific section"
+                }
+                if ($written -notmatch '## Coaching|## Code Style|## Tool') {
+                    LogError "Validation failed: $claudeMd missing template body"
+                }
+            }
+            # Adopt back to profile
+            $adoptDest = Join-Path $userRepoPath "claude\CLAUDE.md"
+            if (Adopt-ClaudeMd -DeployedPath $claudeMd -DestPath $adoptDest) {
+                if ($errors -eq 0) {
+                    Write-Summary "OK" "claude.md" "merge-adopted to profile"
+                } else {
+                    Write-Summary "ERROR" "claude.md" "validation failed"
+                }
+            } else {
+                Write-Summary "ERROR" "claude.md" "adopt failed after merge"
+            }
+        }
         "skipped" {
             Write-Summary "WARN" "claude.md" "skipped (user review)"
         }
@@ -387,7 +412,7 @@ if ($rulesSrc) {
             }
             $ruleResult = Deploy-ManagedFile -Content $ruleContent -DestPath $destFile -ToolName "claude rules" -ItemName $rf.Name -AdoptLabel $ruleAdoptLabel
 
-            if ($ruleResult -eq "adopted") {
+            if ($ruleResult -eq "adopted" -or $ruleResult -eq "merge-adopted") {
                 $adoptRuleDest = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name
                 $adoptRuleDir = Split-Path -Parent $adoptRuleDest
                 if (-not (Test-Path $adoptRuleDir)) {
@@ -398,7 +423,7 @@ if ($rulesSrc) {
             }
             Record-DeployOutcome -Outcome $ruleResult -ToolName "claude rules" -ItemName $rf.Name
             # Write-back: sync merged content to dotprofile repo
-            if ($script:DiffReviewResult -eq "merge" -and $script:MergedContent -and $userRepoPath) {
+            if ($ruleResult -eq "merge-adopted" -and $userRepoPath) {
                 $wbDest = Join-Path $userRepoPath "claude\rules\$($rf.Name)"
                 $wbDir = Split-Path -Parent $wbDest
                 if (-not (Test-Path $wbDir)) { New-Item -ItemType Directory -Path $wbDir -Force | Out-Null }

@@ -735,6 +735,79 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 29. Deployment menu parity audit
+# ---------------------------------------------------------------------------
+if $EXTENSIVE; then
+    ps1_lib="$REPO_ROOT/scripts/aitools-lib.ps1"
+    sh_lib="$REPO_ROOT/scripts/aitools-lib.sh"
+    # Extract [letter] patterns from auto-merge menu sections
+    ps1_auto=$(perl -ne 'print "$1\n" if /Console.*Write.*\[(\w)\]/' "$ps1_lib" | sort -u | paste -sd,)
+    sh_auto=$(perl -ne 'print "$1\n" if /printf.*\[(\w)\]/' "$sh_lib" | sort -u | paste -sd,)
+    if [ "$ps1_auto" = "$sh_auto" ]; then
+        step_pass "29" "Deployment menu parity audit" "PS1 and bash menus match: $ps1_auto"
+    else
+        step_fail "29" "Deployment menu parity audit" "PS1: $ps1_auto vs bash: $sh_auto"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# 30. Return value coverage audit
+# ---------------------------------------------------------------------------
+if $EXTENSIVE; then
+    sh_lib="$REPO_ROOT/scripts/aitools-lib.sh"
+    ps1_lib="$REPO_ROOT/scripts/aitools-lib.ps1"
+    # Extract all MANAGED_FILE_RESULT values from bash lib
+    sh_returns=$(perl -ne 'print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/' "$sh_lib" | sort -u | paste -sd,)
+    # Extract Deploy-ManagedFile return values from PS1 lib
+    ps1_returns=$(perl -ne 'print "$1\n" if /return\s+"([\w-]+)"/ && !/return ""/' "$ps1_lib" | sort -u | paste -sd,)
+    # Check deploy_tracker_record cases in bash
+    sh_tracker=$(perl -ne 'print "$1\n" if /^\s+([\w-]+)\)\s/' "$sh_lib" | sort -u | paste -sd,)
+    # Check Record-DeployOutcome cases in PS1
+    ps1_tracker=$(perl -ne 'print "$1\n" if /^\s+"([\w-]+)"\s+\{/' "$ps1_lib" | sort -u | paste -sd,)
+    missing=""
+    # Check callers for coverage of each bash return value
+    for caller in "$REPO_ROOT/scripts/setup-user-claude.sh" "$REPO_ROOT/scripts/setup-user-mcp.sh"; do
+        cname=$(basename "$caller")
+        for val in $(echo "$sh_returns" | tr ',' ' '); do
+            if ! grep -q "$val" "$caller"; then
+                missing="${missing}${missing:+; }$cname missing $val"
+            fi
+        done
+    done
+    if [ -z "$missing" ]; then
+        step_pass "30" "Return value coverage audit" "all callers handle: $sh_returns"
+    else
+        step_fail "30" "Return value coverage audit" "$missing"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# 31. Deployment state machine sync
+# ---------------------------------------------------------------------------
+if $EXTENSIVE; then
+    sh_lib="$REPO_ROOT/scripts/aitools-lib.sh"
+    ps1_lib="$REPO_ROOT/scripts/aitools-lib.ps1"
+    # Compare MANAGED_FILE_RESULT sets
+    sh_results=$(perl -ne 'print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/' "$sh_lib" | sort -u | paste -sd,)
+    ps1_results=$(perl -ne 'print "$1\n" if /return\s+"([\w-]+)"/' "$ps1_lib" | grep -v '^$' | sort -u | paste -sd,)
+    # Compare tracker case sets
+    sh_tracker=$(perl -ne 'print "$1\n" if /^\s+([\w|-]+)\)\s/' "$sh_lib" | sort -u | paste -sd,)
+    ps1_tracker=$(perl -ne 'print "$1\n" if /^\s+"([\w-]+)"\s+\{/' "$ps1_lib" | sort -u | paste -sd,)
+    issues=""
+    if [ "$sh_results" != "$ps1_results" ]; then
+        issues="return values: bash=$sh_results ps1=$ps1_results"
+    fi
+    if [ "$sh_tracker" != "$ps1_tracker" ]; then
+        issues="${issues}${issues:+; }tracker cases: bash=$sh_tracker ps1=$ps1_tracker"
+    fi
+    if [ -z "$issues" ]; then
+        step_pass "31" "Deployment state machine sync" "PS1 and bash return values match"
+    else
+        step_fail "31" "Deployment state machine sync" "$issues"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------
 print_summary

@@ -185,6 +185,27 @@ For `@latest` / remote tools:
 - PASS: Both source scripts include the call in the exit section.
 - FAIL: Missing from one or both source scripts.
 
+### 29. Deployment menu parity audit
+
+Extract interactive menu choice patterns (`[letter]`) from both
+`scripts/aitools-lib.ps1` (Prompt-DiffReview) and `scripts/aitools-lib.sh`
+(prompt_diff_review). Verify identical choice letters and order in auto-merge
+menu and fallback menu. Flag mismatches.
+
+### 30. Return value coverage audit
+
+Extract all return values from `Deploy-ManagedFile` / `deploy_managed_file`.
+For each caller file (`setup-user-claude`, `setup-user-mcp`,
+`setup-user-hooks`), verify a case/switch branch exists for every return value.
+Also verify `Record-DeployOutcome` / `deploy_tracker_record` handles every
+value.
+
+### 31. Deployment state machine sync
+
+Verify the return value sets match between PS1 and bash:
+- `Deploy-ManagedFile` return values == `deploy_managed_file` MANAGED_FILE_RESULT values
+- `Record-DeployOutcome` cases == `deploy_tracker_record` cases
+
 ---
 
 ## Version tag (after all checks pass)

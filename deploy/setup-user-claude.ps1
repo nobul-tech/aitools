@@ -431,9 +431,12 @@ function Try-AutoMerge {
         [IO.File]::WriteAllText($tmpAncestor, $AncestorContent)
         [IO.File]::WriteAllText($tmpSource, $SourceContent)
 
-        $merged = git merge-file -p $tmpLocal $tmpAncestor $tmpSource 2>&1
+        # In-place merge: modifies $tmpLocal with merged result.
+        # Avoids -p (stdout) which decodes UTF-8 through [Console]::OutputEncoding
+        # (OEM codepage on Windows), mangling non-ASCII characters.
+        git merge-file $tmpLocal $tmpAncestor $tmpSource 2>$null
         if ($LASTEXITCODE -eq 0) {
-            return ($merged -join "`n")
+            return [System.IO.File]::ReadAllText($tmpLocal, [System.Text.Encoding]::UTF8)
         }
         return $null
     } catch {
@@ -868,33 +871,25 @@ function Prompt-DiffReview {
             }
             [Console]::WriteLine("")
             if ($AdoptLabel) {
-                [Console]::WriteLine("  [y]es       : accept merge result")
-                [Console]::WriteLine("  [o]verwrite : source wins -> deploy to local (backup kept)")
-                [Console]::WriteLine("  [a]dopt     : local wins -> copy back to $AdoptLabel")
-                [Console]::WriteLine("  [s]kip      : keep local as-is (no changes)")
-                [Console]::WriteLine("  [x]abort    : stop deployment")
-                [Console]::Write("  choice [y/o/a/s/x]: ")
+                [Console]::WriteLine("  [a]ccept    : deploy merge + update $AdoptLabel")
             } else {
-                [Console]::WriteLine("  [y]es       : accept merge result")
-                [Console]::WriteLine("  [o]verwrite : source wins -> deploy to local (backup kept)")
-                [Console]::WriteLine("  [s]kip      : keep local as-is (no changes)")
-                [Console]::WriteLine("  [x]abort    : stop deployment")
-                [Console]::Write("  choice [y/o/s/x]: ")
+                [Console]::WriteLine("  [a]ccept")
             }
+            [Console]::WriteLine("  [o]verwrite")
+            [Console]::WriteLine("  [s]kip")
+            [Console]::WriteLine("  [x]abort")
+            [Console]::Write("  choice [a/o/s/x]: ")
             $choice = [Console]::ReadLine()
             switch ($choice.ToLower()) {
-                "y" {
-                    $script:MergedContent = $autoMerged
-                    [Console]::WriteLine("  >> merged: auto-merge deployed")
-                    return "merge"
-                }
                 "a" {
+                    $script:MergedContent = $autoMerged
                     if ($AdoptLabel) {
-                        [Console]::WriteLine("  >> adopted: local version copied back to $AdoptLabel")
-                        return "adopt"
+                        [Console]::WriteLine("  >> accepted: merge deployed + $AdoptLabel updated")
+                        return "merge-adopt"
+                    } else {
+                        [Console]::WriteLine("  >> accepted: merge deployed")
+                        return "merge"
                     }
-                    [Console]::WriteLine("  >> overwritten: source deployed to local (backup kept)")
-                    return "overwrite"
                 }
                 "s" {
                     [Console]::WriteLine("  >> skipped: local file unchanged")
@@ -978,6 +973,10 @@ function Deploy-ManagedFile {
         [string]$AdoptLabel = ""
     )
 
+    # Normalize trailing whitespace for consistent comparison.
+    # Prevents round-trip diff noise (deploy -> adopt strips trailing blanks -> deploy sees diff).
+    $Content = $Content -replace '[\r\n]+$', "`n"
+
     # Dry run: report what would happen without writing
     if ($DryRun) {
         if (Test-Path $DestPath) {
@@ -986,6 +985,7 @@ function Deploy-ManagedFile {
             } catch {
                 $existing = ""
             }
+            if ($existing) { $existing = $existing -replace '[\r\n]+$', "`n" }
             if ($existing -eq $Content) {
                 Log "[DRY RUN] Unchanged: $ItemName"
             } else {
@@ -1009,6 +1009,7 @@ function Deploy-ManagedFile {
             LogWarn "Cannot read $DestPath for comparison: $_"
             $existing = ""
         }
+        if ($existing) { $existing = $existing -replace '[\r\n]+$', "`n" }
         if ($existing -eq $Content) {
             # Content identical — update deploy state (bootstraps manifest)
             Update-DeployState -FilePath $DestPath -Content $Content
@@ -1046,6 +1047,14 @@ function Deploy-ManagedFile {
             "skip" {
                 LogWarn "Skipped: $ItemName"
                 return "skipped"
+            }
+            "merge-adopt" {
+                $Content = $script:MergedContent
+                $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
+                [System.IO.File]::WriteAllText($resolved, $Content, [System.Text.UTF8Encoding]::new($false))
+                Update-DeployState -FilePath $DestPath -Content $Content
+                LogOk "Updated (merge-adopt): $ItemName"
+                return "merge-adopted"
             }
             "merge" {
                 $Content = $script:MergedContent
@@ -1088,7 +1097,8 @@ function Record-DeployOutcome {
     switch ($Outcome) {
         { $_ -eq "added" -or $_ -eq "created" } { $script:dtAdded++;     Write-Summary "DETAIL" $ToolName "added: $ItemName" }
         "updated"   { $script:dtUpdated++;   Write-Summary "DETAIL" $ToolName "updated: $ItemName" }
-        "adopted"   { $script:dtAdopted++;   Write-Summary "DETAIL" $ToolName "adopted: $ItemName" }
+        "adopted"       { $script:dtAdopted++;   Write-Summary "DETAIL" $ToolName "adopted: $ItemName" }
+        "merge-adopted" { $script:dtUpdated++;   Write-Summary "DETAIL" $ToolName "merge-adopted: $ItemName" }
         "skipped"   { $script:dtSkipped++;   Write-Summary "DETAIL" $ToolName "skipped: $ItemName" }
         "unchanged" { $script:dtUnchanged++ }
         "preserved" { $script:dtPreserved++ }
@@ -1984,7 +1994,7 @@ if ($rulesSrc) {
             }
             $ruleResult = Deploy-ManagedFile -Content $ruleContent -DestPath $destFile -ToolName "claude rules" -ItemName $rf.Name -AdoptLabel $ruleAdoptLabel
 
-            if ($ruleResult -eq "adopted") {
+            if ($ruleResult -eq "adopted" -or $ruleResult -eq "merge-adopted") {
                 $adoptRuleDest = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name
                 $adoptRuleDir = Split-Path -Parent $adoptRuleDest
                 if (-not (Test-Path $adoptRuleDir)) {
@@ -1995,7 +2005,7 @@ if ($rulesSrc) {
             }
             Record-DeployOutcome -Outcome $ruleResult -ToolName "claude rules" -ItemName $rf.Name
             # Write-back: sync merged content to dotprofile repo
-            if ($script:DiffReviewResult -eq "merge" -and $script:MergedContent -and $userRepoPath) {
+            if ($ruleResult -eq "merge-adopted" -and $userRepoPath) {
                 $wbDest = Join-Path $userRepoPath "claude\rules\$($rf.Name)"
                 $wbDir = Split-Path -Parent $wbDest
                 if (-not (Test-Path $wbDir)) { New-Item -ItemType Directory -Path $wbDir -Force | Out-Null }

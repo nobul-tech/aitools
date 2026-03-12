@@ -867,6 +867,83 @@ if (Test-Path $manifestPath) {
 }
 
 # ---------------------------------------------------------------------------
+# 29. Deployment menu parity audit
+# ---------------------------------------------------------------------------
+if ($Extensive) {
+    $ps1Lib = Join-Path $script:RepoRoot "scripts\aitools-lib.ps1"
+    $shLib = Join-Path $script:RepoRoot "scripts\aitools-lib.sh"
+    # Extract [letter] patterns from menu lines
+    $ps1Choices = (Select-String -Path $ps1Lib -Pattern 'Console.*Write.*\[(\w)\]' -AllMatches |
+        ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique) -join ','
+    $shChoices = (Select-String -Path $shLib -Pattern 'printf.*\[(\w)\]' -AllMatches |
+        ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique) -join ','
+    if ($ps1Choices -eq $shChoices) {
+        StepPass "29" "Deployment menu parity audit" "PS1 and bash menus match: $ps1Choices"
+    } else {
+        StepFail "29" "Deployment menu parity audit" "PS1: $ps1Choices vs bash: $shChoices"
+    }
+}
+
+# ---------------------------------------------------------------------------
+# 30. Return value coverage audit
+# ---------------------------------------------------------------------------
+if ($Extensive) {
+    $ps1Lib = Join-Path $script:RepoRoot "scripts\aitools-lib.ps1"
+    $shLib = Join-Path $script:RepoRoot "scripts\aitools-lib.sh"
+    # Extract MANAGED_FILE_RESULT values from bash
+    $shReturns = (perl -ne 'print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/' $shLib | Sort-Object -Unique) -join ','
+    # Check callers for each value
+    $callers = @(
+        (Join-Path $script:RepoRoot "scripts\setup-user-claude.sh"),
+        (Join-Path $script:RepoRoot "scripts\setup-user-claude.ps1"),
+        (Join-Path $script:RepoRoot "scripts\setup-user-mcp.sh"),
+        (Join-Path $script:RepoRoot "scripts\setup-user-mcp.ps1")
+    )
+    $missing = @()
+    foreach ($caller in $callers) {
+        $cname = Split-Path -Leaf $caller
+        $content = Get-Content $caller -Raw -ErrorAction SilentlyContinue
+        if (-not $content) { continue }
+        foreach ($val in ($shReturns -split ',')) {
+            if ($content -notmatch [regex]::Escape($val)) {
+                $missing += "$cname missing $val"
+            }
+        }
+    }
+    if ($missing.Count -eq 0) {
+        StepPass "30" "Return value coverage audit" "all callers handle: $shReturns"
+    } else {
+        StepFail "30" "Return value coverage audit" ($missing -join '; ')
+    }
+}
+
+# ---------------------------------------------------------------------------
+# 31. Deployment state machine sync
+# ---------------------------------------------------------------------------
+if ($Extensive) {
+    $ps1Lib = Join-Path $script:RepoRoot "scripts\aitools-lib.ps1"
+    $shLib = Join-Path $script:RepoRoot "scripts\aitools-lib.sh"
+    # Compare return value sets
+    $shResults = (perl -ne 'print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/' $shLib | Sort-Object -Unique) -join ','
+    $ps1Results = (perl -ne 'print "$1\n" if /return\s+"([\w-]+)"/' $ps1Lib | Sort-Object -Unique) -join ','
+    $issues = @()
+    if ($shResults -ne $ps1Results) {
+        $issues += "return values: bash=$shResults ps1=$ps1Results"
+    }
+    # Compare tracker cases
+    $shTracker = (perl -ne 'print "$1\n" if /^\s+([\w|-]+)\)\s/' $shLib | Sort-Object -Unique) -join ','
+    $ps1Tracker = (perl -ne 'print "$1\n" if /^\s+"([\w-]+)"\s+\{/' $ps1Lib | Sort-Object -Unique) -join ','
+    if ($shTracker -ne $ps1Tracker) {
+        $issues += "tracker cases: bash=$shTracker ps1=$ps1Tracker"
+    }
+    if ($issues.Count -eq 0) {
+        StepPass "31" "Deployment state machine sync" "PS1 and bash return values match"
+    } else {
+        StepFail "31" "Deployment state machine sync" ($issues -join '; ')
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------
 PrintSummary

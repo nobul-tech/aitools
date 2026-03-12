@@ -341,7 +341,7 @@ function Deploy-Skill {
 
     $skillResult = Deploy-ManagedFile -Content $srcContent -DestPath $dest -ToolName $ToolName -ItemName $SkillName -AdoptLabel "shared/"
 
-    if ($skillResult -eq "adopted") {
+    if ($skillResult -eq "adopted" -or $skillResult -eq "merge-adopted") {
         # Copy deployed version back to repo source
         Copy-Item -Path $dest -Destination $src -Force -ErrorAction Stop
         LogOk "Adopted skill to shared/: $SkillName"

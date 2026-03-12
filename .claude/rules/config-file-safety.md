@@ -104,6 +104,12 @@ pattern — deploy managed files, preserve everything else:
 
 This is the directory-level equivalent of read-then-merge for config files.
 
+### Interactive managed file deployment
+
+Managed files deployed via `Deploy-ManagedFile` / `deploy_managed_file` use
+the interactive diff review pattern when both sides differ. See
+`.claude/rules/interactive-menus.md` and `reference/managed-file-deployment.md`.
+
 ### Post-write validation
 
 Every config-writing script must validate output immediately after writing.

@@ -148,6 +148,9 @@ Summary detail text is max 30 chars. JSON configs log changed keys and emit DETA
 summary lines; text files log diffs to deploy.log.
 See `@reference/script-standards-detail.md` for patterns and examples.
 
+For interactive managed file deployment (diff review + user choice), see
+`.claude/rules/interactive-menus.md` and `reference/managed-file-deployment.md`.
+
 ### External command error handling
 
 External install/upgrade commands (pip, npm, winget, brew, cargo, apt-get) MUST:

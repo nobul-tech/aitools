@@ -12,6 +12,28 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.52.4 -- Merge UX fixes + deployment flow documentation (2026-03-12)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Merge preview encoding (#42, PS1)**: `Try-AutoMerge` now uses in-place `git merge-file` + `[IO.File]::ReadAllText` instead of pipeline capture through OEM codepage -- fixes Unicode mojibake (em-dash, arrows) on Windows. |
+| 2 | **Trailing blank lines (#43)**: Normalize trailing whitespace in `Deploy-ManagedFile` / `deploy_managed_file` before content comparison -- prevents false diffs on every deploy-adopt-deploy cycle. |
+| 3 | **Auto-merge menu (#44)**: Replace separate `[y]es` + `[a]dopt` with single `[a]ccept` that deploys merge AND updates profile. New return value `merge-adopt` / `merge-adopted` handled by all callers. |
+
+### Added
+
+| # | Change |
+|---|--------|
+| 4 | **Deployment flow documentation**: New rule `.claude/rules/interactive-menus.md`, new reference `reference/managed-file-deployment.md` (full state machine spec), new cursor rule `.cursor/rules/interactive-menus.mdc`. Cross-references added to `script-standards.md`, `config-file-safety.md`, `sources-of-truth.md`, `cursor-practices.md`, `post-push-checklist.md`. |
+| 5 | **Check steps 29-31** (post-push): menu parity audit, return value coverage audit, deployment state machine sync. |
+
+### Platform testing
+
+- Windows: tested
+- macOS: not tested (bash syntax validated, PS1 encoding fix is Windows-only)
+
 ## v0.52.3 -- Auto-merge engine swap, NASM detection, pup messaging, log locking (2026-03-12)
 
 ### Fixed
