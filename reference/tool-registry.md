@@ -503,7 +503,9 @@ rustup --version
 - **NASM**: Required by `aws-lc-sys` (crypto library used by rustls, reqwest, and many crates).
   `setup-rust.ps1` auto-installs via `winget install NASM.NASM`. Without NASM, `cargo install`
   for any crate using `aws-lc-rs` panics: `NASM command not found! Build cannot continue.`
-- **CMake**: Required by some crates. `winget install Kitware.CMake`.
+- **CMake**: Required by some crates. Official: cmake.org/download lists pip, ZIP, MSI
+  (not winget). Windows: `uv pip install cmake` (user-level, PyPI package maintained by
+  Kitware). macOS: `brew install cmake`. See `reference/tool-evaluation-playbook.md`.
 
 All known build prerequisites are tracked in `aitools-lib.ps1` (`$script:BuildPrereqs`)
 and `aitools-lib.sh` (`check_build_prereqs`). When a new prerequisite is discovered,
@@ -521,7 +523,7 @@ installed but not on PATH in current session).
 | Tool | Winget ID | Standard path | Verified | Notes |
 |------|-----------|--------------|----------|-------|
 | NASM | NASM.NASM | `%LOCALAPPDATA%\bin\NASM\nasm.exe` | 2026-03-11 (v3.01) | Per-user Nullsoft installer; `Program Files` as secondary |
-| CMake | Kitware.CMake | `C:\Program Files\CMake\bin\cmake.exe` | UNVERIFIED | Assumed MSI behavior -- verify after install |
+| CMake | N/A (pip via uv) | PENDING (trial install) | UNVERIFIED | Install method changed from winget to uv pip per cmake.org/download (2026-03-12) |
 
 **macOS/Linux:**
 

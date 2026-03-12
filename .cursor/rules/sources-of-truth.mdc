@@ -14,6 +14,7 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 |------|-----------------|-------|
 | `reference/tool-registry.md` | Registry of managed tools — install commands, lifecycle, per-platform version tracking | Any |
 | `reference/tool-evaluation-criteria.md` | Tool evaluation framework and lifecycle phases | Any |
+| `reference/tool-evaluation-playbook.md` | Install method discovery process and criteria — feeds BuildPrereqs and tool-registry entries | Any |
 | `CLAUDE.md` | Project-level instructions and Key Decisions | Any |
 | `shared/claude-shared.md` | User-level preferences embedded into deploy scripts (propagates to all machines) | Any |
 | `shared/cursor-rules/user-rules.md` | Cursor User Rules template (manual copy if needed) | Any |

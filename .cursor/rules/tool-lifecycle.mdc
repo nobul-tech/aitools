@@ -78,3 +78,25 @@ Required checks (via chrome-devtools):
 3. Package manager presence (Homebrew formula/tap, crates.io, npm, winget ID, etc.)
 
 Record findings in `reference/tool-registry.md` before modifying scripts. Include the verification date and source URL. If the upstream method has changed, update tool-registry first, then update scripts to match.
+
+For build prerequisites, this gate also applies -- verify official install methods
+before writing `BuildPrereqs` entries or `BuildFailureSignatures` remedies.
+See "Install method discovery" above.
+
+### Install method discovery
+
+Before choosing or changing an install command for ANY managed tool or build
+prerequisite, follow the discovery process:
+
+1. **Read official docs** -- download page, getting started guide, install instructions
+2. **Identify all methods** per platform (pip, brew, winget, curl, ZIP, MSI, etc.)
+3. **Evaluate** each method against classification criteria: official support (highest),
+   elevation requirement, update model, PATH integration, existing toolchain fit
+4. **Trial install** on target platform -- record actual install path, version, any issues
+5. **Document** in `tool-registry.md`: source URL, chosen method, rationale, trial results
+
+This applies to managed tools AND build prerequisites (`BuildPrereqs` entries,
+`BuildFailureSignatures` remedies). The tool's official documentation is the starting
+point -- do not assume any package manager is universally correct.
+
+Details and templates: `@reference/tool-evaluation-playbook.md`

@@ -91,6 +91,10 @@ function Log($msg, $level = "info") {
 function LogOk($msg)    { Log $msg "ok" }
 function LogError($msg) { Log $msg "error"; $script:errors++ }
 function LogWarn($msg)  { Log $msg "warn"; $script:warnings++ }
+function LogDetail($msg) {
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    Add-Content -Path $logFile -Value "[$ts] [$scriptName] [detail] $msg"
+}
 
 # ---------------------------------------------------------------------------
 # Summary writer (3-arg: category, tool, detail)
@@ -336,9 +340,10 @@ function Test-AiMergeOutput {
         return $false
     }
 
-    # Check 3: permission/access language
-    if ($Output -match '(?i)\b(permission|approve|access denied)\b') {
-        $script:MergeRejectReason = "Contains permission/access language"
+    # Check 3: conversational refusal patterns (not bare keywords -- content may
+    # legitimately contain "permission", "access", etc.)
+    if ($Output -match '(?i)(I don''t have permission|I cannot access|I''m not authorized|I need (your )?approval|permission denied|access denied|I''m unable to|I can''t (read|write|access|open|modify))') {
+        $script:MergeRejectReason = "Contains conversational refusal language"
         return $false
     }
 
@@ -388,7 +393,7 @@ function Invoke-AiMerge {
         return "overwrite"
     }
 
-    [Console]::WriteLine("  >> merging via AI...")
+    [Console]::WriteLine("  >> merging via AI (this may take 30-60s)...")
 
     $currentMerge = ""
     $iteration = 0
@@ -480,7 +485,9 @@ $feedback
         if (-not (Test-AiMergeOutput -Output $merged -SourceContent $SourceContent -LocalContent $LocalContent)) {
             [Console]::WriteLine("  >> AI merge output rejected (iteration $iteration): $($script:MergeRejectReason)")
             LogWarn "AI merge output rejected (iteration $iteration): $($script:MergeRejectReason)"
-            Log "Rejected AI merge output: $merged"
+            foreach ($detailLine in ($merged -split "`n")) {
+                LogDetail "rejected-merge: $detailLine"
+            }
             [Console]::Write("  fallback [o]verwrite / [s]kip: ")
             $fb = [Console]::ReadLine()
             if ($fb.ToLower() -eq "s") { return "skip" }
@@ -865,6 +872,12 @@ function Refresh-Path {
     $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
     $env:Path = "$machinePath;$userPath"
+}
+
+function Test-IsAdmin {
+    ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]"Administrator"
+    )
 }
 
 # Log-WingetOutput: Filter and log captured winget command output.
@@ -1257,9 +1270,16 @@ $script:BuildPrereqs = @{
             ToolName   = "cmake"
             # Get-Command exempt: command-existence check with explicit fallback
             Check      = { [bool](Get-Command cmake -ErrorAction SilentlyContinue) }
-            # UNVERIFIED: assumed MSI behavior -- verify after install (#22)
-            KnownPaths = @("$env:ProgramFiles\CMake\bin\cmake.exe")
-            Install    = "winget install Kitware.CMake"
+            # Official: cmake.org/download lists pip, ZIP, MSI (not winget)
+            # PyPI: cmake 4.2.3, maintained by Kitware (jcfr@kitware.com)
+            # Source: https://cmake.org/download/ + https://pypi.org/project/cmake/
+            # Verified source: 2026-03-12 via chrome-devtools
+            KnownPaths = @(
+                "$env:USERPROFILE\.local\bin\cmake.exe",       # UNVERIFIED: uv tool install
+                "$env:APPDATA\Python\Scripts\cmake.exe",       # UNVERIFIED: pip install --user
+                "$env:ProgramFiles\CMake\bin\cmake.exe"        # UNVERIFIED: MSI fallback
+            )
+            Install    = "uv pip install cmake"
             Platform   = "win"
         }
     )
@@ -1341,7 +1361,7 @@ function Check-BuildPrereqs {
 $script:BuildFailureSignatures = @(
     @{ Pattern = "NASM command not found";                Remedy = "winget install NASM.NASM";                     Name = "NASM (assembler)" }
     @{ Pattern = "linker.*not found|link\.exe.*not found"; Remedy = "Install MSVC Build Tools with C++ workload";  Name = "MSVC linker" }
-    @{ Pattern = "cmake.*not found|Could not find cmake"; Remedy = "winget install Kitware.CMake";                 Name = "CMake" }
+    @{ Pattern = "cmake.*not found|Could not find cmake"; Remedy = "uv pip install cmake (or see cmake.org/download)"; Name = "CMake" }
     @{ Pattern = "pkg-config.*not found";                 Remedy = "Install pkg-config";                           Name = "pkg-config" }
     @{ Pattern = "Python\.h.*not found|python.*dev";      Remedy = "Install Python development headers";           Name = "Python headers" }
     @{ Pattern = "C compiler.*not found|cc.*not found";   Remedy = "Install a C compiler (MSVC/gcc/clang)";        Name = "C compiler" }
@@ -1383,7 +1403,6 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
-
 # --- Auto-detect machine info ---
 $osInfo = (Get-CimInstance Win32_OperatingSystem).Caption
 $hostname = $env:COMPUTERNAME
@@ -1407,9 +1426,9 @@ Imported via `@` from user-level `~/.claude/CLAUDE.md` on each machine.
 
 ## Identity
 
-- Name: Jose
+- Name: pepe
 - Git: `Jose <jose@nobul.tech>`
-- Company: Nobul
+- Company: nobul.tech
 
 ## Code Style Defaults
 
@@ -1632,11 +1651,12 @@ if ($DryRun) {
 $rulesSrc = Join-Path $env:TEMP "aitools-rules-$(Get-Random)"
 New-Item -ItemType Directory -Path $rulesSrc -Force | Out-Null
 $_rule_concurrent_agents_md_ = @'
-## Concurrent Agent Coordination
+## Agent Concurrency Rules
 
-Multiple AI agents (Claude Code, Cursor Agent CLI) may edit a codebase concurrently.
+Multiple AI agents (Claude Code, Cursor Agent CLI, Windsurf, Copilot) may edit files simultaneously.
+Each agent must check for concurrent work before modifying any file.
 
-Before editing a file, run `git diff` to check for unexpected changes from another agent session.
+Before editing, run `git status`, `git diff`, and `git stash list` to check for unexpected changes and review recent commits for other agent activity.
 
 ### Conflict Resolution
 
@@ -1645,6 +1665,7 @@ If `git diff` reveals unexpected changes:
 2. If changes are complementary, preserve both
 3. If changes conflict, ask the user which to keep
 4. Never silently overwrite another agent's work
+5. Log the conflict resolution decision for audit trail
 '@
 $_ruleDest_concurrent_agents_md_ = Join-Path $rulesSrc "concurrent-agents.md"
 [System.IO.File]::WriteAllText($_ruleDest_concurrent_agents_md_, $_rule_concurrent_agents_md_, [System.Text.UTF8Encoding]::new($false))

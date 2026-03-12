@@ -287,6 +287,7 @@ $inventoryErrors = 0
 $protectedFiles = @(
     "reference/tool-registry.md",
     "reference/tool-evaluation-criteria.md",
+    "reference/tool-evaluation-playbook.md",
     "reference/tool-versions.json",
     "CLAUDE.md",
     "shared/claude-shared.md",

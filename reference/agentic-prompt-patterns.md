@@ -31,7 +31,14 @@ Safe patterns for using `claude -p` in aitools scripts (deploy, setup, merge).
    dotprofile repo (`<userRepoPath>/claude/rules/`) and auto commit/push.
 
 7. **Log rejected output** — always log rejected AI output to `deploy.log` for
-   post-incident debugging. Use `log` (not `log_warn`) for the raw content.
+   post-incident debugging. Use `log_detail` / `LogDetail` (file-only) per line --
+   not `log` (which also writes to console, causing wall-of-text output with large
+   merge content).
+
+8. **Validate with precision** — Check 3 (permission/access language) must use
+   conversational-refusal phrases ("I don't have permission", "I cannot access",
+   "access denied"), not bare keywords ("permission", "approve"). Document content
+   legitimately contains these words.
 
 ## Incident Context
 

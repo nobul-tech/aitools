@@ -141,7 +141,7 @@
       "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
       "minVersion": null,
       "blocked": [],
-      "notes": "brew install datadog-labs/pack/pup (macOS); cargo install --git (Windows); Rust-based CLI, OAuth2 auth. Verified: 2026-03-06"
+      "notes": "brew install datadog-labs/pack/pup (macOS); cargo install --git (Windows, CMake prereq method changed from winget to uv pip per cmake.org 2026-03-12); Rust-based CLI, OAuth2 auth. Verified: 2026-03-06"
     },
     "datadog-mcp": {
       "pinned": false,

@@ -47,6 +47,7 @@ Log file output is plain text only (no ANSI codes).
 | `log_ok` | `LogOk` | `ok` | Success |
 | `log_error` | `LogError` | `error` | Error (must increment ERRORS) |
 | `log_warn` | `LogWarn` | `warn` | Warning (must increment WARNINGS) |
+| `log_detail` | `LogDetail` | `detail` | Diagnostic content (file-only, no console) |
 
 All timestamps must be UTC with Z suffix (`date -u +%Y-%m-%dT%H:%M:%SZ` / `.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")`).
 
@@ -171,6 +172,9 @@ specific remedy. If no signature matches, log the generic failure.
 Both layers use centralized data tables in `aitools-lib.ps1`/`.sh`. Adding a new prerequisite
 or failure signature = one entry in the table. See `reference/script-standards-detail.md` for
 the process.
+
+Install fields in `BuildPrereqs` entries must reference methods derived from official
+tool documentation. See `.claude/rules/tool-lifecycle.md` Install method discovery.
 
 ### KnownPaths empirical verification
 

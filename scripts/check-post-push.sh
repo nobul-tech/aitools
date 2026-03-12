@@ -268,6 +268,7 @@ inventory_errors=0
 for pf in \
     "reference/tool-registry.md" \
     "reference/tool-evaluation-criteria.md" \
+    "reference/tool-evaluation-playbook.md" \
     "reference/tool-versions.json" \
     "CLAUDE.md" \
     "shared/claude-shared.md" \

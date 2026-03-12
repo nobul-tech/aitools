@@ -28,6 +28,30 @@ if (-not $cargoCheck) {
     Refresh-Path  # Pick up tools installed earlier in the same aitools-install session
     $missingPrereqs = Check-BuildPrereqs "cargo"
     if ($missingPrereqs.Count -gt 0) {
+        # Attempt auto-install for prerequisites with known user-level methods
+        foreach ($p in $missingPrereqs) {
+            # Get-Command exempt: command-existence check with explicit fallback
+            if ($p.Name -eq "CMake" -and (Get-Command uv -ErrorAction SilentlyContinue)) {
+                Log "Attempting CMake install via uv pip (per cmake.org/download)..."
+                $uvOutput = uv pip install cmake 2>&1 | Out-String
+                Log-WingetOutput $uvOutput
+                Refresh-Path
+                # Get-Command exempt: command-existence check with explicit fallback
+                if (Get-Command cmake -ErrorAction SilentlyContinue) {
+                    LogOk "CMake installed via uv pip (user-level, no admin)"
+                    $missingPrereqs = @($missingPrereqs | Where-Object { $_.Name -ne "CMake" })
+                } else {
+                    if (Ensure-ToolOnPath -ToolName "cmake" -KnownPaths $p.KnownPaths) {
+                        LogOk "CMake found after uv install (added to session PATH)"
+                        $missingPrereqs = @($missingPrereqs | Where-Object { $_.Name -ne "CMake" })
+                    } else {
+                        LogWarn "uv pip install cmake succeeded but cmake not on PATH"
+                    }
+                }
+            }
+        }
+    }
+    if ($missingPrereqs.Count -gt 0) {
         foreach ($p in $missingPrereqs) {
             LogError "$($p.Name) not installed -- required to build pup from source"
             LogError "Fix: $($p.Install)"

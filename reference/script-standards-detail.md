@@ -82,6 +82,7 @@ Check scripts source `check-lib.sh`/`.ps1` which in turn sources `aitools-lib.sh
 | Module-level counters | `ERRORS=0`, `WARNINGS=0` | n/a (set in `Initialize-Logging`) | Safe defaults for scripts that source without `logging_init` |
 | Logging init | `logging_init "name"` | `Initialize-Logging "name"` | Sets SCRIPT_NAME, LOG_DIR, LOG_FILE; resets ERRORS, WARNINGS |
 | Standard logging | `log`/`log_ok`/`log_error`/`log_warn` | `Log`/`LogOk`/`LogError`/`LogWarn` | `[ts] [script] [level] msg` with console colors |
+| Detail logging | `log_detail()` | `LogDetail` | File-only diagnostic logging (no console output) |
 | Summary writer | `write_summary` | `Write-Summary` | 3-arg append to summary file |
 | Summary renderer | `show_summary` | `Show-Summary` | Colored panel display |
 | File backup | `backup_file()` | `Backup-File` | Timestamped backup with pruning |
@@ -145,6 +146,11 @@ Setup scripts and check scripts use the defaults -- no overrides.
 | `scripts/aitools` | `log`, `log_error`, `log_warn` | `Log`, `LogError`, `LogWarn` | File-only logging (no tee to stdout); errors/warns to stderr |
 | `scripts/aitools-install` | `log`, `log_ok`, `log_error`, `log_warn` | `Log`, `LogOk`, `LogError`, `LogWarn` | JSONL dual-format (human-readable + structured JSON) |
 | `scripts/build-deploy.sh` | `blog`, `blog_ok`, `blog_error` | n/a | Standalone build tool; doesn't source aitools-lib.sh; defines own logging functions |
+
+**`log_detail` / `LogDetail`**: File-only logging for diagnostic content (rejected merge
+output, verbose debugging). Not included in override tables -- entry points that override
+`log`/`Log` do not need to override `log_detail`/`LogDetail` because it always writes
+directly to `$LOG_FILE`/`$logFile` regardless of console routing.
 
 ## End-of-run summary
 
@@ -916,17 +922,20 @@ Layer 2 only fires after minutes of wasted compilation.
 
 When a user reports a new build failure:
 
-1. **File a GitHub issue** with the full error output
-2. **Identify the error pattern** — the grep-able string from the build output
-3. **Add to `aitools-lib.ps1`:**
+1. **Read the tool's official documentation** (download page, install guide) to identify
+   supported install methods. Choose method per `reference/tool-evaluation-playbook.md`.
+   Do not choose from memory.
+2. **File a GitHub issue** with the full error output
+3. **Identify the error pattern** — the grep-able string from the build output
+4. **Add to `aitools-lib.ps1`:**
    - Entry in `$script:BuildPrereqs` (if it's a checkable command)
    - Entry in `$script:BuildFailureSignatures` (the error pattern + remedy)
-4. **Add to `aitools-lib.sh`:**
+5. **Add to `aitools-lib.sh`:**
    - Entry in `check_build_prereqs()` case block
    - Entry in `diagnose_build_failure()` patterns array
-5. **Document** in `reference/tool-registry.md` under the relevant tool's Prerequisites section
-6. **Run** `bash scripts/build-deploy.sh` to propagate to deploy scripts
-7. **Verify** with `check-pre-commit` (framework audit passes) and smoke test
+6. **Document** in `reference/tool-registry.md` under the relevant tool's Prerequisites section
+7. **Run** `bash scripts/build-deploy.sh` to propagate to deploy scripts
+8. **Verify** with `check-pre-commit` (framework audit passes) and smoke test
 
 ### Ensure-ToolOnPath / ensure_tool_on_path
 

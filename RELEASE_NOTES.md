@@ -12,6 +12,40 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.51.0 -- Install method discovery process, fix AI merge validation (2026-03-12)
+
+Closes #25, #26, #27.
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **AI merge validation false positive** (#25): Check 3 matched bare keywords ("permission") in CLAUDE.md content. Replaced with sentence-level conversational-refusal patterns. |
+| 2 | **Rejected AI merge output wall of text** (#27): Multi-KB content dumped to console as single line. Now uses `LogDetail`/`log_detail` (file-only) per line. |
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 3 | **CMake prereq: pip instead of winget** (#26): Changed from `winget install Kitware.CMake` (needs admin) to `uv pip install cmake` (user-level). Decision based on cmake.org/download which lists pip as an official method (winget not mentioned). PyPI package maintained by Kitware. |
+| 4 | **CMake auto-install in setup-datadog**: When CMake missing, attempts `uv pip install cmake` before falling back to ACTION item. |
+
+### Added
+
+| # | Change |
+|---|--------|
+| 5 | **Install method discovery process**: New rule section in `tool-lifecycle.md` + detailed playbook (`reference/tool-evaluation-playbook.md`). Requires reading official tool documentation, evaluating install methods against criteria, trial installation, and documenting rationale. Applies to managed tools AND build prerequisites. |
+| 6 | **`log_detail` / `LogDetail`**: File-only structured logging for diagnostic content. |
+| 7 | **AI merge progress message**: "merging via AI (this may take 30-60s)..." |
+| 8 | **`Test-IsAdmin` helper**: Admin detection for future elevation framework. |
+
+### Platform testing
+
+- Windows: tested (CMake trial install, AI merge regression test)
+- macOS: not tested (tested: Windows)
+
+---
+
 ## v0.50.2 -- Fix AI merge prompt corruption (2026-03-11)
 
 Closes #24.

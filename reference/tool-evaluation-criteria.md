@@ -133,7 +133,10 @@ When adding a new managed tool, follow these phases in order. Each phase has a g
 ### Phase 1: Evaluate & Record Source of Truth
 **Gate: Official install docs verified and recorded in "Under Evaluation."**
 
-1. Fetch the tool's official installation page
+1. Fetch the tool's official installation page. Identify ALL available install methods
+   per platform. Evaluate and select using the install method discovery process
+   (`@reference/tool-evaluation-playbook.md`). Record the chosen method with source URL
+   and rationale.
 2. Record in `reference/tool-registry.md` under **"Under Evaluation"**:
    - Official source URL, preferred install command per platform, version check command
    - Non-preferred install methods (cleanup targets for setup scripts)

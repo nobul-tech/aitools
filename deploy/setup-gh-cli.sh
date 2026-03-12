@@ -110,6 +110,10 @@ log() {
 log_ok()    { log "$1" "ok"; }
 log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
 log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
+log_detail() {
+    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '[%s] [%s] [detail] %s\n' "$ts" "$SCRIPT_NAME" "$1" >> "$LOG_FILE"
+}
 
 # ---------------------------------------------------------------------------
 # Summary writer (3-arg: category, tool, detail)
@@ -304,9 +308,10 @@ validate_ai_merge_output() {
         return 1
     fi
 
-    # Check 3: permission/access language
-    if printf '%s' "$output" | perl -ne 'exit 0 if /\b(permission|approve|access denied)\b/i; END { exit 1 }'; then
-        MERGE_REJECT_REASON="Contains permission/access language"
+    # Check 3: conversational refusal patterns (not bare keywords -- content may
+    # legitimately contain "permission", "access", etc.)
+    if printf '%s' "$output" | perl -ne 'exit 0 if /(?:I don.t have permission|I cannot access|I.m not authorized|I need (?:your )?approval|permission denied|access denied|I.m unable to|I can.t (?:read|write|access|open|modify))/i; END { exit 1 }'; then
+        MERGE_REJECT_REASON="Contains conversational refusal language"
         return 1
     fi
 
@@ -370,7 +375,7 @@ _invoke_ai_merge() {
         return 0
     fi
 
-    printf '  >> merging via AI...\n' > /dev/tty
+    printf '  >> merging via AI (this may take 30-60s)...\n' > /dev/tty
 
     local current_merge=""
     local iteration=0
@@ -457,7 +462,9 @@ ${feedback}
         if ! validate_ai_merge_output "$merged" "$source_content" "$local_content"; then
             printf '  >> AI merge output rejected (iteration %d): %s\n' "$iteration" "$MERGE_REJECT_REASON" > /dev/tty
             log_warn "AI merge output rejected (iteration $iteration): $MERGE_REJECT_REASON"
-            log "Rejected AI merge output: $merged"
+            while IFS= read -r _detail_line; do
+                log_detail "rejected-merge: $_detail_line"
+            done <<< "$merged"
             printf '  fallback [o]verwrite / [s]kip: ' > /dev/tty
             local fb
             read -r fb < /dev/tty
@@ -1098,11 +1105,14 @@ check_build_prereqs() {
                 fi
             fi
             # cmake -- required by some crates
+            # Official: cmake.org/download lists pip, ZIP, MSI (not winget)
+            # macOS: brew install cmake (user-level, no sudo)
+            # Windows: uv pip install cmake (user-level, see reference/tool-evaluation-playbook.md)
             if ! command -v cmake >/dev/null 2>&1; then
                 if ensure_tool_on_path "cmake" /usr/local/bin/cmake /opt/homebrew/bin/cmake /usr/bin/cmake /Applications/CMake.app/Contents/bin/cmake; then
                     : # Found via fallback
                 else
-                    echo "CMake|brew install cmake (macOS) or apt-get install cmake (Linux)"
+                    echo "CMake|brew install cmake (macOS) / uv pip install cmake (Windows) -- see cmake.org/download"
                     missing=1
                 fi
             fi
@@ -1134,7 +1144,7 @@ diagnose_build_failure() {
     local -a patterns=(
         "NASM command not found|NASM|brew install nasm / apt-get install nasm"
         "linker.*not found|Linker|Install build-essential (Linux) or Xcode CLI tools (macOS)"
-        "cmake.*not found|CMake|brew install cmake / apt-get install cmake"
+        "cmake.*not found|CMake|brew install cmake / uv pip install cmake (see cmake.org/download)"
         "pkg-config.*not found|pkg-config|brew install pkg-config / apt-get install pkg-config"
         "Python\.h.*not found|Python headers|Install python3-dev or python3-devel"
         "openssl.*not found|OpenSSL|brew install openssl / apt-get install libssl-dev"

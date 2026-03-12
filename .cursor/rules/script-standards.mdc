@@ -31,6 +31,7 @@ Every log line: `[timestamp] [script] [level] message`. Valid levels: `info`, `o
 | `log_ok` | `LogOk` | `ok` | Success |
 | `log_error` | `LogError` | `error` | Error (must increment ERRORS) |
 | `log_warn` | `LogWarn` | `warn` | Warning (must increment WARNINGS) |
+| `log_detail` | `LogDetail` | `detail` | Diagnostic content (file-only, no console) |
 
 UTC timestamps with Z suffix. Raw `echo`/`Write-Host` without structured logging is not acceptable. All helpers are defined in `scripts/aitools-lib.sh` / `.ps1` -- do not define inline copies.
 
@@ -71,6 +72,9 @@ Setup scripts for tools requiring auth must check auth status on every run (not 
 ### Build prerequisite validation
 
 Setup scripts compiling from source (`cargo install`, `pip install` with C extensions, `go install` with cgo) MUST use the two-layer prerequisite framework: **Layer 1 (preventive):** `Check-BuildPrereqs`/`check_build_prereqs` before build — missing prereqs → `log_error` + `write_summary ERROR/ACTION` + skip build. **Layer 2 (diagnostic):** `Diagnose-BuildFailure`/`diagnose_build_failure` on captured output after failure — surface specific remedy or fall back to generic error. Both layers use centralized tables in `aitools-lib.ps1`/`.sh`. See `reference/script-standards-detail.md`.
+
+Install fields in `BuildPrereqs` entries must reference methods derived from official
+tool documentation. See `.claude/rules/tool-lifecycle.md` Install method discovery.
 
 ### KnownPaths empirical verification
 All KnownPaths entries must be verified on the actual platform. Document date +
