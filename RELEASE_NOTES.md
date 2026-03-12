@@ -12,6 +12,37 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.52.2 -- Fix pre-pull checkout data loss, resume merge fixes (2026-03-12)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Pre-pull checkout (#37)**: Remove `scripts/` from `git checkout HEAD --` in entry points -- was silently destroying uncommitted source files. Root cause: `build-deploy.sh` chmod on `scripts/*.sh` created mode noise, checkout cleared noise + real work. |
+| 2 | **Build chmod**: Remove `scripts/` from `chmod +x` in `build-deploy.sh` -- eliminates the mode noise source. |
+| 3 | **Error severity (#34)**: `log_warn` -> `log_error` for AI merge failure (user-requested operation). |
+| 4 | **Start telemetry (#36)**: Add invocation start log line before CLI call in `invoke_ai`/`Invoke-AI` retry loop. |
+| 5 | **Shadow bootstrap (#32)**: Seed deploy shadow from existing content when empty -- enables diff3 for pre-existing files. |
+| 6 | **Prompt fences (#33)**: ALL-CAPS anti-fence rule + defense-in-depth stripping of code fences from AI output. |
+| 7 | **Spinner + transparency (#35)**: Show backend/tier/filename before AI merge; animated spinner during invocation. |
+
+### Added
+
+| # | Change |
+|---|--------|
+| 8 | **git-safety rule**: `.claude/rules/git-safety.md` + Cursor parity -- codifies deploy/ ephemeral, scripts/ never-reset. |
+| 9 | **User-facing AI standards**: New section in agentic-standards rule (transparency, progress, failure severity). |
+| 10 | **CLAUDE.md**: deploy/ lifecycle added to Key Decisions. |
+
+### Platform testing
+
+- Windows: tested
+- macOS: not tested (tested: Windows)
+
+Closes #32, #33, #34, #35, #36, #37
+
+---
+
 ## v0.52.1 -- Fix post-push check false positives (steps 26, 27) (2026-03-12)
 
 ### Fixed
