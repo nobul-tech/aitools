@@ -51,6 +51,7 @@ This removes the manual "update both files" requirement and eliminates dotprofil
 
 | Item | Version | Summary |
 |------|---------|---------|
+| Agentic framework + merge overhaul | v0.52.0 | `invoke_ai`/`Invoke-AI`, structured prompts, speed/permission tiers, header preservation, clip2md refactor |
 | Eliminate deploy template duplication | v0.25.1 | Sentinel-based extraction in `build-deploy.sh` -- single source of truth for all 4 script pairs, ~507 lines removed |
 | Summary format + error handling standards | v0.32.0 | 3-field summary, canonical tool names, external command standards, detail reference rewrite |
 | Error handling audit | v0.22 | Error handling rules, full script audit, 5 violations + 4 logic bugs fixed |

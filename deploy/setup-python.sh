@@ -15,8 +15,8 @@ set -euo pipefail
 # Sourced, not executed directly. No shebang, no set -euo pipefail (caller sets it).
 #
 # Provides: platform detection, display_path, read_config_key, logging_init,
-# log/log_ok/log_error/log_warn, write_summary, show_summary,
-# SORT_KEYS_JS, normalize_json.
+# log/log_ok/log_error/log_warn/log_detail, invoke_ai, write_summary,
+# show_summary, SORT_KEYS_JS, normalize_json.
 #
 # Usage:
 #   source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/aitools-lib.sh"
@@ -110,6 +110,160 @@ log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
 log_detail() {
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf '[%s] [%s] [detail] %s\n' "$ts" "$SCRIPT_NAME" "$1" >> "$LOG_FILE"
+}
+
+# ---------------------------------------------------------------------------
+# Agentic AI invocation -- generalized wrapper for claude/agent CLI
+# ---------------------------------------------------------------------------
+# Purpose: Standardized AI CLI invocation with speed/permission tiers,
+#   validation callbacks, automatic retry, and telemetry logging.
+# Inputs: SPEED (fast/balanced/quality), PERMISSIONS (none/readonly/full/
+#   dangerous), VALIDATE_FN (function name, receives output as $1),
+#   MAX_RETRIES (retry count on validation failure). Prompt from stdin.
+# Expected output: Raw AI-generated text on stdout.
+# Validation: Caller-provided VALIDATE_FN must return 0 (pass) or 1 (fail)
+#   and set AI_REJECT_REASON on failure.
+# Known limitations: Agent CLI has no --model flag; speed is hint-only via
+#   prompt prefix. Retry prepends rejection reason but may not fix structural
+#   issues (e.g., model always wrapping in code fences).
+
+# File-only AI telemetry logging (avoids stdout capture interference when
+# invoke_ai output is captured via $()). Does not increment ERRORS/WARNINGS --
+# callers decide whether to count invoke_ai failures.
+_ai_log() {
+    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '[%s] [%s] [%s] %s\n' "$ts" "$SCRIPT_NAME" "${2:-info}" "$1" >> "${LOG_FILE:-/dev/null}"
+}
+
+AI_REJECT_REASON=""
+
+invoke_ai() {
+    local speed="${1:-balanced}"
+    local permissions="${2:-none}"
+    local validate_fn="${3:-}"
+    local max_retries="${4:-0}"
+
+    AI_REJECT_REASON=""
+
+    # Read prompt from stdin
+    local prompt
+    prompt=$(cat)
+
+    # Detect backend
+    # command -v exempt: existence check with explicit fallback chain
+    local cli_cmd=""
+    if command -v claude >/dev/null 2>&1; then
+        cli_cmd="claude"
+    elif $IS_WINDOWS; then
+        # Windows Git Bash: agent may be on PowerShell PATH only
+        local agent_path
+        agent_path=$(pwsh -NoProfile -Command \
+            'Get-Command agent -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source' \
+            2>/dev/null) || true  # pwsh may not be installed; fallback is no agent CLI
+        if [ -n "$agent_path" ]; then cli_cmd="agent"; fi
+    elif command -v agent >/dev/null 2>&1; then
+        cli_cmd="agent"
+    fi
+
+    if [ -z "$cli_cmd" ]; then
+        AI_REJECT_REASON="No AI CLI available (claude or agent)"
+        _ai_log "AI invocation: no CLI available (claude or agent)" "error"
+        return 1
+    fi
+
+    # Build CLI flags
+    local -a flags=()
+
+    if [ "$cli_cmd" = "claude" ]; then
+        flags+=("-p" "--no-session-persistence")
+        # Speed mapping (claude CLI: explicit model + effort)
+        case "$speed" in
+            fast)     flags+=("--model" "haiku" "--effort" "low") ;;
+            balanced) flags+=("--model" "sonnet") ;;
+            quality)  flags+=("--model" "opus" "--effort" "high") ;;
+        esac
+        # Permission mapping
+        case "$permissions" in
+            none)      flags+=("--allowedTools" "") ;;
+            readonly)  flags+=("--allowedTools" "Read Glob Grep") ;;
+            full)      ;; # default -- no restriction
+            dangerous) flags+=("--dangerously-skip-permissions") ;;
+        esac
+        # System prompt hints for speed tiers
+        case "$speed" in
+            fast)    flags+=("--append-system-prompt" "Be concise and direct.") ;;
+            quality) flags+=("--append-system-prompt" "Take your time. Be thorough.") ;;
+        esac
+    else
+        # Agent CLI -- no --model flag; speed via prompt prefix only
+        flags+=("-p" "--trust")
+        # Permission mapping
+        case "$permissions" in
+            none)      flags+=("--mode" "ask") ;;
+            readonly)  flags+=("--mode" "plan") ;;
+            full)      ;; # default
+            dangerous) flags+=("--force") ;;
+        esac
+    fi
+
+    # Speed prefix for agent CLI (no model flag available)
+    local speed_prefix=""
+    if [ "$cli_cmd" = "agent" ]; then
+        case "$speed" in
+            fast)    speed_prefix="Be concise and direct. Prioritize speed.\n\n" ;;
+            quality) speed_prefix="Take your time. Be thorough and precise.\n\n" ;;
+        esac
+    fi
+
+    # Retry loop
+    local attempt=0
+    local current_prompt="$prompt"
+
+    while [ "$attempt" -le "$max_retries" ]; do
+        attempt=$((attempt + 1))
+
+        local full_prompt
+        full_prompt=$(printf '%b%s' "$speed_prefix" "$current_prompt")
+
+        local output
+        # Suppress set -e abort; CLI may exit non-zero on model errors
+        output=$(printf '%s' "$full_prompt" | "$cli_cmd" "${flags[@]}" 2>&1) || true
+
+        if [ -z "$output" ]; then
+            AI_REJECT_REASON="Empty output from $cli_cmd"
+            _ai_log "AI invocation: speed=$speed backend=$cli_cmd attempt=$attempt result=empty" "warn"
+            if [ "$attempt" -le "$max_retries" ]; then
+                current_prompt=$(printf 'Your previous output was empty. Try again.\n\n%s' "$prompt")
+                continue
+            fi
+            return 1
+        fi
+
+        # Validate if function provided
+        if [ -n "$validate_fn" ]; then
+            if ! "$validate_fn" "$output"; then
+                [ -z "$AI_REJECT_REASON" ] && AI_REJECT_REASON="Validation failed"
+                _ai_log "AI invocation: speed=$speed backend=$cli_cmd attempt=$attempt result=rejected reason=$AI_REJECT_REASON" "warn"
+                while IFS= read -r _rej_line; do
+                    log_detail "ai-rejected: $_rej_line"
+                done <<< "$output"
+                if [ "$attempt" -le "$max_retries" ]; then
+                    current_prompt=$(printf 'Your previous output was rejected: %s. Try again.\n\n%s' \
+                        "$AI_REJECT_REASON" "$prompt")
+                    continue
+                fi
+                _ai_log "AI invocation: speed=$speed backend=$cli_cmd exhausted after $attempt attempts" "warn"
+                return 1
+            fi
+        fi
+
+        # Success
+        _ai_log "AI invocation: speed=$speed backend=$cli_cmd attempt=$attempt result=accepted"
+        printf '%s' "$output"
+        return 0
+    done
+
+    return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -279,140 +433,90 @@ try_diff3_merge() {
     return 1
 }
 
-MERGE_REJECT_REASON=""
-
 # ---------------------------------------------------------------------------
-# Validate AI merge output before accepting it.
-# Returns 0 if valid, 1 if invalid. Sets MERGE_REJECT_REASON on failure.
+# Merge file description lookup
 # ---------------------------------------------------------------------------
-validate_ai_merge_output() {
-    local output="$1"
-    local source_content="$2"
-    local local_content="$3"
-    MERGE_REJECT_REASON=""
-
-    # Check 1: conversational patterns (first non-empty line)
-    local first_line
-    first_line=$(printf '%s' "$output" | perl -ne 'if (/\S/) { print; exit }')
-    if printf '%s' "$first_line" | perl -ne 'exit 0 if /^(I |Here|Sure|Certainly|Let me)/i; exit 1'; then
-        MERGE_REJECT_REASON="Conversational text: $(printf '%.60s' "$first_line")"
-        return 1
-    fi
-
-    # Check 2: markdown code fences
-    if printf '%s\n' "$output" | perl -ne 'exit 0 if /^```/; END { exit 1 }'; then
-        MERGE_REJECT_REASON="Contains markdown code fences"
-        return 1
-    fi
-
-    # Check 3: conversational refusal patterns (not bare keywords -- content may
-    # legitimately contain "permission", "access", etc.)
-    if printf '%s' "$output" | perl -ne 'exit 0 if /(?:I don.t have permission|I cannot access|I.m not authorized|I need (?:your )?approval|permission denied|access denied|I.m unable to|I can.t (?:read|write|access|open|modify))/i; END { exit 1 }'; then
-        MERGE_REJECT_REASON="Contains conversational refusal language"
-        return 1
-    fi
-
-    # Check 4: minimum length (output >= 50% of shorter input when shorter > 40 chars)
-    local out_len src_len local_len min_input_len threshold
-    out_len=$(printf '%s' "$output" | wc -c | tr -d ' ')
-    src_len=$(printf '%s' "$source_content" | wc -c | tr -d ' ')
-    local_len=$(printf '%s' "$local_content" | wc -c | tr -d ' ')
-    if [ "$src_len" -le "$local_len" ]; then min_input_len=$src_len; else min_input_len=$local_len; fi
-    threshold=$((min_input_len / 2))
-    if [ "$min_input_len" -gt 40 ] && [ "$out_len" -lt "$threshold" ]; then
-        MERGE_REJECT_REASON="Too short ($out_len chars vs minimum $threshold)"
-        return 1
-    fi
-
-    # Check 5: structural overlap — at least one non-trivial line from output
-    # appears verbatim in source or local content
-    local has_overlap=false
-    while IFS= read -r line; do
-        local trimmed
-        trimmed=$(printf '%s' "$line" | perl -pe 's/^\s+|\s+$//g')
-        [ -z "$trimmed" ] && continue
-        [ "${#trimmed}" -lt 8 ] && continue
-        if printf '%s' "$source_content" | grep -qF "$trimmed"; then
-            has_overlap=true; break
-        fi
-        if printf '%s' "$local_content" | grep -qF "$trimmed"; then
-            has_overlap=true; break
-        fi
-    done <<< "$output"
-    if [ "$has_overlap" = "false" ]; then
-        MERGE_REJECT_REASON="No structural overlap with source or local"
-        return 1
-    fi
-
-    return 0
+# Purpose: Returns a human-readable description of a managed file for AI merge
+#   prompts, providing context about the file's role in the config system.
+# Inputs: $1 = file path
+# Expected output: Single-line description string on stdout.
+_get_merge_file_description() {
+    case "$(basename "$1")" in
+        CLAUDE.md) printf 'User-scope CLAUDE.md -- personal preferences and instructions for Claude Code' ;;
+        *.md)      printf 'Configuration rule: %s' "$(basename "$1")" ;;
+        *.json)    printf 'JSON config: %s' "$(basename "$1")" ;;
+        *)         printf 'Managed file: %s' "$(basename "$1")" ;;
+    esac
 }
 
-MERGED_CONTENT=""
-
 # ---------------------------------------------------------------------------
-# Agentic merge via claude CLI with refinement loop.
-# Self-contained prompt — all content inlined, no tool use needed.
-# Sets DIFF_REVIEW_RESULT="merge" + MERGED_CONTENT, or falls back.
+# AI merge prompt builder (initial merge)
 # ---------------------------------------------------------------------------
-_invoke_ai_merge() {
+# Purpose: Builds a structured merge prompt following the Role/Context/Task/
+#   Constraints/Format pattern for merging managed configuration files.
+# Inputs: $1=file_path, $2=source_content, $3=local_content, $4=diff_output
+# Expected output: Complete prompt string on stdout, suitable for invoke_ai.
+# Validation: validate_ai_merge_output (5 checks: conversational, fences,
+#   refusal, truncation, header preservation)
+# Known limitations: Very large files may hit model context limits. Files with
+#   no markdown headers rely on Check 4 (length) for rewrite detection.
+_ai_prompt_merge() {
     local file_path="$1"
     local source_content="$2"
-    local local_content="${3:-}"
+    local local_content="$3"
+    local diff_output="$4"
 
-    # Read local from disk if not provided (backward compat)
-    if [ -z "$local_content" ] && [ -f "$file_path" ]; then
-        local_content=$(cat "$file_path")
-    fi
+    local file_desc
+    file_desc=$(_get_merge_file_description "$file_path")
 
-    # command -v exempt: existence check with explicit fallback
-    if ! command -v claude >/dev/null 2>&1; then
-        printf '  >> claude CLI not found -- merge unavailable, falling back to overwrite\n' > /dev/tty
-        log_warn "AI merge unavailable (claude CLI not found)"
-        DIFF_REVIEW_RESULT="overwrite"
-        return 0
-    fi
+    printf '%s' "You are merging a managed configuration file during automated deployment.
 
-    printf '  >> merging via AI (this may take 30-60s)...\n' > /dev/tty
+## What you are merging
+${file_desc}
 
-    local current_merge=""
-    local iteration=0
+## Where changes come from
+SOURCE: The canonical template, synced across machines -- the updated version being deployed
+LOCAL: The user's current file on this machine, with their customizations
 
-    while true; do
-        iteration=$((iteration + 1))
-        local prompt_text
+## What is happening
+Updated configuration is being deployed. Source has changed and needs to be
+incorporated without losing local customizations.
 
-        if [ -z "$current_merge" ]; then
-            # Initial merge prompt
-            prompt_text="You are a file merge tool. Output ONLY the merged result — no commentary, no code fences, no explanation.
+## Differences (unified diff: local vs source)
+${diff_output}
 
-## Context
-A deploy system detected that SOURCE (updated template) and LOCAL (user's
-current file with customizations) have diverged. Merge them.
-
-## SOURCE (new template being deployed)
-<SOURCE>
-${source_content}
-</SOURCE>
-
-## LOCAL (user's current file with their customizations)
+## Full local file (start from this)
 <LOCAL>
 ${local_content}
 </LOCAL>
 
 ## Rules
-- Preserve all user customizations from LOCAL that are intentional
-- Include all new content from SOURCE (new sections, updated tables, structural changes)
-- When both sides modify the same line, prefer LOCAL unless SOURCE adds new information
-- Output the merged file content ONLY — no preamble, no explanation, no markdown fences"
-        else
-            # Refinement prompt
-            local feedback
-            printf '  refinement feedback: ' > /dev/tty
-            IFS= read -r feedback < /dev/tty
-            prompt_text="You are a file merge tool. Output ONLY the revised merged result — no commentary, no code fences, no explanation.
+1. Start with LOCAL as your base -- preserve all user customizations
+2. Apply ONLY the changes shown in the diff
+3. If a change conflicts with a local customization (contradicts its intent), keep local
+4. If a change adds new content not in LOCAL, add it in the appropriate location
+5. If a change updates content the user hasn't customized, apply it
+6. Output the complete merged file -- no commentary, no code fences, no explanation"
+}
+
+# ---------------------------------------------------------------------------
+# AI merge prompt builder (refinement)
+# ---------------------------------------------------------------------------
+# Purpose: Builds a refinement prompt for iterating on a previous merge result
+#   based on user feedback.
+# Inputs: $1=source_content, $2=local_content, $3=current_merge, $4=feedback
+# Expected output: Complete prompt string on stdout, suitable for invoke_ai.
+# Validation: Same as initial merge (validate_ai_merge_output).
+_ai_prompt_merge_refine() {
+    local source_content="$1"
+    local local_content="$2"
+    local current_merge="$3"
+    local feedback="$4"
+
+    printf '%s' "You are refining a merged configuration file based on user feedback.
 
 ## Context
-A previous merge produced CURRENT_MERGE from SOURCE + LOCAL. The user wants refinements.
+A previous merge produced CURRENT_MERGE from SOURCE + LOCAL. The user wants changes.
 
 ## SOURCE (original template)
 <SOURCE>
@@ -435,33 +539,133 @@ ${feedback}
 ## Rules
 - Apply the user's feedback to CURRENT_MERGE
 - Keep all content from CURRENT_MERGE not affected by the feedback
-- Output the revised merged file content ONLY — no preamble, no explanation, no markdown fences"
+- Output the revised merged file content ONLY -- no preamble, no explanation, no markdown fences"
+}
+
+# Merge validation wrapper for invoke_ai -- captures source/local context
+# via module-level variables set by _invoke_ai_merge before calling invoke_ai.
+_MERGE_VALIDATE_SOURCE=""
+_MERGE_VALIDATE_LOCAL=""
+_merge_validate() {
+    validate_ai_merge_output "$1" "$_MERGE_VALIDATE_SOURCE" "$_MERGE_VALIDATE_LOCAL"
+    AI_REJECT_REASON="$MERGE_REJECT_REASON"
+}
+
+MERGE_REJECT_REASON=""
+
+# ---------------------------------------------------------------------------
+# Validate AI merge output before accepting it.
+# Returns 0 if valid, 1 if invalid. Sets MERGE_REJECT_REASON on failure.
+# ---------------------------------------------------------------------------
+validate_ai_merge_output() {
+    local output="$1"
+    local source_content="$2"
+    local local_content="$3"
+    MERGE_REJECT_REASON=""
+
+    # Check 1: conversational patterns (first non-empty line)
+    local first_line
+    first_line=$(printf '%s' "$output" | perl -ne 'if (/\S/) { print; exit }')
+    if printf '%s' "$first_line" | perl -ne 'exit 0 if /^(I |Here|Sure|Certainly|Let me)/i; exit 1'; then
+        MERGE_REJECT_REASON="AI responded conversationally instead of producing merged content"
+        return 1
+    fi
+
+    # Check 2: markdown code fences
+    if printf '%s\n' "$output" | perl -ne 'exit 0 if /^```/; END { exit 1 }'; then
+        MERGE_REJECT_REASON="AI wrapped output in code fences -- need raw content"
+        return 1
+    fi
+
+    # Check 3: conversational refusal patterns (not bare keywords -- content may
+    # legitimately contain "permission", "access", etc.)
+    if printf '%s' "$output" | perl -ne 'exit 0 if /(?:I don.t have permission|I cannot access|I.m not authorized|I need (?:your )?approval|permission denied|access denied|I.m unable to|I can.t (?:read|write|access|open|modify))/i; END { exit 1 }'; then
+        MERGE_REJECT_REASON="AI indicated it couldn't perform the merge"
+        return 1
+    fi
+
+    # Check 4: minimum length (output >= 50% of shorter input when shorter > 40 chars)
+    local out_len src_len local_len min_input_len threshold
+    out_len=$(printf '%s' "$output" | wc -c | tr -d ' ')
+    src_len=$(printf '%s' "$source_content" | wc -c | tr -d ' ')
+    local_len=$(printf '%s' "$local_content" | wc -c | tr -d ' ')
+    if [ "$src_len" -le "$local_len" ]; then min_input_len=$src_len; else min_input_len=$local_len; fi
+    threshold=$((min_input_len / 2))
+    if [ "$min_input_len" -gt 40 ] && [ "$out_len" -lt "$threshold" ]; then
+        MERGE_REJECT_REASON="Output too short ($out_len chars, expected ${threshold}+) -- likely truncated"
+        return 1
+    fi
+
+    # Check 5: header preservation — deduplicated headers from source+local must
+    # be >=60% preserved in output. Files with 0 headers pass (Check 4 handles truncation).
+    local combined_headers
+    combined_headers=$(printf '%s\n%s' "$source_content" "$local_content" \
+        | grep -E '^#{1,6} ' | sort -u)
+    local total preserved=0
+    total=$(printf '%s\n' "$combined_headers" | grep -c '^' || true)  # count lines; may be 0
+    if [ "$total" -gt 0 ]; then
+        while IFS= read -r header; do
+            [ -z "$header" ] && continue
+            printf '%s' "$output" | grep -qF "$header" && preserved=$((preserved + 1))
+        done <<< "$combined_headers"
+        local threshold=$(( (total * 60 + 99) / 100 ))
+        [ "$threshold" -lt 1 ] && threshold=1
+        if [ "$preserved" -lt "$threshold" ]; then
+            MERGE_REJECT_REASON="Rewrote too much ($preserved/$total section headers preserved, need 60%+)"
+            return 1
+        fi
+    fi
+
+    return 0
+}
+
+MERGED_CONTENT=""
+
+# ---------------------------------------------------------------------------
+# Agentic merge via invoke_ai with refinement loop.
+# Uses structured prompts from _ai_prompt_merge / _ai_prompt_merge_refine.
+# Sets DIFF_REVIEW_RESULT="merge" + MERGED_CONTENT, or falls back.
+# ---------------------------------------------------------------------------
+_invoke_ai_merge() {
+    local file_path="$1"
+    local source_content="$2"
+    local local_content="${3:-}"
+    local diff_output="${4:-}"
+
+    # Read local from disk if not provided (backward compat)
+    if [ -z "$local_content" ] && [ -f "$file_path" ]; then
+        local_content=$(cat "$file_path")
+    fi
+
+    printf '  >> merging via AI...\n' > /dev/tty
+
+    # Set validation context for _merge_validate wrapper
+    _MERGE_VALIDATE_SOURCE="$source_content"
+    _MERGE_VALIDATE_LOCAL="$local_content"
+
+    local current_merge=""
+    local iteration=0
+
+    while true; do
+        iteration=$((iteration + 1))
+        local prompt_text
+
+        if [ -z "$current_merge" ]; then
+            prompt_text=$(_ai_prompt_merge "$file_path" "$source_content" "$local_content" "$diff_output")
+        else
+            local feedback
+            printf '  refinement feedback: ' > /dev/tty
+            IFS= read -r feedback < /dev/tty
+            prompt_text=$(_ai_prompt_merge_refine "$source_content" "$local_content" "$current_merge" "$feedback")
         fi
 
         local merged
-        # claude -p exit code checked below; suppress set -e abort
-        merged=$(printf '%s' "$prompt_text" | claude -p --allowedTools "" --no-session-persistence 2>&1) || true
+        # invoke_ai returns 1 on failure with no stdout; || true suppresses set -e abort
+        merged=$(printf '%s' "$prompt_text" | invoke_ai balanced none _merge_validate 1) || true
 
         if [ -z "$merged" ]; then
-            printf '  >> AI merge failed (empty output, iteration %d) -- choose another option\n' "$iteration" > /dev/tty
-            log_warn "AI merge returned empty output (iteration $iteration)"
-            printf '  fallback [o]verwrite / [s]kip: ' > /dev/tty
-            local fb
-            read -r fb < /dev/tty
-            case "$(printf '%s' "$fb" | tr '[:upper:]' '[:lower:]')" in
-                s) DIFF_REVIEW_RESULT="skip" ;;
-                *) DIFF_REVIEW_RESULT="overwrite" ;;
-            esac
-            return 0
-        fi
-
-        # Validate output before showing preview
-        if ! validate_ai_merge_output "$merged" "$source_content" "$local_content"; then
-            printf '  >> AI merge output rejected (iteration %d): %s\n' "$iteration" "$MERGE_REJECT_REASON" > /dev/tty
-            log_warn "AI merge output rejected (iteration $iteration): $MERGE_REJECT_REASON"
-            while IFS= read -r _detail_line; do
-                log_detail "rejected-merge: $_detail_line"
-            done <<< "$merged"
+            printf '  >> AI merge failed (iteration %d): %s\n' "$iteration" "${AI_REJECT_REASON:-unknown error}" > /dev/tty
+            log_warn "AI merge failed (iteration $iteration): ${AI_REJECT_REASON:-unknown error}"
             printf '  fallback [o]verwrite / [s]kip: ' > /dev/tty
             local fb
             read -r fb < /dev/tty
@@ -657,7 +861,7 @@ prompt_diff_review() {
                 printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
                 DIFF_REVIEW_RESULT="overwrite"
             fi ;;
-        m)  _invoke_ai_merge "$file_path" "$new_content" "$cur_content" ;;
+        m)  _invoke_ai_merge "$file_path" "$new_content" "$cur_content" "$diff_output" ;;
         s)  printf '  >> skipped: local file unchanged\n' > /dev/tty
             DIFF_REVIEW_RESULT="skip" ;;
         x)  log_error "Aborted by user"

@@ -12,6 +12,38 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.52.0 -- Agentic framework, merge overhaul, clip2md refactor (2026-03-12)
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **`invoke_ai` / `Invoke-AI`**: Generalized AI invocation in aitools-lib. Multiple backends (claude/agent CLI), speed tiers (fast/balanced/quality), permission tiers (none/readonly/full/dangerous), validation callbacks, automatic retry, telemetry logging. |
+| 2 | **Agentic standards rule**: `.claude/rules/agentic-standards.md` -- prompt design pattern (Role/Context/Task/Constraints/Format), evaluation lifecycle, speed/permission governance. |
+| 3 | **Agentic framework reference**: `reference/agentic-framework.md` -- detailed spec. |
+| 4 | **Merge prompt overhaul**: Context-rich prompt with file descriptions, deploy semantics, unified diff. AI applies diff to local instead of rewriting. |
+| 5 | **RFC-0002**: aitools / nobul-ops coordination principles. |
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 6 | **Check 5 validation**: Header preservation (60% threshold) replaces verbatim line matching. |
+| 7 | **Merge speed**: sonnet (balanced) instead of default opus. |
+| 8 | **Merge errors**: User-friendly messages ("rewrote too much" vs "structural overlap"). |
+| 9 | **clip2md**: Opportunistic `invoke_ai fast` (haiku/auto). `--no-session-persistence` added. |
+
+### Notes
+
+- Agent CLI (Cursor): `--model auto` default for all speed tiers (account limitation). Speed via prompt hints only.
+
+### Platform testing
+
+- Windows: tested
+- macOS: not tested (tested: Windows)
+
+---
+
 ## v0.51.0 -- Install method discovery process, fix AI merge validation (2026-03-12)
 
 Closes #25, #26, #27.

@@ -13,7 +13,7 @@ Every log line must follow this format:
 
 - **Timestamp**: UTC with Z suffix -- `date -u +%Y-%m-%dT%H:%M:%SZ` (bash) / `.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")` (PS1)
 - **Script name**: set by `logging_init` / `Initialize-Logging`
-- **Level**: one of `info`, `ok`, `warn`, `error`
+- **Level**: one of `info`, `ok`, `warn`, `error`, `detail`
 
 ### Console colors
 
@@ -89,6 +89,7 @@ Check scripts source `check-lib.sh`/`.ps1` which in turn sources `aitools-lib.sh
 | Dir backup | `backup_dir()` | `Backup-Dir` | Directory backup for managed files |
 | JSON hashtable | n/a | `ConvertPSObjectToHashtable` | PSCustomObject to Hashtable (recursive, array-aware) |
 | DETAIL emitter | `emit_merge_details()` | `Emit-MergeDetails` | Parse CHANGED: lines / emit DETAIL summary entries |
+| AI invocation | `invoke_ai()`, `_ai_log()` | `Invoke-AI` | Generalized AI CLI wrapper with speed/permission tiers |
 | JSON normalization | `SORT_KEYS_JS`, `normalize_json()` | `Normalize-JsonForComparison`, `ConvertTo-CanonicalObject` | Sorted-key JSON for deterministic comparison |
 | Check logging init | `check_log_init()` | `CheckLogInit` | Sets check log paths + bridges aitools-lib logging vars |
 | Check step functions | `step_pass`/`step_fail`/`step_warn`/`step_skip` | `StepPass`/`StepFail`/`StepWarn`/`StepSkip` | `[PASS]`/`[FAIL]`/`[WARN]`/`[SKIP]` with console colors |
@@ -151,6 +152,11 @@ Setup scripts and check scripts use the defaults -- no overrides.
 output, verbose debugging). Not included in override tables -- entry points that override
 `log`/`Log` do not need to override `log_detail`/`LogDetail` because it always writes
 directly to `$LOG_FILE`/`$logFile` regardless of console routing.
+
+**`_ai_log` (bash only)**: File-only telemetry for `invoke_ai`. Uses the same format
+as `log` but writes only to `$LOG_FILE` (no console). This prevents stdout pollution
+when `invoke_ai` output is captured via `$()`. Entry point overrides of `log` do NOT
+affect `_ai_log` -- it always writes directly to the log file.
 
 ## End-of-run summary
 
@@ -1004,6 +1010,69 @@ actual machine with the tool installed. Document verification date and version.
 Unverified paths must be marked `UNVERIFIED` in code comments and docs. This
 applies to all tools and their build dependencies (e.g., NASM is a dependency
 of Rust/cargo, not a directly managed tool -- same verification standard applies).
+
+## Agentic invocation patterns
+
+### Telemetry code patterns
+
+Bash (`invoke_ai` uses `_ai_log` for file-only telemetry):
+```bash
+_ai_log "AI invocation: speed=$speed backend=$cli_cmd attempt=$attempt result=accepted"
+```
+
+PowerShell (`Invoke-AI` uses standard `Log` -- `Write-Host` doesn't pollute output stream):
+```powershell
+Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=accepted"
+```
+
+### Example deploy.log output
+
+Successful merge:
+```
+[2026-03-12T15:32:36Z] [setup-user-claude] [info] AI invocation: speed=balanced backend=claude attempt=1 result=accepted
+```
+
+Failed merge with retry:
+```
+[2026-03-12T15:32:30Z] [setup-user-claude] [warn] AI invocation: speed=balanced backend=claude attempt=1 result=rejected reason=AI wrapped output in code fences -- need raw content
+[2026-03-12T15:32:30Z] [setup-user-claude] [detail] ai-rejected: ```markdown
+[2026-03-12T15:32:30Z] [setup-user-claude] [detail] ai-rejected: # Shared Claude Code Preferences
+[2026-03-12T15:32:30Z] [setup-user-claude] [detail] ai-rejected: ...
+[2026-03-12T15:32:36Z] [setup-user-claude] [info] AI invocation: speed=balanced backend=claude attempt=2 result=accepted
+```
+
+### Post-mortem analysis workflow
+
+1. Grep deploy.log for `ai-rejected:` lines
+2. Correlate with preceding `result=rejected reason=` line
+3. Identify which validation check failed and why
+4. Update the prompt function to address the pattern
+5. Re-test with the failing input saved from the log
+
+### Prompt testing pattern
+
+```bash
+#!/usr/bin/env bash
+# .scratch/test-merge-prompt.sh -- test merge prompt with sample inputs
+set -euo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/aitools-lib.sh"
+logging_init "test-merge"
+
+# Create sample inputs
+source_content="# Config\n## Section A\nold content"
+local_content="# Config\n## Section A\ncustomized content\n## Section B\nuser addition"
+
+# Build prompt and invoke
+prompt=$(_ai_prompt_merge "/tmp/test.md" "$source_content" "$local_content" "diff output here")
+result=$(printf '%s' "$prompt" | invoke_ai balanced none "" 0) || true
+
+if [ -n "$result" ]; then
+    echo "PASS: Got output (${#result} chars)"
+    echo "$result" | head -10
+else
+    echo "FAIL: Empty output. Reason: ${AI_REJECT_REASON:-unknown}"
+fi
+```
 
 ## Exemptions table
 

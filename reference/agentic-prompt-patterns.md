@@ -1,44 +1,28 @@
-# Agentic Prompt Patterns for `claude -p`
+# Agentic Prompt Patterns for AI CLI
 
-Safe patterns for using `claude -p` in aitools scripts (deploy, setup, merge).
+Patterns for using AI CLI tools (`claude -p`, `agent -p`) in aitools scripts.
 
-## Core Rules
+## Framework
 
-1. **Inline all content** — never reference file paths in prompts. The claude CLI
-   with `--allowedTools ""` cannot read files. Use XML delimiters to embed content:
-   ```
-   <SOURCE>
-   ${source_content}
-   </SOURCE>
-   ```
+All AI invocations in reusable scripts use `invoke_ai` / `Invoke-AI` from
+aitools-lib. See `reference/agentic-framework.md` for the full spec and
+`.claude/rules/agentic-standards.md` for the governing rule.
 
-2. **Disable tool use** — `--allowedTools ""` for text-only tasks (merge, rewrite).
-   Prevents the model from attempting file reads or shell commands.
+### Key principles
 
-3. **Disable session persistence** — `--no-session-persistence` for utility calls.
-   These are one-shot operations; no session state should leak between invocations.
+1. **Inline all content** -- never reference file paths in prompts. Use XML delimiters.
+2. **Disable tool use** -- `none` permission tier for text-only tasks.
+3. **Disable session persistence** -- handled automatically by `invoke_ai`.
+4. **Validate before accepting** -- every invocation uses a validation callback.
+5. **Offer refinement** -- show preview, let user choose `[y]es / [r]efine / [n]o`.
+6. **Log rejected output** -- `log_detail` per line for post-mortem.
 
-4. **Validate before accepting** — call `validate_ai_merge_output` (bash) /
-   `Test-AiMergeOutput` (PS1) before writing any AI-generated content to disk.
-   Checks for: conversational text, code fences, permission language, truncation,
-   structural overlap with inputs.
+## Functions
 
-5. **Offer refinement** — after validation passes, show a preview and let the user
-   choose `[y]es accept / [r]efine / [n]o reject`. Refinement re-invokes claude
-   with the previous result + user feedback.
-
-6. **Write back to source** — when merged content is accepted, sync it to the
-   dotprofile repo (`<userRepoPath>/claude/rules/`) and auto commit/push.
-
-7. **Log rejected output** — always log rejected AI output to `deploy.log` for
-   post-incident debugging. Use `log_detail` / `LogDetail` (file-only) per line --
-   not `log` (which also writes to console, causing wall-of-text output with large
-   merge content).
-
-8. **Validate with precision** — Check 3 (permission/access language) must use
-   conversational-refusal phrases ("I don't have permission", "I cannot access",
-   "access denied"), not bare keywords ("permission", "approve"). Document content
-   legitimately contains these words.
+| Language | Invocation | Validation | Merge prompt | Refine prompt |
+|----------|-----------|-----------|--------------|---------------|
+| Bash | `invoke_ai` | `validate_ai_merge_output` | `_ai_prompt_merge` | `_ai_prompt_merge_refine` |
+| PS1 | `Invoke-AI` | `Test-AiMergeOutput` | `Get-AiMergePrompt` | `Get-AiMergeRefinePrompt` |
 
 ## Incident Context
 
@@ -46,9 +30,7 @@ These patterns were established after Incident #24 (2026-03-11), where the AI me
 feature (v0.50.1) corrupted `~/.claude/rules/concurrent-agents.md` by writing Claude's
 conversational response instead of merged content. See GitHub issue #24.
 
-## Functions
-
-| Language | Validation | Merge |
-|----------|-----------|-------|
-| Bash | `validate_ai_merge_output` in `aitools-lib.sh` | `_invoke_ai_merge` in `aitools-lib.sh` |
-| PowerShell | `Test-AiMergeOutput` in `aitools-lib.ps1` | `Invoke-AiMerge` in `aitools-lib.ps1` |
+Subsequent improvements:
+- v0.50.2: Validation checks, refinement loop
+- v0.51.0: `log_detail` for rejected output, progress message
+- v0.52.0: `invoke_ai` framework, structured prompts, header preservation, speed tiers

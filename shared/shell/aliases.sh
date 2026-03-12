@@ -65,7 +65,13 @@ Respond in EXACTLY this format with nothing else:
 FILENAME|SUMMARY'
 
   local result
-  result=$(printf '%s' "$md" | claude -p "$prompt" 2>/dev/null) || return 1
+  # type exempt: function-existence check with explicit fallback
+  if type invoke_ai &>/dev/null; then
+    result=$(printf '%s\n\n%s' "$prompt" "$md" | invoke_ai fast none) || return 1
+  else
+    # stderr suppressed: claude CLI may emit warnings; exit code checked via || return 1
+    result=$(printf '%s' "$md" | claude -p "$prompt" --no-session-persistence 2>/dev/null) || return 1
+  fi
 
   # Normalize: strip newlines, trim whitespace
   result=$(printf '%s' "$result" | tr -d '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')

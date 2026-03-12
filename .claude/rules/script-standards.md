@@ -34,7 +34,7 @@ pseudocode in `plans/*.md`, and any code you propose in conversation.
 
 Every log line must follow: `[timestamp] [script-name] [level] message`
 
-Valid levels: `info`, `ok`, `warn`, `error`
+Valid levels: `info`, `ok`, `warn`, `error`, `detail`
 
 Console output uses ANSI colors: red for `[error]`, yellow for `[warn]`, plain for `[info]`/`[ok]`.
 Log file output is plain text only (no ANSI codes).
@@ -54,6 +54,29 @@ All timestamps must be UTC with Z suffix (`date -u +%Y-%m-%dT%H:%M:%SZ` / `.ToUn
 Logging framework is required -- raw `echo` or `Write-Host` without structured logging is not acceptable in reusable scripts.
 
 All helpers are defined in `scripts/aitools-lib.sh` (bash) / `.ps1`. Scripts source the lib and call `logging_init` / `Initialize-Logging`. Entry points with specialized logging override the functions after sourcing. Do not define inline copies.
+
+### Agentic invocation logging
+
+Every `invoke_ai` / `Invoke-AI` call must log structured telemetry to deploy.log:
+
+| Event | Level | Format |
+|-------|-------|--------|
+| Invocation start | `info` | `AI: speed=TIER backend=CLI attempt=N` |
+| Success | `info` | `AI: speed=TIER backend=CLI attempt=N result=accepted` |
+| Validation failure | `warn` | `AI: speed=TIER backend=CLI attempt=N result=rejected reason=REASON` |
+| Rejected output | `detail` | `ai-rejected: LINE` (per-line, file-only) |
+| All retries exhausted | `warn` | `AI: speed=TIER backend=CLI exhausted after N attempts` |
+| Backend unavailable | `error` | `AI: no CLI available (claude or agent)` |
+
+This telemetry enables prompt iteration: read `[detail] ai-rejected:` lines
+from deploy.log, identify the failure mode, update the prompt, re-test.
+
+See `.claude/rules/agentic-standards.md` for prompt design and evaluation rules.
+
+### Agentic invocation
+
+See `.claude/rules/agentic-standards.md` for AI CLI invocation requirements,
+prompt design standards, and evaluation lifecycle.
 
 ### Exit footer
 

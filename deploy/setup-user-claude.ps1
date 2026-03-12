@@ -20,9 +20,10 @@ if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
 # aitools-lib.ps1 -- shared helpers for all aitools PowerShell scripts
 # Dot-sourced, not executed directly.
 #
-# Provides: ReadConfigKey, Initialize-Logging, Log/LogOk/LogError/LogWarn,
-# Write-Summary, Show-Summary, Refresh-Path, Log-WingetOutput,
-# Repair-UvToolEnv, Remove-OrphanedPythonDirs, Normalize-JsonForComparison.
+# Provides: ReadConfigKey, Initialize-Logging, Log/LogOk/LogError/LogWarn/
+# LogDetail, Invoke-AI, Write-Summary, Show-Summary, Refresh-Path,
+# Log-WingetOutput, Repair-UvToolEnv, Remove-OrphanedPythonDirs,
+# Normalize-JsonForComparison.
 #
 # Usage:
 #   . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
@@ -94,6 +95,144 @@ function LogWarn($msg)  { Log $msg "warn"; $script:warnings++ }
 function LogDetail($msg) {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     Add-Content -Path $logFile -Value "[$ts] [$scriptName] [detail] $msg"
+}
+
+# ---------------------------------------------------------------------------
+# Agentic AI invocation -- generalized wrapper for claude/agent CLI
+# ---------------------------------------------------------------------------
+# Purpose: Standardized AI CLI invocation with speed/permission tiers,
+#   validation callbacks, automatic retry, and telemetry logging.
+# Inputs: Prompt (pipeline), Speed, Permissions, ValidateFn, MaxRetries
+# Expected output: AI-generated text string, or $null on failure.
+# Validation: Caller-provided ValidateFn (function name); receives output as
+#   positional arg, must return $true/$false and set $script:AIRejectReason.
+# Known limitations: Agent CLI has no --model flag; speed is hint-only via
+#   prompt prefix. Retry prepends rejection reason but may not fix structural
+#   issues (e.g., model always wrapping in code fences).
+$script:AIRejectReason = ""
+
+function Invoke-AI {
+    param(
+        [Parameter(Mandatory, ValueFromPipeline)][string]$Prompt,
+        [ValidateSet("fast","balanced","quality")][string]$Speed = "balanced",
+        [ValidateSet("none","readonly","full","dangerous")][string]$Permissions = "none",
+        [string]$ValidateFn = "",
+        [int]$MaxRetries = 0
+    )
+
+    $script:AIRejectReason = ""
+
+    # Detect backend
+    # Get-Command exempt: command-existence check with explicit fallback chain
+    $cliCmd = $null
+    if (Get-Command claude -ErrorAction SilentlyContinue) {
+        $cliCmd = "claude"
+    } elseif (Get-Command agent -ErrorAction SilentlyContinue) {
+        $cliCmd = "agent"
+    }
+
+    if (-not $cliCmd) {
+        $script:AIRejectReason = "No AI CLI available (claude or agent)"
+        Log "AI invocation: no CLI available (claude or agent)" "error"
+        return $null
+    }
+
+    # Build CLI flags
+    $flags = @()
+
+    if ($cliCmd -eq "claude") {
+        $flags += "-p", "--no-session-persistence"
+        # Speed mapping (claude CLI: explicit model + effort)
+        switch ($Speed) {
+            "fast"     { $flags += "--model", "haiku", "--effort", "low" }
+            "balanced" { $flags += "--model", "sonnet" }
+            "quality"  { $flags += "--model", "opus", "--effort", "high" }
+        }
+        # Permission mapping
+        switch ($Permissions) {
+            "none"      { $flags += "--allowedTools", "" }
+            "readonly"  { $flags += "--allowedTools", "Read Glob Grep" }
+            "full"      { } # default -- no restriction
+            "dangerous" { $flags += "--dangerously-skip-permissions" }
+        }
+        # System prompt hints for speed tiers
+        switch ($Speed) {
+            "fast"    { $flags += "--append-system-prompt", "Be concise and direct." }
+            "quality" { $flags += "--append-system-prompt", "Take your time. Be thorough." }
+        }
+    } else {
+        # Agent CLI -- no --model flag; speed via prompt prefix only
+        $flags += "-p", "--trust"
+        # Permission mapping
+        switch ($Permissions) {
+            "none"      { $flags += "--mode", "ask" }
+            "readonly"  { $flags += "--mode", "plan" }
+            "full"      { } # default
+            "dangerous" { $flags += "--force" }
+        }
+    }
+
+    # Speed prefix for agent CLI (no model flag available)
+    $speedPrefix = ""
+    if ($cliCmd -eq "agent") {
+        switch ($Speed) {
+            "fast"    { $speedPrefix = "Be concise and direct. Prioritize speed.`n`n" }
+            "quality" { $speedPrefix = "Take your time. Be thorough and precise.`n`n" }
+        }
+    }
+
+    # Retry loop
+    $currentPrompt = $Prompt
+    for ($attempt = 1; $attempt -le ($MaxRetries + 1); $attempt++) {
+        $fullPrompt = "${speedPrefix}${currentPrompt}"
+
+        $output = $null
+        try {
+            $output = $fullPrompt | & $cliCmd @flags 2>&1
+            if ($LASTEXITCODE -ne 0) { $output = $null }
+        } catch {
+            # CLI invocation failed (e.g., binary not found despite Get-Command)
+            Log "AI invocation error: $_" "warn"
+            $output = $null
+        }
+
+        # Normalize array output to string
+        if ($output -is [array]) { $output = $output -join "`n" }
+
+        if ([string]::IsNullOrWhiteSpace($output)) {
+            $script:AIRejectReason = "Empty output from $cliCmd"
+            Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=empty" "warn"
+            if ($attempt -le $MaxRetries) {
+                $currentPrompt = "Your previous output was empty. Try again.`n`n$Prompt"
+                continue
+            }
+            return $null
+        }
+
+        # Validate if function provided
+        if ($ValidateFn) {
+            $valid = & $ValidateFn $output
+            if (-not $valid) {
+                if (-not $script:AIRejectReason) { $script:AIRejectReason = "Validation failed" }
+                Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=rejected reason=$($script:AIRejectReason)" "warn"
+                foreach ($rejLine in ($output -split "`n")) {
+                    LogDetail "ai-rejected: $rejLine"
+                }
+                if ($attempt -le $MaxRetries) {
+                    $currentPrompt = "Your previous output was rejected: $($script:AIRejectReason). Try again.`n`n$Prompt"
+                    continue
+                }
+                Log "AI invocation: speed=$Speed backend=$cliCmd exhausted after $attempt attempts" "warn"
+                return $null
+            }
+        }
+
+        # Success
+        Log "AI invocation: speed=$Speed backend=$cliCmd attempt=$attempt result=accepted"
+        return $output
+    }
+
+    return $null
 }
 
 # ---------------------------------------------------------------------------
@@ -312,6 +451,129 @@ function Try-Diff3Merge {
     }
 }
 
+# ---------------------------------------------------------------------------
+# Merge file description lookup
+# ---------------------------------------------------------------------------
+# Purpose: Returns a human-readable description of a managed file for AI merge
+#   prompts, providing context about the file's role in the config system.
+function Get-MergeFileDescription {
+    param([string]$FilePath)
+    $name = Split-Path $FilePath -Leaf
+    switch -Wildcard ($name) {
+        "CLAUDE.md" { return "User-scope CLAUDE.md -- personal preferences and instructions for Claude Code" }
+        "*.md"      { return "Configuration rule: $name" }
+        "*.json"    { return "JSON config: $name" }
+        default     { return "Managed file: $name" }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# AI merge prompt builder (initial merge)
+# ---------------------------------------------------------------------------
+# Purpose: Builds a structured merge prompt following the Role/Context/Task/
+#   Constraints/Format pattern for merging managed configuration files.
+# Inputs: FilePath, SourceContent, LocalContent, DiffOutput
+# Expected output: Complete prompt string suitable for Invoke-AI.
+# Validation: Test-AiMergeOutput (5 checks: conversational, fences,
+#   refusal, truncation, header preservation)
+# Known limitations: Very large files may hit model context limits. Files with
+#   no markdown headers rely on Check 4 (length) for rewrite detection.
+function Get-AiMergePrompt {
+    param(
+        [string]$FilePath,
+        [string]$SourceContent,
+        [string]$LocalContent,
+        [string]$DiffOutput
+    )
+    $fileDesc = Get-MergeFileDescription $FilePath
+    return @"
+You are merging a managed configuration file during automated deployment.
+
+## What you are merging
+$fileDesc
+
+## Where changes come from
+SOURCE: The canonical template, synced across machines -- the updated version being deployed
+LOCAL: The user's current file on this machine, with their customizations
+
+## What is happening
+Updated configuration is being deployed. Source has changed and needs to be
+incorporated without losing local customizations.
+
+## Differences (unified diff: local vs source)
+$DiffOutput
+
+## Full local file (start from this)
+<LOCAL>
+$LocalContent
+</LOCAL>
+
+## Rules
+1. Start with LOCAL as your base -- preserve all user customizations
+2. Apply ONLY the changes shown in the diff
+3. If a change conflicts with a local customization (contradicts its intent), keep local
+4. If a change adds new content not in LOCAL, add it in the appropriate location
+5. If a change updates content the user hasn't customized, apply it
+6. Output the complete merged file -- no commentary, no code fences, no explanation
+"@
+}
+
+# ---------------------------------------------------------------------------
+# AI merge prompt builder (refinement)
+# ---------------------------------------------------------------------------
+# Purpose: Builds a refinement prompt for iterating on a previous merge result
+#   based on user feedback.
+# Inputs: SourceContent, LocalContent, CurrentMerge, Feedback
+# Validation: Same as initial merge (Test-AiMergeOutput).
+function Get-AiMergeRefinePrompt {
+    param(
+        [string]$SourceContent,
+        [string]$LocalContent,
+        [string]$CurrentMerge,
+        [string]$Feedback
+    )
+    return @"
+You are refining a merged configuration file based on user feedback.
+
+## Context
+A previous merge produced CURRENT_MERGE from SOURCE + LOCAL. The user wants changes.
+
+## SOURCE (original template)
+<SOURCE>
+$SourceContent
+</SOURCE>
+
+## LOCAL (original user file)
+<LOCAL>
+$LocalContent
+</LOCAL>
+
+## CURRENT MERGE (previous result)
+<CURRENT_MERGE>
+$CurrentMerge
+</CURRENT_MERGE>
+
+## User Feedback
+$Feedback
+
+## Rules
+- Apply the user's feedback to CURRENT_MERGE
+- Keep all content from CURRENT_MERGE not affected by the feedback
+- Output the revised merged file content ONLY -- no preamble, no explanation, no markdown fences
+"@
+}
+
+# Merge validation wrapper for Invoke-AI -- captures source/local context
+# via script-level variables set by Invoke-AiMerge before calling Invoke-AI.
+$script:_mergeValidateSource = ""
+$script:_mergeValidateLocal = ""
+function _MergeValidateWrapper {
+    param([string]$Output)
+    $result = Test-AiMergeOutput -Output $Output -SourceContent $script:_mergeValidateSource -LocalContent $script:_mergeValidateLocal
+    $script:AIRejectReason = $script:MergeRejectReason
+    return $result
+}
+
 $script:MergeRejectReason = ""
 
 # ---------------------------------------------------------------------------
@@ -330,20 +592,20 @@ function Test-AiMergeOutput {
     $firstLine = ($Output -split "`n" | Where-Object { $_.Trim() } | Select-Object -First 1)
     if ($firstLine -and $firstLine -match '(?i)^(I |Here|Sure|Certainly|Let me)') {
         $truncated = $firstLine.Substring(0, [Math]::Min(60, $firstLine.Length))
-        $script:MergeRejectReason = "Conversational text: $truncated"
+        $script:MergeRejectReason = "AI responded conversationally instead of producing merged content"
         return $false
     }
 
     # Check 2: markdown code fences
     if ($Output -match '(?m)^```') {
-        $script:MergeRejectReason = "Contains markdown code fences"
+        $script:MergeRejectReason = "AI wrapped output in code fences -- need raw content"
         return $false
     }
 
     # Check 3: conversational refusal patterns (not bare keywords -- content may
     # legitimately contain "permission", "access", etc.)
     if ($Output -match '(?i)(I don''t have permission|I cannot access|I''m not authorized|I need (your )?approval|permission denied|access denied|I''m unable to|I can''t (read|write|access|open|modify))') {
-        $script:MergeRejectReason = "Contains conversational refusal language"
+        $script:MergeRejectReason = "AI indicated it couldn't perform the merge"
         return $false
     }
 
@@ -352,48 +614,52 @@ function Test-AiMergeOutput {
     $minInputLen = [Math]::Min($SourceContent.Length, $LocalContent.Length)
     $threshold = [Math]::Floor($minInputLen / 2)
     if ($minInputLen -gt 40 -and $outLen -lt $threshold) {
-        $script:MergeRejectReason = "Too short ($outLen chars vs minimum $threshold)"
+        $script:MergeRejectReason = "Output too short ($outLen chars, expected ${threshold}+) -- likely truncated"
         return $false
     }
 
-    # Check 5: structural overlap
-    $hasOverlap = $false
-    foreach ($line in ($Output -split "`n")) {
-        $trimmed = $line.Trim()
-        if (-not $trimmed -or $trimmed.Length -lt 8) { continue }
-        if ($SourceContent.Contains($trimmed) -or $LocalContent.Contains($trimmed)) {
-            $hasOverlap = $true
-            break
-        }
+    # Check 5: header preservation -- deduplicated headers from source+local must
+    # be >=60% preserved in output. Files with 0 headers pass (Check 4 handles truncation).
+    $allHeaders = @()
+    foreach ($line in (($SourceContent + "`n" + $LocalContent) -split "`n")) {
+        if ($line -match '^#{1,6} ') { $allHeaders += $line }
     }
-    if (-not $hasOverlap) {
-        $script:MergeRejectReason = "No structural overlap with source or local"
-        return $false
+    $combinedHeaders = @($allHeaders | Sort-Object -Unique)
+    $total = $combinedHeaders.Count
+    if ($total -gt 0) {
+        $preserved = 0
+        foreach ($header in $combinedHeaders) {
+            if ($Output.Contains($header)) { $preserved++ }
+        }
+        $threshold = [Math]::Ceiling($total * 60 / 100)
+        if ($threshold -lt 1) { $threshold = 1 }
+        if ($preserved -lt $threshold) {
+            $script:MergeRejectReason = "Rewrote too much ($preserved/$total section headers preserved, need 60%+)"
+            return $false
+        }
     }
 
     return $true
 }
 
 # ---------------------------------------------------------------------------
-# Agentic merge via claude CLI with refinement loop.
-# Self-contained prompt — all content inlined, no tool use needed.
+# Agentic merge via Invoke-AI with refinement loop.
+# Uses structured prompts from Get-AiMergePrompt / Get-AiMergeRefinePrompt.
 # Returns "merge" (sets $script:MergedContent) or "overwrite"/"skip".
 # ---------------------------------------------------------------------------
 function Invoke-AiMerge {
     param(
         [string]$FilePath,
         [string]$SourceContent,
-        [string]$LocalContent
+        [string]$LocalContent,
+        [string]$DiffOutput = ""
     )
 
-    # Get-Command exempt: command-existence check with explicit fallback
-    if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
-        [Console]::WriteLine("  >> claude CLI not found -- merge unavailable, falling back to overwrite")
-        LogWarn "AI merge unavailable (claude CLI not found)"
-        return "overwrite"
-    }
+    [Console]::WriteLine("  >> merging via AI...")
 
-    [Console]::WriteLine("  >> merging via AI (this may take 30-60s)...")
+    # Set validation context for _MergeValidateWrapper
+    $script:_mergeValidateSource = $SourceContent
+    $script:_mergeValidateLocal = $LocalContent
 
     $currentMerge = ""
     $iteration = 0
@@ -402,92 +668,22 @@ function Invoke-AiMerge {
         $iteration++
 
         if (-not $currentMerge) {
-            # Initial merge prompt
-            $promptText = @"
-You are a file merge tool. Output ONLY the merged result -- no commentary, no code fences, no explanation.
-
-## Context
-A deploy system detected that SOURCE (updated template) and LOCAL (user's
-current file with customizations) have diverged. Merge them.
-
-## SOURCE (new template being deployed)
-<SOURCE>
-$SourceContent
-</SOURCE>
-
-## LOCAL (user's current file with their customizations)
-<LOCAL>
-$LocalContent
-</LOCAL>
-
-## Rules
-- Preserve all user customizations from LOCAL that are intentional
-- Include all new content from SOURCE (new sections, updated tables, structural changes)
-- When both sides modify the same line, prefer LOCAL unless SOURCE adds new information
-- Output the merged file content ONLY -- no preamble, no explanation, no markdown fences
-"@
+            $promptText = Get-AiMergePrompt -FilePath $FilePath -SourceContent $SourceContent `
+                -LocalContent $LocalContent -DiffOutput $DiffOutput
         } else {
-            # Refinement prompt
             [Console]::Write("  refinement feedback: ")
             $feedback = [Console]::ReadLine()
-            $promptText = @"
-You are a file merge tool. Output ONLY the revised merged result -- no commentary, no code fences, no explanation.
-
-## Context
-A previous merge produced CURRENT_MERGE from SOURCE + LOCAL. The user wants refinements.
-
-## SOURCE (original template)
-<SOURCE>
-$SourceContent
-</SOURCE>
-
-## LOCAL (original user file)
-<LOCAL>
-$LocalContent
-</LOCAL>
-
-## CURRENT MERGE (previous result)
-<CURRENT_MERGE>
-$currentMerge
-</CURRENT_MERGE>
-
-## User Feedback
-$feedback
-
-## Rules
-- Apply the user's feedback to CURRENT_MERGE
-- Keep all content from CURRENT_MERGE not affected by the feedback
-- Output the revised merged file content ONLY -- no preamble, no explanation, no markdown fences
-"@
+            $promptText = Get-AiMergeRefinePrompt -SourceContent $SourceContent `
+                -LocalContent $LocalContent -CurrentMerge $currentMerge -Feedback $feedback
         }
 
-        $merged = $null
-        try {
-            $merged = $promptText | claude -p --allowedTools "" --no-session-persistence 2>&1
-            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($merged)) {
-                [Console]::WriteLine("  >> AI merge failed (exit $LASTEXITCODE, iteration $iteration) -- choose another option")
-                LogWarn "AI merge failed (exit $LASTEXITCODE, iteration $iteration)"
-                [Console]::Write("  fallback [o]verwrite / [s]kip: ")
-                $fb = [Console]::ReadLine()
-                if ($fb.ToLower() -eq "s") { return "skip" }
-                return "overwrite"
-            }
-        } catch {
-            [Console]::WriteLine("  >> AI merge error: $_ -- choose another option")
-            LogWarn "AI merge error (iteration $iteration): $_"
-            [Console]::Write("  fallback [o]verwrite / [s]kip: ")
-            $fb = [Console]::ReadLine()
-            if ($fb.ToLower() -eq "s") { return "skip" }
-            return "overwrite"
-        }
+        $merged = $promptText | Invoke-AI -Speed "balanced" -Permissions "none" `
+            -ValidateFn "_MergeValidateWrapper" -MaxRetries 1
 
-        # Validate output before showing preview
-        if (-not (Test-AiMergeOutput -Output $merged -SourceContent $SourceContent -LocalContent $LocalContent)) {
-            [Console]::WriteLine("  >> AI merge output rejected (iteration $iteration): $($script:MergeRejectReason)")
-            LogWarn "AI merge output rejected (iteration $iteration): $($script:MergeRejectReason)"
-            foreach ($detailLine in ($merged -split "`n")) {
-                LogDetail "rejected-merge: $detailLine"
-            }
+        if (-not $merged) {
+            $reason = if ($script:AIRejectReason) { $script:AIRejectReason } else { "unknown error" }
+            [Console]::WriteLine("  >> AI merge failed (iteration $iteration): $reason")
+            LogWarn "AI merge failed (iteration $iteration): $reason"
             [Console]::Write("  fallback [o]verwrite / [s]kip: ")
             $fb = [Console]::ReadLine()
             if ($fb.ToLower() -eq "s") { return "skip" }
@@ -582,7 +778,17 @@ function Prompt-DiffReview {
     $curLines = @($CurrentContent -split "`n")
     $diffs = Compare-Object $srcLines $curLines
     $diffCount = 0
-    if ($diffs) { $diffCount = @($diffs).Count }
+    $diffOutput = ""
+    if ($diffs) {
+        $diffCount = @($diffs).Count
+        # Build diff text for AI merge prompt
+        $diffLines = @()
+        foreach ($d in $diffs) {
+            $prefix = if ($d.SideIndicator -eq "=>") { "+ " } else { "- " }
+            $diffLines += "${prefix}$($d.InputObject)"
+        }
+        $diffOutput = $diffLines -join "`n"
+    }
 
     if ($diffCount -eq 0) {
         [Console]::WriteLine("  (whitespace-only differences)")
@@ -696,7 +902,7 @@ function Prompt-DiffReview {
             return "overwrite"
         }
         "m" {
-            return (Invoke-AiMerge -FilePath $FilePath -SourceContent $NewContent -LocalContent $CurrentContent)
+            return (Invoke-AiMerge -FilePath $FilePath -SourceContent $NewContent -LocalContent $CurrentContent -DiffOutput $diffOutput)
         }
         "s" {
             [Console]::WriteLine("  >> skipped: local file unchanged")
@@ -1651,12 +1857,11 @@ if ($DryRun) {
 $rulesSrc = Join-Path $env:TEMP "aitools-rules-$(Get-Random)"
 New-Item -ItemType Directory -Path $rulesSrc -Force | Out-Null
 $_rule_concurrent_agents_md_ = @'
-## Agent Concurrency Rules
+## Concurrent Agent Coordination
 
-Multiple AI agents (Claude Code, Cursor Agent CLI, Windsurf, Copilot) may edit files simultaneously.
-Each agent must check for concurrent work before modifying any file.
+Multiple AI agents (Claude Code, Cursor Agent CLI) may edit a codebase concurrently.
 
-Before editing, run `git status`, `git diff`, and `git stash list` to check for unexpected changes and review recent commits for other agent activity.
+Before editing a file, run `git diff` to check for unexpected changes from another agent session.
 
 ### Conflict Resolution
 
@@ -1665,7 +1870,6 @@ If `git diff` reveals unexpected changes:
 2. If changes are complementary, preserve both
 3. If changes conflict, ask the user which to keep
 4. Never silently overwrite another agent's work
-5. Log the conflict resolution decision for audit trail
 '@
 $_ruleDest_concurrent_agents_md_ = Join-Path $rulesSrc "concurrent-agents.md"
 [System.IO.File]::WriteAllText($_ruleDest_concurrent_agents_md_, $_rule_concurrent_agents_md_, [System.Text.UTF8Encoding]::new($false))

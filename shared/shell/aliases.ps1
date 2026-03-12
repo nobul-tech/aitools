@@ -69,9 +69,16 @@ Summary: one line, max 80 chars, what the content is actually about.
 Respond in EXACTLY this format with nothing else:
 FILENAME|SUMMARY
 "@
-    $resultRaw = $Markdown | & claude -p $prompt 2>$null
-    $claudeExit = $LASTEXITCODE
-    if ($claudeExit -ne 0) { return $null }
+    # Get-Command exempt: command-existence check with explicit fallback
+    if (Get-Command Invoke-AI -ErrorAction SilentlyContinue) {
+        $resultRaw = "$prompt`n`n$Markdown" | Invoke-AI -Speed "fast" -Permissions "none"
+        if (-not $resultRaw) { return $null }
+    } else {
+        # stderr suppressed: claude CLI may emit warnings; exit code checked below
+        $resultRaw = $Markdown | & claude -p $prompt --no-session-persistence 2>$null
+        $claudeExit = $LASTEXITCODE
+        if ($claudeExit -ne 0) { return $null }
+    }
 
     # Normalize to single string
     if ($resultRaw -is [array]) { $resultRaw = $resultRaw -join '' }

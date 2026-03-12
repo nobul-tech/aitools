@@ -19,6 +19,7 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 | `reference/claude-code-maintenance.md` | Claude Code maintenance tracker — version deps, workarounds, upstream issues | Any |
 | `reference/tool-versions.json` | Machine-readable per-platform version manifest for all managed tools | Any |
 | `reference/user-repo.md` | User repo pattern, template resolution, session archive — scripts reference this | Any |
+| `reference/agentic-framework.md` | Agentic AI invocation spec — speed/permission tiers, prompt design, validation patterns | Any |
 
 ### The rule
 
