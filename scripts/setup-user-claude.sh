@@ -319,7 +319,7 @@ if [ -n "$RULES_SRC" ]; then
             deploy_tracker_record "$MANAGED_FILE_RESULT" "claude rules" "$rule_name"
             # Write-back: sync merged content to dotprofile repo
             if [ "$DIFF_REVIEW_RESULT" = "merge" ] && [ -n "$MERGED_CONTENT" ] && [ -n "${USER_REPO_PATH:-}" ]; then
-                local wb_dest="$USER_REPO_PATH/claude/rules/$rule_name"
+                wb_dest="$USER_REPO_PATH/claude/rules/$rule_name"
                 mkdir -p "$(dirname "$wb_dest")"
                 printf '%s\n' "$MERGED_CONTENT" > "$wb_dest"
                 log "Wrote merged $rule_name back to $(display_path "$wb_dest")"
