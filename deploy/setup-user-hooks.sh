@@ -1578,6 +1578,7 @@ cat > "$GUARD_DEST" <<'__EMBEDDED_GUARD__'
 # Rollout mode (per-check):
 #   MODE_AND="enforce"      — && : zero false positives confirmed, blocking
 #   MODE_SUBSHELL="enforce" — $(): zero false positives confirmed, blocking
+#   MODE_SCRATCH="enforce"  — scratch files: zero false positives confirmed, blocking
 #   MODE_REST="observe"     — ||, ;, backticks: false positives exist or low sample count
 #   See .claude/rules/hook-rollout.md for the observe-then-enforce practice.
 #
@@ -1593,6 +1594,7 @@ set -euo pipefail
 # --- Mode and logging ---
 MODE_AND="enforce"      # &&  — zero false positives confirmed; blocking
 MODE_SUBSHELL="enforce" # $() — zero false positives confirmed; blocking
+MODE_SCRATCH="enforce" # scratch files — zero false positives confirmed; blocking
 MODE_REST="observe"     # ||, ;, backticks — false positives or low sample; observe only
 
 LOG_DIR="$HOME/.claude/hooks/logs"
@@ -1653,7 +1655,7 @@ NEWLINE_COUNT=$(( (CMD_LEN - STRIPPED_LEN) / 2 ))
 # 5+ lines (4+ newlines) = too complex for inline. Write a temp file instead.
 if [ "$NEWLINE_COUNT" -ge 4 ]; then
     LINE_COUNT=$((NEWLINE_COUNT + 1))
-    violation "USO: Scratch files --: This command is ~${LINE_COUNT} lines long. Write it to a temp .sh or .ps1 file using the Write tool, execute with Bash, then clean up. USO: never inline long commands in the Bash tool."
+    violation "USO: Scratch files --: This command is ~${LINE_COUNT} lines long. Write it to a temp .sh or .ps1 file using the Write tool, execute with Bash, then clean up. USO: never inline long commands in the Bash tool." "$MODE_SCRATCH"
 fi
 
 # --- USO: Simple Bash commands only ---
