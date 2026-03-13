@@ -365,6 +365,9 @@ deploy_skill() {
         created|updated)
             SKILL_CHANGES=$((SKILL_CHANGES + 1))
             ;;
+        skipped|unchanged)
+            # No action needed — tracker records the outcome
+            ;;
     esac
     deploy_tracker_record "$MANAGED_FILE_RESULT" "$tool_name" "$skill_name"
 }

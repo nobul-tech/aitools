@@ -486,6 +486,7 @@ TOOL_CMDS = {
     'uv':               ['uv', '--version'],
     'go':               ['go', 'version'],
     'datadog-pup':      ['pup', 'version'],
+    'perl':             ['perl', '--version'],
 }
 for key, val in data['tools'].items():
     if 'maintenanceFile' in val:
@@ -787,12 +788,12 @@ fi
 if $EXTENSIVE; then
     sh_lib="$REPO_ROOT/scripts/aitools-lib.sh"
     ps1_lib="$REPO_ROOT/scripts/aitools-lib.ps1"
-    # Compare MANAGED_FILE_RESULT sets
-    sh_results=$(perl -ne 'print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/' "$sh_lib" | sort -u | paste -sd,)
-    ps1_results=$(perl -ne 'print "$1\n" if /return\s+"([\w-]+)"/' "$ps1_lib" | grep -v '^$' | sort -u | paste -sd,)
-    # Compare tracker case sets
-    sh_tracker=$(perl -ne 'print "$1\n" if /^\s+([\w|-]+)\)\s/' "$sh_lib" | sort -u | paste -sd,)
-    ps1_tracker=$(perl -ne 'print "$1\n" if /^\s+"([\w-]+)"\s+\{/' "$ps1_lib" | sort -u | paste -sd,)
+    # Compare MANAGED_FILE_RESULT sets (scoped to target functions via flip-flop)
+    sh_results=$(perl -ne 'if (/^deploy_managed_file\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_managed_file/)) { print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/ }' "$sh_lib" | sort -u | paste -sd,)
+    ps1_results=$(perl -ne 'if (/^function Deploy-ManagedFile\b/ .. (/^function / && !/Deploy-ManagedFile/)) { print "$1\n" if /return\s+"([\w-]+)"/ }' "$ps1_lib" | sort -u | paste -sd,)
+    # Compare tracker case sets (scoped to target functions via flip-flop)
+    sh_tracker=$(perl -ne 'if (/^deploy_tracker_record\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_tracker_record/)) { if (/^\s+([\w|.-]+)\)\s/) { for (split /\|/, $1) { print "$_\n" } } }' "$sh_lib" | sort -u | paste -sd,)
+    ps1_tracker=$(perl -ne 'if (/^function Record-DeployOutcome\b/ .. (/^function / && !/Record-DeployOutcome/)) { while (/-eq\s+"([\w-]+)"|"([\w-]+)"\s*\{/g) { print(($1 // $2) . "\n") } }' "$ps1_lib" | sort -u | paste -sd,)
     issues=""
     if [ "$sh_results" != "$ps1_results" ]; then
         issues="return values: bash=$sh_results ps1=$ps1_results"

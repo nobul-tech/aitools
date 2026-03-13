@@ -421,6 +421,10 @@ if ($rulesSrc) {
                 Copy-Item -Path $destFile -Destination $adoptRuleDest -Force -ErrorAction Stop
                 LogOk "Adopted rule to profile: $($rf.Name)"
             }
+            if ($ruleResult -eq "skipped" -or $ruleResult -eq "unchanged" -or
+                $ruleResult -eq "created" -or $ruleResult -eq "updated") {
+                # No action needed -- tracker records the outcome
+            }
             Record-DeployOutcome -Outcome $ruleResult -ToolName "claude rules" -ItemName $rf.Name
             # Write-back: sync merged content to dotprofile repo
             if ($ruleResult -eq "merge-adopted" -and $userRepoPath) {

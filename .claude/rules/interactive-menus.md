@@ -16,7 +16,16 @@ validate this (`check-post-push` step 29: Menu parity audit).
 ### Return value contract
 
 Every return value from `Deploy-ManagedFile` / `deploy_managed_file` MUST be
-handled by every caller. Adding a new return value requires updating:
+handled at **every call site**. Scripts with multiple call sites (e.g.,
+setup-user-claude deploys both CLAUDE.md and rules) must handle all return
+values at each site independently.
+
+**Known limitation:** Step 30 (return value coverage audit) validates at
+file level, not call-site level. It can miss incomplete handlers when the
+same file has another call site that does handle the value. Manual audit
+is required for multi-deployment scripts.
+
+Adding a new return value requires updating:
 
 1. The function itself (both PS1 and bash)
 2. `Record-DeployOutcome` / `deploy_tracker_record` (both)

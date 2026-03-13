@@ -358,6 +358,9 @@ function Deploy-Skill {
     if ($skillResult -eq "created" -or $skillResult -eq "updated") {
         $script:skillChanges++
     }
+    if ($skillResult -eq "skipped" -or $skillResult -eq "unchanged") {
+        # No action needed -- tracker records the outcome
+    }
     Record-DeployOutcome -Outcome $skillResult -ToolName $ToolName -ItemName $SkillName
 }
 

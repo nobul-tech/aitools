@@ -98,6 +98,10 @@ Missing any causes drift between the pipeline, documentation, and deployed confi
 - `reference/tool-versions.json` — add tool entry with per-platform version tracking
 - `CLAUDE.md` — add `setup-<tool>` to "Deploy using MDM" tool scripts list
 - `.claude/rules/tool-lifecycle.md` + `.cursor/rules/tool-lifecycle.mdc` — update this checklist if pattern changes
+- `scripts/check-post-push.ps1` — add entry to `$toolCmds` dictionary
+  (command name + version flag, e.g., `'perl' = @('perl', '--version')`)
+- `scripts/check-post-push.sh` — add entry to `TOOL_CMDS` dictionary
+  (same command + version flag)
 
 #### Rebuild + propagate
 1. `bash scripts/build-deploy.sh` — verify count increments by 2

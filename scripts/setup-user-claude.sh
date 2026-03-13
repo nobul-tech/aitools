@@ -330,6 +330,9 @@ if [ -n "$RULES_SRC" ]; then
                     cp "$RULES_DEST/$rule_name" "$USER_REPO_PATH/claude/rules/$rule_name"
                     log_ok "Adopted rule to profile: $rule_name"
                     ;;
+                skipped|unchanged|created|updated)
+                    # No action needed — tracker records the outcome
+                    ;;
             esac
             deploy_tracker_record "$MANAGED_FILE_RESULT" "claude rules" "$rule_name"
             # Write-back: sync merged content to dotprofile repo

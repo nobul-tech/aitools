@@ -7,8 +7,12 @@ alwaysApply: false
 ## Interactive Deploy Menus (this repo)
 
 PS1 and bash menus MUST show identical options in identical order. Every return
-value from `Deploy-ManagedFile` / `deploy_managed_file` MUST be handled by
-every caller. Non-interactive fallback required (`AITOOLS_FORCE`, non-terminal).
+value from `Deploy-ManagedFile` / `deploy_managed_file` MUST be handled at
+**every call site**. Scripts with multiple call sites (e.g., setup-user-claude
+deploys both CLAUDE.md and rules) must handle all return values at each site
+independently. **Known limitation:** Step 30 validates at file level, not
+call-site level -- manual audit required for multi-deployment scripts.
+Non-interactive fallback required (`AITOOLS_FORCE`, non-terminal).
 
 PS1 console I/O: `[Console]::ReadLine/WriteLine`. Read external command output
 via temp file + `[IO.File]::ReadAllText(..., UTF8)` (not pipeline capture).

@@ -563,6 +563,7 @@ if (-not (Test-Path $versionsJson)) {
         'uv'               = @('uv', '--version')
         'go'               = @('go', 'version')
         'datadog-pup'      = @('pup', 'version')
+        'perl'             = @('perl', '--version')
     }
     foreach ($entry in $toolData.tools.PSObject.Properties) {
         $key = $entry.Name
@@ -923,16 +924,16 @@ if ($Extensive) {
 if ($Extensive) {
     $ps1Lib = Join-Path $script:RepoRoot "scripts\aitools-lib.ps1"
     $shLib = Join-Path $script:RepoRoot "scripts\aitools-lib.sh"
-    # Compare return value sets
-    $shResults = (perl -ne 'print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/' $shLib | Sort-Object -Unique) -join ','
-    $ps1Results = (perl -ne 'print "$1\n" if /return\s+"([\w-]+)"/' $ps1Lib | Sort-Object -Unique) -join ','
+    # Compare return value sets (scoped to target functions via flip-flop)
+    $shResults = (perl -ne 'if (/^deploy_managed_file\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_managed_file/)) { print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/ }' $shLib | Sort-Object -Unique) -join ','
+    $ps1Results = (perl -ne 'if (/^function Deploy-ManagedFile\b/ .. (/^function / && !/Deploy-ManagedFile/)) { print "$1\n" if /return\s+"([\w-]+)"/ }' $ps1Lib | Sort-Object -Unique) -join ','
     $issues = @()
     if ($shResults -ne $ps1Results) {
         $issues += "return values: bash=$shResults ps1=$ps1Results"
     }
-    # Compare tracker cases
-    $shTracker = (perl -ne 'print "$1\n" if /^\s+([\w|-]+)\)\s/' $shLib | Sort-Object -Unique) -join ','
-    $ps1Tracker = (perl -ne 'print "$1\n" if /^\s+"([\w-]+)"\s+\{/' $ps1Lib | Sort-Object -Unique) -join ','
+    # Compare tracker cases (scoped to target functions via flip-flop)
+    $shTracker = (perl -ne 'if (/^deploy_tracker_record\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_tracker_record/)) { if (/^\s+([\w|.-]+)\)\s/) { for (split /\|/, $1) { print "$_\n" } } }' $shLib | Sort-Object -Unique) -join ','
+    $ps1Tracker = (perl -ne 'if (/^function Record-DeployOutcome\b/ .. (/^function / && !/Record-DeployOutcome/)) { while (/-eq\s+"([\w-]+)"|"([\w-]+)"\s*\{/g) { print(($1 // $2) . "\n") } }' $ps1Lib | Sort-Object -Unique) -join ','
     if ($shTracker -ne $ps1Tracker) {
         $issues += "tracker cases: bash=$shTracker ps1=$ps1Tracker"
     }

@@ -12,6 +12,28 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.52.6 -- Post-integration fixes (2026-03-12)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **deploy/setup-perl.sh missing +x bit (#46)**: `build-deploy.sh` sets filesystem `chmod +x` but didn't update git index. Fixed with `git update-index --chmod=+x`. |
+| 2 | **Perl missing from version command dictionaries (#46)**: Added `perl --version` to `$toolCmds`/`TOOL_CMDS` in check-post-push scripts. Onboarding checklist amended to prevent recurrence. |
+| 3 | **`skipped` return value unhandled (#47)**: setup-user-mcp skills loop and setup-user-claude rules loop now explicitly handle `skipped`/`unchanged` per return value contract. |
+| 4 | **Step 31 over-broad extraction (#48)**: Rewrote perl regexes with flip-flop operator to scope extraction to target functions (`Deploy-ManagedFile`, `Record-DeployOutcome`) instead of entire lib files. |
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 5 | **interactive-menus.md**: Clarified return value contract as per-call-site (not per-file). Documented step 30 file-level limitation. |
+| 6 | **tool-lifecycle.md**: Added check-post-push version command dictionaries to onboarding checklist. |
+
+(tested: Windows)
+
+---
+
 ## v0.52.5 -- Refresh-Path fix, managed Perl lifecycle (2026-03-12)
 
 ### Fixed
