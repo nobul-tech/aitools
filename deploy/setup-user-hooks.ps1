@@ -1882,20 +1882,22 @@ fi
 # Pipelines (|) are explicitly OK per the USO.
 # Checked before the first-token allowlist because compound commands like
 # `git tag && git push` have `git` as first token and would exit early.
-# Known gap: $(...) after quoted segments (e.g., git commit -m "$(...)") is
-# invisible due to json_field truncation at \". Mitigated by the USO itself
-# (use git commit -F) and by CC's permission system (which prompts anyway).
+# $() and backtick checks use raw INPUT (not COMMAND) because json_field
+# truncates at \" — $(...) inside quoted arguments would be invisible.
 case "$COMMAND" in
     *'&&'*) violation "USO: Simple Bash commands only --: Don't use '&&' to chain commands. Make separate Bash tool calls instead. For git in another repo, use 'git -C /path' instead of 'cd /path && git'." "$MODE_AND" ;;
     *'||'*) violation "USO: Simple Bash commands only --: Don't use '||' to chain commands. Make separate Bash tool calls instead." "$MODE_REST" ;;
     *';'*)
-        # Exempt ; inside scripting-language arguments: pwsh -Command '...;...' and perl -e '...;...'
+        # Exempt ; inside scripting-language arguments: pwsh -Command '...;...' and perl '...;...'
         # The ; is a language-internal statement separator, not a shell command separator.
+        # perl: any invocation (perl -ne, -pe, -e, -E, etc.) may contain Perl semicolons.
         case "$COMMAND" in
-            pwsh\ *|powershell\ *|'perl -e'*|'perl -E'*) ;;
+            pwsh\ *|powershell\ *|perl\ *) ;;
             *) violation "USO: Simple Bash commands only --: Don't use ';' to chain commands. Make separate Bash tool calls instead." "$MODE_REST" ;;
         esac
         ;;
+esac
+case "$INPUT" in
     *'$('*) violation "USO: Simple Bash commands only --: Don't use '\$(...)' command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_SUBSHELL" ;;
     *'`'*)  violation "USO: Simple Bash commands only --: Don't use backtick command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_REST" ;;
 esac
@@ -1949,16 +1951,24 @@ case "$FIRST_TOKEN" in
 esac
 
 # Check for standalone file-search commands (should use Grep tool)
+# Allow in pipelines — Grep tool can't pipe output into other commands.
 case "$FIRST_TOKEN" in
     grep|rg|egrep|fgrep)
-        violation "USO: Dedicated tools --: Use the Grep tool instead of '$FIRST_TOKEN' to search file contents. The Grep tool supports regex, file filtering, and multiple output modes."
+        case "$COMMAND" in
+            *\|*) ;;  # Pipeline — legitimate shell use
+            *) violation "USO: Dedicated tools --: Use the Grep tool instead of '$FIRST_TOKEN' to search file contents. The Grep tool supports regex, file filtering, and multiple output modes." ;;
+        esac
         ;;
 esac
 
 # Check for file-finding commands (should use Glob tool)
+# Allow in pipelines — Glob tool can't pipe output into other commands.
 case "$FIRST_TOKEN" in
     find)
-        violation "USO: Dedicated tools --: Use the Glob tool instead of 'find' to locate files. Example: Glob with pattern '**/*.sh' instead of 'find . -name \"*.sh\"'."
+        case "$COMMAND" in
+            *\|*) ;;  # Pipeline — legitimate shell use
+            *) violation "USO: Dedicated tools --: Use the Glob tool instead of 'find' to locate files. Example: Glob with pattern '**/*.sh' instead of 'find . -name \"*.sh\"'." ;;
+        esac
         ;;
     ls)
         # ls is borderline -- block when clearly used to list directory contents
@@ -1970,12 +1980,19 @@ case "$FIRST_TOKEN" in
 esac
 
 # Check for file-editing commands (should use Edit tool)
+# Allow in pipelines — Edit tool can't pipe output into other commands.
 case "$FIRST_TOKEN" in
     sed)
-        violation "USO: Dedicated tools --: Use the Edit tool instead of 'sed' to modify files. For non-trivial string manipulation, use Perl (USO: Perl for string manipulation)."
+        case "$COMMAND" in
+            *\|*) ;;  # Pipeline — legitimate shell use
+            *) violation "USO: Dedicated tools --: Use the Edit tool instead of 'sed' to modify files. For non-trivial string manipulation, use Perl (USO: Perl for string manipulation)." ;;
+        esac
         ;;
     awk)
-        violation "USO: Dedicated tools --: Use the Read tool instead of 'awk' to process files. For string manipulation, use Perl (USO: Perl for string manipulation)."
+        case "$COMMAND" in
+            *\|*) ;;  # Pipeline — legitimate shell use
+            *) violation "USO: Dedicated tools --: Use the Read tool instead of 'awk' to process files. For string manipulation, use Perl (USO: Perl for string manipulation)." ;;
+        esac
         ;;
 esac
 
