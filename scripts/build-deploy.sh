@@ -1311,8 +1311,10 @@ chmod +x "$DEPLOY_DIR"/*.sh 2>/dev/null || true
 blog_ok "Set +x on all .sh files in deploy/"
 
 # 2. Convert deploy/*.ps1 to CRLF (.gitattributes requires eol=crlf)
-#    build-deploy.sh writes LF; without this, git sees them as modified
-perl -pi -e 's/(?<!\r)\n/\r\n/' "$DEPLOY_DIR"/*.ps1
+#    build-deploy.sh writes LF; without this, git sees them as modified.
+#    binmode ARGVOUT: prevent Strawberry Perl's text-mode from doubling \r.
+#    See .claude/rules/cross-platform.md "Strawberry Perl text mode".
+perl -pi -e 'binmode ARGVOUT; s/(?<!\r)\n/\r\n/' "$DEPLOY_DIR"/*.ps1
 blog_ok "Converted deploy/*.ps1 to CRLF"
 
 blog_ok "Build complete: $GENERATED scripts generated in deploy/"

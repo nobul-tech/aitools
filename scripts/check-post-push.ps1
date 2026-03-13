@@ -605,15 +605,37 @@ if (-not (Test-Path $versionsJson)) {
                 continue
             }
             try {
-                $out = (& $cmd[0] $cmd[1..($cmd.Length-1)] 2>&1 | Select-Object -First 1) -as [string]
-                if ($out -and $out.Contains($platformVer)) {
-                    $ver21Ok++
-                } elseif ($out) {
-                    $ver21Details += ("      WARN {0}: installed='{1}' manifest='{2}'" -f $key, $out, $platformVer)
-                    $ver21Warns++
-                } else {
-                    $ver21Details += ("      SKIP {0}: not installed (manifest: {1})" -f $key, $platformVer)
-                    $ver21Skip++
+                # Lower ErrorActionPreference so stderr from native commands
+                # (perl warnings, modal deprecation notices) doesn't throw.
+                # Pattern: same as InvokeGit in check-lib.ps1.
+                $prevEAP = $ErrorActionPreference
+                $ErrorActionPreference = "Continue"
+                try {
+                    $allOutput = @(& $cmd[0] $cmd[1..($cmd.Length-1)] 2>&1)
+                } finally {
+                    $ErrorActionPreference = $prevEAP
+                }
+                # Search ALL output lines for version string (not just first).
+                # Handles tools that emit warnings before the version line
+                # (e.g., modal DeprecationWarning, perl stderr preamble).
+                $matched = $false
+                foreach ($outLine in $allOutput) {
+                    $lineStr = "$outLine"
+                    if ($lineStr -and $lineStr.Contains($platformVer)) {
+                        $ver21Ok++
+                        $matched = $true
+                        break
+                    }
+                }
+                if (-not $matched) {
+                    $firstLine = ($allOutput | Select-Object -First 1) -as [string]
+                    if ($firstLine) {
+                        $ver21Details += ("      WARN {0}: installed='{1}' manifest='{2}'" -f $key, $firstLine, $platformVer)
+                        $ver21Warns++
+                    } else {
+                        $ver21Details += ("      SKIP {0}: not installed (manifest: {1})" -f $key, $platformVer)
+                        $ver21Skip++
+                    }
                 }
             } catch {
                 $ver21Details += ("      SKIP {0}: not installed (manifest: {1})" -f $key, $platformVer)

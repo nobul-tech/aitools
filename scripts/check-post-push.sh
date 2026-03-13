@@ -498,11 +498,13 @@ for key, val in data['tools'].items():
             continue
         try:
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-            out = (r.stdout or r.stderr).strip().split('\n')[0]
-            if plat_ver in out:
+            all_lines = (r.stdout or r.stderr or '').strip().split('\n')
+            # Search all output lines for version (handles tools that emit
+            # warnings/deprecation notices before the version line)
+            if any(plat_ver in line for line in all_lines):
                 print(f"OK|{key}|")
             else:
-                print(f"WARN|{key}|installed='{out}' manifest='{plat_ver}'")
+                print(f"WARN|{key}|installed='{all_lines[0]}' manifest='{plat_ver}'")
         except FileNotFoundError:
             print(f"SKIP|{key}|not installed (manifest: {plat_ver})")
         except subprocess.TimeoutExpired:
