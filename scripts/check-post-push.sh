@@ -8,10 +8,14 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # shellcheck source=scripts/check-lib.sh
 source "$SCRIPT_DIR/check-lib.sh"
+# shellcheck source=scripts/init-logging.sh
+source "$SCRIPT_DIR/init-logging.sh"
 
 # OS guard: use .ps1 on Windows
 case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*) echo "Use check-post-push.ps1 on Windows"; exit 1 ;;
+    MINGW*|MSYS*|CYGWIN*)
+        log_error "This script is for macOS/Linux. On Windows, use check-post-push.ps1."
+        exit 1 ;;
 esac
 
 resolve_config
@@ -171,34 +175,13 @@ else
 fi
 
 # PS1 validation
-if $IS_MACOS; then
-    if require_pwsh "6" "Full syntax (.ps1)"; then
-        ps1_errors=0
-        for f in "$REPO_ROOT"/scripts/*.ps1 "$REPO_ROOT"/deploy/*.ps1; do
-            [ -f "$f" ] || continue
-            if ! pwsh -NoProfile -Command "
-                \$e = \$null
-                \$null = [System.Management.Automation.Language.Parser]::ParseFile('$f', [ref]\$null, [ref]\$e)
-                if (\$e.Count -gt 0) { \$e | ForEach-Object { Write-Host \"  line \$(\$_.Extent.StartLineNumber): \$(\$_.Message)\" }; exit 1 }
-            " 2>/dev/null; then
-                echo "      FAIL: $(basename "$f")"
-                ps1_errors=$((ps1_errors + 1))
-            fi
-        done
-        if [ "$ps1_errors" -eq 0 ]; then
-            step_pass "6" "Full syntax (.ps1)"
-        else
-            step_fail "6" "Full syntax (.ps1)" "$ps1_errors file(s) failed"
-        fi
-    fi
-elif $IS_WINDOWS; then
+if require_pwsh "6" "Full syntax (.ps1)"; then
     ps1_errors=0
     for f in "$REPO_ROOT"/scripts/*.ps1 "$REPO_ROOT"/deploy/*.ps1; do
         [ -f "$f" ] || continue
-        win_path=$(cygpath -w "$f")
         if ! pwsh -NoProfile -Command "
             \$e = \$null
-            \$null = [System.Management.Automation.Language.Parser]::ParseFile('$win_path', [ref]\$null, [ref]\$e)
+            \$null = [System.Management.Automation.Language.Parser]::ParseFile('$f', [ref]\$null, [ref]\$e)
             if (\$e.Count -gt 0) { \$e | ForEach-Object { Write-Host \"  line \$(\$_.Extent.StartLineNumber): \$(\$_.Message)\" }; exit 1 }
         " 2>/dev/null; then
             echo "      FAIL: $(basename "$f")"
@@ -468,7 +451,7 @@ else
                   ver21_details="${ver21_details}      WARN ${v21_tool}: ${v21_msg}\n" ;;
         esac
     done < <(python3 - "$versions_json" <<'PYEOF'
-import json, sys, subprocess, datetime
+import json, sys, subprocess, datetime, platform
 with open(sys.argv[1]) as f:
     data = json.load(f)
 today = datetime.date.today()
@@ -488,6 +471,8 @@ TOOL_CMDS = {
     'datadog-pup':      ['pup', 'version'],
     'perl':             ['perl', '--version'],
 }
+plat_key = {'Darwin': 'macos', 'Windows': 'windows'}.get(platform.system(), 'linux')
+plat_name = {'macos': 'macOS', 'windows': 'Windows', 'linux': 'Linux'}[plat_key]
 for key, val in data['tools'].items():
     if 'maintenanceFile' in val:
         continue  # covered by step 20
@@ -503,9 +488,9 @@ for key, val in data['tools'].items():
             else:
                 print(f"OK|{key}|")
     else:
-        macos_ver = (val.get('macos') or {}).get('lastVerifiedVersion')
-        if not macos_ver:
-            print(f"SKIP|{key}|no macOS version in manifest")
+        plat_ver = (val.get(plat_key) or {}).get('lastVerifiedVersion')
+        if not plat_ver:
+            print(f"SKIP|{key}|no {plat_name} version in manifest")
             continue
         cmd = TOOL_CMDS.get(key)
         if not cmd:
@@ -514,14 +499,14 @@ for key, val in data['tools'].items():
         try:
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
             out = (r.stdout or r.stderr).strip().split('\n')[0]
-            if macos_ver in out:
+            if plat_ver in out:
                 print(f"OK|{key}|")
             else:
-                print(f"WARN|{key}|installed='{out}' manifest='{macos_ver}'")
+                print(f"WARN|{key}|installed='{out}' manifest='{plat_ver}'")
         except FileNotFoundError:
-            print(f"SKIP|{key}|not installed (manifest: {macos_ver})")
+            print(f"SKIP|{key}|not installed (manifest: {plat_ver})")
         except subprocess.TimeoutExpired:
-            print(f"WARN|{key}|version check timed out (manifest: {macos_ver})")
+            print(f"WARN|{key}|version check timed out (manifest: {plat_ver})")
 PYEOF
     )
     [ -n "$ver21_details" ] && printf "%b" "$ver21_details"

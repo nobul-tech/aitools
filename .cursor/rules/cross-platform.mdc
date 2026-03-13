@@ -15,7 +15,19 @@ This repo targets macOS and Windows equally.
 
 ### OS guard + dispatch
 
-Every `.sh` setup script has `case "$(uname -s)" in MINGW*...) exit 1`. The bash `aitools` runs in Git Bash on Windows, so:
+Every script uses the canonical guard pattern. Guards MUST use structured
+logging (`LogError`/`log_error`), not raw output. Source `init-logging`
+before the guard. See `.claude/rules/cross-platform.md` "OS guard patterns".
+
+**PS1:** `if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows)` —
+use `-not $IsWindows` (catches macOS AND Linux), never `$IsMacOS` alone.
+**Bash:** `case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*)` — exits on Windows.
+
+Exemptions: libraries (aitools-lib, check-lib, init-logging), hooks, build
+scripts, scratch files. Full table in `.claude/rules/cross-platform.md`.
+
+Dead code rule: Do not write platform branches for the rejected platform
+below an OS guard. Branch on capability, not identity.
 
 - Never call `.sh` setup scripts without a `uname -s` dispatch
 - On Windows, call `.ps1` via `pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$path")"`
@@ -37,3 +49,10 @@ Prefer ASCII in PS1 strings and expressions for consistency. PS 7 handles UTF-8 
 Before committing scripts, validate syntax:
 - PS1: `pwsh -NoProfile -Command '$e = $null; $null = [System.Management.Automation.Language.Parser]::ParseFile("path", [ref]$null, [ref]$e); if ($e) { $e }'`
 - Bash: `bash -n path/to/script.sh`
+
+### Git Bash PATH shadowing (Windows)
+
+Git for Windows bundles tools in `usr/bin/` (notably `perl`). When Git Bash
+spawns pwsh, the child inherits PATH where `usr/bin/` may shadow managed
+installs (e.g., Strawberry Perl). Per PSO "Fail, don't mask": use explicit
+PATH prepend for managed tools, no fallback to Git's bundled versions.

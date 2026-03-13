@@ -9,10 +9,14 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # shellcheck source=scripts/check-lib.sh
 source "$SCRIPT_DIR/check-lib.sh"
+# shellcheck source=scripts/init-logging.sh
+source "$SCRIPT_DIR/init-logging.sh"
 
 # OS guard: use .ps1 on Windows
 case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*) echo "Use check-pre-commit.ps1 on Windows"; exit 1 ;;
+    MINGW*|MSYS*|CYGWIN*)
+        log_error "This script is for macOS/Linux. On Windows, use check-pre-commit.ps1."
+        exit 1 ;;
 esac
 
 resolve_config
@@ -72,34 +76,13 @@ else
 
     # PS1 validation
     if [ -n "$staged_ps1" ]; then
-        if $IS_MACOS; then
-            if require_pwsh "2" "Script syntax (.ps1)"; then
-                ps1_errors=0
-                while IFS= read -r f; do
-                    [ -n "$f" ] || continue
-                    if ! pwsh -NoProfile -Command "
-                        \$e = \$null
-                        \$null = [System.Management.Automation.Language.Parser]::ParseFile('$REPO_ROOT/$f', [ref]\$null, [ref]\$e)
-                        if (\$e.Count -gt 0) { \$e | ForEach-Object { Write-Host \"  line \$(\$_.Extent.StartLineNumber): \$(\$_.Message)\" }; exit 1 }
-                    " 2>/dev/null; then
-                        echo "      FAIL: $f"
-                        ps1_errors=$((ps1_errors + 1))
-                    fi
-                done <<< "$staged_ps1"
-                if [ "$ps1_errors" -eq 0 ]; then
-                    step_pass "2" "Script syntax (.ps1)"
-                else
-                    step_fail "2" "Script syntax (.ps1)" "$ps1_errors file(s) failed"
-                fi
-            fi
-        elif $IS_WINDOWS; then
+        if require_pwsh "2" "Script syntax (.ps1)"; then
             ps1_errors=0
             while IFS= read -r f; do
                 [ -n "$f" ] || continue
-                win_path=$(cygpath -w "$REPO_ROOT/$f")
                 if ! pwsh -NoProfile -Command "
                     \$e = \$null
-                    \$null = [System.Management.Automation.Language.Parser]::ParseFile('$win_path', [ref]\$null, [ref]\$e)
+                    \$null = [System.Management.Automation.Language.Parser]::ParseFile('$REPO_ROOT/$f', [ref]\$null, [ref]\$e)
                     if (\$e.Count -gt 0) { \$e | ForEach-Object { Write-Host \"  line \$(\$_.Extent.StartLineNumber): \$(\$_.Message)\" }; exit 1 }
                 " 2>/dev/null; then
                     echo "      FAIL: $f"

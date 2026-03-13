@@ -68,9 +68,13 @@ function Initialize-Logging {
     if ($IsWindows -or (-not (Test-Path variable:IsMacOS))) {
         # Windows (PS 7+) or PS 5.1 (always Windows)
         $script:logDir = Join-Path $env:LOCALAPPDATA "aitools"
-    } else {
-        # macOS/Linux
+    } elseif ($IsMacOS) {
         $script:logDir = Join-Path $HOME "Library/Logs/aitools"
+    } else {
+        # Linux: XDG_STATE_HOME, default ~/.local/state
+        $xdg = $env:XDG_STATE_HOME
+        if (-not $xdg) { $xdg = Join-Path $HOME ".local/state" }
+        $script:logDir = Join-Path $xdg "aitools"
     }
     $script:logFile = Join-Path $script:logDir "deploy.log"
     if (-not (Test-Path $script:logDir)) {

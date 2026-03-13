@@ -13,6 +13,11 @@ All plans you propose and all reusable code you write must follow these conventi
 **Bash:** shebang/header > `set -euo pipefail` > `source aitools-lib.sh` + `logging_init "name"` (provides platform detection, display_path, read_config_key, log/log_ok/log_error/log_warn, write_summary, backup_file, backup_dir, emit_merge_details, ERRORS/WARNINGS counters) > OS guard > body > exit footer
 **PS1:** header > `. aitools-lib.ps1` + `Initialize-Logging "name"` (provides ReadConfigKey, Log/LogOk/LogError/LogWarn, Write-Summary, Backup-File, Backup-Dir, ConvertPSObjectToHashtable, Emit-MergeDetails, $errors/$warnings counters) > OS guard > body > exit footer
 
+### Block order (check/audit scripts)
+
+**Bash:** shebang/header > `set -euo pipefail` > `source check-lib.sh` + `source init-logging.sh` > OS guard (`log_error`) > `resolve_config` + `check_log_init "NAME"` > body > `print_summary`
+**PS1:** header > `. check-lib.ps1` + `. init-logging.ps1` > OS guard (`LogError`) > `ResolveConfig` + `CheckLogInit "NAME"` > body > `PrintSummary`
+
 ### Error and warning tracking (required)
 
 - `log_error()` MUST do `ERRORS=$((ERRORS + 1))`; `log_warn()` MUST do `WARNINGS=$((WARNINGS + 1))`
@@ -69,9 +74,10 @@ Never use `grep -P` in bash scripts -- macOS BSD `grep` doesn't support it. Use 
 
 ### Check script logging
 
-Check scripts use separate logging (check-lib, not aitools-lib). Step functions
-(StepPass/step_pass) write to checks.log/checks.jsonl. CheckLogInit bridges
-aitools-lib vars so lib functions work in check context.
+Check scripts source check-lib (which sources aitools-lib), then init-logging
+for structured logging before the OS guard. After the guard, CheckLogInit
+overrides logging vars for check-specific paths (checks.log/checks.jsonl).
+Double-init is safe -- see `reference/script-standards-detail.md` "Bridge pattern".
 
 ### End-of-run summary
 

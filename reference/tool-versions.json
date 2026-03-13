@@ -3,7 +3,7 @@
     "title": "aitools Tool Version Manifest",
     "description": "Per-platform version manifest for all tools managed by aitools. Used by aitools install to detect drift and by aitools.nobul.tech for version tracking and PR automation.",
     "schemaVersion": "1.0",
-    "updated": "2026-03-06",
+    "updated": "2026-03-13",
     "repositories": {
       "primary":      "https://github.com/nobul-jose/aitools",
       "userTemplate": "https://github.com/nobul-jose/aitools-{username}"
@@ -23,7 +23,7 @@
     },
     "vercel-cli": {
       "macos":   { "lastVerifiedVersion": "50.28.0",           "lastVerified": "2026-03-06" },
-      "windows": { "lastVerifiedVersion": null,                "lastVerified": null },
+      "windows": { "lastVerifiedVersion": "50.17.1",           "lastVerified": "2026-03-13" },
       "linux":   { "lastVerifiedVersion": null,                "lastVerified": null },
       "minVersion": null,
       "blocked": [],
@@ -31,7 +31,7 @@
     },
     "cursor-agent-cli": {
       "macos":   { "lastVerifiedVersion": "2026.02.27-e7d2ef6", "lastVerified": "2026-03-02" },
-      "windows": { "lastVerifiedVersion": null,                 "lastVerified": null },
+      "windows": { "lastVerifiedVersion": "2026.03.11-6dfa30c", "lastVerified": "2026-03-13" },
       "linux":   { "lastVerifiedVersion": null,                 "lastVerified": null },
       "minVersion": null,
       "blocked": [],
@@ -39,7 +39,7 @@
     },
     "node": {
       "macos":   { "lastVerifiedVersion": "24.1.0", "lastVerified": "2026-03-02" },
-      "windows": { "lastVerifiedVersion": null,     "lastVerified": null },
+      "windows": { "lastVerifiedVersion": "24.13.1", "lastVerified": "2026-03-13" },
       "linux":   { "lastVerifiedVersion": null,     "lastVerified": null },
       "minVersion": null,
       "blocked": [],
@@ -47,7 +47,7 @@
     },
     "pandoc": {
       "macos":   { "lastVerifiedVersion": "3.9",  "lastVerified": "2026-03-02" },
-      "windows": { "lastVerifiedVersion": null,   "lastVerified": null },
+      "windows": { "lastVerifiedVersion": "3.9",    "lastVerified": "2026-03-13" },
       "linux":   { "lastVerifiedVersion": null,   "lastVerified": null },
       "minVersion": null,
       "blocked": [],
@@ -55,7 +55,7 @@
     },
     "pwsh": {
       "macos":   { "lastVerifiedVersion": "7.5.4", "lastVerified": "2026-03-02" },
-      "windows": { "lastVerifiedVersion": null,    "lastVerified": null },
+      "windows": { "lastVerifiedVersion": "7.5.4",  "lastVerified": "2026-03-13" },
       "linux":   { "lastVerifiedVersion": null,    "lastVerified": null },
       "minVersion": null,
       "blocked": [],
@@ -63,7 +63,7 @@
     },
     "rust-cargo": {
       "macos":   { "lastVerifiedVersion": "1.94.0", "lastVerified": "2026-03-06" },
-      "windows": { "lastVerifiedVersion": null,     "lastVerified": null },
+      "windows": { "lastVerifiedVersion": "1.94.0",  "lastVerified": "2026-03-13" },
       "linux":   { "lastVerifiedVersion": null,     "lastVerified": null },
       "minVersion": null,
       "blocked": [],
@@ -71,7 +71,7 @@
     },
     "typst": {
       "macos":   { "lastVerifiedVersion": "0.14.2", "lastVerified": "2026-03-02" },
-      "windows": { "lastVerifiedVersion": null,     "lastVerified": null },
+      "windows": { "lastVerifiedVersion": "0.14.2",  "lastVerified": "2026-03-13" },
       "linux":   { "lastVerifiedVersion": null,     "lastVerified": null },
       "minVersion": null,
       "blocked": [],
@@ -79,7 +79,7 @@
     },
     "gh-cli": {
       "macos":   { "lastVerifiedVersion": "2.87.3", "lastVerified": "2026-03-02" },
-      "windows": { "lastVerifiedVersion": null,     "lastVerified": null },
+      "windows": { "lastVerifiedVersion": "2.88.0",  "lastVerified": "2026-03-13" },
       "linux":   { "lastVerifiedVersion": null,     "lastVerified": null },
       "minVersion": null,
       "blocked": [],
@@ -87,7 +87,7 @@
     },
     "modal-cli": {
       "macos":   { "lastVerifiedVersion": "1.3.5", "lastVerified": "2026-03-06" },
-      "windows": { "lastVerifiedVersion": null, "lastVerified": null },
+      "windows": { "lastVerifiedVersion": "1.3.5", "lastVerified": "2026-03-13" },
       "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
       "minVersion": null,
       "blocked": [],
@@ -95,7 +95,7 @@
     },
     "python": {
       "macos":   { "lastVerifiedVersion": "3.14.3", "lastVerified": "2026-03-06" },
-      "windows": { "lastVerifiedVersion": null, "lastVerified": null },
+      "windows": { "lastVerifiedVersion": "3.14.3", "lastVerified": "2026-03-13" },
       "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
       "minVersion": "3.10",
       "blocked": [],
@@ -103,7 +103,7 @@
     },
     "uv": {
       "macos":   { "lastVerifiedVersion": "0.10.8", "lastVerified": "2026-03-06" },
-      "windows": { "lastVerifiedVersion": null, "lastVerified": null },
+      "windows": { "lastVerifiedVersion": "0.10.9", "lastVerified": "2026-03-13" },
       "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
       "minVersion": null,
       "blocked": [],
@@ -111,7 +111,7 @@
     },
     "go": {
       "macos":   { "lastVerifiedVersion": "go1.26.1", "lastVerified": "2026-03-06" },
-      "windows": { "lastVerifiedVersion": null, "lastVerified": null },
+      "windows": { "lastVerifiedVersion": "go1.26.1", "lastVerified": "2026-03-13" },
       "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
       "minVersion": null,
       "blocked": [],
@@ -137,7 +137,7 @@
     },
     "datadog-pup": {
       "macos":   { "lastVerifiedVersion": "Pup 0.26.0", "lastVerified": "2026-03-06" },
-      "windows": { "lastVerifiedVersion": null, "lastVerified": null },
+      "windows": { "lastVerifiedVersion": "Pup 0.30.0", "lastVerified": "2026-03-13" },
       "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
       "minVersion": null,
       "blocked": [],

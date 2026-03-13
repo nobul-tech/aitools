@@ -10,10 +10,12 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:RepoRoot = Split-Path -Parent $scriptDir
 
 . (Join-Path $scriptDir "check-lib.ps1")
+. (Join-Path $scriptDir "init-logging.ps1")
 
 # OS guard: use .sh on macOS/Linux
-if ($PSVersionTable.PSEdition -eq "Core" -and $IsMacOS) {
-    Write-Host "Use check-prereq-detection.sh on macOS"; exit 1
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    LogError "This script is for Windows. On macOS/Linux, use check-prereq-detection.sh."
+    exit 1
 }
 
 ResolveConfig

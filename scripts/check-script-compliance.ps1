@@ -8,10 +8,11 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptDir
 
 . (Join-Path $scriptDir "check-lib.ps1")
+. (Join-Path $scriptDir "init-logging.ps1")
 
 # OS guard: use .sh on macOS/Linux
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
-    Write-Host "Use check-script-compliance.sh on macOS/Linux"
+    LogError "This script is for Windows. On macOS/Linux, use check-script-compliance.sh."
     exit 1
 }
 

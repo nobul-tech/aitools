@@ -4,13 +4,18 @@
 # Source base lib (provides ReadConfigKey)
 . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
 
-# Ensure Git bundled tools (perl, etc.) are on PATH.
-# Git Bash inherits these automatically; PowerShell needs explicit addition.
-# Safety net: adds Git's usr/bin for bundled tools (perl, etc.).
-# Perl is also independently managed via setup-perl.ps1.
-$_gitUsrBin = Join-Path $env:ProgramFiles "Git\usr\bin"
-if ((Test-Path $_gitUsrBin) -and ($env:Path -notmatch [regex]::Escape($_gitUsrBin))) {
-    $env:Path = "$_gitUsrBin;$env:Path"
+# Check scripts use perl for regex extraction (steps 22a, 26, 29, 31).
+# On Windows, prepend managed Strawberry Perl so it takes priority over
+# Git-bundled perl (v5.38.2) inherited from Git Bash's PATH.
+# Per PSO "Fail, don't mask": if Strawberry Perl isn't installed, do not
+# fall back to Git's bundled version. Run `aitools install` to fix.
+# See .claude/rules/cross-platform.md "Git Bash PATH shadowing".
+if ($IsWindows) {
+    $_spBin = "C:\Strawberry\perl\bin"   # Verified: 2026-03-12 (v5.42.0.1)
+    if (Test-Path $_spBin) {
+        $env:Path = "$_spBin;$env:Path"
+    }
+    # If Strawberry isn't installed, perl-dependent check steps fail visibly
 }
 
 # ---------------------------------------------------------------------------

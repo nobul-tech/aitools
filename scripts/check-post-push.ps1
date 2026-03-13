@@ -8,10 +8,12 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:RepoRoot = Split-Path -Parent $scriptDir
 
 . (Join-Path $scriptDir "check-lib.ps1")
+. (Join-Path $scriptDir "init-logging.ps1")
 
 # OS guard: use .sh on macOS/Linux
-if ($PSVersionTable.PSEdition -eq "Core" -and $IsMacOS) {
-    Write-Host "Use check-post-push.sh on macOS"; exit 1
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    LogError "This script is for Windows. On macOS/Linux, use check-post-push.sh."
+    exit 1
 }
 
 ResolveConfig
@@ -548,7 +550,7 @@ if (-not (Test-Path $versionsJson)) {
     $today = [datetime]::UtcNow.Date
     $ver21Warns = 0; $ver21Ok = 0; $ver21Skip = 0
     $ver21Details = @()
-    $platformKey = if ($IsMacOS) { 'macos' } elseif ($IsLinux) { 'linux' } else { 'windows' }
+    $platformKey = 'windows'
     $toolCmds = @{
         'vercel-cli'       = @('vercel', '--version')
         'cursor-agent-cli' = @('agent', '--version')
@@ -559,7 +561,7 @@ if (-not (Test-Path $versionsJson)) {
         'typst'            = @('typst', '--version')
         'gh-cli'           = @('gh', '--version')
         'modal-cli'        = @('modal', '--version')
-        'python'           = @($(if ($IsMacOS) { 'python3' } else { 'python' }), '--version')
+        'python'           = @('python', '--version')
         'uv'               = @('uv', '--version')
         'go'               = @('go', 'version')
         'datadog-pup'      = @('pup', 'version')

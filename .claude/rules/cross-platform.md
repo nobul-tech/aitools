@@ -18,9 +18,81 @@ or treat either platform as the obvious default.
 
 This is enforced as a Project Standing Order (PSO) in CLAUDE.md.
 
+### Platform targeting principle
+
+Scripts come in platform pairs: `.sh` targets macOS/Linux, `.ps1` targets
+Windows. Every setup, utility, and check script must have both variants
+unless listed in the OS guard exemptions table below. The OS guard enforces
+this at runtime; header comments document the target platform.
+
+### OS guard patterns
+
+These are the canonical, copyable patterns. For block order placement, see
+`script-standards.md`. For the logging requirement, see
+`reference/script-standards-detail.md` "OS guard logging convention".
+
+**PowerShell (Windows scripts):**
+
+```powershell
+if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+    LogError "This script is for Windows. On macOS/Linux, use the .sh version."
+    exit 1
+}
+```
+
+Key: Use `-not $IsWindows` (catches macOS AND Linux). Never use `$IsMacOS`
+alone — it misses Linux. The `PSVersion.Major -ge 6` check ensures the guard
+is transparent to PS 5.1 on Windows (where `$IsWindows` is undefined).
+
+**Bash (macOS/Linux scripts):**
+
+```bash
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        log_error "This script is for macOS/Linux. On Windows, use the .ps1 version."
+        exit 1 ;;
+esac
+```
+
+**Prerequisite**: Guards MUST use structured logging (`LogError`/`log_error`),
+not raw output (`Write-Host`/`echo`). This requires logging to be initialized
+before the guard. Source `init-logging.ps1`/`init-logging.sh` after the lib
+source and before the guard. See `script-standards.md` block order.
+
+### OS guard exemptions
+
+Scripts without a blocking entry guard:
+
+| Category | Scripts | Rationale |
+|----------|---------|-----------|
+| Shared libraries | `aitools-lib.sh/.ps1`, `check-lib.sh/.ps1` | Dot-sourced by callers that have their own guards. Never invoked directly. |
+| Init libraries | `init-logging.sh/.ps1` | Sourced for initialization. Platform-native (each only runs on its target). |
+| Hooks | `shared/hooks/*.sh` | Claude Code hooks run in bash on all platforms by design. No PS1 variant. |
+| Shell alias modules | `shared/shell/aliases.sh/.ps1` | Sourced into shell profiles. Platform-specific functions use inline runtime guards. |
+| Build scripts | `build-deploy.sh` | Runs on all platforms. See cross-language exceptions table. |
+| Scratch/test files | `.scratch/*.sh` | Temporary development files. Not deployed or reusable. |
+
+### Dead code from platform guards
+
+When an OS guard exits on the wrong platform, any platform-conditional code
+below the guard for the rejected platform is dead code. For example, an
+`$IS_WINDOWS` branch in a bash script with an OS guard that exits on Windows
+can never execute.
+
+**Rule:** Do not write platform branches for the rejected platform below an
+OS guard. If the guard exits on Windows, all code below it runs on
+macOS/Linux only — no `if $IS_WINDOWS` branches needed. If the guard exits
+on non-Windows, all code below runs on Windows only — no `if ($IsMacOS)`
+branches needed.
+
+**Corollary:** Platform-conditional code (like `require_pwsh` for PS1
+validation) should use capability checks, not platform identity checks.
+After the guard, you know which platform you're on — branch on capability
+(`command -v pwsh`) not identity (`$IS_MACOS`).
+
 ### OS guard + dispatch rule
 
-Every `.sh` setup script has `case "$(uname -s)" in MINGW*...) exit 1`. The bash `aitools` entry point runs in Git Bash on Windows. So:
+Every script uses the guard pattern from the OS guard patterns section above. The bash `aitools` entry point runs in Git Bash on Windows. So:
 
 - **Never call `.sh` setup scripts without a `uname -s` dispatch.** On Windows, call the `.ps1` variant via `pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$path")"`.
 - When adding a new code path that invokes setup scripts, search the file for existing `MINGW*|MSYS*|CYGWIN*` blocks and replicate the pattern.
@@ -108,6 +180,26 @@ directories found in the registry that are missing from the current PATH.
 Setup scripts call `Refresh-Path` after winget/MSI installs to pick up new
 binaries without restarting the shell. The function is safe to call multiple
 times — duplicate directories are filtered.
+
+### Git Bash PATH shadowing (Windows)
+
+Git for Windows bundles tools in its `usr/bin/` directory (notably `perl`).
+When Claude Code (Git Bash) spawns `pwsh`, the child process inherits Git
+Bash's PATH where `usr/bin/` may appear before managed tool install
+directories (e.g., `C:\Strawberry\perl\bin`).
+
+**Consequence**: `perl --version` from pwsh-spawned-by-Git-Bash may return
+Git's bundled perl (v5.38.2) instead of the managed Strawberry Perl (v5.42.0).
+
+**Resolution in check scripts**: `check-lib.ps1` explicitly prepends the
+managed Strawberry Perl install path on Windows, ensuring it takes priority
+over Git's bundled version. Per PSO "Fail, don't mask": if the managed tool
+is not installed, the script fails — no fallback to Git's bundled version.
+
+**Resolution in other contexts**: Use `Refresh-Path` (aitools-lib.ps1) or
+read the Windows system PATH from the registry directly.
+
+**Currently shadowed tools**: Only `perl` confirmed.
 
 ### Pre-validation convention
 

@@ -9,10 +9,14 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # shellcheck source=scripts/check-lib.sh
 source "$SCRIPT_DIR/check-lib.sh"
+# shellcheck source=scripts/init-logging.sh
+source "$SCRIPT_DIR/init-logging.sh"
 
 # OS guard: use .ps1 on Windows
 case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*) echo "Use check-pre-push.ps1 on Windows"; exit 1 ;;
+    MINGW*|MSYS*|CYGWIN*)
+        log_error "This script is for macOS/Linux. On Windows, use check-pre-push.ps1."
+        exit 1 ;;
 esac
 
 resolve_config

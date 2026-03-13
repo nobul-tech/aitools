@@ -12,7 +12,7 @@ pseudocode in `plans/*.md`, and any code you propose in conversation.
 1. Shebang + header comment (name, purpose, "safe to re-run", platform, reference to `tool-registry.md`)
 2. `set -euo pipefail`
 3. `source aitools-lib.sh` + `logging_init "script-name"` (provides platform detection, display_path, read_config_key, log/log_ok/log_error/log_warn, write_summary, backup_file, backup_dir, emit_merge_details, ERRORS/WARNINGS counters)
-4. OS guard (`case "$(uname -s)" in MINGW*...) exit 1`)
+4. OS guard -- see cross-platform.md "OS guard patterns"
 5. Script body
 6. Exit footer (check `$ERRORS` + `$WARNINGS`, exit 1 on errors)
 
@@ -20,9 +20,38 @@ pseudocode in `plans/*.md`, and any code you propose in conversation.
 
 1. Header comment (name, purpose, "safe to re-run", platform, reference to `tool-registry.md`)
 2. `. aitools-lib.ps1` + `Initialize-Logging "script-name"` (provides ReadConfigKey, Log/LogOk/LogError/LogWarn, Write-Summary, Backup-File, Backup-Dir, ConvertPSObjectToHashtable, Emit-MergeDetails, $errors/$warnings counters)
-3. OS guard (`if $PSVersionTable... -and -not $IsWindows`)
+3. OS guard -- see cross-platform.md "OS guard patterns"
 4. Script body
 5. Exit footer (check `$errors` + `$warnings`, exit 1 on errors)
+
+### Block order (check/audit scripts)
+
+Check scripts follow a variant. Key difference: they source `check-lib`
+(which sources `aitools-lib`), then `init-logging` for the guard, then
+`check_log_init`/`CheckLogInit` which overrides logging vars for
+check-specific paths (checks.log, checks.jsonl).
+
+**Bash:**
+
+1. Shebang + header
+2. `set -euo pipefail`
+3. `source check-lib.sh` + `source init-logging.sh`
+4. OS guard (uses `log_error`)
+5. `resolve_config` + `check_log_init "NAME"`
+6. Script body (steps)
+7. `print_summary`
+
+**PowerShell:**
+
+1. Header
+2. `. check-lib.ps1` + `. init-logging.ps1`
+3. OS guard (uses `LogError`)
+4. `ResolveConfig` + `CheckLogInit "NAME"`
+5. Script body (steps)
+6. `PrintSummary`
+
+See `reference/script-standards-detail.md` "Bridge pattern" for why the
+double-init (init-logging → CheckLogInit) is safe.
 
 ### Error and warning tracking requirement
 
@@ -98,8 +127,11 @@ Documented as a logging override exception in `reference/script-standards-detail
 ### Check script logging
 
 Check/audit scripts (`check-*.sh/.ps1`) use a separate logging system from setup
-scripts. Check scripts source `check-lib` (which sources `aitools-lib`) and call
-`CheckLogInit`/`check_log_init` — NOT `Initialize-Logging`/`logging_init`.
+scripts. They source `check-lib` (which sources `aitools-lib`), then source
+`init-logging` to initialize structured logging before the OS guard. After the
+guard, they call `CheckLogInit`/`check_log_init` which overrides logging vars
+for check-specific paths (checks.log, checks.jsonl). This double-init is safe —
+see `reference/script-standards-detail.md` "Bridge pattern".
 
 - **Step functions**: `StepPass`/`step_pass`, `StepFail`/`step_fail`, etc.
 - **Destinations**: `checks.log` + `checks.jsonl` (not `deploy.log`)

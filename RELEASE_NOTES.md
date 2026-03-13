@@ -12,6 +12,49 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.52.7 -- OS guard standardization, init-logging, dead code cleanup (2026-03-13)
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **`init-logging.sh/.ps1`**: New sourced libraries that auto-detect the caller and initialize structured logging. Sourced before the OS guard so guards can use `log_error`/`LogError` for Datadog-parseable error messages. |
+| 2 | **PSO: Fail, don't mask**: New standing order -- never mask broken states with fallbacks. Surface failures via structured logging; remediate root cause. |
+| 3 | **OS guard patterns** in `cross-platform.md`: Canonical copyable guard patterns, exemptions table, dead code rule. |
+| 4 | **OS guard logging convention** in `script-standards-detail.md`: Rationale for structured logging in guards (Datadog observability). |
+| 5 | **Git Bash PATH shadowing** documentation in `cross-platform.md`: Documents how Git's bundled tools shadow managed installs when Git Bash spawns pwsh. |
+| 6 | **Check script block order** in `script-standards.md`: Documented the init-logging double-init pattern for check scripts. |
+| 7 | **Windows tool versions**: Populated `tool-versions.json` for 13 tools previously null on Windows. |
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 8 | **4 PS1 check scripts used `$IsMacOS` guard**: Missed Linux. Changed to `-not $IsWindows` (catches macOS AND Linux). |
+| 9 | **10 check scripts used raw output in guards**: `Write-Host`/`echo` replaced with `LogError`/`log_error` via init-logging. |
+| 10 | **Git Bash PATH shadowing in `check-lib.ps1`**: Removed blanket Git `usr/bin` PATH prepend. Now explicitly prepends managed Strawberry Perl directory, ensuring it takes priority over Git's bundled perl (5.38.2 vs 5.42.0). |
+| 11 | **`Initialize-Logging` wrong Linux path**: macOS path (`~/Library/Logs/aitools`) was used for Linux. Added 3-way platform split: Windows (`$LOCALAPPDATA`), macOS (`~/Library/Logs`), Linux (XDG_STATE_HOME). |
+| 12 | **Step 21 hardcoded `macos` platform key**: Now uses `platform.system()` for dynamic detection. Works on Windows and Linux. |
+
+### Removed
+
+| # | Change |
+|---|--------|
+| 13 | **Dead `$IS_WINDOWS` branches** in `check-pre-commit.sh` (step 2) and `check-post-push.sh` (step 6): OS guard exits on Windows, so `elif $IS_WINDOWS` branches with `cygpath` were unreachable. Also removed `if $IS_MACOS` wrapper -- replaced with `require_pwsh` (works on macOS AND Linux). |
+| 14 | **Dead `$IsMacOS`/`$IsLinux` branches** in `check-post-push.ps1`: Platform key and python command simplified from 3-way conditional to constants (OS guard ensures Windows-only). |
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 15 | **Bridge pattern docs**: Updated `script-standards-detail.md` -- double-init is safe and deterministic, not fragile. |
+| 16 | **CC version**: Updated `claude-code-maintenance.md` from 2.1.70 to 2.1.74. |
+| 17 | **Cursor rule parity**: Updated `cross-platform.mdc` and `script-standards.mdc` with guard patterns, check script block order, PATH shadowing. |
+
+(tested: Windows)
+
+---
+
 ## v0.52.6 -- Post-integration fixes (2026-03-12)
 
 ### Fixed
