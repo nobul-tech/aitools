@@ -67,7 +67,7 @@ After the guard, branch on capability (`command -v pwsh`) not identity
 
 - Never call `.sh` setup scripts without a `uname -s` dispatch
 - On Windows, call `.ps1` via `pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$path")"`
-- When adding a command to `scripts/aitools`, add the equivalent to `scripts/aitools.ps1`
+- When adding a command to `@scripts/aitools`, add the equivalent to `@scripts/aitools.ps1`
 
 ### Cross-language script calls require explicit approval
 

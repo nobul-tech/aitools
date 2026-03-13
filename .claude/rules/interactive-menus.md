@@ -30,7 +30,7 @@ Adding a new return value requires updating:
 1. The function itself (both PS1 and bash)
 2. `Record-DeployOutcome` / `deploy_tracker_record` (both)
 3. Every caller's switch/case block (both)
-4. `reference/managed-file-deployment.md` (spec)
+4. `@reference/managed-file-deployment.md` (spec)
 
 Check scripts validate caller completeness (`check-post-push` step 30).
 
@@ -52,5 +52,36 @@ Both menu functions MUST handle:
 PS1 menus displaying content from external commands (git, pandoc, etc.) MUST
 read via temp file + `[IO.File]::ReadAllText(..., UTF8)`. Never capture
 external command stdout through the PowerShell pipeline for display -- OEM
-codepage (CP437) mangles non-ASCII. See `reference/cross-platform-detail.md`
+codepage (CP437) mangles non-ASCII. See `@reference/cross-platform-detail.md`
 PowerShell pipeline encoding.
+
+### JSON field-level review
+
+JSON config deployments use field-level review rather than text diff
+review. Only managed fields are shown; preserved fields are never
+displayed or changed.
+
+**Review display** (when managed fields differ):
+
+```
+  <field>: "current" → "proposed"  (source: profile.json | script)
+```
+
+**Menu**:
+
+```
+  [o]verwrite : proposed values win
+  [a]dopt     : local values win → sync to profile.json
+  [s]kip
+  [x]abort
+```
+
+- **Adopt** available only for fields sourced from `profile.json`.
+  Fields hardcoded in scripts (MCP server URLs, `--isolated`, deny
+  rules) cannot be adopted — adopt option omitted when all changed
+  fields are script-sourced
+- **No `[m]erge`** — JSON fields are discrete values, not text blocks
+- **Non-interactive**: auto-select overwrite (same as text types)
+
+Cross-ref: `@reference/managed-file-deployment.md` "JSON Config Review
+Detail"

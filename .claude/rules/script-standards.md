@@ -12,7 +12,7 @@ pseudocode in `plans/*.md`, and any code you propose in conversation.
 1. Shebang + header comment (name, purpose, "safe to re-run", platform, reference to `tool-registry.md`)
 2. `set -euo pipefail`
 3. `source aitools-lib.sh` + `logging_init "script-name"` (provides platform detection, display_path, read_config_key, log/log_ok/log_error/log_warn, write_summary, backup_file, backup_dir, emit_merge_details, ERRORS/WARNINGS counters)
-4. OS guard -- see cross-platform.md "OS guard patterns"
+4. OS guard -- see `@.claude/rules/cross-platform.md` "OS guard patterns"
 5. Script body
 6. Exit footer (check `$ERRORS` + `$WARNINGS`, exit 1 on errors)
 
@@ -20,7 +20,7 @@ pseudocode in `plans/*.md`, and any code you propose in conversation.
 
 1. Header comment (name, purpose, "safe to re-run", platform, reference to `tool-registry.md`)
 2. `. aitools-lib.ps1` + `Initialize-Logging "script-name"` (provides ReadConfigKey, Log/LogOk/LogError/LogWarn, Write-Summary, Backup-File, Backup-Dir, ConvertPSObjectToHashtable, Emit-MergeDetails, $errors/$warnings counters)
-3. OS guard -- see cross-platform.md "OS guard patterns"
+3. OS guard -- see `@.claude/rules/cross-platform.md` "OS guard patterns"
 4. Script body
 5. Exit footer (check `$errors` + `$warnings`, exit 1 on errors)
 
@@ -50,7 +50,7 @@ check-specific paths (checks.log, checks.jsonl).
 5. Script body (steps)
 6. `PrintSummary`
 
-See `reference/script-standards-detail.md` "Bridge pattern" for why the
+See `@reference/script-standards-detail.md` "Bridge pattern" for why the
 double-init (init-logging → CheckLogInit) is safe.
 
 ### Error and warning tracking requirement
@@ -82,7 +82,7 @@ All timestamps must be UTC with Z suffix (`date -u +%Y-%m-%dT%H:%M:%SZ` / `.ToUn
 
 Logging framework is required -- raw `echo` or `Write-Host` without structured logging is not acceptable in reusable scripts.
 
-All helpers are defined in `scripts/aitools-lib.sh` (bash) / `.ps1`. Scripts source the lib and call `logging_init` / `Initialize-Logging`. Entry points with specialized logging override the functions after sourcing. Do not define inline copies.
+All helpers are defined in `@scripts/aitools-lib.sh` (bash) / `.ps1`. Scripts source the lib and call `logging_init` / `Initialize-Logging`. Entry points with specialized logging override the functions after sourcing. Do not define inline copies.
 
 ### Agentic invocation logging
 
@@ -100,11 +100,11 @@ Every `invoke_ai` / `Invoke-AI` call must log structured telemetry to deploy.log
 This telemetry enables prompt iteration: read `[detail] ai-rejected:` lines
 from deploy.log, identify the failure mode, update the prompt, re-test.
 
-See `.claude/rules/agentic-standards.md` for prompt design and evaluation rules.
+See `@.claude/rules/agentic-standards.md` for prompt design and evaluation rules.
 
 ### Agentic invocation
 
-See `.claude/rules/agentic-standards.md` for AI CLI invocation requirements,
+See `@.claude/rules/agentic-standards.md` for AI CLI invocation requirements,
 prompt design standards, and evaluation lifecycle.
 
 ### Exit footer
@@ -122,7 +122,7 @@ See `@reference/script-standards-detail.md` for the full portability table.
 
 `build-deploy.sh` defines its own `blog`/`blog_ok`/`blog_error` (doesn't source aitools-lib.sh).
 These must also follow the `[timestamp] [script] [level] message` format.
-Documented as a logging override exception in `reference/script-standards-detail.md`.
+Documented as a logging override exception in `@reference/script-standards-detail.md`.
 
 ### Check script logging
 
@@ -131,7 +131,7 @@ scripts. They source `check-lib` (which sources `aitools-lib`), then source
 `init-logging` to initialize structured logging before the OS guard. After the
 guard, they call `CheckLogInit`/`check_log_init` which overrides logging vars
 for check-specific paths (checks.log, checks.jsonl). This double-init is safe —
-see `reference/script-standards-detail.md` "Bridge pattern".
+see `@reference/script-standards-detail.md` "Bridge pattern".
 
 - **Step functions**: `StepPass`/`step_pass`, `StepFail`/`step_fail`, etc.
 - **Destinations**: `checks.log` + `checks.jsonl` (not `deploy.log`)
@@ -139,7 +139,7 @@ see `reference/script-standards-detail.md` "Bridge pattern".
 
 `CheckLogInit`/`check_log_init` bridges the gap by also setting aitools-lib
 logging variables, so lib functions called from check steps can write to
-`deploy.log`. See `reference/script-standards-detail.md` for details.
+`deploy.log`. See `@reference/script-standards-detail.md` for details.
 
 ### End-of-run summary
 
@@ -181,7 +181,7 @@ summary lines; text files log diffs to deploy.log.
 See `@reference/script-standards-detail.md` for patterns and examples.
 
 For interactive managed file deployment (diff review + user choice), see
-`.claude/rules/interactive-menus.md` and `reference/managed-file-deployment.md`.
+`@.claude/rules/interactive-menus.md` and `@reference/managed-file-deployment.md`.
 
 ### External command error handling
 
@@ -204,7 +204,7 @@ not just fresh installs. After successful install/upgrade:
 2. Not authenticated: `log_warn` + `write_summary WARN` + `write_summary ACTION`
 3. Authenticated: no extra output (silent success)
 
-Auth check commands are documented per-tool in `reference/tool-registry.md` (Authentication section).
+Auth check commands are documented per-tool in `@reference/tool-registry.md` (Authentication section).
 
 | Tool | Check method | Type |
 |------|-------------|------|
@@ -228,11 +228,11 @@ Don't waste minutes on a doomed compilation.
 specific remedy. If no signature matches, log the generic failure.
 
 Both layers use centralized data tables in `aitools-lib.ps1`/`.sh`. Adding a new prerequisite
-or failure signature = one entry in the table. See `reference/script-standards-detail.md` for
+or failure signature = one entry in the table. See `@reference/script-standards-detail.md` for
 the process.
 
 Install fields in `BuildPrereqs` entries must reference methods derived from official
-tool documentation. See `.claude/rules/tool-lifecycle.md` Install method discovery.
+tool documentation. See `@.claude/rules/tool-lifecycle.md` Install method discovery.
 
 ### KnownPaths empirical verification
 
@@ -240,7 +240,7 @@ All `KnownPaths` entries in `$script:BuildPrereqs`, `ensure_tool_on_path` calls,
 and any other hardcoded install-path arrays MUST be empirically verified on the
 actual platform before shipping. This applies to:
 
-- **Directly managed tools** from `reference/tool-registry.md`
+- **Directly managed tools** from `@reference/tool-registry.md`
 - **Build dependencies** discovered during installation (NASM, CMake, etc.)
 - **Any tool** where we specify filesystem paths for fallback detection
 

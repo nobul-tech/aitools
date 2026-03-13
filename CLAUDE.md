@@ -1,6 +1,15 @@
 # AI Tooling Hub
 
-Jose's cross-machine scaffolding for Claude Code, Cursor, MCP across Windows and macOS. Automates lifecycle management of supported tools, context and configuration files.  Supports multiple users with dotprofile repos
+**Mission**: Cross-platform tool lifecycle management, configuration, and AI
+context orchestration for developers who work across Windows, macOS, and Linux.
+
+One CLI that installs, configures, and maintains all managed tools with native
+platform support (PowerShell on Windows, bash on macOS/Linux), structured
+logging, interactive deployment review, and drift detection. Multi-user via
+dotprofile repos. MDM-ready via self-contained deploy scripts. Tools and
+dependencies are managed using platform-native best practices — evaluation
+criteria prioritize delivering the best developer experience on each platform,
+not artificial 1:1 parity.
 
 ## Project Structure
 

@@ -137,7 +137,7 @@
     },
     "datadog-pup": {
       "macos":   { "lastVerifiedVersion": "Pup 0.26.0", "lastVerified": "2026-03-06" },
-      "windows": { "lastVerifiedVersion": "Pup 0.30.0", "lastVerified": "2026-03-13" },
+      "windows": { "lastVerifiedVersion": "Pup 0.31.0", "lastVerified": "2026-03-13" },
       "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
       "minVersion": null,
       "blocked": [],

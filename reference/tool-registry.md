@@ -144,7 +144,48 @@ agent --version
 - **Post-Install Config:** `~/.cursor/cli-config.json` (merged from profile by setup script; preferences in `profile.json` under `cursor.cli`)
 - **Dependencies:** ripgrep (`rg`)
 - **Invocation:** `agent` (direct)
-- **Last verified version:** macOS: 2026.02.27-e7d2ef6 (2026-03-02) | Windows: pending | Linux: pending
+- **Last verified version:** macOS: 2026.02.27-e7d2ef6 (2026-03-02) | Windows: 2026.03.11-6dfa30c (2026-03-13) | Linux: pending
+
+### Config Behavior
+
+**Config files managed by aitools:**
+
+| File | Script | Managed fields |
+|------|--------|----------------|
+| `~/.cursor/cli-config.json` | `setup-user-cursor` | `version`, `editor.vimMode`, `permissions`, `model`, `hasChangedDefaultModel` |
+| `~/.cursor/mcp.json` | `setup-cursor-ide-mcp` | `mcpServers.chrome-devtools`, `mcpServers.vercel`, `mcpServers.webflow` |
+
+All other fields (e.g., `authInfo`, `privacyCache`, `network`, `sandbox`,
+`attribution`) are preserved via read-then-merge. See
+`@.claude/rules/config-file-safety.md`.
+
+**MCP server disable scope (KNOWN ISSUE):**
+
+`agent mcp disable <name>` is **project-scoped**, not user-scoped. The
+disable state is stored in Cursor's internal per-project config, not in
+`~/.cursor/mcp.json` or `cli-config.json`.
+
+Impact: `setup-cursor-ide-mcp` runs `agent mcp disable vercel/webflow`
+from the directory where `aitools install` executes (typically the
+aitools repo). Other projects see these servers as enabled, causing
+authentication errors on launch.
+
+Current workaround: Users must run `agent mcp disable vercel` and
+`agent mcp disable webflow` manually in each new project directory.
+
+Planned fix: Stop deploying vercel/webflow to user-level `mcp.json`.
+Add them per-project only via `aitools --addmcp`.
+
+**Platform-specific MCP commands:**
+
+| Platform | chrome-devtools stdio command |
+|----------|------------------------------|
+| Windows | `cmd /c npx -y chrome-devtools-mcp@latest --isolated` |
+| macOS | `npx -y chrome-devtools-mcp@latest --isolated` |
+
+The `cmd /c` wrapper is required on Windows for npx PATH resolution.
+OS guards in setup scripts ensure the correct variant is deployed. See
+`@reference/managed-file-deployment.md` "Platform-Specific Config Values".
 
 ---
 
@@ -464,6 +505,31 @@ No CPAN modules required. Minimum version: 5.10+.
 mode). Perl one-liners that write explicit `\r\n` produce double-CR
 (`\r\r\n`). Fix: `export PERLIO=:perlio` or per-invocation prefix. See
 `reference/cross-platform-detail.md` "Strawberry Perl text mode".
+
+### PERLIO Deployment
+
+Strawberry Perl's `:crlf` text mode requires `PERLIO=:perlio` to prevent
+double-CR on explicit `\r\n` writes. This is a deployment concern, not
+just a usage note.
+
+| Context | How PERLIO is set | Scope |
+|---------|-------------------|-------|
+| `build-deploy.sh` | `export PERLIO=:perlio` | Build-time |
+| Setup scripts | Not needed (no explicit CRLF writes) | N/A |
+| Interactive shell | User sets manually if needed | Manual |
+
+**Git Bash bundled perl** (`/usr/bin/perl`, v5.38.2) already uses
+`:perlio` — the fix is a no-op for it. Only Strawberry Perl at
+`C:\Strawberry\perl\bin\` is affected.
+
+**PATH priority**: `check-lib.ps1` prepends `C:\Strawberry\perl\bin` to
+PATH to ensure the managed Strawberry Perl is used instead of Git Bash's
+bundled version. This is required because Git's `usr/bin/` can shadow
+managed tools due to PATH order.
+
+See also `@reference/managed-file-deployment.md` "Environment Variable
+Deployment" and `@reference/cross-platform-detail.md` "Strawberry Perl
+text mode".
 
 ---
 

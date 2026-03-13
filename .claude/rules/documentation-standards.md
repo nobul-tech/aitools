@@ -63,3 +63,36 @@ Create a `plans/*.md` file when work:
 - Spans multiple sessions
 - Has phased gates or dependencies
 - Needs detailed design beyond a roadmap row
+
+### Layered reference architecture
+
+- **Rules** (`.claude/rules/`) = concise behavioral directives, ~40-100 lines
+- **References** (`reference/`) = implementation detail, unlimited length
+- **No duplication** — one authoritative location per fact
+- **Tool configs** documented per-tool in `@reference/tool-registry.md`
+- **Specs vs state** — rules and references are specs;
+  `@reference/known-gaps.md` tracks out-of-spec code
+- **Cursor parity** — `.cursor/rules/*.mdc` mirrors `.claude/rules/*.md`.
+  See `@.claude/rules/cursor-rule-parity.md`
+
+### `@` link convention
+
+- `@` can reference ANY repo file: `@reference/`, `@.claude/rules/`,
+  `@shared/`, `@scripts/`, `@plans/`
+- In `.claude/rules/*.md`: `@path/file.md` is NOT resolved — it remains
+  plain text. Use `@` consistently for all cross-references to signal
+  "this is a linked file" and enable grep-based link auditing
+- In `CLAUDE.md`: `@path/file.md` IS resolved at load time and pulls the
+  file into context. Only use `@` for files you want auto-loaded. Use
+  plain paths for references you want to keep lazy (most references)
+- Standardize existing rules files to use `@` for all cross-refs
+
+### Function and library attribution
+
+- When referencing shared library functions (`deploy_managed_file()`,
+  `backup_file()`, `invoke_ai()`, etc.), cite file + function name:
+  `deploy_managed_file()` in `@scripts/aitools-lib.sh` /
+  `Deploy-ManagedFile` in `@scripts/aitools-lib.ps1`
+- Never cite line numbers in rules or reference files — they drift.
+  Function names are stable identifiers
+- Plan files may use line numbers for one-time edit instructions

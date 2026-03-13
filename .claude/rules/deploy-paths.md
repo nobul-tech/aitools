@@ -26,7 +26,7 @@ Two deployment methods must produce equivalent results:
 ### When changing `shared/` content
 
 1. Edit the `shared/` source file
-2. If the file has a user repo counterpart (e.g., `shared/claude-shared.md` →
+2. If the file has a user repo counterpart (e.g., `@shared/claude-shared.md` →
    `<userRepoPath>/claude/CLAUDE.md`), update both
 3. Run `bash scripts/build-deploy.sh` to regenerate `deploy/`
 4. Both paths now produce equivalent output
@@ -39,7 +39,7 @@ Two deployment methods must produce equivalent results:
 
 ### Template sync
 
-`shared/claude-shared.md` and `<userRepoPath>/claude/CLAUDE.md` must stay in sync.
+`@shared/claude-shared.md` and `<userRepoPath>/claude/CLAUDE.md` must stay in sync.
 When one changes, update the other. The user repo template takes priority at runtime
 (scripts/ path reads it first, falls back to shared/).
 
@@ -60,7 +60,7 @@ reproduces whatever is hardcoded in the template.
 **What IS auto-embedded** (safe — single source of truth):
 - `shared/hooks/*.sh` → read via `cat` at build time
 - `shared/skills/*.md` → read via `cat` at build time
-- `shared/claude-shared.md` → read via `cat` at build time
+- `@shared/claude-shared.md` → read via `cat` at build time
 - `<userRepoPath>/claude/rules/*.md` → read via `cat` at build time
 
 **When changing setup logic in any of the 4 scripts above**:

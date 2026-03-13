@@ -24,7 +24,13 @@ Blind overwrites silently drop user data and non-managed fields.
 
 ### Backup before overwrite
 
-Back up targets before writing. Single files: `.bak.TIMESTAMP` (max 20). Directories: `.bak.TIMESTAMP/` (max 5). Skip if target doesn't exist. Backup failures are non-fatal.
+Scripts MUST back up targets before writing, regardless of ownership model or deployment type:
+- **Markdown files and shell scripts**: `deploy_managed_file` calls `backup_file` internally
+- **JSON config files**: caller MUST call `backup_file` / `Backup-File` before the merge write
+
+Retention: Single files `.bak.TIMESTAMP` (max 20), directories `.bak.TIMESTAMP/` (max 5). Skip if target doesn't exist. Backup failures are non-fatal. A merge or copy without backup is a bug.
+
+See `@.claude/rules/managed-file-deployment.md` and `@reference/managed-file-deployment.md` "Backup Policy".
 
 ### Diff logging on overwrite
 

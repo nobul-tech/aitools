@@ -12,6 +12,46 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.53 -- Close documentation gaps for managed file deployment (2026-03-13)
+
+### Added
+
+| # | Change |
+|---|--------|
+| 1 | **Mission statement** in CLAUDE.md: Cross-platform tool lifecycle management, configuration, and AI context orchestration |
+| 2 | **`.claude/rules/managed-file-deployment.md`** (NEW): Deployment type definitions (markdown, JSON config, shell script), content sources, shared requirements, platform-specific config values |
+| 3 | **`reference/known-gaps.md`** (NEW): Consolidated tracking of 5 known out-of-spec items — hook deployment, JSON backup parity, JSON interactive review, MCP disable scope, backup proliferation |
+| 4 | **Layered reference architecture** in `documentation-standards.md`: Rules = concise directives, references = implementation detail, `@` link convention, function attribution without line numbers |
+| 5 | **10 reference sections** appended to `reference/managed-file-deployment.md`: deployment types, content sources, platform-specific config values, shell script detail, JSON config review detail, diff mechanisms, AI-assisted merge detail, backup policy, env var deployment, auth file policy |
+| 6 | **Cursor CLI config behavior** in `tool-registry.md`: managed fields table, MCP disable scope known issue, platform-specific MCP commands |
+| 7 | **Perl PERLIO deployment** in `tool-registry.md`: build-time scope, PATH priority, Git Bash bundled perl behavior |
+| 8 | **MCP server disable scope** in `tool-lifecycle.md`: per-project vs per-user asymmetry between Cursor CLI and Claude Code |
+| 9 | **Deployment pattern updates** in `tool-lifecycle.md`: new onboarding checklist bullet for deployment types table |
+| 10 | **JSON field-level review** in `interactive-menus.md`: review display, menu options, adopt rules for JSON config deployments |
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 11 | **Backup section** in `config-file-safety.md`: now mandates per deployment type (internal for text, caller for JSON), cross-refs deployment rule |
+| 12 | **`@` consistency**: ~44 cross-reference paths standardized across 8 rules files to use `@` prefix convention |
+| 13 | **Cursor parity**: new `managed-file-deployment.mdc`, extended `tool-lifecycle.mdc` (+4 sections), `config-file-safety.mdc` (backup), `documentation-standards.mdc` (+3 sections) |
+| 14 | **Sources-of-truth**: added `managed-file-deployment.md` and `known-gaps.md` to protected files table |
+| 15 | **Cursor CLI Windows version**: updated from `pending` to `2026.03.11-6dfa30c` in tool-registry.md |
+| 16 | **Datadog Pup Windows version**: updated to `0.31.0` in tool-versions.json |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `.claude/rules/managed-file-deployment.md` | Deployment type definitions, content sources, platform config rules |
+| `.cursor/rules/managed-file-deployment.mdc` | Cursor parity for above |
+| `reference/known-gaps.md` | Known out-of-spec code tracking |
+
+**Verified on:** Windows
+
+---
+
 ## v0.52.8 -- Fix deploy/ drift, Strawberry Perl PERLIO, cross-platform.md slim-down (2026-03-13)
 
 ### Fixed

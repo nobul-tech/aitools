@@ -62,6 +62,7 @@ When a tool is approved (Phase 2 gate passed), complete ALL of these steps in or
   (command name + version flag, e.g., `'perl' = @('perl', '--version')`)
 - `scripts/check-post-push.sh` — add entry to `TOOL_CMDS` dictionary
   (same command + version flag)
+- Check deployment types table in `@.claude/rules/managed-file-deployment.md` — add row if new file type
 
 #### Rebuild + propagate
 1. `bash scripts/build-deploy.sh` — verify count increments by 2
@@ -110,3 +111,30 @@ This applies to managed tools AND build prerequisites (`BuildPrereqs` entries,
 point -- do not assume any package manager is universally correct.
 
 Details and templates: `@reference/tool-evaluation-playbook.md`
+
+### Cross-platform vetting
+
+When recommending tools in this project, verify availability on both macOS and Windows. Disclose if a tool is single-platform or has limited support on one OS.
+
+### MCP server isolation
+
+Chrome DevTools MCP uses `--isolated` flag for throwaway temp Chrome profiles, enabling concurrent Claude Code + Cursor sessions without Chrome profile lock conflicts. Apply the same pattern to any future stdio MCP server that creates persistent local state.
+
+### MCP server disable scope
+
+`agent mcp disable` (Cursor CLI) stores disable state **per-project**, not per-user. Setup scripts that disable MCP servers only affect the directory from which they run.
+
+When adding MCP servers to configuration:
+- **Always-available** servers (chrome-devtools): user-level config is correct — no disable needed
+- **Opt-in per-project** servers (vercel, webflow): prefer project-level config only. Adding to user-level `~/.cursor/mcp.json` then disabling is fragile — the disable doesn't propagate to new projects
+
+Claude Code handles this differently: `permissions.deny` in `~/.claude/settings.json` is user-scoped and applies globally. Per-project enable via `.claude/settings.local.json` `permissions.allow`. This asymmetry between tools must be documented in `@reference/tool-registry.md` for each MCP server entry.
+
+See `@reference/tool-registry.md` "Cursor Agent CLI > Config Behavior" for the known issue and planned fix.
+
+### Deployment pattern updates
+
+When onboarding a new tool that deploys config files, check the deployment types table in `@.claude/rules/managed-file-deployment.md`.
+
+- If the new tool's file type doesn't match an existing row, add a row (both rule and reference, plus Cursor `.mdc` parity)
+- If modifying deployment behavior for an existing type, update corresponding table entries

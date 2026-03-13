@@ -67,14 +67,25 @@ try {
 
 ### Backup before overwrite
 
-Scripts must back up targets before writing, regardless of ownership model.
+Scripts MUST back up targets before writing, regardless of ownership model
+or deployment type. This applies equally to all managed file types:
 
+- **Markdown files and shell scripts**: `deploy_managed_file` calls
+  `backup_file` internally — callers need not call it separately
+- **JSON config files**: caller MUST call `backup_file` / `Backup-File`
+  before the merge write
+
+Retention:
 - **Single files**: `<file>.bak.<TIMESTAMP>`, keep at most 20, auto-prune oldest
 - **Directories**: `<dir>.bak.<TIMESTAMP>/`, keep at most 5, auto-prune oldest
 - Skip if target doesn't exist (first run — nothing to back up)
 
 Backup failures are non-fatal (warn and proceed) — a failed backup should not
-block deployment.
+block deployment. A merge or copy without backup is a bug.
+
+See `@.claude/rules/managed-file-deployment.md` for full deployment type
+definitions and `@reference/managed-file-deployment.md` "Backup Policy"
+for details.
 
 ### Diff logging on overwrite
 
@@ -108,7 +119,7 @@ This is the directory-level equivalent of read-then-merge for config files.
 
 Managed files deployed via `Deploy-ManagedFile` / `deploy_managed_file` use
 the interactive diff review pattern when both sides differ. See
-`.claude/rules/interactive-menus.md` and `reference/managed-file-deployment.md`.
+`@.claude/rules/interactive-menus.md` and `@reference/managed-file-deployment.md`.
 
 ### Post-write validation
 
@@ -152,9 +163,9 @@ Check non-empty file and required sections (e.g., `## Machine-Specific`).
 These scripts demonstrate the patterns above. Do not assume they are
 violation-free -- always verify copied code against these rules.
 
-- Node.js merge: `scripts/setup-user-cursor.sh` (cli-config.json)
-- PowerShell merge: `scripts/setup-user-mcp.ps1` (settings.json read-then-merge)
-- Hook merge: `scripts/setup-user-hooks.sh` (settings.json hooks array)
-- Bash `validate_json_config`: `scripts/aitools-install.sh`
-- PS1 `ValidateJsonConfig`: `scripts/aitools-install.ps1`
-- Inline Node.js validation: `scripts/setup-user-mcp.sh`
+- Node.js merge: `@scripts/setup-user-cursor.sh` (cli-config.json)
+- PowerShell merge: `@scripts/setup-user-mcp.ps1` (settings.json read-then-merge)
+- Hook merge: `@scripts/setup-user-hooks.sh` (settings.json hooks array)
+- Bash `validate_json_config`: `@scripts/aitools-install.sh`
+- PS1 `ValidateJsonConfig`: `@scripts/aitools-install.ps1`
+- Inline Node.js validation: `@scripts/setup-user-mcp.sh`

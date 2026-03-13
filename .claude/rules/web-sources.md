@@ -43,6 +43,6 @@ WebFetch misses. When accuracy matters, use the real browser.
 
 ### Cross-reference
 
-Before reading a tool's docs, check `reference/tool-registry.md` first --
+Before reading a tool's docs, check `@reference/tool-registry.md` first --
 it may already have verified information. If proposing changes to an existing
 entry, re-verify using Chrome DevTools MCP skill before editing.

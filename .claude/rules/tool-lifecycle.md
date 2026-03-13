@@ -16,7 +16,7 @@ paths:
 
 ## Tool Lifecycle Gate (this repo)
 
-When adding a new managed tool, follow the lifecycle in `reference/tool-evaluation-criteria.md`.
+When adding a new managed tool, follow the lifecycle in `@reference/tool-evaluation-criteria.md`.
 
 **Hard stop at Phase 2:** After installing the tool and providing a test command, you MUST wait for the user's explicit approval before writing any integration code (aliases, setup scripts, installer steps, build changes).
 
@@ -51,7 +51,7 @@ lifecycle phases.
 
 ### Lifecycle field completeness
 
-Every tool entry in `reference/tool-registry.md` (including Under Evaluation) must have all 6 fields:
+Every tool entry in `@reference/tool-registry.md` (including Under Evaluation) must have all 6 fields:
 - **Platform Status** (per platform: `evaluating`/`approved`/`supported`/`n/a`)
 - **Concurrency** (can multiple instances run simultaneously?)
 - **Post-Install Config** (steps required after install, or "None")
@@ -81,27 +81,28 @@ Missing any causes drift between the pipeline, documentation, and deployed confi
 
 #### Prerequisite
 - Verify upstream install method via Chrome DevTools MCP skill (see "Install command verification gate")
-- Record verified install commands in `reference/tool-registry.md` (protected -- present for review)
+- Record verified install commands in `@reference/tool-registry.md` (protected -- present for review)
 
 #### Non-protected (implement directly)
 - `scripts/setup-<tool>.sh` — install/update (macOS+Linux; OS guard exits on Windows)
 - `scripts/setup-<tool>.ps1` — install/update (Windows; OS guard exits on macOS/Linux)
-- `scripts/aitools-install.sh` — add `validate_and_run "$SCRIPT_DIR/setup-<tool>.sh"` step
-- `scripts/aitools-install.ps1` — add `Invoke-ValidatedScript $toolScript` step
-- `scripts/build-deploy.sh` — add numbered copy-as-is block pair after last tool block
-- If tool requires auth: add auth status check in both setup scripts (see script-standards "Post-install authentication check") and document auth commands in `reference/tool-registry.md` Authentication section
+- `@scripts/aitools-install.sh` — add `validate_and_run "$SCRIPT_DIR/setup-<tool>.sh"` step
+- `@scripts/aitools-install.ps1` — add `Invoke-ValidatedScript $toolScript` step
+- `@scripts/build-deploy.sh` — add numbered copy-as-is block pair after last tool block
+- If tool requires auth: add auth status check in both setup scripts (see script-standards "Post-install authentication check") and document auth commands in `@reference/tool-registry.md` Authentication section
 
 #### Protected (present for review before writing)
-- `reference/tool-registry.md` — full entry with all 6 lifecycle fields
-- `shared/claude-shared.md` — add row to Managed CLI Tools table (shared template + MDM source)
+- `@reference/tool-registry.md` — full entry with all 6 lifecycle fields
+- `@shared/claude-shared.md` — add row to Managed CLI Tools table (shared template + MDM source)
 - `<userRepoPath>/claude/CLAUDE.md` (dotprofile repo) — same row addition; commit + push dotprofile repo separately
-- `reference/tool-versions.json` — add tool entry with per-platform version tracking
+- `@reference/tool-versions.json` — add tool entry with per-platform version tracking
 - `CLAUDE.md` — add `setup-<tool>` to "Deploy using MDM" tool scripts list
-- `.claude/rules/tool-lifecycle.md` + `.cursor/rules/tool-lifecycle.mdc` — update this checklist if pattern changes
-- `scripts/check-post-push.ps1` — add entry to `$toolCmds` dictionary
+- `@.claude/rules/tool-lifecycle.md` + `@.cursor/rules/tool-lifecycle.mdc` — update this checklist if pattern changes
+- `@scripts/check-post-push.ps1` — add entry to `$toolCmds` dictionary
   (command name + version flag, e.g., `'perl' = @('perl', '--version')`)
-- `scripts/check-post-push.sh` — add entry to `TOOL_CMDS` dictionary
+- `@scripts/check-post-push.sh` — add entry to `TOOL_CMDS` dictionary
   (same command + version flag)
+- Check deployment types table in `@.claude/rules/managed-file-deployment.md` — add row if new file type
 
 #### Rebuild + propagate
 1. `bash scripts/build-deploy.sh` — verify count increments by 2
@@ -113,8 +114,8 @@ Missing any causes drift between the pipeline, documentation, and deployed confi
 
 `setup-user-claude.sh/.ps1` reads the user's dotprofile `<userRepoPath>/claude/CLAUDE.md` first.
 If `userRepoPath` is configured in `~/.aitools/config.json` and the file exists, it wins over
-`shared/claude-shared.md`. This means any Managed CLI Tools row (or other shared preference) added
-to `shared/claude-shared.md` must ALSO be added to the dotprofile file — otherwise the live
+`@shared/claude-shared.md`. This means any Managed CLI Tools row (or other shared preference) added
+to `@shared/claude-shared.md` must ALSO be added to the dotprofile file — otherwise the live
 `~/.claude/CLAUDE.md` will not reflect the change.
 
 Longer-term: a future `aitools user sync` command will merge shared template sections into the
@@ -144,7 +145,7 @@ Required checks (via chrome-devtools):
 2. GitHub releases page -- available platforms, architectures, asset formats
 3. Package manager presence (Homebrew formula/tap, crates.io, npm, winget ID, etc.)
 
-Record findings in `reference/tool-registry.md` before modifying scripts. Include
+Record findings in `@reference/tool-registry.md` before modifying scripts. Include
 the verification date and source URL. If the upstream method has changed, update
 tool-registry first, then update scripts to match.
 
@@ -162,7 +163,7 @@ prerequisite, follow the discovery process:
 3. **Evaluate** each method against classification criteria: official support (highest),
    elevation requirement, update model, PATH integration, existing toolchain fit
 4. **Trial install** on target platform -- record actual install path, version, any issues
-5. **Document** in `tool-registry.md`: source URL, chosen method, rationale, trial results
+5. **Document** in `@reference/tool-registry.md`: source URL, chosen method, rationale, trial results
 
 This applies to managed tools AND build prerequisites (`BuildPrereqs` entries,
 `BuildFailureSignatures` remedies). The tool's official documentation is the starting
@@ -180,3 +181,35 @@ Disclose if a tool is single-platform or has limited support on one OS.
 Chrome DevTools MCP uses `--isolated` flag for throwaway temp Chrome profiles, enabling
 concurrent Claude Code + Cursor sessions without Chrome profile lock conflicts. Apply
 the same pattern to any future stdio MCP server that creates persistent local state.
+
+### MCP server disable scope
+
+`agent mcp disable` (Cursor CLI) stores disable state **per-project**,
+not per-user. Setup scripts that disable MCP servers only affect the
+directory from which they run.
+
+When adding MCP servers to configuration:
+- **Always-available** servers (chrome-devtools): user-level config is
+  correct — no disable needed
+- **Opt-in per-project** servers (vercel, webflow): prefer project-level
+  config only. Adding to user-level `~/.cursor/mcp.json` then disabling
+  is fragile — the disable doesn't propagate to new projects
+
+Claude Code handles this differently: `permissions.deny` in
+`~/.claude/settings.json` is user-scoped and applies globally. Per-project
+enable via `.claude/settings.local.json` `permissions.allow`. This
+asymmetry between tools must be documented in `@reference/tool-registry.md`
+for each MCP server entry.
+
+See `@reference/tool-registry.md` "Cursor Agent CLI > Config Behavior"
+for the known issue and planned fix.
+
+### Deployment pattern updates
+
+When onboarding a new tool that deploys config files, check the
+deployment types table in `@.claude/rules/managed-file-deployment.md`.
+
+- If the new tool's file type doesn't match an existing row, add a row
+  (both rule and reference, plus Cursor `.mdc` parity)
+- If modifying deployment behavior for an existing type, update
+  corresponding table entries
