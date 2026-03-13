@@ -11,6 +11,15 @@ dependencies are managed using platform-native best practices — evaluation
 criteria prioritize delivering the best developer experience on each platform,
 not artificial 1:1 parity.
 
+## Design Principles
+
+- **Three-layer governance**: Prevention (rules in context stop issues from being created), Detection (hooks fire in real-time during sessions), Audit (skills/subagents provide deep review on demand). Each layer catches what the previous missed. Applies to both governance and USO/PSO compliance.
+- **Ambiguity is a defect**: If a rule, reference, or plan can be read two ways, that's a bug. Surface it immediately — file in `reference/known-gaps.json` per `.claude/rules/gap-governance.md`. Every session has this duty.
+- **Full context, not token budgeting**: Use the full context window. Launch subagents with complete rules. Load reference files generously. Keep CLAUDE.md and rules succinct for *clarity*, not to save tokens. Use skills, reference files, and hooks for depth.
+- **Specs vs state**: Rules and references define what SHOULD be. `reference/known-gaps.json` tracks what ISN'T yet. Never describe a feature as "working" if it hasn't fired in production. See `.claude/rules/gap-governance.md`.
+- **Separate tool harnesses**: Claude Code (`.claude/rules/`, CLAUDE.md) and Cursor (`.cursor/rules/`, agents.md) serve different purposes and are managed independently. No parity requirement.
+- **Skills as enablement**: Every managed tool, dependency, and repeatable process gets a skill in `shared/skills/`. Skills provide dynamic usage patterns loaded in context when relevant — the enablement layer that complements rules (prevention) and hooks (enforcement).
+
 ## Project Structure
 
 ```

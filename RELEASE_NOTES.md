@@ -12,6 +12,45 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.54 -- Governance and compliance framework (2026-03-13)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Design Principles** in CLAUDE.md: Three-layer governance (prevention/detection/audit), ambiguity-as-defect, full context over token budgeting, specs vs state, separate tool harnesses, skills as enablement |
+| 2 | **`.claude/rules/gap-governance.md`** (NEW): Decision tree (gap vs ambiguity vs roadmap vs issue), severity scale, lifecycle (open/planned/closed), surfacing duty, staleness rule (90 days), `/gap` and `/audit` skill interface specs, SubagentStart and PreToolUse hook specs |
+| 3 | **`reference/known-gaps.json`** (NEW): Migrated 5 existing gaps from markdown to structured JSON with severity, type, created/updated dates. Replaces `known-gaps.md`. |
+| 4 | **`plans/governance-and-compliance-framework.md`** (NEW): Full implementation plan — 30 skills (15 managed tools + 3 dependencies + 3 build tools + 9 process/workflow), hook specifications, permission strategy, edge cases, verification steps |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 5 | **Cursor rule parity killed**: Removed `cursor-rule-parity.md` rule. Claude Code and Cursor are separate tool harnesses managed independently — no parity requirement. |
+| 6 | **`documentation-standards.md`**: Replaced cursor parity bullet with gap-governance cross-reference; updated `known-gaps.md` → `known-gaps.json` |
+| 7 | **`sources-of-truth.md`**: Updated protected files table — `known-gaps.md` → `known-gaps.json` with governance rule reference |
+| 8 | **`ROADMAP.md`**: Added governance & compliance framework entry linking to plan |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `.claude/rules/gap-governance.md` | Gap/ambiguity governance rule — decision tree, lifecycle, skill/hook specs |
+| `reference/known-gaps.json` | Structured gap tracking (replaces known-gaps.md) |
+| `plans/governance-and-compliance-framework.md` | Implementation plan for 30 skills, hooks, permissions |
+
+### Files removed
+
+| File | Reason |
+|------|--------|
+| `.claude/rules/cursor-rule-parity.md` | Replaced by "Separate tool harnesses" design principle |
+| `reference/known-gaps.md` | Replaced by `reference/known-gaps.json` |
+
+**Verified on:** Windows
+
+---
+
 ## v0.53 -- Close documentation gaps for managed file deployment (2026-03-13)
 
 ### Added

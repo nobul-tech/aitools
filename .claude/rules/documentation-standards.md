@@ -71,9 +71,8 @@ Create a `plans/*.md` file when work:
 - **No duplication** — one authoritative location per fact
 - **Tool configs** documented per-tool in `@reference/tool-registry.md`
 - **Specs vs state** — rules and references are specs;
-  `@reference/known-gaps.md` tracks out-of-spec code
-- **Cursor parity** — `.cursor/rules/*.mdc` mirrors `.claude/rules/*.md`.
-  See `@.claude/rules/cursor-rule-parity.md`
+  `@reference/known-gaps.json` tracks out-of-spec code.
+  See `@.claude/rules/gap-governance.md` for lifecycle and classification
 
 ### `@` link convention
 

@@ -14,7 +14,7 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 | `shared/cursor-rules/user-rules.md` | Cursor User Rules template (manual copy if needed) | Any |
 | `.claude/rules/*.md` | Claude Code behavioral rules (this file included) | Any |
 | `.claude/rules/managed-file-deployment.md` | Deployment type definitions, content sources, platform config rules | Any |
-| `reference/known-gaps.md` | Known out-of-spec code tracking — gaps, affected scripts, planned fixes | Any |
+| `reference/known-gaps.json` | Gap and ambiguity tracking — governed by `.claude/rules/gap-governance.md` | Any |
 | `.cursor/rules/*.mdc` | Cursor behavioral rules | Any |
 | `ROADMAP.md` | Active/planned work items — drives project priorities | Any |
 | `plans/*.md` | Detailed implementation plans — referenced by roadmap | Any |

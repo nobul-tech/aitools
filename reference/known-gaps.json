@@ -1,0 +1,75 @@
+{
+  "meta": {
+    "governance": ".claude/rules/gap-governance.md",
+    "description": "Deviations from spec and unresolved ambiguities. Rules define what SHOULD be; this file tracks what ISN'T yet.",
+    "lastUpdated": "2026-03-13"
+  },
+  "gaps": [
+    {
+      "id": 1,
+      "title": "Hook Script Deployment",
+      "status": "open",
+      "severity": "high",
+      "type": "gap",
+      "affected": ["setup-user-hooks.sh", "setup-user-hooks.ps1"],
+      "linked": null,
+      "description": "Current implementation uses direct cp/Copy-Item for hook scripts. Missing: backup_file before overwrite, deploy_managed_file interactive review, adopt/skip/merge options. User customizations are silently lost.",
+      "plannedFix": "Upgrade to deploy_managed_file (same as markdown type). Adopt target: shared/hooks/<filename> in aitools repo.",
+      "created": "2026-03-13",
+      "updated": "2026-03-13"
+    },
+    {
+      "id": 2,
+      "title": "JSON Config Backup (bash)",
+      "status": "open",
+      "severity": "medium",
+      "type": "gap",
+      "affected": ["setup-user-hooks.sh", "setup-user-mcp.sh"],
+      "linked": null,
+      "description": "Bash versions do NOT call backup_file before settings.json merge. PowerShell versions DO call Backup-File. Platform parity gap.",
+      "plannedFix": "Add backup_file call in bash before Node.js merge.",
+      "created": "2026-03-13",
+      "updated": "2026-03-13"
+    },
+    {
+      "id": 3,
+      "title": "JSON Config Interactive Review",
+      "status": "open",
+      "severity": "medium",
+      "type": "gap",
+      "affected": ["setup-user-hooks.sh", "setup-user-hooks.ps1", "setup-user-mcp.sh", "setup-user-mcp.ps1", "setup-user-cursor.sh", "setup-user-cursor.ps1", "setup-cursor-ide-mcp.sh", "setup-cursor-ide-mcp.ps1"],
+      "linked": null,
+      "description": "All JSON config merges are silent. Clobber detection blocks on field loss, but there is no 'here's what will change, proceed?' prompt.",
+      "plannedFix": "Add field-level review menu showing changed managed fields with old → new values.",
+      "created": "2026-03-13",
+      "updated": "2026-03-13"
+    },
+    {
+      "id": 4,
+      "title": "MCP Disable Scope (Cursor CLI)",
+      "status": "open",
+      "severity": "high",
+      "type": "gap",
+      "affected": ["setup-cursor-ide-mcp.sh", "setup-cursor-ide-mcp.ps1"],
+      "linked": null,
+      "description": "agent mcp disable is project-scoped, not user-scoped. Setup runs it from the aitools repo directory only. Other projects see vercel/webflow as enabled, causing authentication errors on launch.",
+      "plannedFix": "Stop deploying vercel/webflow to user-level mcp.json. Add per-project only via aitools --addmcp.",
+      "created": "2026-03-13",
+      "updated": "2026-03-13"
+    },
+    {
+      "id": 5,
+      "title": "Backup Proliferation",
+      "status": "open",
+      "severity": "low",
+      "type": "gap",
+      "affected": ["aitools-lib.sh", "aitools-lib.ps1"],
+      "linked": null,
+      "description": "backup_dir copies the entire directory including individual .bak.* files. Each backup contains older backups, causing cascading growth.",
+      "plannedFix": "Exclude *.bak.* patterns from directory backup copies.",
+      "created": "2026-03-13",
+      "updated": "2026-03-13"
+    }
+  ],
+  "closed": []
+}
