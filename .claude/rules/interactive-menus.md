@@ -52,5 +52,5 @@ Both menu functions MUST handle:
 PS1 menus displaying content from external commands (git, pandoc, etc.) MUST
 read via temp file + `[IO.File]::ReadAllText(..., UTF8)`. Never capture
 external command stdout through the PowerShell pipeline for display -- OEM
-codepage (CP437) mangles non-ASCII. See `cross-platform.md` PowerShell
-pipeline encoding.
+codepage (CP437) mangles non-ASCII. See `reference/cross-platform-detail.md`
+PowerShell pipeline encoding.

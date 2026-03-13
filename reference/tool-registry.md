@@ -458,6 +458,13 @@ No CPAN modules required. Minimum version: 5.10+.
 - **Invocation:** `perl` (direct). Anti-pattern: `sed`/`awk` for non-trivial string manipulation
 - **Last verified version:** Windows: 5.42.0.1 (2026-03-12) | macOS: pending | Linux: pending
 
+### Platform Gotchas
+
+**Windows (Strawberry Perl):** Defaults to `:unix:crlf` PerlIO layers (text
+mode). Perl one-liners that write explicit `\r\n` produce double-CR
+(`\r\r\n`). Fix: `export PERLIO=:perlio` or per-invocation prefix. See
+`reference/cross-platform-detail.md` "Strawberry Perl text mode".
+
 ---
 
 ## PowerShell (pwsh)

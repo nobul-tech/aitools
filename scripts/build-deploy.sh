@@ -21,6 +21,11 @@ SCRIPTS_DIR="$REPO_ROOT/scripts"
 DEPLOY_DIR="$REPO_ROOT/deploy"
 SHARED_DIR="$REPO_ROOT/shared"
 
+# Strawberry Perl text-mode fix: PERLIO=:perlio disables CRLF translation that
+# causes double-CR (\r\r\n) in extract_between --crlf output. No-op for Git's
+# bundled perl (already uses :unix:perlio). See reference/cross-platform-detail.md.
+export PERLIO=:perlio
+
 # --- Build logging (standalone -- does not source aitools-lib.sh) ---
 SCRIPT_NAME="build-deploy"
 blog()       { printf '[%s] [%s] [info] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1"; }
@@ -1312,9 +1317,8 @@ blog_ok "Set +x on all .sh files in deploy/"
 
 # 2. Convert deploy/*.ps1 to CRLF (.gitattributes requires eol=crlf)
 #    build-deploy.sh writes LF; without this, git sees them as modified.
-#    binmode ARGVOUT: prevent Strawberry Perl's text-mode from doubling \r.
-#    See .claude/rules/cross-platform.md "Strawberry Perl text mode".
-perl -pi -e 'binmode ARGVOUT; s/(?<!\r)\n/\r\n/' "$DEPLOY_DIR"/*.ps1
+#    PERLIO=:perlio (set at top) prevents Strawberry Perl text-mode double-CR.
+perl -pi -e 's/(?<!\r)\n/\r\n/' "$DEPLOY_DIR"/*.ps1
 blog_ok "Converted deploy/*.ps1 to CRLF"
 
 blog_ok "Build complete: $GENERATED scripts generated in deploy/"

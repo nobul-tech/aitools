@@ -50,9 +50,11 @@ Before committing scripts, validate syntax:
 - PS1: `pwsh -NoProfile -Command '$e = $null; $null = [System.Management.Automation.Language.Parser]::ParseFile("path", [ref]$null, [ref]$e); if ($e) { $e }'`
 - Bash: `bash -n path/to/script.sh`
 
-### Git Bash PATH shadowing (Windows)
+### Windows platform gotchas
 
-Git for Windows bundles tools in `usr/bin/` (notably `perl`). When Git Bash
-spawns pwsh, the child inherits PATH where `usr/bin/` may shadow managed
-installs (e.g., Strawberry Perl). Per PSO "Fail, don't mask": use explicit
-PATH prepend for managed tools, no fallback to Git's bundled versions.
+Details: `reference/cross-platform-detail.md`
+
+- **Git Bash PATH shadowing**: Git's `usr/bin/` can shadow managed tools (perl).
+  Use explicit PATH prepend; no fallback to bundled versions
+- **Strawberry Perl text mode**: Defaults to `:crlf` layer (double-CR on
+  explicit `\r\n` writes). Fix: `export PERLIO=:perlio`

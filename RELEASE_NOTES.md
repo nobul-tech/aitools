@@ -12,6 +12,26 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.52.8 -- Fix deploy/ drift, Strawberry Perl PERLIO, cross-platform.md slim-down (2026-03-13)
+
+### Fixed
+
+| # | Change |
+|---|--------|
+| 1 | **Step 7 deploy/ drift (FAIL → PASS)**: `check-lib.ps1` prepends Strawberry Perl to PATH; when Step 7 spawned `build-deploy.sh` from that context, Strawberry Perl's `:crlf` text mode doubled CR in `extract_between --crlf` output (`\r\r\n`). Fix: `export PERLIO=:perlio` near top of `build-deploy.sh` — disables CRLF layer, matching Git perl. Removed redundant `binmode ARGVOUT` from final CRLF conversion. |
+
+### Changed
+
+| # | Change |
+|---|--------|
+| 2 | **`cross-platform.md` slim-down** (214 → 112 lines): Moved gotcha details, code examples, and explanatory prose to new `reference/cross-platform-detail.md`. Consolidated 6 separate gotcha sections into single "Windows platform gotchas" bullet list with `@reference` pointer. All inbound section heading references preserved. |
+| 3 | **Cursor rule parity**: Updated `.cursor/rules/cross-platform.mdc` with Strawberry Perl text mode gotcha. |
+| 4 | **Tool registry/versions**: Added Platform Gotchas subsection to Perl entry in `tool-registry.md`. Added PERLIO note to `tool-versions.json`. |
+
+(tested: Windows)
+
+---
+
 ## v0.52.7 -- OS guard standardization, init-logging, dead code cleanup (2026-03-13)
 
 ### Added
