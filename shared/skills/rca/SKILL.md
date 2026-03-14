@@ -87,6 +87,26 @@ violation wasn't caught.
 **Recurrence risk**: low | medium | high
 ```
 
+## Evaluating corrective actions (barrier analysis)
+
+Before recommending a fix, test it against the incident that motivated it:
+
+1. **Replay** the timeline with the proposed fix in place
+2. **At each decision point**: would the fix have changed the outcome?
+3. **If yes** → fix addresses this failure mode. Ship it.
+4. **If no** → fix addresses a different class of failure. Ask:
+   - Is it still valuable for that other class? (Keep, but don't claim
+     it fixes THIS incident)
+   - Does the actual failure mode need a different fix type?
+     (Information problem → hook. Reasoning problem → skill/coaching.
+     Process problem → rule/checklist.)
+5. **Document coverage**: "This hook prevents X-class failures.
+   It does NOT prevent Y-class failures (reasoning/connection)."
+
+No single mechanism is definitive. The three-layer model acknowledges
+this — each layer catches what the previous missed. Evaluate proposed
+fixes honestly, don't overclaim.
+
 ## When to escalate
 
 - Same root cause category 3+ times → structural fix required
