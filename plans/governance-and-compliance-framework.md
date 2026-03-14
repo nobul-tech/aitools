@@ -76,7 +76,10 @@ project-level skill with the same name as a user-level one.
   - `/bash-skill` — `Bash` is a Claude Code tool name
   - `/go-lang` — `/go` is ambiguous as an English word
 - Process skills use descriptive names (`/gap`, `/audit`, etc.)
-- Dev splits use `-dev` suffix (`/aitools-dev`)
+- Project-level counterparts to user-level skills use `aitools-` prefix
+  (`/aitools-dev` for `/aitools`, `/aitools-planning` for `/planning`)
+- Project-level skills without a user-level counterpart use descriptive
+  names (`/gap`, `/audit`, `/logging`)
 
 ### Skill template
 
@@ -159,6 +162,7 @@ validation).
 | `/cross-platform` | Platform dispatch | OS detection, path conventions, dispatch patterns, equal visibility |
 | `/error-handling` | Error suppression patterns | Canonical bash/PS1 patterns: suppression-with-check, null guards, external command capture, exit footers |
 | `/mcp-skill` | MCP server config | Enable/disable patterns, Claude vs Cursor asymmetry, isolation mode, auth, `--addmcp` |
+| `/planning` | Session and plan strategy | Context budgets (1M=100k injectable, 200k=20k), session flow (60-70% stop), subagent coordination and parallelization, when to create plans vs work directly, model-dependent context windows (Opus 1M, Sonnet 200k, Haiku 100k), batch sizing (2-3 files), what works vs fails from session history |
 
 ### Project-level skills (8)
 
@@ -173,9 +177,9 @@ Located in `.claude/skills/` within the aitools repo.
 | `/logging` | Structured logging framework | All 7 log functions, levels, when to use each, JSONL dual-output, deploy tracker, counter contract, write_summary |
 | `/build-deploy` | Build pipeline | Sentinel extraction, lib inlining, profile interpolation, CRLF handling, standalone blog logging |
 | `/aitools-dev` | aitools development | Entry point dispatch, how to add tools/deployment types, return value contracts, validation callbacks |
-| `/plan-writing` | Plan format standards | When pseudocode OK vs verbatim required, revision workflow, template for plan sections |
+| `/aitools-planning` | aitools plan standards | Foundational decisions pattern, verbatim code requirement, platform annotations (Windows PS1 / macOS bash), batch verification checklist, cross-reference audit, test plan with expected counts |
 
-Total: **37 skills** (29 user-level + 8 project-level).
+Total: **38 skills** (30 user-level + 8 project-level).
 
 ## Skill Deployment
 
@@ -359,7 +363,7 @@ Dependency-aware sequencing:
 2. **Plan corrections** (v0.54.1 — done)
 3. **`/gap` and `/audit` skills** — governance filing and review
 4. **SubagentStart hook** — pre-built cache + context injection
-5. **User-level tool skills** — all 29
+5. **User-level tool skills** — all 30
 6. **Project-level skills** — all 8
 7. **PreToolUse hooks** — known-gaps validator, protected file reminder,
    error suppression, git checklist
