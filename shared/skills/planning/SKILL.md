@@ -128,3 +128,10 @@ avoids wasted work from miscommunication.
 When uncertain about a design decision, file it as an open question
 or ask the user. "Probably" is ambiguous — mark it as a gap that needs
 resolution, or ask.
+
+### Suggest answers with questions
+
+Never ask a bare question that blocks the user. Always pair the question
+with a suggested answer: "Should we do X? I'd suggest Y because Z."
+The user can accept, modify, or reject — but they're never stuck
+waiting for you to have an opinion.
