@@ -52,6 +52,24 @@ record — these are not open questions.
     the PROJECT enforces cross-platform parity (PSOs). `/optimize-plan`
     does not assume cross-platform — it checks contextually based on
     what the plan touches.
+16. **Suggest answers with questions.** Never ask bare questions. Apply
+    6-point evaluation criteria (state, context, leverage, risk,
+    precedent, ambiguity) when suggesting. UCI coaching item.
+17. **Barrier analysis before shipping corrective actions.** Replay the
+    incident with the proposed fix. If it wouldn't have changed the
+    outcome, it addresses a different failure class — document which.
+    No single mechanism is definitive.
+18. **Dependency map for path-targeted hooks.** `reference/dependency-map.json`
+    maps files to their downstream consumers. Hooks read the map at
+    runtime to inject reminders. `/audit` validates the map for
+    completeness. Build with hooks (step 8), not before.
+19. **Skill names match user mental model.** `/investigate` not
+    `/incident-response`. `/optimize-plan` not `/plan-review`. The name
+    should be what you'd naturally type when you need the skill.
+20. **Fix gap #15 before building more user-level skills.** `shared/skills/`
+    is source, not deployment. Skills are invisible to Claude Code until
+    deployed to `~/.claude/skills/` by `setup-user-mcp`. No hacks —
+    fix the deployment infrastructure properly.
 
 ## Three-Layer Architecture
 
@@ -200,7 +218,7 @@ shared/skills/perl/
 | `/error-handling` | Error suppression patterns | Canonical bash/PS1 patterns: suppression-with-check, null guards, external command capture, exit footers |
 | `/mcp-skill` | MCP server config | Enable/disable patterns, Claude vs Cursor asymmetry, isolation mode, auth, `--addmcp` |
 | `/planning` | Session and plan strategy | Context budgets (1M=100k injectable, 200k=20k), session flow (60-70% stop), subagent coordination and parallelization, when to create plans vs work directly, model-dependent context windows (Opus 1M, Sonnet 200k, Haiku 100k), batch sizing (2-3 files), what works vs fails from session history, user as co-architect |
-| `/incident-response` | Incident lifecycle | Detection → triage → investigation (5 Whys, Swiss cheese model, timeline, barrier analysis) → remediation → corrective action (behavioral vs structural) → verification → dissemination → follow-up. Recurrence = wrong fix, not wrong person. |
+| `/investigate` | Incident lifecycle | Detection → triage → investigation (5 Whys, Swiss cheese model, timeline, barrier analysis) → remediation → corrective action (behavioral vs structural) → verification → dissemination → follow-up. Recurrence = wrong fix, not wrong person. |
 | `/optimize-plan` | Living plan review | Reads plan file + known-gaps.json + recent git log + referenced rules + ROADMAP.md. Outputs: stale sections, dependency graph, leverage map (what unblocks most downstream work), scope assessment (still coherent or split?), missing decisions. Invoke periodically after major batches, not one-shot. |
 
 ### Project-level skills (8)

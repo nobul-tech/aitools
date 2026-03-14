@@ -12,17 +12,39 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
-## v0.54.1 -- Skill architecture, hook redesign, gap filings (2026-03-13)
+## v0.54.1 -- Skill architecture, hook redesign, 12 gap filings (2026-03-13)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **`/gap` skill** (project-level): File gaps/ambiguities to known-gaps.json with classification decision tree, severity assignment, protected file review gate. Model-invocable. |
+| 2 | **`/audit` skill** (project-level): Deep governance review — cross-references, gap health, stale entries, TODO(gap) markers, skill coverage, plan consistency. User-invocable only. |
+| 3 | **`/planning` skill** (user-level): Session flow, context budgets per model, batch sizing, subagent coordination, user-as-co-architect, decision evaluation criteria (state/context/leverage/risk/precedent/ambiguity). |
+| 4 | **`/optimize-plan` skill** (user-level): Living plan review — stale sections, dependency graph, leverage map, scope assessment, context-window-aware depth. |
+| 5 | **`/investigate` skill** (user-level): Full incident lifecycle with RCA (5 Whys, Swiss cheese model, timeline), barrier analysis for evaluating corrective actions, escalation framework. |
 
 ### Improvements
 
 | # | Change |
 |---|--------|
-| 1 | **Plan file major revision**: 37 skills (29 user-level + 8 project-level), skill placement framework, SubagentStart pre-built cache design, 10 foundational decisions captured, 6 hook specifications, exclusion criteria for budget management |
-| 2 | **CLAUDE.md**: Added "End users are developers" principle, split skill locations (user-level `shared/skills/` + project-level `.claude/skills/`), updated project structure tree |
-| 3 | **documentation-standards.md**: Added skill placement section with user/project criteria, split threshold, no-override rule |
-| 4 | **gap-governance.md**: Streamlined hook specs to reference plan, added decisions-tracking pattern for resolved ambiguities |
-| 5 | **known-gaps.json**: Filed 12 new gaps (IDs 6-17) covering README staleness, undocumented env vars, CI absence, broken cross-references, skill deployment scaling, Cursor verification |
+| 6 | **Plan file major revision**: 40 skills (32 user + 8 project), skill placement framework, SubagentStart pre-built cache, 20 foundational decisions, 7 hook specifications, exclusion criteria, telemetry architecture (SQLite + Datadog), barrier analysis methodology, dependency map design |
+| 7 | **CLAUDE.md**: "End users are developers" principle (single/multi-platform), skill locations (user-level + project-level), project structure tree |
+| 8 | **documentation-standards.md**: Skill placement section with user/project criteria, split threshold, no-override rule |
+| 9 | **gap-governance.md**: Streamlined hook specs to reference plan, decisions-tracking pattern |
+| 10 | **known-gaps.json**: 12 new gaps (IDs 6-17) |
+| 11 | **UCI coaching**: "Suggest answers with questions" — 6-point evaluation criteria |
+| 12 | **Session working convention**: 60-70% context budget, structured flow, resume-from markers |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `.claude/skills/gap/SKILL.md` | Gap filing skill with tests |
+| `.claude/skills/audit/SKILL.md` | Governance audit skill with tests |
+| `shared/skills/planning/SKILL.md` | Session and plan strategy skill with tests |
+| `shared/skills/optimize-plan/SKILL.md` | Living plan review skill with tests |
+| `shared/skills/investigate/SKILL.md` | Incident lifecycle + RCA skill with tests |
 
 **Verified on:** Windows
 

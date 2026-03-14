@@ -1,6 +1,6 @@
 ---
-name: incident-response
-description: "Full incident lifecycle from detection through follow-up. Use when something went wrong — a rule was violated, a deployment failed, a bug recurred, or a process broke down. Covers triage, investigation, remediation, corrective actions, and verification."
+name: investigate
+description: "Investigate when something went wrong. Use when a rule was violated, a deployment failed, a bug recurred, or a process broke down. Covers the full lifecycle: triage, RCA (5 Whys, Swiss cheese model), remediation, corrective actions, barrier analysis, and verification."
 ---
 
 ## Purpose

@@ -1,4 +1,4 @@
-# /incident-response expected behaviors
+# /investigate expected behaviors
 
 ## Auto-trigger tests
 
@@ -15,7 +15,8 @@ Should NOT auto-load for:
 
 ## Lifecycle coverage
 - Should walk through all 8 phases when appropriate
-- Should reference /rca for the investigation phase
+- RCA techniques (5 Whys, Swiss cheese, timeline) are phase 3
+- Barrier analysis applied before recommending corrective actions
 - Should recommend corrective action TYPE based on recurrence
 
 ## Escalation
