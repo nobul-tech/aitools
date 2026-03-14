@@ -18,7 +18,8 @@ not artificial 1:1 parity.
 - **Full context, not token budgeting**: Use the full context window. Launch subagents with complete rules. Load reference files generously. Keep CLAUDE.md and rules succinct for *clarity*, not to save tokens. Use skills, reference files, and hooks for depth.
 - **Specs vs state**: Rules and references define what SHOULD be. `reference/known-gaps.json` tracks what ISN'T yet. Never describe a feature as "working" if it hasn't fired in production. See `.claude/rules/gap-governance.md`.
 - **Separate tool harnesses**: Claude Code (`.claude/rules/`, CLAUDE.md) and Cursor (`.cursor/rules/`, agents.md) serve different purposes and are managed independently. No parity requirement.
-- **Skills as enablement**: Every managed tool, dependency, and repeatable process gets a skill in `shared/skills/`. Skills provide dynamic usage patterns loaded in context when relevant — the enablement layer that complements rules (prevention) and hooks (enforcement).
+- **End users are developers**: Every aitools user benefits from understanding internals. No "dumb user" persona. Skills, docs, and menus assume developer familiarity.
+- **Skills as enablement**: Every managed tool, dependency, and repeatable process gets a skill. User-level skills (`shared/skills/` → `~/.claude/skills/`) cover managed tools and project-agnostic patterns. Project-level skills (`.claude/skills/`) cover repo-specific frameworks. See `plans/governance-and-compliance-framework.md` for placement criteria.
 
 ## Project Structure
 
@@ -27,6 +28,7 @@ aitools/
 ├── .claude/
 │   ├── commands/        # Claude Code slash commands
 │   └── rules/           # Claude Code project rules (modular)
+│   └── skills/          # Project-level skill definitions (auto-discovered)
 ├── .cursor/rules/       # Cursor rules (.mdc format)
 ├── shared/              # Source of truth for configs
 │   ├── claude-shared.md #   → embedded into deploy scripts by build
@@ -34,7 +36,7 @@ aitools/
 │   ├── hooks/           # Claude Code hooks
 │   ├── mcp/             # MCP server configuration docs
 │   ├── shell/           # Shell aliases (bash/zsh + PowerShell)
-│   └── skills/          # Claude Code skill definitions
+│   └── skills/          # User-level skill definitions (deployed to ~/.claude/skills/)
 ├── scripts/             # Dev/source scripts (read from shared/)
 │   ├── aitools-lib.sh   #   Shared helpers (sourced; inlined into deploy/ by build)
 │   ├── aitools-lib.ps1  #   PowerShell equivalent

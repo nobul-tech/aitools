@@ -12,6 +12,22 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.54.1 -- Skill architecture, hook redesign, gap filings (2026-03-13)
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | **Plan file major revision**: 37 skills (29 user-level + 8 project-level), skill placement framework, SubagentStart pre-built cache design, 10 foundational decisions captured, 6 hook specifications, exclusion criteria for budget management |
+| 2 | **CLAUDE.md**: Added "End users are developers" principle, split skill locations (user-level `shared/skills/` + project-level `.claude/skills/`), updated project structure tree |
+| 3 | **documentation-standards.md**: Added skill placement section with user/project criteria, split threshold, no-override rule |
+| 4 | **gap-governance.md**: Streamlined hook specs to reference plan, added decisions-tracking pattern for resolved ambiguities |
+| 5 | **known-gaps.json**: Filed 12 new gaps (IDs 6-17) covering README staleness, undocumented env vars, CI absence, broken cross-references, skill deployment scaling, Cursor verification |
+
+**Verified on:** Windows
+
+---
+
 ## v0.54 -- Governance and compliance framework (2026-03-13)
 
 ### New features

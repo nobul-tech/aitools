@@ -108,23 +108,24 @@ Accept the rare race rather than over-engineering file locking.
 - User-invocable: yes
 - Model-invocable: no (`disable-model-invocation: true`)
 
+### Decisions tracking
+
+Ambiguities resolved during a session belong in the plan file's
+"Foundational Decisions" section — not here. known-gaps.json is for
+OPEN items needing work. Resolved decisions need a durable home in the
+plan or reference that produced them.
+
 ### Hook specifications
 
-**SubagentStart hook** (command type) — injects into every subagent:
-- Surfacing duty: report ambiguities with `AMBIGUITY:` prefix in response
-- Scratch namespace: use `.scratch/{session_id}_{agent_type}_` prefix
-- Skill awareness: list available compliance skills
-- Subagents are sensors, not filers — main agent triages and files via `/gap`
+Full hook architecture: `@plans/governance-and-compliance-framework.md`
+§Hook Specifications. Summary:
 
-**PreToolUse agent hook on known-gaps.json** (agent type):
-- Fires on Edit/Write targeting `reference/known-gaps.json`
-- Validates: required fields present, severity/status/type are valid enums,
-  ID is sequential, JSON is well-formed
-- **Fail-open**: on timeout or error, allow the edit. /audit catches later.
-- Timeout: 30 seconds
-
-**PreToolUse prompt hook on protected files** (prompt type):
-- Fires on Edit/Write targeting files in sources-of-truth protected table
-- Lightweight Haiku check: "you're editing a protected file — verify
-  cross-references and downstream dependencies"
-- Does not block, context injection only
+- **SubagentStart** (command): pre-built cache serves all skill content
+  + governance duty + scratch namespace via single file read (~5ms).
+  Subagents are sensors, not filers — report `AMBIGUITY:` findings.
+- **PreToolUse on known-gaps.json** (agent): validates required fields,
+  enums, sequential IDs. Fail-open on timeout/error.
+- **PreToolUse on protected files** (prompt): cross-reference reminder.
+- **PreToolUse on Edit/Write** (prompt): error-suppression detection.
+- **PreToolUse on Bash git commands** (prompt): checklist reminder.
+- **Stop** (prompt): ambiguity check — were findings surfaced or filed?

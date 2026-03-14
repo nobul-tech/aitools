@@ -1,16 +1,38 @@
 # Governance and Compliance Framework
 
 Implementation plan for the three-layer governance and compliance system.
-Produced from design session 2026-03-13. Reference: CLAUDE.md Design Principles.
+Produced from design session 2026-03-13, refined same day.
+Reference: CLAUDE.md Design Principles.
 
-## Context
+## Foundational Decisions
 
-This plan covers: gap governance (known-gaps.json lifecycle), tool/process
-skills (30 skills), hook specifications (SubagentStart, PreToolUse), permission
-strategy, and the integration between all three layers.
+Resolved during the design session. Captured here as the authoritative
+record — these are not open questions.
 
-Rules and CLAUDE.md changes ship first (this batch). Skills and hooks are
-built incrementally after the framework is in place.
+1. **End users are developers.** No "dumb user" persona exists. Every
+   aitools user benefits from understanding internals.
+2. **JSON format for known-gaps.** Not markdown (fragile Edit tool parsing),
+   not SQLite (binary blob in git). JSON is structured, git-diff friendly,
+   Claude manipulates reliably.
+3. **Separate tool harnesses.** Claude Code and Cursor managed independently.
+   No parity requirement.
+4. **Fail-open for governance hooks.** Detection catches most; audit catches
+   rest. Blocking on hook failure would be worse than missing a validation.
+5. **Accept-and-audit for concurrency.** Duplicate gap IDs from races are
+   rare. `/audit` detects and flags. No file locking.
+6. **Subagents are sensors, main agent files.** Subagents report `AMBIGUITY:`
+   findings. Main agent triages and invokes `/gap`.
+7. **Skill priority: user > project.** Claude Code loads user-level skills
+   over project-level when names collide. Never use the same name at both
+   levels.
+8. **Include-by-default, exclude selectively** for SubagentStart injection.
+   Pre-build the full payload at deploy time; exclude to stay under 10%
+   of subagent context (100k tokens at 1M window).
+9. **invoke_ai is about managed content sync**, not generic AI invocation.
+   Skills named for what they teach: `/managed-files` (deployment state
+   machine) and `/ai-merge` (AI-assisted conflict resolution).
+10. **Resolved ambiguities belong in this plan file** (Decisions section).
+    Open gaps belong in `known-gaps.json`. Don't mix them.
 
 ## Three-Layer Architecture
 
@@ -24,12 +46,72 @@ Skills bridge prevention and detection: they show the right way (prevention)
 so hooks don't need to block the wrong way (detection). Hook stderr messages
 reference skills to close the remediation loop.
 
-## Skill Inventory
+## Skill Architecture
 
-30 skills. Each defined in `shared/skills/<name>/SKILL.md`. Deployed to
-`~/.claude/skills/` and `~/.cursor/skills/` by setup-user-mcp.
+### Placement framework
 
-### Tool skills (one per managed tool)
+**User-level** (`shared/skills/` → deployed to `~/.claude/skills/`):
+- About a globally managed tool installed on the machine
+- Patterns are project-agnostic (factual: gotchas, platform behavior)
+- Referenced by User Standing Orders (USOs)
+- Injected into subagents via pre-built cache
+
+**Project-level** (`.claude/skills/` in repo, auto-discovered):
+- About this project's specific conventions, frameworks, or files
+- Patterns would be wrong or misleading in another project
+- References project-specific artifacts (known-gaps.json, build-deploy.sh)
+
+**Split threshold**: A tool needs both levels only when it serves two
+distinct personas (end user vs developer of the tool itself). Use
+`<name>` for user-level and `<name>-dev` for project-level.
+
+**No same-name overrides**: User-level takes priority. Never create a
+project-level skill with the same name as a user-level one.
+
+### Naming conventions
+
+- Tool skills use the tool's CLI command name (e.g., `/perl`, `/cargo`)
+- Three exceptions to avoid conflicts or ambiguity:
+  - `/mcp-skill` — `/mcp` is a built-in Claude Code command
+  - `/bash-skill` — `Bash` is a Claude Code tool name
+  - `/go-lang` — `/go` is ambiguous as an English word
+- Process skills use descriptive names (`/gap`, `/audit`, etc.)
+- Dev splits use `-dev` suffix (`/aitools-dev`)
+
+### Skill template
+
+Every tool skill follows this structure:
+
+```yaml
+---
+name: <tool-name>
+description: "<tool> usage patterns, platform gotchas, and conventions.
+  Use when working with <tool>."
+# Optional:
+# inject: false          # Exclude from SubagentStart pre-built cache
+# disable-model-invocation: true  # User-invocable only, zero context cost
+---
+
+## Patterns
+Common invocation patterns.
+
+## Platform Gotchas
+Per-platform issues — every skill covers all managed platforms.
+
+## Anti-Patterns
+What the standing-order-guard hook blocks and why.
+
+## Cross-References
+- Tool registry: `reference/tool-registry.md`
+- Setup script: `scripts/setup-<tool>.sh/.ps1`
+```
+
+Process skills follow a task-oriented structure (steps, decision trees,
+validation).
+
+### User-level skills (29)
+
+#### Managed tool skills (15)
 
 | Skill | Tool | Key content |
 |-------|------|-------------|
@@ -49,7 +131,7 @@ reference skills to close the remediation loop.
 | `/pup` | Datadog CLI | Auth status check, log shipping, metric submission |
 | `/perl` | Perl | String manipulation patterns replacing sed/awk, PERLIO env var (Strawberry vs Git bundled on Windows), system Perl on macOS/Linux, one-liner patterns, minimum 5.10 |
 
-### Dependency skills
+#### Dependency skills (3)
 
 | Skill | Tool | Key content |
 |-------|------|-------------|
@@ -57,7 +139,7 @@ reference skills to close the remediation loop.
 | `/node` | Node.js/npm | Package management, global installs, npm vs npx policy (never use npx), version management |
 | `/bash-skill` | Bash | Cross-platform environments (Git Bash MINGW vs macOS 3.2 vs Linux GNU), pipeline patterns, quoting, PATH differences, BSD vs GNU userland |
 
-### Build tool skills
+#### Build tool skills (3)
 
 | Skill | Tool | Key content |
 |-------|------|-------------|
@@ -65,106 +147,159 @@ reference skills to close the remediation loop.
 | `/cmake` | CMake | Install methods per platform, version requirements, path detection |
 | `/msvc` | MSVC Build Tools | Visual Studio components, elevation requirements, detection patterns |
 
-### Process/workflow skills
+#### Cross-cutting skills (8)
+
+| Skill | Purpose | Key content |
+|-------|---------|-------------|
+| `/aitools` | CLI usage | Subcommands, flags, env vars (AITOOLS_FORCE, DRY_RUN, RUN_ID), deploy menus, troubleshooting |
+| `/managed-files` | Deployment system | State machine, menu options (overwrite/adopt/merge/skip), deploy state tracking, what happens to customizations |
+| `/ai-merge` | AI-assisted conflict resolution | How merge prompt works (RCFT), 5-check validation, refinement loop, debugging from deploy.log, speed tiers, clip2md naming |
+| `/scratch` | Temp file conventions | Naming (session+agent prefix), cleanup, when to use, permission pre-approvals |
+| `/nested-claude` | Nested session workarounds | CLAUDECODE env var, `claude mcp add` failure, `--addmcp` alternative, safe/unsafe operations |
+| `/cross-platform` | Platform dispatch | OS detection, path conventions, dispatch patterns, equal visibility |
+| `/error-handling` | Error suppression patterns | Canonical bash/PS1 patterns: suppression-with-check, null guards, external command capture, exit footers |
+| `/mcp-skill` | MCP server config | Enable/disable patterns, Claude vs Cursor asymmetry, isolation mode, auth, `--addmcp` |
+
+### Project-level skills (8)
+
+Located in `.claude/skills/` within the aitools repo.
 
 | Skill | Purpose | Key content |
 |-------|---------|-------------|
 | `/gap` | File gaps/ambiguities | Reads known-gaps.json, classifies, formats, writes. Model-invocable. |
-| `/audit` | Deep governance review | Reads all rules/refs, reports gaps, cross-ref breaks, staleness. User-invocable only. |
+| `/audit` | Deep governance review | Rules/refs consistency, cross-ref breaks, staleness, skill budget, TODO(gap) markers. User-invocable only. |
 | `/tool-eval` | Tool evaluation/onboarding | 5 lifecycle phases, chrome-devtools verification, Phase 2 gate, onboarding checklist |
-| `/scratch` | Temp file conventions | Naming (session+agent prefix), cleanup, when to use, permission pre-approvals |
-| `/nested-claude` | Nested session workarounds | CLAUDECODE env var, `claude mcp add` failure, `--addmcp` alternative, safe/unsafe operations |
-| `/cross-platform` | Platform dispatch | OS detection, path conventions, dispatch patterns, equal visibility |
 | `/dotprofile` | User repo management | profile.json fields, template tokens, template resolution, session archiving |
-| `/mcp-skill` | MCP server config | Enable/disable patterns, Claude vs Cursor asymmetry, isolation mode, auth, `--addmcp` |
+| `/logging` | Structured logging framework | All 7 log functions, levels, when to use each, JSONL dual-output, deploy tracker, counter contract, write_summary |
+| `/build-deploy` | Build pipeline | Sentinel extraction, lib inlining, profile interpolation, CRLF handling, standalone blog logging |
+| `/aitools-dev` | aitools development | Entry point dispatch, how to add tools/deployment types, return value contracts, validation callbacks |
+| `/plan-writing` | Plan format standards | When pseudocode OK vs verbatim required, revision workflow, template for plan sections |
 
-### Naming conventions
+Total: **37 skills** (29 user-level + 8 project-level).
 
-- Tool skills use the tool's CLI command name (e.g., `/perl`, `/cargo`, `/pwsh`)
-- Three exceptions to avoid conflicts or ambiguity:
-  - `/mcp-skill` — `/mcp` is a built-in Claude Code command
-  - `/bash-skill` — `Bash` is a Claude Code tool name
-  - `/go-lang` — `/go` is ambiguous as an English word
-- Process skills use descriptive names (`/gap`, `/audit`, `/tool-eval`, etc.)
+## Skill Deployment
 
-### Skill template
+### User-level deployment
 
-Every tool skill follows this structure:
+`setup-user-mcp.sh/.ps1` deploys user-level skills from `shared/skills/`
+to `~/.claude/skills/` (and `~/.cursor/skills/` — see gap #12 for Cursor
+verification status). After deploying all skills, builds the SubagentStart
+pre-built cache (see below).
 
-```yaml
----
-name: <tool-name>
-description: "<tool> usage patterns, platform gotchas, and project conventions. Use when working with <tool>."
----
+### SubagentStart pre-built cache
 
-## Patterns
-Common invocation patterns for this project.
+At deploy time (not hook runtime), concatenate all injectable skill
+content into a single file:
 
-## Platform Gotchas
-Per-platform issues — every tool skill covers all managed platforms (Windows,
-macOS, Linux) with platform-specific sections, not just the current platform.
+**Build step** (in `setup-user-mcp.sh/.ps1`, after skill deployment):
+1. Read all `~/.claude/skills/*/SKILL.md` files
+2. Read all `.claude/skills/*/SKILL.md` files (project-level, if in aitools)
+3. Exclude skills with `inject: false` in frontmatter
+4. If total exceeds 10% of context budget (100k tokens ≈ 400k chars):
+   exclude `disable-model-invocation: true` skills first, then
+   largest-first until under budget. Log what was excluded.
+5. Concatenate remaining skill content + governance context + scratch
+   namespace into `~/.aitools/hooks/subagent-context.json`
 
-## Anti-Patterns
-What the standing-order-guard hook blocks and why.
-
-## Cross-References
-- Tool registry: `reference/tool-registry.md` (install, versions, lifecycle)
-- Setup script: `scripts/setup-<tool>.sh/.ps1`
+**Format:**
+```json
+{
+  "hookSpecificOutput": {
+    "additionalContext": "<all skill content + governance>"
+  }
+}
 ```
 
-Process skills follow a task-oriented structure (steps, decision trees,
-validation) instead of the patterns/gotchas/anti-patterns layout.
+**SubagentStart hook** (`shared/hooks/subagent-context.sh`):
+```bash
+#!/usr/bin/env bash
+cat ~/.aitools/hooks/subagent-context.json
+```
+
+Two lines. One syscall. ~20ms macOS, ~155ms Windows (bash startup
+overhead unavoidable for command hooks).
+
+**Rebuild triggers**: `aitools install`, `aitools` (sync), skill
+file changes during deploy.
+
+### Exclusion criteria
+
+When total injectable content exceeds 10% budget:
+
+1. Skills with `inject: false` frontmatter (explicit author opt-out)
+2. Skills with `disable-model-invocation: true` (already hidden from
+   auto-discovery; loaded on demand only)
+3. Largest skills first (a 50k char skill consuming 5% alone should be
+   on-demand, not bulk-injected)
+
+`/audit` skill scope includes skill budget analysis: total size, headroom,
+skills approaching threshold, recommendations for splitting large skills.
 
 ## Hook Specifications
 
-### SubagentStart hook (command type)
+### SubagentStart context injector (command type)
 
-Injects context into every subagent:
+Pre-built cache served via single `cat` command. Contains:
+- All injectable skill content (user-level + project-level)
+- Governance duty: `AMBIGUITY:` prefix convention
+- Scratch namespace: `.scratch/{session_id}_{agent_type}_` prefix
+- Key project rules (if in aitools repo)
 
-```
-GOVERNANCE: Report ambiguities with "AMBIGUITY:" prefix in your response.
-The main agent will triage and file via /gap. Do not file directly.
-
-SCRATCH: Use .scratch/{session_id}_{agent_type}_ prefix for all temp files.
-
-SKILLS: Available compliance skills — /scratch, /perl, /pwsh, /git,
-/cross-platform, /bash-skill, /go-lang, /mcp-skill.
-Load when relevant to your task.
-```
-
-Subagents are sensors (report findings), not filers (don't write to
-known-gaps.json). Main agent reviews AMBIGUITY: items and invokes /gap.
+Subagents receive the full skill library. No smart routing per agent
+type — inclusive by default, exclude selectively at build time.
 
 This hook subsumes the planned "Subagent context hook & CLAUDE.md trim"
-roadmap item — both inject context into subagents. Combine into one hook
-that handles CLAUDE.md injection AND governance context.
+roadmap item. Combine into one hook.
 
-### PreToolUse agent hook on known-gaps.json
+### PreToolUse agent hook on known-gaps.json (agent type)
 
 - Event: PreToolUse, matcher: Edit|Write on `reference/known-gaps.json`
-- Type: agent (spawns subagent with Read/Grep/Glob)
 - Validates: required fields, valid enums, sequential IDs, well-formed JSON
 - **Fail-open**: on timeout or error, allow the edit. /audit catches later.
 - Timeout: 30 seconds
 
-### PreToolUse prompt hook on protected files
+### PreToolUse prompt hook on protected files (prompt type)
 
 - Event: PreToolUse, matcher: Edit|Write on sources-of-truth files
-- Type: prompt (lightweight Haiku check)
 - Injects reminder: "Protected file — verify cross-references and
   downstream dependencies"
 - Does not block, context injection only
 
-### Standing order guard updates
+### PreToolUse prompt hook for error suppression (prompt type)
 
-Update hook stderr messages to reference skills when blocking:
-- `sed` blocked → "Use Perl for string manipulation. Load /perl for patterns."
-- 5+ line inline → "Write to .scratch/ file. Load /scratch for conventions."
+- Event: PreToolUse, matcher: Edit|Write
+- Scans content for: `2>/dev/null`, `SilentlyContinue`, `|| true`,
+  empty `catch {}` without result checks within 3 lines
+- Warns (does not block): "Error suppression detected without result
+  check. See `/error-handling` skill."
+- Addresses recurring incidents I5, I7, I11, I17
+
+### PreToolUse prompt hook for git workflow (prompt type)
+
+- Event: PreToolUse, matcher: Bash matching `git commit|git push`
+- Checks: were check-pre-commit or check-pre-push scripts invoked
+  earlier in this session?
+- Warns if not: "Pre-commit checklist not run. Execute check scripts
+  first per PSO."
+- Addresses incident I12
+
+### Stop prompt hook for ambiguity check (prompt type)
+
+- Event: Stop (fires on every Claude response)
+- Lightweight check: "Did this response touch rules or references?
+  Were any ambiguities surfaced or filed?"
+- Context injection only, does not block
+
+### Standing order guard updates (update existing)
+
+Update stderr messages to reference skills when blocking:
+- `sed` blocked → "Use Perl for string manipulation. Load /perl."
+- 5+ line inline → "Write to .scratch/ file. Load /scratch."
 - `&&` blocked → "Use separate Bash tool calls."
 - Standalone `grep` → "Use the Grep tool."
 
-Closed loop: hook blocks → stderr references skill → agent loads skill →
-correct pattern used.
+Closed loop: hook blocks → stderr references skill → agent loads
+skill → correct pattern used.
 
 ## Permission Strategy
 
@@ -181,32 +316,27 @@ correct pattern used.
 }
 ```
 
-Eliminates permission prompts for scratch file operations. Other permissions
-(Edit/Write on project files, Bash commands) remain as-is — the existing
-allow rules in settings.local.json cover most Bash patterns.
-
 ### Hook-based permission decisions
 
 PreToolUse hooks can return `permissionDecision: "allow"` for patterns
-too complex for glob rules (e.g., Bash commands touching temp directories).
-Implement only if permission prompts become a recurring friction point.
+too complex for glob rules. Implement only if permission prompts become
+recurring friction.
 
 ## Edge Cases
 
-- **Concurrency (gap IDs)**: Accept duplicate IDs from rare races.
-  /audit detects and flags for renumbering.
-- **Fail-open**: All governance hooks fail-open. Detection catches most;
-  audit catches rest.
-- **Partial edits**: Validate required fields only. plannedFix and linked
-  are optional.
-- **Hook timeout**: 30s explicit. known-gaps.json is small; agent reads
-  and checks fields in <10s.
-- **Scratch collisions**: SubagentStart hook injects unique prefix per
-  session+agent type. Eliminates concurrent write conflicts.
+- **Concurrency (gap IDs)**: Accept-and-audit. /audit detects duplicates.
+- **Fail-open**: All governance hooks fail-open.
+- **Partial edits**: Validate required fields only.
+- **Hook timeout**: 30s explicit for agent hooks.
+- **Scratch collisions**: SubagentStart injects unique prefix.
 - **Closed gaps**: Move to `closed` array with version and date.
-  Lightweight history preserved in JSON.
-- **TODO(gap) markers**: Deferred filing pressure valve. /audit scans
-  for unfiled markers across the codebase.
+- **TODO(gap) markers**: /audit scans for unfiled markers.
+- **Skill priority conflict**: Never use same name at user and project
+  level. User-level always wins.
+- **Subagent skill gap**: SubagentStart pre-built cache injects all
+  skill content. Subagents don't inherit skills otherwise.
+- **SubagentStart overhead**: Pre-built cache = one file read (~5ms
+  incremental). Bash startup (~150ms Windows) is baseline for all hooks.
 
 ## Relationship to Existing Infrastructure
 
@@ -215,43 +345,42 @@ Implement only if permission prompts become a recurring friction point.
 - **Hooks extend standing-order-guard.sh**: Guard blocks bad patterns.
   Skills show good patterns. Stderr messages bridge the two.
 - **`/gap` respects sources-of-truth gate**: known-gaps.json is protected.
-  Skill presents entry for review before writing.
-- **`/pre-update` command**: Existing command may migrate to skill format.
-  Both coexist — commands are legacy, skills are the new path.
-- **SubagentStart consolidation**: The governance SubagentStart hook and
-  the planned "Subagent context hook & CLAUDE.md trim" roadmap item serve
-  the same purpose. Combine into one hook.
-- **RFC-0002 portability**: Governance patterns should be repo-agnostic
-  where possible. nobul-ops can adopt the same three-layer model.
+- **`/pre-update` command**: May migrate to skill format.
+- **SubagentStart consolidation**: Combines governance injection with
+  the planned CLAUDE.md injection roadmap item.
 - **Claude Code maintenance workarounds**: Feed into `/claude` and
-  `/nested-claude` skills. Maintenance file remains the tracker; skills
-  provide runtime guidance.
+  `/nested-claude` skills.
 
 ## Implementation Notes
 
-No priority ordering. Dependency-aware sequencing only:
+Dependency-aware sequencing:
 
-1. **Rules and CLAUDE.md** (this batch) — foundation everything builds on
-2. **`/gap` and `/audit` skills** — governance filing and review
-3. **SubagentStart hook** — context injection for all subagents (combine
-   with existing CLAUDE.md injection roadmap item)
-4. **Tool skills** — all 15 managed tools
-5. **Dependency skills** — `/git`, `/node`, `/bash-skill`
-6. **Build tool skills** — `/nasm`, `/cmake`, `/msvc`
-7. **Process skills** — remaining 6 (`/tool-eval`, `/scratch`,
-   `/nested-claude`, `/cross-platform`, `/dotprofile`, `/mcp-skill`)
-8. **PreToolUse hooks** — known-gaps.json validator, protected file reminder
-9. **Standing order guard updates** — stderr → skill references
-10. **Permission updates** — .scratch pre-approvals in settings.json
-
-Steps 2-10 can be done in any order within each step. Between steps,
-verify the previous step works before proceeding.
+1. **Rules and CLAUDE.md** (v0.54 — done)
+2. **Plan corrections** (v0.54.1 — this batch)
+3. **`/gap` and `/audit` skills** — governance filing and review
+4. **SubagentStart hook** — pre-built cache + context injection
+5. **User-level tool skills** — all 29
+6. **Project-level skills** — all 8
+7. **PreToolUse hooks** — known-gaps validator, protected file reminder,
+   error suppression, git checklist
+8. **Standing order guard updates** — stderr → skill references
+9. **Stop hook** — ambiguity check
+10. **Permission updates** — .scratch pre-approvals
 
 ## Verification
 
 After each implementation step:
 - Invoke the skill manually with realistic input
-- Verify hook fail-open behavior (kill the hook process mid-run)
-- Check that SubagentStart injection appears in subagent context
-- Run /audit to verify it detects known test cases
+- Verify hook fail-open behavior
+- Check SubagentStart injection appears in subagent context
+- Run /audit to verify detection of known test cases
 - Smoke-test per hook-rollout.md patterns
+- Check `/context` for skill budget impact
+
+## Open Questions
+
+Tracked as gaps in `known-gaps.json`. Key unresolved items:
+- Gap #12: Cursor skill deployment mechanism unverified
+- Gap #14: Subagent skill preloading via `skills:` field vs hook injection
+- Gap #15: setup-user-mcp scaling from 2 to 29+ user-level skills
+- Gap #16: Meta-skill for ambiguity detection

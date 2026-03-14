@@ -74,6 +74,23 @@ Create a `plans/*.md` file when work:
   `@reference/known-gaps.json` tracks out-of-spec code.
   See `@.claude/rules/gap-governance.md` for lifecycle and classification
 
+### Skill placement
+
+- **User-level** (`shared/skills/` → deployed to `~/.claude/skills/`):
+  managed tool patterns, project-agnostic conventions, USO enablement.
+  Content must be factual (patterns, gotchas, platform behavior), not
+  project-specific opinions.
+- **Project-level** (`.claude/skills/` in repo): project-specific
+  frameworks, governance workflows, development patterns. Auto-discovered
+  by Claude Code, not deployed.
+- **Split threshold**: A tool needs both user and project skills only
+  when it serves two distinct personas (end user vs developer). Use
+  `<name>` for user-level and `<name>-dev` for project-level.
+- **No project overrides of user skills**: User-level takes priority
+  in Claude Code. Never create same-name skills at both levels.
+- Full inventory and architecture:
+  `@plans/governance-and-compliance-framework.md`
+
 ### `@` link convention
 
 - `@` can reference ANY repo file: `@reference/`, `@.claude/rules/`,
