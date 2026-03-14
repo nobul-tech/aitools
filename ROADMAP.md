@@ -29,6 +29,7 @@ Detailed plans live in `plans/`. See `RELEASE_NOTES.md` for completed work.
 | setup-typst raw npm output | [#14](https://github.com/nobul-jose/aitools/issues/14) | Low | Raw `up to date in 209ms` npm output leaks before structured log lines |
 | setup-cursor-ide-mcp raw agent output | [#15](https://github.com/nobul-jose/aitools/issues/15) | Low | `agent mcp disable` output not captured into structured logging |
 | setup-rust blank log line | [#16](https://github.com/nobul-jose/aitools/issues/16) | Low | Empty rustup output lines produce `[info] ` with blank message |
+| Nobul Auth0 platform | plans/nobul-auth0-platform.md | High | Auth0 tenant (auth.nobul.tech) for centralized credential management. Phase 1: `aitools auth` CLI + GitHub token via device flow. Phase 2: Vercel + Datadog. Phase 3: token lifecycle. Phase 4: vcard/credits web apps. Phase 5: multi-machine + RBAC. Resolves gap #23. |
 | Elevation-aware installs | -- | Medium | `Install-WingetPackage` lib function with user scope -> machine scope -> `Start-Process -Verb RunAs` cascade. For tools that genuinely need admin (MSVC Build Tools). |
 
 ### aitools user sync — managed CLAUDE.md merging (near-term)

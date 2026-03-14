@@ -12,6 +12,80 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.56 -- Install audit findings, Auth0 platform plan (2026-03-14)
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | **Gap #23 filed**: Credential storage undocumented; keychain prompts block `aitools install` (85s delay, 6-8 prompts on macOS for gh/pup). Linked to Auth0 roadmap item. |
+| 2 | **3 GH issues filed**: User repo pull fails on untracked file conflicts (#49), user repo pull suppresses stderr (#50), hooks silently overwritten via bare cp (#51). Gap #1 linked to #51. |
+| 3 | **Nobul Auth0 platform plan**: `plans/nobul-auth0-platform.md` — 5-phase plan for centralized credential management via Auth0 tenant (auth.nobul.tech). Phase 1: `aitools auth` CLI + GitHub device flow. Phases 2-5: multi-provider, token lifecycle, web apps (vcard/credits), RBAC. |
+| 4 | **ROADMAP.md**: Auth0 platform added as high-priority planned item |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `plans/nobul-auth0-platform.md` | Auth0 platform implementation plan (5 phases) |
+
+**Verified on:** macOS
+
+---
+
+## v0.55 -- Framework adoption infrastructure (2026-03-14)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Framework adoption lifecycle**: `reference/framework-adoption.md` — 9-step discovery-to-continuation cycle for adopting established discipline concepts into the harness |
+| 2 | **Framework registry**: `reference/framework-registry.json` — structured source of truth for all adopted frameworks (8 frameworks: gap governance, source of truth, three-layer governance, tool lifecycle, managed file deployment, incident investigation, intent documentation, hook rollout) |
+| 3 | **Harness architecture**: `reference/harness.md` — defines the 5 harness components (rules, references, skills, hooks, plans) and their relationships |
+| 4 | **Governed vocabulary**: `reference/framework-governed-vocabulary.md` + `reference/glossary.json` + `/glossary` skill — base artifacts, scope modifiers, and composition convention for consistent terminology |
+| 5 | **`/intent-writing` skill** (user-level): Draft intent statements with purpose/scope/audience structure |
+| 6 | **`/intent-audit` skill** (user-level): Verify existing intent statements against file content |
+| 7 | **`/glossary` skill** (project-level): Read governed vocabulary definitions, add new terms |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 8 | **Gap governance enriched schema**: discovery context, discipline, frameworks, reference file fields added to known-gaps.json entries |
+| 9 | **Frameworks rule** (`.claude/rules/frameworks.md`): Intent, registry of registries (frameworks, gaps, tools), three-layer pattern reference |
+| 10 | **Glossary rule** (`.claude/rules/glossary.md`): Governed terms always in context, definitions via skill/JSON |
+| 11 | **CLAUDE.md**: Three-layer registries design principle, document intent principle updates |
+| 12 | **Gap #20 filed**: No process discipline rule governs plan adherence or deviations. Reference file: `reference/gap-020-process-discipline.md` |
+| 13 | **Gap #21 filed**: Tool registry markdown needs migration to three-layer pattern |
+| 14 | **Gap #22 filed**: Gap registry has no read/context skill |
+| 15 | **8 framework reference files**: Per-framework documentation with discipline source, key concepts, and implementing artifacts |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `reference/framework-adoption.md` | Discovery-to-continuation lifecycle |
+| `reference/framework-registry.json` | Framework registry (structured data) |
+| `reference/harness.md` | Harness architecture (5 components) |
+| `reference/framework-governed-vocabulary.md` | Vocabulary composition convention |
+| `reference/glossary.json` | Governed vocabulary definitions |
+| `reference/framework-gap-governance.md` | Gap governance framework doc |
+| `reference/framework-source-of-truth.md` | Source of truth framework doc |
+| `reference/framework-three-layer-governance.md` | Three-layer governance framework doc |
+| `reference/framework-tool-lifecycle.md` | Tool lifecycle framework doc |
+| `reference/framework-managed-file-deployment.md` | Managed file deployment framework doc |
+| `reference/framework-incident-investigation.md` | Incident investigation framework doc |
+| `reference/framework-intent-documentation.md` | Intent documentation framework doc |
+| `reference/framework-hook-rollout.md` | Hook rollout framework doc |
+| `reference/gap-020-process-discipline.md` | Gap #20 reference file |
+| `.claude/skills/glossary/SKILL.md` | Glossary skill |
+| `shared/skills/intent-writing/SKILL.md` | Intent writing skill |
+| `shared/skills/intent-audit/SKILL.md` | Intent audit skill |
+
+**Verified on:** macOS
+
+---
+
 ## v0.54.1 -- Skill architecture, hook redesign, 12 gap filings (2026-03-13)
 
 ### New features
