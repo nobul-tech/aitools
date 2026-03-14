@@ -18,7 +18,7 @@ not artificial 1:1 parity.
 - **Full context, not token budgeting**: Use the full context window. Launch subagents with complete rules. Load reference files generously. Keep CLAUDE.md and rules succinct for *clarity*, not to save tokens. Use skills, reference files, and hooks for depth.
 - **Specs vs state**: Rules and references define what SHOULD be. `reference/known-gaps.json` tracks what ISN'T yet. Never describe a feature as "working" if it hasn't fired in production. See `.claude/rules/gap-governance.md`.
 - **Separate tool harnesses**: Claude Code (`.claude/rules/`, CLAUDE.md) and Cursor (`.cursor/rules/`, agents.md) serve different purposes and are managed independently. No parity requirement.
-- **End users are developers**: Every aitools user benefits from understanding internals. No "dumb user" persona. Skills, docs, and menus assume developer familiarity.
+- **End users are developers**: Every aitools user benefits from understanding internals. No "dumb user" persona. Skills, docs, and menus assume developer familiarity. Users may work on one, two, or all three platforms — aitools supports all combinations. Cross-platform coverage in skills and docs is factual (all platforms documented), not prescriptive (don't assume every user cares about every platform).
 - **Skills as enablement**: Every managed tool, dependency, and repeatable process gets a skill. User-level skills (`shared/skills/` → `~/.claude/skills/`) cover managed tools and project-agnostic patterns. Project-level skills (`.claude/skills/`) cover repo-specific frameworks. See `plans/governance-and-compliance-framework.md` for placement criteria.
 
 ## Project Structure

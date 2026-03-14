@@ -46,6 +46,12 @@ record — these are not open questions.
 14. **User as co-architect during planning.** Present options not
     conclusions. Flag uncertainty explicitly. The user has domain
     knowledge no amount of codebase exploration replaces.
+15. **Users may be single or multi-platform.** aitools supports all
+    combinations (1, 2, or 3 platforms). User-level skills document all
+    platforms factually — users consume what's relevant to them. aitools
+    the PROJECT enforces cross-platform parity (PSOs). `/optimize-plan`
+    does not assume cross-platform — it checks contextually based on
+    what the plan touches.
 
 ## Three-Layer Architecture
 
@@ -196,6 +202,7 @@ shared/skills/perl/
 | `/planning` | Session and plan strategy | Context budgets (1M=100k injectable, 200k=20k), session flow (60-70% stop), subagent coordination and parallelization, when to create plans vs work directly, model-dependent context windows (Opus 1M, Sonnet 200k, Haiku 100k), batch sizing (2-3 files), what works vs fails from session history, user as co-architect |
 | `/incident-response` | Incident lifecycle | Detection → triage → investigation (5 Whys, contributing factors) → remediation → corrective action (behavioral vs structural) → verification → dissemination → follow-up. Recurrence = wrong fix, not wrong person. |
 | `/rca` | Root cause analysis | Alias/subset of incident-response focused on investigation phase: 5 Whys, fishbone, Swiss cheese model, contributing factors vs single root cause, timeline reconstruction |
+| `/optimize-plan` | Living plan review | Reads plan file + known-gaps.json + recent git log + referenced rules + ROADMAP.md. Outputs: stale sections, dependency graph, leverage map (what unblocks most downstream work), scope assessment (still coherent or split?), missing decisions. Invoke periodically after major batches, not one-shot. |
 
 ### Project-level skills (8)
 
@@ -212,7 +219,7 @@ Located in `.claude/skills/` within the aitools repo.
 | `/aitools-dev` | aitools development | Entry point dispatch, how to add tools/deployment types, return value contracts, validation callbacks |
 | `/aitools-planning` | aitools plan standards | Foundational decisions pattern, verbatim code requirement, platform annotations (Windows PS1 / macOS bash), batch verification checklist, cross-reference audit, test plan with expected counts |
 
-Total: **40 skills** (32 user-level + 8 project-level).
+Total: **42 skills** (34 user-level + 8 project-level).
 
 ## Skill Deployment
 
@@ -458,7 +465,7 @@ Dependency-aware sequencing:
 3. **`/gap` and `/audit` skills** — governance filing and review
 4. **SubagentStart hook** — pre-built cache + context injection
 5. **Telemetry hooks + SQLite** — local KPI collection infrastructure
-6. **User-level tool skills** — all 32
+6. **User-level tool skills** — all 34
 7. **Project-level skills** — all 8
 8. **PreToolUse hooks** — known-gaps validator, protected file reminder,
    error suppression, git checklist
