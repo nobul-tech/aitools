@@ -28,6 +28,8 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 | `reference/framework-registry.json` | Framework registry — source of truth for all adopted frameworks | Any |
 | `.claude/rules/frameworks.md` | Framework rule — intent of frameworks, registry of registries | Any |
 | `reference/gap-*.md` | Gap reference files — full discovery context for framework-level gaps | Any |
+| `reference/harness.md` | Harness architecture — the five components and their relationships | Any |
+| `reference/glossary.json` | Governed vocabulary definitions — source of truth for all terms | Any |
 
 ### The rule
 

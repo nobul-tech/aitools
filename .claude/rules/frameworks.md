@@ -1,5 +1,13 @@
 ## Frameworks (this repo)
 
+**Intent**: **Purpose**: State what frameworks are, when to check
+them, and where the registries live — so agents always know to check
+before assuming. **Scope**: Framework concept, registry references,
+and harness registry list. NOT framework data (see
+`@reference/framework-registry.json`). NOT the adoption process (see
+`@reference/framework-adoption.md`). **Audience**: Every agent,
+every session.
+
 Frameworks are governance structures adopted from established
 disciplines into the harness. Each bridges a discipline's concepts
 to concrete harness artifacts (rules, skills, hooks, reference files).

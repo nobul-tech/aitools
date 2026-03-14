@@ -228,4 +228,5 @@ its artifacts.
 - Framework rule: `@.claude/rules/frameworks.md`
 - Gap governance: `@.claude/rules/gap-governance.md`
 - Governed vocabulary: `@reference/framework-governed-vocabulary.md`
+- Intent documentation: `@reference/framework-intent-documentation.md`
 - Three-layer governance: `@reference/framework-three-layer-governance.md`

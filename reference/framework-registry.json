@@ -122,8 +122,8 @@
       "name": "Intent documentation",
       "governs": "Every file and section states its purpose, scope, and audience",
       "discipline": "Knowledge management",
-      "concepts": ["Documentation as governance", "ISO purpose/scope/audience", "Conformance checking"],
-      "referenceFile": "reference/framework-adoption.md",
+      "concepts": ["Documentation as governance", "ISO purpose/scope/audience", "Intent verification"],
+      "referenceFile": "reference/framework-intent-documentation.md",
       "artifacts": [
         "shared/skills/intent-writing/SKILL.md",
         "shared/skills/intent-audit/SKILL.md",
@@ -138,7 +138,7 @@
       "discipline": "Process management",
       "concepts": ["Process deviation", "Plan adherence", "Amendment protocols"],
       "gap": 20,
-      "referenceFile": null
+      "referenceFile": "reference/gap-020-process-discipline.md"
     }
   ]
 }

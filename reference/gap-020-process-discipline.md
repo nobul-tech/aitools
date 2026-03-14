@@ -9,6 +9,8 @@ for resolution.
 
 ## Discovery
 
+Session: 2026-03-14.
+
 During governance plan step 4 prerequisite work (SubagentStart hook),
 the agent proposed pulling step 7 (/aitools-dev skill) forward to
 before step 4. The justification was "the skill is small." The user
