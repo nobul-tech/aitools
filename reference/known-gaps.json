@@ -238,6 +238,19 @@
       "plannedFix": "Fix gap #15 (setup-user-mcp dynamic discovery). Decision #20 documents the policy: no hacks, fix deployment properly.",
       "created": "2026-03-13",
       "updated": "2026-03-13"
+    },
+    {
+      "id": 19,
+      "title": "path-targeted-hooks-analysis.md placement not reviewed",
+      "status": "open",
+      "severity": "medium",
+      "type": "gap",
+      "affected": ["reference/path-targeted-hooks-analysis.md", ".claude/rules/sources-of-truth.md"],
+      "linked": null,
+      "description": "Created reference/path-targeted-hooks-analysis.md without presenting for review (source-of-truth review gate violation). Also not added to sources-of-truth.md protected files table. The file may belong in reference/, plans/, or as a section within the governance plan — placement decision was not made explicitly.",
+      "plannedFix": "Review file placement with user. Add to sources-of-truth.md if it stays in reference/. Consider whether it should be a section in the plan instead of a standalone file.",
+      "created": "2026-03-14",
+      "updated": "2026-03-14"
     }
   ],
   "closed": []
