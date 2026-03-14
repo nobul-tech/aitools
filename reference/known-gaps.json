@@ -2,7 +2,7 @@
   "meta": {
     "governance": ".claude/rules/gap-governance.md",
     "description": "Deviations from spec and unresolved ambiguities. Rules define what SHOULD be; this file tracks what ISN'T yet.",
-    "lastUpdated": "2026-03-13"
+    "lastUpdated": "2026-03-14"
   },
   "gaps": [
     {
@@ -223,6 +223,19 @@
       "linked": null,
       "description": "script-standards.md references 'See script-standards-detail.md Bridge pattern' but that section heading doesn't exist in the detail file. Cross-reference points to missing content.",
       "plannedFix": "Add Bridge pattern section to script-standards-detail.md or fix the reference.",
+      "created": "2026-03-13",
+      "updated": "2026-03-13"
+    },
+    {
+      "id": 18,
+      "title": "Claimed skills discoverable before deployment infrastructure exists",
+      "status": "open",
+      "severity": "medium",
+      "type": "gap",
+      "affected": ["shared/skills/", "scripts/setup-user-mcp.sh", "scripts/setup-user-mcp.ps1"],
+      "linked": "gap #15, decision #20",
+      "description": "Session created 4 user-level skills in shared/skills/ and claimed they would show up after restart. They won't — shared/skills/ is source, not deployment. Skills are invisible until deployed to ~/.claude/skills/ by setup-user-mcp. Barrier analysis: dependency map hook would have injected a reminder but wouldn't have definitively prevented the wrong suggestion (information problem vs reasoning problem). Root cause: knew about gap #15 but didn't connect it to the current suggestion.",
+      "plannedFix": "Fix gap #15 (setup-user-mcp dynamic discovery). Decision #20 documents the policy: no hacks, fix deployment properly.",
       "created": "2026-03-13",
       "updated": "2026-03-13"
     }

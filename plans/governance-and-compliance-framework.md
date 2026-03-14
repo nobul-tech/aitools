@@ -351,6 +351,24 @@ roadmap item. Combine into one hook.
   Were any ambiguities surfaced or filed?"
 - Context injection only, does not block
 
+### PermissionRequest telemetry hook (command type, async)
+
+- Event: PermissionRequest
+- Logs every permission prompt to telemetry SQLite: which tool triggered
+  it, timestamp, session context
+- KPI: high permission prompt rate = need more pre-approvals in
+  settings.json or hook-based permissionDecision
+- Async: does not block the permission dialog
+
+### Path-targeted dependency hooks (prompt type)
+
+9 generalizable patterns for dependency-aware context injection.
+Full analysis: `reference/path-targeted-hooks-analysis.md`.
+
+Key principle: when writing to a file, inject reminders about what
+that file feeds into and depends on. Source: `reference/dependency-map.json`
+(to be created with hooks, step 8).
+
 ### Standing order guard updates (update existing)
 
 Update stderr messages to reference skills when blocking:
