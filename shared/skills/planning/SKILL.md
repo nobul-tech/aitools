@@ -132,6 +132,18 @@ resolution, or ask.
 ### Suggest answers with questions
 
 Never ask a bare question that blocks the user. Always pair the question
-with a suggested answer: "Should we do X? I'd suggest Y because Z."
+with a suggested answer, evaluated against these criteria:
+
+1. **Current state** — what's built, broken, or in progress right now?
+2. **Context** — what is the user working on? What have they said matters?
+3. **Leverage** — which option unblocks the most downstream work?
+4. **Risk** — which option is easiest to course-correct from if wrong?
+5. **Precedent** — has a similar decision been made? What worked before?
+6. **Ambiguity** — if not confident, say so. Present options with
+   tradeoffs rather than picking one.
+
+Format: "Should we do X? I'd suggest Y because [criteria 1, 3 apply].
+Alternative Z if [different tradeoff]."
+
 The user can accept, modify, or reject — but they're never stuck
 waiting for you to have an opinion.
