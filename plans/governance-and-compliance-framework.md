@@ -356,7 +356,7 @@ recurring friction.
 Dependency-aware sequencing:
 
 1. **Rules and CLAUDE.md** (v0.54 — done)
-2. **Plan corrections** (v0.54.1 — this batch)
+2. **Plan corrections** (v0.54.1 — done)
 3. **`/gap` and `/audit` skills** — governance filing and review
 4. **SubagentStart hook** — pre-built cache + context injection
 5. **User-level tool skills** — all 29
@@ -367,6 +367,24 @@ Dependency-aware sequencing:
 9. **Stop hook** — ambiguity check
 10. **Permission updates** — .scratch pre-approvals
 
+### Session working convention
+
+Each session picks up this plan, works through the next steps, and
+stops at **60-70% context usage** to leave room for commit/push workflow,
+late-session course corrections, and gap filing. Check `/context`
+periodically.
+
+**Session flow:**
+1. Read this plan + known-gaps.json + relevant rules
+2. Work through implementation steps in order
+3. Surface ambiguities as they arise (surfacing duty)
+4. At 60-70% context: stop building, file any new gaps, update release
+   notes, commit, tag, push both repos
+5. If more work remains, note where to resume in the commit message
+
+Steps 1-2 marked "done" can be skipped. Resume from the first
+incomplete step.
+
 ## Verification
 
 After each implementation step:
@@ -376,6 +394,14 @@ After each implementation step:
 - Run /audit to verify detection of known test cases
 - Smoke-test per hook-rollout.md patterns
 - Check `/context` for skill budget impact
+
+## Open Questions
+
+Tracked as gaps in `known-gaps.json`. Key unresolved items:
+- Gap #12: Cursor skill deployment mechanism unverified
+- Gap #14: Subagent skill preloading via `skills:` field vs hook injection
+- Gap #15: setup-user-mcp scaling from 2 to 29+ user-level skills
+- Gap #16: Meta-skill for ambiguity detection
 
 ## Open Questions
 
