@@ -247,8 +247,8 @@
       "type": "gap",
       "affected": ["reference/path-targeted-hooks-analysis.md", ".claude/rules/sources-of-truth.md"],
       "linked": null,
-      "description": "Created reference/path-targeted-hooks-analysis.md without presenting for review (source-of-truth review gate violation). Also not added to sources-of-truth.md protected files table. The file may belong in reference/, plans/, or as a section within the governance plan — placement decision was not made explicitly.",
-      "plannedFix": "Review file placement with user. Add to sources-of-truth.md if it stays in reference/. Consider whether it should be a section in the plan instead of a standalone file.",
+      "description": "Assumed reference/ was the correct location for path-targeted-hooks-analysis.md without evaluating alternatives or consulting the user. Did not apply decision criteria (state, context, leverage, risk, precedent, ambiguity) from foundational decision #16. Alternatives not considered: section within the governance plan, a new plans/ file, staying in .scratch/ until hooks are built, or a different reference/ name. The assumption was treated as obvious when it wasn't.",
+      "plannedFix": "Evaluate placement with user applying decision criteria. Options: 1) reference/ standalone (current), 2) section in governance plan, 3) plans/ as hook implementation plan, 4) defer until hooks are built.",
       "created": "2026-03-14",
       "updated": "2026-03-14"
     }
