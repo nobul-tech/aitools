@@ -149,7 +149,7 @@ shared/skills/perl/
 - `/audit` scope includes: "does this skill have test cases?"
 - Run evals in fresh sessions (no context bleed from prior conversation)
 
-### User-level skills (33)
+### User-level skills (32)
 
 #### Managed tool skills (15)
 
@@ -187,7 +187,7 @@ shared/skills/perl/
 | `/cmake` | CMake | Install methods per platform, version requirements, path detection |
 | `/msvc` | MSVC Build Tools | Visual Studio components, elevation requirements, detection patterns |
 
-#### Cross-cutting skills (12)
+#### Cross-cutting skills (11)
 
 | Skill | Purpose | Key content |
 |-------|---------|-------------|
@@ -200,8 +200,7 @@ shared/skills/perl/
 | `/error-handling` | Error suppression patterns | Canonical bash/PS1 patterns: suppression-with-check, null guards, external command capture, exit footers |
 | `/mcp-skill` | MCP server config | Enable/disable patterns, Claude vs Cursor asymmetry, isolation mode, auth, `--addmcp` |
 | `/planning` | Session and plan strategy | Context budgets (1M=100k injectable, 200k=20k), session flow (60-70% stop), subagent coordination and parallelization, when to create plans vs work directly, model-dependent context windows (Opus 1M, Sonnet 200k, Haiku 100k), batch sizing (2-3 files), what works vs fails from session history, user as co-architect |
-| `/incident-response` | Incident lifecycle | Detection → triage → investigation (5 Whys, contributing factors) → remediation → corrective action (behavioral vs structural) → verification → dissemination → follow-up. Recurrence = wrong fix, not wrong person. |
-| `/rca` | Root cause analysis | Alias/subset of incident-response focused on investigation phase: 5 Whys, fishbone, Swiss cheese model, contributing factors vs single root cause, timeline reconstruction |
+| `/incident-response` | Incident lifecycle | Detection → triage → investigation (5 Whys, Swiss cheese model, timeline, barrier analysis) → remediation → corrective action (behavioral vs structural) → verification → dissemination → follow-up. Recurrence = wrong fix, not wrong person. |
 | `/optimize-plan` | Living plan review | Reads plan file + known-gaps.json + recent git log + referenced rules + ROADMAP.md. Outputs: stale sections, dependency graph, leverage map (what unblocks most downstream work), scope assessment (still coherent or split?), missing decisions. Invoke periodically after major batches, not one-shot. |
 
 ### Project-level skills (8)
@@ -219,7 +218,7 @@ Located in `.claude/skills/` within the aitools repo.
 | `/aitools-dev` | aitools development | Entry point dispatch, how to add tools/deployment types, return value contracts, validation callbacks |
 | `/aitools-planning` | aitools plan standards | Foundational decisions pattern, verbatim code requirement, platform annotations (Windows PS1 / macOS bash), batch verification checklist, cross-reference audit, test plan with expected counts |
 
-Total: **41 skills** (33 user-level + 8 project-level).
+Total: **40 skills** (32 user-level + 8 project-level).
 
 ## Skill Deployment
 
@@ -465,7 +464,7 @@ Dependency-aware sequencing:
 3. **`/gap` and `/audit` skills** — governance filing and review
 4. **SubagentStart hook** — pre-built cache + context injection
 5. **Telemetry hooks + SQLite** — local KPI collection infrastructure
-6. **User-level tool skills** — all 33
+6. **User-level tool skills** — all 32
 7. **Project-level skills** — all 8
 8. **PreToolUse hooks** — known-gaps validator, protected file reminder,
    error suppression, git checklist
