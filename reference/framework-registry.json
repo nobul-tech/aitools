@@ -1,0 +1,144 @@
+{
+  "meta": {
+    "governance": ".claude/rules/frameworks.md",
+    "adoption": "reference/framework-adoption.md",
+    "intent": {
+      "purpose": "Source of truth for all adopted governance frameworks and their implementing artifacts",
+      "scope": "Framework entries and pending adoptions only. NOT the adoption process (framework-adoption.md). NOT framework documentation (framework-*.md files). NOT the word list (.claude/rules/frameworks.md)",
+      "audience": "/frameworks skill, /audit skill, agents checking whether a framework addresses their decision point"
+    },
+    "lastUpdated": "2026-03-14"
+  },
+  "frameworks": [
+    {
+      "name": "Three-layer governance",
+      "governs": "Prevention, detection, and audit of all harness activity",
+      "discipline": "Quality management",
+      "concepts": ["Layered defense", "Defense in depth"],
+      "referenceFile": "reference/framework-three-layer-governance.md",
+      "artifacts": [
+        "CLAUDE.md (design principles)",
+        ".claude/rules/*.md (prevention layer)",
+        "shared/hooks/*.sh (detection layer)",
+        ".claude/skills/audit/SKILL.md (audit layer)"
+      ]
+    },
+    {
+      "name": "Gap governance",
+      "governs": "Tracking and resolving harness deficiencies",
+      "discipline": "Quality management",
+      "concepts": ["Defect tracking", "Severity classification", "Continuous improvement (PDCA)"],
+      "referenceFile": "reference/framework-gap-governance.md",
+      "artifacts": [
+        ".claude/rules/gap-governance.md",
+        "reference/known-gaps.json",
+        ".claude/skills/gap/SKILL.md",
+        ".claude/skills/audit/SKILL.md"
+      ]
+    },
+    {
+      "name": "Source-of-truth protection",
+      "governs": "Approval gates for critical files that propagate across machines",
+      "discipline": "Change management",
+      "concepts": ["Change advisory boards", "Approval gates", "Protected state"],
+      "referenceFile": "reference/framework-source-of-truth.md",
+      "artifacts": [
+        ".claude/rules/sources-of-truth.md"
+      ]
+    },
+    {
+      "name": "Tool lifecycle",
+      "governs": "Evaluation, approval, integration, and deprecation of managed tools",
+      "discipline": "Software asset management",
+      "concepts": ["Lifecycle phases", "Approval gates", "Deprecation paths"],
+      "referenceFile": "reference/framework-tool-lifecycle.md",
+      "artifacts": [
+        ".claude/rules/tool-lifecycle.md",
+        "reference/tool-registry.md",
+        "reference/tool-evaluation-criteria.md",
+        "reference/tool-evaluation-playbook.md",
+        "reference/tool-versions.json"
+      ]
+    },
+    {
+      "name": "Managed file deployment",
+      "governs": "Deploying and reconciling harness content across machines",
+      "discipline": "Configuration management",
+      "concepts": ["Drift detection", "Reconciliation", "State machines"],
+      "referenceFile": "reference/framework-managed-file-deployment.md",
+      "artifacts": [
+        ".claude/rules/managed-file-deployment.md",
+        "reference/managed-file-deployment.md",
+        ".claude/rules/interactive-menus.md",
+        ".claude/rules/config-file-safety.md"
+      ]
+    },
+    {
+      "name": "Hook rollout",
+      "governs": "Graduated deployment of detection hooks",
+      "discipline": "Release engineering",
+      "concepts": ["Canary deployment", "Observe-then-enforce", "Graduated rollout"],
+      "referenceFile": "reference/framework-hook-rollout.md",
+      "artifacts": [
+        ".claude/rules/hook-rollout.md",
+        "shared/hooks/standing-order-guard.sh"
+      ]
+    },
+    {
+      "name": "Incident investigation",
+      "governs": "Root cause analysis and corrective actions when something goes wrong",
+      "discipline": "Safety engineering",
+      "concepts": ["5 Whys", "Swiss cheese model (Reason)", "Barrier analysis"],
+      "referenceFile": "reference/framework-incident-investigation.md",
+      "artifacts": [
+        "shared/skills/investigate/SKILL.md"
+      ]
+    },
+    {
+      "name": "Framework adoption",
+      "governs": "How the harness grows by adopting concepts from established disciplines",
+      "discipline": "Organizational learning",
+      "concepts": ["Double-loop learning (Argyris)", "Single-loop vs double-loop"],
+      "referenceFile": "reference/framework-adoption.md",
+      "artifacts": [
+        "reference/framework-adoption.md",
+        ".claude/rules/frameworks.md",
+        "reference/framework-registry.json"
+      ]
+    },
+    {
+      "name": "Governed vocabulary",
+      "governs": "Consistent terminology across the harness",
+      "discipline": "Information architecture",
+      "concepts": ["Ubiquitous language (Evans/DDD)", "Faceted classification (Ranganathan)"],
+      "referenceFile": "reference/framework-governed-vocabulary.md",
+      "artifacts": [
+        ".claude/rules/glossary.md",
+        "reference/glossary.json",
+        ".claude/skills/glossary/SKILL.md"
+      ]
+    },
+    {
+      "name": "Intent documentation",
+      "governs": "Every file and section states its purpose, scope, and audience",
+      "discipline": "Knowledge management",
+      "concepts": ["Documentation as governance", "ISO purpose/scope/audience", "Conformance checking"],
+      "referenceFile": "reference/framework-adoption.md",
+      "artifacts": [
+        "shared/skills/intent-writing/SKILL.md",
+        "shared/skills/intent-audit/SKILL.md",
+        ".claude/rules/sources-of-truth.md (intent protection)"
+      ]
+    }
+  ],
+  "pending": [
+    {
+      "name": "Process discipline",
+      "governs": "Plan adherence, deviations, and amendments",
+      "discipline": "Process management",
+      "concepts": ["Process deviation", "Plan adherence", "Amendment protocols"],
+      "gap": 20,
+      "referenceFile": null
+    }
+  ]
+}

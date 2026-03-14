@@ -68,8 +68,16 @@ record — these are not open questions.
     should be what you'd naturally type when you need the skill.
 20. **Fix gap #15 before building more user-level skills.** `shared/skills/`
     is source, not deployment. Skills are invisible to Claude Code until
-    deployed to `~/.claude/skills/` by `setup-user-mcp`. No hacks —
+    deployed to `~/.claude/skills/` by `setup-user-skills`. No hacks —
     fix the deployment infrastructure properly.
+21. **Frameworks are first-class harness components.** Every adopted
+    governance framework gets a dedicated reference file
+    (`reference/framework-*.md`) documenting source discipline,
+    adoption rationale, maintenance, and implementing artifacts.
+    The framework registry (`@reference/framework-registry.json`)
+    is the source of truth. Cross-references between frameworks,
+    rules, skills, and hooks are explicit and bidirectional. See
+    `@reference/framework-adoption.md`.
 
 ## Three-Layer Architecture
 
@@ -242,17 +250,18 @@ Total: **40 skills** (32 user-level + 8 project-level).
 
 ### User-level deployment
 
-`setup-user-mcp.sh/.ps1` deploys user-level skills from `shared/skills/`
-to `~/.claude/skills/` (and `~/.cursor/skills/` — see gap #12 for Cursor
-verification status). After deploying all skills, builds the SubagentStart
-pre-built cache (see below).
+`setup-user-skills.sh/.ps1` (split from setup-user-mcp per gap #15)
+deploys user-level skills from `shared/skills/` to `~/.claude/skills/`
+using dynamic directory iteration. Cursor deployment deferred per gap #12.
+After deploying all skills, builds the SubagentStart pre-built cache
+(see below).
 
 ### SubagentStart pre-built cache
 
 At deploy time (not hook runtime), concatenate all injectable skill
 content into a single file:
 
-**Build step** (in `setup-user-mcp.sh/.ps1`, after skill deployment):
+**Build step** (in `setup-user-skills.sh/.ps1`, after skill deployment):
 1. Read all `~/.claude/skills/*/SKILL.md` files
 2. Read all `.claude/skills/*/SKILL.md` files (project-level, if in aitools)
 3. Exclude skills with `inject: false` in frontmatter
@@ -497,7 +506,13 @@ Dependency-aware sequencing:
 
 1. **Rules and CLAUDE.md** (v0.54 — done)
 2. **Plan corrections** (v0.54.1 — done)
-3. **`/gap` and `/audit` skills** — governance filing and review
+3. **`/gap` and `/audit` skills** (v0.54.1 — done)
+3.5. **Framework documentation and schema enrichment** (v0.55 — in progress)
+     Framework reference files, enriched gap schema, frameworks rule,
+     framework registry JSON, intent-writing + intent-audit skills,
+     harness definition, registry convention, cross-reference convention.
+3.6. **User deploys via `aitools install`** — skills and framework
+     docs deployed to machine before step 4 builds on them.
 4. **SubagentStart hook** — pre-built cache + context injection
 5. **Telemetry hooks + SQLite** — local KPI collection infrastructure
 6. **User-level tool skills** — all 32

@@ -101,3 +101,11 @@ When a subagent reports `AMBIGUITY: <description>`:
 
 File them one at a time, incrementing IDs. Present all entries as a batch
 for user review if filing multiple gaps at once.
+
+## Cross-References
+
+- Framework: `@reference/framework-gap-governance.md`
+- Operational rule: `@.claude/rules/gap-governance.md`
+- Discovery cycle: `@reference/framework-adoption.md`
+- Gap data: `@reference/known-gaps.json`
+- Audit skill: `.claude/skills/audit/SKILL.md`

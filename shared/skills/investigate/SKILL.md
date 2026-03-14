@@ -201,3 +201,9 @@ Things that almost went wrong but were caught:
 
 Near-misses are valuable signals. They don't need the full lifecycle,
 but logging them in the session helps `/audit` identify trends.
+
+## Cross-References
+
+- Framework: `@reference/framework-incident-investigation.md`
+- Three-layer governance: `@reference/framework-three-layer-governance.md`
+- Gap filing: `.claude/skills/gap/SKILL.md`

@@ -111,3 +111,12 @@ User invokes `/audit` explicitly. The skill:
 - Does not file gaps automatically (use `/gap` for that)
 - Does not modify rules or references
 - Does not auto-trigger (user must invoke explicitly)
+
+## Cross-References
+
+- Frameworks:
+  - Three-layer governance: `@reference/framework-three-layer-governance.md`
+  - Gap governance: `@reference/framework-gap-governance.md`
+- Operational rule: `@.claude/rules/gap-governance.md`
+- Gap data: `@reference/known-gaps.json`
+- Gap filing: `.claude/skills/gap/SKILL.md`

@@ -1,5 +1,16 @@
 # Claude Code Version Dependencies
 
+**Intent**: **Purpose**: Track Claude Code version dependencies,
+workarounds, and behavioral assumptions that affect aitools scripts
+and hooks. **Scope**: What we depend on, what we work around, and
+what's available but not yet adopted. NOT a comprehensive Claude Code
+feature inventory — upstream docs
+(https://docs.anthropic.com/en/docs/claude-code) are the source of
+truth for the full capability set. **Audience**: Agents modifying
+setup scripts or hooks, agents evaluating whether a Claude Code
+feature can solve a problem. See `@reference/framework-adoption.md`
+"The Harness" for how this fits into the overall system.
+
 Registry of version-dependent workarounds, behaviors, and assumptions in this repo.
 
 - **Current version**: 2.1.74

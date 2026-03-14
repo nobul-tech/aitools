@@ -23,6 +23,11 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 | `reference/user-repo.md` | User repo pattern, template resolution, session archive — scripts reference this | Any |
 | `reference/agentic-framework.md` | Agentic AI invocation spec — speed/permission tiers, prompt design, validation patterns | Any |
 | `reference/managed-file-deployment.md` | Managed file deployment state machine -- menus, return values, caller contracts | Any |
+| Intent statements in any file | Defines how all future sessions interpret the file's purpose and scope | Any |
+| `reference/framework-*.md` | Framework documentation — discipline source, adoption rationale, maintenance | Any |
+| `reference/framework-registry.json` | Framework registry — source of truth for all adopted frameworks | Any |
+| `.claude/rules/frameworks.md` | Framework rule — intent of frameworks, registry of registries | Any |
+| `reference/gap-*.md` | Gap reference files — full discovery context for framework-level gaps | Any |
 
 ### The rule
 
@@ -36,6 +41,15 @@ Before writing, editing, or deleting content in any protected file:
 
 - **Trivial fixes** (typos, whitespace, markdown formatting) that do not change meaning may be made without review, but mention them in your response so the user is aware.
 - **User-dictated content** — if the user provides the exact text to write (e.g., "add this bullet to CLAUDE.md: ..."), that counts as pre-approved. Write it directly.
+
+### Intent statements
+
+Intent statements (`**Intent**:` blocks in markdown, `intent:` header
+comments in code) are protected regardless of which file they appear
+in. Draft the intent, present for user review, write only after
+approval. This applies to new intent statements and modifications to
+existing ones. See `@reference/framework-adoption.md` for why intent
+is part of the harness.
 
 ### Why this matters
 

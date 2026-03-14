@@ -1,0 +1,254 @@
+{
+  "meta": {
+    "governance": ".claude/rules/glossary.md",
+    "framework": "reference/framework-governed-vocabulary.md",
+    "intent": {
+      "purpose": "Provide the authoritative definition for every governed term in the harness",
+      "scope": "Definitions, facets, and abbreviation mappings only. NOT the word list (glossary rule). NOT the composition convention (framework-governed-vocabulary.md). NOT usage guidance (/glossary skill)",
+      "audience": "/glossary skill, /audit skill, agents resolving terminology questions"
+    },
+    "lastUpdated": "2026-03-14"
+  },
+  "facets": {
+    "scopeModifiers": {
+      "project": "In the aitools repo, for this repo's sessions",
+      "shared": "In shared/ in the aitools repo, source for deployment",
+      "dotprofile": "In the user's aitools-<username> repo, personal source",
+      "user": "Deployed to ~/, active on the machine"
+    },
+    "baseArtifacts": {
+      "alias": "Shell alias file (shared/shell/ or deployed to profile)",
+      "claude": "CLAUDE.md file at the given scope",
+      "config": "JSON configuration file (settings.json, config.json, mcp.json)",
+      "hook": "Hook script (.sh in shared/hooks/ or ~/.claude/hooks/)",
+      "rule": "Claude Code rule file (.md in .claude/rules/ or ~/.claude/rules/)",
+      "skill": "Skill definition (SKILL.md in .claude/skills/, shared/skills/, or ~/.claude/skills/)"
+    }
+  },
+  "terms": {
+    "adoption": {
+      "definition": "The process of mapping concepts from an established discipline into harness artifacts. See the DTCC steps 4-6.",
+      "source": "reference/framework-adoption.md"
+    },
+    "aitools": {
+      "definition": "The CLI command (aitools install, aitools mcp, etc.). Distinct from aitools repo.",
+      "source": "CLAUDE.md"
+    },
+    "aitools repo": {
+      "definition": "The ~/repos/aitools repository — source of truth for all harness content. Distinct from aitools (the CLI command).",
+      "source": "CLAUDE.md"
+    },
+    "ambiguity": {
+      "definition": "A decision point where the harness doesn't provide explicit guidance. The trigger for the DTCC. Can arise from a gap in artifacts, a gap in frameworks, a bug, or context rot.",
+      "source": "reference/framework-adoption.md"
+    },
+    "artifact": {
+      "definition": "A concrete file in the harness that implements a framework or convention. Types: rule, skill, hook, reference file, JSON registry, design principle, command, agent definition.",
+      "source": "reference/framework-adoption.md"
+    },
+    "audience": {
+      "definition": "The third component of an intent statement (after purpose and intent scope). Who consumes the file and what they expect to find. Adopted from ISO intended audience.",
+      "source": "shared/skills/intent-writing/SKILL.md"
+    },
+    "audit": {
+      "definition": "The third layer of three-layer governance: deep analysis on demand that catches what prevention and detection missed. Also the name of the /audit skill. Context distinguishes: 'audit layer' = governance concept, '/audit' = the skill.",
+      "source": "reference/framework-three-layer-governance.md"
+    },
+    "configuration": {
+      "definition": "The harness layer covering our use of the Claude Code platform: the rules we write, skills we build, hooks we configure, claude content we author, settings we set. Exists at project and user deployment scope.",
+      "source": "reference/framework-adoption.md"
+    },
+    "context rot": {
+      "definition": "When harness content becomes stale or misleading due to changes in the codebase, upstream tools, or conventions that the content doesn't reflect. A source of ambiguity.",
+      "source": "reference/framework-adoption.md"
+    },
+    "cross-reference": {
+      "definition": "An explicit, bidirectional link between harness artifacts. Every reference file ends with a ## Cross-References section listing related glossary terms, frameworks, rules, skills, registries, and other reference files. The convention is defined in reference/framework-adoption.md.",
+      "source": "reference/framework-adoption.md"
+    },
+    "cursor rule": {
+      "definition": "Cursor rule file (.cursor/rules/*.mdc). Separate harness from Claude Code. Not a composition of scope modifier + base artifact — cursor is not a scope modifier.",
+      "source": ".claude/rules/frameworks.md"
+    },
+    "deployment scope": {
+      "definition": "Where a configuration, tool, hook, or MCP server applies: user-level (all projects on the machine), project-level (one repo), or managed-level (all users on the machine). Distinct from intent scope.",
+      "source": ".claude/rules/managed-file-deployment.md"
+    },
+    "design principle": {
+      "definition": "An inline directive in the Design Principles section of project claude. Governs how agents behave across all sessions in this repo.",
+      "source": "CLAUDE.md"
+    },
+    "DP": {
+      "abbreviationOf": "design principle"
+    },
+    "detection": {
+      "definition": "The second layer of three-layer governance: hooks firing in real-time during tool calls and session events. Catches issues as they happen by blocking or warning.",
+      "source": "reference/framework-three-layer-governance.md"
+    },
+    "discovery context": {
+      "definition": "A gap schema field capturing what the filer was doing when the gap was found, what harness artifacts were audited, and the session reference. Maps to DTCC steps 1-2.",
+      "source": ".claude/rules/gap-governance.md"
+    },
+    "discovery-to-continuation cycle": {
+      "definition": "The nine-step process for handling ambiguities: record context, audit state, characterize deficiency, recognize discipline, research frameworks, design adaptation, implement, integrate, continue. Steps 1-6 produce gap context. Steps 7-9 are execution.",
+      "source": "reference/framework-adoption.md"
+    },
+    "DTCC": {
+      "abbreviationOf": "discovery-to-continuation cycle"
+    },
+    "discipline": {
+      "definition": "An established field of practice where significant prior work exists on how to solve a class of problems. Examples: quality management, safety engineering, process management. Disciplines are external; frameworks are our adoption of their concepts.",
+      "source": "reference/framework-adoption.md"
+    },
+    "dotprofile repo": {
+      "definition": "The aitools-<username> companion repo storing per-user preferences, claude templates, rules, and session archives. Distinct from aitools repo.",
+      "source": "reference/user-repo.md"
+    },
+    "drift": {
+      "definition": "When deployed content diverges from its source over time. Addressed by the managed file deployment framework (drift detection, reconciliation) and the three-layer registry pattern (JSON source of truth prevents markdown drift).",
+      "source": "reference/framework-managed-file-deployment.md"
+    },
+    "expected": {
+      "definition": "A gap schema field stating what specific rule, reference, or convention says the state should be different. Must cite the source as file:section. If no spec exists, write 'No spec exists for: [topic].'",
+      "source": ".claude/rules/gap-governance.md"
+    },
+    "framework": {
+      "definition": "A governance structure built by adopting concepts from an established discipline. Bridges discipline to artifacts. Distinct from discipline (external field) and artifact (specific file). Each framework has a dedicated reference file and a registry entry.",
+      "source": "reference/framework-adoption.md"
+    },
+    "gap": {
+      "definition": "A deficiency in the harness where code deviates from an existing spec. Distinguished from ambiguity (where no spec exists). Filed in known-gaps.json with structured fields. Severity: critical/high/medium/low. Lifecycle: open, planned, closed.",
+      "source": ".claude/rules/gap-governance.md"
+    },
+    "governed vocabulary": {
+      "definition": "The practice of maintaining a single authoritative definition for every term used across the harness. Adopted from ubiquitous language (Domain-Driven Design) and faceted classification (Ranganathan). Implemented via the glossary rule, JSON, and skill.",
+      "sourceDiscipline": "Information architecture (DDD, Ranganathan)",
+      "source": "reference/framework-governed-vocabulary.md"
+    },
+    "harness": {
+      "definition": "Everything we build and maintain that shapes how AI agents behave, what they know, and what guardrails they operate within. Five components: platform, configuration, orchestration, managed tools, frameworks.",
+      "source": "reference/harness.md"
+    },
+    "hook": {
+      "definition": "A Claude Code mechanism that fires during session events (PreToolUse, PostToolUse, SessionStart, SessionEnd, SubagentStart, InstructionsLoaded, PermissionRequest, Stop). Types: command, prompt, agent, HTTP. Part of the detection layer.",
+      "source": "reference/claude-code-maintenance.md"
+    },
+    "impact": {
+      "definition": "A gap schema field naming what breaks, degrades, or is at risk if the gap is not fixed. Must be concrete — name the affected workflow and who is affected.",
+      "source": ".claude/rules/gap-governance.md"
+    },
+    "intent": {
+      "definition": "A declaration stating a file's or section's purpose, intent scope, and audience. Guides what content belongs and is the basis for intent verification. Protected activity — requires user approval to write or modify.",
+      "source": "shared/skills/intent-writing/SKILL.md"
+    },
+    "intent scope": {
+      "definition": "The second component of an intent statement (after purpose, before audience). What the file covers and what it explicitly excludes. Adopted from ISO/IEC scope statement. Distinct from deployment scope.",
+      "source": "shared/skills/intent-writing/SKILL.md"
+    },
+    "intent verification": {
+      "definition": "The process of checking each section of a file against its stated intent, classifying content that has drifted beyond intent scope, and surfacing findings for the DTCC. Performed by the /intent-audit skill.",
+      "sourceDiscipline": "Process mining, quality management (conformance checking)",
+      "source": "shared/skills/intent-audit/SKILL.md"
+    },
+    "key decision": {
+      "definition": "An inline directive in the Key Decisions section of project claude. Records architectural and design choices that affect how the project works.",
+      "source": "CLAUDE.md"
+    },
+    "KD": {
+      "abbreviationOf": "key decision"
+    },
+    "managed tool": {
+      "definition": "A CLI tool, dependency, or build tool governed by reference/tool-registry.md. Each gets setup scripts, platform lifecycle tracking, and a corresponding user skill. Standing orders and hooks enforce tool selection.",
+      "source": "reference/framework-adoption.md"
+    },
+    "observation": {
+      "definition": "A gap schema field stating concrete facts about what was observed. Quote specific text, cite files and line numbers, name behaviors. No interpretation — facts only.",
+      "source": ".claude/rules/gap-governance.md"
+    },
+    "orchestration": {
+      "definition": "The harness layer where aitools manages the full lifecycle of harness content: authoring, building, deploying, maintaining, and reconciling configuration across machines and users.",
+      "source": "reference/framework-adoption.md"
+    },
+    "platform": {
+      "definition": "The harness layer provided by Claude Code: CLAUDE.md hierarchy, rules, skills, hooks, settings, commands, agents, session management. The infrastructure we build on.",
+      "source": "reference/framework-adoption.md"
+    },
+    "prevention": {
+      "definition": "The first layer of three-layer governance: rules in context and skills loaded on demand. Stops issues from being created by showing the right way. Active every session.",
+      "source": "reference/framework-three-layer-governance.md"
+    },
+    "process deviation": {
+      "definition": "Executing outside an established plan's sequence without formal amendment. The plan exists for a reason; bypassing it without amending first makes the deviation invisible to future sessions.",
+      "sourceDiscipline": "Process management (ISO/quality management)",
+      "source": "reference/gap-020-process-discipline.md"
+    },
+    "project coaching item": {
+      "definition": "An inline directive in the Coaching section of project claude targeting agent behavior improvements specific to this repo.",
+      "source": "CLAUDE.md"
+    },
+    "PCI": {
+      "abbreviationOf": "project coaching item"
+    },
+    "project standing order": {
+      "definition": "An inline directive in the Project Standing Orders section of project claude. Non-negotiable rules specific to this repo.",
+      "source": "CLAUDE.md"
+    },
+    "PSO": {
+      "abbreviationOf": "project standing order"
+    },
+    "purpose": {
+      "definition": "The first component of an intent statement (before intent scope and audience). What the file exists to deliver. Adopted from ISO/ITIL/CMMI purpose statement.",
+      "source": "shared/skills/intent-writing/SKILL.md"
+    },
+    "registry": {
+      "definition": "A structured data store following the three-layer pattern: rule (intent, always in context), JSON (data, source of truth), skill (access layer). Current registries: frameworks, gaps, tools.",
+      "source": "reference/framework-adoption.md"
+    },
+    "rule": {
+      "definition": "A Claude Code rule file (.md in .claude/rules/ or ~/.claude/rules/). Always loaded into context for every session. Part of the prevention layer. Default meaning when 'rule' is used without a modifier. See also: cursor rule.",
+      "source": "reference/framework-three-layer-governance.md"
+    },
+    "scope creep": {
+      "definition": "Content in a file that serves a valid purpose but extends beyond the file's stated intent scope. An intent verification finding type. Resolution: move to the correct file, split, or amend the intent.",
+      "source": "shared/skills/intent-audit/SKILL.md"
+    },
+    "skill": {
+      "definition": "A Claude Code mechanism providing specialized knowledge loaded on demand or by auto-trigger. Lives in .claude/skills/ (project, auto-discovered) or ~/.claude/skills/ (user, deployed by setup-user-skills). Part of the prevention layer.",
+      "source": "reference/framework-three-layer-governance.md"
+    },
+    "state audit": {
+      "definition": "DTCC step 2: searching existing harness artifacts (rules, references, gaps, code, plans) to determine whether the ambiguity is real or apparent. Distinct from /audit (deep governance review).",
+      "source": "reference/framework-adoption.md"
+    },
+    "suggested resolution": {
+      "definition": "A gap schema field providing a starting point for whoever picks up the gap — NOT a commitment. The consumer's context and priorities will differ. Must list options when the path isn't obvious and name specific harness artifacts.",
+      "source": ".claude/rules/gap-governance.md"
+    },
+    "surfacing duty": {
+      "definition": "The continuous obligation for every session to actively look for ambiguities. Not periodic — happens while reading rules, following cross-references, and making decisions.",
+      "source": ".claude/rules/gap-governance.md"
+    },
+    "three-layer governance": {
+      "definition": "The organizing principle for all harness governance: prevention (rules/skills), detection (hooks), audit (on-demand deep review). Each layer catches what the previous missed.",
+      "source": "reference/framework-three-layer-governance.md"
+    },
+    "trigger": {
+      "definition": "The event that starts the DTCC: an agent encounters a decision point without explicit guidance and would otherwise make an assumption. The assumption is the failure mode.",
+      "source": "reference/framework-adoption.md"
+    },
+    "user coaching item": {
+      "definition": "An inline directive in the Coaching section of shared/dotprofile/user claude targeting agent behavior improvements across all projects.",
+      "source": "shared/claude-shared.md"
+    },
+    "UCI": {
+      "abbreviationOf": "user coaching item"
+    },
+    "user standing order": {
+      "definition": "An inline directive in the Standing Orders section of shared/dotprofile/user claude. Non-negotiable rules that apply across all projects.",
+      "source": "shared/claude-shared.md"
+    },
+    "USO": {
+      "abbreviationOf": "user standing order"
+    }
+  }
+}
