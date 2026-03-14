@@ -33,6 +33,19 @@ record — these are not open questions.
    machine) and `/ai-merge` (AI-assisted conflict resolution).
 10. **Resolved ambiguities belong in this plan file** (Decisions section).
     Open gaps belong in `known-gaps.json`. Don't mix them.
+11. **Formal eval files per skill.** Each skill gets a `tests/` directory
+    with test prompts and expected behaviors. Higher expected value than
+    spot-checking; easier to course-correct from (baseline exists).
+12. **Incident tracking is project-level** (aitools effectiveness tracker).
+    Cross-user aggregation is a future roadmap item — schema must not
+    paint us into a corner.
+13. **Local SQLite + Datadog for KPIs.** Hooks write to local
+    `~/.aitools/telemetry/governance.db` (SQLite, WAL mode). SessionEnd
+    ships aggregated KPIs to Datadog via `log_ship`. Local is source of
+    truth; Datadog is visualization and alerting.
+14. **User as co-architect during planning.** Present options not
+    conclusions. Flag uncertainty explicitly. The user has domain
+    knowledge no amount of codebase exploration replaces.
 
 ## Three-Layer Architecture
 
@@ -112,6 +125,24 @@ What the standing-order-guard hook blocks and why.
 Process skills follow a task-oriented structure (steps, decision trees,
 validation).
 
+### Skill eval convention
+
+Every skill directory includes a `tests/` folder:
+
+```
+shared/skills/perl/
+├── SKILL.md
+└── tests/
+    ├── test-sed-replacement.md    # Prompt that should trigger skill
+    ├── test-no-trigger.md         # Prompt that should NOT trigger skill
+    └── expected-behaviors.md      # What correct output looks like
+```
+
+- Auto-triggering skills: test both trigger and non-trigger prompts
+- `disable-model-invocation: true` skills: manual invocation tests only
+- `/audit` scope includes: "does this skill have test cases?"
+- Run evals in fresh sessions (no context bleed from prior conversation)
+
 ### User-level skills (29)
 
 #### Managed tool skills (15)
@@ -162,7 +193,9 @@ validation).
 | `/cross-platform` | Platform dispatch | OS detection, path conventions, dispatch patterns, equal visibility |
 | `/error-handling` | Error suppression patterns | Canonical bash/PS1 patterns: suppression-with-check, null guards, external command capture, exit footers |
 | `/mcp-skill` | MCP server config | Enable/disable patterns, Claude vs Cursor asymmetry, isolation mode, auth, `--addmcp` |
-| `/planning` | Session and plan strategy | Context budgets (1M=100k injectable, 200k=20k), session flow (60-70% stop), subagent coordination and parallelization, when to create plans vs work directly, model-dependent context windows (Opus 1M, Sonnet 200k, Haiku 100k), batch sizing (2-3 files), what works vs fails from session history |
+| `/planning` | Session and plan strategy | Context budgets (1M=100k injectable, 200k=20k), session flow (60-70% stop), subagent coordination and parallelization, when to create plans vs work directly, model-dependent context windows (Opus 1M, Sonnet 200k, Haiku 100k), batch sizing (2-3 files), what works vs fails from session history, user as co-architect |
+| `/incident-response` | Incident lifecycle | Detection → triage → investigation (5 Whys, contributing factors) → remediation → corrective action (behavioral vs structural) → verification → dissemination → follow-up. Recurrence = wrong fix, not wrong person. |
+| `/rca` | Root cause analysis | Alias/subset of incident-response focused on investigation phase: 5 Whys, fishbone, Swiss cheese model, contributing factors vs single root cause, timeline reconstruction |
 
 ### Project-level skills (8)
 
@@ -179,7 +212,7 @@ Located in `.claude/skills/` within the aitools repo.
 | `/aitools-dev` | aitools development | Entry point dispatch, how to add tools/deployment types, return value contracts, validation callbacks |
 | `/aitools-planning` | aitools plan standards | Foundational decisions pattern, verbatim code requirement, platform annotations (Windows PS1 / macOS bash), batch verification checklist, cross-reference audit, test plan with expected counts |
 
-Total: **38 skills** (30 user-level + 8 project-level).
+Total: **40 skills** (32 user-level + 8 project-level).
 
 ## Skill Deployment
 
@@ -305,6 +338,67 @@ Update stderr messages to reference skills when blocking:
 Closed loop: hook blocks → stderr references skill → agent loads
 skill → correct pattern used.
 
+## Telemetry and KPIs
+
+### Local storage
+
+SQLite database at `~/.aitools/telemetry/governance.db` (WAL mode for
+concurrent async hooks):
+
+```sql
+-- Raw events from hooks
+CREATE TABLE events (
+  timestamp TEXT, session_id TEXT, event_type TEXT,
+  tool_name TEXT, skill_name TEXT, hook_name TEXT,
+  outcome TEXT, details TEXT
+);
+-- Session summaries (populated by SessionEnd hook)
+CREATE TABLE sessions (
+  session_id TEXT PRIMARY KEY, start TEXT, end TEXT,
+  project TEXT, model TEXT, context_window INT,
+  skills_loaded INT, tools_used INT, gaps_filed INT
+);
+-- Daily aggregated KPIs (populated by SessionEnd hook)
+CREATE TABLE kpis (
+  date TEXT, metric TEXT, value REAL
+);
+```
+
+### Telemetry hooks
+
+| Hook | Event | Async | What it captures |
+|------|-------|-------|-----------------|
+| telemetry-init | SessionStart | no | Create session row, capture model/context window |
+| telemetry-instructions | InstructionsLoaded | yes | Skill/rule load events |
+| telemetry-tool | PostToolUse | yes | Tool usage, hook fire/block events |
+| telemetry-summary | SessionEnd | no | Aggregate session KPIs, ship to Datadog via `log_ship` |
+
+All telemetry hooks are async except SessionStart (needs to init before
+other hooks fire) and SessionEnd (must complete before session closes).
+
+### KPI definitions
+
+| KPI | Metric | Source |
+|-----|--------|--------|
+| Hook fire rate | Events per session by hook | events table |
+| Hook block rate | Blocked / total by hook | events table |
+| Skill load frequency | Loads per session by skill | events table |
+| Skill coverage | Skills with SKILL.md / total managed tools | filesystem |
+| Eval coverage | Skills with tests/ / total skills | filesystem |
+| Gap closure velocity | Closed gaps / open gaps over time | known-gaps.json |
+| Incident recurrence | Same root cause repeat count | effectiveness tracker |
+| Corrective action hold rate | Non-recurring / total incidents | effectiveness tracker |
+
+### Datadog integration
+
+Telemetry ships to Datadog via the `log_ship` helper from the Datadog
+roadmap item (`plans/datadog-log-integration.md`). The SessionEnd hook
+calls `log_ship` with aggregated KPIs. Local SQLite is source of truth;
+Datadog provides dashboards, alerting, and cross-machine aggregation.
+
+Future: cross-user aggregation when aitools.nobul.tech ships (roadmap
+item). Schema designed to support per-user metrics without code changes.
+
 ## Permission Strategy
 
 ### Project settings.json additions
@@ -363,13 +457,14 @@ Dependency-aware sequencing:
 2. **Plan corrections** (v0.54.1 — done)
 3. **`/gap` and `/audit` skills** — governance filing and review
 4. **SubagentStart hook** — pre-built cache + context injection
-5. **User-level tool skills** — all 30
-6. **Project-level skills** — all 8
-7. **PreToolUse hooks** — known-gaps validator, protected file reminder,
+5. **Telemetry hooks + SQLite** — local KPI collection infrastructure
+6. **User-level tool skills** — all 32
+7. **Project-level skills** — all 8
+8. **PreToolUse hooks** — known-gaps validator, protected file reminder,
    error suppression, git checklist
-8. **Standing order guard updates** — stderr → skill references
-9. **Stop hook** — ambiguity check
-10. **Permission updates** — .scratch pre-approvals
+9. **Standing order guard updates** — stderr → skill references
+10. **Stop hook** — ambiguity check
+11. **Permission updates** — .scratch pre-approvals
 
 ### Session working convention
 
