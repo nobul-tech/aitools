@@ -149,7 +149,7 @@ shared/skills/perl/
 - `/audit` scope includes: "does this skill have test cases?"
 - Run evals in fresh sessions (no context bleed from prior conversation)
 
-### User-level skills (29)
+### User-level skills (33)
 
 #### Managed tool skills (15)
 
@@ -187,7 +187,7 @@ shared/skills/perl/
 | `/cmake` | CMake | Install methods per platform, version requirements, path detection |
 | `/msvc` | MSVC Build Tools | Visual Studio components, elevation requirements, detection patterns |
 
-#### Cross-cutting skills (8)
+#### Cross-cutting skills (12)
 
 | Skill | Purpose | Key content |
 |-------|---------|-------------|
@@ -219,7 +219,7 @@ Located in `.claude/skills/` within the aitools repo.
 | `/aitools-dev` | aitools development | Entry point dispatch, how to add tools/deployment types, return value contracts, validation callbacks |
 | `/aitools-planning` | aitools plan standards | Foundational decisions pattern, verbatim code requirement, platform annotations (Windows PS1 / macOS bash), batch verification checklist, cross-reference audit, test plan with expected counts |
 
-Total: **42 skills** (34 user-level + 8 project-level).
+Total: **41 skills** (33 user-level + 8 project-level).
 
 ## Skill Deployment
 
@@ -465,7 +465,7 @@ Dependency-aware sequencing:
 3. **`/gap` and `/audit` skills** — governance filing and review
 4. **SubagentStart hook** — pre-built cache + context injection
 5. **Telemetry hooks + SQLite** — local KPI collection infrastructure
-6. **User-level tool skills** — all 34
+6. **User-level tool skills** — all 33
 7. **Project-level skills** — all 8
 8. **PreToolUse hooks** — known-gaps validator, protected file reminder,
    error suppression, git checklist
@@ -505,14 +505,7 @@ After each implementation step:
 
 Tracked as gaps in `known-gaps.json`. Key unresolved items:
 - Gap #12: Cursor skill deployment mechanism unverified
+- Gap #13: Skill priority correction (planned, linked to v0.54.1)
 - Gap #14: Subagent skill preloading via `skills:` field vs hook injection
-- Gap #15: setup-user-mcp scaling from 2 to 29+ user-level skills
-- Gap #16: Meta-skill for ambiguity detection
-
-## Open Questions
-
-Tracked as gaps in `known-gaps.json`. Key unresolved items:
-- Gap #12: Cursor skill deployment mechanism unverified
-- Gap #14: Subagent skill preloading via `skills:` field vs hook injection
-- Gap #15: setup-user-mcp scaling from 2 to 29+ user-level skills
+- Gap #15: setup-user-mcp scaling from 2 to 33+ user-level skills
 - Gap #16: Meta-skill for ambiguity detection
