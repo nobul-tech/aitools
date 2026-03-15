@@ -12,6 +12,28 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.58 -- Verified terminology, capability bypass detection (2026-03-14)
+
+### Bug fixes
+
+| # | Change |
+|---|--------|
+| 1 | **"unchanged" → "verified"** in 6 remaining setup scripts (setup-user-cursor, setup-user-mcp, setup-cursor-ide-mcp) — aligns with glossary-governed term |
+| 2 | **Remove redundant inline summary block** from setup-user-cursor (.sh/.ps1) — was duplicating the end-of-run panel |
+| 3 | **Fix 4 capability bypasses** in rules: `@reference/` to governed JSON replaced with skill references (frameworks.md, glossary.md, documentation-standards.md) |
+
+### New features
+
+| # | Change |
+|---|--------|
+| 4 | **Pre-commit step 15**: Deprecated summary terms — catches `"unchanged"` in `write_summary` calls |
+| 5 | **Pre-commit step 16**: Capability bypass audit — catches `@reference/` to governed JSON in rules (Dennis & Van Horn 1966 capability model) |
+| 6 | **Governed summary outcomes spec**: New section in `script-standards-detail.md` codifying governed vs deprecated summary detail values |
+
+**Verified on:** macOS
+
+---
+
 ## v0.57 -- Frameworks skill, governed data access, bug fixes #49/#50/#51 (2026-03-14)
 
 ### New features
