@@ -30,19 +30,31 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | 5 | **All 8 user-level skills now deploy** — was 2 (chrome-devtools, a11y-debugging). Now also deploys: intent-audit, intent-writing, investigate, optimize-plan, planning, scratch |
 | 6 | **Dynamic skill embedding in build** — `build-deploy.sh` discovers and embeds all skills from `shared/skills/` at build time. Deploy scripts are fully self-contained with all skills |
 
+### New hooks
+
+| # | Change |
+|---|--------|
+| 7 | **`sh-file-fixup.sh`** (PostToolUse on Write\|Edit) — auto-fixes .sh files after creation/modification: CRLF→LF, chmod +x, git update-index --chmod=+x. Eliminates the recurring manual fixup cycle that interrupted every commit involving .sh files |
+| 8 | **`surfacing-duty-stop.sh`** (Stop, prompt type) — periodic surfacing duty reminder every 30m in long sessions, plus gap-acknowledgment detection that prompts filing when agent says "pre-existing gap" without invoking /gap. Implements the Stop hook spec from gap-governance.md |
+
 ### Bug fixes
 
 | # | Change |
 |---|--------|
-| 7 | **Accept & adopt target fixed** — skills and hooks adopt now writes to dotprofile repo (`<userRepoPath>/claude/skills/`, `claude/hooks/`), not to `shared/` in the aitools repo. Fixes gap #15 |
-| 8 | **PS1 hooks parity** — `setup-user-hooks.ps1` now deploys scratch-init.sh and harvest-session.sh, matching the bash version |
+| 9 | **Accept & adopt target fixed** — skills and hooks adopt now writes to dotprofile repo (`<userRepoPath>/claude/skills/`, `claude/hooks/`), not to `shared/` in the aitools repo. Fixes gap #15 |
+| 10 | **PS1 hooks parity** — `setup-user-hooks.ps1` now deploys scratch-init.sh and harvest-session.sh, matching the bash version |
+| 11 | **First-deploy gap fixed** — `aitools` entry point now compares deploy list against repo source after pull+build. If the list changed, self-updates and re-execs so new deploy scripts run on the first deploy, not the second. Zero overhead when lists match (~1ms perl comparison) |
+| 12 | **Raw echo in resolve_hook()** — changed to `printf '%s\n'` to satisfy check-script step 6 (no raw echo in setup scripts) |
+| 13 | **Stop hook false positive** — suppresses gap-acknowledgment detection for 30m after known-gaps.json is modified, preventing false triggers when agent discusses a gap after filing it |
 
 ### Improvements
 
 | # | Change |
 |---|--------|
-| 9 | **User repo spec updated** — `reference/user-repo.md` now documents `claude/skills/` and `claude/hooks/` directories in the dotprofile structure |
-| 10 | **CLAUDE.md deploy list updated** — includes `setup-user-skills` in the config scripts list |
+| 14 | **MergeHookEntry supports hook types** — bash and PS1 merge functions now accept a `hookType` parameter (default: `command`). Enables `prompt`-type hooks like the Stop hook |
+| 15 | **User repo spec updated** — `reference/user-repo.md` now documents `claude/skills/` and `claude/hooks/` directories in the dotprofile structure |
+| 16 | **CLAUDE.md deploy list updated** — includes `setup-user-skills` in the config scripts list |
+| 17 | **Gap #25 filed** — deploy/setup-user-hooks embeds 2 of 6 hook scripts; settings.json references 4 missing paths on MDM machines |
 
 ---
 
