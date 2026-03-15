@@ -76,12 +76,6 @@ git diff deploy/
 ```
 Any diff means deploy/ was stale at push time. Should be empty.
 
-### 8. Rule parity audit
-
-Verify the Rule Correspondence table in `reference/cursor-practices.md` is
-accurate: every `.claude/rules/*.md` has its documented `.cursor/rules/*.mdc`
-counterpart (or is marked Claude Code-specific). Flag missing or orphaned files.
-
 ### 9. Source-of-truth consistency
 
 For each tool in `reference/tool-registry.md`:

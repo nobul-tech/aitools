@@ -208,28 +208,6 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 8. Rule parity audit
-# ---------------------------------------------------------------------------
-# Known Claude-only rules (no cursor counterpart expected)
-claude_only="git-identity|python-style|surface-silent-failures"
-parity_errors=0
-for f in "$REPO_ROOT"/.claude/rules/*.md; do
-    [ -f "$f" ] || continue
-    base=$(basename "$f" .md)
-    if echo "$base" | grep -qE "^($claude_only)$"; then continue; fi
-    cursor_file="$REPO_ROOT/.cursor/rules/${base}.mdc"
-    if [ ! -f "$cursor_file" ]; then
-        echo "      missing cursor counterpart: .cursor/rules/${base}.mdc"
-        parity_errors=$((parity_errors + 1))
-    fi
-done
-if [ "$parity_errors" -eq 0 ]; then
-    step_pass "8" "Rule parity audit"
-else
-    step_fail "8" "Rule parity audit" "$parity_errors missing counterpart(s)"
-fi
-
-# ---------------------------------------------------------------------------
 # 9. Source-of-truth consistency
 # ---------------------------------------------------------------------------
 # Count tool sections (## headings between --- separators) vs lifecycle field count

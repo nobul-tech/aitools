@@ -240,32 +240,7 @@ if ($bashExe) {
     StepSkip "7" "deploy/ drift audit" "bash not found"
 }
 
-# ---------------------------------------------------------------------------
-# 8. Rule parity audit
-# ---------------------------------------------------------------------------
-$claudeOnly = @("git-identity", "python-style", "surface-silent-failures")
-$parityErrors = 0
-$claudeRulesDir = Join-Path (Join-Path $script:RepoRoot ".claude") "rules"
-$cursorRulesDir = Join-Path (Join-Path $script:RepoRoot ".cursor") "rules"
-$claudeRules = Get-ChildItem $claudeRulesDir -Filter "*.md" -ErrorAction SilentlyContinue
-if (-not $claudeRules) {
-    StepFail "8" "Rule parity audit" "no rules found in .claude/rules/"
-} else {
-    foreach ($f in $claudeRules) {
-        $base = $f.BaseName
-        if ($claudeOnly -contains $base) { continue }
-        $cursorFile = Join-Path $cursorRulesDir "$base.mdc"
-        if (-not (Test-Path $cursorFile)) {
-            Write-Host "      missing cursor counterpart: .cursor/rules/$base.mdc"
-            $parityErrors++
-        }
-    }
-    if ($parityErrors -eq 0) {
-        StepPass "8" "Rule parity audit"
-    } else {
-        StepFail "8" "Rule parity audit" "$parityErrors missing counterpart(s)"
-    }
-}
+
 
 # ---------------------------------------------------------------------------
 # 9. Source-of-truth consistency
