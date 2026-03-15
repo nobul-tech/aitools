@@ -1341,6 +1341,18 @@ else
     STEPS=3
 fi
 
+# --- Smart reload: skip steps 1-2 if re-execing after deploy list change ---
+_prebuild_done=false
+if [ "${AITOOLS_PREBUILD_DONE:-}" = "1" ]; then
+    _prebuild_done=true
+    pulled_updates=false
+    [ "${AITOOLS_PULLED_UPDATES:-}" = "1" ] && pulled_updates=true
+    unset AITOOLS_PREBUILD_DONE
+    unset AITOOLS_PULLED_UPDATES
+    log "Steps 1-2 already complete (reloaded)"
+fi
+
+if ! $_prebuild_done; then
 # [1/N] Pull latest
 if $do_gitpull; then
     log "Step 1/$STEPS: Pulling latest"
@@ -1404,6 +1416,34 @@ else
     log_error "build failed (see $LOG_DISPLAY)"
     return 1
 fi
+
+# Check if repo has a different deploy list than the running binary.
+# If so, self-update and re-exec so deploy_configs uses the current list.
+# Cost when lists match: one perl comparison (~1ms). No extra work.
+if [ -f "$repo_path/scripts/aitools" ]; then
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*) _lp='local deploy_scripts=".*\.ps1"' ;;
+        *) _lp='local deploy_scripts=".*\.sh"' ;;
+    esac
+    _repo_list=$(perl -ne "print if /^\s+$_lp/" "$repo_path/scripts/aitools" | tail -1)
+    _self_list=$(perl -ne "print if /^\s+$_lp/" "$0" | tail -1)
+    if [ -n "$_repo_list" ] && [ "$_repo_list" != "$_self_list" ]; then
+        log "Deploy script list changed -- reloading entry point"
+        _nv=$(repo_version "$repo_path")
+        if bash -n "$repo_path/scripts/aitools" 2>/dev/null; then
+            sed "s/^AITOOLS_INSTALLED_VERSION=.*/AITOOLS_INSTALLED_VERSION=\"$_nv\"/" \
+                "$repo_path/scripts/aitools" > "$HOME/.local/bin/aitools"
+            chmod +x "$HOME/.local/bin/aitools"
+            export AITOOLS_PREBUILD_DONE=1
+            [ "$pulled_updates" = "true" ] && export AITOOLS_PULLED_UPDATES=1
+            exec "$HOME/.local/bin/aitools" "$@"
+        else
+            log_warn "Repo scripts/aitools has syntax errors -- continuing with current list"
+        fi
+    fi
+fi
+
+fi  # _prebuild_done
 
 if $do_install; then
     # --- install: pull + rebuild + run installer (includes deploy) ---

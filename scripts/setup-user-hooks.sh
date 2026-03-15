@@ -62,9 +62,9 @@ fi
 resolve_hook() {
     local hook_name="$1"
     if [ -n "$DOTPROFILE_HOOKS" ] && [ -f "$DOTPROFILE_HOOKS/$hook_name" ]; then
-        echo "$DOTPROFILE_HOOKS/$hook_name"
+        printf '%s\n' "$DOTPROFILE_HOOKS/$hook_name"
     else
-        echo "$REPO_DIR/shared/hooks/$hook_name"
+        printf '%s\n' "$REPO_DIR/shared/hooks/$hook_name"
     fi
 }
 

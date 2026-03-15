@@ -1278,6 +1278,18 @@ if ($doInstall) {
     $steps = 3
 }
 
+# --- Smart reload: skip steps 1-2 if re-execing after deploy list change ---
+$_prebuildDone = $false
+if ($env:AITOOLS_PREBUILD_DONE -eq "1") {
+    $_prebuildDone = $true
+    $pulledUpdates = $false
+    if ($env:AITOOLS_PULLED_UPDATES -eq "1") { $pulledUpdates = $true }
+    Remove-Item Env:\AITOOLS_PREBUILD_DONE -ErrorAction SilentlyContinue
+    Remove-Item Env:\AITOOLS_PULLED_UPDATES -ErrorAction SilentlyContinue
+    Log "Steps 1-2 already complete (reloaded)"
+}
+
+if (-not $_prebuildDone) {
 # [1/N] Pull latest
 Log "Step 1/$steps`: Pulling latest"
 $pulledUpdates = $false
@@ -1347,6 +1359,36 @@ if ($LASTEXITCODE -eq 0) {
     LogError "build failed (see $logFile)"
     exit 1
 }
+
+# Check if repo has a different deploy list than the running binary.
+# If so, self-update and re-exec so Deploy-Configs uses the current list.
+# Cost when lists match: one string comparison (~0ms). No extra work.
+$repoAitools = Join-Path $repoPath "scripts\aitools.ps1"
+if (Test-Path $repoAitools) {
+    $_repoList = (Select-String -Path $repoAitools -Pattern 'deployScripts\s*=\s*@\(' | Select-Object -Last 1)
+    $_selfList = (Select-String -Path $PSCommandPath -Pattern 'deployScripts\s*=\s*@\(' | Select-Object -Last 1)
+    if ($_repoList -and $_selfList -and $_repoList.Line.Trim() -ne $_selfList.Line.Trim()) {
+        Log "Deploy script list changed -- reloading entry point"
+        # Validate syntax before overwriting
+        $parseErrors = $null
+        $null = [System.Management.Automation.Language.Parser]::ParseFile($repoAitools, [ref]$null, [ref]$parseErrors)
+        if ($parseErrors.Count -eq 0) {
+            $newVersion = Get-RepoVersion $repoPath
+            $srcContent = Get-Content $repoAitools -Raw
+            $stampedContent = $srcContent -replace '^\$AITOOLS_INSTALLED_VERSION = ".*"', "`$AITOOLS_INSTALLED_VERSION = `"$newVersion`""
+            $installedPath = Join-Path $env:USERPROFILE ".local\bin\aitools.ps1"
+            [System.IO.File]::WriteAllText($installedPath, $stampedContent, [System.Text.UTF8Encoding]::new($false))
+            $env:AITOOLS_PREBUILD_DONE = "1"
+            if ($pulledUpdates) { $env:AITOOLS_PULLED_UPDATES = "1" }
+            & $installedPath @PSBoundParameters
+            exit $LASTEXITCODE
+        } else {
+            LogWarn "Repo scripts/aitools.ps1 has parse errors -- continuing with current list"
+        }
+    }
+}
+
+}  # _prebuildDone
 
 if ($doInstall) {
     # --- install: pull + rebuild + run installer (includes deploy) ---
