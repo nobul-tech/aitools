@@ -73,7 +73,8 @@ GUARD_SCRIPT=$(resolve_hook "standing-order-guard.sh")
 GLOSSARY_SCRIPT=$(resolve_hook "glossary-skill-guard.sh")
 SCRATCH_SCRIPT=$(resolve_hook "scratch-init.sh")
 HARVEST_SCRIPT=$(resolve_hook "harvest-session.sh")
-for src in "$HOOK_SCRIPT" "$GUARD_SCRIPT" "$GLOSSARY_SCRIPT" "$SCRATCH_SCRIPT" "$HARVEST_SCRIPT"; do
+SHFIXUP_SCRIPT=$(resolve_hook "sh-file-fixup.sh")
+for src in "$HOOK_SCRIPT" "$GUARD_SCRIPT" "$GLOSSARY_SCRIPT" "$SCRATCH_SCRIPT" "$HARVEST_SCRIPT" "$SHFIXUP_SCRIPT"; do
     if [ ! -f "$src" ]; then
         log_error "Hook script not found: $src"
         exit 1
@@ -86,6 +87,7 @@ GUARD_DEST="$HOME/.claude/hooks/standing-order-guard.sh"
 GLOSSARY_DEST="$HOME/.claude/hooks/glossary-skill-guard.sh"
 SCRATCH_DEST="$HOME/.claude/hooks/scratch-init.sh"
 HARVEST_DEST="$HOME/.claude/hooks/harvest-session.sh"
+SHFIXUP_DEST="$HOME/.claude/hooks/sh-file-fixup.sh"
 
 HOOKS_CHANGED=false
 
@@ -98,12 +100,13 @@ if [ "$DRY_RUN" = "true" ]; then
     log "[DRY RUN] Would deploy hook: $(display_path "$GLOSSARY_SCRIPT") -> $(display_path "$GLOSSARY_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$SCRATCH_SCRIPT") -> $(display_path "$SCRATCH_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$HARVEST_SCRIPT") -> $(display_path "$HARVEST_DEST")"
+    log "[DRY RUN] Would deploy hook: $(display_path "$SHFIXUP_SCRIPT") -> $(display_path "$SHFIXUP_DEST")"
 else
     mkdir -p "$HOME/.claude/hooks"
 
     deploy_tracker_init
 
-    for hook_pair in "$HOOK_SCRIPT|$HOOK_DEST" "$GUARD_SCRIPT|$GUARD_DEST" "$GLOSSARY_SCRIPT|$GLOSSARY_DEST" "$SCRATCH_SCRIPT|$SCRATCH_DEST" "$HARVEST_SCRIPT|$HARVEST_DEST"; do
+    for hook_pair in "$HOOK_SCRIPT|$HOOK_DEST" "$GUARD_SCRIPT|$GUARD_DEST" "$GLOSSARY_SCRIPT|$GLOSSARY_DEST" "$SCRATCH_SCRIPT|$SCRATCH_DEST" "$HARVEST_SCRIPT|$HARVEST_DEST" "$SHFIXUP_SCRIPT|$SHFIXUP_DEST"; do
         hook_src="${hook_pair%%|*}"
         hook_dst="${hook_pair##*|}"
         hook_name=$(basename "$hook_dst")
@@ -184,6 +187,7 @@ GUARD_CMD="bash \"$GUARD_DEST\""
 GLOSSARY_CMD="bash \"$HOME/.claude/hooks/glossary-skill-guard.sh\""
 SCRATCH_CMD="bash \"$SCRATCH_DEST\""
 HARVEST_CMD="bash \"$HARVEST_DEST\""
+SHFIXUP_CMD="bash \"$SHFIXUP_DEST\""
 
 MERGE_RESULT=$(node -e "
 $SORT_KEYS_JS
@@ -197,6 +201,7 @@ const dryRun = process.argv[5] === 'true';
 const force = process.argv[6] === 'true';
 const scratchCmd = process.argv[7];
 const harvestCmd = process.argv[8];
+const shfixupCmd = process.argv[9];
 
 // --- BEGIN claude preferences (replaced by build-deploy) ---
 let autoMemory = true;
@@ -277,6 +282,7 @@ mergeHookEntry('SessionEnd', 'harvest-session.sh', '', harvestCmd);
 mergeHookEntry('SessionStart', 'scratch-init.sh', '', scratchCmd);
 mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
 mergeHookEntry('PreToolUse', 'glossary-skill-guard.sh', 'Read|Grep', glossaryCmd);
+mergeHookEntry('PostToolUse', 'sh-file-fixup.sh', 'Write|Edit', shfixupCmd);
 
 // --- Track old values for change reporting ---
 const oldAutoMemory = settings.autoMemoryEnabled;
@@ -351,7 +357,7 @@ if (dryRun) {
         prefChanges.forEach(c => console.log(c));
     }
 }
-" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD")
+" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD")
 
 # Parse merge result: first line is status, CHANGED: lines are key changes
 MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)

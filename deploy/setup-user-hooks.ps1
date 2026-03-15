@@ -2041,6 +2041,9 @@ $hookDestPath = Join-Path $hooksDir "session-archive.sh"
 $hookDestUnix = $hookDestPath -replace '\\', '/'
 $hookCmd = "bash `"$hookDestUnix`""
 
+$shfixupDestUnix = $shfixupDest -replace '\\', '/'
+$shfixupCmd = "bash `"$shfixupDestUnix`""
+
 # Read existing settings
 $settings = @{}
 $corrupt = $false
@@ -2128,6 +2131,7 @@ MergeHookEntry "PreToolUse" "standing-order-guard.sh" "Bash" $guardCmd
 $glossaryDestUnix = (Join-Path $hooksDir "glossary-skill-guard.sh") -replace '\\', '/'
 $glossaryCmd = "bash `"$glossaryDestUnix`""
 MergeHookEntry "PreToolUse" "glossary-skill-guard.sh" "Read|Grep" $glossaryCmd
+MergeHookEntry "PostToolUse" "sh-file-fixup.sh" "Write|Edit" $shfixupCmd
 
 # --- Track old values for change reporting ---
 $oldAutoMemory = $settings["autoMemoryEnabled"]

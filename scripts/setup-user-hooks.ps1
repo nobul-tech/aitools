@@ -65,7 +65,8 @@ $guardScript = Resolve-HookSource "standing-order-guard.sh"
 $glossaryScript = Resolve-HookSource "glossary-skill-guard.sh"
 $scratchScript = Resolve-HookSource "scratch-init.sh"
 $harvestScript = Resolve-HookSource "harvest-session.sh"
-foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript)) {
+$shfixupScript = Resolve-HookSource "sh-file-fixup.sh"
+foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript)) {
     if (-not (Test-Path $src)) {
         LogError "Hook script not found: $src"
         exit 1
@@ -81,6 +82,7 @@ $guardDest = Join-Path $hooksDir "standing-order-guard.sh"
 $glossaryDest = Join-Path $hooksDir "glossary-skill-guard.sh"
 $scratchDest = Join-Path $hooksDir "scratch-init.sh"
 $harvestDest = Join-Path $hooksDir "harvest-session.sh"
+$shfixupDest = Join-Path $hooksDir "sh-file-fixup.sh"
 
 $hooksChanged = $false
 
@@ -93,12 +95,13 @@ if ($DryRun) {
     Log "[DRY RUN] Would deploy hook: $glossaryScript -> $glossaryDest"
     Log "[DRY RUN] Would deploy hook: $scratchScript -> $scratchDest"
     Log "[DRY RUN] Would deploy hook: $harvestScript -> $harvestDest"
+    Log "[DRY RUN] Would deploy hook: $shfixupScript -> $shfixupDest"
 } else {
     if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }
 
     Initialize-DeployTracker
 
-    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest))) {
+    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest))) {
         $src = $pair[0]; $dst = $pair[1]
         $hookName = Split-Path $dst -Leaf
         $srcContent = Get-Content $src -Raw -ErrorAction Stop
@@ -220,6 +223,9 @@ $hookDestPath = Join-Path $hooksDir "session-archive.sh"
 $hookDestUnix = $hookDestPath -replace '\\', '/'
 $hookCmd = "bash `"$hookDestUnix`""
 
+$shfixupDestUnix = $shfixupDest -replace '\\', '/'
+$shfixupCmd = "bash `"$shfixupDestUnix`""
+
 # Read existing settings
 $settings = @{}
 $corrupt = $false
@@ -307,6 +313,7 @@ MergeHookEntry "PreToolUse" "standing-order-guard.sh" "Bash" $guardCmd
 $glossaryDestUnix = (Join-Path $hooksDir "glossary-skill-guard.sh") -replace '\\', '/'
 $glossaryCmd = "bash `"$glossaryDestUnix`""
 MergeHookEntry "PreToolUse" "glossary-skill-guard.sh" "Read|Grep" $glossaryCmd
+MergeHookEntry "PostToolUse" "sh-file-fixup.sh" "Write|Edit" $shfixupCmd
 
 # --- Track old values for change reporting ---
 $oldAutoMemory = $settings["autoMemoryEnabled"]

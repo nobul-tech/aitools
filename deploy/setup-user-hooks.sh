@@ -1807,6 +1807,7 @@ GUARD_CMD="bash \"$GUARD_DEST\""
 GLOSSARY_CMD="bash \"$HOME/.claude/hooks/glossary-skill-guard.sh\""
 SCRATCH_CMD="bash \"$SCRATCH_DEST\""
 HARVEST_CMD="bash \"$HARVEST_DEST\""
+SHFIXUP_CMD="bash \"$SHFIXUP_DEST\""
 
 MERGE_RESULT=$(node -e "
 $SORT_KEYS_JS
@@ -1820,6 +1821,7 @@ const dryRun = process.argv[5] === 'true';
 const force = process.argv[6] === 'true';
 const scratchCmd = process.argv[7];
 const harvestCmd = process.argv[8];
+const shfixupCmd = process.argv[9];
 // --- Embedded preferences (from profile.json at build time) ---
 const autoMemory = false;
 const alwaysThinking = true;
@@ -1882,6 +1884,7 @@ mergeHookEntry('SessionEnd', 'harvest-session.sh', '', harvestCmd);
 mergeHookEntry('SessionStart', 'scratch-init.sh', '', scratchCmd);
 mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
 mergeHookEntry('PreToolUse', 'glossary-skill-guard.sh', 'Read|Grep', glossaryCmd);
+mergeHookEntry('PostToolUse', 'sh-file-fixup.sh', 'Write|Edit', shfixupCmd);
 
 // --- Track old values for change reporting ---
 const oldAutoMemory = settings.autoMemoryEnabled;
@@ -1956,7 +1959,7 @@ if (dryRun) {
         prefChanges.forEach(c => console.log(c));
     }
 }
-" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD")
+" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD")
 
 # Parse merge result: first line is status, CHANGED: lines are key changes
 MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)
