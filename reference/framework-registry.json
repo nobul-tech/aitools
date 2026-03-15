@@ -4,10 +4,10 @@
     "adoption": "reference/framework-adoption.md",
     "intent": {
       "purpose": "Source of truth for all adopted governance frameworks and their implementing artifacts",
-      "scope": "Framework entries and pending adoptions only. NOT the adoption process (framework-adoption.md). NOT framework documentation (framework-*.md files). NOT the word list (.claude/rules/frameworks.md)",
-      "audience": "/frameworks skill, /audit skill, agents checking whether a framework addresses their decision point"
+      "scope": "Framework entries and pending adoptions only. NOT the adoption process (framework-adoption.md). NOT framework documentation (framework-*.md files)",
+      "audience": "/frameworks skill, /audit skill"
     },
-    "lastUpdated": "2026-03-14"
+    "lastUpdated": "2026-03-15"
   },
   "frameworks": [
     {
@@ -21,7 +21,8 @@
         ".claude/rules/*.md (prevention layer)",
         "shared/hooks/*.sh (detection layer)",
         ".claude/skills/audit/SKILL.md (audit layer)"
-      ]
+      ],
+      "lastUpdated": "2026-03-14"
     },
     {
       "name": "Gap governance",
@@ -31,10 +32,10 @@
       "referenceFile": "reference/framework-gap-governance.md",
       "artifacts": [
         ".claude/rules/gap-governance.md",
-        "reference/known-gaps.json",
         ".claude/skills/gap/SKILL.md",
         ".claude/skills/audit/SKILL.md"
-      ]
+      ],
+      "lastUpdated": "2026-03-14"
     },
     {
       "name": "Source-of-truth protection",
@@ -44,21 +45,25 @@
       "referenceFile": "reference/framework-source-of-truth.md",
       "artifacts": [
         ".claude/rules/sources-of-truth.md"
-      ]
+      ],
+      "lastUpdated": "2026-03-14"
     },
     {
       "name": "Tool lifecycle",
-      "governs": "Evaluation, approval, integration, and deprecation of managed tools",
+      "governs": "Evaluation, approval, integration, maintenance, and health tracking of managed tools",
       "discipline": "Software asset management",
-      "concepts": ["Lifecycle phases", "Approval gates", "Deprecation paths"],
+      "concepts": ["Lifecycle phases", "Approval gates", "Health flags", "Provenance verification", "Evaluation provenance"],
       "referenceFile": "reference/framework-tool-lifecycle.md",
       "artifacts": [
         ".claude/rules/tool-lifecycle.md",
-        "reference/tool-registry.md",
+        ".claude/rules/tool-evaluation.md",
         "reference/tool-evaluation-criteria.md",
         "reference/tool-evaluation-playbook.md",
-        "reference/tool-versions.json"
-      ]
+        "reference/evaluations/",
+        ".claude/skills/tool-registry/SKILL.md",
+        ".claude/skills/tool-eval/SKILL.md"
+      ],
+      "lastUpdated": "2026-03-15"
     },
     {
       "name": "Managed file deployment",
@@ -71,7 +76,8 @@
         "reference/managed-file-deployment.md",
         ".claude/rules/interactive-menus.md",
         ".claude/rules/config-file-safety.md"
-      ]
+      ],
+      "lastUpdated": "2026-03-14"
     },
     {
       "name": "Hook rollout",
@@ -82,7 +88,8 @@
       "artifacts": [
         ".claude/rules/hook-rollout.md",
         "shared/hooks/standing-order-guard.sh"
-      ]
+      ],
+      "lastUpdated": "2026-03-14"
     },
     {
       "name": "Incident investigation",
@@ -92,7 +99,8 @@
       "referenceFile": "reference/framework-incident-investigation.md",
       "artifacts": [
         "shared/skills/investigate/SKILL.md"
-      ]
+      ],
+      "lastUpdated": "2026-03-14"
     },
     {
       "name": "Framework adoption",
@@ -102,9 +110,9 @@
       "referenceFile": "reference/framework-adoption.md",
       "artifacts": [
         "reference/framework-adoption.md",
-        ".claude/rules/frameworks.md",
-        "reference/framework-registry.json"
-      ]
+        ".claude/rules/frameworks.md"
+      ],
+      "lastUpdated": "2026-03-14"
     },
     {
       "name": "Governed vocabulary",
@@ -114,9 +122,9 @@
       "referenceFile": "reference/framework-governed-vocabulary.md",
       "artifacts": [
         ".claude/rules/glossary.md",
-        "reference/glossary.json",
         ".claude/skills/glossary/SKILL.md"
-      ]
+      ],
+      "lastUpdated": "2026-03-14"
     },
     {
       "name": "Intent documentation",
@@ -128,7 +136,8 @@
         "shared/skills/intent-writing/SKILL.md",
         "shared/skills/intent-audit/SKILL.md",
         ".claude/rules/sources-of-truth.md (intent protection)"
-      ]
+      ],
+      "lastUpdated": "2026-03-14"
     },
     {
       "name": "Governed data access",
@@ -137,12 +146,30 @@
       "concepts": ["Capability-based security (Dennis & Van Horn)", "Document control (ISO 9001)", "Information hiding (Parnas)", "Principle of least privilege (Saltzer & Schroeder)", "File classification", "Skill-as-capability", "Controlled distribution"],
       "referenceFile": "reference/framework-governed-data-access.md",
       "artifacts": [
+        ".claude/rules/governed-data-access.md",
+        ".claude/skills/governed-data/SKILL.md",
         ".claude/rules/glossary.md (trigger directive)",
         ".claude/rules/frameworks.md (trigger directive)",
         ".claude/rules/gap-governance.md (trigger directive)",
+        ".claude/rules/tool-evaluation.md (trigger directive)",
         ".claude/skills/frameworks/SKILL.md",
         "reference/framework-governed-data-access.md"
-      ]
+      ],
+      "lastUpdated": "2026-03-15"
+    },
+    {
+      "name": "Artifact harvesting",
+      "governs": "Lifecycle of reusable artifacts produced during sessions — code, prompts, patterns, research",
+      "discipline": "Reuse engineering (Disciplined Agile)",
+      "concepts": ["Harvesting (DA)", "Staging pipeline", "Toil automation (SRE)", "Tactical-to-strategic promotion (Ousterhout)"],
+      "referenceFile": "reference/framework-artifact-harvesting.md",
+      "artifacts": [
+        ".claude/rules/artifact-harvesting.md",
+        ".claude/skills/harvest/SKILL.md",
+        "harvesting/",
+        "shared/hooks/harvest-session.sh"
+      ],
+      "lastUpdated": "2026-03-15"
     }
   ],
   "pending": [

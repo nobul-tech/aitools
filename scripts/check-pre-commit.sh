@@ -325,19 +325,21 @@ else
     step_pass "15" "Deprecated summary terms" "no deprecated terms found"
 fi
 
-# Step 16: Capability bypass — direct @reference/ to governed JSON in rules
+# Step 16: Capability bypass — direct @reference/ to governed JSON in rules/CLAUDE.md
 echo ""
 echo "${BOLD}--- Step 16: Capability bypass audit ---${RESET}"
 # Governed JSON files that require skill access (capability-based security, Dennis & Van Horn 1966)
 # @reference/ prefix loads file into context, bypassing the governing skill
-hits=$(grep -rn '@reference/.*\.json' .claude/rules/ \
-    | perl -ne 'print if /glossary\.json|framework-registry\.json|known-gaps\.json/' \
+# Scope: .claude/rules/, CLAUDE.md, and any @-referenced files in CLAUDE.md
+# See .claude/rules/governed-data-access.md for the principle
+hits=$(grep -rn '@reference/.*\.json\|reference/.*\.json' .claude/rules/ CLAUDE.md \
+    | perl -ne 'print if /glossary\.json|framework-registry\.json|known-gaps\.json|tool-registry\.json/' \
     | grep -v '^.*:.*|.*|.*|.*|' || true)
 if [ -n "$hits" ]; then
-    step_fail "16" "Capability bypass audit" "rules load governed JSON directly (use governing skill)"
+    step_fail "16" "Capability bypass audit" "rules/CLAUDE.md load governed JSON directly (use governing skill)"
     echo "$hits"
 else
-    step_pass "16" "Capability bypass audit" "no direct @reference/ to governed JSON in rules"
+    step_pass "16" "Capability bypass audit" "no direct governed JSON references in rules/CLAUDE.md"
 fi
 
 # ---------------------------------------------------------------------------

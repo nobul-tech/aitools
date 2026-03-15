@@ -22,7 +22,7 @@ surfacing duty defined in `.claude/rules/gap-governance.md`.
 - Planned feature → add to `ROADMAP.md`
 - Specific bug with repro steps → `gh issue create`
 - Process improvement → `ROADMAP.md` or RFC
-- Tool evaluation → `reference/tool-registry.md`
+- Tool evaluation → `/tool-eval` skill
 
 ## Filing process
 

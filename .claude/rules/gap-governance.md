@@ -1,8 +1,8 @@
 ## Gap Governance (this repo)
 
-### What goes in known-gaps.json
+### What gets filed via /gap skill
 
-`reference/known-gaps.json` tracks deviations from spec and unresolved
+The `/gap` skill tracks deviations from spec and unresolved
 ambiguities. Two types:
 
 | Type | Definition | Example |
@@ -17,7 +17,7 @@ ambiguities. Two types:
 | Planned feature | `ROADMAP.md` |
 | Specific bug with repro | GitHub issue (`gh issue create`) |
 | Process improvement | `ROADMAP.md` or RFC |
-| Tool evaluation | `@reference/tool-registry.md` |
+| Tool evaluation | `/tool-eval` skill |
 
 ### Decision tree
 
@@ -54,7 +54,7 @@ produces these fields.
 
   "discoveryContext": "What plan step or task were you executing when this surfaced? What harness artifacts (rules, references, gaps, code, plans) did you audit before filing? Include session date. If a session archive exists, include the reference.",
 
-  "discipline": "If this maps to an established field of practice, name it. See reference/framework-registry.json for the taxonomy. null if this is a simple code deviation.",
+  "discipline": "If this maps to an established field of practice, name it. Check via /frameworks skill for the taxonomy. null if this is a simple code deviation.",
 
   "frameworks": "Specific frameworks from the named discipline that inform resolution. Give the consumer enough to evaluate them without prior knowledge. null if no discipline applies.",
 

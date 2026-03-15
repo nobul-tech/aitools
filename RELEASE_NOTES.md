@@ -12,6 +12,50 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.59 -- Governance overhaul, artifact harvesting, tool evaluation framework (2026-03-15)
+
+### New frameworks
+
+| # | Change |
+|---|--------|
+| 1 | **Tool evaluation framework** — new rule (`.claude/rules/tool-evaluation.md`), `/tool-eval` skill, `/tool-registry` skill. Ranked evaluation principles, health flags (green/yellow/red), evaluation provenance in `reference/evaluations/` |
+| 2 | **Artifact harvesting framework** — adopted from Disciplined Agile reuse engineering. New rule, `/harvest` skill, `harvesting/` directory, SessionEnd hook (`harvest-session.sh`) for classifying and preserving session work product |
+| 3 | **Governed data access** — new rule (`.claude/rules/governed-data-access.md`), `/governed-data` skill. Codifies the principle that governed JSON files are accessed only through their governing skill |
+
+### New skills
+
+| # | Change |
+|---|--------|
+| 4 | **`/tool-registry`** (project) — governed access to tool registry data |
+| 5 | **`/tool-eval`** (project) — evaluation process, health flag criteria, Homebrew verification checklist |
+| 6 | **`/governed-data`** (project) — content placement standard, adding governed registries, compliance auditing |
+| 7 | **`/harvest`** (project) — artifact harvesting lifecycle, manifest management, promotion workflow |
+| 8 | **`/scratch`** (user-level) — ephemeral session scratch files, mktemp session directories, commit message pattern |
+
+### New hooks
+
+| # | Change |
+|---|--------|
+| 9 | **`scratch-init.sh`** (SessionStart) — creates unique session scratch directory, cleans stale dirs |
+| 10 | **`harvest-session.sh`** (SessionEnd) — classifies scratch contents, harvests artifacts, audits harvesting/ |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 11 | **Structured logging for aitools entry points** — `scripts/aitools` and `scripts/aitools.ps1` now use `[timestamp] [aitools] [level]` format for all step output. Added missing `blog_warn` to `build-deploy.sh` |
+| 12 | **Pre-commit step 16 expanded** — now checks CLAUDE.md in addition to rules, adds `tool-registry.json` to governed files list |
+| 13 | **Tool lifecycle rule rewritten** — 206→90 lines, added intent, stripped procedures that moved to skills |
+| 14 | **Frameworks rule lean rewrite** — updated intent, added registries table rows for Glossary and Tool evaluation |
+| 15 | **CLAUDE.md governed data cleanup** — removed 5 direct JSON references, removed stale Three-layer registries design principle |
+| 16 | **Cross-reference sweep** — 14 files updated to reference `/tool-registry` skill instead of `tool-registry.md` |
+| 17 | **Chrome DevTools skill** — added `.md` URL pattern for efficient Claude Code docs reading |
+| 18 | **USO/UCI updates** — scratch directives now reference `/scratch` skill and session directories |
+| 19 | **Framework registry** — Tool lifecycle entry updated (new concepts, artifacts), Governed data access entry updated (new skill), Artifact harvesting entry added. `lastUpdated` backfilled on all entries |
+| 20 | **Framework reference files** — `framework-tool-lifecycle.md` and `framework-governed-data-access.md` rewritten to follow content placement standard (concepts only, no requirements duplication) |
+
+---
+
 ## v0.58 -- Verified terminology, capability bypass detection (2026-03-14)
 
 ### Bug fixes

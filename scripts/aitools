@@ -1329,17 +1329,8 @@ export AITOOLS_SUPPRESS_SUMMARY_DISPLAY=1
 # Source shared lib (provides write_summary, show_summary)
 source "$repo_path/scripts/aitools-lib.sh"
 logging_init "aitools"
-# Override: file-only logging, errors/warns to stderr (no tee to stdout)
-log() {
-    local level="${2:-info}"
-    printf '[%s] [aitools] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$level" "$1" >> "$LOG_FILE"
-}
-log_ok()    { log "$1" "ok"; }
-log_error() { log "$1" "error"; printf 'error: %s\n' "$1" >&2; ERRORS=$((ERRORS + 1)); }
-log_warn()  { log "$1" "warn"; printf 'warning: %s\n' "$1" >&2; WARNINGS=$((WARNINGS + 1)); }
 
-echo "aitools $AITOOLS_INSTALLED_VERSION"
-echo ""
+log "aitools $AITOOLS_INSTALLED_VERSION"
 
 if $do_install; then
     STEPS=3
@@ -1352,16 +1343,16 @@ fi
 
 # [1/N] Pull latest
 if $do_gitpull; then
-    echo "[1/$STEPS] Pulling latest..."
+    log "Step 1/$STEPS: Pulling latest"
     pulled_updates=false
     # Reset generated files before pull (line-ending diffs, mode changes)
     git -C "$repo_path" checkout HEAD -- deploy/ 2>/dev/null || true
     if pull_out=$(cd "$repo_path" && git pull --tags origin main 2>&1); then
         if echo "$pull_out" | grep -q "Already up to date"; then
-            echo "  Already up to date."
+            log_ok "Already up to date"
         else
             pulled_updates=true
-            echo "  Updated."
+            log_ok "Updated"
         fi
     else
         log_error "git pull failed"
@@ -1370,22 +1361,22 @@ if $do_gitpull; then
     fi
 else
     # no-args and install: quiet pull (warn on failure, continue from local)
-    echo "[1/$STEPS] Pulling latest..."
+    log "Step 1/$STEPS: Pulling latest"
     pulled_updates=false
     # Reset generated files before pull (line-ending diffs, mode changes)
     git -C "$repo_path" checkout HEAD -- deploy/ 2>/dev/null || true
     if pull_out=$(cd "$repo_path" && git pull origin main 2>&1); then
         if echo "$pull_out" | grep -q "Already up to date"; then
-            echo "  Already up to date."
+            log_ok "Already up to date"
         else
             pulled_updates=true
-            echo "  Updated."
+            log_ok "Updated"
         fi
     else
         if echo "$pull_out" | grep -qiE "could not resolve|unable to access|connection refused|connection timed out|no route to host"; then
-            echo "  Could not reach remote — deploying from local checkout."
+            log_warn "Could not reach remote — deploying from local checkout"
         else
-            log_warn "git pull failed -- deploying from local checkout."
+            log_warn "git pull failed -- deploying from local checkout"
             echo "$pull_out" | head -3 | sed 's/^/    /' >&2
         fi
         write_summary WARN "source" "stale local checkout (git pull failed)"
@@ -1406,9 +1397,9 @@ if raw=$(read_config_key "$config" "userRepoPath"); then
 fi
 
 # [2/N] Rebuild deploy scripts
-echo "[2/$STEPS] Rebuilding deploy scripts..."
+log "Step 2/$STEPS: Rebuilding deploy scripts"
 if bash "$repo_path/scripts/build-deploy.sh" >> "$LOG_FILE" 2>&1; then
-    echo "  Done."
+    log_ok "Rebuilt"
 else
     log_error "build failed (see $LOG_DISPLAY)"
     return 1
@@ -1416,8 +1407,7 @@ fi
 
 if $do_install; then
     # --- install: pull + rebuild + run installer (includes deploy) ---
-    echo "[3/$STEPS] Running installer..."
-    echo ""
+    log "Step 3/$STEPS: Running installer"
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
             # Windows: forward to PowerShell installer with translated flags
@@ -1447,32 +1437,32 @@ if $do_install; then
     installer_rc=$?
     echo ""
     if [ $installer_rc -eq 0 ]; then
-        echo "All up to date. ($(repo_version "$repo_path"))"
+        log_ok "All up to date ($(repo_version "$repo_path"))"
         # Session archive hint (after final status line)
         if ! read_config_key "$config" "userRepoPath" >/dev/null 2>&1; then
             printf '\033[33mhint: To archive sessions across machines, run '\''aitools user init'\''.\033[0m\n'
         fi
         check_profile interactive
     else
-        echo "Completed with errors (see $(display_path "$LOG_FILE"))."
+        log "Completed with errors (see $LOG_DISPLAY)" "error"
     fi
 
 elif $do_gitpull; then
     # --- gitpull: pull + rebuild + deploy + changelog + version tag ---
-    echo "[3/$STEPS] Deploying configurations..."
+    log "Step 3/$STEPS: Deploying configurations"
     deploy_configs "$repo_path/scripts"
     deploy_rc=$?
     if [ $deploy_rc -eq 0 ]; then
-        echo "  Done."
+        log_ok "Done"
     else
-        echo "  Completed with $deploy_rc error(s)."
+        log "Completed with $deploy_rc error(s)" "warn"
     fi
 
-    echo "[4/$STEPS] Tagging version..."
+    log "Step 4/$STEPS: Tagging version"
     # Skip if HEAD already has a tag (e.g., re-running gitpull without new commits)
     if git -C "$repo_path" describe --tags --match "v*" --exact-match HEAD >/dev/null 2>&1; then
         existing=$(git -C "$repo_path" describe --tags --match "v*" --exact-match HEAD 2>/dev/null)
-        echo "  HEAD already tagged ($existing) — skipping"
+        log_ok "HEAD already tagged ($existing) — skipping"
         tag="$existing"
     else
         latest_tag=$(git -C "$repo_path" describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "v0.0.0")
@@ -1492,41 +1482,39 @@ elif $do_gitpull; then
         # Release notes gate: require a matching entry before tagging
         tag_short="${tag%%.0}"  # v0.18.0 -> v0.18, v0.18.1 stays v0.18.1
         if ! grep -q "^## ${tag} \|^## ${tag_short} " "$repo_path/RELEASE_NOTES.md" 2>/dev/null; then
-            printf '\033[33m  RELEASE_NOTES.md has no entry for %s -- skipping tag.\033[0m\n' "$tag"
-            echo "  Add a '## ${tag} -- Title ($(date -u +%Y-%m-%d))' section first."
+            log_warn "RELEASE_NOTES.md has no entry for $tag -- skipping tag"
+            log "Add a '## ${tag} -- Title ($(date -u +%Y-%m-%d))' section first"
             tag="(skipped)"
         else
             git -C "$repo_path" tag "$tag"
             if git -C "$repo_path" push origin "$tag" 2>/dev/null; then
-                echo "  Tagged $tag"
+                log_ok "Tagged $tag"
             else
-                echo "  Tagged $tag (local only -- push failed)"
+                log_warn "Tagged $tag (local only -- push failed)"
             fi
         fi
     fi
 
-    echo ""
     if $pulled_updates; then
-        echo "Updated and deployed. ($tag)"
+        log_ok "Updated and deployed ($tag)"
         # Show date-formatted changelog (no hashes)
         cd "$repo_path" && git log --format='  %ad  %s' --date=short ORIG_HEAD..HEAD 2>/dev/null
     else
-        echo "Deployed. ($tag)"
+        log_ok "Deployed ($tag)"
     fi
 
 else
     # --- no-args: quiet pull + rebuild + deploy ---
-    echo "[3/$STEPS] Deploying configurations..."
+    log "Step 3/$STEPS: Deploying configurations"
     deploy_configs "$repo_path/scripts"
     deploy_rc=$?
     if [ $deploy_rc -eq 0 ]; then
-        echo "  Done."
+        log_ok "Done"
     else
-        echo "  Completed with $deploy_rc error(s)."
+        log "Completed with $deploy_rc error(s)" "warn"
     fi
 
-    echo ""
-    echo "Configs deployed. ($(repo_version "$repo_path"))"
+    log_ok "Configs deployed ($(repo_version "$repo_path"))"
 
     check_profile interactive
 

@@ -317,29 +317,35 @@ if ($allHits.Count -gt 0) {
     StepPass "15" "Deprecated summary terms" "no deprecated terms found"
 }
 
-# Step 16: Capability bypass — direct @reference/ to governed JSON in rules
+# Step 16: Capability bypass — direct @reference/ to governed JSON in rules/CLAUDE.md
 Write-Host ""
 Write-Host "--- Step 16: Capability bypass audit ---" -ForegroundColor White
 # Governed JSON files that require skill access (capability-based security, Dennis & Van Horn 1966)
 # @reference/ prefix loads file into context, bypassing the governing skill
+# Scope: .claude/rules/, CLAUDE.md, and any @-referenced files in CLAUDE.md
+# See .claude/rules/governed-data-access.md for the principle
 $rulesDir = Join-Path $script:RepoRoot ".claude/rules"
+$claudeMd = Join-Path $script:RepoRoot "CLAUDE.md"
+$scanFiles = @()
 $ruleFiles = Get-ChildItem "$rulesDir/*.md" -ErrorAction SilentlyContinue
+if ($ruleFiles) { $scanFiles += $ruleFiles }
+if (Test-Path $claudeMd) { $scanFiles += Get-Item $claudeMd }
 $capHits = @()
-if ($ruleFiles) {
-    $rawHits = Select-String -Path $ruleFiles -Pattern '@reference/.*\.json' -ErrorAction SilentlyContinue
+if ($scanFiles.Count -gt 0) {
+    $rawHits = Select-String -Path $scanFiles -Pattern '@?reference/.*\.json' -ErrorAction SilentlyContinue
     if ($rawHits) {
         foreach ($h in $rawHits) {
-            if ($h.Line -match 'glossary\.json|framework-registry\.json|known-gaps\.json' -and $h.Line -notmatch '^\|.*\|.*\|.*\|') {
+            if ($h.Line -match 'glossary\.json|framework-registry\.json|known-gaps\.json|tool-registry\.json' -and $h.Line -notmatch '^\|.*\|.*\|.*\|') {
                 $capHits += $h
             }
         }
     }
 }
 if ($capHits.Count -gt 0) {
-    StepFail "16" "Capability bypass audit" "rules load governed JSON directly (use governing skill)"
+    StepFail "16" "Capability bypass audit" "rules/CLAUDE.md load governed JSON directly (use governing skill)"
     $capHits | ForEach-Object { Write-Host "  $_" }
 } else {
-    StepPass "16" "Capability bypass audit" "no direct @reference/ to governed JSON in rules"
+    StepPass "16" "Capability bypass audit" "no direct governed JSON references in rules/CLAUDE.md"
 }
 
 # ---------------------------------------------------------------------------

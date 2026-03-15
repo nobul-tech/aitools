@@ -29,7 +29,7 @@ WebFetch misses. When accuracy matters, use the real browser.
 
 ### When to use Chrome DevTools MCP skill
 
-- Reading official tool docs to extract install commands for `tool-registry.md`
+- Reading official tool docs to extract install commands for the `/tool-registry` skill
 - Verifying config requirements, post-install steps, or dependencies
 - Checking release notes or changelogs for lifecycle field updates
 - Any page whose content will be recorded verbatim in a protected file
@@ -43,6 +43,6 @@ WebFetch misses. When accuracy matters, use the real browser.
 
 ### Cross-reference
 
-Before reading a tool's docs, check `@reference/tool-registry.md` first --
+Before reading a tool's docs, check via the `/tool-registry` skill first --
 it may already have verified information. If proposing changes to an existing
 entry, re-verify using Chrome DevTools MCP skill before editing.

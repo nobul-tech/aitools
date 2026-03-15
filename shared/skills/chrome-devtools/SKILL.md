@@ -52,6 +52,20 @@ Many pages use JS-rendered accordions/tabs (e.g., FAQ sections) whose content is
 
 You can send multiple tool calls in parallel, but maintain correct order: navigate → wait → snapshot → interact.
 
+### Reading Claude Code docs efficiently
+
+Every `code.claude.com/docs/en/<topic>` page has a markdown version at
+`code.claude.com/docs/en/<topic>.md`. Navigate directly to the `.md`
+URL — it gives clean markdown without the massive DOM of the rendered
+page.
+
+The full docs index is at: `https://code.claude.com/docs/llms.txt`
+
+The rendered pages also have a "Copy page" dropdown (top-right) with:
+- **Copy page** — copies as Markdown for LLMs to clipboard
+- **View as Markdown** — opens the `.md` URL
+- **Open in Claude** — opens in Claude for Q&A
+
 ## Troubleshooting
 
 If `chrome-devtools-mcp` is insufficient, guide users to use Chrome DevTools UI:

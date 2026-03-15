@@ -1,28 +1,19 @@
 ## Frameworks (this repo)
 
-**Intent**: **Purpose**: State what frameworks are, when to check
-them, and where the registries live — so agents always know to check
-before assuming. **Scope**: Framework concept, registry references,
-and harness registry list. NOT framework data (use `/frameworks` skill). NOT the adoption process (see
-`@reference/framework-adoption.md`). **Audience**: Every agent,
-every session.
+**Intent**: **Purpose**: Govern the harness registry pattern and the
+framework adoption process — ensuring agents check existing governance
+before assuming, and all governed data follows the three-layer pattern.
+**Scope**: Registry of registries, framework governance principle, and
+skill gate. NOT framework data or lookup (use `/frameworks` skill).
+NOT the adoption process (see `/frameworks` skill for entry point).
+**Audience**: Every agent, every session.
 
-Frameworks are governance structures adopted from established
-disciplines into the harness. Each bridges a discipline's concepts
-to concrete harness artifacts (rules, skills, hooks, reference files).
+### Governing principle
 
 When an agent encounters a decision point without explicit guidance,
 check whether an existing framework addresses it before assuming.
-The assumption is the failure mode — see
-`@reference/framework-adoption.md` for the discovery-to-continuation
-cycle.
-
-### Framework registry
-
-The framework registry (accessible via `/frameworks` skill) is the source of truth for all
-adopted frameworks. Each entry includes: name, what it governs,
-source discipline, key concepts, reference file, and implementing
-artifacts.
+The assumption is the failure mode. Invoke the `/frameworks` skill
+to check coverage.
 
 ### Harness registries
 
@@ -31,11 +22,14 @@ Each registry follows the three-layer pattern defined in
 rule (intent, always in context) + JSON (data, source of truth) +
 skill (access layer).
 
-| Registry | Rule | Data | Write Skill | Read Skill |
-|----------|------|------|-------------|------------|
+| Registry | Rule | Data | Process Skill | Data Skill |
+|----------|------|------|---------------|------------|
 | Frameworks | This file | `@reference/framework-registry.json` | — | `/frameworks` |
-| Gaps | `@.claude/rules/gap-governance.md` | `@reference/known-gaps.json` | `/gap` | `/gaps` |
-| Tools | `@.claude/rules/tool-lifecycle.md` | `reference/tool-registry.json` | `/tool-eval` | `/tools` |
+| Gaps | `@.claude/rules/gap-governance.md` | `@reference/known-gaps.json` | `/gap` | `/gap` |
+| Glossary | `@.claude/rules/glossary.md` | `@reference/glossary.json` | — | `/glossary` |
+| Tool registry | `@.claude/rules/tool-lifecycle.md` | `@reference/tool-registry.json` | — | `/tool-registry` |
+| Tool evaluation | `@.claude/rules/tool-evaluation.md` | `reference/evaluations/` | `/tool-eval` | — |
+| Artifact harvesting | `@.claude/rules/artifact-harvesting.md` | `harvesting/` | `/harvest` | `/harvest` |
 
 ### When to invoke /frameworks
 

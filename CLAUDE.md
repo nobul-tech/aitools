@@ -14,15 +14,13 @@ not artificial 1:1 parity.
 ## Design Principles
 
 - **Three-layer governance**: Prevention (rules in context stop issues from being created), Detection (hooks fire in real-time during sessions), Audit (skills/subagents provide deep review on demand). Each layer catches what the previous missed. Applies to both governance and USO/PSO compliance.
-- **Ambiguity is a defect**: If a rule, reference, or plan can be read two ways, that's a bug. Surface it immediately — file in `reference/known-gaps.json` per `.claude/rules/gap-governance.md`. Every session has this duty.
+- **Ambiguity is a defect**: If a rule, reference, or plan can be read two ways, that's a bug. Surface it immediately — file via `/gap` skill per `.claude/rules/gap-governance.md`. Every session has this duty.
 - **Full context, not token budgeting**: Use the full context window. Launch subagents with complete rules. Load reference files generously. Keep CLAUDE.md and rules succinct for *clarity*, not to save tokens. Use skills, reference files, and hooks for depth.
-- **Specs vs state**: Rules and references define what SHOULD be. `reference/known-gaps.json` tracks what ISN'T yet. Never describe a feature as "working" if it hasn't fired in production. See `.claude/rules/gap-governance.md`.
+- **Specs vs state**: Rules and references define what SHOULD be. The `/gap` skill tracks what ISN'T yet. Never describe a feature as "working" if it hasn't fired in production. See `.claude/rules/gap-governance.md`.
 - **Separate tool harnesses**: Claude Code (`.claude/rules/`, CLAUDE.md) and Cursor (`.cursor/rules/`, agents.md) serve different purposes and are managed independently. No parity requirement.
 - **End users are developers**: Every aitools user benefits from understanding internals. No "dumb user" persona. Skills, docs, and menus assume developer familiarity. Users may work on one, two, or all three platforms — aitools supports all combinations. Cross-platform coverage in skills and docs is factual (all platforms documented), not prescriptive (don't assume every user cares about every platform).
-- **Skills as enablement**: Every managed tool, dependency, and repeatable process gets a skill. User-level skills (`shared/skills/` → `~/.claude/skills/`) cover managed tools and project-agnostic patterns. Project-level skills (`.claude/skills/`) cover repo-specific frameworks. Skills are process implementations governed by rules. Every skill with auto-trigger behavior requires three artifacts: the skill itself, a trigger directive in its governing rule (states WHEN to invoke), and a detection hook spec (catches when the process is bypassed). The rule governs; the skill implements; the hook enforces. See `plans/governance-and-compliance-framework.md` for placement criteria and `reference/framework-governed-data-access.md` for the access pattern.
+- **Skills as enablement**: Every managed tool, dependency, and repeatable process gets a skill. User-level skills (`shared/skills/` → `~/.claude/skills/`) cover managed tools and project-agnostic patterns. Project-level skills (`.claude/skills/`) cover repo-specific frameworks. Skills are process implementations governed by rules. Every skill with auto-trigger behavior requires three artifacts: the skill itself, a trigger directive in its governing rule (states WHEN to invoke), and a detection hook spec (catches when the process is bypassed). The rule governs; the skill implements; the hook enforces. See `plans/governance-and-compliance-framework.md` for placement criteria and `.claude/rules/governed-data-access.md` for the access pattern.
 - **Document intent**: Every markdown file, every major section that could be misread in isolation, and every code file must state its intent: purpose (what it exists to deliver), scope (what's covered and explicitly excluded), and audience (who consumes it). A file or section without intent is ambiguous by definition. In markdown, intent appears as an `**Intent**:` block or opening paragraph. In code, intent appears as a header comment block. New files must include intent; existing files are backfilled incrementally. Intent statements are a protected activity — draft and present for user approval before writing. See `@.claude/rules/sources-of-truth.md`.
-- **Three-layer registries**: Every registry (tools, gaps, frameworks) follows: rule (intent and guidance, always in context), structured data file (JSON, single source of truth, protected), skill (access layer, loaded on demand, injected into subagents). Markdown registry files are not sources of truth — they drift from structured data. See `@reference/framework-three-layer-governance.md` "Registry Convention".
-
 ## Project Structure
 
 ```
@@ -129,13 +127,14 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
 
 - This directory is the **"home base"** for general/cross-project AI conversations
 - Shared preferences live in `shared/claude-shared.md` (template). User's personal copy lives in `<userRepoPath>/claude/CLAUDE.md` (syncs across machines). `scripts/setup-user-claude.sh/.ps1` reads from user repo first (dotprofile wins if present; fallback: shared template). Both files must be kept in sync — shared template is the fallback and the MDM deploy source. Interpolates `{{PLACEHOLDER}}` tokens from `profile.json`, and writes to `~/.claude/CLAUDE.md`. `deploy/` scripts use build-time embedded content (self-contained).
-- `reference/tool-registry.md` is the source of truth for install commands -- always check before modifying installer scripts
-- Install methods in `tool-registry.md` and `BuildPrereqs` must be derived from official tool documentation via the discovery process in `.claude/rules/tool-lifecycle.md` -- never chosen from assumption or memory
+- The `/tool-registry` skill is the access point for tool install commands -- always check via the skill before modifying installer scripts
+- Install methods and `BuildPrereqs` must be derived from official tool documentation via the `/tool-eval` skill -- never chosen from assumption or memory
 - **`claude mcp add` and nested sessions**: `claude mcp add` fails inside nested Claude Code sessions (`CLAUDECODE` env var blocks it). `--addmcp` avoids this by writing `.claude/settings.local.json` directly via Node.js. `setup-user-mcp.sh/.ps1` unsets the var as a workaround.
 - AI CLI invocations in scripts use `invoke_ai`/`Invoke-AI` (aitools-lib) with explicit speed/permission tiers. Prompts follow the structured pattern and are evaluated per `.claude/rules/agentic-standards.md`
 - **deploy/ lifecycle**: `deploy/` is fully generated by `build-deploy.sh` and
   reset to HEAD before every `aitools` pull. Uncommitted deploy/ changes are
   ephemeral. See `.claude/rules/git-safety.md`
+- **Governed data changes**: When a governed file's schema changes, update the governing skill first (so it documents the new schema), then invoke the skill to make the data change. Never change governed data without the skill reflecting the current schema. See `@.claude/rules/governed-data-access.md`
 
 ## Code Conventions
 

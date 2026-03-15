@@ -1,16 +1,14 @@
 # Governed Data Access
 
-**Intent**: **Purpose**: Document the governed data access framework
-— how governed files (JSON registries) are accessed only through
-their governing skills, and the three-layer enforcement pattern
-(prevention, detection, telemetry). **Scope**: File classification
-tiers, skill-as-capability pattern, controlled distribution,
-enforcement mechanisms, and source discipline credits. NOT the
-individual skill processes (those are in the skill SKILL.md files).
-NOT the deployment state machine (see
-`@reference/managed-file-deployment.md`). **Audience**: Agents
-designing new registries, agents building detection hooks, `/audit`
-skill verifying three-layer completeness.
+**Intent**: **Purpose**: Document the source disciplines, adoption
+rationale, and design patterns behind skill-gated access to governed
+registries. **Scope**: Why we adopted capability-based security,
+document control, and information hiding — and how they map to our
+harness. NOT the operational rules (see
+`@.claude/rules/governed-data-access.md`). NOT which registries
+exist (see `@.claude/rules/frameworks.md` registries table).
+**Audience**: Agents designing new registries, agents building
+detection hooks, framework adoption work.
 
 ## Source Disciplines
 
@@ -21,9 +19,9 @@ This framework adopts concepts from three established disciplines:
 **Capability-based security** (Dennis & Van Horn, 1966): A capability
 is an unforgeable token that grants specific access AND defines what
 operations are permitted. In our harness: a loaded skill IS the
-capability. Having `/gap` loaded grants access to `known-gaps.json`
-AND provides the governed process. Without the skill — no capability,
-no governed access.
+capability. Having a governing skill loaded grants access to the
+registry AND provides the governed process. Without the skill — no
+capability, no governed access.
 
 **Principle of least privilege** (Saltzer & Schroeder, 1975): Each
 agent gets only the access needed for its role. Agents without the
@@ -42,13 +40,15 @@ and writes require the skill's process (approval).
 
 **Information hiding** (Parnas, 1972): Modules expose interfaces and
 hide implementation details. In our harness: skills expose the
-governed process (interface), JSON files are the implementation
+governed process (interface), JSON registries are the implementation
 detail (hidden behind the skill).
 
 **Encapsulation**: Data accessible only through methods. The skill IS
 the method; the JSON IS the private data.
 
-## File Classification
+## How We Adopted It
+
+### File classification
 
 Every file in the harness has an access tier:
 
@@ -56,13 +56,13 @@ Every file in the harness has an access tier:
 |------|------|-------|-------------|---------|
 | **Open** | Any agent | Any agent | None | Code, scripts, scratch files |
 | **Protected** | Any agent | Human review required | Source-of-truth rule | CLAUDE.md, rules, plans, reference files |
-| **Governed** | Through governing skill | Through governing skill | Skill = capability | `known-gaps.json`, `glossary.json`, `framework-registry.json` |
+| **Governed** | Through governing skill | Through governing skill | Skill = capability | JSON registries accessed via their skills |
 
 Protected and governed are not mutually exclusive. Governed files are
 also protected (they appear in the protected files list). Governed
 adds skill-gated process enforcement on top of human review.
 
-## Skill-as-Capability Pattern
+### Skill-as-capability pattern
 
 A loaded skill grants access to governed data AND provides the process
 for interacting with it. The capability unifies access and authority:
@@ -77,13 +77,13 @@ for interacting with it. The capability unifies access and authority:
 Without the skill loaded, the agent has no governed process. With the
 skill loaded, access and process are inseparable.
 
-## Controlled Distribution
+### Controlled distribution
 
 Rules and documentation reference skills, not raw file paths. The
 skill is the only documented entry point to governed data:
 
 - **Do**: "Definitions: `/glossary` skill"
-- **Don't**: "Definitions: `@reference/glossary.json`"
+- **Don't**: reference governed data file paths in rules or docs
 
 The `@reference/` syntax resolves at load time and pulls file content
 into context — this gives agents the data without the process.
@@ -94,74 +94,43 @@ Files remain discoverable via filesystem tools (Glob, Grep). Controlled
 distribution changes the default path, not physical access. The
 detection layer (hooks) catches direct access that bypasses the skill.
 
-## Three-Layer Enforcement
+### Three-layer enforcement
 
-Every governed file has three enforcement layers:
+Every governed registry has three enforcement layers:
 
 | Layer | Mechanism | What it catches |
 |-------|-----------|----------------|
-| Prevention | Trigger directive in rule | Agent reads rule, knows to invoke skill. Always in context. |
-| Detection | PreToolUse hook on Read/Edit | Agent accesses governed file directly — hook injects process reminder or logs bypass. |
-| Telemetry | KPI: governed file access without skill invocation | Measures whether prevention and detection are working. Ships to Datadog. |
+| Prevention | Trigger directive in rule + governed-data-access rule | Agent reads rule, knows to invoke skill. Always in context. |
+| Detection | PreToolUse hook on Read/Edit + pre-commit step 16 | Agent accesses governed data directly — hook injects reminder, pre-commit blocks commit. |
+| Telemetry | KPI: governed data access without skill invocation | Measures whether prevention and detection are working. |
 
-A governed file without all three layers has gaps:
+A governed registry without all three layers has gaps:
 - Prevention only = suggestion (agent can ignore)
 - Prevention + detection = enforced (agent is reminded)
 - Prevention + detection + telemetry = governed (effectiveness is measured)
 
-### Current coverage
+## How It's Maintained
 
-| Governed file | Prevention | Detection | Telemetry |
-|--------------|-----------|-----------|-----------|
-| `known-gaps.json` | `/gap` trigger in gap-governance.md ✓ | Planned | Planned |
-| `glossary.json` | `/glossary` trigger in glossary.md ✓ | Planned | Planned |
-| `framework-registry.json` | `/frameworks` trigger in frameworks.md ✓ | Planned | Planned |
+- `@.claude/rules/governed-data-access.md` enforces the access principle
+- Pre-commit step 16 catches capability bypasses at commit time
+- The registries table in `@.claude/rules/frameworks.md` lists all
+  governed registries and their skills
+- New governed registries: use `/governed-data` skill
 
-### Detection hook pattern
+## Implementing Artifacts
 
-PreToolUse command hook (exit 0, observe only) on Read/Edit/Write/Grep.
-When `file_path` or `path` matches a governed file:
-
-1. Inject governing process via `additionalContext` (prompt injection)
-2. Log event to telemetry: `event_type=governed_file_access`,
-   `tool_name`, governed file, governing skill
-3. Do NOT block — the skill also uses Read, and hooks cannot
-   distinguish skill reads from direct reads
-
-The standing-order-guard (PreToolUse on Bash) additionally checks for
-governed file paths in bash commands (`cat`, `jq`, `node -e`, etc.)
-to prevent Bash tool bypass.
-
-### Telemetry KPIs
-
-| KPI | Metric | What it tells you |
-|-----|--------|-------------------|
-| Governance compliance rate | Skill invocations / governed file accesses | Are agents using skills or bypassing them? |
-| Bypass rate by file | Direct accesses per governed file | Which files are most bypassed? |
-| Prevention effectiveness | Compliance rate delta after trigger directives | Did the rule fix work? |
-| Time-to-correction | Time between direct access and skill invocation | Do agents self-correct? |
-
-## Adding a New Governed File
-
-When creating a new JSON registry:
-
-1. **Create the skill** — the governed process for reading and writing
-2. **Add trigger directive** to the governing rule — when to invoke
-3. **Design the detection hook spec** — what to detect on direct access
-4. **Register in this framework** — add to the coverage table above
-5. **Apply controlled distribution** — reference the skill, not the
-   file path, in rules and documentation
-
-All five artifacts are created together. A governed file without its
-skill is ungoverned data. A skill without its trigger directive is
-ungoverned process.
+- `@.claude/rules/governed-data-access.md` (operational rule)
+- `@.claude/rules/frameworks.md` (registries table)
+- Trigger directives in governing rules (glossary.md, gap-governance.md,
+  frameworks.md, tool-evaluation.md)
+- `scripts/check-pre-commit.sh/.ps1` step 16 (capability bypass audit)
 
 ## Cross-References
 
+- Operational rule: `@.claude/rules/governed-data-access.md`
+- Registries table: `@.claude/rules/frameworks.md`
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
 - Framework registry: `/frameworks` skill
-- Glossary terms: `file classification`, `governed file`,
-  `skill-as-capability`, `controlled distribution`
-- Gap governance: `@.claude/rules/gap-governance.md`
-- Managed file deployment: `@reference/managed-file-deployment.md`
+- Glossary terms: `file classification`, `skill-as-capability`,
+  `controlled distribution`
 - Harness architecture: `@reference/harness.md`

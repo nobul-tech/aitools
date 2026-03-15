@@ -69,7 +69,7 @@ Create a `plans/*.md` file when work:
 - **Rules** (`.claude/rules/`) = concise behavioral directives, ~40-100 lines
 - **References** (`reference/`) = implementation detail, unlimited length
 - **No duplication** — one authoritative location per fact
-- **Tool configs** documented per-tool in `@reference/tool-registry.md`
+- **Tool configs** documented per-tool via `/tool-registry` skill
 - **Specs vs state** — rules and references are specs;
   `known-gaps.json` (via `/gap` skill) tracks out-of-spec code.
   See `@.claude/rules/gap-governance.md` for lifecycle and classification

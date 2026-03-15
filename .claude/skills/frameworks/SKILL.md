@@ -1,22 +1,21 @@
 ---
 name: frameworks
-description: "Read the framework registry and add new frameworks.
+description: "Read, update, and add frameworks in the registry.
   Use when checking if a framework exists, looking up a framework's
-  artifacts, adding a new adopted framework, or discussing which
-  discipline governs a decision point."
+  artifacts, updating a stale entry, adding a new adopted framework,
+  or discussing which discipline governs a decision point."
 ---
 
 ## Intent
 
-**Purpose**: Provide governed access to the framework registry and
-the process for adding new frameworks. **Scope**: Reading framework
-entries from `@reference/framework-registry.json`, adding new
-frameworks with user approval, and checking framework coverage for
-a domain. NOT the adoption lifecycle (see
+**Purpose**: Provide governed access to the framework registry —
+reading entries, updating existing frameworks, adding new ones, and
+checking coverage for a domain. **Scope**: All CRUD operations on
+the framework registry. NOT the adoption lifecycle (see
 `@reference/framework-adoption.md`). NOT individual framework
 documentation (see `reference/framework-*.md` files). **Audience**:
 Any agent checking whether a framework addresses their decision
-point, or adding a new adopted framework.
+point, updating a framework's artifacts, or adding a new framework.
 
 ## Reading frameworks
 
@@ -24,7 +23,7 @@ point, or adding a new adopted framework.
 2. Look up in `frameworks` array by name, discipline, or governed
    domain
 3. Present the entry with: name, what it governs, source discipline,
-   key concepts, reference file, and implementing artifacts
+   key concepts, reference file, implementing artifacts, lastUpdated
 4. If the caller needs the full framework documentation, point to
    the `referenceFile` path
 
@@ -38,6 +37,31 @@ Given a domain or decision point:
 4. If not found: this is a governance gap — the domain has no
    governing framework. Report as a potential framework adoption
    opportunity per `@reference/framework-adoption.md`
+
+## Updating a framework
+
+When a framework's artifacts, concepts, or governance scope change:
+
+1. Read current entry from `@reference/framework-registry.json`
+2. Identify what changed:
+   - **Artifacts** — new rules, skills, data files added or removed?
+     Verify each artifact path exists.
+   - **Concepts** — new concepts introduced? Old concepts no longer
+     relevant?
+   - **Governs** — scope expanded or narrowed?
+3. Check the reference file (`referenceFile`) — does it reflect the
+   changes? Flag for separate update if stale.
+4. Draft updated entry with all required fields + updated
+   `lastUpdated`
+5. Present for review (protected file)
+6. Write if approved
+
+### Staleness
+
+Entries without `lastUpdated` or with `lastUpdated` >90 days old
+are stale. The `/audit` skill flags these. Stale entries MUST be
+reviewed — artifacts may have been added, removed, or renamed
+without the registry being updated.
 
 ## Adding a framework
 
@@ -60,7 +84,8 @@ of `@reference/framework-adoption.md`):
   "referenceFile": "reference/framework-<name>.md",
   "artifacts": [
     "List of implementing artifacts (rules, skills, hooks, reference files)"
-  ]
+  ],
+  "lastUpdated": "YYYY-MM-DD"
 }
 ```
 
@@ -82,20 +107,39 @@ array with:
 
 ### Writing the changes
 
+For both adds and updates:
+
 1. Draft the JSON entry with all required fields
-2. If adding to `frameworks` (not `pending`), verify:
+2. Verify:
    - Reference file exists (`reference/framework-<name>.md`)
    - At least one implementing artifact exists
-   - Entry in `.claude/rules/frameworks.md` is not needed (the rule
-     reads from the registry, not a static list)
-3. Present for review — `framework-registry.json` is protected per
+   - Each artifact path in the list is valid (file or directory exists)
+   - `lastUpdated` is set to today
+3. Present for review — the registry is protected per
    `@.claude/rules/sources-of-truth.md`
 4. Write if approved
+
+## Framework reference file template
+
+Every `reference/framework-*.md` file MUST have these sections:
+
+1. **Intent** — purpose, scope, audience
+2. **Source Discipline(s)** — what discipline the concepts come from,
+   key authors/works cited
+3. **How We Adopted It** — how discipline concepts map to harness
+   artifacts
+4. **How It's Maintained** — ongoing care, what triggers updates
+5. **Implementing Artifacts** — list of rules, skills, data files,
+   hooks (reference skills not JSON paths)
+6. **Cross-References** — links to related frameworks, rules, skills
+
+When updating a framework, verify the reference file matches the
+registry entry. If artifacts diverge, update both together.
 
 ## Cross-References
 
 - Framework rule: `@.claude/rules/frameworks.md`
-- Registry data: `@reference/framework-registry.json`
+- Governed data access: `@.claude/rules/governed-data-access.md`
 - Adoption lifecycle: `@reference/framework-adoption.md`
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
 - Governance audit: `/audit` skill (validates framework health)

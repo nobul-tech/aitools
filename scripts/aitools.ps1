@@ -1266,17 +1266,8 @@ $env:AITOOLS_SUPPRESS_SUMMARY_DISPLAY = "1"
 # Source shared lib (provides Write-Summary, Show-Summary)
 . (Join-Path $repoPath "scripts" "aitools-lib.ps1")
 Initialize-Logging "aitools"
-# Override: file-only logging, errors/warns to stderr (no console echo)
-function Log($msg, $level = "info") {
-    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-    Add-Content -Path $logFile -Value "[$ts] [aitools] [$level] $msg"
-}
-function LogOk($msg)    { Log $msg "ok" }
-function LogError($msg) { Log $msg "error"; Write-Host "error: $msg" -ForegroundColor Red; $script:errors++ }
-function LogWarn($msg)  { Log $msg "warn"; Write-Host "warning: $msg" -ForegroundColor Yellow; $script:warnings++ }
 
-Write-Host "aitools $AITOOLS_INSTALLED_VERSION"
-Write-Host ""
+Log "aitools $AITOOLS_INSTALLED_VERSION"
 
 if ($doInstall) {
     $steps = 3
@@ -1288,7 +1279,7 @@ if ($doInstall) {
 }
 
 # [1/N] Pull latest
-Write-Host "[1/$steps] Pulling latest..."
+Log "Step 1/$steps`: Pulling latest"
 $pulledUpdates = $false
 Push-Location $repoPath
 try {
@@ -1306,7 +1297,7 @@ try {
             exit 1
         } else {
             if ($pullOut -match "(?i)(could not resolve|unable to access|connection refused|connection timed out|no route to host)") {
-                Write-Host "  Could not reach remote - deploying from local checkout."
+                LogWarn "Could not reach remote - deploying from local checkout"
             } else {
                 LogWarn "git pull failed -- deploying from local checkout."
                 $pullOut.Trim().Split("`n") | Select-Object -First 3 | ForEach-Object { Write-Host "    $_" }
@@ -1314,10 +1305,10 @@ try {
             Write-Summary "WARN" "source" "stale local checkout (git pull failed)"
         }
     } elseif ($pullOut -match "Already up to date") {
-        Write-Host "  Already up to date."
+        LogOk "Already up to date"
     } else {
         $pulledUpdates = $true
-        Write-Host "  Updated."
+        LogOk "Updated"
     }
 } finally {
     Pop-Location
@@ -1334,7 +1325,7 @@ if ($userRepoPath -and (Test-Path (Join-Path $userRepoPath ".git"))) {
 }
 
 # [2/N] Rebuild deploy scripts
-Write-Host "[2/$steps] Rebuilding deploy scripts..."
+Log "Step 2/$steps`: Rebuilding deploy scripts"
 # build-deploy.sh is intentionally bash-only (text-processing-heavy, no .ps1 variant).
 # Invoke via Git Bash, which is a prerequisite for Claude Code on Windows.
 # See .claude/rules/cross-platform.md "Approved exceptions" for why.
@@ -1351,7 +1342,7 @@ if ($unixRepoPath -match '^/([A-Za-z])/') {
 $buildResult = & $bashExe "$unixRepoPath/scripts/build-deploy.sh" 2>&1 | Out-String
 Add-Content -Path $logFile -Value $buildResult
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "  Done."
+    LogOk "Rebuilt"
 } else {
     LogError "build failed (see $logFile)"
     exit 1
@@ -1359,8 +1350,7 @@ if ($LASTEXITCODE -eq 0) {
 
 if ($doInstall) {
     # --- install: pull + rebuild + run installer (includes deploy) ---
-    Write-Host "[3/$steps] Running installer..."
-    Write-Host ""
+    Log "Step 3/$steps`: Running installer"
     $installerArgs = @()
     if ($SkipGhAuth) { $installerArgs += "-SkipGhAuth" }
     if ($SkipDriveDetection) { $installerArgs += "-SkipDriveDetection" }
@@ -1369,7 +1359,7 @@ if ($doInstall) {
     $installerRc = $LASTEXITCODE
     Write-Host ""
     if ($installerRc -eq 0) {
-        Write-Host "All up to date. ($(Get-RepoVersion $repoPath))"
+        LogOk "All up to date ($(Get-RepoVersion $repoPath))"
         # Session archive hint (after final status line)
         $userRepo = Read-ConfigKey -File $configFile -Key "userRepoPath"
         if (-not $userRepo) {
@@ -1377,24 +1367,24 @@ if ($doInstall) {
         }
         Invoke-ProfileCheck -Mode "interactive"
     } else {
-        Write-Host "Completed with errors (see $logFile)."
+        Log "Completed with errors (see $logFile)" "error"
     }
 
 } elseif ($doGitpull) {
     # --- gitpull: pull + rebuild + deploy + changelog + version tag ---
-    Write-Host "[3/$steps] Deploying configurations..."
+    Log "Step 3/$steps`: Deploying configurations"
     $deployRc = Deploy-Configs (Join-Path $repoPath "scripts")
     if ($deployRc -eq 0) {
-        Write-Host "  Done."
+        LogOk "Done"
     } else {
-        Write-Host "  Completed with $deployRc error(s)."
+        Log "Completed with $deployRc error(s)" "warn"
     }
 
-    Write-Host "[4/$steps] Tagging version..."
+    Log "Step 4/$steps`: Tagging version"
     # Skip if HEAD already has a tag (e.g., re-running gitpull without new commits)
     $existing = git -C $repoPath describe --tags --match "v*" --exact-match HEAD 2>$null
     if ($LASTEXITCODE -eq 0 -and $existing) {
-        Write-Host "  HEAD already tagged ($existing) -- skipping"
+        LogOk "HEAD already tagged ($existing) -- skipping"
         $tag = $existing
     } else {
         $latestTag = git -C $repoPath describe --tags --match "v*" --abbrev=0 2>$null
@@ -1421,43 +1411,41 @@ if ($doInstall) {
         }
         if (-not $rnMatch) {
             $today = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
-            Write-Host "  RELEASE_NOTES.md has no entry for $tag -- skipping tag." -ForegroundColor Yellow
-            Write-Host "  Add a '## $tag -- Title ($today)' section first."
+            LogWarn "RELEASE_NOTES.md has no entry for $tag -- skipping tag"
+            Log "Add a '## $tag -- Title ($today)' section first"
             $tag = "(skipped)"
         } else {
             git -C $repoPath tag $tag
             $pushResult = git -C $repoPath push origin $tag 2>&1 | Out-String
             if ($LASTEXITCODE -eq 0) {
-                Write-Host "  Tagged $tag"
+                LogOk "Tagged $tag"
             } else {
-                Write-Host "  Tagged $tag (local only -- push failed)"
+                LogWarn "Tagged $tag (local only -- push failed)"
             }
         }
     }
 
-    Write-Host ""
     if ($pulledUpdates) {
-        Write-Host "Updated and deployed. ($tag)"
+        LogOk "Updated and deployed ($tag)"
         # Show date-formatted changelog (no hashes)
         Push-Location $repoPath
         git log --format='  %ad  %s' --date=short ORIG_HEAD..HEAD 2>$null | ForEach-Object { Write-Host $_ }
         Pop-Location
     } else {
-        Write-Host "Deployed. ($tag)"
+        LogOk "Deployed ($tag)"
     }
 
 } else {
     # --- no-args: quiet pull + rebuild + deploy ---
-    Write-Host "[3/$steps] Deploying configurations..."
+    Log "Step 3/$steps`: Deploying configurations"
     $deployRc = Deploy-Configs (Join-Path $repoPath "scripts")
     if ($deployRc -eq 0) {
-        Write-Host "  Done."
+        LogOk "Done"
     } else {
-        Write-Host "  Completed with $deployRc error(s)."
+        Log "Completed with $deployRc error(s)" "warn"
     }
 
-    Write-Host ""
-    Write-Host "Configs deployed. ($(Get-RepoVersion $repoPath))"
+    LogOk "Configs deployed ($(Get-RepoVersion $repoPath))"
 
     Invoke-ProfileCheck -Mode "interactive"
 
