@@ -215,7 +215,7 @@ if (!settings.permissions) settings.permissions = {};
 if (!Array.isArray(settings.permissions.deny)) settings.permissions.deny = [];
 
 // Add deny rules if not already present
-const denyRules = ['MCP(vercel)', 'MCP(webflow)'];
+const denyRules = ['MCP(vercel)', 'MCP(webflow)', 'Agent(Claude Code Guide)'];
 for (const rule of denyRules) {
     if (!settings.permissions.deny.includes(rule)) {
         settings.permissions.deny.push(rule);

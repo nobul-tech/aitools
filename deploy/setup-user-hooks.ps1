@@ -2229,6 +2229,26 @@ if ($DryRun) {
             if ($ptCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse standing-order-guard hook, got $ptCount" }
             if ($glCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse glossary-skill-guard hook, got $glCount" }
 
+            # Validate hook schema: command-type must have command,
+            # prompt-type must have prompt (not command).
+            foreach ($eventName in $vParsed.hooks.PSObject.Properties.Name) {
+                foreach ($rule in @($vParsed.hooks.$eventName)) {
+                    foreach ($h in @($rule.hooks)) {
+                        if ($h.type -eq "command" -and -not $h.command) {
+                            LogError "Validation failed: $eventName hook has type 'command' but no command field"
+                        }
+                        if ($h.type -eq "prompt") {
+                            if (-not $h.prompt) {
+                                LogError "Validation failed: $eventName hook has type 'prompt' but no prompt field. Prompt-type hooks require a static string."
+                            }
+                            if ($h.command) {
+                                LogError "Validation failed: $eventName hook has type 'prompt' with command field. Use type 'command' for scripts."
+                            }
+                        }
+                    }
+                }
+            }
+
             LogOk "Settings deployed to $settingsFile"
             Log "  SessionEnd hook: $hookCmd"
             Log "  PreToolUse hook: $guardCmd"
