@@ -56,7 +56,7 @@ if [ "$_skill_count" -eq 0 ]; then
     exit 1
 fi
 blog "Found $_skill_count skill(s) in shared/skills/"
-for _hook_file in session-archive.sh standing-order-guard.sh sh-file-fixup.sh; do
+for _hook_file in session-archive.sh standing-order-guard.sh sh-file-fixup.sh surfacing-duty-stop.sh; do
     if [ ! -f "$SHARED_DIR/hooks/$_hook_file" ]; then
         blog_error "Required hook file not found: $SHARED_DIR/hooks/$_hook_file"
         exit 1
@@ -68,6 +68,7 @@ CLAUDE_SHARED_CONTENT=$(cat "$CLAUDE_SHARED")
 HOOK_SESSION_ARCHIVE=$(cat "$SHARED_DIR/hooks/session-archive.sh")
 HOOK_STANDING_ORDER_GUARD=$(cat "$SHARED_DIR/hooks/standing-order-guard.sh")
 HOOK_SH_FILE_FIXUP=$(cat "$SHARED_DIR/hooks/sh-file-fixup.sh")
+HOOK_SURFACING_DUTY=$(cat "$SHARED_DIR/hooks/surfacing-duty-stop.sh")
 
 # Read shared library content for inlining into deploy scripts
 AITOOLS_LIB_BASH=$(cat "$SCRIPTS_DIR/aitools-lib.sh")

@@ -66,7 +66,8 @@ $glossaryScript = Resolve-HookSource "glossary-skill-guard.sh"
 $scratchScript = Resolve-HookSource "scratch-init.sh"
 $harvestScript = Resolve-HookSource "harvest-session.sh"
 $shfixupScript = Resolve-HookSource "sh-file-fixup.sh"
-foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript)) {
+$surfacingScript = Resolve-HookSource "surfacing-duty-stop.sh"
+foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $surfacingScript)) {
     if (-not (Test-Path $src)) {
         LogError "Hook script not found: $src"
         exit 1
@@ -83,6 +84,7 @@ $glossaryDest = Join-Path $hooksDir "glossary-skill-guard.sh"
 $scratchDest = Join-Path $hooksDir "scratch-init.sh"
 $harvestDest = Join-Path $hooksDir "harvest-session.sh"
 $shfixupDest = Join-Path $hooksDir "sh-file-fixup.sh"
+$surfacingDest = Join-Path $hooksDir "surfacing-duty-stop.sh"
 
 $hooksChanged = $false
 
@@ -96,12 +98,13 @@ if ($DryRun) {
     Log "[DRY RUN] Would deploy hook: $scratchScript -> $scratchDest"
     Log "[DRY RUN] Would deploy hook: $harvestScript -> $harvestDest"
     Log "[DRY RUN] Would deploy hook: $shfixupScript -> $shfixupDest"
+    Log "[DRY RUN] Would deploy hook: $surfacingScript -> $surfacingDest"
 } else {
     if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }
 
     Initialize-DeployTracker
 
-    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest))) {
+    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($surfacingScript, $surfacingDest))) {
         $src = $pair[0]; $dst = $pair[1]
         $hookName = Split-Path $dst -Leaf
         $srcContent = Get-Content $src -Raw -ErrorAction Stop
@@ -226,6 +229,9 @@ $hookCmd = "bash `"$hookDestUnix`""
 $shfixupDestUnix = $shfixupDest -replace '\\', '/'
 $shfixupCmd = "bash `"$shfixupDestUnix`""
 
+$surfacingDestUnix = $surfacingDest -replace '\\', '/'
+$surfacingCmd = "bash `"$surfacingDestUnix`""
+
 # Read existing settings
 $settings = @{}
 $corrupt = $false
@@ -245,7 +251,8 @@ if (-not $settings.ContainsKey("hooks")) { $settings["hooks"] = @{} }
 
 # Helper: ensure exactly one entry for a hookId in an event array.
 # Updates the command if found, adds if not, deduplicates extras.
-function MergeHookEntry($eventName, $hookIdentifier, $matcherValue, $cmd) {
+function MergeHookEntry($eventName, $hookIdentifier, $matcherValue, $cmd, $hookType) {
+    if (-not $hookType) { $hookType = "command" }
     if (-not $settings["hooks"].ContainsKey($eventName)) {
         $settings["hooks"][$eventName] = @()
     }
@@ -259,6 +266,7 @@ function MergeHookEntry($eventName, $hookIdentifier, $matcherValue, $cmd) {
                 if ($h -is [System.Collections.Hashtable] -and $h.ContainsKey("command") -and $h["command"] -match [regex]::Escape($hookIdentifier)) {
                     if (-not $found) {
                         $h["command"] = $cmd
+                        $h["type"] = $hookType
                         $rule["matcher"] = $matcherValue
                         $found = $true
                     }
@@ -269,7 +277,7 @@ function MergeHookEntry($eventName, $hookIdentifier, $matcherValue, $cmd) {
     if (-not $found) {
         $arr += @{
             matcher = $matcherValue
-            hooks   = @(@{ type = "command"; command = $cmd })
+            hooks   = @(@{ type = $hookType; command = $cmd })
         }
     }
 
@@ -314,6 +322,7 @@ $glossaryDestUnix = (Join-Path $hooksDir "glossary-skill-guard.sh") -replace '\\
 $glossaryCmd = "bash `"$glossaryDestUnix`""
 MergeHookEntry "PreToolUse" "glossary-skill-guard.sh" "Read|Grep" $glossaryCmd
 MergeHookEntry "PostToolUse" "sh-file-fixup.sh" "Write|Edit" $shfixupCmd
+MergeHookEntry "Stop" "surfacing-duty-stop.sh" "" $surfacingCmd "prompt"
 
 # --- Track old values for change reporting ---
 $oldAutoMemory = $settings["autoMemoryEnabled"]

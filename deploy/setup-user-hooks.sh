@@ -1808,6 +1808,7 @@ GLOSSARY_CMD="bash \"$HOME/.claude/hooks/glossary-skill-guard.sh\""
 SCRATCH_CMD="bash \"$SCRATCH_DEST\""
 HARVEST_CMD="bash \"$HARVEST_DEST\""
 SHFIXUP_CMD="bash \"$SHFIXUP_DEST\""
+SURFACING_CMD="bash \"$SURFACING_DEST\""
 
 MERGE_RESULT=$(node -e "
 $SORT_KEYS_JS
@@ -1822,6 +1823,7 @@ const force = process.argv[6] === 'true';
 const scratchCmd = process.argv[7];
 const harvestCmd = process.argv[8];
 const shfixupCmd = process.argv[9];
+const surfacingCmd = process.argv[10];
 // --- Embedded preferences (from profile.json at build time) ---
 const autoMemory = false;
 const alwaysThinking = true;
@@ -1846,7 +1848,8 @@ if (!settings.hooks) settings.hooks = {};
 
 // Helper: ensure exactly one entry for a hookId in an event array.
 // Updates the command if found, adds if not, deduplicates extras.
-function mergeHookEntry(eventName, hookId, matcher, cmd) {
+function mergeHookEntry(eventName, hookId, matcher, cmd, hookType) {
+    hookType = hookType || 'command';
     if (!Array.isArray(settings.hooks[eventName])) settings.hooks[eventName] = [];
     const arr = settings.hooks[eventName];
 
@@ -1856,7 +1859,10 @@ function mergeHookEntry(eventName, hookId, matcher, cmd) {
         if (rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId))) {
             if (!found) {
                 rule.hooks.forEach(h => {
-                    if (h.command && h.command.includes(hookId)) h.command = cmd;
+                    if (h.command && h.command.includes(hookId)) {
+                        h.command = cmd;
+                        h.type = hookType;
+                    }
                 });
                 rule.matcher = matcher;
                 found = true;
@@ -1864,7 +1870,7 @@ function mergeHookEntry(eventName, hookId, matcher, cmd) {
         }
     }
     if (!found) {
-        arr.push({ matcher, hooks: [{ type: 'command', command: cmd }] });
+        arr.push({ matcher, hooks: [{ type: hookType, command: cmd }] });
     }
 
     // Deduplicate: keep only the first entry matching hookId
@@ -1885,6 +1891,7 @@ mergeHookEntry('SessionStart', 'scratch-init.sh', '', scratchCmd);
 mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
 mergeHookEntry('PreToolUse', 'glossary-skill-guard.sh', 'Read|Grep', glossaryCmd);
 mergeHookEntry('PostToolUse', 'sh-file-fixup.sh', 'Write|Edit', shfixupCmd);
+mergeHookEntry('Stop', 'surfacing-duty-stop.sh', '', surfacingCmd, 'prompt');
 
 // --- Track old values for change reporting ---
 const oldAutoMemory = settings.autoMemoryEnabled;
@@ -1959,7 +1966,7 @@ if (dryRun) {
         prefChanges.forEach(c => console.log(c));
     }
 }
-" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD")
+" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$SURFACING_CMD")
 
 # Parse merge result: first line is status, CHANGED: lines are key changes
 MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)
