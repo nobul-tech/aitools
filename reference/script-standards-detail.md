@@ -252,7 +252,7 @@ Every file write in a setup script must distinguish one of three outcomes:
 
 | Outcome | Log level | Log message | Summary detail (max 30 chars) |
 |---------|-----------|-------------|-------------------------------|
-| **Unchanged** | `log_ok` / `LogOk` | `"Unchanged: <filepath>"` | `"unchanged"` |
+| **Unchanged** | `log_ok` / `LogOk` | `"Unchanged: <filepath>"` | `"verified"` |
 | **Updated** | `log_ok` / `LogOk` | `"Updated: <filepath>"` + change detail | Concise description |
 | **Failed** | `log_error` / `LogError` | `"Failed: <filepath>: <reason>"` | `"<failure reason>"` |
 
@@ -268,9 +268,32 @@ Every file write in a setup script must distinguish one of three outcomes:
 
 - Max 30 characters (compliance-checked)
 - No file paths (those go in log lines)
-- Present tense: "updated", "unchanged", "failed", "created"
+- Present tense: "updated", "verified", "failed", "created"
 - Multi-item tools: counts (`"2 added, 1 updated"`)
-- JSON configs: 0 keys changed -> `"unchanged"` / 1 key -> key + short value / 2-3 -> comma-joined names / 4+ -> `"N keys updated"`
+- JSON configs: 0 keys changed -> `"verified"` / 1 key -> key + short value / 2-3 -> comma-joined names / 4+ -> `"N keys updated"`
+
+### Governed summary outcomes
+
+Summary detail values that describe deployment/config state use governed
+vocabulary from `reference/glossary.json`. These terms have precise
+definitions — do not substitute synonyms.
+
+| Governed term | Glossary definition | When to use |
+|---------------|--------------------|----|
+| `"verified"` | Deployed content matches source — no write needed | Config/file unchanged from source |
+| `"updated"` | Content written because source differs from deployed | Config/file was different, now updated |
+| `"created"` | File did not exist, now written | First-time deployment |
+| `"configured"` | Server/service set up or reconfigured | MCP server, integration setup |
+| `"accepted"` | User chose to adopt local value back to source | Adopt menu outcome |
+
+Non-governed detail values (version strings, error descriptions, counts)
+are free-text and not subject to this table.
+
+**Deprecated terms** (previously used, now replaced):
+
+| Deprecated | Governed replacement | Reason |
+|-----------|---------------------|--------|
+| `"unchanged"` | `"verified"` | Glossary defines "verified" as the outcome; "unchanged" is ambiguous (unchanged by whom?) |
 
 ### DETAIL lines in summary panel
 
@@ -295,7 +318,7 @@ DETAIL|claude hooks|hooks: updated
                           autoMemoryEnabled: false -> true
                           hooks: updated
   [ok]  claude.md         updated
-  [ok]  claude rules      unchanged
+  [ok]  claude rules      verified
 ────────────────────────────────────────────────────────
 ```
 

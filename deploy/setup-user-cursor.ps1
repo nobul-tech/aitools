@@ -1858,7 +1858,7 @@ if ($DryRun) {
     } elseif ($beforeJson -eq $afterJson -and -not $corrupt) {
         LogOk "Already up to date: $cliConfig"
         $status.cliConfig = "already up to date"
-        Write-Summary "OK" "cursor cli" "unchanged"
+        Write-Summary "OK" "cursor cli" "verified"
     } else {
         if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
         if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
@@ -1912,14 +1912,6 @@ if ($DryRun) {
     }
 }
 
-# --- Summary ---
-
-Log "=============================="
-Log "Summary:"
-Log "  ripgrep:       $($status.ripgrep)"
-Log "  Cursor CLI:    $($status.cursorCli)"
-Log "  cli-config:    $($status.cliConfig)"
-Log "=============================="
 if ($errors -gt 0) {
     Log "FAILED with $errors error(s). See log: $logFile" "error"
     exit 1

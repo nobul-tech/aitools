@@ -1568,7 +1568,7 @@ case "$MERGE_STATUS" in
         write_summary OK "cursor ide mcp" "updated" ;;
     unchanged)
         log_ok "Cursor MCP config already up to date"
-        write_summary OK "cursor ide mcp" "unchanged" ;;
+        write_summary OK "cursor ide mcp" "verified" ;;
     dry-run)
         log "[DRY RUN] Would write Cursor MCP config"
         log "  Servers: chrome-devtools (stdio), vercel (http), webflow (http)" ;;

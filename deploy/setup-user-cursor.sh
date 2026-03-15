@@ -1643,7 +1643,7 @@ if (dryRun) {
         unchanged)
             log_ok "Already up to date: $(display_path "$CLI_CONFIG")"
             STATUS_cliConfig="already up to date"
-            write_summary OK "cursor cli" "unchanged" ;;
+            write_summary OK "cursor cli" "verified" ;;
         created)
             log_ok "Created: $(display_path "$CLI_CONFIG")"
             STATUS_cliConfig="created"
@@ -1671,15 +1671,6 @@ if (dryRun) {
             write_summary ERROR "cursor cli" "unexpected error" ;;
     esac
 fi
-
-# --- Summary ---
-
-log "=============================="
-log "Summary:"
-log "  ripgrep:       ${STATUS_ripgrep}"
-log "  Cursor CLI:    ${STATUS_cursorCli}"
-log "  cli-config:    ${STATUS_cliConfig}"
-log "=============================="
 if [ "$ERRORS" -gt 0 ]; then
     log "FAILED with $ERRORS error(s)" "error"
     exit 1

@@ -968,6 +968,23 @@ if ($Extensive) {
     }
 }
 
+# Step 32: Deprecated summary terms
+if ($Extensive) {
+    Write-Host ""
+    Write-Host "--- Step 32: Deprecated summary terms ---" -ForegroundColor White
+    $shHits = Select-String -Path (Get-ChildItem "$script:RepoRoot/scripts/*.sh") -Pattern 'write_summary.*"unchanged"' -ErrorAction SilentlyContinue
+    $ps1Hits = Select-String -Path (Get-ChildItem "$script:RepoRoot/scripts/*.ps1") -Pattern 'Write-Summary.*"unchanged"' -ErrorAction SilentlyContinue
+    $allHits = @()
+    if ($shHits) { $allHits += $shHits }
+    if ($ps1Hits) { $allHits += $ps1Hits }
+    if ($allHits.Count -gt 0) {
+        StepFail "32" "Deprecated summary terms" "found 'unchanged' in write_summary calls (use 'verified')"
+        $allHits | ForEach-Object { Write-Host "  $_" }
+    } else {
+        StepPass "32" "Deprecated summary terms" "no deprecated terms found"
+    }
+}
+
 # ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------

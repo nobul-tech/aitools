@@ -127,7 +127,7 @@ if ($DryRun) {
     if (-not $corrupt -and $lostKeys.Count -eq 0 -and $afterNorm -eq $existingNorm) {
         $mcpChanged = $false
         LogOk "Cursor MCP config already up to date"
-        Write-Summary "OK" "cursor ide mcp" "unchanged"
+        Write-Summary "OK" "cursor ide mcp" "verified"
     } else {
         $mcpChanged = $true
         $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($mcpJson)

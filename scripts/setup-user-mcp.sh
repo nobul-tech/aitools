@@ -285,7 +285,7 @@ if [ "$DRY_RUN" != "true" ]; then
         if [ "$MCP_CHANGED" = "true" ]; then
             write_summary OK "claude mcp" "configured"
         else
-            write_summary OK "claude mcp" "unchanged"
+            write_summary OK "claude mcp" "verified"
         fi
     fi
 else

@@ -1903,7 +1903,7 @@ if ($DryRun) {
 } else {
     LogOk "User-level MCP configured (all servers; vercel/webflow disabled by default)"
     if ($errors -eq 0) {
-        Write-Summary "OK" "claude mcp" $(if ($mcpChanged) { "configured" } else { "unchanged" })
+        Write-Summary "OK" "claude mcp" $(if ($mcpChanged) { "configured" } else { "verified" })
     }
 }
 Log "To enable per project: aitools --addmcp vercel"
