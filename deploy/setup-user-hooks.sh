@@ -1891,7 +1891,7 @@ mergeHookEntry('SessionStart', 'scratch-init.sh', '', scratchCmd);
 mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
 mergeHookEntry('PreToolUse', 'glossary-skill-guard.sh', 'Read|Grep', glossaryCmd);
 mergeHookEntry('PostToolUse', 'sh-file-fixup.sh', 'Write|Edit', shfixupCmd);
-mergeHookEntry('Stop', 'surfacing-duty-stop.sh', '', surfacingCmd, 'prompt');
+mergeHookEntry('Stop', 'surfacing-duty-stop.sh', '', surfacingCmd);
 
 // --- Track old values for change reporting ---
 const oldAutoMemory = settings.autoMemoryEnabled;

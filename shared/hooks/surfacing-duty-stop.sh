@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# surfacing-duty-stop.sh — Claude Code Stop hook (prompt type)
-# Injects surfacing duty reminders into the conversation.
+# surfacing-duty-stop.sh — Claude Code Stop hook (command type)
+# Surfaces duty reminders via stderr feedback after agent responses.
 #
-# Fires after every agent response. As a "prompt" type hook, stdout
-# becomes a system message the agent sees on its next turn.
+# Fires after every agent response. As a command-type Stop hook,
+# stderr output is shown to the agent as feedback on its next turn.
 #
 # Two functions:
 #   1. Periodic reminder: every 30+ minutes, remind about surfacing duty
@@ -11,9 +11,9 @@
 #      without invoking /gap or writing TODO(gap):, prompt them to file
 #
 # Hook contract:
-#   - Stop hook, prompt type (stdout → injected into conversation)
+#   - Stop hook, command type (stderr → shown to agent as feedback)
+#   - Exit 0 = allow, Exit 2 = block (we always allow)
 #   - Must be fast (<50ms) — fires on every agent turn
-#   - Empty stdout = no injection (silent pass-through)
 #   - Must never crash or hang
 
 set -euo pipefail
@@ -122,9 +122,9 @@ if [ "$_suppress_gap_check" = "false" ]; then
     fi
 fi
 
-# Output reminders (if any). Empty stdout = no injection.
+# Output reminders (if any) to stderr (shown to agent as feedback).
 if [ -n "$reminders" ]; then
-    printf '%s' "$reminders"
+    printf '%s' "$reminders" >&2
 fi
 
 exit 0

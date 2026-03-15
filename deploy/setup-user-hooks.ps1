@@ -2137,7 +2137,7 @@ $glossaryDestUnix = (Join-Path $hooksDir "glossary-skill-guard.sh") -replace '\\
 $glossaryCmd = "bash `"$glossaryDestUnix`""
 MergeHookEntry "PreToolUse" "glossary-skill-guard.sh" "Read|Grep" $glossaryCmd
 MergeHookEntry "PostToolUse" "sh-file-fixup.sh" "Write|Edit" $shfixupCmd
-MergeHookEntry "Stop" "surfacing-duty-stop.sh" "" $surfacingCmd "prompt"
+MergeHookEntry "Stop" "surfacing-duty-stop.sh" "" $surfacingCmd
 
 # --- Track old values for change reporting ---
 $oldAutoMemory = $settings["autoMemoryEnabled"]
