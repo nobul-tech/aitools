@@ -184,7 +184,11 @@ Full hook architecture: `@plans/governance-and-compliance-framework.md`
   Subagents are sensors, not filers — report `AMBIGUITY:` findings.
 - **PreToolUse on known-gaps.json** (agent): validates required fields,
   enums, sequential IDs. Fail-open on timeout/error.
-- **PreToolUse on protected files** (prompt): cross-reference reminder.
-- **PreToolUse on Edit/Write** (prompt): error-suppression detection.
-- **PreToolUse on Bash git commands** (prompt): checklist reminder.
-- **Stop** (prompt): ambiguity check — were findings surfaced or filed?
+- **PreToolUse on protected files** (command): cross-reference reminder.
+- **PreToolUse on Edit/Write** (command): error-suppression detection.
+- **PreToolUse on Bash git commands** (command): checklist reminder.
+- **PostToolUse on Write/Edit** (command): sh-file-fixup (CRLF, chmod, git index).
+- **Stop** (command): surfacing duty — periodic reminder + gap-acknowledgment
+  detection. Uses stderr for agent feedback. NOTE: Claude Code `type: "prompt"`
+  hooks require a static `prompt` string field (not a command/script path).
+  Dynamic Stop hooks must use `type: "command"` with stderr output.

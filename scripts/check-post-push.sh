@@ -363,6 +363,41 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 17b. Hook schema validation (deployed settings.json)
+# ---------------------------------------------------------------------------
+# Catches type mismatches: prompt-type hooks need "prompt" field, command-type
+# need "command" field. A wrong schema breaks ALL hooks on Claude Code launch.
+if [ -f "$settings_file" ] && command -v node &>/dev/null; then
+    schema_errors=$(node -e "
+const fs = require('fs');
+try {
+    const s = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
+    const errs = [];
+    for (const [event, rules] of Object.entries(s.hooks || {})) {
+        for (const rule of (rules || [])) {
+            for (const h of (rule.hooks || [])) {
+                if (h.type === 'command' && !h.command)
+                    errs.push(event + ': type=command but no command field');
+                if (h.type === 'prompt' && !h.prompt)
+                    errs.push(event + ': type=prompt but no prompt field');
+                if (h.type === 'prompt' && h.command)
+                    errs.push(event + ': type=prompt has command field (should use prompt field)');
+            }
+        }
+    }
+    if (errs.length) { console.log(errs.join('; ')); process.exit(1); }
+} catch(e) { console.log('parse error: ' + e.message); process.exit(1); }
+" "$settings_file" 2>/dev/null) || true
+    if [ -n "$schema_errors" ]; then
+        step_fail "17b" "Hook schema validation" "$schema_errors"
+    else
+        step_pass "17b" "Hook schema validation"
+    fi
+else
+    step_skip "17b" "Hook schema validation" "settings.json missing or node unavailable"
+fi
+
+# ---------------------------------------------------------------------------
 # 18. Untracked file hygiene
 # ---------------------------------------------------------------------------
 untracked=$(git status --porcelain 2>/dev/null | grep '^??' | grep -E '\.(md|sh|ps1|mdc)$' || true)

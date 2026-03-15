@@ -363,6 +363,30 @@ if (dryRun) {
         const glCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('glossary-skill-guard.sh'))).length;
         if (glCount !== 1) { console.error('Validation failed: expected 1 PreToolUse glossary-skill-guard hook, got ' + glCount); process.exit(1); }
 
+        // Validate hook schema: command-type must have command field,
+        // prompt-type must have prompt field (not command).
+        // Catches the type mismatch that broke settings.json in v0.60.
+        for (const [event, rules] of Object.entries(_v.hooks || {})) {
+            for (const rule of (rules || [])) {
+                for (const h of (rule.hooks || [])) {
+                    if (h.type === 'command' && !h.command) {
+                        console.error('Validation failed: ' + event + ' hook has type "command" but no command field');
+                        process.exit(1);
+                    }
+                    if (h.type === 'prompt') {
+                        if (!h.prompt) {
+                            console.error('Validation failed: ' + event + ' hook has type "prompt" but no prompt field. Prompt-type hooks require a static string in the prompt field, not a command path.');
+                            process.exit(1);
+                        }
+                        if (h.command) {
+                            console.error('Validation failed: ' + event + ' hook has type "prompt" with a command field. Prompt-type hooks use the prompt field for static text. Use type "command" for script execution.');
+                            process.exit(1);
+                        }
+                    }
+                }
+            }
+        }
+
         console.log('ok');
         prefChanges.forEach(c => console.log(c));
     }
