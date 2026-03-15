@@ -295,7 +295,7 @@ function Get-RepoVersion {
 # Deploy all config scripts from the repo's scripts/ directory.
 function Deploy-Configs {
     param([string]$ScriptDir)
-    $deployScripts = @("setup-user-claude.ps1", "setup-user-mcp.ps1", "setup-cursor-ide-mcp.ps1", "setup-user-cursor.ps1", "setup-user-hooks.ps1")
+    $deployScripts = @("setup-user-claude.ps1", "setup-user-mcp.ps1", "setup-user-skills.ps1", "setup-cursor-ide-mcp.ps1", "setup-user-cursor.ps1", "setup-user-hooks.ps1")
     $errors = 0
     $env:AITOOLS_DEPLOY = "1"
     if ($DryRun) { $env:AITOOLS_DRY_RUN = "1" }

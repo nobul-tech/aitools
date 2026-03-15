@@ -41,12 +41,21 @@ if [ ! -f "$CLAUDE_SHARED" ]; then
     blog_error "Required shared file not found: $CLAUDE_SHARED"
     exit 1
 fi
-for skill_file in "$SHARED_DIR/skills/chrome-devtools/SKILL.md" "$SHARED_DIR/skills/a11y-debugging/SKILL.md"; do
-    if [ ! -f "$skill_file" ]; then
-        blog_error "Required skill file not found: $skill_file"
-        exit 1
+# Verify at least one skill file exists in shared/skills/
+_skill_count=0
+for _skill_dir in "$SHARED_DIR/skills"/*/; do
+    [ -d "$_skill_dir" ] || continue
+    if [ -f "$_skill_dir/SKILL.md" ]; then
+        _skill_count=$((_skill_count + 1))
+    else
+        blog_warn "Skill directory missing SKILL.md: $_skill_dir"
     fi
 done
+if [ "$_skill_count" -eq 0 ]; then
+    blog_error "No skill files found in $SHARED_DIR/skills/"
+    exit 1
+fi
+blog "Found $_skill_count skill(s) in shared/skills/"
 if [ ! -f "$SHARED_DIR/hooks/session-archive.sh" ]; then
     blog_error "Required hook file not found: $SHARED_DIR/hooks/session-archive.sh"
     exit 1
@@ -877,36 +886,56 @@ blog "Copying deploy/setup-perl.ps1"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
-# 29-30. deploy/setup-user-mcp.sh and .ps1 (template with embedded skills)
+# 29-30. deploy/setup-user-mcp.sh and .ps1 (MCP only, skills moved to setup-user-skills)
 # ============================================================
-# The scripts/ versions read skills from shared/skills/ (repo-relative).
-# The deploy/ versions must be self-contained, so we embed SKILL.md content
-# inline using heredocs, replacing the file-copy deploy_skill() function.
 
-# Read skill content
-SKILL_CHROME_DEVTOOLS=$(cat "$SHARED_DIR/skills/chrome-devtools/SKILL.md")
-SKILL_A11Y_DEBUGGING=$(cat "$SHARED_DIR/skills/a11y-debugging/SKILL.md")
-
-blog "Generating deploy/setup-user-mcp.sh (with embedded skills)"
+blog "Generating deploy/setup-user-mcp.sh"
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
-    # Extract everything from script body start to skills section
     extract_between "$SCRIPTS_DIR/setup-user-mcp.sh" \
         '^# --- BEGIN mcp body' '^# --- END mcp body'
+    extract_between "$SCRIPTS_DIR/setup-user-mcp.sh" \
+        '^# --- BEGIN exit' '^# --- END exit'
+} | inline_lib_bash > "$DEPLOY_DIR/setup-user-mcp.sh"
+chmod +x "$DEPLOY_DIR/setup-user-mcp.sh"
+GENERATED=$((GENERATED + 1))
+
+blog "Generating deploy/setup-user-mcp.ps1"
+{
+    echo "$HEADER_COMMENT_PS1"
+    extract_between "$SCRIPTS_DIR/setup-user-mcp.ps1" \
+        '^# --- BEGIN mcp body' '^# --- END mcp body' --crlf
+    extract_between "$SCRIPTS_DIR/setup-user-mcp.ps1" \
+        '^# --- BEGIN exit' '^# --- END exit' --crlf
+} | inline_lib_ps1 > "$DEPLOY_DIR/setup-user-mcp.ps1"
+GENERATED=$((GENERATED + 1))
+
+# ============================================================
+# 31-32. deploy/setup-user-skills.sh and .ps1 (with dynamically embedded skills)
+# ============================================================
+# The scripts/ versions discover skills from shared/skills/ at runtime.
+# The deploy/ versions embed all SKILL.md content at build time for self-contained deployment.
+
+blog "Generating deploy/setup-user-skills.sh (with embedded skills)"
+{
+    echo '#!/usr/bin/env bash'
+    echo "$HEADER_COMMENT_BASH"
+    # Extract boilerplate (flag parsing, lib, OS guard, DRY_RUN)
+    extract_between "$SCRIPTS_DIR/setup-user-skills.sh" \
+        '^# --- BEGIN skills body' '^# --- BEGIN skill discovery'
+
     # Emit self-contained skills deployment using heredocs
     cat <<'SKILLS_HEADER'
 
-# --- Deploy Chrome DevTools skills (embedded) ---
-# Vendored from https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/main/skills
-# Content embedded at build time by build-deploy.sh for self-contained deployment.
+# --- Deploy skills (embedded at build time) ---
 
 SKILLS_DEST="$HOME/.claude/skills"
 SKILLS_DEST_CURSOR="$HOME/.cursor/skills"
 ALL_SKILL_DESTS="$SKILLS_DEST $SKILLS_DEST_CURSOR"
 
 SKILLS_HEADER
-    # Emit helper function for diff-reviewed skill deployment.
+    # Emit helper function for diff-reviewed embedded skill deployment.
     # Takes a content FILE path (not a string) to avoid bash 3.2
     # parsing issues with $(cat <<'EOF') command substitution.
     cat <<'DEPLOY_SKILL_FUNC'
@@ -919,20 +948,20 @@ deploy_embedded_skill() {
     local dest_dir="$dest_base/$skill_name"
     local dest="$dest_dir/SKILL.md"
     local _adopt_label=""
-    local _repo_path
-    _repo_path=$(read_config_key "$HOME/.aitools/config.json" "repoPath")
-    if [ -n "$_repo_path" ]; then
-        _adopt_label="shared/"
+    local _user_repo_path
+    _user_repo_path=$(read_config_key "$HOME/.aitools/config.json" "userRepoPath")
+    if [ -n "$_user_repo_path" ]; then
+        _adopt_label="dotprofile"
     fi
 
     deploy_managed_file "$(cat "$content_file")" "$dest" "$tool_name" "$skill_name" "$_adopt_label"
 
     case "$MANAGED_FILE_RESULT" in
-        adopted)
-            if [ -n "$_repo_path" ]; then
-                mkdir -p "$_repo_path/shared/skills/$skill_name"
-                cp "$dest" "$_repo_path/shared/skills/$skill_name/SKILL.md"
-                log_ok "Adopted skill to shared/: $skill_name"
+        "accept & adopt")
+            if [ -n "$_user_repo_path" ]; then
+                mkdir -p "$_user_repo_path/claude/skills/$skill_name"
+                cp "$dest" "$_user_repo_path/claude/skills/$skill_name/SKILL.md"
+                log_ok "Adopted skill to dotprofile: $skill_name"
             fi
             # Sync to all other deploy targets (prevents clobber)
             for _other_base in $ALL_SKILL_DESTS; do
@@ -946,35 +975,45 @@ deploy_embedded_skill() {
 }
 
 DEPLOY_SKILL_FUNC
-    # Write skill content to temp files (cat > file <<'EOF' works in bash 3.2;
-    # $(cat <<'EOF') variable assignment does not)
+
+    # Dynamically discover and embed all skills from shared/skills/
+    _embedded_skills=""
     echo '_skill_tmp=$(mktemp -d)'
-    echo 'cat > "$_skill_tmp/chrome-devtools.md" <<'"'"'__SKILL_CHROME_DEVTOOLS__'"'"
-    echo "$SKILL_CHROME_DEVTOOLS"
-    echo '__SKILL_CHROME_DEVTOOLS__'
-    echo ''
-    echo 'cat > "$_skill_tmp/a11y-debugging.md" <<'"'"'__SKILL_A11Y_DEBUGGING__'"'"
-    echo "$SKILL_A11Y_DEBUGGING"
-    echo '__SKILL_A11Y_DEBUGGING__'
-    echo ''
+    for _skill_dir in "$SHARED_DIR/skills"/*/; do
+        [ -d "$_skill_dir" ] || continue
+        _sname=$(basename "$_skill_dir")
+        _sfile="$_skill_dir/SKILL.md"
+        [ -f "$_sfile" ] || continue
+        _heredoc_marker="__SKILL_$(echo "$_sname" | tr '[:lower:]-' '[:upper:]_')__"
+        echo "cat > \"\$_skill_tmp/${_sname}.md\" <<'${_heredoc_marker}'"
+        cat "$_sfile"
+        echo "${_heredoc_marker}"
+        echo ''
+        _embedded_skills="$_embedded_skills $_sname"
+    done
+    _embedded_skills="${_embedded_skills# }"
+
     # Deploy to ~/.claude/skills/ (Claude Code)
     echo 'log "Deploying skills to $SKILLS_DEST..."'
     echo 'ERRORS_BEFORE_CLAUDE_SKILLS=$ERRORS'
     echo 'deploy_tracker_init'
-    echo 'deploy_embedded_skill "chrome-devtools" "$SKILLS_DEST" "claude skills" "$_skill_tmp/chrome-devtools.md"'
-    echo 'deploy_embedded_skill "a11y-debugging" "$SKILLS_DEST" "claude skills" "$_skill_tmp/a11y-debugging.md"'
+    for _sname in $_embedded_skills; do
+        echo "deploy_embedded_skill \"$_sname\" \"\$SKILLS_DEST\" \"claude skills\" \"\$_skill_tmp/${_sname}.md\""
+    done
     echo 'if [ "$ERRORS" -eq "$ERRORS_BEFORE_CLAUDE_SKILLS" ]; then'
     echo '    deploy_tracker_summary "claude skills"'
     echo 'else'
     echo '    write_summary ERROR "claude skills" "deploy failed"'
     echo 'fi'
     echo ''
+
     # Deploy to ~/.cursor/skills/ (Cursor Agent CLI)
     echo 'log "Deploying skills to $SKILLS_DEST_CURSOR..."'
     echo 'ERRORS_BEFORE_CURSOR_SKILLS=$ERRORS'
     echo 'deploy_tracker_init'
-    echo 'deploy_embedded_skill "chrome-devtools" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/chrome-devtools.md"'
-    echo 'deploy_embedded_skill "a11y-debugging" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/a11y-debugging.md"'
+    for _sname in $_embedded_skills; do
+        echo "deploy_embedded_skill \"$_sname\" \"\$SKILLS_DEST_CURSOR\" \"cursor skills\" \"\$_skill_tmp/${_sname}.md\""
+    done
     echo 'if [ "$ERRORS" -eq "$ERRORS_BEFORE_CURSOR_SKILLS" ]; then'
     echo '    deploy_tracker_summary "cursor skills"'
     echo 'else'
@@ -983,32 +1022,32 @@ DEPLOY_SKILL_FUNC
     echo ''
     echo 'rm -rf "$_skill_tmp"'
     echo ''
+
     # Emit exit footer from source
-    extract_between "$SCRIPTS_DIR/setup-user-mcp.sh" \
+    extract_between "$SCRIPTS_DIR/setup-user-skills.sh" \
         '^# --- BEGIN exit' '^# --- END exit'
-} | inline_lib_bash > "$DEPLOY_DIR/setup-user-mcp.sh"
-chmod +x "$DEPLOY_DIR/setup-user-mcp.sh"
+} | inline_lib_bash > "$DEPLOY_DIR/setup-user-skills.sh"
+chmod +x "$DEPLOY_DIR/setup-user-skills.sh"
 GENERATED=$((GENERATED + 1))
 
-blog "Generating deploy/setup-user-mcp.ps1 (with embedded skills)"
+blog "Generating deploy/setup-user-skills.ps1 (with embedded skills)"
 {
     echo "$HEADER_COMMENT_PS1"
-    # Extract everything from script body start to skills section (CRLF for PS1)
-    extract_between "$SCRIPTS_DIR/setup-user-mcp.ps1" \
-        '^# --- BEGIN mcp body' '^# --- END mcp body' --crlf
+    # Extract boilerplate (param, lib, OS guard, DRY_RUN)
+    extract_between "$SCRIPTS_DIR/setup-user-skills.ps1" \
+        '^# --- BEGIN skills body' '^# --- BEGIN skill discovery' --crlf
+
     # Emit self-contained skills deployment using PS1 here-strings
     cat <<'SKILLS_PS1_HEADER'
 
-# --- Deploy Chrome DevTools skills (embedded) ---
-# Vendored from https://github.com/ChromeDevTools/chrome-devtools-mcp/tree/main/skills
-# Content embedded at build time by build-deploy.sh for self-contained deployment.
+# --- Deploy skills (embedded at build time) ---
 
 $skillsDest = Join-Path (Join-Path $env:USERPROFILE ".claude") "skills"
 $skillsDestCursor = Join-Path (Join-Path $env:USERPROFILE ".cursor") "skills"
 $allSkillDests = @($skillsDest, $skillsDestCursor)
 
 SKILLS_PS1_HEADER
-    # Emit helper function for diff-reviewed skill deployment
+    # Emit helper function for diff-reviewed embedded skill deployment
     cat <<'DEPLOY_SKILL_PS1_FUNC'
 function Deploy-EmbeddedSkill {
     param([string]$SkillName, [string]$DestBase, [string]$ToolName, [string]$Content)
@@ -1017,20 +1056,19 @@ function Deploy-EmbeddedSkill {
     $dest = Join-Path $destDir "SKILL.md"
     $adoptLabel = ""
     $cfgFile = Join-Path $env:USERPROFILE ".aitools\config.json"
-    $repoPath = ReadConfigKey -File $cfgFile -Key "repoPath"
-    if ($repoPath) { $adoptLabel = "shared/" }
+    $userRepoPath = ReadConfigKey -File $cfgFile -Key "userRepoPath"
+    if ($userRepoPath) { $adoptLabel = "dotprofile" }
 
     $skillResult = Deploy-ManagedFile -Content $Content -DestPath $dest -ToolName $ToolName -ItemName $SkillName -AdoptLabel $adoptLabel
 
-    if ($skillResult -eq "adopted") {
-        if ($repoPath) {
-            $adoptDir = Join-Path (Join-Path $repoPath "shared\skills") $SkillName
+    if ($skillResult -eq "accept & adopt") {
+        if ($userRepoPath) {
+            $adoptDir = Join-Path $userRepoPath "claude\skills\$SkillName"
             if (-not (Test-Path $adoptDir)) {
                 New-Item -ItemType Directory -Path $adoptDir -Force | Out-Null
             }
-            $adoptDest = Join-Path $adoptDir "SKILL.md"
-            Copy-Item -Path $dest -Destination $adoptDest -Force -ErrorAction Stop
-            LogOk "Adopted skill to shared/: $SkillName"
+            Copy-Item -Path $dest -Destination (Join-Path $adoptDir "SKILL.md") -Force -ErrorAction Stop
+            LogOk "Adopted skill to dotprofile: $SkillName"
         }
         # Sync to all other deploy targets (prevents clobber)
         foreach ($otherBase in $allSkillDests) {
@@ -1046,43 +1084,60 @@ function Deploy-EmbeddedSkill {
 }
 
 DEPLOY_SKILL_PS1_FUNC
-    # Store skill content in variables (PS1 here-strings)
-    echo '$chromeDevtoolsSkill = @'"'"
-    echo "$SKILL_CHROME_DEVTOOLS"
-    echo "'"'@'
-    echo ''
-    echo '$a11ySkill = @'"'"
-    echo "$SKILL_A11Y_DEBUGGING"
-    echo "'"'@'
-    echo ''
+
+    # Dynamically discover and embed all skills from shared/skills/
+    _embedded_skills=""
+    for _skill_dir in "$SHARED_DIR/skills"/*/; do
+        [ -d "$_skill_dir" ] || continue
+        _sname=$(basename "$_skill_dir")
+        _sfile="$_skill_dir/SKILL.md"
+        [ -f "$_sfile" ] || continue
+        # PS1 variable name: convert dashes to underscores
+        _varname=$(echo "$_sname" | tr '-' '_')
+        echo "\$skill_${_varname} = @'"
+        cat "$_sfile"
+        echo "'@"
+        echo ''
+        _embedded_skills="$_embedded_skills ${_sname}|${_varname}"
+    done
+    _embedded_skills="${_embedded_skills# }"
+
     # Deploy to ~/.claude/skills/ (Claude Code)
     echo 'Log "Deploying skills to $skillsDest..."'
     echo '$errorsBeforeClaudeSkills = $errors'
     echo 'Initialize-DeployTracker'
-    echo 'Deploy-EmbeddedSkill "chrome-devtools" $skillsDest "claude skills" $chromeDevtoolsSkill'
-    echo 'Deploy-EmbeddedSkill "a11y-debugging" $skillsDest "claude skills" $a11ySkill'
+    for _pair in $_embedded_skills; do
+        _sname="${_pair%%|*}"
+        _varname="${_pair##*|}"
+        echo "Deploy-EmbeddedSkill \"$_sname\" \$skillsDest \"claude skills\" \$skill_${_varname}"
+    done
     echo 'if ($errors -eq $errorsBeforeClaudeSkills) {'
     echo '    Write-DeployTrackerSummary -ToolName "claude skills"'
     echo '} else {'
     echo '    Write-Summary "ERROR" "claude skills" "deploy failed"'
     echo '}'
     echo ''
+
     # Deploy to ~/.cursor/skills/ (Cursor Agent CLI)
     echo 'Log "Deploying skills to $skillsDestCursor..."'
     echo '$errorsBeforeCursorSkills = $errors'
     echo 'Initialize-DeployTracker'
-    echo 'Deploy-EmbeddedSkill "chrome-devtools" $skillsDestCursor "cursor skills" $chromeDevtoolsSkill'
-    echo 'Deploy-EmbeddedSkill "a11y-debugging" $skillsDestCursor "cursor skills" $a11ySkill'
+    for _pair in $_embedded_skills; do
+        _sname="${_pair%%|*}"
+        _varname="${_pair##*|}"
+        echo "Deploy-EmbeddedSkill \"$_sname\" \$skillsDestCursor \"cursor skills\" \$skill_${_varname}"
+    done
     echo 'if ($errors -eq $errorsBeforeCursorSkills) {'
     echo '    Write-DeployTrackerSummary -ToolName "cursor skills"'
     echo '} else {'
     echo '    Write-Summary "ERROR" "cursor skills" "deploy failed"'
     echo '}'
     echo ''
+
     # Emit exit footer from source (CRLF for PS1)
-    extract_between "$SCRIPTS_DIR/setup-user-mcp.ps1" \
+    extract_between "$SCRIPTS_DIR/setup-user-skills.ps1" \
         '^# --- BEGIN exit' '^# --- END exit' --crlf
-} | inline_lib_ps1 > "$DEPLOY_DIR/setup-user-mcp.ps1"
+} | inline_lib_ps1 > "$DEPLOY_DIR/setup-user-skills.ps1"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================

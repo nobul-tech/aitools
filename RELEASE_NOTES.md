@@ -12,6 +12,40 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.60 -- Skills extraction, dotprofile adopt flow, dynamic skill discovery (2026-03-15)
+
+### Breaking changes
+
+| # | Change |
+|---|--------|
+| 1 | **Skills deployment extracted from setup-user-mcp** — skills are now deployed by `setup-user-skills.sh/.ps1` (new script pair). `setup-user-mcp` only handles MCP servers and deny rules. Entry points updated to call the new script |
+
+### New features
+
+| # | Change |
+|---|--------|
+| 2 | **Dynamic skill discovery** — `setup-user-skills` scans `shared/skills/*/` at runtime instead of hardcoding skill names. Adding a new skill to `shared/skills/` is all that's needed — no script changes required |
+| 3 | **Dotprofile priority for skills and hooks** — dotprofile repo (`claude/skills/`, `claude/hooks/`) overrides shared versions, matching the existing CLAUDE.md priority pattern |
+| 4 | **Reverse discovery** — `setup-user-skills` and `setup-user-hooks` scan deployed directories for user-created content not in any source and offer to adopt it to the dotprofile repo |
+| 5 | **All 8 user-level skills now deploy** — was 2 (chrome-devtools, a11y-debugging). Now also deploys: intent-audit, intent-writing, investigate, optimize-plan, planning, scratch |
+| 6 | **Dynamic skill embedding in build** — `build-deploy.sh` discovers and embeds all skills from `shared/skills/` at build time. Deploy scripts are fully self-contained with all skills |
+
+### Bug fixes
+
+| # | Change |
+|---|--------|
+| 7 | **Accept & adopt target fixed** — skills and hooks adopt now writes to dotprofile repo (`<userRepoPath>/claude/skills/`, `claude/hooks/`), not to `shared/` in the aitools repo. Fixes gap #15 |
+| 8 | **PS1 hooks parity** — `setup-user-hooks.ps1` now deploys scratch-init.sh and harvest-session.sh, matching the bash version |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 9 | **User repo spec updated** — `reference/user-repo.md` now documents `claude/skills/` and `claude/hooks/` directories in the dotprofile structure |
+| 10 | **CLAUDE.md deploy list updated** — includes `setup-user-skills` in the config scripts list |
+
+---
+
 ## v0.59 -- Governance overhaul, artifact harvesting, tool evaluation framework (2026-03-15)
 
 ### New frameworks

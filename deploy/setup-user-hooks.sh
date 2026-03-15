@@ -1805,6 +1805,8 @@ mkdir -p "$HOME/.claude"
 HOOK_CMD="bash \"$HOOK_DEST\""
 GUARD_CMD="bash \"$GUARD_DEST\""
 GLOSSARY_CMD="bash \"$HOME/.claude/hooks/glossary-skill-guard.sh\""
+SCRATCH_CMD="bash \"$SCRATCH_DEST\""
+HARVEST_CMD="bash \"$HARVEST_DEST\""
 
 MERGE_RESULT=$(node -e "
 $SORT_KEYS_JS
@@ -1816,6 +1818,8 @@ const guardCmd = process.argv[3];
 const glossaryCmd = process.argv[4];
 const dryRun = process.argv[5] === 'true';
 const force = process.argv[6] === 'true';
+const scratchCmd = process.argv[7];
+const harvestCmd = process.argv[8];
 // --- Embedded preferences (from profile.json at build time) ---
 const autoMemory = false;
 const alwaysThinking = true;
@@ -1874,6 +1878,8 @@ function mergeHookEntry(eventName, hookId, matcher, cmd) {
 }
 
 mergeHookEntry('SessionEnd', 'session-archive.sh', '', hookCmd);
+mergeHookEntry('SessionEnd', 'harvest-session.sh', '', harvestCmd);
+mergeHookEntry('SessionStart', 'scratch-init.sh', '', scratchCmd);
 mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
 mergeHookEntry('PreToolUse', 'glossary-skill-guard.sh', 'Read|Grep', glossaryCmd);
 
@@ -1935,9 +1941,13 @@ if (dryRun) {
         const _missing = _required.filter(k => !(k in _v));
         if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
         // Validate hook arrays have exactly one entry per managed hook
-        const seCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('session-archive.sh'))).length;
+        const seArchiveCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('session-archive.sh'))).length;
+        const seHarvestCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('harvest-session.sh'))).length;
+        const ssCount = (_v.hooks.SessionStart || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('scratch-init.sh'))).length;
         const ptCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('standing-order-guard.sh'))).length;
-        if (seCount !== 1) { console.error('Validation failed: expected 1 SessionEnd hook, got ' + seCount); process.exit(1); }
+        if (seArchiveCount !== 1) { console.error('Validation failed: expected 1 SessionEnd session-archive hook, got ' + seArchiveCount); process.exit(1); }
+        if (seHarvestCount !== 1) { console.error('Validation failed: expected 1 SessionEnd harvest-session hook, got ' + seHarvestCount); process.exit(1); }
+        if (ssCount !== 1) { console.error('Validation failed: expected 1 SessionStart scratch-init hook, got ' + ssCount); process.exit(1); }
         if (ptCount !== 1) { console.error('Validation failed: expected 1 PreToolUse standing-order-guard hook, got ' + ptCount); process.exit(1); }
         const glCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('glossary-skill-guard.sh'))).length;
         if (glCount !== 1) { console.error('Validation failed: expected 1 PreToolUse glossary-skill-guard hook, got ' + glCount); process.exit(1); }
@@ -1946,7 +1956,7 @@ if (dryRun) {
         prefChanges.forEach(c => console.log(c));
     }
 }
-" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE")
+" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD")
 
 # Parse merge result: first line is status, CHANGED: lines are key changes
 MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)

@@ -614,6 +614,7 @@ $deployScripts = @(
     "setup-user-claude.ps1",
     "setup-user-cursor.ps1",
     "setup-user-mcp.ps1",
+    "setup-user-skills.ps1",
     "setup-cursor-ide-mcp.ps1",
     "setup-user-hooks.ps1"
 )

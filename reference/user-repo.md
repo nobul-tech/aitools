@@ -13,8 +13,13 @@ aitools-<username>/
 ├── profile.json          # User identity and machine inventory
 ├── claude/
 │   ├── CLAUDE.md          # Personal CLAUDE.md template ({{PLACEHOLDER}} tokens)
-│   └── rules/             # User-level Claude Code rules (deployed to ~/.claude/rules/)
-│       └── concurrent-agents.md
+│   ├── hooks/             # User-level hook overrides (deployed to ~/.claude/hooks/)
+│   │   └── session-archive.sh
+│   ├── rules/             # User-level Claude Code rules (deployed to ~/.claude/rules/)
+│   │   └── concurrent-agents.md
+│   └── skills/            # User-level skill overrides (deployed to ~/.claude/skills/)
+│       └── scratch/
+│           └── SKILL.md
 ├── sessions/             # Archived Claude Code transcripts
 │   ├── aitools/          # One directory per project
 │   │   └── 2026-02-19_abc12345.jsonl

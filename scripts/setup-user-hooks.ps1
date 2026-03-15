@@ -41,10 +41,31 @@ if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoDir = Split-Path -Parent $scriptDir
 
-$hookScript = Join-Path $repoDir "shared\hooks\session-archive.sh"
-$guardScript = Join-Path $repoDir "shared\hooks\standing-order-guard.sh"
-$glossaryScript = Join-Path $repoDir "shared\hooks\glossary-skill-guard.sh"
-foreach ($src in @($hookScript, $guardScript, $glossaryScript)) {
+# User repo for dotprofile overrides and adopt target
+$userRepoPath = ReadConfigKey -File (Join-Path $env:USERPROFILE ".aitools\config.json") -Key "userRepoPath"
+$dotprofileHooks = $null
+if ($userRepoPath) {
+    $dpHooksPath = Join-Path $userRepoPath "claude\hooks"
+    if (Test-Path $dpHooksPath) {
+        $dotprofileHooks = $dpHooksPath
+    }
+}
+
+# Resolve hook source: dotprofile wins over shared
+function Resolve-HookSource {
+    param([string]$HookName)
+    if ($dotprofileHooks -and (Test-Path (Join-Path $dotprofileHooks $HookName))) {
+        return (Join-Path $dotprofileHooks $HookName)
+    }
+    return (Join-Path $repoDir "shared\hooks\$HookName")
+}
+
+$hookScript = Resolve-HookSource "session-archive.sh"
+$guardScript = Resolve-HookSource "standing-order-guard.sh"
+$glossaryScript = Resolve-HookSource "glossary-skill-guard.sh"
+$scratchScript = Resolve-HookSource "scratch-init.sh"
+$harvestScript = Resolve-HookSource "harvest-session.sh"
+foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript)) {
     if (-not (Test-Path $src)) {
         LogError "Hook script not found: $src"
         exit 1
@@ -58,29 +79,44 @@ $hooksDir = Join-Path $claudeDir "hooks"
 $hookDest = Join-Path $hooksDir "session-archive.sh"
 $guardDest = Join-Path $hooksDir "standing-order-guard.sh"
 $glossaryDest = Join-Path $hooksDir "glossary-skill-guard.sh"
+$scratchDest = Join-Path $hooksDir "scratch-init.sh"
+$harvestDest = Join-Path $hooksDir "harvest-session.sh"
 
 $hooksChanged = $false
+
+$hookAdoptLabel = ""
+if ($userRepoPath) { $hookAdoptLabel = "dotprofile" }
 
 if ($DryRun) {
     Log "[DRY RUN] Would deploy hook: $hookScript -> $hookDest"
     Log "[DRY RUN] Would deploy hook: $guardScript -> $guardDest"
     Log "[DRY RUN] Would deploy hook: $glossaryScript -> $glossaryDest"
+    Log "[DRY RUN] Would deploy hook: $scratchScript -> $scratchDest"
+    Log "[DRY RUN] Would deploy hook: $harvestScript -> $harvestDest"
 } else {
     if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }
 
     Initialize-DeployTracker
 
-    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest))) {
+    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest))) {
         $src = $pair[0]; $dst = $pair[1]
         $hookName = Split-Path $dst -Leaf
         $srcContent = Get-Content $src -Raw -ErrorAction Stop
 
-        $hookResult = Deploy-ManagedFile -Content $srcContent -DestPath $dst -ToolName "claude hooks" -ItemName $hookName -AdoptLabel "source"
+        $hookResult = Deploy-ManagedFile -Content $srcContent -DestPath $dst -ToolName "claude hooks" -ItemName $hookName -AdoptLabel $hookAdoptLabel
 
         switch ($hookResult) {
             "accept & adopt" {
-                Copy-Item -Path $dst -Destination $src -Force
-                LogOk "Accepted & adopted hook to source: $hookName"
+                if ($userRepoPath) {
+                    $adoptDir = Join-Path $userRepoPath "claude\hooks"
+                    if (-not (Test-Path $adoptDir)) {
+                        New-Item -ItemType Directory -Path $adoptDir -Force | Out-Null
+                    }
+                    Copy-Item -Path $dst -Destination (Join-Path $adoptDir $hookName) -Force -ErrorAction Stop
+                    LogOk "Adopted hook to dotprofile: $hookName"
+                } else {
+                    LogWarn "Cannot adopt: no user repo configured (run 'aitools user init')"
+                }
             }
             { $_ -in @("created", "updated") } {
                 $hooksChanged = $true
@@ -93,6 +129,46 @@ if ($DryRun) {
     }
 
     Write-DeployTrackerSummary -ToolName "claude hooks"
+
+    # --- Reverse discovery ---
+    # Scan deployed hooks for user-created hooks not in shared or dotprofile
+    if (Test-Path $hooksDir) {
+        foreach ($hookFile in Get-ChildItem -Path $hooksDir -Filter "*.sh" -File) {
+            $hookName = $hookFile.Name
+
+            # Skip if in shared
+            if (Test-Path (Join-Path $repoDir "shared\hooks\$hookName")) { continue }
+            # Skip if in dotprofile
+            if ($dotprofileHooks -and (Test-Path (Join-Path $dotprofileHooks $hookName))) { continue }
+
+            # Found a user-created hook
+            if ($userRepoPath) {
+                Log "Found user-created hook: $hookName"
+                try {
+                    [Console]::WriteLine("")
+                    [Console]::WriteLine("  User-created hook detected: $hookName")
+                    [Console]::WriteLine("  [a]dopt to dotprofile  [s]kip")
+                    [Console]::Write("  > ")
+                    $choice = [Console]::ReadLine()
+                } catch {
+                    $choice = "s"
+                }
+                switch ($choice) {
+                    { $_ -in @("a", "adopt") } {
+                        $adoptDir = Join-Path $userRepoPath "claude\hooks"
+                        if (-not (Test-Path $adoptDir)) {
+                            New-Item -ItemType Directory -Path $adoptDir -Force | Out-Null
+                        }
+                        Copy-Item -Path $hookFile.FullName -Destination (Join-Path $adoptDir $hookName) -Force
+                        LogOk "Adopted user hook to dotprofile: $hookName"
+                    }
+                    default {
+                        Log "Skipped adoption of $hookName"
+                    }
+                }
+            }
+        }
+    }
 }
 # --- END hook deployment (replaced by build-deploy) ---
 

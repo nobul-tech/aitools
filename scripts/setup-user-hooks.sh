@@ -51,11 +51,28 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-HOOK_SCRIPT="$REPO_DIR/shared/hooks/session-archive.sh"
-GUARD_SCRIPT="$REPO_DIR/shared/hooks/standing-order-guard.sh"
-GLOSSARY_SCRIPT="$REPO_DIR/shared/hooks/glossary-skill-guard.sh"
-SCRATCH_SCRIPT="$REPO_DIR/shared/hooks/scratch-init.sh"
-HARVEST_SCRIPT="$REPO_DIR/shared/hooks/harvest-session.sh"
+# User repo for dotprofile overrides and adopt target
+USER_REPO_PATH=$(read_config_key "$HOME/.aitools/config.json" "userRepoPath")
+DOTPROFILE_HOOKS=""
+if [ -n "$USER_REPO_PATH" ] && [ -d "$USER_REPO_PATH/claude/hooks" ]; then
+    DOTPROFILE_HOOKS="$USER_REPO_PATH/claude/hooks"
+fi
+
+# Resolve hook source: dotprofile wins over shared
+resolve_hook() {
+    local hook_name="$1"
+    if [ -n "$DOTPROFILE_HOOKS" ] && [ -f "$DOTPROFILE_HOOKS/$hook_name" ]; then
+        echo "$DOTPROFILE_HOOKS/$hook_name"
+    else
+        echo "$REPO_DIR/shared/hooks/$hook_name"
+    fi
+}
+
+HOOK_SCRIPT=$(resolve_hook "session-archive.sh")
+GUARD_SCRIPT=$(resolve_hook "standing-order-guard.sh")
+GLOSSARY_SCRIPT=$(resolve_hook "glossary-skill-guard.sh")
+SCRATCH_SCRIPT=$(resolve_hook "scratch-init.sh")
+HARVEST_SCRIPT=$(resolve_hook "harvest-session.sh")
 for src in "$HOOK_SCRIPT" "$GUARD_SCRIPT" "$GLOSSARY_SCRIPT" "$SCRATCH_SCRIPT" "$HARVEST_SCRIPT"; do
     if [ ! -f "$src" ]; then
         log_error "Hook script not found: $src"
@@ -72,10 +89,15 @@ HARVEST_DEST="$HOME/.claude/hooks/harvest-session.sh"
 
 HOOKS_CHANGED=false
 
+_hook_adopt_label=""
+if [ -n "$USER_REPO_PATH" ]; then _hook_adopt_label="dotprofile"; fi
+
 if [ "$DRY_RUN" = "true" ]; then
     log "[DRY RUN] Would deploy hook: $(display_path "$HOOK_SCRIPT") -> $(display_path "$HOOK_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$GUARD_SCRIPT") -> $(display_path "$GUARD_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$GLOSSARY_SCRIPT") -> $(display_path "$GLOSSARY_DEST")"
+    log "[DRY RUN] Would deploy hook: $(display_path "$SCRATCH_SCRIPT") -> $(display_path "$SCRATCH_DEST")"
+    log "[DRY RUN] Would deploy hook: $(display_path "$HARVEST_SCRIPT") -> $(display_path "$HARVEST_DEST")"
 else
     mkdir -p "$HOME/.claude/hooks"
 
@@ -86,12 +108,21 @@ else
         hook_dst="${hook_pair##*|}"
         hook_name=$(basename "$hook_dst")
 
-        deploy_managed_file "$(cat "$hook_src")" "$hook_dst" "claude hooks" "$hook_name" "source"
+        deploy_managed_file "$(cat "$hook_src")" "$hook_dst" "claude hooks" "$hook_name" "$_hook_adopt_label"
 
         case "$MANAGED_FILE_RESULT" in
             "accept & adopt")
-                cp "$hook_dst" "$hook_src"
-                log_ok "Accepted & adopted hook to source: $hook_name"
+                if [ -n "$USER_REPO_PATH" ]; then
+                    mkdir -p "$USER_REPO_PATH/claude/hooks"
+                    cp "$hook_dst" "$USER_REPO_PATH/claude/hooks/$hook_name"
+                    log_ok "Adopted hook to dotprofile: $hook_name"
+                    if [ -c /dev/tty ]; then
+                        printf '  Review: cd %s && git diff\n' \
+                            "$(display_path "$USER_REPO_PATH")" > /dev/tty
+                    fi
+                else
+                    log_warn "Cannot adopt: no user repo configured (run 'aitools user init')"
+                fi
                 ;;
             created|updated)
                 chmod +x "$hook_dst"
@@ -104,6 +135,42 @@ else
     done
 
     deploy_tracker_summary "claude hooks"
+
+    # --- Reverse discovery ---
+    # Scan deployed hooks for user-created hooks not in shared or dotprofile
+    for hook_file in "$HOME/.claude/hooks"/*.sh; do
+        [ -f "$hook_file" ] || continue
+        hook_name=$(basename "$hook_file")
+
+        # Skip if in shared
+        [ -f "$REPO_DIR/shared/hooks/$hook_name" ] && continue
+        # Skip if in dotprofile
+        if [ -n "$DOTPROFILE_HOOKS" ] && [ -f "$DOTPROFILE_HOOKS/$hook_name" ]; then
+            continue
+        fi
+
+        # Found a user-created hook
+        if [ -n "$USER_REPO_PATH" ]; then
+            log "Found user-created hook: $hook_name"
+            if [ -c /dev/tty ]; then
+                printf '\n  User-created hook detected: %s\n' "$hook_name" > /dev/tty
+                printf '  [a]dopt to dotprofile  [s]kip\n' > /dev/tty
+                printf '  > ' > /dev/tty
+                choice=""
+                read -r choice < /dev/tty
+                case "$choice" in
+                    a|adopt)
+                        mkdir -p "$USER_REPO_PATH/claude/hooks"
+                        cp "$hook_file" "$USER_REPO_PATH/claude/hooks/$hook_name"
+                        log_ok "Adopted user hook to dotprofile: $hook_name"
+                        ;;
+                    *)
+                        log "Skipped adoption of $hook_name"
+                        ;;
+                esac
+            fi
+        fi
+    done
 fi
 # --- END hook deployment (replaced by build-deploy) ---
 
