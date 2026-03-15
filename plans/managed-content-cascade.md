@@ -200,6 +200,23 @@ should:
 3. **Preserve unknown sections** — any section not in the cascade
    manifest is treated as `user`
 
+## Hardcoded data in scripts (anti-pattern)
+
+Several scripts embed managed data directly instead of reading from
+a configuration source. The cascade plan must externalize these:
+
+| Script | Hardcoded data | Should come from |
+|---|---|---|
+| `setup-user-mcp.sh/.ps1` | `denyRules` array (MCP denies + Agent denies) | `shared/` manifest (enforced) + profile.json (user) |
+| `scripts/aitools` | `deploy_scripts` list | `shared/` manifest or directory scan |
+| `setup-user-hooks.sh/.ps1` | Hook list (7 hooks) | `shared/hooks/` directory scan (partially done for skills) |
+| `setup-user-hooks.sh/.ps1` | `managedKeys` in settings.json merge | `shared/` manifest |
+
+The deny rules are particularly urgent: adding `Agent(Claude Code Guide)`
+required editing 2 scripts + rebuilding deploy/. Under the cascade model,
+framework denies are ASO-level (enforced from shared/), user denies come
+from profile.json, and the scripts read both sources at runtime.
+
 ## Dependencies
 
 - `profile.json` interpolation handles optional Identity gracefully
@@ -208,6 +225,8 @@ should:
   optional with defaults)
 - `deploy_managed_file` needs section-aware merge mode (new capability)
 - `build-deploy.sh` needs to embed cascade metadata (new)
+- Deny rules need external data source (shared/ manifest for ASO,
+  profile.json for user overrides)
 
 ## Implementation Phases
 
