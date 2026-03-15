@@ -302,6 +302,46 @@ if ($prereqFail) {
     StepPass "14" "Build prereq framework"
 }
 
+# Step 15: Deprecated summary terms
+Write-Host ""
+Write-Host "--- Step 15: Deprecated summary terms ---" -ForegroundColor White
+$shHits = Select-String -Path (Get-ChildItem "$script:RepoRoot/scripts/*.sh") -Pattern 'write_summary.*"unchanged"' -ErrorAction SilentlyContinue
+$ps1Hits = Select-String -Path (Get-ChildItem "$script:RepoRoot/scripts/*.ps1") -Pattern 'Write-Summary.*"unchanged"' -ErrorAction SilentlyContinue
+$allHits = @()
+if ($shHits) { $allHits += $shHits }
+if ($ps1Hits) { $allHits += $ps1Hits }
+if ($allHits.Count -gt 0) {
+    StepFail "15" "Deprecated summary terms" "found 'unchanged' in write_summary calls (use 'verified')"
+    $allHits | ForEach-Object { Write-Host "  $_" }
+} else {
+    StepPass "15" "Deprecated summary terms" "no deprecated terms found"
+}
+
+# Step 16: Capability bypass — direct @reference/ to governed JSON in rules
+Write-Host ""
+Write-Host "--- Step 16: Capability bypass audit ---" -ForegroundColor White
+# Governed JSON files that require skill access (capability-based security, Dennis & Van Horn 1966)
+# @reference/ prefix loads file into context, bypassing the governing skill
+$rulesDir = Join-Path $script:RepoRoot ".claude/rules"
+$ruleFiles = Get-ChildItem "$rulesDir/*.md" -ErrorAction SilentlyContinue
+$capHits = @()
+if ($ruleFiles) {
+    $rawHits = Select-String -Path $ruleFiles -Pattern '@reference/.*\.json' -ErrorAction SilentlyContinue
+    if ($rawHits) {
+        foreach ($h in $rawHits) {
+            if ($h.Line -match 'glossary\.json|framework-registry\.json|known-gaps\.json' -and $h.Line -notmatch '^\|.*\|.*\|.*\|') {
+                $capHits += $h
+            }
+        }
+    }
+}
+if ($capHits.Count -gt 0) {
+    StepFail "16" "Capability bypass audit" "rules load governed JSON directly (use governing skill)"
+    $capHits | ForEach-Object { Write-Host "  $_" }
+} else {
+    StepPass "16" "Capability bypass audit" "no direct @reference/ to governed JSON in rules"
+}
+
 # ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------

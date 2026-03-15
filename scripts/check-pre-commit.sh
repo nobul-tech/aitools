@@ -311,6 +311,35 @@ else
     step_pass "14" "Build prereq framework"
 fi
 
+# Step 15: Deprecated summary terms
+echo ""
+echo "${BOLD}--- Step 15: Deprecated summary terms ---${RESET}"
+hits=$(grep -rn 'write_summary.*"unchanged"' scripts/ --include='*.sh' || true)
+hits_ps1=$(grep -rn 'Write-Summary.*"unchanged"' scripts/ --include='*.ps1' || true)
+all_hits="${hits}${hits:+$'\n'}${hits_ps1}"
+all_hits=$(echo "$all_hits" | sed '/^$/d')
+if [ -n "$all_hits" ]; then
+    step_fail "15" "Deprecated summary terms" "found 'unchanged' in write_summary calls (use 'verified')"
+    echo "$all_hits"
+else
+    step_pass "15" "Deprecated summary terms" "no deprecated terms found"
+fi
+
+# Step 16: Capability bypass — direct @reference/ to governed JSON in rules
+echo ""
+echo "${BOLD}--- Step 16: Capability bypass audit ---${RESET}"
+# Governed JSON files that require skill access (capability-based security, Dennis & Van Horn 1966)
+# @reference/ prefix loads file into context, bypassing the governing skill
+hits=$(grep -rn '@reference/.*\.json' .claude/rules/ \
+    | perl -ne 'print if /glossary\.json|framework-registry\.json|known-gaps\.json/' \
+    | grep -v '^.*:.*|.*|.*|.*|' || true)
+if [ -n "$hits" ]; then
+    step_fail "16" "Capability bypass audit" "rules load governed JSON directly (use governing skill)"
+    echo "$hits"
+else
+    step_pass "16" "Capability bypass audit" "no direct @reference/ to governed JSON in rules"
+fi
+
 # ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------

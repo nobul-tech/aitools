@@ -795,22 +795,6 @@ if $EXTENSIVE; then
     fi
 fi
 
-# Step 32: Deprecated summary terms
-if $EXTENSIVE; then
-    echo ""
-    echo "${BOLD}--- Step 32: Deprecated summary terms ---${RESET}"
-    hits=$(grep -rn 'write_summary.*"unchanged"' scripts/ --include='*.sh' || true)
-    hits_ps1=$(grep -rn 'Write-Summary.*"unchanged"' scripts/ --include='*.ps1' || true)
-    all_hits="${hits}${hits:+$'\n'}${hits_ps1}"
-    all_hits=$(echo "$all_hits" | sed '/^$/d')
-    if [ -n "$all_hits" ]; then
-        step_fail "32" "Deprecated summary terms" "found 'unchanged' in write_summary calls (use 'verified')"
-        echo "$all_hits"
-    else
-        step_pass "32" "Deprecated summary terms" "no deprecated terms found"
-    fi
-fi
-
 # ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------
