@@ -12,6 +12,47 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.57 -- Frameworks skill, governed data access, bug fixes #49/#50/#51 (2026-03-14)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **`/frameworks` skill** (project-level): Read framework registry, add new adopted frameworks. Trigger directive in frameworks rule. |
+| 2 | **Governed data access framework**: `reference/framework-governed-data-access.md` — pattern for registry access via skills instead of direct file reads. Three artifacts: skill, trigger directive, detection hook. |
+| 3 | **Glossary detection hook**: `shared/hooks/glossary-skill-guard.sh` — fires on Read/Grep of glossary files, reminds agent to use /glossary skill. First governed data access hook. |
+
+### Bug fixes
+
+| # | Change |
+|---|--------|
+| 4 | **#49**: User repo template now includes `.gitignore` (`.scratch/`, `*.bak.*`, `.DS_Store`) |
+| 5 | **#50**: User repo pull captures stderr via `2>&1` and logs via `log_detail` on failure (was `2>/dev/null`) |
+| 6 | **#51**: Hook deployment migrated from bare `cp` to `deploy_managed_file` with interactive review, deploy tracking, and accept & adopt support |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 7 | **Deployment outcome renames**: `unchanged`→`verified`, `adopted`/`merge-adopted`→`accept & adopt` across aitools-lib, setup-user-claude, setup-user-mcp, deploy tracker (8 files) |
+| 8 | **Framework registry**: New governed-data-access framework entry |
+| 9 | **Gap #24 filed**: No governed data access pattern for registry files |
+| 10 | **Glossary**: 12 new governed terms (DTCC, discovery context, discipline, framework, etc.) |
+| 11 | **Investigate skill**: Three-layer RCA check added |
+| 12 | **Harness, adoption, three-layer governance docs**: Rule-skill governance, DTCC three-artifact requirement, three-layer completeness |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `.claude/skills/frameworks/SKILL.md` | Frameworks skill |
+| `reference/framework-governed-data-access.md` | Governed data access framework doc |
+| `shared/hooks/glossary-skill-guard.sh` | Glossary skill detection hook |
+
+**Verified on:** macOS
+
+---
+
 ## v0.56 -- Install audit findings, Auth0 platform plan (2026-03-14)
 
 ### Improvements
