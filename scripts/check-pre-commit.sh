@@ -314,8 +314,8 @@ fi
 # Step 15: Deprecated summary terms
 echo ""
 echo "${BOLD}--- Step 15: Deprecated summary terms ---${RESET}"
-hits=$(grep -rn 'write_summary.*"unchanged"' scripts/ --include='*.sh' || true)
-hits_ps1=$(grep -rn 'Write-Summary.*"unchanged"' scripts/ --include='*.ps1' || true)
+hits=$(grep -rn 'write_summary.*"unchanged"' scripts/ --include='*.sh' | grep -v '^scripts/check-' || true)
+hits_ps1=$(grep -rn 'Write-Summary.*"unchanged"' scripts/ --include='*.ps1' | grep -v '^scripts/check-' || true)
 all_hits="${hits}${hits:+$'\n'}${hits_ps1}"
 all_hits=$(echo "$all_hits" | sed '/^$/d')
 if [ -n "$all_hits" ]; then

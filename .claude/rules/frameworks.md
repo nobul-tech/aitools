@@ -3,8 +3,7 @@
 **Intent**: **Purpose**: State what frameworks are, when to check
 them, and where the registries live — so agents always know to check
 before assuming. **Scope**: Framework concept, registry references,
-and harness registry list. NOT framework data (see
-`@reference/framework-registry.json`). NOT the adoption process (see
+and harness registry list. NOT framework data (use `/frameworks` skill). NOT the adoption process (see
 `@reference/framework-adoption.md`). **Audience**: Every agent,
 every session.
 
@@ -20,8 +19,7 @@ cycle.
 
 ### Framework registry
 
-The framework registry (`@reference/framework-registry.json`,
-accessible via `/frameworks` skill) is the source of truth for all
+The framework registry (accessible via `/frameworks` skill) is the source of truth for all
 adopted frameworks. Each entry includes: name, what it governs,
 source discipline, key concepts, reference file, and implementing
 artifacts.

@@ -2,8 +2,7 @@
 
 **Intent**: **Purpose**: List every governed term, base artifact,
 and scope modifier so agents always have them in context. **Scope**:
-The word list only. NOT the definitions (those are in
-`@reference/glossary.json`). NOT usage guidance (`/glossary` skill).
+The word list only. NOT the definitions (use `/glossary` skill).
 NOT the composition convention (see
 `@reference/framework-governed-vocabulary.md`). **Audience**: Every
 agent, every session.
