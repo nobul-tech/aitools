@@ -28,6 +28,14 @@ set. Exists at two deployment scopes:
   `~/.claude/settings.json`, user claude) — preferences and governance
   that follow the developer across all projects
 
+**Rule-skill governance**: Within configuration, rules and skills
+have a governance relationship. Rules (always loaded) govern domains
+and enforce process via trigger directives. Skills (loaded on demand)
+implement the governed process. Governed data files (JSON registries)
+are accessed through their governing skills — the skill is the API,
+the JSON is the implementation detail. See
+`@reference/framework-governed-data-access.md`.
+
 **Orchestration** — aitools manages the full lifecycle of harness
 content: authoring, building, deploying, and maintaining configuration
 across machines and users. This includes:

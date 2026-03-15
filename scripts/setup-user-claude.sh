@@ -215,11 +215,7 @@ else
     deploy_managed_file "$NEW_CONTENT" "$CLAUDE_MD" "claude.md" "CLAUDE.md" "$_adopt_label"
 
     case "$MANAGED_FILE_RESULT" in
-        adopted)
-            adopt_claude_md "$CLAUDE_MD" "$USER_REPO_PATH/claude/CLAUDE.md"
-            write_summary OK "claude.md" "adopted to profile"
-            ;;
-        merge-adopted)
+        "accept & adopt")
             if [ ! -s "$CLAUDE_MD" ]; then
                 log_error "Validation failed: $CLAUDE_MD is empty or missing"
             elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
@@ -229,7 +225,7 @@ else
             fi
             adopt_claude_md "$CLAUDE_MD" "$USER_REPO_PATH/claude/CLAUDE.md"
             if [ "$ERRORS" -eq 0 ]; then
-                write_summary OK "claude.md" "merge-adopted to profile"
+                write_summary OK "claude.md" "accepted to profile"
             else
                 write_summary ERROR "claude.md" "validation failed"
             fi
@@ -255,9 +251,9 @@ else
                 write_summary ERROR "claude.md" "validation failed"
             fi
             ;;
-        unchanged)
-            log "CLAUDE.md unchanged (no differences)"
-            write_summary OK "claude.md" "unchanged"
+        verified)
+            log "CLAUDE.md verified (no differences)"
+            write_summary OK "claude.md" "verified"
             ;;
     esac
 fi
@@ -325,18 +321,18 @@ if [ -n "$RULES_SRC" ]; then
             deploy_managed_file "$(cat "$rule_file")" "$RULES_DEST/$rule_name" "claude rules" "$rule_name" "$_adopt_label"
 
             case "$MANAGED_FILE_RESULT" in
-                adopted|merge-adopted)
+                "accept & adopt")
                     mkdir -p "$USER_REPO_PATH/claude/rules"
                     cp "$RULES_DEST/$rule_name" "$USER_REPO_PATH/claude/rules/$rule_name"
                     log_ok "Adopted rule to profile: $rule_name"
                     ;;
-                skipped|unchanged|created|updated)
+                skipped|verified|created|updated)
                     # No action needed — tracker records the outcome
                     ;;
             esac
             deploy_tracker_record "$MANAGED_FILE_RESULT" "claude rules" "$rule_name"
             # Write-back: sync merged content to dotprofile repo
-            if [ "$MANAGED_FILE_RESULT" = "merge-adopted" ] && [ -n "${USER_REPO_PATH:-}" ]; then
+            if [ "$MANAGED_FILE_RESULT" = "accept & adopt" ] && [ -n "${MERGED_CONTENT:-}" ] && [ -n "${USER_REPO_PATH:-}" ]; then
                 wb_dest="$USER_REPO_PATH/claude/rules/$rule_name"
                 mkdir -p "$(dirname "$wb_dest")"
                 printf '%s\n' "$MERGED_CONTENT" > "$wb_dest"

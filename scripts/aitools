@@ -1015,6 +1015,9 @@ fs.writeFileSync(process.argv[7], JSON.stringify(profile, null, 2) + '\n');
                 # Create .gitattributes
                 printf '* text=auto eol=lf\n*.jsonl text eol=lf\n' > "$user_repo_dir/.gitattributes"
 
+                # Create .gitignore
+                printf '.scratch/\n*.bak.*\n.DS_Store\n' > "$user_repo_dir/.gitignore"
+
                 # Create README
                 printf '# %s\n\nPrivate user repo for session archives and profile data.\nSee [aitools](https://github.com/%s/aitools) for details.\n' \
                     "$repo_name" "$gh_user" > "$user_repo_dir/README.md"
@@ -1393,8 +1396,11 @@ fi
 if raw=$(read_config_key "$config" "userRepoPath"); then
     user_repo_path=$(to_native_path "$raw")
     if [ -d "$user_repo_path/.git" ]; then
-        if ! git -C "$user_repo_path" pull --ff-only --quiet 2>/dev/null; then
+        ur_pull_exit=0
+        ur_pull_out=$(git -C "$user_repo_path" pull --ff-only --quiet 2>&1) || ur_pull_exit=$?
+        if [ "$ur_pull_exit" -ne 0 ]; then
             log_warn "user repo pull failed -- using local copy."
+            log_detail "user-repo-pull: $ur_pull_out"
         fi
     fi
 fi

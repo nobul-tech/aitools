@@ -966,9 +966,9 @@ function Prompt-DiffReview {
 # Uses manifest to auto-deploy when user hasn't edited the local file.
 # Falls back to interactive review with merge options when both sides differ.
 #
-# Returns: "created", "updated", "unchanged", "adopted", or "skipped"
+# Returns: "created", "updated", "verified", "accept & adopt", or "skipped"
 # Exits with code 2 on abort.
-# On "adopted"/"skipped": does NOT write the file.
+# On "accept & adopt"/"skipped": does NOT write the file.
 # On "created"/"updated": writes content to dest + updates deploy state.
 # ---------------------------------------------------------------------------
 function Deploy-ManagedFile {
@@ -1001,7 +1001,7 @@ function Deploy-ManagedFile {
         } else {
             Log "[DRY RUN] Would create: $ItemName -> $DestPath"
         }
-        return "unchanged"
+        return "verified"
     }
 
     $destDir = Split-Path -Parent $DestPath
@@ -1020,7 +1020,7 @@ function Deploy-ManagedFile {
         if ($existing -eq $Content) {
             # Content identical — update deploy state (bootstraps manifest)
             Update-DeployState -FilePath $DestPath -Content $Content
-            return "unchanged"
+            return "verified"
         }
 
         # Content differs — check deploy state for auto-deploy eligibility
@@ -1050,7 +1050,7 @@ function Deploy-ManagedFile {
             -CurrentContent $existing -AncestorContent $ancestorContent `
             -AdoptLabel $AdoptLabel
         switch ($result) {
-            "adopt" { return "adopted" }
+            "adopt" { return "accept & adopt" }
             "skip" {
                 LogWarn "Skipped: $ItemName"
                 return "skipped"
@@ -1061,7 +1061,7 @@ function Deploy-ManagedFile {
                 [System.IO.File]::WriteAllText($resolved, $Content, [System.Text.UTF8Encoding]::new($false))
                 Update-DeployState -FilePath $DestPath -Content $Content
                 LogOk "Updated (merge-adopt): $ItemName"
-                return "merge-adopted"
+                return "accept & adopt"
             }
             "merge" {
                 $Content = $script:MergedContent
@@ -1088,13 +1088,13 @@ function Deploy-ManagedFile {
 # loops that deploy multiple managed files (rules, skills, hooks).
 # ---------------------------------------------------------------------------
 
-$script:dtAdded = 0; $script:dtUpdated = 0; $script:dtUnchanged = 0
-$script:dtAdopted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0
+$script:dtAdded = 0; $script:dtUpdated = 0; $script:dtVerified = 0
+$script:dtAccepted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0
 $script:deployTrackerText = ""
 
 function Initialize-DeployTracker {
-    $script:dtAdded = 0; $script:dtUpdated = 0; $script:dtUnchanged = 0
-    $script:dtAdopted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0
+    $script:dtAdded = 0; $script:dtUpdated = 0; $script:dtVerified = 0
+    $script:dtAccepted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0
     $script:deployTrackerText = ""
 }
 
@@ -1104,10 +1104,9 @@ function Record-DeployOutcome {
     switch ($Outcome) {
         { $_ -eq "added" -or $_ -eq "created" } { $script:dtAdded++;     Write-Summary "DETAIL" $ToolName "added: $ItemName" }
         "updated"   { $script:dtUpdated++;   Write-Summary "DETAIL" $ToolName "updated: $ItemName" }
-        "adopted"       { $script:dtAdopted++;   Write-Summary "DETAIL" $ToolName "adopted: $ItemName" }
-        "merge-adopted" { $script:dtUpdated++;   Write-Summary "DETAIL" $ToolName "merge-adopted: $ItemName" }
+        "accept & adopt" { $script:dtAccepted++;  Write-Summary "DETAIL" $ToolName "accept & adopt: $ItemName" }
         "skipped"   { $script:dtSkipped++;   Write-Summary "DETAIL" $ToolName "skipped: $ItemName" }
-        "unchanged" { $script:dtUnchanged++ }
+        "verified"  { $script:dtVerified++ }
         "preserved" { $script:dtPreserved++ }
     }
 }
@@ -1118,9 +1117,9 @@ function Write-DeployTrackerSummary {
     $parts = @()
     if ($script:dtAdded -gt 0)     { $parts += "$($script:dtAdded) added" }
     if ($script:dtUpdated -gt 0)   { $parts += "$($script:dtUpdated) updated" }
-    if ($script:dtAdopted -gt 0)   { $parts += "$($script:dtAdopted) adopted" }
-    if ($script:dtUnchanged -gt 0) { $parts += "$($script:dtUnchanged) unchanged" }
-    $text = if ($parts.Count -gt 0) { $parts -join ", " } else { "unchanged" }
+    if ($script:dtAccepted -gt 0)  { $parts += "$($script:dtAccepted) accepted" }
+    if ($script:dtVerified -gt 0)  { $parts += "$($script:dtVerified) verified" }
+    $text = if ($parts.Count -gt 0) { $parts -join ", " } else { "verified" }
     $script:deployTrackerText = $text
 
     if ($script:dtSkipped -gt 0) {

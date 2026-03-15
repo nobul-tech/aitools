@@ -185,6 +185,21 @@ No single mechanism is definitive. The three-layer model acknowledges
 this — each layer catches what the previous missed. Evaluate proposed
 fixes honestly, don't overclaim.
 
+### Three-layer check
+
+When analyzing a failure, check all three governance layers:
+
+- **Prevention**: Was there a rule with a trigger directive? Did the
+  agent have it in context? Was the directive clear and imperative?
+- **Detection**: Was there a hook that should have caught the bypass?
+  Did it fire? If not, why not?
+- **Audit**: Would `/audit` have flagged this as a gap? If not, what
+  check is missing?
+
+A failure that passes through all three layers reveals a systemic gap.
+A failure caught by detection but not prevention reveals a rule gap.
+A failure only caught by audit reveals both rule and detection gaps.
+
 ## Escalation
 
 - Same root cause category 3+ times → structural fix required

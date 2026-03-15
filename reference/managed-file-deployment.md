@@ -25,7 +25,7 @@ Source content
     |
     +-- File doesn't exist --> write --> "created"
     |
-    +-- Content identical --> "unchanged"
+    +-- Content identical --> "verified"
     |
     +-- Content differs
          |
@@ -37,21 +37,21 @@ Source content
               |    |
               |    +-- Auto-merge succeeds --> Auto-Merge Menu
               |    |    |
-              |    |    +-- [a]ccept (AdoptLabel)  --> write + adopt --> "merge-adopted"
-              |    |    +-- [a]ccept (no label)    --> write         --> "updated"
-              |    |    +-- [o]verwrite            --> write source  --> "updated"
-              |    |    +-- [s]kip                 -->               --> "skipped"
-              |    |    +-- [x]abort               --> exit 2
+              |    |    +-- [a]ccept & adopt (AdoptLabel)  --> write + sync  --> "accept & adopt"
+              |    |    +-- [a]ccept & adopt (no label)    --> write         --> "updated"
+              |    |    +-- [o]verwrite                    --> write source  --> "updated"
+              |    |    +-- [s]kip                         -->               --> "skipped"
+              |    |    +-- [x]abort                       --> exit 2
               |    |
-              |    +-- Auto-merge conflicts --> Fallback Menu
+              |    +-- Auto-merge conflicts --> Merge-Conflict Menu
               |
-              +-- No ancestor --> Fallback Menu
+              +-- No ancestor --> Merge-Conflict Menu
                    |
-                   +-- [o]verwrite            --> write source  --> "updated"
-                   +-- [a]dopt (AdoptLabel)   --> copy to prof  --> "adopted"
-                   +-- [m]erge               --> AI merge+write --> "updated"
-                   +-- [s]kip                -->               --> "skipped"
-                   +-- [x]abort              --> exit 2
+                   +-- [o]verwrite                    --> write source  --> "updated"
+                   +-- [a]ccept & adopt (AdoptLabel)  --> keep + sync   --> "accept & adopt"
+                   +-- [m]erge                        --> AI merge      --> "updated"
+                   +-- [s]kip                         -->               --> "skipped"
+                   +-- [x]abort                       --> exit 2
 ```
 
 ## Menus
@@ -60,8 +60,8 @@ Source content
 
 With AdoptLabel:
 ```
-  [a]ccept    : deploy merge + update <AdoptLabel>
-  [o]verwrite
+  [a]ccept & adopt : deploy merge + sync to <AdoptLabel>
+  [o]verwrite      : deploy source (discard merge)
   [s]kip
   [x]abort
   choice [a/o/s/x]:
@@ -69,22 +69,22 @@ With AdoptLabel:
 
 Without AdoptLabel:
 ```
-  [a]ccept
+  [a]ccept   : deploy merge
   [o]verwrite
   [s]kip
   [x]abort
   choice [a/o/s/x]:
 ```
 
-### Fallback Menu (no ancestor or merge conflicts)
+### Merge-Conflict Menu (no ancestor or merge conflicts)
 
 With AdoptLabel:
 ```
-  [o]verwrite : source wins --> deploy to local (backup kept)
-  [a]dopt     : local wins --> copy back to <AdoptLabel>
-  [m]erge     : AI-assisted merge of source + local
-  [s]kip      : keep local as-is (no changes)
-  [x]abort    : stop deployment
+  [o]verwrite      : source wins --> deploy to local (backup kept)
+  [a]ccept & adopt : local wins --> sync to <AdoptLabel>
+  [m]erge          : AI-assisted merge of source + local
+  [s]kip           : keep local as-is (no changes)
+  [x]abort         : stop deployment
   choice [o/a/m/s/x]:
 ```
 
@@ -109,22 +109,20 @@ When `AITOOLS_FORCE` is set or stdin is not a terminal:
 
 | Value | Menu | Meaning |
 |-------|------|---------|
-| `"merge-adopt"` | Auto-merge | Accept merge + update profile |
-| `"merge"` | Auto-merge | Accept merge (no profile update) |
+| `"accept-adopt"` | Both (with AdoptLabel) | Accept & adopt — content approved + synced to adopt target |
+| `"merge"` | Auto-merge (no label) | Accept merge (no adopt target) |
 | `"overwrite"` | Both | Source wins (deploy to local) |
-| `"adopt"` | Fallback | Local wins (copy to profile) |
 | `"skip"` | Both | Keep local unchanged |
 | (exit 2) | Both | User aborted |
 
 ### deploy_managed_file / Deploy-ManagedFile
 
-| Value | Meaning | File written? | Profile updated? |
-|-------|---------|--------------|-----------------|
+| Value | Meaning | File written? | Adopt target updated? |
+|-------|---------|--------------|----------------------|
 | `"created"` | New file | Yes | No |
 | `"updated"` | Content changed | Yes | No |
-| `"unchanged"` | Content identical | No | No |
-| `"merge-adopted"` | Merge accepted + profile | Yes | Yes |
-| `"adopted"` | Local wins, copied to profile | No | Yes |
+| `"verified"` | Content identical — actively confirmed correct | No | No |
+| `"accept & adopt"` | User accepted content + synced to adopt target | Yes (auto-merge) or No (merge-conflict) | Yes |
 | `"skipped"` | User chose skip | No | No |
 
 ## Caller Responsibilities
@@ -135,9 +133,8 @@ Every caller of `deploy_managed_file` MUST handle all return values:
 |-------------|-------------|-------------|----------|
 | `created` | Yes | If applicable | Yes |
 | `updated` | Yes | If applicable | Yes |
-| `unchanged` | No | No | Yes |
-| `merge-adopted` | Yes | Adopt already done by lib | Yes |
-| `adopted` | No | Adopt already done by caller | Yes |
+| `verified` | No | No | Yes |
+| `accept & adopt` | Yes | Adopt done by caller | Yes |
 | `skipped` | No | No | Yes |
 
 ## Deploy State (Shadow System)
@@ -229,7 +226,7 @@ platforms). No platform-specific variants needed.
 Deployed content originates from two repos. The dotprofile repo takes
 priority when present; the aitools `shared/` directory is the fallback.
 
-| Content | Primary source | Fallback |
+| Content | Primary source | Merge-Conflict |
 |---------|---------------|----------|
 | CLAUDE.md template | `<userRepoPath>/claude/CLAUDE.md` | `shared/claude-shared.md` |
 | User rules | `<userRepoPath>/claude/rules/*.md` | (none — no rules deployed) |

@@ -26,6 +26,10 @@
     }
   },
   "terms": {
+    "accept & adopt": {
+      "definition": "Deployment outcome: user approved the current content (merged or local) and synced it back to the adopt target (profile or source repo). The [a] menu option in both auto-merge and merge-conflict menus. Replaces the separate adopted and merge-adopted outcomes.",
+      "source": "reference/managed-file-deployment.md"
+    },
     "adoption": {
       "definition": "The process of mapping concepts from an established discipline into harness artifacts. See the DTCC steps 4-6.",
       "source": "reference/framework-adoption.md"
@@ -50,9 +54,22 @@
       "definition": "The third component of an intent statement (after purpose and intent scope). Who consumes the file and what they expect to find. Adopted from ISO intended audience.",
       "source": "shared/skills/intent-writing/SKILL.md"
     },
+    "auto-merge menu": {
+      "definition": "Deployment menu shown when git 3-way merge succeeds cleanly. Options: accept & adopt, overwrite, skip, abort. The merge result is previewed before the user chooses.",
+      "source": "reference/managed-file-deployment.md"
+    },
     "audit": {
       "definition": "The third layer of three-layer governance: deep analysis on demand that catches what prevention and detection missed. Also the name of the /audit skill. Context distinguishes: 'audit layer' = governance concept, '/audit' = the skill.",
       "source": "reference/framework-three-layer-governance.md"
+    },
+    "controlled distribution": {
+      "definition": "The practice of not advertising governed file paths in rules or documentation. Access is routed through the governing skill, which is the only documented entry point. From ISO 9001 document control.",
+      "sourceDiscipline": "Quality management (ISO 9001 §7.5 document control)",
+      "source": "reference/framework-governed-data-access.md"
+    },
+    "created": {
+      "definition": "Deployment outcome: file did not exist, written for the first time.",
+      "source": "reference/managed-file-deployment.md"
     },
     "configuration": {
       "definition": "The harness layer covering our use of the Claude Code platform: the rules we write, skills we build, hooks we configure, claude content we author, settings we set. Exists at project and user deployment scope.",
@@ -116,9 +133,17 @@
       "definition": "A governance structure built by adopting concepts from an established discipline. Bridges discipline to artifacts. Distinct from discipline (external field) and artifact (specific file). Each framework has a dedicated reference file and a registry entry.",
       "source": "reference/framework-adoption.md"
     },
+    "file classification": {
+      "definition": "The access tier assigned to a harness file: open (unrestricted), protected (writes require human review), or governed (access requires governing skill process).",
+      "source": "reference/framework-governed-data-access.md"
+    },
     "gap": {
       "definition": "A deficiency in the harness where code deviates from an existing spec. Distinguished from ambiguity (where no spec exists). Filed in known-gaps.json with structured fields. Severity: critical/high/medium/low. Lifecycle: open, planned, closed.",
       "source": ".claude/rules/gap-governance.md"
+    },
+    "governed file": {
+      "definition": "A JSON registry file accessible only through its governing skill's process. The skill is the API; the JSON is the implementation detail. Current governed files: known-gaps.json (/gap), glossary.json (/glossary), framework-registry.json (/frameworks).",
+      "source": "reference/framework-governed-data-access.md"
     },
     "governed vocabulary": {
       "definition": "The practice of maintaining a single authoritative definition for every term used across the harness. Adopted from ubiquitous language (Domain-Driven Design) and faceted classification (Ranganathan). Implemented via the glossary rule, JSON, and skill.",
@@ -156,6 +181,10 @@
     },
     "KD": {
       "abbreviationOf": "key decision"
+    },
+    "merge-conflict menu": {
+      "definition": "Deployment menu shown when content differs and no clean merge is available — either git 3-way merge had conflicts or no ancestor exists. Options: overwrite, accept & adopt, merge (AI-assisted), skip, abort.",
+      "source": "reference/managed-file-deployment.md"
     },
     "managed tool": {
       "definition": "A CLI tool, dependency, or build tool governed by reference/tool-registry.md. Each gets setup scripts, platform lifecycle tracking, and a corresponding user skill. Standing orders and hooks enforce tool selection.",
@@ -196,6 +225,10 @@
     "PSO": {
       "abbreviationOf": "project standing order"
     },
+    "preserved": {
+      "definition": "Deployment outcome: file exists at deploy target but is not managed by the current deploy loop. Left untouched.",
+      "source": "reference/managed-file-deployment.md"
+    },
     "purpose": {
       "definition": "The first component of an intent statement (before intent scope and audience). What the file exists to deliver. Adopted from ISO/ITIL/CMMI purpose statement.",
       "source": "shared/skills/intent-writing/SKILL.md"
@@ -207,6 +240,15 @@
     "rule": {
       "definition": "A Claude Code rule file (.md in .claude/rules/ or ~/.claude/rules/). Always loaded into context for every session. Part of the prevention layer. Default meaning when 'rule' is used without a modifier. See also: cursor rule.",
       "source": "reference/framework-three-layer-governance.md"
+    },
+    "skill-as-capability": {
+      "definition": "The pattern where a loaded skill grants access to governed data AND provides the process for interacting with it. The capability unifies access and authority.",
+      "sourceDiscipline": "Information security (capability-based security, Dennis & Van Horn 1966)",
+      "source": "reference/framework-governed-data-access.md"
+    },
+    "skipped": {
+      "definition": "Deployment outcome: user chose to keep local content as-is. No file written, no adoption.",
+      "source": "reference/managed-file-deployment.md"
     },
     "scope creep": {
       "definition": "Content in a file that serves a valid purpose but extends beyond the file's stated intent scope. An intent verification finding type. Resolution: move to the correct file, split, or amend the intent.",
@@ -236,6 +278,10 @@
       "definition": "The event that starts the DTCC: an agent encounters a decision point without explicit guidance and would otherwise make an assumption. The assumption is the failure mode.",
       "source": "reference/framework-adoption.md"
     },
+    "updated": {
+      "definition": "Deployment outcome: content differed from source, new content written (via auto-deploy, overwrite, or merge).",
+      "source": "reference/managed-file-deployment.md"
+    },
     "user coaching item": {
       "definition": "An inline directive in the Coaching section of shared/dotprofile/user claude targeting agent behavior improvements across all projects.",
       "source": "shared/claude-shared.md"
@@ -246,6 +292,10 @@
     "user standing order": {
       "definition": "An inline directive in the Standing Orders section of shared/dotprofile/user claude. Non-negotiable rules that apply across all projects.",
       "source": "shared/claude-shared.md"
+    },
+    "verified": {
+      "definition": "Deployment outcome: deployed content matches source. Active confirmation that the file is correct — no write needed.",
+      "source": "reference/managed-file-deployment.md"
     },
     "USO": {
       "abbreviationOf": "user standing order"

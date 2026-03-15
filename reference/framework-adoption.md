@@ -150,6 +150,17 @@ Follow existing conventions:
 - New registry entries follow the registry convention
   (`@reference/framework-three-layer-governance.md`)
 
+When creating a skill as part of a framework, create three artifacts
+together — never one without the others:
+
+1. **Skill** (SKILL.md) — the governed process
+2. **Trigger directive** in the governing rule — when to invoke
+3. **Detection hook spec** — what to detect when the process is bypassed
+
+The hook may not be built immediately (hook infrastructure is
+incremental), but the spec must be designed at adoption time. Track
+unbuilt hooks via `/gap` skill.
+
 ### 8. Integrate
 
 Wire the new artifacts into the three-layer governance:

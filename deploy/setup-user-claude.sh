@@ -938,9 +938,9 @@ prompt_diff_review() {
 #   $4 = item name (for DETAIL summary, e.g., "concurrent-agents.md")
 #   $5 = adopt label ("profile", "shared/", or "" to hide adopt option)
 #
-# Sets MANAGED_FILE_RESULT to: "created", "updated", "unchanged", "adopted", "skipped"
+# Sets MANAGED_FILE_RESULT to: "created", "updated", "verified", "accept & adopt", "skipped"
 # Exits with code 2 on abort (from prompt_diff_review).
-# On "adopted"/"skipped": does NOT write the file (caller decides).
+# On "accept & adopt"/"skipped": does NOT write the file (caller decides).
 # On "created"/"updated": writes src_content to dest + updates deploy state.
 # ---------------------------------------------------------------------------
 MANAGED_FILE_RESULT=""
@@ -955,7 +955,7 @@ deploy_managed_file() {
     # Prevents round-trip diff noise (deploy -> adopt strips trailing blanks -> deploy sees diff).
     src_content=$(printf '%s' "$src_content" | perl -0777 -pe 's/[\r\n]+$/\n/')
 
-    MANAGED_FILE_RESULT="unchanged"
+    MANAGED_FILE_RESULT="verified"
 
     # Dry run: report what would happen without writing
     if [ "${DRY_RUN:-}" = "true" ]; then
@@ -983,7 +983,7 @@ deploy_managed_file() {
         if [ "$existing" = "$src_content" ]; then
             # Content identical — update deploy state (bootstraps manifest)
             update_deploy_state "$dest" "$src_content"
-            MANAGED_FILE_RESULT="unchanged"
+            MANAGED_FILE_RESULT="verified"
             return 0
         fi
 
@@ -1015,7 +1015,7 @@ deploy_managed_file() {
         prompt_diff_review "$dest" "$src_content" "$adopt_label" "$existing" "$ancestor_content"
         case "$DIFF_REVIEW_RESULT" in
             adopt)
-                MANAGED_FILE_RESULT="adopted"
+                MANAGED_FILE_RESULT="accept & adopt"
                 return 0
                 ;;
             skip)
@@ -1028,7 +1028,7 @@ deploy_managed_file() {
                 printf '%s' "$src_content" > "$dest"
                 update_deploy_state "$dest" "$src_content"
                 log_ok "Updated (merge-adopt): $item_name"
-                MANAGED_FILE_RESULT="merge-adopted"
+                MANAGED_FILE_RESULT="accept & adopt"
                 return 0
                 ;;
             merge)
@@ -1055,13 +1055,13 @@ deploy_managed_file() {
 # ---------------------------------------------------------------------------
 
 # Reset all deploy tracker counters. Call before a deploy loop.
-_DT_ADDED=0; _DT_UPDATED=0; _DT_UNCHANGED=0
-_DT_ADOPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0
+_DT_ADDED=0; _DT_UPDATED=0; _DT_VERIFIED=0
+_DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0
 DEPLOY_TRACKER_TEXT=""
 
 deploy_tracker_init() {
-    _DT_ADDED=0; _DT_UPDATED=0; _DT_UNCHANGED=0
-    _DT_ADOPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0
+    _DT_ADDED=0; _DT_UPDATED=0; _DT_VERIFIED=0
+    _DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0
     DEPLOY_TRACKER_TEXT=""
 }
 
@@ -1074,13 +1074,11 @@ deploy_tracker_record() {
                    write_summary DETAIL "$tool_name" "added: $item_name" ;;
         updated)   _DT_UPDATED=$((_DT_UPDATED + 1))
                    write_summary DETAIL "$tool_name" "updated: $item_name" ;;
-        adopted)       _DT_ADOPTED=$((_DT_ADOPTED + 1))
-                       write_summary DETAIL "$tool_name" "adopted: $item_name" ;;
-        merge-adopted) _DT_UPDATED=$((_DT_UPDATED + 1))
-                       write_summary DETAIL "$tool_name" "merge-adopted: $item_name" ;;
+        "accept & adopt") _DT_ACCEPTED=$((_DT_ACCEPTED + 1))
+                       write_summary DETAIL "$tool_name" "accept & adopt: $item_name" ;;
         skipped)   _DT_SKIPPED=$((_DT_SKIPPED + 1))
                    write_summary DETAIL "$tool_name" "skipped: $item_name" ;;
-        unchanged) _DT_UNCHANGED=$((_DT_UNCHANGED + 1)) ;;
+        verified)  _DT_VERIFIED=$((_DT_VERIFIED + 1)) ;;
         preserved) _DT_PRESERVED=$((_DT_PRESERVED + 1)) ;;
     esac
 }
@@ -1093,9 +1091,9 @@ deploy_tracker_summary() {
     local parts=""
     [ "$_DT_ADDED" -gt 0 ]     && parts="$_DT_ADDED added"
     [ "$_DT_UPDATED" -gt 0 ]   && parts="${parts:+$parts, }$_DT_UPDATED updated"
-    [ "$_DT_ADOPTED" -gt 0 ]   && parts="${parts:+$parts, }$_DT_ADOPTED adopted"
-    [ "$_DT_UNCHANGED" -gt 0 ] && parts="${parts:+$parts, }$_DT_UNCHANGED unchanged"
-    [ -z "$parts" ] && parts="unchanged"
+    [ "$_DT_ACCEPTED" -gt 0 ]  && parts="${parts:+$parts, }$_DT_ACCEPTED accepted"
+    [ "$_DT_VERIFIED" -gt 0 ]  && parts="${parts:+$parts, }$_DT_VERIFIED verified"
+    [ -z "$parts" ] && parts="verified"
     DEPLOY_TRACKER_TEXT="$parts"
 
     if [ "$_DT_SKIPPED" -gt 0 ]; then
@@ -1750,18 +1748,18 @@ if [ -n "$RULES_SRC" ]; then
             deploy_managed_file "$(cat "$rule_file")" "$RULES_DEST/$rule_name" "claude rules" "$rule_name" "$_adopt_label"
 
             case "$MANAGED_FILE_RESULT" in
-                adopted|merge-adopted)
+                "accept & adopt")
                     mkdir -p "$USER_REPO_PATH/claude/rules"
                     cp "$RULES_DEST/$rule_name" "$USER_REPO_PATH/claude/rules/$rule_name"
                     log_ok "Adopted rule to profile: $rule_name"
                     ;;
-                skipped|unchanged|created|updated)
+                skipped|verified|created|updated)
                     # No action needed — tracker records the outcome
                     ;;
             esac
             deploy_tracker_record "$MANAGED_FILE_RESULT" "claude rules" "$rule_name"
             # Write-back: sync merged content to dotprofile repo
-            if [ "$MANAGED_FILE_RESULT" = "merge-adopted" ] && [ -n "${USER_REPO_PATH:-}" ]; then
+            if [ "$MANAGED_FILE_RESULT" = "accept & adopt" ] && [ -n "${MERGED_CONTENT:-}" ] && [ -n "${USER_REPO_PATH:-}" ]; then
                 wb_dest="$USER_REPO_PATH/claude/rules/$rule_name"
                 mkdir -p "$(dirname "$wb_dest")"
                 printf '%s\n' "$MERGED_CONTENT" > "$wb_dest"

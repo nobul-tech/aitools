@@ -70,6 +70,15 @@ record — these are not open questions.
     is source, not deployment. Skills are invisible to Claude Code until
     deployed to `~/.claude/skills/` by `setup-user-skills`. No hacks —
     fix the deployment infrastructure properly.
+21. **Rule-skill governance.** Rules govern and enforce process; skills
+    implement it. Three artifacts are required for every governed skill:
+    (1) the skill (SKILL.md), (2) a trigger directive in the governing
+    rule ("When X, invoke /skill"), (3) a detection hook spec (catches
+    bypass). Trigger directives are imperative enforcement, not passive
+    pointers. "Usage: /skill" is insufficient. "When X arises, invoke
+    /skill" is required. All three artifacts are created together —
+    never one without the others. Hook implementation may be deferred
+    but the spec must exist. See `reference/framework-governed-data-access.md`.
 21. **Frameworks are first-class harness components.** Every adopted
     governance framework gets a dedicated reference file
     (`reference/framework-*.md`) documenting source discipline,

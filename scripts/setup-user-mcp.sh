@@ -351,7 +351,7 @@ deploy_skill() {
     deploy_managed_file "$(cat "$src")" "$dest" "$tool_name" "$skill_name" "$_adopt_label"
 
     case "$MANAGED_FILE_RESULT" in
-        adopted|merge-adopted)
+        "accept & adopt")
             # Copy deployed version back to repo source
             cp "$dest" "$src"
             log_ok "Adopted skill to shared/: $skill_name"
@@ -365,7 +365,7 @@ deploy_skill() {
         created|updated)
             SKILL_CHANGES=$((SKILL_CHANGES + 1))
             ;;
-        skipped|unchanged)
+        skipped|verified)
             # No action needed — tracker records the outcome
             ;;
     esac

@@ -408,6 +408,32 @@
       "suggestedResolution": "Immediate: file-based auth checks for gh and pup (check token files/config instead of invoking auth commands that hit keychain). Follow project precedent from Vercel/Modal fixes. Long-term: Auth0 credential broker (Nobul Auth0 platform roadmap item) — centralized token management via `aitools auth`, export env vars (GH_TOKEN, VERCEL_TOKEN, DD_ACCESS_TOKEN) so CLI tools skip keychain entirely.",
       "created": "2026-03-14",
       "updated": "2026-03-14"
+    },
+    {
+      "id": 24,
+      "title": "Rules lack trigger directives governing skill invocation",
+      "status": "open",
+      "severity": "high",
+      "type": "gap",
+      "affected": [
+        ".claude/rules/script-standards.md",
+        ".claude/rules/tool-lifecycle.md",
+        ".claude/rules/sources-of-truth.md",
+        ".claude/rules/interactive-menus.md",
+        ".claude/rules/agentic-standards.md",
+        ".claude/rules/cross-platform.md"
+      ],
+      "linked": "reference/framework-governed-data-access.md",
+      "referenceFile": null,
+      "observation": "Of 18 rules, only gap-governance.md has proper trigger directives ('File it via the /gap skill'). glossary.md and frameworks.md were fixed in this session. 6 other rules govern domains with planned skills but have only passive pointers or no skill reference. Agents bypass skill processes when rules don't enforce invocation.",
+      "expected": "reference/framework-three-layer-governance.md defines rules as the prevention layer. reference/framework-governed-data-access.md requires every rule governing a domain with a skill to include a 'When to invoke' trigger directive.",
+      "impact": "Agent bypassed /glossary skill process despite direct terminology question from user. The glossary rule was in context but contained no enforcement. Root cause confirmed via RCA: agent treats skills as data sources, not process authorities, when rules lack trigger directives. Session 2026-03-14.",
+      "discoveryContext": "Found during RCA of glossary skill bypass. User asked 'do we have all these in our glossary?' — agent answered from cached data without invoking /glossary. 5 Whys traced to missing trigger directive in glossary rule. Audited: all 18 rules in .claude/rules/, gap-governance.md (only rule with triggers), glossary.md (passive pointer), frameworks.md (passive pointer). Session: 2026-03-14.",
+      "discipline": "Information security, quality management",
+      "frameworks": "Governed data access (capability-based security, ISO 9001 document control) — trigger directives are the prevention-layer enforcement for the skill-as-capability pattern.",
+      "suggestedResolution": "Add 'When to invoke' trigger directive to each rule as its corresponding skill is built. Trigger directive and skill are created together — never one without the other. glossary.md and frameworks.md fixed in this session. Remaining: script-standards.md, tool-lifecycle.md, sources-of-truth.md, interactive-menus.md, agentic-standards.md, cross-platform.md — each addressed when their planned skills ship.",
+      "created": "2026-03-14",
+      "updated": "2026-03-14"
     }
   ],
   "closed": [

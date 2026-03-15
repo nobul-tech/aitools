@@ -38,3 +38,17 @@ skill (access layer).
 | Frameworks | This file | `@reference/framework-registry.json` | — | `/frameworks` |
 | Gaps | `@.claude/rules/gap-governance.md` | `@reference/known-gaps.json` | `/gap` | `/gaps` |
 | Tools | `@.claude/rules/tool-lifecycle.md` | `reference/tool-registry.json` | `/tool-eval` | `/tools` |
+
+### When to invoke /frameworks
+
+Invoke the `/frameworks` skill when ANY of these arise:
+
+- Checking if a framework exists for a domain or decision point
+- Looking up a framework's implementing artifacts
+- Adding a newly adopted framework to the registry
+- Discussing which discipline governs a class of decisions
+- User asks about frameworks or says /frameworks
+
+The skill provides the governed process for reading and writing the
+framework registry. Accessing the registry JSON directly bypasses
+that process.

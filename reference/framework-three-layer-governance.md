@@ -22,9 +22,17 @@ complete.
 | Detection | During tool calls and session events | Hooks firing in real-time | Issues as they happen, blocking or warning |
 | Audit | On demand | `/audit` skill, `/gap` skill | What slipped through both layers |
 
-Skills bridge prevention and detection: they show the right way
-(prevention) so hooks don't need to block the wrong way (detection).
-Hook stderr messages reference skills to close the remediation loop.
+**Rule-skill governance**: Rules govern and enforce process; skills
+implement it. Rules are always in context and contain trigger directives
+stating WHEN to invoke their corresponding skill. The skill provides
+the governed process (loaded on demand). This is the primary enforcement
+mechanism in the prevention layer. Hook stderr messages reference skills
+to close the detection-to-prevention remediation loop.
+
+A rule without a trigger directive for its skill is a governance gap.
+A skill without a corresponding rule trigger is ungoverned process —
+it exists but nothing enforces its use. See
+`@reference/framework-governed-data-access.md` for the full pattern.
 
 ## Layer Assignment
 
@@ -109,6 +117,47 @@ get a reference file.
 ### Current registries
 
 The registry list is maintained in `@.claude/rules/frameworks.md`.
+
+## Three-Layer Completeness
+
+Every governance mechanism in the harness should have all three layers.
+A mechanism with only prevention is a suggestion. A mechanism with
+prevention and detection is enforced. A mechanism with all three is
+governed.
+
+### Rule-skill governance (canonical example)
+
+| Layer | Mechanism | What it does |
+|-------|-----------|-------------|
+| Prevention | Trigger directive in rule | States WHEN to invoke the skill. Always in context. |
+| Detection | PreToolUse hook on skill's data files | Fires when agent reads governed data directly, bypassing the skill process. |
+| Audit | `/audit` check | Verifies all rules with skills have trigger directives, and all skills with data files have detection hooks. |
+
+A skill without a trigger directive in its governing rule is ungoverned
+process — it exists but nothing enforces its use. A rule without a
+detection hook has a single point of failure — if the agent ignores the
+directive, nothing catches it.
+
+### Access control (strongest enforcement)
+
+Where possible, enforce process by controlling access rather than
+advising it. Skills are APIs; governed JSON files are private data.
+Three enforcement levels: training (rule says "use skill"),
+monitoring (hook fires on access), access control (context removal
+prevents access entirely). Agents without the governing context
+receive restricted access via context injection — governed data
+files are excluded, and a directive explains the observe-and-report
+role.
+
+### Framework completeness audit
+
+When adopting or reviewing a framework, verify three-layer coverage:
+
+| Question | If no |
+|----------|-------|
+| Does the rule contain trigger directives for its skills? | Prevention gap |
+| Is there a hook that detects when governed process is bypassed? | Detection gap |
+| Does `/audit` verify this framework's completeness? | Audit gap |
 
 ## Implementing Artifacts
 

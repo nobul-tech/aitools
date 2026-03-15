@@ -129,6 +129,20 @@
         "shared/skills/intent-audit/SKILL.md",
         ".claude/rules/sources-of-truth.md (intent protection)"
       ]
+    },
+    {
+      "name": "Governed data access",
+      "governs": "Access control for governed JSON registries — skill-gated process enforcement",
+      "discipline": "Information security, quality management, software engineering",
+      "concepts": ["Capability-based security (Dennis & Van Horn)", "Document control (ISO 9001)", "Information hiding (Parnas)", "Principle of least privilege (Saltzer & Schroeder)", "File classification", "Skill-as-capability", "Controlled distribution"],
+      "referenceFile": "reference/framework-governed-data-access.md",
+      "artifacts": [
+        ".claude/rules/glossary.md (trigger directive)",
+        ".claude/rules/frameworks.md (trigger directive)",
+        ".claude/rules/gap-governance.md (trigger directive)",
+        ".claude/skills/frameworks/SKILL.md",
+        "reference/framework-governed-data-access.md"
+      ]
     }
   ],
   "pending": [

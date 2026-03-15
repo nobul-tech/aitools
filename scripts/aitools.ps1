@@ -964,6 +964,12 @@ fs.writeFileSync(process.argv[7], JSON.stringify(profile, null, 2) + '\n');
                     "* text=auto eol=lf`n*.jsonl text eol=lf`n",
                     [System.Text.UTF8Encoding]::new($false))
 
+                # Create .gitignore
+                [System.IO.File]::WriteAllText(
+                    (Join-Path $userRepoDir ".gitignore"),
+                    ".scratch/`n*.bak.*`n.DS_Store`n",
+                    [System.Text.UTF8Encoding]::new($false))
+
                 # Create README
                 [System.IO.File]::WriteAllText(
                     (Join-Path $userRepoDir "README.md"),
@@ -1320,9 +1326,10 @@ try {
 # Pull user repo (quiet, non-blocking -- stale local data is better than failing)
 $userRepoPath = Read-ConfigKey -File $configFile -Key "userRepoPath"
 if ($userRepoPath -and (Test-Path (Join-Path $userRepoPath ".git"))) {
-    $urPull = git -C $userRepoPath pull --ff-only --quiet 2>&1
+    $urPull = git -C $userRepoPath pull --ff-only --quiet 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) {
         LogWarn "user repo pull failed -- using local copy."
+        LogDetail "user-repo-pull: $($urPull.Trim())"
     }
 }
 

@@ -270,16 +270,8 @@ if ($DryRun) {
     $claudeResult = Deploy-ManagedFile -Content $content -DestPath $claudeMd -ToolName "claude.md" -ItemName "CLAUDE.md" -AdoptLabel $adoptLabel
 
     switch ($claudeResult) {
-        "adopted" {
-            $adoptDest = Join-Path $userRepoPath "claude\CLAUDE.md"
-            if (Adopt-ClaudeMd -DeployedPath $claudeMd -DestPath $adoptDest) {
-                Write-Summary "OK" "claude.md" "adopted to profile"
-            } else {
-                Write-Summary "ERROR" "claude.md" "adopt failed"
-            }
-        }
-        "merge-adopted" {
-            # Validate (same as created/updated)
+        "accept & adopt" {
+            # Validate
             if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
                 LogError "Validation failed: $claudeMd is empty or missing"
             } else {
@@ -295,12 +287,12 @@ if ($DryRun) {
             $adoptDest = Join-Path $userRepoPath "claude\CLAUDE.md"
             if (Adopt-ClaudeMd -DeployedPath $claudeMd -DestPath $adoptDest) {
                 if ($errors -eq 0) {
-                    Write-Summary "OK" "claude.md" "merge-adopted to profile"
+                    Write-Summary "OK" "claude.md" "accepted to profile"
                 } else {
                     Write-Summary "ERROR" "claude.md" "validation failed"
                 }
             } else {
-                Write-Summary "ERROR" "claude.md" "adopt failed after merge"
+                Write-Summary "ERROR" "claude.md" "adopt failed"
             }
         }
         "skipped" {
@@ -328,9 +320,9 @@ if ($DryRun) {
                 Write-Summary "ERROR" "claude.md" "validation failed"
             }
         }
-        "unchanged" {
-            Log "CLAUDE.md unchanged (no differences)"
-            Write-Summary "OK" "claude.md" "unchanged"
+        "verified" {
+            Log "CLAUDE.md verified (no differences)"
+            Write-Summary "OK" "claude.md" "verified"
         }
     }
 }
@@ -412,7 +404,7 @@ if ($rulesSrc) {
             }
             $ruleResult = Deploy-ManagedFile -Content $ruleContent -DestPath $destFile -ToolName "claude rules" -ItemName $rf.Name -AdoptLabel $ruleAdoptLabel
 
-            if ($ruleResult -eq "adopted" -or $ruleResult -eq "merge-adopted") {
+            if ($ruleResult -eq "accept & adopt") {
                 $adoptRuleDest = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name
                 $adoptRuleDir = Split-Path -Parent $adoptRuleDest
                 if (-not (Test-Path $adoptRuleDir)) {
@@ -421,13 +413,13 @@ if ($rulesSrc) {
                 Copy-Item -Path $destFile -Destination $adoptRuleDest -Force -ErrorAction Stop
                 LogOk "Adopted rule to profile: $($rf.Name)"
             }
-            if ($ruleResult -eq "skipped" -or $ruleResult -eq "unchanged" -or
+            if ($ruleResult -eq "skipped" -or $ruleResult -eq "verified" -or
                 $ruleResult -eq "created" -or $ruleResult -eq "updated") {
                 # No action needed -- tracker records the outcome
             }
             Record-DeployOutcome -Outcome $ruleResult -ToolName "claude rules" -ItemName $rf.Name
             # Write-back: sync merged content to dotprofile repo
-            if ($ruleResult -eq "merge-adopted" -and $userRepoPath) {
+            if ($ruleResult -eq "accept & adopt" -and $script:MergedContent -and $userRepoPath) {
                 $wbDest = Join-Path $userRepoPath "claude\rules\$($rf.Name)"
                 $wbDir = Split-Path -Parent $wbDest
                 if (-not (Test-Path $wbDir)) { New-Item -ItemType Directory -Path $wbDir -Force | Out-Null }

@@ -341,7 +341,7 @@ function Deploy-Skill {
 
     $skillResult = Deploy-ManagedFile -Content $srcContent -DestPath $dest -ToolName $ToolName -ItemName $SkillName -AdoptLabel "shared/"
 
-    if ($skillResult -eq "adopted" -or $skillResult -eq "merge-adopted") {
+    if ($skillResult -eq "accept & adopt") {
         # Copy deployed version back to repo source
         Copy-Item -Path $dest -Destination $src -Force -ErrorAction Stop
         LogOk "Adopted skill to shared/: $SkillName"
@@ -358,7 +358,7 @@ function Deploy-Skill {
     if ($skillResult -eq "created" -or $skillResult -eq "updated") {
         $script:skillChanges++
     }
-    if ($skillResult -eq "skipped" -or $skillResult -eq "unchanged") {
+    if ($skillResult -eq "skipped" -or $skillResult -eq "verified") {
         # No action needed -- tracker records the outcome
     }
     Record-DeployOutcome -Outcome $skillResult -ToolName $ToolName -ItemName $SkillName

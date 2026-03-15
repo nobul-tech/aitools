@@ -7,6 +7,7 @@
 # Hooks deployed:
 #   SessionEnd: session-archive.sh (archives transcripts to user repo)
 #   PreToolUse[Bash]: standing-order-guard.sh (enforces standing orders on Bash commands)
+#   PreToolUse[Read|Grep]: glossary-skill-guard.sh (reminds agent to use /glossary skill)
 #
 # Reads claude preferences from profile.json (via config.json -> userRepoPath).
 # See reference/user-repo.md and shared/hooks/ for details.
@@ -42,47 +43,56 @@ $repoDir = Split-Path -Parent $scriptDir
 
 $hookScript = Join-Path $repoDir "shared\hooks\session-archive.sh"
 $guardScript = Join-Path $repoDir "shared\hooks\standing-order-guard.sh"
-foreach ($src in @($hookScript, $guardScript)) {
+$glossaryScript = Join-Path $repoDir "shared\hooks\glossary-skill-guard.sh"
+foreach ($src in @($hookScript, $guardScript, $glossaryScript)) {
     if (-not (Test-Path $src)) {
         LogError "Hook script not found: $src"
         exit 1
     }
 }
 
-# --- Deploy hook script to ~/.claude/hooks/ ---
+# --- Deploy hook scripts to ~/.claude/hooks/ ---
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
 $hooksDir = Join-Path $claudeDir "hooks"
 
 $hookDest = Join-Path $hooksDir "session-archive.sh"
 $guardDest = Join-Path $hooksDir "standing-order-guard.sh"
+$glossaryDest = Join-Path $hooksDir "glossary-skill-guard.sh"
 
 $hooksChanged = $false
 
 if ($DryRun) {
     Log "[DRY RUN] Would deploy hook: $hookScript -> $hookDest"
     Log "[DRY RUN] Would deploy hook: $guardScript -> $guardDest"
+    Log "[DRY RUN] Would deploy hook: $glossaryScript -> $glossaryDest"
 } else {
     if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }
-    $hooksUpdated = 0
-    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest))) {
+
+    Initialize-DeployTracker
+
+    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest))) {
         $src = $pair[0]; $dst = $pair[1]
         $hookName = Split-Path $dst -Leaf
         $srcContent = Get-Content $src -Raw -ErrorAction Stop
-        $dstContent = if (Test-Path $dst) { Get-Content $dst -Raw -ErrorAction Stop } else { $null }
-        if ($srcContent -eq $dstContent) {
-            LogOk "Hook unchanged: $hookName"
-        } else {
-            # Log change notice to deploy.log when updating existing hook
-            if ($dstContent) {
-                Add-Content -Path $script:logFile -Value "Hook $hookName changed (updated by setup-user-hooks)"
+
+        $hookResult = Deploy-ManagedFile -Content $srcContent -DestPath $dst -ToolName "claude hooks" -ItemName $hookName -AdoptLabel "source"
+
+        switch ($hookResult) {
+            "accept & adopt" {
+                Copy-Item -Path $dst -Destination $src -Force
+                LogOk "Accepted & adopted hook to source: $hookName"
             }
-            Copy-Item -Path $src -Destination $dst -Force
-            LogOk "Deployed hook: $dst"
-            $hooksChanged = $true
-            $hooksUpdated++
-            Write-Summary "DETAIL" "claude hooks" "hook updated: $hookName"
+            { $_ -in @("created", "updated") } {
+                $hooksChanged = $true
+            }
+            { $_ -in @("skipped", "verified") } {
+                # No action needed
+            }
         }
+        Record-DeployOutcome -Outcome $hookResult -ToolName "claude hooks" -ItemName $hookName
     }
+
+    Write-DeployTrackerSummary -ToolName "claude hooks"
 }
 # --- END hook deployment (replaced by build-deploy) ---
 
@@ -217,6 +227,11 @@ $guardDestUnix = $guardDest -replace '\\', '/'
 $guardCmd = "bash `"$guardDestUnix`""
 MergeHookEntry "PreToolUse" "standing-order-guard.sh" "Bash" $guardCmd
 
+# PreToolUse: glossary skill guard
+$glossaryDestUnix = (Join-Path $hooksDir "glossary-skill-guard.sh") -replace '\\', '/'
+$glossaryCmd = "bash `"$glossaryDestUnix`""
+MergeHookEntry "PreToolUse" "glossary-skill-guard.sh" "Read|Grep" $glossaryCmd
+
 # --- Track old values for change reporting ---
 $oldAutoMemory = $settings["autoMemoryEnabled"]
 $oldAlwaysThinking = $settings["alwaysThinkingEnabled"]
@@ -302,8 +317,10 @@ if ($DryRun) {
             # Validate hook deduplication
             $seCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'session-archive\.sh' }).Count
             $ptCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'standing-order-guard\.sh' }).Count
+            $glCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'glossary-skill-guard\.sh' }).Count
             if ($seCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd hook, got $seCount" }
-            if ($ptCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse hook, got $ptCount" }
+            if ($ptCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse standing-order-guard hook, got $ptCount" }
+            if ($glCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse glossary-skill-guard hook, got $glCount" }
 
             LogOk "Settings deployed to $settingsFile"
             Log "  SessionEnd hook: $hookCmd"
@@ -314,13 +331,6 @@ if ($DryRun) {
             Log "  effortLevel: $effortDisplay"
             if ($prefChanges.Count -gt 0) {
                 Emit-MergeDetails -Changes $prefChanges -ToolName "claude hooks"
-            }
-        }
-        if ($errors -eq 0) {
-            if ($hooksChanged) {
-                Write-Summary "OK" "claude hooks" "deployed"
-            } else {
-                Write-Summary "OK" "claude hooks" "unchanged"
             }
         }
     }

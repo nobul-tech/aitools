@@ -26,6 +26,7 @@ skill
 
 ### Terms
 
+accept & adopt
 adoption
 aitools
 aitools repo
@@ -33,8 +34,11 @@ ambiguity
 artifact
 audience
 audit
+auto-merge menu
 configuration
+controlled distribution
 context rot
+created
 cross-reference
 cursor rule
 deployment scope
@@ -48,8 +52,10 @@ discipline
 dotprofile repo
 drift
 expected
+file classification
 framework
 gap
+governed file
 governed vocabulary
 harness
 impact
@@ -59,9 +65,11 @@ intent verification
 key decision
 KD
 managed tool
+merge-conflict menu
 observation
 orchestration
 platform
+preserved
 prevention
 process deviation
 project coaching item
@@ -71,16 +79,36 @@ PSO
 purpose
 registry
 scope creep
+skill-as-capability
+skipped
 state audit
 suggested resolution
 surfacing duty
 three-layer governance
 trigger
+updated
 user coaching item
 UCI
 user standing order
 USO
+verified
 
-Definitions: `@reference/glossary.json`
-Usage: `/glossary` skill
+### When to invoke /glossary
+
+Invoke the `/glossary` skill (not the raw JSON file) when ANY of
+these arise in conversation:
+
+- Checking whether a term is governed
+- Discussing what to name a concept
+- Resolving a terminology ambiguity (two words for same thing, or
+  one word with two meanings)
+- Adding a new governed term
+- User mentions "glossary", "governed term", "vocabulary", or asks
+  "what should we call X?"
+
+The skill provides the governed PROCESS (check rule, check JSON,
+determine type, draft entries, present for review). Reading the file
+directly bypasses that process.
+
+Definitions: `/glossary` skill
 Composition: `@reference/framework-governed-vocabulary.md`

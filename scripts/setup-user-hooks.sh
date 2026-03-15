@@ -8,6 +8,7 @@
 # Hooks deployed:
 #   SessionEnd: session-archive.sh (archives transcripts to user repo)
 #   PreToolUse[Bash]: standing-order-guard.sh (enforces standing orders on Bash commands)
+#   PreToolUse[Read|Grep]: glossary-skill-guard.sh (reminds agent to use /glossary skill)
 #
 # Reads claude preferences from profile.json (via config.json -> userRepoPath).
 # See reference/user-repo.md and shared/hooks/ for details.
@@ -52,7 +53,8 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 HOOK_SCRIPT="$REPO_DIR/shared/hooks/session-archive.sh"
 GUARD_SCRIPT="$REPO_DIR/shared/hooks/standing-order-guard.sh"
-for src in "$HOOK_SCRIPT" "$GUARD_SCRIPT"; do
+GLOSSARY_SCRIPT="$REPO_DIR/shared/hooks/glossary-skill-guard.sh"
+for src in "$HOOK_SCRIPT" "$GUARD_SCRIPT" "$GLOSSARY_SCRIPT"; do
     if [ ! -f "$src" ]; then
         log_error "Hook script not found: $src"
         exit 1
@@ -62,38 +64,42 @@ done
 # --- Deploy hook scripts to ~/.claude/hooks/ ---
 HOOK_DEST="$HOME/.claude/hooks/session-archive.sh"
 GUARD_DEST="$HOME/.claude/hooks/standing-order-guard.sh"
+GLOSSARY_DEST="$HOME/.claude/hooks/glossary-skill-guard.sh"
 
 HOOKS_CHANGED=false
 
 if [ "$DRY_RUN" = "true" ]; then
     log "[DRY RUN] Would deploy hook: $(display_path "$HOOK_SCRIPT") -> $(display_path "$HOOK_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$GUARD_SCRIPT") -> $(display_path "$GUARD_DEST")"
+    log "[DRY RUN] Would deploy hook: $(display_path "$GLOSSARY_SCRIPT") -> $(display_path "$GLOSSARY_DEST")"
 else
     mkdir -p "$HOME/.claude/hooks"
-    HOOKS_UPDATED=0
-    for hook_pair in "$HOOK_SCRIPT|$HOOK_DEST" "$GUARD_SCRIPT|$GUARD_DEST"; do
+
+    deploy_tracker_init
+
+    for hook_pair in "$HOOK_SCRIPT|$HOOK_DEST" "$GUARD_SCRIPT|$GUARD_DEST" "$GLOSSARY_SCRIPT|$GLOSSARY_DEST"; do
         hook_src="${hook_pair%%|*}"
         hook_dst="${hook_pair##*|}"
         hook_name=$(basename "$hook_dst")
-        # diff -q exits 0 when files are identical; suppress output (we only care about result)
-        if [ -f "$hook_dst" ] && diff -q "$hook_src" "$hook_dst" >/dev/null 2>&1; then
-            log_ok "Hook unchanged: $hook_name"
-        else
-            # Log unified diff when updating existing hook
-            if [ -f "$hook_dst" ]; then
-                diff_exit=0
-                diff -u "$hook_dst" "$hook_src" >> "$LOG_FILE" 2>&1 || diff_exit=$?
-                # diff exits 1 for differences (expected), 2+ for errors
-                [ "$diff_exit" -le 1 ] || log_warn "diff failed for $hook_name (exit $diff_exit)"
-            fi
-            cp "$hook_src" "$hook_dst"
-            chmod +x "$hook_dst"
-            log_ok "Deployed hook: $(display_path "$hook_dst")"
-            HOOKS_CHANGED=true
-            HOOKS_UPDATED=$((HOOKS_UPDATED + 1))
-            write_summary DETAIL "claude hooks" "hook updated: $hook_name"
-        fi
+
+        deploy_managed_file "$(cat "$hook_src")" "$hook_dst" "claude hooks" "$hook_name" "source"
+
+        case "$MANAGED_FILE_RESULT" in
+            "accept & adopt")
+                cp "$hook_dst" "$hook_src"
+                log_ok "Accepted & adopted hook to source: $hook_name"
+                ;;
+            created|updated)
+                chmod +x "$hook_dst"
+                HOOKS_CHANGED=true
+                ;;
+            skipped|verified)
+                ;;
+        esac
+        deploy_tracker_record "$MANAGED_FILE_RESULT" "claude hooks" "$hook_name"
     done
+
+    deploy_tracker_summary "claude hooks"
 fi
 # --- END hook deployment (replaced by build-deploy) ---
 
@@ -104,6 +110,7 @@ mkdir -p "$HOME/.claude"
 # The hook commands — use deployed copies in ~/.claude/hooks/
 HOOK_CMD="bash \"$HOOK_DEST\""
 GUARD_CMD="bash \"$GUARD_DEST\""
+GLOSSARY_CMD="bash \"$HOME/.claude/hooks/glossary-skill-guard.sh\""
 
 MERGE_RESULT=$(node -e "
 $SORT_KEYS_JS
@@ -112,8 +119,9 @@ const path = require('path');
 const settingsFile = process.argv[1];
 const hookCmd = process.argv[2];
 const guardCmd = process.argv[3];
-const dryRun = process.argv[4] === 'true';
-const force = process.argv[5] === 'true';
+const glossaryCmd = process.argv[4];
+const dryRun = process.argv[5] === 'true';
+const force = process.argv[6] === 'true';
 
 // --- BEGIN claude preferences (replaced by build-deploy) ---
 let autoMemory = true;
@@ -191,6 +199,7 @@ function mergeHookEntry(eventName, hookId, matcher, cmd) {
 
 mergeHookEntry('SessionEnd', 'session-archive.sh', '', hookCmd);
 mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
+mergeHookEntry('PreToolUse', 'glossary-skill-guard.sh', 'Read|Grep', glossaryCmd);
 
 // --- Track old values for change reporting ---
 const oldAutoMemory = settings.autoMemoryEnabled;
@@ -253,13 +262,15 @@ if (dryRun) {
         const seCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('session-archive.sh'))).length;
         const ptCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('standing-order-guard.sh'))).length;
         if (seCount !== 1) { console.error('Validation failed: expected 1 SessionEnd hook, got ' + seCount); process.exit(1); }
-        if (ptCount !== 1) { console.error('Validation failed: expected 1 PreToolUse hook, got ' + ptCount); process.exit(1); }
+        if (ptCount !== 1) { console.error('Validation failed: expected 1 PreToolUse standing-order-guard hook, got ' + ptCount); process.exit(1); }
+        const glCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('glossary-skill-guard.sh'))).length;
+        if (glCount !== 1) { console.error('Validation failed: expected 1 PreToolUse glossary-skill-guard hook, got ' + glCount); process.exit(1); }
 
         console.log('ok');
         prefChanges.forEach(c => console.log(c));
     }
 }
-" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$DRY_RUN" "$FORCE")
+" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE")
 
 # Parse merge result: first line is status, CHANGED: lines are key changes
 MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)
@@ -295,13 +306,6 @@ case "$MERGE_STATUS" in
         ;;
 esac
 
-if [ "$ERRORS" -eq 0 ]; then
-    if [ "$HOOKS_CHANGED" = "true" ]; then
-        write_summary OK "claude hooks" "deployed"
-    else
-        write_summary OK "claude hooks" "unchanged"
-    fi
-fi
 # --- END hooks body (extracted by build-deploy) ---
 
 # --- BEGIN exit (extracted by build-deploy) ---
