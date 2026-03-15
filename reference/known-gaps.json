@@ -7,7 +7,7 @@
       "scope": "Gap and ambiguity entries only. NOT the filing process (gap-governance.md rule). NOT the framework documentation (framework-gap-governance.md). NOT gap reference files (reference/gap-*.md)",
       "audience": "/gap skill, /gaps skill, /audit skill, agents checking whether a deficiency has already been filed"
     },
-    "lastUpdated": "2026-03-14"
+    "lastUpdated": "2026-03-15"
   },
   "gaps": [
     {
@@ -434,6 +434,25 @@
       "suggestedResolution": "Add 'When to invoke' trigger directive to each rule as its corresponding skill is built. Trigger directive and skill are created together — never one without the other. glossary.md and frameworks.md fixed in this session. Remaining: script-standards.md, tool-lifecycle.md, sources-of-truth.md, interactive-menus.md, agentic-standards.md, cross-platform.md — each addressed when their planned skills ship.",
       "created": "2026-03-14",
       "updated": "2026-03-14"
+    },
+    {
+      "id": 25,
+      "title": "Deploy hooks template embeds 2 of 6 hook scripts; settings.json references 4 missing paths",
+      "status": "open",
+      "severity": "high",
+      "type": "gap",
+      "affected": ["scripts/build-deploy.sh", "deploy/setup-user-hooks.sh", "deploy/setup-user-hooks.ps1"],
+      "linked": null,
+      "referenceFile": null,
+      "observation": "deploy/setup-user-hooks.sh embeds only session-archive.sh and standing-order-guard.sh via heredoc. The settings.json merge block registers all 6 hooks (session-archive, harvest-session, scratch-init, standing-order-guard, glossary-skill-guard, sh-file-fixup) pointing to ~/.claude/hooks/ paths. On MDM-deployed machines, 4 hook scripts are never written to disk, so settings.json references non-existent files. build-deploy.sh lines 1457-1796 (bash deploy version) and corresponding PS1 section.",
+      "expected": "Pre-commit step 13 (deploy template logic sync) requires deploy/ templates to reflect scripts/ changes. The deploy version should embed all hook scripts that the settings.json merge registers, or the settings.json merge should only register hooks that are actually embedded.",
+      "impact": "MDM-deployed machines (no repo checkout) have broken hook configuration. Claude Code silently fails when invoking hooks whose scripts don't exist on disk. Affected hooks: glossary-skill-guard (PreToolUse), scratch-init (SessionStart), harvest-session (SessionEnd), sh-file-fixup (PostToolUse). Only session-archive and standing-order-guard work on MDM machines.",
+      "discoveryContext": "Found while adding sh-file-fixup.sh hook to build-deploy.sh during gap #15 extraction work. Noticed build-deploy only reads HOOK_SESSION_ARCHIVE and HOOK_STANDING_ORDER_GUARD but mergeHookEntry registers 6 hooks. Audited: scripts/build-deploy.sh lines 59-70 (hook file reads), lines 1113-1161 (bash deploy template), lines 1171-1241 (PS1 deploy template), scripts/setup-user-hooks.sh (6 hooks in deploy loop). Session: 2026-03-15.",
+      "discipline": null,
+      "frameworks": null,
+      "suggestedResolution": "Extend the deploy hooks template in build-deploy.sh to dynamically discover and embed all hook scripts from shared/hooks/. Pattern: same approach used for skills in the new setup-user-skills deploy template (iterate shared/hooks/*.sh, embed via heredoc/here-string, generate deploy calls). The settings.json merge already handles all 6 hooks — only the file embedding is missing. Alternative: strip unembedded hooks from the settings.json merge in the deploy version (simpler but reduces MDM functionality).",
+      "created": "2026-03-15",
+      "updated": "2026-03-15"
     }
   ],
   "closed": [
