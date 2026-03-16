@@ -1,7 +1,7 @@
 {
   "meta": {
     "schemaVersion": "1.0",
-    "lastAudit": "2026-03-15"
+    "lastAudit": "2026-03-16"
   },
   "artifacts": {
     "2026-03-15_gh-issue-comment.md": {
@@ -53,6 +53,28 @@
       "status": "harvested",
       "promotedTo": null,
       "pruneAfter": "2026-04-14"
+    },
+    "2026-03-15_aar-tool-ops-plan.md": {
+      "harvested": "2026-03-15",
+      "session": "aitools/2026-03-15_2Hb40B0VEu",
+      "description": "After Action Review of the tool-ops planning session — 731-line analysis covering session arc, 10 key decisions, 7 plan revisions, military doctrine parallels, and lessons learned",
+      "type": "research",
+      "language": "markdown",
+      "status": "candidate",
+      "keep": true,
+      "promotedTo": null,
+      "pruneAfter": null
+    },
+    "2026-03-15_test-tool-ops.py": {
+      "harvested": "2026-03-15",
+      "session": "aitools/2026-03-15_2Hb40B0VEu",
+      "description": "Tool-ops test suite — 42 tests across 5 suites: schema integrity, drift detection, contract tests, governed access enforcement, cross-reference validation",
+      "type": "code",
+      "language": "python",
+      "status": "candidate",
+      "keep": true,
+      "promotedTo": null,
+      "pruneAfter": null
     }
   }
 }
