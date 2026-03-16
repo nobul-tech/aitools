@@ -12,6 +12,16 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.61.1 -- Tool-ops governed data bypass fix (2026-03-15)
+
+### Bug fixes
+
+| # | Change |
+|---|--------|
+| 1 | **Governed data bypass in tool-ops-claude-code.md intent** — intent statement referenced `tool-ops.json` and `incidents.json` directly instead of through governing skills. Found by tool-ops test suite (Suite 4: governed access enforcement). Fixed to reference `/tool-ops` and `/incident` skills |
+
+---
+
 ## v0.61 -- Tool-ops framework, incidents rename, CC ops consolidation (2026-03-15)
 
 ### Breaking changes

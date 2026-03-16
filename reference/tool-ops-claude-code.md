@@ -5,7 +5,7 @@ Claude Code as a managed tool — version dependencies, session
 behavior, platform workarounds, and setup notes that affect harness
 scripts and hooks. **Scope**: Operational knowledge only. NOT
 install/upgrade (tool-registry.md). NOT governance modes or deny
-rules (tool-ops.json). NOT incidents (incidents.json). NOT
+rules (`/tool-ops` skill). NOT incidents (`/incident` skill). NOT
 configuration deployment (setup scripts). **Audience**: Agents
 modifying CC-related scripts or hooks, agents troubleshooting CC
 behavior, check scripts validating version deps.
