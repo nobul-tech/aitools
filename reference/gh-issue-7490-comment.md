@@ -48,7 +48,7 @@ esac
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `reference/claude-code-windows-shell.md` | 88 | Entire file exists for this limitation |
+| `reference/tool-ops-claude-code.md` (Windows Shell Limitations section) | ~80 | Entire section exists for this limitation |
 | `.claude/rules/cross-platform.md` | ~70 of 100 | OS guards, PS 5.1 compat, ASCII-only rule, encoding gotchas, quoting patterns |
 | Standing order in shared config | 1 of 6 | "Platform-native dispatch" -- non-negotiable rule for AI sessions |
 | Checklist blockquotes (x6 files) | 18 | "On Windows: powershell.exe..." in every pre-commit/pre-push/post-push rule |

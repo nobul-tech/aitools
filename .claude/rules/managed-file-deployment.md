@@ -77,7 +77,7 @@ Windows). The OS guard + platform dispatch pattern prevents this — see
 Adding a row (new file type) or column (new attribute) requires updating:
 this rule, `@reference/managed-file-deployment.md`,
 `@.cursor/rules/managed-file-deployment.mdc`, and
-`@reference/known-gaps.md` if there are implementation gaps. See
+the `/incident` skill if there are implementation gaps. See
 `@.claude/rules/tool-lifecycle.md` "Deployment pattern updates".
 
 ### Cross-references
@@ -87,4 +87,4 @@ this rule, `@reference/managed-file-deployment.md`,
 - JSON write safety: `@.claude/rules/config-file-safety.md`
 - AI merge: `@.claude/rules/agentic-standards.md`
 - Content sources: `@reference/user-repo.md`
-- Known gaps: `@reference/known-gaps.md`
+- Known incidents: `/incident` skill

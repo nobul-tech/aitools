@@ -12,14 +12,14 @@
       "toolRegistry":          "reference/tool-registry.md",
       "toolEvaluation":        "reference/tool-evaluation-criteria.md",
       "sourcesOfTruth":        ".claude/rules/sources-of-truth.md",
-      "claudeCodeMaintenance": "reference/claude-code-maintenance.md",
+      "claudeCodeMaintenance": "reference/tool-ops-claude-code.md",
       "userRepo":              "reference/user-repo.md",
       "verificationChecklist": "reference/post-push-checklist.md"
     }
   },
   "tools": {
     "claude-code": {
-      "maintenanceFile": "claude-code-maintenance.md"
+      "maintenanceFile": "tool-ops-claude-code.md"
     },
     "vercel-cli": {
       "macos":   { "lastVerifiedVersion": "50.28.0",           "lastVerified": "2026-03-06" },

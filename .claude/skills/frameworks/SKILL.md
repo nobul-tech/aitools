@@ -100,8 +100,8 @@ array with:
   "governs": "What it would cover",
   "discipline": "Source discipline",
   "concepts": ["Key concepts"],
-  "gap": 0,
-  "referenceFile": "reference/gap-NNN-short-name.md or null"
+  "incident": 0,
+  "referenceFile": "reference/incident-NNN-short-name.md or null"
 }
 ```
 
@@ -143,4 +143,4 @@ registry entry. If artifacts diverge, update both together.
 - Adoption lifecycle: `@reference/framework-adoption.md`
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
 - Governance audit: `/audit` skill (validates framework health)
-- Gap filing: `/gap` skill (when coverage gap found)
+- Incident filing: `/incident` skill (when coverage gap found)

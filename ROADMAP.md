@@ -12,7 +12,7 @@ Detailed plans live in `plans/`. See `RELEASE_NOTES.md` for completed work.
 
 | Item | Plan | Priority | Summary |
 |------|------|----------|---------|
-| Governance & compliance framework | plans/governance-and-compliance-framework.md | High | Three-layer governance (prevention/detection/audit), 40 skills (32 user + 8 project), gap governance (known-gaps.json), SubagentStart pre-built cache, PreToolUse validation hooks, SQLite telemetry + Datadog KPIs. Step 3.5 in progress: frameworks skill, governed data access pattern, glossary hook. |
+| Governance & compliance framework | plans/governance-and-compliance-framework.md | High | Three-layer governance (prevention/detection/audit), 40 skills (32 user + 8 project), incident governance (incidents.json), SubagentStart pre-built cache, PreToolUse validation hooks, SQLite telemetry + Datadog KPIs. Step 3.5 in progress: frameworks skill, governed data access pattern, glossary hook. |
 | Subagent context hook & CLAUDE.md trim | -- | High | SubagentStart hook injects user + project CLAUDE.md into Explore/Plan/general-purpose agents. Trim shared/claude-shared.md (~146 → ~106 lines). Hook script drafted, trimmed template proposed — ready to implement. |
 | Chrome DevTools research subagent | -- | Medium | Custom subagent type for web doc reading tasks. Uses `chrome-devtools` skill. Subagent context hook (above) handles CLAUDE.md injection; this item adds the custom agent type + skill integration. |
 | Tool lifecycle gaps | -- | Medium | Security/credential docs, cleanup for all tools, troubleshooting guides, ~~version management~~, CVE response, deprecation path |

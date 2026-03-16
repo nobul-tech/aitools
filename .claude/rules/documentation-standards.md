@@ -71,8 +71,8 @@ Create a `plans/*.md` file when work:
 - **No duplication** — one authoritative location per fact
 - **Tool configs** documented per-tool via `/tool-registry` skill
 - **Specs vs state** — rules and references are specs;
-  `known-gaps.json` (via `/gap` skill) tracks out-of-spec code.
-  See `@.claude/rules/gap-governance.md` for lifecycle and classification
+  `incidents.json` (via `/incident` skill) tracks out-of-spec code.
+  See `@.claude/rules/incident-governance.md` for lifecycle and classification
 
 ### Skill placement
 

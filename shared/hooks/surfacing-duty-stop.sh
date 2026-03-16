@@ -7,8 +7,8 @@
 #
 # Two functions:
 #   1. Periodic reminder: every 30+ minutes, remind about surfacing duty
-#   2. Gap-acknowledgment detection: if agent said "gap" or "pre-existing"
-#      without invoking /gap or writing TODO(gap):, prompt them to file
+#   2. Incident-acknowledgment detection: if agent said "incident" or "pre-existing"
+#      without invoking /incident or writing TODO(incident):, prompt them to file
 #
 # Hook contract:
 #   - Stop hook, command type (stderr → shown to agent as feedback)
@@ -69,55 +69,55 @@ if [ -n "$session_id" ]; then
 
     if [ "$inject_reminder" = "true" ]; then
         echo "$now" > "$marker"
-        reminders="${reminders}Surfacing duty check: Have you found any gaps or ambiguities this session? File via /gap or leave a TODO(gap): comment. "
+        reminders="${reminders}Surfacing duty check: Have you found any incidents or ambiguities this session? File via /incident or leave a TODO(incident): comment. "
     fi
 fi
 
-# --- 2. Gap-acknowledgment detection ---
-# Scan the last assistant message for gap-acknowledgment language
-# without a corresponding /gap invocation or TODO(gap): marker.
+# --- 2. Incident-acknowledgment detection ---
+# Scan the last assistant message for incident-acknowledgment language
+# without a corresponding /incident invocation or TODO(incident): marker.
 #
-# Suppression: if known-gaps.json was modified in the last 30 minutes,
-# a gap was recently filed — suppress to avoid false positives when the
-# agent is still discussing the gap after filing it.
+# Suppression: if incidents.json was modified in the last 30 minutes,
+# an incident was recently filed — suppress to avoid false positives when the
+# agent is still discussing the incident after filing it.
 
-_suppress_gap_check=false
+_suppress_incident_check=false
 
-# Check known-gaps.json modification time (cross-platform stat)
-_gaps_file=""
+# Check incidents.json modification time (cross-platform stat)
+_incidents_file=""
 if [ -n "${AITOOLS_REPO_PATH:-}" ]; then
-    _gaps_file="$AITOOLS_REPO_PATH/reference/known-gaps.json"
-elif [ -f "$HOME/repos/aitools/reference/known-gaps.json" ]; then
-    _gaps_file="$HOME/repos/aitools/reference/known-gaps.json"
+    _incidents_file="$AITOOLS_REPO_PATH/reference/incidents.json"
+elif [ -f "$HOME/repos/aitools/reference/incidents.json" ]; then
+    _incidents_file="$HOME/repos/aitools/reference/incidents.json"
 fi
-if [ -n "$_gaps_file" ] && [ -f "$_gaps_file" ]; then
-    _gaps_mod=$(stat -f %m "$_gaps_file" 2>/dev/null || stat -c %Y "$_gaps_file" 2>/dev/null || echo "0")
+if [ -n "$_incidents_file" ] && [ -f "$_incidents_file" ]; then
+    _incidents_mod=$(stat -f %m "$_incidents_file" 2>/dev/null || stat -c %Y "$_incidents_file" 2>/dev/null || echo "0")
     _now_epoch=$(date +%s)
-    _gaps_age=$(( _now_epoch - _gaps_mod ))
-    if [ "$_gaps_age" -lt 1800 ]; then
-        _suppress_gap_check=true
+    _incidents_age=$(( _now_epoch - _incidents_mod ))
+    if [ "$_incidents_age" -lt 1800 ]; then
+        _suppress_incident_check=true
     fi
 fi
 
-if [ "$_suppress_gap_check" = "false" ]; then
+if [ "$_suppress_incident_check" = "false" ]; then
     # Read only the last ~100 lines of transcript for speed.
     last_chunk=$(tail -100 "$transcript_path" 2>/dev/null || true)
 
     if [ -n "$last_chunk" ]; then
-        # Check for gap-acknowledgment phrases
-        has_gap_language=false
-        if echo "$last_chunk" | grep -qiE "pre-existing gap|known gap|that.s a gap|existing gap|there.s a gap|gap I noticed|gap we found" 2>/dev/null; then
-            has_gap_language=true
+        # Check for incident-acknowledgment phrases
+        has_incident_language=false
+        if echo "$last_chunk" | grep -qiE "pre-existing incident|known incident|that.s an incident|existing incident|there.s an incident|incident I noticed|incident we found|pre-existing gap|known gap|that.s a gap|existing gap|there.s a gap|gap I noticed|gap we found" 2>/dev/null; then
+            has_incident_language=true
         fi
 
-        # Check if /gap was invoked or TODO(gap): was written in same chunk
+        # Check if /incident was invoked or TODO(incident): was written in same chunk
         has_filing=false
-        if echo "$last_chunk" | grep -qE '/gap|TODO\(gap\)|known-gaps\.json' 2>/dev/null; then
+        if echo "$last_chunk" | grep -qE '/incident|TODO\(incident\)|incidents\.json' 2>/dev/null; then
             has_filing=true
         fi
 
-        if [ "$has_gap_language" = "true" ] && [ "$has_filing" = "false" ]; then
-            reminders="${reminders}You acknowledged a gap but did not file it. Per surfacing duty (.claude/rules/gap-governance.md): invoke /gap now, or write TODO(gap): in the current file if mid-task."
+        if [ "$has_incident_language" = "true" ] && [ "$has_filing" = "false" ]; then
+            reminders="${reminders}You acknowledged an incident but did not file it. Per surfacing duty (.claude/rules/incident-governance.md): invoke /incident now, or write TODO(incident): in the current file if mid-task."
         fi
     fi
 fi

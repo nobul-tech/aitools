@@ -121,7 +121,7 @@ A governed registry without all three layers has gaps:
 
 - `@.claude/rules/governed-data-access.md` (operational rule)
 - `@.claude/rules/frameworks.md` (registries table)
-- Trigger directives in governing rules (glossary.md, gap-governance.md,
+- Trigger directives in governing rules (glossary.md, incident-governance.md,
   frameworks.md, tool-evaluation.md)
 - `scripts/check-pre-commit.sh/.ps1` step 16 (capability bypass audit)
 

@@ -383,7 +383,7 @@ before writing to an existing file.
 - **Skip**: Only when target does not yet exist (nothing to back up)
 - **Failure**: Non-fatal (warn and proceed)
 
-See `@reference/known-gaps.md` Gap 5 for the backup proliferation issue
+See `@reference/incidents.json` incident 5 for the backup proliferation issue
 with directory backups.
 
 ## Environment Variable Deployment

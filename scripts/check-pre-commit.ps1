@@ -335,7 +335,7 @@ if ($scanFiles.Count -gt 0) {
     $rawHits = Select-String -Path $scanFiles -Pattern '@?reference/.*\.json' -ErrorAction SilentlyContinue
     if ($rawHits) {
         foreach ($h in $rawHits) {
-            if ($h.Line -match 'glossary\.json|framework-registry\.json|known-gaps\.json|tool-registry\.json' -and $h.Line -notmatch '^\|.*\|.*\|.*\|') {
+            if ($h.Line -match 'glossary\.json|framework-registry\.json|incidents\.json|tool-registry\.json' -and $h.Line -notmatch '^\|.*\|.*\|.*\|') {
                 $capHits += $h
             }
         }

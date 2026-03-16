@@ -1,11 +1,11 @@
-# Gap #20: No Process Discipline Rule
+# Incident #20: No Process Discipline Rule
 
-**Intent**: **Purpose**: Capture the full discovery context for gap #20
-— why process discipline is needed, what discipline it maps to, and
-how we propose to adopt it. **Scope**: The discovery and research that
-produced gap #20. NOT the implementation of the solution (that will be
-tracked by the plan). **Audience**: The agent that picks up this gap
-for resolution.
+**Intent**: **Purpose**: Capture the full discovery context for
+incident #20 — why process discipline is needed, what discipline it
+maps to, and how we propose to adopt it. **Scope**: The discovery and
+research that produced incident #20. NOT the implementation of the
+solution (that will be tracked by the plan). **Audience**: The agent
+that picks up this incident for resolution.
 
 ## Discovery
 
@@ -22,9 +22,9 @@ sequential dependencies without formally amending the plan first.
 - `@CLAUDE.md` design principles — three-layer governance, ambiguity
   is a defect, specs vs state. None address plan adherence or process
   discipline.
-- `@.claude/rules/gap-governance.md` — tracks defects, not process.
-  The decision tree classifies findings but doesn't govern how plans
-  are followed.
+- `@.claude/rules/incident-governance.md` — tracks defects, not
+  process. The decision tree classifies findings but doesn't govern
+  how plans are followed.
 - `@.claude/rules/plan-execution.md` — covers code batch mechanics
   (sub-agent execution pattern). Does not address plan sequencing or
   deviation protocols.
@@ -70,7 +70,7 @@ covering:
 
 Add a design principle to `@CLAUDE.md`.
 
-Alternative: extend `@.claude/rules/gap-governance.md` with a process
-section. But process discipline is broader than gap governance and
-applies across all projects, so a separate user-level rule is
-preferred.
+Alternative: extend `@.claude/rules/incident-governance.md` with a
+process section. But process discipline is broader than incident
+governance and applies across all projects, so a separate user-level
+rule is preferred.

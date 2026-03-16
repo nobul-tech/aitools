@@ -1,13 +1,13 @@
 ---
 name: audit
-description: "Deep governance review of aitools rules, references, skills, and gaps. Use when asked to audit, review governance health, or check for inconsistencies. Reports gaps, broken cross-references, stale entries, and unfiled TODO(gap) markers."
+description: "Deep governance review of aitools rules, references, skills, and incidents. Use when asked to audit, review governance health, or check for inconsistencies. Reports incidents, broken cross-references, stale entries, and unfiled TODO(incident) markers."
 disable-model-invocation: true
 ---
 
 ## Purpose
 
 Comprehensive governance health check for the aitools project. Reads all
-rules, references, CLAUDE.md, known-gaps.json, and the codebase to report
+rules, references, CLAUDE.md, incidents.json, and the codebase to report
 issues that the prevention layer (rules) and detection layer (hooks)
 missed.
 
@@ -20,15 +20,15 @@ This is the audit layer of the three-layer governance model.
 - Every `@path/file` reference → verify the referenced section/heading exists
 - References from rules to reference files → content matches claims
 
-### Known-gaps.json health
+### Incidents.json health
 - IDs sequential (no duplicates, no gaps in sequence)
-- All required fields present per gap-governance.md schema
-- Severity/status/type values are valid enums
-- Gaps open > 90 days without a linked plan → flag as stale
+- All required fields present per incident-governance.md schema
+- Severity/status values are valid enums
+- Incidents open > 90 days without a linked plan → flag as stale
 - Entries in `closed` array have closedIn and closedDate
 
 ### Unfiled findings
-- Scan codebase for `TODO(gap):` markers → report unfiled gaps
+- Scan codebase for `TODO(incident):` markers → report unfiled incidents
 - Check if subagent output in current session contains `AMBIGUITY:` prefixes
   that weren't filed
 
@@ -65,13 +65,13 @@ This is the audit layer of the three-layer governance model.
 - ✓ N references validated
 - ✗ N broken references (list each)
 
-### Known Gaps
+### Incidents
 - N open (N critical, N high, N medium, N low)
 - N stale (open > 90 days without plan)
 - N duplicate IDs (list each)
 
 ### Unfiled Findings
-- N TODO(gap) markers found (list locations)
+- N TODO(incident): markers found (list locations)
 - N AMBIGUITY: items not filed
 
 ### Rule Compliance
@@ -100,15 +100,15 @@ This is the audit layer of the three-layer governance model.
 User invokes `/audit` explicitly. The skill:
 1. Reads all rules files (`.claude/rules/*.md`)
 2. Reads CLAUDE.md and plan file
-3. Reads `reference/known-gaps.json`
-4. Scans for `TODO(gap):` markers via Grep
+3. Reads `reference/incidents.json`
+4. Scans for `TODO(incident):` markers via Grep
 5. Checks skill directories for completeness
 6. Produces the report above
 
 ## What it does NOT do
 
 - Does not write to any file (read-only analysis)
-- Does not file gaps automatically (use `/gap` for that)
+- Does not file incidents automatically (use `/incident` for that)
 - Does not modify rules or references
 - Does not auto-trigger (user must invoke explicitly)
 
@@ -116,7 +116,7 @@ User invokes `/audit` explicitly. The skill:
 
 - Frameworks:
   - Three-layer governance: `@reference/framework-three-layer-governance.md`
-  - Gap governance: `@reference/framework-gap-governance.md`
-- Operational rule: `@.claude/rules/gap-governance.md`
-- Gap data: `@reference/known-gaps.json`
-- Gap filing: `.claude/skills/gap/SKILL.md`
+  - Incident governance: `@reference/framework-incident-governance.md`
+- Operational rule: `@.claude/rules/incident-governance.md`
+- Incident data: `@reference/incidents.json`
+- Incident filing: `.claude/skills/incident/SKILL.md`

@@ -86,9 +86,9 @@ T+5m:  User reported broken behavior
 | **Rule fade** | Rule in context but ignored after 2 hours | Smaller batches, verification between |
 | **Missing enforcement** | Rule exists but no hook blocks violations | Promote from rule to hook |
 | **Scope creep** | Plan expanded mid-session, new code untested | Session budget, batch discipline |
-| **Assumption** | "Probably X" without verification | File as gap, ask the user |
+| **Assumption** | "Probably X" without verification | File as incident, ask the user |
 | **Tool gap** | No skill for the tool being used | Build the skill |
-| **Stale spec** | Rule references deleted file or old behavior | `/audit` detects, file as gap |
+| **Stale spec** | Rule references deleted file or old behavior | `/audit` detects, file as incident |
 
 #### RCA output format
 
@@ -140,7 +140,7 @@ Record the incident so others (and future sessions) learn from it:
 - **Effectiveness tracker**: Add incident entry (I-number, description,
   RCA, remediation, corrective action)
 - **Coaching item**: If behavioral, add to CLAUDE.md coaching section
-- **Gap filing**: If a spec deviation, file via `/gap`
+- **Incident filing**: If a spec deviation, file via `/incident`
 - **Rule/hook update**: If structural, commit the change
 
 ### 8. Follow-up
@@ -221,4 +221,4 @@ but logging them in the session helps `/audit` identify trends.
 
 - Framework: `@reference/framework-incident-investigation.md`
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
-- Gap filing: `.claude/skills/gap/SKILL.md`
+- Incident filing: `.claude/skills/incident/SKILL.md`

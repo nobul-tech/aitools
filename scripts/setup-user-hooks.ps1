@@ -1,13 +1,15 @@
 # setup-user-hooks.ps1 -- Deploys Claude Code hooks and preferences to ~/.claude/settings.json
 # Safe to re-run -- merges managed fields without clobbering existing settings.
 #
-# Managed fields: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
+# Managed fields: hooks.SessionEnd, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
 # Preserved: permissions, enabledPlugins, all other fields
 #
 # Hooks deployed:
 #   SessionEnd: session-archive.sh (archives transcripts to user repo)
 #   PreToolUse[Bash]: standing-order-guard.sh (enforces standing orders on Bash commands)
 #   PreToolUse[Read|Grep]: glossary-skill-guard.sh (reminds agent to use /glossary skill)
+#   PreToolUse[Agent]: block-claude-code-guide.sh (blocks buggy built-in subagent)
+#   SessionEnd: tool-ops-session-audit.sh (runs tool-ops contract tests and drift detection)
 #
 # Reads claude preferences from profile.json (via config.json -> userRepoPath).
 # See reference/user-repo.md and shared/hooks/ for details.
@@ -67,7 +69,9 @@ $scratchScript = Resolve-HookSource "scratch-init.sh"
 $harvestScript = Resolve-HookSource "harvest-session.sh"
 $shfixupScript = Resolve-HookSource "sh-file-fixup.sh"
 $surfacingScript = Resolve-HookSource "surfacing-duty-stop.sh"
-foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $surfacingScript)) {
+$blockGuideScript = Resolve-HookSource "block-claude-code-guide.sh"
+$toolOpsAuditScript = Resolve-HookSource "tool-ops-session-audit.sh"
+foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $surfacingScript, $blockGuideScript, $toolOpsAuditScript)) {
     if (-not (Test-Path $src)) {
         LogError "Hook script not found: $src"
         exit 1
@@ -85,6 +89,8 @@ $scratchDest = Join-Path $hooksDir "scratch-init.sh"
 $harvestDest = Join-Path $hooksDir "harvest-session.sh"
 $shfixupDest = Join-Path $hooksDir "sh-file-fixup.sh"
 $surfacingDest = Join-Path $hooksDir "surfacing-duty-stop.sh"
+$blockGuideDest = Join-Path $hooksDir "block-claude-code-guide.sh"
+$toolOpsAuditDest = Join-Path $hooksDir "tool-ops-session-audit.sh"
 
 $hooksChanged = $false
 
@@ -99,12 +105,14 @@ if ($DryRun) {
     Log "[DRY RUN] Would deploy hook: $harvestScript -> $harvestDest"
     Log "[DRY RUN] Would deploy hook: $shfixupScript -> $shfixupDest"
     Log "[DRY RUN] Would deploy hook: $surfacingScript -> $surfacingDest"
+    Log "[DRY RUN] Would deploy hook: $blockGuideScript -> $blockGuideDest"
+    Log "[DRY RUN] Would deploy hook: $toolOpsAuditScript -> $toolOpsAuditDest"
 } else {
     if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }
 
     Initialize-DeployTracker
 
-    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($surfacingScript, $surfacingDest))) {
+    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($surfacingScript, $surfacingDest), @($blockGuideScript, $blockGuideDest), @($toolOpsAuditScript, $toolOpsAuditDest))) {
         $src = $pair[0]; $dst = $pair[1]
         $hookName = Split-Path $dst -Leaf
         $srcContent = Get-Content $src -Raw -ErrorAction Stop
@@ -324,6 +332,16 @@ MergeHookEntry "PreToolUse" "glossary-skill-guard.sh" "Read|Grep" $glossaryCmd
 MergeHookEntry "PostToolUse" "sh-file-fixup.sh" "Write|Edit" $shfixupCmd
 MergeHookEntry "Stop" "surfacing-duty-stop.sh" "" $surfacingCmd
 
+# PreToolUse: block claude-code-guide subagent
+$blockGuideDestUnix = $blockGuideDest -replace '\\', '/'
+$blockGuideCmd = "bash `"$blockGuideDestUnix`""
+MergeHookEntry "PreToolUse" "block-claude-code-guide.sh" "Agent" $blockGuideCmd
+
+# SessionEnd: tool-ops session audit
+$toolOpsAuditDestUnix = $toolOpsAuditDest -replace '\\', '/'
+$toolOpsAuditCmd = "bash `"$toolOpsAuditDestUnix`""
+MergeHookEntry "SessionEnd" "tool-ops-session-audit.sh" "" $toolOpsAuditCmd
+
 # --- Track old values for change reporting ---
 $oldAutoMemory = $settings["autoMemoryEnabled"]
 $oldAlwaysThinking = $settings["alwaysThinkingEnabled"]
@@ -413,6 +431,10 @@ if ($DryRun) {
             if ($seCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd hook, got $seCount" }
             if ($ptCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse standing-order-guard hook, got $ptCount" }
             if ($glCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse glossary-skill-guard hook, got $glCount" }
+            $bgCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'block-claude-code-guide\.sh' }).Count
+            if ($bgCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse block-claude-code-guide hook, got $bgCount" }
+            $toaCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'tool-ops-session-audit\.sh' }).Count
+            if ($toaCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd tool-ops-session-audit hook, got $toaCount" }
 
             # Validate hook schema: command-type must have command,
             # prompt-type must have prompt (not command).

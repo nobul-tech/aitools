@@ -48,4 +48,4 @@ Safety engineering:
 
 - Framework registry: `@reference/framework-registry.json`
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
-- Gap governance: `@reference/framework-gap-governance.md`
+- Incident governance: `@reference/framework-incident-governance.md`

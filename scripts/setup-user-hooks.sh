@@ -2,13 +2,15 @@
 # setup-user-hooks.sh — Deploys Claude Code hooks and preferences to ~/.claude/settings.json
 # Safe to re-run — merges managed fields without clobbering existing settings.
 #
-# Managed fields: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
+# Managed fields: hooks.SessionEnd, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
 # Preserved: permissions, enabledPlugins, all other fields
 #
 # Hooks deployed:
 #   SessionEnd: session-archive.sh (archives transcripts to user repo)
 #   PreToolUse[Bash]: standing-order-guard.sh (enforces standing orders on Bash commands)
 #   PreToolUse[Read|Grep]: glossary-skill-guard.sh (reminds agent to use /glossary skill)
+#   PreToolUse[Agent]: block-claude-code-guide.sh (blocks buggy built-in subagent)
+#   SessionEnd: tool-ops-session-audit.sh (runs tool-ops contract tests and drift detection)
 #
 # Reads claude preferences from profile.json (via config.json -> userRepoPath).
 # See reference/user-repo.md and shared/hooks/ for details.
@@ -75,7 +77,9 @@ SCRATCH_SCRIPT=$(resolve_hook "scratch-init.sh")
 HARVEST_SCRIPT=$(resolve_hook "harvest-session.sh")
 SHFIXUP_SCRIPT=$(resolve_hook "sh-file-fixup.sh")
 SURFACING_SCRIPT=$(resolve_hook "surfacing-duty-stop.sh")
-for src in "$HOOK_SCRIPT" "$GUARD_SCRIPT" "$GLOSSARY_SCRIPT" "$SCRATCH_SCRIPT" "$HARVEST_SCRIPT" "$SHFIXUP_SCRIPT" "$SURFACING_SCRIPT"; do
+BLOCK_GUIDE_SCRIPT=$(resolve_hook "block-claude-code-guide.sh")
+TOOL_OPS_AUDIT_SCRIPT=$(resolve_hook "tool-ops-session-audit.sh")
+for src in "$HOOK_SCRIPT" "$GUARD_SCRIPT" "$GLOSSARY_SCRIPT" "$SCRATCH_SCRIPT" "$HARVEST_SCRIPT" "$SHFIXUP_SCRIPT" "$SURFACING_SCRIPT" "$BLOCK_GUIDE_SCRIPT" "$TOOL_OPS_AUDIT_SCRIPT"; do
     if [ ! -f "$src" ]; then
         log_error "Hook script not found: $src"
         exit 1
@@ -90,6 +94,8 @@ SCRATCH_DEST="$HOME/.claude/hooks/scratch-init.sh"
 HARVEST_DEST="$HOME/.claude/hooks/harvest-session.sh"
 SHFIXUP_DEST="$HOME/.claude/hooks/sh-file-fixup.sh"
 SURFACING_DEST="$HOME/.claude/hooks/surfacing-duty-stop.sh"
+BLOCK_GUIDE_DEST="$HOME/.claude/hooks/block-claude-code-guide.sh"
+TOOL_OPS_AUDIT_DEST="$HOME/.claude/hooks/tool-ops-session-audit.sh"
 
 HOOKS_CHANGED=false
 
@@ -104,12 +110,14 @@ if [ "$DRY_RUN" = "true" ]; then
     log "[DRY RUN] Would deploy hook: $(display_path "$HARVEST_SCRIPT") -> $(display_path "$HARVEST_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$SHFIXUP_SCRIPT") -> $(display_path "$SHFIXUP_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$SURFACING_SCRIPT") -> $(display_path "$SURFACING_DEST")"
+    log "[DRY RUN] Would deploy hook: $(display_path "$BLOCK_GUIDE_SCRIPT") -> $(display_path "$BLOCK_GUIDE_DEST")"
+    log "[DRY RUN] Would deploy hook: $(display_path "$TOOL_OPS_AUDIT_SCRIPT") -> $(display_path "$TOOL_OPS_AUDIT_DEST")"
 else
     mkdir -p "$HOME/.claude/hooks"
 
     deploy_tracker_init
 
-    for hook_pair in "$HOOK_SCRIPT|$HOOK_DEST" "$GUARD_SCRIPT|$GUARD_DEST" "$GLOSSARY_SCRIPT|$GLOSSARY_DEST" "$SCRATCH_SCRIPT|$SCRATCH_DEST" "$HARVEST_SCRIPT|$HARVEST_DEST" "$SHFIXUP_SCRIPT|$SHFIXUP_DEST" "$SURFACING_SCRIPT|$SURFACING_DEST"; do
+    for hook_pair in "$HOOK_SCRIPT|$HOOK_DEST" "$GUARD_SCRIPT|$GUARD_DEST" "$GLOSSARY_SCRIPT|$GLOSSARY_DEST" "$SCRATCH_SCRIPT|$SCRATCH_DEST" "$HARVEST_SCRIPT|$HARVEST_DEST" "$SHFIXUP_SCRIPT|$SHFIXUP_DEST" "$SURFACING_SCRIPT|$SURFACING_DEST" "$BLOCK_GUIDE_SCRIPT|$BLOCK_GUIDE_DEST" "$TOOL_OPS_AUDIT_SCRIPT|$TOOL_OPS_AUDIT_DEST"; do
         hook_src="${hook_pair%%|*}"
         hook_dst="${hook_pair##*|}"
         hook_name=$(basename "$hook_dst")
@@ -192,6 +200,8 @@ SCRATCH_CMD="bash \"$SCRATCH_DEST\""
 HARVEST_CMD="bash \"$HARVEST_DEST\""
 SHFIXUP_CMD="bash \"$SHFIXUP_DEST\""
 SURFACING_CMD="bash \"$SURFACING_DEST\""
+BLOCK_GUIDE_CMD="bash \"$BLOCK_GUIDE_DEST\""
+TOOL_OPS_AUDIT_CMD="bash \"$TOOL_OPS_AUDIT_DEST\""
 
 MERGE_RESULT=$(node -e "
 $SORT_KEYS_JS
@@ -207,6 +217,8 @@ const scratchCmd = process.argv[7];
 const harvestCmd = process.argv[8];
 const shfixupCmd = process.argv[9];
 const surfacingCmd = process.argv[10];
+const blockGuideCmd = process.argv[11];
+const toolOpsAuditCmd = process.argv[12];
 
 // --- BEGIN claude preferences (replaced by build-deploy) ---
 let autoMemory = true;
@@ -293,6 +305,8 @@ mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
 mergeHookEntry('PreToolUse', 'glossary-skill-guard.sh', 'Read|Grep', glossaryCmd);
 mergeHookEntry('PostToolUse', 'sh-file-fixup.sh', 'Write|Edit', shfixupCmd);
 mergeHookEntry('Stop', 'surfacing-duty-stop.sh', '', surfacingCmd);
+mergeHookEntry('PreToolUse', 'block-claude-code-guide.sh', 'Agent', blockGuideCmd);
+mergeHookEntry('SessionEnd', 'tool-ops-session-audit.sh', '', toolOpsAuditCmd);
 
 // --- Track old values for change reporting ---
 const oldAutoMemory = settings.autoMemoryEnabled;
@@ -362,6 +376,10 @@ if (dryRun) {
         if (ptCount !== 1) { console.error('Validation failed: expected 1 PreToolUse standing-order-guard hook, got ' + ptCount); process.exit(1); }
         const glCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('glossary-skill-guard.sh'))).length;
         if (glCount !== 1) { console.error('Validation failed: expected 1 PreToolUse glossary-skill-guard hook, got ' + glCount); process.exit(1); }
+        const bgCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('block-claude-code-guide.sh'))).length;
+        if (bgCount !== 1) { console.error('Validation failed: expected 1 PreToolUse block-claude-code-guide hook, got ' + bgCount); process.exit(1); }
+        const toaCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('tool-ops-session-audit.sh'))).length;
+        if (toaCount !== 1) { console.error('Validation failed: expected 1 SessionEnd tool-ops-session-audit hook, got ' + toaCount); process.exit(1); }
 
         // Validate hook schema: command-type must have command field,
         // prompt-type must have prompt field (not command).
@@ -391,7 +409,7 @@ if (dryRun) {
         prefChanges.forEach(c => console.log(c));
     }
 }
-" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$SURFACING_CMD")
+" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$SURFACING_CMD" "$BLOCK_GUIDE_CMD" "$TOOL_OPS_AUDIT_CMD")
 
 # Parse merge result: first line is status, CHANGED: lines are key changes
 MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)

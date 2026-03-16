@@ -1966,7 +1966,7 @@ finding is a potential trigger for the discovery-to-continuation
 cycle (`@reference/framework-adoption.md`).
 
 NOT for writing intent statements (see `/intent-writing`). NOT for
-filing gaps discovered during the audit (use `/gap` after). NOT for
+filing gaps discovered during the audit (use `/incident` after). NOT for
 deciding where displaced content should live (that requires design
 decisions informed by `@reference/framework-adoption.md`).
 
@@ -2026,7 +2026,7 @@ For each finding, propose a specific action:
 - **Split**: propose new file with its own intent
 - **Amend intent**: draft the revised intent (protected — needs
   user approval)
-- **File gap**: when no destination exists, file via `/gap`
+- **File gap**: when no destination exists, file via `/incident`
 
 Present all findings and proposed resolutions to the user before
 making changes. Moving content between files and amending intents
@@ -2079,7 +2079,7 @@ what that means. The hook spec lives in
 - Intent writing: `/intent-writing` skill
 - Framework: `@reference/framework-adoption.md`
 - Protection rule: `@.claude/rules/sources-of-truth.md`
-- Gap filing: `/gap` skill
+- Gap filing: `/incident` skill
 '@
 
 $skill_intent_writing = @'
@@ -2309,9 +2309,9 @@ T+5m:  User reported broken behavior
 | **Rule fade** | Rule in context but ignored after 2 hours | Smaller batches, verification between |
 | **Missing enforcement** | Rule exists but no hook blocks violations | Promote from rule to hook |
 | **Scope creep** | Plan expanded mid-session, new code untested | Session budget, batch discipline |
-| **Assumption** | "Probably X" without verification | File as gap, ask the user |
+| **Assumption** | "Probably X" without verification | File as incident, ask the user |
 | **Tool gap** | No skill for the tool being used | Build the skill |
-| **Stale spec** | Rule references deleted file or old behavior | `/audit` detects, file as gap |
+| **Stale spec** | Rule references deleted file or old behavior | `/audit` detects, file as incident |
 
 #### RCA output format
 
@@ -2363,7 +2363,7 @@ Record the incident so others (and future sessions) learn from it:
 - **Effectiveness tracker**: Add incident entry (I-number, description,
   RCA, remediation, corrective action)
 - **Coaching item**: If behavioral, add to CLAUDE.md coaching section
-- **Gap filing**: If a spec deviation, file via `/gap`
+- **Incident filing**: If a spec deviation, file via `/incident`
 - **Rule/hook update**: If structural, commit the change
 
 ### 8. Follow-up
@@ -2444,7 +2444,7 @@ but logging them in the session helps `/audit` identify trends.
 
 - Framework: `@reference/framework-incident-investigation.md`
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
-- Gap filing: `.claude/skills/gap/SKILL.md`
+- Incident filing: `.claude/skills/incident/SKILL.md`
 '@
 
 $skill_optimize_plan = @'
@@ -2476,7 +2476,7 @@ mid-session discoveries, or when the plan feels unwieldy.
 ### Step 1: Load current state
 
 Read the plan file. Then read these for comparison:
-- `reference/known-gaps.json` — are gaps referenced in the plan still open?
+- `reference/incidents.json` — are gaps referenced in the plan still open?
 - `ROADMAP.md` — does the plan's scope match the roadmap entry?
 - Recent git log (`git log --oneline -20`) — what changed since the plan
   was last updated?
@@ -2523,7 +2523,7 @@ it unblocks Y and Z" visibility.
 
 - Were decisions made in conversation but not captured in the plan?
 - Are there foundational decisions that should be numbered but aren't?
-- Are there gaps filed in known-gaps.json that should be referenced
+- Are there gaps filed in incidents.json that should be referenced
   in the plan's Open Questions section?
 
 ### Step 7: Present findings
@@ -2558,7 +2558,7 @@ Output a structured report:
 Plan review depth scales with available context:
 - **1M context (Opus extended)**: Read all referenced rules and reference
   files. Full cross-reference validation. Deep dependency analysis.
-- **200k context (Sonnet/Opus standard)**: Read the plan + known-gaps.json
+- **200k context (Sonnet/Opus standard)**: Read the plan + incidents.json
   + git log. Spot-check cross-references.
 - **100k context (Haiku)**: Read only the plan. Surface-level consistency
   check.
@@ -2608,7 +2608,7 @@ Override with `model: sonnet` etc. in skill/subagent frontmatter.
 
 ### Session flow
 
-1. Read the plan + known-gaps.json + relevant rules
+1. Read the plan + incidents.json + relevant rules
 2. Work through implementation steps in order
 3. Surface ambiguities as they arise (surfacing duty)
 4. At 60-70%: stop building, file gaps, update release notes, commit,

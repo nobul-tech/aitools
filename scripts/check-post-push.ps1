@@ -269,7 +269,7 @@ $protectedFiles = @(
     "CLAUDE.md",
     "shared/claude-shared.md",
     "ROADMAP.md",
-    "reference/claude-code-maintenance.md",
+    "reference/tool-ops-claude-code.md",
     "reference/user-repo.md"
 )
 foreach ($pf in $protectedFiles) {
@@ -498,7 +498,7 @@ try {
     # claude CLI not found or errored -- $ccVersion stays "unknown",
     # handled by StepSkip below
 }
-$registryFile = Join-Path (Join-Path $script:RepoRoot "reference") "claude-code-maintenance.md"
+$registryFile = Join-Path (Join-Path $script:RepoRoot "reference") "tool-ops-claude-code.md"
 $registryVersion = "unknown"
 if (Test-Path $registryFile) {
     $regContent = Get-Content $registryFile -Raw

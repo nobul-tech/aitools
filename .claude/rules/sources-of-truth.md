@@ -14,11 +14,11 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 | `shared/cursor-rules/user-rules.md` | Cursor User Rules template (manual copy if needed) | Any |
 | `.claude/rules/*.md` | Claude Code behavioral rules (this file included) | Any |
 | `.claude/rules/managed-file-deployment.md` | Deployment type definitions, content sources, platform config rules | Any |
-| `reference/known-gaps.json` | Gap and ambiguity tracking — governed by `.claude/rules/gap-governance.md` | Any |
+| `reference/incidents.json` | Incident tracking — governed by `.claude/rules/incident-governance.md` | Any |
 | `.cursor/rules/*.mdc` | Cursor behavioral rules | Any |
 | `ROADMAP.md` | Active/planned work items — drives project priorities | Any |
 | `plans/*.md` | Detailed implementation plans — referenced by roadmap | Any |
-| `reference/claude-code-maintenance.md` | Claude Code maintenance tracker — version deps, workarounds, upstream issues | Any |
+| `reference/tool-ops-claude-code.md` | Claude Code operations — version deps, session behavior, platform workarounds | Any |
 | `reference/tool-versions.json` | Machine-readable per-platform version manifest for all managed tools | Any |
 | `reference/user-repo.md` | User repo pattern, template resolution, session archive — scripts reference this | Any |
 | `reference/agentic-framework.md` | Agentic AI invocation spec — speed/permission tiers, prompt design, validation patterns | Any |
@@ -27,9 +27,12 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 | `reference/framework-*.md` | Framework documentation — discipline source, adoption rationale, maintenance | Any |
 | `reference/framework-registry.json` | Framework registry — source of truth for all adopted frameworks | Any |
 | `.claude/rules/frameworks.md` | Framework rule — intent of frameworks, registry of registries | Any |
-| `reference/gap-*.md` | Gap reference files — full discovery context for framework-level gaps | Any |
+| `reference/incident-*.md` | Incident reference files — full discovery context for framework-level incidents | Any |
 | `reference/harness.md` | Harness architecture — the five components and their relationships | Any |
 | `reference/glossary.json` | Governed vocabulary definitions — source of truth for all terms | Any |
+| `reference/tool-ops.json` | Tool operations registry — per-tool governance modes and verification specs | Any |
+| `reference/framework-tool-ops.md` | Tool operations framework — SRE discipline source and adoption rationale | Any |
+| `reference/tool-ops-*.md` | Per-tool ops references — operational knowledge for deeply-integrated tools | Any |
 
 ### The rule
 

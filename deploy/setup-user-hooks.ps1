@@ -2139,6 +2139,16 @@ MergeHookEntry "PreToolUse" "glossary-skill-guard.sh" "Read|Grep" $glossaryCmd
 MergeHookEntry "PostToolUse" "sh-file-fixup.sh" "Write|Edit" $shfixupCmd
 MergeHookEntry "Stop" "surfacing-duty-stop.sh" "" $surfacingCmd
 
+# PreToolUse: block claude-code-guide subagent
+$blockGuideDestUnix = $blockGuideDest -replace '\\', '/'
+$blockGuideCmd = "bash `"$blockGuideDestUnix`""
+MergeHookEntry "PreToolUse" "block-claude-code-guide.sh" "Agent" $blockGuideCmd
+
+# SessionEnd: tool-ops session audit
+$toolOpsAuditDestUnix = $toolOpsAuditDest -replace '\\', '/'
+$toolOpsAuditCmd = "bash `"$toolOpsAuditDestUnix`""
+MergeHookEntry "SessionEnd" "tool-ops-session-audit.sh" "" $toolOpsAuditCmd
+
 # --- Track old values for change reporting ---
 $oldAutoMemory = $settings["autoMemoryEnabled"]
 $oldAlwaysThinking = $settings["alwaysThinkingEnabled"]
@@ -2228,6 +2238,10 @@ if ($DryRun) {
             if ($seCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd hook, got $seCount" }
             if ($ptCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse standing-order-guard hook, got $ptCount" }
             if ($glCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse glossary-skill-guard hook, got $glCount" }
+            $bgCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'block-claude-code-guide\.sh' }).Count
+            if ($bgCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse block-claude-code-guide hook, got $bgCount" }
+            $toaCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'tool-ops-session-audit\.sh' }).Count
+            if ($toaCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd tool-ops-session-audit hook, got $toaCount" }
 
             # Validate hook schema: command-type must have command,
             # prompt-type must have prompt (not command).

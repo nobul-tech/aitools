@@ -206,7 +206,7 @@ if (-not $settings.ContainsKey("permissions")) { $settings["permissions"] = @{} 
 if (-not $settings["permissions"].ContainsKey("deny")) { $settings["permissions"]["deny"] = @() }
 
 # Add deny rules if not already present
-$denyRules = @("MCP(vercel)", "MCP(webflow)", "Agent(Claude Code Guide)")
+$denyRules = @("MCP(vercel)", "MCP(webflow)", "Agent(claude-code-guide)")
 foreach ($rule in $denyRules) {
     if ($rule -notin $settings["permissions"]["deny"]) {
         $settings["permissions"]["deny"] += $rule

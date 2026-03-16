@@ -9,12 +9,12 @@ harness definition (see `@reference/harness.md`). NOT the registry
 convention (see `@reference/framework-three-layer-governance.md`).
 NOT the framework registry (see `@reference/framework-registry.json`).
 **Audience**: Agents encountering ambiguities, agents adopting new
-frameworks, agents creating framework artifacts, the `/gap` skill.
+frameworks, agents creating framework artifacts, the `/incident` skill.
 
 ## The Discovery-to-Continuation Cycle
 
 This cycle carries you from "something is missing" through to "back
-on track." Nine steps — steps 1-6 produce gap context, steps 7-9 are
+on track." Nine steps — steps 1-6 produce incident context, steps 7-9 are
 execution tracked by plans and commits.
 
 ### Trigger: ambiguity
@@ -36,7 +36,7 @@ wrong by process — and invisible to future sessions that inherit the
 outcome without knowing it was never deliberated.
 
 Not every ambiguity triggers the full nine steps. If an existing spec
-addresses the situation but the code deviates, that's a simple gap —
+addresses the situation but the code deviates, that's a simple incident —
 steps 1-3, file it, move on. The full cycle (steps 4-9) engages when
 no spec exists and the resolution requires adopting concepts from an
 established discipline.
@@ -44,7 +44,7 @@ established discipline.
 ### 1. Record context
 
 Before investigating the ambiguity, capture what you were doing when
-it surfaced. This becomes the `discoveryContext` field in the gap
+it surfaced. This becomes the `discoveryContext` field in the incident
 entry:
 - What plan step or task were you executing?
 - What goal were you working toward?
@@ -52,7 +52,7 @@ entry:
 - Session date and archive reference if available
 
 This context is essential for the consumer — they need to understand
-the situation that revealed the gap, not just the gap itself.
+the situation that revealed the incident, not just the incident itself.
 
 ### 2. Audit existing state
 
@@ -62,7 +62,7 @@ covers it but you didn't find it, or it's unclear). Check:
 - `@.claude/rules/frameworks.md` — does an existing framework govern
   this class of decision?
 - `@reference/framework-registry.json` — load via `/frameworks` skill
-- `@reference/known-gaps.json` — has this already been filed?
+- `@reference/incidents.json` — has this already been filed?
 - Rules that might address it — search `.claude/rules/` and
   `~/.claude/rules/`
 - Reference files, plan sections, design principles in `@CLAUDE.md`
@@ -103,7 +103,7 @@ If no discipline matches:
   (new rule, new convention) rather than adopting from a discipline
 
 Simple code deviations (bash script missing a function that PS1 has)
-skip steps 4-6 entirely — file the gap with steps 1-3 and move on.
+skip steps 4-6 entirely — file the incident with steps 1-3 and move on.
 
 ### 5. Research frameworks
 
@@ -140,8 +140,8 @@ when the path isn't obvious.
 ### 7. Implement
 
 Build the artifacts designed in step 6. This step is tracked by
-plans, commits, and pull requests — not the gap entry. The gap's
-`linked` field points to the tracking item.
+plans, commits, and pull requests — not the incident entry. The
+incident's `linked` field points to the tracking item.
 
 Follow existing conventions:
 - Protected files require review (`@.claude/rules/sources-of-truth.md`)
@@ -159,7 +159,7 @@ together — never one without the others:
 
 The hook may not be built immediately (hook infrastructure is
 incremental), but the spec must be designed at adoption time. Track
-unbuilt hooks via `/gap` skill.
+unbuilt hooks via `/incident` skill.
 
 ### 8. Integrate
 
@@ -191,8 +191,9 @@ prior work exists on how to solve a class of problems. When the
 DTCC reaches step 4 (Recognition), you're looking for a discipline
 that owns the problem you've found.
 
-Not every gap maps to a discipline. Simple code deviations are just
-bugs. Framework-level gaps — where no spec exists for an entire class
+Not every incident maps to a discipline. Simple code deviations are
+just bugs. Framework-level incidents — where no spec exists for an
+entire class
 of decisions — map to disciplines.
 
 How to recognize a discipline:
@@ -237,7 +238,7 @@ its artifacts.
 - Harness definition: `@reference/harness.md`
 - Framework registry: `@reference/framework-registry.json`
 - Framework rule: `@.claude/rules/frameworks.md`
-- Gap governance: `@.claude/rules/gap-governance.md`
+- Incident governance: `@.claude/rules/incident-governance.md`
 - Governed vocabulary: `@reference/framework-governed-vocabulary.md`
 - Intent documentation: `@reference/framework-intent-documentation.md`
 - Three-layer governance: `@reference/framework-three-layer-governance.md`

@@ -32,7 +32,7 @@ Spans multiple sessions, has phased gates, or needs detailed design beyond a roa
 - **References** (`reference/`) = implementation detail, unlimited length
 - **No duplication** — one authoritative location per fact
 - **Tool configs** documented per-tool in `@reference/tool-registry.md`
-- **Specs vs state** — rules and references are specs; `@reference/known-gaps.md` tracks out-of-spec code
+- **Specs vs state** — rules and references are specs; `@reference/incidents.json` tracks out-of-spec code
 - **Cursor parity** — `.cursor/rules/*.mdc` mirrors `.claude/rules/*.md`. See `@.claude/rules/cursor-rule-parity.md`
 
 ### `@` link convention

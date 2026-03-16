@@ -11,7 +11,7 @@ Should auto-load when:
 
 Should NOT auto-load for:
 - Reviewing an existing plan (that's /optimize-plan)
-- Filing a gap (that's /gap)
+- Filing an incident (that's /incident)
 - Normal coding tasks
 
 ## Context awareness
@@ -31,5 +31,5 @@ Should NOT auto-load for:
 
 ## User collaboration
 - Should present options rather than conclusions
-- Should flag uncertainty as gaps rather than guessing
+- Should flag uncertainty as incidents rather than guessing
 - Should ask clarifying questions when ambiguous

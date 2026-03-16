@@ -48,7 +48,7 @@ Last verified: 2026-02-27 (Claude Code 2.1.62)
 - **Post-Install Config:** `~/.claude/CLAUDE.md` (via setup script), git identity
 - **Dependencies:** Git, Git Bash (Windows)
 - **Invocation:** `claude` (direct)
-- **Last verified version:** See claude-code-maintenance.md
+- **Last verified version:** See tool-ops-claude-code.md
 
 ---
 

@@ -1,0 +1,58 @@
+{
+  "meta": {
+    "schemaVersion": "1.0",
+    "lastAudit": "2026-03-15"
+  },
+  "artifacts": {
+    "2026-03-15_gh-issue-comment.md": {
+      "harvested": "2026-03-15",
+      "session": "aitools/2026-03-15_84280c8b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-14"
+    },
+    "2026-03-15_issue-body-current.md": {
+      "harvested": "2026-03-15",
+      "session": "aitools/2026-03-15_84280c8b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-14"
+    },
+    "2026-03-15_rca-deny-rule-bypass.md": {
+      "harvested": "2026-03-15",
+      "session": "aitools/2026-03-15_84280c8b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-14"
+    },
+    "2026-03-15_rca-registry-bypass.md": {
+      "harvested": "2026-03-15",
+      "session": "aitools/2026-03-15_84280c8b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-14"
+    },
+    "2026-03-15_test-hook.sh": {
+      "harvested": "2026-03-15",
+      "session": "aitools/2026-03-15_84280c8b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-14"
+    }
+  }
+}

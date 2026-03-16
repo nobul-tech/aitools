@@ -147,7 +147,7 @@ read-then-merge (not blind overwrite). Flag any `cat >` or bare
 ### 20. Claude Code maintenance review
 
 Check `claude --version` against the "Current version" in
-`reference/claude-code-maintenance.md`. If they differ:
+`reference/tool-ops-claude-code.md`. If they differ:
 - Update "Current version" in the registry
 - Walk CRITICAL items: check upstream GitHub issues (are they still open?)
 - Walk HIGH items if the version bump is major (e.g., 2.1 -> 2.2 or 3.0)

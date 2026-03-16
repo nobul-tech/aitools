@@ -234,7 +234,7 @@ for pf in \
     "CLAUDE.md" \
     "shared/claude-shared.md" \
     "ROADMAP.md" \
-    "reference/claude-code-maintenance.md" \
+    "reference/tool-ops-claude-code.md" \
     "reference/user-repo.md"; do
     if [ ! -f "$REPO_ROOT/$pf" ]; then
         echo "      missing: $pf"
@@ -433,7 +433,7 @@ fi
 # 20. CC version-dep review
 # ---------------------------------------------------------------------------
 cc_version=$(claude --version 2>/dev/null | head -1 || echo "unknown")
-registry_version=$(grep -E 'Current version' "$REPO_ROOT/reference/claude-code-maintenance.md" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
+registry_version=$(grep -E 'Current version' "$REPO_ROOT/reference/tool-ops-claude-code.md" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
 if [ "$cc_version" = "unknown" ]; then
     step_skip "20" "CC version-dep review" "claude CLI not found"
 elif echo "$cc_version" | grep -q "$registry_version"; then

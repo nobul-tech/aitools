@@ -13,14 +13,14 @@
 - Should detect `@.claude/rules/cursor-rule-parity.md` as broken (deleted in v0.54)
 - Should NOT flag valid references as broken
 
-### Known-gaps.json
-- Should detect duplicate IDs if two gaps share an ID
-- Should flag gaps open > 90 days without a linked plan
-- Should verify all required fields per gap-governance.md
-- Should reject invalid severity/status/type values
+### Incidents.json
+- Should detect duplicate IDs if two incidents share an ID
+- Should flag incidents open > 90 days without a linked plan
+- Should verify all required fields per incident-governance.md
+- Should reject invalid severity/status values
 
-### TODO(gap) markers
-- Should find `TODO(gap):` in any file via Grep
+### TODO(incident) markers
+- Should find `TODO(incident):` in any file via Grep
 - Should report file path and line content
 
 ### Skill health
@@ -35,5 +35,5 @@
 
 ## Non-interference
 - Must NOT write to any file
-- Must NOT file gaps (report only — user files via /gap)
+- Must NOT file incidents (report only — user files via /incident)
 - Must NOT modify rules or references

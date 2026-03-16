@@ -11,17 +11,17 @@ record — these are not open questions.
 
 1. **End users are developers.** No "dumb user" persona exists. Every
    aitools user benefits from understanding internals.
-2. **JSON format for known-gaps.** Not markdown (fragile Edit tool parsing),
+2. **JSON format for incidents.** Not markdown (fragile Edit tool parsing),
    not SQLite (binary blob in git). JSON is structured, git-diff friendly,
    Claude manipulates reliably.
 3. **Separate tool harnesses.** Claude Code and Cursor managed independently.
    No parity requirement.
 4. **Fail-open for governance hooks.** Detection catches most; audit catches
    rest. Blocking on hook failure would be worse than missing a validation.
-5. **Accept-and-audit for concurrency.** Duplicate gap IDs from races are
+5. **Accept-and-audit for concurrency.** Duplicate incident IDs from races are
    rare. `/audit` detects and flags. No file locking.
 6. **Subagents are sensors, main agent files.** Subagents report `AMBIGUITY:`
-   findings. Main agent triages and invokes `/gap`.
+   findings. Main agent triages and invokes `/incident`.
 7. **Skill priority: user > project.** Claude Code loads user-level skills
    over project-level when names collide. Never use the same name at both
    levels.
@@ -32,7 +32,7 @@ record — these are not open questions.
    Skills named for what they teach: `/managed-files` (deployment state
    machine) and `/ai-merge` (AI-assisted conflict resolution).
 10. **Resolved ambiguities belong in this plan file** (Decisions section).
-    Open gaps belong in `known-gaps.json`. Don't mix them.
+    Open gaps belong in `incidents.json`. Don't mix them.
 11. **Formal eval files per skill.** Each skill gets a `tests/` directory
     with test prompts and expected behaviors. Higher expected value than
     spot-checking; easier to course-correct from (baseline exists).
@@ -94,7 +94,7 @@ record — these are not open questions.
 |-------|-----------|------|---------|
 | Prevention | Rules in context, skills loaded dynamically | Every session | Stops issues from being created |
 | Detection | Hooks firing in real-time | During tool calls, session events | Issues as they happen |
-| Audit | `/audit` skill, `/gap` skill | On demand | What slipped through |
+| Audit | `/audit` skill, `/incident` skill | On demand | What slipped through |
 
 Skills bridge prevention and detection: they show the right way (prevention)
 so hooks don't need to block the wrong way (detection). Hook stderr messages
@@ -113,7 +113,7 @@ reference skills to close the remediation loop.
 **Project-level** (`.claude/skills/` in repo, auto-discovered):
 - About this project's specific conventions, frameworks, or files
 - Patterns would be wrong or misleading in another project
-- References project-specific artifacts (known-gaps.json, build-deploy.sh)
+- References project-specific artifacts (incidents.json, build-deploy.sh)
 
 **Split threshold**: A tool needs both levels only when it serves two
 distinct personas (end user vs developer of the tool itself). Use
@@ -129,11 +129,11 @@ project-level skill with the same name as a user-level one.
   - `/mcp-skill` — `/mcp` is a built-in Claude Code command
   - `/bash-skill` — `Bash` is a Claude Code tool name
   - `/go-lang` — `/go` is ambiguous as an English word
-- Process skills use descriptive names (`/gap`, `/audit`, etc.)
+- Process skills use descriptive names (`/incident`, `/audit`, etc.)
 - Project-level counterparts to user-level skills use `aitools-` prefix
   (`/aitools-dev` for `/aitools`, `/aitools-planning` for `/planning`)
 - Project-level skills without a user-level counterpart use descriptive
-  names (`/gap`, `/audit`, `/logging`)
+  names (`/incident`, `/audit`, `/logging`)
 
 ### Skill template
 
@@ -236,7 +236,7 @@ shared/skills/perl/
 | `/mcp-skill` | MCP server config | Enable/disable patterns, Claude vs Cursor asymmetry, isolation mode, auth, `--addmcp` |
 | `/planning` | Session and plan strategy | Context budgets (1M=100k injectable, 200k=20k), session flow (60-70% stop), subagent coordination and parallelization, when to create plans vs work directly, model-dependent context windows (Opus 1M, Sonnet 200k, Haiku 100k), batch sizing (2-3 files), what works vs fails from session history, user as co-architect |
 | `/investigate` | Incident lifecycle | Detection → triage → investigation (5 Whys, Swiss cheese model, timeline, barrier analysis) → remediation → corrective action (behavioral vs structural) → verification → dissemination → follow-up. Recurrence = wrong fix, not wrong person. |
-| `/optimize-plan` | Living plan review | Reads plan file + known-gaps.json + recent git log + referenced rules + ROADMAP.md. Outputs: stale sections, dependency graph, leverage map (what unblocks most downstream work), scope assessment (still coherent or split?), missing decisions. Invoke periodically after major batches, not one-shot. |
+| `/optimize-plan` | Living plan review | Reads plan file + incidents.json + recent git log + referenced rules + ROADMAP.md. Outputs: stale sections, dependency graph, leverage map (what unblocks most downstream work), scope assessment (still coherent or split?), missing decisions. Invoke periodically after major batches, not one-shot. |
 
 ### Project-level skills (8)
 
@@ -244,8 +244,8 @@ Located in `.claude/skills/` within the aitools repo.
 
 | Skill | Purpose | Key content |
 |-------|---------|-------------|
-| `/gap` | File gaps/ambiguities | Reads known-gaps.json, classifies, formats, writes. Model-invocable. |
-| `/audit` | Deep governance review | Rules/refs consistency, cross-ref breaks, staleness, skill budget, TODO(gap) markers. User-invocable only. |
+| `/incident` | File gaps/ambiguities | Reads incidents.json, classifies, formats, writes. Model-invocable. |
+| `/audit` | Deep governance review | Rules/refs consistency, cross-ref breaks, staleness, skill budget, TODO(incident) markers. User-invocable only. |
 | `/tool-eval` | Tool evaluation/onboarding | 5 lifecycle phases, chrome-devtools verification, Phase 2 gate, onboarding checklist |
 | `/dotprofile` | User repo management | profile.json fields, template tokens, template resolution, session archiving |
 | `/logging` | Structured logging framework | All 7 log functions, levels, when to use each, JSONL dual-output, deploy tracker, counter contract, write_summary |
@@ -330,9 +330,9 @@ type — inclusive by default, exclude selectively at build time.
 This hook subsumes the planned "Subagent context hook & CLAUDE.md trim"
 roadmap item. Combine into one hook.
 
-### PreToolUse agent hook on known-gaps.json (agent type)
+### PreToolUse agent hook on incidents.json (agent type)
 
-- Event: PreToolUse, matcher: Edit|Write on `reference/known-gaps.json`
+- Event: PreToolUse, matcher: Edit|Write on `reference/incidents.json`
 - Validates: required fields, valid enums, sequential IDs, well-formed JSON
 - **Fail-open**: on timeout or error, allow the edit. /audit catches later.
 - Timeout: 30 seconds
@@ -445,7 +445,7 @@ other hooks fire) and SessionEnd (must complete before session closes).
 | Skill load frequency | Loads per session by skill | events table |
 | Skill coverage | Skills with SKILL.md / total managed tools | filesystem |
 | Eval coverage | Skills with tests/ / total skills | filesystem |
-| Gap closure velocity | Closed gaps / open gaps over time | known-gaps.json |
+| Gap closure velocity | Closed gaps / open gaps over time | incidents.json |
 | Incident recurrence | Same root cause repeat count | effectiveness tracker |
 | Corrective action hold rate | Non-recurring / total incidents | effectiveness tracker |
 
@@ -482,13 +482,13 @@ recurring friction.
 
 ## Edge Cases
 
-- **Concurrency (gap IDs)**: Accept-and-audit. /audit detects duplicates.
+- **Concurrency (incident IDs)**: Accept-and-audit. /audit detects duplicates.
 - **Fail-open**: All governance hooks fail-open.
 - **Partial edits**: Validate required fields only.
 - **Hook timeout**: 30s explicit for agent hooks.
 - **Scratch collisions**: SubagentStart injects unique prefix.
 - **Closed gaps**: Move to `closed` array with version and date.
-- **TODO(gap) markers**: /audit scans for unfiled markers.
+- **TODO(incident) markers**: /audit scans for unfiled markers.
 - **Skill priority conflict**: Never use same name at user and project
   level. User-level always wins.
 - **Subagent skill gap**: SubagentStart pre-built cache injects all
@@ -502,7 +502,7 @@ recurring friction.
   (static). Skill = usage patterns/gotchas (dynamic). No duplication.
 - **Hooks extend standing-order-guard.sh**: Guard blocks bad patterns.
   Skills show good patterns. Stderr messages bridge the two.
-- **`/gap` respects sources-of-truth gate**: known-gaps.json is protected.
+- **`/incident` respects sources-of-truth gate**: incidents.json is protected.
 - **`/pre-update` command**: May migrate to skill format.
 - **SubagentStart consolidation**: Combines governance injection with
   the planned CLAUDE.md injection roadmap item.
@@ -515,7 +515,7 @@ Dependency-aware sequencing:
 
 1. **Rules and CLAUDE.md** (v0.54 — done)
 2. **Plan corrections** (v0.54.1 — done)
-3. **`/gap` and `/audit` skills** (v0.54.1 — done)
+3. **`/incident` and `/audit` skills** (v0.54.1 — done)
 3.5. **Framework documentation and schema enrichment** (v0.55 — in progress)
      Framework reference files, enriched gap schema, frameworks rule,
      framework registry JSON, intent-writing + intent-audit skills,
@@ -526,7 +526,7 @@ Dependency-aware sequencing:
 5. **Telemetry hooks + SQLite** — local KPI collection infrastructure
 6. **User-level tool skills** — all 32
 7. **Project-level skills** — all 8
-8. **PreToolUse hooks** — known-gaps validator, protected file reminder,
+8. **PreToolUse hooks** — incidents validator, protected file reminder,
    error suppression, git checklist
 9. **Standing order guard updates** — stderr → skill references
 10. **Stop hook** — ambiguity check
@@ -540,7 +540,7 @@ late-session course corrections, and gap filing. Check `/context`
 periodically.
 
 **Session flow:**
-1. Read this plan + known-gaps.json + relevant rules
+1. Read this plan + incidents.json + relevant rules
 2. Work through implementation steps in order
 3. Surface ambiguities as they arise (surfacing duty)
 4. At 60-70% context: stop building, file any new gaps, update release
@@ -562,7 +562,7 @@ After each implementation step:
 
 ## Open Questions
 
-Tracked as gaps in `known-gaps.json`. Key unresolved items:
+Tracked as gaps in `incidents.json`. Key unresolved items:
 - Gap #12: Cursor skill deployment mechanism unverified
 - Gap #13: Skill priority correction (planned, linked to v0.54.1)
 - Gap #14: Subagent skill preloading via `skills:` field vs hook injection

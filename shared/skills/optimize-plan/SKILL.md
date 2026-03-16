@@ -26,7 +26,7 @@ mid-session discoveries, or when the plan feels unwieldy.
 ### Step 1: Load current state
 
 Read the plan file. Then read these for comparison:
-- `reference/known-gaps.json` — are gaps referenced in the plan still open?
+- `reference/incidents.json` — are gaps referenced in the plan still open?
 - `ROADMAP.md` — does the plan's scope match the roadmap entry?
 - Recent git log (`git log --oneline -20`) — what changed since the plan
   was last updated?
@@ -73,7 +73,7 @@ it unblocks Y and Z" visibility.
 
 - Were decisions made in conversation but not captured in the plan?
 - Are there foundational decisions that should be numbered but aren't?
-- Are there gaps filed in known-gaps.json that should be referenced
+- Are there gaps filed in incidents.json that should be referenced
   in the plan's Open Questions section?
 
 ### Step 7: Present findings
@@ -108,7 +108,7 @@ Output a structured report:
 Plan review depth scales with available context:
 - **1M context (Opus extended)**: Read all referenced rules and reference
   files. Full cross-reference validation. Deep dependency analysis.
-- **200k context (Sonnet/Opus standard)**: Read the plan + known-gaps.json
+- **200k context (Sonnet/Opus standard)**: Read the plan + incidents.json
   + git log. Spot-check cross-references.
 - **100k context (Haiku)**: Read only the plan. Surface-level consistency
   check.

@@ -25,11 +25,12 @@ skill (access layer).
 | Registry | Rule | Data | Process Skill | Data Skill |
 |----------|------|------|---------------|------------|
 | Frameworks | This file | `@reference/framework-registry.json` | — | `/frameworks` |
-| Gaps | `@.claude/rules/gap-governance.md` | `@reference/known-gaps.json` | `/gap` | `/gap` |
+| Incidents | `@.claude/rules/incident-governance.md` | `@reference/incidents.json` | `/incident` | `/incident` |
 | Glossary | `@.claude/rules/glossary.md` | `@reference/glossary.json` | — | `/glossary` |
 | Tool registry | `@.claude/rules/tool-lifecycle.md` | `@reference/tool-registry.json` | — | `/tool-registry` |
 | Tool evaluation | `@.claude/rules/tool-evaluation.md` | `reference/evaluations/` | `/tool-eval` | — |
 | Artifact harvesting | `@.claude/rules/artifact-harvesting.md` | `harvesting/` | `/harvest` | `/harvest` |
+| Tool operations | `@.claude/rules/tool-ops.md` | `@reference/tool-ops.json` | — | `/tool-ops` |
 
 ### When to invoke /frameworks
 

@@ -16,8 +16,7 @@ session management. Full capability set documented upstream
 (https://docs.anthropic.com/en/docs/claude-code,
 https://github.com/anthropics/claude-code). Our reference files track
 what we depend on and what's available but not yet adopted
-(`@reference/claude-code-maintenance.md`,
-`@reference/claude-code-practices.md`).
+(`@reference/tool-ops-claude-code.md`).
 
 **Configuration** — our use of the platform. The rules we write, skills
 we build, hooks we configure, claude content we author, settings we
@@ -43,7 +42,7 @@ across machines and users. This includes:
   shell aliases) and dotprofile repos. See `@reference/user-repo.md`.
 - Resolving priority between shared templates and user customizations
   (dotprofile wins; shared is fallback and MDM source). See
-  `@reference/claude-code-practices.md` "User-Level CLAUDE.md Setup".
+  `@reference/tool-ops-claude-code.md` "User-Level CLAUDE.md Setup".
 - Interactive deployment review with adoption/merge logic. See
   `@reference/managed-file-deployment.md`.
 - Build pipeline generating self-contained deploy scripts. See
@@ -52,8 +51,8 @@ across machines and users. This includes:
   checklists (`@reference/pre-commit-checklist.md`,
   `@reference/pre-push-checklist.md`,
   `@reference/post-push-checklist.md`), AI-assisted operations
-  (`@reference/agentic-framework.md`), gap tracking
-  (`@reference/known-gaps.json`), plans, and reference files
+  (`@reference/agentic-framework.md`), incident tracking
+  (`@reference/incidents.json`), plans, and reference files
 
 See `@CLAUDE.md` for the full project description.
 
@@ -84,4 +83,4 @@ documentation lives in `reference/framework-*.md` files. See
 - Framework registry: `@reference/framework-registry.json`
 - Framework rule: `@.claude/rules/frameworks.md`
 - Project description: `@CLAUDE.md`
-- Skills: `/frameworks`, `/glossary`, `/audit`, `/intent-audit`, `/gap`
+- Skills: `/frameworks`, `/glossary`, `/audit`, `/intent-audit`, `/incident`

@@ -14,9 +14,9 @@ not artificial 1:1 parity.
 ## Design Principles
 
 - **Three-layer governance**: Prevention (rules in context stop issues from being created), Detection (hooks fire in real-time during sessions), Audit (skills/subagents provide deep review on demand). Each layer catches what the previous missed. Applies to both governance and USO/PSO compliance.
-- **Ambiguity is a defect**: If a rule, reference, or plan can be read two ways, that's a bug. Surface it immediately — file via `/gap` skill per `.claude/rules/gap-governance.md`. Every session has this duty.
+- **Ambiguity is a defect**: If a rule, reference, or plan can be read two ways, that's a bug. Surface it immediately — file via `/incident` skill per `.claude/rules/incident-governance.md`. Every session has this duty.
 - **Full context, not token budgeting**: Use the full context window. Launch subagents with complete rules. Load reference files generously. Keep CLAUDE.md and rules succinct for *clarity*, not to save tokens. Use skills, reference files, and hooks for depth.
-- **Specs vs state**: Rules and references define what SHOULD be. The `/gap` skill tracks what ISN'T yet. Never describe a feature as "working" if it hasn't fired in production. See `.claude/rules/gap-governance.md`.
+- **Specs vs state**: Rules and references define what SHOULD be. The `/incident` skill tracks what ISN'T yet. Never describe a feature as "working" if it hasn't fired in production. See `.claude/rules/incident-governance.md`.
 - **Separate tool harnesses**: Claude Code (`.claude/rules/`, CLAUDE.md) and Cursor (`.cursor/rules/`, agents.md) serve different purposes and are managed independently. No parity requirement.
 - **End users are developers**: Every aitools user benefits from understanding internals. No "dumb user" persona. Skills, docs, and menus assume developer familiarity. Users may work on one, two, or all three platforms — aitools supports all combinations. Cross-platform coverage in skills and docs is factual (all platforms documented), not prescriptive (don't assume every user cares about every platform).
 - **Skills as enablement**: Every managed tool, dependency, and repeatable process gets a skill. User-level skills (`shared/skills/` → `~/.claude/skills/`) cover managed tools and project-agnostic patterns. Project-level skills (`.claude/skills/`) cover repo-specific frameworks. Skills are process implementations governed by rules. Every skill with auto-trigger behavior requires three artifacts: the skill itself, a trigger directive in its governing rule (states WHEN to invoke), and a detection hook spec (catches when the process is bypassed). The rule governs; the skill implements; the hook enforces. See `plans/governance-and-compliance-framework.md` for placement criteria and `.claude/rules/governed-data-access.md` for the access pattern.
@@ -135,6 +135,7 @@ clip2md meeting-notes          # Explicit name: meeting-notes.md
   reset to HEAD before every `aitools` pull. Uncommitted deploy/ changes are
   ephemeral. See `.claude/rules/git-safety.md`
 - **Governed data changes**: When a governed file's schema changes, update the governing skill first (so it documents the new schema), then invoke the skill to make the data change. Never change governed data without the skill reflecting the current schema. See `@.claude/rules/governed-data-access.md`
+- **Tool-ops framework**: Per-tool operational metadata (deny rules, hooks, context injection, governance modes) governed by `.claude/rules/tool-ops.md`. Claude Code is the first implementation — see `reference/tool-ops-claude-code.md`. Registry at `/tool-ops` skill.
 
 ## Code Conventions
 

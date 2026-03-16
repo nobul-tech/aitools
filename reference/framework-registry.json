@@ -25,17 +25,17 @@
       "lastUpdated": "2026-03-14"
     },
     {
-      "name": "Gap governance",
-      "governs": "Tracking and resolving harness deficiencies",
+      "name": "Incident governance",
+      "governs": "Tracking and resolving harness deficiencies with root cause analysis and corrective actions",
       "discipline": "Quality management",
-      "concepts": ["Defect tracking", "Severity classification", "Continuous improvement (PDCA)"],
-      "referenceFile": "reference/framework-gap-governance.md",
+      "concepts": ["Defect tracking", "Severity classification", "Continuous improvement (PDCA)", "Root cause analysis"],
+      "referenceFile": "reference/framework-incident-governance.md",
       "artifacts": [
-        ".claude/rules/gap-governance.md",
-        ".claude/skills/gap/SKILL.md",
+        ".claude/rules/incident-governance.md",
+        ".claude/skills/incident/SKILL.md",
         ".claude/skills/audit/SKILL.md"
       ],
-      "lastUpdated": "2026-03-14"
+      "lastUpdated": "2026-03-15"
     },
     {
       "name": "Source-of-truth protection",
@@ -150,7 +150,7 @@
         ".claude/skills/governed-data/SKILL.md",
         ".claude/rules/glossary.md (trigger directive)",
         ".claude/rules/frameworks.md (trigger directive)",
-        ".claude/rules/gap-governance.md (trigger directive)",
+        ".claude/rules/incident-governance.md (trigger directive)",
         ".claude/rules/tool-evaluation.md (trigger directive)",
         ".claude/skills/frameworks/SKILL.md",
         "reference/framework-governed-data-access.md"
@@ -170,6 +170,21 @@
         "shared/hooks/harvest-session.sh"
       ],
       "lastUpdated": "2026-03-15"
+    },
+    {
+      "name": "Tool operations",
+      "governs": "Per-tool operational metadata, governance modes, and verification specs for deeply-integrated managed tools",
+      "discipline": "Site reliability engineering",
+      "concepts": ["Operational readiness", "Observe-then-enforce", "Pull systems", "Contract testing"],
+      "referenceFile": "reference/framework-tool-ops.md",
+      "artifacts": [
+        ".claude/rules/tool-ops.md",
+        ".claude/skills/tool-ops/SKILL.md",
+        "reference/tool-ops.json",
+        "reference/tool-ops-claude-code.md",
+        "shared/hooks/tool-ops-session-audit.sh"
+      ],
+      "lastUpdated": "2026-03-15"
     }
   ],
   "pending": [
@@ -178,8 +193,8 @@
       "governs": "Plan adherence, deviations, and amendments",
       "discipline": "Process management",
       "concepts": ["Process deviation", "Plan adherence", "Amendment protocols"],
-      "gap": 20,
-      "referenceFile": "reference/gap-020-process-discipline.md"
+      "incident": 20,
+      "referenceFile": "reference/incident-020-process-discipline.md"
     }
   ]
 }

@@ -11,7 +11,7 @@ Should auto-load when:
 Should NOT auto-load for:
 - Writing a new plan from scratch (that's /planning or /aitools-planning)
 - Normal coding tasks unrelated to plan review
-- Filing a gap (that's /gap)
+- Filing an incident (that's /incident)
 
 ## Detection accuracy
 
@@ -34,7 +34,7 @@ Should NOT auto-load for:
 
 ### Missing content
 - Should detect undocumented decisions (gaps in foundational decisions)
-- Should cross-check known-gaps.json Open Questions
+- Should cross-check incidents.json Open Questions
 
 ## Context awareness
 - In 1M context: should load referenced rules and reference files

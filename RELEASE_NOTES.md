@@ -12,6 +12,48 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.61 -- Tool-ops framework, incidents rename, CC ops consolidation (2026-03-15)
+
+### Breaking changes
+
+| # | Change |
+|---|--------|
+| 1 | **Gap → Incident rename** — `known-gaps.json` renamed to `incidents.json`, `gap-governance.md` to `incident-governance.md`, `/gap` skill to `/incident`. Schema: removed `type` field (gap/ambiguity distinction), added `rootCause`, `correctiveAction`, `preventionLayer` nullable fields. All 72 files updated across rules, skills, hooks, reference docs, scripts, plans, cursor rules, glossary, and deploy |
+| 2 | **CC ops files consolidated** — `claude-code-maintenance.md`, `claude-code-practices.md`, `claude-code-windows-shell.md` merged into `reference/tool-ops-claude-code.md`. All cross-references updated (14 files) |
+
+### New frameworks
+
+| # | Change |
+|---|--------|
+| 3 | **Tool operations framework** — per-tool operational metadata for deeply-integrated managed tools. Governs deny rules, hooks, context injection, KPIs, governance modes (audit→active), and verification specs. Grounded in SRE operational readiness, hook-rollout observe-to-enforce, and lean pull systems. New rule (`.claude/rules/tool-ops.md`), reference (`reference/framework-tool-ops.md`), registry (`reference/tool-ops.json`), skill (`/tool-ops`). Claude Code is the first implementation |
+
+### New skills
+
+| # | Change |
+|---|--------|
+| 4 | **`/incident`** (project) — replaces `/gap`. Files harness deficiencies with structured fields, severity classification, and root cause tracking. Updated schema with rootCause/correctiveAction/preventionLayer |
+| 5 | **`/tool-ops`** (project) — governed access to tool-ops.json. Read operational metadata, update governance modes, manage per-tool entries |
+
+### New hooks
+
+| # | Change |
+|---|--------|
+| 6 | **`block-claude-code-guide.sh`** (PreToolUse on Agent) — blocks built-in Claude Code Guide subagent (Haiku model returns inaccurate schema), injects corrective harness context for other Agent calls. Resolves deny rule bypass (incident #26) |
+| 7 | **`tool-ops-session-audit.sh`** (SessionEnd) — reads tool-ops.json, runs mock-json-pipe contract tests, checks deny rule drift, detects stale version deps, emits KPIs to `~/.claude/hooks/logs/tool-ops-audit.jsonl`. Advisory only (always exit 0) |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 8 | **20 incidents migrated from effectiveness.md** — I1-I20 from the Claude Code effectiveness tracker now in `incidents.json` as entries #28-47 with structured fields. Original text preserved in effectiveness.md |
+| 9 | **2 new incidents filed** — #26 (deny rule bypass via permissions.deny) and #27 (glossary hook registered but never deployed) |
+| 10 | **Glossary updated** — "gap" and "ambiguity" deprecated, "incident" added. 8+ term sources updated |
+| 11 | **Surfacing duty hook updated** — `surfacing-duty-stop.sh` now uses incident terminology, detects both gap and incident language for backward compatibility |
+| 12 | **Intent blocks added** — `incident-governance.md`, `incident/SKILL.md`, `tool-ops-claude-code.md` now have formal intent statements |
+| 13 | **Framework registry** — tool-ops entry added, gap governance entry renamed to incident governance |
+
+---
+
 ## v0.60 -- Skills extraction, dotprofile adopt flow, dynamic skill discovery (2026-03-15)
 
 ### Breaking changes
@@ -222,7 +264,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | `reference/harness.md` | Harness architecture (5 components) |
 | `reference/framework-governed-vocabulary.md` | Vocabulary composition convention |
 | `reference/glossary.json` | Governed vocabulary definitions |
-| `reference/framework-gap-governance.md` | Gap governance framework doc |
+| `reference/framework-gap-governance.md` [now: `framework-incident-governance.md`] | Gap governance framework doc |
 | `reference/framework-source-of-truth.md` | Source of truth framework doc |
 | `reference/framework-three-layer-governance.md` | Three-layer governance framework doc |
 | `reference/framework-tool-lifecycle.md` | Tool lifecycle framework doc |
@@ -230,7 +272,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | `reference/framework-incident-investigation.md` | Incident investigation framework doc |
 | `reference/framework-intent-documentation.md` | Intent documentation framework doc |
 | `reference/framework-hook-rollout.md` | Hook rollout framework doc |
-| `reference/gap-020-process-discipline.md` | Gap #20 reference file |
+| `reference/gap-020-process-discipline.md` [now: `incident-020-process-discipline.md`] | Gap #20 reference file |
 | `.claude/skills/glossary/SKILL.md` | Glossary skill |
 | `shared/skills/intent-writing/SKILL.md` | Intent writing skill |
 | `shared/skills/intent-audit/SKILL.md` | Intent audit skill |
@@ -267,7 +309,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 | File | Purpose |
 |------|---------|
-| `.claude/skills/gap/SKILL.md` | Gap filing skill with tests |
+| `.claude/skills/gap/SKILL.md` [now: `incident/SKILL.md`] | Gap filing skill with tests |
 | `.claude/skills/audit/SKILL.md` | Governance audit skill with tests |
 | `shared/skills/planning/SKILL.md` | Session and plan strategy skill with tests |
 | `shared/skills/optimize-plan/SKILL.md` | Living plan review skill with tests |
@@ -301,8 +343,8 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 | File | Purpose |
 |------|---------|
-| `.claude/rules/gap-governance.md` | Gap/ambiguity governance rule — decision tree, lifecycle, skill/hook specs |
-| `reference/known-gaps.json` | Structured gap tracking (replaces known-gaps.md) |
+| `.claude/rules/gap-governance.md` [now: `incident-governance.md`] | Gap/ambiguity governance rule — decision tree, lifecycle, skill/hook specs |
+| `reference/known-gaps.json` [now: `incidents.json`] | Structured gap tracking (replaces known-gaps.md) |
 | `plans/governance-and-compliance-framework.md` | Implementation plan for 30 skills, hooks, permissions |
 
 ### Files removed
@@ -310,7 +352,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 | File | Reason |
 |------|--------|
 | `.claude/rules/cursor-rule-parity.md` | Replaced by "Separate tool harnesses" design principle |
-| `reference/known-gaps.md` | Replaced by `reference/known-gaps.json` |
+| `reference/known-gaps.md` | Replaced by `reference/known-gaps.json` [now: `incidents.json`] |
 
 **Verified on:** Windows
 
@@ -350,7 +392,7 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 |------|---------|
 | `.claude/rules/managed-file-deployment.md` | Deployment type definitions, content sources, platform config rules |
 | `.cursor/rules/managed-file-deployment.mdc` | Cursor parity for above |
-| `reference/known-gaps.md` | Known out-of-spec code tracking |
+| `reference/known-gaps.md` [now: `incidents.json`] | Known out-of-spec code tracking |
 
 **Verified on:** Windows
 

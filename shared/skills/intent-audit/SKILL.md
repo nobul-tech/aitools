@@ -18,7 +18,7 @@ finding is a potential trigger for the discovery-to-continuation
 cycle (`@reference/framework-adoption.md`).
 
 NOT for writing intent statements (see `/intent-writing`). NOT for
-filing gaps discovered during the audit (use `/gap` after). NOT for
+filing gaps discovered during the audit (use `/incident` after). NOT for
 deciding where displaced content should live (that requires design
 decisions informed by `@reference/framework-adoption.md`).
 
@@ -78,7 +78,7 @@ For each finding, propose a specific action:
 - **Split**: propose new file with its own intent
 - **Amend intent**: draft the revised intent (protected — needs
   user approval)
-- **File gap**: when no destination exists, file via `/gap`
+- **File gap**: when no destination exists, file via `/incident`
 
 Present all findings and proposed resolutions to the user before
 making changes. Moving content between files and amending intents
@@ -131,4 +131,4 @@ what that means. The hook spec lives in
 - Intent writing: `/intent-writing` skill
 - Framework: `@reference/framework-adoption.md`
 - Protection rule: `@.claude/rules/sources-of-truth.md`
-- Gap filing: `/gap` skill
+- Gap filing: `/incident` skill

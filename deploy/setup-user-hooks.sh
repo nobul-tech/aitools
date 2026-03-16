@@ -1809,6 +1809,8 @@ SCRATCH_CMD="bash \"$SCRATCH_DEST\""
 HARVEST_CMD="bash \"$HARVEST_DEST\""
 SHFIXUP_CMD="bash \"$SHFIXUP_DEST\""
 SURFACING_CMD="bash \"$SURFACING_DEST\""
+BLOCK_GUIDE_CMD="bash \"$BLOCK_GUIDE_DEST\""
+TOOL_OPS_AUDIT_CMD="bash \"$TOOL_OPS_AUDIT_DEST\""
 
 MERGE_RESULT=$(node -e "
 $SORT_KEYS_JS
@@ -1824,6 +1826,8 @@ const scratchCmd = process.argv[7];
 const harvestCmd = process.argv[8];
 const shfixupCmd = process.argv[9];
 const surfacingCmd = process.argv[10];
+const blockGuideCmd = process.argv[11];
+const toolOpsAuditCmd = process.argv[12];
 // --- Embedded preferences (from profile.json at build time) ---
 const autoMemory = false;
 const alwaysThinking = true;
@@ -1892,6 +1896,8 @@ mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
 mergeHookEntry('PreToolUse', 'glossary-skill-guard.sh', 'Read|Grep', glossaryCmd);
 mergeHookEntry('PostToolUse', 'sh-file-fixup.sh', 'Write|Edit', shfixupCmd);
 mergeHookEntry('Stop', 'surfacing-duty-stop.sh', '', surfacingCmd);
+mergeHookEntry('PreToolUse', 'block-claude-code-guide.sh', 'Agent', blockGuideCmd);
+mergeHookEntry('SessionEnd', 'tool-ops-session-audit.sh', '', toolOpsAuditCmd);
 
 // --- Track old values for change reporting ---
 const oldAutoMemory = settings.autoMemoryEnabled;
@@ -1961,6 +1967,10 @@ if (dryRun) {
         if (ptCount !== 1) { console.error('Validation failed: expected 1 PreToolUse standing-order-guard hook, got ' + ptCount); process.exit(1); }
         const glCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('glossary-skill-guard.sh'))).length;
         if (glCount !== 1) { console.error('Validation failed: expected 1 PreToolUse glossary-skill-guard hook, got ' + glCount); process.exit(1); }
+        const bgCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('block-claude-code-guide.sh'))).length;
+        if (bgCount !== 1) { console.error('Validation failed: expected 1 PreToolUse block-claude-code-guide hook, got ' + bgCount); process.exit(1); }
+        const toaCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('tool-ops-session-audit.sh'))).length;
+        if (toaCount !== 1) { console.error('Validation failed: expected 1 SessionEnd tool-ops-session-audit hook, got ' + toaCount); process.exit(1); }
 
         // Validate hook schema: command-type must have command field,
         // prompt-type must have prompt field (not command).
@@ -1990,7 +2000,7 @@ if (dryRun) {
         prefChanges.forEach(c => console.log(c));
     }
 }
-" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$SURFACING_CMD")
+" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$SURFACING_CMD" "$BLOCK_GUIDE_CMD" "$TOOL_OPS_AUDIT_CMD")
 
 # Parse merge result: first line is status, CHANGED: lines are key changes
 MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)

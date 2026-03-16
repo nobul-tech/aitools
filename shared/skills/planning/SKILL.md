@@ -27,7 +27,7 @@ Override with `model: sonnet` etc. in skill/subagent frontmatter.
 
 ### Session flow
 
-1. Read the plan + known-gaps.json + relevant rules
+1. Read the plan + incidents.json + relevant rules
 2. Work through implementation steps in order
 3. Surface ambiguities as they arise (surfacing duty)
 4. At 60-70%: stop building, file gaps, update release notes, commit,

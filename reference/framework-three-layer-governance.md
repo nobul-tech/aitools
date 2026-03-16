@@ -20,7 +20,7 @@ complete.
 |-------|------|-----------|---------|
 | Prevention | Every session, before issues are created | Rules in context, skills loaded on demand | Stops issues by showing the right way |
 | Detection | During tool calls and session events | Hooks firing in real-time | Issues as they happen, blocking or warning |
-| Audit | On demand | `/audit` skill, `/gap` skill | What slipped through both layers |
+| Audit | On demand | `/audit` skill, `/incident` skill | What slipped through both layers |
 
 **Rule-skill governance**: Rules govern and enforce process; skills
 implement it. Rules are always in context and contain trigger directives
@@ -78,24 +78,24 @@ purpose, scope, and audience fields.
 
 **Skill** — loads the JSON on demand, presents it with context.
 Injected into subagents via SubagentStart cache. Write skills
-(`/gap`, `/tool-eval`) file entries. Read skills (`/gaps`,
+(`/incident`, `/tool-eval`) file entries. Read skills (`/incidents`,
 `/frameworks`, `/tools`) present the registry.
 
 **Per-entry reference files** (`reference/<concept>-*.md`) — when
 entries have enough detail to stand alone. Frameworks and tools
-warrant per-entry files. Simple gap entries stay in JSON only;
-framework-level gaps that went through the full DTCC (steps 4-6)
+warrant per-entry files. Simple incident entries stay in JSON only;
+framework-level incidents that went through the full DTCC (steps 4-6)
 get a reference file.
 
 ### Naming
 
 - Rule: `.claude/rules/<registry-name>.md`
 - Data: `reference/<registry-name>.json` or `reference/<name>-registry.json`
-- Write skill: `/<singular>` (e.g., `/gap`, `/tool-eval`)
-- Read skill: `/<plural>` (e.g., `/gaps`, `/frameworks`, `/tools`)
+- Write skill: `/<singular>` (e.g., `/incident`, `/tool-eval`)
+- Read skill: `/<plural>` (e.g., `/incidents`, `/frameworks`, `/tools`)
 - Per-entry reference: `reference/<concept>-<name>.md`
-  (e.g., `framework-gap-governance.md`, `tool-perl.md`,
-  `gap-020-process-discipline.md`)
+  (e.g., `framework-incident-governance.md`, `tool-perl.md`,
+  `incident-020-process-discipline.md`)
 
 ### Schema
 
@@ -171,4 +171,4 @@ When adopting or reviewing a framework, verify three-layer coverage:
 
 - Framework registry: `@reference/framework-registry.json`
 - Meta-framework: `@reference/framework-adoption.md`
-- Gap governance: `@reference/framework-gap-governance.md`
+- Incident governance: `@reference/framework-incident-governance.md`

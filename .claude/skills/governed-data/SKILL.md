@@ -69,7 +69,7 @@ Check whether governed data access is being bypassed:
 1. Run pre-commit step 16 — checks `.claude/rules/` and `CLAUDE.md`
    for direct JSON references
 2. Search reference files for governed JSON paths:
-   `grep -rn 'glossary\.json\|framework-registry\.json\|known-gaps\.json\|tool-registry\.json' reference/*.md`
+   `grep -rn 'glossary\.json\|framework-registry\.json\|incidents\.json\|tool-registry\.json\|tool-ops\.json' reference/*.md`
 3. Search skills for JSON paths that shouldn't be there (skills
    other than the governing skill referencing the JSON)
 4. Report findings — each hit is a bypass vector to fix

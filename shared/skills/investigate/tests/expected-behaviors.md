@@ -11,7 +11,7 @@ Should auto-load when:
 Should NOT auto-load for:
 - Normal debugging (use tool-specific skills)
 - Planned refactoring (that's /planning)
-- Filing a gap (that's /gap — though incidents may produce gaps)
+- Filing an incident (that's /incident)
 
 ## Lifecycle coverage
 - Should walk through all 8 phases when appropriate
