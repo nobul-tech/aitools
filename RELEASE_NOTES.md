@@ -12,13 +12,20 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
-## v0.61.1 -- Tool-ops governed data bypass fix (2026-03-15)
+## v0.61.2 -- AAR, test suite, governed data fix (2026-03-15)
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | **After Action Review** — 731-line AAR of the tool-ops planning session harvested as a keep artifact. Covers session arc, 10 key decisions, 7 plan revisions, military doctrine parallels (Mission Command, OPORD, Backbrief), and lessons for future plans |
+| 2 | **Tool-ops test suite** — 42 tests across 5 suites (schema integrity, drift detection, live contract tests, governed access enforcement, cross-reference validation). Harvested as a keep artifact for reuse |
 
 ### Bug fixes
 
 | # | Change |
 |---|--------|
-| 1 | **Governed data bypass in tool-ops-claude-code.md intent** — intent statement referenced `tool-ops.json` and `incidents.json` directly instead of through governing skills. Found by tool-ops test suite (Suite 4: governed access enforcement). Fixed to reference `/tool-ops` and `/incident` skills |
+| 3 | **Governed data bypass in tool-ops-claude-code.md intent** — intent statement referenced `tool-ops.json` and `incidents.json` directly instead of through governing skills. Found by tool-ops test suite (Suite 4). Fixed to reference `/tool-ops` and `/incident` skills |
 
 ---
 
