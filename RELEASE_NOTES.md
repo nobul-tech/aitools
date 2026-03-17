@@ -12,6 +12,19 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.62.1 -- Brief integrity, #54 integration, readingOrder fix (2026-03-16)
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | **Decision #54 integration** — 13 reciprocal `related` links fixed, component (15) added to #51 (systemic finding escalation from Plan Writer to improvement cycle) |
+| 2 | **readingOrder fix** — 6 decisions (#49-#54) were missing from `meta.readingOrder`. Agents reading via /brief would have missed them. Now 53 active decisions across 12 phases, zero gaps |
+| 3 | **Handoff prompt updated** — improvement cycle woven into plan-writing protocol (write-review escalation, Plan Writer template, cross-cutting table, sequencing). ReadingOrder aligned with brief |
+| 4 | **Incident #49 filed** — subagent transcript search missed queue-operation messages, produced false fabrication claim |
+
+---
+
 ## v0.62.0 -- Workspace governance, planning brief v6, harness improvement cycle (2026-03-16)
 
 ### New
