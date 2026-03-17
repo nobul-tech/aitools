@@ -137,6 +137,7 @@ For each section:
 3. Plan Writer reviews as the user would (see section F below for delegation template)
 4. S3 revises based on Plan Writer feedback
 5. Plan Writer approves or pushes back again
+5a. If Plan Writer flags a SYSTEMIC finding (governance gap, cross-cutting pattern, missing structural enforcement — not just "rewrite this paragraph"), escalate to the harness improvement cycle rather than ad-hoc revision. Investigate, look for structural fixes before mechanical ones, run barrier analysis if multiple options exist. S3 decides whether to run inline or defer to a later batch.
 6. S3 moves to the next section
 
 ### Section order
@@ -266,6 +267,22 @@ For each section S3 presents, evaluate against these 10 criteria:
 10. Does the section match the user's demonstrated quality bar?
 ```
 
+### Escalation to improvement cycle
+
+```
+When your review reveals a finding that is SYSTEMIC — it affects multiple
+sections, reveals a governance gap, or indicates a class of problem the
+harness does not govern — do not attempt to fix it within the review loop.
+Flag it explicitly:
+
+  SYSTEMIC FINDING: [description]. This requires investigation and
+  structural-first generalization, not a section rewrite.
+
+S3 decides the response: run the improvement cycle inline, defer to a
+later batch, or file an incident for future resolution. Your job is to
+DETECT and FLAG, not to resolve systemic findings.
+```
+
 ### Deduplication rule
 
 ```
@@ -304,7 +321,7 @@ preference signals.
 | #49 | Naming: flat verb skill naming |
 | #51, #52 | Plan-writing protocol + Plan Writer role |
 | **#53** | **Governance: governed document drift prevention (governedBy + hooks)** |
-| **#54** | **Process: harness improvement cycle (finding to verified fix)** |
+| **#54** | **Process: harness improvement cycle (finding to verified fix). Escalation target from Plan Writer when systemic findings surface during plan writing** |
 
 ### Staff functions (decision #38)
 
@@ -345,6 +362,7 @@ Key principles that affect plan execution:
 2. **Next**: log_ship (#32) for KPI measurement
 3. **Then**: Framework artifacts in dependency order
 4. **Early**: Decision #53 Phase 1 (rule-write-impact hook) — prevents drift during plan execution itself
+5. **Throughout**: The harness improvement cycle (#54) governs how findings surfaced during plan writing and execution become verified fixes. Not infrastructure — a process pattern that S3 and Plan Writer both reference
 
 ---
 
@@ -360,6 +378,7 @@ Key principles that affect plan execution:
    - Write it
    - Launch the Plan Writer subagent using the template in section F
    - Revise based on Plan Writer review
+   - If Plan Writer flags a systemic finding, apply the improvement cycle (investigate, structural-first, barrier analysis) or defer to a later batch
    - Get Plan Writer approval
    - Move to next section
 

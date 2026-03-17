@@ -730,7 +730,8 @@
         28,
         44,
         46,
-        48
+        48,
+        54
       ]
     },
     {
@@ -2292,7 +2293,8 @@
         36,
         41,
         42,
-        48
+        48,
+        54
       ]
     },
     {
@@ -2473,7 +2475,8 @@
         40,
         43,
         44,
-        48
+        48,
+        54
       ]
     },
     {
@@ -2774,7 +2777,8 @@
         39,
         40,
         45,
-        48
+        48,
+        54
       ]
     },
     {
@@ -2940,7 +2944,8 @@
         36,
         38,
         46,
-        48
+        48,
+        54
       ]
     },
     {
@@ -3014,7 +3019,8 @@
         13,
         29,
         41,
-        43
+        43,
+        54
       ]
     },
     {
@@ -3063,7 +3069,8 @@
         34,
         44,
         47,
-        48
+        48,
+        54
       ]
     },
     {
@@ -3181,7 +3188,8 @@
         36,
         41,
         44,
-        46
+        46,
+        54
       ]
     },
     {
@@ -3202,25 +3210,97 @@
         "(10) Existing skills unchanged: /investigate, /incident, /frameworks, /glossary, /tool-eval, /tool-registry, /tool-ops, /audit, /scratch"
       ],
       "frameworks": [
-        { "name": "Governed vocabulary", "status": "existing" },
-        { "name": "Mission command", "status": "proposed" },
-        { "name": "Mission analysis", "status": "proposed" },
-        { "name": "Operational learning", "status": "proposed" },
-        { "name": "Platform engineering", "status": "proposed" }
+        {
+          "name": "Governed vocabulary",
+          "status": "existing"
+        },
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        },
+        {
+          "name": "Mission analysis",
+          "status": "proposed"
+        },
+        {
+          "name": "Operational learning",
+          "status": "proposed"
+        },
+        {
+          "name": "Platform engineering",
+          "status": "proposed"
+        }
       ],
       "artifacts": [
-        { "path": "shared/skills/brief/SKILL.md", "status": "proposed", "intent": { "purpose": "Produce or consume planning briefs — decision capture during conversation and governed reading in reading order with blocker checks", "scope": "Brief creation and consumption only. NOT plan writing. NOT delegation (/delegate). NOT post-execution debrief (/debrief)", "audience": "Every agent and user preparing to write a plan, in any project" } },
-        { "path": "shared/skills/debrief/SKILL.md", "status": "proposed", "intent": { "purpose": "Conduct structured After Action Reviews — observations, insights, proposals with barrier analysis", "scope": "AAR production only. NOT artifact management (/harvest). NOT delegation (/delegate). NOT incident filing (/incident)", "audience": "Every agent and user at plan completion, in any project" } },
-        { "path": "shared/skills/delegate/SKILL.md", "status": "proposed", "intent": { "purpose": "Delegate work to subagents with full delegation duty — identity, context injection, running estimate extract, authority model", "scope": "Delegation briefing construction only. NOT inter-agent messaging (/channel). NOT post-execution debrief (/debrief)", "audience": "Every agent and user delegating work, in any project" } },
-        { "path": "shared/skills/channel/SKILL.md", "status": "proposed", "intent": { "purpose": "Post and read inter-agent messages — SITREPs, FINDINGs, running estimates", "scope": "Channel messaging only. NOT delegation (/delegate). NOT channel archival (channel-archive.sh hook)", "audience": "Every delegated agent posting status or findings, every delegating agent reading channel state" } },
-        { "path": "shared/skills/compat/SKILL.md", "status": "proposed", "intent": { "purpose": "Check platform correctness — divergence lookup, all-platform script registration, wrapper adoption verification", "scope": "Platform compatibility queries only. NOT tool installation (/tool-registry, /tool-eval). NOT tool-specific operations (/tool-ops)", "audience": "Every agent and user writing or reviewing cross-platform code, in any project" } }
+        {
+          "path": "shared/skills/brief/SKILL.md",
+          "status": "proposed",
+          "intent": {
+            "purpose": "Produce or consume planning briefs — decision capture during conversation and governed reading in reading order with blocker checks",
+            "scope": "Brief creation and consumption only. NOT plan writing. NOT delegation (/delegate). NOT post-execution debrief (/debrief)",
+            "audience": "Every agent and user preparing to write a plan, in any project"
+          }
+        },
+        {
+          "path": "shared/skills/debrief/SKILL.md",
+          "status": "proposed",
+          "intent": {
+            "purpose": "Conduct structured After Action Reviews — observations, insights, proposals with barrier analysis",
+            "scope": "AAR production only. NOT artifact management (/harvest). NOT delegation (/delegate). NOT incident filing (/incident)",
+            "audience": "Every agent and user at plan completion, in any project"
+          }
+        },
+        {
+          "path": "shared/skills/delegate/SKILL.md",
+          "status": "proposed",
+          "intent": {
+            "purpose": "Delegate work to subagents with full delegation duty — identity, context injection, running estimate extract, authority model",
+            "scope": "Delegation briefing construction only. NOT inter-agent messaging (/channel). NOT post-execution debrief (/debrief)",
+            "audience": "Every agent and user delegating work, in any project"
+          }
+        },
+        {
+          "path": "shared/skills/channel/SKILL.md",
+          "status": "proposed",
+          "intent": {
+            "purpose": "Post and read inter-agent messages — SITREPs, FINDINGs, running estimates",
+            "scope": "Channel messaging only. NOT delegation (/delegate). NOT channel archival (channel-archive.sh hook)",
+            "audience": "Every delegated agent posting status or findings, every delegating agent reading channel state"
+          }
+        },
+        {
+          "path": "shared/skills/compat/SKILL.md",
+          "status": "proposed",
+          "intent": {
+            "purpose": "Check platform correctness — divergence lookup, all-platform script registration, wrapper adoption verification",
+            "scope": "Platform compatibility queries only. NOT tool installation (/tool-registry, /tool-eval). NOT tool-specific operations (/tool-ops)",
+            "audience": "Every agent and user writing or reviewing cross-platform code, in any project"
+          }
+        }
       ],
       "kpis": [
-        { "name": "skillNamingCompliance", "source": "harness state audit", "unit": "percent skills following flat-verb convention", "target": "100% of new skills" },
-        { "name": "skillDiscoverability", "source": "session transcript analysis", "unit": "percent correct skill invocations on first try", "target": ">= 90%" }
+        {
+          "name": "skillNamingCompliance",
+          "source": "harness state audit",
+          "unit": "percent skills following flat-verb convention",
+          "target": "100% of new skills"
+        },
+        {
+          "name": "skillDiscoverability",
+          "source": "session transcript analysis",
+          "unit": "percent correct skill invocations on first try",
+          "target": ">= 90%"
+        }
       ],
       "status": "agreed",
-      "related": [3, 8, 13, 16, 36, 43]
+      "related": [
+        3,
+        8,
+        13,
+        16,
+        36,
+        43
+      ]
     },
     {
       "id": 50,
@@ -3243,24 +3323,87 @@
         "(13) Agent bypass gap: if agent uses raw Agent tool without /delegate, estimate exists (hook created it) but stays stale. Mitigate with delegation rule (prevention); escalate to hook if pattern recurs"
       ],
       "frameworks": [
-        { "name": "Mission command", "status": "proposed", "note": "Running estimate is a first-class MC concept — S3 maintains, S2 contributes" },
-        { "name": "Operational learning", "status": "proposed", "note": "Estimate feeds AAR, archived for carry-forward" },
-        { "name": "Mission analysis", "status": "proposed", "note": "/brief seeds initial estimate from planning brief facts/assumptions" }
+        {
+          "name": "Mission command",
+          "status": "proposed",
+          "note": "Running estimate is a first-class MC concept — S3 maintains, S2 contributes"
+        },
+        {
+          "name": "Operational learning",
+          "status": "proposed",
+          "note": "Estimate feeds AAR, archived for carry-forward"
+        },
+        {
+          "name": "Mission analysis",
+          "status": "proposed",
+          "note": "/brief seeds initial estimate from planning brief facts/assumptions"
+        }
       ],
       "artifacts": [
-        { "path": "reference/running-estimate-schema.json", "status": "proposed", "intent": { "purpose": "Define the JSON schema for running estimates — continuously updated state documents for multi-agent operations", "scope": "Schema definition only. NOT the maintenance process (/delegate skill). NOT the creation mechanism (channel-init.sh hook)", "audience": "/delegate skill, /debrief skill, /brief skill, channel-init.sh hook, channel-archive.sh hook" } },
-        { "path": "shared/hooks/channel-init.sh", "status": "proposed", "scope": "user hook", "intent": "SessionStart: create .aitools/channel/session-XXX/, prune >24h orphan dirs, seed stub running estimate. Single responsibility: channel readiness. Merges channel-init + channel-prune" },
-        { "path": "reference/channel-schemas.json", "status": "proposed", "intent": "Add RUNNING_ESTIMATE message type — updated-in-place, always archived" },
-        { "path": "reference/framework-registry.json", "status": "existing", "intent": "Add provenance entry for running estimate (ADP 5-0)" },
-        { "path": "reference/glossary.json", "status": "existing", "intent": "Add 'running estimate' governed term" }
+        {
+          "path": "reference/running-estimate-schema.json",
+          "status": "proposed",
+          "intent": {
+            "purpose": "Define the JSON schema for running estimates — continuously updated state documents for multi-agent operations",
+            "scope": "Schema definition only. NOT the maintenance process (/delegate skill). NOT the creation mechanism (channel-init.sh hook)",
+            "audience": "/delegate skill, /debrief skill, /brief skill, channel-init.sh hook, channel-archive.sh hook"
+          }
+        },
+        {
+          "path": "shared/hooks/channel-init.sh",
+          "status": "proposed",
+          "scope": "user hook",
+          "intent": "SessionStart: create .aitools/channel/session-XXX/, prune >24h orphan dirs, seed stub running estimate. Single responsibility: channel readiness. Merges channel-init + channel-prune"
+        },
+        {
+          "path": "reference/channel-schemas.json",
+          "status": "proposed",
+          "intent": "Add RUNNING_ESTIMATE message type — updated-in-place, always archived"
+        },
+        {
+          "path": "reference/framework-registry.json",
+          "status": "existing",
+          "intent": "Add provenance entry for running estimate (ADP 5-0)"
+        },
+        {
+          "path": "reference/glossary.json",
+          "status": "existing",
+          "intent": "Add 'running estimate' governed term"
+        }
       ],
       "kpis": [
-        { "name": "estimateMaintenanceRate", "source": "channel-manifest.json", "unit": "percent plan executions with running estimate", "target": "100%" },
-        { "name": "estimateVersionsPerPlan", "source": "running estimate meta.version", "unit": "versions per plan execution", "target": ">= batches + 2" },
-        { "name": "carryForwardSuccessRate", "source": "S2 intelligence prep inputs", "unit": "percent sessions where prior estimate was available", "target": ">= 90%" }
+        {
+          "name": "estimateMaintenanceRate",
+          "source": "channel-manifest.json",
+          "unit": "percent plan executions with running estimate",
+          "target": "100%"
+        },
+        {
+          "name": "estimateVersionsPerPlan",
+          "source": "running estimate meta.version",
+          "unit": "versions per plan execution",
+          "target": ">= batches + 2"
+        },
+        {
+          "name": "carryForwardSuccessRate",
+          "source": "S2 intelligence prep inputs",
+          "unit": "percent sessions where prior estimate was available",
+          "target": ">= 90%"
+        }
       ],
       "status": "agreed",
-      "related": [4, 22, 23, 26, 36, 44, 46, 48, 49]
+      "related": [
+        4,
+        22,
+        23,
+        26,
+        36,
+        44,
+        46,
+        48,
+        49,
+        54
+      ]
     },
     {
       "id": 51,
@@ -3281,26 +3424,84 @@
         "(11) S2 intelligence prep consumed before S3 starts writing: the S2 investigation (investigate-plan-transition.md from .scratch/ or harvesting/) IS the intelligence brief for this plan",
         "(12) Three review layers: Plan Writer review (calibrated as user) → S3 verification (did Plan Writer catch everything? does the plan work as an executable document?) → user final approval (the real user sees only the finished product)",
         "(13) S3 verification turns: after Plan Writer approves all sections, S3 does its own pass — reads the complete plan as if it were a fresh agent. Can I execute this? Are all 51 decisions mapped? Would I know what to do for each batch?",
-        "(14) Provenance: In-Context Preference Learning (ICPL, arxiv 2410.17233), Constitutional AI (Anthropic, arxiv 2212.08073). Both adapted for plan-writing quality review"
+        "(14) Provenance: In-Context Preference Learning (ICPL, arxiv 2410.17233), Constitutional AI (Anthropic, arxiv 2212.08073). Both adapted for plan-writing quality review",
+        "(15) Systemic finding escalation: when Plan Writer review reveals a finding that crosses section boundaries, reveals a governance gap, or indicates a class of problem the harness does not govern, the write-review loop pauses. S3 classifies: point fix (revise the section) or systemic (invoke the harness improvement cycle per decision #54 — investigate, structural-first generalization, barrier analysis, worktree-isolated fix, independent re-audit). S3 decides whether to run inline or defer to a batch. This prevents the Plan Writer loop from becoming an ad-hoc rewrite engine for structural problems"
       ],
       "frameworks": [
-        { "name": "Mission command", "status": "proposed", "note": "Plan Writer is a delegation from S3 — delegation duty applies" },
-        { "name": "Mission analysis", "status": "proposed", "note": "Plan Writer consumes the brief via reading order — the transition from analysis to planning" },
-        { "name": "Operational learning", "status": "proposed", "note": "Preference calibration from session history IS operational learning — learning from past execution to improve future execution" }
+        {
+          "name": "Mission command",
+          "status": "proposed",
+          "note": "Plan Writer is a delegation from S3 — delegation duty applies"
+        },
+        {
+          "name": "Mission analysis",
+          "status": "proposed",
+          "note": "Plan Writer consumes the brief via reading order — the transition from analysis to planning"
+        },
+        {
+          "name": "Operational learning",
+          "status": "proposed",
+          "note": "Preference calibration from session history IS operational learning — learning from past execution to improve future execution"
+        }
       ],
       "artifacts": [
-        { "path": "shared/skills/delegate/SKILL.md", "status": "proposed", "intent": "Add plan-writing delegation template with: user-identity calibration, session access instructions, preference extraction heuristic, multi-turn protocol, quality checklist gate" },
-        { "path": "reference/framework-mission-command.md", "status": "proposed", "intent": "Document Plan Writer role, briefing-to-plan transition process, relationship to S2 intelligence prep" },
-        { "path": "reference/framework-registry.json", "status": "existing", "intent": "Add provenance entries for In-Context Preference Learning and Constitutional AI" }
+        {
+          "path": "shared/skills/delegate/SKILL.md",
+          "status": "proposed",
+          "intent": "Add plan-writing delegation template with: user-identity calibration, session access instructions, preference extraction heuristic, multi-turn protocol, quality checklist gate"
+        },
+        {
+          "path": "reference/framework-mission-command.md",
+          "status": "proposed",
+          "intent": "Document Plan Writer role, briefing-to-plan transition process, relationship to S2 intelligence prep"
+        },
+        {
+          "path": "reference/framework-registry.json",
+          "status": "existing",
+          "intent": "Add provenance entries for In-Context Preference Learning and Constitutional AI"
+        }
       ],
       "kpis": [
-        { "name": "planQualityScore", "source": "10-criterion checklist", "unit": "criteria passed on first draft", "target": ">= 8/10" },
-        { "name": "planRewriteCount", "source": "Plan Writer running estimate", "unit": "internal iterations", "target": "2-4 (not 7)" },
-        { "name": "userApprovalRounds", "source": "session transcript", "unit": "rounds of user revision after Plan Writer completes", "target": "<= 2" },
-        { "name": "preferenceCalibrationAccuracy", "source": "user approval rate of Plan Writer decisions", "unit": "percent plan sections approved without revision", "target": ">= 70%" }
+        {
+          "name": "planQualityScore",
+          "source": "10-criterion checklist",
+          "unit": "criteria passed on first draft",
+          "target": ">= 8/10"
+        },
+        {
+          "name": "planRewriteCount",
+          "source": "Plan Writer running estimate",
+          "unit": "internal iterations",
+          "target": "2-4 (not 7)"
+        },
+        {
+          "name": "userApprovalRounds",
+          "source": "session transcript",
+          "unit": "rounds of user revision after Plan Writer completes",
+          "target": "<= 2"
+        },
+        {
+          "name": "preferenceCalibrationAccuracy",
+          "source": "user approval rate of Plan Writer decisions",
+          "unit": "percent plan sections approved without revision",
+          "target": ">= 70%"
+        }
       ],
       "status": "agreed",
-      "related": [3, 4, 13, 28, 36, 37, 45, 48, 49, 50, 52]
+      "related": [
+        3,
+        4,
+        13,
+        28,
+        36,
+        37,
+        45,
+        48,
+        49,
+        50,
+        52,
+        54
+      ]
     },
     {
       "id": 52,
@@ -3328,21 +3529,63 @@
         }
       },
       "frameworks": [
-        { "name": "Mission command", "status": "proposed", "note": "Plan Writer is a staff role instantiated via delegation duty — like S1/S2/S3 but for the analysis-to-planning transition" },
-        { "name": "Mission analysis", "status": "proposed", "note": "The Plan Writer reviews the product of the briefing-to-plan transition — the ungoverned gap this role closes" },
-        { "name": "Operational learning", "status": "proposed", "note": "Preference calibration from session history IS operational learning applied to plan quality" }
+        {
+          "name": "Mission command",
+          "status": "proposed",
+          "note": "Plan Writer is a staff role instantiated via delegation duty — like S1/S2/S3 but for the analysis-to-planning transition"
+        },
+        {
+          "name": "Mission analysis",
+          "status": "proposed",
+          "note": "The Plan Writer reviews the product of the briefing-to-plan transition — the ungoverned gap this role closes"
+        },
+        {
+          "name": "Operational learning",
+          "status": "proposed",
+          "note": "Preference calibration from session history IS operational learning applied to plan quality"
+        }
       ],
       "artifacts": [
-        { "path": "shared/skills/delegate/SKILL.md", "status": "proposed", "intent": "Add plan-writing delegation template: Plan Writer role with identity, calibration data access, review protocol, quality checklist" },
-        { "path": "reference/framework-mission-command.md", "status": "proposed", "intent": "Document Plan Writer role alongside S1/S2/S3. Different from staff functions: Plan Writer is for the analysis-to-planning transition, staff functions are for plan execution" },
-        { "path": "reference/glossary.json", "status": "existing", "intent": "Add 'plan writer' governed term" }
+        {
+          "path": "shared/skills/delegate/SKILL.md",
+          "status": "proposed",
+          "intent": "Add plan-writing delegation template: Plan Writer role with identity, calibration data access, review protocol, quality checklist"
+        },
+        {
+          "path": "reference/framework-mission-command.md",
+          "status": "proposed",
+          "intent": "Document Plan Writer role alongside S1/S2/S3. Different from staff functions: Plan Writer is for the analysis-to-planning transition, staff functions are for plan execution"
+        },
+        {
+          "path": "reference/glossary.json",
+          "status": "existing",
+          "intent": "Add 'plan writer' governed term"
+        }
       ],
       "kpis": [
-        { "name": "planWriterCatchRate", "source": "Plan Writer review log", "unit": "percent issues caught by Plan Writer that user would have caught", "target": ">= 70%" },
-        { "name": "planWriterFalsePositiveRate", "source": "user overrides of Plan Writer rejections", "unit": "percent Plan Writer rejections that user approves anyway", "target": "< 20%" }
+        {
+          "name": "planWriterCatchRate",
+          "source": "Plan Writer review log",
+          "unit": "percent issues caught by Plan Writer that user would have caught",
+          "target": ">= 70%"
+        },
+        {
+          "name": "planWriterFalsePositiveRate",
+          "source": "user overrides of Plan Writer rejections",
+          "unit": "percent Plan Writer rejections that user approves anyway",
+          "target": "< 20%"
+        }
       ],
       "status": "agreed",
-      "related": [4, 25, 38, 45, 49, 51]
+      "related": [
+        4,
+        25,
+        38,
+        45,
+        49,
+        51,
+        54
+      ]
     },
     {
       "id": 53,
@@ -3360,27 +3603,107 @@
         "(8) Scope exclusions: NOT schema migration for cross-session state documents (running estimate — channel-init.sh). NOT cross-reference breakage (/audit skill). NOT hook behavior governance (tool-ops.json). NOT skill intent drift (brief intents are archival once skill is implemented)"
       ],
       "frameworks": [
-        { "name": "Three-layer governance", "status": "existing", "note": "Prevention (governedBy field), Detection (rule-write-impact hook, plan-gate drift check), Audit (S2 intelligence prep, /audit skill)" },
-        { "name": "Governed data access", "status": "existing", "note": "Extends existing skill-gated access — /brief skill resolves governedBy references" },
-        { "name": "Incident investigation", "status": "existing", "note": "Barrier analysis methodology applied to evaluate each prevention element" },
-        { "name": "Mission command", "status": "proposed", "note": "S2 intelligence prep includes brief freshness check" }
+        {
+          "name": "Three-layer governance",
+          "status": "existing",
+          "note": "Prevention (governedBy field), Detection (rule-write-impact hook, plan-gate drift check), Audit (S2 intelligence prep, /audit skill)"
+        },
+        {
+          "name": "Governed data access",
+          "status": "existing",
+          "note": "Extends existing skill-gated access — /brief skill resolves governedBy references"
+        },
+        {
+          "name": "Incident investigation",
+          "status": "existing",
+          "note": "Barrier analysis methodology applied to evaluate each prevention element"
+        },
+        {
+          "name": "Mission command",
+          "status": "proposed",
+          "note": "S2 intelligence prep includes brief freshness check"
+        }
       ],
       "artifacts": [
-        { "path": "shared/hooks/rule-write-impact.sh", "status": "proposed", "scope": "user hook", "intent": { "purpose": "Alert agents when rule changes may affect planning brief decisions — advisory drift detection at the moment drift is created", "scope": "PostToolUse on Write/Edit to .claude/rules/*.md only. Advisory feedback via stderr, never blocking. Single responsibility: rule-to-brief impact alerting", "audience": "Claude Code hook infrastructure, deployed to ~/.claude/hooks/" } },
-        { "path": "shared/hooks/plan-gate.sh", "status": "proposed", "scope": "user hook — extends decision #41", "intent": "Add check_drift() function alongside check_blockers(). Reads governedBy references, validates governing rules exist and are current" },
-        { "path": "shared/skills/brief/SKILL.md", "status": "proposed", "scope": "extends decision #45", "intent": "Add governedBy resolution mode: read governing rule, present structural assertions alongside implementation components. Flag staleness" },
-        { "path": "plans/mission-command-briefing/planning-brief.json", "status": "existing", "intent": "Add optional governedBy field to decision schema. Apply to decisions #3, #22, #26, #34, #50" },
-        { "path": "reference/tool-ops.json", "status": "existing", "intent": "Register rule-write-impact hook with verification cases" }
+        {
+          "path": "shared/hooks/rule-write-impact.sh",
+          "status": "proposed",
+          "scope": "user hook",
+          "intent": {
+            "purpose": "Alert agents when rule changes may affect planning brief decisions — advisory drift detection at the moment drift is created",
+            "scope": "PostToolUse on Write/Edit to .claude/rules/*.md only. Advisory feedback via stderr, never blocking. Single responsibility: rule-to-brief impact alerting",
+            "audience": "Claude Code hook infrastructure, deployed to ~/.claude/hooks/"
+          }
+        },
+        {
+          "path": "shared/hooks/plan-gate.sh",
+          "status": "proposed",
+          "scope": "user hook — extends decision #41",
+          "intent": "Add check_drift() function alongside check_blockers(). Reads governedBy references, validates governing rules exist and are current"
+        },
+        {
+          "path": "shared/skills/brief/SKILL.md",
+          "status": "proposed",
+          "scope": "extends decision #45",
+          "intent": "Add governedBy resolution mode: read governing rule, present structural assertions alongside implementation components. Flag staleness"
+        },
+        {
+          "path": "plans/mission-command-briefing/planning-brief.json",
+          "status": "existing",
+          "intent": "Add optional governedBy field to decision schema. Apply to decisions #3, #22, #26, #34, #50"
+        },
+        {
+          "path": "reference/tool-ops.json",
+          "status": "existing",
+          "intent": "Register rule-write-impact hook with verification cases"
+        }
       ],
       "kpis": [
-        { "name": "driftDetectionRate", "source": "rule-write-impact hook logs", "unit": "percent rule changes that fire the hook and find affected decisions", "target": "100% of rule changes to domains with brief decisions" },
-        { "name": "driftResolutionTime", "source": "brief update timestamps after hook fires", "unit": "sessions between drift detection and brief amendment", "target": "<= 1" },
-        { "name": "governedByAdoptionRate", "source": "planning brief schema audit", "unit": "percent decisions with structural assertions that have governedBy", "target": ">= 90%" },
-        { "name": "planGateDriftDenyRate", "source": "plan-gate hook logs", "unit": "plan mode denials due to stale governedBy references", "target": "trending to 0" },
-        { "name": "falsePositiveRate", "source": "rule-write-impact hook logs", "unit": "percent false positives", "target": "< 30%" }
+        {
+          "name": "driftDetectionRate",
+          "source": "rule-write-impact hook logs",
+          "unit": "percent rule changes that fire the hook and find affected decisions",
+          "target": "100% of rule changes to domains with brief decisions"
+        },
+        {
+          "name": "driftResolutionTime",
+          "source": "brief update timestamps after hook fires",
+          "unit": "sessions between drift detection and brief amendment",
+          "target": "<= 1"
+        },
+        {
+          "name": "governedByAdoptionRate",
+          "source": "planning brief schema audit",
+          "unit": "percent decisions with structural assertions that have governedBy",
+          "target": ">= 90%"
+        },
+        {
+          "name": "planGateDriftDenyRate",
+          "source": "plan-gate hook logs",
+          "unit": "plan mode denials due to stale governedBy references",
+          "target": "trending to 0"
+        },
+        {
+          "name": "falsePositiveRate",
+          "source": "rule-write-impact hook logs",
+          "unit": "percent false positives",
+          "target": "< 30%"
+        }
       ],
       "status": "proposed",
-      "related": [3, 20, 22, 26, 29, 34, 35, 41, 45, 50]
+      "related": [
+        3,
+        20,
+        22,
+        26,
+        29,
+        34,
+        35,
+        41,
+        45,
+        50,
+        54
+      ]
     },
     {
       "id": 54,
@@ -3402,25 +3725,94 @@
         "(12) Placement: orchestration pattern, not a new skill. Main agent follows steps using existing skills (/investigate, /delegate, /debrief). Documented in: (a) operational learning rule — real-time improvement process section, (b) /delegate skill — delegation templates for 3 cycle roles (investigator, editor, auditor), (c) framework reference — adopted process with source instance"
       ],
       "frameworks": [
-        { "name": "Operational learning", "status": "proposed", "note": "The cycle IS operational learning applied in real-time — AAR schema, barrier analysis, validated proposals. Extends plan-end debrief to continuous improvement" },
-        { "name": "Mission command", "status": "proposed", "note": "Delegation duty (#4) governs every subagent launch. User as commander at every checkpoint" },
-        { "name": "Incident investigation", "status": "existing", "note": "Barrier analysis methodology (Swiss cheese, 5 Whys, timeline replay) applied during option evaluation and proposal validation" },
-        { "name": "Three-layer governance", "status": "existing", "note": "Cycle products span all three layers — rules (prevention), hooks (detection), skills/audits (audit)" }
+        {
+          "name": "Operational learning",
+          "status": "proposed",
+          "note": "The cycle IS operational learning applied in real-time — AAR schema, barrier analysis, validated proposals. Extends plan-end debrief to continuous improvement"
+        },
+        {
+          "name": "Mission command",
+          "status": "proposed",
+          "note": "Delegation duty (#4) governs every subagent launch. User as commander at every checkpoint"
+        },
+        {
+          "name": "Incident investigation",
+          "status": "existing",
+          "note": "Barrier analysis methodology (Swiss cheese, 5 Whys, timeline replay) applied during option evaluation and proposal validation"
+        },
+        {
+          "name": "Three-layer governance",
+          "status": "existing",
+          "note": "Cycle products span all three layers — rules (prevention), hooks (detection), skills/audits (audit)"
+        }
       ],
       "artifacts": [
-        { "path": ".claude/rules/operational-learning.md", "status": "proposed", "scope": "project + user-level via dotprofile", "intent": "Add 'Harness improvement cycle' section: finding-to-verified-fix process, entry gate, structural-first principle, same-check-verifies-fix principle, iteration cap, scope discipline" },
-        { "path": ".claude/skills/delegate/SKILL.md", "status": "proposed", "scope": "project skill", "intent": "Add delegation templates for 3 cycle roles: S2 investigator (AAR output + barrier analysis), S3 editor (worktree isolation + mechanical edits), S2 auditor (re-run original check independently)" },
-        { "path": "reference/framework-operational-learning.md", "status": "proposed", "scope": "project", "intent": "Document improvement cycle as real-time operational learning. Session RTzBnBupE6 as source instance. Three design principles" }
+        {
+          "path": ".claude/rules/operational-learning.md",
+          "status": "proposed",
+          "scope": "project + user-level via dotprofile",
+          "intent": "Add 'Harness improvement cycle' section: finding-to-verified-fix process, entry gate, structural-first principle, same-check-verifies-fix principle, iteration cap, scope discipline"
+        },
+        {
+          "path": ".claude/skills/delegate/SKILL.md",
+          "status": "proposed",
+          "scope": "project skill",
+          "intent": "Add delegation templates for 3 cycle roles: S2 investigator (AAR output + barrier analysis), S3 editor (worktree isolation + mechanical edits), S2 auditor (re-run original check independently)"
+        },
+        {
+          "path": "reference/framework-operational-learning.md",
+          "status": "proposed",
+          "scope": "project",
+          "intent": "Document improvement cycle as real-time operational learning. Session RTzBnBupE6 as source instance. Three design principles"
+        }
       ],
       "kpis": [
-        { "name": "findingToFixTime", "source": "cycle completion timestamps", "unit": "sessions between finding surfaced and fix verified clean", "target": "<= 1" },
-        { "name": "reauditFirstPassRate", "source": "re-audit results (step 8)", "unit": "percent fix attempts passing re-audit on first iteration", "target": ">= 80%" },
-        { "name": "cycleIterationCount", "source": "cycle iteration tracking", "unit": "average iterations before clean result", "target": "<= 2" },
-        { "name": "structuralFixRate", "source": "cycle outcomes", "unit": "percent systemic findings producing structural fixes", "target": ">= 70%" },
-        { "name": "spotCheckCatchRate", "source": "spot-check results (step 3)", "unit": "percent subagent outputs with material errors caught", "target": "trending to 0" }
+        {
+          "name": "findingToFixTime",
+          "source": "cycle completion timestamps",
+          "unit": "sessions between finding surfaced and fix verified clean",
+          "target": "<= 1"
+        },
+        {
+          "name": "reauditFirstPassRate",
+          "source": "re-audit results (step 8)",
+          "unit": "percent fix attempts passing re-audit on first iteration",
+          "target": ">= 80%"
+        },
+        {
+          "name": "cycleIterationCount",
+          "source": "cycle iteration tracking",
+          "unit": "average iterations before clean result",
+          "target": "<= 2"
+        },
+        {
+          "name": "structuralFixRate",
+          "source": "cycle outcomes",
+          "unit": "percent systemic findings producing structural fixes",
+          "target": ">= 70%"
+        },
+        {
+          "name": "spotCheckCatchRate",
+          "source": "spot-check results (step 3)",
+          "unit": "percent subagent outputs with material errors caught",
+          "target": "trending to 0"
+        }
       ],
       "status": "proposed",
-      "related": [4, 35, 36, 41, 44, 45, 46, 48, 53]
+      "related": [
+        4,
+        35,
+        36,
+        41,
+        44,
+        45,
+        46,
+        48,
+        50,
+        51,
+        52,
+        53
+      ]
     }
   ]
 }
