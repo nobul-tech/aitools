@@ -1,11 +1,14 @@
 ## Frameworks (this repo)
 
-**Intent**: **Purpose**: Govern the harness registry pattern and the
-framework adoption process — ensuring agents check existing governance
-before assuming, and all governed data follows the three-layer pattern.
-**Scope**: Registry of registries, framework governance principle, and
-skill gate. NOT framework data or lookup (use `/frameworks` skill).
-NOT the adoption process (see `/frameworks` skill for entry point).
+**Intent**: **Purpose**: Govern how the harness grows — ensuring
+agents check existing frameworks before assuming, and that new
+frameworks follow the adoption lifecycle. **Scope**: The governing
+principle (check before assuming), the three-layer registry pattern,
+trigger directive for `/frameworks` skill. NOT framework data
+(use `/frameworks` skill — it gates `reference/framework-registry.json`).
+NOT the adoption process (`reference/framework-adoption.md`). NOT
+individual framework documentation (`reference/framework-*.md`).
+NOT the provenance map (use `/frameworks` skill).
 **Audience**: Every agent, every session.
 
 ### Governing principle
@@ -15,22 +18,18 @@ check whether an existing framework addresses it before assuming.
 The assumption is the failure mode. Invoke the `/frameworks` skill
 to check coverage.
 
-### Harness registries
+### Three-layer registry pattern
 
-Each registry follows the three-layer pattern defined in
-`@reference/framework-three-layer-governance.md` "Registry Convention":
-rule (intent, always in context) + JSON (data, source of truth) +
-skill (access layer).
+Every governed registry follows: rule (governance, always in context)
++ JSON (data, source of truth) + skill (access layer). The rule
+states the intent and trigger. The JSON holds the state. The skill
+gates access to the JSON — agents read and write data through the
+skill, never directly.
 
-| Registry | Rule | Data | Process Skill | Data Skill |
-|----------|------|------|---------------|------------|
-| Frameworks | This file | `@reference/framework-registry.json` | — | `/frameworks` |
-| Incidents | `@.claude/rules/incident-governance.md` | `@reference/incidents.json` | `/incident` | `/incident` |
-| Glossary | `@.claude/rules/glossary.md` | `@reference/glossary.json` | — | `/glossary` |
-| Tool registry | `@.claude/rules/tool-lifecycle.md` | `@reference/tool-registry.json` | — | `/tool-registry` |
-| Tool evaluation | `@.claude/rules/tool-evaluation.md` | `reference/evaluations/` | `/tool-eval` | — |
-| Artifact harvesting | `@.claude/rules/artifact-harvesting.md` | `harvesting/` | `/harvest` | `/harvest` |
-| Tool operations | `@.claude/rules/tool-ops.md` | `@reference/tool-ops.json` | — | `/tool-ops` |
+Registries and their governing skills are documented in the framework
+registry itself (`reference/framework-registry.json` via `/frameworks`
+skill). Do not duplicate that inventory here — this rule governs the
+pattern, not the instances.
 
 ### When to invoke /frameworks
 
@@ -38,6 +37,7 @@ Invoke the `/frameworks` skill when ANY of these arise:
 
 - Checking if a framework exists for a domain or decision point
 - Looking up a framework's implementing artifacts
+- Checking the provenance of an adapted concept
 - Adding a newly adopted framework to the registry
 - Discussing which discipline governs a class of decisions
 - User asks about frameworks or says /frameworks
@@ -45,3 +45,11 @@ Invoke the `/frameworks` skill when ANY of these arise:
 The skill provides the governed process for reading and writing the
 framework registry. Accessing the registry JSON directly bypasses
 that process.
+
+### Cross-references
+
+- Framework registry data: `/frameworks` skill
+- Adoption lifecycle: `@reference/framework-adoption.md`
+- Three-layer pattern: `@reference/framework-three-layer-governance.md`
+- Governed data access: `@.claude/rules/governed-data-access.md`
+- Provenance map: `/frameworks` skill (check provenance mode)

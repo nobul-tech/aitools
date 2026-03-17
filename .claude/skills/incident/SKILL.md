@@ -14,6 +14,17 @@ skill). NOT for investigating root causes (`/investigate` skill).
 **Audience**: Agents fulfilling surfacing duty, agents prompted by
 the incident-governance rule, subagents triaging `AMBIGUITY:` findings.
 
+## Known Limitations
+
+This skill is outdated and ineffective in its current form. It does not
+reflect the current state of the harness — specifically, it lacks
+escalation awareness (pattern matching against existing incidents),
+does not enforce structural fixes for recurring root causes (3+
+occurrences), and suggests behavioral coaching (UCIs) as resolutions
+when hooks are the most effective structural mechanism. Fixing this
+skill needs further investigation. See planning brief decision #35
+and incident #48.
+
 ## When to use
 
 - A rule says X but code does Y → **incident** (spec deviation)

@@ -43,5 +43,8 @@ desktop.ini
 # Google Drive internal
 .gd/
 
+# Runtime session data
+.aitools/
+
 # Claude Code plan artifacts
 reference/plans/

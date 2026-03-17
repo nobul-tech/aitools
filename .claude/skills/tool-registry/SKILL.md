@@ -18,10 +18,13 @@ verify a version, or write a registry entry after evaluation.
 ## Reading tool entries
 
 1. Read `@reference/tool-registry.json`
-2. Find the tool in the `tools` object by key
-3. Present: source, install methods per platform, health flags,
-   delivery provenance, lifecycle fields, maintenance workarounds
-4. If health flags are yellow or red, surface the reasons prominently
+2. Find the tool in `tools.<slug>` (CLI tools) or `mcpServers.<slug>` (MCP servers)
+3. Present: displayName, source, purpose, install methods per platform,
+   lifecycle (platformStatus, concurrency, postInstallConfig, dependencies,
+   invocation), versions (per-platform lastVerified), authentication (if
+   present), notes, pathIssues, platformGotchas
+4. For MCP servers: also present transport, auth, scope, installClaudeCode
+5. If any platform version is null, note it as "not yet verified"
 
 ## Adding or updating a tool entry
 
@@ -62,15 +65,18 @@ provides the exact content to write.
 When a tool is verified on a platform:
 
 1. Read `@reference/tool-registry.json`
-2. Update the platform's `lastVerifiedVersion` and `lastVerified`
-3. Re-evaluate health flag if version was previously unverified
-4. Present for review (protected file)
-5. Write if approved
+2. Navigate to `tools.<slug>.versions.<platform>`
+3. Update `lastVerifiedVersion` and `lastVerified`
+4. For MCP servers: update `mcpServers.<slug>.versions.lastReviewed`
+5. Update `meta.lastUpdated` to today's date
+6. Present for review (protected file)
+7. Write if approved
 
 ## Schema
 
-`reference/tool-registry.json` uses `schemaVersion: "2.0"`. Key
-sections per tool:
+`reference/tool-registry.json` uses `schemaVersion: "1.0"`. Top-level
+keys: `meta`, `tools`, `mcpServers`, `mcpManagement`, `overrides`.
+Key sections per CLI tool (`tools.<slug>`):
 
 | Section | Purpose |
 |---------|---------|

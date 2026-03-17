@@ -6,7 +6,7 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 
 | File | What it controls | Agent |
 |------|-----------------|-------|
-| `reference/tool-registry.md` | Registry of managed tools — install commands, lifecycle, per-platform version tracking | Any |
+| `reference/tool-registry.json` | Registry of managed tools — install methods, platform versions, lifecycle, operational knowledge (via `/tool-registry` skill) | Any |
 | `reference/tool-evaluation-criteria.md` | Tool evaluation framework and lifecycle phases | Any |
 | `reference/tool-evaluation-playbook.md` | Install method discovery process and criteria — feeds BuildPrereqs and tool-registry entries | Any |
 | `CLAUDE.md` | Project-level instructions and Key Decisions | Any |
@@ -19,7 +19,7 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 | `ROADMAP.md` | Active/planned work items — drives project priorities | Any |
 | `plans/*.md` | Detailed implementation plans — referenced by roadmap | Any |
 | `reference/tool-ops-claude-code.md` | Claude Code operations — version deps, session behavior, platform workarounds | Any |
-| `reference/tool-versions.json` | Machine-readable per-platform version manifest for all managed tools | Any |
+| `reference/tool-versions.json` | RETIRED — merged into `reference/tool-registry.json`. Kept for reference until check scripts are updated | Any |
 | `reference/user-repo.md` | User repo pattern, template resolution, session archive — scripts reference this | Any |
 | `reference/agentic-framework.md` | Agentic AI invocation spec — speed/permission tiers, prompt design, validation patterns | Any |
 | `reference/managed-file-deployment.md` | Managed file deployment state machine -- menus, return values, caller contracts | Any |

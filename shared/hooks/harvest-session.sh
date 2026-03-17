@@ -70,6 +70,13 @@ for file in "$SESSION_DIR"/*; do
         *.py|*.sh|*.ps1|*.js|*.ts|*.go|*.rs|*.pl)
             is_ephemeral=false
             ;;
+        *.json)
+            # JSON: config/lock files are ephemeral, structured data is artifact
+            case "$filename" in
+                package-lock*|node_modules*|*.config.json|tsconfig*) is_ephemeral=true ;;
+                *) is_ephemeral=false ;;
+            esac
+            ;;
         *.md)
             # Markdown: logs are ephemeral, research/analysis is artifact
             case "$filename" in
@@ -77,8 +84,12 @@ for file in "$SESSION_DIR"/*; do
                 *) is_ephemeral=false ;;
             esac
             ;;
+        *.yaml|*.yml|*.toml|*.csv|*.sql|*.html|*.txt)
+            is_ephemeral=false
+            ;;
         *)
-            is_ephemeral=true
+            # Unknown extension: harvest with warning rather than silently delete
+            is_ephemeral=false
             ;;
     esac
 

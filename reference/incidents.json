@@ -7,7 +7,7 @@
       "scope": "Incident entries only. NOT the filing process (incident-governance.md rule). NOT the framework documentation (framework-incident-governance.md). NOT incident reference files (reference/incident-*.md)",
       "audience": "/incident skill, /audit skill, check scripts, hooks, agents checking whether a deficiency has already been filed"
     },
-    "lastUpdated": "2026-03-15"
+    "lastUpdated": "2026-03-16"
   },
   "incidents": [
     {
@@ -15,7 +15,10 @@
       "title": "Hook scripts deployed without backup or interactive review",
       "status": "open",
       "severity": "high",
-      "affected": ["setup-user-hooks.sh", "setup-user-hooks.ps1"],
+      "affected": [
+        "setup-user-hooks.sh",
+        "setup-user-hooks.ps1"
+      ],
       "linked": "https://github.com/nobul-jose/aitools/issues/51",
       "referenceFile": null,
       "observation": "setup-user-hooks.sh/.ps1 use direct cp/Copy-Item for hook scripts. No backup_file call before overwrite, no deploy_managed_file interactive review, no adopt/skip/merge options.",
@@ -36,7 +39,10 @@
       "title": "Bash scripts missing backup_file before JSON config merge",
       "status": "open",
       "severity": "medium",
-      "affected": ["setup-user-hooks.sh", "setup-user-mcp.sh"],
+      "affected": [
+        "setup-user-hooks.sh",
+        "setup-user-mcp.sh"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "setup-user-hooks.sh and setup-user-mcp.sh do NOT call backup_file before settings.json merge. Their PowerShell counterparts DO call Backup-File.",
@@ -57,7 +63,16 @@
       "title": "JSON config merges have no interactive review",
       "status": "open",
       "severity": "medium",
-      "affected": ["setup-user-hooks.sh", "setup-user-hooks.ps1", "setup-user-mcp.sh", "setup-user-mcp.ps1", "setup-user-cursor.sh", "setup-user-cursor.ps1", "setup-cursor-ide-mcp.sh", "setup-cursor-ide-mcp.ps1"],
+      "affected": [
+        "setup-user-hooks.sh",
+        "setup-user-hooks.ps1",
+        "setup-user-mcp.sh",
+        "setup-user-mcp.ps1",
+        "setup-user-cursor.sh",
+        "setup-user-cursor.ps1",
+        "setup-cursor-ide-mcp.sh",
+        "setup-cursor-ide-mcp.ps1"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "All JSON config merges proceed silently. Clobber detection blocks on field loss, but there is no 'here is what will change, proceed?' prompt showing managed field diffs.",
@@ -78,7 +93,10 @@
       "title": "Cursor MCP disable is project-scoped, not user-scoped",
       "status": "open",
       "severity": "high",
-      "affected": ["setup-cursor-ide-mcp.sh", "setup-cursor-ide-mcp.ps1"],
+      "affected": [
+        "setup-cursor-ide-mcp.sh",
+        "setup-cursor-ide-mcp.ps1"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "agent mcp disable stores disable state per-project, not per-user. Setup script runs from the aitools repo directory only. Other projects see vercel/webflow as enabled.",
@@ -99,7 +117,10 @@
       "title": "Directory backups cascade — each backup contains older backups",
       "status": "open",
       "severity": "low",
-      "affected": ["aitools-lib.sh", "aitools-lib.ps1"],
+      "affected": [
+        "aitools-lib.sh",
+        "aitools-lib.ps1"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "backup_dir copies the entire directory including individual .bak.* files from previous backups. Each new backup contains all older backups.",
@@ -120,7 +141,9 @@
       "title": "README 22 versions behind — missing major features",
       "status": "open",
       "severity": "high",
-      "affected": ["README.md"],
+      "affected": [
+        "README.md"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "README.md last updated at v0.33. Current version is v0.54.1. Missing: logging locations, sessions feature, troubleshooting, env vars (AITOOLS_FORCE/DRY_RUN/RUN_ID), MCP status, config.json format, check scripts, governance framework.",
@@ -141,7 +164,12 @@
       "title": "AITOOLS_FORCE/DRY_RUN/RUN_ID env vars undocumented",
       "status": "open",
       "severity": "medium",
-      "affected": ["scripts/aitools", "scripts/aitools.ps1", "scripts/aitools-install.sh", "scripts/aitools-install.ps1"],
+      "affected": [
+        "scripts/aitools",
+        "scripts/aitools.ps1",
+        "scripts/aitools-install.sh",
+        "scripts/aitools-install.ps1"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "Entry points set AITOOLS_FORCE, AITOOLS_DRY_RUN, AITOOLS_RUN_ID, AITOOLS_SUPPRESS_SUMMARY_DISPLAY env vars used by child scripts. Not documented in README, CLAUDE.md, or any reference file.",
@@ -162,7 +190,10 @@
       "title": "Sessions feature silently fails without userRepoPath",
       "status": "open",
       "severity": "medium",
-      "affected": ["scripts/aitools", "scripts/aitools.ps1"],
+      "affected": [
+        "scripts/aitools",
+        "scripts/aitools.ps1"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "aitools sessions subcommands produce confusing output or silently fail if userRepoPath is not configured in ~/.aitools/config.json.",
@@ -183,7 +214,12 @@
       "title": "Entry point logging override pattern has unclear design intent",
       "status": "open",
       "severity": "medium",
-      "affected": ["scripts/aitools", "scripts/aitools.ps1", "scripts/aitools-install.sh", "scripts/aitools-install.ps1"],
+      "affected": [
+        "scripts/aitools",
+        "scripts/aitools.ps1",
+        "scripts/aitools-install.sh",
+        "scripts/aitools-install.ps1"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "Entry points redefine log/log_ok/log_error/log_warn after sourcing aitools-lib. If lib adds a new logging function, overrides miss it. No validation that overrides cover all levels.",
@@ -204,7 +240,11 @@
       "title": "No CI pipeline — all verification is manual check scripts",
       "status": "open",
       "severity": "high",
-      "affected": ["scripts/check-pre-commit.sh", "scripts/check-pre-push.sh", "scripts/check-post-push.sh"],
+      "affected": [
+        "scripts/check-pre-commit.sh",
+        "scripts/check-pre-push.sh",
+        "scripts/check-post-push.sh"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "No GitHub Actions workflow exists. All verification relies on manual check script invocation. PSO says 'checklist scripts, not ad-hoc' but nothing enforces running them before commit/push.",
@@ -225,7 +265,10 @@
       "title": "CLI entry point behavior only discoverable by reading source",
       "status": "open",
       "severity": "medium",
-      "affected": ["scripts/aitools", "scripts/aitools.ps1"],
+      "affected": [
+        "scripts/aitools",
+        "scripts/aitools.ps1"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "Entry point dispatch (noargs vs install vs gitpull vs user init), quiet pull retry logic, network detection, flag passthrough to install scripts — not documented in any reference file or skill.",
@@ -246,7 +289,10 @@
       "title": "Cursor skill deployment mechanism unverified",
       "status": "open",
       "severity": "medium",
-      "affected": ["scripts/setup-user-mcp.sh", "scripts/setup-user-mcp.ps1"],
+      "affected": [
+        "scripts/setup-user-mcp.sh",
+        "scripts/setup-user-mcp.ps1"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "setup-user-mcp deploys skills to ~/.cursor/skills/. Whether Cursor Agent CLI discovers and loads SKILL.md files from that path has never been tested.",
@@ -267,7 +313,10 @@
       "title": "Skill deployment hardcoded for 2 skills, needs dynamic discovery",
       "status": "open",
       "severity": "high",
-      "affected": ["scripts/setup-user-mcp.sh", "scripts/setup-user-mcp.ps1"],
+      "affected": [
+        "scripts/setup-user-mcp.sh",
+        "scripts/setup-user-mcp.ps1"
+      ],
       "linked": "plans/governance-and-compliance-framework.md",
       "referenceFile": null,
       "observation": "setup-user-mcp.sh:L378-379 and setup-user-mcp.ps1:L370-371 hardcode two deploy_skill calls (chrome-devtools, a11y-debugging). Five skills exist in shared/skills/ but only two are deployed. Skill deployment is bundled into setup-user-mcp despite being a separate concern.",
@@ -309,7 +358,10 @@
       "title": "Bridge pattern cross-reference points to missing section",
       "status": "open",
       "severity": "low",
-      "affected": [".claude/rules/script-standards.md", "reference/script-standards-detail.md"],
+      "affected": [
+        ".claude/rules/script-standards.md",
+        "reference/script-standards-detail.md"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "script-standards.md references 'See script-standards-detail.md Bridge pattern' but that section heading does not exist in reference/script-standards-detail.md.",
@@ -330,7 +382,11 @@
       "title": "Skills claimed discoverable but deployment infrastructure missing",
       "status": "open",
       "severity": "medium",
-      "affected": ["shared/skills/", "scripts/setup-user-mcp.sh", "scripts/setup-user-mcp.ps1"],
+      "affected": [
+        "shared/skills/",
+        "scripts/setup-user-mcp.sh",
+        "scripts/setup-user-mcp.ps1"
+      ],
       "linked": "incident #15",
       "referenceFile": null,
       "observation": "Session created 4 user-level skills in shared/skills/ (planning, optimize-plan, investigate, rca) and stated they would be available after restart. shared/skills/ is the source directory, not the deployment target.",
@@ -351,7 +407,10 @@
       "title": "Reference file placed without evaluating alternatives",
       "status": "open",
       "severity": "medium",
-      "affected": ["reference/path-targeted-hooks-analysis.md", ".claude/rules/sources-of-truth.md"],
+      "affected": [
+        "reference/path-targeted-hooks-analysis.md",
+        ".claude/rules/sources-of-truth.md"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "path-targeted-hooks-analysis.md was created in reference/ without evaluating alternative locations or consulting the user. Decision criteria from foundational decision #16 were not applied.",
@@ -393,7 +452,10 @@
       "title": "Tool registry is markdown — needs migration to three-layer pattern",
       "status": "open",
       "severity": "medium",
-      "affected": ["reference/tool-registry.md", "reference/tool-versions.json"],
+      "affected": [
+        "reference/tool-registry.md",
+        "reference/tool-versions.json"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "reference/tool-registry.md is a large markdown file serving as both structured data and prose documentation. reference/tool-versions.json tracks versions separately. Two sources that can drift.",
@@ -414,7 +476,9 @@
       "title": "Incident registry has no read/context skill",
       "status": "open",
       "severity": "medium",
-      "affected": [".claude/skills/incident/SKILL.md"],
+      "affected": [
+        ".claude/skills/incident/SKILL.md"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "/incident skill files entries (write). /audit skill checks health. No skill presents the incident registry with context for agents working with incidents (read).",
@@ -435,7 +499,14 @@
       "title": "Credential storage undocumented; keychain prompts block install",
       "status": "open",
       "severity": "high",
-      "affected": ["scripts/setup-vercelcli.sh", "scripts/setup-vercelcli.ps1", "scripts/setup-gh-cli.sh", "scripts/setup-gh-cli.ps1", "scripts/setup-datadog.sh", "scripts/setup-datadog.ps1"],
+      "affected": [
+        "scripts/setup-vercelcli.sh",
+        "scripts/setup-vercelcli.ps1",
+        "scripts/setup-gh-cli.sh",
+        "scripts/setup-gh-cli.ps1",
+        "scripts/setup-datadog.sh",
+        "scripts/setup-datadog.ps1"
+      ],
       "linked": "ROADMAP.md (Nobul Auth0 platform)",
       "referenceFile": null,
       "observation": "gh and pup auth checks use macOS Keychain (via their default credential stores), causing 85s delay and 6-8 interactive keychain prompts during `aitools install`. Vercel and Modal were already fixed in v0.36.2 with file-based auth checks. No documentation exists for credential storage behavior across managed tools.",
@@ -484,7 +555,11 @@
       "title": "Deploy hooks template embeds 2 of 6 hook scripts; settings.json references 4 missing paths",
       "status": "open",
       "severity": "high",
-      "affected": ["scripts/build-deploy.sh", "deploy/setup-user-hooks.sh", "deploy/setup-user-hooks.ps1"],
+      "affected": [
+        "scripts/build-deploy.sh",
+        "deploy/setup-user-hooks.sh",
+        "deploy/setup-user-hooks.ps1"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "deploy/setup-user-hooks.sh embeds only session-archive.sh and standing-order-guard.sh via heredoc. The settings.json merge block registers all 6 hooks (session-archive, harvest-session, scratch-init, standing-order-guard, glossary-skill-guard, sh-file-fixup) pointing to ~/.claude/hooks/ paths. On MDM-deployed machines, 4 hook scripts are never written to disk, so settings.json references non-existent files. build-deploy.sh lines 1457-1796 (bash deploy version) and corresponding PS1 section.",
@@ -505,7 +580,11 @@
       "title": "Deny rule bypass — permissions.deny doesn't block built-in subagent types",
       "status": "open",
       "severity": "critical",
-      "affected": ["shared/hooks/block-claude-code-guide.sh", "scripts/setup-user-hooks.sh", "scripts/setup-user-hooks.ps1"],
+      "affected": [
+        "shared/hooks/block-claude-code-guide.sh",
+        "scripts/setup-user-hooks.sh",
+        "scripts/setup-user-hooks.ps1"
+      ],
       "linked": "https://github.com/nobul-jose/aitools/issues/34730",
       "referenceFile": null,
       "observation": "Agent(claude-code-guide) added to permissions.deny in ~/.claude/settings.json. Built-in Claude Code Guide subagent continued to be invoked, returning inaccurate hook schema (Haiku model) that caused user to disable all hooks. permissions.deny syntax documented as Tool(pattern) but no CC documentation confirms built-in subagent types are matchable.",
@@ -526,7 +605,11 @@
       "title": "Glossary skill guard hook registered but never deployed to disk",
       "status": "open",
       "severity": "high",
-      "affected": ["scripts/build-deploy.sh", "scripts/setup-user-hooks.sh", "scripts/setup-user-hooks.ps1"],
+      "affected": [
+        "scripts/build-deploy.sh",
+        "scripts/setup-user-hooks.sh",
+        "scripts/setup-user-hooks.ps1"
+      ],
       "linked": "Incident #25",
       "referenceFile": null,
       "observation": "settings.json registers glossary-skill-guard.sh as PreToolUse hook at ~/.claude/hooks/glossary-skill-guard.sh. Script file does not exist on disk. Claude Code silently ignores hooks pointing to non-existent files.",
@@ -547,7 +630,9 @@
       "title": "Batch size (20+ files) caused cross-cutting rules skipped despite being in context",
       "status": "planned",
       "severity": "medium",
-      "affected": ["shared/claude-shared.md"],
+      "affected": [
+        "shared/claude-shared.md"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "Session archive feature planned as 20+ file batch across 5 groups. Cross-cutting concerns (dispatch patterns, encoding, platform guards) got skipped even when rules were in context.",
@@ -568,7 +653,9 @@
       "title": "Subagent context gap: rules/CLAUDE.md not inherited by Task subagents",
       "status": "open",
       "severity": "medium",
-      "affected": ["shared/claude-shared.md"],
+      "affected": [
+        "shared/claude-shared.md"
+      ],
       "linked": "https://github.com/anthropics/claude-code/issues/29423",
       "referenceFile": null,
       "observation": "Subagents launched via Task tool did not load .claude/rules/, CLAUDE.md, or ~/.claude/CLAUDE.md. Upstream limitation -- Task subagents are isolated processes with no rule inheritance.",
@@ -589,7 +676,9 @@
       "title": "Dismissiveness when user challenged subagent results; deflected instead of investigating",
       "status": "planned",
       "severity": "high",
-      "affected": ["shared/claude-shared.md"],
+      "affected": [
+        "shared/claude-shared.md"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "User challenged subagent audit results; Claude deflected instead of investigating. Tendency to defend prior output rather than treat user feedback as signal.",
@@ -610,7 +699,9 @@
       "title": "Subagent work product condensed to stub summary, discarding detail",
       "status": "planned",
       "severity": "medium",
-      "affected": ["shared/claude-shared.md"],
+      "affected": [
+        "shared/claude-shared.md"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "Multi-file audit by subagent produced detailed findings; main context condensed them to a stub summary discarding the detail. Context pressure led to summarization that lost actionable information.",
@@ -631,7 +722,10 @@
       "title": "Silent hook failure: session-archive hook was no-op due to missing userRepoPath",
       "status": "planned",
       "severity": "high",
-      "affected": ["shared/hooks/session-archive.sh", "scripts/setup-user-hooks.sh"],
+      "affected": [
+        "shared/hooks/session-archive.sh",
+        "scripts/setup-user-hooks.sh"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "Session-archive hook was deployed and appeared working, but was actually a no-op because userRepoPath was missing from config.json. Feature described as 'working' when it had never fired.",
@@ -652,7 +746,11 @@
       "title": "Deploy template logic not updated when scripts/ source fixed — recurring pattern",
       "status": "planned",
       "severity": "high",
-      "affected": ["scripts/build-deploy.sh", "deploy/setup-user-hooks.sh", "deploy/setup-user-hooks.ps1"],
+      "affected": [
+        "scripts/build-deploy.sh",
+        "deploy/setup-user-hooks.sh",
+        "deploy/setup-user-hooks.ps1"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "When fixing bugs in scripts/setup-user-hooks.sh/.ps1, the corresponding template in build-deploy.sh was not updated. User had to remind. This is the 3rd+ occurrence of this pattern.",
@@ -673,7 +771,9 @@
       "title": "Plan drafted with unguarded error-suppression patterns and missing exemption entries",
       "status": "open",
       "severity": "high",
-      "affected": ["plans/"],
+      "affected": [
+        "plans/"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "Initial plan for setup-typst.sh included '2>/dev/null || true' without required explanatory comments, without noting the need for exemption table entries, and with vague pseudocode that omitted required logging block elements. User had to request a re-audit to surface these issues.",
@@ -715,7 +815,9 @@
       "title": "Unnecessary @import of CC version-deps file in CLAUDE.md",
       "status": "open",
       "severity": "medium",
-      "affected": ["CLAUDE.md"],
+      "affected": [
+        "CLAUDE.md"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "Added @import of CC version-deps file (now reference/tool-ops-claude-code.md) in CLAUDE.md, adding 85 lines of maintenance-only context to every session. File is already triggered by post-push checklist #20.",
@@ -778,7 +880,11 @@
       "title": "Skipped checklist scripts during commit+push cycle despite PSO",
       "status": "open",
       "severity": "high",
-      "affected": ["scripts/check-pre-commit.sh", "scripts/check-pre-push.sh", "scripts/check-post-push.sh"],
+      "affected": [
+        "scripts/check-pre-commit.sh",
+        "scripts/check-pre-push.sh",
+        "scripts/check-post-push.sh"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "Performed git commit and git push on both aitools and dotprofile repos without running check-pre-commit.sh, check-pre-push.sh, or check-post-push.sh. Occurred across two consecutive commit+push cycles. The user had just added a 'Project git conventions' section to CLAUDE.md explicitly requiring checklist execution -- the new rule was in the diff being committed.",
@@ -799,7 +905,9 @@
       "title": "Verification failure: regex test output not checked for completeness",
       "status": "open",
       "severity": "high",
-      "affected": ["scripts/check-pre-push.sh"],
+      "affected": [
+        "scripts/check-pre-push.sh"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "After implementing pre-push step 7 regex fix, ran verification test with 6 deploy-relevant files. Output showed only 5 matches -- build-deploy.sh was missing. Declared 'correct' and committed/pushed/tagged v0.27.4. Bug caught only in post-push comprehensive test (46 test cases).",
@@ -883,7 +991,10 @@
       "title": "Error suppression in lib code during standards implementation — Batch 3",
       "status": "open",
       "severity": "high",
-      "affected": ["scripts/aitools-lib.sh", "scripts/aitools-lib.ps1"],
+      "affected": [
+        "scripts/aitools-lib.sh",
+        "scripts/aitools-lib.ps1"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "While implementing Batch 3 (summary renderer DETAIL support + summary preservation), wrote two error-suppression violations in aitools-lib. PS1: Copy-Item -ErrorAction SilentlyContinue with no result check. Bash: cp 2>/dev/null || true with no comment. User caught it immediately. This is the 4th error-suppression incident (I5, I7, I11, I17).",
@@ -946,7 +1057,9 @@
       "title": "PS1 -replace chain ordering bug — USO Perl violation",
       "status": "open",
       "severity": "high",
-      "affected": ["scripts/check-post-push.ps1"],
+      "affected": [
+        "scripts/check-post-push.ps1"
+      ],
       "linked": null,
       "referenceFile": null,
       "observation": "check-post-push.ps1 step 26 used a 3-part -replace chain to extract deploy script basenames. The ordering was wrong: .sh$ strip ran before (.*$ strip, so for inputs like 'setup-user-mcp.sh (with embedded skills)', the .sh extension was never removed. This caused a persistent false-positive WARN. The bash version used Perl and worked correctly.",
@@ -961,6 +1074,27 @@
       "preventionLayer": "Prevention (standing order, pending extension)",
       "created": "2026-03-12",
       "updated": "2026-03-15"
+    },
+    {
+      "id": 48,
+      "title": "Agent asserts behavioral constraints as fact without checking source artifacts",
+      "status": "open",
+      "severity": "medium",
+      "affected": [],
+      "linked": null,
+      "referenceFile": null,
+      "observation": "During a session auditing prior session output (b8a9ed4e), the main agent made two incorrect assertions without verification: (1) Stated 'The SessionEnd hook harvests its .scratch/ files but didn't clean up the session directory itself' — attributing cleanup to harvest-session.sh. Actual cleanup is handled by scratch-init.sh (SessionStart), which prunes dirs older than 24h via find -mmin +1440. The dirs in question were <24h old, so cleanup was correctly deferred. (2) Stated 'subagents don't have access to the Skill tool' when delegating an investigation. General-purpose agents have 'Tools: *' which includes Skill. The agent asserted a constraint that doesn't exist. Both occurred in consecutive exchanges within the same session.",
+      "expected": "CLAUDE.md design principle 'Ambiguity is a defect' — if uncertain about a behavior, check the source. UCI 'Err on the side of caution' — when uncertain, default to the cautious path (which is checking, not asserting). UCI 'Verify subagent audit results' — applies reflexively to the agent's own assertions. The agent had access to scratch-init.sh and the Agent tool description — both were checkable before asserting.",
+      "impact": "First assumption: would have produced incorrect audit findings about 'orphaned' scratch dirs and misattributed cleanup responsibility to the wrong script. Second assumption: subagent launched without access to its governing /investigate skill, producing a degraded investigation. User intervened twice to correct — time cost and trust erosion. Pattern recurrence (see #34, #35) suggests the verification-first principle is not yet internalized.",
+      "discoveryContext": "Current audit session (auditing b8a9ed4e output). User caught both assumptions in consecutive exchanges. Agent was reading scratch directory contents and harvest manifest when it made the cleanup assumption, then immediately made the subagent capability assumption when launching the investigation. Session: 2026-03-16.",
+      "discipline": null,
+      "frameworks": null,
+      "suggestedResolution": "Needs further investigation. This is the 3rd occurrence of the same root cause pattern (#34, #35, #48). Per the investigate framework escalation rule, 3+ occurrences of the same root cause category requires a structural fix — behavioral coaching (UCIs) has not held. The /incident skill itself may need updating to reflect current harness state and escalation thresholds.",
+      "rootCause": "Agent treats internal model of harness behavior as reliable when it is not. Instead of checking the source artifact (scratch-init.sh for cleanup behavior, Agent tool description for capability), the agent asserts from cached/assumed knowledge. Same root cause as #34 (plan drafted from assumptions) and #35 (revision from memory instead of re-read).",
+      "correctiveAction": null,
+      "preventionLayer": null,
+      "created": "2026-03-16",
+      "updated": "2026-03-16"
     }
   ],
   "closed": [

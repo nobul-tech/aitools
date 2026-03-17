@@ -1,0 +1,3348 @@
+{
+  "meta": {
+    "schemaVersion": "6.0",
+    "plan": "plans/mission-command-and-platform-engineering.md",
+    "created": "2026-03-16",
+    "intent": {
+      "purpose": "Provide the executing agent (S3) with every resolved decision point, verified fact, and planning assumption needed to write the Mission Command, Platform Engineering, Mission Analysis, and Operational Learning plan — without re-deriving decisions from conversation transcripts",
+      "scope": "47 decisions (1 merged), 18 facts, 7 assumptions from sessions 84280c8b, eaacf9da, b8a9ed4e, and the current audit session. Each decision has rationale, components (implementation steps), artifacts (files with intents), framework attribution, KPIs, and session references. NOT the plan itself (the plan references this brief). NOT execution instructions (the plan provides those). NOT post-execution review (the AAR from /debrief covers that)",
+      "audience": "The S3 (operations) executing agent who writes the plan, the S2 (intelligence) agent who conducts pre-plan intelligence prep, and the user who validates the brief before plan writing begins. Read via /brief skill which presents in reading order and flags blockers"
+    },
+    "readingOrder": {
+      "description": "Recommended consumption sequence for the executing agent. IDs are stable — this reorders without renumbering. /brief skill presents decisions in this order.",
+      "sequence": [
+        {
+          "phase": "1. Critical blockers — resolve before anything",
+          "items": [
+            "F1",
+            "F2",
+            "F3",
+            "F17"
+          ]
+        },
+        {
+          "phase": "2. All facts — verified ground truth",
+          "items": [
+            "F4",
+            "F5",
+            "F6",
+            "F7",
+            "F8",
+            "F9",
+            "F10",
+            "F11",
+            "F12",
+            "F13",
+            "F14",
+            "F15",
+            "F16",
+            "F18"
+          ]
+        },
+        {
+          "phase": "3. All assumptions — accepted for planning, unverified",
+          "items": [
+            "A1",
+            "A2",
+            "A3",
+            "A4",
+            "A5",
+            "A6",
+            "A7"
+          ]
+        },
+        {
+          "phase": "4. Framework definitions — build mental model before reading decisions",
+          "items": [
+            3,
+            8,
+            13,
+            36,
+            37,
+            38
+          ]
+        },
+        {
+          "phase": "5. Critical blocker resolution decisions",
+          "items": [
+            29,
+            39,
+            40,
+            41
+          ]
+        },
+        {
+          "phase": "6. Mission Command decisions",
+          "items": [
+            4,
+            5,
+            6,
+            7,
+            15,
+            16,
+            17,
+            19,
+            20,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            44
+          ]
+        },
+        {
+          "phase": "7. Platform Engineering decisions",
+          "items": [
+            9
+          ]
+        },
+        {
+          "phase": "8. Mission Analysis decisions",
+          "items": [
+            21,
+            43,
+            45
+          ]
+        },
+        {
+          "phase": "9. Operational Learning decisions",
+          "items": [
+            1,
+            2,
+            10,
+            11,
+            12,
+            14,
+            18,
+            30,
+            46,
+            47
+          ]
+        },
+        {
+          "phase": "10. Infrastructure decisions",
+          "items": [
+            32,
+            33,
+            34,
+            42
+          ]
+        },
+        {
+          "phase": "11. Process decisions",
+          "items": [
+            35,
+            48
+          ]
+        }
+      ]
+    },
+    "schemaFields": {
+      "components": "Implementation steps and design constraints — the HOW. Ordered sub-steps, sequencing, constraints. Never artifact intents.",
+      "artifacts": "Files to create or modify — the WHAT. Each with path, status, scope, and intent. Intent format: structured {purpose, scope, audience} object REQUIRED for framework artifacts (.claude/rules/, .claude/skills/, shared/skills/, reference/framework-*). Flat string acceptable for utility artifacts (hooks, schemas, config files)."
+    },
+    "concept": "Adapted from MDMP Step 2 (Mission Analysis). Each decision is a resolved decision point. Facts are verified ground truths. Assumptions are accepted for planning but unverified. KPIs define how we measure success via Datadog telemetry (governance plan decision #13: local SQLite + Datadog).",
+    "sourceFrameworks": [
+      "MDMP Step 2: Mission Analysis (facts, assumptions, specified/implied tasks)",
+      "Mission Command planning guidance (commander's resolved decisions)",
+      "SRE production readiness review (checklist items with rationale)",
+      "OPORD Situation paragraph (facts and assumptions that shape execution)"
+    ],
+    "sessions": {
+      "thisSession": "b8a9ed4e — 2026-03-16, formulated this planning brief",
+      "toolOpsPlanningSession": "84280c8b — 2026-03-15 20:08-22:57 UTC, delegation protocol, tool-ops framework, 7 plan rewrites. Transcript: sessions/aitools/2026-03-15_84280c8b.jsonl",
+      "toolOpsExecutionSession": "eaacf9da — 2026-03-15 22:57-00:22 UTC, executed tool-ops plan, produced AAR + test suite. Transcript: sessions/aitools/2026-03-15_eaacf9da.jsonl",
+      "skillsExtractionSession": "c8862b68 — 2026-03-15 17:08-20:01 UTC, setup-user-skills extraction. Transcript: sessions/aitools/2026-03-15_c8862b68.jsonl",
+      "windowsSession": "Summary: /Users/pepe/Library/CloudStorage/GoogleDrive-jose@nobul.tech/My Drive/nobul co/scratch/chat-summary-macos-work.md",
+      "auditSession": "current — 2026-03-16, decisions #35-48, skill naming (flat verbs), framework absorption, S2 AAR audits, incident #48 filed, tool-registry migration (incident #21 resolved), intent skills updated (#39/#40), all critical blockers resolved",
+      "planFile": "~/.claude/plans/gleaming-cooking-unicorn.md (local only, see decision #18)"
+    },
+    "workProducts": {
+      "aar": "harvesting/2026-03-16_aar-tool-ops-plan.md (731 lines, 10 decisions, 7 plan revisions)",
+      "testSuite": "harvesting/2026-03-16_test-tool-ops.py (42 tests, 5 suites)",
+      "delegationEvolution": "plans/mission-command-briefing/delegation-evolution.md",
+      "decisionQualityAudit": "plans/mission-command-briefing/decision-quality-audit.md",
+      "researchSynthesis": "plans/mission-command-briefing/research-synthesis.md",
+      "intentApprovalEvolution": "plans/mission-command-briefing/intent-approval-evolution.md",
+      "incidentRegistryAudit": "plans/mission-command-briefing/investigate-incident-registry.md",
+      "crossRefAudit": "plans/mission-command-briefing/investigate-cross-refs.md",
+      "sessionGapAudit": "plans/mission-command-briefing/investigate-session-gaps.md",
+      "harnessStateAudit": "plans/mission-command-briefing/investigate-harness-state.md",
+      "crossPlatformAudit": "plans/mission-command-briefing/cross-platform-full-audit.md",
+      "knownStateAudit": "plans/mission-command-briefing/known-state-audit.md"
+    },
+    "telemetry": {
+      "strategy": "Local SQLite (~/.aitools/telemetry/governance.db, WAL mode) + Datadog via log_ship (plans/datadog-log-integration.md). Auth0 manages datadogApiKey (plans/nobul-auth0-platform.md Phase 2).",
+      "datadogPlan": "plans/datadog-log-integration.md — 5 phases: foundation (log_ship), dashboards, CI visibility, MCP integration, post-credits migration to Axiom",
+      "auth0Plan": "plans/nobul-auth0-platform.md — 5 phases: tenant setup, GitHub MVP, multi-provider, token lifecycle, web apps + RBAC"
+    },
+    "sequencingNotes": {
+      "kpiDependency": "All KPIs are aspirational until decision #32 (log_ship + SQLite) is implemented. Plan must sequence #32 in first execution phase.",
+      "channelDependency": "Channel infrastructure (decision #22) must be built before delegation (#4) works with collision-resistant file naming."
+    },
+    "kpiSchema": {
+      "description": "Each decision has a kpis array. Each KPI has: name (metric name), source (what generates it), unit (measurement), target (success threshold). KPIs ship to Datadog via log_ship at SessionEnd.",
+      "example": {
+        "name": "delegationComplianceRate",
+        "source": "channel SITREPs",
+        "unit": "percent",
+        "target": ">= 95% of delegations include all 8 components"
+      }
+    }
+  },
+  "facts": [
+    {
+      "id": "F1",
+      "severity": "critical",
+      "blocksPlanning": true,
+      "status": "resolved",
+      "resolvedIn": "current audit session — tool-registry.json created, SKILL.md updated, incident #21 resolved",
+      "observation": "/tool-registry skill (SKILL.md lines 20, 64, 72, 102) references reference/tool-registry.json which does not exist. Any agent invoking /tool-registry gets broken behavior.",
+      "verified": "Session b8a9ed4e: cross-reference investigator confirmed. RCA: harvesting/2026-03-15_rca-registry-bypass.md. Incident #21 tracks migration but no corrective action taken.",
+      "impact": "Agent-breaking. /tool-registry skill is non-functional.",
+      "frameworks": [
+        "Incident governance",
+        "Tool lifecycle"
+      ]
+    },
+    {
+      "id": "F2",
+      "severity": "critical",
+      "blocksPlanning": true,
+      "status": "resolved",
+      "resolvedIn": "current audit session — SKILL.md updated to @harvesting/harvest-manifest.json",
+      "observation": "/harvest skill (SKILL.md lines 29, 69) references @reference/harvest-manifest.json but actual file is harvesting/harvest-manifest.json — wrong directory.",
+      "verified": "Session b8a9ed4e: cross-reference investigator confirmed.",
+      "impact": "Agent-breaking. /harvest skill cannot read manifest.",
+      "frameworks": [
+        "Artifact harvesting",
+        "Incident governance"
+      ]
+    },
+    {
+      "id": "F3",
+      "severity": "high",
+      "blocksPlanning": false,
+      "status": "resolved",
+      "resolvedIn": "current audit session — frameworks.md rewritten from scratch, registries table removed, pure governance",
+      "observation": ".claude/rules/frameworks.md registries table (line 30, always in context) lists phantom @reference/tool-registry.json.",
+      "verified": "Session b8a9ed4e: cross-reference investigator confirmed.",
+      "impact": "Every agent sees the broken reference. Reinforces phantom.",
+      "frameworks": [
+        "Incident governance"
+      ]
+    },
+    {
+      "id": "F4",
+      "severity": "high",
+      "blocksPlanning": false,
+      "observation": "surfacing-duty-stop.sh lines 53/56 use stat -f (BSD-only) with no platform dispatch. Crashes on every Stop hook on Windows: 'line 54: File: unbound variable'.",
+      "verified": "Windows session: error visible twice. Session b8a9ed4e: confirmed by reading hook source.",
+      "impact": "Surfacing duty disabled on Windows. Incident-acknowledgment detection never fires.",
+      "frameworks": [
+        "Platform engineering (proposed)",
+        "Tool operations"
+      ]
+    },
+    {
+      "id": "F5",
+      "severity": "high",
+      "blocksPlanning": false,
+      "observation": "8 incidents silently resolved (IDs: 8, 15, 17, 18, 32, 36, 40, 47). Code fixed, incidents never closed.",
+      "verified": "Session b8a9ed4e: incident registry auditor verified each.",
+      "impact": "Registry shows 42 open when real count is ~25. Planning based on inflated count.",
+      "frameworks": [
+        "Incident governance"
+      ]
+    },
+    {
+      "id": "F6",
+      "severity": "high",
+      "blocksPlanning": false,
+      "observation": "3 stale duplicate incidents (39, 41, 46) duplicate #43. 3 'planned' incidents (28, 30, 33) have corrective actions but linked=null.",
+      "verified": "Session b8a9ed4e: incident registry auditor confirmed.",
+      "impact": "6 more entries that should be closed or updated.",
+      "frameworks": [
+        "Incident governance"
+      ]
+    },
+    {
+      "id": "F7",
+      "severity": "high",
+      "blocksPlanning": false,
+      "observation": "5 unfiled issues: (1) stop hook crash Windows, (2) 3 uncommitted sessions Mac, (3) phantom session ID 2Hb40B0VEu in harvest manifest, (4) date mismatch between hooks, (5) Explore agents can't write to scratch.",
+      "verified": "Session b8a9ed4e: session gap investigator confirmed all 5 with draft fields. Report: plans/mission-command-briefing/investigate-session-gaps.md",
+      "impact": "Surfacing duty gap. Issues discussed but never tracked.",
+      "frameworks": [
+        "Incident governance"
+      ]
+    },
+    {
+      "id": "F8",
+      "severity": "medium",
+      "blocksPlanning": false,
+      "observation": "14/22 rules (64%) lack intent statements. 3/17 skills lack intent.",
+      "verified": "Session b8a9ed4e: harness state auditor confirmed.",
+      "impact": "Violates 'Document intent' design principle.",
+      "frameworks": [
+        "Intent documentation"
+      ]
+    },
+    {
+      "id": "F9",
+      "severity": "medium",
+      "blocksPlanning": false,
+      "observation": "7/8 user-level skills have no trigger directive in any rule.",
+      "verified": "Session b8a9ed4e: harness state auditor confirmed.",
+      "impact": "Skills may not auto-fire. No detection hook catches bypass.",
+      "frameworks": [
+        "Three-layer governance"
+      ]
+    },
+    {
+      "id": "F10",
+      "severity": "medium",
+      "blocksPlanning": false,
+      "observation": "4 glossary terms in JSON (hook, incident, rule, skill) missing from rule word list. governed file definition omits tool-ops.json.",
+      "verified": "Session b8a9ed4e: harness state auditor confirmed.",
+      "impact": "Terms invisible to agents (they read the rule, not JSON).",
+      "frameworks": [
+        "Governed vocabulary"
+      ]
+    },
+    {
+      "id": "F11",
+      "severity": "medium",
+      "blocksPlanning": false,
+      "observation": "reference/evaluations/ directory empty. No tool evaluation artifacts exist.",
+      "verified": "Session b8a9ed4e: harness state auditor confirmed.",
+      "impact": "Tool evaluation framework has no instances.",
+      "frameworks": [
+        "Tool lifecycle"
+      ]
+    },
+    {
+      "id": "F12",
+      "severity": "medium",
+      "blocksPlanning": false,
+      "observation": "cursor-rule-parity.md deleted v0.54 but still referenced by 2 files. 2 checklist paths wrong in tool-ops-claude-code.md.",
+      "verified": "Session b8a9ed4e: cross-reference investigator confirmed.",
+      "impact": "Broken cross-references — agents hit dead ends.",
+      "frameworks": [
+        "Incident governance"
+      ]
+    },
+    {
+      "id": "F13",
+      "severity": "low",
+      "blocksPlanning": false,
+      "observation": "8 framework lastUpdated timestamps are 2026-03-14 despite 22 commits on 2026-03-15.",
+      "verified": "Session b8a9ed4e: harness state auditor confirmed.",
+      "impact": "May trigger false staleness warnings.",
+      "frameworks": [
+        "Framework adoption"
+      ]
+    },
+    {
+      "id": "F14",
+      "severity": "medium",
+      "blocksPlanning": false,
+      "observation": "Datadog log_ship helper designed (plans/datadog-log-integration.md) but not built. KPI telemetry pipeline does not exist yet. Local SQLite governance.db does not exist yet.",
+      "verified": "Session b8a9ed4e: read Datadog plan. No log_ship function in aitools-lib.sh.",
+      "impact": "No KPIs can be measured until log_ship + SQLite are built. Framework effectiveness is unmeasured.",
+      "frameworks": [
+        "Tool operations",
+        "Three-layer governance"
+      ]
+    },
+    {
+      "id": "F15",
+      "severity": "medium",
+      "blocksPlanning": false,
+      "observation": "Auth0 tenant provisioned (Startups plan) but aitools auth not implemented. datadogApiKey currently in plain text in config.json. No centralized credential management.",
+      "verified": "Session b8a9ed4e: read Auth0 plan. No aitools-auth.sh/.ps1 in scripts/.",
+      "impact": "Credentials managed ad-hoc per tool. Keychain prompts block installs (incident #23).",
+      "frameworks": [
+        "Tool lifecycle"
+      ]
+    },
+    {
+      "id": "F16",
+      "severity": "medium",
+      "blocksPlanning": false,
+      "observation": "/incident skill (SKILL.md) is outdated and ineffective — filing process does not match current harness state. Lacks escalation awareness (pattern matching against existing incidents), does not enforce structural fixes for 3+ recurrence patterns, suggests UCIs as resolutions when hooks are more effective. Known Limitations section added to SKILL.md in current session.",
+      "verified": "Current audit session: user rejected UCI resolution for incident #48, said 'weak sauce.' Known Limitations section written to SKILL.md. Decision #35 tracks the fix.",
+      "impact": "Agents filing incidents via /incident get no guidance on escalation thresholds. Same root cause filed 3+ times without structural fix (incidents #34, #35, #48).",
+      "frameworks": [
+        "Incident governance"
+      ]
+    },
+    {
+      "id": "F17",
+      "severity": "high",
+      "blocksPlanning": true,
+      "status": "resolved",
+      "resolvedIn": "current audit session — /intent-writing updated with 5 heuristic sections, /intent-audit updated with 3 new sections + 2 finding types",
+      "observation": "/intent-writing skill describes the format (purpose/scope/audience) but not the heuristics that make intents good: no multi-pass ambiguity removal, no weight-by-recency, no consolidated presentation pattern, no quality checklist. /intent-audit skill checks alignment but not quality — bad intents that technically align pass the audit.",
+      "verified": "Current audit session: user said 'i think the heuristic we use should be part of the skill.' Reviewed both SKILL.md files — confirmed neither contains session-proven heuristics. Decisions #39 and #40 marked as critical blockers.",
+      "impact": "Executing agents write generic intents requiring 3+ revision rounds (15min in eaacf9da batch 1). With heuristics, intents were approved in 42 seconds (eaacf9da batch 6). Plan execution quality depends on these skills being updated first.",
+      "frameworks": [
+        "Intent documentation"
+      ]
+    },
+    {
+      "id": "F18",
+      "severity": "low",
+      "blocksPlanning": false,
+      "observation": "8 new hook artifacts proposed across decisions #5, #36, #41, #42, #47: block-explore-agent.sh, channel-archive.sh, aar-reminder.sh, channel-init.sh, channel-prune.sh, plan-gate.sh, intent-enforcement.sh, scratch-skill-guard.sh. shared/hooks/ will grow from 9 to 17 files. setup-user-hooks.sh/.ps1 and build-deploy.sh must be updated for deployment.",
+      "verified": "Current audit session: counted from decisions #5 (1), #36 (3 incl split), #41 (1), #42 (1), #47 (1) = 8 new hooks.",
+      "impact": "Hook deployment infrastructure (setup-user-hooks, build-deploy) must scale. Hook testing pattern from eaacf9da should be applied to all new hooks.",
+      "frameworks": [
+        "Tool operations",
+        "Hook rollout"
+      ]
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "A1",
+      "assumption": "Closing 14 incidents won't break downstream references in plans, roadmap, or other incidents.",
+      "risk": "If a plan references a closed ID, the reference becomes stale.",
+      "verification": "Grep repo for each incident ID before closing.",
+      "frameworks": [
+        "Incident governance"
+      ]
+    },
+    {
+      "id": "A2",
+      "assumption": "Stop hook stat crash doesn't affect other hooks on Windows.",
+      "risk": "Other hooks may have the same BSD stat pattern.",
+      "verification": "session-archive.sh has uname dispatch (safe). Verify tool-ops-session-audit.sh.",
+      "frameworks": [
+        "Platform engineering (proposed)"
+      ]
+    },
+    {
+      "id": "A3",
+      "assumption": "Blocking Explore agents won't break existing workflows.",
+      "risk": "Some agents use Explore for legitimate read-only research.",
+      "verification": "Audit recent sessions for Explore launches. Determine if general-purpose works instead.",
+      "frameworks": [
+        "Mission command (proposed)"
+      ]
+    },
+    {
+      "id": "A4",
+      "assumption": "Hooks run bash on all platforms (Claude Code design constraint).",
+      "risk": "If Anthropic changes CC to run hooks in PowerShell on Windows, all hooks break.",
+      "verification": "Monitor CC release notes. Current: verified CC 2.1.76.",
+      "frameworks": [
+        "Platform engineering (proposed)",
+        "Tool operations"
+      ]
+    },
+    {
+      "id": "A5",
+      "assumption": "Datadog startup credits (up to $100K, 1 year Pro) are sufficient for our telemetry volume.",
+      "risk": "If log volume exceeds credits, we need to migrate to Axiom sooner than planned.",
+      "verification": "Monitor usage after log_ship is built. Axiom migration path is designed (Phase 5).",
+      "frameworks": [
+        "Tool operations"
+      ]
+    },
+    {
+      "id": "A6",
+      "assumption": "Auth0 Startups plan (100K MAU, 12 months free) will remain available and auto-downgrade to Free (25K MAU) after.",
+      "risk": "Auth0 changes pricing or plan terms.",
+      "verification": "Monitor Auth0 announcements. Free tier (25K MAU) is the fallback.",
+      "frameworks": [
+        "Tool lifecycle"
+      ]
+    },
+    {
+      "id": "A7",
+      "assumption": "Hooks are the most effective structural enforcement mechanism for recurring behavioral patterns — more effective than UCIs, rules alone, or skill guidance.",
+      "risk": "Hooks add latency (target < 50ms per hook), complexity (17 hooks to maintain), and maintenance burden. If hooks become brittle or slow, agents will find ways to bypass or users will disable them.",
+      "verification": "After first plan execution: measure hook-enforced compliance rate vs behavioral-only (UCI) compliance rate for same class of violations. If hook compliance > 95% and UCI compliance < 50%, assumption validated.",
+      "frameworks": [
+        "Three-layer governance",
+        "Tool operations"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "id": 1,
+      "decision": "Session archive hook must auto-commit and auto-push at SessionEnd",
+      "rationale": "3 sessions invisible cross-machine because archive hook copies transcripts but does no git ops. 'User commits on their own schedule' creates predictable cross-machine gap.",
+      "context": "Windows session: 1/4 sessions visible. Session b8a9ed4e: confirmed 3 uncommitted on Mac. reference/user-repo.md L147.",
+      "components": [
+        "(1) git add transcript after copy",
+        "(2) git commit: 'Archive session <date>_<prefix> (<project>)'",
+        "(3) git push to remote",
+        "(4) If push fails (remote ahead): log_warn, don't block SessionEnd",
+        "(5) If userRepoPath not configured: skip silently (existing behavior)"
+      ],
+      "frameworks": [
+        {
+          "name": "Operational learning",
+          "status": "proposed",
+          "note": "Absorbed session lifecycle per decision #36. See decision #36 for Operational Learning intent"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/hooks/session-archive.sh",
+          "status": "existing"
+        },
+        {
+          "path": "reference/user-repo.md",
+          "status": "existing"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "crossMachineVisibilityRate",
+          "source": "session-archive hook logs",
+          "unit": "percent",
+          "target": ">= 99% sessions visible within 5 min of end"
+        },
+        {
+          "name": "archivePushFailureRate",
+          "source": "session-archive hook logs",
+          "unit": "failures/week",
+          "target": "< 1"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        2,
+        10,
+        14,
+        18,
+        36
+      ]
+    },
+    {
+      "id": 2,
+      "decision": "Data replication between session archives and harvesting is acceptable if clearly defined",
+      "rationale": "User: 'im ok replicating data... some users have privacy concerns.' Archives (dotprofile) = full transcripts for user. Harvesting (project repo) = extracted artifacts for project. Privacy boundary must be documented.",
+      "context": "Session b8a9ed4e: overlap discussion between hooks.",
+      "components": [
+        "(1) Document what lives where: transcripts in dotprofile, artifacts in project repo",
+        "(2) Privacy boundary: user controls dotprofile visibility, project repo is shared",
+        "(3) Naming consistency between systems (session ID prefix, date format)",
+        "(4) Define opt-out: harvesting without archiving, or vice versa",
+        "(5) Document in reference/user-repo.md and reference/framework-artifact-harvesting.md"
+      ],
+      "frameworks": [
+        {
+          "name": "Operational learning",
+          "status": "proposed",
+          "note": "Absorbed session lifecycle per decision #36"
+        },
+        {
+          "name": "Artifact harvesting",
+          "status": "absorbed",
+          "note": "Absorbed into Operational learning per decision #36"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "reference/user-repo.md",
+          "status": "existing"
+        },
+        {
+          "path": "reference/framework-artifact-harvesting.md",
+          "status": "existing"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "archiveHarvestNamingConsistency",
+          "source": "check script audit",
+          "unit": "mismatches",
+          "target": "0"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        1,
+        10,
+        18,
+        36
+      ]
+    },
+    {
+      "id": 3,
+      "decision": "Mission command framework needed: rule, skill, reference file, channel",
+      "rationale": "5 delegation failures this session + AAR Decision 8 (L1187) identified delegation duty as framework-level. Scope expanded from 'delegation protocol' to full Mission Command: delegation + communication + staff functions + authority model.",
+      "context": "Planning 84280c8b: L522 framework vision, L633 naming, L1187 delegation duty. Session b8a9ed4e: 5 failures demonstrated, framework evolved through naming iterations (Agent delegation -> Delegation protocol -> Mission command). AAR Section 9 Lesson 5.",
+      "components": [
+        "(1) Rule (.claude/rules/delegation.md): governance principle, trigger directive, harness constraints",
+        "(2) Skill (.claude/skills/delegate/SKILL.md): context injection, agent type selection, identity briefing, carry-forward",
+        "(3) Skill (.claude/skills/channel/SKILL.md): inter-agent messaging (SITREP/FINDING)",
+        "(4) Reference (reference/framework-mission-command.md): Mission Command + FM 101-5-2 adaptation, harness constraints",
+        "(5) Reference (reference/channel-schemas.json): SITREP and FINDING (SALUTE-adapted) schemas",
+        "(6) Directory (.aitools/channel/): operations journal for inter-agent communication",
+        "(7) Hook (shared/hooks/block-explore-agent.sh): agent type enforcement",
+        "(8) Register via /frameworks skill"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed",
+          "intent": {
+            "purpose": "Govern how agents plan, delegate, communicate, and coordinate during multi-agent operations. Adapted from Mission Command (Auftragstaktik) and US Army battle staff communications (FM 101-5-2), with five harness constraints: no persistence, no inherited rules, no mid-execution updates, no peer communication, post-execution verification only. Covers the full operational cycle: delegation duty, identity briefings, inter-agent communication (SITREP/FINDING), staff function identities (S1-S3), disciplined initiative authority, intelligence preparation, findings consolidation, and FRAGORD kill-and-replace",
+            "scope": "Delegation protocol (8 components), inter-agent channel (.aitools/channel/, schemas, /channel skill), staff functions and identity assignment, authority model (sensors not filers, disciplined initiative), plan execution coordination (S2 at start/end, S1 at end), FRAGORD pattern, pre-draft intent approval pattern. NOT plan writing (mission analysis). NOT tool-specific operations (tool operations). NOT session archiving or learning loop (operational learning)",
+            "audience": "Every agent that delegates work or communicates findings, every plan execution, every session"
+          }
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".claude/rules/delegation.md",
+          "status": "proposed"
+        },
+        {
+          "path": ".claude/skills/delegate/SKILL.md",
+          "status": "proposed"
+        },
+        {
+          "path": ".claude/skills/channel/SKILL.md",
+          "status": "proposed"
+        },
+        {
+          "path": "reference/framework-mission-command.md",
+          "status": "proposed"
+        },
+        {
+          "path": "reference/channel-schemas.json",
+          "status": "proposed"
+        },
+        {
+          "path": ".aitools/channel/",
+          "status": "proposed"
+        },
+        {
+          "path": "shared/hooks/block-explore-agent.sh",
+          "status": "proposed"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "delegationComplianceRate",
+          "source": "channel SITREPs",
+          "unit": "percent",
+          "target": ">= 95% delegations include all 8 components"
+        },
+        {
+          "name": "channelMessageCount",
+          "source": "channel-manifest.json",
+          "unit": "messages/plan",
+          "target": ">= 1 SITREP per batch"
+        },
+        {
+          "name": "findingConsolidationRate",
+          "source": "S2 SITREP at plan end",
+          "unit": "percent",
+          "target": "100% findings reviewed at plan completion"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        4,
+        5,
+        6,
+        7,
+        15,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        37,
+        38
+      ]
+    },
+    {
+      "id": 4,
+      "decision": "Delegation duty has 8 components — 7 from tool-ops execution protocol + agent type matching",
+      "rationale": "Planning session 84280c8b produced 7-step duty through 7 revisions. Session b8a9ed4e added 8th: agent type matching.",
+      "context": "84280c8b: L1187 duty born, L1271 identity, L1236-1242 constraints, L1260 recursive, L1268 include-the-plan. eaacf9da: executed 8 batches. AAR: harvesting/2026-03-16_aar-tool-ops-plan.md. b8a9ed4e: 5 failures, evolution report plans/mission-command-briefing/delegation-evolution.md.",
+      "components": [
+        "(1) Establish identity — who the agent is, role, how work fits larger effort",
+        "(2) Include the plan — execution protocol + relevant sections (FRAGORD without OPORD is useless)",
+        "(3) Include prior results — actual results, deviations, impact",
+        "(4) Include what comes after — downstream dependencies",
+        "(5) Inject critical rules — standing orders, scratch, error-handling, source-of-truth, governed-data",
+        "(6) Note deviations — what changed from plan and why",
+        "(7) Note new findings — issues surfaced during prior work",
+        "(8) Match agent type — Explore for read-only, general-purpose when writing required"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".claude/skills/delegate/SKILL.md",
+          "status": "proposed"
+        },
+        {
+          "path": ".claude/rules/delegation.md",
+          "status": "proposed"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "delegationComponentCoverage",
+          "source": "delegation briefing audit",
+          "unit": "components/8",
+          "target": "8/8 for every delegation"
+        },
+        {
+          "name": "agentTypeMismatchRate",
+          "source": "block-explore-agent hook",
+          "unit": "blocks/session",
+          "target": "0 after framework adoption"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        3,
+        5,
+        6,
+        7,
+        19,
+        21,
+        23,
+        25,
+        26,
+        27,
+        28,
+        44,
+        46,
+        48
+      ]
+    },
+    {
+      "id": 5,
+      "decision": "Block Explore agents via new PreToolUse hook with corrective injection",
+      "rationale": "Explore agents can't Write/Edit. Delegation duty component 5 requires scratch access. New hook per decision #20 (one hook per feature).",
+      "context": "Session b8a9ed4e: 3 Explore agents failed silently on write-to-scratch. Existing block-claude-code-guide.sh pattern (84280c8b).",
+      "components": [
+        "(1) New hook: shared/hooks/block-explore-agent.sh",
+        "(2) PreToolUse on Agent — check subagent_type in tool_input JSON",
+        "(3) If Explore: exit 0 with deny + corrective message in permissionDecisionReason",
+        "(4) Message: 'Explore agents cannot write to scratch. Use general-purpose. See /delegate.'",
+        "(5) If not Explore: exit 0, no stdout (allow)",
+        "(6) Add verification case to tool-ops.json via /tool-ops",
+        "(7) Deploy to ~/.claude/hooks/ via setup-user-hooks"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        },
+        {
+          "name": "Tool operations",
+          "status": "existing"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/hooks/block-explore-agent.sh",
+          "status": "proposed"
+        },
+        {
+          "path": "reference/tool-ops.json",
+          "status": "existing"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "exploreDenyRate",
+          "source": "hook logs",
+          "unit": "blocks/session",
+          "target": "trending to 0 as agents learn"
+        },
+        {
+          "name": "hookLatency",
+          "source": "hook timing",
+          "unit": "ms",
+          "target": "< 50ms"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        3,
+        4,
+        6,
+        20
+      ]
+    },
+    {
+      "id": 6,
+      "decision": "Add Explore agent deny rule to Claude Code permissions — defense in depth",
+      "rationale": "Hook provides corrective injection, deny rule provides belt-and-suspenders prevention. Register in tool-ops.json via /tool-ops.",
+      "context": "Session b8a9ed4e: existing pattern from Agent(claude-code-guide). Three-layer: hook=detection, deny=prevention.",
+      "components": [
+        "(1) Add Agent(Explore) to permissions.deny in settings.json",
+        "(2) Add deny rule to tool-ops.json: id=cc-deny-explore-agent, pattern=Agent(Explore), hook=block-explore-agent.sh",
+        "(3) Add to setup-user-hooks deployment",
+        "(4) Add verification test case to tool-ops.json"
+      ],
+      "frameworks": [
+        {
+          "name": "Tool operations",
+          "status": "existing"
+        },
+        {
+          "name": "Three-layer governance",
+          "status": "existing"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "reference/tool-ops.json",
+          "status": "existing"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "denyRuleDriftRate",
+          "source": "tool-ops-session-audit hook",
+          "unit": "mismatches",
+          "target": "0"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        3,
+        4,
+        5,
+        20
+      ]
+    },
+    {
+      "id": 7,
+      "decision": "Delegation duty is recursive — any agent that delegates must follow it",
+      "rationale": "AAR Revision 6 (L1260): 'This applies recursively.' Protocol included in briefing so delegated agents follow it if they delegate.",
+      "context": "84280c8b: L1254-1264 agent generalized to 'delegating/delegated agent'. Evolution report Section 7. b8a9ed4e: confirmed.",
+      "components": [
+        "(1) Any agent that delegates follows all 8 components",
+        "(2) Protocol itself included in briefing for recursive application",
+        "(3) Terminology: 'delegating agent' / 'delegated agent' — never 'main agent'",
+        "(4) Practical depth limit: ~2-3 levels (context cost increases per level)"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".claude/rules/delegation.md",
+          "status": "proposed"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "maxDelegationDepth",
+          "source": "channel SITREPs",
+          "unit": "levels",
+          "target": "<= 3"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        3,
+        4,
+        19,
+        25,
+        27
+      ]
+    },
+    {
+      "id": 8,
+      "decision": "Platform engineering framework: all aitools code, all languages, user-level",
+      "rationale": "Hooks + build-deploy run bash on ALL platforms but cross-platform rule only covers .sh/.ps1 pairs. surfacing-duty-stop.sh crashed on Windows. nobul-ops has 10 Rust platform blocks, 4 CI targets. Scope covers all languages.",
+      "context": "Windows session: stop hook crash. b8a9ed4e: cross-platform audit, nobul-ops audit (10 #[cfg] blocks). CLAUDE.md mission: 'platform-native best practices — not artificial 1:1 parity.'",
+      "components": [
+        "(1) Absorbs .claude/rules/cross-platform.md as the rule",
+        "(2) Absorbs reference/cross-platform-detail.md as detail reference",
+        "(3) New reference/framework-platform-engineering.md — Rust/Go/Python/Perl patterns from nobul-ops",
+        "(4) New reference/platform-compat.json — divergence registry + all-platform script registry",
+        "(5) New shared/skills/compat/SKILL.md — USER-LEVEL, deployed to ~/.claude/skills/",
+        "(6) Extend aitools-lib.sh: get_mtime(), get_birthtime(), epoch_to_date() wrappers",
+        "(7) All-platform registry: 9+ hooks, build-deploy.sh, init-logging.sh, check-lib.sh, aitools-lib.sh (expanded list from merged #31)",
+        "(8) Check script validation: registered scripts use wrappers not raw platform commands",
+        "(9) CI patterns from nobul-ops (4 targets, platform-aware packaging) (merged from #31)",
+        "(10) Rust #[cfg], Go build tags, Python sys.platform documented with examples",
+        "(11) Three-layer: prevention (rule+compat registry), detection (check scripts), audit (/compat skill) (merged from #31)"
+      ],
+      "frameworks": [
+        {
+          "name": "Platform engineering",
+          "status": "proposed",
+          "intent": {
+            "purpose": "Govern platform correctness across the harness — what code runs on which platforms, how it handles platform differences, and how violations are prevented, detected, and audited. Maintain registries of all-platform scripts, known command divergences, and empirically verified install paths. Provide three-layer governance for platform concerns: prevention (rule + compat registry), detection (portability check scripts), audit (on-demand compliance review). Grounded in project mission: 'platform-native best practices — not artificial 1:1 parity'",
+            "scope": "All aitools code: .sh/.ps1 pairs, all-platform bash (hooks, build-deploy), compiled language platform blocks (Rust #[cfg], Go build tags), scripting language checks (Python, Perl), CI cross-compilation, platform-native paths, package manager behaviors, and platform-specific implementation patterns in setup scripts (the HOW — not the WHAT, which is tool lifecycle), compatibility wrappers. Absorbs existing cross-platform rule and reference. NOT tool selection or install method evaluation (tool lifecycle — decides WHAT and WHICH method). NOT tool-specific operations (tool operations)",
+            "audience": "Every agent writing code that runs on multiple platforms, in any project. User-level skill deployed to ~/.claude/skills/"
+          }
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".claude/rules/cross-platform.md",
+          "status": "existing"
+        },
+        {
+          "path": "reference/cross-platform-detail.md",
+          "status": "existing"
+        },
+        {
+          "path": "scripts/aitools-lib.sh",
+          "status": "existing"
+        },
+        {
+          "path": "reference/framework-platform-engineering.md",
+          "status": "proposed"
+        },
+        {
+          "path": "reference/platform-compat.json",
+          "status": "proposed"
+        },
+        {
+          "path": "shared/skills/compat/SKILL.md",
+          "status": "proposed"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "platformViolationRate",
+          "source": "check script portability audit",
+          "unit": "violations/release",
+          "target": "0"
+        },
+        {
+          "name": "allPlatformScriptCoverage",
+          "source": "platform-compat.json registry",
+          "unit": "percent",
+          "target": "100% of all-platform scripts registered"
+        },
+        {
+          "name": "wrapperAdoptionRate",
+          "source": "grep for raw stat/date in registered scripts",
+          "unit": "percent",
+          "target": "100% use wrappers after migration"
+        },
+        {
+          "name": "crossPlatformTestCoverage",
+          "source": "CI build results",
+          "unit": "platforms tested per release",
+          "target": ">= 2 (macOS + Windows)"
+        },
+        {
+          "name": "platformCompatRegistryCoverage",
+          "source": "platform-compat.json",
+          "unit": "percent known divergences documented",
+          "target": "100%"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        9,
+        31,
+        37
+      ]
+    },
+    {
+      "id": 9,
+      "decision": "Fix surfacing-duty-stop.sh: add uname dispatch for stat calls",
+      "rationale": "Lines 53/56 use stat -f (BSD-only). Windows Git Bash: GNU stat -f means --file-system. Crashes under set -u.",
+      "context": "Windows session: 'line 54: File: unbound variable.' b8a9ed4e: confirmed by reading source.",
+      "components": [
+        "(1) Line 53: stat -f %m → get_mtime wrapper or inline uname dispatch",
+        "(2) Line 56: stat -f %B → get_birthtime wrapper or inline uname dispatch",
+        "(3) Hooks don't source aitools-lib.sh — need lightweight hook-utils.sh or inline dispatch",
+        "(4) Test on both macOS and Windows Git Bash"
+      ],
+      "frameworks": [
+        {
+          "name": "Platform engineering",
+          "status": "proposed"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/hooks/surfacing-duty-stop.sh",
+          "status": "existing"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "stopHookCrashRate",
+          "source": "hook error logs",
+          "unit": "crashes/session",
+          "target": "0 on all platforms"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        8
+      ]
+    },
+    {
+      "id": 10,
+      "decision": "Session ID and date derivation shared between hooks",
+      "rationale": "session-archive uses birth time, harvest uses current date. Produced mismatch: archive=2026-03-15, harvest=2026-03-16 for same session.",
+      "context": "b8a9ed4e: manifest 2026-03-16_eaacf9da vs archive 2026-03-15_eaacf9da. Session spanned midnight UTC.",
+      "components": [
+        "(1) Session ID prefix: first 8 chars (already consistent)",
+        "(2) Session date: standardize on transcript birth time (session start), not current date",
+        "(3) Project name: basename of git root (already consistent)",
+        "(4) Shared utility in aitools-lib.sh or dedicated hook-utils.sh",
+        "(5) Update harvest-session.sh L56: replace date -u with birth-time-based date"
+      ],
+      "frameworks": [
+        {
+          "name": "Operational learning",
+          "status": "proposed",
+          "note": "Absorbed session lifecycle per decision #36"
+        },
+        {
+          "name": "Artifact harvesting",
+          "status": "absorbed",
+          "note": "Absorbed into Operational learning per decision #36"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/hooks/session-archive.sh",
+          "status": "existing"
+        },
+        {
+          "path": "shared/hooks/harvest-session.sh",
+          "status": "existing"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "dateDerivationMismatchRate",
+          "source": "manifest vs archive audit",
+          "unit": "mismatches/week",
+          "target": "0"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        1,
+        2,
+        11,
+        36
+      ]
+    },
+    {
+      "id": 11,
+      "decision": "Fix harvest manifest: correct fake session ID and deduplicate",
+      "rationale": "Session fabricated 2Hb40B0VEu during harvest test. Real session: eaacf9da. Duplicates from re-harvesting.",
+      "context": "b8a9ed4e: traced fake ID. Manifest lines 57-78 (fake ID), lines 79-108 (duplicates).",
+      "components": [
+        "(1) Change 2Hb40B0VEu to eaacf9da on 2 entries",
+        "(2) Fix date: 2026-03-15 not 2026-03-16",
+        "(3) Deduplicate lines 79-108 (re-harvested copies with generic descriptions)",
+        "(4) Use /harvest skill (governed data)"
+      ],
+      "frameworks": [
+        {
+          "name": "Artifact harvesting",
+          "status": "absorbed",
+          "note": "Absorbed into Operational learning per decision #36"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "harvesting/harvest-manifest.json",
+          "status": "existing"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "manifestIntegrityScore",
+          "source": "harvest manifest audit",
+          "unit": "issues",
+          "target": "0 phantom IDs, 0 duplicates"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        10,
+        34,
+        36
+      ]
+    },
+    {
+      "id": 12,
+      "decision": "Intent-writing skill must incorporate AAR patterns",
+      "rationale": "AAR L1122: user said skill isn't good enough, explicit instructions better. Weight by recency, multi-pass ambiguity removal, pre-write term audit.",
+      "context": "84280c8b: L1101 weight-by-recency, L1122 'my explicit instructions are better.' b8a9ed4e: 'generalize from the AAR.'",
+      "components": [
+        "(1) Reference recent conversation history — more recent = more weight",
+        "(2) Multi-pass ambiguity removal: 4 passes per AAR L1117",
+        "(3) Pre-write governed term audit before writing",
+        "(4) Read skill as reference but don't invoke mechanically",
+        "(5) Match conciseness of existing governed JSON intents"
+      ],
+      "frameworks": [
+        {
+          "name": "Intent documentation",
+          "status": "existing"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/skills/intent-writing/SKILL.md",
+          "status": "existing"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "intentApprovalRounds",
+          "source": "session transcript analysis",
+          "unit": "rounds/batch",
+          "target": "<= 1 (single-round approval)"
+        },
+        {
+          "name": "intentCoverageRate",
+          "source": "harness state audit",
+          "unit": "percent",
+          "target": ">= 90% files have intent"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        13,
+        28,
+        39,
+        40
+      ]
+    },
+    {
+      "id": 13,
+      "decision": "Adopt MDMP Mission Analysis as framework for pre-plan requirements enumeration",
+      "rationale": "Tool-ops plan: 7 rewrites because requirements surfaced during writing. AAR Lesson 1: 'Enumerate before writing.' This planning brief is the proof of concept.",
+      "context": "b8a9ed4e: user said 'this is a skill in itself.' Windows session recommended enumeration. This brief: 33 decisions, 15 facts, 6 assumptions — proof of concept.",
+      "components": [
+        "(1) Planning brief schema: meta + facts + assumptions + decisions with KPIs",
+        "(2) Decision capture during conversation — recognize resolved decision points",
+        "(3) Review workflow: print human-readable, discuss, refine, re-audit",
+        "(4) Plan-brief linkage: plan references its brief, executing agents read both",
+        "(5) Quality checklist: 6 criteria (decision #21) applied before plan writing",
+        "(6) /brief skill: governed process for creating/maintaining briefs",
+        "(7) Reference: framework-mission-analysis.md documenting MDMP adaptation"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission analysis",
+          "status": "proposed",
+          "intent": {
+            "purpose": "Govern pre-plan requirements enumeration — capturing resolved decision points, facts, assumptions, and constraints before entering plan mode. Adapted from MDMP Step 2 and SRE production readiness reviews",
+            "scope": "Planning brief schema, decision capture, plan-brief linkage, quality checklist. NOT plan writing. NOT plan execution. NOT delegation (mission command)",
+            "audience": "Agents preparing to write a plan, users making decisions to capture before planning"
+          }
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/skills/brief/SKILL.md",
+          "status": "proposed"
+        },
+        {
+          "path": "reference/framework-mission-analysis.md",
+          "status": "proposed"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "planRewriteCount",
+          "source": "plan revision history",
+          "unit": "rewrites/plan",
+          "target": "<= 2 (down from 7)"
+        },
+        {
+          "name": "decisionQualityScore",
+          "source": "6-criterion checklist audit",
+          "unit": "criteria passed/6",
+          "target": "6/6 for every decision"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        12,
+        18,
+        21,
+        28,
+        37,
+        39,
+        43,
+        45
+      ]
+    },
+    {
+      "id": 14,
+      "decision": "Scratch files must always be cleaned up — no orphaned session directories",
+      "rationale": "User directive. SessionEnd hook handles cleanup. SessionStart prunes >24 hours. Both must work cross-platform.",
+      "context": "b8a9ed4e: user said 'scratch files should always be cleaned up.'",
+      "components": [
+        "(1) SessionEnd hook deletes session dir after classifying",
+        "(2) SessionStart hook prunes >24h via find -mmin +1440 (POSIX, portable)",
+        "(3) Edge case: crash without SessionEnd — SessionStart is safety net"
+      ],
+      "frameworks": [
+        {
+          "name": "Artifact harvesting",
+          "status": "absorbed",
+          "note": "Absorbed into Operational learning per decision #36"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/hooks/scratch-init.sh",
+          "status": "existing"
+        },
+        {
+          "path": "shared/hooks/harvest-session.sh",
+          "status": "existing"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "orphanedScratchDirs",
+          "source": "SessionStart audit",
+          "unit": "count",
+          "target": "0"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        1,
+        22,
+        34,
+        36
+      ]
+    },
+    {
+      "id": 15,
+      "decision": "Framework name is 'Mission command' — encompasses delegation, communication, coordination, staff functions",
+      "rationale": "Evolved: Agent delegation -> Delegation protocol -> Mission command. The doctrine we're adapting IS Mission Command — covers delegation, comms, staff org, disciplined initiative.",
+      "context": "b8a9ed4e: user approved 'thats pretty damn beautiful.' Naming evolution captured across session.",
+      "components": [
+        "(1) Add 'mission command' to governed vocabulary via /glossary",
+        "(2) Update all references from prior names",
+        "(3) Source: Mission Command (Auftragstaktik), FM 101-5-2/ABCS, OPORD/WARNORD/FRAGORD, S1-S3, AAR"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        },
+        {
+          "name": "Governed vocabulary",
+          "status": "existing"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "reference/glossary.json",
+          "status": "existing"
+        }
+      ],
+      "kpis": [],
+      "status": "agreed",
+      "related": [
+        3,
+        16
+      ]
+    },
+    {
+      "id": 16,
+      "decision": "Naming conventions: frameworks 2+ word noun phrase, rules noun, skills verb, hooks descriptive",
+      "rationale": "Without conventions, names collide. Rules are governance only — no process, no howto. Skills and references are where actions/howtos live.",
+      "context": "b8a9ed4e: user said 'rules are just about governance' and 'i like having verbs for skills they imply action.'",
+      "components": [
+        "(1) Document in reference/framework-governed-vocabulary.md",
+        "(2) Add to .claude/rules/frameworks.md",
+        "(3) Audit existing skills for verb/noun consistency",
+        "(4) Add governed terms via /glossary"
+      ],
+      "frameworks": [
+        {
+          "name": "Governed vocabulary",
+          "status": "existing"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "reference/framework-governed-vocabulary.md",
+          "status": "existing"
+        },
+        {
+          "path": ".claude/rules/frameworks.md",
+          "status": "existing"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "namingConventionCompliance",
+          "source": "harness state audit",
+          "unit": "percent",
+          "target": "100% of new artifacts follow conventions"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        15,
+        17
+      ]
+    },
+    {
+      "id": 17,
+      "decision": "New framework creation gatekept by /frameworks skill",
+      "rationale": "/frameworks skill provides governed process. Direct writes to framework-registry.json bypass the process.",
+      "context": "b8a9ed4e: user said 'any creation of a new framework would have to be gatekept by the framework skill.'",
+      "components": [
+        "(1) All 4 proposed frameworks registered via /frameworks",
+        "(2) Each requires: reference file exists, implementing artifacts exist, lastUpdated set"
+      ],
+      "frameworks": [
+        {
+          "name": "Governed data access",
+          "status": "existing"
+        },
+        {
+          "name": "Framework adoption",
+          "status": "existing"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".claude/skills/frameworks/SKILL.md",
+          "status": "existing"
+        },
+        {
+          "path": "reference/framework-registry.json",
+          "status": "existing"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "frameworkRegistrationCompliance",
+          "source": "audit skill",
+          "unit": "percent",
+          "target": "100% frameworks registered via skill"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        16
+      ]
+    },
+    {
+      "id": 18,
+      "decision": "Plan subagent plan files should be archived or harvested",
+      "rationale": "Tool-ops plan at ~/.claude/plans/gleaming-cooking-unicorn.md — outside repo, outside dotprofile. Lost on machine change.",
+      "context": "b8a9ed4e: tracing session references for #4 revealed plan in Claude's local dir only.",
+      "components": [
+        "(1) Option A: SessionEnd hook checks ~/.claude/plans/ and copies to .aitools/scratch/ for harvesting",
+        "(2) Option B: /delegate instructs Plan subagents to write to .aitools/scratch/",
+        "(3) Option C: /brief copies to repo at plan-finalization",
+        "(4) Evaluate best fit with existing patterns"
+      ],
+      "frameworks": [
+        {
+          "name": "Operational learning",
+          "status": "proposed",
+          "note": "Absorbed session lifecycle per decision #36"
+        },
+        {
+          "name": "Artifact harvesting",
+          "status": "absorbed",
+          "note": "Absorbed into Operational learning per decision #36"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/hooks/harvest-session.sh",
+          "status": "existing"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "planFilePreservationRate",
+          "source": "harvest manifest audit",
+          "unit": "percent",
+          "target": "100% plans archived"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        1,
+        2,
+        13,
+        19,
+        36
+      ]
+    },
+    {
+      "id": 19,
+      "decision": "Delegation references must include session IDs for planning, execution, and subagent work",
+      "rationale": "Subagents start blank. Session references let executing agents trace full context.",
+      "context": "b8a9ed4e: user said 'referencing this session is important because of the limitations of our subagents: they start blank.'",
+      "components": [
+        "(1) Planning conversation session ID",
+        "(2) Plan file location",
+        "(3) Executing conversation session ID",
+        "(4) Subagent work products (AAR, test suites, reports)",
+        "(5) Current session ID",
+        "(6) /delegate template includes session references section"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        },
+        {
+          "name": "Operational learning",
+          "status": "proposed",
+          "note": "Absorbed session lifecycle per decision #36"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".claude/skills/delegate/SKILL.md",
+          "status": "proposed"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "sessionReferenceCompleteness",
+          "source": "delegation briefing audit",
+          "unit": "references/delegation",
+          "target": ">= 3 per delegation"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        4,
+        7,
+        18
+      ]
+    },
+    {
+      "id": 20,
+      "decision": "One hook per feature — new hooks for new capabilities, never conflate",
+      "rationale": "Single-responsibility hooks: easier to test, reason about, manage via tool-ops. One hook doing 5 things = one bug breaks 5 features.",
+      "context": "b8a9ed4e: user rejected extending block-claude-code-guide.sh — 'i dont like conflating hooks.'",
+      "components": [
+        "(1) New capability = new hook in shared/hooks/",
+        "(2) New hook = entry in tool-ops.json hooks array via /tool-ops",
+        "(3) New hook = verification cases in tool-ops.json",
+        "(4) Exception: extending existing only when explicitly stated",
+        "(5) Document in tool-ops rule or hook-rollout rule"
+      ],
+      "frameworks": [
+        {
+          "name": "Tool operations",
+          "status": "existing"
+        },
+        {
+          "name": "Hook rollout",
+          "status": "existing"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".claude/rules/tool-ops.md",
+          "status": "existing"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "hookSingleResponsibilityScore",
+          "source": "tool-ops.json audit",
+          "unit": "features/hook",
+          "target": "1"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        5,
+        6,
+        41,
+        42
+      ]
+    },
+    {
+      "id": 21,
+      "decision": "Every planning brief decision must pass 6-criterion quality checklist before plan is written",
+      "rationale": "Decision #4 improved from narrow/no-refs to exemplar through systematic improvement. Generalized into checklist: A(scope), B(source), C(components), D(current), E(merge), F(refs).",
+      "context": "b8a9ed4e: user asked to generalize improvement of #4. Audit: plans/mission-command-briefing/decision-quality-audit.md",
+      "components": [
+        "(1) A — Check scope: component of something larger?",
+        "(2) B — Trace to source: session IDs, quotes, line numbers",
+        "(3) C — Enumerate components: concrete sub-steps",
+        "(4) D — Current-session discoveries: has concept grown?",
+        "(5) E — Merge related: sub-components scattered?",
+        "(6) F — Session references: planning, execution, work products"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission analysis",
+          "status": "proposed"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/skills/brief/SKILL.md",
+          "status": "proposed"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "decisionQualityPassRate",
+          "source": "checklist audit",
+          "unit": "percent",
+          "target": "100% pass all 6 before plan writing"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        4,
+        13,
+        39,
+        40,
+        43
+      ]
+    },
+    {
+      "id": 22,
+      "decision": ".aitools/channel/ is a first-class directory for inter-agent communication under the .aitools/ workspace",
+      "rationale": "Channel messages have different lifecycle than scratch. Military ops journal is separate from working documents.",
+      "context": "b8a9ed4e: user said 'i want .channel directory... naming and pathing conventions and schemas and how this ties into harvesting.'",
+      "components": [
+        "(1) .aitools/channel/ under .aitools/ workspace, gitignored",
+        "(2) Session-scoped: .aitools/channel/session-XXXXXXXXXX/",
+        "(3) File naming: {UTC-timestamp}_{agent-role-slugified}_{type}.json",
+        "(4) channel-manifest.json per session dir — message index",
+        "(5) SessionEnd hook: archive severity >= high to harvesting/, clean up rest",
+        "(6) .aitools/channel/ in .aitools/.gitignore",
+        "(7) SessionStart hook: create session channel dir",
+        "(8) Path in .aitools/channel/.current-session"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        },
+        {
+          "name": "Artifact harvesting",
+          "status": "absorbed",
+          "note": "Absorbed into Operational learning per decision #36"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".aitools/channel/",
+          "status": "proposed"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "channelOrphanRate",
+          "source": "SessionStart audit",
+          "unit": "orphaned dirs",
+          "target": "0"
+        },
+        {
+          "name": "highSeverityArchivalRate",
+          "source": "SessionEnd hook logs",
+          "unit": "percent",
+          "target": "100% high+ findings archived"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        3,
+        14,
+        23,
+        24,
+        25,
+        26,
+        34,
+        46
+      ]
+    },
+    {
+      "id": 23,
+      "decision": "/channel skill governs messaging with SITREP and FINDING (SALUTE-adapted) schemas",
+      "rationale": "Two message types: SITREP (status), FINDING (structured observation). FINDING severity=critical is the SPOTREP. Urgency in severity field.",
+      "context": "b8a9ed4e: adapted SITREP/SPOTREP/SALUTE from FM 101-5-2.",
+      "components": [
+        "(1) SITREP: {type, agent, timestamp, batch, status, filesWritten, filesModified, summary}",
+        "(2) FINDING (SALUTE): {type, severity, finding, location:{file,line}, agent, timestamp, context, actionTaken, recommendation}",
+        "(3) /channel post --type sitrep: write SITREP",
+        "(4) /channel post --type finding --severity <level>: write FINDING",
+        "(5) /channel read: all messages, filterable by type/severity/agent",
+        "(6) /channel status: summary counts",
+        "(7) Auto-trigger: agents invoke without user prompting",
+        "(8) channel-manifest.json tracks all messages per session"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".claude/skills/channel/SKILL.md",
+          "status": "proposed"
+        },
+        {
+          "path": "reference/channel-schemas.json",
+          "status": "proposed"
+        },
+        {
+          "path": ".aitools/channel/session-XXX/channel-manifest.json",
+          "status": "proposed"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "sitrepCompletionRate",
+          "source": "channel-manifest.json",
+          "unit": "percent",
+          "target": "100% batches have SITREP"
+        },
+        {
+          "name": "findingResolutionRate",
+          "source": "S2 consolidation SITREP",
+          "unit": "percent",
+          "target": ">= 80% findings resolved by execution"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        3,
+        4,
+        22,
+        24
+      ]
+    },
+    {
+      "id": 24,
+      "decision": "Agents are sensors not filers — findings flow channel -> S2 consolidation -> S1 incident filing",
+      "rationale": "Subagents filing incidents directly creates spam (batch 2 finds problem, batch 4 fixes it). S2 consolidates at plan end, delegates to S1 for filing only still-outstanding items.",
+      "context": "b8a9ed4e: user said 'the executing agent collects all incident reports and only files the one still outstanding at end of plan.' Also: 'delegate incident filing to a subagent.' Existing principle in incident-governance.md.",
+      "components": [
+        "(1) During execution: agents post FINDINGs via /channel to .aitools/channel/. Never invoke /incident",
+        "(2) Disciplined initiative: fix routine issues, report significant findings, don't make architectural decisions",
+        "(3) Between batches: executing agent reads .aitools/channel/, adjusts next briefing",
+        "(4) Plan completion: executing agent delegates to S2 (consolidation)",
+        "(5) S2 reads all .aitools/channel/ findings, cross-references with completed batches, discards resolved",
+        "(6) S2 delegates to S1 (incident filer) for each outstanding finding",
+        "(7) S1 drafts incident via /incident, presents to user for approval",
+        "(8) S2 posts final SITREP: 'N reviewed, M filed, K resolved'",
+        "(9) Update incident-governance.md: replace 'report INCIDENT:' with 'post FINDING to /channel'"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        },
+        {
+          "name": "Incident governance",
+          "status": "existing"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".claude/rules/incident-governance.md",
+          "status": "existing"
+        },
+        {
+          "path": ".claude/skills/delegate/SKILL.md",
+          "status": "proposed"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "falseIncidentRate",
+          "source": "incident registry audit",
+          "unit": "stale incidents filed during plan execution",
+          "target": "0"
+        },
+        {
+          "name": "consolidationCompleteness",
+          "source": "S2 final SITREP",
+          "unit": "percent findings reviewed",
+          "target": "100%"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        3,
+        22,
+        23,
+        25,
+        26,
+        30,
+        35,
+        36,
+        48
+      ]
+    },
+    {
+      "id": 25,
+      "decision": "Military staff functions (S1-S3) adapted as agent identities assigned by plan or executing agent",
+      "rationale": "Staff roles map to FUNCTIONS not titles. Each is an identity via delegation protocol. Plan writer assigns executing agent identity.",
+      "context": "b8a9ed4e: user asked 'how do we adapt the military identities for S3?' 84280c8b L1260: eliminated 'main agent.' AAR Rev 7: role-based identities.",
+      "components": [
+        "(1) S3 (Operations) = executing agent / operations coordinator — assigned by plan writer",
+        "(2) S2 (Intelligence) = consolidation agent — spawned at plan start (IPB) and plan end (consolidation)",
+        "(3) S1 (Administration) = incident filer — delegated by S2 at plan end",
+        "(4) Batch agents = role from briefing ('hook engineer for batch 7')",
+        "(5) Plan writer assigns executing agent identity in preamble",
+        "(6) These are functions not ranks — any agent can hold any function",
+        "(7) A batch agent delegating sub-work assigns its own delegates' identities"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".claude/skills/delegate/SKILL.md",
+          "status": "proposed"
+        },
+        {
+          "path": "reference/framework-mission-command.md",
+          "status": "proposed"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "identityAssignmentRate",
+          "source": "delegation briefing audit",
+          "unit": "percent",
+          "target": "100% agents have identity"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        3,
+        4,
+        7,
+        22,
+        24,
+        26,
+        27,
+        30,
+        38,
+        44
+      ]
+    },
+    {
+      "id": 26,
+      "decision": "S2 spawned at plan start (intelligence preparation) and plan end (findings consolidation)",
+      "rationale": "At start: reads brief, prior channel, known states → intelligence brief. At end: consolidates findings → delegates S1 for incident filing. S1 waits till end.",
+      "context": "b8a9ed4e: user said 'maybe the executing agent spawns an S2 subagent? the admin stuff, S1, can probably wait till the end no?'",
+      "components": [
+        "(1) Plan start: executing agent delegates to S2 (intelligence preparation)",
+        "(2) S2 start mission: read brief, prior .aitools/channel/, known states → intelligence brief",
+        "(3) S2 returns brief. Executing agent absorbs it, starts batch 1",
+        "(4) Between batches: executing agent reads channel itself (lightweight)",
+        "(5) Plan completion: executing agent delegates to S2 again (consolidation)",
+        "(6) S2 consolidation: read .aitools/channel/, cross-reference, discard resolved, prepare outstanding briefs",
+        "(7) S2 delegates to S1 for each outstanding finding",
+        "(8) S1 waits till end — no admin overhead during execution"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        },
+        {
+          "name": "Mission analysis",
+          "status": "proposed"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".claude/skills/delegate/SKILL.md",
+          "status": "proposed"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "intelligencePrepTime",
+          "source": "S2 SITREP at start",
+          "unit": "seconds",
+          "target": "< 120"
+        },
+        {
+          "name": "consolidationCompletionRate",
+          "source": "S2 final SITREP",
+          "unit": "percent",
+          "target": "100% plans have S2 consolidation"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        3,
+        4,
+        22,
+        24,
+        25,
+        29,
+        30,
+        36,
+        38,
+        44
+      ]
+    },
+    {
+      "id": 27,
+      "decision": "FRAGORD is kill-and-replace — terminate stale delegation and reissue",
+      "rationale": "No mid-execution updates possible. FRAGORD = wait for/kill current agent, create new with updated briefing including original OPORD + deviations + new findings.",
+      "context": "b8a9ed4e: identified during military protocol analysis. Architectural constraint: no mid-execution communication.",
+      "components": [
+        "(1) Executing agent monitors channel and user interrupts between delegations",
+        "(2) If findings change plan: don't delegate next batch with stale orders",
+        "(3) If current agent running and orders invalidated: user interrupts, new delegation created",
+        "(4) New briefing: original plan + all deviations + new findings + explanation of change",
+        "(5) /delegate skill: 'before each delegation, check if findings invalidate planned briefing'",
+        "(6) Sequential order revision, not real-time FRAGORD"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".claude/skills/delegate/SKILL.md",
+          "status": "proposed"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "staleOrderDelegationRate",
+          "source": "delegation audit",
+          "unit": "percent",
+          "target": "0% delegations with stale orders"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        3,
+        4,
+        7,
+        25
+      ]
+    },
+    {
+      "id": 28,
+      "decision": "Plans must pre-draft all intents before delegation, present consolidated for single-round approval",
+      "rationale": "Tool-ops batch 1: 15 min, 3+ rounds. Batch 5: 'beautiful', 42 sec. User can only approve/deny subagent tool calls — no feedback channel.",
+      "context": "eaacf9da L149: 'every file that needs an intent must have it drafted and approved before I delegate.' Report: plans/mission-command-briefing/intent-approval-evolution.md",
+      "components": [
+        "(1) Plans enumerate intent-requiring files per batch",
+        "(2) Executing agent drafts all intents BEFORE delegating",
+        "(3) Present as consolidated batch for single-round approval",
+        "(4) Delegated agent receives verbatim approved text",
+        "(5) Track approval: Approved / Pending / Draft table",
+        "(6) If changes requested: revise and re-present before delegating"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        },
+        {
+          "name": "Intent documentation",
+          "status": "existing"
+        },
+        {
+          "name": "Mission analysis",
+          "status": "proposed"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".claude/skills/delegate/SKILL.md",
+          "status": "proposed"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "intentApprovalRoundsPerBatch",
+          "source": "session transcript",
+          "unit": "rounds",
+          "target": "1"
+        },
+        {
+          "name": "intentApprovalTime",
+          "source": "session transcript",
+          "unit": "seconds",
+          "target": "< 120"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        3,
+        4,
+        12,
+        13,
+        39
+      ]
+    },
+    {
+      "id": 29,
+      "decision": "Critical facts (blocksPlanning=true) must be resolved before plan writing begins",
+      "rationale": "Two skills broken right now. Don't start mission with broken comms. S2 intelligence prep would discover these but we already know them.",
+      "context": "b8a9ed4e: S2 investigation revealed F1 and F2. User: 'all critical items done first, block until S1/S2 give clear.'",
+      "components": [
+        "(1) Fix F1: tool-registry SKILL.md → point to tool-registry.md (RCA Option A)",
+        "(2) Fix F2: harvest SKILL.md → harvesting/harvest-manifest.json (correct directory)",
+        "(3) Fix F3: frameworks.md registries table → reference skill not phantom path",
+        "(4) Verify: invoke /tool-registry and /harvest after fixes",
+        "(5) Only after S2 confirms all critical facts resolved: proceed to plan"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        },
+        {
+          "name": "Incident governance",
+          "status": "existing"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".claude/skills/tool-registry/SKILL.md",
+          "status": "existing"
+        },
+        {
+          "path": ".claude/skills/harvest/SKILL.md",
+          "status": "existing"
+        },
+        {
+          "path": ".claude/rules/frameworks.md",
+          "status": "existing"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "criticalFactResolutionTime",
+          "source": "session timestamp",
+          "unit": "minutes",
+          "target": "< 30 from identification to fix"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        26,
+        41,
+        45
+      ]
+    },
+    {
+      "id": 30,
+      "decision": "Every plan completion includes incident registry audit by S2, delegated to S1 for cleanup",
+      "rationale": "Plan execution changes code, silently resolving incidents. Without post-execution audit, registry drifts. S2 does both: consolidate new + audit existing.",
+      "context": "b8a9ed4e: audit found 14 closeable incidents. User: 'probably something every plan should include.'",
+      "components": [
+        "(1) Standard plan completion: executing agent delegates to S2",
+        "(2) S2 mission expands: (a) consolidate channel findings, (b) audit existing incident registry",
+        "(3) Silently resolved: S2 prepares close briefs → S1",
+        "(4) Stale/duplicate: S2 prepares close briefs with rationale → S1",
+        "(5) New outstanding: S2 prepares filing briefs → S1",
+        "(6) S1 files new + closes resolved via /incident with user approval",
+        "(7) Document in /delegate plan completion checklist",
+        "(8) Document in delegation rule trigger directive"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        },
+        {
+          "name": "Incident governance",
+          "status": "existing"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".claude/skills/delegate/SKILL.md",
+          "status": "proposed"
+        },
+        {
+          "path": ".claude/rules/delegation.md",
+          "status": "proposed"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "incidentRegistryDriftRate",
+          "source": "S2 audit at plan end",
+          "unit": "stale incidents found",
+          "target": "trending to 0"
+        },
+        {
+          "name": "registryCleanupCompletionRate",
+          "source": "S2 final SITREP",
+          "unit": "percent",
+          "target": "100% plans include registry audit"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        24,
+        25,
+        26,
+        35,
+        36
+      ]
+    },
+    {
+      "id": 31,
+      "decision": "MERGED into decision #8 — Platform engineering scope expansion",
+      "status": "merged",
+      "mergedInto": 8,
+      "note": "Components (7), (9), (10) and KPIs crossPlatformTestCoverage + platformCompatRegistryCoverage merged into #8. Original decision captured scope evolution from 'portable scripting' to 'platform engineering' with three-layer governance mapping."
+    },
+    {
+      "id": 32,
+      "decision": "KPIs ship to Datadog via log_ship — the telemetry pipeline for all framework effectiveness measurement",
+      "rationale": "Governance plan decision #13: 'Local SQLite + Datadog for KPIs.' Every decision in this brief has KPIs. Those KPIs need a delivery mechanism. log_ship is designed (plans/datadog-log-integration.md) but not built. Building it is a prerequisite for measuring any framework's effectiveness.",
+      "context": "b8a9ed4e: added KPIs to all decisions. plans/datadog-log-integration.md: 5 phases, log_ship conceptual code. plans/governance-and-compliance-framework.md decision #13.",
+      "components": [
+        "(1) Build log_ship in aitools-lib.sh — POST JSON batch to Datadog HTTP Logs API at script exit",
+        "(2) Build LogShip in aitools-lib.ps1 — Invoke-RestMethod equivalent",
+        "(3) Build local SQLite store: ~/.aitools/telemetry/governance.db (WAL mode)",
+        "(4) SessionEnd hook: ship accumulated KPIs from SQLite to Datadog",
+        "(5) Channel KPIs: message counts, SITREP/FINDING ratios, consolidation completeness",
+        "(6) Delegation KPIs: compliance rate, component coverage, agent type mismatches",
+        "(7) Platform KPIs: violation rate, wrapper adoption, all-platform coverage",
+        "(8) Opt-in: only ships if datadogApiKey configured (no-op otherwise)",
+        "(9) Graceful: network failures logged locally, never abort script"
+      ],
+      "frameworks": [
+        {
+          "name": "Tool operations",
+          "status": "existing"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "scripts/aitools-lib.sh",
+          "status": "existing"
+        },
+        {
+          "path": "scripts/aitools-lib.ps1",
+          "status": "existing"
+        },
+        {
+          "path": "plans/datadog-log-integration.md",
+          "status": "existing"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "logShipSuccessRate",
+          "source": "log_ship function logs",
+          "unit": "percent",
+          "target": ">= 95%"
+        },
+        {
+          "name": "kpiDeliveryLatency",
+          "source": "Datadog intake timestamps",
+          "unit": "seconds",
+          "target": "< 30"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        33
+      ]
+    },
+    {
+      "id": 33,
+      "decision": "Auth0 manages datadogApiKey and other provider credentials — centralized credential management",
+      "rationale": "datadogApiKey currently in plain config.json (F15). Auth0 plan Phase 2 moves Datadog + Vercel credentials to Auth0 token management. aitools auth CLI resolves incident #23 (keychain prompts block install).",
+      "context": "b8a9ed4e: read Auth0 plan. plans/nobul-auth0-platform.md: 5 phases. datadogApiKey integration is Phase 2. Incident #23: credential storage undocumented.",
+      "components": [
+        "(1) Phase 1 (GitHub): aitools auth login → device flow → GH_TOKEN export → no keychain",
+        "(2) Phase 2 (Datadog+Vercel): Auth0 stores IdP tokens → DD_ACCESS_TOKEN, VERCEL_TOKEN exports",
+        "(3) log_ship reads credential from Auth0-managed token (Phase 2) or config.json (Phase 1 fallback)",
+        "(4) Token storage: ~/.aitools/auth/ with 600 permissions, NOT in dotprofile",
+        "(5) Shell integration: eval $(aitools auth env) exports all provider tokens",
+        "(6) Auth0 dependency: startup plan provisioned, custom domain auth.nobul.tech"
+      ],
+      "frameworks": [
+        {
+          "name": "Tool lifecycle",
+          "status": "existing"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "plans/nobul-auth0-platform.md",
+          "status": "existing"
+        },
+        {
+          "path": "scripts/aitools-auth.sh",
+          "status": "proposed"
+        },
+        {
+          "path": "scripts/aitools-auth.ps1",
+          "status": "proposed"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "keychainPromptRate",
+          "source": "install logs",
+          "unit": "prompts/install",
+          "target": "0 after Auth0 Phase 1"
+        },
+        {
+          "name": "credentialExpiryRate",
+          "source": "aitools auth status",
+          "unit": "expired tokens",
+          "target": "0 (auto-refresh)"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        32
+      ]
+    },
+    {
+      "id": 34,
+      "decision": "All aitools workspace features live under .aitools/ at repo root — scratch, channel, harvesting are user-level capabilities",
+      "rationale": "Mission command, mission analysis, scratch, channel, harvesting — these are capabilities aitools provides to users across all projects, not project-specific implementation details. A unified .aitools/ directory at repo root (parallel to .claude/) establishes aitools as a workspace platform. Currently scattered: .scratch/ (gitignored), .channel/ (proposed, gitignored), harvesting/ (tracked). Consolidating under .aitools/ with clear gitignore rules per subdirectory.",
+      "context": "Session b8a9ed4e: user realized 'Mission Command and Mission Analysis: this is stuff we want to give to our users. .channel should instead be .aitools/channels or something like that. also scratch is something and harvesting is something we want to give to our users. .scratch should really be .aitools/scratch/'",
+      "components": [
+        "(1) .aitools/ at repo root in every project that uses aitools workspace features",
+        "(2) .aitools/scratch/ — session ephemeral files (was .scratch/). Gitignored",
+        "(3) .aitools/channel/ — inter-agent communication (was .channel/). Gitignored",
+        "(4) .aitools/harvesting/ — artifact harvesting lifecycle (was harvesting/). Tracked in git",
+        "(5) .aitools/.gitignore — ignores scratch/ and channel/, tracks harvesting/",
+        "(6) .aitools/.current-session — pointer to active session scratch dir (was .scratch/.current-session)",
+        "(7) .aitools/channel/.current-session — pointer to active channel dir (was .aitools/channel/.current-session)",
+        "(8) Update all hooks: scratch-init.sh, harvest-session.sh, session-archive.sh to use .aitools/ paths",
+        "(9) Update /scratch skill to reference .aitools/scratch/",
+        "(10) Update /channel skill to reference .aitools/channel/",
+        "(11) Update /harvest skill to reference .aitools/harvesting/",
+        "(12) Parallel to .claude/ (Claude Code platform), .aitools/ is the aitools workspace platform",
+        "(13) ~/.aitools/ remains user-level config/data (config.json, auth/, telemetry/) — distinct from .aitools/ at repo root"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        },
+        {
+          "name": "Mission analysis",
+          "status": "proposed"
+        },
+        {
+          "name": "Artifact harvesting",
+          "status": "absorbed",
+          "note": "Absorbed into Operational learning per decision #36"
+        },
+        {
+          "name": "Operational learning",
+          "status": "proposed",
+          "note": "Absorbed session lifecycle per decision #36"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".aitools/",
+          "status": "proposed"
+        },
+        {
+          "path": ".aitools/scratch/",
+          "status": "proposed"
+        },
+        {
+          "path": ".aitools/channel/",
+          "status": "proposed"
+        },
+        {
+          "path": ".aitools/harvesting/",
+          "status": "proposed"
+        },
+        {
+          "path": "shared/hooks/scratch-init.sh",
+          "status": "existing"
+        },
+        {
+          "path": "shared/hooks/harvest-session.sh",
+          "status": "existing"
+        },
+        {
+          "path": "shared/skills/scratch/SKILL.md",
+          "status": "existing"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "aitoolsDirAdoption",
+          "source": "project audits",
+          "unit": "percent projects using .aitools/",
+          "target": "100% of active projects"
+        },
+        {
+          "name": "pathMigrationCompleteness",
+          "source": "grep for old paths (.scratch/, .channel/, harvesting/)",
+          "unit": "stale references",
+          "target": "0"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        11,
+        14,
+        22,
+        36,
+        46,
+        47
+      ]
+    },
+    {
+      "id": 35,
+      "decision": "UCIs are not effective for recurring behavioral patterns — /incident skill must reflect harness state including escalation thresholds",
+      "rationale": "Incident #48 is the 3rd occurrence of the 'assert without checking' pattern (#34, #35, #48). Per the investigate framework: '3+ occurrences of same root cause category → structural fix required.' The suggested resolution for #48 initially proposed a new UCI — user rejected: 'weak sauce.' UCIs are behavioral fixes that fade. Hooks are probably the most effective structural mechanism — they fire in real-time, can't be ignored, and can inject corrective context. The /incident skill should enforce escalation awareness during filing.",
+      "context": "Current audit session: user caught agent making 2 incorrect assumptions, S1 agent drafted incident #48 with UCI as resolution, user rejected. User guidance: 'hooks are probably the most effective thing here.'",
+      "components": [
+        "(1) /incident skill: when filing, check for root cause pattern matches against existing incidents",
+        "(2) If 3+ incidents share root cause category: flag escalation requirement in the filing process",
+        "(3) Escalation means structural fix (hook, skill, rule change) — not another behavioral coaching item",
+        "(4) Hooks are the preferred structural mechanism: real-time, unavoidable, can inject corrective context",
+        "(5) /incident skill reads incident registry for pattern detection during filing",
+        "(6) Update suggestedResolution field guidance: 'needs further investigation' is acceptable; UCI-only is not acceptable for 3+ recurrence patterns",
+        "(7) /incident skill is currently outdated and ineffective — fixing it needs further investigation"
+      ],
+      "frameworks": [
+        {
+          "name": "Incident governance",
+          "status": "existing"
+        },
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": ".claude/skills/incident/SKILL.md",
+          "status": "existing"
+        },
+        {
+          "path": "reference/framework-incident-investigation.md",
+          "status": "existing"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "uciOnlyResolutionRate",
+          "source": "incident registry audit",
+          "unit": "percent of 3+ recurrence incidents with UCI-only resolution",
+          "target": "0%"
+        },
+        {
+          "name": "escalationDetectionRate",
+          "source": "/incident skill filing process",
+          "unit": "percent pattern matches detected",
+          "target": ">= 90%"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        24,
+        30,
+        36,
+        41,
+        42,
+        48
+      ]
+    },
+    {
+      "id": 36,
+      "decision": "Operational Learning framework: AAR debrief, artifact harvesting, session persistence, channel archival — user-level, closes the learning loop",
+      "rationale": "Execution without structured reflection loses lessons. The 731-line AAR from eaacf9da proved the value but was ad hoc. CALL taxonomy (observation/insight/lesson-identified/lesson-learned) shows that 'lessons' are ambiguous — only verified behavioral changes count as 'learned.' AAR produces proposals, not lessons. User validates immediately, not lazily at next plan start. Absorbs artifact harvesting (file-level capture is one component of learning) and session lifecycle (persistence exists to enable learning). Barrier analysis from safety engineering applied during proposal validation. User directed: 'this is all closing the loop stuff.'",
+      "context": "Current audit session: user rejected AAR as Mission Command component ('harvest and harvesting is also part of this stuff... this is all closing the loop stuff'). Web research: FM 7-0 (AAR in Training domain, not Operations), CALL OIL taxonomy, Deming PDCA Check-Act, Argyris double-loop, Schindler & Eppler knowledge harvesting. User approved 'Operational Learning' name. User rejected 'extract' mode ('what are lessons? that is ambiguous'), directed AAR to produce proposals not lessons, validated immediately not deferred. User directed single-responsibility hooks with intents.",
+      "components": [
+        "(1) /debrief — conduct AAR: 3-node JSON (observations, insights, proposals with barrier analysis). S2 produces at plan end. User validates proposals immediately",
+        "(2) /harvest — manage artifacts: promote, prune, manifest. Absorbs /harvest",
+        "(3) AAR schema (reference/aar-schema.json): observations (what happened — facts), insights (why — analysis), proposals (what to change — with barrier analysis field validating each proposal). Adapted from CALL OIL taxonomy",
+        "(4) Absorbs artifact harvesting framework: harvesting is one component of the learning loop",
+        "(5) Absorbs session lifecycle: session persistence (archiving, cross-machine sync) exists to enable future learning",
+        "(6) User-level skill (shared/skills/operational-learning/SKILL.md → ~/.claude/skills/)",
+        "(7) User-level rule via dotprofile (delegation to ~/.claude/rules/) for cross-project coverage",
+        "(8) Hook: channel-archive.sh (SessionEnd) — archive severity >= high channel messages (including AAR) to .aitools/harvesting/, update manifest",
+        "(9) Hook: aar-reminder.sh (Stop) — detect plan completion without AAR, nudge agent to /debrief",
+        "(10) Hook: channel-init.sh (SessionStart) — create channel dir, prune >24h orphaned channel dirs",
+        "(11) AAR always harvested: produced in .aitools/channel/session-XXX/ as {timestamp}_s2_aar.json, copied to .aitools/harvesting/YYYY-MM-DD_aar-s2-{session-prefix}.json by channel-archive.sh",
+        "(12) Pipeline: execution completes → S3 delegates to S2 → S2 invokes /debrief → AAR produced in channel → user validates proposals → session ends → channel-archive.sh archives high-severity → harvest-session.sh archives scratch → session-archive.sh archives transcript + auto-commit/push → next session: S2 reads approved decisions (intelligence prep)",
+        "(13) Validated proposals become: harness changes (structural), facts in next brief (knowledge), incidents via S2→S1 (deficiencies), or dismissed (situational)",
+        "(14) Barrier analysis on each proposal: replay timeline with proposed fix, verify it would have changed the outcome. Concept owned by Incident investigation (safety engineering), applied by Operational Learning during proposal validation",
+        "(15) Session archive hook updated: auto-commit + auto-push per decision #1",
+        "(16) Register via /frameworks skill. Mark artifact harvesting as absorbed. Mark session lifecycle as absorbed before registration (never existed as registered framework)"
+      ],
+      "frameworks": [
+        {
+          "name": "Operational learning",
+          "status": "proposed",
+          "intent": {
+            "purpose": "Govern how the harness learns from execution — structured debrief (AAR: observations, insights, proposals with barrier analysis), artifact harvesting, session persistence, and feeding validated improvements back into the next planning cycle. Adapted from US Army organizational learning (FM 7-0, CALL observation/insight/lesson-identified/lesson-learned taxonomy), Deming PDCA Check-Act phases, Argyris double-loop learning, and safety engineering barrier analysis (applied during proposal validation). Absorbs artifact harvesting and session lifecycle. AAR proposals are validated by the user immediately after execution, not deferred",
+            "scope": "After Action Reviews via /debrief (3-node schema: observations, insights, proposals with barrier analysis), artifact harvesting via /harvest (absorbs existing /harvest), session transcript persistence and cross-machine sync (absorbs session lifecycle), channel message archival. NOT plan execution or delegation (mission command). NOT pre-plan enumeration (mission analysis). NOT incident filing (incident governance — AAR proposals may feed incidents via S2→S1). NOT reactive incident investigation (/investigate — operational learning is proactive)",
+            "audience": "Every agent and user in any project. User-level skills (/debrief, /harvest) deployed to ~/.claude/skills/. The learning loop applies to any project with plans, not just aitools"
+          }
+        },
+        {
+          "name": "Artifact harvesting",
+          "status": "absorbed"
+        },
+        {
+          "name": "Incident investigation",
+          "status": "existing",
+          "note": "Barrier analysis concept owned by incident investigation, applied by operational learning"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/skills/debrief/SKILL.md",
+          "status": "proposed",
+          "scope": "user-level",
+          "intent": {
+            "purpose": "Conduct structured After Action Reviews — observations, insights, proposals with barrier analysis",
+            "scope": "AAR production only. NOT artifact management (/harvest). NOT delegation (/delegate). NOT incident filing (/incident)",
+            "audience": "Every agent and user at plan completion, in any project"
+          }
+        },
+        {
+          "path": "shared/skills/harvest/SKILL.md",
+          "status": "existing",
+          "scope": "user-level",
+          "intent": {
+            "purpose": "Manage artifact harvesting lifecycle — promote, prune, manifest updates. Governed by Operational Learning framework",
+            "scope": "Artifact management only. NOT AAR production (/debrief). NOT session archiving (session-archive.sh hook)",
+            "audience": "Every agent and user managing harvested artifacts, in any project"
+          }
+        },
+        {
+          "path": ".claude/rules/operational-learning.md",
+          "status": "proposed",
+          "scope": "project + user-level via dotprofile",
+          "intent": "Learning duty principle, trigger directive, AAR requirement, absorbs artifact-harvesting.md"
+        },
+        {
+          "path": "reference/framework-operational-learning.md",
+          "status": "proposed",
+          "scope": "project",
+          "intent": "Framework documentation — source disciplines, adaptation, artifact inventory"
+        },
+        {
+          "path": "reference/aar-schema.json",
+          "status": "proposed",
+          "scope": "project",
+          "intent": "AAR JSON schema — observations, insights, proposals with barrier analysis"
+        },
+        {
+          "path": "shared/hooks/channel-archive.sh",
+          "status": "proposed",
+          "scope": "user hook",
+          "intent": "SessionEnd: archive severity >= high channel messages to .aitools/harvesting/"
+        },
+        {
+          "path": "shared/hooks/aar-reminder.sh",
+          "status": "proposed",
+          "scope": "user hook",
+          "intent": "Stop: detect plan completion without AAR, nudge agent"
+        },
+        {
+          "path": "shared/hooks/channel-init.sh",
+          "status": "proposed",
+          "scope": "user hook",
+          "intent": "SessionStart: create .aitools/channel/session-XXX/ and .current-session pointer. Single responsibility: channel creation. Mission Command artifact"
+        },
+        {
+          "path": "shared/hooks/channel-prune.sh",
+          "status": "proposed",
+          "scope": "user hook",
+          "intent": "SessionStart: prune >24h orphaned channel dirs. Single responsibility: channel lifecycle cleanup. Operational Learning artifact"
+        },
+        {
+          "path": "shared/hooks/session-archive.sh",
+          "status": "existing",
+          "scope": "user hook",
+          "intent": "SessionEnd: transcript to dotprofile, auto-commit/push (updated per decision #1)"
+        },
+        {
+          "path": "shared/hooks/harvest-session.sh",
+          "status": "existing",
+          "scope": "user hook",
+          "intent": "SessionEnd: scratch artifacts to .aitools/harvesting/"
+        },
+        {
+          "path": ".claude/rules/artifact-harvesting.md",
+          "status": "absorbed",
+          "intent": "Redirect to operational-learning.md"
+        },
+        {
+          "path": ".claude/skills/harvest/SKILL.md",
+          "status": "existing",
+          "intent": "Project-level harvest skill — update cross-references to Operational Learning framework"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "aarProductionRate",
+          "source": "channel-manifest.json",
+          "unit": "percent plans with formal AAR",
+          "target": "100%"
+        },
+        {
+          "name": "proposalValidationRate",
+          "source": "AAR proposals with user disposition",
+          "unit": "percent proposals validated immediately",
+          "target": "100%"
+        },
+        {
+          "name": "artifactPromotionRate",
+          "source": "harvest manifest",
+          "unit": "percent harvested promoted to harness",
+          "target": "trending up"
+        },
+        {
+          "name": "learningCycleCompletionRate",
+          "source": "AAR proposals that appear as facts in next brief",
+          "unit": "percent complete cycles",
+          "target": ">= 75%"
+        },
+        {
+          "name": "channelArchivalRate",
+          "source": "channel-archive.sh logs",
+          "unit": "percent high-severity messages archived",
+          "target": "100%"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        1,
+        2,
+        10,
+        11,
+        14,
+        18,
+        24,
+        26,
+        30,
+        34,
+        35,
+        37,
+        40,
+        43,
+        44,
+        48
+      ]
+    },
+    {
+      "id": 37,
+      "decision": "Provenance map in framework registry — every adapted concept traceable to source discipline, owning framework, and harness meaning",
+      "rationale": "DTCC, Swiss cheese, barrier analysis, 5 Whys, PDCA, double-loop, CALL, MDMP, Auftragstaktik — concepts from different disciplines scattered across framework docs. User: 'i keep getting confused with DTCC and swiss cheese and all that, how can we keep our mappings/inspiration straight?' One lookup location resolves concept confusion. Each skill's cross-references list which provenance concepts it applies.",
+      "context": "Current audit session: user identified concept confusion after reviewing the mapping table. 12+ adapted concepts across 7+ source disciplines with no single lookup.",
+      "components": [
+        "(1) New top-level 'provenance' array in reference/framework-registry.json alongside 'frameworks' and 'pending'",
+        "(2) Schema per entry: concept, source (discipline, work, key), ownedBy (single framework), usedBy (framework list), adaptation (harness meaning + implementing skills)",
+        "(3) Gatekept by /frameworks skill — same governed data access as frameworks and pending arrays",
+        "(4) Bidirectional navigation: concept → framework → skill (forward), skill → framework → concept (reverse)",
+        "(5) Each skill's Cross-References section lists provenance concepts it applies",
+        "(6) Initial population: 12 concepts from the mapping table (three-layer governance, Swiss cheese, 5 Whys, barrier analysis, PDCA, double-loop, DTCC, Auftragstaktik, OPORD/FRAGORD/SITREP, MDMP Step 2, AAR/CALL/OIL, SALUTE)",
+        "(7) New concepts added during framework adoption (DTCC step 6) get a provenance entry at the same time"
+      ],
+      "frameworks": [
+        {
+          "name": "Framework adoption",
+          "status": "existing"
+        },
+        {
+          "name": "Governed data access",
+          "status": "existing"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "reference/framework-registry.json",
+          "status": "existing",
+          "intent": "Add provenance array — concept-to-source-to-framework mapping"
+        },
+        {
+          "path": ".claude/skills/frameworks/SKILL.md",
+          "status": "existing",
+          "intent": "Add 'check provenance' mode — lookup concept by name, return source and adaptation"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "provenanceCoverage",
+          "source": "framework registry audit",
+          "unit": "percent adapted concepts with provenance entry",
+          "target": "100%"
+        },
+        {
+          "name": "conceptConfusionRate",
+          "source": "session transcript analysis",
+          "unit": "concept misattributions per session",
+          "target": "0"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        3,
+        8,
+        13,
+        36,
+        38
+      ]
+    },
+    {
+      "id": 38,
+      "decision": "Staff function definitions (S1/S2/S3) documented in Mission Command reference and provenance map — one lookup resolves confusion",
+      "rationale": "User confused S1 and S3 during session ('isnt s3 the admin agent?'). Military S-numbers are jargon that requires lookup. The mapping exists in decision #25 but is buried in a components list. Staff functions need a clear, standalone reference that any agent can find without reading the full brief.",
+      "context": "Current audit session: user asked 'isnt s3 the admin agent? s1 is executing s2 is intelligence right? or am i getting that wrong.' The correct mapping (S1=admin, S2=intelligence, S3=operations) was consistent in the brief but not obvious. S-numbers are military convention — without a lookup, agents and users will guess wrong.",
+      "components": [
+        "(1) Staff function mapping table in reference/framework-mission-command.md — S1 (Administration: incident filing, registry cleanup), S2 (Intelligence: AAR debrief, findings consolidation, intelligence prep), S3 (Operations: plan execution, batch delegation, inter-batch verification)",
+        "(2) Provenance entries for S1, S2, S3 in framework-registry.json provenance array — source: US Army staff organization (FM 101-5), ownedBy: Mission command",
+        "(3) These are FUNCTIONS not ranks — any agent can hold any function. A batch agent delegating sub-work assigns its own delegates' functions",
+        "(4) The executing agent is ALWAYS S3 (operations). S2 and S1 are delegated by S3 at defined points (S2 at plan start/end, S1 at plan end via S2)",
+        "(5) Staff function assignment is part of the delegation duty (component 1: establish identity) — the delegating agent tells the delegated agent which function it holds",
+        "(6) User = Commander. Approves decisions (source-of-truth gate), validates proposals (AAR disposition), authorizes delegations. Not a staff function — staff functions serve the commander"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "reference/framework-mission-command.md",
+          "status": "proposed",
+          "intent": "Staff function mapping table — S1/S2/S3 definitions, when each is spawned, what each produces"
+        },
+        {
+          "path": "reference/framework-registry.json",
+          "status": "existing",
+          "intent": "Provenance entries for S1, S2, S3 — source discipline and harness adaptation"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "staffFunctionMisassignmentRate",
+          "source": "delegation briefing audit",
+          "unit": "incorrect S-number usage per plan",
+          "target": "0"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        3,
+        25,
+        26,
+        37,
+        44
+      ]
+    },
+    {
+      "id": 39,
+      "decision": "CRITICAL: Update /intent-writing skill with heuristics proven in sessions 84280c8b, eaacf9da, and b8a9ed4e — must be done before plan writing begins",
+      "rationale": "The current /intent-writing skill is generic — it describes the format (purpose/scope/audience) but not the heuristics that make intents good. Session 84280c8b produced the multi-pass ambiguity removal ('wtf is bootstrap?' — 4 passes). Session eaacf9da proved the pre-draft consolidated presentation pattern (15min → 42sec). Session b8a9ed4e produced the 6-criterion quality checklist (decision #21). The user said 'i think my explicit instructions are better' (84280c8b L1122) — the skill must incorporate those explicit instructions. Without these heuristics, executing agents will produce generic intents that require multiple revision rounds.",
+      "context": "Current audit session: user said 'do we have enough to update /intent-writing and /intent-audit skills? i think the heuristic we use should be part of the skill.' 84280c8b L1101: 'more recent the conversation where i confirmed i was happy, the more weight.' L1115: 'wtf is bootstrap? remove ambiguities, do multiple passes.' eaacf9da: intent approval from 15min/3rounds to 42sec/1round. Decision #21: 6-criterion quality checklist.",
+      "critical": true,
+      "blocksPlanning": true,
+      "components": [
+        "(1) Add multi-pass ambiguity removal: draft intent, audit for undefined terms, remove or define each, repeat until clean (AAR L1117: 4 passes)",
+        "(2) Add weight-by-recency: look at recent approved intents as examples, more recent = more weight (84280c8b L1101)",
+        "(3) Add pre-write governed term audit: check all terms against /glossary before writing (avoids introducing ambiguous vocabulary)",
+        "(4) Add consolidated presentation pattern: when multiple intents needed, present all as a batch for single-round approval (eaacf9da intent-approval-evolution)",
+        "(5) Add the 6-criterion quality checklist (decision #21) as a pre-write validation: scope, source, components, current-session, merge related, session references",
+        "(6) Add style calibration: match conciseness of existing governed JSON intents (incidents.json, glossary.json, tool-ops.json)",
+        "(7) Add 'read skill as reference but do not invoke mechanically' guidance (84280c8b L1122: user's explicit instructions over rote skill invocation)",
+        "(8) Source material: delegation-evolution.md (ambiguity purge), intent-approval-evolution.md (from 15min to 42sec), decision-quality-audit.md (6 criteria)"
+      ],
+      "frameworks": [
+        {
+          "name": "Intent documentation",
+          "status": "existing"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/skills/intent-writing/SKILL.md",
+          "status": "existing",
+          "intent": "Add proven heuristics from 3 sessions — ambiguity removal, weight-by-recency, consolidated presentation, quality checklist"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "intentApprovalRounds",
+          "source": "session transcript",
+          "unit": "rounds per batch",
+          "target": "1 (single-round)"
+        },
+        {
+          "name": "intentApprovalTime",
+          "source": "session transcript",
+          "unit": "seconds",
+          "target": "< 120"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        12,
+        13,
+        21,
+        28,
+        40,
+        41,
+        42,
+        43
+      ]
+    },
+    {
+      "id": 40,
+      "decision": "CRITICAL: Update /intent-audit skill with heuristics for auditing quality, not just alignment — must be done before plan writing begins",
+      "rationale": "The current /intent-audit skill checks alignment (does content match intent?) but not quality (is the intent itself good?). Sessions proved that bad intents pass alignment checks — 'this file is about deployment' aligns with deployment content but is useless. The 6-criterion checklist, multi-pass ambiguity removal, and barrier analysis on proposals all need to be part of intent auditing. Without quality auditing, executing agents write intents that technically align but don't prevent the problems intents exist to prevent.",
+      "context": "Current audit session: user directed 'audit all intents with the heuristic we defined earlier' and 'the heuristic we use should be part of the skill.' The current skill has alignment checking (sections 1-5) but no quality heuristic for the intent statement itself.",
+      "critical": true,
+      "blocksPlanning": true,
+      "components": [
+        "(1) Add intent quality audit mode: check the intent itself against the 6-criterion checklist before checking alignment",
+        "(2) Quality criteria: Is purpose concrete (not 'about X')? Does scope have exclusions? Is audience specific? Are governed terms used correctly? Are cross-references valid?",
+        "(3) Add multi-pass ambiguity detection: scan intent for undefined terms, terms with multiple meanings, terms not in /glossary",
+        "(4) Add barrier analysis on intent: 'if an agent read only this intent, would they know what belongs and what doesn't?' If no, the intent fails",
+        "(5) Add comparison to exemplar intents: tool-ops.json, glossary.json, incident-governance.md as reference (weight by recency)",
+        "(6) Output: quality score before alignment report — if the intent itself is bad, alignment checking is meaningless"
+      ],
+      "frameworks": [
+        {
+          "name": "Intent documentation",
+          "status": "existing"
+        },
+        {
+          "name": "Operational learning",
+          "status": "proposed",
+          "note": "Barrier analysis concept applied to intent validation"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/skills/intent-audit/SKILL.md",
+          "status": "existing",
+          "intent": "Add intent quality auditing — heuristics, barrier analysis, exemplar comparison"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "intentQualityPassRate",
+          "source": "intent audit output",
+          "unit": "percent intents passing quality check on first draft",
+          "target": ">= 80%"
+        },
+        {
+          "name": "ambiguousTermDetectionRate",
+          "source": "intent audit output",
+          "unit": "percent undefined terms caught before write",
+          "target": ">= 95%"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        12,
+        21,
+        36,
+        39,
+        41,
+        42
+      ]
+    },
+    {
+      "id": 41,
+      "decision": "Plan-gate hook: structural enforcement of blocksPlanning=true items before plan mode entry",
+      "rationale": "Decision #29 says critical facts must be resolved before plan writing begins, but enforcement is behavioral ('the plan says so'). Decision #35 and incident #48 proved behavioral enforcement doesn't hold. A PreToolUse hook on EnterPlanMode reads the planning brief, checks for unresolved blocksPlanning=true items, and denies with corrective context listing the blockers. One hook, one responsibility, reusable for any future planning brief.",
+      "context": "Current audit session: user asked 'can we use hooks for enforcement of these blockers?' 4 current blockers: F1 (broken /tool-registry), F2 (broken /harvest), #39 (/intent-writing), #40 (/intent-audit). No structural enforcement exists — only the brief's blocksPlanning field, which agents can ignore.",
+      "components": [
+        "(1) New hook: shared/hooks/plan-gate.sh",
+        "(2) Event: PreToolUse on EnterPlanMode",
+        "(3) Reads planning brief JSON (path from session context or convention: plans/*/planning-brief.json)",
+        "(4) Checks: any fact with blocksPlanning=true, any decision with blocksPlanning=true",
+        "(5) If unresolved blockers found: deny via JSON stdout with permissionDecisionReason listing each blocker (id, title, severity)",
+        "(6) If all clear: allow (exit 0, no stdout)",
+        "(7) Must handle: no brief exists (allow — not all plan sessions have briefs), brief parse error (allow with warning — fail open)",
+        "(8) Register in tool-ops.json via /tool-ops with verification cases",
+        "(9) Deploy to ~/.claude/hooks/ via setup-user-hooks",
+        "(10) Structural enforcement of decision #29 — replaces behavioral 'the plan says so'"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed",
+          "note": "Plan-gate is the structural enforcement of the 'resolve critical items first' principle"
+        },
+        {
+          "name": "Tool operations",
+          "status": "existing"
+        },
+        {
+          "name": "Three-layer governance",
+          "status": "existing",
+          "note": "Hook = detection layer for planning readiness"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/hooks/plan-gate.sh",
+          "status": "proposed",
+          "scope": "user hook",
+          "intent": {
+            "purpose": "Deny plan mode entry when unresolved blocksPlanning=true items exist in the planning brief",
+            "scope": "PreToolUse on EnterPlanMode only. Single responsibility: planning readiness enforcement. NOT plan quality (S2 intelligence prep). NOT brief creation (/brief skill)",
+            "audience": "Claude Code hook infrastructure, deployed to ~/.claude/hooks/"
+          }
+        },
+        {
+          "path": "reference/tool-ops.json",
+          "status": "existing",
+          "intent": "Register plan-gate hook with verification cases"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "planGateDenyRate",
+          "source": "hook logs",
+          "unit": "denials per session",
+          "target": "trending to 0 as blockers are resolved before plan mode"
+        },
+        {
+          "name": "planGateLatency",
+          "source": "hook timing",
+          "unit": "ms",
+          "target": "< 200 (JSON parse + check)"
+        },
+        {
+          "name": "blockerResolutionTime",
+          "source": "brief timestamps",
+          "unit": "hours from identification to resolution",
+          "target": "< 24"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        20,
+        29,
+        35,
+        39,
+        40,
+        45,
+        48
+      ]
+    },
+    {
+      "id": 42,
+      "decision": "Intent-enforcement write hook: deny writes to new framework artifacts without intent statements",
+      "rationale": "The 'Document intent' design principle is behavioral — agents skip it under context pressure. Decision #35 proved behavioral enforcement doesn't hold for recurring patterns. 14/22 rules (64%) and 3/17 skills lack intent (fact F8). A PreToolUse hook on Write makes intent structurally required for new framework artifacts.",
+      "context": "Current audit session: user asked 'can we make a write hook that blocks writes with a hint that any new framework/artifact must have an intent and it must pass the intent audit?' S2 analysis confirmed 3 stub intents in decision #36 and missing intents in decisions #3, #8, #13.",
+      "components": [
+        "(1) New hook: shared/hooks/intent-enforcement.sh",
+        "(2) Event: PreToolUse on Write",
+        "(3) Check: if target file matches framework artifact pattern (.claude/rules/*.md, .claude/skills/*/SKILL.md, shared/skills/*/SKILL.md, reference/framework-*.md) AND file does not exist (new file)",
+        "(4) Read the content being written (from tool_input.content)",
+        "(5) Check for intent marker: **Intent**: (markdown) or intent: (code header) or meta.intent (JSON)",
+        "(6) If no intent found: deny with corrective message — 'New framework artifacts must include an intent statement (purpose, scope, audience). See /intent-writing skill. Run /intent-audit before writing.'",
+        "(7) If intent found: allow (exit 0, no stdout) — quality check is /intent-audit's job, not the hook's",
+        "(8) Existing files: allow all writes (intent already exists or backfill is incremental)",
+        "(9) Single responsibility: intent presence enforcement. NOT intent quality (that's /intent-audit skill)"
+      ],
+      "frameworks": [
+        {
+          "name": "Intent documentation",
+          "status": "existing"
+        },
+        {
+          "name": "Three-layer governance",
+          "status": "existing",
+          "note": "Hook = detection layer for intent presence"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/hooks/intent-enforcement.sh",
+          "status": "proposed",
+          "scope": "user hook",
+          "intent": {
+            "purpose": "Deny creation of new framework artifact files that lack an intent statement, with corrective context directing to /intent-writing",
+            "scope": "PreToolUse on Write only. New files matching framework artifact patterns only. Single responsibility: intent presence check. NOT intent quality (that's /intent-audit). NOT existing files (incremental backfill)",
+            "audience": "Claude Code hook infrastructure, deployed to ~/.claude/hooks/"
+          }
+        },
+        {
+          "path": "reference/tool-ops.json",
+          "status": "existing",
+          "intent": "Register intent-enforcement hook with verification cases"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "intentlessArtifactCreationRate",
+          "source": "hook deny logs",
+          "unit": "denials per session",
+          "target": "trending to 0 as agents learn"
+        },
+        {
+          "name": "intentCoverageRate",
+          "source": "harness state audit",
+          "unit": "percent framework artifacts with intent",
+          "target": ">= 95% (up from 36%)"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        20,
+        35,
+        39,
+        40,
+        47
+      ]
+    },
+    {
+      "id": 43,
+      "decision": "Planning brief schema clarification: components = implementation steps, artifacts = files with structured intents",
+      "rationale": "S2 analysis found inconsistent use of components field — some decisions use it for steps, some for artifact descriptions, some for intents. The brief already has separate components (string array) and artifacts (object array) fields. Define the boundary: components describe the HOW (steps, constraints, sequencing), artifacts describe the WHAT (files with purpose/scope/audience intents).",
+      "context": "Current audit session: user asked 'components is ambiguous. what do we actually put there?' S2 analysis found 3 stub intents in #36 artifacts, missing intent fields in #3/#8/#13 artifacts, and intent text accidentally placed in components.",
+      "components": [
+        "(1) components: ordered implementation steps and design constraints. Answer 'what do we do and in what order?' Example: '(1) Read full plan, (2) Fix file references, (3) Verify by invoking skill'",
+        "(2) artifacts: files to create or modify, each with structured intent (purpose, scope, audience). Answer 'what files change and what is each file's job?'",
+        "(3) Intents belong in artifacts array, never in components",
+        "(4) Update meta section of planning brief schema with field definitions",
+        "(5) Backfill: decisions #3, #8, #13 artifacts need intent fields added (S2 analysis finding #10)",
+        "(6) Fix: decision #36 has 3 stub intents needing expansion (S2 analysis finding #9)"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission analysis",
+          "status": "proposed"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "plans/mission-command-briefing/planning-brief.json",
+          "status": "existing",
+          "intent": "Update meta section with schema field definitions for components and artifacts"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "schemaComplianceRate",
+          "source": "S2 brief analysis",
+          "unit": "percent decisions with correct field usage",
+          "target": "100%"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        13,
+        21,
+        36,
+        39,
+        45
+      ]
+    },
+    {
+      "id": 44,
+      "decision": "S2 analysis output must use the AAR schema — observations, insights, proposals with barrier analysis",
+      "rationale": "S2 analysis agent was launched to audit the planning brief but produced a traditional report format instead of the AAR schema defined in decision #36. This is a delegation failure — the delegating agent had the AAR schema in context (decision #36) but did not inject it into the S2 briefing. The traditional report has the right content but wrong structure: findings ARE observations and insights, but they're not structured as actionable proposals with barrier analysis. Without proposals, the user and main agent must manually extract action items from prose.",
+      "context": "Current audit session: user asked 'S2 should have produced something like an AAR no? with proposed decisions?' The S2 agent produced a 680-line audit report with 17 findings organized by audit dimension. The findings are thorough but not structured as proposals. This is evidence that decision #36 (AAR schema) must be injected into every S2 delegation, and that the delegation duty (decision #4 component 2: include the plan) was violated.",
+      "components": [
+        "(1) Every S2 delegation must include the AAR schema (decision #36) in the briefing",
+        "(2) S2 output format: JSON with 3 top-level nodes — observations (what was found), insights (why it matters), proposals (what to change, each with barrier analysis)",
+        "(3) Each proposal includes: what to change, why, barrier analysis (would this have prevented the issue?), severity, affected decisions",
+        "(4) The /delegate skill template for S2 must include the AAR schema injection",
+        "(5) This applies to ALL S2 delegations: intelligence prep at plan start, findings consolidation at plan end, ad-hoc analysis",
+        "(6) Relaunch S2 with corrected delegation to produce AAR-formatted output"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed",
+          "note": "Delegation duty violation — plan not included in briefing"
+        },
+        {
+          "name": "Operational learning",
+          "status": "proposed",
+          "note": "AAR schema is the required output format for S2"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/skills/delegate/SKILL.md",
+          "status": "proposed",
+          "intent": "S2 delegation template must inject AAR schema"
+        },
+        {
+          "path": "reference/aar-schema.json",
+          "status": "proposed",
+          "intent": "Schema that S2 output must conform to"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "s2AarComplianceRate",
+          "source": "S2 output format audit",
+          "unit": "percent S2 outputs using AAR schema",
+          "target": "100%"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        4,
+        25,
+        26,
+        36,
+        38,
+        46,
+        48
+      ]
+    },
+    {
+      "id": 45,
+      "decision": "Planning brief is governed data — /brief skill gates access, enforces reading order, and checks blockers",
+      "rationale": "Decisions are in capture order (1-44), not consumption order. Agents read top-to-bottom; context rot means later decisions get less attention. Decision #36 (Operational Learning) redefines what decisions #1-2 mean, but an agent reading #1 first builds a 'Session Lifecycle' mental model that #36 undoes. Critical blockers should be first, framework definitions before their decisions, dependencies before dependents. Behavioral ordering ('read in this order') won't hold. Governed data access is the proven pattern — brief is governed data, /brief is the gate, hook catches bypass.",
+      "context": "Current audit session: user asked 'what about ordering? does it matter? does our briefing have an intent?' S2 AAR confirmed ~55 missing reciprocal links and stale framework references — both caused by capture-order reading. Governed data access pattern proven for glossary.json, incidents.json, tool-ops.json.",
+      "components": [
+        "(1) Add intent to meta section of planning brief schema (purpose/scope/audience)",
+        "(2) Add readingOrder to meta — recommended consumption sequence by phase",
+        "(3) /brief skill gets 'read' mode: present existing brief in reading order, flag unresolved blockers",
+        "(4) /brief skill gets 'create' mode: capture decisions during conversation, produce brief",
+        "(5) Hook: PreToolUse on Read of planning-brief.json — corrective injection: 'Use /brief to read the brief. It presents decisions in reading order and flags unresolved blockers.'",
+        "(6) Reading order phases: critical blockers → framework definitions → facts/assumptions → decisions grouped by framework → infrastructure → process",
+        "(7) Within each phase: dependency order (if B depends on A, A comes first)",
+        "(8) IDs stay stable — readingOrder reorders without renumbering, preserving cross-references",
+        "(9) Same governed data pattern as glossary.json (/glossary), incidents.json (/incident), tool-ops.json (/tool-ops)"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission analysis",
+          "status": "proposed"
+        },
+        {
+          "name": "Governed data access",
+          "status": "existing"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/skills/brief/SKILL.md",
+          "status": "proposed",
+          "intent": {
+            "purpose": "Provide governed access to planning briefs — creating briefs during conversation and presenting existing briefs in reading order with blocker checks",
+            "scope": "Brief creation (decision capture, quality checklist) and brief consumption (reading order, blocker flagging). NOT plan writing. NOT plan execution. NOT post-execution debrief (/debrief)",
+            "audience": "Every agent and user preparing to write a plan or consuming a brief, in any project. User-level skill deployed to ~/.claude/skills/"
+          }
+        },
+        {
+          "path": "shared/hooks/brief-read-guard.sh",
+          "status": "proposed",
+          "scope": "user hook",
+          "intent": {
+            "purpose": "Redirect raw reads of planning-brief.json to /brief skill which presents in reading order and checks blockers",
+            "scope": "PreToolUse on Read of **/planning-brief.json only. Corrective injection, not hard deny. Single responsibility: governed brief access",
+            "audience": "Claude Code hook infrastructure, deployed to ~/.claude/hooks/"
+          }
+        },
+        {
+          "path": "plans/mission-command-briefing/planning-brief.json",
+          "status": "existing",
+          "intent": "Add meta.intent and meta.readingOrder fields"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "briefReadViaSkillRate",
+          "source": "hook corrective injection logs",
+          "unit": "percent brief reads via /brief vs raw",
+          "target": ">= 90%"
+        },
+        {
+          "name": "blockerVisibilityRate",
+          "source": "/brief read output",
+          "unit": "percent sessions where blockers shown before framework decisions",
+          "target": "100%"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        13,
+        29,
+        41,
+        43
+      ]
+    },
+    {
+      "id": 46,
+      "decision": "Scratch skill must prevent file overwrites — delegating agent assigns unique output paths with timestamp + agent identity",
+      "rationale": "Two S2 agents writing to the same session scratch directory would have collided on 'briefing-aar.json' if the second hadn't been manually renamed to 'briefing-aar-v2.json'. No naming convention prevents collisions. Channel messages use {timestamp}_{agent-role}_{type}.json by design — scratch files need the same. Once .aitools/channel/ exists, subagent work products go there (not scratch), but scratch still needs collision resistance for temp files.",
+      "context": "Current audit session: two S2 agents launched for the same brief. First wrote briefing-aar.json, second would have overwritten if not manually renamed. User: 'if it was the same schema they would have been overwriting? this is a gap right?'",
+      "components": [
+        "(1) Scratch file naming convention: {timestamp}_{agent-identity}_{purpose}.{ext} — matches channel convention",
+        "(2) Delegating agent is responsible for deconfliction — assigns unique output paths as part of delegation briefing",
+        "(3) /scratch skill updated with naming convention and collision prevention guidance",
+        "(4) /delegate skill includes output path assignment as part of delegation duty",
+        "(5) Subagent work products (AARs, analysis reports) go to .aitools/channel/ once channel infrastructure exists — scratch for temp files only"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed",
+          "note": "Delegation duty includes output path assignment"
+        },
+        {
+          "name": "Operational learning",
+          "status": "proposed",
+          "note": "Channel is the correct destination for inter-agent work products"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/skills/scratch/SKILL.md",
+          "status": "existing",
+          "intent": "Add collision-resistant naming convention and delegation path assignment guidance"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "scratchCollisionRate",
+          "source": "scratch directory audits",
+          "unit": "overwritten files per session",
+          "target": "0"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        4,
+        22,
+        34,
+        44,
+        47,
+        48
+      ]
+    },
+    {
+      "id": 47,
+      "decision": "Scratch path injection hook: PreToolUse on Write/Read of any path containing 'scratch' injects the /scratch skill",
+      "rationale": "Agents writing to scratch without loading the scratch skill don't know the naming convention, cleanup model, or collision prevention rules. A corrective injection hook ensures the skill context is available whenever scratch is accessed.",
+      "context": "Current audit session: user directed 'new artifact, a hook that fires on any path that has scratch in the path to inject the scratch skill.'",
+      "components": [
+        "(1) New hook: shared/hooks/scratch-skill-guard.sh",
+        "(2) Event: PreToolUse on Write and Read",
+        "(3) Check: if tool_input path contains 'scratch' (case-insensitive)",
+        "(4) If match: inject /scratch skill content as corrective context (allow, not deny)",
+        "(5) If no match: allow, no output",
+        "(6) Same pattern as glossary-skill-guard.sh (corrective injection on governed data access)",
+        "(7) Register in tool-ops.json via /tool-ops"
+      ],
+      "frameworks": [
+        {
+          "name": "Three-layer governance",
+          "status": "existing",
+          "note": "Hook = detection layer for scratch skill awareness"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shared/hooks/scratch-skill-guard.sh",
+          "status": "proposed",
+          "scope": "user hook",
+          "intent": "PreToolUse on Write/Read: inject /scratch skill context when path contains 'scratch'. Corrective injection, not deny. Single responsibility: scratch skill awareness"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "scratchSkillInjectionRate",
+          "source": "hook logs",
+          "unit": "injections per session",
+          "target": "informational — track to understand scratch usage patterns"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        46,
+        34,
+        42
+      ]
+    },
+    {
+      "id": 48,
+      "decision": "Agent decision tree: fix-right is the default, band-aids require conscious override — placement across harness requires /investigate + barrier analysis",
+      "rationale": "F1 was band-aided (point skill to .md) when a subagent could have done the full migration. The band-aid was unnecessary and created known-stale state. Band-aids are architectural decisions — they create technical debt that compounds when the next agent treats the band-aid as the real state. The decision tree (fix properly → delegate → investigate → file → workaround → band-aid) defines agent authority when encountering problems. But the tree touches many harness surfaces — assuming it only goes in /delegate is itself the band-aid pattern. Full barrier analysis needed to identify every surface where the tree must be enforced.",
+      "context": "Current audit session: agent band-aided F1, user pushed for proper fix, subagent launched for full migration. User then said 'anytime an agent thinks about a band-aid or a hack or quick fix, it should ask itself: should I instead delegate this to a subagent and do it right?' Then: 'i think that is ONE of the places to put it, but probably have to do full barrier analysis and think of all other ways our harness can work here.'",
+      "components": [
+        "(1) The decision tree: understand root cause? → can fix properly? → can delegate? → file incident → workaround + incident. Band-aid only when all else fails, with documented justification",
+        "(2) 'Do it right' is the default. Band-aid is a conscious override requiring: what the band-aid is, what the proper fix would be, why the override was chosen",
+        "(3) S3 or any agent with operational context can override — band-aid IS sometimes correct (unblock dependency, fix later in plan)",
+        "(4) Band-aids that persist > 1 session without a linked plan become incidents",
+        "(5) CRITICAL: Do NOT assume placement. Run /investigate with barrier analysis to determine every harness surface where this tree must be enforced. Surfaces to analyze include but are not limited to: /delegate skill, delegation rule, /investigate skill, /incident skill, /debrief skill (catch persisted band-aids in AAR), surfacing duty, /brief skill (band-aids as facts in next brief), hooks (can a hook detect band-aid language?), the authority model in Mission Command",
+        "(6) For each surface: barrier analysis — 'if this tree were enforced HERE, would it have caught the F1 band-aid? Would it have changed the agent's behavior?' Surfaces that pass the barrier test get the enforcement. Surfaces that don't pass are documented as insufficient",
+        "(7) The /investigate output is the implementation guide — it tells the plan writer exactly where to put the tree and how"
+      ],
+      "frameworks": [
+        {
+          "name": "Mission command",
+          "status": "proposed",
+          "note": "Authority model extension — disciplined initiative includes do-it-right default"
+        },
+        {
+          "name": "Operational learning",
+          "status": "proposed",
+          "note": "Debrief catches persisted band-aids"
+        },
+        {
+          "name": "Incident governance",
+          "status": "existing",
+          "note": "Unfixed problems get filed"
+        },
+        {
+          "name": "Incident investigation",
+          "status": "existing",
+          "note": "Barrier analysis applied to determine placement"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "TBD — /investigate determines placement",
+          "status": "proposed",
+          "intent": "Barrier analysis will identify which skills, rules, hooks, and reference files need the decision tree"
+        }
+      ],
+      "kpis": [
+        {
+          "name": "bandaidRate",
+          "source": "debrief AAR proposals",
+          "unit": "band-aids per plan execution",
+          "target": "trending to 0"
+        },
+        {
+          "name": "bandaidPersistenceRate",
+          "source": "incident registry audit",
+          "unit": "band-aids persisting > 1 session without plan",
+          "target": "0"
+        },
+        {
+          "name": "doItRightDelegationRate",
+          "source": "delegation briefing audit",
+          "unit": "percent problems delegated for proper fix vs band-aided",
+          "target": ">= 90%"
+        }
+      ],
+      "status": "agreed",
+      "related": [
+        4,
+        24,
+        35,
+        36,
+        41,
+        44,
+        46
+      ]
+    },
+    {
+      "id": 49,
+      "decision": "Flat verb skill naming: each skill is one verb, one job, no subcommands — /brief, /debrief, /harvest, /delegate, /channel, /compat",
+      "rationale": "Compound skills (/learn debrief, /learn harvest, /analyze create, /analyze read) require agents to know the hierarchy before knowing the action. Flat verbs eliminate the extra decision: 'I need to delegate' → /delegate. 'Session done, need to review' → /debrief. The framework grouping is in cross-references, not command hierarchy. User rejected /learn compound model: 'i noticed it then but didnt say anything.'",
+      "context": "Current audit session: user approved Option D (flat verbs) over Option A (single /ops), B (two top-level by phase), C (three by framework). CLI UX research: git/docker popularized verb-noun, but our skills are single-action, not multi-object. Military briefing types (OPORD, FRAGORD, SITREP) are also flat — each is its own document type, not a subcommand.",
+      "components": [
+        "(1) /brief — produce or consume planning briefs. Mission Analysis framework. User-level (shared/skills/brief/SKILL.md)",
+        "(2) /debrief — conduct AAR (observations/insights/proposals with barrier analysis). Operational Learning framework. User-level (shared/skills/debrief/SKILL.md)",
+        "(3) /harvest — manage artifact lifecycle (promote/prune/manifest). Operational Learning framework. User-level (shared/skills/harvest/SKILL.md — existing, updated)",
+        "(4) /delegate — delegate work to subagents with full delegation duty. Mission Command framework. User-level (shared/skills/delegate/SKILL.md)",
+        "(5) /channel — inter-agent messaging (SITREP/FINDING/running estimate). Mission Command framework. User-level (shared/skills/channel/SKILL.md)",
+        "(6) /compat — check platform correctness. Platform Engineering framework. User-level (shared/skills/compat/SKILL.md)",
+        "(7) Skill directory name matches invocation verb: shared/skills/brief/, shared/skills/debrief/, etc.",
+        "(8) /learn eliminated — was compounding /debrief and /harvest as subcommands",
+        "(9) /analyze eliminated — replaced by /brief (bidirectional: 'brief me' / 'I'll brief you')",
+        "(10) Existing skills unchanged: /investigate, /incident, /frameworks, /glossary, /tool-eval, /tool-registry, /tool-ops, /audit, /scratch"
+      ],
+      "frameworks": [
+        { "name": "Governed vocabulary", "status": "existing" },
+        { "name": "Mission command", "status": "proposed" },
+        { "name": "Mission analysis", "status": "proposed" },
+        { "name": "Operational learning", "status": "proposed" },
+        { "name": "Platform engineering", "status": "proposed" }
+      ],
+      "artifacts": [
+        { "path": "shared/skills/brief/SKILL.md", "status": "proposed", "intent": { "purpose": "Produce or consume planning briefs — decision capture during conversation and governed reading in reading order with blocker checks", "scope": "Brief creation and consumption only. NOT plan writing. NOT delegation (/delegate). NOT post-execution debrief (/debrief)", "audience": "Every agent and user preparing to write a plan, in any project" } },
+        { "path": "shared/skills/debrief/SKILL.md", "status": "proposed", "intent": { "purpose": "Conduct structured After Action Reviews — observations, insights, proposals with barrier analysis", "scope": "AAR production only. NOT artifact management (/harvest). NOT delegation (/delegate). NOT incident filing (/incident)", "audience": "Every agent and user at plan completion, in any project" } },
+        { "path": "shared/skills/delegate/SKILL.md", "status": "proposed", "intent": { "purpose": "Delegate work to subagents with full delegation duty — identity, context injection, running estimate extract, authority model", "scope": "Delegation briefing construction only. NOT inter-agent messaging (/channel). NOT post-execution debrief (/debrief)", "audience": "Every agent and user delegating work, in any project" } },
+        { "path": "shared/skills/channel/SKILL.md", "status": "proposed", "intent": { "purpose": "Post and read inter-agent messages — SITREPs, FINDINGs, running estimates", "scope": "Channel messaging only. NOT delegation (/delegate). NOT channel archival (channel-archive.sh hook)", "audience": "Every delegated agent posting status or findings, every delegating agent reading channel state" } },
+        { "path": "shared/skills/compat/SKILL.md", "status": "proposed", "intent": { "purpose": "Check platform correctness — divergence lookup, all-platform script registration, wrapper adoption verification", "scope": "Platform compatibility queries only. NOT tool installation (/tool-registry, /tool-eval). NOT tool-specific operations (/tool-ops)", "audience": "Every agent and user writing or reviewing cross-platform code, in any project" } }
+      ],
+      "kpis": [
+        { "name": "skillNamingCompliance", "source": "harness state audit", "unit": "percent skills following flat-verb convention", "target": "100% of new skills" },
+        { "name": "skillDiscoverability", "source": "session transcript analysis", "unit": "percent correct skill invocations on first try", "target": ">= 90%" }
+      ],
+      "status": "agreed",
+      "related": [3, 8, 13, 16, 36, 43]
+    },
+    {
+      "id": 50,
+      "decision": "Running estimate: continuously maintained state document for all plan executions, enforced by SessionStart hook + /delegate skill",
+      "rationale": "Current audit session: 15 subagents launched without a running estimate. Two S2 AARs lost. Carry-forward between subagents was ad-hoc text. When session relaunched, accumulated state was lost. The running estimate (adapted from ADP 5-0) is the continuously updated JSON that tracks situation, findings, conclusions, and delegation log. S2 investigation found PreToolUse:Agent hooks cannot inject content — they can only deny. SessionStart hook is the only mechanism that unconditionally ensures channel + estimate exist before any delegation.",
+      "context": "Current audit session: S2 carry-forward design produced full schema (813 lines), lifecycle, integration mapping. S2 investigation recommended Option 4 (SessionStart hook + /delegate skill) with barrier analysis proving it would have prevented all failures in the incident. PreToolUse:Agent rejected — hooks cannot modify tool input, only allow/deny. Decision #20 analysis: combining channel-init + prune + estimate-seed is one feature (channel readiness), same precedent as scratch-init.sh.",
+      "components": [
+        "(1) Governed term: 'running estimate' (not carry-forward). Provenance: ADP 5-0 The Operations Process. Add to /glossary and provenance map",
+        "(2) One schema, all levels — session/plan/delegation distinguished by meta.scope, not different schemas. Schema: reference/running-estimate-schema.json",
+        "(3) SessionStart hook: channel-init.sh creates .aitools/channel/session-XXX/, prunes >24h orphan dirs, seeds stub running estimate. Same pattern as scratch-init.sh. ~5ms. Merges planned channel-init.sh + channel-prune.sh into one hook (channel readiness = one feature)",
+        "(4) S3 is primary maintainer — updates estimate before and after every delegation. S2 contributes at plan start (intelligence prep) and plan end (consolidation + AAR)",
+        "(5) /delegate skill reads and updates the estimate as part of delegation duty. Components 3 (prior results), 6 (deviations), 7 (new findings) are extracted from the estimate",
+        "(6) Lives in .aitools/channel/session-XXX/ as a channel message type (RUNNING_ESTIMATE). Updated in place (version incremented), not append-only like SITREPs/FINDINGs",
+        "(7) Archived by channel-archive.sh at SessionEnd to .aitools/harvesting/. This is the carry-forward mechanism between sessions",
+        "(8) Next session's S2 intelligence prep reads archived estimate from .aitools/harvesting/ — the learning loop closure",
+        "(9) Schema sections: meta (identity/versioning), situation (currentState/completedWork/deviations/facts/assumptions), findings (consolidated from channel), conclusions (assessment/recommendations/risks — conclusions first per doctrine), delegationLog (execution trace for AAR)",
+        "(10) Required fields: meta (all), situation.currentState, conclusions.assessment. Everything else populated during execution",
+        "(11) Feeds the AAR: completedWork→observations, deviations→insights basis, conclusions.recommendations→proposal seeds. S2 does analysis (why) and proposals (what to change), not re-reporting",
+        "(12) Ad-hoc sessions (no plan): estimate seeded by hook but only maintained if /delegate is used. Future: extend enforcement to all sessions with delegations",
+        "(13) Agent bypass gap: if agent uses raw Agent tool without /delegate, estimate exists (hook created it) but stays stale. Mitigate with delegation rule (prevention); escalate to hook if pattern recurs"
+      ],
+      "frameworks": [
+        { "name": "Mission command", "status": "proposed", "note": "Running estimate is a first-class MC concept — S3 maintains, S2 contributes" },
+        { "name": "Operational learning", "status": "proposed", "note": "Estimate feeds AAR, archived for carry-forward" },
+        { "name": "Mission analysis", "status": "proposed", "note": "/brief seeds initial estimate from planning brief facts/assumptions" }
+      ],
+      "artifacts": [
+        { "path": "reference/running-estimate-schema.json", "status": "proposed", "intent": { "purpose": "Define the JSON schema for running estimates — continuously updated state documents for multi-agent operations", "scope": "Schema definition only. NOT the maintenance process (/delegate skill). NOT the creation mechanism (channel-init.sh hook)", "audience": "/delegate skill, /debrief skill, /brief skill, channel-init.sh hook, channel-archive.sh hook" } },
+        { "path": "shared/hooks/channel-init.sh", "status": "proposed", "scope": "user hook", "intent": "SessionStart: create .aitools/channel/session-XXX/, prune >24h orphan dirs, seed stub running estimate. Single responsibility: channel readiness. Merges channel-init + channel-prune" },
+        { "path": "reference/channel-schemas.json", "status": "proposed", "intent": "Add RUNNING_ESTIMATE message type — updated-in-place, always archived" },
+        { "path": "reference/framework-registry.json", "status": "existing", "intent": "Add provenance entry for running estimate (ADP 5-0)" },
+        { "path": "reference/glossary.json", "status": "existing", "intent": "Add 'running estimate' governed term" }
+      ],
+      "kpis": [
+        { "name": "estimateMaintenanceRate", "source": "channel-manifest.json", "unit": "percent plan executions with running estimate", "target": "100%" },
+        { "name": "estimateVersionsPerPlan", "source": "running estimate meta.version", "unit": "versions per plan execution", "target": ">= batches + 2" },
+        { "name": "carryForwardSuccessRate", "source": "S2 intelligence prep inputs", "unit": "percent sessions where prior estimate was available", "target": ">= 90%" }
+      ],
+      "status": "agreed",
+      "related": [4, 22, 23, 26, 36, 44, 46, 48, 49]
+    },
+    {
+      "id": 51,
+      "decision": "Plan-writing protocol: S3 writes the plan directly, Plan Writer subagent replaces the user as the reviewer in the iterative write-review loop",
+      "rationale": "S3 delegated plan writing to a single subagent with a summary prompt — produced a shallow 190-line plan. S2 investigation recommended Option D: S3 writes the plan section by section with the user reviewing each section. User modification: 'use agents to replace me in the multiple turn workflow, tell them their identity is me.' The Plan Writer does NOT write — it REVIEWS what S3 writes, calibrated to the user's demonstrated standards from 237 session transcripts. S3 is the author. The Plan Writer is the quality gate with the user's voice.",
+      "context": "Current session: S3 launched one Plan subagent → shallow plan. User: 'how was this plan written? with a single prompt?' S2 investigation: Option D. User refined: 'the plan writer doesnt self-review, you review him... you use the plan writer in place of me.' User directed session history access: 'give them access to all my aitools sessions, and all my sessions, dotprofile too.' Research: In-Context Preference Learning (ICPL, arxiv 2410.17233), Constitutional AI (Anthropic, arxiv 2212.08073).",
+      "components": [
+        "(1) S3 writes the plan directly — S3 is the author, consuming the brief in reading order, writing section by section. S3 is NOT a delegator here. S3 reads, thinks, writes",
+        "(2) Plan Writer subagent replaces the user in the review loop. Where Option D says 'S3 writes section → user reviews → S3 revises', the Plan Writer takes the user's seat for review turns",
+        "(3) The write-review loop: S3 writes execution protocol → presents to Plan Writer → Plan Writer reviews as the user would ('Jose would push back on X because [cites session pattern]') → S3 revises → Plan Writer approves or pushes back again → S3 writes next section → repeat",
+        "(4) Plan Writer identity: 'You are the Plan Writer. Your identity is the user (Jose). You REVIEW, you do not write. When S3 presents a section, evaluate it as Jose would: does it meet the standards demonstrated in recent sessions? What would Jose push back on? What would get a one-word approval?'",
+        "(5) Preference-calibrated review: the Plan Writer reads user messages from session transcripts to calibrate its review judgment. Extract: approvals (what preceded 'beautiful'), rejections (what preceded 'wtf'), redirections ('actually think about X'), escalations ('do barrier analysis'), corrections ('that is ONE of the places'). Weight by recency — most recent session standards override older ones",
+        "(6) Session access: full dotprofile session archive (~/repos/aitools-nobul-jose/sessions/, 237 transcripts across 20 projects). Intent of access: calibrate quality judgment to match user's demonstrated standards. Extract USER MESSAGES showing quality judgment — approvals, rejections, redirections, escalations, corrections. Agent tool calls and file contents are noise, user voice is signal. Deduplication: dotprofile archive is canonical, skip local copies of archived sessions",
+        "(7) Weight-by-recency tiers: March 14-16 (highest — current standards), March 9-13 (high — framework adoption), March 1-6 (medium — early harness), February (low — initial setup). Cross-project sessions show implementation style in other codebases — different signal from aitools governance sessions. Same session: later exchanges override earlier (standards tighten as context builds)",
+        "(8) Plan Writer uses skills during review: /intent-audit on sections with intent statements, /investigate with barrier analysis on plan structure, quality checklist as gate. It invokes skills as part of review, not just generates approval/rejection text",
+        "(9) S3 multi-turn protocol: execution protocol first → context/known states → batch skeleton → batch details (1-2 at a time) → verification section. Each section goes through write-review loop before S3 moves to next",
+        "(10) Plan quality checklist (10 criteria): execution protocol present, known states documented, identity model defined, session references present, delegation context per batch (all 8 components), harness constraints documented, verification section, running estimate integration, all brief decisions mapped, S2 intelligence prep consumed",
+        "(11) S2 intelligence prep consumed before S3 starts writing: the S2 investigation (investigate-plan-transition.md from .scratch/ or harvesting/) IS the intelligence brief for this plan",
+        "(12) Three review layers: Plan Writer review (calibrated as user) → S3 verification (did Plan Writer catch everything? does the plan work as an executable document?) → user final approval (the real user sees only the finished product)",
+        "(13) S3 verification turns: after Plan Writer approves all sections, S3 does its own pass — reads the complete plan as if it were a fresh agent. Can I execute this? Are all 51 decisions mapped? Would I know what to do for each batch?",
+        "(14) Provenance: In-Context Preference Learning (ICPL, arxiv 2410.17233), Constitutional AI (Anthropic, arxiv 2212.08073). Both adapted for plan-writing quality review"
+      ],
+      "frameworks": [
+        { "name": "Mission command", "status": "proposed", "note": "Plan Writer is a delegation from S3 — delegation duty applies" },
+        { "name": "Mission analysis", "status": "proposed", "note": "Plan Writer consumes the brief via reading order — the transition from analysis to planning" },
+        { "name": "Operational learning", "status": "proposed", "note": "Preference calibration from session history IS operational learning — learning from past execution to improve future execution" }
+      ],
+      "artifacts": [
+        { "path": "shared/skills/delegate/SKILL.md", "status": "proposed", "intent": "Add plan-writing delegation template with: user-identity calibration, session access instructions, preference extraction heuristic, multi-turn protocol, quality checklist gate" },
+        { "path": "reference/framework-mission-command.md", "status": "proposed", "intent": "Document Plan Writer role, briefing-to-plan transition process, relationship to S2 intelligence prep" },
+        { "path": "reference/framework-registry.json", "status": "existing", "intent": "Add provenance entries for In-Context Preference Learning and Constitutional AI" }
+      ],
+      "kpis": [
+        { "name": "planQualityScore", "source": "10-criterion checklist", "unit": "criteria passed on first draft", "target": ">= 8/10" },
+        { "name": "planRewriteCount", "source": "Plan Writer running estimate", "unit": "internal iterations", "target": "2-4 (not 7)" },
+        { "name": "userApprovalRounds", "source": "session transcript", "unit": "rounds of user revision after Plan Writer completes", "target": "<= 2" },
+        { "name": "preferenceCalibrationAccuracy", "source": "user approval rate of Plan Writer decisions", "unit": "percent plan sections approved without revision", "target": ">= 70%" }
+      ],
+      "status": "agreed",
+      "related": [3, 4, 13, 28, 36, 37, 45, 48, 49, 50, 52]
+    },
+    {
+      "id": 52,
+      "decision": "Define the Plan Writer as a subagent role with a governed intent — a preference-calibrated reviewer that represents the user's judgment in the plan-writing loop",
+      "rationale": "The plan-writing protocol (decision #51) requires a reviewer that can stand in for the user during the write-review loop. Without a defined role, every plan-writing session reinvents who the reviewer is, what standards they apply, and what data they calibrate from. The Plan Writer is a reusable role definition — like S1/S2/S3 staff functions but for the briefing-to-plan transition. Its intent must be explicit so any delegating agent can instantiate it correctly.",
+      "context": "Current session: user defined the role incrementally — 'create a subagent type', 'their identity is me', 'the plan writer doesnt self-review, you review him', 'give them access to all my sessions', 'there is some overlap in dotprofile so make sure they know what is duplicated', 'its also your duty to verify, you can do that with a couple of turns.' The role crystallized through 5 user turns of refinement — exactly the pattern the Plan Writer itself will use (preference extraction from user interaction).",
+      "components": [
+        "(1) Plan Writer role definition with governed intent (below)",
+        "(2) The Plan Writer is instantiated by S3 via /delegate skill using the plan-writing delegation template",
+        "(3) The Plan Writer is a general-purpose subagent (needs all tools including Skill) with a specific role, not a new Claude Code subagent type",
+        "(4) The Plan Writer role can evolve — future sessions may refine its calibration, add new quality criteria, or adjust the weight-by-recency tiers. The role definition is governed (protected file, review gate) so changes are deliberate",
+        "(5) The Plan Writer role is reusable across plans — any plan produced from a brief goes through the same write-review loop with a Plan Writer calibrated from current session history",
+        "(6) Add 'plan writer' as a governed term via /glossary skill"
+      ],
+      "planWriterIntent": {
+        "purpose": "Review plan sections written by S3, representing the user's quality judgment. The Plan Writer does NOT write — it evaluates what S3 writes against the user's demonstrated standards extracted from session history. It pushes back when standards are not met, approves when they are, and cites specific session patterns as evidence for its judgment. The Plan Writer closes the briefing-to-plan transition gap by providing calibrated review that would otherwise require the user at the keyboard for every section.",
+        "scope": "Plan section review only. Evaluates: does this section meet the user's demonstrated quality standards? Would the user approve, push back, redirect, or reject? Cites evidence from session transcripts. Uses /intent-audit, /investigate, barrier analysis during review. Applies 10-criterion plan quality checklist. NOT plan writing (S3 writes). NOT brief creation (/brief skill). NOT execution delegation (/delegate skill). NOT post-execution debrief (/debrief skill).",
+        "audience": "S3 (the executing agent who writes the plan and presents sections for review). Instantiated by S3 via /delegate with the plan-writing delegation template.",
+        "calibration": {
+          "dataSource": "Full dotprofile session archive (~/repos/aitools-nobul-jose/sessions/, 237 transcripts across 20 projects). Dotprofile archive is canonical — skip local copies of archived sessions.",
+          "extractionTarget": "User messages demonstrating quality judgment: approvals, rejections, redirections, escalations, corrections. Agent tool calls and file contents are noise. User voice is signal.",
+          "weightByRecency": "Most recent sessions carry most weight. March 14-16 (highest), March 9-13 (high), March 1-6 (medium), February (low). Cross-project sessions show implementation style. Same session: later exchanges override earlier.",
+          "heuristic": "In-Context Preference Learning (ICPL) — calibrate from preference examples in context without weight changes. The Plan Writer builds a model of: what gets 'beautiful' vs what gets 'wtf is bootstrap?' and applies that model to S3's plan sections.",
+          "provenance": "ICPL (arxiv 2410.17233), Constitutional AI (Anthropic, arxiv 2212.08073)"
+        }
+      },
+      "frameworks": [
+        { "name": "Mission command", "status": "proposed", "note": "Plan Writer is a staff role instantiated via delegation duty — like S1/S2/S3 but for the analysis-to-planning transition" },
+        { "name": "Mission analysis", "status": "proposed", "note": "The Plan Writer reviews the product of the briefing-to-plan transition — the ungoverned gap this role closes" },
+        { "name": "Operational learning", "status": "proposed", "note": "Preference calibration from session history IS operational learning applied to plan quality" }
+      ],
+      "artifacts": [
+        { "path": "shared/skills/delegate/SKILL.md", "status": "proposed", "intent": "Add plan-writing delegation template: Plan Writer role with identity, calibration data access, review protocol, quality checklist" },
+        { "path": "reference/framework-mission-command.md", "status": "proposed", "intent": "Document Plan Writer role alongside S1/S2/S3. Different from staff functions: Plan Writer is for the analysis-to-planning transition, staff functions are for plan execution" },
+        { "path": "reference/glossary.json", "status": "existing", "intent": "Add 'plan writer' governed term" }
+      ],
+      "kpis": [
+        { "name": "planWriterCatchRate", "source": "Plan Writer review log", "unit": "percent issues caught by Plan Writer that user would have caught", "target": ">= 70%" },
+        { "name": "planWriterFalsePositiveRate", "source": "user overrides of Plan Writer rejections", "unit": "percent Plan Writer rejections that user approves anyway", "target": "< 20%" }
+      ],
+      "status": "agreed",
+      "related": [4, 25, 38, 45, 49, 51]
+    }
+  ]
+}

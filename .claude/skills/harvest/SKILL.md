@@ -26,7 +26,7 @@ When a session produces reusable code, prompts, or patterns:
 
 1. Move file from `.scratch/session-xxx/` to `harvesting/`
 2. Rename with date prefix: `YYYY-MM-DD_descriptive-name.ext`
-3. Add entry to `@reference/harvest-manifest.json` via this skill:
+3. Add entry to `@harvesting/harvest-manifest.json` via this skill:
    - `harvested`: today's date
    - `session`: project/date_sessionprefix
    - `description`: what problem this solved
@@ -66,7 +66,7 @@ Status lifecycle: `harvested` → `candidate` → `promoted` | `pruned`
 
 Lightweight check, < 1 second:
 
-1. Read `@reference/harvest-manifest.json`
+1. Read `@harvesting/harvest-manifest.json`
 2. For each artifact:
    - Calculate age (days since harvested)
    - Check git log for references: `git log --all --oneline -- harvesting/<file>`
