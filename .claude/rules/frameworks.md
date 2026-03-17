@@ -5,7 +5,7 @@ agents check existing frameworks before assuming, and that new
 frameworks follow the adoption lifecycle. **Scope**: The governing
 principle (check before assuming), the three-layer registry pattern,
 trigger directive for `/frameworks` skill. NOT framework data
-(use `/frameworks` skill — it gates `reference/framework-registry.json`).
+(use `/frameworks` skill — it gates the framework registry).
 NOT the adoption process (`reference/framework-adoption.md`). NOT
 individual framework documentation (`reference/framework-*.md`).
 NOT the provenance map (use `/frameworks` skill).
@@ -27,9 +27,8 @@ gates access to the JSON — agents read and write data through the
 skill, never directly.
 
 Registries and their governing skills are documented in the framework
-registry itself (`reference/framework-registry.json` via `/frameworks`
-skill). Do not duplicate that inventory here — this rule governs the
-pattern, not the instances.
+registry itself (via `/frameworks` skill). Do not duplicate that
+inventory here — this rule governs the pattern, not the instances.
 
 ### When to invoke /frameworks
 

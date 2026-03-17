@@ -12,6 +12,38 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.62.2 -- Governed-data-access enforcement, harness definition update (2026-03-17)
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 1 | **Governed-data bypass vectors removed** — 28 governed registry JSON paths removed from 10 files (rules, reference docs, cursor rules). Agents no longer learn registry file paths from rules loaded at session start. Pre-commit step 16 (capability bypass audit) now passes |
+| 2 | **Harness definition updated** — CLAUDE.md mission, `reference/harness.md`, and glossary definition aligned to: "aitools and the tools, context, state, artifacts, frameworks, and provenance it manages" |
+| 3 | **`reference/harness.md` rewritten** — all governed JSON paths removed, artifact roles scoped out to future `/artifact-roles` skill, crisp one-line definition added |
+| 4 | **Incident #50 filed** — sources-of-truth.md protected files table exposes all governed registry JSON paths as bypass vectors. Step 16 "known failure" rationalization proven wrong during live session |
+
+### Governed-data fixes
+
+| File | Paths removed |
+|------|--------------|
+| `.claude/rules/frameworks.md` | 2 (`framework-registry.json`) |
+| `.claude/rules/tool-lifecycle.md` | 1 (`tool-registry.json`) |
+| `.claude/rules/documentation-standards.md` | 1 (`incidents.json`) |
+| `.claude/rules/tool-ops.md` | 1 (`tool-ops.json`) |
+| `reference/framework-adoption.md` | 6 (`framework-registry.json` ×5, `incidents.json` ×1) |
+| `reference/framework-governed-vocabulary.md` | 4 (`glossary.json` ×3, `framework-registry.json` ×1) |
+| `reference/framework-three-layer-governance.md` | 1 (`framework-registry.json`) |
+| `reference/managed-file-deployment.md` | 1 (`incidents.json`) |
+| `reference/script-standards-detail.md` | 1 (`glossary.json`) |
+| `.cursor/rules/managed-file-deployment.mdc` | 2 (`incidents.json` ×2) |
+
+### Remaining (tracked)
+
+9 governed registry paths remain in rules: `sources-of-truth.md` (6) and `incident-governance.md` (3). Both require design work — see Incident #50.
+
+---
+
 ## v0.62.1 -- Brief integrity, #54 integration, readingOrder fix (2026-03-16)
 
 ### Improvements

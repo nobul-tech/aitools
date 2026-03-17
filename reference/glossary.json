@@ -155,7 +155,7 @@
       "source": "reference/framework-governed-vocabulary.md"
     },
     "harness": {
-      "definition": "Everything we build and maintain that shapes how AI agents behave, what they know, and what guardrails they operate within. Five components: platform, configuration, orchestration, managed tools, frameworks.",
+      "definition": "aitools and the tools, context, state, artifacts, frameworks, and provenance it manages. Five components: platform, configuration, orchestration, managed tools, frameworks.",
       "source": "reference/harness.md"
     },
     "hook": {

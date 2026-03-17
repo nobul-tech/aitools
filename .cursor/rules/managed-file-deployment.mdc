@@ -53,7 +53,7 @@ Scripts must NEVER write cross-platform values. See `@.claude/rules/cross-platfo
 
 ### Updating this table
 
-Adding a row (new file type) or column requires updating: this rule, `@reference/managed-file-deployment.md`, `@.claude/rules/managed-file-deployment.md`, and `@reference/incidents.json` if there are implementation gaps. See `@.claude/rules/tool-lifecycle.md` "Deployment pattern updates".
+Adding a row (new file type) or column requires updating: this rule, `@reference/managed-file-deployment.md`, `@.claude/rules/managed-file-deployment.md`, and the `/incident` skill if there are implementation gaps. See `@.claude/rules/tool-lifecycle.md` "Deployment pattern updates".
 
 ### Cross-references
 
@@ -62,4 +62,4 @@ Adding a row (new file type) or column requires updating: this rule, `@reference
 - JSON write safety: `@.claude/rules/config-file-safety.md`
 - AI merge: `@.claude/rules/agentic-standards.md`
 - Content sources: `@reference/user-repo.md`
-- Known incidents: `@reference/incidents.json`
+- Known incidents: `/incident` skill

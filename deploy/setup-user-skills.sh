@@ -1767,6 +1767,54 @@ comment). If the file has no intent statement, flag that as the
 first finding — every file needs one per the Document intent
 design principle (`@CLAUDE.md`).
 
+### 1b. Audit the intent itself
+
+Before checking content against intent, check whether the intent
+itself is good. A well-aligned file with a bad intent is still
+broken — the intent will guide future sessions to produce wrong
+content.
+
+Apply the quality criteria from `/intent-writing`:
+
+| Check | Pass | Fail |
+|-------|------|------|
+| Purpose names specific deliverable | "Track harness deficiencies and drive corrective actions" | "Track things" |
+| Scope has negative boundaries | "NOT the filing process. NOT the framework doc" | No exclusions |
+| Audience names consumers | "/incident skill, /audit skill, check scripts, hooks" | "Agents" |
+| Active verbs in purpose | "Govern", "Equip", "Define", "Track" | "Is about", "Contains" |
+| No restated title | Adds information beyond filename | Repeats filename in different words |
+| Conciseness matches exemplars | Comparable length to recently approved intents | 2x-3x longer |
+
+If the intent fails quality checks, classify as **Intent quality gap** —
+distinct from "Intent too narrow/broad" (which is about coverage). A
+quality gap means the intent exists but wouldn't pass the
+`/intent-writing` checklist.
+
+### 1c. Scan for ambiguity
+
+Perform at least 2 passes over the intent statement:
+
+**Pass 1 — Undefined terms**: Flag any term not in the governed
+vocabulary AND not self-evident to a fresh agent with no project
+context. "Harness" is governed. "Bootstrap" is not — and means
+different things in different contexts.
+
+**Pass 2 — Terms with multiple meanings**: Flag terms that could
+mean different things to different consumers. "Deployment" in this
+codebase means both "managed file deployment" (interactive menu)
+and "MDM/enterprise deployment" (deploy/ scripts). If the intent
+uses "deployment" without qualification, that's ambiguous.
+
+**Pass 3 — Barrier test**: Read ONLY the intent statement (ignore
+the file's actual content). Mentally classify 3 hypothetical pieces
+of content:
+1. Something clearly in scope
+2. Something clearly out of scope
+3. Something borderline
+
+If you cannot confidently classify #2 or #3 from the intent alone,
+the intent has insufficient boundaries. Flag as **Intent ambiguity**.
+
 ### 2. Decompose the content
 
 For each section in the file, identify:
@@ -1797,6 +1845,31 @@ Each misalignment is one of:
 | **Missing home** | Content has no correct destination yet | File a gap — the harness is missing a home for this content |
 | **Intent too narrow** | Content is correct here but intent doesn't cover it | Propose intent amendment (protected activity) |
 | **Intent too broad** | Intent promises more than the file delivers | Propose intent amendment or split file |
+| **Intent quality gap** | Intent exists but fails quality criteria from `/intent-writing` | Revise intent per quality checklist |
+| **Intent ambiguity** | Intent contains undefined or multi-meaning terms | Ambiguity purge per `/intent-writing` multi-pass process |
+
+### 4b. Compare to exemplar intents
+
+After classifying findings, compare the audited intent to the
+current best exemplars (weight recent > old):
+
+**Exemplar ranking** (as of 2026-03-16, most recent first):
+
+1. `reference/tool-ops.json` meta.intent — approved 2026-03-15
+2. `.claude/rules/tool-ops.md` **Intent** — approved 2026-03-15
+3. `.claude/rules/governed-data-access.md` **Intent** — approved 2026-03-14
+4. `reference/incidents.json` meta.intent — approved 2026-03-15
+5. `reference/glossary.json` meta.intent — approved 2026-03-15
+
+**Comparison dimensions**:
+- **Structure**: Does it follow the same purpose/scope/audience pattern?
+- **Conciseness**: Is it comparable length, or significantly longer/shorter?
+- **Specificity**: Are exclusions as concrete? Is audience as specific?
+- **Active voice**: Does purpose use the same verb pattern?
+
+If the audited intent is structurally weaker than the exemplars,
+flag as **Intent quality gap** with the specific dimension that
+diverges.
 
 ### 5. Propose resolution
 
@@ -1976,13 +2049,126 @@ draft, present for user review, write only after approval.
 - **Missing audience**: Not stating who consumes it. A file read by
   scripts has different requirements than one read by agents.
 
+## Pre-write audit
+
+Before drafting, perform these checks:
+
+### Governed term audit
+
+Scan draft content for terms. For each term:
+1. Is it in the `/glossary` skill's governed vocabulary?
+2. If not, is it widely understood without definition?
+3. If neither — the term is ambiguous. Replace with a governed
+   term, define it, or remove it.
+
+The ambiguity purge from session 84280c8b found "bootstrap",
+"calibrate verbosity", and "more weight" as undefined terms that
+would have confused executing agents. Four passes were needed to
+catch them all. Do at least two passes.
+
+### Exemplar calibration
+
+Read 2-3 recently approved intents (weight recent > old):
+- JSON intents: check `meta.intent` in governed JSON files
+- Rule intents: check `**Intent**:` blocks in `.claude/rules/`
+- Skill intents: check `## Intent` sections in skill files
+
+Calibrate your draft to match the conciseness and structural
+patterns of approved exemplars. The best governed JSON intents are
+one clause per field. Rule intents use negative scope boundaries
+("NOT X. NOT Y.") and name specific consumers in audience.
+
+## Multi-pass ambiguity removal
+
+After drafting the intent, perform at least 2 self-audit passes
+before presenting to the user:
+
+**Pass 1 — Undefined terms**: Read every word. Is each term either
+(a) in the governed vocabulary, (b) a common English word, or
+(c) defined in the file itself? Flag anything else.
+
+**Pass 2 — Vague mechanisms**: Look for phrases that describe
+an outcome without specifying the mechanism. "Ensure quality" —
+how? "Manage lifecycle" — which gates? Replace with specifics
+or remove.
+
+**Pass 3 (if anything changed in passes 1-2)**: Re-read the
+complete intent after edits. Edits can introduce new ambiguities.
+
+The 4-pass ambiguity purge in session 84280c8b killed terms at
+every level — a word ("bootstrap"), a phrase ("calibrate
+verbosity"), and a mechanism ("more weight"). Each pass found
+something the previous missed.
+
 ## Process
 
 1. Draft the intent statement addressing purpose, scope, and audience
-2. Present to user for review (protected activity)
-3. Iterate — intent often takes 2-3 rounds to get right
-4. Write only after user approval
-5. If modifying an existing intent, show old → new
+2. Run pre-write audit (governed terms + exemplar calibration)
+3. Run multi-pass ambiguity removal (2-3 passes)
+4. Present to user for review (protected activity)
+5. Iterate — intent often takes 2-3 rounds to get right
+6. Write only after user approval
+7. If modifying an existing intent, show old → new
+
+## Consolidated presentation
+
+When multiple files in one task need intents, present ALL drafts
+in a single message for single-round approval:
+
+1. Draft all intents in the batch
+2. Present them together with a tracking table:
+   | File | Intent status |
+   |------|---------------|
+   | `file-a.md` | Draft below |
+   | `file-b.json` | Draft below |
+3. User reviews and approves the batch, or requests specific
+   revisions
+
+In the tool-ops execution session (eaacf9da), batch 1 presented
+intents one at a time — 3 rounds, 15 minutes. By batch 5, 4 intents
+in one block — 1 round, "beautiful", ~42 seconds. Consolidation
+reduced approval friction by 10-15x.
+
+Sub-agents cannot receive user feedback during execution. Every
+intent that requires user approval MUST be pre-approved before
+delegation. The sub-agent receives verbatim intent text, not
+instructions to draft intent.
+
+## Quality criteria
+
+Apply this checklist to every intent before presenting for approval:
+
+| Criterion | Check | Failure mode |
+|-----------|-------|--------------|
+| **Concrete purpose** | Does purpose name the specific deliverable, not just the topic? | "This file is about deployment" vs "Define which tools are managed and their install methods" |
+| **Negative scope** | Does scope include at least one "NOT" exclusion? | Without boundaries, scope creep is inevitable |
+| **Specific audience** | Does audience name specific consumers (skills, scripts, agents, hooks)? | "Agents" is too vague — which agents, doing what? |
+| **Active verbs** | Does purpose use active verbs (govern, track, define, equip)? | Passive voice ("is used for") hides what the file actually does |
+| **No restated title** | Does intent add information beyond the filename/title? | "This section covers the discovery cycle" — the title says that |
+| **Exemplar match** | Does the structure match recently approved intents? | Stylistic mismatch signals the drafter didn't calibrate |
+
+## Style calibration
+
+The approved intent style has converged through iteration:
+
+**Markdown rules** (`.claude/rules/*.md`):
+- Format: `**Intent**: **Purpose**: ... **Scope**: ... **Audience**: ...`
+  as a single flowing paragraph
+- Purpose: one clause, active verb, names the specific governance domain
+- Scope: "X only. NOT Y. NOT Z." — at least 2-3 exclusions referencing
+  skill/framework/data that live elsewhere
+- Audience: "Every agent, every session" OR specific consumers + context
+
+**Governed JSON** (`meta.intent` in registry files):
+- Format: `{ "purpose": "...", "scope": "...", "audience": "..." }`
+- Purpose: one sentence, often a noun phrase with qualifying dash
+- Scope: "X only. NOT Y. NOT Z." — same pattern, shorter
+- Audience: names specific skills, scripts, hooks by name
+
+**Skills** (`## Intent` section):
+- Format: opening paragraph addressing all three, then "NOT X" lines
+- More conversational than rules/JSON
+- Must name what the skill does NOT do (prevent confusion with related skills)
 
 ## Anti-patterns
 

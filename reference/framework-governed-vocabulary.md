@@ -5,8 +5,8 @@ consistent terminology across the harness — how terms are defined,
 how they compose, and how the glossary is maintained. **Scope**: The
 composition convention, glossary maintenance process, and source
 disciplines. NOT the word list (that's in
-`@.claude/rules/glossary.md`). NOT the definitions (those are in
-`@reference/glossary.json`). NOT the registry convention (that's in
+`@.claude/rules/glossary.md`). NOT the definitions (the `/glossary` skill
+gates access to the definitions registry). NOT the registry convention (that's in
 `@reference/framework-three-layer-governance.md`). NOT the
 cross-reference convention (that's in
 `@reference/framework-adoption.md`). **Audience**: Agents adding new
@@ -25,8 +25,8 @@ work.
 
 ## How We Adopted It
 
-- **Single source of truth** → `@reference/glossary.json` holds every
-  definition. No other file redefines a governed term.
+- **Single source of truth** → the `/glossary` skill gates access to
+  the definitions registry. No other file redefines a governed term.
 - **Always in context** → `@.claude/rules/glossary.md` lists every
   governed term so agents see them every session without loading a
   skill or reading a reference file.
@@ -93,11 +93,11 @@ Base artifacts combine with scope modifiers:
 ## Implementing Artifacts
 
 - `@.claude/rules/glossary.md` (word list, always in context)
-- `@reference/glossary.json` (definitions, source of truth)
+- `/glossary` skill (gate to definitions, source of truth)
 - `/glossary` skill (read definitions, add new terms)
 
 ## Cross-References
 
-- Framework registry: `@reference/framework-registry.json`
+- Framework registry: `/frameworks` skill
 - Framework adoption: `@reference/framework-adoption.md`
 - Harness definition: `@reference/harness.md`

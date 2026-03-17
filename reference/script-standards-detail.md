@@ -275,7 +275,7 @@ Every file write in a setup script must distinguish one of three outcomes:
 ### Governed summary outcomes
 
 Summary detail values that describe deployment/config state use governed
-vocabulary from `reference/glossary.json`. These terms have precise
+vocabulary from the `/glossary` skill. These terms have precise
 definitions — do not substitute synonyms.
 
 | Governed term | Glossary definition | When to use |

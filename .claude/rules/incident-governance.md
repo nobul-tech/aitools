@@ -183,7 +183,7 @@ plan or reference that produced them.
 
 ### Framework adoption
 
-When an incident maps to an established discipline (steps 4-6 of the
+When an incident maps to an established disci pline (steps 4-6 of the
 discovery cycle), the resolution involves adopting concepts from that
 discipline into the harness. See `@reference/framework-adoption.md`
 for the full lifecycle and `@.claude/rules/frameworks.md` for the

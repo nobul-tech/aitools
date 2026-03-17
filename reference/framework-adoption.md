@@ -6,8 +6,8 @@ convention for connecting framework artifacts. **Scope**: The
 discovery-to-continuation cycle (DTCC), its trigger, guidance for
 recognizing disciplines, and the cross-reference convention. NOT the
 harness definition (see `@reference/harness.md`). NOT the registry
-convention (see `@reference/framework-three-layer-governance.md`).
-NOT the framework registry (see `@reference/framework-registry.json`).
+convention governed by (see `@reference/framework-three-layer-governance.md`).
+NOT the framework registry state (governed by `/frameworks` skill).
 **Audience**: Agents encountering ambiguities, agents adopting new
 frameworks, agents creating framework artifacts, the `/incident` skill.
 
@@ -61,8 +61,8 @@ The ambiguity may be real (nothing covers it) or apparent (something
 covers it but you didn't find it, or it's unclear). Check:
 - `@.claude/rules/frameworks.md` — does an existing framework govern
   this class of decision?
-- `@reference/framework-registry.json` — load via `/frameworks` skill
-- `@reference/incidents.json` — has this already been filed?
+- `/frameworks` skill — check existing frameworks
+- `/incident` skill — has this already been filed?
 - Rules that might address it — search `.claude/rules/` and
   `~/.claude/rules/`
 - Reference files, plan sections, design principles in `@CLAUDE.md`
@@ -91,7 +91,7 @@ user for help.
 
 Check whether this deficiency maps to an established field of
 practice — one where significant prior work exists. Consult the
-framework registry (`@reference/framework-registry.json`) for
+framework registry (via `/frameworks` skill) for
 disciplines already recognized. If a discipline matches:
 - Name it in the `discipline` field
 - Proceed to step 5
@@ -202,8 +202,7 @@ How to recognize a discipline:
 - People have written books, standards, or methodologies about it
 - You can find prior art that directly informs your adaptation design
 
-The framework registry (`@reference/framework-registry.json`,
-accessible via `/frameworks` skill) tracks which disciplines have
+The framework registry (via `/frameworks` skill) tracks which disciplines have
 been recognized and which frameworks were adopted from them. Each
 framework entry includes its source discipline and key concepts.
 
@@ -236,7 +235,7 @@ its artifacts.
 ## Cross-References
 
 - Harness definition: `@reference/harness.md`
-- Framework registry: `@reference/framework-registry.json`
+- Framework registry: `/frameworks` skill
 - Framework rule: `@.claude/rules/frameworks.md`
 - Incident governance: `@.claude/rules/incident-governance.md`
 - Governed vocabulary: `@reference/framework-governed-vocabulary.md`

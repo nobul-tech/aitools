@@ -169,6 +169,6 @@ When adopting or reviewing a framework, verify three-layer coverage:
 
 ## Cross-References
 
-- Framework registry: `@reference/framework-registry.json`
+- Framework registry: `/frameworks` skill
 - Meta-framework: `@reference/framework-adoption.md`
 - Incident governance: `@reference/framework-incident-governance.md`

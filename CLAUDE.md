@@ -1,15 +1,20 @@
 # AI Tooling Hub
 
-**Mission**: Cross-platform tool lifecycle management, configuration, and AI
-context orchestration for developers who work across Windows, macOS, and Linux.
+**Mission**: Cross-platform tool lifecycle management, governance,
+state, and AI context orchestration for developers working on any
+project on any supported platform.
 
-One CLI that installs, configures, and maintains all managed tools with native
-platform support (PowerShell on Windows, bash on macOS/Linux), structured
-logging, interactive deployment review, and drift detection. Multi-user via
-dotprofile repos. MDM-ready via self-contained deploy scripts. Tools and
-dependencies are managed using platform-native best practices — evaluation
-criteria prioritize delivering the best developer experience on each platform,
-not artificial 1:1 parity.
+One CLI that installs, configures, and maintains all managed tools
+with native platform support (PowerShell on Windows, bash on
+macOS/Linux), structured logging, interactive deployment review, and
+drift detection. The harness — aitools and the tools, context, state,
+artifacts, frameworks, and provenance it manages — gives every project
+it touches governance frameworks, artifact harvesting, session state
+carry-forward, and provenance tracking. Multi-user via dotprofile
+repos. MDM-ready via self-contained deploy scripts. Tools and
+dependencies are managed using platform-native best practices —
+evaluation criteria prioritize delivering the best developer
+experience on each platform, not artificial 1:1 parity.
 
 ## Design Principles
 

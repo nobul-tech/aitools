@@ -455,6 +455,336 @@
       "status": "harvested",
       "promotedTo": null,
       "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_add-component-51.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_analyze-reading-order.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_audit-54-integration.md": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_barrier-amendment.md": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_barrier-fragord.md": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_barrier-governed-by.md": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_channel-placement-investigation.md": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_decision-workflow-pattern.md": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_extract-channel-mentions.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_extract-exact-quotes.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_extract-placement-discussion.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_extract-thinking-2580-2600.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_extract-thinking.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_extract-user-msgs.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_find-aitools-decision.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_find-aitools-user-msg.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_find-critical-msgs.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_find-exact-quote.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_find-give-to-users.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_find-quote-anywhere.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_fix-reading-order.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_fix-reciprocal-links.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_investigate-full-prevention.md": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_investigate-governed-drift-decision.md": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_read-continuation-msgs.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_reading-order-audit.md": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_workflow-description.md": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_37ab88e4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_extract-broader.pl": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_e059186f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "perl",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_extract-intent-medium.pl": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_e059186f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "perl",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_extract-intent-msgs.pl": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_e059186f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "perl",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_extract-specific-terms.pl": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_e059186f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "perl",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_search_approval.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_e059186f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
+    },
+    "2026-03-17_search_intent.py": {
+      "harvested": "2026-03-17",
+      "session": "aitools/2026-03-17_e059186f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-16"
     }
   }
 }

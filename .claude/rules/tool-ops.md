@@ -27,5 +27,5 @@ Invoke the `/tool-ops` skill when ANY of these arise:
 - User asks about tool-ops or says /tool-ops
 
 The skill provides the governed process for reading and writing
-tool-ops.json. Accessing the registry JSON directly bypasses that
-process.
+the tool-ops registry. Accessing the registry directly bypasses
+that process.

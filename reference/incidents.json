@@ -7,7 +7,7 @@
       "scope": "Incident entries only. NOT the filing process (incident-governance.md rule). NOT the framework documentation (framework-incident-governance.md). NOT incident reference files (reference/incident-*.md)",
       "audience": "/incident skill, /audit skill, check scripts, hooks, agents checking whether a deficiency has already been filed"
     },
-    "lastUpdated": "2026-03-16"
+    "lastUpdated": "2026-03-17"
   },
   "incidents": [
     {
@@ -1116,6 +1116,32 @@
       "preventionLayer": null,
       "created": "2026-03-16",
       "updated": "2026-03-16"
+    },
+    {
+      "id": 50,
+      "title": "sources-of-truth.md protected files table exposes all governed registry JSON paths as bypass vectors",
+      "status": "open",
+      "severity": "high",
+      "affected": [
+        ".claude/rules/sources-of-truth.md",
+        ".claude/rules/incident-governance.md",
+        ".claude/rules/documentation-standards.md",
+        ".claude/rules/tool-ops.md"
+      ],
+      "linked": null,
+      "referenceFile": null,
+      "observation": "sources-of-truth.md lines 9-33 list all 5 governed registries by full JSON path (tool-registry.json, incidents.json, framework-registry.json, glossary.json, tool-ops.json). incident-governance.md references incidents.json 3 times (L162, L180, L205). documentation-standards.md references incidents.json (L74). tool-ops.md references tool-ops.json (L30). Total: 11 governed registry paths exposed in rules loaded into every agent's context at session start. Scan of all in-context files plus @-referenced files found 26 governed registry bypass vectors across the codebase (excluding plans/ which are working documents, not governance artifacts loaded into agent context).",
+      "expected": "governed-data-access.md states: 'A JSON path in a non-skill file is a bypass vector — agents read it and access the file directly, defeating the skill gate.' Rules MUST NOT reference JSON file paths — they should reference the governing skill instead.",
+      "impact": "Every agent in every session learns the exact paths of all governed registries from the rules in its context. Proven live: agent read framework-registry.json path from frameworks.md and accessed the file directly, bypassing /frameworks skill. The glossary-skill-guard hook only covers glossary.json — the other 4 registries have no detection layer. sources-of-truth.md is the largest single source of bypass vectors (6 paths) but also the hardest to fix because its protected files table needs to identify the files it protects.",
+      "discoveryContext": "Found during comprehensive harness audit session 2026-03-17. Agent was asked to test and verify all managed configs using /tool-ops. User asked 'how do you know about framework-registry.json?' — triggering /investigate RCA that traced the path to frameworks.md (now fixed) and sources-of-truth.md (this incident). Audited: governed-data-access.md, frameworks.md, sources-of-truth.md, incident-governance.md, tool-ops.md, documentation-standards.md. Full scan script produced 26 governed registry references across 47 files (plans/ excluded — working documents, not governance artifacts). Session: 2026-03-17.",
+      "discipline": "Information security",
+      "frameworks": "Capability-based security (Dennis & Van Horn) — the governed-data-access framework adapts this concept. The file path IS the capability token; exposing it in rules grants the capability to every agent. The skill gate is the access control mechanism being bypassed.",
+      "suggestedResolution": "Needs further investigation and barrier analysis (not yet performed). sources-of-truth.md needs a significant overhaul — it predates the framework adoption lifecycle and the governed-data-access pattern. Initial options identified but not evaluated: (1) Replace JSON paths with skill references in the table — but the table needs to identify WHICH files are protected, creating a tension with governed-data-access. (2) Restructure the table to reference governance categories instead of file paths (e.g., 'Framework registry — governed by /frameworks skill' instead of 'reference/framework-registry.json'). (3) Move the protected files table out of the always-in-context rule into a reference file accessed via a skill. For the other affected rules (incident-governance, documentation-standards, tool-ops): replace JSON path references with skill references, similar to the fix applied to frameworks.md and tool-lifecycle.md in this session. Barrier analysis should evaluate each option against the core tension: sources-of-truth.md must name what it protects, but naming governed files by path creates bypass vectors.",
+      "rootCause": "sources-of-truth.md was written before the governed-data-access framework was adopted. When governed-data-access was added, the existing references in sources-of-truth.md were not audited for compliance. The step 16 pre-commit check catches @-prefixed references but the sources-of-truth.md table uses plain paths without @, and the check was rationalized as 'known failure' for governance descriptions.",
+      "correctiveAction": "Partial: frameworks.md (2 paths) and tool-lifecycle.md (1 path) fixed this session — step 16 now passes. Remaining: sources-of-truth.md (6), incident-governance.md (3), documentation-standards.md (1), tool-ops.md (1) = 11 paths still in rules.",
+      "preventionLayer": "Detection — extend governed-data hook (rules-json-guard.sh) to fire on Write/Edit to .claude/rules/*.md when governed JSON paths are introduced. Prevention — update step 16 scope to include plain paths (not just @-prefixed).",
+      "created": "2026-03-17",
+      "updated": "2026-03-17"
     }
   ],
   "closed": [

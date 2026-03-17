@@ -130,4 +130,4 @@ bypasses that process.
 - Registry access: `/tool-registry` skill
 - Discovery playbook: `@reference/tool-evaluation-playbook.md`
 - Evaluation criteria: `@reference/tool-evaluation-criteria.md`
-- Registry data: `reference/tool-registry.json` (accessed via `/tool-registry` skill)
+- Registry data: `/tool-registry` skill
