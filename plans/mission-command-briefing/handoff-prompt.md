@@ -15,18 +15,17 @@ Read the brief in this order — it is deliberate and prevents context rot:
 1. **Critical blockers** (all resolved): F1, F2, F3, F17
 2. **All facts**: F4-F16, F18 (14 verified ground truths)
 3. **All assumptions**: A1-A7 (accepted for planning, unverified)
-4. **Framework definitions** (build mental model before details): decisions #3, #8, #13, #36, #37, #38
-5. **Critical blocker resolution decisions**: #29, #39, #40, #41
-6. **Mission Command decisions**: #4, #5, #6, #7, #15, #16, #17, #19, #20, #22, #23, #24, #25, #26, #27, #28, #44
-7. **Platform Engineering decisions**: #9
-8. **Mission Analysis decisions**: #21, #43, #45
-9. **Operational Learning decisions**: #1, #2, #10, #11, #12, #14, #18, #30, #46, #47
-10. **Infrastructure decisions**: #32, #33, #34, #42
-11. **Process decisions**: #35, #48
-12. **Plan-writing protocol**: #49, #50, #51, #52
-13. **Governance additions (session RTzBnBupE6)**: #53 (governed document drift prevention), #54 (harness improvement cycle)
+4. **Framework definitions** (build mental model before details): #3, #8, #13, #36, #37, #38
+5. **Critical blocker resolution**: #29, #39, #40, #41
+6. **Mission Command**: #4, #5, #6, #7, #15, #16, #49, #17, #19, #20, #22, #23, #24, #25, #26, #27, #28, #44
+7. **Platform Engineering**: #9
+8. **Mission Analysis**: #21, #43, #45
+9. **Operational Learning**: #1, #2, #10, #11, #12, #14, #18, #30, #46, #47
+10. **Infrastructure**: #32, #33, #34, #50, #42, #53
+11. **Process**: #35, #48, #54
+12. **Plan-writing protocol**: #51, #52
 
-Decision #31 is merged into #8. Total: 53 active decisions + 1 merged = 54.
+Decision #31 is merged into #8. Total: 53 active decisions + 1 merged = 54. All decisions are in the brief's `meta.readingOrder` — no gaps.
 
 ---
 
