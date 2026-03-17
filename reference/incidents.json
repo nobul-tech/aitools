@@ -1095,6 +1095,27 @@
       "preventionLayer": null,
       "created": "2026-03-16",
       "updated": "2026-03-16"
+    },
+    {
+      "id": 49,
+      "title": "Subagent transcript search missed queue-operation messages, produced false fabrication claim",
+      "status": "open",
+      "severity": "medium",
+      "affected": [],
+      "linked": null,
+      "referenceFile": null,
+      "observation": "S2 subagent investigating channel placement decision in session b8a9ed4e searched for user messages using type:'human' filter only. The user's actual message was captured as type:'queue-operation' (how Claude Code buffers multi-line input). The subagent concluded the quote in Decision #34 was 'fabricated' — the most serious possible finding. Spot-check by main agent found the quote at line 2583 as a queue-operation, confirming the quote was real. The investigation report's central claim was wrong.",
+      "expected": "UCI 'Verify subagent audit results' — spot-check results. The subagent should have searched ALL message types in JSONL transcripts, not just type:'human'. The JSONL format includes queue-operation, user, assistant, and other types. A complete search must cover all of them.",
+      "impact": "Near-miss: if the main agent had not spot-checked, a false fabrication claim would have been presented to the user, damaging trust in the planning brief and potentially leading to unnecessary rework of Decision #34. The subagent's investigation report (.scratch/session-RTzBnBupE6/channel-placement-investigation.md) contains the incorrect finding. The actual issue (ambiguous placement, not fabricated quote) was identified by the main agent's verification.",
+      "discoveryContext": "Current session investigating channel placement at user's request. Subagent launched with /investigate skill to audit session b8a9ed4e. Main agent spot-checked per UCI 'Verify subagent audit results' — searched for the alleged fabricated quote and found it immediately at line 2583. Session: 2026-03-16.",
+      "discipline": null,
+      "frameworks": null,
+      "suggestedResolution": "When delegating transcript analysis to subagents, the delegation briefing must include JSONL format documentation: message types (human, assistant, queue-operation, system, etc.), content field structure, and the requirement to search ALL types. The /delegate skill template for transcript analysis should inject this context. Additionally, investigate whether a transcript-reading utility skill or helper would prevent this class of error.",
+      "rootCause": "Incomplete search scope in JSONL transcript. The subagent assumed user messages only appear as type:'human'. Claude Code's queue-operation entries contain the actual user text when multi-line input is buffered. This is a format knowledge gap — the subagent didn't know the JSONL schema.",
+      "correctiveAction": null,
+      "preventionLayer": null,
+      "created": "2026-03-16",
+      "updated": "2026-03-16"
     }
   ],
   "closed": [
