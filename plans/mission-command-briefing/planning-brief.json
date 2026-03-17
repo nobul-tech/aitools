@@ -3343,6 +3343,84 @@
       ],
       "status": "agreed",
       "related": [4, 25, 38, 45, 49, 51]
+    },
+    {
+      "id": 53,
+      "decision": "Governed document drift prevention: `governedBy` schema field + rule-write impact hook + plan-gate drift check — structural enforcement against stale brief decisions",
+      "rationale": "Workspace rule superseded 5 planning brief decisions (#3, #22, #26, #34, #50); brief never updated; implementing agent built stale architecture (session uyZ7TELqpP). Root cause: cross-document consistency is ungoverned — the harness governs single-document correctness (skill gates, schema validation) but not the case where Rule A supersedes Decision B across different governance scopes. S2 barrier analysis evaluated 3 partial solutions: governedBy (structural, PARTIAL — prevents drift but not forgetting), FRAGORD (distribution, REJECTED — solves wrong problem), amendment+codification (audit, REJECTED — negative ROI). Combined prevention stack: `governedBy` field eliminates structural duplication (prevention), rule-write-impact hook catches drift at creation time (detection), plan-gate extension catches drift at execution time (prevention). Per decision #35: structural enforcement via hooks over behavioral coaching via UCIs.",
+      "context": "Session RTzBnBupE6: S2 investigation produced 3 barrier analyses, full prevention stack design, and incident replay. Prior session: `.claude/rules/aitools-workspace.md` written without updating brief. Session uyZ7TELqpP: agent implemented stale architecture from brief. S2 investigations: barrier-governed-by.md, barrier-fragord.md, barrier-amendment.md, investigate-full-prevention.md, investigate-governed-drift-decision.md.",
+      "components": [
+        "(1) Add optional `governedBy` field to planning brief decision schema — string containing path to governing rule. Decisions with `governedBy` defer STRUCTURAL assertions to the rule; IMPLEMENTATION details remain in decision components. Scope: structural facts (directory layout, gitignore classification, scope boundaries). Not: implementation details (hook behavior, seeding logic, read paths)",
+        "(2) /brief skill `governedBy` resolution: when presenting a decision with the field, read the governing rule, extract structural assertions, present alongside decision's implementation components. Flag if rule mtime is newer than brief's last update (potential staleness)",
+        "(3) New hook: shared/hooks/rule-write-impact.sh — PostToolUse on Write/Edit to `.claude/rules/*.md`. Scans planning brief for decisions referencing the affected domain (keyword/path matching, err toward over-matching). Emits stderr reminder. Advisory only (PostToolUse cannot block). Handles: no brief exists (no-op), brief parse error (warn, continue)",
+        "(4) Extend plan-gate.sh (decision #41) with check_drift() alongside existing check_blockers(). Reads `governedBy` references, checks governing rules exist and are not newer than brief's last verified timestamp. If drift detected: deny plan mode. NOT a new hook per decision #20 — explicit extension of existing",
+        "(5) Apply `governedBy` to decisions #3, #22, #26, #34, #50 — all governed by `.claude/rules/aitools-workspace.md`. Simplify structural components to one-line references. Keep implementation components detailed",
+        "(6) S2 intelligence prep (decision #26) includes brief-rule freshness as a standard check — reads `governedBy` references, flags stale decisions in intelligence brief",
+        "(7) Drift telemetry: when rule-write-impact hook fires, log drift event to SQLite. Ship to Datadog when integration available (decision #32). Deferred until Datadog roadmap delivers",
+        "(8) Scope exclusions: NOT schema migration for cross-session state documents (running estimate — channel-init.sh). NOT cross-reference breakage (/audit skill). NOT hook behavior governance (tool-ops.json). NOT skill intent drift (brief intents are archival once skill is implemented)"
+      ],
+      "frameworks": [
+        { "name": "Three-layer governance", "status": "existing", "note": "Prevention (governedBy field), Detection (rule-write-impact hook, plan-gate drift check), Audit (S2 intelligence prep, /audit skill)" },
+        { "name": "Governed data access", "status": "existing", "note": "Extends existing skill-gated access — /brief skill resolves governedBy references" },
+        { "name": "Incident investigation", "status": "existing", "note": "Barrier analysis methodology applied to evaluate each prevention element" },
+        { "name": "Mission command", "status": "proposed", "note": "S2 intelligence prep includes brief freshness check" }
+      ],
+      "artifacts": [
+        { "path": "shared/hooks/rule-write-impact.sh", "status": "proposed", "scope": "user hook", "intent": { "purpose": "Alert agents when rule changes may affect planning brief decisions — advisory drift detection at the moment drift is created", "scope": "PostToolUse on Write/Edit to .claude/rules/*.md only. Advisory feedback via stderr, never blocking. Single responsibility: rule-to-brief impact alerting", "audience": "Claude Code hook infrastructure, deployed to ~/.claude/hooks/" } },
+        { "path": "shared/hooks/plan-gate.sh", "status": "proposed", "scope": "user hook — extends decision #41", "intent": "Add check_drift() function alongside check_blockers(). Reads governedBy references, validates governing rules exist and are current" },
+        { "path": "shared/skills/brief/SKILL.md", "status": "proposed", "scope": "extends decision #45", "intent": "Add governedBy resolution mode: read governing rule, present structural assertions alongside implementation components. Flag staleness" },
+        { "path": "plans/mission-command-briefing/planning-brief.json", "status": "existing", "intent": "Add optional governedBy field to decision schema. Apply to decisions #3, #22, #26, #34, #50" },
+        { "path": "reference/tool-ops.json", "status": "existing", "intent": "Register rule-write-impact hook with verification cases" }
+      ],
+      "kpis": [
+        { "name": "driftDetectionRate", "source": "rule-write-impact hook logs", "unit": "percent rule changes that fire the hook and find affected decisions", "target": "100% of rule changes to domains with brief decisions" },
+        { "name": "driftResolutionTime", "source": "brief update timestamps after hook fires", "unit": "sessions between drift detection and brief amendment", "target": "<= 1" },
+        { "name": "governedByAdoptionRate", "source": "planning brief schema audit", "unit": "percent decisions with structural assertions that have governedBy", "target": ">= 90%" },
+        { "name": "planGateDriftDenyRate", "source": "plan-gate hook logs", "unit": "plan mode denials due to stale governedBy references", "target": "trending to 0" },
+        { "name": "falsePositiveRate", "source": "rule-write-impact hook logs", "unit": "percent false positives", "target": "< 30%" }
+      ],
+      "status": "proposed",
+      "related": [3, 20, 22, 26, 29, 34, 35, 41, 45, 50]
+    },
+    {
+      "id": 54,
+      "decision": "Harness improvement cycle: finding to verified fix through structured investigation, parallel barrier analysis, worktree-isolated editing, and independent re-audit — the process by which the harness improves itself",
+      "rationale": "Session RTzBnBupE6 produced a 10-step workflow: user questioned `.aitools/channel/` placement → S2 investigated (spot-check caught material error) → user clarified intent → S2 audited brief (AAR-format: 14 proposals with exact edit specs) → user pushed for institutional approaches over mechanical amendments → 3 parallel S2 barrier analyses on options from framework provenance (FRAGORD/FM 101-5-2, governedBy/ISO 10007, amendment+codification/legal) → synthesis selected governedBy → S3 applied amendments in worktree → S2 re-audited (14→1, 0 intent issues) → S2 designed structural fix (decision #53). Three design principles: (a) structural fixes before mechanical — the user's push from '10 amendments' to 'find the structural root cause' was the highest-value intervention, per #35/#48; (b) same check verifies the fix — the audit that discovered the problem is re-run by an independent agent, not a different verification; (c) provenance-informed options — search source disciplines of adopted frameworks before inventing from scratch. Two session patterns worth noting: the user twice pushed the agent from local optimum to global ('this feels inefficient' → structural fix, 'think outside current capabilities' → full prevention stack with hooks and telemetry), and user intent clarification was needed before generalization could proceed. The cycle produced decision #53 (5-element prevention stack with Swiss cheese analysis), validating that the structured process generates higher-quality fixes than ad-hoc investigation.",
+      "context": "Session RTzBnBupE6: workspace rule superseded 5 brief decisions. User explicitly pushed for efficiency, institutional provenance, bigger thinking, and accuracy. Artifacts produced by the cycle: channel-placement-investigation.md, workspace-audit.json, barrier-governed-by.md, barrier-fragord.md, barrier-amendment.md, investigate-full-prevention.md, investigate-governed-drift-decision.md, workspace-reaudit.json. The cycle consumed ~4 hours but produced a multi-element prevention stack with Swiss cheese analysis. User directive: 'audit our conversation to ensure you capture my intent accurately.'",
+      "components": [
+        "(1) Entry gate: finding emerges from any source (AAR proposal, /audit, check script, user, S2, incident). Classify: point fix (typo, missing field, single-file correction) skips to step 7. Systemic finding (pattern across decisions, new class of problem, governance gap) proceeds through full cycle. The gate prevents over-engineering trivial fixes while ensuring systemic findings get thorough treatment",
+        "(2) S2 structured investigation: delegate to S2 per delegation duty (#4) with AAR schema injection (#44). S2 audits finding against governing artifacts (rules, references, incidents, code). Output: AAR-format JSON — observations (facts with file citations), insights (root cause analysis), proposals (exact old/new text per proposal + barrier analysis validating each). The proposals ARE the fix specification — detailed enough for a downstream editor to apply mechanically",
+        "(3) Main agent spot-check: per UCI 'Verify subagent audit results' — read at least one file reported clean, verify one proposal's old_string against actual file content, check one insight's cited line numbers. Non-negotiable. Session RTzBnBupE6: spot-check caught S2's central claim being factually wrong, preventing a cascade of incorrect fixes",
+        "(4) Structural-first generalization: BEFORE proposing mechanical fixes, ask: does this finding reveal a class of problem the harness does not govern? Search the framework registry (via /frameworks) for source disciplines that address this class. Search provenance of adopted frameworks for institutional approaches. Per #35: structural enforcement over behavioral expectation. Per #48: fix-right is the default. Only fall back to mechanical fixes when investigation confirms no structural option exists or the structural fix has disproportionate cost",
+        "(5) Parallel barrier analysis: when multiple structural options exist with no clear winner, launch N parallel S2 subagents (one per option). Each uses the SAME barrier analysis framework: replay incident timeline with proposed fix, verify it would have changed the outcome, identify remaining gaps (Swiss cheese model), assess implementation cost and marginal value. Same framework enables apples-to-apples synthesis",
+        "(6) Option synthesis and user presentation: synthesize barrier analyses — compare catch rates, costs, marginal values, failure modes. Present recommendation. User is commander at EVERY step — can redirect scope, reject options, approve direction, request deeper investigation, or clarify intent. When the finding touches user intent or design philosophy, the cycle pauses for intent clarification before generalization proceeds",
+        "(7) Worktree-isolated editing: delegate to S3 with isolation='worktree'. S3 receives exact edit specifications from audit proposals (step 2). The audit produced the fix specification; the editor applies mechanically. Worktree isolation prevents half-applied edits from corrupting main. Ambiguous specifications flagged for main agent review rather than interpreted",
+        "(8) Independent re-audit — same check verifies the fix: delegate to a FRESH S2 (not the original auditor, not the editor) to re-run the EXACT SAME audit that produced the original proposals. Same check, independent agent. Verify: zero inconsistencies on original finding's scope, zero intent preservation issues. This principle is load-bearing — a different verification would miss regressions in the original scope",
+        "(9) Iterate on outstanding items: if re-audit finds remaining issues, classify. Mechanical: batch into worktree edit pass (step 7). Systemic: launch parallel S2 with /investigate + barrier analysis (steps 4-6). Cap at 3 iterations — after 3, present current state to user with outstanding items and recommendation",
+        "(10) Completion: present verified results to user. 'Verified' = re-audit (step 8) produced clean result on original finding's scope. Structural decisions produced by cycle presented as brief decision proposals. User approves, modifies, or defers",
+        "(11) Scope discipline: each re-audit checks against ORIGINAL finding, not expanded scope. Scope expansion requires explicit user approval. Prevents a gitignore finding from becoming a workspace redesign — unless user directs it",
+        "(12) Placement: orchestration pattern, not a new skill. Main agent follows steps using existing skills (/investigate, /delegate, /debrief). Documented in: (a) operational learning rule — real-time improvement process section, (b) /delegate skill — delegation templates for 3 cycle roles (investigator, editor, auditor), (c) framework reference — adopted process with source instance"
+      ],
+      "frameworks": [
+        { "name": "Operational learning", "status": "proposed", "note": "The cycle IS operational learning applied in real-time — AAR schema, barrier analysis, validated proposals. Extends plan-end debrief to continuous improvement" },
+        { "name": "Mission command", "status": "proposed", "note": "Delegation duty (#4) governs every subagent launch. User as commander at every checkpoint" },
+        { "name": "Incident investigation", "status": "existing", "note": "Barrier analysis methodology (Swiss cheese, 5 Whys, timeline replay) applied during option evaluation and proposal validation" },
+        { "name": "Three-layer governance", "status": "existing", "note": "Cycle products span all three layers — rules (prevention), hooks (detection), skills/audits (audit)" }
+      ],
+      "artifacts": [
+        { "path": ".claude/rules/operational-learning.md", "status": "proposed", "scope": "project + user-level via dotprofile", "intent": "Add 'Harness improvement cycle' section: finding-to-verified-fix process, entry gate, structural-first principle, same-check-verifies-fix principle, iteration cap, scope discipline" },
+        { "path": ".claude/skills/delegate/SKILL.md", "status": "proposed", "scope": "project skill", "intent": "Add delegation templates for 3 cycle roles: S2 investigator (AAR output + barrier analysis), S3 editor (worktree isolation + mechanical edits), S2 auditor (re-run original check independently)" },
+        { "path": "reference/framework-operational-learning.md", "status": "proposed", "scope": "project", "intent": "Document improvement cycle as real-time operational learning. Session RTzBnBupE6 as source instance. Three design principles" }
+      ],
+      "kpis": [
+        { "name": "findingToFixTime", "source": "cycle completion timestamps", "unit": "sessions between finding surfaced and fix verified clean", "target": "<= 1" },
+        { "name": "reauditFirstPassRate", "source": "re-audit results (step 8)", "unit": "percent fix attempts passing re-audit on first iteration", "target": ">= 80%" },
+        { "name": "cycleIterationCount", "source": "cycle iteration tracking", "unit": "average iterations before clean result", "target": "<= 2" },
+        { "name": "structuralFixRate", "source": "cycle outcomes", "unit": "percent systemic findings producing structural fixes", "target": ">= 70%" },
+        { "name": "spotCheckCatchRate", "source": "spot-check results (step 3)", "unit": "percent subagent outputs with material errors caught", "target": "trending to 0" }
+      ],
+      "status": "proposed",
+      "related": [4, 35, 36, 41, 44, 45, 46, 48, 53]
     }
   ]
 }

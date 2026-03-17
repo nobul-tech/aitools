@@ -12,6 +12,44 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.62.0 -- Workspace governance, planning brief v6, harness improvement cycle (2026-03-16)
+
+### New
+
+| # | Change |
+|---|--------|
+| 1 | **aitools-workspace rule** — new `.claude/rules/aitools-workspace.md` governs the `.aitools/` namespace: project-scoped harness capabilities (channel, scratch, harvesting) with cross-machine carry-forward principle. Session-ephemeral data gitignored; carry-forward state (running estimates) tracked in git |
+| 2 | **tool-registry.json** — unified JSON registry merging tool-registry.md + tool-versions.json. Governed by `/tool-registry` skill |
+| 3 | **Mission command briefing** — 54-decision planning brief (`plans/mission-command-briefing/`) covering Mission Command, Platform Engineering, Mission Analysis, and Operational Learning frameworks |
+| 4 | **Decision #53: Governed document drift prevention** — `governedBy` schema field + rule-write impact hook + plan-gate drift check. Structural enforcement against stale brief decisions |
+| 5 | **Decision #54: Harness improvement cycle** — finding-to-verified-fix workflow through structured investigation, parallel barrier analysis, worktree-isolated editing, and independent re-audit |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 6 | **Rules refined** — frameworks.md (deduplicated registry table), sources-of-truth.md (tool-registry.md→json), tool-lifecycle.md (install method discovery, trigger directive) |
+| 7 | **Skills updated** — intent-writing (pre-write audit, multi-pass ambiguity removal, quality criteria, style calibration), intent-audit (quality/ambiguity checks, exemplar comparison), tool-registry (schema v1.0 alignment), incident (known limitations noted) |
+| 8 | **harvest-session.sh** — JSON, YAML, and unknown file extensions now harvested instead of silently deleted |
+| 9 | **5 brief decisions amended** — #3, #22, #26, #34, #50 aligned with workspace rule carry-forward principle (14→1 inconsistencies) |
+| 10 | **Cross-machine carry-forward intent** — added to dotprofile CLAUDE.md and live ~/.claude/CLAUDE.md |
+
+### Incidents
+
+| # | Change |
+|---|--------|
+| 11 | **Incident #48** — agent asserts behavioral constraints without checking source artifacts (3rd occurrence of pattern) |
+| 12 | **Incident #49** — subagent transcript search missed queue-operation messages, produced false fabrication claim |
+
+### Harvesting
+
+| # | Change |
+|---|--------|
+| 13 | **30+ session artifacts** harvested from sessions 84280c8b, eaacf9da, b8a9ed4e, and current session |
+| 14 | **Handoff prompt** for continuation sessions |
+
+---
+
 ## v0.61.2 -- AAR, test suite, governed data fix (2026-03-15)
 
 ### Improvements
