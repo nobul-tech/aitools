@@ -277,8 +277,12 @@ Verify before writing:
 
 Write the handoff to: [HANDOFF_PATH]
 (Use the location from the schwerpunkt-assessment, or the existing
-handoff path if updating, or [SESSION_DIR]/handoff-prompt-draft.md
-if no location was determined)
+handoff path if updating. The handoff MUST be written to a PERMANENT
+tracked location — never to session scratch. Scratch directories are
+deleted by the SessionEnd hook (harvest-session.sh lines 165-166).
+A handoff in scratch will not survive the session it was created in.
+Typical locations: plans/<briefing-name>/handoff-prompt.md or
+.aitools/briefings/<name>/handoff-prompt.md)
 
 CRITICAL: If Write is denied, output "WRITE_BLOCKED" as the first line
 of your response and include the full handoff content in your response
@@ -316,7 +320,12 @@ Test these 9 criteria:
 
 2. **Reference integrity**: Does every file path referenced in the
    handoff exist on disk? Read each path to verify. Report any broken
-   references.
+   references. CRITICAL: also verify that referenced files will SURVIVE
+   the session lifecycle. Files in `.scratch/` are deleted by the
+   SessionEnd hook (harvest-session.sh). The handoff itself must NOT
+   be in scratch. Referenced scratch files will be harvested to
+   `harvesting/` with date-prefixed names — if the handoff references
+   scratch paths, note that these paths will change after session end.
 
 3. **Reading order**: Does the reading order build context progressively
    (situation -> findings -> priorities -> background)? Are there
