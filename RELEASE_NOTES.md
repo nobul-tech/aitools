@@ -12,6 +12,39 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.62.5 -- Session activity dashboard, full /handoff governance (2026-03-19)
+
+### New
+
+| # | Change |
+|---|--------|
+| 1 | **Session activity dashboard** — interactive HTML report (`harvesting/2026-03-19_session-subagent-report.html`) showing all 40 subagent launches: identity, delegation prompts, skills, context, outcomes, duration, tokens. Dark theme, filterable, searchable, collapsible |
+| 2 | **Exit code 1 AAR** — full investigation chain: cross-boundary verification failure class, false claim propagation RCA, 6 proposals implemented |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 3 | **13 governed terms** — accepting session, assumption, Auftrag, blast radius, blocker, cross-boundary, delegating agent, handoff, Lagebeurteilung, lifecycle transition, Mitdenken, Reibung, Schwerpunkt |
+| 4 | **Incident-governance** — ambiguity routing (terminological→/glossary, structural→/incident), TODO(glossary) markers |
+| 5 | **Scratch skill** — lifecycle deletion warning |
+| 6 | **Workspace rule** — channel/handoffs/ row |
+| 7 | **Lagebeurteilung** — general-purpose capability in /handoff (5 transition points, assumption flush) |
+| 8 | **PCI language** — "delegating agent" replaces fixed "S3", delegation duty component 9 (lifecycle transition awareness) |
+| 9 | **"Accepting session"** — replaces "next session" throughout, staleness notes added |
+
+### Session totals (Z1IhGrcgGO)
+
+40 subagents, 3.4M tokens, 2h 54m compute, 1043 tool calls, 4 worktrees, 8 commits, v0.62.2–v0.62.5.
+
+---
+
+## v0.62.4 -- /handoff governance, glossary terms, ambiguity routing (2026-03-19)
+
+All 6 AAR proposals implemented. 13 governed terms filed. Ambiguity routing in surfacing duty. Lagebeurteilung as general-purpose capability. Scratch lifecycle warning. Workspace rule updated. See v0.62.5 for consolidated description.
+
+---
+
 ## v0.62.3 -- /handoff skill, harness verification, cross-boundary RCA (2026-03-18)
 
 ### New

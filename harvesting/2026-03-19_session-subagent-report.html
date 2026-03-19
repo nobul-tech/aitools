@@ -1,0 +1,1905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Session Z1IhGrcgGO — Subagent Activity Report</title>
+<style>
+  :root {
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #21262d;
+    --bg-hover: #30363d;
+    --border: #30363d;
+    --border-light: #484f58;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted: #6e7681;
+    --accent-blue: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-yellow: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-orange: #f0883e;
+    --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --radius: 6px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { font-size: 14px; scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ── Fixed Header ── */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    box-shadow: var(--shadow);
+  }
+
+  .header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .header-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .header-title span {
+    color: var(--text-secondary);
+    font-weight: 400;
+    font-size: 0.9rem;
+  }
+
+  .session-id {
+    font-family: var(--font-mono);
+    color: var(--accent-blue);
+    font-size: 0.85rem;
+  }
+
+  /* ── Stats Bar ── */
+  .stats-bar {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .stat-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .stat-value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .stat-value.green { color: var(--accent-green); }
+  .stat-value.yellow { color: var(--accent-yellow); }
+  .stat-value.red { color: var(--accent-red); }
+  .stat-value.blue { color: var(--accent-blue); }
+  .stat-value.purple { color: var(--accent-purple); }
+
+  /* ── Controls ── */
+  .controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 12px 24px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .filter-group {
+    display: flex;
+    gap: 4px;
+  }
+
+  .filter-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 4px 12px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-family: var(--font-sans);
+    transition: all 0.15s;
+  }
+
+  .filter-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .filter-btn.active {
+    background: var(--accent-blue);
+    color: #fff;
+    border-color: var(--accent-blue);
+  }
+
+  .search-box {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 5px 12px;
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    font-family: var(--font-sans);
+    width: 280px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .search-box:focus {
+    border-color: var(--accent-blue);
+  }
+
+  .search-box::placeholder {
+    color: var(--text-muted);
+  }
+
+  .view-toggle {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+  }
+
+  /* ── Timeline ── */
+  .timeline-section {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+  }
+
+  .section-title {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+
+  .timeline-container {
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+
+  .timeline {
+    position: relative;
+    min-height: 60px;
+    width: 100%;
+    min-width: 900px;
+  }
+
+  .timeline-axis {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .timeline-labels {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 4px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .timeline-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-bottom: 20px;
+  }
+
+  .timeline-row {
+    display: flex;
+    align-items: center;
+    height: 14px;
+    position: relative;
+  }
+
+  .timeline-bar-label {
+    width: 40px;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    text-align: right;
+    padding-right: 6px;
+    flex-shrink: 0;
+  }
+
+  .timeline-bar-track {
+    flex: 1;
+    position: relative;
+    height: 100%;
+  }
+
+  .timeline-bar {
+    position: absolute;
+    height: 10px;
+    top: 2px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    min-width: 3px;
+  }
+
+  .timeline-bar:hover {
+    opacity: 0.8;
+  }
+
+  .timeline-bar.status-completed { background: var(--accent-green); }
+  .timeline-bar.status-blocked { background: var(--accent-yellow); }
+  .timeline-bar.status-error { background: var(--accent-red); }
+  .timeline-bar.status-inline { background: var(--accent-purple); }
+  .timeline-bar.status-partial { background: var(--accent-orange); }
+
+  .timeline-bar .tooltip {
+    display: none;
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    border-radius: var(--radius);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .timeline-bar:hover .tooltip {
+    display: block;
+  }
+
+  /* ── Agent Cards ── */
+  .agents-container {
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .agent-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+
+  .agent-card:hover {
+    border-color: var(--border-light);
+  }
+
+  .agent-card.highlight {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 1px var(--accent-blue);
+  }
+
+  .agent-card-header {
+    display: grid;
+    grid-template-columns: 48px 1fr auto;
+    gap: 12px;
+    padding: 12px 16px;
+    cursor: pointer;
+    align-items: center;
+  }
+
+  .agent-card-header:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .agent-number {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    font-family: var(--font-mono);
+    flex-shrink: 0;
+  }
+
+  .agent-number.role-s2 { background: #1f3a5f; color: var(--accent-blue); }
+  .agent-number.role-s3 { background: #1a3d2a; color: var(--accent-green); }
+  .agent-number.role-verifier { background: #3d2e1a; color: var(--accent-orange); }
+
+  .agent-info {
+    min-width: 0;
+  }
+
+  .agent-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .agent-mission {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+  }
+
+  .agent-role-badge {
+    font-size: 0.7rem;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+  }
+
+  .agent-role-badge.role-s2 { background: #1f3a5f; color: var(--accent-blue); }
+  .agent-role-badge.role-s3 { background: #1a3d2a; color: var(--accent-green); }
+  .agent-role-badge.role-verifier { background: #3d2e1a; color: var(--accent-orange); }
+
+  .agent-meta {
+    display: flex;
+    gap: 12px;
+    margin-top: 4px;
+    flex-wrap: wrap;
+  }
+
+  .agent-meta-item {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .agent-meta-item .icon {
+    font-size: 0.8rem;
+  }
+
+  .agent-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .status-badge {
+    font-size: 0.7rem;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .status-badge.completed { background: #1a3d2a; color: var(--accent-green); }
+  .status-badge.blocked { background: #3d351a; color: var(--accent-yellow); }
+  .status-badge.error { background: #3d1a1a; color: var(--accent-red); }
+  .status-badge.inline { background: #2a1a3d; color: var(--accent-purple); }
+  .status-badge.partial { background: #3d2a1a; color: var(--accent-orange); }
+
+  .expand-icon {
+    color: var(--text-muted);
+    transition: transform 0.2s;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+
+  .agent-card.expanded .expand-icon {
+    transform: rotate(90deg);
+  }
+
+  /* ── Card Detail ── */
+  .agent-detail {
+    display: none;
+    border-top: 1px solid var(--border);
+    padding: 16px;
+    background: var(--bg-primary);
+  }
+
+  .agent-card.expanded .agent-detail {
+    display: block;
+  }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  @media (max-width: 768px) {
+    .detail-grid { grid-template-columns: 1fr; }
+  }
+
+  .detail-section {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+  }
+
+  .detail-section-title {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+
+  .detail-section-content {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+  }
+
+  .detail-section-content.mono {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+  }
+
+  .file-path {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--accent-blue);
+    display: block;
+    padding: 2px 0;
+    word-break: break-all;
+  }
+
+  .skill-tag {
+    display: inline-block;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--accent-purple);
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    margin: 2px;
+  }
+
+  .finding-text {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    line-height: 1.6;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border-left: 3px solid var(--accent-blue);
+    border-radius: 0 var(--radius) var(--radius) 0;
+  }
+
+  .note-text {
+    font-size: 0.8rem;
+    color: var(--accent-yellow);
+    padding: 6px 10px;
+    background: rgba(210, 153, 34, 0.1);
+    border: 1px solid rgba(210, 153, 34, 0.3);
+    border-radius: var(--radius);
+    margin-top: 8px;
+  }
+
+  /* ── Prompt Collapsible ── */
+  .prompt-section {
+    margin-top: 12px;
+  }
+
+  .prompt-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    padding: 6px 0;
+    user-select: none;
+  }
+
+  .prompt-toggle:hover {
+    color: var(--text-primary);
+  }
+
+  .prompt-toggle .arrow {
+    transition: transform 0.2s;
+    font-size: 0.7rem;
+  }
+
+  .prompt-toggle.open .arrow {
+    transform: rotate(90deg);
+  }
+
+  .prompt-content {
+    display: none;
+    margin-top: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 500px;
+    overflow-y: auto;
+  }
+
+  .prompt-content.open {
+    display: block;
+  }
+
+  .full-width {
+    grid-column: 1 / -1;
+  }
+
+  /* ── Worktree Badge ── */
+  .worktree-badge {
+    font-size: 0.65rem;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(188, 140, 255, 0.15);
+    color: var(--accent-purple);
+    border: 1px solid rgba(188, 140, 255, 0.3);
+    font-family: var(--font-mono);
+  }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
+
+  .legend-dot.green { background: var(--accent-green); }
+  .legend-dot.yellow { background: var(--accent-yellow); }
+  .legend-dot.red { background: var(--accent-red); }
+  .legend-dot.purple { background: var(--accent-purple); }
+  .legend-dot.orange { background: var(--accent-orange); }
+
+  /* ── Hidden utility ── */
+  .hidden { display: none !important; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg-primary); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+  /* ── No Results ── */
+  .no-results {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ HEADER ═══════════════ -->
+<div class="header">
+  <div class="header-top">
+    <div>
+      <div class="header-title">
+        Session Activity Report
+        <span>&mdash; Subagent Delegations</span>
+      </div>
+      <div class="session-id">Z1IhGrcgGO &middot; 2026-03-19</div>
+    </div>
+    <div class="stats-bar" id="statsBar">
+      <!-- filled by JS -->
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ CONTROLS ═══════════════ -->
+<div class="controls">
+  <div class="filter-group" id="roleFilters">
+    <button class="filter-btn active" data-role="all">All</button>
+    <button class="filter-btn" data-role="s2">S2 Intel</button>
+    <button class="filter-btn" data-role="s3">S3 Ops</button>
+    <button class="filter-btn" data-role="verifier">Verifier</button>
+  </div>
+  <div class="filter-group" id="statusFilters">
+    <button class="filter-btn active" data-status="all">All Status</button>
+    <button class="filter-btn" data-status="completed">Completed</button>
+    <button class="filter-btn" data-status="blocked">Blocked</button>
+    <button class="filter-btn" data-status="partial">Partial</button>
+  </div>
+  <input type="text" class="search-box" id="searchBox" placeholder="Search prompts, missions, findings..." />
+  <div class="view-toggle">
+    <button class="filter-btn" id="expandAll">Expand All</button>
+    <button class="filter-btn" id="collapseAll">Collapse All</button>
+  </div>
+</div>
+
+<!-- ═══════════════ TIMELINE ═══════════════ -->
+<div class="timeline-section">
+  <div class="section-title">Launch Timeline &amp; Duration</div>
+  <div class="timeline-container">
+    <div class="timeline" id="timeline">
+      <!-- filled by JS -->
+    </div>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot green"></div> Completed</div>
+    <div class="legend-item"><div class="legend-dot yellow"></div> Write Blocked</div>
+    <div class="legend-item"><div class="legend-dot orange"></div> Partial</div>
+    <div class="legend-item"><div class="legend-dot purple"></div> Inline</div>
+  </div>
+</div>
+
+<!-- ═══════════════ AGENT LIST ═══════════════ -->
+<div class="agents-container" id="agentsList">
+  <!-- filled by JS -->
+</div>
+<div class="no-results hidden" id="noResults">No agents match current filters.</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// DATA — all 40 agents from session Z1IhGrcgGO
+// ═══════════════════════════════════════════════════════════
+const agents = [
+  {
+    id: 1,
+    role: "verifier",
+    roleLabel: "Verifier",
+    mission: "Test hook with mock JSON pipe per tool-ops verification spec",
+    description: "Tool-ops hook testing (block-claude-code-guide)",
+    status: "completed",
+    statusLabel: "Inline",
+    statusClass: "inline",
+    duration: 0,
+    durationLabel: "inline",
+    tokens: 0,
+    tokenLabel: "n/a",
+    toolUses: 0,
+    worktree: false,
+    skills: ["/tool-ops"],
+    filesRead: [],
+    output: null,
+    finding: "Hook testing executed inline by the main agent. Verified mock JSON pipe behavior against tool-ops verification spec.",
+    note: null,
+    prompt: "Inline execution by main agent — no delegation prompt. Tested the block-claude-code-guide hook using mock JSON pipe input per the tool-ops verification specification."
+  },
+  {
+    id: 2,
+    role: "s2",
+    roleLabel: "S2 (Explore)",
+    mission: "Understand what deploy scripts manage — what they deploy, what configs they write",
+    description: "Explore: inventory source deploy scripts",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 69,
+    durationLabel: "~69s",
+    tokens: 62000,
+    tokenLabel: "62K",
+    toolUses: 26,
+    worktree: false,
+    skills: [],
+    filesRead: ["deploy/", "scripts/"],
+    output: null,
+    finding: "Produced a comprehensive inventory of all deploy scripts, their managed files, and configuration targets. Mapped the full deployment surface area.",
+    note: null,
+    prompt: "You are S2 (Explore). Your mission: inventory every source and deploy script in this repo. For each script, document: (1) what it deploys, (2) what config files it writes, (3) what tools it manages, (4) platform coverage. Read all files in scripts/ and deploy/ directories. Produce a structured inventory."
+  },
+  {
+    id: 3,
+    role: "s2",
+    roleLabel: "S2 (Explore)",
+    mission: "Read all 17 skill SKILL.md files, extract intent statements",
+    description: "Extract intents from all skills",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 53,
+    durationLabel: "~53s",
+    tokens: 81000,
+    tokenLabel: "81K",
+    toolUses: 17,
+    worktree: false,
+    skills: [],
+    filesRead: [".claude/skills/*/SKILL.md", "shared/skills/*/SKILL.md"],
+    output: null,
+    finding: "Extracted and catalogued intent statements from all 17 skill definitions. Identified patterns in intent formulation and gaps in coverage.",
+    note: null,
+    prompt: "You are S2 (Explore). Your mission: read every SKILL.md file in .claude/skills/ and shared/skills/. Extract the **Intent** block from each. Produce a table: skill name, intent purpose, intent scope, intent audience. Flag any skills missing intent statements."
+  },
+  {
+    id: 4,
+    role: "s2",
+    roleLabel: "S2 (General)",
+    mission: "Search session transcripts for user messages about intent approval/rejection",
+    description: "Extract intent signals from Mar 16 sessions",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 357,
+    durationLabel: "~357s",
+    tokens: 133000,
+    tokenLabel: "133K",
+    toolUses: 19,
+    worktree: false,
+    skills: [],
+    filesRead: ["session transcripts (Mar 16)"],
+    output: null,
+    finding: "Found user intent approval/rejection signals in session transcripts. Mapped how intent statements evolved through user feedback cycles.",
+    note: null,
+    prompt: "You are S2. Search the March 16 session transcripts for user messages about intent statement approval or rejection. Find every instance where the user reviewed, approved, modified, or rejected an intent statement. Extract the exact quotes and the context. Document the pattern of how intent review happens."
+  },
+  {
+    id: 5,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Investigate 3 pre-existing bugs in check-post-push.sh, produce AAR",
+    description: "S2 post-push bugs AAR",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 847,
+    durationLabel: "~847s (14m)",
+    tokens: 110000,
+    tokenLabel: "110K",
+    toolUses: 90,
+    worktree: false,
+    skills: ["/investigate"],
+    filesRead: ["scripts/check-post-push.sh", "scripts/check-post-push.ps1"],
+    output: ".scratch/session-Z1IhGrcgGO/s2-post-push-aar.md",
+    finding: "Root-caused 3 bugs in check-post-push.sh. Produced a detailed After Action Review with fix recommendations and prevention analysis.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Investigate 3 pre-existing bugs in check-post-push.sh. For each bug: (1) reproduce the exact failure, (2) identify root cause, (3) determine impact, (4) propose fix. Produce a full AAR (After Action Review) at .scratch/session-Z1IhGrcgGO/s2-post-push-aar.md. Use the /investigate skill for structured investigation."
+  },
+  {
+    id: 6,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Investigate lifecycle of operational artifacts (briefings, AARs, plans)",
+    description: "Q4 artifact lifecycle investigation",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 202,
+    durationLabel: "~202s",
+    tokens: 60000,
+    tokenLabel: "60K",
+    toolUses: 37,
+    worktree: false,
+    skills: [],
+    filesRead: ["plans/", "reference/", ".claude/rules/"],
+    output: ".scratch/session-Z1IhGrcgGO/q4-lifecycle-investigation.md",
+    finding: "Mapped the full lifecycle of operational artifacts: creation, use, archival, and pruning. Identified gaps in the lifecycle for briefings vs AARs vs plans.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Investigate Question 4 from the planning brief: what is the lifecycle of operational artifacts — briefings, AARs, plans? Trace each artifact type through creation, use, modification, archival, and pruning. Identify where the lifecycle is well-governed and where it has gaps. Write findings to .scratch/session-Z1IhGrcgGO/q4-lifecycle-investigation.md."
+  },
+  {
+    id: 7,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "How artifact roles feed into intent enforcement hooks",
+    description: "Q10 artifact-roles investigation",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 224,
+    durationLabel: "~224s",
+    tokens: 70000,
+    tokenLabel: "70K",
+    toolUses: 22,
+    worktree: false,
+    skills: [],
+    filesRead: ["plans/governance-and-compliance-framework.md", "reference/harness.md"],
+    output: ".scratch/session-Z1IhGrcgGO/q10-artifact-roles-investigation.md",
+    finding: "Traced how artifact roles (briefing, AAR, plan, skill) connect to intent enforcement hooks. Found tension between harness.md and the planning brief on /artifact-roles skill.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Investigate Question 10: how do artifact roles feed into intent enforcement hooks? Map the chain from artifact classification to hook behavior. Check harness.md, the governance plan, and hook specifications. Write findings to .scratch/session-Z1IhGrcgGO/q10-artifact-roles-investigation.md."
+  },
+  {
+    id: 8,
+    role: "s3",
+    roleLabel: "S3 (Operations)",
+    mission: "Update post-push-fix-briefing.md with AAR findings",
+    description: "Update post-push briefing with AAR (worktree)",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 80,
+    durationLabel: "~80s",
+    tokens: 41000,
+    tokenLabel: "41K",
+    toolUses: 3,
+    worktree: true,
+    skills: [],
+    filesRead: [".scratch/session-Z1IhGrcgGO/s2-post-push-aar.md"],
+    output: ".scratch/session-Z1IhGrcgGO/post-push-fix-briefing.md",
+    finding: "Successfully updated the post-push fix briefing with AAR findings from the bug investigation.",
+    note: null,
+    prompt: "You are S3 (Operations). Working in an isolated worktree. Update the post-push-fix-briefing.md with the AAR findings from s2-post-push-aar.md. Incorporate root causes, fixes, and prevention measures."
+  },
+  {
+    id: 9,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "5-pass ambiguity/consistency audit of Q4 and Q10 against planning brief",
+    description: "Q4-Q10 ambiguity audit",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 218,
+    durationLabel: "~218s",
+    tokens: 122000,
+    tokenLabel: "122K",
+    toolUses: 18,
+    worktree: false,
+    skills: [],
+    filesRead: [".scratch/session-Z1IhGrcgGO/q4-lifecycle-investigation.md", ".scratch/session-Z1IhGrcgGO/q10-artifact-roles-investigation.md"],
+    output: ".scratch/session-Z1IhGrcgGO/q4-q10-ambiguity-audit.md",
+    finding: "Performed 5-pass audit: found ambiguities in artifact lifecycle terminology, inconsistencies between Q4 and Q10 findings, and misalignment with the planning brief.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Perform a 5-pass ambiguity and consistency audit comparing the Q4 and Q10 investigation outputs against the planning brief. Pass 1: term consistency. Pass 2: scope overlap. Pass 3: contradictions. Pass 4: missing coverage. Pass 5: integration feasibility. Write to .scratch/session-Z1IhGrcgGO/q4-q10-ambiguity-audit.md."
+  },
+  {
+    id: 10,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Audit briefings-at-.aitools/ decision against workspace rule and planning brief",
+    description: "Briefings location decision audit",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 208,
+    durationLabel: "~208s",
+    tokens: 68000,
+    tokenLabel: "68K",
+    toolUses: 22,
+    worktree: false,
+    skills: [],
+    filesRead: [".claude/rules/aitools-workspace.md", "plans/"],
+    output: ".scratch/session-Z1IhGrcgGO/briefings-location-decision.md",
+    finding: "Audited the decision to place briefings under .aitools/. Found alignment with workspace rule but tension with existing plans/ convention. Recommended resolution path.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Audit the decision to locate briefings at .aitools/ against the workspace rule (.claude/rules/aitools-workspace.md) and the planning brief. Check: does the workspace rule support this? Does it contradict any existing convention? Write to .scratch/session-Z1IhGrcgGO/briefings-location-decision.md."
+  },
+  {
+    id: 11,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Draft governed vocabulary definition for 'promotion'",
+    description: "Draft 'promotion' definition",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 184,
+    durationLabel: "~184s",
+    tokens: 79000,
+    tokenLabel: "79K",
+    toolUses: 37,
+    worktree: false,
+    skills: ["/glossary"],
+    filesRead: ["reference/glossary.json", ".claude/rules/glossary.md"],
+    output: ".scratch/session-Z1IhGrcgGO/promotion-definition-draft.md",
+    finding: "Drafted a governed definition for 'promotion' covering artifact promotion from harvesting to harness. Aligned with existing glossary conventions.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Draft a governed vocabulary definition for the term 'promotion' (as in artifact promotion from harvesting to harness). Follow the glossary framework conventions. Check existing definitions via /glossary for style exemplars. Write draft to .scratch/session-Z1IhGrcgGO/promotion-definition-draft.md."
+  },
+  {
+    id: 12,
+    role: "verifier",
+    roleLabel: "Verifier",
+    mission: "Audit the promotion definition against glossary exemplars, barrier test",
+    description: "Audit 'promotion' definition",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 166,
+    durationLabel: "~166s",
+    tokens: 67000,
+    tokenLabel: "67K",
+    toolUses: 14,
+    worktree: false,
+    skills: ["/glossary"],
+    filesRead: [".scratch/session-Z1IhGrcgGO/promotion-definition-draft.md", "reference/glossary.json"],
+    output: ".scratch/session-Z1IhGrcgGO/promotion-definition-audit.md",
+    finding: "Verified the promotion definition against glossary exemplars. Passed barrier tests. Identified minor improvements for scope precision.",
+    note: null,
+    prompt: "You are a Verifier. Audit the promotion definition draft against: (1) glossary exemplar quality, (2) barrier test — could this definition be misread? (3) consistency with existing governed terms. Write audit results to .scratch/session-Z1IhGrcgGO/promotion-definition-audit.md."
+  },
+  {
+    id: 13,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Draft governed definitions for repo and project",
+    description: "Draft 'repo'/'project' definitions",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 223,
+    durationLabel: "~223s",
+    tokens: 71000,
+    tokenLabel: "71K",
+    toolUses: 25,
+    worktree: false,
+    skills: ["/glossary"],
+    filesRead: ["reference/glossary.json", "CLAUDE.md"],
+    output: ".scratch/session-Z1IhGrcgGO/repo-project-definition-draft.md",
+    finding: "Drafted governed definitions distinguishing 'repo' (git repository as a container) from 'project' (the work context that may span repos). Clarified the relationship.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Draft governed vocabulary definitions for 'repo' and 'project'. These terms are used inconsistently in the harness. Clarify the distinction. Check /glossary for style. Write to .scratch/session-Z1IhGrcgGO/repo-project-definition-draft.md."
+  },
+  {
+    id: 14,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Barrier analysis on 'persisted in a way that survives machine switches'",
+    description: "Carry-forward barrier analysis A",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 134,
+    durationLabel: "~134s",
+    tokens: 54000,
+    tokenLabel: "54K",
+    toolUses: 11,
+    worktree: false,
+    skills: [],
+    filesRead: [".claude/rules/aitools-workspace.md"],
+    output: ".scratch/session-Z1IhGrcgGO/carry-forward-barrier-A.md",
+    finding: "Barrier analysis of 'persisted in a way that survives machine switches' — found the phrase could be read as requiring specific persistence mechanisms. Proposed tighter formulation.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Perform barrier analysis on the phrase 'persisted in a way that survives machine switches' from the carry-forward principle. Question: could this be read as requiring any specific persistence mechanism? What barriers does it create or remove? Write to .scratch/session-Z1IhGrcgGO/carry-forward-barrier-A.md."
+  },
+  {
+    id: 15,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Barrier analysis on 'persisted in the repo's backing storage'",
+    description: "Carry-forward barrier analysis B",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 164,
+    durationLabel: "~164s",
+    tokens: 53000,
+    tokenLabel: "53K",
+    toolUses: 15,
+    worktree: false,
+    skills: [],
+    filesRead: [".claude/rules/aitools-workspace.md"],
+    output: ".scratch/session-Z1IhGrcgGO/carry-forward-barrier-B.md",
+    finding: "Barrier analysis of 'persisted in the repo backing storage' — found this tightly couples to git, which may exclude valid alternatives. Analyzed tradeoffs.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Perform barrier analysis on the alternative formulation 'persisted in the repo's backing storage' for the carry-forward principle. Compare against formulation A. Write to .scratch/session-Z1IhGrcgGO/carry-forward-barrier-B.md."
+  },
+  {
+    id: 16,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Barrier analysis on explicit per-mechanism enumeration",
+    description: "Carry-forward barrier analysis C",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 105,
+    durationLabel: "~105s",
+    tokens: 48000,
+    tokenLabel: "48K",
+    toolUses: 7,
+    worktree: false,
+    skills: [],
+    filesRead: [".claude/rules/aitools-workspace.md"],
+    output: ".scratch/session-Z1IhGrcgGO/carry-forward-barrier-C.md",
+    finding: "Barrier analysis of explicit per-mechanism enumeration — found enumeration is brittle but unambiguous. Compared all three formulations on the ambiguity-flexibility spectrum.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Perform barrier analysis on a third formulation: explicit per-mechanism enumeration for carry-forward. Compare against A and B on ambiguity, flexibility, and maintenance burden. Write to .scratch/session-Z1IhGrcgGO/carry-forward-barrier-C.md."
+  },
+  {
+    id: 17,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Investigate harness.md vs Q10 contradiction on /artifact-roles skill",
+    description: "Artifact-roles tension investigation",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 107,
+    durationLabel: "~107s",
+    tokens: 47000,
+    tokenLabel: "47K",
+    toolUses: 5,
+    worktree: false,
+    skills: [],
+    filesRead: ["reference/harness.md", ".scratch/session-Z1IhGrcgGO/q10-artifact-roles-investigation.md"],
+    output: ".scratch/session-Z1IhGrcgGO/artifact-roles-tension-investigation.md",
+    finding: "Identified and documented the tension between harness.md and Q10 findings on /artifact-roles skill. The skill is referenced but doesn't exist yet — governance gap.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Investigate the contradiction between harness.md and Q10 on the /artifact-roles skill. harness.md references it; Q10 found tension. Is the skill supposed to exist? Is it planned? Who owns it? Write to .scratch/session-Z1IhGrcgGO/artifact-roles-tension-investigation.md."
+  },
+  {
+    id: 18,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Trace carry-forward concept through planning brief and session transcripts",
+    description: "Carry-forward provenance tracer",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 343,
+    durationLabel: "~343s",
+    tokens: 132000,
+    tokenLabel: "132K",
+    toolUses: 57,
+    worktree: false,
+    skills: ["/frameworks"],
+    filesRead: ["plans/", "session transcripts", ".claude/rules/aitools-workspace.md"],
+    output: ".scratch/session-Z1IhGrcgGO/carry-forward-provenance.md",
+    finding: "Traced carry-forward from its first mention through planning brief evolution and session discussions. Found it emerged organically from the cross-machine workflow, not from any single decision.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Trace the provenance of the 'carry-forward' concept. Where did it first appear? How did it evolve through planning briefs and sessions? Is it adapted from an external discipline? Check /frameworks for the provenance. Write to .scratch/session-Z1IhGrcgGO/carry-forward-provenance.md."
+  },
+  {
+    id: 19,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Which frameworks inform carry-forward, source discipline analysis",
+    description: "Carry-forward framework tracer",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 264,
+    durationLabel: "~264s",
+    tokens: 108000,
+    tokenLabel: "108K",
+    toolUses: 34,
+    worktree: false,
+    skills: ["/frameworks"],
+    filesRead: ["reference/framework-registry.json", "reference/framework-*.md"],
+    output: ".scratch/session-Z1IhGrcgGO/carry-forward-frameworks.md",
+    finding: "Identified frameworks informing carry-forward: state management (from session continuity), artifact harvesting (from ops), workspace governance (from aitools). No single external discipline — it's a harness-native synthesis.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Which frameworks inform the carry-forward concept? Analyze: (1) is there a source discipline? (2) which existing frameworks contribute? (3) does carry-forward need its own framework entry? Use /frameworks to check. Write to .scratch/session-Z1IhGrcgGO/carry-forward-frameworks.md."
+  },
+  {
+    id: 20,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Design scope-creep governance, immediate action, briefing decomposition",
+    description: "Scope-creep governance framework",
+    status: "blocked",
+    statusLabel: "WRITE_BLOCKED",
+    statusClass: "blocked",
+    duration: 289,
+    durationLabel: "~289s",
+    tokens: 144000,
+    tokenLabel: "144K",
+    toolUses: 24,
+    worktree: false,
+    skills: [],
+    filesRead: ["plans/", "ROADMAP.md", ".claude/rules/"],
+    output: null,
+    finding: "Completed scope-creep governance analysis but could not write the output file. Analysis covered immediate action framework, briefing decomposition strategy, and governance boundaries.",
+    note: "WRITE_BLOCKED — completed analysis but file write was denied by permissions.",
+    prompt: "You are S2 (Intelligence). Design scope-creep governance: (1) when does exploratory work become scope creep? (2) what immediate-action framework prevents it? (3) how should the planning brief be decomposed to reduce scope-creep risk? Write to .scratch/session-Z1IhGrcgGO/scope-creep-governance.md."
+  },
+  {
+    id: 21,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Graph analysis of 54-decision dependency structure",
+    description: "Briefing cluster analysis (first attempt)",
+    status: "blocked",
+    statusLabel: "WRITE_BLOCKED",
+    statusClass: "blocked",
+    duration: 658,
+    durationLabel: "~658s (11m)",
+    tokens: 129000,
+    tokenLabel: "129K",
+    toolUses: 14,
+    worktree: false,
+    skills: [],
+    filesRead: ["plans/planning-brief.md"],
+    output: null,
+    finding: "Attempted graph analysis of all 54 decisions in the planning brief. Built dependency graph but could not write results. This was later relaunched as Agent 25.",
+    note: "WRITE_BLOCKED — first attempt. Relaunched as Agent #25 with WRITE_BLOCKED signal.",
+    prompt: "You are S2 (Intelligence). Perform graph analysis of the 54-decision dependency structure in the planning brief. For each decision: identify dependencies (which decisions must come first), identify dependents (which decisions depend on this one), classify as leaf/branch/root. Identify clusters of tightly-coupled decisions. Write to .scratch/session-Z1IhGrcgGO/briefing-cluster-analysis.md."
+  },
+  {
+    id: 22,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Comprehensive status of all scratch artifacts",
+    description: "Session state audit",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 484,
+    durationLabel: "~484s (8m)",
+    tokens: 148000,
+    tokenLabel: "148K",
+    toolUses: 27,
+    worktree: false,
+    skills: [],
+    filesRead: [".scratch/session-Z1IhGrcgGO/"],
+    output: ".scratch/session-Z1IhGrcgGO/session-state-audit.md",
+    finding: "Comprehensive audit of all scratch artifacts: catalogued every file, its status, dependencies, and integration readiness. Identified orphaned artifacts and blocked outputs.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Perform a comprehensive session state audit. List every file in .scratch/session-Z1IhGrcgGO/. For each: status (complete/partial/blocked), dependencies on other artifacts, integration readiness, and recommended next action. Write to .scratch/session-Z1IhGrcgGO/session-state-audit.md."
+  },
+  {
+    id: 23,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Research German Auftragstaktik originals, IDF, NATO, Toyota, Cynefin, OODA",
+    description: "Deep provenance research (doctrine)",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 466,
+    durationLabel: "~466s (8m)",
+    tokens: 90000,
+    tokenLabel: "90K",
+    toolUses: 40,
+    worktree: false,
+    skills: ["/frameworks"],
+    filesRead: ["reference/framework-*.md"],
+    output: ".scratch/session-Z1IhGrcgGO/provenance-deep-research.md",
+    finding: "Deep research into Auftragstaktik origins (Prussian/German military doctrine), IDF adaptations, NATO C2, Toyota Production System, Cynefin, and OODA loop. Mapped which concepts the harness actually uses vs. merely references.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Deep provenance research. Trace the harness concepts to their original sources: (1) Auftragstaktik — original German military doctrine, key authors, evolution. (2) Schwerpunkt, Reibung — precise military meanings vs. harness usage. (3) IDF, NATO C2, Toyota, Cynefin, OODA — which concepts actually inform the harness vs. are merely name-dropped? Write to .scratch/session-Z1IhGrcgGO/provenance-deep-research.md."
+  },
+  {
+    id: 24,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Investigate why subagents couldn't write files",
+    description: "Write failure RCA",
+    status: "blocked",
+    statusLabel: "WRITE_BLOCKED",
+    statusClass: "blocked",
+    duration: 151,
+    durationLabel: "~151s",
+    tokens: 87000,
+    tokenLabel: "87K",
+    toolUses: 25,
+    worktree: false,
+    skills: [],
+    filesRead: [".claude/settings.json", ".claude/settings.local.json"],
+    output: null,
+    finding: "Investigated WRITE_BLOCKED failures but ironically reproduced the exact failure it was investigating. The RCA itself was blocked from writing.",
+    note: "Meta-failure: the agent investigating write blocks was itself write-blocked. Root cause analysis completed in-memory but could not be persisted.",
+    prompt: "You are S2 (Intelligence). Investigate why subagents are getting WRITE_BLOCKED errors. Check: (1) permission settings in .claude/settings*.json, (2) file system permissions on .scratch/, (3) any deny rules that might block writes. Root-cause the failure pattern. Write RCA to .scratch/session-Z1IhGrcgGO/write-failure-rca.md."
+  },
+  {
+    id: 25,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Graph analysis of 54-decision dependency structure (relaunch)",
+    description: "Briefing cluster analysis (relaunch)",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 248,
+    durationLabel: "~248s",
+    tokens: 111000,
+    tokenLabel: "111K",
+    toolUses: 10,
+    worktree: false,
+    skills: [],
+    filesRead: ["plans/planning-brief.md"],
+    output: ".scratch/session-Z1IhGrcgGO/briefing-cluster-analysis.md",
+    finding: "Successfully completed the 54-decision dependency graph analysis. Identified decision clusters, critical path, and recommended execution order for the planning brief.",
+    note: "Relaunch of Agent #21 with WRITE_BLOCKED signal in the prompt to help the agent work around permission issues.",
+    prompt: "You are S2 (Intelligence). IMPORTANT: Previous attempt was WRITE_BLOCKED. If you cannot write to the output path, report your findings inline. Perform graph analysis of the 54-decision dependency structure in the planning brief. Identify clusters, critical path, and execution order. Write to .scratch/session-Z1IhGrcgGO/briefing-cluster-analysis.md."
+  },
+  {
+    id: 26,
+    role: "s3",
+    roleLabel: "S3 (Operations)",
+    mission: "Write the complete handoff prompt from all session artifacts",
+    description: "Write handoff prompt",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 434,
+    durationLabel: "~434s (7m)",
+    tokens: 127000,
+    tokenLabel: "127K",
+    toolUses: 25,
+    worktree: false,
+    skills: ["/handoff"],
+    filesRead: [".scratch/session-Z1IhGrcgGO/*.md"],
+    output: ".scratch/session-Z1IhGrcgGO/handoff-prompt-draft.md",
+    finding: "Synthesized all session artifacts into a complete handoff prompt. Covered decisions made, artifacts produced, open questions, and continuation priorities.",
+    note: "Output later moved to plans/ as the canonical handoff prompt.",
+    prompt: "You are S3 (Operations). Write the complete handoff prompt synthesizing ALL session artifacts. Read every .md file in .scratch/session-Z1IhGrcgGO/. The handoff must cover: (1) what was decided, (2) what was produced, (3) what is open, (4) continuation priorities. Use /handoff skill conventions. Write to .scratch/session-Z1IhGrcgGO/handoff-prompt-draft.md."
+  },
+  {
+    id: 27,
+    role: "verifier",
+    roleLabel: "Verifier",
+    mission: "9-criteria verification of the handoff prompt",
+    description: "Verify handoff prompt (worktree)",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 219,
+    durationLabel: "~219s",
+    tokens: 86000,
+    tokenLabel: "86K",
+    toolUses: 22,
+    worktree: true,
+    skills: ["/handoff"],
+    filesRead: [".scratch/session-Z1IhGrcgGO/handoff-prompt-draft.md"],
+    output: ".scratch/session-Z1IhGrcgGO/handoff-verification.md",
+    finding: "Verified handoff prompt against 9 criteria. Found 7 amendments needed: missing cluster analysis reference, incomplete artifact inventory, and other gaps.",
+    note: "Ran in isolated worktree to prevent interference with main workspace.",
+    prompt: "You are a Verifier running in an isolated worktree. Verify the handoff prompt against 9 criteria: (1) completeness — all decisions covered? (2) accuracy — facts match source artifacts? (3) actionability — next session knows what to do? (4) context — enough background without re-reading everything? (5-9) additional quality gates. Write to .scratch/session-Z1IhGrcgGO/handoff-verification.md."
+  },
+  {
+    id: 28,
+    role: "s3",
+    roleLabel: "S3 (Operations)",
+    mission: "Apply verification amendments to handoff prompt",
+    description: "Apply 7 amendments",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 110,
+    durationLabel: "~110s",
+    tokens: 63000,
+    tokenLabel: "63K",
+    toolUses: 17,
+    worktree: false,
+    skills: [],
+    filesRead: [".scratch/session-Z1IhGrcgGO/handoff-verification.md", ".scratch/session-Z1IhGrcgGO/handoff-prompt-draft.md"],
+    output: ".scratch/session-Z1IhGrcgGO/handoff-prompt-draft.md",
+    finding: "Applied all 7 amendments identified by the verifier. Handoff prompt updated with cluster analysis reference, completed artifact inventory, and other fixes.",
+    note: null,
+    prompt: "You are S3 (Operations). Apply the 7 amendments from the verification report to the handoff prompt. Read both the verification results and the current draft. Apply each amendment precisely. Write updated draft to .scratch/session-Z1IhGrcgGO/handoff-prompt-draft.md."
+  },
+  {
+    id: 29,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Verify handoff Schwerpunkt against Reibung",
+    description: "Schwerpunkt assessment",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 249,
+    durationLabel: "~249s",
+    tokens: 106000,
+    tokenLabel: "106K",
+    toolUses: 26,
+    worktree: false,
+    skills: [],
+    filesRead: [".scratch/session-Z1IhGrcgGO/handoff-prompt-draft.md", ".scratch/session-Z1IhGrcgGO/provenance-deep-research.md"],
+    output: ".scratch/session-Z1IhGrcgGO/schwerpunkt-assessment.md",
+    finding: "Assessed Schwerpunkt (main effort) against Reibung (friction points). Found alignment but flagged scratch directory lifecycle as underspecified friction.",
+    note: "CAUTION: Made false claim 'scratch dirs are NOT auto-cleaned' that propagated through the downstream chain. This misinformation affected Agents #31, #37, #38.",
+    prompt: "You are S2 (Intelligence). Verify the handoff prompt's Schwerpunkt (main effort) against identified Reibung (friction). Is the Schwerpunkt correctly aimed at the biggest friction? Are there friction points the Schwerpunkt ignores? Write to .scratch/session-Z1IhGrcgGO/schwerpunkt-assessment.md."
+  },
+  {
+    id: 30,
+    role: "s3",
+    roleLabel: "S3 (Operations)",
+    mission: "Design, name, and build the /handoff skill",
+    description: "Design + build /handoff skill",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 196,
+    durationLabel: "~196s",
+    tokens: 75000,
+    tokenLabel: "75K",
+    toolUses: 19,
+    worktree: false,
+    skills: ["/glossary", "/frameworks"],
+    filesRead: ["shared/skills/*/SKILL.md", ".claude/rules/"],
+    output: "shared/skills/handoff/SKILL.md",
+    finding: "Designed and built the /handoff skill (523 lines). Covers session handoff generation, verification, and continuation. Established as a governed skill in the harness.",
+    note: "This is a permanent harness artifact — not a scratch file. 523 lines of skill definition.",
+    prompt: "You are S3 (Operations). Design and build the /handoff skill. Requirements: (1) generate handoff prompts from session artifacts, (2) verify handoff completeness, (3) support continuation in next session. Follow skill conventions from existing skills. Check /glossary for term governance. Check /frameworks for placement. Write to shared/skills/handoff/SKILL.md."
+  },
+  {
+    id: 31,
+    role: "verifier",
+    roleLabel: "Verifier",
+    mission: "Final verification including cluster analysis capture and /handoff skill",
+    description: "Re-verify handoff with cluster analysis (worktree)",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 267,
+    durationLabel: "~267s",
+    tokens: 97000,
+    tokenLabel: "97K",
+    toolUses: 30,
+    worktree: true,
+    skills: ["/handoff"],
+    filesRead: [".scratch/session-Z1IhGrcgGO/handoff-prompt-draft.md", ".scratch/session-Z1IhGrcgGO/briefing-cluster-analysis.md", "shared/skills/handoff/SKILL.md"],
+    output: ".scratch/session-Z1IhGrcgGO/handoff-final-verification.md",
+    finding: "Final verification of handoff prompt with cluster analysis and /handoff skill cross-check. Passed with minor findings.",
+    note: "Ran in isolated worktree. May have been influenced by Agent #29's false claim about scratch directories.",
+    prompt: "You are a Verifier in an isolated worktree. Final verification of the handoff prompt. Check: (1) cluster analysis is properly captured, (2) /handoff skill is referenced correctly, (3) all session artifacts are accounted for, (4) continuation priorities are actionable. Write to .scratch/session-Z1IhGrcgGO/handoff-final-verification.md."
+  },
+  {
+    id: 32,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Should the harness itself be in /tool-ops?",
+    description: "Aitools-in-tool-ops investigation",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 201,
+    durationLabel: "~201s",
+    tokens: 75000,
+    tokenLabel: "75K",
+    toolUses: 35,
+    worktree: false,
+    skills: ["/tool-ops"],
+    filesRead: ["reference/tool-ops.json", "reference/framework-tool-ops.md", ".claude/rules/tool-ops.md"],
+    output: ".scratch/session-Z1IhGrcgGO/aitools-in-tool-ops-investigation.md",
+    finding: "Concluded NO — aitools should NOT be in /tool-ops. 0 of 4 entry criteria met. The harness governs tools; it is not itself a managed tool in the same sense.",
+    note: "Clear negative finding: 0 of 4 criteria met. The investigation itself was valuable for clarifying the boundary.",
+    prompt: "You are S2 (Intelligence). Investigate: should the aitools harness itself be tracked in /tool-ops? Check the 4 entry criteria in the tool-ops framework. Evaluate each criterion against aitools. Use /tool-ops skill. Write to .scratch/session-Z1IhGrcgGO/aitools-in-tool-ops-investigation.md."
+  },
+  {
+    id: 33,
+    role: "s3",
+    roleLabel: "S3 (Operations)",
+    mission: "Add CI/CD findings to handoff prompt",
+    description: "Update handoff with CI/CD findings",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 98,
+    durationLabel: "~98s",
+    tokens: 49000,
+    tokenLabel: "49K",
+    toolUses: 11,
+    worktree: false,
+    skills: [],
+    filesRead: [".scratch/session-Z1IhGrcgGO/handoff-prompt-draft.md", ".scratch/session-Z1IhGrcgGO/harness-cicd-investigation.md"],
+    output: ".scratch/session-Z1IhGrcgGO/handoff-prompt-draft.md",
+    finding: "Added CI/CD investigation findings to the handoff prompt. Included bootstrap problem analysis and staged rollout recommendation.",
+    note: null,
+    prompt: "You are S3 (Operations). Update the handoff prompt with CI/CD findings from the harness-cicd-investigation. Add: bootstrap problem, feasibility assessment, staged rollout recommendation. Write to .scratch/session-Z1IhGrcgGO/handoff-prompt-draft.md."
+  },
+  {
+    id: 34,
+    role: "verifier",
+    roleLabel: "Verifier",
+    mission: "5-part verification including /tool-ops cross-check",
+    description: "Final verification with /tool-ops (worktree)",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 228,
+    durationLabel: "~228s",
+    tokens: 78000,
+    tokenLabel: "78K",
+    toolUses: 37,
+    worktree: true,
+    skills: ["/tool-ops", "/handoff"],
+    filesRead: [".scratch/session-Z1IhGrcgGO/handoff-prompt-draft.md", ".scratch/session-Z1IhGrcgGO/aitools-in-tool-ops-investigation.md"],
+    output: ".scratch/session-Z1IhGrcgGO/handoff-final-verification-v2.md",
+    finding: "5-part final verification passed. Confirmed /tool-ops findings are correctly integrated. Handoff prompt ready for deployment.",
+    note: "Ran in isolated worktree.",
+    prompt: "You are a Verifier in an isolated worktree. 5-part verification: (1) /tool-ops findings correctly captured, (2) CI/CD findings integrated, (3) no contradictions with harness rules, (4) continuation priorities ranked, (5) all artifacts referenced. Write to .scratch/session-Z1IhGrcgGO/handoff-final-verification-v2.md."
+  },
+  {
+    id: 35,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Bootstrap problem, harness self-verification architecture",
+    description: "Harness CI/CD investigation",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 376,
+    durationLabel: "~376s (6m)",
+    tokens: 90000,
+    tokenLabel: "90K",
+    toolUses: 27,
+    worktree: false,
+    skills: [],
+    filesRead: ["scripts/check-*.sh", ".github/"],
+    output: ".scratch/session-Z1IhGrcgGO/harness-cicd-investigation.md",
+    finding: "Investigated the bootstrap problem: the harness verifies itself using itself. Proposed self-verification architecture with staged rollout to break the circularity.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Investigate the harness CI/CD bootstrap problem: the harness uses itself for verification. How do you CI/CD a system that is its own test harness? Analyze: (1) what can be tested externally, (2) what requires self-reference, (3) staged rollout architecture. Write to .scratch/session-Z1IhGrcgGO/harness-cicd-investigation.md."
+  },
+  {
+    id: 36,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "GitHub Actions feasibility, staged rollout",
+    description: "CI/CD feasibility",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 273,
+    durationLabel: "~273s",
+    tokens: 91000,
+    tokenLabel: "91K",
+    toolUses: 52,
+    worktree: false,
+    skills: [],
+    filesRead: [".github/", "scripts/check-*.sh", "scripts/check-*.ps1"],
+    output: ".scratch/session-Z1IhGrcgGO/cicd-feasibility.md",
+    finding: "Assessed GitHub Actions feasibility for harness CI/CD. Identified which check scripts can run in CI vs. require local context. Proposed staged rollout: syntax checks first, then structural, then governance.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Assess GitHub Actions feasibility for harness CI/CD. For each check script: (1) can it run in CI? (2) what dependencies does it need? (3) what's the expected runtime? Propose a staged rollout plan. Write to .scratch/session-Z1IhGrcgGO/cicd-feasibility.md."
+  },
+  {
+    id: 37,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Why 3 verifications missed scratch deletion",
+    description: "Scratch deletion RCA",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 245,
+    durationLabel: "~245s",
+    tokens: 85000,
+    tokenLabel: "85K",
+    toolUses: 24,
+    worktree: false,
+    skills: [],
+    filesRead: [".scratch/", ".claude/rules/"],
+    output: ".scratch/session-Z1IhGrcgGO/scratch-deletion-rca.md",
+    finding: "Root-caused why 3 verifications missed the scratch deletion issue. Found verification prompts did not include scratch lifecycle checks — a gap in the verification criteria.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Root-cause analysis: why did 3 separate verifications miss the scratch deletion issue? Examine: (1) verification criteria — was scratch lifecycle included? (2) verifier prompts — did they ask about it? (3) systemic gap — what class of issues do verifications miss? Write to .scratch/session-Z1IhGrcgGO/scratch-deletion-rca.md."
+  },
+  {
+    id: 38,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Find every place scratch deletion should have been caught",
+    description: "Verification lifecycle gap audit",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 301,
+    durationLabel: "~301s (5m)",
+    tokens: 103000,
+    tokenLabel: "103K",
+    toolUses: 17,
+    worktree: false,
+    skills: [],
+    filesRead: [".claude/rules/", "shared/hooks/", ".scratch/session-Z1IhGrcgGO/scratch-deletion-rca.md"],
+    output: ".scratch/session-Z1IhGrcgGO/verification-lifecycle-gap-audit.md",
+    finding: "Identified every point where scratch deletion should have been caught: SessionEnd hook, /scratch skill, workspace rule, handoff verification criteria. Mapped the full gap chain.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Audit the verification lifecycle for the scratch deletion gap. Find every place in the harness where scratch directory deletion should have been caught: hooks, skills, rules, verification criteria, check scripts. Map the full gap chain. Write to .scratch/session-Z1IhGrcgGO/verification-lifecycle-gap-audit.md."
+  },
+  {
+    id: 39,
+    role: "s2",
+    roleLabel: "S2 (Intelligence)",
+    mission: "Should /handoff test session transitions? 5 options",
+    description: "Session transition testing design",
+    status: "completed",
+    statusLabel: "Completed",
+    statusClass: "completed",
+    duration: 225,
+    durationLabel: "~225s",
+    tokens: 64000,
+    tokenLabel: "64K",
+    toolUses: 19,
+    worktree: false,
+    skills: ["/handoff"],
+    filesRead: ["shared/skills/handoff/SKILL.md"],
+    output: ".scratch/session-Z1IhGrcgGO/session-transition-testing.md",
+    finding: "Evaluated 5 options for testing session transitions in /handoff. Recommended option 3: lightweight transition checklist embedded in the skill, not a separate test framework.",
+    note: null,
+    prompt: "You are S2 (Intelligence). Should /handoff test session transitions? Evaluate 5 options: (1) no testing, (2) manual checklist, (3) embedded transition check, (4) separate test skill, (5) full test framework. Recommend one with rationale. Write to .scratch/session-Z1IhGrcgGO/session-transition-testing.md."
+  },
+  {
+    id: 40,
+    role: "s3",
+    roleLabel: "S3 (Operations)",
+    mission: "Implement all 6 AAR proposals, fix handoff, file glossary terms",
+    description: "S3-executor: implement all /handoff fixes",
+    status: "partial",
+    statusLabel: "Partial",
+    statusClass: "partial",
+    duration: 827,
+    durationLabel: "~827s (14m)",
+    tokens: 132000,
+    tokenLabel: "132K",
+    toolUses: 83,
+    worktree: false,
+    skills: ["/handoff", "/glossary"],
+    filesRead: [".scratch/session-Z1IhGrcgGO/*.md", "shared/skills/handoff/SKILL.md", ".claude/rules/"],
+    output: "multiple files",
+    finding: "Modified 4 files successfully. 3 rule file modifications blocked by permissions. Partial completion — the executor completed the highest-priority changes.",
+    note: "Partial success: 4 files modified, 3 rule files blocked. The permission boundary prevented full completion of all 6 AAR proposals.",
+    prompt: "You are S3 (Operations) with full agency. Implement ALL 6 AAR proposals: (1) fix handoff prompt gaps, (2) update /handoff skill, (3) file new glossary terms, (4) update rules with scratch lifecycle, (5) add verification criteria for scratch, (6) update workspace rule. Modify files directly."
+  }
+];
+
+// ═══════════════════════════════════════════════════════════
+// COMPUTE STATS
+// ═══════════════════════════════════════════════════════════
+const totalAgents = agents.length;
+const totalTokens = agents.reduce((s, a) => s + a.tokens, 0);
+const totalDuration = agents.reduce((s, a) => s + a.duration, 0);
+const completedCount = agents.filter(a => a.status === "completed").length;
+const blockedCount = agents.filter(a => a.status === "blocked").length;
+const partialCount = agents.filter(a => a.status === "partial").length;
+const totalToolUses = agents.reduce((s, a) => s + a.toolUses, 0);
+const worktreeCount = agents.filter(a => a.worktree).length;
+
+function formatTokens(n) {
+  if (n === 0) return "n/a";
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+  if (n >= 1000) return Math.round(n / 1000) + "K";
+  return n.toString();
+}
+
+function formatDuration(s) {
+  if (s === 0) return "inline";
+  if (s >= 3600) return Math.floor(s/3600) + "h " + Math.floor((s%3600)/60) + "m";
+  if (s >= 60) return Math.floor(s/60) + "m " + (s%60) + "s";
+  return s + "s";
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER STATS BAR
+// ═══════════════════════════════════════════════════════════
+document.getElementById("statsBar").innerHTML = `
+  <div class="stat-card">
+    <div><div class="stat-value blue">${totalAgents}</div><div class="stat-label">Agents</div></div>
+  </div>
+  <div class="stat-card">
+    <div><div class="stat-value green">${completedCount}</div><div class="stat-label">Completed</div></div>
+  </div>
+  <div class="stat-card">
+    <div><div class="stat-value yellow">${blockedCount}</div><div class="stat-label">Blocked</div></div>
+  </div>
+  <div class="stat-card">
+    <div><div class="stat-value red">${partialCount}</div><div class="stat-label">Partial</div></div>
+  </div>
+  <div class="stat-card">
+    <div><div class="stat-value purple">${formatTokens(totalTokens)}</div><div class="stat-label">Tokens</div></div>
+  </div>
+  <div class="stat-card">
+    <div><div class="stat-value blue">${formatDuration(totalDuration)}</div><div class="stat-label">Total Time</div></div>
+  </div>
+  <div class="stat-card">
+    <div><div class="stat-value blue">${totalToolUses}</div><div class="stat-label">Tool Calls</div></div>
+  </div>
+  <div class="stat-card">
+    <div><div class="stat-value purple">${worktreeCount}</div><div class="stat-label">Worktrees</div></div>
+  </div>
+`;
+
+// ═══════════════════════════════════════════════════════════
+// RENDER TIMELINE
+// ═══════════════════════════════════════════════════════════
+function renderTimeline() {
+  const maxDur = Math.max(...agents.map(a => a.duration), 1);
+  const container = document.getElementById("timeline");
+
+  // Cumulative start positions (sequential for visualization)
+  let html = '<div class="timeline-bars">';
+  agents.forEach(a => {
+    const widthPct = a.duration === 0 ? 0.5 : (a.duration / maxDur) * 100;
+    const statusCls = a.status === "completed" ? "status-completed" :
+                      a.status === "blocked" ? "status-blocked" :
+                      a.status === "partial" ? "status-partial" :
+                      "status-inline";
+    html += `
+      <div class="timeline-row" data-agent-id="${a.id}">
+        <div class="timeline-bar-label">#${a.id}</div>
+        <div class="timeline-bar-track">
+          <div class="timeline-bar ${statusCls}"
+               style="left: 0; width: ${Math.max(widthPct, 0.4)}%;"
+               onclick="scrollToAgent(${a.id})">
+            <div class="tooltip">#${a.id} ${a.description} &mdash; ${a.durationLabel}, ${a.tokenLabel} tokens</div>
+          </div>
+        </div>
+      </div>`;
+  });
+  html += '</div>';
+
+  // Axis labels
+  html += `
+    <div class="timeline-axis"></div>
+    <div class="timeline-labels">
+      <span>0s</span>
+      <span>${formatDuration(Math.round(maxDur * 0.25))}</span>
+      <span>${formatDuration(Math.round(maxDur * 0.5))}</span>
+      <span>${formatDuration(Math.round(maxDur * 0.75))}</span>
+      <span>${formatDuration(maxDur)}</span>
+    </div>`;
+
+  container.innerHTML = html;
+}
+renderTimeline();
+
+// ═══════════════════════════════════════════════════════════
+// RENDER AGENT CARDS
+// ═══════════════════════════════════════════════════════════
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function renderAgents(filteredAgents) {
+  const container = document.getElementById("agentsList");
+  const noResults = document.getElementById("noResults");
+
+  if (filteredAgents.length === 0) {
+    container.innerHTML = "";
+    noResults.classList.remove("hidden");
+    return;
+  }
+  noResults.classList.add("hidden");
+
+  container.innerHTML = filteredAgents.map(a => {
+    const roleCls = a.role === "s2" ? "role-s2" : a.role === "s3" ? "role-s3" : "role-verifier";
+    const statusCls = a.status === "completed" ? "completed" :
+                      a.status === "blocked" ? "blocked" :
+                      a.status === "partial" ? "partial" : "inline";
+
+    const skillsHtml = a.skills.length > 0
+      ? a.skills.map(s => `<span class="skill-tag">${escapeHtml(s)}</span>`).join("")
+      : '<span style="color: var(--text-muted); font-size: 0.8rem;">none</span>';
+
+    const filesHtml = a.filesRead.length > 0
+      ? a.filesRead.map(f => `<span class="file-path">${escapeHtml(f)}</span>`).join("")
+      : '<span style="color: var(--text-muted); font-size: 0.8rem;">none specified</span>';
+
+    const outputHtml = a.output
+      ? `<span class="file-path">${escapeHtml(a.output)}</span>`
+      : '<span style="color: var(--text-muted); font-size: 0.8rem;">no file output</span>';
+
+    const noteHtml = a.note
+      ? `<div class="note-text">${escapeHtml(a.note)}</div>`
+      : "";
+
+    const worktreeBadge = a.worktree
+      ? ' <span class="worktree-badge">worktree</span>'
+      : "";
+
+    return `
+    <div class="agent-card" id="agent-${a.id}" data-role="${a.role}" data-status="${a.status}">
+      <div class="agent-card-header" onclick="toggleCard(${a.id})">
+        <div class="agent-number ${roleCls}">${a.id}</div>
+        <div class="agent-info">
+          <div class="agent-title-row">
+            <span class="agent-mission">${escapeHtml(a.mission)}</span>
+            <span class="agent-role-badge ${roleCls}">${escapeHtml(a.roleLabel)}</span>
+            ${worktreeBadge}
+          </div>
+          <div class="agent-meta">
+            <span class="agent-meta-item"><span class="icon">&#9202;</span> ${a.durationLabel}</span>
+            <span class="agent-meta-item"><span class="icon">&#9881;</span> ${a.tokenLabel} tokens</span>
+            <span class="agent-meta-item"><span class="icon">&#9874;</span> ${a.toolUses} tools</span>
+          </div>
+        </div>
+        <div class="agent-status">
+          <span class="status-badge ${statusCls}">${a.statusLabel}</span>
+          <span class="expand-icon">&#9654;</span>
+        </div>
+      </div>
+      <div class="agent-detail">
+        <div class="detail-grid">
+          <div class="detail-section">
+            <div class="detail-section-title">Skills Used</div>
+            <div class="detail-section-content">${skillsHtml}</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-section-title">Output</div>
+            <div class="detail-section-content mono">${outputHtml}</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-section-title">Files Instructed to Read</div>
+            <div class="detail-section-content mono">${filesHtml}</div>
+          </div>
+          <div class="detail-section">
+            <div class="detail-section-title">Metrics</div>
+            <div class="detail-section-content mono">
+              Duration: ${a.durationLabel}<br>
+              Tokens: ${a.tokenLabel}<br>
+              Tool calls: ${a.toolUses}<br>
+              Worktree: ${a.worktree ? "yes" : "no"}
+            </div>
+          </div>
+          <div class="detail-section full-width">
+            <div class="detail-section-title">Key Finding</div>
+            <div class="finding-text">${escapeHtml(a.finding)}</div>
+            ${noteHtml}
+          </div>
+        </div>
+        <div class="prompt-section">
+          <div class="prompt-toggle" onclick="togglePrompt(event, ${a.id})">
+            <span class="arrow">&#9654;</span> Delegation Prompt
+          </div>
+          <div class="prompt-content" id="prompt-${a.id}">${escapeHtml(a.prompt)}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+renderAgents(agents);
+
+// ═══════════════════════════════════════════════════════════
+// INTERACTIONS
+// ═══════════════════════════════════════════════════════════
+function toggleCard(id) {
+  const card = document.getElementById(`agent-${id}`);
+  card.classList.toggle("expanded");
+}
+
+function togglePrompt(event, id) {
+  event.stopPropagation();
+  const toggle = event.currentTarget;
+  const content = document.getElementById(`prompt-${id}`);
+  toggle.classList.toggle("open");
+  content.classList.toggle("open");
+}
+
+function scrollToAgent(id) {
+  const card = document.getElementById(`agent-${id}`);
+  if (card) {
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+    card.classList.add("highlight");
+    setTimeout(() => card.classList.remove("highlight"), 2000);
+  }
+}
+
+// ── Filters ──
+let activeRole = "all";
+let activeStatus = "all";
+let searchQuery = "";
+
+function applyFilters() {
+  let filtered = agents;
+
+  if (activeRole !== "all") {
+    filtered = filtered.filter(a => a.role === activeRole);
+  }
+  if (activeStatus !== "all") {
+    filtered = filtered.filter(a => a.status === activeStatus);
+  }
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    filtered = filtered.filter(a =>
+      a.mission.toLowerCase().includes(q) ||
+      a.description.toLowerCase().includes(q) ||
+      a.finding.toLowerCase().includes(q) ||
+      a.prompt.toLowerCase().includes(q) ||
+      a.roleLabel.toLowerCase().includes(q) ||
+      (a.output && a.output.toLowerCase().includes(q)) ||
+      (a.note && a.note.toLowerCase().includes(q)) ||
+      a.skills.some(s => s.toLowerCase().includes(q)) ||
+      a.filesRead.some(f => f.toLowerCase().includes(q))
+    );
+  }
+
+  renderAgents(filtered);
+
+  // Update timeline visibility
+  document.querySelectorAll(".timeline-row").forEach(row => {
+    const id = parseInt(row.dataset.agentId);
+    const visible = filtered.some(a => a.id === id);
+    row.style.display = visible ? "flex" : "none";
+  });
+}
+
+document.querySelectorAll("#roleFilters .filter-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#roleFilters .filter-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    activeRole = btn.dataset.role;
+    applyFilters();
+  });
+});
+
+document.querySelectorAll("#statusFilters .filter-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#statusFilters .filter-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    activeStatus = btn.dataset.status;
+    applyFilters();
+  });
+});
+
+document.getElementById("searchBox").addEventListener("input", (e) => {
+  searchQuery = e.target.value;
+  applyFilters();
+});
+
+document.getElementById("expandAll").addEventListener("click", () => {
+  document.querySelectorAll(".agent-card").forEach(c => c.classList.add("expanded"));
+});
+
+document.getElementById("collapseAll").addEventListener("click", () => {
+  document.querySelectorAll(".agent-card").forEach(c => c.classList.remove("expanded"));
+});
+
+// ── Keyboard shortcut ──
+document.addEventListener("keydown", (e) => {
+  if (e.key === "/" && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== "INPUT") {
+    e.preventDefault();
+    document.getElementById("searchBox").focus();
+  }
+  if (e.key === "Escape") {
+    document.getElementById("searchBox").blur();
+    document.getElementById("searchBox").value = "";
+    searchQuery = "";
+    applyFilters();
+  }
+});
+</script>
+</body>
+</html>
