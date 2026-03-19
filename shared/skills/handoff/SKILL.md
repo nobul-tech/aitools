@@ -1,18 +1,19 @@
 ---
 name: handoff
 description: "End a session by producing a verified handoff prompt for the
-  next session. Use when ending a session, context is getting large, switching
-  machines, or significant work products need to carry forward. Orchestrates
-  audit, assessment, writing, and verification via subagents."
+  the accepting session. Use when ending a session, context is getting large,
+  switching machines, or significant work products need to carry forward.
+  Orchestrates audit, assessment, writing, and verification via subagents."
 ---
 
 ## Intent
 
 Produce a verified handoff prompt that captures everything from the current
 session -- decisions made, work products, open threads, and scope governance
-for the next session. The handoff is a self-contained document that a fresh
-agent can read and continue from without access to the current conversation
-transcript.
+for the accepting session. The handoff is a self-contained document that a
+fresh agent can read and continue from without access to the current
+conversation transcript. The accepting session is not necessarily the next
+chronological session -- intermediate sessions may intervene.
 
 NOT for mid-session checkpoints (commit and continue). NOT for artifact
 harvesting (see `/harvest` skill). NOT for session planning (see `/planning`
@@ -26,7 +27,7 @@ Invoke `/handoff` when ANY of these conditions arise:
 - User says `/handoff` or asks to wrap up the session
 - Context usage exceeds 60% and significant work remains
 - Session has uncommitted decisions, investigations, or work products
-  that a fresh session would need
+  that the accepting session would need
 - User is switching machines (work must carry forward via git)
 - Session has been running 3+ hours with multiple work streams
 
@@ -36,8 +37,8 @@ This skill applies four concepts from German military doctrine. They are
 used as thinking tools, not formal frameworks:
 
 - **Schwerpunkt** (point of main effort): Every handoff declares a single
-  decisive objective for the next session. There is exactly one. Work that
-  does not serve it is deferred or excluded.
+  decisive objective for the accepting session. There is exactly one. Work
+  that does not serve it is deferred or excluded.
 - **Lagebeurteilung** (situation assessment): Structured assessment of
   session state before writing the handoff. Walks through specific
   categories (forces, terrain, time, logistics) rather than free-form
@@ -48,8 +49,8 @@ used as thinking tools, not formal frameworks:
   planned for, not ignored.
 - **Mitdenken** (thinking along): The skill thinks about the USER's
   intent, not just the mechanical steps. If the user wants to hand off
-  plan-writing, the skill ensures the next session can write the plan --
-  not just that it has a list of decisions.
+  plan-writing, the skill ensures the accepting session can write the
+  plan -- not just that it has a list of decisions.
 
 ## Prerequisites
 
@@ -80,14 +81,14 @@ the handoff itself.
 **If not**: Ask the user:
 
 > "What's the Schwerpunkt for this handoff? What is the single most
-> important thing the next session must be able to do?"
+> important thing the accepting session must be able to do?"
 
 Suggest an answer based on what the session produced. Examples:
 - "Continue implementing the approved decisions from this session"
 - "Write the plan file using the brief and investigation products"
 - "Fix the bugs found in post-push verification"
 
-The Schwerpunkt for the handoff PROCESS (not the next session) is always:
+The Schwerpunkt for the handoff PROCESS (not the accepting session) is always:
 "Produce a verified handoff prompt that captures everything from this
 session, enabling a fresh session to continue with clear context."
 
@@ -144,13 +145,13 @@ agent (foreground has Write access).
 ### Step 3: Lagebeurteilung (situation assessment)
 
 Launch an S2 subagent to assess whether the handoff is achievable and
-propose the next session's Schwerpunkt.
+propose the accepting session's Schwerpunkt.
 
 **Delegation prompt template:**
 
 ```
 You are S2 (Intelligence). Your task: assess the feasibility of
-producing a handoff prompt for this session and propose the next
+producing a handoff prompt for this session and propose the accepting
 session's Schwerpunkt.
 
 Read: [SESSION_DIR]/session-state-audit.md
@@ -166,6 +167,14 @@ Produce a structured assessment with these sections:
    - 1.3 Time: session constraints, depleting resources, deadlines
    - 1.4 Logistics: infrastructure state (briefs, plans, manifests,
      configs -- what is current vs stale)
+   - 1.5 Assumptions: what is this session assuming that has not been
+     verified? For each assumption: what was assumed, who assumed it,
+     when, what is the impact if falsified? Surface assumptions
+     explicitly -- they are invisible until failure unless tracked.
+     Categories to check: artifact persistence (will files survive
+     session end?), tool behavior (do subagents have Write access?),
+     accepting session state (will the handoff be the next thing
+     read?), infrastructure (are referenced tools/configs available?)
 
 2. **Reibung inventory** (friction analysis):
    - Critical friction: what makes this handoff hard?
@@ -185,10 +194,13 @@ Produce a structured assessment with these sections:
    handoff prompt, based on the session's content and the Reibung
    analysis.
 
-6. **Recommended Schwerpunkt for the NEXT session**: the single most
-   important objective, with a priority sequence (waves).
+6. **Recommended Schwerpunkt for the ACCEPTING session**: the single
+   most important objective, with a priority sequence. The accepting
+   session should first re-assess the running estimate before executing,
+   especially if intermediate sessions have occurred since this handoff
+   was written.
 
-7. **Exclusion clauses**: what the next session must NOT do. Include
+7. **Exclusion clauses**: what the accepting session must NOT do. Include
    hard exclusions (require formal override to change) and soft
    exclusions (allowed if naturally encountered). Each exclusion
    must have specific rationale.
@@ -224,18 +236,26 @@ Read these files IN ORDER:
 3. [EXISTING_HANDOFF_PATH] (if one exists -- check plans/*/handoff-prompt.md)
 4. Any planning brief referenced in the assessment
 
-The handoff prompt MUST be self-contained: a fresh agent reading ONLY
-this document must understand what to do, what was decided, and what
-NOT to do. Files referenced for depth reading are supplementary.
+The handoff prompt MUST be self-contained: the accepting session's
+agent reading ONLY this document must understand what to do, what was
+decided, and what NOT to do. Files referenced for depth reading are
+supplementary. If intermediate sessions have occurred since this
+handoff was written, the accepting session should re-assess the
+running estimate before executing the Schwerpunkt.
 
 Use a layered content strategy:
-- **Layer 1 (in the handoff)**: everything the receiving agent needs
+- **Layer 1 (in the handoff)**: everything the accepting session needs
   WITHOUT reading any other file. All decisions, their essential content,
   the Schwerpunkt, exclusions, and the first actions to take.
 - **Layer 2 (referenced files)**: full investigation depth, provenance
   research, barrier analyses. Read on demand when entering a work stream.
 - **Layer 3 (background)**: planning brief, session transcripts,
   framework references. Read only to trace a decision's origin.
+
+Include a staleness note: "If intermediate sessions have occurred
+since this handoff was written, re-assess the running estimate before
+executing. The assumptions in this handoff were valid at write time
+but may have been falsified by subsequent work."
 
 Required sections (adapt labels to fit the content):
 
@@ -251,8 +271,10 @@ C. **Session chain**: table of sessions that produced this state.
 D. **What this session built**: committed work, approved decisions with
    enough detail to implement them, investigation products.
 
-E. **Schwerpunkt for the next session**: the single decisive objective.
-   Priority sequence (waves). What to do first.
+E. **Schwerpunkt for the accepting session**: the single decisive
+   objective. Priority sequence. What to do first. The accepting
+   session should first re-assess the running estimate, especially
+   if intermediate sessions have occurred.
 
 F. **Exclusion clauses**: hard and soft exclusions. FRAGORD requirement
    for out-of-scope work.
@@ -276,13 +298,27 @@ Verify before writing:
 - Cross-references between sections use unambiguous labels
 
 Write the handoff to: [HANDOFF_PATH]
-(Use the location from the schwerpunkt-assessment, or the existing
-handoff path if updating. The handoff MUST be written to a PERMANENT
-tracked location — never to session scratch. Scratch directories are
-deleted by the SessionEnd hook (harvest-session.sh lines 165-166).
-A handoff in scratch will not survive the session it was created in.
-Typical locations: plans/<briefing-name>/handoff-prompt.md or
-.aitools/briefings/<name>/handoff-prompt.md)
+
+Path pattern: `plans/<briefing-name>/handoff-<session-date>_<session-prefix>.md`
+(e.g., `plans/mission-command-briefing/handoff-2026-03-19_Z1IhGrcgGO.md`)
+
+When `.aitools/channel/handoffs/` becomes tracked (after .gitignore
+restructuring), the canonical path will be:
+`.aitools/channel/handoffs/<session-date>_<session-prefix>.md`
+
+Until then, use `plans/<briefing-name>/handoff-prompt.md` (single
+handoff per briefing, updated in place) or the pattern above (one
+handoff per session, accumulating).
+
+The handoff MUST be written to a PERMANENT tracked location — never
+to session scratch. Scratch directories are deleted by the SessionEnd
+hook (harvest-session.sh lines 164-166). A handoff in scratch will
+not survive the session it was created in.
+
+SessionStart discovery: when a session starts, it should check for
+available handoffs and announce their presence. This enables the
+accepting session to discover handoffs without prior knowledge of
+their existence.
 
 CRITICAL: If Write is denied, output "WRITE_BLOCKED" as the first line
 of your response and include the full handoff content in your response
@@ -313,10 +349,10 @@ Read the schwerpunkt assessment at: [SESSION_DIR]/schwerpunkt-assessment.md
 
 Test these 9 criteria:
 
-1. **Self-containment**: Can a fresh agent understand the mission without
-   reading any other file? Are approved decisions clear enough to
-   implement without re-deriving? If scratch files were deleted, would
-   the inlined content suffice for the first wave of work?
+1. **Self-containment**: Can the accepting session's agent understand the
+   mission without reading any other file? Are approved decisions clear
+   enough to implement without re-deriving? If scratch files were
+   deleted, would the inlined content suffice for the first actions?
 
 2. **Reference integrity**: Does every file path referenced in the
    handoff exist on disk? Read each path to verify. Report any broken
@@ -426,8 +462,8 @@ Show the user a summary of the handoff. Do NOT paste the entire handoff
 into the conversation (it may be large). Instead, present:
 
 1. **Where the handoff is**: file path
-2. **Schwerpunkt for the next session**: the single decisive objective
-3. **Exclusion clauses**: what the next session must not do (summary)
+2. **Schwerpunkt for the accepting session**: the single decisive objective
+3. **Exclusion clauses**: what the accepting session must not do (summary)
 4. **Verification verdict**: READY (with any notes)
 5. **Open items needing user decision**: anything the handoff flagged
    as requiring user input before committing
@@ -458,28 +494,43 @@ If the user approves:
 
 3. **Push** if the user requests it (both repos if dotprofile applies).
 
-4. **Report**: state what was committed, what the next session should
-   read first, and the Schwerpunkt.
+4. **Report**: state what was committed, what the accepting session
+   should read first, and the Schwerpunkt.
 
 ---
 
 ## Delegation duty
 
-Every subagent launch in this workflow must follow the delegation duty:
+Every subagent launch in this workflow must follow the delegation duty.
+The delegating agent (not a fixed "S3" -- any agent that launches a
+subagent or produces a handoff) bears this duty. It is recursive per
+decision #7: when the delegating agent is itself a subagent, it
+inherits the duty from its parent.
 
 1. **Identity**: Name the subagent role (S2, S3, Verifier)
 2. **Context**: List every file the subagent must read, in order
 3. **Output**: Name the exact file the subagent must write
 4. **WRITE_BLOCKED signal**: Every delegation prompt must include the
    WRITE_BLOCKED instruction. Background subagents may be auto-denied
-   Write permissions. If this happens, the main agent writes the content
-   from the subagent's response.
+   Write permissions. If this happens, the delegating agent writes the
+   content from the subagent's response.
 5. **Foreground for file-writing**: If a subagent must write files,
    launch it in the foreground (not `run_in_background`). Background
    subagents cannot get Write approval from the user.
 6. **Verify output exists**: After every subagent completes, check that
    the output file was actually written. If not and WRITE_BLOCKED was
-   returned, write it from the main agent.
+   returned, write it from the delegating agent.
+7. **Prior results**: What earlier subagents produced that this one
+   should know about.
+8. **What comes after**: What depends on this subagent's output.
+9. **Lifecycle transition awareness**: The delegating agent must verify
+   that all artifacts produced by the subagent will survive lifecycle
+   transitions. Files in `.scratch/` are deleted by the SessionEnd
+   hook. Handoffs, carry-forward state, and any artifact that must
+   persist MUST be written to a permanent tracked location (`plans/`,
+   `reference/`, `.aitools/channel/`). If the subagent writes to
+   scratch, the delegating agent must move the artifact to a permanent
+   location before the session ends.
 
 ## Handoff quality criteria
 
@@ -487,7 +538,7 @@ A good handoff prompt satisfies all of these:
 
 | Criterion | What it means |
 |-----------|---------------|
-| **Self-contained** | A fresh agent can understand the mission from the handoff alone |
+| **Self-contained** | The accepting session can understand the mission from the handoff alone |
 | **Layered** | Essential content is inline; depth is by reference |
 | **Scope-governed** | Schwerpunkt declares focus; exclusions prevent drift |
 | **Actionable** | First actions are specific and achievable |
@@ -523,13 +574,47 @@ This skill works in any project. The sections and depth adapt:
   scratch is deleted by the SessionEnd hook.
 - The user decides the final location if the agent is unsure
 
+## Lagebeurteilung as general-purpose capability
+
+The Lagebeurteilung categories (Forces, Terrain, Time, Logistics,
+Assumptions) are not specific to handoffs. They apply at any
+transition point where context may be lost or assumptions may fail.
+
+### Where Lagebeurteilung walkthroughs are needed
+
+| Transition point | Why | Key categories |
+|-----------------|-----|----------------|
+| **Session end** (handoff) | Full context transfer | All five |
+| **Session start** | Assess inherited state, detect drift | Forces (what exists), Terrain (what changed), Assumptions (what prior session assumed) |
+| **Delegation** (subagent launch) | Subagent lacks parent context | Terrain (context gap), Logistics (what files exist), Assumptions (Write access, scratch persistence) |
+| **Batch boundary** (plan execution) | Fresh subagent per batch | Forces (what prior batches produced), Time (remaining work), Assumptions (prior batch correctness) |
+| **Incident response** | Rapid situation assessment | Forces (what is broken), Time (urgency), Logistics (what tools/access available) |
+
+### Walkthrough protocol
+
+At each transition point, the agent walks through the applicable
+categories and asks "what are you assuming?" for each. The assumption
+flush is the most valuable step -- 8 of 8 false assumptions in the
+exit-code-1 investigation would have been caught by an explicit
+walkthrough.
+
+Each assumption gets tracked with:
+- What is assumed
+- Who assumed it (agent identity)
+- When (session timestamp)
+- Status: unverified (default) / verified (confirmed) / falsified (contradicted)
+- Impact if falsified
+
 ## Cross-References
 
 - Session planning: `/planning` skill
-- Scratch files: `/scratch` skill
+- Scratch files: `/scratch` skill (includes lifecycle warning)
 - Investigation methodology: `/investigate` skill
 - Intent writing: `/intent-writing` skill (for intent on new files)
 - Delegation evolution: `plans/mission-command-briefing/delegation-evolution.md`
   (how delegation duty was developed through 7 user interventions)
 - Handoff exemplar: `plans/mission-command-briefing/handoff-prompt.md`
   (the first handoff produced by this workflow)
+- Governed vocabulary: `/glossary` skill (terms: handoff, accepting
+  session, delegating agent, lifecycle transition, assumption,
+  Schwerpunkt, Lagebeurteilung, Reibung, Mitdenken, Auftrag)

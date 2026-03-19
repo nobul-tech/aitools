@@ -37,6 +37,7 @@ Project-scoped (`<repo>/.aitools/`):
 | `scratch/` | gitignored | Session-ephemeral working files |
 | `channel/session-*/` | gitignored | Session-ephemeral messages (SITREPs, FINDINGs) |
 | `channel/running-estimate.json` | tracked | Carry-forward state between sessions and machines |
+| `channel/handoffs/` | tracked | Handoff prompts from completed sessions (see `/handoff` skill) |
 | `harvesting/` | tracked | Artifact lifecycle — candidates for harness promotion |
 
 User-scoped (`~/.aitools/`):

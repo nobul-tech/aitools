@@ -92,6 +92,24 @@ SCRIPT
 bash "$SESSION_DIR/task.sh"
 ```
 
+## Scratch lifecycle warning
+
+**Files in scratch are DELETED by the SessionEnd hook
+(`harvest-session.sh`).** Non-ephemeral `.md` files are copied to
+`harvesting/` with a date prefix (e.g.,
+`harvesting/2026-03-19_filename.md`) before deletion. All other
+files are deleted without backup.
+
+**Never put carry-forward artifacts in scratch.** Handoff prompts,
+planning briefs, running estimates, and any artifact that must
+survive the session MUST be written to a permanent tracked location
+(`plans/`, `reference/`, `.aitools/channel/`). A handoff written to
+scratch will not survive the session that created it.
+
+The scratch directory itself (`session-XXXXXXXXXX/`) is removed by
+`rm -rf` after harvesting completes (lines 164-166 of
+`harvest-session.sh`).
+
 ## What goes in .scratch/
 
 **Ephemeral (deleted at session end):**

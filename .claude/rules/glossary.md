@@ -92,6 +92,20 @@ user standing order
 USO
 verified
 
+accepting session
+assumption
+Auftrag
+blast radius
+blocker
+cross-boundary
+delegating agent
+handoff
+Lagebeurteilung
+lifecycle transition
+Mitdenken
+Reibung
+Schwerpunkt
+
 ### When to invoke /glossary
 
 Invoke the `/glossary` skill (not the raw JSON file) when ANY of

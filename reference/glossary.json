@@ -7,7 +7,7 @@
       "scope": "Definitions, facets, and abbreviation mappings only. NOT the word list (glossary rule). NOT the composition convention (framework-governed-vocabulary.md). NOT usage guidance (/glossary skill)",
       "audience": "/glossary skill, /audit skill, agents resolving terminology questions"
     },
-    "lastUpdated": "2026-03-15"
+    "lastUpdated": "2026-03-19"
   },
   "facets": {
     "scopeModifiers": {
@@ -307,6 +307,58 @@
     },
     "USO": {
       "abbreviationOf": "user standing order"
+    },
+    "accepting session": {
+      "definition": "The session that reads a handoff prompt and continues the work. Not necessarily the next chronological session — intermediate sessions may intervene. The accepting session re-assesses the running estimate before executing the handoff's Schwerpunkt. Distinct from the session that produced the handoff (the delegating session).",
+      "source": "shared/skills/handoff/SKILL.md"
+    },
+    "assumption": {
+      "definition": "An unverified belief held by an agent during a session that influences decisions or plans. Assumptions are invisible until failure unless explicitly tracked. Lifecycle: unverified (default when surfaced), verified (confirmed against evidence, becomes a fact), falsified (contradicted by evidence, becomes a finding). Tracked in running estimates (session-level) and planning briefs (plan-level).",
+      "source": "shared/skills/handoff/SKILL.md"
+    },
+    "Auftrag": {
+      "definition": "Mission or mission-type order. The commander's intent expressed as the objective to achieve, not the method to use. From German military doctrine (Auftragstaktik). Used informally in the harness as a thinking tool — not a formal framework. The delegating agent states the Auftrag; the accepting agent determines how to achieve it.",
+      "source": "harvesting/2026-03-19_aar-exit-code-investigation.md"
+    },
+    "blocker": {
+      "definition": "A dependency that prevents work from proceeding. An open thread classified as BLOCKED has at least one blocker. Distinguished from deferred (could proceed but is deprioritized) and ready (can execute now). A blocker names the specific dependency that must be resolved.",
+      "source": "shared/skills/handoff/SKILL.md"
+    },
+    "blast radius": {
+      "definition": "The scope of impact when a change propagates through the harness. Used in exclusion clause rationale to justify deferral: changes with large blast radius (many affected files, cross-cutting references) require dedicated plan batches rather than ad-hoc execution. Adapted from incident response terminology.",
+      "source": "shared/skills/handoff/SKILL.md"
+    },
+    "cross-boundary": {
+      "definition": "Spanning a context boundary — between sessions, between agents (delegation), between machines, or between plan batches. Cross-boundary transitions are where assumptions fail because the receiving context does not inherit the sending context's state. Every delegation and every handoff is a cross-boundary transition.",
+      "source": "shared/skills/handoff/SKILL.md"
+    },
+    "delegating agent": {
+      "definition": "The agent that launches a subagent or produces a handoff for a future session. The delegating agent bears the delegation duty: inspecting output, verifying assumptions, ensuring lifecycle survival of artifacts. Recursive per decision #7 — when the delegating agent is itself a subagent, it inherits the duty from its parent. Replaces the fixed 'S3' reference in delegation contexts.",
+      "source": "shared/skills/handoff/SKILL.md"
+    },
+    "handoff": {
+      "definition": "Two distinct meanings distinguished by context: (1) handoff prompt — the self-contained document written at session end that enables a fresh agent to continue work. A file artifact written to a permanent tracked location. (2) handoff process — the 8-step workflow (Schwerpunkt declaration through commit) governed by the /handoff skill. The process produces the prompt. When ambiguous, use 'handoff prompt' or 'handoff process' explicitly.",
+      "source": "shared/skills/handoff/SKILL.md"
+    },
+    "Lagebeurteilung": {
+      "definition": "Situation assessment with fixed categories examined every time, even if nothing changed. From German Bundeswehr doctrine. Categories adapted per transition type: Forces (artifacts, state, decisions), Terrain (transition mechanism, constraints), Time (deadlines, imminence), Logistics (what must survive). Used in the /handoff skill (step 3) and generalizable to any transition point: incident response, session end, delegation, batch boundaries, session start.",
+      "source": "shared/skills/handoff/SKILL.md"
+    },
+    "lifecycle transition": {
+      "definition": "A point where artifacts, state, or context cross a boundary that may not preserve them. Examples: session end (scratch deleted by SessionEnd hook), delegation (subagent lacks parent context), machine switch (only git-tracked data survives), plan batch boundary (fresh subagent per batch). The delegating agent must verify artifact survival at every lifecycle transition.",
+      "source": "shared/skills/handoff/SKILL.md"
+    },
+    "Mitdenken": {
+      "definition": "Thinking along — agents actively model the superior's (or user's) decision space rather than mechanically executing tasks. From German military doctrine. The agent connects findings to higher-level decisions, anticipates needs, and surfaces implications. Used informally in the harness as a thinking tool — not a formal framework.",
+      "source": "harvesting/2026-03-19_aar-exit-code-investigation.md"
+    },
+    "Reibung": {
+      "definition": "Friction — the accumulation of small difficulties that makes execution harder than planning suggests. From Clausewitz (Vom Kriege). In the harness, used as a structured inventory of what makes a transition or execution difficult: large scratch directories, decisions existing only in conversation, dependency chains, context constraints. Friction is planned for, not ignored.",
+      "source": "shared/skills/handoff/SKILL.md"
+    },
+    "Schwerpunkt": {
+      "definition": "Point of main effort — a singular decisive objective that concentrates effort and forces prioritization. From German military doctrine (Clausewitz, Bundeswehr). Every scope-bearing artifact (handoff, plan, delegation briefing) declares exactly one Schwerpunkt. Work that does not serve it is deferred or excluded. Used informally in the harness as a thinking tool — not a formal framework.",
+      "source": "shared/skills/handoff/SKILL.md"
     }
   }
 }

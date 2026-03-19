@@ -3,7 +3,8 @@
 **Intent**: **Purpose**: Govern how harness deficiencies are filed,
 classified, tracked, and resolved — the operational process for the
 surfacing duty. **Scope**: Filing process, severity classification,
-lifecycle states, surfacing duty, staleness rules, hook specifications.
+lifecycle states, surfacing duty, ambiguity routing, staleness rules,
+hook specifications.
 NOT the incident data itself (`/incident` skill). NOT the framework
 documentation (`reference/framework-incident-governance.md`). NOT
 incident reference files (`reference/incident-*.md`). **Audience**:
@@ -28,6 +29,7 @@ ambiguities, and operational incidents requiring root cause analysis.
 | Specific bug with repro | GitHub issue (`gh issue create`) |
 | Process improvement | `ROADMAP.md` or RFC |
 | Tool evaluation | `/tool-eval` skill |
+| Terminological ambiguity | `/glossary` skill (see ambiguity routing) |
 
 ### Decision tree
 
@@ -36,8 +38,9 @@ ambiguities, and operational incidents requiring root cause analysis.
    - **Yes, but spec is unclear** → Incident (ambiguity)
    - **No spec exists for a common decision** → Incident (governance ambiguity)
 2. Something went wrong in production with real impact? → Incident (operational)
-3. One-off bug with repro steps? → GitHub issue
-4. Feature we want but haven't built? → Roadmap item
+3. A term has multiple meanings, or a key concept has no definition? → `/glossary` skill
+4. One-off bug with repro steps? → GitHub issue
+5. Feature we want but haven't built? → Roadmap item
 
 ### Required fields
 
@@ -132,17 +135,29 @@ No "in progress" state — the linked plan or roadmap item tracks that.
 
 ### Surfacing duty
 
-Every planning and coding session must actively look for incidents.
+Every planning and coding session must actively look for deficiencies.
 This is continuous, not periodic:
 
 - Reading a rule? Is it clear? Could it be read two ways?
 - Following a cross-reference? Does the target exist and match?
 - Making a decision with no rule? Is that a governance incident?
 - Something broke in production? File with root cause analysis.
+- Using a term? Is the meaning clear and consistent across the harness?
 
-Found something? File it via the `/incident` skill or leave a `TODO(incident):`
-comment in the current file if mid-task. The `/audit` skill scans for
-unfiled `TODO(incident):` markers.
+#### Ambiguity routing
+
+Found something? Route it by type:
+
+- **Terminological ambiguity** (a term has multiple meanings, two
+  terms mean the same thing, or a key concept has no governed
+  definition): file via the `/glossary` skill.
+- **Structural ambiguity** (a spec is unclear, contradictory, or
+  missing; code deviates from spec; an operational incident
+  occurred): file via the `/incident` skill.
+
+If mid-task and cannot file immediately, leave a `TODO(incident):`
+or `TODO(glossary):` comment in the current file. The `/audit` skill
+scans for unfiled markers.
 
 ### Staleness
 
@@ -170,7 +185,7 @@ Accept the rare race rather than over-engineering file locking.
 **`/audit`** — deep governance review:
 - Reads all rules, references, CLAUDE.md
 - Reports: incidents, inconsistencies, broken cross-references, stale entries,
-  duplicate IDs, unfiled `TODO(incident):` markers
+  duplicate IDs, unfiled `TODO(incident):` and `TODO(glossary):` markers
 - User-invocable: yes
 - Model-invocable: no (`disable-model-invocation: true`)
 
@@ -183,7 +198,7 @@ plan or reference that produced them.
 
 ### Framework adoption
 
-When an incident maps to an established disci pline (steps 4-6 of the
+When an incident maps to an established discipline (steps 4-6 of the
 discovery cycle), the resolution involves adopting concepts from that
 discipline into the harness. See `@reference/framework-adoption.md`
 for the full lifecycle and `@.claude/rules/frameworks.md` for the

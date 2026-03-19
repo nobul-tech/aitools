@@ -8,6 +8,8 @@ This session produced 17 findings, 10 approved decisions, provenance research ac
 
 **IMPORTANT — Scratch path migration**: This handoff references files at `.scratch/session-Z1IhGrcgGO/*` paths. These files were in session scratch when the handoff was written. The SessionEnd hook (`harvest-session.sh`) classifies `.md` files as artifacts, copies them to `harvesting/` with a `YYYY-MM-DD_` date prefix, and then deletes the session scratch directory. If a `.scratch/` path is broken, look for the file at `harvesting/2026-03-19_<filename>` (or the date the session ended). The file content is identical — only the path changed.
 
+**STALENESS NOTE**: If intermediate sessions have occurred since this handoff was written (2026-03-19, session Z1IhGrcgGO), re-assess the running estimate before executing the Schwerpunkt below. The assumptions in this handoff were valid at write time but may have been falsified by subsequent work. Check `git log --oneline` for commits after the handoff date.
+
 ---
 
 ## A. Source of Truth
@@ -18,16 +20,19 @@ The planning brief is at `plans/mission-command-briefing/planning-brief.json`. I
 
 ### Session-specific artifacts
 
-This session's work products are at `.scratch/session-Z1IhGrcgGO/`. These files persist on disk (gitignored but not auto-cleaned). They are the source of truth for the 10 approved decisions and 17 findings that have NOT yet been committed to permanent harness locations.
+This session's work products were at `.scratch/session-Z1IhGrcgGO/`
+when this handoff was written. After the SessionEnd hook fires, those
+files will be at `harvesting/2026-03-19_<filename>` (date-prefixed,
+content identical). See the scratch path migration note above.
 
-### Reading order for the receiving agent
+### Reading order for the accepting session
 
 Read in this order -- it is deliberate:
 
 1. **This handoff prompt** (you are reading it now -- finish it completely)
 2. **Session state audit**: `.scratch/session-Z1IhGrcgGO/session-state-audit.md` -- comprehensive status of everything done, decided, open, and blocked
 3. **Findings index**: `.scratch/session-Z1IhGrcgGO/findings-index.md` -- 17 findings, 13 recommendations, completion status
-4. **Schwerpunkt assessment**: `.scratch/session-Z1IhGrcgGO/schwerpunkt-assessment.md` -- executability analysis, Reibung inventory, next-session priorities
+4. **Schwerpunkt assessment**: `.scratch/session-Z1IhGrcgGO/schwerpunkt-assessment.md` -- executability analysis, Reibung inventory, priority sequence
 5. **Planning brief**: `plans/mission-command-briefing/planning-brief.json` -- all 54 decisions (read in the order specified by `meta.readingOrder`)
 6. **Workspace rule**: `.claude/rules/aitools-workspace.md` -- governs .aitools/ namespace, carry-forward principle
 7. Read additional files on demand per the scratch file reading guide (Schwerpunkt assessment, Appendix)
@@ -220,9 +225,13 @@ Work products R1 (intent-writing heuristic), R2 (intent-audit heuristic), R3 (sh
 
 ---
 
-## E. Schwerpunkt for Next Session
+## E. Schwerpunkt for the Accepting Session
 
 **Implement the approved decisions that unblock the plan-writing mission, then write the plan.**
+
+The accepting session should first re-assess the running estimate
+(especially if intermediate sessions have occurred), then proceed
+with the priority sequence below.
 
 ### Wave 1 -- Foundation (unblock everything)
 
