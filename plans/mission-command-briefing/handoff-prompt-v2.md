@@ -2,7 +2,7 @@
 
 You are S3 (Operations). Your Schwerpunkt: **implement the 10 approved decisions that unblock the plan-writing mission, then write the plan.**
 
-This session produced 17 findings, 10 approved decisions, provenance research across 6 doctrinal traditions, and shipped v0.62.2 (governed-data bypass fixes, harness definition update, incident #50). The approved decisions unblock the plan that has been the objective since session b8a9ed4e. Your job is to execute them, then write the plan.
+This session produced 17 findings, 10 approved decisions, provenance research across 6 doctrinal traditions, and shipped v0.62.2 through v0.62.5 across 8 significant commits (43c1b41 through 3042dc2; 3 intermediate fixup commits consolidated). Post-handoff work (v0.62.3-5) added the /handoff skill, implemented all 6 AAR proposals, filed 13 governed terms, and produced a session activity dashboard. The approved decisions unblock the plan that has been the objective since session b8a9ed4e. Your job is to execute them, then write the plan.
 
 **What you must NOT do** is listed in section F. Read it before doing anything.
 
@@ -74,12 +74,13 @@ Read these files IN FULL before entering execution mode:
 - `.scratch/session-Z1IhGrcgGO/briefing-cluster-analysis.md` -- planning brief dependency graph and sub-briefing clustering analysis (11 sub-briefings, 5 execution waves, 55-65% time reduction vs sequential). Read before writing batch skeleton (Wave 3).
 
 **Harness verification**:
-- `.scratch/session-Z1IhGrcgGO/harness-cicd-investigation.md` — harness self-verification architecture, bootstrap problem analysis, 5-option barrier analysis, skill testing gap
-- `.scratch/session-Z1IhGrcgGO/cicd-feasibility.md` — GitHub Actions feasibility, staged rollout (4 phases), macOS runner analysis, tool-ops verification in CI
+- `.scratch/session-Z1IhGrcgGO/harness-cicd-investigation.md` — harness self-verification architecture, bootstrap problem analysis, 5-option barrier analysis, skill testing gap. After SessionEnd, look at `harvesting/2026-03-19_harness-cicd-investigation.md`
+- `.scratch/session-Z1IhGrcgGO/cicd-feasibility.md` — GitHub Actions feasibility, staged rollout (4 phases), macOS runner analysis, tool-ops verification in CI. After SessionEnd, look at `harvesting/2026-03-19_cicd-feasibility.md`
 - `.scratch/session-Z1IhGrcgGO/aitools-in-tool-ops-investigation.md` — why aitools is NOT a tool-ops entry (0/4 criteria met, self-referential governance trap)
 - `.scratch/session-Z1IhGrcgGO/scratch-deletion-rca.md` — RCA: false claim propagation through 5 subagents, scratch lifecycle verification gap
-- `.scratch/session-Z1IhGrcgGO/verification-lifecycle-gap-audit.md` — 10 missed catch points, cross-boundary verification failure class
+- `.scratch/session-Z1IhGrcgGO/verification-lifecycle-gap-audit.md` — 10 missed catch points, cross-boundary verification failure class. After SessionEnd, look at `harvesting/2026-03-19_verification-lifecycle-gap-audit.md`
 - `.scratch/session-Z1IhGrcgGO/session-transition-testing.md` — should /handoff test session transitions? Option C recommended (static location check)
+- `harvesting/2026-03-19_aar-exit-code-investigation.md` — full AAR: 5 observations, 5 insights, 6 proposals (all implemented), cross-boundary verification failure class, false claim propagation RCA, 15 glossary gap terms
 
 **Provenance research** (read if adopting frameworks or working on scope governance):
 - `.scratch/session-Z1IhGrcgGO/provenance-deep-research.md` -- 21 concepts, 6 traditions, synthesis matrix. Summary inlined in section H below.
@@ -109,13 +110,13 @@ These sessions produced the decisions in the brief and subsequent work. The tran
 | `uyZ7TELqpP` | 2026-03-16 | S2 intelligence prep: carry-forward design, estimate enforcement investigation, running estimate |
 | `79b05dd0` | 2026-03-16 | Continuation: decisions #49-52 (flat verb naming, running estimate, plan-writing protocol, Plan Writer role) |
 | `RTzBnBupE6` | 2026-03-16 | Workspace governance, brief consistency, decisions #53-54, v0.62.0 |
-| **`Z1IhGrcgGO`** | **2026-03-17/18** | **v0.62.2, 17 findings, incident #50, harness definition update, 10 approved decisions, provenance research. See section D** |
+| **`Z1IhGrcgGO`** | **2026-03-17/19** | **v0.62.2-v0.62.5 (8 commits), 17 findings, incident #50, harness definition update, 10 approved decisions, provenance research, /handoff skill, 6 AAR proposals implemented, 13 governed terms, session activity dashboard. See section D** |
 
 ---
 
 ## D. What Session Z1IhGrcgGO Built
 
-### D.1. Shipped work (5 commits)
+### D.1. Shipped work (8 commits)
 
 | Commit | What |
 |--------|------|
@@ -124,6 +125,9 @@ These sessions produced the decisions in the brief and subsequent work. The tran
 | 66d7351 | Reading order fix: 6 missing decisions added, phase 13 eliminated |
 | a77beb4 | Decision #54 integrated into planning brief + handoff prompt |
 | 43c1b41 | Handoff prompt v0.62.0 session continuity update |
+| ec938e6 | v0.62.3: /handoff skill created and deployed, handoff prompt v2 written, harness CI/CD investigation, cross-boundary verification RCA, 33 prior-session artifacts harvested |
+| bf21f21 | v0.62.4: all 6 AAR proposals implemented, 13 governed terms filed, ambiguity routing in incident-governance.md, Lagebeurteilung generalized in /handoff, PCI language correction, scratch lifecycle warning, workspace rule channel/handoffs/ row |
+| 3042dc2 | v0.62.5: session activity dashboard (interactive HTML, 40 subagents), release notes for v0.62.4-5, exit code 1 AAR harvested |
 
 ### D.2. Incident filed
 
@@ -200,6 +204,10 @@ After removing 28 JSON paths from rules and reference files:
 - 3 remain in `.claude/rules/incident-governance.md` (user has approach, pending explanation)
 - Total: 9 remaining (down from 37)
 
+### D.7. Not yet approved work products
+
+Work products R1 (intent-writing heuristic), R2 (intent-audit heuristic), R3 (shared signal vocabulary) are drafted but unapproved. Located in `.scratch/session-Z1IhGrcgGO/intent-heuristic-findings.md` and `.scratch/session-Z1IhGrcgGO/intent-audit-findings.md`. Related to soft exclusion 6 (intent backfill).
+
 ### D.8. Harness verification findings
 
 Two S2 investigations and one tool-ops assessment produced:
@@ -219,9 +227,47 @@ Two S2 investigations and one tool-ops assessment produced:
 
 - **Reconciliation**: tool-ops governs tools at runtime. The harness governs ITSELF via the three-layer pattern extended to verification infrastructure: check scripts (structural), CI (external automation), subagent verification (semantic), KPIs (production monitoring). Each layer catches what others miss.
 
-### D.7. Not yet approved work products
+### D.9. Exit code 1 investigation chain (v0.62.3-4)
 
-Work products R1 (intent-writing heuristic), R2 (intent-audit heuristic), R3 (shared signal vocabulary) are drafted but unapproved. Located in `.scratch/session-Z1IhGrcgGO/intent-heuristic-findings.md` and `.scratch/session-Z1IhGrcgGO/intent-audit-findings.md`. Related to soft exclusion 6 (intent backfill).
+A background subagent was denied Write permission, producing exit code 1. The investigation expanded into a full AAR covering cross-boundary verification failures and false claim propagation.
+
+**5 observations** — O-1: session-level assumptions are untracked. O-2: ambiguities partially governed but inconsistently routed. O-3: PCI language assumes a fixed S3. O-4: "next session" is itself an assumption. O-5: carry-forward data model needs session identity.
+
+**5 insights** — I-1: assumptions need the same governance as incidents (three-layer: surfacing duty, Lagebeurteilung walkthroughs, /audit). I-2: ambiguity routing needed (terminological to /glossary, structural to /incident). I-3: delegation is a lifecycle transition; the 9-component delegation duty is a PCI, recursive per decision #7. I-4: handoff-session relationship is not 1:1. I-5: "Wave 0" was an untracked session-level assumption.
+
+**6 proposals — ALL implemented in v0.62.4** (commit bf21f21):
+
+| Proposal | Implementation |
+|----------|---------------|
+| P-1: Assumptions framework | Category 1.5 (Assumptions) added to Lagebeurteilung in /handoff SKILL.md step 3 |
+| P-2: Ambiguity routing | Surfacing duty extended in incident-governance.md: terminological to /glossary, structural to /incident |
+| P-3: PCI language correction | "Delegating agent MUST inspect" replaces "S3 MUST inspect" throughout. Delegation duty components 7-9 added |
+| P-4: Handoff path with session identity | Path pattern: `plans/<briefing>/handoff-<date>_<prefix>.md` |
+| P-5: "Accepting session" language | 13 replacements of "next session" in SKILL.md. Staleness note added to this handoff |
+| P-6: Lagebeurteilung generalized | 5 transition points (incident response, session end, delegation, batch boundaries, session start), assumption flush protocol |
+
+**Cross-boundary verification failure class discovered**: artifacts that cross lifecycle boundaries (session end/start) were tested only within one side of the boundary. The scratch deletion RCA found a false claim ("scratch not auto-cleaned") that propagated through 5 subagents unchallenged — zero of 10 catch points triggered.
+
+**10 missed catch points** documented in `.scratch/session-Z1IhGrcgGO/verification-lifecycle-gap-audit.md`. After SessionEnd, look at `harvesting/2026-03-19_verification-lifecycle-gap-audit.md`.
+
+**AAR**: `harvesting/2026-03-19_aar-exit-code-investigation.md`. Also identified 15 glossary gap terms (see OT-16 in section G).
+
+### D.10. Governance implementation (v0.62.4)
+
+Beyond the 6 AAR proposals, commit bf21f21 shipped:
+
+- **13 governed terms filed** via /glossary: accepting session, assumption, Auftrag, blast radius, blocker, cross-boundary, delegating agent, handoff, Lagebeurteilung, lifecycle transition, Mitdenken, Reibung, Schwerpunkt
+- **Ambiguity routing** in incident-governance.md: new routing subsection, decision tree step 3 added, TODO(glossary) markers, /audit scope expanded
+- **Lagebeurteilung** generalized from session-end-only to a general-purpose capability in /handoff skill: 5 transition points, walkthrough protocol, assumption flush
+- **PCI language correction**: "delegating agent" replaces fixed "S3" references. Delegation duty expanded to 9 components (component 9: lifecycle transition awareness)
+- **Scratch skill** updated with lifecycle deletion warning (files deleted after SessionEnd harvest)
+- **Workspace rule** updated: `channel/handoffs/` row added to workspace structure table (partial advance of D-BRIEFINGS)
+
+### D.11. Session activity dashboard (v0.62.5)
+
+Commit 3042dc2 produced an interactive HTML session activity report at `harvesting/2026-03-19_session-subagent-report.html`. The dashboard documents all 40 subagent launches across the session: identity, delegation prompts, skills invoked, context provided, outcomes, duration, tokens. Dark theme, filterable, searchable, collapsible sections.
+
+**Session totals**: 40 subagents, 3.4M tokens, 2h 54m compute, 1043 tool calls, 4 worktrees, 8 significant commits (43c1b41 through 3042dc2; 3 intermediate fixups consolidated), v0.62.2 through v0.62.5.
 
 ---
 
@@ -297,7 +343,7 @@ These are explicit scope boundaries. Any work outside these boundaries requires 
 
 ## G. Open Threads (Carry-Forward)
 
-12 open threads from this session. Classified by actionability:
+16 open threads from this session. Classified by actionability:
 
 ### READY (can execute now)
 
@@ -313,7 +359,7 @@ These are explicit scope boundaries. Any work outside these boundaries requires 
 
 | # | Thread | Blocking dependency |
 |---|--------|-------------------|
-| OT-1 | `incident-governance.md`: 3 `incidents.json` paths | User to explain approach (user has a specific plan for this) |
+| OT-1 | `incident-governance.md`: 3 `incidents.json` paths | PARTIALLY RESOLVED — v0.62.4 updated incident-governance.md (ambiguity routing, decision tree), but the 3 `incidents.json` paths remain. User approach still pending |
 | OT-7 | `sources-of-truth.md` overhaul (#50) | Needs barrier analysis. Hard exclusion 3 |
 | OT-8 | R5: Extend governed-data hook to all registries | Build after artifact-roles hook ships |
 | OT-9 | R9: `rules-json-guard.sh` hook | Build after `artifact-role-guard.sh` |
@@ -325,6 +371,15 @@ These are explicit scope boundaries. Any work outside these boundaries requires 
 |---|--------|-------------|
 | OT-4 | Scope-creep as framework concept | Research discipline mapping. Interesting but not blocking |
 | OT-5 | Recency heuristic provenance | Continue web research. Soft exclusion 8 |
+
+### NEW (identified after handoff was written)
+
+| # | Thread | Source | Next action |
+|---|--------|--------|-------------|
+| OT-13 | Cross-boundary verification failure class: should this become a framework? | `.scratch/session-Z1IhGrcgGO/verification-lifecycle-gap-audit.md` section 9 (after SessionEnd, look at `harvesting/2026-03-19_verification-lifecycle-gap-audit.md`) | Recommendation: "not yet, incident count is 1." Revisit if pattern recurs |
+| OT-14 | Tool-ops documentation for all 9 hooks (only 1 of 9 documented) | `.scratch/session-Z1IhGrcgGO/verification-lifecycle-gap-audit.md` section 7 | Extend tool-ops verification specs to all 9 hooks. Item 3 of D.8 top 5 verification actions |
+| OT-15 | CI/CD Phase 1 (~30 lines YAML) | `.scratch/session-Z1IhGrcgGO/cicd-feasibility.md` (after SessionEnd, look at `harvesting/2026-03-19_cicd-feasibility.md`) | Confirmed feasible. No `.github/` directory exists. macOS runner would have caught all post-push bugs on day one. Soft exclusion 7 applies |
+| OT-16 | 15 glossary gap terms identified in AAR (not yet filed) | `harvesting/2026-03-19_aar-exit-code-investigation.md` "Glossary gaps" section | Terms: blocker, lifecycle transition, blast radius, assumption, accepting session, delegating agent, PCI, cross-boundary, Schwerpunkt, Lagebeurteilung, Reibung, Mitdenken, Auftrag, handoff (file vs process), session (CC vs working). NOTE: 13 were filed in v0.62.4, PCI was pre-existing — verify that "session" (CC session vs working session) remains the 1 unfiled term |
 
 ---
 
@@ -340,10 +395,15 @@ Session Z1IhGrcgGO produced a deep research investigation across 6 doctrinal tra
 | **Cynefin** | Snowden | 18/25 | Domain classification (Clear/Complicated/Complex/Chaotic) determines not just WHAT to do but HOW to approach each decision. Our 54 decisions span all 4 domains |
 | **Lagebeurteilung** | Bundeswehr | 15/25 | Structured situation assessment with fixed categories examined every time, even if nothing changed. Prevents blind spots from accumulating across sessions |
 
-Two additional concepts are already in informal use:
-- **Mitdenken** (German): Agents actively model the superior's decision space, not just execute their task. Connect findings to higher-level decisions.
-- **Reibung** (Clausewitz): Friction analysis. Applied in the Schwerpunkt assessment (section 2, "Reibung Inventory").
-- **Bootstrap problem** (Gödel/QA): a system cannot fully verify itself. The harness needs at least one external verification layer (CI, production KPIs) to catch when the internal verification (check scripts) is itself broken. Evidence: check-post-push.sh broken 16 days undetected.
+**Status update (v0.62.4)**: The following German doctrine concepts are now IMPLEMENTED (no longer just informal use):
+- **Schwerpunkt**: governed term filed, used in /handoff skill and this handoff
+- **Lagebeurteilung**: governed term filed, generalized as a general-purpose capability in /handoff skill (5 transition points, assumption flush protocol)
+- **Mitdenken**: governed term filed. Agents actively model the superior's decision space, not just execute their task
+- **Reibung**: governed term filed. Friction analysis. Applied in the Schwerpunkt assessment (section 2, "Reibung Inventory")
+- **Auftrag**: governed term filed. The mission statement that enables Auftragstaktik (mission-type tactics)
+
+Additional concepts in informal use:
+- **Bootstrap problem** (Godel/QA): a system cannot fully verify itself. The harness needs at least one external verification layer (CI, production KPIs) to catch when the internal verification (check scripts) is itself broken. Evidence: check-post-push.sh broken 16 days undetected.
 
 Full research: `.scratch/session-Z1IhGrcgGO/provenance-deep-research.md` (21 concepts, synthesis matrix, integration paths, source URLs). Per exclusion clause 5, do NOT create framework artifacts from these concepts. Use them as thinking tools only.
 
@@ -353,7 +413,7 @@ Full research: `.scratch/session-Z1IhGrcgGO/provenance-deep-research.md` (21 con
 
 ### Write failure RCA finding
 
-Background subagents in Claude Code are auto-denied Write permissions not pre-approved in the session's allow list. When delegating file-writing tasks:
+Background subagents in Claude Code are auto-denied Write permissions unless pre-approved in the session's allow list. When delegating file-writing tasks:
 - **Preferred**: Run the subagent in foreground (not background)
 - **Alternative**: Pre-approve Write by creating an empty file at the target path using the Write tool before launching the subagent
 - **Signal**: Add to delegation prompts: "If the Write tool is denied, your FIRST output line must be: WRITE_BLOCKED". The delegating agent monitors for this signal and retries in foreground.
@@ -369,6 +429,18 @@ A new `/handoff` skill was built and deployed during this session (`shared/skill
 ### Subagent transcript search
 
 Per incident #49 (session RTzBnBupE6): session transcripts are JSONL format. User messages appear in MULTIPLE message types: "human", "queue-operation" (multi-line input buffering), and "user". Search ALL types -- not just "human". A subagent that missed queue-operation messages produced a false fabrication claim.
+
+### Background subagent Write denial pattern (v0.62.3-4)
+
+During this session, 3 background subagents were blocked by Write denials (WRITE_BLOCKED). The RCA confirmed Claude Code auto-denies Write for background subagents unless pre-approved. The WRITE_BLOCKED signal pattern is now in the /handoff SKILL.md delegation prompt template. Key lesson: when the delegating agent receives WRITE_BLOCKED, it must surface the failure in conversation text and retry in foreground. Do NOT rely on the Claude Code task failure notification UI (requires Ctrl+O to expand) — the agent must surface failures explicitly.
+
+### Delegation duty now has 9 components (v0.62.4)
+
+The /handoff SKILL.md delegation duty was substantially updated in v0.62.4. It now has 9 components (up from the ~6 described above in the Write failure RCA). Component 9 is **lifecycle transition awareness**: every delegation crosses a context boundary, and the delegating agent must verify that artifacts survive the boundary crossing. The accepting session should read the current SKILL.md (`shared/skills/handoff/SKILL.md`), not rely solely on this section.
+
+### Surfacing duty: patterns, not just instances
+
+The exit code 1 investigation revealed that the delegating agent must surface PATTERNS across subagent failures, not just individual failure instances. When 3 subagents all fail for the same reason (Write denial), that is a systemic pattern requiring RCA, not 3 individual retries.
 
 ---
 
@@ -412,7 +484,7 @@ Read `plans/mission-command-briefing/handoff-prompt.md` for:
 Note: the prior handoff was written for session RTzBnBupE6. This handoff (Z1IhGrcgGO) SUPPLEMENTS it with:
 - Session Z1IhGrcgGO's outputs (section D above)
 - Updated Schwerpunkt (section E -- Wave 1-3 sequence)
-- Exclusion clauses (section F -- 5 hard, 3 soft)
+- Exclusion clauses (section F -- 5 hard, 4 soft)
 - Open threads with actionability classification (section G)
 - Provenance research summary (section H)
 - Delegation duty updates (section I)
@@ -440,18 +512,30 @@ Additionally, this session's amendments from commit 43c1b41 (handoff prompt upda
 
 ## L. Provenance
 
-This handoff prompt was produced during session `Z1IhGrcgGO` on 2026-03-18 (v0.62.2). It updates the prior handoff from session `RTzBnBupE6` (v0.62.0).
+This handoff prompt was produced during session `Z1IhGrcgGO` on 2026-03-18 (v0.62.2) and updated in-session through v0.62.5. It updates the prior handoff from session `RTzBnBupE6` (v0.62.0).
 
-Changes from prior version:
+### Version history
+
+| Version | Date | What changed |
+|---------|------|-------------|
+| v0.62.2 | 2026-03-18 | Initial handoff: 5 commits, 10 approved decisions, 12 open threads, provenance research |
+| v0.62.3 | 2026-03-18 | /handoff skill created, harness verification investigations, cross-boundary RCA, scratch path migration note |
+| v0.62.4 | 2026-03-19 | All 6 AAR proposals implemented, 13 governed terms, ambiguity routing, Lagebeurteilung generalized, delegation duty to 9 components |
+| v0.62.5 | 2026-03-19 | Session activity dashboard, release notes, state audit. Handoff updated: sections D.9-D.11 added, section G expanded to 16 threads, section H status updated, section I expanded with new delegation findings |
+
+Changes from prior handoff (RTzBnBupE6 v0.62.0):
 - Session chain updated with Z1IhGrcgGO (7th session in the chain)
 - Brief remains at 54 decisions; 10 new approved decisions exist in scratch files awaiting implementation
 - Schwerpunkt shifted from "write the plan" to "implement approved decisions that unblock plan writing, then write the plan"
 - 5 hard exclusion clauses added (scope governance from provenance research)
-- 12 open threads documented with actionability classification
+- 16 open threads documented with actionability classification (12 original + 4 new)
 - Provenance research: 21 new concepts from 6 doctrinal traditions, 5 high-leverage recommendations
-- Delegation duty updated: Write failure RCA, WRITE_BLOCKED signal, Schwerpunkt declaration
+- Delegation duty updated: Write failure RCA, WRITE_BLOCKED signal, Schwerpunkt declaration, 9 components, lifecycle transition awareness, pattern surfacing
 - Post-push bug fixes documented with self-contained delegation packages
 - Incident #50 filed (sources-of-truth.md bypass vectors)
 - Harness definition updated (CLAUDE.md mission paragraph, harness.md, glossary.json)
+- 6 AAR proposals implemented (cross-boundary verification failure class, false claim propagation RCA)
+- 13 governed terms filed (German doctrine concepts now implemented, not just informal)
+- Session activity dashboard produced (40 subagents, 3.4M tokens, 2h 54m compute)
 
 The user's intent: execute the 10 approved decisions that unblock plan writing (small, well-defined tasks), then write the plan using the protocol from session 84280c8b with Plan Writer review from decision #52. The Plan Writer replaces the user in the iterative review loop, calibrated from session transcripts. S3 is the author. The Plan Writer is the quality gate with the user's voice. The user sees only the finished product.

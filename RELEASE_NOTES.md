@@ -12,6 +12,12 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.62.6 -- Handoff v3 update, /handoff workflow executed (2026-03-19)
+
+Handoff prompt updated to v3 using the /handoff skill's full 8-step workflow (state audit → update → verify → amend). Captures v0.62.3-5 work: 6 AAR proposals implemented, 13 governed terms, session activity dashboard, cross-boundary verification RCA, surfacing duty findings, CC UX observation. 5 verification amendments applied (section numbering, exclusion count, term count, commit range, grammar).
+
+---
+
 ## v0.62.5 -- Session activity dashboard, full /handoff governance (2026-03-19)
 
 ### New
