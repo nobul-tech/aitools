@@ -6,6 +6,8 @@ This session produced 17 findings, 10 approved decisions, provenance research ac
 
 **What you must NOT do** is listed in section F. Read it before doing anything.
 
+**IMPORTANT — Scratch path migration**: This handoff references files at `.scratch/session-Z1IhGrcgGO/*` paths. These files were in session scratch when the handoff was written. The SessionEnd hook (`harvest-session.sh`) classifies `.md` files as artifacts, copies them to `harvesting/` with a `YYYY-MM-DD_` date prefix, and then deletes the session scratch directory. If a `.scratch/` path is broken, look for the file at `harvesting/2026-03-19_<filename>` (or the date the session ended). The file content is identical — only the path changed.
+
 ---
 
 ## A. Source of Truth
