@@ -70,6 +70,9 @@ Read these files IN FULL before entering execution mode:
 - `.scratch/session-Z1IhGrcgGO/harness-cicd-investigation.md` — harness self-verification architecture, bootstrap problem analysis, 5-option barrier analysis, skill testing gap
 - `.scratch/session-Z1IhGrcgGO/cicd-feasibility.md` — GitHub Actions feasibility, staged rollout (4 phases), macOS runner analysis, tool-ops verification in CI
 - `.scratch/session-Z1IhGrcgGO/aitools-in-tool-ops-investigation.md` — why aitools is NOT a tool-ops entry (0/4 criteria met, self-referential governance trap)
+- `.scratch/session-Z1IhGrcgGO/scratch-deletion-rca.md` — RCA: false claim propagation through 5 subagents, scratch lifecycle verification gap
+- `.scratch/session-Z1IhGrcgGO/verification-lifecycle-gap-audit.md` — 10 missed catch points, cross-boundary verification failure class
+- `.scratch/session-Z1IhGrcgGO/session-transition-testing.md` — should /handoff test session transitions? Option C recommended (static location check)
 
 **Provenance research** (read if adopting frameworks or working on scope governance):
 - `.scratch/session-Z1IhGrcgGO/provenance-deep-research.md` -- 21 concepts, 6 traditions, synthesis matrix. Summary inlined in section H below.

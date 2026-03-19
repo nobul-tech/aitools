@@ -517,8 +517,11 @@ This skill works in any project. The sections and depth adapt:
 - Prior content is carried forward or marked as superseded
 
 **Project without plans/ directory**:
-- The handoff is written to the scratch directory
-- The user decides where to commit it (if anywhere)
+- The handoff is written to a permanent tracked location chosen by
+  the agent (e.g., `handoff-prompt.md` at repo root, or a new
+  `plans/` directory created for this purpose). NEVER to scratch —
+  scratch is deleted by the SessionEnd hook.
+- The user decides the final location if the agent is unsure
 
 ## Cross-References
 

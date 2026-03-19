@@ -12,6 +12,29 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.62.3 -- /handoff skill, harness verification, cross-boundary RCA (2026-03-18)
+
+### New
+
+| # | Change |
+|---|--------|
+| 1 | **`/handoff` skill** — user-level skill (`shared/skills/handoff/`) capturing the full session handoff workflow: Schwerpunkt declaration, session state audit (S2), Lagebeurteilung, handoff writing (S3), 9-criteria verification, amendments, commit. Applies German doctrine concepts (Schwerpunkt, Lagebeurteilung, Reibung, Mitdenken) as thinking tools. Deployed to Claude Code and Cursor |
+| 2 | **Handoff prompt v2** — `plans/mission-command-briefing/handoff-prompt-v2.md`. 12 sections, verified 3x, covers 10 approved decisions, 12 open threads, 5 hard exclusions, provenance research across 6 doctrinal traditions |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 3 | **Harness CI/CD investigation** — bootstrap problem identified (check-post-push.sh broken on macOS 16 days undetected). CI Phase 1 feasibility confirmed (shellcheck + tool-ops mock tests, ~30 lines YAML). Tool-ops "no" for aitools self-tracking reconciled via three-layer verification architecture |
+| 4 | **Cross-boundary verification RCA** — false claim ("scratch not auto-cleaned") propagated through 5 subagents unchallenged. 10 missed catch points identified. New verification failure class: artifacts that cross lifecycle boundaries (session end/start) tested only within one side of the boundary |
+| 5 | **`/handoff` skill scratch deletion fix** — removed scratch fallback, mandated permanent tracked location, added lifecycle survival to verification criterion 2, fixed "Project without plans/" adaptation that endorsed scratch |
+
+### Harvested
+
+33 artifacts from prior sessions (investigations, barrier analyses, extraction scripts)
+
+---
+
 ## v0.62.2 -- Governed-data-access enforcement, harness definition update (2026-03-17)
 
 ### Improvements
