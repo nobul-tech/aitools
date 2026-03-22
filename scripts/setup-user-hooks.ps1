@@ -1,15 +1,21 @@
 # setup-user-hooks.ps1 -- Deploys Claude Code hooks and preferences to ~/.claude/settings.json
 # Safe to re-run -- merges managed fields without clobbering existing settings.
 #
-# Managed fields: hooks.SessionEnd, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
+# Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
 # Preserved: permissions, enabledPlugins, all other fields
 #
 # Hooks deployed:
+#   SessionStart: scratch-init.sh (creates session scratch directory)
+#   SessionStart: dashboard-serve.sh (launches live dashboard server)
 #   SessionEnd: session-archive.sh (archives transcripts to user repo)
+#   SessionEnd: harvest-session.sh (harvests session artifacts)
+#   SessionEnd: tool-ops-session-audit.sh (runs tool-ops contract tests and drift detection)
 #   PreToolUse[Bash]: standing-order-guard.sh (enforces standing orders on Bash commands)
 #   PreToolUse[Read|Grep]: glossary-skill-guard.sh (reminds agent to use /glossary skill)
 #   PreToolUse[Agent]: block-claude-code-guide.sh (blocks buggy built-in subagent)
-#   SessionEnd: tool-ops-session-audit.sh (runs tool-ops contract tests and drift detection)
+#   PostToolUse[Write|Edit]: sh-file-fixup.sh (fixes CRLF and chmod on .sh files)
+#   Stop: surfacing-duty-stop.sh (periodic surfacing duty reminder)
+#   Stop: estimate-refresh-stop.sh (Lagebeurteilung + estimate freshness)
 #
 # Reads claude preferences from profile.json (via config.json -> userRepoPath).
 # See reference/user-repo.md and shared/hooks/ for details.
@@ -71,7 +77,9 @@ $shfixupScript = Resolve-HookSource "sh-file-fixup.sh"
 $surfacingScript = Resolve-HookSource "surfacing-duty-stop.sh"
 $blockGuideScript = Resolve-HookSource "block-claude-code-guide.sh"
 $toolOpsAuditScript = Resolve-HookSource "tool-ops-session-audit.sh"
-foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $surfacingScript, $blockGuideScript, $toolOpsAuditScript)) {
+$dashboardScript = Resolve-HookSource "dashboard-serve.sh"
+$estimateRefreshScript = Resolve-HookSource "estimate-refresh-stop.sh"
+foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $surfacingScript, $blockGuideScript, $toolOpsAuditScript, $dashboardScript, $estimateRefreshScript)) {
     if (-not (Test-Path $src)) {
         LogError "Hook script not found: $src"
         exit 1
@@ -91,6 +99,8 @@ $shfixupDest = Join-Path $hooksDir "sh-file-fixup.sh"
 $surfacingDest = Join-Path $hooksDir "surfacing-duty-stop.sh"
 $blockGuideDest = Join-Path $hooksDir "block-claude-code-guide.sh"
 $toolOpsAuditDest = Join-Path $hooksDir "tool-ops-session-audit.sh"
+$dashboardDest = Join-Path $hooksDir "dashboard-serve.sh"
+$estimateRefreshDest = Join-Path $hooksDir "estimate-refresh-stop.sh"
 
 $hooksChanged = $false
 
@@ -107,12 +117,14 @@ if ($DryRun) {
     Log "[DRY RUN] Would deploy hook: $surfacingScript -> $surfacingDest"
     Log "[DRY RUN] Would deploy hook: $blockGuideScript -> $blockGuideDest"
     Log "[DRY RUN] Would deploy hook: $toolOpsAuditScript -> $toolOpsAuditDest"
+    Log "[DRY RUN] Would deploy hook: $dashboardScript -> $dashboardDest"
+    Log "[DRY RUN] Would deploy hook: $estimateRefreshScript -> $estimateRefreshDest"
 } else {
     if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }
 
     Initialize-DeployTracker
 
-    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($surfacingScript, $surfacingDest), @($blockGuideScript, $blockGuideDest), @($toolOpsAuditScript, $toolOpsAuditDest))) {
+    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($surfacingScript, $surfacingDest), @($blockGuideScript, $blockGuideDest), @($toolOpsAuditScript, $toolOpsAuditDest), @($dashboardScript, $dashboardDest), @($estimateRefreshScript, $estimateRefreshDest))) {
         $src = $pair[0]; $dst = $pair[1]
         $hookName = Split-Path $dst -Leaf
         $srcContent = Get-Content $src -Raw -ErrorAction Stop
@@ -342,6 +354,16 @@ $toolOpsAuditDestUnix = $toolOpsAuditDest -replace '\\', '/'
 $toolOpsAuditCmd = "bash `"$toolOpsAuditDestUnix`""
 MergeHookEntry "SessionEnd" "tool-ops-session-audit.sh" "" $toolOpsAuditCmd
 
+# SessionStart: dashboard server
+$dashboardDestUnix = $dashboardDest -replace '\\', '/'
+$dashboardCmd = "bash `"$dashboardDestUnix`""
+MergeHookEntry "SessionStart" "dashboard-serve.sh" "" $dashboardCmd
+
+# Stop: estimate refresh + Lagebeurteilung
+$estimateRefreshDestUnix = $estimateRefreshDest -replace '\\', '/'
+$estimateRefreshCmd = "bash `"$estimateRefreshDestUnix`""
+MergeHookEntry "Stop" "estimate-refresh-stop.sh" "" $estimateRefreshCmd
+
 # --- Track old values for change reporting ---
 $oldAutoMemory = $settings["autoMemoryEnabled"]
 $oldAlwaysThinking = $settings["alwaysThinkingEnabled"]
@@ -435,6 +457,10 @@ if ($DryRun) {
             if ($bgCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse block-claude-code-guide hook, got $bgCount" }
             $toaCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'tool-ops-session-audit\.sh' }).Count
             if ($toaCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd tool-ops-session-audit hook, got $toaCount" }
+            $dashCount = @($vParsed.hooks.SessionStart | Where-Object { $_.hooks.command -match 'dashboard-serve\.sh' }).Count
+            if ($dashCount -ne 1) { LogError "Validation failed: expected 1 SessionStart dashboard-serve hook, got $dashCount" }
+            $erCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'estimate-refresh-stop\.sh' }).Count
+            if ($erCount -ne 1) { LogError "Validation failed: expected 1 Stop estimate-refresh-stop hook, got $erCount" }
 
             # Validate hook schema: command-type must have command,
             # prompt-type must have prompt (not command).

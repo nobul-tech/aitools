@@ -449,6 +449,9 @@ Commands:
   sessions list [proj] List archived sessions (optionally filter by project)
   sessions archive ID  Manually archive a session by ID (full or prefix)
   sessions move F proj Refile an archived session under a different project
+  dashboard            Start the live mission control dashboard server
+                       --stop: stop the server  --status: show server status
+                       --snapshot: generate static HTML  --background: for hooks
 
 Options:
   --addmcp <name...>   Enable MCP server(s) for current project (vercel, webflow)
@@ -475,6 +478,8 @@ user_subcmd=""
 do_sessions=false
 sessions_subcmd=""
 sessions_args=()
+do_dashboard=false
+dashboard_args=()
 addmcp_seen=false
 addmcp_servers=()
 dry_run=false
@@ -511,6 +516,15 @@ while [[ $# -gt 0 ]]; do
             # Collect remaining positional args for sessions subcommands
             while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
                 sessions_args+=("$1")
+                shift
+            done
+            ;;
+        dashboard)
+            do_dashboard=true
+            shift
+            # Collect all remaining args for dashboard subcommand
+            while [[ $# -gt 0 ]]; do
+                dashboard_args+=("$1")
                 shift
             done
             ;;
@@ -708,6 +722,30 @@ if (cursorJson?.mcpServers) {
 '
     show_cloud_mcp mcp
     return 0
+fi
+
+# ---------------------------------------------------------------------------
+# dashboard — mission control dashboard lifecycle
+# ---------------------------------------------------------------------------
+
+if $do_dashboard; then
+    # Dashboard is a standalone script that handles its own logging and summary.
+    # Dispatch to aitools-dashboard.sh (macOS) or aitools-dashboard.ps1 (Windows).
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            if ! command -v pwsh &>/dev/null; then
+                log_error "pwsh (PowerShell 7) not found"
+                return 1
+            fi
+            pwsh -NoProfile -ExecutionPolicy Bypass \
+                -File "$(cygpath -w "$repo_path/scripts/aitools-dashboard.ps1")" \
+                "${dashboard_args[@]}"
+            ;;
+        *)
+            bash "$repo_path/scripts/aitools-dashboard.sh" "${dashboard_args[@]}"
+            ;;
+    esac
+    return $?
 fi
 
 # ---------------------------------------------------------------------------

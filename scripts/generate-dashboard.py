@@ -5,18 +5,28 @@ Purpose: Read a running estimate JSON file and produce a self-contained HTML
 dashboard that visualizes session state: header, summary stats, agent tracker,
 governance (decisions + assumptions), findings, open threads, and session state.
 
+Supports two modes:
+  Static (default): Embeds JSON into HTML at generation time. Works from
+      file:/// on any platform. No runtime dependencies.
+  Live (--serve): Starts a local HTTP server. Dashboard polls the estimate
+      file via fetch() and re-renders on change without page reload.
+      Uses --watch internally to detect file changes and refresh the data
+      endpoint. Zero external dependencies (stdlib http.server).
+
 This is the first S1 (Administration) capability in the harness --
 administration-as-code. The generator codifies the pattern proven in 4
 manually-produced dashboards from sessions 5HyCwPtSDH and Z1IhGrcgGO.
 
 Architecture: Embedded JSON + generator script (Option G from the feasibility
-study). The HTML contains its own data -- no fetch(), no server, no runtime
-dependencies. Works from file:/// on any platform.
+study). Static mode embeds data; live mode serves it via HTTP -- both use the
+same HTML template with progressive enhancement.
 
 Usage:
     python3 scripts/generate-dashboard.py --estimate path/to/running-estimate.json
     python3 scripts/generate-dashboard.py --estimate est.json --output dashboard.html
     python3 scripts/generate-dashboard.py --estimate est.json --open
+    python3 scripts/generate-dashboard.py --estimate est.json --serve
+    python3 scripts/generate-dashboard.py --estimate est.json --serve --port 9000
 
 Safe to re-run. Overwrites output if it already exists.
 """
@@ -25,9 +35,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import signal
 import sys
+import threading
+import time
 import webbrowser
 from datetime import datetime, timezone
+from functools import partial
+from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from typing import Any
 
@@ -70,12 +86,160 @@ def get_nested(data: dict, *keys: str, default: Any = None) -> Any:
     return current
 
 
-def build_html(estimate: dict[str, Any], generated_at: str) -> str:
-    """Build the complete self-contained HTML dashboard."""
+def build_html(
+    estimate: dict[str, Any],
+    generated_at: str,
+    *,
+    live_mode: bool = False,
+    poll_url: str = "",
+    poll_interval: int = 3,
+) -> str:
+    """Build the complete self-contained HTML dashboard.
+
+    In static mode: embeds estimate JSON directly. Works from file:///.
+    In live mode: embeds initial data AND enables fetch-based polling
+    from poll_url. Dashboard re-renders on new data without page reload.
+    """
     estimate_json = json.dumps(estimate, ensure_ascii=False, indent=None)
-    return HTML_TEMPLATE.replace("/*__ESTIMATE_DATA__*/null", estimate_json).replace(
+    html = HTML_TEMPLATE.replace("/*__ESTIMATE_DATA__*/null", estimate_json).replace(
         "/*__GENERATED_AT__*/", generated_at
     )
+    live_flag = "true" if live_mode else "false"
+    html = html.replace("/*__LIVE_MODE__*/false", live_flag)
+    html = html.replace("/*__POLL_URL__*/", poll_url)
+    html = html.replace("/*__POLL_INTERVAL__*/3", str(poll_interval))
+    return html
+
+
+# ---------------------------------------------------------------------------
+# Live server
+# ---------------------------------------------------------------------------
+
+class DashboardHandler(SimpleHTTPRequestHandler):
+    """HTTP handler that serves the dashboard and a live data endpoint."""
+
+    estimate_path: Path
+    dashboard_html: str
+
+    def do_GET(self) -> None:
+        if self.path == "/" or self.path == "/index.html":
+            content = self.server.dashboard_html.encode("utf-8")  # type: ignore[attr-defined]
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(content)
+        elif self.path == "/api/estimate":
+            try:
+                data = self.server.estimate_path.read_text(encoding="utf-8")  # type: ignore[attr-defined]
+                content = data.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(content)))
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(content)
+            except Exception as e:
+                self.send_error(500, str(e))
+        else:
+            self.send_error(404, "Not found")
+
+    def log_message(self, format: str, *args: Any) -> None:
+        """Suppress routine request logging; only log errors."""
+        if args and isinstance(args[0], str) and args[0].startswith("2"):
+            return  # suppress 2xx logs
+        super().log_message(format, *args)
+
+
+def watch_and_regenerate(
+    estimate_path: Path,
+    server: HTTPServer,
+    poll_url: str,
+    poll_interval: int,
+) -> None:
+    """Watch estimate file for changes and regenerate the served HTML.
+
+    Uses os.stat polling (cross-platform, no dependencies).
+    """
+    last_mtime = estimate_path.stat().st_mtime
+    while True:
+        time.sleep(1)
+        try:
+            current_mtime = estimate_path.stat().st_mtime
+        except OSError:
+            continue
+        if current_mtime != last_mtime:
+            last_mtime = current_mtime
+            try:
+                estimate = load_estimate(estimate_path)
+                generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                server.dashboard_html = build_html(  # type: ignore[attr-defined]
+                    estimate,
+                    generated_at,
+                    live_mode=True,
+                    poll_url=poll_url,
+                    poll_interval=poll_interval,
+                )
+                session_id = get_nested(estimate, "meta", "sessionId") or "unknown"
+                version = get_nested(estimate, "meta", "version", default="?")
+                print(f"[{generated_at}] Regenerated: v{version} session={session_id}")
+            except Exception as e:
+                print(f"[watch] Error regenerating: {e}", file=sys.stderr)
+
+
+def run_server(
+    estimate_path: Path,
+    port: int,
+    open_browser: bool,
+    poll_interval: int = 3,
+) -> None:
+    """Start the live dashboard server."""
+    estimate = load_estimate(estimate_path)
+    session_id = get_nested(estimate, "meta", "sessionId") or "unknown"
+    poll_url = f"http://localhost:{port}/api/estimate"
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    html = build_html(
+        estimate,
+        generated_at,
+        live_mode=True,
+        poll_url=poll_url,
+        poll_interval=poll_interval,
+    )
+
+    server = HTTPServer(("localhost", port), DashboardHandler)
+    server.estimate_path = estimate_path  # type: ignore[attr-defined]
+    server.dashboard_html = html  # type: ignore[attr-defined]
+
+    # Start file watcher thread
+    watcher = threading.Thread(
+        target=watch_and_regenerate,
+        args=(estimate_path, server, poll_url, poll_interval),
+        daemon=True,
+    )
+    watcher.start()
+
+    url = f"http://localhost:{port}/"
+    print(f"Live dashboard serving at: {url}")
+    print(f"Watching: {estimate_path}")
+    print(f"Session: {session_id}")
+    print(f"Poll interval: {poll_interval}s")
+    print("Press Ctrl+C to stop.")
+
+    if open_browser:
+        webbrowser.open(url)
+
+    # Handle Ctrl+C gracefully
+    def shutdown(signum: int, frame: Any) -> None:
+        print("\nShutting down...")
+        server.shutdown()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, shutdown)
+    signal.signal(signal.SIGTERM, shutdown)
+
+    server.serve_forever()
 
 
 # ---------------------------------------------------------------------------
@@ -302,11 +466,13 @@ body { background: var(--bg-primary); color: var(--text-primary); font-family: v
 
 <script>
 // Data injected by generate-dashboard.py at build time.
-const DASHBOARD_DATA = /*__ESTIMATE_DATA__*/null;
+var DASHBOARD_DATA = /*__ESTIMATE_DATA__*/null;
 const GENERATED_AT = "/*__GENERATED_AT__*/";
+const LIVE_MODE = /*__LIVE_MODE__*/false;
+const POLL_URL = "/*__POLL_URL__*/";
+const POLL_INTERVAL = /*__POLL_INTERVAL__*/3;
 
-(function() {
-  const D = DASHBOARD_DATA;
+function renderDashboard(D, generatedAt) {
   if (!D) { document.getElementById('app').innerHTML = '<div class="no-results">No data. Generate with: python3 scripts/generate-dashboard.py --estimate &lt;path&gt;</div>'; return; }
 
   const app = document.getElementById('app');
@@ -391,7 +557,7 @@ const GENERATED_AT = "/*__GENERATED_AT__*/";
   html += '<div class="header"><div class="header-top"><div>';
   html += '<div class="header-title">Mission Control Dashboard <span>v' + esc(String(version)) + '</span></div>';
   html += '<div class="session-id">' + esc(sessionId) + (created ? ' &middot; ' + esc(created.substring(0,10)) : '') + '</div>';
-  html += '</div><div style="font-size:0.75rem;color:var(--text-muted)">Generated: ' + esc(GENERATED_AT) + '</div></div>';
+  html += '</div><div style="font-size:0.75rem;color:var(--text-muted)">' + (LIVE_MODE ? '<span id="liveIndicator" style="color:var(--accent-green);font-weight:700;margin-right:6px">&#9679; LIVE</span>' : '') + 'Generated: ' + esc(generatedAt) + '</div></div>';
   if (schwerpunkt) {
     html += '<div class="schwerpunkt">' + esc(schwerpunkt) + '</div>';
   }
@@ -652,7 +818,7 @@ const GENERATED_AT = "/*__GENERATED_AT__*/";
   }
 
   // FOOTER
-  html += '<div class="footer">Generated by <a href="https://github.com/nobul-jose/aitools">aitools</a> generate-dashboard.py from running estimate v' + esc(String(version)) + ' &middot; ' + esc(GENERATED_AT) + '</div>';
+  html += '<div class="footer">Generated by <a href="https://github.com/nobul-jose/aitools">aitools</a> generate-dashboard.py from running estimate v' + esc(String(version)) + ' &middot; ' + esc(generatedAt) + (LIVE_MODE ? ' &middot; polling every ' + POLL_INTERVAL + 's' : '') + '</div>';
 
   app.innerHTML = html;
 
@@ -718,7 +884,37 @@ const GENERATED_AT = "/*__GENERATED_AT__*/";
   var collapseBtn = document.getElementById('collapseAllBtn');
   if (expandBtn) expandBtn.addEventListener('click', function() { agentsList.querySelectorAll('.agent-card').forEach(function(c) { c.classList.add('expanded'); }); });
   if (collapseBtn) collapseBtn.addEventListener('click', function() { agentsList.querySelectorAll('.agent-card').forEach(function(c) { c.classList.remove('expanded'); }); });
-})();
+}
+
+// Initial render
+renderDashboard(DASHBOARD_DATA, GENERATED_AT);
+
+// Live polling: fetch new data and re-render without page reload
+if (LIVE_MODE && POLL_URL) {
+  var lastDataHash = JSON.stringify(DASHBOARD_DATA);
+  setInterval(function() {
+    fetch(POLL_URL, { cache: 'no-store' })
+      .then(function(r) { return r.json(); })
+      .then(function(newData) {
+        var newHash = JSON.stringify(newData);
+        if (newHash !== lastDataHash) {
+          lastDataHash = newHash;
+          DASHBOARD_DATA = newData;
+          var now = new Date().toISOString().replace(/\.\d{3}/, '').replace('T', 'T');
+          renderDashboard(newData, now);
+          var indicator = document.getElementById('liveIndicator');
+          if (indicator) {
+            indicator.style.color = 'var(--accent-cyan)';
+            setTimeout(function() { indicator.style.color = 'var(--accent-green)'; }, 500);
+          }
+        }
+      })
+      .catch(function() {
+        var indicator = document.getElementById('liveIndicator');
+        if (indicator) { indicator.innerHTML = '&#9679; OFFLINE'; indicator.style.color = 'var(--accent-red)'; }
+      });
+  }, POLL_INTERVAL * 1000);
+}
 </script>
 </body>
 </html>
@@ -729,8 +925,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Generate a self-contained HTML Mission Control Dashboard from a running estimate JSON.",
         epilog="Examples:\n"
+        "  # Static (embedded data, works from file:///)\n"
         "  python3 scripts/generate-dashboard.py --estimate .scratch/session-XYZ/running-estimate.json\n"
-        "  python3 scripts/generate-dashboard.py --estimate est.json --output /tmp/dashboard.html --open\n",
+        "  python3 scripts/generate-dashboard.py --estimate est.json --output /tmp/dashboard.html --open\n"
+        "\n"
+        "  # Live (HTTP server, auto-updates on file change)\n"
+        "  python3 scripts/generate-dashboard.py --estimate est.json --serve\n"
+        "  python3 scripts/generate-dashboard.py --estimate est.json --serve --port 9000\n",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
@@ -750,9 +951,44 @@ def main() -> None:
         action="store_true",
         help="Open the generated dashboard in the default browser",
     )
+    parser.add_argument(
+        "--serve",
+        action="store_true",
+        help="Start a live dashboard server (auto-updates when estimate file changes)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8411,
+        help="Port for the live server (default: 8411)",
+    )
+    parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="Watch estimate file and regenerate HTML on change (static mode only; --serve implies --watch)",
+    )
+    parser.add_argument(
+        "--poll-interval",
+        type=int,
+        default=3,
+        dest="poll_interval",
+        help="Seconds between live polls in the browser (default: 3)",
+    )
     args = parser.parse_args()
 
     estimate_path = args.estimate.resolve()
+
+    # Live server mode
+    if args.serve:
+        run_server(
+            estimate_path,
+            port=args.port,
+            open_browser=args.open,
+            poll_interval=args.poll_interval,
+        )
+        return  # run_server blocks until Ctrl+C
+
+    # Static generation mode
     estimate = load_estimate(estimate_path)
 
     # Derive output path
@@ -780,6 +1016,32 @@ def main() -> None:
         url = output_path.as_uri()
         print(f"Opening: {url}")
         webbrowser.open(url)
+
+    # Watch mode (static): regenerate on file change
+    if args.watch:
+        print(f"Watching: {estimate_path}")
+        print("Press Ctrl+C to stop.")
+        last_mtime = estimate_path.stat().st_mtime
+        try:
+            while True:
+                time.sleep(1)
+                try:
+                    current_mtime = estimate_path.stat().st_mtime
+                except OSError:
+                    continue
+                if current_mtime != last_mtime:
+                    last_mtime = current_mtime
+                    try:
+                        estimate = load_estimate(estimate_path)
+                        generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                        html = build_html(estimate, generated_at)
+                        output_path.write_text(html, encoding="utf-8")
+                        version = get_nested(estimate, "meta", "version", default="?")
+                        print(f"[{generated_at}] Regenerated: v{version}")
+                    except Exception as e:
+                        print(f"[watch] Error: {e}", file=sys.stderr)
+        except KeyboardInterrupt:
+            print("\nStopped watching.")
 
 
 if __name__ == "__main__":

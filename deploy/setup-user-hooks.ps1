@@ -2149,6 +2149,16 @@ $toolOpsAuditDestUnix = $toolOpsAuditDest -replace '\\', '/'
 $toolOpsAuditCmd = "bash `"$toolOpsAuditDestUnix`""
 MergeHookEntry "SessionEnd" "tool-ops-session-audit.sh" "" $toolOpsAuditCmd
 
+# SessionStart: dashboard server
+$dashboardDestUnix = $dashboardDest -replace '\\', '/'
+$dashboardCmd = "bash `"$dashboardDestUnix`""
+MergeHookEntry "SessionStart" "dashboard-serve.sh" "" $dashboardCmd
+
+# Stop: estimate refresh + Lagebeurteilung
+$estimateRefreshDestUnix = $estimateRefreshDest -replace '\\', '/'
+$estimateRefreshCmd = "bash `"$estimateRefreshDestUnix`""
+MergeHookEntry "Stop" "estimate-refresh-stop.sh" "" $estimateRefreshCmd
+
 # --- Track old values for change reporting ---
 $oldAutoMemory = $settings["autoMemoryEnabled"]
 $oldAlwaysThinking = $settings["alwaysThinkingEnabled"]
@@ -2242,6 +2252,10 @@ if ($DryRun) {
             if ($bgCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse block-claude-code-guide hook, got $bgCount" }
             $toaCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'tool-ops-session-audit\.sh' }).Count
             if ($toaCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd tool-ops-session-audit hook, got $toaCount" }
+            $dashCount = @($vParsed.hooks.SessionStart | Where-Object { $_.hooks.command -match 'dashboard-serve\.sh' }).Count
+            if ($dashCount -ne 1) { LogError "Validation failed: expected 1 SessionStart dashboard-serve hook, got $dashCount" }
+            $erCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'estimate-refresh-stop\.sh' }).Count
+            if ($erCount -ne 1) { LogError "Validation failed: expected 1 Stop estimate-refresh-stop hook, got $erCount" }
 
             # Validate hook schema: command-type must have command,
             # prompt-type must have prompt (not command).

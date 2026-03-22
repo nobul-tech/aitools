@@ -438,6 +438,9 @@ Commands:
   sessions list [proj] List archived sessions (optionally filter by project)
   sessions archive ID  Manually archive a session by ID (full or prefix)
   sessions move F proj Refile an archived session under a different project
+  dashboard            Start the live mission control dashboard server
+                       --stop: stop the server  --status: show server status
+                       --snapshot: generate static HTML  --background: for hooks
 
 Options:
   --addmcp <name...>   Enable MCP server(s) for current project (vercel, webflow)
@@ -464,6 +467,7 @@ $doGitpull = $Command -eq "gitpull"
 $doMcpStatus = $Command -eq "mcp"
 $doUser = $Command -eq "user"
 $doSessions = $Command -eq "sessions"
+$doDashboard = $Command -eq "dashboard"
 
 # --patch flag for gitpull (may come via -Patch switch or positional $Remaining)
 $gitpullPatch = $false
@@ -488,7 +492,7 @@ if ($doUser -or $doSessions) {
 }
 
 # Reject unknown commands (typos like "installs", "mcpp", etc.)
-$knownCommands = @("install", "gitpull", "mcp", "user", "sessions", "")
+$knownCommands = @("install", "gitpull", "mcp", "user", "sessions", "dashboard", "")
 if ($Command -and $Command -notin $knownCommands) {
     LogError "unknown command '$Command'"
     Write-Host "Run 'aitools --help' for usage."
@@ -659,6 +663,24 @@ if (cursorJson?.mcpServers) {
 '@
     Show-CloudMcp -Context "mcp"
     exit 0
+}
+
+# ---------------------------------------------------------------------------
+# dashboard -- mission control dashboard lifecycle
+# ---------------------------------------------------------------------------
+
+if ($doDashboard) {
+    # Dashboard is a standalone script that handles its own logging and summary.
+    $dashboardScript = Join-Path $repoPath "scripts\aitools-dashboard.ps1"
+    if (-not (Test-Path $dashboardScript)) {
+        LogError "aitools-dashboard.ps1 not found at $dashboardScript"
+        exit 1
+    }
+    # Forward all remaining args to the dashboard script
+    $dashArgs = @()
+    if ($Remaining) { $dashArgs = $Remaining }
+    & $dashboardScript @dashArgs
+    exit $LASTEXITCODE
 }
 
 # ---------------------------------------------------------------------------
