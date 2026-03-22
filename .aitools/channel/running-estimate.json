@@ -6,8 +6,8 @@
     "sessionId": "77a33baf",
     "priorSession": "5HyCwPtSDH",
     "created": "2026-03-22T12:05:00Z",
-    "updated": "2026-03-22T15:45:00Z",
-    "version": 8.1,
+    "updated": "2026-03-22T17:00:00Z",
+    "version": 8.3,
     "versionHistory": [
       {"version": 1, "timestamp": "2026-03-21T15:00:00Z", "changes": "Initial estimate after intelligence loading (session 5HyCwPtSDH)"},
       {"version": 2, "timestamp": "2026-03-21T16:00:00Z", "changes": "M1 findings integrated, .gitignore contradiction identified"},
@@ -17,7 +17,9 @@
       {"version": 6, "timestamp": "2026-03-22T03:00:00Z", "changes": "Nachbesprechung update: M21 SHIP readiness verified (READY, zero blockers), M22 assumption testing (5 verified, 3 partial, 1 untestable), M23 estimate self-verification, all delegation log entries through D24, RECON kill + FRAGORD-v1 destruction deviations added, 9 M22-reclassified assumptions updated, Schwerpunkt updated to reflect current state"},
       {"version": 7, "timestamp": "2026-03-22T08:00:00Z", "changes": "FINAL STATE CAPTURE (M27). Session 5HyCwPtSDH complete. Dashboard shipped. Pre-handoff checklist produced."},
       {"version": 8, "timestamp": "2026-03-22T13:30:00Z", "changes": "ACCEPTING SESSION (77a33baf). Lagebeurteilung: switched Mac to Windows, found 3 cross-platform failure clusters. 90 observations, 11 assumptions, 11 facts, 0 decisions."},
-      {"version": 8.1, "timestamp": "2026-03-22T15:45:00Z", "changes": "Commander authorized fixes (D-v8-3: dotprofile pull, D-v8-4: fix+prevent recurring bugs). Schwerpunkt shifted from observation-only to fix+prevent. Commander-provided facts: multi-session, multi-repo-type, multi-user, CC-specific workspace, unknown Mac decisions. 17 assumptions (3 critical FALSIFIED: AS-v8-12/14/17). Lifecycle transition (observation→action) documented. 'Lifecycle boundary gap' generalization identified. OL estimate v2 created. Pre-commit checklist passed."}
+      {"version": 8.1, "timestamp": "2026-03-22T15:45:00Z", "changes": "Commander authorized fixes. Schwerpunkt shifted to fix+prevent. Commander-provided facts. 17 assumptions (3 FALSIFIED). OL estimate v2 created. Pre-commit checklist passed."},
+      {"version": 8.2, "timestamp": "2026-03-22T16:30:00Z", "changes": "Running estimate brought current. completedWork: 17 entries. Deviation OL-O10. D-v8-4/D-v8-5 DONE."},
+      {"version": 8.3, "timestamp": "2026-03-22T17:00:00Z", "changes": "D-v8-6 IMPLEMENTED: design principle 'Process discipline as work product' written to CLAUDE.md. OL v3: I7 (6-stage carry-forward pipeline), I8 (session-to-session bidirectional merge), P7 (pipeline pattern). D-v8-3 remains PENDING (blocksSessionEnd)."}
     ],
     "supersedes": [],
     "authoritativeNote": "v8 is the first update by accepting session 77a33baf. v1-v7 are from session 5HyCwPtSDH (Mac). v8 captures the Lagebeurteilung when switching to Windows: ground truth invalidated the prior session's accepting Schwerpunkt. Platform stabilization must precede channel infrastructure."
@@ -115,7 +117,7 @@
   ],
 
   "situation": {
-    "currentState": "Session COMPLETE. All planned work delivered through M27. Dashboard shipped in three phases: M24 (dynamic --serve mode), M25 (lifecycle hooks), M26 (CLI-native aitools dashboard command). Final state captured in this v7 estimate. Pre-handoff checklist produced. Ready for /handoff.",
+    "currentState": "Session 77a33baf (accepting session, Windows). Lagebeurteilung completed: 3 cross-platform failure clusters documented (hooks, CLI path, dotprofile). Hook stat -f fix DONE and COMMITTED (3 locations, uname dispatch, commit 2175814). Prevention DONE and COMMITTED (cross-platform.md hook portability section, check-pre-commit.sh step 17). OL estimate created (operational-learning.json v2). D-v8-3 (dotprofile pull) still PENDING — blocksSessionEnd. D-v8-4/D-v8-5 fix+prevent portion DONE. Lifecycle transition discipline learned (OL-O10): S3 skipped Lagebeurteilung at execution boundary, commander caught it.",
 
     "completedWork": [
       "Verified aitools install output: CLAUDE.md merge-adopt chain, deploy log, deployed file, dotprofile template",
@@ -164,7 +166,25 @@
       "M24: Dynamic dashboard built -- --serve mode with local HTTP server (stdlib), CORS bypassed, progressive enhancement (LIVE_MODE flag), poll-based updates without page reload, 200 lines added to generate-dashboard.py, backward compatible with static mode. Silent descoping observation: CORS barrier led to static descope without surfacing -- corrected workflow validated.",
       "M25: Dashboard lifecycle hooks -- dashboard-serve.sh (SessionStart hook, thin dispatcher to aitools dashboard --background) + estimate-refresh-stop.sh (Stop hook, combined turn tracking + Lagebeurteilung reminder at context threshold). Auto-update flow: agent updates estimate -> mtime changes -> server watcher detects -> regenerates HTML -> browser polls and re-renders.",
       "M26: CLI-native dashboard -- aitools dashboard as first-class CLI command. Dual-script (aitools-dashboard.sh + aitools-dashboard.ps1) with structured logging, OS guards, aitools-lib. Subcommands: --background, --stop, --status, --snapshot, --port, --estimate. Hook simplified to thin dispatcher. aitools entry point updated with 'dashboard' subcommand dispatch.",
-      "M27: Final state capture -- this v7 estimate. All remaining decisions, observations, plan-scale items. Pre-handoff checklist. Accepting session Schwerpunkt."
+      "M27: Final state capture -- this v7 estimate. All remaining decisions, observations, plan-scale items. Pre-handoff checklist. Accepting session Schwerpunkt.",
+
+      "--- SESSION 77a33baf COMPLETED WORK (v8.2) ---",
+      "Lagebeurteilung on Windows: identified 3 cross-platform failure clusters from terminal output and deploy.log forensics",
+      "Observation collection: 100+ observations, 17 assumptions (3 critical FALSIFIED), 11 facts, 6 ambiguities — all audited against governed vocabulary",
+      "Investigation: /investigate skill, git log search (30 terms, 2 repos, 64+ commits), release notes, GitHub issues, incidents.json, planning brief cross-references",
+      "Planning brief (3829 lines, 54 decisions) loaded into context and cross-referenced with observations",
+      "Running estimate v7 (prior session) loaded, updated to v8, v8.1, v8.2 with session observations, commander-provided facts, decisions, assumptions",
+      "Operational learning estimate created: operational-learning.json v1→v2. 10 observations, 6 insights, 6 patterns, 5 proposals (2 analyzed, 1 implemented, 2 pending). Active intelligence carry-forward gaps with informsTransitions/resolvableBy/blocksExecution.",
+      "Hook stat -f fix: 3 locations in surfacing-duty-stop.sh and estimate-refresh-stop.sh. Replaced broken stat -f || stat -c fallback chain with uname -s platform dispatch. Tested on Windows Git Bash. Deployed to ~/.claude/hooks/. Commit 2175814.",
+      "Hook portability audit: all 11 hooks in shared/hooks/ audited by subagent. All PORTABLE after fix. One consistency gap: glossary-skill-guard.sh missing set -euo pipefail.",
+      "Prevention: cross-platform.md updated with 'Hook portability' section (known-bad patterns table, canonical dispatch pattern, 'NEVER use fallback chain' guidance). check-pre-commit.sh step 17 added (context-aware hook portability audit for 5 known-bad patterns).",
+      "Two commits: 9f19760 (estimates), 2175814 (hook fix + prevention). Both pushed.",
+      "Commander-provided facts captured: multi-session support, repo types, dashboard architecture, CC-specific workspace, user model breadth, unknown Mac decisions",
+      "Lifecycle transition discipline: learned OL-O10/OL-P6 (demonstrate-then-skip). Commander caught S3 rushing from decision to execution without Lagebeurteilung.",
+      "Proposal promotion: 3 orphaned structuralFix suggestions promoted to tracked proposals (OL-PR3/4/5) with CALL lifecycle status (pending-analysis → analyzed → implemented → verified)",
+      "CarryForwardGaps restructured: gaps now have informsTransitions, resolvableBy, blocksExecution fields — active intelligence requirements, not passive documentation",
+      "AAR/OL schema overlap documented as CFG-A7 gap — cannot resolve without Mac-side verification",
+      "Vocabulary findings: 'repo' (generic, ungoverned), 'carry-forward' (ungoverned), 'commit gap' (coined), 'configuration confidence' (coined), 'lifecycle boundary gap' (coined or Mac work product)"
     ],
 
     "deviations": [
@@ -232,6 +252,11 @@
         "description": "Original RECON-MISSION-CONTROL produced hook-centric architecture from stale assumptions (fetch() works, Stop hook can generate HTML in <15ms)",
         "impact": "Architecture was invalid -- CORS blocks fetch() from file:///. Feasibility study discovered this. RECON findings were partially salvageable (S1 role analysis, dashboard requirements) and extracted into FRAGORD v2.",
         "batchOrigin": "pre-M20"
+      },
+      {
+        "description": "SESSION 77a33baf: S3 skipped Lagebeurteilung at decision→execution boundary. Commander issued D-v8-5, S3 went directly to fixing hooks without presenting execution plan or confirming scope. Committed 4 files without checkpoint. Commander caught it: 'stop for a second. i noticed you went and just started executing.'",
+        "impact": "Entire fix+prevent cycle executed without commander checkpoint. Fix was correct but process was wrong. Captured as OL-O10/OL-P6. Proposal OL-PR5 (Lagebeurteilung at every execution transition) filed as pending-analysis.",
+        "batchOrigin": "session 77a33baf, D-v8-5 execution"
       }
     ],
 
@@ -483,10 +508,31 @@
       {
         "id": "D-v8-4",
         "decision": "Before ending this session: fix the recurring cross-platform bugs (hook stat -f crash — 4th instance of the same class) AND spend as much time and tokens as necessary to prevent them from happening again on any repo on any platform. The prevention is as important as the fix.",
-        "status": "decided",
+        "status": "DONE",
         "decidedBy": "commander (session 77a33baf)",
         "relatedBriefDecisions": [8, 9],
-        "blocksSessionEnd": true
+        "blocksSessionEnd": true,
+        "evidence": "Fix: 3 stat locations patched with uname -s dispatch (commit 2175814). Test: both hooks run clean on Windows Git Bash. Verify: surfacing duty reminder fires correctly. Prevent: cross-platform.md hook portability section + check-pre-commit.sh step 17. Audit: all 11 hooks verified PORTABLE by subagent.",
+        "olReference": "OL-PR2 (implemented)"
+      },
+      {
+        "id": "D-v8-6",
+        "decision": "Design principle: 'Process discipline as work product.' The observation-to-fact pipeline IS the primary deliverable of every session. Code changes are outputs of the discipline, not substitutes for it. Added to CLAUDE.md Design Principles. Applies to every session, every platform, every aitools developer.",
+        "status": "IMPLEMENTED",
+        "decidedBy": "commander (session 77a33baf)",
+        "implementedBy": "Written to CLAUDE.md Design Principles section",
+        "relatedBriefDecisions": [36, 8],
+        "terrainChange": "Every artifact written before this principle was written without it. Prior artifacts become STALE at the principle level. Propagation requires the full 6-stage carry-forward pipeline (produce → commit → push → pull → deploy → verify), each stage with independent failure modes."
+      },
+      {
+        "id": "D-v8-5",
+        "decision": "Fix, test, verify, and prevent hook errors from happening again. Hooks written on any platform should work on any platform we support. Platform Engineering framework (planning brief #8) is proposed but NOT registered — the detection layer for hook portability does not exist. This decision implements the minimum viable detection layer.",
+        "status": "DONE",
+        "decidedBy": "commander (session 77a33baf)",
+        "relatedBriefDecisions": [8, 9],
+        "blocksSessionEnd": true,
+        "evidence": "Same as D-v8-4. Additionally: Platform Engineering framework checked via /frameworks — NOT registered, NOT pending. Only exists in planning brief decision #8 (proposed). The detection layer (check-pre-commit step 17) is now the first implemented artifact of the proposed framework.",
+        "olReference": "OL-PR2 (implemented), OL-I2 (detection layer gap — partially closed)"
       }
     ],
 

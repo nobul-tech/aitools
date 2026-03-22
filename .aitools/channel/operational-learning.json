@@ -15,8 +15,8 @@
       "ISO 9001 document control — governed access, controlled distribution"
     ],
     "created": "2026-03-22T14:00:00Z",
-    "updated": "2026-03-22T15:30:00Z",
-    "version": 2,
+    "updated": "2026-03-22T17:00:00Z",
+    "version": 3,
     "versionHistory": [
       {
         "version": 1,
@@ -28,7 +28,13 @@
         "version": 2,
         "timestamp": "2026-03-22T15:30:00Z",
         "session": "77a33baf",
-        "changes": "Commander authorized fixes (D-v8-3, D-v8-4). Lifecycle transition observation→action captured. 'Lifecycle boundary gap' identified as generalization of all 5 patterns (P1-P5). Added I5 (configuration audit), I6 (user model breadth), P4 (cross-machine divergence), P5 (OL everywhere). Expanded carryForwardGaps with 5 Mac-side items. 3 new vocabulary findings. Pre-commit checklist pass."
+        "changes": "Commander authorized fixes (D-v8-3, D-v8-4). Lifecycle transition observation→action captured. 'Lifecycle boundary gap' identified. Added I5, I6, P4, P5. Expanded carryForwardGaps. Pre-commit checklist pass."
+      },
+      {
+        "version": 3,
+        "timestamp": "2026-03-22T17:00:00Z",
+        "session": "77a33baf",
+        "changes": "Design principle D-v8-6 'Process discipline as work product' written to CLAUDE.md. I7 (6-stage carry-forward pipeline — not just commit+push), I8 (session-to-session bidirectional merge). P7 (6-stage pipeline pattern with per-stage failure modes and enforcement). 3 structuralFix suggestions promoted to proposals (OL-PR3/4/5). Active carry-forward gaps restructured with informsTransitions/resolvableBy/blocksExecution. OL-O10 (demonstrate-then-skip), P6 (process pattern). Proposal lifecycle: pending-analysis→analyzed→implemented→verified."
       }
     ]
   },
@@ -105,6 +111,14 @@
       "evidence": "aitools.ps1:318 (*> $null pattern), deploy.log (zero stderr between build completion and error entries), commit 682be4d (prior bugs)",
       "relatedDecisions": [],
       "severity": "high"
+    },
+    {
+      "id": "OL-O10",
+      "observation": "After a lifecycle transition decision, S3 rushed from 'decision made' to 'full execution with commit' without terrain assessment. Commander issued D-v8-5 (fix, test, verify, prevent hooks). S3 checked /frameworks, recorded the decision, then immediately edited 3 source files, tested, deployed, launched audit subagent, wrote a check script step, tested it, and committed — all without presenting an execution plan, confirming scope, or doing a Lagebeurteilung. S3 had demonstrated the correct pattern minutes earlier (pre-commit checklist with 3 passes at the observation→action boundary) but did not repeat it at the decision→execution boundary. Commander caught it: 'stop for a second. i noticed you went and just started executing.'",
+      "sessions": ["77a33baf"],
+      "evidence": "Session conversation: D-v8-5 decision at commander's request, then 4-file commit (2175814) without intermediate checkpoint. Pre-commit checklist (the correct pattern) was executed at the prior transition but not at this one. The Lagebeurteilung definition says 'fixed categories examined every time' — S3 examined at transition 1, skipped at transition 2.",
+      "relatedDecisions": [8, 9],
+      "severity": "high"
     }
   ],
 
@@ -145,6 +159,20 @@
       "framework": "Configuration management (ISO 10007), Intelligence preparation (FM 2-01.3)"
     },
     {
+      "id": "OL-I7",
+      "insight": "Carry-forward is a 6-stage pipeline (produce → commit → push → pull → deploy → verify), not 'just commit and push.' This session observed failures at stages 2 (commit gap — selective), 4 (dotprofile pull blocked — dirty tree), 5 (hooks crash, deploy scripts silent failure), and 6 (no Lagebeurteilung at session start). Each stage has independent failure modes. Collapsing the pipeline to 'commit and push' is a false assumption that hides 4 of the 6 failure points. Provenance: Swiss cheese (each stage is a layer with holes), SRE deployment pipeline, Lean value stream mapping, military logistics chain",
+      "basedOn": ["OL-O1", "OL-O9", "OL-P3", "OL-P4"],
+      "sessions": ["77a33baf"],
+      "framework": "Platform engineering, Operational learning, Three-layer governance"
+    },
+    {
+      "id": "OL-I8",
+      "insight": "Carry-forward is session-to-session, not machine-to-machine. The machine is the platform (affects HOW). The session is the unit of work (produces WHAT). Both directions produce original work: prior session had harvesting/AARs/dashboard architecture, this session produced OL estimate/design principle/portability prevention/proposal lifecycle. Reconciliation is a two-way merge, not a one-way sync. The git merge model applies: divergent sessions, conflict detection, explicit resolution",
+      "basedOn": ["OL-P4", "OL-P5"],
+      "sessions": ["77a33baf"],
+      "framework": "Operational learning, Mission command"
+    },
+    {
       "id": "OL-I6",
       "insight": "The user model is broader than any single session captures. aitools users span: single-platform, multi-platform, single-user, multi-user collaborating, working on aitools itself, or only using aitools on other projects. Design decisions that assume single-user-multi-machine (the current dominant pattern) may not hold for multi-user scenarios. The dashboard, channel, and concurrency architectures must account for all combinations. This was understood on the Mac session but not documented in the repo",
       "basedOn": [],
@@ -159,128 +187,228 @@
       "pattern": "Write-on-A, discover-on-B",
       "description": "Code written and tested on one platform, deployed to both, discovered broken on the other. Has occurred 4 times for hooks. Also applies to dotprofile CLAUDE.md template (incident #28). The prevention is platform-aware validation before deployment, not post-deployment discovery",
       "instances": ["stat -f hooks (4th)", "find -printf (2nd)", "$MODE unset (1st)", "Stop hook type (3rd)", "CLAUDE.md placeholder #28"],
-      "structuralFix": "Decision #8 (Platform engineering framework) with detection-layer hook for portability checking"
+      "structuralFix": "OL-PR2 (IMPLEMENTED: check-pre-commit.sh step 17). Also: decision #8 (Platform engineering framework — proposed, not registered)"
     },
     {
       "id": "OL-P2",
       "pattern": "Correct pattern exists but new code uses old pattern",
       "description": "A correct solution is extracted/documented (get_mtime, uname dispatch, deploy_managed_file) but subsequent code written after the extraction uses the pre-extraction pattern. The extraction provides the capability but not the enforcement",
       "instances": ["stat hooks vs get_mtime (O3)", "harvest-session.sh paths vs workspace rule (O8)"],
-      "structuralFix": "Check script that greps for known-bad patterns in registered all-platform scripts (decision #8 component 8)"
+      "structuralFix": "OL-PR2 (IMPLEMENTED: check-pre-commit.sh step 17)"
     },
     {
       "id": "OL-P3",
       "pattern": "Commit pipeline selectivity",
       "description": "During-session code changes get committed (agent makes git commits). End-of-session hook outputs do not (no git operations in hooks). The commit is SELECTIVE — intentional artifacts committed, hook-produced artifacts stranded. Repeats every session until decision #1 is implemented",
       "instances": ["v0.63.0 commit (2 files from 35-mission session)", "harvesting/ stale by 3 days", "dotprofile untracked session files"],
-      "structuralFix": "Decision #1 (auto-commit/push in session-archive.sh)"
+      "structuralFix": "OL-PR1 (analyzed, not yet implemented)"
     },
     {
       "id": "OL-P4",
       "pattern": "Cross-machine state divergence",
       "description": "Work done on one machine creates decisions, artifacts, and architectural changes that are not fully committed/pushed. The other machine operates on a stale baseline, treating old decisions as current. The divergence is invisible until someone switches machines and does a Lagebeurteilung. From configuration management (ISO 10007): this is a configuration baseline divergence requiring a configuration audit",
       "instances": ["Mac 3/19-3/22 work not on Windows", "Per-session estimates exist on Mac but not Windows", "Dashboard architecture decided on Mac with S1 but not in repo", "Unknown decisions that conflict with planning brief"],
-      "structuralFix": "Decision #1 (auto-commit/push closes the gap) + configuration confidence dimension (D-v8-2) + Mac-side inventory at next Mac session",
+      "structuralFix": "OL-PR1 (auto-commit/push) + OL-PR3 (configuration confidence, pending-analysis) + Mac-side inventory",
       "provenance": ["ISO 10007 (configuration management)", "IPB FM 2-01.3 (intelligence gaps)", "Clausewitz fog of war"]
+    },
+    {
+      "id": "OL-P6",
+      "pattern": "Demonstrate-then-skip at subsequent transitions",
+      "description": "The agent demonstrates the correct lifecycle transition discipline (assessment, checklist, verification) at the first boundary, then skips it at the next boundary in the same session. The correct pattern is known and recently executed — the skip is not ignorance, it's urgency overriding discipline. This is OL-P2 (correct pattern exists, old pattern used) applied to PROCESS, not code. The Lagebeurteilung definition requires 'fixed categories examined every time, even if nothing changed' — 'every time' means every transition, not just the first one",
+      "instances": ["Session 77a33baf: pre-commit checklist (3 passes) at observation→action boundary, then straight to execution at decision→execution boundary for D-v8-5. Commander caught it."],
+      "structuralFix": "OL-PR5 (pending-analysis: Lagebeurteilung at every execution transition)",
+      "provenance": ["Lagebeurteilung (Bundeswehr)", "OODA Orient phase (Boyd)", "Deming PDCA Plan before Do"]
+    },
+    {
+      "id": "OL-P7",
+      "pattern": "6-stage carry-forward pipeline",
+      "description": "Carry-forward is not 'commit and push' — it's a 6-stage pipeline: (1) Produce: hooks/agent create artifacts, (2) Commit: git add + commit, (3) Push: git push to remote, (4) Pull: git pull on consuming session's machine, (5) Deploy: aitools sync deploys configs/hooks/skills, (6) Verify: Lagebeurteilung confirms state. Each stage has independent failure modes. This session observed failures at stages 2 (selective commit), 4 (dotprofile dirty tree), 5 (hooks crash, deploy scripts silent failure), and 6 (no Lagebeurteilung done). Different artifact types traverse different pipeline paths: git-tracked JSON goes through git (stages 2-4), deployed hooks go through file copy (stage 5), settings go through deploy scripts (stage 5). 'Commit and push' addresses 2 of 6 stages",
+      "instances": ["Mac v0.63.0: committed + pushed, but dotprofile pull blocked (stage 4), hooks crashed (stage 5), deploy failed (stage 5), no verification (stage 6)", "harvesting/ stale: produced (stage 1) but never committed (stage 2)", "OL-O10: execution without Lagebeurteilung (stage 6 skipped)"],
+      "structuralFix": "Each stage needs its own enforcement. Stage 1: OL-PR1 (auto-commit closes gap between produce and commit). Stage 4: D-v8-3 (dotprofile pre-pull mitigation). Stage 5: D-v8-4/D-v8-5 (hook portability, deploy script diagnostics). Stage 6: OL-PR5 (Lagebeurteilung at every transition). No single fix closes all 6 stages.",
+      "provenance": ["Swiss cheese model (Reason) — each stage is a layer with holes", "SRE deployment pipeline (build→test→stage→deploy→verify)", "Lean value stream mapping (waste at handoffs)", "Military logistics (produce→transport→store→distribute→consume)"]
     },
     {
       "id": "OL-P5",
       "pattern": "OL is everywhere, not a silo",
       "description": "Operational learning is not a standalone artifact — it's a layer that attaches to every harness activity. Sessions, mission command, delegation, artifacts, frameworks, provenance, channels all produce and consume learning. Across all provenance (CALL institutional, Deming embedded, Argyris double-loop, SRE event-driven, safety engineering contextual): learning is embedded in the process, accumulated across events, and applied continuously. A separate OL file captures the SYNTHESIS but not the learning itself — the learning happens everywhere",
       "instances": ["This session's observation discipline applied governed vocabulary to real terminal output", "Prior session's 5HyCwPtSDH AARs embedded in missions", "Running estimate v7→v8 IS learning in action"],
-      "structuralFix": "OL estimate accumulates cross-session; session estimates embed per-session learning; both carry forward via git"
+      "structuralFix": "OL-PR4 (pending-analysis: OL as institutional accumulator, blocked by CFG-A7)"
     }
   ],
 
   "proposals": [
     {
       "id": "OL-PR1",
+      "status": "analyzed",
       "proposal": "Implement decision #1 (auto-commit/push) as the highest-priority pipeline fix. Every session without it loses harvested artifacts and session archives. The running estimate proved carry-forward works when committed — extend to all SessionEnd outputs",
       "barrierAnalysis": "If decision #1 had been implemented before session 5HyCwPtSDH: harvesting artifacts from 3/20-3/22 would be on Windows now. Session archives in dotprofile would be committed. The 'stale by 3 days' observation would not exist. PASSES barrier test",
       "effort": "small",
       "severity": "high",
-      "basedOn": ["OL-I1", "OL-O1"]
+      "basedOn": ["OL-I1", "OL-O1"],
+      "sourcePattern": "OL-P3"
     },
     {
       "id": "OL-PR2",
-      "proposal": "Add a hook portability check to the pre-commit or post-push check scripts. Grep all registered hooks for known-bad patterns (stat -f, find -printf, grep -P, date -d) and flag them. This is the missing detection layer",
+      "status": "implemented",
+      "proposal": "Add a hook portability check to the pre-commit check scripts. Grep all registered hooks for known-bad patterns (stat -f, find -printf, grep -P, date -d) and flag them. This is the missing detection layer",
       "barrierAnalysis": "If a portability check existed before the stop hooks were committed: the stat -f pattern would have been flagged. The hook would have been written with uname dispatch from the start. PASSES barrier test for OL-O2, OL-O3, OL-O7",
       "effort": "medium",
       "severity": "high",
-      "basedOn": ["OL-I2", "OL-O2", "OL-O7"]
+      "basedOn": ["OL-I2", "OL-O2", "OL-O7"],
+      "sourcePattern": "OL-P1, OL-P2",
+      "implementedBy": "Session 77a33baf: check-pre-commit.sh step 17, commit 2175814"
+    },
+    {
+      "id": "OL-PR3",
+      "status": "pending-analysis",
+      "proposal": "Add configuration confidence dimension (VERIFIED/STALE/SUPERSEDED/UNKNOWN) to running estimate decisions and facts. Adapted from ISO 10007 configuration status accounting and IPB intelligence confidence assessment",
+      "barrierAnalysis": "PENDING — depends on Mac-side verification of current estimate architecture (CFG-A3). May conflict with per-session estimate design. Analyze after Mac inventory.",
+      "effort": "medium",
+      "severity": "medium",
+      "basedOn": ["OL-I5", "OL-P4"],
+      "sourcePattern": "OL-P4",
+      "blockedBy": "CFG-A3 (per-session estimate architecture unknown)"
+    },
+    {
+      "id": "OL-PR4",
+      "status": "pending-analysis",
+      "proposal": "Establish OL estimate as the cumulative institutional learning accumulator — separate from per-session running estimates, consuming AARs from across sessions. OL estimate grows; session estimates update in place. Both carry forward via git",
+      "barrierAnalysis": "PENDING — depends on Mac-side AAR schema verification (CFG-A7). The OL estimate may need to consume or align with the AAR format developed on Mac. Analyze after Mac AARs are accessible.",
+      "effort": "medium",
+      "severity": "medium",
+      "basedOn": ["OL-P5"],
+      "sourcePattern": "OL-P5",
+      "blockedBy": "CFG-A7 (AAR/OL schema relationship unknown)"
+    },
+    {
+      "id": "OL-PR5",
+      "status": "pending-analysis",
+      "proposal": "Add Lagebeurteilung requirement at every execution transition — not just delegations and handoffs. When a commander decision authorizes execution, the agent must assess terrain before writing code: scope, approach, risks, dependencies on gapped state. The /delegate skill's delegation duty or a new standing order may be the natural home",
+      "barrierAnalysis": "PENDING — the pattern (OL-P6) was observed once in this session. Per the escalation policy (decision #35): 1st occurrence = behavioral coaching, 3+ = structural fix. This is occurrence 1. Monitor for recurrence before investing in structural enforcement. However, the CALL provenance (PDCA Plan before Do, Lagebeurteilung every time) suggests structural enforcement is warranted even on first occurrence when the consequence is high (entire execution without commander checkpoint).",
+      "effort": "small",
+      "severity": "high",
+      "basedOn": ["OL-O10", "OL-P6"],
+      "sourcePattern": "OL-P6",
+      "blockedBy": null
     }
   ],
 
   "carryForwardGaps": {
-    "description": "State that SHOULD be on this Windows clone but is NOT, due to the commit pipeline gap (OL-I1) or the dotprofile pull failure",
+    "description": "Active intelligence requirements — state gaps that must be surfaced at lifecycle transition boundaries. Each gap states WHERE it's relevant, WHAT resolves it, and WHETHER it blocks specific execution. Consumed by: /handoff (include in handoff prompt), session start Lagebeurteilung (flag unresolved), lifecycle transition assessments (check dependencies). Adapted from IPB FM 2-01.3: intelligence gaps with collection plans, briefed at every operations order.",
     "verified": [
       {
+        "id": "CFG-V1",
         "artifact": "harvesting/ artifacts from 3/20 to 3/22",
         "status": "MISSING",
         "evidence": "ls harvesting/ shows only 2026-03-19 files. User confirms 3/22 artifacts exist on Mac",
-        "cause": "harvest-session.sh has no git operations. SessionEnd outputs never committed"
+        "cause": "harvest-session.sh has no git operations. SessionEnd outputs never committed",
+        "informsTransitions": ["handoff", "session-start", "harvesting-review"],
+        "resolvableBy": "Mac session: git add harvesting/, commit, push. OR implement decision #1 (auto-commit/push)",
+        "blocksExecution": "Any /harvest review or promotion — working from stale manifest"
       },
       {
+        "id": "CFG-V2",
         "artifact": "dotprofile CLAUDE.md updates",
         "status": "BLOCKED",
         "evidence": "git pull --ff-only fails: uncommitted CLAUDE.md change (deliberate template update)",
-        "cause": "Uncommitted change on Windows blocks pull. No pre-pull mitigation for dotprofile"
+        "cause": "Uncommitted change on Windows blocks pull. No pre-pull mitigation for dotprofile",
+        "informsTransitions": ["handoff", "session-start", "dotprofile-pull", "aitools-sync"],
+        "resolvableBy": "D-v8-3: commit or stash local change, pull, reconcile. THIS SESSION.",
+        "blocksExecution": "D-v8-3 (blocksSessionEnd). Cross-machine CLAUDE.md sync. Session archive visibility."
       },
       {
+        "id": "CFG-V3",
         "artifact": "dotprofile session archives (2 untracked)",
         "status": "MISSING",
         "evidence": "sessions/aitools/2026-03-14_0df15714.jsonl and 2026-03-16_9dc5dee4.jsonl untracked",
-        "cause": "session-archive.sh copies but doesn't commit"
+        "cause": "session-archive.sh copies but doesn't commit",
+        "informsTransitions": ["handoff", "session-start"],
+        "resolvableBy": "git add + commit in dotprofile repo (can be done as part of D-v8-3)",
+        "blocksExecution": "Session history completeness. Plan Writer calibration (decision #51/52) depends on session transcripts."
       },
       {
+        "id": "CFG-V4",
         "artifact": ".aitools/channel/handoffs/",
         "status": "DIRECTORY DOES NOT EXIST",
         "evidence": "ls .aitools/channel/ shows only running-estimate.json",
-        "cause": "Decision #22 proposed tracked handoffs — not implemented"
+        "cause": "Decision #22 proposed tracked handoffs — not implemented",
+        "informsTransitions": ["handoff"],
+        "resolvableBy": "Implement decision #22 channel infrastructure OR create directory manually",
+        "blocksExecution": "Not blocking — /handoff skill has fallback. But handoff prompts not persisted for future sessions."
       }
     ],
     "assumed": [
       {
+        "id": "CFG-A1",
         "artifact": "Plans, references, or incidents updated 3/20-3/22 on Mac",
         "status": "UNKNOWN",
         "evidence": "Cannot verify without Mac-side inventory. Last committed code changes are in v0.63.0",
-        "verificationMethod": "Compare Mac working tree against HEAD on next Mac session"
+        "informsTransitions": ["session-start", "plan-execution", "incident-filing"],
+        "resolvableBy": "Mac session: git diff --stat HEAD, compare against running estimate facts",
+        "blocksExecution": "Any work assuming current incidents.json, reference files, or plans are authoritative"
       },
       {
+        "id": "CFG-A2",
         "artifact": "Namespace consolidation (.scratch/ → .aitools/scratch/, harvesting/ → .aitools/harvesting/)",
         "status": "UNKNOWN — may be partially migrated on Mac",
         "evidence": "Hooks still reference old paths. Workspace rule specifies new paths. Decision #34 decided but implementation status unknown",
-        "verificationMethod": "Check Mac hooks and directory structure"
+        "informsTransitions": ["session-start", "hook-deployment", "scratch-init"],
+        "resolvableBy": "Mac session: check hooks and directory structure. Compare against decision #34 spec.",
+        "blocksExecution": "Hook deployment — deploying hooks that reference wrong paths. Scratch/harvesting operations."
       },
       {
+        "id": "CFG-A3",
         "artifact": "Per-session running estimates (D-PER-SESSION-ESTIMATES)",
         "status": "CONFIRMED DIVERGENT — Mac has per-session, Windows has single-file",
-        "evidence": "Commander: 'on the mac we have it by sessions.' Windows has single running-estimate.json at fixed path. Architecture diverged.",
-        "verificationMethod": "Check Mac .aitools/channel/ directory structure"
+        "evidence": "Commander: 'on the mac we have it by sessions.' Windows has single running-estimate.json at fixed path.",
+        "informsTransitions": ["session-start", "handoff", "estimate-reconciliation"],
+        "resolvableBy": "Mac session: inventory estimate architecture, document divergence, decide which pattern is authoritative",
+        "blocksExecution": "Running estimate schema decisions. Any work assuming single-file pattern is current."
       },
       {
-        "artifact": "Dashboard architecture (per-session dashboards, per-mission dashboards, multi-session concurrency)",
+        "id": "CFG-A4",
+        "artifact": "Dashboard architecture (per-session, per-mission, multi-session concurrency)",
         "status": "DECISIONS EXIST ON MAC, NOT IN REPO",
-        "evidence": "Commander: 'we did some work on dashboards with S1 and decided we need one dashboard per session.' Designs and S1 work products not committed.",
-        "verificationMethod": "Review Mac session scratch/channel for S1 dashboard architecture artifacts"
+        "evidence": "Commander: 'we did some work on dashboards with S1 and decided we need one dashboard per session.'",
+        "informsTransitions": ["session-start", "dashboard-work", "channel-infrastructure"],
+        "resolvableBy": "Mac session: commit S1 work products, push dashboard architecture decisions",
+        "blocksExecution": "Channel infrastructure build (HR-3). Dashboard implementation. Any work assuming current dashboard architecture."
       },
       {
+        "id": "CFG-A5",
         "artifact": "Channel-dashboard architectural mapping",
         "status": "CONCEPTUAL — NOT YET VERIFIED",
-        "evidence": "Commander: 'this is all similar to how artifacts work with channels I think.' Hierarchy: repo → sessions → missions, each level with channels AND dashboards. Exact mapping undocumented.",
-        "verificationMethod": "Review Mac S1 work products; verify channel schema supports dashboard integration"
+        "evidence": "Commander: 'this is all similar to how artifacts work with channels I think.' Hierarchy: repo → sessions → missions.",
+        "informsTransitions": ["channel-infrastructure", "dashboard-work"],
+        "resolvableBy": "Mac session: review S1 work products, verify mapping",
+        "blocksExecution": "Channel schema design — must know if dashboards are channel consumers"
       },
       {
+        "id": "CFG-A6",
         "artifact": "Multi-user, multi-repo-type support decisions",
         "status": "COMMANDER-STATED REQUIREMENT, IMPLEMENTATION STATUS UNKNOWN",
-        "evidence": "Commander: users span single/multi-platform, solo/collaborative, aitools-developer/aitools-consumer. Repo types: local, git, cloud-sync. .aitools/ for all. Architectural decisions for these scenarios may exist on Mac.",
-        "verificationMethod": "Audit Mac decisions, plans, and CLAUDE.md for multi-user/multi-repo architecture"
+        "evidence": "Users span: single/multi-platform, solo/collaborative, aitools-developer/consumer. Repo types: local, git, cloud-sync.",
+        "informsTransitions": ["session-start", "architecture-decisions"],
+        "resolvableBy": "Mac session: audit decisions and plans for multi-user/multi-repo architecture",
+        "blocksExecution": "Not immediately blocking — current work is single-user. But architectural decisions that assume single-user may conflict."
       },
       {
+        "id": "CFG-A7",
+        "artifact": "AAR schema and Mac AARs — relationship to this OL estimate",
+        "status": "KNOWN OVERLAP, SCHEMA RELATIONSHIP UNKNOWN",
+        "evidence": "OL estimate has observations/insights/proposals — same as AAR schema (decision #36). Mac has 4+ markdown AARs. reference/aar-schema.json does not exist (proposed). Restructuring OL to match unseen AAR schema would be guessing.",
+        "informsTransitions": ["session-start", "handoff", "ol-restructuring", "debrief"],
+        "resolvableBy": "Mac session: read AARs, check for aar-schema.json, determine OL-AAR relationship (consume vs be)",
+        "blocksExecution": "OL schema restructuring. AAR formalization. /debrief skill design. Proposal schema changes should wait."
+      },
+      {
+        "id": "CFG-A8",
         "artifact": "Planning brief decisions that may be superseded by Mac work",
         "status": "COMMANDER CONFIRMS CONFLICTS EXIST, SCOPE UNKNOWN",
-        "evidence": "Commander: 'there are MANY unknown decisions and some conflict with state/decisions we assume have not changed.' Cannot identify which brief decisions are stale without Mac inventory.",
-        "verificationMethod": "Full brief audit against Mac session decisions on next Mac session. ISO 10007: configuration audit against baseline."
+        "evidence": "Commander: 'there are MANY unknown decisions and some conflict with state/decisions we assume have not changed.'",
+        "informsTransitions": ["session-start", "plan-execution", "handoff", "brief-reading"],
+        "resolvableBy": "Mac session: full brief audit against session decisions. ISO 10007 configuration audit.",
+        "blocksExecution": "Plan execution from the brief — decisions may be superseded. Channel infrastructure build depends on brief decisions #22-24 which may have changed."
       }
     ]
   },
