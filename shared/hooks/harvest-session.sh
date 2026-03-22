@@ -161,8 +161,11 @@ fs.writeFileSync(f, JSON.stringify(manifest, null, 2) + '\n');
     fi
 done
 
-# --- Delete session dir ---
-rm -rf "$SESSION_DIR"
+# --- Clear session pointer (leave session dir intact) ---
+# Previously rm -rf'd $SESSION_DIR here, but if harvest partially failed
+# or classification missed files, they became unrecoverable (see 30-file
+# loss incident, session Z1IhGrcgGO, 2026-03-21). Session dirs accumulate
+# in .scratch/ and are logged as stale by scratch-init.sh on next session.
 rm -f "$SCRATCH_DIR/.current-session"
 
 # --- Audit harvesting/ (prune stale) ---
@@ -197,8 +200,9 @@ for (const [name, entry] of Object.entries(manifest.artifacts)) {
             } catch {}
 
             if (refs === 0) {
-                // Prune: delete file, mark in manifest
-                try { fs.unlinkSync(path.join(dir, name)); } catch {}
+                // Mark as pruned in manifest but do NOT delete the file.
+                // Previous auto-deletion destroyed artifacts before review.
+                // Files accumulate in harvesting/ for manual cleanup.
                 entry.status = 'pruned';
                 pruned++;
             } else {

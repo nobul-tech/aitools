@@ -12,6 +12,20 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.64.1 -- Remove auto-deletion from session hooks (2026-03-22)
+
+### Fixes
+
+| # | Change |
+|---|--------|
+| 1 | **Remove rm -rf from scratch-init.sh** — SessionStart hook no longer auto-deletes stale session dirs (>24h). This was the proximate cause of the 30-file loss (session Z1IhGrcgGO). Now logs stale count for manual cleanup |
+| 2 | **Remove rm -rf from harvest-session.sh** — SessionEnd hook no longer deletes the session scratch dir after harvesting. If harvest partially fails or classification misses files, they remain recoverable |
+| 3 | **Remove fs.unlinkSync from harvest-session.sh** — Prune logic still marks artifacts as `pruned` in manifest but no longer deletes files from `harvesting/`. Files accumulate for manual cleanup |
+
+(tested: macOS)
+
+---
+
 ## v0.64.0 -- Platform stabilization, operational learning, process discipline (2026-03-22)
 
 Session 77a33baf (Windows): Lagebeurteilung after switching from Mac revealed 3 cross-platform failure clusters. Fixed all. Built institutional learning infrastructure. Established design principle. 3-agent parallel investigation for Deploy-Configs root cause.

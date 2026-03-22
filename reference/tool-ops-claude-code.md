@@ -54,6 +54,7 @@ Post-push checklist #20 triggers this review automatically.
 | 7 | Session management commands (claude -c, --resume, /resume, /rename) | 2.1.51 | 2.1.51 | "Session Management Commands" section below | -- |
 | 8 | Hook execution context (hooks run in bash or HTTP, not configurable shell) | 2.1.51 | 2.1.74 (2026-03-13) | `shared/hooks/session-archive.sh`, `scripts/setup-user-hooks.sh` | -- (2.1.63 adds HTTP hooks as alternative to shell) |
 | 9 | Coaching items tied to CC capabilities (subagent gap, auto-memory locality) | 2.1.51 | 2.1.51 | `shared/claude-shared.md` | -- |
+| 23 | `claude update` triggers SessionEnd hooks then cancels them | 2.1.81 | 2.1.81 (2026-03-22) | `scripts/aitools-install.sh/.ps1` (runs `claude update`) | -- |
 | 19 | `effortLevel` setting (`settings.json` key controlling reasoning effort) | 2.1.68 | 2.1.74 (2026-03-13) | `scripts/setup-user-hooks.sh/.ps1`, `reference/user-repo.md`, `shared/claude-shared.md` | -- |
 
 ### MEDIUM -- Affects developer experience or specific features
@@ -180,6 +181,26 @@ All levels merge together. More specific wins on conflict.
 | `/resume` | Switch sessions from inside a running session |
 | `/rename <name>` | Name the current session for easy recall |
 | `claude --continue --fork-session` | Fork current session into a new one |
+
+### claude update Hook Cancellation
+
+`claude update` (called by `aitools-install` step 9) internally starts a
+transient session to check for updates. When it completes, SessionEnd hooks
+fire — but CC immediately cancels them with `Hook cancelled`. This is CC
+behavior, not a hook bug.
+
+Observed output:
+```
+SessionEnd hook [bash ".../harvest-session.sh"] failed: Hook cancelled
+```
+
+**Impact:** None. The hooks exit before doing real work (no session dir exists
+for the transient update session). The `[info]` log level in aitools-install
+correctly treats this as informational, not an error.
+
+**No action needed.** This is benign noise from CC's session lifecycle firing
+hooks for non-interactive sessions. If CC adds a hook filter for session type,
+this goes away.
 
 ### Session Storage Internals
 
