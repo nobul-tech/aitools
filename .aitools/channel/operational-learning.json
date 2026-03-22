@@ -1,0 +1,344 @@
+{
+  "meta": {
+    "intent": {
+      "purpose": "Accumulate operational learning across sessions — observations, insights, patterns, and proposals that feed future session intelligence prep, framework evolution, and harness improvement. The institutional memory for this project. Adapted from CALL (Center for Army Lessons Learned) institutional database pattern: individual sessions produce observations, this file synthesizes them into insights and proposals that persist",
+      "scope": "Cross-session learning only. Observations citing session estimates, insights connecting observations across sessions, patterns that generalize, proposals with barrier analysis, carry-forward gap tracking, governed vocabulary findings. NOT session operational state (main running estimate). NOT incident tracking (incidents.json via /incident). NOT framework registry data (framework-registry.json via /frameworks). NOT fix specifications (those come from plans)",
+      "audience": "S2 intelligence prep at session start, /debrief skill consumers, accepting session agents, the commander. Any agent asking 'what have we learned?'"
+    },
+    "governance": ".claude/rules/operational-learning.md (proposed, not yet created)",
+    "provenance": [
+      "CALL OIL taxonomy (observations, insights, lessons-identified, lessons-learned) — institutional accumulation pattern",
+      "Deming PDCA Check-Act — learning embedded in every cycle",
+      "Argyris double-loop learning — questioning assumptions, not just outcomes",
+      "Safety engineering barrier analysis — applied during proposal validation",
+      "SRE retrospectives — learning tied to operational events",
+      "ISO 9001 document control — governed access, controlled distribution"
+    ],
+    "created": "2026-03-22T14:00:00Z",
+    "updated": "2026-03-22T15:30:00Z",
+    "version": 2,
+    "versionHistory": [
+      {
+        "version": 1,
+        "timestamp": "2026-03-22T14:00:00Z",
+        "session": "77a33baf",
+        "changes": "Initial creation. Seeded from session 77a33baf Lagebeurteilung on Windows. Cross-platform failures surfaced systemic learning about the carry-forward pipeline, hook portability, and observation discipline. Prior sessions' learnings (5HyCwPtSDH) referenced but not yet incorporated — their OL artifacts are stranded on Mac."
+      },
+      {
+        "version": 2,
+        "timestamp": "2026-03-22T15:30:00Z",
+        "session": "77a33baf",
+        "changes": "Commander authorized fixes (D-v8-3, D-v8-4). Lifecycle transition observation→action captured. 'Lifecycle boundary gap' identified as generalization of all 5 patterns (P1-P5). Added I5 (configuration audit), I6 (user model breadth), P4 (cross-machine divergence), P5 (OL everywhere). Expanded carryForwardGaps with 5 Mac-side items. 3 new vocabulary findings. Pre-commit checklist pass."
+      }
+    ]
+  },
+
+  "observations": [
+    {
+      "id": "OL-O1",
+      "observation": "The carry-forward pipeline has a structural gap: code changes (committed during session by agent) carry forward via git. SessionEnd hook outputs (harvesting artifacts, session archives) do NOT — they're produced after the last commit and stranded on the local machine",
+      "sessions": ["77a33baf", "5HyCwPtSDH"],
+      "evidence": "v0.63.0 commit contains only running-estimate.json + RELEASE_NOTES.md. session-archive.sh:11 explicitly says 'No git operations.' harvest-session.sh has no git operations. harvesting/ on Windows stops at 3/19; Mac has artifacts through 3/22. Decision #1 proposes auto-commit/push but is NOT implemented",
+      "relatedDecisions": [1, 36],
+      "severity": "high"
+    },
+    {
+      "id": "OL-O2",
+      "observation": "Cross-platform hook failures are a recurring pattern (4th instance): $MODE unset (v0.29.2), find -printf GNU-only (v0.31.0), Stop hook type wrong (bc2429e), stat -f BSD-only (this session). Each time: written on macOS, tested on macOS, deployed to both platforms, discovered broken on Windows",
+      "sessions": ["77a33baf"],
+      "evidence": "git log commits 6427f53, 7b4033e, bc2429e. Current stat -f crash reproduced empirically. All hook commits say '(tested: macOS)'. No check script validates hook cross-platform portability",
+      "relatedDecisions": [8, 9],
+      "severity": "high"
+    },
+    {
+      "id": "OL-O3",
+      "observation": "Correct patterns exist in the codebase but new code uses old patterns. get_mtime() extracted into check-lib.sh (v0.32.0). session-archive.sh uses uname -s dispatch. But hooks written AFTER these extractions used the old broken stat -f || stat -c pattern",
+      "sessions": ["77a33baf"],
+      "evidence": "check-lib.sh:162 (get_mtime), session-archive.sh:68 (uname dispatch) — both correct. surfacing-duty-stop.sh:53, estimate-refresh-stop.sh:111 — both broken, written later",
+      "relatedDecisions": [8],
+      "severity": "high"
+    },
+    {
+      "id": "OL-O4",
+      "observation": "The governed vocabulary enforces observation precision. Overclaims ('every Windows turn,' 'carry-forward is blocked,' '3rd instance') were caught when audited against governed definitions. The observation-to-fact pipeline (observe → classify → verify → correct) ran 3 passes in this session, each catching errors the previous missed",
+      "sessions": ["77a33baf"],
+      "evidence": "O78 (wrong carry-forward claim corrected), F9 (3rd→4th instance corrected), AS7 (overclaim downgraded to assumption), O44 (search expanded from 1 to 30 terms)",
+      "relatedDecisions": [36],
+      "severity": "medium"
+    },
+    {
+      "id": "OL-O5",
+      "observation": "Search breadth determines discovery quality. One search term ('unbound') found 0 commits. Thirty terms across 2 repos found 64+ commits including the exact prior art (commit 6427f53). The narrow search produced a false negative ('no prior art exists') that broader search corrected",
+      "sessions": ["77a33baf"],
+      "evidence": "O44 (original narrow search), O85 (expanded search results)",
+      "relatedDecisions": [],
+      "severity": "medium"
+    },
+    {
+      "id": "OL-O6",
+      "observation": "Platform transitions require Lagebeurteilung before resuming prior Schwerpunkt. The prior session set accepting Schwerpunkt to 'Build channel infrastructure.' Switching to Windows revealed 3 failure clusters that the prior session (Mac-only) couldn't have known about. The Schwerpunkt had to shift to platform stabilization",
+      "sessions": ["77a33baf", "5HyCwPtSDH"],
+      "evidence": "Running estimate v7 acceptingSessionSchwerpunkt vs v8 Schwerpunkt. Prior session ran 28 delegations on Mac with no Windows testing",
+      "relatedDecisions": [8, 50],
+      "severity": "high"
+    },
+    {
+      "id": "OL-O7",
+      "observation": "The hooks directory contains both correct and incorrect cross-platform patterns side by side. session-archive.sh (correct uname dispatch) and surfacing-duty-stop.sh (broken stat -f) are in the same shared/hooks/ directory. No code review or check script caught the inconsistency",
+      "sessions": ["77a33baf"],
+      "evidence": "session-archive.sh:68 vs surfacing-duty-stop.sh:53. Same directory, different patterns, no enforcement",
+      "relatedDecisions": [8, 20],
+      "severity": "medium"
+    },
+    {
+      "id": "OL-O8",
+      "observation": "The namespace consolidation (decision #34: .scratch/ → .aitools/scratch/, harvesting/ → .aitools/harvesting/) has NOT been implemented in the hooks. harvest-session.sh references .scratch/ and harvesting/ at repo root. The hooks and the workspace rule are out of sync",
+      "sessions": ["77a33baf"],
+      "evidence": "harvest-session.sh:35 ($PROJECT_ROOT/.scratch), harvest-session.sh:49 ($PROJECT_ROOT/harvesting). Workspace rule (.claude/rules/aitools-workspace.md) specifies .aitools/ paths",
+      "relatedDecisions": [34],
+      "severity": "medium"
+    },
+    {
+      "id": "OL-O9",
+      "observation": "The Deploy-Configs function suppresses all output (*> $null 2>> $logFile), creating silent failures in reusable code — violating USO. When 6 deploy scripts crashed, zero diagnostic output reached the log. Prior bugs in the same function (commit 682be4d: $LASTEXITCODE false positives) show this is a recurring fragility surface",
+      "sessions": ["77a33baf"],
+      "evidence": "aitools.ps1:318 (*> $null pattern), deploy.log (zero stderr between build completion and error entries), commit 682be4d (prior bugs)",
+      "relatedDecisions": [],
+      "severity": "high"
+    }
+  ],
+
+  "insights": [
+    {
+      "id": "OL-I1",
+      "insight": "The harness has a gap where SessionEnd hook outputs are produced but never committed (we call this the 'commit gap' — ungoverned term, see vocabularyFindings). The carry-forward mechanism (git tracked files) works. The running estimate proved it — committed during session, pulled on Windows, carried forward. The gap is that SessionEnd hook outputs are never committed. Decision #1 (auto-commit/push) is the designed fix but hasn't been implemented across 6 sessions since it was decided. This is the highest-priority pipeline fix because every session that ends without it loses harvested artifacts and session archives",
+      "basedOn": ["OL-O1"],
+      "sessions": ["77a33baf"],
+      "framework": "Operational learning (decision #36)"
+    },
+    {
+      "id": "OL-I2",
+      "insight": "Cross-platform failures repeat because there is no DETECTION layer for platform portability. The PREVENTION layer exists (cross-platform.md rule, correct patterns in check-lib.sh). The AUDIT layer exists (/compat skill proposed). But no hook or check script catches platform-specific commands in hooks before deployment. Per three-layer governance, the missing layer is where failures persist",
+      "basedOn": ["OL-O2", "OL-O3", "OL-O7"],
+      "sessions": ["77a33baf"],
+      "framework": "Three-layer governance, Platform engineering (decision #8)"
+    },
+    {
+      "id": "OL-I3",
+      "insight": "Governed vocabulary is not documentation — it is an active quality gate. Without it, the running estimate contains overclaims, ambiguities, and assumptions disguised as facts. The same dynamic that caused the v4 false .gitignore claim (prior session) would have recurred in v8 if the vocabulary hadn't forced classification. The observation-to-fact pipeline IS the quality mechanism",
+      "basedOn": ["OL-O4", "OL-O5"],
+      "sessions": ["77a33baf", "5HyCwPtSDH"],
+      "framework": "Governed vocabulary, Operational learning"
+    },
+    {
+      "id": "OL-I4",
+      "insight": "The workspace is in a TRANSITION state. Decisions #34 (namespace consolidation) and D-PER-SESSION-ESTIMATES (per-session estimates) are decided but not implemented ON WINDOWS. The Mac may have progressed further. Commander explicitly stated 'most of where stuff lives and naming conventions are assumptions.' Any assumption about structure, paths, or naming on this Windows clone is an assumption, not a fact",
+      "basedOn": ["OL-O8", "OL-O1"],
+      "sessions": ["77a33baf"],
+      "framework": "Platform engineering"
+    },
+    {
+      "id": "OL-I5",
+      "insight": "The harness needs a CONFIGURATION AUDIT mechanism for cross-machine state. When work happens on one machine and isn't fully committed, the other machine's running estimate, planning brief, and architectural assumptions diverge silently. The divergence is invisible until someone switches machines. ISO 10007 (configuration status accounting) and IPB (intelligence gaps with collection plans) both address this: document the baseline, track changes, audit divergences. The running estimate's carryForwardGaps section is a start but lacks the confidence dimension — we need VERIFIED/STALE/SUPERSEDED/UNKNOWN per item",
+      "basedOn": ["OL-O1", "OL-P4"],
+      "sessions": ["77a33baf"],
+      "framework": "Configuration management (ISO 10007), Intelligence preparation (FM 2-01.3)"
+    },
+    {
+      "id": "OL-I6",
+      "insight": "The user model is broader than any single session captures. aitools users span: single-platform, multi-platform, single-user, multi-user collaborating, working on aitools itself, or only using aitools on other projects. Design decisions that assume single-user-multi-machine (the current dominant pattern) may not hold for multi-user scenarios. The dashboard, channel, and concurrency architectures must account for all combinations. This was understood on the Mac session but not documented in the repo",
+      "basedOn": [],
+      "sessions": ["77a33baf"],
+      "framework": "Mission command (user model), Platform engineering (multi-platform support)"
+    }
+  ],
+
+  "patterns": [
+    {
+      "id": "OL-P1",
+      "pattern": "Write-on-A, discover-on-B",
+      "description": "Code written and tested on one platform, deployed to both, discovered broken on the other. Has occurred 4 times for hooks. Also applies to dotprofile CLAUDE.md template (incident #28). The prevention is platform-aware validation before deployment, not post-deployment discovery",
+      "instances": ["stat -f hooks (4th)", "find -printf (2nd)", "$MODE unset (1st)", "Stop hook type (3rd)", "CLAUDE.md placeholder #28"],
+      "structuralFix": "Decision #8 (Platform engineering framework) with detection-layer hook for portability checking"
+    },
+    {
+      "id": "OL-P2",
+      "pattern": "Correct pattern exists but new code uses old pattern",
+      "description": "A correct solution is extracted/documented (get_mtime, uname dispatch, deploy_managed_file) but subsequent code written after the extraction uses the pre-extraction pattern. The extraction provides the capability but not the enforcement",
+      "instances": ["stat hooks vs get_mtime (O3)", "harvest-session.sh paths vs workspace rule (O8)"],
+      "structuralFix": "Check script that greps for known-bad patterns in registered all-platform scripts (decision #8 component 8)"
+    },
+    {
+      "id": "OL-P3",
+      "pattern": "Commit pipeline selectivity",
+      "description": "During-session code changes get committed (agent makes git commits). End-of-session hook outputs do not (no git operations in hooks). The commit is SELECTIVE — intentional artifacts committed, hook-produced artifacts stranded. Repeats every session until decision #1 is implemented",
+      "instances": ["v0.63.0 commit (2 files from 35-mission session)", "harvesting/ stale by 3 days", "dotprofile untracked session files"],
+      "structuralFix": "Decision #1 (auto-commit/push in session-archive.sh)"
+    },
+    {
+      "id": "OL-P4",
+      "pattern": "Cross-machine state divergence",
+      "description": "Work done on one machine creates decisions, artifacts, and architectural changes that are not fully committed/pushed. The other machine operates on a stale baseline, treating old decisions as current. The divergence is invisible until someone switches machines and does a Lagebeurteilung. From configuration management (ISO 10007): this is a configuration baseline divergence requiring a configuration audit",
+      "instances": ["Mac 3/19-3/22 work not on Windows", "Per-session estimates exist on Mac but not Windows", "Dashboard architecture decided on Mac with S1 but not in repo", "Unknown decisions that conflict with planning brief"],
+      "structuralFix": "Decision #1 (auto-commit/push closes the gap) + configuration confidence dimension (D-v8-2) + Mac-side inventory at next Mac session",
+      "provenance": ["ISO 10007 (configuration management)", "IPB FM 2-01.3 (intelligence gaps)", "Clausewitz fog of war"]
+    },
+    {
+      "id": "OL-P5",
+      "pattern": "OL is everywhere, not a silo",
+      "description": "Operational learning is not a standalone artifact — it's a layer that attaches to every harness activity. Sessions, mission command, delegation, artifacts, frameworks, provenance, channels all produce and consume learning. Across all provenance (CALL institutional, Deming embedded, Argyris double-loop, SRE event-driven, safety engineering contextual): learning is embedded in the process, accumulated across events, and applied continuously. A separate OL file captures the SYNTHESIS but not the learning itself — the learning happens everywhere",
+      "instances": ["This session's observation discipline applied governed vocabulary to real terminal output", "Prior session's 5HyCwPtSDH AARs embedded in missions", "Running estimate v7→v8 IS learning in action"],
+      "structuralFix": "OL estimate accumulates cross-session; session estimates embed per-session learning; both carry forward via git"
+    }
+  ],
+
+  "proposals": [
+    {
+      "id": "OL-PR1",
+      "proposal": "Implement decision #1 (auto-commit/push) as the highest-priority pipeline fix. Every session without it loses harvested artifacts and session archives. The running estimate proved carry-forward works when committed — extend to all SessionEnd outputs",
+      "barrierAnalysis": "If decision #1 had been implemented before session 5HyCwPtSDH: harvesting artifacts from 3/20-3/22 would be on Windows now. Session archives in dotprofile would be committed. The 'stale by 3 days' observation would not exist. PASSES barrier test",
+      "effort": "small",
+      "severity": "high",
+      "basedOn": ["OL-I1", "OL-O1"]
+    },
+    {
+      "id": "OL-PR2",
+      "proposal": "Add a hook portability check to the pre-commit or post-push check scripts. Grep all registered hooks for known-bad patterns (stat -f, find -printf, grep -P, date -d) and flag them. This is the missing detection layer",
+      "barrierAnalysis": "If a portability check existed before the stop hooks were committed: the stat -f pattern would have been flagged. The hook would have been written with uname dispatch from the start. PASSES barrier test for OL-O2, OL-O3, OL-O7",
+      "effort": "medium",
+      "severity": "high",
+      "basedOn": ["OL-I2", "OL-O2", "OL-O7"]
+    }
+  ],
+
+  "carryForwardGaps": {
+    "description": "State that SHOULD be on this Windows clone but is NOT, due to the commit pipeline gap (OL-I1) or the dotprofile pull failure",
+    "verified": [
+      {
+        "artifact": "harvesting/ artifacts from 3/20 to 3/22",
+        "status": "MISSING",
+        "evidence": "ls harvesting/ shows only 2026-03-19 files. User confirms 3/22 artifacts exist on Mac",
+        "cause": "harvest-session.sh has no git operations. SessionEnd outputs never committed"
+      },
+      {
+        "artifact": "dotprofile CLAUDE.md updates",
+        "status": "BLOCKED",
+        "evidence": "git pull --ff-only fails: uncommitted CLAUDE.md change (deliberate template update)",
+        "cause": "Uncommitted change on Windows blocks pull. No pre-pull mitigation for dotprofile"
+      },
+      {
+        "artifact": "dotprofile session archives (2 untracked)",
+        "status": "MISSING",
+        "evidence": "sessions/aitools/2026-03-14_0df15714.jsonl and 2026-03-16_9dc5dee4.jsonl untracked",
+        "cause": "session-archive.sh copies but doesn't commit"
+      },
+      {
+        "artifact": ".aitools/channel/handoffs/",
+        "status": "DIRECTORY DOES NOT EXIST",
+        "evidence": "ls .aitools/channel/ shows only running-estimate.json",
+        "cause": "Decision #22 proposed tracked handoffs — not implemented"
+      }
+    ],
+    "assumed": [
+      {
+        "artifact": "Plans, references, or incidents updated 3/20-3/22 on Mac",
+        "status": "UNKNOWN",
+        "evidence": "Cannot verify without Mac-side inventory. Last committed code changes are in v0.63.0",
+        "verificationMethod": "Compare Mac working tree against HEAD on next Mac session"
+      },
+      {
+        "artifact": "Namespace consolidation (.scratch/ → .aitools/scratch/, harvesting/ → .aitools/harvesting/)",
+        "status": "UNKNOWN — may be partially migrated on Mac",
+        "evidence": "Hooks still reference old paths. Workspace rule specifies new paths. Decision #34 decided but implementation status unknown",
+        "verificationMethod": "Check Mac hooks and directory structure"
+      },
+      {
+        "artifact": "Per-session running estimates (D-PER-SESSION-ESTIMATES)",
+        "status": "CONFIRMED DIVERGENT — Mac has per-session, Windows has single-file",
+        "evidence": "Commander: 'on the mac we have it by sessions.' Windows has single running-estimate.json at fixed path. Architecture diverged.",
+        "verificationMethod": "Check Mac .aitools/channel/ directory structure"
+      },
+      {
+        "artifact": "Dashboard architecture (per-session dashboards, per-mission dashboards, multi-session concurrency)",
+        "status": "DECISIONS EXIST ON MAC, NOT IN REPO",
+        "evidence": "Commander: 'we did some work on dashboards with S1 and decided we need one dashboard per session.' Designs and S1 work products not committed.",
+        "verificationMethod": "Review Mac session scratch/channel for S1 dashboard architecture artifacts"
+      },
+      {
+        "artifact": "Channel-dashboard architectural mapping",
+        "status": "CONCEPTUAL — NOT YET VERIFIED",
+        "evidence": "Commander: 'this is all similar to how artifacts work with channels I think.' Hierarchy: repo → sessions → missions, each level with channels AND dashboards. Exact mapping undocumented.",
+        "verificationMethod": "Review Mac S1 work products; verify channel schema supports dashboard integration"
+      },
+      {
+        "artifact": "Multi-user, multi-repo-type support decisions",
+        "status": "COMMANDER-STATED REQUIREMENT, IMPLEMENTATION STATUS UNKNOWN",
+        "evidence": "Commander: users span single/multi-platform, solo/collaborative, aitools-developer/aitools-consumer. Repo types: local, git, cloud-sync. .aitools/ for all. Architectural decisions for these scenarios may exist on Mac.",
+        "verificationMethod": "Audit Mac decisions, plans, and CLAUDE.md for multi-user/multi-repo architecture"
+      },
+      {
+        "artifact": "Planning brief decisions that may be superseded by Mac work",
+        "status": "COMMANDER CONFIRMS CONFLICTS EXIST, SCOPE UNKNOWN",
+        "evidence": "Commander: 'there are MANY unknown decisions and some conflict with state/decisions we assume have not changed.' Cannot identify which brief decisions are stale without Mac inventory.",
+        "verificationMethod": "Full brief audit against Mac session decisions on next Mac session. ISO 10007: configuration audit against baseline."
+      }
+    ]
+  },
+
+  "vocabularyFindings": [
+    {
+      "term": "carry-forward",
+      "status": "ungoverned",
+      "usage": "Used in workspace rule, running estimate design, session rationale. AM-1 (prior session) flagged scope overloading (within-session, cross-session, cross-machine)",
+      "action": "File via /glossary when ready"
+    },
+    {
+      "term": "ground truth",
+      "status": "ungoverned",
+      "usage": "Used in Lagebeurteilung rationale to mean 'verified state on this platform.' Equivalent to 'fact' in running estimate schema but implies platform-specific verification",
+      "action": "Monitor — may not need governance if usage stays narrow"
+    },
+    {
+      "term": "commit gap",
+      "status": "ungoverned — coined this session",
+      "usage": "The structural gap where SessionEnd hook outputs are produced but never committed. Distinct from 'carry-forward gap' (which implies git doesn't work — it does, the problem is nobody calls git)",
+      "action": "Candidate for governance if the concept persists across sessions"
+    },
+    {
+      "term": "repo (generic)",
+      "status": "ungoverned — 'aitools repo' and 'dotprofile repo' are governed, generic 'repo' is not",
+      "usage": "Commander: 'repo means any project or system type.' Covers local directories, git repos, cloud-sync folders. The workspace (.aitools/) that aitools provides capabilities to. Broader than either governed term.",
+      "action": "File via /glossary — this is a base concept that many other terms depend on"
+    },
+    {
+      "term": "configuration confidence",
+      "status": "ungoverned — coined this session, adapted from ISO 10007 + IPB",
+      "usage": "The certainty level of a decision or fact: VERIFIED (checked this session), STALE (prior session, no change evidence), SUPERSEDED (newer decisions exist), UNKNOWN (may have changed). Proposed as D-v8-2",
+      "action": "Candidate for governance — ties into how running estimates track decision freshness"
+    },
+    {
+      "term": "lifecycle boundary gap",
+      "status": "ungoverned — may exist in Mac OL work products. Independently derived this session as generalization of P1-P5",
+      "usage": "A failure mode at lifecycle transitions where artifacts, state, or context are lost. All 5 OL patterns are instances. 'lifecycle transition' IS governed; 'lifecycle boundary gap' is the failure mode AT that transition. Provenance: Lean (waste at handoffs), Swiss cheese (holes at boundaries), systems engineering (interface gaps), SRE (handoff failures), military (relief in place)",
+      "action": "Verify against Mac OL artifacts — may already be governed there. If not, file via /glossary as a term that ties to the existing 'lifecycle transition' definition"
+    }
+  ],
+
+  "scopeGuard": {
+    "inScope": [
+      "Cross-session learning observations and insights",
+      "Patterns that generalize across sessions",
+      "Proposals with barrier analysis",
+      "Carry-forward gap tracking",
+      "Governed vocabulary findings from learning activities"
+    ],
+    "outOfScope": [
+      "Session operational state (main running estimate)",
+      "Incident tracking (incidents.json via /incident skill)",
+      "Framework registry data (framework-registry.json via /frameworks skill)",
+      "Fix specifications and implementation details (plans/)",
+      "Tool evaluation or registry data (/tool-registry, /tool-eval skills)"
+    ],
+    "scopeCreepDefinition": "Content that serves a valid purpose but extends beyond this file's stated intent scope. Per glossary: resolution is move to correct file, split, or amend the intent"
+  }
+}

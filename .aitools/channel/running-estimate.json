@@ -1,28 +1,31 @@
 {
   "meta": {
-    "estimateId": "5HyCwPtSDH_session_s3",
+    "estimateId": "77a33baf_session_s3",
     "maintainer": "s3",
     "scope": "session",
-    "sessionId": "5HyCwPtSDH",
-    "created": "2026-03-21T15:00:00Z",
-    "updated": "2026-03-22T08:00:00Z",
-    "version": 7,
+    "sessionId": "77a33baf",
+    "priorSession": "5HyCwPtSDH",
+    "created": "2026-03-22T12:05:00Z",
+    "updated": "2026-03-22T15:45:00Z",
+    "version": 8.1,
     "versionHistory": [
-      {"version": 1, "timestamp": "2026-03-21T15:00:00Z", "changes": "Initial estimate after intelligence loading"},
+      {"version": 1, "timestamp": "2026-03-21T15:00:00Z", "changes": "Initial estimate after intelligence loading (session 5HyCwPtSDH)"},
       {"version": 2, "timestamp": "2026-03-21T16:00:00Z", "changes": "M1 findings integrated, .gitignore contradiction identified"},
       {"version": 3, "timestamp": "2026-03-21T17:00:00Z", "changes": "M2-M5 launched, session lessons captured, commander corrections recorded"},
       {"version": 4, "timestamp": "2026-03-21T23:30:00Z", "changes": "Reconciliation mission: all 7 AARs consolidated, 10 proposal themes ranked, 3 framework proposals drafted, 8 glossary terms identified, 2 incidents ready to file, operational learning cycle demonstrated"},
       {"version": 5, "timestamp": "2026-03-22T01:00:00Z", "changes": "M20 authoritative reconciliation: .gitignore fix EXECUTED AND VERIFIED, CORS constraint empirically verified, all 17+8 assumptions from M12 classified, false claims corrected, 12 session decisions captured, ship definition for dashboard codified"},
       {"version": 6, "timestamp": "2026-03-22T03:00:00Z", "changes": "Nachbesprechung update: M21 SHIP readiness verified (READY, zero blockers), M22 assumption testing (5 verified, 3 partial, 1 untestable), M23 estimate self-verification, all delegation log entries through D24, RECON kill + FRAGORD-v1 destruction deviations added, 9 M22-reclassified assumptions updated, Schwerpunkt updated to reflect current state"},
-      {"version": 7, "timestamp": "2026-03-22T08:00:00Z", "changes": "FINAL STATE CAPTURE (M27). New decisions: D-CLI-NATIVE-DASHBOARD, D-SILENT-DESCOPING-PREVENTION, D-DYNAMIC-HARD-REQUIREMENT. Completed work through M27. 8 observations from operational learning. 5 plan-scale items for accepting session. Accepting session Schwerpunkt. Delegation log through D28. Updated open threads. Pre-handoff checklist produced."}
+      {"version": 7, "timestamp": "2026-03-22T08:00:00Z", "changes": "FINAL STATE CAPTURE (M27). Session 5HyCwPtSDH complete. Dashboard shipped. Pre-handoff checklist produced."},
+      {"version": 8, "timestamp": "2026-03-22T13:30:00Z", "changes": "ACCEPTING SESSION (77a33baf). Lagebeurteilung: switched Mac to Windows, found 3 cross-platform failure clusters. 90 observations, 11 assumptions, 11 facts, 0 decisions."},
+      {"version": 8.1, "timestamp": "2026-03-22T15:45:00Z", "changes": "Commander authorized fixes (D-v8-3: dotprofile pull, D-v8-4: fix+prevent recurring bugs). Schwerpunkt shifted from observation-only to fix+prevent. Commander-provided facts: multi-session, multi-repo-type, multi-user, CC-specific workspace, unknown Mac decisions. 17 assumptions (3 critical FALSIFIED: AS-v8-12/14/17). Lifecycle transition (observation→action) documented. 'Lifecycle boundary gap' generalization identified. OL estimate v2 created. Pre-commit checklist passed."}
     ],
-    "supersedes": ["running-estimate-v4.json", "running-estimate-v3-stale.json"],
-    "authoritativeNote": "This is the SINGLE source of truth and FINAL version for session 5HyCwPtSDH. v6 was accurate through M23 but did not include M24-M27 work (dynamic dashboard, lifecycle hooks, CLI-native dashboard, final state capture). v5 was accurate at time of writing but stale: it did not include M21 verification results, M22 assumption testing, or the RECON kill/FRAGORD-v1 destruction deviations. v4 contained a false .gitignore completion claim. v3-stale contained an incorrectly-verified 3-depth assumption. All are preserved for provenance only."
+    "supersedes": [],
+    "authoritativeNote": "v8 is the first update by accepting session 77a33baf. v1-v7 are from session 5HyCwPtSDH (Mac). v8 captures the Lagebeurteilung when switching to Windows: ground truth invalidated the prior session's accepting Schwerpunkt. Platform stabilization must precede channel infrastructure."
   },
 
-  "schwerpunkt": "Session 5HyCwPtSDH is COMPLETE. All planned work delivered. Dashboard shipped (static + dynamic + CLI-native). Final state captured in v7. Pre-handoff checklist produced. Ready for /handoff to accepting session.",
+  "schwerpunkt": "Platform stabilization: fix recurring cross-platform bugs (stat -f hooks, dotprofile pull) and prevent recurrence on any repo/platform. Observation phase complete — commander authorized fixes. Dotprofile must be pulled before session end. Channel infrastructure deferred until platform is stable.",
 
-  "acceptingSessionSchwerpunkt": "Build channel infrastructure (decisions #22-24), implement per-mission dashboards and concurrent session dashboards, full platform support. All hard requirements. Use the operational learning, orchestration patterns, and governance frameworks developed in session 5HyCwPtSDH.",
+  "acceptingSessionSchwerpunkt": "Build channel infrastructure (decisions #22-24), implement per-mission dashboards and concurrent session dashboards, full platform support. DEFERRED by session 77a33baf — platform must be stable first. See v8 Lagebeurteilung.",
 
   "hardRequirements": [
     {
@@ -281,7 +284,53 @@
       "Post-mission Nachbesprechung (4 questions) catches assumption propagation that spot-checking alone misses (M17).",
       "The number of staff functions (3) is independent of delegation depth (levels). Conflating cardinality with depth produced a false 'verified' (M16).",
       "Channel infrastructure (decisions #22-24) was never implemented this session. Zero SITREPs, zero FINDINGs produced. This is a prerequisite for per-mission dashboards.",
-      "The 6-phase executability assessment (pre -> transition -> post -> communicate -> contingency -> learn) was validated conceptually across multiple missions but never formally applied end-to-end in one mission."
+      "The 6-phase executability assessment (pre -> transition -> post -> communicate -> contingency -> learn) was validated conceptually across multiple missions but never formally applied end-to-end in one mission.",
+
+      "--- SESSION 77a33baf OBSERVATIONS (v8) ---",
+      "LAGEBEURTEILUNG: Prior accepting Schwerpunkt assumed stable Windows platform. Ground truth on Windows invalidated that assumption — 3 failure clusters found on first use.",
+      "HOOK CRASH: surfacing-duty-stop.sh crashes on Windows Git Bash: 'line 54: File: unbound variable'. stat -f %m on GNU stat produces multiline filesystem output + exits 1; the || chain also runs stat -c %Y; $(…) captures BOTH outputs; bash arithmetic interprets 'File' as variable name under set -u. REPRODUCED empirically.",
+      "HOOK CRASH: Same stat -f || stat -c pattern at 3 locations: surfacing-duty-stop.sh:53 (file_mod), surfacing-duty-stop.sh:94 (_incidents_mod), estimate-refresh-stop.sh:111 (est_mod). Planning brief assumption A2 ('crash doesn't affect other hooks') is INVALIDATED — estimate-refresh has the identical pattern.",
+      "HOOK CRASH: Correct platform dispatch exists in check-lib.sh:162 (get_mtime with $IS_MACOS) and session-archive.sh:68 (uname -s dispatch). Hooks written AFTER get_mtime extraction used the old broken pattern instead.",
+      "HOOK CRASH: This is the 4TH instance of hooks breaking: (1) $MODE unset v0.29.2, (2) find -printf GNU-only v0.31.0, (3) Stop hook type wrong (prompt vs command, commit bc2429e), (4) stat -f this session. No check script validates hook cross-platform portability.",
+      "HOOK CRASH: The -u flag (nounset) correctly surfaced the stat bug as a crash rather than allowing silent wrong comparisons against garbage data. The crash IS the designed behavior of strict mode.",
+      "HOOK AMBIGUITY: CC output shows 'Ran 2 stop hooks' but only 1 error (surfacing-duty). Fate of estimate-refresh-stop.sh unknown — may have succeeded (stat code path is turn-count gated) or also failed (CC may only show first error).",
+      "AITOOLS CLI: aitools (no-args) first run exits after 'Already up to date' — no user repo pull, no rebuild, no deploy. Root cause unknown.",
+      "AITOOLS CLI: aitools (no-args) second approach — all 6 deploy PS1 scripts fail at same timestamp (12:10:17) with zero diagnostic output in deploy.log. Deploy-Configs uses *> $null 2>> $logFile which suppresses all output — silent failure violating USO.",
+      "AITOOLS CLI: aitools install always succeeds (3/3 today). aitools no-args always fails (2/2 today). Both paths run the same PS1 scripts from scripts/ directory.",
+      "AITOOLS CLI: Deploy-Configs had prior bugs fixed: commit 682be4d fixed $LASTEXITCODE false positives and double-logging. Current failure may be regression or unfixed variant.",
+      "AITOOLS CLI: Summary panel shows '[ok] claude hooks 11 verified' after setup-user-hooks.ps1 FAILED — panel reflects already-deployed state from prior successful aitools install, not this run's attempt.",
+      "DOTPROFILE PULL: aitools-nobul-jose pull fails: 'Your local changes to CLAUDE.md would be overwritten by merge'. The uncommitted change is DELIBERATE — template placeholder update ({{IDENTITY_GIT_EMAIL}} → {{IDENTITY_GIT_NAME}}@{{PROFILE_COMPANY}}) made on Mac, not committed.",
+      "DOTPROFILE PULL: Repo is 4 commits behind origin/main. Uncommitted change blocks pulling those 4 commits.",
+      "DOTPROFILE PULL: 2 untracked session files exist: sessions/aitools/2026-03-14_0df15714.jsonl, sessions/aitools/2026-03-16_9dc5dee4.jsonl.",
+      "DOTPROFILE PULL: Prior incident #28 (commit 8553e37): wrong placeholder in same CLAUDE.md template caused Windows to deploy 'pepe' as git author. Same file, same issue class.",
+      "DOTPROFILE PULL: aitools repo has pre-pull checkout HEAD -- deploy/. Dotprofile repo has NO pre-pull mitigation. GitHub issues #49 and #50 (OPEN) track related problems.",
+      "DOTPROFILE PULL: Pull failure is MASKED — logs warning and continues with local copy. Per PSO 'Fail, don't mask' this is a tension: designed as non-blocking but masks a real sync failure.",
+      "PLATFORM: Prior session 5HyCwPtSDH ran entirely on macOS. 28 delegations, all hooks, all testing on Mac. Accepting Schwerpunkt set without Windows validation.",
+      "PLATFORM: All hook-related commits tested on macOS only. No hook has been tested on Windows before deployment.",
+      "PLATFORM: No check script validates hook cross-platform portability. Detection layer gap.",
+      "PLATFORM: NASM version detection changed from '3.01' (March 12, incorrect — NASM 3.01 doesn't exist) to '2.16.01' (today, correct). Version detection bug was fixed on Mac.",
+      "PLATFORM: deploy/setup-user-claude.ps1 has a staged change (M in git status) while 5 other deploy files have only unstaged changes. One file was explicitly staged.",
+      "PLATFORM: PowerShell 7.6.0 available (current: 7.5.4). Datadog CLI not authenticated. Google Calendar MCP needs authentication.",
+      "SELF-OBSERVATION: This agent (S3) used Read tool to read ~/.claude/CLAUDE.md when it was already in context at session start. Wasted tool call.",
+      "SELF-OBSERVATION: Initial git search used 'unbound' only (too narrow, 0 results). Expanded search with 30 terms across 2 repos found 64+ matching commits. Broader search found the exact prior art (commit 6427f53).",
+      "SEARCH PRIOR ART: Planning brief F4 (high) documents the stat -f bug. Decision #9 plans the fix (uname dispatch). Decision #8 (Platform engineering) plans aitools-lib wrappers (get_mtime, get_birthtime, epoch_to_date). Bug was discovered in investigate-session-gaps.md but never fixed.",
+      "'carry-forward' is used as key concept in workspace rule and running estimate design but is NOT a governed glossary term.",
+
+      "--- SESSION 77a33baf COMMANDER-PROVIDED FACTS (v8.1) ---",
+      "MULTI-SESSION: aitools supports multiple Claude Code sessions running concurrently on the same repo. Multiple Agent CLI sessions can also run concurrently. Both tool types can run simultaneously. Commander-stated fact.",
+      "REPO TYPES: aitools supports local-only directories, git repos, and cloud-sync repo types. .aitools/ is used for all repo types. 'Repo' means any project or system type. Commander-stated fact.",
+      "DASHBOARDS: Architecture decision on Mac: one dashboard per session, with dedicated dashboards for missions launched from sessions. Multiple sessions on same repo each need their own dashboard. Work done with S1 on Mac — designs and decisions NOT in this repo.",
+      "CC-SPECIFIC: The .aitools/ workspace (channels, estimates, OL, harvest, scratch) is Claude Code specific harness work. Agent CLI awareness informs design but implementation is CC-only today. NOT currently documented in project CLAUDE.md — should be (decision D-v8-1).",
+      "USER MODEL: aitools users span: single-platform, multi-platform, collaborating on shared repos, working on aitools itself, or only using aitools on other projects. All combinations are supported. Commander-stated fact.",
+      "UNKNOWN DECISIONS: Commander states MANY unknown decisions exist on Mac from session 5HyCwPtSDH, and SOME of those decisions conflict with state/decisions in our planning brief and running estimate that we assume haven't changed. The scope of conflicts is unknown.",
+      "PIPELINE GAP (v0.63.0 audit): The last Mac commit contains ONLY running-estimate.json + RELEASE_NOTES.md. SessionEnd hook outputs (harvesting artifacts, session archives) were NEVER committed. session-archive.sh:11 explicitly says 'No git operations.' harvest-session.sh also has no git operations. Decision #1 (auto-commit/push) NOT implemented.",
+      "HARVESTING STALE: harvesting/ on Windows has files only up to 2026-03-19. Commander confirms artifacts up to 3/22 exist on Mac. Three days of harvested artifacts never committed/pushed.",
+      "HOOKS USE OLD PATHS: harvest-session.sh references .scratch/ and harvesting/ at repo root. session-archive.sh has no git operations. Both use paths from before decision #34 (namespace consolidation). Consolidation NOT implemented in hooks.",
+      "CORRECT PATTERN CO-EXISTS WITH BROKEN: session-archive.sh:68 uses correct uname -s dispatch for stat. surfacing-duty-stop.sh:53 uses broken stat -f || stat -c pattern. Same shared/hooks/ directory.",
+      "VOCABULARY GAP: 'repo' (generic — any project/workspace aitools provides capabilities to) is NOT governed. 'aitools repo' and 'dotprofile repo' are governed but refer to specific repos. The generic concept needs definition.",
+      "CONFIDENCE PROBLEM: Decisions in planning brief and running estimate have no confidence dimension. A decision from the Mac session that was 'agreed' may now be superseded by Mac work we can't see. Need: VERIFIED/STALE/SUPERSEDED/UNKNOWN classification per configuration management (ISO 10007) and intelligence analysis (IPB FM 2-01.3) provenance.",
+      "LIFECYCLE TRANSITION: Session transitioning from observation to action (D-v8-3, D-v8-4). Per governed term 'lifecycle transition': a point where artifacts, state, or context cross a boundary that may not preserve them. Risks: estimates not committed (the same SessionEnd-outputs-never-committed pattern, now on OUR work), unverified assumptions feeding fixes, subagent context loss, prevention work squeezed by urgent fixes.",
+      "LIFECYCLE BOUNDARY GAP: All 5 OL patterns (P1-P5) are instances of gaps at lifecycle boundaries. The concept generalizes: write→deploy boundary (P1), knowledge→application boundary (P2), session→post-session boundary (P3), machine-A→machine-B boundary (P4), session→institutional boundary (P5). Term may exist in Mac OL work products — independently converging on same concept. Provenance: Lean value stream mapping (waste at handoffs), Swiss cheese (holes at layer boundaries), systems engineering (interface gaps), SRE (handoff failures)."
     ],
 
     "decisions": [
@@ -405,6 +454,39 @@
         "implementedBy": "M24 (--serve mode with Python http.server + fetch polling)",
         "evidence": "Empirically verified: dashboard updates without page reload when estimate file changes. Screenshot evidence in m24-live-dashboard-*.png.",
         "relatedBriefDecisions": [36]
+      },
+      {
+        "id": "--- SESSION 77a33baf DECISIONS (v8.1) ---"
+      },
+      {
+        "id": "D-v8-1",
+        "decision": ".aitools/ workspace (channels, estimates, OL, harvest, scratch) is Claude Code specific harness work. Agent CLI awareness informs design but implementation is CC-only today. Must be documented in project CLAUDE.md as a Key Decision.",
+        "status": "decided",
+        "decidedBy": "commander (session 77a33baf)",
+        "relatedBriefDecisions": [3, 22, 34, 50]
+      },
+      {
+        "id": "D-v8-2",
+        "decision": "Decisions and facts in the running estimate and planning brief need a confidence dimension: VERIFIED (checked this platform/session), STALE (verified prior session, no evidence of change), SUPERSEDED (commander says newer decisions exist), UNKNOWN (may have changed). Adapted from ISO 10007 configuration status accounting and IPB intelligence confidence assessment.",
+        "status": "proposed",
+        "decidedBy": "S3 (session 77a33baf), based on commander's statement about unknown conflicting decisions",
+        "relatedBriefDecisions": [50, 53]
+      },
+      {
+        "id": "D-v8-3",
+        "decision": "Before ending this session: resolve the dotprofile repo issues and have it pulled successfully on Windows.",
+        "status": "decided",
+        "decidedBy": "commander (session 77a33baf)",
+        "relatedBriefDecisions": [],
+        "blocksSessionEnd": true
+      },
+      {
+        "id": "D-v8-4",
+        "decision": "Before ending this session: fix the recurring cross-platform bugs (hook stat -f crash — 4th instance of the same class) AND spend as much time and tokens as necessary to prevent them from happening again on any repo on any platform. The prevention is as important as the fix.",
+        "status": "decided",
+        "decidedBy": "commander (session 77a33baf)",
+        "relatedBriefDecisions": [8, 9],
+        "blocksSessionEnd": true
       }
     ],
 
@@ -596,6 +678,144 @@
         "rationale": "M22: Structural completeness verified. handoff-prompt-v2.md has 12 top-level sections, JSON has 13 non-meta keys (structural reorganization explains the difference). Open thread count: EXACT MATCH (16 = 5 ready + 5 blocked + 2 deferred + 4 new). Content-level accuracy (every bullet, every detail) remains unverified.",
         "severity": "low",
         "m22Result": "PARTIALLY-VERIFIED: structure complete, content unverified"
+      },
+
+      {"id": "--- SESSION 77a33baf ASSUMPTIONS (v8) ---"},
+      {
+        "id": "AS-v8-1",
+        "assumption": "The first aitools no-args exit-early is caused by a stale installed entry point or silent re-exec failure",
+        "status": "unverified",
+        "taxonomy": "Environmental",
+        "evidence": "Deploy log shows only 3 entries then stops. No re-exec marker logged. Installed version was refreshed by aitools install at 12:04 — stale entry point unlikely but possible if deploy list changed.",
+        "severity": "medium"
+      },
+      {
+        "id": "AS-v8-2",
+        "assumption": "PowerShell *> $null 2>> $logFile redirection swallows stderr, causing zero diagnostic output from deploy script crashes",
+        "status": "unverified",
+        "taxonomy": "Environmental",
+        "evidence": "Deploy-Configs (aitools.ps1:318) uses this pattern. 6 scripts crashed with zero stderr in log. PowerShell stream redirection order is the likely cause but not tested.",
+        "severity": "high"
+      },
+      {
+        "id": "AS-v8-3",
+        "assumption": "The 6 deploy scripts fail because of something specific to the Deploy-Configs invocation path vs the aitools-install.ps1 path",
+        "status": "unverified",
+        "taxonomy": "Environmental",
+        "evidence": "Both paths run same PS1 scripts from scripts/ directory. aitools install succeeds 3/3, no-args fails 2/2. Prior bugs in Deploy-Configs fixed (commit 682be4d). Root cause unidentified.",
+        "severity": "high"
+      },
+      {
+        "id": "AS-v8-4",
+        "assumption": "Planning brief A2 ('Stop hook stat crash doesn't affect other hooks on Windows') is invalidated",
+        "status": "falsified",
+        "taxonomy": "Architectural",
+        "evidence": "estimate-refresh-stop.sh:111 has identical stat -f || stat -c pattern. Code confirmed by reading source. Whether it CRASHES on every turn is uncertain — stat code path is turn-count gated (fires at turn-count multiples of 10 after turn 5).",
+        "severity": "high"
+      },
+      {
+        "id": "AS-v8-5",
+        "assumption": "estimate-refresh-stop.sh succeeded on this turn because its stat code path only fires on turn-count multiples of 10 after turn 5",
+        "status": "unverified",
+        "taxonomy": "Environmental",
+        "evidence": "CC showed 'Ran 2 stop hooks' with only 1 error (surfacing-duty). estimate-refresh-stop.sh checks turn_count >= LAGE_INTERVAL (15) && turns_since_lage >= LAGE_INTERVAL. On turn 1, this would not fire. The stat code path at line 111 only fires inside a modulo check at line 82.",
+        "severity": "medium"
+      },
+      {
+        "id": "AS-v8-6",
+        "assumption": "The 'claude hooks 11 verified' summary reflects already-deployed state from prior aitools install, not this run's failed attempt",
+        "status": "unverified",
+        "taxonomy": "Environmental",
+        "evidence": "setup-user-hooks.ps1 failed this run but hooks are present at ~/.claude/hooks/ from the 12:04 aitools install. The summary panel likely checks deployed state, not deployment success.",
+        "severity": "low"
+      },
+      {
+        "id": "AS-v8-7",
+        "assumption": "surfacing-duty stop hook crashes on EVERY Windows turn where CC provides a valid transcript path",
+        "status": "likely-unverified",
+        "taxonomy": "Environmental",
+        "evidence": "Reproduced the stat -f mechanism (F1, F2). Crash observed on turn 1 (O17). The hook's early exit (line 35) only skips if transcript_path is empty or file doesn't exist — CC provides valid paths on normal turns.",
+        "severity": "high"
+      },
+      {
+        "id": "AS-v8-8",
+        "assumption": "aitools (no-args) is the primary sync workflow",
+        "status": "unverified",
+        "taxonomy": "Behavioral",
+        "evidence": "User ran both no-args and install today. No evidence which is preferred for routine use. The no-args path is designed as the lightweight option (pull + rebuild + deploy configs only).",
+        "severity": "low"
+      },
+      {
+        "id": "AS-v8-9",
+        "assumption": "The prior session's accepting Schwerpunkt ('Build channel infrastructure') assumed Windows platform stability",
+        "status": "unverified",
+        "taxonomy": "Architectural",
+        "evidence": "Not explicitly stated in running estimate v7. Implied by HR-4 ('Full platform support') being listed as a separate hard requirement. Prior session ran entirely on Mac — no Windows testing.",
+        "severity": "medium"
+      },
+      {
+        "id": "AS-v8-10",
+        "assumption": "After platform stabilization, the Schwerpunkt will shift to channel infrastructure (decisions #22-24)",
+        "status": "unverified",
+        "taxonomy": "Behavioral",
+        "evidence": "Commander has not confirmed. Priorities may change based on investigation findings.",
+        "severity": "medium"
+      },
+      {
+        "id": "AS-v8-11",
+        "assumption": "Only dotprofile carry-forward (CLAUDE.md, rules, sessions) is blocked. Running estimate carry-forward (aitools repo) is working",
+        "status": "verified",
+        "taxonomy": "Environmental",
+        "evidence": "aitools repo pulled successfully ('Already up to date'). running-estimate.json is tracked in aitools repo (.aitools/channel/). Dotprofile repo pull failed due to dirty CLAUDE.md.",
+        "severity": "high"
+      },
+      {
+        "id": "AS-v8-12",
+        "assumption": "The repo has all up-to-date work product and state from Mac",
+        "status": "FALSIFIED",
+        "taxonomy": "Environmental",
+        "evidence": "Commander confirms: harvesting/ stale by 3 days (stops at 3/19, Mac has 3/22). v0.63.0 commit contains only 2 files. SessionEnd hook outputs never committed. Commander states MANY unknown decisions exist that may conflict with planning brief.",
+        "severity": "critical"
+      },
+      {
+        "id": "AS-v8-13",
+        "assumption": "The incomplete push is limited to harvesting/. Other tracked directories may also be missing.",
+        "status": "likely-true",
+        "taxonomy": "Environmental",
+        "evidence": ".aitools/channel/handoffs/ doesn't exist. Plans, references, incidents may have been updated on Mac post-v0.63.0. Cannot verify without Mac inventory.",
+        "severity": "high"
+      },
+      {
+        "id": "AS-v8-14",
+        "assumption": "Planning brief decisions are current and not superseded by Mac work",
+        "status": "FALSIFIED",
+        "taxonomy": "Architectural",
+        "evidence": "Commander states: 'there are MANY unknown decisions and some of those decisions conflict with state/decisions that we assume have not changed.' Specific areas: dashboards, channels, concurrency, naming. Scope of conflicts unknown.",
+        "severity": "critical"
+      },
+      {
+        "id": "AS-v8-15",
+        "assumption": "The dashboard hierarchy (repo → sessions → missions) maps to the channel hierarchy",
+        "status": "unverified",
+        "taxonomy": "Architectural",
+        "evidence": "Commander said 'this is all similar to how artifacts work with channels I think.' Architectural parallel suggested but exact mapping unclear. Dashboard and channel architectures developed on Mac with S1 — designs not in this repo.",
+        "severity": "medium"
+      },
+      {
+        "id": "AS-v8-16",
+        "assumption": "Namespace consolidation (decision #34), per-session estimates (D-PER-SESSION-ESTIMATES), and other architectural decisions may have progressed further on Mac",
+        "status": "likely-true",
+        "taxonomy": "Architectural",
+        "evidence": "Commander said 'on the mac we have it by sessions.' Current Windows has single running-estimate.json. Commander said 'most of where stuff lives and naming conventions are assumptions.' Hooks still reference old paths.",
+        "severity": "high"
+      },
+      {
+        "id": "AS-v8-17",
+        "assumption": "The current file structure and naming conventions on this Windows clone accurately reflect the Mac's current state",
+        "status": "FALSIFIED",
+        "taxonomy": "Environmental",
+        "evidence": "Commander explicitly stated: 'most of where stuff lives and naming conventions etc are assumptions.' Per-session estimates exist on Mac. Namespace consolidation may be partially done. We cannot treat Windows file layout as authoritative.",
+        "severity": "critical"
       }
     ],
     "unflaggedAmbiguities": [
@@ -654,6 +874,28 @@
         "classification": "verified-as-resolved",
         "rationale": "VERIFIED: WRITE_BLOCKED IS in the delegation duty -- it is component 4 in SKILL.md (lines 513-516). The SKILL.md is authoritative over the planning brief's 8-component list. This ambiguity is resolved.",
         "severity": "low"
+      },
+      {"id": "--- SESSION 77a33baf AMBIGUITIES (v8) ---"},
+      {
+        "id": "AM-v8-1",
+        "ambiguity": "Did estimate-refresh-stop.sh succeed or fail on this turn? CC shows 2 hooks ran, 1 error.",
+        "classification": "unresolved",
+        "rationale": "Two possibilities: (a) succeeded because stat code path is turn-count gated and this was turn 1 (AS-v8-5), (b) also failed but CC only surfaces the first error. Matters because it determines whether both hooks are broken on every turn or only surfacing-duty.",
+        "severity": "medium"
+      },
+      {
+        "id": "AM-v8-2",
+        "ambiguity": "User repo pull failure is MASKED (log_warn + continue) vs PSO 'Fail, don't mask'",
+        "classification": "unresolved-design-tension",
+        "rationale": "The pull was designed as non-blocking (stale local data > failing entirely). But PSO says managed dependency failures should surface as errors. If the masking is intentional, it needs documented exception. If unintentional, it needs escalation to log_error.",
+        "severity": "medium"
+      },
+      {
+        "id": "AM-v8-3",
+        "ambiguity": "'carry-forward' used as key concept but not governed in glossary",
+        "classification": "unresolved-terminology",
+        "rationale": "Used in workspace rule, running estimate design, and this session's rationale. AM-1 from prior session also flagged scope overloading. Term needs /glossary filing.",
+        "severity": "medium"
       }
     ]
   },
