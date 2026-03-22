@@ -322,9 +322,12 @@ deploy_configs() {
                         errors=$((errors + 1))
                         continue
                     fi
+                    # Run without output redirection -- child PS1 scripts log to
+                    # deploy.log via [IO.File]::AppendAllText. PowerShell's 2>> holds
+                    # an exclusive file lock that blocks the child's AppendAllText.
                     if ! pwsh -NoProfile -ExecutionPolicy Bypass \
-                        -File "$(cygpath -w "$script_path")" > /dev/null 2>> "$LOG_FILE"; then
-                        log_error "$script failed (see $LOG_DISPLAY)"
+                        -File "$(cygpath -w "$script_path")"; then
+                        log_error "$script failed (exit $?) -- see $LOG_DISPLAY"
                         errors=$((errors + 1))
                     fi
                 else
@@ -347,8 +350,11 @@ deploy_configs() {
                         errors=$((errors + 1))
                         continue
                     fi
-                    if ! bash "$script_path" > /dev/null 2>> "$LOG_FILE"; then
-                        log_error "$script failed (see $LOG_DISPLAY)"
+                    # Run without output redirection -- child scripts log to
+                    # deploy.log via >> append. Removing redirection ensures
+                    # parity with the Windows fix and lets errors surface.
+                    if ! bash "$script_path"; then
+                        log_error "$script failed (exit $?) -- see $LOG_DISPLAY"
                         errors=$((errors + 1))
                     fi
                 else

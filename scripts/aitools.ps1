@@ -314,15 +314,18 @@ function Deploy-Configs {
             }
             # Reset exit code before each script (prevents stale values from previous iteration)
             $global:LASTEXITCODE = 0
+            # Run script without output redirection -- child scripts log to
+            # deploy.log via aitools-lib. PowerShell's 2>> holds a file lock
+            # that blocks the child's [IO.File]::AppendAllText on the same file.
             try {
-                & $scriptPath *> $null 2>> $logFile
+                & $scriptPath
             } catch {
-                LogError "$script failed (see $logFile)"
+                LogError "$script failed: $_"
                 $errors++
                 continue
             }
             if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
-                LogError "$script failed (see $logFile)"
+                LogError "$script failed (exit code $LASTEXITCODE)"
                 $errors++
             }
         } else {
