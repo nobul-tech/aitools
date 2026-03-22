@@ -110,3 +110,44 @@ Before committing scripts, validate syntax on the current platform:
 - PS1: `pwsh -NoProfile -Command '$e = $null; $null = [System.Management.Automation.Language.Parser]::ParseFile("path", [ref]$null, [ref]$e); if ($e) { $e }'`
 - Bash: `bash -n path/to/script.sh`
 - Note untested platform in commit message: `(tested: Windows)` or `(tested: macOS)`
+
+### Hook portability (all-platform bash)
+
+Hooks (`shared/hooks/*.sh`) run in bash on ALL platforms — macOS,
+Linux, and Windows Git Bash. They are exempt from the dual-script
+rule (no `.ps1` pair needed) but MUST be portable across all bash
+environments. Hooks cannot source `aitools-lib.sh` or `check-lib.sh`
+— they are standalone deployed files.
+
+**Known command divergences in hooks:**
+
+| Command | macOS (BSD) | Linux/Git Bash (GNU) | Correct pattern |
+|---------|-------------|---------------------|-----------------|
+| `stat` modification time | `stat -f %m file` | `stat -c %Y file` | `uname -s` dispatch |
+| `stat` birth time | `stat -f %B file` | `stat -c %W file` (0 if unsupported) | `uname -s` dispatch |
+| `stat` formatted date | `stat -f "%SB" -t "%Y-%m-%d"` | `date -d "@$(stat -c %Y)"` | `uname -s` dispatch |
+| `find` formatted output | `find -printf` not available | `find -printf '%T@'` | Use `find -print0` + `stat` loop |
+| `grep` Perl regex | Not available | `grep -P` | Use `perl -ne` or `grep -E` |
+| `date` parsing | `date -j -f fmt` | `date -d string` | `uname -s` dispatch |
+
+**Canonical `stat` dispatch pattern for hooks** (from `session-archive.sh:68`):
+
+```bash
+if [ "$(uname -s)" = "Darwin" ]; then
+    mod_time=$(stat -f %m "$file" 2>/dev/null || echo "0")
+else
+    mod_time=$(stat -c %Y "$file" 2>/dev/null || echo "0")
+fi
+```
+
+**NEVER use the fallback chain pattern** `stat -f %m "$file" || stat -c %Y "$file"`.
+On Git Bash, GNU `stat -f` means `--file-system` (not format). It
+partially succeeds with wrong multiline output, contaminating the
+variable. Under `set -u`, bash arithmetic then crashes with
+"File: unbound variable". This bug recurred 4 times before this
+rule was written.
+
+**All hooks must use `set -euo pipefail`** (code style default).
+The `-u` flag catches unset variables, which is the correct behavior
+— it surfaces bugs as crashes rather than allowing silent wrong
+results.

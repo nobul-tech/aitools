@@ -50,10 +50,26 @@ if [ -n "$session_id" ]; then
         # First check: only inject if session is >30 min old
         # Use transcript modification time as proxy for session start
         if [ -f "$transcript_path" ]; then
-            file_mod=$(stat -f %m "$transcript_path" 2>/dev/null || stat -c %Y "$transcript_path" 2>/dev/null || echo "$now")
+            # Platform dispatch: macOS BSD stat vs GNU stat (Linux/Git Bash)
+            # See session-archive.sh:68 for the canonical pattern
+            if [ "$(uname -s)" = "Darwin" ]; then
+                file_mod=$(stat -f %m "$transcript_path" 2>/dev/null || echo "$now")
+            else
+                file_mod=$(stat -c %Y "$transcript_path" 2>/dev/null || echo "$now")
+            fi
             age=$(( now - file_mod ))
             # Transcript gets modified constantly; use birth time if available
-            file_birth=$(stat -f %B "$transcript_path" 2>/dev/null || echo "$file_mod")
+            if [ "$(uname -s)" = "Darwin" ]; then
+                file_birth=$(stat -f %B "$transcript_path" 2>/dev/null || echo "$file_mod")
+            else
+                # GNU stat: %W = birth time (0 if unsupported), fallback to mod time
+                _birth=$(stat -c %W "$transcript_path" 2>/dev/null || echo "0")
+                if [ "$_birth" != "0" ] && [ -n "$_birth" ]; then
+                    file_birth="$_birth"
+                else
+                    file_birth="$file_mod"
+                fi
+            fi
             session_age=$(( now - file_birth ))
             if [ "$session_age" -gt 1800 ]; then
                 inject_reminder=true
@@ -91,7 +107,12 @@ elif [ -f "$HOME/repos/aitools/reference/incidents.json" ]; then
     _incidents_file="$HOME/repos/aitools/reference/incidents.json"
 fi
 if [ -n "$_incidents_file" ] && [ -f "$_incidents_file" ]; then
-    _incidents_mod=$(stat -f %m "$_incidents_file" 2>/dev/null || stat -c %Y "$_incidents_file" 2>/dev/null || echo "0")
+    # Platform dispatch: macOS BSD stat vs GNU stat (Linux/Git Bash)
+    if [ "$(uname -s)" = "Darwin" ]; then
+        _incidents_mod=$(stat -f %m "$_incidents_file" 2>/dev/null || echo "0")
+    else
+        _incidents_mod=$(stat -c %Y "$_incidents_file" 2>/dev/null || echo "0")
+    fi
     _now_epoch=$(date +%s)
     _incidents_age=$(( _now_epoch - _incidents_mod ))
     if [ "$_incidents_age" -lt 1800 ]; then

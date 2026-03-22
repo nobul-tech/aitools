@@ -108,7 +108,12 @@ if [ -z "$reminders" ] && [ "$turn_count" -ge 5 ]; then
 
             if [ -n "$estimate" ]; then
                 now=$(date +%s)
-                est_mod=$(stat -f %m "$estimate" 2>/dev/null || stat -c %Y "$estimate" 2>/dev/null || echo "$now")
+                # Platform dispatch: macOS BSD stat vs GNU stat (Linux/Git Bash)
+                if [ "$(uname -s)" = "Darwin" ]; then
+                    est_mod=$(stat -f %m "$estimate" 2>/dev/null || echo "$now")
+                else
+                    est_mod=$(stat -c %Y "$estimate" 2>/dev/null || echo "$now")
+                fi
                 est_age=$((now - est_mod))
                 if [ "$est_age" -gt 1800 ]; then
                     minutes=$((est_age / 60))

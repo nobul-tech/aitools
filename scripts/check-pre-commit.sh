@@ -342,6 +342,77 @@ else
     step_pass "16" "Capability bypass audit" "no direct governed JSON references in rules/CLAUDE.md"
 fi
 
+# Step 17: Hook portability audit — known-bad patterns in all-platform hooks
+# Hooks run bash on ALL platforms. These patterns break on one platform:
+#   stat -f ... || stat -c ...  (broken fallback chain, see cross-platform.md)
+#   find -printf                (GNU-only, crashes on macOS BSD find)
+#   grep -P                    (Perl regex, not on macOS BSD grep)
+#   date -d                    (GNU-only, macOS uses date -j)
+#   readlink -f                (GNU-only, macOS needs realpath)
+# Each pattern is OK if guarded by uname -s dispatch.
+
+echo "${BOLD}--- Step 17: Hook portability audit ---${RESET}"
+hook_dir="$REPO_ROOT/shared/hooks"
+hook_issues=""
+if [ -d "$hook_dir" ]; then
+    for hook in "$hook_dir"/*.sh; do
+        [ -f "$hook" ] || continue
+        name=$(basename "$hook")
+        # Check for stat fallback chain: stat -f ... || stat -c ... on one line
+        # This is ALWAYS wrong — see cross-platform.md "NEVER use the fallback chain"
+        if perl -ne 'print if /stat\s+-f.*\|\|.*stat\s+-c/ && !/^\s*#/' "$hook" 2>/dev/null | grep -q .; then
+            hook_issues="${hook_issues}  $name: stat fallback chain (NEVER use, see cross-platform.md)\n"
+        fi
+        # Check for stat -f NOT inside a uname -s guard (within 5 lines)
+        # A guarded stat -f has uname within the preceding 5 lines
+        if perl -e '
+            open my $fh, "<", $ARGV[0] or exit 0;
+            my @lines = <$fh>;
+            for my $i (0..$#lines) {
+                next if $lines[$i] =~ /^\s*#/;
+                next unless $lines[$i] =~ /stat\s+-f\s+%/;
+                next if $lines[$i] =~ /\|\|/;  # fallback chain caught above
+                my $guarded = 0;
+                for my $j (($i > 5 ? $i - 5 : 0) .. $i) {
+                    $guarded = 1 if $lines[$j] =~ /uname/;
+                }
+                print "line " . ($i+1) . ": " . $lines[$i] unless $guarded;
+            }
+        ' "$hook" 2>/dev/null | grep -q .; then
+            hook_issues="${hook_issues}  $name: unguarded stat -f (use uname -s dispatch)\n"
+        fi
+        # Check for find -printf
+        if perl -ne 'print if /find\s.*-printf/ && !/^\s*#/' "$hook" 2>/dev/null | grep -q .; then
+            hook_issues="${hook_issues}  $name: find -printf (GNU-only, use find + stat loop)\n"
+        fi
+        # Check for grep -P
+        if perl -ne 'print if /grep\s+-[^\s]*P/ && !/^\s*#/' "$hook" 2>/dev/null | grep -q .; then
+            hook_issues="${hook_issues}  $name: grep -P (use perl -ne or grep -E)\n"
+        fi
+        # Check for date -d NOT inside a uname -s guard (within 5 lines)
+        if perl -e '
+            open my $fh, "<", $ARGV[0] or exit 0;
+            my @lines = <$fh>;
+            for my $i (0..$#lines) {
+                next if $lines[$i] =~ /^\s*#/;
+                next unless $lines[$i] =~ /date\s+-d\s/;
+                my $guarded = 0;
+                for my $j (($i > 5 ? $i - 5 : 0) .. $i) {
+                    $guarded = 1 if $lines[$j] =~ /uname/;
+                }
+                print "line " . ($i+1) . ": " . $lines[$i] unless $guarded;
+            }
+        ' "$hook" 2>/dev/null | grep -q .; then
+            hook_issues="${hook_issues}  $name: unguarded date -d (use uname -s dispatch)\n"
+        fi
+    done
+fi
+if [ -n "$hook_issues" ]; then
+    step_fail "17" "Hook portability audit" "platform-specific patterns found:\n$hook_issues"
+else
+    step_pass "17" "Hook portability audit" "all hooks portable"
+fi
+
 # ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------
