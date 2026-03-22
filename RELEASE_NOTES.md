@@ -12,6 +12,42 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.64.0 -- Platform stabilization, operational learning, process discipline (2026-03-22)
+
+Session 77a33baf (Windows): Lagebeurteilung after switching from Mac revealed 3 cross-platform failure clusters. Fixed all. Built institutional learning infrastructure. Established design principle. 3-agent parallel investigation for Deploy-Configs root cause.
+
+### New
+
+| # | Change |
+|---|--------|
+| 1 | **Design principle: Process discipline as work product** — the observation-to-fact pipeline IS the primary deliverable. Added to CLAUDE.md Design Principles. Governs every session, every platform, every aitools developer |
+| 2 | **Operational learning estimate** — `.aitools/channel/operational-learning.json`. Institutional learning accumulator (CALL OIL taxonomy). 11 observations, 8 insights, 7 patterns, 5 proposals with CALL lifecycle (pending-analysis → analyzed → implemented → verified). Active carry-forward gaps with `informsTransitions`/`resolvableBy`/`blocksExecution` |
+| 3 | **Hook portability check** — `check-pre-commit.sh` step 17. Context-aware detection of 5 known-bad patterns in hooks (`stat -f`, stat fallback chains, `find -printf`, `grep -P`, `date -d`). Missing detection layer for platform engineering |
+| 4 | **Hook portability rule** — `cross-platform.md` new section: known command divergences table, canonical `stat` dispatch pattern, "NEVER use fallback chain" guidance |
+
+### Fixes
+
+| # | Change |
+|---|--------|
+| 1 | **Stop hook crash on Windows** — `surfacing-duty-stop.sh` and `estimate-refresh-stop.sh` crashed with "File: unbound variable". Root cause: `stat -f %m` on GNU stat (Git Bash) means `--file-system`, partially succeeds with wrong multiline output, contaminates variable, `set -u` catches it. Fix: `uname -s` platform dispatch (same pattern as `session-archive.sh:68`). 4th hook crash instance (v0.29.2 $MODE, v0.31.0 find-printf, bc2429e hook type, this) |
+| 2 | **Deploy-Configs file lock crash** — `aitools` no-args failed on Windows: all 6 deploy PS1 scripts crashed instantly with zero diagnostics. Root cause: `2>> $logFile` holds exclusive .NET FileStream lock; child scripts write to same file via `[IO.File]::AppendAllText()`; lock collision throws IOException on first log call; `*> $null` suppresses the exception. Fix: remove output redirection, matching `Invoke-ValidatedScript` pattern. Fixed both PS1 and bash entry points. 3-agent parallel investigation (S3-Alpha, S3-Beta in worktree, S2-Verify) |
+| 3 | **Dotprofile pull blocked** — `aitools-nobul-jose` had uncommitted CLAUDE.md template change blocking pull. Resolved: stash, pull, pop, resolve conflict (de-interpolation bug: `jose@nobul.tech` hardcoded instead of `{{IDENTITY_GIT_EMAIL}}`). 2 untracked session files committed |
+
+### Operational Learning
+
+| Pattern | Description |
+|---------|-------------|
+| P1 | Write-on-A, discover-on-B (4th instance) |
+| P2 | Correct pattern exists but new code uses old |
+| P3 | Commit pipeline selectivity (SessionEnd outputs never committed) |
+| P4 | Cross-machine state divergence |
+| P6 | Demonstrate-then-skip at subsequent transitions |
+| P7 | 6-stage carry-forward pipeline (produce → commit → push → pull → deploy → verify) |
+
+(tested: Windows)
+
+---
+
 ## v0.63.0 -- Dynamic mission control dashboard, .gitignore fix, 30 file recovery (2026-03-21)
 
 Session 5HyCwPtSDH: 35 missions, ~47 agents, 18 AARs, 16 decisions. The session that taught the harness how to learn continuously.
