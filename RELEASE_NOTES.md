@@ -12,6 +12,36 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.63.0 -- Dynamic mission control dashboard, .gitignore fix, 30 file recovery (2026-03-21)
+
+Session 5HyCwPtSDH: 35 missions, ~47 agents, 18 AARs, 16 decisions. The session that taught the harness how to learn continuously.
+
+### New
+
+| # | Change |
+|---|--------|
+| 1 | **Dynamic mission control dashboard** — `aitools dashboard` CLI command with `--serve` (live HTTP server, auto-updates when running estimate changes), `--stop`, `--status`, `--snapshot`. Zero external dependencies (Python stdlib). CORS-safe (localhost, not file://). Dual-script (.sh + .ps1) |
+| 2 | **SessionStart hook** — `dashboard-serve.sh` auto-launches dashboard server. Zero user action. Calls `aitools dashboard --background` |
+| 3 | **Lagebeurteilung Stop hook** — `estimate-refresh-stop.sh` tracks turns, injects context rot reminders at 20%+ context, detects stale running estimates. Implements D-CONTEXT-ROT-HOOK |
+| 4 | **30 file recovery** — session Z1IhGrcgGO's 30 lost investigation files recovered from CC transcript extraction (Write tool call content in JSONL). Method: `extract-writes.py` parsed 11.4 MB transcript + 52 subagent transcripts |
+
+### Fixes
+
+| # | Change |
+|---|--------|
+| 1 | **`.gitignore` fix** (D-GITIGNORE-FIX) — replaced blanket `.aitools/` with selective patterns. Unblocks: running estimate tracking, channel/handoffs/, briefings/. Unanimous finding across M1, M2, M4 |
+| 2 | **Running estimate at tracked path** — `.aitools/channel/running-estimate.json` now carries forward between machines via git |
+
+### Session decisions (16)
+
+D-CONTEXT-ROT-HOOK, D-OPERATIONAL-LEARNING-DUTY, D-GITIGNORE-FIX, D-MULTI-AGENT-PATTERNS, D-PER-SESSION-ESTIMATES, D-AITOOL-PREFIX, D-S1-LAUNCH, D-DASHBOARD-GOVERNANCE, D-ASSUMPTION-INJECTION, D-MARK-OR-VERIFY, D-NACHBESPRECHUNG, D-CLI-NATIVE-DASHBOARD, D-SILENT-DESCOPING-PREVENTION, D-DYNAMIC-HARD-REQUIREMENT, D-INLINE-SYNTHESIS, D-DELEGATION-GATE
+
+### Hard requirements for accepting session
+
+HR-1: Per-mission dashboards (auto-start at delegation). HR-2: Concurrent session dashboards (per-session ports). HR-3: Channel infrastructure (decisions #22-24). HR-4: Full platform support (.ps1 server). HR-5: Running estimate auto-freshness.
+
+---
+
 ## v0.62.6 -- Handoff v3 update, /handoff workflow executed (2026-03-19)
 
 Handoff prompt updated to v3 using the /handoff skill's full 8-step workflow (state audit → update → verify → amend). Captures v0.62.3-5 work: 6 AAR proposals implemented, 13 governed terms, session activity dashboard, cross-boundary verification RCA, surfacing duty findings, CC UX observation. 5 verification amendments applied (section numbering, exclusion count, term count, commit range, grammar).
