@@ -113,6 +113,14 @@
       "severity": "high"
     },
     {
+      "id": "OL-O11",
+      "observation": "The Lagebeurteilung → recommendation → commander decides workflow has been used ad hoc throughout session 77a33baf but is not formalized. Lagebeurteilung IS governed (glossary definition with adapted categories: Forces, Terrain, Time, Logistics). The governed definition says 'every time, even if nothing changed' — WHEN is answered. But HOW to present the result and WHERE to pull inputs from are undefined. The workflow already exists in FRAGMENTS across the harness: /handoff skill step 3 (Lagebeurteilung), delegation duty (pre-flight assessment), decision #26 (S2 intelligence prep), decision #13 (Mission Analysis). The fragments are not unified — the gap is unification, not absence. The agent performed the workflow when prompted but skipped it when not prompted (OL-O10).",
+      "sessions": ["77a33baf"],
+      "evidence": "glossary.json Lagebeurteilung definition (governed). /frameworks check: no framework governs this workflow. /handoff skill step 3 uses Lagebeurteilung. Planning brief decisions #13 and #26 use assessment concepts. check-pre-commit.sh (check script process). OL-O10 (skipped when not prompted). No rule, skill, or framework unifies these fragments into a single 'when commander asks what next' workflow.",
+      "relatedDecisions": [13, 26],
+      "severity": "medium"
+    },
+    {
       "id": "OL-O10",
       "observation": "After a lifecycle transition decision, S3 rushed from 'decision made' to 'full execution with commit' without terrain assessment. Commander issued D-v8-5 (fix, test, verify, prevent hooks). S3 checked /frameworks, recorded the decision, then immediately edited 3 source files, tested, deployed, launched audit subagent, wrote a check script step, tested it, and committed — all without presenting an execution plan, confirming scope, or doing a Lagebeurteilung. S3 had demonstrated the correct pattern minutes earlier (pre-commit checklist with 3 passes at the observation→action boundary) but did not repeat it at the decision→execution boundary. Commander caught it: 'stop for a second. i noticed you went and just started executing.'",
       "sessions": ["77a33baf"],
@@ -443,6 +451,12 @@
       "status": "ungoverned — coined this session, adapted from ISO 10007 + IPB",
       "usage": "The certainty level of a decision or fact: VERIFIED (checked this session), STALE (prior session, no change evidence), SUPERSEDED (newer decisions exist), UNKNOWN (may have changed). Proposed as D-v8-2",
       "action": "Candidate for governance — ties into how running estimates track decision freshness"
+    },
+    {
+      "term": "COA (Course of Action)",
+      "status": "ungoverned — used ad hoc, determined unnecessary",
+      "usage": "S3 used 'COA brief' to describe the recommendation that follows a Lagebeurteilung. The Lagebeurteilung definition already covers this: situation assessment → recommendation → commander decides. A separate 'COA' term adds military jargon without adding governance value. The concept is covered; the term is not needed.",
+      "action": "Do NOT add to glossary. If future sessions find a distinct meaning that Lagebeurteilung doesn't cover, revisit."
     },
     {
       "term": "lifecycle boundary gap",

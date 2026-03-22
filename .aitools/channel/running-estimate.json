@@ -117,7 +117,7 @@
   ],
 
   "situation": {
-    "currentState": "Session 77a33baf (accepting session, Windows). Lagebeurteilung completed: 3 cross-platform failure clusters documented (hooks, CLI path, dotprofile). Hook stat -f fix DONE and COMMITTED (3 locations, uname dispatch, commit 2175814). Prevention DONE and COMMITTED (cross-platform.md hook portability section, check-pre-commit.sh step 17). OL estimate created (operational-learning.json v2). D-v8-3 (dotprofile pull) still PENDING — blocksSessionEnd. D-v8-4/D-v8-5 fix+prevent portion DONE. Lifecycle transition discipline learned (OL-O10): S3 skipped Lagebeurteilung at execution boundary, commander caught it.",
+    "currentState": "Session 77a33baf (accepting session, Windows). Hook fix+prevent DONE (D-v8-4/D-v8-5, commit 2175814). Design principle 'Process discipline as work product' IMPLEMENTED (D-v8-6, commit 9faa943). OL estimate at v3 (11 observations, 8 insights, 7 patterns, 5 proposals). 6-stage carry-forward pipeline identified (OL-I7/P7). Lagebeurteilung-recommendation workflow gap documented (OL-O11). D-v8-3 (dotprofile pull) PENDING — last blocksSessionEnd item. Context is large — D-v8-3 then commit + session end recommended.",
 
     "completedWork": [
       "Verified aitools install output: CLAUDE.md merge-adopt chain, deploy log, deployed file, dotprofile template",
