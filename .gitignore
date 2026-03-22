@@ -43,8 +43,12 @@ desktop.ini
 # Google Drive internal
 .gd/
 
-# Runtime session data
-.aitools/
+# Runtime session data (selective — tracked paths unblocked per D-GITIGNORE-FIX)
+.aitools/scratch/
+.aitools/channel/session-*/
+.aitools/channel/.current-session
+.aitools/.current-session
+.aitools/.dashboard-pid
 
 # Claude Code plan artifacts
 reference/plans/
