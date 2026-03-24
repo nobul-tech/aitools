@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# harness-db-sessionend.sh -- Claude Code SessionEnd hook
+# Marks the current session as complete and exports DB to JSON for
+# git carry-forward (Option B: SQLite runtime, JSON archive).
+#
+# Design decisions:
+#   - Requires Python 3 (sqlite3 stdlib -- no external deps)
+#   - Exports session DB to .aitools/channel/running-estimate.json (tracked)
+#   - Silent exit on errors (hook must never break Claude Code)
+#   - Cross-platform: Python sqlite3 works on macOS, Windows Git Bash, Linux
+#   - Session ID from CC hook input (same pattern as harvest-session.sh)
+
+set -euo pipefail
+
+# --- Pure-bash JSON field extraction (same as harvest-session.sh) ---
+json_field() {
+    local json="$1" key="$2"
+    local val
+    val=$(printf '%s' "$json" \
+        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
+        | head -1 \
+        | sed 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"//' \
+        | sed 's/"$//')
+    printf '%s' "$val"
+}
+
+# Read hook input from stdin
+INPUT=$(cat)
+SESSION_ID=$(json_field "$INPUT" "session_id")
+
+# Bail if no session ID (defensive)
+if [ -z "$SESSION_ID" ]; then
+    exit 0
+fi
+
+# Find project root
+CWD=$(json_field "$INPUT" "cwd")
+if [ -n "$CWD" ]; then
+    PROJECT_ROOT=$(cd "$CWD" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || echo "$CWD")
+else
+    PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "$(pwd)")
+fi
+
+# Check for Python 3
+PYTHON=""
+if command -v python3 > /dev/null 2>&1; then
+    PYTHON="python3"
+elif command -v python > /dev/null 2>&1; then
+    PYTHON="python"
+fi
+
+if [ -z "$PYTHON" ]; then
+    exit 0
+fi
+
+HELPER="$PROJECT_ROOT/scripts/harness-db.py"
+
+# Check helper script exists
+if [ ! -f "$HELPER" ]; then
+    exit 0
+fi
+
+# Mark session as ended
+"$PYTHON" "$HELPER" session end --id "$SESSION_ID" 2>/dev/null || true
+
+# Export DB to JSON for git carry-forward
+"$PYTHON" "$HELPER" export --format json --session "$SESSION_ID" 2>/dev/null || true
+
+printf 'Harness DB: session %s ended, JSON exported\n' "$SESSION_ID"

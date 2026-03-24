@@ -5,13 +5,16 @@ Purpose: Read a running estimate JSON file and produce a self-contained HTML
 dashboard that visualizes session state: header, summary stats, agent tracker,
 governance (decisions + assumptions), findings, open threads, and session state.
 
-Supports two modes:
+Supports three modes:
   Static (default): Embeds JSON into HTML at generation time. Works from
       file:/// on any platform. No runtime dependencies.
   Live (--serve): Starts a local HTTP server. Dashboard polls the estimate
       file via fetch() and re-renders on change without page reload.
       Uses --watch internally to detect file changes and refresh the data
       endpoint. Zero external dependencies (stdlib http.server).
+  Multi-mission (--multi-dir): Scans a directory for */running-estimate.json
+      files and renders a summary table of all missions. Supports both static
+      and live modes. Individual mission dashboards linked by port.
 
 This is the first S1 (Administration) capability in the harness --
 administration-as-code. The generator codifies the pattern proven in 4
@@ -27,6 +30,8 @@ Usage:
     python3 scripts/generate-dashboard.py --estimate est.json --open
     python3 scripts/generate-dashboard.py --estimate est.json --serve
     python3 scripts/generate-dashboard.py --estimate est.json --serve --port 9000
+    python3 scripts/generate-dashboard.py --multi-dir .scratch/session-XYZ/ --serve --port 8420
+    python3 scripts/generate-dashboard.py --multi-dir .scratch/session-XYZ/ --output multi.html
 
 Safe to re-run. Overwrites output if it already exists.
 """
@@ -957,6 +962,406 @@ if (LIVE_MODE && POLL_URL) {
 """
 
 
+def scan_multi_dir(multi_dir: Path) -> list[dict[str, Any]]:
+    """Scan a directory for */running-estimate.json files and load them.
+
+    Returns a list of dicts with keys: name, path, data, warnings.
+    """
+    results: list[dict[str, Any]] = []
+    if not multi_dir.is_dir():
+        print(f"Error: --multi-dir is not a directory: {multi_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    for sub in sorted(multi_dir.iterdir()):
+        if not sub.is_dir():
+            continue
+        est_path = sub / "running-estimate.json"
+        if not est_path.exists():
+            continue
+        try:
+            with open(est_path, encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                continue
+            warnings = validate_estimate_fields(data)
+            results.append({
+                "name": sub.name,
+                "path": str(est_path),
+                "data": data,
+                "warnings": warnings,
+            })
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"[multi] Skipping {est_path}: {e}", file=sys.stderr)
+            continue
+
+    return results
+
+
+def build_multi_html(
+    missions: list[dict[str, Any]],
+    generated_at: str,
+    *,
+    live_mode: bool = False,
+    poll_url: str = "",
+    poll_interval: int = 3,
+    multi_dir: str = "",
+) -> str:
+    """Build the multi-mission summary dashboard HTML."""
+    missions_json = json.dumps(
+        [
+            {
+                "name": m["name"],
+                "path": m["path"],
+                "data": m["data"],
+                "warnings": m["warnings"],
+            }
+            for m in missions
+        ],
+        ensure_ascii=False,
+        indent=None,
+    )
+    return MULTI_HTML_TEMPLATE.replace(
+        "/*__MISSIONS_DATA__*/null", missions_json
+    ).replace(
+        "/*__GENERATED_AT__*/", generated_at
+    ).replace(
+        "/*__LIVE_MODE__*/false", "true" if live_mode else "false"
+    ).replace(
+        "/*__POLL_URL__*/", poll_url
+    ).replace(
+        "/*__POLL_INTERVAL__*/3", str(poll_interval)
+    ).replace(
+        "/*__MULTI_DIR__*/", multi_dir
+    )
+
+
+class MultiDashboardHandler(SimpleHTTPRequestHandler):
+    """HTTP handler for multi-mission dashboard with live data endpoint."""
+
+    multi_dir: Path
+    dashboard_html: str
+
+    def do_GET(self) -> None:
+        if self.path == "/" or self.path == "/index.html":
+            content = self.server.dashboard_html.encode("utf-8")  # type: ignore[attr-defined]
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(content)
+        elif self.path == "/api/missions":
+            try:
+                missions = scan_multi_dir(self.server.multi_dir)  # type: ignore[attr-defined]
+                payload = [
+                    {
+                        "name": m["name"],
+                        "path": m["path"],
+                        "data": m["data"],
+                        "warnings": m["warnings"],
+                    }
+                    for m in missions
+                ]
+                data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(data)
+            except Exception as e:
+                self.send_error(500, str(e))
+        else:
+            self.send_error(404, "Not found")
+
+    def log_message(self, format: str, *args: Any) -> None:
+        if args and isinstance(args[0], str) and args[0].startswith("2"):
+            return
+        super().log_message(format, *args)
+
+
+def run_multi_server(
+    multi_dir: Path,
+    port: int,
+    open_browser: bool,
+    poll_interval: int = 5,
+) -> None:
+    """Start the multi-mission live dashboard server."""
+    missions = scan_multi_dir(multi_dir)
+    if not missions:
+        print(f"No running estimates found in {multi_dir}/*/running-estimate.json", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Found {len(missions)} mission(s): {', '.join(m['name'] for m in missions)}")
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    poll_url = f"http://localhost:{port}/api/missions"
+    html = build_multi_html(
+        missions,
+        generated_at,
+        live_mode=True,
+        poll_url=poll_url,
+        poll_interval=poll_interval,
+        multi_dir=str(multi_dir),
+    )
+
+    server = HTTPServer(("localhost", port), MultiDashboardHandler)
+    server.multi_dir = multi_dir  # type: ignore[attr-defined]
+    server.dashboard_html = html  # type: ignore[attr-defined]
+
+    # Periodic regeneration thread
+    def watch_multi() -> None:
+        while True:
+            time.sleep(poll_interval)
+            try:
+                new_missions = scan_multi_dir(multi_dir)
+                new_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                server.dashboard_html = build_multi_html(  # type: ignore[attr-defined]
+                    new_missions,
+                    new_at,
+                    live_mode=True,
+                    poll_url=poll_url,
+                    poll_interval=poll_interval,
+                    multi_dir=str(multi_dir),
+                )
+            except Exception as e:
+                print(f"[multi-watch] Error: {e}", file=sys.stderr)
+
+    watcher = threading.Thread(target=watch_multi, daemon=True)
+    watcher.start()
+
+    url = f"http://localhost:{port}/"
+    print(f"Multi-mission dashboard serving at: {url}")
+    print(f"Watching: {multi_dir}")
+    print(f"Poll interval: {poll_interval}s")
+    print("Press Ctrl+C to stop.")
+
+    if open_browser:
+        webbrowser.open(url)
+
+    def shutdown(signum: int, frame: Any) -> None:
+        print("\nShutting down...")
+        server.shutdown()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, shutdown)
+    signal.signal(signal.SIGTERM, shutdown)
+
+    server.serve_forever()
+
+
+# ---------------------------------------------------------------------------
+# Multi-Mission HTML Template
+# ---------------------------------------------------------------------------
+
+MULTI_HTML_TEMPLATE = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Mission Dashboard</title>
+<style>
+:root {
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-tertiary: #21262d;
+  --bg-hover: #30363d;
+  --border: #30363d;
+  --border-light: #484f58;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted: #6e7681;
+  --accent-blue: #58a6ff;
+  --accent-green: #3fb950;
+  --accent-yellow: #d29922;
+  --accent-red: #f85149;
+  --accent-purple: #bc8cff;
+  --accent-orange: #f0883e;
+  --accent-cyan: #56d4dd;
+  --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --radius: 6px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { font-size: 14px; }
+body { background: var(--bg-primary); color: var(--text-primary); font-family: var(--font-sans); line-height: 1.5; min-height: 100vh; }
+
+.header { position: sticky; top: 0; z-index: 100; background: var(--bg-secondary); border-bottom: 1px solid var(--border); padding: 16px 24px; box-shadow: var(--shadow); }
+.header-top { display: flex; align-items: center; justify-content: space-between; }
+.header-title { font-size: 1.3rem; font-weight: 600; }
+.header-title span { color: var(--text-secondary); font-weight: 400; font-size: 0.9rem; }
+.header-meta { font-size: 0.75rem; color: var(--text-muted); }
+
+.summary-bar { display: flex; gap: 12px; flex-wrap: wrap; padding: 12px 24px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); }
+.summary-stat { background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 14px; display: flex; align-items: center; gap: 8px; }
+.summary-stat .val { font-size: 1.2rem; font-weight: 700; font-family: var(--font-mono); }
+.summary-stat .lbl { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+.val.green { color: var(--accent-green); }
+.val.blue { color: var(--accent-blue); }
+.val.yellow { color: var(--accent-yellow); }
+.val.red { color: var(--accent-red); }
+.val.cyan { color: var(--accent-cyan); }
+
+.content { padding: 16px 24px; }
+
+.mission-table { width: 100%; border-collapse: collapse; }
+.mission-table th { text-align: left; font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-weight: 600; }
+.mission-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 0.88rem; vertical-align: top; }
+.mission-table tr:hover td { background: var(--bg-tertiary); }
+.mission-name { font-weight: 600; color: var(--accent-blue); font-family: var(--font-mono); }
+.schwerpunkt-cell { color: var(--text-secondary); font-size: 0.82rem; max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.counter { font-family: var(--font-mono); font-weight: 600; }
+.counter.zero { color: var(--text-muted); }
+.health-badge { font-size: 0.65rem; padding: 2px 8px; border-radius: 10px; font-weight: 600; text-transform: uppercase; }
+.health-badge.healthy { background: rgba(63,185,80,0.2); color: var(--accent-green); }
+.health-badge.warning { background: rgba(210,153,34,0.2); color: var(--accent-yellow); }
+.health-badge.error { background: rgba(248,81,73,0.2); color: var(--accent-red); }
+.warn-list { font-size: 0.75rem; color: var(--accent-yellow); margin-top: 4px; }
+
+.footer { padding: 12px 24px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.75rem; text-align: center; background: var(--bg-secondary); }
+.footer a { color: var(--accent-blue); text-decoration: none; }
+.no-results { text-align: center; padding: 40px; color: var(--text-muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+var MISSIONS_DATA = /*__MISSIONS_DATA__*/null;
+var GENERATED_AT = "/*__GENERATED_AT__*/";
+var LIVE_MODE = /*__LIVE_MODE__*/false;
+var POLL_URL = "/*__POLL_URL__*/";
+var POLL_INTERVAL = /*__POLL_INTERVAL__*/3;
+var MULTI_DIR = "/*__MULTI_DIR__*/";
+
+function renderMulti(missions, generatedAt) {
+  var app = document.getElementById('app');
+  if (!missions || missions.length === 0) {
+    app.innerHTML = '<div class="no-results">No missions found. Place running-estimate.json files in subdirectories of: ' + MULTI_DIR + '</div>';
+    return;
+  }
+
+  function esc(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  // Aggregate stats
+  var totalMissions = missions.length;
+  var totalDelegations = 0;
+  var totalFindings = 0;
+  var totalThreads = 0;
+  var totalDecisions = 0;
+  var healthyCount = 0;
+
+  missions.forEach(function(m) {
+    var d = m.data || {};
+    var sit = d.situation || {};
+    totalDelegations += (d.delegationLog || []).length;
+    totalFindings += (d.findings || []).length;
+    totalThreads += (d.openThreads || []).length;
+    totalDecisions += (sit.decisions || []).length;
+    if (!m.warnings || m.warnings.length === 0) healthyCount++;
+  });
+
+  var html = '';
+
+  // Header
+  html += '<div class="header"><div class="header-top"><div>';
+  html += '<div class="header-title">Multi-Mission Dashboard <span>' + totalMissions + ' missions</span></div>';
+  html += '</div>';
+  html += '<div class="header-meta">' + (LIVE_MODE ? '<span style="color:var(--accent-green);font-weight:700;margin-right:6px" id="liveIndicator">&#9679; LIVE</span>' : '') + 'Generated: ' + esc(generatedAt) + '</div>';
+  html += '</div></div>';
+
+  // Summary bar
+  html += '<div class="summary-bar">';
+  html += '<div class="summary-stat"><div class="val blue">' + totalMissions + '</div><div class="lbl">Missions</div></div>';
+  html += '<div class="summary-stat"><div class="val ' + (healthyCount === totalMissions ? 'green' : 'yellow') + '">' + healthyCount + '/' + totalMissions + '</div><div class="lbl">Healthy</div></div>';
+  html += '<div class="summary-stat"><div class="val blue">' + totalDelegations + '</div><div class="lbl">Delegations</div></div>';
+  html += '<div class="summary-stat"><div class="val cyan">' + totalFindings + '</div><div class="lbl">Findings</div></div>';
+  html += '<div class="summary-stat"><div class="val yellow">' + totalThreads + '</div><div class="lbl">Open Threads</div></div>';
+  html += '<div class="summary-stat"><div class="val green">' + totalDecisions + '</div><div class="lbl">Decisions</div></div>';
+  html += '</div>';
+
+  // Mission table
+  html += '<div class="content">';
+  html += '<table class="mission-table">';
+  html += '<thead><tr>';
+  html += '<th>Mission</th><th>Schwerpunkt</th><th>Delegations</th><th>Findings</th><th>Decisions</th><th>Threads</th><th>Health</th>';
+  html += '</tr></thead><tbody>';
+
+  missions.forEach(function(m) {
+    var d = m.data || {};
+    var sit = d.situation || {};
+    var meta = d.meta || {};
+    var delegations = (d.delegationLog || []).length;
+    var findings = (d.findings || []).length;
+    var decisions = (sit.decisions || []).length;
+    var threads = (d.openThreads || []).length;
+    var schwerpunkt = d.schwerpunkt || '';
+    var isHealthy = !m.warnings || m.warnings.length === 0;
+    var version = meta.version || '?';
+
+    html += '<tr>';
+    html += '<td><span class="mission-name">' + esc(m.name) + '</span><br><span style="font-size:0.72rem;color:var(--text-muted)">v' + esc(String(version)) + '</span></td>';
+    html += '<td class="schwerpunkt-cell" title="' + esc(schwerpunkt) + '">' + esc(schwerpunkt) + '</td>';
+    html += '<td><span class="counter ' + (delegations === 0 ? 'zero' : '') + '">' + delegations + '</span></td>';
+    html += '<td><span class="counter ' + (findings === 0 ? 'zero' : '') + '">' + findings + '</span></td>';
+    html += '<td><span class="counter ' + (decisions === 0 ? 'zero' : '') + '">' + decisions + '</span></td>';
+    html += '<td><span class="counter ' + (threads === 0 ? 'zero' : '') + '">' + threads + '</span></td>';
+    html += '<td>';
+    if (isHealthy) {
+      html += '<span class="health-badge healthy">OK</span>';
+    } else {
+      html += '<span class="health-badge warning">WARN</span>';
+      html += '<div class="warn-list">' + m.warnings.map(function(w) { return esc(w); }).join(', ') + '</div>';
+    }
+    html += '</td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+
+  // Footer
+  html += '<div class="footer">Generated by <a href="https://github.com/nobul-jose/aitools">aitools</a> generate-dashboard.py (multi-mission) &middot; ' + esc(generatedAt) + (LIVE_MODE ? ' &middot; polling every ' + POLL_INTERVAL + 's' : '') + '</div>';
+
+  app.innerHTML = html;
+}
+
+// Initial render
+renderMulti(MISSIONS_DATA, GENERATED_AT);
+
+// Live polling
+if (LIVE_MODE && POLL_URL) {
+  var lastHash = JSON.stringify(MISSIONS_DATA);
+  setInterval(function() {
+    fetch(POLL_URL, { cache: 'no-store' })
+      .then(function(r) { return r.json(); })
+      .then(function(newData) {
+        var newHash = JSON.stringify(newData);
+        if (newHash !== lastHash) {
+          lastHash = newHash;
+          MISSIONS_DATA = newData;
+          var now = new Date().toISOString().replace(/\.\d{3}/, '').replace('T', 'T');
+          renderMulti(newData, now);
+          var indicator = document.getElementById('liveIndicator');
+          if (indicator) {
+            indicator.style.color = 'var(--accent-cyan)';
+            setTimeout(function() { indicator.style.color = 'var(--accent-green)'; }, 500);
+          }
+        }
+      })
+      .catch(function() {
+        var indicator = document.getElementById('liveIndicator');
+        if (indicator) { indicator.innerHTML = '&#9679; OFFLINE'; indicator.style.color = 'var(--accent-red)'; }
+      });
+  }, POLL_INTERVAL * 1000);
+}
+</script>
+</body>
+</html>
+"""
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Generate a self-contained HTML Mission Control Dashboard from a running estimate JSON.",
@@ -967,14 +1372,25 @@ def main() -> None:
         "\n"
         "  # Live (HTTP server, auto-updates on file change)\n"
         "  python3 scripts/generate-dashboard.py --estimate est.json --serve\n"
-        "  python3 scripts/generate-dashboard.py --estimate est.json --serve --port 9000\n",
+        "  python3 scripts/generate-dashboard.py --estimate est.json --serve --port 9000\n"
+        "\n"
+        "  # Multi-mission (scan directory for estimates)\n"
+        "  python3 scripts/generate-dashboard.py --multi-dir .scratch/session-XYZ/ --serve --port 8420\n"
+        "  python3 scripts/generate-dashboard.py --multi-dir .scratch/session-XYZ/ --output multi.html\n",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--estimate",
-        required=True,
         type=Path,
-        help="Path to the running estimate JSON file (required)",
+        default=None,
+        help="Path to the running estimate JSON file (required unless --multi-dir used)",
+    )
+    parser.add_argument(
+        "--multi-dir",
+        type=Path,
+        default=None,
+        dest="multi_dir",
+        help="Directory to scan for */running-estimate.json (multi-mission mode)",
     )
     parser.add_argument(
         "--output",
@@ -1012,6 +1428,53 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # Validate: need either --estimate or --multi-dir
+    if args.multi_dir is None and args.estimate is None:
+        parser.error("one of --estimate or --multi-dir is required")
+
+    # --- Multi-mission mode ---
+    if args.multi_dir is not None:
+        multi_dir = args.multi_dir.resolve()
+        if args.serve:
+            run_multi_server(
+                multi_dir,
+                port=args.port,
+                open_browser=args.open,
+                poll_interval=args.poll_interval,
+            )
+            return
+
+        # Static multi-mission generation
+        missions = scan_multi_dir(multi_dir)
+        if not missions:
+            print(f"No running estimates found in {multi_dir}/*/running-estimate.json", file=sys.stderr)
+            sys.exit(1)
+
+        generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        html = build_multi_html(missions, generated_at, multi_dir=str(multi_dir))
+
+        if args.output:
+            output_path = args.output.resolve()
+        else:
+            output_path = multi_dir / "multi-mission-dashboard.html"
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(html, encoding="utf-8")
+        print(f"Multi-mission dashboard written to: {output_path}")
+        print(f"Missions found: {len(missions)} ({', '.join(m['name'] for m in missions)})")
+        for m in missions:
+            d = m["data"]
+            print(f"  {m['name']}: {len(d.get('delegationLog', []))} delegations, "
+                  f"{len(d.get('findings', []))} findings"
+                  f"{' [WARNINGS: ' + ', '.join(m['warnings']) + ']' if m['warnings'] else ''}")
+
+        if args.open:
+            url = output_path.as_uri()
+            print(f"Opening: {url}")
+            webbrowser.open(url)
+        return
+
+    # --- Single-estimate mode ---
     estimate_path = args.estimate.resolve()
 
     # Live server mode

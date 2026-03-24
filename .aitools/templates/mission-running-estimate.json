@@ -1,0 +1,31 @@
+{
+  "meta": {
+    "sessionId": "PLACEHOLDER",
+    "mission": "PLACEHOLDER",
+    "maintainer": "PLACEHOLDER",
+    "created": "PLACEHOLDER",
+    "updated": "PLACEHOLDER",
+    "version": 1
+  },
+  "schwerpunkt": "Mission starting -- awaiting first phase boundary update",
+  "situation": {
+    "currentState": "",
+    "completedWork": [],
+    "deviations": [],
+    "facts": [],
+    "assumptions": [],
+    "decisions": []
+  },
+  "findings": [],
+  "openThreads": [],
+  "delegationLog": [],
+  "conclusions": {
+    "assessment": "",
+    "recommendations": [],
+    "risksAndOpportunities": []
+  },
+  "m12AssumptionVerification": {
+    "unflaggedAssumptions": [],
+    "unflaggedAmbiguities": []
+  }
+}

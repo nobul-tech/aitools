@@ -50,5 +50,11 @@ desktop.ini
 .aitools/.current-session
 .aitools/.dashboard-pid
 
+# SQLite runtime (rebuilt from JSON exports at session start)
+.aitools/sessions/
+.aitools/harness.db
+.aitools/harness.db-shm
+.aitools/harness.db-wal
+
 # Claude Code plan artifacts
 reference/plans/
