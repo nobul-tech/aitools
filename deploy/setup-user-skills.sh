@@ -1658,6 +1658,1738 @@ If standard a11y queries fail or the `evaluate_script` snippets return unexpecte
 - **Visual Inspection**: If automated scripts cannot determine contrast (e.g., text over gradient images or complex backgrounds), use `take_screenshot` to capture the element. While models cannot measure exact contrast ratios from images, they can visually assess legibility and identifying obvious issues.
 __SKILL_A11Y_DEBUGGING__
 
+cat > "$_skill_tmp/aitool-ops.md" <<'__SKILL_AITOOL_OPS__'
+---
+name: aitool-ops
+description: "Read-only reference card for tool-ops operational knowledge —
+  deny rules, hooks, CC version dependencies, doc access methods, governance
+  modes. Available in ANY repo. Use when checking tool behavior, deny rules,
+  hook behavior, CC version deps, or doc access methods."
+---
+
+## Intent
+
+**Purpose**: Provide tool-ops operational knowledge to any agent in
+any repo — deny rules, hooks, CC version dependencies, doc access
+methods, governance modes, and known behavioral gaps. This is a
+read-only reference card derived from the aitools repo's tool-ops
+sources. **Scope**: Read-only lookups only. NOT writes to
+tool-ops.json (use `/tool-ops` in the aitools repo for that). NOT
+tool evaluation (use `/tool-eval`). NOT tool install/version
+management (use `/tool-registry`). NOT incident filing (use
+`/incident`). **Audience**: Any agent in any repo needing to check
+tool operational behavior before making assumptions.
+
+## When to use
+
+Invoke `/aitool-ops` when ANY of these arise:
+
+- Checking deny rules (what permission patterns are blocked and why)
+- Checking hook behavior (what hooks fire, their events and matchers)
+- Checking CC version dependencies (what breaks if CC upgrades)
+- Checking doc access methods (chrome-devtools vs WebFetch)
+- Checking governance modes (audit vs active per category)
+- Checking subagent limitations (cross-repo access, SendMessage gap)
+- Checking session management commands
+- Checking hook portability rules (BSD vs GNU command divergences)
+- User says `/aitool-ops` or asks about tool operations
+
+## What this does NOT do
+
+- Does NOT write to tool-ops.json — use `/tool-ops` in the aitools
+  repo for registry writes
+- Does NOT evaluate tools for adoption — use `/tool-eval`
+- Does NOT manage the tool install registry — use `/tool-registry`
+- Does NOT file incidents — use `/incident`
+
+## Staleness warning
+
+This skill was generated from `tool-ops.json` and
+`tool-ops-claude-code.md` in the aitools repo. If the source has been
+updated since the last `aitools install`, this content may be stale.
+Run `aitools` to refresh.
+
+Future enhancement: `build-deploy.sh` could auto-generate this skill's
+content from the source files at build time, keeping it always current.
+For now, the content is manually authored.
+
+---
+
+## Claude Code — Deny Rules
+
+| ID | Permission Pattern | Hook | Reason |
+|----|-------------------|------|--------|
+| cc-deny-guide-subagent | `Agent(claude-code-guide)` | `block-claude-code-guide.sh` | Haiku model returns inaccurate schema — caused incident where all hooks were disabled (#34730) |
+
+The deny rule blocks the built-in guide subagent and injects corrective
+harness context instead.
+
+## Claude Code — Hooks
+
+| Event | Matcher | Script | Purpose |
+|-------|---------|--------|---------|
+| PreToolUse | Agent | `block-claude-code-guide.sh` | Deny built-in guide subagent, inject corrective harness context |
+
+Additional hooks deployed by the harness (not in tool-ops.json but
+part of the operational landscape):
+
+| Event | Script | Purpose |
+|-------|--------|---------|
+| SessionStart | `scratch-init.sh` | Create session scratch directory |
+| SessionEnd | `session-archive.sh` | Archive session transcript to user repo |
+| SessionEnd | `harvest-session.sh` | Classify and harvest scratch artifacts |
+| PostToolUse (Write/Edit) | `sh-file-fixup.sh` | Fix CRLF line endings and chmod +x on .sh files |
+| PreToolUse (Bash git) | `standing-order-guard.sh` | Checklist reminder for git operations |
+| Stop | `surfacing-duty-stop.sh` | Periodic surfacing duty reminder |
+| Stop | `estimate-refresh-stop.sh` | Running estimate refresh reminder |
+| PreToolUse (Read glossary.json) | `glossary-skill-guard.sh` | Redirect direct JSON access to /glossary skill |
+| PreToolUse (Agent) | `block-claude-code-guide.sh` | Block guide subagent + context injection |
+| SessionStart | `tool-ops-session-audit.sh` | Audit tool-ops coverage at session start |
+| SessionStart | `dashboard-serve.sh` | Start dashboard server if running estimate exists |
+| SessionStart | `harness-db-sessionstart.sh` | Record session start in harness DB |
+| SessionEnd | `harness-db-sessionend.sh` | Record session end in harness DB |
+
+## Claude Code — Governance Modes
+
+All categories are currently in **audit** mode (observe and log, do
+not enforce):
+
+| Category | Mode | What it covers |
+|----------|------|----------------|
+| denyRules | audit | Permission pattern blocking |
+| hooks | audit | Hook fire/fail tracking |
+| contextInjection | audit | Doc URL injection into subagents |
+| kpis | audit | Operational metrics collection |
+| versionDeps | audit | Version dependency drift detection |
+| verifications | audit | Hook and deny rule testing |
+
+Promotion from audit to active requires zero-drift telemetry evidence
+via the `/tool-ops` skill in the aitools repo.
+
+## Claude Code — Doc Access
+
+**Method**: chrome-devtools skill navigates to
+`https://code.claude.com/docs/en/*.md`
+
+**Key pages**: hooks.md, permissions.md, sub-agents.md, settings.md,
+mcp.md
+
+**Quick reference for hook types**:
+- `command` requires `command` field
+- `prompt` requires `prompt` field (static string only)
+- `http` requires `url` field
+- `agent` requires `prompt` field
+
+**Rule**: When reading web content that will be recorded verbatim
+(install commands, config steps, API references), use the
+chrome-devtools skill instead of WebFetch. WebFetch summarizes via a
+smaller model and misses JS-rendered content. WebFetch is fine for
+general research, blog posts, and quick fact-checks.
+
+## Claude Code — Version Dependencies (CRITICAL)
+
+Items that would break core scripts if CC behavior changes.
+
+| # | Item | Baseline | Last Verified |
+|---|------|----------|---------------|
+| 1 | Windows shell hardcoded to Git Bash (`CLAUDE_CODE_SHELL` broken) | 2.1.51 | 2.1.74 |
+| 2 | SessionEnd hook API contract (session_id, cwd, transcript_path on stdin) | 2.1.51 | 2.1.74 |
+
+**Impact of #1**: CC on Windows always uses Git Bash. `CLAUDE_CODE_SHELL`
+is silently ignored. All Windows dispatch must use `pwsh -File` for PS1
+scripts. Upstream: #7490, #25558, #5049, #16225, #20453.
+
+**Impact of #2**: Session archive hook parses stdin JSON. If the contract
+changes, session archiving breaks silently.
+
+## Claude Code — Version Dependencies (HIGH)
+
+Items that would break workflows or produce wrong results.
+
+| # | Item | Baseline | Last Verified |
+|---|------|----------|---------------|
+| 4 | Session path sanitization (CWD uses `-` replacement, lossy for hyphenated names) | 2.1.51 | 2.1.51 |
+| 5 | Subagent context gap (rules/CLAUDE.md not inherited by Task subagents) | 2.1.51 | 2.1.74 |
+| 6 | CLAUDE.md hierarchy and merge behavior (5 levels, more-specific wins) | 2.1.51 | 2.1.51 |
+| 7 | Session management commands (claude -c, --resume, /resume, /rename) | 2.1.51 | 2.1.51 |
+| 8 | Hook execution context (hooks run in bash or HTTP, not configurable shell) | 2.1.51 | 2.1.74 |
+| 9 | Coaching items tied to CC capabilities (subagent gap, auto-memory locality) | 2.1.51 | 2.1.51 |
+| 19 | `effortLevel` setting (settings.json key, defaults to medium for Opus 4.6 since 2.1.68) | 2.1.68 | 2.1.74 |
+| 23 | `claude update` triggers SessionEnd hooks then cancels them (benign noise) | 2.1.81 | 2.1.81 |
+| 24 | Subagent cross-repo file access restriction | 2.1.74 | 2.1.74 |
+| 25 | SendMessage for agent continuation unavailable (gated behind Agent Teams flag) | 2.1.77 | 2.1.81 |
+
+## Claude Code — Version Dependencies (MEDIUM)
+
+| # | Item | Baseline | Last Verified |
+|---|------|----------|---------------|
+| 10 | Write tool produces CRLF on macOS | 2.1.51 | 2.1.51 |
+| 11 | PATH limitations (npm global bin not always visible to CC) | 2.1.51 | 2.1.51 |
+| 12 | PowerShell-from-Bash quoting patterns (single-quote outer, double-quote inner) | 2.1.51 | 2.1.51 |
+| 13 | Cursor Agent CLI rule sources (does NOT read ~/.claude/CLAUDE.md) | 2.1.51 | 2.1.51 |
+| 18 | `@file` references resolved in CLAUDE.md but NOT in `.claude/rules/*.md` | 2.1.63 | 2.1.63 |
+| 20 | `InstructionsLoaded` hook event (fires after CLAUDE.md and rules load) | 2.1.68 | 2.1.74 |
+| 21 | `agent_id`/`agent_type` in hook events (distinguishes main vs subagent) | 2.1.68 | 2.1.74 |
+
+## Claude Code — Version Dependencies (LOW)
+
+| # | Item | Baseline | Last Verified |
+|---|------|----------|---------------|
+| 14 | Auto-memory locality (machine-specific, does not sync) | 2.1.51 | 2.1.51 |
+| 15 | Session sync not possible (CLI sessions are local per machine + directory) | 2.1.51 | 2.1.51 |
+| 16 | Session storage internals (JSONL under ~/.claude/projects/) | 2.1.51 | 2.1.51 |
+| 17 | JSONL transcript fields (type, cwd, sessionId) | 2.1.51 | 2.1.51 |
+| 22 | `includeGitInstructions` setting (controls git context injection into system prompt) | 2.1.68 | 2.1.74 |
+
+## Subagent Cross-Repo Access Restriction (#24)
+
+Subagents launched via the Agent tool have restricted file access
+outside the CWD repo:
+
+- **Glob/Grep**: Denied outside CWD repo boundaries
+- **Read**: Works with explicit absolute paths (even outside CWD repo)
+- **Write/Edit**: Denied outside CWD repo
+
+**Impact on delegation**: When delegating work that needs files from
+another repo, include the file content in the delegation prompt
+(inline via XML delimiters) rather than expecting the subagent to
+read it. Alternatively, use Read with explicit paths for known
+file locations.
+
+## Agent Continuation Gap — SendMessage (#25)
+
+Since v2.1.77, there is no working mechanism to send messages to a
+previously spawned subagent:
+
+- **Old mechanism** (`resume` parameter on Agent tool): Removed in
+  v2.1.77. Had longstanding issues and was effectively non-functional
+  before removal.
+- **New mechanism** (`SendMessage` tool): Part of the Agent Teams
+  feature set, gated behind `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`
+  (disabled by default). Even with the flag enabled, reports of
+  unavailability.
+
+**Impact on delegation patterns**:
+
+- Subagents must be fully self-contained at launch. No follow-up
+  messages possible.
+- The Agent tool's own return value includes `agentId` with
+  instructions to use SendMessage — the model will attempt to use
+  it and fail.
+- Sequential delegation (launch new agent with prior agent's output)
+  is the only working pattern for iterative subagent work.
+
+**Workaround**: Include all context in the initial Agent launch
+prompt. Use TaskOutput to read completed agent results. Launch new
+agents for follow-up work, passing prior output as context.
+
+Upstream: #35240, #37051, #38183
+
+## Session Management Commands
+
+| Command | What it does |
+|---------|--------------|
+| `claude -c` | Resume most recent session in current directory |
+| `claude --resume` | Interactive session picker (current directory only) |
+| `claude --resume "name"` | Resume a named session |
+| `/resume` | Switch sessions from inside a running session |
+| `/rename <name>` | Name the current session for easy recall |
+| `claude --continue --fork-session` | Fork current session into a new one |
+
+Sessions are local to each machine and tied to the directory they were
+started in. They do not sync across devices.
+
+## CLAUDE.md Hierarchy (5 levels)
+
+| Level | Path | Scope |
+|-------|------|-------|
+| Managed (org/IT) | `C:\Program Files\ClaudeCode\CLAUDE.md` | All users on machine |
+| User (personal global) | `~/.claude/CLAUDE.md` | You, all projects, this machine |
+| Project (team) | `./CLAUDE.md` in repo root | All team members via git |
+| Project (personal) | `./CLAUDE.local.md` | You only, auto-gitignored |
+| Subdirectory | `./some-dir/CLAUDE.md` | Loaded on-demand when working in that dir |
+
+All levels merge together. More specific wins on conflict.
+
+## Hook Portability Rules
+
+Hooks (`shared/hooks/*.sh`) run in bash on ALL platforms — macOS,
+Linux, and Windows Git Bash. They must be portable across all bash
+# aitools-lib.sh -- shared helpers for all aitools bash scripts
+# Sourced, not executed directly. No shebang, no set -euo pipefail (caller sets it).
+#
+# Provides: platform detection, display_path, read_config_key, logging_init,
+# log/log_ok/log_error/log_warn/log_detail, invoke_ai, write_summary,
+# show_summary, SORT_KEYS_JS, normalize_json.
+#
+# Usage:
+#   source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/aitools-lib.sh"
+#   logging_init "script-name"
+#
+# Entry points (aitools, aitools-install) override log functions after sourcing
+# for specialized logging (file-only, JSONL, etc.).
+
+# ---------------------------------------------------------------------------
+# Platform detection
+# ---------------------------------------------------------------------------
+IS_MACOS=false
+IS_WINDOWS=false
+case "$(uname -s)" in
+    Darwin*)              IS_MACOS=true ;;
+    MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=true ;;
+esac
+
+# ---------------------------------------------------------------------------
+# Log directory (platform-aware)
+# ---------------------------------------------------------------------------
+AITOOLS_LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
+$IS_MACOS && AITOOLS_LOG_DIR="$HOME/Library/Logs/aitools"
+
+# ---------------------------------------------------------------------------
+# Module-level counters (safe for sourcing without logging_init under set -u)
+# ---------------------------------------------------------------------------
+ERRORS=0
+WARNINGS=0
+
+# ---------------------------------------------------------------------------
+# Display-friendly path (native Windows on MSYS, no-op elsewhere)
+# ---------------------------------------------------------------------------
+display_path() {
+    if command -v cygpath &>/dev/null; then
+        cygpath -w "$1"
+    else
+        printf '%s' "$1"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Config reader (pure bash, handles UTF-8 BOM)
+# ---------------------------------------------------------------------------
+# Read a top-level string value from a JSON config file.
+# Handles UTF-8 BOM (PowerShell 5.x writes one) and JSON-escaped backslashes.
+read_config_key() {
+    local file="$1" key="$2"
+    [ -f "$file" ] || return 1
+    local val
+    val=$(tr -d '\357\273\277' < "$file" \
+        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
+        | head -1 \
+        | cut -d'"' -f4)
+    [ -n "$val" ] || return 1
+    # Unescape JSON backslashes: \\ -> \
+    printf '%b' "$val"
+}
+
+# ---------------------------------------------------------------------------
+# Logging init
+# ---------------------------------------------------------------------------
+# Sets SCRIPT_NAME, LOG_DIR, LOG_FILE; resets ERRORS, WARNINGS; creates log dir.
+# Usage: logging_init "setup-foo"
+logging_init() {
+    SCRIPT_NAME="${1:?logging_init requires a script name}"
+    LOG_DIR="$AITOOLS_LOG_DIR"
+    LOG_FILE="$LOG_DIR/deploy.log"
+    mkdir -p "$LOG_DIR"
+    ERRORS=0
+    WARNINGS=0
+}
+
+# ---------------------------------------------------------------------------
+# Standard logging (Pattern A: console + log file, with [level] tag)
+# ---------------------------------------------------------------------------
+log() {
+    local level="${2:-info}"
+    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    local line="[$ts] [$SCRIPT_NAME] [$level] $1"
+    printf '%s\n' "$line" >> "$LOG_FILE"
+    case "$level" in
+        error) printf '\033[31m%s\033[0m\n' "$line" ;;
+        warn)  printf '\033[33m%s\033[0m\n' "$line" ;;
+        *)     printf '%s\n' "$line" ;;
+    esac
+}
+log_ok()    { log "$1" "ok"; }
+log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
+log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
+log_detail() {
+    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '[%s] [%s] [detail] %s\n' "$ts" "$SCRIPT_NAME" "$1" >> "$LOG_FILE"
+}
+
+# ---------------------------------------------------------------------------
+# Agentic AI invocation -- generalized wrapper for claude/agent CLI
+# ---------------------------------------------------------------------------
+# Purpose: Standardized AI CLI invocation with speed/permission tiers,
+#   validation callbacks, automatic retry, and telemetry logging.
+# Inputs: SPEED (fast/balanced/quality), PERMISSIONS (none/readonly/full/
+#   dangerous), VALIDATE_FN (function name, receives output as $1),
+#   MAX_RETRIES (retry count on validation failure). Prompt from stdin.
+# Expected output: Raw AI-generated text on stdout.
+# Validation: Caller-provided VALIDATE_FN must return 0 (pass) or 1 (fail)
+#   and set AI_REJECT_REASON on failure.
+# Known limitations: Agent CLI has no --model flag; speed is hint-only via
+#   prompt prefix. Retry prepends rejection reason but may not fix structural
+#   issues (e.g., model always wrapping in code fences).
+
+# File-only AI telemetry logging (avoids stdout capture interference when
+# invoke_ai output is captured via $()). Does not increment ERRORS/WARNINGS --
+# callers decide whether to count invoke_ai failures.
+_ai_log() {
+    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '[%s] [%s] [%s] %s\n' "$ts" "$SCRIPT_NAME" "${2:-info}" "$1" >> "${LOG_FILE:-/dev/null}"
+}
+
+AI_REJECT_REASON=""
+
+invoke_ai() {
+    local speed="${1:-balanced}"
+    local permissions="${2:-none}"
+    local validate_fn="${3:-}"
+    local max_retries="${4:-0}"
+
+    AI_REJECT_REASON=""
+
+    # Read prompt from stdin
+    local prompt
+    prompt=$(cat)
+
+    # Detect backend
+    # command -v exempt: existence check with explicit fallback chain
+    local cli_cmd=""
+    if command -v claude >/dev/null 2>&1; then
+        cli_cmd="claude"
+    elif $IS_WINDOWS; then
+        # Windows Git Bash: agent may be on PowerShell PATH only
+        local agent_path
+        agent_path=$(pwsh -NoProfile -Command \
+            'Get-Command agent -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source' \
+            2>/dev/null) || true  # pwsh may not be installed; fallback is no agent CLI
+        if [ -n "$agent_path" ]; then cli_cmd="agent"; fi
+    elif command -v agent >/dev/null 2>&1; then
+        cli_cmd="agent"
+    fi
+
+    if [ -z "$cli_cmd" ]; then
+        AI_REJECT_REASON="No AI CLI available (claude or agent)"
+        _ai_log "AI invocation: no CLI available (claude or agent)" "error"
+        return 1
+    fi
+
+    # Build CLI flags
+    local -a flags=()
+
+    if [ "$cli_cmd" = "claude" ]; then
+        flags+=("-p" "--no-session-persistence")
+        # Speed mapping (claude CLI: explicit model + effort)
+        case "$speed" in
+            fast)     flags+=("--model" "haiku" "--effort" "low") ;;
+            balanced) flags+=("--model" "sonnet") ;;
+            quality)  flags+=("--model" "opus" "--effort" "high") ;;
+        esac
+        # Permission mapping
+        case "$permissions" in
+            none)      flags+=("--allowedTools" "") ;;
+            readonly)  flags+=("--allowedTools" "Read Glob Grep") ;;
+            full)      ;; # default -- no restriction
+            dangerous) flags+=("--dangerously-skip-permissions") ;;
+        esac
+        # System prompt hints for speed tiers
+        case "$speed" in
+            fast)    flags+=("--append-system-prompt" "Be concise and direct.") ;;
+            quality) flags+=("--append-system-prompt" "Take your time. Be thorough.") ;;
+        esac
+    else
+        # Agent CLI -- no --model flag; speed via prompt prefix only
+        flags+=("-p" "--trust")
+        # Permission mapping
+        case "$permissions" in
+            none)      flags+=("--mode" "ask") ;;
+            readonly)  flags+=("--mode" "plan") ;;
+            full)      ;; # default
+            dangerous) flags+=("--force") ;;
+        esac
+    fi
+
+    # Speed prefix for agent CLI (no model flag available)
+    local speed_prefix=""
+    if [ "$cli_cmd" = "agent" ]; then
+        case "$speed" in
+            fast)    speed_prefix="Be concise and direct. Prioritize speed.\n\n" ;;
+            quality) speed_prefix="Take your time. Be thorough and precise.\n\n" ;;
+        esac
+    fi
+
+    # Retry loop
+    local attempt=0
+    local current_prompt="$prompt"
+
+    while [ "$attempt" -le "$max_retries" ]; do
+        attempt=$((attempt + 1))
+
+        _ai_log "AI invocation: speed=$speed backend=$cli_cmd attempt=$attempt"
+
+        local full_prompt
+        full_prompt=$(printf '%b%s' "$speed_prefix" "$current_prompt")
+
+        local output
+        # Suppress set -e abort; CLI may exit non-zero on model errors
+        output=$(printf '%s' "$full_prompt" | "$cli_cmd" "${flags[@]}" 2>&1) || true
+
+        if [ -z "$output" ]; then
+            AI_REJECT_REASON="Empty output from $cli_cmd"
+            _ai_log "AI invocation: speed=$speed backend=$cli_cmd attempt=$attempt result=empty" "warn"
+            if [ "$attempt" -le "$max_retries" ]; then
+                current_prompt=$(printf 'Your previous output was empty. Try again.\n\n%s' "$prompt")
+                continue
+            fi
+            return 1
+        fi
+
+        # Validate if function provided
+        if [ -n "$validate_fn" ]; then
+            if ! "$validate_fn" "$output"; then
+                [ -z "$AI_REJECT_REASON" ] && AI_REJECT_REASON="Validation failed"
+                _ai_log "AI invocation: speed=$speed backend=$cli_cmd attempt=$attempt result=rejected reason=$AI_REJECT_REASON" "warn"
+                while IFS= read -r _rej_line; do
+                    log_detail "ai-rejected: $_rej_line"
+                done <<< "$output"
+                if [ "$attempt" -le "$max_retries" ]; then
+                    current_prompt=$(printf 'Your previous output was rejected: %s. Try again.\n\n%s' \
+                        "$AI_REJECT_REASON" "$prompt")
+                    continue
+                fi
+                _ai_log "AI invocation: speed=$speed backend=$cli_cmd exhausted after $attempt attempts" "warn"
+                return 1
+            fi
+        fi
+
+        # Success
+        _ai_log "AI invocation: speed=$speed backend=$cli_cmd attempt=$attempt result=accepted"
+        printf '%s' "$output"
+        return 0
+    done
+
+    return 1
+}
+
+# ---------------------------------------------------------------------------
+# Summary writer (3-arg: category, tool, detail)
+# ---------------------------------------------------------------------------
+write_summary() {
+    if [ -n "${AITOOLS_SUMMARY_FILE:-}" ]; then
+        local cat="$1"
+        # Auto-promote OK to WARN when warnings have been logged
+        if [ "$cat" = "OK" ] && [ "${WARNINGS:-0}" -gt 0 ]; then
+            cat="WARN"
+        fi
+        printf '%s|%s|%s\n' "$cat" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Backup a file before overwriting. Keeps at most $max_backups copies.
+# ---------------------------------------------------------------------------
+backup_file() {
+    local file="$1" max_backups=20
+    [ -f "$file" ] || return 0
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
+    cp "$file" "${file}.bak.${ts}"
+    # Prune oldest beyond limit
+    ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1)) | xargs rm -f 2>/dev/null
+    log "Backed up $(display_path "$file")"
+}
+
+# ---------------------------------------------------------------------------
+# Backup a directory before modifying managed files. Keeps at most $max_backups copies.
+# ---------------------------------------------------------------------------
+backup_dir() {
+    local dir="$1" max_backups=5
+    [ -d "$dir" ] || return 0
+    local file_count
+    file_count=$(find "$dir" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')
+    if [ "$file_count" -eq 0 ]; then
+        return 0
+    fi
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
+    if ! cp -R "$dir" "${dir}.bak.${ts}"; then
+        log_warn "Could not back up $(display_path "$dir") -- proceeding without backup"
+        return 0
+    fi
+    local old_backups
+    old_backups=$(find "$(dirname "$dir")" -maxdepth 1 -name "$(basename "$dir").bak.*" -type d \
+        | sort -r | tail -n +$((max_backups + 1)))
+    if [ -n "$old_backups" ]; then
+        printf '%s\n' "$old_backups" | while IFS= read -r old_dir; do
+            rm -rf "$old_dir"
+            log "Pruned old backup: $(display_path "$old_dir")"
+        done
+    fi
+    log "Backed up $(display_path "$dir") ($file_count managed files)"
+}
+
+# ---------------------------------------------------------------------------
+# Deploy state tracking: manifest + shadow copies for auto-deploy detection.
+# Tracks what was last deployed to each managed file.
+# ---------------------------------------------------------------------------
+_DEPLOY_STATE_DIR="$HOME/.aitools/deploy-state"
+_DEPLOY_MANIFEST=""
+
+get_content_hash() {
+    printf '%s' "$1" | sha256sum | cut -d' ' -f1
+}
+
+_deploy_state_key() {
+    local file_path="$1"
+    # Normalize: strip $HOME prefix, use forward slashes
+    printf '%s' "$file_path" | perl -pe "s{^\Q$HOME\E/}{}"
+}
+
+initialize_deploy_state() {
+    local manifest_path="$_DEPLOY_STATE_DIR/manifest.json"
+    if [ -f "$manifest_path" ]; then
+        _DEPLOY_MANIFEST=$(cat "$manifest_path")
+    else
+        _DEPLOY_MANIFEST='{"version":1,"files":{}}'
+    fi
+}
+
+get_deploy_state_hash() {
+    local file_path="$1"
+    if [ -z "$_DEPLOY_MANIFEST" ]; then initialize_deploy_state; fi
+    local key
+    key=$(_deploy_state_key "$file_path")
+    # node is already a dependency (used by read_config_key)
+    printf '%s' "$_DEPLOY_MANIFEST" | node -e "
+        const m = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+        const f = m.files || {};
+        const e = f[process.argv[1]];
+        if (e && e.hash) process.stdout.write(e.hash);
+    " "$key" 2>/dev/null
+}
+
+update_deploy_state() {
+    local file_path="$1"
+    local content="$2"
+    if [ -z "$_DEPLOY_MANIFEST" ]; then initialize_deploy_state; fi
+    local key hash ts
+    key=$(_deploy_state_key "$file_path")
+    hash=$(get_content_hash "$content")
+    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    mkdir -p "$_DEPLOY_STATE_DIR"
+
+    # Update manifest via node
+    _DEPLOY_MANIFEST=$(printf '%s' "$_DEPLOY_MANIFEST" | node -e "
+        const m = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+        if (!m.files) m.files = {};
+        m.files[process.argv[1]] = { hash: process.argv[2], deployedAt: process.argv[3] };
+        process.stdout.write(JSON.stringify(m, null, 2));
+    " "$key" "$hash" "$ts" 2>/dev/null)
+
+    printf '%s\n' "$_DEPLOY_MANIFEST" > "$_DEPLOY_STATE_DIR/manifest.json"
+
+    # Write shadow copy
+    local shadow_path="$_DEPLOY_STATE_DIR/shadows/$key"
+    mkdir -p "$(dirname "$shadow_path")"
+    printf '%s' "$content" > "$shadow_path"
+}
+
+get_deploy_shadow() {
+    local file_path="$1"
+    local key
+    key=$(_deploy_state_key "$file_path")
+    local shadow_path="$_DEPLOY_STATE_DIR/shadows/$key"
+    if [ -f "$shadow_path" ]; then
+        cat "$shadow_path"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Non-agentic 3-way merge using shadow as common ancestor.
+# Backend: git merge-file (guaranteed prerequisite -- no discovery needed).
+# Sets AUTO_MERGED_CONTENT on clean merge. Returns 0 on success, 1 on failure.
+# ---------------------------------------------------------------------------
+AUTO_MERGED_CONTENT=""
+try_auto_merge() {
+    local local_content="$1"
+    local ancestor_content="$2"
+    local source_content="$3"
+    AUTO_MERGED_CONTENT=""
+
+    local tmp_local tmp_ancestor tmp_source
+    tmp_local=$(mktemp)
+    tmp_ancestor=$(mktemp)
+    tmp_source=$(mktemp)
+    printf '%s' "$local_content" > "$tmp_local"
+    printf '%s' "$ancestor_content" > "$tmp_ancestor"
+    printf '%s' "$source_content" > "$tmp_source"
+
+    local merged
+    # 2>/dev/null: git merge-file writes conflict markers to stderr on exit 1;
+    # we only want stdout. Exit code checked via $rc immediately below.
+    merged=$(git merge-file -p "$tmp_local" "$tmp_ancestor" "$tmp_source" 2>/dev/null)
+    local rc=$?
+    rm -f "$tmp_local" "$tmp_ancestor" "$tmp_source"
+
+    if [ "$rc" -eq 0 ]; then
+        AUTO_MERGED_CONTENT="$merged"
+        return 0
+    fi
+    return 1
+}
+
+# ---------------------------------------------------------------------------
+# Merge file description lookup
+# ---------------------------------------------------------------------------
+# Purpose: Returns a human-readable description of a managed file for AI merge
+#   prompts, providing context about the file's role in the config system.
+# Inputs: $1 = file path
+# Expected output: Single-line description string on stdout.
+_get_merge_file_description() {
+    case "$(basename "$1")" in
+        CLAUDE.md) printf 'User-scope CLAUDE.md -- personal preferences and instructions for Claude Code' ;;
+        *.md)      printf 'Configuration rule: %s' "$(basename "$1")" ;;
+        *.json)    printf 'JSON config: %s' "$(basename "$1")" ;;
+        *)         printf 'Managed file: %s' "$(basename "$1")" ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------
+# AI merge prompt builder (initial merge)
+# ---------------------------------------------------------------------------
+# Purpose: Builds a structured merge prompt following the Role/Context/Task/
+#   Constraints/Format pattern for merging managed configuration files.
+# Inputs: $1=file_path, $2=source_content, $3=local_content, $4=diff_output
+# Expected output: Complete prompt string on stdout, suitable for invoke_ai.
+# Validation: validate_ai_merge_output (5 checks: conversational, fences,
+#   refusal, truncation, header preservation)
+# Known limitations: Very large files may hit model context limits. Files with
+#   no markdown headers rely on Check 4 (length) for rewrite detection.
+_ai_prompt_merge() {
+    local file_path="$1"
+    local source_content="$2"
+    local local_content="$3"
+    local diff_output="$4"
+
+    local file_desc
+    file_desc=$(_get_merge_file_description "$file_path")
+
+    printf '%s' "You are merging a managed configuration file during automated deployment.
+
+## What you are merging
+${file_desc}
+
+## Where changes come from
+SOURCE: The canonical template, synced across machines -- the updated version being deployed
+LOCAL: The user's current file on this machine, with their customizations
+
+## What is happening
+Updated configuration is being deployed. Source has changed and needs to be
+incorporated without losing local customizations.
+
+## Differences (unified diff: local vs source)
+${diff_output}
+
+## Full local file (start from this)
+<LOCAL>
+${local_content}
+</LOCAL>
+
+## Rules
+1. Start with LOCAL as your base -- preserve all user customizations
+2. Apply ONLY the changes shown in the diff
+3. If a change conflicts with a local customization (contradicts its intent), keep local
+4. If a change adds new content not in LOCAL, add it in the appropriate location
+5. If a change updates content the user hasn't customized, apply it
+6. CRITICAL: Do NOT wrap your output in markdown code fences (\`\`\`). Output raw file content ONLY
+7. No commentary, no explanation, no preamble -- just the merged file content"
+}
+
+# ---------------------------------------------------------------------------
+# AI merge prompt builder (refinement)
+# ---------------------------------------------------------------------------
+# Purpose: Builds a refinement prompt for iterating on a previous merge result
+#   based on user feedback.
+# Inputs: $1=source_content, $2=local_content, $3=current_merge, $4=feedback
+# Expected output: Complete prompt string on stdout, suitable for invoke_ai.
+# Validation: Same as initial merge (validate_ai_merge_output).
+_ai_prompt_merge_refine() {
+    local source_content="$1"
+    local local_content="$2"
+    local current_merge="$3"
+    local feedback="$4"
+
+    printf '%s' "You are refining a merged configuration file based on user feedback.
+
+## Context
+A previous merge produced CURRENT_MERGE from SOURCE + LOCAL. The user wants changes.
+
+## SOURCE (original template)
+<SOURCE>
+${source_content}
+</SOURCE>
+
+## LOCAL (original user file)
+<LOCAL>
+${local_content}
+</LOCAL>
+
+## CURRENT MERGE (previous result)
+<CURRENT_MERGE>
+${current_merge}
+</CURRENT_MERGE>
+
+## User Feedback
+${feedback}
+
+## Rules
+- Apply the user's feedback to CURRENT_MERGE
+- Keep all content from CURRENT_MERGE not affected by the feedback
+- Output the revised merged file content ONLY -- no preamble, no explanation, no markdown fences"
+}
+
+# Merge validation wrapper for invoke_ai -- captures source/local context
+# via module-level variables set by _invoke_ai_merge before calling invoke_ai.
+_MERGE_VALIDATE_SOURCE=""
+_MERGE_VALIDATE_LOCAL=""
+_merge_validate() {
+    validate_ai_merge_output "$1" "$_MERGE_VALIDATE_SOURCE" "$_MERGE_VALIDATE_LOCAL"
+    AI_REJECT_REASON="$MERGE_REJECT_REASON"
+}
+
+MERGE_REJECT_REASON=""
+
+# ---------------------------------------------------------------------------
+# Validate AI merge output before accepting it.
+# Returns 0 if valid, 1 if invalid. Sets MERGE_REJECT_REASON on failure.
+# ---------------------------------------------------------------------------
+validate_ai_merge_output() {
+    local output="$1"
+    local source_content="$2"
+    local local_content="$3"
+    MERGE_REJECT_REASON=""
+
+    # Check 1: conversational patterns (first non-empty line)
+    local first_line
+    first_line=$(printf '%s' "$output" | perl -ne 'if (/\S/) { print; exit }')
+    if printf '%s' "$first_line" | perl -ne 'exit 0 if /^(I |Here|Sure|Certainly|Let me)/i; exit 1'; then
+        MERGE_REJECT_REASON="AI responded conversationally instead of producing merged content"
+        return 1
+    fi
+
+    # Check 2: markdown code fences
+    if printf '%s\n' "$output" | perl -ne 'exit 0 if /^```/; END { exit 1 }'; then
+        MERGE_REJECT_REASON="AI wrapped output in code fences -- need raw content"
+        return 1
+    fi
+
+    # Check 3: conversational refusal patterns (not bare keywords -- content may
+    # legitimately contain "permission", "access", etc.)
+    if printf '%s' "$output" | perl -ne 'exit 0 if /(?:I don.t have permission|I cannot access|I.m not authorized|I need (?:your )?approval|permission denied|access denied|I.m unable to|I can.t (?:read|write|access|open|modify))/i; END { exit 1 }'; then
+        MERGE_REJECT_REASON="AI indicated it couldn't perform the merge"
+        return 1
+    fi
+
+    # Check 4: minimum length (output >= 50% of shorter input when shorter > 40 chars)
+    local out_len src_len local_len min_input_len threshold
+    out_len=$(printf '%s' "$output" | wc -c | tr -d ' ')
+    src_len=$(printf '%s' "$source_content" | wc -c | tr -d ' ')
+    local_len=$(printf '%s' "$local_content" | wc -c | tr -d ' ')
+    if [ "$src_len" -le "$local_len" ]; then min_input_len=$src_len; else min_input_len=$local_len; fi
+    threshold=$((min_input_len / 2))
+    if [ "$min_input_len" -gt 40 ] && [ "$out_len" -lt "$threshold" ]; then
+        MERGE_REJECT_REASON="Output too short ($out_len chars, expected ${threshold}+) -- likely truncated"
+        return 1
+    fi
+
+    # Check 5: header preservation — deduplicated headers from source+local must
+    # be >=60% preserved in output. Files with 0 headers pass (Check 4 handles truncation).
+    local combined_headers
+    combined_headers=$(printf '%s\n%s' "$source_content" "$local_content" \
+        | grep -E '^#{1,6} ' | sort -u)
+    local total preserved=0
+    total=$(printf '%s\n' "$combined_headers" | grep -c '^' || true)  # count lines; may be 0
+    if [ "$total" -gt 0 ]; then
+        while IFS= read -r header; do
+            [ -z "$header" ] && continue
+            printf '%s' "$output" | grep -qF "$header" && preserved=$((preserved + 1))
+        done <<< "$combined_headers"
+        local threshold=$(( (total * 60 + 99) / 100 ))
+        [ "$threshold" -lt 1 ] && threshold=1
+        if [ "$preserved" -lt "$threshold" ]; then
+            MERGE_REJECT_REASON="Rewrote too much ($preserved/$total section headers preserved, need 60%+)"
+            return 1
+        fi
+    fi
+
+    return 0
+}
+
+MERGED_CONTENT=""
+
+# ---------------------------------------------------------------------------
+# Spinner for AI operations (visual progress indicator)
+# ---------------------------------------------------------------------------
+_AI_SPINNER_PID=""
+
+_start_spinner() {
+    local msg="${1:-working...}"
+    (
+        local chars='/-\|'
+        local i=0
+        while true; do
+            printf '\r  %s %s' "${chars:$((i % 4)):1}" "$msg" > /dev/tty
+            i=$((i + 1))
+            sleep 0.2
+        done
+    ) &
+    _AI_SPINNER_PID=$!
+}
+
+_stop_spinner() {
+    if [ -n "$_AI_SPINNER_PID" ] && kill -0 "$_AI_SPINNER_PID" 2>/dev/null; then
+        kill "$_AI_SPINNER_PID" 2>/dev/null
+        wait "$_AI_SPINNER_PID" 2>/dev/null || true  # reap; exit code irrelevant for spinner
+    fi
+    _AI_SPINNER_PID=""
+    printf '\r  \033[K' > /dev/tty  # clear spinner line
+}
+
+# ---------------------------------------------------------------------------
+# Agentic merge via invoke_ai with refinement loop.
+# Uses structured prompts from _ai_prompt_merge / _ai_prompt_merge_refine.
+# Sets DIFF_REVIEW_RESULT="merge" + MERGED_CONTENT, or falls back.
+# ---------------------------------------------------------------------------
+_invoke_ai_merge() {
+    local file_path="$1"
+    local source_content="$2"
+    local local_content="${3:-}"
+    local diff_output="${4:-}"
+
+    # Read local from disk if not provided (backward compat)
+    if [ -z "$local_content" ] && [ -f "$file_path" ]; then
+        local_content=$(cat "$file_path")
+    fi
+
+    # Detect backend for transparency display
+    local ai_backend="unknown"
+    if command -v claude >/dev/null 2>&1; then
+        ai_backend="claude"
+    elif command -v agent >/dev/null 2>&1; then
+        ai_backend="agent"
+    fi
+    local display_name
+    display_name=$(basename "$file_path")
+    printf '  >> AI merge: %s (balanced) -- merging %s...\n' "$ai_backend" "$display_name" > /dev/tty
+
+    # Set validation context for _merge_validate wrapper
+    _MERGE_VALIDATE_SOURCE="$source_content"
+    _MERGE_VALIDATE_LOCAL="$local_content"
+
+    local current_merge=""
+    local iteration=0
+
+    while true; do
+        iteration=$((iteration + 1))
+        local prompt_text
+
+        if [ -z "$current_merge" ]; then
+            prompt_text=$(_ai_prompt_merge "$file_path" "$source_content" "$local_content" "$diff_output")
+        else
+            local feedback
+            printf '  refinement feedback: ' > /dev/tty
+            IFS= read -r feedback < /dev/tty
+            prompt_text=$(_ai_prompt_merge_refine "$source_content" "$local_content" "$current_merge" "$feedback")
+        fi
+
+        local merged
+        _start_spinner "merging $display_name (attempt $iteration)..."
+        # invoke_ai returns 1 on failure with no stdout; || true suppresses set -e abort
+        merged=$(printf '%s' "$prompt_text" | invoke_ai balanced none _merge_validate 1) || true
+        _stop_spinner
+
+        # Defense-in-depth: strip leading/trailing code fences if AI ignored instructions
+        if [ -n "$merged" ]; then
+            merged=$(printf '%s' "$merged" | perl -0777 -pe 's/\A```[^\n]*\n//; s/\n```\s*\z//')
+        fi
+
+        if [ -z "$merged" ]; then
+            printf '  >> AI merge failed (iteration %d): %s\n' "$iteration" "${AI_REJECT_REASON:-unknown error}" > /dev/tty
+            log_error "AI merge failed (iteration $iteration): ${AI_REJECT_REASON:-unknown error}"
+            printf '  fallback [o]verwrite / [s]kip: ' > /dev/tty
+            local fb
+            read -r fb < /dev/tty
+            case "$(printf '%s' "$fb" | tr '[:upper:]' '[:lower:]')" in
+                s) DIFF_REVIEW_RESULT="skip" ;;
+                *) DIFF_REVIEW_RESULT="overwrite" ;;
+            esac
+            return 0
+        fi
+
+        # Show merge preview
+        printf '\n  --- merged result preview (first 30 lines) ---\n' > /dev/tty
+        printf '%s\n' "$merged" | head -30 | while IFS= read -r line; do
+            printf '  | %s\n' "$line" > /dev/tty
+        done
+        local total_lines
+        total_lines=$(printf '%s\n' "$merged" | wc -l | tr -d ' ')
+        if [ "$total_lines" -gt 30 ]; then
+            printf '  | ... (%d more lines)\n' "$((total_lines - 30))" > /dev/tty
+        fi
+        printf '\n  [y]es accept / [r]efine / [n]o reject: ' > /dev/tty
+        local accept
+        read -r accept < /dev/tty
+        case "$(printf '%s' "$accept" | tr '[:upper:]' '[:lower:]')" in
+            y)
+                MERGED_CONTENT="$merged"
+                DIFF_REVIEW_RESULT="merge"
+                printf '  >> merged: AI-merged content accepted (iteration %d)\n' "$iteration" > /dev/tty
+                return 0
+                ;;
+            r)
+                current_merge="$merged"
+                printf '  >> refining merge (iteration %d)...\n' "$iteration" > /dev/tty
+                continue
+                ;;
+            *)
+                printf '  >> merge rejected, falling back to overwrite\n' > /dev/tty
+                DIFF_REVIEW_RESULT="overwrite"
+                return 0
+                ;;
+        esac
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Prompt user before overwriting a managed file with different content.
+# Shows diff, attempts diff3 auto-merge, offers interactive options.
+#
+# Args:
+#   $1 = file path (deployed file on disk)
+#   $2 = new content that would be written (from source template)
+#   $3 = adopt target label (e.g., "profile", "shared/") or "" to hide adopt
+#   $4 = current content of local file (optional, read from disk if empty)
+#   $5 = ancestor content from shadow (optional, enables diff3 merge)
+#
+# Sets global DIFF_REVIEW_RESULT to: "overwrite", "adopt", "merge", or "skip"
+# When "merge": also sets MERGED_CONTENT with the merged result.
+# Exits with code 2 on abort.
+# Non-interactive / --force: sets "overwrite" and returns.
+# ---------------------------------------------------------------------------
+DIFF_REVIEW_RESULT=""
+prompt_diff_review() {
+    local file_path="$1"
+    local new_content="$2"
+    local adopt_label="${3:-}"
+    local cur_content="${4:-}"
+    local ancestor_content="${5:-}"
+
+    DIFF_REVIEW_RESULT="overwrite"
+    MERGED_CONTENT=""
+
+    # --force or AITOOLS_FORCE: auto-overwrite
+    if [ "${AITOOLS_FORCE:-}" = "1" ] || [ "${FORCE:-}" = "true" ]; then
+        log_warn "Diff in $(display_path "$file_path") -- overwriting (--force)"
+        return 0
+    fi
+
+    # Non-interactive: auto-overwrite
+    if ! (printf '' > /dev/tty) 2>/dev/null; then
+        log_warn "Diff in $(display_path "$file_path") -- overwriting (non-interactive)"
+        return 0
+    fi
+
+    # Read current file if not provided
+    if [ -z "$cur_content" ] && [ -f "$file_path" ]; then
+        cur_content=$(cat "$file_path")
+    fi
+
+    # Context header
+    printf '\n\033[33m[REVIEW]\033[0m %s differs from source.\n' \
+        "$(display_path "$file_path")" > /dev/tty
+    printf '  source = template (would deploy)\n' > /dev/tty
+    printf '  local  = current file on disk\n\n' > /dev/tty
+
+    # Show diff
+    local diff_output
+    # diff exits 1 on differences (expected), suppress set -e abort
+    diff_output=$(diff -u <(printf '%s' "$new_content") <(printf '%s' "$cur_content") \
+        --label "source (would deploy)" --label "local (on disk)" 2>&1) || true
+    local diff_lines
+    diff_lines=$(printf '%s\n' "$diff_output" | wc -l | tr -d ' ')
+    if [ "$diff_lines" -le 40 ]; then
+        printf '%s\n' "$diff_output" > /dev/tty
+    else
+        printf '%s\n' "$diff_output" | head -30 > /dev/tty
+        printf '  ... (%d more lines -- full diff in deploy log)\n' \
+            "$((diff_lines - 30))" > /dev/tty
+        printf '%s\n' "$diff_output" >> "${LOG_FILE:-/dev/null}"
+    fi
+
+    # Attempt automatic merge if ancestor available
+    if [ -n "$ancestor_content" ]; then
+        printf '\n  Attempting automatic merge...\n' > /dev/tty
+        if try_auto_merge "$cur_content" "$ancestor_content" "$new_content"; then
+            printf '  Clean merge -- no conflicts.\n\n' > /dev/tty
+            local total_m_lines preview_count
+            total_m_lines=$(printf '%s\n' "$AUTO_MERGED_CONTENT" | wc -l | tr -d ' ')
+            preview_count=$total_m_lines
+            if [ "$preview_count" -gt 30 ]; then preview_count=30; fi
+            printf '  --- merged result preview (first %d lines) ---\n' "$preview_count" > /dev/tty
+            printf '%s\n' "$AUTO_MERGED_CONTENT" | head -"$preview_count" | while IFS= read -r line; do
+                printf '  | %s\n' "$line" > /dev/tty
+            done
+            if [ "$total_m_lines" -gt 30 ]; then
+                printf '  | ... (%d more lines)\n' "$((total_m_lines - 30))" > /dev/tty
+            fi
+            printf '\n' > /dev/tty
+            if [ -n "$adopt_label" ]; then
+                printf '  [a]ccept    : deploy merge + update %s\n' "$adopt_label" > /dev/tty
+            else
+                printf '  [a]ccept\n' > /dev/tty
+            fi
+            printf '  [o]verwrite\n' > /dev/tty
+            printf '  [s]kip\n' > /dev/tty
+            printf '  [x]abort\n' > /dev/tty
+            printf '  choice [a/o/s/x]: ' > /dev/tty
+            local merge_choice
+            read -r merge_choice < /dev/tty
+            case "$(printf '%s' "$merge_choice" | tr '[:upper:]' '[:lower:]')" in
+                a)  MERGED_CONTENT="$AUTO_MERGED_CONTENT"
+                    if [ -n "$adopt_label" ]; then
+                        printf '  >> accepted: merge deployed + %s updated\n' "$adopt_label" > /dev/tty
+                        DIFF_REVIEW_RESULT="merge-adopt"
+                    else
+                        printf '  >> accepted: merge deployed\n' > /dev/tty
+                        DIFF_REVIEW_RESULT="merge"
+                    fi
+                    return 0 ;;
+                s)  printf '  >> skipped: local file unchanged\n' > /dev/tty
+                    DIFF_REVIEW_RESULT="skip"
+                    return 0 ;;
+                x)  log_error "Aborted by user"
+                    exit 2 ;;
+                *)  printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
+                    DIFF_REVIEW_RESULT="overwrite"
+                    return 0 ;;
+            esac
+        else
+            printf '  Merge has conflicts -- manual choice required.\n' > /dev/tty
+        fi
+    fi
+
+    # Options (no auto-merge or merge had conflicts)
+    printf '\n' > /dev/tty
+    if [ -n "$adopt_label" ]; then
+        printf '  [o]verwrite : source wins -> deploy to local (backup kept)\n' > /dev/tty
+        printf '  [a]dopt     : local wins -> copy back to %s\n' "$adopt_label" > /dev/tty
+        printf '  [m]erge     : AI-assisted merge of source + local\n' > /dev/tty
+        printf '  [s]kip      : keep local as-is (no changes)\n' > /dev/tty
+        printf '  [x]abort    : stop deployment\n' > /dev/tty
+        printf '  choice [o/a/m/s/x]: ' > /dev/tty
+    else
+        printf '  [o]verwrite : source wins -> deploy to local (backup kept)\n' > /dev/tty
+        printf '  [m]erge     : AI-assisted merge of source + local\n' > /dev/tty
+        printf '  [s]kip      : keep local as-is (no changes)\n' > /dev/tty
+        printf '  [x]abort    : stop deployment\n' > /dev/tty
+        printf '  choice [o/m/s/x]: ' > /dev/tty
+    fi
+
+    local choice
+    read -r choice < /dev/tty
+    case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
+        a)  if [ -n "$adopt_label" ]; then
+                printf '  >> adopted: local version copied back to %s\n' "$adopt_label" > /dev/tty
+                DIFF_REVIEW_RESULT="adopt"
+            else
+                printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
+                DIFF_REVIEW_RESULT="overwrite"
+            fi ;;
+        m)  _invoke_ai_merge "$file_path" "$new_content" "$cur_content" "$diff_output" ;;
+        s)  printf '  >> skipped: local file unchanged\n' > /dev/tty
+            DIFF_REVIEW_RESULT="skip" ;;
+        x)  log_error "Aborted by user"
+            exit 2 ;;
+        *)  printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
+            DIFF_REVIEW_RESULT="overwrite" ;;
+    esac
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Deploy a managed file with diff review and deploy state tracking.
+# Uses manifest to auto-deploy when user hasn't edited the local file.
+# Falls back to interactive review with merge options when both sides differ.
+#
+# Args:
+#   $1 = source content (string to deploy)
+#   $2 = dest file path (deployed location)
+#   $3 = tool name (for summary, e.g., "claude rules")
+#   $4 = item name (for DETAIL summary, e.g., "concurrent-agents.md")
+#   $5 = adopt label ("profile", "shared/", or "" to hide adopt option)
+#
+# Sets MANAGED_FILE_RESULT to: "created", "updated", "verified", "accept & adopt", "skipped"
+# Exits with code 2 on abort (from prompt_diff_review).
+# On "accept & adopt"/"skipped": does NOT write the file (caller decides).
+# On "created"/"updated": writes src_content to dest + updates deploy state.
+# ---------------------------------------------------------------------------
+MANAGED_FILE_RESULT=""
+deploy_managed_file() {
+    local src_content="$1"
+    local dest="$2"
+    local tool_name="$3"
+    local item_name="$4"
+    local adopt_label="${5:-}"
+
+    # Normalize trailing whitespace for consistent comparison.
+    # Prevents round-trip diff noise (deploy -> adopt strips trailing blanks -> deploy sees diff).
+    src_content=$(printf '%s' "$src_content" | perl -0777 -pe 's/[\r\n]+$/\n/')
+
+    MANAGED_FILE_RESULT="verified"
+
+    # Dry run: report what would happen without writing
+    if [ "${DRY_RUN:-}" = "true" ]; then
+        if [ -f "$dest" ]; then
+            local _dr_existing
+            _dr_existing=$(cat "$dest")
+            _dr_existing=$(printf '%s' "$_dr_existing" | perl -0777 -pe 's/[\r\n]+$/\n/')
+            if [ "$_dr_existing" = "$src_content" ]; then
+                log "[DRY RUN] Unchanged: $item_name"
+            else
+                log "[DRY RUN] Would update: $item_name -> $(display_path "$dest")"
+            fi
+        else
+            log "[DRY RUN] Would create: $item_name -> $(display_path "$dest")"
+        fi
+        return 0
+    fi
+
+    mkdir -p "$(dirname "$dest")"
+
+    if [ -f "$dest" ]; then
+        local existing
+        existing=$(cat "$dest")
+        existing=$(printf '%s' "$existing" | perl -0777 -pe 's/[\r\n]+$/\n/')
+        if [ "$existing" = "$src_content" ]; then
+            # Content identical — update deploy state (bootstraps manifest)
+            update_deploy_state "$dest" "$src_content"
+            MANAGED_FILE_RESULT="verified"
+            return 0
+        fi
+
+        # Content differs — check deploy state for auto-deploy eligibility
+        local state_hash existing_hash
+        state_hash=$(get_deploy_state_hash "$dest")
+        if [ -n "$state_hash" ]; then
+            existing_hash=$(get_content_hash "$existing")
+            if [ "$existing_hash" = "$state_hash" ]; then
+                # User didn't edit since last deploy → auto-deploy silently
+                backup_file "$dest"
+                printf '%s\n' "$src_content" > "$dest"
+                update_deploy_state "$dest" "$src_content"
+                log "Auto-deployed: $item_name (no local edits detected)"
+                MANAGED_FILE_RESULT="updated"
+                return 0
+            fi
+        fi
+
+        # User edited AND source changed — backup + interactive review
+        backup_file "$dest"
+        local ancestor_content
+        ancestor_content=$(get_deploy_shadow "$dest")
+        # Bootstrap: seed shadow from current deployed content if empty
+        if [ -z "$ancestor_content" ]; then
+            log "Bootstrapping deploy shadow from existing: $(display_path "$dest")"
+            ancestor_content="$existing"
+        fi
+        prompt_diff_review "$dest" "$src_content" "$adopt_label" "$existing" "$ancestor_content"
+        case "$DIFF_REVIEW_RESULT" in
+            adopt)
+                MANAGED_FILE_RESULT="accept & adopt"
+                return 0
+                ;;
+            skip)
+                log_warn "Skipped: $item_name"
+                MANAGED_FILE_RESULT="skipped"
+                return 0
+                ;;
+            merge-adopt)
+                src_content="$MERGED_CONTENT"
+                printf '%s' "$src_content" > "$dest"
+                update_deploy_state "$dest" "$src_content"
+                log_ok "Updated (merge-adopt): $item_name"
+                MANAGED_FILE_RESULT="accept & adopt"
+                return 0
+                ;;
+            merge)
+                src_content="$MERGED_CONTENT"
+                ;;
+        esac
+        # overwrite or merge: write content to dest
+        printf '%s\n' "$src_content" > "$dest"
+        update_deploy_state "$dest" "$src_content"
+        MANAGED_FILE_RESULT="updated"
+        log_ok "Updated: $item_name -> $(display_path "$dest")"
+    else
+        # New file — create
+        printf '%s\n' "$src_content" > "$dest"
+        update_deploy_state "$dest" "$src_content"
+        MANAGED_FILE_RESULT="created"
+        log_ok "Created: $item_name -> $(display_path "$dest")"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Deploy tracker: centralizes outcome counting and summary writing for
+# loops that deploy multiple managed files (rules, skills, hooks).
+# ---------------------------------------------------------------------------
+
+# Reset all deploy tracker counters. Call before a deploy loop.
+_DT_ADDED=0; _DT_UPDATED=0; _DT_VERIFIED=0
+_DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0
+DEPLOY_TRACKER_TEXT=""
+
+deploy_tracker_init() {
+    _DT_ADDED=0; _DT_UPDATED=0; _DT_VERIFIED=0
+    _DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0
+    DEPLOY_TRACKER_TEXT=""
+}
+
+# Record a single file outcome. Increments counter and writes DETAIL summary.
+# Args: $1=outcome $2=tool_name $3=item_name
+deploy_tracker_record() {
+    local outcome="$1" tool_name="$2" item_name="$3"
+    case "$outcome" in
+        added|created) _DT_ADDED=$((_DT_ADDED + 1))
+                   write_summary DETAIL "$tool_name" "added: $item_name" ;;
+        updated)   _DT_UPDATED=$((_DT_UPDATED + 1))
+                   write_summary DETAIL "$tool_name" "updated: $item_name" ;;
+        "accept & adopt") _DT_ACCEPTED=$((_DT_ACCEPTED + 1))
+                       write_summary DETAIL "$tool_name" "accept & adopt: $item_name" ;;
+        skipped)   _DT_SKIPPED=$((_DT_SKIPPED + 1))
+                   write_summary DETAIL "$tool_name" "skipped: $item_name" ;;
+        verified)  _DT_VERIFIED=$((_DT_VERIFIED + 1)) ;;
+        preserved) _DT_PRESERVED=$((_DT_PRESERVED + 1)) ;;
+    esac
+}
+
+# Write aggregate summary for a deploy loop. Uses non-zero counts.
+# Sets DEPLOY_TRACKER_TEXT for use in log lines.
+# Args: $1=tool_name
+deploy_tracker_summary() {
+    local tool_name="$1"
+    local parts=""
+    [ "$_DT_ADDED" -gt 0 ]     && parts="$_DT_ADDED added"
+    [ "$_DT_UPDATED" -gt 0 ]   && parts="${parts:+$parts, }$_DT_UPDATED updated"
+    [ "$_DT_ACCEPTED" -gt 0 ]  && parts="${parts:+$parts, }$_DT_ACCEPTED accepted"
+    [ "$_DT_VERIFIED" -gt 0 ]  && parts="${parts:+$parts, }$_DT_VERIFIED verified"
+    [ -z "$parts" ] && parts="verified"
+    DEPLOY_TRACKER_TEXT="$parts"
+
+    if [ "$_DT_SKIPPED" -gt 0 ]; then
+        write_summary WARN "$tool_name" "$_DT_SKIPPED skipped (user review)"
+    else
+        write_summary OK "$tool_name" "$parts"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Repair broken uv tool environment (cross-platform)
+# ---------------------------------------------------------------------------
+# When `uv tool upgrade <tool>` fails with "missing a valid environment",
+# find a working Python via `uv python find` (fallback: system python/python3)
+# and reinstall with --force --python <path>.
+# Returns 0 if repaired, 1 if not applicable or failed.
+repair_uv_tool_env() {
+    local tool_name="$1"
+    local upgrade_output="${2:-}"
+
+    if ! printf '%s\n' "$upgrade_output" | grep -q 'missing a valid environment'; then
+        return 1
+    fi
+
+    log_warn "$tool_name uv environment is broken (Python removed?) -- repairing..."
+
+    # Find a working Python -- uv's own Pythons first, then system
+    local working_python=""
+    local uv_python
+    uv_python=$(uv python find 2>/dev/null) || true
+    if [ -n "$uv_python" ] && [ -x "$uv_python" ]; then
+        working_python="$uv_python"
+    elif command -v python3 >/dev/null 2>&1; then
+        working_python=$(command -v python3)
+    elif command -v python >/dev/null 2>&1; then
+        working_python=$(command -v python)
+    fi
+
+    if [ -z "$working_python" ]; then
+        log_error "Cannot repair $tool_name -- no working Python found"
+        return 1
+    fi
+
+    log "Repairing with: uv tool install --force --python $working_python $tool_name"
+    local repair_output
+    repair_output=$(uv tool install --force --python "$working_python" "$tool_name" 2>&1) || true
+    printf '%s\n' "$repair_output" | while IFS= read -r line; do
+        [ -n "$line" ] && log "$line"
+    done
+
+    if printf '%s\n' "$repair_output" | grep -qi 'error.*failed'; then
+        log_error "$tool_name environment repair failed"
+        return 1
+    fi
+
+    log_ok "Repaired $tool_name uv environment"
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Parse CHANGED: lines from a node merge result and emit DETAIL summary entries.
+# Usage: emit_merge_details "$MERGE_RESULT" "tool_name"
+# Only processes lines prefixed with "CHANGED: " -- ignores status and other output.
+# ---------------------------------------------------------------------------
+emit_merge_details() {
+    local merge_result="$1" tool_name="$2"
+    local changed_keys
+    changed_keys=$(echo "$merge_result" | perl -ne 'print if s/^CHANGED: //')
+    if [ -n "$changed_keys" ]; then
+        while IFS= read -r key_change; do
+            log "  $key_change"
+            write_summary DETAIL "$tool_name" "$key_change"
+        done <<< "$changed_keys"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# JSON normalization for comparison (sorted keys, deterministic output)
+# ---------------------------------------------------------------------------
+# JavaScript JSON.stringify preserves insertion order, which may differ
+# between runs or between PS1/bash variants writing the same file. Sorting
+# keys before comparison ensures identical content produces identical JSON.
+#
+# SORT_KEYS_JS: minified sortKeys function for embedding in node -e blocks.
+#   Usage: node -e "$SORT_KEYS_JS; ..."
+#
+# normalize_json: pipe-based wrapper for standalone use.
+#   Usage: NORMALIZED=$(echo "$json_string" | normalize_json)
+SORT_KEYS_JS='function sortKeys(o){if(o===null||typeof o!=="object")return o;if(Array.isArray(o))return o.map(sortKeys);var s={};Object.keys(o).sort().forEach(function(k){s[k]=sortKeys(o[k])});return s}'
+
+normalize_json() {
+    node -e "
+        var input = require('fs').readFileSync('/dev/stdin', 'utf8');
+        $SORT_KEYS_JS
+        try {
+            console.log(JSON.stringify(sortKeys(JSON.parse(input)), null, 2));
+        } catch(e) {
+            process.stderr.write('normalize_json: ' + e.message + '\n');
+            process.exit(1);
+        }
+    "
+}
+
+# ---------------------------------------------------------------------------
+# Go install provenance detection (macOS)
+# Returns: "homebrew", "pkg-installer", "goenv", "manual", "none", or "unknown"
+# ---------------------------------------------------------------------------
+detect_go_provenance() {
+    local go_path
+    go_path=$(command -v go 2>/dev/null) || { echo "none"; return; }
+    case "$go_path" in
+        /opt/homebrew/*/go|/usr/local/Cellar/*/go)
+            echo "homebrew" ;;
+        /usr/local/go/bin/go)
+            # Check if installed via macOS .pkg installer (pkgutil) or manual tarball
+            if pkgutil --pkg-info=org.golang.go >/dev/null 2>&1; then
+                echo "pkg-installer"
+            else
+                echo "manual"
+            fi ;;
+        */.goenv/*)
+            echo "goenv" ;;
+        *)
+            echo "unknown" ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------
+# Ensure GOPATH/bin is on PATH for current session
+# Returns 0 if already on PATH, 1 if added (caller should warn re persistence)
+# ---------------------------------------------------------------------------
+ensure_gopath_bin_on_path() {
+    local gopath_bin="${GOPATH:-$HOME/go}/bin"
+    case ":$PATH:" in
+        *":$gopath_bin:"*) return 0 ;;
+    esac
+    export PATH="$gopath_bin:$PATH"
+    return 1
+}
+
+# ---------------------------------------------------------------------------
+# Summary panel renderer
+# ---------------------------------------------------------------------------
+# Reads AITOOLS_SUMMARY_FILE, displays colored panel, cleans up.
+# Silent no-op if file unset, missing, or empty.
+show_summary() {
+    local sfile="${AITOOLS_SUMMARY_FILE:-}"
+    [ -n "$sfile" ] || return 0
+    [ -f "$sfile" ] || return 0
+    [ -s "$sfile" ] || { rm -f "$sfile"; return 0; }
+
+    # Dedup by tool name: highest severity wins (ERROR > WARN > OK).
+    # ACTIONs (empty tool name) are never deduped. DETAIL lines collected separately.
+    # Output is pre-sorted: OK+details, WARN+details, ERROR+details, ACTIONs.
+    local deduped
+    deduped=$(perl -F'\|' -lane '
+        BEGIN { %rank = (OK => 1, WARN => 2, ERROR => 3); }
+        $cat = $F[0]; $tool = $F[1]; $det = join("|", @F[2..$#F]);
+        if ($cat eq "DETAIL") {
+            push @{$details{$tool}}, $det; next;
+        }
+        if ($cat eq "ACTION" || $tool eq "") {
+            push @actions, $_; next;
+        }
+        $r = $rank{$cat} // 0;
+        if (!exists $best{$tool}) {
+            push @order, $tool;
+            $best{$tool} = $cat; $detail{$tool} = $det;
+        } elsif ($r > ($rank{$best{$tool}} // 0)) {
+            $best{$tool} = $cat; $detail{$tool} = $det;
+        }
+        END {
+            my (@ok, @warn, @err);
+            for my $t (@order) {
+                my @g = ("$best{$t}|$t|$detail{$t}",
+                         map { "DETAIL|$t|$_" } @{$details{$t} // []});
+                if    ($best{$t} eq "OK")    { push @ok,   @g }
+                elsif ($best{$t} eq "WARN")  { push @warn, @g }
+                elsif ($best{$t} eq "ERROR") { push @err,  @g }
+            }
+            print for @ok, @warn, @err, @actions;
+        }
+    ' "$sfile")
+
+    # Single-pass display: Perl output is pre-sorted by severity.
+    # DETAIL lines inherit the color of their preceding parent entry.
+    echo ""
+    echo "────────────────────────────────────────────────────────"
+    local last_color="" first_action=true
+    while IFS='|' read -r cat tool detail; do
+        case "$cat" in
+            OK)
+                last_color='\033[32m'
+                printf '\033[32m  [ok]  %-16s %s\033[0m\n' "$tool" "$detail"
+                ;;
+            WARN)
+                last_color='\033[33m'
+                printf '\033[33m  [!]   %-16s %s\033[0m\n' "$tool" "$detail"
+                ;;
+            ERROR)
+                last_color='\033[31m'
+                printf '\033[31m  [ERR] %-16s %s\033[0m\n' "$tool" "$detail"
+                ;;
+            DETAIL)
+                printf '%b                          %s\033[0m\n' "$last_color" "$detail"
+                ;;
+            ACTION)
+                if [ "$first_action" = true ]; then
+                    echo ""
+                    printf '\033[1;35m  ACTION REQUIRED -- run before tools are ready:\033[0m\n'
+                    first_action=false
+                fi
+                printf '\033[1;35m  >>  %s\033[0m\n' "$detail"
+                ;;
+        esac
+    done <<< "$deduped"
+    echo "────────────────────────────────────────────────────────"
+
+    # Preserve summary for log compliance checks
+    if [ "${AITOOLS_PRESERVE_SUMMARY:-}" = "1" ]; then
+        # cp may fail if log dir was cleaned up; non-blocking (summary already displayed)
+        if ! cp "$sfile" "$LOG_DIR/last-summary.txt" 2>/dev/null; then
+            printf 'warning: could not preserve summary file\n' >&2
+        fi
+    fi
+    # Cleanup summary file (already displayed; rm -f ignores nonexistent files)
+    rm -f "$sfile"
+}
+
+# ---------------------------------------------------------------------------
+# Build prerequisite checking
+# ---------------------------------------------------------------------------
+
+# ensure_tool_on_path: Verify a tool is findable after installation.
+# Tries: 1) command -v (current PATH), 2) hash -r (cache refresh),
+# 3) known paths fallback (filesystem check + session PATH update).
+# Usage: ensure_tool_on_path "nasm" "/usr/local/bin/nasm" "/opt/homebrew/bin/nasm"
+# Returns 0 if tool is now on PATH, 1 otherwise.
+ensure_tool_on_path() {
+    local tool_name="$1"
+    shift
+    local known_paths=("$@")
+
+    # Already on PATH?
+    if command -v "$tool_name" >/dev/null 2>&1; then return 0; fi
+
+    # Refresh command cache (picks up tools installed earlier in the same session)
+    hash -r 2>/dev/null  # expected to succeed; some shells don't support it
+    if command -v "$tool_name" >/dev/null 2>&1; then return 0; fi
+
+    # Fallback: check known install locations on disk
+    for kp in "${known_paths[@]}"; do
+        if [ -x "$kp" ]; then
+            local parent_dir
+            parent_dir=$(dirname "$kp")
+            export PATH="$parent_dir:$PATH"
+            log "$tool_name found at $kp (added to session PATH)"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Check known build prerequisites for an ecosystem.
+# Usage: check_build_prereqs "cargo"
+#   Outputs missing prereq info to stdout (one per line: NAME|INSTALL_INSTRUCTION).
+#   Returns 0 if all present, 1 if any missing.
+check_build_prereqs() {
+    local ecosystem="$1"
+    local missing=0
+
+    # Refresh shell command cache (picks up tools installed earlier in the same session)
+    hash -r 2>/dev/null  # expected to succeed; some shells don't support it
+
+    case "$ecosystem" in
+        cargo)
+            # NASM -- required by aws-lc-sys on x86_64
+            if [ "$(uname -m)" = "x86_64" ] && ! command -v nasm >/dev/null 2>&1; then
+                # Fallback: check known install locations
+                if ensure_tool_on_path "nasm" /usr/local/bin/nasm /opt/homebrew/bin/nasm /usr/bin/nasm; then
+                    : # Found via fallback -- ensure_tool_on_path already added to PATH
+                else
+                    echo "NASM|brew install nasm (macOS) or apt-get install nasm (Linux)"
+                    missing=1
+                fi
+            fi
+            # cmake -- required by some crates
+            # Official: cmake.org/download lists pip, ZIP, MSI (not winget)
+            # macOS: brew install cmake (user-level, no sudo)
+            # Windows: uv tool install cmake (user-level, see reference/tool-evaluation-playbook.md)
+            if ! command -v cmake >/dev/null 2>&1; then
+                if ensure_tool_on_path "cmake" /usr/local/bin/cmake /opt/homebrew/bin/cmake /usr/bin/cmake /Applications/CMake.app/Contents/bin/cmake; then
+                    : # Found via fallback
+                else
+                    echo "CMake|brew install cmake (macOS) / uv tool install cmake (Windows) -- see cmake.org/download"
+                    missing=1
+                fi
+            fi
+            ;;
+        pip)
+            # Add pip-specific prereqs here as discovered
+            ;;
+        go)
+            # Add go-specific prereqs here as discovered
+            ;;
+    esac
+
+    return $missing
+}
+
+# ---------------------------------------------------------------------------
+# Build failure diagnosis
+# ---------------------------------------------------------------------------
+
+# Scan build output for known failure signatures.
+# Usage: diagnose_build_failure "$output"
+#   Prints "NAME|REMEDY" if a known signature is found.
+#   Returns 0 if found, 1 if no match.
+diagnose_build_failure() {
+    local output="$1"
+
+    # Table of known failure patterns -> remediation
+    # Add new entries here when new build failures are discovered.
+    local -a patterns=(
+        "NASM command not found|NASM|brew install nasm / apt-get install nasm"
+        "linker.*not found|Linker|Install build-essential (Linux) or Xcode CLI tools (macOS)"
+        "cmake.*not found|CMake|brew install cmake / uv tool install cmake (see cmake.org/download)"
+        "pkg-config.*not found|pkg-config|brew install pkg-config / apt-get install pkg-config"
+        "Python\.h.*not found|Python headers|Install python3-dev or python3-devel"
+        "openssl.*not found|OpenSSL|brew install openssl / apt-get install libssl-dev"
+    )
+
+    for entry in "${patterns[@]}"; do
+        local pattern="${entry%%|*}"
+        local rest="${entry#*|}"
+        if printf '%s\n' "$output" | grep -qiE "$pattern"; then
+            echo "$rest"
+            return 0
+        fi
+    done
+    return 1
+}
+— they are standalone deployed files.
+
+### Known command divergences
+
+| Command | macOS (BSD) | Linux/Git Bash (GNU) | Correct Pattern |
+|---------|-------------|---------------------|-----------------|
+| `stat` modification time | `stat -f %m file` | `stat -c %Y file` | `uname -s` dispatch |
+| `stat` birth time | `stat -f %B file` | `stat -c %W file` (0 if unsupported) | `uname -s` dispatch |
+| `stat` formatted date | `stat -f "%SB" -t "%Y-%m-%d"` | `date -d "@$(stat -c %Y)"` | `uname -s` dispatch |
+| `find` formatted output | `find -printf` not available | `find -printf '%T@'` | Use `find -print0` + `stat` loop |
+| `grep` Perl regex | Not available | `grep -P` | Use `perl -ne` or `grep -E` |
+| `date` parsing | `date -j -f fmt` | `date -d string` | `uname -s` dispatch |
+
+**Never use the fallback chain pattern** `stat -f %m "$file" || stat -c %Y "$file"`.
+On Git Bash, GNU `stat -f` means `--file-system` (not format). It
+partially succeeds with wrong multiline output, contaminating the
+variable.
+
+## Claude Code — Verification
+
+Hook and deny rule testing uses mock-json-pipe:
+
+```bash
+echo '{"tool_name":"Agent","tool_input":{"subagent_type":"claude-code-guide"}}' | bash block-claude-code-guide.sh
+# Expected: exit 0, stdout contains "permissionDecision.*deny"
+
+echo '{"tool_name":"Agent","tool_input":{"subagent_type":"Explore"}}' | bash block-claude-code-guide.sh
+# Expected: exit 0, no stdout (not blocked)
+```
+
+## Windows Shell Limitations
+
+CC on Windows is hardcoded to Git Bash. The `CLAUDE_CODE_SHELL`
+environment variable is broken (silently ignored).
+
+**Working workarounds**:
+
+- Run PS1 commands: `pwsh -NoProfile -Command 'Your-Command Here'`
+- Run PS1 scripts: `pwsh -NoProfile -ExecutionPolicy Bypass -File "path/to/script.ps1"`
+- Quoting rule: Always single-quote the outer `-Command` string.
+  Use double quotes inside for PS interpolation.
+- For complex PS1: Write to a temp `.ps1` file, execute with `-File`.
+
+## `claude update` Hook Cancellation (#23)
+
+`claude update` starts a transient session. When it completes,
+SessionEnd hooks fire but CC immediately cancels them. Observed
+output: `SessionEnd hook [...] failed: Hook cancelled`.
+
+**Impact**: None. The hooks exit before doing real work (no session
+dir exists for the transient update session). This is benign noise.
+
+## Cross-references
+
+- Full tool-ops registry (CRUD): `/tool-ops` skill (aitools repo only)
+- Tool-ops governance rule: `.claude/rules/tool-ops.md` (aitools repo)
+- CC operational reference: `reference/tool-ops-claude-code.md` (aitools repo)
+- Framework documentation: `reference/framework-tool-ops.md` (aitools repo)
+- Tool evaluation: `/tool-eval` skill
+- Tool install registry: `/tool-registry` skill
+__SKILL_AITOOL_OPS__
+
 cat > "$_skill_tmp/chrome-devtools.md" <<'__SKILL_CHROME_DEVTOOLS__'
 ---
 name: chrome-devtools
@@ -3881,6 +5613,7 @@ log "Deploying skills to $SKILLS_DEST..."
 ERRORS_BEFORE_CLAUDE_SKILLS=$ERRORS
 deploy_tracker_init
 deploy_embedded_skill "a11y-debugging" "$SKILLS_DEST" "claude skills" "$_skill_tmp/a11y-debugging.md"
+deploy_embedded_skill "aitool-ops" "$SKILLS_DEST" "claude skills" "$_skill_tmp/aitool-ops.md"
 deploy_embedded_skill "chrome-devtools" "$SKILLS_DEST" "claude skills" "$_skill_tmp/chrome-devtools.md"
 deploy_embedded_skill "handoff" "$SKILLS_DEST" "claude skills" "$_skill_tmp/handoff.md"
 deploy_embedded_skill "intent-audit" "$SKILLS_DEST" "claude skills" "$_skill_tmp/intent-audit.md"
@@ -3900,6 +5633,7 @@ log "Deploying skills to $SKILLS_DEST_CURSOR..."
 ERRORS_BEFORE_CURSOR_SKILLS=$ERRORS
 deploy_tracker_init
 deploy_embedded_skill "a11y-debugging" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/a11y-debugging.md"
+deploy_embedded_skill "aitool-ops" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/aitool-ops.md"
 deploy_embedded_skill "chrome-devtools" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/chrome-devtools.md"
 deploy_embedded_skill "handoff" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/handoff.md"
 deploy_embedded_skill "intent-audit" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/intent-audit.md"
