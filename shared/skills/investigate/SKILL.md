@@ -3,14 +3,25 @@ name: investigate
 description: "Investigate when something went wrong. Use when a rule was violated, a deployment failed, a bug recurred, or a process broke down. Covers the full lifecycle: triage, RCA (5 Whys, Swiss cheese model), remediation, corrective actions, barrier analysis, and verification."
 ---
 
-## Purpose
+## Intent
 
-Structured response to incidents — things that went wrong or almost went
-wrong. Covers the full lifecycle so findings become durable improvements,
-not just one-time fixes.
+**Purpose**: Provide a structured investigation lifecycle for
+incidents -- from detection and triage through root cause analysis,
+remediation, corrective action, verification, and dissemination.
+Ensures findings become durable improvements, not one-time fixes.
+**Scope**: The full investigation process: detection, triage, RCA
+(5 Whys, Swiss cheese model, timeline reconstruction), remediation,
+corrective action hierarchy (behavioral < structural <
+environmental), barrier analysis, verification, and follow-up. NOT
+for filing incidents into incidents.json (use `/incident` skill).
+NOT for governance health audits (use `/audit` skill). NOT for
+planning corrective action implementation (use `/planning` skill).
+**Audience**: Any agent responding to something that went wrong or
+almost went wrong -- rule violations, deployment failures, recurring
+bugs, or process breakdowns.
 
 If the same type of incident recurs after a corrective action, the
-corrective action was wrong — not the person. Structural fixes (hooks,
+corrective action was wrong -- not the person. Structural fixes (hooks,
 skills, rules) prevent recurrence. Behavioral coaching alone doesn't.
 
 ## Incident Lifecycle

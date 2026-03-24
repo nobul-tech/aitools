@@ -3,14 +3,19 @@ name: optimize-plan
 description: "Review and improve an existing plan file. Use when a plan needs re-evaluation after new discoveries, scope changes, or multiple implementation sessions. Detects stale sections, dependency issues, leverage opportunities, and scope drift."
 ---
 
-## Purpose
+## Intent
 
-Plans evolve. Each implementation session surfaces new information that
-may invalidate assumptions, change dependencies, or shift priorities.
-This skill provides a structured re-evaluation of an existing plan file
-against current state.
+**Purpose**: Provide structured re-evaluation of an existing plan
+file against current state -- detecting stale sections, dependency
+shifts, leverage opportunities, scope drift, and missing content.
+**Scope**: Plan re-evaluation and optimization only. NOT plan
+creation from scratch (see `/planning`). NOT plan execution or
+code implementation. NOT governance auditing (see `/audit`).
+**Audience**: Any agent working on a multi-session plan that needs
+re-evaluation after new discoveries, scope changes, or multiple
+implementation sessions.
 
-This is NOT a one-shot review — invoke periodically after major batches,
+This is NOT a one-shot review -- invoke periodically after major batches,
 mid-session discoveries, or when the plan feels unwieldy.
 
 ## When to use

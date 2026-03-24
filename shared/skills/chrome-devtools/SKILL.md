@@ -3,6 +3,18 @@ name: chrome-devtools
 description: Uses Chrome DevTools via MCP for efficient debugging, troubleshooting and browser automation. Use when debugging web pages, automating browser interactions, analyzing performance, or inspecting network requests.
 ---
 
+## Intent
+
+**Purpose**: Equip the agent with workflow patterns for Chrome
+DevTools via MCP -- page interaction sequences, efficient data
+retrieval, element inspection, accordion expansion, and documentation
+reading shortcuts. **Scope**: Browser automation patterns and
+troubleshooting guidance only. NOT accessibility-specific workflows
+(see `/a11y-debugging`). NOT MCP server installation or configuration
+(see `/tool-ops` skill for chrome-devtools MCP entry). **Audience**:
+Any agent using the chrome-devtools MCP server for page inspection,
+browser automation, or official documentation reading.
+
 ## Core Concepts
 
 **Browser lifecycle**: Browser starts automatically on first tool call using a persistent Chrome profile. Configure via CLI args in the MCP server configuration: `npx chrome-devtools-mcp@latest --help`.

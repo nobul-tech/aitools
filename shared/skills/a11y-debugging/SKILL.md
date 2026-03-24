@@ -3,6 +3,19 @@ name: a11y-debugging
 description: Uses Chrome DevTools MCP for accessibility (a11y) debugging and auditing based on web.dev guidelines. Use when testing semantic HTML, ARIA labels, focus states, keyboard navigation, tap targets, and color contrast.
 ---
 
+## Intent
+
+**Purpose**: Equip the agent with accessibility debugging and
+auditing workflows using Chrome DevTools MCP -- semantic structure
+verification, label checking, focus/keyboard testing, tap target
+measurement, color contrast analysis, global page checks, and ARIA
+live region validation. Based on web.dev guidelines. **Scope**:
+Accessibility-specific browser automation patterns only. NOT general
+browser automation or page interaction (see `/chrome-devtools`). NOT
+WCAG compliance certification (this is debugging assistance, not a
+formal audit tool). **Audience**: Any agent debugging accessibility
+issues on web pages using the chrome-devtools MCP server.
+
 ## Core Concepts
 
 **Accessibility Tree vs DOM**: Visually hiding an element (e.g., `CSS opacity: 0`) behaves differently for screen readers than `display: none` or `aria-hidden="true"`. The `take_snapshot` tool returns the accessibility tree of the page, which represents what assistive technologies "see", making it the most reliable source of truth for semantic structure.

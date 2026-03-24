@@ -1486,6 +1486,19 @@ name: a11y-debugging
 description: Uses Chrome DevTools MCP for accessibility (a11y) debugging and auditing based on web.dev guidelines. Use when testing semantic HTML, ARIA labels, focus states, keyboard navigation, tap targets, and color contrast.
 ---
 
+## Intent
+
+**Purpose**: Equip the agent with accessibility debugging and
+auditing workflows using Chrome DevTools MCP -- semantic structure
+verification, label checking, focus/keyboard testing, tap target
+measurement, color contrast analysis, global page checks, and ARIA
+live region validation. Based on web.dev guidelines. **Scope**:
+Accessibility-specific browser automation patterns only. NOT general
+browser automation or page interaction (see `/chrome-devtools`). NOT
+WCAG compliance certification (this is debugging assistance, not a
+formal audit tool). **Audience**: Any agent debugging accessibility
+issues on web pages using the chrome-devtools MCP server.
+
 ## Core Concepts
 
 **Accessibility Tree vs DOM**: Visually hiding an element (e.g., `CSS opacity: 0`) behaves differently for screen readers than `display: none` or `aria-hidden="true"`. The `take_snapshot` tool returns the accessibility tree of the page, which represents what assistive technologies "see", making it the most reliable source of truth for semantic structure.
@@ -1650,6 +1663,18 @@ cat > "$_skill_tmp/chrome-devtools.md" <<'__SKILL_CHROME_DEVTOOLS__'
 name: chrome-devtools
 description: Uses Chrome DevTools via MCP for efficient debugging, troubleshooting and browser automation. Use when debugging web pages, automating browser interactions, analyzing performance, or inspecting network requests.
 ---
+
+## Intent
+
+**Purpose**: Equip the agent with workflow patterns for Chrome
+DevTools via MCP -- page interaction sequences, efficient data
+retrieval, element inspection, accordion expansion, and documentation
+reading shortcuts. **Scope**: Browser automation patterns and
+troubleshooting guidance only. NOT accessibility-specific workflows
+(see `/a11y-debugging`). NOT MCP server installation or configuration
+(see `/tool-ops` skill for chrome-devtools MCP entry). **Audience**:
+Any agent using the chrome-devtools MCP server for page inspection,
+browser automation, or official documentation reading.
 
 ## Core Concepts
 
@@ -2814,14 +2839,25 @@ name: investigate
 description: "Investigate when something went wrong. Use when a rule was violated, a deployment failed, a bug recurred, or a process broke down. Covers the full lifecycle: triage, RCA (5 Whys, Swiss cheese model), remediation, corrective actions, barrier analysis, and verification."
 ---
 
-## Purpose
+## Intent
 
-Structured response to incidents — things that went wrong or almost went
-wrong. Covers the full lifecycle so findings become durable improvements,
-not just one-time fixes.
+**Purpose**: Provide a structured investigation lifecycle for
+incidents -- from detection and triage through root cause analysis,
+remediation, corrective action, verification, and dissemination.
+Ensures findings become durable improvements, not one-time fixes.
+**Scope**: The full investigation process: detection, triage, RCA
+(5 Whys, Swiss cheese model, timeline reconstruction), remediation,
+corrective action hierarchy (behavioral < structural <
+environmental), barrier analysis, verification, and follow-up. NOT
+for filing incidents into incidents.json (use `/incident` skill).
+NOT for governance health audits (use `/audit` skill). NOT for
+planning corrective action implementation (use `/planning` skill).
+**Audience**: Any agent responding to something that went wrong or
+almost went wrong -- rule violations, deployment failures, recurring
+bugs, or process breakdowns.
 
 If the same type of incident recurs after a corrective action, the
-corrective action was wrong — not the person. Structural fixes (hooks,
+corrective action was wrong -- not the person. Structural fixes (hooks,
 skills, rules) prevent recurrence. Behavioral coaching alone doesn't.
 
 ## Incident Lifecycle
@@ -3035,20 +3071,369 @@ but logging them in the session helps `/audit` identify trends.
 - Incident filing: `.claude/skills/incident/SKILL.md`
 __SKILL_INVESTIGATE__
 
+cat > "$_skill_tmp/mission-control.md" <<'__SKILL_MISSION_CONTROL__'
+---
+name: mission-control
+description: "Monitor running missions -- process health, activity,
+  work products, deliverable validation. Use when launching competing
+  missions, checking mission progress, assessing mission health, or
+  deciding whether to FRAGORD a mission. Codifies the 7 ad-hoc
+  monitoring patterns that worked in multi-mission operations."
+---
+
+## Intent
+
+**Purpose**: Provide structured monitoring for concurrent autonomous
+missions -- process health, activity tracking, work product inventory,
+deliverable validation, and dashboard health. Codifies the ad-hoc
+shell commands that provided actual visibility when dashboards showed
+zeros. **Scope**: Monitoring and assessment only. NOT mission
+launching (that is the delegating agent's responsibility). NOT
+dashboard rendering (see `generate-dashboard.py`). NOT session
+lifecycle (see `/scratch` and `/handoff` skills). NOT the running
+estimate schema (see the template at
+`.aitools/templates/mission-running-estimate.json`). **Audience**:
+Any agent operating as a commander over concurrent missions, or any
+agent maintaining its own running estimate.
+
+## When to use
+
+Invoke `/mission-control` when ANY of these conditions arise:
+
+- User says `/mission-control` or asks about mission status
+- Launching concurrent missions (pre-flight verification)
+- Checking whether a running mission is active or stalled
+- Assessing mission health across multiple instances
+- Deciding whether to FRAGORD (fragmentary order) a mission
+- Validating a mission's deliverable after completion
+- Setting up a running estimate for a new mission
+- User asks about dashboard ports, processes, or health
+
+## The 7 monitoring commands
+
+These commands are the empirically-validated monitoring stack. They
+were the ACTUAL monitoring that worked when dashboards showed zeros
+during a 3-mission operation (Alpha/Bravo/Charlie, 2026-03-24).
+
+### Layer 1: Infrastructure health (pre-flight)
+
+**Pattern 1: Process discovery**
+
+```bash
+ps aux | grep generate-dashboard
+```
+
+Reveals which dashboard server processes are running, their PIDs,
+which port each is on, and which estimate file each reads. Also
+reveals orphaned processes from prior sessions.
+
+Use the dashboard wrapper for managed instances:
+
+```bash
+bash scripts/aitools-dashboard.sh --status
+```
+
+**Pattern 7: Dashboard health check**
+
+```bash
+bash scripts/aitools-dashboard.sh --health-check
+```
+
+Two-layer check: HTTP liveness (server responds with 200) AND data
+quality (running estimate has all dashboard-expected fields). Exit
+code 0 = healthy, 1 = unhealthy or no instances running.
+
+For ad-hoc port checks when instances are not managed:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" http://localhost:<port>/
+```
+
+### Layer 2: Activity monitoring (continuous)
+
+**Pattern 2: Last activity extraction**
+
+```bash
+tail -1 <transcript>.jsonl | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(d.get('type','?'), d.get('message',{}).get('content','')[:100]
+      if isinstance(d.get('message',{}), dict) else '')
+"
+```
+
+Shows the last thing each mission agent did -- its most recent tool
+call, response, or assistant message. This is the real-time activity
+indicator.
+
+Transcript locations: `~/.claude/projects/<project-hash>/<uuid>.jsonl`
+
+To find the most recent transcript for a project:
+
+```bash
+ls -t ~/.claude/projects/*/session-*.jsonl | head -5
+```
+
+**Pattern 3: Progress gauge**
+
+```bash
+wc -l <transcript>.jsonl
+```
+
+Rough proxy for how much work an agent has done. Higher line counts
+indicate more conversation turns. Compare across missions to gauge
+relative progress. A mission at 21K lines is deep into reading; one
+at 3K lines may have finished quickly or stalled early.
+
+### Layer 3: Work product inventory (periodic)
+
+**Pattern 4: Work product inventory**
+
+```bash
+ls <scratch-dir>/
+```
+
+Lists what files each mission has produced. File names reveal the
+approach: `pillar-governance.json` + `pillar-implementation.json`
+indicates a generate-then-assemble strategy. `merge-final.py` +
+`add-pillar2.py` indicates iterative assembly. This is richer than
+any self-reported status.
+
+**Pattern 5: Deliverable size and growth**
+
+```bash
+wc -c <output-file>
+```
+
+Deliverable size is a proxy for completeness. Poll periodically to
+see growth rate -- a file growing steadily indicates active writing.
+A file that stopped growing may indicate stall or completion.
+
+### Layer 4: Deliverable validation (post-flight)
+
+**Pattern 6: Deliverable validation**
+
+```bash
+python3 -c "
+import json
+with open('<output-file>') as f:
+    d = json.load(f)
+print(f'Size: {len(json.dumps(d))} chars')
+print(f'Top keys: {list(d.keys())}')
+for k in d:
+    if isinstance(d[k], dict):
+        print(f'  {k}: {list(d[k].keys())[:5]}')
+    elif isinstance(d[k], list):
+        print(f'  {k}: [{len(d[k])} items]')
+"
+```
+
+Validates: (1) valid JSON, (2) expected top-level structure,
+(3) non-empty sections. This is the acceptance test.
+
+## Pre-flight verification protocol
+
+Before launching concurrent missions, verify ALL of these:
+
+1. **Port availability**: For each assigned port, confirm it is free:
+   ```bash
+   lsof -iTCP:<port> -sTCP:LISTEN
+   ```
+   Empty output = available. If occupied, either stop the occupant
+   or reassign the port.
+
+2. **Template compliance**: Each mission copies the running estimate
+   template and fills in its identity:
+   ```bash
+   cp .aitools/templates/mission-running-estimate.json \
+      <mission-scratch-dir>/running-estimate.json
+   ```
+   Then replace PLACEHOLDER values with mission-specific data.
+
+3. **Dashboard data quality**: After the mission starts and writes
+   its first estimate update, run the health check:
+   ```bash
+   bash scripts/aitools-dashboard.sh --health-check
+   ```
+   If unhealthy, fix the estimate before the mission proceeds with
+   real work.
+
+4. **Process isolation**: Each mission's scratch directory is clean
+   (no leftover files from prior runs).
+
+5. **Monitoring readiness**: The commander can access all dashboards:
+   ```bash
+   bash scripts/aitools-dashboard.sh --status
+   ```
+
+## Running estimate maintenance
+
+### The template
+
+The running estimate template at
+`.aitools/templates/mission-running-estimate.json` contains ALL
+fields that `generate-dashboard.py` expects. Missions MUST start
+from this template so dashboards never show silent zeros.
+
+### Behavioral update guidance
+
+Agents should update their running estimate at each phase boundary.
+This is a behavioral pattern, not a structural enforcement --
+decision #35 established that UCIs are ineffective, and the
+structural fix (hooks auto-writing) comes with SQLite migration.
+
+Until then, the template + validation + health check create a
+structural gate that catches failures early.
+
+**Update pattern** (copy into mission code):
+
+```python
+import json
+
+def update_running_estimate(path, phase_description, completed_item=None, delegation=None):
+    """Update running estimate with current progress.
+
+    Call at each phase boundary. The running estimate feeds the live
+    dashboard -- stale data means the commander has no visibility.
+    """
+    with open(path) as f:
+        est = json.load(f)
+
+    # Update current state
+    est['situation']['currentState'] = phase_description
+
+    # Track completed work
+    if completed_item:
+        est['situation']['completedWork'].append(completed_item)
+
+    # Track delegations
+    if delegation:
+        est['delegationLog'].append(delegation)
+
+    # Bump version and timestamp
+    est['meta']['version'] = est['meta'].get('version', 0) + 1
+    from datetime import datetime, timezone
+    est['meta']['updated'] = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+    with open(path, 'w') as f:
+        json.dump(est, f, indent=2)
+```
+
+**Delegation log entry format** (matches dashboard expectations):
+
+```python
+{
+    "id": "D1",
+    "type": "s2",       # s2 | s3 | s1 | verifier
+    "mission": "Audit project rules for coverage gaps",
+    "status": "complete",  # running | complete | blocked | failed
+    "agentType": "subagent",
+    "dutyFulfilled": {
+        "identity": True,
+        "context": True,
+        "output": True,
+        "writeBlocked": True,
+        "verify": True
+    }
+}
+```
+
+## Mission health assessment
+
+Use these indicators to assess overall mission health:
+
+| Indicator | Healthy | Warning | Critical |
+|-----------|---------|---------|----------|
+| Dashboard HTTP | 200 | -- | Non-200 or no response |
+| Estimate fields | All present | -- | Missing fields (zeros) |
+| Transcript growth | Growing | Flat 5+ min | Flat 15+ min |
+| Work products | New files appearing | No new files 10+ min | No files at all |
+| Deliverable size | Growing | Flat | Zero or missing |
+
+### When to FRAGORD a mission
+
+Issue a fragmentary order (course correction) when:
+
+- Dashboard shows all zeros after 5+ minutes (schema mismatch)
+- Transcript growth stopped but mission is not complete
+- Mission is producing files but not the expected deliverable
+- Mission took an incorrect architectural approach (visible from
+  file names in work product inventory)
+- Port conflict detected (mission on wrong port)
+
+A FRAGORD is a targeted correction, not a restart. Inject a message
+to the mission agent with the specific fix needed.
+
+## Multi-mission dashboard
+
+When operating multiple missions concurrently, use the multi-mission
+view to see all missions in a single summary:
+
+```bash
+python3 scripts/generate-dashboard.py \
+  --multi-dir <parent-dir> \
+  --serve --port 8420
+```
+
+The `--multi-dir` flag scans the directory for
+`*/running-estimate.json` files and renders a summary table showing
+mission name, schwerpunkt, delegation count, and overall status.
+Click through to individual mission dashboards for detail.
+
+For static generation:
+
+```bash
+python3 scripts/generate-dashboard.py \
+  --multi-dir <parent-dir> \
+  --output multi-dashboard.html
+```
+
+## Finding mission transcripts
+
+Claude Code stores transcripts at:
+```
+~/.claude/projects/<project-path-hash>/<session-uuid>.jsonl
+```
+
+To identify which transcript belongs to which mission:
+1. Check file modification times against mission launch times
+2. Read the first few lines of each transcript for the mission prompt
+3. Check file sizes -- missions with more work have larger transcripts
+
+## Cross-references
+
+- Running estimate template: `.aitools/templates/mission-running-estimate.json`
+- Dashboard generator: `scripts/generate-dashboard.py`
+- Dashboard lifecycle: `scripts/aitools-dashboard.sh`
+- Session scratch: `/scratch` skill
+- Session handoff: `/handoff` skill
+- Session planning: `/planning` skill
+- Governed vocabulary: `/glossary` skill (terms: Schwerpunkt,
+  Lagebeurteilung, Reibung, FRAGORD, running estimate)
+- UCI ineffectiveness: Decision #35 (running estimate v9)
+- Ad-hoc patterns source: `.scratch/session-RnTOD5XJFi/adhoc-monitoring-patterns.md`
+- Gap analysis source: `.scratch/session-RnTOD5XJFi/mission-control-gap-analysis.md`
+__SKILL_MISSION_CONTROL__
+
 cat > "$_skill_tmp/optimize-plan.md" <<'__SKILL_OPTIMIZE_PLAN__'
 ---
 name: optimize-plan
 description: "Review and improve an existing plan file. Use when a plan needs re-evaluation after new discoveries, scope changes, or multiple implementation sessions. Detects stale sections, dependency issues, leverage opportunities, and scope drift."
 ---
 
-## Purpose
+## Intent
 
-Plans evolve. Each implementation session surfaces new information that
-may invalidate assumptions, change dependencies, or shift priorities.
-This skill provides a structured re-evaluation of an existing plan file
-against current state.
+**Purpose**: Provide structured re-evaluation of an existing plan
+file against current state -- detecting stale sections, dependency
+shifts, leverage opportunities, scope drift, and missing content.
+**Scope**: Plan re-evaluation and optimization only. NOT plan
+creation from scratch (see `/planning`). NOT plan execution or
+code implementation. NOT governance auditing (see `/audit`).
+**Audience**: Any agent working on a multi-session plan that needs
+re-evaluation after new discoveries, scope changes, or multiple
+implementation sessions.
 
-This is NOT a one-shot review — invoke periodically after major batches,
+This is NOT a one-shot review -- invoke periodically after major batches,
 mid-session discoveries, or when the plan feels unwieldy.
 
 ## When to use
@@ -3171,6 +3556,18 @@ cat > "$_skill_tmp/planning.md" <<'__SKILL_PLANNING__'
 name: planning
 description: "Session and plan strategy for Claude Code sessions. Use when starting a planning session, deciding session scope, coordinating subagents, or managing context budgets. Covers batch sizing, session flow, subagent parallelization, and user collaboration patterns."
 ---
+
+## Intent
+
+**Purpose**: Equip the agent with session and plan strategy --
+context budget management, session flow, batch sizing, subagent
+coordination, and user collaboration patterns. **Scope**: Session
+planning conventions and execution strategy only. NOT plan file
+creation or content (that is the agent's deliverable). NOT plan
+re-evaluation (see `/optimize-plan`). NOT session handoff (see
+`/handoff`). NOT session resume (see `/aitool-resume`). **Audience**:
+Any agent starting a planning session, deciding session scope,
+coordinating subagents, or managing context budgets.
 
 ## Session Working Convention
 
@@ -3489,6 +3886,7 @@ deploy_embedded_skill "handoff" "$SKILLS_DEST" "claude skills" "$_skill_tmp/hand
 deploy_embedded_skill "intent-audit" "$SKILLS_DEST" "claude skills" "$_skill_tmp/intent-audit.md"
 deploy_embedded_skill "intent-writing" "$SKILLS_DEST" "claude skills" "$_skill_tmp/intent-writing.md"
 deploy_embedded_skill "investigate" "$SKILLS_DEST" "claude skills" "$_skill_tmp/investigate.md"
+deploy_embedded_skill "mission-control" "$SKILLS_DEST" "claude skills" "$_skill_tmp/mission-control.md"
 deploy_embedded_skill "optimize-plan" "$SKILLS_DEST" "claude skills" "$_skill_tmp/optimize-plan.md"
 deploy_embedded_skill "planning" "$SKILLS_DEST" "claude skills" "$_skill_tmp/planning.md"
 deploy_embedded_skill "scratch" "$SKILLS_DEST" "claude skills" "$_skill_tmp/scratch.md"
@@ -3507,6 +3905,7 @@ deploy_embedded_skill "handoff" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_t
 deploy_embedded_skill "intent-audit" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/intent-audit.md"
 deploy_embedded_skill "intent-writing" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/intent-writing.md"
 deploy_embedded_skill "investigate" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/investigate.md"
+deploy_embedded_skill "mission-control" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/mission-control.md"
 deploy_embedded_skill "optimize-plan" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/optimize-plan.md"
 deploy_embedded_skill "planning" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/planning.md"
 deploy_embedded_skill "scratch" "$SKILLS_DEST_CURSOR" "cursor skills" "$_skill_tmp/scratch.md"
