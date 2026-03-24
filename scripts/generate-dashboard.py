@@ -48,6 +48,31 @@ from pathlib import Path
 from typing import Any
 
 
+def validate_estimate_fields(data: dict[str, Any]) -> list[str]:
+    """Check for expected dashboard fields and return list of missing ones.
+
+    The dashboard renders from these fields. Missing fields produce silent zeros
+    in the UI -- this function makes schema mismatches visible to operators.
+    """
+    missing: list[str] = []
+
+    # Top-level arrays
+    for field in ("delegationLog", "findings", "openThreads"):
+        if field not in data:
+            missing.append(field)
+
+    # Nested under situation
+    situation = data.get("situation")
+    if situation is None:
+        missing.append("situation")
+    elif isinstance(situation, dict):
+        for field in ("decisions", "assumptions", "deviations", "facts"):
+            if field not in situation:
+                missing.append(f"situation.{field}")
+
+    return missing
+
+
 def load_estimate(path: Path) -> dict[str, Any]:
     """Load and validate a running estimate JSON file."""
     if not path.exists():
@@ -62,6 +87,17 @@ def load_estimate(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         print(f"Error: estimate must be a JSON object, got {type(data).__name__}", file=sys.stderr)
         sys.exit(1)
+
+    # Warn about missing fields -- dashboard still works (defaults to [])
+    # but operators see the schema mismatch instead of silent zeros
+    missing = validate_estimate_fields(data)
+    if missing:
+        print(
+            f"[dashboard] WARNING: Running estimate missing fields: "
+            f"{', '.join(missing)}. Dashboard will show zeros for these.",
+            file=sys.stderr,
+        )
+
     return data
 
 

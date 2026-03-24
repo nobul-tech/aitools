@@ -3486,6 +3486,21 @@ Mitigation: SubagentStart hook injects skills and governance context
 via pre-built cache (when deployed). Until then, include critical rules
 in the subagent prompt.
 
+### Subagent file access restriction
+
+Subagents cannot use Glob or Grep on paths outside the current repo.
+The tools are permission-denied. The Read tool with explicit absolute
+paths WORKS for cross-repo access.
+
+When delegating tasks that need files from other repos (dotprofile
+session archives, other project repos):
+- Provide the FULL ABSOLUTE PATH in the delegation prompt
+- Do NOT instruct the subagent to "search for" or "find" files
+- Use `ls` via Bash to discover file lists from the main agent,
+  then pass explicit paths to the subagent
+- This restriction applies recursively — subagents of subagents
+  have the same limitation
+
 ### Parallelization
 
 Launch multiple subagents in a single message when queries are

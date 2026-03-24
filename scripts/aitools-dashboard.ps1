@@ -6,11 +6,16 @@
 #
 # Options:
 #   -Background         Start server in background (for hooks)
-#   -Stop               Stop the running server
-#   -Status             Show server status
+#   -Stop               Stop running server(s)
+#     -Port PORT          Stop specific port only
+#     -All                Stop all instances
+#   -Status             Show all running instances with health
+#   -HealthCheck        Liveness + data quality check for all instances
 #   -Snapshot           Generate static HTML snapshot
 #   -Port PORT          Custom port (default: 8411)
 #   -Estimate PATH      Explicit estimate path (default: auto-detect)
+#
+# Multi-instance: PID files stored in ~/.aitools/dashboard-pids/<port>.pid
 #
 # Called by: aitools dashboard (entry point dispatch)
 # Called by: SessionStart hook (dashboard-serve.sh) via aitools dashboard --background
@@ -20,8 +25,10 @@ param(
     [switch]$Background,
     [switch]$Stop,
     [switch]$Status,
+    [switch]$HealthCheck,
     [switch]$Snapshot,
     [switch]$OpenBrowser,
+    [switch]$All,
     [int]$Port = 8411,
     [string]$Estimate = "",
     [string]$ProjectRoot = ""
@@ -48,15 +55,16 @@ if (-not $ProjectRoot) {
 }
 
 # ---------------------------------------------------------------------------
-# PID file location
+# PID registry directory (multi-instance)
 # ---------------------------------------------------------------------------
-$pidDir = Join-Path $ProjectRoot ".aitools"
-if (-not (Test-Path $pidDir)) {
-    try { New-Item -ItemType Directory -Path $pidDir -Force | Out-Null } catch {
-        $pidDir = $env:TEMP
-    }
+$pidRegistryDir = Join-Path $env:USERPROFILE ".aitools\dashboard-pids"
+if (-not (Test-Path $pidRegistryDir)) {
+    try { New-Item -ItemType Directory -Path $pidRegistryDir -Force | Out-Null } catch {}
 }
-$pidFile = Join-Path $pidDir ".dashboard-pid"
+
+# Legacy PID file location (for migration)
+$legacyPidDir = Join-Path $ProjectRoot ".aitools"
+$legacyPidFile = Join-Path $legacyPidDir ".dashboard-pid"
 
 # ---------------------------------------------------------------------------
 # Find python
@@ -138,11 +146,19 @@ function Find-Estimate {
 }
 
 # ---------------------------------------------------------------------------
-# Check if server is running
+# PID registry helpers (multi-instance)
 # ---------------------------------------------------------------------------
-function Get-ServerPid {
-    if (Test-Path $pidFile) {
-        $pidStr = Get-Content $pidFile -Raw -ErrorAction SilentlyContinue
+
+function Get-PidFileForPort {
+    param([int]$PortNum)
+    return Join-Path $pidRegistryDir "$PortNum.pid"
+}
+
+function Get-PortServerPid {
+    param([int]$PortNum)
+    $pf = Get-PidFileForPort -PortNum $PortNum
+    if (Test-Path $pf) {
+        $pidStr = Get-Content $pf -Raw -ErrorAction SilentlyContinue
         if ($pidStr) {
             $pidStr = $pidStr.Trim()
             $pidInt = 0
@@ -154,9 +170,58 @@ function Get-ServerPid {
             }
         }
         # Stale PID file -- clean up
-        Remove-Item -Path $pidFile -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path $pf -Force -ErrorAction SilentlyContinue
     }
     return $null
+}
+
+function Invoke-LegacyMigration {
+    if (Test-Path $legacyPidFile) {
+        $pidStr = Get-Content $legacyPidFile -Raw -ErrorAction SilentlyContinue
+        if ($pidStr) {
+            $pidStr = $pidStr.Trim()
+            $pidInt = 0
+            if ([int]::TryParse($pidStr, [ref]$pidInt)) {
+                try {
+                    $proc = Get-Process -Id $pidInt -ErrorAction SilentlyContinue
+                    if ($proc) {
+                        $newPf = Get-PidFileForPort -PortNum 8411
+                        if (-not (Test-Path $newPf)) {
+                            Copy-Item $legacyPidFile $newPf
+                            Log "Migrated legacy PID $pidInt to port registry (8411)"
+                        }
+                    }
+                } catch {}
+            }
+        }
+        Remove-Item -Path $legacyPidFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Get-RunningInstances {
+    $instances = @()
+    $pidFiles = Get-ChildItem -Path $pidRegistryDir -Filter "*.pid" -File -ErrorAction SilentlyContinue
+    foreach ($pf in $pidFiles) {
+        $portName = $pf.BaseName
+        $pidStr = Get-Content $pf.FullName -Raw -ErrorAction SilentlyContinue
+        if ($pidStr) {
+            $pidStr = $pidStr.Trim()
+            $pidInt = 0
+            if ([int]::TryParse($pidStr, [ref]$pidInt)) {
+                try {
+                    $proc = Get-Process -Id $pidInt -ErrorAction SilentlyContinue
+                    if ($proc) {
+                        $instances += [PSCustomObject]@{ Port = $portName; Pid = $pidInt }
+                    } else {
+                        Remove-Item -Path $pf.FullName -Force -ErrorAction SilentlyContinue
+                    }
+                } catch {
+                    Remove-Item -Path $pf.FullName -Force -ErrorAction SilentlyContinue
+                }
+            }
+        }
+    }
+    return $instances
 }
 
 # ---------------------------------------------------------------------------
@@ -173,20 +238,121 @@ function Test-PortInUse {
 }
 
 # ---------------------------------------------------------------------------
+# Health check helper: check one instance
+# ---------------------------------------------------------------------------
+function Test-InstanceHealth {
+    param([int]$InstPort, [int]$InstPid)
+    $healthy = $true
+    $details = ""
+
+    # 1. HTTP liveness check
+    try {
+        $response = Invoke-WebRequest -Uri "http://localhost:$InstPort/" -UseBasicParsing -TimeoutSec 5 -ErrorAction SilentlyContinue
+        if ($response.StatusCode -ne 200) {
+            $healthy = $false
+            $details = "HTTP $($response.StatusCode) (expected 200)"
+        }
+    } catch {
+        $healthy = $false
+        $details = "HTTP request failed"
+    }
+
+    # 2. Data quality check: read the estimate via API
+    $estimateJson = $null
+    try {
+        $apiResponse = Invoke-WebRequest -Uri "http://localhost:$InstPort/api/estimate" -UseBasicParsing -TimeoutSec 5 -ErrorAction SilentlyContinue
+        if ($apiResponse.StatusCode -eq 200) {
+            $estimateJson = $apiResponse.Content
+        }
+    } catch {}
+
+    if ($estimateJson) {
+        try {
+            $d = $estimateJson | ConvertFrom-Json
+            $missing = @()
+            foreach ($f in @("delegationLog", "findings", "openThreads")) {
+                if (-not ($d.PSObject.Properties.Name -contains $f)) {
+                    $missing += $f
+                }
+            }
+            if (-not ($d.PSObject.Properties.Name -contains "situation")) {
+                $missing += "situation"
+            } elseif ($d.situation) {
+                foreach ($f in @("decisions", "assumptions", "deviations", "facts")) {
+                    if (-not ($d.situation.PSObject.Properties.Name -contains $f)) {
+                        $missing += "situation.$f"
+                    }
+                }
+            }
+
+            $delCount = @($d.delegationLog).Count
+            $findCount = @($d.findings).Count
+            $threadCount = @($d.openThreads).Count
+
+            if ($missing.Count -gt 0) {
+                $healthy = $false
+                $missingStr = $missing -join ", "
+                $details = "$details, missing fields: $missingStr ($delCount delegations, $findCount findings, $threadCount threads)".TrimStart(", ")
+            } else {
+                $details = "$details, $delCount delegations, $findCount findings, $threadCount threads".TrimStart(", ")
+            }
+        } catch {
+            $details = "$details, estimate JSON parse error".TrimStart(", ")
+            $healthy = $false
+        }
+    } elseif ($healthy) {
+        $details = "$details, no /api/estimate endpoint (static mode?)".TrimStart(", ")
+    }
+
+    if ($healthy) {
+        LogOk "Dashboard on port ${InstPort}: HEALTHY ($details)"
+    } else {
+        LogWarn "Dashboard on port ${InstPort}: UNHEALTHY ($details)"
+    }
+
+    return $healthy
+}
+
+# ---------------------------------------------------------------------------
+# Migrate legacy PID file
+# ---------------------------------------------------------------------------
+Invoke-LegacyMigration
+
+# ---------------------------------------------------------------------------
 # ACTION: Status
 # ---------------------------------------------------------------------------
 if ($Status) {
-    $pid = Get-ServerPid
-    if ($pid) {
-        LogOk "Dashboard server running (PID $pid) on port $Port"
-        Log "URL: http://localhost:$Port/"
-        Log "PID file: $pidFile"
-    } else {
-        Log "Dashboard server is not running"
+    $instances = Get-RunningInstances
+    if ($instances.Count -eq 0) {
+        Log "No dashboard instances running"
         if (Test-PortInUse -TestPort $Port) {
-            LogWarn "Port $Port is in use by another process"
+            LogWarn "Port $Port is in use by another process (not a managed dashboard)"
+        }
+    } else {
+        foreach ($inst in $instances) {
+            LogOk "Dashboard server running (PID $($inst.Pid)) on port $($inst.Port)"
+            Log "  URL: http://localhost:$($inst.Port)/"
+            Log "  PID file: $(Get-PidFileForPort -PortNum $inst.Port)"
         }
     }
+    exit 0
+}
+
+# ---------------------------------------------------------------------------
+# ACTION: HealthCheck
+# ---------------------------------------------------------------------------
+if ($HealthCheck) {
+    $instances = Get-RunningInstances
+    if ($instances.Count -eq 0) {
+        LogWarn "No dashboard instances running"
+        exit 1
+    }
+    $unhealthy = 0
+    foreach ($inst in $instances) {
+        $result = Test-InstanceHealth -InstPort $inst.Port -InstPid $inst.Pid
+        if (-not $result) { $unhealthy++ }
+    }
+    if ($unhealthy -gt 0) { exit 1 }
     exit 0
 }
 
@@ -194,15 +360,34 @@ if ($Status) {
 # ACTION: Stop
 # ---------------------------------------------------------------------------
 if ($Stop) {
-    $pid = Get-ServerPid
-    if ($pid) {
-        try {
-            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-        } catch {}
-        Remove-Item -Path $pidFile -Force -ErrorAction SilentlyContinue
-        LogOk "Dashboard server stopped (PID $pid)"
+    if ($All) {
+        # Stop all instances
+        $instances = Get-RunningInstances
+        if ($instances.Count -eq 0) {
+            Log "No dashboard instances running"
+        } else {
+            foreach ($inst in $instances) {
+                try {
+                    Stop-Process -Id $inst.Pid -Force -ErrorAction SilentlyContinue
+                } catch {}
+                $pf = Get-PidFileForPort -PortNum $inst.Port
+                Remove-Item -Path $pf -Force -ErrorAction SilentlyContinue
+                LogOk "Stopped dashboard on port $($inst.Port) (PID $($inst.Pid))"
+            }
+        }
     } else {
-        Log "Dashboard server is not running"
+        # Stop specific port
+        $pid = Get-PortServerPid -PortNum $Port
+        if ($pid) {
+            try {
+                Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+            } catch {}
+            $pf = Get-PidFileForPort -PortNum $Port
+            Remove-Item -Path $pf -Force -ErrorAction SilentlyContinue
+            LogOk "Stopped dashboard on port $Port (PID $pid)"
+        } else {
+            Log "No dashboard running on port $Port"
+        }
     }
     exit 0
 }
@@ -254,10 +439,10 @@ if ($Snapshot) {
 # ACTION: Start (default)
 # ---------------------------------------------------------------------------
 
-# Check if already running
-$existingPid = Get-ServerPid
+# Check if this port already has a running instance
+$existingPid = Get-PortServerPid -PortNum $Port
 if ($existingPid) {
-    Log "Dashboard server already running (PID $existingPid)"
+    Log "Dashboard server already running on port $Port (PID $existingPid)"
     if (-not $Background) {
         Log "URL: http://localhost:$Port/"
     }
@@ -305,6 +490,8 @@ if (-not $Estimate) {
 Log "Starting dashboard server on port $Port..."
 Log "Estimate: $Estimate"
 
+$portPidFile = Get-PidFileForPort -PortNum $Port
+
 if ($Background) {
     # Background mode: Start-Process for detached process
     $proc = Start-Process -FilePath $python -ArgumentList @(
@@ -312,8 +499,8 @@ if ($Background) {
     ) -WindowStyle Hidden -PassThru -ErrorAction SilentlyContinue
 
     if ($proc) {
-        # Write PID for cleanup
-        Set-Content -Path $pidFile -Value $proc.Id -NoNewline
+        # Write PID to port-keyed registry
+        Set-Content -Path $portPidFile -Value $proc.Id -NoNewline
 
         # Brief pause to let the server bind
         Start-Sleep -Milliseconds 300
@@ -322,17 +509,17 @@ if ($Background) {
         try {
             $check = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
             if ($check) {
-                LogOk "Dashboard server started in background (PID $($proc.Id))"
+                LogOk "Dashboard server started in background (PID $($proc.Id)) on port $Port"
                 Log "URL: http://localhost:$Port/"
                 Write-Summary "OK" "dashboard" "http://localhost:$Port/"
             } else {
-                Remove-Item -Path $pidFile -Force -ErrorAction SilentlyContinue
+                Remove-Item -Path $portPidFile -Force -ErrorAction SilentlyContinue
                 LogError "Dashboard server failed to start"
                 Write-Summary "ERROR" "dashboard" "failed to start"
                 exit 1
             }
         } catch {
-            Remove-Item -Path $pidFile -Force -ErrorAction SilentlyContinue
+            Remove-Item -Path $portPidFile -Force -ErrorAction SilentlyContinue
             LogError "Dashboard server failed to start"
             Write-Summary "ERROR" "dashboard" "failed to start"
             exit 1
@@ -344,12 +531,12 @@ if ($Background) {
     }
 } else {
     # Foreground mode: server runs until Ctrl+C
-    Set-Content -Path $pidFile -Value $PID -NoNewline
+    Set-Content -Path $portPidFile -Value $PID -NoNewline
 
     # Register cleanup
     $cleanupBlock = {
-        if (Test-Path $pidFile) {
-            Remove-Item -Path $pidFile -Force -ErrorAction SilentlyContinue
+        if (Test-Path $portPidFile) {
+            Remove-Item -Path $portPidFile -Force -ErrorAction SilentlyContinue
         }
     }
     Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action $cleanupBlock | Out-Null
