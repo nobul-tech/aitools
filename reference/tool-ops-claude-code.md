@@ -14,7 +14,7 @@ behavior, check scripts validating version deps.
 
 Registry of version-dependent workarounds, behaviors, and assumptions in this repo.
 
-- **Current version**: 2.1.74
+- **Current version**: 2.1.81
 - **Baseline version**: 2.1.51 (2026-02-16) -- version when most workarounds were written
 
 ### How to use
@@ -55,7 +55,9 @@ Post-push checklist #20 triggers this review automatically.
 | 8 | Hook execution context (hooks run in bash or HTTP, not configurable shell) | 2.1.51 | 2.1.74 (2026-03-13) | `shared/hooks/session-archive.sh`, `scripts/setup-user-hooks.sh` | -- (2.1.63 adds HTTP hooks as alternative to shell) |
 | 9 | Coaching items tied to CC capabilities (subagent gap, auto-memory locality) | 2.1.51 | 2.1.51 | `shared/claude-shared.md` | -- |
 | 23 | `claude update` triggers SessionEnd hooks then cancels them | 2.1.81 | 2.1.81 (2026-03-22) | `scripts/aitools-install.sh/.ps1` (runs `claude update`) | -- |
+| 24 | Subagent cross-repo file access restriction (Glob/Grep denied outside CWD repo, Read with explicit paths works) | 2.1.74 | 2.1.74 (2026-03-24) | `shared/claude-shared.md` (delegation duty), delegation prompts | -- |
 | 19 | `effortLevel` setting (`settings.json` key controlling reasoning effort) | 2.1.68 | 2.1.74 (2026-03-13) | `scripts/setup-user-hooks.sh/.ps1`, `reference/user-repo.md`, `shared/claude-shared.md` | -- |
+| 25 | SendMessage for agent continuation unavailable (gated behind Agent Teams flag; old `resume` param removed in 2.1.77) | 2.1.77 | 2.1.81 (2026-03-24) | Agent tool documentation, delegation prompts | [#35240](https://github.com/anthropics/claude-code/issues/35240), [#37051](https://github.com/anthropics/claude-code/issues/37051), [#38183](https://github.com/anthropics/claude-code/issues/38183) |
 
 ### MEDIUM -- Affects developer experience or specific features
 
@@ -201,6 +203,35 @@ correctly treats this as informational, not an error.
 **No action needed.** This is benign noise from CC's session lifecycle firing
 hooks for non-interactive sessions. If CC adds a hook filter for session type,
 this goes away.
+
+### Agent Continuation Gap (SendMessage)
+
+Since v2.1.77, there is no working mechanism to send messages to a
+previously spawned subagent:
+
+- **Old mechanism** (`resume` parameter on Agent tool): Removed in v2.1.77.
+  Had longstanding issues (#11712, #13619, #10856) and was effectively
+  non-functional before removal.
+- **New mechanism** (`SendMessage` tool): Part of the Agent Teams feature set,
+  gated behind `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` (disabled by default).
+  The Agent tool description references SendMessage as if universally available,
+  but it is not. Even with the flag enabled, reports of unavailability (#34750).
+
+**Impact on delegation patterns:**
+
+- Subagents must be fully self-contained at launch. No follow-up messages possible.
+- The Agent tool's own return value includes `agentId` with instructions to use
+  SendMessage -- the model will attempt to use it and fail.
+- Sequential delegation (launch new agent with prior agent's output) is the
+  only working pattern for iterative subagent work.
+
+**Workaround:** Include all context in the initial Agent launch prompt. Use
+TaskOutput to read completed agent results. Launch new agents for follow-up
+work, passing prior output as context.
+
+Upstream: [#35240](https://github.com/anthropics/claude-code/issues/35240),
+[#37051](https://github.com/anthropics/claude-code/issues/37051),
+[#38183](https://github.com/anthropics/claude-code/issues/38183)
 
 ### Session Storage Internals
 

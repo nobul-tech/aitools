@@ -30,13 +30,22 @@ json_field() {
 SESSION_ID=$(json_field "$INPUT" "session_id")
 CWD=$(json_field "$INPUT" "cwd")
 
+# Session ID prefix for filenames (first 10 chars, matching scratch dir suffix)
+SESSION_PREFIX=""
+if [ -n "$SESSION_ID" ]; then
+    SESSION_PREFIX=$(printf '%s' "$SESSION_ID" | cut -c1-10)
+fi
+
 # Find project root
 PROJECT_ROOT=$(cd "$CWD" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || echo "$CWD")
 SCRATCH_DIR="$PROJECT_ROOT/.scratch"
 
 # --- Find session scratch dir ---
+# Try session_id-based dir first (new pattern), then .current-session (legacy)
 SESSION_DIR=""
-if [ -f "$SCRATCH_DIR/.current-session" ]; then
+if [ -n "$SESSION_PREFIX" ] && [ -d "$SCRATCH_DIR/session-$SESSION_PREFIX" ]; then
+    SESSION_DIR="$SCRATCH_DIR/session-$SESSION_PREFIX"
+elif [ -f "$SCRATCH_DIR/.current-session" ]; then
     SESSION_DIR=$(cat "$SCRATCH_DIR/.current-session" 2>/dev/null || echo "")
 fi
 
@@ -51,6 +60,9 @@ HAS_HARVESTING=false
 if [ -d "$HARVESTING_DIR" ]; then
     HAS_HARVESTING=true
 fi
+
+# --- Handoff destination ---
+HANDOFFS_DIR="$PROJECT_ROOT/.aitools/channel/handoffs"
 
 # --- Classify and process session dir contents ---
 TODAY=$(date -u +%Y-%m-%d)
@@ -95,18 +107,67 @@ for file in "$SESSION_DIR"/*; do
 
     if $is_ephemeral; then
         DELETED=$((DELETED + 1))
-    elif $HAS_HARVESTING; then
-        # Harvest: move to harvesting/ with date prefix
-        dest_name="${TODAY}_${filename}"
+        continue
+    fi
+
+    # --- Route non-ephemeral files ---
+
+    # Handoff files go to .aitools/channel/handoffs/ (dedicated location)
+    is_handoff=false
+    case "$filename" in
+        handoff*) is_handoff=true ;;
+    esac
+
+    if $is_handoff; then
+        # Auto-create handoffs dir if it doesn't exist
+        if [ ! -d "$HANDOFFS_DIR" ]; then
+            mkdir -p "$HANDOFFS_DIR" 2>/dev/null || true
+        fi
+    fi
+    if $is_handoff && [ -d "$HANDOFFS_DIR" ]; then
+        # Handoff: copy to handoffs/ with session ID
+        handoff_dest="${HANDOFFS_DIR}/${TODAY}_session-${SESSION_PREFIX}_${filename}"
+        cp "$file" "$handoff_dest" 2>/dev/null || true
+        HARVESTED=$((HARVESTED + 1))
+        continue
+    fi
+
+    # Auto-create harvesting/ on first harvest (F2 from issue #54)
+    if ! $HAS_HARVESTING; then
+        mkdir -p "$HARVESTING_DIR" 2>/dev/null
+        if [ -d "$HARVESTING_DIR" ]; then
+            HAS_HARVESTING=true
+        fi
+        # Create minimal manifest
+        if command -v node >/dev/null 2>&1; then
+            MANIFEST="$HARVESTING_DIR/harvest-manifest.json"
+            node -e "
+const fs = require('fs');
+const f = process.argv[1];
+if (!fs.existsSync(f)) {
+    fs.writeFileSync(f, JSON.stringify({ meta: { schemaVersion: '1.0', lastAudit: null }, artifacts: {} }, null, 2) + '\n');
+}
+" "$MANIFEST" 2>/dev/null || true
+        fi
+        printf '[harvest] Created harvesting/ directory in %s\n' "$PROJECT_ROOT" >&2
+    fi
+
+    if $HAS_HARVESTING; then
+        # Harvest: copy to harvesting/ with date + session ID prefix
+        session_tag=""
+        if [ -n "$SESSION_PREFIX" ]; then
+            session_tag="session-${SESSION_PREFIX}_"
+        fi
+        dest_name="${TODAY}_${session_tag}${filename}"
         dest_path="$HARVESTING_DIR/$dest_name"
 
         # Avoid overwrites
         if [ -f "$dest_path" ]; then
             counter=1
-            while [ -f "${HARVESTING_DIR}/${TODAY}_${counter}_${filename}" ]; do
+            while [ -f "${HARVESTING_DIR}/${TODAY}_${counter}_${session_tag}${filename}" ]; do
                 counter=$((counter + 1))
             done
-            dest_name="${TODAY}_${counter}_${filename}"
+            dest_name="${TODAY}_${counter}_${session_tag}${filename}"
             dest_path="$HARVESTING_DIR/$dest_name"
         fi
 
@@ -119,8 +180,7 @@ for file in "$SESSION_DIR"/*; do
             session_ref=""
             if [ -n "$CWD" ]; then
                 project_name=$(basename "$PROJECT_ROOT")
-                prefix=$(printf '%s' "$SESSION_ID" | cut -c1-8)
-                session_ref="${project_name}/${TODAY}_${prefix}"
+                session_ref="${project_name}/${TODAY}_${SESSION_PREFIX}"
             fi
 
             node -e "
@@ -155,11 +215,14 @@ fs.writeFileSync(f, JSON.stringify(manifest, null, 2) + '\n');
         fi
 
         HARVESTED=$((HARVESTED + 1))
-    else
-        # No harvesting dir — treat as ephemeral
-        DELETED=$((DELETED + 1))
     fi
 done
+
+# --- Report harvest results (F4 from issue #54) ---
+if [ "$HARVESTED" -gt 0 ] || [ "$DELETED" -gt 0 ]; then
+    printf '[harvest] Session %s: %d artifacts harvested, %d ephemeral skipped\n' \
+        "${SESSION_PREFIX:-unknown}" "$HARVESTED" "$DELETED" >&2
+fi
 
 # --- Clear session pointer (leave session dir intact) ---
 # Previously rm -rf'd $SESSION_DIR here, but if harvest partially failed

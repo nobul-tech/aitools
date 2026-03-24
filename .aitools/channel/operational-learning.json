@@ -127,6 +127,14 @@
       "evidence": "Session conversation: D-v8-5 decision at commander's request, then 4-file commit (2175814) without intermediate checkpoint. Pre-commit checklist (the correct pattern) was executed at the prior transition but not at this one. The Lagebeurteilung definition says 'fixed categories examined every time' — S3 examined at transition 1, skipped at transition 2.",
       "relatedDecisions": [8, 9],
       "severity": "high"
+    },
+    {
+      "id": "OL-O12",
+      "observation": "Subagents cannot use Glob or Grep on file paths outside the current repo's directory tree. The tools are permission-denied. However, the Read tool with explicit absolute file paths WORKS for cross-repo access. The workaround: when delegating tasks that need files from other repos (dotprofile sessions, other project repos), provide explicit absolute paths in the delegation prompt — do not instruct the subagent to 'search' or 'find' files outside the repo.",
+      "sessions": ["RnTOD5XJFi"],
+      "evidence": "S2 agent (mission-prompt-improvement) attempted Glob on ~/repos/aitools-nobul-jose/sessions/marse/ — denied. Main agent confirmed files exist and are readable via explicit Read paths. Root cause: CC sandboxes subagent Glob/Grep to the current repo. Read tool has broader access when given explicit paths.",
+      "relatedDecisions": [4],
+      "severity": "high"
     }
   ],
 

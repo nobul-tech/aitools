@@ -1,17 +1,32 @@
 #!/usr/bin/env bash
 # scratch-init.sh — Claude Code SessionStart hook
-# Creates a unique session scratch directory and logs stale dirs.
+# Creates a unique session scratch directory, logs stale dirs, and
+# discovers unconsumed handoffs.
 #
 # Design decisions:
 #   - Silent exit on errors (hook must never break Claude Code)
 #   - Logs stale session dirs older than 24h (no auto-delete after 30-file loss)
 #   - Writes session dir path to .scratch/.current-session for agents
-#   - Uses mktemp for uniqueness, no collision risk
+#   - Uses session_id from CC hook input for deterministic dir names (R1, #53)
+#   - Discovers handoffs at .aitools/channel/handoffs/ (R3, #53)
 
 set -euo pipefail
 
+# --- Pure-bash JSON field extraction (same as harvest-session.sh) ---
+json_field() {
+    local json="$1" key="$2"
+    local val
+    val=$(printf '%s' "$json" \
+        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
+        | head -1 \
+        | sed 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"//' \
+        | sed 's/"$//')
+    printf '%s' "$val"
+}
+
 # Read hook input from stdin (contains session_id, cwd, etc.)
 INPUT=$(cat)
+SESSION_ID=$(json_field "$INPUT" "session_id")
 
 # Find project root (hooks run in cwd but we need the git root)
 PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
@@ -36,10 +51,36 @@ if [ -d "$SCRATCH_DIR" ]; then
 fi
 
 # --- Create fresh session dir ---
-SESSION_DIR=$(mktemp -d "$SCRATCH_DIR/session-XXXXXXXXXX")
+# Use session_id for deterministic dir name (fixes .current-session race
+# condition for concurrent sessions — M4 AAR P3, verified UA-6).
+# Fallback to mktemp if session_id is empty (defensive).
+SESSION_PREFIX=""
+if [ -n "$SESSION_ID" ]; then
+    SESSION_PREFIX=$(printf '%s' "$SESSION_ID" | cut -c1-10)
+    SESSION_DIR="$SCRATCH_DIR/session-$SESSION_PREFIX"
+    mkdir -p "$SESSION_DIR"
+else
+    SESSION_DIR=$(mktemp -d "$SCRATCH_DIR/session-XXXXXXXXXX")
+fi
 
 # Write the path so agents and the SessionEnd hook can find it
 printf '%s' "$SESSION_DIR" > "$SCRATCH_DIR/.current-session"
+
+# --- Discover unconsumed handoffs (R3, issue #53) ---
+HANDOFFS_DIR="$PROJECT_ROOT/.aitools/channel/handoffs"
+if [ -d "$HANDOFFS_DIR" ]; then
+    handoff_count=0
+    latest_handoff=""
+    for hf in "$HANDOFFS_DIR"/handoff*; do
+        [ -f "$hf" ] || continue
+        handoff_count=$((handoff_count + 1))
+        latest_handoff="$hf"
+    done
+    if [ "$handoff_count" -gt 0 ]; then
+        printf 'Handoff available: %s (%d total in %s)\n' \
+            "$(basename "$latest_handoff")" "$handoff_count" "$HANDOFFS_DIR"
+    fi
+fi
 
 # SessionStart stdout is added as context for Claude
 printf 'Session scratch directory: %s\n' "$SESSION_DIR"

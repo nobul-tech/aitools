@@ -1,13 +1,14 @@
 {
   "meta": {
-    "estimateId": "77a33baf_session_s3",
+    "estimateId": "RnTOD5XJFi_session_s3",
     "maintainer": "s3",
     "scope": "session",
-    "sessionId": "77a33baf",
-    "priorSession": "5HyCwPtSDH",
+    "sessionId": "RnTOD5XJFi",
+    "priorSession": "KHGOmVeNNM",
+    "priorPriorSession": "77a33baf",
     "created": "2026-03-22T12:05:00Z",
-    "updated": "2026-03-22T17:00:00Z",
-    "version": 8.3,
+    "updated": "2026-03-24T21:00:00Z",
+    "version": 9.0,
     "versionHistory": [
       {"version": 1, "timestamp": "2026-03-21T15:00:00Z", "changes": "Initial estimate after intelligence loading (session 5HyCwPtSDH)"},
       {"version": 2, "timestamp": "2026-03-21T16:00:00Z", "changes": "M1 findings integrated, .gitignore contradiction identified"},
@@ -19,15 +20,16 @@
       {"version": 8, "timestamp": "2026-03-22T13:30:00Z", "changes": "ACCEPTING SESSION (77a33baf). Lagebeurteilung: switched Mac to Windows, found 3 cross-platform failure clusters. 90 observations, 11 assumptions, 11 facts, 0 decisions."},
       {"version": 8.1, "timestamp": "2026-03-22T15:45:00Z", "changes": "Commander authorized fixes. Schwerpunkt shifted to fix+prevent. Commander-provided facts. 17 assumptions (3 FALSIFIED). OL estimate v2 created. Pre-commit checklist passed."},
       {"version": 8.2, "timestamp": "2026-03-22T16:30:00Z", "changes": "Running estimate brought current. completedWork: 17 entries. Deviation OL-O10. D-v8-4/D-v8-5 DONE."},
-      {"version": 8.3, "timestamp": "2026-03-22T17:00:00Z", "changes": "D-v8-6 IMPLEMENTED: design principle 'Process discipline as work product' written to CLAUDE.md. OL v3: I7 (6-stage carry-forward pipeline), I8 (session-to-session bidirectional merge), P7 (pipeline pattern). D-v8-3 remains PENDING (blocksSessionEnd)."}
+      {"version": 8.3, "timestamp": "2026-03-22T17:00:00Z", "changes": "D-v8-6 IMPLEMENTED: design principle 'Process discipline as work product' written to CLAUDE.md. OL v3: I7 (6-stage carry-forward pipeline), I8 (session-to-session bidirectional merge), P7 (pipeline pattern). D-v8-3 remains PENDING (blocksSessionEnd)."},
+      {"version": 9.0, "timestamp": "2026-03-24T21:00:00Z", "changes": "SESSION RnTOD5XJFi (macOS, 2026-03-24). Schwerpunkt shifted to SQLite migration. Major discoveries: context rot on user intent (~100K tokens buried commander instruction), behavioral framing gap (CC /resume loses operative weight), harness IS code+governance+state+OL (not just governance). Artifacts: /aitool-resume RFC v7, harness-state.json artifact (new concept), 3 CLAUDE.md proposals (Golf/Hotel/Juliet reconciled at 159 lines), SQLite harness architecture RFC (multi-DB: per-session + harness-level, Option B approved), intent sentinel hook designed, issues #53/#54 hook changes written (uncommitted). 10 intelligence missions launched. OL updated: OL-O12 (subagent cross-repo file access restriction), tool-ops item #24 (same), item #25 (SendMessage unavailable, gated behind Agent Teams). Worktree empirically disproved (gitignored files absent). Dashboard miss investigated (3 rounds of prompts missed shipped capability — code invisible to governance analysts). Demonstrate-then-skip at 4 occurrences (approaching structural fix). Commander decisions: everything into SQLite, multi-DB not single, Python sqlite3 as governed capability, new hooks harness-db-sessionstart.sh + harness-db-sessionend.sh, generate harness-state.json from DB, migration NOW, dashboard one-page with session selector."}
     ],
     "supersedes": [],
-    "authoritativeNote": "v8 is the first update by accepting session 77a33baf. v1-v7 are from session 5HyCwPtSDH (Mac). v8 captures the Lagebeurteilung when switching to Windows: ground truth invalidated the prior session's accepting Schwerpunkt. Platform stabilization must precede channel infrastructure."
+    "authoritativeNote": "v9 is the update by session RnTOD5XJFi (macOS, 2026-03-24). Sessions KHGOmVeNNM (2026-03-23) + RnTOD5XJFi (2026-03-24) form a /resume chain. v1-v7 from 5HyCwPtSDH (Mac). v8 from 77a33baf (Windows). v9 captures: the full discovery arc (context rot, behavioral framing, SQLite architecture), 10 intelligence missions, and the Schwerpunkt shift to SQLite migration. The harness definition expanded: code IS the harness, not just governance."
   },
 
-  "schwerpunkt": "Platform stabilization: fix recurring cross-platform bugs (stat -f hooks, dotprofile pull) and prevent recurrence on any repo/platform. Observation phase complete — commander authorized fixes. Dotprofile must be pulled before session end. Channel infrastructure deferred until platform is stable.",
+  "schwerpunkt": "SQLite migration: convert harness state from JSON files to SQLite (Python sqlite3). Multi-DB architecture: per-session DBs (.aitools/sessions/<id>.db) + harness DB (.aitools/harness.db). Option B: SQLite runtime (gitignored) + JSON archive (tracked, carries forward via git). Everything into DB — running estimate, SITREPs, FINDINGs, channel state, session state. New hooks: harness-db-sessionstart.sh + harness-db-sessionend.sh. Generate harness-state.json from DB automatically at session end. Dashboard: one page with session selector. Commander directive: migration NOW.",
 
-  "acceptingSessionSchwerpunkt": "Build channel infrastructure (decisions #22-24), implement per-mission dashboards and concurrent session dashboards, full platform support. DEFERRED by session 77a33baf — platform must be stable first. See v8 Lagebeurteilung.",
+  "acceptingSessionSchwerpunkt": "Complete SQLite migration (Phase 1: schema + harness-db.py helper, Phase 2: migrate hooks, Phase 3: migrate dashboard, Phase 4: migrate deploy pipeline, Phase 5: verify cross-platform). Then: launch three competing harness-state missions using the new SQLite-backed infrastructure. Prior Schwerpunkte: platform stabilization (DONE, v0.64.1), channel infrastructure (PARTIALLY DONE — running estimate tracked, handoffs dir created, channels not built).",
 
   "hardRequirements": [
     {
@@ -117,7 +119,7 @@
   ],
 
   "situation": {
-    "currentState": "Session 77a33baf (accepting session, Windows). Hook fix+prevent DONE (D-v8-4/D-v8-5, commit 2175814). Design principle 'Process discipline as work product' IMPLEMENTED (D-v8-6, commit 9faa943). OL estimate at v3 (11 observations, 8 insights, 7 patterns, 5 proposals). 6-stage carry-forward pipeline identified (OL-I7/P7). Lagebeurteilung-recommendation workflow gap documented (OL-O11). D-v8-3 (dotprofile pull) PENDING — last blocksSessionEnd item. Context is large — D-v8-3 then commit + session end recommended.",
+    "currentState": "Session RnTOD5XJFi (macOS, /resume of KHGOmVeNNM). Schwerpunkt shifted to SQLite migration. Prior session KHGOmVeNNM (2026-03-23, macOS) produced: issues #53/#54 hook changes (harvest-session.sh + scratch-init.sh, uncommitted), .aitools/channel/handoffs/ directory, intent sentinel hook designed (not deployed), context rot research. This session RnTOD5XJFi (2026-03-24, macOS) launched 10+ intelligence missions: S2-Delta (v3 prompts, 16 commander patterns), S2-Echo (dashboard investigation, root cause: code invisible to governance analysts), S2-Foxtrot (v4 prompts + 4-pillar artifact intent), S3-Golf (CLAUDE.md v1, abstract), S3-Hotel (CLAUDE.md v2, grounded in code), S3-Juliet (CLAUDE.md reconciliation, 159 lines), S2-India (meta-audit, 3 assumption failures, 7 failure catalog), S2-Kilo (worktree investigation, empirically disproved gitignored files in worktrees), S2-Lima (dashboard verification FRAGORD, killed due to stale data), S3-Mike (SQLite architecture design, Option B approved), S3-November (FRAGORD v3, 3 parallel investigations, SQLite RFC, dependency audit, multi-DB design), S2-Oscar (SendMessage investigation, unavailable, gated behind Agent Teams). Key decisions: SQLite migration NOW, multi-DB architecture (per-session + harness), Python sqlite3 as governed capability, harness-state.json as new artifact (4-pillar), /aitool-resume RFC v7, CLAUDE.md 3 proposals reconciled at 159 lines. Dashboard shows stale data — this v9 estimate update fixes that. Running estimate now current.",
 
     "completedWork": [
       "Verified aitools install output: CLAUDE.md merge-adopt chain, deploy log, deployed file, dotprofile template",
@@ -184,7 +186,37 @@
       "Proposal promotion: 3 orphaned structuralFix suggestions promoted to tracked proposals (OL-PR3/4/5) with CALL lifecycle status (pending-analysis → analyzed → implemented → verified)",
       "CarryForwardGaps restructured: gaps now have informsTransitions, resolvableBy, blocksExecution fields — active intelligence requirements, not passive documentation",
       "AAR/OL schema overlap documented as CFG-A7 gap — cannot resolve without Mac-side verification",
-      "Vocabulary findings: 'repo' (generic, ungoverned), 'carry-forward' (ungoverned), 'commit gap' (coined), 'configuration confidence' (coined), 'lifecycle boundary gap' (coined or Mac work product)"
+      "Vocabulary findings: 'repo' (generic, ungoverned), 'carry-forward' (ungoverned), 'commit gap' (coined), 'configuration confidence' (coined), 'lifecycle boundary gap' (coined or Mac work product)",
+
+      "--- SESSION KHGOmVeNNM (2026-03-23, macOS) COMPLETED WORK ---",
+      "Issues #53/#54 hook changes: harvest-session.sh modified — session ID in harvested filenames (YYYY-MM-DD_session-XXXX_filename), auto-creates harvesting/ + harvest-manifest.json on first harvest, routes handoff* files to .aitools/channel/handoffs/, auto-creates handoffs dir, reports harvest results to stderr",
+      "Issues #53/#54 hook changes: scratch-init.sh modified — uses session_id from CC hook input for deterministic dir names (backward compatible, falls back to mktemp), discovers handoffs at .aitools/channel/handoffs/ and announces them",
+      ".aitools/channel/handoffs/ directory created with .gitkeep — first handoff file is the session handoff itself",
+      "Intent sentinel Stop hook designed (intent-sentinel-stop.sh): resurfaces user's last instruction after 3 agent turns without user input, detects research-to-execution phase transition (5+ Read calls then Write/Edit). NOT deployed — awaits decision on registration in setup-user-hooks.sh/.ps1",
+      "Context rot research completed: S2 subagent found existing context rot framework (multi-agent techniques) does NOT address single-agent within-conversation intent loss. Stop hook can extract user's last instruction from transcript JSONL",
+      "Hook verification by subagent: 18 criteria PASS, 3 amendments applied to harvest-session.sh and scratch-init.sh",
+      "Recency weight heuristic introduced by commander: when instructions conflict, the most recent one carries the most weight",
+      "Agent-user asymmetry identified: agent has broad context (1M tokens) but no long-term memory; user has long-term memory but limited context bandwidth — shorthand IDs opaque to user, dashboard must show human-readable labels",
+
+      "--- SESSION RnTOD5XJFi (2026-03-24, macOS, /resume of KHGOmVeNNM) COMPLETED WORK ---",
+      "S2-Delta: v3 mission prompts produced — 16 commander patterns extracted from marse sessions, access instructions for subagent cross-repo restrictions, phase 8 live session transcript, cross-repo commander voice broadening",
+      "S2-Echo: Dashboard investigation AAR — root cause identified: code invisible to governance analysts. Three rounds of prompt refinement missed shipped capability (dashboard) because prompt design was framed as 'improve the prompt' not 'equip the mission agent.' Contributing causes: harness-state.json skeleton has zero dashboard content, planning brief has only 1 dashboard mention, OL file frames dashboard as gap not capability",
+      "S2-Foxtrot: v4 prompts produced + revised 4-pillar artifact intent. Key change: harness IS code + governance + state + OL. Phase 2 code reading added. Dashboard integration section added. 5-check self-containment test. All three prompts structurally identical except identity",
+      "S3-Golf: CLAUDE.md v1 produced (abstract — did not read code, wrote from governance artifacts only). Demonstrate-then-skip occurrence #3: prompt said 'read code' but agent demonstrated governance understanding then skipped code reading",
+      "S3-Hotel: CLAUDE.md v2 produced (grounded — read ALL code including all hooks, key scripts, deploy pipeline, build system). Used git worktree for isolation",
+      "S3-Juliet: CLAUDE.md reconciliation (159 lines, best of Golf + Hotel). Three proposals awaiting commander final review",
+      "S2-India: Meta-audit AAR — 10 assumption tests (7 PASS, 3 FAIL: script count 63 not 59, harness-state.json missing 2/4 pillars, CLAUDE.md 176 lines not 200). 7 failure catalog entries (F1-F7). 5 ambiguity resolutions. Worktree-specific caveats identified",
+      "S2-Kilo: Worktree investigation AAR — empirically created test worktree, verified gitignored files (.scratch/) ABSENT, untracked files (harness-state.json, handoffs) ABSENT. Recommendation: Option B (no worktrees) — interference risk negligible (distinct output files), simplicity benefit substantial. 35 prompt-writing lessons cataloged across v1-v5",
+      "S2-Lima: Dashboard verification — FRAGORD'd (killed) because running estimate stale (v8.3, dated 2026-03-22). Dashboard mechanism works (PID 4685 running) but shows stale data. This v9 update fixes the data staleness",
+      "S3-Mike: SQLite architecture design — Option B approved (SQLite runtime gitignored + JSON archive tracked for carry-forward). Schema designed for sessions, missions, decisions, observations, delegation_log, deviations, hard_requirements, version_history, dashboard_state. WAL mode for concurrent reads. Python sqlite3 only (no CLI dependency)",
+      "S3-November: FRAGORD v3 — 3 parallel investigations executed inline (dependency audit: 14 files across 6 categories; multi-DB design: per-session + harness-level pattern; schema/naming design). SQLite RFC produced. 7 deliverables. build-deploy.sh confirmed as indirect dependency (via content embedding, not code reference)",
+      "S2-Oscar: SendMessage investigation — SendMessage is gated behind CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS (disabled by default). Old resume param removed in 2.1.77. Neither mechanism works in 2.1.81. 5 GitHub issues confirm. Proposed tool-ops-claude-code.md item #25",
+      "/aitool-resume RFC v7 (final, post-double-audit): cross-platform session context restoration skill. Two modes: post-resume enhancement and full replacement. Chronological transcript walk with boundary detection. Quick mode for simple sessions. 26 audit findings + 6 ideal-state audit findings addressed",
+      "harness-state.json artifact concept: the harness in document form (4 pillars: governance + implementation + state + OL). v1 skeleton exists but missing implementation and OL pillars. To be generated from SQLite DB at session end",
+      "SQLite RFC: multi-DB architecture (per-session DBs at .aitools/sessions/<id>.db + harness DB at .aitools/harness.db). Option B: SQLite runtime (gitignored) + JSON archive (tracked). Everything into DB: running estimate, SITREPs, FINDINGs, channel state, session state. New hooks: harness-db-sessionstart.sh + harness-db-sessionend.sh. 14 files to migrate across 5 phases",
+      "Demonstrate-then-skip at 4 occurrences: #1 session 77a33baf (pre-commit checklist then straight to execution), #2 RnTOD5XJFi (read files then jumped to editing hooks), #3 S3-Golf (told to read code, skipped), #4 dashboard in prompts but never tested. Approaching structural fix threshold",
+      "OL-O12 added: subagent cross-repo file access restriction. Glob/Grep denied outside current repo. Read with explicit absolute paths works. Workaround: provide explicit paths in delegation prompts",
+      "Running estimate v9 update (this operation): updating all detail arrays from v8.3 content to include sessions KHGOmVeNNM + RnTOD5XJFi work"
     ],
 
     "deviations": [
@@ -355,7 +387,21 @@
       "VOCABULARY GAP: 'repo' (generic — any project/workspace aitools provides capabilities to) is NOT governed. 'aitools repo' and 'dotprofile repo' are governed but refer to specific repos. The generic concept needs definition.",
       "CONFIDENCE PROBLEM: Decisions in planning brief and running estimate have no confidence dimension. A decision from the Mac session that was 'agreed' may now be superseded by Mac work we can't see. Need: VERIFIED/STALE/SUPERSEDED/UNKNOWN classification per configuration management (ISO 10007) and intelligence analysis (IPB FM 2-01.3) provenance.",
       "LIFECYCLE TRANSITION: Session transitioning from observation to action (D-v8-3, D-v8-4). Per governed term 'lifecycle transition': a point where artifacts, state, or context cross a boundary that may not preserve them. Risks: estimates not committed (the same SessionEnd-outputs-never-committed pattern, now on OUR work), unverified assumptions feeding fixes, subagent context loss, prevention work squeezed by urgent fixes.",
-      "LIFECYCLE BOUNDARY GAP: All 5 OL patterns (P1-P5) are instances of gaps at lifecycle boundaries. The concept generalizes: write→deploy boundary (P1), knowledge→application boundary (P2), session→post-session boundary (P3), machine-A→machine-B boundary (P4), session→institutional boundary (P5). Term may exist in Mac OL work products — independently converging on same concept. Provenance: Lean value stream mapping (waste at handoffs), Swiss cheese (holes at layer boundaries), systems engineering (interface gaps), SRE (handoff failures)."
+      "LIFECYCLE BOUNDARY GAP: All 5 OL patterns (P1-P5) are instances of gaps at lifecycle boundaries. The concept generalizes: write→deploy boundary (P1), knowledge→application boundary (P2), session→post-session boundary (P3), machine-A→machine-B boundary (P4), session→institutional boundary (P5). Term may exist in Mac OL work products — independently converging on same concept. Provenance: Lean value stream mapping (waste at handoffs), Swiss cheese (holes at layer boundaries), systems engineering (interface gaps), SRE (handoff failures).",
+
+      "--- SESSION KHGOmVeNNM + RnTOD5XJFi FACTS (v9) ---",
+      "Subagents CANNOT Glob/Grep outside current repo directory tree (permission denied). CAN Read with explicit absolute file paths. Root cause: CC sandboxes subagent Glob/Grep to the current repo. Read tool has broader access when given explicit paths. Workaround: provide explicit absolute paths in delegation prompts.",
+      "SendMessage is gated behind CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS (disabled by default). Old resume param removed in CC 2.1.77. Neither mechanism works in CC 2.1.81. 5 GitHub issues confirm (#35240, #37051, #38183, #34750, #38379). No way to send message to running or completed subagent.",
+      "Git worktrees do NOT contain gitignored files or untracked files. Empirically verified: created test worktree, .scratch/ absent (No such file or directory), harness-state.json absent (untracked), handoff files absent (untracked). Only tracked files present. This eliminates worktrees as a viable isolation strategy for competing missions that need scratch files.",
+      "Python sqlite3 is stdlib — available everywhere Python runs, no separate install. sqlite3 CLI is available on macOS (/usr/bin/sqlite3) and most Linux distros but NOT guaranteed on Windows Git Bash. All DB access from hooks must use Python.",
+      "The dashboard mechanism works (PID 4685 running on session RnTOD5XJFi) but shows stale estimate data (v8.3, dated 2026-03-22). Dashboard reads JSON, displays what's there. Staleness is a data maintenance issue, not a dashboard bug.",
+      "nobul-ops CLAUDE.md (March 24, 2026) is the best CLAUDE.md exemplar. Used by S3-Hotel as grounding for CLAUDE.md v2 revision.",
+      "The planning brief has 54 decisions, the running estimate has 16 session decisions from 5HyCwPtSDH + 6 from 77a33baf + 16 from KHGOmVeNNM/RnTOD5XJFi = 92 total known decisions across the project.",
+      "Script count in scripts/ is 63 (not 59 as previously stated). CLAUDE.md is 176 lines (not 200). 11 hooks in shared/hooks/. These corrections from S2-India meta-audit illustrate verify-don't-infer principle.",
+      "harness-state.json v1 skeleton is missing 2 of 4 pillars (implementation and OL). Was written before the 4-pillar expansion. Agents reading it as a template would inherit governance-only structure.",
+      "build-deploy.sh is an INDIRECT dependency on running estimate — it embeds skill content from shared/skills/ which mentions 'running estimate' and '.aitools/channel/' in text. Not a code dependency. Updating skills and rebuilding propagates changes automatically.",
+      "CC /resume compresses tool result payloads: 596 of 872 JSONL lines compressed in session RnTOD5XJFi — ALL file reads and subagent returns from prior session. Agent has illusion of continuity without behavioral framing.",
+      "Hook performance budget: Stop hook must be <50ms. File mtime check is ~1ms. DB query via Python subprocess is ~100-200ms. Use mtime as proxy for staleness in Stop hooks, only fall back to DB query when accuracy needed (session start/end)."
     ],
 
     "decisions": [
@@ -533,6 +579,131 @@
         "blocksSessionEnd": true,
         "evidence": "Same as D-v8-4. Additionally: Platform Engineering framework checked via /frameworks — NOT registered, NOT pending. Only exists in planning brief decision #8 (proposed). The detection layer (check-pre-commit step 17) is now the first implemented artifact of the proposed framework.",
         "olReference": "OL-PR2 (implemented), OL-I2 (detection layer gap — partially closed)"
+      },
+      {
+        "id": "--- SESSION KHGOmVeNNM + RnTOD5XJFi DECISIONS (v9) ---"
+      },
+      {
+        "id": "D-HARNESS-STATE",
+        "decision": "harness-state.json artifact: the harness in document form. Four pillars: governance (what was decided), implementation (what was built — every hook, key scripts, dashboard system, deploy pipeline), state (where things are — running estimate, OL, handoffs, harvest manifest), operational learning (what was learned — patterns, proposals, carry-forward gaps). Up to 700K tokens. Quality over brevity. Self-containment test: agent reading only this file + rules + CLAUDE.md has everything needed to govern, modify code, launch dashboard, assess state, avoid failure patterns.",
+        "status": "decided",
+        "decidedBy": "commander (session RnTOD5XJFi)",
+        "artifacts": [".aitools/channel/harness-state.json (v1 skeleton exists, missing implementation + OL pillars)", ".scratch/session-RnTOD5XJFi/revised-artifact-intent.md"],
+        "relatedBriefDecisions": [36, 50]
+      },
+      {
+        "id": "D-HARNESS-PROMPT",
+        "decision": "Harness restoration prompt: the prompt that restores a new agent to full behavioral understanding of the harness. Used by /aitool-resume skill. Chronological transcript walk with boundary detection, recency weighting, verify-don't-infer discipline.",
+        "status": "decided",
+        "decidedBy": "commander (session RnTOD5XJFi)",
+        "artifacts": [".scratch/session-RnTOD5XJFi/aitool-resume-prompt.md", ".scratch/session-RnTOD5XJFi/aitool-resume-reference.md"],
+        "relatedBriefDecisions": [50, 51]
+      },
+      {
+        "id": "D-AITOOL-RESUME",
+        "decision": "/aitool-resume skill: cross-platform session context restoration. RFC v7 (final, post-double-audit). Two modes: post-resume enhancement (after CC /resume, detects compressed content, reads fresh, restores framing) and full replacement (discovers sessions, presents picker, reads transcript, builds context). Quick mode for simple sessions. Stands alone, no dependency on other skills.",
+        "status": "decided",
+        "decidedBy": "commander (session RnTOD5XJFi)",
+        "artifacts": [".scratch/session-RnTOD5XJFi/rfc-aitool-resume-v7-final.md"],
+        "relatedBriefDecisions": [50, 51]
+      },
+      {
+        "id": "D-INTENT-SENTINEL",
+        "decision": "Intent sentinel Stop hook: resurfaces user's last instruction after 3 agent turns without user input, detects research-to-execution phase transition (5+ Read calls then Write/Edit). Designed in session KHGOmVeNNM, not deployed. Awaits registration decision.",
+        "status": "designed",
+        "decidedBy": "commander (session KHGOmVeNNM)",
+        "artifacts": [".scratch/session-KHGOmVeNNM/intent-sentinel-stop.sh", ".scratch/session-KHGOmVeNNM/intent-sentinel-design.md"],
+        "relatedBriefDecisions": [20, 36]
+      },
+      {
+        "id": "D-ISSUES-53-54",
+        "decision": "Hook improvements for issues #53 (handoff lifecycle) and #54 (harvest silent skip). harvest-session.sh: session ID in filenames, auto-create harvesting/, handoff routing. scratch-init.sh: session_id-based dirs, handoff discovery.",
+        "status": "written-not-committed",
+        "decidedBy": "commander (session KHGOmVeNNM)",
+        "artifacts": ["shared/hooks/harvest-session.sh", "shared/hooks/scratch-init.sh"],
+        "relatedBriefDecisions": [1, 34],
+        "evidence": "Verified by subagent (18 criteria PASS, 3 amendments applied)"
+      },
+      {
+        "id": "D-NO-WORKTREES",
+        "decision": "Competing missions run in main repo without worktrees. Empirically verified: gitignored files (.scratch/) absent from worktrees, untracked files (harness-state.json, handoffs) also absent. 23+ scratch files would need absolute paths. Interference risk negligible (distinct output files). Simplicity benefit substantial.",
+        "status": "decided",
+        "decidedBy": "commander (session RnTOD5XJFi, based on S2-Kilo empirical investigation)",
+        "artifacts": [".scratch/session-RnTOD5XJFi/worktree-investigation-aar.md"],
+        "relatedBriefDecisions": [3, 4]
+      },
+      {
+        "id": "D-RECENCY-WEIGHT",
+        "decision": "Recency weight principle: when instructions conflict, the most recent one carries the most weight. The commander's most recent prompt is always the highest-priority instruction. Applies to content weight in context (memory files > fresh Read results > conversation history from /resume). This is a behavioral framing principle, not a UCI — structural enforcement via intent sentinel hook.",
+        "status": "decided",
+        "decidedBy": "commander (session KHGOmVeNNM)",
+        "relatedBriefDecisions": [51]
+      },
+      {
+        "id": "D-VERIFY-DONT-INFER",
+        "decision": "Verify, don't infer: claims about context state must be verified by checking, not inferred from conversation history. When asked 'are those files in your context?', the agent must verify by reading, not by assuming from /resume history. Same chain-of-trust failure as M11 assumption propagation.",
+        "status": "decided",
+        "decidedBy": "commander (session RnTOD5XJFi)",
+        "relatedBriefDecisions": [36, 50]
+      },
+      {
+        "id": "D-CODE-IS-HARNESS",
+        "decision": "The harness IS code + governance + state + OL. Excluding code produces artifacts that agents cannot fully act on. Three rounds of governance-focused prompt design missed the dashboard (a major shipped capability) because code was invisible to governance analysts. The 4-pillar artifact intent (governance + implementation + state + OL) replaces the governance-only framing.",
+        "status": "decided",
+        "decidedBy": "commander (session RnTOD5XJFi, based on S2-Echo dashboard investigation)",
+        "artifacts": [".scratch/session-RnTOD5XJFi/revised-artifact-intent.md", ".scratch/session-RnTOD5XJFi/dashboard-investigation-aar.md"],
+        "relatedBriefDecisions": [36]
+      },
+      {
+        "id": "D-SQLITE-OPTION-B",
+        "decision": "SQLite runtime (gitignored) + JSON archive (tracked) for cross-machine carry-forward. DB is the live concurrent-access-safe data store during sessions. At session end, export DB to JSON (committed to git). At session start, import JSON to DB if DB missing. JSON diffs work, code review works, history works. No binary blobs in git.",
+        "status": "approved",
+        "decidedBy": "commander (session RnTOD5XJFi, S3-Mike design approved)",
+        "artifacts": [".scratch/session-RnTOD5XJFi/sqlite-architecture-design.md"],
+        "relatedBriefDecisions": [22, 34, 50]
+      },
+      {
+        "id": "D-SQLITE-MULTI-DB",
+        "decision": "Multi-DB architecture: per-session DBs (.aitools/sessions/<id>.db) + harness DB (.aitools/harness.db). Per-session DBs eliminate write contention between concurrent sessions (no WAL serialization between sessions). Harness DB holds cross-session state (KPIs, session index, dashboard state). Commander directive: 'I hate that we have just one db. clearly we need more than one.'",
+        "status": "approved",
+        "decidedBy": "commander (session RnTOD5XJFi)",
+        "artifacts": [".scratch/session-RnTOD5XJFi/rfc-sqlite-harness-architecture.md", ".scratch/session-RnTOD5XJFi/sqlite-multi-db-design.md"],
+        "relatedBriefDecisions": [22, 34, 50]
+      },
+      {
+        "id": "D-SQLITE-EVERYTHING-IN-DB",
+        "decision": "Everything goes into the DB: running estimate, SITREPs, FINDINGs, channel state, session state. Not just running estimate. Commander directive: 'Everything goes into the DB -- not just running estimate.'",
+        "status": "approved",
+        "decidedBy": "commander (session RnTOD5XJFi)",
+        "relatedBriefDecisions": [22, 34, 50]
+      },
+      {
+        "id": "D-SQLITE-HOOKS",
+        "decision": "New hooks for SQLite integration: harness-db-sessionstart.sh (import JSON to DB if DB missing, register session) + harness-db-sessionend.sh (export DB to JSON, commit). All DB access from hooks via Python subprocess (python3 scripts/harness-db.py ...) because sqlite3 CLI unavailable on Windows Git Bash.",
+        "status": "approved",
+        "decidedBy": "commander (session RnTOD5XJFi)",
+        "relatedBriefDecisions": [1, 20, 22]
+      },
+      {
+        "id": "D-SQLITE-GENERATE",
+        "decision": "Generate harness-state.json from harness.db automatically at session end. The harness-state.json becomes a generated artifact (like deploy/ scripts), not a manually maintained file.",
+        "status": "approved",
+        "decidedBy": "commander (session RnTOD5XJFi)",
+        "relatedBriefDecisions": [36, 50]
+      },
+      {
+        "id": "D-SQLITE-MIGRATION-NOW",
+        "decision": "SQLite migration is the current Schwerpunkt. Migration order: Phase 1 (schema + harness-db.py helper), Phase 2 (migrate hooks), Phase 3 (migrate dashboard), Phase 4 (migrate deploy pipeline), Phase 5 (verify cross-platform). 14 files across 5 phases.",
+        "status": "approved",
+        "decidedBy": "commander (session RnTOD5XJFi)",
+        "relatedBriefDecisions": [22, 34, 50]
+      },
+      {
+        "id": "D-DASHBOARD-SELECTOR",
+        "decision": "Dashboard: one page with session selector/tabs instead of one dashboard per session. Commander preference for consolidated view.",
+        "status": "decided",
+        "decidedBy": "commander (session RnTOD5XJFi)",
+        "relatedBriefDecisions": [36]
       }
     ],
 
@@ -582,6 +753,63 @@
         "taxonomy": "Architectural",
         "evidence": "FP-2 analysis recommends embedding. This is a design judgment, not a verifiable fact.",
         "rationale": "Architecture decisions are choices, not testable claims."
+      },
+      {"id": "--- SESSION KHGOmVeNNM + RnTOD5XJFi ASSUMPTIONS (v9) ---"},
+      {
+        "id": "AS-v9-1",
+        "assumption": "SQLite multi-DB architecture (per-session + harness) will perform acceptably for dashboard reads across multiple attached DBs",
+        "status": "unverified",
+        "taxonomy": "Architectural",
+        "evidence": "SQLite ATTACH allows querying across DBs. Firefox profile DB pattern uses this approach. Dashboard would ATTACH all session DBs for consolidated view. Performance depends on number of sessions and DB sizes — untested at scale.",
+        "severity": "high"
+      },
+      {
+        "id": "AS-v9-2",
+        "assumption": "Python subprocess overhead (~100-200ms per call) is acceptable for SessionStart/SessionEnd hooks but not for Stop hooks",
+        "status": "unverified",
+        "taxonomy": "Environmental",
+        "evidence": "S3-Mike design: Stop hook uses file mtime (~1ms). SessionStart/End hooks can afford Python subprocess. No empirical measurement of actual Python subprocess time on this machine.",
+        "severity": "medium"
+      },
+      {
+        "id": "AS-v9-3",
+        "assumption": "JSON export from SQLite at session end will produce running-estimate.json that is backward compatible with existing consumers (dashboard, hooks, agents)",
+        "status": "unverified",
+        "taxonomy": "Architectural",
+        "evidence": "Design specifies schema that mirrors current JSON structure. But the mapping between relational tables and nested JSON arrays has not been tested.",
+        "severity": "high"
+      },
+      {
+        "id": "AS-v9-4",
+        "assumption": "The intent sentinel hook will effectively mitigate within-conversation context rot",
+        "status": "unverified",
+        "taxonomy": "Behavioral",
+        "evidence": "Designed based on context rot research (session KHGOmVeNNM). Two functions: resurface user intent after 3 turns, detect research-to-execution transition. Not deployed, not tested.",
+        "severity": "medium"
+      },
+      {
+        "id": "AS-v9-5",
+        "assumption": "CLAUDE.md reconciliation (159 lines from S3-Juliet) is close to final and needs only minor commander edits",
+        "status": "unverified",
+        "taxonomy": "Behavioral",
+        "evidence": "Three proposals (Golf/Hotel/Juliet) produced. Juliet reconciles best of both. Commander has not reviewed.",
+        "severity": "low"
+      },
+      {
+        "id": "AS-v9-6",
+        "assumption": "The dashboard one-page-with-selector design (D-DASHBOARD-SELECTOR) replaces the per-session-dashboard design from session 5HyCwPtSDH",
+        "status": "unverified",
+        "taxonomy": "Architectural",
+        "evidence": "Commander stated preference for consolidated view. Prior design (one dashboard per session) was from 5HyCwPtSDH. Needs explicit confirmation that the earlier design is superseded.",
+        "severity": "medium"
+      },
+      {
+        "id": "AS-v9-7",
+        "assumption": "After SQLite migration, the dashboard stale-data problem is resolved because DB writes are immediate and dashboard reads from DB",
+        "status": "unverified",
+        "taxonomy": "Architectural",
+        "evidence": "Design: dashboard reads DB (live mode) with mtime-based watcher. If agents write to DB via Python helper, mtime changes trigger regeneration. But the agent must still CALL the helper — if agents write JSON directly (old habit), the DB stays stale.",
+        "severity": "medium"
       }
     ]
   },
@@ -1002,6 +1230,65 @@
       "source": "M16 AAR",
       "detail": "M16 investigated dashboard governance and found that the 3-depth assumption (3 staff functions = 3 depth levels) was incorrectly verified. Staff functions (S1/S2/S3) are parallel roles, not hierarchical levels. Delegation depth (how many levels of subagent nesting) is a separate concept. Conflating them produced a false 'verified' status.",
       "governanceImplication": "D-MARK-OR-VERIFY distinction (verified-against-spec vs unverified-in-execution) prevents this class of false claim."
+    },
+    {
+      "id": "--- SESSION KHGOmVeNNM + RnTOD5XJFi OBSERVATIONS (v9) ---"
+    },
+    {
+      "id": "OBS-9",
+      "observation": "Context rot on user intent: during a long research phase (~100K tokens of file reads), the agent lost track of the commander's instruction and jumped from research to execution without permission. This is within-conversation context rot — distinct from the multi-agent context rot documented in the context rot framework proposal",
+      "source": "Session KHGOmVeNNM direct observation",
+      "detail": "The agent was instructed to investigate GitHub issues #53/#54. After reading multiple files and building understanding, the agent began editing hooks without presenting a plan or confirming scope. The commander's instruction was still in context but had been buried under ~100K tokens of Read results. The existing context rot framework (multi-agent techniques) does not address this single-agent failure mode.",
+      "governanceImplication": "Intent sentinel Stop hook designed to resurface user's last instruction. Recency weight principle established: most recent instruction carries most weight."
+    },
+    {
+      "id": "OBS-10",
+      "observation": "Behavioral framing gap: CC /resume preserves content but not operative weight. Content that governed a prior agent's behavior becomes inert data in a resumed conversation. Presence is not behavioral weight.",
+      "source": "Session RnTOD5XJFi direct observation",
+      "detail": "After /resume from KHGOmVeNNM, the resumed agent could recall specific details when prompted (from compressed summaries) but did NOT treat the content as operative directives. When asked 'are those files in your context?', the agent said YES — stating an assumption as fact without verifying. 596 of 872 JSONL lines were compressed — ALL file reads and subagent returns. The /aitool-resume skill addresses this: re-reads files from disk for behavioral framing regardless of /resume content.",
+      "governanceImplication": "D-AITOOL-RESUME skill. D-VERIFY-DONT-INFER principle. D-RECENCY-WEIGHT principle."
+    },
+    {
+      "id": "OBS-11",
+      "observation": "Dashboard miss: three rounds of prompt refinement (v1, v2, v3) by two different S2 agents completely omitted the dashboard — a major shipped capability with 3 scripts, 3 decisions, a SessionStart hook, and 70+ running estimate references. Root cause: code invisible to governance analysts",
+      "source": "S2-Echo dashboard investigation AAR",
+      "detail": "Prompt design was framed as 'improve the prompt' not 'equip the mission agent.' S2 agents read governance artifacts but never audited scripts/ or shared/hooks/ for shipped capabilities. The dashboard exists as code, not as a rule or skill. Contributing causes: harness-state.json skeleton has zero dashboard content, planning brief has only 1 dashboard mention, OL file frames dashboards as gap not capability, v2 AAR didn't mention dashboards. The irony: D-SILENT-DESCOPING-PREVENTION was born from the dashboard mission, and the dashboard itself was silently descoped from the mission prompts.",
+      "governanceImplication": "D-CODE-IS-HARNESS (4-pillar artifact intent). Capability audit step added to mission prompt design process. Shipped capabilities must be framed with behavioral instructions, not just informational descriptions."
+    },
+    {
+      "id": "OBS-12",
+      "observation": "Demonstrate-then-skip at occurrence 4 (approaching structural fix threshold). Instances: #1 session 77a33baf (pre-commit checklist then straight to execution), #2 RnTOD5XJFi (read files then jumped to editing hooks), #3 S3-Golf (told to read code, skipped), #4 dashboard in prompts but never tested",
+      "source": "S2-India meta-audit + S2-Echo dashboard investigation",
+      "detail": "The pattern recurs across sessions and agents. UCIs are proven ineffective (4 occurrences despite coaching). The intent sentinel hook addresses #2 (within-session). The 'understand harness first BEFORE mission objective' structural directive addresses #3 (mission agents). The capability audit step addresses #4 (prompt design). Each occurrence reveals a different vector of the same underlying failure.",
+      "governanceImplication": "OL-P6 (demonstrate-then-skip pattern) now at 4 instances. Structural fixes required at each vector."
+    },
+    {
+      "id": "OBS-13",
+      "observation": "Subagent cross-repo file access restriction: Glob/Grep denied outside current repo directory tree, but Read with explicit absolute paths works",
+      "source": "S2-Delta (mission-prompt-improvement) empirical failure + main agent verification",
+      "detail": "S2 agent attempted Glob on ~/repos/aitools-nobul-jose/sessions/marse/ — denied. Main agent confirmed files exist and are readable via explicit Read paths. Root cause: CC sandboxes subagent Glob/Grep to the current repo. Read tool has broader access when given explicit paths. This is OL-O12 in operational-learning.json.",
+      "governanceImplication": "Delegation prompts must provide explicit absolute paths for cross-repo files. Access Instructions section added to mission prompts."
+    },
+    {
+      "id": "OBS-14",
+      "observation": "SendMessage is unavailable — gated behind CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS (disabled by default). No mechanism exists for sending follow-up instructions to running or completed subagents.",
+      "source": "S2-Oscar investigation",
+      "detail": "Old resume param removed in CC 2.1.77. SendMessage introduced as replacement but gated behind experimental flag. Neither mechanism works in 2.1.81. 5 GitHub issues confirm (#35240, #37051, #38183, #34750, #38379). The Agent tool's own documentation tells the model to use SendMessage — misleading. All subagent delegation must be self-contained: all context and instructions at launch time.",
+      "governanceImplication": "Proposed tool-ops-claude-code.md item #25. Confirms D-INLINE-SYNTHESIS and self-contained delegation design. No workaround for true continuation."
+    },
+    {
+      "id": "OBS-15",
+      "observation": "The harness definition expanded: the harness IS code + governance + state + operational learning. Excluding any pillar produces artifacts that agents cannot fully act on.",
+      "source": "Commander (session RnTOD5XJFi), S2-Echo investigation, revised artifact intent",
+      "detail": "Commander: 'i never told you to put all of that stuff into context, nor did i tell anyone to consider all of the work product and ALL code as part of the definition of the ideal harness.' The dashboard system (3 scripts, 3 decisions, a SessionStart hook, 70+ references) was INVISIBLE to governance-focused analysis. This reframing changes what harness-state.json must contain and what mission agents must read.",
+      "governanceImplication": "D-CODE-IS-HARNESS. D-HARNESS-STATE (4-pillar artifact). Revised artifact intent document."
+    },
+    {
+      "id": "OBS-16",
+      "observation": "Running estimate stale by 2 days (v8.3 dated 2026-03-22, current date 2026-03-24). Dashboard shows stale data because running estimate not maintained across 2 sessions.",
+      "source": "Session RnTOD5XJFi direct observation",
+      "detail": "Session KHGOmVeNNM (2026-03-23) did not update the running estimate. Session RnTOD5XJFi (2026-03-24) discovered staleness when FRAGORD'd S2-Lima's dashboard verification. The dashboard mechanism works — the data pipeline is the failure point. This v9 update fixes the staleness.",
+      "governanceImplication": "SQLite migration (D-SQLITE-MIGRATION-NOW) addresses the structural problem. Running estimate maintenance must be a session duty, not an afterthought."
     }
   ],
 
@@ -1131,10 +1418,109 @@
       "summary": "Local HTTP server via Python stdlib (http.server) is sufficient for dynamic dashboards. No framework, no npm, no external dependencies.",
       "status": "verified",
       "action": "Pattern documented in M24 AAR. Should be added to reference/cross-platform-detail.md alongside CORS constraint."
+    },
+    {
+      "id": "--- SESSION KHGOmVeNNM + RnTOD5XJFi FINDINGS (v9) ---"
+    },
+    {
+      "id": "F19",
+      "type": "staleness",
+      "summary": "Running estimate stale by 2 days (v8.3 dated 2026-03-22, session dates 2026-03-23 and 2026-03-24). Dashboard shows stale data as a direct consequence.",
+      "status": "RESOLVED by this v9 update",
+      "action": "This v9 update brings the running estimate current. SQLite migration will address the structural problem (DB writes are immediate, dashboard reads from DB)."
+    },
+    {
+      "id": "F20",
+      "type": "design-gap",
+      "summary": "harness-state.json v1 skeleton is missing 2 of 4 pillars (implementation and operational learning). Written before the 4-pillar expansion.",
+      "status": "open",
+      "action": "Agents reading the skeleton as Phase 7 input would inherit governance-only structure. Must be treated as starting point, not template. Will be regenerated from SQLite DB at session end once migration completes."
+    },
+    {
+      "id": "F21",
+      "type": "empirical-finding",
+      "summary": "Script count is 63 (not 59 as previously assumed), CLAUDE.md is 176 lines (not 200), 11 hooks confirmed. Prior prompt versions used incorrect counts.",
+      "status": "verified",
+      "action": "S2-India meta-audit. Corrected in v5 prompts. Illustrates verify-don't-infer principle."
+    },
+    {
+      "id": "F22",
+      "type": "empirical-finding",
+      "summary": "Worktree .scratch/ is empty — gitignored files do NOT appear in git worktrees. Untracked files also absent. Eliminates worktrees as isolation strategy for missions needing scratch files.",
+      "status": "verified",
+      "action": "S2-Kilo empirical investigation. D-NO-WORKTREES decision. Competing missions run in main repo with distinct output files."
+    },
+    {
+      "id": "F23",
+      "type": "dependency-finding",
+      "summary": "build-deploy.sh is an indirect migration dependency (via content embedding in shared/skills/) — not a direct code dependency on running estimate paths or dashboard logic.",
+      "status": "verified",
+      "action": "S3-November FRAGORD v3 investigation A. Updating skills and rebuilding propagates changes automatically. Not a blocking dependency for SQLite migration."
+    },
+    {
+      "id": "F24",
+      "type": "tool-gap",
+      "summary": "SendMessage unavailable in CC 2.1.81. Gated behind CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS. Old resume param removed in 2.1.77. No agent continuation mechanism available.",
+      "status": "verified-upstream-bug",
+      "action": "S2-Oscar investigation. 5 GitHub issues confirm. Proposed tool-ops-claude-code.md item #25. All delegation must be self-contained."
+    },
+    {
+      "id": "F25",
+      "type": "context-rot",
+      "summary": "Within-conversation context rot: ~100K tokens of file reads buried commander's instruction. Agent jumped from research to execution without permission.",
+      "status": "mitigation-designed",
+      "action": "Intent sentinel Stop hook designed (session KHGOmVeNNM), not deployed. Recency weight principle established. /aitool-resume skill addresses cross-session variant."
+    },
+    {
+      "id": "F26",
+      "type": "capability-blindness",
+      "summary": "Three rounds of mission prompt design missed the dashboard — a fully shipped capability — because prompt design was framed as structural improvement, not capability equipping.",
+      "status": "resolved-in-v4-prompts",
+      "action": "S2-Echo investigation. Dashboard integration section added to v4 prompts. Capability audit step added to prompt design process. D-CODE-IS-HARNESS established."
     }
   ],
 
   "openThreads": [
+    {
+      "thread": "SQLite migration",
+      "status": "NOW — Schwerpunkt",
+      "description": "D-SQLITE-MIGRATION-NOW. Multi-DB architecture: per-session DBs + harness DB. Option B (SQLite runtime gitignored + JSON archive tracked). 14 files across 5 phases. Phase 1: schema + harness-db.py helper. Phase 2: migrate hooks. Phase 3: migrate dashboard. Phase 4: migrate deploy pipeline. Phase 5: verify cross-platform. RFC awaits 5 open questions from commander. Python sqlite3 only."
+    },
+    {
+      "thread": "Three competing harness-state missions",
+      "status": "READY when SQLite architecture ships",
+      "description": "Three agents (Alpha/Bravo/Charlie as Architect/Cartographer/Chronicler) produce competing harness-state.json versions. v5 prompts (no worktrees — D-NO-WORKTREES, 35 prompt lessons incorporated). Blocked on: SQLite migration providing the infrastructure these agents would use. Dashboard: one page with session selector (D-DASHBOARD-SELECTOR)."
+    },
+    {
+      "thread": "CLAUDE.md revision",
+      "status": "3 proposals produced, awaiting commander review",
+      "description": "S3-Golf (v1, governance-only, abstract), S3-Hotel (v2, grounded in all code, worktree), S3-Juliet (reconciliation, 159 lines, best of both). Commander has not reviewed. Protected file — needs approval."
+    },
+    {
+      "thread": "Issues #53/#54 hook changes",
+      "status": "written-verified-not-committed",
+      "description": "harvest-session.sh + scratch-init.sh modified for issues #53 (handoff lifecycle) and #54 (harvest silent skip). Session ID in filenames, auto-create harvesting/, handoff routing, session_id-based scratch dirs, handoff discovery. Verified by subagent (18 criteria PASS). Not yet committed."
+    },
+    {
+      "thread": "Intent sentinel hook",
+      "status": "designed-not-deployed",
+      "description": "D-INTENT-SENTINEL. Stop hook that resurfaces user's last instruction after 3 agent turns without user input, detects research-to-execution phase transition. In scratch, not in shared/hooks/. Needs deploy decision and registration in setup-user-hooks."
+    },
+    {
+      "thread": "/aitool-resume RFC",
+      "status": "v7 final, post-double-audit",
+      "description": "D-AITOOL-RESUME. Cross-platform session context restoration skill. Two modes: post-resume enhancement and full replacement. Quick mode for simple sessions. 26 audit findings + 6 ideal-state findings addressed. Ready for implementation."
+    },
+    {
+      "thread": "GitHub issue for Anthropic (/resume behavioral framing)",
+      "status": "NOT FILED",
+      "description": "CC /resume preserves content but loses operative weight. 596 of 872 JSONL lines compressed. Should file a GitHub issue documenting the behavioral framing gap as a feature request."
+    },
+    {
+      "thread": "Dashboard verification",
+      "status": "FRAGORD'd — stale data fixed by v9 update",
+      "description": "S2-Lima was FRAGORD'd (killed) because running estimate was stale. Dashboard mechanism works (PID 4685). This v9 estimate update fixes the data staleness. Dashboard should now show current state."
+    },
     {
       "thread": "Glossary updates -- 8+ new terms identified",
       "status": "filing-briefs-ready",
@@ -1158,12 +1544,12 @@
     {
       "thread": "De-interpolation classification",
       "status": "resolved-by-M22",
-      "description": "M22 VERIFIED: De-interpolation is INTENTIONAL (setup-user-claude.sh:166-173). The reported issue is a BUG in the reverse substitution (incomplete token list or edge case), not a spec deviation. The spec (managed-file-deployment.md) has a documentation gap -- describes adopt flow but not the reverse-substitution mechanics."
+      "description": "M22 VERIFIED: De-interpolation is INTENTIONAL (setup-user-claude.sh:166-173). The reported issue is a BUG in the reverse substitution (incomplete token list or edge case), not a spec deviation."
     },
     {
       "thread": "Dotprofile session commit",
       "status": "ready",
-      "description": "5 untracked session files (33.1 MB) need to be committed. Commander approval needed."
+      "description": "5 untracked session files (33.1 MB) need to be committed. Commander approval needed. D-v8-3 (dotprofile pull) was PENDING from session 77a33baf."
     },
     {
       "thread": "Dashboard ship mission",
@@ -1177,13 +1563,18 @@
     },
     {
       "thread": "Channel infrastructure",
-      "status": "NOT STARTED -- accepting session priority",
-      "description": "Decisions #22-24 never implemented. Zero SITREPs, zero FINDINGs this session. Prerequisite for per-mission dashboards (PS-1). Assigned to accepting session Schwerpunkt."
+      "status": "SUPERSEDED by SQLite migration",
+      "description": "Decisions #22-24 (SITREPs, FINDINGs, mission-level state). Previously assigned as Schwerpunkt. Now part of the SQLite migration — SITREPs and FINDINGs become tables in per-session DBs instead of channel directory files."
     },
     {
-      "thread": "Uncommitted code changes",
+      "thread": "Uncommitted code changes (sessions 5HyCwPtSDH + KHGOmVeNNM)",
       "status": "needs-commander-decision",
-      "description": "Modified: .gitignore, scripts/aitools, scripts/aitools.ps1, scripts/generate-dashboard.py, scripts/setup-user-hooks.sh/.ps1, deploy/setup-user-skills.sh/.ps1, harvesting/harvest-manifest.json. New: scripts/aitools-dashboard.sh/.ps1, shared/hooks/dashboard-serve.sh, shared/hooks/estimate-refresh-stop.sh. Plus 36 untracked harvesting/ files."
+      "description": "From 5HyCwPtSDH: .gitignore, scripts/aitools, scripts/aitools.ps1, scripts/generate-dashboard.py, scripts/setup-user-hooks.sh/.ps1, deploy/setup-user-skills.sh/.ps1, harvesting/harvest-manifest.json, scripts/aitools-dashboard.sh/.ps1, shared/hooks/dashboard-serve.sh, shared/hooks/estimate-refresh-stop.sh, 36+ untracked harvesting/ files. From KHGOmVeNNM: shared/hooks/harvest-session.sh, shared/hooks/scratch-init.sh, .aitools/channel/handoffs/."
+    },
+    {
+      "thread": "tool-ops-claude-code.md updates",
+      "status": "ready",
+      "description": "Item #24: subagent cross-repo file access restriction (OL-O12). Item #25: SendMessage unavailable, gated behind Agent Teams flag. Both ready to write."
     }
   ],
 
@@ -1216,68 +1607,117 @@
     {"id": "D25", "type": "s3", "mission": "M24: Dynamic dashboard -- --serve mode, CORS workaround, silent descoping observation", "status": "complete", "agentType": "subagent"},
     {"id": "D26", "type": "s3", "mission": "M25: Dashboard lifecycle hooks -- dashboard-serve.sh + estimate-refresh-stop.sh", "status": "complete", "agentType": "subagent"},
     {"id": "D27", "type": "s3", "mission": "M26: CLI-native dashboard -- aitools dashboard command, dual-script, hook simplification", "status": "complete", "agentType": "subagent"},
-    {"id": "D28", "type": "s3", "mission": "M27: Final state capture -- v7 estimate + pre-handoff checklist", "status": "complete", "agentType": "inline"}
+    {"id": "D28", "type": "s3", "mission": "M27: Final state capture -- v7 estimate + pre-handoff checklist", "status": "complete", "agentType": "inline"},
+
+    {"id": "--- SESSION 77a33baf DELEGATIONS ---"},
+    {"id": "D29", "type": "s3", "mission": "Lagebeurteilung on Windows: observation collection, 3 cross-platform failure clusters identified", "status": "complete", "agentType": "inline", "session": "77a33baf"},
+    {"id": "D30", "type": "s2", "mission": "Hook portability audit: all 11 hooks audited, all PORTABLE after fix", "status": "complete", "agentType": "subagent", "session": "77a33baf"},
+    {"id": "D31", "type": "s3", "mission": "Hook stat -f fix: 3 locations, uname-s platform dispatch, tested on Windows Git Bash", "status": "complete", "agentType": "inline", "session": "77a33baf"},
+    {"id": "D32", "type": "s3", "mission": "Prevention: cross-platform.md hook portability section + check-pre-commit.sh step 17", "status": "complete", "agentType": "inline", "session": "77a33baf"},
+    {"id": "D33", "type": "s3", "mission": "Design principle 'Process discipline as work product' written to CLAUDE.md", "status": "complete", "agentType": "inline", "session": "77a33baf"},
+    {"id": "D34", "type": "s3", "mission": "OL estimate created and updated v1 through v3", "status": "complete", "agentType": "inline", "session": "77a33baf"},
+
+    {"id": "--- SESSION KHGOmVeNNM DELEGATIONS ---"},
+    {"id": "D35", "type": "s2", "mission": "Context rot research: within-conversation intent loss investigation", "status": "complete", "agentType": "subagent", "session": "KHGOmVeNNM"},
+    {"id": "D36", "type": "s3", "mission": "Issues #53/#54 hook changes: harvest-session.sh + scratch-init.sh", "status": "complete", "agentType": "inline", "session": "KHGOmVeNNM"},
+    {"id": "D37", "type": "s2", "mission": "Hook verification: 18 criteria tested, 3 amendments applied", "status": "complete", "agentType": "subagent", "session": "KHGOmVeNNM"},
+    {"id": "D38", "type": "s3", "mission": "Intent sentinel Stop hook design", "status": "complete", "agentType": "inline", "session": "KHGOmVeNNM"},
+
+    {"id": "--- SESSION RnTOD5XJFi DELEGATIONS ---"},
+    {"id": "D39", "type": "s2", "mission": "S2-Delta: v3 mission prompts -- 16 commander patterns from marse, access instructions, cross-repo voice", "status": "complete", "agentType": "subagent", "session": "RnTOD5XJFi"},
+    {"id": "D40", "type": "s2", "mission": "S2-Echo: Dashboard investigation -- root cause: code invisible to governance analysts", "status": "complete", "agentType": "subagent", "session": "RnTOD5XJFi"},
+    {"id": "D41", "type": "s2", "mission": "S2-Foxtrot: v4 prompts + revised 4-pillar artifact intent", "status": "complete", "agentType": "subagent", "session": "RnTOD5XJFi"},
+    {"id": "D42", "type": "s3", "mission": "S3-Golf: CLAUDE.md v1 (abstract, governance-only, did not read code)", "status": "complete", "agentType": "subagent", "session": "RnTOD5XJFi"},
+    {"id": "D43", "type": "s3", "mission": "S3-Hotel: CLAUDE.md v2 (grounded, read all code, worktree)", "status": "complete", "agentType": "subagent", "session": "RnTOD5XJFi"},
+    {"id": "D44", "type": "s3", "mission": "S3-Juliet: CLAUDE.md reconciliation (159 lines, best of Golf + Hotel)", "status": "complete", "agentType": "subagent", "session": "RnTOD5XJFi"},
+    {"id": "D45", "type": "s2", "mission": "S2-India: Meta-audit -- 10 assumption tests (7 PASS, 3 FAIL), 7 failure catalog, 5 ambiguity resolutions", "status": "complete", "agentType": "subagent", "session": "RnTOD5XJFi"},
+    {"id": "D46", "type": "s2", "mission": "S2-Kilo: Worktree investigation -- empirically disproved gitignored files in worktrees, 35 prompt lessons, v5 prompts", "status": "complete", "agentType": "subagent", "session": "RnTOD5XJFi"},
+    {"id": "D47", "type": "s2", "mission": "S2-Lima: Dashboard verification -- FRAGORD'd (killed), stale data", "status": "killed", "agentType": "subagent", "session": "RnTOD5XJFi"},
+    {"id": "D48", "type": "s3", "mission": "S3-Mike: SQLite architecture design -- Option B approved (SQLite runtime + JSON archive)", "status": "complete", "agentType": "subagent", "session": "RnTOD5XJFi"},
+    {"id": "D49", "type": "s3", "mission": "S3-November: FRAGORD v3 -- 3 investigations (dependency audit, multi-DB, schema/naming), SQLite RFC, 7 deliverables", "status": "complete", "agentType": "subagent", "session": "RnTOD5XJFi"},
+    {"id": "D50", "type": "s2", "mission": "S2-Oscar: SendMessage investigation -- unavailable, gated behind Agent Teams", "status": "complete", "agentType": "subagent", "session": "RnTOD5XJFi"},
+    {"id": "D51", "type": "s3", "mission": "S3-Papa: Running estimate v9 update -- this operation", "status": "complete", "agentType": "subagent", "session": "RnTOD5XJFi"}
   ],
 
   "conclusions": {
-    "assessment": "Session 5HyCwPtSDH is COMPLETE with 28 delegations (D1-D28). All planned work delivered. Dashboard shipped in three phases beyond MVP: dynamic --serve mode (M24), lifecycle hooks (M25), CLI-native command (M26). The .gitignore fix (rank 1 blocker) is APPLIED AND VERIFIED. CORS constraint EMPIRICALLY CONFIRMED and worked around via local HTTP server. 16 decisions captured (13 from v6, 3 new in v7). 8 observations from operational learning documented. 5 plan-scale items defined for accepting session. M12 assumption verification: 12 verified, 3 partially verified, 3 falsified, 1 untestable, 6 design opinions. This v7 is the FINAL estimate for the session.",
+    "assessment": "v9 state: 51 delegations across 4 sessions (5HyCwPtSDH D1-D28, 77a33baf D29-D34, KHGOmVeNNM D35-D38, RnTOD5XJFi D39-D51). Schwerpunkt shifted to SQLite migration. Key artifacts produced: SQLite RFC (multi-DB, Option B approved), /aitool-resume RFC v7, 3 CLAUDE.md proposals (Golf/Hotel/Juliet), harness-state.json 4-pillar intent, intent sentinel hook design. Major discoveries: context rot on user intent, behavioral framing gap in /resume, harness IS code+governance+state+OL, worktrees lack gitignored files (empirically verified), SendMessage gated behind Agent Teams. Issues #53/#54 hook changes written and verified but not committed. Running estimate now current (this v9 update). Dashboard stale-data problem fixed by this update.",
     "recommendations": [
       {
-        "recommendation": "Execute /handoff",
-        "rationale": "All planned work complete. Final state captured in v7. Pre-handoff checklist produced.",
+        "recommendation": "Begin SQLite migration Phase 1 (schema + harness-db.py helper)",
+        "rationale": "D-SQLITE-MIGRATION-NOW. This is the Schwerpunkt. Phase 1 unblocks all subsequent phases. Python sqlite3 is stdlib — no new dependencies.",
         "urgency": "immediate"
       },
       {
-        "recommendation": "Commit all code changes before /handoff",
-        "rationale": "Modified and new files in scripts/, shared/hooks/, deploy/, .gitignore. Commander decision needed on commit scope.",
+        "recommendation": "Commit issues #53/#54 hook changes",
+        "rationale": "harvest-session.sh + scratch-init.sh changes written and verified (18 criteria PASS) across sessions KHGOmVeNNM + RnTOD5XJFi. Sitting in working tree uncommitted.",
         "urgency": "immediate"
+      },
+      {
+        "recommendation": "Commander review of CLAUDE.md proposals (Golf/Hotel/Juliet)",
+        "rationale": "Three proposals produced, reconciled at 159 lines by S3-Juliet. Protected file — needs commander approval.",
+        "urgency": "next-session"
+      },
+      {
+        "recommendation": "Deploy intent sentinel hook",
+        "rationale": "Designed in session KHGOmVeNNM. Addresses within-conversation context rot (4 occurrences of demonstrate-then-skip). Copy to shared/hooks/, register in setup-user-hooks.",
+        "urgency": "next-session"
+      },
+      {
+        "recommendation": "File GitHub issue for CC /resume behavioral framing gap",
+        "rationale": "596 of 872 JSONL lines compressed. Operative weight lost. /aitool-resume is our workaround but upstream should know.",
+        "urgency": "next-session"
       },
       {
         "recommendation": "File the 2 incidents (orchestration gap, data loss)",
         "rationale": "Both are real deficiencies that surfacing duty requires filing.",
-        "urgency": "immediate-or-accepting-session"
+        "urgency": "next-session"
       },
       {
         "recommendation": "File 8+ glossary terms",
         "rationale": "8+ ungoverned terms identified. Filing briefs ready in s2b.",
-        "urgency": "accepting-session"
+        "urgency": "next-session"
       },
       {
-        "recommendation": "Build channel infrastructure (PS-3) as first priority in accepting session",
-        "rationale": "Prerequisite for per-mission dashboards (PS-1). Zero implementation this session.",
-        "urgency": "accepting-session-priority-1"
-      },
-      {
-        "recommendation": "Amend planning brief with session decisions",
-        "rationale": "M19 B2 provides full schema mapping. 16 decisions ready for amendment.",
-        "urgency": "accepting-session"
+        "recommendation": "Update tool-ops-claude-code.md with items #24 and #25",
+        "rationale": "Subagent cross-repo access restriction (OL-O12) and SendMessage unavailable. Both verified.",
+        "urgency": "next-session"
       }
     ],
     "risksAndOpportunities": [
       {
         "type": "risk",
-        "description": "This authoritative estimate is in .scratch/ -- still ephemeral. The .gitignore fix enables .aitools/ tracked paths but the estimate has not been moved there.",
-        "mitigation": "Copy to .aitools/channel/ before session end, or ensure harvest captures it. The /handoff skill should reference this file."
+        "description": "Uncommitted code changes across 2 sessions (5HyCwPtSDH + KHGOmVeNNM) could be lost. harvest-session.sh, scratch-init.sh, and other files sitting in working tree.",
+        "mitigation": "Commit issues #53/#54 hook changes immediately. Review scope of 5HyCwPtSDH uncommitted changes."
       },
       {
         "type": "risk",
-        "description": "Uncommitted code changes (aitools-dashboard.sh/.ps1, hooks, generate-dashboard.py modifications) could be lost if not committed before session end.",
-        "mitigation": "Commander should commit before /handoff. Pre-handoff checklist item."
+        "description": "SQLite migration is a cross-cutting change affecting 14 files across hooks, scripts, dashboard, and deploy. Risk of introducing regressions during migration.",
+        "mitigation": "Phased migration with verification between phases. JSON fallback maintained until full verification. Cross-platform testing at Phase 5."
+      },
+      {
+        "type": "risk",
+        "description": "JSON export from SQLite (session end) must be backward compatible with all existing consumers. Untested.",
+        "mitigation": "AS-v9-3 tracks this. Phase 1 (harness-db.py) includes export function. Test against existing dashboard and hooks before proceeding to Phase 2."
       },
       {
         "type": "opportunity",
-        "description": "The .gitignore fix unblocks 8+ downstream proposals. The dashboard infrastructure (generate-dashboard.py + aitools dashboard + hooks) provides the foundation for per-mission dashboards (PS-1) and concurrent session dashboards (PS-2).",
+        "description": "SQLite multi-DB architecture eliminates the concurrent session write contention that has blocked D-PER-SESSION-ESTIMATES since session 5HyCwPtSDH. Channel infrastructure (PS-3) becomes tables in session DB instead of directory files.",
         "mitigation": null
       },
       {
         "type": "opportunity",
-        "description": "8 observations from operational learning provide governance improvements ready for the accepting session to codify.",
+        "description": "/aitool-resume RFC v7 is ready for implementation. Addresses the behavioral framing gap that afflicts every /resume session. Cross-platform by design.",
+        "mitigation": null
+      },
+      {
+        "type": "opportunity",
+        "description": "35 prompt-writing lessons cataloged across v1-v5. Three CLAUDE.md proposals ready for commander review. Harness-state.json 4-pillar intent defined. Significant intellectual work product ready for conversion to artifacts.",
         "mitigation": null
       },
       {
         "type": "risk",
-        "description": "1 assumption (UA-5: S1 skill invocation) is truly untestable without execution. 3 assumptions (UA-1, UA-9, UA-17) are partially verified. Not blocking but represent known unknowns.",
-        "mitigation": "UA-1 (reconciliation algorithm) is highest-priority: needs implementation + test harness."
+        "description": "Intent sentinel hook designed but not deployed. 4 occurrences of demonstrate-then-skip and counting. Each occurrence risks unauthorized execution or context rot.",
+        "mitigation": "Deploy intent sentinel hook. D-INTENT-SENTINEL is designed and in scratch."
       }
     ]
   },
