@@ -3,6 +3,18 @@ name: planning
 description: "Session and plan strategy for Claude Code sessions. Use when starting a planning session, deciding session scope, coordinating subagents, or managing context budgets. Covers batch sizing, session flow, subagent parallelization, and user collaboration patterns."
 ---
 
+## Intent
+
+**Purpose**: Equip the agent with session and plan strategy --
+context budget management, session flow, batch sizing, subagent
+coordination, and user collaboration patterns. **Scope**: Session
+planning conventions and execution strategy only. NOT plan file
+creation or content (that is the agent's deliverable). NOT plan
+re-evaluation (see `/optimize-plan`). NOT session handoff (see
+`/handoff`). NOT session resume (see `/aitool-resume`). **Audience**:
+Any agent starting a planning session, deciding session scope,
+coordinating subagents, or managing context budgets.
+
 ## Session Working Convention
 
 ### Context budget

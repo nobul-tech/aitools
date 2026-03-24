@@ -12,6 +12,49 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.65.0 -- SQLite foundation, mission control, dashboard fixes, hook improvements (2026-03-24)
+
+### New capabilities
+
+| # | Change |
+|---|--------|
+| 1 | **SQLite harness database foundation** — `scripts/harness-db.py` (1001-line Python CLI) with subcommands: init, session start/end, mission start/end, log, export, status. Canonical schema at `reference/harness-db-schema.sql` covering session DBs (per-session, WAL mode) and harness DB (cross-session). Option B architecture: SQLite runtime (gitignored) + JSON archive (tracked in git). |
+| 2 | **Session lifecycle hooks** — `harness-db-sessionstart.sh` registers sessions in SQLite DB. `harness-db-sessionend.sh` exports DB to `running-estimate.json` for git carry-forward. |
+| 3 | **`/mission-control` skill** — new user-level skill codifying 7 ad-hoc monitoring patterns into a structured 4-layer monitoring stack: infrastructure health, activity monitoring, work product inventory, deliverable validation. Pre-flight verification protocol, mission health thresholds, FRAGORD criteria. |
+| 4 | **Multi-mission dashboard** — `generate-dashboard.py --multi-dir` scans directory for multiple running estimates, renders summary table with per-mission health. Both static and live (`--serve`) modes. |
+| 5 | **Dashboard schema validation** — `generate-dashboard.py` warns on stderr when running estimate is missing expected fields. Silent zeros → visible warnings. Backward compatible. |
+| 6 | **Dashboard `--health-check`** — `aitools-dashboard.sh --health-check` reports per-instance liveness + data quality with field counts. |
+| 7 | **Multi-instance dashboard ports** — port-keyed PID registry (`~/.aitools/dashboard-pids/<port>.pid`) replacing single PID file. `--stop --port N` or `--stop --all`. `--status` shows all instances. |
+| 8 | **Running estimate template** — `.aitools/templates/mission-running-estimate.json` with ALL dashboard-expected fields pre-populated. Missions copy to prevent silent-zero dashboards. |
+
+### Hook improvements (issues #53, #54)
+
+| # | Change |
+|---|--------|
+| 9 | **harvest-session.sh** — session ID in harvested filenames (`YYYY-MM-DD_session-XXXX_filename`), auto-creates `harvesting/` + manifest on first harvest, routes `handoff*` files to `.aitools/channel/handoffs/`, reports harvest results to stderr |
+| 10 | **scratch-init.sh** — uses CC `session_id` for deterministic dir names (fixes `.current-session` race condition for concurrent sessions), discovers unconsumed handoffs at `.aitools/channel/handoffs/` on session start |
+| 11 | **`.aitools/channel/handoffs/`** — new tracked directory for session handoff documents |
+
+### Operational knowledge
+
+| # | Change |
+|---|--------|
+| 12 | **tool-ops-claude-code.md #24** — subagent cross-repo file access restriction: Glob/Grep denied outside CWD repo, Read with explicit paths works. Documented workaround for delegation prompts. |
+| 13 | **tool-ops-claude-code.md #25** — SendMessage for agent continuation unavailable: gated behind Agent Teams flag, old `resume` param removed in 2.1.77. Agent Continuation Gap section with 3 upstream issues linked. |
+| 14 | **operational-learning.json OL-O12** — subagent file access restriction observation with evidence and workaround |
+| 15 | **planning/SKILL.md** — subagent file access restriction section added alongside existing subagent context gap |
+
+### Session state
+
+| # | Change |
+|---|--------|
+| 16 | **running-estimate.json v9** — updated from v8.3 with full session RnTOD5XJFi state: 16 new decisions, 28 completedWork, 13 facts, 7 assumptions, 8 observations, 8 findings, 12 mission delegations. Audited by S2-Quebec (5-POV parallel audit, PASS with zero must-fix items). |
+| 17 | **harness-state.json** — new artifact (exploration): the harness in document form. Initial skeleton with design principles, operative patterns, frameworks, decisions, gaps, assumptions. |
+
+(tested: macOS)
+
+---
+
 ## v0.64.1 -- Remove auto-deletion from session hooks (2026-03-22)
 
 ### Fixes
