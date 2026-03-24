@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scratch-init.sh — Claude Code SessionStart hook
-# Creates a unique session scratch directory, logs stale dirs, and
-# discovers unconsumed handoffs.
+# Creates a unique session scratch directory, logs stale dirs, discovers
+# unconsumed handoffs, and registers the session in the harness SQLite DB.
 #
 # Design decisions:
 #   - Silent exit on errors (hook must never break Claude Code)
@@ -9,6 +9,8 @@
 #   - Writes session dir path to .scratch/.current-session for agents
 #   - Uses session_id from CC hook input for deterministic dir names (R1, #53)
 #   - Discovers handoffs at .aitools/channel/handoffs/ (R3, #53)
+#   - Registers session in harness SQLite DB if harness-db.py is available
+#   - SQLite integration is OBSERVE mode (log-only, never blocks)
 
 set -euo pipefail
 
@@ -79,6 +81,36 @@ if [ -d "$HANDOFFS_DIR" ]; then
     if [ "$handoff_count" -gt 0 ]; then
         printf 'Handoff available: %s (%d total in %s)\n' \
             "$(basename "$latest_handoff")" "$handoff_count" "$HANDOFFS_DIR"
+    fi
+fi
+
+# --- Register session in harness SQLite DB (OBSERVE mode) ---
+# This is additive — if harness-db.py is missing or fails, session
+# continues normally. SQLite integration never blocks SessionStart.
+if [ -n "$SESSION_ID" ]; then
+    PYTHON=""
+    if command -v python3 > /dev/null 2>&1; then
+        PYTHON="python3"
+    elif command -v python > /dev/null 2>&1; then
+        PYTHON="python"
+    fi
+
+    if [ -n "$PYTHON" ]; then
+        # Look for harness-db.py in multiple locations
+        HELPER=""
+        if [ -f "$PROJECT_ROOT/scripts/harness-db.py" ]; then
+            HELPER="$PROJECT_ROOT/scripts/harness-db.py"
+        elif [ -f "$HOME/repos/aitools/scripts/harness-db.py" ]; then
+            HELPER="$HOME/repos/aitools/scripts/harness-db.py"
+        fi
+
+        if [ -n "$HELPER" ] && "$PYTHON" -c "import sqlite3" 2>/dev/null; then
+            # Initialize harness databases (creates if missing)
+            "$PYTHON" "$HELPER" init 2>/dev/null || true
+            # Register this session
+            "$PYTHON" "$HELPER" session start --id "$SESSION_ID" 2>/dev/null || true
+            printf 'Harness DB: session %s registered\n' "$SESSION_ID"
+        fi
     fi
 fi
 

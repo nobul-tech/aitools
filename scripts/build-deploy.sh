@@ -56,7 +56,7 @@ if [ "$_skill_count" -eq 0 ]; then
     exit 1
 fi
 blog "Found $_skill_count skill(s) in shared/skills/"
-for _hook_file in session-archive.sh standing-order-guard.sh sh-file-fixup.sh surfacing-duty-stop.sh; do
+for _hook_file in session-archive.sh standing-order-guard.sh sh-file-fixup.sh surfacing-duty-stop.sh scratch-init.sh harvest-session.sh glossary-skill-guard.sh block-claude-code-guide.sh tool-ops-session-audit.sh dashboard-serve.sh estimate-refresh-stop.sh harness-db-sessionstart.sh harness-db-sessionend.sh; do
     if [ ! -f "$SHARED_DIR/hooks/$_hook_file" ]; then
         blog_error "Required hook file not found: $SHARED_DIR/hooks/$_hook_file"
         exit 1
@@ -69,6 +69,15 @@ HOOK_SESSION_ARCHIVE=$(cat "$SHARED_DIR/hooks/session-archive.sh")
 HOOK_STANDING_ORDER_GUARD=$(cat "$SHARED_DIR/hooks/standing-order-guard.sh")
 HOOK_SH_FILE_FIXUP=$(cat "$SHARED_DIR/hooks/sh-file-fixup.sh")
 HOOK_SURFACING_DUTY=$(cat "$SHARED_DIR/hooks/surfacing-duty-stop.sh")
+HOOK_SCRATCH_INIT=$(cat "$SHARED_DIR/hooks/scratch-init.sh")
+HOOK_HARVEST_SESSION=$(cat "$SHARED_DIR/hooks/harvest-session.sh")
+HOOK_GLOSSARY_GUARD=$(cat "$SHARED_DIR/hooks/glossary-skill-guard.sh")
+HOOK_BLOCK_GUIDE=$(cat "$SHARED_DIR/hooks/block-claude-code-guide.sh")
+HOOK_TOOL_OPS_AUDIT=$(cat "$SHARED_DIR/hooks/tool-ops-session-audit.sh")
+HOOK_DASHBOARD_SERVE=$(cat "$SHARED_DIR/hooks/dashboard-serve.sh")
+HOOK_ESTIMATE_REFRESH=$(cat "$SHARED_DIR/hooks/estimate-refresh-stop.sh")
+HOOK_HARNESS_DB_START=$(cat "$SHARED_DIR/hooks/harness-db-sessionstart.sh")
+HOOK_HARNESS_DB_END=$(cat "$SHARED_DIR/hooks/harness-db-sessionend.sh")
 
 # Read shared library content for inlining into deploy scripts
 AITOOLS_LIB_BASH=$(cat "$SCRIPTS_DIR/aitools-lib.sh")
@@ -1172,27 +1181,45 @@ BLOCK
     # REPLACE: hook deployment (deploy embeds scripts via heredoc instead of cp from repo)
     cat <<'BLOCK'
 # --- Deploy embedded hook scripts to ~/.claude/hooks/ ---
-HOOK_DEST="$HOME/.claude/hooks/session-archive.sh"
-GUARD_DEST="$HOME/.claude/hooks/standing-order-guard.sh"
-mkdir -p "$HOME/.claude/hooks"
+HOOKS_DIR="$HOME/.claude/hooks"
+mkdir -p "$HOOKS_DIR"
 
 if [ "$DRY_RUN" = "true" ]; then
-    log "[DRY RUN] Would deploy hooks to ~/.claude/hooks/"
+    log "[DRY RUN] Would deploy hooks to $HOOKS_DIR"
 else
 BLOCK
-    echo 'cat > "$HOOK_DEST" <<'"'"'__EMBEDDED_HOOK__'"'"
-    echo "$HOOK_SESSION_ARCHIVE"
-    echo '__EMBEDDED_HOOK__'
-    echo 'cat > "$GUARD_DEST" <<'"'"'__EMBEDDED_GUARD__'"'"
-    echo "$HOOK_STANDING_ORDER_GUARD"
-    echo '__EMBEDDED_GUARD__'
+    # Embed each hook script via heredoc with unique delimiters
+    _embed_hook() {
+        local varname="$1" filename="$2" delimiter="$3"
+        echo "cat > \"\$HOOKS_DIR/$filename\" <<'${delimiter}'"
+        eval 'echo "$'"$varname"'"'
+        echo "$delimiter"
+    }
+    _embed_hook HOOK_SESSION_ARCHIVE "session-archive.sh" "__EMB_ARCHIVE__"
+    _embed_hook HOOK_STANDING_ORDER_GUARD "standing-order-guard.sh" "__EMB_GUARD__"
+    _embed_hook HOOK_SCRATCH_INIT "scratch-init.sh" "__EMB_SCRATCH__"
+    _embed_hook HOOK_HARVEST_SESSION "harvest-session.sh" "__EMB_HARVEST__"
+    _embed_hook HOOK_SH_FILE_FIXUP "sh-file-fixup.sh" "__EMB_SHFIXUP__"
+    _embed_hook HOOK_SURFACING_DUTY "surfacing-duty-stop.sh" "__EMB_SURFACING__"
+    _embed_hook HOOK_GLOSSARY_GUARD "glossary-skill-guard.sh" "__EMB_GLOSSARY__"
+    _embed_hook HOOK_BLOCK_GUIDE "block-claude-code-guide.sh" "__EMB_BLOCKGUIDE__"
+    _embed_hook HOOK_TOOL_OPS_AUDIT "tool-ops-session-audit.sh" "__EMB_TOOLOPS__"
+    _embed_hook HOOK_DASHBOARD_SERVE "dashboard-serve.sh" "__EMB_DASHBOARD__"
+    _embed_hook HOOK_ESTIMATE_REFRESH "estimate-refresh-stop.sh" "__EMB_ESTIMREFRESH__"
+    _embed_hook HOOK_HARNESS_DB_START "harness-db-sessionstart.sh" "__EMB_HDBSTART__"
+    _embed_hook HOOK_HARNESS_DB_END "harness-db-sessionend.sh" "__EMB_HDBEND__"
     cat <<'BLOCK'
 
-    chmod +x "$HOOK_DEST"
-    log_ok "Deployed hook: $HOOK_DEST"
-    chmod +x "$GUARD_DEST"
-    log_ok "Deployed hook: $GUARD_DEST"
+    for _hf in "$HOOKS_DIR"/*.sh; do
+        [ -f "$_hf" ] || continue
+        chmod +x "$_hf"
+        log_ok "Deployed hook: $_hf"
+    done
 fi
+
+# Legacy dest vars for settings.json merge below
+HOOK_DEST="$HOOKS_DIR/session-archive.sh"
+GUARD_DEST="$HOOKS_DIR/standing-order-guard.sh"
 
 BLOCK
 
@@ -1255,28 +1282,58 @@ BLOCK
     printf '$hooksDir = Join-Path $claudeDir "hooks"\r\n'
     printf 'if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }\r\n'
     printf '\r\n'
-    printf '$hookDest = Join-Path $hooksDir "session-archive.sh"\r\n'
-    printf '$guardDest = Join-Path $hooksDir "standing-order-guard.sh"\r\n'
-    printf '\r\n'
-    # Embed hook content via PS here-strings
-    printf '$hookContent = @'"'"'\r\n'
-    echo "$HOOK_SESSION_ARCHIVE" | perl -pe 's/\r?\n$/\r\n/'
-    printf ''"'"'@\r\n'
-    printf '\r\n'
-    printf '$guardContent = @'"'"'\r\n'
-    echo "$HOOK_STANDING_ORDER_GUARD" | perl -pe 's/\r?\n$/\r\n/'
-    printf ''"'"'@\r\n'
+    # Helper: embed a hook via PS here-string
+    _embed_ps1_hook() {
+        local varname="$1" filename="$2" psvar="$3"
+        printf '$%s = @'"'"'\r\n' "$psvar"
+        eval 'echo "$'"$varname"'"' | perl -pe 's/\r?\n$/\r\n/'
+        printf ''"'"'@\r\n'
+        printf '\r\n'
+    }
+    _embed_ps1_hook HOOK_SESSION_ARCHIVE "session-archive.sh" "hook_archive"
+    _embed_ps1_hook HOOK_STANDING_ORDER_GUARD "standing-order-guard.sh" "hook_guard"
+    _embed_ps1_hook HOOK_SCRATCH_INIT "scratch-init.sh" "hook_scratch"
+    _embed_ps1_hook HOOK_HARVEST_SESSION "harvest-session.sh" "hook_harvest"
+    _embed_ps1_hook HOOK_SH_FILE_FIXUP "sh-file-fixup.sh" "hook_shfixup"
+    _embed_ps1_hook HOOK_SURFACING_DUTY "surfacing-duty-stop.sh" "hook_surfacing"
+    _embed_ps1_hook HOOK_GLOSSARY_GUARD "glossary-skill-guard.sh" "hook_glossary"
+    _embed_ps1_hook HOOK_BLOCK_GUIDE "block-claude-code-guide.sh" "hook_blockguide"
+    _embed_ps1_hook HOOK_TOOL_OPS_AUDIT "tool-ops-session-audit.sh" "hook_toolops"
+    _embed_ps1_hook HOOK_DASHBOARD_SERVE "dashboard-serve.sh" "hook_dashboard"
+    _embed_ps1_hook HOOK_ESTIMATE_REFRESH "estimate-refresh-stop.sh" "hook_estimrefresh"
+    _embed_ps1_hook HOOK_HARNESS_DB_START "harness-db-sessionstart.sh" "hook_hdbstart"
+    _embed_ps1_hook HOOK_HARNESS_DB_END "harness-db-sessionend.sh" "hook_hdbend"
+    # Deploy all hooks
+    printf '$hookFiles = @{\r\n'
+    printf '    "session-archive.sh" = $hook_archive\r\n'
+    printf '    "standing-order-guard.sh" = $hook_guard\r\n'
+    printf '    "scratch-init.sh" = $hook_scratch\r\n'
+    printf '    "harvest-session.sh" = $hook_harvest\r\n'
+    printf '    "sh-file-fixup.sh" = $hook_shfixup\r\n'
+    printf '    "surfacing-duty-stop.sh" = $hook_surfacing\r\n'
+    printf '    "glossary-skill-guard.sh" = $hook_glossary\r\n'
+    printf '    "block-claude-code-guide.sh" = $hook_blockguide\r\n'
+    printf '    "tool-ops-session-audit.sh" = $hook_toolops\r\n'
+    printf '    "dashboard-serve.sh" = $hook_dashboard\r\n'
+    printf '    "estimate-refresh-stop.sh" = $hook_estimrefresh\r\n'
+    printf '    "harness-db-sessionstart.sh" = $hook_hdbstart\r\n'
+    printf '    "harness-db-sessionend.sh" = $hook_hdbend\r\n'
+    printf '}\r\n'
     printf '\r\n'
     printf 'if ($DryRun) {\r\n'
     printf '    Log "[DRY RUN] Would deploy hooks to ~/.claude/hooks/"\r\n'
     printf '} else {\r\n'
-    printf '    $resolvedHook = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($hookDest)\r\n'
-    printf '    [System.IO.File]::WriteAllText($resolvedHook, $hookContent, [System.Text.UTF8Encoding]::new($false))\r\n'
-    printf '    LogOk "Deployed hook: $hookDest"\r\n'
-    printf '    $resolvedGuard = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($guardDest)\r\n'
-    printf '    [System.IO.File]::WriteAllText($resolvedGuard, $guardContent, [System.Text.UTF8Encoding]::new($false))\r\n'
-    printf '    LogOk "Deployed hook: $guardDest"\r\n'
+    printf '    foreach ($hName in $hookFiles.Keys) {\r\n'
+    printf '        $hDest = Join-Path $hooksDir $hName\r\n'
+    printf '        $hResolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($hDest)\r\n'
+    printf '        [System.IO.File]::WriteAllText($hResolved, $hookFiles[$hName], [System.Text.UTF8Encoding]::new($false))\r\n'
+    printf '        LogOk "Deployed hook: $hDest"\r\n'
+    printf '    }\r\n'
     printf '}\r\n'
+    printf '\r\n'
+    printf '# Legacy dest vars for settings.json merge below\r\n'
+    printf '$hookDest = Join-Path $hooksDir "session-archive.sh"\r\n'
+    printf '$guardDest = Join-Path $hooksDir "standing-order-guard.sh"\r\n'
 
     # REPLACE: embedded preferences (no extraction between — sentinels are adjacent in PS1)
     printf '\r\n'

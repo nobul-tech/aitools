@@ -91,3 +91,30 @@ fi
 
 mkdir -p "$DEST_DIR"
 cp "$TRANSCRIPT" "$DEST_FILE"
+
+# --- Log archive event to harness DB (OBSERVE mode) ---
+# Additive: if harness-db.py is missing or fails, archive still succeeds.
+PYTHON=""
+if command -v python3 > /dev/null 2>&1; then
+    PYTHON="python3"
+elif command -v python > /dev/null 2>&1; then
+    PYTHON="python"
+fi
+
+if [ -n "$PYTHON" ] && [ -n "$REPO_ROOT" ]; then
+    HELPER=""
+    if [ -f "$REPO_ROOT/scripts/harness-db.py" ]; then
+        HELPER="$REPO_ROOT/scripts/harness-db.py"
+    elif [ -f "$HOME/repos/aitools/scripts/harness-db.py" ]; then
+        HELPER="$HOME/repos/aitools/scripts/harness-db.py"
+    fi
+
+    if [ -n "$HELPER" ] && "$PYTHON" -c "import sqlite3" 2>/dev/null; then
+        "$PYTHON" "$HELPER" log \
+            --session "$SESSION_ID" \
+            --type sitrep \
+            --agent "session-archive" \
+            --message "Transcript archived to ${DEST_FILE}" \
+            2>/dev/null || true
+    fi
+fi

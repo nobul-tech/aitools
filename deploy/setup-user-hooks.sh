@@ -1455,14 +1455,13 @@ if ! command -v node &>/dev/null; then
     exit 1
 fi
 # --- Deploy embedded hook scripts to ~/.claude/hooks/ ---
-HOOK_DEST="$HOME/.claude/hooks/session-archive.sh"
-GUARD_DEST="$HOME/.claude/hooks/standing-order-guard.sh"
-mkdir -p "$HOME/.claude/hooks"
+HOOKS_DIR="$HOME/.claude/hooks"
+mkdir -p "$HOOKS_DIR"
 
 if [ "$DRY_RUN" = "true" ]; then
-    log "[DRY RUN] Would deploy hooks to ~/.claude/hooks/"
+    log "[DRY RUN] Would deploy hooks to $HOOKS_DIR"
 else
-cat > "$HOOK_DEST" <<'__EMBEDDED_HOOK__'
+cat > "$HOOKS_DIR/session-archive.sh" <<'__EMB_ARCHIVE__'
 #!/usr/bin/env bash
 # session-archive.sh — Claude Code SessionEnd hook
 # Archives session transcript to user repo after each session ends.
@@ -1556,8 +1555,35 @@ fi
 
 mkdir -p "$DEST_DIR"
 cp "$TRANSCRIPT" "$DEST_FILE"
-__EMBEDDED_HOOK__
-cat > "$GUARD_DEST" <<'__EMBEDDED_GUARD__'
+
+# --- Log archive event to harness DB (OBSERVE mode) ---
+# Additive: if harness-db.py is missing or fails, archive still succeeds.
+PYTHON=""
+if command -v python3 > /dev/null 2>&1; then
+    PYTHON="python3"
+elif command -v python > /dev/null 2>&1; then
+    PYTHON="python"
+fi
+
+if [ -n "$PYTHON" ] && [ -n "$REPO_ROOT" ]; then
+    HELPER=""
+    if [ -f "$REPO_ROOT/scripts/harness-db.py" ]; then
+        HELPER="$REPO_ROOT/scripts/harness-db.py"
+    elif [ -f "$HOME/repos/aitools/scripts/harness-db.py" ]; then
+        HELPER="$HOME/repos/aitools/scripts/harness-db.py"
+    fi
+
+    if [ -n "$HELPER" ] && "$PYTHON" -c "import sqlite3" 2>/dev/null; then
+        "$PYTHON" "$HELPER" log \
+            --session "$SESSION_ID" \
+            --type sitrep \
+            --agent "session-archive" \
+            --message "Transcript archived to ${DEST_FILE}" \
+            2>/dev/null || true
+    fi
+fi
+__EMB_ARCHIVE__
+cat > "$HOOKS_DIR/standing-order-guard.sh" <<'__EMB_GUARD__'
 #!/usr/bin/env bash
 # standing-order-guard.sh — Claude Code PreToolUse hook
 # Enforces standing orders by inspecting tool calls before execution.
@@ -1788,13 +1814,1271 @@ esac
 
 # All checks passed — allow the command
 exit 0
-__EMBEDDED_GUARD__
+__EMB_GUARD__
+cat > "$HOOKS_DIR/scratch-init.sh" <<'__EMB_SCRATCH__'
+#!/usr/bin/env bash
+# scratch-init.sh — Claude Code SessionStart hook
+# Creates a unique session scratch directory, logs stale dirs, discovers
+# unconsumed handoffs, and registers the session in the harness SQLite DB.
+#
+# Design decisions:
+#   - Silent exit on errors (hook must never break Claude Code)
+#   - Logs stale session dirs older than 24h (no auto-delete after 30-file loss)
+#   - Writes session dir path to .scratch/.current-session for agents
+#   - Uses session_id from CC hook input for deterministic dir names (R1, #53)
+#   - Discovers handoffs at .aitools/channel/handoffs/ (R3, #53)
+#   - Registers session in harness SQLite DB if harness-db.py is available
+#   - SQLite integration is OBSERVE mode (log-only, never blocks)
 
-    chmod +x "$HOOK_DEST"
-    log_ok "Deployed hook: $HOOK_DEST"
-    chmod +x "$GUARD_DEST"
-    log_ok "Deployed hook: $GUARD_DEST"
+set -euo pipefail
+
+# --- Pure-bash JSON field extraction (same as harvest-session.sh) ---
+json_field() {
+    local json="$1" key="$2"
+    local val
+    val=$(printf '%s' "$json" \
+        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
+        | head -1 \
+        | sed 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"//' \
+        | sed 's/"$//')
+    printf '%s' "$val"
+}
+
+# Read hook input from stdin (contains session_id, cwd, etc.)
+INPUT=$(cat)
+SESSION_ID=$(json_field "$INPUT" "session_id")
+
+# Find project root (hooks run in cwd but we need the git root)
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+if [ -z "$PROJECT_ROOT" ]; then
+    PROJECT_ROOT="$(pwd)"
 fi
+
+SCRATCH_DIR="$PROJECT_ROOT/.scratch"
+
+# Ensure .scratch/ exists
+mkdir -p "$SCRATCH_DIR"
+
+# --- Log stale session dirs (older than 24h) ---
+# These are from crashed or killed sessions where SessionEnd never fired.
+# Previously rm -rf'd here, but that destroyed 30 unharvested artifacts
+# (session Z1IhGrcgGO, 2026-03-21). Now we leave them for manual cleanup.
+if [ -d "$SCRATCH_DIR" ]; then
+    stale_count=$(find "$SCRATCH_DIR" -maxdepth 1 -name "session-*" -type d -mmin +1440 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$stale_count" -gt 0 ]; then
+        printf 'Stale scratch dirs: %d (older than 24h, run cleanup manually)\n' "$stale_count"
+    fi
+fi
+
+# --- Create fresh session dir ---
+# Use session_id for deterministic dir name (fixes .current-session race
+# condition for concurrent sessions — M4 AAR P3, verified UA-6).
+# Fallback to mktemp if session_id is empty (defensive).
+SESSION_PREFIX=""
+if [ -n "$SESSION_ID" ]; then
+    SESSION_PREFIX=$(printf '%s' "$SESSION_ID" | cut -c1-10)
+    SESSION_DIR="$SCRATCH_DIR/session-$SESSION_PREFIX"
+    mkdir -p "$SESSION_DIR"
+else
+    SESSION_DIR=$(mktemp -d "$SCRATCH_DIR/session-XXXXXXXXXX")
+fi
+
+# Write the path so agents and the SessionEnd hook can find it
+printf '%s' "$SESSION_DIR" > "$SCRATCH_DIR/.current-session"
+
+# --- Discover unconsumed handoffs (R3, issue #53) ---
+HANDOFFS_DIR="$PROJECT_ROOT/.aitools/channel/handoffs"
+if [ -d "$HANDOFFS_DIR" ]; then
+    handoff_count=0
+    latest_handoff=""
+    for hf in "$HANDOFFS_DIR"/handoff*; do
+        [ -f "$hf" ] || continue
+        handoff_count=$((handoff_count + 1))
+        latest_handoff="$hf"
+    done
+    if [ "$handoff_count" -gt 0 ]; then
+        printf 'Handoff available: %s (%d total in %s)\n' \
+            "$(basename "$latest_handoff")" "$handoff_count" "$HANDOFFS_DIR"
+    fi
+fi
+
+# --- Register session in harness SQLite DB (OBSERVE mode) ---
+# This is additive — if harness-db.py is missing or fails, session
+# continues normally. SQLite integration never blocks SessionStart.
+if [ -n "$SESSION_ID" ]; then
+    PYTHON=""
+    if command -v python3 > /dev/null 2>&1; then
+        PYTHON="python3"
+    elif command -v python > /dev/null 2>&1; then
+        PYTHON="python"
+    fi
+
+    if [ -n "$PYTHON" ]; then
+        # Look for harness-db.py in multiple locations
+        HELPER=""
+        if [ -f "$PROJECT_ROOT/scripts/harness-db.py" ]; then
+            HELPER="$PROJECT_ROOT/scripts/harness-db.py"
+        elif [ -f "$HOME/repos/aitools/scripts/harness-db.py" ]; then
+            HELPER="$HOME/repos/aitools/scripts/harness-db.py"
+        fi
+
+        if [ -n "$HELPER" ] && "$PYTHON" -c "import sqlite3" 2>/dev/null; then
+            # Initialize harness databases (creates if missing)
+            "$PYTHON" "$HELPER" init 2>/dev/null || true
+            # Register this session
+            "$PYTHON" "$HELPER" session start --id "$SESSION_ID" 2>/dev/null || true
+            printf 'Harness DB: session %s registered\n' "$SESSION_ID"
+        fi
+    fi
+fi
+
+# SessionStart stdout is added as context for Claude
+printf 'Session scratch directory: %s\n' "$SESSION_DIR"
+__EMB_SCRATCH__
+cat > "$HOOKS_DIR/harvest-session.sh" <<'__EMB_HARVEST__'
+#!/usr/bin/env bash
+# harvest-session.sh — Claude Code SessionEnd hook
+# Classifies session scratch contents, harvests artifacts, cleans up,
+# audits the harvesting/ directory, marks session complete in harness DB,
+# and exports DB to JSON for git carry-forward.
+#
+# Design decisions:
+#   - Silent exit on errors (hook must never break Claude Code)
+#   - Only harvests if project has a harvesting/ directory
+#   - Classification by file extension (code/scripts -> artifact, logs/msgs -> ephemeral)
+#   - Pure-bash JSON parsing (jq not guaranteed in hook environment)
+#   - Manifest updates via node (already required by aitools)
+#   - SQLite session end + export is additive (OBSERVE mode, never blocks)
+#   - No rm -rf of session dirs (30-file-loss fix, session Z1IhGrcgGO, 2026-03-21)
+
+set -euo pipefail
+
+# Read hook input from stdin
+INPUT=$(cat)
+
+# --- Pure-bash JSON field extraction ---
+json_field() {
+    local json="$1" key="$2"
+    local val
+    val=$(printf '%s' "$json" \
+        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
+        | head -1 \
+        | sed 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"//' \
+        | sed 's/"$//')
+    printf '%s' "$val"
+}
+
+SESSION_ID=$(json_field "$INPUT" "session_id")
+CWD=$(json_field "$INPUT" "cwd")
+
+# Session ID prefix for filenames (first 10 chars, matching scratch dir suffix)
+SESSION_PREFIX=""
+if [ -n "$SESSION_ID" ]; then
+    SESSION_PREFIX=$(printf '%s' "$SESSION_ID" | cut -c1-10)
+fi
+
+# Find project root
+PROJECT_ROOT=$(cd "$CWD" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || echo "$CWD")
+SCRATCH_DIR="$PROJECT_ROOT/.scratch"
+
+# --- Find session scratch dir ---
+# Try session_id-based dir first (new pattern), then .current-session (legacy)
+SESSION_DIR=""
+if [ -n "$SESSION_PREFIX" ] && [ -d "$SCRATCH_DIR/session-$SESSION_PREFIX" ]; then
+    SESSION_DIR="$SCRATCH_DIR/session-$SESSION_PREFIX"
+elif [ -f "$SCRATCH_DIR/.current-session" ]; then
+    SESSION_DIR=$(cat "$SCRATCH_DIR/.current-session" 2>/dev/null || echo "")
+fi
+
+# If no session dir or it doesn't exist, nothing to do
+if [ -z "$SESSION_DIR" ] || [ ! -d "$SESSION_DIR" ]; then
+    # Still mark session as ended in DB even if no scratch dir
+    _mark_session_end=true
+else
+    _mark_session_end=false
+fi
+
+# --- Check if project supports harvesting ---
+HARVESTING_DIR="$PROJECT_ROOT/harvesting"
+HAS_HARVESTING=false
+if [ -d "$HARVESTING_DIR" ]; then
+    HAS_HARVESTING=true
+fi
+
+# --- Handoff destination ---
+HANDOFFS_DIR="$PROJECT_ROOT/.aitools/channel/handoffs"
+
+# --- Classify and process session dir contents ---
+TODAY=$(date -u +%Y-%m-%d)
+HARVESTED=0
+DELETED=0
+
+if [ -n "$SESSION_DIR" ] && [ -d "$SESSION_DIR" ]; then
+    for file in "$SESSION_DIR"/*; do
+        [ -f "$file" ] || continue
+        filename=$(basename "$file")
+
+        # Classification by extension and name
+        is_ephemeral=true
+        case "$filename" in
+            commit-msg*|*.log|*.tmp)
+                is_ephemeral=true
+                ;;
+            *.py|*.sh|*.ps1|*.js|*.ts|*.go|*.rs|*.pl)
+                is_ephemeral=false
+                ;;
+            *.json)
+                # JSON: config/lock files are ephemeral, structured data is artifact
+                case "$filename" in
+                    package-lock*|node_modules*|*.config.json|tsconfig*) is_ephemeral=true ;;
+                    *) is_ephemeral=false ;;
+                esac
+                ;;
+            *.md)
+                # Markdown: logs are ephemeral, research/analysis is artifact
+                case "$filename" in
+                    *log*|*output*|*dump*) is_ephemeral=true ;;
+                    *) is_ephemeral=false ;;
+                esac
+                ;;
+            *.yaml|*.yml|*.toml|*.csv|*.sql|*.html|*.txt)
+                is_ephemeral=false
+                ;;
+            *)
+                # Unknown extension: harvest with warning rather than silently delete
+                is_ephemeral=false
+                ;;
+        esac
+
+        if $is_ephemeral; then
+            DELETED=$((DELETED + 1))
+            continue
+        fi
+
+        # --- Route non-ephemeral files ---
+
+        # Handoff files go to .aitools/channel/handoffs/ (dedicated location)
+        is_handoff=false
+        case "$filename" in
+            handoff*) is_handoff=true ;;
+        esac
+
+        if $is_handoff; then
+            # Auto-create handoffs dir if it doesn't exist
+            if [ ! -d "$HANDOFFS_DIR" ]; then
+                mkdir -p "$HANDOFFS_DIR" 2>/dev/null || true
+            fi
+        fi
+        if $is_handoff && [ -d "$HANDOFFS_DIR" ]; then
+            # Handoff: copy to handoffs/ with session ID
+            handoff_dest="${HANDOFFS_DIR}/${TODAY}_session-${SESSION_PREFIX}_${filename}"
+            cp "$file" "$handoff_dest" 2>/dev/null || true
+            HARVESTED=$((HARVESTED + 1))
+            continue
+        fi
+
+        # Auto-create harvesting/ on first harvest (F2 from issue #54)
+        if ! $HAS_HARVESTING; then
+            mkdir -p "$HARVESTING_DIR" 2>/dev/null
+            if [ -d "$HARVESTING_DIR" ]; then
+                HAS_HARVESTING=true
+            fi
+            # Create minimal manifest
+            if command -v node >/dev/null 2>&1; then
+                MANIFEST="$HARVESTING_DIR/harvest-manifest.json"
+                node -e "
+const fs = require('fs');
+const f = process.argv[1];
+if (!fs.existsSync(f)) {
+    fs.writeFileSync(f, JSON.stringify({ meta: { schemaVersion: '1.0', lastAudit: null }, artifacts: {} }, null, 2) + '\n');
+}
+" "$MANIFEST" 2>/dev/null || true
+            fi
+            printf '[harvest] Created harvesting/ directory in %s\n' "$PROJECT_ROOT" >&2
+        fi
+
+        if $HAS_HARVESTING; then
+            # Harvest: copy to harvesting/ with date + session ID prefix
+            session_tag=""
+            if [ -n "$SESSION_PREFIX" ]; then
+                session_tag="session-${SESSION_PREFIX}_"
+            fi
+            dest_name="${TODAY}_${session_tag}${filename}"
+            dest_path="$HARVESTING_DIR/$dest_name"
+
+            # Avoid overwrites
+            if [ -f "$dest_path" ]; then
+                counter=1
+                while [ -f "${HARVESTING_DIR}/${TODAY}_${counter}_${session_tag}${filename}" ]; do
+                    counter=$((counter + 1))
+                done
+                dest_name="${TODAY}_${counter}_${session_tag}${filename}"
+                dest_path="$HARVESTING_DIR/$dest_name"
+            fi
+
+            cp "$file" "$dest_path"
+
+            # Update manifest if node is available
+            MANIFEST="$HARVESTING_DIR/harvest-manifest.json"
+            if command -v node >/dev/null 2>&1; then
+                # Derive session reference
+                session_ref=""
+                if [ -n "$CWD" ]; then
+                    project_name=$(basename "$PROJECT_ROOT")
+                    session_ref="${project_name}/${TODAY}_${SESSION_PREFIX}"
+                fi
+
+                node -e "
+const fs = require('fs');
+const f = process.argv[1];
+const name = process.argv[2];
+const session = process.argv[3];
+const desc = process.argv[4];
+const today = process.argv[5];
+
+let manifest = { meta: { schemaVersion: '1.0', lastAudit: null }, artifacts: {} };
+try { manifest = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+
+manifest.artifacts[name] = {
+    harvested: today,
+    session: session,
+    description: 'Auto-harvested from session scratch',
+    type: 'code',
+    language: null,
+    status: 'harvested',
+    promotedTo: null,
+    pruneAfter: new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0]
+};
+
+// Detect language from extension
+const ext = name.split('.').pop();
+const langMap = { py: 'python', sh: 'bash', ps1: 'powershell', js: 'javascript', ts: 'typescript', go: 'go', rs: 'rust', pl: 'perl', md: 'markdown' };
+if (langMap[ext]) manifest.artifacts[name].language = langMap[ext];
+
+fs.writeFileSync(f, JSON.stringify(manifest, null, 2) + '\n');
+" "$MANIFEST" "$dest_name" "$session_ref" "$filename" "$TODAY" 2>/dev/null || true
+            fi
+
+            HARVESTED=$((HARVESTED + 1))
+        fi
+    done
+fi
+
+# --- Report harvest results (F4 from issue #54) ---
+if [ "$HARVESTED" -gt 0 ] || [ "$DELETED" -gt 0 ]; then
+    printf '[harvest] Session %s: %d artifacts harvested, %d ephemeral skipped\n' \
+        "${SESSION_PREFIX:-unknown}" "$HARVESTED" "$DELETED" >&2
+fi
+
+# --- Clear session pointer (leave session dir intact) ---
+# Previously rm -rf'd $SESSION_DIR here, but if harvest partially failed
+# or classification missed files, they became unrecoverable (see 30-file
+# loss incident, session Z1IhGrcgGO, 2026-03-21). Session dirs accumulate
+# in .scratch/ and are logged as stale by scratch-init.sh on next session.
+rm -f "$SCRATCH_DIR/.current-session"
+
+# --- Audit harvesting/ (prune stale) ---
+if $HAS_HARVESTING && command -v node >/dev/null 2>&1; then
+    MANIFEST="$HARVESTING_DIR/harvest-manifest.json"
+    if [ -f "$MANIFEST" ]; then
+        node -e "
+const fs = require('fs');
+const path = require('path');
+const f = process.argv[1];
+const dir = process.argv[2];
+
+let manifest;
+try { manifest = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { process.exit(0); }
+
+const today = new Date();
+let pruned = 0;
+
+for (const [name, entry] of Object.entries(manifest.artifacts)) {
+    if (entry.status === 'promoted' || entry.status === 'pruned') continue;
+
+    // Check prune date
+    if (entry.pruneAfter) {
+        const pruneDate = new Date(entry.pruneAfter);
+        if (today > pruneDate) {
+            // Check git references before pruning
+            const { execSync } = require('child_process');
+            let refs = 0;
+            try {
+                const out = execSync('git log --all --oneline -- ' + path.join(dir, name), { encoding: 'utf8', timeout: 5000 });
+                refs = out.trim().split('\n').filter(l => l).length;
+            } catch {}
+
+            if (refs === 0) {
+                // Mark as pruned in manifest but do NOT delete the file.
+                // Previous auto-deletion destroyed artifacts before review.
+                // Files accumulate in harvesting/ for manual cleanup.
+                entry.status = 'pruned';
+                pruned++;
+            } else {
+                // Has references — promote to candidate
+                entry.status = 'candidate';
+            }
+        }
+    }
+}
+
+manifest.meta.lastAudit = today.toISOString().split('T')[0];
+fs.writeFileSync(f, JSON.stringify(manifest, null, 2) + '\n');
+" "$MANIFEST" "$HARVESTING_DIR" 2>/dev/null || true
+    fi
+fi
+
+# --- Mark session complete in harness SQLite DB (OBSERVE mode) ---
+# Additive: if harness-db.py is missing or fails, harvest still succeeds.
+if [ -n "$SESSION_ID" ]; then
+    PYTHON=""
+    if command -v python3 > /dev/null 2>&1; then
+        PYTHON="python3"
+    elif command -v python > /dev/null 2>&1; then
+        PYTHON="python"
+    fi
+
+    if [ -n "$PYTHON" ]; then
+        HELPER=""
+        if [ -f "$PROJECT_ROOT/scripts/harness-db.py" ]; then
+            HELPER="$PROJECT_ROOT/scripts/harness-db.py"
+        elif [ -f "$HOME/repos/aitools/scripts/harness-db.py" ]; then
+            HELPER="$HOME/repos/aitools/scripts/harness-db.py"
+        fi
+
+        if [ -n "$HELPER" ] && "$PYTHON" -c "import sqlite3" 2>/dev/null; then
+            # Mark session as ended
+            "$PYTHON" "$HELPER" session end --id "$SESSION_ID" 2>/dev/null || true
+            # Export DB to JSON for git carry-forward
+            "$PYTHON" "$HELPER" export --format json --session "$SESSION_ID" 2>/dev/null || true
+            printf '[harness-db] Session %s ended, JSON exported\n' "$SESSION_ID" >&2
+        fi
+    fi
+fi
+
+exit 0
+__EMB_HARVEST__
+cat > "$HOOKS_DIR/sh-file-fixup.sh" <<'__EMB_SHFIXUP__'
+#!/usr/bin/env bash
+# sh-file-fixup.sh — Claude Code PostToolUse hook for Write and Edit
+# Auto-fixes .sh files after creation/modification:
+#   - CRLF → LF line endings (Write tool on macOS can produce CRLF)
+#   - chmod +x on disk (Write tool creates 100644)
+#   - git update-index --chmod=+x (if tracked with wrong mode)
+#
+# Eliminates the recurring manual fixup cycle that interrupts every commit
+# involving .sh files. See reference/framework-incident-investigation.md.
+#
+# Hook contract:
+#   - PostToolUse on Write|Edit (runs AFTER the tool completes)
+#   - Receives JSON on stdin with tool_input.file_path
+#   - Exit 0 always (PostToolUse must never block)
+#   - Stderr feedback is shown to Claude
+
+set -euo pipefail
+
+# Read JSON from stdin
+input=$(cat)
+
+# Extract file_path from tool_input (pure-bash, no jq dependency)
+file_path=""
+if [[ "$input" =~ \"file_path\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
+    file_path="${BASH_REMATCH[1]}"
+fi
+
+# Only act on .sh files
+[ -n "$file_path" ] || exit 0
+[[ "$file_path" == *.sh ]] || exit 0
+[ -f "$file_path" ] || exit 0
+
+fixed=""
+
+# Fix CRLF → LF
+if perl -ne 'exit 1 if /\r/' "$file_path" 2>/dev/null; then
+    : # no CRLF found
+else
+    perl -pi -e 's/\r$//' "$file_path"
+    fixed="${fixed}CRLF->LF "
+fi
+
+# Fix executable bit on disk
+if [ ! -x "$file_path" ]; then
+    chmod +x "$file_path"
+    fixed="${fixed}+x "
+fi
+
+# Fix git index executable bit (if inside a git work tree)
+dir=$(dirname "$file_path")
+if git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    mode=$(git -C "$dir" ls-files -s "$file_path" 2>/dev/null | cut -c1-6)
+    if [ "$mode" = "100644" ]; then
+        git update-index --chmod=+x "$file_path" 2>/dev/null || true
+        fixed="${fixed}git+x "
+    fi
+fi
+
+# Report what was fixed (stderr → shown to Claude as feedback)
+if [ -n "$fixed" ]; then
+    echo "sh-file-fixup: $(basename "$file_path") — fixed: ${fixed% }" >&2
+fi
+
+exit 0
+__EMB_SHFIXUP__
+cat > "$HOOKS_DIR/surfacing-duty-stop.sh" <<'__EMB_SURFACING__'
+#!/usr/bin/env bash
+# surfacing-duty-stop.sh — Claude Code Stop hook (command type)
+# Surfaces duty reminders via stderr feedback after agent responses.
+#
+# Fires after every agent response. As a command-type Stop hook,
+# stderr output is shown to the agent as feedback on its next turn.
+#
+# Two functions:
+#   1. Periodic reminder: every 30+ minutes, remind about surfacing duty
+#   2. Incident-acknowledgment detection: if agent said "incident" or "pre-existing"
+#      without invoking /incident or writing TODO(incident):, prompt them to file
+#
+# Hook contract:
+#   - Stop hook, command type (stderr → shown to agent as feedback)
+#   - Exit 0 = allow, Exit 2 = block (we always allow)
+#   - Must be fast (<50ms) — fires on every agent turn
+#   - Must never crash or hang
+
+set -euo pipefail
+
+# Read JSON from stdin
+input=$(cat)
+
+# Extract session_id and transcript_path
+session_id=""
+transcript_path=""
+if [[ "$input" =~ \"session_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
+    session_id="${BASH_REMATCH[1]}"
+fi
+if [[ "$input" =~ \"transcript_path\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
+    transcript_path="${BASH_REMATCH[1]}"
+fi
+
+# Need transcript to scan
+[ -n "$transcript_path" ] && [ -f "$transcript_path" ] || exit 0
+
+reminders=""
+
+# --- 1. Periodic surfacing duty reminder ---
+# Check session age via transcript file birth time.
+# Inject reminder every 30 minutes (tracked via marker file).
+if [ -n "$session_id" ]; then
+    marker_dir="/tmp/aitools-surfacing-$session_id"
+    mkdir -p "$marker_dir" 2>/dev/null || true
+    marker="$marker_dir/last-reminder"
+    now=$(date +%s)
+    inject_reminder=false
+
+    if [ ! -f "$marker" ]; then
+        # First check: only inject if session is >30 min old
+        # Use transcript modification time as proxy for session start
+        if [ -f "$transcript_path" ]; then
+            # Platform dispatch: macOS BSD stat vs GNU stat (Linux/Git Bash)
+            # See session-archive.sh:68 for the canonical pattern
+            if [ "$(uname -s)" = "Darwin" ]; then
+                file_mod=$(stat -f %m "$transcript_path" 2>/dev/null || echo "$now")
+            else
+                file_mod=$(stat -c %Y "$transcript_path" 2>/dev/null || echo "$now")
+            fi
+            age=$(( now - file_mod ))
+            # Transcript gets modified constantly; use birth time if available
+            if [ "$(uname -s)" = "Darwin" ]; then
+                file_birth=$(stat -f %B "$transcript_path" 2>/dev/null || echo "$file_mod")
+            else
+                # GNU stat: %W = birth time (0 if unsupported), fallback to mod time
+                _birth=$(stat -c %W "$transcript_path" 2>/dev/null || echo "0")
+                if [ "$_birth" != "0" ] && [ -n "$_birth" ]; then
+                    file_birth="$_birth"
+                else
+                    file_birth="$file_mod"
+                fi
+            fi
+            session_age=$(( now - file_birth ))
+            if [ "$session_age" -gt 1800 ]; then
+                inject_reminder=true
+            fi
+        fi
+    else
+        last=$(cat "$marker")
+        elapsed=$(( now - last ))
+        if [ "$elapsed" -gt 1800 ]; then
+            inject_reminder=true
+        fi
+    fi
+
+    if [ "$inject_reminder" = "true" ]; then
+        echo "$now" > "$marker"
+        reminders="${reminders}Surfacing duty check: Have you found any incidents or ambiguities this session? File via /incident or leave a TODO(incident): comment. "
+    fi
+fi
+
+# --- 2. Incident-acknowledgment detection ---
+# Scan the last assistant message for incident-acknowledgment language
+# without a corresponding /incident invocation or TODO(incident): marker.
+#
+# Suppression: if incidents.json was modified in the last 30 minutes,
+# an incident was recently filed — suppress to avoid false positives when the
+# agent is still discussing the incident after filing it.
+
+_suppress_incident_check=false
+
+# Check incidents.json modification time (cross-platform stat)
+_incidents_file=""
+if [ -n "${AITOOLS_REPO_PATH:-}" ]; then
+    _incidents_file="$AITOOLS_REPO_PATH/reference/incidents.json"
+elif [ -f "$HOME/repos/aitools/reference/incidents.json" ]; then
+    _incidents_file="$HOME/repos/aitools/reference/incidents.json"
+fi
+if [ -n "$_incidents_file" ] && [ -f "$_incidents_file" ]; then
+    # Platform dispatch: macOS BSD stat vs GNU stat (Linux/Git Bash)
+    if [ "$(uname -s)" = "Darwin" ]; then
+        _incidents_mod=$(stat -f %m "$_incidents_file" 2>/dev/null || echo "0")
+    else
+        _incidents_mod=$(stat -c %Y "$_incidents_file" 2>/dev/null || echo "0")
+    fi
+    _now_epoch=$(date +%s)
+    _incidents_age=$(( _now_epoch - _incidents_mod ))
+    if [ "$_incidents_age" -lt 1800 ]; then
+        _suppress_incident_check=true
+    fi
+fi
+
+if [ "$_suppress_incident_check" = "false" ]; then
+    # Read only the last ~100 lines of transcript for speed.
+    last_chunk=$(tail -100 "$transcript_path" 2>/dev/null || true)
+
+    if [ -n "$last_chunk" ]; then
+        # Check for incident-acknowledgment phrases
+        has_incident_language=false
+        if echo "$last_chunk" | grep -qiE "pre-existing incident|known incident|that.s an incident|existing incident|there.s an incident|incident I noticed|incident we found|pre-existing gap|known gap|that.s a gap|existing gap|there.s a gap|gap I noticed|gap we found" 2>/dev/null; then
+            has_incident_language=true
+        fi
+
+        # Check if /incident was invoked or TODO(incident): was written in same chunk
+        has_filing=false
+        if echo "$last_chunk" | grep -qE '/incident|TODO\(incident\)|incidents\.json' 2>/dev/null; then
+            has_filing=true
+        fi
+
+        if [ "$has_incident_language" = "true" ] && [ "$has_filing" = "false" ]; then
+            reminders="${reminders}You acknowledged an incident but did not file it. Per surfacing duty (.claude/rules/incident-governance.md): invoke /incident now, or write TODO(incident): in the current file if mid-task."
+        fi
+    fi
+fi
+
+# Output reminders (if any) to stderr (shown to agent as feedback).
+if [ -n "$reminders" ]; then
+    printf '%s' "$reminders" >&2
+fi
+
+exit 0
+__EMB_SURFACING__
+cat > "$HOOKS_DIR/glossary-skill-guard.sh" <<'__EMB_GLOSSARY__'
+#!/usr/bin/env bash
+# glossary-skill-guard.sh — Detection layer for governed data access
+# Fires on Read/Grep of glossary files, reminds agent to use /glossary skill
+# Part of the governed data access framework.
+# See reference/framework-governed-data-access.md
+
+set -euo pipefail
+
+INPUT=$(cat)
+FILE_PATH=$(echo "$INPUT" | perl -ne 'print $1 if /"file_path"\s*:\s*"([^"]*)"/')
+PATTERN_PATH=$(echo "$INPUT" | perl -ne 'print $1 if /"path"\s*:\s*"([^"]*)"/')
+
+TARGET="${FILE_PATH:-$PATTERN_PATH}"
+
+case "$TARGET" in
+    *glossary.json|*glossary.md)
+        # hookSpecificOutput JSON goes to stdout (structured hook response)
+        echo '{"hookSpecificOutput":{"additionalContext":"You are reading glossary files directly. Use /glossary skill instead — it provides the governed process for checking definitions, adding terms, and resolving ambiguities. Reading the file bypasses that process."}}'
+        ;;
+esac
+exit 0
+__EMB_GLOSSARY__
+cat > "$HOOKS_DIR/block-claude-code-guide.sh" <<'__EMB_BLOCKGUIDE__'
+#!/usr/bin/env bash
+# block-claude-code-guide.sh — Claude Code PreToolUse hook
+# Blocks the built-in claude-code-guide subagent (Haiku model) and
+# injects corrective harness context so the agent can proceed with
+# accurate information without needing the subagent.
+#
+# Hook contract:
+#   - Fires on PreToolUse for the Agent tool
+#   - Receives JSON on stdin (tool_input.subagent_type, etc.)
+#   - Exit 0 with no output = allow (all other agent types)
+#   - Exit 0 with JSON stdout = deny with corrective context
+#
+# See: https://github.com/anthropics/claude-code/issues/34730
+
+set -euo pipefail
+
+INPUT=$(cat)
+
+# Extract subagent_type from tool_input using bash regex (no jq dependency)
+SUBAGENT_TYPE=""
+pattern='"subagent_type"[[:space:]]*:[[:space:]]*"([^"]*)"'
+if [[ "$INPUT" =~ $pattern ]]; then
+    SUBAGENT_TYPE="${BASH_REMATCH[1]}"
+fi
+
+if [ "$SUBAGENT_TYPE" = "claude-code-guide" ]; then
+    # Return JSON deny with corrective context.
+    # permissionDecisionReason is shown to Claude (not the user) on deny,
+    # so it serves as injected harness knowledge.
+    cat <<'HOOKJSON'
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "deny",
+    "permissionDecisionReason": "claude-code-guide subagent is DENIED. It is a Haiku-based built-in that returns inaccurate schema information — it caused a production incident where all hooks were disabled (issue #34730). DO NOT retry this call.\n\nFor Claude Code documentation (hooks, settings, permissions, subagents, MCP), use the chrome-devtools skill to navigate to the .md pages at code.claude.com/docs/en/*.md and read the rendered content. Key pages:\n  - Hooks: code.claude.com/docs/en/hooks.md\n  - Permissions: code.claude.com/docs/en/permissions.md\n  - Sub-agents: code.claude.com/docs/en/sub-agents.md\n  - Settings: code.claude.com/docs/en/settings.md\n  - MCP: code.claude.com/docs/en/mcp.md\n\nQuick reference — hook type schemas:\n  type: \"command\" requires: command (string, shell command to execute)\n  type: \"prompt\"  requires: prompt (string, static LLM prompt text)\n  type: \"http\"    requires: url (string, endpoint URL)\n  type: \"agent\"   requires: prompt (string, task for subagent)\n\nNever mix these — a command-type hook with a prompt field or a prompt-type hook with a command field will break settings.json validation and disable ALL hooks."
+  }
+}
+HOOKJSON
+    exit 0
+fi
+
+exit 0
+__EMB_BLOCKGUIDE__
+cat > "$HOOKS_DIR/tool-ops-session-audit.sh" <<'__EMB_TOOLOPS__'
+#!/usr/bin/env bash
+# tool-ops-session-audit.sh — SessionEnd hook
+# Reads tool-ops.json, runs quick verifications on audit-mode capabilities,
+# logs drift and KPIs to tool-ops-audit.jsonl.
+#
+# Hook contract:
+#   - SessionEnd hook, command type
+#   - Always exit 0 (advisory — never block session end)
+#   - Must handle missing files gracefully
+#   - No jq dependency — uses grep/regex for JSON parsing
+
+set -euo pipefail
+
+# Read JSON from stdin (SessionEnd provides session_id, etc.)
+input=$(cat)
+session_id=""
+if [[ "$input" =~ \"session_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
+    session_id="${BASH_REMATCH[1]}"
+fi
+
+# Find tool-ops.json
+tool_ops=""
+if [ -n "${AITOOLS_REPO_PATH:-}" ] && [ -f "$AITOOLS_REPO_PATH/reference/tool-ops.json" ]; then
+    tool_ops="$AITOOLS_REPO_PATH/reference/tool-ops.json"
+elif [ -f "$HOME/repos/aitools/reference/tool-ops.json" ]; then
+    tool_ops="$HOME/repos/aitools/reference/tool-ops.json"
+fi
+# No tool-ops.json — nothing to audit
+[ -n "$tool_ops" ] || exit 0
+
+# Ensure log directory (exit silently if we cannot create it)
+log_dir="$HOME/.claude/hooks/logs"
+mkdir -p "$log_dir" 2>/dev/null || exit 0  # non-critical — exit clean if mkdir fails
+log_file="$log_dir/tool-ops-audit.jsonl"
+timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+# --- Contract tests (mock-json-pipe verifications) ---
+# Run verification cases from tool-ops.json against deployed hook scripts.
+# For each tool with a verifications array, pipe mock input to the target
+# hook and check exit code + stdout against expected values.
+
+drift_count=0
+test_pass=0
+test_fail=0
+
+# Find hook scripts directory
+hooks_dir="$HOME/.claude/hooks"
+
+# Verify block-claude-code-guide.sh if deployed
+guide_hook="$hooks_dir/block-claude-code-guide.sh"
+if [ -f "$guide_hook" ]; then
+    # Test 1: Should deny claude-code-guide subagent
+    test_input='{"tool_name":"Agent","tool_input":{"subagent_type":"claude-code-guide"}}'
+    # Capture output; ignore non-zero exit (should not happen but guard against it)
+    test_output=$(echo "$test_input" | bash "$guide_hook" 2>/dev/null) || true  # hook may fail in unusual env — don't abort audit
+    if echo "$test_output" | grep -q 'permissionDecision.*deny' 2>/dev/null; then  # grep stderr suppressed — pattern match only
+        test_pass=$((test_pass + 1))
+    else
+        test_fail=$((test_fail + 1))
+    fi
+
+    # Test 2: Should allow Explore subagent (no deny output)
+    test_input='{"tool_name":"Agent","tool_input":{"subagent_type":"Explore"}}'
+    test_output=$(echo "$test_input" | bash "$guide_hook" 2>/dev/null) || true  # same guard as above
+    if [ -z "$test_output" ]; then
+        # Empty output = allowed (correct behavior)
+        test_pass=$((test_pass + 1))
+    else
+        test_fail=$((test_fail + 1))
+    fi
+fi
+
+# --- Drift detection: deny rules vs deployed settings ---
+settings_file="$HOME/.claude/settings.json"
+if [ -f "$settings_file" ] && [ -f "$guide_hook" ]; then
+    # Check that block-claude-code-guide.sh is registered in settings.json PreToolUse
+    if ! grep -q 'block-claude-code-guide\.sh' "$settings_file" 2>/dev/null; then  # grep stderr suppressed — file may be unreadable
+        drift_count=$((drift_count + 1))
+    fi
+fi
+
+# --- Version dep staleness check ---
+# Look for the tool-ops reference doc and count items needing attention
+ops_ref=""
+if [ -n "${AITOOLS_REPO_PATH:-}" ] && [ -f "$AITOOLS_REPO_PATH/reference/tool-ops-claude-code.md" ]; then
+    ops_ref="$AITOOLS_REPO_PATH/reference/tool-ops-claude-code.md"
+elif [ -f "$HOME/repos/aitools/reference/tool-ops-claude-code.md" ]; then
+    ops_ref="$HOME/repos/aitools/reference/tool-ops-claude-code.md"
+fi
+
+stale_deps=0
+if [ -n "$ops_ref" ]; then
+    # Count lines mentioning CRITICAL that also mention "Last verified" — heuristic for stale items
+    # grep -c returns exit 1 on no match; capture in subshell to prevent set -e abort
+    stale_deps=$(grep -c 'CRITICAL.*Last verified' "$ops_ref" 2>/dev/null || true)  # stderr suppressed — file may be unreadable
+    # Ensure numeric — default to 0 if empty or non-numeric
+    if ! [[ "$stale_deps" =~ ^[0-9]+$ ]]; then stale_deps=0; fi
+fi
+
+# --- Emit results ---
+printf '{"timestamp":"%s","session_id":"%s","test_pass":%d,"test_fail":%d,"drift_count":%d,"stale_deps":%d}\n' \
+    "$timestamp" "$session_id" "$test_pass" "$test_fail" "$drift_count" "$stale_deps" \
+    >> "$log_file"
+
+exit 0
+__EMB_TOOLOPS__
+cat > "$HOOKS_DIR/dashboard-serve.sh" <<'__EMB_DASHBOARD__'
+#!/usr/bin/env bash
+# dashboard-serve.sh -- Claude Code SessionStart hook
+# Delegates to `aitools dashboard --background` for dashboard lifecycle.
+#
+# The CLI owns estimation discovery, PID management, port detection, and
+# server launch. This hook is a thin dispatcher that extracts project
+# root from the hook input and delegates.
+#
+# Hook contract:
+#   - SessionStart hook, command type
+#   - stdout is added as context for Claude
+#   - Must be fast (<100ms for detection; server starts async)
+#   - Must never crash or hang (silent exit on errors)
+
+set -euo pipefail
+
+# Read hook input from stdin (contains session_id, cwd, etc.)
+INPUT=$(cat)
+
+# Extract cwd from hook input
+cwd=""
+if [[ "$INPUT" =~ \"cwd\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
+    cwd="${BASH_REMATCH[1]}"
+fi
+
+# Find project root
+PROJECT_ROOT=""
+if [ -n "$cwd" ]; then
+    PROJECT_ROOT=$(cd "$cwd" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || echo "$cwd")
+else
+    PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+fi
+
+# Find aitools CLI
+AITOOLS=""
+if command -v aitools >/dev/null 2>&1; then
+    AITOOLS="aitools"
+elif [ -f "$HOME/.local/bin/aitools" ]; then
+    AITOOLS="$HOME/.local/bin/aitools"
+fi
+
+if [ -n "$AITOOLS" ]; then
+    # Delegate to CLI -- it handles everything
+    cd "$PROJECT_ROOT" 2>/dev/null || true
+    "$AITOOLS" dashboard --background --project-root "$PROJECT_ROOT" 2>/dev/null || true
+else
+    # Fallback: direct launch if aitools CLI not installed
+    # This preserves functionality during initial setup before first `aitools install`
+    PYTHON=""
+    if command -v python3 >/dev/null 2>&1; then
+        PYTHON="python3"
+    elif command -v python >/dev/null 2>&1; then
+        PYTHON="python"
+    fi
+    [ -n "$PYTHON" ] || exit 0
+
+    GENERATOR=""
+    if [ -f "$HOME/repos/aitools/scripts/generate-dashboard.py" ]; then
+        GENERATOR="$HOME/repos/aitools/scripts/generate-dashboard.py"
+    elif [ -f "$PROJECT_ROOT/scripts/generate-dashboard.py" ]; then
+        GENERATOR="$PROJECT_ROOT/scripts/generate-dashboard.py"
+    fi
+    [ -n "$GENERATOR" ] || exit 0
+
+    # Find estimate (simplified -- CLI has full search logic)
+    ESTIMATE=""
+    if [ -f "$PROJECT_ROOT/.aitools/channel/running-estimate.json" ]; then
+        ESTIMATE="$PROJECT_ROOT/.aitools/channel/running-estimate.json"
+    fi
+    if [ -z "$ESTIMATE" ] && [ -d "$PROJECT_ROOT/.scratch" ]; then
+        for dir in "$PROJECT_ROOT"/.scratch/session-*/; do
+            [ -d "$dir" ] || continue
+            for est in "$dir"/*running-estimate*.json; do
+                [ -f "$est" ] || continue
+                ESTIMATE="$est"
+                break 2
+            done
+        done
+    fi
+    [ -n "$ESTIMATE" ] || exit 0
+
+    PORT=8411
+    PID_DIR="$PROJECT_ROOT/.aitools"
+    mkdir -p "$PID_DIR" 2>/dev/null || PID_DIR="/tmp"
+    PID_FILE="$PID_DIR/.dashboard-pid"
+
+    # Check if already running
+    if [ -f "$PID_FILE" ]; then
+        old_pid=$(cat "$PID_FILE" 2>/dev/null || echo "")
+        if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
+            printf 'Dashboard: http://localhost:%d/\n' "$PORT"
+            exit 0
+        fi
+        rm -f "$PID_FILE"
+    fi
+
+    nohup "$PYTHON" "$GENERATOR" --estimate "$ESTIMATE" --serve --port "$PORT" \
+        >/dev/null 2>&1 &
+    SERVER_PID=$!
+    disown "$SERVER_PID" 2>/dev/null || true
+    printf '%d' "$SERVER_PID" > "$PID_FILE"
+    sleep 0.3
+    if kill -0 "$SERVER_PID" 2>/dev/null; then
+        printf 'Dashboard: http://localhost:%d/\n' "$PORT"
+    else
+        rm -f "$PID_FILE"
+    fi
+fi
+
+exit 0
+__EMB_DASHBOARD__
+cat > "$HOOKS_DIR/estimate-refresh-stop.sh" <<'__EMB_ESTIMREFRESH__'
+#!/usr/bin/env bash
+# estimate-refresh-stop.sh -- Claude Code Stop hook (command type)
+# Combined Lagebeurteilung reminder + running estimate freshness tracker.
+#
+# Two functions:
+#   1. Auto-track turn count via marker file (mechanical, no judgment)
+#   2. At context threshold (estimated from turn count), inject
+#      Lagebeurteilung reminder to update the running estimate
+#
+# The running estimate auto-update flow:
+#   Agent updates estimate -> file mtime changes -> dashboard server's
+#   file watcher detects change -> regenerates served HTML -> browser
+#   polls and re-renders. This hook's job is to REMIND the agent to
+#   update, not to update the estimate itself (that requires judgment).
+#
+# Freshness sources (checked in order):
+#   1. JSON running estimate mtime (primary, always available)
+#   2. Session DB updated_at (supplemental, if harness-db.py available)
+#   If either source is fresh, suppress the stale reminder.
+#
+# Hook contract:
+#   - Stop hook, command type (stderr -> shown to agent as feedback)
+#   - Exit 0 = allow, Exit 2 = block (we always allow)
+#   - Must be fast (<50ms) -- fires on every agent turn
+#   - Must never crash or hang
+#
+# Related decisions:
+#   D-CONTEXT-ROT-HOOK: Lagebeurteilung checkpoint at 20%+ context
+#   D-OPERATIONAL-LEARNING-DUTY: OBSERVE-SURFACE-PROPOSE-CONNECT
+
+set -euo pipefail
+
+# Read JSON from stdin
+input=$(cat)
+
+# Extract session_id
+session_id=""
+if [[ "$input" =~ \"session_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
+    session_id="${BASH_REMATCH[1]}"
+fi
+
+[ -n "$session_id" ] || exit 0
+
+# --- Turn tracking via marker directory ---
+marker_dir="/tmp/aitools-estimate-$session_id"
+mkdir -p "$marker_dir" 2>/dev/null || exit 0
+
+# Increment turn count
+turn_file="$marker_dir/turn-count"
+turn_count=0
+if [ -f "$turn_file" ]; then
+    turn_count=$(cat "$turn_file" 2>/dev/null || echo "0")
+    if ! [[ "$turn_count" =~ ^[0-9]+$ ]]; then turn_count=0; fi
+fi
+turn_count=$((turn_count + 1))
+printf '%d' "$turn_count" > "$turn_file"
+
+# --- Lagebeurteilung checkpoint ---
+# Heuristic: each agent turn uses ~2-5K tokens of context.
+# At 200K total context, 20% = 40K tokens = ~10-20 turns.
+# Inject reminder at turn 15, then every 15 turns after.
+# This is conservative -- better to remind too early than too late.
+
+LAGE_INTERVAL=15
+reminders=""
+
+last_lage_file="$marker_dir/last-lage-turn"
+last_lage_turn=0
+if [ -f "$last_lage_file" ]; then
+    last_lage_turn=$(cat "$last_lage_file" 2>/dev/null || echo "0")
+    if ! [[ "$last_lage_turn" =~ ^[0-9]+$ ]]; then last_lage_turn=0; fi
+fi
+
+turns_since_lage=$((turn_count - last_lage_turn))
+
+if [ "$turn_count" -ge "$LAGE_INTERVAL" ] && [ "$turns_since_lage" -ge "$LAGE_INTERVAL" ]; then
+    printf '%d' "$turn_count" > "$last_lage_file"
+
+    reminders="Lagebeurteilung checkpoint (turn ${turn_count}): Context is growing. Update the running estimate with current situation, new findings, and decisions. If the dashboard server is running, the update will appear automatically. Key fields to refresh: schwerpunkt, situation.currentState, completedWork (append recent), findings (new ones), delegationLog (new entries), meta.version (increment). "
+fi
+
+# --- Estimate freshness check ---
+# If a running estimate exists and hasn't been modified in 30+ minutes,
+# remind the agent it may be stale.
+if [ -z "$reminders" ] && [ "$turn_count" -ge 5 ]; then
+    # Check every 10 turns
+    if [ $((turn_count % 10)) -eq 0 ]; then
+        # Find project root
+        cwd=""
+        if [[ "$input" =~ \"cwd\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
+            cwd="${BASH_REMATCH[1]}"
+        fi
+
+        if [ -n "$cwd" ]; then
+            project_root=$(cd "$cwd" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || echo "$cwd")
+
+            # Check for running estimate
+            estimate=""
+            if [ -f "$project_root/.aitools/channel/running-estimate.json" ]; then
+                estimate="$project_root/.aitools/channel/running-estimate.json"
+            fi
+            # Check scratch dirs
+            if [ -z "$estimate" ] && [ -d "$project_root/.scratch" ]; then
+                for dir in "$project_root"/.scratch/session-*/; do
+                    [ -d "$dir" ] || continue
+                    for est in "$dir"/*running-estimate*.json; do
+                        [ -f "$est" ] || continue
+                        estimate="$est"
+                        break 2
+                    done
+                done
+            fi
+
+            if [ -n "$estimate" ]; then
+                now=$(date +%s)
+                # Platform dispatch: macOS BSD stat vs GNU stat (Linux/Git Bash)
+                if [ "$(uname -s)" = "Darwin" ]; then
+                    est_mod=$(stat -f %m "$estimate" 2>/dev/null || echo "$now")
+                else
+                    est_mod=$(stat -c %Y "$estimate" 2>/dev/null || echo "$now")
+                fi
+                est_age=$((now - est_mod))
+                if [ "$est_age" -gt 1800 ]; then
+                    # Before flagging stale, check if session DB was recently updated
+                    # (supplemental: agent may have written to DB but not exported yet)
+                    db_fresh=false
+                    if [ -n "$session_id" ] && [ -d "$project_root/.aitools/sessions" ]; then
+                        db_prefix=$(printf '%s' "$session_id" | cut -c1-10)
+                        db_file="$project_root/.aitools/sessions/${db_prefix}.db"
+                        if [ -f "$db_file" ]; then
+                            if [ "$(uname -s)" = "Darwin" ]; then
+                                db_mod=$(stat -f %m "$db_file" 2>/dev/null || echo "0")
+                            else
+                                db_mod=$(stat -c %Y "$db_file" 2>/dev/null || echo "0")
+                            fi
+                            db_age=$((now - db_mod))
+                            if [ "$db_age" -lt 1800 ]; then
+                                db_fresh=true
+                            fi
+                        fi
+                    fi
+                    if [ "$db_fresh" = false ]; then
+                        minutes=$((est_age / 60))
+                        reminders="Running estimate is ${minutes} minutes stale. Consider updating it with current session state. "
+                    fi
+                fi
+            fi
+        fi
+    fi
+fi
+
+# Output reminders (if any) to stderr (shown to agent as feedback)
+if [ -n "$reminders" ]; then
+    printf '%s' "$reminders" >&2
+fi
+
+exit 0
+__EMB_ESTIMREFRESH__
+cat > "$HOOKS_DIR/harness-db-sessionstart.sh" <<'__EMB_HDBSTART__'
+#!/usr/bin/env bash
+# harness-db-sessionstart.sh -- Claude Code SessionStart hook
+# Initializes harness databases and registers the current session.
+#
+# Design decisions:
+#   - Requires Python 3 (sqlite3 stdlib -- no external deps)
+#   - Creates harness DB + session DB via harness-db.py helper
+#   - Silent exit on errors (hook must never break Claude Code)
+#   - Cross-platform: Python sqlite3 works on macOS, Windows Git Bash, Linux
+#   - Session ID from CC hook input (same pattern as scratch-init.sh)
+
+set -euo pipefail
+
+# --- Pure-bash JSON field extraction (same as scratch-init.sh) ---
+json_field() {
+    local json="$1" key="$2"
+    local val
+    val=$(printf '%s' "$json" \
+        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
+        | head -1 \
+        | sed 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"//' \
+        | sed 's/"$//')
+    printf '%s' "$val"
+}
+
+# Read hook input from stdin (contains session_id, cwd, etc.)
+INPUT=$(cat)
+SESSION_ID=$(json_field "$INPUT" "session_id")
+
+# Bail if no session ID (defensive)
+if [ -z "$SESSION_ID" ]; then
+    exit 0
+fi
+
+# Find project root
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+if [ -z "$PROJECT_ROOT" ]; then
+    PROJECT_ROOT="$(pwd)"
+fi
+
+# Check for Python 3 (required for harness-db.py)
+PYTHON=""
+if command -v python3 > /dev/null 2>&1; then
+    PYTHON="python3"
+elif command -v python > /dev/null 2>&1; then
+    PYTHON="python"
+fi
+
+if [ -z "$PYTHON" ]; then
+    printf 'harness-db: Python 3 not found, skipping DB init\n'
+    exit 0
+fi
+
+# Verify sqlite3 module is available
+if ! "$PYTHON" -c "import sqlite3" 2>/dev/null; then
+    printf 'harness-db: Python sqlite3 module not available, skipping DB init\n'
+    exit 0
+fi
+
+HELPER="$PROJECT_ROOT/scripts/harness-db.py"
+
+# Check helper script exists
+if [ ! -f "$HELPER" ]; then
+    exit 0
+fi
+
+# Initialize harness databases (creates if missing)
+"$PYTHON" "$HELPER" init 2>/dev/null || true
+
+# Register this session
+"$PYTHON" "$HELPER" session start --id "$SESSION_ID" 2>/dev/null || true
+
+printf 'Harness DB: session %s registered\n' "$SESSION_ID"
+__EMB_HDBSTART__
+cat > "$HOOKS_DIR/harness-db-sessionend.sh" <<'__EMB_HDBEND__'
+#!/usr/bin/env bash
+# harness-db-sessionend.sh -- Claude Code SessionEnd hook
+# Marks the current session as complete and exports DB to JSON for
+# git carry-forward (Option B: SQLite runtime, JSON archive).
+#
+# Design decisions:
+#   - Requires Python 3 (sqlite3 stdlib -- no external deps)
+#   - Exports session DB to .aitools/channel/running-estimate.json (tracked)
+#   - Silent exit on errors (hook must never break Claude Code)
+#   - Cross-platform: Python sqlite3 works on macOS, Windows Git Bash, Linux
+#   - Session ID from CC hook input (same pattern as harvest-session.sh)
+
+set -euo pipefail
+
+# --- Pure-bash JSON field extraction (same as harvest-session.sh) ---
+json_field() {
+    local json="$1" key="$2"
+    local val
+    val=$(printf '%s' "$json" \
+        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
+        | head -1 \
+        | sed 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"//' \
+        | sed 's/"$//')
+    printf '%s' "$val"
+}
+
+# Read hook input from stdin
+INPUT=$(cat)
+SESSION_ID=$(json_field "$INPUT" "session_id")
+
+# Bail if no session ID (defensive)
+if [ -z "$SESSION_ID" ]; then
+    exit 0
+fi
+
+# Find project root
+CWD=$(json_field "$INPUT" "cwd")
+if [ -n "$CWD" ]; then
+    PROJECT_ROOT=$(cd "$CWD" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || echo "$CWD")
+else
+    PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "$(pwd)")
+fi
+
+# Check for Python 3
+PYTHON=""
+if command -v python3 > /dev/null 2>&1; then
+    PYTHON="python3"
+elif command -v python > /dev/null 2>&1; then
+    PYTHON="python"
+fi
+
+if [ -z "$PYTHON" ]; then
+    exit 0
+fi
+
+HELPER="$PROJECT_ROOT/scripts/harness-db.py"
+
+# Check helper script exists
+if [ ! -f "$HELPER" ]; then
+    exit 0
+fi
+
+# Mark session as ended
+"$PYTHON" "$HELPER" session end --id "$SESSION_ID" 2>/dev/null || true
+
+# Export DB to JSON for git carry-forward
+"$PYTHON" "$HELPER" export --format json --session "$SESSION_ID" 2>/dev/null || true
+
+printf 'Harness DB: session %s ended, JSON exported\n' "$SESSION_ID"
+__EMB_HDBEND__
+
+    for _hf in "$HOOKS_DIR"/*.sh; do
+        [ -f "$_hf" ] || continue
+        chmod +x "$_hf"
+        log_ok "Deployed hook: $_hf"
+    done
+fi
+
+# Legacy dest vars for settings.json merge below
+HOOK_DEST="$HOOKS_DIR/session-archive.sh"
+GUARD_DEST="$HOOKS_DIR/standing-order-guard.sh"
 
 
 # --- Merge hook into ~/.claude/settings.json ---

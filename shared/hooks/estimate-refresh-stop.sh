@@ -13,6 +13,11 @@
 #   polls and re-renders. This hook's job is to REMIND the agent to
 #   update, not to update the estimate itself (that requires judgment).
 #
+# Freshness sources (checked in order):
+#   1. JSON running estimate mtime (primary, always available)
+#   2. Session DB updated_at (supplemental, if harness-db.py available)
+#   If either source is fresh, suppress the stale reminder.
+#
 # Hook contract:
 #   - Stop hook, command type (stderr -> shown to agent as feedback)
 #   - Exit 0 = allow, Exit 2 = block (we always allow)
@@ -116,8 +121,28 @@ if [ -z "$reminders" ] && [ "$turn_count" -ge 5 ]; then
                 fi
                 est_age=$((now - est_mod))
                 if [ "$est_age" -gt 1800 ]; then
-                    minutes=$((est_age / 60))
-                    reminders="Running estimate is ${minutes} minutes stale. Consider updating it with current session state. "
+                    # Before flagging stale, check if session DB was recently updated
+                    # (supplemental: agent may have written to DB but not exported yet)
+                    db_fresh=false
+                    if [ -n "$session_id" ] && [ -d "$project_root/.aitools/sessions" ]; then
+                        db_prefix=$(printf '%s' "$session_id" | cut -c1-10)
+                        db_file="$project_root/.aitools/sessions/${db_prefix}.db"
+                        if [ -f "$db_file" ]; then
+                            if [ "$(uname -s)" = "Darwin" ]; then
+                                db_mod=$(stat -f %m "$db_file" 2>/dev/null || echo "0")
+                            else
+                                db_mod=$(stat -c %Y "$db_file" 2>/dev/null || echo "0")
+                            fi
+                            db_age=$((now - db_mod))
+                            if [ "$db_age" -lt 1800 ]; then
+                                db_fresh=true
+                            fi
+                        fi
+                    fi
+                    if [ "$db_fresh" = false ]; then
+                        minutes=$((est_age / 60))
+                        reminders="Running estimate is ${minutes} minutes stale. Consider updating it with current session state. "
+                    fi
                 fi
             fi
         fi

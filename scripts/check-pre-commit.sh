@@ -414,6 +414,49 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 18. Python script syntax validation
+# ---------------------------------------------------------------------------
+py_staged=$(echo "$STAGED_FILES" | grep '\.py$' || true)
+if [ -z "$STAGED_FILES" ]; then
+    step_skip "18" "Script syntax (.py)" "no scripts staged"
+elif [ -z "$py_staged" ]; then
+    step_skip "18" "Script syntax (.py)" "no .py staged"
+else
+    PYTHON=""
+    if command -v python3 >/dev/null 2>&1; then
+        PYTHON="python3"
+    elif command -v python >/dev/null 2>&1; then
+        PYTHON="python"
+    fi
+    if [ -z "$PYTHON" ]; then
+        step_skip "18" "Script syntax (.py)" "python3 not found"
+    else
+        py_errors=0
+        while IFS= read -r f; do
+            [ -f "$f" ] || continue
+            if ! "$PYTHON" -m py_compile "$f" 2>/dev/null; then
+                py_errors=$((py_errors + 1))
+                printf '    FAIL: %s\n' "$f"
+            fi
+        done <<< "$py_staged"
+        if [ "$py_errors" -eq 0 ]; then
+            step_pass "18" "Script syntax (.py)"
+        else
+            step_fail "18" "Script syntax (.py)" "$py_errors file(s) failed"
+        fi
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# 19. Harness DB schema file exists
+# ---------------------------------------------------------------------------
+if [ -f "$REPO_ROOT/reference/harness-db-schema.sql" ]; then
+    step_pass "19" "Harness DB schema file" "reference/harness-db-schema.sql exists"
+else
+    step_fail "19" "Harness DB schema file" "reference/harness-db-schema.sql missing"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------
 print_summary
