@@ -12,6 +12,41 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.65.1 -- Compliance, reference-card skill, intent fixes (2026-03-24)
+
+### New capabilities
+
+| # | Change |
+|---|--------|
+| 1 | **`/aitool-ops` reference-card skill** — first user-level reference-card in the harness. Embedded tool-ops knowledge (deny rules, 14 hooks, CC version deps, governance modes, hook portability table, subagent restrictions, SendMessage gap) available in ANY repo. Establishes the three-tier skill taxonomy pattern (decision #49, M5 P-6). |
+| 2 | **`.claude/rules/aitool-ops.md`** — governance rule with trigger directive, three-tier taxonomy table, reference-card pattern definition |
+
+### Hook improvements
+
+| # | Change |
+|---|--------|
+| 3 | **SQLite-integrated hooks** — 5 session lifecycle hooks rewritten with harness-db.py integration (OBSERVE mode, graceful degradation). Critical fixes carried forward (stat dispatch, no rm-rf, session_id dirs). |
+| 4 | **glossary-skill-guard.sh** — 2 audit fixes: added missing `set -euo pipefail`, fixed `hookSpecificOutput` JSON going to stderr instead of stdout |
+| 5 | **build-deploy.sh** — hook embedding expanded from 4 to 13 hooks |
+| 6 | **check-pre-commit.sh** — step 18 (Python syntax validation), step 19 (schema file check) |
+
+### Skill quality
+
+| # | Change |
+|---|--------|
+| 7 | **5 skill intents fixed** — chrome-devtools, a11y-debugging, investigate, optimize-plan: upgraded from `## Purpose`/`Core Concepts` to structured `## Intent` (purpose/scope/audience) |
+| 8 | **Skill artifact lifecycle RFC** — written to scratch, defines 5-phase lifecycle, 12 conventions, testing strategy |
+
+### Compliance
+
+| # | Change |
+|---|--------|
+| 9 | **Full 7-domain compliance audit** — cross-platform, structured logging, build-deploy, library usage, entry points, agentic standards, hook deployment. CLEAN: zero violations across 13 hooks, 34 setup scripts, 2 entry points, 2 Python scripts |
+
+(tested: macOS)
+
+---
+
 ## v0.65.0 -- SQLite foundation, mission control, dashboard fixes, hook improvements (2026-03-24)
 
 ### New capabilities
