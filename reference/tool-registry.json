@@ -380,6 +380,58 @@
         "interactiveShell": "User sets manually if needed"
       }
     },
+    "bash": {
+      "displayName": "Bash",
+      "source": "https://www.gnu.org/software/bash/ (upstream) / https://formulae.brew.sh/formula/bash (macOS Homebrew)",
+      "purpose": "Shell interpreter for all aitools scripts, hooks, and CLI entry points. macOS system bash is 3.2 (GPLv2-frozen by Apple). Managed via Homebrew on macOS to get bash 5.x. Linux and Windows (Git Bash) ship 5.x natively.",
+      "install": {
+        "macos": [
+          { "method": "homebrew", "command": "brew install bash", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "Installs to /opt/homebrew/bin/bash (ARM) or /usr/local/bin/bash (Intel). System /bin/bash unchanged." }
+        ],
+        "windows": [
+          { "method": "bundled", "command": null, "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "Comes with Git for Windows (Git Bash). Update via: winget upgrade Git.Git" }
+        ],
+        "linux": [
+          { "method": "system", "command": null, "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "Pre-installed on all major distros. Ubuntu 20.04+ has bash 5.0+." }
+        ]
+      },
+      "update": {
+        "homebrew": "brew upgrade bash",
+        "windows": "winget upgrade Git.Git (bash version tied to Git for Windows release)"
+      },
+      "versionCheck": "bash --version",
+      "systemRequirements": "Minimum version: 5.0. All aitools scripts use #!/usr/bin/env bash which resolves via PATH.",
+      "notes": "macOS: Homebrew bash coexists with system bash (/bin/bash). SIP prevents replacing /bin/bash. #!/usr/bin/env bash resolves to Homebrew version if /opt/homebrew/bin is in PATH (standard Homebrew setup). Not added to /etc/shells or set as login shell -- used for scripts only, not interactive use.",
+      "lifecycle": {
+        "platformStatus": { "macos": "supported", "windows": "supported", "linux": "supported" },
+        "concurrency": "Yes -- stateless CLI",
+        "postInstallConfig": null,
+        "dependencies": ["Homebrew (macOS)", "Git for Windows (Windows)"],
+        "invocation": { "command": "bash", "antiPatterns": ["Using /bin/bash directly on macOS (gets 3.2)", "grep -P in scripts (use perl -ne instead)"] }
+      },
+      "versions": {
+        "macos": { "lastVerifiedVersion": null, "lastVerified": null },
+        "windows": { "lastVerifiedVersion": null, "lastVerified": null },
+        "linux": { "lastVerifiedVersion": null, "lastVerified": null },
+        "minVersion": "5.0",
+        "blocked": []
+      },
+      "authentication": null,
+      "buildPrereqs": null,
+      "knownPaths": {
+        "macos": ["/opt/homebrew/bin/bash", "/usr/local/bin/bash"],
+        "windows": ["C:\\Program Files\\Git\\bin\\bash.exe"],
+        "linux": ["/usr/bin/bash", "/bin/bash"]
+      },
+      "nonPreferredMethods": null,
+      "pathIssues": {
+        "macos": "System /bin/bash (3.2) can shadow Homebrew bash if /opt/homebrew/bin is not in PATH. Homebrew installer normally adds it to .zprofile."
+      },
+      "platformGotchas": {
+        "macos": "Apple ships bash 3.2.57 (2007, last GPLv2 release). Will never update due to GPLv3 policy. Features missing in 3.2: associative arrays (4.0+), mapfile/readarray (4.0+), reliable process substitution+heredoc (4.0+), EPOCHREALTIME (5.0+). Homebrew bash is the standard fix.",
+        "windows": "Git Bash version is tied to Git for Windows release. Git for Windows 2.42+ ships bash 5.x. Cannot be upgraded independently of Git."
+      }
+    },
     "pwsh": {
       "displayName": "PowerShell (pwsh)",
       "source": "https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell",

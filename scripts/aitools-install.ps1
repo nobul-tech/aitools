@@ -606,9 +606,21 @@ if (Test-Path $perlScript) {
 }
 
 # ============================================================
-# 20. Deploy configurations
+# 20. Bash
 # ============================================================
-Log "Step 20: Deploy configurations"
+Log "Step 20: Bash"
+
+$bashScript = Join-Path $PSScriptRoot "setup-bash.ps1"
+if (Test-Path $bashScript) {
+    Invoke-ValidatedScript $bashScript
+} else {
+    LogWarn "setup-bash.ps1 not found -- skipping (MDM deploy)"
+}
+
+# ============================================================
+# 21. Deploy configurations
+# ============================================================
+Log "Step 21: Deploy configurations"
 
 $deployScripts = @(
     "setup-user-claude.ps1",

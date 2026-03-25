@@ -899,7 +899,26 @@ blog "Copying deploy/setup-perl.ps1"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
-# 29-30. deploy/setup-user-mcp.sh and .ps1 (MCP only, skills moved to setup-user-skills)
+# 29-30. deploy/setup-bash.sh and .ps1 (copy as-is)
+# ============================================================
+blog "Copying deploy/setup-bash.sh"
+{
+    echo '#!/usr/bin/env bash'
+    echo "$HEADER_COMMENT_BASH"
+    tail -n +2 "$SCRIPTS_DIR/setup-bash.sh" | inline_lib_bash
+} > "$DEPLOY_DIR/setup-bash.sh"
+chmod +x "$DEPLOY_DIR/setup-bash.sh"
+GENERATED=$((GENERATED + 1))
+
+blog "Copying deploy/setup-bash.ps1"
+{
+    echo "$HEADER_COMMENT_PS1"
+    cat "$SCRIPTS_DIR/setup-bash.ps1" | inline_lib_ps1
+} > "$DEPLOY_DIR/setup-bash.ps1"
+GENERATED=$((GENERATED + 1))
+
+# ============================================================
+# 31-32. deploy/setup-user-mcp.sh and .ps1 (MCP only, skills moved to setup-user-skills)
 # ============================================================
 
 blog "Generating deploy/setup-user-mcp.sh"

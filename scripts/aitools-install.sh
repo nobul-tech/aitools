@@ -684,9 +684,21 @@ else
 fi
 
 # ============================================================
-# 20. Deploy configurations
+# 20. Bash
 # ============================================================
-log "Step 20: Deploy configurations"
+log "Step 20: Bash"
+
+bash_script="$SCRIPT_DIR/setup-bash.sh"
+if [ -f "$bash_script" ]; then
+    validate_and_run "$bash_script"
+else
+    log_warn "setup-bash.sh not found -- skipping (MDM deploy)"
+fi
+
+# ============================================================
+# 21. Deploy configurations
+# ============================================================
+log "Step 21: Deploy configurations"
 
 DEPLOY_SCRIPTS="setup-user-claude.sh setup-user-cursor.sh setup-user-mcp.sh setup-user-skills.sh setup-cursor-ide-mcp.sh setup-user-hooks.sh"
 
