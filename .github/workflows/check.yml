@@ -121,13 +121,33 @@ jobs:
 
       - name: Check deploy drift
         run: |
-          drift=$(git diff deploy/ 2>/dev/null || true)
+          # Exclude files that embed user-specific data (profile.json, user rules):
+          #   setup-user-claude.sh/.ps1 — embeds CLAUDE.md template + user rules
+          #   setup-user-hooks.sh/.ps1  — embeds claude preferences
+          #   setup-user-skills.sh/.ps1 — embeds skill content
+          #   setup-user-cursor.sh/.ps1 — embeds cursor rules
+          drift=$(git diff -- deploy/ \
+            ':!deploy/setup-user-claude.sh' ':!deploy/setup-user-claude.ps1' \
+            ':!deploy/setup-user-hooks.sh' ':!deploy/setup-user-hooks.ps1' \
+            ':!deploy/setup-user-skills.sh' ':!deploy/setup-user-skills.ps1' \
+            ':!deploy/setup-user-cursor.sh' ':!deploy/setup-user-cursor.ps1' \
+            2>/dev/null || true)
           if [ -n "$drift" ]; then
             echo "::error::deploy/ is stale -- run build-deploy.sh and commit"
             git diff --stat deploy/
             exit 1
           fi
-          echo "deploy/ is up to date"
+          # Show profile-dependent drift as info (expected on CI without user profile)
+          profile_drift=$(git diff --stat -- \
+            deploy/setup-user-claude.sh deploy/setup-user-claude.ps1 \
+            deploy/setup-user-hooks.sh deploy/setup-user-hooks.ps1 \
+            deploy/setup-user-skills.sh deploy/setup-user-skills.ps1 \
+            deploy/setup-user-cursor.sh deploy/setup-user-cursor.ps1 \
+            2>/dev/null || true)
+          if [ -n "$profile_drift" ]; then
+            echo "::notice::Profile-dependent deploy files differ (expected on CI without user profile)"
+          fi
+          echo "deploy/ drift check passed"
 
       - name: Line ending audit
         run: |
@@ -229,7 +249,12 @@ jobs:
 
       - name: Check deploy drift
         run: |
-          drift=$(git diff deploy/ 2>/dev/null || true)
+          drift=$(git diff -- deploy/ \
+            ':!deploy/setup-user-claude.sh' ':!deploy/setup-user-claude.ps1' \
+            ':!deploy/setup-user-hooks.sh' ':!deploy/setup-user-hooks.ps1' \
+            ':!deploy/setup-user-skills.sh' ':!deploy/setup-user-skills.ps1' \
+            ':!deploy/setup-user-cursor.sh' ':!deploy/setup-user-cursor.ps1' \
+            2>/dev/null || true)
           if [ -n "$drift" ]; then
             echo "::error::deploy/ is stale -- run build-deploy.sh and commit"
             exit 1
@@ -304,7 +329,12 @@ jobs:
       - name: Check deploy drift
         shell: bash
         run: |
-          drift=$(git diff deploy/ 2>/dev/null || true)
+          drift=$(git diff -- deploy/ \
+            ':!deploy/setup-user-claude.sh' ':!deploy/setup-user-claude.ps1' \
+            ':!deploy/setup-user-hooks.sh' ':!deploy/setup-user-hooks.ps1' \
+            ':!deploy/setup-user-skills.sh' ':!deploy/setup-user-skills.ps1' \
+            ':!deploy/setup-user-cursor.sh' ':!deploy/setup-user-cursor.ps1' \
+            2>/dev/null || true)
           if [ -n "$drift" ]; then
             echo "::error::deploy/ is stale"
             exit 1
