@@ -143,8 +143,10 @@ the `settings.json` hook command to the deployed copy. The hook:
 - Reads `userRepoPath` from config
 - Derives project name from the session's working directory
 - Copies the transcript JSONL to `sessions/<project>/<date>_<prefix>.jsonl`
+- Auto-commits the archived file with `git add <specific-file>` + `git commit`
+- Pushes to remote (best-effort: warns on failure, never blocks SessionEnd)
+- Runs `git pull --rebase` before push to handle concurrent sessions
 - Silently skips if config is missing or user repo doesn't exist
-- Never runs git operations (user commits/pushes on their own schedule)
 
 ## Template Resolution (CLAUDE.md)
 

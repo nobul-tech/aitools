@@ -1682,7 +1682,7 @@ if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -
 $hook_archive = @'
 #!/usr/bin/env bash
 # session-archive.sh — Claude Code SessionEnd hook
-# Archives session transcript to user repo after each session ends.
+# Archives session transcript to user repo, then auto-commits and pushes.
 #
 # Baseline: Claude Code 2.1.51 -- hook schema (session_id, cwd, transcript_path)
 # Hook input: JSON on stdin with session_id, cwd, transcript_path, etc.
@@ -1690,9 +1690,18 @@ $hook_archive = @'
 #
 # Design decisions:
 #   - Silent exit on any misconfiguration (hook must never break Claude Code)
-#   - No git operations (user commits/pushes on their own schedule)
+#   - Auto-commit + push after copy (implements planning brief decision #1)
+#   - Push is best-effort: warns on failure, never blocks SessionEnd
+#   - git add <specific-file> only (never git add -A) to avoid committing
+#     unrelated dotprofile changes
 #   - Pure-bash JSON parsing (jq not guaranteed in hook environment)
 #   - Uses transcript file birth time for date (session start), fallback to today
+#   - Portable: macOS, Linux, Windows Git Bash (uname -s dispatch for stat)
+#
+# KPI definitions (aspirational until decision #32 ships):
+#   - crossMachineVisibilityRate: % sessions archived + committed + pushed
+#     within 5 min of session end (target: >=99%)
+#   - archivePushFailureRate: push failures per week (target: <1)
 
 set -euo pipefail
 
@@ -1774,6 +1783,42 @@ fi
 mkdir -p "$DEST_DIR"
 cp "$TRANSCRIPT" "$DEST_FILE"
 
+# --- Auto-commit and push to dotprofile repo (decision #1) ---
+# Best-effort: git failures warn to stderr but never block SessionEnd.
+# Uses specific file staging (not git add -A) to avoid committing
+# unrelated dotprofile changes.
+GIT_OK=true
+if ! command -v git > /dev/null 2>&1; then
+    GIT_OK=false
+fi
+
+if $GIT_OK; then
+    # Compute path relative to user repo root for git add
+    RELATIVE_PATH="sessions/${PROJECT}/${DATE}_${PREFIX}.jsonl"
+    COMMIT_MSG="Archive session ${DATE}_${PREFIX} (${PROJECT})"
+
+    # All git operations run inside the dotprofile repo
+    if ! git -C "$USER_REPO" add "$RELATIVE_PATH" 2>/dev/null; then
+        printf '[session-archive] warn: git add failed for %s\n' "$RELATIVE_PATH" >&2
+        GIT_OK=false
+    fi
+
+    if $GIT_OK; then
+        if ! git -C "$USER_REPO" commit -m "$COMMIT_MSG" 2>/dev/null; then
+            printf '[session-archive] warn: git commit failed (nothing to commit?)\n' >&2
+            GIT_OK=false
+        fi
+    fi
+
+    if $GIT_OK; then
+        # Pull --rebase first to handle concurrent sessions or remote changes
+        git -C "$USER_REPO" pull --rebase 2>/dev/null || true
+        if ! git -C "$USER_REPO" push 2>/dev/null; then
+            printf '[session-archive] warn: git push failed (offline or remote ahead)\n' >&2
+        fi
+    fi
+fi
+
 # --- Log archive event to harness DB (OBSERVE mode) ---
 # Additive: if harness-db.py is missing or fails, archive still succeeds.
 PYTHON=""
@@ -1796,7 +1841,7 @@ if [ -n "$PYTHON" ] && [ -n "$REPO_ROOT" ]; then
             --session "$SESSION_ID" \
             --type sitrep \
             --agent "session-archive" \
-            --message "Transcript archived to ${DEST_FILE}" \
+            --message "Transcript archived and committed to ${DEST_FILE}" \
             2>/dev/null || true
     fi
 fi
