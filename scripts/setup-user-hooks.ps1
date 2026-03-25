@@ -16,6 +16,8 @@
 #   PostToolUse[Write|Edit]: sh-file-fixup.sh (fixes CRLF and chmod on .sh files)
 #   Stop: surfacing-duty-stop.sh (periodic surfacing duty reminder)
 #   Stop: estimate-refresh-stop.sh (Lagebeurteilung + estimate freshness)
+#   Stop: intent-sentinel-stop.sh (consolidated telemetry + intent resurface)
+#   PreToolUse[Agent]: delegation-duty-guard.sh (checks delegation prompts for duty elements)
 #
 # Reads claude preferences from profile.json (via config.json -> userRepoPath).
 # See reference/user-repo.md and shared/hooks/ for details.
@@ -79,7 +81,9 @@ $blockGuideScript = Resolve-HookSource "block-claude-code-guide.sh"
 $toolOpsAuditScript = Resolve-HookSource "tool-ops-session-audit.sh"
 $dashboardScript = Resolve-HookSource "dashboard-serve.sh"
 $estimateRefreshScript = Resolve-HookSource "estimate-refresh-stop.sh"
-foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $surfacingScript, $blockGuideScript, $toolOpsAuditScript, $dashboardScript, $estimateRefreshScript)) {
+$sentinelScript = Resolve-HookSource "intent-sentinel-stop.sh"
+$delegGuardScript = Resolve-HookSource "delegation-duty-guard.sh"
+foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $surfacingScript, $blockGuideScript, $toolOpsAuditScript, $dashboardScript, $estimateRefreshScript, $sentinelScript, $delegGuardScript)) {
     if (-not (Test-Path $src)) {
         LogError "Hook script not found: $src"
         exit 1
@@ -101,6 +105,8 @@ $blockGuideDest = Join-Path $hooksDir "block-claude-code-guide.sh"
 $toolOpsAuditDest = Join-Path $hooksDir "tool-ops-session-audit.sh"
 $dashboardDest = Join-Path $hooksDir "dashboard-serve.sh"
 $estimateRefreshDest = Join-Path $hooksDir "estimate-refresh-stop.sh"
+$sentinelDest = Join-Path $hooksDir "intent-sentinel-stop.sh"
+$delegGuardDest = Join-Path $hooksDir "delegation-duty-guard.sh"
 
 $hooksChanged = $false
 
@@ -119,12 +125,14 @@ if ($DryRun) {
     Log "[DRY RUN] Would deploy hook: $toolOpsAuditScript -> $toolOpsAuditDest"
     Log "[DRY RUN] Would deploy hook: $dashboardScript -> $dashboardDest"
     Log "[DRY RUN] Would deploy hook: $estimateRefreshScript -> $estimateRefreshDest"
+    Log "[DRY RUN] Would deploy hook: $sentinelScript -> $sentinelDest"
+    Log "[DRY RUN] Would deploy hook: $delegGuardScript -> $delegGuardDest"
 } else {
     if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }
 
     Initialize-DeployTracker
 
-    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($surfacingScript, $surfacingDest), @($blockGuideScript, $blockGuideDest), @($toolOpsAuditScript, $toolOpsAuditDest), @($dashboardScript, $dashboardDest), @($estimateRefreshScript, $estimateRefreshDest))) {
+    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($surfacingScript, $surfacingDest), @($blockGuideScript, $blockGuideDest), @($toolOpsAuditScript, $toolOpsAuditDest), @($dashboardScript, $dashboardDest), @($estimateRefreshScript, $estimateRefreshDest), @($sentinelScript, $sentinelDest), @($delegGuardScript, $delegGuardDest))) {
         $src = $pair[0]; $dst = $pair[1]
         $hookName = Split-Path $dst -Leaf
         $srcContent = Get-Content $src -Raw -ErrorAction Stop
@@ -364,6 +372,16 @@ $estimateRefreshDestUnix = $estimateRefreshDest -replace '\\', '/'
 $estimateRefreshCmd = "bash `"$estimateRefreshDestUnix`""
 MergeHookEntry "Stop" "estimate-refresh-stop.sh" "" $estimateRefreshCmd
 
+# Stop: intent sentinel (consolidated telemetry)
+$sentinelDestUnix = $sentinelDest -replace '\\', '/'
+$sentinelCmd = "bash `"$sentinelDestUnix`""
+MergeHookEntry "Stop" "intent-sentinel-stop.sh" "" $sentinelCmd
+
+# PreToolUse: delegation duty guard
+$delegGuardDestUnix = $delegGuardDest -replace '\\', '/'
+$delegGuardCmd = "bash `"$delegGuardDestUnix`""
+MergeHookEntry "PreToolUse" "delegation-duty-guard.sh" "Agent" $delegGuardCmd
+
 # --- Track old values for change reporting ---
 $oldAutoMemory = $settings["autoMemoryEnabled"]
 $oldAlwaysThinking = $settings["alwaysThinkingEnabled"]
@@ -461,6 +479,10 @@ if ($DryRun) {
             if ($dashCount -ne 1) { LogError "Validation failed: expected 1 SessionStart dashboard-serve hook, got $dashCount" }
             $erCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'estimate-refresh-stop\.sh' }).Count
             if ($erCount -ne 1) { LogError "Validation failed: expected 1 Stop estimate-refresh-stop hook, got $erCount" }
+            $sentCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'intent-sentinel-stop\.sh' }).Count
+            if ($sentCount -ne 1) { LogError "Validation failed: expected 1 Stop intent-sentinel hook, got $sentCount" }
+            $dgCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'delegation-duty-guard\.sh' }).Count
+            if ($dgCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse delegation-duty-guard hook, got $dgCount" }
 
             # Validate hook schema: command-type must have command,
             # prompt-type must have prompt (not command).

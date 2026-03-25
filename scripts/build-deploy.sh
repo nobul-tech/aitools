@@ -56,7 +56,7 @@ if [ "$_skill_count" -eq 0 ]; then
     exit 1
 fi
 blog "Found $_skill_count skill(s) in shared/skills/"
-for _hook_file in session-archive.sh standing-order-guard.sh sh-file-fixup.sh surfacing-duty-stop.sh scratch-init.sh harvest-session.sh glossary-skill-guard.sh block-claude-code-guide.sh tool-ops-session-audit.sh dashboard-serve.sh estimate-refresh-stop.sh harness-db-sessionstart.sh harness-db-sessionend.sh; do
+for _hook_file in session-archive.sh standing-order-guard.sh sh-file-fixup.sh surfacing-duty-stop.sh scratch-init.sh harvest-session.sh glossary-skill-guard.sh block-claude-code-guide.sh tool-ops-session-audit.sh dashboard-serve.sh estimate-refresh-stop.sh harness-db-sessionstart.sh harness-db-sessionend.sh intent-sentinel-stop.sh delegation-duty-guard.sh; do
     if [ ! -f "$SHARED_DIR/hooks/$_hook_file" ]; then
         blog_error "Required hook file not found: $SHARED_DIR/hooks/$_hook_file"
         exit 1
@@ -78,6 +78,8 @@ HOOK_DASHBOARD_SERVE=$(cat "$SHARED_DIR/hooks/dashboard-serve.sh")
 HOOK_ESTIMATE_REFRESH=$(cat "$SHARED_DIR/hooks/estimate-refresh-stop.sh")
 HOOK_HARNESS_DB_START=$(cat "$SHARED_DIR/hooks/harness-db-sessionstart.sh")
 HOOK_HARNESS_DB_END=$(cat "$SHARED_DIR/hooks/harness-db-sessionend.sh")
+HOOK_INTENT_SENTINEL=$(cat "$SHARED_DIR/hooks/intent-sentinel-stop.sh")
+HOOK_DELEGATION_GUARD=$(cat "$SHARED_DIR/hooks/delegation-duty-guard.sh")
 
 # Read shared library content for inlining into deploy scripts
 AITOOLS_LIB_BASH=$(cat "$SCRIPTS_DIR/aitools-lib.sh")
@@ -1227,6 +1229,8 @@ BLOCK
     _embed_hook HOOK_ESTIMATE_REFRESH "estimate-refresh-stop.sh" "__EMB_ESTIMREFRESH__"
     _embed_hook HOOK_HARNESS_DB_START "harness-db-sessionstart.sh" "__EMB_HDBSTART__"
     _embed_hook HOOK_HARNESS_DB_END "harness-db-sessionend.sh" "__EMB_HDBEND__"
+    _embed_hook HOOK_INTENT_SENTINEL "intent-sentinel-stop.sh" "__EMB_SENTINEL__"
+    _embed_hook HOOK_DELEGATION_GUARD "delegation-duty-guard.sh" "__EMB_DELEGGUARD__"
     cat <<'BLOCK'
 
     for _hf in "$HOOKS_DIR"/*.sh; do
@@ -1322,6 +1326,8 @@ BLOCK
     _embed_ps1_hook HOOK_ESTIMATE_REFRESH "estimate-refresh-stop.sh" "hook_estimrefresh"
     _embed_ps1_hook HOOK_HARNESS_DB_START "harness-db-sessionstart.sh" "hook_hdbstart"
     _embed_ps1_hook HOOK_HARNESS_DB_END "harness-db-sessionend.sh" "hook_hdbend"
+    _embed_ps1_hook HOOK_INTENT_SENTINEL "intent-sentinel-stop.sh" "hook_sentinel"
+    _embed_ps1_hook HOOK_DELEGATION_GUARD "delegation-duty-guard.sh" "hook_delegguard"
     # Deploy all hooks
     printf '$hookFiles = @{\r\n'
     printf '    "session-archive.sh" = $hook_archive\r\n'
@@ -1337,6 +1343,8 @@ BLOCK
     printf '    "estimate-refresh-stop.sh" = $hook_estimrefresh\r\n'
     printf '    "harness-db-sessionstart.sh" = $hook_hdbstart\r\n'
     printf '    "harness-db-sessionend.sh" = $hook_hdbend\r\n'
+    printf '    "intent-sentinel-stop.sh" = $hook_sentinel\r\n'
+    printf '    "delegation-duty-guard.sh" = $hook_delegguard\r\n'
     printf '}\r\n'
     printf '\r\n'
     printf 'if ($DryRun) {\r\n'

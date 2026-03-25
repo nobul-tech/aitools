@@ -3,6 +3,7 @@
 # Safe to re-run — merges managed fields without clobbering existing settings.
 #
 # Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
+# (includes intent-sentinel-stop Stop hook and delegation-duty-guard PreToolUse[Agent] hook)
 # Preserved: permissions, enabledPlugins, all other fields
 #
 # Hooks deployed:
@@ -17,6 +18,8 @@
 #   PostToolUse[Write|Edit]: sh-file-fixup.sh (fixes CRLF and chmod on .sh files)
 #   Stop: surfacing-duty-stop.sh (periodic surfacing duty reminder)
 #   Stop: estimate-refresh-stop.sh (Lagebeurteilung + estimate freshness)
+#   Stop: intent-sentinel-stop.sh (consolidated telemetry + intent resurface)
+#   PreToolUse[Agent]: delegation-duty-guard.sh (checks delegation prompts for duty elements)
 #
 # Reads claude preferences from profile.json (via config.json -> userRepoPath).
 # See reference/user-repo.md and shared/hooks/ for details.
@@ -87,7 +90,9 @@ BLOCK_GUIDE_SCRIPT=$(resolve_hook "block-claude-code-guide.sh")
 TOOL_OPS_AUDIT_SCRIPT=$(resolve_hook "tool-ops-session-audit.sh")
 DASHBOARD_SCRIPT=$(resolve_hook "dashboard-serve.sh")
 ESTIMATE_REFRESH_SCRIPT=$(resolve_hook "estimate-refresh-stop.sh")
-for src in "$HOOK_SCRIPT" "$GUARD_SCRIPT" "$GLOSSARY_SCRIPT" "$SCRATCH_SCRIPT" "$HARVEST_SCRIPT" "$SHFIXUP_SCRIPT" "$SURFACING_SCRIPT" "$BLOCK_GUIDE_SCRIPT" "$TOOL_OPS_AUDIT_SCRIPT" "$DASHBOARD_SCRIPT" "$ESTIMATE_REFRESH_SCRIPT"; do
+SENTINEL_SCRIPT=$(resolve_hook "intent-sentinel-stop.sh")
+DELEG_GUARD_SCRIPT=$(resolve_hook "delegation-duty-guard.sh")
+for src in "$HOOK_SCRIPT" "$GUARD_SCRIPT" "$GLOSSARY_SCRIPT" "$SCRATCH_SCRIPT" "$HARVEST_SCRIPT" "$SHFIXUP_SCRIPT" "$SURFACING_SCRIPT" "$BLOCK_GUIDE_SCRIPT" "$TOOL_OPS_AUDIT_SCRIPT" "$DASHBOARD_SCRIPT" "$ESTIMATE_REFRESH_SCRIPT" "$SENTINEL_SCRIPT" "$DELEG_GUARD_SCRIPT"; do
     if [ ! -f "$src" ]; then
         log_error "Hook script not found: $src"
         exit 1
@@ -106,6 +111,8 @@ BLOCK_GUIDE_DEST="$HOME/.claude/hooks/block-claude-code-guide.sh"
 TOOL_OPS_AUDIT_DEST="$HOME/.claude/hooks/tool-ops-session-audit.sh"
 DASHBOARD_DEST="$HOME/.claude/hooks/dashboard-serve.sh"
 ESTIMATE_REFRESH_DEST="$HOME/.claude/hooks/estimate-refresh-stop.sh"
+SENTINEL_DEST="$HOME/.claude/hooks/intent-sentinel-stop.sh"
+DELEG_GUARD_DEST="$HOME/.claude/hooks/delegation-duty-guard.sh"
 
 HOOKS_CHANGED=false
 
@@ -124,12 +131,14 @@ if [ "$DRY_RUN" = "true" ]; then
     log "[DRY RUN] Would deploy hook: $(display_path "$TOOL_OPS_AUDIT_SCRIPT") -> $(display_path "$TOOL_OPS_AUDIT_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$DASHBOARD_SCRIPT") -> $(display_path "$DASHBOARD_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$ESTIMATE_REFRESH_SCRIPT") -> $(display_path "$ESTIMATE_REFRESH_DEST")"
+    log "[DRY RUN] Would deploy hook: $(display_path "$SENTINEL_SCRIPT") -> $(display_path "$SENTINEL_DEST")"
+    log "[DRY RUN] Would deploy hook: $(display_path "$DELEG_GUARD_SCRIPT") -> $(display_path "$DELEG_GUARD_DEST")"
 else
     mkdir -p "$HOME/.claude/hooks"
 
     deploy_tracker_init
 
-    for hook_pair in "$HOOK_SCRIPT|$HOOK_DEST" "$GUARD_SCRIPT|$GUARD_DEST" "$GLOSSARY_SCRIPT|$GLOSSARY_DEST" "$SCRATCH_SCRIPT|$SCRATCH_DEST" "$HARVEST_SCRIPT|$HARVEST_DEST" "$SHFIXUP_SCRIPT|$SHFIXUP_DEST" "$SURFACING_SCRIPT|$SURFACING_DEST" "$BLOCK_GUIDE_SCRIPT|$BLOCK_GUIDE_DEST" "$TOOL_OPS_AUDIT_SCRIPT|$TOOL_OPS_AUDIT_DEST" "$DASHBOARD_SCRIPT|$DASHBOARD_DEST" "$ESTIMATE_REFRESH_SCRIPT|$ESTIMATE_REFRESH_DEST"; do
+    for hook_pair in "$HOOK_SCRIPT|$HOOK_DEST" "$GUARD_SCRIPT|$GUARD_DEST" "$GLOSSARY_SCRIPT|$GLOSSARY_DEST" "$SCRATCH_SCRIPT|$SCRATCH_DEST" "$HARVEST_SCRIPT|$HARVEST_DEST" "$SHFIXUP_SCRIPT|$SHFIXUP_DEST" "$SURFACING_SCRIPT|$SURFACING_DEST" "$BLOCK_GUIDE_SCRIPT|$BLOCK_GUIDE_DEST" "$TOOL_OPS_AUDIT_SCRIPT|$TOOL_OPS_AUDIT_DEST" "$DASHBOARD_SCRIPT|$DASHBOARD_DEST" "$ESTIMATE_REFRESH_SCRIPT|$ESTIMATE_REFRESH_DEST" "$SENTINEL_SCRIPT|$SENTINEL_DEST" "$DELEG_GUARD_SCRIPT|$DELEG_GUARD_DEST"; do
         hook_src="${hook_pair%%|*}"
         hook_dst="${hook_pair##*|}"
         hook_name=$(basename "$hook_dst")
@@ -216,6 +225,8 @@ BLOCK_GUIDE_CMD="bash \"$BLOCK_GUIDE_DEST\""
 TOOL_OPS_AUDIT_CMD="bash \"$TOOL_OPS_AUDIT_DEST\""
 DASHBOARD_CMD="bash \"$DASHBOARD_DEST\""
 ESTIMATE_REFRESH_CMD="bash \"$ESTIMATE_REFRESH_DEST\""
+SENTINEL_CMD="bash \"$SENTINEL_DEST\""
+DELEG_GUARD_CMD="bash \"$DELEG_GUARD_DEST\""
 
 MERGE_RESULT=$(node -e "
 $SORT_KEYS_JS
@@ -235,6 +246,8 @@ const blockGuideCmd = process.argv[11];
 const toolOpsAuditCmd = process.argv[12];
 const dashboardCmd = process.argv[13];
 const estimateRefreshCmd = process.argv[14];
+const sentinelCmd = process.argv[15];
+const delegGuardCmd = process.argv[16];
 
 // --- BEGIN claude preferences (replaced by build-deploy) ---
 let autoMemory = true;
@@ -325,6 +338,8 @@ mergeHookEntry('PreToolUse', 'block-claude-code-guide.sh', 'Agent', blockGuideCm
 mergeHookEntry('SessionEnd', 'tool-ops-session-audit.sh', '', toolOpsAuditCmd);
 mergeHookEntry('SessionStart', 'dashboard-serve.sh', '', dashboardCmd);
 mergeHookEntry('Stop', 'estimate-refresh-stop.sh', '', estimateRefreshCmd);
+mergeHookEntry('Stop', 'intent-sentinel-stop.sh', '', sentinelCmd);
+mergeHookEntry('PreToolUse', 'delegation-duty-guard.sh', 'Agent', delegGuardCmd);
 
 // --- Track old values for change reporting ---
 const oldAutoMemory = settings.autoMemoryEnabled;
@@ -402,6 +417,10 @@ if (dryRun) {
         if (dashCount !== 1) { console.error('Validation failed: expected 1 SessionStart dashboard-serve hook, got ' + dashCount); process.exit(1); }
         const erCount = (_v.hooks.Stop || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('estimate-refresh-stop.sh'))).length;
         if (erCount !== 1) { console.error('Validation failed: expected 1 Stop estimate-refresh-stop hook, got ' + erCount); process.exit(1); }
+        const sentCount = (_v.hooks.Stop || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('intent-sentinel-stop.sh'))).length;
+        if (sentCount !== 1) { console.error('Validation failed: expected 1 Stop intent-sentinel hook, got ' + sentCount); process.exit(1); }
+        const dgCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('delegation-duty-guard.sh'))).length;
+        if (dgCount !== 1) { console.error('Validation failed: expected 1 PreToolUse delegation-duty-guard hook, got ' + dgCount); process.exit(1); }
 
         // Validate hook schema: command-type must have command field,
         // prompt-type must have prompt field (not command).
@@ -431,7 +450,7 @@ if (dryRun) {
         prefChanges.forEach(c => console.log(c));
     }
 }
-" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$SURFACING_CMD" "$BLOCK_GUIDE_CMD" "$TOOL_OPS_AUDIT_CMD" "$DASHBOARD_CMD" "$ESTIMATE_REFRESH_CMD")
+" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$SURFACING_CMD" "$BLOCK_GUIDE_CMD" "$TOOL_OPS_AUDIT_CMD" "$DASHBOARD_CMD" "$ESTIMATE_REFRESH_CMD" "$SENTINEL_CMD" "$DELEG_GUARD_CMD")
 
 # Parse merge result: first line is status, CHANGED: lines are key changes
 MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)
