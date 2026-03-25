@@ -11,6 +11,7 @@
 #   - Discovers handoffs at .aitools/channel/handoffs/ (R3, #53)
 #   - Registers session in harness SQLite DB if harness-db.py is available
 #   - SQLite integration is OBSERVE mode (log-only, never blocks)
+#   - harness-db.py stderr is NOT suppressed — safety warnings must surface
 
 set -euo pipefail
 
@@ -106,9 +107,10 @@ if [ -n "$SESSION_ID" ]; then
 
         if [ -n "$HELPER" ] && "$PYTHON" -c "import sqlite3" 2>/dev/null; then
             # Initialize harness databases (creates if missing)
-            "$PYTHON" "$HELPER" init 2>/dev/null || true
+            # Let stderr through (warnings visible to Claude), but don't block on failure
+            "$PYTHON" "$HELPER" init || true
             # Register this session
-            "$PYTHON" "$HELPER" session start --id "$SESSION_ID" 2>/dev/null || true
+            "$PYTHON" "$HELPER" session start --id "$SESSION_ID" || true
             printf 'Harness DB: session %s registered\n' "$SESSION_ID"
         fi
     fi

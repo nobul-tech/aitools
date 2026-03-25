@@ -6,7 +6,8 @@
 # Design decisions:
 #   - Requires Python 3 (sqlite3 stdlib -- no external deps)
 #   - Exports session DB to .aitools/channel/running-estimate.json (tracked)
-#   - Silent exit on errors (hook must never break Claude Code)
+#   - Silent exit on missing deps (hook must never break Claude Code)
+#   - harness-db.py stderr is NOT suppressed — safety warnings must surface
 #   - Cross-platform: Python sqlite3 works on macOS, Windows Git Bash, Linux
 #   - Session ID from CC hook input (same pattern as harvest-session.sh)
 
@@ -61,9 +62,11 @@ if [ ! -f "$HELPER" ]; then
 fi
 
 # Mark session as ended
-"$PYTHON" "$HELPER" session end --id "$SESSION_ID" 2>/dev/null || true
+# Let stderr through (warnings visible to Claude), but don't block on failure
+"$PYTHON" "$HELPER" session end --id "$SESSION_ID" || true
 
 # Export DB to JSON for git carry-forward
-"$PYTHON" "$HELPER" export --format json --session "$SESSION_ID" 2>/dev/null || true
+# stderr warnings (e.g. overwrite-smaller-file safety check) must be visible
+"$PYTHON" "$HELPER" export --format json --session "$SESSION_ID" || true
 
 printf 'Harness DB: session %s ended, JSON exported\n' "$SESSION_ID"

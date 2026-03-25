@@ -11,6 +11,7 @@
 #   - Pure-bash JSON parsing (jq not guaranteed in hook environment)
 #   - Manifest updates via node (already required by aitools)
 #   - SQLite session end + export is additive (OBSERVE mode, never blocks)
+#   - harness-db.py stderr is NOT suppressed — safety warnings must surface
 #   - No rm -rf of session dirs (30-file-loss fix, session Z1IhGrcgGO, 2026-03-21)
 
 set -euo pipefail
@@ -310,9 +311,11 @@ if [ -n "$SESSION_ID" ]; then
 
         if [ -n "$HELPER" ] && "$PYTHON" -c "import sqlite3" 2>/dev/null; then
             # Mark session as ended
-            "$PYTHON" "$HELPER" session end --id "$SESSION_ID" 2>/dev/null || true
+            # Let stderr through (warnings visible to Claude), but don't block on failure
+            "$PYTHON" "$HELPER" session end --id "$SESSION_ID" || true
             # Export DB to JSON for git carry-forward
-            "$PYTHON" "$HELPER" export --format json --session "$SESSION_ID" 2>/dev/null || true
+            # stderr warnings (e.g. overwrite-smaller-file safety check) must be visible
+            "$PYTHON" "$HELPER" export --format json --session "$SESSION_ID" || true
             printf '[harness-db] Session %s ended, JSON exported\n' "$SESSION_ID" >&2
         fi
     fi

@@ -155,11 +155,12 @@ if [ -n "$PYTHON" ] && [ -n "$REPO_ROOT" ]; then
     fi
 
     if [ -n "$HELPER" ] && "$PYTHON" -c "import sqlite3" 2>/dev/null; then
+        # Let stderr through (warnings visible to Claude), but don't block on failure
         "$PYTHON" "$HELPER" log \
             --session "$SESSION_ID" \
             --type sitrep \
             --agent "session-archive" \
             --message "Transcript archived and committed to ${DEST_FILE}" \
-            2>/dev/null || true
+            || true
     fi
 fi

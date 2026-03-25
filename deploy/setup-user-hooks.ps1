@@ -1837,12 +1837,13 @@ if [ -n "$PYTHON" ] && [ -n "$REPO_ROOT" ]; then
     fi
 
     if [ -n "$HELPER" ] && "$PYTHON" -c "import sqlite3" 2>/dev/null; then
+        # Let stderr through (warnings visible to Claude), but don't block on failure
         "$PYTHON" "$HELPER" log \
             --session "$SESSION_ID" \
             --type sitrep \
             --agent "session-archive" \
             --message "Transcript archived and committed to ${DEST_FILE}" \
-            2>/dev/null || true
+            || true
     fi
 fi
 '@
@@ -1850,9 +1851,14 @@ fi
 $hook_guard = @'
 #!/usr/bin/env bash
 # standing-order-guard.sh — Claude Code PreToolUse hook
-# Enforces standing orders by inspecting tool calls before execution.
+# Purpose: Enforce standing orders by inspecting Bash tool calls before
+#   execution. Catches USO violations that would otherwise trigger
+#   permission prompts or bypass dedicated tools.
+# Scope: USO enforcement only (dedicated tools, scratch files, simple
+#   bash commands). NOT agentic standards, NOT script-standards compliance.
+# Audience: Claude Code PreToolUse hook system — fires on every Bash call.
 #
-# Currently enforces:
+# Enforces:
 #   USO: Dedicated tools for file ops (Read/Edit/Write/Grep/Glob, not Bash)
 #   USO: Scratch files for complex scripting (no long inline commands)
 #   USO: Simple Bash commands only (no &&, ||, ;, $(...), backticks, globs in rm)
@@ -1864,10 +1870,12 @@ $hook_guard = @'
 #   - Must never crash or hang (would break Claude Code)
 #
 # Rollout mode (per-check):
-#   MODE_AND="enforce"      — && : zero false positives confirmed, blocking
-#   MODE_SUBSHELL="enforce" — $(): zero false positives confirmed, blocking
-#   MODE_SCRATCH="enforce"  — scratch files: zero false positives confirmed, blocking
-#   MODE_REST="observe"     — ||, ;, backticks: false positives exist or low sample count
+#   MODE_AND="enforce"       — && : zero false positives confirmed, blocking
+#   MODE_SUBSHELL="enforce"  — $(): zero false positives confirmed, blocking
+#   MODE_SCRATCH="enforce"   — scratch files: zero false positives confirmed, blocking
+#   MODE_OR="enforce"        — || : zero false positives, promoted 2026-03-24
+#   MODE_SEMICOLON="enforce" — ;  : pwsh/perl exemptions in place, promoted 2026-03-24
+#   MODE_BACKTICK="enforce"  — backticks: zero false positives, promoted 2026-03-24
 #   See .claude/rules/hook-rollout.md for the observe-then-enforce practice.
 #
 # Design decisions:
@@ -1876,14 +1884,22 @@ $hook_guard = @'
 #   - Helpful feedback: tell Claude which tool to use instead
 #   - Pipeline exemption: cat/head/tail in pipelines (cmd | ...) are allowed
 #     because the Read tool cannot pipe output into other commands
+#
+# KPI definitions (emit to log, future: structured JSONL):
+#   - guardFireCount: total hook invocations per session
+#   - guardBlockCount: violations blocked (exit 2) per session
+#   - guardObserveCount: violations observed but allowed per session
+#   - falsePositiveRate: user-reported false positives / total blocks
 
 set -euo pipefail
 
 # --- Mode and logging ---
-MODE_AND="enforce"      # &&  — zero false positives confirmed; blocking
-MODE_SUBSHELL="enforce" # $() — zero false positives confirmed; blocking
-MODE_SCRATCH="enforce" # scratch files — zero false positives confirmed; blocking
-MODE_REST="observe"     # ||, ;, backticks — false positives or low sample; observe only
+MODE_AND="enforce"       # &&  — zero false positives confirmed; blocking
+MODE_SUBSHELL="enforce"  # $() — zero false positives confirmed; blocking
+MODE_SCRATCH="enforce"   # scratch files — zero false positives confirmed; blocking
+MODE_OR="enforce"        # ||  — zero false positives; promoted 2026-03-24
+MODE_SEMICOLON="enforce" # ;   — pwsh/perl exemptions in place; promoted 2026-03-24
+MODE_BACKTICK="enforce"  # backticks — zero false positives; promoted 2026-03-24
 
 LOG_DIR="$HOME/.claude/hooks/logs"
 LOG_FILE="$LOG_DIR/standing-order-guard.log"
@@ -1892,12 +1908,12 @@ LOG_FILE="$LOG_DIR/standing-order-guard.log"
 mkdir -p "$LOG_DIR"
 
 # violation() — dispatch based on per-check mode
-# $1: message  $2: mode variable value (enforce or observe; defaults to MODE_REST)
+# $1: message  $2: mode variable value (enforce or observe; defaults to enforce)
 # In enforce mode: write message to stderr, exit 2 (block)
 # In observe mode: append to log file, exit 0 (allow)
 violation() {
     local message="$1"
-    local mode="${2:-$MODE_REST}"
+    local mode="${2:-enforce}"
     if [ "$mode" = "enforce" ]; then
         echo "$message" >&2
         exit 2
@@ -1955,20 +1971,20 @@ fi
 # truncates at \" — $(...) inside quoted arguments would be invisible.
 case "$COMMAND" in
     *'&&'*) violation "USO: Simple Bash commands only --: Don't use '&&' to chain commands. Make separate Bash tool calls instead. For git in another repo, use 'git -C /path' instead of 'cd /path && git'." "$MODE_AND" ;;
-    *'||'*) violation "USO: Simple Bash commands only --: Don't use '||' to chain commands. Make separate Bash tool calls instead." "$MODE_REST" ;;
+    *'||'*) violation "USO: Simple Bash commands only --: Don't use '||' to chain commands. Make separate Bash tool calls instead." "$MODE_OR" ;;
     *';'*)
         # Exempt ; inside scripting-language arguments: pwsh -Command '...;...' and perl '...;...'
         # The ; is a language-internal statement separator, not a shell command separator.
         # perl: any invocation (perl -ne, -pe, -e, -E, etc.) may contain Perl semicolons.
         case "$COMMAND" in
             pwsh\ *|powershell\ *|perl\ *) ;;
-            *) violation "USO: Simple Bash commands only --: Don't use ';' to chain commands. Make separate Bash tool calls instead." "$MODE_REST" ;;
+            *) violation "USO: Simple Bash commands only --: Don't use ';' to chain commands. Make separate Bash tool calls instead." "$MODE_SEMICOLON" ;;
         esac
         ;;
 esac
 case "$INPUT" in
     *'$('*) violation "USO: Simple Bash commands only --: Don't use '\$(...)' command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_SUBSHELL" ;;
-    *'`'*)  violation "USO: Simple Bash commands only --: Don't use backtick command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_REST" ;;
+    *'`'*)  violation "USO: Simple Bash commands only --: Don't use backtick command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_BACKTICK" ;;
 esac
 
 # --- USO: Dedicated tools for file operations ---
@@ -2094,6 +2110,7 @@ $hook_scratch = @'
 #   - Discovers handoffs at .aitools/channel/handoffs/ (R3, #53)
 #   - Registers session in harness SQLite DB if harness-db.py is available
 #   - SQLite integration is OBSERVE mode (log-only, never blocks)
+#   - harness-db.py stderr is NOT suppressed — safety warnings must surface
 
 set -euo pipefail
 
@@ -2189,9 +2206,10 @@ if [ -n "$SESSION_ID" ]; then
 
         if [ -n "$HELPER" ] && "$PYTHON" -c "import sqlite3" 2>/dev/null; then
             # Initialize harness databases (creates if missing)
-            "$PYTHON" "$HELPER" init 2>/dev/null || true
+            # Let stderr through (warnings visible to Claude), but don't block on failure
+            "$PYTHON" "$HELPER" init || true
             # Register this session
-            "$PYTHON" "$HELPER" session start --id "$SESSION_ID" 2>/dev/null || true
+            "$PYTHON" "$HELPER" session start --id "$SESSION_ID" || true
             printf 'Harness DB: session %s registered\n' "$SESSION_ID"
         fi
     fi
@@ -2215,6 +2233,7 @@ $hook_harvest = @'
 #   - Pure-bash JSON parsing (jq not guaranteed in hook environment)
 #   - Manifest updates via node (already required by aitools)
 #   - SQLite session end + export is additive (OBSERVE mode, never blocks)
+#   - harness-db.py stderr is NOT suppressed — safety warnings must surface
 #   - No rm -rf of session dirs (30-file-loss fix, session Z1IhGrcgGO, 2026-03-21)
 
 set -euo pipefail
@@ -2514,9 +2533,11 @@ if [ -n "$SESSION_ID" ]; then
 
         if [ -n "$HELPER" ] && "$PYTHON" -c "import sqlite3" 2>/dev/null; then
             # Mark session as ended
-            "$PYTHON" "$HELPER" session end --id "$SESSION_ID" 2>/dev/null || true
+            # Let stderr through (warnings visible to Claude), but don't block on failure
+            "$PYTHON" "$HELPER" session end --id "$SESSION_ID" || true
             # Export DB to JSON for git carry-forward
-            "$PYTHON" "$HELPER" export --format json --session "$SESSION_ID" 2>/dev/null || true
+            # stderr warnings (e.g. overwrite-smaller-file safety check) must be visible
+            "$PYTHON" "$HELPER" export --format json --session "$SESSION_ID" || true
             printf '[harness-db] Session %s ended, JSON exported\n' "$SESSION_ID" >&2
         fi
     fi
@@ -3204,7 +3225,8 @@ $hook_hdbstart = @'
 # Design decisions:
 #   - Requires Python 3 (sqlite3 stdlib -- no external deps)
 #   - Creates harness DB + session DB via harness-db.py helper
-#   - Silent exit on errors (hook must never break Claude Code)
+#   - Silent exit on missing deps (hook must never break Claude Code)
+#   - harness-db.py stderr is NOT suppressed — safety warnings must surface
 #   - Cross-platform: Python sqlite3 works on macOS, Windows Git Bash, Linux
 #   - Session ID from CC hook input (same pattern as scratch-init.sh)
 
@@ -3264,10 +3286,11 @@ if [ ! -f "$HELPER" ]; then
 fi
 
 # Initialize harness databases (creates if missing)
-"$PYTHON" "$HELPER" init 2>/dev/null || true
+# Let stderr through (warnings visible to Claude), but don't block on failure
+"$PYTHON" "$HELPER" init || true
 
 # Register this session
-"$PYTHON" "$HELPER" session start --id "$SESSION_ID" 2>/dev/null || true
+"$PYTHON" "$HELPER" session start --id "$SESSION_ID" || true
 
 printf 'Harness DB: session %s registered\n' "$SESSION_ID"
 '@
@@ -3281,7 +3304,8 @@ $hook_hdbend = @'
 # Design decisions:
 #   - Requires Python 3 (sqlite3 stdlib -- no external deps)
 #   - Exports session DB to .aitools/channel/running-estimate.json (tracked)
-#   - Silent exit on errors (hook must never break Claude Code)
+#   - Silent exit on missing deps (hook must never break Claude Code)
+#   - harness-db.py stderr is NOT suppressed — safety warnings must surface
 #   - Cross-platform: Python sqlite3 works on macOS, Windows Git Bash, Linux
 #   - Session ID from CC hook input (same pattern as harvest-session.sh)
 
@@ -3336,10 +3360,12 @@ if [ ! -f "$HELPER" ]; then
 fi
 
 # Mark session as ended
-"$PYTHON" "$HELPER" session end --id "$SESSION_ID" 2>/dev/null || true
+# Let stderr through (warnings visible to Claude), but don't block on failure
+"$PYTHON" "$HELPER" session end --id "$SESSION_ID" || true
 
 # Export DB to JSON for git carry-forward
-"$PYTHON" "$HELPER" export --format json --session "$SESSION_ID" 2>/dev/null || true
+# stderr warnings (e.g. overwrite-smaller-file safety check) must be visible
+"$PYTHON" "$HELPER" export --format json --session "$SESSION_ID" || true
 
 printf 'Harness DB: session %s ended, JSON exported\n' "$SESSION_ID"
 '@
