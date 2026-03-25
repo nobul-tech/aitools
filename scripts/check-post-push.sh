@@ -455,15 +455,12 @@ else
     ver21_ok=0
     ver21_skip=0
     ver21_details=""
-    while IFS='|' read -r v21_status v21_tool v21_msg; do
-        case "$v21_status" in
-            OK)   ver21_ok=$((ver21_ok + 1)) ;;
-            SKIP) ver21_skip=$((ver21_skip + 1))
-                  ver21_details="${ver21_details}      SKIP ${v21_tool}: ${v21_msg}\n" ;;
-            WARN) ver21_warns=$((ver21_warns + 1))
-                  ver21_details="${ver21_details}      WARN ${v21_tool}: ${v21_msg}\n" ;;
-        esac
-    done < <(python3 - "$versions_json" <<'PYEOF'
+    # D1 fix: bash 3.2 does not support process substitution + heredoc in a
+    # single construct (< <(cmd <<'HEREDOC')). Use a temp file for the Python
+    # script instead. This is safe on all bash versions.
+    _ver21_pyscript=$(mktemp)
+    _ver21_output=$(mktemp)
+    cat > "$_ver21_pyscript" <<'PYEOF'
 import json, sys, subprocess, datetime, platform
 with open(sys.argv[1]) as f:
     data = json.load(f)
@@ -483,6 +480,7 @@ TOOL_CMDS = {
     'go':               ['go', 'version'],
     'datadog-pup':      ['pup', 'version'],
     'perl':             ['perl', '--version'],
+    'bash':             ['bash', '--version'],
 }
 plat_key = {'Darwin': 'macos', 'Windows': 'windows'}.get(platform.system(), 'linux')
 plat_name = {'macos': 'macOS', 'windows': 'Windows', 'linux': 'Linux'}[plat_key]
@@ -523,7 +521,17 @@ for key, val in data['tools'].items():
         except subprocess.TimeoutExpired:
             print(f"WARN|{key}|version check timed out (manifest: {plat_ver})")
 PYEOF
-    )
+    python3 "$_ver21_pyscript" "$versions_json" > "$_ver21_output" 2>/dev/null || true
+    while IFS='|' read -r v21_status v21_tool v21_msg; do
+        case "$v21_status" in
+            OK)   ver21_ok=$((ver21_ok + 1)) ;;
+            SKIP) ver21_skip=$((ver21_skip + 1))
+                  ver21_details="${ver21_details}      SKIP ${v21_tool}: ${v21_msg}\n" ;;
+            WARN) ver21_warns=$((ver21_warns + 1))
+                  ver21_details="${ver21_details}      WARN ${v21_tool}: ${v21_msg}\n" ;;
+        esac
+    done < "$_ver21_output"
+    rm -f "$_ver21_pyscript" "$_ver21_output"
     [ -n "$ver21_details" ] && printf "%b" "$ver21_details"
     if [ "$ver21_warns" -eq 0 ]; then
         step_pass "21" "Tool version freshness" "${ver21_ok} OK, ${ver21_skip} skipped"
@@ -742,8 +750,8 @@ if $EXTENSIVE; then
     ps1_lib="$REPO_ROOT/scripts/aitools-lib.ps1"
     sh_lib="$REPO_ROOT/scripts/aitools-lib.sh"
     # Extract [letter] patterns from auto-merge menu sections
-    ps1_auto=$(perl -ne 'print "$1\n" if /Console.*Write.*\[(\w)\]/' "$ps1_lib" | sort -u | paste -sd,)
-    sh_auto=$(perl -ne 'print "$1\n" if /printf.*\[(\w)\]/' "$sh_lib" | sort -u | paste -sd,)
+    ps1_auto=$(perl -ne 'print "$1\n" if /Console.*Write.*\[(\w)\]/' "$ps1_lib" | sort -u | paste -s -d , -)
+    sh_auto=$(perl -ne 'print "$1\n" if /printf.*\[(\w)\]/' "$sh_lib" | sort -u | paste -s -d , -)
     if [ "$ps1_auto" = "$sh_auto" ]; then
         step_pass "29" "Deployment menu parity audit" "PS1 and bash menus match: $ps1_auto"
     else
@@ -758,13 +766,13 @@ if $EXTENSIVE; then
     sh_lib="$REPO_ROOT/scripts/aitools-lib.sh"
     ps1_lib="$REPO_ROOT/scripts/aitools-lib.ps1"
     # Extract all MANAGED_FILE_RESULT values from bash lib
-    sh_returns=$(perl -ne 'print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/' "$sh_lib" | sort -u | paste -sd,)
+    sh_returns=$(perl -ne 'print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/' "$sh_lib" | sort -u | paste -s -d , -)
     # Extract Deploy-ManagedFile return values from PS1 lib
-    ps1_returns=$(perl -ne 'print "$1\n" if /return\s+"([\w-]+)"/ && !/return ""/' "$ps1_lib" | sort -u | paste -sd,)
+    ps1_returns=$(perl -ne 'print "$1\n" if /return\s+"([\w-]+)"/ && !/return ""/' "$ps1_lib" | sort -u | paste -s -d , -)
     # Check deploy_tracker_record cases in bash
-    sh_tracker=$(perl -ne 'print "$1\n" if /^\s+([\w-]+)\)\s/' "$sh_lib" | sort -u | paste -sd,)
+    sh_tracker=$(perl -ne 'print "$1\n" if /^\s+([\w-]+)\)\s/' "$sh_lib" | sort -u | paste -s -d , -)
     # Check Record-DeployOutcome cases in PS1
-    ps1_tracker=$(perl -ne 'print "$1\n" if /^\s+"([\w-]+)"\s+\{/' "$ps1_lib" | sort -u | paste -sd,)
+    ps1_tracker=$(perl -ne 'print "$1\n" if /^\s+"([\w-]+)"\s+\{/' "$ps1_lib" | sort -u | paste -s -d , -)
     missing=""
     # Check callers for coverage of each bash return value
     for caller in "$REPO_ROOT/scripts/setup-user-claude.sh" "$REPO_ROOT/scripts/setup-user-mcp.sh"; do
@@ -789,11 +797,11 @@ if $EXTENSIVE; then
     sh_lib="$REPO_ROOT/scripts/aitools-lib.sh"
     ps1_lib="$REPO_ROOT/scripts/aitools-lib.ps1"
     # Compare MANAGED_FILE_RESULT sets (scoped to target functions via flip-flop)
-    sh_results=$(perl -ne 'if (/^deploy_managed_file\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_managed_file/)) { print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/ }' "$sh_lib" | sort -u | paste -sd,)
-    ps1_results=$(perl -ne 'if (/^function Deploy-ManagedFile\b/ .. (/^function / && !/Deploy-ManagedFile/)) { print "$1\n" if /return\s+"([\w-]+)"/ }' "$ps1_lib" | sort -u | paste -sd,)
+    sh_results=$(perl -ne 'if (/^deploy_managed_file\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_managed_file/)) { print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/ }' "$sh_lib" | sort -u | paste -s -d , -)
+    ps1_results=$(perl -ne 'if (/^function Deploy-ManagedFile\b/ .. (/^function / && !/Deploy-ManagedFile/)) { print "$1\n" if /return\s+"([\w-]+)"/ }' "$ps1_lib" | sort -u | paste -s -d , -)
     # Compare tracker case sets (scoped to target functions via flip-flop)
-    sh_tracker=$(perl -ne 'if (/^deploy_tracker_record\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_tracker_record/)) { if (/^\s+([\w|.-]+)\)\s/) { for (split /\|/, $1) { print "$_\n" } } }' "$sh_lib" | sort -u | paste -sd,)
-    ps1_tracker=$(perl -ne 'if (/^function Record-DeployOutcome\b/ .. (/^function / && !/Record-DeployOutcome/)) { while (/-eq\s+"([\w-]+)"|"([\w-]+)"\s*\{/g) { print(($1 // $2) . "\n") } }' "$ps1_lib" | sort -u | paste -sd,)
+    sh_tracker=$(perl -ne 'if (/^deploy_tracker_record\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_tracker_record/)) { if (/^\s+([\w|.-]+)\)\s/) { for (split /\|/, $1) { print "$_\n" } } }' "$sh_lib" | sort -u | paste -s -d , -)
+    ps1_tracker=$(perl -ne 'if (/^function Record-DeployOutcome\b/ .. (/^function / && !/Record-DeployOutcome/)) { while (/-eq\s+"([\w-]+)"|"([\w-]+)"\s*\{/g) { print(($1 // $2) . "\n") } }' "$ps1_lib" | sort -u | paste -s -d , -)
     issues=""
     if [ "$sh_results" != "$ps1_results" ]; then
         issues="return values: bash=$sh_results ps1=$ps1_results"
