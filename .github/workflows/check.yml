@@ -333,6 +333,13 @@ jobs:
             ':!deploy/setup-user-cursor.sh' ':!deploy/setup-user-cursor.ps1' \
             2>/dev/null || true)
           if [ -n "$drift" ]; then
+            echo "::group::Deploy drift details"
+            git diff --stat -- deploy/ \
+              ':!deploy/setup-user-claude.sh' ':!deploy/setup-user-claude.ps1' \
+              ':!deploy/setup-user-hooks.sh' ':!deploy/setup-user-hooks.ps1' \
+              ':!deploy/setup-user-skills.sh' ':!deploy/setup-user-skills.ps1' \
+              ':!deploy/setup-user-cursor.sh' ':!deploy/setup-user-cursor.ps1'
+            echo "::endgroup::"
             echo "::error::deploy/ is stale"
             exit 1
           fi
