@@ -1,0 +1,122 @@
+{
+  "meta": {
+    "type": "session-aar",
+    "session": "5HyCwPtSDH",
+    "date": "2026-03-21",
+    "producer": "S3 (Operations)",
+    "schwerpunkt": "Make the harness learn from what just happened — produce proposals that embed this session's operational learning as permanent capabilities"
+  },
+  "sessionMetrics": {
+    "missions": 10,
+    "aars": 7,
+    "proposalsGenerated": 38,
+    "proposalThemes": 10,
+    "frameworkProposals": 3,
+    "glossaryTermsIdentified": 8,
+    "incidentCandidates": 2,
+    "commanderCorrections": 10,
+    "filesRecovered": 30,
+    "delegations": 11
+  },
+  "observations": [
+    {
+      "id": "SO-1",
+      "fact": "The S3 agent required 10 commander corrections before productive work began. Corrections covered: governed data access, terminology, command hierarchy, context gap scope, S2/S3 pairing, context capacity, agent types, concurrent sessions, running estimate lifecycle, and orchestration patterns.",
+      "implication": "Cold-start S3 agents have significant conceptual gaps even after reading comprehensive briefings. The planning brief + handoff + running estimate provide WHAT to do but not enough operational KNOW-HOW for effective execution."
+    },
+    {
+      "id": "SO-2",
+      "fact": "All 7 missions (M1-M5, M6-M7) were launched as single agents. None used write-verify-amend, parallel investigation, or S2 chaining. M9 RCA traced this to: orchestration patterns never codified, delegation duty has no PATTERN-CHECK, and the 40-agent dashboard presents agents as flat list without chain annotations.",
+      "implication": "The single-agent-per-mission pattern is the DEFAULT behavior. Multi-agent orchestration requires either (a) codified governance that triggers pattern selection, or (b) an S3 that learned the patterns through prior direct experience. This session's S3 had neither."
+    },
+    {
+      "id": "SO-3",
+      "fact": "4 AARs independently converged on the .gitignore fix as the root cause blocker (M1, M2, M4, and the handoff's OT-2). This convergence was invisible during the parallel investigation phase — it emerged only during reconciliation.",
+      "implication": "Parallel S2 investigations produce higher-quality intelligence than sequential investigations (multiple perspectives on the same problem), but require a reconciliation phase to surface convergence and conflicts. The reconciliation step is essential, not optional."
+    },
+    {
+      "id": "SO-4",
+      "fact": "M7 recovered all 30 lost files (100%) from CC session transcripts. The methodology: parse JSONL, extract Write tool_use blocks, deduplicate by filename, reconstruct files. This proves CC transcripts are a complete record of all agent writes.",
+      "implication": "CC session transcripts are a last-resort recovery mechanism for any data loss. The session-to-UUID mapping (M6-P4) would make this recovery straightforward instead of requiring forensic search."
+    },
+    {
+      "id": "SO-5",
+      "fact": "This session's reconciliation phase (M10) is itself the proof-of-concept for the operational learning cycle. The cycle: OBSERVE (agent during mission) -> SURFACE (AAR) -> CONSOLIDATE (S3 reconciliation) -> PROPOSE (planning brief amendments) -> DECIDE (commander approval) -> EMBED (code change) -> VERIFY (next session).",
+      "implication": "The operational learning framework (FP-1) is already working — it just has not been formalized. Formalizing it ensures every session follows the cycle, not just sessions that happen to have a reconciliation mission."
+    },
+    {
+      "id": "SO-6",
+      "fact": "Executing S2 intelligence inline (Phase 1a/b/c) instead of delegating to subagents avoided the context gap problem. The S3 had all 7 AARs, running estimate, and briefings already in context — delegating would have required subagents to re-read everything.",
+      "implication": "Subagents are best for FRESH investigations (reading new files, exploring unknown territory). For SYNTHESIS of data already in context, inline execution is more efficient. This is an orchestration pattern insight: use subagents for investigation, inline for consolidation."
+    }
+  ],
+  "insights": [
+    {
+      "id": "SI-1",
+      "observation_refs": ["SO-1", "SO-2"],
+      "analysis": "THE COLD-START PROBLEM IS THE PRIMARY FAILURE MODE FOR S3 AGENTS. A fresh S3 reads thousands of lines of briefing material, absorbs tactical rules (AAR format, WRITE_BLOCKED, never Explore), and then attempts strategic orchestration — with the fundamentals consuming the cognitive bandwidth needed for pattern recognition. The 40-agent session's S3 was effective because it INVENTED the patterns through iterative learning with the commander — it had the advantage of development, not just reading. A cold-start S3 reads the finished patterns but lacks the experiential understanding of WHY and WHEN. The fix is: (a) codify orchestration patterns with trigger conditions so pattern selection is governed, not intuitive; (b) add PATTERN-CHECK to delegation duty so the question is explicitly asked; (c) keep delegation prompts short (recency bias means the last thing in the prompt has highest salience)."
+    },
+    {
+      "id": "SI-2",
+      "observation_refs": ["SO-3", "SO-6"],
+      "analysis": "RECONCILIATION IS THE MISSING PHASE IN THE MISSION COMMAND FRAMEWORK. Decision #3 covers delegation (briefing agents) and communication (SITREP/FINDING). Decision #26 covers S2 timing (start/end of plan). But there is no governed phase for RECONCILING the outputs of multiple parallel investigations into coherent proposals. Without reconciliation, convergence between M1/M2/M4 on the .gitignore fix would never have been surfaced. The reconciliation phase should be: (a) governed as part of the operational learning cycle, (b) triggered after parallel S2 investigations return, (c) executed inline (synthesis of data already in context), (d) produces ranked proposals with conflict analysis."
+    },
+    {
+      "id": "SI-3",
+      "observation_refs": ["SO-4", "SO-5"],
+      "analysis": "THE HARNESS HAS TWO DATA PRESERVATION GAPS THAT COMPOUND. Gap 1: carry-forward data has no working location (.gitignore defeats workspace rule). Gap 2: session data has no reliable preservation (harvest may not fire, stale cleanup destroys without harvesting). When both gaps are active (as they were for session Z1IhGrcgGO), the result is total data loss. The .gitignore fix (Gap 1) and harvest reliability fixes (Gap 2) are independent but compound: fixing either one alone reduces data loss risk, fixing both eliminates it."
+    }
+  ],
+  "proposalSummary": {
+    "totalProposals": 38,
+    "consolidatedThemes": 10,
+    "frameworkProposals": 3,
+    "topPriorityByLeverage": [
+      "1. Fix .gitignore selective tracking (CRITICAL leverage — unblocks 8+ proposals)",
+      "2. Codify orchestration patterns (HIGH leverage — every future S3 benefits)",
+      "3. Per-session estimates with reconciliation (HIGH leverage — enables cross-session carry-forward)",
+      "4. Harvest reliability fixes (HIGH leverage — prevents data loss)",
+      "5. Fix .current-session race condition (HIGH leverage — concurrent session safety)"
+    ],
+    "planningBriefAmendmentsNeeded": [
+      "#3 (Mission Command): add orchestration patterns subsection, context rot mitigation",
+      "#4 (Delegation duty): add component 10 (PATTERN-CHECK)",
+      "#22 (Channel infrastructure): concurrent session support",
+      "#34 (Workspace): .aitools/.gitignore template",
+      "#36 (Operational Learning): formalize the 7-step cycle",
+      "#49 (Skill naming): /aitool-* uniform prefix, three-tier taxonomy",
+      "#50 (Running estimate): per-session with reconciliation algorithm",
+      "#51 (Plan writing): generalize write-verify-amend beyond plan writing"
+    ]
+  },
+  "barrierAnalysis": {
+    "whatPreventsEmbedding": [
+      {
+        "barrier": "Planning brief is a protected file requiring commander review",
+        "mitigation": "Present amendments as a batch with convergence evidence from AARs",
+        "severity": "Process barrier, not technical"
+      },
+      {
+        "barrier": "Orchestration patterns are new governance (no precedent in the brief)",
+        "mitigation": "Decision #51 (plan-writing write-review loop) IS a precedent — it governs one specific orchestration pattern. The proposal generalizes it.",
+        "severity": "Conceptual barrier — resolved by framing as generalization"
+      },
+      {
+        "barrier": "Many proposals depend on .gitignore fix (rank 1)",
+        "mitigation": "Fix is low-effort, well-understood, 4 AARs converge. Can be done in 5 minutes.",
+        "severity": "Sequencing barrier — resolved by doing it first"
+      }
+    ]
+  },
+  "operationalLearningDutyReport": {
+    "observationsCount": 6,
+    "insightsCount": 3,
+    "proposalsCount": "38 proposals consolidated into 10 themes",
+    "frameworkConnections": "All proposals mapped to existing planning brief decisions and/or proposed framework extensions",
+    "discrepanciesNoted": [
+      "Running estimate in scratch violates /scratch skill prohibition — but no alternative exists until .gitignore is fixed",
+      "Delegation duty says 9 components (v0.62.4) but planning brief says 8 — need amendment",
+      "This session used single-agent pattern despite M9 identifying it as anti-pattern — operational learning duty requires noting this honestly"
+    ]
+  }
+}

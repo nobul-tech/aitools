@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Governance Dashboard - Session 5HyCwPtSDH</title>
+<style>
+:root {
+  --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #c9d1d9;
+  --text-dim: #8b949e; --accent: #58a6ff; --green: #3fb950; --yellow: #d29922;
+  --orange: #db6d28; --red: #f85149; --purple: #bc8cff; --blue: #58a6ff;
+  --cyan: #39d353; --pink: #f778ba;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.5; }
+.header { padding: 24px 32px; border-bottom: 1px solid var(--border); }
+.header h1 { font-size: 24px; font-weight: 600; }
+.header .subtitle { color: var(--accent); font-size: 14px; margin-top: 4px; }
+.summary-bar { display: flex; gap: 16px; padding: 16px 32px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.summary-stat { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 12px 20px; min-width: 120px; }
+.summary-stat .value { font-size: 24px; font-weight: 700; }
+.summary-stat .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); }
+.summary-stat .value.critical { color: var(--red); }
+.summary-stat .value.high { color: var(--orange); }
+.summary-stat .value.medium { color: var(--yellow); }
+.summary-stat .value.green { color: var(--green); }
+.summary-stat .value.blue { color: var(--blue); }
+
+.tab-bar { display: flex; gap: 0; padding: 0 32px; border-bottom: 1px solid var(--border); background: var(--card); }
+.tab { padding: 12px 24px; cursor: pointer; color: var(--text-dim); border-bottom: 2px solid transparent; font-weight: 500; font-size: 14px; transition: all 0.2s; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.filter-bar { display: flex; gap: 8px; padding: 12px 32px; flex-wrap: wrap; align-items: center; }
+.filter-btn { padding: 4px 12px; border-radius: 16px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); cursor: pointer; font-size: 12px; transition: all 0.2s; }
+.filter-btn:hover { border-color: var(--text-dim); color: var(--text); }
+.filter-btn.active { background: var(--accent); border-color: var(--accent); color: #000; }
+.search-input { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; color: var(--text); font-size: 13px; width: 300px; }
+.search-input::placeholder { color: var(--text-dim); }
+
+.content { padding: 16px 32px; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; transition: all 0.2s; }
+.card:hover { border-color: var(--text-dim); }
+.card-header { padding: 12px 16px; cursor: pointer; display: flex; align-items: center; gap: 12px; }
+.card-header:hover { background: rgba(88,166,255,0.04); }
+.card-body { padding: 0 16px 16px; display: none; }
+.card.expanded .card-body { display: block; }
+
+.leverage-badge, .status-badge, .category-badge, .state-badge, .convergence-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+.leverage-critical { background: rgba(248,81,73,0.2); color: var(--red); border: 1px solid rgba(248,81,73,0.3); }
+.leverage-high { background: rgba(219,109,40,0.2); color: var(--orange); border: 1px solid rgba(219,109,40,0.3); }
+.leverage-medium { background: rgba(210,153,34,0.2); color: var(--yellow); border: 1px solid rgba(210,153,34,0.3); }
+
+.status-decided { background: rgba(63,185,80,0.2); color: var(--green); }
+.status-proposed { background: rgba(210,153,34,0.2); color: var(--yellow); }
+.status-deferred { background: rgba(139,148,158,0.2); color: var(--text-dim); }
+
+.state-verified { background: rgba(63,185,80,0.2); color: var(--green); }
+.state-unverified { background: rgba(210,153,34,0.2); color: var(--yellow); }
+.state-falsified { background: rgba(248,81,73,0.2); color: var(--red); }
+.state-likely { background: rgba(88,166,255,0.2); color: var(--blue); }
+
+.convergence-3 { background: rgba(63,185,80,0.2); color: var(--green); }
+.convergence-2 { background: rgba(210,153,34,0.2); color: var(--yellow); }
+.convergence-1 { background: rgba(139,148,158,0.2); color: var(--text-dim); }
+
+.card-title { font-weight: 600; font-size: 15px; flex: 1; }
+.card-id { font-family: monospace; color: var(--accent); font-size: 13px; min-width: 180px; }
+.card-badges { display: flex; gap: 6px; align-items: center; }
+.card-meta { color: var(--text-dim); font-size: 12px; margin-top: 4px; }
+.detail-row { display: flex; gap: 8px; margin-top: 8px; }
+.detail-label { color: var(--text-dim); font-size: 12px; min-width: 140px; font-weight: 500; }
+.detail-value { font-size: 13px; }
+.detail-value.mono { font-family: monospace; font-size: 12px; }
+.components-list { list-style: none; padding: 0; margin: 8px 0; }
+.components-list li { padding: 4px 0; font-size: 13px; border-bottom: 1px solid rgba(48,54,61,0.5); }
+.components-list li:last-child { border-bottom: none; }
+
+.provenance-tag { display: inline-block; padding: 2px 8px; background: rgba(188,140,255,0.15); color: var(--purple); border-radius: 4px; font-size: 11px; margin: 2px; }
+.brief-tag { display: inline-block; padding: 2px 8px; background: rgba(88,166,255,0.15); color: var(--blue); border-radius: 4px; font-size: 11px; margin: 2px; font-family: monospace; }
+.framework-tag { display: inline-block; padding: 2px 8px; background: rgba(57,211,83,0.15); color: var(--cyan); border-radius: 4px; font-size: 11px; margin: 2px; }
+
+.section-title { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); margin-top: 12px; margin-bottom: 4px; font-weight: 600; }
+
+.collapse-icon { color: var(--text-dim); transition: transform 0.2s; font-size: 12px; }
+.card.expanded .collapse-icon { transform: rotate(90deg); }
+
+.kbd { background: var(--card); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; font-size: 11px; font-family: monospace; color: var(--text-dim); }
+
+.footer { padding: 16px 32px; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 12px; }
+
+.assumption-category { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.cat-environmental { background: rgba(88,166,255,0.15); color: var(--blue); }
+.cat-architectural { background: rgba(188,140,255,0.15); color: var(--purple); }
+.cat-behavioral { background: rgba(247,120,186,0.15); color: var(--pink); }
+.cat-temporal { background: rgba(210,153,34,0.15); color: var(--yellow); }
+
+.verifiability-tag { font-size: 11px; color: var(--text-dim); font-style: italic; }
+
+.finding-box { background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.2); border-radius: 6px; padding: 12px 16px; margin: 12px 0; }
+.finding-box h4 { color: var(--red); font-size: 13px; margin-bottom: 4px; }
+.finding-box p { font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Governance Dashboard -- Session 5HyCwPtSDH</h1>
+  <div class="subtitle">2026-03-21 | S3 (Operations) | 13 missions, 18 agents, 7 AARs | Consolidated decisions, assumptions, proposals</div>
+</div>
+
+<div class="summary-bar">
+  <div class="summary-stat"><div class="value green">8</div><div class="label">Decisions</div></div>
+  <div class="summary-stat"><div class="value critical">2</div><div class="label">Critical</div></div>
+  <div class="summary-stat"><div class="value high">4</div><div class="label">High</div></div>
+  <div class="summary-stat"><div class="value medium">2</div><div class="label">Medium</div></div>
+  <div class="summary-stat" style="border-left: 3px solid var(--border)"><div class="value blue">22</div><div class="label">Assumptions</div></div>
+  <div class="summary-stat"><div class="value green">1</div><div class="label">Verified</div></div>
+  <div class="summary-stat"><div class="value medium">21</div><div class="label">Unverified</div></div>
+  <div class="summary-stat" style="border-left: 3px solid var(--border)"><div class="value">38</div><div class="label">Proposals</div></div>
+  <div class="summary-stat"><div class="value green">8</div><div class="label">Decided</div></div>
+  <div class="summary-stat"><div class="value medium">30</div><div class="label">Proposed</div></div>
+  <div class="summary-stat" style="border-left: 3px solid var(--border)"><div class="value">13</div><div class="label">Missions</div></div>
+  <div class="summary-stat"><div class="value">18</div><div class="label">Agents</div></div>
+  <div class="summary-stat"><div class="value">7</div><div class="label">AARs</div></div>
+  <div class="summary-stat" style="border-left: 3px solid var(--border)"><div class="value mono" style="font-size:14px">#3,4,7,16,22,34,36,49,50,54</div><div class="label">Brief Decisions Touched</div></div>
+</div>
+
+<div class="tab-bar">
+  <div class="tab active" onclick="switchTab('decisions')">Decisions (8)</div>
+  <div class="tab" onclick="switchTab('assumptions')">Assumptions (22)</div>
+  <div class="tab" onclick="switchTab('proposals')">Proposals (38 in 10 themes)</div>
+</div>
+
+<!-- DECISIONS TAB -->
+<div id="tab-decisions" class="tab-content active">
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="filterDecisions('all')">All</button>
+    <button class="filter-btn" onclick="filterDecisions('critical')">Critical</button>
+    <button class="filter-btn" onclick="filterDecisions('high')">High</button>
+    <button class="filter-btn" onclick="filterDecisions('medium')">Medium</button>
+    <span style="color:var(--text-dim);font-size:12px;margin-left:8px">|</span>
+    <button class="filter-btn" onclick="filterDecisions('decided')">Decided</button>
+    <button class="filter-btn" onclick="filterDecisions('proposed')">Proposed</button>
+    <input type="text" class="search-input" placeholder="Search decisions..." oninput="searchCards('decisions', this.value)">
+  </div>
+  <div class="content" id="decisions-list">
+
+    <div class="card" data-leverage="critical" data-status="decided" data-search="context rot hook lagebeurteilung stop hook checkpoint">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id">D-CONTEXT-ROT-HOOK</span>
+        <span class="card-title">Create Lagebeurteilung checkpoint Stop hook for context rot mitigation</span>
+        <div class="card-badges">
+          <span class="leverage-badge leverage-critical">CRITICAL</span>
+          <span class="status-badge status-decided">Decided</span>
+          <span style="color:var(--text-dim);font-size:11px">12 components</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">What it decides</span><span class="detail-value">A command-type Stop hook that injects context rot mitigation as context grows past ~20% threshold</span></div>
+        <div class="detail-row"><span class="detail-label">Who decided</span><span class="detail-value">Commander + S3 collaborative design</span></div>
+        <div class="detail-row"><span class="detail-label">When</span><span class="detail-value">Session 5HyCwPtSDH, turn 16 (context rot positioning correction)</span></div>
+        <div class="detail-row"><span class="detail-label">Brief decisions</span><span class="detail-value"><span class="brief-tag">#36</span><span class="brief-tag">#50</span><span class="brief-tag">#54</span></span></div>
+        <div class="section-title">Provenance</div>
+        <div><span class="provenance-tag">Lagebeurteilung (Bundeswehr)</span><span class="provenance-tag">SA theory (Endsley)</span><span class="provenance-tag">OODA Orient (Boyd)</span><span class="provenance-tag">Periodic inspection (safety eng.)</span></div>
+        <div class="section-title">Frameworks</div>
+        <div><span class="framework-tag">Operational learning (proposed)</span><span class="framework-tag">Mission command (proposed)</span><span class="framework-tag">Three-layer governance (existing)</span></div>
+        <div class="section-title">Components (12)</div>
+        <ul class="components-list">
+          <li>(1) New hook: shared/hooks/lagebeurteilung-checkpoint.sh</li>
+          <li>(2) Event: Stop -- fires after every agent turn</li>
+          <li>(3) Type: command (NOT prompt -- needs conditional logic)</li>
+          <li>(4) Threshold heuristic: ~20% context usage before first injection</li>
+          <li>(5) Below threshold: silent (exit 0)</li>
+          <li>(6) Above threshold: emit additionalContext via stderr JSON</li>
+          <li>(7) Reminder content: re-read running estimate, audit in reverse chronological order, ultrathink</li>
+          <li>(8) Multi-agent delegation: N-level creates N injection points (structural mitigation)</li>
+          <li>(9) PreToolUse on Agent: refresh running estimate before each launch</li>
+          <li>(10) Operational learning duty at END of delegation prompt</li>
+          <li>(11) Register in tool-ops.json via /tool-ops</li>
+          <li>(12) Deploy to ~/.claude/hooks/ via setup-user-hooks</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" data-leverage="critical" data-status="decided" data-search="operational learning duty observe surface propose connect continuous">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id">D-OPERATIONAL-LEARNING-DUTY</span>
+        <span class="card-title">Every delegation prompt injects operational learning duty block</span>
+        <div class="card-badges">
+          <span class="leverage-badge leverage-critical">CRITICAL</span>
+          <span class="status-badge status-decided">Decided</span>
+          <span style="color:var(--text-dim);font-size:11px">6 components</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">What it decides</span><span class="detail-value">Every agent observes, surfaces, proposes, and connects findings to frameworks -- continuous, not session-end only</span></div>
+        <div class="detail-row"><span class="detail-label">Who decided</span><span class="detail-value">Commander directive</span></div>
+        <div class="detail-row"><span class="detail-label">When</span><span class="detail-value">Session 5HyCwPtSDH, commander stated "this should be part of every SESSION and MISSION"</span></div>
+        <div class="detail-row"><span class="detail-label">Brief decisions</span><span class="detail-value"><span class="brief-tag">#36</span><span class="brief-tag">#4</span><span class="brief-tag">#44</span></span></div>
+        <div class="section-title">Provenance</div>
+        <div><span class="provenance-tag">Double-loop learning (Argyris)</span><span class="provenance-tag">CALL OIL (US Army)</span><span class="provenance-tag">Kaizen (Toyota)</span><span class="provenance-tag">Deming PDCA Check-Act</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-leverage="high" data-status="decided" data-search="gitignore fix carry forward tracking blocker">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id">D-GITIGNORE-FIX</span>
+        <span class="card-title">Replace blanket .aitools/ gitignore with selective patterns</span>
+        <div class="card-badges">
+          <span class="leverage-badge leverage-high">HIGH</span>
+          <span class="status-badge status-decided">Decided</span>
+          <span style="color:var(--text-dim);font-size:11px">8 components</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">What it decides</span><span class="detail-value">Unblock carry-forward architecture by fixing the root cause blocker identified unanimously by 4 AARs</span></div>
+        <div class="detail-row"><span class="detail-label">Who decided</span><span class="detail-value">Unanimous convergence across M1/M2/M4 + commander approval</span></div>
+        <div class="detail-row"><span class="detail-label">Brief decisions</span><span class="detail-value"><span class="brief-tag">#22</span><span class="brief-tag">#34</span><span class="brief-tag">#50</span></span></div>
+        <div class="section-title">Provenance</div>
+        <div><span class="provenance-tag">4-AAR convergence (empirical)</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-leverage="high" data-status="decided" data-search="multi agent orchestration patterns pattern check delegation">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id">D-MULTI-AGENT-PATTERNS</span>
+        <span class="card-title">Codify 5 multi-agent orchestration patterns with PATTERN-CHECK duty</span>
+        <div class="card-badges">
+          <span class="leverage-badge leverage-high">HIGH</span>
+          <span class="status-badge status-decided">Decided</span>
+          <span style="color:var(--text-dim);font-size:11px">8 components</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">What it decides</span><span class="detail-value">Codify write-verify-amend, parallel S2, S2 chain, S2-then-S3, WRITE_BLOCKED relaunch as governed patterns</span></div>
+        <div class="detail-row"><span class="detail-label">Who decided</span><span class="detail-value">M9 root cause analysis + commander directive</span></div>
+        <div class="detail-row"><span class="detail-label">Brief decisions</span><span class="detail-value"><span class="brief-tag">#3</span><span class="brief-tag">#4</span><span class="brief-tag">#7</span><span class="brief-tag">#51</span></span></div>
+        <div class="section-title">Provenance</div>
+        <div><span class="provenance-tag">Auftragstaktik</span><span class="provenance-tag">MDMP war-gaming</span><span class="provenance-tag">A3 Thinking (Toyota)</span><span class="provenance-tag">Catchball (Hoshin Kanri)</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-leverage="high" data-status="decided" data-search="per session estimates reconciliation concurrent">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id">D-PER-SESSION-ESTIMATES</span>
+        <span class="card-title">Per-session running estimates with reconciliation at handoff</span>
+        <div class="card-badges">
+          <span class="leverage-badge leverage-high">HIGH</span>
+          <span class="status-badge status-decided">Decided</span>
+          <span style="color:var(--text-dim);font-size:11px">5 components</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">What it decides</span><span class="detail-value">Running estimates are per-session (gitignored) with reconciliation into carry-forward estimate at session end</span></div>
+        <div class="detail-row"><span class="detail-label">Who decided</span><span class="detail-value">Commander choice (per-session with reconciliation)</span></div>
+        <div class="detail-row"><span class="detail-label">Brief decisions</span><span class="detail-value"><span class="brief-tag">#50</span><span class="brief-tag">#22</span><span class="brief-tag">#34</span></span></div>
+      </div>
+    </div>
+
+    <div class="card" data-leverage="medium" data-status="decided" data-search="aitool prefix skill naming taxonomy">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id">D-AITOOL-PREFIX</span>
+        <span class="card-title">User-level skills use /aitool-* naming prefix, three-tier taxonomy</span>
+        <div class="card-badges">
+          <span class="leverage-badge leverage-medium">MEDIUM</span>
+          <span class="status-badge status-decided">Decided</span>
+          <span style="color:var(--text-dim);font-size:11px">5 components</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">What it decides</span><span class="detail-value">Uniform /aitool-* prefix for user-level skills, three-tier taxonomy (project, user, reference-card)</span></div>
+        <div class="detail-row"><span class="detail-label">Who decided</span><span class="detail-value">Commander choice (/aitool-* over /ait-*)</span></div>
+        <div class="detail-row"><span class="detail-label">Brief decisions</span><span class="detail-value"><span class="brief-tag">#16</span><span class="brief-tag">#49</span></span></div>
+      </div>
+    </div>
+
+    <div class="card" data-leverage="high" data-status="decided" data-search="s1 launch administration incident filing glossary">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id">D-S1-LAUNCH</span>
+        <span class="card-title">S1 (Administration) launched via S2 delegation for filing duties</span>
+        <div class="card-badges">
+          <span class="leverage-badge leverage-high">HIGH</span>
+          <span class="status-badge status-decided">Decided</span>
+          <span style="color:var(--text-dim);font-size:11px">6 components</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">What it decides</span><span class="detail-value">S1 is launched via S2 for incident filing, glossary updates, and registry maintenance</span></div>
+        <div class="detail-row"><span class="detail-label">Who decided</span><span class="detail-value">Commander directive + decisions #24-26 implementation</span></div>
+        <div class="detail-row"><span class="detail-label">Brief decisions</span><span class="detail-value"><span class="brief-tag">#24</span><span class="brief-tag">#25</span><span class="brief-tag">#26</span></span></div>
+      </div>
+    </div>
+
+    <div class="card" data-leverage="medium" data-status="decided" data-search="dashboard governance operational learning naming">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id">D-DASHBOARD-GOVERNANCE</span>
+        <span class="card-title">Dashboard production is S2 duty in Operational Learning framework</span>
+        <div class="card-badges">
+          <span class="leverage-badge leverage-medium">MEDIUM</span>
+          <span class="status-badge status-decided">Decided</span>
+          <span style="color:var(--text-dim);font-size:11px">5 components</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">What it decides</span><span class="detail-value">Dashboard production governed as S2 consolidation duty, with standard naming and tracked location</span></div>
+        <div class="detail-row"><span class="detail-label">Who decided</span><span class="detail-value">Commander directive + gap analysis</span></div>
+        <div class="detail-row"><span class="detail-label">Brief decisions</span><span class="detail-value"><span class="brief-tag">#36</span></span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ASSUMPTIONS TAB -->
+<div id="tab-assumptions" class="tab-content">
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="filterAssumptions('all')">All (22)</button>
+    <button class="filter-btn" onclick="filterAssumptions('verified')">Verified (1)</button>
+    <button class="filter-btn" onclick="filterAssumptions('unverified')">Unverified (21)</button>
+    <span style="color:var(--text-dim);font-size:12px;margin-left:8px">|</span>
+    <button class="filter-btn" onclick="filterAssumptions('environmental')">Environmental</button>
+    <button class="filter-btn" onclick="filterAssumptions('architectural')">Architectural</button>
+    <button class="filter-btn" onclick="filterAssumptions('behavioral')">Behavioral</button>
+    <button class="filter-btn" onclick="filterAssumptions('temporal')">Temporal</button>
+    <input type="text" class="search-input" placeholder="Search assumptions..." oninput="searchCards('assumptions', this.value)">
+  </div>
+
+  <div class="finding-box">
+    <h4>FINDING: "3-depth sufficient" assumption is verified-against-spec but unverified-in-execution</h4>
+    <p>Running estimate assumption #5 says "N-level delegation depth of 3 is sufficient for S3->S2->S1 flow" with status "verified" citing decision #7. However: decision #7 says "PRACTICAL depth limit: ~2-3 levels" -- that is a cost observation, not a sufficiency claim. This session launched 16 missions with ZERO using 3-level delegation (S1 was never launched). The reconciliation mission planned S3->S2->S1 but executed inline. The assumption was verified against the PLANNING BRIEF (decision #7 says 2-3) but never tested against EXECUTION (we never actually did 3 levels). Scenarios needing >3: S3->S2->S1->subS1 (complex administrative chains), S3->S2->deeperS2->S1 (intelligence chains requiring further investigation). Status should be: "verified-against-spec, unverified-in-execution."</p>
+  </div>
+
+  <div class="content" id="assumptions-list">
+
+    <!-- Explicit assumption from running estimate (the questioned one) -->
+    <div class="card" data-state="unverified" data-category="architectural" data-search="delegation depth 3 level s1 s2 s3">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">A-5</span>
+        <span class="card-title">N-level delegation depth of 3 is sufficient for S3->S2->S1 flow</span>
+        <div class="card-badges">
+          <span class="state-badge state-unverified">VERIFIED-AGAINST-SPEC ONLY</span>
+          <span class="assumption-category cat-architectural">Architectural</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Source</span><span class="detail-value">Running estimate assumption #5, decision #7</span></div>
+        <div class="detail-row"><span class="detail-label">Verifiability</span><span class="detail-value verifiability-tag">verifiable-by-test (requires actual 3-level delegation execution)</span></div>
+        <div class="detail-row"><span class="detail-label">Impact if false</span><span class="detail-value">S1 administrative filing chains may exceed 3 levels, requiring architectural support for deeper delegation</span></div>
+        <div class="detail-row"><span class="detail-label">Connected decisions</span><span class="detail-value"><span class="brief-tag">D-S1-LAUNCH</span><span class="brief-tag">#7</span><span class="brief-tag">#25</span></span></div>
+        <div class="detail-row"><span class="detail-label">AUDIT NOTE</span><span class="detail-value" style="color:var(--red)">Decision #7 says "PRACTICAL" not "SUFFICIENT FOR ALL." Zero missions in this session used 3-level. Reconciliation planned S3->S2->S1 but executed inline. Verified against SPEC only, never against EXECUTION.</span></div>
+      </div>
+    </div>
+
+    <!-- Remaining 4 explicit assumptions from running estimate -->
+    <div class="card" data-state="unverified" data-category="architectural" data-search="de-interpolation placeholder spec deviation">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">A-1</span>
+        <span class="card-title">De-interpolation placeholder issue is a spec deviation</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-architectural">Architectural</span></div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Verification</span><span class="detail-value">Need managed-file-deployment spec check</span></div>
+        <div class="detail-row"><span class="detail-label">Identified</span><span class="detail-value">Turn 1 (verification report)</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="environmental" data-search="last summary txt inconsistency code path">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">A-2</span>
+        <span class="card-title">last-summary.txt inconsistency is separate code path issue</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-environmental">Environmental</span></div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Verification</span><span class="detail-value">Need write_summary investigation</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="behavioral" data-search="reconciliation multi agent patterns success">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">A-3</span>
+        <span class="card-title">Reconciliation mission will successfully use multi-agent patterns</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-behavioral">Behavioral</span></div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Note</span><span class="detail-value">Launched but executed inline (SO-6). The reconciliation mission used inline synthesis, not multi-agent patterns. Partially falsified.</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="environmental" data-search="stop hook transcript size proxy context growth">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">A-4</span>
+        <span class="card-title">Stop hook can use transcript size as proxy for context growth</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-environmental">Environmental</span></div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Verification</span><span class="detail-value">verifiable-by-code: Need to verify hook has access to transcript path and stat works cross-platform</span></div>
+        <div class="detail-row"><span class="detail-label">Connected decisions</span><span class="detail-value"><span class="brief-tag">D-CONTEXT-ROT-HOOK</span></span></div>
+      </div>
+    </div>
+
+    <!-- M12 unflagged assumptions (17 total, showing critical and high) -->
+    <div class="card" data-state="unverified" data-category="architectural" data-search="reconciliation algorithm union last updated wins">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">UA-1</span>
+        <span class="card-title">Reconciliation algorithm (UNION/LAST-UPDATED-WINS/MOST-ADVANCED-STATUS) produces correct results</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-architectural">Architectural</span><span class="leverage-badge leverage-critical" style="font-size:10px">CRITICAL</span></div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Impact if false</span><span class="detail-value">UNION for arrays is lossy in the inverse case (resolved items reappear). LAST-UPDATED-WINS discards older session's data. Status regression not handled.</span></div>
+        <div class="detail-row"><span class="detail-label">Connected decisions</span><span class="detail-value"><span class="brief-tag">D-PER-SESSION-ESTIMATES</span><span class="brief-tag">#50</span></span></div>
+        <div class="detail-row"><span class="detail-label">Verification method</span><span class="detail-value verifiability-tag">verifiable-by-test: Design test cases for edge cases</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="environmental" data-search="harvest session classification context dependent">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">UA-2</span>
+        <span class="card-title">harvest-session.sh classification logic works outside SessionEnd hook context</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-environmental">Environmental</span><span class="leverage-badge leverage-critical" style="font-size:10px">CRITICAL</span></div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Impact if false</span><span class="detail-value">Opportunistic harvest at SessionStart would misclassify files or fail silently</span></div>
+        <div class="detail-row"><span class="detail-label">Verification</span><span class="detail-value verifiability-tag">verifiable-by-code: Read harvest-session.sh classification logic, check session_id deps</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="architectural" data-search="context rot hook conflict stop hooks decision 20">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">UA-3</span>
+        <span class="card-title">D-CONTEXT-ROT-HOOK does not conflict with existing hook architecture</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-architectural">Architectural</span><span class="leverage-badge leverage-critical" style="font-size:10px">CRITICAL</span></div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Impact if false</span><span class="detail-value">Two Stop hooks (lagebeurteilung + aar-reminder) may interact. One-hook-per-feature principle (#20) needs analysis.</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="temporal" data-search="handoff scratch paths resolve sessionend">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">UA-4</span>
+        <span class="card-title">Handoff scratch file paths still resolve after SessionEnd hook</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-temporal">Temporal</span><span class="leverage-badge leverage-high" style="font-size:10px">HIGH</span></div>
+      </div>
+      <div class="card-body"><div class="detail-row"><span class="detail-label">Verification</span><span class="detail-value verifiability-tag">verifiable-by-code: ls harvesting/2026-03-19_*</span></div></div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="behavioral" data-search="s1 agents glossary incident skills heuristic bypass">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">UA-5</span>
+        <span class="card-title">S1 agents can successfully invoke /glossary and /incident via heuristic bypass</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-behavioral">Behavioral</span><span class="leverage-badge leverage-high" style="font-size:10px">HIGH</span></div>
+      </div>
+      <div class="card-body"><div class="detail-row"><span class="detail-label">Connected decisions</span><span class="detail-value"><span class="brief-tag">D-S1-LAUNCH</span><span class="brief-tag">#24</span><span class="brief-tag">#25</span><span class="brief-tag">#26</span></span></div></div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="environmental" data-search="current session race condition cc session id hook input">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">UA-6</span>
+        <span class="card-title">CC session_id is available in SessionStart hook input JSON</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-environmental">Environmental</span><span class="leverage-badge leverage-high" style="font-size:10px">HIGH</span></div>
+      </div>
+      <div class="card-body"><div class="detail-row"><span class="detail-label">Evidence against</span><span class="detail-value" style="color:var(--red)">scratch-init.sh uses RANDOM suffixes -- if CC provided session_id, why random?</span></div></div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="architectural" data-search="session decisions compatible planning brief 54 schema amendment">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">UA-7</span>
+        <span class="card-title">8 session decisions are compatible with brief's 54-decision schema</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-architectural">Architectural</span><span class="leverage-badge leverage-high" style="font-size:10px">HIGH</span></div>
+      </div>
+      <div class="card-body"><div class="detail-row"><span class="detail-label">Impact</span><span class="detail-value">Per-session estimates contradicts #50 update-in-place. Component 10 skips 9. Three-tier contradicts #49 flat naming.</span></div></div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="behavioral" data-search="operational learning duty agents comply behavioral">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">UA-8</span>
+        <span class="card-title">Operational learning duty block will actually be followed by agents</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-behavioral">Behavioral</span><span class="leverage-badge leverage-high" style="font-size:10px">HIGH</span></div>
+      </div>
+      <div class="card-body"><div class="detail-row"><span class="detail-label">Tension</span><span class="detail-value">Decision #35 says "UCIs are not effective for recurring behavioral patterns." The duty IS a behavioral instruction via prompt, not structural.</span></div></div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="temporal" data-search="40 agent dashboard accurate transcript parsing">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">UA-9</span>
+        <span class="card-title">40-agent dashboard accurately represents all agents' delegations</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-temporal">Temporal</span><span class="leverage-badge leverage-high" style="font-size:10px">HIGH</span></div>
+      </div>
+      <div class="card-body"><div class="detail-row"><span class="detail-label">Note</span><span class="detail-value">M8 was single-agent, no verifier launched. Chain relationships were inferred, not from JSONL.</span></div></div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="environmental" data-search="proposals handoff open threads duplicate conflict">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">UA-10</span>
+        <span class="card-title">38 proposals do not duplicate or conflict with handoff's 16 open threads</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-environmental">Environmental</span><span class="leverage-badge leverage-high" style="font-size:10px">HIGH</span></div>
+      </div>
+      <div class="card-body"><div class="detail-row"><span class="detail-label">Note</span><span class="detail-value">No cross-reference matrix created. OT-14 (tool-ops docs for 9 hooks) not addressed by any mission.</span></div></div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="behavioral" data-search="reference card skill read only feasible">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">UA-11</span>
+        <span class="card-title">Reference-card pattern (/aitool-ops read-only) is technically feasible</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-behavioral">Behavioral</span><span class="leverage-badge leverage-medium" style="font-size:10px">MEDIUM</span></div>
+      </div>
+      <div class="card-body"></div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="temporal" data-search="planning brief assumptions a1 a7 still valid">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">UA-12</span>
+        <span class="card-title">Planning brief's 7 assumptions (A1-A7) still valid after this session</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-temporal">Temporal</span><span class="leverage-badge leverage-medium" style="font-size:10px">MEDIUM</span></div>
+      </div>
+      <div class="card-body"><div class="detail-row"><span class="detail-label">Note</span><span class="detail-value">A3 (Explore agents) now VERIFIED by this session. A7 (hooks effective) challenged by M11 I-7.</span></div></div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="architectural" data-search="mission count 10 11 discrepancy aar running estimate">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">UA-13</span>
+        <span class="card-title">Session AAR metric of "10 missions" vs running estimate "11 missions"</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-architectural">Architectural</span><span class="leverage-badge leverage-medium" style="font-size:10px">MEDIUM</span></div>
+      </div>
+      <div class="card-body"></div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="environmental" data-search="file recovery 30 content correct not just filenames">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">UA-14</span>
+        <span class="card-title">30/30 file recovery produced correct CONTENT, not just filenames</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-environmental">Environmental</span><span class="leverage-badge leverage-medium" style="font-size:10px">MEDIUM</span></div>
+      </div>
+      <div class="card-body"><div class="detail-row"><span class="detail-label">Risk</span><span class="detail-value">Parser must take LAST Write per filename. No verifier launched for M7.</span></div></div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="behavioral" data-search="write verify amend applicable all s3 outputs scope">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">UA-15</span>
+        <span class="card-title">Write-verify-amend applicable to ALL S3 outputs (scope question)</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-behavioral">Behavioral</span><span class="leverage-badge leverage-medium" style="font-size:10px">MEDIUM</span></div>
+      </div>
+      <div class="card-body"></div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="temporal" data-search="delegation duty component count 5 8 9 12 authoritative">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">UA-16</span>
+        <span class="card-title">Delegation duty count: 9 (v0.62.4) is authoritative, not brief's 8</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-temporal">Temporal</span><span class="leverage-badge leverage-medium" style="font-size:10px">MEDIUM</span></div>
+      </div>
+      <div class="card-body"></div>
+    </div>
+
+    <div class="card" data-state="unverified" data-category="environmental" data-search="m3 handoff json schema b conversion correct 1035">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:60px">UA-17</span>
+        <span class="card-title">M3's 1035-line handoff JSON Schema B conversion is correct</span>
+        <div class="card-badges"><span class="state-badge state-unverified">Unverified</span><span class="assumption-category cat-environmental">Environmental</span><span class="leverage-badge leverage-medium" style="font-size:10px">LOW</span></div>
+      </div>
+      <div class="card-body"><div class="detail-row"><span class="detail-label">Note</span><span class="detail-value">Single-agent mission, no verifier launched. M9 root cause: single-agent = assumption propagation vector.</span></div></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- PROPOSALS TAB -->
+<div id="tab-proposals" class="tab-content">
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="filterProposals('all')">All (10 themes)</button>
+    <button class="filter-btn" onclick="filterProposals('critical')">Critical</button>
+    <button class="filter-btn" onclick="filterProposals('high')">High</button>
+    <button class="filter-btn" onclick="filterProposals('medium')">Medium</button>
+    <span style="color:var(--text-dim);font-size:12px;margin-left:8px">|</span>
+    <button class="filter-btn" onclick="filterProposals('decided')">Decided</button>
+    <button class="filter-btn" onclick="filterProposals('proposed')">Proposed</button>
+    <input type="text" class="search-input" placeholder="Search proposals..." oninput="searchCards('proposals', this.value)">
+  </div>
+  <div class="content" id="proposals-list">
+
+    <div class="card" data-leverage="critical" data-status="decided" data-convergence="4" data-search="gitignore carry forward tracking selective patterns">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:80px">Rank 1</span>
+        <span class="card-title">Fix .gitignore to enable carry-forward tracking</span>
+        <div class="card-badges">
+          <span class="convergence-badge convergence-3">4 AARs</span>
+          <span class="leverage-badge leverage-critical">CRITICAL</span>
+          <span class="status-badge status-decided">Decided</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Source missions</span><span class="detail-value">M1-P1, M2-P3, M4-P1, M4-P4</span></div>
+        <div class="detail-row"><span class="detail-label">Target artifact</span><span class="detail-value">.gitignore + .aitools/.gitignore</span></div>
+        <div class="detail-row"><span class="detail-label">Best formulation</span><span class="detail-value">M4-P1 (both gitignore strategies) + M4-P4 (verification)</span></div>
+        <div class="detail-row"><span class="detail-label">Effort</span><span class="detail-value">LOW</span></div>
+        <div class="detail-row"><span class="detail-label">Brief decisions</span><span class="detail-value"><span class="brief-tag">#22</span><span class="brief-tag">#34</span><span class="brief-tag">#50</span></span></div>
+        <div class="detail-row"><span class="detail-label">Handoff wave</span><span class="detail-value">Wave 1 item 3 (OT-2)</span></div>
+        <div class="detail-row"><span class="detail-label">Blocked by</span><span class="detail-value">Nothing -- unblocks 8+ downstream proposals</span></div>
+        <div class="detail-row"><span class="detail-label">Related assumptions</span><span class="detail-value"><span class="brief-tag">UA-7</span> (session decisions compatible with brief)</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-leverage="high" data-status="decided" data-convergence="3" data-search="per session running estimates reconciliation">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:80px">Rank 2</span>
+        <span class="card-title">Per-session running estimates with reconciliation</span>
+        <div class="card-badges">
+          <span class="convergence-badge convergence-3">3 AARs</span>
+          <span class="leverage-badge leverage-high">HIGH</span>
+          <span class="status-badge status-decided">Decided</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Source missions</span><span class="detail-value">M4-P2, M4-P5, M1-I7</span></div>
+        <div class="detail-row"><span class="detail-label">Target artifact</span><span class="detail-value">Running estimate schema, channel-init.sh, reconciliation algorithm</span></div>
+        <div class="detail-row"><span class="detail-label">Effort</span><span class="detail-value">MEDIUM-HIGH</span></div>
+        <div class="detail-row"><span class="detail-label">Blocked by</span><span class="detail-value">Rank 1 (.gitignore fix)</span></div>
+        <div class="detail-row"><span class="detail-label">Related assumptions</span><span class="detail-value"><span class="brief-tag">UA-1</span> (reconciliation algorithm correctness)</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-leverage="high" data-status="proposed" data-convergence="3" data-search="current session race condition session id">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:80px">Rank 3</span>
+        <span class="card-title">Fix .current-session pointer race condition for concurrent sessions</span>
+        <div class="card-badges">
+          <span class="convergence-badge convergence-3">3 AARs</span>
+          <span class="leverage-badge leverage-high">HIGH</span>
+          <span class="status-badge status-proposed">Proposed</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Source missions</span><span class="detail-value">M4-P3, M1-I5, M2-P2</span></div>
+        <div class="detail-row"><span class="detail-label">Effort</span><span class="detail-value">MEDIUM</span></div>
+        <div class="detail-row"><span class="detail-label">Related assumptions</span><span class="detail-value"><span class="brief-tag">UA-6</span> (CC session_id available in hook input)</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-leverage="high" data-status="proposed" data-convergence="3" data-search="harvest before destroying stale scratch directories">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:80px">Rank 4</span>
+        <span class="card-title">Harvest before destroying stale scratch directories</span>
+        <div class="card-badges">
+          <span class="convergence-badge convergence-3">3 AARs</span>
+          <span class="leverage-badge leverage-high">HIGH</span>
+          <span class="status-badge status-proposed">Proposed</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Source missions</span><span class="detail-value">M1-P4, M2-P2, M6-P3</span></div>
+        <div class="detail-row"><span class="detail-label">Effort</span><span class="detail-value">HIGH</span></div>
+        <div class="detail-row"><span class="detail-label">Related assumptions</span><span class="detail-value"><span class="brief-tag">UA-2</span> (harvest classification works outside SessionEnd)</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-leverage="high" data-status="proposed" data-convergence="2" data-search="auto commit harvested artifacts git">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:80px">Rank 5</span>
+        <span class="card-title">Auto-commit harvested artifacts</span>
+        <div class="card-badges">
+          <span class="convergence-badge convergence-2">2 AARs</span>
+          <span class="leverage-badge leverage-high">HIGH</span>
+          <span class="status-badge status-proposed">Proposed</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Source missions</span><span class="detail-value">M2-P1, M2-P5</span></div>
+        <div class="detail-row"><span class="detail-label">Effort</span><span class="detail-value">MEDIUM</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-leverage="high" data-status="decided" data-convergence="1" data-search="codify multi agent orchestration patterns delegation">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:80px">Rank 6</span>
+        <span class="card-title">Codify multi-agent orchestration patterns (6 proposals)</span>
+        <div class="card-badges">
+          <span class="convergence-badge convergence-1">1 AAR / 6 proposals</span>
+          <span class="leverage-badge leverage-high">HIGH</span>
+          <span class="status-badge status-decided">Decided</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Source missions</span><span class="detail-value">M9-P1 through M9-P6</span></div>
+        <div class="detail-row"><span class="detail-label">Target artifact</span><span class="detail-value">Planning brief, reference/orchestration-patterns.md, delegation duty</span></div>
+        <div class="detail-row"><span class="detail-label">Effort</span><span class="detail-value">MEDIUM</span></div>
+        <div class="detail-row"><span class="detail-label">Brief decisions</span><span class="detail-value"><span class="brief-tag">#3</span><span class="brief-tag">#4</span><span class="brief-tag">#51</span></span></div>
+      </div>
+    </div>
+
+    <div class="card" data-leverage="medium" data-status="decided" data-convergence="1" data-search="three tier skill taxonomy reference cards aitool prefix">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:80px">Rank 7</span>
+        <span class="card-title">Three-tier skill taxonomy with /aitool-* prefix (7 proposals)</span>
+        <div class="card-badges">
+          <span class="convergence-badge convergence-1">1 AAR / 7 proposals</span>
+          <span class="leverage-badge leverage-medium">MEDIUM</span>
+          <span class="status-badge status-decided">Decided</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Source missions</span><span class="detail-value">M5-P1 through M5-P7</span></div>
+        <div class="detail-row"><span class="detail-label">Effort</span><span class="detail-value">HIGH</span></div>
+        <div class="detail-row"><span class="detail-label">Related assumptions</span><span class="detail-value"><span class="brief-tag">UA-11</span> (reference-card pattern feasible)</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-leverage="medium" data-status="proposed" data-convergence="2" data-search="carry forward state detection hook pretooluse">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:80px">Rank 8</span>
+        <span class="card-title">Carry-forward state detection hook</span>
+        <div class="card-badges">
+          <span class="convergence-badge convergence-2">2 AARs</span>
+          <span class="leverage-badge leverage-medium">MEDIUM</span>
+          <span class="status-badge status-proposed">Proposed</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Source missions</span><span class="detail-value">M1-P2, M1-P5</span></div>
+        <div class="detail-row"><span class="detail-label">Effort</span><span class="detail-value">MEDIUM</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-leverage="medium" data-status="proposed" data-convergence="2" data-search="harvest lifecycle testing mock session tool ops">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:80px">Rank 9</span>
+        <span class="card-title">Harvest lifecycle testing</span>
+        <div class="card-badges">
+          <span class="convergence-badge convergence-2">2 AARs</span>
+          <span class="leverage-badge leverage-medium">MEDIUM</span>
+          <span class="status-badge status-proposed">Proposed</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Source missions</span><span class="detail-value">M1-P3</span></div>
+        <div class="detail-row"><span class="detail-label">Effort</span><span class="detail-value">MEDIUM</span></div>
+      </div>
+    </div>
+
+    <div class="card" data-leverage="medium" data-status="proposed" data-convergence="2" data-search="file recovery cc transcripts session uuid mapping">
+      <div class="card-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="collapse-icon">&#9654;</span>
+        <span class="card-id" style="min-width:80px">Rank 10</span>
+        <span class="card-title">File recovery from CC transcripts (session-to-UUID mapping)</span>
+        <div class="card-badges">
+          <span class="convergence-badge convergence-2">2 AARs</span>
+          <span class="leverage-badge leverage-medium">MEDIUM</span>
+          <span class="status-badge status-proposed">Proposed</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-row"><span class="detail-label">Source missions</span><span class="detail-value">M6-P2, M6-P4</span></div>
+        <div class="detail-row"><span class="detail-label">Effort</span><span class="detail-value">LOW</span></div>
+        <div class="detail-row"><span class="detail-label">Note</span><span class="detail-value">M7 proved methodology works (100% recovery rate). Low effort, immediate value.</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="footer">
+  Session 5HyCwPtSDH | S3 (Operations) | 2026-03-21 | Governance Dashboard v1 | Keyboard: <span class="kbd">1</span>/<span class="kbd">2</span>/<span class="kbd">3</span> switch tabs, <span class="kbd">/</span> focus search, <span class="kbd">e</span> expand all, <span class="kbd">c</span> collapse all
+</div>
+
+<script>
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  const tabs = document.querySelectorAll('.tab');
+  const idx = tab === 'decisions' ? 0 : tab === 'assumptions' ? 1 : 2;
+  tabs[idx].classList.add('active');
+}
+
+function filterDecisions(f) {
+  const cards = document.querySelectorAll('#decisions-list .card');
+  cards.forEach(c => {
+    if (f === 'all') { c.style.display = ''; return; }
+    if (f === 'decided' || f === 'proposed') {
+      c.style.display = c.dataset.status === f ? '' : 'none';
+    } else {
+      c.style.display = c.dataset.leverage === f ? '' : 'none';
+    }
+  });
+  updateFilterButtons(event);
+}
+
+function filterAssumptions(f) {
+  const cards = document.querySelectorAll('#assumptions-list .card');
+  cards.forEach(c => {
+    if (f === 'all') { c.style.display = ''; return; }
+    if (f === 'verified' || f === 'unverified') {
+      c.style.display = c.dataset.state === f ? '' : 'none';
+    } else {
+      c.style.display = c.dataset.category === f ? '' : 'none';
+    }
+  });
+  updateFilterButtons(event);
+}
+
+function filterProposals(f) {
+  const cards = document.querySelectorAll('#proposals-list .card');
+  cards.forEach(c => {
+    if (f === 'all') { c.style.display = ''; return; }
+    if (f === 'decided' || f === 'proposed') {
+      c.style.display = c.dataset.status === f ? '' : 'none';
+    } else {
+      c.style.display = c.dataset.leverage === f ? '' : 'none';
+    }
+  });
+  updateFilterButtons(event);
+}
+
+function updateFilterButtons(e) {
+  if (!e || !e.target) return;
+  const bar = e.target.closest('.filter-bar');
+  bar.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+}
+
+function searchCards(tab, query) {
+  const listId = tab + '-list';
+  const cards = document.querySelectorAll('#' + listId + ' .card');
+  const q = query.toLowerCase();
+  cards.forEach(c => {
+    const searchText = (c.dataset.search || '') + ' ' + c.textContent.toLowerCase();
+    c.style.display = searchText.includes(q) ? '' : 'none';
+  });
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === '1') switchTab('decisions');
+  if (e.key === '2') switchTab('assumptions');
+  if (e.key === '3') switchTab('proposals');
+  if (e.key === '/') {
+    e.preventDefault();
+    const active = document.querySelector('.tab-content.active');
+    const input = active ? active.closest('body').querySelector('.tab-content.active').previousElementSibling || document.querySelector('.search-input') : null;
+    const visibleInput = document.querySelector('.tab-content.active').parentElement.querySelector('.filter-bar .search-input') || document.querySelector('.search-input');
+    if (visibleInput) visibleInput.focus();
+  }
+  if (e.key === 'e') {
+    document.querySelectorAll('.tab-content.active .card').forEach(c => c.classList.add('expanded'));
+  }
+  if (e.key === 'c') {
+    document.querySelectorAll('.tab-content.active .card').forEach(c => c.classList.remove('expanded'));
+  }
+});
+</script>
+</body>
+</html>

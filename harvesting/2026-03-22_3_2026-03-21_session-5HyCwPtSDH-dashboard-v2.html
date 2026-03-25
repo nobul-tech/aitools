@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Session 5HyCwPtSDH v2 Dashboard -- 2026-03-21</title>
+<style>
+  :root {
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #21262d;
+    --bg-hover: #30363d;
+    --border: #30363d;
+    --border-light: #484f58;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted: #6e7681;
+    --accent-blue: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-yellow: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-orange: #f0883e;
+    --accent-cyan: #56d4dd;
+    --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --radius: 6px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { font-size: 14px; scroll-behavior: smooth; }
+  body { background: var(--bg-primary); color: var(--text-primary); font-family: var(--font-sans); line-height: 1.5; min-height: 100vh; }
+  .header { position: sticky; top: 0; z-index: 100; background: var(--bg-secondary); border-bottom: 1px solid var(--border); padding: 12px 24px; box-shadow: var(--shadow); }
+  .header-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+  .header-title { font-size: 1.3rem; font-weight: 600; }
+  .header-title span { color: var(--text-secondary); font-weight: 400; font-size: 0.9rem; }
+  .session-id { font-family: var(--font-mono); color: var(--accent-blue); font-size: 0.85rem; }
+  .stats-bar { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .stat-card { background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 14px; display: flex; align-items: center; gap: 8px; }
+  .stat-value { font-size: 1.2rem; font-weight: 700; font-family: var(--font-mono); }
+  .stat-label { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-value.green { color: var(--accent-green); }
+  .stat-value.yellow { color: var(--accent-yellow); }
+  .stat-value.red { color: var(--accent-red); }
+  .stat-value.blue { color: var(--accent-blue); }
+  .stat-value.purple { color: var(--accent-purple); }
+  .stat-value.orange { color: var(--accent-orange); }
+  .stat-value.cyan { color: var(--accent-cyan); }
+  .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 12px 24px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); }
+  .filter-group { display: flex; gap: 4px; }
+  .filter-btn { background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-secondary); padding: 4px 12px; border-radius: var(--radius); cursor: pointer; font-size: 0.8rem; font-family: var(--font-sans); transition: all 0.15s; }
+  .filter-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .filter-btn.active { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
+  .search-box { background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); padding: 5px 12px; border-radius: var(--radius); font-size: 0.85rem; font-family: var(--font-sans); width: 280px; outline: none; transition: border-color 0.15s; }
+  .search-box:focus { border-color: var(--accent-blue); }
+  .search-box::placeholder { color: var(--text-muted); }
+  .view-toggle { margin-left: auto; display: flex; gap: 4px; }
+  .section-title { font-size: 0.85rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; font-weight: 600; }
+  .session-summary { padding: 20px 24px; border-bottom: 1px solid var(--border); background: var(--bg-secondary); }
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 12px; }
+  @media (max-width: 900px) { .summary-grid { grid-template-columns: 1fr; } }
+  .summary-card { background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .summary-card-title { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; font-weight: 600; }
+  .summary-card-content { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.7; }
+  .summary-card-content strong { color: var(--text-primary); }
+  .summary-card-content .hl { color: var(--accent-blue); font-family: var(--font-mono); font-weight: 600; }
+  .compliance-bar { margin-top: 8px; background: var(--bg-primary); border-radius: 4px; height: 8px; overflow: hidden; }
+  .compliance-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+  .compliance-fill.green { background: var(--accent-green); }
+  .compliance-fill.yellow { background: var(--accent-yellow); }
+  .compliance-fill.red { background: var(--accent-red); }
+  .tab-nav { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-secondary); padding: 8px 16px; cursor: pointer; font-size: 0.8rem; font-family: var(--font-sans); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; transition: all 0.15s; }
+  .tab-btn:hover { color: var(--text-primary); }
+  .tab-btn.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .timeline-section { padding: 20px 24px; border-bottom: 1px solid var(--border); background: var(--bg-secondary); }
+  .timeline-container { overflow-x: auto; padding-bottom: 8px; }
+  .timeline { position: relative; min-height: 60px; width: 100%; min-width: 900px; }
+  .timeline-axis { position: absolute; bottom: 0; left: 0; right: 0; height: 1px; background: var(--border); }
+  .timeline-labels { display: flex; justify-content: space-between; padding-top: 4px; font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono); }
+  .timeline-bars { display: flex; flex-direction: column; gap: 2px; padding-bottom: 20px; }
+  .timeline-row { display: flex; align-items: center; height: 18px; position: relative; }
+  .timeline-bar-label { width: 55px; font-size: 0.65rem; color: var(--text-muted); font-family: var(--font-mono); text-align: right; padding-right: 6px; flex-shrink: 0; white-space: nowrap; overflow: hidden; }
+  .timeline-bar-track { flex: 1; position: relative; height: 100%; }
+  .timeline-bar { position: absolute; height: 12px; top: 3px; border-radius: 2px; cursor: pointer; transition: opacity 0.15s; min-width: 3px; }
+  .timeline-bar:hover { opacity: 0.8; }
+  .timeline-bar.s-completed { background: var(--accent-green); }
+  .timeline-bar.s-blocked { background: var(--accent-yellow); }
+  .timeline-bar.s-running { background: var(--accent-blue); }
+  .timeline-bar.s-inline { background: var(--accent-purple); }
+  .timeline-bar.s-partial { background: var(--accent-orange); }
+  .timeline-bar.s-fragord { background: repeating-linear-gradient(45deg, var(--accent-yellow), var(--accent-yellow) 3px, rgba(210,153,34,0.4) 3px, rgba(210,153,34,0.4) 6px); }
+  .timeline-bar .tooltip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: var(--bg-primary); border: 1px solid var(--border); padding: 4px 8px; border-radius: var(--radius); font-size: 0.75rem; white-space: nowrap; z-index: 10; pointer-events: none; }
+  .timeline-bar:hover .tooltip { display: block; }
+  .agents-container { padding: 20px 24px; display: flex; flex-direction: column; gap: 8px; }
+  .agent-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color 0.15s; }
+  .agent-card:hover { border-color: var(--border-light); }
+  .agent-card.highlight { border-color: var(--accent-blue); box-shadow: 0 0 0 1px var(--accent-blue); }
+  .agent-card.fragord-card { border-left: 3px solid var(--accent-yellow); }
+  .agent-card-header { display: grid; grid-template-columns: 48px 1fr auto; gap: 12px; padding: 12px 16px; cursor: pointer; align-items: center; }
+  .agent-card-header:hover { background: var(--bg-tertiary); }
+  .agent-number { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; font-family: var(--font-mono); flex-shrink: 0; }
+  .agent-number.role-s2 { background: #1f3a5f; color: var(--accent-blue); }
+  .agent-number.role-s3 { background: #1a3d2a; color: var(--accent-green); }
+  .agent-number.role-verifier { background: #3d2e1a; color: var(--accent-orange); }
+  .agent-number.role-s1 { background: #3d1a3d; color: var(--accent-purple); }
+  .agent-info { min-width: 0; }
+  .agent-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .agent-mission { font-weight: 600; font-size: 0.95rem; }
+  .agent-role-badge { font-size: 0.7rem; padding: 1px 8px; border-radius: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; flex-shrink: 0; }
+  .agent-role-badge.role-s2 { background: #1f3a5f; color: var(--accent-blue); }
+  .agent-role-badge.role-s3 { background: #1a3d2a; color: var(--accent-green); }
+  .agent-role-badge.role-verifier { background: #3d2e1a; color: var(--accent-orange); }
+  .agent-role-badge.role-s1 { background: #3d1a3d; color: var(--accent-purple); }
+  .pattern-badge { font-size: 0.65rem; padding: 1px 6px; border-radius: 4px; background: rgba(86,212,221,0.15); color: var(--accent-cyan); border: 1px solid rgba(86,212,221,0.3); font-family: var(--font-mono); font-weight: 600; }
+  .fragord-badge { font-size: 0.65rem; padding: 1px 6px; border-radius: 4px; background: rgba(210,153,34,0.15); color: var(--accent-yellow); border: 1px solid rgba(210,153,34,0.3); font-family: var(--font-mono); font-weight: 600; }
+  .worktree-badge { font-size: 0.65rem; padding: 1px 6px; border-radius: 4px; background: rgba(188,140,255,0.15); color: var(--accent-purple); border: 1px solid rgba(188,140,255,0.3); font-family: var(--font-mono); }
+  .agent-meta { display: flex; gap: 12px; margin-top: 4px; flex-wrap: wrap; }
+  .agent-meta-item { font-size: 0.75rem; color: var(--text-secondary); font-family: var(--font-mono); display: flex; align-items: center; gap: 4px; }
+  .agent-status { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .status-badge { font-size: 0.7rem; padding: 2px 10px; border-radius: 10px; font-weight: 600; text-transform: uppercase; }
+  .status-badge.completed { background: #1a3d2a; color: var(--accent-green); }
+  .status-badge.blocked { background: #3d351a; color: var(--accent-yellow); }
+  .status-badge.running { background: #1a2a3d; color: var(--accent-blue); }
+  .status-badge.partial { background: #3d2a1a; color: var(--accent-orange); }
+  .status-badge.inline { background: #2a1a3d; color: var(--accent-purple); }
+  .expand-icon { color: var(--text-muted); transition: transform 0.2s; font-size: 1rem; flex-shrink: 0; }
+  .agent-card.expanded .expand-icon { transform: rotate(90deg); }
+  .agent-detail { display: none; border-top: 1px solid var(--border); padding: 16px; background: var(--bg-primary); }
+  .agent-card.expanded .agent-detail { display: block; }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  @media (max-width: 768px) { .detail-grid { grid-template-columns: 1fr; } }
+  .detail-section { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+  .detail-section-title { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 600; }
+  .detail-section-content { font-size: 0.85rem; color: var(--text-secondary); }
+  .detail-section-content.mono { font-family: var(--font-mono); font-size: 0.8rem; }
+  .file-path { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent-blue); display: block; padding: 2px 0; word-break: break-all; }
+  .context-item { display: flex; align-items: baseline; gap: 6px; padding: 2px 0; font-size: 0.82rem; color: var(--text-secondary); }
+  .context-bullet { color: var(--accent-cyan); font-size: 0.7rem; flex-shrink: 0; }
+  .duty-checklist { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+  .duty-item { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; padding: 2px 0; }
+  .duty-check { width: 16px; height: 16px; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; flex-shrink: 0; }
+  .duty-check.pass { background: rgba(63,185,80,0.2); color: var(--accent-green); border: 1px solid rgba(63,185,80,0.4); }
+  .duty-check.fail { background: rgba(248,81,73,0.2); color: var(--accent-red); border: 1px solid rgba(248,81,73,0.4); }
+  .duty-label { color: var(--text-secondary); }
+  .aar-outcome { font-size: 0.85rem; color: var(--text-primary); padding: 8px 12px; background: var(--bg-tertiary); border-left: 3px solid var(--accent-green); border-radius: 0 var(--radius) var(--radius) 0; }
+  .deviation-item { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; font-size: 0.82rem; color: var(--accent-orange); }
+  .deviation-bullet { color: var(--accent-red); font-size: 0.7rem; flex-shrink: 0; }
+  .finding-text { font-size: 0.85rem; color: var(--text-primary); line-height: 1.6; padding: 8px 12px; background: var(--bg-tertiary); border-left: 3px solid var(--accent-blue); border-radius: 0 var(--radius) var(--radius) 0; }
+  .note-text { font-size: 0.8rem; color: var(--accent-yellow); padding: 6px 10px; background: rgba(210,153,34,0.1); border: 1px solid rgba(210,153,34,0.3); border-radius: var(--radius); margin-top: 8px; }
+  .spot-check-text { font-size: 0.85rem; color: var(--text-secondary); padding: 6px 10px; background: var(--bg-tertiary); border-left: 3px solid var(--accent-purple); border-radius: 0 var(--radius) var(--radius) 0; }
+  .prompt-section { margin-top: 12px; }
+  .prompt-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-secondary); font-size: 0.8rem; padding: 6px 0; user-select: none; }
+  .prompt-toggle:hover { color: var(--text-primary); }
+  .prompt-toggle .arrow { transition: transform 0.2s; font-size: 0.7rem; }
+  .prompt-toggle.open .arrow { transform: rotate(90deg); }
+  .prompt-content { display: none; margin-top: 8px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; max-height: 500px; overflow-y: auto; }
+  .prompt-content.open { display: block; }
+  .full-width { grid-column: 1 / -1; }
+  .chain-section { padding: 20px 24px; border-bottom: 1px solid var(--border); background: var(--bg-secondary); }
+  .chain-card { background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; margin-bottom: 8px; }
+  .chain-title { font-weight: 600; font-size: 0.9rem; color: var(--accent-cyan); margin-bottom: 6px; }
+  .chain-agents { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-secondary); }
+  .chain-flow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .chain-node { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); padding: 2px 8px; font-family: var(--font-mono); font-size: 0.75rem; }
+  .chain-arrow { color: var(--accent-cyan); font-size: 0.8rem; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 4px; font-size: 0.7rem; color: var(--text-muted); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+  .legend-dot.green { background: var(--accent-green); }
+  .legend-dot.yellow { background: var(--accent-yellow); }
+  .legend-dot.blue { background: var(--accent-blue); }
+  .legend-dot.purple { background: var(--accent-purple); }
+  .legend-dot.orange { background: var(--accent-orange); }
+  .legend-dot.fragord { background: repeating-linear-gradient(45deg, var(--accent-yellow), var(--accent-yellow) 2px, rgba(210,153,34,0.4) 2px, rgba(210,153,34,0.4) 4px); }
+  .hidden { display: none !important; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg-primary); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+  .no-results { text-align: center; padding: 40px; color: var(--text-muted); font-size: 0.95rem; }
+  .convergence-item { padding: 6px 0; border-bottom: 1px solid rgba(48,54,61,0.5); }
+  .convergence-item:last-child { border-bottom: none; }
+  .convergence-label { color: var(--accent-purple); font-weight: 600; font-size: 0.85rem; }
+  .convergence-desc { font-size: 0.82rem; color: var(--text-secondary); margin-top: 2px; }
+  .convergence-agents { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); }
+  .decision-item { padding: 6px 0; border-bottom: 1px solid rgba(48,54,61,0.5); display: flex; gap: 10px; align-items: baseline; }
+  .decision-item:last-child { border-bottom: none; }
+  .decision-id { color: var(--accent-cyan); font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
+  .decision-text { font-size: 0.82rem; color: var(--text-secondary); }
+  .assumption-item { padding: 4px 0; display: flex; gap: 8px; align-items: baseline; }
+  .assumption-status { font-size: 0.7rem; padding: 1px 6px; border-radius: 4px; font-weight: 600; font-family: var(--font-mono); white-space: nowrap; }
+  .assumption-status.unverified { background: rgba(210,153,34,0.2); color: var(--accent-yellow); border: 1px solid rgba(210,153,34,0.3); }
+  .assumption-status.verified { background: rgba(63,185,80,0.2); color: var(--accent-green); border: 1px solid rgba(63,185,80,0.4); }
+  .assumption-status.falsified { background: rgba(248,81,73,0.2); color: var(--accent-red); border: 1px solid rgba(248,81,73,0.4); }
+  .assumption-text { font-size: 0.82rem; color: var(--text-secondary); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div>
+      <div class="header-title">Session Activity Report v2 <span>&mdash; 13 Missions, 18 Agents</span></div>
+      <div class="session-id">5HyCwPtSDH &middot; 2026-03-21</div>
+    </div>
+    <div class="stats-bar" id="statsBar"></div>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="filter-group" id="roleFilters">
+    <button class="filter-btn active" data-role="all">All</button>
+    <button class="filter-btn" data-role="s2">S2 Intel</button>
+    <button class="filter-btn" data-role="s3">S3 Ops</button>
+  </div>
+  <div class="filter-group" id="statusFilters">
+    <button class="filter-btn active" data-status="all">All Status</button>
+    <button class="filter-btn" data-status="completed">Completed</button>
+    <button class="filter-btn" data-status="blocked">FRAGORD</button>
+    <button class="filter-btn" data-status="running">Running</button>
+  </div>
+  <div class="filter-group" id="patternFilters">
+    <button class="filter-btn active" data-pattern="all">All Patterns</button>
+    <button class="filter-btn" data-pattern="single-agent">Single</button>
+    <button class="filter-btn" data-pattern="WRITE_BLOCKED-RELAUNCH">FRAGORD</button>
+    <button class="filter-btn" data-pattern="S2-CHAIN">S2 Chain</button>
+    <button class="filter-btn" data-pattern="S2-THEN-S3">S2->S3</button>
+  </div>
+  <input type="text" class="search-box" id="searchBox" placeholder="Search missions, findings, context... (/ to focus)" />
+  <div class="view-toggle">
+    <button class="filter-btn" id="expandAll">Expand All</button>
+    <button class="filter-btn" id="collapseAll">Collapse All</button>
+  </div>
+</div>
+
+
+<!-- SESSION-LEVEL SUMMARY -->
+<div class="session-summary">
+  <div class="section-title">Session-Level Summary</div>
+  <div class="tab-nav">
+    <button class="tab-btn active" data-tab="overview">Overview</button>
+    <button class="tab-btn" data-tab="convergence">Convergence Themes</button>
+    <button class="tab-btn" data-tab="decisions">Session Decisions</button>
+    <button class="tab-btn" data-tab="assumptions">Assumptions</button>
+  </div>
+
+  <div class="tab-panel active" id="tab-overview">
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="summary-card-title">Session Metrics</div>
+        <div class="summary-card-content">
+          <strong>13 missions</strong> across <span class="hl">18 agents</span><br>
+          <strong>38 proposals</strong> in <span class="hl">10 themes</span><br>
+          <strong>30/30</strong> files recovered from Z1IhGrcgGO<br>
+          <strong>10</strong> commander corrections<br>
+          <strong>8</strong> session decisions captured<br>
+          <strong>~1.3M</strong> tokens estimated
+        </div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-title">Delegation Compliance</div>
+        <div class="summary-card-content">
+          Early agents (D1-D2): <strong style="color:var(--accent-red)">2/5</strong> duty components<br>
+          Mid agents (M1-M5): <strong style="color:var(--accent-yellow)">3-5/5</strong> (improving)<br>
+          Late agents (M6+): <strong style="color:var(--accent-green)">5/5</strong> full compliance<br>
+          <div class="compliance-bar"><div class="compliance-fill yellow" style="width:72%"></div></div>
+          <span style="font-size:0.75rem;color:var(--text-muted)">Overall: 72% delegation duty compliance</span>
+        </div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-title">Orchestration Patterns Used</div>
+        <div class="summary-card-content">
+          <span class="pattern-badge">single-agent</span> 12 missions<br>
+          <span class="pattern-badge">WRITE_BLOCKED-RELAUNCH</span> 1 (M1)<br>
+          <span class="pattern-badge">S2-CHAIN</span> 1 (M6 &rarr; M7)<br>
+          <span class="pattern-badge">S2-THEN-S3</span> 1 (M6 &rarr; M7)<br>
+          <span style="color:var(--accent-red);font-size:0.8rem">No WRITE-VERIFY-AMEND or PARALLEL-INVESTIGATE used</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-convergence">
+    <div class="convergence-item">
+      <div class="convergence-label">Rank 1: Fix .gitignore (CRITICAL)</div>
+      <div class="convergence-desc">Replace blanket .aitools/ with selective patterns. Root cause blocker -- unblocks 8+ proposals.</div>
+      <div class="convergence-agents">M1-P1, M2-P3, M4-P1, M4-P4 (4 AARs)</div>
+    </div>
+    <div class="convergence-item">
+      <div class="convergence-label">Rank 2: Per-session running estimates</div>
+      <div class="convergence-desc">Per-session estimates with reconciliation for concurrent sessions.</div>
+      <div class="convergence-agents">M4-P2, M4-P5, M1-I7 (3 AARs)</div>
+    </div>
+    <div class="convergence-item">
+      <div class="convergence-label">Rank 3: Fix .current-session race</div>
+      <div class="convergence-desc">SessionEnd hook must use session_id from CC input, not .current-session file.</div>
+      <div class="convergence-agents">M4-P3, M1-I5, M2-P2 (3 AARs)</div>
+    </div>
+    <div class="convergence-item">
+      <div class="convergence-label">Rank 4: Harvest before stale-dir deletion</div>
+      <div class="convergence-desc">scratch-init.sh stale cleanup destroys without harvesting. Root cause of 30 lost files.</div>
+      <div class="convergence-agents">M1-P4, M2-P2, M6-P3 (3 AARs)</div>
+    </div>
+    <div class="convergence-item">
+      <div class="convergence-label">Rank 5: Auto-commit harvested artifacts</div>
+      <div class="convergence-desc">harvest-session.sh copies but never commits. Closes Phase 2 failure mode.</div>
+      <div class="convergence-agents">M2-P1, M2-P5 (2 AARs)</div>
+    </div>
+    <div class="convergence-item">
+      <div class="convergence-label">Rank 6: Codify orchestration patterns</div>
+      <div class="convergence-desc">5 multi-agent patterns from 40-agent session need governance. PATTERN-CHECK as duty #10.</div>
+      <div class="convergence-agents">M9-P1 through P6 (6 proposals from RCA)</div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-decisions">
+    <div class="decision-item"><div class="decision-id">D-GITIGNORE-FIX</div><div class="decision-text">Replace .gitignore blanket .aitools/ with selective patterns (unanimous across M1/M2/M4)</div></div>
+    <div class="decision-item"><div class="decision-id">D-MULTI-AGENT-PATTERNS</div><div class="decision-text">Codify 5 orchestration patterns with PATTERN-CHECK as delegation duty component 10</div></div>
+    <div class="decision-item"><div class="decision-id">D-PER-SESSION-ESTIMATES</div><div class="decision-text">Per-session running estimates with reconciliation at handoff/session-end</div></div>
+    <div class="decision-item"><div class="decision-id">D-CONTEXT-ROT-HOOK</div><div class="decision-text">Stop hook for Lagebeurteilung checkpoint at 20%+ context usage</div></div>
+    <div class="decision-item"><div class="decision-id">D-OPERATIONAL-LEARNING</div><div class="decision-text">Every delegation prompt injects operational learning duty block</div></div>
+    <div class="decision-item"><div class="decision-id">D-AITOOL-PREFIX</div><div class="decision-text">User-level skills use /aitool-* prefix. Three-tier taxonomy.</div></div>
+    <div class="decision-item"><div class="decision-id">D-S1-LAUNCH</div><div class="decision-text">S1 (Administration) via S2->S1 delegation for incident/glossary filing</div></div>
+    <div class="decision-item"><div class="decision-id">D-DASHBOARD-GOV</div><div class="decision-text">Dashboard production is S2 duty, governed under Operational Learning</div></div>
+  </div>
+
+  <div class="tab-panel" id="tab-assumptions">
+    <div class="assumption-item"><span class="assumption-status unverified">unverified</span><span class="assumption-text">De-interpolation placeholder issue is a spec deviation</span></div>
+    <div class="assumption-item"><span class="assumption-status unverified">unverified</span><span class="assumption-text">last-summary.txt inconsistency is separate code path issue</span></div>
+    <div class="assumption-item"><span class="assumption-status unverified">unverified</span><span class="assumption-text">Stop hook can use transcript size as proxy for context growth</span></div>
+    <div class="assumption-item"><span class="assumption-status unverified">unverified</span><span class="assumption-text">Reconciliation mission will use multi-agent patterns successfully</span></div>
+    <div class="assumption-item"><span class="assumption-status verified">verified</span><span class="assumption-text">N-level delegation depth of 3 is sufficient for S3->S2->S1</span></div>
+  </div>
+</div>
+
+
+<!-- WORKFLOW CHAINS -->
+<div class="chain-section">
+  <div class="section-title">Workflow Chains</div>
+  <div class="chain-card">
+    <div class="chain-title">WRITE_BLOCKED-RELAUNCH: M1 Running Estimate Lifecycle</div>
+    <div class="chain-flow">
+      <span class="chain-node">#4 M1 Explore</span>
+      <span class="chain-arrow">&rarr; FRAGORD &rarr;</span>
+      <span class="chain-node">#5 M1-FRAGORD General</span>
+    </div>
+    <div class="chain-agents">Pattern: Agent launched as Explore (can't write), FRAGORD'd, relaunched with original findings + WRITE_BLOCKED signal</div>
+  </div>
+  <div class="chain-card">
+    <div class="chain-title">S2-CHAIN then S2-THEN-S3: M6 Trash + M7 Recovery</div>
+    <div class="chain-flow">
+      <span class="chain-node">#10 M6 Trash Search</span>
+      <span class="chain-arrow">&rarr; findings feed &rarr;</span>
+      <span class="chain-node">#11 M7 Transcript Recovery</span>
+    </div>
+    <div class="chain-agents">Pattern: S2 identifies recovery vectors, S3 acts on transcript vector. 30/30 recovered.</div>
+  </div>
+  <div class="chain-card">
+    <div class="chain-title">Inline Consolidation: Reconciliation Phases</div>
+    <div class="chain-flow">
+      <span class="chain-node">7 AARs</span>
+      <span class="chain-arrow">&rarr;</span>
+      <span class="chain-node">#14 S2a Consolidation</span>
+      <span class="chain-arrow">&rarr;</span>
+      <span class="chain-node">#16 Session AAR</span>
+      <span class="chain-arrow">&rarr;</span>
+      <span class="chain-node">#17 v2 Dashboards</span>
+    </div>
+    <div class="chain-agents">Pattern: S3 executes synthesis inline (data already in context). Subagent delegation would require re-reading all AARs.</div>
+  </div>
+</div>
+
+<div class="timeline-section">
+  <div class="section-title">Launch Timeline &amp; Duration</div>
+  <div class="timeline-container"><div class="timeline" id="timeline"></div></div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot green"></div> Completed</div>
+    <div class="legend-item"><div class="legend-dot yellow"></div> FRAGORD'd</div>
+    <div class="legend-item"><div class="legend-dot blue"></div> Running</div>
+    <div class="legend-item"><div class="legend-dot fragord"></div> FRAGORD (hatched)</div>
+    <div class="legend-item"><div class="legend-dot purple"></div> Inline</div>
+  </div>
+</div>
+
+<div class="agents-container" id="agentsList"></div>
+<div class="no-results hidden" id="noResults">No agents match current filters.</div>
+
+<script>
+
+const agents = [
+  {
+    id: 1, role: "s2", roleLabel: "S2 (General)", mission: "Investigate missing briefing JSONs",
+    description: "D1: Briefings", status: "completed", statusLabel: "Completed", statusClass: "completed",
+    duration: 156, durationLabel: "~156s", tokens: 43000, tokenLabel: "43K", toolUses: 5,
+    worktree: false, isFragord: false, fragordOf: null, startOffset: 0,
+    pattern: "single-agent",
+    contextInjected: ["Investigation tasks (9 items)", "File paths to check", "Output format requirements"],
+    capturedIntent: "Determine if briefing JSONs were deleted or never committed. Check all possible locations.",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: false, criticalRulesInjected: false, aarFormatRequired: false, writeBlockedSignal: false },
+    finding: "Briefing JSONs not lost -- .gitignore blanket .aitools/ prevents carry-forward. Planning-brief.json safe (tracked). Running-estimate.json local only (gitignored).",
+    aarOutcome: null, output: ".scratch/session-5HyCwPtSDH/investigation-briefing-jsons.md",
+    deviations: ["Used general-purpose instead of Explore -- correct in hindsight (never use Explore)"],
+    spotCheckResults: "3 claims verified, 1 partially incorrect (subagent said nothing lost, but running estimate at risk)",
+    note: null, prompt: "Investigate missing briefing JSON files. Check git history, .aitools/, plans/."
+  },
+  {
+    id: 2, role: "s2", roleLabel: "S2 (Explore)", mission: "Investigate lost AARs and session archives",
+    description: "D2a: AARs", status: "completed", statusLabel: "Completed", statusClass: "completed",
+    duration: 76, durationLabel: "~76s", tokens: 100000, tokenLabel: "100K", toolUses: 45,
+    worktree: false, isFragord: false, fragordOf: null, startOffset: 160,
+    pattern: "single-agent",
+    contextInjected: ["Investigation tasks (9 items)", "File paths for hooks", "Dotprofile repo path", "CC local session path"],
+    capturedIntent: "Determine if harvest hook .json bug is deployed, if AARs can be recovered, if session archives exist locally.",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: false, criticalRulesInjected: false, aarFormatRequired: false, writeBlockedSignal: false },
+    finding: "Harvest hook fix deployed. 2 AARs unrecoverable. 5 session files untracked in dotprofile (33.1 MB). Session e059186f: 4.2 MB archived, 11.4 MB locally.",
+    aarOutcome: null, output: "Inline return (Explore agent)",
+    deviations: ["Explore agent type -- can't write", "No WRITE_BLOCKED signal"],
+    spotCheckResults: "4 claims verified (deploy diff, file sizes, git status, archived size)",
+    note: "Launched as Explore -- should have been general-purpose", prompt: "Full investigation context with 9 tasks covering git history, hook analysis, session archives."
+  },
+  {
+    id: 3, role: "s2", roleLabel: "S2 (Explore)", mission: "Investigate dotprofile repo state and CC local sessions",
+    description: "D2b: Dotprofile", status: "completed", statusLabel: "Completed", statusClass: "completed",
+    duration: 60, durationLabel: "~60s", tokens: 73000, tokenLabel: "73K", toolUses: 28,
+    worktree: false, isFragord: false, fragordOf: null, startOffset: 160,
+    pattern: "single-agent",
+    contextInjected: ["Dotprofile repo path", "CC projects path", "Hook analysis tasks"],
+    capturedIntent: "Find all local session data that wasn't archived. Determine hook behavior.",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: false, criticalRulesInjected: false, aarFormatRequired: false, writeBlockedSignal: false },
+    finding: "33.1 MB untracked sessions across 4 projects. Hook is copy-only (no auto-commit/push).",
+    aarOutcome: null, output: "Inline return (Explore agent)",
+    deviations: ["Explore agent type", "Size discrepancy with D2a"],
+    spotCheckResults: "Cross-referenced with D2a -- discrepancy caught",
+    note: null, prompt: "Full investigation context with 5 tasks covering dotprofile state, CC local sessions."
+  },
+  {
+    id: 4, role: "s2", roleLabel: "S2 (Explore)", mission: "Running estimate lifecycle investigation (ORIGINAL)",
+    description: "M1: RE (Explore)", status: "blocked", statusLabel: "FRAGORD'd", statusClass: "blocked",
+    duration: 41, durationLabel: "~41s", tokens: 61000, tokenLabel: "61K", toolUses: 12,
+    worktree: false, isFragord: true, fragordOf: null, fragordRelaunchedAs: 5, startOffset: 300,
+    pattern: "WRITE_BLOCKED-RELAUNCH",
+    contextInjected: ["7 investigation tasks", "File paths for hooks/skills/tool-ops"],
+    capturedIntent: "Determine why assumption was made that running estimate would be deleted at session end.",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: false, criticalRulesInjected: false, aarFormatRequired: true, writeBlockedSignal: false },
+    finding: ".json harvested not deleted, but harvest != carry-forward. 0/60 harvested artifacts are .json. /scratch skill warns against running estimates in scratch.",
+    aarOutcome: "Inline prose AAR -- not persisted to file",
+    output: "Inline return only -- no file written (Explore can't write)",
+    deviations: ["Explore agent type -- CANNOT WRITE. Led to FRAGORD."],
+    spotCheckResults: "Findings verified via M1-FRAGORD relaunch",
+    note: "FRAGORD'd: launched as Explore (can't write). Findings carried forward to M1-FRAGORD relaunch.",
+    prompt: "Investigation of running estimate lifecycle with 7 tasks."
+  },
+  {
+    id: 5, role: "s2", roleLabel: "S2 (General)", mission: "Running estimate lifecycle (FRAGORD relaunch)",
+    description: "M1-FRAGORD", status: "completed", statusLabel: "Completed", statusClass: "completed",
+    duration: 162, durationLabel: "~162s", tokens: 75000, tokenLabel: "75K", toolUses: 24,
+    worktree: false, isFragord: false, fragordOf: 4, startOffset: 350,
+    pattern: "WRITE_BLOCKED-RELAUNCH",
+    contextInjected: ["FRAGORD context (original findings)", "7 file paths", "AAR JSON schema", "WRITE_BLOCKED signal", "ultrathink"],
+    capturedIntent: "Verify original M1 findings, expand with additional analysis, write persistent AAR file.",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: true, criticalRulesInjected: true, aarFormatRequired: true, writeBlockedSignal: true },
+    finding: "15 observations, verified all original M1 findings. .gitignore defeats three rules. .json harvest path never exercised (0/60).",
+    aarOutcome: "15 observations, 7 insights, 5 proposals -- all with barrier analysis. 17.5 KB JSON.",
+    output: ".scratch/session-5HyCwPtSDH/m1-running-estimate-lifecycle-aar.json",
+    deviations: [], spotCheckResults: "O-9 verified (running estimate in scratch confirmed as anti-pattern)",
+    note: "FRAGORD relaunch of Agent #4. Carried forward original findings + verified independently.",
+    prompt: "FRAGORD context with original findings to verify. AAR JSON output required. WRITE_BLOCKED signal."
+  },
+  {
+    id: 6, role: "s2", roleLabel: "S2 (General)", mission: "Scratch paths and lifecycle management",
+    description: "M2: Scratch", status: "completed", statusLabel: "Completed", statusClass: "completed",
+    duration: 291, durationLabel: "~5m", tokens: 96000, tokenLabel: "96K", toolUses: 53,
+    worktree: false, isFragord: false, fragordOf: null, startOffset: 350,
+    pattern: "single-agent",
+    contextInjected: ["8 investigation tasks", "File paths for briefings+skills+rules"],
+    capturedIntent: "Determine if handoff scratch paths are broken. Map lifecycle management across skills/frameworks.",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: false, criticalRulesInjected: false, aarFormatRequired: false, writeBlockedSignal: false },
+    finding: "CRITICAL: All 30 scratch files from handoff are LOST. Only 4 survived (manually committed). Two-phase harvest reliability gap.",
+    aarOutcome: "8 observations, 6 insights, 6 proposals. Prose converted to JSON by S3.",
+    output: ".scratch/session-5HyCwPtSDH/m2-scratch-lifecycle-aar.json",
+    deviations: ["Stale briefing (pre-correction)", "Prose AAR format (not JSON)", "No WRITE_BLOCKED signal"],
+    spotCheckResults: "30-file loss confirmed independently",
+    note: "Launched before 40-agent lessons. Prose AAR converted to JSON by delegating agent.",
+    prompt: "Investigation of scratch path survivability with 8 tasks."
+  },
+  {
+    id: 7, role: "s3", roleLabel: "S3 (Operations)", mission: "Convert handoff-prompt-v2.md to structured JSON (Schema B)",
+    description: "M3: JSON", status: "completed", statusLabel: "Completed", statusClass: "completed",
+    duration: 414, durationLabel: "~7m", tokens: 85000, tokenLabel: "85K", toolUses: 17,
+    worktree: false, isFragord: false, fragordOf: null, startOffset: 350,
+    pattern: "single-agent",
+    contextInjected: ["Schema B requirements (14 sections)", "3 full files to read", "AAR JSON schema", "WRITE_BLOCKED signal", "ultrathink"],
+    capturedIntent: "Design handoff-briefing JSON schema. Produce the JSON. Capture both backward and forward-looking structure.",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: false, criticalRulesInjected: true, aarFormatRequired: true, writeBlockedSignal: true },
+    finding: "1035-line valid JSON with 14 top-level sections. Schema B captures forward+backward looking structure.",
+    aarOutcome: "4 design observations, 4 insights on JSON vs prose, 4 schema improvement proposals.",
+    output: ".scratch/session-5HyCwPtSDH/handoff-briefing.json",
+    deviations: [], spotCheckResults: "Valid JSON verified (python3 json.load). 14 sections confirmed.",
+    note: "Largest task. Read 3 full files (4400+ lines total) into context.",
+    prompt: "Full Schema B requirements. Read 3 files IN FULL. WRITE_BLOCKED signal. ultrathink."
+  },
+  {
+    id: 8, role: "s2", roleLabel: "S2 (Intelligence)", mission: "Concurrent sessions + channel architecture reconciliation",
+    description: "M4: Concurrent", status: "completed", statusLabel: "Completed", statusClass: "completed",
+    duration: 303, durationLabel: "~5m", tokens: 84000, tokenLabel: "84K", toolUses: 43,
+    worktree: false, isFragord: false, fragordOf: null, startOffset: 350,
+    pattern: "single-agent",
+    contextInjected: ["Concurrent session use case", "Commander per-session estimate decision", "7 full files to read", "AAR JSON schema", "WRITE_BLOCKED signal", "ultrathink"],
+    capturedIntent: "Design channel architecture for multi-session concurrent use. Fix .current-session race.",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: false, criticalRulesInjected: true, aarFormatRequired: true, writeBlockedSignal: true },
+    finding: ".current-session pointer has race condition. Both root + nested .gitignore needed. Per-session estimates with reconciliation.",
+    aarOutcome: "10 observations, 6 insights, 5 proposals -- all with barrier analysis. 20.7 KB JSON.",
+    output: ".scratch/session-5HyCwPtSDH/m4-concurrent-channel-aar.json",
+    deviations: [], spotCheckResults: ".current-session race verified (scratch-init.sh lines 37,40)",
+    note: null, prompt: "Full concurrent session investigation. 5 tasks. Read 7 files IN FULL."
+  },
+  {
+    id: 9, role: "s2", roleLabel: "S2 (Intelligence)", mission: "/aitool-* naming convention + user-level skill deployment",
+    description: "M5: Naming", status: "completed", statusLabel: "Completed", statusClass: "completed",
+    duration: 191, durationLabel: "~3m", tokens: 78000, tokenLabel: "78K", toolUses: 36,
+    worktree: false, isFragord: false, fragordOf: null, startOffset: 350,
+    pattern: "single-agent",
+    contextInjected: ["Commander's /aitool-* prefix choice", "Skill directory listing", "Build-deploy.sh skill embedding", "Planning brief decisions #16, #49"],
+    capturedIntent: "Design naming convention for cross-repo skill availability. Evaluate prefix vs flat verbs.",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: false, criticalRulesInjected: true, aarFormatRequired: true, writeBlockedSignal: true },
+    finding: "Three-tier skill taxonomy: project-only, user-level, reference-card. Uniform /aitool-* prefix for all user skills.",
+    aarOutcome: "13 observations, 8 insights, 7 proposals. 21.5 KB JSON.",
+    output: ".scratch/session-5HyCwPtSDH/m5-aitool-naming-aar.json",
+    deviations: [], spotCheckResults: "Skill count verified (9 user + 9 project)",
+    note: null, prompt: "Full naming convention investigation. Read all skill directories. Check build system."
+  },
+  {
+    id: 10, role: "s2", roleLabel: "S2 (Intelligence)", mission: "Trash recovery search for 30 lost files from session Z1IhGrcgGO",
+    description: "M6: Trash", status: "completed", statusLabel: "Completed", statusClass: "completed",
+    duration: 138, durationLabel: "~2m", tokens: 55000, tokenLabel: "55K", toolUses: 32,
+    worktree: false, isFragord: false, fragordOf: null, startOffset: 900,
+    pattern: "S2-CHAIN",
+    contextInjected: ["30 target filenames from handoff", "Deletion code paths (harvest-session.sh, scratch-init.sh)", "Recovery vectors to try"],
+    capturedIntent: "Search macOS Trash, Spotlight, git history for 30 lost files. Identify all possible recovery vectors.",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: false, criticalRulesInjected: true, aarFormatRequired: true, writeBlockedSignal: true },
+    finding: "NOT RECOVERED from Trash/Spotlight/git. rm -rf bypasses Trash. Two uninvestigated vectors: Time Machine and CC transcripts.",
+    aarOutcome: "11 observations, 6 insights, 4 proposals. Conclusion: NOT RECOVERED, 2 vectors remain.",
+    output: ".scratch/session-5HyCwPtSDH/m6-trash-recovery-aar.json",
+    deviations: [], spotCheckResults: "rm -rf behavior verified. Spotlight search confirmed empty.",
+    note: null, prompt: "Trash recovery investigation. Search macOS Trash, Spotlight, git history."
+  },
+  {
+    id: 11, role: "s3", roleLabel: "S3 (Operations)", mission: "Recover 30 lost files from CC session transcripts",
+    description: "M7: Recovery", status: "completed", statusLabel: "Completed", statusClass: "completed",
+    duration: 450, durationLabel: "~8m", tokens: 120000, tokenLabel: "120K", toolUses: 35,
+    worktree: false, isFragord: false, fragordOf: null, startOffset: 1050,
+    pattern: "S2-THEN-S3",
+    contextInjected: ["M6 findings (recovery vectors)", "CC transcript path", "Target filenames (30)", "Python extraction approach"],
+    capturedIntent: "Parse CC session transcript JSONL files. Extract Write tool_use blocks. Reconstruct 30 lost files.",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: true, criticalRulesInjected: true, aarFormatRequired: true, writeBlockedSignal: true },
+    finding: "30/30 files recovered (100%). Also recovered 6 bonus substantive files and 19 WRITE_BLOCKED content blocks.",
+    aarOutcome: "30/30 target files recovered. 6 bonus files. 36 ephemeral files discarded. 19 WRITE_BLOCKED blocks saved.",
+    output: ".scratch/session-5HyCwPtSDH/m7-file-recovery-aar.json",
+    deviations: [], spotCheckResults: "recovery_rate: 30/30 verified. Files written to harvesting/.",
+    note: "Python script parsed 3592 JSONL lines + 52 subagent transcripts. Extracted 101 Write calls.",
+    prompt: "Recover 30 lost files from CC transcript. Parse JSONL. Extract Write tool_use blocks."
+  },
+  {
+    id: 12, role: "s3", roleLabel: "S3 (Operations)", mission: "Session activity dashboard v1 (11 agents)",
+    description: "M8: Dashboard", status: "completed", statusLabel: "Completed", statusClass: "completed",
+    duration: 300, durationLabel: "~5m", tokens: 90000, tokenLabel: "90K", toolUses: 8,
+    worktree: false, isFragord: false, fragordOf: null, startOffset: 1500,
+    pattern: "single-agent",
+    contextInjected: ["40-agent dashboard exemplar (FULL)", "All AAR files", "Running estimate"],
+    capturedIntent: "Produce session activity dashboard HTML with 10 new fields over exemplar design.",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: false, criticalRulesInjected: true, aarFormatRequired: false, writeBlockedSignal: true },
+    finding: "2165-line HTML dashboard with dark theme, filterable cards, timeline, session-level summary panels.",
+    aarOutcome: null,
+    output: ".scratch/session-5HyCwPtSDH/session-dashboard.html",
+    deviations: [], spotCheckResults: "Renders correctly in Chrome. All 11 agents present.",
+    note: "V1 dashboard -- this is being superseded by the v2 dashboard.", prompt: "Produce session dashboard. Match exemplar design. Add 10 new fields."
+  },
+  {
+    id: 13, role: "s2", roleLabel: "S2 (Intelligence)", mission: "Root-cause why S3 launched single-agent-per-mission instead of multi-agent workflows",
+    description: "M9: Patterns", status: "completed", statusLabel: "Completed", statusClass: "completed",
+    duration: 360, durationLabel: "~6m", tokens: 110000, tokenLabel: "110K", toolUses: 28,
+    worktree: false, isFragord: false, fragordOf: null, startOffset: 1800,
+    pattern: "single-agent",
+    contextInjected: ["40-agent dashboard (FULL)", "Running estimate (FULL)", "All AAR files", "Planning brief decisions #3,#4,#25,#26,#51", "Handoff-prompt-v2.md"],
+    capturedIntent: "5-Whys root cause analysis: why did this session repeat the single-agent anti-pattern despite having the 40-agent exemplar?",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: true, criticalRulesInjected: true, aarFormatRequired: true, writeBlockedSignal: true },
+    finding: "Root cause: Mission Command framework governs individual delegations but not composition into workflows. 5 orchestration patterns never codified.",
+    aarOutcome: "15 observations, 7 insights, 6 proposals. Full 5-Whys chain. 6 contributing factors identified.",
+    output: ".scratch/session-5HyCwPtSDH/m9-delegation-pattern-aar.json",
+    deviations: [], spotCheckResults: "5-Whys chain verified against dashboard and running estimate.",
+    note: null, prompt: "Root-cause analysis of single-agent pattern. 5-Whys. Read 40-agent dashboard FULL."
+  },
+  {
+    id: 14, role: "s3", roleLabel: "S3 (Operations)", mission: "Reconciliation Phase 1a: Consolidate proposals from 7 AARs",
+    description: "Recon: S2a", status: "completed", statusLabel: "Completed", statusClass: "inline",
+    duration: 0, durationLabel: "inline", tokens: 0, tokenLabel: "inline", toolUses: 0,
+    worktree: false, isFragord: false, fragordOf: null, startOffset: 2200,
+    pattern: "single-agent",
+    contextInjected: ["All 7 AAR files in context", "Running estimate v4"],
+    capturedIntent: "Extract all proposals from AARs, rank by cross-AAR convergence, group by target artifact.",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: true, criticalRulesInjected: true, aarFormatRequired: true, writeBlockedSignal: true },
+    finding: "38 proposals consolidated into 10 ranked themes. #1: .gitignore fix (4 AARs converge). 3 conflicts resolved.",
+    aarOutcome: "10 convergence themes, 3 conflict analyses, 4-wave execution sequence.",
+    output: ".scratch/session-5HyCwPtSDH/s2a-consolidated-proposals.json",
+    deviations: [], spotCheckResults: "Convergence counts verified against AARs.",
+    note: "Executed inline by S3 (synthesis of data already in context).", prompt: "Inline execution -- no delegation prompt."
+  },
+  {
+    id: 15, role: "s2", roleLabel: "S2 (Intelligence)", mission: "Investigate assumption propagation through multi-agent missions",
+    description: "M11: Assumptions", status: "completed", statusLabel: "Completed", statusClass: "completed",
+    duration: 420, durationLabel: "~7m", tokens: 130000, tokenLabel: "130K", toolUses: 42,
+    worktree: false, isFragord: false, fragordOf: null, startOffset: 2400,
+    pattern: "single-agent",
+    contextInjected: ["40-agent dashboard (FULL)", "scratch-deletion-rca.md", "verification-lifecycle-gap-audit.md", "Running estimate v4", "All AAR files", "Glossary definition of assumption"],
+    capturedIntent: "Investigate how unverified assumptions propagate through multi-agent missions. Design structural prevention.",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: true, criticalRulesInjected: true, aarFormatRequired: true, writeBlockedSignal: true },
+    finding: "8 insights on assumption propagation. Chain-of-trust failure: 3 verifiers trusted upstream claims instead of independently verifying. Commander is only reliable catch mechanism but doesn't scale.",
+    aarOutcome: "15 observations, 8 insights, 8 proposals. Framework placement analysis: NOT standalone, fits Mission Command + Operational Learning.",
+    output: ".scratch/session-5HyCwPtSDH/m11-assumption-propagation-aar.json",
+    deviations: [], spotCheckResults: "Agent #29 false claim chain verified against recovered files.",
+    note: null, prompt: "Assumption propagation investigation. Read scratch-deletion-rca and verification-lifecycle-gap-audit."
+  },
+  {
+    id: 16, role: "s3", roleLabel: "S3 (Operations)", mission: "Session AAR: operational learning consolidation",
+    description: "Session AAR", status: "completed", statusLabel: "Completed", statusClass: "inline",
+    duration: 0, durationLabel: "inline", tokens: 0, tokenLabel: "inline", toolUses: 0,
+    worktree: false, isFragord: false, fragordOf: null, startOffset: 2850,
+    pattern: "single-agent",
+    contextInjected: ["All AARs and reconciliation outputs already in context"],
+    capturedIntent: "Produce session-level AAR with metrics, observations, insights, and proposal summary.",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: true, criticalRulesInjected: true, aarFormatRequired: true, writeBlockedSignal: true },
+    finding: "10 missions, 38 proposals in 10 themes, 3 framework proposals, 10 commander corrections, 30 files recovered.",
+    aarOutcome: "6 session observations, 3 session insights, 38 proposals consolidated, barrier analysis.",
+    output: ".scratch/session-5HyCwPtSDH/session-aar.json",
+    deviations: ["Running estimate in scratch violates /scratch skill prohibition"], spotCheckResults: null,
+    note: "Executed inline by S3.", prompt: "Inline execution -- no delegation prompt."
+  },
+  {
+    id: 17, role: "s3", roleLabel: "S3 (Operations)", mission: "Running (M12): v2 dashboards for this session + 40-agent session",
+    description: "M12: Dashboards", status: "running", statusLabel: "Running", statusClass: "running",
+    duration: 0, durationLabel: "running", tokens: 0, tokenLabel: "est.", toolUses: 0,
+    worktree: false, isFragord: false, fragordOf: null, startOffset: 2900,
+    pattern: "single-agent",
+    contextInjected: ["40-agent dashboard exemplar (FULL)", "All AARs", "Session AAR", "Reconciliation outputs", "Running estimate v4", "v1 dashboard"],
+    capturedIntent: "Produce comprehensive v2 dashboards covering ALL missions. Open in Chrome DevTools and verify.",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: true, criticalRulesInjected: true, aarFormatRequired: false, writeBlockedSignal: true },
+    finding: null, aarOutcome: null,
+    output: ".scratch/session-5HyCwPtSDH/2026-03-21_session-5HyCwPtSDH-dashboard-v2.html",
+    deviations: [], spotCheckResults: null,
+    note: "This agent (M13/S3) -- meta! Producing the dashboard that includes itself.", prompt: "Produce v2 dashboards. Read ALL source files IN FULL."
+  },
+  {
+    id: 18, role: "s3", roleLabel: "S3 (Operations)", mission: "Meta: This agent producing the dashboard you are reading",
+    description: "M13: Meta", status: "running", statusLabel: "Running", statusClass: "running",
+    duration: 0, durationLabel: "running", tokens: 0, tokenLabel: "est.", toolUses: 0,
+    worktree: false, isFragord: false, fragordOf: null, startOffset: 2900,
+    pattern: "single-agent",
+    contextInjected: ["Everything -- full session context"],
+    capturedIntent: "S3 identity. Producing the dashboard that documents itself. Hofstadter would approve.",
+    delegationDutyFulfilled: { identityEstablished: true, priorResultsIncluded: true, criticalRulesInjected: true, aarFormatRequired: false, writeBlockedSignal: true },
+    finding: null, aarOutcome: null, output: "This file.",
+    deviations: [], spotCheckResults: null,
+    note: "The dashboard is both the deliverable and the observer. Session 5HyCwPtSDH, agent S3 (Operations), mission M13.",
+    prompt: "You are looking at it."
+  }
+];
+
+
+function initDashboard() {
+  const statsBar = document.getElementById('statsBar');
+  const roleFilters = document.getElementById('roleFilters');
+  const statusFilters = document.getElementById('statusFilters');
+  const searchBox = document.getElementById('searchBox');
+  const agentsList = document.getElementById('agentsList');
+  const noResults = document.getElementById('noResults');
+  const timeline = document.getElementById('timeline');
+
+  let activeRole = 'all';
+  let activeStatus = 'all';
+  let activePattern = 'all';
+  let searchTerm = '';
+
+  // Stats
+  const totalAgents = agents.length;
+  const s2Count = agents.filter(a => a.role === 's2').length;
+  const s3Count = agents.filter(a => a.role === 's3').length;
+  const verifierCount = agents.filter(a => a.role === 'verifier').length;
+  const completedCount = agents.filter(a => a.status === 'completed').length;
+  const blockedCount = agents.filter(a => a.status === 'blocked').length;
+  const totalTokens = agents.reduce((s, a) => s + (a.tokens || 0), 0);
+  const totalDuration = agents.reduce((s, a) => s + (a.duration || 0), 0);
+
+  statsBar.innerHTML = `
+    <div class="stat-card"><div class="stat-value green">${totalAgents}</div><div class="stat-label">Agents</div></div>
+    <div class="stat-card"><div class="stat-value blue">${s2Count}</div><div class="stat-label">S2</div></div>
+    <div class="stat-card"><div class="stat-value green">${s3Count}</div><div class="stat-label">S3</div></div>
+    ${verifierCount ? `<div class="stat-card"><div class="stat-value orange">${verifierCount}</div><div class="stat-label">Verifier</div></div>` : ''}
+    <div class="stat-card"><div class="stat-value purple">${completedCount}/${totalAgents}</div><div class="stat-label">Complete</div></div>
+    <div class="stat-card"><div class="stat-value yellow">${Math.round(totalTokens/1000)}K</div><div class="stat-label">Tokens</div></div>
+    <div class="stat-card"><div class="stat-value cyan">${Math.round(totalDuration/60)}m</div><div class="stat-label">Compute</div></div>
+  `;
+
+  // Render timeline
+  if (timeline) {
+    const maxDur = Math.max(...agents.map(a => (a.startOffset||0) + (a.duration||10)));
+    let bars = '<div class="timeline-bars">';
+    agents.forEach(a => {
+      const left = ((a.startOffset||0)/maxDur*100).toFixed(1);
+      const width = Math.max(1, ((a.duration||10)/maxDur*100)).toFixed(1);
+      const sc = a.isFragord ? 's-fragord' : `s-${a.statusClass || a.status}`;
+      const label = `#${a.id}`;
+      bars += `<div class="timeline-row">
+        <div class="timeline-bar-label">${a.description ? a.description.substring(0,8) : label}</div>
+        <div class="timeline-bar-track">
+          <div class="timeline-bar ${sc}" style="left:${left}%;width:${width}%">
+            <div class="tooltip">#${a.id} ${a.mission.substring(0,50)} (${a.durationLabel||'?'})</div>
+          </div>
+        </div>
+      </div>`;
+    });
+    bars += '</div><div class="timeline-axis"></div>';
+    timeline.innerHTML = bars;
+  }
+
+  // Render agents
+  function renderAgents() {
+    let html = '';
+    let visible = 0;
+    agents.forEach(a => {
+      const matchRole = activeRole === 'all' || a.role === activeRole;
+      const matchStatus = activeStatus === 'all' || a.status === activeStatus;
+      const matchPattern = activePattern === 'all' || (a.pattern && a.pattern === activePattern);
+      const text = JSON.stringify(a).toLowerCase();
+      const matchSearch = !searchTerm || text.includes(searchTerm.toLowerCase());
+      if (!matchRole || !matchStatus || !matchPattern || !matchSearch) return;
+      visible++;
+
+      const roleClass = `role-${a.role}`;
+      const fragordClass = a.isFragord ? ' fragord-card' : '';
+      const badges = [];
+      if (a.isFragord) badges.push('<span class="fragord-badge">FRAGORD</span>');
+      if (a.fragordOf) badges.push(`<span class="fragord-badge">FRAGORD of #${a.fragordOf}</span>`);
+      if (a.worktree) badges.push('<span class="worktree-badge">worktree</span>');
+      if (a.pattern) badges.push(`<span class="pattern-badge">${a.pattern}</span>`);
+
+      // Duty checklist
+      const dd = a.delegationDutyFulfilled || {};
+      const dutyItems = [
+        ['Identity', dd.identityEstablished],
+        ['Prior results', dd.priorResultsIncluded],
+        ['Critical rules', dd.criticalRulesInjected],
+        ['AAR format', dd.aarFormatRequired],
+        ['WRITE_BLOCKED', dd.writeBlockedSignal],
+        ['Context files', dd.contextFilesListed !== false],
+        ['Output path', dd.outputPathSpecified !== false],
+        ['Schwerpunkt', dd.schwerpunktStated !== false],
+        ['ultrathink', dd.ultrathinkEnabled !== undefined ? dd.ultrathinkEnabled : null],
+        ['Learning duty', dd.learningDutyInjected !== undefined ? dd.learningDutyInjected : null],
+        ['Assumptions', dd.assumptionsInjected !== undefined ? dd.assumptionsInjected : null],
+      ].filter(([,v]) => v !== null && v !== undefined);
+
+      let dutyHtml = '<div class="duty-checklist">';
+      dutyItems.forEach(([label, val]) => {
+        const cls = val ? 'pass' : 'fail';
+        const icon = val ? '&#10003;' : '&#10007;';
+        dutyHtml += `<div class="duty-item"><div class="duty-check ${cls}">${icon}</div><span class="duty-label">${label}</span></div>`;
+      });
+      dutyHtml += '</div>';
+
+      // Context injected
+      let ctxHtml = '';
+      if (a.contextInjected && a.contextInjected.length) {
+        ctxHtml = a.contextInjected.map(c => `<div class="context-item"><span class="context-bullet">&#9656;</span>${c}</div>`).join('');
+      }
+
+      // Deviations
+      let devHtml = '';
+      if (a.deviations && a.deviations.length) {
+        devHtml = a.deviations.map(d => `<div class="deviation-item"><span class="deviation-bullet">&#9679;</span>${d}</div>`).join('');
+      }
+
+      html += `
+      <div class="agent-card${fragordClass}" data-id="${a.id}">
+        <div class="agent-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+          <div class="agent-number ${roleClass}">${a.id}</div>
+          <div class="agent-info">
+            <div class="agent-title-row">
+              <span class="agent-mission">${a.mission}</span>
+              <span class="agent-role-badge ${roleClass}">${a.roleLabel}</span>
+              ${badges.join(' ')}
+            </div>
+            <div class="agent-meta">
+              <span class="agent-meta-item">${a.durationLabel || 'n/a'}</span>
+              <span class="agent-meta-item">${a.tokenLabel || 'n/a'} tokens</span>
+              <span class="agent-meta-item">${a.toolUses || 0} tools</span>
+            </div>
+          </div>
+          <div class="agent-status">
+            <span class="status-badge ${a.statusClass || a.status}">${a.statusLabel}</span>
+            <span class="expand-icon">&#9654;</span>
+          </div>
+        </div>
+        <div class="agent-detail">
+          <div class="detail-grid">
+            <div class="detail-section">
+              <div class="detail-section-title">Captured Intent (Auftrag)</div>
+              <div class="detail-section-content">${a.capturedIntent || 'Not captured'}</div>
+            </div>
+            <div class="detail-section">
+              <div class="detail-section-title">Context Injected</div>
+              <div class="detail-section-content">${ctxHtml || 'No context injection recorded'}</div>
+            </div>
+            <div class="detail-section">
+              <div class="detail-section-title">Delegation Duty (${dutyItems.filter(([,v])=>v).length}/${dutyItems.length})</div>
+              <div class="detail-section-content">${dutyHtml}</div>
+            </div>
+            <div class="detail-section">
+              <div class="detail-section-title">Key Finding</div>
+              <div class="finding-text">${a.finding || 'No finding recorded'}</div>
+            </div>
+            ${a.aarOutcome ? `<div class="detail-section"><div class="detail-section-title">AAR Outcome</div><div class="aar-outcome">${a.aarOutcome}</div></div>` : ''}
+            ${devHtml ? `<div class="detail-section"><div class="detail-section-title">Deviations</div><div class="detail-section-content">${devHtml}</div></div>` : ''}
+            ${a.spotCheckResults ? `<div class="detail-section"><div class="detail-section-title">Spot-Check Results</div><div class="spot-check-text">${a.spotCheckResults}</div></div>` : ''}
+            ${a.output ? `<div class="detail-section"><div class="detail-section-title">Output</div><div class="file-path">${a.output}</div></div>` : ''}
+            ${a.note ? `<div class="detail-section full-width"><div class="note-text">${a.note}</div></div>` : ''}
+          </div>
+          ${a.prompt ? `<div class="prompt-section"><div class="prompt-toggle" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')"><span class="arrow">&#9654;</span> Delegation Prompt</div><div class="prompt-content">${typeof a.prompt === 'string' ? a.prompt : JSON.stringify(a.prompt)}</div></div>` : ''}
+        </div>
+      </div>`;
+    });
+    agentsList.innerHTML = html;
+    noResults.classList.toggle('hidden', visible > 0);
+  }
+
+  // Filter handlers
+  roleFilters.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      roleFilters.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeRole = btn.dataset.role;
+      renderAgents();
+    });
+  });
+  statusFilters.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      statusFilters.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeStatus = btn.dataset.status;
+      renderAgents();
+    });
+  });
+  const patternFilters = document.getElementById('patternFilters');
+  if (patternFilters) {
+    patternFilters.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        patternFilters.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activePattern = btn.dataset.pattern;
+        renderAgents();
+      });
+    });
+  }
+  searchBox.addEventListener('input', () => { searchTerm = searchBox.value; renderAgents(); });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && document.activeElement !== searchBox) { e.preventDefault(); searchBox.focus(); }
+    if (e.key === 'Escape') { searchBox.value = ''; searchTerm = ''; searchBox.blur(); renderAgents(); }
+  });
+
+  // Expand/collapse all
+  document.getElementById('expandAll').addEventListener('click', () => {
+    document.querySelectorAll('.agent-card').forEach(c => c.classList.add('expanded'));
+  });
+  document.getElementById('collapseAll').addEventListener('click', () => {
+    document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('expanded'));
+  });
+
+  // Tabs
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const nav = btn.parentElement;
+      const container = nav.parentElement;
+      nav.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      container.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      const target = container.querySelector('#tab-' + btn.dataset.tab);
+      if (target) target.classList.add('active');
+    });
+  });
+
+  renderAgents();
+}
+document.addEventListener('DOMContentLoaded', initDashboard);
+
+</script>
+</body>
+</html>

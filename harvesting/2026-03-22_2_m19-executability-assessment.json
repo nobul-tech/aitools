@@ -1,0 +1,529 @@
+{
+  "meta": {
+    "mission": "M19",
+    "agent": "S3 (Operations)",
+    "session": "5HyCwPtSDH",
+    "created": "2026-03-21T24:30:00Z",
+    "schwerpunkt": "Executability assessment on consolidating session artifacts into coherent briefing artifacts before /handoff",
+    "method": "6-phase lifecycle: Pre-Assessment (Lagebeurteilung), Transition (consolidation), Post-Verification, Communication, Contingency, Learning. Read ALL 17 AARs, BOTH running estimates, 3 reconciliation outputs, handoff JSON, session AAR, planning brief meta, handoff-prompt-v2."
+  },
+
+  "phase1_preAssessment": {
+    "conclusion": "GO WITH CAVEATS",
+    "overallReadiness": "Consolidation is feasible. The session has produced comprehensive, structured artifacts. The primary risk is the running estimate version collision and the sheer volume of material requiring synthesis into a handoff-consumable form.",
+
+    "lagebeurteilung": {
+      "forces": {
+        "aars": {
+          "count": 13,
+          "files": ["m1", "m2", "m4", "m5", "m6", "m7", "m9", "m11", "m12", "m14", "m16", "m17", "m18"],
+          "totalObservations": "100+",
+          "totalInsights": "50+",
+          "totalProposals": "80+",
+          "quality": "HIGH — all use structured AAR format with observations, insights, proposals. Cross-references consistent."
+        },
+        "reconciliationOutputs": {
+          "s2a": "10 ranked proposal themes from 38 proposals, with convergence scores and execution waves",
+          "s2b": "8 glossary terms, 2 incident candidates, filing briefs ready",
+          "s2c": "3 framework proposals (Operational Learning, Context Rot Mitigation, Orchestration Patterns)"
+        },
+        "runningEstimates": {
+          "count": 2,
+          "versionCollision": true,
+          "analysis": "SEE BLOCKER B1"
+        },
+        "sessionDecisions": {
+          "count": 8,
+          "ids": ["D-CONTEXT-ROT-HOOK", "D-OPERATIONAL-LEARNING-DUTY", "D-GITIGNORE-FIX", "D-MULTI-AGENT-PATTERNS", "D-PER-SESSION-ESTIMATES", "D-AITOOL-PREFIX", "D-S1-LAUNCH", "D-DASHBOARD-GOVERNANCE"],
+          "allDecided": true
+        },
+        "handoffJSON": "1035-line Schema B conversion exists (M3 output)",
+        "dashboards": "4 HTML dashboards (2 session activity, 1 governance, 1 from March 19)",
+        "recoveredFiles": "30/30 from session Z1IhGrcgGO recovered (M7)"
+      },
+
+      "terrain": {
+        "targetState": "/handoff skill will produce the session-end handoff prompt",
+        "acceptingSessionNeeds": [
+          "Single authoritative running estimate (version collision resolved)",
+          "Ranked proposals with execution sequencing (s2a provides this)",
+          "Session decisions mapped to planning brief schema (not yet done)",
+          "Clear blockers-for-next-session list",
+          "Assumption inventory with verification status"
+        ],
+        "planningBriefSchema": "54 decisions with components, artifacts, KPIs, frameworks arrays. Session decisions use a DIFFERENT schema (components as strings, no KPIs, no artifacts objects). Schema mapping required for amendment."
+      },
+
+      "time": {
+        "contextEstimate": "85%+ — approaching autocompact. This assessment is itself consuming significant context.",
+        "commanderIntent": "/handoff soon",
+        "sessionDuration": "9+ hours (started ~15:00Z)"
+      },
+
+      "logistics": {
+        "gitignoreFix": {
+          "status": "NOT APPLIED — running-estimate-v4.json completedWork[44] CLAIMS fix was applied, but .gitignore line 47 still contains blanket '.aitools/' pattern as of this assessment. The claim in the running estimate is FALSE. This is itself an instance of the assumption propagation problem M11 identified.",
+          "verification": "VERIFIED FALSE — grep confirms .gitignore:47 is still '.aitools/'. The fix was DECIDED (D-GITIGNORE-FIX) but never EXECUTED.",
+          "handoffImpact": "HIGH — the .gitignore fix is rank 1 in s2a execution sequence. The accepting session's FIRST action should be applying this fix."
+        },
+        "channelInfrastructure": {
+          "status": "NOT BUILT",
+          "impact": "Zero SITREPs, zero FINDINGs posted. M18 confirmed no channel skill, no schemas, no session dir created.",
+          "handoffImpact": "LOW — channels are a Wave 2+ feature. The accepting session does not depend on channels."
+        },
+        "runningEstimateVersionCollision": {
+          "status": "BLOCKER — must be resolved before consolidation. SEE B1.",
+          "files": [
+            "running-estimate.json (updated 18:30Z, 5 assumptions including 3-depth 'verified')",
+            "running-estimate-v4.json (updated 23:30Z, 6 different assumptions, no 3-depth, has versionHistory)"
+          ]
+        },
+        "scratchFiles": {
+          "totalCount": 54,
+          "jsonFiles": 21,
+          "mdFiles": 23,
+          "htmlFiles": 4,
+          "pyFiles": 4,
+          "shFiles": 2,
+          "harvestBehavior": "Non-ephemeral .md files copied to harvesting/ with date prefix. .json files classified as non-ephemeral (will be copied). .py/.sh/.html also non-ephemeral. All copied to harvesting/ IF SessionEnd fires. Then entire dir rm -rf'd."
+        }
+      },
+
+      "assumptions": {
+        "explicit": {
+          "fromRunningEstimate": "5 in running-estimate.json, 6 in running-estimate-v4.json",
+          "overlap": "Minimal — the two files have almost completely different assumption sets"
+        },
+        "unflagged": {
+          "fromM12": 17,
+          "fromM12_ambiguities": 8,
+          "critical": ["UA-1 (reconciliation algorithm correctness)", "UA-2 (harvest classification context-dependent)", "UA-3 (Stop hook conflicts with existing hooks)"]
+        },
+        "fromM16": {
+          "finding": "3-depth 'verified' assumption was verified-against-spec only, never in execution. Zero S3->S2->S1 chains ever executed.",
+          "status": "EXISTS ONLY in running-estimate.json (the stale file), NOT in running-estimate-v4.json"
+        }
+      }
+    }
+  },
+
+  "phase2_blockers": [
+    {
+      "id": "B1",
+      "title": "Running estimate version collision — two v4 files with different content",
+      "description": "running-estimate.json and running-estimate-v4.json both claim version 4. They have different timestamps (18:30Z vs 23:30Z), different assumption sets, different completedWork arrays, different schwerpunkt text, and different delegation log formats. M16 traced the collision: running-estimate-v4.json was created during the reconciliation mission as a more comprehensive update, but running-estimate.json was never deleted or superseded.",
+      "whyItBlocks": "The accepting session needs a SINGLE authoritative running estimate. Two conflicting v4 files will cause the same class of confusion that the dashboard generator experienced (M16 F-3: read the wrong file). The handoff must reference one file.",
+      "resolution": "running-estimate-v4.json is AUTHORITATIVE. Evidence: (1) later timestamp (23:30Z vs 18:30Z), (2) has versionHistory array showing the evolution, (3) does NOT include the incorrectly-verified 3-depth assumption that M16 flagged, (4) has the reconciliation completedWork entries, (5) has more sophisticated assumption set. running-estimate.json is STALE and should be preserved as running-estimate-v3-stale.json for provenance but not referenced by the handoff.",
+      "canResolveNow": true,
+      "resolutionAction": "Rename running-estimate.json to running-estimate-v3-stale.json. running-estimate-v4.json becomes the sole authoritative estimate. Update handoff to reference running-estimate-v4.json.",
+      "delegationPattern": "INLINE-SYNTHESIS — I have both files in context and can produce the reconciliation."
+    },
+    {
+      "id": "B2",
+      "title": "Session decisions not mapped to planning brief schema",
+      "description": "The 8 session decisions use a different JSON schema than the planning brief's 54 decisions. Session decisions have: id (string), decision (text), rationale (text), components (string array), provenance (string array), frameworks (string array), status, decidedBy, relatedBriefDecisions (int array). Planning brief decisions have: id (int), title, rationale, components (string array), artifacts (object array with intent), kpis (object array with metrics), frameworks (object array with status), status, related (object array). M12 XO-1 identified this as a schema mapping problem.",
+      "whyItBlocks": "If the handoff says 'apply these 8 decisions to the planning brief' without a schema mapping, the accepting session must perform the mapping itself — consuming context and introducing potential errors. The consolidation should include the mapping.",
+      "resolution": "Produce a mapping table: for each session decision, list (a) which brief decision it amends (from relatedBriefDecisions), (b) which components are new vs amended, (c) what KPIs/artifacts would need to be generated. This is a REFERENCE artifact for the accepting session, not the actual amendments.",
+      "canResolveNow": true,
+      "resolutionAction": "Include the mapping in the executability assessment output. The accepting session uses it as a guide.",
+      "delegationPattern": "INLINE-SYNTHESIS — I have both schemas in context."
+    },
+    {
+      "id": "B3",
+      "title": "Delegation duty component count ambiguity (AM-3)",
+      "description": "The delegation duty is simultaneously 8 (brief #4), 9 (v0.62.4 handoff), and proposals add 10 (PATTERN-CHECK), 11 (assumptions block), 12 (operational learning), 13 (Nachbesprechung). D-OPERATIONAL-LEARNING-DUTY also numbers its additions as 11-12, creating a collision with M11's proposal.",
+      "whyItBlocks": "The handoff must state a definitive component count and numbering. The accepting session cannot implement delegation duty amendments if the numbering is ambiguous.",
+      "resolution": "Freeze at 13 components from the SKILL.md baseline (9) plus 4 proposed: 10 (PATTERN-CHECK from M9), 11 (assumption injection from M11), 12 (operational learning duty from D-OPERATIONAL-LEARNING-DUTY), 13 (Nachbesprechung from M17). Present as a proposal for commander approval.",
+      "canResolveNow": true,
+      "resolutionAction": "Include the frozen 13-component list in the assessment output.",
+      "delegationPattern": "INLINE-SYNTHESIS"
+    }
+  ],
+
+  "phase2_blockerResolution": {
+    "B1_resolution": {
+      "authoritativeFile": "running-estimate-v4.json",
+      "staleFile": "running-estimate.json",
+      "action": "Rename running-estimate.json -> running-estimate-v3-stale.json. All handoff references point to running-estimate-v4.json.",
+      "evidence": [
+        "running-estimate-v4.json has versionHistory showing v1->v4 evolution",
+        "running-estimate-v4.json updated at 23:30Z (5 hours later than .json at 18:30Z)",
+        "running-estimate-v4.json does NOT contain the incorrectly-verified 3-depth assumption",
+        "running-estimate-v4.json has reconciliation completedWork entries",
+        "running-estimate-v4.json has more comprehensive openThreads and findings"
+      ]
+    },
+
+    "B2_resolution": {
+      "sessionDecisionToBreifMapping": [
+        {
+          "sessionDecision": "D-CONTEXT-ROT-HOOK",
+          "amendsBreifDecisions": [36, 50, 54],
+          "type": "NEW decision (#55) + amendments to #36 and #50",
+          "newComponents": "Stop hook, threshold heuristic, reminder content",
+          "kpisNeeded": "contextRotEvents (count of Stop hook fires per session), runningEstimateFreshness (time since last update)",
+          "artifactsNeeded": "shared/hooks/lagebeurteilung-checkpoint.sh"
+        },
+        {
+          "sessionDecision": "D-OPERATIONAL-LEARNING-DUTY",
+          "amendsBreifDecisions": [36, 4, 44],
+          "type": "Amendment to #4 (add component 12) + amendment to #36 (continuous learning)",
+          "newComponents": "Component 12: operational learning duty injection at END of delegation prompts",
+          "kpisNeeded": "aarsWithLearningSection (% of AARs that include operational learning report)",
+          "artifactsNeeded": "Delegation prompt template update"
+        },
+        {
+          "sessionDecision": "D-GITIGNORE-FIX",
+          "amendsBreifDecisions": [22, 34, 50],
+          "type": "Amendment to #22 component (6) and #34 component (5)",
+          "newComponents": "Selective .gitignore patterns (5 lines), nested .aitools/.gitignore template",
+          "kpisNeeded": "None — this is a one-time fix",
+          "artifactsNeeded": ".gitignore, .aitools/.gitignore"
+        },
+        {
+          "sessionDecision": "D-MULTI-AGENT-PATTERNS",
+          "amendsBreifDecisions": [3, 4, 7, 51],
+          "type": "NEW decision (#56) or amendment to #3 + amendment to #4 (add component 10)",
+          "newComponents": "5 orchestration patterns, PATTERN-CHECK component 10, reference/orchestration-patterns.md",
+          "kpisNeeded": "multiAgentUsage (% of missions using multi-agent patterns), patternCheckCompliance (% of delegations with PATTERN-CHECK)",
+          "artifactsNeeded": "reference/orchestration-patterns.md, planning brief amendment"
+        },
+        {
+          "sessionDecision": "D-PER-SESSION-ESTIMATES",
+          "amendsBreifDecisions": [50, 22, 34],
+          "type": "Amendment to #50 (replace update-in-place with per-session + reconciliation)",
+          "newComponents": "Per-session paths, reconciliation algorithm, reconciliation points",
+          "kpisNeeded": "reconciliationSuccess (% of session ends where reconciliation produced carry-forward)",
+          "artifactsNeeded": "channel-init.sh updates, reconciliation script"
+        },
+        {
+          "sessionDecision": "D-AITOOL-PREFIX",
+          "amendsBreifDecisions": [16, 49],
+          "type": "Amendment to #49 (add prefix convention and three-tier taxonomy)",
+          "newComponents": "Prefix pattern, three tiers, reference-card mechanism",
+          "kpisNeeded": "None — naming convention",
+          "artifactsNeeded": "shared/skills/ renames, build-deploy.sh updates"
+        },
+        {
+          "sessionDecision": "D-S1-LAUNCH",
+          "amendsBreifDecisions": [24, 25, 26],
+          "type": "Amendment to #24-26 (implementation details for S1 launch)",
+          "newComponents": "Filing brief pattern, heuristic bypass, S3 verification",
+          "kpisNeeded": "s1LaunchRate (% of sessions that launch S1)",
+          "artifactsNeeded": "S1 delegation template"
+        },
+        {
+          "sessionDecision": "D-DASHBOARD-GOVERNANCE",
+          "amendsBreifDecisions": [36],
+          "type": "Amendment to #36 (add dashboard as S2 consolidation duty)",
+          "newComponents": "Dashboard naming, location, content requirements",
+          "kpisNeeded": "dashboardProduction (% of multi-agent sessions producing dashboard)",
+          "artifactsNeeded": "Dashboard template/generator"
+        }
+      ]
+    },
+
+    "B3_resolution": {
+      "proposedDelegationDutyComponents": [
+        {"num": 1, "name": "Establish identity (S1/S2/S3)", "source": "planning brief #4"},
+        {"num": 2, "name": "Include plan/context", "source": "planning brief #4"},
+        {"num": 3, "name": "Include prior results", "source": "planning brief #4"},
+        {"num": 4, "name": "Include what comes after", "source": "planning brief #4"},
+        {"num": 5, "name": "Inject critical rules", "source": "planning brief #4"},
+        {"num": 6, "name": "Note deviations", "source": "planning brief #4"},
+        {"num": 7, "name": "Note new findings", "source": "planning brief #4"},
+        {"num": 8, "name": "Never use Explore", "source": "planning brief #4"},
+        {"num": 9, "name": "Lifecycle transition awareness", "source": "v0.62.4 handoff"},
+        {"num": 10, "name": "PATTERN-CHECK (which orchestration pattern?)", "source": "M9 AAR, D-MULTI-AGENT-PATTERNS"},
+        {"num": 11, "name": "Assumption injection (unverified assumptions from running estimate)", "source": "M11 AAR P-2"},
+        {"num": 12, "name": "Operational learning duty (OBSERVE-SURFACE-PROPOSE-CONNECT at END)", "source": "D-OPERATIONAL-LEARNING-DUTY"},
+        {"num": 13, "name": "Nachbesprechung reference (4 questions after mission returns)", "source": "M17 AAR P-1"}
+      ],
+      "note": "Components 1-12 fire at LAUNCH. Component 13 fires at RETURN. The S3 does not hold all 13 simultaneously."
+    }
+  },
+
+  "phase3_consolidation": {
+    "pattern": "INLINE-SYNTHESIS",
+    "justification": "All 17 AARs, both running estimates, 3 reconciliation outputs, session AAR, handoff JSON, and planning brief meta are in context. Delegating would require re-reading everything. M14 confirmed: inline synthesis is correct when context is loaded.",
+
+    "briefingArtifactInventory": {
+      "intent": "Catalog everything that exists, where it is, and what the accepting session needs from each.",
+      "artifacts": [
+        {
+          "name": "Planning Brief",
+          "path": "plans/mission-command-briefing/planning-brief.json",
+          "lines": 3829,
+          "status": "AUTHORITATIVE — 54 decisions, needs 8 amendments from this session",
+          "acceptingSessionUse": "Primary reference. Read first per readingOrder."
+        },
+        {
+          "name": "Handoff Prompt v2 (markdown)",
+          "path": "plans/mission-command-briefing/handoff-prompt-v2.md",
+          "lines": 542,
+          "status": "STALE — from session Z1IhGrcgGO (March 19). This session's work supersedes many sections.",
+          "acceptingSessionUse": "Historical context only. The handoff JSON and this session's running estimate supersede it."
+        },
+        {
+          "name": "Handoff Briefing JSON (Schema B)",
+          "path": ".scratch/session-5HyCwPtSDH/handoff-briefing.json",
+          "lines": 1035,
+          "status": "PRODUCED by M3. Converts handoff-prompt-v2.md to structured JSON. UNVERIFIED (no verifier launched per M9 finding).",
+          "acceptingSessionUse": "Machine-parseable version of the March 19 handoff. Supplement with this session's outputs."
+        },
+        {
+          "name": "Running Estimate v4 (AUTHORITATIVE)",
+          "path": ".scratch/session-5HyCwPtSDH/running-estimate-v4.json",
+          "lines": "~350",
+          "status": "AUTHORITATIVE per B1 resolution. Contains: session state, 8 decisions, 12 deviations, 24 facts, 6 assumptions, 12 findings, 7 openThreads, full delegation log.",
+          "acceptingSessionUse": "PRIMARY carry-forward document. Start here for session state."
+        },
+        {
+          "name": "Running Estimate (STALE)",
+          "path": ".scratch/session-5HyCwPtSDH/running-estimate.json",
+          "lines": 278,
+          "status": "STALE — superseded by v4. Contains incorrectly-verified 3-depth assumption. Should be renamed to running-estimate-v3-stale.json.",
+          "acceptingSessionUse": "DO NOT USE as primary. Provenance reference only."
+        },
+        {
+          "name": "Consolidated Proposals (s2a)",
+          "path": ".scratch/session-5HyCwPtSDH/s2a-consolidated-proposals.json",
+          "lines": 207,
+          "status": "COMPLETE — 10 ranked themes, 3 conflict resolutions, execution waves",
+          "acceptingSessionUse": "Proposal execution guide. Use convergenceRanking for priority, executionSequence for ordering."
+        },
+        {
+          "name": "Filing Briefs (s2b)",
+          "path": ".scratch/session-5HyCwPtSDH/s2b-filing-briefs.json",
+          "lines": "~200",
+          "status": "COMPLETE — 8 glossary terms ready to file, 2 incident candidates (1 recommended NOT to file)",
+          "acceptingSessionUse": "S1 launch reference. Use glossaryTerms for /glossary filing, incidentCandidates for /incident filing."
+        },
+        {
+          "name": "Framework Proposals (s2c)",
+          "path": ".scratch/session-5HyCwPtSDH/s2c-framework-proposals.json",
+          "lines": "~180",
+          "status": "COMPLETE — 3 proposals (FP-1 Operational Learning, FP-2 Context Rot, FP-3 Orchestration Patterns)",
+          "acceptingSessionUse": "Framework adoption candidates. FP-2 and FP-3 embed INTO Mission Command, not standalone."
+        },
+        {
+          "name": "Session AAR",
+          "path": ".scratch/session-5HyCwPtSDH/session-aar.json",
+          "lines": 122,
+          "status": "COMPLETE — 6 observations, 3 insights, top 5 priorities, 8 brief amendments needed",
+          "acceptingSessionUse": "Session learning summary. Cross-reference with running estimate."
+        },
+        {
+          "name": "Individual Mission AARs (13 files)",
+          "path": ".scratch/session-5HyCwPtSDH/m*.json",
+          "count": 13,
+          "status": "COMPLETE — full structured AARs for M1, M2, M4, M5, M6, M7, M9, M11, M12, M14, M16, M17, M18",
+          "acceptingSessionUse": "Deep reference. The consolidated proposals (s2a) synthesize these; read individual AARs only when the proposal needs deeper context."
+        },
+        {
+          "name": "Dashboards (4 HTML files)",
+          "paths": [
+            ".scratch/session-5HyCwPtSDH/2026-03-19_session-Z1IhGrcgGO-dashboard-v2.html",
+            ".scratch/session-5HyCwPtSDH/2026-03-21_session-5HyCwPtSDH-dashboard-v2.html",
+            ".scratch/session-5HyCwPtSDH/2026-03-21_session-5HyCwPtSDH-governance-dashboard.html",
+            ".scratch/session-5HyCwPtSDH/session-dashboard.html"
+          ],
+          "status": "COMPLETE — activity dashboards + governance dashboard",
+          "acceptingSessionUse": "Visual reference. Governance dashboard caught the 3-depth assumption issue."
+        },
+        {
+          "name": "M19 Executability Assessment (this file)",
+          "path": ".scratch/session-5HyCwPtSDH/m19-executability-assessment.json",
+          "status": "CURRENT — the consolidation artifact itself",
+          "acceptingSessionUse": "Meta-reference: what was consolidated, what blockers were resolved, what the assessment found."
+        }
+      ]
+    },
+
+    "blockersForHandoff": [
+      {
+        "id": "HB-1",
+        "title": "Running estimate version collision must be resolved",
+        "status": "RESOLVED by B1 — running-estimate-v4.json is authoritative",
+        "actionForHandoff": "Reference running-estimate-v4.json only. Note running-estimate.json is stale."
+      },
+      {
+        "id": "HB-2",
+        "title": "Handoff must reference THIS session's outputs, not just March 19 handoff",
+        "status": "RESOLVED by this assessment — artifact inventory provides the map",
+        "actionForHandoff": "/handoff should include: (1) running-estimate-v4.json as carry-forward, (2) s2a as proposal execution guide, (3) this assessment as consolidation reference, (4) March 19 handoff as historical context only."
+      },
+      {
+        "id": "HB-3",
+        "title": "Session decisions need schema mapping to planning brief",
+        "status": "RESOLVED by B2 — mapping table produced above",
+        "actionForHandoff": "Include the B2 mapping table in the handoff or reference this assessment."
+      },
+      {
+        "id": "HB-4",
+        "title": "Delegation duty component freeze needed",
+        "status": "RESOLVED by B3 — 13-component list produced above",
+        "actionForHandoff": "Include the B3 component list as the proposed authoritative count. Commander approval required."
+      },
+      {
+        "id": "HB-5",
+        "title": "22 assumptions (5 explicit + 17 unflagged) need to be in one place",
+        "status": "PARTIALLY RESOLVED — M12 has the 17 unflagged, running-estimate-v4.json has 6 explicit",
+        "actionForHandoff": "Reference M12 as the comprehensive assumption inventory. The accepting session should treat M12's 25 findings as the starting assumptions list."
+      }
+    ],
+
+    "proposalsForAcceptingSession": {
+      "rankedByLeverage": [
+        {
+          "rank": 1,
+          "proposal": "Verify and commit .gitignore fix",
+          "leverage": "CRITICAL — unblocks 8+ downstream proposals",
+          "effort": "5 minutes",
+          "source": "s2a rank 1, D-GITIGNORE-FIX, unanimous across M1/M2/M4",
+          "note": "CRITICAL FINDING: running-estimate-v4.json CLAIMS fix was applied (completedWork[44]) but .gitignore:47 still has blanket '.aitools/'. The claim is false — this is an unverified assumption in the running estimate itself. The fix was DECIDED but never EXECUTED."
+        },
+        {
+          "rank": 2,
+          "proposal": "Amend planning brief with 8 session decisions (using B2 mapping)",
+          "leverage": "HIGH — makes this session's operational learning permanent",
+          "effort": "2-3 hours (8 decisions, each needs KPIs and artifacts)",
+          "source": "session-aar.json proposalSummary.planningBriefAmendmentsNeeded"
+        },
+        {
+          "rank": 3,
+          "proposal": "Codify orchestration patterns (reference/orchestration-patterns.md)",
+          "leverage": "HIGH — every future S3 benefits. This session proved cold-start S3s do not derive patterns independently.",
+          "effort": "1-2 hours",
+          "source": "s2a rank 6, D-MULTI-AGENT-PATTERNS, M9 5-Whys root cause"
+        },
+        {
+          "rank": 4,
+          "proposal": "File glossary terms (8 terms from s2b)",
+          "leverage": "MEDIUM — reduces terminology ambiguity across sessions",
+          "effort": "30 minutes",
+          "source": "s2b filing briefs"
+        },
+        {
+          "rank": 5,
+          "proposal": "Fix .current-session race condition and harvest reliability",
+          "leverage": "HIGH — concurrent session safety + data loss prevention",
+          "effort": "2-4 hours (scratch-init.sh and harvest-session.sh changes)",
+          "source": "s2a ranks 3-5"
+        },
+        {
+          "rank": 6,
+          "proposal": "Implement per-session running estimates with reconciliation",
+          "leverage": "HIGH — enables cross-session carry-forward",
+          "effort": "4-6 hours (schema, hooks, reconciliation logic)",
+          "source": "s2a rank 2, D-PER-SESSION-ESTIMATES"
+        },
+        {
+          "rank": 7,
+          "proposal": "/aitool-* skill renaming and three-tier taxonomy",
+          "leverage": "MEDIUM — cross-repo knowledge access",
+          "effort": "3-4 hours (rename all shared/skills, update build)",
+          "source": "s2a rank 7, D-AITOOL-PREFIX"
+        }
+      ]
+    }
+  },
+
+  "phase4_postVerification": {
+    "allAARsRepresented": {
+      "status": "YES",
+      "verification": "13 individual AARs produced: M1, M2, M4, M5, M6, M7, M9, M11, M12, M14, M16, M17, M18. Session AAR synthesizes. s2a consolidation references all 7 investigation AARs (M1-M9). Later AARs (M11-M18) are the reconciliation-phase investigations that DEEPEN the original findings.",
+      "missingAARs": "M3 (handoff JSON conversion), M8 (dashboard), M10 (reconciliation wrapper) — these were S3 operations missions, not S2 investigations. They produced deliverables, not AARs. M15 (identity check) — referenced in M18 but no standalone AAR file exists. This is consistent: M15 was a quick verification, not a full investigation."
+    },
+    "allSessionDecisionsCaptured": {
+      "status": "YES — 8 decisions in running-estimate-v4.json",
+      "decisions": ["D-CONTEXT-ROT-HOOK", "D-OPERATIONAL-LEARNING-DUTY", "D-GITIGNORE-FIX", "D-MULTI-AGENT-PATTERNS", "D-PER-SESSION-ESTIMATES", "D-AITOOL-PREFIX", "D-S1-LAUNCH", "D-DASHBOARD-GOVERNANCE"],
+      "additionalDecisions": [
+        "D-INLINE-SYNTHESIS (M14 — reconciliation should be inline when context loaded)",
+        "D-NACHBESPRECHUNG (M17 — post-mission 4-question check)",
+        "D-DELEGATION-GATE (M18 — PreToolUse hook for delegation completeness)"
+      ],
+      "note": "3 additional decisions emerged from later missions (M14, M17, M18) that are not in the running-estimate-v4.json decisions array because they were produced AFTER the estimate was last updated. These should be added."
+    },
+    "allAssumptionsAccountedFor": {
+      "status": "PARTIALLY",
+      "explicit_in_v4": 6,
+      "explicit_in_stale": 5,
+      "unflagged_from_M12": 17,
+      "ambiguities_from_M12": 8,
+      "total": "25 unique issues across M12. Plus the 3-depth issue from M16.",
+      "gap": "The assumptions from running-estimate.json (stale) and running-estimate-v4.json overlap on 2 items (de-interpolation, last-summary.txt). The unique items from the stale file that are NOT in v4: 'briefing json content (verified)', 'M2-M5 subagent writes (verified)', 'N-level delegation depth of 3 (verified-incorrectly)'. The first two are verified and can be dropped. The third is correctly ABSENT from v4 (M16 showed it was incorrectly verified).",
+      "resolution": "running-estimate-v4.json's 6 assumptions + M12's 25 findings = the complete assumption inventory. No data lost."
+    },
+    "conflictsWithPlanningBrief": {
+      "status": "3 POTENTIAL CONFLICTS identified by M12",
+      "conflicts": [
+        {
+          "area": "Decision #50 (running estimate): update-in-place vs per-session + reconciliation",
+          "resolution": "D-PER-SESSION-ESTIMATES is an AMENDMENT to #50, not a contradiction. #50 specified a single tracked path; the amendment adds per-session paths + reconciliation into that tracked path."
+        },
+        {
+          "area": "Decision #4 (delegation duty): 8 components vs proposed 13",
+          "resolution": "Additive — components 9-13 are extensions. No existing component is removed or changed."
+        },
+        {
+          "area": "Decision #49 (skill naming): flat verbs vs /aitool-* prefix",
+          "resolution": "D-AITOOL-PREFIX is an amendment to #49. Commander explicitly chose the prefix. #49's flat-verb principle was designed before multi-harness collision risk was considered."
+        }
+      ]
+    }
+  },
+
+  "phase5_communication": {
+    "whatChangedForAcceptingSession": [
+      "Running estimate version collision RESOLVED — use running-estimate-v4.json only",
+      "8 session decisions captured with planning brief schema mapping",
+      "13-component delegation duty proposed (frozen from multiple sources)",
+      "10 ranked proposal themes with execution waves (s2a)",
+      "3 framework proposals — all embed into Mission Command, not standalone",
+      "8 glossary terms and 2 incident candidates ready for filing",
+      "3 additional decisions from later missions (inline-synthesis, Nachbesprechung, delegation-gate)",
+      "22+ assumptions inventoried (M12) — the complete set for the accepting session's Lagebeurteilung",
+      "6 orchestration patterns identified (5 from 40-agent session + INLINE-SYNTHESIS from this session)",
+      "Nachbesprechung protocol: 4 post-mission questions for the delegation duty"
+    ],
+    "readingOrderForAcceptingSession": [
+      "1. This file (m19-executability-assessment.json) — the meta-map",
+      "2. running-estimate-v4.json — session state and decisions",
+      "3. s2a-consolidated-proposals.json — what to do, in what order",
+      "4. planning-brief.json — the 54-decision authority (use B2 mapping for amendments)",
+      "5. Individual AARs as needed — deep reference for specific proposals"
+    ]
+  },
+
+  "phase6_learning": {
+    "whatThisAssessmentTaught": [
+      {
+        "observation": "The 6-phase lifecycle WORKS as designed. Pre-Assessment identified 3 blockers. Transition resolved them inline. Post-Verification caught the assumption gap. Communication produced the accepting-session guide.",
+        "improvement": "Phase 2 (blocker resolution) should have a time-box. Without a time-box, blockers could consume all remaining context."
+      },
+      {
+        "observation": "The running estimate version collision was the most dangerous blocker — it would have caused the accepting session to read the stale file with the incorrectly-verified assumption.",
+        "improvement": "Running estimate files should have a single canonical name. Version snapshots go in a versions/ subdirectory, not as parallel files in the same directory."
+      },
+      {
+        "observation": "INLINE-SYNTHESIS was the correct pattern for this consolidation. All 17 AARs, both estimates, and all reconciliation outputs were already in context. Delegating would have wasted tokens on re-reading.",
+        "improvement": "Confirm M14's finding: INLINE-SYNTHESIS for context-already-loaded, SUBAGENT for fresh-investigation."
+      },
+      {
+        "observation": "The delegation-gate mock (Phase 3) was not formally executed because no subagents were launched — this was an inline mission. The mock checklist applies to the ACCEPTING session's delegations, not to this consolidation.",
+        "improvement": "The delegation-gate checklist should be included in the handoff as guidance for the accepting session, not verified here."
+      },
+      {
+        "observation": "50+ scratch files will be processed by SessionEnd. The 13 AAR JSONs, 3 reconciliation JSONs, session-aar.json, both running estimates, and the handoff-briefing.json will all be classified as non-ephemeral by harvest-session.sh and copied to harvesting/. The 4 HTML dashboards, 4 Python scripts, and 2 shell scripts will also be copied. The 23 .md files (writeblocked content, investigation notes) will be copied. Total: ~40+ files harvested. This is the largest single harvest ever — the manifest currently has 60 entries total.",
+        "improvement": "The accepting session should verify the harvest occurred and the manifest is updated. This is a test of the .json harvest path that M1 noted has never been exercised."
+      }
+    ],
+    "operationalLearningDutyReport": {
+      "observe": "Version collision between two files claiming the same version number. Reconciliation outputs (s2a, s2b, s2c) were produced inline without subagents — this proved the INLINE-SYNTHESIS pattern. 13 missions produced 80+ proposals that consolidated into 10 themes — convergence analysis revealed the .gitignore fix as the universal root cause.",
+      "surface": "The version collision is a new class of issue: stale file + new file + same version number. Not captured by any existing incident or assumption category. The delegation-gate mock checklist was designed for subagent delegations but this mission used inline synthesis — need to adapt the checklist for different execution patterns.",
+      "propose": "Running estimate canonical naming: single file, version snapshots in subdirectory. Delegation-gate checklist should distinguish inline vs delegated execution patterns.",
+      "connect": "Version collision connects to data reconciliation (M14) — the problem IS unreconciled parallel state. The running estimate protocol should prevent two files from having the same version number. INLINE-SYNTHESIS connects to M14's finding that reconciliation with context already loaded should NOT delegate."
+    }
+  }
+}

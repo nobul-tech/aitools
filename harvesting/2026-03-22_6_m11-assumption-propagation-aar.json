@@ -1,0 +1,186 @@
+{
+  "meta": {
+    "mission": "M11",
+    "agent": "S2",
+    "session": "5HyCwPtSDH",
+    "created": "2026-03-21T23:00:00Z",
+    "schwerpunkt": "Investigate how unverified assumptions propagate through multi-agent missions and design structural prevention using existing harness capabilities"
+  },
+  "observations": [
+    {
+      "id": "O-1",
+      "fact": "Agent #29 (S2 Schwerpunkt assessment, session Z1IhGrcgGO) stated on lines 162-163 of schwerpunkt-assessment.md: 'The current .scratch/ session directories are NOT automatically cleaned up between sessions -- they persist on disk.' Also on line 457, rated 'Scratch directory cleaned up before next session reads it' as Low probability. Both claims are factually false -- harvest-session.sh line 165 runs 'rm -rf \"$SESSION_DIR\"'.",
+      "source": "harvesting/2026-03-19_session-subagent-report.html:1339 (agent #29 note), harvesting/2026-03-19_scratch-deletion-rca.md:1-5"
+    },
+    {
+      "id": "O-2",
+      "fact": "The false claim propagated through 5 artifacts in sequence: (1) schwerpunkt-assessment.md (Agent #29, S2), (2) handoff-prompt-draft.md line 19 (Agent #26/28, S3: 'These files persist on disk, gitignored but not auto-cleaned'), (3) handoff-verification.md lines 37-38 (Agent #31, Verifier 1: 'scratch directories persist on disk and the session-state-audit section 3.2 states scratch is NOT auto-cleaned'), (4) handoff-final-verification.md line 29 (Agent #34, Verifier 2: 'scratch persists on disk'), (5) handoff-final-verification-v2.md (Agent #34, Verifier 3: did not repeat but did not challenge).",
+      "source": "harvesting/2026-03-19_scratch-deletion-rca.md:430-456"
+    },
+    {
+      "id": "O-3",
+      "fact": "Three independent verifiers (#31, #34 twice) all used Criterion 2 (Reference Integrity) to check file paths. All verified files existed on disk at that moment. None asked 'will this file exist when the next session reads it?' The verification model checks present state, not post-lifecycle state. Criterion 9 (Barrier Test) simulated a fresh agent opening the handoff but not the SessionEnd hooks firing before the agent arrives.",
+      "source": "harvesting/2026-03-19_scratch-deletion-rca.md:14-68, harvesting/2026-03-19_verification-lifecycle-gap-audit.md:116-167"
+    },
+    {
+      "id": "O-4",
+      "fact": "Three existing harness artifacts explicitly documented scratch ephemerality BEFORE Agent #29 made its false claim: (a) /scratch skill lines 97-101: 'Files in scratch are DELETED by the SessionEnd hook', (b) aitools-workspace.md line 26: 'Session-ephemeral data (scratch files) is gitignored -- it belongs to one session on one machine', (c) artifact-harvesting.md lines 65-66: 'SessionEnd hook: classify .scratch/ contents, harvest artifacts, delete ephemeral files'. Agent #29 either did not read these, or read them and drew the opposite conclusion.",
+      "source": "harvesting/2026-03-19_scratch-deletion-rca.md:126-134"
+    },
+    {
+      "id": "O-5",
+      "fact": "In this session (5HyCwPtSDH), the S3 made 12 documented deviations. At least 8 were caused by unverified assumptions: (1) 'rules only' scoping of context gap (understated blank-slate reality), (2) no S2/S3 pairing duty understanding, (3) '11.4 MB too large for subagent' (1M context available), (4) Explore agents can write (they cannot), (5) single session per repo (commander runs concurrent), (6) running estimate in scratch survives SessionEnd (harvested not deleted, semantics wrong), (7) single-agent-per-mission (despite 40-agent exemplar), (8) context rot heuristic at beginning of prompt works (loses salience).",
+      "source": ".scratch/session-5HyCwPtSDH/running-estimate.json:190-202 (deviations array)"
+    },
+    {
+      "id": "O-6",
+      "fact": "The running estimate has an 'assumptions' array with unverified/verified/falsified lifecycle. At version 4, it tracks 5 assumptions. 4 are unverified. Only 1 (N-level delegation depth) is verified. The 12 deviations were NOT tracked as assumptions before they caused damage -- they were discovered as deviations after the fact, corrected by the commander.",
+      "source": ".scratch/session-5HyCwPtSDH/running-estimate.json:228-234"
+    },
+    {
+      "id": "O-7",
+      "fact": "The glossary defines 'assumption' with a full lifecycle: 'An unverified belief held by an agent during a session that influences decisions or plans. Assumptions are invisible until failure unless explicitly tracked. Lifecycle: unverified (default when surfaced), verified (confirmed against evidence, becomes a fact), falsified (contradicted by evidence, becomes a finding).' Source: shared/skills/handoff/SKILL.md. The governed definition explicitly states 'invisible until failure unless explicitly tracked' -- the exact failure mode observed.",
+      "source": "reference/glossary.json:315-318 (assumption definition)"
+    },
+    {
+      "id": "O-8",
+      "fact": "The 40-agent session commander's corrections were the primary assumption-catching mechanism. In 165 human messages, the commander corrected: terminology ('use /glossary'), governed data access ('use the skill not the file'), hierarchy ('I am the commander, not S2'), delegation depth ('use subagents everywhere'), scope ('that's scope creep -- use /investigate only for RCA'), lifecycle awareness ('do you know about delegation duty?'), and factual errors ('what about your F issues/table? audit them'). These corrections happened BETWEEN agent launches, functioning as manual verification gates.",
+      "source": ".scratch/session-5HyCwPtSDH/40agent-human-messages.md: L1809 (scope creep), L1794 (S2 briefing), L1815 (AAR format), L2056 (subagents everywhere), L2106 (ambiguity workflow)"
+    },
+    {
+      "id": "O-9",
+      "fact": "The M9 delegation pattern AAR found the root cause for single-agent-per-mission: the 5 multi-agent orchestration patterns (write-verify-amend, parallel S2, S2 chain, S2-then-S3, WRITE_BLOCKED relaunch) were never codified. They exist as tacit knowledge in the 40-agent session. The dashboard presents 40 flat agent cards with no chain annotations. The handoff describes delegation DUTY but not delegation PATTERNS.",
+      "source": ".scratch/session-5HyCwPtSDH/m9-delegation-pattern-aar.json:86-121 (insights I-1 through I-7)"
+    },
+    {
+      "id": "O-10",
+      "fact": "Agent #29's prompt was: 'You are S2 (Intelligence). Verify the handoff prompt's Schwerpunkt against identified Reibung. Is the Schwerpunkt correctly aimed at the biggest friction? Are there friction points the Schwerpunkt ignores? Write to .scratch/session-Z1IhGrcgGO/schwerpunkt-assessment.md.' The prompt contained no reference to scratch lifecycle, no instruction to verify claims against source code, no injection of the /scratch skill's lifecycle warning, and no list of current unverified assumptions.",
+      "source": "harvesting/2026-03-19_session-subagent-report.html:1340 (agent #29 prompt)"
+    },
+    {
+      "id": "O-11",
+      "fact": "In the 40-agent session, Agents #37 and #38 were launched BECAUSE the commander caught the false claim after the handoff was moved to its permanent location. The commander's catch initiated a 2-agent S2 chain: Agent #37 (RCA of why 3 verifications missed it) fed into Agent #38 (full verification lifecycle gap audit). Without the commander catching the false claim, it would have propagated into the next session unchallenged. The handoff-prompt-v2.md line 9 scratch path migration note was itself a manual correction added post-discovery.",
+      "source": "harvesting/2026-03-19_session-subagent-report.html:1497-1538 (agents #37, #38), plans/mission-command-briefing/handoff-prompt-v2.md:9"
+    },
+    {
+      "id": "O-12",
+      "fact": "The S3 in session 5HyCwPtSDH assumed Explore agents can write (deviation #7). This assumption was falsified when M1 produced no file output. The M1 AAR (FRAGORD) had to be relaunched as general-purpose. Decision #5 in the planning brief explicitly blocks Explore agents via a proposed hook (block-explore-agent.sh) with corrective injection. The S3 had the planning brief in context but did not connect decision #5 to its delegation choice.",
+      "source": ".scratch/session-5HyCwPtSDH/running-estimate.json:197 (deviation), plans/mission-command-briefing/planning-brief.json:749-764 (decision #5)"
+    },
+    {
+      "id": "O-13",
+      "fact": "The S3 in session 5HyCwPtSDH assumed a single session per repo (deviation #8). This was corrected by the commander. The concurrent-agents.md user rule exists at ~/.claude/rules/ and explicitly says 'Multiple AI agents (Claude Code, Cursor Agent CLI) may edit a codebase concurrently.' This rule was in the S3's context (loaded for every session), yet the assumption was not checked against it.",
+      "source": ".scratch/session-5HyCwPtSDH/running-estimate.json:198 (deviation), ~/.claude/rules/concurrent-agents.md"
+    },
+    {
+      "id": "O-14",
+      "fact": "The 10 missed catch points documented in verification-lifecycle-gap-audit.md show a consistent pattern: each catch point checked its own domain (verifiers checked file existence, tool-ops checked hook specs, workspace rule stated principles) but none crossed the boundary to verify claims against implementation. The S2 subagent inferred from 'gitignored' that scratch persists. The verifiers inferred from file-exists-now that it will exist later. Each agent's reasoning was locally valid but globally wrong.",
+      "source": "harvesting/2026-03-19_verification-lifecycle-gap-audit.md:36-231 (10 catch points)"
+    },
+    {
+      "id": "O-15",
+      "fact": "The M1 AAR found that 3 authoritative sources agree running estimates MUST NOT go in scratch, yet provides no working canonical location. The /scratch skill names running estimates BY NAME in its prohibition (lines 103-107). The workspace rule declares .aitools/channel/running-estimate.json as 'tracked'. But .gitignore blanket-ignores .aitools/. The gap is not in the rules -- it is in the implementation. This is the same structural pattern as Agent #29's false claim: the rules say one thing, the implementation does another, and agents reason from whichever they encounter first.",
+      "source": ".scratch/session-5HyCwPtSDH/m1-running-estimate-lifecycle-aar.json:96-121 (insights I-2, I-3, I-7)"
+    }
+  ],
+  "insights": [
+    {
+      "id": "I-1",
+      "observation_refs": ["O-1", "O-2", "O-3", "O-4", "O-14"],
+      "analysis": "ASSUMPTION PROPAGATION IS A CHAIN-OF-TRUST FAILURE. Agent #29 made a false claim. The S3 writer repeated it. Three verifiers cited it as evidence. Nobody read harvest-session.sh. The chain of trust worked backwards: each downstream agent trusted the upstream agent's claim rather than independently verifying. The 'three independent verifiers' were not independent -- they all inherited the same false premise from the schwerpunkt-assessment. Independence requires independent evidence, not just independent execution. The verifiers faithfully executed their criteria, but the criteria assumed environmental stability. The verification model verified the document, not the system it exists within."
+    },
+    {
+      "id": "I-2",
+      "observation_refs": ["O-5", "O-6", "O-7", "O-12", "O-13"],
+      "analysis": "ASSUMPTIONS ARE INVISIBLE UNTIL FAILURE. The glossary defines this explicitly: 'invisible until failure unless explicitly tracked.' The S3's 12 deviations were all assumptions that were not tracked in the running estimate's assumptions array until AFTER they caused damage. The S3 assumed Explore can write, assumed single session per repo, assumed transcript too large -- all without registering them as assumptions. The running estimate's assumptions array (5 items at v4) captures only the assumptions the S3 was aware of having. The dangerous assumptions are the ones the agent does not recognize as assumptions -- they are treated as facts without verification. The governed definition describes exactly this failure mode but provides no structural mechanism to surface unrecognized assumptions."
+    },
+    {
+      "id": "I-3",
+      "observation_refs": ["O-8", "O-11"],
+      "analysis": "THE COMMANDER IS THE ONLY RELIABLE ASSUMPTION-CATCHING MECHANISM AND IT DOES NOT SCALE. In the 40-agent session, the commander caught Agent #29's false claim and launched Agents #37-38 to investigate. In session 5HyCwPtSDH, the commander caught 12 S3 deviations through direct correction. In both cases, the commander's domain knowledge was the barrier that caught assumptions passing through all three governance layers (prevention, detection, audit). But the commander reviewed the final handoff -- the false claim had already propagated through 5 agents before being caught. Within multi-agent chains that produce intermediate work (not commander-reviewed), false claims propagate without challenge. The commander's corrections are manual gates between turns; within a delegation chain, there are no gates."
+    },
+    {
+      "id": "I-4",
+      "observation_refs": ["O-10", "O-4", "O-14"],
+      "analysis": "DELEGATION PROMPTS DO NOT INJECT ASSUMPTIONS OR VERIFICATION DUTIES. Agent #29's prompt said 'verify Schwerpunkt against Reibung' but did not: (a) list current unverified assumptions, (b) instruct the agent to verify environmental claims against source code, (c) inject the /scratch skill's lifecycle section, or (d) include a verification duty ('before stating X about system behavior, read the source file'). The delegation duty (9 components) includes 'inject critical rules' (component 5) but does not include 'inject current assumptions' or 'inject verification duty for environmental claims.' The delegation duty tells agents WHAT to think about, not HOW to verify what they think they know."
+    },
+    {
+      "id": "I-5",
+      "observation_refs": ["O-9", "O-5"],
+      "analysis": "SINGLE-AGENT MISSIONS ARE THEMSELVES AN ASSUMPTION PROPAGATION VECTOR. When a single agent performs research, writes output, and that output is consumed downstream without verification, any false claim in the output propagates. The write-verify-amend pattern breaks this: the Verifier reads FRESH files, not the writer's cached understanding. The Verifier's independence provides a second evidence chain. The 40-agent session used this pattern for the handoff (agents #26-28) and for the /handoff skill (agents #30-31). Session 5HyCwPtSDH used zero verification agents. M2's 6 proposals, M4's 5 proposals, and M3's 1035-line schema conversion all went unverified. Any assumption embedded in those outputs propagates into the running estimate and subsequent decisions."
+    },
+    {
+      "id": "I-6",
+      "observation_refs": ["O-15", "O-4", "O-1"],
+      "analysis": "RULES-IMPLEMENTATION DIVERGENCE IS THE BREEDING GROUND FOR ENVIRONMENTAL ASSUMPTIONS. Agent #29 inferred from gitignore semantics that scratch persists. The M1 AAR found rules say running estimates must not go in scratch, but the implementation provides no working alternative. In both cases, the rules describe the intended state but the implementation differs. When an agent encounters the implementation (gitignored scratch dirs exist on disk) before the rules (scratch is ephemeral), the agent reasons from what it observes. The gap between rules and implementation is where false assumptions breed. The /intent-audit skill checks content against intent; no equivalent checks implementation against rules. This is the cross-boundary verification failure class identified in the scratch-deletion-rca.md."
+    },
+    {
+      "id": "I-7",
+      "observation_refs": ["O-7", "O-6", "O-2"],
+      "analysis": "THE ASSUMPTION LIFECYCLE (unverified/verified/falsified) IS GOVERNED IN DEFINITION BUT NOT IN PRACTICE. The glossary defines assumption with a lifecycle. The running estimate has an assumptions array. The Lagebeurteilung includes an assumption flush (handoff SKILL.md). But: (a) agents do not register assumptions as they form them -- they register them only when they realize they are assuming something, (b) delegation prompts do not inject the current assumptions list, (c) no hook detects when an agent states a fact that contradicts an existing assumption or a governed definition, (d) the verification criteria for handoffs and other outputs do not include 'check whether any stated facts are actually unverified assumptions.' The lifecycle exists on paper but has no structural enforcement."
+    },
+    {
+      "id": "I-8",
+      "observation_refs": ["O-3", "O-14", "O-11"],
+      "analysis": "VERIFICATION WITHOUT SOURCE-CODE READING IS VERIFICATION THEATER. All three verifiers in the 40-agent session used ls/Read to check file existence but none read harvest-session.sh to understand what happens to those files. In session 5HyCwPtSDH, the S3 had the planning brief (decision #5: block Explore agents) in context but did not connect it to its delegation choice. The pattern: agents verify against DOCUMENTS (rules, handoffs, briefs) but not against CODE (hooks, scripts, implementations). Document verification catches document-level errors. Code verification catches implementation-level errors. The two verification domains are complementary but only one is practiced. The /tool-ops skill has verification specs for exactly 1 of 9 hooks -- the verification infrastructure itself has this same gap."
+    }
+  ],
+  "proposals": [
+    {
+      "id": "P-1",
+      "insight_refs": ["I-2", "I-7"],
+      "what": "ASSUMPTION SURFACING DUTY: Add to the operational learning duty block an explicit instruction: 'Before stating any fact about system behavior (what hooks do, what survives SessionEnd, what agents can/cannot do, how files are tracked), verify it by reading the source file. If you cannot read the source, mark the statement as ASSUMPTION: <claim> and add it to the running estimate assumptions array with status unverified.' This is injected at the end of every delegation prompt alongside the existing operational learning duty block (decision D-OPERATIONAL-LEARNING-DUTY).",
+      "why": "The core failure: agents state assumptions as facts. Making the distinction explicit and structural (mark it or verify it) gives downstream agents the signal they need to independently verify rather than trust. The existing governed definition of 'assumption' says 'invisible until failure unless explicitly tracked.' This proposal makes them visible by requiring explicit marking.",
+      "barrier_analysis": "Replay against Agent #29: The agent would have written 'ASSUMPTION: scratch directories persist across sessions' instead of stating it as fact. Downstream agents would have seen the ASSUMPTION tag and could have verified. Replay against Session 5HyCwPtSDH S3: 'ASSUMPTION: Explore agents can write' would have triggered a check of decision #5. LIMITATION: This is behavioral -- agents may not comply. But unlike a UCI that fades, this duty is injected at the end of every delegation prompt (closest to where the agent works) and is part of the operational learning duty block that every AAR must report on. Non-compliance is detectable in the AAR: if the AAR has zero assumptions but states environmental facts, the duty was not followed."
+    },
+    {
+      "id": "P-2",
+      "insight_refs": ["I-4", "I-7"],
+      "what": "ASSUMPTIONS BLOCK IN DELEGATION: Add component 11 to delegation duty: 'Inject current assumptions from the running estimate. For each unverified assumption relevant to this mission, include it with the instruction: If your work depends on this assumption, VERIFY IT by reading the source file before proceeding. New assumptions discovered during execution: add to the running estimate assumptions array with status unverified.' The assumptions block goes after rules injection (component 5) and before the operational learning duty (proposed component 12).",
+      "why": "In session 5HyCwPtSDH, the S3 assumed single-session-per-repo without checking. If the delegation prompt for M4 had included 'ASSUMPTION: single session per repo -- unverified', the M4 agent would have checked concurrent-agents.md and the workspace rule before designing. The assumptions block serves as an explicit knowledge boundary: 'here is what we think but have not confirmed.'",
+      "barrier_analysis": "Replay against Agent #29: The delegating agent in the 40-agent session would have needed to include 'ASSUMPTION: scratch files persist across sessions -- unverified (source: Agent inference, not verified against harvest-session.sh).' Agent #29 would have seen this and been prompted to read harvest-session.sh. LIMITATION: The delegating agent must know which assumptions are relevant. An assumption not in the running estimate cannot be injected. This is why P-1 (surfacing duty) is the prerequisite -- it populates the assumptions array that P-2 injects. INTERACTION: P-1 and P-2 form a closed loop. P-1 surfaces assumptions during execution. P-2 propagates them to downstream agents. Together they make assumptions visible across delegation boundaries."
+    },
+    {
+      "id": "P-3",
+      "insight_refs": ["I-1", "I-5", "I-8"],
+      "what": "PATTERN-CHECK INCLUDES VERIFICATION PATTERN: Extend the proposed PATTERN-CHECK (delegation duty component 10 per session decision D-MULTI-AGENT-PATTERNS) to explicitly include: 'For any S2 output that makes claims about system behavior (hooks, lifecycle, permissions, file survival), launch a VERIFIER that reads the source code for each claim. The Verifier reads FRESH files, not the S2's output -- it independently confirms or falsifies each claim.' This is the write-verify-amend pattern applied specifically to assumption verification, not just output quality.",
+      "why": "The 40-agent session eventually caught the false claim through Agents #37-38 (RCA chain). But those were launched AFTER the commander caught the error. In a governed system, the Verifier would have been launched BEFORE the output was consumed downstream. A Verifier reading harvest-session.sh would have found 'rm -rf' and falsified Agent #29's claim before it propagated through 5 artifacts. The key insight: the Verifier's value is not checking the document's quality but checking the document's facts against source code.",
+      "barrier_analysis": "Replay against the 40-agent session: After Agent #29 completed, a Verifier would read schwerpunkt-assessment.md, identify the claim about scratch persistence, read harvest-session.sh lines 165-166, and report FALSIFIED. The S3 writer (Agent #26) would never have repeated the false claim. The propagation chain would have been broken at the source. LIMITATION: Verifiers add latency and token cost. For 40-agent sessions, this could be significant. Mitigation: only trigger verification for S2 outputs that make environmental claims (hook behavior, file lifecycle, tool capabilities), not for all S2 outputs. The heuristic: does the output contain claims about what the system DOES (vs what the system SHOULD DO)? 'Should' claims are checked against rules. 'Does' claims are checked against code."
+    },
+    {
+      "id": "P-4",
+      "insight_refs": ["I-6", "I-8"],
+      "what": "INTENT-AUDIT FOR IMPLEMENTATION DIVERGENCE: Extend the /intent-audit skill with a new finding type: 'Implementation divergence -- a rule states X but the implementation does Y.' The audit process for this finding type: (1) read the rule's claim, (2) identify the implementing code (hook, script, config), (3) read the code, (4) compare. This is the cross-boundary verification that the scratch-deletion-rca.md identified as missing. Trigger: when /intent-audit encounters a claim about system behavior in a rule's content, check the implementing artifact.",
+      "why": "The gap between .gitignore (blanket .aitools/) and the workspace rule (running-estimate.json: tracked) was identified independently by M1, M2, and M4 -- unanimous convergence on the same finding. But it was never caught by /intent-audit or /audit because neither checks implementation against rules. The workspace rule's intent says what SHOULD be tracked. The .gitignore says what IS tracked. The divergence between these is where false assumptions breed (Agent #29 inferred from gitignore that scratch persists). Making implementation divergence a first-class finding type gives the audit layer the ability to catch this class of issue systematically.",
+      "barrier_analysis": "Replay: /intent-audit on aitools-workspace.md would read the rule, find 'running-estimate.json: tracked', then check .gitignore and find blanket .aitools/. Finding: IMPLEMENTATION DIVERGENCE. This would have been caught before any session depended on the running estimate being tracked. LIMITATION: requires the audit to identify which code artifacts implement which rules. This mapping does not exist systematically -- it would need to be built incrementally. START POINT: the workspace rule's table has a 'Tracked' column that maps directly to .gitignore patterns. This is the easiest implementation divergence to check."
+    },
+    {
+      "id": "P-5",
+      "insight_refs": ["I-3", "I-1"],
+      "what": "CONTEXT ROT HEURISTIC FOR ASSUMPTION FRESHNESS: The proposed Stop hook (session decision D-CONTEXT-ROT-HOOK) should include assumption freshness as a Lagebeurteilung category. When the hook fires at 20%+ context usage, the injected reminder should include: 'Re-read the running estimate assumptions array. For each unverified assumption: has evidence emerged since it was registered? Has a mission produced findings that contradict it? Update statuses: verified (evidence confirms), falsified (evidence contradicts), still unverified (no new evidence).' This is the running estimate assumption flush integrated into the context rot mitigation.",
+      "why": "In session 5HyCwPtSDH, the S3 registered 'single session per repo' as an implicit assumption early on. It was corrected by the commander at turn 9. Between turns 5 and 9, the S3 made decisions based on this false assumption (M1-M4 prompts). A periodic assumption freshness check would have caught: 'ASSUMPTION: single session per repo -- have I verified this? concurrent-agents.md is in my rules. Let me read it.' The assumption was in context (the rule was loaded) but the S3 never connected the rule to its assumption. The Stop hook forces this connection at regular intervals.",
+      "barrier_analysis": "This builds on D-CONTEXT-ROT-HOOK (already decided by the commander). The assumption freshness check adds approximately 10 lines to the Lagebeurteilung reminder content. LIMITATION: the Stop hook fires on the main S3, not on delegated agents. Delegated agents are short-lived and should not need context rot mitigation (per decision D-CONTEXT-ROT-HOOK component 8). However, a long-running S3 that accumulates unverified assumptions across many delegations IS the risk profile this addresses."
+    },
+    {
+      "id": "P-6",
+      "insight_refs": ["I-7", "I-2"],
+      "what": "PREEMPTIVE ASSUMPTION REGISTRATION FOR KNOWN ASSUMPTION-PRONE DOMAINS: Create a 'common assumptions' reference list in the delegation duty or the /scratch skill that catalogs domains where agents commonly make false assumptions. Initial entries from evidence: (1) SCRATCH LIFECYCLE: 'Files in .scratch/ are deleted at session end. Do not assume persistence.' (2) AGENT CAPABILITIES: 'Explore agents cannot Write/Edit. Check decision #5.' (3) SESSION MODEL: 'Multiple concurrent sessions may exist on the same repo. Check concurrent-agents.md.' (4) CONTEXT SIZE: 'Subagents have 1M context. Do not refuse to read large files.' (5) GITIGNORE vs RULES: 'What .gitignore ignores and what rules say should be tracked may diverge. Check both.' Each entry names the domain, the common false assumption, and the source file to verify against.",
+      "why": "The same assumptions recur across sessions. Agent #29 assumed scratch persists. Session 5HyCwPtSDH's S3 assumed the same (deviation #9). Both sessions independently discovered the .gitignore contradiction (M1, M2, M4 unanimous). Cataloging known assumption-prone domains turns recurring discoveries into prevention. An agent encountering a decision about scratch files sees the warning and reads harvest-session.sh instead of inferring from gitignore semantics.",
+      "barrier_analysis": "This is a prevention-layer artifact: a list that agents can check before making environmental claims. It does not require hooks or skills -- it can be added to the /scratch skill, the delegation duty template, or a new reference file. LIMITATION: the list is static and grows only when assumptions are discovered. Unknown-unknown assumptions (ones nobody has made yet) are not covered. This is why P-1 (surfacing duty) and P-3 (verification pattern) remain necessary for novel assumptions. P-6 handles the KNOWN assumptions; P-1 and P-3 handle the UNKNOWN ones."
+    },
+    {
+      "id": "P-7",
+      "insight_refs": ["I-4", "I-5", "I-7"],
+      "what": "DELEGATION PROMPT DIFF FOR RE-LAUNCHED MISSIONS: When this session's 11 missions (D1, D2, M1-M9) are re-launched with assumption prevention, each prompt should include at minimum: (a) the assumptions block (P-2) with all currently unverified assumptions, (b) the operational learning duty with assumption surfacing (P-1), (c) the common assumptions list for the mission's domain (P-6), and (d) for S2 outputs that make system-behavior claims, a PATTERN-CHECK note that a Verifier should follow. Specific prompt diffs per mission: D1/D2 (add assumptions block + learning duty). M1-FRAGORD (add 'do not assume scratch lifecycle -- read harvest-session.sh'). M2 (add 'verify harvest reliability claims against hook source'). M3 (add 'launch verifier after schema conversion to check against handoff rules'). M4 (add 'verify .gitignore claims by running git check-ignore'). M5-M9 (add assumptions block + learning duty + domain-specific common assumptions).",
+      "why": "The mission asks: 'what would the prompt look like WITH assumption prevention?' The answer is not rewriting prompts from scratch but adding 3 structural blocks to each existing prompt. The blocks are: (1) assumptions context (what we think but have not confirmed), (2) assumption surfacing duty (mark or verify), (3) domain-specific warnings (what previous agents got wrong in this domain). These blocks are short (10-20 lines each) and can be generated from the running estimate + common assumptions list.",
+      "barrier_analysis": "This proposal is a synthesis of P-1, P-2, and P-6 applied to concrete missions. It does not require new infrastructure -- it requires the delegating agent to: (a) read the running estimate assumptions array, (b) select relevant assumptions for the mission, (c) append the assumptions block + learning duty + common assumptions to the prompt. This is delegation duty component 11 (P-2) in practice. RISK: prompt length increases by ~30-50 lines per mission. With 1M context, this is negligible. The 40-agent session's prompts averaged 5-15 lines -- adding 30 lines of assumption context is a 3-6x increase in prompt size but a marginal increase in context usage."
+    },
+    {
+      "id": "P-8",
+      "insight_refs": ["I-1", "I-3", "I-6"],
+      "what": "FRAMEWORK PLACEMENT: Assumption governance is NOT a standalone framework. It fits into three existing frameworks: (1) MISSION COMMAND -- delegation duty gains component 11 (assumptions block) and component 12 (operational learning + assumption surfacing). The assumptions block is the delegation-level mechanism. (2) OPERATIONAL LEARNING -- the operational learning duty block gains the assumption surfacing instruction. The AAR gains an 'assumptions' section reporting which assumptions were surfaced, verified, or falsified during execution. This is the session-level mechanism. (3) MISSION ANALYSIS (decision #13) -- assumptions are already a first-class element of the planning brief schema (the brief has a 7-item assumptions array with the same lifecycle). This is the plan-level mechanism. The common assumptions list (P-6) is an operational artifact of Mission Command, analogous to the delegation duty checklist. The implementation divergence finding type (P-4) extends the existing /intent-audit skill within the Three-Layer Governance framework.",
+      "why": "The investigation considered whether assumption governance should be its own framework. The evidence says no: (a) the assumption lifecycle is already defined in the glossary, (b) the planning brief already has assumptions as first-class elements, (c) the running estimate already has an assumptions array, (d) the Lagebeurteilung already includes an assumption flush. What is missing is not a framework but structural enforcement within the existing frameworks. Adding a new framework would create governance overhead without new capability. The proposals (P-1 through P-7) are all additions to existing frameworks.",
+      "barrier_analysis": "PROVENANCE: (1) MDMP Step 2 (Mission Analysis) -- facts, assumptions, and constraints are the three inputs to planning. The planning brief schema already reflects this. (2) ADP 5-0 Running Estimate -- assumptions maintained continuously, not just at plan start. The running estimate assumptions array reflects this but lacks enforcement. (3) Swiss Cheese Model (Reason) -- assumption propagation IS the mechanism by which errors pass through barriers. Each agent that trusts an upstream claim without verifying is a hole in a barrier layer. (4) CALL OIL -- unverified assumptions are 'observations' that have been misclassified as 'lessons learned' without going through the insight/lesson-identified gates. The false claim was an observation treated as a lesson. (5) Double-loop learning (Argyris) -- single-loop learning would fix the specific false claim; double-loop learning changes the governing variable (how assumptions are handled during delegation). The proposals aim at double-loop: changing the delegation protocol, not just fixing the one false claim."
+    }
+  ]
+}

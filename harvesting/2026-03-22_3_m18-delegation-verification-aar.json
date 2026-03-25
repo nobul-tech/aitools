@@ -1,0 +1,427 @@
+{
+  "meta": {
+    "mission": "M18",
+    "agent": "S2 (Intelligence)",
+    "session": "5HyCwPtSDH",
+    "created": "2026-03-21T24:00:00Z",
+    "schwerpunkt": "Three interrelated questions about harness gaps: (Q1) delegation duty verification at delegation time, (Q2) channel system usage, (Q3) running estimate freshness via hooks. Unified AAR with proposals.",
+    "method": "Full read of: tool-ops.json, tool-ops-claude-code.md, 7 hook scripts (block-claude-code-guide.sh, standing-order-guard.sh, scratch-init.sh, surfacing-duty-stop.sh, tool-ops-session-audit.sh, glossary-skill-guard.sh, sh-file-fixup.sh), settings.json (deployed hook config), planning-brief.json decisions #22/#23/#24, running-estimate.json, session-aar.json, m11-assumption-propagation-aar.json, m12-unflagged-assumptions.json, m16-3depth-verification-trace.json, m17-mission-analysis-gap.json, incident-governance.md hook specs, governance-and-compliance-framework.md hook specs."
+  },
+
+  "executiveSummary": "All three questions have feasible answers with existing Claude Code hook architecture. Q1: A PreToolUse hook on Agent CAN inspect tool_input.prompt — proven by block-claude-code-guide.sh reading tool_input.subagent_type from the same JSON. Pattern-matching catches 6 of 8 proposed checklist items; the semantic gap (M15-class: does the agent have access to the right DATA?) requires a different mechanism. Q2: Channels were never built — zero SITREPs, zero FINDINGs posted in this session. The channel directory (.aitools/channel/) exists with one stale session dir from March 16 but was never used in session 5HyCwPtSDH. Channels WOULD have helped the M15 failure only if earlier agents had posted FINDINGs with identity assignment details that M15 could have read. Q3: The Stop hook fires after every agent turn — surfacing-duty-stop.sh already uses it for 30-minute periodic reminders. Running estimate auto-update is partially feasible: turn count and time elapsed can be auto-incremented, but Schwerpunkt assessment and assumption flush require agent judgment. The Nachbesprechung 4-question protocol (M17 proposal) is the right post-return mechanism, but there is no SubagentCompleted hook event — PreToolUse on Agent (next delegation) is the closest available proxy.",
+
+  "q1": {
+    "title": "Delegation Duty Verification at Delegation Time",
+
+    "technicalFeasibility": {
+      "canHookInspectPrompt": true,
+      "evidence": "block-claude-code-guide.sh (lines 19-24) reads tool_input.subagent_type from PreToolUse on Agent stdin JSON using bash regex: pattern='\"subagent_type\"[[:space:]]*:[[:space:]]*\"([^\"]*)\"'. The same technique works for any field in tool_input, including 'prompt'. standing-order-guard.sh (lines 75-78) reads tool_input.command using the same json_field() function. The hook input JSON for PreToolUse on Agent contains the full tool_input object, which includes the 'prompt' field for general-purpose Agent calls.",
+      "hookType": "command (not prompt — needs conditional logic for pattern matching)",
+      "event": "PreToolUse",
+      "matcher": "Agent",
+      "stdinFields": ["tool_name", "tool_input.prompt", "tool_input.subagent_type", "session_id", "agent_id (since CC 2.1.68)", "agent_type (since CC 2.1.68)"],
+      "outputMechanism": "stderr JSON with additionalContext field — shown to agent as feedback on next turn. NOT a deny (exit 2) — a reminder (exit 0 with stderr). Same pattern as glossary-skill-guard.sh line 15.",
+      "existingHookOnAgent": "block-claude-code-guide.sh already fires on PreToolUse/Agent. A second hook CAN coexist — settings.json supports arrays of hooks per matcher. Current config (settings.json line 38-45) has one hook on Agent. Adding a second is a settings.json array append."
+    },
+
+    "proposedChecklist": {
+      "description": "8-item checklist for delegation prompt completeness. Each item has a detection pattern that the hook can match against tool_input.prompt.",
+      "items": [
+        {
+          "id": "DC-1",
+          "check": "Identity assignment",
+          "pattern": "You are S[123]|## Identity|S[123] \\(|identity.*S[123]",
+          "patternType": "regex",
+          "feasibility": "HIGH — identity follows a consistent format",
+          "wouldCatchM15": "YES — M15 was assigned identity in its prompt"
+        },
+        {
+          "id": "DC-2",
+          "check": "Files to read specified",
+          "pattern": "Read.*full|file_path|/Users/|~/repos/|\\.json|\\.md",
+          "patternType": "regex",
+          "feasibility": "MEDIUM — file paths vary in format, but most delegation prompts include absolute paths or file extensions",
+          "wouldCatchM15": "PARTIAL — M15's prompt told it what to check (dashboard data) but not the SOURCE data (the actual delegation prompts). The hook would see 'files present' but cannot judge 'right files present'"
+        },
+        {
+          "id": "DC-3",
+          "check": "Output location specified",
+          "pattern": "Write to:|output.*path|write.*to.*\\.scratch|write.*to.*\\.aitools",
+          "patternType": "regex",
+          "feasibility": "HIGH — output paths follow consistent patterns",
+          "wouldCatchM15": "YES — M15 had an output path"
+        },
+        {
+          "id": "DC-4",
+          "check": "WRITE_BLOCKED signal included",
+          "pattern": "WRITE_BLOCKED",
+          "patternType": "literal",
+          "feasibility": "HIGH — exact string match",
+          "wouldCatchM15": "N/A — WRITE_BLOCKED is for environment failures, not delegation completeness"
+        },
+        {
+          "id": "DC-5",
+          "check": "Operational learning duty included",
+          "pattern": "OPERATIONAL LEARNING|OBSERVE.*SURFACE.*PROPOSE|operational learning duty",
+          "patternType": "regex",
+          "feasibility": "HIGH — duty block follows a consistent template",
+          "wouldCatchM15": "PARTIAL — would ensure M15 has the duty, but the duty would not have prevented M15 from checking secondary data instead of primary data"
+        },
+        {
+          "id": "DC-6",
+          "check": "Context rot mitigation included",
+          "pattern": "CONTEXT ROT|re-read.*running estimate|context.*rot.*mitigation",
+          "patternType": "regex",
+          "feasibility": "HIGH — mitigation block follows consistent template",
+          "wouldCatchM15": "NO — M15 was a short-lived subagent, context rot is a session-level concern"
+        },
+        {
+          "id": "DC-7",
+          "check": "AAR output format specified",
+          "pattern": "AAR|observations.*insights.*proposals|JSON.*format",
+          "patternType": "regex",
+          "feasibility": "MEDIUM — format specification varies",
+          "wouldCatchM15": "YES — M15 should have been told to produce findings in a structured format"
+        },
+        {
+          "id": "DC-8",
+          "check": "Nachbesprechung 4 questions referenced",
+          "pattern": "Nachbesprechung|4.*question|Q1.*ASSUMPTIONS|post-mission check",
+          "patternType": "regex",
+          "feasibility": "HIGH — once the Nachbesprechung is formalized, its reference is consistent",
+          "wouldCatchM15": "NO — Nachbesprechung is for the delegating agent's post-return processing, not for the delegated agent"
+        }
+      ],
+      "coverageAnalysis": "6 of 8 items are detectable with HIGH confidence via regex. 2 are MEDIUM (file paths, AAR format). But the CRITICAL gap is DC-2: the hook can detect WHETHER files are mentioned but not WHETHER the RIGHT files are mentioned. The M15 failure was not 'no files specified' but 'wrong files specified' — M15 was told to check dashboard data when it needed the actual delegation prompts."
+    },
+
+    "theM15Gap": {
+      "whatHappened": "M15 was given a mission ('check if agents received identities') but was pointed at secondary data (dashboard) instead of primary data (the actual prompts in the parent conversation or session JSONL). M15 checked the dashboard, found identities missing from the dashboard's metadata fields, and reported CRITICAL when the identities were present in the prompts themselves.",
+      "whyPatternMatchingCannotCatch": "The hook can detect 'prompt mentions file paths' but cannot detect 'prompt mentions the CORRECT file paths for THIS mission.' The hook does not know what the mission requires — it only knows what patterns appear in the prompt text. A mission about checking identity assignments needs access to delegation prompts; a mission about checking .gitignore needs access to .gitignore. The hook cannot distinguish these because the required data depends on the mission semantics, not on prompt patterns.",
+      "whatCouldCatch": "An AGENT-type hook (not command-type) could semantically analyze the prompt: 'This mission asks about identity verification. The prompt points to dashboard data. Does the dashboard contain the actual identity assignments, or are those only in the delegation prompts? If the latter, the agent needs transcript access, not dashboard access.' But agent-type hooks are slow (~5-10s per delegation) and use tokens. They add Reibung at every delegation boundary.",
+      "proposedMitigation": "PROMPT FEEDBACK via stderr additionalContext. The hook cannot catch semantic incompleteness, but it CAN inject a REMINDER: 'You are about to delegate. Verify: (1) Does the agent have access to PRIMARY data for its mission, not just SECONDARY representations? (2) Re-read the running estimate — have earlier findings changed this delegation's premise? (3) Current assumptions that may be relevant: [list from running estimate].' This shifts the verification burden to S3, who has the semantic context to judge correctness.",
+      "promptFeedbackContent": "Delegation check: You are launching a subagent. Before proceeding, verify: (a) The prompt assigns an identity (S1/S2/S3 or role). (b) The prompt specifies PRIMARY data sources — not dashboards, summaries, or secondary representations when the mission requires verifying original artifacts. (c) The running estimate assumptions relevant to this mission are injected. (d) The prompt includes WRITE_BLOCKED signal and output path. (e) The prompt includes operational learning duty at the END. Missing items are listed above if detected."
+    },
+
+    "interactionWithExistingHook": {
+      "currentState": "block-claude-code-guide.sh fires on PreToolUse/Agent. It checks subagent_type and denies claude-code-guide specifically. For all other agent types, it exits 0 (allow, no output).",
+      "coexistencePlan": "Two options: (1) SEPARATE HOOK — add a second PreToolUse/Agent entry in settings.json hooks array. Both hooks fire independently. Drawback: two process spawns per delegation. (2) COMBINE into one hook — block-claude-code-guide.sh checks subagent_type first (deny if claude-code-guide), then checks prompt patterns and emits reminder if items missing. Advantage: one process spawn. Recommendation: COMBINE — the hooks serve the same event and can share stdin parsing. The combined hook becomes 'delegation-gate.sh': deny bad agent types + verify delegation completeness."
+    },
+
+    "reibung": [
+      "Every delegation spawns a bash process for the hook (~150ms on Windows, ~20ms on macOS). A combined hook avoids doubling this.",
+      "The prompt field in tool_input may be very large (1000+ lines for complex delegations with injected files). Regex matching against large strings is still fast in bash (<10ms) but the INPUT=$(cat) step reads the full JSON.",
+      "False positives: a prompt that mentions 'S2' in the context section but assigns a different role could trigger false 'identity found' detection. The regex must match the assignment pattern, not just the token.",
+      "Agent-type hooks for semantic analysis would add 5-10s per delegation — unacceptable for routine delegations. Reserve for mission-critical delegations only (a future enhancement, not the initial version).",
+      "The hook fires for ALL Agent tool calls, including Explore agents and short research tasks. The reminder should be proportional — suppress for trivial delegations (e.g., if prompt is <200 chars, skip the full checklist)."
+    ],
+
+    "proposal": {
+      "id": "Q1-P1",
+      "what": "Create shared/hooks/delegation-gate.sh that combines: (1) existing claude-code-guide deny logic, (2) delegation prompt pattern checks against the 8-item checklist, (3) prompt feedback via stderr additionalContext for missing items, (4) S3 reminder to verify primary data access and refresh running estimate assumptions. Deploy by replacing block-claude-code-guide.sh in settings.json.",
+      "implementation": [
+        "(1) Read tool_input from stdin (existing pattern)",
+        "(2) Check subagent_type — deny if claude-code-guide (existing logic, preserved)",
+        "(3) Extract prompt from tool_input — if empty or short (<200 chars), skip checklist (trivial delegation)",
+        "(4) Run regex checks for DC-1 through DC-8",
+        "(5) Build missing-items list",
+        "(6) If any items missing OR prompt is long (>200 chars): emit additionalContext via stderr with: (a) list of missing items, (b) primary-data-access reminder, (c) running estimate assumptions reminder, (d) Nachbesprechung reference",
+        "(7) Always exit 0 (prevention layer, not enforcement — the hook reminds, does not block)",
+        "(8) Log all checks to ~/.claude/hooks/logs/delegation-gate.log for observability"
+      ],
+      "verificationCases": [
+        {"input": {"tool_name": "Agent", "tool_input": {"subagent_type": "claude-code-guide"}}, "expectExit": 0, "expectStdout": "permissionDecision.*deny"},
+        {"input": {"tool_name": "Agent", "tool_input": {"prompt": "You are S2 (Intelligence). Read /Users/pepe/repos/aitools/reference/incidents.json in full. Write to: .scratch/session-X/analysis.json\n\nWRITE_BLOCKED Signal\nOPERATIONAL LEARNING DUTY\nCONTEXT ROT MITIGATION\nNachbesprechung"}}, "expectExit": 0, "expectStderr": null, "note": "All 8 items present — no reminder needed"},
+        {"input": {"tool_name": "Agent", "tool_input": {"prompt": "Check the dashboard for identity assignments"}}, "expectExit": 0, "expectStderr": "additionalContext.*identity.*WRITE_BLOCKED.*output path", "note": "Missing most items — full reminder"}
+      ]
+    }
+  },
+
+  "q2": {
+    "title": "Channel System Usage in This Session",
+
+    "findings": {
+      "channelUsed": false,
+      "sitrepsPosted": 0,
+      "findingsPosted": 0,
+      "channelSessionDir": "Not created — .aitools/channel/session-5HyCwPtSDH/ does not exist",
+      "existingChannelState": ".aitools/channel/ exists with one stale session dir: session-uyZ7TELqpP (created 2026-03-16, contains one running-estimate JSON). This dir was created during the planning brief session, not the 40-agent or this session."
+    },
+
+    "whyNotUsed": [
+      "Decision #22 (channel infrastructure) status is 'agreed' but the /channel skill (decision #23) status is 'agreed' — neither was IMPLEMENTED. The skill file (.claude/skills/channel/SKILL.md) does not exist. The schema file (reference/channel-schemas.json) does not exist.",
+      "The SessionStart hook (scratch-init.sh) creates .scratch/session-* but does NOT create .aitools/channel/session-*. Decision #22 component (7) says 'SessionStart hook: create session channel dir' — this was never implemented.",
+      "No agent in this session was briefed on the channel system. The delegation prompts did not include 'post findings to .aitools/channel/' or 'post a SITREP when complete.' Decision #23 component (7) says 'Auto-trigger: agents invoke without user prompting' — but agents cannot invoke a skill that does not exist.",
+      "The one existing channel session dir (session-uyZ7TELqpP) appears to have been created manually during the planning brief session as a prototype. It was never cleaned up because no SessionEnd hook processes channel directories."
+    ],
+
+    "whatChannelsWouldHaveLookedLike": {
+      "description": "If channels had been implemented, this session would have produced the following structured messages:",
+      "examples": [
+        {
+          "type": "SITREP",
+          "agent": "M1 (S2 Running Estimate Lifecycle)",
+          "content": {"type": "sitrep", "agent": "s2-running-estimate-lifecycle", "timestamp": "2026-03-21T16:30:00Z", "batch": "M1", "status": "complete", "filesWritten": ["m1-running-estimate-lifecycle-aar.json"], "filesModified": [], "summary": "3 authoritative sources agree running estimates must not go in scratch. .gitignore blanket blocks carry-forward. 5 proposals."},
+          "file": ".aitools/channel/session-5HyCwPtSDH/20260321T163000Z_s2-running-estimate_sitrep.json"
+        },
+        {
+          "type": "FINDING",
+          "agent": "M1 (S2 Running Estimate Lifecycle)",
+          "content": {"type": "finding", "severity": "critical", "finding": ".gitignore line 47 blanket .aitools/ contradicts workspace rule tracked paths", "location": {"file": ".gitignore", "line": 47}, "agent": "s2-running-estimate-lifecycle", "timestamp": "2026-03-21T16:25:00Z", "context": "Checked /scratch skill prohibition against current .gitignore. All three authoritative sources (workspace rule, /scratch skill, artifact-harvesting rule) agree running estimates must NOT go in scratch, but no working tracked path exists.", "actionTaken": "Documented in AAR as P-4", "recommendation": "Fix .gitignore: replace blanket .aitools/ with selective patterns"},
+          "file": ".aitools/channel/session-5HyCwPtSDH/20260321T162500Z_s2-running-estimate_finding.json"
+        },
+        {
+          "type": "FINDING",
+          "agent": "M4 (S2 Concurrent Sessions)",
+          "content": {"type": "finding", "severity": "high", "finding": ".current-session has last-writer-wins race condition in concurrent session scenario", "location": {"file": ".scratch/.current-session", "line": 1}, "agent": "s2-concurrent-sessions", "timestamp": "2026-03-21T17:00:00Z", "context": "Verified by analyzing scratch-init.sh: mktemp creates random suffix, printf overwrites .current-session. Second session's printf clobbers first session's pointer.", "actionTaken": "Proposed P-3: use CC session_id for deterministic dir names", "recommendation": "Implement per-session estimates with reconciliation"},
+          "file": ".aitools/channel/session-5HyCwPtSDH/20260321T170000Z_s2-concurrent_finding.json"
+        }
+      ],
+      "totalEstimatedMessages": "11 SITREPs (one per mission completion) + ~8-12 FINDINGs (critical/high severity observations from missions)",
+      "channelManifest": "channel-manifest.json would track all ~20 messages, filterable by type/severity/agent"
+    },
+
+    "wouldChannelsHavePreventedM15Failure": {
+      "answer": "PARTIALLY — channels provide structured inter-agent communication but do not solve the primary-vs-secondary data problem.",
+      "mechanism": "If earlier agents (the delegating S3 in earlier missions) had posted FINDINGs with metadata about identity assignments — e.g., 'M1 assigned identity S2, prompt included ## Identity block' — then M15 could have read the channel and known WHERE identity assignments exist (in delegation prompts, not in dashboards). The channel finding would have been: 'Identity assigned via prompt, not recorded in dashboard metadata.' M15 would then have known to check prompts, not dashboards.",
+      "limitation": "Channels only help if the upstream agent posts RELEVANT findings. The delegating S3 would have had to recognize 'identity assignments are in prompts and should be recorded in the channel' — which is itself the knowledge gap that caused the M15 failure. Channels are a communication medium, not a knowledge source. They amplify what agents observe but do not create observations that agents miss.",
+      "betterSolution": "The delegation-gate hook (Q1-P1) injecting 'verify primary data access' is more directly targeted at the M15 failure class. Channels would help with INFORMATION FLOW between agents; the hook helps with INFORMATION QUALITY at delegation time. Both are needed."
+    },
+
+    "channelBuildStatus": {
+      "prerequisitesForBuild": [
+        "Fix .gitignore selective tracking (D-GITIGNORE-FIX) — without this, channel tracked paths are defeated",
+        "Create /channel skill (SKILL.md with post/read/status commands)",
+        "Create reference/channel-schemas.json (SITREP and FINDING SALUTE-adapted schemas)",
+        "Modify scratch-init.sh to also create .aitools/channel/session-* directory",
+        "Modify harvest-session.sh to archive high-severity findings from channel to harvesting/",
+        "Add channel posting to delegation duty template (agents must know to post)"
+      ],
+      "estimatedEffort": "Medium — ~2-3 batches of plan execution. Skill + schemas + hook modifications + delegation duty update.",
+      "sequencingDependency": "BLOCKED by .gitignore fix. Channel tracked paths (.aitools/channel/running-estimate.json, .aitools/channel/handoffs/) cannot be committed until .gitignore allows them."
+    }
+  },
+
+  "q3": {
+    "title": "Running Estimate Auto-Update via Hook",
+
+    "hookEventAnalysis": {
+      "question": "Which CC hook event fires on user prompts?",
+      "answer": "There is no 'UserMessage' or 'UserPrompt' hook event in Claude Code. The available events are: PreToolUse, PostToolUse, SessionStart, SessionEnd, SubagentStart, InstructionsLoaded, PermissionRequest, Stop. The STOP event is the closest: it fires AFTER every agent response (which happens after every user prompt that generates a response). The surfacing-duty-stop.sh already uses this event for periodic reminders.",
+      "stopHookCapabilities": {
+        "firesWhen": "After every agent response (assistant turn completion)",
+        "stdinFields": ["session_id", "transcript_path", "agent_id (since CC 2.1.68)", "agent_type (since CC 2.1.68)"],
+        "outputMechanism": "stderr text shown to agent as feedback on next turn",
+        "existingUsage": "surfacing-duty-stop.sh uses it for 30-minute periodic reminders and incident-acknowledgment detection. It reads transcript_path to scan last 100 lines for incident language.",
+        "performanceConstraint": "<50ms per fire — fires on EVERY agent turn including subagent turns"
+      }
+    },
+
+    "whatCanBeAutoUpdated": {
+      "autoUpdatable": [
+        {
+          "field": "Turn count / delegation count",
+          "method": "Count JSONL lines in transcript_path where type=human. Or count lines matching tool_name=Agent (delegation count). stat for file size as proxy for context usage.",
+          "accuracy": "HIGH — mechanical counting, no judgment needed",
+          "implementation": "Hook reads transcript, counts, writes to running estimate JSON"
+        },
+        {
+          "field": "Session duration / time elapsed",
+          "method": "Compare transcript birth time (stat -f %B) to current time. Already done in surfacing-duty-stop.sh lines 52-57.",
+          "accuracy": "HIGH — mechanical calculation",
+          "implementation": "Already proven in surfacing-duty-stop.sh"
+        },
+        {
+          "field": "Context usage estimate",
+          "method": "Transcript file size as proxy. 1M context window, JSONL file size correlates roughly with token usage. Very rough heuristic — transcript size != context window usage (context includes system prompt, rules, file reads).",
+          "accuracy": "LOW — proxy only, useful for threshold detection (20%, 50%, 80%) not for precise measurement",
+          "implementation": "stat -f %z (macOS) or stat -c %s (Linux) on transcript_path. Compare against threshold (e.g., 2MB ~ 20% of 1M context)"
+        },
+        {
+          "field": "Last mission return timestamp",
+          "method": "Cannot detect 'mission returned' from Stop hook — Stop fires on every agent turn, not specifically on subagent completion. No SubagentCompleted event exists.",
+          "accuracy": "NOT FEASIBLE via Stop hook",
+          "implementation": "Would require a SubagentCompleted event that CC does not provide"
+        }
+      ],
+      "requiresAgentJudgment": [
+        {
+          "field": "Schwerpunkt assessment",
+          "why": "Requires reading mission outputs and evaluating whether the session focus has shifted. Cannot be automated — this IS the Lagebeurteilung.",
+          "mechanism": "Stop hook reminder at threshold (D-CONTEXT-ROT-HOOK) prompts S3 to reassess. Not auto-updated."
+        },
+        {
+          "field": "Assumption flush",
+          "why": "Requires reading each assumption and evaluating whether new evidence confirms/contradicts it. Cannot be automated.",
+          "mechanism": "Stop hook reminder prompts S3 to re-read assumptions array. M11 P-5 proposes this as Lagebeurteilung category."
+        },
+        {
+          "field": "Findings / decisions updates",
+          "why": "Requires understanding what missions produced and classifying outputs. Cannot be automated.",
+          "mechanism": "Nachbesprechung Q3 ('What facts/findings/decisions need to be added RIGHT NOW?') — behavioral, not hook-driven."
+        },
+        {
+          "field": "Nachbesprechung 4 questions",
+          "why": "All 4 questions require judgment: assumptions invalidated? Schwerpunkt changed? Running estimate update needed? Next mission adjustment? None can be answered by pattern matching.",
+          "mechanism": "Inject as reminder when Stop hook detects a long gap since last running estimate modification (e.g., if running-estimate.json mtime is >30 min stale and session is active)"
+        }
+      ]
+    },
+
+    "proposedArchitecture": {
+      "id": "Q3-P1",
+      "what": "Extend lagebeurteilung-checkpoint.sh (the proposed Stop hook from D-CONTEXT-ROT-HOOK) with three tiers of running estimate support:",
+      "tiers": [
+        {
+          "tier": 1,
+          "name": "Auto-increment (mechanical, no judgment)",
+          "trigger": "Every Stop hook fire",
+          "action": "If running-estimate.json exists in current session scratch dir, update meta.turnCount and meta.lastActivity timestamp. These are pure counters — no judgment, no JSON comprehension needed. Use perl one-liner to update specific fields.",
+          "reibung": "Writing to a JSON file on every turn adds ~5ms disk I/O. Acceptable within the <50ms budget IF the write is append-style or targeted field update.",
+          "decision": "DEFER — the running estimate format is not yet finalized. Auto-writing to an evolving JSON format creates coupling. Better to let the running estimate stabilize first."
+        },
+        {
+          "tier": 2,
+          "name": "Threshold reminder (context rot mitigation)",
+          "trigger": "Context usage proxy crosses 20% / 50% / 80% thresholds",
+          "action": "Emit additionalContext via stderr: 'Context at ~N%. Lagebeurteilung checkpoint: (1) Re-read running estimate. (2) Flush assumptions — verify or falsify each against current evidence. (3) Audit conversation in reverse chronological order for uncaptured decisions. (4) Check: is the Schwerpunkt still correctly aimed?'",
+          "reibung": "This is D-CONTEXT-ROT-HOOK as already decided. No new Reibung.",
+          "decision": "IMPLEMENT — already decided by commander. This AAR confirms feasibility."
+        },
+        {
+          "tier": 3,
+          "name": "Staleness detection (running estimate freshness)",
+          "trigger": "Stop hook fires AND running-estimate.json mtime is >30 min behind transcript mtime AND at least 2 missions have returned since last update (estimated from transcript size growth)",
+          "action": "Emit additionalContext via stderr: 'Running estimate has not been updated in 30+ minutes while the session has been active. Missions may have returned findings that are not yet captured. Perform Nachbesprechung: Q1 assumptions invalidated? Q2 Schwerpunkt changed? Q3 update needed? Q4 next mission adjustment?'",
+          "reibung": "Requires the hook to locate and stat the running estimate file. Must handle: (a) running estimate in .scratch/session-*/running-estimate.json (current pattern), (b) future .aitools/channel/running-estimate.json (after .gitignore fix). The hook needs to know the running estimate path — either hardcoded with fallback, or read from a .current-session pointer.",
+          "decision": "IMPLEMENT as part of lagebeurteilung-checkpoint.sh. The staleness detection is a lightweight stat check — well within <50ms budget."
+        }
+      ]
+    },
+
+    "interactionWithSurfacingDutyStop": {
+      "currentStopHook": "surfacing-duty-stop.sh fires on every agent turn. It checks session age (30-min periodic reminder) and scans transcript for incident-acknowledgment language.",
+      "conflict": "D-CONTEXT-ROT-HOOK proposes a NEW Stop hook (lagebeurteilung-checkpoint.sh). Two Stop hooks would both fire on every agent turn. M12 UA-3 flagged this as an unflagged assumption: 'Does this conflict with decision #20 (one hook per feature)?'",
+      "resolution": "COMBINE into one Stop hook. surfacing-duty-stop.sh and lagebeurteilung-checkpoint.sh serve the same conceptual purpose: periodic situation awareness injection. The surfacing duty (incident awareness) and the Lagebeurteilung checkpoint (running estimate, assumptions, Schwerpunkt) are both categories of the same periodic re-orientation. A single hook with multiple check categories is cleaner than two hooks with overlapping timing logic.",
+      "combinedHookDesign": "Name: lagebeurteilung-stop.sh (subsumes surfacing-duty-stop.sh). Categories checked on each fire: (1) Surfacing duty — incidents/ambiguities (existing logic from surfacing-duty-stop.sh). (2) Context threshold — 20%/50%/80% context rot checkpoints (new). (3) Running estimate staleness — 30-min freshness check (new). (4) Assumption flush — at 50%+ context, remind to re-verify assumptions (new). Emits combined additionalContext with all relevant reminders."
+    },
+
+    "nachbesprechungIntegration": {
+      "problem": "M17 identified that the Nachbesprechung (post-mission check) has no hook trigger because CC has no SubagentCompleted event.",
+      "availableProxy": "PreToolUse on Agent (next delegation) is the closest proxy. The proposed delegation-gate.sh (Q1-P1) fires before each delegation. It COULD include: 'Did you perform Nachbesprechung on the last mission return? Is the running estimate current?' But this fires too LATE if the S3 has already composed the next prompt without processing the previous return.",
+      "stopHookApproach": "The Stop hook fires after EVERY S3 turn, including the turn where the S3 reads a returned mission's output. If the Stop hook detects that a mission returned (by scanning the last few transcript entries for Agent tool completion), it could inject the Nachbesprechung reminder. Detection: scan last 5 transcript lines for 'Agent' tool_use result. If found, inject: 'Mission returned. Perform Nachbesprechung before proceeding.'",
+      "feasibility": "MEDIUM — detecting mission return from transcript is possible but adds complexity and increases the Stop hook's runtime. The transcript may not have the exact format needed for reliable detection. An alternative: always inject Nachbesprechung reminder in the delegation-gate.sh (Q1-P1) with: 'Before this delegation: did you process the last mission return? Q1-Q4.' This is slightly late (fires at next delegation) but practically equivalent because the S3's next action after reading a mission return IS usually the next delegation.",
+      "recommendation": "Implement Nachbesprechung reminder in BOTH hooks: (a) Stop hook detects if recent turns included mission return and injects Q1-Q4 reminder. (b) Delegation-gate.sh includes 'verify you processed the last return' in its checklist. Belt-and-suspenders: the Stop hook catches it immediately, the delegation gate catches it if the Stop hook missed."
+    }
+  },
+
+  "unifiedAnalysis": {
+    "interconnections": [
+      {
+        "connection": "Q1 + Q2: Delegation gate would be more effective WITH channels",
+        "explanation": "The delegation-gate.sh (Q1) can check prompt patterns but cannot verify primary data access. If channels existed (Q2), the gate could CHECK whether the channel has relevant FINDINGs for this mission's domain: 'You are delegating an identity verification mission. The channel has 3 FINDINGs about identity assignments from earlier missions. Did you include these in the delegation prompt?' This is still pattern matching (checking for channel file references) but more semantically informed."
+      },
+      {
+        "connection": "Q1 + Q3: Delegation gate and Stop hook share infrastructure",
+        "explanation": "Both hooks need: (a) running estimate location, (b) session ID, (c) assumption awareness. The running estimate path discovery logic should be shared (a helper function). Both hooks should read from the same .current-session pointer to find the session scratch directory."
+      },
+      {
+        "connection": "Q2 + Q3: Channels solve the running estimate staleness problem",
+        "explanation": "If agents post SITREPs to the channel, the S3 (and the Stop hook) can detect 'missions returned but running estimate not updated' by comparing channel manifest timestamps against running estimate mtime. The channel becomes the event source: 'SITREP posted at 17:00, running estimate last modified at 16:30 — 30 minutes of unprocessed intelligence.' This is more precise than the current proxy (transcript size growth)."
+      },
+      {
+        "connection": "All three: The Nachbesprechung is the unifying concept",
+        "explanation": "Q1 (delegation gate) verifies the LAUNCH. Q2 (channels) provide the COMMUNICATION. Q3 (running estimate freshness) verifies the STATE. The Nachbesprechung connects them: after each mission return, the S3 checks channels for findings (Q2), updates the running estimate (Q3), and the delegation gate (Q1) verifies the next launch incorporates the updated state. The Nachbesprechung is the ORIENT phase that consumes channel intelligence and produces updated state for the next delegation."
+      }
+    ]
+  },
+
+  "operationalLearning": {
+    "observations": [
+      {
+        "id": "OL-1",
+        "observation": "The existing hook infrastructure is more capable than the session decisions assumed. surfacing-duty-stop.sh already implements: (a) session age tracking, (b) transcript scanning, (c) periodic injection via stderr additionalContext, (d) suppression via external file mtime check. The D-CONTEXT-ROT-HOOK session decision proposes capabilities that are EXTENSIONS of proven patterns, not novel capabilities.",
+        "implication": "Implementation risk is low — the proposed hooks use only proven patterns from existing hooks."
+      },
+      {
+        "id": "OL-2",
+        "observation": "M12 UA-3 correctly identified the two-Stop-hook conflict potential. The resolution (combine into one) was not proposed by M12 because M12's scope was auditing assumptions, not resolving them. But M12's assumption was correct: two Stop hooks doing similar periodic checks should be combined.",
+        "implication": "M12's unflagged assumptions audit produced actionable intelligence that was not consumed until this AAR. The channel system (Q2) would have made this finding visible to subsequent missions."
+      },
+      {
+        "id": "OL-3",
+        "observation": "The .aitools/channel/ directory EXISTS (created March 16) but was never used in subsequent sessions. This is the same class of issue as the .gitignore blocker: infrastructure was prototyped but never operationalized. The stale session-uyZ7TELqpP directory is orphaned.",
+        "implication": "Proposed infrastructure that is created but not operationalized creates confusion — agents may discover the directory and make incorrect assumptions about its state. The SessionStart hook should clean up stale channel session dirs (same pattern as scratch-init.sh's stale cleanup)."
+      },
+      {
+        "id": "OL-4",
+        "observation": "CC 2.1.68 added agent_id and agent_type to hook stdin JSON (version dep #21, verified 2.1.74). These fields are NOT YET USED by any hook. They would allow the delegation-gate hook to distinguish: (a) main agent vs subagent (agent_type), (b) specific agent identity (agent_id). For the delegation gate, agent_type could suppress the checklist for subagent-launched-subagents (depth 2+) where the delegation duty is less formal.",
+        "implication": "New CC capabilities are documented in tool-ops-claude-code.md but not yet leveraged. agent_type discrimination should be part of the delegation-gate design."
+      },
+      {
+        "id": "OL-5",
+        "observation": "The planning brief decision #22 component (8) says '.aitools/channel/.current-session' for the current session pointer. D-PER-SESSION-ESTIMATES component (5) says 'Fix .current-session race by using CC session_id for deterministic dir names.' M12 UA-6 flags this as an unflagged assumption: is session_id available in SessionStart hook input? ANSWER: YES. session-archive.sh (lines 33-35) reads session_id and transcript_path from SessionEnd hook input. scratch-init.sh (line 13) reads hook input but does not extract session_id — it uses mktemp instead. The session_id IS available; scratch-init.sh just does not use it.",
+        "implication": "M12 UA-6 is VERIFIED FALSE — session_id IS available at SessionStart. scratch-init.sh should be updated to use session_id instead of random suffixes. This fixes the .current-session race condition."
+      }
+    ],
+    "frameworkConnections": [
+      "Three-layer governance: Q1 (delegation gate) is Prevention, Q3 (Stop hook staleness) is Detection, channels (Q2) enable Audit",
+      "Mission Command: delegation duty gains component 13 (Nachbesprechung), component 14 (channel posting), and the delegation gate hook enforces components 1-12 at launch time",
+      "Operational Learning: the Stop hook Lagebeurteilung checkpoint IS the continuous learning mechanism — it forces re-orientation at intervals, not just at session end",
+      "Tool Operations: delegation-gate.sh and lagebeurteilung-stop.sh are new hooks that need tool-ops.json entries with verification cases"
+    ]
+  },
+
+  "proposals": [
+    {
+      "id": "M18-P1",
+      "title": "Delegation gate hook (delegation-gate.sh)",
+      "priority": "HIGH",
+      "description": "Combine block-claude-code-guide.sh deny logic with delegation prompt pattern checks and S3 reminder injection. Fires on PreToolUse/Agent. Exit 0 always (prevention, not enforcement). Emits additionalContext for missing checklist items and primary-data-access reminder.",
+      "dependencies": ["None — can be built and deployed independently"],
+      "effort": "Small — extends proven patterns from existing hooks"
+    },
+    {
+      "id": "M18-P2",
+      "title": "Combined Lagebeurteilung Stop hook (lagebeurteilung-stop.sh)",
+      "priority": "HIGH",
+      "description": "Combine surfacing-duty-stop.sh with context rot threshold checks, running estimate staleness detection, assumption flush reminder, and Nachbesprechung trigger on mission return. Single Stop hook replaces surfacing-duty-stop.sh.",
+      "dependencies": ["Running estimate path convention stabilized (currently in .scratch/, future in .aitools/channel/)"],
+      "effort": "Medium — extends proven patterns but adds 3 new check categories"
+    },
+    {
+      "id": "M18-P3",
+      "title": "Channel infrastructure build",
+      "priority": "MEDIUM (blocked by .gitignore fix)",
+      "description": "Create /channel skill, SITREP/FINDING schemas, SessionStart channel dir creation, SessionEnd channel archiving. Agents post structured messages during execution.",
+      "dependencies": ["D-GITIGNORE-FIX must be implemented first"],
+      "effort": "Medium-Large — new skill, new schemas, hook modifications, delegation duty update"
+    },
+    {
+      "id": "M18-P4",
+      "title": "scratch-init.sh session_id fix",
+      "priority": "HIGH",
+      "description": "Update scratch-init.sh to use CC session_id from SessionStart hook input instead of mktemp random suffix. Fixes .current-session race condition (M4 finding, M12 UA-6 VERIFIED: session_id IS available).",
+      "dependencies": ["None — session_id confirmed available"],
+      "effort": "Small — one file change, proven input parsing pattern"
+    },
+    {
+      "id": "M18-P5",
+      "title": "Nachbesprechung as delegation duty component",
+      "priority": "HIGH",
+      "description": "Formalize the 4-question post-mission check as delegation duty component (next available number). Behavioral enforcement via delegation prompt + belt-and-suspenders hook reminders from M18-P1 and M18-P2.",
+      "dependencies": ["M18-P1 (delegation gate) and M18-P2 (Stop hook) provide structural reminder"],
+      "effort": "Small — governance artifact update, no code"
+    }
+  ],
+
+  "contextRotVerification": {
+    "runningEstimateReread": "Re-read at running-estimate.json lines 14-29 (D-CONTEXT-ROT-HOOK). Confirmed: the session decision's 12 components align with this AAR's findings. Component (9) PreToolUse on Agent maps to Q1-P1 (delegation-gate.sh). Component (2) Stop event maps to Q3-P1 tier 2. No discrepancies.",
+    "toolOpsCcReread": "Re-read tool-ops-claude-code.md. Confirmed: (a) agent_id/agent_type available since 2.1.68 (item #21), (b) InstructionsLoaded event available since 2.1.68 (item #20), (c) no SubagentCompleted event exists, (d) hook execution context is bash on all platforms (item #8). No discrepancies with AAR findings.",
+    "discrepancies": [
+      "M12 UA-6 assumed session_id might NOT be available in SessionStart. This AAR VERIFIES it IS available (session-archive.sh reads it from SessionEnd input; scratch-init.sh receives the same input schema but ignores session_id). The assumption is FALSIFIED.",
+      "M12 UA-3 assumed two Stop hooks might conflict. This AAR proposes COMBINING them (lagebeurteilung-stop.sh subsumes surfacing-duty-stop.sh). The assumption is RESOLVED.",
+      "Running estimate v4 (running-estimate.json) does not track M16/M17 findings about Nachbesprechung or delegation gate. The running estimate is stale relative to this session's later missions. This is exactly the staleness problem Q3 addresses."
+    ]
+  }
+}

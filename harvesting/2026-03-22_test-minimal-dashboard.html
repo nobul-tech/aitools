@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mission Control Dashboard</title>
+<style>
+:root {
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-tertiary: #21262d;
+  --bg-hover: #30363d;
+  --border: #30363d;
+  --border-light: #484f58;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted: #6e7681;
+  --accent-blue: #58a6ff;
+  --accent-green: #3fb950;
+  --accent-yellow: #d29922;
+  --accent-red: #f85149;
+  --accent-purple: #bc8cff;
+  --accent-orange: #f0883e;
+  --accent-cyan: #56d4dd;
+  --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --radius: 6px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { font-size: 14px; scroll-behavior: smooth; }
+body { background: var(--bg-primary); color: var(--text-primary); font-family: var(--font-sans); line-height: 1.5; min-height: 100vh; }
+
+/* Header */
+.header { position: sticky; top: 0; z-index: 100; background: var(--bg-secondary); border-bottom: 1px solid var(--border); padding: 12px 24px; box-shadow: var(--shadow); }
+.header-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
+.header-title { font-size: 1.3rem; font-weight: 600; }
+.header-title span { color: var(--text-secondary); font-weight: 400; font-size: 0.9rem; }
+.session-id { font-family: var(--font-mono); color: var(--accent-blue); font-size: 0.85rem; }
+.schwerpunkt { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; margin-top: 4px; padding: 6px 10px; background: var(--bg-tertiary); border-left: 3px solid var(--accent-blue); border-radius: 0 var(--radius) var(--radius) 0; }
+
+/* Stats bar */
+.stats-bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.stat-card { background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 14px; display: flex; align-items: center; gap: 8px; }
+.stat-value { font-size: 1.2rem; font-weight: 700; font-family: var(--font-mono); }
+.stat-label { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-value.green { color: var(--accent-green); }
+.stat-value.yellow { color: var(--accent-yellow); }
+.stat-value.red { color: var(--accent-red); }
+.stat-value.blue { color: var(--accent-blue); }
+.stat-value.purple { color: var(--accent-purple); }
+.stat-value.orange { color: var(--accent-orange); }
+.stat-value.cyan { color: var(--accent-cyan); }
+
+/* Controls */
+.controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 24px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); }
+.filter-group { display: flex; gap: 4px; }
+.filter-btn { background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-secondary); padding: 4px 12px; border-radius: var(--radius); cursor: pointer; font-size: 0.78rem; font-family: var(--font-sans); transition: all 0.15s; }
+.filter-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.filter-btn.active { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
+.search-box { background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); padding: 5px 12px; border-radius: var(--radius); font-size: 0.82rem; font-family: var(--font-sans); width: 260px; outline: none; transition: border-color 0.15s; }
+.search-box:focus { border-color: var(--accent-blue); }
+.search-box::placeholder { color: var(--text-muted); }
+
+/* Tabs */
+.tab-nav { display: flex; gap: 0; border-bottom: 1px solid var(--border); background: var(--bg-secondary); }
+.tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-secondary); padding: 10px 18px; cursor: pointer; font-size: 0.82rem; font-family: var(--font-sans); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; transition: all 0.15s; }
+.tab-btn:hover { color: var(--text-primary); }
+.tab-btn.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
+.tab-panel { display: none; padding: 16px 24px; }
+.tab-panel.active { display: block; }
+
+/* Section titles */
+.section-title { font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; font-weight: 600; }
+
+/* Agent cards */
+.agent-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color 0.15s; margin-bottom: 6px; }
+.agent-card:hover { border-color: var(--border-light); }
+.agent-card-header { display: grid; grid-template-columns: 42px 1fr auto; gap: 12px; padding: 10px 14px; cursor: pointer; align-items: center; }
+.agent-card-header:hover { background: var(--bg-tertiary); }
+.agent-number { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8rem; font-family: var(--font-mono); flex-shrink: 0; }
+.agent-number.role-s2 { background: #1f3a5f; color: var(--accent-blue); }
+.agent-number.role-s3 { background: #1a3d2a; color: var(--accent-green); }
+.agent-number.role-s1 { background: #3d1a3d; color: var(--accent-purple); }
+.agent-number.role-verifier { background: #3d2e1a; color: var(--accent-orange); }
+.agent-info { min-width: 0; }
+.agent-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.agent-mission { font-weight: 600; font-size: 0.9rem; }
+.agent-role-badge { font-size: 0.65rem; padding: 1px 8px; border-radius: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; flex-shrink: 0; }
+.agent-role-badge.role-s2 { background: #1f3a5f; color: var(--accent-blue); }
+.agent-role-badge.role-s3 { background: #1a3d2a; color: var(--accent-green); }
+.agent-role-badge.role-s1 { background: #3d1a3d; color: var(--accent-purple); }
+.agent-role-badge.role-verifier { background: #3d2e1a; color: var(--accent-orange); }
+.status-badge { font-size: 0.65rem; padding: 2px 10px; border-radius: 10px; font-weight: 600; text-transform: uppercase; }
+.status-badge.complete { background: #1a3d2a; color: var(--accent-green); }
+.status-badge.completed { background: #1a3d2a; color: var(--accent-green); }
+.status-badge.running { background: #1a2a3d; color: var(--accent-blue); }
+.status-badge.blocked { background: #3d351a; color: var(--accent-yellow); }
+.status-badge.partial { background: #3d2a1a; color: var(--accent-orange); }
+.status-badge.inline { background: #2a1a3d; color: var(--accent-purple); }
+.status-badge.failed { background: rgba(248,81,73,0.2); color: var(--accent-red); }
+.expand-icon { color: var(--text-muted); transition: transform 0.2s; font-size: 1rem; flex-shrink: 0; }
+.agent-card.expanded .expand-icon { transform: rotate(90deg); }
+.agent-detail { display: none; border-top: 1px solid var(--border); padding: 14px; background: var(--bg-primary); }
+.agent-card.expanded .agent-detail { display: block; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 768px) { .detail-grid { grid-template-columns: 1fr; } }
+.detail-section { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; }
+.detail-section-title { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; font-weight: 600; }
+.detail-section-content { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; }
+.duty-checklist { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; }
+.duty-item { display: flex; align-items: center; gap: 5px; font-size: 0.78rem; }
+.duty-check { width: 14px; height: 14px; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; flex-shrink: 0; }
+.duty-check.pass { background: rgba(63,185,80,0.2); color: var(--accent-green); border: 1px solid rgba(63,185,80,0.4); }
+.duty-check.fail { background: rgba(248,81,73,0.2); color: var(--accent-red); border: 1px solid rgba(248,81,73,0.4); }
+.duty-label { color: var(--text-secondary); }
+.finding-text { font-size: 0.82rem; color: var(--text-primary); line-height: 1.5; padding: 6px 10px; background: var(--bg-tertiary); border-left: 3px solid var(--accent-blue); border-radius: 0 var(--radius) var(--radius) 0; }
+
+/* Governance cards */
+.gov-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; overflow: hidden; transition: border-color 0.15s; }
+.gov-card:hover { border-color: var(--border-light); }
+.gov-card-header { padding: 10px 14px; cursor: pointer; display: flex; align-items: center; gap: 10px; }
+.gov-card-header:hover { background: var(--bg-tertiary); }
+.gov-card.expanded .gov-card-body { display: block; }
+.gov-card-body { display: none; padding: 10px 14px; border-top: 1px solid var(--border); background: var(--bg-primary); font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; }
+.gov-card .collapse-icon { color: var(--text-muted); transition: transform 0.2s; font-size: 0.75rem; }
+.gov-card.expanded .collapse-icon { transform: rotate(90deg); }
+.gov-id { font-family: var(--font-mono); color: var(--accent-cyan); font-size: 0.8rem; font-weight: 600; white-space: nowrap; min-width: 160px; }
+.gov-title { font-weight: 600; font-size: 0.88rem; flex: 1; }
+.gov-badges { display: flex; gap: 6px; }
+
+/* Assumption/finding/thread styling */
+.status-tag { font-size: 0.65rem; padding: 1px 7px; border-radius: 4px; font-weight: 600; font-family: var(--font-mono); white-space: nowrap; }
+.status-tag.verified { background: rgba(63,185,80,0.2); color: var(--accent-green); border: 1px solid rgba(63,185,80,0.4); }
+.status-tag.unverified { background: rgba(210,153,34,0.2); color: var(--accent-yellow); border: 1px solid rgba(210,153,34,0.3); }
+.status-tag.falsified { background: rgba(248,81,73,0.2); color: var(--accent-red); border: 1px solid rgba(248,81,73,0.4); }
+.status-tag.open { background: rgba(210,153,34,0.2); color: var(--accent-yellow); border: 1px solid rgba(210,153,34,0.3); }
+.status-tag.resolved { background: rgba(63,185,80,0.2); color: var(--accent-green); border: 1px solid rgba(63,185,80,0.4); }
+.status-tag.proposed { background: rgba(188,140,255,0.2); color: var(--accent-purple); border: 1px solid rgba(188,140,255,0.3); }
+.status-tag.decided { background: rgba(63,185,80,0.2); color: var(--accent-green); border: 1px solid rgba(63,185,80,0.4); }
+.status-tag.partial { background: rgba(240,136,62,0.2); color: var(--accent-orange); border: 1px solid rgba(240,136,62,0.3); }
+
+.category-tag { font-size: 0.6rem; padding: 1px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase; }
+.cat-environmental { background: rgba(88,166,255,0.15); color: var(--accent-blue); }
+.cat-architectural { background: rgba(188,140,255,0.15); color: var(--accent-purple); }
+.cat-behavioral { background: rgba(240,136,62,0.15); color: var(--accent-orange); }
+.cat-temporal { background: rgba(210,153,34,0.15); color: var(--accent-yellow); }
+
+/* Finding type tags */
+.type-tag { font-size: 0.6rem; padding: 1px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+.type-spec-deviation { background: rgba(248,81,73,0.15); color: var(--accent-red); }
+.type-observation { background: rgba(88,166,255,0.15); color: var(--accent-blue); }
+.type-terminology-gap { background: rgba(188,140,255,0.15); color: var(--accent-purple); }
+.type-inconsistency { background: rgba(210,153,34,0.15); color: var(--accent-yellow); }
+.type-design-gap { background: rgba(240,136,62,0.15); color: var(--accent-orange); }
+.type-governance-gap { background: rgba(240,136,62,0.15); color: var(--accent-orange); }
+.type-operational-incident { background: rgba(248,81,73,0.2); color: var(--accent-red); }
+.type-false-claim { background: rgba(248,81,73,0.15); color: var(--accent-red); }
+.type-empirical-finding { background: rgba(63,185,80,0.15); color: var(--accent-green); }
+.type-process-learning { background: rgba(86,212,221,0.15); color: var(--accent-cyan); }
+
+/* State section */
+.state-block { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; }
+.state-block-title { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 600; }
+.state-block-content { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; }
+.state-item { padding: 3px 0; border-bottom: 1px solid rgba(48,54,61,0.4); }
+.state-item:last-child { border-bottom: none; }
+.deviation-item { display: flex; gap: 6px; padding: 4px 0; border-bottom: 1px solid rgba(48,54,61,0.4); font-size: 0.82rem; color: var(--accent-orange); }
+.deviation-item:last-child { border-bottom: none; }
+.deviation-bullet { color: var(--accent-red); flex-shrink: 0; }
+
+/* Thread cards */
+.thread-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 6px; }
+.thread-title { font-weight: 600; font-size: 0.88rem; color: var(--text-primary); }
+.thread-desc { font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px; }
+
+/* Conclusion section */
+.conclusion-box { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; }
+.recommendation-item { padding: 8px 0; border-bottom: 1px solid rgba(48,54,61,0.4); }
+.recommendation-item:last-child { border-bottom: none; }
+.rec-text { font-weight: 600; font-size: 0.88rem; color: var(--text-primary); }
+.rec-rationale { font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px; }
+.rec-urgency { font-size: 0.6rem; padding: 1px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase; }
+.urgency-immediate { background: rgba(248,81,73,0.2); color: var(--accent-red); }
+.urgency-next-session { background: rgba(210,153,34,0.2); color: var(--accent-yellow); }
+
+.risk-item { padding: 8px 0; border-bottom: 1px solid rgba(48,54,61,0.4); }
+.risk-item:last-child { border-bottom: none; }
+.risk-type { font-size: 0.65rem; padding: 1px 6px; border-radius: 4px; font-weight: 600; text-transform: uppercase; }
+.risk-type.risk { background: rgba(248,81,73,0.15); color: var(--accent-red); }
+.risk-type.opportunity { background: rgba(63,185,80,0.15); color: var(--accent-green); }
+
+/* Footer */
+.footer { padding: 12px 24px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.75rem; text-align: center; background: var(--bg-secondary); }
+.footer a { color: var(--accent-blue); text-decoration: none; }
+
+/* No results */
+.no-results { text-align: center; padding: 30px; color: var(--text-muted); font-size: 0.9rem; }
+.hidden { display: none !important; }
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+/* Responsive */
+@media (max-width: 900px) { .stats-bar { gap: 8px; } .stat-card { padding: 4px 10px; } }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+// Data injected by generate-dashboard.py at build time.
+const DASHBOARD_DATA = {"meta": {"sessionId": "test-minimal", "created": "2026-03-22T00:00:00Z", "version": 1}, "schwerpunkt": "Testing minimal estimate input"};
+const GENERATED_AT = "2026-03-22T00:45:43Z";
+
+(function() {
+  const D = DASHBOARD_DATA;
+  if (!D) { document.getElementById('app').innerHTML = '<div class="no-results">No data. Generate with: python3 scripts/generate-dashboard.py --estimate &lt;path&gt;</div>'; return; }
+
+  const app = document.getElementById('app');
+  const meta = D.meta || {};
+  const situation = D.situation || {};
+  const schwerpunkt = D.schwerpunkt || '';
+  const findings = D.findings || [];
+  const openThreads = D.openThreads || [];
+  const delegationLog = D.delegationLog || [];
+  const conclusions = D.conclusions || {};
+  const decisions = (situation.decisions || []);
+  const assumptions = (situation.assumptions || []);
+  const m12 = D.m12AssumptionVerification || {};
+  const deviations = situation.deviations || [];
+  const facts = situation.facts || [];
+  const completedWork = situation.completedWork || [];
+
+  // Combine assumptions from both sources
+  const allAssumptions = [];
+  assumptions.forEach(a => allAssumptions.push(a));
+  const ua = (m12.unflaggedAssumptions || []);
+  ua.forEach(a => { if (!allAssumptions.find(x => x.id === a.id)) allAssumptions.push(a); });
+  const amb = (m12.unflaggedAmbiguities || []);
+
+  // Stats
+  const totalDelegations = delegationLog.length;
+  const completeDelegations = delegationLog.filter(d => (d.status||'').toLowerCase().includes('complete')).length;
+  const s2Count = delegationLog.filter(d => (d.type||'') === 's2').length;
+  const s3Count = delegationLog.filter(d => (d.type||'') === 's3').length;
+  const findingsCount = findings.length;
+  const threadsCount = openThreads.length;
+  const decisionsCount = decisions.length;
+  const deviationsCount = deviations.length;
+  const assumptionVerified = allAssumptions.filter(a => (a.status||a.classification||'').toLowerCase().includes('verified') && !(a.status||a.classification||'').toLowerCase().includes('unverif')).length;
+  const assumptionTotal = allAssumptions.length;
+  const factsCount = facts.length;
+
+  // Determine session info
+  const sessionId = meta.sessionId || meta.estimateId || 'unknown';
+  const created = meta.created || '';
+  const version = meta.version || '?';
+
+  function esc(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function statusClass(s) {
+    if (!s) return '';
+    const sl = s.toLowerCase();
+    if (sl.includes('verified') && !sl.includes('unverif') && !sl.includes('partial')) return 'verified';
+    if (sl.includes('partial')) return 'partial';
+    if (sl.includes('falsif') || sl.includes('incorrect')) return 'falsified';
+    if (sl.includes('resolved') || sl.includes('done') || sl.includes('executed')) return 'resolved';
+    if (sl.includes('decided')) return 'decided';
+    if (sl.includes('proposed') || sl.includes('proposal')) return 'proposed';
+    if (sl.includes('open') || sl.includes('ready') || sl.includes('unverif') || sl.includes('untestable')) return 'unverified';
+    return 'open';
+  }
+
+  function typeClass(t) {
+    if (!t) return '';
+    return 'type-' + t.replace(/[\s_]+/g, '-').toLowerCase();
+  }
+
+  function categoryClass(c) {
+    if (!c) return '';
+    return 'cat-' + c.toLowerCase();
+  }
+
+  function roleClass(type) {
+    if (!type) return 'role-s2';
+    const t = type.toLowerCase();
+    if (t === 's1') return 'role-s1';
+    if (t === 's2') return 'role-s2';
+    if (t === 's3') return 'role-s3';
+    if (t.includes('verif')) return 'role-verifier';
+    return 'role-s2';
+  }
+
+  // ----- Build HTML -----
+  let html = '';
+
+  // HEADER
+  html += '<div class="header"><div class="header-top"><div>';
+  html += '<div class="header-title">Mission Control Dashboard <span>v' + esc(String(version)) + '</span></div>';
+  html += '<div class="session-id">' + esc(sessionId) + (created ? ' &middot; ' + esc(created.substring(0,10)) : '') + '</div>';
+  html += '</div><div style="font-size:0.75rem;color:var(--text-muted)">Generated: ' + esc(GENERATED_AT) + '</div></div>';
+  if (schwerpunkt) {
+    html += '<div class="schwerpunkt">' + esc(schwerpunkt) + '</div>';
+  }
+  html += '<div class="stats-bar">';
+  html += '<div class="stat-card"><div class="stat-value blue">' + totalDelegations + '</div><div class="stat-label">Delegations</div></div>';
+  html += '<div class="stat-card"><div class="stat-value green">' + completeDelegations + '/' + totalDelegations + '</div><div class="stat-label">Complete</div></div>';
+  html += '<div class="stat-card"><div class="stat-value blue">' + s2Count + '</div><div class="stat-label">S2</div></div>';
+  html += '<div class="stat-card"><div class="stat-value green">' + s3Count + '</div><div class="stat-label">S3</div></div>';
+  html += '<div class="stat-card"><div class="stat-value purple">' + decisionsCount + '</div><div class="stat-label">Decisions</div></div>';
+  html += '<div class="stat-card"><div class="stat-value cyan">' + findingsCount + '</div><div class="stat-label">Findings</div></div>';
+  html += '<div class="stat-card"><div class="stat-value yellow">' + threadsCount + '</div><div class="stat-label">Open Threads</div></div>';
+  html += '<div class="stat-card"><div class="stat-value orange">' + deviationsCount + '</div><div class="stat-label">Deviations</div></div>';
+  html += '<div class="stat-card"><div class="stat-value green">' + assumptionVerified + '/' + assumptionTotal + '</div><div class="stat-label">Assumptions Verified</div></div>';
+  html += '</div></div>';
+
+  // TAB NAV
+  html += '<div class="tab-nav" id="mainTabs">';
+  html += '<button class="tab-btn active" data-tab="agents">Agents (' + totalDelegations + ')</button>';
+  html += '<button class="tab-btn" data-tab="governance">Governance (' + decisionsCount + 'D / ' + assumptionTotal + 'A)</button>';
+  html += '<button class="tab-btn" data-tab="findings">Findings (' + findingsCount + ')</button>';
+  html += '<button class="tab-btn" data-tab="state">Session State</button>';
+  html += '<button class="tab-btn" data-tab="threads">Open Threads (' + threadsCount + ')</button>';
+  if (conclusions.assessment) html += '<button class="tab-btn" data-tab="conclusions">Conclusions</button>';
+  html += '</div>';
+
+  // ===== AGENTS TAB =====
+  html += '<div class="tab-panel active" id="tab-agents">';
+  html += '<div class="controls"><div class="filter-group" id="roleFilters">';
+  html += '<button class="filter-btn active" data-role="all">All</button>';
+  html += '<button class="filter-btn" data-role="s2">S2</button>';
+  html += '<button class="filter-btn" data-role="s3">S3</button>';
+  html += '</div>';
+  html += '<input type="text" class="search-box" id="agentSearch" placeholder="Search agents... (/ to focus)" />';
+  html += '<div class="filter-group"><button class="filter-btn" id="expandAllBtn">Expand All</button><button class="filter-btn" id="collapseAllBtn">Collapse All</button></div>';
+  html += '</div>';
+  html += '<div style="padding:12px 24px" id="agentsList">';
+
+  delegationLog.forEach(function(agent, idx) {
+    const rc = roleClass(agent.type);
+    const duty = agent.dutyFulfilled || {};
+    const dutyKeys = Object.keys(duty);
+    const dutyPass = dutyKeys.filter(k => duty[k] === true).length;
+    const statusLbl = esc(agent.status || 'unknown');
+    const sc = statusClass(agent.status);
+
+    html += '<div class="agent-card" data-role="' + esc(agent.type) + '" data-search="' + esc(JSON.stringify(agent).toLowerCase()) + '">';
+    html += '<div class="agent-card-header" onclick="this.parentElement.classList.toggle(\'expanded\')">';
+    html += '<div class="agent-number ' + rc + '">' + esc(agent.id) + '</div>';
+    html += '<div class="agent-info"><div class="agent-title-row">';
+    html += '<span class="agent-mission">' + esc(agent.mission) + '</span>';
+    html += '<span class="agent-role-badge ' + rc + '">' + esc(agent.type || '').toUpperCase() + '</span>';
+    if (agent.agentType) html += '<span style="font-size:0.65rem;color:var(--text-muted);font-family:var(--font-mono)">' + esc(agent.agentType) + '</span>';
+    html += '</div></div>';
+    html += '<div style="display:flex;align-items:center;gap:8px"><span class="status-badge ' + sc + '">' + statusLbl + '</span><span class="expand-icon">&#9654;</span></div>';
+    html += '</div>';
+
+    // Detail
+    html += '<div class="agent-detail"><div class="detail-grid">';
+    if (dutyKeys.length > 0) {
+      html += '<div class="detail-section"><div class="detail-section-title">Delegation Duty (' + dutyPass + '/' + dutyKeys.length + ')</div><div class="duty-checklist">';
+      dutyKeys.forEach(function(k) {
+        const v = duty[k];
+        const cls = v === true ? 'pass' : 'fail';
+        const icon = v === true ? '&#10003;' : (typeof v === 'string' ? '&#8212;' : '&#10007;');
+        html += '<div class="duty-item"><div class="duty-check ' + cls + '">' + icon + '</div><span class="duty-label">' + esc(k) + '</span></div>';
+      });
+      html += '</div></div>';
+    }
+    if (agent.deviation) {
+      html += '<div class="detail-section"><div class="detail-section-title">Deviation</div><div class="detail-section-content" style="color:var(--accent-orange)">' + esc(agent.deviation) + '</div></div>';
+    }
+    html += '</div></div></div>';
+  });
+
+  html += '</div>';
+  html += '<div class="no-results hidden" id="agentNoResults">No agents match filters.</div>';
+  html += '</div>';
+
+  // ===== GOVERNANCE TAB =====
+  html += '<div class="tab-panel" id="tab-governance">';
+
+  // Decisions sub-section
+  html += '<div class="section-title" style="padding:0 0 8px">Decisions (' + decisionsCount + ')</div>';
+  decisions.forEach(function(d) {
+    const sc = statusClass(d.status);
+    html += '<div class="gov-card" data-search="' + esc(JSON.stringify(d).toLowerCase()) + '">';
+    html += '<div class="gov-card-header" onclick="this.parentElement.classList.toggle(\'expanded\')">';
+    html += '<span class="collapse-icon">&#9654;</span>';
+    html += '<span class="gov-id">' + esc(d.id) + '</span>';
+    html += '<span class="gov-title">' + esc(d.decision) + '</span>';
+    html += '<div class="gov-badges"><span class="status-tag ' + sc + '">' + esc(d.status) + '</span></div>';
+    html += '</div>';
+    html += '<div class="gov-card-body">';
+    if (d.decidedBy) html += '<div><strong>Decided by:</strong> ' + esc(d.decidedBy) + '</div>';
+    if (d.executedBy) html += '<div><strong>Executed by:</strong> ' + esc(d.executedBy) + '</div>';
+    if (d.verificationEvidence) html += '<div style="margin-top:6px"><strong>Verification:</strong> ' + esc(d.verificationEvidence) + '</div>';
+    if (d.relatedBriefDecisions && d.relatedBriefDecisions.length) {
+      html += '<div style="margin-top:6px"><strong>Brief decisions:</strong> ' + d.relatedBriefDecisions.map(function(n) { return '#' + n; }).join(', ') + '</div>';
+    }
+    html += '</div></div>';
+  });
+
+  // Assumptions sub-section
+  html += '<div class="section-title" style="padding:16px 0 8px">Assumptions (' + assumptionTotal + ')</div>';
+  allAssumptions.forEach(function(a) {
+    const st = a.status || a.classification || 'unknown';
+    const sc = statusClass(st);
+    const cat = a.taxonomy || '';
+    html += '<div class="gov-card" data-search="' + esc(JSON.stringify(a).toLowerCase()) + '">';
+    html += '<div class="gov-card-header" onclick="this.parentElement.classList.toggle(\'expanded\')">';
+    html += '<span class="collapse-icon">&#9654;</span>';
+    html += '<span class="gov-id">' + esc(a.id) + '</span>';
+    html += '<span class="gov-title">' + esc(a.assumption) + '</span>';
+    html += '<div class="gov-badges"><span class="status-tag ' + sc + '">' + esc(st) + '</span>';
+    if (cat) html += '<span class="category-tag ' + categoryClass(cat) + '">' + esc(cat) + '</span>';
+    html += '</div></div>';
+    html += '<div class="gov-card-body">';
+    if (a.evidence) html += '<div><strong>Evidence:</strong> ' + esc(a.evidence) + '</div>';
+    if (a.rationale) html += '<div><strong>Rationale:</strong> ' + esc(a.rationale) + '</div>';
+    if (a.verifiedBy) html += '<div><strong>Verified by:</strong> ' + esc(a.verifiedBy) + '</div>';
+    if (a.m22Result) html += '<div style="margin-top:4px"><strong>M22 result:</strong> ' + esc(a.m22Result) + '</div>';
+    if (a.severity) html += '<div><strong>Severity:</strong> ' + esc(a.severity) + '</div>';
+    html += '</div></div>';
+  });
+
+  // Ambiguities sub-section (if any)
+  if (amb.length > 0) {
+    html += '<div class="section-title" style="padding:16px 0 8px">Ambiguities (' + amb.length + ')</div>';
+    amb.forEach(function(a) {
+      const st = a.classification || 'unresolved';
+      const sc = statusClass(st);
+      html += '<div class="gov-card" data-search="' + esc(JSON.stringify(a).toLowerCase()) + '">';
+      html += '<div class="gov-card-header" onclick="this.parentElement.classList.toggle(\'expanded\')">';
+      html += '<span class="collapse-icon">&#9654;</span>';
+      html += '<span class="gov-id">' + esc(a.id) + '</span>';
+      html += '<span class="gov-title">' + esc(a.ambiguity) + '</span>';
+      html += '<div class="gov-badges"><span class="status-tag ' + sc + '">' + esc(st) + '</span></div>';
+      html += '</div>';
+      html += '<div class="gov-card-body">';
+      if (a.rationale) html += '<div>' + esc(a.rationale) + '</div>';
+      if (a.severity) html += '<div><strong>Severity:</strong> ' + esc(a.severity) + '</div>';
+      html += '</div></div>';
+    });
+  }
+  html += '</div>';
+
+  // ===== FINDINGS TAB =====
+  html += '<div class="tab-panel" id="tab-findings">';
+  html += '<div style="padding:0 0 12px"><div class="section-title">Findings (' + findingsCount + ')</div></div>';
+  findings.forEach(function(f) {
+    const fsc = statusClass(f.status);
+    const ftc = typeClass(f.type);
+    html += '<div class="gov-card" data-search="' + esc(JSON.stringify(f).toLowerCase()) + '">';
+    html += '<div class="gov-card-header" onclick="this.parentElement.classList.toggle(\'expanded\')">';
+    html += '<span class="collapse-icon">&#9654;</span>';
+    html += '<span class="gov-id">' + esc(f.id) + '</span>';
+    html += '<span class="gov-title">' + esc(f.summary) + '</span>';
+    html += '<div class="gov-badges">';
+    if (f.type) html += '<span class="type-tag ' + ftc + '">' + esc(f.type) + '</span>';
+    html += '<span class="status-tag ' + fsc + '">' + esc(f.status) + '</span>';
+    html += '</div></div>';
+    html += '<div class="gov-card-body">';
+    if (f.action) html += '<div><strong>Action:</strong> ' + esc(f.action) + '</div>';
+    html += '</div></div>';
+  });
+  html += '</div>';
+
+  // ===== STATE TAB =====
+  html += '<div class="tab-panel" id="tab-state">';
+
+  // Current state
+  if (situation.currentState) {
+    html += '<div class="state-block"><div class="state-block-title">Current State</div>';
+    html += '<div class="state-block-content">' + esc(situation.currentState) + '</div></div>';
+  }
+
+  // Deviations
+  if (deviations.length > 0) {
+    html += '<div class="state-block"><div class="state-block-title">Deviations (' + deviations.length + ')</div>';
+    deviations.forEach(function(d) {
+      html += '<div class="deviation-item"><span class="deviation-bullet">&#9679;</span><div>';
+      html += '<div>' + esc(d.description) + '</div>';
+      if (d.impact) html += '<div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">Impact: ' + esc(d.impact) + '</div>';
+      html += '</div></div>';
+    });
+    html += '</div>';
+  }
+
+  // Facts
+  if (facts.length > 0) {
+    html += '<div class="state-block"><div class="state-block-title">Verified Facts (' + facts.length + ')</div>';
+    html += '<div class="state-block-content">';
+    facts.forEach(function(f) {
+      const text = typeof f === 'string' ? f : (f.fact || f.description || JSON.stringify(f));
+      html += '<div class="state-item">' + esc(text) + '</div>';
+    });
+    html += '</div></div>';
+  }
+
+  // Completed work (last 20)
+  if (completedWork.length > 0) {
+    const showCount = Math.min(completedWork.length, 20);
+    html += '<div class="state-block"><div class="state-block-title">Completed Work (last ' + showCount + ' of ' + completedWork.length + ')</div>';
+    html += '<div class="state-block-content">';
+    completedWork.slice(-showCount).reverse().forEach(function(w) {
+      const text = typeof w === 'string' ? w : (w.description || JSON.stringify(w));
+      html += '<div class="state-item">' + esc(text) + '</div>';
+    });
+    html += '</div></div>';
+  }
+  html += '</div>';
+
+  // ===== OPEN THREADS TAB =====
+  html += '<div class="tab-panel" id="tab-threads">';
+  html += '<div class="section-title">Open Threads (' + threadsCount + ')</div>';
+  openThreads.forEach(function(t) {
+    const tsc = statusClass(t.status);
+    html += '<div class="thread-card">';
+    html += '<div style="display:flex;align-items:center;gap:8px"><span class="thread-title">' + esc(t.thread) + '</span>';
+    html += '<span class="status-tag ' + tsc + '">' + esc(t.status) + '</span></div>';
+    if (t.description) html += '<div class="thread-desc">' + esc(t.description) + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // ===== CONCLUSIONS TAB =====
+  if (conclusions.assessment) {
+    html += '<div class="tab-panel" id="tab-conclusions">';
+    html += '<div class="conclusion-box"><div class="state-block-title">Assessment</div>';
+    html += '<div class="state-block-content">' + esc(conclusions.assessment) + '</div></div>';
+
+    if (conclusions.recommendations && conclusions.recommendations.length > 0) {
+      html += '<div class="conclusion-box"><div class="state-block-title">Recommendations</div>';
+      conclusions.recommendations.forEach(function(r) {
+        const ucls = (r.urgency||'').includes('immediate') ? 'urgency-immediate' : 'urgency-next-session';
+        html += '<div class="recommendation-item">';
+        html += '<div style="display:flex;align-items:center;gap:8px"><span class="rec-text">' + esc(r.recommendation) + '</span>';
+        if (r.urgency) html += '<span class="rec-urgency ' + ucls + '">' + esc(r.urgency) + '</span>';
+        html += '</div>';
+        if (r.rationale) html += '<div class="rec-rationale">' + esc(r.rationale) + '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    if (conclusions.risksAndOpportunities && conclusions.risksAndOpportunities.length > 0) {
+      html += '<div class="conclusion-box"><div class="state-block-title">Risks &amp; Opportunities</div>';
+      conclusions.risksAndOpportunities.forEach(function(r) {
+        html += '<div class="risk-item">';
+        html += '<div style="display:flex;align-items:center;gap:8px"><span class="risk-type ' + esc(r.type) + '">' + esc(r.type) + '</span>';
+        html += '<span style="font-size:0.85rem">' + esc(r.description) + '</span></div>';
+        if (r.mitigation) html += '<div style="font-size:0.8rem;color:var(--text-secondary);margin-top:3px"><strong>Mitigation:</strong> ' + esc(r.mitigation) + '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  // FOOTER
+  html += '<div class="footer">Generated by <a href="https://github.com/nobul-jose/aitools">aitools</a> generate-dashboard.py from running estimate v' + esc(String(version)) + ' &middot; ' + esc(GENERATED_AT) + '</div>';
+
+  app.innerHTML = html;
+
+  // ===== Interactivity =====
+
+  // Tab switching
+  document.querySelectorAll('#mainTabs .tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('#mainTabs .tab-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+      var target = document.getElementById('tab-' + btn.dataset.tab);
+      if (target) target.classList.add('active');
+    });
+  });
+
+  // Agent filtering
+  var activeRole = 'all';
+  var agentSearchTerm = '';
+  var searchBox = document.getElementById('agentSearch');
+  var roleFilters = document.getElementById('roleFilters');
+  var agentsList = document.getElementById('agentsList');
+  var noResults = document.getElementById('agentNoResults');
+
+  function filterAgents() {
+    if (!agentsList) return;
+    var cards = agentsList.querySelectorAll('.agent-card');
+    var visible = 0;
+    cards.forEach(function(card) {
+      var role = card.getAttribute('data-role') || '';
+      var search = card.getAttribute('data-search') || '';
+      var matchRole = activeRole === 'all' || role === activeRole;
+      var matchSearch = !agentSearchTerm || search.includes(agentSearchTerm.toLowerCase());
+      if (matchRole && matchSearch) { card.classList.remove('hidden'); visible++; }
+      else { card.classList.add('hidden'); }
+    });
+    if (noResults) noResults.classList.toggle('hidden', visible > 0);
+  }
+
+  if (roleFilters) {
+    roleFilters.querySelectorAll('.filter-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        roleFilters.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        activeRole = btn.dataset.role;
+        filterAgents();
+      });
+    });
+  }
+
+  if (searchBox) {
+    searchBox.addEventListener('input', function() { agentSearchTerm = searchBox.value; filterAgents(); });
+  }
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', function(e) {
+    if (e.key === '/' && document.activeElement !== searchBox) { e.preventDefault(); if (searchBox) searchBox.focus(); }
+    if (e.key === 'Escape' && searchBox) { searchBox.value = ''; agentSearchTerm = ''; searchBox.blur(); filterAgents(); }
+  });
+
+  // Expand/collapse all agents
+  var expandBtn = document.getElementById('expandAllBtn');
+  var collapseBtn = document.getElementById('collapseAllBtn');
+  if (expandBtn) expandBtn.addEventListener('click', function() { agentsList.querySelectorAll('.agent-card').forEach(function(c) { c.classList.add('expanded'); }); });
+  if (collapseBtn) collapseBtn.addEventListener('click', function() { agentsList.querySelectorAll('.agent-card').forEach(function(c) { c.classList.remove('expanded'); }); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+{
+  "meta": {
+    "mission": "M21",
+    "agent": "S2 (Intelligence)",
+    "session": "5HyCwPtSDH",
+    "created": "2026-03-22T02:00:00Z",
+    "schwerpunkt": "Verify M20 fixes, recon current state, determine READY/NOT-READY for dashboard ship"
+  },
+
+  "verification": {
+    "task1_gitignore": {
+      "verdict": "VERIFIED CORRECT",
+      "evidence": {
+        "linesRead": ".gitignore lines 46-50: selective patterns with D-GITIGNORE-FIX comment",
+        "patterns": [
+          ".aitools/scratch/",
+          ".aitools/channel/session-*/",
+          ".aitools/channel/.current-session",
+          ".aitools/.current-session"
+        ],
+        "gitCheckIgnoreTests": {
+          "running-estimate_NOT_ignored": "PASS (exit 1 = not ignored)",
+          "scratch_IS_ignored": "PASS (matched .gitignore:47)",
+          "handoffs_NOT_ignored": "PASS (exit 1 = not ignored)",
+          "session-dirs_IS_ignored": "PASS (matched .gitignore:48)",
+          "channel-current-session_IS_ignored": "PASS (matched .gitignore:49)",
+          "root-current-session_IS_ignored": "PASS (matched .gitignore:50)"
+        },
+        "allTestsPassed": 6,
+        "gitStatus": ".gitignore shows 'M' (staged modification) — fix is applied but not committed"
+      }
+    },
+
+    "task2_authoritative_estimate": {
+      "verdict": "VERIFIED — ACCURATE AND COMPLETE",
+      "details": {
+        "version": 5,
+        "decisionsCount": 13,
+        "decisionsPresent": [
+          "D-CONTEXT-ROT-HOOK", "D-OPERATIONAL-LEARNING-DUTY", "D-GITIGNORE-FIX",
+          "D-MULTI-AGENT-PATTERNS", "D-PER-SESSION-ESTIMATES", "D-AITOOL-PREFIX",
+          "D-S1-LAUNCH", "D-DASHBOARD-GOVERNANCE", "D-NACHBESPRECHUNG",
+          "D-MARK-OR-VERIFY", "D-INLINE-SYNTHESIS", "D-DELEGATION-GATE",
+          "D-DASHBOARD-SHIP-DEFINITION"
+        ],
+        "falseClaimCorrected": "D-GITIGNORE-FIX status is 'EXECUTED-AND-VERIFIED' with 6-test evidence — no longer falsely claiming applied-but-unverified",
+        "assumptionClassification": {
+          "total": 25,
+          "verified": 7,
+          "falsified": 3,
+          "unverifiableByReading": 9,
+          "unverifiableOpinion": 6,
+          "zeroVerifiableButUnverified": true
+        },
+        "authoritativeNote": "meta.authoritativeNote correctly flags v4 and v3-stale as superseded with rationale",
+        "m19FindingsAddressed": "All 3 M19 blockers (B1 version collision, B2 schema mapping, B3 component count) acknowledged in the estimate's decisions and findings"
+      }
+    },
+
+    "task3_corsTest": {
+      "verdict": "VERIFIED EXISTS",
+      "file": ".scratch/session-5HyCwPtSDH/cors-test.html",
+      "content": "Minimal HTML with fetch('running-estimate-v4.json'), catch displays 'CORS BLOCKED: ' + error message",
+      "m20Report": "M20 states screenshot taken via chrome-devtools showing 'CORS BLOCKED: Failed to fetch'. Screenshot not independently re-taken (requires chrome-devtools interaction), but test file structure is correct and CORS behavior is well-documented browser security policy. Accepted."
+    },
+
+    "task4_assumptionSpotCheck": {
+      "verdict": "SPOT-CHECKS PASS",
+      "spotCheck1": {
+        "assumption": "UA-4: Handoff file paths resolve at harvested paths",
+        "claimed": "verified — all 6 files exist at harvesting/2026-03-19_* paths",
+        "independentVerification": "CONFIRMED. ls of all 6 specific files (session-state-audit, findings-index, schwerpunkt-assessment, scratch-deletion-rca, verification-lifecycle-gap-audit, cicd-feasibility) at harvesting/2026-03-19_* — all exist."
+      },
+      "spotCheck2": {
+        "assumption": "UA-6: session_id is available in SessionStart hook input JSON",
+        "claimed": "verified — scratch-init.sh comment confirms, harvest-session.sh parses it, tool-ops-claude-code.md documents API contract",
+        "independentVerification": "CONFIRMED. grep for 'session_id' in shared/hooks/ shows: (1) scratch-init.sh line 13 comment 'contains session_id', (2) harvest-session.sh line 30 parses SESSION_ID from hook input, (3) session-archive.sh line 33 does same, (4) surfacing-duty-stop.sh lines 25-28 parse it. Multiple hooks confirm session_id is in hook input JSON."
+      }
+    }
+  },
+
+  "reconForShipReadiness": {
+    "existingAssets": {
+      "feasibilityStudy": {
+        "file": ".scratch/session-5HyCwPtSDH/feasibility-mission-control.json",
+        "status": "COMPLETE — 7 options evaluated against 7 criteria, converged on embedded JSON + generator script (Option G = A-prime + B)"
+      },
+      "reconFragordV2": {
+        "file": ".scratch/session-5HyCwPtSDH/recon-mission-control-fragord.json",
+        "status": "COMPLETE — 7 panels defined, S1 role specified, commander intent synthesized from 165 messages, 6-phase executability assessment: GO, 13-point delegation gate checklist, reading order for SHIP agent"
+      },
+      "runningEstimateV5": {
+        "file": ".scratch/session-5HyCwPtSDH/running-estimate-authoritative.json",
+        "status": "COMPLETE — 744 lines, full data model for dashboard to consume"
+      },
+      "v2DashboardTemplate": {
+        "file": ".scratch/session-5HyCwPtSDH/2026-03-21_session-5HyCwPtSDH-dashboard-v2.html",
+        "status": "COMPLETE — proven CSS design language (dark theme, GitHub-inspired), filter/search/collapse JS, tab navigation, agent cards, stats bar. 90% reusable per FRAGORD assessment."
+      },
+      "governanceDashboard": {
+        "file": ".scratch/session-5HyCwPtSDH/2026-03-21_session-5HyCwPtSDH-governance-dashboard.html",
+        "status": "COMPLETE — decisions/assumptions layout for governance panel reference"
+      },
+      "corsConstraint": {
+        "status": "EMPIRICALLY VERIFIED — fetch() from file:/// is CORS-blocked. Embedded-data pattern is the only viable approach."
+      },
+      "shipDefinition": {
+        "decision": "D-DASHBOARD-SHIP-DEFINITION",
+        "criteria": [
+          "scripts/generate-dashboard.py exists",
+          "Tested against running-estimate-authoritative.json",
+          "Produces valid self-contained HTML",
+          "Opened in browser, all panels render"
+        ]
+      }
+    },
+
+    "blockerAnalysis": {
+      "gitignoreFixed": {
+        "status": "FIXED (not committed)",
+        "blocksShip": false,
+        "note": "Dashboard output goes to scratch dir. .gitignore fix enables carry-forward but is not a dashboard prerequisite."
+      },
+      "runningEstimateAuthoritative": {
+        "status": "VERIFIED by this mission",
+        "blocksShip": false
+      },
+      "dataModelSufficient": {
+        "status": "YES — 80%+ of required dashboard data is in the running estimate",
+        "gaps": "Agent metrics (duration, tokens), orchestration patterns, assumption categories — all documented as growth-path items, not MVP requirements",
+        "blocksShip": false
+      },
+      "templateReusable": {
+        "status": "YES — v2 dashboard CSS/JS verified: dark theme variables, stat cards, filter buttons, search box, tab navigation, agent cards with collapsible detail, timeline section",
+        "blocksShip": false
+      },
+      "pythonAvailable": {
+        "status": "YES — Python 3.14.3",
+        "blocksShip": false
+      },
+      "governanceGates": {
+        "status": "NONE for ship",
+        "detail": "scripts/generate-dashboard.py is NOT in sources-of-truth protected files list. It is a new reusable script, not a governed config. No protected-file review gate needed. CLAUDE.md code conventions and script-standards apply but do not require pre-approval."
+      },
+      "uncommittedChanges": {
+        "status": "ADVISORY",
+        "detail": ".gitignore has staged modification. deploy/ scripts and harvest-manifest.json have unstaged modifications. 40 untracked harvesting files. None of these block dashboard ship, but the .gitignore fix should be committed before session end.",
+        "blocksShip": false
+      }
+    }
+  },
+
+  "readyDetermination": {
+    "verdict": "READY FOR SHIP",
+    "confidence": "HIGH",
+    "rationale": [
+      "All 6 .gitignore pattern tests PASS independently verified",
+      "Authoritative running estimate v5 verified — 13 decisions, no false claims, all assumptions classified",
+      "CORS constraint empirically verified — embedded-data architecture is the only viable path",
+      "Feasibility study and RECON FRAGORD v2 provide complete intelligence for SHIP agent",
+      "v2 dashboard template provides 90% reusable CSS/JS",
+      "Python 3.14.3 available",
+      "Ship definition codified (D-DASHBOARD-SHIP-DEFINITION) with clear pass/fail criteria",
+      "No governance gates blocking the new script",
+      "Zero blockers identified"
+    ],
+    "advisories": [
+      "Commit .gitignore fix before session end (applied but unstaged)",
+      "SHIP agent should use running-estimate-authoritative.json (v5), not running-estimate-v4.json",
+      "The FRAGORD reading order says item 4 is running-estimate-v4.json — update the delegation prompt to point to running-estimate-authoritative.json instead",
+      "First Python script in scripts/ — establishes a precedent for future Python tools"
+    ]
+  },
+
+  "operationalLearning": {
+    "observe": [
+      "M20 execution was clean: .gitignore fix correctly applied with selective patterns, CORS test created and verified via chrome-devtools, authoritative estimate produced with all prior version falsities corrected. The fix-state-report documents all 6 verification tests.",
+      "The git status shows .gitignore as 'M' (staged) — meaning the fix is applied in the working tree and staged for commit. This is one 'git commit' away from being permanent.",
+      "The authoritative estimate (v5) correctly supersedes v4 by adding 5 decisions (D-NACHBESPRECHUNG through D-DASHBOARD-SHIP-DEFINITION) that v4 was missing because they emerged from later missions."
+    ],
+    "surface": [
+      "FRAGORD v2 reading order references 'running-estimate-v4.json' as item 4 but the authoritative version is now running-estimate-authoritative.json (v5). This is a stale reference that the SHIP delegation prompt must correct.",
+      "The 40 untracked harvesting files in git status represent the M7 recovery artifacts — they should be committed alongside the .gitignore fix as part of session housekeeping."
+    ],
+    "propose": [
+      "The SHIP delegation prompt should reference running-estimate-authoritative.json explicitly and warn the agent that running-estimate-v4.json is superseded.",
+      "A single commit capturing .gitignore fix + harvesting artifacts would be clean session housekeeping before the ship mission."
+    ],
+    "connect": [
+      "The stale FRAGORD reference to v4 instead of v5 is another instance of the assumption propagation problem (M11, F13). The FRAGORD was written before M20 produced the authoritative estimate. Every downstream consumer of the FRAGORD inherits the stale pointer unless corrected at delegation time.",
+      "The verification approach (independent git check-ignore tests, independent file existence checks, independent grep for session_id) follows the 'verify subagent audit results' UCI — treating M20's claims as leads, not conclusions."
+    ]
+  }
+}

@@ -1,0 +1,251 @@
+{
+  "meta": {
+    "mission": "M27-FINAL-STATE-AND-S1-PREP",
+    "agent": "S3 (Operations)",
+    "session": "5HyCwPtSDH",
+    "created": "2026-03-22T08:00:00Z",
+    "purpose": "Pre-handoff checklist: everything that must happen before /handoff. S1 preparation for accepting session."
+  },
+
+  "preHandoffChecklist": {
+    "mustDoBeforeHandoff": [
+      {
+        "id": "PH-1",
+        "task": "Commander commits code changes",
+        "status": "NEEDS COMMANDER DECISION",
+        "detail": "Modified files: .gitignore, scripts/aitools, scripts/aitools.ps1, scripts/generate-dashboard.py, scripts/setup-user-hooks.sh, scripts/setup-user-hooks.ps1, deploy/setup-user-skills.sh, deploy/setup-user-skills.ps1, harvesting/harvest-manifest.json. New files: scripts/aitools-dashboard.sh, scripts/aitools-dashboard.ps1, shared/hooks/dashboard-serve.sh, shared/hooks/estimate-refresh-stop.sh. Plus 36 untracked harvesting/ files.",
+        "blocker": true,
+        "reason": "Uncommitted code will be lost when session ends. Dashboard infrastructure, hooks, and .gitignore fix are all uncommitted."
+      },
+      {
+        "id": "PH-2",
+        "task": "Verify running-estimate-authoritative.json (v7) is complete",
+        "status": "DONE",
+        "detail": "v7 written by M27 with all 28 delegations, 16 decisions, 8 observations, 5 plan-scale items, accepting session Schwerpunkt, hardRequirements field.",
+        "blocker": false
+      },
+      {
+        "id": "PH-3",
+        "task": "Ensure .gitignore fix is in the commit",
+        "status": "NEEDS INCLUSION IN PH-1",
+        "detail": ".gitignore is modified (staged). Must be included in the commit. This is the rank 1 blocker from the entire session.",
+        "blocker": true
+      },
+      {
+        "id": "PH-4",
+        "task": "Run pre-commit checks",
+        "status": "NOT DONE",
+        "detail": "PSO requires check scripts before commit. bash scripts/check-pre-commit.sh",
+        "blocker": false,
+        "reason": "PSO compliance. May catch issues in new scripts."
+      }
+    ],
+
+    "shouldDoBeforeHandoff": [
+      {
+        "id": "SH-1",
+        "task": "Copy running-estimate-authoritative.json to .aitools/channel/ tracked path",
+        "status": "NOT DONE",
+        "detail": "The estimate is in .scratch/ (gitignored). Moving to .aitools/channel/ makes it tracked and carry-forward safe. The .gitignore fix enables this.",
+        "reason": "Without this, the estimate only survives via harvest. Direct tracking is more reliable."
+      },
+      {
+        "id": "SH-2",
+        "task": "Build deploy scripts (build-deploy.sh)",
+        "status": "NOT DONE",
+        "detail": "New hooks (dashboard-serve.sh, estimate-refresh-stop.sh) and modified hook setup scripts need deploy/ regeneration.",
+        "reason": "deploy/ is generated. New shared/hooks/ files need to flow through."
+      }
+    ],
+
+    "deferToAcceptingSession": [
+      {
+        "id": "DS-1",
+        "task": "File 2 incidents via /incident skill",
+        "detail": "(1) Orchestration patterns governance gap (medium severity). (2) 30-file data loss from harvest reliability gap (critical severity). Filing briefs in s2b-filing-briefs.json."
+      },
+      {
+        "id": "DS-2",
+        "task": "File glossary terms via /glossary skill",
+        "detail": "9+ ungoverned terms: orchestration pattern, reconciliation, carry-forward, session-ephemeral, operational learning, FRAGORD, SITREP, FINDING, technical feasibility. Filing briefs in s2b-filing-briefs.json."
+      },
+      {
+        "id": "DS-3",
+        "task": "Review and approve 3 framework proposals",
+        "detail": "FP-1 Operational Learning, FP-2 Context Rot Mitigation, FP-3 Orchestration Patterns. Full proposals in s2c-framework-proposals.json."
+      },
+      {
+        "id": "DS-4",
+        "task": "Amend planning brief with 16 session decisions",
+        "detail": "M19 B2 provides full schema mapping. Decisions D-CONTEXT-ROT-HOOK through D-DYNAMIC-HARD-REQUIREMENT need integer IDs #55-#70."
+      },
+      {
+        "id": "DS-5",
+        "task": "Commit 5 untracked session files to dotprofile repo",
+        "detail": "5 untracked session files (33.1 MB) across 4 projects in the dotprofile repo."
+      },
+      {
+        "id": "DS-6",
+        "task": "Document CORS + http.server pattern in reference/cross-platform-detail.md",
+        "detail": "Empirically verified: fetch() from file:/// is CORS-blocked. Local HTTP server via Python stdlib is the workaround. Future agents building local HTML tools need this."
+      }
+    ]
+  },
+
+  "s1GlossaryTermsToFile": {
+    "source": "All AARs and observations across M1-M27",
+    "terms": [
+      {
+        "term": "orchestration pattern",
+        "reason": "Used across M9, M10, M14, D-MULTI-AGENT-PATTERNS. 5 patterns demonstrated but ungoverned.",
+        "filingSource": "s2b-filing-briefs.json"
+      },
+      {
+        "term": "reconciliation",
+        "reason": "Used in M10 (AAR reconciliation), D-PER-SESSION-ESTIMATES (estimate reconciliation), UA-1 (algorithm). Multiple meanings.",
+        "filingSource": "s2b-filing-briefs.json"
+      },
+      {
+        "term": "carry-forward",
+        "reason": "AM-1: overloaded (within-session, cross-session, cross-machine). Workspace rule vs D-PER-SESSION-ESTIMATES use differently.",
+        "filingSource": "s2b-filing-briefs.json"
+      },
+      {
+        "term": "session-ephemeral",
+        "reason": "Used in workspace rule (.aitools/scratch/), scratch skill, .gitignore patterns. No governed definition.",
+        "filingSource": "s2b-filing-briefs.json"
+      },
+      {
+        "term": "operational learning",
+        "reason": "D-OPERATIONAL-LEARNING-DUTY. OBSERVE-SURFACE-PROPOSE-CONNECT cycle. FP-1 framework proposal. No governed definition.",
+        "filingSource": "s2b-filing-briefs.json"
+      },
+      {
+        "term": "FRAGORD",
+        "reason": "OBS-4: means kill-and-replace (TaskStop then relaunch). Used but ungoverned. Conflated with other mission modification patterns.",
+        "filingSource": "s2b-filing-briefs.json"
+      },
+      {
+        "term": "SITREP",
+        "reason": "Channel message type. Decisions #22-24 reference but never implemented. Zero SITREPs this session.",
+        "filingSource": "s2b-filing-briefs.json"
+      },
+      {
+        "term": "FINDING",
+        "reason": "F4: term collision. Running estimate element (F1-F18) vs FINDING channel message type. Two meanings, same word.",
+        "filingSource": "s2b-filing-briefs.json"
+      },
+      {
+        "term": "technical feasibility",
+        "reason": "OBS-3: ungoverned. Decomposed into harness capability + barrier analysis + executability assessment. Three distinct concepts conflated.",
+        "filingSource": "M27 observations"
+      },
+      {
+        "term": "Nachbesprechung",
+        "reason": "D-NACHBESPRECHUNG, OBS-7. 4-question post-mission protocol. Used but relies on external military terminology without harness definition.",
+        "filingSource": "M17 AAR"
+      },
+      {
+        "term": "Lagebeurteilung",
+        "reason": "D-CONTEXT-ROT-HOOK, estimate-refresh-stop.sh. Already in glossary.json but verify completeness given implementation details.",
+        "filingSource": "M25 implementation"
+      },
+      {
+        "term": "silent descoping",
+        "reason": "OBS-1, D-SILENT-DESCOPING-PREVENTION. The most dangerous failure mode identified this session. Needs governed definition.",
+        "filingSource": "M24 AAR"
+      }
+    ]
+  },
+
+  "s1IncidentsToFile": {
+    "source": "All findings and AARs across M1-M27",
+    "incidents": [
+      {
+        "title": "Multi-agent orchestration patterns not codified in Mission Command governance",
+        "severity": "medium",
+        "finding": "F10",
+        "detail": "5 orchestration patterns demonstrated in 40-agent session (M9 AAR) but not codified. This session's S3 did not independently derive them despite reading the dashboard. Root cause: patterns not in governance, so they are not in context, so agents do not apply them.",
+        "suggestedResolution": "FP-3 framework proposal. Codify patterns: INLINE-SYNTHESIS, S2/S3 pairing, parallel alternatives, FRAGORD (kill-and-replace), verification chain."
+      },
+      {
+        "title": "30 files permanently lost from harvest reliability gap -- two-phase failure",
+        "severity": "critical",
+        "finding": "F11",
+        "detail": "Phase 1: SessionEnd never fires (crash, force quit) -- harvest never runs. Phase 2: SessionEnd fires but harvest has no auto-commit -- artifacts sit untracked. Both phases caused data loss in session Z1IhGrcgGO. M7 recovered all 30 files from CC transcripts (corrective). Preventive: harvest before stale deletion + auto-commit.",
+        "suggestedResolution": "Convergence rank 4 (harvest before stale deletion) + rank 5 (auto-commit harvested artifacts). Two preventive changes to harvest-session.sh."
+      },
+      {
+        "title": "Silent descoping of hard requirements is undetected by current governance",
+        "severity": "high",
+        "finding": "F17",
+        "detail": "M24: CORS barrier discovered. Dynamic dashboard requirement silently descended to static without surfacing. No governance mechanism detects when a hard requirement is descoped. D-SILENT-DESCOPING-PREVENTION provides the fix (hardRequirements field + executability gate).",
+        "suggestedResolution": "Implement D-SILENT-DESCOPING-PREVENTION in running estimate schema. Add executability assessment gate that checks hardRequirements status changes."
+      }
+    ]
+  },
+
+  "s1UncommittedFiles": {
+    "modified": [
+      {"file": ".gitignore", "nature": "D-GITIGNORE-FIX -- selective patterns replacing blanket .aitools/", "priority": "CRITICAL"},
+      {"file": "scripts/aitools", "nature": "Added 'dashboard' subcommand dispatch", "priority": "high"},
+      {"file": "scripts/aitools.ps1", "nature": "Added 'dashboard' subcommand dispatch", "priority": "high"},
+      {"file": "scripts/generate-dashboard.py", "nature": "Added --serve mode, HTTP server, progressive enhancement", "priority": "high"},
+      {"file": "scripts/setup-user-hooks.sh", "nature": "Added dashboard-serve.sh and estimate-refresh-stop.sh to hook deployment", "priority": "high"},
+      {"file": "scripts/setup-user-hooks.ps1", "nature": "Added dashboard-serve.sh and estimate-refresh-stop.sh to hook deployment", "priority": "high"},
+      {"file": "deploy/setup-user-skills.sh", "nature": "Generated -- rebuild before commit", "priority": "low"},
+      {"file": "deploy/setup-user-skills.ps1", "nature": "Generated -- rebuild before commit", "priority": "low"},
+      {"file": "harvesting/harvest-manifest.json", "nature": "Updated manifest with new harvested artifacts", "priority": "medium"}
+    ],
+    "new": [
+      {"file": "scripts/aitools-dashboard.sh", "nature": "M26: CLI-native dashboard (macOS)", "priority": "high"},
+      {"file": "scripts/aitools-dashboard.ps1", "nature": "M26: CLI-native dashboard (Windows)", "priority": "high"},
+      {"file": "shared/hooks/dashboard-serve.sh", "nature": "M25: SessionStart hook for dashboard auto-launch", "priority": "high"},
+      {"file": "shared/hooks/estimate-refresh-stop.sh", "nature": "M25: Stop hook for estimate freshness + Lagebeurteilung", "priority": "high"}
+    ],
+    "untrackedHarvesting": "36 files in harvesting/ (2026-03-19_* artifacts from M7 recovery)",
+    "commanderDecisionNeeded": "Commit scope: all modified + new + harvesting? Or subset? Pre-commit checks should run first."
+  },
+
+  "acceptingSessionBrief": {
+    "schwerpunkt": "Build channel infrastructure (decisions #22-24), implement per-mission dashboards and concurrent session dashboards, full platform support. All hard requirements. Use the operational learning, orchestration patterns, and governance frameworks developed in session 5HyCwPtSDH.",
+    "hardRequirements": ["HR-1 (per-mission dashboards)", "HR-2 (concurrent session dashboards)", "HR-3 (channel infrastructure)", "HR-4 (full platform support)", "HR-5 (auto-freshness)"],
+    "planScaleItems": ["PS-1", "PS-2", "PS-3", "PS-4", "PS-5"],
+    "executionOrder": [
+      "1. PS-3 (channel infrastructure) -- prerequisite for everything else",
+      "2. PS-1 (per-mission dashboards) -- depends on PS-3",
+      "3. PS-5 (auto-freshness) -- can be done in parallel with PS-1",
+      "4. PS-2 (concurrent session dashboards) -- depends on PS-1",
+      "5. PS-4 (full platform support) -- depends on PS-1 + PS-2"
+    ],
+    "keyFilesToRead": [
+      ".scratch/session-5HyCwPtSDH/running-estimate-authoritative.json (v7 -- this file is the complete state)",
+      ".scratch/session-5HyCwPtSDH/m24-dynamic-dashboard-aar.json (CORS workaround, server pattern)",
+      ".scratch/session-5HyCwPtSDH/m4-concurrent-channel-aar.json (channel architecture design)",
+      ".scratch/session-5HyCwPtSDH/s2a-consolidated-proposals.json (10 proposal themes)",
+      ".scratch/session-5HyCwPtSDH/s2c-framework-proposals.json (3 framework proposals)",
+      ".scratch/session-5HyCwPtSDH/recon-mission-control-fragord.json (dashboard intelligence brief)",
+      "scripts/generate-dashboard.py (current dashboard implementation)",
+      "scripts/aitools-dashboard.sh (CLI-native dashboard)",
+      "shared/hooks/dashboard-serve.sh (SessionStart hook)",
+      "shared/hooks/estimate-refresh-stop.sh (Stop hook)"
+    ],
+    "operationalLearningToApply": [
+      "OBS-1: Surface hard requirement changes immediately -- never silently descope",
+      "OBS-2: Apply 6-phase executability assessment end-to-end on at least one mission",
+      "OBS-4: FRAGORD = TaskStop + relaunch. Know your tools.",
+      "OBS-5: Delegation completeness determines verification completeness",
+      "OBS-6: INLINE-SYNTHESIS when context loaded, subagent for fresh investigation",
+      "OBS-7: Nachbesprechung (4 questions) after every mission return",
+      "OBS-8: Cardinality (3 staff functions) is independent of depth (delegation levels)"
+    ],
+    "deferredFromThisSession": [
+      "DS-1: File 2 incidents (orchestration gap, data loss)",
+      "DS-2: File 9+ glossary terms",
+      "DS-3: Review 3 framework proposals",
+      "DS-4: Amend planning brief with 16 session decisions",
+      "DS-5: Commit dotprofile session files",
+      "DS-6: Document CORS + http.server pattern"
+    ]
+  }
+}

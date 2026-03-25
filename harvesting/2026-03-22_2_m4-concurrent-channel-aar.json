@@ -1,0 +1,130 @@
+{
+  "meta": {
+    "mission": "M4",
+    "agent": "S2",
+    "session": "5HyCwPtSDH",
+    "created": "2026-03-21T08:00:00Z",
+    "schwerpunkt": "Reconcile the channel architecture for concurrent multi-session use on the same repo"
+  },
+  "observations": [
+    {
+      "id": "O-1",
+      "fact": "Root .gitignore line 47 contains a blanket '.aitools/' pattern that ignores EVERYTHING under .aitools/, including files that decisions #22, #34, and #50 require to be tracked: running-estimate.json, harvesting/, briefings/. Confirmed via git check-ignore: all paths under .aitools/ match line 47.",
+      "source": ".gitignore:47, verified with git check-ignore -v"
+    },
+    {
+      "id": "O-2",
+      "fact": "The existing running estimate at .aitools/channel/session-uyZ7TELqpP/20260316T190000Z_s3_running-estimate.json was created 2026-03-16 14:11 local time by session uyZ7TELqpP (S3). It lives at a session-scoped path (gitignored), NOT at the fixed tracked path (.aitools/channel/running-estimate.json) that decision #50 component (6) specifies. The handoff-prompt-v2.md line 92 explicitly acknowledges this: 'NOTE: lives at session-scoped path; should migrate to .aitools/channel/running-estimate.json per decision #50 when channel infrastructure is built.'",
+      "source": ".aitools/channel/session-uyZ7TELqpP/20260316T190000Z_s3_running-estimate.json:meta.sessionId, handoff-prompt-v2.md:92"
+    },
+    {
+      "id": "O-3",
+      "fact": "scratch-init.sh creates .scratch/session-XXXXXXXXXX using mktemp and writes .scratch/.current-session as a single pointer file. If two Claude Code sessions start concurrently on the same repo, the second session's mktemp would create a distinct directory (no collision), but the second write to .scratch/.current-session would overwrite the first session's pointer. The SessionEnd hook (harvest-session.sh) reads .current-session to find the session dir — so the FIRST session's SessionEnd would find the SECOND session's directory, not its own.",
+      "source": "shared/hooks/scratch-init.sh:37-40, shared/hooks/harvest-session.sh:39-41"
+    },
+    {
+      "id": "O-4",
+      "fact": "Decision #34 component (5) says '.aitools/.gitignore' (a NESTED gitignore inside .aitools/). Decision #22 component (6) also says '.aitools/.gitignore'. But the handoff OT-2 fix says to replace the blanket pattern in the ROOT .gitignore with selective patterns. These are architecturally different: root .gitignore with selective patterns vs nested .aitools/.gitignore with its own rules.",
+      "source": "planning-brief.json:2168 (decision #34 component 5), planning-brief.json:1560 (decision #22 component 6), handoff-prompt-v2.md:286 (OT-2 fix)"
+    },
+    {
+      "id": "O-5",
+      "fact": "No .aitools/.gitignore file exists on disk. No .aitools/.current-session file exists. No .aitools/channel/.current-session file exists. The only content under .aitools/ is .aitools/channel/session-uyZ7TELqpP/ with the one running estimate JSON file. The entire .aitools/ structure was created manually ('Channel dir created manually for this session' per the running estimate situation.currentState).",
+      "source": "ls -laR .aitools/ output, running-estimate.json:situation.currentState"
+    },
+    {
+      "id": "O-6",
+      "fact": "Decision #50 component (6) says: 'Lives at .aitools/channel/running-estimate.json (tracked in git, fixed path — not session-scoped). Updated in place (version incremented).' Component (7) says: 'committed by session-archive.sh at SessionEnd'. This assumes one writer at a time. No concurrency model is specified anywhere in the planning brief.",
+      "source": "planning-brief.json:3327 (decision #50 component 6), planning-brief.json:3328 (component 7)"
+    },
+    {
+      "id": "O-7",
+      "fact": "The workspace rule (.claude/rules/aitools-workspace.md) table says channel/running-estimate.json is 'tracked' and channel/session-*/ is 'gitignored'. But the blanket .gitignore makes BOTH gitignored. The workspace rule describes the INTENDED state; the .gitignore implements a DIFFERENT state. The barrier-amendment.md harvesting artifact from 2026-03-17 documents this as contradiction C1 and C3.",
+      "source": ".claude/rules/aitools-workspace.md:39, .gitignore:47, harvesting/2026-03-17_barrier-amendment.md:16-18"
+    },
+    {
+      "id": "O-8",
+      "fact": "The commander runs MULTIPLE agent sessions concurrently on the same repo. This is the current operational reality — session 5HyCwPtSDH is running right now alongside potentially other sessions. The concurrent-agents.md rule exists at user level but only covers git diff coordination for file edits, not session infrastructure (scratch dirs, current-session pointers, running estimates).",
+      "source": "~/.claude/rules/concurrent-agents.md, user schwerpunkt statement"
+    },
+    {
+      "id": "O-9",
+      "fact": "The CLAUDE.md mission says 'session state carry-forward' is a harness capability. The workspace rule says 'Any project aitools touches gets these capabilities.' Running estimates on grizzlies, customers, etc. each need their own .aitools/ namespace. The architecture must work for ANY repo the user works on, not just the aitools repo.",
+      "source": "CLAUDE.md:5 (mission), .claude/rules/aitools-workspace.md:14-15"
+    },
+    {
+      "id": "O-10",
+      "fact": "Decision #22 component (8) specifies '.aitools/channel/.current-session' and decision #34 component (6) specifies '.aitools/.current-session' as separate pointer files. Both are single-pointer files with the same concurrent-overwrite vulnerability as .scratch/.current-session.",
+      "source": "planning-brief.json:1562 (decision #22 component 8), planning-brief.json:2169 (decision #34 component 6)"
+    }
+  ],
+  "insights": [
+    {
+      "id": "I-1",
+      "observation_refs": ["O-3", "O-8", "O-10"],
+      "analysis": "SINGLE-POINTER FILES ARE BROKEN FOR CONCURRENT SESSIONS. .scratch/.current-session, .aitools/.current-session, and .aitools/channel/.current-session all use the last-writer-wins pattern. With N concurrent sessions, N-1 sessions lose their pointer at SessionStart, and all N SessionEnd hooks read the wrong session directory. This is not a theoretical risk — the commander explicitly runs concurrent sessions. The fix is straightforward: each session must embed its own session ID in its directory name (already done — session-XXXXXXXXXX) and the SessionEnd hook must receive the session ID from Claude Code's hook input JSON (already available — harvest-session.sh reads session_id from stdin), NOT from the .current-session pointer file. The pointer file can remain as a convenience for the LATEST session but must not be the authoritative lookup path for hooks."
+    },
+    {
+      "id": "I-2",
+      "observation_refs": ["O-2", "O-6", "O-8"],
+      "analysis": "PER-SESSION RUNNING ESTIMATES WITH RECONCILIATION IS THE CORRECT ARCHITECTURE. Decision #50 assumed one session at a time (component 6: 'Updated in place'). With concurrent sessions, two agents writing to the same running-estimate.json simultaneously would produce data loss or corruption. The commander's proposed design (per-session estimates at session-scoped paths, reconciled carry-forward estimate at fixed tracked path) resolves this. Each session writes to .aitools/channel/session-XXX/running-estimate.json (ephemeral, no contention). At session end or handoff, the session's estimate is RECONCILED into .aitools/channel/running-estimate.json (tracked, carry-forward). The reconciliation is a merge operation — it takes the session's completedWork, findings, and deviations and merges them into the carry-forward estimate. The existing session-uyZ7TELqpP estimate already demonstrates this pattern accidentally — it IS a per-session estimate at a session-scoped path."
+    },
+    {
+      "id": "I-3",
+      "observation_refs": ["O-1", "O-4", "O-7"],
+      "analysis": "TWO COMPETING GITIGNORE STRATEGIES EXIST AND NEITHER IS IMPLEMENTED. Strategy A (planning brief decisions #22, #34): a nested .aitools/.gitignore that ignores session dirs and scratch but allows harvesting and running-estimate.json to be tracked. Strategy B (handoff OT-2): selective patterns in the ROOT .gitignore replacing the blanket '.aitools/' line. Both strategies achieve the same outcome, but they have different implications. Strategy A (nested) is self-contained — when aitools creates .aitools/ in a user's project repo, it can include its own .gitignore. Strategy B (root) requires modifying the project's root .gitignore, which is project-specific. For the aitools repo itself, either works. For OTHER projects that aitools manages, Strategy A is superior because aitools can deploy .aitools/.gitignore without touching the project's .gitignore. The planning brief's original design (Strategy A) is better for the multi-project use case. The handoff's OT-2 (Strategy B) works for the aitools repo but doesn't generalize."
+    },
+    {
+      "id": "I-4",
+      "observation_refs": ["O-5", "O-7", "O-1"],
+      "analysis": "THE .AITOOLS/ DIRECTORY HAS NEVER BEEN TRACKED IN GIT. Everything under it is invisible to git due to the blanket ignore. The existing session-uyZ7TELqpP directory with its running estimate exists only on THIS machine's filesystem, untracked. If the user switches to Windows, this data is gone. The cross-machine carry-forward principle (workspace rule L17-29) is completely unfulfilled for .aitools/ state. The blanket .gitignore is the root cause blocker — until it is fixed, NOTHING under .aitools/ can carry forward."
+    },
+    {
+      "id": "I-5",
+      "observation_refs": ["O-9", "O-8"],
+      "analysis": "FOR EXTERNAL PROJECTS (grizzlies, customers, etc.), the architecture must handle: (a) .aitools/ directory created by a hook or aitools command, (b) .aitools/.gitignore deployed by the same mechanism, (c) per-session directories created by scratch-init/channel-init, (d) carry-forward data tracked without modifying the project's root .gitignore, (e) concurrent sessions on the same project. The nested .gitignore approach (Strategy A from I-3) handles this cleanly: aitools deploys .aitools/.gitignore once, and the directory self-manages its own tracking. The root .gitignore approach requires a project-specific modification for every repo the user works on."
+    },
+    {
+      "id": "I-6",
+      "observation_refs": ["O-3", "O-10", "O-8"],
+      "analysis": "THE RECONCILIATION PROBLEM HAS TWO DIMENSIONS: timing and authority. TIMING: when does reconciliation happen? Options: (a) at session end (SessionEnd hook), (b) at handoff (/handoff skill), (c) at session start (SessionStart hook reads all peer session estimates). AUTHORITY: who reconciles? With concurrent sessions, merging N session estimates into one carry-forward estimate requires conflict resolution. For completedWork (append-only), merge is trivial. For conclusions.assessment (single value), the most recent wins. For assumptions (status tracking), the most advanced status wins (verified > unverified, falsified > verified). The reconciliation algorithm should be simple and deterministic: LAST-UPDATED-WINS for scalar fields, UNION for array fields, MOST-ADVANCED-STATUS for enum fields."
+    }
+  ],
+  "proposals": [
+    {
+      "id": "P-1",
+      "insight_refs": ["I-3", "I-4", "I-5"],
+      "what": "Use BOTH gitignore strategies: (1) Replace the root .gitignore blanket '.aitools/' with '.aitools/scratch/' and '.aitools/channel/session-*/' and '.aitools/.current-session' and '.aitools/channel/.current-session'. (2) ALSO create .aitools/.gitignore with the same selective patterns. The root .gitignore fix unblocks the aitools repo immediately. The nested .aitools/.gitignore becomes the template that channel-init.sh deploys to other project repos.",
+      "why": "The root fix is needed NOW for the aitools repo (unblocks OT-2, enables tracking of running-estimate.json, harvesting migration, briefings). The nested .gitignore is needed for the multi-project use case — when a user runs aitools on grizzlies or customers, channel-init.sh creates .aitools/ and deploys .aitools/.gitignore so the project's root .gitignore is not modified. Both strategies complement each other.",
+      "barrier_analysis": "Risk: double-gitignore maintenance (root + nested). Mitigation: the root .gitignore patterns are temporary — once .aitools/.gitignore exists and harvesting/ migrates under .aitools/, the root patterns can be simplified to just '.aitools/' plus a negation or removed entirely if the nested file covers it. For the aitools repo specifically, the root .gitignore will always need to handle .aitools/ because the repo IS the harness source — it has both the source code and the workspace state."
+    },
+    {
+      "id": "P-2",
+      "insight_refs": ["I-1", "I-2", "I-6"],
+      "what": "Adopt per-session running estimates with reconciliation: (a) Each session writes its running estimate to .aitools/channel/session-XXX/running-estimate.json (gitignored, session-scoped, no contention). (b) The carry-forward estimate lives at .aitools/channel/running-estimate.json (tracked, fixed path). (c) Reconciliation happens at session end or handoff: the session's estimate is merged into the carry-forward estimate using LAST-UPDATED-WINS for scalars, UNION for arrays, MOST-ADVANCED-STATUS for enums. (d) The carry-forward estimate's meta section gets a 'reconciledFrom' array listing session IDs that contributed. Amend decision #50 component (6) to say: 'The carry-forward estimate lives at .aitools/channel/running-estimate.json (tracked in git, fixed path). Per-session estimates live at .aitools/channel/session-XXX/running-estimate.json (gitignored, session-scoped). At session end, the session estimate is reconciled into the carry-forward estimate.'",
+      "why": "Decision #50 assumed sequential sessions. The commander runs concurrent sessions. Without per-session estimates, two agents writing to the same file simultaneously produces data loss. The reconciliation model preserves each session's work independently and merges at session boundaries. The existing session-uyZ7TELqpP estimate already demonstrates this pattern — it IS a per-session estimate that was never reconciled because the infrastructure does not exist yet.",
+      "barrier_analysis": "Risk: reconciliation algorithm complexity. Mitigation: start with the simplest algorithm (UNION for arrays, LAST-UPDATED-WINS for scalars). The running estimate schema has mostly array fields (completedWork, deviations, facts, assumptions, findings, recommendations, delegationLog) — these all merge via UNION (deduplicated by content hash or by timestamp+description). The only scalar conflict points are meta.version (take max), situation.currentState (take most recent), and conclusions.assessment (take most recent). Risk: what if two sessions produce contradictory conclusions.assessment? This is the command decision the commander makes at the next session start — the carry-forward estimate shows both, the commander chooses. Risk: reconciliation at SessionEnd may not fire (session killed). Mitigation: SessionStart hook can also reconcile — if it finds stale session dirs with estimates that were never merged, it merges them into carry-forward before creating the new session dir."
+    },
+    {
+      "id": "P-3",
+      "insight_refs": ["I-1"],
+      "what": "Fix the .current-session pointer race condition: (a) SessionEnd hook (harvest-session.sh) must use the session_id from Claude Code's hook input JSON to find the session directory, NOT read from .current-session. The session dir name includes the session ID (session-XXXXXXXXXX), so the hook can reconstruct the path: .scratch/session-$SESSION_ID. (b) The .current-session pointer file becomes a CONVENIENCE for interactive use (agents can read it to find 'a' session dir) but not the authoritative mechanism. (c) Same fix for channel: .aitools/channel/.current-session becomes convenience-only; hooks use session_id from input.",
+      "why": "With concurrent sessions, .current-session is overwritten by the latest session start. When an earlier session ends, its SessionEnd hook reads the wrong pointer. The fix is simple: Claude Code already passes session_id in the hook input JSON (harvest-session.sh reads it at line 30). Use that ID to construct the path directly instead of indirecting through a file that may have been overwritten.",
+      "barrier_analysis": "Risk: scratch-init.sh uses mktemp to generate the session dir name (session-XXXXXXXXXX), which is a random string, not the Claude Code session_id. The SessionEnd hook cannot reconstruct the path from session_id alone. Fix: change scratch-init.sh to use the Claude Code session_id as the directory suffix instead of mktemp's random string. The session_id IS available in the SessionStart hook input JSON. Change: SESSION_DIR=\"$SCRATCH_DIR/session-$SESSION_ID\" (with mkdir -p instead of mktemp). This makes the session dir name deterministic and reconstructable from the session_id. Risk: SESSION_ID could contain characters unsafe for directory names. Mitigation: Claude Code session IDs appear to be alphanumeric (uyZ7TELqpP, 5HyCwPtSDH, Z1IhGrcgGO). Validate with a regex check. If unsafe chars, fall back to mktemp but write session_id mapping."
+    },
+    {
+      "id": "P-4",
+      "insight_refs": ["I-3", "I-5"],
+      "what": "For the specific .gitignore fix (OT-2), the proposed patterns from the handoff are ALMOST correct but need one addition. Proposed: '.aitools/scratch/', '.aitools/channel/session-*/', '.aitools/.current-session', '.aitools/channel/.current-session'. Missing: the root .gitignore must also NOT ignore .aitools/channel/running-estimate.json, .aitools/channel/handoffs/, .aitools/harvesting/, and .aitools/briefings/. With git, removing the blanket '.aitools/' and adding only the selective ignore patterns automatically UN-ignores everything not listed. So the proposed patterns are sufficient — anything not matching the four selective patterns will be trackable. Verify: .aitools/channel/running-estimate.json does NOT match any of the four patterns, so it becomes trackable. .aitools/harvesting/ does NOT match, so it becomes trackable. .aitools/briefings/ does NOT match, so it becomes trackable. CORRECT.",
+      "why": "Verification that the proposed .gitignore fix is complete and does not accidentally ignore tracked content. The patterns are the minimum set: ignore session-ephemeral (scratch, session dirs, current-session pointers), track everything else (running estimate, handoffs, harvesting, briefings).",
+      "barrier_analysis": "Edge case: what about .aitools/channel/channel-manifest.json (decision #22 component 4, per session dir)? The manifest is inside session-*/ dirs which are gitignored, so it is correctly ephemeral. Edge case: what about files directly in .aitools/ (not in a subdirectory)? They would be tracked, which is correct for things like a future .aitools/config.json. Edge case: what about .aitools/channel/ directory itself (the parent of session dirs)? Git does not track empty directories, so .aitools/channel/ only appears in git if it contains tracked files (running-estimate.json, handoffs/). This is correct behavior."
+    },
+    {
+      "id": "P-5",
+      "insight_refs": ["I-2", "I-6"],
+      "what": "Define the reconciliation algorithm explicitly as a schema extension to decision #50. Add a 'reconciliation' section to the running estimate schema: { \"strategy\": { \"arrays\": \"union-by-description\", \"scalars\": \"last-updated-wins\", \"enums\": \"most-advanced-status\" }, \"statusOrder\": [\"unverified\", \"verified\", \"falsified\"], \"reconciledFrom\": [\"session-id-1\", \"session-id-2\"] }. The reconciliation happens in THREE places: (1) SessionEnd hook — merge this session's estimate into carry-forward. (2) /handoff skill — explicit reconciliation as part of handoff writing. (3) SessionStart hook — find any un-reconciled session estimates from crashed/killed sessions and merge them before creating new session dir.",
+      "why": "Without a defined algorithm, reconciliation becomes ad-hoc and agent-dependent. A deterministic algorithm means hooks can do it automatically. The three reconciliation points cover all lifecycle events: start (catch crashes), end (normal flow), and handoff (explicit checkpoint).",
+      "barrier_analysis": "Risk: array union-by-description could produce duplicates if the same work is described differently by two sessions. Mitigation: use content similarity heuristic or accept near-duplicates and let the next session's S2 deduplicate during Lagebeurteilung. The cost of a few duplicate array entries is far lower than the cost of lost work from a failed reconciliation. Risk: the reconciliation logic must be implemented in bash (hooks are bash). JSON manipulation in bash is fragile. Mitigation: use node (already required by aitools, already used in harvest-session.sh for manifest updates). The reconciliation is a small node script: read two JSON files, merge arrays (concat + dedupe by JSON.stringify of each element), take max version, take most recent updated timestamp."
+    }
+  ]
+}

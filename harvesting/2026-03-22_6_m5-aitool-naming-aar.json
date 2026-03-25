@@ -1,0 +1,169 @@
+{
+  "meta": {
+    "mission": "M5",
+    "agent": "S2",
+    "session": "5HyCwPtSDH",
+    "date": "2026-03-21",
+    "schwerpunkt": "Design /aitool-* naming convention for cross-repo skill availability"
+  },
+  "observations": [
+    {
+      "id": "O-1",
+      "fact": "9 skills are user-level (shared/skills/ -> ~/.claude/skills/): a11y-debugging, chrome-devtools, handoff, intent-audit, intent-writing, investigate, optimize-plan, planning, scratch. 9 skills are project-level (.claude/skills/ -> only in aitools repo): audit, frameworks, glossary, governed-data, harvest, incident, tool-eval, tool-ops, tool-registry.",
+      "source": "ls shared/skills/ and ls .claude/skills/"
+    },
+    {
+      "id": "O-2",
+      "fact": "Claude Code discovers skills from two directories: ~/.claude/skills/ (user-level, deployed by setup-user-skills) and .claude/skills/ (project-level, auto-discovered from repo). The `name` field in SKILL.md frontmatter is the invocation name. The directory name is the filesystem container. Decision #49 component (7) states: 'Skill directory name matches invocation verb.'",
+      "source": "reference/glossary.json:266, plans/mission-command-briefing/planning-brief.json:3218"
+    },
+    {
+      "id": "O-3",
+      "fact": "The tool-ops skill references aitools-repo-specific files: reference/tool-ops.json, reference/framework-tool-ops.md, reference/tool-ops-*.md, .claude/rules/tool-ops.md. These paths only exist in the aitools repo. Deploying tool-ops as-is to ~/.claude/skills/ would reference non-existent files when invoked from grizzlies or customers repos.",
+      "source": ".claude/skills/tool-ops/SKILL.md:20-24, lines 103-107"
+    },
+    {
+      "id": "O-4",
+      "fact": "All 9 project-level skills reference aitools-repo-specific JSON registries and rules: audit reads all rules/references/incidents, frameworks reads reference/framework-registry.json, glossary reads reference/glossary.json, governed-data reads the governed-data registry, harvest reads harvesting/harvest-manifest.json, incident reads reference/incidents.json, tool-eval reads reference/tool-evaluation-criteria.md, tool-registry reads reference/tool-registry.json, tool-ops reads reference/tool-ops.json.",
+      "source": ".claude/skills/*/SKILL.md (all 9 files)"
+    },
+    {
+      "id": "O-5",
+      "fact": "Decision #49 lists skills that were planned to remain unchanged: '/investigate, /incident, /frameworks, /glossary, /tool-eval, /tool-registry, /tool-ops, /audit, /scratch'. It also planned new user-level skills: /brief, /debrief, /delegate, /channel, /compat. All the 'unchanged' skills except /scratch and /investigate are project-level today.",
+      "source": "plans/mission-command-briefing/planning-brief.json:3221"
+    },
+    {
+      "id": "O-6",
+      "fact": "setup-user-skills.sh (scripts/ version) discovers skills dynamically from shared/skills/ at runtime. build-deploy.sh embeds SKILL.md content as heredocs into deploy/setup-user-skills.sh at build time. Only shared/skills/ content is embedded -- .claude/skills/ content is never embedded in deploy scripts.",
+      "source": "scripts/build-deploy.sh:983-997, scripts/setup-user-skills.sh:56-77"
+    },
+    {
+      "id": "O-7",
+      "fact": "The 'no same-name overrides' rule prevents creating skills with the same name at both user-level and project-level. Documentation explicitly states: 'User-level takes priority. Never create a project-level skill with the same name as a user-level skill.'",
+      "source": "plans/governance-and-compliance-framework.md:122, .claude/rules/documentation-standards.md:89-90"
+    },
+    {
+      "id": "O-8",
+      "fact": "Decision #16 establishes naming conventions: 'frameworks 2+ word noun phrase, rules noun, skills verb, hooks descriptive.' Skills should be verb-like (action-oriented). The /aitool-* prefix would create compound names that deviate from the flat-verb principle.",
+      "source": "plans/mission-command-briefing/planning-brief.json:1290-1310"
+    },
+    {
+      "id": "O-9",
+      "fact": "21 rules across .claude/rules/ and CLAUDE.md reference project-level skills by name: /tool-ops (6 references), /incident (12+ references), /glossary (7+ references), /frameworks (5+ references), /tool-eval (4+ references), /tool-registry (3+ references), /harvest (2+ references), /audit (6+ references).",
+      "source": "grep across .claude/rules/ and CLAUDE.md"
+    },
+    {
+      "id": "O-10",
+      "fact": "The harness mission statement says: 'gives every project it touches governance frameworks, artifact harvesting, session state carry-forward, and provenance tracking.' This implies harness capabilities should be available in every project, not just aitools.",
+      "source": "CLAUDE.md:1-10"
+    },
+    {
+      "id": "O-11",
+      "fact": "Skills that read/write governed JSON registries require those JSON files to exist. Most project-level skills (tool-ops, tool-registry, frameworks, glossary, incidents, harvest) are bound to specific JSON files that only exist in the aitools repo. These are not 'harness capabilities' -- they are 'aitools repo management capabilities.'",
+      "source": ".claude/skills/tool-ops/SKILL.md, .claude/skills/tool-registry/SKILL.md, .claude/skills/glossary/SKILL.md, etc."
+    },
+    {
+      "id": "O-12",
+      "fact": "The current deployed skills at ~/.claude/skills/ exactly match shared/skills/: a11y-debugging, chrome-devtools, handoff, intent-audit, intent-writing, investigate, optimize-plan, planning, scratch. No project-level skills are deployed to user scope.",
+      "source": "ls ~/.claude/skills/"
+    },
+    {
+      "id": "O-13",
+      "fact": "The Skill tool in Claude Code uses the `name` field from frontmatter for matching when invoked with `skill: 'tool-ops'`. The directory name is for filesystem organization. Both should match (decision #49 component 7) but the name field is the invocation key.",
+      "source": "SKILL.md frontmatter across all skills, system prompt Skill tool definition"
+    }
+  ],
+  "insights": [
+    {
+      "id": "I-1",
+      "observation_refs": ["O-3", "O-4", "O-11"],
+      "analysis": "Project-level skills divide into two categories: (A) skills that are inherently bound to aitools repo data (tool-ops, tool-registry, tool-eval, frameworks, glossary, incident, governed-data, audit) -- these read/write JSON files that only exist in aitools; and (B) skills that implement harness capabilities portable to any repo (harvest). The tool-ops problem is NOT that tool-ops should be user-level -- it is that the KNOWLEDGE tool-ops provides (deny rules, hook behavior) should be accessible cross-repo. The skill itself is the wrong vehicle because it needs reference/tool-ops.json."
+    },
+    {
+      "id": "I-2",
+      "observation_refs": ["O-1", "O-5", "O-10"],
+      "analysis": "The commander's frustration is real: when working in grizzlies, they wanted to check tool-ops knowledge (deny rules, hook behavior) but couldn't because /tool-ops only exists in aitools. The solution is not to deploy the /tool-ops SKILL to user scope (it would fail without its JSON file), but to make the operational KNOWLEDGE accessible without invoking the skill. Two approaches: (A) a lightweight user-level skill that provides read-only access to tool-ops knowledge (embeds key facts or reads from a deployed artifact), or (B) embed critical tool-ops knowledge into user-level rules/CLAUDE.md where it's always in context."
+    },
+    {
+      "id": "I-3",
+      "observation_refs": ["O-8", "O-2", "O-13"],
+      "analysis": "The /aitool-* prefix creates a tension with decision #16 (skills are verbs) and decision #49 (flat verbs). /aitool-scratch is a compound noun-prefix, not a verb. /scratch is a verb. The prefix adds cognitive load: 'I need to write a temp file' -> /scratch (immediate) vs /aitool-scratch (requires knowing the prefix convention). However, the collision prevention rationale is valid -- if another harness deploys skills to ~/.claude/skills/, namespace conflicts are real."
+    },
+    {
+      "id": "I-4",
+      "observation_refs": ["O-6", "O-7", "O-12"],
+      "analysis": "The deployment mechanism (shared/skills/ -> build-deploy -> deploy/ -> ~/.claude/skills/) is directory-name-based. Renaming from 'scratch' to 'aitool-scratch' requires: (1) rename shared/skills/scratch/ to shared/skills/aitool-scratch/, (2) change name: field in SKILL.md from 'scratch' to 'aitool-scratch', (3) rebuild deploy scripts, (4) on next deploy, old 'scratch/' directory in ~/.claude/skills/ becomes orphaned (reverse discovery would flag it). Migration is mechanically simple but creates orphan cleanup and muscle-memory disruption."
+    },
+    {
+      "id": "I-5",
+      "observation_refs": ["O-9"],
+      "analysis": "Renaming skills that are referenced in rules creates a large blast radius. /incident alone has 12+ references across .claude/rules/. But wait -- project-level skills (in .claude/skills/) would NOT be renamed because the /aitool-* prefix is for USER-level skills deployed to ~/.claude/skills/. The confusion: /incident is project-level today, not user-level. If it stays project-level, no rename needed. If it moves to user-level (which I-1 shows would break it), then rename applies. The blast radius concern is real only for skills that actually move levels."
+    },
+    {
+      "id": "I-6",
+      "observation_refs": ["O-7", "O-13"],
+      "analysis": "Collision prevention has two dimensions: (1) directory name collision (two harnesses both create ~/.claude/skills/scratch/) and (2) invocation name collision (two skills both have name: scratch in frontmatter). The directory name and invocation name should match (decision #49 component 7). The /aitool-* prefix solves both simultaneously. But the collision risk is theoretical today -- aitools is the only harness deploying to ~/.claude/skills/ for this user. The prefix is insurance against a future multi-harness world."
+    },
+    {
+      "id": "I-7",
+      "observation_refs": ["O-1", "O-4", "O-11"],
+      "analysis": "Harvest is the only project-level skill that could reasonably become user-level. It reads harvesting/harvest-manifest.json, and every project aitools touches gets a .aitools/harvesting/ directory (per aitools-workspace.md). The harvest skill could be rewritten to use a project-relative path (.aitools/harvesting/harvest-manifest.json) rather than an aitools-repo-specific path. This would make it a true harness capability available in any project. All other project-level skills are fundamentally aitools-repo-specific."
+    },
+    {
+      "id": "I-8",
+      "observation_refs": ["O-10", "O-2", "O-3"],
+      "analysis": "The real need is a tiered knowledge model: (1) Full governed skill with read/write access to JSON registry -- only works in aitools repo (project-level). (2) Read-only knowledge summary deployed to all repos via user-level skill -- provides the essential operational facts without needing the JSON. For tool-ops specifically: deny rules, hook behavior, and doc access methods are relatively static facts that could be embedded in a user-level 'aitool-ops' skill as a reference card. Changes would propagate on next aitools deploy."
+    }
+  ],
+  "proposals": [
+    {
+      "id": "P-1",
+      "insight_refs": ["I-1", "I-2", "I-8"],
+      "what": "Create a tiered skill architecture: project-level skills (full CRUD on governed registries, aitools repo only) and user-level 'reference card' skills (read-only knowledge summaries, deployed everywhere). Do NOT move project-level skills to user-level wholesale.",
+      "why": "Project-level skills are bound to repo-specific JSON files. Deploying them to user scope would produce skills that fail when invoked outside aitools. Instead, extract the cross-repo-useful KNOWLEDGE from project-level skills into lightweight user-level reference cards.",
+      "barrier_analysis": "Barrier: Maintaining two representations of the same knowledge (project skill + user reference card) creates sync risk. Mitigation: build-deploy.sh could auto-generate reference cards from project skills during build, similar to how it already embeds shared/skills/ content. The project skill remains the source of truth; the reference card is a derived artifact. Risk: Reference cards become stale if build step is skipped. Mitigation: check-pre-commit validates reference card freshness."
+    },
+    {
+      "id": "P-2",
+      "insight_refs": ["I-3", "I-6"],
+      "what": "Use the /aitool-* prefix ONLY for user-level skills that could collide with other tools or frameworks, NOT for all user-level skills. Skills with unique-enough names (a11y-debugging, chrome-devtools, handoff) keep their current names. Skills with generic names (scratch, planning, investigate) get the prefix. Proposed mapping: scratch -> aitool-scratch, planning -> aitool-planning, investigate -> aitool-investigate, handoff -> aitool-handoff, intent-audit -> aitool-intent-audit, intent-writing -> aitool-intent-writing, optimize-plan -> aitool-optimize-plan. New reference-card skills: aitool-ops (from tool-ops knowledge), aitool-tools (from tool-registry knowledge). Leave unchanged: a11y-debugging, chrome-devtools (already namespaced by specificity).",
+      "why": "Blanket prefixing breaks the flat-verb principle (decision #49) and adds friction for ALL skills when the collision risk only exists for generically-named ones. Selective prefixing balances collision prevention with usability. The 'aitool-' prefix signals 'this is a harness-managed skill' which is the right semantic for skills that are part of the aitools infrastructure.",
+      "barrier_analysis": "Barrier 1: Inconsistency -- some skills prefixed, some not. Users must remember which have the prefix. Mitigation: The split is predictable -- tool-specific skills (a11y-debugging, chrome-devtools) keep names, harness-infrastructure skills get the prefix. Barrier 2: Decision #49 tension. The flat-verb ideal says '/scratch' not '/aitool-scratch'. But #49 was designed before multi-harness collision risk was considered. The prefix is a namespace, not a hierarchy -- it does not introduce subcommands. Barrier 3: Existing triggers in rules reference current names. But rules only reference project-level skills, which are NOT being renamed."
+    },
+    {
+      "id": "P-3",
+      "insight_refs": ["I-3", "I-6"],
+      "what": "ALTERNATIVE to P-2: Apply /aitool-* prefix to ALL user-level skills uniformly. Every skill in shared/skills/ gets renamed: aitool-scratch, aitool-planning, aitool-handoff, aitool-chrome-devtools, aitool-a11y-debugging, etc. New reference-card skills also get prefix: aitool-ops, aitool-tools.",
+      "why": "Consistency wins over optimizing individual names. Users learn one rule: 'all harness skills start with /aitool-'. No ambiguity about which skills have the prefix. Claude Code auto-completion makes the prefix cheap -- type '/aitool-' and see all options. Fully prevents collisions with any other framework that might deploy skills.",
+      "barrier_analysis": "Barrier 1: Muscle memory disruption. All 9 current skills change names. Mitigation: Claude Code's Skill tool matches on name field -- old names would stop working immediately after deployment. A transition mechanism (keeping old directories alongside new for 1-2 versions) could soften this. Barrier 2: Verbosity. '/aitool-scratch' is 15 chars vs '/scratch' 8 chars. In practice, users type '/ait' and autocomplete. Barrier 3: Decision #49 violation. The prefix adds a namespace layer that #49 explicitly rejected (compound naming). Counter: #49 rejected hierarchical subcommands ('/learn debrief'), not namespace prefixes. '/aitool-scratch' is still one verb, one job, no subcommands."
+    },
+    {
+      "id": "P-4",
+      "insight_refs": ["I-4", "I-5"],
+      "what": "Migration path for any prefix rename: (1) Rename directories in shared/skills/, (2) Update name: field in all SKILL.md frontmatter, (3) Run build-deploy.sh to regenerate deploy/, (4) On deploy, old skill directories in ~/.claude/skills/ detected by reverse discovery and offered for cleanup, (5) Update any shared/ rules or CLAUDE.md references to user-level skill names. Project-level skill references in .claude/rules/ remain unchanged.",
+      "why": "The deployment infrastructure already handles this cleanly. Reverse discovery (setup-user-skills.sh:170-213) detects orphaned skills. The build system dynamically discovers skills from directory names. No hardcoded skill lists to update. The main work is the rename itself and rule reference updates.",
+      "barrier_analysis": "Barrier: Orphaned old-name directories will confuse Claude Code (it discovers from both). Mitigation: setup-user-skills.sh needs a cleanup phase that removes known-renamed directories. Add a 'legacy_names' map to the deploy script. Barrier: Dotprofile repos that override skills (dotprofile-skills/) would need matching renames. Mitigation: Document in migration notes; aitools deploy logs a warning when dotprofile has a skill name that doesn't match any shared skill."
+    },
+    {
+      "id": "P-5",
+      "insight_refs": ["I-7"],
+      "what": "Promote /harvest from project-level to user-level, rewriting it to use project-relative paths (.aitools/harvesting/harvest-manifest.json) instead of aitools-repo-specific paths. Move from .claude/skills/harvest/ to shared/skills/harvest/ (or shared/skills/aitool-harvest/ if prefix adopted).",
+      "why": "Harvest is the only project-level skill that implements a harness capability (artifact lifecycle management) designed to be available in every project. The .aitools/harvesting/ workspace is created for every project aitools touches. The skill should follow the workspace.",
+      "barrier_analysis": "Barrier: harvest/SKILL.md currently references harvesting/harvest-manifest.json (aitools-repo-relative path). Rewriting to .aitools/harvesting/harvest-manifest.json changes the schema location. Projects without .aitools/ initialized would get a 'no manifest found' error. Mitigation: Skill checks for .aitools/ existence and provides 'run aitools init' guidance. The same pattern scratch/ already uses. Barrier: Removing harvest from .claude/skills/ while adding to shared/skills/ creates a transition where the aitools repo has two copies (project + user). Mitigation: Per no-same-name rule, remove from .claude/skills/ first, then add to shared/skills/."
+    },
+    {
+      "id": "P-6",
+      "insight_refs": ["I-2", "I-8"],
+      "what": "For the specific /tool-ops problem: create shared/skills/aitool-ops/SKILL.md as a read-only reference card. Build-deploy.sh extracts key operational facts from reference/tool-ops.json at build time and embeds them as static content in the skill. The skill provides: deny rule lookups, hook behavior reference, doc access methods. It does NOT provide write access to tool-ops.json. The project-level /tool-ops skill remains for full CRUD in the aitools repo.",
+      "why": "When working in grizzlies and needing to check 'what are the deny rules for Claude Code?', the user invokes /aitool-ops and gets the answer from embedded knowledge. No dependency on the aitools repo being present. The reference card is regenerated on every build, so it stays in sync with the JSON registry.",
+      "barrier_analysis": "Barrier: Build-time extraction adds complexity to build-deploy.sh. It needs to parse JSON and format it into SKILL.md content. Mitigation: Use a simple jq/node extraction step, similar to how build-deploy.sh already processes complex content. Barrier: The reference card is a snapshot -- if the user updates tool-ops.json between builds, the reference card is stale until next build. Mitigation: build-deploy.sh already runs on every aitools sync. Staleness window is minimal. Barrier: Two skills for the same domain (/tool-ops in aitools, /aitool-ops everywhere). Mitigation: Different names, different purposes (CRUD vs read-only). The rule in .claude/rules/tool-ops.md directs to /tool-ops for writes, which only makes sense in the aitools repo anyway."
+    },
+    {
+      "id": "P-7",
+      "insight_refs": ["I-1", "I-2"],
+      "what": "Formalize the three-tier skill taxonomy: (1) Project-only skills -- .claude/skills/, bound to repo-specific data, never deployed to user scope. (2) User-level skills -- shared/skills/ -> ~/.claude/skills/, portable to any repo, may use project-relative paths (.aitools/). (3) Reference-card skills -- derived from project-only skills at build time, deployed to user scope as read-only knowledge. Document this taxonomy in reference/framework-governed-vocabulary.md or a new reference file.",
+      "why": "The current two-tier model (project vs user) does not account for the cross-repo knowledge access need the commander identified. The reference-card tier fills the gap without breaking the governed-data-access pattern (skills that write to registries stay project-level, knowledge extraction stays read-only).",
+      "barrier_analysis": "Barrier: Adds complexity to the skill governance model. Three tiers instead of two. Mitigation: The taxonomy makes explicit what is already implicit -- some skills are repo-bound, some are portable, and there is unmet demand for cross-repo knowledge access. Making it explicit prevents ad-hoc solutions. Barrier: Reference cards must be maintained. Mitigation: They are auto-generated at build time. The maintenance burden is one build step per reference card, not ongoing manual sync."
+    }
+  ]
+}

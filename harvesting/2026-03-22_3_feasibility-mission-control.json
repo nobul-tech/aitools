@@ -1,0 +1,482 @@
+{
+  "meta": {
+    "mission": "M20",
+    "agent": "S2 (Intelligence)",
+    "session": "5HyCwPtSDH",
+    "created": "2026-03-21T25:00:00Z",
+    "schwerpunkt": "Feasibility study: dynamically-updated mission control dashboard reflecting CURRENT session state",
+    "method": "7-option evaluation against 7 criteria. Full harness read: CLAUDE.md, ROADMAP.md, aitools CLI, running-estimate-v4.json, both dashboards, M19 executability assessment, .gitignore, scratch-init.sh, tool-ops-claude-code.md, workspace structure."
+  },
+
+  "keyInsight": {
+    "statement": "The running estimate JSON IS already the data model. It tracks missions, decisions, assumptions, findings, delegation log, Schwerpunkt, open threads. If the dashboard reads from the running estimate, it is as current as the estimate.",
+    "implication": "The problem is NOT 'how to get data into the dashboard' -- it is 'how to get data into the running estimate reliably, and how to render the estimate as a visual dashboard'. The first problem is already being solved by the session architecture (per-session estimates, S3 maintenance). The second problem is the actual engineering challenge."
+  },
+
+  "contextRotVerification": {
+    "gitignoreFixed": false,
+    "evidence": ".gitignore line 47 still contains blanket '.aitools/' pattern. The claim in running-estimate-v4.json completedWork[44] ('Fixed .gitignore: added selective patterns to unblock .aitools/ tracked paths') is FALSE. The fix was DECIDED (D-GITIGNORE-FIX) but never EXECUTED. M19 independently confirmed this.",
+    "runningEstimateV4IsAuthoritative": true,
+    "evidence2": "running-estimate-v3-stale.json exists as renamed stale file. running-estimate-v4.json is the sole authoritative estimate per M19 B1 resolution."
+  },
+
+  "evaluationMatrix": {
+    "criteria": [
+      {"id": "C1", "name": "Achieves dynamic reflection", "description": "Does it show CURRENT state (missions, decisions, assumptions, proposals, agent status, running estimate, artifacts)?"},
+      {"id": "C2", "name": "Simplicity", "description": "1-5 scale (5=simplest). How easy to build, understand, maintain?"},
+      {"id": "C3", "name": "Growability", "description": "Can features be added without rewriting the core?"},
+      {"id": "C4", "name": "Reibung", "description": "What friction points make it hard?"},
+      {"id": "C5", "name": "Harness fit", "description": "Does it use existing patterns? aitools CLI? skills? hooks? governed data?"},
+      {"id": "C6", "name": "Cross-platform", "description": "Works on macOS + Windows?"},
+      {"id": "C7", "name": "Multi-session", "description": "Supports concurrent sessions per commander's requirement?"}
+    ],
+
+    "options": [
+      {
+        "id": "A",
+        "name": "HTML reads JSON via fetch + setInterval",
+        "description": "Static HTML file with embedded JavaScript. setInterval polls running-estimate.json via fetch() every N seconds. Re-renders dashboard on each poll.",
+        "scores": {
+          "C1": {"score": 4, "note": "Dynamic IF the fetch works. Dashboard is as current as the estimate. Missing: agent-level metrics not in estimate."},
+          "C2": {"score": 5, "note": "Single HTML file. No server. No build step. No dependencies. Conceptually trivial."},
+          "C3": {"score": 5, "note": "Add new panels = add new render functions. Add new data sources = add more fetch calls. Template is standard HTML/JS."},
+          "C4": {"score": "BLOCKER", "note": "fetch() with file:/// protocol is BLOCKED by browser CORS/security policies. Chrome, Firefox, Safari all block fetch('file:///...') from a file:/// origin. This is not configurable without --disable-web-security (Chrome) or about:config (Firefox). This blocker kills the option as-is."},
+          "C5": {"score": 2, "note": "Does not use any harness pattern. No CLI integration. No governed data access."},
+          "C6": {"score": 5, "note": "HTML renders anywhere."},
+          "C7": {"score": 4, "note": "Each session has its own estimate; each session could have its own dashboard. Or a multi-session dashboard reads multiple estimates."}
+        },
+        "verdict": "BLOCKED by CORS. The simplest option is killed by browser security. Would require a local server to bypass, which transforms it into Option C."
+      },
+      {
+        "id": "A-prime",
+        "name": "HTML with EMBEDDED JSON (no fetch)",
+        "description": "HTML file with the running estimate JSON embedded directly in a <script> tag. No fetch, no CORS, no server. The dashboard generator reads the JSON and embeds it at generation time.",
+        "scores": {
+          "C1": {"score": 5, "note": "Shows ALL state from the running estimate at generation time. As current as the last generation. Not live-updating but refreshed on each generation."},
+          "C2": {"score": 5, "note": "Single HTML file. Zero runtime dependencies. The current dashboards already use this pattern -- the agents[] array in dashboard-v2.html IS an embedded data model. This is proven."},
+          "C3": {"score": 5, "note": "Add panels = add render functions. Add data = expand the embedded JSON or add more embedded data blocks. The v2 dashboard already demonstrates: session summary, convergence themes, decisions, assumptions, timeline, agent cards -- all from embedded data."},
+          "C4": {"score": "LOW", "note": "The only friction: the dashboard must be regenerated to reflect new state. This is NOT a bug -- it is the update mechanism. Generation happens (a) on demand via a command, (b) via a hook, or (c) as part of S2/S3 operational duty. The current session already regenerated the dashboard manually multiple times."},
+          "C5": {"score": 5, "note": "FITS PERFECTLY. The current dashboards ARE this pattern. The running estimate IS the data model. The harness already produces both. This is not a new pattern -- it is codifying the existing one."},
+          "C6": {"score": 5, "note": "HTML renders on any OS. Generation script works on macOS and Windows (Python or bash)."},
+          "C7": {"score": 5, "note": "Each session generates its own dashboard from its own estimate. A multi-session dashboard reads all session estimates. The per-session estimate architecture (D-PER-SESSION-ESTIMATES) already provides the data isolation."}
+        },
+        "verdict": "RECOMMENDED. This is what we are already doing -- the v2 dashboards prove the pattern. The gap is: no automated generation, no standard template, no CLI integration."
+      },
+      {
+        "id": "B",
+        "name": "Python/Node script generates HTML on demand",
+        "description": "A generator script reads running-estimate.json + scratch inventory + any other data sources, and produces a self-contained HTML file. Invoked via `aitools dashboard` or as part of the S3 operational duty.",
+        "scores": {
+          "C1": {"score": 5, "note": "Generated dashboard reflects state at generation time. Can include any data source the script reads."},
+          "C2": {"score": 4, "note": "One script + one HTML template. Python is a managed tool. More moving parts than pure HTML, but the generation step is straightforward."},
+          "C3": {"score": 5, "note": "Add data sources = add readers to the script. Add panels = add template sections. Template is decoupled from data."},
+          "C4": {"score": "LOW", "note": "Requires maintaining a script and a template. Template must be kept in sync with the running estimate schema. But this is standard development -- no novel risks."},
+          "C5": {"score": 4, "note": "Fits well as an `aitools dashboard` command or as a skill. Uses the CLI pattern. Could read governed data via scripts."},
+          "C6": {"score": 5, "note": "Python 3 is a managed tool on both platforms."},
+          "C7": {"score": 5, "note": "Same as A-prime -- reads per-session estimates."}
+        },
+        "verdict": "STRONG OPTION. This is essentially the automation layer for A-prime. A-prime is the data pattern; Option B is the generation mechanism. They combine."
+      },
+      {
+        "id": "C",
+        "name": "MCP server serves live dashboard",
+        "description": "A local HTTP server (Node/Python) serves the dashboard and reads running-estimate.json on each request. Chrome DevTools MCP could navigate to it.",
+        "scores": {
+          "C1": {"score": 5, "note": "Truly live -- dashboard reflects estimate on every page load or via WebSocket push."},
+          "C2": {"score": 2, "note": "Requires a running server process. Port management. Process lifecycle. Significant complexity for marginal benefit over regeneration."},
+          "C3": {"score": 4, "note": "Server can serve multiple routes, APIs, WebSocket. Very growable but at the cost of ongoing complexity."},
+          "C4": {"score": "HIGH", "note": "Server must be started, monitored, stopped. Port conflicts with other tools. Process management on both platforms. What starts the server? What stops it? This is infrastructure, not a dashboard."},
+          "C5": {"score": 2, "note": "No existing pattern for running servers in aitools. Would require new lifecycle management. Does not fit the 'everything is a file' harness philosophy."},
+          "C6": {"score": 3, "note": "Server code is cross-platform but process management differs (launchd vs Windows Service vs manual start)."},
+          "C7": {"score": 3, "note": "Multiple concurrent sessions = multiple server instances = port conflicts. Or one server aggregating all sessions = more complexity."}
+        },
+        "verdict": "OVERENGINEERED. The benefit (live updates) does not justify the complexity (server lifecycle). The running estimate changes infrequently enough that regeneration is sufficient."
+      },
+      {
+        "id": "D",
+        "name": "Self-updating HTML via File API",
+        "description": "Dashboard HTML contains a script that reads local files via the File System Access API or FileReader API.",
+        "scores": {
+          "C1": {"score": 3, "note": "Would work IF the API were available without user gesture."},
+          "C2": {"score": 3, "note": "Complex browser API usage. Permission prompts."},
+          "C3": {"score": 3, "note": "Limited by browser API evolution."},
+          "C4": {"score": "HIGH", "note": "File System Access API requires user gesture (click) to grant permission on every page load. Cannot auto-read a file. showDirectoryPicker is not available in file:/// context. Broken by design for this use case."},
+          "C5": {"score": 1, "note": "No harness fit. Browser API is a foreign mechanism."},
+          "C6": {"score": 4, "note": "API works in Chrome on both platforms, IF it works at all."},
+          "C7": {"score": 3, "note": "Each dashboard instance would need its own permission grant."}
+        },
+        "verdict": "NOT VIABLE. Browser security prevents automatic local file reading without user interaction."
+      },
+      {
+        "id": "E",
+        "name": "Stop hook writes JSON sidecar, HTML polls it",
+        "description": "A Stop hook writes dashboard-state.json after each turn. HTML polls the sidecar file.",
+        "scores": {
+          "C1": {"score": 3, "note": "Sidecar updated on every turn (mechanical), but polling still blocked by CORS (same as Option A)."},
+          "C2": {"score": 3, "note": "Two mechanisms: hook for writing, HTML for rendering. The hook part is clean but the HTML polling part has the same CORS problem."},
+          "C3": {"score": 3, "note": "Hook can be extended, but fundamental CORS limit remains."},
+          "C4": {"score": "BLOCKER", "note": "Same fetch/CORS blocker as Option A. The sidecar does not solve the browser security problem."},
+          "C5": {"score": 3, "note": "Hook part fits well. HTML polling part does not."},
+          "C6": {"score": 4, "note": "Hook works on both platforms."},
+          "C7": {"score": 4, "note": "Each session's hook writes its own sidecar."}
+        },
+        "verdict": "BLOCKED. Same CORS problem as Option A. The hook is useful for OTHER purposes (triggering regeneration) but cannot solve the rendering problem alone."
+      },
+      {
+        "id": "F",
+        "name": "Running estimate IS the dashboard data (pure)",
+        "description": "Dashboard HTML is purely a viewer for running-estimate.json. Every S3 estimate update = dashboard update.",
+        "scores": {
+          "C1": {"score": 5, "note": "Single source of truth. As current as the estimate."},
+          "C2": {"score": 5, "note": "Simplest possible data model. Already exists."},
+          "C3": {"score": 4, "note": "Growable IF the estimate schema is extended. But extending a governed JSON schema has process overhead."},
+          "C4": {"score": "MEDIUM", "note": "The estimate schema does not currently include all dashboard-desired data. Agent-level metrics (duration, tokens, tool calls) are in the delegation log but not in a dashboard-friendly format. Extending the schema is feasible but requires schema governance."},
+          "C5": {"score": 5, "note": "Running estimate is already a governed harness artifact."},
+          "C6": {"score": 5, "note": "JSON + HTML, fully cross-platform."},
+          "C7": {"score": 5, "note": "Per-session estimates provide natural multi-session isolation."}
+        },
+        "verdict": "CORRECT DATA MODEL. The estimate is the dashboard's data source. But a generator is needed to convert JSON to viewable HTML (bringing us back to A-prime + B)."
+      },
+      {
+        "id": "G",
+        "name": "Hybrid: estimate for state, scratch inventory for artifacts",
+        "description": "Dashboard reads running-estimate.json (state) + an artifact inventory JSON (produced by a scan of .scratch/).",
+        "scores": {
+          "C1": {"score": 5, "note": "Complete view: state + artifacts + metrics."},
+          "C2": {"score": 4, "note": "Two data sources, both simple. Inventory is a trivial ls-to-JSON."},
+          "C3": {"score": 5, "note": "Add data sources = add more inventory scripts. Dashboard template reads all sources."},
+          "C4": {"score": "LOW", "note": "Minor: inventory script needs to run alongside dashboard generation."},
+          "C5": {"score": 5, "note": "Both data sources are harness artifacts. Inventory can be produced by a hook or script."},
+          "C6": {"score": 5, "note": "All components cross-platform."},
+          "C7": {"score": 5, "note": "Per-session estimates + per-session scratch dirs = natural isolation."}
+        },
+        "verdict": "BEST COMPLETE OPTION. This is A-prime + B with an additional data source for artifact completeness."
+      }
+    ],
+
+    "summaryTable": {
+      "headers": ["Option", "Dynamic", "Simple", "Grow", "Reibung", "Harness", "XPlat", "Multi", "Verdict"],
+      "rows": [
+        ["A: fetch+poll",       4, 5, 5, "BLOCKER", 2, 5, 4, "BLOCKED (CORS)"],
+        ["A': embed JSON",      5, 5, 5, "LOW",     5, 5, 5, "RECOMMENDED"],
+        ["B: script generates", 5, 4, 5, "LOW",     4, 5, 5, "STRONG (automation layer)"],
+        ["C: MCP server",       5, 2, 4, "HIGH",    2, 3, 3, "OVERENGINEERED"],
+        ["D: File API",         3, 3, 3, "HIGH",    1, 4, 3, "NOT VIABLE"],
+        ["E: hook+sidecar",     3, 3, 3, "BLOCKER", 3, 4, 4, "BLOCKED (CORS)"],
+        ["F: estimate=data",    5, 5, 4, "MEDIUM",  5, 5, 5, "CORRECT DATA MODEL"],
+        ["G: hybrid",           5, 4, 5, "LOW",     5, 5, 5, "BEST COMPLETE"]
+      ]
+    }
+  },
+
+  "recommendation": {
+    "winner": "A-prime + B + F = G (converged)",
+    "rationale": "All viable options converge to the same architecture: (1) The running estimate JSON IS the data model (Option F). (2) A generator script reads the estimate + artifact inventory and embeds them into an HTML template (Option A-prime + B). (3) The result is a self-contained HTML file with no runtime dependencies (Option A-prime). Options A, D, and E are all killed by browser security (CORS/File API). Option C is overengineered. The converged option (G) is what we are ALREADY DOING -- the v2 dashboards prove it works. The gap is automation and standardization.",
+
+    "whyNotLiveFetch": "Browser security policies universally block fetch() from file:/// origins. This is not a misconfiguration -- it is a fundamental security boundary. Browsers enforce same-origin policy even for local files, and file:/// has no origin. The only workaround is --disable-web-security (unsafe) or a local HTTP server (Option C, overengineered). The embedded JSON pattern avoids this entirely by having no runtime data dependency.",
+
+    "whyNotServer": "A running server adds infrastructure management (start, stop, monitor, port allocation, process lifecycle) for the sole benefit of 'live' updates. The running estimate changes infrequently (every few minutes at most, when S3 updates it). Regenerating the dashboard on update provides the same practical freshness with zero infrastructure.",
+
+    "whyThisConverges": "The commander's four existing dashboards (2 session activity, 1 governance, 1 from March 19) ALL use the embedded-data pattern. The agents[] array in dashboard-v2.html is literally an embedded JSON data model rendered by JavaScript. This is not a new architecture -- it is formalizing what already works."
+  },
+
+  "architecture": {
+    "title": "Data Flow: What Writes -> What Stores -> What Renders",
+    "diagram": [
+      "",
+      "  +-------------------+     +------------------------+     +-------------------+",
+      "  |   S3 (Operations) |     | Running Estimate JSON  |     | Dashboard HTML    |",
+      "  |   - Updates est.  |---->| - missions, decisions  |     | - Self-contained  |",
+      "  |   - Tracks state  |     | - assumptions, facts   |     | - Embedded data   |",
+      "  |   - Logs agents   |     | - delegation log       |     | - Filterable      |",
+      "  +-------------------+     | - findings, threads    |     | - Searchable      |",
+      "                            +------------------------+     | - Cross-platform  |",
+      "                                       |                   +-------------------+",
+      "                                       |                           ^",
+      "                                       v                           |",
+      "  +-------------------+     +------------------------+             |",
+      "  | scratch-init.sh   |     | Artifact Inventory     |             |",
+      "  | (ls + classify)   |---->| - .scratch/ file list  |----+        |",
+      "  |                   |     | - sizes, types, ages   |    |        |",
+      "  +-------------------+     +------------------------+    |        |",
+      "                                                          v        |",
+      "                            +------------------------+             |",
+      "                            | Dashboard Generator    |------------>+",
+      "                            | (Python or template)   |",
+      "                            | - Reads estimate JSON  |",
+      "                            | - Reads inventory      |",
+      "                            | - Embeds into template |",
+      "                            | - Writes HTML file     |",
+      "                            +------------------------+",
+      "                                       ^",
+      "                                       |",
+      "                            +------------------------+",
+      "                            | Trigger Mechanisms     |",
+      "                            | (a) aitools dashboard  |",
+      "                            | (b) Stop hook (regen)  |",
+      "                            | (c) S3 duty (manual)   |",
+      "                            | (d) /handoff (auto)    |",
+      "                            +------------------------+",
+      ""
+    ],
+
+    "components": [
+      {
+        "name": "Running Estimate JSON",
+        "role": "Primary data source",
+        "exists": true,
+        "location": ".aitools/channel/session-{id}/running-estimate.json (once .gitignore is fixed) or .scratch/session-{id}/running-estimate.json (current, pre-fix)",
+        "schema": "Already defined by running-estimate-v4.json: meta, schwerpunkt, situation (currentState, completedWork, deviations, facts, assumptions), findings, openThreads, delegationLog, conclusions",
+        "updatedBy": "S3 (Operations) -- the S3 maintains the estimate as operational duty",
+        "governedBy": "D-PER-SESSION-ESTIMATES, workspace rule (.claude/rules/aitools-workspace.md)"
+      },
+      {
+        "name": "Artifact Inventory",
+        "role": "Supplementary data source",
+        "exists": false,
+        "location": ".scratch/session-{id}/artifact-inventory.json (generated)",
+        "schema": "Array of {path, name, size, type, modified, classification} for all files in the session scratch directory",
+        "updatedBy": "Dashboard generator (reads filesystem at generation time)",
+        "note": "Could also be produced by a hook, but simpler to generate on demand"
+      },
+      {
+        "name": "Dashboard Template",
+        "role": "HTML + CSS + JS template with placeholder for data injection",
+        "exists": false,
+        "location": "shared/templates/mission-control-dashboard.html (template) or reference/dashboard-template.html",
+        "schema": "HTML file with a <script id='dashboard-data'> placeholder that the generator replaces with JSON",
+        "note": "The v2 dashboard CSS/JS is 90% reusable. The template extracts the layout from the data."
+      },
+      {
+        "name": "Dashboard Generator",
+        "role": "Reads data sources, embeds into template, writes output",
+        "exists": false,
+        "location": "scripts/generate-dashboard.py (or scripts/generate-dashboard.sh)",
+        "implementation": "Python preferred (JSON parsing + template injection is trivial). Reads running estimate + artifact inventory + optional session metadata. Outputs self-contained HTML.",
+        "invocation": "aitools dashboard (CLI), or directly via python3 scripts/generate-dashboard.py --session {id}"
+      },
+      {
+        "name": "Dashboard Output",
+        "role": "The rendered dashboard file",
+        "exists": true,
+        "location": ".scratch/session-{id}/YYYY-MM-DD_session-{id}-dashboard.html",
+        "note": "Naming convention from D-DASHBOARD-GOVERNANCE. Output is session-scoped, lives in scratch, harvested at session end."
+      }
+    ],
+
+    "triggerMechanisms": [
+      {
+        "trigger": "aitools dashboard",
+        "type": "CLI command (new)",
+        "when": "On demand by user or agent",
+        "what": "Generates dashboard from running estimate of current or specified session",
+        "priority": "MVP",
+        "implementation": "Add 'dashboard' case to scripts/aitools (bash) and scripts/aitools.ps1 (PS1). Calls the generator script.",
+        "harnessFit": "Follows existing pattern: aitools has subcommands (mcp, user, sessions). Dashboard is another."
+      },
+      {
+        "trigger": "Stop hook (optional, future)",
+        "type": "Hook-triggered regeneration",
+        "when": "After every N agent turns, or when context passes a threshold",
+        "what": "Regenerates dashboard from current estimate. Could be combined with context rot mitigation hook (D-CONTEXT-ROT-HOOK).",
+        "priority": "Growth path",
+        "note": "Not in MVP. The Lagebeurteilung checkpoint hook (D-CONTEXT-ROT-HOOK) could trigger dashboard regeneration as a side effect."
+      },
+      {
+        "trigger": "S3 operational duty",
+        "type": "Manual (agent behavior)",
+        "when": "When S3 updates the running estimate, S3 also regenerates the dashboard",
+        "what": "S3 calls the generator after updating the estimate. This is the current pattern (S3 produces dashboards inline).",
+        "priority": "MVP",
+        "note": "This is what happened today -- S3 produced the dashboards as part of its duties. The generator formalizes it."
+      },
+      {
+        "trigger": "/handoff skill",
+        "type": "Skill integration",
+        "when": "At session end, before handoff",
+        "what": "Auto-generates final dashboard as part of the handoff artifact set",
+        "priority": "Growth path",
+        "note": "The handoff should include a fresh dashboard. The /handoff skill calls the generator as part of its artifact production."
+      }
+    ]
+  },
+
+  "minimumViableVersion": {
+    "title": "MVP: What ships first",
+    "scope": "A Python script that reads running-estimate.json and produces a self-contained HTML dashboard. No hooks, no CLI integration, no automation. Manually invoked.",
+
+    "deliverables": [
+      {
+        "artifact": "scripts/generate-dashboard.py",
+        "description": "Python 3 script. Reads a running estimate JSON file. Embeds it into an HTML template. Outputs a self-contained HTML file. Includes --help, argparse, pathlib.",
+        "inputs": "--estimate <path> (required), --output <path> (optional, defaults to same dir), --session-id <id> (optional, derived from estimate meta)",
+        "implementation": "~150-200 lines. JSON load, template string with {DATA_PLACEHOLDER}, write HTML. The template is the HTML/CSS/JS from the v2 dashboard with the hardcoded agents[] array replaced by the estimate data."
+      },
+      {
+        "artifact": "HTML template (embedded in script or separate file)",
+        "description": "The dashboard layout: header, stats bar, tabs (overview, decisions, assumptions, findings, agents), timeline, cards. CSS from v2 dashboard. JS rendering from v2 dashboard. Data comes from an embedded JSON object.",
+        "decision": "Embed in script (simpler) vs separate file (more maintainable). For MVP, embed in script. Extract to separate file in growth phase."
+      }
+    ],
+
+    "whatItDoesNOTInclude": [
+      "No aitools CLI integration (that comes in growth phase)",
+      "No hook-based auto-regeneration",
+      "No artifact inventory (estimate-only for MVP)",
+      "No multi-session aggregation",
+      "No governance dashboard (separate concern, already exists as manual output)"
+    ],
+
+    "effort": "2-4 hours for the script + template. The v2 dashboard HTML is 90% reusable -- the work is refactoring the hardcoded data into a template.",
+
+    "testPlan": [
+      "1. Run against running-estimate-v4.json",
+      "2. Open output in Chrome, verify all sections render",
+      "3. Verify filters and search work",
+      "4. Run against the March 16 running estimate (.aitools/channel/session-uyZ7TELqpP/)",
+      "5. Verify it handles a minimal estimate (just meta + situation)"
+    ]
+  },
+
+  "growthPath": {
+    "title": "What gets added later (ordered by leverage)",
+
+    "phases": [
+      {
+        "phase": 1,
+        "name": "CLI integration",
+        "what": "Add 'dashboard' subcommand to aitools CLI",
+        "how": "Add 'dashboard' case to scripts/aitools and scripts/aitools.ps1. Calls generate-dashboard.py with session discovery (reads .scratch/.current-session or --session flag).",
+        "unblocks": "Any agent or user can run 'aitools dashboard' to get current state",
+        "effort": "1-2 hours",
+        "prerequisite": "MVP"
+      },
+      {
+        "phase": 2,
+        "name": "Artifact inventory",
+        "what": "Dashboard includes .scratch/ file listing with classifications",
+        "how": "Generator scans .scratch/session-{id}/, classifies files (AAR, proposal, dashboard, script, investigation, ephemeral), embeds as secondary data source",
+        "unblocks": "Complete view of session output without reading individual files",
+        "effort": "2-3 hours",
+        "prerequisite": "Phase 1"
+      },
+      {
+        "phase": 3,
+        "name": "Governance dashboard merge",
+        "what": "The governance dashboard (decisions, assumptions, proposals) becomes a tab in the mission control dashboard, not a separate file",
+        "how": "Extend the template with governance panels. The running estimate already has decisions + assumptions + findings. The s2a consolidated proposals provide the proposal view.",
+        "unblocks": "Single dashboard for everything instead of 2-4 separate files",
+        "effort": "3-4 hours",
+        "prerequisite": "Phase 2"
+      },
+      {
+        "phase": 4,
+        "name": "Hook-triggered regeneration",
+        "what": "Stop hook or Lagebeurteilung checkpoint hook auto-regenerates the dashboard",
+        "how": "The D-CONTEXT-ROT-HOOK fires on context growth. It could invoke the generator as a side effect. Alternatively, a lightweight Stop hook calls the generator every N turns.",
+        "unblocks": "Dashboard stays fresh without manual invocation",
+        "effort": "1-2 hours (hook is simple -- call the generator)",
+        "prerequisite": "Phase 1 + D-CONTEXT-ROT-HOOK implementation"
+      },
+      {
+        "phase": 5,
+        "name": "Multi-session aggregation",
+        "what": "A 'command post' dashboard that aggregates all active sessions into one view",
+        "how": "Generator discovers all session estimates (glob .aitools/channel/session-*/running-estimate.json + .scratch/session-*/running-estimate*.json). Renders a multi-session overview with drill-down.",
+        "unblocks": "Commander sees all concurrent sessions at once",
+        "effort": "4-6 hours",
+        "prerequisite": "Phase 1 + .gitignore fix + per-session estimates implementation"
+      },
+      {
+        "phase": 6,
+        "name": "Auto-open in browser",
+        "what": "Dashboard generation optionally auto-opens the HTML in the default browser",
+        "how": "Python webbrowser.open() or platform-specific open/start command",
+        "unblocks": "Zero-friction dashboard viewing",
+        "effort": "30 minutes",
+        "prerequisite": "MVP"
+      },
+      {
+        "phase": 7,
+        "name": "aitools.nobul.tech hosted dashboard",
+        "what": "Dashboard data uploaded to the web platform. Viewable at aitools.nobul.tech/sessions/{id}",
+        "how": "Generator pushes JSON to the ingest API (already on ROADMAP as 'aitools.nobul.tech + Modal compute'). Web frontend renders from the API.",
+        "unblocks": "Cross-device dashboard access. Share dashboard links. Historical session comparison.",
+        "effort": "Depends on aitools.nobul.tech implementation",
+        "prerequisite": "Phase 5 + aitools.nobul.tech"
+      }
+    ]
+  },
+
+  "blockers": [
+    {
+      "id": "BLK-1",
+      "title": ".gitignore blanket .aitools/ must be fixed",
+      "severity": "HIGH for growth path, LOW for MVP",
+      "impact": "MVP can work with .scratch/ estimates. Growth phases 4-5 (hook regeneration, multi-session) depend on .aitools/ being tracked. Without the fix, running estimates are gitignored and cannot carry forward.",
+      "status": "Decision D-GITIGNORE-FIX is DECIDED but NOT EXECUTED. .gitignore line 47 still blanket-ignores .aitools/.",
+      "resolution": "Apply the fix: replace '.aitools/' with selective patterns. This is convergence rank 1 across 4 AARs."
+    },
+    {
+      "id": "BLK-2",
+      "title": "Running estimate location standardization",
+      "severity": "MEDIUM",
+      "impact": "Currently running estimates live in .scratch/session-{id}/ which is gitignored and ephemeral. The workspace rule says they should be at .aitools/channel/session-{id}/running-estimate.json (tracked). Until the location is standardized, the generator must search multiple paths.",
+      "status": "D-PER-SESSION-ESTIMATES decides the target location. BLK-1 must be fixed first.",
+      "resolution": "After .gitignore fix: standardize estimate location. Generator falls back to .scratch/ if .aitools/ not found."
+    },
+    {
+      "id": "BLK-3",
+      "title": "Running estimate schema does not include agent-level metrics",
+      "severity": "LOW",
+      "impact": "The v2 dashboard shows per-agent duration, tokens, tool uses. These are in the dashboard's embedded data but NOT in the running estimate's delegation log. The delegation log has: id, type, mission, agentType, status, dutyFulfilled. It does NOT have: duration, tokens, toolUses.",
+      "status": "Schema extension needed. This is a governed data change (running estimate is a governed artifact).",
+      "resolution": "Extend delegation log entries with optional metrics fields: duration_seconds, estimated_tokens, tool_use_count. These can be populated by S3 at mission return (Nachbesprechung component 13)."
+    }
+  ],
+
+  "questionsForCommander": [
+    {
+      "question": "Should the dashboard generator be Python or bash?",
+      "recommendation": "Python. JSON parsing + HTML template injection is natural in Python. Bash would require jq or node calls. Python is a managed tool on both platforms. The script follows project conventions: argparse, type hints, pathlib, --help.",
+      "impact": "Determines language and maintenance burden."
+    },
+    {
+      "question": "Should the MVP dashboard template be the full v2 design (timeline, agent cards, delegation duty checklist, convergence themes) or a simpler starting point?",
+      "recommendation": "Start with the full v2 design. The CSS/JS is already written and proven. Simplifying it would throw away work. The generator just needs to inject data into the existing template.",
+      "impact": "Determines MVP scope and effort."
+    },
+    {
+      "question": "Should this be a roadmap item or a quick implementation?",
+      "recommendation": "Quick implementation. The pattern is proven (4 dashboards already exist). The gap is only the generator script. This is 2-4 hours of work, not a planning exercise.",
+      "impact": "Determines when it ships."
+    },
+    {
+      "question": "Should the generator live in scripts/ (reusable) or .scratch/ (prototype)?",
+      "recommendation": "scripts/generate-dashboard.py from the start. This is a reusable tool that will be called by the CLI, hooks, and skills. Putting it in .scratch/ means it gets harvested and lost. The project has managed tools in scripts/ -- this fits.",
+      "impact": "Determines permanence and discoverability."
+    }
+  ],
+
+  "operationalLearning": {
+    "observe": [
+      "The 4 existing dashboards ALL use the embedded-data pattern (JSON literal in <script> tag). This was not a deliberate architectural choice -- it was the path of least resistance for an agent producing HTML. But it IS the correct pattern for this use case.",
+      "Browser CORS policy blocks fetch() from file:/// origins. This is a hard constraint that eliminates the most obvious 'dynamic' approach. Many developers assume local fetch works and discover it does not.",
+      "The running estimate JSON schema is rich enough to power a dashboard without modification. The delegationLog + findings + assumptions + decisions arrays map directly to dashboard panels.",
+      "M19 executability assessment ALREADY identified the .gitignore as NOT fixed, contradicting the running estimate's completedWork claim. This is the assumption propagation problem in action -- once a false claim enters the running estimate, it propagates to all consumers."
+    ],
+    "surface": [
+      "FINDING: The 'dynamic dashboard' requirement does NOT require live data fetching. It requires the dashboard to reflect CURRENT state. 'Current' means 'as of last generation' -- which is functionally equivalent to 'as of last estimate update' when generation is triggered by the update.",
+      "FINDING: The fetch() CORS blocker is a known constraint that should be documented in reference/cross-platform-detail.md or a similar reference. Future agents will face this same constraint when building local HTML tools."
+    ],
+    "propose": [
+      "Document the fetch() CORS constraint: add to reference/cross-platform-detail.md under a 'Browser Security for Local Files' section. This prevents future agents from wasting time on Option A.",
+      "The dashboard generator should be the FIRST skill to use the 'templates' pattern -- a template file in shared/ with a generator in scripts/. This creates the template for future generators (report generators, handoff doc generators, etc.)."
+    ],
+    "connect": [
+      "The embedded-data pattern connects to the 'everything is a file' harness philosophy. The dashboard IS a file. It contains its own data. It has no runtime dependencies. This aligns with the cross-machine carry-forward principle -- the HTML file works on any machine without setup.",
+      "The generator pattern connects to build-deploy.sh (generates deploy/ from source). Dashboard generation follows the same: source (estimate + template) -> build (generator) -> output (HTML). The pattern is already in the harness.",
+      "The CORS finding connects to the tool-ops framework -- browser behavior that affects harness tools should be documented as operational knowledge, similar to CC version dependencies."
+    ]
+  }
+}

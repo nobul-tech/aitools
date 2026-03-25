@@ -1,0 +1,139 @@
+{
+  "meta": {
+    "mission": "M6",
+    "agent": "S2",
+    "session": "5HyCwPtSDH",
+    "timestamp": "2026-03-21T08:00:00Z",
+    "subject": "Trash recovery search for 30 lost files from session Z1IhGrcgGO"
+  },
+  "observations": [
+    {
+      "id": "O-1",
+      "fact": "macOS Trash (~/.Trash/) contains zero files from session Z1IhGrcgGO. The Trash holds only unrelated files: counsel-package directories, zip files, a JPEG, and PDFs. No .md files matching any of the 30 target filenames exist in Trash.",
+      "source": "find ~/.Trash/ -name '*.md' and find ~/.Trash/ -name '*Z1IhGrcgGO*' — both returned zero matches for session files"
+    },
+    {
+      "id": "O-2",
+      "fact": "harvest-session.sh (SessionEnd hook) uses 'rm -rf \"$SESSION_DIR\"' at line 165. scratch-init.sh (SessionStart hook) uses 'rm -rf \"$stale_dir\"' at line 32 for dirs older than 24h. Both use rm -rf, which permanently deletes files on Unix — it does NOT move files to macOS Trash.",
+      "source": "/Users/pepe/repos/aitools/shared/hooks/harvest-session.sh:165, /Users/pepe/repos/aitools/shared/hooks/scratch-init.sh:30-33"
+    },
+    {
+      "id": "O-3",
+      "fact": "Spotlight (mdfind) returned zero results for every searched filename: session-state-audit.md, findings-index.md, schwerpunkt-assessment.md, scratch-deletion-rca.md, carry-forward-provenance.md, carry-forward-barrier-A/B/C.md, promotion-definition-draft.md, cicd-feasibility.md, intent-audit-findings.md, provenance-deep-research.md, briefings-location-decision.md, repo-project-definition-draft.md, verification-lifecycle-gap-audit.md, scope-creep-governance.md, write-failure-rca.md. Spotlight indexes file metadata but cannot index files that no longer exist on any indexed volume.",
+      "source": "mdfind 'kMDItemFSName == ...' for 15+ filenames — all returned empty"
+    },
+    {
+      "id": "O-4",
+      "fact": "The harvest manifest (harvest-manifest.json) contains zero entries for session Z1IhGrcgGO. The session ID prefix is not present in any artifact's 'session' field. However, 4 files dated 2026-03-19 DO exist in the harvesting/ directory from a different session that ran during the same time window: aar-exit-code-investigation.md, blocked-rule-changes.md, handoff-fix-verification.md, session-subagent-report.html. The AAR file explicitly references 'Session: Z1IhGrcgGO (2026-03-17/19)'.",
+      "source": "grep Z1IhGrcgGO harvest-manifest.json (no match), ls harvesting/ (4 files from 2026-03-19), harvesting/2026-03-19_aar-exit-code-investigation.md:3"
+    },
+    {
+      "id": "O-5",
+      "fact": "The session ID 'Z1IhGrcgGO' matches the mktemp pattern from scratch-init.sh ('session-XXXXXXXXXX') — it is a scratch directory suffix, not a Claude Code session UUID. Claude Code sessions use UUIDs like 'e059186f-45b2-461b-a4ba-e33cd23f9ee1'. The .scratch/ directory currently contains no directory named session-Z1IhGrcgGO.",
+      "source": "scratch-init.sh:37 (mktemp -d pattern), ls .scratch/ (not present), CC project dir listing (UUID format only)"
+    },
+    {
+      "id": "O-6",
+      "fact": "The dotprofile session archive (aitools-nobul-jose/sessions/aitools/) contains sessions only through 2026-03-17_e059186f.jsonl. No archives exist for sessions after March 17. The session that created the Z1IhGrcgGO scratch directory may not have been archived.",
+      "source": "ls /Users/pepe/repos/aitools-nobul-jose/sessions/aitools/ — last entry is 2026-03-17"
+    },
+    {
+      "id": "O-7",
+      "fact": "Spotlight content search for 'Z1IhGrcgGO' returned 10 results — all in existing repo files (RELEASE_NOTES.md, harvesting/*.md, harvesting/*.html, plans/mission-command-briefing/*.md, shared/skills/handoff/SKILL.md) and Cursor logs. Zero results from deleted files, iCloud cache, or external volumes.",
+      "source": "mdfind 'Z1IhGrcgGO' — 10 live files returned, zero from recovery sources"
+    },
+    {
+      "id": "O-8",
+      "fact": "Git history contains no trace of the 30 files. They were never committed to any branch (git log --all --oneline for Z1IhGrcgGO patterns and for .scratch/session-Z1IhGrcgGO/* both returned empty). The .scratch/ directory is gitignored by design.",
+      "source": "git log --all --oneline --diff-filter=D -- '.scratch/session-Z1IhGrcgGO/*' (empty), git log --all --oneline -- '*Z1IhGrcgGO*' (empty)"
+    },
+    {
+      "id": "O-9",
+      "fact": "Permission was denied for: tmutil listbackups, tmutil latestbackup, ls /Volumes/, diskutil apfs listSnapshots, and searching inside CC session transcript .jsonl files with perl. Time Machine status and APFS snapshot availability could not be verified.",
+      "source": "Bash tool permission denials on tmutil, ls /Volumes/, diskutil, and perl on .jsonl files"
+    },
+    {
+      "id": "O-10",
+      "fact": "The harvest-session.sh hook's classification logic at lines 80-85 treats most .md files as artifacts (non-ephemeral), EXCEPT those matching '*log*|*output*|*dump*'. All 30 target filenames would have been classified as artifacts eligible for harvesting. The hook copies artifacts to harvesting/ BEFORE running rm -rf on the session dir (line 165).",
+      "source": "harvest-session.sh:80-85 (classification), 96-161 (harvest before delete), 165 (rm -rf)"
+    },
+    {
+      "id": "O-11",
+      "fact": "The harvest manifest has no Z1IhGrcgGO entries despite the hook being designed to harvest .md files. This means either: (a) the SessionEnd hook did not fire for that session (crash, kill, or explicit /exit), (b) the hook fired but failed silently before reaching the harvest loop, (c) the .current-session file was stale/missing so the hook found no session dir, or (d) the stale cleanup in scratch-init.sh of the NEXT session deleted the directory before SessionEnd ran.",
+      "source": "Logical deduction from O-2, O-4, O-10 combined with harvest-session.sh control flow"
+    }
+  ],
+  "insights": [
+    {
+      "id": "I-1",
+      "observation_refs": ["O-1", "O-2"],
+      "analysis": "The files are NOT in macOS Trash. rm -rf is a permanent deletion on Unix — it bypasses Trash entirely. This is by design in both hooks (harvest-session.sh and scratch-init.sh). The Trash recovery path is a dead end."
+    },
+    {
+      "id": "I-2",
+      "observation_refs": ["O-2", "O-8", "O-10", "O-11"],
+      "analysis": "The deletion was permanent and the files were never committed to git. The two possible deletion agents are: (1) harvest-session.sh's rm -rf at line 165, which runs AFTER the harvest loop — meaning if harvesting worked, copies should exist in harvesting/ but they do not; or (2) scratch-init.sh's stale directory cleanup, which rm -rfs any session-* dirs older than 24h with no harvesting step. If the session crashed or was force-killed and the SessionEnd hook never fired, then the next session's scratch-init.sh would have destroyed the directory as 'stale' — without harvesting anything."
+    },
+    {
+      "id": "I-3",
+      "observation_refs": ["O-3", "O-7", "O-8"],
+      "analysis": "All filesystem-level search methods (Spotlight filename search, Spotlight content search, git history) confirm the files no longer exist anywhere on the indexed filesystem. No shadow copies, no iCloud cache, no secondary locations."
+    },
+    {
+      "id": "I-4",
+      "observation_refs": ["O-4", "O-11"],
+      "analysis": "The 4 harvested files from 2026-03-19 were likely from a DIFFERENT CC session UUID that happened to work in the same time window as Z1IhGrcgGO. The harvest manifest shows session refs like 'aitools/2026-03-19_XXXXXXXX' for these 4 files — not matching Z1IhGrcgGO. This is consistent with Z1IhGrcgGO's scratch dir being deleted without successful harvesting."
+    },
+    {
+      "id": "I-5",
+      "observation_refs": ["O-9"],
+      "analysis": "Two potential recovery vectors remain uninvestigated due to permission restrictions: (1) Time Machine backups — if configured and a backup exists from March 17-19, the files could be recoverable from the backup volume; (2) APFS local snapshots — macOS automatically creates these, and if one exists from the right time window, 'tmutil localsnapshots /' would show it. (3) CC session transcript .jsonl files — the Write tool calls in the transcript contain the full file content that was written. If the CC UUID for the Z1IhGrcgGO session can be identified and the .jsonl searched, file contents could be reconstructed from Write tool call parameters."
+    },
+    {
+      "id": "I-6",
+      "observation_refs": ["O-5", "O-6"],
+      "analysis": "The Z1IhGrcgGO session ID is a mktemp suffix, not a CC UUID. The mapping between scratch dir name and CC session UUID is not recorded anywhere persistent — it exists only in the .current-session file (which is overwritten each session) and in the session transcript (which requires searching .jsonl files to find). The dotprofile archive stops at March 17, so later sessions may not have been archived."
+    }
+  ],
+  "proposals": [
+    {
+      "id": "P-1",
+      "insight_refs": ["I-5"],
+      "what": "Manual Time Machine / APFS snapshot check",
+      "why": "These are the only remaining recovery vectors with a nonzero probability. rm -rf deletes are recoverable from Time Machine backups or APFS snapshots if they exist.",
+      "barrier_analysis": "Requires running tmutil and diskutil commands outside of Claude Code (permission denied in-session). User should run: (1) 'tmutil listlocalsnapshots /' to check APFS snapshots, (2) 'tmutil listbackups' to check Time Machine, (3) if a backup from March 17-19 exists, browse to <backup>/Users/pepe/repos/aitools/.scratch/session-Z1IhGrcgGO/ to check for the files."
+    },
+    {
+      "id": "P-2",
+      "insight_refs": ["I-5", "I-6"],
+      "what": "Reconstruct file contents from CC session transcript",
+      "why": "Every Write tool call in a CC session .jsonl transcript contains the full file content. If we can identify which CC UUID corresponds to the Z1IhGrcgGO scratch directory, the .jsonl file contains all 30 files' contents as Write tool parameters.",
+      "barrier_analysis": "Requires: (1) identifying the CC UUID — search all .jsonl files from the March 17-19 window for 'Z1IhGrcgGO' string; (2) extracting Write tool calls from the .jsonl; (3) parsing the content parameter to reconstruct each file. Permission was denied for perl on .jsonl files in this session. User could run: grep -l Z1IhGrcgGO ~/.claude/projects/-Users-pepe-repos-aitools/*.jsonl"
+    },
+    {
+      "id": "P-3",
+      "insight_refs": ["I-2"],
+      "what": "Fix scratch-init.sh stale cleanup to harvest before deleting",
+      "why": "The current stale directory cleanup (scratch-init.sh:30-33) runs rm -rf with zero harvesting. If SessionEnd never fires (crash, kill, OOM), all session work is permanently lost. This is the likely root cause of the data loss — the 30 files were created in session Z1IhGrcgGO, SessionEnd never fired (or failed), and the next session's scratch-init destroyed them.",
+      "barrier_analysis": "Implementation: before rm -rf in scratch-init.sh's stale cleanup loop, call the same harvest logic from harvest-session.sh (or a shared function). This ensures crashed sessions' artifacts survive. Trade-off: slightly slower SessionStart, but prevents total data loss."
+    },
+    {
+      "id": "P-4",
+      "insight_refs": ["I-6"],
+      "what": "Record scratch-dir-to-CC-UUID mapping persistently",
+      "why": "The mktemp suffix (Z1IhGrcgGO) and the CC session UUID are currently only linked via the ephemeral .current-session file. If the mapping were recorded in a persistent location (e.g., .scratch/.session-history), post-mortem recovery from .jsonl transcripts would be straightforward.",
+      "barrier_analysis": "Low-effort change: append 'UUID scratch-dir-name timestamp' to a log file in scratch-init.sh. The file would be gitignored but survives across sessions on the same machine."
+    }
+  ],
+  "conclusion": {
+    "recovery_status": "NOT RECOVERED",
+    "confidence": "high",
+    "summary": "The 30 files from .scratch/session-Z1IhGrcgGO/ were permanently deleted by rm -rf (either harvest-session.sh line 165 or scratch-init.sh line 32). rm -rf bypasses macOS Trash entirely. The files were never committed to git. Spotlight, Trash, and content searches all return zero results. The harvest manifest shows no entries for this session, meaning the harvest hook either did not fire or failed. Two uninvestigated recovery vectors remain: (1) Time Machine / APFS snapshots (requires tmutil commands denied in this session), and (2) CC session transcript .jsonl reconstruction (Write tool calls contain full file contents, but searching requires permission to read .jsonl files).",
+    "recommended_next_steps": [
+      "Run 'tmutil listlocalsnapshots /' and 'tmutil listbackups' outside Claude Code to check for backups",
+      "Run 'grep -rl Z1IhGrcgGO ~/.claude/projects/-Users-pepe-repos-aitools/*.jsonl' to find the CC session UUID",
+      "If UUID found, extract Write tool calls targeting .scratch/session-Z1IhGrcgGO/ from the .jsonl to reconstruct files",
+      "Fix scratch-init.sh stale cleanup to harvest before rm -rf (prevents future data loss from crashed sessions)"
+    ]
+  }
+}

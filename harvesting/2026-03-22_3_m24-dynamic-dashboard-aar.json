@@ -1,0 +1,173 @@
+{
+  "meta": {
+    "mission": "M24-DYNAMIC-DASHBOARD",
+    "agent": "S3 (Operations)",
+    "session": "5HyCwPtSDH",
+    "created": "2026-03-22T07:00:00Z",
+    "schwerpunkt": "Deliver DYNAMIC dashboard that was silently descoped to static. Investigate all alternatives, barrier-analyze, build, verify empirically."
+  },
+
+  "criticalObservation": {
+    "title": "Hard requirement silently descoped without surfacing",
+    "what": "The commander required a DYNAMIC dashboard. CORS blocking fetch() from file:// was discovered. Instead of surfacing this as a HARD BLOCK ('Sir, we cannot do dynamic with file:// CORS -- what alternatives should we investigate?'), the team silently descended to a static generator. The requirement changed from dynamic to static with no COMMUNICATION phase.",
+    "violates": [
+      "Surfacing duty: hard requirements that cannot be met MUST be surfaced as blockers",
+      "Commander authority: the commander decides whether to accept alternatives",
+      "Executability assessment lifecycle: the answer changed but no communication happened"
+    ],
+    "correctWorkflow": "1. HARD BLOCK surfaced. 2. Commander directs alternatives investigation. 3. S2 missions investigate. 4. Barrier analysis on each. 5. Analysis study. 6. Refine and loop. 7. Ship when viable approach found."
+  },
+
+  "alternativesInvestigation": {
+    "options": [
+      {
+        "id": "alt-1",
+        "name": "Local HTTP server (stdlib)",
+        "description": "Python http.server serves dashboard + /api/estimate endpoint. Dashboard polls via fetch(). File watcher detects estimate changes.",
+        "corsBlocked": false,
+        "dependencies": "Zero -- Python stdlib only (http.server, os.stat)",
+        "crossPlatform": "Yes -- Python 3 is managed on both platforms",
+        "simplicity": 4,
+        "growability": 5,
+        "reibung": "Port management, process lifecycle. Mitigated by default port (8411) and graceful shutdown.",
+        "verdict": "VIABLE -- chosen approach"
+      },
+      {
+        "id": "alt-2",
+        "name": "File watcher + regeneration + meta-refresh",
+        "description": "Watch estimate file, regenerate HTML on change. HTML has <meta http-equiv='refresh' content='5'> for auto-reload.",
+        "corsBlocked": false,
+        "dependencies": "Zero for polling (os.stat). fswatch/watchdog optional.",
+        "crossPlatform": "Yes",
+        "simplicity": 5,
+        "growability": 3,
+        "reibung": "Visible page refresh flicker. Full page reload loses scroll position and expanded cards. Not truly dynamic -- just auto-regenerating static.",
+        "verdict": "VIABLE but inferior to alt-1 (flicker, state loss)"
+      },
+      {
+        "id": "alt-3",
+        "name": "MCP chrome-devtools injection",
+        "description": "Hook/script uses chrome-devtools evaluate_script to push new data into the open dashboard page.",
+        "corsBlocked": false,
+        "dependencies": "Chrome DevTools MCP server must be running",
+        "crossPlatform": "Yes (where MCP available)",
+        "simplicity": 2,
+        "growability": 2,
+        "reibung": "Tight coupling to MCP server. Dashboard must be open in the connected Chrome instance. Cannot work without MCP.",
+        "verdict": "NOT RECOMMENDED -- too tightly coupled"
+      },
+      {
+        "id": "alt-4",
+        "name": "Self-refreshing HTML with meta-refresh",
+        "description": "<meta http-equiv='refresh' content='10'> combined with static regeneration on a schedule.",
+        "corsBlocked": false,
+        "dependencies": "Zero",
+        "crossPlatform": "Yes",
+        "simplicity": 5,
+        "growability": 2,
+        "reibung": "Visible flicker. Full page reload. No incremental update. Same limitations as alt-2.",
+        "verdict": "VIABLE but crude"
+      },
+      {
+        "id": "alt-5",
+        "name": "Hybrid embedded + polling (progressive enhancement)",
+        "description": "Dashboard embeds initial data (works from file://). Also tries fetch() from localhost. If server running: live updates. If not: falls back to embedded data.",
+        "corsBlocked": false,
+        "dependencies": "Zero for static. Python stdlib for server.",
+        "crossPlatform": "Yes",
+        "simplicity": 4,
+        "growability": 5,
+        "reibung": "Two code paths. Mitigated by clean separation (LIVE_MODE flag).",
+        "verdict": "THIS IS WHAT WE BUILT -- combined alt-1 + alt-5"
+      }
+    ],
+    "winner": "alt-1 + alt-5 combined",
+    "rationale": "Local HTTP server (stdlib) + progressive enhancement. Static mode still works from file:// (no regression). --serve mode adds dynamic via fetch polling from HTTP origin. Zero external dependencies. Cross-platform. Growable toward aitools.nobul.tech."
+  },
+
+  "implementationSummary": {
+    "changesTo": "scripts/generate-dashboard.py",
+    "newFlags": [
+      "--serve: Start live HTTP server with auto-updating dashboard",
+      "--watch: Watch estimate file and regenerate HTML on change (static mode)",
+      "--port N: Server port (default 8411)",
+      "--poll-interval N: Browser poll frequency in seconds (default 3)"
+    ],
+    "serverArchitecture": {
+      "handler": "DashboardHandler (extends SimpleHTTPRequestHandler)",
+      "endpoints": [
+        "/ -- serves the live-mode HTML dashboard",
+        "/api/estimate -- serves the current estimate JSON (read from disk on each request)"
+      ],
+      "fileWatcher": "os.stat polling in a daemon thread, regenerates served HTML on mtime change",
+      "shutdown": "SIGINT/SIGTERM handlers for graceful shutdown"
+    },
+    "htmlChanges": {
+      "renderFunction": "Extracted rendering from IIFE into reusable renderDashboard(D, generatedAt) function",
+      "livePolling": "setInterval + fetch(POLL_URL) every POLL_INTERVAL seconds. On new data, re-render without page reload. Hash comparison prevents unnecessary re-renders.",
+      "liveIndicator": "Green 'LIVE' dot in header. Flashes cyan on update. Shows red 'OFFLINE' on fetch failure.",
+      "progressiveEnhancement": "LIVE_MODE=false: embedded data only (file:// safe). LIVE_MODE=true: fetch polling active."
+    },
+    "linesChanged": "Approximately 200 lines added (server, watcher, new CLI args, HTML live polling logic)",
+    "backwardCompatible": true,
+    "staticModeUnchanged": true
+  },
+
+  "verificationResults": {
+    "staticMode": {
+      "tested": true,
+      "result": "PASS -- generates HTML with embedded data, identical behavior to original"
+    },
+    "liveServerStartup": {
+      "tested": true,
+      "result": "PASS -- server starts on specified port, serves dashboard"
+    },
+    "httpEndpoints": {
+      "tested": true,
+      "results": {
+        "rootPage": "200 OK",
+        "apiEstimate": "200 OK with valid JSON",
+        "unknown": "404 Not Found"
+      }
+    },
+    "liveModeFlag": {
+      "tested": true,
+      "result": "PASS -- LIVE_MODE=true in served HTML, poll URL correctly set"
+    },
+    "dynamicUpdate": {
+      "tested": true,
+      "method": "Modified estimate file (version 6->7, schwerpunkt text change) while dashboard open in Chrome. Waited for poll cycle (3s). Verified via evaluate_script that DASHBOARD_DATA.meta.version changed to 7 and schwerpunkt text updated. Screenshot confirms visual update.",
+      "result": "PASS -- dashboard updated WITHOUT page reload, data version changed, schwerpunkt text changed, live indicator remained green",
+      "evidence": [
+        "m24-live-dashboard-initial.png: version 6, original schwerpunkt",
+        "m24-live-dashboard-after-update.png: version 7, updated schwerpunkt",
+        "evaluate_script output: {dataVersion:7, schwerpunkt:'M24-DYNAMIC-DASHBOARD...'}"
+      ]
+    },
+    "offlineGraceDegradation": {
+      "tested": false,
+      "note": "The dashboard shows OFFLINE indicator on fetch failure (implemented but not empirically tested)"
+    }
+  },
+
+  "operationalLearning": {
+    "observe": [
+      "The CORS constraint is real but does NOT block dynamic dashboards -- it blocks fetch from file:// origin. Serving from localhost via http.server avoids CORS entirely. The feasibility study correctly identified this but framed it as 'no dynamic possible' when the correct framing is 'no dynamic FROM FILE://, dynamic FROM HTTP is trivial'.",
+      "Python's http.server stdlib module is sufficient for a local dashboard server. No framework, no npm, no external dependencies. This fits the harness philosophy: stdlib over third-party when the gap is small.",
+      "The progressive enhancement pattern (embedded data as fallback, live polling as upgrade) preserves all existing behavior while adding the dynamic capability. Static mode is unchanged -- backward compatibility is complete.",
+      "The silently-descoped requirement is the most important finding. The generator itself was always the right base. The missing piece was the server + polling -- approximately 200 lines of stdlib Python."
+    ],
+    "surface": [
+      "FINDING: The harness has no mechanism to prevent silent descoping of hard requirements. When a CORS constraint was discovered, the team descended to a static approach without surfacing the requirement change. This is a governance gap.",
+      "FINDING: 'Dynamic' in the dashboard context means 'updates without manual intervention'. Two viable mechanisms exist: (1) server + fetch polling (live, no reload), (2) file watcher + regeneration + meta-refresh (auto-regenerating static). Option 1 is strictly superior (no flicker, preserves scroll position, incremental update)."
+    ],
+    "propose": [
+      "File an incident for the 'silent descoping' governance gap. The running estimate needs a hardRequirements field with mandatory surfacing when status changes.",
+      "Document the http.server pattern for local tool UIs in reference/cross-platform-detail.md alongside the CORS constraint. Future agents building local HTML tools should know: file:// blocks fetch, localhost via http.server unblocks it."
+    ],
+    "connect": [
+      "The server pattern connects directly to the ROADMAP item 'aitools.nobul.tech + Modal compute'. The /api/estimate endpoint is a prototype of the ingest API. When the web platform ships, the dashboard generator pushes to aitools.nobul.tech instead of localhost.",
+      "The progressive enhancement pattern connects to the 'simplicity, growable' commander directive. The feature degrades gracefully: live server -> static HTML -> raw JSON. Each layer works independently."
+    ]
+  }
+}

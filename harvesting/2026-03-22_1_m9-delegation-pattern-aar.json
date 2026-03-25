@@ -1,0 +1,211 @@
+{
+  "meta": {
+    "mission": "M9",
+    "agent": "S2",
+    "session": "5HyCwPtSDH",
+    "created": "2026-03-21T22:00:00Z",
+    "schwerpunkt": "Root-cause why session 5HyCwPtSDH's S3 launched 1-agent-per-mission instead of multi-agent workflows despite reading the 40-agent session dashboard"
+  },
+  "observations": [
+    {
+      "id": "O-1",
+      "fact": "Session Z1IhGrcgGO (40-agent session) used FIVE distinct multi-agent workflow patterns: (A) Write-verify-amend cycles: agents #26-28 (S3 writes handoff -> Verifier checks 9 criteria -> S3 applies 7 amendments), agents #30-31-33-34 (S3 builds /handoff skill -> Verifier re-verifies with CI/CD cross-check -> S3 updates -> Verifier final 5-part verification). (B) Parallel barrier analyses: agents #14-15-16 ran 3 concurrent S2 investigations on the same carry-forward question with different formulations (A/B/C), results compared by main agent. (C) S2-then-S3 chaining: agents #5->8 (S2 investigates post-push bugs -> S3 updates briefing with AAR findings), agents #6+7->9 (S2 Q4 + S2 Q10 -> S2 cross-audit of both). (D) S2-WRITE_BLOCKED-relaunch: agent #21 blocked -> relaunched as #25 with WRITE_BLOCKED signal. (E) S2-chain deepening: agents #37->38 (S2 scratch deletion RCA -> S2 verification lifecycle gap audit using RCA as input), agent #29->37 (S2 Schwerpunkt assessment contains false claim -> S2 RCA of why 3 verifications missed it).",
+      "source": "harvesting/2026-03-19_session-subagent-report.html: agents #5,6,7,8,9,14,15,16,21,25,26,27,28,29,30,31,33,34,37,38"
+    },
+    {
+      "id": "O-2",
+      "fact": "Session 5HyCwPtSDH launched 7 subagent delegations (D1 through D7 per running-estimate.json delegationLog). Each mission (M1-M5 plus early investigations) was a SINGLE agent with a comprehensive prompt. No mission used write-verify-amend. No mission used parallel investigations on the same question. No S3 mission had a verification agent launched after it. The only chaining was M1 returning inline (Explore), getting a FRAGORD, and being re-investigated with a format conversion of the inline results.",
+      "source": ".scratch/session-5HyCwPtSDH/running-estimate.json:delegationLog, AARs M1-M7"
+    },
+    {
+      "id": "O-3",
+      "fact": "The running estimate at version 3 (updated 17:00 UTC) records the session extracted lessons from the 40-agent session: 'WRITE_BLOCKED pattern, never Explore, iterative verify-amend, false claim propagation.' The S3 explicitly noted 'iterative verify-amend' as a lesson learned. Yet none of the subsequent missions M2-M5 used this pattern.",
+      "source": ".scratch/session-5HyCwPtSDH/running-estimate.json:situation.completedWork[23]"
+    },
+    {
+      "id": "O-4",
+      "fact": "The S3 running estimate records 9 deviations corrected by the commander during the session. The commander corrected: (1) governed data access violation, (2) ungoverned terms, (3) misidentifying commander as S2, (4) scoping context gap too narrowly, (5) not understanding S2/S3 pairing duty, (6) assuming transcript too large for subagent, (7) launching M1 as Explore, (8) assuming single session per repo, (9) assuming running estimate deletion. The number of corrections shows the S3 was operating with significant conceptual gaps even after reading the briefing materials.",
+      "source": ".scratch/session-5HyCwPtSDH/running-estimate.json:situation.deviations (9 items)"
+    },
+    {
+      "id": "O-5",
+      "fact": "The handoff-prompt-v2.md section I (Delegation Duty Updates) explicitly describes the WRITE_BLOCKED signal pattern and the write failure RCA, but does NOT describe the multi-agent workflow patterns (write-verify-amend, parallel barrier analyses, S2-then-S3 chaining). The handoff describes WHAT the session produced (40 subagents, 3.4M tokens) but not HOW the session orchestrated its multi-agent workflows.",
+      "source": "plans/mission-command-briefing/handoff-prompt-v2.md: sections D.11 (dashboard stats) and I (delegation duty updates)"
+    },
+    {
+      "id": "O-6",
+      "fact": "The 40-agent dashboard (harvesting/2026-03-19_session-subagent-report.html) lists each agent individually with role, mission, prompt, and output. The dashboard does NOT explicitly annotate which agents were part of multi-agent chains. The write-verify-amend cycle for the handoff (#26->27->28) appears as 3 separate cards. The parallel barrier analyses (#14,15,16) appear as 3 separate cards. An agent reading the dashboard sequentially sees 40 independent agents, not 15-20 coordinated workflow chains.",
+      "source": "harvesting/2026-03-19_session-subagent-report.html: agents array (40 entries, no chaining metadata)"
+    },
+    {
+      "id": "O-7",
+      "fact": "Decision #3 (Mission Command framework) describes delegation protocol, inter-agent communication, staff functions, and authority model. Decision #4 describes the 8 delegation duty components. Decision #25 defines S1/S2/S3 staff functions. Decision #26 says 'S2 spawned at plan start and plan end.' Decision #51 describes the plan-writing write-review loop with Plan Writer. However, NONE of these decisions explicitly describe the multi-agent workflow patterns that the 40-agent session demonstrated (write-verify-amend for non-plan artifacts, parallel investigation of the same question with different framings, S2 investigation chains where output feeds next S2).",
+      "source": "plans/mission-command-briefing/planning-brief.json: decisions #3, #4, #25, #26, #51"
+    },
+    {
+      "id": "O-8",
+      "fact": "The M2 AAR (scratch lifecycle) produced 6 proposals. The M4 AAR (concurrent sessions) produced 5 proposals. Both are substantive multi-page investigations. Neither had a verification agent launched to check the proposals against known harness state or to test whether the proposals would actually work. In the 40-agent session, by contrast, the promotion definition (agent #11) was immediately followed by an audit/verification agent (#12) that barrier-tested it against glossary exemplars.",
+      "source": "M2 AAR proposals P-1 through P-6, M4 AAR proposals P-1 through P-5, 40-agent dashboard agents #11-12"
+    },
+    {
+      "id": "O-9",
+      "fact": "The 40-agent session's main S3 agent never launched an S2 investigation without knowing what to do with the output. Every S2 was part of a deliberate chain: S2 investigates -> main agent reads and decides -> S3 acts on the decision OR another S2 deepens the investigation. The current session's S3 launched M2-M5 as parallel background agents and planned to 'await returns, spot-check each, reconcile' (running-estimate.json:situation.currentState). The batch launch pattern treats missions as independent work units, not as intelligence that feeds subsequent decisions.",
+      "source": ".scratch/session-5HyCwPtSDH/running-estimate.json:situation.currentState, 40-agent dashboard agent chain analysis"
+    },
+    {
+      "id": "O-10",
+      "fact": "The M3 mission (handoff JSON conversion) was assigned as an S3 (operations) mission. In the 40-agent session, the equivalent work (writing the handoff prompt, agent #26) was followed by a Verifier (#27) that checked 9 criteria, then an S3 amender (#28). The current session's M3 had no verification step planned or executed.",
+      "source": ".scratch/session-5HyCwPtSDH/running-estimate.json:delegationLog D5 (M3), 40-agent dashboard agents #26-28"
+    },
+    {
+      "id": "O-11",
+      "fact": "Decision #44 in the planning brief explicitly says: 'S2 analysis output must use the AAR schema.' The current session's S3 did learn this and applied it to M2-M5 (all launched with AAR format requirement per running-estimate.json finding F8 status: 'corrected'). This shows the S3 WAS capable of learning individual tactical lessons and applying them. The gap was in learning the higher-order orchestration patterns.",
+      "source": ".scratch/session-5HyCwPtSDH/running-estimate.json:findings F8"
+    },
+    {
+      "id": "O-12",
+      "fact": "The M7 file recovery mission discovered that the 40-agent session transcript (e059186f) is 11.4 MB / 3592 JSONL lines. The recovery script found 101 Write calls across the main transcript and 52 subagent transcripts. The main agent initially assumed this was 'too large' for subagents (deviation #6). The commander corrected: 'subagents have 1M context.' This correction shows the S3 was underestimating the available capacity for subagent context injection, which is a prerequisite for multi-agent patterns (verifiers need full context to verify).",
+      "source": ".scratch/session-5HyCwPtSDH/m7-file-recovery-aar.json, running-estimate.json:deviations[5]"
+    },
+    {
+      "id": "O-13",
+      "fact": "The handoff-prompt-v2.md section D.5 describes 'Write failure RCA' and explicitly says: 'when delegating file-writing tasks, either run the subagent in foreground or pre-approve Write by creating an empty file at the target path.' Section D.9 describes the WRITE_BLOCKED signal pattern. These are tactical fixes for a specific failure mode. The handoff does NOT describe the ORCHESTRATION patterns — when to launch a verifier, when to run parallel investigations, when to chain S2 outputs.",
+      "source": "plans/mission-command-briefing/handoff-prompt-v2.md: sections D.5, D.9, I"
+    },
+    {
+      "id": "O-14",
+      "fact": "The planning brief decision #51 (plan-writing protocol) defines a write-review loop: 'S3 writes section -> presents to Plan Writer -> Plan Writer reviews as user would -> S3 revises -> Plan Writer approves or pushes back.' This is a governed write-verify-amend cycle, but it is scoped ONLY to plan writing. The pattern is not generalized to other S3 outputs (handoff JSONs, schema designs, architecture proposals). Decision #52 formalizes the Plan Writer role but again only for plan writing.",
+      "source": "plans/mission-command-briefing/planning-brief.json: decisions #51, #52"
+    },
+    {
+      "id": "O-15",
+      "fact": "The 40-agent session's main S3 demonstrated a specific sequencing discipline: after each S2 or S3 completed a critical artifact, a Verifier was launched in a WORKTREE (isolated from the main workspace). Worktree agents: #8 (S3 in worktree for briefing update), #27 (Verifier in worktree for handoff), #31 (Verifier in worktree for re-verification), #34 (Verifier in worktree for final verification). The current session used zero worktrees.",
+      "source": "harvesting/2026-03-19_session-subagent-report.html: agents #8, #27, #31, #34 (all worktree: true)"
+    }
+  ],
+  "insights": [
+    {
+      "id": "I-1",
+      "observation_refs": ["O-5", "O-6", "O-7", "O-13"],
+      "analysis": "THE MULTI-AGENT PATTERNS WERE NEVER EXPLICITLY DOCUMENTED. The 40-agent session demonstrated 5 distinct orchestration patterns (write-verify-amend, parallel barrier analysis, S2-then-S3 chaining, WRITE_BLOCKED relaunch, S2 chain deepening), but these patterns exist only in the implicit structure of the 40-agent session — visible in the dashboard as individual agent entries, not as annotated workflow chains. The handoff describes delegation DUTY (9 components, WRITE_BLOCKED signal) but not delegation PATTERNS (when to use which multi-agent workflow). The planning brief describes the Plan Writer write-review loop (decision #51) but does not generalize the pattern to non-plan artifacts. An accepting S3 agent was told to read the dashboard and learn from it, but the dashboard presented 40 independent agents, not 15-20 coordinated chains. The orchestration knowledge was tacit, not codified."
+    },
+    {
+      "id": "I-2",
+      "observation_refs": ["O-3", "O-4", "O-11"],
+      "analysis": "THE S3 LEARNED TACTICAL LESSONS BUT NOT STRATEGIC PATTERNS. The S3 successfully extracted and applied: (a) AAR format requirement (decision #44), (b) never use Explore agents, (c) WRITE_BLOCKED signal pattern, (d) 1M context for subagents. These are all single-decision tactical rules — 'do X not Y.' The multi-agent orchestration patterns are strategic — they require understanding WHEN to compose agents into chains, WHICH pattern to use for which situation, and HOW to connect outputs to inputs. The S3 noted 'iterative verify-amend' in the running estimate but did not apply it, suggesting the lesson was captured as a label without understanding the triggering conditions."
+    },
+    {
+      "id": "I-3",
+      "observation_refs": ["O-2", "O-8", "O-9", "O-10"],
+      "analysis": "THE S3 TREATED MISSIONS AS INDEPENDENT WORK UNITS, NOT AS INTELLIGENCE FEEDS. The batch launch pattern (M2-M5 all in parallel background) is appropriate for truly independent research questions. But several missions had clear chain relationships: M2 (scratch lifecycle) findings should have informed M4 (concurrent sessions) design — both deal with the .gitignore blocker and .aitools/ structure. M3 (handoff JSON) should have had a schema verifier. M5 (naming) had design implications that could have used a Plan Writer-style review. The 40-agent session's S3 launched agents in deliberate sequences, using each agent's output to inform the next agent's prompt. The current session's S3 launched a batch and planned to reconcile later — treating subagent output as deliverables rather than intelligence."
+    },
+    {
+      "id": "I-4",
+      "observation_refs": ["O-1", "O-14", "O-15"],
+      "analysis": "THE 40-AGENT SESSION'S ORCHESTRATION WAS EMERGENT, NOT GOVERNED. The write-verify-amend pattern for the handoff (agents #26-28) was not prescribed by any rule or decision — the main S3 invented it during the session based on the Plan Writer write-review loop concept (decision #51) and generalized it to non-plan artifacts. The parallel barrier analyses (#14-16) were the main S3's application of decision #51's 'barrier analysis' concept to carry-forward formulation options. These patterns emerged from an S3 that deeply understood the underlying principles (verification before commitment, parallel exploration of alternatives, output feeds input). The patterns were not in any rule because they had just been invented. This means the current session's S3 was expected to independently derive the same patterns from reading the dashboard — a significantly harder task than following an explicit rule."
+    },
+    {
+      "id": "I-5",
+      "observation_refs": ["O-4", "O-12"],
+      "analysis": "CONTEXT PRESSURE AND CONCEPTUAL GAPS COMPETED WITH PATTERN LEARNING. The S3 had 9 commander corrections in the session, showing it was simultaneously learning basic concepts (S2/S3 pairing, context capacity, concurrent sessions) while also being expected to absorb and apply sophisticated orchestration patterns from the 40-agent dashboard. A fresh S3 agent with no prior session context faced a cold-start problem: read 542-line handoff + 3829-line planning brief + 40-agent dashboard + running estimate + AARs, absorb all concepts, AND apply multi-agent patterns — all while making its first mistakes on fundamentals like 'never use Explore.' The fundamentals consumed the learning bandwidth that would have been needed for orchestration pattern recognition."
+    },
+    {
+      "id": "I-6",
+      "observation_refs": ["O-7", "O-14"],
+      "analysis": "THE PLANNING BRIEF HAS A GOVERNANCE GAP FOR MULTI-AGENT ORCHESTRATION PATTERNS. Decision #3 governs Mission Command (delegation, communication, authority). Decision #4 governs delegation duty (9 components). Decision #25 governs staff functions. Decision #26 governs S2 timing. Decision #51 governs the plan-writing write-review loop. NONE of these decisions govern: (a) when to launch a verifier after an S3 completes a critical artifact, (b) when to run parallel S2 investigations on the same question, (c) when to chain S2 outputs as inputs to the next S2, (d) when to use worktrees for verification agents, (e) how to decide between single-agent and multi-agent approaches for a given task. The write-verify-amend pattern is governed only for plan writing (decision #51), not generalized to all S3 outputs. This is the gap."
+    },
+    {
+      "id": "I-7",
+      "observation_refs": ["O-6", "O-1"],
+      "analysis": "THE 40-AGENT DASHBOARD IS A FLAT LIST, NOT A WORKFLOW DIAGRAM. The dashboard has 40 agent cards with role, mission, prompt, output, and status. The workflow chains (which agents fed into which) are invisible. An agent reading the dashboard sequentially sees: 'S2 barrier A, S2 barrier B, S2 barrier C' as three independent investigations. Only by reading the prompts carefully and noticing 'Compare against formulation A' (agent #15) and 'Compare against A and B' (agent #16) can the reader infer the parallel pattern. The S3 write-verify-amend chain (#26-28) requires reading 3 separate cards and noticing that #27's prompt references #26's output and #28's prompt references #27's output. This inference is possible but not surfaced."
+    }
+  ],
+  "proposals": [
+    {
+      "id": "P-1",
+      "insight_refs": ["I-1", "I-6"],
+      "what": "Add a new planning brief decision (or amend decision #3) that codifies multi-agent orchestration patterns as part of Mission Command. Define 5 governed patterns: (1) WRITE-VERIFY-AMEND: for any S3 output that will be committed or consumed downstream — S3 writes, Verifier checks against criteria, S3 amends. (2) PARALLEL-INVESTIGATE: for ambiguous questions with 2+ valid framings — launch N parallel S2 agents with different framings, compare results. (3) S2-CHAIN: when S2 output reveals a deeper question — launch a follow-up S2 with the prior output as input. (4) S2-THEN-S3: S2 investigates, main agent reads and decides, S3 acts on the decision. (5) WRITE_BLOCKED-RELAUNCH: when a background agent is write-blocked, relaunch with WRITE_BLOCKED signal in foreground. Each pattern defines: trigger condition (WHEN to use it), agent composition (WHO is involved), data flow (WHAT connects them), and exit criteria (WHEN it is complete).",
+      "why": "The 40-agent session proved these patterns work but they exist only as tacit knowledge in one session transcript. Without codification, every new S3 agent must independently derive them — which this session proved does not happen reliably. The patterns are structural, not behavioral — they describe agent composition, not agent attitude. Per decision #35, hooks are more effective than coaching for structural patterns.",
+      "barrier_analysis": "This is a planning brief amendment — it requires user review per sources-of-truth.md. The patterns are already demonstrated in the 40-agent session, so no new invention is needed. Risk: over-prescribing orchestration could make agents rigid. Mitigation: define patterns as AVAILABLE options with trigger conditions, not as mandatory sequences. The delegating agent chooses the pattern based on the task."
+    },
+    {
+      "id": "P-2",
+      "insight_refs": ["I-7"],
+      "what": "Extend the session activity dashboard schema to include workflow chain metadata. Each agent entry gets an optional 'chain' field: { chainId: 'handoff-write-verify', role: 'writer|verifier|amender', predecessors: [26], successors: [28] }. The dashboard renders chains as connected groups, not just independent cards. Add a 'Workflow Chains' section above the individual agent cards that shows N chains with their composition pattern.",
+      "why": "The dashboard is the primary teaching artifact for multi-agent patterns. If the dashboard shows 40 independent agents, readers learn 'launch many agents.' If the dashboard shows 15 workflow chains composed of 40 agents, readers learn 'compose agents into patterns.' The chain metadata makes the orchestration knowledge explicit and visual.",
+      "barrier_analysis": "This is a dashboard schema change — moderate effort. The chain metadata must be manually annotated (the system cannot automatically infer chains from prompts). Risk: chain annotation is retrospective and may be inaccurate. Mitigation: the main S3 annotates chains during the session as part of the running estimate's delegationLog, then the dashboard generator reads those annotations."
+    },
+    {
+      "id": "P-3",
+      "insight_refs": ["I-2", "I-5"],
+      "what": "Add a PATTERN-CHECK step to the delegation duty. After the delegating agent composes the mission prompt (duty components 1-9) and BEFORE launching the agent, the delegating agent must ask: 'Is this mission complete with a single agent, or does it need a multi-agent pattern?' Decision criteria: (a) If the output will be committed or consumed downstream: use WRITE-VERIFY-AMEND. (b) If the question has 2+ valid framings: use PARALLEL-INVESTIGATE. (c) If the mission is operations (S3) and produces a governed artifact: use WRITE-VERIFY-AMEND with worktree verification. The PATTERN-CHECK is component 10 of the delegation duty.",
+      "why": "The single-agent default is the root cause. The S3 composed comprehensive single-agent prompts because nothing in the delegation duty prompted it to consider multi-agent composition. Adding an explicit pattern-check step makes multi-agent orchestration part of the standard delegation workflow, not an advanced technique that only experienced S3s discover.",
+      "barrier_analysis": "This extends the delegation duty from 9 to 10 components. Risk: makes delegation more complex and slower. Mitigation: the pattern-check is a mental checklist, not a subagent — it adds 10 seconds of reasoning, not a new agent launch. For simple tasks (filing a glossary term, reading a file), the answer is always 'single agent' and the check is trivial. The check only adds real value for substantive missions."
+    },
+    {
+      "id": "P-4",
+      "insight_refs": ["I-4", "I-1"],
+      "what": "Create a reference file (reference/orchestration-patterns.md) that documents the 5 multi-agent patterns with concrete examples from the 40-agent session. Each pattern gets: (a) Name and one-sentence description. (b) Trigger condition — when to use this pattern. (c) Agent composition diagram — which roles, what order. (d) Data flow — what connects agents. (e) Concrete example from session Z1IhGrcgGO with agent IDs. (f) Anti-pattern — what goes wrong without it (e.g., 'M3 handoff JSON had no verifier; errors discovered only when commander read it').",
+      "why": "The /delegate skill (proposed) needs a reference to inject into delegation briefings when multi-agent patterns apply. The reference file serves both as documentation for humans and as context for agents. The concrete examples from the 40-agent session ground the patterns in demonstrated reality rather than theoretical aspiration.",
+      "barrier_analysis": "This is a new reference file — requires user review per sources-of-truth.md. Risk: the file becomes stale as new patterns emerge. Mitigation: update the file whenever a session discovers a new pattern (the surfacing duty already covers this). Risk: agents may over-apply patterns and launch unnecessary verification agents for trivial tasks. Mitigation: the trigger conditions must be specific — 'output will be committed' not 'any S3 output.'"
+    },
+    {
+      "id": "P-5",
+      "insight_refs": ["I-3", "I-6"],
+      "what": "Add a PreToolUse hook on the Agent tool (subagent launch) that checks whether the mission description matches a multi-agent pattern trigger and injects a reminder if the delegating agent appears to be using a single-agent pattern for a multi-agent task. Detection heuristic: if the prompt contains 'write to' (file creation) AND the agent role is S3 AND there is no prior delegation in the current chain with role 'verifier', inject: 'REMINDER: S3 operations that produce committable artifacts should use the WRITE-VERIFY-AMEND pattern. Consider launching a Verifier after this agent completes.' This is a corrective injection (allow, not deny) — it does not block the launch, only reminds.",
+      "why": "Per decision #35, hooks are more effective than coaching for recurring patterns. The S3's tendency to use single-agent patterns is exactly the kind of recurring behavioral gap that a hook catches in real-time. The hook fires at the moment of delegation, when the delegating agent can still adjust. A UCI ('remember to use multi-agent patterns') fires at session start and fades from context. The hook fires at the decision point.",
+      "barrier_analysis": "HIGH barrier. Requires: (1) parsing subagent_type and prompt from the Agent tool input JSON, (2) pattern matching on prompt content to detect S3 write missions, (3) tracking prior delegations in the current session to detect missing verifiers. Risk: false positives — the hook fires for every S3 write mission, including trivial ones (updating a commit message). Mitigation: only fire when the output path is a governed artifact or a substantive file (>.5KB), not for ephemeral files. Alternative: instead of a hook, add the pattern-check to the /delegate skill template (P-3 above) and rely on the skill being invoked. This is lower barrier but less reliable (skill invocation is voluntary, hooks are automatic)."
+    },
+    {
+      "id": "P-6",
+      "insight_refs": ["I-5"],
+      "what": "Add an 'Orchestration Briefing' section to the handoff prompt template (/handoff skill). When the session used multi-agent patterns, the handoff must explicitly describe: (a) which patterns were used, (b) which missions used them, (c) what the accepting session should replicate. The /handoff SKILL.md step 2 (Schwerpunkt) already captures WHAT to do; this adds HOW to orchestrate it. Include a 'Multi-Agent Lessons' subsection that catalogs which orchestration patterns worked and which were missing.",
+      "why": "The Z1IhGrcgGO handoff described the 40-agent dashboard as a deliverable ('interactive HTML, 40 subagents') but not as an orchestration guide. The accepting session read the stats (3.4M tokens, 2h54m compute) but not the workflow patterns. The handoff template must force the handoff writer to make orchestration patterns explicit, not leave them as implicit structure in a dashboard.",
+      "barrier_analysis": "This extends the /handoff SKILL.md — a protected file requiring user review. Low implementation barrier (add a section to step 2 or create a new step). Risk: increases handoff length. Mitigation: the orchestration briefing is a concise section (5-10 bullets listing patterns used), not a full analysis."
+    }
+  ],
+  "root_cause_analysis": {
+    "method": "5-Whys with barrier analysis",
+    "chain": [
+      {
+        "level": 1,
+        "why": "Why did the S3 launch 1 agent per mission instead of multi-agent workflows?",
+        "because": "The S3 treated each mission as an independent work unit, composing comprehensive single-agent prompts rather than multi-agent chains.",
+        "evidence": "running-estimate.json delegationLog: 7 single-agent delegations, 0 chains"
+      },
+      {
+        "level": 2,
+        "why": "Why did the S3 treat missions as independent work units?",
+        "because": "Nothing in the delegation duty (9 components) or the handoff prompt prompted the S3 to consider multi-agent composition. The delegation duty tells you WHAT to include in a briefing, not HOW to compose agents into workflows.",
+        "evidence": "planning-brief.json decision #4: 8 (now 9) delegation duty components, none about orchestration patterns"
+      },
+      {
+        "level": 3,
+        "why": "Why does the delegation duty not include orchestration pattern selection?",
+        "because": "The multi-agent orchestration patterns were emergent in the 40-agent session — they were invented during that session, not derived from any prior governance. The delegation duty was designed during sessions 84280c8b and eaacf9da, before the 40-agent session demonstrated the full pattern vocabulary.",
+        "evidence": "40-agent dashboard: write-verify-amend, parallel barrier analysis, S2 chaining were all first demonstrated in session Z1IhGrcgGO"
+      },
+      {
+        "level": 4,
+        "why": "Why were the patterns not codified after the 40-agent session demonstrated them?",
+        "because": "The 40-agent session's handoff (handoff-prompt-v2.md) captured WHAT was produced (40 agents, 3.4M tokens) and updated the delegation duty (WRITE_BLOCKED signal, 9 components, lifecycle awareness), but did not codify the HOW (orchestration patterns). The dashboard was created as an observability artifact, not as a teaching artifact. The patterns were tacit knowledge in the session, not explicit knowledge in the harness.",
+        "evidence": "handoff-prompt-v2.md section I: delegation duty updates (tactical), no orchestration patterns section. Dashboard: 40 flat entries, no chain annotations."
+      },
+      {
+        "level": 5,
+        "why": "Why was tacit orchestration knowledge not made explicit?",
+        "because": "The harness governance model covers delegation (HOW to brief an agent), communication (HOW agents report back), and staff functions (WHO does what), but does not have a concept of 'orchestration patterns' (WHEN and HOW to compose agents into workflows). This is a governance gap — the Mission Command framework governs the individual delegation but not the composition of delegations into workflows.",
+        "evidence": "planning-brief.json decisions #3-7, #22-28, #44, #51-52: all govern individual delegations or specific roles, none govern multi-agent composition"
+      }
+    ],
+    "root_cause": "The Mission Command framework governs individual delegations but not the composition of delegations into multi-agent workflows. The 40-agent session demonstrated 5 orchestration patterns through emergent S3 behavior. These patterns were never codified because the governance model does not have a concept for them. The handoff captured tactical lessons (WRITE_BLOCKED, 9-component duty) but not strategic patterns (write-verify-amend, parallel investigation). The accepting S3 was expected to independently derive the same patterns from reading a flat dashboard — a task that requires both deep understanding of the underlying principles AND available cognitive bandwidth, neither of which a cold-start S3 with 9 fundamental corrections had.",
+    "contributing_factors": [
+      "Dashboard presents agents as flat list, not as workflow chains — orchestration structure invisible",
+      "Handoff describes delegation duty updates but not orchestration patterns",
+      "Planning brief governs individual delegation (decision #4) but not multi-agent composition",
+      "Plan-writing write-review loop (decision #51) is scoped only to plan writing, not generalized",
+      "S3 cold-start problem: 9 fundamental corrections consumed the learning bandwidth needed for pattern recognition",
+      "The 40-agent session's S3 was the same session that INVENTED the patterns — it had the advantage of having developed them through iterative learning with the commander"
+    ]
+  }
+}

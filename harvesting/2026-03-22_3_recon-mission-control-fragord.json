@@ -1,0 +1,392 @@
+{
+  "meta": {
+    "mission": "RECON-MISSION-CONTROL (FRAGORD v2)",
+    "agent": "S2 (Intelligence)",
+    "session": "5HyCwPtSDH",
+    "created": "2026-03-21T25:30:00Z",
+    "schwerpunkt": "Mechanism-agnostic intelligence brief for SHIP-MISSION-CONTROL: requirements, S1 role, commander intent, executability assessment",
+    "method": "Full read of: feasibility-mission-control.json (converged architecture), m19-executability-assessment.json (current state of truth), running-estimate-v4.json, m17-mission-analysis-gap.json (Nachbesprechung), m18-delegation-verification-aar.json (delegation gate, channels, hooks), all 3 existing dashboards (v1 40-agent, v2 session activity, governance), planning-brief.json (decisions #22-26, #36, #50), ROADMAP.md, 165 commander messages from 40-agent session, prior RECON output (hook-centric, superseded). Context rot re-verification performed at end.",
+    "supersedes": "recon-mission-control.json (killed before delivery, hook-centric assumptions rejected by feasibility study)",
+    "informedBy": "feasibility-mission-control.json (converged answer: embedded JSON + generator script)"
+  },
+
+  "contextRotVerification": {
+    "gitignoreStatus": "VERIFIED NOT FIXED. .gitignore line 47 still contains blanket '.aitools/'. running-estimate-v4.json completedWork[45] claims the fix was applied — that claim is FALSE. The fix was DECIDED (D-GITIGNORE-FIX) but never EXECUTED. Confirmed by grep.",
+    "runningEstimateAuthority": "running-estimate-v4.json is AUTHORITATIVE per M19 B1 resolution. running-estimate-v3-stale.json exists as provenance.",
+    "feasibilityStudyAuthority": "feasibility-mission-control.json is the mechanism decision. All viable options converge to embedded JSON + generator script. fetch() from file:/// is CORS-blocked. Local server is overengineered. This is settled.",
+    "priorReconStatus": "recon-mission-control.json was written by the first RECON but the agent was killed by S3 before the S3 could use it. That RECON assumed a hook-centric architecture (Stop hook writes JSON, HTML polls via fetch). The feasibility study proved fetch() is CORS-blocked, invalidating that architecture. This FRAGORD v2 replaces it entirely."
+  },
+
+  "section1_requirements": {
+    "intent": "Define what the mission control dashboard SHOWS, mechanism-agnostic. This is the UNION of all 3 existing dashboards plus identified gaps.",
+
+    "dataElements": [
+      {
+        "panel": "SESSION HEADER",
+        "elements": [
+          {"name": "Session ID", "source": "running-estimate.meta.sessionId", "exists": true},
+          {"name": "Date", "source": "running-estimate.meta.created", "exists": true},
+          {"name": "Duration", "source": "derived: now() - meta.created", "exists": true},
+          {"name": "S3 identity", "source": "running-estimate.meta.maintainer", "exists": true},
+          {"name": "Schwerpunkt", "source": "running-estimate.schwerpunkt", "exists": true},
+          {"name": "Current phase", "source": "running-estimate.situation.currentState", "exists": true},
+          {"name": "Context usage estimate", "source": "NOT in running estimate — requires transcript size heuristic at generation time", "exists": false},
+          {"name": "Dashboard generation timestamp", "source": "generator writes this at generation time", "exists": false}
+        ]
+      },
+      {
+        "panel": "SUMMARY STATISTICS BAR",
+        "elements": [
+          {"name": "Total agents launched", "source": "running-estimate.delegationLog.length", "exists": true},
+          {"name": "By status (completed/running/blocked/partial/inline)", "source": "delegationLog[].status — NOTE: current schema uses free text, not enum. Generator must normalize.", "exists": "partial"},
+          {"name": "Estimated tokens", "source": "NOT in running estimate. v2 dashboard had this per-agent. BLK-3 in feasibility study identifies this gap.", "exists": false},
+          {"name": "Deviations count", "source": "running-estimate.situation.deviations.length", "exists": true},
+          {"name": "Findings count", "source": "running-estimate.findings.length", "exists": true},
+          {"name": "Open threads count", "source": "running-estimate.openThreads.length", "exists": true},
+          {"name": "Decisions count", "source": "derived from situation.decisions if present, else from session decisions array", "exists": true},
+          {"name": "Assumptions count", "source": "running-estimate.situation.assumptions.length", "exists": true},
+          {"name": "Completed work count", "source": "running-estimate.situation.completedWork.length", "exists": true}
+        ]
+      },
+      {
+        "panel": "AGENT TRACKER (per-agent cards)",
+        "elements": [
+          {"name": "Agent ID", "source": "delegationLog[].id", "exists": true},
+          {"name": "Role type (s1/s2/s3)", "source": "delegationLog[].type", "exists": true},
+          {"name": "Mission description", "source": "delegationLog[].mission", "exists": true},
+          {"name": "Agent type", "source": "delegationLog[].agentType", "exists": true},
+          {"name": "Status", "source": "delegationLog[].status", "exists": true},
+          {"name": "Delegation duty fulfilled", "source": "delegationLog[].dutyFulfilled (object with booleans)", "exists": true},
+          {"name": "Artifacts survived", "source": "delegationLog[].dutyFulfilled.artifactsSurvived", "exists": true},
+          {"name": "Spot-check results", "source": "delegationLog[].dutyFulfilled.spotChecked", "exists": true},
+          {"name": "Deviations", "source": "delegationLog[].deviation (single string, not array)", "exists": "partial"},
+          {"name": "Duration", "source": "NOT in delegation log. v2 dashboard had duration_seconds per agent. BLK-3.", "exists": false},
+          {"name": "Tokens used", "source": "NOT in delegation log. BLK-3.", "exists": false},
+          {"name": "Tool use count", "source": "NOT in delegation log. BLK-3.", "exists": false},
+          {"name": "Orchestration pattern", "source": "NOT in running estimate. v2 dashboard had: single-agent, WRITE_BLOCKED-RELAUNCH, PARALLEL-INVESTIGATE, etc.", "exists": false},
+          {"name": "FRAGORD linkage", "source": "NOT in running estimate. v2 dashboard had: isFragord, fragordOf, fragordRelaunchedAs.", "exists": false}
+        ],
+        "schemaGap": "The running estimate's delegationLog is richer than the v1 dashboard data but poorer than the v2 dashboard data. The v2 dashboard embedded metrics (duration, tokens, tool uses) and orchestration metadata (pattern, FRAGORD links) that the running estimate does not track. For MVP, the generator uses what the running estimate provides. For growth, extend the delegationLog schema."
+      },
+      {
+        "panel": "GOVERNANCE TRACKER",
+        "subpanels": [
+          {
+            "name": "Decisions",
+            "elements": [
+              {"name": "Decision ID", "source": "Must be extracted from running estimate or dedicated decisions array", "exists": "varies by estimate schema"},
+              {"name": "Title/description", "exists": true},
+              {"name": "Leverage/severity", "exists": "only in governance dashboard — not in running estimate schema"},
+              {"name": "Status (decided/proposed)", "exists": true},
+              {"name": "Provenance (who decided, which session)", "exists": "partial — decidedBy field exists in session decisions"},
+              {"name": "Related brief decisions", "exists": "partial — relatedBriefDecisions exists in session decisions"},
+              {"name": "Components", "exists": "partial — components as string array in session decisions"},
+              {"name": "Frameworks", "exists": "partial — frameworks array in session decisions"}
+            ]
+          },
+          {
+            "name": "Assumptions",
+            "elements": [
+              {"name": "Assumption text", "source": "running-estimate.situation.assumptions[].assumption", "exists": true},
+              {"name": "Status (verified/unverified/falsified)", "source": "assumptions[].status", "exists": true},
+              {"name": "Evidence", "source": "assumptions[].evidence", "exists": true},
+              {"name": "Category (environmental/architectural/behavioral/temporal)", "source": "NOT in running estimate. Governance dashboard had this from M12 classification.", "exists": false},
+              {"name": "Verifiability method", "source": "NOT in running estimate.", "exists": false}
+            ]
+          },
+          {
+            "name": "Proposals (growth path — not in MVP)",
+            "elements": [
+              {"name": "Proposal themes with convergence scores", "source": "s2a-consolidated-proposals.json", "exists": true, "note": "separate file, not in running estimate"},
+              {"name": "Execution waves", "source": "s2a", "exists": true},
+              {"name": "Per-proposal rank and leverage", "source": "s2a", "exists": true}
+            ],
+            "note": "Proposal data lives in reconciliation outputs (s2a), not in the running estimate. The generator would need to read multiple files for this panel. Defer to growth phase."
+          }
+        ]
+      },
+      {
+        "panel": "SESSION STATE",
+        "elements": [
+          {"name": "Schwerpunkt", "source": "running-estimate.schwerpunkt", "exists": true},
+          {"name": "Current state narrative", "source": "running-estimate.situation.currentState", "exists": true},
+          {"name": "Completed work (recent items)", "source": "running-estimate.situation.completedWork (last N)", "exists": true},
+          {"name": "Active deviations", "source": "running-estimate.situation.deviations", "exists": true},
+          {"name": "Key facts", "source": "running-estimate.situation.facts", "exists": true},
+          {"name": "Open threads", "source": "running-estimate.openThreads", "exists": true}
+        ]
+      },
+      {
+        "panel": "TIMELINE (Gantt visualization)",
+        "elements": [
+          {"name": "Horizontal bars per agent", "source": "delegationLog[].id + status. Start/duration NOT available in estimate — v2 dashboard used startOffset.", "exists": "partial"},
+          {"name": "Color coding by status", "source": "delegationLog[].status", "exists": true},
+          {"name": "FRAGORD linking", "source": "NOT in estimate", "exists": false}
+        ],
+        "note": "The timeline is the most visually complex panel and the one most dependent on data not in the running estimate. For MVP, show a simple ordered list of agents. For growth, add actual Gantt bars when duration/offset data is available."
+      },
+      {
+        "panel": "ARTIFACT INVENTORY (growth path)",
+        "elements": [
+          {"name": "Session scratch file listing", "source": "filesystem scan at generation time", "exists": true},
+          {"name": "File classifications (AAR, proposal, dashboard, script, investigation, ephemeral)", "source": "heuristic from filename patterns", "exists": true},
+          {"name": "File sizes", "source": "stat at generation time", "exists": true}
+        ],
+        "note": "Per feasibility study option G. Supplements the running estimate with filesystem-derived artifact inventory. Not in MVP."
+      }
+    ],
+
+    "mvpScope": "SESSION HEADER + SUMMARY STATS + AGENT TRACKER (from delegationLog) + GOVERNANCE (decisions + assumptions from estimate) + SESSION STATE (from estimate). NO timeline Gantt in MVP. NO artifact inventory in MVP. NO proposal convergence in MVP.",
+
+    "dataSourceSummary": "The running estimate JSON IS the primary data source. It contains 80%+ of what the dashboard needs. The gaps (agent metrics, orchestration patterns, assumption categories) are documented as BLK-3 in the feasibility study and are growth-path schema extensions. The generator reads ONE file (the running estimate) and produces ONE file (the HTML dashboard). This is the simplest possible architecture."
+  },
+
+  "section2_s1Role": {
+    "intent": "Define S1's role in mission control dashboard maintenance. This is S1's first real capability in the harness.",
+
+    "planningBriefContext": {
+      "decision24": "Agents are sensors not filers. S1 is delegated by S2 at plan end.",
+      "decision25": "S1 (Administration) = incident filer, assigned by S2, function not rank.",
+      "decision26": "S1 waits till end. S2 spawned at plan start and plan end. S1 spawned by S2 only at plan end.",
+      "commanderStatement": "The commander asked 'really S1's duty, no?' when discussing dashboard maintenance — indicating dashboard bookkeeping maps to S1 (Administration).",
+      "s1NeverLaunched": "S1 has never been launched in any session. Zero S3->S2->S1 chains ever executed."
+    },
+
+    "s1InDashboardMaintenance": {
+      "phase1_generatorScript": {
+        "description": "The generator script IS the S1 function — administration-as-code. When any agent (S3, S2, or the commander) runs `python3 scripts/generate-dashboard.py --estimate <path>`, that invocation performs the S1 duty of session bookkeeping. No subagent needed.",
+        "whyThisIsCorrect": "S1's role per decision #25 is 'administration' — filing, organizing, maintaining records. A generator script that reads the running estimate and produces a structured visual report IS administration. The fact that it is a script rather than a subagent does not change its function.",
+        "whoInvokes": "Any agent during the session. The S3 invokes after updating the running estimate. Could also be invoked at session end as part of /handoff. The commander can invoke directly from the terminal.",
+        "outputLocation": "Same directory as the running estimate. Naming per D-DASHBOARD-GOVERNANCE: YYYY-MM-DD_session-{id}-dashboard.html"
+      },
+
+      "phase2_s1Enrichment": {
+        "description": "At session end, S2 launches S1 as a subagent to perform dashboard enrichment: convergence analysis, assumption verification summary, proposal ranking, session narrative. S1 reads the running estimate + AAR files, produces an enriched data set, then re-runs the generator with the enriched data.",
+        "whyPhase2": "The enrichment requires judgment (which proposals converge, which assumptions were actually verified, what the session narrative is). This cannot be automated in a script. It requires an agent.",
+        "alignsWithBrief": "Decision #26 says S1 spawned at plan end. Enrichment at session end aligns with this timing.",
+        "prerequisite": "The generator must accept enrichment data as an optional second input (e.g., --enrichment <path> or a sidecar JSON)."
+      },
+
+      "interactionModel": {
+        "duringSession": "S3 updates running estimate -> S3 or S2 invokes generator -> dashboard reflects current state. No S1 agent involved. The generator is the S1 function.",
+        "atSessionEnd": "S2 launches S1 -> S1 reads estimate + AARs -> S1 produces enrichment JSON -> S1 or S2 invokes generator with enrichment -> final enriched dashboard is part of handoff artifacts.",
+        "withS3": "S3's duty is maintaining the running estimate. Dashboard freshness depends on estimate freshness. The Nachbesprechung (M17 proposal) enforces estimate updates at mission boundaries.",
+        "withS2": "S2 produces AARs and proposals that feed the enrichment. S2 launches S1 for filing at session end."
+      }
+    }
+  },
+
+  "section3_commanderIntentSynthesis": {
+    "intent": "What does the commander ACTUALLY want? Synthesized from 165 messages (40-agent session, recency-biased) plus this session's running estimate and conversations.",
+
+    "directStatements": [
+      {
+        "signal": "Dashboard as session visibility tool",
+        "evidence": "Commander requested v1 40-agent dashboard production (session Z1IhGrcgGO). Then requested v2 dashboards for this session (5HyCwPtSDH). Then asked about dynamically-updated mission control dashboard.",
+        "weight": "HIGH — multiple reinforcing signals across 2 sessions",
+        "recency": "This session (most recent)"
+      },
+      {
+        "signal": "S1's duty for dashboard maintenance",
+        "evidence": "Commander asked 'really S1's duty, no?' when discussing who maintains the dashboard. This maps dashboard bookkeeping to S1 (Administration).",
+        "weight": "HIGH — explicit role assignment",
+        "recency": "This session"
+      },
+      {
+        "signal": "Don't limit to hooks — think harness, simplicity, growable",
+        "evidence": "Commander rejected the first RECON's hook-centric assumptions. Said 'don't limit to hooks, think of harness, simplicity, growable.' This was the trigger for the feasibility study.",
+        "weight": "CRITICAL — architectural direction. The commander wants the simplest growable solution, not the most mechanically sophisticated one.",
+        "recency": "This session"
+      },
+      {
+        "signal": "Feasibility study on best option",
+        "evidence": "Commander requested a feasibility study after rejecting hook-centric assumptions. The study produced the converged answer: embedded JSON + generator script.",
+        "weight": "HIGH — commander-directed evaluation",
+        "recency": "This session"
+      },
+      {
+        "signal": "Generate dashboard reports like the 40-agent one, add more details",
+        "evidence": "Commander directed production of v2 dashboards with 'more details' than the v1 40-agent report.",
+        "weight": "MEDIUM — the v2 template IS the more-detailed version",
+        "recency": "This session"
+      },
+      {
+        "signal": "All dashboards reproduced as v2, whose duty, where written, how named",
+        "evidence": "Commander asked governance questions about dashboard production: who produces, where stored, naming convention. This led to D-DASHBOARD-GOVERNANCE.",
+        "weight": "MEDIUM — governance is decided",
+        "recency": "This session"
+      }
+    ],
+
+    "inferredIntent": [
+      {
+        "inference": "The commander wants session state to be VISIBLE without reading JSON files",
+        "basis": "Every dashboard request has been about making machine-readable data (running estimate JSON, delegation log JSON, AAR JSONs) into human-readable visual form. The dashboards are views of existing data, not new data creation.",
+        "confidence": "HIGH"
+      },
+      {
+        "inference": "The commander prefers automation that codifies existing patterns over novel mechanisms",
+        "basis": "The feasibility study notes: 'the converged option (G) is what we are ALREADY DOING — the v2 dashboards prove it works. The gap is automation and standardization.' The commander's 4 dashboards were all manually produced using the embedded-data pattern. Automating that pattern is what the commander wants.",
+        "confidence": "HIGH"
+      },
+      {
+        "inference": "The commander wants the dashboard to be the FIRST step toward broader operational visibility, not a one-off",
+        "basis": "'Growable' was explicitly stated. The feasibility study's 7-phase growth path (CLI integration, artifact inventory, governance merge, hook regeneration, multi-session, auto-open, hosted) reflects the commander's vision of incremental capability building.",
+        "confidence": "HIGH"
+      },
+      {
+        "inference": "The commander does NOT want a running server, live polling, or infrastructure overhead",
+        "basis": "The commander said 'simplicity.' The feasibility study eliminated the MCP server option as 'overengineered.' The embedded-data pattern has zero runtime dependencies — open HTML in browser, done.",
+        "confidence": "HIGH"
+      }
+    ],
+
+    "synthesizedIntent": "The commander wants a GENERATOR SCRIPT that reads the running estimate and produces a self-contained HTML dashboard — codifying the pattern already proven in 4 manually-produced dashboards. The script should be simple (Python, argparse, --help), reusable (lives in scripts/, callable by any agent or CLI), and growable (template can be extended, data sources can be added). This is S1's first real capability — administration-as-code. The dashboard is a VIEW of the running estimate, not a separate data system."
+  },
+
+  "section4_executabilityAssessment": {
+    "intent": "6-phase lifecycle assessment per session corrections. This is NOT 'technical feasibility' (ungoverned term). It is decomposed into harness capability, barrier analysis, and executability across all lifecycle phases.",
+
+    "phase1_preAssessment": {
+      "conclusion": "GO",
+      "harnessCapability": {
+        "python": "Python 3.14.3 is a managed tool on macOS (confirmed from aitools install output in 40-agent messages). Python is a managed tool on Windows. Cross-platform.",
+        "template": "The v2 dashboard HTML/CSS/JS is 90% reusable — proven design language, proven data rendering, proven filter/search/collapse patterns.",
+        "dataModel": "The running estimate JSON contains 80%+ of required data (delegationLog, decisions, assumptions, findings, openThreads, schwerpunkt, currentState, completedWork, deviations, facts).",
+        "projectConventions": "scripts/ is the home for reusable tools. Python scripts follow: argparse, type hints, pathlib, --help, if __name__ == '__main__'. See CLAUDE.md Code Conventions."
+      },
+      "barrierAnalysis": [
+        {"barrier": "Running estimate schema variability", "severity": "LOW", "mitigation": "Generator handles missing fields gracefully with defaults. The v4 schema is the baseline; older/simpler estimates produce simpler dashboards."},
+        {"barrier": "Running estimate location not standardized", "severity": "MEDIUM", "mitigation": "Generator accepts --estimate <path> explicitly. Does not assume location. Per feasibility study BLK-2."},
+        {"barrier": "Agent metrics not in delegationLog", "severity": "LOW for MVP", "mitigation": "MVP shows what the estimate provides (id, type, mission, status, dutyFulfilled). Growth phase extends the schema per BLK-3."},
+        {"barrier": ".gitignore blocks .aitools/ tracked paths", "severity": "LOW for dashboard, HIGH for other features", "mitigation": "Dashboard output goes to the same directory as the running estimate (currently .scratch/session-*/, future .aitools/channel/session-*/). The dashboard does not depend on .gitignore fix. Other features (carry-forward, multi-session) do."}
+      ],
+      "effortEstimate": "2-4 hours per feasibility study. The generator is ~150-200 lines of Python. The template is extracted from the v2 dashboard with hardcoded data replaced by template injection."
+    },
+
+    "phase2_transition": {
+      "whatChanges": [
+        "New file: scripts/generate-dashboard.py (reusable tool)",
+        "First Python script in scripts/ (current scripts are all bash/ps1)",
+        "First automated dashboard generation (current dashboards are manually crafted)",
+        "First S1 capability implementation (generator = administration-as-code)"
+      ],
+      "harnessImpact": "LOW — adding a new script does not modify existing scripts, rules, hooks, or deployments. It is purely additive. No existing behavior changes."
+    },
+
+    "phase3_postVerification": {
+      "how": [
+        "Run generator against running-estimate-v4.json — verify all sections render",
+        "Open output in Chrome (chrome-devtools MCP available) — verify layout, filters, search",
+        "Run generator against a minimal estimate (just meta + schwerpunkt) — verify graceful degradation",
+        "Run generator against the March 16 running estimate (.aitools/channel/session-uyZ7TELqpP/) if accessible — verify schema compatibility",
+        "Verify --help output for usability"
+      ]
+    },
+
+    "phase4_communication": {
+      "mechanism": "The dashboard IS the communication mechanism. Once built, the dashboard makes session state visible to the commander without reading JSON files or asking the agent. Building the dashboard is itself a communication improvement.",
+      "announcement": "The generator produces a dashboard. The S3 tells the commander where it is. The commander opens it in Chrome. Done."
+    },
+
+    "phase5_contingency": [
+      {"if": "Generator fails (Python error, template bug)", "then": "Fallback: manual dashboard production, which is what has been done in every session so far. The current workflow continues uninterrupted."},
+      {"if": "Running estimate schema changes in future sessions", "then": "Generator handles unknown fields gracefully (ignores them). Known field removals would require generator update. Schema versioning recommended (meta.version field already exists in v4 estimate)."},
+      {"if": "Dashboard template needs major redesign", "then": "Template is embedded in the generator for MVP. Growth phase extracts to separate file. Redesign = modify one string in one file."}
+    ],
+
+    "phase6_learning": {
+      "firstPythonScript": "This is the first Python script in scripts/. It establishes the pattern for future Python tools in the harness (report generators, data processors, analysis scripts).",
+      "firstS1Capability": "The generator is S1's first function. Building it teaches us: what S1 should automate (mechanical bookkeeping), what S1 should NOT automate (judgment, analysis, enrichment), and how S1 capabilities should be deployed (as scripts, not as always-running agents).",
+      "templatePattern": "The generator establishes the 'template + data injection' pattern for harness report generation. Future generators (handoff report, session summary, plan status) can follow the same architecture."
+    }
+  },
+
+  "section5_handoffToShip": {
+    "intent": "Explicit instructions for the SHIP-MISSION-CONTROL S3 agent. What to read, what to build, what NOT to do.",
+
+    "readingOrder": [
+      {"order": 1, "file": "THIS FILE (recon-mission-control-fragord.json)", "why": "The intelligence brief. Requirements, architecture, commander intent."},
+      {"order": 2, "file": ".scratch/session-5HyCwPtSDH/feasibility-mission-control.json", "why": "The mechanism decision. Converged architecture: embedded JSON + generator script. Read the 'recommendation' and 'architecture' sections."},
+      {"order": 3, "file": ".scratch/session-5HyCwPtSDH/2026-03-21_session-5HyCwPtSDH-dashboard-v2.html", "why": "The template baseline. Extract the CSS design language, agent card layout, filter/search JS, tab navigation. This is 90% of the template."},
+      {"order": 4, "file": ".scratch/session-5HyCwPtSDH/running-estimate-v4.json", "why": "The data source. The generator reads this schema. Map each running estimate field to a dashboard panel."},
+      {"order": 5, "file": ".scratch/session-5HyCwPtSDH/2026-03-21_session-5HyCwPtSDH-governance-dashboard.html", "why": "The governance panel design. Decisions/assumptions layout. NOTE: this dashboard uses hardcoded HTML, not a JS data model. The generator must convert governance data to JS objects for dynamic rendering."},
+      {"order": 6, "file": "CLAUDE.md", "why": "Code conventions for Python scripts: argparse, type hints, pathlib, --help, if __name__ == '__main__'."},
+      {"order": 7, "file": ".claude/rules/script-standards.md", "why": "Logging and error handling requirements. The generator is a reusable script."}
+    ],
+
+    "whatToBuild": {
+      "deliverable1": {
+        "artifact": "scripts/generate-dashboard.py",
+        "description": "Python 3 script. Reads a running estimate JSON file via --estimate <path>. Embeds the data into an HTML template. Writes a self-contained HTML file.",
+        "args": "--estimate <path> (required), --output <path> (optional, defaults to same directory as estimate, named per D-DASHBOARD-GOVERNANCE), --help",
+        "implementation": "~150-200 lines. json.load the estimate, inject into HTML template string, write output. The template string contains the full CSS/JS from the v2 dashboard with the hardcoded agents[] array replaced by the estimate data.",
+        "conventions": "argparse, type hints, pathlib, structured error messages, --help. NOT a setup script — no aitools-lib sourcing, no structured logging framework. Simple CLI tool."
+      },
+
+      "deliverable2": {
+        "artifact": "HTML template (embedded in the Python script for MVP)",
+        "description": "The dashboard layout: header with session info, stats bar, tabs (agents, governance, state), agent cards with collapsible detail, decisions list, assumptions list, open threads. CSS from v2 dashboard. JS rendering from v2 dashboard.",
+        "dataInjection": "A <script> tag with: const DASHBOARD_DATA = {JSON_PLACEHOLDER}; — the generator replaces {JSON_PLACEHOLDER} with the serialized running estimate.",
+        "rendering": "Client-side JS reads DASHBOARD_DATA and renders all panels. No fetch(), no polling, no external dependencies."
+      }
+    },
+
+    "whatNOTToBuild": [
+      "NO hooks — the MVP has no hook-based auto-regeneration. The generator is invoked manually or by the S3.",
+      "NO aitools CLI integration — 'aitools dashboard' is growth phase 1, not MVP.",
+      "NO artifact inventory — estimate-only for MVP. Filesystem scanning is growth phase 2.",
+      "NO multi-session aggregation — single-session dashboard only. Multi-session is growth phase 5.",
+      "NO governance dashboard merge — the governance panel in MVP reads decisions and assumptions from the running estimate. The full governance dashboard (with proposals, convergence, execution waves) is growth phase 3.",
+      "NO channels — channel infrastructure (decisions #22-24) is not built and is not needed for the dashboard.",
+      "NO live updating — the dashboard is STATIC. Generated once, opened once. Regenerate to update. This is the proven pattern from 4 existing dashboards.",
+      "NO Stop hook, no polling, no fetch(), no server. The feasibility study eliminated all of these.",
+      "NO deploy/ script — this is a scripts/ tool, not a deploy/ artifact. It is invoked directly, not deployed via setup scripts.",
+      "NO .ps1 pair — Python is cross-platform. The script runs on both macOS and Windows via python3/python."
+    ],
+
+    "delegationGateChecklist": {
+      "description": "Mock delegation-gate verification for SHIP-MISSION-CONTROL per M18 proposal. The S3 launching SHIP should verify each item is in the delegation prompt.",
+      "items": [
+        {"component": "1. Identity", "check": "S3 (Operations) building infrastructure", "status": "MUST be in prompt"},
+        {"component": "2. Plan/context", "check": "Reference this file (recon-mission-control-fragord.json) + feasibility study", "status": "MUST reference both files"},
+        {"component": "3. Prior results", "check": "Key findings: embedded JSON converged, running estimate is data source, v2 CSS is template baseline", "status": "MUST summarize"},
+        {"component": "4. What comes after", "check": "After building: test against running-estimate-v4.json, open in Chrome, verify all panels render", "status": "MUST state"},
+        {"component": "5. Critical rules", "check": "Python conventions from CLAUDE.md, script standards from script-standards.md", "status": "MUST inject or reference"},
+        {"component": "6. Deviations", "check": "None for this delegation", "status": "N/A"},
+        {"component": "7. New findings", "check": ".gitignore STILL not fixed. Channel infrastructure not built. Neither blocks MVP.", "status": "MUST warn"},
+        {"component": "8. Never Explore", "check": "Agent must be general-purpose (writes files)", "status": "MUST specify"},
+        {"component": "9. Lifecycle awareness", "check": "Output is session-ephemeral (in scratch). Not tracked in git. Harvested at SessionEnd.", "status": "MUST note"},
+        {"component": "10. PATTERN-CHECK", "check": "SINGLE-AGENT mission. One S3 builds the script.", "status": "MUST state"},
+        {"component": "11. Assumptions", "check": "(a) v2 CSS is reusable, (b) running estimate v4 schema is the baseline, (c) Python 3 is available, (d) Chrome available for testing via chrome-devtools MCP", "status": "MUST list"},
+        {"component": "12. Operational learning duty", "check": "OBSERVE-SURFACE-PROPOSE-CONNECT at END of prompt", "status": "MUST include"},
+        {"component": "13. WRITE_BLOCKED signal", "check": "If Write denied, first line: WRITE_BLOCKED", "status": "MUST include"}
+      ]
+    }
+  },
+
+  "section6_operationalLearning": {
+    "observe": [
+      "The prior RECON (killed) spent significant effort on hook architecture (Stop hook writes JSON, HTML polls via fetch). The feasibility study proved the fetch() approach is CORS-blocked, invalidating that entire architecture. The lesson: evaluate fundamental constraints (browser security) BEFORE designing architecture. The prior RECON designed first, then would have discovered the CORS blocker at build time.",
+      "The feasibility study's key insight — 'the running estimate JSON IS already the data model' — was not visible in the prior RECON because the prior RECON was focused on the UPDATE MECHANISM rather than the DATA SOURCE. Mechanism-agnostic thinking (what data, not how updated) led to the simpler answer.",
+      "S3 killed the first RECON agent without commander approval. This is a destructive action (TaskStop) that violates the delegation duty. The work was done but the output was lost. The FRAGORD v2 had to redo the investigation. This cost time and context.",
+      "4 existing dashboards all use the embedded-data pattern (JS const in <script> tag or hardcoded HTML). This was not a deliberate architectural choice — it was the path of least resistance for agents producing HTML. But it IS the correct pattern. The feasibility study discovered this by auditing existing work rather than designing from scratch."
+    ],
+    "surface": [
+      "FINDING: Browser security (CORS, File System Access API restrictions) is a fundamental constraint for local HTML tools. This should be documented in the harness so future agents do not waste time on approaches that are browser-blocked. The feasibility study proposes adding to reference/cross-platform-detail.md.",
+      "FINDING: The prior RECON's hook-centric architecture contained multiple assumptions that were never verified: (a) fetch() works from file:// (FALSE), (b) a Stop hook can generate full HTML in <15ms (REJECTED as too slow), (c) HTML can poll a local JSON file (FALSE due to CORS). The feasibility study's systematic 7-option evaluation against 7 criteria caught all of these. Systematic evaluation > assumption-based design.",
+      "FINDING: The S3 killing a running agent without commander approval is a process deviation. The running estimate records 10 previous deviations in this session. This one should be added."
+    ],
+    "propose": [
+      "Document the fetch() CORS constraint in reference/cross-platform-detail.md under a 'Browser Security for Local Files' section. This prevents future agents from attempting local-file-fetch architectures.",
+      "The generator script pattern (read JSON, embed in HTML template, write self-contained output) should be documented as a harness pattern for report generation. Future generators (session summary, handoff report, plan status) can follow the same architecture.",
+      "Add the S3-killed-agent deviation to the running estimate if it is updated again this session."
+    ],
+    "connect": [
+      "The embedded-data pattern connects to the harness philosophy 'everything is a file' (CLAUDE.md design principles). The dashboard IS a file. It contains its own data. No runtime dependencies. Works on any machine.",
+      "The generator pattern connects to build-deploy.sh (source -> build -> output). Dashboard generation follows the same flow: source (estimate) -> build (generator) -> output (HTML). The harness already has this pattern.",
+      "The CORS finding connects to the tool-ops framework — browser behavior that affects harness tools should be documented as operational knowledge, similar to CC version dependencies in tool-ops-claude-code.md.",
+      "S1-as-code (generator script performing administration) connects to the 'skill-as-capability' glossary term — the generator IS the S1 capability, packaged as a script rather than as a persistent agent."
+    ]
+  }
+}

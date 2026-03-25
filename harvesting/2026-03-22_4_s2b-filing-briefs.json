@@ -1,0 +1,137 @@
+{
+  "meta": {
+    "producer": "S3 (Operations) inline — Phase 1b",
+    "session": "5HyCwPtSDH",
+    "created": "2026-03-21T23:10:00Z",
+    "method": "Scanned all 7 AARs + running estimate for ungoverned terms and findings that should be incidents. Commander intent citations from 40agent-human-messages.md using backward-chronological heuristic."
+  },
+  "glossaryTerms": [
+    {
+      "term": "orchestration pattern",
+      "type": "term",
+      "definition_draft": "A governed composition of multiple agents into a coordinated workflow with defined trigger conditions, agent roles, data flow, and exit criteria. Five patterns identified: WRITE-VERIFY-AMEND, PARALLEL-INVESTIGATE, S2-CHAIN, S2-THEN-S3, WRITE_BLOCKED-RELAUNCH. Each pattern describes WHEN to compose agents, not WHAT individual agents do (which is delegation duty). Distinct from delegation (a single agent briefing) and staff function (a role identity).",
+      "source_rule": ".claude/rules/glossary.md — term not listed",
+      "source_framework": "Mission Command (proposed, decision #3)",
+      "commanderIntentEvidence": "Commander's execution plan for this session explicitly names 'write-verify-amend cycles, parallel S2, S2→S3 chaining, S2→S1 admin delegation' as execution methods. Commander corrected S3's single-agent-per-mission pattern across the session.",
+      "priority": "HIGH — this session's primary operational learning"
+    },
+    {
+      "term": "reconciliation",
+      "type": "term",
+      "definition_draft": "Merging per-session operational state into a single carry-forward artifact using a deterministic algorithm. For running estimates: LAST-UPDATED-WINS for scalar fields, UNION for array fields, MOST-ADVANCED-STATUS for enum fields. Reconciliation happens at session end (hook), session start (catch crashed sessions), and handoff (explicit checkpoint). Distinct from merge (git-level conflict resolution) and consolidation (human editorial synthesis).",
+      "source_rule": ".claude/rules/glossary.md — term not listed",
+      "source_framework": "Decision #50 (running estimate), workspace rule carry-forward principle",
+      "commanderIntentEvidence": "Commander chose 'per-session estimates with reconciliation' (running-estimate.json:facts[88]). M4 AAR quotes commander: architecture must support multi-writer.",
+      "priority": "HIGH — prerequisite for concurrent session architecture"
+    },
+    {
+      "term": "carry-forward",
+      "type": "term",
+      "definition_draft": "Project state that persists across sessions and machines — running estimates, consolidated findings, harvested artifacts. MUST be tracked in the repo (git-tracked for git repos, synced for cloud-synced folders). Carry-forward state is the opposite of session-ephemeral state (scratch files, in-flight channel messages). The carry-forward principle governs workspace design: if data needs to survive a machine switch, it must be tracked. Distinct from session-ephemeral (belongs to one session on one machine) and harvested (entered evaluation pipeline, not necessarily carry-forward).",
+      "source_rule": ".claude/rules/aitools-workspace.md lines 17-29 — concept used but term not governed",
+      "source_framework": "Workspace rule, planning brief decisions #3, #22, #26, #34, #50",
+      "commanderIntentEvidence": "CLAUDE.md mission: 'session state carry-forward'. Workspace rule L22: 'Project state that carries forward between sessions.' Commander's running estimate fact: 'running estimate carry-forward.'",
+      "priority": "HIGH — used pervasively but ungoverned"
+    },
+    {
+      "term": "session-ephemeral",
+      "type": "term",
+      "definition_draft": "Data that belongs to one session on one machine and is expected to be destroyed at session end. Scratch files, in-flight channel messages, .current-session pointers. Gitignored by design. Distinct from carry-forward (persists across sessions) and harvested (copied to evaluation pipeline before destruction).",
+      "source_rule": ".claude/rules/aitools-workspace.md line 27 — concept used but compound term not governed",
+      "source_framework": "Workspace rule",
+      "commanderIntentEvidence": "Workspace rule L27: 'Session-ephemeral data (scratch files, in-flight channel messages) is gitignored.'",
+      "priority": "MEDIUM — clarifies the carry-forward/ephemeral boundary"
+    },
+    {
+      "term": "context rot",
+      "type": "term",
+      "definition_draft": "Progressive degradation of an agent's ability to correctly apply rules, findings, and context as a session grows longer. Manifests as: rule fade (rules loaded early are ignored late), finding staleness (earlier analysis contradicted by later findings not noticed), and conceptual drift (agent's working model diverges from actual harness state). Mitigated by: fresh subagents (context at launch = full salience), write-verify-amend cycles (natural refresh points), and FRAGORD kill-and-replace (stale agents relaunched). Distinct from staleness (incidents open too long) and scope creep (work expanding beyond intent).",
+      "source_rule": ".claude/rules/glossary.md — listed but noted as already present. Checking: YES it is listed.",
+      "source_framework": "Already governed in glossary word list",
+      "commanderIntentEvidence": "Commander's execution plan has entire section on context rot mitigation. Commander deals with it by: 'asking agents to re-read in reverse chronological order', 'using ultrathink', 'launching subagents to re-read files fresh.'",
+      "priority": "ALREADY GOVERNED — skip filing, but definition may need update to include mitigation strategies"
+    },
+    {
+      "term": "operational learning",
+      "type": "term",
+      "definition_draft": "The harness capability by which sessions produce not just deliverables but reusable knowledge — patterns, corrections, framework proposals — that embed into the harness as permanent improvements. The OBSERVE-SURFACE-PROPOSE-CONNECT duty applied continuously. Every session is a sensor. Operational learning subsumes artifact harvesting and session lifecycle as its implementation mechanisms. Distinct from coaching (behavioral improvement for one agent) and framework adoption (formalizing external concepts into the harness).",
+      "source_rule": ".claude/rules/glossary.md — term not listed",
+      "source_framework": "Planning brief decision #36 (proposed), #54 (harness improvement cycle)",
+      "commanderIntentEvidence": "Commander's Schwerpunkt for this session: 'Make the harness learn from what just happened so it doesn't happen again.' Planning brief decision #36: Operational Learning framework absorbs session lifecycle and artifact harvesting.",
+      "priority": "HIGH — this session's governing concept"
+    },
+    {
+      "term": "FRAGORD",
+      "type": "term",
+      "definition_draft": "Fragmentary Order — a directive to modify, replace, or terminate a previously issued mission for a delegated agent. In the harness: kill a running subagent and relaunch with updated context, or amend a running mission's parameters. Used when findings invalidate the original mission parameters. Provenance: US Army FM 101-5-2 (adapted). Distinct from delegation (initial mission assignment) and handoff (session-to-session transition).",
+      "source_rule": ".claude/rules/glossary.md — term not listed",
+      "source_framework": "Mission Command (proposed, decision #3)",
+      "commanderIntentEvidence": "Commander's execution plan: 'FRAGORD stale agents — if findings changed since launch, kill and relaunch.' M1 AAR was produced via FRAGORD (inline Explore results converted to JSON AAR format).",
+      "priority": "MEDIUM — used in this session's operations"
+    },
+    {
+      "term": "SITREP",
+      "type": "term",
+      "definition_draft": "Situation Report — a structured status message from a delegated agent to the delegating agent, transmitted via the channel. Contains: mission progress, findings surfaced, deviations from plan, assumptions status. Part of the inter-agent communication protocol. Provenance: US Army FM 101-5-2 (adapted). Distinct from FINDING (intelligence report) and AAR (after-action review).",
+      "source_rule": ".claude/rules/glossary.md — term not listed",
+      "source_framework": "Mission Command (proposed, decision #3), channel schemas (decision #22)",
+      "commanderIntentEvidence": "Planning brief decision #22 component (4): 'channel-manifest.json (per session dir: message index with timestamps, types, session ID).' KPI: '>= 1 SITREP per batch.'",
+      "priority": "MEDIUM — used in planning brief but not governed"
+    },
+    {
+      "term": "FINDING",
+      "type": "term",
+      "definition_draft": "A structured intelligence report from a delegated agent, transmitted via the channel using the SALUTE-adapted format. Contains: size/activity/location/unit/time/equipment (adapted for harness context). Distinct from SITREP (status report), observation (AAR element), and finding (running estimate element — NOTE: term collision with 'finding' in running estimate schema; this FINDING is the channel message type, that 'finding' is the estimate element).",
+      "source_rule": ".claude/rules/glossary.md — term not listed",
+      "source_framework": "Mission Command (proposed, decision #3), channel schemas (decision #22)",
+      "commanderIntentEvidence": "Running estimate F4: 'finding term collision — I proposed it for verification output, but planning brief uses FINDING as SALUTE channel message type.' Commander identified the collision.",
+      "priority": "HIGH — has known term collision that needs resolution"
+    }
+  ],
+  "incidentCandidates": [
+    {
+      "title": "Running estimates written to scratch despite explicit /scratch skill prohibition",
+      "severity": "high",
+      "observation": "Running-estimate.json at .scratch/session-5HyCwPtSDH/ (13.8 KB). /scratch skill SKILL.md lines 103-107 explicitly name running estimates as carry-forward artifacts that MUST NOT go in scratch. The canonical location (.aitools/channel/running-estimate.json per workspace rule) is gitignored, forcing agents to fall back to scratch.",
+      "expected": "/scratch skill lines 103-107: 'Never put carry-forward artifacts in scratch. Handoff prompts, planning briefs, running estimates, and any artifact that must survive the session MUST be written to a permanent tracked location.'",
+      "impact": "Running estimate for this session exists only in scratch on this one machine. If SessionEnd fires or stale cleanup runs, the estimate is destroyed (harvested at best, but harvested != carry-forward). Cross-machine carry-forward principle completely unfulfilled.",
+      "rootCause": ".gitignore blanket line 47 makes the canonical location non-functional. Agents correctly identify the canonical path but discover it is gitignored, then fall back to scratch because it at least exists.",
+      "suggestedResolution": "Fix .gitignore (convergence rank 1 from consolidated proposals). This is the same root cause as OT-2 from the handoff.",
+      "filingRecommendation": "DO NOT file as new incident — this is the same deficiency as the workspace rule contradiction already tracked. Instead, update the running estimate and handoff to reference this as a concrete instance of the .gitignore blocker.",
+      "commanderIntentEvidence": "Commander identified this in M1 investigation. Running estimate deviation #9: 'Assumed running estimate in scratch would be deleted at SessionEnd.'"
+    },
+    {
+      "title": "Multi-agent orchestration patterns not codified in governance",
+      "severity": "medium",
+      "observation": "M9 RCA: 5-Whys chain from 'S3 launched single agents per mission' to root cause: 'Mission Command framework governs individual delegations but not composition into workflows.' The 40-agent session demonstrated 5 patterns (WRITE-VERIFY-AMEND, PARALLEL-INVESTIGATE, S2-CHAIN, S2-THEN-S3, WRITE_BLOCKED-RELAUNCH) that were never codified. Current session's S3 did not independently derive them.",
+      "expected": "Per decision #3: Mission Command framework governs delegation, communication, staff functions, and authority. The composition of delegations into multi-agent workflows falls within this scope but has no governance.",
+      "impact": "Every new S3 agent must independently derive orchestration patterns from a flat dashboard — which this session proved does not happen. Single-agent-per-mission pattern produces lower quality output (no verification, no parallel investigation, no chaining).",
+      "rootCause": "The patterns were emergent in the 40-agent session, never codified because the handoff described WHAT was produced but not HOW it was orchestrated.",
+      "suggestedResolution": "Amend planning brief decision #3 or add new decision for orchestration patterns. Create reference/orchestration-patterns.md. Add PATTERN-CHECK as delegation duty component 10.",
+      "filingRecommendation": "FILE as new incident — this is a governance gap (no spec exists for multi-agent composition). Severity medium because the harness functions without it but produces lower quality output.",
+      "commanderIntentEvidence": "Commander's execution plan for this session explicitly names multi-agent patterns as execution methods. Commander corrected single-agent pattern throughout session."
+    },
+    {
+      "title": "30 files permanently lost from session Z1IhGrcgGO due to two-phase harvest reliability gap",
+      "severity": "critical",
+      "observation": "M6/M7 investigation confirmed: 30 files at .scratch/session-Z1IhGrcgGO/ were permanently deleted. rm -rf bypasses Trash. Phase 1 failure (SessionEnd never fired, stale cleanup destroyed files) or Phase 2 failure (SessionEnd fired, files copied but never committed, then destroyed by next cleanup). M7 recovered all 30 from CC transcript Write calls.",
+      "expected": "harvest-session.sh is designed to preserve non-ephemeral files. scratch-init.sh stale cleanup should not destroy without harvesting.",
+      "impact": "30 files of session intellectual output (state audit, findings, investigations, barrier analyses, decision drafts, provenance research, delegation packages) were irrecoverable by filesystem means. Only recoverable via CC transcript parsing.",
+      "rootCause": "Two-phase reliability gap: (1) SessionEnd may not fire (crash/kill), leaving files for stale cleanup which has no harvest step. (2) Even when SessionEnd fires, harvest copies but never commits — untracked files are ephemeral.",
+      "suggestedResolution": "Convergence rank 4 (harvest before stale deletion) + rank 5 (auto-commit harvested artifacts).",
+      "filingRecommendation": "FILE as new incident — this is an operational incident with real data loss. Severity critical (data loss, cross-machine propagation failure). The file recovery (M7) is the corrective action; the harvest reliability fix is the preventive action.",
+      "commanderIntentEvidence": "Commander launched M6 (trash recovery) and M7 (file recovery) as dedicated missions. Commander's handoff line 9 predicted the problem. M7 achieved 100% recovery."
+    }
+  ],
+  "glossaryTermsAlreadyGoverned": [
+    "context rot — listed in glossary word list. Definition may need updating to include mitigation strategies discovered in this session."
+  ],
+  "terminologyCollisions": [
+    {
+      "term": "finding",
+      "collision": "Running estimate 'finding' (status element) vs FINDING channel message type (SALUTE-adapted intelligence report)",
+      "resolution_recommendation": "Govern both: 'finding' (lowercase, running estimate element) and 'FINDING' (uppercase, channel message type). The case distinction is the disambiguation. Document in glossary definitions.",
+      "source": "Running estimate F4, planning brief decision #22"
+    }
+  ]
+}

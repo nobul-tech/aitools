@@ -1,0 +1,160 @@
+{
+  "meta": {
+    "producer": "S3 (Operations) inline — Phase 1c",
+    "session": "5HyCwPtSDH",
+    "created": "2026-03-21T23:20:00Z",
+    "method": "Analysis of 40-agent session human messages, planning brief decisions #36/#50/#54, handoff section I, and this session's operational experience"
+  },
+  "frameworkProposals": [
+    {
+      "id": "FP-1",
+      "name": "Operational Learning Framework (formalization of decision #36)",
+      "status": "Proposed in planning brief, demonstrated in this session",
+      "provenance": {
+        "primary": "OODA Loop (Boyd) — Orient phase: update mental model from observations",
+        "secondary": "Lagebeurteilung (Bundeswehr) — structured situation assessment",
+        "tertiary": "Deming PDCA — Plan-Do-Check-Act cycle applied to harness improvement"
+      },
+      "whatItWouldLookLike": {
+        "rule": ".claude/rules/operational-learning.md — governing principle: every session is a sensor. Trigger directive: invoke at session end, batch boundaries, and delegation returns.",
+        "skill": "Not a separate skill — embedded in /handoff (Lagebeurteilung), /audit (surfacing duty), and the new /debrief (AAR production). The framework coordinates these skills.",
+        "reference": "reference/framework-operational-learning.md — source discipline documentation, OBSERVE-SURFACE-PROPOSE-CONNECT duty, continuous improvement cycle.",
+        "hooks": [
+          "SessionEnd: harvest-session.sh (existing, needs harvest-before-delete fix)",
+          "SessionEnd: session-archive.sh (existing, needs auto-commit per decision #1)",
+          "SessionStart: scratch-init.sh (existing, needs opportunistic harvest)",
+          "Stop: aar-reminder.sh (proposed in decision #36 — periodic AAR production reminder)"
+        ]
+      },
+      "embeddingInHarness": {
+        "currentState": "Decision #36 proposed. Artifact harvesting rule exists (.claude/rules/artifact-harvesting.md). /harvest skill exists (project-level). Session archive hook exists. All are pieces of the framework but not connected by a governing rule.",
+        "proposedState": "Operational learning rule connects: (1) artifact harvesting (what to keep), (2) session archiving (full transcript preservation), (3) AAR production (structured learning), (4) running estimate (carry-forward state), (5) Lagebeurteilung (situation assessment at transitions). The rule governs the CYCLE; the individual skills/hooks implement the STEPS.",
+        "keyInsight": "This session proved the cycle works: M1-M9 AARs observed problems, surfaced proposals, this reconciliation phase proposes harness changes, and the commander decides which to embed. The cycle is: OBSERVE (agent during mission) -> SURFACE (AAR) -> CONSOLIDATE (S3 reconciliation) -> PROPOSE (amendment to planning brief) -> DECIDE (commander approval) -> EMBED (code/rule/hook change) -> VERIFY (next session observes if fix works)."
+      },
+      "planningBriefAmendment": "Amend decision #36: add operational learning cycle definition (7 steps above). Note that this session demonstrated the full cycle.",
+      "leverage": "HIGH — this is the meta-framework that makes the harness self-improving"
+    },
+    {
+      "id": "FP-2",
+      "name": "Context Rot Mitigation Framework",
+      "status": "Demonstrated in this session, not yet proposed for formal adoption",
+      "provenance": {
+        "primary": "Situation Awareness theory (Endsley 1995) — SA degradation in dynamic environments",
+        "secondary": "Lagebeurteilung (Bundeswehr) — periodic reassessment prevents blind spots",
+        "tertiary": "Periodic Inspection (industrial safety) — scheduled checks prevent failure accumulation"
+      },
+      "whatItWouldLookLike": {
+        "rule": "NOT a separate rule — embed context rot mitigation into the Mission Command rule (.claude/rules/delegation.md). Context rot is a delegation concern (subagents launched with stale parent context) and a session management concern (long sessions degrade rule salience).",
+        "techniques": [
+          {
+            "name": "Fresh subagent pattern",
+            "description": "Launch short-lived subagents for tasks requiring high rule salience. Fresh context at launch = full salience. Many small agents > few large ones.",
+            "trigger": "Session >2 hours old, or >50 tool calls since last delegation"
+          },
+          {
+            "name": "Write-verify-amend cycle",
+            "description": "Natural refresh point: S3 writes, Verifier reads fresh, S3 re-reads verifier output. Each step resets salience for the relevant rules.",
+            "trigger": "Any S3 output that will be committed or consumed downstream"
+          },
+          {
+            "name": "FRAGORD kill-and-replace",
+            "description": "If findings changed since a subagent was launched, kill it and relaunch with updated context rather than trying to patch a stale agent.",
+            "trigger": "New findings that contradict a running subagent's premises"
+          },
+          {
+            "name": "Running estimate freshness check",
+            "description": "Before producing final output, re-read the running estimate and check for discrepancies with earlier analysis. Surface contradictions rather than silently resolving them.",
+            "trigger": "Before any final deliverable (AAR, handoff, dashboard, running estimate update)"
+          },
+          {
+            "name": "Operational learning duty injection",
+            "description": "Inject the OBSERVE-SURFACE-PROPOSE-CONNECT duty at the END of delegation prompts (after files are loaded, closest to where agent works — recency bias works in our favor).",
+            "trigger": "Every delegation"
+          }
+        ]
+      },
+      "embeddingInHarness": {
+        "currentState": "Context rot is mentioned in commander's execution plan for this session but not governed. The delegation duty has 9 components — none address context rot explicitly. The /handoff skill has Lagebeurteilung (periodic reassessment) but it covers session transitions, not within-session degradation.",
+        "proposedState": "Add context rot mitigation techniques to the Mission Command reference file (reference/framework-mission-command.md). Add a brief mention in the delegation rule. The techniques are not a separate framework — they are tactics within Mission Command that address a known failure mode of long-running agent sessions.",
+        "keyInsight": "Context rot is not a GOVERNANCE problem (no rule is missing) — it is a PHYSICS problem (LLM context window has recency bias, long sessions dilute rule salience). The mitigation is structural (how you compose agents) not behavioral (telling agents to pay attention). Decision #35 (hooks > coaching for recurring patterns) applies: structural mitigation > behavioral reminders."
+      },
+      "planningBriefAmendment": "Amend decision #3 (Mission Command framework): add context rot mitigation as a subsection of the framework reference. Not a separate decision — it is a tactical concern within Mission Command.",
+      "leverage": "HIGH — addresses the primary failure mode of multi-session, multi-agent operations"
+    },
+    {
+      "id": "FP-3",
+      "name": "Multi-Agent Orchestration Patterns (codification)",
+      "status": "Demonstrated in 40-agent session, root-caused in M9 AAR, proposed for codification",
+      "provenance": {
+        "primary": "Mission Command (Auftragstaktik) — commander's intent enables subordinate initiative, but within governed patterns",
+        "secondary": "Choreography vs Orchestration (distributed systems) — the S3 is the orchestrator, patterns define the choreography",
+        "tertiary": "Design Patterns (Gang of Four) — named, reusable compositions that communicate intent"
+      },
+      "patterns": [
+        {
+          "name": "WRITE-VERIFY-AMEND",
+          "trigger": "S3 output that will be committed or consumed downstream",
+          "composition": "S3 writes -> Verifier checks against criteria -> S3 amends based on verification",
+          "example": "40-agent session agents #26-28: S3 writes handoff, Verifier checks 9 criteria, S3 applies 7 amendments",
+          "antiPattern": "This session M3 (handoff JSON): S3 wrote, no verifier launched, errors discovered only when commander read it"
+        },
+        {
+          "name": "PARALLEL-INVESTIGATE",
+          "trigger": "Ambiguous question with 2+ valid framings",
+          "composition": "Launch N parallel S2 agents with different framings -> compare results -> select best or synthesize",
+          "example": "40-agent session agents #14-16: 3 carry-forward barrier analyses (A, B, C) compared",
+          "antiPattern": "Single S2 with one framing — misses alternative perspectives"
+        },
+        {
+          "name": "S2-CHAIN",
+          "trigger": "S2 output reveals a deeper question not in the original mission",
+          "composition": "S2 investigates -> results reveal deeper question -> launch follow-up S2 with prior output as input",
+          "example": "40-agent session agents #37-38: S2 scratch deletion RCA -> S2 verification lifecycle gap audit",
+          "antiPattern": "Expanding original S2 scope mid-mission — violates single-responsibility"
+        },
+        {
+          "name": "S2-THEN-S3",
+          "trigger": "Decision requires intelligence before action",
+          "composition": "S2 investigates -> delegating agent reads and decides -> S3 acts on the decision",
+          "example": "40-agent session agents #5->8: S2 investigates post-push bugs -> S3 updates briefing with AAR findings",
+          "antiPattern": "S3 acting without S2 intelligence — produces decisions based on assumptions"
+        },
+        {
+          "name": "WRITE_BLOCKED-RELAUNCH",
+          "trigger": "Background agent denied Write permission",
+          "composition": "Agent produces WRITE_BLOCKED as first output line -> delegating agent retries in foreground",
+          "example": "40-agent session agent #21 blocked -> relaunched as #25 with WRITE_BLOCKED signal",
+          "antiPattern": "Assuming background Write will succeed — 3/40 agents were blocked in 40-agent session"
+        }
+      ],
+      "embeddingInHarness": {
+        "currentState": "Decision #51 governs write-review loop for plan writing only. Decision #4 governs delegation duty (9 components). Neither addresses multi-agent composition.",
+        "proposedState": "(1) New reference file: reference/orchestration-patterns.md — documents all 5 patterns with triggers, composition, examples, and anti-patterns. (2) Amend delegation duty: add component 10 (PATTERN-CHECK — before launching, ask 'single agent or multi-agent pattern?'). (3) Extend /handoff skill: add orchestration briefing section. (4) Extend dashboard schema: add workflow chain metadata for connected agent groups.",
+        "keyInsight": "The 40-agent session's S3 invented these patterns through iterative learning with the commander. They represent emergent solutions to real orchestration problems. Codifying them means future S3 agents start with the vocabulary and triggers, not a blank slate."
+      },
+      "planningBriefAmendment": "Add new decision or amend decision #3: codify 5 orchestration patterns as part of Mission Command framework. Amend decision #4: add component 10 (PATTERN-CHECK). Note that the 40-agent session demonstrated the patterns and this session demonstrated the failure mode when they are not codified.",
+      "leverage": "HIGH — directly addresses M9 root cause"
+    }
+  ],
+  "connectionToExistingFrameworks": {
+    "missionCommand": "FP-2 and FP-3 embed INTO Mission Command (decision #3) as subsections of the framework reference. They are not separate frameworks — they are Mission Command concerns.",
+    "operationalLearning": "FP-1 IS the formalization of decision #36. It connects existing harness capabilities (harvesting, archiving, AAR, running estimate, Lagebeurteilung) into a governed cycle.",
+    "threeLayerGovernance": "All three proposals follow the prevention-detection-audit pattern. FP-1: prevention (rules on what to harvest), detection (hooks that harvest/archive), audit (/audit skill checks completeness). FP-2: prevention (delegation patterns that avoid rot), detection (freshness checks), audit (running estimate discrepancy surfacing). FP-3: prevention (PATTERN-CHECK in delegation duty), detection (proposed hook on Agent tool), audit (dashboard chain metadata)."
+  },
+  "sessionAsProofOfConcept": {
+    "whatThisSessionDemonstrated": "This session IS the operational learning cycle in action. The S3 observed problems (9 AARs), surfaced proposals (consolidated into this document), and will propose harness changes. The commander decides which to embed. The cycle is self-referential: the mission to formalize operational learning IS an instance of operational learning.",
+    "whatWorked": [
+      "AAR format (decision #44) produced structured, comparable intelligence across 7 investigations",
+      "WRITE_BLOCKED signal prevented data loss from 3+ Write denials",
+      "Running estimate carried forward key facts and findings within the session",
+      "M7 file recovery methodology (CC transcript parsing) worked at 100% recovery rate"
+    ],
+    "whatDidNotWork": [
+      "Single-agent-per-mission pattern produced investigations without verification",
+      "S3 cold-start problem: 9 corrections needed before productive work began",
+      "Running estimate in scratch (anti-pattern) because canonical location is gitignored",
+      "No orchestration patterns applied despite reading the 40-agent dashboard",
+      "Handoff described WHAT was produced but not HOW it was orchestrated"
+    ]
+  }
+}

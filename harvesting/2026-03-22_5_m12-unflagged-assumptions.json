@@ -1,0 +1,292 @@
+{
+  "meta": {
+    "mission": "M12",
+    "agent": "S2 (Intelligence)",
+    "session": "5HyCwPtSDH",
+    "created": "2026-03-21T23:45:00Z",
+    "schwerpunkt": "Audit the ENTIRE session for assumptions and ambiguities that have NOT yet been flagged in the running estimate's 5 explicit assumptions or 12 deviations",
+    "method": "Cross-referenced 8 files: running-estimate.json (v4), m11-assumption-propagation-aar.json, session-aar.json, s2a-consolidated-proposals.json, s2c-framework-proposals.json, planning-brief.json (54 decisions, 18 facts, 7 assumptions), handoff-prompt-v2.md (542 lines), CLAUDE.md. Applied M11's taxonomy: Environmental, Architectural, Behavioral, Temporal."
+  },
+  "summary": {
+    "knownAssumptions": 5,
+    "knownDeviations": 12,
+    "unflaggedAssumptions": 17,
+    "unflaggedAmbiguities": 8,
+    "total": 25,
+    "severity": {
+      "critical": 3,
+      "high": 9,
+      "medium": 10,
+      "low": 3
+    }
+  },
+  "unflaggedAssumptions": [
+    {
+      "id": "UA-1",
+      "taxonomy": "Architectural",
+      "severity": "critical",
+      "assumption": "The reconciliation algorithm (UNION for arrays, LAST-UPDATED-WINS for scalars, MOST-ADVANCED-STATUS for enums) produces correct results for all running estimate fields",
+      "source": "running-estimate.json:114 (D-PER-SESSION-ESTIMATES component 3), s2a-consolidated-proposals.json:28",
+      "whyItMatters": "UNION for arrays is lossy in the inverse case: if session A removes an item from the findings array (marks it resolved) and session B adds a new item, UNION produces both — the resolved item reappears. LAST-UPDATED-WINS for scalars discards the older session's currentState entirely, even if it contains information the newer session does not have. MOST-ADVANCED-STATUS assumes status transitions are monotonically forward — but a status can legitimately regress (decided -> reopened). None of these edge cases were analyzed. M4 proposed the algorithm but no barrier analysis was performed on it.",
+      "verification": "Design test cases: (1) two sessions both modify findings array — one resolves F1, the other adds F17. Reconcile. Is F1 present or absent? (2) Two sessions both update situation.currentState with non-overlapping facts. Reconcile. Is information lost? (3) A finding status goes decided -> reopened. What does MOST-ADVANCED-STATUS produce?",
+      "relatedBriefDecisions": [50, 22]
+    },
+    {
+      "id": "UA-2",
+      "taxonomy": "Environmental",
+      "severity": "critical",
+      "assumption": "harvest-session.sh correctly classifies ALL file types in scratch for the harvest-before-delete proposal",
+      "source": "s2a-consolidated-proposals.json:53-54 (Rank 4), running-estimate.json:176 (M2 completed work)",
+      "whyItMatters": "The consolidated proposals (Rank 4) say 'add opportunistic harvesting before deletion' to scratch-init.sh's stale-dir cleanup. This assumes harvest-session.sh's classification logic can run OUTSIDE the SessionEnd hook context — at SessionStart, on a different session's stale directory. The classification logic may depend on session-specific state (e.g., .current-session pointer, session_id from hook input JSON). If it does, the opportunistic harvest would misclassify files or fail silently. M2's AAR identified the 30-file loss but did not verify whether the classification logic is context-dependent.",
+      "verification": "Read harvest-session.sh classification logic. Check: does it reference session_id, .current-session, or hook input JSON? If yes, the classification function must be extracted and made session-independent before it can be called from scratch-init.sh.",
+      "relatedBriefDecisions": [14, 36]
+    },
+    {
+      "id": "UA-3",
+      "taxonomy": "Architectural",
+      "severity": "critical",
+      "assumption": "The session decision D-CONTEXT-ROT-HOOK does not conflict with the planning brief's existing hook architecture (decisions #20, #36, #41, #42, #47)",
+      "source": "running-estimate.json:14-29 (D-CONTEXT-ROT-HOOK), planning-brief.json:1465-1506 (decision #20)",
+      "whyItMatters": "D-CONTEXT-ROT-HOOK proposes a new Stop hook (lagebeurteilung-checkpoint.sh). The planning brief's decision #20 says 'one hook per feature — new hooks for new capabilities.' The session also decided D-OPERATIONAL-LEARNING-DUTY which proposes injecting the operational learning duty at the END of every delegation prompt. These two decisions were made independently. But: decision #36 component (9) already proposes 'aar-reminder.sh (Stop) — detect plan completion without AAR.' That is ALSO a Stop hook. Two Stop hooks (aar-reminder.sh and lagebeurteilung-checkpoint.sh) would both fire after every agent turn. Were they designed to be independent? Do they interact? Could lagebeurteilung-checkpoint.sh subsume aar-reminder.sh (both are Lagebeurteilung-style checks)? This potential conflict with decision #20's one-hook-per-feature principle was never analyzed.",
+      "verification": "Compare the two Stop hooks: (1) lagebeurteilung-checkpoint.sh fires at context 20%+, checks context rot. (2) aar-reminder.sh fires at plan completion detection, checks AAR absence. Are these truly separate features? If yes, they are compliant with #20. If no, one should subsume the other. Also check: what is the cumulative latency of N Stop hooks? The <50ms target per hook may compound.",
+      "relatedBriefDecisions": [20, 36, 50]
+    },
+    {
+      "id": "UA-4",
+      "taxonomy": "Temporal",
+      "severity": "high",
+      "assumption": "The handoff-prompt-v2.md scratch file paths still resolve after the SessionEnd hook fires for session Z1IhGrcgGO",
+      "source": "handoff-prompt-v2.md:9 (scratch path migration note), running-estimate.json:186 (read full planning brief and handoff)",
+      "whyItMatters": "The handoff-prompt-v2.md line 9 adds a scratch path migration note: files at .scratch/session-Z1IhGrcgGO/* will be at harvesting/2026-03-19_<filename> after SessionEnd. This session (5HyCwPtSDH) read the handoff. But did the S3 verify that the harvested files ACTUALLY exist at the harvesting/ paths? The M2 AAR found harvest-session.sh has a .json classification bug (now fixed). If files were harvested BEFORE the fix, they may have been misclassified. The session's fact line 208 says 'harvest-session.sh .json bug: FIXED and DEPLOYED (diff confirmed identical)' — but this was the fix to the bug, not verification that prior harvests were correct.",
+      "verification": "Run: ls harvesting/2026-03-19_* to confirm all files referenced in handoff-prompt-v2.md exist at their harvested paths. Specifically check: session-state-audit.md, findings-index.md, schwerpunkt-assessment.md, scratch-deletion-rca.md, verification-lifecycle-gap-audit.md, cicd-feasibility.md.",
+      "relatedBriefDecisions": [14, 36]
+    },
+    {
+      "id": "UA-5",
+      "taxonomy": "Behavioral",
+      "severity": "high",
+      "assumption": "S1 agents can successfully invoke /glossary and /incident skills via heuristic bypass",
+      "source": "running-estimate.json:141-148 (D-S1-LAUNCH components 2-4)",
+      "whyItMatters": "D-S1-LAUNCH component 4 says S1 uses 'backward-chronological user prompt heuristic for intent inference when commander grants permission.' This means S1 agents read user prompts to infer what the commander wants filed. But /glossary and /incident skills are governed processes with specific required fields (incident-governance.md requires 12+ fields per entry). The assumption is that an S1 agent, operating from heuristic inference of commander intent, can produce entries that meet the field quality rules. The incident-governance.md field quality rules are strict: 'observation vs expected: Together these must make the incident self-evident to a reader who has never seen it before. If you cannot fill both, you may not understand the incident well enough to file it.' An S1 agent inferring from user prompts may not have enough context to fill all required fields to quality standards.",
+      "verification": "Attempt a test filing: have S1 read the session's user prompts and attempt to produce one incident entry and one glossary entry. Check whether the field quality rules are met without access to the original investigation artifacts.",
+      "relatedBriefDecisions": [24, 25, 26]
+    },
+    {
+      "id": "UA-6",
+      "taxonomy": "Environmental",
+      "severity": "high",
+      "assumption": "The .current-session race condition fix (use CC session_id for deterministic dir names) is actually feasible — that session_id is available in hook input JSON at SessionStart",
+      "source": "running-estimate.json:116 (D-PER-SESSION-ESTIMATES component 5), s2a-consolidated-proposals.json:41",
+      "whyItMatters": "M4 proposes using Claude Code session_id as the directory suffix. The running estimate says 'Fix .current-session race by using Claude Code session_id for deterministic dir names.' But this assumes the session_id is available in the SessionStart hook's input JSON. Claude Code hooks receive different input depending on the event type. The existing scratch-init.sh creates session directories with random suffixes — if CC provided session_id in SessionStart input, why would scratch-init.sh use random suffixes? The fact that scratch-init.sh uses random suffixes is evidence that session_id may NOT be available at SessionStart.",
+      "verification": "Read the Claude Code hook documentation or the existing hook input JSON to determine: (1) what fields are available in SessionStart hook input, (2) whether session_id is one of them. Also read scratch-init.sh to understand why it uses random suffixes.",
+      "relatedBriefDecisions": [22, 34, 50]
+    },
+    {
+      "id": "UA-7",
+      "taxonomy": "Architectural",
+      "severity": "high",
+      "assumption": "The session's 8 decisions (D-CONTEXT-ROT-HOOK through D-DASHBOARD-GOVERNANCE) are compatible with the planning brief's 54-decision schema without amendment conflicts",
+      "source": "running-estimate.json:12-167 (all 8 decisions), planning-brief.json (54 decisions)",
+      "whyItMatters": "Several session decisions overlap with or extend brief decisions. For example: (1) D-PER-SESSION-ESTIMATES component 3 introduces a reconciliation algorithm — but decision #50 component (6) says running estimate lives at a FIXED tracked path, updated in place. Per-session estimates with reconciliation is a fundamentally different architecture from update-in-place at a fixed path. (2) D-MULTI-AGENT-PATTERNS adds component 10 to delegation duty — but decision #4 lists exactly 8 components. Adding component 10 skips component 9 (which was added in v0.62.4 and is not in the brief). (3) D-AITOOL-PREFIX introduces a three-tier skill taxonomy — but decision #49 lists flat verb naming without mentioning tiers or prefixes. These are not contradictions per se, but they are amendments that need to be reconciled explicitly. The session's decisions reference 'relatedBriefDecisions' but no conflict analysis was performed.",
+      "verification": "For each of the 8 session decisions, compare components 1:1 against the referenced brief decisions. List: (a) compatible extensions (new component, no conflict), (b) amendments (existing component modified), (c) contradictions (session decision contradicts brief decision). Present the conflict analysis before attempting to merge.",
+      "relatedBriefDecisions": [3, 4, 22, 34, 49, 50]
+    },
+    {
+      "id": "UA-8",
+      "taxonomy": "Behavioral",
+      "severity": "high",
+      "assumption": "The operational learning duty block (OBSERVE-SURFACE-PROPOSE-CONNECT) will actually be followed by agents when injected at the end of delegation prompts",
+      "source": "running-estimate.json:43-53 (D-OPERATIONAL-LEARNING-DUTY), m11-assumption-propagation-aar.json:132-134 (P-1)",
+      "whyItMatters": "M11's P-1 proposes adding assumption surfacing duty to the operational learning block. The assumption is that injecting instructions at the end of delegation prompts will change agent behavior. But M11's own insight I-2 says 'assumptions are invisible until failure unless explicitly tracked' and I-7 says 'the assumption lifecycle is governed in definition but not in practice.' If agents do not comply with the existing delegation duty (9 components, frequently violated per deviation #10), adding more duties to the prompt may not produce behavioral change. This is the same class of problem as UCIs — behavioral instructions that fade. Decision #35 explicitly says 'UCIs are not effective for recurring behavioral patterns.' The operational learning duty IS a behavioral instruction injected via prompt, not a structural mechanism.",
+      "verification": "Design a structural enforcement mechanism for the operational learning duty: can a hook detect when an AAR lacks an 'assumptions' section? Can a hook detect when an agent writes a fact about system behavior without the ASSUMPTION: prefix? If structural enforcement is not feasible, acknowledge the duty as behavioral and track compliance rates. Do not treat it as structural enforcement.",
+      "relatedBriefDecisions": [35, 36, 4, 44]
+    },
+    {
+      "id": "UA-9",
+      "taxonomy": "Temporal",
+      "severity": "high",
+      "assumption": "The 40-agent session dashboard (harvesting/2026-03-19_session-subagent-report.html) accurately represents all 40 agents' delegations",
+      "source": "running-estimate.json:186 (read 40-agent dashboard), s2c-framework-proposals.json:98-99 (WRITE-VERIFY-AMEND example cites agents #26-28)",
+      "whyItMatters": "Multiple session artifacts cite specific agent numbers from the 40-agent session as evidence. M9's root cause analysis cites the dashboard's flat presentation as a cause of the single-agent pattern. FP-3 cites specific agents (#26-28 for write-verify-amend, #14-16 for parallel investigate, #37-38 for S2 chain). But the dashboard was produced by M8 in THIS session, which was itself a single-agent delegation. M8 parsed a JSONL transcript to produce the dashboard. The assumption is that M8's parsing was correct and complete — that all 40 agents were captured, with correct metadata. No verifier was launched for M8. If M8 missed agents or misattributed chain relationships (which are not in the JSONL — they were inferred), then the orchestration patterns cited as evidence may be based on incomplete data.",
+      "verification": "Spot-check the dashboard against the raw transcript. Pick agents #37 and #38 (cited as the RCA chain). Verify: (1) their prompts match what the dashboard shows, (2) their outputs match, (3) their chain relationship is correctly represented. If the dashboard lacks chain annotations (M9's finding), verify that the AGENTS exist at all.",
+      "relatedBriefDecisions": [3, 51]
+    },
+    {
+      "id": "UA-10",
+      "taxonomy": "Environmental",
+      "severity": "high",
+      "assumption": "The session's proposals (38 total, 10 themes) do not duplicate or conflict with the handoff-prompt-v2.md's 16 open threads",
+      "source": "running-estimate.json (findings F1-F16), handoff-prompt-v2.md:344-383 (OT-1 through OT-16)",
+      "whyItMatters": "The handoff-prompt-v2.md lists 16 open threads from session Z1IhGrcgGO. This session's running estimate lists 16 findings and 8 session decisions. The consolidated proposals list 38 proposals across 10 themes. But no cross-reference was performed between the session's proposals and the handoff's open threads. For example: OT-2 (root .gitignore blocker) maps to session decision D-GITIGNORE-FIX. OT-14 (tool-ops documentation for 9 hooks) was not addressed by any session mission. OT-16 (15 glossary gap terms, 13 filed, 1 remaining: 'session') was partially addressed but the remaining gap was not tracked in the running estimate's openThreads. The handoff's open threads represent carry-forward obligations that this session should account for.",
+      "verification": "Create a cross-reference matrix: for each of the 16 handoff open threads, identify which (if any) session mission, finding, or decision addresses it. Identify threads that were NOT addressed and add them to the running estimate's openThreads.",
+      "relatedBriefDecisions": [50]
+    },
+    {
+      "id": "UA-11",
+      "taxonomy": "Behavioral",
+      "severity": "medium",
+      "assumption": "The reference-card pattern (/aitool-ops as read-only cross-repo tool-ops knowledge) is technically feasible in Claude Code's skill architecture",
+      "source": "running-estimate.json:129 (D-AITOOL-PREFIX component 3)",
+      "whyItMatters": "D-AITOOL-PREFIX proposes a 'reference-card' pattern: /aitool-ops as a read-only, build-time-extracted knowledge card deployed to ~/.claude/skills/. This assumes that Claude Code skills can be meaningfully read-only. But Claude Code skills are SKILL.md files that define processes — they tell agents what to do. A read-only reference card would need to explicitly prevent agents from attempting to modify the source registries (which are in the aitools repo, not the current project). If an agent reads /aitool-ops in a grizzlies/customers repo and tries to update tool-ops.json, it will either fail (file not found) or create a local copy (drift). The reference-card pattern must include explicit 'do not modify — this is a read-only extract from the aitools repo' guardrails.",
+      "verification": "Read the existing user-level skills deployed to ~/.claude/skills/. Check: do any existing skills have read-only guardrails? What happens when an agent invokes a skill that references files in a different repo?",
+      "relatedBriefDecisions": [16, 49]
+    },
+    {
+      "id": "UA-12",
+      "taxonomy": "Temporal",
+      "severity": "medium",
+      "assumption": "The planning brief's 7 assumptions (A1-A7) are still valid after this session's discoveries",
+      "source": "planning-brief.json:420-485 (assumptions A1-A7)",
+      "whyItMatters": "The planning brief has 7 assumptions accepted for planning. This session discovered significant new information that may falsify some. Specifically: A3 ('Blocking Explore agents won't break existing workflows') — this session proved Explore agents cannot write (deviation #7, M1 FRAGORD). A3 is now VERIFIED, not just assumed. A4 ('Hooks run bash on all platforms') — this session's D-CONTEXT-ROT-HOOK proposes a new Stop hook. Was A4 re-verified for the latest CC version? A7 ('Hooks are the most effective structural enforcement mechanism') — this session's M11 insight I-7 found 'the assumption lifecycle is governed in definition but not in practice' despite hooks existing. Does this challenge A7? The brief's assumptions were not re-assessed against the session's findings.",
+      "verification": "Walk through A1-A7 with the session's discoveries. For each: verified (evidence confirms), falsified (evidence contradicts), unchanged (no new evidence). Update the planning brief assumptions section.",
+      "relatedBriefDecisions": []
+    },
+    {
+      "id": "UA-13",
+      "taxonomy": "Architectural",
+      "severity": "medium",
+      "assumption": "The session AAR (session-aar.json) metric of '10 missions' is correct when the running estimate says '11 missions complete'",
+      "source": "session-aar.json:10 (missions: 10), running-estimate.json:170 (11 missions complete)",
+      "whyItMatters": "The session AAR says 10 missions, the running estimate says 11 missions complete. The delegation log lists D1, D2, M1-M9 = 11 entries. The session AAR says 7 AARs. The discrepancy: is D1+D2 counted as 1 mission or 2? Is the reconciliation mission (D12) counted? The metrics are inconsistent between the two documents produced by the same S3. If the metrics feed the session dashboard or the handoff, the inconsistency propagates.",
+      "verification": "Count: D1 (briefing JSON investigation), D2 (lost AARs + sessions — 2 agents), M1-M9 = 11 delegations. D12 (reconciliation) is in-progress. The session AAR says 10 missions because it was likely written before M11 was launched. Reconcile and update.",
+      "relatedBriefDecisions": []
+    },
+    {
+      "id": "UA-14",
+      "taxonomy": "Environmental",
+      "severity": "medium",
+      "assumption": "The 30/30 file recovery from M7 produced files with correct content — not just correct filenames",
+      "source": "running-estimate.json:183 (M7: 30/30 recovered), running-estimate.json:210 (fact: 30 session files RECOVERED)",
+      "whyItMatters": "M7 recovered files by parsing JSONL transcript Write tool_use blocks. The running estimate and session AAR celebrate 100% recovery rate. But the assumption is that the LAST Write to each filename is the correct final version. If a file was written multiple times (draft, revision, final), the parser must take the last write. If the parser takes the first write, or any non-final write, the recovered files are stale versions. No verifier was launched for M7 (single-agent mission, per M9's root cause finding). The 30/30 recovery rate was self-reported by the recovery agent.",
+      "verification": "Spot-check 2-3 recovered files: read the recovered file in .scratch/ and compare against the version referenced in the 40-agent session's handoff or dashboard. If the content matches, the recovery is valid. If it does not, the parser may have taken a non-final write.",
+      "relatedBriefDecisions": []
+    },
+    {
+      "id": "UA-15",
+      "taxonomy": "Behavioral",
+      "severity": "medium",
+      "assumption": "The write-verify-amend pattern is applicable to ALL S3 outputs, not just handoffs and plans",
+      "source": "s2c-framework-proposals.json:96-99 (WRITE-VERIFY-AMEND pattern), running-estimate.json:88 (D-MULTI-AGENT-PATTERNS component 1)",
+      "whyItMatters": "D-MULTI-AGENT-PATTERNS component 1 says write-verify-amend is 'For any S3 output that will be consumed by others.' FP-3 defines the pattern trigger as 'S3 output that will be committed or consumed downstream.' But many S3 outputs are intermediate — running estimate updates, scratch file writes, delegation prompt construction. Applying write-verify-amend to ALL such outputs would multiply agent launches significantly. The 40-agent session used the pattern for the handoff (a high-stakes output) but NOT for every delegation prompt. The pattern needs explicit scope boundaries: which outputs warrant verification and which do not.",
+      "verification": "Define the scope: (1) High-stakes outputs (handoffs, plans, registry modifications) — always verify. (2) Medium-stakes (AARs, proposals, investigation reports) — verify when they feed decisions. (3) Low-stakes (running estimate updates, scratch notes, delegation prompts) — no verification needed. Without this scope, the pattern is either under-applied (this session) or over-applied (unsustainable overhead).",
+      "relatedBriefDecisions": [3, 51]
+    },
+    {
+      "id": "UA-16",
+      "taxonomy": "Temporal",
+      "severity": "medium",
+      "assumption": "The session's delegation duty count (9 components per v0.62.4) is authoritative — not the planning brief's 8 components",
+      "source": "running-estimate.json:214 (fact: Delegation duty: 9 components), planning-brief.json:686-698 (decision #4: 8 components)",
+      "whyItMatters": "Finding F7 flags this inconsistency but classifies it as 'open' with action 'Brief amendment.' The running estimate fact says 9 components (v0.62.4 handoff). The planning brief says 8. The handoff-prompt-v2.md section I says 9 (component 9: lifecycle transition awareness). But the handoff also says 'The accepting session should read the current SKILL.md, not rely solely on this section.' This creates a temporal ordering problem: which is the source of truth? The SKILL.md (most recent), the planning brief (the canonical schema), or the handoff (the session-specific update)? If the plan is written from the brief (which says 8), it will be stale. This is EXACTLY the drift problem decision #53 (governedBy) was designed to prevent — but #53 is not yet implemented.",
+      "verification": "Read shared/skills/handoff/SKILL.md to get the current delegation duty component count. Compare against: brief (#4), handoff (section I), running estimate (fact). The SKILL.md is the source of truth per the handoff's own instruction. Update the brief to match. This is the first test case for the governedBy pattern.",
+      "relatedBriefDecisions": [4, 53]
+    },
+    {
+      "id": "UA-17",
+      "taxonomy": "Environmental",
+      "severity": "low",
+      "assumption": "M3's 1035-line handoff JSON Schema B conversion is correct and complete",
+      "source": "running-estimate.json:179 (M3: Handoff -> JSON — 1035-line Schema B conversion)",
+      "whyItMatters": "M3 was a single-agent S3 mission that converted the handoff to JSON. No verifier was launched. The running estimate records it as complete. The handoff-prompt-v2.md's 542 lines of structured markdown were converted into 14 JSON sections. Any error in the conversion (missing section, misattributed content, structural error in the JSON) propagates when the next session reads the JSON instead of the markdown. M9's root cause: single-agent missions without verification are assumption propagation vectors.",
+      "verification": "If the JSON conversion is consumed downstream, launch a verifier that reads both the original handoff-prompt-v2.md and the converted JSON, checking section-by-section completeness. If the conversion is purely archival (not consumed), mark as low priority.",
+      "relatedBriefDecisions": []
+    }
+  ],
+  "unflaggedAmbiguities": [
+    {
+      "id": "AM-1",
+      "severity": "high",
+      "ambiguity": "The scope of 'carry-forward' is ambiguous: does it mean within-session carry-forward (running estimate between delegations), cross-session carry-forward (running estimate between sessions), or cross-machine carry-forward (running estimate between machines)?",
+      "source": "running-estimate.json:109 (D-PER-SESSION-ESTIMATES), planning-brief.json:2166 (decision #34 component 6), CLAUDE.md rules aitools-workspace.md",
+      "whyItMatters": "D-PER-SESSION-ESTIMATES uses 'carry-forward' in two senses: (1) the carry-forward ESTIMATE at the fixed tracked path (.aitools/channel/running-estimate.json), and (2) the carry-forward PRINCIPLE from the workspace rule (cross-machine). The workspace rule says 'Project state that carries forward between sessions... MUST be tracked in git.' Decision #50 says 'running estimate at .aitools/channel/running-estimate.json (tracked in git, fixed path).' But D-PER-SESSION-ESTIMATES introduces per-session estimates that are GITIGNORED. The reconciliation algorithm produces the carry-forward version. This means 'carry-forward' in D-PER-SESSION-ESTIMATES means 'the version that gets tracked,' while in the workspace rule it means 'anything that needs to survive machine switches.' The term is overloaded.",
+      "proposedResolution": "Use the /glossary skill to govern 'carry-forward' as a term. Distinguish: carry-forward state (the data), carry-forward estimate (the document), carry-forward principle (the governance rule)."
+    },
+    {
+      "id": "AM-2",
+      "severity": "high",
+      "ambiguity": "What happens to session decisions (D-CONTEXT-ROT-HOOK etc.) that are NOT in the planning brief? Are they brief amendments, new decisions (#55+), or a separate governance artifact?",
+      "source": "running-estimate.json:12-167 (8 session decisions), planning-brief.json meta (54 decisions)",
+      "whyItMatters": "The running estimate records 8 session decisions with format similar to planning brief decisions (components, provenance, status, relatedBriefDecisions). But they are NOT in the planning brief. The handoff-prompt-v2.md section K says 'Apply via /brief skill.' The session AAR's proposalSummary lists 8 planning brief amendments needed. But the session decisions introduce NEW concepts not in the brief (orchestration patterns, context rot hooks, per-session estimates). Are these amendments to existing decisions or new decisions? If amendments, which existing decision do they amend? If new decisions, what IDs do they get? The brief's ID scheme is sequential (1-54). Adding decisions #55-62 is straightforward but the session decisions use string IDs (D-CONTEXT-ROT-HOOK), not integers.",
+      "proposedResolution": "Assign integer IDs (#55-#62) to the 8 session decisions. Map each to the brief decisions it amends or extends. Present the mapping for commander review before merging."
+    },
+    {
+      "id": "AM-3",
+      "severity": "high",
+      "ambiguity": "The delegation duty component count is simultaneously 5, 8, and 9 across different documents, and the session proposes adding component 10 (PATTERN-CHECK), 11 (assumptions block), and 12 (operational learning duty) — is the count now 12?",
+      "source": "running-estimate.json:214 (9 components), running-estimate.json:85-95 (D-MULTI-AGENT-PATTERNS: component 10), m11-assumption-propagation-aar.json:139 (P-2: component 11), running-estimate.json:47-52 (D-OPERATIONAL-LEARNING-DUTY: components 11-12)",
+      "whyItMatters": "The delegation duty has become a moving target. The planning brief says 8 components. v0.62.4 says 9. This session's decisions propose adding components 10, 11, and 12. But D-OPERATIONAL-LEARNING-DUTY also numbers its additions as 11 and 12, creating a collision with M11's proposal (which numbers the assumptions block as component 11). The duty is the most frequently referenced governance artifact in the session, yet its component count is ambiguous.",
+      "proposedResolution": "Freeze the delegation duty component list as a single authoritative source. Start from the SKILL.md version (9 components). Assign the new components sequentially: 10 (PATTERN-CHECK), 11 (assumptions block), 12 (operational learning duty injection), 13 (context rot heuristic for subagents). Present the complete 13-component list for commander approval."
+    },
+    {
+      "id": "AM-4",
+      "severity": "medium",
+      "ambiguity": "Is the running estimate schema from decision #50 the same schema as the session's running-estimate.json, or are they different artifacts?",
+      "source": "planning-brief.json:3322-3333 (decision #50 components), running-estimate.json (the actual file being maintained)",
+      "whyItMatters": "Decision #50 proposes reference/running-estimate-schema.json with specific sections: meta, situation, findings, conclusions, delegationLog. The session's running-estimate.json has: meta, schwerpunkt, decisions, situation (with different subsections: currentState, completedWork, deviations, facts, assumptions), findings, openThreads, delegationLog. There is no 'conclusions' section. There IS a 'decisions' section and an 'openThreads' section that #50 does not mention. The session's running estimate is a de facto prototype of the schema, but it diverges from #50's specification. Which is authoritative?",
+      "proposedResolution": "The session's running-estimate.json is the empirical prototype. Decision #50's schema should be updated to reflect what the session proved useful: add 'schwerpunkt', 'decisions', 'openThreads'. Rename or merge 'conclusions' with the session's 'assumptions' subsection. Present the reconciled schema for commander review."
+    },
+    {
+      "id": "AM-5",
+      "severity": "medium",
+      "ambiguity": "The S3 reconciliation mission (D12) is described as '4-phase multi-agent execution' but is actually executing inline (S3 doing synthesis directly) — which is the right pattern?",
+      "source": "running-estimate.json:276 (D12: ~12-15 internal agents), session-aar.json:49-50 (SO-6: inline execution)",
+      "whyItMatters": "The running estimate says the reconciliation mission uses '~12-15 internal' agents with 4-phase multi-agent patterns. But the session AAR observation SO-6 says 'Executing S2 intelligence inline (Phase 1a/b/c) instead of delegating to subagents avoided the context gap problem.' This is a contradiction: was the reconciliation multi-agent or inline? If it was inline (S3 doing synthesis with data already in context), then the '~12-15 internal' agents description is inaccurate. If some phases were inline and some used subagents, the delegation log should distinguish. This matters because the reconciliation mission is itself the proof-of-concept for the orchestration patterns — if it did not use them, it is not a valid proof.",
+      "proposedResolution": "Clarify the D12 delegation log entry: which phases used subagents (M10 check proposals, M11 assumption propagation, M12 this audit) and which were inline (S2a consolidated proposals, S2b convergence themes, S2c framework proposals). Update the agent count to reflect actual, not projected."
+    },
+    {
+      "id": "AM-6",
+      "severity": "medium",
+      "ambiguity": "The term 'finding' is used in three incompatible senses: running estimate finding (F1-F16), channel FINDING message type (decision #23), and /glossary 'finding' term (F4 identifies this collision)",
+      "source": "running-estimate.json:241 (F4: 'finding' term collision), planning-brief.json:1609-1614 (decision #23: FINDING schema)",
+      "whyItMatters": "F4 identifies this ambiguity and assigns it to 'S1-glossary filing.' But the ambiguity is load-bearing: the running estimate's findings array uses 'finding' as a noun (a discovered fact). Decision #23 uses 'FINDING' as a message type (a SALUTE-adapted structured observation). The S2 consolidation process (decision #24) reads 'findings' from the channel — but which findings? The running estimate's or the channel's? If the consolidation reads channel FINDINGs but the running estimate calls its array 'findings', agents may confuse the two data sources.",
+      "proposedResolution": "When filing via /glossary, propose different terms: 'finding' (lowercase, running estimate: a discovered fact or observation) vs 'FINDING' (uppercase, channel message type: a SALUTE-adapted structured observation posted via /channel). Or rename the running estimate's array to 'observations' to avoid collision."
+    },
+    {
+      "id": "AM-7",
+      "severity": "medium",
+      "ambiguity": "What is the relationship between the session's proposed frameworks (FP-1, FP-2, FP-3) and the handoff's exclusion clause 5 ('Do NOT adopt new frameworks from the provenance research')?",
+      "source": "s2c-framework-proposals.json:9-137 (3 framework proposals), handoff-prompt-v2.md:326 (exclusion clause 5)",
+      "whyItMatters": "The handoff explicitly says 'Do NOT create new framework artifacts without a plan.' FP-1 proposes formalizing the Operational Learning framework. FP-2 proposes formalizing Context Rot Mitigation (embedded in Mission Command). FP-3 proposes codifying orchestration patterns. The s2c-framework-proposals.json says FP-2 and FP-3 are NOT separate frameworks but embed INTO Mission Command. FP-1 is a formalization of existing decision #36. Are these proposals compliant with exclusion clause 5? The exclusion says 'do not create framework ARTIFACTS' — rules, skills, references. The proposals describe what these artifacts would look like but do not create them. Is describing a framework the same as adopting it?",
+      "proposedResolution": "The framework proposals are PROPOSALS for the next session's plan, not implementations. They are compliant with exclusion clause 5 as long as no .claude/rules/, shared/skills/, or reference/framework-*.md files are created. The proposals should be explicitly labeled as 'candidates for plan execution' not 'decisions to implement.'"
+    },
+    {
+      "id": "AM-8",
+      "severity": "low",
+      "ambiguity": "The session's 'WRITE_BLOCKED Signal' convention is documented in the delegation prompt but not in the planning brief or the delegation duty",
+      "source": "This mission's prompt (WRITE_BLOCKED header), handoff-prompt-v2.md:416-419 (Write failure RCA), planning-brief.json decision #4 (8 components, no WRITE_BLOCKED)",
+      "whyItMatters": "The WRITE_BLOCKED signal was discovered in session Z1IhGrcgGO and documented in the handoff. This session uses it (this mission's prompt includes it). But it is not in the planning brief's delegation duty (decision #4) and it is not a delegation duty component. It is an ad-hoc convention that was never formally governed. If it is important enough to include in every delegation prompt, it should be a delegation duty component. If it is not important enough for that, it should be documented somewhere that agents can find it.",
+      "proposedResolution": "Add WRITE_BLOCKED handling as a delegation duty component (e.g., component 14: 'Include WRITE_BLOCKED signal in delegation prompt for background subagents. If first output line is WRITE_BLOCKED, retry in foreground.'). Or document it in the /delegate skill template as a standard delegation practice."
+    }
+  ],
+  "crossCuttingObservations": [
+    {
+      "id": "XO-1",
+      "observation": "The session produced 8 decisions but the planning brief has a governed process for decisions (via /brief skill). The session decisions were captured in the running estimate, not via /brief. This means the decisions lack the brief's structured fields: frameworks array, artifacts array, kpis array, status, related array. The running estimate's decision format (components as string array, provenance as string array) is incompatible with the brief's decision format (components as string array, artifacts as object array with intent, kpis as object array with metrics, frameworks as object array with status). Reconciliation requires schema mapping.",
+      "impact": "When merging session decisions into the brief, each decision must be reformulated to match the brief schema. This is not a trivial format conversion — it requires generating KPIs, identifying artifacts with intents, and mapping to the frameworks array format."
+    },
+    {
+      "id": "XO-2",
+      "observation": "M11's taxonomy (Environmental, Architectural, Behavioral, Temporal) was never applied to the running estimate's 5 existing assumptions. Assumption #4 (Stop hook transcript size proxy) is Environmental. Assumption #3 (reconciliation multi-agent success) is Behavioral. Assumption #1 (de-interpolation is spec deviation) is Architectural. Assumption #2 (last-summary.txt is separate code path) is Environmental. Assumption #5 (N-level delegation depth) is Architectural (verified). Classifying existing assumptions by taxonomy would help prioritize verification: Environmental assumptions can be verified by reading code, Behavioral assumptions require testing, Temporal assumptions require waiting, Architectural assumptions require design review.",
+      "impact": "The assumption taxonomy is useful but was not applied retroactively. Apply it to all assumptions (existing + newly discovered) for consistent triage."
+    },
+    {
+      "id": "XO-3",
+      "observation": "The session's context is estimated at ~60% (running-estimate.json:170). This audit (M12) was launched as an S2 subagent, which means it starts with fresh context. But the files it reads (running estimate, 7 AARs, proposals, brief, handoff) collectively exceed 50K lines. The audit's own context may be approaching the threshold where context rot affects the quality of the later findings. The first findings (UA-1 through UA-3) had the benefit of fresh context on the planning brief. The later findings (UA-15 through UA-17) were written after the brief's 3829 lines were partially displaced by the running estimate re-read.",
+      "impact": "Findings should be reviewed in reverse order (last produced, least context pressure) as a spot-check for quality degradation. If later findings are weaker than earlier ones, that is evidence of context rot within this audit."
+    }
+  ],
+  "contextRotMitigationCheck": {
+    "reReadRunningEstimate": true,
+    "reReadAssumptions": "5 explicit assumptions confirmed at lines 228-234. No discrepancies with this audit's references.",
+    "reReadDeviations": "12 deviations confirmed at lines 190-202. No discrepancies.",
+    "reReadIncidentGovernanceRule": "Reviewed: surfacing duty section, ambiguity routing, decision tree. All references in this audit are consistent.",
+    "reReadSourcesOfTruth": "Reviewed: protected files table. Planning brief IS a protected file — session decisions modifying it require user review. This audit's proposals are consistent with the review gate.",
+    "discrepanciesFound": "One: running-estimate.json:170 says '11 missions complete' but session-aar.json:10 says 'missions: 10'. This discrepancy is captured as UA-13."
+  },
+  "operationalLearningDutyReport": {
+    "observe": "17 unflagged assumptions and 8 unflagged ambiguities discovered across 8 source files. The running estimate's 5 explicit assumptions captured only the assumptions the S3 was AWARE of having. The dangerous assumptions are the ones treated as facts without verification — exactly matching M11's insight I-2.",
+    "surface": "All 25 findings surfaced in this document with source citations, severity, taxonomy classification, and verification steps.",
+    "propose": "Three meta-proposals: (1) Apply M11's taxonomy retroactively to ALL assumptions (existing + new) for consistent triage. (2) Perform conflict analysis between session's 8 decisions and brief's 54 decisions before merging. (3) Freeze delegation duty component count at a single authoritative source before adding more components.",
+    "connect": "All proposals map to existing frameworks: conflict analysis maps to Mission Analysis (decision #13), delegation duty freeze maps to Mission Command (decision #4), assumption taxonomy maps to Operational Learning (decision #36). No new frameworks needed."
+  }
+}
