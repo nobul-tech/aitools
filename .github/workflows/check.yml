@@ -1,0 +1,311 @@
+# .github/workflows/check.yml
+# CI pipeline for aitools: syntax validation, build, cross-platform checks
+# 3 runners: macOS (ARM), Linux (Ubuntu), Windows
+#
+# Bash management:
+#   macOS runner: brew install bash (system bash is 3.2, need 5.x)
+#   Linux runner: bash 5.x ships with Ubuntu (no action needed)
+#   Windows runner: Git Bash ships bash 5.x (no action needed)
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # =====================================================================
+  # macOS (ARM) -- Primary development platform
+  # =====================================================================
+  macos:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install modern bash via Homebrew
+        run: |
+          echo "::group::Installing bash"
+          brew install bash
+          echo "Homebrew bash version:"
+          "$(brew --prefix)/bin/bash" --version | head -1
+          echo "System bash version:"
+          /bin/bash --version | head -1
+          echo "::endgroup::"
+
+      - name: Verify bash version
+        run: |
+          # Confirm #!/usr/bin/env bash resolves to Homebrew bash (5.x)
+          BASH_VER=$(bash -c 'echo "${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"')
+          echo "Resolved bash version: $BASH_VER"
+          MAJOR=$(echo "$BASH_VER" | cut -d. -f1)
+          if [ "$MAJOR" -lt 4 ]; then
+            echo "::error::bash version $BASH_VER is below minimum 4.0"
+            exit 1
+          fi
+          echo "bash $BASH_VER OK (>= 4.0)"
+
+      - name: Validate bash script syntax
+        run: |
+          echo "::group::Checking .sh files"
+          errors=0
+          for f in scripts/*.sh deploy/*.sh shared/hooks/*.sh; do
+            [ -f "$f" ] || continue
+            if ! bash -n "$f" 2>/tmp/bash-syntax-err.txt; then
+              echo "FAIL: $f"
+              cat /tmp/bash-syntax-err.txt
+              errors=$((errors + 1))
+            fi
+          done
+          echo "::endgroup::"
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::$errors bash file(s) failed syntax check"
+            exit 1
+          fi
+          echo "All .sh files passed syntax validation"
+
+      - name: Validate PowerShell script syntax
+        run: |
+          echo "::group::Checking .ps1 files"
+          if command -v pwsh >/dev/null 2>&1; then
+            errors=0
+            for f in scripts/*.ps1 deploy/*.ps1; do
+              [ -f "$f" ] || continue
+              if ! pwsh -NoProfile -Command "
+                \$e = \$null
+                \$null = [System.Management.Automation.Language.Parser]::ParseFile('$f', [ref]\$null, [ref]\$e)
+                if (\$e.Count -gt 0) { \$e | ForEach-Object { Write-Host \"  line \$(\$_.Extent.StartLineNumber): \$(\$_.Message)\" }; exit 1 }
+              " 2>/dev/null; then
+                echo "FAIL: $(basename "$f")"
+                errors=$((errors + 1))
+              fi
+            done
+            echo "::endgroup::"
+            if [ "$errors" -gt 0 ]; then
+              echo "::error::$errors ps1 file(s) failed syntax check"
+              exit 1
+            fi
+            echo "All .ps1 files passed syntax validation"
+          else
+            echo "::warning::pwsh not available, skipping .ps1 validation"
+            echo "::endgroup::"
+          fi
+
+      - name: Validate Python script syntax
+        run: |
+          errors=0
+          for f in scripts/*.py; do
+            [ -f "$f" ] || continue
+            if ! python3 -m py_compile "$f" 2>/tmp/py-syntax-err.txt; then
+              echo "FAIL: $f"
+              cat /tmp/py-syntax-err.txt
+              errors=$((errors + 1))
+            fi
+          done
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::$errors Python file(s) failed syntax check"
+            exit 1
+          fi
+          echo "All .py files passed syntax validation"
+
+      - name: Build deploy scripts
+        run: |
+          echo "::group::Running build-deploy.sh"
+          bash scripts/build-deploy.sh
+          echo "::endgroup::"
+
+      - name: Check deploy drift
+        run: |
+          drift=$(git diff deploy/ 2>/dev/null || true)
+          if [ -n "$drift" ]; then
+            echo "::error::deploy/ is stale -- run build-deploy.sh and commit"
+            git diff --stat deploy/
+            exit 1
+          fi
+          echo "deploy/ is up to date"
+
+      - name: Line ending audit
+        run: |
+          crlf_count=0
+          for f in scripts/*.sh deploy/*.sh shared/hooks/*.sh; do
+            [ -f "$f" ] || continue
+            if perl -ne 'exit 1 if /\r/' "$f" 2>/dev/null; then
+              echo "CRLF found: $f"
+              crlf_count=$((crlf_count + 1))
+            fi
+          done
+          if [ "$crlf_count" -gt 0 ]; then
+            echo "::error::$crlf_count file(s) have CRLF line endings"
+            exit 1
+          fi
+          echo "No CRLF line endings found"
+
+      - name: Cross-platform script pairing
+        run: |
+          errors=0
+          for f in scripts/setup-*.sh; do
+            [ -f "$f" ] || continue
+            base=$(basename "$f" .sh)
+            if [ ! -f "scripts/${base}.ps1" ]; then
+              echo "Unpaired: scripts/${base}.sh (no .ps1)"
+              errors=$((errors + 1))
+            fi
+          done
+          for f in scripts/setup-*.ps1; do
+            [ -f "$f" ] || continue
+            base=$(basename "$f" .ps1)
+            if [ ! -f "scripts/${base}.sh" ]; then
+              echo "Unpaired: scripts/${base}.ps1 (no .sh)"
+              errors=$((errors + 1))
+            fi
+          done
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::$errors unpaired script(s)"
+            exit 1
+          fi
+          echo "All setup scripts are paired"
+
+  # =====================================================================
+  # Linux (Ubuntu) -- CI baseline, validates Linux compatibility
+  # =====================================================================
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify bash version
+        run: |
+          BASH_VER=$(bash -c 'echo "${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"')
+          echo "bash version: $BASH_VER"
+          MAJOR=$(echo "$BASH_VER" | cut -d. -f1)
+          if [ "$MAJOR" -lt 4 ]; then
+            echo "::error::bash version $BASH_VER is below minimum 4.0"
+            exit 1
+          fi
+          echo "bash $BASH_VER OK (>= 4.0)"
+
+      - name: Validate bash script syntax
+        run: |
+          errors=0
+          for f in scripts/*.sh deploy/*.sh shared/hooks/*.sh; do
+            [ -f "$f" ] || continue
+            if ! bash -n "$f" 2>/tmp/bash-syntax-err.txt; then
+              echo "FAIL: $f"
+              cat /tmp/bash-syntax-err.txt
+              errors=$((errors + 1))
+            fi
+          done
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::$errors bash file(s) failed syntax check"
+            exit 1
+          fi
+          echo "All .sh files passed syntax validation"
+
+      - name: Validate Python script syntax
+        run: |
+          errors=0
+          for f in scripts/*.py; do
+            [ -f "$f" ] || continue
+            if ! python3 -m py_compile "$f" 2>/tmp/py-syntax-err.txt; then
+              echo "FAIL: $f"
+              cat /tmp/py-syntax-err.txt
+              errors=$((errors + 1))
+            fi
+          done
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::$errors Python file(s) failed syntax check"
+            exit 1
+          fi
+          echo "All .py files passed syntax validation"
+
+      - name: Build deploy scripts
+        run: bash scripts/build-deploy.sh
+
+      - name: Check deploy drift
+        run: |
+          drift=$(git diff deploy/ 2>/dev/null || true)
+          if [ -n "$drift" ]; then
+            echo "::error::deploy/ is stale -- run build-deploy.sh and commit"
+            exit 1
+          fi
+
+  # =====================================================================
+  # Windows -- validates PS1 scripts natively + bash scripts via Git Bash
+  # =====================================================================
+  windows:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Git Bash version
+        shell: bash
+        run: |
+          BASH_VER=$(bash -c 'echo "${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"')
+          echo "Git Bash version: $BASH_VER"
+          MAJOR=$(echo "$BASH_VER" | cut -d. -f1)
+          if [ "$MAJOR" -lt 4 ]; then
+            echo "::error::Git Bash version $BASH_VER is below minimum 4.0"
+            exit 1
+          fi
+          echo "Git Bash $BASH_VER OK (>= 4.0)"
+
+      - name: Validate bash script syntax (via Git Bash)
+        shell: bash
+        run: |
+          errors=0
+          for f in scripts/*.sh deploy/*.sh shared/hooks/*.sh; do
+            [ -f "$f" ] || continue
+            if ! bash -n "$f" 2>/tmp/bash-syntax-err.txt; then
+              echo "FAIL: $f"
+              cat /tmp/bash-syntax-err.txt
+              errors=$((errors + 1))
+            fi
+          done
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::$errors bash file(s) failed syntax check"
+            exit 1
+          fi
+          echo "All .sh files passed syntax validation"
+
+      - name: Validate PowerShell script syntax (native)
+        shell: pwsh
+        run: |
+          $errors = 0
+          $files = Get-ChildItem -Path "scripts/*.ps1", "deploy/*.ps1" -ErrorAction SilentlyContinue
+          foreach ($f in $files) {
+              $parseErrors = $null
+              $null = [System.Management.Automation.Language.Parser]::ParseFile(
+                  $f.FullName, [ref]$null, [ref]$parseErrors)
+              if ($parseErrors.Count -gt 0) {
+                  Write-Host "FAIL: $($f.Name)"
+                  $parseErrors | ForEach-Object {
+                      Write-Host "  line $($_.Extent.StartLineNumber): $($_.Message)"
+                  }
+                  $errors++
+              }
+          }
+          if ($errors -gt 0) {
+              Write-Error "$errors ps1 file(s) failed syntax check"
+              exit 1
+          }
+          Write-Host "All .ps1 files passed syntax validation"
+
+      - name: Build deploy scripts (via Git Bash)
+        shell: bash
+        run: bash scripts/build-deploy.sh
+
+      - name: Check deploy drift
+        shell: bash
+        run: |
+          drift=$(git diff deploy/ 2>/dev/null || true)
+          if [ -n "$drift" ]; then
+            echo "::error::deploy/ is stale"
+            exit 1
+          fi
