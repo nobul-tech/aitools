@@ -14,6 +14,22 @@
 
 set -euo pipefail
 
+# --- Telemetry: JSONL event emission ---
+_SESSION_DIR=""
+_cs_file="$(git rev-parse --show-toplevel 2>/dev/null || echo "")/.scratch/.current-session"
+if [ -f "$_cs_file" ]; then
+    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+fi
+
+emit_hook_event() {
+    local event_type="$1" detail_json="$2"
+    [ -n "$_SESSION_DIR" ] || return 0
+    printf '{"t":"%s","type":"%s","src":"bccg","d":%s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$event_type" "$detail_json" \
+        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+}
+
 INPUT=$(cat)
 
 # Extract subagent_type from tool_input using bash regex (no jq dependency)
@@ -24,6 +40,7 @@ if [[ "$INPUT" =~ $pattern ]]; then
 fi
 
 if [ "$SUBAGENT_TYPE" = "claude-code-guide" ]; then
+    emit_hook_event "hook_block" "{\"blocked\":\"claude-code-guide\"}"
     # Return JSON deny with corrective context.
     # permissionDecisionReason is shown to Claude (not the user) on deny,
     # so it serves as injected harness knowledge.

@@ -154,6 +154,25 @@ CREATE TABLE IF NOT EXISTS completed_work (
     completed_at TEXT NOT NULL        -- ISO 8601 UTC
 );
 
+-- Session-level event log. Append-only. The WAL for telemetry.
+-- Written by enforcement hooks (fast, via JSONL) and ingested at session end.
+-- Read by SessionEnd processor (cold path only).
+CREATE TABLE IF NOT EXISTS events (
+    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type TEXT NOT NULL,
+    -- Enumerated event types:
+    --   'hook_fire'      -- enforcement hook fired (guard, fixup)
+    --   'hook_block'     -- enforcement hook blocked a tool use
+    --   'hook_warn'      -- enforcement hook warned but allowed
+    --   'delegation'     -- subagent launched (from delegation-duty-guard)
+    --   'session_event'  -- session lifecycle (start, checkpoint, end)
+    source TEXT NOT NULL,            -- hook name or 'agent' or 'system'
+    detail TEXT,                     -- JSON blob with event-specific data
+    created_at TEXT NOT NULL         -- ISO 8601 UTC (Z suffix)
+);
+CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
+CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
+
 -- Version history (replaces meta.versionHistory array)
 CREATE TABLE IF NOT EXISTS version_history (
     version REAL NOT NULL PRIMARY KEY,

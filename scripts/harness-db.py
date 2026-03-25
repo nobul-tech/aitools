@@ -18,6 +18,8 @@ Usage:
     python3 scripts/harness-db.py mission end --session <id> --mission <name> --status <status> [--result <text>]
     python3 scripts/harness-db.py log --session <id> --type <sitrep|finding> --message <text> [--agent <role>] [--severity <level>]
     python3 scripts/harness-db.py export --format json [--session <id>]
+    python3 scripts/harness-db.py process-events [--session <id>]
+    python3 scripts/harness-db.py ship
     python3 scripts/harness-db.py status
 
 Safe to re-run. All operations are idempotent where possible.
@@ -31,6 +33,8 @@ import json
 import os
 import sqlite3
 import sys
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -152,6 +156,16 @@ CREATE TABLE IF NOT EXISTS completed_work (
     decided_by TEXT,
     completed_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS events (
+    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type TEXT NOT NULL,
+    source TEXT NOT NULL,
+    detail TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
+CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
 
 CREATE TABLE IF NOT EXISTS version_history (
     version REAL NOT NULL PRIMARY KEY,
@@ -969,6 +983,343 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def process_session_events(
+    session_dir: Path, session_id: str, harness_db_path: Path
+) -> dict[str, Any]:
+    """Process events.jsonl from a session into KPI metrics.
+
+    This is the cold-path processor. It runs once at session end.
+    It replaces the observation functions of:
+      - intent-sentinel-stop.sh (8 telemetry functions)
+      - estimate-refresh-stop.sh (turn tracking, freshness)
+      - surfacing-duty-stop.sh (duty reminders)
+
+    Reads events.jsonl (written by enforcement hooks during the session),
+    computes aggregate metrics, and writes them to kpi_events in the
+    harness DB.
+
+    Args:
+        session_dir: Path to the session scratch directory.
+        session_id: The session ID string.
+        harness_db_path: Path to the harness DB.
+
+    Returns:
+        Dict of computed metrics (metric_name -> metric_value).
+    """
+    events_file = session_dir / "events.jsonl"
+    if not events_file.exists():
+        return {}
+
+    # Parse JSONL events
+    events: list[dict[str, Any]] = []
+    for line in events_file.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            events.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+
+    if not events:
+        return {}
+
+    metrics: dict[str, float] = {}
+
+    # --- Metrics formerly computed by intent-sentinel ---
+
+    # 1. Hook fires (all types)
+    hook_fires = [e for e in events if e.get("type") in ("hook_fire", "hook_block", "hook_warn")]
+    metrics["guard.fireCount"] = float(len(hook_fires))
+
+    # 2. Turn count (deduplicate by timestamp -- multiple hooks fire on same turn)
+    turn_timestamps = sorted(set(e.get("t", "") for e in hook_fires if e.get("t")))
+    metrics["session.turnCount"] = float(len(turn_timestamps))
+
+    # 3. Blocks and warnings
+    blocks = [e for e in events if e.get("type") == "hook_block"]
+    warns = [e for e in events if e.get("type") == "hook_warn"]
+    metrics["guard.blockCount"] = float(len(blocks))
+    metrics["guard.warnCount"] = float(len(warns))
+
+    # 4. Subagent count (from delegation events)
+    delegations = [e for e in events if e.get("type") == "delegation"]
+    metrics["session.subagentCount"] = float(len(delegations))
+
+    # 5. Delegation compliance scores
+    if delegations:
+        scores = []
+        for d in delegations:
+            detail = d.get("d", {})
+            if isinstance(detail, dict) and "score" in detail:
+                try:
+                    scores.append(float(detail["score"]))
+                except (ValueError, TypeError):
+                    pass
+        if scores:
+            metrics["delegation.avgScore"] = sum(scores) / len(scores)
+            metrics["delegation.minScore"] = min(scores)
+            metrics["delegation.count"] = float(len(scores))
+
+    # 6. Session duration (from first to last event)
+    all_timestamps = sorted(t for e in events if (t := e.get("t")) is not None)
+    if len(all_timestamps) >= 2:
+        try:
+            first_dt = datetime.fromisoformat(all_timestamps[0].replace("Z", "+00:00"))
+            last_dt = datetime.fromisoformat(all_timestamps[-1].replace("Z", "+00:00"))
+            duration_seconds = (last_dt - first_dt).total_seconds()
+            metrics["session.durationSeconds"] = duration_seconds
+        except (ValueError, TypeError):
+            pass
+
+    # 7. Work product count (scratch files in session dir)
+    if session_dir.exists():
+        scratch_files = [f for f in session_dir.iterdir() if f.is_file()]
+        metrics["session.scratchFileCount"] = float(len(scratch_files))
+
+    # 8. Source breakdown (which hooks fired most)
+    source_counts: dict[str, int] = {}
+    for e in events:
+        src = e.get("src", "unknown")
+        source_counts[src] = source_counts.get(src, 0) + 1
+
+    # --- Write metrics to harness DB kpi_events ---
+    now = utcnow()
+    if harness_db_path.exists():
+        try:
+            hconn = open_db(harness_db_path)
+            for metric_name, metric_value in metrics.items():
+                hconn.execute(
+                    """INSERT INTO kpi_events
+                       (session_id, metric_name, metric_value, dimensions, collected_at)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (
+                        session_id,
+                        metric_name,
+                        metric_value,
+                        json.dumps({"sources": source_counts}),
+                        now,
+                    ),
+                )
+            hconn.commit()
+            hconn.close()
+        except sqlite3.Error as e:
+            print(f"Warning: Failed to write KPI metrics: {e}", file=sys.stderr)
+
+    return metrics
+
+
+def ship_to_datadog(harness_db_path: Path) -> int:
+    """Ship unshipped KPI events to Datadog.
+
+    Uses Datadog Metrics API v2 (submit series).
+    Requires DD_API_KEY environment variable.
+    DD_SITE defaults to us5.datadoghq.com per harness config.
+
+    Args:
+        harness_db_path: Path to the harness DB.
+
+    Returns:
+        Number of events shipped (0 if no API key or no events).
+    """
+    api_key = os.environ.get("DD_API_KEY", "")
+    site = os.environ.get("DD_SITE", "us5.datadoghq.com")
+    if not api_key:
+        return 0
+
+    if not harness_db_path.exists():
+        return 0
+
+    try:
+        hconn = open_db(harness_db_path, readonly=True)
+    except sqlite3.Error:
+        return 0
+
+    # Get last shipped event_id from kpi_ship_log
+    try:
+        row = hconn.execute(
+            "SELECT COALESCE(MAX(ship_id), 0) FROM kpi_ship_log WHERE status = 'shipped'"
+        ).fetchone()
+        # Use the max event_id from shipped batches as high-water mark
+        # For simplicity, track by counting: ship all events with id > max previously shipped
+        last_row = hconn.execute(
+            """SELECT COALESCE(
+                (SELECT MAX(ke.event_id) FROM kpi_events ke
+                 WHERE ke.collected_at <= (
+                   SELECT MAX(shipped_at) FROM kpi_ship_log WHERE status = 'shipped'
+                 )), 0)"""
+        ).fetchone()
+        last_shipped_id = last_row[0] if last_row else 0
+    except sqlite3.Error:
+        last_shipped_id = 0
+
+    # Get unshipped events
+    try:
+        rows = hconn.execute(
+            """SELECT event_id, session_id, metric_name, metric_value,
+                      dimensions, collected_at
+               FROM kpi_events WHERE event_id > ?
+               ORDER BY event_id""",
+            (last_shipped_id,),
+        ).fetchall()
+    except sqlite3.Error:
+        hconn.close()
+        return 0
+
+    hconn.close()
+
+    if not rows:
+        return 0
+
+    # Detect platform for tags
+    platform = detect_platform()
+
+    # Determine project name from cwd
+    project_root = find_project_root()
+    project_name = project_root.name
+
+    # Build Datadog series payload
+    series: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            ts_str = row["collected_at"].replace("Z", "+00:00")
+            ts_epoch = int(datetime.fromisoformat(ts_str).timestamp())
+        except (ValueError, TypeError, AttributeError):
+            ts_epoch = int(datetime.now(timezone.utc).timestamp())
+
+        series.append({
+            "metric": f"aitools.{row['metric_name']}",
+            "type": 0,  # gauge
+            "points": [{"timestamp": ts_epoch, "value": float(row["metric_value"])}],
+            "tags": [
+                f"session:{row['session_id']}",
+                f"platform:{platform}",
+                f"project:{project_name}",
+                "source:aitools-harness",
+            ],
+        })
+
+    payload = json.dumps({"series": series}).encode("utf-8")
+
+    url = f"https://api.{site}/api/v2/series"
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "DD-API-KEY": api_key,
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            status = resp.status
+            dd_response = resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        status = e.code
+        dd_response = e.read().decode("utf-8", errors="replace") if e.fp else str(e)
+    except urllib.error.URLError as e:
+        status = 0
+        dd_response = str(e)
+    except Exception as e:
+        status = 0
+        dd_response = str(e)
+
+    # Record shipment in harness DB
+    shipped = status == 202
+    try:
+        wconn = open_db(harness_db_path)
+        wconn.execute(
+            """INSERT INTO kpi_ship_log
+               (batch_size, shipped_at, status, error_message, datadog_response)
+               VALUES (?, ?, ?, ?, ?)""",
+            (
+                len(rows),
+                utcnow(),
+                "shipped" if shipped else "failed",
+                None if shipped else f"HTTP {status}",
+                dd_response[:500] if dd_response else None,
+            ),
+        )
+        wconn.commit()
+        wconn.close()
+    except sqlite3.Error:
+        pass
+
+    return len(rows) if shipped else 0
+
+
+def cmd_process_events(args: argparse.Namespace) -> int:
+    """Process session events.jsonl into KPI metrics."""
+    project_root = find_project_root()
+    session_id = args.session
+
+    if session_id is None:
+        session_id = find_active_session_id(project_root)
+
+    if session_id is None:
+        print("Error: No session ID specified and no active session found.", file=sys.stderr)
+        return 1
+
+    # Find session scratch directory
+    prefix = session_prefix(session_id)
+    session_dir = project_root / ".scratch" / f"session-{prefix}"
+
+    if not session_dir.exists():
+        print(f"Error: Session directory not found: {session_dir}", file=sys.stderr)
+        return 1
+
+    events_file = session_dir / "events.jsonl"
+    if not events_file.exists():
+        print(f"No events.jsonl found in {session_dir} (no enforcement hook events recorded)")
+        return 0
+
+    harness_db_path = get_harness_db_path(project_root)
+    if not harness_db_path.exists():
+        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        return 1
+
+    metrics = process_session_events(session_dir, session_id, harness_db_path)
+
+    if metrics:
+        print(f"Processed {len(metrics)} metrics from events.jsonl:")
+        for name, value in sorted(metrics.items()):
+            if isinstance(value, float) and value == int(value):
+                print(f"  {name}: {int(value)}")
+            else:
+                print(f"  {name}: {value:.2f}")
+    else:
+        print("No metrics computed (events.jsonl may be empty)")
+
+    return 0
+
+
+def cmd_ship(args: argparse.Namespace) -> int:
+    """Ship KPI events to Datadog."""
+    project_root = find_project_root()
+    harness_db_path = get_harness_db_path(project_root)
+
+    if not harness_db_path.exists():
+        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        return 1
+
+    api_key = os.environ.get("DD_API_KEY", "")
+    if not api_key:
+        print("DD_API_KEY not set. Set it to enable Datadog shipping.")
+        print("  export DD_API_KEY=your-api-key")
+        print("  export DD_SITE=us5.datadoghq.com  # default")
+        return 0
+
+    shipped = ship_to_datadog(harness_db_path)
+    if shipped > 0:
+        print(f"Shipped {shipped} KPI events to Datadog")
+    else:
+        print("No events to ship (or shipping failed — check kpi_ship_log)")
+
+    return 0
+
+
 # -- CLI setup ----------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1041,6 +1392,15 @@ def build_parser() -> argparse.ArgumentParser:
     # status
     subparsers.add_parser("status", help="Show harness database status")
 
+    # process-events
+    process_parser = subparsers.add_parser(
+        "process-events", help="Process session events.jsonl into KPI metrics"
+    )
+    process_parser.add_argument("--session", help="Session ID (auto-detects if omitted)")
+
+    # ship
+    subparsers.add_parser("ship", help="Ship KPI events to Datadog")
+
     return parser
 
 
@@ -1057,6 +1417,8 @@ def main() -> int:
         "init": cmd_init,
         "status": cmd_status,
         "export": cmd_export,
+        "process-events": cmd_process_events,
+        "ship": cmd_ship,
     }
 
     if args.command in dispatch:

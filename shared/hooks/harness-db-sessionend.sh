@@ -65,8 +65,15 @@ fi
 # Let stderr through (warnings visible to Claude), but don't block on failure
 "$PYTHON" "$HELPER" session end --id "$SESSION_ID" || true
 
+# Process session events.jsonl into KPI metrics (cold-path telemetry)
+# Reads events emitted by enforcement hooks during the session
+"$PYTHON" "$HELPER" process-events --session "$SESSION_ID" || true
+
+# Ship KPI events to Datadog (if DD_API_KEY is configured)
+"$PYTHON" "$HELPER" ship || true
+
 # Export DB to JSON for git carry-forward
 # stderr warnings (e.g. overwrite-smaller-file safety check) must be visible
 "$PYTHON" "$HELPER" export --format json --session "$SESSION_ID" || true
 
-printf 'Harness DB: session %s ended, JSON exported\n' "$SESSION_ID"
+printf 'Harness DB: session %s ended, events processed, JSON exported\n' "$SESSION_ID"

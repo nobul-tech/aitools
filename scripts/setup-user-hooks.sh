@@ -3,8 +3,8 @@
 # Safe to re-run — merges managed fields without clobbering existing settings.
 #
 # Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
-# (includes intent-sentinel-stop Stop hook, delegation-duty-guard PreToolUse[Agent] hook,
-#  and harness-db-sessionstart/sessionend hooks)
+# (includes delegation-duty-guard PreToolUse[Agent] hook,
+#  and harness-db-sessionstart/sessionend hooks with telemetry processing)
 # Preserved: permissions, enabledPlugins, all other fields
 #
 # Hooks deployed:
@@ -17,9 +17,6 @@
 #   PreToolUse[Read|Grep]: glossary-skill-guard.sh (reminds agent to use /glossary skill)
 #   PreToolUse[Agent]: block-claude-code-guide.sh (blocks buggy built-in subagent)
 #   PostToolUse[Write|Edit]: sh-file-fixup.sh (fixes CRLF and chmod on .sh files)
-#   Stop: surfacing-duty-stop.sh (periodic surfacing duty reminder)
-#   Stop: estimate-refresh-stop.sh (Lagebeurteilung + estimate freshness)
-#   Stop: intent-sentinel-stop.sh (consolidated telemetry + intent resurface)
 #   PreToolUse[Agent]: delegation-duty-guard.sh (checks delegation prompts for duty elements)
 #   SessionStart: harness-db-sessionstart.sh (initializes harness SQLite DBs)
 #   SessionEnd: harness-db-sessionend.sh (marks session complete, exports JSON)
@@ -88,16 +85,13 @@ GLOSSARY_SCRIPT=$(resolve_hook "glossary-skill-guard.sh")
 SCRATCH_SCRIPT=$(resolve_hook "scratch-init.sh")
 HARVEST_SCRIPT=$(resolve_hook "harvest-session.sh")
 SHFIXUP_SCRIPT=$(resolve_hook "sh-file-fixup.sh")
-SURFACING_SCRIPT=$(resolve_hook "surfacing-duty-stop.sh")
 BLOCK_GUIDE_SCRIPT=$(resolve_hook "block-claude-code-guide.sh")
 TOOL_OPS_AUDIT_SCRIPT=$(resolve_hook "tool-ops-session-audit.sh")
 DASHBOARD_SCRIPT=$(resolve_hook "dashboard-serve.sh")
-ESTIMATE_REFRESH_SCRIPT=$(resolve_hook "estimate-refresh-stop.sh")
-SENTINEL_SCRIPT=$(resolve_hook "intent-sentinel-stop.sh")
 DELEG_GUARD_SCRIPT=$(resolve_hook "delegation-duty-guard.sh")
 HARNESS_DB_START_SCRIPT=$(resolve_hook "harness-db-sessionstart.sh")
 HARNESS_DB_END_SCRIPT=$(resolve_hook "harness-db-sessionend.sh")
-for src in "$HOOK_SCRIPT" "$GUARD_SCRIPT" "$GLOSSARY_SCRIPT" "$SCRATCH_SCRIPT" "$HARVEST_SCRIPT" "$SHFIXUP_SCRIPT" "$SURFACING_SCRIPT" "$BLOCK_GUIDE_SCRIPT" "$TOOL_OPS_AUDIT_SCRIPT" "$DASHBOARD_SCRIPT" "$ESTIMATE_REFRESH_SCRIPT" "$SENTINEL_SCRIPT" "$DELEG_GUARD_SCRIPT" "$HARNESS_DB_START_SCRIPT" "$HARNESS_DB_END_SCRIPT"; do
+for src in "$HOOK_SCRIPT" "$GUARD_SCRIPT" "$GLOSSARY_SCRIPT" "$SCRATCH_SCRIPT" "$HARVEST_SCRIPT" "$SHFIXUP_SCRIPT" "$BLOCK_GUIDE_SCRIPT" "$TOOL_OPS_AUDIT_SCRIPT" "$DASHBOARD_SCRIPT" "$DELEG_GUARD_SCRIPT" "$HARNESS_DB_START_SCRIPT" "$HARNESS_DB_END_SCRIPT"; do
     if [ ! -f "$src" ]; then
         log_error "Hook script not found: $src"
         exit 1
@@ -111,12 +105,9 @@ GLOSSARY_DEST="$HOME/.claude/hooks/glossary-skill-guard.sh"
 SCRATCH_DEST="$HOME/.claude/hooks/scratch-init.sh"
 HARVEST_DEST="$HOME/.claude/hooks/harvest-session.sh"
 SHFIXUP_DEST="$HOME/.claude/hooks/sh-file-fixup.sh"
-SURFACING_DEST="$HOME/.claude/hooks/surfacing-duty-stop.sh"
 BLOCK_GUIDE_DEST="$HOME/.claude/hooks/block-claude-code-guide.sh"
 TOOL_OPS_AUDIT_DEST="$HOME/.claude/hooks/tool-ops-session-audit.sh"
 DASHBOARD_DEST="$HOME/.claude/hooks/dashboard-serve.sh"
-ESTIMATE_REFRESH_DEST="$HOME/.claude/hooks/estimate-refresh-stop.sh"
-SENTINEL_DEST="$HOME/.claude/hooks/intent-sentinel-stop.sh"
 DELEG_GUARD_DEST="$HOME/.claude/hooks/delegation-duty-guard.sh"
 HARNESS_DB_START_DEST="$HOME/.claude/hooks/harness-db-sessionstart.sh"
 HARNESS_DB_END_DEST="$HOME/.claude/hooks/harness-db-sessionend.sh"
@@ -229,12 +220,9 @@ GLOSSARY_CMD="bash \"$HOME/.claude/hooks/glossary-skill-guard.sh\""
 SCRATCH_CMD="bash \"$SCRATCH_DEST\""
 HARVEST_CMD="bash \"$HARVEST_DEST\""
 SHFIXUP_CMD="bash \"$SHFIXUP_DEST\""
-SURFACING_CMD="bash \"$SURFACING_DEST\""
 BLOCK_GUIDE_CMD="bash \"$BLOCK_GUIDE_DEST\""
 TOOL_OPS_AUDIT_CMD="bash \"$TOOL_OPS_AUDIT_DEST\""
 DASHBOARD_CMD="bash \"$DASHBOARD_DEST\""
-ESTIMATE_REFRESH_CMD="bash \"$ESTIMATE_REFRESH_DEST\""
-SENTINEL_CMD="bash \"$SENTINEL_DEST\""
 DELEG_GUARD_CMD="bash \"$DELEG_GUARD_DEST\""
 HARNESS_DB_START_CMD="bash \"$HARNESS_DB_START_DEST\""
 HARNESS_DB_END_CMD="bash \"$HARNESS_DB_END_DEST\""
@@ -252,15 +240,12 @@ const force = process.argv[6] === 'true';
 const scratchCmd = process.argv[7];
 const harvestCmd = process.argv[8];
 const shfixupCmd = process.argv[9];
-const surfacingCmd = process.argv[10];
-const blockGuideCmd = process.argv[11];
-const toolOpsAuditCmd = process.argv[12];
-const dashboardCmd = process.argv[13];
-const estimateRefreshCmd = process.argv[14];
-const sentinelCmd = process.argv[15];
-const delegGuardCmd = process.argv[16];
-const harnessDbStartCmd = process.argv[17];
-const harnessDbEndCmd = process.argv[18];
+const blockGuideCmd = process.argv[10];
+const toolOpsAuditCmd = process.argv[11];
+const dashboardCmd = process.argv[12];
+const delegGuardCmd = process.argv[13];
+const harnessDbStartCmd = process.argv[14];
+const harnessDbEndCmd = process.argv[15];
 
 // --- BEGIN claude preferences (replaced by build-deploy) ---
 let autoMemory = true;
@@ -346,12 +331,9 @@ mergeHookEntry('SessionStart', 'scratch-init.sh', '', scratchCmd);
 mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
 mergeHookEntry('PreToolUse', 'glossary-skill-guard.sh', 'Read|Grep', glossaryCmd);
 mergeHookEntry('PostToolUse', 'sh-file-fixup.sh', 'Write|Edit', shfixupCmd);
-mergeHookEntry('Stop', 'surfacing-duty-stop.sh', '', surfacingCmd);
 mergeHookEntry('PreToolUse', 'block-claude-code-guide.sh', 'Agent', blockGuideCmd);
 mergeHookEntry('SessionEnd', 'tool-ops-session-audit.sh', '', toolOpsAuditCmd);
 mergeHookEntry('SessionStart', 'dashboard-serve.sh', '', dashboardCmd);
-mergeHookEntry('Stop', 'estimate-refresh-stop.sh', '', estimateRefreshCmd);
-mergeHookEntry('Stop', 'intent-sentinel-stop.sh', '', sentinelCmd);
 mergeHookEntry('PreToolUse', 'delegation-duty-guard.sh', 'Agent', delegGuardCmd);
 mergeHookEntry('SessionStart', 'harness-db-sessionstart.sh', '', harnessDbStartCmd);
 mergeHookEntry('SessionEnd', 'harness-db-sessionend.sh', '', harnessDbEndCmd);
@@ -430,10 +412,6 @@ if (dryRun) {
         if (toaCount !== 1) { console.error('Validation failed: expected 1 SessionEnd tool-ops-session-audit hook, got ' + toaCount); process.exit(1); }
         const dashCount = (_v.hooks.SessionStart || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('dashboard-serve.sh'))).length;
         if (dashCount !== 1) { console.error('Validation failed: expected 1 SessionStart dashboard-serve hook, got ' + dashCount); process.exit(1); }
-        const erCount = (_v.hooks.Stop || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('estimate-refresh-stop.sh'))).length;
-        if (erCount !== 1) { console.error('Validation failed: expected 1 Stop estimate-refresh-stop hook, got ' + erCount); process.exit(1); }
-        const sentCount = (_v.hooks.Stop || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('intent-sentinel-stop.sh'))).length;
-        if (sentCount !== 1) { console.error('Validation failed: expected 1 Stop intent-sentinel hook, got ' + sentCount); process.exit(1); }
         const dgCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('delegation-duty-guard.sh'))).length;
         if (dgCount !== 1) { console.error('Validation failed: expected 1 PreToolUse delegation-duty-guard hook, got ' + dgCount); process.exit(1); }
         const hdbStartCount = (_v.hooks.SessionStart || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('harness-db-sessionstart.sh'))).length;
@@ -469,7 +447,7 @@ if (dryRun) {
         prefChanges.forEach(c => console.log(c));
     }
 }
-" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$SURFACING_CMD" "$BLOCK_GUIDE_CMD" "$TOOL_OPS_AUDIT_CMD" "$DASHBOARD_CMD" "$ESTIMATE_REFRESH_CMD" "$SENTINEL_CMD" "$DELEG_GUARD_CMD" "$HARNESS_DB_START_CMD" "$HARNESS_DB_END_CMD")
+" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$BLOCK_GUIDE_CMD" "$TOOL_OPS_AUDIT_CMD" "$DASHBOARD_CMD" "$DELEG_GUARD_CMD" "$HARNESS_DB_START_CMD" "$HARNESS_DB_END_CMD")
 
 # Parse merge result: first line is status, CHANGED: lines are key changes
 MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)

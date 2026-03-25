@@ -56,7 +56,7 @@ if [ "$_skill_count" -eq 0 ]; then
     exit 1
 fi
 blog "Found $_skill_count skill(s) in shared/skills/"
-for _hook_file in session-archive.sh standing-order-guard.sh sh-file-fixup.sh surfacing-duty-stop.sh scratch-init.sh harvest-session.sh glossary-skill-guard.sh block-claude-code-guide.sh tool-ops-session-audit.sh dashboard-serve.sh estimate-refresh-stop.sh harness-db-sessionstart.sh harness-db-sessionend.sh intent-sentinel-stop.sh delegation-duty-guard.sh; do
+for _hook_file in session-archive.sh standing-order-guard.sh sh-file-fixup.sh scratch-init.sh harvest-session.sh glossary-skill-guard.sh block-claude-code-guide.sh tool-ops-session-audit.sh dashboard-serve.sh harness-db-sessionstart.sh harness-db-sessionend.sh delegation-duty-guard.sh; do
     if [ ! -f "$SHARED_DIR/hooks/$_hook_file" ]; then
         blog_error "Required hook file not found: $SHARED_DIR/hooks/$_hook_file"
         exit 1
@@ -68,17 +68,14 @@ CLAUDE_SHARED_CONTENT=$(cat "$CLAUDE_SHARED")
 HOOK_SESSION_ARCHIVE=$(cat "$SHARED_DIR/hooks/session-archive.sh")
 HOOK_STANDING_ORDER_GUARD=$(cat "$SHARED_DIR/hooks/standing-order-guard.sh")
 HOOK_SH_FILE_FIXUP=$(cat "$SHARED_DIR/hooks/sh-file-fixup.sh")
-HOOK_SURFACING_DUTY=$(cat "$SHARED_DIR/hooks/surfacing-duty-stop.sh")
 HOOK_SCRATCH_INIT=$(cat "$SHARED_DIR/hooks/scratch-init.sh")
 HOOK_HARVEST_SESSION=$(cat "$SHARED_DIR/hooks/harvest-session.sh")
 HOOK_GLOSSARY_GUARD=$(cat "$SHARED_DIR/hooks/glossary-skill-guard.sh")
 HOOK_BLOCK_GUIDE=$(cat "$SHARED_DIR/hooks/block-claude-code-guide.sh")
 HOOK_TOOL_OPS_AUDIT=$(cat "$SHARED_DIR/hooks/tool-ops-session-audit.sh")
 HOOK_DASHBOARD_SERVE=$(cat "$SHARED_DIR/hooks/dashboard-serve.sh")
-HOOK_ESTIMATE_REFRESH=$(cat "$SHARED_DIR/hooks/estimate-refresh-stop.sh")
 HOOK_HARNESS_DB_START=$(cat "$SHARED_DIR/hooks/harness-db-sessionstart.sh")
 HOOK_HARNESS_DB_END=$(cat "$SHARED_DIR/hooks/harness-db-sessionend.sh")
-HOOK_INTENT_SENTINEL=$(cat "$SHARED_DIR/hooks/intent-sentinel-stop.sh")
 HOOK_DELEGATION_GUARD=$(cat "$SHARED_DIR/hooks/delegation-duty-guard.sh")
 
 # Read shared library content for inlining into deploy scripts
@@ -1222,15 +1219,12 @@ BLOCK
     _embed_hook HOOK_SCRATCH_INIT "scratch-init.sh" "__EMB_SCRATCH__"
     _embed_hook HOOK_HARVEST_SESSION "harvest-session.sh" "__EMB_HARVEST__"
     _embed_hook HOOK_SH_FILE_FIXUP "sh-file-fixup.sh" "__EMB_SHFIXUP__"
-    _embed_hook HOOK_SURFACING_DUTY "surfacing-duty-stop.sh" "__EMB_SURFACING__"
     _embed_hook HOOK_GLOSSARY_GUARD "glossary-skill-guard.sh" "__EMB_GLOSSARY__"
     _embed_hook HOOK_BLOCK_GUIDE "block-claude-code-guide.sh" "__EMB_BLOCKGUIDE__"
     _embed_hook HOOK_TOOL_OPS_AUDIT "tool-ops-session-audit.sh" "__EMB_TOOLOPS__"
     _embed_hook HOOK_DASHBOARD_SERVE "dashboard-serve.sh" "__EMB_DASHBOARD__"
-    _embed_hook HOOK_ESTIMATE_REFRESH "estimate-refresh-stop.sh" "__EMB_ESTIMREFRESH__"
     _embed_hook HOOK_HARNESS_DB_START "harness-db-sessionstart.sh" "__EMB_HDBSTART__"
     _embed_hook HOOK_HARNESS_DB_END "harness-db-sessionend.sh" "__EMB_HDBEND__"
-    _embed_hook HOOK_INTENT_SENTINEL "intent-sentinel-stop.sh" "__EMB_SENTINEL__"
     _embed_hook HOOK_DELEGATION_GUARD "delegation-duty-guard.sh" "__EMB_DELEGGUARD__"
     cat <<'BLOCK'
 
@@ -1319,15 +1313,12 @@ BLOCK
     _embed_ps1_hook HOOK_SCRATCH_INIT "scratch-init.sh" "hook_scratch"
     _embed_ps1_hook HOOK_HARVEST_SESSION "harvest-session.sh" "hook_harvest"
     _embed_ps1_hook HOOK_SH_FILE_FIXUP "sh-file-fixup.sh" "hook_shfixup"
-    _embed_ps1_hook HOOK_SURFACING_DUTY "surfacing-duty-stop.sh" "hook_surfacing"
     _embed_ps1_hook HOOK_GLOSSARY_GUARD "glossary-skill-guard.sh" "hook_glossary"
     _embed_ps1_hook HOOK_BLOCK_GUIDE "block-claude-code-guide.sh" "hook_blockguide"
     _embed_ps1_hook HOOK_TOOL_OPS_AUDIT "tool-ops-session-audit.sh" "hook_toolops"
     _embed_ps1_hook HOOK_DASHBOARD_SERVE "dashboard-serve.sh" "hook_dashboard"
-    _embed_ps1_hook HOOK_ESTIMATE_REFRESH "estimate-refresh-stop.sh" "hook_estimrefresh"
     _embed_ps1_hook HOOK_HARNESS_DB_START "harness-db-sessionstart.sh" "hook_hdbstart"
     _embed_ps1_hook HOOK_HARNESS_DB_END "harness-db-sessionend.sh" "hook_hdbend"
-    _embed_ps1_hook HOOK_INTENT_SENTINEL "intent-sentinel-stop.sh" "hook_sentinel"
     _embed_ps1_hook HOOK_DELEGATION_GUARD "delegation-duty-guard.sh" "hook_delegguard"
     # Deploy all hooks
     printf '$hookFiles = @{\r\n'
@@ -1336,15 +1327,12 @@ BLOCK
     printf '    "scratch-init.sh" = $hook_scratch\r\n'
     printf '    "harvest-session.sh" = $hook_harvest\r\n'
     printf '    "sh-file-fixup.sh" = $hook_shfixup\r\n'
-    printf '    "surfacing-duty-stop.sh" = $hook_surfacing\r\n'
     printf '    "glossary-skill-guard.sh" = $hook_glossary\r\n'
     printf '    "block-claude-code-guide.sh" = $hook_blockguide\r\n'
     printf '    "tool-ops-session-audit.sh" = $hook_toolops\r\n'
     printf '    "dashboard-serve.sh" = $hook_dashboard\r\n'
-    printf '    "estimate-refresh-stop.sh" = $hook_estimrefresh\r\n'
     printf '    "harness-db-sessionstart.sh" = $hook_hdbstart\r\n'
     printf '    "harness-db-sessionend.sh" = $hook_hdbend\r\n'
-    printf '    "intent-sentinel-stop.sh" = $hook_sentinel\r\n'
     printf '    "delegation-duty-guard.sh" = $hook_delegguard\r\n'
     printf '}\r\n'
     printf '\r\n'

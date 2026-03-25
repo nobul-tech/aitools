@@ -16,6 +16,22 @@
 
 set -euo pipefail
 
+# --- Telemetry: JSONL event emission ---
+_SESSION_DIR=""
+_cs_file="$(git rev-parse --show-toplevel 2>/dev/null || echo "")/.scratch/.current-session"
+if [ -f "$_cs_file" ]; then
+    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+fi
+
+emit_hook_event() {
+    local event_type="$1" detail_json="$2"
+    [ -n "$_SESSION_DIR" ] || return 0
+    printf '{"t":"%s","type":"%s","src":"fixup","d":%s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$event_type" "$detail_json" \
+        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+}
+
 # Read JSON from stdin
 input=$(cat)
 
@@ -59,6 +75,7 @@ fi
 # Report what was fixed (stderr → shown to Claude as feedback)
 if [ -n "$fixed" ]; then
     echo "sh-file-fixup: $(basename "$file_path") — fixed: ${fixed% }" >&2
+    emit_hook_event "hook_fire" "{\"file\":\"$(basename "$file_path")\",\"action\":\"${fixed% }\"}"
 fi
 
 exit 0

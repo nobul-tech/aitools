@@ -56,17 +56,40 @@ LOG_FILE="$LOG_DIR/standing-order-guard.log"
 # Ensure log directory exists (needed for observe logging; harmless in enforce-only runs)
 mkdir -p "$LOG_DIR"
 
+# --- Telemetry: JSONL event emission ---
+# Appends one structured line to the session event log (~0.1ms).
+# Session dir resolved from .scratch/.current-session (set by scratch-init.sh).
+# If unavailable, silently no-ops (hook must never fail).
+_SESSION_DIR=""
+_cs_file="$(git rev-parse --show-toplevel 2>/dev/null || echo "")/.scratch/.current-session"
+if [ -f "$_cs_file" ]; then
+    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+fi
+
+emit_hook_event() {
+    local event_type="$1" detail_json="$2"
+    [ -n "$_SESSION_DIR" ] || return 0
+    printf '{"t":"%s","type":"%s","src":"sog","d":%s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$event_type" "$detail_json" \
+        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+}
+
 # violation() — dispatch based on per-check mode
 # $1: message  $2: mode variable value (enforce or observe; defaults to enforce)
+# $3: check name (for telemetry)
 # In enforce mode: write message to stderr, exit 2 (block)
 # In observe mode: append to log file, exit 0 (allow)
 violation() {
     local message="$1"
     local mode="${2:-enforce}"
+    local check_name="${3:-unknown}"
     if [ "$mode" = "enforce" ]; then
+        emit_hook_event "hook_block" "{\"check\":\"$check_name\"}"
         echo "$message" >&2
         exit 2
     else
+        emit_hook_event "hook_warn" "{\"check\":\"$check_name\",\"mode\":\"observe\"}"
         printf '%s [WOULD-BLOCK] %s | cmd: %s\n' \
             "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$message" "$COMMAND" \
             >> "$LOG_FILE"
@@ -108,7 +131,7 @@ NEWLINE_COUNT=$(( (CMD_LEN - STRIPPED_LEN) / 2 ))
 # 5+ lines (4+ newlines) = too complex for inline. Write a temp file instead.
 if [ "$NEWLINE_COUNT" -ge 4 ]; then
     LINE_COUNT=$((NEWLINE_COUNT + 1))
-    violation "USO: Scratch files --: This command is ~${LINE_COUNT} lines long. Write it to a temp .sh or .ps1 file using the Write tool, execute with Bash, then clean up. USO: never inline long commands in the Bash tool." "$MODE_SCRATCH"
+    violation "USO: Scratch files --: This command is ~${LINE_COUNT} lines long. Write it to a temp .sh or .ps1 file using the Write tool, execute with Bash, then clean up. USO: never inline long commands in the Bash tool." "$MODE_SCRATCH" "scratch"
 fi
 
 # --- USO: Simple Bash commands only ---
@@ -119,21 +142,21 @@ fi
 # $() and backtick checks use raw INPUT (not COMMAND) because json_field
 # truncates at \" — $(...) inside quoted arguments would be invisible.
 case "$COMMAND" in
-    *'&&'*) violation "USO: Simple Bash commands only --: Don't use '&&' to chain commands. Make separate Bash tool calls instead. For git in another repo, use 'git -C /path' instead of 'cd /path && git'." "$MODE_AND" ;;
-    *'||'*) violation "USO: Simple Bash commands only --: Don't use '||' to chain commands. Make separate Bash tool calls instead." "$MODE_OR" ;;
+    *'&&'*) violation "USO: Simple Bash commands only --: Don't use '&&' to chain commands. Make separate Bash tool calls instead. For git in another repo, use 'git -C /path' instead of 'cd /path && git'." "$MODE_AND" "and" ;;
+    *'||'*) violation "USO: Simple Bash commands only --: Don't use '||' to chain commands. Make separate Bash tool calls instead." "$MODE_OR" "or" ;;
     *';'*)
         # Exempt ; inside scripting-language arguments: pwsh -Command '...;...' and perl '...;...'
         # The ; is a language-internal statement separator, not a shell command separator.
         # perl: any invocation (perl -ne, -pe, -e, -E, etc.) may contain Perl semicolons.
         case "$COMMAND" in
             pwsh\ *|powershell\ *|perl\ *) ;;
-            *) violation "USO: Simple Bash commands only --: Don't use ';' to chain commands. Make separate Bash tool calls instead." "$MODE_SEMICOLON" ;;
+            *) violation "USO: Simple Bash commands only --: Don't use ';' to chain commands. Make separate Bash tool calls instead." "$MODE_SEMICOLON" "semicolon" ;;
         esac
         ;;
 esac
 case "$INPUT" in
-    *'$('*) violation "USO: Simple Bash commands only --: Don't use '\$(...)' command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_SUBSHELL" ;;
-    *'`'*)  violation "USO: Simple Bash commands only --: Don't use backtick command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_BACKTICK" ;;
+    *'$('*) violation "USO: Simple Bash commands only --: Don't use '\$(...)' command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_SUBSHELL" "subshell" ;;
+    *'`'*)  violation "USO: Simple Bash commands only --: Don't use backtick command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_BACKTICK" "backtick" ;;
 esac
 
 # --- USO: Dedicated tools for file operations ---
@@ -155,7 +178,7 @@ case "$FIRST_TOKEN" in
     rm)
         case "$COMMAND" in
             *'*'*|*'?'*)
-                violation "USO: Simple Bash commands only --: Don't use glob patterns (*, ?) with 'rm'. Write a cleanup script listing the specific files, execute it, then clean up the script."
+                violation "USO: Simple Bash commands only --: Don't use glob patterns (*, ?) with 'rm'. Write a cleanup script listing the specific files, execute it, then clean up the script." "enforce" "glob-rm"
                 ;;
         esac
         ;;
@@ -167,19 +190,19 @@ case "$FIRST_TOKEN" in
     cat)
         case "$COMMAND" in
             *\|*) ;;  # Pipeline — legitimate shell use
-            *) violation "USO: Dedicated tools --: Use the Read tool instead of 'cat' to read files. The Read tool provides line numbers and handles large files better." ;;
+            *) violation "USO: Dedicated tools --: Use the Read tool instead of 'cat' to read files. The Read tool provides line numbers and handles large files better." "enforce" "cat" ;;
         esac
         ;;
     head)
         case "$COMMAND" in
             *\|*) ;;
-            *) violation "USO: Dedicated tools --: Use the Read tool with offset/limit parameters instead of 'head'. Example: Read with limit=20 for the first 20 lines." ;;
+            *) violation "USO: Dedicated tools --: Use the Read tool with offset/limit parameters instead of 'head'. Example: Read with limit=20 for the first 20 lines." "enforce" "head" ;;
         esac
         ;;
     tail)
         case "$COMMAND" in
             *\|*) ;;
-            *) violation "USO: Dedicated tools --: Use the Read tool with offset parameter instead of 'tail'. Example: Read with offset=100 to start from line 100." ;;
+            *) violation "USO: Dedicated tools --: Use the Read tool with offset parameter instead of 'tail'. Example: Read with offset=100 to start from line 100." "enforce" "tail" ;;
         esac
         ;;
 esac
@@ -190,7 +213,7 @@ case "$FIRST_TOKEN" in
     grep|rg|egrep|fgrep)
         case "$COMMAND" in
             *\|*) ;;  # Pipeline — legitimate shell use
-            *) violation "USO: Dedicated tools --: Use the Grep tool instead of '$FIRST_TOKEN' to search file contents. The Grep tool supports regex, file filtering, and multiple output modes." ;;
+            *) violation "USO: Dedicated tools --: Use the Grep tool instead of '$FIRST_TOKEN' to search file contents. The Grep tool supports regex, file filtering, and multiple output modes." "enforce" "grep" ;;
         esac
         ;;
 esac
@@ -201,7 +224,7 @@ case "$FIRST_TOKEN" in
     find)
         case "$COMMAND" in
             *\|*) ;;  # Pipeline — legitimate shell use
-            *) violation "USO: Dedicated tools --: Use the Glob tool instead of 'find' to locate files. Example: Glob with pattern '**/*.sh' instead of 'find . -name \"*.sh\"'." ;;
+            *) violation "USO: Dedicated tools --: Use the Glob tool instead of 'find' to locate files. Example: Glob with pattern '**/*.sh' instead of 'find . -name \"*.sh\"'." "enforce" "find" ;;
         esac
         ;;
     ls)
@@ -219,13 +242,13 @@ case "$FIRST_TOKEN" in
     sed)
         case "$COMMAND" in
             *\|*) ;;  # Pipeline — legitimate shell use
-            *) violation "USO: Dedicated tools --: Use the Edit tool instead of 'sed' to modify files. For non-trivial string manipulation, use Perl (USO: Perl for string manipulation)." ;;
+            *) violation "USO: Dedicated tools --: Use the Edit tool instead of 'sed' to modify files. For non-trivial string manipulation, use Perl (USO: Perl for string manipulation)." "enforce" "sed" ;;
         esac
         ;;
     awk)
         case "$COMMAND" in
             *\|*) ;;  # Pipeline — legitimate shell use
-            *) violation "USO: Dedicated tools --: Use the Read tool instead of 'awk' to process files. For string manipulation, use Perl (USO: Perl for string manipulation)." ;;
+            *) violation "USO: Dedicated tools --: Use the Read tool instead of 'awk' to process files. For string manipulation, use Perl (USO: Perl for string manipulation)." "enforce" "awk" ;;
         esac
         ;;
 esac
@@ -237,9 +260,10 @@ FIRST_LINE=$(printf '%s' "$COMMAND" | head -1)
 case "$FIRST_LINE" in
     echo*\>*|printf*\>*)
         # echo/printf redirecting to a file
-        violation "USO: Dedicated tools --: Use the Write tool instead of echo/printf redirection to create files. The Write tool handles encoding and permissions correctly."
+        violation "USO: Dedicated tools --: Use the Write tool instead of echo/printf redirection to create files. The Write tool handles encoding and permissions correctly." "enforce" "echo-redirect"
         ;;
 esac
 
 # All checks passed — allow the command
+emit_hook_event "hook_fire" "{\"result\":\"allow\"}"
 exit 0

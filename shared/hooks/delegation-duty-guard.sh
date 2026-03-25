@@ -32,6 +32,23 @@
 
 set -euo pipefail
 
+# --- Telemetry: JSONL event emission ---
+# Appends one structured line to the session event log (~0.1ms).
+_SESSION_DIR=""
+_cs_file="$(git rev-parse --show-toplevel 2>/dev/null || echo "")/.scratch/.current-session"
+if [ -f "$_cs_file" ]; then
+    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+fi
+
+emit_hook_event() {
+    local event_type="$1" detail_json="$2"
+    [ -n "$_SESSION_DIR" ] || return 0
+    printf '{"t":"%s","type":"%s","src":"ddg","d":%s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$event_type" "$detail_json" \
+        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+}
+
 # --- Read JSON from stdin ---
 input=$(cat)
 
@@ -146,40 +163,8 @@ if [ "$score" -lt 6 ] && [ -n "$missing" ]; then
 
     printf '%s' "$reminder" >&2
 
-    # --- KPI logging to harness DB ---
-    # Extract session_id from hook input (may not be present in PreToolUse)
-    session_id=""
-    sid_pattern='"session_id"[[:space:]]*:[[:space:]]*"([^"]*)"'
-    if [[ "$input" =~ $sid_pattern ]]; then
-        session_id="${BASH_REMATCH[1]}"
-    fi
-
-    if [ -n "$session_id" ]; then
-        # Find project root for harness-db.py
-        project_root=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
-
-        PYTHON=""
-        if command -v python3 > /dev/null 2>&1; then
-            PYTHON="python3"
-        elif command -v python > /dev/null 2>&1; then
-            PYTHON="python"
-        fi
-
-        if [ -n "$PYTHON" ] && [ -n "$project_root" ]; then
-            HELPER=""
-            if [ -f "$project_root/scripts/harness-db.py" ]; then
-                HELPER="$project_root/scripts/harness-db.py"
-            elif [ -f "$HOME/repos/aitools/scripts/harness-db.py" ]; then
-                HELPER="$HOME/repos/aitools/scripts/harness-db.py"
-            fi
-
-            if [ -n "$HELPER" ] && "$PYTHON" -c "import sqlite3" 2>/dev/null; then
-                "$PYTHON" "$HELPER" log --session "$session_id" --type finding \
-                    --agent "delegation-guard" \
-                    --message "Delegation ${score}/6. Missing: ${missing}" || true
-            fi
-        fi
-    fi
+    # --- Emit telemetry event (JSONL, replaces Python subprocess KPI logging) ---
+    emit_hook_event "delegation" "{\"score\":$score,\"missing\":\"$missing\"}"
 fi
 
 # OBSERVE mode: always allow

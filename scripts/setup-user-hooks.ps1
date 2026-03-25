@@ -14,9 +14,6 @@
 #   PreToolUse[Read|Grep]: glossary-skill-guard.sh (reminds agent to use /glossary skill)
 #   PreToolUse[Agent]: block-claude-code-guide.sh (blocks buggy built-in subagent)
 #   PostToolUse[Write|Edit]: sh-file-fixup.sh (fixes CRLF and chmod on .sh files)
-#   Stop: surfacing-duty-stop.sh (periodic surfacing duty reminder)
-#   Stop: estimate-refresh-stop.sh (Lagebeurteilung + estimate freshness)
-#   Stop: intent-sentinel-stop.sh (consolidated telemetry + intent resurface)
 #   PreToolUse[Agent]: delegation-duty-guard.sh (checks delegation prompts for duty elements)
 #   SessionStart: harness-db-sessionstart.sh (initializes harness SQLite DBs)
 #   SessionEnd: harness-db-sessionend.sh (marks session complete, exports JSON)
@@ -78,16 +75,13 @@ $glossaryScript = Resolve-HookSource "glossary-skill-guard.sh"
 $scratchScript = Resolve-HookSource "scratch-init.sh"
 $harvestScript = Resolve-HookSource "harvest-session.sh"
 $shfixupScript = Resolve-HookSource "sh-file-fixup.sh"
-$surfacingScript = Resolve-HookSource "surfacing-duty-stop.sh"
 $blockGuideScript = Resolve-HookSource "block-claude-code-guide.sh"
 $toolOpsAuditScript = Resolve-HookSource "tool-ops-session-audit.sh"
 $dashboardScript = Resolve-HookSource "dashboard-serve.sh"
-$estimateRefreshScript = Resolve-HookSource "estimate-refresh-stop.sh"
-$sentinelScript = Resolve-HookSource "intent-sentinel-stop.sh"
 $delegGuardScript = Resolve-HookSource "delegation-duty-guard.sh"
 $harnessDbStartScript = Resolve-HookSource "harness-db-sessionstart.sh"
 $harnessDbEndScript = Resolve-HookSource "harness-db-sessionend.sh"
-foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $surfacingScript, $blockGuideScript, $toolOpsAuditScript, $dashboardScript, $estimateRefreshScript, $sentinelScript, $delegGuardScript, $harnessDbStartScript, $harnessDbEndScript)) {
+foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $blockGuideScript, $toolOpsAuditScript, $dashboardScript, $delegGuardScript, $harnessDbStartScript, $harnessDbEndScript)) {
     if (-not (Test-Path $src)) {
         LogError "Hook script not found: $src"
         exit 1
@@ -104,12 +98,9 @@ $glossaryDest = Join-Path $hooksDir "glossary-skill-guard.sh"
 $scratchDest = Join-Path $hooksDir "scratch-init.sh"
 $harvestDest = Join-Path $hooksDir "harvest-session.sh"
 $shfixupDest = Join-Path $hooksDir "sh-file-fixup.sh"
-$surfacingDest = Join-Path $hooksDir "surfacing-duty-stop.sh"
 $blockGuideDest = Join-Path $hooksDir "block-claude-code-guide.sh"
 $toolOpsAuditDest = Join-Path $hooksDir "tool-ops-session-audit.sh"
 $dashboardDest = Join-Path $hooksDir "dashboard-serve.sh"
-$estimateRefreshDest = Join-Path $hooksDir "estimate-refresh-stop.sh"
-$sentinelDest = Join-Path $hooksDir "intent-sentinel-stop.sh"
 $delegGuardDest = Join-Path $hooksDir "delegation-duty-guard.sh"
 $harnessDbStartDest = Join-Path $hooksDir "harness-db-sessionstart.sh"
 $harnessDbEndDest = Join-Path $hooksDir "harness-db-sessionend.sh"
@@ -358,7 +349,6 @@ $glossaryDestUnix = (Join-Path $hooksDir "glossary-skill-guard.sh") -replace '\\
 $glossaryCmd = "bash `"$glossaryDestUnix`""
 MergeHookEntry "PreToolUse" "glossary-skill-guard.sh" "Read|Grep" $glossaryCmd
 MergeHookEntry "PostToolUse" "sh-file-fixup.sh" "Write|Edit" $shfixupCmd
-MergeHookEntry "Stop" "surfacing-duty-stop.sh" "" $surfacingCmd
 
 # PreToolUse: block claude-code-guide subagent
 $blockGuideDestUnix = $blockGuideDest -replace '\\', '/'
@@ -374,16 +364,6 @@ MergeHookEntry "SessionEnd" "tool-ops-session-audit.sh" "" $toolOpsAuditCmd
 $dashboardDestUnix = $dashboardDest -replace '\\', '/'
 $dashboardCmd = "bash `"$dashboardDestUnix`""
 MergeHookEntry "SessionStart" "dashboard-serve.sh" "" $dashboardCmd
-
-# Stop: estimate refresh + Lagebeurteilung
-$estimateRefreshDestUnix = $estimateRefreshDest -replace '\\', '/'
-$estimateRefreshCmd = "bash `"$estimateRefreshDestUnix`""
-MergeHookEntry "Stop" "estimate-refresh-stop.sh" "" $estimateRefreshCmd
-
-# Stop: intent sentinel (consolidated telemetry)
-$sentinelDestUnix = $sentinelDest -replace '\\', '/'
-$sentinelCmd = "bash `"$sentinelDestUnix`""
-MergeHookEntry "Stop" "intent-sentinel-stop.sh" "" $sentinelCmd
 
 # PreToolUse: delegation duty guard
 $delegGuardDestUnix = $delegGuardDest -replace '\\', '/'
@@ -495,10 +475,6 @@ if ($DryRun) {
             if ($toaCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd tool-ops-session-audit hook, got $toaCount" }
             $dashCount = @($vParsed.hooks.SessionStart | Where-Object { $_.hooks.command -match 'dashboard-serve\.sh' }).Count
             if ($dashCount -ne 1) { LogError "Validation failed: expected 1 SessionStart dashboard-serve hook, got $dashCount" }
-            $erCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'estimate-refresh-stop\.sh' }).Count
-            if ($erCount -ne 1) { LogError "Validation failed: expected 1 Stop estimate-refresh-stop hook, got $erCount" }
-            $sentCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'intent-sentinel-stop\.sh' }).Count
-            if ($sentCount -ne 1) { LogError "Validation failed: expected 1 Stop intent-sentinel hook, got $sentCount" }
             $dgCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'delegation-duty-guard\.sh' }).Count
             if ($dgCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse delegation-duty-guard hook, got $dgCount" }
             $hdbStartCount = @($vParsed.hooks.SessionStart | Where-Object { $_.hooks.command -match 'harness-db-sessionstart\.sh' }).Count
