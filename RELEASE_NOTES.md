@@ -12,21 +12,34 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
-## v0.66.1 -- CI fix, harness-db hook registration, artifact catchup (2026-03-25)
+## v0.67.0 -- Telemetry rebuild, /aitool-continue, mission control (2026-03-25)
+
+### Architecture
+
+| # | Change |
+|---|--------|
+| 1 | **Telemetry rebuild** — deleted 3 Stop hooks (surfacing-duty, estimate-refresh, intent-sentinel) whose /tmp state tracking was unreliable. Enforcement hooks (standing-order-guard, delegation-duty-guard, block-claude-code-guide, glossary-skill-guard, sh-file-fixup) now emit JSONL events (~0.1ms) instead of Python subprocesses (~150ms). SessionEnd processes and ships to Datadog. |
+| 2 | **Harness DB extended** — `harness-db.py` gains event processing, new schema fields, JSONL aggregation. `harness-db-schema.sql` updated. |
+
+### New skills
+
+| # | Change |
+|---|--------|
+| 3 | **/aitool-continue** — user-level continuous self-learning skill. Loads operational learning, commander profile, delegation principles, project context, and recent session state so every session starts smarter than the last. |
 
 ### Bug fixes
 
 | # | Change |
 |---|--------|
-| 1 | **CI fix: CLAUDE_EFFORT_LEVEL unbound variable** — CI runners failed for 6 consecutive runs because `CLAUDE_EFFORT_LEVEL` was referenced without `set -u` guard in hook scripts. Added `${CLAUDE_EFFORT_LEVEL:-}` default. deploy/ rebuilt. |
-| 2 | **Harness-db hooks registered in settings.json** — `harness-db-sessionstart.sh` and `harness-db-sessionend.sh` were deployed to `~/.claude/hooks/` but never registered via `mergeHookEntry` in `setup-user-hooks.sh/.ps1`. Hooks were invisible to Claude Code. Both scripts now resolve, deploy, validate, and register alongside the existing 13 hooks. |
+| 4 | **CI fix: CLAUDE_EFFORT_LEVEL unbound variable** — CI runners failed for 6 consecutive runs because `CLAUDE_EFFORT_LEVEL` was referenced without `set -u` guard in hook scripts. Added `${CLAUDE_EFFORT_LEVEL:-}` default. deploy/ rebuilt. |
+| 5 | **Harness-db hooks registered in settings.json** — `harness-db-sessionstart.sh` and `harness-db-sessionend.sh` were deployed to `~/.claude/hooks/` but never registered via `mergeHookEntry` in `setup-user-hooks.sh/.ps1`. Hooks were invisible to Claude Code. Both scripts now resolve, deploy, validate, and register alongside the existing 13 hooks. |
 
 ### Housekeeping
 
 | # | Change |
 |---|--------|
-| 3 | **360 harvested artifacts committed** — backlog of session artifacts from 2026-03-22 through 2026-03-24 (AARs, dashboards, research, scripts, running estimates). Harvest manifest updated with 4 new entries. |
-| 4 | **Harness state carry-forward** — channel state files (alpha, bravo, charlie) and mission-command handoff plan from session 5HyCwPtSDH. |
+| 6 | **360 harvested artifacts committed** — backlog of session artifacts from 2026-03-22 through 2026-03-24 (AARs, dashboards, research, scripts, running estimates). Harvest manifest updated with 4 new entries. |
+| 7 | **Harness state carry-forward** — channel state files (alpha, bravo, charlie) and mission-command handoff plan from session 5HyCwPtSDH. |
 
 (tested: macOS)
 
