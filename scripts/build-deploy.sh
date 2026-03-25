@@ -1256,7 +1256,7 @@ BLOCK
 // --- Embedded preferences (from profile.json at build time) ---
 const autoMemory = $CLAUDE_AUTO_MEMORY;
 const alwaysThinking = $CLAUDE_ALWAYS_THINKING;
-const effortLevel = $([ -n "$CLAUDE_EFFORT_LEVEL" ] && echo "\"$CLAUDE_EFFORT_LEVEL\"" || echo "null");
+const effortLevel = $([ -n "${CLAUDE_EFFORT_LEVEL:-}" ] && echo "\"$CLAUDE_EFFORT_LEVEL\"" || echo "null");
 const validEffortLevels = ['low', 'medium', 'high'];
 BLOCK_INTERP
 
@@ -1367,7 +1367,7 @@ BLOCK
     printf '# --- Embedded preferences (from profile.json at build time) ---\r\n'
     printf '$autoMemory = $%s\r\n' "$CLAUDE_AUTO_MEMORY"
     printf '$alwaysThinking = $%s\r\n' "$CLAUDE_ALWAYS_THINKING"
-    if [ -n "$CLAUDE_EFFORT_LEVEL" ]; then
+    if [ -n "${CLAUDE_EFFORT_LEVEL:-}" ]; then
         printf '$effortLevel = "%s"\r\n' "$CLAUDE_EFFORT_LEVEL"
     else
         printf '$effortLevel = $null\r\n'
