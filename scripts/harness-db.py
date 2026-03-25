@@ -21,6 +21,26 @@ Usage:
     python3 scripts/harness-db.py process-events [--session <id>]
     python3 scripts/harness-db.py ship
     python3 scripts/harness-db.py status
+    python3 scripts/harness-db.py knowledge add --item-id <id> --type <type> --content <text> [--attributed-to <who>] [--session <id>] [--trust-level <level>]
+    python3 scripts/harness-db.py knowledge invalidate --item-id <id> [--superseded-by <id>] [--session <id>]
+    python3 scripts/harness-db.py knowledge verify --item-id <id> [--trust-level <level>]
+    python3 scripts/harness-db.py knowledge list [--type <type>] [--trust-level <level>] [--valid-only] [--stale]
+    python3 scripts/harness-db.py edge add --source <id> --target <id> --relationship <rel> [--session <id>]
+    python3 scripts/harness-db.py edge list --item-id <id>
+    python3 scripts/harness-db.py nogood add --items <id,id,...> --contradiction <text> [--session <id>]
+    python3 scripts/harness-db.py nogood list
+    python3 scripts/harness-db.py nogood check --items <id,id,...>
+    python3 scripts/harness-db.py provenance-export [--output <file>]
+
+    # Lean subcommands -- designed for one-liner Bash calls:
+    python3 scripts/harness-db.py ol add "text"
+    python3 scripts/harness-db.py ol list
+    python3 scripts/harness-db.py decision add "title" [--description <text>]
+    python3 scripts/harness-db.py decision list
+    python3 scripts/harness-db.py incident add "text" [--impact <text>]
+    python3 scripts/harness-db.py incident list
+    python3 scripts/harness-db.py observation add "text" [--category <cat>] [--severity <level>]
+    python3 scripts/harness-db.py search "query"
 
 Safe to re-run. All operations are idempotent where possible.
 Platform: macOS, Windows, Linux (Python 3.10+, sqlite3 stdlib)
@@ -42,7 +62,7 @@ from typing import Any
 
 # -- Constants ----------------------------------------------------------------
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Session DB tables (Tier 1)
 SESSION_SCHEMA = """\
@@ -223,6 +243,57 @@ CREATE TABLE IF NOT EXISTS dashboard_state (
     last_checked TEXT
 );
 
+CREATE TABLE IF NOT EXISTS knowledge_items (
+    item_id TEXT PRIMARY KEY,
+    item_type TEXT NOT NULL
+        CHECK (item_type IN ('observation', 'assumption', 'fact', 'finding',
+               'decision', 'ol_entry', 'rule_change', 'framework_change',
+               'commander_directive')),
+    version INTEGER NOT NULL DEFAULT 1,
+    content TEXT NOT NULL,
+    t_valid TEXT,
+    t_invalid TEXT,
+    attributed_to TEXT NOT NULL,
+    produced_by_session TEXT,
+    produced_by_mission TEXT,
+    authority_level INTEGER NOT NULL DEFAULT 1
+        CHECK (authority_level BETWEEN 0 AND 3),
+    warn_after_days INTEGER DEFAULT 30,
+    error_after_days INTEGER DEFAULT 90,
+    last_verified_at TEXT,
+    trust_level TEXT NOT NULL DEFAULT 'agent_observation'
+        CHECK (trust_level IN ('commander_directive', 'verified_fact',
+               'agent_observation', 'unverified_assumption')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ki_type ON knowledge_items(item_type);
+CREATE INDEX IF NOT EXISTS idx_ki_trust ON knowledge_items(trust_level);
+CREATE INDEX IF NOT EXISTS idx_ki_session ON knowledge_items(produced_by_session);
+CREATE INDEX IF NOT EXISTS idx_ki_valid ON knowledge_items(t_invalid);
+
+CREATE TABLE IF NOT EXISTS provenance_edges (
+    edge_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_item_id TEXT NOT NULL REFERENCES knowledge_items(item_id),
+    target_item_id TEXT NOT NULL REFERENCES knowledge_items(item_id),
+    relationship TEXT NOT NULL
+        CHECK (relationship IN ('derived_from', 'informed', 'triggered',
+               'validated', 'invalidated', 'superseded')),
+    created_at TEXT NOT NULL,
+    session_id TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_prov_source ON provenance_edges(source_item_id);
+CREATE INDEX IF NOT EXISTS idx_prov_target ON provenance_edges(target_item_id);
+CREATE INDEX IF NOT EXISTS idx_prov_rel ON provenance_edges(relationship);
+
+CREATE TABLE IF NOT EXISTS nogood_sets (
+    nogood_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_ids TEXT NOT NULL,
+    contradiction TEXT NOT NULL,
+    discovered_in_session TEXT NOT NULL,
+    discovered_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY,
     applied_at TEXT NOT NULL
@@ -326,6 +397,24 @@ def find_active_session_id(project_root: Path) -> str | None:
         if basename.startswith("session-"):
             return basename[len("session-"):]
     return None
+
+
+def resolve_session_db(project_root: Path, session_id: str | None = None) -> tuple[Path, str] | None:
+    """Resolve session DB path from explicit ID or auto-detection.
+
+    Returns (db_path, session_id) or None if no session found.
+    Prints error to stderr on failure.
+    """
+    if session_id is None:
+        session_id = find_active_session_id(project_root)
+    if session_id is None:
+        print("Error: No --session specified and no active session found.", file=sys.stderr)
+        return None
+    db_path = get_session_db_path(project_root, session_id)
+    if not db_path.exists():
+        print(f"Error: Session DB not found: {db_path}", file=sys.stderr)
+        return None
+    return db_path, session_id
 
 
 # -- Subcommands --------------------------------------------------------------
@@ -1320,6 +1409,859 @@ def cmd_ship(args: argparse.Namespace) -> int:
     return 0
 
 
+# -- Provenance subcommands ---------------------------------------------------
+
+def cmd_knowledge_add(args: argparse.Namespace) -> int:
+    """Add a knowledge item to the harness provenance system."""
+    project_root = find_project_root()
+    harness_path = get_harness_db_path(project_root)
+
+    if not harness_path.exists():
+        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        return 1
+
+    now = utcnow()
+    conn = open_db(harness_path)
+
+    # Check for existing item (idempotent on item_id)
+    existing = conn.execute(
+        "SELECT item_id, version FROM knowledge_items WHERE item_id = ?",
+        (args.item_id,),
+    ).fetchone()
+
+    if existing is not None:
+        # Supersede: bump version, keep old content accessible via provenance
+        new_version = existing["version"] + 1
+        conn.execute(
+            """UPDATE knowledge_items
+               SET version = ?, content = ?, updated_at = ?,
+                   t_valid = COALESCE(?, t_valid),
+                   attributed_to = COALESCE(?, attributed_to),
+                   produced_by_session = COALESCE(?, produced_by_session),
+                   produced_by_mission = COALESCE(?, produced_by_mission),
+                   authority_level = COALESCE(?, authority_level),
+                   trust_level = COALESCE(?, trust_level)
+               WHERE item_id = ?""",
+            (
+                new_version, args.content, now,
+                args.t_valid,
+                args.attributed_to,
+                args.session,
+                args.mission,
+                args.authority_level,
+                args.trust_level,
+                args.item_id,
+            ),
+        )
+        conn.commit()
+        conn.close()
+        print(f"Updated knowledge item: {args.item_id} (v{new_version})")
+        return 0
+
+    conn.execute(
+        """INSERT INTO knowledge_items
+           (item_id, item_type, version, content, t_valid, t_invalid,
+            attributed_to, produced_by_session, produced_by_mission,
+            authority_level, warn_after_days, error_after_days,
+            trust_level, created_at, updated_at)
+           VALUES (?, ?, 1, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            args.item_id,
+            args.item_type,
+            args.content,
+            args.t_valid or now,
+            args.attributed_to or "agent",
+            args.session,
+            args.mission,
+            int(args.authority_level) if args.authority_level else 1,
+            int(args.warn_after) if args.warn_after else 30,
+            int(args.error_after) if args.error_after else 90,
+            args.trust_level or "agent_observation",
+            now,
+            now,
+        ),
+    )
+    conn.commit()
+    conn.close()
+    print(f"Added knowledge item: {args.item_id} ({args.item_type})")
+    return 0
+
+
+def cmd_knowledge_invalidate(args: argparse.Namespace) -> int:
+    """Invalidate a knowledge item and propagate to downstream dependents."""
+    project_root = find_project_root()
+    harness_path = get_harness_db_path(project_root)
+
+    if not harness_path.exists():
+        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        return 1
+
+    now = utcnow()
+    conn = open_db(harness_path)
+
+    # Check item exists
+    item = conn.execute(
+        "SELECT item_id, t_invalid FROM knowledge_items WHERE item_id = ?",
+        (args.item_id,),
+    ).fetchone()
+
+    if item is None:
+        print(f"Error: Knowledge item not found: {args.item_id}", file=sys.stderr)
+        conn.close()
+        return 1
+
+    if item["t_invalid"] is not None:
+        print(f"Item already invalidated at {item['t_invalid']}")
+        conn.close()
+        return 0
+
+    # Invalidate the item
+    conn.execute(
+        "UPDATE knowledge_items SET t_invalid = ?, updated_at = ? WHERE item_id = ?",
+        (now, now, args.item_id),
+    )
+
+    # Record invalidation edge if a superseding item is specified
+    if args.superseded_by:
+        conn.execute(
+            """INSERT INTO provenance_edges
+               (source_item_id, target_item_id, relationship, created_at, session_id)
+               VALUES (?, ?, 'superseded', ?, ?)""",
+            (args.superseded_by, args.item_id, now, args.session or "unknown"),
+        )
+
+    # Dependency-directed propagation: flag downstream items
+    # Items that derived_from or were informed by the invalidated item
+    flagged = propagate_invalidation(conn, args.item_id, now, args.session or "unknown")
+
+    conn.commit()
+    conn.close()
+
+    print(f"Invalidated: {args.item_id}")
+    if flagged:
+        print(f"Downstream items flagged ({len(flagged)}):")
+        for fid in flagged:
+            print(f"  - {fid}")
+    return 0
+
+
+def propagate_invalidation(
+    conn: sqlite3.Connection,
+    item_id: str,
+    timestamp: str,
+    session_id: str,
+    _visited: set[str] | None = None,
+) -> list[str]:
+    """Propagate invalidation through the dependency graph (ATMS principle).
+
+    When an item is invalidated, find all items that depend on it
+    (via derived_from or informed edges) and flag them by setting
+    trust_level to 'unverified_assumption' if they were higher.
+
+    Returns list of item_ids that were flagged.
+    """
+    if _visited is None:
+        _visited = set()
+
+    if item_id in _visited:
+        return []
+    _visited.add(item_id)
+
+    flagged: list[str] = []
+
+    # Find items that derive from or are informed by the invalidated item
+    # Edge direction: source --[derived_from]--> target
+    # So items that have target = invalidated item are the dependents
+    # Wait -- the design says source_item_id --[relationship]--> target_item_id
+    # "OL-2 derived_from observation-42" means OL-2 depends on observation-42
+    # So source is the dependent, target is the basis.
+    # When we invalidate target (observation-42), we need to find all sources.
+    dependents = conn.execute(
+        """SELECT DISTINCT source_item_id FROM provenance_edges
+           WHERE target_item_id = ?
+             AND relationship IN ('derived_from', 'informed', 'triggered')""",
+        (item_id,),
+    ).fetchall()
+
+    for row in dependents:
+        dep_id = row["source_item_id"]
+
+        # Check if the dependent is still valid (not already invalidated)
+        dep_item = conn.execute(
+            "SELECT item_id, t_invalid, trust_level FROM knowledge_items WHERE item_id = ?",
+            (dep_id,),
+        ).fetchone()
+
+        if dep_item is None or dep_item["t_invalid"] is not None:
+            continue
+
+        # Flag by downgrading trust level to unverified_assumption
+        if dep_item["trust_level"] != "unverified_assumption":
+            conn.execute(
+                """UPDATE knowledge_items
+                   SET trust_level = 'unverified_assumption', updated_at = ?
+                   WHERE item_id = ?""",
+                (timestamp, dep_id),
+            )
+            flagged.append(dep_id)
+
+        # Recurse
+        flagged.extend(
+            propagate_invalidation(conn, dep_id, timestamp, session_id, _visited)
+        )
+
+    return flagged
+
+
+def cmd_knowledge_verify(args: argparse.Namespace) -> int:
+    """Mark a knowledge item as verified (resets staleness clock)."""
+    project_root = find_project_root()
+    harness_path = get_harness_db_path(project_root)
+
+    if not harness_path.exists():
+        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        return 1
+
+    now = utcnow()
+    conn = open_db(harness_path)
+
+    item = conn.execute(
+        "SELECT item_id FROM knowledge_items WHERE item_id = ?",
+        (args.item_id,),
+    ).fetchone()
+
+    if item is None:
+        print(f"Error: Knowledge item not found: {args.item_id}", file=sys.stderr)
+        conn.close()
+        return 1
+
+    trust = args.trust_level or "verified_fact"
+    conn.execute(
+        """UPDATE knowledge_items
+           SET last_verified_at = ?, trust_level = ?, updated_at = ?
+           WHERE item_id = ?""",
+        (now, trust, now, args.item_id),
+    )
+    conn.commit()
+    conn.close()
+    print(f"Verified: {args.item_id} (trust: {trust})")
+    return 0
+
+
+def cmd_knowledge_list(args: argparse.Namespace) -> int:
+    """List knowledge items with optional filters."""
+    project_root = find_project_root()
+    harness_path = get_harness_db_path(project_root)
+
+    if not harness_path.exists():
+        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        return 1
+
+    conn = open_db(harness_path, readonly=True)
+
+    query = "SELECT * FROM knowledge_items WHERE 1=1"
+    params: list[str] = []
+
+    if args.item_type:
+        query += " AND item_type = ?"
+        params.append(args.item_type)
+
+    if args.trust_level:
+        query += " AND trust_level = ?"
+        params.append(args.trust_level)
+
+    if args.valid_only:
+        query += " AND t_invalid IS NULL"
+
+    if args.stale:
+        # Items past their warn_after_days without verification
+        query += """ AND (
+            last_verified_at IS NULL
+            AND julianday('now') - julianday(created_at) > warn_after_days
+            AND t_invalid IS NULL
+        )"""
+
+    query += " ORDER BY created_at DESC"
+
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+
+    if not rows:
+        print("No knowledge items found matching criteria.")
+        return 0
+
+    print(f"Knowledge items ({len(rows)}):")
+    for r in rows:
+        validity = "CURRENT" if r["t_invalid"] is None else f"INVALID({r['t_invalid']})"
+        stale_marker = ""
+        if r["t_invalid"] is None and r["last_verified_at"] is None:
+            try:
+                created = datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
+                age_days = (datetime.now(timezone.utc) - created).days
+                if age_days > r["error_after_days"]:
+                    stale_marker = " STALE!"
+                elif age_days > r["warn_after_days"]:
+                    stale_marker = " stale?"
+            except (ValueError, TypeError):
+                pass
+        print(
+            f"  {r['item_id']} [{r['item_type']}] v{r['version']} "
+            f"{validity} trust={r['trust_level']} L{r['authority_level']}"
+            f"{stale_marker}"
+        )
+        # Truncate content for display
+        content_preview = r["content"][:80].replace("\n", " ")
+        if len(r["content"]) > 80:
+            content_preview += "..."
+        print(f"    {content_preview}")
+
+    return 0
+
+
+def cmd_edge_add(args: argparse.Namespace) -> int:
+    """Add a provenance edge between two knowledge items."""
+    project_root = find_project_root()
+    harness_path = get_harness_db_path(project_root)
+
+    if not harness_path.exists():
+        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        return 1
+
+    now = utcnow()
+    conn = open_db(harness_path)
+
+    # Verify both items exist
+    for item_id in [args.source, args.target]:
+        row = conn.execute(
+            "SELECT item_id FROM knowledge_items WHERE item_id = ?",
+            (item_id,),
+        ).fetchone()
+        if row is None:
+            print(f"Error: Knowledge item not found: {item_id}", file=sys.stderr)
+            conn.close()
+            return 1
+
+    conn.execute(
+        """INSERT INTO provenance_edges
+           (source_item_id, target_item_id, relationship, created_at, session_id)
+           VALUES (?, ?, ?, ?, ?)""",
+        (args.source, args.target, args.relationship, now, args.session or "unknown"),
+    )
+    conn.commit()
+    conn.close()
+    print(f"Edge added: {args.source} --[{args.relationship}]--> {args.target}")
+    return 0
+
+
+def cmd_edge_list(args: argparse.Namespace) -> int:
+    """List provenance edges for a knowledge item."""
+    project_root = find_project_root()
+    harness_path = get_harness_db_path(project_root)
+
+    if not harness_path.exists():
+        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        return 1
+
+    conn = open_db(harness_path, readonly=True)
+
+    # Edges where this item is source (what it depends on)
+    outgoing = conn.execute(
+        """SELECT e.*, k.item_type, k.content
+           FROM provenance_edges e
+           JOIN knowledge_items k ON e.target_item_id = k.item_id
+           WHERE e.source_item_id = ?
+           ORDER BY e.created_at""",
+        (args.item_id,),
+    ).fetchall()
+
+    # Edges where this item is target (what depends on it)
+    incoming = conn.execute(
+        """SELECT e.*, k.item_type, k.content
+           FROM provenance_edges e
+           JOIN knowledge_items k ON e.source_item_id = k.item_id
+           WHERE e.target_item_id = ?
+           ORDER BY e.created_at""",
+        (args.item_id,),
+    ).fetchall()
+
+    conn.close()
+
+    if not outgoing and not incoming:
+        print(f"No provenance edges for: {args.item_id}")
+        return 0
+
+    print(f"Provenance for: {args.item_id}")
+
+    if outgoing:
+        print(f"\n  Bases ({len(outgoing)} -- what this item depends on):")
+        for e in outgoing:
+            content_preview = e["content"][:60].replace("\n", " ")
+            print(
+                f"    --[{e['relationship']}]--> {e['target_item_id']} "
+                f"[{e['item_type']}] {content_preview}"
+            )
+
+    if incoming:
+        print(f"\n  Dependents ({len(incoming)} -- what depends on this item):")
+        for e in incoming:
+            content_preview = e["content"][:60].replace("\n", " ")
+            print(
+                f"    <--[{e['relationship']}]-- {e['source_item_id']} "
+                f"[{e['item_type']}] {content_preview}"
+            )
+
+    return 0
+
+
+def cmd_nogood_add(args: argparse.Namespace) -> int:
+    """Record a nogood set (known contradiction combination)."""
+    project_root = find_project_root()
+    harness_path = get_harness_db_path(project_root)
+
+    if not harness_path.exists():
+        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        return 1
+
+    now = utcnow()
+    conn = open_db(harness_path)
+
+    # Parse item IDs (comma-separated)
+    item_ids = [i.strip() for i in args.items.split(",") if i.strip()]
+    if len(item_ids) < 2:
+        print("Error: A nogood set requires at least 2 item IDs.", file=sys.stderr)
+        conn.close()
+        return 1
+
+    # Verify all items exist
+    for item_id in item_ids:
+        row = conn.execute(
+            "SELECT item_id FROM knowledge_items WHERE item_id = ?",
+            (item_id,),
+        ).fetchone()
+        if row is None:
+            print(f"Error: Knowledge item not found: {item_id}", file=sys.stderr)
+            conn.close()
+            return 1
+
+    item_ids_json = json.dumps(item_ids)
+    conn.execute(
+        """INSERT INTO nogood_sets
+           (item_ids, contradiction, discovered_in_session, discovered_at)
+           VALUES (?, ?, ?, ?)""",
+        (item_ids_json, args.contradiction, args.session or "unknown", now),
+    )
+    conn.commit()
+    conn.close()
+    print(f"Nogood set recorded: {item_ids} -- {args.contradiction}")
+    return 0
+
+
+def cmd_nogood_list(args: argparse.Namespace) -> int:
+    """List all nogood sets."""
+    project_root = find_project_root()
+    harness_path = get_harness_db_path(project_root)
+
+    if not harness_path.exists():
+        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        return 1
+
+    conn = open_db(harness_path, readonly=True)
+    rows = conn.execute(
+        "SELECT * FROM nogood_sets ORDER BY discovered_at DESC"
+    ).fetchall()
+    conn.close()
+
+    if not rows:
+        print("No nogood sets recorded.")
+        return 0
+
+    print(f"Nogood sets ({len(rows)}):")
+    for r in rows:
+        items = json.loads(r["item_ids"])
+        print(f"  #{r['nogood_id']}: {items}")
+        print(f"    Contradiction: {r['contradiction']}")
+        print(f"    Discovered: {r['discovered_at']} (session: {r['discovered_in_session']})")
+
+    return 0
+
+
+def cmd_nogood_check(args: argparse.Namespace) -> int:
+    """Check if a set of assumptions hits a known nogood set."""
+    project_root = find_project_root()
+    harness_path = get_harness_db_path(project_root)
+
+    if not harness_path.exists():
+        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        return 1
+
+    conn = open_db(harness_path, readonly=True)
+
+    # Parse the assumptions to check
+    check_items = set(i.strip() for i in args.items.split(",") if i.strip())
+
+    rows = conn.execute("SELECT * FROM nogood_sets").fetchall()
+    conn.close()
+
+    hits: list[dict[str, Any]] = []
+    for r in rows:
+        nogood_items = set(json.loads(r["item_ids"]))
+        # If the nogood set is a subset of the current assumptions, it's a hit
+        if nogood_items.issubset(check_items):
+            hits.append({
+                "nogood_id": r["nogood_id"],
+                "items": list(nogood_items),
+                "contradiction": r["contradiction"],
+            })
+
+    if hits:
+        print(f"WARNING: {len(hits)} known contradiction(s) detected:")
+        for h in hits:
+            print(f"  Nogood #{h['nogood_id']}: {h['items']}")
+            print(f"    {h['contradiction']}")
+        return 1
+    else:
+        print("No known contradictions in the given assumption set.")
+        return 0
+
+
+def cmd_provenance_export(args: argparse.Namespace) -> int:
+    """Export all provenance data (knowledge items, edges, nogoods) to JSON."""
+    project_root = find_project_root()
+    harness_path = get_harness_db_path(project_root)
+
+    if not harness_path.exists():
+        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        return 1
+
+    conn = open_db(harness_path, readonly=True)
+
+    data: dict[str, Any] = {}
+
+    # Knowledge items
+    items = conn.execute(
+        "SELECT * FROM knowledge_items ORDER BY created_at"
+    ).fetchall()
+    data["knowledgeItems"] = [
+        {
+            "itemId": ki["item_id"],
+            "itemType": ki["item_type"],
+            "version": ki["version"],
+            "content": ki["content"],
+            "tValid": ki["t_valid"],
+            "tInvalid": ki["t_invalid"],
+            "attributedTo": ki["attributed_to"],
+            "producedBySession": ki["produced_by_session"],
+            "producedByMission": ki["produced_by_mission"],
+            "authorityLevel": ki["authority_level"],
+            "warnAfterDays": ki["warn_after_days"],
+            "errorAfterDays": ki["error_after_days"],
+            "lastVerifiedAt": ki["last_verified_at"],
+            "trustLevel": ki["trust_level"],
+            "createdAt": ki["created_at"],
+            "updatedAt": ki["updated_at"],
+        }
+        for ki in items
+    ]
+
+    # Provenance edges
+    edges = conn.execute(
+        "SELECT * FROM provenance_edges ORDER BY created_at"
+    ).fetchall()
+    data["provenanceEdges"] = [
+        {
+            "edgeId": e["edge_id"],
+            "sourceItemId": e["source_item_id"],
+            "targetItemId": e["target_item_id"],
+            "relationship": e["relationship"],
+            "createdAt": e["created_at"],
+            "sessionId": e["session_id"],
+        }
+        for e in edges
+    ]
+
+    # Nogood sets
+    nogoods = conn.execute(
+        "SELECT * FROM nogood_sets ORDER BY discovered_at"
+    ).fetchall()
+    data["nogoodSets"] = [
+        {
+            "nogoodId": ng["nogood_id"],
+            "itemIds": json.loads(ng["item_ids"]),
+            "contradiction": ng["contradiction"],
+            "discoveredInSession": ng["discovered_in_session"],
+            "discoveredAt": ng["discovered_at"],
+        }
+        for ng in nogoods
+    ]
+
+    conn.close()
+
+    output = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+    if args.output:
+        Path(args.output).write_text(output)
+        print(f"Provenance exported to: {args.output}")
+    else:
+        print(output, end="")
+
+    return 0
+
+
+# -- Lean subcommands (one-liner Bash calls) ----------------------------------
+
+
+def cmd_ol_add(args: argparse.Namespace) -> int:
+    """Add an operational learning entry to the session observations table."""
+    project_root = find_project_root()
+    result = resolve_session_db(project_root, getattr(args, "session", None))
+    if result is None:
+        return 1
+    db_path, session_id = result
+
+    now = utcnow()
+    conn = open_db(db_path)
+    conn.execute(
+        """INSERT INTO observations (category, text, status, created_at)
+           VALUES ('finding', ?, 'verified', ?)""",
+        (args.text, now),
+    )
+    conn.execute(
+        "UPDATE session SET updated_at = ? WHERE session_id = ?",
+        (now, session_id),
+    )
+    conn.commit()
+    row_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.close()
+    print(f"OL-{row_id}")
+    return 0
+
+
+def cmd_ol_list(args: argparse.Namespace) -> int:
+    """List operational learning entries (observations with category=finding)."""
+    project_root = find_project_root()
+    result = resolve_session_db(project_root, getattr(args, "session", None))
+    if result is None:
+        return 1
+    db_path, _session_id = result
+
+    conn = open_db(db_path, readonly=True)
+    rows = conn.execute(
+        "SELECT observation_id, text, created_at FROM observations ORDER BY created_at"
+    ).fetchall()
+    conn.close()
+
+    for r in rows:
+        text_preview = r["text"][:120].replace("\n", " ")
+        print(f"OL-{r['observation_id']}: {text_preview}")
+    return 0
+
+
+def cmd_decision_add(args: argparse.Namespace) -> int:
+    """Add a decision to the session decisions table."""
+    project_root = find_project_root()
+    result = resolve_session_db(project_root, getattr(args, "session", None))
+    if result is None:
+        return 1
+    db_path, session_id = result
+
+    now = utcnow()
+    conn = open_db(db_path)
+
+    # Auto-generate decision_id from title
+    slug = args.title[:30].upper().replace(" ", "-")
+    decision_id = f"D-{slug}"
+
+    # Deduplicate: check if exact decision_id exists
+    existing = conn.execute(
+        "SELECT decision_id FROM decisions WHERE decision_id = ?",
+        (decision_id,),
+    ).fetchone()
+    if existing is not None:
+        # Append a counter
+        count = conn.execute(
+            "SELECT COUNT(*) FROM decisions WHERE decision_id LIKE ?",
+            (f"{decision_id}%",),
+        ).fetchone()[0]
+        decision_id = f"{decision_id}-{count + 1}"
+
+    description = getattr(args, "description", None)
+    conn.execute(
+        """INSERT INTO decisions (decision_id, title, description, status, decided_at)
+           VALUES (?, ?, ?, 'decided', ?)""",
+        (decision_id, args.title, description, now),
+    )
+    conn.execute(
+        "UPDATE session SET updated_at = ? WHERE session_id = ?",
+        (now, session_id),
+    )
+    conn.commit()
+    conn.close()
+    print(decision_id)
+    return 0
+
+
+def cmd_decision_list(args: argparse.Namespace) -> int:
+    """List decisions from the session DB."""
+    project_root = find_project_root()
+    result = resolve_session_db(project_root, getattr(args, "session", None))
+    if result is None:
+        return 1
+    db_path, _session_id = result
+
+    conn = open_db(db_path, readonly=True)
+    rows = conn.execute(
+        "SELECT decision_id, title, status, decided_at FROM decisions ORDER BY decided_at"
+    ).fetchall()
+    conn.close()
+
+    for r in rows:
+        print(f"{r['decision_id']}: [{r['status']}] {r['title']}")
+    return 0
+
+
+def cmd_incident_add(args: argparse.Namespace) -> int:
+    """Add a process deviation/incident to the session DB."""
+    project_root = find_project_root()
+    result = resolve_session_db(project_root, getattr(args, "session", None))
+    if result is None:
+        return 1
+    db_path, session_id = result
+
+    now = utcnow()
+    conn = open_db(db_path)
+    conn.execute(
+        """INSERT INTO deviations (description, impact, created_at)
+           VALUES (?, ?, ?)""",
+        (args.text, getattr(args, "impact", None), now),
+    )
+    conn.execute(
+        "UPDATE session SET updated_at = ? WHERE session_id = ?",
+        (now, session_id),
+    )
+    conn.commit()
+    row_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.close()
+    print(f"DEV-{row_id}")
+    return 0
+
+
+def cmd_incident_list(args: argparse.Namespace) -> int:
+    """List process deviations/incidents from the session DB."""
+    project_root = find_project_root()
+    result = resolve_session_db(project_root, getattr(args, "session", None))
+    if result is None:
+        return 1
+    db_path, _session_id = result
+
+    conn = open_db(db_path, readonly=True)
+    rows = conn.execute(
+        "SELECT deviation_id, description, impact, created_at FROM deviations ORDER BY created_at"
+    ).fetchall()
+    conn.close()
+
+    for r in rows:
+        text_preview = r["description"][:120].replace("\n", " ")
+        impact = f" | impact: {r['impact']}" if r["impact"] else ""
+        print(f"DEV-{r['deviation_id']}: {text_preview}{impact}")
+    return 0
+
+
+def cmd_observation_add(args: argparse.Namespace) -> int:
+    """Add an observation to the session DB."""
+    project_root = find_project_root()
+    result = resolve_session_db(project_root, getattr(args, "session", None))
+    if result is None:
+        return 1
+    db_path, session_id = result
+
+    category = getattr(args, "category", None) or "observation"
+    severity = getattr(args, "severity", None)
+
+    now = utcnow()
+    conn = open_db(db_path)
+    conn.execute(
+        """INSERT INTO observations (category, text, status, severity, created_at)
+           VALUES (?, ?, 'pending', ?, ?)""",
+        (category, args.text, severity, now),
+    )
+    conn.execute(
+        "UPDATE session SET updated_at = ? WHERE session_id = ?",
+        (now, session_id),
+    )
+    conn.commit()
+    row_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.close()
+    print(f"OBS-{row_id}")
+    return 0
+
+
+def cmd_search(args: argparse.Namespace) -> int:
+    """Search across all session DB tables for a text pattern."""
+    project_root = find_project_root()
+    result = resolve_session_db(project_root, getattr(args, "session", None))
+    if result is None:
+        return 1
+    db_path, _session_id = result
+
+    query = f"%{args.query}%"
+    conn = open_db(db_path, readonly=True)
+    found = 0
+
+    # Search observations
+    rows = conn.execute(
+        "SELECT observation_id, category, text FROM observations WHERE text LIKE ?",
+        (query,),
+    ).fetchall()
+    for r in rows:
+        text_preview = r["text"][:100].replace("\n", " ")
+        print(f"[{r['category']}] OBS-{r['observation_id']}: {text_preview}")
+        found += 1
+
+    # Search decisions
+    rows = conn.execute(
+        "SELECT decision_id, title, description FROM decisions WHERE title LIKE ? OR description LIKE ?",
+        (query, query),
+    ).fetchall()
+    for r in rows:
+        print(f"[decision] {r['decision_id']}: {r['title']}")
+        found += 1
+
+    # Search deviations
+    rows = conn.execute(
+        "SELECT deviation_id, description FROM deviations WHERE description LIKE ?",
+        (query,),
+    ).fetchall()
+    for r in rows:
+        text_preview = r["description"][:100].replace("\n", " ")
+        print(f"[deviation] DEV-{r['deviation_id']}: {text_preview}")
+        found += 1
+
+    # Search messages
+    rows = conn.execute(
+        "SELECT message_id, message_type, message FROM messages WHERE message LIKE ? OR title LIKE ?",
+        (query, query),
+    ).fetchall()
+    for r in rows:
+        text_preview = r["message"][:100].replace("\n", " ")
+        print(f"[{r['message_type']}] MSG-{r['message_id']}: {text_preview}")
+        found += 1
+
+    # Search missions
+    rows = conn.execute(
+        "SELECT mission_id, description, key_result FROM missions WHERE description LIKE ? OR key_result LIKE ?",
+        (query, query),
+    ).fetchall()
+    for r in rows:
+        print(f"[mission] {r['mission_id']}: {r['description']}")
+        found += 1
+
+    if found == 0:
+        print(f"No results for: {args.query}")
+
+    conn.close()
+    return 0
+
+
 # -- CLI setup ----------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1401,6 +2343,172 @@ def build_parser() -> argparse.ArgumentParser:
     # ship
     subparsers.add_parser("ship", help="Ship KPI events to Datadog")
 
+    # -- Provenance subcommands -----------------------------------------------
+
+    # knowledge
+    knowledge_parser = subparsers.add_parser("knowledge", help="Knowledge item operations")
+    knowledge_sub = knowledge_parser.add_subparsers(dest="knowledge_command")
+
+    # knowledge add
+    ka = knowledge_sub.add_parser("add", help="Add or update a knowledge item")
+    ka.add_argument("--item-id", required=True, help="Stable ID (e.g., OL-2, D-34)")
+    ka.add_argument(
+        "--type", dest="item_type", required=True,
+        choices=["observation", "assumption", "fact", "finding", "decision",
+                 "ol_entry", "rule_change", "framework_change", "commander_directive"],
+        help="Knowledge item type",
+    )
+    ka.add_argument("--content", required=True, help="The knowledge content")
+    ka.add_argument("--attributed-to", help="Who produced it (commander|agent|name)")
+    ka.add_argument("--session", help="Producing session ID")
+    ka.add_argument("--mission", help="Producing mission ID")
+    ka.add_argument("--authority-level", type=int, choices=[0, 1, 2, 3], help="Authority (0-3)")
+    ka.add_argument(
+        "--trust-level",
+        choices=["commander_directive", "verified_fact",
+                 "agent_observation", "unverified_assumption"],
+        help="Trust classification",
+    )
+    ka.add_argument("--t-valid", dest="t_valid", help="When fact became true (ISO 8601)")
+    ka.add_argument("--warn-after", help="Days before staleness warning (default: 30)")
+    ka.add_argument("--error-after", help="Days before staleness error (default: 90)")
+
+    # knowledge invalidate
+    ki_inv = knowledge_sub.add_parser("invalidate", help="Invalidate an item and propagate")
+    ki_inv.add_argument("--item-id", required=True, help="Item ID to invalidate")
+    ki_inv.add_argument("--superseded-by", help="Item ID that supersedes this one")
+    ki_inv.add_argument("--session", help="Session ID recording invalidation")
+
+    # knowledge verify
+    ki_ver = knowledge_sub.add_parser("verify", help="Mark an item as verified")
+    ki_ver.add_argument("--item-id", required=True, help="Item ID to verify")
+    ki_ver.add_argument(
+        "--trust-level",
+        choices=["commander_directive", "verified_fact",
+                 "agent_observation", "unverified_assumption"],
+        help="New trust level (default: verified_fact)",
+    )
+
+    # knowledge list
+    ki_ls = knowledge_sub.add_parser("list", help="List knowledge items")
+    ki_ls.add_argument(
+        "--type", dest="item_type",
+        choices=["observation", "assumption", "fact", "finding", "decision",
+                 "ol_entry", "rule_change", "framework_change", "commander_directive"],
+        help="Filter by type",
+    )
+    ki_ls.add_argument(
+        "--trust-level",
+        choices=["commander_directive", "verified_fact",
+                 "agent_observation", "unverified_assumption"],
+        help="Filter by trust level",
+    )
+    ki_ls.add_argument("--valid-only", action="store_true", help="Only current (non-invalidated) items")
+    ki_ls.add_argument("--stale", action="store_true", help="Only stale items past warn_after_days")
+
+    # edge
+    edge_parser = subparsers.add_parser("edge", help="Provenance edge operations")
+    edge_sub = edge_parser.add_subparsers(dest="edge_command")
+
+    # edge add
+    ea = edge_sub.add_parser("add", help="Add a provenance edge")
+    ea.add_argument("--source", required=True, help="Source item ID (the dependent)")
+    ea.add_argument("--target", required=True, help="Target item ID (the basis)")
+    ea.add_argument(
+        "--relationship", required=True,
+        choices=["derived_from", "informed", "triggered",
+                 "validated", "invalidated", "superseded"],
+        help="Edge type",
+    )
+    ea.add_argument("--session", help="Session ID where edge was recorded")
+
+    # edge list
+    el = edge_sub.add_parser("list", help="List edges for a knowledge item")
+    el.add_argument("--item-id", required=True, help="Item ID to show edges for")
+
+    # nogood
+    nogood_parser = subparsers.add_parser("nogood", help="Nogood set operations")
+    nogood_sub = nogood_parser.add_subparsers(dest="nogood_command")
+
+    # nogood add
+    na = nogood_sub.add_parser("add", help="Record a known contradiction")
+    na.add_argument("--items", required=True, help="Comma-separated item IDs")
+    na.add_argument("--contradiction", required=True, help="Description of the contradiction")
+    na.add_argument("--session", help="Session ID where discovered")
+
+    # nogood list
+    nogood_sub.add_parser("list", help="List all nogood sets")
+
+    # nogood check
+    nc = nogood_sub.add_parser("check", help="Check assumptions against known nogoods")
+    nc.add_argument("--items", required=True, help="Comma-separated item IDs to check")
+
+    # provenance export
+    prov_export = subparsers.add_parser(
+        "provenance-export", help="Export all provenance data to JSON"
+    )
+    prov_export.add_argument("--output", help="Output file path (stdout if omitted)")
+
+    # -- Lean subcommands (one-liner Bash calls) ------------------------------
+
+    # ol (operational learning)
+    ol_parser = subparsers.add_parser("ol", help="Operational learning (quick add/list)")
+    ol_sub = ol_parser.add_subparsers(dest="ol_command")
+
+    ol_add = ol_sub.add_parser("add", help="Add an OL entry")
+    ol_add.add_argument("text", help="The operational learning text")
+    ol_add.add_argument("--session", help="Session ID (auto-detects if omitted)")
+
+    ol_ls = ol_sub.add_parser("list", help="List OL entries")
+    ol_ls.add_argument("--session", help="Session ID (auto-detects if omitted)")
+
+    # decision (quick)
+    dec_parser = subparsers.add_parser("decision", help="Decisions (quick add/list)")
+    dec_sub = dec_parser.add_subparsers(dest="decision_command")
+
+    dec_add = dec_sub.add_parser("add", help="Add a decision")
+    dec_add.add_argument("title", help="Decision title")
+    dec_add.add_argument("--description", help="Decision description")
+    dec_add.add_argument("--session", help="Session ID (auto-detects if omitted)")
+
+    dec_ls = dec_sub.add_parser("list", help="List decisions")
+    dec_ls.add_argument("--session", help="Session ID (auto-detects if omitted)")
+
+    # incident (maps to deviations table)
+    inc_parser = subparsers.add_parser("incident", help="Process incidents (quick add/list)")
+    inc_sub = inc_parser.add_subparsers(dest="incident_command")
+
+    inc_add = inc_sub.add_parser("add", help="Add an incident/deviation")
+    inc_add.add_argument("text", help="Incident description")
+    inc_add.add_argument("--impact", help="Impact description")
+    inc_add.add_argument("--session", help="Session ID (auto-detects if omitted)")
+
+    inc_ls = inc_sub.add_parser("list", help="List incidents/deviations")
+    inc_ls.add_argument("--session", help="Session ID (auto-detects if omitted)")
+
+    # observation (quick)
+    obs_parser = subparsers.add_parser("observation", help="Observations (quick add/list)")
+    obs_sub = obs_parser.add_subparsers(dest="observation_command")
+
+    obs_add = obs_sub.add_parser("add", help="Add an observation")
+    obs_add.add_argument("text", help="Observation text")
+    obs_add.add_argument(
+        "--category", default="observation",
+        choices=["observation", "assumption", "fact", "finding"],
+        help="Category (default: observation)",
+    )
+    obs_add.add_argument(
+        "--severity",
+        choices=["critical", "high", "medium", "low"],
+        help="Severity level",
+    )
+    obs_add.add_argument("--session", help="Session ID (auto-detects if omitted)")
+
+    # search
+    search_parser = subparsers.add_parser("search", help="Search across all session tables")
+    search_parser.add_argument("query", help="Text to search for (LIKE match)")
+    search_parser.add_argument("--session", help="Session ID (auto-detects if omitted)")
+
     return parser
 
 
@@ -1419,6 +2527,7 @@ def main() -> int:
         "export": cmd_export,
         "process-events": cmd_process_events,
         "ship": cmd_ship,
+        "provenance-export": cmd_provenance_export,
     }
 
     if args.command in dispatch:
@@ -1444,6 +2553,85 @@ def main() -> int:
 
     if args.command == "log":
         return cmd_log(args)
+
+    if args.command == "knowledge":
+        kc = getattr(args, "knowledge_command", None)
+        if kc == "add":
+            return cmd_knowledge_add(args)
+        elif kc == "invalidate":
+            return cmd_knowledge_invalidate(args)
+        elif kc == "verify":
+            return cmd_knowledge_verify(args)
+        elif kc == "list":
+            return cmd_knowledge_list(args)
+        else:
+            parser.parse_args(["knowledge", "--help"])
+            return 1
+
+    if args.command == "edge":
+        ec = getattr(args, "edge_command", None)
+        if ec == "add":
+            return cmd_edge_add(args)
+        elif ec == "list":
+            return cmd_edge_list(args)
+        else:
+            parser.parse_args(["edge", "--help"])
+            return 1
+
+    if args.command == "nogood":
+        nc = getattr(args, "nogood_command", None)
+        if nc == "add":
+            return cmd_nogood_add(args)
+        elif nc == "list":
+            return cmd_nogood_list(args)
+        elif nc == "check":
+            return cmd_nogood_check(args)
+        else:
+            parser.parse_args(["nogood", "--help"])
+            return 1
+
+    # -- Lean subcommands dispatch --------------------------------------------
+
+    if args.command == "ol":
+        oc = getattr(args, "ol_command", None)
+        if oc == "add":
+            return cmd_ol_add(args)
+        elif oc == "list":
+            return cmd_ol_list(args)
+        else:
+            parser.parse_args(["ol", "--help"])
+            return 1
+
+    if args.command == "decision":
+        dc = getattr(args, "decision_command", None)
+        if dc == "add":
+            return cmd_decision_add(args)
+        elif dc == "list":
+            return cmd_decision_list(args)
+        else:
+            parser.parse_args(["decision", "--help"])
+            return 1
+
+    if args.command == "incident":
+        ic = getattr(args, "incident_command", None)
+        if ic == "add":
+            return cmd_incident_add(args)
+        elif ic == "list":
+            return cmd_incident_list(args)
+        else:
+            parser.parse_args(["incident", "--help"])
+            return 1
+
+    if args.command == "observation":
+        obc = getattr(args, "observation_command", None)
+        if obc == "add":
+            return cmd_observation_add(args)
+        else:
+            parser.parse_args(["observation", "--help"])
+            return 1
+
+    if args.command == "search":
+        return cmd_search(args)
 
     parser.print_help()
     return 1
