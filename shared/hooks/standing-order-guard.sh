@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # standing-order-guard.sh — Claude Code PreToolUse hook
-# Enforces standing orders by inspecting tool calls before execution.
+# Purpose: Enforce standing orders by inspecting Bash tool calls before
+#   execution. Catches USO violations that would otherwise trigger
+#   permission prompts or bypass dedicated tools.
+# Scope: USO enforcement only (dedicated tools, scratch files, simple
+#   bash commands). NOT agentic standards, NOT script-standards compliance.
+# Audience: Claude Code PreToolUse hook system — fires on every Bash call.
 #
-# Currently enforces:
+# Enforces:
 #   USO: Dedicated tools for file ops (Read/Edit/Write/Grep/Glob, not Bash)
 #   USO: Scratch files for complex scripting (no long inline commands)
 #   USO: Simple Bash commands only (no &&, ||, ;, $(...), backticks, globs in rm)
@@ -14,10 +19,12 @@
 #   - Must never crash or hang (would break Claude Code)
 #
 # Rollout mode (per-check):
-#   MODE_AND="enforce"      — && : zero false positives confirmed, blocking
-#   MODE_SUBSHELL="enforce" — $(): zero false positives confirmed, blocking
-#   MODE_SCRATCH="enforce"  — scratch files: zero false positives confirmed, blocking
-#   MODE_REST="observe"     — ||, ;, backticks: false positives exist or low sample count
+#   MODE_AND="enforce"       — && : zero false positives confirmed, blocking
+#   MODE_SUBSHELL="enforce"  — $(): zero false positives confirmed, blocking
+#   MODE_SCRATCH="enforce"   — scratch files: zero false positives confirmed, blocking
+#   MODE_OR="enforce"        — || : zero false positives, promoted 2026-03-24
+#   MODE_SEMICOLON="enforce" — ;  : pwsh/perl exemptions in place, promoted 2026-03-24
+#   MODE_BACKTICK="enforce"  — backticks: zero false positives, promoted 2026-03-24
 #   See .claude/rules/hook-rollout.md for the observe-then-enforce practice.
 #
 # Design decisions:
@@ -26,14 +33,22 @@
 #   - Helpful feedback: tell Claude which tool to use instead
 #   - Pipeline exemption: cat/head/tail in pipelines (cmd | ...) are allowed
 #     because the Read tool cannot pipe output into other commands
+#
+# KPI definitions (emit to log, future: structured JSONL):
+#   - guardFireCount: total hook invocations per session
+#   - guardBlockCount: violations blocked (exit 2) per session
+#   - guardObserveCount: violations observed but allowed per session
+#   - falsePositiveRate: user-reported false positives / total blocks
 
 set -euo pipefail
 
 # --- Mode and logging ---
-MODE_AND="enforce"      # &&  — zero false positives confirmed; blocking
-MODE_SUBSHELL="enforce" # $() — zero false positives confirmed; blocking
-MODE_SCRATCH="enforce" # scratch files — zero false positives confirmed; blocking
-MODE_REST="observe"     # ||, ;, backticks — false positives or low sample; observe only
+MODE_AND="enforce"       # &&  — zero false positives confirmed; blocking
+MODE_SUBSHELL="enforce"  # $() — zero false positives confirmed; blocking
+MODE_SCRATCH="enforce"   # scratch files — zero false positives confirmed; blocking
+MODE_OR="enforce"        # ||  — zero false positives; promoted 2026-03-24
+MODE_SEMICOLON="enforce" # ;   — pwsh/perl exemptions in place; promoted 2026-03-24
+MODE_BACKTICK="enforce"  # backticks — zero false positives; promoted 2026-03-24
 
 LOG_DIR="$HOME/.claude/hooks/logs"
 LOG_FILE="$LOG_DIR/standing-order-guard.log"
@@ -42,12 +57,12 @@ LOG_FILE="$LOG_DIR/standing-order-guard.log"
 mkdir -p "$LOG_DIR"
 
 # violation() — dispatch based on per-check mode
-# $1: message  $2: mode variable value (enforce or observe; defaults to MODE_REST)
+# $1: message  $2: mode variable value (enforce or observe; defaults to enforce)
 # In enforce mode: write message to stderr, exit 2 (block)
 # In observe mode: append to log file, exit 0 (allow)
 violation() {
     local message="$1"
-    local mode="${2:-$MODE_REST}"
+    local mode="${2:-enforce}"
     if [ "$mode" = "enforce" ]; then
         echo "$message" >&2
         exit 2
@@ -105,20 +120,20 @@ fi
 # truncates at \" — $(...) inside quoted arguments would be invisible.
 case "$COMMAND" in
     *'&&'*) violation "USO: Simple Bash commands only --: Don't use '&&' to chain commands. Make separate Bash tool calls instead. For git in another repo, use 'git -C /path' instead of 'cd /path && git'." "$MODE_AND" ;;
-    *'||'*) violation "USO: Simple Bash commands only --: Don't use '||' to chain commands. Make separate Bash tool calls instead." "$MODE_REST" ;;
+    *'||'*) violation "USO: Simple Bash commands only --: Don't use '||' to chain commands. Make separate Bash tool calls instead." "$MODE_OR" ;;
     *';'*)
         # Exempt ; inside scripting-language arguments: pwsh -Command '...;...' and perl '...;...'
         # The ; is a language-internal statement separator, not a shell command separator.
         # perl: any invocation (perl -ne, -pe, -e, -E, etc.) may contain Perl semicolons.
         case "$COMMAND" in
             pwsh\ *|powershell\ *|perl\ *) ;;
-            *) violation "USO: Simple Bash commands only --: Don't use ';' to chain commands. Make separate Bash tool calls instead." "$MODE_REST" ;;
+            *) violation "USO: Simple Bash commands only --: Don't use ';' to chain commands. Make separate Bash tool calls instead." "$MODE_SEMICOLON" ;;
         esac
         ;;
 esac
 case "$INPUT" in
     *'$('*) violation "USO: Simple Bash commands only --: Don't use '\$(...)' command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_SUBSHELL" ;;
-    *'`'*)  violation "USO: Simple Bash commands only --: Don't use backtick command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_REST" ;;
+    *'`'*)  violation "USO: Simple Bash commands only --: Don't use backtick command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_BACKTICK" ;;
 esac
 
 # --- USO: Dedicated tools for file operations ---
