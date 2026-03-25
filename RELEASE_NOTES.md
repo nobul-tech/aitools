@@ -12,6 +12,47 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.66.0 -- Intent sentinel, delegation guard, managed bash, CI pipeline (2026-03-24)
+
+### New hooks
+
+| # | Change |
+|---|--------|
+| 1 | **intent-sentinel-stop.sh** — Stop hook with 8 telemetry functions. Consolidated status line every 5 turns: context usage, turns since human, subagent count, RE freshness, delegation compliance, session duration, tool usage profile. Resurfaces commander intent after 3 agent-only turns. Detects research→execution phase transitions. The commander's window into harness internals. |
+| 2 | **delegation-duty-guard.sh** — PreToolUse on Agent. Checks every subagent launch for 6 delegation duty elements (identity, rules, skills, OL, WRITE_BLOCKED, access workaround). Injects corrective reminder when elements missing. OBSERVE mode. |
+
+### Platform + CI
+
+| # | Change |
+|---|--------|
+| 3 | **Managed bash** — `setup-bash.sh/.ps1` installs bash 5.x via Homebrew on macOS (system bash is 3.2 from 2007). Linux/Windows verified. Added to tool-registry, install pipeline, build-deploy. |
+| 4 | **CI pipeline** — `.github/workflows/check.yml` with 3 runners: macOS-14 (brew install bash), ubuntu-latest, windows-2022. Validates bash/PS1/Python syntax, build-deploy drift, line endings, script pairing. |
+| 5 | **D1+D2 fixed** — check-post-push.sh: process substitution+heredoc (D1) rewritten with temp file approach, 10 BSD paste call sites (D2) fixed with explicit stdin arg. |
+
+### Hook improvements
+
+| # | Change |
+|---|--------|
+| 6 | **standing-order-guard.sh** — 3 checks promoted to enforce (OR, semicolon, backticks). MODE_REST eliminated — each check has its own variable. Intent header + KPI definitions added. 15/15 smoke tests. |
+| 7 | **Hook stderr fix** — removed `2>/dev/null` from harness-db.py calls in 5 hooks. Safety warnings now surface via stderr. Fixes USO violation (no silent failures). |
+
+### Skills + evaluation
+
+| # | Change |
+|---|--------|
+| 8 | **`/aitool-eval` reference-card** — second reference-card skill. Full evaluation methodology embedded: criteria, discovery playbook, health flags, Homebrew checklist, sandbox walkthrough. Platform gotcha catalogs, Perl exemplar, system tool upgrade + governed capability evaluation contexts. |
+| 9 | **/aitool-eval depth** — Perl story as deep cross-platform exemplar, platform-specific gotcha catalogs (macOS/Windows/Linux), BuildPrereqs reference, Perl-on-macOS carry-forward. |
+
+### Research (in scratch, to be harvested)
+
+| # | Change |
+|---|--------|
+| 10 | **Self-evolving systems research** — 1,752 lines across 3 files. 23 concepts from 7 domains (autopoiesis, strange loops, MAPE-K, Constitutional AI, OODA, SECI spiral). 7 safety mechanisms identified. Ascending Spiral conceptual model. Managed deployment analysis for DB exports. |
+
+(tested: macOS)
+
+---
+
 ## v0.65.1 -- Compliance, reference-card skill, intent fixes (2026-03-24)
 
 ### New capabilities
