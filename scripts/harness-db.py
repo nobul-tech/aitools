@@ -760,8 +760,49 @@ def export_session_to_dict(conn: sqlite3.Connection) -> dict[str, Any]:
     return data
 
 
+def session_has_meaningful_content(conn: sqlite3.Connection) -> bool:
+    """Check whether a session DB has content beyond just session registration.
+
+    A session DB with only a session row and no missions, messages, decisions,
+    observations, or other data is considered empty/minimal. Exporting such a
+    DB would overwrite a potentially rich running-estimate.json with empty data.
+
+    Returns:
+        True if the session has meaningful content worth exporting.
+    """
+    # Check for any content in data tables (beyond the session row itself)
+    tables_to_check = [
+        ("missions", "SELECT COUNT(*) FROM missions"),
+        ("messages", "SELECT COUNT(*) FROM messages"),
+        ("decisions", "SELECT COUNT(*) FROM decisions"),
+        ("observations", "SELECT COUNT(*) FROM observations"),
+        ("delegation_log", "SELECT COUNT(*) FROM delegation_log"),
+        ("completed_work", "SELECT COUNT(*) FROM completed_work"),
+        ("hard_requirements", "SELECT COUNT(*) FROM hard_requirements"),
+        ("deviations", "SELECT COUNT(*) FROM deviations"),
+        ("version_history", "SELECT COUNT(*) FROM version_history"),
+    ]
+    total_records = 0
+    for _table_name, query in tables_to_check:
+        try:
+            row = conn.execute(query).fetchone()
+            if row is not None:
+                total_records += row[0]
+        except sqlite3.OperationalError:
+            # Table may not exist in older schema versions
+            pass
+
+    return total_records > 0
+
+
 def cmd_export(args: argparse.Namespace) -> int:
-    """Export session DB to JSON (running-estimate.json format)."""
+    """Export session DB to JSON (running-estimate.json format).
+
+    Safety: refuses to overwrite a larger existing running-estimate.json with
+    empty/minimal session data. This prevents data loss when short-lived or
+    competing sessions (e.g., `claude -p` missions) end and export over a
+    rich running estimate built by a longer session.
+    """
     project_root = find_project_root()
 
     if args.format != "json":
@@ -796,6 +837,26 @@ def cmd_export(args: argparse.Namespace) -> int:
         return 1
 
     conn = open_db(db_path, readonly=True)
+
+    # Safety check: does this session DB have meaningful content?
+    has_content = session_has_meaningful_content(conn)
+
+    if not has_content:
+        # Check if an existing running-estimate.json exists and has content
+        output_path = get_running_estimate_path(project_root)
+        if output_path.exists() and output_path.stat().st_size > 10:
+            print(
+                f"Warning: Session DB for {session_id} has no meaningful content "
+                f"(no missions, messages, decisions, etc.). "
+                f"Skipping export to preserve existing {output_path.name} "
+                f"({output_path.stat().st_size} bytes).",
+                file=sys.stderr,
+            )
+            conn.close()
+            return 0
+        # If no existing file or it's trivially small, allow the export
+        # (creating a minimal file is fine when there's nothing to lose)
+
     data = export_session_to_dict(conn)
     conn.close()
 
@@ -803,10 +864,35 @@ def cmd_export(args: argparse.Namespace) -> int:
         print("Error: No session data found in DB.", file=sys.stderr)
         return 1
 
-    # Write to running-estimate.json
+    # Safety check: if existing file is substantially larger, warn and skip
     output_path = get_running_estimate_path(project_root)
+    new_content = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    if output_path.exists():
+        existing_size = output_path.stat().st_size
+        new_size = len(new_content.encode("utf-8"))
+        # If existing is more than 2x the size of what we'd write, skip
+        # This catches the case where a rich running estimate would be
+        # replaced by a session that only has a few entries
+        if existing_size > 100 and new_size < existing_size // 2:
+            if getattr(args, "force", False):
+                print(
+                    f"Warning: Overwriting {output_path.name} "
+                    f"({existing_size} bytes -> {new_size} bytes) due to --force.",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"Warning: Export would replace {output_path.name} "
+                    f"({existing_size} bytes) with smaller content ({new_size} bytes). "
+                    f"This likely means a richer running estimate from another session "
+                    f"would be lost. Skipping export. Use --force to override.",
+                    file=sys.stderr,
+                )
+                return 0
+
+    # Write to running-estimate.json
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    output_path.write_text(new_content)
 
     print(f"Exported to: {output_path}")
     return 0
@@ -947,6 +1033,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Export format (default: json)",
     )
     export_parser.add_argument("--session", help="Session ID (auto-detects if omitted)")
+    export_parser.add_argument(
+        "--force", action="store_true",
+        help="Force export even if it would overwrite a larger file",
+    )
 
     # status
     subparsers.add_parser("status", help="Show harness database status")
