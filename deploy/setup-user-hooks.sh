@@ -1688,17 +1688,40 @@ LOG_FILE="$LOG_DIR/standing-order-guard.log"
 # Ensure log directory exists (needed for observe logging; harmless in enforce-only runs)
 mkdir -p "$LOG_DIR"
 
+# --- Telemetry: JSONL event emission ---
+# Appends one structured line to the session event log (~0.1ms).
+# Session dir resolved from .scratch/.current-session (set by scratch-init.sh).
+# If unavailable, silently no-ops (hook must never fail).
+_SESSION_DIR=""
+_cs_file="$(git rev-parse --show-toplevel 2>/dev/null || echo "")/.scratch/.current-session"
+if [ -f "$_cs_file" ]; then
+    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+fi
+
+emit_hook_event() {
+    local event_type="$1" detail_json="$2"
+    [ -n "$_SESSION_DIR" ] || return 0
+    printf '{"t":"%s","type":"%s","src":"sog","d":%s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$event_type" "$detail_json" \
+        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+}
+
 # violation() — dispatch based on per-check mode
 # $1: message  $2: mode variable value (enforce or observe; defaults to enforce)
+# $3: check name (for telemetry)
 # In enforce mode: write message to stderr, exit 2 (block)
 # In observe mode: append to log file, exit 0 (allow)
 violation() {
     local message="$1"
     local mode="${2:-enforce}"
+    local check_name="${3:-unknown}"
     if [ "$mode" = "enforce" ]; then
+        emit_hook_event "hook_block" "{\"check\":\"$check_name\"}"
         echo "$message" >&2
         exit 2
     else
+        emit_hook_event "hook_warn" "{\"check\":\"$check_name\",\"mode\":\"observe\"}"
         printf '%s [WOULD-BLOCK] %s | cmd: %s\n' \
             "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$message" "$COMMAND" \
             >> "$LOG_FILE"
@@ -1740,7 +1763,7 @@ NEWLINE_COUNT=$(( (CMD_LEN - STRIPPED_LEN) / 2 ))
 # 5+ lines (4+ newlines) = too complex for inline. Write a temp file instead.
 if [ "$NEWLINE_COUNT" -ge 4 ]; then
     LINE_COUNT=$((NEWLINE_COUNT + 1))
-    violation "USO: Scratch files --: This command is ~${LINE_COUNT} lines long. Write it to a temp .sh or .ps1 file using the Write tool, execute with Bash, then clean up. USO: never inline long commands in the Bash tool." "$MODE_SCRATCH"
+    violation "USO: Scratch files --: This command is ~${LINE_COUNT} lines long. Write it to a temp .sh or .ps1 file using the Write tool, execute with Bash, then clean up. USO: never inline long commands in the Bash tool." "$MODE_SCRATCH" "scratch"
 fi
 
 # --- USO: Simple Bash commands only ---
@@ -1751,21 +1774,21 @@ fi
 # $() and backtick checks use raw INPUT (not COMMAND) because json_field
 # truncates at \" — $(...) inside quoted arguments would be invisible.
 case "$COMMAND" in
-    *'&&'*) violation "USO: Simple Bash commands only --: Don't use '&&' to chain commands. Make separate Bash tool calls instead. For git in another repo, use 'git -C /path' instead of 'cd /path && git'." "$MODE_AND" ;;
-    *'||'*) violation "USO: Simple Bash commands only --: Don't use '||' to chain commands. Make separate Bash tool calls instead." "$MODE_OR" ;;
+    *'&&'*) violation "USO: Simple Bash commands only --: Don't use '&&' to chain commands. Make separate Bash tool calls instead. For git in another repo, use 'git -C /path' instead of 'cd /path && git'." "$MODE_AND" "and" ;;
+    *'||'*) violation "USO: Simple Bash commands only --: Don't use '||' to chain commands. Make separate Bash tool calls instead." "$MODE_OR" "or" ;;
     *';'*)
         # Exempt ; inside scripting-language arguments: pwsh -Command '...;...' and perl '...;...'
         # The ; is a language-internal statement separator, not a shell command separator.
         # perl: any invocation (perl -ne, -pe, -e, -E, etc.) may contain Perl semicolons.
         case "$COMMAND" in
             pwsh\ *|powershell\ *|perl\ *) ;;
-            *) violation "USO: Simple Bash commands only --: Don't use ';' to chain commands. Make separate Bash tool calls instead." "$MODE_SEMICOLON" ;;
+            *) violation "USO: Simple Bash commands only --: Don't use ';' to chain commands. Make separate Bash tool calls instead." "$MODE_SEMICOLON" "semicolon" ;;
         esac
         ;;
 esac
 case "$INPUT" in
-    *'$('*) violation "USO: Simple Bash commands only --: Don't use '\$(...)' command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_SUBSHELL" ;;
-    *'`'*)  violation "USO: Simple Bash commands only --: Don't use backtick command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_BACKTICK" ;;
+    *'$('*) violation "USO: Simple Bash commands only --: Don't use '\$(...)' command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_SUBSHELL" "subshell" ;;
+    *'`'*)  violation "USO: Simple Bash commands only --: Don't use backtick command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_BACKTICK" "backtick" ;;
 esac
 
 # --- USO: Dedicated tools for file operations ---
@@ -1787,7 +1810,7 @@ case "$FIRST_TOKEN" in
     rm)
         case "$COMMAND" in
             *'*'*|*'?'*)
-                violation "USO: Simple Bash commands only --: Don't use glob patterns (*, ?) with 'rm'. Write a cleanup script listing the specific files, execute it, then clean up the script."
+                violation "USO: Simple Bash commands only --: Don't use glob patterns (*, ?) with 'rm'. Write a cleanup script listing the specific files, execute it, then clean up the script." "enforce" "glob-rm"
                 ;;
         esac
         ;;
@@ -1799,19 +1822,19 @@ case "$FIRST_TOKEN" in
     cat)
         case "$COMMAND" in
             *\|*) ;;  # Pipeline — legitimate shell use
-            *) violation "USO: Dedicated tools --: Use the Read tool instead of 'cat' to read files. The Read tool provides line numbers and handles large files better." ;;
+            *) violation "USO: Dedicated tools --: Use the Read tool instead of 'cat' to read files. The Read tool provides line numbers and handles large files better." "enforce" "cat" ;;
         esac
         ;;
     head)
         case "$COMMAND" in
             *\|*) ;;
-            *) violation "USO: Dedicated tools --: Use the Read tool with offset/limit parameters instead of 'head'. Example: Read with limit=20 for the first 20 lines." ;;
+            *) violation "USO: Dedicated tools --: Use the Read tool with offset/limit parameters instead of 'head'. Example: Read with limit=20 for the first 20 lines." "enforce" "head" ;;
         esac
         ;;
     tail)
         case "$COMMAND" in
             *\|*) ;;
-            *) violation "USO: Dedicated tools --: Use the Read tool with offset parameter instead of 'tail'. Example: Read with offset=100 to start from line 100." ;;
+            *) violation "USO: Dedicated tools --: Use the Read tool with offset parameter instead of 'tail'. Example: Read with offset=100 to start from line 100." "enforce" "tail" ;;
         esac
         ;;
 esac
@@ -1822,7 +1845,7 @@ case "$FIRST_TOKEN" in
     grep|rg|egrep|fgrep)
         case "$COMMAND" in
             *\|*) ;;  # Pipeline — legitimate shell use
-            *) violation "USO: Dedicated tools --: Use the Grep tool instead of '$FIRST_TOKEN' to search file contents. The Grep tool supports regex, file filtering, and multiple output modes." ;;
+            *) violation "USO: Dedicated tools --: Use the Grep tool instead of '$FIRST_TOKEN' to search file contents. The Grep tool supports regex, file filtering, and multiple output modes." "enforce" "grep" ;;
         esac
         ;;
 esac
@@ -1833,7 +1856,7 @@ case "$FIRST_TOKEN" in
     find)
         case "$COMMAND" in
             *\|*) ;;  # Pipeline — legitimate shell use
-            *) violation "USO: Dedicated tools --: Use the Glob tool instead of 'find' to locate files. Example: Glob with pattern '**/*.sh' instead of 'find . -name \"*.sh\"'." ;;
+            *) violation "USO: Dedicated tools --: Use the Glob tool instead of 'find' to locate files. Example: Glob with pattern '**/*.sh' instead of 'find . -name \"*.sh\"'." "enforce" "find" ;;
         esac
         ;;
     ls)
@@ -1851,13 +1874,13 @@ case "$FIRST_TOKEN" in
     sed)
         case "$COMMAND" in
             *\|*) ;;  # Pipeline — legitimate shell use
-            *) violation "USO: Dedicated tools --: Use the Edit tool instead of 'sed' to modify files. For non-trivial string manipulation, use Perl (USO: Perl for string manipulation)." ;;
+            *) violation "USO: Dedicated tools --: Use the Edit tool instead of 'sed' to modify files. For non-trivial string manipulation, use Perl (USO: Perl for string manipulation)." "enforce" "sed" ;;
         esac
         ;;
     awk)
         case "$COMMAND" in
             *\|*) ;;  # Pipeline — legitimate shell use
-            *) violation "USO: Dedicated tools --: Use the Read tool instead of 'awk' to process files. For string manipulation, use Perl (USO: Perl for string manipulation)." ;;
+            *) violation "USO: Dedicated tools --: Use the Read tool instead of 'awk' to process files. For string manipulation, use Perl (USO: Perl for string manipulation)." "enforce" "awk" ;;
         esac
         ;;
 esac
@@ -1869,11 +1892,12 @@ FIRST_LINE=$(printf '%s' "$COMMAND" | head -1)
 case "$FIRST_LINE" in
     echo*\>*|printf*\>*)
         # echo/printf redirecting to a file
-        violation "USO: Dedicated tools --: Use the Write tool instead of echo/printf redirection to create files. The Write tool handles encoding and permissions correctly."
+        violation "USO: Dedicated tools --: Use the Write tool instead of echo/printf redirection to create files. The Write tool handles encoding and permissions correctly." "enforce" "echo-redirect"
         ;;
 esac
 
 # All checks passed — allow the command
+emit_hook_event "hook_fire" "{\"result\":\"allow\"}"
 exit 0
 __EMB_GUARD__
 cat > "$HOOKS_DIR/scratch-init.sh" <<'__EMB_SCRATCH__'
@@ -2343,6 +2367,22 @@ cat > "$HOOKS_DIR/sh-file-fixup.sh" <<'__EMB_SHFIXUP__'
 
 set -euo pipefail
 
+# --- Telemetry: JSONL event emission ---
+_SESSION_DIR=""
+_cs_file="$(git rev-parse --show-toplevel 2>/dev/null || echo "")/.scratch/.current-session"
+if [ -f "$_cs_file" ]; then
+    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+fi
+
+emit_hook_event() {
+    local event_type="$1" detail_json="$2"
+    [ -n "$_SESSION_DIR" ] || return 0
+    printf '{"t":"%s","type":"%s","src":"fixup","d":%s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$event_type" "$detail_json" \
+        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+}
+
 # Read JSON from stdin
 input=$(cat)
 
@@ -2386,163 +2426,11 @@ fi
 # Report what was fixed (stderr → shown to Claude as feedback)
 if [ -n "$fixed" ]; then
     echo "sh-file-fixup: $(basename "$file_path") — fixed: ${fixed% }" >&2
+    emit_hook_event "hook_fire" "{\"file\":\"$(basename "$file_path")\",\"action\":\"${fixed% }\"}"
 fi
 
 exit 0
 __EMB_SHFIXUP__
-cat > "$HOOKS_DIR/surfacing-duty-stop.sh" <<'__EMB_SURFACING__'
-#!/usr/bin/env bash
-# surfacing-duty-stop.sh — Claude Code Stop hook (command type)
-# Surfaces duty reminders via stderr feedback after agent responses.
-#
-# Fires after every agent response. As a command-type Stop hook,
-# stderr output is shown to the agent as feedback on its next turn.
-#
-# Two functions:
-#   1. Periodic reminder: every 30+ minutes, remind about surfacing duty
-#   2. Incident-acknowledgment detection: if agent said "incident" or "pre-existing"
-#      without invoking /incident or writing TODO(incident):, prompt them to file
-#
-# Hook contract:
-#   - Stop hook, command type (stderr → shown to agent as feedback)
-#   - Exit 0 = allow, Exit 2 = block (we always allow)
-#   - Must be fast (<50ms) — fires on every agent turn
-#   - Must never crash or hang
-
-set -euo pipefail
-
-# Read JSON from stdin
-input=$(cat)
-
-# Extract session_id and transcript_path
-session_id=""
-transcript_path=""
-if [[ "$input" =~ \"session_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-    session_id="${BASH_REMATCH[1]}"
-fi
-if [[ "$input" =~ \"transcript_path\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-    transcript_path="${BASH_REMATCH[1]}"
-fi
-
-# Need transcript to scan
-[ -n "$transcript_path" ] && [ -f "$transcript_path" ] || exit 0
-
-reminders=""
-
-# --- 1. Periodic surfacing duty reminder ---
-# Check session age via transcript file birth time.
-# Inject reminder every 30 minutes (tracked via marker file).
-if [ -n "$session_id" ]; then
-    marker_dir="/tmp/aitools-surfacing-$session_id"
-    mkdir -p "$marker_dir" 2>/dev/null || true
-    marker="$marker_dir/last-reminder"
-    now=$(date +%s)
-    inject_reminder=false
-
-    if [ ! -f "$marker" ]; then
-        # First check: only inject if session is >30 min old
-        # Use transcript modification time as proxy for session start
-        if [ -f "$transcript_path" ]; then
-            # Platform dispatch: macOS BSD stat vs GNU stat (Linux/Git Bash)
-            # See session-archive.sh:68 for the canonical pattern
-            if [ "$(uname -s)" = "Darwin" ]; then
-                file_mod=$(stat -f %m "$transcript_path" 2>/dev/null || echo "$now")
-            else
-                file_mod=$(stat -c %Y "$transcript_path" 2>/dev/null || echo "$now")
-            fi
-            age=$(( now - file_mod ))
-            # Transcript gets modified constantly; use birth time if available
-            if [ "$(uname -s)" = "Darwin" ]; then
-                file_birth=$(stat -f %B "$transcript_path" 2>/dev/null || echo "$file_mod")
-            else
-                # GNU stat: %W = birth time (0 if unsupported), fallback to mod time
-                _birth=$(stat -c %W "$transcript_path" 2>/dev/null || echo "0")
-                if [ "$_birth" != "0" ] && [ -n "$_birth" ]; then
-                    file_birth="$_birth"
-                else
-                    file_birth="$file_mod"
-                fi
-            fi
-            session_age=$(( now - file_birth ))
-            if [ "$session_age" -gt 1800 ]; then
-                inject_reminder=true
-            fi
-        fi
-    else
-        last=$(cat "$marker")
-        elapsed=$(( now - last ))
-        if [ "$elapsed" -gt 1800 ]; then
-            inject_reminder=true
-        fi
-    fi
-
-    if [ "$inject_reminder" = "true" ]; then
-        echo "$now" > "$marker"
-        reminders="${reminders}Surfacing duty check: Have you found any incidents or ambiguities this session? File via /incident or leave a TODO(incident): comment. "
-    fi
-fi
-
-# --- 2. Incident-acknowledgment detection ---
-# Scan the last assistant message for incident-acknowledgment language
-# without a corresponding /incident invocation or TODO(incident): marker.
-#
-# Suppression: if incidents.json was modified in the last 30 minutes,
-# an incident was recently filed — suppress to avoid false positives when the
-# agent is still discussing the incident after filing it.
-
-_suppress_incident_check=false
-
-# Check incidents.json modification time (cross-platform stat)
-_incidents_file=""
-if [ -n "${AITOOLS_REPO_PATH:-}" ]; then
-    _incidents_file="$AITOOLS_REPO_PATH/reference/incidents.json"
-elif [ -f "$HOME/repos/aitools/reference/incidents.json" ]; then
-    _incidents_file="$HOME/repos/aitools/reference/incidents.json"
-fi
-if [ -n "$_incidents_file" ] && [ -f "$_incidents_file" ]; then
-    # Platform dispatch: macOS BSD stat vs GNU stat (Linux/Git Bash)
-    if [ "$(uname -s)" = "Darwin" ]; then
-        _incidents_mod=$(stat -f %m "$_incidents_file" 2>/dev/null || echo "0")
-    else
-        _incidents_mod=$(stat -c %Y "$_incidents_file" 2>/dev/null || echo "0")
-    fi
-    _now_epoch=$(date +%s)
-    _incidents_age=$(( _now_epoch - _incidents_mod ))
-    if [ "$_incidents_age" -lt 1800 ]; then
-        _suppress_incident_check=true
-    fi
-fi
-
-if [ "$_suppress_incident_check" = "false" ]; then
-    # Read only the last ~100 lines of transcript for speed.
-    last_chunk=$(tail -100 "$transcript_path" 2>/dev/null || true)
-
-    if [ -n "$last_chunk" ]; then
-        # Check for incident-acknowledgment phrases
-        has_incident_language=false
-        if echo "$last_chunk" | grep -qiE "pre-existing incident|known incident|that.s an incident|existing incident|there.s an incident|incident I noticed|incident we found|pre-existing gap|known gap|that.s a gap|existing gap|there.s a gap|gap I noticed|gap we found" 2>/dev/null; then
-            has_incident_language=true
-        fi
-
-        # Check if /incident was invoked or TODO(incident): was written in same chunk
-        has_filing=false
-        if echo "$last_chunk" | grep -qE '/incident|TODO\(incident\)|incidents\.json' 2>/dev/null; then
-            has_filing=true
-        fi
-
-        if [ "$has_incident_language" = "true" ] && [ "$has_filing" = "false" ]; then
-            reminders="${reminders}You acknowledged an incident but did not file it. Per surfacing duty (.claude/rules/incident-governance.md): invoke /incident now, or write TODO(incident): in the current file if mid-task."
-        fi
-    fi
-fi
-
-# Output reminders (if any) to stderr (shown to agent as feedback).
-if [ -n "$reminders" ]; then
-    printf '%s' "$reminders" >&2
-fi
-
-exit 0
-__EMB_SURFACING__
 cat > "$HOOKS_DIR/glossary-skill-guard.sh" <<'__EMB_GLOSSARY__'
 #!/usr/bin/env bash
 # glossary-skill-guard.sh — Detection layer for governed data access
@@ -2552,6 +2440,22 @@ cat > "$HOOKS_DIR/glossary-skill-guard.sh" <<'__EMB_GLOSSARY__'
 
 set -euo pipefail
 
+# --- Telemetry: JSONL event emission ---
+_SESSION_DIR=""
+_cs_file="$(git rev-parse --show-toplevel 2>/dev/null || echo "")/.scratch/.current-session"
+if [ -f "$_cs_file" ]; then
+    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+fi
+
+emit_hook_event() {
+    local event_type="$1" detail_json="$2"
+    [ -n "$_SESSION_DIR" ] || return 0
+    printf '{"t":"%s","type":"%s","src":"gsg","d":%s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$event_type" "$detail_json" \
+        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+}
+
 INPUT=$(cat)
 FILE_PATH=$(echo "$INPUT" | perl -ne 'print $1 if /"file_path"\s*:\s*"([^"]*)"/')
 PATTERN_PATH=$(echo "$INPUT" | perl -ne 'print $1 if /"path"\s*:\s*"([^"]*)"/')
@@ -2560,6 +2464,7 @@ TARGET="${FILE_PATH:-$PATTERN_PATH}"
 
 case "$TARGET" in
     *glossary.json|*glossary.md)
+        emit_hook_event "hook_warn" "{\"target\":\"$(basename "$TARGET")\"}"
         # hookSpecificOutput JSON goes to stdout (structured hook response)
         echo '{"hookSpecificOutput":{"additionalContext":"You are reading glossary files directly. Use /glossary skill instead — it provides the governed process for checking definitions, adding terms, and resolving ambiguities. Reading the file bypasses that process."}}'
         ;;
@@ -2583,6 +2488,22 @@ cat > "$HOOKS_DIR/block-claude-code-guide.sh" <<'__EMB_BLOCKGUIDE__'
 
 set -euo pipefail
 
+# --- Telemetry: JSONL event emission ---
+_SESSION_DIR=""
+_cs_file="$(git rev-parse --show-toplevel 2>/dev/null || echo "")/.scratch/.current-session"
+if [ -f "$_cs_file" ]; then
+    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+fi
+
+emit_hook_event() {
+    local event_type="$1" detail_json="$2"
+    [ -n "$_SESSION_DIR" ] || return 0
+    printf '{"t":"%s","type":"%s","src":"bccg","d":%s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$event_type" "$detail_json" \
+        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+}
+
 INPUT=$(cat)
 
 # Extract subagent_type from tool_input using bash regex (no jq dependency)
@@ -2593,6 +2514,7 @@ if [[ "$INPUT" =~ $pattern ]]; then
 fi
 
 if [ "$SUBAGENT_TYPE" = "claude-code-guide" ]; then
+    emit_hook_event "hook_block" "{\"blocked\":\"claude-code-guide\"}"
     # Return JSON deny with corrective context.
     # permissionDecisionReason is shown to Claude (not the user) on deny,
     # so it serves as injected harness knowledge.
@@ -2829,165 +2751,6 @@ fi
 
 exit 0
 __EMB_DASHBOARD__
-cat > "$HOOKS_DIR/estimate-refresh-stop.sh" <<'__EMB_ESTIMREFRESH__'
-#!/usr/bin/env bash
-# estimate-refresh-stop.sh -- Claude Code Stop hook (command type)
-# Combined Lagebeurteilung reminder + running estimate freshness tracker.
-#
-# Two functions:
-#   1. Auto-track turn count via marker file (mechanical, no judgment)
-#   2. At context threshold (estimated from turn count), inject
-#      Lagebeurteilung reminder to update the running estimate
-#
-# The running estimate auto-update flow:
-#   Agent updates estimate -> file mtime changes -> dashboard server's
-#   file watcher detects change -> regenerates served HTML -> browser
-#   polls and re-renders. This hook's job is to REMIND the agent to
-#   update, not to update the estimate itself (that requires judgment).
-#
-# Freshness sources (checked in order):
-#   1. JSON running estimate mtime (primary, always available)
-#   2. Session DB updated_at (supplemental, if harness-db.py available)
-#   If either source is fresh, suppress the stale reminder.
-#
-# Hook contract:
-#   - Stop hook, command type (stderr -> shown to agent as feedback)
-#   - Exit 0 = allow, Exit 2 = block (we always allow)
-#   - Must be fast (<50ms) -- fires on every agent turn
-#   - Must never crash or hang
-#
-# Related decisions:
-#   D-CONTEXT-ROT-HOOK: Lagebeurteilung checkpoint at 20%+ context
-#   D-OPERATIONAL-LEARNING-DUTY: OBSERVE-SURFACE-PROPOSE-CONNECT
-
-set -euo pipefail
-
-# Read JSON from stdin
-input=$(cat)
-
-# Extract session_id
-session_id=""
-if [[ "$input" =~ \"session_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-    session_id="${BASH_REMATCH[1]}"
-fi
-
-[ -n "$session_id" ] || exit 0
-
-# --- Turn tracking via marker directory ---
-marker_dir="/tmp/aitools-estimate-$session_id"
-mkdir -p "$marker_dir" 2>/dev/null || exit 0
-
-# Increment turn count
-turn_file="$marker_dir/turn-count"
-turn_count=0
-if [ -f "$turn_file" ]; then
-    turn_count=$(cat "$turn_file" 2>/dev/null || echo "0")
-    if ! [[ "$turn_count" =~ ^[0-9]+$ ]]; then turn_count=0; fi
-fi
-turn_count=$((turn_count + 1))
-printf '%d' "$turn_count" > "$turn_file"
-
-# --- Lagebeurteilung checkpoint ---
-# Heuristic: each agent turn uses ~2-5K tokens of context.
-# At 200K total context, 20% = 40K tokens = ~10-20 turns.
-# Inject reminder at turn 15, then every 15 turns after.
-# This is conservative -- better to remind too early than too late.
-
-LAGE_INTERVAL=15
-reminders=""
-
-last_lage_file="$marker_dir/last-lage-turn"
-last_lage_turn=0
-if [ -f "$last_lage_file" ]; then
-    last_lage_turn=$(cat "$last_lage_file" 2>/dev/null || echo "0")
-    if ! [[ "$last_lage_turn" =~ ^[0-9]+$ ]]; then last_lage_turn=0; fi
-fi
-
-turns_since_lage=$((turn_count - last_lage_turn))
-
-if [ "$turn_count" -ge "$LAGE_INTERVAL" ] && [ "$turns_since_lage" -ge "$LAGE_INTERVAL" ]; then
-    printf '%d' "$turn_count" > "$last_lage_file"
-
-    reminders="Lagebeurteilung checkpoint (turn ${turn_count}): Context is growing. Update the running estimate with current situation, new findings, and decisions. If the dashboard server is running, the update will appear automatically. Key fields to refresh: schwerpunkt, situation.currentState, completedWork (append recent), findings (new ones), delegationLog (new entries), meta.version (increment). "
-fi
-
-# --- Estimate freshness check ---
-# If a running estimate exists and hasn't been modified in 30+ minutes,
-# remind the agent it may be stale.
-if [ -z "$reminders" ] && [ "$turn_count" -ge 5 ]; then
-    # Check every 10 turns
-    if [ $((turn_count % 10)) -eq 0 ]; then
-        # Find project root
-        cwd=""
-        if [[ "$input" =~ \"cwd\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-            cwd="${BASH_REMATCH[1]}"
-        fi
-
-        if [ -n "$cwd" ]; then
-            project_root=$(cd "$cwd" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || echo "$cwd")
-
-            # Check for running estimate
-            estimate=""
-            if [ -f "$project_root/.aitools/channel/running-estimate.json" ]; then
-                estimate="$project_root/.aitools/channel/running-estimate.json"
-            fi
-            # Check scratch dirs
-            if [ -z "$estimate" ] && [ -d "$project_root/.scratch" ]; then
-                for dir in "$project_root"/.scratch/session-*/; do
-                    [ -d "$dir" ] || continue
-                    for est in "$dir"/*running-estimate*.json; do
-                        [ -f "$est" ] || continue
-                        estimate="$est"
-                        break 2
-                    done
-                done
-            fi
-
-            if [ -n "$estimate" ]; then
-                now=$(date +%s)
-                # Platform dispatch: macOS BSD stat vs GNU stat (Linux/Git Bash)
-                if [ "$(uname -s)" = "Darwin" ]; then
-                    est_mod=$(stat -f %m "$estimate" 2>/dev/null || echo "$now")
-                else
-                    est_mod=$(stat -c %Y "$estimate" 2>/dev/null || echo "$now")
-                fi
-                est_age=$((now - est_mod))
-                if [ "$est_age" -gt 1800 ]; then
-                    # Before flagging stale, check if session DB was recently updated
-                    # (supplemental: agent may have written to DB but not exported yet)
-                    db_fresh=false
-                    if [ -n "$session_id" ] && [ -d "$project_root/.aitools/sessions" ]; then
-                        db_prefix=$(printf '%s' "$session_id" | cut -c1-10)
-                        db_file="$project_root/.aitools/sessions/${db_prefix}.db"
-                        if [ -f "$db_file" ]; then
-                            if [ "$(uname -s)" = "Darwin" ]; then
-                                db_mod=$(stat -f %m "$db_file" 2>/dev/null || echo "0")
-                            else
-                                db_mod=$(stat -c %Y "$db_file" 2>/dev/null || echo "0")
-                            fi
-                            db_age=$((now - db_mod))
-                            if [ "$db_age" -lt 1800 ]; then
-                                db_fresh=true
-                            fi
-                        fi
-                    fi
-                    if [ "$db_fresh" = false ]; then
-                        minutes=$((est_age / 60))
-                        reminders="Running estimate is ${minutes} minutes stale. Consider updating it with current session state. "
-                    fi
-                fi
-            fi
-        fi
-    fi
-fi
-
-# Output reminders (if any) to stderr (shown to agent as feedback)
-if [ -n "$reminders" ]; then
-    printf '%s' "$reminders" >&2
-fi
-
-exit 0
-__EMB_ESTIMREFRESH__
 cat > "$HOOKS_DIR/harness-db-sessionstart.sh" <<'__EMB_HDBSTART__'
 #!/usr/bin/env bash
 # harness-db-sessionstart.sh -- Claude Code SessionStart hook
@@ -3133,1870 +2896,19 @@ fi
 # Let stderr through (warnings visible to Claude), but don't block on failure
 "$PYTHON" "$HELPER" session end --id "$SESSION_ID" || true
 
+# Process session events.jsonl into KPI metrics (cold-path telemetry)
+# Reads events emitted by enforcement hooks during the session
+"$PYTHON" "$HELPER" process-events --session "$SESSION_ID" || true
+
+# Ship KPI events to Datadog (if DD_API_KEY is configured)
+"$PYTHON" "$HELPER" ship || true
+
 # Export DB to JSON for git carry-forward
 # stderr warnings (e.g. overwrite-smaller-file safety check) must be visible
 "$PYTHON" "$HELPER" export --format json --session "$SESSION_ID" || true
 
-printf 'Harness DB: session %s ended, JSON exported\n' "$SESSION_ID"
+printf 'Harness DB: session %s ended, events processed, JSON exported\n' "$SESSION_ID"
 __EMB_HDBEND__
-cat > "$HOOKS_DIR/intent-sentinel-stop.sh" <<'__EMB_SENTINEL__'
-#!/usr/bin/env bash
-# intent-sentinel-stop.sh — Claude Code Stop hook (command type)
-# Consolidated telemetry platform: fires every agent turn, collects
-# metrics the commander cannot see, and resurfaces intent when drift
-# is detected.
-#
-# Eight telemetry functions:
-#   1. Turns-since-human tracker (resurface intent after 3 agent-only turns)
-#   2. Phase transition detector (research→execution warning)
-#   3. Context consumption tracker (milestones at 25/50/75%)
-#   4. Tool usage profile (every 10 turns)
-#   5. Subagent tracker (Agent tool launches + completion)
-#   6. Running estimate freshness (stale >30min warning)
-#   7. Delegation duty compliance score (6 elements)
-#   8. Session duration + work product count (every 20 turns)
-#
-# Output: ONE consolidated status line every INJECT_INTERVAL turns.
-# Additional detail lines when specific thresholds are hit.
-#
-# Hook contract:
-#   - Stop hook, command type (stderr -> shown to agent as feedback)
-#   - Exit 0 = allow (always)
-#   - Must be fast (<50ms) — fires on every agent turn
-#   - Must never crash or hang
-# aitools-lib.sh -- shared helpers for all aitools bash scripts
-# Sourced, not executed directly. No shebang, no set -euo pipefail (caller sets it).
-#
-# Provides: platform detection, display_path, read_config_key, logging_init,
-# log/log_ok/log_error/log_warn/log_detail, invoke_ai, write_summary,
-# show_summary, SORT_KEYS_JS, normalize_json.
-#
-# Usage:
-#   source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/aitools-lib.sh"
-#   logging_init "script-name"
-#
-# Entry points (aitools, aitools-install) override log functions after sourcing
-# for specialized logging (file-only, JSONL, etc.).
-
-# ---------------------------------------------------------------------------
-# Platform detection
-# ---------------------------------------------------------------------------
-IS_MACOS=false
-IS_WINDOWS=false
-case "$(uname -s)" in
-    Darwin*)              IS_MACOS=true ;;
-    MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=true ;;
-esac
-
-# ---------------------------------------------------------------------------
-# Log directory (platform-aware)
-# ---------------------------------------------------------------------------
-AITOOLS_LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
-$IS_MACOS && AITOOLS_LOG_DIR="$HOME/Library/Logs/aitools"
-
-# ---------------------------------------------------------------------------
-# Module-level counters (safe for sourcing without logging_init under set -u)
-# ---------------------------------------------------------------------------
-ERRORS=0
-WARNINGS=0
-
-# ---------------------------------------------------------------------------
-# Display-friendly path (native Windows on MSYS, no-op elsewhere)
-# ---------------------------------------------------------------------------
-display_path() {
-    if command -v cygpath &>/dev/null; then
-        cygpath -w "$1"
-    else
-        printf '%s' "$1"
-    fi
-}
-
-# ---------------------------------------------------------------------------
-# Config reader (pure bash, handles UTF-8 BOM)
-# ---------------------------------------------------------------------------
-# Read a top-level string value from a JSON config file.
-# Handles UTF-8 BOM (PowerShell 5.x writes one) and JSON-escaped backslashes.
-read_config_key() {
-    local file="$1" key="$2"
-    [ -f "$file" ] || return 1
-    local val
-    val=$(tr -d '\357\273\277' < "$file" \
-        | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
-        | head -1 \
-        | cut -d'"' -f4)
-    [ -n "$val" ] || return 1
-    # Unescape JSON backslashes: \\ -> \
-    printf '%b' "$val"
-}
-
-# ---------------------------------------------------------------------------
-# Logging init
-# ---------------------------------------------------------------------------
-# Sets SCRIPT_NAME, LOG_DIR, LOG_FILE; resets ERRORS, WARNINGS; creates log dir.
-# Usage: logging_init "setup-foo"
-logging_init() {
-    SCRIPT_NAME="${1:?logging_init requires a script name}"
-    LOG_DIR="$AITOOLS_LOG_DIR"
-    LOG_FILE="$LOG_DIR/deploy.log"
-    mkdir -p "$LOG_DIR"
-    ERRORS=0
-    WARNINGS=0
-}
-
-# ---------------------------------------------------------------------------
-# Standard logging (Pattern A: console + log file, with [level] tag)
-# ---------------------------------------------------------------------------
-log() {
-    local level="${2:-info}"
-    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    local line="[$ts] [$SCRIPT_NAME] [$level] $1"
-    printf '%s\n' "$line" >> "$LOG_FILE"
-    case "$level" in
-        error) printf '\033[31m%s\033[0m\n' "$line" ;;
-        warn)  printf '\033[33m%s\033[0m\n' "$line" ;;
-        *)     printf '%s\n' "$line" ;;
-    esac
-}
-log_ok()    { log "$1" "ok"; }
-log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
-log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
-log_detail() {
-    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '[%s] [%s] [detail] %s\n' "$ts" "$SCRIPT_NAME" "$1" >> "$LOG_FILE"
-}
-
-# ---------------------------------------------------------------------------
-# Agentic AI invocation -- generalized wrapper for claude/agent CLI
-# ---------------------------------------------------------------------------
-# Purpose: Standardized AI CLI invocation with speed/permission tiers,
-#   validation callbacks, automatic retry, and telemetry logging.
-# Inputs: SPEED (fast/balanced/quality), PERMISSIONS (none/readonly/full/
-#   dangerous), VALIDATE_FN (function name, receives output as $1),
-#   MAX_RETRIES (retry count on validation failure). Prompt from stdin.
-# Expected output: Raw AI-generated text on stdout.
-# Validation: Caller-provided VALIDATE_FN must return 0 (pass) or 1 (fail)
-#   and set AI_REJECT_REASON on failure.
-# Known limitations: Agent CLI has no --model flag; speed is hint-only via
-#   prompt prefix. Retry prepends rejection reason but may not fix structural
-#   issues (e.g., model always wrapping in code fences).
-
-# File-only AI telemetry logging (avoids stdout capture interference when
-# invoke_ai output is captured via $()). Does not increment ERRORS/WARNINGS --
-# callers decide whether to count invoke_ai failures.
-_ai_log() {
-    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '[%s] [%s] [%s] %s\n' "$ts" "$SCRIPT_NAME" "${2:-info}" "$1" >> "${LOG_FILE:-/dev/null}"
-}
-
-AI_REJECT_REASON=""
-
-invoke_ai() {
-    local speed="${1:-balanced}"
-    local permissions="${2:-none}"
-    local validate_fn="${3:-}"
-    local max_retries="${4:-0}"
-
-    AI_REJECT_REASON=""
-
-    # Read prompt from stdin
-    local prompt
-    prompt=$(cat)
-
-    # Detect backend
-    # command -v exempt: existence check with explicit fallback chain
-    local cli_cmd=""
-    if command -v claude >/dev/null 2>&1; then
-        cli_cmd="claude"
-    elif $IS_WINDOWS; then
-        # Windows Git Bash: agent may be on PowerShell PATH only
-        local agent_path
-        agent_path=$(pwsh -NoProfile -Command \
-            'Get-Command agent -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source' \
-            2>/dev/null) || true  # pwsh may not be installed; fallback is no agent CLI
-        if [ -n "$agent_path" ]; then cli_cmd="agent"; fi
-    elif command -v agent >/dev/null 2>&1; then
-        cli_cmd="agent"
-    fi
-
-    if [ -z "$cli_cmd" ]; then
-        AI_REJECT_REASON="No AI CLI available (claude or agent)"
-        _ai_log "AI invocation: no CLI available (claude or agent)" "error"
-        return 1
-    fi
-
-    # Build CLI flags
-    local -a flags=()
-
-    if [ "$cli_cmd" = "claude" ]; then
-        flags+=("-p" "--no-session-persistence")
-        # Speed mapping (claude CLI: explicit model + effort)
-        case "$speed" in
-            fast)     flags+=("--model" "haiku" "--effort" "low") ;;
-            balanced) flags+=("--model" "sonnet") ;;
-            quality)  flags+=("--model" "opus" "--effort" "high") ;;
-        esac
-        # Permission mapping
-        case "$permissions" in
-            none)      flags+=("--allowedTools" "") ;;
-            readonly)  flags+=("--allowedTools" "Read Glob Grep") ;;
-            full)      ;; # default -- no restriction
-            dangerous) flags+=("--dangerously-skip-permissions") ;;
-        esac
-        # System prompt hints for speed tiers
-        case "$speed" in
-            fast)    flags+=("--append-system-prompt" "Be concise and direct.") ;;
-            quality) flags+=("--append-system-prompt" "Take your time. Be thorough.") ;;
-        esac
-    else
-        # Agent CLI -- no --model flag; speed via prompt prefix only
-        flags+=("-p" "--trust")
-        # Permission mapping
-        case "$permissions" in
-            none)      flags+=("--mode" "ask") ;;
-            readonly)  flags+=("--mode" "plan") ;;
-            full)      ;; # default
-            dangerous) flags+=("--force") ;;
-        esac
-    fi
-
-    # Speed prefix for agent CLI (no model flag available)
-    local speed_prefix=""
-    if [ "$cli_cmd" = "agent" ]; then
-        case "$speed" in
-            fast)    speed_prefix="Be concise and direct. Prioritize speed.\n\n" ;;
-            quality) speed_prefix="Take your time. Be thorough and precise.\n\n" ;;
-        esac
-    fi
-
-    # Retry loop
-    local attempt=0
-    local current_prompt="$prompt"
-
-    while [ "$attempt" -le "$max_retries" ]; do
-        attempt=$((attempt + 1))
-
-        _ai_log "AI invocation: speed=$speed backend=$cli_cmd attempt=$attempt"
-
-        local full_prompt
-        full_prompt=$(printf '%b%s' "$speed_prefix" "$current_prompt")
-
-        local output
-        # Suppress set -e abort; CLI may exit non-zero on model errors
-        output=$(printf '%s' "$full_prompt" | "$cli_cmd" "${flags[@]}" 2>&1) || true
-
-        if [ -z "$output" ]; then
-            AI_REJECT_REASON="Empty output from $cli_cmd"
-            _ai_log "AI invocation: speed=$speed backend=$cli_cmd attempt=$attempt result=empty" "warn"
-            if [ "$attempt" -le "$max_retries" ]; then
-                current_prompt=$(printf 'Your previous output was empty. Try again.\n\n%s' "$prompt")
-                continue
-            fi
-            return 1
-        fi
-
-        # Validate if function provided
-        if [ -n "$validate_fn" ]; then
-            if ! "$validate_fn" "$output"; then
-                [ -z "$AI_REJECT_REASON" ] && AI_REJECT_REASON="Validation failed"
-                _ai_log "AI invocation: speed=$speed backend=$cli_cmd attempt=$attempt result=rejected reason=$AI_REJECT_REASON" "warn"
-                while IFS= read -r _rej_line; do
-                    log_detail "ai-rejected: $_rej_line"
-                done <<< "$output"
-                if [ "$attempt" -le "$max_retries" ]; then
-                    current_prompt=$(printf 'Your previous output was rejected: %s. Try again.\n\n%s' \
-                        "$AI_REJECT_REASON" "$prompt")
-                    continue
-                fi
-                _ai_log "AI invocation: speed=$speed backend=$cli_cmd exhausted after $attempt attempts" "warn"
-                return 1
-            fi
-        fi
-
-        # Success
-        _ai_log "AI invocation: speed=$speed backend=$cli_cmd attempt=$attempt result=accepted"
-        printf '%s' "$output"
-        return 0
-    done
-
-    return 1
-}
-
-# ---------------------------------------------------------------------------
-# Summary writer (3-arg: category, tool, detail)
-# ---------------------------------------------------------------------------
-write_summary() {
-    if [ -n "${AITOOLS_SUMMARY_FILE:-}" ]; then
-        local cat="$1"
-        # Auto-promote OK to WARN when warnings have been logged
-        if [ "$cat" = "OK" ] && [ "${WARNINGS:-0}" -gt 0 ]; then
-            cat="WARN"
-        fi
-        printf '%s|%s|%s\n' "$cat" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
-    fi
-}
-
-# ---------------------------------------------------------------------------
-# Backup a file before overwriting. Keeps at most $max_backups copies.
-# ---------------------------------------------------------------------------
-backup_file() {
-    local file="$1" max_backups=20
-    [ -f "$file" ] || return 0
-    local ts
-    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
-    cp "$file" "${file}.bak.${ts}"
-    # Prune oldest beyond limit
-    ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1)) | xargs rm -f 2>/dev/null
-    log "Backed up $(display_path "$file")"
-}
-
-# ---------------------------------------------------------------------------
-# Backup a directory before modifying managed files. Keeps at most $max_backups copies.
-# ---------------------------------------------------------------------------
-backup_dir() {
-    local dir="$1" max_backups=5
-    [ -d "$dir" ] || return 0
-    local file_count
-    file_count=$(find "$dir" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')
-    if [ "$file_count" -eq 0 ]; then
-        return 0
-    fi
-    local ts
-    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
-    if ! cp -R "$dir" "${dir}.bak.${ts}"; then
-        log_warn "Could not back up $(display_path "$dir") -- proceeding without backup"
-        return 0
-    fi
-    local old_backups
-    old_backups=$(find "$(dirname "$dir")" -maxdepth 1 -name "$(basename "$dir").bak.*" -type d \
-        | sort -r | tail -n +$((max_backups + 1)))
-    if [ -n "$old_backups" ]; then
-        printf '%s\n' "$old_backups" | while IFS= read -r old_dir; do
-            rm -rf "$old_dir"
-            log "Pruned old backup: $(display_path "$old_dir")"
-        done
-    fi
-    log "Backed up $(display_path "$dir") ($file_count managed files)"
-}
-
-# ---------------------------------------------------------------------------
-# Deploy state tracking: manifest + shadow copies for auto-deploy detection.
-# Tracks what was last deployed to each managed file.
-# ---------------------------------------------------------------------------
-_DEPLOY_STATE_DIR="$HOME/.aitools/deploy-state"
-_DEPLOY_MANIFEST=""
-
-get_content_hash() {
-    printf '%s' "$1" | sha256sum | cut -d' ' -f1
-}
-
-_deploy_state_key() {
-    local file_path="$1"
-    # Normalize: strip $HOME prefix, use forward slashes
-    printf '%s' "$file_path" | perl -pe "s{^\Q$HOME\E/}{}"
-}
-
-initialize_deploy_state() {
-    local manifest_path="$_DEPLOY_STATE_DIR/manifest.json"
-    if [ -f "$manifest_path" ]; then
-        _DEPLOY_MANIFEST=$(cat "$manifest_path")
-    else
-        _DEPLOY_MANIFEST='{"version":1,"files":{}}'
-    fi
-}
-
-get_deploy_state_hash() {
-    local file_path="$1"
-    if [ -z "$_DEPLOY_MANIFEST" ]; then initialize_deploy_state; fi
-    local key
-    key=$(_deploy_state_key "$file_path")
-    # node is already a dependency (used by read_config_key)
-    printf '%s' "$_DEPLOY_MANIFEST" | node -e "
-        const m = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-        const f = m.files || {};
-        const e = f[process.argv[1]];
-        if (e && e.hash) process.stdout.write(e.hash);
-    " "$key" 2>/dev/null
-}
-
-update_deploy_state() {
-    local file_path="$1"
-    local content="$2"
-    if [ -z "$_DEPLOY_MANIFEST" ]; then initialize_deploy_state; fi
-    local key hash ts
-    key=$(_deploy_state_key "$file_path")
-    hash=$(get_content_hash "$content")
-    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-
-    mkdir -p "$_DEPLOY_STATE_DIR"
-
-    # Update manifest via node
-    _DEPLOY_MANIFEST=$(printf '%s' "$_DEPLOY_MANIFEST" | node -e "
-        const m = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-        if (!m.files) m.files = {};
-        m.files[process.argv[1]] = { hash: process.argv[2], deployedAt: process.argv[3] };
-        process.stdout.write(JSON.stringify(m, null, 2));
-    " "$key" "$hash" "$ts" 2>/dev/null)
-
-    printf '%s\n' "$_DEPLOY_MANIFEST" > "$_DEPLOY_STATE_DIR/manifest.json"
-
-    # Write shadow copy
-    local shadow_path="$_DEPLOY_STATE_DIR/shadows/$key"
-    mkdir -p "$(dirname "$shadow_path")"
-    printf '%s' "$content" > "$shadow_path"
-}
-
-get_deploy_shadow() {
-    local file_path="$1"
-    local key
-    key=$(_deploy_state_key "$file_path")
-    local shadow_path="$_DEPLOY_STATE_DIR/shadows/$key"
-    if [ -f "$shadow_path" ]; then
-        cat "$shadow_path"
-    fi
-}
-
-# ---------------------------------------------------------------------------
-# Non-agentic 3-way merge using shadow as common ancestor.
-# Backend: git merge-file (guaranteed prerequisite -- no discovery needed).
-# Sets AUTO_MERGED_CONTENT on clean merge. Returns 0 on success, 1 on failure.
-# ---------------------------------------------------------------------------
-AUTO_MERGED_CONTENT=""
-try_auto_merge() {
-    local local_content="$1"
-    local ancestor_content="$2"
-    local source_content="$3"
-    AUTO_MERGED_CONTENT=""
-
-    local tmp_local tmp_ancestor tmp_source
-    tmp_local=$(mktemp)
-    tmp_ancestor=$(mktemp)
-    tmp_source=$(mktemp)
-    printf '%s' "$local_content" > "$tmp_local"
-    printf '%s' "$ancestor_content" > "$tmp_ancestor"
-    printf '%s' "$source_content" > "$tmp_source"
-
-    local merged
-    # 2>/dev/null: git merge-file writes conflict markers to stderr on exit 1;
-    # we only want stdout. Exit code checked via $rc immediately below.
-    merged=$(git merge-file -p "$tmp_local" "$tmp_ancestor" "$tmp_source" 2>/dev/null)
-    local rc=$?
-    rm -f "$tmp_local" "$tmp_ancestor" "$tmp_source"
-
-    if [ "$rc" -eq 0 ]; then
-        AUTO_MERGED_CONTENT="$merged"
-        return 0
-    fi
-    return 1
-}
-
-# ---------------------------------------------------------------------------
-# Merge file description lookup
-# ---------------------------------------------------------------------------
-# Purpose: Returns a human-readable description of a managed file for AI merge
-#   prompts, providing context about the file's role in the config system.
-# Inputs: $1 = file path
-# Expected output: Single-line description string on stdout.
-_get_merge_file_description() {
-    case "$(basename "$1")" in
-        CLAUDE.md) printf 'User-scope CLAUDE.md -- personal preferences and instructions for Claude Code' ;;
-        *.md)      printf 'Configuration rule: %s' "$(basename "$1")" ;;
-        *.json)    printf 'JSON config: %s' "$(basename "$1")" ;;
-        *)         printf 'Managed file: %s' "$(basename "$1")" ;;
-    esac
-}
-
-# ---------------------------------------------------------------------------
-# AI merge prompt builder (initial merge)
-# ---------------------------------------------------------------------------
-# Purpose: Builds a structured merge prompt following the Role/Context/Task/
-#   Constraints/Format pattern for merging managed configuration files.
-# Inputs: $1=file_path, $2=source_content, $3=local_content, $4=diff_output
-# Expected output: Complete prompt string on stdout, suitable for invoke_ai.
-# Validation: validate_ai_merge_output (5 checks: conversational, fences,
-#   refusal, truncation, header preservation)
-# Known limitations: Very large files may hit model context limits. Files with
-#   no markdown headers rely on Check 4 (length) for rewrite detection.
-_ai_prompt_merge() {
-    local file_path="$1"
-    local source_content="$2"
-    local local_content="$3"
-    local diff_output="$4"
-
-    local file_desc
-    file_desc=$(_get_merge_file_description "$file_path")
-
-    printf '%s' "You are merging a managed configuration file during automated deployment.
-
-## What you are merging
-${file_desc}
-
-## Where changes come from
-SOURCE: The canonical template, synced across machines -- the updated version being deployed
-LOCAL: The user's current file on this machine, with their customizations
-
-## What is happening
-Updated configuration is being deployed. Source has changed and needs to be
-incorporated without losing local customizations.
-
-## Differences (unified diff: local vs source)
-${diff_output}
-
-## Full local file (start from this)
-<LOCAL>
-${local_content}
-</LOCAL>
-
-## Rules
-1. Start with LOCAL as your base -- preserve all user customizations
-2. Apply ONLY the changes shown in the diff
-3. If a change conflicts with a local customization (contradicts its intent), keep local
-4. If a change adds new content not in LOCAL, add it in the appropriate location
-5. If a change updates content the user hasn't customized, apply it
-6. CRITICAL: Do NOT wrap your output in markdown code fences (\`\`\`). Output raw file content ONLY
-7. No commentary, no explanation, no preamble -- just the merged file content"
-}
-
-# ---------------------------------------------------------------------------
-# AI merge prompt builder (refinement)
-# ---------------------------------------------------------------------------
-# Purpose: Builds a refinement prompt for iterating on a previous merge result
-#   based on user feedback.
-# Inputs: $1=source_content, $2=local_content, $3=current_merge, $4=feedback
-# Expected output: Complete prompt string on stdout, suitable for invoke_ai.
-# Validation: Same as initial merge (validate_ai_merge_output).
-_ai_prompt_merge_refine() {
-    local source_content="$1"
-    local local_content="$2"
-    local current_merge="$3"
-    local feedback="$4"
-
-    printf '%s' "You are refining a merged configuration file based on user feedback.
-
-## Context
-A previous merge produced CURRENT_MERGE from SOURCE + LOCAL. The user wants changes.
-
-## SOURCE (original template)
-<SOURCE>
-${source_content}
-</SOURCE>
-
-## LOCAL (original user file)
-<LOCAL>
-${local_content}
-</LOCAL>
-
-## CURRENT MERGE (previous result)
-<CURRENT_MERGE>
-${current_merge}
-</CURRENT_MERGE>
-
-## User Feedback
-${feedback}
-
-## Rules
-- Apply the user's feedback to CURRENT_MERGE
-- Keep all content from CURRENT_MERGE not affected by the feedback
-- Output the revised merged file content ONLY -- no preamble, no explanation, no markdown fences"
-}
-
-# Merge validation wrapper for invoke_ai -- captures source/local context
-# via module-level variables set by _invoke_ai_merge before calling invoke_ai.
-_MERGE_VALIDATE_SOURCE=""
-_MERGE_VALIDATE_LOCAL=""
-_merge_validate() {
-    validate_ai_merge_output "$1" "$_MERGE_VALIDATE_SOURCE" "$_MERGE_VALIDATE_LOCAL"
-    AI_REJECT_REASON="$MERGE_REJECT_REASON"
-}
-
-MERGE_REJECT_REASON=""
-
-# ---------------------------------------------------------------------------
-# Validate AI merge output before accepting it.
-# Returns 0 if valid, 1 if invalid. Sets MERGE_REJECT_REASON on failure.
-# ---------------------------------------------------------------------------
-validate_ai_merge_output() {
-    local output="$1"
-    local source_content="$2"
-    local local_content="$3"
-    MERGE_REJECT_REASON=""
-
-    # Check 1: conversational patterns (first non-empty line)
-    local first_line
-    first_line=$(printf '%s' "$output" | perl -ne 'if (/\S/) { print; exit }')
-    if printf '%s' "$first_line" | perl -ne 'exit 0 if /^(I |Here|Sure|Certainly|Let me)/i; exit 1'; then
-        MERGE_REJECT_REASON="AI responded conversationally instead of producing merged content"
-        return 1
-    fi
-
-    # Check 2: markdown code fences
-    if printf '%s\n' "$output" | perl -ne 'exit 0 if /^```/; END { exit 1 }'; then
-        MERGE_REJECT_REASON="AI wrapped output in code fences -- need raw content"
-        return 1
-    fi
-
-    # Check 3: conversational refusal patterns (not bare keywords -- content may
-    # legitimately contain "permission", "access", etc.)
-    if printf '%s' "$output" | perl -ne 'exit 0 if /(?:I don.t have permission|I cannot access|I.m not authorized|I need (?:your )?approval|permission denied|access denied|I.m unable to|I can.t (?:read|write|access|open|modify))/i; END { exit 1 }'; then
-        MERGE_REJECT_REASON="AI indicated it couldn't perform the merge"
-        return 1
-    fi
-
-    # Check 4: minimum length (output >= 50% of shorter input when shorter > 40 chars)
-    local out_len src_len local_len min_input_len threshold
-    out_len=$(printf '%s' "$output" | wc -c | tr -d ' ')
-    src_len=$(printf '%s' "$source_content" | wc -c | tr -d ' ')
-    local_len=$(printf '%s' "$local_content" | wc -c | tr -d ' ')
-    if [ "$src_len" -le "$local_len" ]; then min_input_len=$src_len; else min_input_len=$local_len; fi
-    threshold=$((min_input_len / 2))
-    if [ "$min_input_len" -gt 40 ] && [ "$out_len" -lt "$threshold" ]; then
-        MERGE_REJECT_REASON="Output too short ($out_len chars, expected ${threshold}+) -- likely truncated"
-        return 1
-    fi
-
-    # Check 5: header preservation — deduplicated headers from source+local must
-    # be >=60% preserved in output. Files with 0 headers pass (Check 4 handles truncation).
-    local combined_headers
-    combined_headers=$(printf '%s\n%s' "$source_content" "$local_content" \
-        | grep -E '^#{1,6} ' | sort -u)
-    local total preserved=0
-    total=$(printf '%s\n' "$combined_headers" | grep -c '^' || true)  # count lines; may be 0
-    if [ "$total" -gt 0 ]; then
-        while IFS= read -r header; do
-            [ -z "$header" ] && continue
-            printf '%s' "$output" | grep -qF "$header" && preserved=$((preserved + 1))
-        done <<< "$combined_headers"
-        local threshold=$(( (total * 60 + 99) / 100 ))
-        [ "$threshold" -lt 1 ] && threshold=1
-        if [ "$preserved" -lt "$threshold" ]; then
-            MERGE_REJECT_REASON="Rewrote too much ($preserved/$total section headers preserved, need 60%+)"
-            return 1
-        fi
-    fi
-
-    return 0
-}
-
-MERGED_CONTENT=""
-
-# ---------------------------------------------------------------------------
-# Spinner for AI operations (visual progress indicator)
-# ---------------------------------------------------------------------------
-_AI_SPINNER_PID=""
-
-_start_spinner() {
-    local msg="${1:-working...}"
-    (
-        local chars='/-\|'
-        local i=0
-        while true; do
-            printf '\r  %s %s' "${chars:$((i % 4)):1}" "$msg" > /dev/tty
-            i=$((i + 1))
-            sleep 0.2
-        done
-    ) &
-    _AI_SPINNER_PID=$!
-}
-
-_stop_spinner() {
-    if [ -n "$_AI_SPINNER_PID" ] && kill -0 "$_AI_SPINNER_PID" 2>/dev/null; then
-        kill "$_AI_SPINNER_PID" 2>/dev/null
-        wait "$_AI_SPINNER_PID" 2>/dev/null || true  # reap; exit code irrelevant for spinner
-    fi
-    _AI_SPINNER_PID=""
-    printf '\r  \033[K' > /dev/tty  # clear spinner line
-}
-
-# ---------------------------------------------------------------------------
-# Agentic merge via invoke_ai with refinement loop.
-# Uses structured prompts from _ai_prompt_merge / _ai_prompt_merge_refine.
-# Sets DIFF_REVIEW_RESULT="merge" + MERGED_CONTENT, or falls back.
-# ---------------------------------------------------------------------------
-_invoke_ai_merge() {
-    local file_path="$1"
-    local source_content="$2"
-    local local_content="${3:-}"
-    local diff_output="${4:-}"
-
-    # Read local from disk if not provided (backward compat)
-    if [ -z "$local_content" ] && [ -f "$file_path" ]; then
-        local_content=$(cat "$file_path")
-    fi
-
-    # Detect backend for transparency display
-    local ai_backend="unknown"
-    if command -v claude >/dev/null 2>&1; then
-        ai_backend="claude"
-    elif command -v agent >/dev/null 2>&1; then
-        ai_backend="agent"
-    fi
-    local display_name
-    display_name=$(basename "$file_path")
-    printf '  >> AI merge: %s (balanced) -- merging %s...\n' "$ai_backend" "$display_name" > /dev/tty
-
-    # Set validation context for _merge_validate wrapper
-    _MERGE_VALIDATE_SOURCE="$source_content"
-    _MERGE_VALIDATE_LOCAL="$local_content"
-
-    local current_merge=""
-    local iteration=0
-
-    while true; do
-        iteration=$((iteration + 1))
-        local prompt_text
-
-        if [ -z "$current_merge" ]; then
-            prompt_text=$(_ai_prompt_merge "$file_path" "$source_content" "$local_content" "$diff_output")
-        else
-            local feedback
-            printf '  refinement feedback: ' > /dev/tty
-            IFS= read -r feedback < /dev/tty
-            prompt_text=$(_ai_prompt_merge_refine "$source_content" "$local_content" "$current_merge" "$feedback")
-        fi
-
-        local merged
-        _start_spinner "merging $display_name (attempt $iteration)..."
-        # invoke_ai returns 1 on failure with no stdout; || true suppresses set -e abort
-        merged=$(printf '%s' "$prompt_text" | invoke_ai balanced none _merge_validate 1) || true
-        _stop_spinner
-
-        # Defense-in-depth: strip leading/trailing code fences if AI ignored instructions
-        if [ -n "$merged" ]; then
-            merged=$(printf '%s' "$merged" | perl -0777 -pe 's/\A```[^\n]*\n//; s/\n```\s*\z//')
-        fi
-
-        if [ -z "$merged" ]; then
-            printf '  >> AI merge failed (iteration %d): %s\n' "$iteration" "${AI_REJECT_REASON:-unknown error}" > /dev/tty
-            log_error "AI merge failed (iteration $iteration): ${AI_REJECT_REASON:-unknown error}"
-            printf '  fallback [o]verwrite / [s]kip: ' > /dev/tty
-            local fb
-            read -r fb < /dev/tty
-            case "$(printf '%s' "$fb" | tr '[:upper:]' '[:lower:]')" in
-                s) DIFF_REVIEW_RESULT="skip" ;;
-                *) DIFF_REVIEW_RESULT="overwrite" ;;
-            esac
-            return 0
-        fi
-
-        # Show merge preview
-        printf '\n  --- merged result preview (first 30 lines) ---\n' > /dev/tty
-        printf '%s\n' "$merged" | head -30 | while IFS= read -r line; do
-            printf '  | %s\n' "$line" > /dev/tty
-        done
-        local total_lines
-        total_lines=$(printf '%s\n' "$merged" | wc -l | tr -d ' ')
-        if [ "$total_lines" -gt 30 ]; then
-            printf '  | ... (%d more lines)\n' "$((total_lines - 30))" > /dev/tty
-        fi
-        printf '\n  [y]es accept / [r]efine / [n]o reject: ' > /dev/tty
-        local accept
-        read -r accept < /dev/tty
-        case "$(printf '%s' "$accept" | tr '[:upper:]' '[:lower:]')" in
-            y)
-                MERGED_CONTENT="$merged"
-                DIFF_REVIEW_RESULT="merge"
-                printf '  >> merged: AI-merged content accepted (iteration %d)\n' "$iteration" > /dev/tty
-                return 0
-                ;;
-            r)
-                current_merge="$merged"
-                printf '  >> refining merge (iteration %d)...\n' "$iteration" > /dev/tty
-                continue
-                ;;
-            *)
-                printf '  >> merge rejected, falling back to overwrite\n' > /dev/tty
-                DIFF_REVIEW_RESULT="overwrite"
-                return 0
-                ;;
-        esac
-    done
-}
-
-# ---------------------------------------------------------------------------
-# Prompt user before overwriting a managed file with different content.
-# Shows diff, attempts diff3 auto-merge, offers interactive options.
-#
-# Args:
-#   $1 = file path (deployed file on disk)
-#   $2 = new content that would be written (from source template)
-#   $3 = adopt target label (e.g., "profile", "shared/") or "" to hide adopt
-#   $4 = current content of local file (optional, read from disk if empty)
-#   $5 = ancestor content from shadow (optional, enables diff3 merge)
-#
-# Sets global DIFF_REVIEW_RESULT to: "overwrite", "adopt", "merge", or "skip"
-# When "merge": also sets MERGED_CONTENT with the merged result.
-# Exits with code 2 on abort.
-# Non-interactive / --force: sets "overwrite" and returns.
-# ---------------------------------------------------------------------------
-DIFF_REVIEW_RESULT=""
-prompt_diff_review() {
-    local file_path="$1"
-    local new_content="$2"
-    local adopt_label="${3:-}"
-    local cur_content="${4:-}"
-    local ancestor_content="${5:-}"
-
-    DIFF_REVIEW_RESULT="overwrite"
-    MERGED_CONTENT=""
-
-    # --force or AITOOLS_FORCE: auto-overwrite
-    if [ "${AITOOLS_FORCE:-}" = "1" ] || [ "${FORCE:-}" = "true" ]; then
-        log_warn "Diff in $(display_path "$file_path") -- overwriting (--force)"
-        return 0
-    fi
-
-    # Non-interactive: auto-overwrite
-    if ! (printf '' > /dev/tty) 2>/dev/null; then
-        log_warn "Diff in $(display_path "$file_path") -- overwriting (non-interactive)"
-        return 0
-    fi
-
-    # Read current file if not provided
-    if [ -z "$cur_content" ] && [ -f "$file_path" ]; then
-        cur_content=$(cat "$file_path")
-    fi
-
-    # Context header
-    printf '\n\033[33m[REVIEW]\033[0m %s differs from source.\n' \
-        "$(display_path "$file_path")" > /dev/tty
-    printf '  source = template (would deploy)\n' > /dev/tty
-    printf '  local  = current file on disk\n\n' > /dev/tty
-
-    # Show diff
-    local diff_output
-    # diff exits 1 on differences (expected), suppress set -e abort
-    diff_output=$(diff -u <(printf '%s' "$new_content") <(printf '%s' "$cur_content") \
-        --label "source (would deploy)" --label "local (on disk)" 2>&1) || true
-    local diff_lines
-    diff_lines=$(printf '%s\n' "$diff_output" | wc -l | tr -d ' ')
-    if [ "$diff_lines" -le 40 ]; then
-        printf '%s\n' "$diff_output" > /dev/tty
-    else
-        printf '%s\n' "$diff_output" | head -30 > /dev/tty
-        printf '  ... (%d more lines -- full diff in deploy log)\n' \
-            "$((diff_lines - 30))" > /dev/tty
-        printf '%s\n' "$diff_output" >> "${LOG_FILE:-/dev/null}"
-    fi
-
-    # Attempt automatic merge if ancestor available
-    if [ -n "$ancestor_content" ]; then
-        printf '\n  Attempting automatic merge...\n' > /dev/tty
-        if try_auto_merge "$cur_content" "$ancestor_content" "$new_content"; then
-            printf '  Clean merge -- no conflicts.\n\n' > /dev/tty
-            local total_m_lines preview_count
-            total_m_lines=$(printf '%s\n' "$AUTO_MERGED_CONTENT" | wc -l | tr -d ' ')
-            preview_count=$total_m_lines
-            if [ "$preview_count" -gt 30 ]; then preview_count=30; fi
-            printf '  --- merged result preview (first %d lines) ---\n' "$preview_count" > /dev/tty
-            printf '%s\n' "$AUTO_MERGED_CONTENT" | head -"$preview_count" | while IFS= read -r line; do
-                printf '  | %s\n' "$line" > /dev/tty
-            done
-            if [ "$total_m_lines" -gt 30 ]; then
-                printf '  | ... (%d more lines)\n' "$((total_m_lines - 30))" > /dev/tty
-            fi
-            printf '\n' > /dev/tty
-            if [ -n "$adopt_label" ]; then
-                printf '  [a]ccept    : deploy merge + update %s\n' "$adopt_label" > /dev/tty
-            else
-                printf '  [a]ccept\n' > /dev/tty
-            fi
-            printf '  [o]verwrite\n' > /dev/tty
-            printf '  [s]kip\n' > /dev/tty
-            printf '  [x]abort\n' > /dev/tty
-            printf '  choice [a/o/s/x]: ' > /dev/tty
-            local merge_choice
-            read -r merge_choice < /dev/tty
-            case "$(printf '%s' "$merge_choice" | tr '[:upper:]' '[:lower:]')" in
-                a)  MERGED_CONTENT="$AUTO_MERGED_CONTENT"
-                    if [ -n "$adopt_label" ]; then
-                        printf '  >> accepted: merge deployed + %s updated\n' "$adopt_label" > /dev/tty
-                        DIFF_REVIEW_RESULT="merge-adopt"
-                    else
-                        printf '  >> accepted: merge deployed\n' > /dev/tty
-                        DIFF_REVIEW_RESULT="merge"
-                    fi
-                    return 0 ;;
-                s)  printf '  >> skipped: local file unchanged\n' > /dev/tty
-                    DIFF_REVIEW_RESULT="skip"
-                    return 0 ;;
-                x)  log_error "Aborted by user"
-                    exit 2 ;;
-                *)  printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
-                    DIFF_REVIEW_RESULT="overwrite"
-                    return 0 ;;
-            esac
-        else
-            printf '  Merge has conflicts -- manual choice required.\n' > /dev/tty
-        fi
-    fi
-
-    # Options (no auto-merge or merge had conflicts)
-    printf '\n' > /dev/tty
-    if [ -n "$adopt_label" ]; then
-        printf '  [o]verwrite : source wins -> deploy to local (backup kept)\n' > /dev/tty
-        printf '  [a]dopt     : local wins -> copy back to %s\n' "$adopt_label" > /dev/tty
-        printf '  [m]erge     : AI-assisted merge of source + local\n' > /dev/tty
-        printf '  [s]kip      : keep local as-is (no changes)\n' > /dev/tty
-        printf '  [x]abort    : stop deployment\n' > /dev/tty
-        printf '  choice [o/a/m/s/x]: ' > /dev/tty
-    else
-        printf '  [o]verwrite : source wins -> deploy to local (backup kept)\n' > /dev/tty
-        printf '  [m]erge     : AI-assisted merge of source + local\n' > /dev/tty
-        printf '  [s]kip      : keep local as-is (no changes)\n' > /dev/tty
-        printf '  [x]abort    : stop deployment\n' > /dev/tty
-        printf '  choice [o/m/s/x]: ' > /dev/tty
-    fi
-
-    local choice
-    read -r choice < /dev/tty
-    case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
-        a)  if [ -n "$adopt_label" ]; then
-                printf '  >> adopted: local version copied back to %s\n' "$adopt_label" > /dev/tty
-                DIFF_REVIEW_RESULT="adopt"
-            else
-                printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
-                DIFF_REVIEW_RESULT="overwrite"
-            fi ;;
-        m)  _invoke_ai_merge "$file_path" "$new_content" "$cur_content" "$diff_output" ;;
-        s)  printf '  >> skipped: local file unchanged\n' > /dev/tty
-            DIFF_REVIEW_RESULT="skip" ;;
-        x)  log_error "Aborted by user"
-            exit 2 ;;
-        *)  printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
-            DIFF_REVIEW_RESULT="overwrite" ;;
-    esac
-    return 0
-}
-
-# ---------------------------------------------------------------------------
-# Deploy a managed file with diff review and deploy state tracking.
-# Uses manifest to auto-deploy when user hasn't edited the local file.
-# Falls back to interactive review with merge options when both sides differ.
-#
-# Args:
-#   $1 = source content (string to deploy)
-#   $2 = dest file path (deployed location)
-#   $3 = tool name (for summary, e.g., "claude rules")
-#   $4 = item name (for DETAIL summary, e.g., "concurrent-agents.md")
-#   $5 = adopt label ("profile", "shared/", or "" to hide adopt option)
-#
-# Sets MANAGED_FILE_RESULT to: "created", "updated", "verified", "accept & adopt", "skipped"
-# Exits with code 2 on abort (from prompt_diff_review).
-# On "accept & adopt"/"skipped": does NOT write the file (caller decides).
-# On "created"/"updated": writes src_content to dest + updates deploy state.
-# ---------------------------------------------------------------------------
-MANAGED_FILE_RESULT=""
-deploy_managed_file() {
-    local src_content="$1"
-    local dest="$2"
-    local tool_name="$3"
-    local item_name="$4"
-    local adopt_label="${5:-}"
-
-    # Normalize trailing whitespace for consistent comparison.
-    # Prevents round-trip diff noise (deploy -> adopt strips trailing blanks -> deploy sees diff).
-    src_content=$(printf '%s' "$src_content" | perl -0777 -pe 's/[\r\n]+$/\n/')
-
-    MANAGED_FILE_RESULT="verified"
-
-    # Dry run: report what would happen without writing
-    if [ "${DRY_RUN:-}" = "true" ]; then
-        if [ -f "$dest" ]; then
-            local _dr_existing
-            _dr_existing=$(cat "$dest")
-            _dr_existing=$(printf '%s' "$_dr_existing" | perl -0777 -pe 's/[\r\n]+$/\n/')
-            if [ "$_dr_existing" = "$src_content" ]; then
-                log "[DRY RUN] Unchanged: $item_name"
-            else
-                log "[DRY RUN] Would update: $item_name -> $(display_path "$dest")"
-            fi
-        else
-            log "[DRY RUN] Would create: $item_name -> $(display_path "$dest")"
-        fi
-        return 0
-    fi
-
-    mkdir -p "$(dirname "$dest")"
-
-    if [ -f "$dest" ]; then
-        local existing
-        existing=$(cat "$dest")
-        existing=$(printf '%s' "$existing" | perl -0777 -pe 's/[\r\n]+$/\n/')
-        if [ "$existing" = "$src_content" ]; then
-            # Content identical — update deploy state (bootstraps manifest)
-            update_deploy_state "$dest" "$src_content"
-            MANAGED_FILE_RESULT="verified"
-            return 0
-        fi
-
-        # Content differs — check deploy state for auto-deploy eligibility
-        local state_hash existing_hash
-        state_hash=$(get_deploy_state_hash "$dest")
-        if [ -n "$state_hash" ]; then
-            existing_hash=$(get_content_hash "$existing")
-            if [ "$existing_hash" = "$state_hash" ]; then
-                # User didn't edit since last deploy → auto-deploy silently
-                backup_file "$dest"
-                printf '%s\n' "$src_content" > "$dest"
-                update_deploy_state "$dest" "$src_content"
-                log "Auto-deployed: $item_name (no local edits detected)"
-                MANAGED_FILE_RESULT="updated"
-                return 0
-            fi
-        fi
-
-        # User edited AND source changed — backup + interactive review
-        backup_file "$dest"
-        local ancestor_content
-        ancestor_content=$(get_deploy_shadow "$dest")
-        # Bootstrap: seed shadow from current deployed content if empty
-        if [ -z "$ancestor_content" ]; then
-            log "Bootstrapping deploy shadow from existing: $(display_path "$dest")"
-            ancestor_content="$existing"
-        fi
-        prompt_diff_review "$dest" "$src_content" "$adopt_label" "$existing" "$ancestor_content"
-        case "$DIFF_REVIEW_RESULT" in
-            adopt)
-                MANAGED_FILE_RESULT="accept & adopt"
-                return 0
-                ;;
-            skip)
-                log_warn "Skipped: $item_name"
-                MANAGED_FILE_RESULT="skipped"
-                return 0
-                ;;
-            merge-adopt)
-                src_content="$MERGED_CONTENT"
-                printf '%s' "$src_content" > "$dest"
-                update_deploy_state "$dest" "$src_content"
-                log_ok "Updated (merge-adopt): $item_name"
-                MANAGED_FILE_RESULT="accept & adopt"
-                return 0
-                ;;
-            merge)
-                src_content="$MERGED_CONTENT"
-                ;;
-        esac
-        # overwrite or merge: write content to dest
-        printf '%s\n' "$src_content" > "$dest"
-        update_deploy_state "$dest" "$src_content"
-        MANAGED_FILE_RESULT="updated"
-        log_ok "Updated: $item_name -> $(display_path "$dest")"
-    else
-        # New file — create
-        printf '%s\n' "$src_content" > "$dest"
-        update_deploy_state "$dest" "$src_content"
-        MANAGED_FILE_RESULT="created"
-        log_ok "Created: $item_name -> $(display_path "$dest")"
-    fi
-}
-
-# ---------------------------------------------------------------------------
-# Deploy tracker: centralizes outcome counting and summary writing for
-# loops that deploy multiple managed files (rules, skills, hooks).
-# ---------------------------------------------------------------------------
-
-# Reset all deploy tracker counters. Call before a deploy loop.
-_DT_ADDED=0; _DT_UPDATED=0; _DT_VERIFIED=0
-_DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0
-DEPLOY_TRACKER_TEXT=""
-
-deploy_tracker_init() {
-    _DT_ADDED=0; _DT_UPDATED=0; _DT_VERIFIED=0
-    _DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0
-    DEPLOY_TRACKER_TEXT=""
-}
-
-# Record a single file outcome. Increments counter and writes DETAIL summary.
-# Args: $1=outcome $2=tool_name $3=item_name
-deploy_tracker_record() {
-    local outcome="$1" tool_name="$2" item_name="$3"
-    case "$outcome" in
-        added|created) _DT_ADDED=$((_DT_ADDED + 1))
-                   write_summary DETAIL "$tool_name" "added: $item_name" ;;
-        updated)   _DT_UPDATED=$((_DT_UPDATED + 1))
-                   write_summary DETAIL "$tool_name" "updated: $item_name" ;;
-        "accept & adopt") _DT_ACCEPTED=$((_DT_ACCEPTED + 1))
-                       write_summary DETAIL "$tool_name" "accept & adopt: $item_name" ;;
-        skipped)   _DT_SKIPPED=$((_DT_SKIPPED + 1))
-                   write_summary DETAIL "$tool_name" "skipped: $item_name" ;;
-        verified)  _DT_VERIFIED=$((_DT_VERIFIED + 1)) ;;
-        preserved) _DT_PRESERVED=$((_DT_PRESERVED + 1)) ;;
-    esac
-}
-
-# Write aggregate summary for a deploy loop. Uses non-zero counts.
-# Sets DEPLOY_TRACKER_TEXT for use in log lines.
-# Args: $1=tool_name
-deploy_tracker_summary() {
-    local tool_name="$1"
-    local parts=""
-    [ "$_DT_ADDED" -gt 0 ]     && parts="$_DT_ADDED added"
-    [ "$_DT_UPDATED" -gt 0 ]   && parts="${parts:+$parts, }$_DT_UPDATED updated"
-    [ "$_DT_ACCEPTED" -gt 0 ]  && parts="${parts:+$parts, }$_DT_ACCEPTED accepted"
-    [ "$_DT_VERIFIED" -gt 0 ]  && parts="${parts:+$parts, }$_DT_VERIFIED verified"
-    [ -z "$parts" ] && parts="verified"
-    DEPLOY_TRACKER_TEXT="$parts"
-
-    if [ "$_DT_SKIPPED" -gt 0 ]; then
-        write_summary WARN "$tool_name" "$_DT_SKIPPED skipped (user review)"
-    else
-        write_summary OK "$tool_name" "$parts"
-    fi
-}
-
-# ---------------------------------------------------------------------------
-# Repair broken uv tool environment (cross-platform)
-# ---------------------------------------------------------------------------
-# When `uv tool upgrade <tool>` fails with "missing a valid environment",
-# find a working Python via `uv python find` (fallback: system python/python3)
-# and reinstall with --force --python <path>.
-# Returns 0 if repaired, 1 if not applicable or failed.
-repair_uv_tool_env() {
-    local tool_name="$1"
-    local upgrade_output="${2:-}"
-
-    if ! printf '%s\n' "$upgrade_output" | grep -q 'missing a valid environment'; then
-        return 1
-    fi
-
-    log_warn "$tool_name uv environment is broken (Python removed?) -- repairing..."
-
-    # Find a working Python -- uv's own Pythons first, then system
-    local working_python=""
-    local uv_python
-    uv_python=$(uv python find 2>/dev/null) || true
-    if [ -n "$uv_python" ] && [ -x "$uv_python" ]; then
-        working_python="$uv_python"
-    elif command -v python3 >/dev/null 2>&1; then
-        working_python=$(command -v python3)
-    elif command -v python >/dev/null 2>&1; then
-        working_python=$(command -v python)
-    fi
-
-    if [ -z "$working_python" ]; then
-        log_error "Cannot repair $tool_name -- no working Python found"
-        return 1
-    fi
-
-    log "Repairing with: uv tool install --force --python $working_python $tool_name"
-    local repair_output
-    repair_output=$(uv tool install --force --python "$working_python" "$tool_name" 2>&1) || true
-    printf '%s\n' "$repair_output" | while IFS= read -r line; do
-        [ -n "$line" ] && log "$line"
-    done
-
-    if printf '%s\n' "$repair_output" | grep -qi 'error.*failed'; then
-        log_error "$tool_name environment repair failed"
-        return 1
-    fi
-
-    log_ok "Repaired $tool_name uv environment"
-    return 0
-}
-
-# ---------------------------------------------------------------------------
-# Parse CHANGED: lines from a node merge result and emit DETAIL summary entries.
-# Usage: emit_merge_details "$MERGE_RESULT" "tool_name"
-# Only processes lines prefixed with "CHANGED: " -- ignores status and other output.
-# ---------------------------------------------------------------------------
-emit_merge_details() {
-    local merge_result="$1" tool_name="$2"
-    local changed_keys
-    changed_keys=$(echo "$merge_result" | perl -ne 'print if s/^CHANGED: //')
-    if [ -n "$changed_keys" ]; then
-        while IFS= read -r key_change; do
-            log "  $key_change"
-            write_summary DETAIL "$tool_name" "$key_change"
-        done <<< "$changed_keys"
-    fi
-}
-
-# ---------------------------------------------------------------------------
-# JSON normalization for comparison (sorted keys, deterministic output)
-# ---------------------------------------------------------------------------
-# JavaScript JSON.stringify preserves insertion order, which may differ
-# between runs or between PS1/bash variants writing the same file. Sorting
-# keys before comparison ensures identical content produces identical JSON.
-#
-# SORT_KEYS_JS: minified sortKeys function for embedding in node -e blocks.
-#   Usage: node -e "$SORT_KEYS_JS; ..."
-#
-# normalize_json: pipe-based wrapper for standalone use.
-#   Usage: NORMALIZED=$(echo "$json_string" | normalize_json)
-SORT_KEYS_JS='function sortKeys(o){if(o===null||typeof o!=="object")return o;if(Array.isArray(o))return o.map(sortKeys);var s={};Object.keys(o).sort().forEach(function(k){s[k]=sortKeys(o[k])});return s}'
-
-normalize_json() {
-    node -e "
-        var input = require('fs').readFileSync('/dev/stdin', 'utf8');
-        $SORT_KEYS_JS
-        try {
-            console.log(JSON.stringify(sortKeys(JSON.parse(input)), null, 2));
-        } catch(e) {
-            process.stderr.write('normalize_json: ' + e.message + '\n');
-            process.exit(1);
-        }
-    "
-}
-
-# ---------------------------------------------------------------------------
-# Go install provenance detection (macOS)
-# Returns: "homebrew", "pkg-installer", "goenv", "manual", "none", or "unknown"
-# ---------------------------------------------------------------------------
-detect_go_provenance() {
-    local go_path
-    go_path=$(command -v go 2>/dev/null) || { echo "none"; return; }
-    case "$go_path" in
-        /opt/homebrew/*/go|/usr/local/Cellar/*/go)
-            echo "homebrew" ;;
-        /usr/local/go/bin/go)
-            # Check if installed via macOS .pkg installer (pkgutil) or manual tarball
-            if pkgutil --pkg-info=org.golang.go >/dev/null 2>&1; then
-                echo "pkg-installer"
-            else
-                echo "manual"
-            fi ;;
-        */.goenv/*)
-            echo "goenv" ;;
-        *)
-            echo "unknown" ;;
-    esac
-}
-
-# ---------------------------------------------------------------------------
-# Ensure GOPATH/bin is on PATH for current session
-# Returns 0 if already on PATH, 1 if added (caller should warn re persistence)
-# ---------------------------------------------------------------------------
-ensure_gopath_bin_on_path() {
-    local gopath_bin="${GOPATH:-$HOME/go}/bin"
-    case ":$PATH:" in
-        *":$gopath_bin:"*) return 0 ;;
-    esac
-    export PATH="$gopath_bin:$PATH"
-    return 1
-}
-
-# ---------------------------------------------------------------------------
-# Summary panel renderer
-# ---------------------------------------------------------------------------
-# Reads AITOOLS_SUMMARY_FILE, displays colored panel, cleans up.
-# Silent no-op if file unset, missing, or empty.
-show_summary() {
-    local sfile="${AITOOLS_SUMMARY_FILE:-}"
-    [ -n "$sfile" ] || return 0
-    [ -f "$sfile" ] || return 0
-    [ -s "$sfile" ] || { rm -f "$sfile"; return 0; }
-
-    # Dedup by tool name: highest severity wins (ERROR > WARN > OK).
-    # ACTIONs (empty tool name) are never deduped. DETAIL lines collected separately.
-    # Output is pre-sorted: OK+details, WARN+details, ERROR+details, ACTIONs.
-    local deduped
-    deduped=$(perl -F'\|' -lane '
-        BEGIN { %rank = (OK => 1, WARN => 2, ERROR => 3); }
-        $cat = $F[0]; $tool = $F[1]; $det = join("|", @F[2..$#F]);
-        if ($cat eq "DETAIL") {
-            push @{$details{$tool}}, $det; next;
-        }
-        if ($cat eq "ACTION" || $tool eq "") {
-            push @actions, $_; next;
-        }
-        $r = $rank{$cat} // 0;
-        if (!exists $best{$tool}) {
-            push @order, $tool;
-            $best{$tool} = $cat; $detail{$tool} = $det;
-        } elsif ($r > ($rank{$best{$tool}} // 0)) {
-            $best{$tool} = $cat; $detail{$tool} = $det;
-        }
-        END {
-            my (@ok, @warn, @err);
-            for my $t (@order) {
-                my @g = ("$best{$t}|$t|$detail{$t}",
-                         map { "DETAIL|$t|$_" } @{$details{$t} // []});
-                if    ($best{$t} eq "OK")    { push @ok,   @g }
-                elsif ($best{$t} eq "WARN")  { push @warn, @g }
-                elsif ($best{$t} eq "ERROR") { push @err,  @g }
-            }
-            print for @ok, @warn, @err, @actions;
-        }
-    ' "$sfile")
-
-    # Single-pass display: Perl output is pre-sorted by severity.
-    # DETAIL lines inherit the color of their preceding parent entry.
-    echo ""
-    echo "────────────────────────────────────────────────────────"
-    local last_color="" first_action=true
-    while IFS='|' read -r cat tool detail; do
-        case "$cat" in
-            OK)
-                last_color='\033[32m'
-                printf '\033[32m  [ok]  %-16s %s\033[0m\n' "$tool" "$detail"
-                ;;
-            WARN)
-                last_color='\033[33m'
-                printf '\033[33m  [!]   %-16s %s\033[0m\n' "$tool" "$detail"
-                ;;
-            ERROR)
-                last_color='\033[31m'
-                printf '\033[31m  [ERR] %-16s %s\033[0m\n' "$tool" "$detail"
-                ;;
-            DETAIL)
-                printf '%b                          %s\033[0m\n' "$last_color" "$detail"
-                ;;
-            ACTION)
-                if [ "$first_action" = true ]; then
-                    echo ""
-                    printf '\033[1;35m  ACTION REQUIRED -- run before tools are ready:\033[0m\n'
-                    first_action=false
-                fi
-                printf '\033[1;35m  >>  %s\033[0m\n' "$detail"
-                ;;
-        esac
-    done <<< "$deduped"
-    echo "────────────────────────────────────────────────────────"
-
-    # Preserve summary for log compliance checks
-    if [ "${AITOOLS_PRESERVE_SUMMARY:-}" = "1" ]; then
-        # cp may fail if log dir was cleaned up; non-blocking (summary already displayed)
-        if ! cp "$sfile" "$LOG_DIR/last-summary.txt" 2>/dev/null; then
-            printf 'warning: could not preserve summary file\n' >&2
-        fi
-    fi
-    # Cleanup summary file (already displayed; rm -f ignores nonexistent files)
-    rm -f "$sfile"
-}
-
-# ---------------------------------------------------------------------------
-# Build prerequisite checking
-# ---------------------------------------------------------------------------
-
-# ensure_tool_on_path: Verify a tool is findable after installation.
-# Tries: 1) command -v (current PATH), 2) hash -r (cache refresh),
-# 3) known paths fallback (filesystem check + session PATH update).
-# Usage: ensure_tool_on_path "nasm" "/usr/local/bin/nasm" "/opt/homebrew/bin/nasm"
-# Returns 0 if tool is now on PATH, 1 otherwise.
-ensure_tool_on_path() {
-    local tool_name="$1"
-    shift
-    local known_paths=("$@")
-
-    # Already on PATH?
-    if command -v "$tool_name" >/dev/null 2>&1; then return 0; fi
-
-    # Refresh command cache (picks up tools installed earlier in the same session)
-    hash -r 2>/dev/null  # expected to succeed; some shells don't support it
-    if command -v "$tool_name" >/dev/null 2>&1; then return 0; fi
-
-    # Fallback: check known install locations on disk
-    for kp in "${known_paths[@]}"; do
-        if [ -x "$kp" ]; then
-            local parent_dir
-            parent_dir=$(dirname "$kp")
-            export PATH="$parent_dir:$PATH"
-            log "$tool_name found at $kp (added to session PATH)"
-            return 0
-        fi
-    done
-    return 1
-}
-
-# Check known build prerequisites for an ecosystem.
-# Usage: check_build_prereqs "cargo"
-#   Outputs missing prereq info to stdout (one per line: NAME|INSTALL_INSTRUCTION).
-#   Returns 0 if all present, 1 if any missing.
-check_build_prereqs() {
-    local ecosystem="$1"
-    local missing=0
-
-    # Refresh shell command cache (picks up tools installed earlier in the same session)
-    hash -r 2>/dev/null  # expected to succeed; some shells don't support it
-
-    case "$ecosystem" in
-        cargo)
-            # NASM -- required by aws-lc-sys on x86_64
-            if [ "$(uname -m)" = "x86_64" ] && ! command -v nasm >/dev/null 2>&1; then
-                # Fallback: check known install locations
-                if ensure_tool_on_path "nasm" /usr/local/bin/nasm /opt/homebrew/bin/nasm /usr/bin/nasm; then
-                    : # Found via fallback -- ensure_tool_on_path already added to PATH
-                else
-                    echo "NASM|brew install nasm (macOS) or apt-get install nasm (Linux)"
-                    missing=1
-                fi
-            fi
-            # cmake -- required by some crates
-            # Official: cmake.org/download lists pip, ZIP, MSI (not winget)
-            # macOS: brew install cmake (user-level, no sudo)
-            # Windows: uv tool install cmake (user-level, see reference/tool-evaluation-playbook.md)
-            if ! command -v cmake >/dev/null 2>&1; then
-                if ensure_tool_on_path "cmake" /usr/local/bin/cmake /opt/homebrew/bin/cmake /usr/bin/cmake /Applications/CMake.app/Contents/bin/cmake; then
-                    : # Found via fallback
-                else
-                    echo "CMake|brew install cmake (macOS) / uv tool install cmake (Windows) -- see cmake.org/download"
-                    missing=1
-                fi
-            fi
-            ;;
-        pip)
-            # Add pip-specific prereqs here as discovered
-            ;;
-        go)
-            # Add go-specific prereqs here as discovered
-            ;;
-    esac
-
-    return $missing
-}
-
-# ---------------------------------------------------------------------------
-# Build failure diagnosis
-# ---------------------------------------------------------------------------
-
-# Scan build output for known failure signatures.
-# Usage: diagnose_build_failure "$output"
-#   Prints "NAME|REMEDY" if a known signature is found.
-#   Returns 0 if found, 1 if no match.
-diagnose_build_failure() {
-    local output="$1"
-
-    # Table of known failure patterns -> remediation
-    # Add new entries here when new build failures are discovered.
-    local -a patterns=(
-        "NASM command not found|NASM|brew install nasm / apt-get install nasm"
-        "linker.*not found|Linker|Install build-essential (Linux) or Xcode CLI tools (macOS)"
-        "cmake.*not found|CMake|brew install cmake / uv tool install cmake (see cmake.org/download)"
-        "pkg-config.*not found|pkg-config|brew install pkg-config / apt-get install pkg-config"
-        "Python\.h.*not found|Python headers|Install python3-dev or python3-devel"
-        "openssl.*not found|OpenSSL|brew install openssl / apt-get install libssl-dev"
-    )
-
-    for entry in "${patterns[@]}"; do
-        local pattern="${entry%%|*}"
-        local rest="${entry#*|}"
-        if printf '%s\n' "$output" | grep -qiE "$pattern"; then
-            echo "$rest"
-            return 0
-        fi
-    done
-    return 1
-}
-#
-# Complements:
-#   - estimate-refresh-stop.sh (Lagebeurteilung checkpoint — context growth)
-#   - surfacing-duty-stop.sh (incident/ambiguity filing duty)
-#   This hook consolidates visibility into a single status line.
-#
-# KPI definitions (logged to harness DB):
-#   - sentinel.turnCount: total turns this session
-#   - sentinel.turnsSinceHuman: agent turns since last user input
-#   - sentinel.contextPercent: estimated context consumption percentage
-#   - sentinel.subagentCount: total subagents launched
-#   - sentinel.delegationScore: duty elements present / 6
-#   - sentinel.reStaleMinutes: running estimate age in minutes
-#   - sentinel.scratchFileCount: files in .scratch/session-*
-#
-# Platform: macOS + Linux + Windows Git Bash (uname -s dispatch for stat)
-
-set -euo pipefail
-
-# --- Configuration (tune after deployment) ---
-TURNS_THRESHOLD=3        # Agent turns without user input before injecting intent
-READ_STREAK_THRESHOLD=5  # Consecutive Read/Grep turns to qualify as "research phase"
-MAX_INTENT_CHARS=300     # Truncate injected intent to this length
-INJECT_INTERVAL=5        # Consolidated status line every N turns
-RE_STALE_MINUTES=30      # Running estimate stale threshold (minutes)
-# Estimated context model: ~2-5K tokens per turn, ~200K total context
-TOKENS_PER_TURN=3500     # Average tokens consumed per turn
-TOTAL_CONTEXT=200000     # Estimated total context window
-
-# --- Read JSON from stdin ---
-input=$(cat)
-
-# --- Pure-bash JSON field extraction ---
-# Same pattern as standing-order-guard.sh / harvest-session.sh.
-# Handles simple top-level string values only.
-json_field() {
-    local json="$1" key="$2"
-    local pattern="\"${key}\"[[:space:]]*:[[:space:]]*\"([^\"]*)\""
-    if [[ "$json" =~ $pattern ]]; then
-        printf '%s' "${BASH_REMATCH[1]}"
-    fi
-}
-
-session_id=$(json_field "$input" "session_id")
-transcript_path=$(json_field "$input" "transcript_path")
-cwd=$(json_field "$input" "cwd")
-
-# Both required — silent exit if missing
-[ -n "$session_id" ] || exit 0
-[ -n "$transcript_path" ] && [ -f "$transcript_path" ] || exit 0
-
-# --- Marker directory ---
-marker_dir="/tmp/aitools-sentinel-$session_id"
-mkdir -p "$marker_dir" 2>/dev/null || exit 0
-
-# --- Turn counter ---
-turn_file="$marker_dir/turn-count"
-turn_count=0
-if [ -f "$turn_file" ]; then
-    turn_count=$(cat "$turn_file" 2>/dev/null || echo "0")
-    if ! [[ "$turn_count" =~ ^[0-9]+$ ]]; then turn_count=0; fi
-fi
-turn_count=$((turn_count + 1))
-printf '%d' "$turn_count" > "$turn_file"
-
-# --- Session start marker (for duration tracking) ---
-start_file="$marker_dir/session-start"
-if [ ! -f "$start_file" ]; then
-    date +%s > "$start_file"
-fi
-
-# --- Project root ---
-project_root=""
-if [ -n "$cwd" ]; then
-    project_root=$(cd "$cwd" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || echo "$cwd")
-fi
-
-# --- Accumulator for reminders ---
-reminders=""
-detail_reminders=""
-
-# ==========================================================================
-# FUNCTION 1: Turns-since-human tracker
-# ==========================================================================
-# Count agent turns since last human message. Only extract intent when
-# threshold is hit.
-
-agent_turns_since_human=0
-agent_turns_since_human=$(tail -500 "$transcript_path" 2>/dev/null | \
-    perl -ne '
-        if (/"type"\s*:\s*"human"/ && !/"isSidechain"\s*:\s*true/) {
-            $count = 0;
-        } elsif (/"type"\s*:\s*"assistant"/ && !/"isSidechain"\s*:\s*true/) {
-            $count++;
-        }
-        END { print $count // 0; }
-    ' 2>/dev/null || echo "0")
-
-if ! [[ "$agent_turns_since_human" =~ ^[0-9]+$ ]]; then
-    agent_turns_since_human=0
-fi
-
-intent_text=""
-if [ "$agent_turns_since_human" -ge "$TURNS_THRESHOLD" ]; then
-    # Extract the user's last instruction
-    last_human_line=$(tail -500 "$transcript_path" 2>/dev/null | \
-        perl -ne '
-            if (/"type"\s*:\s*"human"/ && !/"isSidechain"\s*:\s*true/) {
-                $last = $_;
-            }
-            END { print $last if $last; }
-        ' 2>/dev/null || true)
-
-    if [ -n "$last_human_line" ]; then
-        intent_text=$(printf '%s' "$last_human_line" | \
-            perl -ne '
-                if (/"message"\s*:\s*\{.*?"content"\s*:\s*\[/) {
-                    while (/"type"\s*:\s*"text"\s*,\s*"text"\s*:\s*"((?:[^"\\]|\\.)*)"/g) {
-                        print $1;
-                        last;
-                    }
-                }
-            ' 2>/dev/null || true)
-
-        if [ -n "$intent_text" ]; then
-            intent_text=$(printf '%s' "$intent_text" | \
-                perl -pe 's/\\n/ /g; s/\\"/"/g; s/\\\\/\\/g; s/\\t/ /g;' \
-                2>/dev/null || echo "$intent_text")
-        fi
-    fi
-
-    # Truncate
-    if [ -n "$intent_text" ] && [ "${#intent_text}" -gt "$MAX_INTENT_CHARS" ]; then
-        intent_text="${intent_text:0:$MAX_INTENT_CHARS}..."
-    fi
-
-    if [ -n "$intent_text" ]; then
-        detail_reminders="${detail_reminders}INTENT CHECK (${agent_turns_since_human} turns since user): \"${intent_text}\" -- Still aligned? Confirm with user before shifting from research to execution. "
-    fi
-fi
-
-# ==========================================================================
-# FUNCTION 2: Phase transition detector (Read-heavy -> Write/Edit)
-# ==========================================================================
-
-if [ -z "$detail_reminders" ]; then
-    recent_tools=$(tail -200 "$transcript_path" 2>/dev/null | \
-        perl -ne '
-            while (/"type"\s*:\s*"tool_use".*?"name"\s*:\s*"(\w+)"/g) {
-                print "$1\n";
-            }
-            while (/"name"\s*:\s*"(\w+)".*?"type"\s*:\s*"tool_use"/g) {
-                print "$1\n";
-            }
-        ' 2>/dev/null || true)
-
-    if [ -n "$recent_tools" ]; then
-        read_streak=0
-        saw_write=false
-        last_tool=""
-
-        while IFS= read -r tool; do
-            case "$tool" in
-                Read|Grep|Glob)
-                    read_streak=$((read_streak + 1))
-                    saw_write=false
-                    ;;
-                Write|Edit)
-                    saw_write=true
-                    last_tool="$tool"
-                    ;;
-                *)
-                    read_streak=0
-                    saw_write=false
-                    ;;
-            esac
-        done <<< "$recent_tools"
-
-        if [ "$saw_write" = "true" ] && [ "$read_streak" -ge "$READ_STREAK_THRESHOLD" ]; then
-            detail_reminders="${detail_reminders}PHASE TRANSITION: ${read_streak}+ Read/Grep calls then ${last_tool}. Confirm with user before continuing execution on repo files. "
-        fi
-    fi
-fi
-
-# ==========================================================================
-# FUNCTION 3: Context consumption tracker
-# ==========================================================================
-
-context_percent=$((turn_count * TOKENS_PER_TURN * 100 / TOTAL_CONTEXT))
-if [ "$context_percent" -gt 100 ]; then context_percent=100; fi
-
-# ==========================================================================
-# FUNCTION 4: Tool usage profile (computed on injection turns only)
-# ==========================================================================
-
-tool_profile=""
-if [ $((turn_count % INJECT_INTERVAL)) -eq 0 ]; then
-    tool_profile=$(tail -500 "$transcript_path" 2>/dev/null | \
-        perl -ne '
-            while (/"type"\s*:\s*"tool_use".*?"name"\s*:\s*"(\w+)"/g) { $c{$1}++; }
-            while (/"name"\s*:\s*"(\w+)".*?"type"\s*:\s*"tool_use"/g) { $c{$1}++; }
-            END {
-                my @parts;
-                for my $t (sort { $c{$b} <=> $c{$a} } keys %c) {
-                    push @parts, "$c{$t} $t";
-                    last if @parts >= 5;
-                }
-                print join(", ", @parts) if @parts;
-            }
-        ' 2>/dev/null || true)
-fi
-
-# ==========================================================================
-# FUNCTION 5: Subagent tracker
-# ==========================================================================
-
-subagent_info=""
-if [ $((turn_count % INJECT_INTERVAL)) -eq 0 ]; then
-    subagent_info=$(tail -1000 "$transcript_path" 2>/dev/null | \
-        perl -ne '
-            $launched++ if /"type"\s*:\s*"tool_use".*?"name"\s*:\s*"Agent"/;
-            $launched++ if /"name"\s*:\s*"Agent".*?"type"\s*:\s*"tool_use"/;
-            $complete++ if /"type"\s*:\s*"tool_result"/ && /"name"\s*:\s*"Agent"/;
-            $complete++ if /"name"\s*:\s*"Agent"/ && /"type"\s*:\s*"tool_result"/;
-            END {
-                $launched //= 0;
-                $complete //= 0;
-                my $running = $launched - $complete;
-                $running = 0 if $running < 0;
-                print "${launched}L/${complete}C/${running}R" if $launched > 0;
-            }
-        ' 2>/dev/null || true)
-fi
-
-# ==========================================================================
-# FUNCTION 6: Running estimate freshness
-# ==========================================================================
-
-re_stale_minutes=0
-re_status="n/a"
-if [ -n "$project_root" ]; then
-    estimate=""
-    if [ -f "$project_root/.aitools/channel/running-estimate.json" ]; then
-        estimate="$project_root/.aitools/channel/running-estimate.json"
-    fi
-
-    if [ -n "$estimate" ]; then
-        now=$(date +%s)
-        if [ "$(uname -s)" = "Darwin" ]; then
-            est_mod=$(stat -f %m "$estimate" 2>/dev/null || echo "$now")
-        else
-            est_mod=$(stat -c %Y "$estimate" 2>/dev/null || echo "$now")
-        fi
-        est_age=$((now - est_mod))
-        re_stale_minutes=$((est_age / 60))
-        if [ "$re_stale_minutes" -ge "$RE_STALE_MINUTES" ]; then
-            re_status="STALE(${re_stale_minutes}m)"
-            detail_reminders="${detail_reminders}Running estimate stale (${re_stale_minutes} min). Update with current state. "
-        else
-            re_status="fresh(${re_stale_minutes}m)"
-        fi
-    fi
-fi
-
-# ==========================================================================
-# FUNCTION 7: Delegation duty compliance score
-# ==========================================================================
-
-deleg_score=""
-if [ $((turn_count % INJECT_INTERVAL)) -eq 0 ]; then
-    # Find the most recent Agent tool_use in transcript tail
-    last_agent_prompt=$(tail -500 "$transcript_path" 2>/dev/null | \
-        perl -ne '
-            if (/"name"\s*:\s*"Agent"/ || /"type"\s*:\s*"tool_use".*?"name"\s*:\s*"Agent"/) {
-                $last = $_;
-            }
-            END { print $last if $last; }
-        ' 2>/dev/null || true)
-
-    if [ -n "$last_agent_prompt" ]; then
-        deleg_score=$(printf '%s' "$last_agent_prompt" | \
-            perl -ne '
-                my $score = 0;
-                my @missing;
-                # 1. Identity
-                if (/S[1-9]|you are|your identity|your role/i) { $score++; }
-                else { push @missing, "identity"; }
-                # 2. Rules instruction
-                if (/rules|CLAUDE\.md|\.claude\/rules/i) { $score++; }
-                else { push @missing, "rules"; }
-                # 3. Skills instruction
-                if (/skills|SKILL\.md|shared\/skills/i) { $score++; }
-                else { push @missing, "skills"; }
-                # 4. Operational learning
-                if (/operational learning|carry forward|OL-/i) { $score++; }
-                else { push @missing, "OL"; }
-                # 5. WRITE_BLOCKED signal
-                if (/WRITE_BLOCKED/i) { $score++; }
-                else { push @missing, "WRITE_BLOCKED"; }
-                # 6. Access workaround
-                if (/explicit paths|Glob\/Grep|cross-repo|OL-O12/i) { $score++; }
-                else { push @missing, "access"; }
-                my $missing_str = @missing ? " missing:" . join(",", @missing) : "";
-                print "${score}/6${missing_str}";
-            ' 2>/dev/null || true)
-    fi
-fi
-
-# ==========================================================================
-# FUNCTION 8: Session duration + work product count
-# ==========================================================================
-
-session_duration=""
-scratch_count=0
-commit_count=0
-if [ $((turn_count % INJECT_INTERVAL)) -eq 0 ]; then
-    # Duration
-    session_start=0
-    if [ -f "$start_file" ]; then
-        session_start=$(cat "$start_file" 2>/dev/null || echo "0")
-        if ! [[ "$session_start" =~ ^[0-9]+$ ]]; then session_start=0; fi
-    fi
-    if [ "$session_start" -gt 0 ]; then
-        now=$(date +%s)
-        elapsed=$((now - session_start))
-        hours=$((elapsed / 3600))
-        minutes=$(( (elapsed % 3600) / 60 ))
-        if [ "$hours" -gt 0 ]; then
-            session_duration="${hours}h${minutes}m"
-        else
-            session_duration="${minutes}m"
-        fi
-    fi
-
-    # Scratch file count
-    if [ -n "$project_root" ] && [ -d "$project_root/.scratch" ]; then
-        session_prefix=$(printf '%s' "$session_id" | cut -c1-10)
-        session_dir="$project_root/.scratch/session-$session_prefix"
-        if [ -d "$session_dir" ]; then
-            scratch_count=0
-            for _f in "$session_dir"/*; do
-                [ -f "$_f" ] || continue
-                scratch_count=$((scratch_count + 1))
-            done
-        fi
-    fi
-fi
-
-# ==========================================================================
-# CONSOLIDATED STATUS LINE
-# ==========================================================================
-
-if [ $((turn_count % INJECT_INTERVAL)) -eq 0 ] && [ "$turn_count" -gt 0 ]; then
-    # Build the consolidated status line
-    status_parts="Turn ${turn_count} | Ctx ~${context_percent}%"
-    status_parts="${status_parts} | ${agent_turns_since_human}t since human"
-
-    if [ -n "$subagent_info" ]; then
-        status_parts="${status_parts} | Sub: ${subagent_info}"
-    fi
-
-    status_parts="${status_parts} | RE: ${re_status}"
-
-    if [ -n "$deleg_score" ]; then
-        status_parts="${status_parts} | Deleg: ${deleg_score}"
-    fi
-
-    if [ -n "$session_duration" ]; then
-        status_parts="${status_parts} | ${session_duration}, ${scratch_count} files"
-    fi
-
-    reminders="[sentinel] ${status_parts}"
-
-    # Add tool profile on detail turns
-    if [ -n "$tool_profile" ]; then
-        reminders="${reminders} | Tools: ${tool_profile}"
-    fi
-fi
-
-# --- Append detail reminders (intent/phase/stale) when thresholds hit ---
-if [ -n "$detail_reminders" ]; then
-    if [ -n "$reminders" ]; then
-        reminders="${reminders} || ${detail_reminders}"
-    else
-        reminders="[sentinel] ${detail_reminders}"
-    fi
-fi
-
-# --- Output to stderr (shown to agent as feedback) ---
-if [ -n "$reminders" ]; then
-    printf '%s' "$reminders" >&2
-
-    # --- KPI logging to harness DB (only when injecting) ---
-    if [ -n "$project_root" ]; then
-        PYTHON=""
-        if command -v python3 > /dev/null 2>&1; then
-            PYTHON="python3"
-        elif command -v python > /dev/null 2>&1; then
-            PYTHON="python"
-        fi
-
-        if [ -n "$PYTHON" ]; then
-            HELPER=""
-            if [ -f "$project_root/scripts/harness-db.py" ]; then
-                HELPER="$project_root/scripts/harness-db.py"
-            elif [ -f "$HOME/repos/aitools/scripts/harness-db.py" ]; then
-                HELPER="$HOME/repos/aitools/scripts/harness-db.py"
-            fi
-
-            if [ -n "$HELPER" ] && "$PYTHON" -c "import sqlite3" 2>/dev/null; then
-                "$PYTHON" "$HELPER" log --session "$session_id" --type sitrep \
-                    --agent "intent-sentinel" \
-                    --message "$reminders" || true
-            fi
-        fi
-    fi
-fi
-
-exit 0
-__EMB_SENTINEL__
 cat > "$HOOKS_DIR/delegation-duty-guard.sh" <<'__EMB_DELEGGUARD__'
 #!/usr/bin/env bash
 # delegation-duty-guard.sh — Claude Code PreToolUse hook (matcher: Agent)
@@ -6444,6 +4356,23 @@ diagnose_build_failure() {
 
 set -euo pipefail
 
+# --- Telemetry: JSONL event emission ---
+# Appends one structured line to the session event log (~0.1ms).
+_SESSION_DIR=""
+_cs_file="$(git rev-parse --show-toplevel 2>/dev/null || echo "")/.scratch/.current-session"
+if [ -f "$_cs_file" ]; then
+    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+fi
+
+emit_hook_event() {
+    local event_type="$1" detail_json="$2"
+    [ -n "$_SESSION_DIR" ] || return 0
+    printf '{"t":"%s","type":"%s","src":"ddg","d":%s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$event_type" "$detail_json" \
+        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+}
+
 # --- Read JSON from stdin ---
 input=$(cat)
 
@@ -6558,40 +4487,8 @@ if [ "$score" -lt 6 ] && [ -n "$missing" ]; then
 
     printf '%s' "$reminder" >&2
 
-    # --- KPI logging to harness DB ---
-    # Extract session_id from hook input (may not be present in PreToolUse)
-    session_id=""
-    sid_pattern='"session_id"[[:space:]]*:[[:space:]]*"([^"]*)"'
-    if [[ "$input" =~ $sid_pattern ]]; then
-        session_id="${BASH_REMATCH[1]}"
-    fi
-
-    if [ -n "$session_id" ]; then
-        # Find project root for harness-db.py
-        project_root=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
-
-        PYTHON=""
-        if command -v python3 > /dev/null 2>&1; then
-            PYTHON="python3"
-        elif command -v python > /dev/null 2>&1; then
-            PYTHON="python"
-        fi
-
-        if [ -n "$PYTHON" ] && [ -n "$project_root" ]; then
-            HELPER=""
-            if [ -f "$project_root/scripts/harness-db.py" ]; then
-                HELPER="$project_root/scripts/harness-db.py"
-            elif [ -f "$HOME/repos/aitools/scripts/harness-db.py" ]; then
-                HELPER="$HOME/repos/aitools/scripts/harness-db.py"
-            fi
-
-            if [ -n "$HELPER" ] && "$PYTHON" -c "import sqlite3" 2>/dev/null; then
-                "$PYTHON" "$HELPER" log --session "$session_id" --type finding \
-                    --agent "delegation-guard" \
-                    --message "Delegation ${score}/6. Missing: ${missing}" || true
-            fi
-        fi
-    fi
+    # --- Emit telemetry event (JSONL, replaces Python subprocess KPI logging) ---
+    emit_hook_event "delegation" "{\"score\":$score,\"missing\":\"$missing\"}"
 fi
 
 # OBSERVE mode: always allow
@@ -6621,12 +4518,9 @@ GLOSSARY_CMD="bash \"$HOME/.claude/hooks/glossary-skill-guard.sh\""
 SCRATCH_CMD="bash \"$SCRATCH_DEST\""
 HARVEST_CMD="bash \"$HARVEST_DEST\""
 SHFIXUP_CMD="bash \"$SHFIXUP_DEST\""
-SURFACING_CMD="bash \"$SURFACING_DEST\""
 BLOCK_GUIDE_CMD="bash \"$BLOCK_GUIDE_DEST\""
 TOOL_OPS_AUDIT_CMD="bash \"$TOOL_OPS_AUDIT_DEST\""
 DASHBOARD_CMD="bash \"$DASHBOARD_DEST\""
-ESTIMATE_REFRESH_CMD="bash \"$ESTIMATE_REFRESH_DEST\""
-SENTINEL_CMD="bash \"$SENTINEL_DEST\""
 DELEG_GUARD_CMD="bash \"$DELEG_GUARD_DEST\""
 HARNESS_DB_START_CMD="bash \"$HARNESS_DB_START_DEST\""
 HARNESS_DB_END_CMD="bash \"$HARNESS_DB_END_DEST\""
@@ -6644,15 +4538,12 @@ const force = process.argv[6] === 'true';
 const scratchCmd = process.argv[7];
 const harvestCmd = process.argv[8];
 const shfixupCmd = process.argv[9];
-const surfacingCmd = process.argv[10];
-const blockGuideCmd = process.argv[11];
-const toolOpsAuditCmd = process.argv[12];
-const dashboardCmd = process.argv[13];
-const estimateRefreshCmd = process.argv[14];
-const sentinelCmd = process.argv[15];
-const delegGuardCmd = process.argv[16];
-const harnessDbStartCmd = process.argv[17];
-const harnessDbEndCmd = process.argv[18];
+const blockGuideCmd = process.argv[10];
+const toolOpsAuditCmd = process.argv[11];
+const dashboardCmd = process.argv[12];
+const delegGuardCmd = process.argv[13];
+const harnessDbStartCmd = process.argv[14];
+const harnessDbEndCmd = process.argv[15];
 // --- Embedded preferences (from profile.json at build time) ---
 const autoMemory = false;
 const alwaysThinking = true;
@@ -6720,12 +4611,9 @@ mergeHookEntry('SessionStart', 'scratch-init.sh', '', scratchCmd);
 mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
 mergeHookEntry('PreToolUse', 'glossary-skill-guard.sh', 'Read|Grep', glossaryCmd);
 mergeHookEntry('PostToolUse', 'sh-file-fixup.sh', 'Write|Edit', shfixupCmd);
-mergeHookEntry('Stop', 'surfacing-duty-stop.sh', '', surfacingCmd);
 mergeHookEntry('PreToolUse', 'block-claude-code-guide.sh', 'Agent', blockGuideCmd);
 mergeHookEntry('SessionEnd', 'tool-ops-session-audit.sh', '', toolOpsAuditCmd);
 mergeHookEntry('SessionStart', 'dashboard-serve.sh', '', dashboardCmd);
-mergeHookEntry('Stop', 'estimate-refresh-stop.sh', '', estimateRefreshCmd);
-mergeHookEntry('Stop', 'intent-sentinel-stop.sh', '', sentinelCmd);
 mergeHookEntry('PreToolUse', 'delegation-duty-guard.sh', 'Agent', delegGuardCmd);
 mergeHookEntry('SessionStart', 'harness-db-sessionstart.sh', '', harnessDbStartCmd);
 mergeHookEntry('SessionEnd', 'harness-db-sessionend.sh', '', harnessDbEndCmd);
@@ -6804,10 +4692,6 @@ if (dryRun) {
         if (toaCount !== 1) { console.error('Validation failed: expected 1 SessionEnd tool-ops-session-audit hook, got ' + toaCount); process.exit(1); }
         const dashCount = (_v.hooks.SessionStart || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('dashboard-serve.sh'))).length;
         if (dashCount !== 1) { console.error('Validation failed: expected 1 SessionStart dashboard-serve hook, got ' + dashCount); process.exit(1); }
-        const erCount = (_v.hooks.Stop || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('estimate-refresh-stop.sh'))).length;
-        if (erCount !== 1) { console.error('Validation failed: expected 1 Stop estimate-refresh-stop hook, got ' + erCount); process.exit(1); }
-        const sentCount = (_v.hooks.Stop || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('intent-sentinel-stop.sh'))).length;
-        if (sentCount !== 1) { console.error('Validation failed: expected 1 Stop intent-sentinel hook, got ' + sentCount); process.exit(1); }
         const dgCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('delegation-duty-guard.sh'))).length;
         if (dgCount !== 1) { console.error('Validation failed: expected 1 PreToolUse delegation-duty-guard hook, got ' + dgCount); process.exit(1); }
         const hdbStartCount = (_v.hooks.SessionStart || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('harness-db-sessionstart.sh'))).length;
@@ -6843,7 +4727,7 @@ if (dryRun) {
         prefChanges.forEach(c => console.log(c));
     }
 }
-" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$SURFACING_CMD" "$BLOCK_GUIDE_CMD" "$TOOL_OPS_AUDIT_CMD" "$DASHBOARD_CMD" "$ESTIMATE_REFRESH_CMD" "$SENTINEL_CMD" "$DELEG_GUARD_CMD" "$HARNESS_DB_START_CMD" "$HARNESS_DB_END_CMD")
+" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$BLOCK_GUIDE_CMD" "$TOOL_OPS_AUDIT_CMD" "$DASHBOARD_CMD" "$DELEG_GUARD_CMD" "$HARNESS_DB_START_CMD" "$HARNESS_DB_END_CMD")
 
 # Parse merge result: first line is status, CHANGED: lines are key changes
 MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)

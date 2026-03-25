@@ -1907,17 +1907,40 @@ LOG_FILE="$LOG_DIR/standing-order-guard.log"
 # Ensure log directory exists (needed for observe logging; harmless in enforce-only runs)
 mkdir -p "$LOG_DIR"
 
+# --- Telemetry: JSONL event emission ---
+# Appends one structured line to the session event log (~0.1ms).
+# Session dir resolved from .scratch/.current-session (set by scratch-init.sh).
+# If unavailable, silently no-ops (hook must never fail).
+_SESSION_DIR=""
+_cs_file="$(git rev-parse --show-toplevel 2>/dev/null || echo "")/.scratch/.current-session"
+if [ -f "$_cs_file" ]; then
+    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+fi
+
+emit_hook_event() {
+    local event_type="$1" detail_json="$2"
+    [ -n "$_SESSION_DIR" ] || return 0
+    printf '{"t":"%s","type":"%s","src":"sog","d":%s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$event_type" "$detail_json" \
+        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+}
+
 # violation() — dispatch based on per-check mode
 # $1: message  $2: mode variable value (enforce or observe; defaults to enforce)
+# $3: check name (for telemetry)
 # In enforce mode: write message to stderr, exit 2 (block)
 # In observe mode: append to log file, exit 0 (allow)
 violation() {
     local message="$1"
     local mode="${2:-enforce}"
+    local check_name="${3:-unknown}"
     if [ "$mode" = "enforce" ]; then
+        emit_hook_event "hook_block" "{\"check\":\"$check_name\"}"
         echo "$message" >&2
         exit 2
     else
+        emit_hook_event "hook_warn" "{\"check\":\"$check_name\",\"mode\":\"observe\"}"
         printf '%s [WOULD-BLOCK] %s | cmd: %s\n' \
             "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$message" "$COMMAND" \
             >> "$LOG_FILE"
@@ -1959,7 +1982,7 @@ NEWLINE_COUNT=$(( (CMD_LEN - STRIPPED_LEN) / 2 ))
 # 5+ lines (4+ newlines) = too complex for inline. Write a temp file instead.
 if [ "$NEWLINE_COUNT" -ge 4 ]; then
     LINE_COUNT=$((NEWLINE_COUNT + 1))
-    violation "USO: Scratch files --: This command is ~${LINE_COUNT} lines long. Write it to a temp .sh or .ps1 file using the Write tool, execute with Bash, then clean up. USO: never inline long commands in the Bash tool." "$MODE_SCRATCH"
+    violation "USO: Scratch files --: This command is ~${LINE_COUNT} lines long. Write it to a temp .sh or .ps1 file using the Write tool, execute with Bash, then clean up. USO: never inline long commands in the Bash tool." "$MODE_SCRATCH" "scratch"
 fi
 
 # --- USO: Simple Bash commands only ---
@@ -1970,21 +1993,21 @@ fi
 # $() and backtick checks use raw INPUT (not COMMAND) because json_field
 # truncates at \" — $(...) inside quoted arguments would be invisible.
 case "$COMMAND" in
-    *'&&'*) violation "USO: Simple Bash commands only --: Don't use '&&' to chain commands. Make separate Bash tool calls instead. For git in another repo, use 'git -C /path' instead of 'cd /path && git'." "$MODE_AND" ;;
-    *'||'*) violation "USO: Simple Bash commands only --: Don't use '||' to chain commands. Make separate Bash tool calls instead." "$MODE_OR" ;;
+    *'&&'*) violation "USO: Simple Bash commands only --: Don't use '&&' to chain commands. Make separate Bash tool calls instead. For git in another repo, use 'git -C /path' instead of 'cd /path && git'." "$MODE_AND" "and" ;;
+    *'||'*) violation "USO: Simple Bash commands only --: Don't use '||' to chain commands. Make separate Bash tool calls instead." "$MODE_OR" "or" ;;
     *';'*)
         # Exempt ; inside scripting-language arguments: pwsh -Command '...;...' and perl '...;...'
         # The ; is a language-internal statement separator, not a shell command separator.
         # perl: any invocation (perl -ne, -pe, -e, -E, etc.) may contain Perl semicolons.
         case "$COMMAND" in
             pwsh\ *|powershell\ *|perl\ *) ;;
-            *) violation "USO: Simple Bash commands only --: Don't use ';' to chain commands. Make separate Bash tool calls instead." "$MODE_SEMICOLON" ;;
+            *) violation "USO: Simple Bash commands only --: Don't use ';' to chain commands. Make separate Bash tool calls instead." "$MODE_SEMICOLON" "semicolon" ;;
         esac
         ;;
 esac
 case "$INPUT" in
-    *'$('*) violation "USO: Simple Bash commands only --: Don't use '\$(...)' command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_SUBSHELL" ;;
-    *'`'*)  violation "USO: Simple Bash commands only --: Don't use backtick command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_BACKTICK" ;;
+    *'$('*) violation "USO: Simple Bash commands only --: Don't use '\$(...)' command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_SUBSHELL" "subshell" ;;
+    *'`'*)  violation "USO: Simple Bash commands only --: Don't use backtick command substitution. For commit messages, write to a temp file with Write and use 'git commit -F'. For other values, compute in a prior step." "$MODE_BACKTICK" "backtick" ;;
 esac
 
 # --- USO: Dedicated tools for file operations ---
@@ -2006,7 +2029,7 @@ case "$FIRST_TOKEN" in
     rm)
         case "$COMMAND" in
             *'*'*|*'?'*)
-                violation "USO: Simple Bash commands only --: Don't use glob patterns (*, ?) with 'rm'. Write a cleanup script listing the specific files, execute it, then clean up the script."
+                violation "USO: Simple Bash commands only --: Don't use glob patterns (*, ?) with 'rm'. Write a cleanup script listing the specific files, execute it, then clean up the script." "enforce" "glob-rm"
                 ;;
         esac
         ;;
@@ -2018,19 +2041,19 @@ case "$FIRST_TOKEN" in
     cat)
         case "$COMMAND" in
             *\|*) ;;  # Pipeline — legitimate shell use
-            *) violation "USO: Dedicated tools --: Use the Read tool instead of 'cat' to read files. The Read tool provides line numbers and handles large files better." ;;
+            *) violation "USO: Dedicated tools --: Use the Read tool instead of 'cat' to read files. The Read tool provides line numbers and handles large files better." "enforce" "cat" ;;
         esac
         ;;
     head)
         case "$COMMAND" in
             *\|*) ;;
-            *) violation "USO: Dedicated tools --: Use the Read tool with offset/limit parameters instead of 'head'. Example: Read with limit=20 for the first 20 lines." ;;
+            *) violation "USO: Dedicated tools --: Use the Read tool with offset/limit parameters instead of 'head'. Example: Read with limit=20 for the first 20 lines." "enforce" "head" ;;
         esac
         ;;
     tail)
         case "$COMMAND" in
             *\|*) ;;
-            *) violation "USO: Dedicated tools --: Use the Read tool with offset parameter instead of 'tail'. Example: Read with offset=100 to start from line 100." ;;
+            *) violation "USO: Dedicated tools --: Use the Read tool with offset parameter instead of 'tail'. Example: Read with offset=100 to start from line 100." "enforce" "tail" ;;
         esac
         ;;
 esac
@@ -2041,7 +2064,7 @@ case "$FIRST_TOKEN" in
     grep|rg|egrep|fgrep)
         case "$COMMAND" in
             *\|*) ;;  # Pipeline — legitimate shell use
-            *) violation "USO: Dedicated tools --: Use the Grep tool instead of '$FIRST_TOKEN' to search file contents. The Grep tool supports regex, file filtering, and multiple output modes." ;;
+            *) violation "USO: Dedicated tools --: Use the Grep tool instead of '$FIRST_TOKEN' to search file contents. The Grep tool supports regex, file filtering, and multiple output modes." "enforce" "grep" ;;
         esac
         ;;
 esac
@@ -2052,7 +2075,7 @@ case "$FIRST_TOKEN" in
     find)
         case "$COMMAND" in
             *\|*) ;;  # Pipeline — legitimate shell use
-            *) violation "USO: Dedicated tools --: Use the Glob tool instead of 'find' to locate files. Example: Glob with pattern '**/*.sh' instead of 'find . -name \"*.sh\"'." ;;
+            *) violation "USO: Dedicated tools --: Use the Glob tool instead of 'find' to locate files. Example: Glob with pattern '**/*.sh' instead of 'find . -name \"*.sh\"'." "enforce" "find" ;;
         esac
         ;;
     ls)
@@ -2070,13 +2093,13 @@ case "$FIRST_TOKEN" in
     sed)
         case "$COMMAND" in
             *\|*) ;;  # Pipeline — legitimate shell use
-            *) violation "USO: Dedicated tools --: Use the Edit tool instead of 'sed' to modify files. For non-trivial string manipulation, use Perl (USO: Perl for string manipulation)." ;;
+            *) violation "USO: Dedicated tools --: Use the Edit tool instead of 'sed' to modify files. For non-trivial string manipulation, use Perl (USO: Perl for string manipulation)." "enforce" "sed" ;;
         esac
         ;;
     awk)
         case "$COMMAND" in
             *\|*) ;;  # Pipeline — legitimate shell use
-            *) violation "USO: Dedicated tools --: Use the Read tool instead of 'awk' to process files. For string manipulation, use Perl (USO: Perl for string manipulation)." ;;
+            *) violation "USO: Dedicated tools --: Use the Read tool instead of 'awk' to process files. For string manipulation, use Perl (USO: Perl for string manipulation)." "enforce" "awk" ;;
         esac
         ;;
 esac
@@ -2088,11 +2111,12 @@ FIRST_LINE=$(printf '%s' "$COMMAND" | head -1)
 case "$FIRST_LINE" in
     echo*\>*|printf*\>*)
         # echo/printf redirecting to a file
-        violation "USO: Dedicated tools --: Use the Write tool instead of echo/printf redirection to create files. The Write tool handles encoding and permissions correctly."
+        violation "USO: Dedicated tools --: Use the Write tool instead of echo/printf redirection to create files. The Write tool handles encoding and permissions correctly." "enforce" "echo-redirect"
         ;;
 esac
 
 # All checks passed — allow the command
+emit_hook_event "hook_fire" "{\"result\":\"allow\"}"
 exit 0
 '@
 
@@ -2565,6 +2589,22 @@ $hook_shfixup = @'
 
 set -euo pipefail
 
+# --- Telemetry: JSONL event emission ---
+_SESSION_DIR=""
+_cs_file="$(git rev-parse --show-toplevel 2>/dev/null || echo "")/.scratch/.current-session"
+if [ -f "$_cs_file" ]; then
+    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+fi
+
+emit_hook_event() {
+    local event_type="$1" detail_json="$2"
+    [ -n "$_SESSION_DIR" ] || return 0
+    printf '{"t":"%s","type":"%s","src":"fixup","d":%s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$event_type" "$detail_json" \
+        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+}
+
 # Read JSON from stdin
 input=$(cat)
 
@@ -2608,160 +2648,7 @@ fi
 # Report what was fixed (stderr → shown to Claude as feedback)
 if [ -n "$fixed" ]; then
     echo "sh-file-fixup: $(basename "$file_path") — fixed: ${fixed% }" >&2
-fi
-
-exit 0
-'@
-
-$hook_surfacing = @'
-#!/usr/bin/env bash
-# surfacing-duty-stop.sh — Claude Code Stop hook (command type)
-# Surfaces duty reminders via stderr feedback after agent responses.
-#
-# Fires after every agent response. As a command-type Stop hook,
-# stderr output is shown to the agent as feedback on its next turn.
-#
-# Two functions:
-#   1. Periodic reminder: every 30+ minutes, remind about surfacing duty
-#   2. Incident-acknowledgment detection: if agent said "incident" or "pre-existing"
-#      without invoking /incident or writing TODO(incident):, prompt them to file
-#
-# Hook contract:
-#   - Stop hook, command type (stderr → shown to agent as feedback)
-#   - Exit 0 = allow, Exit 2 = block (we always allow)
-#   - Must be fast (<50ms) — fires on every agent turn
-#   - Must never crash or hang
-
-set -euo pipefail
-
-# Read JSON from stdin
-input=$(cat)
-
-# Extract session_id and transcript_path
-session_id=""
-transcript_path=""
-if [[ "$input" =~ \"session_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-    session_id="${BASH_REMATCH[1]}"
-fi
-if [[ "$input" =~ \"transcript_path\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-    transcript_path="${BASH_REMATCH[1]}"
-fi
-
-# Need transcript to scan
-[ -n "$transcript_path" ] && [ -f "$transcript_path" ] || exit 0
-
-reminders=""
-
-# --- 1. Periodic surfacing duty reminder ---
-# Check session age via transcript file birth time.
-# Inject reminder every 30 minutes (tracked via marker file).
-if [ -n "$session_id" ]; then
-    marker_dir="/tmp/aitools-surfacing-$session_id"
-    mkdir -p "$marker_dir" 2>/dev/null || true
-    marker="$marker_dir/last-reminder"
-    now=$(date +%s)
-    inject_reminder=false
-
-    if [ ! -f "$marker" ]; then
-        # First check: only inject if session is >30 min old
-        # Use transcript modification time as proxy for session start
-        if [ -f "$transcript_path" ]; then
-            # Platform dispatch: macOS BSD stat vs GNU stat (Linux/Git Bash)
-            # See session-archive.sh:68 for the canonical pattern
-            if [ "$(uname -s)" = "Darwin" ]; then
-                file_mod=$(stat -f %m "$transcript_path" 2>/dev/null || echo "$now")
-            else
-                file_mod=$(stat -c %Y "$transcript_path" 2>/dev/null || echo "$now")
-            fi
-            age=$(( now - file_mod ))
-            # Transcript gets modified constantly; use birth time if available
-            if [ "$(uname -s)" = "Darwin" ]; then
-                file_birth=$(stat -f %B "$transcript_path" 2>/dev/null || echo "$file_mod")
-            else
-                # GNU stat: %W = birth time (0 if unsupported), fallback to mod time
-                _birth=$(stat -c %W "$transcript_path" 2>/dev/null || echo "0")
-                if [ "$_birth" != "0" ] && [ -n "$_birth" ]; then
-                    file_birth="$_birth"
-                else
-                    file_birth="$file_mod"
-                fi
-            fi
-            session_age=$(( now - file_birth ))
-            if [ "$session_age" -gt 1800 ]; then
-                inject_reminder=true
-            fi
-        fi
-    else
-        last=$(cat "$marker")
-        elapsed=$(( now - last ))
-        if [ "$elapsed" -gt 1800 ]; then
-            inject_reminder=true
-        fi
-    fi
-
-    if [ "$inject_reminder" = "true" ]; then
-        echo "$now" > "$marker"
-        reminders="${reminders}Surfacing duty check: Have you found any incidents or ambiguities this session? File via /incident or leave a TODO(incident): comment. "
-    fi
-fi
-
-# --- 2. Incident-acknowledgment detection ---
-# Scan the last assistant message for incident-acknowledgment language
-# without a corresponding /incident invocation or TODO(incident): marker.
-#
-# Suppression: if incidents.json was modified in the last 30 minutes,
-# an incident was recently filed — suppress to avoid false positives when the
-# agent is still discussing the incident after filing it.
-
-_suppress_incident_check=false
-
-# Check incidents.json modification time (cross-platform stat)
-_incidents_file=""
-if [ -n "${AITOOLS_REPO_PATH:-}" ]; then
-    _incidents_file="$AITOOLS_REPO_PATH/reference/incidents.json"
-elif [ -f "$HOME/repos/aitools/reference/incidents.json" ]; then
-    _incidents_file="$HOME/repos/aitools/reference/incidents.json"
-fi
-if [ -n "$_incidents_file" ] && [ -f "$_incidents_file" ]; then
-    # Platform dispatch: macOS BSD stat vs GNU stat (Linux/Git Bash)
-    if [ "$(uname -s)" = "Darwin" ]; then
-        _incidents_mod=$(stat -f %m "$_incidents_file" 2>/dev/null || echo "0")
-    else
-        _incidents_mod=$(stat -c %Y "$_incidents_file" 2>/dev/null || echo "0")
-    fi
-    _now_epoch=$(date +%s)
-    _incidents_age=$(( _now_epoch - _incidents_mod ))
-    if [ "$_incidents_age" -lt 1800 ]; then
-        _suppress_incident_check=true
-    fi
-fi
-
-if [ "$_suppress_incident_check" = "false" ]; then
-    # Read only the last ~100 lines of transcript for speed.
-    last_chunk=$(tail -100 "$transcript_path" 2>/dev/null || true)
-
-    if [ -n "$last_chunk" ]; then
-        # Check for incident-acknowledgment phrases
-        has_incident_language=false
-        if echo "$last_chunk" | grep -qiE "pre-existing incident|known incident|that.s an incident|existing incident|there.s an incident|incident I noticed|incident we found|pre-existing gap|known gap|that.s a gap|existing gap|there.s a gap|gap I noticed|gap we found" 2>/dev/null; then
-            has_incident_language=true
-        fi
-
-        # Check if /incident was invoked or TODO(incident): was written in same chunk
-        has_filing=false
-        if echo "$last_chunk" | grep -qE '/incident|TODO\(incident\)|incidents\.json' 2>/dev/null; then
-            has_filing=true
-        fi
-
-        if [ "$has_incident_language" = "true" ] && [ "$has_filing" = "false" ]; then
-            reminders="${reminders}You acknowledged an incident but did not file it. Per surfacing duty (.claude/rules/incident-governance.md): invoke /incident now, or write TODO(incident): in the current file if mid-task."
-        fi
-    fi
-fi
-
-# Output reminders (if any) to stderr (shown to agent as feedback).
-if [ -n "$reminders" ]; then
-    printf '%s' "$reminders" >&2
+    emit_hook_event "hook_fire" "{\"file\":\"$(basename "$file_path")\",\"action\":\"${fixed% }\"}"
 fi
 
 exit 0
@@ -2776,6 +2663,22 @@ $hook_glossary = @'
 
 set -euo pipefail
 
+# --- Telemetry: JSONL event emission ---
+_SESSION_DIR=""
+_cs_file="$(git rev-parse --show-toplevel 2>/dev/null || echo "")/.scratch/.current-session"
+if [ -f "$_cs_file" ]; then
+    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+fi
+
+emit_hook_event() {
+    local event_type="$1" detail_json="$2"
+    [ -n "$_SESSION_DIR" ] || return 0
+    printf '{"t":"%s","type":"%s","src":"gsg","d":%s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$event_type" "$detail_json" \
+        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+}
+
 INPUT=$(cat)
 FILE_PATH=$(echo "$INPUT" | perl -ne 'print $1 if /"file_path"\s*:\s*"([^"]*)"/')
 PATTERN_PATH=$(echo "$INPUT" | perl -ne 'print $1 if /"path"\s*:\s*"([^"]*)"/')
@@ -2784,6 +2687,7 @@ TARGET="${FILE_PATH:-$PATTERN_PATH}"
 
 case "$TARGET" in
     *glossary.json|*glossary.md)
+        emit_hook_event "hook_warn" "{\"target\":\"$(basename "$TARGET")\"}"
         # hookSpecificOutput JSON goes to stdout (structured hook response)
         echo '{"hookSpecificOutput":{"additionalContext":"You are reading glossary files directly. Use /glossary skill instead — it provides the governed process for checking definitions, adding terms, and resolving ambiguities. Reading the file bypasses that process."}}'
         ;;
@@ -2808,6 +2712,22 @@ $hook_blockguide = @'
 
 set -euo pipefail
 
+# --- Telemetry: JSONL event emission ---
+_SESSION_DIR=""
+_cs_file="$(git rev-parse --show-toplevel 2>/dev/null || echo "")/.scratch/.current-session"
+if [ -f "$_cs_file" ]; then
+    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+fi
+
+emit_hook_event() {
+    local event_type="$1" detail_json="$2"
+    [ -n "$_SESSION_DIR" ] || return 0
+    printf '{"t":"%s","type":"%s","src":"bccg","d":%s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$event_type" "$detail_json" \
+        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+}
+
 INPUT=$(cat)
 
 # Extract subagent_type from tool_input using bash regex (no jq dependency)
@@ -2818,6 +2738,7 @@ if [[ "$INPUT" =~ $pattern ]]; then
 fi
 
 if [ "$SUBAGENT_TYPE" = "claude-code-guide" ]; then
+    emit_hook_event "hook_block" "{\"blocked\":\"claude-code-guide\"}"
     # Return JSON deny with corrective context.
     # permissionDecisionReason is shown to Claude (not the user) on deny,
     # so it serves as injected harness knowledge.
@@ -3057,166 +2978,6 @@ fi
 exit 0
 '@
 
-$hook_estimrefresh = @'
-#!/usr/bin/env bash
-# estimate-refresh-stop.sh -- Claude Code Stop hook (command type)
-# Combined Lagebeurteilung reminder + running estimate freshness tracker.
-#
-# Two functions:
-#   1. Auto-track turn count via marker file (mechanical, no judgment)
-#   2. At context threshold (estimated from turn count), inject
-#      Lagebeurteilung reminder to update the running estimate
-#
-# The running estimate auto-update flow:
-#   Agent updates estimate -> file mtime changes -> dashboard server's
-#   file watcher detects change -> regenerates served HTML -> browser
-#   polls and re-renders. This hook's job is to REMIND the agent to
-#   update, not to update the estimate itself (that requires judgment).
-#
-# Freshness sources (checked in order):
-#   1. JSON running estimate mtime (primary, always available)
-#   2. Session DB updated_at (supplemental, if harness-db.py available)
-#   If either source is fresh, suppress the stale reminder.
-#
-# Hook contract:
-#   - Stop hook, command type (stderr -> shown to agent as feedback)
-#   - Exit 0 = allow, Exit 2 = block (we always allow)
-#   - Must be fast (<50ms) -- fires on every agent turn
-#   - Must never crash or hang
-#
-# Related decisions:
-#   D-CONTEXT-ROT-HOOK: Lagebeurteilung checkpoint at 20%+ context
-#   D-OPERATIONAL-LEARNING-DUTY: OBSERVE-SURFACE-PROPOSE-CONNECT
-
-set -euo pipefail
-
-# Read JSON from stdin
-input=$(cat)
-
-# Extract session_id
-session_id=""
-if [[ "$input" =~ \"session_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-    session_id="${BASH_REMATCH[1]}"
-fi
-
-[ -n "$session_id" ] || exit 0
-
-# --- Turn tracking via marker directory ---
-marker_dir="/tmp/aitools-estimate-$session_id"
-mkdir -p "$marker_dir" 2>/dev/null || exit 0
-
-# Increment turn count
-turn_file="$marker_dir/turn-count"
-turn_count=0
-if [ -f "$turn_file" ]; then
-    turn_count=$(cat "$turn_file" 2>/dev/null || echo "0")
-    if ! [[ "$turn_count" =~ ^[0-9]+$ ]]; then turn_count=0; fi
-fi
-turn_count=$((turn_count + 1))
-printf '%d' "$turn_count" > "$turn_file"
-
-# --- Lagebeurteilung checkpoint ---
-# Heuristic: each agent turn uses ~2-5K tokens of context.
-# At 200K total context, 20% = 40K tokens = ~10-20 turns.
-# Inject reminder at turn 15, then every 15 turns after.
-# This is conservative -- better to remind too early than too late.
-
-LAGE_INTERVAL=15
-reminders=""
-
-last_lage_file="$marker_dir/last-lage-turn"
-last_lage_turn=0
-if [ -f "$last_lage_file" ]; then
-    last_lage_turn=$(cat "$last_lage_file" 2>/dev/null || echo "0")
-    if ! [[ "$last_lage_turn" =~ ^[0-9]+$ ]]; then last_lage_turn=0; fi
-fi
-
-turns_since_lage=$((turn_count - last_lage_turn))
-
-if [ "$turn_count" -ge "$LAGE_INTERVAL" ] && [ "$turns_since_lage" -ge "$LAGE_INTERVAL" ]; then
-    printf '%d' "$turn_count" > "$last_lage_file"
-
-    reminders="Lagebeurteilung checkpoint (turn ${turn_count}): Context is growing. Update the running estimate with current situation, new findings, and decisions. If the dashboard server is running, the update will appear automatically. Key fields to refresh: schwerpunkt, situation.currentState, completedWork (append recent), findings (new ones), delegationLog (new entries), meta.version (increment). "
-fi
-
-# --- Estimate freshness check ---
-# If a running estimate exists and hasn't been modified in 30+ minutes,
-# remind the agent it may be stale.
-if [ -z "$reminders" ] && [ "$turn_count" -ge 5 ]; then
-    # Check every 10 turns
-    if [ $((turn_count % 10)) -eq 0 ]; then
-        # Find project root
-        cwd=""
-        if [[ "$input" =~ \"cwd\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
-            cwd="${BASH_REMATCH[1]}"
-        fi
-
-        if [ -n "$cwd" ]; then
-            project_root=$(cd "$cwd" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || echo "$cwd")
-
-            # Check for running estimate
-            estimate=""
-            if [ -f "$project_root/.aitools/channel/running-estimate.json" ]; then
-                estimate="$project_root/.aitools/channel/running-estimate.json"
-            fi
-            # Check scratch dirs
-            if [ -z "$estimate" ] && [ -d "$project_root/.scratch" ]; then
-                for dir in "$project_root"/.scratch/session-*/; do
-                    [ -d "$dir" ] || continue
-                    for est in "$dir"/*running-estimate*.json; do
-                        [ -f "$est" ] || continue
-                        estimate="$est"
-                        break 2
-                    done
-                done
-            fi
-
-            if [ -n "$estimate" ]; then
-                now=$(date +%s)
-                # Platform dispatch: macOS BSD stat vs GNU stat (Linux/Git Bash)
-                if [ "$(uname -s)" = "Darwin" ]; then
-                    est_mod=$(stat -f %m "$estimate" 2>/dev/null || echo "$now")
-                else
-                    est_mod=$(stat -c %Y "$estimate" 2>/dev/null || echo "$now")
-                fi
-                est_age=$((now - est_mod))
-                if [ "$est_age" -gt 1800 ]; then
-                    # Before flagging stale, check if session DB was recently updated
-                    # (supplemental: agent may have written to DB but not exported yet)
-                    db_fresh=false
-                    if [ -n "$session_id" ] && [ -d "$project_root/.aitools/sessions" ]; then
-                        db_prefix=$(printf '%s' "$session_id" | cut -c1-10)
-                        db_file="$project_root/.aitools/sessions/${db_prefix}.db"
-                        if [ -f "$db_file" ]; then
-                            if [ "$(uname -s)" = "Darwin" ]; then
-                                db_mod=$(stat -f %m "$db_file" 2>/dev/null || echo "0")
-                            else
-                                db_mod=$(stat -c %Y "$db_file" 2>/dev/null || echo "0")
-                            fi
-                            db_age=$((now - db_mod))
-                            if [ "$db_age" -lt 1800 ]; then
-                                db_fresh=true
-                            fi
-                        fi
-                    fi
-                    if [ "$db_fresh" = false ]; then
-                        minutes=$((est_age / 60))
-                        reminders="Running estimate is ${minutes} minutes stale. Consider updating it with current session state. "
-                    fi
-                fi
-            fi
-        fi
-    fi
-fi
-
-# Output reminders (if any) to stderr (shown to agent as feedback)
-if [ -n "$reminders" ]; then
-    printf '%s' "$reminders" >&2
-fi
-
-exit 0
-'@
-
 $hook_hdbstart = @'
 #!/usr/bin/env bash
 # harness-db-sessionstart.sh -- Claude Code SessionStart hook
@@ -3363,458 +3124,18 @@ fi
 # Let stderr through (warnings visible to Claude), but don't block on failure
 "$PYTHON" "$HELPER" session end --id "$SESSION_ID" || true
 
+# Process session events.jsonl into KPI metrics (cold-path telemetry)
+# Reads events emitted by enforcement hooks during the session
+"$PYTHON" "$HELPER" process-events --session "$SESSION_ID" || true
+
+# Ship KPI events to Datadog (if DD_API_KEY is configured)
+"$PYTHON" "$HELPER" ship || true
+
 # Export DB to JSON for git carry-forward
 # stderr warnings (e.g. overwrite-smaller-file safety check) must be visible
 "$PYTHON" "$HELPER" export --format json --session "$SESSION_ID" || true
 
-printf 'Harness DB: session %s ended, JSON exported\n' "$SESSION_ID"
-'@
-
-$hook_sentinel = @'
-#!/usr/bin/env bash
-# intent-sentinel-stop.sh — Claude Code Stop hook (command type)
-# Consolidated telemetry platform: fires every agent turn, collects
-# metrics the commander cannot see, and resurfaces intent when drift
-# is detected.
-#
-# Eight telemetry functions:
-#   1. Turns-since-human tracker (resurface intent after 3 agent-only turns)
-#   2. Phase transition detector (research→execution warning)
-#   3. Context consumption tracker (milestones at 25/50/75%)
-#   4. Tool usage profile (every 10 turns)
-#   5. Subagent tracker (Agent tool launches + completion)
-#   6. Running estimate freshness (stale >30min warning)
-#   7. Delegation duty compliance score (6 elements)
-#   8. Session duration + work product count (every 20 turns)
-#
-# Output: ONE consolidated status line every INJECT_INTERVAL turns.
-# Additional detail lines when specific thresholds are hit.
-#
-# Hook contract:
-#   - Stop hook, command type (stderr -> shown to agent as feedback)
-#   - Exit 0 = allow (always)
-#   - Must be fast (<50ms) — fires on every agent turn
-#   - Must never crash or hang
-#   - Standalone — cannot source aitools-lib.sh
-#
-# Complements:
-#   - estimate-refresh-stop.sh (Lagebeurteilung checkpoint — context growth)
-#   - surfacing-duty-stop.sh (incident/ambiguity filing duty)
-#   This hook consolidates visibility into a single status line.
-#
-# KPI definitions (logged to harness DB):
-#   - sentinel.turnCount: total turns this session
-#   - sentinel.turnsSinceHuman: agent turns since last user input
-#   - sentinel.contextPercent: estimated context consumption percentage
-#   - sentinel.subagentCount: total subagents launched
-#   - sentinel.delegationScore: duty elements present / 6
-#   - sentinel.reStaleMinutes: running estimate age in minutes
-#   - sentinel.scratchFileCount: files in .scratch/session-*
-#
-# Platform: macOS + Linux + Windows Git Bash (uname -s dispatch for stat)
-
-set -euo pipefail
-
-# --- Configuration (tune after deployment) ---
-TURNS_THRESHOLD=3        # Agent turns without user input before injecting intent
-READ_STREAK_THRESHOLD=5  # Consecutive Read/Grep turns to qualify as "research phase"
-MAX_INTENT_CHARS=300     # Truncate injected intent to this length
-INJECT_INTERVAL=5        # Consolidated status line every N turns
-RE_STALE_MINUTES=30      # Running estimate stale threshold (minutes)
-# Estimated context model: ~2-5K tokens per turn, ~200K total context
-TOKENS_PER_TURN=3500     # Average tokens consumed per turn
-TOTAL_CONTEXT=200000     # Estimated total context window
-
-# --- Read JSON from stdin ---
-input=$(cat)
-
-# --- Pure-bash JSON field extraction ---
-# Same pattern as standing-order-guard.sh / harvest-session.sh.
-# Handles simple top-level string values only.
-json_field() {
-    local json="$1" key="$2"
-    local pattern="\"${key}\"[[:space:]]*:[[:space:]]*\"([^\"]*)\""
-    if [[ "$json" =~ $pattern ]]; then
-        printf '%s' "${BASH_REMATCH[1]}"
-    fi
-}
-
-session_id=$(json_field "$input" "session_id")
-transcript_path=$(json_field "$input" "transcript_path")
-cwd=$(json_field "$input" "cwd")
-
-# Both required — silent exit if missing
-[ -n "$session_id" ] || exit 0
-[ -n "$transcript_path" ] && [ -f "$transcript_path" ] || exit 0
-
-# --- Marker directory ---
-marker_dir="/tmp/aitools-sentinel-$session_id"
-mkdir -p "$marker_dir" 2>/dev/null || exit 0
-
-# --- Turn counter ---
-turn_file="$marker_dir/turn-count"
-turn_count=0
-if [ -f "$turn_file" ]; then
-    turn_count=$(cat "$turn_file" 2>/dev/null || echo "0")
-    if ! [[ "$turn_count" =~ ^[0-9]+$ ]]; then turn_count=0; fi
-fi
-turn_count=$((turn_count + 1))
-printf '%d' "$turn_count" > "$turn_file"
-
-# --- Session start marker (for duration tracking) ---
-start_file="$marker_dir/session-start"
-if [ ! -f "$start_file" ]; then
-    date +%s > "$start_file"
-fi
-
-# --- Project root ---
-project_root=""
-if [ -n "$cwd" ]; then
-    project_root=$(cd "$cwd" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || echo "$cwd")
-fi
-
-# --- Accumulator for reminders ---
-reminders=""
-detail_reminders=""
-
-# ==========================================================================
-# FUNCTION 1: Turns-since-human tracker
-# ==========================================================================
-# Count agent turns since last human message. Only extract intent when
-# threshold is hit.
-
-agent_turns_since_human=0
-agent_turns_since_human=$(tail -500 "$transcript_path" 2>/dev/null | \
-    perl -ne '
-        if (/"type"\s*:\s*"human"/ && !/"isSidechain"\s*:\s*true/) {
-            $count = 0;
-        } elsif (/"type"\s*:\s*"assistant"/ && !/"isSidechain"\s*:\s*true/) {
-            $count++;
-        }
-        END { print $count // 0; }
-    ' 2>/dev/null || echo "0")
-
-if ! [[ "$agent_turns_since_human" =~ ^[0-9]+$ ]]; then
-    agent_turns_since_human=0
-fi
-
-intent_text=""
-if [ "$agent_turns_since_human" -ge "$TURNS_THRESHOLD" ]; then
-    # Extract the user's last instruction
-    last_human_line=$(tail -500 "$transcript_path" 2>/dev/null | \
-        perl -ne '
-            if (/"type"\s*:\s*"human"/ && !/"isSidechain"\s*:\s*true/) {
-                $last = $_;
-            }
-            END { print $last if $last; }
-        ' 2>/dev/null || true)
-
-    if [ -n "$last_human_line" ]; then
-        intent_text=$(printf '%s' "$last_human_line" | \
-            perl -ne '
-                if (/"message"\s*:\s*\{.*?"content"\s*:\s*\[/) {
-                    while (/"type"\s*:\s*"text"\s*,\s*"text"\s*:\s*"((?:[^"\\]|\\.)*)"/g) {
-                        print $1;
-                        last;
-                    }
-                }
-            ' 2>/dev/null || true)
-
-        if [ -n "$intent_text" ]; then
-            intent_text=$(printf '%s' "$intent_text" | \
-                perl -pe 's/\\n/ /g; s/\\"/"/g; s/\\\\/\\/g; s/\\t/ /g;' \
-                2>/dev/null || echo "$intent_text")
-        fi
-    fi
-
-    # Truncate
-    if [ -n "$intent_text" ] && [ "${#intent_text}" -gt "$MAX_INTENT_CHARS" ]; then
-        intent_text="${intent_text:0:$MAX_INTENT_CHARS}..."
-    fi
-
-    if [ -n "$intent_text" ]; then
-        detail_reminders="${detail_reminders}INTENT CHECK (${agent_turns_since_human} turns since user): \"${intent_text}\" -- Still aligned? Confirm with user before shifting from research to execution. "
-    fi
-fi
-
-# ==========================================================================
-# FUNCTION 2: Phase transition detector (Read-heavy -> Write/Edit)
-# ==========================================================================
-
-if [ -z "$detail_reminders" ]; then
-    recent_tools=$(tail -200 "$transcript_path" 2>/dev/null | \
-        perl -ne '
-            while (/"type"\s*:\s*"tool_use".*?"name"\s*:\s*"(\w+)"/g) {
-                print "$1\n";
-            }
-            while (/"name"\s*:\s*"(\w+)".*?"type"\s*:\s*"tool_use"/g) {
-                print "$1\n";
-            }
-        ' 2>/dev/null || true)
-
-    if [ -n "$recent_tools" ]; then
-        read_streak=0
-        saw_write=false
-        last_tool=""
-
-        while IFS= read -r tool; do
-            case "$tool" in
-                Read|Grep|Glob)
-                    read_streak=$((read_streak + 1))
-                    saw_write=false
-                    ;;
-                Write|Edit)
-                    saw_write=true
-                    last_tool="$tool"
-                    ;;
-                *)
-                    read_streak=0
-                    saw_write=false
-                    ;;
-            esac
-        done <<< "$recent_tools"
-
-        if [ "$saw_write" = "true" ] && [ "$read_streak" -ge "$READ_STREAK_THRESHOLD" ]; then
-            detail_reminders="${detail_reminders}PHASE TRANSITION: ${read_streak}+ Read/Grep calls then ${last_tool}. Confirm with user before continuing execution on repo files. "
-        fi
-    fi
-fi
-
-# ==========================================================================
-# FUNCTION 3: Context consumption tracker
-# ==========================================================================
-
-context_percent=$((turn_count * TOKENS_PER_TURN * 100 / TOTAL_CONTEXT))
-if [ "$context_percent" -gt 100 ]; then context_percent=100; fi
-
-# ==========================================================================
-# FUNCTION 4: Tool usage profile (computed on injection turns only)
-# ==========================================================================
-
-tool_profile=""
-if [ $((turn_count % INJECT_INTERVAL)) -eq 0 ]; then
-    tool_profile=$(tail -500 "$transcript_path" 2>/dev/null | \
-        perl -ne '
-            while (/"type"\s*:\s*"tool_use".*?"name"\s*:\s*"(\w+)"/g) { $c{$1}++; }
-            while (/"name"\s*:\s*"(\w+)".*?"type"\s*:\s*"tool_use"/g) { $c{$1}++; }
-            END {
-                my @parts;
-                for my $t (sort { $c{$b} <=> $c{$a} } keys %c) {
-                    push @parts, "$c{$t} $t";
-                    last if @parts >= 5;
-                }
-                print join(", ", @parts) if @parts;
-            }
-        ' 2>/dev/null || true)
-fi
-
-# ==========================================================================
-# FUNCTION 5: Subagent tracker
-# ==========================================================================
-
-subagent_info=""
-if [ $((turn_count % INJECT_INTERVAL)) -eq 0 ]; then
-    subagent_info=$(tail -1000 "$transcript_path" 2>/dev/null | \
-        perl -ne '
-            $launched++ if /"type"\s*:\s*"tool_use".*?"name"\s*:\s*"Agent"/;
-            $launched++ if /"name"\s*:\s*"Agent".*?"type"\s*:\s*"tool_use"/;
-            $complete++ if /"type"\s*:\s*"tool_result"/ && /"name"\s*:\s*"Agent"/;
-            $complete++ if /"name"\s*:\s*"Agent"/ && /"type"\s*:\s*"tool_result"/;
-            END {
-                $launched //= 0;
-                $complete //= 0;
-                my $running = $launched - $complete;
-                $running = 0 if $running < 0;
-                print "${launched}L/${complete}C/${running}R" if $launched > 0;
-            }
-        ' 2>/dev/null || true)
-fi
-
-# ==========================================================================
-# FUNCTION 6: Running estimate freshness
-# ==========================================================================
-
-re_stale_minutes=0
-re_status="n/a"
-if [ -n "$project_root" ]; then
-    estimate=""
-    if [ -f "$project_root/.aitools/channel/running-estimate.json" ]; then
-        estimate="$project_root/.aitools/channel/running-estimate.json"
-    fi
-
-    if [ -n "$estimate" ]; then
-        now=$(date +%s)
-        if [ "$(uname -s)" = "Darwin" ]; then
-            est_mod=$(stat -f %m "$estimate" 2>/dev/null || echo "$now")
-        else
-            est_mod=$(stat -c %Y "$estimate" 2>/dev/null || echo "$now")
-        fi
-        est_age=$((now - est_mod))
-        re_stale_minutes=$((est_age / 60))
-        if [ "$re_stale_minutes" -ge "$RE_STALE_MINUTES" ]; then
-            re_status="STALE(${re_stale_minutes}m)"
-            detail_reminders="${detail_reminders}Running estimate stale (${re_stale_minutes} min). Update with current state. "
-        else
-            re_status="fresh(${re_stale_minutes}m)"
-        fi
-    fi
-fi
-
-# ==========================================================================
-# FUNCTION 7: Delegation duty compliance score
-# ==========================================================================
-
-deleg_score=""
-if [ $((turn_count % INJECT_INTERVAL)) -eq 0 ]; then
-    # Find the most recent Agent tool_use in transcript tail
-    last_agent_prompt=$(tail -500 "$transcript_path" 2>/dev/null | \
-        perl -ne '
-            if (/"name"\s*:\s*"Agent"/ || /"type"\s*:\s*"tool_use".*?"name"\s*:\s*"Agent"/) {
-                $last = $_;
-            }
-            END { print $last if $last; }
-        ' 2>/dev/null || true)
-
-    if [ -n "$last_agent_prompt" ]; then
-        deleg_score=$(printf '%s' "$last_agent_prompt" | \
-            perl -ne '
-                my $score = 0;
-                my @missing;
-                # 1. Identity
-                if (/S[1-9]|you are|your identity|your role/i) { $score++; }
-                else { push @missing, "identity"; }
-                # 2. Rules instruction
-                if (/rules|CLAUDE\.md|\.claude\/rules/i) { $score++; }
-                else { push @missing, "rules"; }
-                # 3. Skills instruction
-                if (/skills|SKILL\.md|shared\/skills/i) { $score++; }
-                else { push @missing, "skills"; }
-                # 4. Operational learning
-                if (/operational learning|carry forward|OL-/i) { $score++; }
-                else { push @missing, "OL"; }
-                # 5. WRITE_BLOCKED signal
-                if (/WRITE_BLOCKED/i) { $score++; }
-                else { push @missing, "WRITE_BLOCKED"; }
-                # 6. Access workaround
-                if (/explicit paths|Glob\/Grep|cross-repo|OL-O12/i) { $score++; }
-                else { push @missing, "access"; }
-                my $missing_str = @missing ? " missing:" . join(",", @missing) : "";
-                print "${score}/6${missing_str}";
-            ' 2>/dev/null || true)
-    fi
-fi
-
-# ==========================================================================
-# FUNCTION 8: Session duration + work product count
-# ==========================================================================
-
-session_duration=""
-scratch_count=0
-commit_count=0
-if [ $((turn_count % INJECT_INTERVAL)) -eq 0 ]; then
-    # Duration
-    session_start=0
-    if [ -f "$start_file" ]; then
-        session_start=$(cat "$start_file" 2>/dev/null || echo "0")
-        if ! [[ "$session_start" =~ ^[0-9]+$ ]]; then session_start=0; fi
-    fi
-    if [ "$session_start" -gt 0 ]; then
-        now=$(date +%s)
-        elapsed=$((now - session_start))
-        hours=$((elapsed / 3600))
-        minutes=$(( (elapsed % 3600) / 60 ))
-        if [ "$hours" -gt 0 ]; then
-            session_duration="${hours}h${minutes}m"
-        else
-            session_duration="${minutes}m"
-        fi
-    fi
-
-    # Scratch file count
-    if [ -n "$project_root" ] && [ -d "$project_root/.scratch" ]; then
-        session_prefix=$(printf '%s' "$session_id" | cut -c1-10)
-        session_dir="$project_root/.scratch/session-$session_prefix"
-        if [ -d "$session_dir" ]; then
-            scratch_count=0
-            for _f in "$session_dir"/*; do
-                [ -f "$_f" ] || continue
-                scratch_count=$((scratch_count + 1))
-            done
-        fi
-    fi
-fi
-
-# ==========================================================================
-# CONSOLIDATED STATUS LINE
-# ==========================================================================
-
-if [ $((turn_count % INJECT_INTERVAL)) -eq 0 ] && [ "$turn_count" -gt 0 ]; then
-    # Build the consolidated status line
-    status_parts="Turn ${turn_count} | Ctx ~${context_percent}%"
-    status_parts="${status_parts} | ${agent_turns_since_human}t since human"
-
-    if [ -n "$subagent_info" ]; then
-        status_parts="${status_parts} | Sub: ${subagent_info}"
-    fi
-
-    status_parts="${status_parts} | RE: ${re_status}"
-
-    if [ -n "$deleg_score" ]; then
-        status_parts="${status_parts} | Deleg: ${deleg_score}"
-    fi
-
-    if [ -n "$session_duration" ]; then
-        status_parts="${status_parts} | ${session_duration}, ${scratch_count} files"
-    fi
-
-    reminders="[sentinel] ${status_parts}"
-
-    # Add tool profile on detail turns
-    if [ -n "$tool_profile" ]; then
-        reminders="${reminders} | Tools: ${tool_profile}"
-    fi
-fi
-
-# --- Append detail reminders (intent/phase/stale) when thresholds hit ---
-if [ -n "$detail_reminders" ]; then
-    if [ -n "$reminders" ]; then
-        reminders="${reminders} || ${detail_reminders}"
-    else
-        reminders="[sentinel] ${detail_reminders}"
-    fi
-fi
-
-# --- Output to stderr (shown to agent as feedback) ---
-if [ -n "$reminders" ]; then
-    printf '%s' "$reminders" >&2
-
-    # --- KPI logging to harness DB (only when injecting) ---
-    if [ -n "$project_root" ]; then
-        PYTHON=""
-        if command -v python3 > /dev/null 2>&1; then
-            PYTHON="python3"
-        elif command -v python > /dev/null 2>&1; then
-            PYTHON="python"
-        fi
-
-        if [ -n "$PYTHON" ]; then
-            HELPER=""
-            if [ -f "$project_root/scripts/harness-db.py" ]; then
-                HELPER="$project_root/scripts/harness-db.py"
-            elif [ -f "$HOME/repos/aitools/scripts/harness-db.py" ]; then
-                HELPER="$HOME/repos/aitools/scripts/harness-db.py"
-            fi
-
-            if [ -n "$HELPER" ] && "$PYTHON" -c "import sqlite3" 2>/dev/null; then
-                "$PYTHON" "$HELPER" log --session "$session_id" --type sitrep \
-                    --agent "intent-sentinel" \
-                    --message "$reminders" || true
-            fi
-        fi
-    fi
-fi
-
-exit 0
+printf 'Harness DB: session %s ended, events processed, JSON exported\n' "$SESSION_ID"
 '@
 
 $hook_delegguard = @'
@@ -3851,6 +3172,23 @@ $hook_delegguard = @'
 # Platform: macOS + Linux + Windows Git Bash
 
 set -euo pipefail
+
+# --- Telemetry: JSONL event emission ---
+# Appends one structured line to the session event log (~0.1ms).
+_SESSION_DIR=""
+_cs_file="$(git rev-parse --show-toplevel 2>/dev/null || echo "")/.scratch/.current-session"
+if [ -f "$_cs_file" ]; then
+    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+fi
+
+emit_hook_event() {
+    local event_type="$1" detail_json="$2"
+    [ -n "$_SESSION_DIR" ] || return 0
+    printf '{"t":"%s","type":"%s","src":"ddg","d":%s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$event_type" "$detail_json" \
+        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+}
 
 # --- Read JSON from stdin ---
 input=$(cat)
@@ -3966,40 +3304,8 @@ if [ "$score" -lt 6 ] && [ -n "$missing" ]; then
 
     printf '%s' "$reminder" >&2
 
-    # --- KPI logging to harness DB ---
-    # Extract session_id from hook input (may not be present in PreToolUse)
-    session_id=""
-    sid_pattern='"session_id"[[:space:]]*:[[:space:]]*"([^"]*)"'
-    if [[ "$input" =~ $sid_pattern ]]; then
-        session_id="${BASH_REMATCH[1]}"
-    fi
-
-    if [ -n "$session_id" ]; then
-        # Find project root for harness-db.py
-        project_root=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
-
-        PYTHON=""
-        if command -v python3 > /dev/null 2>&1; then
-            PYTHON="python3"
-        elif command -v python > /dev/null 2>&1; then
-            PYTHON="python"
-        fi
-
-        if [ -n "$PYTHON" ] && [ -n "$project_root" ]; then
-            HELPER=""
-            if [ -f "$project_root/scripts/harness-db.py" ]; then
-                HELPER="$project_root/scripts/harness-db.py"
-            elif [ -f "$HOME/repos/aitools/scripts/harness-db.py" ]; then
-                HELPER="$HOME/repos/aitools/scripts/harness-db.py"
-            fi
-
-            if [ -n "$HELPER" ] && "$PYTHON" -c "import sqlite3" 2>/dev/null; then
-                "$PYTHON" "$HELPER" log --session "$session_id" --type finding \
-                    --agent "delegation-guard" \
-                    --message "Delegation ${score}/6. Missing: ${missing}" || true
-            fi
-        fi
-    fi
+    # --- Emit telemetry event (JSONL, replaces Python subprocess KPI logging) ---
+    emit_hook_event "delegation" "{\"score\":$score,\"missing\":\"$missing\"}"
 fi
 
 # OBSERVE mode: always allow
@@ -4012,15 +3318,12 @@ $hookFiles = @{
     "scratch-init.sh" = $hook_scratch
     "harvest-session.sh" = $hook_harvest
     "sh-file-fixup.sh" = $hook_shfixup
-    "surfacing-duty-stop.sh" = $hook_surfacing
     "glossary-skill-guard.sh" = $hook_glossary
     "block-claude-code-guide.sh" = $hook_blockguide
     "tool-ops-session-audit.sh" = $hook_toolops
     "dashboard-serve.sh" = $hook_dashboard
-    "estimate-refresh-stop.sh" = $hook_estimrefresh
     "harness-db-sessionstart.sh" = $hook_hdbstart
     "harness-db-sessionend.sh" = $hook_hdbend
-    "intent-sentinel-stop.sh" = $hook_sentinel
     "delegation-duty-guard.sh" = $hook_delegguard
 }
 
@@ -4154,7 +3457,6 @@ $glossaryDestUnix = (Join-Path $hooksDir "glossary-skill-guard.sh") -replace '\\
 $glossaryCmd = "bash `"$glossaryDestUnix`""
 MergeHookEntry "PreToolUse" "glossary-skill-guard.sh" "Read|Grep" $glossaryCmd
 MergeHookEntry "PostToolUse" "sh-file-fixup.sh" "Write|Edit" $shfixupCmd
-MergeHookEntry "Stop" "surfacing-duty-stop.sh" "" $surfacingCmd
 
 # PreToolUse: block claude-code-guide subagent
 $blockGuideDestUnix = $blockGuideDest -replace '\\', '/'
@@ -4170,16 +3472,6 @@ MergeHookEntry "SessionEnd" "tool-ops-session-audit.sh" "" $toolOpsAuditCmd
 $dashboardDestUnix = $dashboardDest -replace '\\', '/'
 $dashboardCmd = "bash `"$dashboardDestUnix`""
 MergeHookEntry "SessionStart" "dashboard-serve.sh" "" $dashboardCmd
-
-# Stop: estimate refresh + Lagebeurteilung
-$estimateRefreshDestUnix = $estimateRefreshDest -replace '\\', '/'
-$estimateRefreshCmd = "bash `"$estimateRefreshDestUnix`""
-MergeHookEntry "Stop" "estimate-refresh-stop.sh" "" $estimateRefreshCmd
-
-# Stop: intent sentinel (consolidated telemetry)
-$sentinelDestUnix = $sentinelDest -replace '\\', '/'
-$sentinelCmd = "bash `"$sentinelDestUnix`""
-MergeHookEntry "Stop" "intent-sentinel-stop.sh" "" $sentinelCmd
 
 # PreToolUse: delegation duty guard
 $delegGuardDestUnix = $delegGuardDest -replace '\\', '/'
@@ -4291,10 +3583,6 @@ if ($DryRun) {
             if ($toaCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd tool-ops-session-audit hook, got $toaCount" }
             $dashCount = @($vParsed.hooks.SessionStart | Where-Object { $_.hooks.command -match 'dashboard-serve\.sh' }).Count
             if ($dashCount -ne 1) { LogError "Validation failed: expected 1 SessionStart dashboard-serve hook, got $dashCount" }
-            $erCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'estimate-refresh-stop\.sh' }).Count
-            if ($erCount -ne 1) { LogError "Validation failed: expected 1 Stop estimate-refresh-stop hook, got $erCount" }
-            $sentCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'intent-sentinel-stop\.sh' }).Count
-            if ($sentCount -ne 1) { LogError "Validation failed: expected 1 Stop intent-sentinel hook, got $sentCount" }
             $dgCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'delegation-duty-guard\.sh' }).Count
             if ($dgCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse delegation-duty-guard hook, got $dgCount" }
             $hdbStartCount = @($vParsed.hooks.SessionStart | Where-Object { $_.hooks.command -match 'harness-db-sessionstart\.sh' }).Count
