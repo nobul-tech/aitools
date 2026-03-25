@@ -1,0 +1,1089 @@
+{
+  "meta": {
+    "version": "alpha-1.0",
+    "artifactType": "harness-state",
+    "schemaVersion": "1.0",
+    "created": "2026-03-24T23:15:00Z",
+    "updated": "2026-03-24T23:15:00Z",
+    "producer": "Mission Alpha - The Architect (session YqXYt9wQw4)",
+    "parentSession": "RnTOD5XJFi",
+    "sessionChain": ["84280c8b", "eaacf9da", "b8a9ed4e", "uyZ7TELqpP", "79b05dd0", "RTzBnBupE6", "Z1IhGrcgGO", "5HyCwPtSDH", "77a33baf", "KHGOmVeNNM", "RnTOD5XJFi", "YqXYt9wQw4"],
+    "intent": {
+      "purpose": "BE the harness in document form. A single, large, consolidated JSON file that any Claude Code agent loads into context and uses to BEHAVE as if the ideal harness was fully implemented. The agent can: make governance decisions (from GOVERNANCE), modify and extend code correctly (from IMPLEMENTATION), assess the current state of all work streams (from STATE), and avoid repeating mistakes (from OPERATIONAL_LEARNING). When loaded alongside the rules and CLAUDE.md that CC auto-injects, the agent has the FULL harness.",
+      "scope": "Everything the harness IS and aspires to be, organized into four pillars: GOVERNANCE (what was decided), IMPLEMENTATION (what was built), STATE (where things are), OPERATIONAL_LEARNING (what was learned).",
+      "audience": "Any and all Claude Code agents. Loaded into context at session start. Used to behave, not just to know.",
+      "selfContainmentTest": [
+        "1. Agent can make governance decisions from GOVERNANCE pillar (design principles, decisions, frameworks, rules)",
+        "2. Agent can modify any hook or script correctly from IMPLEMENTATION pillar (hook details, script interfaces, code patterns)",
+        "3. Agent can launch and use the live dashboard from IMPLEMENTATION.dashboardSystem (full operational guide)",
+        "4. Agent can assess current state from STATE pillar (Schwerpunkt, running estimate, handoffs, SQLite migration)",
+        "5. Agent can avoid all known failure patterns from OPERATIONAL_LEARNING pillar (10 patterns, failure catalog, meta-lessons)"
+      ]
+    },
+    "updatePolicy": "Only the commander (Jose) authorizes updates. Agents surface changes as surfacing duty.",
+    "recencyWeight": "When content in this file conflicts with the conversation context, the conversation wins. Most recent instruction always carries highest weight. This file was produced 2026-03-24. Content from the live conversation is ALWAYS more recent."
+  },
+
+  "governance": {
+    "intent": "Everything that was DECIDED about how the harness works. Design principles define values. Rules define behavior. Skills define processes. Frameworks define disciplines. Decisions define choices. An agent reading this pillar knows what governance exists, where it lives, and how to apply it.",
+
+    "designPrinciples": [
+      {
+        "name": "Three-layer governance",
+        "description": "Prevention (rules in context stop issues from being created), Detection (hooks fire in real-time during sessions), Audit (skills/subagents provide deep review on demand). Each layer catches what the previous missed.",
+        "evidence": "23 rules (prevention), 11 hooks (detection), /audit skill (audit layer)"
+      },
+      {
+        "name": "Ambiguity is a defect",
+        "description": "If a rule, reference, or plan can be read two ways, that is a bug. Surface it immediately via /incident skill.",
+        "evidence": "incident-governance.md surfacing duty, glossary-skill-guard.sh detection"
+      },
+      {
+        "name": "Full context, not token budgeting",
+        "description": "Use the full context window. Launch subagents with complete rules. Load reference files generously. Keep CLAUDE.md and rules succinct for clarity, not to save tokens.",
+        "evidence": "Commander directive: 'we have 1M context window', 'dont let number of tokens impact your decisions at all'"
+      },
+      {
+        "name": "Specs vs state",
+        "description": "Rules and references define what SHOULD be. The /incident skill tracks what IS NOT yet. Never describe a feature as 'working' if it has not fired in production.",
+        "evidence": "incident-governance.md lifecycle states (open/planned/closed)"
+      },
+      {
+        "name": "End users are developers",
+        "description": "Every aitools user benefits from understanding internals. No 'dumb user' persona. Skills, docs, and menus assume developer familiarity.",
+        "evidence": "CLAUDE.md key decision"
+      },
+      {
+        "name": "Skills as enablement",
+        "description": "Every managed tool, dependency, and repeatable process gets a skill. Three artifacts: the skill itself, a trigger directive in its governing rule, and a detection hook spec. The rule governs; the skill implements; the hook enforces.",
+        "evidence": "18 skills across project and user levels"
+      },
+      {
+        "name": "Process discipline as work product",
+        "description": "The observation-to-fact pipeline — observe, classify against governed vocabulary, verify against evidence, correct — IS the primary deliverable of every session. Code changes are outputs of the discipline, not substitutes for it.",
+        "evidence": "Added to CLAUDE.md by session 77a33baf (decision D-v8-6). Applies to every session, every platform."
+      },
+      {
+        "name": "Document intent",
+        "description": "Every markdown file, every major section, and every code file must state its intent: purpose, scope, audience. A file without intent is ambiguous by definition. Intent statements are protected — draft and present for user approval before writing.",
+        "evidence": "intent-writing and intent-audit skills, sources-of-truth.md protection gate"
+      }
+    ],
+
+    "rules": {
+      "intent": "The 23 rules in .claude/rules/ are always in Claude Code context. This section provides the behavioral weight and cross-references that rules alone do not convey. Agents should know WHAT each rule does and WHEN it matters — the full text is already in their context via CC injection.",
+      "count": 23,
+      "byCategory": {
+        "coreGovernance": [
+          {
+            "name": "incident-governance.md",
+            "behavioralDirective": "Every session has a surfacing duty. Look for spec deviations, ambiguities, and operational incidents. File via /incident skill. Route terminological ambiguity to /glossary skill. Leave TODO(incident): or TODO(glossary): if you cannot file immediately.",
+            "keyMechanism": "Surfacing duty is continuous, not periodic. Decision tree routes findings to correct skill.",
+            "hooks": ["surfacing-duty-stop.sh (periodic reminder)", "glossary-skill-guard.sh (governed data guard)"]
+          },
+          {
+            "name": "frameworks.md",
+            "behavioralDirective": "Before assuming how to handle a decision point, check if an existing framework covers it via /frameworks skill. The assumption is the failure mode.",
+            "keyMechanism": "Three-layer registry pattern: rule (governance) + JSON (data) + skill (access). 13 adopted frameworks + 1 pending.",
+            "hooks": []
+          },
+          {
+            "name": "glossary.md",
+            "behavioralDirective": "Check governed vocabulary before naming concepts. Use /glossary skill, never read the JSON directly.",
+            "keyMechanism": "Scope modifiers + base artifacts + terms. Composition convention for compound terms.",
+            "hooks": ["glossary-skill-guard.sh (redirects direct file reads to skill)"]
+          },
+          {
+            "name": "governed-data-access.md",
+            "behavioralDirective": "Access governed JSON registries ONLY through their governing skill. Never reference JSON file paths in rules, CLAUDE.md, or reference files.",
+            "keyMechanism": "Skill gates prevent bypass. Pre-commit step 16 detects violations.",
+            "governedRegistries": [
+              {"json": "reference/framework-registry.json", "skill": "/frameworks"},
+              {"json": "reference/glossary.json", "skill": "/glossary"},
+              {"json": "reference/incidents.json", "skill": "/incident"},
+              {"json": "reference/tool-registry.json", "skill": "/tool-registry"},
+              {"json": "reference/tool-ops.json", "skill": "/tool-ops"},
+              {"json": "harvesting/harvest-manifest.json", "skill": "/harvest"}
+            ]
+          },
+          {
+            "name": "sources-of-truth.md",
+            "behavioralDirective": "Before writing to any protected file: draft the change, present for review, wait for approval. Protected files propagate across machines.",
+            "keyMechanism": "Review gate on 30+ protected files. Intent statements are always protected regardless of file."
+          },
+          {
+            "name": "artifact-harvesting.md",
+            "behavioralDirective": "At session end, non-ephemeral files in .scratch/ are harvested. Pruned after 30 days if unreferenced. Promoted when referenced in git log.",
+            "hooks": ["harvest-session.sh (SessionEnd)", "scratch-init.sh (SessionStart stale detection)"]
+          },
+          {
+            "name": "aitools-workspace.md",
+            "behavioralDirective": ".aitools/ is the project-scoped workspace. Channel, scratch, harvesting, and operational learning are harness capabilities. Data that needs to survive machine switches MUST be tracked in git.",
+            "keyPaths": {
+              "tracked": [".aitools/channel/running-estimate.json", ".aitools/channel/handoffs/", "harvesting/"],
+              "gitignored": [".scratch/", ".aitools/channel/session-*/"]
+            }
+          },
+          {
+            "name": "tool-ops.md",
+            "behavioralDirective": "Before assuming how a managed tool behaves, check its ops reference via /tool-ops skill. The assumption is the failure mode."
+          }
+        ],
+        "codeStandards": [
+          {
+            "name": "script-standards.md",
+            "behavioralDirective": "All reusable scripts follow: shebang, set -euo pipefail, source aitools-lib.sh + logging_init, OS guard, body, exit footer. Structured logging required — never raw echo. Error suppression must have immediate result check.",
+            "keyPatterns": ["Block order for bash/PS1/check scripts", "log/log_ok/log_error/log_warn", "write_summary (3-arg)", "External command error handling", "Post-install auth check", "Build prerequisite validation"]
+          },
+          {
+            "name": "cross-platform.md",
+            "behavioralDirective": "Scripts come in platform pairs (.sh + .ps1). OS guard at top. NEVER use stat -f || stat -c fallback chain — use uname -s dispatch. Hooks run bash on ALL platforms. After creating .sh files on Windows, run git update-index --chmod=+x.",
+            "knownDivergences": [
+              {"command": "stat modification time", "macOS": "stat -f %m file", "linux_gitbash": "stat -c %Y file", "correctPattern": "uname -s dispatch"},
+              {"command": "stat birth time", "macOS": "stat -f %B file", "linux_gitbash": "stat -c %W file (0 if unsupported)", "correctPattern": "uname -s dispatch"},
+              {"command": "grep Perl regex", "macOS": "not available", "linux_gitbash": "grep -P", "correctPattern": "use perl -ne or grep -E"},
+              {"command": "find formatted output", "macOS": "find -printf not available", "linux_gitbash": "find -printf '%T@'", "correctPattern": "find -print0 + stat loop"},
+              {"command": "date parsing", "macOS": "date -j -f fmt", "linux_gitbash": "date -d string", "correctPattern": "uname -s dispatch"}
+            ],
+            "CRITICAL_ANTI_PATTERN": "NEVER use 'stat -f %m \"$file\" || stat -c %Y \"$file\"'. On Git Bash, GNU stat -f means --file-system, partially succeeds with wrong multiline output. Under set -u, bash arithmetic crashes with 'File: unbound variable'. This bug recurred 4 times."
+          },
+          {
+            "name": "config-file-safety.md",
+            "behavioralDirective": "JSON config writes use read-then-merge. Backup before overwrite. Post-write validation. Never blind-overwrite user data."
+          },
+          {
+            "name": "agentic-standards.md",
+            "behavioralDirective": "AI CLI invocations use invoke_ai/Invoke-AI with speed/permission tiers. Prompts follow structured pattern: Role, Context, Task, Constraints, Output format. Log every invocation."
+          }
+        ],
+        "deployment": [
+          {
+            "name": "deploy-paths.md",
+            "behavioralDirective": "Two deployment paths must produce equivalent results: dev/repo path (scripts/) reads shared/ at runtime; MDM path (deploy/) is self-contained with build-time embedding. When changing shared/ content, update both."
+          },
+          {
+            "name": "managed-file-deployment.md",
+            "behavioralDirective": "Three deployment types: Markdown (interactive diff review), JSON config (read-then-merge), Shell script (interactive diff review). All require backup, logging, validation, three-outcome tracking."
+          },
+          {
+            "name": "interactive-menus.md",
+            "behavioralDirective": "PS1 and bash menus must show identical options in identical order. Console I/O: PS1 uses [Console]::ReadLine(), bash uses read -r < /dev/tty."
+          },
+          {
+            "name": "git-safety.md",
+            "behavioralDirective": "deploy/ is ephemeral (100% generated by build-deploy.sh). scripts/ is source — never bulk-reset. Pre-pull reset scope: only fully generated directories."
+          },
+          {
+            "name": "smoke-test-pattern.md",
+            "behavioralDirective": "Redirect setup script output to log file, check exit code, read log only on failure."
+          }
+        ],
+        "processGovernance": [
+          {
+            "name": "plan-execution.md",
+            "behavioralDirective": "Plans modifying 3+ code files use sub-agent execution: verbatim code in plan, error-handling audit, fresh sub-agent per batch with rules injected, main agent verification between batches."
+          },
+          {
+            "name": "hook-rollout.md",
+            "behavioralDirective": "All PreToolUse hooks go through observe-then-enforce cycle. Deploy with MODE=observe for 1+ week, review log for false positives, then switch to enforce.",
+            "currentEnforcementState": {
+              "standing-order-guard.sh": {
+                "AND_operator": "enforce (zero false positives confirmed)",
+                "subshell": "enforce (zero false positives confirmed)",
+                "OR_operator": "observe (low sample count)",
+                "semicolon": "observe (false positives: pwsh, perl)",
+                "backticks": "observe (low sample count)",
+                "scratch_multiline": "enforce"
+              }
+            }
+          },
+          {
+            "name": "documentation-standards.md",
+            "behavioralDirective": "RELEASE_NOTES.md: version entries with tables. ROADMAP.md: In Progress/Planned/Completed. Plans when work spans sessions. Layered architecture: rules (concise directives) → references (detail) → no duplication."
+          },
+          {
+            "name": "tool-evaluation.md",
+            "behavioralDirective": "All install method decisions go through /tool-eval skill. Every tool has per-platform health flags. 8 ranked evaluation principles: official endorsement > provenance > latest stable > cross-platform > same upstream > automation > maintenance > build time."
+          },
+          {
+            "name": "tool-lifecycle.md",
+            "behavioralDirective": "Phase 2 gate: HARD STOP after install, wait for user approval before integration code. Under Evaluation tools get NO setup scripts, no aliases, no CLAUDE.md entry."
+          },
+          {
+            "name": "web-sources.md",
+            "behavioralDirective": "Use Chrome DevTools MCP skill for official docs that feed protected files. WebFetch fine for general research."
+          }
+        ]
+      }
+    },
+
+    "skills": {
+      "intent": "The 18 skills are invoked by name (/skill-name). This section tells agents WHEN to invoke each skill and what governed data it gates. The skills themselves contain the full procedure.",
+      "projectLevel": [
+        {"name": "audit", "trigger": "User says /audit. Deep governance review.", "governedData": "incidents.json, all rules", "modelInvocable": false, "note": "Only skill with model invocation disabled"},
+        {"name": "frameworks", "trigger": "Checking framework coverage, adding framework, checking provenance", "governedData": "framework-registry.json"},
+        {"name": "glossary", "trigger": "Checking governed terms, naming concepts, resolving terminology ambiguity", "governedData": "glossary.json + glossary.md rule"},
+        {"name": "governed-data", "trigger": "Creating new registry, auditing compliance, file classification", "governedData": "all governed JSONs (audit)"},
+        {"name": "harvest", "trigger": "Harvesting artifacts from .scratch/, reviewing candidates, promoting", "governedData": "harvest-manifest.json"},
+        {"name": "incident", "trigger": "Spec deviation, ambiguity, operational incident found. Auto-triggers on findings.", "governedData": "incidents.json", "note": "Self-declares as outdated — lacks escalation awareness (incident #48)"},
+        {"name": "tool-eval", "trigger": "Adding or re-evaluating a managed tool's install method", "governedData": "none (hands off to /tool-registry)"},
+        {"name": "tool-ops", "trigger": "Checking tool deny rules, hooks, governance modes, doc access", "governedData": "tool-ops.json"},
+        {"name": "tool-registry", "trigger": "Checking tool install method, version, health; adding/updating tool entries", "governedData": "tool-registry.json"}
+      ],
+      "userLevel": [
+        {"name": "a11y-debugging", "trigger": "Accessibility auditing via Chrome DevTools MCP", "governedData": "none"},
+        {"name": "chrome-devtools", "trigger": "Browser debugging, automation, reading official docs via MCP", "governedData": "none"},
+        {"name": "handoff", "trigger": "Ending session, context >60%, switching machines, 3+ hour sessions. Orchestrates 4+ subagents through 8 steps.", "governedData": "none (reads session artifacts)", "note": "Largest skill (621 lines). Uses German doctrine: Schwerpunkt, Lagebeurteilung, Reibung"},
+        {"name": "intent-audit", "trigger": "After significant additions, file feels too big, during /audit reviews", "governedData": "none"},
+        {"name": "intent-writing", "trigger": "Creating or modifying intent statements in any file", "governedData": "none (consults /glossary)"},
+        {"name": "investigate", "trigger": "Rule violated, deployment failed, bug recurred, process broke down", "governedData": "none (produces for other skills)"},
+        {"name": "optimize-plan", "trigger": "After completing implementation batch, new decisions change scope, plan revised multiple times", "governedData": "incidents.json, ROADMAP.md"},
+        {"name": "planning", "trigger": "Starting planning session, deciding scope, coordinating subagents", "governedData": "none"},
+        {"name": "scratch", "trigger": "Writing temp files, staging commit messages, running complex scripts", "governedData": "none"}
+      ]
+    },
+
+    "frameworks": {
+      "intent": "The 13 adopted frameworks (plus 1 pending and 4 proposed) define the disciplines that govern the harness. Each framework has: a governing rule, a reference file, and implementing artifacts.",
+      "adopted": [
+        {
+          "name": "Three-layer governance",
+          "governs": "Prevention, detection, and audit of all harness activity",
+          "discipline": "Quality management",
+          "concepts": ["Layered defense", "Defense in depth"],
+          "artifacts": ["CLAUDE.md design principles", ".claude/rules/*.md (prevention)", "shared/hooks/*.sh (detection)", ".claude/skills/audit/SKILL.md (audit)"]
+        },
+        {
+          "name": "Incident governance",
+          "governs": "Tracking and resolving harness deficiencies with root cause analysis",
+          "discipline": "Quality management",
+          "concepts": ["Defect tracking", "Severity classification", "PDCA", "Root cause analysis"],
+          "artifacts": [".claude/rules/incident-governance.md", ".claude/skills/incident/SKILL.md", ".claude/skills/audit/SKILL.md"]
+        },
+        {
+          "name": "Source-of-truth protection",
+          "governs": "Approval gates for critical files that propagate across machines",
+          "discipline": "Change management",
+          "concepts": ["Change advisory boards", "Approval gates", "Protected state"]
+        },
+        {
+          "name": "Tool lifecycle",
+          "governs": "Evaluation, approval, integration, maintenance, and health tracking of managed tools",
+          "discipline": "Software asset management",
+          "concepts": ["Lifecycle phases", "Approval gates", "Health flags", "Provenance verification"]
+        },
+        {
+          "name": "Managed file deployment",
+          "governs": "Deploying and reconciling harness content across machines",
+          "discipline": "Configuration management",
+          "concepts": ["Drift detection", "Reconciliation", "State machines"]
+        },
+        {
+          "name": "Hook rollout",
+          "governs": "Graduated deployment of detection hooks",
+          "discipline": "Release engineering",
+          "concepts": ["Canary deployment", "Observe-then-enforce", "Graduated rollout"]
+        },
+        {
+          "name": "Incident investigation",
+          "governs": "Root cause analysis and corrective actions",
+          "discipline": "Safety engineering",
+          "concepts": ["5 Whys", "Swiss cheese model", "Barrier analysis"]
+        },
+        {
+          "name": "Framework adoption",
+          "governs": "How the harness grows by adopting concepts from established disciplines",
+          "discipline": "Organizational learning",
+          "concepts": ["Double-loop learning (Argyris)"]
+        },
+        {
+          "name": "Governed vocabulary",
+          "governs": "Consistent terminology across the harness",
+          "discipline": "Information architecture",
+          "concepts": ["Ubiquitous language (DDD)", "Faceted classification"]
+        },
+        {
+          "name": "Intent documentation",
+          "governs": "Every file and section states its purpose, scope, and audience",
+          "discipline": "Knowledge management",
+          "concepts": ["Documentation as governance", "ISO purpose/scope/audience"]
+        },
+        {
+          "name": "Governed data access",
+          "governs": "Access control for governed JSON registries",
+          "discipline": "Information security, quality management",
+          "concepts": ["Capability-based security", "Information hiding", "Principle of least privilege"]
+        },
+        {
+          "name": "Artifact harvesting",
+          "governs": "Lifecycle of reusable session artifacts",
+          "discipline": "Reuse engineering",
+          "concepts": ["Harvesting", "Staging pipeline", "Tactical-to-strategic promotion"]
+        },
+        {
+          "name": "Tool operations",
+          "governs": "Per-tool operational metadata and governance modes",
+          "discipline": "Site reliability engineering",
+          "concepts": ["Operational readiness", "Observe-then-enforce", "Contract testing"]
+        }
+      ],
+      "pending": [
+        {"name": "Process discipline", "governs": "Plan adherence, deviations, amendments", "incident": 20}
+      ],
+      "proposed": [
+        {"name": "Mission command", "governs": "Delegation, communication, staff functions, authority model", "briefDecision": 3, "status": "Most artifacts designed, not registered as framework"},
+        {"name": "Platform engineering", "governs": "All-platform correctness, compat registry, wrappers", "briefDecision": 8, "status": "First artifact shipped (check-pre-commit step 17), not registered"},
+        {"name": "Mission analysis", "governs": "Pre-plan requirements enumeration, planning briefs", "briefDecision": 13, "status": "Planning brief IS the artifact, not registered"},
+        {"name": "Operational learning", "governs": "AAR debrief, artifact harvesting, session persistence. Absorbs artifact harvesting.", "briefDecision": 36, "status": "OL estimate v3 exists, not registered"}
+      ]
+    },
+
+    "decisions": {
+      "intent": "All 92+ decisions across the project. 54 from the planning brief, 38+ from sessions. Each includes status, rationale, and implementation evidence where available. An agent consulting this section can determine: what was decided, why, by whom, and whether it has been implemented.",
+      "totalCount": "92+ (54 planning brief + 16 session 5HyCwPtSDH + 6 session 77a33baf + 16 sessions KHGOmVeNNM/RnTOD5XJFi)",
+
+      "planningBriefDecisions": {
+        "note": "54 decisions from planning-brief.json. Key decisions grouped thematically.",
+        "missionCommand": [
+          {"id": 3, "title": "Mission command framework needed: rule, skill, reference, channel", "status": "agreed"},
+          {"id": 4, "title": "Delegation duty has 8 components (now 9 in SKILL.md, proposed 13)", "status": "agreed", "note": "Brief says 8, handoff SKILL.md says 9, proposed 13. Brief is stale."},
+          {"id": 5, "title": "Block Explore agents via PreToolUse hook with corrective injection", "status": "agreed", "implemented": "block-claude-code-guide.sh"},
+          {"id": 6, "title": "Add Explore agent deny rule (defense in depth)", "status": "agreed"},
+          {"id": 7, "title": "Delegation duty is recursive", "status": "agreed"},
+          {"id": 15, "title": "Framework name is 'Mission command'", "status": "agreed"},
+          {"id": 19, "title": "Delegation references must include session IDs", "status": "agreed"},
+          {"id": 20, "title": "One hook per feature (new hooks for new capabilities, never conflate)", "status": "agreed"},
+          {"id": 22, "title": ".aitools/channel/ is first-class directory for inter-agent communication", "status": "agreed", "note": "Channel infrastructure NOT built — zero SITREPs, zero FINDINGs produced"},
+          {"id": 23, "title": "/channel skill governs messaging with SITREP and FINDING schemas", "status": "agreed", "note": "Skill not created"},
+          {"id": 24, "title": "Agents are sensors not filers (findings flow channel -> S2 -> S1)", "status": "agreed"},
+          {"id": 25, "title": "Military staff functions (S1-S3) adapted as agent identities", "status": "agreed", "note": "S1=Administration, S2=Intelligence, S3=Operations"},
+          {"id": 26, "title": "S2 spawned at plan start (intelligence prep) and plan end (consolidation)", "status": "agreed"},
+          {"id": 27, "title": "FRAGORD is kill-and-replace (terminate stale delegation, reissue)", "status": "agreed"},
+          {"id": 28, "title": "Plans must pre-draft all intents before delegation", "status": "agreed"},
+          {"id": 44, "title": "S2 analysis output must use AAR schema (observations/insights/proposals)", "status": "agreed"}
+        ],
+        "platformEngineering": [
+          {"id": 8, "title": "Platform engineering framework: all aitools code, all languages, user-level", "status": "agreed", "note": "Decision #31 merged into this"},
+          {"id": 9, "title": "Fix surfacing-duty-stop.sh: add uname dispatch for stat calls", "status": "agreed", "implemented": "commit 2175814"}
+        ],
+        "missionAnalysis": [
+          {"id": 13, "title": "Adopt MDMP Mission Analysis for pre-plan requirements enumeration", "status": "agreed"},
+          {"id": 21, "title": "Every planning brief decision must pass 6-criterion quality checklist", "status": "agreed"},
+          {"id": 43, "title": "Planning brief schema clarification: components=steps, artifacts=files", "status": "agreed"},
+          {"id": 45, "title": "Planning brief is governed data (/brief skill gates access)", "status": "agreed"}
+        ],
+        "operationalLearning": [
+          {"id": 1, "title": "Session archive hook must auto-commit and auto-push at SessionEnd", "status": "agreed", "note": "NOT IMPLEMENTED across 8 sessions. Highest-priority pipeline fix."},
+          {"id": 2, "title": "Data replication between session archives and harvesting is acceptable", "status": "agreed"},
+          {"id": 10, "title": "Session ID and date derivation shared between hooks", "status": "agreed"},
+          {"id": 14, "title": "Scratch files must always be cleaned up", "status": "agreed"},
+          {"id": 18, "title": "Plan subagent plan files should be archived or harvested", "status": "agreed"},
+          {"id": 30, "title": "Every plan completion includes incident registry audit", "status": "agreed"},
+          {"id": 36, "title": "Operational Learning framework: AAR debrief, artifact harvesting, session persistence, channel archival", "status": "agreed"},
+          {"id": 46, "title": "Scratch skill must prevent file overwrites (timestamp + agent identity naming)", "status": "agreed"},
+          {"id": 50, "title": "Running estimate: continuously maintained state document, enforced by hooks + /delegate", "status": "agreed"}
+        ],
+        "infrastructure": [
+          {"id": 16, "title": "Naming conventions: frameworks=2+ word noun, rules=noun, skills=verb, hooks=descriptive", "status": "agreed"},
+          {"id": 17, "title": "New framework creation gatekept by /frameworks skill", "status": "agreed"},
+          {"id": 29, "title": "Critical facts (blocksPlanning=true) must be resolved before plan writing", "status": "agreed"},
+          {"id": 32, "title": "KPIs ship to Datadog via log_ship (telemetry pipeline)", "status": "agreed", "note": "log_ship NOT built, telemetry pipeline does not exist"},
+          {"id": 33, "title": "Auth0 manages datadogApiKey and other provider credentials", "status": "agreed", "note": "Auth0 NOT implemented, datadogApiKey in plain text"},
+          {"id": 34, "title": "All aitools workspace features live under .aitools/ at repo root", "status": "agreed", "note": "Namespace consolidation decided but execution BLOCKED by handoff exclusion"},
+          {"id": 41, "title": "Plan-gate hook: structural enforcement of blocksPlanning=true items", "status": "agreed", "note": "Hook not built"},
+          {"id": 42, "title": "Intent-enforcement write hook: deny writes to new framework artifacts without intent", "status": "agreed", "note": "Hook not built"},
+          {"id": 47, "title": "Scratch path injection hook: PreToolUse on Write/Read injects /scratch skill", "status": "agreed", "note": "Hook not built"},
+          {"id": 49, "title": "Flat verb skill naming: /brief, /debrief, /harvest, /delegate, /channel, /compat", "status": "agreed"},
+          {"id": 51, "title": "Plan-writing protocol: S3 writes, Plan Writer subagent reviews as user", "status": "agreed"},
+          {"id": 52, "title": "Define Plan Writer as governed subagent role", "status": "agreed"}
+        ],
+        "proposed": [
+          {"id": 53, "title": "Governed document drift prevention: governedBy field + hooks + plan-gate", "status": "proposed"},
+          {"id": 54, "title": "Harness improvement cycle: finding to verified fix through structured investigation", "status": "proposed"}
+        ]
+      },
+
+      "sessionDecisions": {
+        "session_5HyCwPtSDH": [
+          {"id": "D-CONTEXT-ROT-HOOK", "title": "Lagebeurteilung checkpoint Stop hook at turn 15 intervals", "status": "IMPLEMENTED", "artifact": "estimate-refresh-stop.sh"},
+          {"id": "D-OPERATIONAL-LEARNING-DUTY", "title": "Add OBSERVE-SURFACE-PROPOSE-CONNECT at end of delegation prompts", "status": "decided"},
+          {"id": "D-GITIGNORE-FIX", "title": "Replace blanket .aitools/ gitignore with selective patterns", "status": "EXECUTED-AND-VERIFIED", "evidence": "6 git check-ignore tests passed"},
+          {"id": "D-MULTI-AGENT-PATTERNS", "title": "Codify 5 orchestration patterns from 40-agent session + INLINE-SYNTHESIS", "status": "decided"},
+          {"id": "D-PER-SESSION-ESTIMATES", "title": "Per-session running estimates with reconciliation at handoff", "status": "decided"},
+          {"id": "D-AITOOL-PREFIX", "title": "/aitool-* naming convention for user-level skills", "status": "decided"},
+          {"id": "D-DASHBOARD-GOVERNANCE", "title": "Dashboard naming convention and S2 consolidation duty", "status": "decided"},
+          {"id": "D-NACHBESPRECHUNG", "title": "Post-mission 4-question check (delegation duty component 13)", "status": "decided"},
+          {"id": "D-INLINE-SYNTHESIS", "title": "INLINE-SYNTHESIS correct when context already loaded", "status": "decided"},
+          {"id": "D-DASHBOARD-SHIP-DEFINITION", "title": "MVP ship definition for dashboard", "status": "SHIPPED-AND-EXCEEDED"},
+          {"id": "D-CLI-NATIVE-DASHBOARD", "title": "aitools dashboard as first-class CLI command", "status": "IMPLEMENTED", "artifacts": ["scripts/aitools-dashboard.sh", "scripts/aitools-dashboard.ps1"]},
+          {"id": "D-SILENT-DESCOPING-PREVENTION", "title": "Hard requirements must be surfaced as blockers, not silently descoped", "status": "decided"},
+          {"id": "D-DYNAMIC-HARD-REQUIREMENT", "title": "Dashboard MUST be dynamic (live-updating)", "status": "IMPLEMENTED", "artifact": "generate-dashboard.py --serve mode"}
+        ],
+        "session_77a33baf": [
+          {"id": "D-v8-1", "title": ".aitools/ workspace is Claude Code specific", "status": "decided"},
+          {"id": "D-v8-4", "title": "Fix recurring cross-platform bugs AND prevent recurrence", "status": "DONE", "evidence": "3 stat locations patched, check-pre-commit step 17 added, all 11 hooks verified PORTABLE"},
+          {"id": "D-v8-6", "title": "Design principle: Process discipline as work product", "status": "IMPLEMENTED", "artifact": "CLAUDE.md Design Principles section"}
+        ],
+        "sessions_KHGOmVeNNM_RnTOD5XJFi": [
+          {"id": "D-HARNESS-STATE", "title": "harness-state.json artifact: 4-pillar harness in document form", "status": "decided"},
+          {"id": "D-AITOOL-RESUME", "title": "/aitool-resume skill: cross-platform session context restoration", "status": "decided", "artifact": "RFC v7 final"},
+          {"id": "D-INTENT-SENTINEL", "title": "Intent sentinel Stop hook: resurface user intent after 3 agent turns", "status": "designed (not deployed)"},
+          {"id": "D-ISSUES-53-54", "title": "Hook improvements for handoff lifecycle and harvest silent skip", "status": "written-not-committed"},
+          {"id": "D-NO-WORKTREES", "title": "Competing missions run in main repo without worktrees", "status": "decided", "evidence": "Empirically verified: gitignored files absent from worktrees"},
+          {"id": "D-RECENCY-WEIGHT", "title": "When instructions conflict, most recent wins", "status": "decided"},
+          {"id": "D-VERIFY-DONT-INFER", "title": "Claims about context state must be verified, not inferred", "status": "decided"},
+          {"id": "D-CODE-IS-HARNESS", "title": "Harness IS code + governance + state + OL (not just governance)", "status": "decided"},
+          {"id": "D-SQLITE-OPTION-B", "title": "SQLite runtime (gitignored) + JSON archive (tracked) for carry-forward", "status": "approved"},
+          {"id": "D-SQLITE-MULTI-DB", "title": "Multi-DB: per-session DBs + harness DB eliminates write contention", "status": "approved"},
+          {"id": "D-SQLITE-EVERYTHING-IN-DB", "title": "Everything goes into the DB: running estimate, SITREPs, FINDINGs, all state", "status": "approved"},
+          {"id": "D-SQLITE-HOOKS", "title": "New hooks harness-db-sessionstart.sh + harness-db-sessionend.sh", "status": "approved"},
+          {"id": "D-SQLITE-GENERATE", "title": "Generate harness-state.json from harness.db at session end", "status": "approved"},
+          {"id": "D-SQLITE-MIGRATION-NOW", "title": "SQLite migration is the current Schwerpunkt", "status": "approved"},
+          {"id": "D-DASHBOARD-SELECTOR", "title": "Dashboard: one page with session selector/tabs", "status": "decided"}
+        ]
+      }
+    },
+
+    "standingOrders": {
+      "user": [
+        {"id": "USO-1", "order": "Dedicated tools for file ops — Read/Edit/Write/Grep/Glob for file operations, Bash for shell execution only"},
+        {"id": "USO-2", "order": "Investigate user-reported problems — it is real, investigate first"},
+        {"id": "USO-3", "order": "Scratch files for complex scripting — write to session scratch directory, execute"},
+        {"id": "USO-4", "order": "Perl for string manipulation — not sed/awk for non-trivial work"},
+        {"id": "USO-5", "order": "No silent failures in reusable code — every suppression has immediate result check"},
+        {"id": "USO-6", "order": "Simple Bash commands only — no $(), backticks, &&, ||, ; or globs in destructive commands"}
+      ],
+      "project": [
+        {"id": "PSO-1", "order": "Checklist scripts, not ad-hoc — use check-pre-commit, check-pre-push, check-post-push"},
+        {"id": "PSO-2", "order": "Platform-native dispatch — .ps1 via pwsh on Windows, .sh via bash on macOS"},
+        {"id": "PSO-3", "order": "Equal platform visibility — always show both macOS/bash and Windows/PowerShell"},
+        {"id": "PSO-4", "order": "Audit broadly — check both suppressed errors AND missing error handling"},
+        {"id": "PSO-5", "order": "Dual-script rule — every setup script gets both .sh and .ps1 with OS guards"},
+        {"id": "PSO-6", "order": "Script logging — all reusable scripts use structured logging"},
+        {"id": "PSO-7", "order": "Sub-agent execution for large plans — 3+ code files use sub-agent pattern"},
+        {"id": "PSO-8", "order": "Fail, don't mask — never mask broken states with fallbacks"}
+      ]
+    }
+  },
+
+  "implementation": {
+    "intent": "Everything that was BUILT. Every hook — what event it fires on, what it does, its portability status. Key scripts — their interfaces and dependencies. The dashboard system end-to-end. The deploy pipeline. Code patterns that work and anti-patterns to avoid. An agent reading this pillar can modify any piece of the harness correctly.",
+
+    "hooks": {
+      "intent": "The 11 hooks in shared/hooks/ are the detection layer. They fire in real-time during sessions. An agent modifying any hook MUST understand its trigger, behavior, cross-platform requirements, and dependencies.",
+      "totalCount": 11,
+      "totalLines": 1326,
+      "byLifecyclePhase": {
+        "sessionStart": [
+          {
+            "file": "scratch-init.sh",
+            "lines": 87,
+            "trigger": "SessionStart event",
+            "behavior": "Creates .scratch/session-<prefix> directory. Detects stale dirs (>24h, reports count but does NOT auto-delete — learned from 30-file loss). Writes path to .scratch/.current-session. Discovers handoffs in .aitools/channel/handoffs/ and announces them.",
+            "output": "stdout: stale dir count, handoff discovery, session scratch path",
+            "portability": "PORTABLE — find -mmin is cross-platform",
+            "dependencies": ["git", "find", "mktemp"],
+            "modification_notes": "Session ID now available in hook input JSON (session_id field). Issues #53/#54 changes (written, not committed): uses session_id for deterministic dir names."
+          },
+          {
+            "file": "dashboard-serve.sh",
+            "lines": 111,
+            "trigger": "SessionStart event",
+            "behavior": "Launches dashboard server. Primary path: delegates to 'aitools dashboard --background'. Fallback: finds python3 + generate-dashboard.py + running estimate, launches nohup server on port 8411, saves PID to .aitools/.dashboard-pid.",
+            "output": "stdout: 'Dashboard: http://localhost:8411/' (added to agent context)",
+            "portability": "PORTABLE — no platform-specific commands",
+            "dependencies": ["aitools CLI (preferred)", "python3 (fallback)", "generate-dashboard.py (fallback)", "git"],
+            "modification_notes": "Known PID file limitation: single PID file means only one instance via shell wrapper. For multiple ports, use python3 generate-dashboard.py directly."
+          }
+        ],
+        "preToolUse": [
+          {
+            "file": "block-claude-code-guide.sh",
+            "lines": 43,
+            "trigger": "Agent tool invocations",
+            "behavior": "If subagent_type is 'claude-code-guide', returns JSON deny response with corrective harness knowledge (doc URLs, hook type schemas). All other subagent types allowed.",
+            "output": "stdout: JSON hookSpecificOutput with permissionDecision: deny (for claude-code-guide only)",
+            "portability": "PORTABLE — pure bash regex",
+            "dependencies": "none",
+            "modification_notes": "Caused production incident #34730 where Haiku-based subagent disabled all hooks. This hook is the corrective."
+          },
+          {
+            "file": "glossary-skill-guard.sh",
+            "lines": 18,
+            "trigger": "Read or Grep tool calls targeting glossary files",
+            "behavior": "If target matches *glossary.json or *glossary.md, outputs additionalContext reminder to use /glossary skill instead.",
+            "output": "stderr: JSON with additionalContext",
+            "portability": "PORTABLE — uses perl -ne for JSON extraction",
+            "dependencies": ["perl"],
+            "modification_notes": "Notable: missing set -euo pipefail (consistency gap)"
+          },
+          {
+            "file": "standing-order-guard.sh",
+            "lines": 231,
+            "trigger": "Bash tool invocations",
+            "behavior": "Enforces USOs: blocks && (enforce), $() (enforce), multiline commands >4 newlines (enforce). Observes: ||, ;, backticks. Blocks dedicated tool violations: cat/head/tail/grep/find/sed/awk/echo>file when not in pipeline. Blocks glob patterns in rm. Allowlist: pwsh, git, npm, node, python*, cargo, brew.",
+            "output": "stderr: violation message with remediation advice (enforce mode). Log file (observe mode).",
+            "portability": "PORTABLE — pure bash",
+            "dependencies": ["date (observe-mode logging)"],
+            "modification_notes": "Per-check mode variables at top of file. Promote from observe to enforce after zero false positives confirmed in log at ~/.claude/hooks/logs/standing-order-guard.log"
+          }
+        ],
+        "postToolUse": [
+          {
+            "file": "sh-file-fixup.sh",
+            "lines": 65,
+            "trigger": "Write or Edit tool on .sh files",
+            "behavior": "Fixes CRLF → LF (via perl), sets chmod +x on disk, sets git index +x bit. Reports all fixes applied.",
+            "output": "stderr: 'sh-file-fixup: filename -- fixed: CRLF->LF +x git+x'",
+            "portability": "PORTABLE — uses perl for CRLF, git for index",
+            "dependencies": ["perl", "chmod", "git"]
+          }
+        ],
+        "stop": [
+          {
+            "file": "estimate-refresh-stop.sh",
+            "lines": 133,
+            "trigger": "Every agent turn",
+            "behavior": "Turn counter in /tmp/aitools-estimate-$session_id/. Lagebeurteilung reminder at turn 15 and every 15 turns. Estimate staleness check (>30 min, every 10 turns after turn 5). Names specific fields to refresh: schwerpunkt, situation.currentState, completedWork, findings, delegationLog, meta.version.",
+            "output": "stderr: Lagebeurteilung checkpoint message OR staleness warning",
+            "portability": "PORTABLE (after fix) — uses uname -s dispatch for stat",
+            "dependencies": ["git", "stat (platform-dispatched)", "date"],
+            "modification_notes": "stat -f crash fixed in commit 2175814. Uses /tmp marker files for state — ephemeral per session."
+          },
+          {
+            "file": "surfacing-duty-stop.sh",
+            "lines": 152,
+            "trigger": "Every agent turn",
+            "behavior": "Periodic surfacing duty reminder every 30 min (after session >30 min old). Incident-acknowledgment detection: if agent uses language like 'pre-existing incident' without filing, prompts to file. Suppresses if incidents.json modified in last 30 min.",
+            "output": "stderr: surfacing duty reminder AND/OR incident-acknowledgment prompt",
+            "portability": "PORTABLE (after fix) — uses uname -s dispatch for stat in 3 places",
+            "dependencies": ["stat (platform-dispatched)", "date", "tail", "grep", "transcript file"],
+            "modification_notes": "stat -f crash fixed in commit 2175814. Reads last 100 lines of transcript to detect acknowledgment language."
+          }
+        ],
+        "sessionEnd": [
+          {
+            "file": "harvest-session.sh",
+            "lines": 286,
+            "trigger": "SessionEnd event",
+            "behavior": "Classifies all files in session scratch as ephemeral or artifact. Routes handoff* files to .aitools/channel/handoffs/. Harvests artifacts to harvesting/ with date+session prefix. Updates harvest-manifest.json via node. Prunes stale artifacts (>30 days, unreferenced, not flagged). Promotes referenced artifacts to candidate. Does NOT delete session directory (learned from 30-file loss).",
+            "output": "stderr: harvest summary",
+            "portability": "PORTABLE",
+            "dependencies": ["git", "node (optional, for manifest)", "grep", "sed", "cp", "find"],
+            "modification_notes": "Issues #53/#54 changes (written, not committed): session ID in filenames, auto-creates harvesting/ + manifest, handoff routing to .aitools/channel/handoffs/. NEVER deletes files — marks pruned but preserves."
+          },
+          {
+            "file": "session-archive.sh",
+            "lines": 94,
+            "trigger": "SessionEnd event",
+            "behavior": "Copies session transcript JSONL to user repo (dotprofile) at sessions/<project>/<date>_<prefix>.jsonl. Derives date from transcript birth time. Skips if already archived. No git operations (copy only — decision #1 proposes auto-commit, not implemented).",
+            "output": "none (silent on success)",
+            "portability": "PORTABLE — full uname -s dispatch for stat (birth time + mod time fallback)",
+            "dependencies": ["git", "stat (platform-dispatched)", "date", "cp"],
+            "modification_notes": "Requires userRepoPath in ~/.aitools/config.json. Silent exit if not configured."
+          },
+          {
+            "file": "tool-ops-session-audit.sh",
+            "lines": 106,
+            "trigger": "SessionEnd event",
+            "behavior": "Contract tests on block-claude-code-guide.sh (deny test + allow test). Drift detection (checks if hook registered in settings.json). Version dep staleness check. Emits JSONL record to audit log.",
+            "output": "JSONL to ~/.claude/hooks/logs/tool-ops-audit.jsonl",
+            "portability": "PORTABLE — uses grep (portable flags)",
+            "dependencies": ["grep", "date", "bash (for hook piping)"]
+          }
+        ]
+      },
+      "hookPortabilityRule": "ALL hooks MUST use uname -s dispatch for stat. NEVER use stat -f || stat -c fallback chain. After creating .sh files, run git update-index --chmod=+x. All hooks use set -euo pipefail (except glossary-skill-guard.sh — consistency gap). All hooks exit 0 on error conditions — never crash Claude Code."
+    },
+
+    "scripts": {
+      "intent": "The 63 files in scripts/ are the implementation backbone. This section provides interfaces and dependencies for the key scripts an agent would need to understand or modify.",
+      "totalFiles": 63,
+      "totalLines": "~20,630",
+      "inventory": {
+        "entryPoints": ["aitools (1,661 lines, bash)", "aitools.ps1 (1,569 lines, PowerShell 7)"],
+        "sharedLibraries": ["aitools-lib.sh (1,413 lines)", "aitools-lib.ps1 (1,642 lines)", "check-lib.sh (181)", "check-lib.ps1 (180)", "init-logging.sh (8)", "init-logging.ps1 (7)"],
+        "dashboard": ["aitools-dashboard.sh (390)", "aitools-dashboard.ps1 (362)", "generate-dashboard.py (1,048)"],
+        "setupScripts": ["setup-user-claude.sh/.ps1", "setup-user-hooks.sh/.ps1", "setup-user-mcp.sh/.ps1", "setup-user-skills.sh/.ps1", "setup-user-cursor.sh/.ps1", "setup-cursor-ide-mcp.sh/.ps1"],
+        "toolInstallers": ["setup-python", "setup-rust", "setup-typst", "setup-pandoc", "setup-gh-cli", "setup-go", "setup-modal", "setup-uv", "setup-vercelcli", "setup-datadog", "setup-perl"],
+        "checkScripts": ["check-pre-commit.sh/.ps1 (425/360)", "check-pre-push.sh/.ps1 (162/166)", "check-post-push.sh/.ps1 (820/955)", "check-script-compliance.sh/.ps1", "check-prereq-detection.sh/.ps1"],
+        "buildSystem": ["build-deploy.sh (1,386 lines, bash only — approved cross-language exception)"],
+        "installer": ["aitools-install.sh/.ps1 (714/646)"],
+        "other": ["analyze-session.sh (194)", "profile-check.js (182)", "_validate-ps1.ps1 (8)"]
+      },
+      "keyInterfaces": {
+        "aitools_cli": {
+          "commands": ["(no args) = sync", "gitpull [--patch]", "install", "mcp", "user init", "sessions list|archive|move", "dashboard"],
+          "flags": ["--addmcp", "--dry-run", "--force", "--version", "--help"],
+          "configRead": "~/.aitools/config.json (repoPath, userRepoPath, machineAlias)",
+          "envVars": ["AITOOLS_DEPLOY", "AITOOLS_DRY_RUN", "AITOOLS_FORCE", "AITOOLS_RUN_ID", "AITOOLS_SUMMARY_FILE"]
+        },
+        "aitools_lib": {
+          "logging": ["logging_init(scriptName)", "log(msg)", "log_ok(msg)", "log_error(msg)", "log_warn(msg)", "log_detail(msg)"],
+          "summary": ["write_summary(category, tool, detail) — OK/WARN/ERROR/ACTION"],
+          "backup": ["backup_file(path)", "backup_dir(path)"],
+          "deploy": ["deploy_managed_file(source, target, type) — interactive diff review with menu"],
+          "ai": ["invoke_ai(speed, permissions, prompt, validator) — claude/agent CLI wrapper with retry"],
+          "merge": ["try_auto_merge(local, source, base) — 3-way via git merge-file"],
+          "state": ["initialize_deploy_state()", "get_deploy_state_hash(file)", "update_deploy_state(file, hash)"],
+          "platform": ["IS_MACOS / IS_WINDOWS detection", "display_path(path)", "read_config_key(file, key)"]
+        }
+      }
+    },
+
+    "dashboardSystem": {
+      "intent": "The live dashboard is a SHIPPED, VERIFIED capability. An agent reading this section can launch, use, and maintain the dashboard without consulting any other file.",
+      "status": "SHIPPED AND OPERATIONAL (v0.63.0+, verified 2026-03-24)",
+      "architecture": "Embedded JSON + generator script (Option G from feasibility study). Static mode embeds data; live mode serves via HTTP. Both use same HTML template with progressive enhancement.",
+
+      "components": {
+        "generator": {
+          "file": "scripts/generate-dashboard.py",
+          "lines": 1048,
+          "language": "Python 3.10+, stdlib only (no external dependencies)",
+          "modes": {
+            "static": "Embeds estimate JSON into HTML. Works from file:///. No runtime dependencies.",
+            "live": "Starts HTTP server. Dashboard polls /api/estimate every 3 seconds. Server watches estimate file (1s mtime polling). Re-renders without page reload."
+          },
+          "cli": {
+            "static": "python3 scripts/generate-dashboard.py --estimate path/to/running-estimate.json",
+            "static_with_output": "python3 scripts/generate-dashboard.py --estimate est.json --output dashboard.html",
+            "static_and_open": "python3 scripts/generate-dashboard.py --estimate est.json --open",
+            "live": "python3 scripts/generate-dashboard.py --estimate est.json --serve",
+            "live_with_port": "python3 scripts/generate-dashboard.py --estimate est.json --serve --port 9000"
+          },
+          "htmlTemplate": "~700 lines embedded HTML/CSS/JS. Dark theme. Tabs: Agents, Governance (decisions + assumptions + ambiguities), Findings, Session State, Open Threads, Conclusions."
+        },
+        "cliCommand": {
+          "file_sh": "scripts/aitools-dashboard.sh (390 lines)",
+          "file_ps1": "scripts/aitools-dashboard.ps1 (362 lines)",
+          "subcommands": ["--background (start in background)", "--stop (kill running server)", "--status (show PID and port)", "--snapshot (generate static HTML)", "--open (open in browser)", "--port PORT (default: 8411)", "--estimate PATH (auto-detected if omitted)"],
+          "autoDetection": "Searches 4 locations: .aitools/channel/running-estimate.json, session-specific channel dirs, .scratch/session-*/, .aitools/scratch/session-*/",
+          "pidFile": ".aitools/.dashboard-pid",
+          "defaultPort": 8411
+        },
+        "sessionStartHook": {
+          "file": "shared/hooks/dashboard-serve.sh",
+          "behavior": "Auto-launches dashboard when session starts. Primary: delegates to 'aitools dashboard --background'. Fallback: direct python3 invocation."
+        },
+        "estimateRefreshHook": {
+          "file": "shared/hooks/estimate-refresh-stop.sh",
+          "behavior": "Reminds agent to update running estimate every 15 turns. Detects stale estimates (>30 min). Names specific fields to refresh."
+        }
+      },
+
+      "dataFlow": "Agent updates running-estimate.json → file mtime changes → server watcher thread detects (1s polling) → regenerates HTML → browser polls /api/estimate (3s) → JavaScript re-renders dashboard sections without page reload",
+
+      "multiPortUsage": "The shell wrapper (aitools-dashboard.sh) uses a single PID file — only one instance. For multiple dashboards on different ports (e.g., concurrent missions), use the Python generator DIRECTLY: python3 scripts/generate-dashboard.py --estimate path/to/est.json --serve --port PORT",
+
+      "launchGuide": {
+        "step1": "Create or locate a running estimate JSON file",
+        "step2": "Start the server: python3 scripts/generate-dashboard.py --estimate path/to/est.json --serve --port PORT",
+        "step3": "Open http://localhost:PORT/ in browser (or use chrome-devtools MCP)",
+        "step4": "Update the estimate JSON as you work — dashboard auto-updates",
+        "step5": "At mission end: python3 scripts/generate-dashboard.py --estimate path/to/est.json --output snapshot.html"
+      }
+    },
+
+    "deployPipeline": {
+      "intent": "How code goes from source to deployed on user machines. Two paths that must produce equivalent results.",
+      "devPath": {
+        "description": "scripts/setup-*.sh/.ps1 read shared/ and user repo at runtime. Used by 'aitools' CLI.",
+        "flow": "aitools (entry point) → git pull → build-deploy.sh → deploy_configs() dispatches setup scripts → each script reads shared/, profile.json, deploys to ~/",
+        "configSources": ["shared/ (templates, hooks, skills, shell aliases)", "dotprofile repo (personal CLAUDE.md, rules, profile.json)"]
+      },
+      "mdmPath": {
+        "description": "deploy/setup-*.sh/.ps1 are self-contained with content embedded at build time. Generated by build-deploy.sh.",
+        "flow": "build-deploy.sh → inlines aitools-lib → embeds shared/ content → embeds hooks/skills/rules → writes deploy/ scripts",
+        "note": "deploy/ is fully generated. Reset to HEAD before every pull. Uncommitted changes are ephemeral."
+      },
+      "buildSystem": {
+        "file": "scripts/build-deploy.sh (1,386 lines, bash only)",
+        "purpose": "Generates self-contained deploy/ scripts. Inlines shared libraries, embeds hook content, interpolates profile placeholders.",
+        "approvedCrossLanguage": true,
+        "note": "Only bash script without .ps1 pair. Produces platform-independent output."
+      },
+      "verificationChecklists": {
+        "preCommit": "scripts/check-pre-commit.sh/.ps1 (16+ steps including capability bypass audit, hook portability check)",
+        "prePush": "scripts/check-pre-push.sh/.ps1",
+        "postPush": "scripts/check-post-push.sh/.ps1 (30+ steps including menu parity, return value coverage, version dep staleness)"
+      }
+    },
+
+    "codePatterns": {
+      "correct": [
+        {
+          "pattern": "uname -s dispatch for platform-specific commands",
+          "example": "if [ \"$(uname -s)\" = \"Darwin\" ]; then mod_time=$(stat -f %m \"$file\"); else mod_time=$(stat -c %Y \"$file\"); fi",
+          "usedIn": ["session-archive.sh:68", "estimate-refresh-stop.sh (post-fix)", "surfacing-duty-stop.sh (post-fix)"]
+        },
+        {
+          "pattern": "Structured logging via aitools-lib helpers",
+          "example": "log 'Processing...'; log_ok 'Done'; log_error 'Failed'; log_warn 'Advisory'",
+          "note": "NEVER use raw echo in reusable scripts"
+        },
+        {
+          "pattern": "write_summary 3-arg for end-of-run panel",
+          "example": "write_summary OK 'tool_name' 'version'; write_summary ERROR 'tool_name' 'failure'",
+          "note": "Every code path (success AND failure) must call write_summary"
+        },
+        {
+          "pattern": "deploy_managed_file for interactive deployment",
+          "example": "deploy_managed_file \"$source\" \"$target\" markdown",
+          "note": "Handles backup, diff review, user choice (overwrite/adopt/skip/abort)"
+        },
+        {
+          "pattern": "invoke_ai for AI CLI invocations",
+          "example": "invoke_ai balanced none \"$prompt\" validate_merge_output",
+          "note": "Handles claude/agent backend selection, retry, validation, logging"
+        },
+        {
+          "pattern": "JSON pure-bash parsing in hooks (no jq dependency)",
+          "techniques": ["bash regex with BASH_REMATCH", "grep+sed json_field() helper", "perl -ne for field extraction"]
+        }
+      ],
+      "antiPatterns": [
+        {
+          "pattern": "stat -f || stat -c fallback chain",
+          "consequence": "On Git Bash, GNU stat -f means --file-system. Partially succeeds with wrong multiline output. Under set -u, bash arithmetic crashes with 'File: unbound variable'.",
+          "fix": "uname -s dispatch",
+          "instances": 4,
+          "rule": "NEVER use this pattern. cross-platform.md explicitly prohibits it."
+        },
+        {
+          "pattern": "grep -P (Perl regex) in bash scripts",
+          "consequence": "macOS BSD grep does not support -P",
+          "fix": "Use perl -ne for Perl regex, grep -E for extended regex"
+        },
+        {
+          "pattern": "*> $null 2>> $logFile in PowerShell",
+          "consequence": "Suppresses all output including stderr, creating silent failures",
+          "fix": "Capture output, check exit code, log results"
+        },
+        {
+          "pattern": "Empty catch {} blocks",
+          "consequence": "Swallows both expected (ENOENT) and unexpected (parse errors) failures",
+          "fix": "Distinguish file-not-found from parse errors, log unexpected errors"
+        },
+        {
+          "pattern": "Inline long commands in Bash tool",
+          "consequence": "Standing order guard blocks multiline commands (>4 newlines). Triggers permission prompts.",
+          "fix": "Write to session scratch directory, execute with bash \"$path/task.sh\""
+        }
+      ]
+    },
+
+    "claudeCodeOperations": {
+      "intent": "Version-dependent behaviors and workarounds that affect harness scripts and hooks.",
+      "currentVersion": "2.1.81",
+      "criticalDeps": [
+        {"item": "Windows shell hardcoded to Git Bash", "upstream": ["#7490", "#25558"], "workaround": "pwsh -NoProfile -Command '...' for PowerShell"},
+        {"item": "SessionEnd hook API contract (session_id, cwd, transcript_path)", "note": "Stable since 2.1.51"},
+        {"item": "SendMessage unavailable (gated behind Agent Teams flag)", "upstream": ["#35240", "#37051", "#38183"], "workaround": "Fully self-contained agent launches, sequential delegation for iterative work"},
+        {"item": "Subagent context gap (rules/CLAUDE.md not inherited)", "upstream": ["#29423"], "workaround": "Inject critical rules in delegation prompts"},
+        {"item": "Subagent cross-repo file access restriction", "workaround": "Read with explicit absolute paths works; Glob/Grep denied outside repo"}
+      ],
+      "sessionStorage": {
+        "path": "~/.claude/projects/-<sanitized-cwd>/",
+        "format": "JSONL (one JSON object per line, type/cwd/sessionId fields)",
+        "sanitization": "CWD with / replaced by - (lossy for project names with hyphens)"
+      },
+      "claudeMdHierarchy": ["Managed (C:\\Program Files\\)", "User (~/.claude/CLAUDE.md)", "Project (./CLAUDE.md)", "Personal (./CLAUDE.local.md)", "Subdirectory (./dir/CLAUDE.md)"]
+    }
+  },
+
+  "state": {
+    "intent": "Where everything IS right now. The current Schwerpunkt, active work streams, what prior sessions left behind, what has been harvested, and the SQLite migration plan. An agent reading this pillar can assess what needs to happen next.",
+
+    "schwerpunkt": "SQLite migration: convert harness state from JSON files to SQLite (Python sqlite3). Multi-DB architecture: per-session DBs (.aitools/sessions/<id>.db) + harness DB (.aitools/harness.db). Option B: SQLite runtime (gitignored) + JSON archive (tracked, carries forward via git). Commander directive: migration NOW.",
+
+    "currentVersion": "v0.64.1 (5aa9024, 2026-03-22)",
+
+    "sessionChainSummary": [
+      {"sessions": "84280c8b through RTzBnBupE6 (6 sessions)", "dates": "2026-03-15 to 2026-03-16", "produced": "Planning brief with 54 decisions, all critical blockers resolved"},
+      {"session": "Z1IhGrcgGO", "date": "2026-03-17/19", "produced": "v0.62.2-v0.62.5, 17 findings, /handoff skill, 10 approved decisions"},
+      {"session": "5HyCwPtSDH", "date": "2026-03-21", "produced": "v0.63.0, dynamic dashboard, .gitignore fix, 30-file recovery, 16 decisions, 35 missions"},
+      {"session": "77a33baf", "date": "2026-03-22", "produced": "v0.64.0-v0.64.1, platform stabilization on Windows, hook stat-f fix, OL estimate v3, design principle D-v8-6"},
+      {"session": "KHGOmVeNNM", "date": "2026-03-23", "produced": "Issues #53/#54 hook changes (uncommitted), intent sentinel hook designed, context rot research"},
+      {"session": "RnTOD5XJFi", "date": "2026-03-24", "produced": "SQLite RFC, /aitool-resume RFC v7, harness-state.json concept, 10+ intelligence missions, 4 demonstrate-then-skip occurrences, worktree disproved"}
+    ],
+
+    "hardRequirements": [
+      {"id": "HR-1", "requirement": "Per-mission dashboards: every delegated mission gets its own live view", "status": "not-started", "prerequisite": "Channel infrastructure (HR-3)"},
+      {"id": "HR-2", "requirement": "Concurrent session dashboards: multiple sessions each get own dashboard on different ports", "status": "not-started", "prerequisite": "HR-1"},
+      {"id": "HR-3", "requirement": "Channel infrastructure: decisions #22-24 implemented (SITREPs, FINDINGs, mission-level state)", "status": "not-started", "note": "GREENFIELD — zero implementation"},
+      {"id": "HR-4", "requirement": "Full platform support: Windows .ps1 dashboard server, all repo types", "status": "not-started", "prerequisite": "HR-1, HR-2"},
+      {"id": "HR-5", "requirement": "Running estimate auto-freshness: estimate stays current without manual updates", "status": "partially-started", "evidence": "estimate-refresh-stop.sh provides reminder hook"}
+    ],
+
+    "criticalNotBuilt": [
+      "Channel infrastructure (decisions #22-24) — no SITREPs, no FINDINGs, no mission-level state",
+      "Mission command framework artifacts (rule, skills, reference) — most artifacts designed, none registered",
+      "Telemetry pipeline (log_ship + Datadog/SQLite) — not built",
+      "Auth0 credential management — not implemented",
+      "Decision #1 auto-commit/push — NOT implemented across 8 sessions (highest-priority pipeline fix)",
+      "8 proposed hooks not built: plan-gate, intent-enforcement write, scratch-path-injection, delegation-gate, channel hooks, harness-db hooks, intent sentinel",
+      "Namespace consolidation (.scratch/ → .aitools/scratch/, harvesting/ → .aitools/harvesting/) — decided but execution blocked",
+      "The plan itself (Wave 3 from Z1IhGrcgGO) — still unwritten"
+    ],
+
+    "sqliteMigration": {
+      "intent": "Current Schwerpunkt. Multi-DB architecture migrating harness state from JSON files to SQLite.",
+      "architecture": {
+        "tier1_sessionDBs": {
+          "location": ".aitools/sessions/<session-prefix>.db",
+          "gitignored": true,
+          "purpose": "All session state — eliminates write contention between concurrent sessions",
+          "tables": ["session", "missions (self-referential FK for nesting)", "decisions", "observations", "sitreps", "findings", "delegation_log", "deviations", "hard_requirements", "completed_work", "version_history", "schema_version"],
+          "walMode": true
+        },
+        "tier2_harnessDB": {
+          "location": ".aitools/harness.db",
+          "gitignored": true,
+          "purpose": "Cross-session state, written at session boundaries only",
+          "tables": ["session_index", "kpi_events", "kpi_ship_log", "dashboard_state", "schema_version"]
+        },
+        "carryForward": {
+          "mechanism": "JSON export at session end → committed to git → pulled on other machines → imported to DB at session start",
+          "principle": "DB is runtime artifact (gitignored), JSON is archive (tracked). JSON diffs work, code review works, git history works. No binary blobs in git."
+        }
+      },
+      "migrationPhases": [
+        {"phase": 1, "name": "Foundation", "work": "harness-db.py helper + .gitignore patterns", "status": "not-started"},
+        {"phase": 2, "name": "Dashboard", "work": "DB reading with JSON fallback", "status": "not-started"},
+        {"phase": 3, "name": "Hooks", "work": "Lifecycle integration (harness-db-sessionstart.sh + harness-db-sessionend.sh)", "status": "not-started"},
+        {"phase": 4, "name": "Content", "work": "Skills and rules integration", "status": "not-started"},
+        {"phase": 5, "name": "Verification", "work": "Cross-platform, concurrent, round-trip", "status": "not-started"}
+      ],
+      "designDecisions": [
+        "Per-session DBs (no write contention bottleneck)",
+        "DB=runtime, JSON=archive (cross-machine carry-forward via git)",
+        "Python sqlite3 only (no CLI dependency — not available on Windows Git Bash)",
+        "ATTACH for cross-session dashboard queries",
+        "Nested missions via parent FK",
+        "Keep running-estimate.json filename (backward compatible)",
+        "Harness DB at boundaries only (session start/end)"
+      ]
+    },
+
+    "handoffState": {
+      "fromSession_5HyCwPtSDH": {
+        "schwerpunkt": "Build channel infrastructure (decisions #22-24), implement per-mission and concurrent-session dashboards",
+        "exclusions": ["Do NOT regress .gitignore fix", "Do NOT remove/break dashboard CLI", "Do NOT start namespace consolidation", "Do NOT overhaul sources-of-truth.md"],
+        "openThreads": "16 items including D-PROMOTION glossary, Wave 2 brief amendments, Wave 3 plan writing, CI/CD Phase 1"
+      },
+      "fromSession_KHGOmVeNNM": {
+        "schwerpunkt": "Ship GitHub issues #53/#54 plus intent sentinel hook",
+        "uncommittedWork": ["harvest-session.sh modifications", "scratch-init.sh modifications", ".aitools/channel/handoffs/ directory"],
+        "notDeployed": ["intent-sentinel-stop.sh (in scratch, not in shared/hooks/)"]
+      },
+      "fromSession_RnTOD5XJFi": {
+        "schwerpunkt": "SQLite migration + harness-state.json artifact",
+        "artifacts": ["SQLite RFC", "/aitool-resume RFC v7", "CLAUDE.md 3 proposals (Golf/Hotel/Juliet)", "harness-state.json v1 skeleton"],
+        "uncommitted": ["tool-ops-claude-code.md items #24-#25"]
+      }
+    },
+
+    "carryForwardGaps": {
+      "verified": [
+        {"id": "CFG-V1", "artifact": "harvesting/ artifacts from 3/20-3/22", "status": "MISSING on Windows", "resolution": "Mac session: git add harvesting/, commit, push"},
+        {"id": "CFG-V2", "artifact": "dotprofile CLAUDE.md updates", "status": "BLOCKED by uncommitted change", "resolution": "Commit or stash, pull, reconcile"},
+        {"id": "CFG-V3", "artifact": "dotprofile session archives (2 untracked)", "status": "MISSING", "resolution": "git add + commit in dotprofile repo"},
+        {"id": "CFG-V4", "artifact": ".aitools/channel/handoffs/", "status": "DIRECTORY EXISTS (created by KHGOmVeNNM)", "resolution": "Resolved"}
+      ],
+      "assumed": [
+        {"id": "CFG-A1", "artifact": "Plans, references, or incidents updated 3/20-3/22 on Mac", "status": "UNKNOWN"},
+        {"id": "CFG-A2", "artifact": "Namespace consolidation migration status on Mac", "status": "UNKNOWN"},
+        {"id": "CFG-A3", "artifact": "Per-session running estimates architecture", "status": "CONFIRMED DIVERGENT — Mac has per-session, Windows has single-file"},
+        {"id": "CFG-A7", "artifact": "AAR schema vs OL estimate relationship", "status": "KNOWN OVERLAP, schema relationship unknown"},
+        {"id": "CFG-A8", "artifact": "Planning brief decisions that may be superseded by Mac work", "status": "COMMANDER CONFIRMS CONFLICTS EXIST, scope unknown"}
+      ]
+    },
+
+    "assumptions": {
+      "active": [
+        {"id": "AS-v9-1", "assumption": "SQLite multi-DB ATTACH performs acceptably for dashboard reads", "severity": "high", "status": "unverified"},
+        {"id": "AS-v9-2", "assumption": "Python subprocess overhead (~100-200ms) acceptable for SessionStart/End hooks", "severity": "medium", "status": "unverified"},
+        {"id": "AS-v9-3", "assumption": "JSON export from SQLite backward compatible with dashboard/hooks/agents", "severity": "high", "status": "unverified"},
+        {"id": "AS-v9-6", "assumption": "Dashboard one-page-with-selector replaces per-session-dashboard design", "severity": "medium", "status": "unverified"},
+        {"id": "AS-v9-7", "assumption": "After SQLite migration, dashboard stale-data problem resolved", "severity": "medium", "status": "unverified"}
+      ]
+    }
+  },
+
+  "operationalLearning": {
+    "intent": "Everything that was LEARNED. Recurring patterns with instance counts and evidence. Proposals with implementation status. Carry-forward gaps. The failure catalog. Meta-lessons about how agents fail. An agent reading this pillar can avoid all known failure modes.",
+
+    "recurringPatterns": [
+      {
+        "id": "OL-P1",
+        "name": "Write-on-A, discover-on-B",
+        "description": "Code written and tested on one platform, deployed to both, discovered broken on the other",
+        "instances": 5,
+        "evidence": ["stat -f hooks (4th occurrence)", "find -printf GNU-only (2nd)", "$MODE unset (1st)", "Stop hook type wrong (3rd)", "CLAUDE.md placeholder #28"],
+        "structuralFix": "IMPLEMENTED: check-pre-commit.sh step 17 (hook portability audit). Also: cross-platform.md hook portability section.",
+        "agentAction": "When writing hooks or scripts, ALWAYS check for platform-specific commands. Use uname -s dispatch. Test mentions in commit message: '(tested: macOS)' or '(tested: Windows)'."
+      },
+      {
+        "id": "OL-P2",
+        "name": "Correct pattern exists but new code uses old pattern",
+        "description": "A correct solution exists (get_mtime, uname dispatch, deploy_managed_file) but new code written after the extraction uses the pre-extraction pattern. Extraction provides capability but not enforcement.",
+        "instances": 2,
+        "evidence": ["stat hooks vs get_mtime in check-lib.sh", "harvest-session.sh paths vs workspace rule new paths"],
+        "structuralFix": "IMPLEMENTED: check-pre-commit.sh step 17",
+        "agentAction": "Before writing platform-specific code, check if a helper exists in aitools-lib.sh or check-lib.sh."
+      },
+      {
+        "id": "OL-P3",
+        "name": "Commit pipeline selectivity (commit gap)",
+        "description": "During-session code changes get committed. End-of-session hook outputs do not. Session archives and harvested artifacts are stranded on the local machine.",
+        "instances": "Every session since decision #1 (8+ sessions)",
+        "evidence": ["v0.63.0 commit: only 2 files from 35-mission session", "harvesting/ stale by 3 days", "dotprofile untracked session files"],
+        "structuralFix": "NOT YET IMPLEMENTED. Decision #1 (auto-commit/push) is the designed fix. Highest-priority pipeline fix.",
+        "agentAction": "Manually commit harvesting/ and session archives before ending sessions. Surface decision #1 urgency."
+      },
+      {
+        "id": "OL-P4",
+        "name": "Cross-machine state divergence",
+        "description": "Work on one machine creates decisions and artifacts not fully committed/pushed. Other machine operates on stale baseline. Divergence invisible until machine switch + Lagebeurteilung.",
+        "instances": 3,
+        "evidence": ["Mac 3/19-3/22 work not on Windows", "Per-session estimates on Mac but not Windows", "Dashboard architecture decided on Mac with S1 but not in repo"],
+        "structuralFix": "OL-PR1 (auto-commit/push) + configuration confidence dimension (proposed)",
+        "agentAction": "At session start on a new machine, always do a Lagebeurteilung — assess what may have changed since the last session on this machine."
+      },
+      {
+        "id": "OL-P5",
+        "name": "Demonstrate-then-skip",
+        "description": "Agent demonstrates correct behavior (assessment, checklist, verification) at one boundary then skips it at the next. The correct pattern is known and recently executed — the skip is urgency overriding discipline.",
+        "instances": 4,
+        "evidence": ["Session 77a33baf: pre-commit checklist done, then straight to execution without Lagebeurteilung", "RnTOD5XJFi: read files then jumped to editing hooks", "S3-Golf: told to read code, skipped", "Dashboard in prompts but never tested"],
+        "structuralFix": "Approaching structural fix threshold (decision #35: 3+ occurrences → structural fix). Intent sentinel hook designed but not deployed.",
+        "agentAction": "After EVERY lifecycle transition (not just the first), pause and assess: What did I just decide? What am I about to do? Have I checked the terrain?"
+      },
+      {
+        "id": "OL-P6",
+        "name": "6-stage carry-forward pipeline",
+        "description": "Carry-forward is not 'commit and push' — it is 6 stages: (1) Produce, (2) Commit, (3) Push, (4) Pull, (5) Deploy, (6) Verify. Each stage has independent failure modes. Failures observed at stages 2, 4, 5, and 6.",
+        "instances": "Structural observation, not a failure",
+        "evidence": ["Stage 2: selective commit (P3)", "Stage 4: dotprofile dirty tree blocks pull", "Stage 5: hooks crash, deploy scripts silent failure", "Stage 6: no Lagebeurteilung on machine switch"],
+        "agentAction": "When assessing carry-forward, check all 6 stages — not just 'is it committed?'"
+      },
+      {
+        "id": "OL-P7",
+        "name": "Assumption propagation through agent chains",
+        "description": "False claims propagate when verifiers check documents not code. Three verifiers all trusted upstream — chain-of-trust failure.",
+        "instances": 3,
+        "evidence": ["Agent #29 false claim about scratch persistence → 5 artifacts → 3 verifiers", ".gitignore fix claimed but not executed → M19 and RECON-FRAGORD", "Dashboard miss: 3 rounds of prompts missed shipped code"],
+        "structuralFix": "Verify-don't-infer principle (D-VERIFY-DONT-INFER). Nachbesprechung post-mission check.",
+        "agentAction": "Never trust upstream claims without reading the actual code or file. Mark unverifiable claims as ASSUMPTION."
+      },
+      {
+        "id": "OL-P8",
+        "name": "Governance-focused analysis misses implementation",
+        "description": "When tasked with analyzing the harness, agents focus on governance artifacts (rules, decisions, frameworks) and miss implementation (code, hooks, scripts, dashboard).",
+        "instances": 3,
+        "evidence": ["v1-v3 artifact intent was governance-only", "Three rounds of prompts missed the dashboard", "S3-Golf wrote CLAUDE.md from governance only, ignoring code"],
+        "structuralFix": "Four-pillar artifact intent (D-CODE-IS-HARNESS). Phase 2 code reading in mission prompts.",
+        "agentAction": "When asked about the harness, always check: 'Did I read the code? Did I check scripts/? shared/hooks/? The dashboard?'"
+      },
+      {
+        "id": "OL-P9",
+        "name": "Context rot on user intent",
+        "description": "After ~100K+ tokens of reading, the original user instruction gets buried. Agent drifts from research to execution without permission.",
+        "instances": 2,
+        "evidence": ["Session KHGOmVeNNM: agent jumped from research to editing hooks", "General pattern: objectives buried under accumulated context"],
+        "structuralFix": "Intent sentinel hook designed (not deployed). Recency weight principle.",
+        "agentAction": "After every 5+ Read calls, re-read the mission objective. Before transitioning from reading to writing, verify you have permission."
+      },
+      {
+        "id": "OL-P10",
+        "name": "Behavioral framing gap",
+        "description": "Content present in context has zero behavioral weight unless framed as 'what you should DO'. CC /resume loses operative weight via compression.",
+        "instances": 2,
+        "evidence": ["Dashboard in prompts but never tested — framed as 'what was built' not 'what you should use'", "/resume compresses tool results, losing behavioral framing"],
+        "structuralFix": "/aitool-resume skill (RFC v7) with chronological transcript walk and boundary detection.",
+        "agentAction": "When producing context for other agents, frame capabilities as actions: 'Launch the dashboard by...' not 'A dashboard was built.'"
+      }
+    ],
+
+    "proposals": [
+      {"id": "OL-PR1", "proposal": "Implement decision #1 (auto-commit/push) for SessionEnd hook outputs", "status": "analyzed", "effort": "small", "severity": "high", "note": "Highest-priority pipeline fix. Every session without it loses artifacts."},
+      {"id": "OL-PR2", "proposal": "Hook portability check in pre-commit scripts", "status": "IMPLEMENTED", "implementedBy": "check-pre-commit.sh step 17, commit 2175814"},
+      {"id": "OL-PR3", "proposal": "Configuration confidence dimension (VERIFIED/STALE/SUPERSEDED/UNKNOWN)", "status": "pending-analysis", "blockedBy": "CFG-A3 (per-session estimate architecture unknown)"},
+      {"id": "OL-PR4", "proposal": "OL estimate as cumulative institutional learning accumulator", "status": "pending-analysis", "blockedBy": "CFG-A7 (AAR/OL schema relationship unknown)"},
+      {"id": "OL-PR5", "proposal": "Lagebeurteilung requirement at every execution transition", "status": "pending-analysis", "severity": "high"}
+    ],
+
+    "failureCatalog": [
+      {"id": "F1", "failure": "Demonstrate-then-skip", "occurrences": 4, "mitigation": "Multi-turn self-audit. Intent sentinel hook (designed). Structural fix approaching threshold."},
+      {"id": "F2", "failure": "Dashboard miss — shipped capability invisible to analysts", "occurrences": 3, "mitigation": "Phase 2 code reading. 'Did I check scripts/? shared/hooks/?' audit question."},
+      {"id": "F3", "failure": "Code-exclusion gap — governance-only analysis", "occurrences": 3, "mitigation": "Four-pillar artifact intent. D-CODE-IS-HARNESS decision."},
+      {"id": "F4", "failure": "Subagent access restriction — Glob/Grep denied cross-repo", "occurrences": "structural", "mitigation": "Read with explicit absolute paths. Include full paths in delegation prompts."},
+      {"id": "F5", "failure": "Incomplete brief — told to read code but did not", "occurrences": 1, "mitigation": "Explicit file enumeration in prompts."},
+      {"id": "F6", "failure": "Skeleton missing pillars — pre-expansion template", "occurrences": 1, "mitigation": "Warning section in prompts. OL item about skeleton being incomplete."},
+      {"id": "F7", "failure": "Dashboard PID single-file — multi-port blocked by shell wrapper", "occurrences": 1, "mitigation": "Use python3 generate-dashboard.py directly for multiple ports."},
+      {"id": "F8", "failure": "stat -f || stat -c fallback chain crash", "occurrences": 4, "mitigation": "FIXED: uname -s dispatch. PREVENTED: check-pre-commit step 17. DOCUMENTED: cross-platform.md."}
+    ],
+
+    "metaLessons": [
+      {
+        "lesson": "Recency weight is the governing principle for content conflicts",
+        "description": "When instructions conflict, the most recent one carries the most weight. The commander's most recent prompt is always the highest-priority instruction. This applies to everything: files vs conversation, old rules vs new decisions, prior session vs current session.",
+        "source": "Commander directive (session KHGOmVeNNM)"
+      },
+      {
+        "lesson": "Treat all static files as assumptions until verified",
+        "description": "Everything in files — including this one — may be stale. Context (the live conversation) overrides files. When static content and context conflict, context wins.",
+        "source": "nobul-ops CLAUDE.md principle, reinforced across 4 sessions"
+      },
+      {
+        "lesson": "1M context means never say 'too large'",
+        "description": "Claude Code sessions have 1M context. Subagents have 1M context. Read full files. Load complete rules. No token-based decisions.",
+        "source": "Commander corrections (sessions 5HyCwPtSDH, RnTOD5XJFi)"
+      },
+      {
+        "lesson": "Subagents are blank slates — inherit NOTHING",
+        "description": "Subagents do not inherit rules, CLAUDE.md, skills context, or any project knowledge. Every delegation must include all needed context. The delegation cost is real but non-negotiable.",
+        "source": "CC version dep #5, commander directive, OL-O12"
+      },
+      {
+        "lesson": "Never use Explore agents",
+        "description": "Explore agents cannot Write or Edit. Work product dies with the agent. Always use general-purpose agents with explicit instructions and write permissions.",
+        "source": "Commander directive (session 5HyCwPtSDH), blocked by block-claude-code-guide.sh hook"
+      },
+      {
+        "lesson": "UCIs (coaching items) are ineffective for recurring patterns",
+        "description": "Only structural fixes (hooks, scripts, rules) work for recurring behavioral patterns. Commander rejected UCI as 'weak sauce' after 3rd occurrence of same pattern. Decision #35 codifies: 3+ occurrences → structural fix.",
+        "source": "Planning brief decision #35, OL-P5 (4 occurrences)"
+      },
+      {
+        "lesson": "The file you produce IS the harness",
+        "description": "Every word in harness state documents has behavioral consequences. Inaccuracies propagate through agent chains. An incorrect claim about a hook becomes an incorrect modification by the next agent.",
+        "source": "OL-P7 (assumption propagation), dashboard investigation AAR"
+      },
+      {
+        "lesson": "Re-read the mission objective before every major action",
+        "description": "The commander's most repeated instruction across 4 sessions. After extensive reading (100K+ tokens), the original objective gets buried. Stop. Re-read. Then act.",
+        "source": "Commander (15+ repetitions across sessions), OL-P9 (context rot)"
+      },
+      {
+        "lesson": "Audit shipped capabilities, not just decisions",
+        "description": "Three rounds of prompt design missed the dashboard — a major shipped capability — because analysts only looked at decisions and rules. Check CODE: scripts/, shared/hooks/, the dashboard, the deploy pipeline.",
+        "source": "Dashboard investigation AAR, OL-P8"
+      },
+      {
+        "lesson": "Process discipline IS the deliverable",
+        "description": "The observation-to-fact pipeline — observe, classify, verify, correct — is the primary work product. Code changes, config fixes, and feature builds are outputs of the discipline. A session's value is measured by its process artifacts quality, not just its code artifacts.",
+        "source": "Design principle D-v8-6 (CLAUDE.md), session 77a33baf"
+      }
+    ],
+
+    "vocabularyFindings": [
+      {"term": "carry-forward", "status": "ungoverned", "note": "Key concept used in workspace rule and running estimate. File via /glossary when ready."},
+      {"term": "commit gap", "status": "ungoverned (coined session 77a33baf)", "note": "Structural gap where SessionEnd outputs are produced but never committed."},
+      {"term": "repo (generic)", "status": "ungoverned", "note": "Commander: 'repo means any project or system type.' Broader than 'aitools repo' or 'dotprofile repo'."},
+      {"term": "configuration confidence", "status": "ungoverned (coined session 77a33baf)", "note": "VERIFIED/STALE/SUPERSEDED/UNKNOWN per ISO 10007. Proposed as D-v8-2."},
+      {"term": "lifecycle boundary gap", "status": "ungoverned", "note": "Failure mode at lifecycle transitions where artifacts/state/context are lost. May exist in Mac OL."}
+    ]
+  }
+}
