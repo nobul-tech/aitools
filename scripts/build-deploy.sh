@@ -162,8 +162,9 @@ IDENTITY_GIT_NAME="Jose"
 IDENTITY_GIT_EMAIL="jose@nobul.tech"
 CURSOR_CLI_VIMMODE=false
 CURSOR_CLI_MODEL="auto"
-CLAUDE_AUTO_MEMORY=true
+CLAUDE_AUTO_MEMORY=false
 CLAUDE_ALWAYS_THINKING=true
+CLAUDE_EFFORT_LEVEL="high"
 
 CONFIG="$HOME/.aitools/config.json"
 if [ -f "$CONFIG" ] && command -v node &>/dev/null; then
