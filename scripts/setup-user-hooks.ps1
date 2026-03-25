@@ -18,6 +18,8 @@
 #   Stop: estimate-refresh-stop.sh (Lagebeurteilung + estimate freshness)
 #   Stop: intent-sentinel-stop.sh (consolidated telemetry + intent resurface)
 #   PreToolUse[Agent]: delegation-duty-guard.sh (checks delegation prompts for duty elements)
+#   SessionStart: harness-db-sessionstart.sh (initializes harness SQLite DBs)
+#   SessionEnd: harness-db-sessionend.sh (marks session complete, exports JSON)
 #
 # Reads claude preferences from profile.json (via config.json -> userRepoPath).
 # See reference/user-repo.md and shared/hooks/ for details.
@@ -83,7 +85,9 @@ $dashboardScript = Resolve-HookSource "dashboard-serve.sh"
 $estimateRefreshScript = Resolve-HookSource "estimate-refresh-stop.sh"
 $sentinelScript = Resolve-HookSource "intent-sentinel-stop.sh"
 $delegGuardScript = Resolve-HookSource "delegation-duty-guard.sh"
-foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $surfacingScript, $blockGuideScript, $toolOpsAuditScript, $dashboardScript, $estimateRefreshScript, $sentinelScript, $delegGuardScript)) {
+$harnessDbStartScript = Resolve-HookSource "harness-db-sessionstart.sh"
+$harnessDbEndScript = Resolve-HookSource "harness-db-sessionend.sh"
+foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $surfacingScript, $blockGuideScript, $toolOpsAuditScript, $dashboardScript, $estimateRefreshScript, $sentinelScript, $delegGuardScript, $harnessDbStartScript, $harnessDbEndScript)) {
     if (-not (Test-Path $src)) {
         LogError "Hook script not found: $src"
         exit 1
@@ -107,6 +111,8 @@ $dashboardDest = Join-Path $hooksDir "dashboard-serve.sh"
 $estimateRefreshDest = Join-Path $hooksDir "estimate-refresh-stop.sh"
 $sentinelDest = Join-Path $hooksDir "intent-sentinel-stop.sh"
 $delegGuardDest = Join-Path $hooksDir "delegation-duty-guard.sh"
+$harnessDbStartDest = Join-Path $hooksDir "harness-db-sessionstart.sh"
+$harnessDbEndDest = Join-Path $hooksDir "harness-db-sessionend.sh"
 
 $hooksChanged = $false
 
@@ -127,12 +133,14 @@ if ($DryRun) {
     Log "[DRY RUN] Would deploy hook: $estimateRefreshScript -> $estimateRefreshDest"
     Log "[DRY RUN] Would deploy hook: $sentinelScript -> $sentinelDest"
     Log "[DRY RUN] Would deploy hook: $delegGuardScript -> $delegGuardDest"
+    Log "[DRY RUN] Would deploy hook: $harnessDbStartScript -> $harnessDbStartDest"
+    Log "[DRY RUN] Would deploy hook: $harnessDbEndScript -> $harnessDbEndDest"
 } else {
     if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }
 
     Initialize-DeployTracker
 
-    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($surfacingScript, $surfacingDest), @($blockGuideScript, $blockGuideDest), @($toolOpsAuditScript, $toolOpsAuditDest), @($dashboardScript, $dashboardDest), @($estimateRefreshScript, $estimateRefreshDest), @($sentinelScript, $sentinelDest), @($delegGuardScript, $delegGuardDest))) {
+    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($surfacingScript, $surfacingDest), @($blockGuideScript, $blockGuideDest), @($toolOpsAuditScript, $toolOpsAuditDest), @($dashboardScript, $dashboardDest), @($estimateRefreshScript, $estimateRefreshDest), @($sentinelScript, $sentinelDest), @($delegGuardScript, $delegGuardDest), @($harnessDbStartScript, $harnessDbStartDest), @($harnessDbEndScript, $harnessDbEndDest))) {
         $src = $pair[0]; $dst = $pair[1]
         $hookName = Split-Path $dst -Leaf
         $srcContent = Get-Content $src -Raw -ErrorAction Stop
@@ -382,6 +390,16 @@ $delegGuardDestUnix = $delegGuardDest -replace '\\', '/'
 $delegGuardCmd = "bash `"$delegGuardDestUnix`""
 MergeHookEntry "PreToolUse" "delegation-duty-guard.sh" "Agent" $delegGuardCmd
 
+# SessionStart: harness DB initialization
+$harnessDbStartDestUnix = $harnessDbStartDest -replace '\\', '/'
+$harnessDbStartCmd = "bash `"$harnessDbStartDestUnix`""
+MergeHookEntry "SessionStart" "harness-db-sessionstart.sh" "" $harnessDbStartCmd
+
+# SessionEnd: harness DB session end + export
+$harnessDbEndDestUnix = $harnessDbEndDest -replace '\\', '/'
+$harnessDbEndCmd = "bash `"$harnessDbEndDestUnix`""
+MergeHookEntry "SessionEnd" "harness-db-sessionend.sh" "" $harnessDbEndCmd
+
 # --- Track old values for change reporting ---
 $oldAutoMemory = $settings["autoMemoryEnabled"]
 $oldAlwaysThinking = $settings["alwaysThinkingEnabled"]
@@ -483,6 +501,10 @@ if ($DryRun) {
             if ($sentCount -ne 1) { LogError "Validation failed: expected 1 Stop intent-sentinel hook, got $sentCount" }
             $dgCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'delegation-duty-guard\.sh' }).Count
             if ($dgCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse delegation-duty-guard hook, got $dgCount" }
+            $hdbStartCount = @($vParsed.hooks.SessionStart | Where-Object { $_.hooks.command -match 'harness-db-sessionstart\.sh' }).Count
+            if ($hdbStartCount -ne 1) { LogError "Validation failed: expected 1 SessionStart harness-db-sessionstart hook, got $hdbStartCount" }
+            $hdbEndCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'harness-db-sessionend\.sh' }).Count
+            if ($hdbEndCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd harness-db-sessionend hook, got $hdbEndCount" }
 
             # Validate hook schema: command-type must have command,
             # prompt-type must have prompt (not command).

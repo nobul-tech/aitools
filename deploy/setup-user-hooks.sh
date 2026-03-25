@@ -6628,6 +6628,8 @@ DASHBOARD_CMD="bash \"$DASHBOARD_DEST\""
 ESTIMATE_REFRESH_CMD="bash \"$ESTIMATE_REFRESH_DEST\""
 SENTINEL_CMD="bash \"$SENTINEL_DEST\""
 DELEG_GUARD_CMD="bash \"$DELEG_GUARD_DEST\""
+HARNESS_DB_START_CMD="bash \"$HARNESS_DB_START_DEST\""
+HARNESS_DB_END_CMD="bash \"$HARNESS_DB_END_DEST\""
 
 MERGE_RESULT=$(node -e "
 $SORT_KEYS_JS
@@ -6649,6 +6651,8 @@ const dashboardCmd = process.argv[13];
 const estimateRefreshCmd = process.argv[14];
 const sentinelCmd = process.argv[15];
 const delegGuardCmd = process.argv[16];
+const harnessDbStartCmd = process.argv[17];
+const harnessDbEndCmd = process.argv[18];
 // --- Embedded preferences (from profile.json at build time) ---
 const autoMemory = false;
 const alwaysThinking = true;
@@ -6723,6 +6727,8 @@ mergeHookEntry('SessionStart', 'dashboard-serve.sh', '', dashboardCmd);
 mergeHookEntry('Stop', 'estimate-refresh-stop.sh', '', estimateRefreshCmd);
 mergeHookEntry('Stop', 'intent-sentinel-stop.sh', '', sentinelCmd);
 mergeHookEntry('PreToolUse', 'delegation-duty-guard.sh', 'Agent', delegGuardCmd);
+mergeHookEntry('SessionStart', 'harness-db-sessionstart.sh', '', harnessDbStartCmd);
+mergeHookEntry('SessionEnd', 'harness-db-sessionend.sh', '', harnessDbEndCmd);
 
 // --- Track old values for change reporting ---
 const oldAutoMemory = settings.autoMemoryEnabled;
@@ -6804,6 +6810,10 @@ if (dryRun) {
         if (sentCount !== 1) { console.error('Validation failed: expected 1 Stop intent-sentinel hook, got ' + sentCount); process.exit(1); }
         const dgCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('delegation-duty-guard.sh'))).length;
         if (dgCount !== 1) { console.error('Validation failed: expected 1 PreToolUse delegation-duty-guard hook, got ' + dgCount); process.exit(1); }
+        const hdbStartCount = (_v.hooks.SessionStart || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('harness-db-sessionstart.sh'))).length;
+        if (hdbStartCount !== 1) { console.error('Validation failed: expected 1 SessionStart harness-db-sessionstart hook, got ' + hdbStartCount); process.exit(1); }
+        const hdbEndCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('harness-db-sessionend.sh'))).length;
+        if (hdbEndCount !== 1) { console.error('Validation failed: expected 1 SessionEnd harness-db-sessionend hook, got ' + hdbEndCount); process.exit(1); }
 
         // Validate hook schema: command-type must have command field,
         // prompt-type must have prompt field (not command).
@@ -6833,7 +6843,7 @@ if (dryRun) {
         prefChanges.forEach(c => console.log(c));
     }
 }
-" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$SURFACING_CMD" "$BLOCK_GUIDE_CMD" "$TOOL_OPS_AUDIT_CMD" "$DASHBOARD_CMD" "$ESTIMATE_REFRESH_CMD" "$SENTINEL_CMD" "$DELEG_GUARD_CMD")
+" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$SURFACING_CMD" "$BLOCK_GUIDE_CMD" "$TOOL_OPS_AUDIT_CMD" "$DASHBOARD_CMD" "$ESTIMATE_REFRESH_CMD" "$SENTINEL_CMD" "$DELEG_GUARD_CMD" "$HARNESS_DB_START_CMD" "$HARNESS_DB_END_CMD")
 
 # Parse merge result: first line is status, CHANGED: lines are key changes
 MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)

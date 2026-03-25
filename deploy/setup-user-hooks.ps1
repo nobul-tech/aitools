@@ -4186,6 +4186,16 @@ $delegGuardDestUnix = $delegGuardDest -replace '\\', '/'
 $delegGuardCmd = "bash `"$delegGuardDestUnix`""
 MergeHookEntry "PreToolUse" "delegation-duty-guard.sh" "Agent" $delegGuardCmd
 
+# SessionStart: harness DB initialization
+$harnessDbStartDestUnix = $harnessDbStartDest -replace '\\', '/'
+$harnessDbStartCmd = "bash `"$harnessDbStartDestUnix`""
+MergeHookEntry "SessionStart" "harness-db-sessionstart.sh" "" $harnessDbStartCmd
+
+# SessionEnd: harness DB session end + export
+$harnessDbEndDestUnix = $harnessDbEndDest -replace '\\', '/'
+$harnessDbEndCmd = "bash `"$harnessDbEndDestUnix`""
+MergeHookEntry "SessionEnd" "harness-db-sessionend.sh" "" $harnessDbEndCmd
+
 # --- Track old values for change reporting ---
 $oldAutoMemory = $settings["autoMemoryEnabled"]
 $oldAlwaysThinking = $settings["alwaysThinkingEnabled"]
@@ -4287,6 +4297,10 @@ if ($DryRun) {
             if ($sentCount -ne 1) { LogError "Validation failed: expected 1 Stop intent-sentinel hook, got $sentCount" }
             $dgCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'delegation-duty-guard\.sh' }).Count
             if ($dgCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse delegation-duty-guard hook, got $dgCount" }
+            $hdbStartCount = @($vParsed.hooks.SessionStart | Where-Object { $_.hooks.command -match 'harness-db-sessionstart\.sh' }).Count
+            if ($hdbStartCount -ne 1) { LogError "Validation failed: expected 1 SessionStart harness-db-sessionstart hook, got $hdbStartCount" }
+            $hdbEndCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'harness-db-sessionend\.sh' }).Count
+            if ($hdbEndCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd harness-db-sessionend hook, got $hdbEndCount" }
 
             # Validate hook schema: command-type must have command,
             # prompt-type must have prompt (not command).
