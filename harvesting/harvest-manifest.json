@@ -1,7 +1,7 @@
 {
   "meta": {
     "schemaVersion": "1.0",
-    "lastAudit": "2026-03-20"
+    "lastAudit": "2026-03-24"
   },
   "artifacts": {
     "2026-03-15_gh-issue-comment.md": {
@@ -4315,6 +4315,46 @@
       "status": "harvested",
       "promotedTo": null,
       "pruneAfter": "2026-04-21"
+    },
+    "2026-03-24_context-rot-research.md": {
+      "harvested": "2026-03-24",
+      "session": "aitools/2026-03-24_beaf0ed6",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-23"
+    },
+    "2026-03-24_hook-verification.md": {
+      "harvested": "2026-03-24",
+      "session": "aitools/2026-03-24_beaf0ed6",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-23"
+    },
+    "2026-03-24_intent-sentinel-design.md": {
+      "harvested": "2026-03-24",
+      "session": "aitools/2026-03-24_beaf0ed6",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-23"
+    },
+    "2026-03-24_intent-sentinel-stop.sh": {
+      "harvested": "2026-03-24",
+      "session": "aitools/2026-03-24_beaf0ed6",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-23"
     }
   }
 }
