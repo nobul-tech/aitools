@@ -237,6 +237,109 @@ CREATE TABLE IF NOT EXISTS dashboard_state (
     last_checked TEXT                 -- ISO 8601 UTC
 );
 
+-- ============================================================================
+-- PROVENANCE SYSTEM (Harness DB)
+-- Cross-session knowledge tracking with dependency-directed invalidation.
+-- Based on: ATMS (de Kleer 1986), W3C PROV, dbt freshness, Graphiti
+-- bitemporal model, Pachyderm lineage, Apache Atlas classification.
+-- Written at session boundaries only. Read by agents for context.
+-- ============================================================================
+
+-- Knowledge items: the atoms of the provenance system.
+-- Every consolidated observation, decision, OL entry, and rule change
+-- is a knowledge item. Raw session observations live in session DB
+-- (observations table); items promoted to knowledge_items have survived
+-- the observation-to-fact pipeline.
+CREATE TABLE IF NOT EXISTS knowledge_items (
+    item_id TEXT PRIMARY KEY,           -- stable ID (e.g., "OL-2", "D-34")
+    item_type TEXT NOT NULL
+        CHECK (item_type IN ('observation', 'assumption', 'fact', 'finding',
+               'decision', 'ol_entry', 'rule_change', 'framework_change',
+               'commander_directive')),
+    version INTEGER NOT NULL DEFAULT 1, -- monotonic, never reused
+    content TEXT NOT NULL,              -- the knowledge itself
+
+    -- Temporal validity (Graphiti bitemporal model)
+    -- t_valid: when the underlying fact became true in the real world
+    -- t_invalid: when superseded (null = currently valid)
+    -- These diverge from created_at when we retroactively discover
+    -- something was wrong.
+    t_valid TEXT,                       -- ISO 8601 UTC
+    t_invalid TEXT,                     -- ISO 8601 UTC (null = current)
+
+    -- Attribution (W3C PROV)
+    attributed_to TEXT NOT NULL,        -- 'commander' | 'agent' | agent_name
+    produced_by_session TEXT,           -- session_id that created this item
+    produced_by_mission TEXT,           -- mission_id (if produced by a delegate)
+    authority_level INTEGER NOT NULL DEFAULT 1
+        CHECK (authority_level BETWEEN 0 AND 3),
+        -- L0: system-generated (hooks, automation)
+        -- L1: agent-produced (default)
+        -- L2: agent-produced, commander-reviewed
+        -- L3: commander-directive (highest authority)
+
+    -- Staleness tracking (dbt freshness model)
+    -- Items older than warn_after_days without verification are flagged
+    -- for review. Items older than error_after_days are stale.
+    warn_after_days INTEGER DEFAULT 30,
+    error_after_days INTEGER DEFAULT 90,
+    last_verified_at TEXT,              -- ISO 8601 UTC (null = never verified)
+
+    -- Classification (Apache Atlas)
+    trust_level TEXT NOT NULL DEFAULT 'agent_observation'
+        CHECK (trust_level IN ('commander_directive', 'verified_fact',
+               'agent_observation', 'unverified_assumption')),
+
+    -- Lifecycle
+    created_at TEXT NOT NULL,           -- ISO 8601 UTC: when harness learned this
+    updated_at TEXT NOT NULL            -- ISO 8601 UTC: last record modification
+);
+CREATE INDEX IF NOT EXISTS idx_ki_type ON knowledge_items(item_type);
+CREATE INDEX IF NOT EXISTS idx_ki_trust ON knowledge_items(trust_level);
+CREATE INDEX IF NOT EXISTS idx_ki_session ON knowledge_items(produced_by_session);
+CREATE INDEX IF NOT EXISTS idx_ki_valid ON knowledge_items(t_invalid);
+
+-- Provenance edges: the dependency graph.
+-- Tracks how knowledge items relate to each other.
+-- When a source item is invalidated, downstream targets can be flagged
+-- via dependency-directed propagation (ATMS principle).
+-- Direction: source_item_id --[relationship]--> target_item_id
+-- Example: OL-2 --[derived_from]--> observation-42
+--          means OL-2 was derived from observation-42
+CREATE TABLE IF NOT EXISTS provenance_edges (
+    edge_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_item_id TEXT NOT NULL REFERENCES knowledge_items(item_id),
+    target_item_id TEXT NOT NULL REFERENCES knowledge_items(item_id),
+    relationship TEXT NOT NULL
+        CHECK (relationship IN (
+            'derived_from',   -- source was derived from target
+            'informed',       -- target informed the creation of source
+            'triggered',      -- target triggered creation of source
+            'validated',      -- source validates target (evidence link)
+            'invalidated',    -- source invalidates target (falsification)
+            'superseded'      -- source supersedes target (newer version)
+        )),
+    created_at TEXT NOT NULL,           -- ISO 8601 UTC
+    session_id TEXT NOT NULL            -- session where edge was recorded
+);
+CREATE INDEX IF NOT EXISTS idx_prov_source ON provenance_edges(source_item_id);
+CREATE INDEX IF NOT EXISTS idx_prov_target ON provenance_edges(target_item_id);
+CREATE INDEX IF NOT EXISTS idx_prov_rel ON provenance_edges(relationship);
+
+-- Nogood sets: known contradiction combinations (ATMS).
+-- When the harness discovers that a combination of assumptions leads to
+-- a contradiction, recording the set prevents future agents from
+-- rediscovering the same dead end.
+-- Example: {"items": ["OL-sessions-hold-all", "OL-exceeds-1M"],
+--           "contradiction": "sessions can hold all OL + OL exceeds 1M tokens"}
+CREATE TABLE IF NOT EXISTS nogood_sets (
+    nogood_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_ids TEXT NOT NULL,             -- JSON array of item_id strings
+    contradiction TEXT NOT NULL,        -- human-readable description
+    discovered_in_session TEXT NOT NULL,-- session_id
+    discovered_at TEXT NOT NULL         -- ISO 8601 UTC
+);
+
 -- Harness schema version (separate from session schema_version)
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY,
