@@ -308,6 +308,29 @@ def utcnow() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _log_path() -> Path:
+    """Return the path to deploy.log following aitools platform conventions."""
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Logs" / "aitools" / "deploy.log"
+    else:
+        state_home = os.environ.get("XDG_STATE_HOME", "")
+        if not state_home:
+            state_home = str(Path.home() / ".local" / "state")
+        return Path(state_home) / "aitools" / "deploy.log"
+
+
+def _log_detail(msg: str) -> None:
+    """Write a detail-level message to deploy.log. Nothing to stdout or stderr."""
+    try:
+        log_file = _log_path()
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        ts = utcnow()
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(f"[{ts}] [harness-db] [detail] {msg}\n")
+    except OSError:
+        pass  # logging must never crash the tool
+
+
 def detect_platform() -> str:
     """Return platform string matching session schema conventions."""
     if sys.platform == "darwin":
@@ -403,16 +426,16 @@ def resolve_session_db(project_root: Path, session_id: str | None = None) -> tup
     """Resolve session DB path from explicit ID or auto-detection.
 
     Returns (db_path, session_id) or None if no session found.
-    Prints error to stderr on failure.
+    Logs detail to deploy.log on failure.
     """
     if session_id is None:
         session_id = find_active_session_id(project_root)
     if session_id is None:
-        print("Error: No --session specified and no active session found.", file=sys.stderr)
+        _log_detail("No --session specified and no active session found")
         return None
     db_path = get_session_db_path(project_root, session_id)
     if not db_path.exists():
-        print(f"Error: Session DB not found: {db_path}", file=sys.stderr)
+        _log_detail(f"Session DB not found: {db_path}")
         return None
     return db_path, session_id
 
@@ -509,7 +532,7 @@ def cmd_session_end(args: argparse.Namespace) -> int:
 
     db_path = get_session_db_path(project_root, session_id)
     if not db_path.exists():
-        print(f"Error: Session DB not found: {db_path}", file=sys.stderr)
+        _log_detail(f"Session DB not found: {db_path}")
         return 1
 
     now = utcnow()
@@ -548,7 +571,7 @@ def cmd_mission_start(args: argparse.Namespace) -> int:
 
     db_path = get_session_db_path(project_root, session_id)
     if not db_path.exists():
-        print(f"Error: Session DB not found: {db_path}", file=sys.stderr)
+        _log_detail(f"Session DB not found: {db_path}")
         return 1
 
     now = utcnow()
@@ -590,7 +613,7 @@ def cmd_mission_end(args: argparse.Namespace) -> int:
 
     db_path = get_session_db_path(project_root, session_id)
     if not db_path.exists():
-        print(f"Error: Session DB not found: {db_path}", file=sys.stderr)
+        _log_detail(f"Session DB not found: {db_path}")
         return 1
 
     now = utcnow()
@@ -602,7 +625,7 @@ def cmd_mission_end(args: argparse.Namespace) -> int:
     ).fetchone()
 
     if existing is None:
-        print(f"Error: Mission not found: {mission_id}", file=sys.stderr)
+        _log_detail(f"Mission not found: {mission_id}")
         conn.close()
         return 1
 
@@ -635,7 +658,7 @@ def cmd_log(args: argparse.Namespace) -> int:
 
     db_path = get_session_db_path(project_root, session_id)
     if not db_path.exists():
-        print(f"Error: Session DB not found: {db_path}", file=sys.stderr)
+        _log_detail(f"Session DB not found: {db_path}")
         return 1
 
     now = utcnow()
@@ -909,7 +932,7 @@ def cmd_export(args: argparse.Namespace) -> int:
     project_root = find_project_root()
 
     if args.format != "json":
-        print(f"Error: Unsupported format: {args.format}", file=sys.stderr)
+        _log_detail(f"Unsupported format: {args.format}")
         return 1
 
     # Find session to export
@@ -931,12 +954,12 @@ def cmd_export(args: argparse.Namespace) -> int:
                 session_id = row["session_id"]
 
     if session_id is None:
-        print("Error: No session ID specified and no active session found.", file=sys.stderr)
+        _log_detail("No session ID specified and no active session found")
         return 1
 
     db_path = get_session_db_path(project_root, session_id)
     if not db_path.exists():
-        print(f"Error: Session DB not found: {db_path}", file=sys.stderr)
+        _log_detail(f"Session DB not found: {db_path}")
         return 1
 
     conn = open_db(db_path, readonly=True)
@@ -948,12 +971,11 @@ def cmd_export(args: argparse.Namespace) -> int:
         # Check if an existing running-estimate.json exists and has content
         output_path = get_running_estimate_path(project_root)
         if output_path.exists() and output_path.stat().st_size > 10:
-            print(
-                f"Warning: Session DB for {session_id} has no meaningful content "
+            _log_detail(
+                f"Session DB for {session_id} has no meaningful content "
                 f"(no missions, messages, decisions, etc.). "
                 f"Skipping export to preserve existing {output_path.name} "
-                f"({output_path.stat().st_size} bytes).",
-                file=sys.stderr,
+                f"({output_path.stat().st_size} bytes)."
             )
             conn.close()
             return 0
@@ -964,7 +986,7 @@ def cmd_export(args: argparse.Namespace) -> int:
     conn.close()
 
     if not data:
-        print("Error: No session data found in DB.", file=sys.stderr)
+        _log_detail("No session data found in DB")
         return 1
 
     # Safety check: if existing file is substantially larger, warn and skip
@@ -978,18 +1000,15 @@ def cmd_export(args: argparse.Namespace) -> int:
         # replaced by a session that only has a few entries
         if existing_size > 100 and new_size < existing_size // 2:
             if getattr(args, "force", False):
-                print(
-                    f"Warning: Overwriting {output_path.name} "
-                    f"({existing_size} bytes -> {new_size} bytes) due to --force.",
-                    file=sys.stderr,
+                _log_detail(
+                    f"Overwriting {output_path.name} "
+                    f"({existing_size} bytes -> {new_size} bytes) due to --force."
                 )
             else:
-                print(
-                    f"Warning: Export would replace {output_path.name} "
+                _log_detail(
+                    f"Export would replace {output_path.name} "
                     f"({existing_size} bytes) with smaller content ({new_size} bytes). "
-                    f"This likely means a richer running estimate from another session "
-                    f"would be lost. Skipping export. Use --force to override.",
-                    file=sys.stderr,
+                    f"Skipping export to preserve richer running estimate."
                 )
                 return 0
 
@@ -1193,7 +1212,7 @@ def process_session_events(
             hconn.commit()
             hconn.close()
         except sqlite3.Error as e:
-            print(f"Warning: Failed to write KPI metrics: {e}", file=sys.stderr)
+            _log_detail(f"Failed to write KPI metrics: {e}")
 
     return metrics
 
@@ -1348,7 +1367,7 @@ def cmd_process_events(args: argparse.Namespace) -> int:
         session_id = find_active_session_id(project_root)
 
     if session_id is None:
-        print("Error: No session ID specified and no active session found.", file=sys.stderr)
+        _log_detail("No session ID specified and no active session found")
         return 1
 
     # Find session scratch directory
@@ -1356,7 +1375,7 @@ def cmd_process_events(args: argparse.Namespace) -> int:
     session_dir = project_root / ".scratch" / f"session-{prefix}"
 
     if not session_dir.exists():
-        print(f"Error: Session directory not found: {session_dir}", file=sys.stderr)
+        _log_detail(f"Session directory not found: {session_dir}")
         return 1
 
     events_file = session_dir / "events.jsonl"
@@ -1366,7 +1385,7 @@ def cmd_process_events(args: argparse.Namespace) -> int:
 
     harness_db_path = get_harness_db_path(project_root)
     if not harness_db_path.exists():
-        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        _log_detail("Harness DB not found. Run 'harness-db.py init' first.")
         return 1
 
     metrics = process_session_events(session_dir, session_id, harness_db_path)
@@ -1390,7 +1409,7 @@ def cmd_ship(args: argparse.Namespace) -> int:
     harness_db_path = get_harness_db_path(project_root)
 
     if not harness_db_path.exists():
-        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        _log_detail("Harness DB not found. Run 'harness-db.py init' first.")
         return 1
 
     api_key = os.environ.get("DD_API_KEY", "")
@@ -1417,7 +1436,7 @@ def cmd_knowledge_add(args: argparse.Namespace) -> int:
     harness_path = get_harness_db_path(project_root)
 
     if not harness_path.exists():
-        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        _log_detail("Harness DB not found. Run 'harness-db.py init' first.")
         return 1
 
     now = utcnow()
@@ -1493,7 +1512,7 @@ def cmd_knowledge_invalidate(args: argparse.Namespace) -> int:
     harness_path = get_harness_db_path(project_root)
 
     if not harness_path.exists():
-        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        _log_detail("Harness DB not found. Run 'harness-db.py init' first.")
         return 1
 
     now = utcnow()
@@ -1506,7 +1525,7 @@ def cmd_knowledge_invalidate(args: argparse.Namespace) -> int:
     ).fetchone()
 
     if item is None:
-        print(f"Error: Knowledge item not found: {args.item_id}", file=sys.stderr)
+        _log_detail(f"Knowledge item not found: {args.item_id}")
         conn.close()
         return 1
 
@@ -1619,7 +1638,7 @@ def cmd_knowledge_verify(args: argparse.Namespace) -> int:
     harness_path = get_harness_db_path(project_root)
 
     if not harness_path.exists():
-        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        _log_detail("Harness DB not found. Run 'harness-db.py init' first.")
         return 1
 
     now = utcnow()
@@ -1631,7 +1650,7 @@ def cmd_knowledge_verify(args: argparse.Namespace) -> int:
     ).fetchone()
 
     if item is None:
-        print(f"Error: Knowledge item not found: {args.item_id}", file=sys.stderr)
+        _log_detail(f"Knowledge item not found: {args.item_id}")
         conn.close()
         return 1
 
@@ -1654,7 +1673,7 @@ def cmd_knowledge_list(args: argparse.Namespace) -> int:
     harness_path = get_harness_db_path(project_root)
 
     if not harness_path.exists():
-        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        _log_detail("Harness DB not found. Run 'harness-db.py init' first.")
         return 1
 
     conn = open_db(harness_path, readonly=True)
@@ -1724,7 +1743,7 @@ def cmd_edge_add(args: argparse.Namespace) -> int:
     harness_path = get_harness_db_path(project_root)
 
     if not harness_path.exists():
-        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        _log_detail("Harness DB not found. Run 'harness-db.py init' first.")
         return 1
 
     now = utcnow()
@@ -1737,7 +1756,7 @@ def cmd_edge_add(args: argparse.Namespace) -> int:
             (item_id,),
         ).fetchone()
         if row is None:
-            print(f"Error: Knowledge item not found: {item_id}", file=sys.stderr)
+            _log_detail(f"Knowledge item not found: {item_id}")
             conn.close()
             return 1
 
@@ -1759,7 +1778,7 @@ def cmd_edge_list(args: argparse.Namespace) -> int:
     harness_path = get_harness_db_path(project_root)
 
     if not harness_path.exists():
-        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        _log_detail("Harness DB not found. Run 'harness-db.py init' first.")
         return 1
 
     conn = open_db(harness_path, readonly=True)
@@ -1819,7 +1838,7 @@ def cmd_nogood_add(args: argparse.Namespace) -> int:
     harness_path = get_harness_db_path(project_root)
 
     if not harness_path.exists():
-        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        _log_detail("Harness DB not found. Run 'harness-db.py init' first.")
         return 1
 
     now = utcnow()
@@ -1828,7 +1847,7 @@ def cmd_nogood_add(args: argparse.Namespace) -> int:
     # Parse item IDs (comma-separated)
     item_ids = [i.strip() for i in args.items.split(",") if i.strip()]
     if len(item_ids) < 2:
-        print("Error: A nogood set requires at least 2 item IDs.", file=sys.stderr)
+        _log_detail("A nogood set requires at least 2 item IDs.")
         conn.close()
         return 1
 
@@ -1839,7 +1858,7 @@ def cmd_nogood_add(args: argparse.Namespace) -> int:
             (item_id,),
         ).fetchone()
         if row is None:
-            print(f"Error: Knowledge item not found: {item_id}", file=sys.stderr)
+            _log_detail(f"Knowledge item not found: {item_id}")
             conn.close()
             return 1
 
@@ -1862,7 +1881,7 @@ def cmd_nogood_list(args: argparse.Namespace) -> int:
     harness_path = get_harness_db_path(project_root)
 
     if not harness_path.exists():
-        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        _log_detail("Harness DB not found. Run 'harness-db.py init' first.")
         return 1
 
     conn = open_db(harness_path, readonly=True)
@@ -1891,7 +1910,7 @@ def cmd_nogood_check(args: argparse.Namespace) -> int:
     harness_path = get_harness_db_path(project_root)
 
     if not harness_path.exists():
-        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        _log_detail("Harness DB not found. Run 'harness-db.py init' first.")
         return 1
 
     conn = open_db(harness_path, readonly=True)
@@ -1930,7 +1949,7 @@ def cmd_provenance_export(args: argparse.Namespace) -> int:
     harness_path = get_harness_db_path(project_root)
 
     if not harness_path.exists():
-        print("Error: Harness DB not found. Run 'harness-db.py init' first.", file=sys.stderr)
+        _log_detail("Harness DB not found. Run 'harness-db.py init' first.")
         return 1
 
     conn = open_db(harness_path, readonly=True)
@@ -2037,22 +2056,31 @@ def cmd_ol_add(args: argparse.Namespace) -> int:
 
 
 def cmd_ol_list(args: argparse.Namespace) -> int:
-    """List operational learning entries (observations with category=finding)."""
+    """List operational learning entries (facts and findings only)."""
     project_root = find_project_root()
     result = resolve_session_db(project_root, getattr(args, "session", None))
     if result is None:
         return 1
     db_path, _session_id = result
 
+    limit = getattr(args, "limit", 20) or 20
     conn = open_db(db_path, readonly=True)
+    total = conn.execute(
+        "SELECT COUNT(*) as cnt FROM observations WHERE category IN ('fact', 'finding')"
+    ).fetchone()["cnt"]
     rows = conn.execute(
-        "SELECT observation_id, text, created_at FROM observations ORDER BY created_at"
+        "SELECT observation_id, text, created_at FROM observations "
+        "WHERE category IN ('fact', 'finding') "
+        "ORDER BY created_at DESC LIMIT ?",
+        (limit,),
     ).fetchall()
     conn.close()
 
-    for r in rows:
+    for r in reversed(rows):
         text_preview = r["text"][:120].replace("\n", " ")
         print(f"OL-{r['observation_id']}: {text_preview}")
+    if total > limit:
+        print(f"({total} total, showing last {limit} — use --limit N for more)")
     return 0
 
 
@@ -2108,14 +2136,20 @@ def cmd_decision_list(args: argparse.Namespace) -> int:
         return 1
     db_path, _session_id = result
 
+    limit = getattr(args, "limit", 30) or 30
     conn = open_db(db_path, readonly=True)
+    total = conn.execute("SELECT COUNT(*) as cnt FROM decisions").fetchone()["cnt"]
     rows = conn.execute(
-        "SELECT decision_id, title, status, decided_at FROM decisions ORDER BY decided_at"
+        "SELECT decision_id, title, status, decided_at FROM decisions "
+        "ORDER BY decided_at DESC LIMIT ?",
+        (limit,),
     ).fetchall()
     conn.close()
 
-    for r in rows:
+    for r in reversed(rows):
         print(f"{r['decision_id']}: [{r['status']}] {r['title']}")
+    if total > limit:
+        print(f"({total} total, showing last {limit} — use --limit N for more)")
     return 0
 
 
@@ -2153,16 +2187,22 @@ def cmd_incident_list(args: argparse.Namespace) -> int:
         return 1
     db_path, _session_id = result
 
+    limit = getattr(args, "limit", 30) or 30
     conn = open_db(db_path, readonly=True)
+    total = conn.execute("SELECT COUNT(*) as cnt FROM deviations").fetchone()["cnt"]
     rows = conn.execute(
-        "SELECT deviation_id, description, impact, created_at FROM deviations ORDER BY created_at"
+        "SELECT deviation_id, description, impact, created_at FROM deviations "
+        "ORDER BY created_at DESC LIMIT ?",
+        (limit,),
     ).fetchall()
     conn.close()
 
-    for r in rows:
+    for r in reversed(rows):
         text_preview = r["description"][:120].replace("\n", " ")
         impact = f" | impact: {r['impact']}" if r["impact"] else ""
         print(f"DEV-{r['deviation_id']}: {text_preview}{impact}")
+    if total > limit:
+        print(f"({total} total, showing last {limit} — use --limit N for more)")
     return 0
 
 
@@ -2204,8 +2244,9 @@ def cmd_search(args: argparse.Namespace) -> int:
     db_path, _session_id = result
 
     query = f"%{args.query}%"
+    limit = getattr(args, "limit", 50) or 50
     conn = open_db(db_path, readonly=True)
-    found = 0
+    results: list[str] = []
 
     # Search observations
     rows = conn.execute(
@@ -2214,8 +2255,7 @@ def cmd_search(args: argparse.Namespace) -> int:
     ).fetchall()
     for r in rows:
         text_preview = r["text"][:100].replace("\n", " ")
-        print(f"[{r['category']}] OBS-{r['observation_id']}: {text_preview}")
-        found += 1
+        results.append(f"[{r['category']}] OBS-{r['observation_id']}: {text_preview}")
 
     # Search decisions
     rows = conn.execute(
@@ -2223,8 +2263,7 @@ def cmd_search(args: argparse.Namespace) -> int:
         (query, query),
     ).fetchall()
     for r in rows:
-        print(f"[decision] {r['decision_id']}: {r['title']}")
-        found += 1
+        results.append(f"[decision] {r['decision_id']}: {r['title']}")
 
     # Search deviations
     rows = conn.execute(
@@ -2233,8 +2272,7 @@ def cmd_search(args: argparse.Namespace) -> int:
     ).fetchall()
     for r in rows:
         text_preview = r["description"][:100].replace("\n", " ")
-        print(f"[deviation] DEV-{r['deviation_id']}: {text_preview}")
-        found += 1
+        results.append(f"[deviation] DEV-{r['deviation_id']}: {text_preview}")
 
     # Search messages
     rows = conn.execute(
@@ -2243,8 +2281,7 @@ def cmd_search(args: argparse.Namespace) -> int:
     ).fetchall()
     for r in rows:
         text_preview = r["message"][:100].replace("\n", " ")
-        print(f"[{r['message_type']}] MSG-{r['message_id']}: {text_preview}")
-        found += 1
+        results.append(f"[{r['message_type']}] MSG-{r['message_id']}: {text_preview}")
 
     # Search missions
     rows = conn.execute(
@@ -2252,13 +2289,19 @@ def cmd_search(args: argparse.Namespace) -> int:
         (query, query),
     ).fetchall()
     for r in rows:
-        print(f"[mission] {r['mission_id']}: {r['description']}")
-        found += 1
-
-    if found == 0:
-        print(f"No results for: {args.query}")
+        results.append(f"[mission] {r['mission_id']}: {r['description']}")
 
     conn.close()
+
+    if not results:
+        print(f"No results for: {args.query}")
+        return 0
+
+    total = len(results)
+    for line in results[:limit]:
+        print(line)
+    if total > limit:
+        print(f"({total} total results, showing first {limit} — use --limit N for more)")
     return 0
 
 
@@ -2461,6 +2504,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ol_ls = ol_sub.add_parser("list", help="List OL entries")
     ol_ls.add_argument("--session", help="Session ID (auto-detects if omitted)")
+    ol_ls.add_argument("--limit", type=int, default=20, help="Max entries to show (default: 20)")
 
     # decision (quick)
     dec_parser = subparsers.add_parser("decision", help="Decisions (quick add/list)")
@@ -2473,6 +2517,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     dec_ls = dec_sub.add_parser("list", help="List decisions")
     dec_ls.add_argument("--session", help="Session ID (auto-detects if omitted)")
+    dec_ls.add_argument("--limit", type=int, default=30, help="Max entries to show (default: 30)")
 
     # incident (maps to deviations table)
     inc_parser = subparsers.add_parser("incident", help="Process incidents (quick add/list)")
@@ -2485,6 +2530,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     inc_ls = inc_sub.add_parser("list", help="List incidents/deviations")
     inc_ls.add_argument("--session", help="Session ID (auto-detects if omitted)")
+    inc_ls.add_argument("--limit", type=int, default=30, help="Max entries to show (default: 30)")
 
     # observation (quick)
     obs_parser = subparsers.add_parser("observation", help="Observations (quick add/list)")
@@ -2508,6 +2554,7 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser = subparsers.add_parser("search", help="Search across all session tables")
     search_parser.add_argument("query", help="Text to search for (LIKE match)")
     search_parser.add_argument("--session", help="Session ID (auto-detects if omitted)")
+    search_parser.add_argument("--limit", type=int, default=50, help="Max results to show (default: 50)")
 
     return parser
 
