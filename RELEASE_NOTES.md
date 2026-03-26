@@ -12,6 +12,35 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.67.1 -- Hook pipeline fix, command channel, harness-db CLI (2026-03-25)
+
+### Bug fixes
+
+| # | Change |
+|---|--------|
+| 1 | **Hook deployment pipeline fix** (924b380) — removed stale Stop hook references (surfacing-duty, estimate-refresh, intent-sentinel) from `setup-user-hooks.sh/.ps1` that were deleted in v0.67.0 telemetry rebuild but still referenced in the deployment pipeline. Added cleanup logic to remove orphaned hook files from `~/.claude/hooks/`. |
+| 2 | **harness-db.py context consumption** (ef572f0) — fixed three bugs: stderr output consumed context tokens (redirected to log), unbounded query output (added `--limit`), filter bug in session listing. |
+
+### Enhancements
+
+| # | Change |
+|---|--------|
+| 3 | **harness-db.py lean CLI subcommands** (d395d50) — `log-event`, `add-ol`, `add-finding` subcommands for zero-friction session data entry from hooks and scripts. |
+| 4 | **Provenance schema + rewind-aware /aitool-continue** (0e01902) — provenance tracking tables in harness-db schema. `/aitool-continue` updated with rewind awareness and session continuity context. |
+| 5 | **command-channel-stop.sh** — new Stop hook implementing the command channel uplink. Polls session SQLite DB for pending commander directives and injects them into agent context via stderr. Supports flash/priority/normal directive priorities. |
+
+### Housekeeping
+
+| # | Change |
+|---|--------|
+| 6 | **49 session artifacts harvested** — delegation prompts, investigation reports, operational learning, scripts, and research from session c0dc2ddc. Harvest manifest updated. |
+| 7 | **Running estimate + state carry-forward** — updated channel state and provenance export from current session. |
+| 8 | **deploy/ rebuilt** — `setup-user-skills.sh/.ps1` regenerated with updated skill content. |
+
+(tested: macOS)
+
+---
+
 ## v0.67.0 -- Telemetry rebuild, /aitool-continue, mission control (2026-03-25)
 
 ### Architecture
