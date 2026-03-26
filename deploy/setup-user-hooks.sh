@@ -4605,6 +4605,24 @@ function mergeHookEntry(eventName, hookId, matcher, cmd, hookType) {
     });
 }
 
+// Helper: remove all entries for a hookId from an event array.
+// Used to clean up stale hook registrations after hooks are deleted.
+function removeHookEntry(eventName, hookId) {
+    if (!Array.isArray(settings.hooks[eventName])) return;
+    settings.hooks[eventName] = settings.hooks[eventName].filter(rule => {
+        return !(rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId)));
+    });
+    // Remove the event key entirely if empty
+    if (settings.hooks[eventName].length === 0) {
+        delete settings.hooks[eventName];
+    }
+}
+
+// Remove stale Stop hooks (deleted from shared/hooks/ in commit e070043)
+removeHookEntry('Stop', 'surfacing-duty-stop.sh');
+removeHookEntry('Stop', 'estimate-refresh-stop.sh');
+removeHookEntry('Stop', 'intent-sentinel-stop.sh');
+
 mergeHookEntry('SessionEnd', 'session-archive.sh', '', hookCmd);
 mergeHookEntry('SessionEnd', 'harvest-session.sh', '', harvestCmd);
 mergeHookEntry('SessionStart', 'scratch-init.sh', '', scratchCmd);

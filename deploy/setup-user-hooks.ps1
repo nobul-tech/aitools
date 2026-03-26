@@ -3364,9 +3364,6 @@ $hookCmd = "bash `"$hookDestUnix`""
 $shfixupDestUnix = $shfixupDest -replace '\\', '/'
 $shfixupCmd = "bash `"$shfixupDestUnix`""
 
-$surfacingDestUnix = $surfacingDest -replace '\\', '/'
-$surfacingCmd = "bash `"$surfacingDestUnix`""
-
 # Read existing settings
 $settings = @{}
 $corrupt = $false
@@ -3443,6 +3440,36 @@ function MergeHookEntry($eventName, $hookIdentifier, $matcherValue, $cmd, $hookT
     }
     $settings["hooks"][$eventName] = $deduped
 }
+
+# Helper: remove all entries for a hookId from an event array.
+# Used to clean up stale hook registrations after hooks are deleted.
+function RemoveHookEntry($eventName, $hookIdentifier) {
+    if (-not $settings["hooks"].ContainsKey($eventName)) { return }
+    $arr = @($settings["hooks"][$eventName])
+    $filtered = @()
+    foreach ($rule in $arr) {
+        $isMatch = $false
+        if ($rule -is [System.Collections.Hashtable] -and $rule.ContainsKey("hooks")) {
+            foreach ($h in @($rule["hooks"])) {
+                if ($h -is [System.Collections.Hashtable] -and $h.ContainsKey("command") -and $h["command"] -match [regex]::Escape($hookIdentifier)) {
+                    $isMatch = $true
+                    break
+                }
+            }
+        }
+        if (-not $isMatch) { $filtered += $rule }
+    }
+    if ($filtered.Count -eq 0) {
+        $settings["hooks"].Remove($eventName)
+    } else {
+        $settings["hooks"][$eventName] = $filtered
+    }
+}
+
+# Remove stale Stop hooks (deleted from shared/hooks/ in commit e070043)
+RemoveHookEntry "Stop" "surfacing-duty-stop.sh"
+RemoveHookEntry "Stop" "estimate-refresh-stop.sh"
+RemoveHookEntry "Stop" "intent-sentinel-stop.sh"
 
 # SessionEnd: session archive
 MergeHookEntry "SessionEnd" "session-archive.sh" "" $hookCmd

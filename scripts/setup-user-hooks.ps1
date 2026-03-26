@@ -1,7 +1,7 @@
 # setup-user-hooks.ps1 -- Deploys Claude Code hooks and preferences to ~/.claude/settings.json
 # Safe to re-run -- merges managed fields without clobbering existing settings.
 #
-# Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
+# Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
 # Preserved: permissions, enabledPlugins, all other fields
 #
 # Hooks deployed:
@@ -117,21 +117,24 @@ if ($DryRun) {
     Log "[DRY RUN] Would deploy hook: $scratchScript -> $scratchDest"
     Log "[DRY RUN] Would deploy hook: $harvestScript -> $harvestDest"
     Log "[DRY RUN] Would deploy hook: $shfixupScript -> $shfixupDest"
-    Log "[DRY RUN] Would deploy hook: $surfacingScript -> $surfacingDest"
     Log "[DRY RUN] Would deploy hook: $blockGuideScript -> $blockGuideDest"
     Log "[DRY RUN] Would deploy hook: $toolOpsAuditScript -> $toolOpsAuditDest"
     Log "[DRY RUN] Would deploy hook: $dashboardScript -> $dashboardDest"
-    Log "[DRY RUN] Would deploy hook: $estimateRefreshScript -> $estimateRefreshDest"
-    Log "[DRY RUN] Would deploy hook: $sentinelScript -> $sentinelDest"
     Log "[DRY RUN] Would deploy hook: $delegGuardScript -> $delegGuardDest"
     Log "[DRY RUN] Would deploy hook: $harnessDbStartScript -> $harnessDbStartDest"
     Log "[DRY RUN] Would deploy hook: $harnessDbEndScript -> $harnessDbEndDest"
+    # Stale hook cleanup preview
+    foreach ($staleHook in @("surfacing-duty-stop.sh", "estimate-refresh-stop.sh", "intent-sentinel-stop.sh")) {
+        if (Test-Path (Join-Path $hooksDir $staleHook)) {
+            Log "[DRY RUN] Would remove stale hook: $staleHook"
+        }
+    }
 } else {
     if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }
 
     Initialize-DeployTracker
 
-    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($surfacingScript, $surfacingDest), @($blockGuideScript, $blockGuideDest), @($toolOpsAuditScript, $toolOpsAuditDest), @($dashboardScript, $dashboardDest), @($estimateRefreshScript, $estimateRefreshDest), @($sentinelScript, $sentinelDest), @($delegGuardScript, $delegGuardDest), @($harnessDbStartScript, $harnessDbStartDest), @($harnessDbEndScript, $harnessDbEndDest))) {
+    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($blockGuideScript, $blockGuideDest), @($toolOpsAuditScript, $toolOpsAuditDest), @($dashboardScript, $dashboardDest), @($delegGuardScript, $delegGuardDest), @($harnessDbStartScript, $harnessDbStartDest), @($harnessDbEndScript, $harnessDbEndDest))) {
         $src = $pair[0]; $dst = $pair[1]
         $hookName = Split-Path $dst -Leaf
         $srcContent = Get-Content $src -Raw -ErrorAction Stop
@@ -162,6 +165,25 @@ if ($DryRun) {
     }
 
     Write-DeployTrackerSummary -ToolName "claude hooks"
+
+    # --- Stale hook cleanup ---
+    # Remove hook files that were previously deployed but are no longer managed.
+    # These were removed from shared/hooks/ in commit e070043 but remain on disk.
+    $staleHooks = @("surfacing-duty-stop.sh", "estimate-refresh-stop.sh", "intent-sentinel-stop.sh")
+    foreach ($staleHook in $staleHooks) {
+        $stalePath = Join-Path $hooksDir $staleHook
+        if (Test-Path $stalePath) {
+            Remove-Item $stalePath -Force
+            LogOk "Removed stale hook: $staleHook"
+            $hooksChanged = $true
+        }
+        # Also remove any backups of stale hooks
+        $bakPattern = Join-Path $hooksDir "$staleHook.bak.*"
+        foreach ($bak in Get-ChildItem -Path $bakPattern -File -ErrorAction SilentlyContinue) {
+            Remove-Item $bak.FullName -Force
+            Log "Removed stale backup: $($bak.Name)"
+        }
+    }
 
     # --- Reverse discovery ---
     # Scan deployed hooks for user-created hooks not in shared or dotprofile
@@ -256,9 +278,6 @@ $hookCmd = "bash `"$hookDestUnix`""
 $shfixupDestUnix = $shfixupDest -replace '\\', '/'
 $shfixupCmd = "bash `"$shfixupDestUnix`""
 
-$surfacingDestUnix = $surfacingDest -replace '\\', '/'
-$surfacingCmd = "bash `"$surfacingDestUnix`""
-
 # Read existing settings
 $settings = @{}
 $corrupt = $false
@@ -335,6 +354,36 @@ function MergeHookEntry($eventName, $hookIdentifier, $matcherValue, $cmd, $hookT
     }
     $settings["hooks"][$eventName] = $deduped
 }
+
+# Helper: remove all entries for a hookId from an event array.
+# Used to clean up stale hook registrations after hooks are deleted.
+function RemoveHookEntry($eventName, $hookIdentifier) {
+    if (-not $settings["hooks"].ContainsKey($eventName)) { return }
+    $arr = @($settings["hooks"][$eventName])
+    $filtered = @()
+    foreach ($rule in $arr) {
+        $isMatch = $false
+        if ($rule -is [System.Collections.Hashtable] -and $rule.ContainsKey("hooks")) {
+            foreach ($h in @($rule["hooks"])) {
+                if ($h -is [System.Collections.Hashtable] -and $h.ContainsKey("command") -and $h["command"] -match [regex]::Escape($hookIdentifier)) {
+                    $isMatch = $true
+                    break
+                }
+            }
+        }
+        if (-not $isMatch) { $filtered += $rule }
+    }
+    if ($filtered.Count -eq 0) {
+        $settings["hooks"].Remove($eventName)
+    } else {
+        $settings["hooks"][$eventName] = $filtered
+    }
+}
+
+# Remove stale Stop hooks (deleted from shared/hooks/ in commit e070043)
+RemoveHookEntry "Stop" "surfacing-duty-stop.sh"
+RemoveHookEntry "Stop" "estimate-refresh-stop.sh"
+RemoveHookEntry "Stop" "intent-sentinel-stop.sh"
 
 # SessionEnd: session archive
 MergeHookEntry "SessionEnd" "session-archive.sh" "" $hookCmd

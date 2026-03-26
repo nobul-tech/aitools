@@ -2,7 +2,7 @@
 # setup-user-hooks.sh — Deploys Claude Code hooks and preferences to ~/.claude/settings.json
 # Safe to re-run — merges managed fields without clobbering existing settings.
 #
-# Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
+# Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
 # (includes delegation-duty-guard PreToolUse[Agent] hook,
 #  and harness-db-sessionstart/sessionend hooks with telemetry processing)
 # Preserved: permissions, enabledPlugins, all other fields
@@ -124,21 +124,24 @@ if [ "$DRY_RUN" = "true" ]; then
     log "[DRY RUN] Would deploy hook: $(display_path "$SCRATCH_SCRIPT") -> $(display_path "$SCRATCH_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$HARVEST_SCRIPT") -> $(display_path "$HARVEST_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$SHFIXUP_SCRIPT") -> $(display_path "$SHFIXUP_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$SURFACING_SCRIPT") -> $(display_path "$SURFACING_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$BLOCK_GUIDE_SCRIPT") -> $(display_path "$BLOCK_GUIDE_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$TOOL_OPS_AUDIT_SCRIPT") -> $(display_path "$TOOL_OPS_AUDIT_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$DASHBOARD_SCRIPT") -> $(display_path "$DASHBOARD_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$ESTIMATE_REFRESH_SCRIPT") -> $(display_path "$ESTIMATE_REFRESH_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$SENTINEL_SCRIPT") -> $(display_path "$SENTINEL_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$DELEG_GUARD_SCRIPT") -> $(display_path "$DELEG_GUARD_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$HARNESS_DB_START_SCRIPT") -> $(display_path "$HARNESS_DB_START_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$HARNESS_DB_END_SCRIPT") -> $(display_path "$HARNESS_DB_END_DEST")"
+    # Stale hook cleanup preview
+    for stale_hook in surfacing-duty-stop.sh estimate-refresh-stop.sh intent-sentinel-stop.sh; do
+        if [ -f "$HOME/.claude/hooks/$stale_hook" ]; then
+            log "[DRY RUN] Would remove stale hook: $stale_hook"
+        fi
+    done
 else
     mkdir -p "$HOME/.claude/hooks"
 
     deploy_tracker_init
 
-    for hook_pair in "$HOOK_SCRIPT|$HOOK_DEST" "$GUARD_SCRIPT|$GUARD_DEST" "$GLOSSARY_SCRIPT|$GLOSSARY_DEST" "$SCRATCH_SCRIPT|$SCRATCH_DEST" "$HARVEST_SCRIPT|$HARVEST_DEST" "$SHFIXUP_SCRIPT|$SHFIXUP_DEST" "$SURFACING_SCRIPT|$SURFACING_DEST" "$BLOCK_GUIDE_SCRIPT|$BLOCK_GUIDE_DEST" "$TOOL_OPS_AUDIT_SCRIPT|$TOOL_OPS_AUDIT_DEST" "$DASHBOARD_SCRIPT|$DASHBOARD_DEST" "$ESTIMATE_REFRESH_SCRIPT|$ESTIMATE_REFRESH_DEST" "$SENTINEL_SCRIPT|$SENTINEL_DEST" "$DELEG_GUARD_SCRIPT|$DELEG_GUARD_DEST" "$HARNESS_DB_START_SCRIPT|$HARNESS_DB_START_DEST" "$HARNESS_DB_END_SCRIPT|$HARNESS_DB_END_DEST"; do
+    for hook_pair in "$HOOK_SCRIPT|$HOOK_DEST" "$GUARD_SCRIPT|$GUARD_DEST" "$GLOSSARY_SCRIPT|$GLOSSARY_DEST" "$SCRATCH_SCRIPT|$SCRATCH_DEST" "$HARVEST_SCRIPT|$HARVEST_DEST" "$SHFIXUP_SCRIPT|$SHFIXUP_DEST" "$BLOCK_GUIDE_SCRIPT|$BLOCK_GUIDE_DEST" "$TOOL_OPS_AUDIT_SCRIPT|$TOOL_OPS_AUDIT_DEST" "$DASHBOARD_SCRIPT|$DASHBOARD_DEST" "$DELEG_GUARD_SCRIPT|$DELEG_GUARD_DEST" "$HARNESS_DB_START_SCRIPT|$HARNESS_DB_START_DEST" "$HARNESS_DB_END_SCRIPT|$HARNESS_DB_END_DEST"; do
         hook_src="${hook_pair%%|*}"
         hook_dst="${hook_pair##*|}"
         hook_name=$(basename "$hook_dst")
@@ -170,6 +173,26 @@ else
     done
 
     deploy_tracker_summary "claude hooks"
+
+    # --- Stale hook cleanup ---
+    # Remove hook files that were previously deployed but are no longer managed.
+    # These were removed from shared/hooks/ in commit e070043 but remain on disk.
+    STALE_HOOKS="surfacing-duty-stop.sh estimate-refresh-stop.sh intent-sentinel-stop.sh"
+    for stale_hook in $STALE_HOOKS; do
+        stale_path="$HOME/.claude/hooks/$stale_hook"
+        if [ -f "$stale_path" ]; then
+            rm -f "$stale_path"
+            log_ok "Removed stale hook: $stale_hook"
+            HOOKS_CHANGED=true
+        fi
+        # Also remove any backups of stale hooks
+        for bak in "$HOME/.claude/hooks/${stale_hook}.bak."*; do
+            if [ -f "$bak" ]; then
+                rm -f "$bak"
+                log "Removed stale backup: $(basename "$bak")"
+            fi
+        done
+    done
 
     # --- Reverse discovery ---
     # Scan deployed hooks for user-created hooks not in shared or dotprofile
@@ -324,6 +347,24 @@ function mergeHookEntry(eventName, hookId, matcher, cmd, hookType) {
         return true;
     });
 }
+
+// Helper: remove all entries for a hookId from an event array.
+// Used to clean up stale hook registrations after hooks are deleted.
+function removeHookEntry(eventName, hookId) {
+    if (!Array.isArray(settings.hooks[eventName])) return;
+    settings.hooks[eventName] = settings.hooks[eventName].filter(rule => {
+        return !(rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId)));
+    });
+    // Remove the event key entirely if empty
+    if (settings.hooks[eventName].length === 0) {
+        delete settings.hooks[eventName];
+    }
+}
+
+// Remove stale Stop hooks (deleted from shared/hooks/ in commit e070043)
+removeHookEntry('Stop', 'surfacing-duty-stop.sh');
+removeHookEntry('Stop', 'estimate-refresh-stop.sh');
+removeHookEntry('Stop', 'intent-sentinel-stop.sh');
 
 mergeHookEntry('SessionEnd', 'session-archive.sh', '', hookCmd);
 mergeHookEntry('SessionEnd', 'harvest-session.sh', '', harvestCmd);
