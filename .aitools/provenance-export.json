@@ -1,0 +1,124 @@
+{
+  "knowledgeItems": [
+    {
+      "itemId": "OBS-1",
+      "itemType": "observation",
+      "version": 1,
+      "content": "Stop hooks use /tmp for marker files",
+      "tValid": "2026-03-25T21:40:13Z",
+      "tInvalid": "2026-03-25T21:40:52Z",
+      "attributedTo": "S2-Investigator",
+      "producedBySession": "c0dc2ddc",
+      "producedByMission": null,
+      "authorityLevel": 1,
+      "warnAfterDays": 30,
+      "errorAfterDays": 90,
+      "lastVerifiedAt": null,
+      "trustLevel": "agent_observation",
+      "createdAt": "2026-03-25T21:40:13Z",
+      "updatedAt": "2026-03-25T21:40:52Z"
+    },
+    {
+      "itemId": "OL-2",
+      "itemType": "ol_entry",
+      "version": 2,
+      "content": "Never use /tmp for session-ephemeral harness state. Use .scratch/session-*/ instead. Fixed in all 3 stop hooks (commit 33bbc25).",
+      "tValid": "2026-03-25T21:40:19Z",
+      "tInvalid": null,
+      "attributedTo": "agent",
+      "producedBySession": "c0dc2ddc",
+      "producedByMission": null,
+      "authorityLevel": 2,
+      "warnAfterDays": 30,
+      "errorAfterDays": 90,
+      "lastVerifiedAt": "2026-03-25T21:41:03Z",
+      "trustLevel": "verified_fact",
+      "createdAt": "2026-03-25T21:40:19Z",
+      "updatedAt": "2026-03-25T21:41:52Z"
+    },
+    {
+      "itemId": "D-TMP-FIX",
+      "itemType": "decision",
+      "version": 1,
+      "content": "Fix all 3 stop hooks to use .scratch/session-*/ instead of /tmp",
+      "tValid": "2026-03-25T21:40:28Z",
+      "tInvalid": null,
+      "attributedTo": "commander",
+      "producedBySession": "c0dc2ddc",
+      "producedByMission": null,
+      "authorityLevel": 3,
+      "warnAfterDays": 30,
+      "errorAfterDays": 90,
+      "lastVerifiedAt": null,
+      "trustLevel": "unverified_assumption",
+      "createdAt": "2026-03-25T21:40:28Z",
+      "updatedAt": "2026-03-25T21:40:52Z"
+    },
+    {
+      "itemId": "A-ALL-OL-FITS",
+      "itemType": "assumption",
+      "version": 1,
+      "content": "All operational learning fits in a single session context",
+      "tValid": "2026-03-25T21:41:08Z",
+      "tInvalid": null,
+      "attributedTo": "agent",
+      "producedBySession": "c0dc2ddc",
+      "producedByMission": null,
+      "authorityLevel": 1,
+      "warnAfterDays": 30,
+      "errorAfterDays": 90,
+      "lastVerifiedAt": null,
+      "trustLevel": "unverified_assumption",
+      "createdAt": "2026-03-25T21:41:08Z",
+      "updatedAt": "2026-03-25T21:41:08Z"
+    },
+    {
+      "itemId": "A-OL-EXCEEDS-1M",
+      "itemType": "assumption",
+      "version": 1,
+      "content": "Operational learning exceeds 1M tokens across all projects",
+      "tValid": "2026-03-25T21:41:12Z",
+      "tInvalid": null,
+      "attributedTo": "agent",
+      "producedBySession": "c0dc2ddc",
+      "producedByMission": null,
+      "authorityLevel": 1,
+      "warnAfterDays": 30,
+      "errorAfterDays": 90,
+      "lastVerifiedAt": null,
+      "trustLevel": "unverified_assumption",
+      "createdAt": "2026-03-25T21:41:12Z",
+      "updatedAt": "2026-03-25T21:41:12Z"
+    }
+  ],
+  "provenanceEdges": [
+    {
+      "edgeId": 1,
+      "sourceItemId": "OL-2",
+      "targetItemId": "OBS-1",
+      "relationship": "derived_from",
+      "createdAt": "2026-03-25T21:40:38Z",
+      "sessionId": "c0dc2ddc"
+    },
+    {
+      "edgeId": 2,
+      "sourceItemId": "D-TMP-FIX",
+      "targetItemId": "OL-2",
+      "relationship": "derived_from",
+      "createdAt": "2026-03-25T21:40:42Z",
+      "sessionId": "c0dc2ddc"
+    }
+  ],
+  "nogoodSets": [
+    {
+      "nogoodId": 1,
+      "itemIds": [
+        "A-ALL-OL-FITS",
+        "A-OL-EXCEEDS-1M"
+      ],
+      "contradiction": "All OL fits in session + OL exceeds 1M tokens = impossible",
+      "discoveredInSession": "c0dc2ddc",
+      "discoveredAt": "2026-03-25T21:41:18Z"
+    }
+  ]
+}

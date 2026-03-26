@@ -42,6 +42,12 @@ Usage:
     python3 scripts/harness-db.py observation add "text" [--category <cat>] [--severity <level>]
     python3 scripts/harness-db.py search "query"
 
+    # Command channel -- commander directives:
+    python3 scripts/harness-db.py directive add "message" [--type <type>] [--priority <level>] [--target <text>]
+    python3 scripts/harness-db.py directive list [--status <status>]
+    python3 scripts/harness-db.py directive poll
+    python3 scripts/harness-db.py directive ack <id> [--response <text>] [--status <status>]
+
 Safe to re-run. All operations are idempotent where possible.
 Platform: macOS, Windows, Linux (Python 3.10+, sqlite3 stdlib)
 """
@@ -186,6 +192,47 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
 CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
+
+CREATE TABLE IF NOT EXISTS commander_directives (
+    directive_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    directive_type TEXT NOT NULL
+        CHECK (directive_type IN (
+            'correction',
+            'redirect',
+            'priority',
+            'question',
+            'approve',
+            'reject',
+            'context',
+            'checkpoint'
+        )),
+    priority TEXT NOT NULL DEFAULT 'normal'
+        CHECK (priority IN ('flash', 'priority', 'normal')),
+    message TEXT NOT NULL,
+    target TEXT,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'acknowledged', 'executed', 'rejected', 'deferred')),
+    response TEXT,
+    created_at TEXT NOT NULL,
+    acknowledged_at TEXT,
+    executed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_directives_status ON commander_directives(status);
+
+CREATE TABLE IF NOT EXISTS commander_feedback (
+    feedback_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    feedback_type TEXT NOT NULL
+        CHECK (feedback_type IN ('correction', 'directive', 'bug', 'observation', 'priority')),
+    message TEXT NOT NULL,
+    target TEXT,
+    status TEXT NOT NULL DEFAULT 'submitted'
+        CHECK (status IN ('submitted', 'acknowledged', 'resolved', 'deferred')),
+    resolution TEXT,
+    created_at TEXT NOT NULL,
+    acknowledged_at TEXT,
+    resolved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_status ON commander_feedback(status);
 
 CREATE TABLE IF NOT EXISTS version_history (
     version REAL NOT NULL PRIMARY KEY,
@@ -2305,6 +2352,228 @@ def cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
+# -- Directive subcommands (command channel) -----------------------------------
+
+
+def cmd_directive_add(args: argparse.Namespace) -> int:
+    """Add a commander directive to the session DB."""
+    project_root = find_project_root()
+    result = resolve_session_db(project_root, getattr(args, "session", None))
+    if result is None:
+        return 1
+    db_path, session_id = result
+
+    now = utcnow()
+    directive_type = getattr(args, "type", "context") or "context"
+    priority = getattr(args, "priority", "normal") or "normal"
+    target = getattr(args, "target", None)
+
+    conn = open_db(db_path)
+    # Ensure table exists (schema migration for existing DBs)
+    conn.executescript(
+        """CREATE TABLE IF NOT EXISTS commander_directives (
+            directive_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            directive_type TEXT NOT NULL,
+            priority TEXT NOT NULL DEFAULT 'normal',
+            message TEXT NOT NULL,
+            target TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            response TEXT,
+            created_at TEXT NOT NULL,
+            acknowledged_at TEXT,
+            executed_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_directives_status
+            ON commander_directives(status);"""
+    )
+    conn.execute(
+        """INSERT INTO commander_directives
+           (directive_type, priority, message, target, status, created_at)
+           VALUES (?, ?, ?, ?, 'pending', ?)""",
+        (directive_type, priority, args.message, target, now),
+    )
+    conn.commit()
+    row_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.close()
+    print(f"DIR-{row_id} ({priority})")
+    return 0
+
+
+def cmd_directive_list(args: argparse.Namespace) -> int:
+    """List commander directives from the session DB."""
+    project_root = find_project_root()
+    result = resolve_session_db(project_root, getattr(args, "session", None))
+    if result is None:
+        return 1
+    db_path, _session_id = result
+
+    status_filter = getattr(args, "status", None)
+    limit = getattr(args, "limit", 20) or 20
+
+    conn = open_db(db_path, readonly=True)
+
+    # Check if table exists
+    table_exists = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='commander_directives'"
+    ).fetchone()
+    if not table_exists:
+        print("No directives (table not created yet)")
+        conn.close()
+        return 0
+
+    if status_filter:
+        rows = conn.execute(
+            "SELECT directive_id, directive_type, priority, message, target, status, "
+            "created_at, acknowledged_at FROM commander_directives "
+            "WHERE status = ? ORDER BY created_at DESC LIMIT ?",
+            (status_filter, limit),
+        ).fetchall()
+        total = conn.execute(
+            "SELECT COUNT(*) as cnt FROM commander_directives WHERE status = ?",
+            (status_filter,),
+        ).fetchone()["cnt"]
+    else:
+        rows = conn.execute(
+            "SELECT directive_id, directive_type, priority, message, target, status, "
+            "created_at, acknowledged_at FROM commander_directives "
+            "ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        total = conn.execute(
+            "SELECT COUNT(*) as cnt FROM commander_directives"
+        ).fetchone()["cnt"]
+    conn.close()
+
+    if not rows:
+        print("No directives found")
+        return 0
+
+    for r in reversed(rows):
+        priority_tag = f"[{r['priority'].upper()}] " if r["priority"] != "normal" else ""
+        status_tag = r["status"]
+        msg_preview = r["message"][:100].replace("\n", " ")
+        target_str = f" -> {r['target']}" if r["target"] else ""
+        print(
+            f"DIR-{r['directive_id']} {priority_tag}{r['directive_type']}{target_str} "
+            f"({status_tag}): {msg_preview}"
+        )
+    if total > limit:
+        print(f"({total} total, showing last {limit} -- use --limit N for more)")
+    return 0
+
+
+def cmd_directive_poll(args: argparse.Namespace) -> int:
+    """Poll for pending directives (used by command-channel-stop.sh).
+
+    Prints pending count to stdout. Prints directive text to stderr.
+    Exit 0 always (the hook handles exit codes).
+    """
+    project_root = find_project_root()
+    result = resolve_session_db(project_root, getattr(args, "session", None))
+    if result is None:
+        print("0")
+        return 0
+    db_path, _session_id = result
+
+    conn = open_db(db_path)
+    pending: list[str] = []
+    now = utcnow()
+
+    # Check commander_directives
+    try:
+        rows = conn.execute(
+            "SELECT directive_id, directive_type, priority, message, target "
+            "FROM commander_directives WHERE status = 'pending' ORDER BY created_at"
+        ).fetchall()
+        for r in rows:
+            priority = r["priority"]
+            prefix = (
+                "[FLASH] "
+                if priority == "flash"
+                else "[PRIORITY] " if priority == "priority" else ""
+            )
+            dtype = r["directive_type"].upper()
+            msg = r["message"]
+            target = f" (re: {r['target']})" if r["target"] else ""
+            pending.append(f"{prefix}{dtype}{target}: {msg}")
+            conn.execute(
+                "UPDATE commander_directives SET status = 'acknowledged', "
+                "acknowledged_at = ? WHERE directive_id = ?",
+                (now, r["directive_id"]),
+            )
+    except Exception:
+        pass
+
+    # Check commander_feedback (fallback)
+    try:
+        rows = conn.execute(
+            "SELECT feedback_id, feedback_type, message, target "
+            "FROM commander_feedback WHERE status = 'submitted' ORDER BY created_at"
+        ).fetchall()
+        for r in rows:
+            ftype = r["feedback_type"].upper()
+            msg = r["message"]
+            target = f" (re: {r['target']})" if r["target"] else ""
+            pending.append(f"{ftype}{target}: {msg}")
+            conn.execute(
+                "UPDATE commander_feedback SET status = 'acknowledged', "
+                "acknowledged_at = ? WHERE feedback_id = ?",
+                (now, r["feedback_id"]),
+            )
+    except Exception:
+        pass
+
+    if pending:
+        conn.commit()
+        import sys as _sys
+
+        print("=== COMMANDER DIRECTIVE(S) ===", file=_sys.stderr)
+        for p in pending:
+            print(f"  {p}", file=_sys.stderr)
+        print(
+            "=== END DIRECTIVES -- Address these before continuing ===",
+            file=_sys.stderr,
+        )
+
+    conn.close()
+    print(len(pending))
+    return 0
+
+
+def cmd_directive_ack(args: argparse.Namespace) -> int:
+    """Mark a directive as executed with an optional response."""
+    project_root = find_project_root()
+    result = resolve_session_db(project_root, getattr(args, "session", None))
+    if result is None:
+        return 1
+    db_path, _session_id = result
+
+    now = utcnow()
+    directive_id = args.directive_id
+    response = getattr(args, "response", None)
+    status = getattr(args, "status", "executed") or "executed"
+
+    conn = open_db(db_path)
+    row = conn.execute(
+        "SELECT directive_id, status FROM commander_directives WHERE directive_id = ?",
+        (directive_id,),
+    ).fetchone()
+    if not row:
+        print(f"Directive {directive_id} not found")
+        conn.close()
+        return 1
+
+    conn.execute(
+        "UPDATE commander_directives SET status = ?, response = ?, executed_at = ? "
+        "WHERE directive_id = ?",
+        (status, response, now, directive_id),
+    )
+    conn.commit()
+    conn.close()
+    print(f"DIR-{directive_id} -> {status}")
+    return 0
+
+
 # -- CLI setup ----------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -2556,6 +2825,43 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser.add_argument("--session", help="Session ID (auto-detects if omitted)")
     search_parser.add_argument("--limit", type=int, default=50, help="Max results to show (default: 50)")
 
+    # -- directive (command channel) --
+    dir_parser = subparsers.add_parser("directive", help="Commander directives (command channel)")
+    dir_sub = dir_parser.add_subparsers(dest="directive_command")
+
+    dir_add = dir_sub.add_parser("add", help="Add a directive")
+    dir_add.add_argument("message", help="Directive message text")
+    dir_add.add_argument(
+        "--type", default="context",
+        choices=["correction", "redirect", "priority", "question",
+                 "approve", "reject", "context", "checkpoint"],
+        help="Directive type (default: context)",
+    )
+    dir_add.add_argument(
+        "--priority", default="normal",
+        choices=["flash", "priority", "normal"],
+        help="Priority level (default: normal)",
+    )
+    dir_add.add_argument("--target", help="What the directive is about (mission, file, decision)")
+    dir_add.add_argument("--session", help="Session ID (auto-detects if omitted)")
+
+    dir_ls = dir_sub.add_parser("list", help="List directives")
+    dir_ls.add_argument("--status", choices=["pending", "acknowledged", "executed", "rejected", "deferred"],
+                        help="Filter by status")
+    dir_ls.add_argument("--session", help="Session ID (auto-detects if omitted)")
+    dir_ls.add_argument("--limit", type=int, default=20, help="Max results (default: 20)")
+
+    dir_poll = dir_sub.add_parser("poll", help="Poll pending directives (for hooks)")
+    dir_poll.add_argument("--session", help="Session ID (auto-detects if omitted)")
+
+    dir_ack = dir_sub.add_parser("ack", help="Acknowledge/execute a directive")
+    dir_ack.add_argument("directive_id", type=int, help="Directive ID to acknowledge")
+    dir_ack.add_argument("--response", help="Agent's response to the directive")
+    dir_ack.add_argument("--status", default="executed",
+                         choices=["executed", "rejected", "deferred"],
+                         help="Resolution status (default: executed)")
+    dir_ack.add_argument("--session", help="Session ID (auto-detects if omitted)")
+
     return parser
 
 
@@ -2679,6 +2985,20 @@ def main() -> int:
 
     if args.command == "search":
         return cmd_search(args)
+
+    if args.command == "directive":
+        dc = getattr(args, "directive_command", None)
+        if dc == "add":
+            return cmd_directive_add(args)
+        elif dc == "list":
+            return cmd_directive_list(args)
+        elif dc == "poll":
+            return cmd_directive_poll(args)
+        elif dc == "ack":
+            return cmd_directive_ack(args)
+        else:
+            parser.parse_args(["directive", "--help"])
+            return 1
 
     parser.print_help()
     return 1

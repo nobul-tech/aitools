@@ -4355,6 +4355,486 @@
       "status": "harvested",
       "promotedTo": null,
       "pruneAfter": "2026-04-23"
+    },
+    "2026-03-25_session-c0dc2ddc-f_aitool-resume-test.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_architecture-exploration-findings.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_assistant-text-responses.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_build-knowledge-db.py": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_build-ol-index-v2.py": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_build-ol-index.py": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_capture-final-ol.py": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_capture-session-state.py": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_check-session-rows.py": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_command-center-screenshot.png": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_command-channel-investigation.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_command-channel-operational-learning.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_consolidated-operational-learning.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_credits-investigation-operational-learning.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_credits-startup-programs-inventory.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_credits-tool-design.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_dashboard-extension-investigation.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_datadog-region-investigation.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-2deep-feedback-mission.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-aitool-continue.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-architecture-exploration.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-batch-from-peak.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-cicd-investigation.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-command-channel-investigation.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-commit-ship-observe.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-credits-investigation.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-dashboard-feedback-loop.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-dashboard-investigation.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-datadog-region.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-feedback-ui.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-harness-db-cli.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-harness-db-fix.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-incident-propagation-investigation.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-knowledge-query.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-mission-control-v2.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-mission-control-verify.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-observability-mission.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-observability-stopgap.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-ol-dashboard.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-process-management.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-provenance-and-infrastructure.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-provenance-framing.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-rewind-feature.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-ship-and-deploy-mc.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-telemetry-build.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-telemetry-redesign.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-verify-assumptions.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
+    },
+    "2026-03-25_session-c0dc2ddc-f_delegation-web-portal.md": {
+      "harvested": "2026-03-25",
+      "session": "aitools/2026-03-25_c0dc2ddc-f",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-24"
     }
   }
 }
