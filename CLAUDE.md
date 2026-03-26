@@ -1,8 +1,8 @@
 # AI Tooling Hub
 
-**Mission**: Cross-platform tool lifecycle management, governance,
-state, and AI context orchestration for developers working on any
-project on any supported platform.
+**Mission**: Provenance-aware knowledge system for cross-platform tool
+lifecycle management, governance, state, and AI context orchestration
+for developers working on any project on any supported platform.
 
 One CLI that installs, configures, and maintains all managed tools
 with native platform support (PowerShell on Windows, bash on
@@ -27,6 +27,7 @@ experience on each platform, not artificial 1:1 parity.
 - **Skills as enablement**: Every managed tool, dependency, and repeatable process gets a skill. User-level skills (`shared/skills/` → `~/.claude/skills/`) cover managed tools and project-agnostic patterns. Project-level skills (`.claude/skills/`) cover repo-specific frameworks. Skills are process implementations governed by rules. Every skill with auto-trigger behavior requires three artifacts: the skill itself, a trigger directive in its governing rule (states WHEN to invoke), and a detection hook spec (catches when the process is bypassed). The rule governs; the skill implements; the hook enforces. See `plans/governance-and-compliance-framework.md` for placement criteria and `.claude/rules/governed-data-access.md` for the access pattern.
 - **Process discipline as work product**: The observation-to-fact pipeline — observe, classify against governed vocabulary, verify against evidence, correct — IS the primary deliverable of every session. Code changes, config fixes, and feature builds are outputs of the discipline, not substitutes for it. A session's value is measured by the quality of its process artifacts (running estimate, operational learning, structured observations) not just its code artifacts. This applies to every session, every platform, every aitools developer.
 - **Document intent**: Every markdown file, every major section that could be misread in isolation, and every code file must state its intent: purpose (what it exists to deliver), scope (what's covered and explicitly excluded), and audience (who consumes it). A file or section without intent is ambiguous by definition. In markdown, intent appears as an `**Intent**:` block or opening paragraph. In code, intent appears as a header comment block. New files must include intent; existing files are backfilled incrementally. Intent statements are a protected activity — draft and present for user approval before writing. See `@.claude/rules/sources-of-truth.md`.
+- **Provenance-aware knowledge**: Every knowledge item — operational learning, decision, observation, rule change — tracks what it was based on, who produced it, when the basis was valid, and whether the basis has been superseded. When an assumption is falsified, dependent items are flagged. Known contradictions (nogood sets) are recorded to prevent rediscovery of dead ends. Provenance is collected during sessions (lightweight annotations) and processed at session boundaries (dependency graph construction, staleness propagation). See `reference/framework-provenance.md`.
 ## Project Structure
 
 ```

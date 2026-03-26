@@ -64,6 +64,39 @@ is governed by `/frameworks` skill. Individual framework documentation
 lives in `reference/framework-*.md` files. See
 `@.claude/rules/frameworks.md` for the rule.
 
+**Provenance** — every piece of operational learning, every decision,
+every work product has provenance: what it was based on, when, by whom,
+and whether the basis has been superseded. The provenance component
+tracks dependency chains between knowledge items, propagates
+invalidation when assumptions are falsified, records known
+contradictions (nogood sets) to prevent rediscovery of dead ends, and
+maintains temporal validity windows so stale knowledge is surfaced
+before it causes harm. Provenance is not a feature layered on top of
+the other five components — it is the connective tissue that makes
+the harness a knowledge system rather than a configuration manager.
+See `@reference/framework-provenance.md` for the discipline source
+and adoption rationale.
+
+## How the Components Relate
+
+The six components form a dependency chain:
+
+```
+Platform (external, provided by Claude Code)
+    -> Configuration (our use of the platform)
+        -> Orchestration (manages configuration lifecycle)
+            -> Managed Tools (governed by orchestration)
+            -> Frameworks (governing structures for decisions)
+            -> Provenance (tracks what everything is based on)
+```
+
+Provenance cuts across the other components: it tracks the basis for
+configuration decisions, the history of orchestration changes, the
+evaluation chain for tool selections, and the adoption rationale for
+frameworks. It is both a component (with its own tables, schema, and
+processing) and a cross-cutting concern (every other component
+produces provenance data).
+
 ## Cross-References
 
 - Glossary definition: `/glossary` skill (term: harness)
@@ -73,4 +106,5 @@ lives in `reference/framework-*.md` files. See
 - Registry convention: `@reference/framework-three-layer-governance.md`
 - Framework rule: `@.claude/rules/frameworks.md`
 - Project description: `@CLAUDE.md`
+- Provenance framework: `@reference/framework-provenance.md`
 - Skills: `/frameworks`, `/glossary`, `/audit`, `/intent-audit`, `/incident`
