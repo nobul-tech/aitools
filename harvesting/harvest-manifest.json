@@ -1,7 +1,7 @@
 {
   "meta": {
     "schemaVersion": "1.0",
-    "lastAudit": "2026-03-24"
+    "lastAudit": "2026-03-29"
   },
   "artifacts": {
     "2026-03-15_gh-issue-comment.md": {
@@ -4835,6 +4835,916 @@
       "status": "harvested",
       "promotedTo": null,
       "pruneAfter": "2026-04-24"
+    },
+    "2026-03-26_session-2d439e32-3_assumption-trace-report.md": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_audit-deep-queries.py": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_audit-nobulai-delegations.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_audit-nobulai-governance.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_audit-nobulai-main.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_audit-nobulai-state.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_audit-phantom-session.py": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_audit-queries.py": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_batch-audit-findings.py": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_batch-insert-findings.py": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_batch-ol.py": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_batch-synthesis-insert.py": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_check-kb-harvest.sh": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_cleanup-report.md": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_command-channel-build.md": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_delegation-test-results.md": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_early-session-findings.md": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_events.jsonl": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_export-mission-control.py": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_extract-user-messages.py": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_extract-user-msgs.py": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_feedback-analysis.md": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_full-audit-report.md": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_gov-snapshot2.txt": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_governance-snapshot.txt": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_housekeeping-report.md": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_insert-commit-review-obs.py": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_insert-provenance-observations.py": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_investigation-what-is-aitools.md": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-cockpit-amend-input.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-cockpit-approve-click.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-cockpit-decisions.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-cockpit-directive-modal.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-cockpit-final-deployed.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-cockpit-final.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-cockpit-governance.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-cockpit-overview.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-documents-tab.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-feedback.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-final-documents.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-git-diff-expanded.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-git-diffs-tab.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-governance-tab.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-governance.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-proposal-review.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-screenshot-overview.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-synthesis-report-open.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mc-v2-documents-final.png": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_meaning-reconstruction.md": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mission-control-artifact-inventory.md": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-2d439e32-3_mission-control-data-flow-investigation.md": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_2d439e32-3",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-26_session-d3dae79d-9_events.jsonl": {
+      "harvested": "2026-03-26",
+      "session": "aitools/2026-03-26_d3dae79d-9",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-25"
+    },
+    "2026-03-27_session-d5b52bf2-8_events.jsonl": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_d5b52bf2-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_assessment-ol.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_assessment-synthesis.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_blast-radius-ol.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_blast-radius.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_events.jsonl": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_fix-and-ship-ol.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_hook-design-ol.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_hook-design.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_nesting-test.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_running-estimate-v1.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_session-8236ca9c-insights.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_thinking-awareness-conversation.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_thinking-awareness-summary.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_tool-ops-verify-ol.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_tool-ops-verify.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_verify-and-propose-ol.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_verify-and-propose.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_work-product-inventory-ol.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-8236ca9c-b_work-product-inventory.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_8236ca9c-b",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-6e97c17f-c_d5b52bf2-full-session-v2.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_6e97c17f-c",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-6e97c17f-c_d5b52bf2-full-session.txt": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_6e97c17f-c",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-6e97c17f-c_events.jsonl": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_6e97c17f-c",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-dfbc4091-e_cc-agent-teams-doc.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_dfbc4091-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-dfbc4091-e_cc-subagents-doc.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_dfbc4091-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-dfbc4091-e_events.jsonl": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_dfbc4091-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-27_session-dfbc4091-e_nested-agent-investigation.md": {
+      "harvested": "2026-03-27",
+      "session": "aitools/2026-03-27_dfbc4091-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-26"
+    },
+    "2026-03-28_session-f078fb16-e_draft-project-claude-md.md": {
+      "harvested": "2026-03-28",
+      "session": "aitools/2026-03-28_f078fb16-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-27"
+    },
+    "2026-03-28_session-f078fb16-e_events.jsonl": {
+      "harvested": "2026-03-28",
+      "session": "aitools/2026-03-28_f078fb16-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-27"
+    },
+    "2026-03-28_session-f078fb16-e_session-f078fb16-ol-and-decisions.md": {
+      "harvested": "2026-03-28",
+      "session": "aitools/2026-03-28_f078fb16-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-27"
+    },
+    "2026-03-29_session-fbf7decb-9_1bc9fd30-full.md": {
+      "harvested": "2026-03-29",
+      "session": "aitools/2026-03-29_fbf7decb-9",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-28"
+    },
+    "2026-03-29_session-fbf7decb-9_1bc9fd30-text.md": {
+      "harvested": "2026-03-29",
+      "session": "aitools/2026-03-29_fbf7decb-9",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-28"
+    },
+    "2026-03-29_session-fbf7decb-9_6c703adc-text.md": {
+      "harvested": "2026-03-29",
+      "session": "aitools/2026-03-29_fbf7decb-9",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-28"
+    },
+    "2026-03-29_session-fbf7decb-9_8236ca9c-text.md": {
+      "harvested": "2026-03-29",
+      "session": "aitools/2026-03-29_fbf7decb-9",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-28"
+    },
+    "2026-03-29_session-fbf7decb-9_events.jsonl": {
+      "harvested": "2026-03-29",
+      "session": "aitools/2026-03-29_fbf7decb-9",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-28"
+    },
+    "2026-03-29_session-fbf7decb-9_f078fb16-session.md": {
+      "harvested": "2026-03-29",
+      "session": "aitools/2026-03-29_fbf7decb-9",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-28"
+    },
+    "2026-03-29_session-fbf7decb-9_rfc-0001-nobulai-tools-product-definition.md": {
+      "harvested": "2026-03-29",
+      "session": "aitools/2026-03-29_fbf7decb-9",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-28"
+    },
+    "2026-03-29_session-fbf7decb-9_rfc-0002-mission-control-architecture.md": {
+      "harvested": "2026-03-29",
+      "session": "aitools/2026-03-29_fbf7decb-9",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-28"
+    },
+    "2026-03-29_session-fbf7decb-9_rfc-0003-operational-learning-graph.md": {
+      "harvested": "2026-03-29",
+      "session": "aitools/2026-03-29_fbf7decb-9",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-28"
     }
   }
 }

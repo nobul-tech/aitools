@@ -1,0 +1,2 @@
+{"t":"2026-03-27T01:08:57Z","type":"hook_block","src":"sog","d":{"check":"grep"}}
+{"t":"2026-03-27T01:23:13Z","type":"hook_block","src":"bccg","d":{"blocked":"claude-code-guide"}}

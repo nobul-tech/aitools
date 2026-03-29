@@ -1,0 +1,7 @@
+{"t":"2026-03-28T14:30:41Z","type":"hook_block","src":"sog","d":{"check":"and"}}
+{"t":"2026-03-28T14:48:51Z","type":"hook_warn","src":"gsg","d":{"target":"glossary.json"}}
+{"t":"2026-03-28T15:29:44Z","type":"hook_block","src":"sog","d":{"check":"cat"}}
+{"t":"2026-03-28T19:33:18Z","type":"delegation","src":"ddg","d":{"score":4,"missing":"WRITE_BLOCKED,access"}}
+{"t":"2026-03-28T19:35:16Z","type":"delegation","src":"ddg","d":{"score":4,"missing":"WRITE_BLOCKED,access"}}
+{"t":"2026-03-28T19:36:31Z","type":"delegation","src":"ddg","d":{"score":3,"missing":"skills,WRITE_BLOCKED,access"}}
+{"t":"2026-03-28T19:36:40Z","type":"hook_block","src":"sog","d":{"check":"or"}}

@@ -1,0 +1,17 @@
+{"t":"2026-03-26T01:09:44Z","type":"hook_block","src":"sog","d":{"check":"and"}}
+{"t":"2026-03-26T01:09:46Z","type":"delegation","src":"ddg","d":{"score":2,"missing":"rules,skills,OL,access"}}
+{"t":"2026-03-26T01:09:58Z","type":"delegation","src":"ddg","d":{"score":4,"missing":"rules,access"}}
+{"t":"2026-03-26T01:09:58Z","type":"hook_block","src":"sog","d":{"check":"or"}}
+{"t":"2026-03-26T01:10:23Z","type":"hook_block","src":"sog","d":{"check":"and"}}
+{"t":"2026-03-26T01:10:30Z","type":"hook_fire","src":"sog","d":{"result":"allow"}}
+{"t":"2026-03-26T01:10:35Z","type":"hook_fire","src":"sog","d":{"result":"allow"}}
+{"t":"2026-03-26T01:11:21Z","type":"hook_fire","src":"sog","d":{"result":"allow"}}
+{"t":"2026-03-26T01:13:35Z","type":"hook_fire","src":"sog","d":{"result":"allow"}}
+{"t":"2026-03-26T01:13:53Z","type":"hook_fire","src":"sog","d":{"result":"allow"}}
+{"t":"2026-03-26T01:14:09Z","type":"hook_block","src":"sog","d":{"check":"and"}}
+{"t":"2026-03-26T01:14:12Z","type":"hook_fire","src":"sog","d":{"result":"allow"}}
+{"t":"2026-03-26T01:14:37Z","type":"hook_fire","src":"sog","d":{"result":"allow"}}
+{"t":"2026-03-26T12:38:33Z","type":"hook_warn","src":"gsg","d":{"target":"glossary.json"}}
+{"t":"2026-03-26T12:38:40Z","type":"hook_warn","src":"gsg","d":{"target":"glossary.json"}}
+{"t":"2026-03-26T12:38:48Z","type":"hook_warn","src":"gsg","d":{"target":"glossary.json"}}
+{"t":"2026-03-26T12:39:19Z","type":"hook_block","src":"bccg","d":{"blocked":"claude-code-guide"}}

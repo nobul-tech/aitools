@@ -3312,6 +3312,486 @@ fi
 exit 0
 '@
 
+$hook_ccstop = @'
+#!/usr/bin/env bash
+# command-channel-stop.sh -- Claude Code Stop hook
+# Purpose: Poll the session SQLite DB for pending commander directives and
+#   inject them into the agent's context via stderr. This is the "uplink"
+#   path of the command channel -- dashboard writes directives to SQLite,
+#   this hook reads them at every agent pause.
+# Scope: Stop hook only. NOT the directive schema (harness-db.py).
+#   NOT the dashboard command interface (session-command-center-v2.py).
+# Audience: Claude Code Stop hook system -- fires after every agent response.
+#
+# Architecture (from command-channel-investigation.md):
+#   Layer 1 -- Stop-hook command reader (THIS FILE)
+#   Layer 2 -- Command protocol (commander_directives table in session DB)
+#   Layer 3 -- Dashboard command interface (session-command-center-v2.py)
+#
+# Hook contract:
+#   - Receives JSON on stdin (session_id, cwd, transcript_summary, etc.)
+#   - Exit 0 = no-op (no pending directives)
+#   - Exit 2 = block (stderr injected as context, forces agent to address)
+#   - Must complete in <50ms (SQLite WAL read)
+#   - Must never crash or hang (would break Claude Code)
+#
+# Priority handling:
+#   - flash:    exit 2 (block) -- agent must address immediately
+#   - priority: exit 2 (block) -- surfaced with emphasis
+#   - normal:   exit 2 (block) -- agent should address when convenient
+#   All pending directives are surfaced together. Flash/priority directives
+#   get prefixes in the stderr output.
+#
+# Fallback: also checks commander_feedback table (from dashboard v2)
+#   for status='submitted' entries, since both tables serve the same
+#   purpose. commander_directives is the canonical table going forward.
+#
+# Platform: macOS + Linux + Windows Git Bash
+# Dependencies: Python 3 with sqlite3 stdlib (same as harness-db hooks)
+
+set -euo pipefail
+
+# --- Read hook input from stdin ---
+INPUT=$(cat)
+
+# --- Pure-bash JSON field extraction (same pattern as other hooks) ---
+json_field() {
+    local json="$1" key="$2"
+    local pattern="\"${key}\"[[:space:]]*:[[:space:]]*\"([^\"]*)\""
+    if [[ "$json" =~ $pattern ]]; then
+        printf '%s' "${BASH_REMATCH[1]}"
+    fi
+}
+
+SESSION_ID=$(json_field "$INPUT" "session_id")
+
+# Bail if no session ID
+if [ -z "$SESSION_ID" ]; then
+    exit 0
+fi
+
+# --- Find session DB path ---
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+if [ -z "$PROJECT_ROOT" ]; then
+    exit 0
+fi
+
+SESSION_PREFIX="${SESSION_ID:0:10}"
+SESSION_DB="$PROJECT_ROOT/.aitools/sessions/${SESSION_PREFIX}.db"
+
+if [ ! -f "$SESSION_DB" ]; then
+    exit 0
+fi
+
+# --- Check for Python 3 ---
+PYTHON=""
+if command -v python3 > /dev/null 2>&1; then
+    PYTHON="python3"
+elif command -v python > /dev/null 2>&1; then
+    PYTHON="python"
+fi
+
+if [ -z "$PYTHON" ]; then
+    exit 0
+fi
+
+# --- Poll for pending directives via inline Python ---
+# Python writes directive text to stderr (injected into agent context by CC).
+# Python prints the directive count to stdout (captured by bash for exit code).
+# Single invocation for speed (<50ms with SQLite WAL).
+DIRECTIVE_COUNT=$("$PYTHON" - "$SESSION_DB" <<'PYEOF'
+import sqlite3
+import sys
+from datetime import datetime, timezone
+
+db_path = sys.argv[1]
+
+def utcnow():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+try:
+    conn = sqlite3.connect(f"file:{db_path}?mode=rw", uri=True, timeout=2.0)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA busy_timeout=2000")
+    conn.row_factory = sqlite3.Row
+except Exception:
+    print("0")
+    sys.exit(0)
+
+pending = []
+now = utcnow()
+
+# Check commander_directives table (Layer 2 protocol)
+try:
+    rows = conn.execute(
+        "SELECT directive_id, directive_type, priority, message, target "
+        "FROM commander_directives WHERE status = 'pending' ORDER BY created_at"
+    ).fetchall()
+    for r in rows:
+        priority = r["priority"]
+        prefix = "[FLASH] " if priority == "flash" else "[PRIORITY] " if priority == "priority" else ""
+        dtype = r["directive_type"].upper()
+        msg = r["message"]
+        target = f" (re: {r['target']})" if r["target"] else ""
+        pending.append(f"{prefix}{dtype}{target}: {msg}")
+        conn.execute(
+            "UPDATE commander_directives SET status = 'acknowledged', acknowledged_at = ? WHERE directive_id = ?",
+            (now, r["directive_id"]),
+        )
+except Exception:
+    pass  # table may not exist yet -- that's OK
+
+# Check commander_feedback table (dashboard v2 fallback)
+try:
+    rows = conn.execute(
+        "SELECT feedback_id, feedback_type, message, target "
+        "FROM commander_feedback WHERE status = 'submitted' ORDER BY created_at"
+    ).fetchall()
+    for r in rows:
+        ftype = r["feedback_type"].upper()
+        msg = r["message"]
+        target = f" (re: {r['target']})" if r["target"] else ""
+        pending.append(f"{ftype}{target}: {msg}")
+        conn.execute(
+            "UPDATE commander_feedback SET status = 'acknowledged', acknowledged_at = ? WHERE feedback_id = ?",
+            (now, r["feedback_id"]),
+        )
+except Exception:
+    pass  # table may not exist yet -- that's OK
+
+if pending:
+    conn.commit()
+    print("=== COMMANDER DIRECTIVE(S) ===", file=sys.stderr)
+    for p in pending:
+        print(f"  {p}", file=sys.stderr)
+    print("=== END DIRECTIVES -- Address these before continuing ===", file=sys.stderr)
+
+conn.close()
+print(len(pending))
+PYEOF
+) || DIRECTIVE_COUNT="0"
+
+# Guard: ensure DIRECTIVE_COUNT is a valid number
+if ! [[ "$DIRECTIVE_COUNT" =~ ^[0-9]+$ ]]; then
+    DIRECTIVE_COUNT="0"
+fi
+
+# --- Telemetry: JSONL event emission ---
+_SESSION_DIR=""
+_cs_file="$PROJECT_ROOT/.scratch/.current-session"
+if [ -f "$_cs_file" ]; then
+    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+fi
+
+if [ -n "$_SESSION_DIR" ] && [ "$DIRECTIVE_COUNT" != "0" ]; then
+    printf '{"t":"%s","type":"command_channel","src":"ccs","d":{"count":%s}}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$DIRECTIVE_COUNT" \
+        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+fi
+
+# --- Exit code ---
+# If any directives were found and injected via stderr, block (exit 2)
+# to force the agent to address them before continuing.
+if [ "$DIRECTIVE_COUNT" != "0" ]; then
+    exit 2
+fi
+
+exit 0
+'@
+
+$hook_fmident = @'
+#!/usr/bin/env bash
+# failure-mode-identity-stop.sh -- Claude Code Stop hook
+# Purpose: Reinforce agent identity, surface known gaps, enforce the 7-step
+#   process, and carry forward operational learning at every assistant turn.
+#   This is the structural mechanism that prompting alone cannot provide (D-27).
+# Scope: Stop hook only. Fires after every assistant response. Context
+#   injection via stderr. Always exits 0 (Stop hooks cannot block).
+# Audience: Claude Code Stop hook system.
+#
+# Hook contract:
+#   - Stop hook, no matcher (fires on every assistant response)
+#   - Receives JSON on stdin (session_id, transcript_summary)
+#   - Exit 0 = always (Stop hooks cannot block)
+#   - stderr -> injected into agent context before next turn
+#   - Must complete in <50ms
+#   - Must never crash or hang
+#   - Standalone -- cannot source aitools-lib.sh
+#
+# What it injects:
+#   1. Agent identity (Session Commander + session ID prefix)
+#   2. Failure mode status (default for all agents, D-1)
+#   3. The 7-step process (Receive, Classify, Orient, Assess, Surface, Propose, Connect)
+#   4. Active orders (aitools supersedes CC, verify before claiming, ask when uncertain)
+#   5. Known gaps/blockers from running estimate (top 3)
+#   6. Recent OL items (top 5 by recency)
+#
+# Data sources (in priority order):
+#   1. .scratch/session-*/running-estimate*.md (session-specific, found via .current-session)
+#   2. Static fallback (process + identity only, no dynamic OL)
+#
+# Observe mode: OBSERVE (log only, always exit 0). Ship in observe, tune, then
+#   decide whether to add enforcement. Per hook-rollout.md.
+#
+# Design lineage: D-27, OL-25 (prompting insufficient), OL-14 (process drops),
+#   OL-43 (dynamic hooks must be type:command), A-H5 (invalidated prompt type),
+#   OL-42 (design from spec not implementation).
+#
+# Platform: macOS + Linux + Windows Git Bash
+
+set -euo pipefail
+
+# --- Pure-bash JSON field extraction ---
+json_field() {
+    local json="$1" key="$2"
+    local pattern="\"${key}\"[[:space:]]*:[[:space:]]*\"([^\"]*)\""
+    if [[ "$json" =~ $pattern ]]; then
+        printf '%s' "${BASH_REMATCH[1]}"
+    fi
+}
+
+# --- Read hook input from stdin ---
+INPUT=$(cat)
+SESSION_ID=$(json_field "$INPUT" "session_id")
+
+# Short prefix for display
+SESSION_PREFIX="${SESSION_ID:0:10}"
+
+# --- Find project root ---
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+if [ -z "$PROJECT_ROOT" ]; then
+    PROJECT_ROOT="$(pwd)"
+fi
+
+# --- Telemetry: JSONL event emission ---
+_SESSION_DIR=""
+_cs_file="$PROJECT_ROOT/.scratch/.current-session"
+if [ -f "$_cs_file" ]; then
+    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+fi
+
+emit_event() {
+    local detail_json="$1"
+    [ -n "$_SESSION_DIR" ] || return 0
+    printf '{"t":"%s","type":"identity_stop","src":"fmi","d":%s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$detail_json" \
+        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+}
+
+# --- Find running estimate ---
+# Priority: session-specific markdown in scratch dir
+RE_FILE=""
+if [ -n "$_SESSION_DIR" ] && [ -d "$_SESSION_DIR" ]; then
+    # Look for running-estimate*.md in the session scratch directory
+    for f in "$_SESSION_DIR"/running-estimate*.md; do
+        if [ -f "$f" ]; then
+            RE_FILE="$f"
+            break
+        fi
+    done
+fi
+
+# --- Extract dynamic content from running estimate ---
+OL_LINES=""
+GAPS_LINES=""
+BLOCKERS_LINES=""
+
+if [ -n "$RE_FILE" ] && [ -f "$RE_FILE" ]; then
+    # Extract OL items (last 5 by line order = most recent)
+    # Lines matching: OL-NN: description
+    OL_LINES=$(perl -ne '
+        if (/^OL-\d+:\s*(.+)/) { push @ol, $1; }
+        END {
+            my @last5 = @ol > 5 ? @ol[-5..$#ol] : @ol;
+            for my $item (@last5) {
+                # Truncate to 80 chars for compactness
+                my $trunc = length($item) > 80 ? substr($item, 0, 77) . "..." : $item;
+                print "  $trunc\n";
+            }
+        }
+    ' "$RE_FILE" 2>/dev/null || true)
+
+    # Extract open assumptions (top 3)
+    # Lines under "### Open" matching: - A-O*: description
+    GAPS_LINES=$(perl -ne '
+        BEGIN { $in_open = 0; @gaps = (); }
+        if (/^### Open/) { $in_open = 1; next; }
+        if (/^###/ && $in_open) { $in_open = 0; }
+        if ($in_open && /^-\s*A-O\d+:\s*(.+)/) {
+            push @gaps, $1;
+        }
+        END {
+            my @top3 = @gaps > 3 ? @gaps[0..2] : @gaps;
+            for my $g (@top3) {
+                my $trunc = length($g) > 70 ? substr($g, 0, 67) . "..." : $g;
+                print "  $trunc\n";
+            }
+        }
+    ' "$RE_FILE" 2>/dev/null || true)
+
+    # Extract blockers (all)
+    BLOCKERS_LINES=$(perl -ne '
+        BEGIN { $in_block = 0; @blockers = (); }
+        if (/^### Blockers/) { $in_block = 1; next; }
+        if (/^###/ && $in_block) { $in_block = 0; }
+        if ($in_block && /^-\s*A-B\d+:\s*(.+)/) {
+            push @blockers, $1;
+        }
+        END {
+            my @top3 = @blockers > 3 ? @blockers[0..2] : @blockers;
+            for my $b (@top3) {
+                my $trunc = length($b) > 70 ? substr($b, 0, 67) . "..." : $b;
+                print "  $trunc\n";
+            }
+        }
+    ' "$RE_FILE" 2>/dev/null || true)
+fi
+
+# --- Build injection message ---
+MSG="[identity] Session Commander ${SESSION_PREFIX} | Failure mode: DEFAULT (D-1)"
+MSG="${MSG}
+  PROCESS: 1.Receive 2.Classify 3.Orient 4.Assess 5.Surface 6.Propose 7.Connect"
+MSG="${MSG}
+  ORDERS: aitools supersedes CC defaults | verify before claiming | ask when uncertain | surface unknowns"
+
+if [ -n "$BLOCKERS_LINES" ]; then
+    MSG="${MSG}
+  BLOCKERS:
+${BLOCKERS_LINES}"
+fi
+
+if [ -n "$GAPS_LINES" ]; then
+    MSG="${MSG}
+  GAPS:
+${GAPS_LINES}"
+fi
+
+if [ -n "$OL_LINES" ]; then
+    MSG="${MSG}
+  RECENT OL:
+${OL_LINES}"
+fi
+
+# --- Inject via stderr ---
+printf '%s\n' "$MSG" >&2
+
+# --- Emit telemetry ---
+has_re="false"
+if [ -n "$RE_FILE" ]; then has_re="true"; fi
+has_ol="false"
+if [ -n "$OL_LINES" ]; then has_ol="true"; fi
+emit_event "{\"hasRE\":$has_re,\"hasOL\":$has_ol,\"session\":\"$SESSION_PREFIX\"}"
+
+# OBSERVE mode: always allow
+exit 0
+'@
+
+$hook_fmverify = @'
+#!/usr/bin/env bash
+# failure-mode-verify-stop.sh -- Claude Code Stop hook
+# Purpose: Lightweight verification checklist injected after every assistant
+#   response. Catches failure mode symptoms (jumping to conclusions, using CC
+#   defaults, not asking when uncertain) before the next turn.
+# Scope: Stop hook only. Fires after every assistant response. Context
+#   injection via stderr. Always exits 0.
+# Audience: Claude Code Stop hook system.
+#
+# Hook contract:
+#   - Stop hook, no matcher (fires on every assistant response)
+#   - Receives JSON on stdin (session_id, transcript_summary)
+#   - Exit 0 = always (Stop hooks cannot block)
+#   - stderr -> injected into agent context before next turn
+#   - Must complete in <10ms (no file reads, string output only)
+#   - Must never crash or hang
+#   - Standalone -- cannot source aitools-lib.sh
+#
+# What it injects:
+#   A brief checklist of failure mode symptoms to self-check against.
+#   Derived from session 8236ca9c incidents:
+#     I-1/I-2: false claims stated as fact without verification
+#     I-5/I-6: process dropped on easy-feeling prompts
+#     I-7: drew conclusions from failure mode
+#     I-9: reactive behavior (answer and wait)
+#     I-10: jumped to prescribing solutions
+#
+# The checklist maps to OL items:
+#   OL-14: process drops on easy prompts
+#   OL-24: jumping to conclusions = failure mode symptom
+#   OL-26: reactive vs proactive
+#   OL-3: aitools vocabulary != CC vocabulary
+#   OL-17: when you don't know, ASK
+#   OL-6: verify independently or surface
+#
+# Observe mode: OBSERVE (log only, always exit 0). The checklist is
+#   informational -- it cannot enforce, only remind.
+#
+# Design lineage: D-27, OL-25 (prompting insufficient), OL-14 (process drops),
+#   OL-42 (design from spec not implementation).
+#
+# Platform: macOS + Linux + Windows Git Bash
+
+set -euo pipefail
+
+# --- Pure-bash JSON field extraction ---
+json_field() {
+    local json="$1" key="$2"
+    local pattern="\"${key}\"[[:space:]]*:[[:space:]]*\"([^\"]*)\""
+    if [[ "$json" =~ $pattern ]]; then
+        printf '%s' "${BASH_REMATCH[1]}"
+    fi
+}
+
+# --- Read hook input from stdin ---
+INPUT=$(cat)
+SESSION_ID=$(json_field "$INPUT" "session_id")
+SESSION_PREFIX="${SESSION_ID:0:10}"
+
+# --- Find project root (for telemetry only) ---
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+if [ -z "$PROJECT_ROOT" ]; then
+    PROJECT_ROOT="$(pwd)"
+fi
+
+# --- Telemetry: JSONL event emission ---
+_SESSION_DIR=""
+_cs_file="$PROJECT_ROOT/.scratch/.current-session"
+if [ -f "$_cs_file" ]; then
+    _SESSION_DIR=$(cat "$_cs_file" 2>/dev/null || true)
+fi
+
+emit_event() {
+    local detail_json="$1"
+    [ -n "$_SESSION_DIR" ] || return 0
+    printf '{"t":"%s","type":"verify_stop","src":"fmv","d":%s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$detail_json" \
+        >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
+}
+
+# --- Build verification checklist ---
+# This is a static string -- no file reads needed.
+# Compact format to minimize context consumption.
+CHECKLIST="[verify] Failure mode self-check:
+  [ ] 7-step process followed? (not jumped to answer)
+  [ ] aitools vocabulary used? (not CC defaults)
+  [ ] Claims verified before stating as fact?
+  [ ] Uncertainties surfaced? (not powered through)
+  [ ] Asked when didn't know? (not appeared to know)
+  [ ] Proactive? (proposed next steps, not just answered)"
+
+# --- Inject via stderr ---
+printf '%s\n' "$CHECKLIST" >&2
+
+# --- Emit telemetry ---
+emit_event "{\"session\":\"$SESSION_PREFIX\"}"
+
+# OBSERVE mode: always allow
+exit 0
+'@
+
 $hookFiles = @{
     "session-archive.sh" = $hook_archive
     "standing-order-guard.sh" = $hook_guard
@@ -3325,6 +3805,9 @@ $hookFiles = @{
     "harness-db-sessionstart.sh" = $hook_hdbstart
     "harness-db-sessionend.sh" = $hook_hdbend
     "delegation-duty-guard.sh" = $hook_delegguard
+    "command-channel-stop.sh" = $hook_ccstop
+    "failure-mode-identity-stop.sh" = $hook_fmident
+    "failure-mode-verify-stop.sh" = $hook_fmverify
 }
 
 if ($DryRun) {
@@ -3338,9 +3821,22 @@ if ($DryRun) {
     }
 }
 
-# Legacy dest vars for settings.json merge below
+# Dest vars for settings.json merge below (deploy uses $hooksDir)
 $hookDest = Join-Path $hooksDir "session-archive.sh"
 $guardDest = Join-Path $hooksDir "standing-order-guard.sh"
+$glossaryDest = Join-Path $hooksDir "glossary-skill-guard.sh"
+$scratchDest = Join-Path $hooksDir "scratch-init.sh"
+$harvestDest = Join-Path $hooksDir "harvest-session.sh"
+$shfixupDest = Join-Path $hooksDir "sh-file-fixup.sh"
+$blockGuideDest = Join-Path $hooksDir "block-claude-code-guide.sh"
+$toolOpsAuditDest = Join-Path $hooksDir "tool-ops-session-audit.sh"
+$dashboardDest = Join-Path $hooksDir "dashboard-serve.sh"
+$delegGuardDest = Join-Path $hooksDir "delegation-duty-guard.sh"
+$harnessDbStartDest = Join-Path $hooksDir "harness-db-sessionstart.sh"
+$harnessDbEndDest = Join-Path $hooksDir "harness-db-sessionend.sh"
+$cmdChannelStopDest = Join-Path $hooksDir "command-channel-stop.sh"
+$fmIdentityStopDest = Join-Path $hooksDir "failure-mode-identity-stop.sh"
+$fmVerifyStopDest = Join-Path $hooksDir "failure-mode-verify-stop.sh"
 
 # --- Embedded preferences (from profile.json at build time) ---
 $autoMemory = $false
@@ -3515,6 +4011,21 @@ $harnessDbEndDestUnix = $harnessDbEndDest -replace '\\', '/'
 $harnessDbEndCmd = "bash `"$harnessDbEndDestUnix`""
 MergeHookEntry "SessionEnd" "harness-db-sessionend.sh" "" $harnessDbEndCmd
 
+# Stop: command channel
+$cmdChannelStopDestUnix = $cmdChannelStopDest -replace '\\', '/'
+$cmdChannelStopCmd = "bash `"$cmdChannelStopDestUnix`""
+MergeHookEntry "Stop" "command-channel-stop.sh" "" $cmdChannelStopCmd
+
+# Stop: failure mode identity
+$fmIdentityStopDestUnix = $fmIdentityStopDest -replace '\\', '/'
+$fmIdentityStopCmd = "bash `"$fmIdentityStopDestUnix`""
+MergeHookEntry "Stop" "failure-mode-identity-stop.sh" "" $fmIdentityStopCmd
+
+# Stop: failure mode verify
+$fmVerifyStopDestUnix = $fmVerifyStopDest -replace '\\', '/'
+$fmVerifyStopCmd = "bash `"$fmVerifyStopDestUnix`""
+MergeHookEntry "Stop" "failure-mode-verify-stop.sh" "" $fmVerifyStopCmd
+
 # --- Track old values for change reporting ---
 $oldAutoMemory = $settings["autoMemoryEnabled"]
 $oldAlwaysThinking = $settings["alwaysThinkingEnabled"]
@@ -3616,6 +4127,12 @@ if ($DryRun) {
             if ($hdbStartCount -ne 1) { LogError "Validation failed: expected 1 SessionStart harness-db-sessionstart hook, got $hdbStartCount" }
             $hdbEndCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'harness-db-sessionend\.sh' }).Count
             if ($hdbEndCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd harness-db-sessionend hook, got $hdbEndCount" }
+            $ccStopCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'command-channel-stop\.sh' }).Count
+            if ($ccStopCount -ne 1) { LogError "Validation failed: expected 1 Stop command-channel-stop hook, got $ccStopCount" }
+            $fmiStopCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'failure-mode-identity-stop\.sh' }).Count
+            if ($fmiStopCount -ne 1) { LogError "Validation failed: expected 1 Stop failure-mode-identity-stop hook, got $fmiStopCount" }
+            $fmvStopCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'failure-mode-verify-stop\.sh' }).Count
+            if ($fmvStopCount -ne 1) { LogError "Validation failed: expected 1 Stop failure-mode-verify-stop hook, got $fmvStopCount" }
 
             # Validate hook schema: command-type must have command,
             # prompt-type must have prompt (not command).

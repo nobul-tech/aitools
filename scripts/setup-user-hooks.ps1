@@ -1,7 +1,7 @@
 # setup-user-hooks.ps1 -- Deploys Claude Code hooks and preferences to ~/.claude/settings.json
 # Safe to re-run -- merges managed fields without clobbering existing settings.
 #
-# Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
+# Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
 # Preserved: permissions, enabledPlugins, all other fields
 #
 # Hooks deployed:
@@ -17,6 +17,9 @@
 #   PreToolUse[Agent]: delegation-duty-guard.sh (checks delegation prompts for duty elements)
 #   SessionStart: harness-db-sessionstart.sh (initializes harness SQLite DBs)
 #   SessionEnd: harness-db-sessionend.sh (marks session complete, exports JSON)
+#   Stop: command-channel-stop.sh (polls session DB for commander directives)
+#   Stop: failure-mode-identity-stop.sh (reinforces agent identity and process)
+#   Stop: failure-mode-verify-stop.sh (lightweight failure mode self-check)
 #
 # Reads claude preferences from profile.json (via config.json -> userRepoPath).
 # See reference/user-repo.md and shared/hooks/ for details.
@@ -81,7 +84,10 @@ $dashboardScript = Resolve-HookSource "dashboard-serve.sh"
 $delegGuardScript = Resolve-HookSource "delegation-duty-guard.sh"
 $harnessDbStartScript = Resolve-HookSource "harness-db-sessionstart.sh"
 $harnessDbEndScript = Resolve-HookSource "harness-db-sessionend.sh"
-foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $blockGuideScript, $toolOpsAuditScript, $dashboardScript, $delegGuardScript, $harnessDbStartScript, $harnessDbEndScript)) {
+$cmdChannelStopScript = Resolve-HookSource "command-channel-stop.sh"
+$fmIdentityStopScript = Resolve-HookSource "failure-mode-identity-stop.sh"
+$fmVerifyStopScript = Resolve-HookSource "failure-mode-verify-stop.sh"
+foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $blockGuideScript, $toolOpsAuditScript, $dashboardScript, $delegGuardScript, $harnessDbStartScript, $harnessDbEndScript, $cmdChannelStopScript, $fmIdentityStopScript, $fmVerifyStopScript)) {
     if (-not (Test-Path $src)) {
         LogError "Hook script not found: $src"
         exit 1
@@ -104,6 +110,9 @@ $dashboardDest = Join-Path $hooksDir "dashboard-serve.sh"
 $delegGuardDest = Join-Path $hooksDir "delegation-duty-guard.sh"
 $harnessDbStartDest = Join-Path $hooksDir "harness-db-sessionstart.sh"
 $harnessDbEndDest = Join-Path $hooksDir "harness-db-sessionend.sh"
+$cmdChannelStopDest = Join-Path $hooksDir "command-channel-stop.sh"
+$fmIdentityStopDest = Join-Path $hooksDir "failure-mode-identity-stop.sh"
+$fmVerifyStopDest = Join-Path $hooksDir "failure-mode-verify-stop.sh"
 
 $hooksChanged = $false
 
@@ -123,6 +132,9 @@ if ($DryRun) {
     Log "[DRY RUN] Would deploy hook: $delegGuardScript -> $delegGuardDest"
     Log "[DRY RUN] Would deploy hook: $harnessDbStartScript -> $harnessDbStartDest"
     Log "[DRY RUN] Would deploy hook: $harnessDbEndScript -> $harnessDbEndDest"
+    Log "[DRY RUN] Would deploy hook: $cmdChannelStopScript -> $cmdChannelStopDest"
+    Log "[DRY RUN] Would deploy hook: $fmIdentityStopScript -> $fmIdentityStopDest"
+    Log "[DRY RUN] Would deploy hook: $fmVerifyStopScript -> $fmVerifyStopDest"
     # Stale hook cleanup preview
     foreach ($staleHook in @("surfacing-duty-stop.sh", "estimate-refresh-stop.sh", "intent-sentinel-stop.sh")) {
         if (Test-Path (Join-Path $hooksDir $staleHook)) {
@@ -134,7 +146,7 @@ if ($DryRun) {
 
     Initialize-DeployTracker
 
-    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($blockGuideScript, $blockGuideDest), @($toolOpsAuditScript, $toolOpsAuditDest), @($dashboardScript, $dashboardDest), @($delegGuardScript, $delegGuardDest), @($harnessDbStartScript, $harnessDbStartDest), @($harnessDbEndScript, $harnessDbEndDest))) {
+    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($blockGuideScript, $blockGuideDest), @($toolOpsAuditScript, $toolOpsAuditDest), @($dashboardScript, $dashboardDest), @($delegGuardScript, $delegGuardDest), @($harnessDbStartScript, $harnessDbStartDest), @($harnessDbEndScript, $harnessDbEndDest), @($cmdChannelStopScript, $cmdChannelStopDest), @($fmIdentityStopScript, $fmIdentityStopDest), @($fmVerifyStopScript, $fmVerifyStopDest))) {
         $src = $pair[0]; $dst = $pair[1]
         $hookName = Split-Path $dst -Leaf
         $srcContent = Get-Content $src -Raw -ErrorAction Stop
@@ -429,6 +441,21 @@ $harnessDbEndDestUnix = $harnessDbEndDest -replace '\\', '/'
 $harnessDbEndCmd = "bash `"$harnessDbEndDestUnix`""
 MergeHookEntry "SessionEnd" "harness-db-sessionend.sh" "" $harnessDbEndCmd
 
+# Stop: command channel
+$cmdChannelStopDestUnix = $cmdChannelStopDest -replace '\\', '/'
+$cmdChannelStopCmd = "bash `"$cmdChannelStopDestUnix`""
+MergeHookEntry "Stop" "command-channel-stop.sh" "" $cmdChannelStopCmd
+
+# Stop: failure mode identity
+$fmIdentityStopDestUnix = $fmIdentityStopDest -replace '\\', '/'
+$fmIdentityStopCmd = "bash `"$fmIdentityStopDestUnix`""
+MergeHookEntry "Stop" "failure-mode-identity-stop.sh" "" $fmIdentityStopCmd
+
+# Stop: failure mode verify
+$fmVerifyStopDestUnix = $fmVerifyStopDest -replace '\\', '/'
+$fmVerifyStopCmd = "bash `"$fmVerifyStopDestUnix`""
+MergeHookEntry "Stop" "failure-mode-verify-stop.sh" "" $fmVerifyStopCmd
+
 # --- Track old values for change reporting ---
 $oldAutoMemory = $settings["autoMemoryEnabled"]
 $oldAlwaysThinking = $settings["alwaysThinkingEnabled"]
@@ -530,6 +557,12 @@ if ($DryRun) {
             if ($hdbStartCount -ne 1) { LogError "Validation failed: expected 1 SessionStart harness-db-sessionstart hook, got $hdbStartCount" }
             $hdbEndCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'harness-db-sessionend\.sh' }).Count
             if ($hdbEndCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd harness-db-sessionend hook, got $hdbEndCount" }
+            $ccStopCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'command-channel-stop\.sh' }).Count
+            if ($ccStopCount -ne 1) { LogError "Validation failed: expected 1 Stop command-channel-stop hook, got $ccStopCount" }
+            $fmiStopCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'failure-mode-identity-stop\.sh' }).Count
+            if ($fmiStopCount -ne 1) { LogError "Validation failed: expected 1 Stop failure-mode-identity-stop hook, got $fmiStopCount" }
+            $fmvStopCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'failure-mode-verify-stop\.sh' }).Count
+            if ($fmvStopCount -ne 1) { LogError "Validation failed: expected 1 Stop failure-mode-verify-stop hook, got $fmvStopCount" }
 
             # Validate hook schema: command-type must have command,
             # prompt-type must have prompt (not command).

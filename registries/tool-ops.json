@@ -1,0 +1,71 @@
+{
+  "meta": {
+    "governance": ".claude/rules/tool-ops.md",
+    "framework": "reference/framework-tool-ops.md",
+    "intent": {
+      "purpose": "Per-tool operational metadata for managed tools with deep harness integration — governance modes, deny rules, hooks, context injection, KPIs, and verification specs",
+      "scope": "Operational metadata and governance modes only. NOT the ops knowledge itself. NOT install/versions. NOT incidents. NOT the framework definition",
+      "audience": "/tool-ops skill, /audit skill, tool-ops-session-audit.sh hook, setup scripts"
+    },
+    "lastUpdated": "2026-03-15"
+  },
+  "tools": {
+    "claude-code": {
+      "governanceModes": {
+        "denyRules": "audit",
+        "hooks": "audit",
+        "contextInjection": "audit",
+        "kpis": "audit",
+        "versionDeps": "audit",
+        "verifications": "audit"
+      },
+      "denyRules": [
+        {
+          "id": "cc-deny-guide-subagent",
+          "permissionPattern": "Agent(claude-code-guide)",
+          "hook": "block-claude-code-guide.sh",
+          "reason": "Haiku model returns inaccurate schema — caused incident where all hooks were disabled",
+          "incidentRef": "#34730"
+        }
+      ],
+      "hooks": [
+        {
+          "event": "PreToolUse",
+          "matcher": "Agent",
+          "script": "block-claude-code-guide.sh",
+          "purpose": "Deny built-in guide subagent, inject corrective harness context"
+        }
+      ],
+      "contextInjection": {
+        "docBaseUrl": "https://code.claude.com/docs/en/",
+        "keyPages": ["hooks.md", "permissions.md", "sub-agents.md", "settings.md", "mcp.md"],
+        "quickRef": "command requires command; prompt requires prompt; http requires url; agent requires prompt"
+      },
+      "kpis": [
+        { "name": "hookFireRate", "source": "hook logs", "unit": "fires/session" },
+        { "name": "denyRuleBlocks", "source": "hook logs", "unit": "blocks/session" },
+        { "name": "versionDepDrift", "source": "check script", "unit": "stale items" }
+      ],
+      "verifications": [
+        {
+          "type": "mock-json-pipe",
+          "target": "block-claude-code-guide.sh",
+          "cases": [
+            {
+              "input": {"tool_name":"Agent","tool_input":{"subagent_type":"claude-code-guide"}},
+              "expectExit": 0,
+              "expectStdout": "permissionDecision.*deny"
+            },
+            {
+              "input": {"tool_name":"Agent","tool_input":{"subagent_type":"Explore"}},
+              "expectExit": 0,
+              "expectStdout": null
+            }
+          ]
+        }
+      ],
+      "docAccess": "chrome-devtools skill navigates to code.claude.com/docs/en/*.md",
+      "verificationMethod": "echo JSON | bash hook.sh — check exit code and stdout"
+    }
+  }
+}

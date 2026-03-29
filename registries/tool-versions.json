@@ -1,0 +1,161 @@
+{
+  "_meta": {
+    "title": "aitools Tool Version Manifest",
+    "description": "Per-platform version manifest for all tools managed by aitools. Used by aitools install to detect drift and by aitools.nobul.tech for version tracking and PR automation.",
+    "schemaVersion": "1.0",
+    "updated": "2026-03-13",
+    "repositories": {
+      "primary":      "https://github.com/nobul-jose/aitools",
+      "userTemplate": "https://github.com/nobul-jose/aitools-{username}"
+    },
+    "relatedDocs": {
+      "toolRegistry":          "reference/tool-registry.md",
+      "toolEvaluation":        "reference/tool-evaluation-criteria.md",
+      "sourcesOfTruth":        ".claude/rules/sources-of-truth.md",
+      "claudeCodeMaintenance": "reference/tool-ops-claude-code.md",
+      "userRepo":              "reference/user-repo.md",
+      "verificationChecklist": "reference/post-push-checklist.md"
+    }
+  },
+  "tools": {
+    "claude-code": {
+      "maintenanceFile": "tool-ops-claude-code.md"
+    },
+    "vercel-cli": {
+      "macos":   { "lastVerifiedVersion": "50.28.0",           "lastVerified": "2026-03-06" },
+      "windows": { "lastVerifiedVersion": "50.17.1",           "lastVerified": "2026-03-13" },
+      "linux":   { "lastVerifiedVersion": null,                "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": ""
+    },
+    "cursor-agent-cli": {
+      "macos":   { "lastVerifiedVersion": "2026.02.27-e7d2ef6", "lastVerified": "2026-03-02" },
+      "windows": { "lastVerifiedVersion": "2026.03.11-6dfa30c", "lastVerified": "2026-03-13" },
+      "linux":   { "lastVerifiedVersion": null,                 "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": ""
+    },
+    "node": {
+      "macos":   { "lastVerifiedVersion": "24.1.0", "lastVerified": "2026-03-02" },
+      "windows": { "lastVerifiedVersion": "24.13.1", "lastVerified": "2026-03-13" },
+      "linux":   { "lastVerifiedVersion": null,     "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": ""
+    },
+    "pandoc": {
+      "macos":   { "lastVerifiedVersion": "3.9",  "lastVerified": "2026-03-02" },
+      "windows": { "lastVerifiedVersion": "3.9",    "lastVerified": "2026-03-13" },
+      "linux":   { "lastVerifiedVersion": null,   "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": ""
+    },
+    "pwsh": {
+      "macos":   { "lastVerifiedVersion": "7.5.4", "lastVerified": "2026-03-02" },
+      "windows": { "lastVerifiedVersion": "7.5.4",  "lastVerified": "2026-03-13" },
+      "linux":   { "lastVerifiedVersion": null,    "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": ""
+    },
+    "rust-cargo": {
+      "macos":   { "lastVerifiedVersion": "1.94.0", "lastVerified": "2026-03-06" },
+      "windows": { "lastVerifiedVersion": "1.94.0",  "lastVerified": "2026-03-13" },
+      "linux":   { "lastVerifiedVersion": null,     "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": ""
+    },
+    "typst": {
+      "macos":   { "lastVerifiedVersion": "0.14.2", "lastVerified": "2026-03-02" },
+      "windows": { "lastVerifiedVersion": "0.14.2",  "lastVerified": "2026-03-13" },
+      "linux":   { "lastVerifiedVersion": null,     "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": ""
+    },
+    "gh-cli": {
+      "macos":   { "lastVerifiedVersion": "2.87.3", "lastVerified": "2026-03-02" },
+      "windows": { "lastVerifiedVersion": "2.88.0",  "lastVerified": "2026-03-13" },
+      "linux":   { "lastVerifiedVersion": null,     "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": ""
+    },
+    "modal-cli": {
+      "macos":   { "lastVerifiedVersion": "1.3.5", "lastVerified": "2026-03-06" },
+      "windows": { "lastVerifiedVersion": "1.3.5", "lastVerified": "2026-03-13" },
+      "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": "uv tool install modal; requires Python 3.10+"
+    },
+    "python": {
+      "macos":   { "lastVerifiedVersion": "3.14.3", "lastVerified": "2026-03-06" },
+      "windows": { "lastVerifiedVersion": "3.14.3", "lastVerified": "2026-03-13" },
+      "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "minVersion": "3.10",
+      "blocked": [],
+      "notes": "Windows: pymanager (Python.PythonInstallManager) + py install 3.14. macOS: brew install python"
+    },
+    "uv": {
+      "macos":   { "lastVerifiedVersion": "0.10.8", "lastVerified": "2026-03-06" },
+      "windows": { "lastVerifiedVersion": "0.10.9", "lastVerified": "2026-03-13" },
+      "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": ""
+    },
+    "go": {
+      "macos":   { "lastVerifiedVersion": "go1.26.1", "lastVerified": "2026-03-06" },
+      "windows": { "lastVerifiedVersion": "go1.26.1", "lastVerified": "2026-03-13" },
+      "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": "brew install go (macOS), winget install GoLang.Go (Windows)"
+    },
+    "chrome-devtools-mcp": {
+      "pinned": false,
+      "lastReviewed": "2026-03-02",
+      "assumptions": ["--isolated flag required for concurrent Claude Code + Cursor sessions"],
+      "notes": ""
+    },
+    "vercel-mcp": {
+      "pinned": false,
+      "lastReviewed": "2026-03-02",
+      "assumptions": [],
+      "notes": ""
+    },
+    "webflow-mcp": {
+      "pinned": false,
+      "lastReviewed": "2026-03-02",
+      "assumptions": [],
+      "notes": ""
+    },
+    "datadog-pup": {
+      "macos":   { "lastVerifiedVersion": "Pup 0.26.0", "lastVerified": "2026-03-06" },
+      "windows": { "lastVerifiedVersion": "Pup 0.31.0", "lastVerified": "2026-03-13" },
+      "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "minVersion": null,
+      "blocked": [],
+      "notes": "brew install datadog-labs/pack/pup (macOS); cargo install --git (Windows, CMake prereq method changed from winget to uv pip per cmake.org 2026-03-12); Rust-based CLI, OAuth2 auth. Verified: 2026-03-06"
+    },
+    "datadog-mcp": {
+      "pinned": false,
+      "lastReviewed": "2026-03-06",
+      "assumptions": ["Requires DD_API_KEY and DD_APP_KEY env vars"],
+      "notes": "Official Datadog MCP server -- Preview status"
+    },
+    "perl": {
+      "macos":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "windows": { "lastVerifiedVersion": "5.42.0.1", "lastVerified": "2026-03-12" },
+      "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
+      "minVersion": "5.010",
+      "blocked": [],
+      "notes": "USO-mandated. Windows: winget install StrawberryPerl; macOS/Linux: system perl. Windows gotcha: set PERLIO=:perlio to disable text-mode CRLF translation. Verified: 2026-03-12"
+    }
+  }
+}

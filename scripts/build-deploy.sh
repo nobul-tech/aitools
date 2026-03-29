@@ -56,7 +56,7 @@ if [ "$_skill_count" -eq 0 ]; then
     exit 1
 fi
 blog "Found $_skill_count skill(s) in shared/skills/"
-for _hook_file in session-archive.sh standing-order-guard.sh sh-file-fixup.sh scratch-init.sh harvest-session.sh glossary-skill-guard.sh block-claude-code-guide.sh tool-ops-session-audit.sh dashboard-serve.sh harness-db-sessionstart.sh harness-db-sessionend.sh delegation-duty-guard.sh; do
+for _hook_file in session-archive.sh standing-order-guard.sh sh-file-fixup.sh scratch-init.sh harvest-session.sh glossary-skill-guard.sh block-claude-code-guide.sh tool-ops-session-audit.sh dashboard-serve.sh harness-db-sessionstart.sh harness-db-sessionend.sh delegation-duty-guard.sh command-channel-stop.sh failure-mode-identity-stop.sh failure-mode-verify-stop.sh; do
     if [ ! -f "$SHARED_DIR/hooks/$_hook_file" ]; then
         blog_error "Required hook file not found: $SHARED_DIR/hooks/$_hook_file"
         exit 1
@@ -77,6 +77,9 @@ HOOK_DASHBOARD_SERVE=$(cat "$SHARED_DIR/hooks/dashboard-serve.sh")
 HOOK_HARNESS_DB_START=$(cat "$SHARED_DIR/hooks/harness-db-sessionstart.sh")
 HOOK_HARNESS_DB_END=$(cat "$SHARED_DIR/hooks/harness-db-sessionend.sh")
 HOOK_DELEGATION_GUARD=$(cat "$SHARED_DIR/hooks/delegation-duty-guard.sh")
+HOOK_COMMAND_CHANNEL_STOP=$(cat "$SHARED_DIR/hooks/command-channel-stop.sh")
+HOOK_FM_IDENTITY=$(cat "$SHARED_DIR/hooks/failure-mode-identity-stop.sh")
+HOOK_FM_VERIFY=$(cat "$SHARED_DIR/hooks/failure-mode-verify-stop.sh")
 
 # Read shared library content for inlining into deploy scripts
 AITOOLS_LIB_BASH=$(cat "$SCRIPTS_DIR/aitools-lib.sh")
@@ -1226,6 +1229,9 @@ BLOCK
     _embed_hook HOOK_HARNESS_DB_START "harness-db-sessionstart.sh" "__EMB_HDBSTART__"
     _embed_hook HOOK_HARNESS_DB_END "harness-db-sessionend.sh" "__EMB_HDBEND__"
     _embed_hook HOOK_DELEGATION_GUARD "delegation-duty-guard.sh" "__EMB_DELEGGUARD__"
+    _embed_hook HOOK_COMMAND_CHANNEL_STOP "command-channel-stop.sh" "__EMB_CCSTOP__"
+    _embed_hook HOOK_FM_IDENTITY "failure-mode-identity-stop.sh" "__EMB_FMIDENT__"
+    _embed_hook HOOK_FM_VERIFY "failure-mode-verify-stop.sh" "__EMB_FMVERIFY__"
     cat <<'BLOCK'
 
     for _hf in "$HOOKS_DIR"/*.sh; do
@@ -1235,9 +1241,22 @@ BLOCK
     done
 fi
 
-# Legacy dest vars for settings.json merge below
+# Dest vars for settings.json merge below (deploy uses $HOOKS_DIR, not $HOME/.claude/hooks)
 HOOK_DEST="$HOOKS_DIR/session-archive.sh"
 GUARD_DEST="$HOOKS_DIR/standing-order-guard.sh"
+GLOSSARY_DEST="$HOOKS_DIR/glossary-skill-guard.sh"
+SCRATCH_DEST="$HOOKS_DIR/scratch-init.sh"
+HARVEST_DEST="$HOOKS_DIR/harvest-session.sh"
+SHFIXUP_DEST="$HOOKS_DIR/sh-file-fixup.sh"
+BLOCK_GUIDE_DEST="$HOOKS_DIR/block-claude-code-guide.sh"
+TOOL_OPS_AUDIT_DEST="$HOOKS_DIR/tool-ops-session-audit.sh"
+DASHBOARD_DEST="$HOOKS_DIR/dashboard-serve.sh"
+DELEG_GUARD_DEST="$HOOKS_DIR/delegation-duty-guard.sh"
+HARNESS_DB_START_DEST="$HOOKS_DIR/harness-db-sessionstart.sh"
+HARNESS_DB_END_DEST="$HOOKS_DIR/harness-db-sessionend.sh"
+CMD_CHANNEL_STOP_DEST="$HOOKS_DIR/command-channel-stop.sh"
+FM_IDENTITY_STOP_DEST="$HOOKS_DIR/failure-mode-identity-stop.sh"
+FM_VERIFY_STOP_DEST="$HOOKS_DIR/failure-mode-verify-stop.sh"
 
 BLOCK
 
@@ -1320,6 +1339,9 @@ BLOCK
     _embed_ps1_hook HOOK_HARNESS_DB_START "harness-db-sessionstart.sh" "hook_hdbstart"
     _embed_ps1_hook HOOK_HARNESS_DB_END "harness-db-sessionend.sh" "hook_hdbend"
     _embed_ps1_hook HOOK_DELEGATION_GUARD "delegation-duty-guard.sh" "hook_delegguard"
+    _embed_ps1_hook HOOK_COMMAND_CHANNEL_STOP "command-channel-stop.sh" "hook_ccstop"
+    _embed_ps1_hook HOOK_FM_IDENTITY "failure-mode-identity-stop.sh" "hook_fmident"
+    _embed_ps1_hook HOOK_FM_VERIFY "failure-mode-verify-stop.sh" "hook_fmverify"
     # Deploy all hooks
     printf '$hookFiles = @{\r\n'
     printf '    "session-archive.sh" = $hook_archive\r\n'
@@ -1334,6 +1356,9 @@ BLOCK
     printf '    "harness-db-sessionstart.sh" = $hook_hdbstart\r\n'
     printf '    "harness-db-sessionend.sh" = $hook_hdbend\r\n'
     printf '    "delegation-duty-guard.sh" = $hook_delegguard\r\n'
+    printf '    "command-channel-stop.sh" = $hook_ccstop\r\n'
+    printf '    "failure-mode-identity-stop.sh" = $hook_fmident\r\n'
+    printf '    "failure-mode-verify-stop.sh" = $hook_fmverify\r\n'
     printf '}\r\n'
     printf '\r\n'
     printf 'if ($DryRun) {\r\n'
@@ -1347,9 +1372,22 @@ BLOCK
     printf '    }\r\n'
     printf '}\r\n'
     printf '\r\n'
-    printf '# Legacy dest vars for settings.json merge below\r\n'
+    printf '# Dest vars for settings.json merge below (deploy uses $hooksDir)\r\n'
     printf '$hookDest = Join-Path $hooksDir "session-archive.sh"\r\n'
     printf '$guardDest = Join-Path $hooksDir "standing-order-guard.sh"\r\n'
+    printf '$glossaryDest = Join-Path $hooksDir "glossary-skill-guard.sh"\r\n'
+    printf '$scratchDest = Join-Path $hooksDir "scratch-init.sh"\r\n'
+    printf '$harvestDest = Join-Path $hooksDir "harvest-session.sh"\r\n'
+    printf '$shfixupDest = Join-Path $hooksDir "sh-file-fixup.sh"\r\n'
+    printf '$blockGuideDest = Join-Path $hooksDir "block-claude-code-guide.sh"\r\n'
+    printf '$toolOpsAuditDest = Join-Path $hooksDir "tool-ops-session-audit.sh"\r\n'
+    printf '$dashboardDest = Join-Path $hooksDir "dashboard-serve.sh"\r\n'
+    printf '$delegGuardDest = Join-Path $hooksDir "delegation-duty-guard.sh"\r\n'
+    printf '$harnessDbStartDest = Join-Path $hooksDir "harness-db-sessionstart.sh"\r\n'
+    printf '$harnessDbEndDest = Join-Path $hooksDir "harness-db-sessionend.sh"\r\n'
+    printf '$cmdChannelStopDest = Join-Path $hooksDir "command-channel-stop.sh"\r\n'
+    printf '$fmIdentityStopDest = Join-Path $hooksDir "failure-mode-identity-stop.sh"\r\n'
+    printf '$fmVerifyStopDest = Join-Path $hooksDir "failure-mode-verify-stop.sh"\r\n'
 
     # REPLACE: embedded preferences (no extraction between — sentinels are adjacent in PS1)
     printf '\r\n'
