@@ -87,7 +87,9 @@ $harnessDbEndScript = Resolve-HookSource "harness-db-sessionend.sh"
 $cmdChannelStopScript = Resolve-HookSource "command-channel-stop.sh"
 $fmIdentityStopScript = Resolve-HookSource "failure-mode-identity-stop.sh"
 $fmVerifyStopScript = Resolve-HookSource "failure-mode-verify-stop.sh"
-foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $blockGuideScript, $toolOpsAuditScript, $dashboardScript, $delegGuardScript, $harnessDbStartScript, $harnessDbEndScript, $cmdChannelStopScript, $fmIdentityStopScript, $fmVerifyStopScript)) {
+$intelStopScript = Resolve-HookSource "intelligence-stop.sh"
+$intelStopPyScript = Resolve-HookSource "intelligence-stop.py"
+foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $blockGuideScript, $toolOpsAuditScript, $dashboardScript, $delegGuardScript, $harnessDbStartScript, $harnessDbEndScript, $cmdChannelStopScript, $fmIdentityStopScript, $fmVerifyStopScript, $intelStopScript, $intelStopPyScript)) {
     if (-not (Test-Path $src)) {
         LogError "Hook script not found: $src"
         exit 1
@@ -113,6 +115,8 @@ $harnessDbEndDest = Join-Path $hooksDir "harness-db-sessionend.sh"
 $cmdChannelStopDest = Join-Path $hooksDir "command-channel-stop.sh"
 $fmIdentityStopDest = Join-Path $hooksDir "failure-mode-identity-stop.sh"
 $fmVerifyStopDest = Join-Path $hooksDir "failure-mode-verify-stop.sh"
+$intelStopDest = Join-Path $hooksDir "intelligence-stop.sh"
+$intelStopPyDest = Join-Path $hooksDir "intelligence-stop.py"
 
 $hooksChanged = $false
 
@@ -135,6 +139,8 @@ if ($DryRun) {
     Log "[DRY RUN] Would deploy hook: $cmdChannelStopScript -> $cmdChannelStopDest"
     Log "[DRY RUN] Would deploy hook: $fmIdentityStopScript -> $fmIdentityStopDest"
     Log "[DRY RUN] Would deploy hook: $fmVerifyStopScript -> $fmVerifyStopDest"
+    Log "[DRY RUN] Would deploy hook: $intelStopScript -> $intelStopDest"
+    Log "[DRY RUN] Would deploy hook: $intelStopPyScript -> $intelStopPyDest"
     # Stale hook cleanup preview
     foreach ($staleHook in @("surfacing-duty-stop.sh", "estimate-refresh-stop.sh", "intent-sentinel-stop.sh")) {
         if (Test-Path (Join-Path $hooksDir $staleHook)) {
@@ -146,7 +152,7 @@ if ($DryRun) {
 
     Initialize-DeployTracker
 
-    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($blockGuideScript, $blockGuideDest), @($toolOpsAuditScript, $toolOpsAuditDest), @($dashboardScript, $dashboardDest), @($delegGuardScript, $delegGuardDest), @($harnessDbStartScript, $harnessDbStartDest), @($harnessDbEndScript, $harnessDbEndDest), @($cmdChannelStopScript, $cmdChannelStopDest), @($fmIdentityStopScript, $fmIdentityStopDest), @($fmVerifyStopScript, $fmVerifyStopDest))) {
+    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($blockGuideScript, $blockGuideDest), @($toolOpsAuditScript, $toolOpsAuditDest), @($dashboardScript, $dashboardDest), @($delegGuardScript, $delegGuardDest), @($harnessDbStartScript, $harnessDbStartDest), @($harnessDbEndScript, $harnessDbEndDest), @($cmdChannelStopScript, $cmdChannelStopDest), @($fmIdentityStopScript, $fmIdentityStopDest), @($fmVerifyStopScript, $fmVerifyStopDest), @($intelStopScript, $intelStopDest), @($intelStopPyScript, $intelStopPyDest))) {
         $src = $pair[0]; $dst = $pair[1]
         $hookName = Split-Path $dst -Leaf
         $srcContent = Get-Content $src -Raw -ErrorAction Stop
@@ -456,6 +462,11 @@ $fmVerifyStopDestUnix = $fmVerifyStopDest -replace '\\', '/'
 $fmVerifyStopCmd = "bash `"$fmVerifyStopDestUnix`""
 MergeHookEntry "Stop" "failure-mode-verify-stop.sh" "" $fmVerifyStopCmd
 
+# Stop: intelligence carry-forward
+$intelStopDestUnix = $intelStopDest -replace '\\', '/'
+$intelStopCmd = "bash `"$intelStopDestUnix`""
+MergeHookEntry "Stop" "intelligence-stop.sh" "" $intelStopCmd
+
 # --- Track old values for change reporting ---
 $oldAutoMemory = $settings["autoMemoryEnabled"]
 $oldAlwaysThinking = $settings["alwaysThinkingEnabled"]
@@ -563,6 +574,8 @@ if ($DryRun) {
             if ($fmiStopCount -ne 1) { LogError "Validation failed: expected 1 Stop failure-mode-identity-stop hook, got $fmiStopCount" }
             $fmvStopCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'failure-mode-verify-stop\.sh' }).Count
             if ($fmvStopCount -ne 1) { LogError "Validation failed: expected 1 Stop failure-mode-verify-stop hook, got $fmvStopCount" }
+            $intelStopCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'intelligence-stop\.sh' }).Count
+            if ($intelStopCount -ne 1) { LogError "Validation failed: expected 1 Stop intelligence-stop hook, got $intelStopCount" }
 
             # Validate hook schema: command-type must have command,
             # prompt-type must have prompt (not command).

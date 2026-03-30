@@ -5745,6 +5745,86 @@
       "status": "harvested",
       "promotedTo": null,
       "pruneAfter": "2026-04-28"
+    },
+    "2026-03-29_session-8a9efdbb-0_cc-context-and-python-hooks-eval.md": {
+      "harvested": "2026-03-29",
+      "session": "aitools/2026-03-29_8a9efdbb-0",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-28"
+    },
+    "2026-03-29_session-8a9efdbb-0_cc-turn-tracking-eval.md": {
+      "harvested": "2026-03-29",
+      "session": "aitools/2026-03-29_8a9efdbb-0",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-28"
+    },
+    "2026-03-29_session-8a9efdbb-0_events.jsonl": {
+      "harvested": "2026-03-29",
+      "session": "aitools/2026-03-29_8a9efdbb-0",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-28"
+    },
+    "2026-03-29_session-8a9efdbb-0_f5fa-latest.txt": {
+      "harvested": "2026-03-29",
+      "session": "aitools/2026-03-29_8a9efdbb-0",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-28"
+    },
+    "2026-03-29_session-8a9efdbb-0_f5fa-latest2.txt": {
+      "harvested": "2026-03-29",
+      "session": "aitools/2026-03-29_8a9efdbb-0",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-28"
+    },
+    "2026-03-29_session-8a9efdbb-0_f5fa-latest3.txt": {
+      "harvested": "2026-03-29",
+      "session": "aitools/2026-03-29_8a9efdbb-0",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-28"
+    },
+    "2026-03-29_session-8a9efdbb-0_f5fa-latest4.txt": {
+      "harvested": "2026-03-29",
+      "session": "aitools/2026-03-29_8a9efdbb-0",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-28"
+    },
+    "2026-03-29_session-8a9efdbb-0_validate-ps1.ps1": {
+      "harvested": "2026-03-29",
+      "session": "aitools/2026-03-29_8a9efdbb-0",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "powershell",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-04-28"
     }
   }
 }

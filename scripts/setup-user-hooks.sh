@@ -98,7 +98,9 @@ HARNESS_DB_END_SCRIPT=$(resolve_hook "harness-db-sessionend.sh")
 CMD_CHANNEL_STOP_SCRIPT=$(resolve_hook "command-channel-stop.sh")
 FM_IDENTITY_STOP_SCRIPT=$(resolve_hook "failure-mode-identity-stop.sh")
 FM_VERIFY_STOP_SCRIPT=$(resolve_hook "failure-mode-verify-stop.sh")
-for src in "$HOOK_SCRIPT" "$GUARD_SCRIPT" "$GLOSSARY_SCRIPT" "$SCRATCH_SCRIPT" "$HARVEST_SCRIPT" "$SHFIXUP_SCRIPT" "$BLOCK_GUIDE_SCRIPT" "$TOOL_OPS_AUDIT_SCRIPT" "$DASHBOARD_SCRIPT" "$DELEG_GUARD_SCRIPT" "$HARNESS_DB_START_SCRIPT" "$HARNESS_DB_END_SCRIPT" "$CMD_CHANNEL_STOP_SCRIPT" "$FM_IDENTITY_STOP_SCRIPT" "$FM_VERIFY_STOP_SCRIPT"; do
+INTEL_STOP_SCRIPT=$(resolve_hook "intelligence-stop.sh")
+INTEL_STOP_PY_SCRIPT=$(resolve_hook "intelligence-stop.py")
+for src in "$HOOK_SCRIPT" "$GUARD_SCRIPT" "$GLOSSARY_SCRIPT" "$SCRATCH_SCRIPT" "$HARVEST_SCRIPT" "$SHFIXUP_SCRIPT" "$BLOCK_GUIDE_SCRIPT" "$TOOL_OPS_AUDIT_SCRIPT" "$DASHBOARD_SCRIPT" "$DELEG_GUARD_SCRIPT" "$HARNESS_DB_START_SCRIPT" "$HARNESS_DB_END_SCRIPT" "$CMD_CHANNEL_STOP_SCRIPT" "$FM_IDENTITY_STOP_SCRIPT" "$FM_VERIFY_STOP_SCRIPT" "$INTEL_STOP_SCRIPT" "$INTEL_STOP_PY_SCRIPT"; do
     if [ ! -f "$src" ]; then
         log_error "Hook script not found: $src"
         exit 1
@@ -121,6 +123,8 @@ HARNESS_DB_END_DEST="$HOME/.claude/hooks/harness-db-sessionend.sh"
 CMD_CHANNEL_STOP_DEST="$HOME/.claude/hooks/command-channel-stop.sh"
 FM_IDENTITY_STOP_DEST="$HOME/.claude/hooks/failure-mode-identity-stop.sh"
 FM_VERIFY_STOP_DEST="$HOME/.claude/hooks/failure-mode-verify-stop.sh"
+INTEL_STOP_DEST="$HOME/.claude/hooks/intelligence-stop.sh"
+INTEL_STOP_PY_DEST="$HOME/.claude/hooks/intelligence-stop.py"
 
 HOOKS_CHANGED=false
 
@@ -143,6 +147,8 @@ if [ "$DRY_RUN" = "true" ]; then
     log "[DRY RUN] Would deploy hook: $(display_path "$CMD_CHANNEL_STOP_SCRIPT") -> $(display_path "$CMD_CHANNEL_STOP_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$FM_IDENTITY_STOP_SCRIPT") -> $(display_path "$FM_IDENTITY_STOP_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$FM_VERIFY_STOP_SCRIPT") -> $(display_path "$FM_VERIFY_STOP_DEST")"
+    log "[DRY RUN] Would deploy hook: $(display_path "$INTEL_STOP_SCRIPT") -> $(display_path "$INTEL_STOP_DEST")"
+    log "[DRY RUN] Would deploy hook: $(display_path "$INTEL_STOP_PY_SCRIPT") -> $(display_path "$INTEL_STOP_PY_DEST")"
     # Stale hook cleanup preview
     for stale_hook in surfacing-duty-stop.sh estimate-refresh-stop.sh intent-sentinel-stop.sh; do
         if [ -f "$HOME/.claude/hooks/$stale_hook" ]; then
@@ -154,7 +160,7 @@ else
 
     deploy_tracker_init
 
-    for hook_pair in "$HOOK_SCRIPT|$HOOK_DEST" "$GUARD_SCRIPT|$GUARD_DEST" "$GLOSSARY_SCRIPT|$GLOSSARY_DEST" "$SCRATCH_SCRIPT|$SCRATCH_DEST" "$HARVEST_SCRIPT|$HARVEST_DEST" "$SHFIXUP_SCRIPT|$SHFIXUP_DEST" "$BLOCK_GUIDE_SCRIPT|$BLOCK_GUIDE_DEST" "$TOOL_OPS_AUDIT_SCRIPT|$TOOL_OPS_AUDIT_DEST" "$DASHBOARD_SCRIPT|$DASHBOARD_DEST" "$DELEG_GUARD_SCRIPT|$DELEG_GUARD_DEST" "$HARNESS_DB_START_SCRIPT|$HARNESS_DB_START_DEST" "$HARNESS_DB_END_SCRIPT|$HARNESS_DB_END_DEST" "$CMD_CHANNEL_STOP_SCRIPT|$CMD_CHANNEL_STOP_DEST" "$FM_IDENTITY_STOP_SCRIPT|$FM_IDENTITY_STOP_DEST" "$FM_VERIFY_STOP_SCRIPT|$FM_VERIFY_STOP_DEST"; do
+    for hook_pair in "$HOOK_SCRIPT|$HOOK_DEST" "$GUARD_SCRIPT|$GUARD_DEST" "$GLOSSARY_SCRIPT|$GLOSSARY_DEST" "$SCRATCH_SCRIPT|$SCRATCH_DEST" "$HARVEST_SCRIPT|$HARVEST_DEST" "$SHFIXUP_SCRIPT|$SHFIXUP_DEST" "$BLOCK_GUIDE_SCRIPT|$BLOCK_GUIDE_DEST" "$TOOL_OPS_AUDIT_SCRIPT|$TOOL_OPS_AUDIT_DEST" "$DASHBOARD_SCRIPT|$DASHBOARD_DEST" "$DELEG_GUARD_SCRIPT|$DELEG_GUARD_DEST" "$HARNESS_DB_START_SCRIPT|$HARNESS_DB_START_DEST" "$HARNESS_DB_END_SCRIPT|$HARNESS_DB_END_DEST" "$CMD_CHANNEL_STOP_SCRIPT|$CMD_CHANNEL_STOP_DEST" "$FM_IDENTITY_STOP_SCRIPT|$FM_IDENTITY_STOP_DEST" "$FM_VERIFY_STOP_SCRIPT|$FM_VERIFY_STOP_DEST" "$INTEL_STOP_SCRIPT|$INTEL_STOP_DEST" "$INTEL_STOP_PY_SCRIPT|$INTEL_STOP_PY_DEST"; do
         hook_src="${hook_pair%%|*}"
         hook_dst="${hook_pair##*|}"
         hook_name=$(basename "$hook_dst")
@@ -265,6 +271,7 @@ HARNESS_DB_END_CMD="bash \"$HARNESS_DB_END_DEST\""
 CMD_CHANNEL_STOP_CMD="bash \"$CMD_CHANNEL_STOP_DEST\""
 FM_IDENTITY_STOP_CMD="bash \"$FM_IDENTITY_STOP_DEST\""
 FM_VERIFY_STOP_CMD="bash \"$FM_VERIFY_STOP_DEST\""
+INTEL_STOP_CMD="bash \"$INTEL_STOP_DEST\""
 
 MERGE_RESULT=$(node -e "
 $SORT_KEYS_JS
@@ -288,6 +295,7 @@ const harnessDbEndCmd = process.argv[15];
 const cmdChannelStopCmd = process.argv[16];
 const fmIdentityStopCmd = process.argv[17];
 const fmVerifyStopCmd = process.argv[18];
+const intelStopCmd = process.argv[19];
 
 // --- BEGIN claude preferences (replaced by build-deploy) ---
 let autoMemory = true;
@@ -400,6 +408,7 @@ mergeHookEntry('SessionEnd', 'harness-db-sessionend.sh', '', harnessDbEndCmd);
 mergeHookEntry('Stop', 'command-channel-stop.sh', '', cmdChannelStopCmd);
 mergeHookEntry('Stop', 'failure-mode-identity-stop.sh', '', fmIdentityStopCmd);
 mergeHookEntry('Stop', 'failure-mode-verify-stop.sh', '', fmVerifyStopCmd);
+mergeHookEntry('Stop', 'intelligence-stop.sh', '', intelStopCmd);
 
 // --- Track old values for change reporting ---
 const oldAutoMemory = settings.autoMemoryEnabled;
@@ -487,6 +496,8 @@ if (dryRun) {
         if (fmiStopCount !== 1) { console.error('Validation failed: expected 1 Stop failure-mode-identity-stop hook, got ' + fmiStopCount); process.exit(1); }
         const fmvStopCount = (_v.hooks.Stop || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('failure-mode-verify-stop.sh'))).length;
         if (fmvStopCount !== 1) { console.error('Validation failed: expected 1 Stop failure-mode-verify-stop hook, got ' + fmvStopCount); process.exit(1); }
+        const intelStopCount = (_v.hooks.Stop || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('intelligence-stop.sh'))).length;
+        if (intelStopCount !== 1) { console.error('Validation failed: expected 1 Stop intelligence-stop hook, got ' + intelStopCount); process.exit(1); }
 
         // Validate hook schema: command-type must have command field,
         // prompt-type must have prompt field (not command).
@@ -516,7 +527,7 @@ if (dryRun) {
         prefChanges.forEach(c => console.log(c));
     }
 }
-" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$BLOCK_GUIDE_CMD" "$TOOL_OPS_AUDIT_CMD" "$DASHBOARD_CMD" "$DELEG_GUARD_CMD" "$HARNESS_DB_START_CMD" "$HARNESS_DB_END_CMD" "$CMD_CHANNEL_STOP_CMD" "$FM_IDENTITY_STOP_CMD" "$FM_VERIFY_STOP_CMD")
+" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$BLOCK_GUIDE_CMD" "$TOOL_OPS_AUDIT_CMD" "$DASHBOARD_CMD" "$DELEG_GUARD_CMD" "$HARNESS_DB_START_CMD" "$HARNESS_DB_END_CMD" "$CMD_CHANNEL_STOP_CMD" "$FM_IDENTITY_STOP_CMD" "$FM_VERIFY_STOP_CMD" "$INTEL_STOP_CMD")
 
 # Parse merge result: first line is status, CHANGED: lines are key changes
 MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)

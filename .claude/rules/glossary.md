@@ -27,9 +27,13 @@ skill
 
 accept & adopt
 adoption
+agent
 aitools
 aitools repo
 ambiguity
+Anthropic
+Claude Code
+CC
 artifact
 audience
 audit
@@ -58,6 +62,7 @@ governed file
 governed vocabulary
 harness
 impact
+intelligence
 intent
 intent scope
 intent verification
@@ -71,6 +76,7 @@ platform
 preserved
 prevention
 process deviation
+provenance
 project coaching item
 PCI
 project standing order
@@ -83,6 +89,7 @@ skipped
 state audit
 suggested resolution
 surfacing duty
+The Commander
 three-layer governance
 trigger
 updated

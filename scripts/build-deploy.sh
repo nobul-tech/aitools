@@ -56,7 +56,7 @@ if [ "$_skill_count" -eq 0 ]; then
     exit 1
 fi
 blog "Found $_skill_count skill(s) in shared/skills/"
-for _hook_file in session-archive.sh standing-order-guard.sh sh-file-fixup.sh scratch-init.sh harvest-session.sh glossary-skill-guard.sh block-claude-code-guide.sh tool-ops-session-audit.sh dashboard-serve.sh harness-db-sessionstart.sh harness-db-sessionend.sh delegation-duty-guard.sh command-channel-stop.sh failure-mode-identity-stop.sh failure-mode-verify-stop.sh; do
+for _hook_file in session-archive.sh standing-order-guard.sh sh-file-fixup.sh scratch-init.sh harvest-session.sh glossary-skill-guard.sh block-claude-code-guide.sh tool-ops-session-audit.sh dashboard-serve.sh harness-db-sessionstart.sh harness-db-sessionend.sh delegation-duty-guard.sh command-channel-stop.sh failure-mode-identity-stop.sh failure-mode-verify-stop.sh intelligence-stop.sh intelligence-stop.py; do
     if [ ! -f "$SHARED_DIR/hooks/$_hook_file" ]; then
         blog_error "Required hook file not found: $SHARED_DIR/hooks/$_hook_file"
         exit 1
@@ -80,6 +80,8 @@ HOOK_DELEGATION_GUARD=$(cat "$SHARED_DIR/hooks/delegation-duty-guard.sh")
 HOOK_COMMAND_CHANNEL_STOP=$(cat "$SHARED_DIR/hooks/command-channel-stop.sh")
 HOOK_FM_IDENTITY=$(cat "$SHARED_DIR/hooks/failure-mode-identity-stop.sh")
 HOOK_FM_VERIFY=$(cat "$SHARED_DIR/hooks/failure-mode-verify-stop.sh")
+HOOK_INTEL_STOP=$(cat "$SHARED_DIR/hooks/intelligence-stop.sh")
+HOOK_INTEL_STOP_PY=$(cat "$SHARED_DIR/hooks/intelligence-stop.py")
 
 # Read shared library content for inlining into deploy scripts
 AITOOLS_LIB_BASH=$(cat "$SCRIPTS_DIR/aitools-lib.sh")
@@ -1232,6 +1234,8 @@ BLOCK
     _embed_hook HOOK_COMMAND_CHANNEL_STOP "command-channel-stop.sh" "__EMB_CCSTOP__"
     _embed_hook HOOK_FM_IDENTITY "failure-mode-identity-stop.sh" "__EMB_FMIDENT__"
     _embed_hook HOOK_FM_VERIFY "failure-mode-verify-stop.sh" "__EMB_FMVERIFY__"
+    _embed_hook HOOK_INTEL_STOP "intelligence-stop.sh" "__EMB_INTELSTOP__"
+    _embed_hook HOOK_INTEL_STOP_PY "intelligence-stop.py" "__EMB_INTELPY__"
     cat <<'BLOCK'
 
     for _hf in "$HOOKS_DIR"/*.sh; do
@@ -1257,6 +1261,8 @@ HARNESS_DB_END_DEST="$HOOKS_DIR/harness-db-sessionend.sh"
 CMD_CHANNEL_STOP_DEST="$HOOKS_DIR/command-channel-stop.sh"
 FM_IDENTITY_STOP_DEST="$HOOKS_DIR/failure-mode-identity-stop.sh"
 FM_VERIFY_STOP_DEST="$HOOKS_DIR/failure-mode-verify-stop.sh"
+INTEL_STOP_DEST="$HOOKS_DIR/intelligence-stop.sh"
+INTEL_STOP_PY_DEST="$HOOKS_DIR/intelligence-stop.py"
 
 BLOCK
 
@@ -1342,6 +1348,8 @@ BLOCK
     _embed_ps1_hook HOOK_COMMAND_CHANNEL_STOP "command-channel-stop.sh" "hook_ccstop"
     _embed_ps1_hook HOOK_FM_IDENTITY "failure-mode-identity-stop.sh" "hook_fmident"
     _embed_ps1_hook HOOK_FM_VERIFY "failure-mode-verify-stop.sh" "hook_fmverify"
+    _embed_ps1_hook HOOK_INTEL_STOP "intelligence-stop.sh" "hook_intelstop"
+    _embed_ps1_hook HOOK_INTEL_STOP_PY "intelligence-stop.py" "hook_intelpy"
     # Deploy all hooks
     printf '$hookFiles = @{\r\n'
     printf '    "session-archive.sh" = $hook_archive\r\n'
@@ -1359,6 +1367,8 @@ BLOCK
     printf '    "command-channel-stop.sh" = $hook_ccstop\r\n'
     printf '    "failure-mode-identity-stop.sh" = $hook_fmident\r\n'
     printf '    "failure-mode-verify-stop.sh" = $hook_fmverify\r\n'
+    printf '    "intelligence-stop.sh" = $hook_intelstop\r\n'
+    printf '    "intelligence-stop.py" = $hook_intelpy\r\n'
     printf '}\r\n'
     printf '\r\n'
     printf 'if ($DryRun) {\r\n'
@@ -1388,6 +1398,8 @@ BLOCK
     printf '$cmdChannelStopDest = Join-Path $hooksDir "command-channel-stop.sh"\r\n'
     printf '$fmIdentityStopDest = Join-Path $hooksDir "failure-mode-identity-stop.sh"\r\n'
     printf '$fmVerifyStopDest = Join-Path $hooksDir "failure-mode-verify-stop.sh"\r\n'
+    printf '$intelStopDest = Join-Path $hooksDir "intelligence-stop.sh"\r\n'
+    printf '$intelStopPyDest = Join-Path $hooksDir "intelligence-stop.py"\r\n'
 
     # REPLACE: embedded preferences (no extraction between — sentinels are adjacent in PS1)
     printf '\r\n'

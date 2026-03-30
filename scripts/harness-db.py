@@ -2124,8 +2124,7 @@ def cmd_ol_list(args: argparse.Namespace) -> int:
     conn.close()
 
     for r in reversed(rows):
-        text_preview = r["text"][:120].replace("\n", " ")
-        print(f"OL-{r['observation_id']}: {text_preview}")
+        print(f"OL-{r['observation_id']}: {r['text']}")
     if total > limit:
         print(f"({total} total, showing last {limit} — use --limit N for more)")
     return 0
@@ -2187,14 +2186,15 @@ def cmd_decision_list(args: argparse.Namespace) -> int:
     conn = open_db(db_path, readonly=True)
     total = conn.execute("SELECT COUNT(*) as cnt FROM decisions").fetchone()["cnt"]
     rows = conn.execute(
-        "SELECT decision_id, title, status, decided_at FROM decisions "
+        "SELECT decision_id, title, description, status, decided_at FROM decisions "
         "ORDER BY decided_at DESC LIMIT ?",
         (limit,),
     ).fetchall()
     conn.close()
 
     for r in reversed(rows):
-        print(f"{r['decision_id']}: [{r['status']}] {r['title']}")
+        desc = f"\n  {r['description']}" if r["description"] else ""
+        print(f"{r['decision_id']}: [{r['status']}] {r['title']}{desc}")
     if total > limit:
         print(f"({total} total, showing last {limit} — use --limit N for more)")
     return 0
@@ -2245,9 +2245,8 @@ def cmd_incident_list(args: argparse.Namespace) -> int:
     conn.close()
 
     for r in reversed(rows):
-        text_preview = r["description"][:120].replace("\n", " ")
-        impact = f" | impact: {r['impact']}" if r["impact"] else ""
-        print(f"DEV-{r['deviation_id']}: {text_preview}{impact}")
+        impact = f"\n  impact: {r['impact']}" if r["impact"] else ""
+        print(f"DEV-{r['deviation_id']}: {r['description']}{impact}")
     if total > limit:
         print(f"({total} total, showing last {limit} — use --limit N for more)")
     return 0
