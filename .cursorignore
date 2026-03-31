@@ -1,0 +1,31 @@
+# Cursor indexing / Agent context — keep harness signal, drop bulk copies & runtime noise.
+# Edit if you need to @-mention an ignored path intentionally.
+
+# Harvested exports (very large; RFC copies and session dumps)
+harvesting/
+
+# Local scratch and Claude worktree duplicates
+.scratch/
+.claude/worktrees/
+
+# Runtime harness data (regenerated; not source of truth in git)
+.aitools/scratch/
+.aitools/sessions/
+.aitools/harness.db
+.aitools/harness.db-shm
+.aitools/harness.db-wal
+
+# Huge channel artifacts — relay.md stays available; full sessions are for intentional deep reads
+.aitools/channel/*-full-session.md
+.aitools/channel/pre-failure-mode/
+
+# Python envs and caches
+**/__pycache__/
+**/.venv/
+**/venv/
+**/ENV/
+
+# Logs and temp
+*.log
+*.tmp
+nul
