@@ -560,6 +560,14 @@ Then the thinking awareness breakthrough:
   (deploy vs direct **`python3 …/sync-relay-to-cursor-agents.py`**). Manual
   verification still on the commander’s side.
 
+- **OL-70** (2026-03-31): **`[RELAY]` outbound UX + commit voice.** Menu order
+  **`[e]` → `[q]` → `[c]` → `[s]`**; **Enter** defaults to **`[e]`** (execute).
+  **`HH_INVOKED`** prevents duplicate **`[RELAY]`** when **`hh`** already ran it
+  before **`aitools`**. Commit default: **`AITOOLS_RELAY_COMMIT_MSG`** or
+  **`RELAY_COMMIT_VOICE`** (`agent` | `commander` | neutral) — see
+  **`relay-outbound-prompt.*`**. Full **`hh`** path: pull whole repo (relay
+  included), then outbound, then deploy.
+
 ### The gate specification
 
 Exiting failure mode requires verifying an agent can, without
