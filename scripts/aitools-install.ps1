@@ -647,6 +647,7 @@ Log "Step 22: Relay → Cursor AGENTS.md mirror"
 
 $syncPy = Join-Path $PSScriptRoot "sync-relay-to-cursor-agents.py"
 if (Test-Path $syncPy) {
+    if (-not $DryRun) { $env:AITOOLS_SYNC_DEPLOY_LOG = "1" }
     $target = Join-Path $env:USERPROFILE ".cursor\AGENTS.md"
     $syncArgs = @($syncPy, "--target", $target)
     if ($DryRun) { $syncArgs += "--dry-run" }
@@ -666,11 +667,12 @@ if (Test-Path $syncPy) {
     }
     if ($exitCode -ge 0) {
         if ($exitCode -eq 0) {
-            if ($DryRun) { LogOk "relay→AGENTS sync (dry-run)" } else { LogOk "relay → Cursor AGENTS.md synced" }
+            if ($DryRun) { LogOk "relay→AGENTS sync (dry-run)" }
         } else {
             LogWarn "sync-relay-to-cursor-agents.py failed (non-fatal)"
         }
     }
+    Remove-Item Env:\AITOOLS_SYNC_DEPLOY_LOG -ErrorAction SilentlyContinue
 }
 
 # --- Cleanup ---

@@ -11,14 +11,21 @@ Usage (from aitools repo root):
   python3 scripts/sync-relay-to-cursor-agents.py
   python3 scripts/sync-relay-to-cursor-agents.py --dry-run
   python3 scripts/sync-relay-to-cursor-agents.py --target ~/.cursor/AGENTS.md
+
+Environment (optional):
+  AITOOLS_SYNC_DEPLOY_LOG=1 — print one line in the same shape as scripts/aitools
+  deploy.log entries (timestamp, [aitools], [ok]) after a successful write.
+  Set by deploy_configs / install; omit for interactive runs.
 """
 
 from __future__ import annotations
 
 import argparse
 import difflib
+import os
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 RELAY_SECTION_HEADING = "## Agent relay channel"
@@ -161,7 +168,18 @@ def main() -> int:
 
     target_path.parent.mkdir(parents=True, exist_ok=True)
     target_path.write_text(new, encoding="utf-8")
-    print(f"Wrote {target_path} ({len(new)} bytes) from {relay_path}")
+    if os.environ.get("AITOOLS_SYNC_DEPLOY_LOG"):
+        # Match scripts/aitools log_ok line shape for deploy.log (same file as deploy_configs).
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        root = repo_root()
+        try:
+            rel = relay_path.relative_to(root)
+        except ValueError:
+            rel = relay_path
+        msg = f"relay → Cursor AGENTS.md synced ({len(new)} bytes) ← {rel}"
+        print(f"[{ts}] [aitools] [ok] {msg}", flush=True)
+    else:
+        print(f"Wrote {target_path} ({len(new)} bytes) from {relay_path}")
     return 0
 
 

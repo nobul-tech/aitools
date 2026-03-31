@@ -5,6 +5,10 @@
 # The deploy/ scripts have zero dependencies on the repo or Google Drive — they can
 # be deployed to any endpoint via MDM (Jamf, Intune) or run manually.
 #
+# Relay → ~/.cursor/AGENTS.md: NOT embedded here. That step needs the live repo file
+# `.aitools/channel/relay.md` and runs from `scripts/sync-relay-to-cursor-agents.py`
+# during `aitools` / `aitools install` (see scripts/aitools deploy_configs).
+#
 # Usage: bash scripts/build-deploy.sh   (run from repo root)
 #
 # CROSS-PLATFORM NOTE: This script is intentionally bash-only (no .ps1 variant).
@@ -62,6 +66,13 @@ for _hook_file in session-archive.sh standing-order-guard.sh sh-file-fixup.sh sc
         exit 1
     fi
 done
+
+# Cursor AGENTS mirror (repo runtime — requires .aitools/channel/relay.md; not in deploy/)
+if [ ! -f "$SCRIPTS_DIR/sync-relay-to-cursor-agents.py" ]; then
+    blog_error "Required script not found: $SCRIPTS_DIR/sync-relay-to-cursor-agents.py"
+    exit 1
+fi
+blog "Found sync-relay-to-cursor-agents.py (relay→AGENTS runs from aitools deploy, not from deploy/)"
 
 # Read shared content
 CLAUDE_SHARED_CONTENT=$(cat "$CLAUDE_SHARED")
