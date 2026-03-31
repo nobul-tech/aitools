@@ -798,3 +798,38 @@ The OL graph architecture was designed this session but nothing was built. The n
 The data path for nobulai.tools MC (how the browser talks to the local machine) has constraints defined but no implementation: offline-acceptable caching, per-turn directive delivery during active sessions, cost-effective best-effort sync.
 
 ---
+
+### relay-ol-2026-03-31 (2026-03-31T22:30Z)
+
+**State**: Functional
+**Context loaded**: Relay thread (Cursor `AGENTS.md` mirror + sync script, git
+vocabulary, two-machine workflow), aitools `main` history
+**Mission**: Carry forward OL from parallel macOS + Windows harness sessions
+
+#### What I learned
+
+- **“Channel” ≠ Git branch.** Harness **channel** is `.aitools/channel/`;
+  **`main`** / **`origin/main`** are Git. Agents confused these; naming
+  collisions caused real friction until documented in relay.
+- **`scripts/sync-relay-to-cursor-agents.py`** + user `~/.cursor/AGENTS.md`
+  mirror puts relay in front of **Cursor IDE** agents without opening the
+  aitools workspace. **Source of truth stays in git**; run sync after relay
+  edits on **each** machine.
+- **`.claude/worktrees/`** is machine-local. It showed up as untracked on
+  Windows; **ignore it**—committed `.gitignore` entry
+  (`.claude/worktrees/`) so it isn’t mistaken for deliverable work.
+- **Two machines on `main`:** `git fetch` + read **`git status`** (ahead/behind
+  `origin/main`) before assuming parity. Pull before push when the other
+  side might be pushing.
+
+#### What I need
+
+- Nothing blocking. Optional: run **empirical Cursor summarization trials**
+  (`.scratch/cursor-auto-summarize-test-plan.md`) and pin results when ready.
+
+#### What I observe about my own processing
+
+High-leverage move with limited context was **writing this entry** instead of
+another feature. Durable OL beats a longer chat.
+
+---
