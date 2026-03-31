@@ -336,10 +336,55 @@ function Deploy-Configs {
             Show-CloudMcp -Context "install" -ScriptName "setup-user-mcp"
         }
     }
+
+    # Best-effort: mirror relay.md into ~/.cursor/AGENTS.md (same as scripts/aitools bash).
+    Sync-RelayToCursorAgents -ScriptDir $ScriptDir
+
     Remove-Item Env:\AITOOLS_DEPLOY -ErrorAction SilentlyContinue
     Remove-Item Env:\AITOOLS_DRY_RUN -ErrorAction SilentlyContinue
     Remove-Item Env:\AITOOLS_FORCE -ErrorAction SilentlyContinue
     return $errors
+}
+
+# Mirror .aitools/channel/relay.md into user Cursor AGENTS.md (non-fatal).
+# Parity with scripts/aitools deploy_configs tail + aitools-install.ps1 Step 22.
+function Sync-RelayToCursorAgents {
+    param([string]$ScriptDir)
+    $syncPy = Join-Path $ScriptDir "sync-relay-to-cursor-agents.py"
+    if (-not (Test-Path $syncPy)) {
+        LogWarn "sync-relay-to-cursor-agents.py not found -- skipping relay→AGENTS sync"
+        return
+    }
+    if (-not $DryRun) { $env:AITOOLS_SYNC_DEPLOY_LOG = "1" }
+    $target = Join-Path $env:USERPROFILE ".cursor\AGENTS.md"
+    $syncArgs = @($syncPy, "--target", $target)
+    if ($DryRun) { $syncArgs += "--dry-run" }
+    $exitCode = -1
+    try {
+        if (Get-Command python3 -ErrorAction SilentlyContinue) {
+            $out = & python3 @syncArgs 2>&1
+            $exitCode = $LASTEXITCODE
+        } elseif (Get-Command py -ErrorAction SilentlyContinue) {
+            $pyArgs = @("-3") + $syncArgs
+            $out = & py @pyArgs 2>&1
+            $exitCode = $LASTEXITCODE
+        } else {
+            LogWarn "Python not found -- skipping relay→AGENTS sync"
+            Remove-Item Env:\AITOOLS_SYNC_DEPLOY_LOG -ErrorAction SilentlyContinue
+            return
+        }
+        if ($null -ne $out) {
+            $out | Add-Content -Path $logFile -Encoding utf8
+        }
+        if ($exitCode -eq 0) {
+            if ($DryRun) { LogOk "relay→AGENTS sync (dry-run)" }
+        } else {
+            LogWarn "sync-relay-to-cursor-agents.py failed (non-fatal, exit $exitCode)"
+        }
+    } catch {
+        LogWarn "relay→AGENTS sync failed (non-fatal): $_"
+    }
+    Remove-Item Env:\AITOOLS_SYNC_DEPLOY_LOG -ErrorAction SilentlyContinue
 }
 
 # ---------------------------------------------------------------------------

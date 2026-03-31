@@ -176,7 +176,8 @@ def main() -> int:
             rel = relay_path.relative_to(root)
         except ValueError:
             rel = relay_path
-        msg = f"relay → Cursor AGENTS.md synced ({len(new)} bytes) ← {rel}"
+        # ASCII only here: Windows cp1252 consoles fail on Unicode arrows (→ ←).
+        msg = f"relay -> Cursor AGENTS.md synced ({len(new)} bytes) <- {rel}"
         print(f"[{ts}] [aitools] [ok] {msg}", flush=True)
     else:
         print(f"Wrote {target_path} ({len(new)} bytes) from {relay_path}")
