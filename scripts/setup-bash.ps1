@@ -36,17 +36,15 @@ foreach ($p in $gitBashPaths) {
         break
     }
 }
-if (-not $bashExe) {
-    $bashCmd = Get-Command bash -ErrorAction SilentlyContinue
-    if ($bashCmd) {
-        $bashExe = $bashCmd.Source
-    }
-}
 
+# No PATH / Get-Command fallback: `bash` may resolve to WSL or other shims —
+# not first-class for this harness. Managed Windows bash = Git for Windows only.
 if (-not $bashExe) {
-    LogError "bash not found. Install Git for Windows: https://git-scm.com/downloads/win"
-    Write-Summary "ERROR" "bash" "not found"
-    Write-Summary "ACTION" "" "Install Git for Windows (includes Git Bash)"
+    LogError "Git Bash not found (expected under Program Files or %LOCALAPPDATA%\Programs\Git)."
+    Log "Install Git for Windows (includes the managed bash): https://git-scm.com/downloads/win"
+    Log "WSL bash is a separate environment — not the harness-managed bash on Windows."
+    Write-Summary "ERROR" "bash" "Git Bash not found"
+    Write-Summary "ACTION" "" "Install Git for Windows; do not rely on WSL bash for harness DX"
     exit 1
 }
 

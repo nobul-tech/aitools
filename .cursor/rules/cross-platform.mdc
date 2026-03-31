@@ -13,6 +13,12 @@ This repo targets macOS and Windows equally.
 - Provide both `.ps1` and `.sh` variants for setup/utility scripts
 - Use forward slashes in paths; `$HOME`/`~` for user directory references
 
+### Windows managed bash (Git Bash, not WSL)
+
+Harness bash on Windows = **Git for Windows** (`…\Git\bin\bash.exe`). **WSL
+bash** is a different product — do not assume `bash` in PATH is Git Bash.
+`setup-bash.ps1` checks only Git paths. Details: `.claude/rules/cross-platform.md`.
+
 ### OS guard + dispatch
 
 Every script uses the canonical guard pattern. Guards MUST use structured

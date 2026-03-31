@@ -9,6 +9,18 @@ When writing scripts or paths **in this repo**:
 - Use `$HOME` or `~` for user directory references, not hardcoded paths
 - After creating `.sh` files on Windows, always run `git update-index --chmod=+x <file>`
 
+### Windows: managed bash (first-class for all agents)
+
+On Windows, the **harness-managed** shell for bash scripts (`build-deploy.sh`,
+`aitools` bash dispatch, hooks) is **Git Bash** from **Git for Windows**
+(`…\Git\bin\bash.exe`). **Do not** treat **WSL** `bash` as the canonical
+managed bash: different paths, lifecycle, and `Get-Command bash` often
+resolves to the WSL shim, which breaks version checks and confuses agents.
+
+- **Install / upgrade:** Git for Windows (winget: `Git.Git`).
+- **Verification:** `scripts/setup-bash.ps1` only probes known Git Bash paths
+  (no generic PATH fallback) so install summaries stay truthful.
+
 ### Equal platform visibility
 
 When showing usage examples in docs, always show both macOS/bash and
