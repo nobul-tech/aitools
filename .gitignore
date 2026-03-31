@@ -33,6 +33,8 @@ ENV/
 
 # Claude Code local settings
 .claude/settings.local.json
+# Claude Code worktrees (machine-local; not portable)
+.claude/worktrees/
 CLAUDE.local.md
 *.local.md
 
