@@ -84,6 +84,7 @@ Windows (PowerShell):
 
 `hh` shows **git status** for harness paths (relay, `shared/`, `deploy/`, `build-deploy.sh`, `.cursorignore`), then runs **`aitools`** (unless you pass `-n` / `--status-only`). Use it when you want one habit instead of remembering relay vs shared vs deploy.
 
+- **`[RELAY]` prompt:** After **`aitools`** (or **`hh -n`**), if `.aitools/channel/relay.md` is uncommitted or **`main`** is ahead of **`origin/main`**, the harness may prompt (`scripts/relay-outbound-prompt.sh` / `.ps1`). Set **`AITOOLS_SKIP_RELAY_PROMPT=1`** to skip. Inbound pull is automatic; outbound commit/push is not.
 - **Install:** `aitools install` copies `hh` to `~/.local/bin` (macOS/Linux) and `hh.ps1` + a `hh` function in PowerShell (Windows). Requires `~/.local/bin` on `PATH` (installer usually wires this).
 - **Optional pre-commit** (regenerates `deploy/` when `shared/` or `scripts/build-deploy.sh` is staged): from repo root run `bash scripts/init-hh-hooks.sh` once, or `git config core.hooksPath scripts/githooks`.
 

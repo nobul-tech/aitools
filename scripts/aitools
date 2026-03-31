@@ -1681,6 +1681,15 @@ fi
 
 show_summary
 
+# Relay outbound: prompt if relay.md is dirty or main is ahead of origin (cross-machine OL)
+_rob="$repo_path/scripts/relay-outbound-prompt.sh"
+if [ -f "$_rob" ]; then
+    # shellcheck source=relay-outbound-prompt.sh
+    # shellcheck disable=SC1090
+    source "$_rob"
+    relay_outbound_prompt "$repo_path" || return $?
+fi
+
 unset AITOOLS_RUN_ID
 unset AITOOLS_SUMMARY_FILE
 unset AITOOLS_SUPPRESS_SUMMARY_DISPLAY

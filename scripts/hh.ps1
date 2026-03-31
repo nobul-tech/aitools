@@ -56,10 +56,18 @@ git status --short -- `
     .cursorignore `
     2>$null
 Write-Host ""
-Write-Host "Reminder: commit/push relay + shared when ready; aitools syncs relay -> `$env:USERPROFILE\.cursor\AGENTS.md."
+Write-Host "Reminder: commit/push relay + shared when ready; aitools syncs relay -> `$env:USERPROFILE\.cursor\AGENTS.md ([RELAY] after aitools/hh -n if uncommitted or unpushed)."
 Write-Host ""
 
-if ($n -or $StatusOnly) { exit 0 }
+if ($n -or $StatusOnly) {
+    $rob = Join-Path $repo "scripts\relay-outbound-prompt.ps1"
+    if (Test-Path $rob) {
+        . $rob
+        $relayRc = Invoke-RelayOutboundPrompt -RepoPath $repo
+        if ($relayRc -eq 2) { exit 2 }
+    }
+    exit 0
+}
 
 $aitoolsPs1 = Join-Path $env:USERPROFILE ".local\bin\aitools.ps1"
 if (Test-Path $aitoolsPs1) {

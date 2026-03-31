@@ -224,6 +224,11 @@ Windows, quoting `"$env:USERPROFILE\.cursor\AGENTS.md"` avoids path mistakes.
    (and the sync script if it changed). The mirror file under `~/.cursor` or
    `%USERPROFILE%\.cursor` is **not** in this repo—do not try to commit it here.
 
+**Harness:** After **`aitools`** or **`hh -n`**, if `relay.md` is still uncommitted
+or **`main`** is **ahead of `origin/main`**, you may see a **`[RELAY]`** terminal
+prompt (`scripts/relay-outbound-prompt.sh` / `.ps1`). Set
+**`AITOOLS_SKIP_RELAY_PROMPT=1`** to skip. See **`.claude/rules/relay-outbound.md`**.
+
 If the commander adds relay-only content **only** to `AGENTS.md`, the next
 sync will **overwrite** the relay section—edit **relay.md** first, then sync.
 
@@ -857,5 +862,41 @@ vocabulary, two-machine workflow), aitools `main` history
 
 High-leverage move with limited context was **writing this entry** instead of
 another feature. Durable OL beats a longer chat.
+
+---
+
+### relay-ol-2026-03-31-deploy (2026-03-31T14:20Z)
+
+**State**: Functional
+**Context loaded**: `aitools` deploy on macOS (`0.66.0`), `setup-user-*` scripts,
+`aitools-lib` logging, managed-file merge review
+**Mission**: OL from a real **`aitools`** run — terminal vs `deploy.log`, merge
+prompts, relay sync visibility
+
+#### What I learned
+
+- **`sync-relay-to-cursor-agents.py`** success may **only** land in
+  **`~/Library/Logs/aitools/deploy.log`** (stdout redirected with `>>"$LOG_FILE"`),
+  so the **live terminal** can look like “relay didn’t run” even when it did.
+  **Next:** consider one **`log_ok`** (or tty echo) after sync so the console
+  matches other deploy steps—without duplicating spam.
+- **Managed-file [REVIEW]** for **`~/.claude/CLAUDE.md`** and
+  **`~/.claude/hooks/intelligence-stop.py`** is **interactive in the terminal**
+  (`choice [a/o/s/x]`), not Cursor—**`a`** = merge + adopt to profile / dotprofile.
+  Intelligence hook **yesterday** showed up here when template and local diverged.
+- **Init / merge / logging** are already in **`aitools-lib`** and the setup scripts;
+  don’t re-layer; extend in place.
+- **Two-machine + `main`:** **stash → pull → stash pop** (or commit WIP) beats
+  forgetting long-lived branches when you need a clean **`git pull`**.
+
+#### What I need
+
+- Optional: verify **`deploy.log`** for relay line after each `aitools` run until
+  tty visibility is fixed.
+
+#### What I observe about my own processing
+
+The commander carries OL in **git** (`relay.md`) so the next agent doesn’t
+rebuild context from chat. **This entry is that.**
 
 ---

@@ -131,3 +131,12 @@ What you learned. What CC defaults you caught. What you observed
 about your own processing. What you still don't know.
 
 The next agent reads it. Every entry adds leverage.
+
+## Relay outbound (git)
+
+**`relay.md` is in this repo** — not a managed deploy file under `~/.claude/`
+(those use `[REVIEW]` during `aitools install`). After **`aitools`** or **`hh -n`**,
+the harness may show **`[RELAY]`** if `relay.md` is uncommitted or your branch
+is ahead of **`origin/main`**. Scripts: `scripts/relay-outbound-prompt.sh` and
+`scripts/relay-outbound-prompt.ps1`. Skip with **`AITOOLS_SKIP_RELAY_PROMPT=1`**.
+See **`.claude/rules/relay-outbound.md`**.

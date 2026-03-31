@@ -86,10 +86,16 @@ git status --short -- \
   2>/dev/null || true
 
 echo ""
-echo "Reminder: commit/push relay + shared when ready; aitools syncs relay → ~/.cursor/AGENTS.md."
+echo "Reminder: commit/push relay + shared when ready; aitools syncs relay → ~/.cursor/AGENTS.md ([RELAY] after aitools/hh -n if uncommitted or unpushed)."
 echo ""
 
 if $STATUS_ONLY; then
+  _rob="$REPO_ROOT/scripts/relay-outbound-prompt.sh"
+  if [ -f "$_rob" ]; then
+    # shellcheck disable=SC1090
+    source "$_rob"
+    relay_outbound_prompt "$REPO_ROOT" || exit $?
+  fi
   exit 0
 fi
 

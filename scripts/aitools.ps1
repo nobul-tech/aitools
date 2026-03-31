@@ -1609,6 +1609,13 @@ if (Test-Path $bashSrc) {
 
 Show-Summary
 
+$relayPrompt = Join-Path $repoPath "scripts\relay-outbound-prompt.ps1"
+if (Test-Path $relayPrompt) {
+    . $relayPrompt
+    $relayRc = Invoke-RelayOutboundPrompt -RepoPath $repoPath
+    if ($relayRc -eq 2) { exit 2 }
+}
+
 Remove-Item Env:\AITOOLS_RUN_ID -ErrorAction SilentlyContinue
 Remove-Item Env:\AITOOLS_SUMMARY_FILE -ErrorAction SilentlyContinue
 Remove-Item Env:\AITOOLS_SUPPRESS_SUMMARY_DISPLAY -ErrorAction SilentlyContinue
