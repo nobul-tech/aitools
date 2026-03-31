@@ -40,6 +40,43 @@ You should see the aitools root and a `github.com` (or enterprise) URL for
 **this** project—not nobul-ops, not dotprofile, unless those are submodules
 (which they usually aren’t).
 
+### Git: `HEAD`, `main`, `origin`, and “channel” (not the same thing)
+
+**“Channel” in this harness** means **`.aitools/channel/`** — the relay and
+related artifacts. It is **not** a Git branch name. **`main`** is the branch.
+
+**Names agents get confused about:**
+
+| Name | What it is |
+|------|------------|
+| **`main`** | Your **local** branch (the default branch name in this repo). |
+| **`HEAD`** | “What am I checked out on?” Usually `main` → `HEAD` points at the latest commit on `main`. |
+| **`origin`** | The **remote nickname** (almost always the URL you cloned from). |
+| **`origin/main`** | Where **`main` last was on the remote** according to your last **fetch/pull/push**. Updates when you **fetch** or **pull**, or after **push**. |
+| **`origin/HEAD`** | Which branch the **remote** treats as default (often tracks `origin/main`). Useful for clones; not the same as *your* current branch. |
+
+**Two machines (e.g. macOS + Windows) on the same branch**
+
+If someone else might **push** while you work, **sync before you commit**
+so you don’t duplicate work or fight surprise merges:
+
+```bash
+cd /path/to/aitools
+git fetch
+git status
+```
+
+- If `git status` says you are **behind `origin/main`**, run **`git pull`**
+  (or `git pull --rebase` if that’s your team habit) **before** editing
+  further or **before** you push—especially if the other session is still
+  running and might land commits first.
+- If you **push** and the remote rejected because the branch moved,
+  **pull with rebase or merge**, resolve conflicts, then push again.
+
+**One sentence that replaces a lot:** after `git fetch`, **`git status`**
+usually says whether you’re **ahead** or **behind** `origin/main`—read that
+line before you assume you’re in sync.
+
 ### After you edit this file: commit it
 
 Relay only helps if it’s **in git** and pushed like any other carry-forward
