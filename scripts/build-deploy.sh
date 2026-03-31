@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # build-deploy.sh — Generates self-contained deploy/ scripts from scripts/ + shared/
 #
+# Output goes to deploy/ only. There is no separate build/ directory in this repo;
+# CI and MDM both consume deploy/.
+#
 # Reads shared content files and embeds them into deploy versions of setup scripts.
 # The deploy/ scripts have zero dependencies on the repo or Google Drive — they can
 # be deployed to any endpoint via MDM (Jamf, Intune) or run manually.

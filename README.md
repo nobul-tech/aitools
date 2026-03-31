@@ -20,7 +20,7 @@ Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude C
 
 ## How it works
 
-`shared/` is the single source of truth for all configuration. `scripts/build-deploy.sh` reads from `shared/` and embeds the content into self-contained deploy scripts in `deploy/`. The workflow is: edit `shared/` → run `build-deploy.sh` → commit `deploy/` → deploy to endpoints. Deploy scripts need only bash or PowerShell on the target machine — no repo clone required.
+`shared/` is the single source of truth for all configuration. `scripts/build-deploy.sh` reads from `shared/` and embeds the content into self-contained deploy scripts in `deploy/`. There is no separate `build/` output directory—MDM and CI use `deploy/` only. The workflow is: edit `shared/` → run `build-deploy.sh` → commit `deploy/` → deploy to endpoints. Deploy scripts need only bash or PowerShell on the target machine — no repo clone required.
 
 ## Quick start
 
