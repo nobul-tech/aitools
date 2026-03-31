@@ -20,22 +20,26 @@ $minMajor = 5
 $minMinor = 0
 
 # --- Find Git Bash ---
+# Prefer Git for Windows' bash.exe. Do NOT use Get-Command bash first: PATH often
+# resolves to WSL (bash.exe shim) or other shims that print non-GNU output, which
+# breaks version parsing and shows "version unknown" in the install summary.
 $bashExe = $null
 $gitBashPaths = @(
     "C:\Program Files\Git\bin\bash.exe",
-    "C:\Program Files (x86)\Git\bin\bash.exe"
+    "C:\Program Files (x86)\Git\bin\bash.exe",
+    (Join-Path $env:LOCALAPPDATA "Programs\Git\bin\bash.exe")
 )
 
-# Try command lookup first
-$bashCmd = Get-Command bash -ErrorAction SilentlyContinue
-if ($bashCmd) {
-    $bashExe = $bashCmd.Source
-} else {
-    foreach ($p in $gitBashPaths) {
-        if (Test-Path $p) {
-            $bashExe = $p
-            break
-        }
+foreach ($p in $gitBashPaths) {
+    if (Test-Path -LiteralPath $p) {
+        $bashExe = $p
+        break
+    }
+}
+if (-not $bashExe) {
+    $bashCmd = Get-Command bash -ErrorAction SilentlyContinue
+    if ($bashCmd) {
+        $bashExe = $bashCmd.Source
     }
 }
 
