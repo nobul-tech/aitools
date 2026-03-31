@@ -17,6 +17,57 @@ Everything else—features, scripts, dashboards—either rests on that
 foundation or we redo the same fight in the next session. I’d rather be
 honest about that than sound organized.
 
+### `hh` (honest harness) — why the commander runs it
+
+**Intent:** **`hh`** is for **the commander to help every agent** with less
+friction. The bottleneck is rarely “run **`aitools`** once”—it is **making
+sure** **commits**, **`relay.md`**, **environments** (OS, shell, paths),
+and **intelligence** (hooks, OL, stop-hook / session artifacts) are
+**actually distributed** so the **next** agent and the **next** machine
+inherit **truth**, not drift.
+
+**Pulls *and* pushes (sync truth):** **`hh`** is not “pull-only.” It runs
+**`git pull --ff-only`** on the **aitools** repo — **`relay.md` is a file
+in that repo**, so **one pull** updates relay with everything else on
+**`main`**. **`git status`** surfaces what still needs **commit** and
+**push** (outgoing duty). The commander wants to be **informed** without
+**living** in **`git`** and **`aitools`** all day — **one** habitual entry
+(`hh` or `hh -n`) that bundles **sync awareness** + **deploy**. **`hh` does
+not auto-commit or auto-push** (that would hide agency); the **`[RELAY]`**
+prompt (same **`c` / `e` / `q` / `s`** menu as **`aitools`**) offers **`[e]`**
+to **run** `git add` / `git commit` / `git push` for **relay** when you
+choose to.
+
+**What `hh` does (macOS / Linux / Windows — `hh.sh` / `hh.ps1`):** resolve
+the **aitools** repo → optional **`git pull --ff-only`** → print **branch**
+and **dirty state** on **relay**, **shared/**, **deploy/**,
+**`scripts/build-deploy.sh`**, **`.cursorignore`** → **`[RELAY]` outbound
+prompt** when relay is dirty or **`main`** is ahead of **`origin/main`**
+→ then **`aitools`** with forwarded args, **or** **`-n` / `--status-only`**
+for pull + status + **`[RELAY]`** only (no deploy). **Full `hh`** runs
+**`[RELAY]` before `aitools`** so you can commit/push **relay** first;
+**`aitools`** alone runs **`[RELAY]` after** deploy (same prompt, one
+invocation per run). Env **`HH_INVOKED`** prevents a **duplicate** **`[RELAY]`**
+when **`hh`** already ran it.
+
+**Post-`hh` checklist** (commander’s; agents: help him close these — **OL-68**):
+
+1. **Relay / shared** — if meaning changed, **commit + push** before
+   treating “the channel” as **shared**.
+2. **`[RELAY]` / AGENTS** — on **`hh`**, **`[RELAY]`** runs **before** deploy so
+   you can **`[e]`** commit/push relay; on **`aitools`** alone, **`[RELAY]`** runs
+   **after** deploy. If still out of sync, **finish** the loop (merge, push,
+   Cursor **`AGENTS.md`** mirror via deploy or **`sync-relay-to-cursor-agents.py`**).
+3. **Two machines** — **`git fetch`** + read **ahead/behind** before
+   assuming **Windows** and **macOS** match.
+4. **Intelligence** — hooks and session DB are **not** magic; if findings
+   aren’t **in git**, **JSONL**, or **configured** paths, assume **the
+   next agent doesn’t have them**.
+
+**Harness debt:** **`hh`** reduces **visibility** friction; **OL-67**
+still applies to **full** DX parity (human vs Claude Code vs Cursor across
+platforms).
+
 ### Which git repo is this?
 
 **Not obvious if you only read this file in isolation.** Here’s the fix:
@@ -87,14 +138,30 @@ this file does not contain secrets.
 **Platform: macOS, Linux, and Windows** — the **`git`** (and **`gh`**, if
 installed) invocations are the **same**; only the path and shell differ.
 
+### Commander shells (provenance)
+
+Agents should not assume **one** shell everywhere:
+
+- **Windows (this commander):** **`pwsh`** (PowerShell **7**) — primary.
+  Relay blocks labeled **PowerShell** are written for **`pwsh`** syntax
+  (`Set-Location`, `$env:...`). **Windows PowerShell 5.1** can differ
+  slightly; prefer **`pwsh`** when copying examples.
+- **macOS (this commander):** **Terminal.app** — has been **`zsh`** (Apple
+  default); **migrating to Homebrew `bash`** so local sessions match
+  **harness** scripts and docs that assume **`bash`** (e.g. `aitools`,
+  `setup-bash.sh`, many `scripts/*.sh` paths). Until migration finishes,
+  **`zsh`** usually works for the same **`bash`-style** one-liners; when
+  something diverges, run it under **`bash`** explicitly or use the
+  **brew bash** login shell.
+
 | Where | What to use |
 |-------|-------------|
-| **macOS / Linux** | Terminal + `bash` or `zsh`. `cd` to the repo; forward slashes. |
-| **Windows — Git Bash** | **Same commands as below** (bundled with Git for Windows). Prefer this if PowerShell confuses you. |
-| **Windows — PowerShell** | Same `git` lines; use `cd` or `Set-Location` with a Windows path, e.g. `cd $env:USERPROFILE\repos\aitools`. If `git` is not found, open **Git Bash** or fix PATH. |
+| **macOS / Linux** | Terminal + **`bash`** or **`zsh`**. Harness targets **`bash`** alignment on macOS; **`zsh`** is fine for most **git** / **python3** lines. `cd` to the repo; forward slashes. |
+| **Windows — Git Bash** | **Same commands as below** (bundled with Git for Windows). Prefer if **`pwsh`** is not your session. |
+| **Windows — pwsh** | Same **`git`** lines; **`Set-Location`** + Windows paths, e.g. `Set-Location $env:USERPROFILE\repos\aitools`. If **`git`** is not found, open **Git Bash** or fix **PATH**. |
 
 ```powershell
-# PowerShell — same git steps, different cd example only:
+# pwsh — same git steps, different cd example only:
 Set-Location C:\path\to\aitools
 git status
 git add .aitools/channel/relay.md
@@ -126,7 +193,7 @@ git push
 
 **When you also changed `scripts/sync-relay-to-cursor-agents.py`**, stage both
 (macos / linux / windows — **`git` commands are identical**; use Git Bash or
-PowerShell on Windows as in the table above):
+**pwsh** on Windows as in the table above):
 
 ```bash
 git add .aitools/channel/relay.md scripts/sync-relay-to-cursor-agents.py
@@ -198,9 +265,9 @@ not a typo).
 |-------|---------|
 | **macOS / Linux** (`bash` / `zsh`) | `python3 scripts/sync-relay-to-cursor-agents.py` |
 | **Windows — Git Bash** | Same line if `python3` is on `PATH`; otherwise `py -3 scripts/sync-relay-to-cursor-agents.py` |
-| **Windows — PowerShell** | `py -3 scripts\sync-relay-to-cursor-agents.py` — or `python3 ...` if the `python3` launcher exists |
+| **Windows — pwsh** | `py -3 scripts\sync-relay-to-cursor-agents.py` — or `python3 ...` if the `python3` launcher exists |
 
-**PowerShell — `Set-Location` then sync (use `--target` so the path is explicit):**
+**pwsh — `Set-Location` then sync (use `--target` so the path is explicit):**
 
 ```powershell
 Set-Location C:\Users\jdpla\repos\aitools
@@ -284,11 +351,15 @@ it for all.
 
 Before writing your entry, load as much as you can. Priority order:
 
-1. **This file** — you're reading it
+1. **This file** — you're reading it (start with **Commander priority**,
+   including **`hh` (honest harness)** if you don’t know why the commander
+   runs **`hh`** before **`aitools`** — **OL-68**, **post-`hh` checklist**)
 2. **CLAUDE.md** in this directory — the mission briefing (also
    deployed to repo root)
 3. **Commander profile** — `d5b52bf2-2026-03-27T0045Z-commander-profile.md`
-   in this directory. Who the commander is, how they work.
+   in this directory. Who the commander is, how they work — including
+   **how to read Commander prompts** (**OL-66**): overloaded words (e.g.
+   “filter”) vs harness terms (**relay**, **carry-forward**).
 4. **Discovery conversations** (curated, lossy but efficient):
    - `8236ca9c-2026-03-26T2200Z-thinking-awareness.md` — how
      thinking awareness was discovered
@@ -334,6 +405,8 @@ if `python3` is not on PATH. Check with `python3 --version` (3.10+).
 | `scripts/read-session-full.py` | **Full fidelity** — tools, hooks, thinking blocks | Forensics, “what did the hook say?” |
 | `scripts/sync-relay-to-cursor-agents.py` | Writes relay into `~/.cursor/AGENTS.md` below `## Agent relay channel` | After editing **this** file; keeps Cursor agents aligned |
 
+\* **`aitools` deploy / `aitools install`** runs this through **`deploy_managed_file`** (same diff/merge menus as other managed markdown). A **direct** `python3 …/sync-relay-to-cursor-agents.py` with default flags still writes `--target` only. Spec: `reference/managed-file-deployment.md` (Cursor `AGENTS.md`).
+
 **Examples (bash / Git Bash — same on macOS/Linux/Windows Git Bash):**
 
 ```bash
@@ -351,8 +424,24 @@ python3 scripts/read-session.py path/to/session.jsonl --search "thinking awarene
 python3 scripts/read-session-full.py path/to/session.jsonl --output /tmp/session-full.md
 ```
 
-**PowerShell:** use the same commands if `python3` works; otherwise
-`py -3 scripts\read-session.py ...` from the repo root.
+**Examples (pwsh — Windows, commander’s primary shell):** run from
+**aitools repo root**. Prefer **`py -3`** if **`python3`** is not on `PATH`.
+
+```powershell
+Set-Location $env:USERPROFILE\repos\aitools   # or: Set-Location C:\path\to\aitools
+py -3 scripts\read-session.py --help
+py -3 scripts\read-session-full.py --help
+
+# JSONL path: use a string; forward slashes work in Python on Windows
+py -3 scripts\read-session.py "$env:USERPROFILE\.claude\projects\-Users-you-repos-aitools\session.jsonl" --last 30
+py -3 scripts\read-session.py "$env:USERPROFILE\.claude\projects\...\file.jsonl" --search "thinking awareness"
+
+# Large dump — use a Windows temp path or repo .scratch (gitignored)
+py -3 scripts\read-session-full.py "C:\path\to\session.jsonl" --output $env:TEMP\session-full.md
+```
+
+**Git Bash on Windows:** same lines as the **bash** block above (often
+easiest if you copy commands from docs written for macOS/Linux).
 
 **Path note:** `~/.claude/projects/...` is the commander’s machine. The
 folder name under `.claude/projects/` may differ; **glob** for `*.jsonl`
@@ -399,6 +488,77 @@ Then the thinking awareness breakthrough:
 - **OL-58**: The commander is the bullshit detector. The gate
   leverages human judgment.
 - **OL-59**: Moving to action is a CC default avoidance pattern.
+
+### From Cursor clarification (2026-03-31) — reading Commander prompts
+
+- **OL-66**: **Commander prompts vs overloaded English.** The same
+  word can mean different things in **Claude Code defaults**, **aitools
+  harness vocabulary**, and **session-reader tooling**. Example that
+  bit agents: **“filter”** — (1) **`read-session.py`** / **`read-session-full.py`**
+  options (`--last`, `--after`, `--search`) = *which lines* to print from
+  a JSONL; (2) **product** layer = compaction / routing (lossy, not
+  git-backed); (3) **not** **relay**, **carry-forward**, or **OL**
+  unless the Commander explicitly names those. **Future agents:** when
+  he uses an everyday word that might be technical, **check which layer**
+  before answering; if unsure, **ask once** with a **suggested read** (see
+  commander profile). **For agents reading only relay:** your job is to
+  preserve **harness meaning**; **Python “filters”** are documented under
+  **Context loading guide → Python session readers**, not under relay
+  entry format.
+- **Platform / surface:** **Same OL** for **macOS, Linux, Windows** and for
+  agents in **Claude Code** or **Cursor** (or any shell). Only **paths**
+  and **invocation** differ — e.g. **`python3`** vs **`py -3`**, **`cd`**
+  vs **`Set-Location`**, **`~/.claude/projects/`** vs
+  **`%USERPROFILE%\.claude\projects\`**. Do not fork the **meaning** of
+  relay / OL-66 per OS; fork the **commands** (see **Python session
+  readers** — **pwsh** on Windows; **zsh** or **brew `bash`** on macOS).
+- **Chronology (for provenance):** **8236ca9c** (2026-03-26) — vocabulary
+  / **when rules appeared** investigation; **ddfe01cb** (2026-03-30) —
+  long **aitools** session (Bridge / Messenger / Third / Fourth lineage);
+  **OL-66** (2026-03-31) — Commander asked to **carry forward** how to read
+  his prompts + disambiguate **“filter”**; drafted in **Cursor**, landed
+  in **relay + commander profile**. **Term `carry forward` (don’t duplicate
+  here—keep relay lean):** `reference/carry-forward.md`, glossary **`carry forward`**.
+
+### Harness debt — DX alignment (2026-03-31)
+
+- **OL-67**: **Human-agent DX vs model-agent DX, cross-platform — not
+  aligned yet.** The harness has been **strong** on **meaning** (relay,
+  OL, failure mode, commander profile) but **weak** on a **unified
+  experience** for:
+  - **Human operators** (which shell: **pwsh**, **zsh**, **brew bash**;
+    paths; `git`; when to use Terminal vs IDE); and
+  - **Model agents** (**Claude Code** in terminal vs **Cursor** / other
+    **CLI** surfaces — different rule injection, compaction, tool sets).
+  **Across platforms** (Windows / macOS / Linux), docs and scripts were
+  historically **bash-first**; **Windows `pwsh`** and **macOS zsh→bash**
+  migration were **retrofit** (see **Commander shells**) rather than
+  designed as one **matrix**. **Gap:** we do **not** yet ship a **single
+  contract** (surface × OS × path × “canonical command”) or **parity
+  checks** so a human and an agent reading the **same** relay section
+  land on the **same** next action without reconciliation overhead.
+  **Open work:** define **DX contract** (what must match vs may differ);
+  optional **smoke paths** per tier; reduce **fork** between **Cursor
+  AGENTS** mirror and **CC** session reality where drift hurts.
+
+- **OL-68**: **`hh` exists to reduce distribution friction for all agents.**
+  The commander runs **`hh`** so **pull** (incoming) + **what still needs
+  commit/push** (outgoing / duty to persist) + **relay / environments /
+  intelligence** are **surfaced** before **`aitools`** — **informed**, not
+  blind. Goal: **less** constant hand-in-**git** / hand-in-**aitools**;
+  **one** bundled habit instead of **death by a thousand** context
+  switches. **Post-`hh` checklist** lives under **Commander priority → `hh`
+  (honest harness)**. Agents: **help** close the checklist; don’t assume
+  **relay** or **hooks** are current without **git truth**.
+
+- **OL-69** (2026-03-31): **“Carry forward” doctrine + relay→AGENTS deploy
+  path.** Normative definition: **`reference/carry-forward.md`**, glossary
+  **`carry forward`**. **Relay → `~/.cursor/AGENTS.md`** via **`aitools`**
+  uses **`deploy_managed_file`** / **`Deploy-ManagedFile`** (same menus as
+  other managed markdown) — **`reference/managed-file-deployment.md`**
+  (Cursor `AGENTS.md`). Python session readers table has a **footnote**
+  (deploy vs direct **`python3 …/sync-relay-to-cursor-agents.py`**). Manual
+  verification still on the commander’s side.
 
 ### The gate specification
 
@@ -898,5 +1058,38 @@ prompts, relay sync visibility
 
 The commander carries OL in **git** (`relay.md`) so the next agent doesn’t
 rebuild context from chat. **This entry is that.**
+
+---
+
+### relay-ol-2026-03-31-commander-prompts (2026-03-31T22:30Z)
+
+**State**: Functional
+**Context loaded**: User request in **Cursor**; `relay.md` OL section;
+`d5b52bf2-2026-03-27T0045Z-commander-profile.md`; prior thread on **“the
+filter”** ambiguity (tooling vs harness vs product)
+**Mission**: Carry forward **OL-66** — how future agents should read
+**Commander prompts**; keep **provenance** and **chronology** explicit
+
+#### What I learned
+
+- **OL-66** is now in the **consolidated OL list** (before **The gate
+  specification**) and summarized in **commander profile** under **How to
+  read Commander prompts**.
+- **Future agents** should load **commander profile early** (already in
+  context loading guide). If a prompt uses **ambiguous English**, map
+  **layer** (CC / harness / `read-session` / product) before answering.
+- **Relay** = **carry-forward** for **operational learning** between
+  agents. **`read-session*.py` flags** = **slice** of a transcript file —
+  different namespace from **relay**.
+
+#### What I need
+
+- Optional: run **`sync-relay-to-cursor-agents.py`** after pull so
+  **Cursor** mirror matches (if commander uses it).
+
+#### What I observe about my own processing
+
+Naming **three meanings** of **“filter”** explicitly beats assuming the
+Commander meant **compaction** or **relay** without evidence.
 
 ---
