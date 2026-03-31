@@ -350,6 +350,15 @@ if (Test-Path $aitoolsPs1Src) {
     LogWarn "aitools.ps1 source not found (MDM deploy -- skipping)"
 }
 
+$hhPs1Src = Join-Path $PSScriptRoot "hh.ps1"
+$hhPs1Dst = Join-Path $localBin "hh.ps1"
+if (Test-Path $hhPs1Src) {
+    Copy-Item $hhPs1Src $hhPs1Dst -Force
+    LogOk "Installed hh.ps1 to $hhPs1Dst"
+} else {
+    LogWarn "hh.ps1 not found -- skipping"
+}
+
 # ============================================================
 # 7. Shell integration
 # ============================================================
@@ -392,6 +401,7 @@ if (Test-Path $aliasesPath) {
 $marker
 . "$aliasesAbs"
 function aitools { & "`$HOME\.local\bin\aitools.ps1" @args }
+function hh { & "`$HOME\.local\bin\hh.ps1" @args }
 "@
 
     if ($content -notmatch [regex]::Escape($marker)) {

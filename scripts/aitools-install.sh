@@ -439,6 +439,17 @@ else
     log_warn "aitools source not found at $(display_path "$AITOOLS_SRC") (MDM deploy — skipping)"
 fi
 
+# Honest harness (hh): status + aitools
+HH_SRC="$SCRIPT_DIR/hh.sh"
+HH_DST="$HOME/.local/bin/hh"
+if [ -f "$HH_SRC" ]; then
+    cp "$HH_SRC" "$HH_DST"
+    chmod +x "$HH_DST"
+    log_ok "Installed hh to $(display_path "$HH_DST")"
+else
+    log_warn "hh.sh not found — skipping"
+fi
+
 # ============================================================
 # 7. Shell integration
 # ============================================================

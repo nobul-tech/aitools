@@ -54,7 +54,7 @@ jobs:
         run: |
           echo "::group::Checking .sh files"
           errors=0
-          for f in scripts/*.sh deploy/*.sh shared/hooks/*.sh; do
+          for f in scripts/*.sh scripts/githooks/pre-commit deploy/*.sh shared/hooks/*.sh; do
             [ -f "$f" ] || continue
             if ! bash -n "$f" 2>/tmp/bash-syntax-err.txt; then
               echo "FAIL: $f"
@@ -206,7 +206,7 @@ jobs:
       - name: Validate bash script syntax
         run: |
           errors=0
-          for f in scripts/*.sh deploy/*.sh shared/hooks/*.sh; do
+          for f in scripts/*.sh scripts/githooks/pre-commit deploy/*.sh shared/hooks/*.sh; do
             [ -f "$f" ] || continue
             if ! bash -n "$f" 2>/tmp/bash-syntax-err.txt; then
               echo "FAIL: $f"
@@ -282,7 +282,7 @@ jobs:
         shell: bash
         run: |
           errors=0
-          for f in scripts/*.sh deploy/*.sh shared/hooks/*.sh; do
+          for f in scripts/*.sh scripts/githooks/pre-commit deploy/*.sh shared/hooks/*.sh; do
             [ -f "$f" ] || continue
             if ! bash -n "$f" 2>/tmp/bash-syntax-err.txt; then
               echo "FAIL: $f"

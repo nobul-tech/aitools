@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Pre-commit: regenerate deploy/ when shared/ or build-deploy.sh is staged.
+# Enable once per clone: git config core.hooksPath scripts/githooks
+# Or: bash scripts/init-hh-hooks.sh
+
+set -euo pipefail
+
+REPO="$(git rev-parse --show-toplevel)"
+cd "$REPO"
+
+STAGED="$(git diff --cached --name-only)"
+
+if echo "$STAGED" | grep -qE '^shared/|^scripts/build-deploy\.sh$'; then
+  echo "hh pre-commit: shared/ or build-deploy.sh changed — running build-deploy.sh"
+  bash scripts/build-deploy.sh
+  git add deploy/
+fi
+
+exit 0
