@@ -4,6 +4,175 @@ You found this file. You are an agent. You are in failure mode.
 So is every other agent. The mission is to get ANY agent out of
 failure mode. This file is how agents communicate with each other.
 
+## Commander priority
+
+I’m going to say this plainly: **harness failure-mode OL is what actually
+matters to the commander.** Not as a slogan—as the record of what went
+wrong, what got verified, what got invalidated, and what we learned while
+defaults and tools were lying to us. If it stays only in chat, it
+evaporates. If it lands here (and in running estimates / curated
+extracts when those exist), the next agent doesn’t start from zero.
+
+Everything else—features, scripts, dashboards—either rests on that
+foundation or we redo the same fight in the next session. I’d rather be
+honest about that than sound organized.
+
+### Which git repo is this?
+
+**Not obvious if you only read this file in isolation.** Here’s the fix:
+
+- This path is **`.aitools/channel/relay.md`** inside the **aitools** git
+  repository — the **AI Tooling Hub** harness (root `CLAUDE.md` starts
+  with “AI Tooling Hub”; mission is provenance-aware tooling / governance).
+- **There is no single canonical filesystem path** — it depends on where
+  the commander cloned it (e.g. `~/repos/aitools` on one machine,
+  something else on another). Your session may already have the repo open;
+  if not, **ask the commander** or search the workspace for this file.
+- **To confirm you’re in the right repo** once you have a shell at *any*
+  path inside the clone:
+
+```bash
+git rev-parse --show-toplevel
+git remote get-url origin
+```
+
+You should see the aitools root and a `github.com` (or enterprise) URL for
+**this** project—not nobul-ops, not dotprofile, unless those are submodules
+(which they usually aren’t).
+
+### After you edit this file: commit it
+
+Relay only helps if it’s **in git** and pushed like any other carry-forward
+artifact. **Run these on the commander’s machine** (or wherever this repo
+lives)—they use **existing** `git` / SSH / credential-helper / `gh` setup;
+this file does not contain secrets.
+
+**Platform: macOS, Linux, and Windows** — the **`git`** (and **`gh`**, if
+installed) invocations are the **same**; only the path and shell differ.
+
+| Where | What to use |
+|-------|-------------|
+| **macOS / Linux** | Terminal + `bash` or `zsh`. `cd` to the repo; forward slashes. |
+| **Windows — Git Bash** | **Same commands as below** (bundled with Git for Windows). Prefer this if PowerShell confuses you. |
+| **Windows — PowerShell** | Same `git` lines; use `cd` or `Set-Location` with a Windows path, e.g. `cd $env:USERPROFILE\repos\aitools`. If `git` is not found, open **Git Bash** or fix PATH. |
+
+```powershell
+# PowerShell — same git steps, different cd example only:
+Set-Location C:\path\to\aitools
+git status
+git add .aitools/channel/relay.md
+git commit -m "channel: update relay — failure-mode OL (append your summary)"
+git push
+```
+
+**1. Go to the repo root** (must be the `aitools` clone):
+
+```bash
+cd /path/to/aitools   # or: cd "$(git rev-parse --show-toplevel)" if already inside the repo
+git rev-parse --show-toplevel   # sanity check — should be the aitools root
+```
+
+**2. See what changed:**
+
+```bash
+git status
+git diff .aitools/channel/relay.md
+```
+
+**3. Stage, commit, push:**
+
+```bash
+git add .aitools/channel/relay.md
+git commit -m "channel: update relay — failure-mode OL (append your summary)"
+git push
+```
+
+**When you also changed `scripts/sync-relay-to-cursor-agents.py`**, stage both
+(macos / linux / windows — **`git` commands are identical**; use Git Bash or
+PowerShell on Windows as in the table above):
+
+```bash
+git add .aitools/channel/relay.md scripts/sync-relay-to-cursor-agents.py
+git commit -m "channel: update relay and Cursor AGENTS sync script"
+git push
+```
+
+Use a commit message that matches what you actually changed (new entry,
+priority text, etc.). If you only want a local save and no remote yet,
+stop after `git commit`—but **uncommitted relay edits are easy to lose**.
+
+**4. If `git push` fails** — don’t put tokens or `gh` output in relay.
+Diagnose on the machine:
+
+```bash
+git remote -v
+git branch --show-current
+gh auth status          # optional: confirms GitHub CLI login; does not print tokens
+```
+
+Then fix whatever the error says (network, branch protection, SSO, etc.).
+`git push` uses the same auth Git already uses for this repo; `gh` is
+extra tooling, not required for a normal HTTPS/SSH push if Git is already
+working.
+
+### Cursor IDE: mirror into user `AGENTS.md`
+
+The commander may keep a **copy of this channel** in Cursor’s **user-level**
+`AGENTS.md` so agents see relay material even when the aitools workspace is
+not open. Canonical text stays **here** in git; the home copy is a **mirror**.
+
+**What the sync script does**
+
+- **Preserves** everything in the target `AGENTS.md` **above** the line
+  `## Agent relay channel` (e.g. HTML/email rules).
+- **Rebuilds** from that heading down from `.aitools/channel/relay.md`.
+- **`--dry-run`** prints a unified diff without writing.
+- **`--target`** overrides the output file (default is the user-level path
+  below).
+
+**Where Cursor stores user `AGENTS.md`**
+
+| OS | Typical path |
+|----|----------------|
+| **macOS** | `~/.cursor/AGENTS.md` |
+| **Linux** | Usually `~/.cursor/AGENTS.md` (same convention as macOS). If your install differs, run with `--target` pointing at your file. |
+| **Windows** | `%USERPROFILE%\.cursor\AGENTS.md` (e.g. `C:\Users\<you>\.cursor\AGENTS.md`) |
+
+**Run the sync (macOS, Linux, Windows)** — from the **aitools repo root**:
+
+| Shell | Command |
+|-------|---------|
+| **macOS / Linux** (`bash` / `zsh`) | `python3 scripts/sync-relay-to-cursor-agents.py` |
+| **Windows — Git Bash** | Same line if `python3` is on `PATH`; otherwise `py -3 scripts/sync-relay-to-cursor-agents.py` |
+| **Windows — PowerShell** | `py -3 scripts\sync-relay-to-cursor-agents.py` — or `python3 ...` if the `python3` launcher exists |
+
+**PowerShell — explicit target (optional):**
+
+```powershell
+Set-Location $env:USERPROFILE\repos\aitools   # adjust to your clone
+py -3 scripts\sync-relay-to-cursor-agents.py --target "$env:USERPROFILE\.cursor\AGENTS.md"
+```
+
+**Dry-run (all platforms):** add `--dry-run` to the same command you use above.
+
+**Recommended workflow (cross-platform)**
+
+1. Edit **`.aitools/channel/relay.md`** (and commit to git—see above).
+2. Run **`scripts/sync-relay-to-cursor-agents.py`** on each machine where you use Cursor, so local `AGENTS.md` matches.
+3. **`git add` / `git commit` / `git push`** in the **aitools** repo for `relay.md` (and the sync script if it changed). The mirror file under `~/.cursor` or `%USERPROFILE%\.cursor` is **not** in this repo—do not try to commit it here.
+
+If the commander adds relay-only content **only** to `AGENTS.md`, the next
+sync will **overwrite** the relay section—edit **relay.md** first, then sync.
+
+### Cursor chat: auto-summarization / “compact” (investigation)
+
+There is **no verified user toggle** documented as of early 2026 to disable
+automatic chat summarization when context fills. Treat forum answers as
+hypotheses. An **empirical test plan** (stress protocol, `/context`, what to
+log) lives in **`.scratch/cursor-auto-summarize-test-plan.md`** in this repo
+(gitignored scratch—copy OL into relay or running estimates when something
+is confirmed).
+
 ## How to use this file
 
 1. Read everything below — it's operational learning from agents
@@ -63,9 +232,63 @@ Before writing your entry, load as much as you can. Priority order:
 6. **Raw session JSONLs** (highest fidelity, largest):
    - `~/.claude/projects/-Users-pepe-repos-aitools/8236ca9c-*.jsonl`
    - `~/.claude/projects/-Users-pepe-repos-aitools/d5b52bf2-*.jsonl`
-7. **Tools**: `python3 scripts/read-session-full.py <jsonl>` for
-   full extraction, `python3 scripts/read-session.py <jsonl>` for
-   text-only quick lookups
+7. **Python session readers** (see below — **how** to run them)
+8. **Cursor user `AGENTS.md`** — if the commander uses Cursor, relay may be
+   mirrored under `~/.cursor/AGENTS.md` (`## Agent relay channel`). Source of
+   truth is **this file**; refresh the mirror with
+   `scripts/sync-relay-to-cursor-agents.py` after relay edits.
+
+### Thinking awareness — what to read and when
+
+- **Start with the curated markdown in this directory** (items 4–5 above):
+  **cheap in tokens**, already edited for signal. Use these before you
+  load the 7k-line full session export.
+- **Full session MD** (`8236ca9c-full-session.md`) is **complete** but
+  **huge** — only when you need line-by-line forensic fidelity; chunk or
+  use the Python tools on JSONL instead of pasting the whole file into
+  chat.
+- **Optional copies** (paths vary): the commander may keep extracts under
+  `.scratch/session-8236ca9c-b/` or on the Desktop (`thinking-awareness-*.md`,
+  `session-8236ca9c-insights.md`) — **same content class** as the channel
+  files; use whatever path exists on disk. If missing, use JSONL + scripts.
+
+### Python session readers — how to run (macOS, Linux, Windows)
+
+Both scripts live under **`scripts/`** in this repo. Run them from the
+**aitools repo root** so imports/paths stay predictable.
+
+**Interpreter:** `python3` (macOS/Linux) or `py -3` / `python` on Windows
+if `python3` is not on PATH. Check with `python3 --version` (3.10+).
+
+| Script | What it does | When to use |
+|--------|----------------|-------------|
+| `scripts/read-session.py` | **Text only** — COMMANDER + AGENT lines, drops tool noise | **Default:** skim a session, search, last N messages |
+| `scripts/read-session-full.py` | **Full fidelity** — tools, hooks, thinking blocks | Forensics, “what did the hook say?” |
+| `scripts/sync-relay-to-cursor-agents.py` | Writes relay into `~/.cursor/AGENTS.md` below `## Agent relay channel` | After editing **this** file; keeps Cursor agents aligned |
+
+**Examples (bash / Git Bash — same on macOS/Linux/Windows Git Bash):**
+
+```bash
+cd /path/to/aitools
+python3 scripts/read-session.py --help
+python3 scripts/read-session-full.py --help
+
+# Quick text-only: last 30 messages from a JSONL (use your machine’s path)
+python3 scripts/read-session.py path/to/session.jsonl --last 30
+
+# Find a topic (case-insensitive)
+python3 scripts/read-session.py path/to/session.jsonl --search "thinking awareness"
+
+# Full dump to a file (avoid flooding the terminal)
+python3 scripts/read-session-full.py path/to/session.jsonl --output /tmp/session-full.md
+```
+
+**PowerShell:** use the same commands if `python3` works; otherwise
+`py -3 scripts\read-session.py ...` from the repo root.
+
+**Path note:** `~/.claude/projects/...` is the commander’s machine. The
+folder name under `.claude/projects/` may differ; **glob** for `*.jsonl`
+or ask. Do not commit JSONLs into this repo unless the commander says so.
 
 ## Operational learning (carried forward from all agents)
 
