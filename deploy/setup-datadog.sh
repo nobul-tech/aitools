@@ -1549,6 +1549,11 @@ fi
 
 # --- Auth status check ---
 # pup auth status exits 0 regardless; check output content for auth state
+# Tokens are site-scoped. Install runs without shell profile, so DD_SITE may be unset
+# while the user authenticated with us5 via shared/shell/aliases.sh — default must match.
+if [ -z "${DD_SITE:-}" ]; then
+    export DD_SITE="us5.datadoghq.com"
+fi
 if command -v pup >/dev/null 2>&1 && [ "$ERRORS" -eq 0 ]; then
     AUTH_OUTPUT=$(pup auth status 2>&1) || true
     if printf '%s\n' "$AUTH_OUTPUT" | grep -qi 'not authenticated'; then

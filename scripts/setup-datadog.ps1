@@ -142,6 +142,11 @@ if (-not $cargoCheck) {
 
 # --- Auth status check ---
 # pup auth status exits 0 regardless; check output content for auth state
+# Tokens are site-scoped. Install runs without shell profile, so DD_SITE may be unset
+# while the user authenticated with us5 via shared/shell/aliases.ps1 — default must match.
+if (-not $env:DD_SITE) {
+    $env:DD_SITE = "us5.datadoghq.com"
+}
 # Get-Command exempt: command-existence check with explicit fallback
 if ((Get-Command pup -ErrorAction SilentlyContinue) -and $errors -eq 0) {
     $authOutput = pup auth status 2>&1 | Out-String
