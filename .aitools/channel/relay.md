@@ -138,6 +138,12 @@ Use a commit message that matches what you actually changed (new entry,
 priority text, etc.). If you only want a local save and no remote yet,
 stop after `git commit`—but **uncommitted relay edits are easy to lose**.
 
+**Subject line (first line):** name **`.aitools/channel/relay.md`** or
+**`relay.md`** explicitly so **`git log`** / **`git pull`** on another
+machine (macOS, Linux, Windows) shows **which file changed** without
+opening the diff. Example:
+`channel: update .aitools/channel/relay.md — append OL entry …`
+
 **4. If `git push` fails** — don’t put tokens or `gh` output in relay.
 Diagnose on the machine:
 
