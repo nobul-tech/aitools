@@ -1,10 +1,11 @@
-# hh.ps1 — honest harness (Windows): show git status for harness paths, then run aitools
-# Usage: hh [-n|-status-only]  (-n = status only, no aitools)
+# hh.ps1 — honest harness (Windows): git pull, status, then aitools
+# Usage: hh [-n|-status-only] [-NoPull]  (-n = no aitools; -NoPull = skip git pull)
 
 param(
     [switch]$n,
     [Alias("status-only")]
-    [switch]$StatusOnly
+    [switch]$StatusOnly,
+    [switch]$NoPull
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,6 +45,16 @@ Set-Location $repo
 
 Write-Host "== hh (honest harness) @ $repo =="
 Write-Host ""
+
+if (-not $NoPull -and $env:HH_NO_PULL -ne "1") {
+    Write-Host "-- git pull --"
+    git pull --ff-only
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "hh: git pull failed — continuing with local tip"
+    }
+    Write-Host ""
+}
+
 Write-Host "-- Branch --"
 git status -sb
 Write-Host ""

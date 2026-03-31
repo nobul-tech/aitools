@@ -3,20 +3,24 @@
 #
 # Resolves the aitools repo (walk up from cwd, then ~/.aitools/config.json repoPath).
 # Usage:
-#   hh                  # status + aitools (pull, rebuild deploy, deploy user, relay→AGENTS)
-#   hh -n               # status only (no aitools)
+#   hh                  # git pull + status + aitools (rebuild deploy, relay→AGENTS; aitools pulls again)
+#   hh -n               # git pull + status only (no aitools)
 #   hh --status-only    # same as -n
+#   hh --no-pull        # skip git pull (offline / you pulled already)
 #
 # Env: AITOOLS_REPO — override repo root if set.
+# Env: HH_NO_PULL=1 — same as --no-pull
 
 set -euo pipefail
 
 STATUS_ONLY=false
+NO_PULL=false
 for a in "$@"; do
   case "$a" in
     -n|--status-only) STATUS_ONLY=true ;;
+    --no-pull) NO_PULL=true ;;
     -h|--help)
-      echo "Usage: hh [-n|--status-only]  (status only; no aitools)"
+      echo "Usage: hh [-n|--status-only] [--no-pull]  (pull first unless --no-pull / HH_NO_PULL=1)"
       exit 0
       ;;
   esac
@@ -71,6 +75,12 @@ cd "$REPO_ROOT"
 
 echo "== hh (honest harness) @ $(pwd) =="
 echo ""
+
+if ! $NO_PULL && [ "${HH_NO_PULL:-}" != "1" ]; then
+  echo "-- git pull --"
+  git pull --ff-only || echo "hh: warn: git pull failed — continuing with local tip" >&2
+  echo ""
+fi
 
 echo "-- Branch --"
 git status -sb
