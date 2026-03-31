@@ -640,6 +640,39 @@ foreach ($script in $deployScripts) {
     }
 }
 
+# ============================================================
+# 22. Relay → Cursor AGENTS.md (mirror; same as aitools deploy)
+# ============================================================
+Log "Step 22: Relay → Cursor AGENTS.md mirror"
+
+$syncPy = Join-Path $PSScriptRoot "sync-relay-to-cursor-agents.py"
+if (Test-Path $syncPy) {
+    $target = Join-Path $env:USERPROFILE ".cursor\AGENTS.md"
+    $syncArgs = @($syncPy, "--target", $target)
+    if ($DryRun) { $syncArgs += "--dry-run" }
+    $exitCode = -1
+    if (Get-Command python3 -ErrorAction SilentlyContinue) {
+        $out = & python3 @syncArgs 2>&1
+        $exitCode = $LASTEXITCODE
+        $out | Add-Content -Path $logFile
+    } elseif (Get-Command py -ErrorAction SilentlyContinue) {
+        $pyArgs = @("-3") + $syncArgs
+        $out = & py @pyArgs 2>&1
+        $exitCode = $LASTEXITCODE
+        $out | Add-Content -Path $logFile
+    } else {
+        LogWarn "Python not found -- skipping relay→AGENTS sync"
+        $exitCode = -2
+    }
+    if ($exitCode -ge 0) {
+        if ($exitCode -eq 0) {
+            if ($DryRun) { LogOk "relay→AGENTS sync (dry-run)" } else { LogOk "relay → Cursor AGENTS.md synced" }
+        } else {
+            LogWarn "sync-relay-to-cursor-agents.py failed (non-fatal)"
+        }
+    }
+}
+
 # --- Cleanup ---
 if ($DryRun) { Remove-Item Env:\AITOOLS_DRY_RUN -ErrorAction SilentlyContinue }
 

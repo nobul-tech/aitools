@@ -164,11 +164,16 @@ The commander may keep a **copy of this channel** in Cursor’s **user-level**
 `AGENTS.md` so agents see relay material even when the aitools workspace is
 not open. Canonical text stays **here** in git; the home copy is a **mirror**.
 
-**After `relay.md` changes (pull or push):** run
-**`scripts/sync-relay-to-cursor-agents.py` on each machine** (macOS and
-Windows) so **both** `AGENTS.md` mirrors match. Git does **not** copy the
-mirror—only this script does. Script name ends in **`...-to-cursor-agents.py`**
-(**cursor**, not a typo).
+**`relay.md` → `AGENTS.md`:** **`aitools`** (no args) and **`aitools install`**
+run **`scripts/sync-relay-to-cursor-agents.py` automatically** during deploy
+(Step 22 in the installers; same step inside `deploy_configs` in the CLI)—if
+**Python** (`python3` or Windows **`py -3`**) is on `PATH`. Failures are
+**non-fatal** (warning in deploy log).
+
+You can still run the script **by hand** after pulling on a machine that
+hasn’t run **`aitools`** yet. Git does **not** copy the mirror—only this
+script does. Script name ends in **`...-to-cursor-agents.py`** (**cursor**,
+not a typo).
 
 **What the sync script does**
 
@@ -211,9 +216,13 @@ Windows, quoting `"$env:USERPROFILE\.cursor\AGENTS.md"` avoids path mistakes.
 **Recommended workflow (cross-platform)**
 
 1. Edit **`.aitools/channel/relay.md`** (and commit to git—see above).
-2. On the machine that edited: run **`python3 scripts/sync-relay-to-cursor-agents.py`** (macOS/Linux) or **`py -3 scripts\sync-relay-to-cursor-agents.py`** (Windows) **before or after push**—your mirror should match **committed** relay.
-3. On the **other** machine: **`git pull`**, then run the **same sync script** again so that machine’s `AGENTS.md` matches.
-4. **`git add` / `git commit` / `git push`** in the **aitools** repo for `relay.md` (and the sync script if it changed). The mirror file under `~/.cursor` or `%USERPROFILE%\.cursor` is **not** in this repo—do not try to commit it here.
+2. **`git pull`** on each machine, then **`aitools`** (or **`aitools install`** when
+   doing a full install)—that **refreshes `AGENTS.md`** from relay when Python is
+   available. If you only pulled and did **not** run **`aitools`**, run the
+   **sync script manually** once.
+3. **`git add` / `git commit` / `git push`** in the **aitools** repo for `relay.md`
+   (and the sync script if it changed). The mirror file under `~/.cursor` or
+   `%USERPROFILE%\.cursor` is **not** in this repo—do not try to commit it here.
 
 If the commander adds relay-only content **only** to `AGENTS.md`, the next
 sync will **overwrite** the relay section—edit **relay.md** first, then sync.

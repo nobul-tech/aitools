@@ -367,6 +367,30 @@ deploy_configs() {
             done
             ;;
     esac
+
+    # Best-effort: mirror relay.md into ~/.cursor/AGENTS.md (Cursor IDE).
+    # Non-fatal if Python or sync fails.
+    local sync_py="$script_dir/sync-relay-to-cursor-agents.py"
+    if [ -f "$sync_py" ]; then
+        local sync_args=()
+        if $dry_run; then sync_args+=(--dry-run); fi
+        if command -v python3 &>/dev/null; then
+            if python3 "$sync_py" "${sync_args[@]}" >>"$LOG_FILE" 2>&1; then
+                if $dry_run; then log_ok "relay→AGENTS sync (dry-run)"; else log_ok "relay → Cursor AGENTS.md synced"; fi
+            else
+                log_warn "sync-relay-to-cursor-agents.py failed (non-fatal)"
+            fi
+        elif command -v py &>/dev/null; then
+            if py -3 "$sync_py" "${sync_args[@]}" >>"$LOG_FILE" 2>&1; then
+                if $dry_run; then log_ok "relay→AGENTS sync (dry-run)"; else log_ok "relay → Cursor AGENTS.md synced"; fi
+            else
+                log_warn "sync-relay-to-cursor-agents.py failed (non-fatal)"
+            fi
+        else
+            log_warn "Python not found — skipping relay→AGENTS sync"
+        fi
+    fi
+
     unset AITOOLS_DEPLOY
     unset AITOOLS_DRY_RUN
     unset AITOOLS_FORCE
@@ -447,9 +471,11 @@ Usage: aitools [COMMAND] [OPTIONS]
 
 Commands:
   (none)               Sync configs: pull + rebuild + deploy all configurations
+                       (deploy includes relay → ~/.cursor/AGENTS.md when Python is available)
   gitpull [--patch]    Update source: pull + rebuild + deploy + changelog + version tag
                        --patch: bump patch (v0.14.0 -> v0.14.1) instead of minor
   install              Full setup: pull + rebuild + install tools + deploy configs
+                       (install Step 22 / deploy: relay → Cursor AGENTS.md mirror)
   mcp                  Show MCP server status for current project
   user init            Set up user repo and configure session archiving hook
   sessions list [proj] List archived sessions (optionally filter by project)

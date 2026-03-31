@@ -711,6 +711,32 @@ for script in $DEPLOY_SCRIPTS; do
     fi
 done
 
+# ============================================================
+# 22. Relay → Cursor AGENTS.md (mirror; same as aitools deploy)
+# ============================================================
+log "Step 22: Relay → Cursor AGENTS.md mirror"
+
+sync_py="$SCRIPT_DIR/sync-relay-to-cursor-agents.py"
+if [ -f "$sync_py" ]; then
+    sync_args=()
+    if $DRY_RUN; then sync_args+=(--dry-run); fi
+    if command -v python3 >/dev/null 2>&1; then
+        if python3 "$sync_py" "${sync_args[@]}" >>"$LOG_FILE" 2>&1; then
+            if $DRY_RUN; then log_ok "relay→AGENTS sync (dry-run)"; else log_ok "relay → Cursor AGENTS.md synced"; fi
+        else
+            log_warn "sync-relay-to-cursor-agents.py failed (non-fatal)"
+        fi
+    elif command -v py >/dev/null 2>&1; then
+        if py -3 "$sync_py" "${sync_args[@]}" >>"$LOG_FILE" 2>&1; then
+            if $DRY_RUN; then log_ok "relay→AGENTS sync (dry-run)"; else log_ok "relay → Cursor AGENTS.md synced"; fi
+        else
+            log_warn "sync-relay-to-cursor-agents.py failed (non-fatal)"
+        fi
+    else
+        log_warn "Python not found — skipping relay→AGENTS sync"
+    fi
+fi
+
 [ -z "${AITOOLS_SUPPRESS_SUMMARY_DISPLAY:-}" ] && show_summary
 
 # --- Exit ---
