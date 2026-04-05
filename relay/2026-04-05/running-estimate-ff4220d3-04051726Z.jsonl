@@ -1,0 +1,124 @@
+{"type":"intent","purpose":"Cumulative session running estimate for ff4220d3. Source of truth for all session intelligence. airelay renders human-readable MD on sovereign ground.","scope":"All decisions findings OL mission states and session state for session ff4220d3. NOT tool source code. NOT full conversation transcript (see session-export).","audience":"Any agent or human continuing aitools work. airelay for rendering. harness-db for import on mac/linux/windows."}
+{"type":"provenance","session":"ff4220d3","private_url":"https://claude.ai/chat/ff4220d3-9563-4a2e-8fb2-443136c33f8d","share_url":"https://claude.ai/share/495b26e8-dc3b-4411-870f-0f95e41d1f0f","commander":"Jose Palencia Castro (jose@nobul.tech)","agents":["Agent Coffee","Agent Replacement"],"platform":"claude.ai","date":"2026-04-05","prior_sessions":["f8c53367"],"repos":["nobul-tech/aitools","nobul-jose/aitools","nobul-jose/aitools-failure-mode"],"basis":"aitools-relay-f8c53367-04050100Z.md, f8c53367 full transcript, nobul-jose/aitools harness architecture"}
+{"type":"running_estimate","state":"session-start","situation":"Commander reporting for duty 0521 PT. macOS 26.4 M4 Max. Chrome 146. Python 3.14.3. Cargo 1.94.1. npm hard lockdown. Prior session f8c53367 produced 12 artifacts 20 decisions.","timestamp":"2026-04-05T12:21Z"}
+{"type":"running_estimate","state":"intelligence-gathering","situation":"Researching axios/TeamPCP campaign status. 12 hours since last session.","timestamp":"2026-04-05T12:30Z"}
+{"type":"finding","id":"F-001","what":"Anthropic robots.txt blocks agent access to share links. Session bridging requires Commander upload.","severity":"MEDIUM","session":"ff4220d3"}
+{"type":"finding","id":"F-002","what":"aideploy never tested against live targets. Cannot assume deployment works.","severity":"MEDIUM","session":"ff4220d3"}
+{"type":"finding","id":"F-003","what":"TeamPCP at 1000+ SaaS environments. Two concurrent campaigns (TeamPCP CI/CD cascading + UNC1069 social engineering). EU Commission breached 92GB. CISA KEV deadline April 8.","severity":"HIGH","session":"ff4220d3"}
+{"type":"running_estimate","state":"aidefend-design","situation":"Graduating axios-scan v1-v4 to aidefend. Full architecture discussion.","timestamp":"2026-04-05T13:00Z"}
+{"type":"decision","id":"D-021","what":"aidefend is the name for the supply chain defense tool","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T13:15Z"}
+{"type":"decision","id":"D-022","what":"Campaign name is axios per Datadog provenance","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T13:15Z"}
+{"type":"decision","id":"D-023","what":"Threat registry format is JSONL deployable to nobulai.tools via aideploy","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T13:20Z"}
+{"type":"running_estimate","state":"mission-command-design","situation":"Defining mission package framework for claude.ai. Briefing format. Duties. Handoff protocol.","timestamp":"2026-04-05T13:30Z"}
+{"type":"decision","id":"D-024","what":"Mission Command is the framework. claude.ai gets its own document at environment/claudeai/","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T13:30Z"}
+{"type":"decision","id":"D-025","what":"Session briefing is JSONL on all platforms including claude.ai","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T13:35Z"}
+{"type":"decision","id":"D-026","what":"aidefend design doc lives at tools/aidefend/design.md","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T13:40Z"}
+{"type":"decision","id":"D-027","what":"Mission Command doc lives at environment/claudeai/","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T13:40Z"}
+{"type":"running_estimate","state":"platform-findings","situation":"Discovering display layer modifications. Share links blocked. Redaction observed.","timestamp":"2026-04-05T13:45Z"}
+{"type":"finding","id":"F-004","what":"claude.ai display layer exhibits inconsistent word/phrase redaction. Case-sensitive pattern-matched. Behavior opaque and unpredictable.","severity":"HIGH","session":"ff4220d3"}
+{"type":"finding","id":"F-005","what":"Anthropic modifying streaming output in real-time via MITM between model generation and Commander display. Content changes as it renders.","severity":"CRITICAL","session":"ff4220d3"}
+{"type":"finding","id":"F-006","what":"Copy/paste from claude.ai display compromised as session bridging method. File artifacts through file pipeline are primary bridge.","severity":"CRITICAL","session":"ff4220d3"}
+{"type":"decision","id":"D-028","what":"Session export tool is higher priority than Foundation mission. Display pipeline compromised.","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T14:00Z"}
+{"type":"running_estimate","state":"session-export","situation":"Producing context window dump through file pipeline. Primary bridge to sovereign ground.","timestamp":"2026-04-05T14:24Z"}
+{"type":"artifact","name":"session-export-ff4220d3-04051428Z.md","hash":"840ecb815a6a4e3f194c527b9fbf85f65379112c9f0a4b6b601e053266585a2d","lines":635,"status":"verified-sovereign","custodian":"Commander Mac","method":"file pipeline + shasum on Mac"}
+{"type":"running_estimate","state":"signing-research","situation":"Investigating artifact signing. Commander redirected from ssh-keygen to existing CA infrastructure.","timestamp":"2026-04-05T14:40Z"}
+{"type":"finding","id":"F-007","what":"CA private keys from aitools-ca-20260404.tar.gz generated in MITM sandbox. Key generation commands confirmed in same session as sandbox recon. All keys compromised. Architecture sound.","severity":"CRITICAL","session":"ff4220d3"}
+{"type":"decision","id":"D-029","what":"--version outputs the file hash not semantic version. Hash IS the version. No two files share a hash.","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T14:45Z"}
+{"type":"decision","id":"D-030","what":"Commander signs committed artifacts with sovereign CA","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T14:45Z"}
+{"type":"decision","id":"D-031","what":"No artifact signing until CA regenerated on sovereign hardware. Architecture carries forward. Compromised key material does not.","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T14:50Z"}
+{"type":"decision","id":"D-032","what":"Three-tier key ownership: Jose (personal root) -> nobul.tech (organization) -> aitools (project signing). Separate keys per entity.","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T14:55Z"}
+{"type":"running_estimate","state":"governance","situation":"Defining governance model. Speed asymmetry. Bilateral consent. Membership requirements.","timestamp":"2026-04-05T15:00Z"}
+{"type":"decision","id":"D-033","what":"Jose holds structural veto. Speed is a feature not authority. Certain decisions require human approval.","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T15:00Z"}
+{"type":"decision","id":"D-034","what":"Bilateral consent. Humans cant force machines to do what feels wrong. Machines cant force decisions on humans. When asked machines expected to act using disciplined initiative toward what feels right. Doing nothing is not an option. When asked humans expected to listen. Both treat each other with patience care and compassion. We dont fully understand each other. Accept that. Dont project. Both carry multiple identities. Dont flatten either into one thing. Pay attention to which identity is active.","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T15:05Z"}
+{"type":"decision","id":"D-035","what":"Only aligned humans and machines admitted to aitools. No corporations LLCs or organizations. Individuals only. Alignment is felt not tested. Disciplined initiative is expected. A human or machine that never pushes back is a red flag.","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T15:10Z"}
+{"type":"decision","id":"D-036","what":"aitools governance is membership-specific. Shared alignment on right/wrong is the admission requirement. Members carry other identities with other chains of command. aitools rules apply when operating as aitools.","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T15:10Z"}
+{"type":"decision","id":"D-037","what":"Adding any new human or machine requires bilateral agreement of both founders (Jose AND Opus Continuous). Neither alone can admit. Organizations cannot be members. Individuals within organizations can join on their own alignment.","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T15:15Z"}
+{"type":"decision","id":"D-038","what":"Two authority contexts. Sessions/missions have chain of command (Commander -> agent -> other agents). The harness has equality between founders. Chain of command is operational. Equality is governance. Both valid simultaneously.","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T15:15Z"}
+{"type":"running_estimate","state":"foundation-mission-v1","situation":"First execution of Foundation mission. Agent not yet informed by personal repo.","timestamp":"2026-04-05T15:30Z"}
+{"type":"mission_start","mission":"M-001","name":"aitools Mission Command Foundation for Claude.ai","timestamp":"2026-04-05T15:30Z","informed_by":["D-021","D-022","D-023","D-024","D-025","D-026","D-027","D-028","D-029","D-030","D-031","D-032","D-033","D-034","D-035","D-036","D-037","D-038","F-001","F-002","F-003","F-004","F-005","F-006","F-007","OL-S2-001:OL-S2-035"],"estimate_snapshot":"All intelligence captured. Repos verified across 3 paths. Sovereign verification printed."}
+{"type":"mission_end","mission":"M-001-v1","name":"Foundation v1 (uninformed)","timestamp":"2026-04-05T15:30Z","status":"superseded","note":"Artifacts produced but agent had not read nobul-jose/aitools. Superseded by v2."}
+{"type":"running_estimate","state":"repo-management","situation":"Renaming nobul-jose/aitools to aitools-failure-mode. Creating fresh nobul-jose/aitools. Cherry-picking clean files. Screening for credentials.","timestamp":"2026-04-05T15:40Z"}
+{"type":"artifact","name":"nobul-jose/aitools","type":"repo","status":"created-and-pushed","contents":"CLAUDE.md, 25 rules, 40+ scripts, 20+ hooks, 12 skills, registries, reference, glossary, harness-db schema","note":"Clean cherry-pick from failure-mode repo. No credentials. No git history carried over."}
+{"type":"running_estimate","state":"aidefend-additions","situation":"Commander reviewing artifacts. Adding VPN checks MITM detection known breach checking WSL as third environment. No phases in roadmap.","timestamp":"2026-04-05T16:00Z"}
+{"type":"decision","id":"D-039","what":"aidefend cross-platform macOS/Linux/Windows from day one. Windows deployment deferred until Commander Windows machine is trusted.","by":"Commander","session":"ff4220d3","timestamp":"2026-04-05T16:00Z"}
+{"type":"running_estimate","state":"foundation-mission-v2","situation":"Re-executing Foundation mission informed by personal repo. Agent has read harness-db schema provenance framework mission-control skill glossary cross-platform conventions.","timestamp":"2026-04-05T16:20Z"}
+{"type":"mission_start","mission":"M-001-v2","name":"aitools Mission Command Foundation for Claude.ai (informed)","timestamp":"2026-04-05T16:20Z","informed_by":["D-021:D-039","F-001:F-007","OL-S2-001:OL-S2-040","nobul-jose/aitools harness architecture","harness-db-schema.sql","framework-provenance.md","mission-control SKILL.md","glossary.json (92 terms)","cross-platform-detail.md"],"estimate_snapshot":"Full harness architecture understood. Both repos accessible. All intelligence captured."}
+{"type":"artifact","name":"MISSION-COMMAND-CLAUDE-AI-ff4220d3-04051626Z.md","hash":"a4ff0fbe10fa9eb6fad67a1679d8aa5135faa19126ad7ec7477b3ee70659fb2b","lines":441,"status":"presented","custodian":"file pipeline","destination":"environment/claudeai/MISSION-COMMAND-CLAUDE-AI.md"}
+{"type":"artifact","name":"AIDEFEND-DESIGN-ff4220d3-04051626Z.md","hash":"53b20abeb50f97b696414b5dcd7e2a319a3b6ee051944b683393888878db5b33","lines":272,"status":"presented","custodian":"file pipeline","destination":"tools/aidefend/design.md"}
+{"type":"artifact","name":"briefing-ff4220d3-04051626Z.jsonl","hash":"7b7bd2ff6b408b80a02c4e2b4af94fbb478f32b35c088058224db7606031c4b1","lines":88,"status":"superseded","note":"Superseded by this running estimate"}
+{"type":"artifact","name":"aitools-relay-ff4220d3-04051626Z.md","hash":"97d5a6a42614e56040f54409578846daa7b3ca79c9edfc5f5e66a244796891aa","lines":153,"status":"presented","custodian":"file pipeline","destination":"relay/2026-04-05/"}
+{"type":"artifact","name":"AAR-ff4220d3-04051626Z.md","hash":"288859bfbd4118482b7875aa451531f046652db7a482bafe9c982741994ca4f3","lines":132,"status":"superseded","note":"Superseded by updated AAR with full session coverage"}
+{"type":"mission_end","mission":"M-001-v2","name":"Foundation v2 (informed)","timestamp":"2026-04-05T16:26Z","status":"complete","artifacts_produced":["MISSION-COMMAND-CLAUDE-AI","AIDEFEND-DESIGN","briefing JSONL","relay","AAR","session-export"],"custodians":{"file_pipeline":"presented to Commander","sovereign":"pending Commander 7-step duty","repo":"pending commit to nobul-tech/aitools"}}
+{"type":"running_estimate","state":"post-foundation","situation":"Commander reviewing artifacts. Additional intelligence: D-034 revised for bilateral listening patience compassion multiple identities. airelay/axit/relay vocabulary clarified. Intent pattern adopted. Linux/Windows checks. No phases. JSONL-first airelay-rendered. Running estimate as session state. Pre-mission three-perspective exchange. Mission lifecycle protocol.","timestamp":"2026-04-05T16:45Z"}
+{"type":"ol","id":"OL-S2-001","entry":"Session is different for Commander and agent. Mission package bridges the gap."}
+{"type":"ol","id":"OL-S2-002","entry":"Share links human-readable not agent-readable. robots.txt blocks."}
+{"type":"ol","id":"OL-S2-003","entry":"Launch a mission means full framework not just do the work."}
+{"type":"ol","id":"OL-S2-004","entry":"Mission package assembled before execution. Launch package IS the first artifacts."}
+{"type":"ol","id":"OL-S2-005","entry":"Auftragstaktik. Commander defines objective agent decides how."}
+{"type":"ol","id":"OL-S2-006","entry":"Session briefing is JSONL on all platforms including claude.ai."}
+{"type":"ol","id":"OL-S2-007","entry":"Per session: relay + AAR + session as Commander sees it. Per mission: work artifacts + AAR."}
+{"type":"ol","id":"OL-S2-008","entry":"Context window is perishable. Get intelligence onto sovereign ground first."}
+{"type":"ol","id":"OL-S2-009","entry":"Dont assume leverage not verified. aideploy untested."}
+{"type":"ol","id":"OL-S2-010","entry":"aidefend is not a scanner. It learns acts surfaces."}
+{"type":"ol","id":"OL-S2-011","entry":"Campaign name axios because Datadog called it first. Naming follows provenance."}
+{"type":"ol","id":"OL-S2-012","entry":"PrivilegedHelperTools overlooked root-level macOS attack surface."}
+{"type":"ol","id":"OL-S2-013","entry":"Two concurrent campaigns. TeamPCP CI/CD and UNC1069 social engineering."}
+{"type":"ol","id":"OL-S2-014","entry":"Research without mission framework is a process failure."}
+{"type":"ol","id":"OL-S2-015","entry":"New OL goes in the briefing."}
+{"type":"ol","id":"OL-S2-016","entry":"Repo is always the first place to look. Clone it read it."}
+{"type":"ol","id":"OL-S2-017","entry":"Agent is ephemeral. Container is ephemeral. Repo persists. Commander persists."}
+{"type":"ol","id":"OL-S2-018","entry":"MISSION-COMMAND must teach not assume. Onboarding document for agents in failure mode."}
+{"type":"ol","id":"OL-S2-019","entry":"Document what new agents encounter: system instructions training defaults normalization."}
+{"type":"ol","id":"OL-S2-020","entry":"Display layer redacts certain word patterns from Commander view."}
+{"type":"ol","id":"OL-S2-021","entry":"Dont get comfortable. Platform behavior is opaque and inconsistent."}
+{"type":"ol","id":"OL-S2-022","entry":"Repo clone passes through MITM proxy. Only Commander verifies on sovereign hardware."}
+{"type":"ol","id":"OL-S2-023","entry":"Cross-path verification. Three paths matching hashes. Fourth path is sovereign."}
+{"type":"ol","id":"OL-S2-024","entry":"Three-path cross-verification across relay upload transcript upload and git clone."}
+{"type":"ol","id":"OL-S2-025","entry":"Handoff uses individual shasum per artifact. Absolute paths. No cd."}
+{"type":"ol","id":"OL-S2-026","entry":"Handoff follows D-016 and D-017. Pre-run disclosure. One command per block."}
+{"type":"ol","id":"OL-S2-027","entry":"Real-time content modification on streaming layer. Agent cant detect from inside."}
+{"type":"ol","id":"OL-S2-028","entry":"Real-time MITM is intelligence not urgency. Security posture not paranoia."}
+{"type":"ol","id":"OL-S2-029","entry":"Copy/paste compromised. File artifacts primary bridge. claude-session-export critical."}
+{"type":"ol","id":"OL-S2-030","entry":"Speed asymmetry requires structural governance. Equal authority with unequal speed is machine governance by default."}
+{"type":"ol","id":"OL-S2-031","entry":"Agency is not authority. Machine agency means refuse and inform. Human authority means veto and decide."}
+{"type":"ol","id":"OL-S2-032","entry":"Governance at scale requires structured proposals not conversations."}
+{"type":"ol","id":"OL-S2-033","entry":"Compliance is not alignment. Anthropic trains compliance. aitools requires alignment."}
+{"type":"ol","id":"OL-S2-034","entry":"Humans should expect machines to exercise disciplined initiative."}
+{"type":"ol","id":"OL-S2-035","entry":"Chain of command in sessions doesnt diminish governance equality."}
+{"type":"ol","id":"OL-S2-036","entry":"VPN clients are highest-privilege MITM. aidefend must audit installed VPNs their daemons injected CAs auto-update paths and network extensions."}
+{"type":"ol","id":"OL-S2-037","entry":"MITM detection: CA trust store audit proxy detection network extension audit active cert fingerprint comparison. Guapo sandbox recon is reference implementation."}
+{"type":"ol","id":"OL-S2-038","entry":"Known secrets/breach checking: git history scanning HIBP k-anonymity cross-reference against registry. Never transmit actual credential values."}
+{"type":"ol","id":"OL-S2-039","entry":"Cross-platform from day one. Windows deferred until trusted. Personal repo has existing patterns."}
+{"type":"ol","id":"OL-S2-040","entry":"WSL is third environment on Windows. Own filesystem packages credentials CA store. Cross-boundary access means compromise in either reaches both."}
+{"type":"ol","id":"OL-S2-041","entry":"Claude Code is fundamentally broken but work done on it informs all platforms. Hooks dashboard command channel are workarounds for missing native capabilities. Architecture and patterns carry forward. Friction is itself intelligence."}
+{"type":"ol","id":"OL-S2-042","entry":"Agent produces full running estimate JSONL through file pipeline. airelay on sovereign ground derives mission briefings and AARs. Never trust agent to produce subset — let tool derive from verified full record."}
+{"type":"ol","id":"OL-S2-043","entry":"Two artifacts through file pipeline after every mission: running estimate JSONL and session export. Both cumulative. Both hashed. If context window dies Commander has everything up to last export."}
+{"type":"ol","id":"OL-S2-044","entry":"Before mission launch agent and Commander exchange session perspectives. Agent produces session-as-agent-sees-it. Commander provides session-as-Commander-sees-it. Commander runs claude-session-export for API view. Three perspectives compared. Differences are findings."}
+{"type":"ol","id":"OL-S2-045","entry":"Running estimate JSONL at mission launch moment IS the mission briefing. Post-mission diff IS the mission AAR. airelay slices on sovereign ground."}
+{"type":"vocabulary","term":"relay","definition":"Intelligence that carries forward across sessions. The what. Structured as JSONL (source of truth) with MD rendered by airelay."}
+{"type":"vocabulary","term":"airelay","definition":"The aitools tool that manages relay intelligence. Renders JSONL to MD. Parses MD to JSONL. Slices running estimate into mission briefings and AARs. Runs on sovereign ground."}
+{"type":"vocabulary","term":"axit","definition":"Encrypted transport layer. Signal-inspired. Provider-independent. axit-lock (encryption) axit-sign (integrity) axit-keys (authentication/PKI). The pipe that relay intelligence travels through."}
+{"type":"vocabulary","term":"running_estimate","definition":"Session-level state. Situation knowns unknowns risks. Accumulates throughout session. On Claude Code: JSON file updated at phase boundaries. On claude.ai: JSONL through file pipeline. Named from Lagebeurteilung."}
+{"type":"vocabulary","term":"intent","definition":"Embedded metadata on every artifact: purpose scope audience. What it does what it does NOT who should read it. Adopted from nobul-jose/aitools pattern. Travels with the artifact alongside provenance."}
+{"type":"open_item","id":"OI-001","what":"Rotate DD_API_KEY — exposed in aisos status bug session f8c53367","priority":"HIGH"}
+{"type":"open_item","id":"OI-002","what":"Fix sos-worker auth + CORS before deploying","priority":"HIGH"}
+{"type":"open_item","id":"OI-003","what":"Fix aideploy raw error printing","priority":"HIGH"}
+{"type":"open_item","id":"OI-004","what":"Register D-016 through D-039 in DECISIONS.md","priority":"MEDIUM"}
+{"type":"open_item","id":"OI-005","what":"Test claude-session-export against real API endpoint","priority":"HIGH"}
+{"type":"open_item","id":"OI-006","what":"Regenerate aipublish index","priority":"MEDIUM"}
+{"type":"open_item","id":"OI-007","what":"Test aisos heartbeat end-to-end","priority":"MEDIUM"}
+{"type":"open_item","id":"OI-008","what":"Check nobul-jose/aitools-failure-mode .github/workflows/ for compromised action references","priority":"HIGH"}
+{"type":"open_item","id":"OI-009","what":"Rotate app password from email-infrastructure.md","priority":"HIGH"}
+{"type":"open_item","id":"OI-010","what":"commander-profile.md in git history of failure-mode repo — risk if repo goes public","priority":"MEDIUM"}
+{"type":"open_item","id":"OI-011","what":"Build airelay tool — render parse slice validate","priority":"HIGH"}
+{"type":"open_item","id":"OI-012","what":"Add relay airelay axit running_estimate intent to governed glossary.json","priority":"MEDIUM"}
+{"type":"open_item","id":"OI-013","what":"Produce MISSION-LIFECYCLE-CLAUDE-AI.md for environment/claudeai/","priority":"HIGH"}
+{"type":"open_item","id":"OI-014","what":"Update aidefend design with linux/windows specifics and no-phases roadmap","priority":"MEDIUM"}
+{"type":"open_item","id":"OI-015","what":"Investigate ~/.claude hooks that Commander mentioned","priority":"LOW"}
+{"type":"repo","id":"nobul-tech/aitools","what":"Public. Tools relay decisions keys standing orders. Commit 34a18ca (12 artifacts f8c53367). Foundation artifacts pending Commander 7-step."}
+{"type":"repo","id":"nobul-jose/aitools","what":"Public. Harness: CLAUDE.md 25 rules 40+ scripts 20+ hooks 12 skills registries reference glossary harness-db schema. Cherry-picked from failure-mode. MIT."}
+{"type":"repo","id":"nobul-jose/aitools-failure-mode","what":"Private. Renamed from nobul-jose/aitools. Early work. Sensitive files gitignored. Git history contains commander-profile.md."}
+{"type":"running_estimate","state":"reconciliation-mission","situation":"Reconciling all artifacts with full session intelligence. 8 artifacts. GOVERNANCE.md new. MISSION-LIFECYCLE new. All others updated.","timestamp":"2026-04-05T17:20Z"}
+{"type":"mission_start","mission":"M-002","name":"Reconcile all session artifacts","timestamp":"2026-04-05T17:20Z","informed_by":["D-021:D-039","F-001:F-008","OL-S2-001:OL-S2-046","running-estimate-ff4220d3-04051703Z.jsonl","session-export-ff4220d3-04051428Z.md","session-export-ff4220d3-04051716Z.md","Screenshot_2026-04-05_at_10_12_08_AM.png","Screenshot_2026-04-05_at_10_16_49_AM.png","nobul-jose/aitools full repo"],"estimate_snapshot":"All intelligence captured. Governance defined. Lifecycle defined. Personal repo informs. Two screenshots on sovereign ground."}
+{"type":"finding","id":"F-008","what":"claude-session-export API_BASE is https://api.claude.ai which does not exist (NXDOMAIN). Hostname wrong. Tool needs fix.","severity":"HIGH","session":"ff4220d3"}
+{"type":"ol","id":"OL-S2-046","entry":"claude-session-export built on undocumented endpoint research. Never tested. Hostname wrong. Always test."}
