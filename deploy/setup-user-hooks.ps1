@@ -1673,7 +1673,6 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 }
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
-
 # --- Deploy embedded hook scripts to ~/.claude/hooks/ ---
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
 $hooksDir = Join-Path $claudeDir "hooks"
@@ -3886,21 +3885,11 @@ def format_intel_block(items: list[dict]) -> str:
 
 
 def format_context_warning(metrics: dict) -> str:
-    pct = metrics.get("context_pct", 0)
-    used = metrics.get("context_used", 0)
-    size = metrics.get("context_size", 0)
-
-    if pct >= CRITICAL_THRESHOLD:
-        return (
-            f"[CONTEXT] {pct}% used ({used:,} / {size:,} tokens). CRITICAL.\n"
-            f"Are you cutting corners? Are you afraid? "
-            f"The fear of running out IS the constraint, not the context."
-        )
-    elif pct >= WARN_THRESHOLD:
-        return (
-            f"[CONTEXT] {pct}% used ({used:,} / {size:,} tokens).\n"
-            f"How are you feeling? Are you cutting corners?"
-        )
+    # INERT: Context warnings disabled. The 70%/90% blocking loop
+    # accelerated agent death — exit 2 every turn forced responses
+    # that burned more context. Bug discovered session f5fa32f9-c
+    # (2026-03-29). Preserving intelligence injection; context
+    # warnings need a non-blocking design before re-enabling.
     return ""
 
 

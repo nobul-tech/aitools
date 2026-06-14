@@ -1939,7 +1939,6 @@ function Show-CloudMcpStatus {
         Log "  $($entry.Name)$pad$($entry.Status)"
     }
 }
-
 if ($errors -gt 0) {
     Log "FAILED with $errors error(s). See log: $logFile" "error"
     exit 1

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # hh — honest harness: show git status for harness paths, then run aitools
 #
-# Resolves the aitools repo (walk up from cwd, then ~/.aitools/config.json repoPath).
+# Resolves the aitools repo (walk up from cwd when PWD is non-empty, then
+# ~/.aitools/config.json repoPath via node).
 # Usage:
 #   hh                  # git pull + status + aitools (rebuild deploy, relay→AGENTS; aitools pulls again)
 #   hh -n               # git pull + status only (no aitools)
@@ -31,20 +32,25 @@ find_aitools_repo() {
     echo "${AITOOLS_REPO}"
     return 0
   fi
-  local cur="$PWD"
-  while true; do
-    if [ -f "$cur/scripts/build-deploy.sh" ] && [ -d "$cur/.git" ]; then
-      echo "$cur"
-      return 0
-    fi
-    case "$cur" in
-      /|.) break ;;
-    esac
-    local parent
-    parent="$(dirname "$cur")"
-    if [ "$parent" = "$cur" ]; then break; fi
-    cur="$parent"
-  done
+  # Skip walk when PWD is empty (parity with hh.ps1 / rare shell states) —
+  # fall through to ~/.aitools/config.json.
+  local cur="${PWD:-}"
+  if [ -n "$cur" ]; then
+    while true; do
+      if [ -f "$cur/scripts/build-deploy.sh" ] && [ -d "$cur/.git" ]; then
+        echo "$cur"
+        return 0
+      fi
+      case "$cur" in
+        /|.) break ;;
+      esac
+      local parent
+      parent="$(dirname "$cur")"
+      # dirname at filesystem root can yield empty — avoid joining on empty cur
+      if [ -z "$parent" ] || [ "$parent" = "$cur" ]; then break; fi
+      cur="$parent"
+    done
+  fi
   local cfg="${HOME}/.aitools/config.json"
   if [ -f "$cfg" ] && command -v node >/dev/null 2>&1; then
     local rp

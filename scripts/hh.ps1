@@ -1,4 +1,6 @@
 # hh.ps1 — honest harness (Windows): git pull, status, then aitools
+# Resolves repo: AITOOLS_REPO, or walk up from cwd when Path is non-empty, then
+# ~/.aitools/config.json (repoPath / aiToolingRepoPath).
 # Usage: hh [-n|-status-only] [-NoPull]  (-n = no aitools; -NoPull = skip git pull)
 
 param(
@@ -14,14 +16,20 @@ function Find-AitoolsRepo {
     if ($env:AITOOLS_REPO -and (Test-Path (Join-Path $env:AITOOLS_REPO "scripts\build-deploy.sh"))) {
         return $env:AITOOLS_REPO
     }
+    # Walk up from cwd only when Path is non-empty — (Get-Location).Path can be
+    # empty in some pwsh sessions (e.g. certain home-dir / provider states), which
+    # would throw on Join-Path before we read ~/.aitools/config.json.
     $cur = (Get-Location).Path
-    while ($true) {
-        $bd = Join-Path $cur "scripts\build-deploy.sh"
-        $git = Join-Path $cur ".git"
-        if ((Test-Path $bd) -and (Test-Path $git)) { return $cur }
-        $parent = Split-Path $cur -Parent
-        if ($parent -eq $cur -or $cur -eq "") { break }
-        $cur = $parent
+    if (-not [string]::IsNullOrWhiteSpace($cur)) {
+        while ($true) {
+            $bd = Join-Path $cur "scripts\build-deploy.sh"
+            $git = Join-Path $cur ".git"
+            if ((Test-Path $bd) -and (Test-Path $git)) { return $cur }
+            $parent = Split-Path $cur -Parent
+            # Split-Path 'C:\' -Parent is '' — next Join-Path would throw if we continued
+            if ($parent -eq $cur -or [string]::IsNullOrWhiteSpace($cur) -or [string]::IsNullOrWhiteSpace($parent)) { break }
+            $cur = $parent
+        }
     }
     $cfg = Join-Path $env:USERPROFILE ".aitools\config.json"
     if (Test-Path $cfg) {

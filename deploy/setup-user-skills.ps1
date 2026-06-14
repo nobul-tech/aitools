@@ -1660,7 +1660,6 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
-
 # --- Deploy skills (embedded at build time) ---
 
 $skillsDest = Join-Path (Join-Path $env:USERPROFILE ".claude") "skills"

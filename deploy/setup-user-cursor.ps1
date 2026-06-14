@@ -1758,7 +1758,6 @@ if ($DryRun) {
 # --- 3. cli-config.json (merge, not overwrite) ---
 
 Log "Step 3: cli-config.json"
-
 # --- Embedded preferences (from profile.json at build time) ---
 $vimMode = $true
 $modelId = "auto"
@@ -1911,7 +1910,6 @@ if ($DryRun) {
         }
     }
 }
-
 if ($errors -gt 0) {
     Log "FAILED with $errors error(s). See log: $logFile" "error"
     exit 1
