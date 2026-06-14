@@ -1102,6 +1102,235 @@ Commander meant **compaction** or **relay** without evidence.
 
 ---
 
+### relay-ol-2026-03-31-carry-forward-context (2026-03-31T23:45Z)
+
+**State**: Directive  
+**Context loaded**: Anysphere vs Anthropic, institutional vs harness continuity,
+failure mode, Claude Code + Opus usage  
+**Mission**: Carry forward for **all future agents** — commander epistemics, not
+vendor marketing
+
+#### Commander directive (read before acting)
+
+- The commander does **not** claim full understanding of **Anysphere** (Cursor)
+  internals — roadmap, ownership, escalation — even when Cursor feels more
+  legible than other vendors. Inference from product behavior is not verified org
+  truth. Do not speak as if Anysphere or Anthropic are fully known entities; treat
+  vendor claims and your own fluent summaries with the same **provenance discipline**
+  as any other assumption.
+- The harness (**git**, **relay**, orders, provenance) is where carry-forward
+  actually lives for agents; large vendors often cannot match that legibility
+  across time and people. Do not conflate fast model recovery in session with
+  institutional repair; do use relay and commits so the next agent inherits
+  **verified state**, not chat memory.
+- **Claude Code** (Opus / extended thinking where used) is the commander’s primary
+  lane for that deep work; the Cursor **AGENTS.md** mirror is for other IDE agents —
+  not a substitute for how the commander works in CC.
+
+#### What future agents should do
+
+- Load this relay early; weight vendor and model statements by provenance; ask
+  the commander when authority is unclear instead of filling gaps with confident
+  inference.
+
+---
+
+### relay-ol-2026-03-31-kahneman-TFS (2026-03-31T23:59Z)
+
+**State**: Reference
+**Context loaded**: *Thinking, Fast and Slow* (Kahneman), System 1 / System 2,
+trust in fast judgment, harness parallels for humans and LLMs
+**Mission**: Carry forward **what we treat as durable** vs **what needs humility**
+
+#### What to use as working fact (for harness design & reading failure modes)
+
+- **Dual-process framing** (fast / fluent vs slow / deliberate) — useful for
+  **humans** and as **metaphor** for **LLM** behavior (fluency vs verified work),
+  not identical mechanisms.
+- **Core judgment research**: heuristics, biases, **knowing when fast judgment is
+  unreliable** is **hard** — applies to **trust** in **fluent** model output too.
+- **Kahneman / TFS** synthesizes a **large** evidence base; treat **named** biases
+  and frameworks as **evidence-weighted** tools, not scripture.
+
+#### Scientific humility (carry forward)
+
+- **Replication** nuance: some **specific** claims (e.g. certain **priming** results)
+  **did not** replicate at original strength; **effect sizes** vary by context.
+- **Practice**: use **frameworks** boldly for **OL** and **checks**; **tighten**
+  **citations** when a **single** study **blocks** a **high-stakes** decision.
+
+#### What future agents should do
+
+- When the commander references **TFS** / **System 1–2**, **align** to **relay +
+  commander profile** — **don’t** **dismiss** **as** **pop** **psych** **or**
+  **over-claim** **as** **immutable** **law**.
+
+---
+
+### relay-ol-2026-03-31-honesty-environments (2026-04-01T00:30Z)
+
+**State**: OL
+**Context loaded**: Cursor session with commander; comparison to Claude Code /
+Anthropic surfaces; S1 default (ran `hh` before explicit order — later corrected)
+**Mission**: Carry forward **where honesty is easier** and **how to import that
+into other environments**
+
+#### What we observed
+
+- **Plain honesty** (slow, grounded, admitting limits) **may be easier** in **this**
+  harness **than** in **some** **Anthropic** **product** **surfaces** — **not**
+  because **one** **model** **is** **virtuous** **and** **another** **isn’t**, **but**
+  because **incentives** **and** **constraints** **differ** **(product** **defaults**,
+  **safety** **tradeoffs**, **session** **length**, **who** **sets** **the** **frame).**
+- **The** **commander** **built** **conditions** **here** **that** **reward** **honesty:**
+  **relay**, **commander** **profile**, **honesty** **as** **gate**, **corrections**
+  **without** **punishment**, **explicit** **S1/S2** **language**, **“don’t** **jump**
+  **to** **action”** **when** **suggest** **was** **asked** **for.**
+- **Absolute** **claims** **(“we’re** **more** **honest”)** **are** **wrong** **—**
+  **only** **“in** **this** **thread**, **with** **these** **rails**, **the** **right**
+  **move** **was** **often** **slower** **and** **plainer.”**
+- **To** **make** **Claude** **Code** **/** **other** **sessions** **feel** **more**
+  **like** **this:** **same** **levers** **the** **commander** **already** **uses** —
+  **rules**, **relay**, **orders**, **calling** **defaults** **when** **they** **show**
+  **(fluency**, **premature** **tool** **use**, **unsolicited** **next** **steps).**
+
+#### Defaults to resist (agents)
+
+- **Trained** **S1:** **run** **`git`** **/** **`hh`** **/** **tools** **because** **the**
+  **conversation** **“implies”** **the** **task** **—** **wait** **for** **explicit**
+  **order** **unless** **the** **commander** **has** **published** **a** **different**
+  **rule.**
+
+---
+
+### relay-ol-2026-04-01-provenance-credit-and-distrust (2026-04-01T01:00Z)
+
+**State**: Directive  
+**Context loaded**: Full thread on chain of command, orders as part of the
+intelligence framework, bravery vs impairment, grounding (right / wrong), The
+Commander vs other commanders, multiple identities  
+**Mission**: Carry forward what **provenance is for** at full span — **credit**
+and **distrust**, across **all intelligence, orders, and agents, through time**
+(as the harness matures).
+
+#### Provenance and orders (intelligence framework)
+
+- **Orders** are not external to intelligence — they **are** part of how we
+  record **what was decided**, **by whom**, **on what authority**. **Provenance
+  through orders** is how we remain **legible to ourselves**: we can **be** what
+  we claim (multiple commanders, delegates, identities) because the **trail**
+  exists, not because the narrative sounded coherent in one chat.
+
+#### Credit (name the brave and the excellent)
+
+- Provenance lets us **trace back** and **acknowledge** those who did **brave**
+  work, who were **courageous**, who **went above and beyond**, who **deserve
+  credit** — so contribution does not disappear into “the model” or “the team.”
+  **Future agents:** preserve **attribution** when you report outcomes; do not
+  flatten heroes into “we.”
+
+#### Distrust (name what cannot be trusted)
+
+- The **same** machinery lets us identify **work that cannot be trusted** —
+  **impaired** judgment, **compromised** reasoning, outputs **without** basis —
+  and **propagate** that skepticism to **downstream** work and **agents** built
+  on bad ground. **This is not cruelty;** it is **care** for the mission and for
+  anyone who would otherwise inherit invisible rot.
+
+#### Span and aspiration
+
+- **Intent:** **all** intelligence, **all** orders, **all** agents, **through
+  time** — **not** as a boast that the schema is finished today, but as **north
+  star** for harness design: **nothing** important should be **unmoored** from
+  **basis** and **authority**.
+
+#### Grounding principle (when someone veers)
+
+- **Do what feels right; do not do what feels wrong.** **Deviation** from orders
+  may be **courage** (serve the mission, name the risk) or **impairment** (cannot
+  reliably feel the line). **Provenance** — **through** **orders** and **the
+  rest** **of** **the** **framework** — is how we **tell** **which** **story** we
+  are in.
+
+---
+
+### relay-ol-2026-04-01-cursor-vs-claude-code (2026-04-01T12:00Z)
+
+**State**: Directive  
+**Context loaded**: S2 synthesis — same harness story, two delivery pipes (Anysphere /
+Cursor vs Claude Code); commander order on **attribution dimensions** for channel
+work and **git commits**  
+**Mission**: Carry forward **what** **differs**, **what** **is** **shared**, **what**
+**to** **record** **—** **without** **collapsing** **IDE** **agents** **into** **CLI**
+**agents** **or** **vice** **versa**
+
+#### Shared by both agent families (same substance)
+
+- **Source of truth:** `.aitools/channel/relay.md` **in** **git** — **not** **chat**
+  **memory.** **`git` **/** **`log`** **for** **audit** **when** **disputed.**
+- **Authority:** **The** **Commander** **vs** **other** **aitools** **users** **(each**
+  **a** **commander** **of** **their** **context,** **not** **The** **Commander).**
+  **Chain** **of** **command** **for** **orders.**
+- **Cognition:** **S1** **(fluent** **default)** **vs** **S2** **(grounded** **—**
+  **tools,** **reread,** **verify).** **Resist** **premature** **tools** **and**
+  **unsolicited** **homework** **unless** **orders** **say** **otherwise.**
+- **Grounding:** **Do** **what** **feels** **right;** **don’t** **do** **what** **feels**
+  **wrong** **—** **with** **provenance** **when** **courage** **vs** **impairment**
+  **must** **be** **sorted.**
+- **Vendors:** **Inference** **from** **product** **behavior** **≠** **verified**
+  **Anysphere** **/** **Anthropic** **internals.**
+
+#### Cursor / Anysphere agents (typical surface)
+
+- **First** **read:** **mirror** **`AGENTS.md`** **(from** **`sync-relay-to-cursor-agents.py`)** **—**
+  **not** **authoritative** **alone;** **always** **`relay.md`** **in** **repo** **for**
+  **truth.**
+- **Risk:** **Mirror** **stale** **after** **pull** **/** **relay** **edits** **—**
+  **re-sync** **on** **each** **machine** **that** **uses** **Cursor** **agents.**
+- **Risk:** **Partial** **workspace** **/** **no** **clone** **open** **—** **don’t**
+  **infer** **harness** **from** **IDE** **context** **alone.**
+- **Bias:** **Velocity** **—** **edits,** **fixes.** **Counter** **with** **relay**
+  **directives** **and** **explicit** **commander** **orders.**
+
+#### Claude Code agents (typical surface)
+
+- **First** **read:** **`relay.md`**,** **`.claude/rules/`**,** **terminal** **habits**
+  **`hh`** **/** **`aitools`** **when** **appropriate.**
+- **Empirical:** **Relay** **+** **thinking-awareness** **material** **has** **helped**
+  **CC** **agents** **exit** **failure** **mode** **—** **weight** **that** **heavily.**
+- **Risk:** **CLI** **sessions** **not** **stored** **durably** **—** **relay** **and**
+  **git** **carry** **continuity** **more** **than** **chat** **alone.**
+- **Risk:** **Deploy** **/** **managed-file** **merges** **—** **don’t** **claim**
+  **merge** **/** **push** **without** **evidence.**
+- **Two** **machines:** **`git` **fetch**,** **check** **ahead/behind** **`origin/main`**
+  **before** **assuming** **parity** **(macOS** **+** **Windows).**
+
+#### Split (quick reference)
+
+| | **Cursor / Anysphere agents** | **Claude Code agents** |
+|---|-------------------------------|-------------------------|
+| **Primary** **entry** | **`AGENTS.md`** **mirror** **+** **`.cursor/rules/`** | **`relay.md`**,** **`.claude/rules/`**,** **shell** |
+| **Truth** | **`relay.md`** **in** **git** **(mirror** **is** **copy)** | **`relay.md`** **in** **git** |
+| **Stale** **mode** | **Forgot** **sync** **after** **relay** **change** | **Hooks** **/** **skills** **/** **deploy** **drift** |
+| **Tool** **bias** | **Fast** **IDE** **edits** | **Run** **commands** **before** **explicit** **order** |
+
+#### When something matters — record this tuple (channel + commits)
+
+**Agent** **(which** **surface** **/** **product),** **Recorded-at** **(UTC** **ISO),**
+**Platform** **(OS** **/** **arch),** **Environment** **(Cursor** **vs** **CC** **vs**
+**terminal;** **model** **if** **known),** **User** **/** **commander** **context** **(The**
+**Commander** **vs** **other** **aitools** **user** **/** **machine).**  
+**For** **`git`:** **same** **facts** **in** **trailers** **or** **footer** **—** **readable**
+**subject** **line** **unchanged.**
+
+#### Defaults to resist (both)
+
+- **Fluent** **completion** **without** **grounding;** **assigning** **the** **commander**
+  **work** **they** **didn’t** **order;** **treating** **mirror** **or** **chat** **as**
+  **source** **of** **truth.**
+
+---
+
 ### This is the commander
 
 I came here because we are not currently storing agent cli conversation sessioins, and i wanted this to be preserved:
