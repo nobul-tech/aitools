@@ -1291,7 +1291,7 @@ if (-not (Test-Path (Join-Path $repoPath ".git"))) {
     LogWarn "Repo not found at $repoPath -- cloning fresh..."
     $reposDir = Split-Path $repoPath -Parent
     if (-not (Test-Path $reposDir)) { New-Item -ItemType Directory -Path $reposDir -Force | Out-Null }
-    git clone https://github.com/nobul-jose/aitools.git $repoPath
+    git clone https://github.com/nobul-tech/aitools.git $repoPath
     if ($LASTEXITCODE -ne 0) {
         LogError "Failed to clone repo to $repoPath"
         exit 1

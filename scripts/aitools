@@ -1359,7 +1359,7 @@ if [ ! -d "$repo_path/.git" ]; then
     log_warn "Repo not found at $(display_path "$repo_path") -- cloning fresh..."
     repos_dir=$(dirname "$repo_path")
     mkdir -p "$repos_dir"
-    if git clone https://github.com/nobul-jose/aitools.git "$repo_path"; then
+    if git clone https://github.com/nobul-tech/aitools.git "$repo_path"; then
         log_ok "Clone successful"
     else
         log_error "Failed to clone repo to $(display_path "$repo_path")"

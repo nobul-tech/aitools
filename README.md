@@ -26,17 +26,29 @@ Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude C
 
 ### Install on a new machine
 
-Clone the repo and run the installer:
+**One-liner (recommended)** — installs prerequisites (package manager + git), clones the repo, runs the full installer, then (interactive only) `aitools user init` to load your dotprofile. Idempotent; re-run anytime.
 
 macOS/Linux:
 ```bash
-git clone https://github.com/nobul-jose/aitools.git ~/repos/aitools
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/nobul-tech/aitools/main/scripts/bootstrap.sh)"
+```
+
+Windows (PowerShell):
+```powershell
+irm https://raw.githubusercontent.com/nobul-tech/aitools/main/scripts/bootstrap.ps1 | iex
+```
+
+**Manual** — clone the repo and run the installer yourself:
+
+macOS/Linux:
+```bash
+git clone https://github.com/nobul-tech/aitools.git ~/repos/aitools
 bash ~/repos/aitools/scripts/aitools-install.sh
 ```
 
 Windows (PowerShell):
 ```powershell
-git clone https://github.com/nobul-jose/aitools.git ~\repos\aitools
+git clone https://github.com/nobul-tech/aitools.git ~\repos\aitools
 ~\repos\aitools\scripts\aitools-install.ps1
 ```
 

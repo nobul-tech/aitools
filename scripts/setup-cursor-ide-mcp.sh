@@ -171,15 +171,19 @@ case "$MERGE_STATUS" in
 esac
 
 # --- Disable vercel/webflow via Cursor CLI if available ---
+# Cursor's `agent mcp` CLI dropped the `disable`/`enable` subcommands; the current
+# verbs are list/add/remove/doctor. We `remove` the two default-off servers (removed
+# == not active, matching the prior "disabled" intent). Treated as best-effort: a
+# failure here is non-fatal (the server simply stays present), so it never aborts install.
 if [ "$DRY_RUN" = "true" ]; then
-    log "[DRY RUN] Would disable vercel/webflow via Cursor CLI (if available)"
+    log "[DRY RUN] Would remove vercel/webflow from Cursor via Cursor CLI (if available)"
 elif command -v agent &>/dev/null; then
     for server in vercel webflow; do
-        if disable_output=$(agent mcp disable "$server" 2>&1); then
-            log_ok "$server disabled in Cursor"
+        if remove_output=$(agent mcp remove "$server" 2>&1); then
+            log_ok "$server removed from Cursor (default-off)"
         else
-            log_error "Failed to disable $server in Cursor"
-            write_summary ERROR "cursor ide mcp" "failed to disable $server"
+            # Non-fatal: typically means the server wasn't present to begin with.
+            log_warn "Could not remove $server from Cursor (likely not configured): $remove_output"
         fi
     done
 else

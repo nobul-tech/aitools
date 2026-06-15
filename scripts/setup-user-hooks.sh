@@ -66,8 +66,10 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# User repo for dotprofile overrides and adopt target
-USER_REPO_PATH=$(read_config_key "$HOME/.aitools/config.json" "userRepoPath")
+# User repo for dotprofile overrides and adopt target.
+# `|| true`: key is absent until 'aitools user init' runs; without the guard,
+# set -e silently aborts before falling back to shared-only hooks.
+USER_REPO_PATH=$(read_config_key "$HOME/.aitools/config.json" "userRepoPath") || true
 DOTPROFILE_HOOKS=""
 if [ -n "$USER_REPO_PATH" ] && [ -d "$USER_REPO_PATH/claude/hooks" ]; then
     DOTPROFILE_HOOKS="$USER_REPO_PATH/claude/hooks"

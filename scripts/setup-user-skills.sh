@@ -42,8 +42,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKILLS_SRC="$REPO_DIR/shared/skills"
 
-# User repo for dotprofile overrides and adopt target
-USER_REPO_PATH=$(read_config_key "$HOME/.aitools/config.json" "userRepoPath")
+# User repo for dotprofile overrides and adopt target.
+# `|| true`: key is absent until 'aitools user init' runs; without the guard,
+# set -e silently aborts before falling back to shared-only skills.
+USER_REPO_PATH=$(read_config_key "$HOME/.aitools/config.json" "userRepoPath") || true
 DOTPROFILE_SKILLS=""
 if [ -n "$USER_REPO_PATH" ] && [ -d "$USER_REPO_PATH/claude/skills" ]; then
     DOTPROFILE_SKILLS="$USER_REPO_PATH/claude/skills"

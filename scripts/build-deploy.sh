@@ -1008,7 +1008,8 @@ deploy_embedded_skill() {
     local dest="$dest_dir/SKILL.md"
     local _adopt_label=""
     local _user_repo_path
-    _user_repo_path=$(read_config_key "$HOME/.aitools/config.json" "userRepoPath")
+    # `|| true`: key absent until 'aitools user init'; set -e would otherwise abort the build.
+    _user_repo_path=$(read_config_key "$HOME/.aitools/config.json" "userRepoPath") || true
     if [ -n "$_user_repo_path" ]; then
         _adopt_label="dotprofile"
     fi

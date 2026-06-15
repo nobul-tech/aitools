@@ -399,13 +399,15 @@ if [ -f "$CONFIG_FILE" ]; then
         fi
     fi
     # Preserve userRepoPath (set by 'aitools user init')
-    EXISTING_USER_REPO=$(read_config_key "$CONFIG_FILE" "userRepoPath")
+    # `|| true`: read_config_key returns nonzero when the key is absent (pre user-init);
+    # without the guard, set -e aborts the install on a fresh/unpersonalized machine.
+    EXISTING_USER_REPO=$(read_config_key "$CONFIG_FILE" "userRepoPath") || true
     if [ -n "$EXISTING_USER_REPO" ]; then
         # printf -v preserves trailing \n ($() command substitution strips it)
         printf -v USER_REPO_LINE '  "userRepoPath": "%s",\n' "$EXISTING_USER_REPO"
     fi
     # Preserve machineAlias (set by 'aitools user init')
-    EXISTING_MACHINE_ALIAS=$(read_config_key "$CONFIG_FILE" "machineAlias")
+    EXISTING_MACHINE_ALIAS=$(read_config_key "$CONFIG_FILE" "machineAlias") || true
     if [ -n "$EXISTING_MACHINE_ALIAS" ]; then
         printf -v MACHINE_ALIAS_LINE '  "machineAlias": "%s",\n' "$EXISTING_MACHINE_ALIAS"
     fi
@@ -733,13 +735,13 @@ if [ -f "$sync_py" ]; then
     if $DRY_RUN; then sync_args+=(--dry-run); fi
     if ! $DRY_RUN; then export AITOOLS_SYNC_DEPLOY_LOG=1; fi
     if command -v python3 >/dev/null 2>&1; then
-        if python3 "$sync_py" "${sync_args[@]}" >>"$LOG_FILE" 2>&1; then
+        if python3 "$sync_py" ${sync_args[@]+"${sync_args[@]}"} >>"$LOG_FILE" 2>&1; then
             if $DRY_RUN; then log_ok "relay→AGENTS sync (dry-run)"; fi
         else
             log_warn "sync-relay-to-cursor-agents.py failed (non-fatal)"
         fi
     elif command -v py >/dev/null 2>&1; then
-        if py -3 "$sync_py" "${sync_args[@]}" >>"$LOG_FILE" 2>&1; then
+        if py -3 "$sync_py" ${sync_args[@]+"${sync_args[@]}"} >>"$LOG_FILE" 2>&1; then
             if $DRY_RUN; then log_ok "relay→AGENTS sync (dry-run)"; fi
         else
             log_warn "sync-relay-to-cursor-agents.py failed (non-fatal)"
