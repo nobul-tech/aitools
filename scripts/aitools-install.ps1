@@ -544,27 +544,27 @@ if (Test-Path $typstScript) {
 }
 
 # ============================================================
-# 14. Python
+# 14. uv  (MUST precede Python -- uv is the Python manager)
 # ============================================================
-Log "Step 14: Python"
-
-$pythonScript = Join-Path $PSScriptRoot "setup-python.ps1"
-if (Test-Path $pythonScript) {
-    Invoke-ValidatedScript $pythonScript
-} else {
-    LogWarn "setup-python.ps1 not found -- skipping (MDM deploy)"
-}
-
-# ============================================================
-# 15. uv
-# ============================================================
-Log "Step 15: uv"
+Log "Step 14: uv"
 
 $uvScript = Join-Path $PSScriptRoot "setup-uv.ps1"
 if (Test-Path $uvScript) {
     Invoke-ValidatedScript $uvScript
 } else {
     LogWarn "setup-uv.ps1 not found -- skipping (MDM deploy)"
+}
+
+# ============================================================
+# 15. Python  (via uv -- requires Step 14)
+# ============================================================
+Log "Step 15: Python"
+
+$pythonScript = Join-Path $PSScriptRoot "setup-python.ps1"
+if (Test-Path $pythonScript) {
+    Invoke-ValidatedScript $pythonScript
+} else {
+    LogWarn "setup-python.ps1 not found -- skipping (MDM deploy)"
 }
 
 # ============================================================

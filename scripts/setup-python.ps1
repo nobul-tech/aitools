@@ -1,10 +1,17 @@
-# setup-python.ps1 -- Installs/updates Python on Windows via pymanager
-# Safe to re-run -- detects existing install and upgrades as needed.
+# setup-python.ps1 -- Manages Python via uv (unified manager, Windows)
+# Safe to re-run -- idempotent.
 #
-# Windows: Installs Python Install Manager (pymanager) via winget, then
-# installs the Python runtime via `py install`. Removes Microsoft Store
-# (MSIX) Python if detected (conflicts with pymanager).
-# pip available as `python -m pip` (PEP 773 deprecates standalone pip).
+# uv is the single source of truth for Python on BOTH Windows and macOS. This
+# script installs the target Python via uv and makes it the default, so bare
+# `python`/`python3` resolve to the uv-managed interpreter (shims in uv's bin
+# dir, %USERPROFILE%\.local\bin). Per-repo overrides use uv's normal mechanism
+# (.python-version / `uv venv` / `uv run`) -- not a global rebind.
+#
+# Requires uv -- setup-uv.ps1 MUST run before this script.
+#
+# NOTE: Replaces the previous pymanager-based flow. A legacy pymanager, Microsoft
+# Store (MSIX) Python, or winget Python.Python.3.x may still shadow the uv shim on
+# PATH -- this script WARNS (does not auto-remove) so you can clean those up.
 #
 # See reference/tool-registry.md for install source details.
 
@@ -18,176 +25,68 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
     exit 1
 }
 
-# Pymanager winget ID (version-agnostic -- auto-updates via winget)
-$pymanagerWingetId = "Python.PythonInstallManager"
-
-# Target Python runtime version (bump here for future upgrades)
+# Target Python version (bump here for future upgrades; mirrors setup-python.sh)
 $targetPyVersion = "3.14"
 
-# --- Remove Microsoft Store (MSIX) Python if present ---
-$msixPackages = Get-AppxPackage *PythonSoftwareFoundation* -ErrorAction SilentlyContinue
-if ($msixPackages) {
-    Log "Microsoft Store Python detected -- removing (conflicts with pymanager)..."
-    foreach ($pkg in $msixPackages) {
-        Log "Removing: $($pkg.PackageFullName)"
-        try {
-            Remove-AppxPackage -Package $pkg.PackageFullName -ErrorAction Stop
-            LogOk "Removed MSIX package: $($pkg.PackageFullName)"
-        } catch {
-            LogWarn "Could not remove MSIX package: $($pkg.PackageFullName) -- $_"
-        }
-    }
-    Refresh-Path
-} else {
-    Log "No Microsoft Store Python found (OK)"
-}
-
-# Refresh PATH to pick up tools installed by prior steps or previous runs
+# Refresh PATH to pick up tools installed by prior steps (e.g., setup-uv)
 Refresh-Path
 
-# --- Detect legacy Python.Python.3.x winget install ---
-$legacyDetected = $false
-$legacyOutput = winget list --id Python.Python --accept-source-agreements 2>&1 | Out-String
-if ($legacyOutput -match 'Python\.Python\.3\.(\d+)') {
-    $legacyMinor = $Matches[1]
-    $legacyDetected = $true
-    LogWarn "Legacy winget Python install detected (Python.Python.3.$legacyMinor)"
-    LogWarn "pymanager will manage Python runtimes going forward"
-    LogWarn "To uninstall legacy: winget uninstall Python.Python.3.$legacyMinor"
-    Write-Summary "ACTION" "" "winget uninstall Python.Python.3.$legacyMinor -- remove legacy Python"
+# --- Require uv (the manager) ---
+# Get-Command exempt: command-existence check with explicit error/exit
+if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+    LogError "uv not found -- setup-uv.ps1 must run before setup-python.ps1"
+    Write-Summary "ERROR" "python" "uv not installed (ordering: uv before python)"
+    exit 1
 }
 
-# --- Clean up orphaned Python directories ---
-$orphansRemoved = Remove-OrphanedPythonDirs
-if ($orphansRemoved -gt 0) {
-    LogOk "Cleaned up $orphansRemoved orphaned Python directory(ies)"
+# --- Install/update the default Python via uv ---
+# --default: install unversioned python/python3 executables into uv's bin dir.
+# --preview-features python-install-default: silence the experimental warning and
+#   pin the behavior (the --default flag is gated behind this preview feature).
+Log "Installing/updating uv-managed Python $targetPyVersion as default..."
+$installOutput = uv python install $targetPyVersion --default --upgrade --preview-features python-install-default 2>&1 | Out-String
+$installOutput.Trim().Split("`n") | ForEach-Object {
+    $l = $_.TrimEnd()
+    if ($l.Trim()) { Log $l }
 }
-
-# --- Install/update pymanager ---
-# Get-Command exempt: command-existence check with if/else fallback
-$hasPymanager = (Get-Command pymanager -ErrorAction SilentlyContinue) -ne $null
-
-if ($hasPymanager) {
-    # Pymanager already installed -- upgrade via winget
-    Log "pymanager found -- checking for updates via winget..."
-    $wingetOutput = winget upgrade $pymanagerWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    Log-WingetOutput $wingetOutput
-    if ($wingetOutput -match 'No available upgrade|No newer package versions') {
-        LogOk "pymanager already up to date"
-    } elseif ($wingetOutput -match 'No installed package') {
-        Log "winget has no record of $pymanagerWingetId -- reinstalling..."
-        $wingetOutput = winget install $pymanagerWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-        if ($LASTEXITCODE -ne 0) {
-            LogError "winget install pymanager failed (exit code $LASTEXITCODE)"
-            Write-Summary "ERROR" "python" "winget install pymanager failed"
-        }
-    } elseif ($LASTEXITCODE -ne 0) {
-        LogError "winget upgrade pymanager failed (exit code $LASTEXITCODE)"
-        Write-Summary "ERROR" "python" "winget upgrade pymanager failed"
-    }
-} else {
-    # Pymanager not present (may have old py.exe launcher or nothing)
-    Log "Installing pymanager via winget ($pymanagerWingetId)..."
-    $wingetOutput = winget install $pymanagerWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
-    Log-WingetOutput $wingetOutput
-    if ($wingetOutput -match 'already installed') {
-        LogOk "pymanager already installed (winget)"
-    } elseif ($LASTEXITCODE -ne 0) {
-        LogError "winget install pymanager failed (exit code $LASTEXITCODE)"
-        Write-Summary "ERROR" "python" "winget install pymanager failed"
-    }
+if ($LASTEXITCODE -ne 0) {
+    LogError "uv python install failed (exit code $LASTEXITCODE)"
+    Write-Summary "ERROR" "python" "uv python install failed"
+    exit 1
 }
 
 Refresh-Path
 
-# --- Verify pymanager is available ---
+# --- Verify python resolves to the uv-managed interpreter ---
 # Get-Command exempt: command-existence check with if/else fallback
-if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
-    LogError "pymanager installed but 'py' not found in PATH"
-    Write-Summary "ERROR" "python" "pymanager not on PATH"
+$pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+if ($pythonCmd) {
+    $pyVersion = python --version 2>&1
+    $src = $pythonCmd.Source
+    if ($src -match '\\uv\\' -or $src -match '\.local\\bin') {
+        LogOk "$pyVersion (uv-managed at $src)"
+        Write-Summary "OK" "python" "$pyVersion (uv)"
+    } else {
+        LogWarn "python resolves to $src ($pyVersion), not the uv shim"
+        LogWarn "A legacy pymanager / Microsoft Store / winget Python may be shadowing uv on PATH"
+        LogWarn "Ensure uv's bin dir (%USERPROFILE%\.local\bin) precedes those in PATH"
+        Write-Summary "WARN" "python" "$pyVersion (uv shim shadowed -- check PATH)"
+        Write-Summary "ACTION" "" "Put %USERPROFILE%\.local\bin first in PATH -- python default"
+    }
 } else {
-    # --- Install/update Python runtime ---
-    $pyListOutput = py list 2>&1 | Out-String
-    if ($pyListOutput -match $targetPyVersion) {
-        Log "Python $targetPyVersion already installed -- checking for updates..."
-        $pyUpdateOutput = py install --update $targetPyVersion 2>&1 | Out-String
-        $pyUpdateOutput.Trim().Split("`n") | ForEach-Object {
-            $l = $_.TrimEnd()
-            if ($l.Trim()) { Log $l }
-        }
-        if ($LASTEXITCODE -ne 0) {
-            LogWarn "py install --update returned non-zero (exit code $LASTEXITCODE)"
-        }
-    } else {
-        Log "Installing Python $targetPyVersion via pymanager..."
-        $pyInstallOutput = py install $targetPyVersion 2>&1 | Out-String
-        $pyInstallOutput.Trim().Split("`n") | ForEach-Object {
-            $l = $_.TrimEnd()
-            if ($l.Trim()) { Log $l }
-        }
-        if ($LASTEXITCODE -ne 0) {
-            LogError "py install $targetPyVersion failed (exit code $LASTEXITCODE)"
-            Write-Summary "ERROR" "python" "runtime install failed"
-        }
-    }
+    LogError "'python' not found after uv install -- is uv's bin dir (%USERPROFILE%\.local\bin) on PATH?"
+    Write-Summary "ERROR" "python" "python not on PATH after uv install"
+    Write-Summary "ACTION" "" "Add %USERPROFILE%\.local\bin to PATH -- uv python shims"
+}
 
-    Refresh-Path
-
-    # --- Verify python command works ---
-    # Get-Command exempt: command-existence check with if/else fallback
-    $pythonCheck = Get-Command python -ErrorAction SilentlyContinue
-    if ($pythonCheck) {
-        $pyVersion = python --version 2>$null
-        if ($pyVersion) {
-            LogOk "$pyVersion (via pymanager)"
-            Log "Install path: $($pythonCheck.Source)"
-
-            # Warn if legacy install is shadowing pymanager
-            if ($pyVersion -notmatch $targetPyVersion) {
-                LogWarn "python --version reports $pyVersion (expected $targetPyVersion)"
-                LogWarn "Legacy Python install may be shadowing pymanager on PATH"
-            }
-
-            # Summary reflects accumulated warnings (legacy install, version mismatch)
-            if ($warnings -gt 0) {
-                Write-Summary "WARN" "python" "$pyVersion (legacy present)"
-            } else {
-                Write-Summary "OK" "python" "$pyVersion"
-            }
-        } else {
-            LogError "python found on PATH but --version failed"
-            Write-Summary "ERROR" "python" "version check failed"
-        }
-    } else {
-        LogError "'python' command not found after pymanager install"
-        LogWarn "Check 'Manage app execution aliases' in Windows Settings"
-        Write-Summary "ERROR" "python" "python not on PATH"
-
-        # Check if pymanager bin dir is in persistent PATH
-        $pymanagerBin = Join-Path $env:LOCALAPPDATA "Python\bin"
-        $persistentPath = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
-        if ($persistentPath -notlike "*$pymanagerBin*") {
-            LogWarn "Add $pymanagerBin to PATH for python/pip aliases"
-            Write-Summary "ACTION" "" "Add $pymanagerBin to PATH -- python alias"
-        }
-    }
-
-    # --- Verify pip ---
-    # Get-Command exempt: command-existence check with if/else fallback
-    if (Get-Command pip -ErrorAction SilentlyContinue) {
-        $pipVersion = pip --version 2>$null
-        if ($pipVersion) {
-            LogOk "pip available: $pipVersion"
-        }
-    } else {
-        # PEP 773: standalone pip deprecated; python -m pip is the future
-        $pipModVersion = python -m pip --version 2>$null
-        if ($pipModVersion) {
-            LogOk "pip available (module): $pipModVersion"
-        } else {
-            LogWarn "pip not found -- try: python -m ensurepip"
-        }
-    }
+# --- pip note ---
+# uv-managed CPython bundles pip; prefer `uv pip` for project work.
+# Get-Command exempt: command-existence check with if/else fallback
+if (Get-Command pip -ErrorAction SilentlyContinue) {
+    $pipVersion = pip --version 2>$null
+    if ($pipVersion) { LogOk "pip available: $pipVersion" }
+} else {
+    Log "pip not on PATH as a standalone command -- use 'uv pip' or 'python -m pip'"
 }
 
 # --- Exit ---
