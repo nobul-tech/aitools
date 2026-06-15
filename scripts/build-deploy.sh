@@ -177,6 +177,20 @@ else
     blog "WARN: No user rules found at build time -- deploy scripts will not manage ~/.claude/rules/"
 fi
 
+# --- Build target: the user's own dotprofile repo, not the shared aitools repo ---
+# build-deploy produces a PERSONALIZED, self-contained (MDM-ready) artifact into the
+# user's dotprofile repo (aitools-<ghuser>/deploy/). The shared aitools/deploy/ is left
+# untouched. Every user has a dotprofile; 'aitools user init' creates one if missing.
+# If no dotprofile is configured yet, skip gracefully -- the bootstrap flow runs
+# build-deploy only AFTER user init, so userRepoPath is set by the time we build.
+if [ -n "${_urp:-}" ] && [ -d "$_urp" ]; then
+    DEPLOY_DIR="$_urp/deploy"
+    blog "Build target: $DEPLOY_DIR (dotprofile repo)"
+else
+    blog_warn "No dotprofile configured (userRepoPath unset). Run 'aitools user init' first -- skipping deploy build."
+    exit 0
+fi
+
 # --- Profile interpolation ---
 # Read profile from user repo, interpolate identity placeholders.
 # Fallback: use defaults if profile not found (build never fails).

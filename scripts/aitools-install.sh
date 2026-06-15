@@ -256,7 +256,15 @@ AITOOLS_REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 # 0. System prerequisites
 # ============================================================
 # Windows long path check is in aitools-install.ps1 (Step 0).
-# macOS/Linux have no path length limit -- nothing to do here.
+# macOS/Linux: ensure Homebrew is on PATH so brew- and node-dependent steps work
+# even when invoked non-interactively (no profile sourced). Mirrors bootstrap.sh.
+if [ "$OS_NAME" = "Darwin" ] && ! command -v brew >/dev/null 2>&1; then
+    if [ -x /opt/homebrew/bin/brew ]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [ -x /usr/local/bin/brew ]; then
+        eval "$(/usr/local/bin/brew shellenv)"
+    fi
+fi
 
 # ============================================================
 # 1. Install/update gh CLI
