@@ -892,12 +892,12 @@ if ($Extensive) {
     $shLib = Join-Path $script:RepoRoot "scripts\aitools-lib.sh"
     # Extract MANAGED_FILE_RESULT values from bash
     $shReturns = (perl -ne 'print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/' $shLib | Sort-Object -Unique) -join ','
-    # Check callers for each value
+    # Audit the inline-handling caller (setup-user-claude). setup-user-mcp no longer calls
+    # deploy_managed_file (skills moved to setup-user-skills); skills/hooks delegate handling
+    # to deploy_tracker_record, covered by step 30 tracker extraction + step 31.
     $callers = @(
         (Join-Path $script:RepoRoot "scripts\setup-user-claude.sh"),
-        (Join-Path $script:RepoRoot "scripts\setup-user-claude.ps1"),
-        (Join-Path $script:RepoRoot "scripts\setup-user-mcp.sh"),
-        (Join-Path $script:RepoRoot "scripts\setup-user-mcp.ps1")
+        (Join-Path $script:RepoRoot "scripts\setup-user-claude.ps1")
     )
     $missing = @()
     foreach ($caller in $callers) {

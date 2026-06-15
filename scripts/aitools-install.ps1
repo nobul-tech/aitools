@@ -682,7 +682,7 @@ if (Test-Path $syncPy) {
             LogWarn "sync-relay-to-cursor-agents.py failed (non-fatal)"
         }
     }
-    Remove-Item Env:\AITOOLS_SYNC_DEPLOY_LOG -ErrorAction SilentlyContinue
+    if (Test-Path Env:\AITOOLS_SYNC_DEPLOY_LOG) { Remove-Item Env:\AITOOLS_SYNC_DEPLOY_LOG }
 }
 
 # --- Cleanup ---

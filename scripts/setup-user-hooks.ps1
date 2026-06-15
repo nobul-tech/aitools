@@ -205,9 +205,12 @@ if ($DryRun) {
         }
         # Also remove any backups of stale hooks
         $bakPattern = Join-Path $hooksDir "$staleHook.bak.*"
-        foreach ($bak in Get-ChildItem -Path $bakPattern -File -ErrorAction SilentlyContinue) {
-            Remove-Item $bak.FullName -Force
-            Log "Removed stale backup: $($bak.Name)"
+        $staleBaks = Get-ChildItem -Path $bakPattern -File -ErrorAction SilentlyContinue
+        if ($staleBaks) {
+            foreach ($bak in $staleBaks) {
+                Remove-Item $bak.FullName -Force
+                Log "Removed stale backup: $($bak.Name)"
+            }
         }
     }
 

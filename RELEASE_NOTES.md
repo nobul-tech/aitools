@@ -12,6 +12,48 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.68.0 -- Resilient session/scratch harvesting + Windows harvest RCA (2026-06-14)
+
+### Bug fixes
+
+| # | Severity | Change |
+|---|----------|--------|
+| 1 | High | **Windows harvest no-op fixed** (bda38a2) — `setup-user-hooks.ps1` deployed `scratch-init.sh` + `harvest-session.sh` as files but never registered them in `settings.json` (no `MergeHookEntry`/validation), so harvesting + scratch dirs were no-ops on Windows since 2026-03-15. Added the two missing registrations + validation counts. |
+| 2 | Medium | **check-post-push step 32 false-failure** (44e1daf) — the hook-registration parity audit compared sort-order-sensitive strings extracted via perl-in-PowerShell (mangled `$1`/`\n`). Moved the comparison to stdlib `scripts/check-hook-parity.py` (set-based, order-independent). |
+| 3 | Low | **check-post-push step 30 stale caller list** — audited `setup-user-mcp` for `deploy_managed_file` return-value coverage, but skills deployment moved to `setup-user-skills`; `setup-user-mcp` is no longer a caller. Caller list corrected. |
+| 4 | Low | **Unguarded `-ErrorAction SilentlyContinue`** — `setup-user-hooks.ps1` stale-backup `Get-ChildItem` now null-checks its result; `aitools-install.ps1` env cleanup uses a `Test-Path` guard. |
+| 5 | Low | **read-session.py UnicodeEncodeError** on non-ASCII under a Windows cp1252 console — added a UTF-8 stdout/stderr reconfigure. |
+
+### New features
+
+| # | Change |
+|---|--------|
+| 6 | **SessionStart catch-up harvesting** — new `session-catchup.sh` hook + stdlib `scripts/ait-harvest.py` recover CC transcripts (incl. subagents) and scratch artifacts that an abrupt / offline / slept SessionEnd missed. Concurrency-safe across same-machine sessions: heartbeat single-flight lock, mtime-primary liveness, skip-own-session via stdin sid, dotprofile-state guards. |
+| 7 | **Single-source hook registration** — `shared/hooks/hooks-manifest.json` + `check-post-push` step 32 parity audit close the bash↔PS1 registration drift that caused bug #1. |
+| 8 | **Unified archive logic** — `session-archive.sh` / `harvest-session.sh` refactored to thin shims; `aitools sessions archive` (bash + ps1) delegate to `ait-harvest.py`, ending the triplication. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 9 | **`reference/logging.md`** — logging-standard decision doc (unified `~/.aitools/logs/`, per-component files, 5 MB × 5 rotation, native path separators). Phase 5 migration (`aitools-lib`) tracked in [#7](https://github.com/nobul-tech/aitools/issues/7). |
+| 10 | **`plans/harvest-archive-resilience.md`** + ROADMAP "In Progress" entry. |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `scripts/ait-harvest.py` | Stdlib session/scratch carry-forward helper |
+| `scripts/check-hook-parity.py` | Hook-registration parity audit (step 32) |
+| `shared/hooks/session-catchup.sh` | SessionStart catch-up hook |
+| `shared/hooks/hooks-manifest.json` | Single source of truth for hook registration |
+| `reference/logging.md` | Logging standard |
+| `plans/harvest-archive-resilience.md` | Implementation plan |
+
+**Verified on:** Windows (14/14 `ait-harvest` unit tests, hook smoke tests, `build-deploy` clean, `check-post-push -Extensive` 0 FAIL, full `aitools install` clean — 19 hooks verified). macOS verification pending for the deferred Phase 5 logging migration (#7).
+
+---
+
 ## v0.67.1 -- Hook pipeline fix, command channel, harness-db CLI (2026-03-25)
 
 ### Bug fixes

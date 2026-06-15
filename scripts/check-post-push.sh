@@ -774,8 +774,10 @@ if $EXTENSIVE; then
     # Check Record-DeployOutcome cases in PS1
     ps1_tracker=$(perl -ne 'print "$1\n" if /^\s+"([\w-]+)"\s+\{/' "$ps1_lib" | sort -u | paste -s -d , -)
     missing=""
-    # Check callers for coverage of each bash return value
-    for caller in "$REPO_ROOT/scripts/setup-user-claude.sh" "$REPO_ROOT/scripts/setup-user-mcp.sh"; do
+    # Audit the inline-handling caller (setup-user-claude). setup-user-mcp no longer
+    # calls deploy_managed_file (skills moved to setup-user-skills); skills/hooks delegate
+    # handling to deploy_tracker_record, covered by the tracker/state-machine audits (31).
+    for caller in "$REPO_ROOT/scripts/setup-user-claude.sh"; do
         cname=$(basename "$caller")
         for val in $(echo "$sh_returns" | tr ',' ' '); do
             if ! grep -q "$val" "$caller"; then
