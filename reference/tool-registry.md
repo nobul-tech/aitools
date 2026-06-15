@@ -717,57 +717,57 @@ typst --version
 
 ## Python
 
-**Source**: https://www.python.org/downloads/
-**Purpose**: Python runtime. Required by: Modal CLI, uv, pip-installed tools.
+**Source**: https://www.python.org/downloads/ (managed via uv: https://docs.astral.sh/uv/)
+**Purpose**: Python runtime, managed by **uv** (unified manager, all platforms). Required by: Modal CLI, pip-installed tools.
 
 ### Install
 
+uv is the single Python manager on macOS, Windows, and Linux (parity). Requires uv installed first (`setup-uv` runs before `setup-python` in `aitools-install`).
+
 | Platform | Method | Command |
 |----------|--------|---------|
-| macOS | Homebrew (preferred) | `brew install python` |
-| Windows | pymanager (preferred) | `winget install Python.PythonInstallManager` then `py install 3.14` |
+| macOS | uv (preferred) | `uv python install 3.14 --default` |
+| Windows | uv (preferred) | `uv python install 3.14 --default` |
+| Linux | uv (preferred) | `uv python install 3.14 --default` |
 
-**Note (Windows)**: Python Install Manager (pymanager, PEP 773) is the official PSF tool
-for managing Python runtimes on Windows. The winget ID `Python.PythonInstallManager` is
-version-agnostic and auto-updates. Runtimes are managed via `py install <version>`.
+`--default` installs `python`/`python3` shims into uv's bin dir (`~/.local/bin`), so bare `python3` resolves to the uv-managed interpreter. Per-repo overrides use uv's `.python-version` / `uv venv` (not a global rebind). Replaces the prior brew-python (macOS) and pymanager (Windows) approach as of v0.69.0.
 
 ### Update
 
-- Homebrew: `brew upgrade python`
-- pymanager: `winget upgrade Python.PythonInstallManager` (manager) + `py install --update 3.14` (runtime)
+- uv: `uv python install 3.14 --default --upgrade` (latest patch)
 
 ### Check Version
 
 ```bash
-python3 --version   # macOS
-python --version    # Windows
-py list             # Windows: list installed runtimes (pymanager)
+python3 --version    # all platforms (resolves to the uv-managed shim)
+uv python list       # uv-managed versions
 ```
 
 ### Non-Preferred Install Methods (cleanup targets)
 
 | Method | Detection | Why not preferred |
 |--------|-----------|-------------------|
-| Microsoft Store (MSIX) | `Get-AppxPackage *PythonSoftwareFoundation*` | PATH conflicts with pymanager, can't be managed by winget upgrade |
-| winget `Python.Python.3.x` | `winget list --id Python.Python` | Version-specific ID requires manual bumps; replaced by pymanager |
-| Old py.exe launcher | `py --help` (no `install` subcommand) | Superseded by pymanager; conflicts if both present |
-| Conda | `conda list python` | Environment isolation issues, conflicts with system Python |
-| pyenv | `pyenv versions` | Extra layer of indirection, not needed for our use case |
+| Homebrew (`brew install python`) | `brew list python@3.14` | Superseded by uv (v0.69.0). May remain as a transitive brew dependency — fine; not the user-facing default |
+| pymanager (Windows) | `py list` | Superseded by uv (v0.69.0); was the prior Windows manager (PEP 773) |
+| Microsoft Store (MSIX) | `Get-AppxPackage *PythonSoftwareFoundation*` | PATH conflicts; not manageable by uv |
+| winget `Python.Python.3.x` | `winget list --id Python.Python` | Version-specific ID requires manual bumps |
+| Conda | `conda list python` | Environment isolation issues, conflicts with managed Python |
+| pyenv | `pyenv versions` | uv now fills the version-manager role; redundant |
 
 ### Notes
 
-- On macOS, `python3` and `pip3` are the correct commands (Homebrew convention)
-- On Windows, `python` and `python -m pip` are the correct commands (PEP 773 deprecates standalone `pip`)
-- On Windows, pymanager provides `py` for runtime management (`py install`, `py list`, `py install --update`)
+- `python3` (and `python`) resolve to the uv-managed interpreter via the `~/.local/bin` shim on all platforms.
+- `~/.local/bin` must precede `/usr/bin` in PATH so the uv shim wins over a system python (macOS CommandLineTools ships 3.9).
+- Prefer `uv pip` / `uv run` for project work; `python3 -m pip` also works.
 
 ### Lifecycle
 
 - **Platform Status:** macOS: supported | Windows: supported | Linux: supported
 - **Concurrency:** Yes -- runtime
-- **Post-Install Config:** None
-- **Dependencies:** --
-- **Invocation:** `python3` (macOS) / `python` (Windows); `pip3` (macOS) / `python -m pip` (Windows); `py` (Windows: runtime management)
-- **Last verified version:** macOS: pending | Windows: pending | Linux: pending
+- **Post-Install Config:** `~/.local/bin` ahead of `/usr/bin` in PATH
+- **Dependencies:** uv (install first)
+- **Invocation:** `python3` / `python` (uv-managed shims); `uv pip` for packages
+- **Last verified version:** macOS: 3.14.6 via uv (2026-06-15) | Windows: pending (uv mirror untested) | Linux: pending
 
 ---
 

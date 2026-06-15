@@ -6,7 +6,7 @@ resolving harness deficiencies through structured defect management.
 this way, how it's maintained, and how it fits the three-layer model.
 NOT the operational filing process (that's in
 `@.claude/rules/incident-governance.md`). NOT the incident data itself
-(that's in `@reference/incidents.json`). **Audience**: Agents
+(that's in `@registries/incidents.json`). **Audience**: Agents
 encountering the incident system for the first time, framework
 adoption work.
 
@@ -19,7 +19,7 @@ staleness rules mirror defect tracking practices.
 
 ## How We Adopted It
 
-- **Defect tracking** → `@reference/incidents.json` with structured
+- **Defect tracking** → `@registries/incidents.json` with structured
   fields, severity classification, lifecycle states
 - **Continuous improvement** → surfacing duty (every session looks for
   ambiguities), staleness rule (90 days without a plan = stale)
@@ -42,12 +42,12 @@ staleness rules mirror defect tracking practices.
 ## Implementing Artifacts
 
 - `@.claude/rules/incident-governance.md` (operational rule)
-- `@reference/incidents.json` (data)
+- `@registries/incidents.json` (data)
 - `@.claude/skills/incident/SKILL.md` (filing)
 - `@.claude/skills/audit/SKILL.md` (health checking)
 
 ## Cross-References
 
-- Framework registry: `@reference/framework-registry.json`
+- Framework registry: `@registries/framework-registry.json`
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
 - Discovery cycle: `@reference/framework-adoption.md`

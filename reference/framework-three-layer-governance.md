@@ -71,7 +71,7 @@ pattern that mirrors the governance layers:
 intent: what the registry is, why it matters, when to check it.
 References the JSON and skill. Contains no data that can drift.
 
-**Structured data** (`reference/<name>.json`) — single source of
+**Structured data** (`registries/<name>.json`) — single source of
 truth. Protected file. Machine-readable for `/audit` validation.
 Schema documented in the rule. Must include `meta.intent` with
 purpose, scope, and audience fields.
@@ -90,7 +90,7 @@ get a reference file.
 ### Naming
 
 - Rule: `.claude/rules/<registry-name>.md`
-- Data: `reference/<registry-name>.json` or `reference/<name>-registry.json`
+- Data: `reference/<registry-name>.json` or `registries/<name>-registry.json`
 - Write skill: `/<singular>` (e.g., `/incident`, `/tool-eval`)
 - Read skill: `/<plural>` (e.g., `/incidents`, `/frameworks`, `/tools`)
 - Per-entry reference: `reference/<concept>-<name>.md`

@@ -230,7 +230,7 @@ for pf in \
     "reference/tool-registry.md" \
     "reference/tool-evaluation-criteria.md" \
     "reference/tool-evaluation-playbook.md" \
-    "reference/tool-versions.json" \
+    "registries/tool-versions.json" \
     "CLAUDE.md" \
     "shared/claude-shared.md" \
     "ROADMAP.md" \
@@ -445,7 +445,7 @@ fi
 # ---------------------------------------------------------------------------
 # 21. Tool version freshness
 # ---------------------------------------------------------------------------
-versions_json="$REPO_ROOT/reference/tool-versions.json"
+versions_json="$REPO_ROOT/registries/tool-versions.json"
 if [ ! -f "$versions_json" ]; then
     step_skip "21" "Tool version freshness" "tool-versions.json not found"
 elif ! command -v python3 >/dev/null 2>&1; then

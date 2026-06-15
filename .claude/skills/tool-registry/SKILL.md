@@ -17,7 +17,7 @@ verify a version, or write a registry entry after evaluation.
 
 ## Reading tool entries
 
-1. Read `@reference/tool-registry.json`
+1. Read `@registries/tool-registry.json`
 2. Find the tool in `tools.<slug>` (CLI tools) or `mcpServers.<slug>` (MCP servers)
 3. Present: displayName, source, purpose, install methods per platform,
    lifecycle (platformStatus, concurrency, postInstallConfig, dependencies,
@@ -64,7 +64,7 @@ provides the exact content to write.
 
 When a tool is verified on a platform:
 
-1. Read `@reference/tool-registry.json`
+1. Read `@registries/tool-registry.json`
 2. Navigate to `tools.<slug>.versions.<platform>`
 3. Update `lastVerifiedVersion` and `lastVerified`
 4. For MCP servers: update `mcpServers.<slug>.versions.lastReviewed`
@@ -74,7 +74,7 @@ When a tool is verified on a platform:
 
 ## Schema
 
-`reference/tool-registry.json` uses `schemaVersion: "1.0"`. Top-level
+`registries/tool-registry.json` uses `schemaVersion: "1.0"`. Top-level
 keys: `meta`, `tools`, `mcpServers`, `mcpManagement`, `overrides`.
 Key sections per CLI tool (`tools.<slug>`):
 
@@ -105,5 +105,5 @@ Key sections per CLI tool (`tools.<slug>`):
 - Evaluation process: `/tool-eval` skill
 - Evaluation principles: `@.claude/rules/tool-evaluation.md`
 - Lifecycle gates: `@.claude/rules/tool-lifecycle.md`
-- Registry data: `@reference/tool-registry.json`
+- Registry data: `@registries/tool-registry.json`
 - Evaluation research: `reference/evaluations/`

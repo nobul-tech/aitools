@@ -3,9 +3,9 @@
     "title": "aitools Tool Version Manifest",
     "description": "Per-platform version manifest for all tools managed by aitools. Used by aitools install to detect drift and by aitools.nobul.tech for version tracking and PR automation.",
     "schemaVersion": "1.0",
-    "updated": "2026-03-13",
+    "updated": "2026-06-15",
     "repositories": {
-      "primary":      "https://github.com/nobul-jose/aitools",
+      "primary":      "https://github.com/nobul-tech/aitools",
       "userTemplate": "https://github.com/nobul-jose/aitools-{username}"
     },
     "relatedDocs": {
@@ -94,12 +94,12 @@
       "notes": "uv tool install modal; requires Python 3.10+"
     },
     "python": {
-      "macos":   { "lastVerifiedVersion": "3.14.3", "lastVerified": "2026-03-06" },
+      "macos":   { "lastVerifiedVersion": "3.14.6", "lastVerified": "2026-06-15" },
       "windows": { "lastVerifiedVersion": "3.14.3", "lastVerified": "2026-03-13" },
       "linux":   { "lastVerifiedVersion": null, "lastVerified": null },
       "minVersion": "3.10",
       "blocked": [],
-      "notes": "Windows: pymanager (Python.PythonInstallManager) + py install 3.14. macOS: brew install python"
+      "notes": "Managed by uv on all platforms: uv python install 3.14 --default (shims in ~/.local/bin). Requires uv first. Replaces brew-python/pymanager (v0.69.0). Windows uv path not yet validated."
     },
     "uv": {
       "macos":   { "lastVerifiedVersion": "0.10.8", "lastVerified": "2026-03-06" },

@@ -12,6 +12,54 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.69.0 -- Remote bootstrap one-liner + uv-unified Python + per-user deploy + registry consolidation (2026-06-15)
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Remote bootstrap one-liner** (fa07e52, 7cc8cb5) — `scripts/bootstrap.{sh,ps1}`: `curl\|bash` (macOS/Linux) / `irm\|iex` (Windows) installs prerequisites (package manager + git), clones nobul-tech/aitools, runs the installer, then (interactive) pulls the dotprofile and rebuilds from it. README documents both one-liners. |
+| 2 | **uv as the unified Python manager** (2e702a9 macOS, 3c4bba4 Windows) — `setup-python.{sh,ps1}` run `uv python install <ver> --default` so `python`/`python3` resolve to the uv-managed interpreter (`~/.local/bin` shims); per-repo override via uv `.python-version` / `uv venv`. Replaces brew-python (macOS) and pymanager (Windows). Installer reordered: uv (Step 14) before Python (Step 15). |
+| 3 | **Per-user MDM deploy** (2c0fd32) — `build-deploy.sh` builds the personalized self-contained `deploy/` into the user's dotprofile repo (`aitools-<ghuser>/deploy/`), not the shared `aitools/deploy/`. Skips gracefully when no dotprofile is configured. |
+| 4 | **Registries consolidated under `registries/`** — the JSON registries (tool-registry, tool-ops, tool-versions, framework-registry, glossary, incidents) are now canonical in `registries/`; the duplicate `reference/*.json` copies were removed. Skills (`/tool-registry`, `/tool-ops`), `sources-of-truth.md`, framework docs, and `check-post-push` repointed to `registries/`; `check-pre-commit` step 16 audit extended to also guard `registries/`. `glossary.json` reconciled (newer `reference/` content promoted into `registries/`). |
+
+### Bug fixes
+
+| # | Severity | Change |
+|---|----------|--------|
+| 1 | High | **bash 3.2 install crash** (fa07e52) — empty `sync_args` array under `set -u` aborted Step 22 on a fresh Mac. Guarded with `${arr[@]+...}`. |
+| 2 | High | **`set -e` abort pre-user-init** (fa07e52) — `VAR=$(read_config_key … userRepoPath)` returned nonzero when the key was absent, killing aitools-install (402/408), build-deploy (1011), setup-user-skills, setup-user-hooks. Guarded `\|\| true` → graceful shared-only fallback. |
+| 3 | Medium | **Homebrew not on PATH non-interactively** (2c0fd32) — `aitools` + `aitools-install` eval `brew shellenv` on macOS when brew is absent from PATH; fixes "node required for JSON manipulation" under hooks/MDM/`!`-shells. |
+| 4 | Medium | **Modal spurious "Python 3.10+ required"** (2e702a9) — setup-modal skips the system-python gate when uv is present (uv provisions its own Python); enforces 3.10+ only on the pip fallback. |
+| 5 | Low | **Cursor CLI drift** (fa07e52) — `agent mcp disable` removed upstream; setup-cursor-ide-mcp uses `agent mcp remove`, non-fatal. |
+| 6 | Low | **bootstrap flow ordering** (7cc8cb5) — deployed shared-only configs before pulling the dotprofile; reordered so `user init` pulls it, then `aitools` rebuilds from it. |
+
+### Owner migration (nobul-jose → nobul-tech)
+
+| # | Change |
+|---|--------|
+| 7 | Repo moved to the **nobul-tech** org. Updated clone URLs (`aitools`, `aitools.ps1`, README), registry `meta.primary` (`tool-registry.json`, `tool-versions.json`), `ROADMAP.md` issue links, `incidents.json` issue link, and `LICENSE` copyright. Per-user dotprofile repos correctly stay under the user account (e.g. `nobul-jose/aitools-nobul-jose`); the `userTemplate` URL is intentionally left username-based. |
+
+### Files created / removed
+
+| File | |
+|------|--|
+| `scripts/bootstrap.sh` / `.ps1` | created — remote bootstrap |
+| `reference/{tool-registry,tool-ops,tool-versions,framework-registry,glossary,incidents}.json` | removed — duplicates of `registries/*.json` (consolidated to the canonical `registries/`) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 8 | `registries/tool-registry.json` + `reference/tool-registry.md` + `registries/tool-versions.json` Python entries updated brew/pymanager → uv. |
+| 9 | README ("How it works" / "What's here" / "Develop") + `.claude/rules/deploy-paths.md` reconciled to the per-user dotprofile-deploy model. |
+
+**Verified on:** macOS (`python3`→uv 3.14.6, `bash`→5.3, Modal installs clean, full bootstrap + `aitools user init` + dotprofile `deploy/` build confirmed). **Windows: NOT yet validated** — the `setup-python.ps1` uv mirror and uv-Python registry entries were authored on macOS (no pwsh to parse-check); run `aitools install` on Windows to validate.
+
+**Known debt (follow-ups):** (a) pre-commit deploy-drift steps 3+10 and post-push #7 now no-op against the frozen shared `aitools/deploy/` (build-deploy targets the dotprofile) — updating those check steps to audit the dotprofile `deploy/` is deferred; (b) Windows uv-Python path untested.
+
+---
+
 ## v0.68.0 -- Resilient session/scratch harvesting + Windows harvest RCA (2026-06-14)
 
 ### Bug fixes

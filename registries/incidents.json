@@ -19,7 +19,7 @@
         "setup-user-hooks.sh",
         "setup-user-hooks.ps1"
       ],
-      "linked": "https://github.com/nobul-jose/aitools/issues/51",
+      "linked": "https://github.com/nobul-tech/aitools/issues/51",
       "referenceFile": null,
       "observation": "setup-user-hooks.sh/.ps1 use direct cp/Copy-Item for hook scripts. No backup_file call before overwrite, no deploy_managed_file interactive review, no adopt/skip/merge options.",
       "expected": ".claude/rules/managed-file-deployment.md requires backup before write and interactive diff review for shell script deployment type. .claude/rules/config-file-safety.md requires backup before overwrite.",

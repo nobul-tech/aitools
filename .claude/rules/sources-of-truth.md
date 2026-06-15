@@ -6,7 +6,7 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 
 | File | What it controls | Agent |
 |------|-----------------|-------|
-| `reference/tool-registry.json` | Registry of managed tools — install methods, platform versions, lifecycle, operational knowledge (via `/tool-registry` skill) | Any |
+| `registries/tool-registry.json` | Registry of managed tools — install methods, platform versions, lifecycle, operational knowledge (via `/tool-registry` skill) | Any |
 | `reference/tool-evaluation-criteria.md` | Tool evaluation framework and lifecycle phases | Any |
 | `reference/tool-evaluation-playbook.md` | Install method discovery process and criteria — feeds BuildPrereqs and tool-registry entries | Any |
 | `CLAUDE.md` | Project-level instructions and Key Decisions | Any |
@@ -14,23 +14,23 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 | `shared/cursor-rules/user-rules.md` | Cursor User Rules template (manual copy if needed) | Any |
 | `.claude/rules/*.md` | Claude Code behavioral rules (this file included) | Any |
 | `.claude/rules/managed-file-deployment.md` | Deployment type definitions, content sources, platform config rules | Any |
-| `reference/incidents.json` | Incident tracking — governed by `.claude/rules/incident-governance.md` | Any |
+| `registries/incidents.json` | Incident tracking — governed by `.claude/rules/incident-governance.md` | Any |
 | `.cursor/rules/*.mdc` | Cursor behavioral rules | Any |
 | `ROADMAP.md` | Active/planned work items — drives project priorities | Any |
 | `plans/*.md` | Detailed implementation plans — referenced by roadmap | Any |
 | `reference/tool-ops-claude-code.md` | Claude Code operations — version deps, session behavior, platform workarounds | Any |
-| `reference/tool-versions.json` | RETIRED — merged into `reference/tool-registry.json`. Kept for reference until check scripts are updated | Any |
+| `registries/tool-versions.json` | Per-platform tool version manifest — read by `check-post-push` version-freshness checks | Any |
 | `reference/user-repo.md` | User repo pattern, template resolution, session archive — scripts reference this | Any |
 | `reference/agentic-framework.md` | Agentic AI invocation spec — speed/permission tiers, prompt design, validation patterns | Any |
 | `reference/managed-file-deployment.md` | Managed file deployment state machine -- menus, return values, caller contracts | Any |
 | Intent statements in any file | Defines how all future sessions interpret the file's purpose and scope | Any |
 | `reference/framework-*.md` | Framework documentation — discipline source, adoption rationale, maintenance | Any |
-| `reference/framework-registry.json` | Framework registry — source of truth for all adopted frameworks | Any |
+| `registries/framework-registry.json` | Framework registry — source of truth for all adopted frameworks | Any |
 | `.claude/rules/frameworks.md` | Framework rule — intent of frameworks, registry of registries | Any |
 | `reference/incident-*.md` | Incident reference files — full discovery context for framework-level incidents | Any |
 | `reference/harness.md` | Harness architecture — the five components and their relationships | Any |
-| `reference/glossary.json` | Governed vocabulary definitions — source of truth for all terms | Any |
-| `reference/tool-ops.json` | Tool operations registry — per-tool governance modes and verification specs | Any |
+| `registries/glossary.json` | Governed vocabulary definitions — source of truth for all terms | Any |
+| `registries/tool-ops.json` | Tool operations registry — per-tool governance modes and verification specs | Any |
 | `reference/framework-tool-ops.md` | Tool operations framework — SRE discipline source and adoption rationale | Any |
 | `reference/tool-ops-*.md` | Per-tool ops references — operational knowledge for deeply-integrated tools | Any |
 

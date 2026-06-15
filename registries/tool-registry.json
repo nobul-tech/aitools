@@ -7,9 +7,9 @@
       "scope": "Tool data only. NOT lifecycle gates or onboarding checklists (.claude/rules/tool-lifecycle.md). NOT evaluation process (/tool-eval skill). NOT per-tool ops metadata (tool-ops.json)",
       "audience": "/tool-registry skill, /tool-eval skill, /audit skill, setup scripts, check scripts, aitools-install"
     },
-    "lastUpdated": "2026-03-16",
+    "lastUpdated": "2026-06-15",
     "repositories": {
-      "primary": "https://github.com/nobul-jose/aitools",
+      "primary": "https://github.com/nobul-tech/aitools",
       "userTemplate": "https://github.com/nobul-jose/aitools-{username}"
     },
     "relatedDocs": {
@@ -609,33 +609,34 @@
     },
     "python": {
       "displayName": "Python",
-      "source": "https://www.python.org/downloads/",
-      "purpose": "Python runtime. Required by: Modal CLI, uv, pip-installed tools.",
+      "source": "https://www.python.org/downloads/ (managed via uv: https://docs.astral.sh/uv/)",
+      "purpose": "Python runtime, managed by uv (unified manager, all platforms). Required by: Modal CLI, pip-installed tools.",
       "install": {
         "macos": [
-          { "method": "homebrew", "command": "brew install python", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": null }
+          { "method": "uv", "command": "uv python install 3.14 --default", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "--default installs python/python3 shims into uv's bin dir (~/.local/bin). Requires uv (install first)." }
         ],
         "windows": [
-          { "method": "pymanager", "command": "winget install Python.PythonInstallManager then py install 3.14", "preferred": true, "autoUpdates": true, "ccCompatible": true, "notes": "Python Install Manager (PEP 773) — version-agnostic, auto-updates. Runtimes managed via py install <version>." }
+          { "method": "uv", "command": "uv python install 3.14 --default", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "Same as macOS; shims land in %USERPROFILE%\\.local\\bin. Requires uv (install first). NOT yet validated on Windows (mirror of macOS, v0.69.0)." }
         ],
-        "linux": []
+        "linux": [
+          { "method": "uv", "command": "uv python install 3.14 --default", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "Same as macOS." }
+        ]
       },
       "update": {
-        "homebrew": "brew upgrade python",
-        "pymanager": "winget upgrade Python.PythonInstallManager (manager) + py install --update 3.14 (runtime)"
+        "uv": "uv python install 3.14 --default --upgrade (latest patch)"
       },
-      "versionCheck": "python3 --version (macOS) / python --version (Windows) / py list (Windows: list installed runtimes)",
+      "versionCheck": "python3 --version (all platforms; resolves to the uv-managed interpreter via ~/.local/bin shim). uv python list (uv-managed versions).",
       "systemRequirements": null,
-      "notes": "On macOS, `python3` and `pip3` are the correct commands (Homebrew convention). On Windows, `python` and `python -m pip` are the correct commands (PEP 773 deprecates standalone pip). On Windows, pymanager provides `py` for runtime management (py install, py list, py install --update).",
+      "notes": "uv is the single Python manager on all platforms (macOS/Windows/Linux parity). `uv python install <ver> --default` makes python/python3 resolve to the uv-managed interpreter (shims in ~/.local/bin). Per-repo overrides use uv's .python-version / `uv venv` (not a global rebind). Requires uv installed first — setup-uv runs before setup-python in aitools-install. Replaces the prior brew-python (macOS) and pymanager (Windows) approach (v0.69.0).",
       "lifecycle": {
         "platformStatus": { "macos": "supported", "windows": "supported", "linux": "supported" },
         "concurrency": "Yes — runtime",
-        "postInstallConfig": null,
-        "dependencies": [],
-        "invocation": { "command": "python3 (macOS) / python (Windows)", "antiPatterns": [] }
+        "postInstallConfig": "~/.local/bin must precede /usr/bin in PATH so the uv shim wins over a system python (macOS CommandLineTools ships 3.9).",
+        "dependencies": ["uv (must be installed first)"],
+        "invocation": { "command": "python3 / python (uv-managed shims)", "antiPatterns": ["relying on system python3 (macOS CommandLineTools 3.9)"] }
       },
       "versions": {
-        "macos": { "lastVerifiedVersion": "3.14.3", "lastVerified": "2026-03-06" },
+        "macos": { "lastVerifiedVersion": "3.14.6", "lastVerified": "2026-06-15" },
         "windows": { "lastVerifiedVersion": "3.14.3", "lastVerified": "2026-03-13" },
         "linux": { "lastVerifiedVersion": null, "lastVerified": null },
         "minVersion": "3.10",
@@ -645,11 +646,12 @@
       "buildPrereqs": null,
       "knownPaths": null,
       "nonPreferredMethods": [
-        { "method": "Microsoft Store (MSIX)", "detection": "Get-AppxPackage *PythonSoftwareFoundation*", "reason": "PATH conflicts with pymanager, can't be managed by winget upgrade" },
-        { "method": "winget Python.Python.3.x", "detection": "winget list --id Python.Python", "reason": "Version-specific ID requires manual bumps; replaced by pymanager" },
-        { "method": "old py.exe launcher", "detection": "py --help (no install subcommand)", "reason": "Superseded by pymanager; conflicts if both present" },
-        { "method": "conda", "detection": "conda list python", "reason": "Environment isolation issues, conflicts with system Python" },
-        { "method": "pyenv", "detection": "pyenv versions", "reason": "Extra layer of indirection, not needed for our use case" }
+        { "method": "Homebrew (brew install python)", "detection": "brew list python@3.14", "reason": "Superseded by uv as the unified manager (v0.69.0). May remain as a transitive dependency of other brew formulae — fine; not the user-facing default." },
+        { "method": "pymanager (Windows)", "detection": "py list", "reason": "Superseded by uv (v0.69.0); was the prior Windows manager (PEP 773)." },
+        { "method": "Microsoft Store (MSIX)", "detection": "Get-AppxPackage *PythonSoftwareFoundation*", "reason": "PATH conflicts; not manageable by uv." },
+        { "method": "winget Python.Python.3.x", "detection": "winget list --id Python.Python", "reason": "Version-specific ID requires manual bumps." },
+        { "method": "conda", "detection": "conda list python", "reason": "Environment isolation issues, conflicts with managed Python." },
+        { "method": "pyenv", "detection": "pyenv versions", "reason": "uv now fills the version-manager role; redundant for our use." }
       ],
       "pathIssues": null,
       "platformGotchas": null

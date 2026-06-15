@@ -332,7 +332,7 @@ echo "${BOLD}--- Step 16: Capability bypass audit ---${RESET}"
 # @reference/ prefix loads file into context, bypassing the governing skill
 # Scope: .claude/rules/, CLAUDE.md, and any @-referenced files in CLAUDE.md
 # See .claude/rules/governed-data-access.md for the principle
-hits=$(grep -rn '@reference/.*\.json\|reference/.*\.json' .claude/rules/ CLAUDE.md \
+hits=$(grep -rnE '@?(reference|registries)/[a-z0-9-]*\.json' .claude/rules/ CLAUDE.md \
     | perl -ne 'print if /glossary\.json|framework-registry\.json|incidents\.json|tool-registry\.json/' \
     | grep -v '^.*:.*|.*|.*|.*|' || true)
 if [ -n "$hits" ]; then

@@ -17,7 +17,7 @@ ops coverage, setup scripts reading governance modes.
 
 To look up a tool's operational metadata:
 
-1. Read `reference/tool-ops.json`
+1. Read `registries/tool-ops.json`
 2. Find the tool key under `tools` (e.g., `tools.claude-code`)
 3. Return the requested section: `governanceModes`, `denyRules`,
    `hooks`, `contextInjection`, `kpis`, `verifications`, `docAccess`,

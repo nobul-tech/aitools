@@ -8,7 +8,7 @@ Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude C
 |-----------|---------|
 | `shared/` | Source of truth: Claude prefs, Cursor rules, shell aliases, MCP docs |
 | `scripts/` | `aitools` CLI, installers, setup scripts, `build-deploy.sh` pipeline |
-| `deploy/` | Generated self-contained scripts (MDM-ready, no repo needed) |
+| `deploy/` | Frozen historical shared baseline. `build-deploy.sh` now generates each user's MDM-ready scripts into their **dotprofile repo** (`aitools-<user>/deploy/`), not here |
 | `.claude/rules/` | Claude Code project rules |
 | `.cursor/rules/` | Cursor project rules (.mdc format) |
 | `reference/` | Setup notes, practices, session showcase |
@@ -20,7 +20,7 @@ Cross-machine AI tooling hub — shared configs, rules, and scripts for Claude C
 
 ## How it works
 
-`shared/` is the single source of truth for all configuration. `scripts/build-deploy.sh` reads from `shared/` and embeds the content into self-contained deploy scripts in `deploy/`. There is no separate `build/` output directory—MDM and CI use `deploy/` only. The workflow is: edit `shared/` → run `build-deploy.sh` → commit `deploy/` → deploy to endpoints. Deploy scripts need only bash or PowerShell on the target machine — no repo clone required.
+`shared/` is the single source of truth for shared framework content. `scripts/build-deploy.sh` reads from `shared/` **and the user's dotprofile repo**, then embeds the content into self-contained, personalized deploy scripts written to **`<userRepoPath>/deploy/`** (the user's `aitools-<user>` repo) — not the shared `aitools/deploy/`, which is now frozen/historical. Deploy scripts need only bash or PowerShell on the target machine — no repo clone required. The workflow is: edit `shared/` (framework) or your dotprofile repo (personal config) → run `build-deploy.sh` → commit the generated `deploy/` **in your dotprofile repo** → deploy to endpoints.
 
 ## Quick start
 
@@ -107,15 +107,16 @@ Work inside the repo to update shared configuration:
 macOS/Linux:
 ```bash
 vim shared/claude-shared.md
-bash scripts/build-deploy.sh
-git add shared/ deploy/ && git commit -m "Update shared config"
+bash scripts/build-deploy.sh        # writes the personalized deploy/ into your dotprofile repo
+git add shared/ && git commit -m "Update shared config"
+# then commit the regenerated deploy/ in your dotprofile repo (aitools-<user>/)
 ```
 
 Windows (PowerShell):
 ```powershell
 # Edit shared source files in your editor, then rebuild deploy scripts:
-bash scripts/build-deploy.sh             # bash-only build step (uses Git Bash on Windows)
-git add shared/ deploy/; git commit -m "Update shared config"
+bash scripts/build-deploy.sh             # bash-only build step (uses Git Bash on Windows); writes deploy/ into your dotprofile repo
+git add shared/; git commit -m "Update shared config"   # commit deploy/ in your dotprofile repo
 ```
 
 ### Verification checklists
