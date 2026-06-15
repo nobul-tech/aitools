@@ -47,15 +47,26 @@ if (Test-Path (Join-Path $aitoolsDir '.git')) {
 Say "Running installer..."
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $aitoolsDir 'scripts\aitools-install.ps1')
 
-# --- 4. Personalize: pull dotprofile so placeholders/skills/hooks resolve ("Tier 2") ---
+# --- 4. Pull the user's authoritative dotprofile, then build FROM it ("Tier 2") ---
+# The remote aitools-<ghuser> repo -- not this machine -- is the source of truth for
+# personalization. Order matters: Step 3 deployed shared-only configs (no dotprofile
+# yet), so we (a) 'user init' to clone/pull the dotprofile and set userRepoPath, then
+# (b) re-run 'aitools' so build-deploy + the config deploy source the freshly pulled
+# dotprofile. Any machine the user provisions converges on the same remote dotprofile.
+#
 # Interactive only. [Environment]::UserInteractive is false in headless/MDM runs.
 $aitoolsCmd = Get-Command aitools -ErrorAction SilentlyContinue
 if ([Environment]::UserInteractive -and $aitoolsCmd) {
-    Say "Personalizing: aitools user init"
-    try { & aitools user init }
-    catch { Say "user init skipped/failed -- run it later with: aitools user init" }
+    Say "Pulling your dotprofile: aitools user init"
+    try {
+        & aitools user init
+        Say "Rebuilding configs from your dotprofile: aitools"
+        & aitools
+    } catch {
+        Say "user init/rebuild skipped/failed -- run 'aitools user init; aitools' later"
+    }
 } else {
-    Say "Skipping 'aitools user init' (non-interactive). Run it later to load your dotprofile."
+    Say "Skipping dotprofile (non-interactive). Run 'aitools user init; aitools' later."
 }
 
 Say "Done. Open a new shell so PATH + aliases take effect."

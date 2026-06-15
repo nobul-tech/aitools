@@ -79,15 +79,26 @@ else
     say "Installer reported issues -- see the log above before continuing."
 fi
 
-# --- 4. Personalize: pull dotprofile so placeholders/skills/hooks resolve ("Tier 2") ---
+# --- 4. Pull the user's authoritative dotprofile, then build FROM it ("Tier 2") ---
+# The remote aitools-<ghuser> repo -- not this machine -- is the source of truth for
+# personalization. Order matters: Step 3 deployed shared-only configs (no dotprofile
+# yet), so we must (a) 'user init' to clone/pull the dotprofile and set userRepoPath,
+# then (b) re-run 'aitools' so build-deploy.sh + the config deploy source the freshly
+# pulled dotprofile -- resolving CLAUDE.md placeholders, skills, and hooks to YOUR
+# profile. Any machine the user provisions converges on the same remote dotprofile.
+#
 # Interactive only: 'aitools user init' may create/clone your private user repo and
 # expects a TTY. Skipped automatically in non-interactive/MDM runs.
 if [ -t 0 ] && [ -x "$HOME/.local/bin/aitools" ]; then
-    say "Personalizing: aitools user init"
-    "$HOME/.local/bin/aitools" user init || \
-        say "user init skipped/failed -- run it later with: aitools user init"
+    say "Pulling your dotprofile: aitools user init"
+    if "$HOME/.local/bin/aitools" user init; then
+        say "Rebuilding configs from your dotprofile: aitools"
+        "$HOME/.local/bin/aitools" || say "rebuild reported issues -- see the log above"
+    else
+        say "user init skipped/failed -- run 'aitools user init && aitools' later"
+    fi
 else
-    say "Skipping 'aitools user init' (non-interactive). Run it later to load your dotprofile."
+    say "Skipping dotprofile (non-interactive). Run 'aitools user init && aitools' later."
 fi
 
 say "Done. Open a new shell so PATH + aliases take effect."
