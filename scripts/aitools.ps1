@@ -1206,55 +1206,34 @@ if ($doSessions) {
             $transcript = $matches[0]
             $fullId = $transcript.BaseName
 
-            # Derive project name from CWD recorded in the JSONL transcript
-            # Uses node (already required by other aitools commands)
-            $sessionCwd = node -e @"
-const fs = require('fs'), readline = require('readline');
-const rl = readline.createInterface({ input: fs.createReadStream(process.argv[1]) });
-rl.on('line', line => {
-    try {
-        const d = JSON.parse(line);
-        if (d.cwd) { process.stdout.write(d.cwd); rl.close(); }
-    } catch {}
-});
-"@ $transcript.FullName 2>$null
-
-            if ($sessionCwd) {
-                # Use same derivation logic as the hook
-                $cwdRepo = ""
-                if (Test-Path $sessionCwd) {
-                    try {
-                        Push-Location $sessionCwd
-                        $cwdRepo = git rev-parse --show-toplevel 2>$null
-                    } finally {
-                        Pop-Location
-                    }
-                }
-                if ($cwdRepo) {
-                    $project = Split-Path $cwdRepo -Leaf
-                } else {
-                    $project = (Split-Path $sessionCwd -Leaf).ToLower() -replace '[^a-z0-9-]', '-'
-                }
+            # Delegate the actual archive (project derivation, subagents,
+            # idempotent dest-exists, commit/push) to ait-harvest.py -- the
+            # single source of truth shared with the SessionEnd hook.
+            # Resolve a Python interpreter (existence check + explicit fallback).
+            $archivePy = $null
+            if (Get-Command python -ErrorAction SilentlyContinue) {
+                $archivePy = "python"
+            } elseif (Get-Command python3 -ErrorAction SilentlyContinue) {
+                $archivePy = "python3"
+            }
+            if (-not $archivePy) {
+                LogError "Python 3 not found; cannot archive"
+                exit 1
+            }
+            $archiveHelper = $null
+            $candidate = Join-Path $repoPath "scripts\ait-harvest.py"
+            if (Test-Path $candidate) {
+                $archiveHelper = $candidate
             } else {
-                # Last resort: basename of the Claude projects directory
-                # Lossy for project names with hyphens (e.g., ai-tooling -> tooling)
-                $projectDir = $transcript.Directory.Name
-                $project = $projectDir.Split('-')[-1]
+                $fallback = Join-Path $env:USERPROFILE "repos\aitools\scripts\ait-harvest.py"
+                if (Test-Path $fallback) { $archiveHelper = $fallback }
             }
-
-            $archiveDate = $transcript.CreationTime.ToUniversalTime().ToString("yyyy-MM-dd")
-            $prefix = $fullId.Substring(0, [Math]::Min(8, $fullId.Length))
-            $destDir = Join-Path $sessionsDir $project
-            $destFile = Join-Path $destDir "${archiveDate}_${prefix}.jsonl"
-
-            if (Test-Path $destFile) {
-                Write-Host "Already archived: $($destFile.Substring($userRepo.Length + 1))"
-                exit 0
+            if (-not $archiveHelper) {
+                LogError "ait-harvest.py not found; cannot archive"
+                exit 1
             }
-
-            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-            Copy-Item -Path $transcript.FullName -Destination $destFile
-            Write-Host "Archived: $($destFile.Substring($userRepo.Length + 1))"
+            & $archivePy $archiveHelper archive --session $fullId --transcript $transcript.FullName
+            Write-Host "Archive requested for $fullId (see ~/.aitools/logs/ait-harvest.log)"
         }
         "move" {
             $src = if ($subArgs.Count -gt 0) { $subArgs[0] } else { "" }

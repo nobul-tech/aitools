@@ -356,21 +356,36 @@ def utcnow() -> str:
 
 
 def _log_path() -> Path:
-    """Return the path to deploy.log following aitools platform conventions."""
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Logs" / "aitools" / "deploy.log"
-    else:
-        state_home = os.environ.get("XDG_STATE_HOME", "")
-        if not state_home:
-            state_home = str(Path.home() / ".local" / "state")
-        return Path(state_home) / "aitools" / "deploy.log"
+    """Return the path to the harness-db log file.
+
+    Unified cross-platform location per reference/logging.md: ~/.aitools/logs/.
+    (Previously split: ~/Library/Logs/aitools/deploy.log on macOS,
+    $XDG_STATE_HOME/aitools/deploy.log elsewhere. The split is dissolved here.)
+    Per-component file: harness-db.log (was deploy.log)."""
+    return Path.home() / ".aitools" / "logs" / "harness-db.log"
 
 
 def _log_detail(msg: str) -> None:
-    """Write a detail-level message to deploy.log. Nothing to stdout or stderr."""
+    """Write a detail-level message to harness-db.log. Nothing to stdout/stderr.
+
+    Size-based rotation (5 MB x 5 backups) mirrors reference/logging.md using
+    stdlib only. Logging must never crash the tool."""
     try:
         log_file = _log_path()
         log_file.parent.mkdir(parents=True, exist_ok=True)
+        # Rotate if oversized: harness-db.log -> .1 ... -> .5.
+        try:
+            if log_file.exists() and log_file.stat().st_size >= 5 * 1024 * 1024:
+                oldest = log_file.with_name(f"{log_file.name}.5")
+                if oldest.exists():
+                    oldest.unlink()
+                for i in range(4, 0, -1):
+                    src = log_file.with_name(f"{log_file.name}.{i}")
+                    if src.exists():
+                        os.replace(str(src), str(log_file.with_name(f"{log_file.name}.{i + 1}")))
+                os.replace(str(log_file), str(log_file.with_name(f"{log_file.name}.1")))
+        except OSError:
+            pass  # rotation failure must not stop logging
         ts = utcnow()
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(f"[{ts}] [harness-db] [detail] {msg}\n")

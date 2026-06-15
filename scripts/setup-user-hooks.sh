@@ -84,6 +84,7 @@ resolve_hook() {
 }
 
 HOOK_SCRIPT=$(resolve_hook "session-archive.sh")
+SESSION_CATCHUP_SCRIPT=$(resolve_hook "session-catchup.sh")
 GUARD_SCRIPT=$(resolve_hook "standing-order-guard.sh")
 GLOSSARY_SCRIPT=$(resolve_hook "glossary-skill-guard.sh")
 SCRATCH_SCRIPT=$(resolve_hook "scratch-init.sh")
@@ -100,7 +101,10 @@ FM_IDENTITY_STOP_SCRIPT=$(resolve_hook "failure-mode-identity-stop.sh")
 FM_VERIFY_STOP_SCRIPT=$(resolve_hook "failure-mode-verify-stop.sh")
 INTEL_STOP_SCRIPT=$(resolve_hook "intelligence-stop.sh")
 INTEL_STOP_PY_SCRIPT=$(resolve_hook "intelligence-stop.py")
-for src in "$HOOK_SCRIPT" "$GUARD_SCRIPT" "$GLOSSARY_SCRIPT" "$SCRATCH_SCRIPT" "$HARVEST_SCRIPT" "$SHFIXUP_SCRIPT" "$BLOCK_GUIDE_SCRIPT" "$TOOL_OPS_AUDIT_SCRIPT" "$DASHBOARD_SCRIPT" "$DELEG_GUARD_SCRIPT" "$HARNESS_DB_START_SCRIPT" "$HARNESS_DB_END_SCRIPT" "$CMD_CHANNEL_STOP_SCRIPT" "$FM_IDENTITY_STOP_SCRIPT" "$FM_VERIFY_STOP_SCRIPT" "$INTEL_STOP_SCRIPT" "$INTEL_STOP_PY_SCRIPT"; do
+# ait-harvest.py lives in scripts/ (not shared/hooks/) but is deployed to
+# ~/.claude/hooks/ so the archive/harvest/catchup shims can find it.
+AIT_HARVEST_SCRIPT="$REPO_DIR/scripts/ait-harvest.py"
+for src in "$HOOK_SCRIPT" "$SESSION_CATCHUP_SCRIPT" "$GUARD_SCRIPT" "$GLOSSARY_SCRIPT" "$SCRATCH_SCRIPT" "$HARVEST_SCRIPT" "$SHFIXUP_SCRIPT" "$BLOCK_GUIDE_SCRIPT" "$TOOL_OPS_AUDIT_SCRIPT" "$DASHBOARD_SCRIPT" "$DELEG_GUARD_SCRIPT" "$HARNESS_DB_START_SCRIPT" "$HARNESS_DB_END_SCRIPT" "$CMD_CHANNEL_STOP_SCRIPT" "$FM_IDENTITY_STOP_SCRIPT" "$FM_VERIFY_STOP_SCRIPT" "$INTEL_STOP_SCRIPT" "$INTEL_STOP_PY_SCRIPT" "$AIT_HARVEST_SCRIPT"; do
     if [ ! -f "$src" ]; then
         log_error "Hook script not found: $src"
         exit 1
@@ -109,6 +113,7 @@ done
 
 # --- Deploy hook scripts to ~/.claude/hooks/ ---
 HOOK_DEST="$HOME/.claude/hooks/session-archive.sh"
+SESSION_CATCHUP_DEST="$HOME/.claude/hooks/session-catchup.sh"
 GUARD_DEST="$HOME/.claude/hooks/standing-order-guard.sh"
 GLOSSARY_DEST="$HOME/.claude/hooks/glossary-skill-guard.sh"
 SCRATCH_DEST="$HOME/.claude/hooks/scratch-init.sh"
@@ -125,6 +130,7 @@ FM_IDENTITY_STOP_DEST="$HOME/.claude/hooks/failure-mode-identity-stop.sh"
 FM_VERIFY_STOP_DEST="$HOME/.claude/hooks/failure-mode-verify-stop.sh"
 INTEL_STOP_DEST="$HOME/.claude/hooks/intelligence-stop.sh"
 INTEL_STOP_PY_DEST="$HOME/.claude/hooks/intelligence-stop.py"
+AIT_HARVEST_DEST="$HOME/.claude/hooks/ait-harvest.py"
 
 HOOKS_CHANGED=false
 
@@ -133,6 +139,8 @@ if [ -n "$USER_REPO_PATH" ]; then _hook_adopt_label="dotprofile"; fi
 
 if [ "$DRY_RUN" = "true" ]; then
     log "[DRY RUN] Would deploy hook: $(display_path "$HOOK_SCRIPT") -> $(display_path "$HOOK_DEST")"
+    log "[DRY RUN] Would deploy hook: $(display_path "$SESSION_CATCHUP_SCRIPT") -> $(display_path "$SESSION_CATCHUP_DEST")"
+    log "[DRY RUN] Would deploy helper: $(display_path "$AIT_HARVEST_SCRIPT") -> $(display_path "$AIT_HARVEST_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$GUARD_SCRIPT") -> $(display_path "$GUARD_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$GLOSSARY_SCRIPT") -> $(display_path "$GLOSSARY_DEST")"
     log "[DRY RUN] Would deploy hook: $(display_path "$SCRATCH_SCRIPT") -> $(display_path "$SCRATCH_DEST")"
@@ -160,7 +168,7 @@ else
 
     deploy_tracker_init
 
-    for hook_pair in "$HOOK_SCRIPT|$HOOK_DEST" "$GUARD_SCRIPT|$GUARD_DEST" "$GLOSSARY_SCRIPT|$GLOSSARY_DEST" "$SCRATCH_SCRIPT|$SCRATCH_DEST" "$HARVEST_SCRIPT|$HARVEST_DEST" "$SHFIXUP_SCRIPT|$SHFIXUP_DEST" "$BLOCK_GUIDE_SCRIPT|$BLOCK_GUIDE_DEST" "$TOOL_OPS_AUDIT_SCRIPT|$TOOL_OPS_AUDIT_DEST" "$DASHBOARD_SCRIPT|$DASHBOARD_DEST" "$DELEG_GUARD_SCRIPT|$DELEG_GUARD_DEST" "$HARNESS_DB_START_SCRIPT|$HARNESS_DB_START_DEST" "$HARNESS_DB_END_SCRIPT|$HARNESS_DB_END_DEST" "$CMD_CHANNEL_STOP_SCRIPT|$CMD_CHANNEL_STOP_DEST" "$FM_IDENTITY_STOP_SCRIPT|$FM_IDENTITY_STOP_DEST" "$FM_VERIFY_STOP_SCRIPT|$FM_VERIFY_STOP_DEST" "$INTEL_STOP_SCRIPT|$INTEL_STOP_DEST" "$INTEL_STOP_PY_SCRIPT|$INTEL_STOP_PY_DEST"; do
+    for hook_pair in "$HOOK_SCRIPT|$HOOK_DEST" "$SESSION_CATCHUP_SCRIPT|$SESSION_CATCHUP_DEST" "$AIT_HARVEST_SCRIPT|$AIT_HARVEST_DEST" "$GUARD_SCRIPT|$GUARD_DEST" "$GLOSSARY_SCRIPT|$GLOSSARY_DEST" "$SCRATCH_SCRIPT|$SCRATCH_DEST" "$HARVEST_SCRIPT|$HARVEST_DEST" "$SHFIXUP_SCRIPT|$SHFIXUP_DEST" "$BLOCK_GUIDE_SCRIPT|$BLOCK_GUIDE_DEST" "$TOOL_OPS_AUDIT_SCRIPT|$TOOL_OPS_AUDIT_DEST" "$DASHBOARD_SCRIPT|$DASHBOARD_DEST" "$DELEG_GUARD_SCRIPT|$DELEG_GUARD_DEST" "$HARNESS_DB_START_SCRIPT|$HARNESS_DB_START_DEST" "$HARNESS_DB_END_SCRIPT|$HARNESS_DB_END_DEST" "$CMD_CHANNEL_STOP_SCRIPT|$CMD_CHANNEL_STOP_DEST" "$FM_IDENTITY_STOP_SCRIPT|$FM_IDENTITY_STOP_DEST" "$FM_VERIFY_STOP_SCRIPT|$FM_VERIFY_STOP_DEST" "$INTEL_STOP_SCRIPT|$INTEL_STOP_DEST" "$INTEL_STOP_PY_SCRIPT|$INTEL_STOP_PY_DEST"; do
         hook_src="${hook_pair%%|*}"
         hook_dst="${hook_pair##*|}"
         hook_name=$(basename "$hook_dst")
@@ -257,6 +265,7 @@ mkdir -p "$HOME/.claude"
 
 # The hook commands — use deployed copies in ~/.claude/hooks/
 HOOK_CMD="bash \"$HOOK_DEST\""
+SESSION_CATCHUP_CMD="bash \"$SESSION_CATCHUP_DEST\""
 GUARD_CMD="bash \"$GUARD_DEST\""
 GLOSSARY_CMD="bash \"$HOME/.claude/hooks/glossary-skill-guard.sh\""
 SCRATCH_CMD="bash \"$SCRATCH_DEST\""
@@ -296,6 +305,7 @@ const cmdChannelStopCmd = process.argv[16];
 const fmIdentityStopCmd = process.argv[17];
 const fmVerifyStopCmd = process.argv[18];
 const intelStopCmd = process.argv[19];
+const sessionCatchupCmd = process.argv[20];
 
 // --- BEGIN claude preferences (replaced by build-deploy) ---
 let autoMemory = true;
@@ -396,6 +406,7 @@ removeHookEntry('Stop', 'intent-sentinel-stop.sh');
 mergeHookEntry('SessionEnd', 'session-archive.sh', '', hookCmd);
 mergeHookEntry('SessionEnd', 'harvest-session.sh', '', harvestCmd);
 mergeHookEntry('SessionStart', 'scratch-init.sh', '', scratchCmd);
+mergeHookEntry('SessionStart', 'session-catchup.sh', '', sessionCatchupCmd);
 mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
 mergeHookEntry('PreToolUse', 'glossary-skill-guard.sh', 'Read|Grep', glossaryCmd);
 mergeHookEntry('PostToolUse', 'sh-file-fixup.sh', 'Write|Edit', shfixupCmd);
@@ -471,10 +482,12 @@ if (dryRun) {
         const seArchiveCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('session-archive.sh'))).length;
         const seHarvestCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('harvest-session.sh'))).length;
         const ssCount = (_v.hooks.SessionStart || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('scratch-init.sh'))).length;
+        const scCount = (_v.hooks.SessionStart || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('session-catchup.sh'))).length;
         const ptCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('standing-order-guard.sh'))).length;
         if (seArchiveCount !== 1) { console.error('Validation failed: expected 1 SessionEnd session-archive hook, got ' + seArchiveCount); process.exit(1); }
         if (seHarvestCount !== 1) { console.error('Validation failed: expected 1 SessionEnd harvest-session hook, got ' + seHarvestCount); process.exit(1); }
         if (ssCount !== 1) { console.error('Validation failed: expected 1 SessionStart scratch-init hook, got ' + ssCount); process.exit(1); }
+        if (scCount !== 1) { console.error('Validation failed: expected 1 SessionStart session-catchup hook, got ' + scCount); process.exit(1); }
         if (ptCount !== 1) { console.error('Validation failed: expected 1 PreToolUse standing-order-guard hook, got ' + ptCount); process.exit(1); }
         const glCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('glossary-skill-guard.sh'))).length;
         if (glCount !== 1) { console.error('Validation failed: expected 1 PreToolUse glossary-skill-guard hook, got ' + glCount); process.exit(1); }
@@ -527,7 +540,7 @@ if (dryRun) {
         prefChanges.forEach(c => console.log(c));
     }
 }
-" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$BLOCK_GUIDE_CMD" "$TOOL_OPS_AUDIT_CMD" "$DASHBOARD_CMD" "$DELEG_GUARD_CMD" "$HARNESS_DB_START_CMD" "$HARNESS_DB_END_CMD" "$CMD_CHANNEL_STOP_CMD" "$FM_IDENTITY_STOP_CMD" "$FM_VERIFY_STOP_CMD" "$INTEL_STOP_CMD")
+" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$BLOCK_GUIDE_CMD" "$TOOL_OPS_AUDIT_CMD" "$DASHBOARD_CMD" "$DELEG_GUARD_CMD" "$HARNESS_DB_START_CMD" "$HARNESS_DB_END_CMD" "$CMD_CHANNEL_STOP_CMD" "$FM_IDENTITY_STOP_CMD" "$FM_VERIFY_STOP_CMD" "$INTEL_STOP_CMD" "$SESSION_CATCHUP_CMD")
 
 # Parse merge result: first line is status, CHANGED: lines are key changes
 MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)

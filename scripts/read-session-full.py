@@ -22,6 +22,20 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+# Force UTF-8 stdout/stderr so non-ASCII transcript content (arrows, em-dashes,
+# emoji) does not crash on a Windows console using a legacy code page (cp1252).
+# reconfigure() exists on Python 3.7+ TextIOWrapper; guard for stdout objects
+# that lack it (e.g. some test harnesses) and check the result below.
+for _stream in (sys.stdout, sys.stderr):
+    _reconfigure = getattr(_stream, "reconfigure", None)
+    if _reconfigure is not None:
+        try:
+            _reconfigure(encoding="utf-8")
+        except (ValueError, OSError):
+            # Stream does not support re-encoding; output may mangle non-ASCII
+            # but the tool should still run. Honor PYTHONIOENCODING if set.
+            pass
+
 
 @dataclass
 class Entry:

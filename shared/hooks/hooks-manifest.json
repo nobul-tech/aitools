@@ -1,0 +1,31 @@
+{
+  "meta": {
+    "schemaVersion": "1.0",
+    "purpose": "Single source of truth for Claude Code hook registration. Consumed by setup-user-hooks.sh (node block), setup-user-hooks.ps1 (MergeHookEntry loop), build-deploy.sh (required-file check + embed list), and check-post-push step 32 (parity audit). Each entry registers one hook script under one event with an optional matcher. The 'deploy' list names extra files that must be copied to ~/.claude/hooks/ but are not directly registered (helper scripts / Python siblings).",
+    "reference": "plans/imperative-gliding-newell.md §5",
+    "lastUpdated": "2026-06-14"
+  },
+  "hooks": [
+    { "file": "session-archive.sh",            "event": "SessionEnd",   "matcher": "" },
+    { "file": "harvest-session.sh",            "event": "SessionEnd",   "matcher": "" },
+    { "file": "tool-ops-session-audit.sh",     "event": "SessionEnd",   "matcher": "" },
+    { "file": "harness-db-sessionend.sh",      "event": "SessionEnd",   "matcher": "" },
+    { "file": "scratch-init.sh",               "event": "SessionStart", "matcher": "" },
+    { "file": "session-catchup.sh",            "event": "SessionStart", "matcher": "" },
+    { "file": "dashboard-serve.sh",            "event": "SessionStart", "matcher": "" },
+    { "file": "harness-db-sessionstart.sh",    "event": "SessionStart", "matcher": "" },
+    { "file": "standing-order-guard.sh",       "event": "PreToolUse",   "matcher": "Bash" },
+    { "file": "glossary-skill-guard.sh",       "event": "PreToolUse",   "matcher": "Read|Grep" },
+    { "file": "block-claude-code-guide.sh",    "event": "PreToolUse",   "matcher": "Agent" },
+    { "file": "delegation-duty-guard.sh",      "event": "PreToolUse",   "matcher": "Agent" },
+    { "file": "sh-file-fixup.sh",              "event": "PostToolUse",  "matcher": "Write|Edit" },
+    { "file": "command-channel-stop.sh",       "event": "Stop",         "matcher": "" },
+    { "file": "failure-mode-identity-stop.sh", "event": "Stop",         "matcher": "" },
+    { "file": "failure-mode-verify-stop.sh",   "event": "Stop",         "matcher": "" },
+    { "file": "intelligence-stop.sh",          "event": "Stop",         "matcher": "" }
+  ],
+  "deploy": [
+    "intelligence-stop.py",
+    "ait-harvest.py"
+  ]
+}

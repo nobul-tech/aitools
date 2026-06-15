@@ -1273,53 +1273,35 @@ if $do_sessions; then
             transcript="${matches[0]}"
             full_id=$(basename "$transcript" .jsonl)
 
-            # Derive project name from CWD recorded in the JSONL transcript
-            # Uses node (already required by other aitools commands)
-            session_cwd=$(node -e "
-const fs = require('fs'), readline = require('readline');
-const rl = readline.createInterface({ input: fs.createReadStream(process.argv[1]) });
-rl.on('line', line => {
-    try {
-        const d = JSON.parse(line);
-        if (d.cwd) { process.stdout.write(d.cwd); rl.close(); }
-    } catch {}
-});
-" "$transcript" 2>/dev/null)
-
-            if [ -n "$session_cwd" ]; then
-                # Use same derivation logic as the hook
-                cwd_repo=$(cd "$session_cwd" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || echo "")
-                if [ -n "$cwd_repo" ]; then
-                    project=$(basename "$cwd_repo")
-                else
-                    project=$(basename "$session_cwd" | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9-]/-/g')
-                fi
-            else
-                # Last resort: basename of the Claude projects directory
-                # Lossy for project names with hyphens (e.g., ai-tooling → tooling)
-                project_dir=$(basename "$(dirname "$transcript")")
-                project=$(echo "$project_dir" | rev | cut -d'-' -f1 | rev)
+            # Delegate the actual archive (project derivation, subagents,
+            # idempotent dest-exists, commit/push) to ait-harvest.py -- the
+            # single source of truth shared with the SessionEnd hook.
+            # Resolve a Python interpreter (existence check + explicit fallback).
+            archive_py=""
+            if command -v python3 >/dev/null 2>&1; then
+                archive_py="python3"
+            elif command -v python >/dev/null 2>&1; then
+                archive_py="python"
             fi
-
-            # Derive date
-            if [ "$(uname -s)" = "Darwin" ]; then
-                archive_date=$(stat -f "%SB" -t "%Y-%m-%d" "$transcript" 2>/dev/null || date -u +%Y-%m-%d)
-            else
-                archive_date=$(date -u +%Y-%m-%d)
+            if [ -z "$archive_py" ]; then
+                log_error "Python 3 not found; cannot archive"
+                return 1
             fi
-
-            prefix=$(echo "$full_id" | cut -c1-8)
-            dest_dir="$sessions_dir/$project"
-            dest_file="$dest_dir/${archive_date}_${prefix}.jsonl"
-
-            if [ -f "$dest_file" ]; then
-                echo "Already archived: ${dest_file#"$user_repo/"}"
-                return 0
+            archive_helper=""
+            if [ -f "$repo_path/scripts/ait-harvest.py" ]; then
+                archive_helper="$repo_path/scripts/ait-harvest.py"
+            elif [ -f "$HOME/repos/aitools/scripts/ait-harvest.py" ]; then
+                archive_helper="$HOME/repos/aitools/scripts/ait-harvest.py"
             fi
-
-            mkdir -p "$dest_dir"
-            cp "$transcript" "$dest_file"
-            echo "Archived: ${dest_file#"$user_repo/"}"
+            if [ -z "$archive_helper" ]; then
+                log_error "ait-harvest.py not found; cannot archive"
+                return 1
+            fi
+            # No git push for a manual CLI archive (do_git left to the helper's
+            # default; --no-op-on-missing handled inside). Pass the transcript.
+            "$archive_py" "$archive_helper" archive \
+                --session "$full_id" --transcript "$transcript"
+            echo "Archive requested for $full_id (see ~/.aitools/logs/ait-harvest.log)"
             ;;
         move)
             src="${sessions_args[0]:-}"

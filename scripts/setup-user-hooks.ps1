@@ -73,6 +73,7 @@ function Resolve-HookSource {
 }
 
 $hookScript = Resolve-HookSource "session-archive.sh"
+$sessionCatchupScript = Resolve-HookSource "session-catchup.sh"
 $guardScript = Resolve-HookSource "standing-order-guard.sh"
 $glossaryScript = Resolve-HookSource "glossary-skill-guard.sh"
 $scratchScript = Resolve-HookSource "scratch-init.sh"
@@ -89,7 +90,10 @@ $fmIdentityStopScript = Resolve-HookSource "failure-mode-identity-stop.sh"
 $fmVerifyStopScript = Resolve-HookSource "failure-mode-verify-stop.sh"
 $intelStopScript = Resolve-HookSource "intelligence-stop.sh"
 $intelStopPyScript = Resolve-HookSource "intelligence-stop.py"
-foreach ($src in @($hookScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $blockGuideScript, $toolOpsAuditScript, $dashboardScript, $delegGuardScript, $harnessDbStartScript, $harnessDbEndScript, $cmdChannelStopScript, $fmIdentityStopScript, $fmVerifyStopScript, $intelStopScript, $intelStopPyScript)) {
+# ait-harvest.py lives in scripts/ (not shared/hooks/) but is deployed to
+# ~/.claude/hooks/ so the archive/harvest/catchup shims can find it.
+$aitHarvestScript = Join-Path $repoDir "scripts\ait-harvest.py"
+foreach ($src in @($hookScript, $sessionCatchupScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $blockGuideScript, $toolOpsAuditScript, $dashboardScript, $delegGuardScript, $harnessDbStartScript, $harnessDbEndScript, $cmdChannelStopScript, $fmIdentityStopScript, $fmVerifyStopScript, $intelStopScript, $intelStopPyScript, $aitHarvestScript)) {
     if (-not (Test-Path $src)) {
         LogError "Hook script not found: $src"
         exit 1
@@ -101,6 +105,7 @@ $claudeDir = Join-Path $env:USERPROFILE ".claude"
 $hooksDir = Join-Path $claudeDir "hooks"
 
 $hookDest = Join-Path $hooksDir "session-archive.sh"
+$sessionCatchupDest = Join-Path $hooksDir "session-catchup.sh"
 $guardDest = Join-Path $hooksDir "standing-order-guard.sh"
 $glossaryDest = Join-Path $hooksDir "glossary-skill-guard.sh"
 $scratchDest = Join-Path $hooksDir "scratch-init.sh"
@@ -117,6 +122,7 @@ $fmIdentityStopDest = Join-Path $hooksDir "failure-mode-identity-stop.sh"
 $fmVerifyStopDest = Join-Path $hooksDir "failure-mode-verify-stop.sh"
 $intelStopDest = Join-Path $hooksDir "intelligence-stop.sh"
 $intelStopPyDest = Join-Path $hooksDir "intelligence-stop.py"
+$aitHarvestDest = Join-Path $hooksDir "ait-harvest.py"
 
 $hooksChanged = $false
 
@@ -125,6 +131,8 @@ if ($userRepoPath) { $hookAdoptLabel = "dotprofile" }
 
 if ($DryRun) {
     Log "[DRY RUN] Would deploy hook: $hookScript -> $hookDest"
+    Log "[DRY RUN] Would deploy hook: $sessionCatchupScript -> $sessionCatchupDest"
+    Log "[DRY RUN] Would deploy helper: $aitHarvestScript -> $aitHarvestDest"
     Log "[DRY RUN] Would deploy hook: $guardScript -> $guardDest"
     Log "[DRY RUN] Would deploy hook: $glossaryScript -> $glossaryDest"
     Log "[DRY RUN] Would deploy hook: $scratchScript -> $scratchDest"
@@ -152,7 +160,7 @@ if ($DryRun) {
 
     Initialize-DeployTracker
 
-    foreach ($pair in @(@($hookScript, $hookDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($blockGuideScript, $blockGuideDest), @($toolOpsAuditScript, $toolOpsAuditDest), @($dashboardScript, $dashboardDest), @($delegGuardScript, $delegGuardDest), @($harnessDbStartScript, $harnessDbStartDest), @($harnessDbEndScript, $harnessDbEndDest), @($cmdChannelStopScript, $cmdChannelStopDest), @($fmIdentityStopScript, $fmIdentityStopDest), @($fmVerifyStopScript, $fmVerifyStopDest), @($intelStopScript, $intelStopDest), @($intelStopPyScript, $intelStopPyDest))) {
+    foreach ($pair in @(@($hookScript, $hookDest), @($sessionCatchupScript, $sessionCatchupDest), @($aitHarvestScript, $aitHarvestDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($blockGuideScript, $blockGuideDest), @($toolOpsAuditScript, $toolOpsAuditDest), @($dashboardScript, $dashboardDest), @($delegGuardScript, $delegGuardDest), @($harnessDbStartScript, $harnessDbStartDest), @($harnessDbEndScript, $harnessDbEndDest), @($cmdChannelStopScript, $cmdChannelStopDest), @($fmIdentityStopScript, $fmIdentityStopDest), @($fmVerifyStopScript, $fmVerifyStopDest), @($intelStopScript, $intelStopDest), @($intelStopPyScript, $intelStopPyDest))) {
         $src = $pair[0]; $dst = $pair[1]
         $hookName = Split-Path $dst -Leaf
         $srcContent = Get-Content $src -Raw -ErrorAction Stop
@@ -406,6 +414,21 @@ RemoveHookEntry "Stop" "intent-sentinel-stop.sh"
 # SessionEnd: session archive
 MergeHookEntry "SessionEnd" "session-archive.sh" "" $hookCmd
 
+# SessionEnd: harvest session artifacts
+$harvestDestUnix = $harvestDest -replace '\\', '/'
+$harvestCmd = "bash `"$harvestDestUnix`""
+MergeHookEntry "SessionEnd" "harvest-session.sh" "" $harvestCmd
+
+# SessionStart: scratch directory initialization
+$scratchDestUnix = $scratchDest -replace '\\', '/'
+$scratchCmd = "bash `"$scratchDestUnix`""
+MergeHookEntry "SessionStart" "scratch-init.sh" "" $scratchCmd
+
+# SessionStart: catch-up (recovers what SessionEnd missed)
+$sessionCatchupDestUnix = $sessionCatchupDest -replace '\\', '/'
+$sessionCatchupCmd = "bash `"$sessionCatchupDestUnix`""
+MergeHookEntry "SessionStart" "session-catchup.sh" "" $sessionCatchupCmd
+
 # PreToolUse: standing order guard
 $guardDestUnix = $guardDest -replace '\\', '/'
 $guardCmd = "bash `"$guardDestUnix`""
@@ -551,9 +574,15 @@ if ($DryRun) {
 
             # Validate hook deduplication
             $seCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'session-archive\.sh' }).Count
+            $seHarvestCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'harvest-session\.sh' }).Count
+            $ssScratchCount = @($vParsed.hooks.SessionStart | Where-Object { $_.hooks.command -match 'scratch-init\.sh' }).Count
+            $ssCatchupCount = @($vParsed.hooks.SessionStart | Where-Object { $_.hooks.command -match 'session-catchup\.sh' }).Count
             $ptCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'standing-order-guard\.sh' }).Count
             $glCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'glossary-skill-guard\.sh' }).Count
-            if ($seCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd hook, got $seCount" }
+            if ($seCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd session-archive hook, got $seCount" }
+            if ($seHarvestCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd harvest-session hook, got $seHarvestCount" }
+            if ($ssScratchCount -ne 1) { LogError "Validation failed: expected 1 SessionStart scratch-init hook, got $ssScratchCount" }
+            if ($ssCatchupCount -ne 1) { LogError "Validation failed: expected 1 SessionStart session-catchup hook, got $ssCatchupCount" }
             if ($ptCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse standing-order-guard hook, got $ptCount" }
             if ($glCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse glossary-skill-guard hook, got $glCount" }
             $bgCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'block-claude-code-guide\.sh' }).Count

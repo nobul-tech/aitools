@@ -63,12 +63,18 @@ if [ "$_skill_count" -eq 0 ]; then
     exit 1
 fi
 blog "Found $_skill_count skill(s) in shared/skills/"
-for _hook_file in session-archive.sh standing-order-guard.sh sh-file-fixup.sh scratch-init.sh harvest-session.sh glossary-skill-guard.sh block-claude-code-guide.sh tool-ops-session-audit.sh dashboard-serve.sh harness-db-sessionstart.sh harness-db-sessionend.sh delegation-duty-guard.sh command-channel-stop.sh failure-mode-identity-stop.sh failure-mode-verify-stop.sh intelligence-stop.sh intelligence-stop.py; do
+for _hook_file in session-archive.sh session-catchup.sh standing-order-guard.sh sh-file-fixup.sh scratch-init.sh harvest-session.sh glossary-skill-guard.sh block-claude-code-guide.sh tool-ops-session-audit.sh dashboard-serve.sh harness-db-sessionstart.sh harness-db-sessionend.sh delegation-duty-guard.sh command-channel-stop.sh failure-mode-identity-stop.sh failure-mode-verify-stop.sh intelligence-stop.sh intelligence-stop.py; do
     if [ ! -f "$SHARED_DIR/hooks/$_hook_file" ]; then
         blog_error "Required hook file not found: $SHARED_DIR/hooks/$_hook_file"
         exit 1
     fi
 done
+# ait-harvest.py lives in scripts/ but is deployed to ~/.claude/hooks/ (it is the
+# helper that the archive/harvest/catchup shims call).
+if [ ! -f "$SCRIPTS_DIR/ait-harvest.py" ]; then
+    blog_error "Required helper not found: $SCRIPTS_DIR/ait-harvest.py"
+    exit 1
+fi
 
 # Cursor AGENTS mirror (repo runtime — requires .aitools/channel/relay.md; not in deploy/)
 if [ ! -f "$SCRIPTS_DIR/sync-relay-to-cursor-agents.py" ]; then
@@ -80,6 +86,8 @@ blog "Found sync-relay-to-cursor-agents.py (relay→AGENTS runs from aitools dep
 # Read shared content
 CLAUDE_SHARED_CONTENT=$(cat "$CLAUDE_SHARED")
 HOOK_SESSION_ARCHIVE=$(cat "$SHARED_DIR/hooks/session-archive.sh")
+HOOK_SESSION_CATCHUP=$(cat "$SHARED_DIR/hooks/session-catchup.sh")
+HOOK_AIT_HARVEST=$(cat "$SCRIPTS_DIR/ait-harvest.py")
 HOOK_STANDING_ORDER_GUARD=$(cat "$SHARED_DIR/hooks/standing-order-guard.sh")
 HOOK_SH_FILE_FIXUP=$(cat "$SHARED_DIR/hooks/sh-file-fixup.sh")
 HOOK_SCRATCH_INIT=$(cat "$SHARED_DIR/hooks/scratch-init.sh")
@@ -1234,6 +1242,8 @@ BLOCK
         echo "$delimiter"
     }
     _embed_hook HOOK_SESSION_ARCHIVE "session-archive.sh" "__EMB_ARCHIVE__"
+    _embed_hook HOOK_SESSION_CATCHUP "session-catchup.sh" "__EMB_CATCHUP__"
+    _embed_hook HOOK_AIT_HARVEST "ait-harvest.py" "__EMB_AITHARVEST__"
     _embed_hook HOOK_STANDING_ORDER_GUARD "standing-order-guard.sh" "__EMB_GUARD__"
     _embed_hook HOOK_SCRATCH_INIT "scratch-init.sh" "__EMB_SCRATCH__"
     _embed_hook HOOK_HARVEST_SESSION "harvest-session.sh" "__EMB_HARVEST__"
@@ -1261,6 +1271,8 @@ fi
 
 # Dest vars for settings.json merge below (deploy uses $HOOKS_DIR, not $HOME/.claude/hooks)
 HOOK_DEST="$HOOKS_DIR/session-archive.sh"
+SESSION_CATCHUP_DEST="$HOOKS_DIR/session-catchup.sh"
+AIT_HARVEST_DEST="$HOOKS_DIR/ait-harvest.py"
 GUARD_DEST="$HOOKS_DIR/standing-order-guard.sh"
 GLOSSARY_DEST="$HOOKS_DIR/glossary-skill-guard.sh"
 SCRATCH_DEST="$HOOKS_DIR/scratch-init.sh"
@@ -1348,6 +1360,8 @@ BLOCK
         printf '\r\n'
     }
     _embed_ps1_hook HOOK_SESSION_ARCHIVE "session-archive.sh" "hook_archive"
+    _embed_ps1_hook HOOK_SESSION_CATCHUP "session-catchup.sh" "hook_catchup"
+    _embed_ps1_hook HOOK_AIT_HARVEST "ait-harvest.py" "hook_aitharvest"
     _embed_ps1_hook HOOK_STANDING_ORDER_GUARD "standing-order-guard.sh" "hook_guard"
     _embed_ps1_hook HOOK_SCRATCH_INIT "scratch-init.sh" "hook_scratch"
     _embed_ps1_hook HOOK_HARVEST_SESSION "harvest-session.sh" "hook_harvest"
@@ -1367,6 +1381,8 @@ BLOCK
     # Deploy all hooks
     printf '$hookFiles = @{\r\n'
     printf '    "session-archive.sh" = $hook_archive\r\n'
+    printf '    "session-catchup.sh" = $hook_catchup\r\n'
+    printf '    "ait-harvest.py" = $hook_aitharvest\r\n'
     printf '    "standing-order-guard.sh" = $hook_guard\r\n'
     printf '    "scratch-init.sh" = $hook_scratch\r\n'
     printf '    "harvest-session.sh" = $hook_harvest\r\n'
@@ -1398,6 +1414,8 @@ BLOCK
     printf '\r\n'
     printf '# Dest vars for settings.json merge below (deploy uses $hooksDir)\r\n'
     printf '$hookDest = Join-Path $hooksDir "session-archive.sh"\r\n'
+    printf '$sessionCatchupDest = Join-Path $hooksDir "session-catchup.sh"\r\n'
+    printf '$aitHarvestDest = Join-Path $hooksDir "ait-harvest.py"\r\n'
     printf '$guardDest = Join-Path $hooksDir "standing-order-guard.sh"\r\n'
     printf '$glossaryDest = Join-Path $hooksDir "glossary-skill-guard.sh"\r\n'
     printf '$scratchDest = Join-Path $hooksDir "scratch-init.sh"\r\n'

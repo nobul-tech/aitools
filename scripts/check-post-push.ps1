@@ -944,6 +944,42 @@ if ($Extensive) {
 }
 
 # ---------------------------------------------------------------------------
+# 32. Hook-registration parity audit
+# ---------------------------------------------------------------------------
+# Single-source check: every hook in shared/hooks/hooks-manifest.json must be
+# registered in BOTH setup-user-hooks.sh and .ps1. Closes the bash<->PS1 drift
+# that left scratch-init/harvest unregistered on Windows (RCA, plan §5).
+if ($Extensive) {
+    $manifest = Join-Path $script:RepoRoot "shared\hooks\hooks-manifest.json"
+    $shSetup = Join-Path $script:RepoRoot "scripts\setup-user-hooks.sh"
+    $ps1Setup = Join-Path $script:RepoRoot "scripts\setup-user-hooks.ps1"
+    $pyCmd = $null
+    if (Get-Command python -ErrorAction SilentlyContinue) { $pyCmd = "python" }
+    elseif (Get-Command python3 -ErrorAction SilentlyContinue) { $pyCmd = "python3" }
+    if (-not (Test-Path $manifest) -or -not (Test-Path $shSetup) -or -not (Test-Path $ps1Setup)) {
+        StepSkip "32" "Hook-registration parity audit" "manifest or setup script missing"
+    } elseif (-not $pyCmd) {
+        StepSkip "32" "Hook-registration parity audit" "python not available"
+    } else {
+        $manifestFiles = (& $pyCmd -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); print(','.join(sorted(h['file'] for h in d['hooks'])))" $manifest)
+        $shFiles = (perl -ne "print qq{\$1\n} if /mergeHookEntry\('[^']*',\s*'([\w.-]+)'/" $shSetup | Sort-Object -Unique) -join ','
+        $ps1Files = (perl -ne 'print "$1\n" if /MergeHookEntry\s+"[^"]*"\s+"([\w.-]+)"/' $ps1Setup | Sort-Object -Unique) -join ','
+        $parityIssues = @()
+        if ($shFiles -ne $manifestFiles) {
+            $parityIssues += "bash registrations != manifest"
+        }
+        if ($ps1Files -ne $manifestFiles) {
+            $parityIssues += "ps1 registrations != manifest"
+        }
+        if ($parityIssues.Count -eq 0) {
+            StepPass "32" "Hook-registration parity audit" "bash + ps1 match manifest"
+        } else {
+            StepFail "32" "Hook-registration parity audit" ($parityIssues -join '; ')
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------
 PrintSummary
