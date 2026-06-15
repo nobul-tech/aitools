@@ -25,7 +25,11 @@ esac
 # Refresh PATH hash to pick up tools installed by prior steps (e.g., setup-python, setup-uv)
 hash -r
 
-# Verify Python 3.10+
+# Verify Python 3.10+ -- but ONLY as a gate for the pip fallback. When uv is
+# available (the preferred path), uv provisions its own Python for the tool, so
+# the system python3 version is irrelevant. On macOS, bare `python3` is often
+# Apple's CommandLineTools 3.9, which would otherwise wrongly fail this check
+# even though Homebrew/uv provide a newer Python.
 PYTHON_CMD=""
 if command -v python3 >/dev/null 2>&1; then
     PYTHON_CMD="python3"
@@ -33,12 +37,14 @@ elif command -v python >/dev/null 2>&1; then
     PYTHON_CMD="python"
 fi
 
-if [ -n "$PYTHON_CMD" ]; then
+if command -v uv >/dev/null 2>&1; then
+    log "uv available -- uv provisions Python for Modal (system Python version not required)"
+elif [ -n "$PYTHON_CMD" ]; then
     PY_VERSION=$("$PYTHON_CMD" -c "import sys; print(str(sys.version_info.major) + '.' + str(sys.version_info.minor))" 2>/dev/null)
     PY_MAJOR=$(printf '%s' "$PY_VERSION" | cut -d. -f1)
     PY_MINOR=$(printf '%s' "$PY_VERSION" | cut -d. -f2)
     if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]; }; then
-        log_error "Python 3.10+ required. Found Python $PY_VERSION"
+        log_error "Python 3.10+ required (pip fallback path). Found Python $PY_VERSION"
         write_summary ERROR "modal cli" "Python 3.10+ required (found $PY_VERSION)"
         exit 1
     fi

@@ -633,27 +633,27 @@ else
 fi
 
 # ============================================================
-# 14. Python
+# 14. uv  (MUST precede Python -- uv is the Python manager)
 # ============================================================
-log "Step 14: Python"
-
-python_script="$SCRIPT_DIR/setup-python.sh"
-if [ -f "$python_script" ]; then
-    validate_and_run "$python_script"
-else
-    log_warn "setup-python.sh not found — skipping (MDM deploy)"
-fi
-
-# ============================================================
-# 15. uv
-# ============================================================
-log "Step 15: uv"
+log "Step 14: uv"
 
 uv_script="$SCRIPT_DIR/setup-uv.sh"
 if [ -f "$uv_script" ]; then
     validate_and_run "$uv_script"
 else
     log_warn "setup-uv.sh not found — skipping (MDM deploy)"
+fi
+
+# ============================================================
+# 15. Python  (via uv -- requires Step 14)
+# ============================================================
+log "Step 15: Python"
+
+python_script="$SCRIPT_DIR/setup-python.sh"
+if [ -f "$python_script" ]; then
+    validate_and_run "$python_script"
+else
+    log_warn "setup-python.sh not found — skipping (MDM deploy)"
 fi
 
 # ============================================================
