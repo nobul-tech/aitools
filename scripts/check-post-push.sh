@@ -835,23 +835,13 @@ if $EXTENSIVE; then
     else
         py=python3
         command -v python3 >/dev/null 2>&1 || py=python
-        # Manifest hook files (sorted, comma-joined)
-        manifest_files=$("$py" -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); print(','.join(sorted(h['file'] for h in d['hooks'])))" "$manifest" 2>/dev/null)
-        # Files registered in the bash node block: mergeHookEntry('Event','file.sh',...)
-        sh_files=$(perl -ne "print \"\$1\n\" if /mergeHookEntry\\('[^']*',\\s*'([\\w.-]+)'/" "$sh_setup" | sort -u | paste -s -d , -)
-        # Files registered in PS1: MergeHookEntry "Event" "file.sh" ...
-        ps1_files=$(perl -ne 'print "$1\n" if /MergeHookEntry\s+"[^"]*"\s+"([\w.-]+)"/' "$ps1_setup" | sort -u | paste -s -d , -)
-        parity_issues=""
-        if [ "$sh_files" != "$manifest_files" ]; then
-            parity_issues="bash registrations != manifest (bash=$sh_files manifest=$manifest_files)"
-        fi
-        if [ "$ps1_files" != "$manifest_files" ]; then
-            parity_issues="${parity_issues}${parity_issues:+; }ps1 registrations != manifest (ps1=$ps1_files manifest=$manifest_files)"
-        fi
-        if [ -z "$parity_issues" ]; then
-            step_pass "32" "Hook-registration parity audit" "bash + ps1 match manifest ($manifest_files)"
+        # Parity comparison done entirely in python (scripts/check-hook-parity.py) --
+        # set-based, no platform sort-order fragility. Capture exit without set -e abort.
+        parity_out=$("$py" "$REPO_ROOT/scripts/check-hook-parity.py" "$manifest" "$sh_setup" "$ps1_setup" 2>&1) && parity_rc=0 || parity_rc=$?
+        if [ "$parity_rc" -eq 0 ]; then
+            step_pass "32" "Hook-registration parity audit" "$parity_out"
         else
-            step_fail "32" "Hook-registration parity audit" "$parity_issues"
+            step_fail "32" "Hook-registration parity audit" "$parity_out"
         fi
     fi
 fi

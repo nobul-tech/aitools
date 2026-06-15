@@ -961,20 +961,14 @@ if ($Extensive) {
     } elseif (-not $pyCmd) {
         StepSkip "32" "Hook-registration parity audit" "python not available"
     } else {
-        $manifestFiles = (& $pyCmd -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); print(','.join(sorted(h['file'] for h in d['hooks'])))" $manifest)
-        $shFiles = (perl -ne "print qq{\$1\n} if /mergeHookEntry\('[^']*',\s*'([\w.-]+)'/" $shSetup | Sort-Object -Unique) -join ','
-        $ps1Files = (perl -ne 'print "$1\n" if /MergeHookEntry\s+"[^"]*"\s+"([\w.-]+)"/' $ps1Setup | Sort-Object -Unique) -join ','
-        $parityIssues = @()
-        if ($shFiles -ne $manifestFiles) {
-            $parityIssues += "bash registrations != manifest"
-        }
-        if ($ps1Files -ne $manifestFiles) {
-            $parityIssues += "ps1 registrations != manifest"
-        }
-        if ($parityIssues.Count -eq 0) {
-            StepPass "32" "Hook-registration parity audit" "bash + ps1 match manifest"
+        # Parity comparison done entirely in python (scripts/check-hook-parity.py) --
+        # set-based, no perl-in-PowerShell quoting or platform sort-order fragility.
+        $parityScript = Join-Path $script:RepoRoot "scripts\check-hook-parity.py"
+        $parityOut = (& $pyCmd $parityScript $manifest $shSetup $ps1Setup 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -eq 0) {
+            StepPass "32" "Hook-registration parity audit" $parityOut
         } else {
-            StepFail "32" "Hook-registration parity audit" ($parityIssues -join '; ')
+            StepFail "32" "Hook-registration parity audit" $parityOut
         }
     }
 }
