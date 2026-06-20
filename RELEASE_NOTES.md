@@ -12,6 +12,42 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.70.0 -- Harness-owned shell integration + deterministic tool resolution (2026-06-20)
+
+Workstream A of the managed-tool resolution design (`plans/tooling-resolution-and-artifact-registry.md`): the harness now owns PATH precedence in the login profile and resolves managed Python deterministically, so the uv python shim / cursor-agent / brew bash win in the harness's contexts instead of being shadowed.
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Login-profile PATH ownership** — `scripts/setup-user-shell.{sh,ps1}` (new): idempotently owns a marked block (`# >>> aitools managed >>>` … `# <<< aitools managed <<<`) in the login profile (`~/.bash_profile`; PowerShell `$PROFILE`). Placed last, it re-asserts precedence (`brew shellenv` → prepend `~/.local/bin`), yielding the canonical order `~/.local/bin → /opt/homebrew/bin → grok/antigravity → system` without rewriting the user's own lines. Wired into `aitools-install` Step 7 and embedded in `build-deploy`. |
+| 2 | **Deterministic Python resolver** — `harness_python` (`aitools-lib.sh`) / `Get-HarnessPython` (`aitools-lib.ps1`): prefer the uv shim (`~/.local/bin/python3`) over a bare PATH lookup, for non-interactive contexts (cron/launchd) where login PATH order does not apply. `aitools-dashboard` `find_python`/`Find-Python` delegate to it. |
+| 3 | **Cursor `agent` shim management** — `setup-user-cursor.{sh,ps1}`: harness owns the `agent → cursor-agent` symlink (POSIX) and warns when `agent` resolves to grok instead of Cursor (PATH-order regression). |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 4 | Live `~/.bash_profile` on nobul-mac: managed block applied (decision-#6 order verified — uv python 3.14.6, brew bash 5.3.15, cursor-agent all resolving correctly); stray zsh-only lines (`autoload`/`compinit` from the grok installer) that errored on every bash login removed. |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `scripts/setup-user-shell.sh` / `.ps1` | Idempotent owner of the login-profile managed PATH block |
+| `reference/ait-shellintegration.md` | How aitools owns shell integration + PATH precedence; marker convention; canonical order; resolver |
+
+### Deferred (Workstream A remainder)
+
+| Item | Reason |
+|------|--------|
+| Install-step reorder (decision #9) | High blast radius, untestable locally (`.ps1`), no current functional value — tracked follow-up |
+| Hook python-resolution inlining | 10 standalone deployed hooks cannot source the lib; each needs an inline shim + test |
+
+**Verified on:** macOS — all edited `.sh` `bash -n` clean; `setup-user-shell.sh` tested against profile copies (idempotent, single marker pair) then applied live and re-verified in a fresh login shell; `harness_python` smoke-tested → uv shim, Python 3.14.6. PowerShell files are mechanical parity mirrors, marked `UNTESTED on Windows` (no pwsh on this Mac).
+
+---
+
 ## v0.69.1 -- Python resolution correctness + managed-tool/artifact-registry design capture (2026-06-20)
 
 ### Bug fixes

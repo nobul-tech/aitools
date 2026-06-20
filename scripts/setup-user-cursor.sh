@@ -117,6 +117,26 @@ else
     fi
 fi
 
+# --- 2b. Manage the agent -> cursor-agent symlink (harness-owned) ---
+# The Cursor installer provides `cursor-agent`; the harness owns the `agent`
+# shim so `agent` deterministically means Cursor, never a stale grok symlink.
+if [ "$DRY_RUN" != "true" ]; then
+    LOCAL_BIN="$HOME/.local/bin"
+    if [ -x "$LOCAL_BIN/cursor-agent" ]; then
+        if [ ! -e "$LOCAL_BIN/agent" ] || [ "$(readlink "$LOCAL_BIN/agent" 2>/dev/null || true)" != "cursor-agent" ]; then
+            ln -sfn cursor-agent "$LOCAL_BIN/agent"
+            log_ok "Linked agent -> cursor-agent in $(display_path "$LOCAL_BIN")"
+        fi
+    fi
+    # Detection: warn if `agent` still resolves to grok (PATH-order regression).
+    RESOLVED_AGENT="$(command -v agent 2>/dev/null || true)"
+    case "$RESOLVED_AGENT" in
+        "$HOME/.grok/"*)
+            log_warn "'agent' resolves to grok ($RESOLVED_AGENT), not Cursor -- ensure ~/.local/bin precedes ~/.grok/bin (run setup-user-shell.sh)"
+            write_summary WARN "cursor cli" "agent shadowed by grok" ;;
+    esac
+fi
+
 # --- 3. cli-config.json (merge, not overwrite) ---
 
 log "Step 3: cli-config.json"

@@ -114,6 +114,16 @@ if ($DryRun) {
     }
 }
 
+# --- 2b. Detection: warn if `agent` resolves to grok, not Cursor ---
+# (Symlink management is POSIX-only; on Windows the Cursor installer owns the shim.)
+if (-not $DryRun) {
+    $resolvedAgent = Get-Command agent -ErrorAction SilentlyContinue
+    if ($resolvedAgent -and $resolvedAgent.Source -like "*\.grok\*") {
+        LogWarn "'agent' resolves to grok ($($resolvedAgent.Source)), not Cursor -- ensure the Cursor shim precedes grok on PATH"
+        Write-Summary "WARN" "cursor cli" "agent shadowed by grok"
+    }
+}
+
 # --- 3. cli-config.json (merge, not overwrite) ---
 
 Log "Step 3: cli-config.json"

@@ -465,6 +465,15 @@ fi
 # ============================================================
 log "Step 7: Shell integration"
 
+# Login-profile PATH ownership (managed marked block) -- must run so the harness
+# resolves managed tools (uv python, cursor-agent, brew bash) deterministically.
+shell_script="$SCRIPT_DIR/setup-user-shell.sh"
+if [ -f "$shell_script" ]; then
+    validate_and_run "$shell_script"
+else
+    log_warn "setup-user-shell.sh not found — skipping login-profile PATH block (MDM deploy)"
+fi
+
 ALIASES_PATH="$SCRIPT_DIR/../shared/shell/aliases.sh"
 if [ -f "$ALIASES_PATH" ]; then
     ALIASES_ABS=$(cd "$(dirname "$ALIASES_PATH")" && pwd)/$(basename "$ALIASES_PATH")

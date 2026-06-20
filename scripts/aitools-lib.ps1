@@ -1568,6 +1568,23 @@ function Ensure-ToolOnPath {
     return $false
 }
 
+function Get-HarnessPython {
+    # Resolve the harness-managed Python interpreter deterministically.
+    # Prefers the uv shim under ~/.local\bin so the harness uses the managed
+    # interpreter even in non-interactive contexts where login PATH order does
+    # not apply. Returns the resolved path or command name; $null if none found.
+    # UNTESTED on Windows -- mirrors harness_python in aitools-lib.sh.
+    $localBin = Join-Path $HOME ".local\bin"
+    foreach ($exe in @("python3.exe", "python.exe")) {
+        $shim = Join-Path $localBin $exe
+        if (Test-Path $shim) { return $shim }
+    }
+    # Get-Command exempt: command-existence check with explicit fallback
+    if (Get-Command python3 -ErrorAction SilentlyContinue) { return "python3" }
+    if (Get-Command python -ErrorAction SilentlyContinue) { return "python" }
+    return $null
+}
+
 function Check-BuildPrereqs {
     <#
     .SYNOPSIS

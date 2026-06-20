@@ -364,6 +364,14 @@ if (Test-Path $hhPs1Src) {
 # ============================================================
 Log "Step 7: Shell integration"
 
+# Login-profile PATH ownership (managed marked block)
+$shellScript = Join-Path $PSScriptRoot "setup-user-shell.ps1"
+if (Test-Path $shellScript) {
+    Invoke-ValidatedScript $shellScript
+} else {
+    LogWarn "setup-user-shell.ps1 not found -- skipping login-profile PATH block (MDM deploy)"
+}
+
 $aliasesPath = Join-Path $PSScriptRoot "..\shared\shell\aliases.ps1"
 if (Test-Path $aliasesPath) {
     $aliasesAbs = (Resolve-Path $aliasesPath).Path

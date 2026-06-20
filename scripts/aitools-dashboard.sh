@@ -112,13 +112,8 @@ EXPECTED_SITUATION_FIELDS="decisions assumptions deviations facts"
 # Find python3
 # ---------------------------------------------------------------------------
 find_python() {
-    if command -v python3 >/dev/null 2>&1; then
-        printf 'python3'
-    elif command -v python >/dev/null 2>&1; then
-        printf 'python'
-    else
-        return 1
-    fi
+    # Delegate to the harness resolver (prefers the uv shim deterministically).
+    harness_python
 }
 
 # ---------------------------------------------------------------------------

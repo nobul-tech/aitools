@@ -70,9 +70,8 @@ $legacyPidFile = Join-Path $legacyPidDir ".dashboard-pid"
 # Find python
 # ---------------------------------------------------------------------------
 function Find-Python {
-    if (Get-Command python3 -ErrorAction SilentlyContinue) { return "python3" }
-    if (Get-Command python -ErrorAction SilentlyContinue) { return "python" }
-    return $null
+    # Delegate to the harness resolver (prefers the uv shim deterministically).
+    Get-HarnessPython
 }
 
 # ---------------------------------------------------------------------------

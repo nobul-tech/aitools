@@ -1332,6 +1332,30 @@ ensure_tool_on_path() {
     return 1
 }
 
+# ---------------------------------------------------------------------------
+# Resolve the harness-managed Python interpreter deterministically.
+# Prefers the uv shim (~/.local/bin/python3) so the harness uses the managed
+# interpreter even in non-interactive contexts (cron/launchd/hooks) where the
+# login-profile PATH order does not apply. Prints the resolved command or path
+# on stdout; returns 1 if no interpreter is found.
+# ---------------------------------------------------------------------------
+harness_python() {
+    local uv_shim="$HOME/.local/bin/python3"
+    if [ -x "$uv_shim" ]; then
+        printf '%s' "$uv_shim"
+        return 0
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+        command -v python3
+        return 0
+    fi
+    if command -v python >/dev/null 2>&1; then
+        command -v python
+        return 0
+    fi
+    return 1
+}
+
 # Check known build prerequisites for an ecosystem.
 # Usage: check_build_prereqs "cargo"
 #   Outputs missing prereq info to stdout (one per line: NAME|INSTALL_INSTRUCTION).
