@@ -67,11 +67,11 @@ if ($pythonCmd) {
         LogOk "$pyVersion (uv-managed at $src)"
         Write-Summary "OK" "python" "$pyVersion (uv)"
     } else {
-        LogWarn "python resolves to $src ($pyVersion), not the uv shim"
-        LogWarn "A legacy pymanager / Microsoft Store / winget Python may be shadowing uv on PATH"
-        LogWarn "Ensure uv's bin dir (%USERPROFILE%\.local\bin) precedes those in PATH"
-        Write-Summary "WARN" "python" "$pyVersion (uv shim shadowed -- check PATH)"
-        Write-Summary "ACTION" "" "Put %USERPROFILE%\.local\bin first in PATH -- python default"
+        $shadowDir = Split-Path $src -Parent
+        LogWarn "python resolves to $src ($pyVersion), not the uv shim at $env:USERPROFILE\.local\bin\python.exe"
+        LogWarn "$shadowDir precedes %USERPROFILE%\.local\bin in PATH -- the uv shim is shadowed (legacy pymanager / MS Store / winget Python?)"
+        Write-Summary "WARN" "python" "$pyVersion (uv shim shadowed)"
+        Write-Summary "ACTION" "" "Put %USERPROFILE%\.local\bin before $shadowDir in PATH -- python default"
     }
 } else {
     LogError "'python' not found after uv install -- is uv's bin dir (%USERPROFILE%\.local\bin) on PATH?"

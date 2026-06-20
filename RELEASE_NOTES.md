@@ -12,6 +12,32 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.69.1 -- Python resolution correctness + managed-tool/artifact-registry design capture (2026-06-20)
+
+### Bug fixes
+
+| # | Severity | Change |
+|---|----------|--------|
+| 1 | Medium | **Python shadow mis-diagnosis** — `setup-python.{sh,ps1}` and the `tool-registry.json` `python` entry told users to put `~/.local/bin` before `/usr/bin`, but the uv shim is shadowed by the Homebrew bin (`/opt/homebrew/bin/python3`), and `~/.local/bin` already precedes `/usr/bin`. Detection now names the *actual* shadowing dir (parent of the resolved binary); the registry `postInstallConfig` is corrected and `knownPaths` populated with the uv shim paths. Interactively `python3` already resolves to the uv shim; the shadow bites the harness's non-interactive contexts — durable fix tracked in the plan below. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 2 | **`plans/tooling-resolution-and-artifact-registry.md`** — confirmed design for harness-owned PATH/shell-integration, a tool-ops model 1:1 with tool-registry (baseline resolution + verification, optional rich sections, `enforcement` flag only on blocking rules), consumer-declared tool dependencies, and a generated artifact registry. Captures 10 decisions + Workstreams A/B/C + sequencing + open-thread backlog. |
+| 3 | **ROADMAP** — "In Progress" row for the above. |
+| 4 | **Framework registry** — `pending` adoption entry: Artifact registry (ITIL CMDB + SBOM). |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `plans/tooling-resolution-and-artifact-registry.md` | Design of record for managed-tool resolution + artifact registry |
+
+**Verified on:** macOS — `setup-python.sh` `bash -n` clean; `tool-registry.json` and `framework-registry.json` parse clean. `setup-python.ps1` is a mechanical parity edit, not parse-checked (no pwsh on this Mac; see plan backlog). The durable resolution fix (Workstreams A–C) is not yet implemented.
+
+---
+
 ## v0.69.0 -- Remote bootstrap one-liner + uv-unified Python + per-user deploy + registry consolidation (2026-06-15)
 
 ### New features

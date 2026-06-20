@@ -7,6 +7,7 @@ Detailed plans live in `plans/`. See `RELEASE_NOTES.md` for completed work.
 
 | Item | Plan | Priority | Summary |
 |------|------|----------|---------|
+| Managed-tool resolution + artifact registry | plans/tooling-resolution-and-artifact-registry.md | High | Harness owns PATH/shell-integration so the uv `python3` and `cursor-agent` resolve deterministically; tool-ops becomes 1:1 with tool-registry (baseline resolution + verification); generated artifact registry (CMDB + SBOM). Python/uv detection + registry fixes shipped; Step 0 (metadata convention) -> A (shell/PATH/agent) -> B (tool-ops) -> C (artifact registry) pending. |
 | Harvest/archive/logging resilience | plans/harvest-archive-resilience.md | High | SessionStart catch-up + stdlib `ait-harvest.py` (concurrency-safe heartbeat lock, mtime-primary liveness) recover CC sessions that abrupt-exit/offline missed. Windows harvest RCA fixed (PS1 hook-registration parity). `hooks-manifest.json` + `check-post-push` step 32 parity audit close the bash↔PS1 drift root cause. Phases 1–4 shipped; Phase 5 (aitools-lib logging migration to `~/.aitools/logs/`) tracked in [#7](https://github.com/nobul-tech/aitools/issues/7). |
 
 ## Planned

@@ -195,6 +195,14 @@
       "concepts": ["Process deviation", "Plan adherence", "Amendment protocols"],
       "incident": 20,
       "referenceFile": "reference/incident-020-process-discipline.md"
+    },
+    {
+      "name": "Artifact registry",
+      "governs": "Inventory and dependency graph of all source artifacts — kind, intent, governance status, and managed-tool / inter-artifact dependencies; derived (generated) from in-file metadata, not hand-authored",
+      "discipline": "Configuration management (ITIL CMDB), Software supply chain (SBOM)",
+      "concepts": ["Configuration management database (CMDB)", "Software bill of materials (SBOM)", "Configuration items", "Dependency graph", "Single-source-via-generation"],
+      "incident": 0,
+      "referenceFile": "plans/tooling-resolution-and-artifact-registry.md"
     }
   ]
 }

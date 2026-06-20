@@ -63,11 +63,15 @@ if command -v python3 >/dev/null 2>&1; then
             log_ok "$PY_VERSION (uv-managed at $PY_PATH)"
             write_summary OK "python" "$PY_VERSION (uv)" ;;
         *)
-            # python3 found, but not the uv shim -- PATH ordering issue
-            log_warn "python3 resolves to $PY_PATH ($PY_VERSION), not the uv shim"
-            log_warn "Ensure uv's bin dir (~/.local/bin) precedes /usr/bin in PATH"
-            write_summary WARN "python" "$PY_VERSION (uv shim shadowed -- check PATH)"
-            write_summary ACTION "" "Put ~/.local/bin before /usr/bin in PATH -- python3 default" ;;
+            # python3 found, but not the uv shim -- PATH ordering issue.
+            # Name the ACTUAL shadowing dir (parent of the resolved binary) instead
+            # of assuming /usr/bin: on macOS the shadow is usually Homebrew's
+            # /opt/homebrew/bin (a python@3.x formula), not the system /usr/bin.
+            SHADOW_DIR=$(dirname "$PY_PATH")
+            log_warn "python3 resolves to $PY_PATH ($PY_VERSION), not the uv shim at $HOME/.local/bin/python3"
+            log_warn "$SHADOW_DIR precedes $HOME/.local/bin in PATH -- the uv shim is shadowed"
+            write_summary WARN "python" "$PY_VERSION (uv shim shadowed)"
+            write_summary ACTION "" "Put ~/.local/bin before $SHADOW_DIR in PATH -- python3 default" ;;
     esac
 else
     log_error "python3 not found after uv install -- is uv's bin dir (~/.local/bin) on PATH?"

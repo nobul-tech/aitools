@@ -7,7 +7,7 @@
       "scope": "Tool data only. NOT lifecycle gates or onboarding checklists (.claude/rules/tool-lifecycle.md). NOT evaluation process (/tool-eval skill). NOT per-tool ops metadata (tool-ops.json)",
       "audience": "/tool-registry skill, /tool-eval skill, /audit skill, setup scripts, check scripts, aitools-install"
     },
-    "lastUpdated": "2026-06-15",
+    "lastUpdated": "2026-06-17",
     "repositories": {
       "primary": "https://github.com/nobul-tech/aitools",
       "userTemplate": "https://github.com/nobul-jose/aitools-{username}"
@@ -631,7 +631,7 @@
       "lifecycle": {
         "platformStatus": { "macos": "supported", "windows": "supported", "linux": "supported" },
         "concurrency": "Yes — runtime",
-        "postInstallConfig": "~/.local/bin must precede /usr/bin in PATH so the uv shim wins over a system python (macOS CommandLineTools ships 3.9).",
+        "postInstallConfig": "~/.local/bin must precede the active Homebrew bin (/opt/homebrew/bin Apple Silicon, /usr/local/bin Intel) and any system python dir in PATH so the uv shim wins. A Homebrew python@3.x formula at /opt/homebrew/bin/python3 is the common shadow.",
         "dependencies": ["uv (must be installed first)"],
         "invocation": { "command": "python3 / python (uv-managed shims)", "antiPatterns": ["relying on system python3 (macOS CommandLineTools 3.9)"] }
       },
@@ -644,7 +644,11 @@
       },
       "authentication": null,
       "buildPrereqs": null,
-      "knownPaths": null,
+      "knownPaths": {
+        "macos": ["~/.local/bin/python3", "~/.local/bin/python"],
+        "windows": ["%USERPROFILE%\\.local\\bin\\python3.exe", "%USERPROFILE%\\.local\\bin\\python.exe"],
+        "linux": ["~/.local/bin/python3"]
+      },
       "nonPreferredMethods": [
         { "method": "Homebrew (brew install python)", "detection": "brew list python@3.14", "reason": "Superseded by uv as the unified manager (v0.69.0). May remain as a transitive dependency of other brew formulae — fine; not the user-facing default." },
         { "method": "pymanager (Windows)", "detection": "py list", "reason": "Superseded by uv (v0.69.0); was the prior Windows manager (PEP 773)." },
