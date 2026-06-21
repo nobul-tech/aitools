@@ -46,6 +46,7 @@ User-scoped (`~/.aitools/`):
 |------|---------|
 | `config.json` | Machine identity, repo paths, Google Drive discovery |
 | `deploy-state/` | Last-deployed file hashes for drift detection |
+| `logs/` | Unified component logs (`deploy.log`, `checks.log`, `ait-harvest.log`, `harness-db.log`), 5 MB × 5 rotation — see `@reference/logging.md` |
 | `auth/` | Per-user credentials (proposed) |
 | `telemetry/` | SQLite KPI aggregation across all projects (proposed) |
 

@@ -838,11 +838,9 @@ those functions write to `deploy.log` using the bridged variables.
 
 **Double-init safety:** `init-logging` sets logging vars to the default
 aitools log directory. `CheckLogInit` fully overrides these to check-specific
-paths. On the target platform, both point to the same parent directory
-(`$LOCALAPPDATA/aitools` on Windows, `~/Library/Logs/aitools` on macOS,
-`${XDG_STATE_HOME:-$HOME/.local/state}/aitools` on Linux). On the wrong
-platform, the OS guard exits before `CheckLogInit` runs — the init-logging
-state is never used operationally.
+paths. Both point to the unified `~/.aitools/logs` directory on every platform
+(see `@reference/logging.md` §1). On the wrong platform, the OS guard exits
+before `CheckLogInit` runs — the init-logging state is never used operationally.
 
 This is the standard double-init pattern — not fragile. The override is
 total and deterministic.
@@ -873,13 +871,10 @@ on logging init). Rejected because:
 3. Guards are the most common "wrong platform" signal — they should be
    visible in dashboards and alerts
 
-**Platform log directories:**
-
-| Platform | Directory | Set by |
-|----------|-----------|--------|
-| Windows | `$env:LOCALAPPDATA\aitools` | `Initialize-Logging` |
-| macOS | `~/Library/Logs/aitools` | `logging_init` |
-| Linux | `${XDG_STATE_HOME:-$HOME/.local/state}/aitools` | `logging_init` |
+**Log directory:** unified `~/.aitools/logs` on all platforms, set by
+`logging_init` (bash) / `Initialize-Logging` (PS1). Path, size-based rotation
+(5 MB × 5), and per-component file conventions are the single source of truth in
+`@reference/logging.md`.
 
 ## Cross-platform grep portability
 

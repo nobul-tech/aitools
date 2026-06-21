@@ -66,8 +66,8 @@ display_path() {
 # Logging
 # ---------------------------------------------------------------------------
 
-LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
-[ "$(uname -s)" = "Darwin" ] && LOG_DIR="$HOME/Library/Logs/aitools"
+# Unified log dir (reference/logging.md §1): ~/.aitools/logs on all platforms.
+LOG_DIR="${AITOOLS_LOG_DIR:-$HOME/.aitools/logs}"
 LOG_FILE="$LOG_DIR/deploy.log"
 mkdir -p "$LOG_DIR"
 LOG_DISPLAY=$(display_path "$LOG_FILE")

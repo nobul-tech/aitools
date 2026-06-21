@@ -39,6 +39,8 @@ check_log_init() {
     _CHECK_LOG="$_CHECK_LOG_DIR/checks.log"
     _CHECK_JSONL="$_CHECK_LOG_DIR/checks.jsonl"
     mkdir -p "$_CHECK_LOG_DIR"
+    _rotate_log "$_CHECK_LOG"
+    _rotate_log "$_CHECK_JSONL"
 
     local ts
     ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)

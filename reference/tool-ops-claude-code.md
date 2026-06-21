@@ -143,6 +143,17 @@ Baseline: Claude Code 2.1.51 (2026-02-16)
 - Syncing raw session files (JSONL) via git is **not recommended** — they contain absolute paths, aren't portable across OS, and there's no `--resume <file>` mechanism.
 - **Best practice:** Use `CLAUDE.md` and auto-memory as the cross-device "session transfer" layer. Put valuable decisions and context there, let sessions be ephemeral.
 
+### Session Archive & Catch-up (harness)
+
+While CC sessions don't sync, the harness archives them. SessionEnd
+(`session-archive.sh`) and SessionStart (`session-catchup.sh`) hooks — thin
+shims over `scripts/ait-harvest.py` — copy each session transcript **and its
+subagent transcripts** to the user repo (`sessions/<project>/`), committing and
+pushing best-effort. Catch-up on SessionStart recovers anything an abrupt,
+offline, or slept SessionEnd missed. The helper logs to
+`~/.aitools/logs/ait-harvest.log`. Full spec: `@reference/user-repo.md`
+"Archiving Mechanism".
+
 ### CLAUDE.md Hierarchy (5 levels)
 
 | Level | Path | Scope |

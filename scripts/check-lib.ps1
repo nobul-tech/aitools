@@ -37,12 +37,14 @@ $script:CheckName = ""
 function CheckLogInit {
     param([string]$Name)
     $script:CheckName = $Name
-    $script:CheckLogDir = Join-Path $env:LOCALAPPDATA "aitools"
+    $script:CheckLogDir = if ($env:AITOOLS_LOG_DIR) { $env:AITOOLS_LOG_DIR } else { Join-Path $HOME ".aitools" "logs" }
     $script:CheckLog = Join-Path $script:CheckLogDir "checks.log"
     $script:CheckJsonl = Join-Path $script:CheckLogDir "checks.jsonl"
     if (-not (Test-Path $script:CheckLogDir)) {
         New-Item -ItemType Directory -Path $script:CheckLogDir -Force | Out-Null
     }
+    Rotate-Log $script:CheckLog
+    Rotate-Log $script:CheckJsonl
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $hostName = $env:COMPUTERNAME
     if (-not $hostName) { $hostName = hostname }

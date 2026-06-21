@@ -79,7 +79,7 @@ function Read-ConfigKey {
 # Logging (bootstrap -- overridden after lib is sourced below)
 # ---------------------------------------------------------------------------
 
-$logDir = Join-Path $env:LOCALAPPDATA "aitools"
+$logDir = if ($env:AITOOLS_LOG_DIR) { $env:AITOOLS_LOG_DIR } else { Join-Path $HOME ".aitools" "logs" }
 $logFile = Join-Path $logDir "deploy.log"
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 $script:errors = 0

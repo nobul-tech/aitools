@@ -39,24 +39,39 @@ function ReadConfigKey {
 # Sets $script:scriptName, $script:logDir, $script:logFile; resets
 # $script:errors, $script:warnings. Creates log directory.
 # Usage: Initialize-Logging "setup-foo"
+# Log rotation (reference/logging.md §4): size-based, 5 MB x 5 backups.
+# Fail-safe -- a broken rotate must never break the operation it records (§5).
+$script:LogMaxBytes = 5242880   # 5 MB
+$script:LogBackupCount = 5
+function Rotate-Log {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { return }
+    $item = Get-Item $Path -ErrorAction SilentlyContinue
+    if (-not $item -or $item.Length -lt $script:LogMaxBytes) { return }
+    $n = $script:LogBackupCount
+    Remove-Item "$Path.$n" -Force -ErrorAction SilentlyContinue
+    for ($i = $n; $i -gt 1; $i--) {
+        $prev = $i - 1
+        Move-Item "$Path.$prev" "$Path.$i" -Force -ErrorAction SilentlyContinue
+    }
+    Move-Item $Path "$Path.1" -Force -ErrorAction SilentlyContinue
+}
+
 function Initialize-Logging {
     param([Parameter(Mandatory)][string]$Name)
     $script:scriptName = $Name
-    if ($IsWindows -or (-not (Test-Path variable:IsMacOS))) {
-        # Windows (PS 7+) or PS 5.1 (always Windows)
-        $script:logDir = Join-Path $env:LOCALAPPDATA "aitools"
-    } elseif ($IsMacOS) {
-        $script:logDir = Join-Path $HOME "Library/Logs/aitools"
+    # Unified cross-platform log dir (reference/logging.md §1): ~/.aitools/logs
+    # on all platforms. Honors an explicit AITOOLS_LOG_DIR override (e.g. tests).
+    if ($env:AITOOLS_LOG_DIR) {
+        $script:logDir = $env:AITOOLS_LOG_DIR
     } else {
-        # Linux: XDG_STATE_HOME, default ~/.local/state
-        $xdg = $env:XDG_STATE_HOME
-        if (-not $xdg) { $xdg = Join-Path $HOME ".local/state" }
-        $script:logDir = Join-Path $xdg "aitools"
+        $script:logDir = Join-Path $HOME ".aitools" "logs"
     }
     $script:logFile = Join-Path $script:logDir "deploy.log"
     if (-not (Test-Path $script:logDir)) {
         New-Item -ItemType Directory -Path $script:logDir -Force | Out-Null
     }
+    Rotate-Log $script:logFile
     $script:errors = 0
     $script:warnings = 0
 }

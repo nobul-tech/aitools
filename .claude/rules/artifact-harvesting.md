@@ -62,10 +62,16 @@ analysis against harness inventory, git history, and KPIs). Triggers:
 
 ### Automation
 
-- **SessionEnd hook**: classify `.scratch/` contents, harvest
-  artifacts, delete ephemeral files, ship KPIs
-- **SessionStart hook**: audit `harvesting/`, auto-prune stale,
-  log candidates, ship inventory KPIs
+- **SessionEnd hooks**: `harvest-session.sh` classifies `.scratch/`
+  contents and harvests reusable artifacts (no longer deletes —
+  v0.64.1), ships KPIs; `session-archive.sh` archives the session
+  transcript **and its subagent transcripts** to the user repo.
+- **SessionStart hooks**: audit `harvesting/`, auto-prune stale,
+  log candidates, ship inventory KPIs; `session-catchup.sh` recovers
+  transcripts + scratch artifacts an abrupt SessionEnd missed.
+- **Helper**: all archive/harvest/catch-up logic lives in
+  `scripts/ait-harvest.py` (the hooks are thin shims); it logs to
+  `~/.aitools/logs/ait-harvest.log`.
 - **`aitools` sync**: prompt for candidate review if any exist
 
 ### Cross-references

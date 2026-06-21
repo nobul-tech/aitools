@@ -135,18 +135,30 @@ v1 configs are additive-compatible -- existing fields are preserved. The install
 
 ## Archiving Mechanism
 
-A Claude Code `SessionEnd` hook copies transcript files to the user repo after each session ends.
-The hook source lives at `shared/hooks/session-archive.sh` in the aitools repo. Setup scripts
-(`scripts/` and `deploy/` variants) copy it to `~/.claude/hooks/session-archive.sh` and point
-the `settings.json` hook command to the deployed copy. The hook:
+Claude Code `SessionEnd` and `SessionStart` hooks carry session transcripts and
+scratch artifacts forward into the user repo. The hooks are thin shims; all logic
+lives in `scripts/ait-harvest.py` (Python stdlib, no deps), deployed to
+`~/.claude/hooks/ait-harvest.py`.
 
-- Reads `userRepoPath` from config
-- Derives project name from the session's working directory
-- Copies the transcript JSONL to `sessions/<project>/<date>_<prefix>.jsonl`
-- Auto-commits the archived file with `git add <specific-file>` + `git commit`
-- Pushes to remote (best-effort: warns on failure, never blocks SessionEnd)
-- Runs `git pull --rebase` before push to handle concurrent sessions
-- Silently skips if config is missing or user repo doesn't exist
+- **`session-archive.sh`** (SessionEnd) → `ait-harvest.py archive`: copies the
+  session transcript **and its subagent transcripts** to
+  `sessions/<project>/<date>_<prefix>.jsonl`, then `git add` (specific file) +
+  commit + push. Best-effort: `git pull --rebase` first for concurrent sessions,
+  warns on failure, never blocks SessionEnd.
+- **`session-catchup.sh`** (SessionStart) → `ait-harvest.py`: recovers
+  transcripts (incl. subagents) and `.scratch/` artifacts that an abrupt,
+  offline, or slept SessionEnd missed. Concurrency-safe (single-flight lock,
+  mtime liveness, skip-own-session via stdin sid).
+- **`harvest-session.sh`** (SessionEnd): harvests reusable `.scratch/` artifacts
+  into `harvesting/`.
+- Project name is derived from the session's working directory; `userRepoPath`
+  is read from `~/.aitools/config.json`. Silently skips if config is missing or
+  the user repo doesn't exist.
+- The helper logs to `~/.aitools/logs/ait-harvest.log` (size-based rotation —
+  see `@reference/logging.md`).
+
+The `SessionEnd` hook API contract (session_id, cwd, transcript_path on stdin) is
+a CC version dependency — see `@reference/tool-ops-claude-code.md`.
 
 ## Template Resolution (CLAUDE.md)
 

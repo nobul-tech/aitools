@@ -23,10 +23,11 @@ case "$(uname -s)" in
 esac
 
 # ---------------------------------------------------------------------------
-# Log directory (platform-aware)
+# Log directory -- unified cross-platform location (reference/logging.md §1):
+# ~/.aitools/logs on macOS, Linux, and Windows. Honors an explicit
+# AITOOLS_LOG_DIR override (e.g. for tests).
 # ---------------------------------------------------------------------------
-AITOOLS_LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/aitools"
-$IS_MACOS && AITOOLS_LOG_DIR="$HOME/Library/Logs/aitools"
+AITOOLS_LOG_DIR="${AITOOLS_LOG_DIR:-$HOME/.aitools/logs}"
 
 # ---------------------------------------------------------------------------
 # Module-level counters (safe for sourcing without logging_init under set -u)
@@ -68,11 +69,42 @@ read_config_key() {
 # ---------------------------------------------------------------------------
 # Sets SCRIPT_NAME, LOG_DIR, LOG_FILE; resets ERRORS, WARNINGS; creates log dir.
 # Usage: logging_init "setup-foo"
+# ---------------------------------------------------------------------------
+# Log rotation (reference/logging.md §4): size-based, 5 MB x 5 backups.
+# Fail-safe -- a broken rotate must never break the operation it records (§5).
+# ---------------------------------------------------------------------------
+_LOG_MAX_BYTES=5242880   # 5 MB
+_LOG_BACKUP_COUNT=5
+_rotate_log() {
+    local f="$1"
+    [ -f "$f" ] || return 0
+    local size
+    if [ "$(uname -s)" = "Darwin" ]; then
+        size=$(stat -f %z "$f" 2>/dev/null || echo 0)
+    else
+        size=$(stat -c %s "$f" 2>/dev/null || echo 0)
+    fi
+    [ "$size" -ge "$_LOG_MAX_BYTES" ] || return 0
+    # Shift backups: <f>.4 -> <f>.5 ... <f>.1 -> <f>.2, then <f> -> <f>.1.
+    # All mutations tolerate failure (fail-safe logging, logging.md §5).
+    rm -f "$f.$_LOG_BACKUP_COUNT" 2>/dev/null || true
+    local i=$_LOG_BACKUP_COUNT
+    while [ "$i" -gt 1 ]; do
+        local prev=$((i - 1))
+        if [ -f "$f.$prev" ]; then
+            mv -f "$f.$prev" "$f.$i" 2>/dev/null || true
+        fi
+        i=$prev
+    done
+    mv -f "$f" "$f.1" 2>/dev/null || true
+}
+
 logging_init() {
     SCRIPT_NAME="${1:?logging_init requires a script name}"
     LOG_DIR="$AITOOLS_LOG_DIR"
     LOG_FILE="$LOG_DIR/deploy.log"
     mkdir -p "$LOG_DIR"
+    _rotate_log "$LOG_FILE"
     ERRORS=0
     WARNINGS=0
 }

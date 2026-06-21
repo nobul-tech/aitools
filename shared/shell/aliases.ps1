@@ -27,11 +27,11 @@ function ccs { claude --resume @args }
 # Optional: Claude Code CLI for auto-naming and summaries.
 # ---------------------------------------------------------------------------
 
-# Logging helper: appends to %LOCALAPPDATA%\aitools\clip2md.log
+# Logging helper: appends to ~/.aitools/logs/clip2md.log
 function _clip2md_log {
     param([string]$Message)
     try {
-        $logDir = Join-Path $env:LOCALAPPDATA "aitools"
+        $logDir = Join-Path $HOME ".aitools" "logs"
         if (-not (Test-Path $logDir)) {
             $null = New-Item -ItemType Directory -Path $logDir -Force
         }

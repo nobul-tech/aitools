@@ -68,6 +68,9 @@ Valid levels: `info`, `ok`, `warn`, `error`, `detail`
 Console output uses ANSI colors: red for `[error]`, yellow for `[warn]`, plain for `[info]`/`[ok]`.
 Log file output is plain text only (no ANSI codes).
 
+Log location (`~/.aitools/logs`), size-based rotation (5 MB × 5 backups), and
+per-component file names are the single source of truth in `@reference/logging.md`.
+
 ### Required logging helpers
 
 | Bash | PowerShell | Level | Purpose |

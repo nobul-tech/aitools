@@ -19,8 +19,7 @@ git status --short
 
 Then read the last 30 lines of the deploy log (before clearing it):
 
-- macOS: `~/Library/Logs/aitools/deploy.log`
-- Windows: `$LOCALAPPDATA/aitools/deploy.log`
+- All platforms: `~/.aitools/logs/deploy.log`
 
 If the log file doesn't exist, note that and move on.
 
@@ -58,8 +57,8 @@ If HEAD is already up to date with origin/main, say so and skip the diff analysi
 Truncate the deploy log so post-update output is isolated.
 Use `truncate -s 0` (not shell `>` redirect, which can hang in Claude Code):
 
-- macOS: `truncate -s 0 ~/Library/Logs/aitools/deploy.log`
-- Windows: `pwsh -Command 'Set-Content -Path "$env:LOCALAPPDATA\aitools\deploy.log" -Value $null'`
+- macOS/Linux: `truncate -s 0 ~/.aitools/logs/deploy.log`
+- Windows: `pwsh -Command 'Set-Content -Path "$HOME\.aitools\logs\deploy.log" -Value $null'`
 
 Detect the current platform and use the correct command.
 

@@ -12,6 +12,33 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.72.0 -- Unified logging to ~/.aitools/logs with rotation (issue #7) (2026-06-20)
+
+Completes the logging migration ([#7](https://github.com/nobul-tech/aitools/issues/7)): all aitools logging moves to a single cross-platform directory `~/.aitools/logs/` with size-based rotation, dissolving the prior 3-way native split (macOS `~/Library/Logs`, Linux `~/.local/state`, Windows `%LOCALAPPDATA%`) and the latent bash↔PS1 Windows divergence it caused.
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Log rotation** -- size-based, 5 MB × 5 backups, net-new in `logging_init` (bash) / `Initialize-Logging` (PS1) via a fail-safe `_rotate_log`/`Rotate-Log` helper (`stat`+`uname` dispatch / `.Length`+`Move-Item`). Also wired into `check_log_init`/`CheckLogInit` (`checks.log`/`.jsonl`). The Python loggers (`ait-harvest.py`, `harness-db.py`) already rotated. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 2 | **Unified log location** -- `aitools-lib.{sh,ps1}`, the `aitools`/`aitools.ps1` bootstrap loggers, `check-lib.ps1`, and the clip2md aliases now resolve to `~/.aitools/logs` (forward slashes in bash, `Join-Path` in PS1), honoring an `AITOOLS_LOG_DIR` override for tests. Propagated to all 38 deploy scripts. |
+| 3 | **Doc consolidation** -- `reference/logging.md` is the single source of truth; fixed the stale 3-way table + bridge prose in `script-standards-detail.md`, the old truncate paths in `pre-update.md`, added a pointer in `script-standards.md`, and documented the harvest/archive system (catch-up, subagent transcripts, `ait-harvest.py` helper, `logs/`) across `user-repo.md`, `tool-ops-claude-code.md`, `artifact-harvesting.md`, `aitools-workspace.md`. |
+
+### Bug fixes
+
+| # | Severity | Change |
+|---|----------|--------|
+| 4 | Low | Stale "deletes ephemeral files" claim in `artifact-harvesting.md` corrected (auto-deletion was removed in v0.64.1). |
+
+**Verified on:** macOS + PowerShell (pwsh installed this session) -- bash and PS1 both resolve to `~/.aitools/logs/deploy.log`; rotation tested live on both (6 MB log → `.1`; second → `.1`+`.2`; small file → no rotate); `AITOOLS_LOG_DIR` override works; `deploy.log`/`checks.log` now land in `~/.aitools/logs` with no new writes to the old dirs; acceptance scan shows zero leftover log-path literals (only legit NASM/Git/Python install paths remain); all `.ps1` parse-clean; `check-post-push -Extensive` **0 FAIL**; all 38 deploy scripts carry the new path.
+
+---
+
 ## v0.71.0 -- Hook registration generated from the manifest + Explore agent block (2026-06-20)
 
 Closes the recurring hook-registration drift class (7 incidents across v0.60-v0.70, one silent for ~3 months) by making `shared/hooks/hooks-manifest.json` the **generator** of hook deployment + registration, not merely an audit source. Adding a hook is now one manifest entry -- no parallel hand-maintained lists in `setup-user-hooks.{sh,ps1}` + `build-deploy.sh`. Full RCA via `/investigate` (report harvested this session).
