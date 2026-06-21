@@ -73,6 +73,3 @@ fi
 "$PYTHON" "$HELPER" session start --id "$SESSION_ID" || true
 
 printf 'Harness DB: session %s registered\n' "$SESSION_ID"
-
-SHORT_ID="${SESSION_ID:0:10}"
-printf 'This is Session Commander %s.\n' "$SHORT_ID"

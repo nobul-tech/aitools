@@ -8,7 +8,7 @@
 # Audience: Claude Code PreToolUse hook system — fires on every Bash call.
 #
 # Enforces:
-#   USO: Dedicated tools for file ops (Read/Edit/Write/, not Bash)
+#   USO: Dedicated tools for file ops (Read/Edit/Write/Grep/Glob, not Bash)
 #   USO: Scratch files for complex scripting (no long inline commands)
 #   USO: Simple Bash commands only (no &&, ||, ;, $(...), backticks, globs in rm)
 #
@@ -50,7 +50,7 @@ MODE_OR="enforce"        # ||  — zero false positives; promoted 2026-03-24
 MODE_SEMICOLON="enforce" # ;   — pwsh/perl exemptions in place; promoted 2026-03-24
 MODE_BACKTICK="enforce"  # backticks — zero false positives; promoted 2026-03-24
 
-LOG_DIR="$HOME/.aitools/logs"
+LOG_DIR="$HOME/.claude/hooks/logs"
 LOG_FILE="$LOG_DIR/standing-order-guard.log"
 
 # Ensure log directory exists (needed for observe logging; harmless in enforce-only runs)
@@ -120,42 +120,16 @@ if [ -z "$COMMAND" ]; then
     exit 0
 fi
 
-# --- Full command extraction (escape-aware) ---
-# json_field() stops at the first escaped quote (\"), which hides everything
-# after it — including newlines — when a command's lines contain quotes
-# (e.g. echo "x"). The multi-line check below needs the WHOLE command, so
-# extract it honoring backslash escapes: a JSON string value is a run of
-# (escaped char \X) or (any char that is not a quote or backslash).
-# Only the newline check uses this; the operator checks keep using COMMAND so
-# their matching behavior (and false-positive profile) is unchanged.
-json_field_full() {
-    local json="$1" key="$2"
-    local pattern="\"${key}\"[[:space:]]*:[[:space:]]*\"((\\\\.|[^\"\\\\])*)\""
-    if [[ "$json" =~ $pattern ]]; then
-        printf '%s' "${BASH_REMATCH[1]}"
-    fi
-}
-COMMAND_FULL=$(json_field_full "$INPUT" "command")
-[ -n "$COMMAND_FULL" ] || COMMAND_FULL="$COMMAND"
-
 # --- USO: Scratch files for complex scripting ---
 # In JSON, newlines in strings are escaped as \n (literal two-char sequence).
 # Count occurrences by measuring string length before/after removing \n sequences.
 # This avoids grep exit-code issues with set -euo pipefail when no matches exist.
-
-# literal "\n" tokens (raw JSON form)
-STRIPPED_LIT="${COMMAND_FULL//\\n/}"
-LIT_COUNT=$(( (${#COMMAND_FULL} - ${#STRIPPED_LIT}) / 2 ))
-
-# real newline characters (decoded form)
-NL=$'\n'
-STRIPPED_REAL="${COMMAND_FULL//$NL/}"
-REAL_COUNT=$(( ${#COMMAND_FULL} - ${#STRIPPED_REAL} ))
-
-NEWLINE_COUNT=$(( LIT_COUNT + REAL_COUNT ))
-
-# 4+ lines (3+ newlines) = too complex for inline. Write a temp file instead.
-if [ "$NEWLINE_COUNT" -ge 3 ]; then
+STRIPPED="${COMMAND//\\n/}"
+CMD_LEN=${#COMMAND}
+STRIPPED_LEN=${#STRIPPED}
+NEWLINE_COUNT=$(( (CMD_LEN - STRIPPED_LEN) / 2 ))
+# 5+ lines (4+ newlines) = too complex for inline. Write a temp file instead.
+if [ "$NEWLINE_COUNT" -ge 4 ]; then
     LINE_COUNT=$((NEWLINE_COUNT + 1))
     violation "USO: Scratch files --: This command is ~${LINE_COUNT} lines long. Write it to a temp .sh or .ps1 file using the Write tool, execute with Bash, then clean up. USO: never inline long commands in the Bash tool." "$MODE_SCRATCH" "scratch"
 fi
@@ -191,9 +165,9 @@ esac
 read -r FIRST_TOKEN _ <<< "$COMMAND"
 
 # Allowlist: commands that look like file ops but are legitimate shell use.
-# pwsh wrapping, perl, uv, git operations, npm/node, etc. are always OK.
+# pwsh wrapping, git operations, npm/node, etc. are always OK.
 case "$FIRST_TOKEN" in
-    pwsh|powershell|git|perl|uv|npm|node|python*|pip*|cargo|rustup|brew|winget|choco)
+    pwsh|powershell|git|npm|node|python*|pip*|cargo|rustup|brew|winget|choco)
         exit 0
         ;;
 esac
@@ -233,18 +207,34 @@ case "$FIRST_TOKEN" in
         ;;
 esac
 
-# grep/find/glob/ls checks removed 2026-06-21.
-# Per Claude Code 2.1.117 the Grep and Glob tools are no longer available on
-# macOS/Linux (https://x.com/dmwlff/status/2047105823890166170), so steering
-# grep/find toward those tools is no longer valid. ls was always allowed (gray
-# area — commonly used for quick verification). These commands now fall through
-# to the final allow at the end of the script.
-#
-# NOTE: the previous half-commented version left a dangling `exit 0` + `;;`
-# here, which (a) was a syntax error caught only because the unconditional
-# `exit 0` short-circuited execution before the parser reached `;;`, and
-# (b) made the sed/awk/echo-redirect checks below dead code. Both are fixed by
-# removing the block entirely.
+# Check for standalone file-search commands (should use Grep tool)
+# Allow in pipelines — Grep tool can't pipe output into other commands.
+case "$FIRST_TOKEN" in
+    grep|rg|egrep|fgrep)
+        case "$COMMAND" in
+            *\|*) ;;  # Pipeline — legitimate shell use
+            *) violation "USO: Dedicated tools --: Use the Grep tool instead of '$FIRST_TOKEN' to search file contents. The Grep tool supports regex, file filtering, and multiple output modes." "enforce" "grep" ;;
+        esac
+        ;;
+esac
+
+# Check for file-finding commands (should use Glob tool)
+# Allow in pipelines — Glob tool can't pipe output into other commands.
+case "$FIRST_TOKEN" in
+    find)
+        case "$COMMAND" in
+            *\|*) ;;  # Pipeline — legitimate shell use
+            *) violation "USO: Dedicated tools --: Use the Glob tool instead of 'find' to locate files. Example: Glob with pattern '**/*.sh' instead of 'find . -name \"*.sh\"'." "enforce" "find" ;;
+        esac
+        ;;
+    ls)
+        # ls is borderline -- block when clearly used to list directory contents
+        # for exploration (should use Glob or Bash 'ls' for quick checks).
+        # Allow: ls is commonly used for quick verification before mkdir, etc.
+        # Decision: allow ls, it's a gray area and commonly used in workflows.
+        exit 0
+        ;;
+esac
 
 # Check for file-editing commands (should use Edit tool)
 # Allow in pipelines — Edit tool can't pipe output into other commands.
