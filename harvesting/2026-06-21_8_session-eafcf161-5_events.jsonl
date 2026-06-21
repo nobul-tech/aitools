@@ -1,0 +1,14 @@
+{"t":"2026-06-20T17:37:09Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":32.4,"context_used":64715,"agentic_turns":2,"intel_count":0}}
+{"t":"2026-06-20T18:06:04Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":73.1,"context_used":146224,"agentic_turns":16,"intel_count":0}}
+{"t":"2026-06-20T18:18:09Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":106.2,"context_used":212389,"agentic_turns":19,"intel_count":0}}
+{"t":"2026-06-20T18:22:25Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":111.3,"context_used":222531,"agentic_turns":5,"intel_count":0}}
+{"t":"2026-06-20T18:32:46Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":131.5,"context_used":263099,"agentic_turns":14,"intel_count":0}}
+{"t":"2026-06-20T18:45:01Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":139.8,"context_used":279509,"agentic_turns":10,"intel_count":0}}
+{"t":"2026-06-20T18:59:11Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":151.8,"context_used":303589,"agentic_turns":14,"intel_count":0}}
+{"t":"2026-06-21T01:09:42Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":289.1,"context_used":578287,"agentic_turns":10,"intel_count":0}}
+{"t":"2026-06-21T01:14:18Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":297.5,"context_used":594995,"agentic_turns":18,"intel_count":0}}
+{"t":"2026-06-21T01:19:10Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":306.5,"context_used":612979,"agentic_turns":21,"intel_count":0}}
+{"t":"2026-06-21T01:22:50Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":308.7,"context_used":617482,"agentic_turns":6,"intel_count":0}}
+{"t":"2026-06-21T01:26:37Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":321.3,"context_used":642654,"agentic_turns":12,"intel_count":0}}
+{"t":"2026-06-21T01:44:16Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":370.9,"context_used":741889,"agentic_turns":8,"intel_count":0}}
+{"t":"2026-06-21T01:48:58Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":382.8,"context_used":765661,"agentic_turns":22,"intel_count":0}}

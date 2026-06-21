@@ -1,0 +1,15 @@
+Regenerate deploy/ for aitools v0.70.0 (harness_python + setup-user-shell)
+
+build-deploy.sh regenerated the personalized deploy/ scripts during
+`aitools install`: every script now inlines the new harness_python /
+Get-HarnessPython resolver (aitools-lib), plus the new
+setup-user-shell.{sh,ps1} login-profile PATH-block owner and the
+setup-user-cursor agent-symlink / grok-detection change.
+
+TODO(automation): this commit+push should NOT be manual. build-deploy runs
+on every `aitools install` / `aitools`, leaving the dotprofile deploy/ dirty.
+It should auto-commit + push to aitools-nobul-jose the same way
+session-archive.sh already auto-commits session archives. Tracking the
+design of that automation next.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>

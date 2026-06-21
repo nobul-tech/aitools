@@ -1,0 +1,11 @@
+Regenerate deploy/ for aitools v0.71.0 (manifest-driven hooks + block-explore)
+
+build-deploy regenerated the personalized deploy/ scripts: setup-user-hooks.{sh,ps1}
+now embed the manifest-driven registration list (REGS_JSON / $regs) + the new
+block-explore-agent hook, and the MDM preferences effortLevel JS-quoting bug is
+fixed. Every script also picks up the regenerated lib.
+
+TODO(automation): this commit+push is still manual -- should auto-commit on
+build-deploy / aitools install (tracked design, prior commit note).
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>

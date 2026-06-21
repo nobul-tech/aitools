@@ -234,14 +234,11 @@ def git_root(cwd: Path) -> Optional[Path]:
     return Path(top) if top else None
 
 
-def first_record_cwd_and_count(transcript: Path) -> tuple[Optional[str], int]:
-    """Return (cwd-from-first-record-with-cwd, total-record-count).
+def first_record_cwd(transcript: Path) -> Optional[str]:
+    """Return the cwd from the first record that carries one, else None.
 
-    cwd is None if no record carries a cwd field. Count is the number of
-    JSON-parseable lines (used for the transient-session signal). Never raises;
-    returns (None, 0) on read errors (caller treats as empty/unreadable)."""
-    cwd: Optional[str] = None
-    count = 0
+    Short-circuits on the first cwd found -- transcripts can be many MB, so we
+    never read the whole file just to derive a project name. Never raises."""
     try:
         with open(transcript, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -252,13 +249,37 @@ def first_record_cwd_and_count(transcript: Path) -> tuple[Optional[str], int]:
                     rec = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                count += 1
-                if cwd is None and isinstance(rec, dict) and rec.get("cwd"):
-                    cwd = str(rec["cwd"])
+                if isinstance(rec, dict) and rec.get("cwd"):
+                    return str(rec["cwd"])
     except OSError as e:
         log_detail(f"could not read transcript {transcript.name}: {e}")
-        return None, 0
-    return cwd, count
+    return None
+
+
+def record_count_capped(transcript: Path, cap: int) -> int:
+    """Count JSON-parseable records, stopping once `cap` is reached.
+
+    Used for the transient-session signal so we never read a multi-MB
+    transcript in full just to learn it has more than a couple of records.
+    Returns 0 on read errors. Never raises."""
+    count = 0
+    try:
+        with open(transcript, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                count += 1
+                if count >= cap:
+                    break
+    except OSError as e:
+        log_detail(f"could not read transcript {transcript.name}: {e}")
+        return 0
+    return count
 
 
 def derive_project(transcript: Path, cwd: Optional[str]) -> str:
@@ -484,6 +505,19 @@ def dotprofile_push_blocked_reason(repo: Path, remaining: float) -> Optional[str
     return None
 
 
+def worktree_dirty(repo: Path, remaining: float) -> bool:
+    """True if the repo has staged or unstaged tracked changes (untracked
+    ignored). Used to skip a `pull --rebase` that would deterministically fail:
+    the dotprofile is EXPECTED to carry uncommitted work-in-progress, and that
+    must not error out or hang the sweep. Conservative: False if we cannot tell
+    (let the normal rebase path run)."""
+    rc, out, _ = _git(
+        repo, ["status", "--porcelain", "--untracked-files=no"], remaining)
+    if rc != 0:
+        return False
+    return bool(out.strip())
+
+
 def commit_and_push(
     repo: Path, rel_path: str, commit_msg: str, deadline: float,
 ) -> None:
@@ -514,11 +548,19 @@ def commit_and_push(
         log_warn(f"push skipped, commit kept: {reason}")
         return
 
-    # Pull --rebase handles the cross-machine race; the lock handles same-machine.
-    rc, _, err = _git(repo, ["pull", "--rebase"], remaining())
-    if rc != 0:
-        log_warn(f"git pull --rebase failed, push skipped, commit kept: {err}")
-        return
+    # The dotprofile is expected to carry uncommitted work-in-progress; a
+    # pull --rebase fails deterministically on a dirty tree, so skip it rather
+    # than error/hang on the expected-dirty condition. The single-flight lock
+    # covers the same-machine race; cross-machine divergence is reconciled on
+    # the next clean push (push below just no-ops with a logged 'remote ahead').
+    if worktree_dirty(repo, remaining()):
+        log_detail("dotprofile worktree dirty; skipping pull --rebase")
+    else:
+        # Pull --rebase handles the cross-machine race; lock handles same-machine.
+        rc, _, err = _git(repo, ["pull", "--rebase"], remaining())
+        if rc != 0:
+            log_warn(f"git pull --rebase failed, push skipped, commit kept: {err}")
+            return
 
     rc, _, err = _git(repo, ["push"], remaining())
     if rc != 0:
@@ -576,7 +618,7 @@ def archive_claude_session(
         return False
 
     if cwd is None:
-        cwd, _ = first_record_cwd_and_count(transcript)
+        cwd = first_record_cwd(transcript)
 
     project = derive_project(transcript, cwd)
     full_id = transcript.stem  # filename without .jsonl == session id
@@ -824,9 +866,19 @@ def harvest_scratch(
     except OSError:
         pass
 
-    # Audit/prune the manifest (mark pruned, never unlink -- 30-file-loss guard).
-    _audit_manifest(manifest_path, harvesting_dir, project_root)
+    # Idempotency marker: a harvested session dir is never re-swept. This is the
+    # fix for the catchup re-harvest loop that re-copied every orphaned dir each
+    # session start, producing duplicate harvesting/ copies. Written even when
+    # nothing was harvested so empty / ephemeral-only dirs also settle.
+    try:
+        (session_dir / ".harvested").write_text(
+            utcnow() + "\n", encoding="utf-8")
+    except OSError as e:
+        log_detail(f"could not write .harvested marker in {session_dir}: {e}")
 
+    # Manifest audit/prune is hoisted to catchup() (the SessionStart owner of
+    # audit, per .claude/rules/artifact-harvesting.md) so it runs at most once
+    # per session, not once per harvested dir.
     if harvested or deleted:
         log_info(
             f"harvest {prefix or 'unknown'}: {harvested} harvested, "
@@ -836,18 +888,30 @@ def harvest_scratch(
 
 
 def _audit_manifest(
-    manifest_path: Path, harvesting_dir: Path, project_root: Path,
+    manifest_path: Path,
+    harvesting_dir: Path,
+    project_root: Path,
+    deadline: Optional[float] = None,
 ) -> None:
     """Prune stale artifacts: mark 'pruned' (never delete the file) when past
-    pruneAfter with zero git refs, else promote to 'candidate'."""
+    pruneAfter with zero git refs, else promote to 'candidate'.
+
+    Perf: a SINGLE `git log --name-only` pass builds the set of basenames ever
+    committed under harvesting/, replacing the previous one-subprocess-per-
+    artifact scan (was O(past-due artifacts) git invocations; now O(1)).
+    Deadline-bounded -- skips cleanly when the catchup budget is spent."""
     if not manifest_path.exists():
+        return
+    if deadline is not None and (deadline - time.monotonic()) <= 0:
+        log_detail("audit skipped: deadline reached")
         return
     manifest = _load_manifest(manifest_path)
     today = datetime.now(timezone.utc).date()
-    changed = False
+
+    # Collect past-due active artifacts first; only pay for git if any exist.
+    due: list[tuple[str, dict[str, Any]]] = []
     for name, entry in manifest.get("artifacts", {}).items():
-        status = entry.get("status")
-        if status in ("promoted", "pruned"):
+        if entry.get("status") in ("promoted", "pruned"):
             continue
         prune_after = entry.get("pruneAfter")
         if not prune_after:
@@ -858,23 +922,41 @@ def _audit_manifest(
             continue
         if today <= prune_date:
             continue
-        # Past prune date: check git refs.
-        refs = 0
-        try:
-            out = subprocess.run(
-                ["git", "-C", str(project_root), "log", "--all", "--oneline",
-                 "--", str(harvesting_dir / name)],
-                capture_output=True, text=True, timeout=5,
-            )
-            if out.returncode == 0:
-                refs = len([ln for ln in out.stdout.splitlines() if ln.strip()])
-        except (OSError, subprocess.SubprocessError):
-            refs = 0
-        if refs == 0:
-            entry["status"] = "pruned"  # marked, NOT deleted
-        else:
-            entry["status"] = "candidate"
+        due.append((name, entry))
+
+    if not due:
+        return
+
+    # ONE git pass: basenames of every path ever committed under harvesting/.
+    # On any failure we leave `referenced` empty -> due artifacts mark 'pruned'
+    # (treat-as-unreferenced), matching the prior per-artifact behavior.
+    referenced: set[str] = set()
+    try:
+        rel = harvesting_dir.relative_to(project_root).as_posix()
+    except ValueError:
+        rel = "harvesting"
+    timeout = 8.0
+    if deadline is not None:
+        timeout = max(1.0, min(timeout, deadline - time.monotonic()))
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(project_root), "log", "--all", "--name-only",
+             "--pretty=format:", "--", rel],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        if out.returncode == 0:
+            for ln in out.stdout.splitlines():
+                ln = ln.strip()
+                if ln:
+                    referenced.add(os.path.basename(ln))
+    except (OSError, subprocess.SubprocessError) as e:
+        log_detail(f"audit git log failed, treating all as unreferenced: {e}")
+
+    changed = False
+    for name, entry in due:
+        entry["status"] = "candidate" if name in referenced else "pruned"
         changed = True
+
     if changed:
         manifest.setdefault("meta", {})["lastAudit"] = today_utc()
         try:
@@ -890,7 +972,7 @@ def _audit_manifest(
 def _is_transient_session(transcript: Path) -> bool:
     """Positive signal for a transient `claude update` session (plan §20.2 M2):
     a transcript with very few records."""
-    _, count = first_record_cwd_and_count(transcript)
+    count = record_count_capped(transcript, TRANSIENT_MIN_RECORDS)
     return 0 < count < TRANSIENT_MIN_RECORDS
 
 
@@ -918,9 +1000,17 @@ def catchup(
     try:
         recovered += _catchup_archive(user_repo, session_id, deadline, lock)
         lock.heartbeat()
-        # Harvest orphaned scratch dirs in the current repo.
-        recovered += _catchup_harvest(cwd, session_id)
+        # Harvest orphaned scratch dirs in the current repo (deadline-bounded).
+        harvested, project_root = _catchup_harvest(cwd, session_id, deadline)
+        recovered += harvested
         lock.heartbeat()
+        # Audit/prune the manifest ONCE here -- SessionStart owns audit
+        # (.claude/rules/artifact-harvesting.md) -- not once per harvested dir.
+        if project_root is not None and project_root.is_dir():
+            harvesting_dir = project_root / "harvesting"
+            manifest_path = harvesting_dir / "harvest-manifest.json"
+            _audit_manifest(manifest_path, harvesting_dir, project_root, deadline)
+            lock.heartbeat()
         # Push if the dotprofile is ahead (e.g. a prior commit never pushed).
         if user_repo is not None:
             remaining = deadline - time.monotonic()
@@ -1004,16 +1094,20 @@ def _catchup_archive(
     return recovered
 
 
-def _catchup_harvest(cwd: str, session_id: Optional[str]) -> int:
+def _catchup_harvest(
+    cwd: str, session_id: Optional[str], deadline: float,
+) -> tuple[int, Optional[Path]]:
     """Harvest orphaned .scratch/session-* dirs in the current repo whose
-    SessionEnd never ran. Skips the current session's own dir."""
+    SessionEnd never ran. Skips the current session's own dir and any dir
+    already carrying a `.harvested` marker (idempotency -- prevents the
+    re-harvest loop). Deadline-bounded. Returns (recovered, project_root)."""
     root = git_root(Path(cwd)) if cwd and Path(cwd).is_dir() else None
     project_root = root if root is not None else Path(cwd) if cwd else None
     if project_root is None or not project_root.is_dir():
-        return 0
+        return 0, project_root
     scratch_dir = project_root / ".scratch"
     if not scratch_dir.is_dir():
-        return 0
+        return 0, project_root
 
     own_prefix = session_id[:SCRATCH_PREFIX_LEN] if session_id else None
     recovered = 0
@@ -1023,16 +1117,21 @@ def _catchup_harvest(cwd: str, session_id: Optional[str]) -> int:
             if p.is_dir() and p.name.startswith("session-")
         ]
     except OSError:
-        return 0
+        return 0, project_root
 
     for sd in session_dirs:
+        if deadline - time.monotonic() <= 0:
+            log_warn("catchup harvest: deadline reached, stopping sweep")
+            break
         dir_prefix = sd.name[len("session-"):]
         if own_prefix and dir_prefix == own_prefix:
             continue  # never harvest our own live session
+        if (sd / ".harvested").exists():
+            continue  # already harvested in a prior session (idempotency)
         recovered += harvest_scratch(
             str(project_root), dir_prefix, project_root=project_root
         )
-    return recovered
+    return recovered, project_root
 
 
 # ---------------------------------------------------------------------------

@@ -7,7 +7,7 @@
       "scope": "Incident entries only. NOT the filing process (incident-governance.md rule). NOT the framework documentation (framework-incident-governance.md). NOT incident reference files (reference/incident-*.md)",
       "audience": "/incident skill, /audit skill, check scripts, hooks, agents checking whether a deficiency has already been filed"
     },
-    "lastUpdated": "2026-03-17"
+    "lastUpdated": "2026-06-20"
   },
   "incidents": [
     {
@@ -1142,6 +1142,30 @@
       "preventionLayer": "Detection — extend governed-data hook (rules-json-guard.sh) to fire on Write/Edit to .claude/rules/*.md when governed JSON paths are introduced. Prevention — update step 16 scope to include plain paths (not just @-prefixed).",
       "created": "2026-03-17",
       "updated": "2026-03-17"
+    },
+    {
+      "id": 51,
+      "title": "Harness launches subagents with a reduced toolset (missing Grep), but standing-order-guard blocks bash grep — leaving no way to search file contents",
+      "status": "open",
+      "severity": "high",
+      "affected": [
+        "shared/hooks/delegation-duty-guard.sh",
+        "shared/hooks/standing-order-guard.sh"
+      ],
+      "linked": "incident #48, incident #49",
+      "referenceFile": null,
+      "observation": "A Verifier subagent (session 46ee1c2b) was launched without the Grep tool. Calling Grep returned 'No such tool available: Grep — search file contents with grep via the Bash tool instead.' Calling bash grep was then blocked by standing-order-guard.sh (lines 212-219: first-token grep|rg|egrep|fgrep outside a pipeline -> exit 2 'Use the Grep tool instead'). The two mechanisms point at each other: the platform says use bash grep, the hook says use the Grep tool. The subagent's only remaining way to search file contents was Read with offset/limit. A separate perl content search was also denied. The subagent completed its task only by reading line ranges manually.",
+      "expected": "Delegation should never reduce a subagent's capability below the main agent's. The harness's own delegation discipline (delegation-duty-guard.sh, the SubagentStart context-injection layer) assumes subagents are full sensors. standing-order-guard.sh's 'use the Grep tool' feedback (line 216) presumes the Grep tool exists in every session, which is false for at least some subagent launches.",
+      "impact": "Every subagent launched without the dedicated file-op tools is blind to content search: it cannot grep, and the guard blocks the bash fallback. This degrades audits, investigations, and verifications (same failure class as #49's incomplete-search finding) — a subagent silently produces less-complete results. Observed live; the Verifier only succeeded via manual Read paging, which does not scale to large files.",
+      "discoveryContext": "Surfaced while a Verifier subagent verified handoff-46ee1c2b-1.md. Hit the Grep-absent / hook-block contradiction live, then again on a denied perl search. User directed framing this as a delegation duty / pre-flight concern: 'when we launch agents in our harness we never want to dumb down their permissions.' Audited: shared/hooks/standing-order-guard.sh (lines 212-219), shared/hooks/hooks-manifest.json (delegation-duty-guard, block-claude-code-guide on Agent matcher), .claude/skills/incident/SKILL.md. Related to #48 and #49 (subagent provisioning gaps). Session: 2026-06-20.",
+      "discipline": "Capability-based security",
+      "frameworks": "Principle of least privilege, inverted — the failure is UNDER-provisioning a delegate below the delegator. Delegation should grant the capabilities the task requires; the harness's pre-flight (SubagentStart / delegation-duty-guard) is the natural enforcement point for a capability floor.",
+      "suggestedResolution": "Treat this as a delegation duty / pre-flight check: the harness must launch subagents with a toolset no narrower than the delegator's — never 'dumb down' permissions when delegating. Options: (1) Make the Agent-launch path (delegation-duty-guard.sh / the launch convention) assert a capability floor that includes the dedicated file-op tools (Read/Edit/Write/Grep/Glob). (2) Add a SubagentStart pre-flight that detects a missing dedicated tool and either restores it or warns. (3) As a secondary safety net, soften standing-order-guard.sh's grep/find/sed feedback so that when the dedicated tool is unavailable the bash fallback is allowed rather than dead-ended (hooks cannot easily introspect the toolset, so this is a fallback, not the primary fix). Primary fix is provisioning, per user direction.",
+      "rootCause": null,
+      "correctiveAction": null,
+      "preventionLayer": null,
+      "created": "2026-06-20",
+      "updated": "2026-06-20"
     }
   ],
   "closed": [

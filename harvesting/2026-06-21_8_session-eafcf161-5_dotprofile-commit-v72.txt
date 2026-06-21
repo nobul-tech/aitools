@@ -1,0 +1,11 @@
+Regenerate deploy/ for aitools v0.72.0 (unified logging + rotation)
+
+build-deploy regenerated the personalized deploy/ scripts: every script now
+inlines the migrated logging substrate -- log dir resolves to ~/.aitools/logs
+(was the 3-way Library/Logs / .local/state / LOCALAPPDATA split) with 5 MB x 5
+size-based rotation.
+
+TODO(automation): this commit+push is still manual -- should auto-commit on
+build-deploy / aitools install (tracked design, prior commit note).
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>

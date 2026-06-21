@@ -1,0 +1,192 @@
+{
+  "alwaysThinkingEnabled": true,
+  "autoCompactEnabled": false,
+  "autoMemoryEnabled": false,
+  "effortLevel": "high",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"/Users/new-jose/.claude/hooks/sh-file-fixup.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"/Users/new-jose/.claude/hooks/standing-order-guard.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"/Users/new-jose/.claude/hooks/glossary-skill-guard.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "Read|Grep"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"/Users/new-jose/.claude/hooks/block-claude-code-guide.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "Agent"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"/Users/new-jose/.claude/hooks/delegation-duty-guard.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "Agent"
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"/Users/new-jose/.claude/hooks/block-explore-agent.sh\""
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"/Users/new-jose/.claude/hooks/session-archive.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"/Users/new-jose/.claude/hooks/harvest-session.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"/Users/new-jose/.claude/hooks/tool-ops-session-audit.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"/Users/new-jose/.claude/hooks/harness-db-sessionend.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"/Users/new-jose/.claude/hooks/scratch-init.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"/Users/new-jose/.claude/hooks/session-catchup.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"/Users/new-jose/.claude/hooks/dashboard-serve.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"/Users/new-jose/.claude/hooks/harness-db-sessionstart.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"/Users/new-jose/.claude/hooks/command-channel-stop.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"/Users/new-jose/.claude/hooks/failure-mode-identity-stop.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"/Users/new-jose/.claude/hooks/failure-mode-verify-stop.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"/Users/new-jose/.claude/hooks/intelligence-stop.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ]
+  },
+  "model": "opus[1m]",
+  "permissions": {
+    "deny": [
+      "MCP(vercel)",
+      "MCP(webflow)",
+      "Agent(claude-code-guide)"
+    ]
+  },
+  "promptSuggestionEnabled": false,
+  "skipWorkflowUsageWarning": true,
+  "theme": "dark",
+  "verbose": true
+}
