@@ -1260,7 +1260,7 @@ BLOCK
 
     # REPLACE: hook deployment (deploy embeds scripts via heredoc instead of cp from repo)
     cat <<'BLOCK'
-# --- Deploy embedded hook scripts to ~/.claude/hooks/ ---
+# --- Deploy embedded hook scripts to ~/.claude/hooks/ (generated from manifest) ---
 HOOKS_DIR="$HOME/.claude/hooks"
 mkdir -p "$HOOKS_DIR"
 
@@ -1268,32 +1268,24 @@ if [ "$DRY_RUN" = "true" ]; then
     log "[DRY RUN] Would deploy hooks to $HOOKS_DIR"
 else
 BLOCK
-    # Embed each hook script via heredoc with unique delimiters
-    _embed_hook() {
-        local varname="$1" filename="$2" delimiter="$3"
-        echo "cat > \"\$HOOKS_DIR/$filename\" <<'${delimiter}'"
-        eval 'echo "$'"$varname"'"'
-        echo "$delimiter"
-    }
-    _embed_hook HOOK_SESSION_ARCHIVE "session-archive.sh" "__EMB_ARCHIVE__"
-    _embed_hook HOOK_SESSION_CATCHUP "session-catchup.sh" "__EMB_CATCHUP__"
-    _embed_hook HOOK_AIT_HARVEST "ait-harvest.py" "__EMB_AITHARVEST__"
-    _embed_hook HOOK_STANDING_ORDER_GUARD "standing-order-guard.sh" "__EMB_GUARD__"
-    _embed_hook HOOK_SCRATCH_INIT "scratch-init.sh" "__EMB_SCRATCH__"
-    _embed_hook HOOK_HARVEST_SESSION "harvest-session.sh" "__EMB_HARVEST__"
-    _embed_hook HOOK_SH_FILE_FIXUP "sh-file-fixup.sh" "__EMB_SHFIXUP__"
-    _embed_hook HOOK_GLOSSARY_GUARD "glossary-skill-guard.sh" "__EMB_GLOSSARY__"
-    _embed_hook HOOK_BLOCK_GUIDE "block-claude-code-guide.sh" "__EMB_BLOCKGUIDE__"
-    _embed_hook HOOK_TOOL_OPS_AUDIT "tool-ops-session-audit.sh" "__EMB_TOOLOPS__"
-    _embed_hook HOOK_DASHBOARD_SERVE "dashboard-serve.sh" "__EMB_DASHBOARD__"
-    _embed_hook HOOK_HARNESS_DB_START "harness-db-sessionstart.sh" "__EMB_HDBSTART__"
-    _embed_hook HOOK_HARNESS_DB_END "harness-db-sessionend.sh" "__EMB_HDBEND__"
-    _embed_hook HOOK_DELEGATION_GUARD "delegation-duty-guard.sh" "__EMB_DELEGGUARD__"
-    _embed_hook HOOK_COMMAND_CHANNEL_STOP "command-channel-stop.sh" "__EMB_CCSTOP__"
-    _embed_hook HOOK_FM_IDENTITY "failure-mode-identity-stop.sh" "__EMB_FMIDENT__"
-    _embed_hook HOOK_FM_VERIFY "failure-mode-verify-stop.sh" "__EMB_FMVERIFY__"
-    _embed_hook HOOK_INTEL_STOP "intelligence-stop.sh" "__EMB_INTELSTOP__"
-    _embed_hook HOOK_INTEL_STOP_PY "intelligence-stop.py" "__EMB_INTELPY__"
+    # Embed each hook + helper from the manifest (single source of truth).
+    # Heredoc per file with a unique delimiter derived from the filename.
+    _MANIFEST="$SHARED_DIR/hooks/hooks-manifest.json"
+    while IFS= read -r _hookfile; do
+        [ -n "$_hookfile" ] || continue
+        if [ -f "$SHARED_DIR/hooks/$_hookfile" ]; then
+            _src="$SHARED_DIR/hooks/$_hookfile"
+        elif [ -f "$SCRIPTS_DIR/$_hookfile" ]; then
+            _src="$SCRIPTS_DIR/$_hookfile"
+        else
+            blog_error "Hook source not found for embed: $_hookfile"
+            continue
+        fi
+        _delim="__EMB_$(echo "$_hookfile" | tr 'a-z.-' 'A-Z__')__"
+        echo "cat > \"\$HOOKS_DIR/$_hookfile\" <<'${_delim}'"
+        cat "$_src"
+        echo "$_delim"
+    done < <(node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));console.log([...m.hooks.map(h=>h.file),...((m.deploy)||[])].join("\n"))' "$_MANIFEST")
     cat <<'BLOCK'
 
     for _hf in "$HOOKS_DIR"/*.sh; do
@@ -1302,29 +1294,15 @@ BLOCK
         log_ok "Deployed hook: $_hf"
     done
 fi
-
-# Dest vars for settings.json merge below (deploy uses $HOOKS_DIR, not $HOME/.claude/hooks)
-HOOK_DEST="$HOOKS_DIR/session-archive.sh"
-SESSION_CATCHUP_DEST="$HOOKS_DIR/session-catchup.sh"
-AIT_HARVEST_DEST="$HOOKS_DIR/ait-harvest.py"
-GUARD_DEST="$HOOKS_DIR/standing-order-guard.sh"
-GLOSSARY_DEST="$HOOKS_DIR/glossary-skill-guard.sh"
-SCRATCH_DEST="$HOOKS_DIR/scratch-init.sh"
-HARVEST_DEST="$HOOKS_DIR/harvest-session.sh"
-SHFIXUP_DEST="$HOOKS_DIR/sh-file-fixup.sh"
-BLOCK_GUIDE_DEST="$HOOKS_DIR/block-claude-code-guide.sh"
-TOOL_OPS_AUDIT_DEST="$HOOKS_DIR/tool-ops-session-audit.sh"
-DASHBOARD_DEST="$HOOKS_DIR/dashboard-serve.sh"
-DELEG_GUARD_DEST="$HOOKS_DIR/delegation-duty-guard.sh"
-HARNESS_DB_START_DEST="$HOOKS_DIR/harness-db-sessionstart.sh"
-HARNESS_DB_END_DEST="$HOOKS_DIR/harness-db-sessionend.sh"
-CMD_CHANNEL_STOP_DEST="$HOOKS_DIR/command-channel-stop.sh"
-FM_IDENTITY_STOP_DEST="$HOOKS_DIR/failure-mode-identity-stop.sh"
-FM_VERIFY_STOP_DEST="$HOOKS_DIR/failure-mode-verify-stop.sh"
-INTEL_STOP_DEST="$HOOKS_DIR/intelligence-stop.sh"
-INTEL_STOP_PY_DEST="$HOOKS_DIR/intelligence-stop.py"
-
 BLOCK
+    # Embed REGS_JSON (registration list) at build time from the manifest, so the
+    # self-contained deploy script needs no manifest at runtime. The node merge
+    # block reads it from argv -- identical to the dev path.
+    _REGS=$(node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));console.log(JSON.stringify(m.hooks.map(h=>({event:h.event,file:h.file,matcher:h.matcher||""}))))' "$SHARED_DIR/hooks/hooks-manifest.json")
+    echo ""
+    echo "# Registration list embedded from hooks-manifest.json at build time."
+    echo "REGS_JSON='$_REGS'"
+    echo ""
 
     # Extract: merge setup (SETTINGS_FILE, mkdir, HOOK_CMD, GUARD_CMD, node block start)
     # up to the profile preference reading inside the node block
@@ -1332,11 +1310,21 @@ BLOCK
         '^# --- END hook deployment' '^// --- BEGIN claude preferences'
 
     # REPLACE: embedded preferences (from profile.json at build time)
+    # Precompute the effortLevel JS literal in bash. Use SINGLE quotes for the JS
+    # string: the merge node block is wrapped in a bash double-quoted string
+    # (node -e "..."), so embedding double quotes ("high") breaks out of the bash
+    # quote and node receives an unquoted identifier (const effortLevel = high;
+    # -> ReferenceError). Single quotes are safe inside the bash double-quote.
+    if [ -n "${CLAUDE_EFFORT_LEVEL:-}" ]; then
+        _EFFORT_JS="'$CLAUDE_EFFORT_LEVEL'"
+    else
+        _EFFORT_JS="null"
+    fi
     cat <<BLOCK_INTERP
 // --- Embedded preferences (from profile.json at build time) ---
 const autoMemory = $CLAUDE_AUTO_MEMORY;
 const alwaysThinking = $CLAUDE_ALWAYS_THINKING;
-const effortLevel = $([ -n "${CLAUDE_EFFORT_LEVEL:-}" ] && echo "\"$CLAUDE_EFFORT_LEVEL\"" || echo "null");
+const effortLevel = $_EFFORT_JS;
 const validEffortLevels = ['low', 'medium', 'high'];
 BLOCK_INTERP
 
@@ -1379,62 +1367,30 @@ BLOCK
     extract_between "$SCRIPTS_DIR/setup-user-hooks.ps1" \
         '^# --- BEGIN hooks body' '^# --- BEGIN hook deployment' --crlf
 
-    # REPLACE: hook deployment (deploy embeds scripts via here-string instead of Copy-Item from repo)
-    printf '# --- Deploy embedded hook scripts to ~/.claude/hooks/ ---\r\n'
+    # REPLACE: hook deployment (deploy embeds scripts via here-string + manifest-driven $regs)
+    printf '# --- Deploy embedded hook scripts to ~/.claude/hooks/ (generated from manifest) ---\r\n'
     printf '$claudeDir = Join-Path $env:USERPROFILE ".claude"\r\n'
     printf '$hooksDir = Join-Path $claudeDir "hooks"\r\n'
     printf 'if (-not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }\r\n'
     printf '\r\n'
-    # Helper: embed a hook via PS here-string
-    _embed_ps1_hook() {
-        local varname="$1" filename="$2" psvar="$3"
-        printf '$%s = @'"'"'\r\n' "$psvar"
-        eval 'echo "$'"$varname"'"' | perl -pe 's/\r?\n$/\r\n/'
+    printf '$hookFiles = @{}\r\n'
+    # Embed each hook + helper from the manifest (single source of truth).
+    _PS_MANIFEST="$SHARED_DIR/hooks/hooks-manifest.json"
+    while IFS= read -r _hookfile; do
+        [ -n "$_hookfile" ] || continue
+        if [ -f "$SHARED_DIR/hooks/$_hookfile" ]; then
+            _src="$SHARED_DIR/hooks/$_hookfile"
+        elif [ -f "$SCRIPTS_DIR/$_hookfile" ]; then
+            _src="$SCRIPTS_DIR/$_hookfile"
+        else
+            blog_error "Hook source not found for PS1 embed: $_hookfile"
+            continue
+        fi
+        printf '$hookFiles["%s"] = @'"'"'\r\n' "$_hookfile"
+        perl -pe 's/\r?\n$/\r\n/' "$_src"
         printf ''"'"'@\r\n'
         printf '\r\n'
-    }
-    _embed_ps1_hook HOOK_SESSION_ARCHIVE "session-archive.sh" "hook_archive"
-    _embed_ps1_hook HOOK_SESSION_CATCHUP "session-catchup.sh" "hook_catchup"
-    _embed_ps1_hook HOOK_AIT_HARVEST "ait-harvest.py" "hook_aitharvest"
-    _embed_ps1_hook HOOK_STANDING_ORDER_GUARD "standing-order-guard.sh" "hook_guard"
-    _embed_ps1_hook HOOK_SCRATCH_INIT "scratch-init.sh" "hook_scratch"
-    _embed_ps1_hook HOOK_HARVEST_SESSION "harvest-session.sh" "hook_harvest"
-    _embed_ps1_hook HOOK_SH_FILE_FIXUP "sh-file-fixup.sh" "hook_shfixup"
-    _embed_ps1_hook HOOK_GLOSSARY_GUARD "glossary-skill-guard.sh" "hook_glossary"
-    _embed_ps1_hook HOOK_BLOCK_GUIDE "block-claude-code-guide.sh" "hook_blockguide"
-    _embed_ps1_hook HOOK_TOOL_OPS_AUDIT "tool-ops-session-audit.sh" "hook_toolops"
-    _embed_ps1_hook HOOK_DASHBOARD_SERVE "dashboard-serve.sh" "hook_dashboard"
-    _embed_ps1_hook HOOK_HARNESS_DB_START "harness-db-sessionstart.sh" "hook_hdbstart"
-    _embed_ps1_hook HOOK_HARNESS_DB_END "harness-db-sessionend.sh" "hook_hdbend"
-    _embed_ps1_hook HOOK_DELEGATION_GUARD "delegation-duty-guard.sh" "hook_delegguard"
-    _embed_ps1_hook HOOK_COMMAND_CHANNEL_STOP "command-channel-stop.sh" "hook_ccstop"
-    _embed_ps1_hook HOOK_FM_IDENTITY "failure-mode-identity-stop.sh" "hook_fmident"
-    _embed_ps1_hook HOOK_FM_VERIFY "failure-mode-verify-stop.sh" "hook_fmverify"
-    _embed_ps1_hook HOOK_INTEL_STOP "intelligence-stop.sh" "hook_intelstop"
-    _embed_ps1_hook HOOK_INTEL_STOP_PY "intelligence-stop.py" "hook_intelpy"
-    # Deploy all hooks
-    printf '$hookFiles = @{\r\n'
-    printf '    "session-archive.sh" = $hook_archive\r\n'
-    printf '    "session-catchup.sh" = $hook_catchup\r\n'
-    printf '    "ait-harvest.py" = $hook_aitharvest\r\n'
-    printf '    "standing-order-guard.sh" = $hook_guard\r\n'
-    printf '    "scratch-init.sh" = $hook_scratch\r\n'
-    printf '    "harvest-session.sh" = $hook_harvest\r\n'
-    printf '    "sh-file-fixup.sh" = $hook_shfixup\r\n'
-    printf '    "glossary-skill-guard.sh" = $hook_glossary\r\n'
-    printf '    "block-claude-code-guide.sh" = $hook_blockguide\r\n'
-    printf '    "tool-ops-session-audit.sh" = $hook_toolops\r\n'
-    printf '    "dashboard-serve.sh" = $hook_dashboard\r\n'
-    printf '    "harness-db-sessionstart.sh" = $hook_hdbstart\r\n'
-    printf '    "harness-db-sessionend.sh" = $hook_hdbend\r\n'
-    printf '    "delegation-duty-guard.sh" = $hook_delegguard\r\n'
-    printf '    "command-channel-stop.sh" = $hook_ccstop\r\n'
-    printf '    "failure-mode-identity-stop.sh" = $hook_fmident\r\n'
-    printf '    "failure-mode-verify-stop.sh" = $hook_fmverify\r\n'
-    printf '    "intelligence-stop.sh" = $hook_intelstop\r\n'
-    printf '    "intelligence-stop.py" = $hook_intelpy\r\n'
-    printf '}\r\n'
-    printf '\r\n'
+    done < <(node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));console.log([...m.hooks.map(h=>h.file),...((m.deploy)||[])].join("\n"))' "$_PS_MANIFEST")
     printf 'if ($DryRun) {\r\n'
     printf '    Log "[DRY RUN] Would deploy hooks to ~/.claude/hooks/"\r\n'
     printf '} else {\r\n'
@@ -1446,26 +1402,15 @@ BLOCK
     printf '    }\r\n'
     printf '}\r\n'
     printf '\r\n'
-    printf '# Dest vars for settings.json merge below (deploy uses $hooksDir)\r\n'
-    printf '$hookDest = Join-Path $hooksDir "session-archive.sh"\r\n'
-    printf '$sessionCatchupDest = Join-Path $hooksDir "session-catchup.sh"\r\n'
-    printf '$aitHarvestDest = Join-Path $hooksDir "ait-harvest.py"\r\n'
-    printf '$guardDest = Join-Path $hooksDir "standing-order-guard.sh"\r\n'
-    printf '$glossaryDest = Join-Path $hooksDir "glossary-skill-guard.sh"\r\n'
-    printf '$scratchDest = Join-Path $hooksDir "scratch-init.sh"\r\n'
-    printf '$harvestDest = Join-Path $hooksDir "harvest-session.sh"\r\n'
-    printf '$shfixupDest = Join-Path $hooksDir "sh-file-fixup.sh"\r\n'
-    printf '$blockGuideDest = Join-Path $hooksDir "block-claude-code-guide.sh"\r\n'
-    printf '$toolOpsAuditDest = Join-Path $hooksDir "tool-ops-session-audit.sh"\r\n'
-    printf '$dashboardDest = Join-Path $hooksDir "dashboard-serve.sh"\r\n'
-    printf '$delegGuardDest = Join-Path $hooksDir "delegation-duty-guard.sh"\r\n'
-    printf '$harnessDbStartDest = Join-Path $hooksDir "harness-db-sessionstart.sh"\r\n'
-    printf '$harnessDbEndDest = Join-Path $hooksDir "harness-db-sessionend.sh"\r\n'
-    printf '$cmdChannelStopDest = Join-Path $hooksDir "command-channel-stop.sh"\r\n'
-    printf '$fmIdentityStopDest = Join-Path $hooksDir "failure-mode-identity-stop.sh"\r\n'
-    printf '$fmVerifyStopDest = Join-Path $hooksDir "failure-mode-verify-stop.sh"\r\n'
-    printf '$intelStopDest = Join-Path $hooksDir "intelligence-stop.sh"\r\n'
-    printf '$intelStopPyDest = Join-Path $hooksDir "intelligence-stop.py"\r\n'
+    # Embed $regs (registration list) at build time from the manifest, so the
+    # self-contained deploy script needs no manifest at runtime.
+    printf '# Registration list embedded from hooks-manifest.json at build time.\r\n'
+    printf '$regs = @(\r\n'
+    while IFS= read -r _line; do
+        [ -n "$_line" ] || continue
+        printf '%s\r\n' "$_line"
+    done < <(node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));for(const h of m.hooks){console.log("    [pscustomobject]@{ event = \""+h.event+"\"; file = \""+h.file+"\"; matcher = \""+(h.matcher||"")+"\" }")}' "$SHARED_DIR/hooks/hooks-manifest.json")
+    printf ')\r\n'
 
     # REPLACE: embedded preferences (no extraction between — sentinels are adjacent in PS1)
     printf '\r\n'

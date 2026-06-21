@@ -17,6 +17,7 @@
     { "file": "standing-order-guard.sh",       "event": "PreToolUse",   "matcher": "Bash" },
     { "file": "glossary-skill-guard.sh",       "event": "PreToolUse",   "matcher": "Read|Grep" },
     { "file": "block-claude-code-guide.sh",    "event": "PreToolUse",   "matcher": "Agent" },
+    { "file": "block-explore-agent.sh",        "event": "PreToolUse",   "matcher": "Agent" },
     { "file": "delegation-duty-guard.sh",      "event": "PreToolUse",   "matcher": "Agent" },
     { "file": "sh-file-fixup.sh",              "event": "PostToolUse",  "matcher": "Write|Edit" },
     { "file": "command-channel-stop.sh",       "event": "Stop",         "matcher": "" },

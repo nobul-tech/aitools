@@ -1,28 +1,17 @@
 # setup-user-hooks.ps1 -- Deploys Claude Code hooks and preferences to ~/.claude/settings.json
 # Safe to re-run -- merges managed fields without clobbering existing settings.
+# UNTESTED on Windows: authored on macOS (no pwsh). Mirrors setup-user-hooks.sh.
+#
+# Hook deployment + registration are GENERATED from shared/hooks/hooks-manifest.json
+# (the single source of truth). Adding a hook = one manifest entry; no edits here.
+# Closes the recurring "deployed but not registered" / parallel-list-drift class
+# (RCA: .scratch investigation 2026-06-20; issue #7 / plan §5).
 #
 # Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
 # Preserved: permissions, enabledPlugins, all other fields
 #
-# Hooks deployed:
-#   SessionStart: scratch-init.sh (creates session scratch directory)
-#   SessionStart: dashboard-serve.sh (launches live dashboard server)
-#   SessionEnd: session-archive.sh (archives transcripts to user repo)
-#   SessionEnd: harvest-session.sh (harvests session artifacts)
-#   SessionEnd: tool-ops-session-audit.sh (runs tool-ops contract tests and drift detection)
-#   PreToolUse[Bash]: standing-order-guard.sh (enforces standing orders on Bash commands)
-#   PreToolUse[Read|Grep]: glossary-skill-guard.sh (reminds agent to use /glossary skill)
-#   PreToolUse[Agent]: block-claude-code-guide.sh (blocks buggy built-in subagent)
-#   PostToolUse[Write|Edit]: sh-file-fixup.sh (fixes CRLF and chmod on .sh files)
-#   PreToolUse[Agent]: delegation-duty-guard.sh (checks delegation prompts for duty elements)
-#   SessionStart: harness-db-sessionstart.sh (initializes harness SQLite DBs)
-#   SessionEnd: harness-db-sessionend.sh (marks session complete, exports JSON)
-#   Stop: command-channel-stop.sh (polls session DB for commander directives)
-#   Stop: failure-mode-identity-stop.sh (reinforces agent identity and process)
-#   Stop: failure-mode-verify-stop.sh (lightweight failure mode self-check)
-#
 # Reads claude preferences from profile.json (via config.json -> userRepoPath).
-# See reference/user-repo.md and shared/hooks/ for details.
+# See reference/user-repo.md and shared/hooks/hooks-manifest.json for details.
 #
 # Note: Hook scripts are bash-only (Claude Code hooks always run in bash on
 # both platforms). This PS1 script only deploys the hook configuration.
@@ -49,9 +38,16 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
 # --- BEGIN hook deployment (replaced by build-deploy) ---
-# --- Resolve repo path ---
+# --- Resolve repo path + manifest ---
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoDir = Split-Path -Parent $scriptDir
+
+$manifestPath = Join-Path $repoDir "shared\hooks\hooks-manifest.json"
+if (-not (Test-Path $manifestPath)) {
+    LogError "Hook manifest not found: $manifestPath"
+    exit 1
+}
+$manifestObj = Get-Content $manifestPath -Raw | ConvertFrom-Json
 
 # User repo for dotprofile overrides and adopt target
 $userRepoPath = ReadConfigKey -File (Join-Path $env:USERPROFILE ".aitools\config.json") -Key "userRepoPath"
@@ -63,66 +59,36 @@ if ($userRepoPath) {
     }
 }
 
-# Resolve hook source: dotprofile wins over shared
+# Resolve hook source: dotprofile wins over shared/hooks, then scripts/ (for
+# deploy-only .py helpers like ait-harvest.py that live in scripts/).
 function Resolve-HookSource {
     param([string]$HookName)
     if ($dotprofileHooks -and (Test-Path (Join-Path $dotprofileHooks $HookName))) {
         return (Join-Path $dotprofileHooks $HookName)
     }
-    return (Join-Path $repoDir "shared\hooks\$HookName")
+    if (Test-Path (Join-Path $repoDir "shared\hooks\$HookName")) {
+        return (Join-Path $repoDir "shared\hooks\$HookName")
+    }
+    return (Join-Path $repoDir "scripts\$HookName")
 }
 
-$hookScript = Resolve-HookSource "session-archive.sh"
-$sessionCatchupScript = Resolve-HookSource "session-catchup.sh"
-$guardScript = Resolve-HookSource "standing-order-guard.sh"
-$glossaryScript = Resolve-HookSource "glossary-skill-guard.sh"
-$scratchScript = Resolve-HookSource "scratch-init.sh"
-$harvestScript = Resolve-HookSource "harvest-session.sh"
-$shfixupScript = Resolve-HookSource "sh-file-fixup.sh"
-$blockGuideScript = Resolve-HookSource "block-claude-code-guide.sh"
-$toolOpsAuditScript = Resolve-HookSource "tool-ops-session-audit.sh"
-$dashboardScript = Resolve-HookSource "dashboard-serve.sh"
-$delegGuardScript = Resolve-HookSource "delegation-duty-guard.sh"
-$harnessDbStartScript = Resolve-HookSource "harness-db-sessionstart.sh"
-$harnessDbEndScript = Resolve-HookSource "harness-db-sessionend.sh"
-$cmdChannelStopScript = Resolve-HookSource "command-channel-stop.sh"
-$fmIdentityStopScript = Resolve-HookSource "failure-mode-identity-stop.sh"
-$fmVerifyStopScript = Resolve-HookSource "failure-mode-verify-stop.sh"
-$intelStopScript = Resolve-HookSource "intelligence-stop.sh"
-$intelStopPyScript = Resolve-HookSource "intelligence-stop.py"
-# ait-harvest.py lives in scripts/ (not shared/hooks/) but is deployed to
-# ~/.claude/hooks/ so the archive/harvest/catchup shims can find it.
-$aitHarvestScript = Join-Path $repoDir "scripts\ait-harvest.py"
-foreach ($src in @($hookScript, $sessionCatchupScript, $guardScript, $glossaryScript, $scratchScript, $harvestScript, $shfixupScript, $blockGuideScript, $toolOpsAuditScript, $dashboardScript, $delegGuardScript, $harnessDbStartScript, $harnessDbEndScript, $cmdChannelStopScript, $fmIdentityStopScript, $fmVerifyStopScript, $intelStopScript, $intelStopPyScript, $aitHarvestScript)) {
+# Registration list + file list, from the manifest (single source of truth).
+# build-deploy embeds $regs statically for the self-contained MDM path.
+$regs = @($manifestObj.hooks)
+$hookFiles = @($manifestObj.hooks | ForEach-Object { $_.file })
+if ($manifestObj.deploy) { $hookFiles += @($manifestObj.deploy) }
+
+# Existence check (resolve every manifest file before deploying any).
+foreach ($hookName in $hookFiles) {
+    $src = Resolve-HookSource $hookName
     if (-not (Test-Path $src)) {
         LogError "Hook script not found: $src"
         exit 1
     }
 }
 
-# --- Deploy hook scripts to ~/.claude/hooks/ ---
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
 $hooksDir = Join-Path $claudeDir "hooks"
-
-$hookDest = Join-Path $hooksDir "session-archive.sh"
-$sessionCatchupDest = Join-Path $hooksDir "session-catchup.sh"
-$guardDest = Join-Path $hooksDir "standing-order-guard.sh"
-$glossaryDest = Join-Path $hooksDir "glossary-skill-guard.sh"
-$scratchDest = Join-Path $hooksDir "scratch-init.sh"
-$harvestDest = Join-Path $hooksDir "harvest-session.sh"
-$shfixupDest = Join-Path $hooksDir "sh-file-fixup.sh"
-$blockGuideDest = Join-Path $hooksDir "block-claude-code-guide.sh"
-$toolOpsAuditDest = Join-Path $hooksDir "tool-ops-session-audit.sh"
-$dashboardDest = Join-Path $hooksDir "dashboard-serve.sh"
-$delegGuardDest = Join-Path $hooksDir "delegation-duty-guard.sh"
-$harnessDbStartDest = Join-Path $hooksDir "harness-db-sessionstart.sh"
-$harnessDbEndDest = Join-Path $hooksDir "harness-db-sessionend.sh"
-$cmdChannelStopDest = Join-Path $hooksDir "command-channel-stop.sh"
-$fmIdentityStopDest = Join-Path $hooksDir "failure-mode-identity-stop.sh"
-$fmVerifyStopDest = Join-Path $hooksDir "failure-mode-verify-stop.sh"
-$intelStopDest = Join-Path $hooksDir "intelligence-stop.sh"
-$intelStopPyDest = Join-Path $hooksDir "intelligence-stop.py"
-$aitHarvestDest = Join-Path $hooksDir "ait-harvest.py"
 
 $hooksChanged = $false
 
@@ -130,25 +96,10 @@ $hookAdoptLabel = ""
 if ($userRepoPath) { $hookAdoptLabel = "dotprofile" }
 
 if ($DryRun) {
-    Log "[DRY RUN] Would deploy hook: $hookScript -> $hookDest"
-    Log "[DRY RUN] Would deploy hook: $sessionCatchupScript -> $sessionCatchupDest"
-    Log "[DRY RUN] Would deploy helper: $aitHarvestScript -> $aitHarvestDest"
-    Log "[DRY RUN] Would deploy hook: $guardScript -> $guardDest"
-    Log "[DRY RUN] Would deploy hook: $glossaryScript -> $glossaryDest"
-    Log "[DRY RUN] Would deploy hook: $scratchScript -> $scratchDest"
-    Log "[DRY RUN] Would deploy hook: $harvestScript -> $harvestDest"
-    Log "[DRY RUN] Would deploy hook: $shfixupScript -> $shfixupDest"
-    Log "[DRY RUN] Would deploy hook: $blockGuideScript -> $blockGuideDest"
-    Log "[DRY RUN] Would deploy hook: $toolOpsAuditScript -> $toolOpsAuditDest"
-    Log "[DRY RUN] Would deploy hook: $dashboardScript -> $dashboardDest"
-    Log "[DRY RUN] Would deploy hook: $delegGuardScript -> $delegGuardDest"
-    Log "[DRY RUN] Would deploy hook: $harnessDbStartScript -> $harnessDbStartDest"
-    Log "[DRY RUN] Would deploy hook: $harnessDbEndScript -> $harnessDbEndDest"
-    Log "[DRY RUN] Would deploy hook: $cmdChannelStopScript -> $cmdChannelStopDest"
-    Log "[DRY RUN] Would deploy hook: $fmIdentityStopScript -> $fmIdentityStopDest"
-    Log "[DRY RUN] Would deploy hook: $fmVerifyStopScript -> $fmVerifyStopDest"
-    Log "[DRY RUN] Would deploy hook: $intelStopScript -> $intelStopDest"
-    Log "[DRY RUN] Would deploy hook: $intelStopPyScript -> $intelStopPyDest"
+    foreach ($hookName in $hookFiles) {
+        $src = Resolve-HookSource $hookName
+        Log "[DRY RUN] Would deploy hook: $src -> $(Join-Path $hooksDir $hookName)"
+    }
     # Stale hook cleanup preview
     foreach ($staleHook in @("surfacing-duty-stop.sh", "estimate-refresh-stop.sh", "intent-sentinel-stop.sh")) {
         if (Test-Path (Join-Path $hooksDir $staleHook)) {
@@ -160,9 +111,9 @@ if ($DryRun) {
 
     Initialize-DeployTracker
 
-    foreach ($pair in @(@($hookScript, $hookDest), @($sessionCatchupScript, $sessionCatchupDest), @($aitHarvestScript, $aitHarvestDest), @($guardScript, $guardDest), @($glossaryScript, $glossaryDest), @($scratchScript, $scratchDest), @($harvestScript, $harvestDest), @($shfixupScript, $shfixupDest), @($blockGuideScript, $blockGuideDest), @($toolOpsAuditScript, $toolOpsAuditDest), @($dashboardScript, $dashboardDest), @($delegGuardScript, $delegGuardDest), @($harnessDbStartScript, $harnessDbStartDest), @($harnessDbEndScript, $harnessDbEndDest), @($cmdChannelStopScript, $cmdChannelStopDest), @($fmIdentityStopScript, $fmIdentityStopDest), @($fmVerifyStopScript, $fmVerifyStopDest), @($intelStopScript, $intelStopDest), @($intelStopPyScript, $intelStopPyDest))) {
-        $src = $pair[0]; $dst = $pair[1]
-        $hookName = Split-Path $dst -Leaf
+    foreach ($hookName in $hookFiles) {
+        $src = Resolve-HookSource $hookName
+        $dst = Join-Path $hooksDir $hookName
         $srcContent = Get-Content $src -Raw -ErrorAction Stop
 
         $hookResult = Deploy-ManagedFile -Content $srcContent -DestPath $dst -ToolName "claude hooks" -ItemName $hookName -AdoptLabel $hookAdoptLabel
@@ -193,8 +144,8 @@ if ($DryRun) {
     Write-DeployTrackerSummary -ToolName "claude hooks"
 
     # --- Stale hook cleanup ---
-    # Remove hook files that were previously deployed but are no longer managed.
-    # These were removed from shared/hooks/ in commit e070043 but remain on disk.
+    # Remove hook files previously deployed but no longer managed (deleted from
+    # shared/hooks/ in commit e070043). Registration cleanup is RemoveHookEntry below.
     $staleHooks = @("surfacing-duty-stop.sh", "estimate-refresh-stop.sh", "intent-sentinel-stop.sh")
     foreach ($staleHook in $staleHooks) {
         $stalePath = Join-Path $hooksDir $staleHook
@@ -203,7 +154,6 @@ if ($DryRun) {
             LogOk "Removed stale hook: $staleHook"
             $hooksChanged = $true
         }
-        # Also remove any backups of stale hooks
         $bakPattern = Join-Path $hooksDir "$staleHook.bak.*"
         $staleBaks = Get-ChildItem -Path $bakPattern -File -ErrorAction SilentlyContinue
         if ($staleBaks) {
@@ -220,12 +170,9 @@ if ($DryRun) {
         foreach ($hookFile in Get-ChildItem -Path $hooksDir -Filter "*.sh" -File) {
             $hookName = $hookFile.Name
 
-            # Skip if in shared
             if (Test-Path (Join-Path $repoDir "shared\hooks\$hookName")) { continue }
-            # Skip if in dotprofile
             if ($dotprofileHooks -and (Test-Path (Join-Path $dotprofileHooks $hookName))) { continue }
 
-            # Found a user-created hook
             if ($userRepoPath) {
                 Log "Found user-created hook: $hookName"
                 try {
@@ -291,21 +238,15 @@ if (Test-Path $configFile) {
 }
 # --- END claude preferences (replaced by build-deploy) ---
 
-# --- Merge hook + preferences into ~/.claude/settings.json ---
+# --- Merge hooks + preferences into ~/.claude/settings.json ---
+# Registrations are GENERATED from the manifest ($regs) -- loop MergeHookEntry +
+# validation over every entry. No per-hook *_Cmd vars or hardcoded calls.
 $settingsFile = Join-Path $claudeDir "settings.json"
 if (-not (Test-Path $claudeDir)) {
     if (-not $DryRun) {
         New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
     }
 }
-
-# Hook command uses Unix-style path (hooks run in bash even on Windows)
-$hookDestPath = Join-Path $hooksDir "session-archive.sh"
-$hookDestUnix = $hookDestPath -replace '\\', '/'
-$hookCmd = "bash `"$hookDestUnix`""
-
-$shfixupDestUnix = $shfixupDest -replace '\\', '/'
-$shfixupCmd = "bash `"$shfixupDestUnix`""
 
 # Read existing settings
 $settings = @{}
@@ -325,7 +266,6 @@ $beforeKeys = @($settings.Keys)
 if (-not $settings.ContainsKey("hooks")) { $settings["hooks"] = @{} }
 
 # Helper: ensure exactly one entry for a hookId in an event array.
-# Updates the command if found, adds if not, deduplicates extras.
 function MergeHookEntry($eventName, $hookIdentifier, $matcherValue, $cmd, $hookType) {
     if (-not $hookType) { $hookType = "command" }
     if (-not $settings["hooks"].ContainsKey($eventName)) {
@@ -333,7 +273,6 @@ function MergeHookEntry($eventName, $hookIdentifier, $matcherValue, $cmd, $hookT
     }
     $arr = @($settings["hooks"][$eventName])
 
-    # Find first matching entry and update it
     $found = $false
     foreach ($rule in $arr) {
         if ($rule -is [System.Collections.Hashtable] -and $rule.ContainsKey("hooks")) {
@@ -356,15 +295,12 @@ function MergeHookEntry($eventName, $hookIdentifier, $matcherValue, $cmd, $hookT
         }
     }
 
-    # Normalize: ensure hooks field in each rule is always an array
-    # (fixes corruption from prior buggy writes where ConvertTo-Json unwrapped single-element arrays)
     foreach ($rule in $arr) {
         if ($rule -is [System.Collections.Hashtable] -and $rule.ContainsKey("hooks") -and $rule["hooks"] -isnot [array]) {
             $rule["hooks"] = @($rule["hooks"])
         }
     }
 
-    # Deduplicate: keep only the first entry matching hookIdentifier
     $seen = $false
     $deduped = @()
     foreach ($rule in $arr) {
@@ -385,7 +321,6 @@ function MergeHookEntry($eventName, $hookIdentifier, $matcherValue, $cmd, $hookT
 }
 
 # Helper: remove all entries for a hookId from an event array.
-# Used to clean up stale hook registrations after hooks are deleted.
 function RemoveHookEntry($eventName, $hookIdentifier) {
     if (-not $settings["hooks"].ContainsKey($eventName)) { return }
     $arr = @($settings["hooks"][$eventName])
@@ -414,84 +349,14 @@ RemoveHookEntry "Stop" "surfacing-duty-stop.sh"
 RemoveHookEntry "Stop" "estimate-refresh-stop.sh"
 RemoveHookEntry "Stop" "intent-sentinel-stop.sh"
 
-# SessionEnd: session archive
-MergeHookEntry "SessionEnd" "session-archive.sh" "" $hookCmd
-
-# SessionEnd: harvest session artifacts
-$harvestDestUnix = $harvestDest -replace '\\', '/'
-$harvestCmd = "bash `"$harvestDestUnix`""
-MergeHookEntry "SessionEnd" "harvest-session.sh" "" $harvestCmd
-
-# SessionStart: scratch directory initialization
-$scratchDestUnix = $scratchDest -replace '\\', '/'
-$scratchCmd = "bash `"$scratchDestUnix`""
-MergeHookEntry "SessionStart" "scratch-init.sh" "" $scratchCmd
-
-# SessionStart: catch-up (recovers what SessionEnd missed)
-$sessionCatchupDestUnix = $sessionCatchupDest -replace '\\', '/'
-$sessionCatchupCmd = "bash `"$sessionCatchupDestUnix`""
-MergeHookEntry "SessionStart" "session-catchup.sh" "" $sessionCatchupCmd
-
-# PreToolUse: standing order guard
-$guardDestUnix = $guardDest -replace '\\', '/'
-$guardCmd = "bash `"$guardDestUnix`""
-MergeHookEntry "PreToolUse" "standing-order-guard.sh" "Bash" $guardCmd
-
-# PreToolUse: glossary skill guard
-$glossaryDestUnix = (Join-Path $hooksDir "glossary-skill-guard.sh") -replace '\\', '/'
-$glossaryCmd = "bash `"$glossaryDestUnix`""
-MergeHookEntry "PreToolUse" "glossary-skill-guard.sh" "Read|Grep" $glossaryCmd
-MergeHookEntry "PostToolUse" "sh-file-fixup.sh" "Write|Edit" $shfixupCmd
-
-# PreToolUse: block claude-code-guide subagent
-$blockGuideDestUnix = $blockGuideDest -replace '\\', '/'
-$blockGuideCmd = "bash `"$blockGuideDestUnix`""
-MergeHookEntry "PreToolUse" "block-claude-code-guide.sh" "Agent" $blockGuideCmd
-
-# SessionEnd: tool-ops session audit
-$toolOpsAuditDestUnix = $toolOpsAuditDest -replace '\\', '/'
-$toolOpsAuditCmd = "bash `"$toolOpsAuditDestUnix`""
-MergeHookEntry "SessionEnd" "tool-ops-session-audit.sh" "" $toolOpsAuditCmd
-
-# SessionStart: dashboard server
-$dashboardDestUnix = $dashboardDest -replace '\\', '/'
-$dashboardCmd = "bash `"$dashboardDestUnix`""
-MergeHookEntry "SessionStart" "dashboard-serve.sh" "" $dashboardCmd
-
-# PreToolUse: delegation duty guard
-$delegGuardDestUnix = $delegGuardDest -replace '\\', '/'
-$delegGuardCmd = "bash `"$delegGuardDestUnix`""
-MergeHookEntry "PreToolUse" "delegation-duty-guard.sh" "Agent" $delegGuardCmd
-
-# SessionStart: harness DB initialization
-$harnessDbStartDestUnix = $harnessDbStartDest -replace '\\', '/'
-$harnessDbStartCmd = "bash `"$harnessDbStartDestUnix`""
-MergeHookEntry "SessionStart" "harness-db-sessionstart.sh" "" $harnessDbStartCmd
-
-# SessionEnd: harness DB session end + export
-$harnessDbEndDestUnix = $harnessDbEndDest -replace '\\', '/'
-$harnessDbEndCmd = "bash `"$harnessDbEndDestUnix`""
-MergeHookEntry "SessionEnd" "harness-db-sessionend.sh" "" $harnessDbEndCmd
-
-# Stop: command channel
-$cmdChannelStopDestUnix = $cmdChannelStopDest -replace '\\', '/'
-$cmdChannelStopCmd = "bash `"$cmdChannelStopDestUnix`""
-MergeHookEntry "Stop" "command-channel-stop.sh" "" $cmdChannelStopCmd
-
-# Stop: failure mode identity
-$fmIdentityStopDestUnix = $fmIdentityStopDest -replace '\\', '/'
-$fmIdentityStopCmd = "bash `"$fmIdentityStopDestUnix`""
-MergeHookEntry "Stop" "failure-mode-identity-stop.sh" "" $fmIdentityStopCmd
-
-# Stop: failure mode verify
-$fmVerifyStopDestUnix = $fmVerifyStopDest -replace '\\', '/'
-$fmVerifyStopCmd = "bash `"$fmVerifyStopDestUnix`""
-MergeHookEntry "Stop" "failure-mode-verify-stop.sh" "" $fmVerifyStopCmd
-
-# Stop: intelligence carry-forward
-$intelStopDestUnix = $intelStopDest -replace '\\', '/'
-$intelStopCmd = "bash `"$intelStopDestUnix`""
-MergeHookEntry "Stop" "intelligence-stop.sh" "" $intelStopCmd
+# Register every manifest hook (generated -- no hardcoded list).
+# Hook command uses Unix-style path (hooks run in bash even on Windows).
+foreach ($r in $regs) {
+    $destUnix = (Join-Path $hooksDir $r.file) -replace '\\', '/'
+    $rCmd = "bash `"$destUnix`""
+    $matcherVal = if ($r.matcher) { $r.matcher } else { "" }
+    MergeHookEntry $r.event $r.file $matcherVal $rCmd
+}
 
 # --- Track old values for change reporting ---
 $oldAutoMemory = $settings["autoMemoryEnabled"]
@@ -531,8 +396,7 @@ if ($DryRun) {
     if ($corrupt) {
         LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
     }
-    Log "[DRY RUN] SessionEnd hook: $hookCmd"
-    Log "[DRY RUN] PreToolUse hook: $guardCmd"
+    Log "[DRY RUN] Registered hooks: $($regs.Count)"
     Log "[DRY RUN] autoMemoryEnabled: $autoMemory"
     Log "[DRY RUN] alwaysThinkingEnabled: $alwaysThinking"
     if ($effortLevel) { Log "[DRY RUN] effortLevel: $effortLevel" }
@@ -575,39 +439,11 @@ if ($DryRun) {
                 LogError "Validation failed: $settingsFile is not valid JSON -- $_"
             }
 
-            # Validate hook deduplication
-            $seCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'session-archive\.sh' }).Count
-            $seHarvestCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'harvest-session\.sh' }).Count
-            $ssScratchCount = @($vParsed.hooks.SessionStart | Where-Object { $_.hooks.command -match 'scratch-init\.sh' }).Count
-            $ssCatchupCount = @($vParsed.hooks.SessionStart | Where-Object { $_.hooks.command -match 'session-catchup\.sh' }).Count
-            $ptCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'standing-order-guard\.sh' }).Count
-            $glCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'glossary-skill-guard\.sh' }).Count
-            if ($seCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd session-archive hook, got $seCount" }
-            if ($seHarvestCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd harvest-session hook, got $seHarvestCount" }
-            if ($ssScratchCount -ne 1) { LogError "Validation failed: expected 1 SessionStart scratch-init hook, got $ssScratchCount" }
-            if ($ssCatchupCount -ne 1) { LogError "Validation failed: expected 1 SessionStart session-catchup hook, got $ssCatchupCount" }
-            if ($ptCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse standing-order-guard hook, got $ptCount" }
-            if ($glCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse glossary-skill-guard hook, got $glCount" }
-            $bgCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'block-claude-code-guide\.sh' }).Count
-            if ($bgCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse block-claude-code-guide hook, got $bgCount" }
-            $toaCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'tool-ops-session-audit\.sh' }).Count
-            if ($toaCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd tool-ops-session-audit hook, got $toaCount" }
-            $dashCount = @($vParsed.hooks.SessionStart | Where-Object { $_.hooks.command -match 'dashboard-serve\.sh' }).Count
-            if ($dashCount -ne 1) { LogError "Validation failed: expected 1 SessionStart dashboard-serve hook, got $dashCount" }
-            $dgCount = @($vParsed.hooks.PreToolUse | Where-Object { $_.hooks.command -match 'delegation-duty-guard\.sh' }).Count
-            if ($dgCount -ne 1) { LogError "Validation failed: expected 1 PreToolUse delegation-duty-guard hook, got $dgCount" }
-            $hdbStartCount = @($vParsed.hooks.SessionStart | Where-Object { $_.hooks.command -match 'harness-db-sessionstart\.sh' }).Count
-            if ($hdbStartCount -ne 1) { LogError "Validation failed: expected 1 SessionStart harness-db-sessionstart hook, got $hdbStartCount" }
-            $hdbEndCount = @($vParsed.hooks.SessionEnd | Where-Object { $_.hooks.command -match 'harness-db-sessionend\.sh' }).Count
-            if ($hdbEndCount -ne 1) { LogError "Validation failed: expected 1 SessionEnd harness-db-sessionend hook, got $hdbEndCount" }
-            $ccStopCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'command-channel-stop\.sh' }).Count
-            if ($ccStopCount -ne 1) { LogError "Validation failed: expected 1 Stop command-channel-stop hook, got $ccStopCount" }
-            $fmiStopCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'failure-mode-identity-stop\.sh' }).Count
-            if ($fmiStopCount -ne 1) { LogError "Validation failed: expected 1 Stop failure-mode-identity-stop hook, got $fmiStopCount" }
-            $fmvStopCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'failure-mode-verify-stop\.sh' }).Count
-            if ($fmvStopCount -ne 1) { LogError "Validation failed: expected 1 Stop failure-mode-verify-stop hook, got $fmvStopCount" }
-            $intelStopCount = @($vParsed.hooks.Stop | Where-Object { $_.hooks.command -match 'intelligence-stop\.sh' }).Count
-            if ($intelStopCount -ne 1) { LogError "Validation failed: expected 1 Stop intelligence-stop hook, got $intelStopCount" }
+            # Validate: every manifest hook registered exactly once (generated check).
+            foreach ($r in $regs) {
+                $rc = @($vParsed.hooks.$($r.event) | Where-Object { $_.hooks.command -match [regex]::Escape($r.file) }).Count
+                if ($rc -ne 1) { LogError "Validation failed: expected 1 $($r.event) $($r.file) hook, got $rc" }
+            }
 
             # Validate hook schema: command-type must have command,
             # prompt-type must have prompt (not command).
@@ -630,8 +466,6 @@ if ($DryRun) {
             }
 
             LogOk "Settings deployed to $settingsFile"
-            Log "  SessionEnd hook: $hookCmd"
-            Log "  PreToolUse hook: $guardCmd"
             Log "  autoMemoryEnabled: $autoMemory"
             Log "  alwaysThinkingEnabled: $alwaysThinking"
             $effortDisplay = if ($effortLevel) { $effortLevel } else { "(not set)" }

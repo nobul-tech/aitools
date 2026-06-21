@@ -2,31 +2,16 @@
 # setup-user-hooks.sh — Deploys Claude Code hooks and preferences to ~/.claude/settings.json
 # Safe to re-run — merges managed fields without clobbering existing settings.
 #
+# Hook deployment + registration are GENERATED from shared/hooks/hooks-manifest.json
+# (the single source of truth). Adding a hook = one manifest entry; no edits to this
+# script. This closes the recurring "deployed but not registered" / parallel-list-drift
+# incident class (RCA: .scratch investigation 2026-06-20; issue #7 / plan §5).
+#
 # Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
-# (includes delegation-duty-guard PreToolUse[Agent] hook,
-#  harness-db-sessionstart/sessionend hooks with telemetry processing,
-#  and Stop hooks for command channel and failure mode)
 # Preserved: permissions, enabledPlugins, all other fields
 #
-# Hooks deployed:
-#   SessionStart: scratch-init.sh (creates session scratch directory)
-#   SessionStart: dashboard-serve.sh (launches live dashboard server)
-#   SessionEnd: session-archive.sh (archives transcripts to user repo)
-#   SessionEnd: harvest-session.sh (harvests session artifacts)
-#   SessionEnd: tool-ops-session-audit.sh (runs tool-ops contract tests and drift detection)
-#   PreToolUse[Bash]: standing-order-guard.sh (enforces standing orders on Bash commands)
-#   PreToolUse[Read|Grep]: glossary-skill-guard.sh (reminds agent to use /glossary skill)
-#   PreToolUse[Agent]: block-claude-code-guide.sh (blocks buggy built-in subagent)
-#   PostToolUse[Write|Edit]: sh-file-fixup.sh (fixes CRLF and chmod on .sh files)
-#   PreToolUse[Agent]: delegation-duty-guard.sh (checks delegation prompts for duty elements)
-#   SessionStart: harness-db-sessionstart.sh (initializes harness SQLite DBs)
-#   SessionEnd: harness-db-sessionend.sh (marks session complete, exports JSON)
-#   Stop: command-channel-stop.sh (polls session DB for commander directives)
-#   Stop: failure-mode-identity-stop.sh (reinforces agent identity and process)
-#   Stop: failure-mode-verify-stop.sh (lightweight failure mode self-check)
-#
 # Reads claude preferences from profile.json (via config.json -> userRepoPath).
-# See reference/user-repo.md and shared/hooks/ for details.
+# See reference/user-repo.md, shared/hooks/hooks-manifest.json, and shared/hooks/ for details.
 
 # --- BEGIN hooks body (extracted by build-deploy) ---
 set -euo pipefail
@@ -62,9 +47,16 @@ if ! command -v node &>/dev/null; then
 fi
 
 # --- BEGIN hook deployment (replaced by build-deploy) ---
-# --- Resolve repo path ---
+# --- Resolve repo path + manifest ---
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Manifest = single source of truth for which hooks exist + how they register.
+MANIFEST="$REPO_DIR/shared/hooks/hooks-manifest.json"
+if [ ! -f "$MANIFEST" ]; then
+    log_error "Hook manifest not found: $MANIFEST"
+    exit 1
+fi
 
 # User repo for dotprofile overrides and adopt target.
 # `|| true`: key is absent until 'aitools user init' runs; without the guard,
@@ -75,90 +67,69 @@ if [ -n "$USER_REPO_PATH" ] && [ -d "$USER_REPO_PATH/claude/hooks" ]; then
     DOTPROFILE_HOOKS="$USER_REPO_PATH/claude/hooks"
 fi
 
-# Resolve hook source: dotprofile wins over shared
+# Resolve hook source: dotprofile wins over shared/hooks, then scripts/ (for
+# deploy-only .py helpers like ait-harvest.py that live in scripts/).
 resolve_hook() {
     local hook_name="$1"
     if [ -n "$DOTPROFILE_HOOKS" ] && [ -f "$DOTPROFILE_HOOKS/$hook_name" ]; then
         printf '%s\n' "$DOTPROFILE_HOOKS/$hook_name"
+    elif [ -f "$REPO_DIR/shared/hooks/$hook_name" ]; then
+        printf '%s\n' "$REPO_DIR/shared/hooks/$hook_name"
+    elif [ -f "$REPO_DIR/scripts/$hook_name" ]; then
+        printf '%s\n' "$REPO_DIR/scripts/$hook_name"
     else
         printf '%s\n' "$REPO_DIR/shared/hooks/$hook_name"
     fi
 }
 
-HOOK_SCRIPT=$(resolve_hook "session-archive.sh")
-SESSION_CATCHUP_SCRIPT=$(resolve_hook "session-catchup.sh")
-GUARD_SCRIPT=$(resolve_hook "standing-order-guard.sh")
-GLOSSARY_SCRIPT=$(resolve_hook "glossary-skill-guard.sh")
-SCRATCH_SCRIPT=$(resolve_hook "scratch-init.sh")
-HARVEST_SCRIPT=$(resolve_hook "harvest-session.sh")
-SHFIXUP_SCRIPT=$(resolve_hook "sh-file-fixup.sh")
-BLOCK_GUIDE_SCRIPT=$(resolve_hook "block-claude-code-guide.sh")
-TOOL_OPS_AUDIT_SCRIPT=$(resolve_hook "tool-ops-session-audit.sh")
-DASHBOARD_SCRIPT=$(resolve_hook "dashboard-serve.sh")
-DELEG_GUARD_SCRIPT=$(resolve_hook "delegation-duty-guard.sh")
-HARNESS_DB_START_SCRIPT=$(resolve_hook "harness-db-sessionstart.sh")
-HARNESS_DB_END_SCRIPT=$(resolve_hook "harness-db-sessionend.sh")
-CMD_CHANNEL_STOP_SCRIPT=$(resolve_hook "command-channel-stop.sh")
-FM_IDENTITY_STOP_SCRIPT=$(resolve_hook "failure-mode-identity-stop.sh")
-FM_VERIFY_STOP_SCRIPT=$(resolve_hook "failure-mode-verify-stop.sh")
-INTEL_STOP_SCRIPT=$(resolve_hook "intelligence-stop.sh")
-INTEL_STOP_PY_SCRIPT=$(resolve_hook "intelligence-stop.py")
-# ait-harvest.py lives in scripts/ (not shared/hooks/) but is deployed to
-# ~/.claude/hooks/ so the archive/harvest/catchup shims can find it.
-AIT_HARVEST_SCRIPT="$REPO_DIR/scripts/ait-harvest.py"
-for src in "$HOOK_SCRIPT" "$SESSION_CATCHUP_SCRIPT" "$GUARD_SCRIPT" "$GLOSSARY_SCRIPT" "$SCRATCH_SCRIPT" "$HARVEST_SCRIPT" "$SHFIXUP_SCRIPT" "$BLOCK_GUIDE_SCRIPT" "$TOOL_OPS_AUDIT_SCRIPT" "$DASHBOARD_SCRIPT" "$DELEG_GUARD_SCRIPT" "$HARNESS_DB_START_SCRIPT" "$HARNESS_DB_END_SCRIPT" "$CMD_CHANNEL_STOP_SCRIPT" "$FM_IDENTITY_STOP_SCRIPT" "$FM_VERIFY_STOP_SCRIPT" "$INTEL_STOP_SCRIPT" "$INTEL_STOP_PY_SCRIPT" "$AIT_HARVEST_SCRIPT"; do
+# Files to deploy = registered hooks + deploy-only helpers, from the manifest.
+HOOK_FILES=()
+while IFS= read -r _f; do
+    [ -n "$_f" ] && HOOK_FILES+=("$_f")
+done < <(node -e '
+const fs = require("fs");
+const m = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const files = [...m.hooks.map(h => h.file), ...((m.deploy) || [])];
+console.log(files.join("\n"));
+' "$MANIFEST")
+
+if [ "${#HOOK_FILES[@]}" -eq 0 ]; then
+    log_error "Manifest produced no hook files -- aborting"
+    exit 1
+fi
+
+# Registration list (event/file/matcher) from the manifest -- passed to the node
+# merge block as an argv. build-deploy embeds this statically for the
+# self-contained MDM path, so the node block is identical dev and deploy.
+REGS_JSON=$(node -e '
+const fs = require("fs");
+const m = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+console.log(JSON.stringify(m.hooks.map(h => ({event: h.event, file: h.file, matcher: h.matcher || ""}))));
+' "$MANIFEST")
+if [ -z "$REGS_JSON" ]; then
+    log_error "Failed to build registration list from manifest"
+    exit 1
+fi
+
+# Existence check (resolve every manifest file before deploying any).
+for hook_name in "${HOOK_FILES[@]}"; do
+    src=$(resolve_hook "$hook_name")
     if [ ! -f "$src" ]; then
         log_error "Hook script not found: $src"
         exit 1
     fi
 done
 
-# --- Deploy hook scripts to ~/.claude/hooks/ ---
-HOOK_DEST="$HOME/.claude/hooks/session-archive.sh"
-SESSION_CATCHUP_DEST="$HOME/.claude/hooks/session-catchup.sh"
-GUARD_DEST="$HOME/.claude/hooks/standing-order-guard.sh"
-GLOSSARY_DEST="$HOME/.claude/hooks/glossary-skill-guard.sh"
-SCRATCH_DEST="$HOME/.claude/hooks/scratch-init.sh"
-HARVEST_DEST="$HOME/.claude/hooks/harvest-session.sh"
-SHFIXUP_DEST="$HOME/.claude/hooks/sh-file-fixup.sh"
-BLOCK_GUIDE_DEST="$HOME/.claude/hooks/block-claude-code-guide.sh"
-TOOL_OPS_AUDIT_DEST="$HOME/.claude/hooks/tool-ops-session-audit.sh"
-DASHBOARD_DEST="$HOME/.claude/hooks/dashboard-serve.sh"
-DELEG_GUARD_DEST="$HOME/.claude/hooks/delegation-duty-guard.sh"
-HARNESS_DB_START_DEST="$HOME/.claude/hooks/harness-db-sessionstart.sh"
-HARNESS_DB_END_DEST="$HOME/.claude/hooks/harness-db-sessionend.sh"
-CMD_CHANNEL_STOP_DEST="$HOME/.claude/hooks/command-channel-stop.sh"
-FM_IDENTITY_STOP_DEST="$HOME/.claude/hooks/failure-mode-identity-stop.sh"
-FM_VERIFY_STOP_DEST="$HOME/.claude/hooks/failure-mode-verify-stop.sh"
-INTEL_STOP_DEST="$HOME/.claude/hooks/intelligence-stop.sh"
-INTEL_STOP_PY_DEST="$HOME/.claude/hooks/intelligence-stop.py"
-AIT_HARVEST_DEST="$HOME/.claude/hooks/ait-harvest.py"
-
-HOOKS_CHANGED=false
-
 _hook_adopt_label=""
 if [ -n "$USER_REPO_PATH" ]; then _hook_adopt_label="dotprofile"; fi
 
+HOOKS_CHANGED=false
+
 if [ "$DRY_RUN" = "true" ]; then
-    log "[DRY RUN] Would deploy hook: $(display_path "$HOOK_SCRIPT") -> $(display_path "$HOOK_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$SESSION_CATCHUP_SCRIPT") -> $(display_path "$SESSION_CATCHUP_DEST")"
-    log "[DRY RUN] Would deploy helper: $(display_path "$AIT_HARVEST_SCRIPT") -> $(display_path "$AIT_HARVEST_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$GUARD_SCRIPT") -> $(display_path "$GUARD_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$GLOSSARY_SCRIPT") -> $(display_path "$GLOSSARY_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$SCRATCH_SCRIPT") -> $(display_path "$SCRATCH_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$HARVEST_SCRIPT") -> $(display_path "$HARVEST_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$SHFIXUP_SCRIPT") -> $(display_path "$SHFIXUP_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$BLOCK_GUIDE_SCRIPT") -> $(display_path "$BLOCK_GUIDE_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$TOOL_OPS_AUDIT_SCRIPT") -> $(display_path "$TOOL_OPS_AUDIT_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$DASHBOARD_SCRIPT") -> $(display_path "$DASHBOARD_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$DELEG_GUARD_SCRIPT") -> $(display_path "$DELEG_GUARD_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$HARNESS_DB_START_SCRIPT") -> $(display_path "$HARNESS_DB_START_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$HARNESS_DB_END_SCRIPT") -> $(display_path "$HARNESS_DB_END_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$CMD_CHANNEL_STOP_SCRIPT") -> $(display_path "$CMD_CHANNEL_STOP_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$FM_IDENTITY_STOP_SCRIPT") -> $(display_path "$FM_IDENTITY_STOP_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$FM_VERIFY_STOP_SCRIPT") -> $(display_path "$FM_VERIFY_STOP_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$INTEL_STOP_SCRIPT") -> $(display_path "$INTEL_STOP_DEST")"
-    log "[DRY RUN] Would deploy hook: $(display_path "$INTEL_STOP_PY_SCRIPT") -> $(display_path "$INTEL_STOP_PY_DEST")"
+    for hook_name in "${HOOK_FILES[@]}"; do
+        src=$(resolve_hook "$hook_name")
+        log "[DRY RUN] Would deploy hook: $(display_path "$src") -> $(display_path "$HOME/.claude/hooks/$hook_name")"
+    done
     # Stale hook cleanup preview
     for stale_hook in surfacing-duty-stop.sh estimate-refresh-stop.sh intent-sentinel-stop.sh; do
         if [ -f "$HOME/.claude/hooks/$stale_hook" ]; then
@@ -170,10 +141,9 @@ else
 
     deploy_tracker_init
 
-    for hook_pair in "$HOOK_SCRIPT|$HOOK_DEST" "$SESSION_CATCHUP_SCRIPT|$SESSION_CATCHUP_DEST" "$AIT_HARVEST_SCRIPT|$AIT_HARVEST_DEST" "$GUARD_SCRIPT|$GUARD_DEST" "$GLOSSARY_SCRIPT|$GLOSSARY_DEST" "$SCRATCH_SCRIPT|$SCRATCH_DEST" "$HARVEST_SCRIPT|$HARVEST_DEST" "$SHFIXUP_SCRIPT|$SHFIXUP_DEST" "$BLOCK_GUIDE_SCRIPT|$BLOCK_GUIDE_DEST" "$TOOL_OPS_AUDIT_SCRIPT|$TOOL_OPS_AUDIT_DEST" "$DASHBOARD_SCRIPT|$DASHBOARD_DEST" "$DELEG_GUARD_SCRIPT|$DELEG_GUARD_DEST" "$HARNESS_DB_START_SCRIPT|$HARNESS_DB_START_DEST" "$HARNESS_DB_END_SCRIPT|$HARNESS_DB_END_DEST" "$CMD_CHANNEL_STOP_SCRIPT|$CMD_CHANNEL_STOP_DEST" "$FM_IDENTITY_STOP_SCRIPT|$FM_IDENTITY_STOP_DEST" "$FM_VERIFY_STOP_SCRIPT|$FM_VERIFY_STOP_DEST" "$INTEL_STOP_SCRIPT|$INTEL_STOP_DEST" "$INTEL_STOP_PY_SCRIPT|$INTEL_STOP_PY_DEST"; do
-        hook_src="${hook_pair%%|*}"
-        hook_dst="${hook_pair##*|}"
-        hook_name=$(basename "$hook_dst")
+    for hook_name in "${HOOK_FILES[@]}"; do
+        hook_src=$(resolve_hook "$hook_name")
+        hook_dst="$HOME/.claude/hooks/$hook_name"
 
         deploy_managed_file "$(cat "$hook_src")" "$hook_dst" "claude hooks" "$hook_name" "$_hook_adopt_label"
 
@@ -204,8 +174,9 @@ else
     deploy_tracker_summary "claude hooks"
 
     # --- Stale hook cleanup ---
-    # Remove hook files that were previously deployed but are no longer managed.
-    # These were removed from shared/hooks/ in commit e070043 but remain on disk.
+    # Remove hook files previously deployed but no longer managed (deleted from
+    # shared/hooks/ in commit e070043). Registration cleanup is handled in the
+    # node merge block via removeHookEntry.
     STALE_HOOKS="surfacing-duty-stop.sh estimate-refresh-stop.sh intent-sentinel-stop.sh"
     for stale_hook in $STALE_HOOKS; do
         stale_path="$HOME/.claude/hooks/$stale_hook"
@@ -214,7 +185,6 @@ else
             log_ok "Removed stale hook: $stale_hook"
             HOOKS_CHANGED=true
         fi
-        # Also remove any backups of stale hooks
         for bak in "$HOME/.claude/hooks/${stale_hook}.bak."*; do
             if [ -f "$bak" ]; then
                 rm -f "$bak"
@@ -224,19 +194,16 @@ else
     done
 
     # --- Reverse discovery ---
-    # Scan deployed hooks for user-created hooks not in shared or dotprofile
+    # Scan deployed hooks for user-created hooks not in shared or dotprofile.
     for hook_file in "$HOME/.claude/hooks"/*.sh; do
         [ -f "$hook_file" ] || continue
         hook_name=$(basename "$hook_file")
 
-        # Skip if in shared
         [ -f "$REPO_DIR/shared/hooks/$hook_name" ] && continue
-        # Skip if in dotprofile
         if [ -n "$DOTPROFILE_HOOKS" ] && [ -f "$DOTPROFILE_HOOKS/$hook_name" ]; then
             continue
         fi
 
-        # Found a user-created hook
         if [ -n "$USER_REPO_PATH" ]; then
             log "Found user-created hook: $hook_name"
             if [ -c /dev/tty ]; then
@@ -261,53 +228,30 @@ else
 fi
 # --- END hook deployment (replaced by build-deploy) ---
 
-# --- Merge hook into ~/.claude/settings.json ---
+# --- Merge hooks + preferences into ~/.claude/settings.json ---
+# Registrations are GENERATED from the manifest (event, file, matcher) -- the node
+# block loops mergeHookEntry + validation over every manifest entry. No per-hook
+# *_CMD vars or positional argv.
 SETTINGS_FILE="$HOME/.claude/settings.json"
 mkdir -p "$HOME/.claude"
-
-# The hook commands — use deployed copies in ~/.claude/hooks/
-HOOK_CMD="bash \"$HOOK_DEST\""
-SESSION_CATCHUP_CMD="bash \"$SESSION_CATCHUP_DEST\""
-GUARD_CMD="bash \"$GUARD_DEST\""
-GLOSSARY_CMD="bash \"$HOME/.claude/hooks/glossary-skill-guard.sh\""
-SCRATCH_CMD="bash \"$SCRATCH_DEST\""
-HARVEST_CMD="bash \"$HARVEST_DEST\""
-SHFIXUP_CMD="bash \"$SHFIXUP_DEST\""
-BLOCK_GUIDE_CMD="bash \"$BLOCK_GUIDE_DEST\""
-TOOL_OPS_AUDIT_CMD="bash \"$TOOL_OPS_AUDIT_DEST\""
-DASHBOARD_CMD="bash \"$DASHBOARD_DEST\""
-DELEG_GUARD_CMD="bash \"$DELEG_GUARD_DEST\""
-HARNESS_DB_START_CMD="bash \"$HARNESS_DB_START_DEST\""
-HARNESS_DB_END_CMD="bash \"$HARNESS_DB_END_DEST\""
-CMD_CHANNEL_STOP_CMD="bash \"$CMD_CHANNEL_STOP_DEST\""
-FM_IDENTITY_STOP_CMD="bash \"$FM_IDENTITY_STOP_DEST\""
-FM_VERIFY_STOP_CMD="bash \"$FM_VERIFY_STOP_DEST\""
-INTEL_STOP_CMD="bash \"$INTEL_STOP_DEST\""
 
 MERGE_RESULT=$(node -e "
 $SORT_KEYS_JS
 const fs = require('fs');
 const path = require('path');
 const settingsFile = process.argv[1];
-const hookCmd = process.argv[2];
-const guardCmd = process.argv[3];
-const glossaryCmd = process.argv[4];
-const dryRun = process.argv[5] === 'true';
-const force = process.argv[6] === 'true';
-const scratchCmd = process.argv[7];
-const harvestCmd = process.argv[8];
-const shfixupCmd = process.argv[9];
-const blockGuideCmd = process.argv[10];
-const toolOpsAuditCmd = process.argv[11];
-const dashboardCmd = process.argv[12];
-const delegGuardCmd = process.argv[13];
-const harnessDbStartCmd = process.argv[14];
-const harnessDbEndCmd = process.argv[15];
-const cmdChannelStopCmd = process.argv[16];
-const fmIdentityStopCmd = process.argv[17];
-const fmVerifyStopCmd = process.argv[18];
-const intelStopCmd = process.argv[19];
-const sessionCatchupCmd = process.argv[20];
+const regsJson = process.argv[2];
+const dryRun = process.argv[3] === 'true';
+const force = process.argv[4] === 'true';
+const home = process.env.HOME || process.env.USERPROFILE;
+
+// --- Registrations from the manifest (computed in bash -> REGS_JSON argv) ---
+const regs = JSON.parse(regsJson).map(r => ({
+    event: r.event,
+    hookId: r.file,
+    matcher: r.matcher || '',
+    cmd: 'bash \"' + path.join(home, '.claude', 'hooks', r.file) + '\"'
+}));
 
 // --- BEGIN claude preferences (replaced by build-deploy) ---
 let autoMemory = true;
@@ -325,7 +269,7 @@ try {
             if (typeof pf.claude.effortLevel === 'string' && validEffortLevels.includes(pf.claude.effortLevel)) {
                 effortLevel = pf.claude.effortLevel;
             } else if (pf.claude.effortLevel !== undefined) {
-                console.error('Warning: invalid effortLevel "' + pf.claude.effortLevel + '" (valid: ' + validEffortLevels.join(', ') + ')');
+                console.error('Warning: invalid effortLevel \"' + pf.claude.effortLevel + '\" (valid: ' + validEffortLevels.join(', ') + ')');
             }
         }
     }
@@ -348,14 +292,11 @@ const beforeKeys = Object.keys(settings);
 // --- Merge hooks ---
 if (!settings.hooks) settings.hooks = {};
 
-// Helper: ensure exactly one entry for a hookId in an event array.
-// Updates the command if found, adds if not, deduplicates extras.
+// Ensure exactly one entry for a hookId in an event array (update/add/dedupe).
 function mergeHookEntry(eventName, hookId, matcher, cmd, hookType) {
     hookType = hookType || 'command';
     if (!Array.isArray(settings.hooks[eventName])) settings.hooks[eventName] = [];
     const arr = settings.hooks[eventName];
-
-    // Find first matching entry and update it
     let found = false;
     for (const rule of arr) {
         if (rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId))) {
@@ -374,8 +315,6 @@ function mergeHookEntry(eventName, hookId, matcher, cmd, hookType) {
     if (!found) {
         arr.push({ matcher, hooks: [{ type: hookType, command: cmd }] });
     }
-
-    // Deduplicate: keep only the first entry matching hookId
     let seen = false;
     settings.hooks[eventName] = arr.filter(rule => {
         const isMatch = rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId));
@@ -387,41 +326,24 @@ function mergeHookEntry(eventName, hookId, matcher, cmd, hookType) {
     });
 }
 
-// Helper: remove all entries for a hookId from an event array.
-// Used to clean up stale hook registrations after hooks are deleted.
+// Remove all entries for a hookId from an event array.
 function removeHookEntry(eventName, hookId) {
     if (!Array.isArray(settings.hooks[eventName])) return;
     settings.hooks[eventName] = settings.hooks[eventName].filter(rule => {
         return !(rule.hooks && rule.hooks.some(h => h.command && h.command.includes(hookId)));
     });
-    // Remove the event key entirely if empty
     if (settings.hooks[eventName].length === 0) {
         delete settings.hooks[eventName];
     }
 }
 
-// Remove stale Stop hooks (deleted from shared/hooks/ in commit e070043)
+// Remove stale hooks (deleted from shared/hooks/ in commit e070043).
 removeHookEntry('Stop', 'surfacing-duty-stop.sh');
 removeHookEntry('Stop', 'estimate-refresh-stop.sh');
 removeHookEntry('Stop', 'intent-sentinel-stop.sh');
 
-mergeHookEntry('SessionEnd', 'session-archive.sh', '', hookCmd);
-mergeHookEntry('SessionEnd', 'harvest-session.sh', '', harvestCmd);
-mergeHookEntry('SessionStart', 'scratch-init.sh', '', scratchCmd);
-mergeHookEntry('SessionStart', 'session-catchup.sh', '', sessionCatchupCmd);
-mergeHookEntry('PreToolUse', 'standing-order-guard.sh', 'Bash', guardCmd);
-mergeHookEntry('PreToolUse', 'glossary-skill-guard.sh', 'Read|Grep', glossaryCmd);
-mergeHookEntry('PostToolUse', 'sh-file-fixup.sh', 'Write|Edit', shfixupCmd);
-mergeHookEntry('PreToolUse', 'block-claude-code-guide.sh', 'Agent', blockGuideCmd);
-mergeHookEntry('SessionEnd', 'tool-ops-session-audit.sh', '', toolOpsAuditCmd);
-mergeHookEntry('SessionStart', 'dashboard-serve.sh', '', dashboardCmd);
-mergeHookEntry('PreToolUse', 'delegation-duty-guard.sh', 'Agent', delegGuardCmd);
-mergeHookEntry('SessionStart', 'harness-db-sessionstart.sh', '', harnessDbStartCmd);
-mergeHookEntry('SessionEnd', 'harness-db-sessionend.sh', '', harnessDbEndCmd);
-mergeHookEntry('Stop', 'command-channel-stop.sh', '', cmdChannelStopCmd);
-mergeHookEntry('Stop', 'failure-mode-identity-stop.sh', '', fmIdentityStopCmd);
-mergeHookEntry('Stop', 'failure-mode-verify-stop.sh', '', fmVerifyStopCmd);
-mergeHookEntry('Stop', 'intelligence-stop.sh', '', intelStopCmd);
+// Register every manifest hook (generated -- no hardcoded list).
+for (const r of regs) mergeHookEntry(r.event, r.hookId, r.matcher, r.cmd);
 
 // --- Track old values for change reporting ---
 const oldAutoMemory = settings.autoMemoryEnabled;
@@ -433,7 +355,6 @@ settings.autoMemoryEnabled = autoMemory;
 settings.alwaysThinkingEnabled = alwaysThinking;
 if (effortLevel) settings.effortLevel = effortLevel;
 
-// --- Detect preference changes ---
 const prefChanges = [];
 if (oldAutoMemory !== settings.autoMemoryEnabled) prefChanges.push('CHANGED: autoMemoryEnabled: ' + (oldAutoMemory !== undefined ? oldAutoMemory : '(not set)') + ' -> ' + settings.autoMemoryEnabled);
 if (oldAlwaysThinking !== settings.alwaysThinkingEnabled) prefChanges.push('CHANGED: alwaysThinkingEnabled: ' + (oldAlwaysThinking !== undefined ? oldAlwaysThinking : '(not set)') + ' -> ' + settings.alwaysThinkingEnabled);
@@ -449,8 +370,7 @@ if (dryRun) {
     console.error('  Managed fields: ' + managedKeys.join(', '));
     if (lostKeys.length > 0) console.error('  CLOBBER WARNING: would lose: ' + lostKeys.join(', '));
     if (corrupt) console.error('  File is corrupt -- --force required');
-    console.error('  SessionEnd hook: ' + hookCmd);
-    console.error('  PreToolUse hook: ' + guardCmd);
+    console.error('  Registered hooks: ' + regs.length);
     console.error('  autoMemoryEnabled: ' + autoMemory);
     console.error('  alwaysThinkingEnabled: ' + alwaysThinking);
     if (effortLevel) console.error('  effortLevel: ' + effortLevel);
@@ -480,57 +400,29 @@ if (dryRun) {
         if (effortLevel) _required.push('effortLevel');
         const _missing = _required.filter(k => !(k in _v));
         if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
-        // Validate hook arrays have exactly one entry per managed hook
-        const seArchiveCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('session-archive.sh'))).length;
-        const seHarvestCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('harvest-session.sh'))).length;
-        const ssCount = (_v.hooks.SessionStart || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('scratch-init.sh'))).length;
-        const scCount = (_v.hooks.SessionStart || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('session-catchup.sh'))).length;
-        const ptCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('standing-order-guard.sh'))).length;
-        if (seArchiveCount !== 1) { console.error('Validation failed: expected 1 SessionEnd session-archive hook, got ' + seArchiveCount); process.exit(1); }
-        if (seHarvestCount !== 1) { console.error('Validation failed: expected 1 SessionEnd harvest-session hook, got ' + seHarvestCount); process.exit(1); }
-        if (ssCount !== 1) { console.error('Validation failed: expected 1 SessionStart scratch-init hook, got ' + ssCount); process.exit(1); }
-        if (scCount !== 1) { console.error('Validation failed: expected 1 SessionStart session-catchup hook, got ' + scCount); process.exit(1); }
-        if (ptCount !== 1) { console.error('Validation failed: expected 1 PreToolUse standing-order-guard hook, got ' + ptCount); process.exit(1); }
-        const glCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('glossary-skill-guard.sh'))).length;
-        if (glCount !== 1) { console.error('Validation failed: expected 1 PreToolUse glossary-skill-guard hook, got ' + glCount); process.exit(1); }
-        const bgCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('block-claude-code-guide.sh'))).length;
-        if (bgCount !== 1) { console.error('Validation failed: expected 1 PreToolUse block-claude-code-guide hook, got ' + bgCount); process.exit(1); }
-        const toaCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('tool-ops-session-audit.sh'))).length;
-        if (toaCount !== 1) { console.error('Validation failed: expected 1 SessionEnd tool-ops-session-audit hook, got ' + toaCount); process.exit(1); }
-        const dashCount = (_v.hooks.SessionStart || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('dashboard-serve.sh'))).length;
-        if (dashCount !== 1) { console.error('Validation failed: expected 1 SessionStart dashboard-serve hook, got ' + dashCount); process.exit(1); }
-        const dgCount = (_v.hooks.PreToolUse || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('delegation-duty-guard.sh'))).length;
-        if (dgCount !== 1) { console.error('Validation failed: expected 1 PreToolUse delegation-duty-guard hook, got ' + dgCount); process.exit(1); }
-        const hdbStartCount = (_v.hooks.SessionStart || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('harness-db-sessionstart.sh'))).length;
-        if (hdbStartCount !== 1) { console.error('Validation failed: expected 1 SessionStart harness-db-sessionstart hook, got ' + hdbStartCount); process.exit(1); }
-        const hdbEndCount = (_v.hooks.SessionEnd || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('harness-db-sessionend.sh'))).length;
-        if (hdbEndCount !== 1) { console.error('Validation failed: expected 1 SessionEnd harness-db-sessionend hook, got ' + hdbEndCount); process.exit(1); }
-        const ccStopCount = (_v.hooks.Stop || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('command-channel-stop.sh'))).length;
-        if (ccStopCount !== 1) { console.error('Validation failed: expected 1 Stop command-channel-stop hook, got ' + ccStopCount); process.exit(1); }
-        const fmiStopCount = (_v.hooks.Stop || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('failure-mode-identity-stop.sh'))).length;
-        if (fmiStopCount !== 1) { console.error('Validation failed: expected 1 Stop failure-mode-identity-stop hook, got ' + fmiStopCount); process.exit(1); }
-        const fmvStopCount = (_v.hooks.Stop || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('failure-mode-verify-stop.sh'))).length;
-        if (fmvStopCount !== 1) { console.error('Validation failed: expected 1 Stop failure-mode-verify-stop hook, got ' + fmvStopCount); process.exit(1); }
-        const intelStopCount = (_v.hooks.Stop || []).filter(r => r.hooks && r.hooks.some(h => h.command && h.command.includes('intelligence-stop.sh'))).length;
-        if (intelStopCount !== 1) { console.error('Validation failed: expected 1 Stop intelligence-stop hook, got ' + intelStopCount); process.exit(1); }
+
+        // Validate: every manifest hook registered exactly once (generated check).
+        for (const r of regs) {
+            const c = (_v.hooks[r.event] || []).filter(rule => rule.hooks && rule.hooks.some(h => h.command && h.command.includes(r.hookId))).length;
+            if (c !== 1) { console.error('Validation failed: expected 1 ' + r.event + ' ' + r.hookId + ' hook, got ' + c); process.exit(1); }
+        }
 
         // Validate hook schema: command-type must have command field,
-        // prompt-type must have prompt field (not command).
-        // Catches the type mismatch that broke settings.json in v0.60.
+        // prompt-type must have prompt field (not command). (v0.60 incident guard.)
         for (const [event, rules] of Object.entries(_v.hooks || {})) {
             for (const rule of (rules || [])) {
                 for (const h of (rule.hooks || [])) {
                     if (h.type === 'command' && !h.command) {
-                        console.error('Validation failed: ' + event + ' hook has type "command" but no command field');
+                        console.error('Validation failed: ' + event + ' hook has type \"command\" but no command field');
                         process.exit(1);
                     }
                     if (h.type === 'prompt') {
                         if (!h.prompt) {
-                            console.error('Validation failed: ' + event + ' hook has type "prompt" but no prompt field. Prompt-type hooks require a static string in the prompt field, not a command path.');
+                            console.error('Validation failed: ' + event + ' hook has type \"prompt\" but no prompt field.');
                             process.exit(1);
                         }
                         if (h.command) {
-                            console.error('Validation failed: ' + event + ' hook has type "prompt" with a command field. Prompt-type hooks use the prompt field for static text. Use type "command" for script execution.');
+                            console.error('Validation failed: ' + event + ' hook has type \"prompt\" with a command field.');
                             process.exit(1);
                         }
                     }
@@ -542,7 +434,7 @@ if (dryRun) {
         prefChanges.forEach(c => console.log(c));
     }
 }
-" "$SETTINGS_FILE" "$HOOK_CMD" "$GUARD_CMD" "$GLOSSARY_CMD" "$DRY_RUN" "$FORCE" "$SCRATCH_CMD" "$HARVEST_CMD" "$SHFIXUP_CMD" "$BLOCK_GUIDE_CMD" "$TOOL_OPS_AUDIT_CMD" "$DASHBOARD_CMD" "$DELEG_GUARD_CMD" "$HARNESS_DB_START_CMD" "$HARNESS_DB_END_CMD" "$CMD_CHANNEL_STOP_CMD" "$FM_IDENTITY_STOP_CMD" "$FM_VERIFY_STOP_CMD" "$INTEL_STOP_CMD" "$SESSION_CATCHUP_CMD")
+" "$SETTINGS_FILE" "$REGS_JSON" "$DRY_RUN" "$FORCE")
 
 # Parse merge result: first line is status, CHANGED: lines are key changes
 MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)
@@ -551,8 +443,6 @@ case "$MERGE_STATUS" in
     ok)
         log_ok "Settings deployed to $(display_path "$SETTINGS_FILE")"
         HOOKS_CHANGED=true
-        log "  SessionEnd hook: $HOOK_CMD"
-        log "  PreToolUse hook: $GUARD_CMD"
         log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"
         log "  alwaysThinkingEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).alwaysThinkingEnabled)")"
         log "  effortLevel: $(node -e "const s=JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')); console.log(s.effortLevel || '(not set)')")"

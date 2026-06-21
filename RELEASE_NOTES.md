@@ -12,6 +12,40 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.71.0 -- Hook registration generated from the manifest + Explore agent block (2026-06-20)
+
+Closes the recurring hook-registration drift class (7 incidents across v0.60-v0.70, one silent for ~3 months) by making `shared/hooks/hooks-manifest.json` the **generator** of hook deployment + registration, not merely an audit source. Adding a hook is now one manifest entry -- no parallel hand-maintained lists in `setup-user-hooks.{sh,ps1}` + `build-deploy.sh`. Full RCA via `/investigate` (report harvested this session).
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Manifest-as-generator** (issue [#7](https://github.com/nobul-tech/aitools/issues/7) / plan §5) -- `setup-user-hooks.{sh,ps1}` and `build-deploy.sh` (§15-16) now GENERATE hook deployment + `settings.json` registration by looping over `hooks-manifest.json`. The dev path reads the manifest at runtime; the self-contained MDM deploy path embeds the registration list (`REGS_JSON` / `$regs`) at build time, so the node merge block is identical dev and deploy. Replaces ~10 hardcoded touchpoints per hook (resolve / dest / cmd / positional `argv` / `mergeHookEntry` / validation) across two languages. |
+| 2 | **`block-explore-agent.sh`** (PreToolUse on Agent) -- blocks the built-in Explore subagent by operator policy, redirecting research/search delegation to `general-purpose`. Mirrors `block-claude-code-guide.sh`; blocklist-driven (extend `BLOCKED_TYPES`). |
+
+### Bug fixes
+
+| # | Severity | Change |
+|---|----------|--------|
+| 3 | High | **MDM hook preferences emitted invalid JS** -- the deploy (MDM) `setup-user-hooks` node merge block produced `const effortLevel = high;` (unquoted -> ReferenceError) whenever `effortLevel` was set: the embedded `"high"` double-quotes collapsed inside the bash-double-quoted `node -e "..."`. Pre-existing; never caught because the generated deploy script was never run. Fixed (single-quoted JS literal). It broke the `settings.json` merge on any MDM machine with `effortLevel` set. |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 4 | **`check-hook-parity.py`** (post-push step 32) rewritten -- the old audit extracted hardcoded `mergeHookEntry` calls (now gone). It now verifies the new invariant: both scripts are manifest-driven and no hardcoded per-hook registration list has resurfaced. |
+| 5 | **PowerShell installed** (`brew install powershell/tap/powershell`) -- closes the standing pwsh-absent gap (registry-listed, no install step). `.ps1` syntax validation now runs in `build-deploy` + `check-post-push` step 6 (both PASS); previously-deferred `.ps1` parse-checks are green. |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `shared/hooks/block-explore-agent.sh` | PreToolUse[Agent] hook blocking the Explore subagent |
+
+**Verified on:** macOS -- all `.sh` `bash -n` clean; setup-user-hooks dev path strip-and-regenerate proven (18 hooks register from the manifest alone, idempotent); generated deploy `.sh` dry-run + live verified self-contained; all `.ps1` parse-clean via pwsh; PowerShell `MergeHookEntry` + `$regs` loop proven (18 register once, idempotent, block-explore matcher=Agent); `check-post-push -Extensive` **0 FAIL** (27 PASS / 3 SKIP / 4 WARN). The full `.ps1` run is OS-guarded to Windows; the first Windows `aitools install` should confirm end-to-end.
+
+---
+
 ## v0.70.0 -- Harness-owned shell integration + deterministic tool resolution (2026-06-20)
 
 Workstream A of the managed-tool resolution design (`plans/tooling-resolution-and-artifact-registry.md`): the harness now owns PATH precedence in the login profile and resolves managed Python deterministically, so the uv python shim / cursor-agent / brew bash win in the harness's contexts instead of being shadowed.
