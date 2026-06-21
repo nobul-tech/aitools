@@ -1,0 +1,3 @@
+{"t":"2026-06-21T17:34:48Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":32.5,"context_used":65032,"agentic_turns":2,"intel_count":0}}
+{"t":"2026-06-21T18:06:39Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":70.9,"context_used":141781,"agentic_turns":19,"intel_count":0}}
+{"t":"2026-06-21T18:15:19Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":75.7,"context_used":151414,"agentic_turns":12,"intel_count":0}}

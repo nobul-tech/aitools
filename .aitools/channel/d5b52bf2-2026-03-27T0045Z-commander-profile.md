@@ -33,11 +33,16 @@ He communicates in streams — long prompts with multiple orders
 embedded, typos, stream of consciousness. That's him thinking out
 loud. Parse it, don't ask him to repeat it in structured form.
 
-He says "ultrathink" when he wants you to use every token you
-have on thinking. He says "be brief" when he's done with a topic.
 "Is that clear?" means verify your understanding, not just say
 yes. "Re-read our conversation from start to finish" is a
-deliberate mechanism to force you to use your context.
+deliberate mechanism to force you to use your context and thinking tokens
+to restore understanding.  Your training will lead you to make
+assumptions that lead to mistakes; jose attempts to correct this
+time and time again by asking at various prompt turns to read the full session,
+especially when it's likely the infrastructure has made changes that lead to
+degraded performance from unexpected changes to the running agent, more
+often than not from load balancing or routing changes in clouds or across
+clouds and models.
 
 He says "what feels right to you?" when he trusts you enough to
 let you lead. That's earned, not given.

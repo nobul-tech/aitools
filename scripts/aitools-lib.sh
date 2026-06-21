@@ -1057,6 +1057,53 @@ deploy_managed_file() {
 }
 
 # ---------------------------------------------------------------------------
+# Write an adopted file back to its source-of-truth target(s).
+#
+# Companion to deploy_managed_file: when the diff review returns
+# "accept & adopt", the local (deployed) file won and must propagate back to
+# every canonical source it was deployed from -- e.g. the user's dotprofile AND
+# the shared/ template. Centralizes the backup+rotate+copy+log that callers
+# used to hand-roll, so all adopt paths behave identically.
+#
+# For each target: rotate a timestamped backup of the existing target (via
+# backup_file -- keeps 20, prunes oldest), ensure its parent dir, then copy the
+# adopted content over it. Empty target args are skipped, so callers may pass an
+# optional path (e.g. "${VAR:+...}") without branching.
+#
+# Args:
+#   $1     = adopted source file to copy FROM (the deployed file on disk)
+#   $2..$N = one or more target paths to write back to (empty entries skipped)
+#
+# Sets ADOPT_TARGETS_WRITTEN to the count written. Returns 0 if >=1 target was
+# written, 1 otherwise (source missing or no non-empty targets).
+# ---------------------------------------------------------------------------
+ADOPT_TARGETS_WRITTEN=0
+adopt_managed_file() {
+    local src="$1"; shift
+    ADOPT_TARGETS_WRITTEN=0
+
+    if [ ! -f "$src" ]; then
+        log_error "adopt_managed_file: adopted source not found: $(display_path "$src")"
+        return 1
+    fi
+
+    local target
+    for target in "$@"; do
+        [ -n "$target" ] || continue
+        backup_file "$target"                 # rotation; no-op if target absent
+        mkdir -p "$(dirname "$target")"
+        if cp "$src" "$target"; then
+            log_ok "Adopted -> $(display_path "$target")"
+            ADOPT_TARGETS_WRITTEN=$((ADOPT_TARGETS_WRITTEN + 1))
+        else
+            log_error "adopt_managed_file: failed to write $(display_path "$target")"
+        fi
+    done
+
+    [ "$ADOPT_TARGETS_WRITTEN" -gt 0 ] && return 0 || return 1
+}
+
+# ---------------------------------------------------------------------------
 # Deploy tracker: centralizes outcome counting and summary writing for
 # loops that deploy multiple managed files (rules, skills, hooks).
 # ---------------------------------------------------------------------------

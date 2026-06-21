@@ -1077,6 +1077,53 @@ function Deploy-ManagedFile {
 }
 
 # ---------------------------------------------------------------------------
+# Write an adopted file back to its source-of-truth target(s).
+#
+# Companion to Deploy-ManagedFile: when the diff review returns "accept & adopt",
+# the local (deployed) file won and must propagate back to every canonical
+# source it was deployed from -- e.g. the dotprofile AND the shared/ template.
+# Centralizes the backup+rotate+copy+log that callers used to hand-roll, so all
+# adopt paths behave identically.
+#
+# For each target: rotate a timestamped backup of the existing target (via
+# Backup-File -- keeps 20, prunes oldest), ensure its parent dir, then copy the
+# adopted content over it. Empty/null targets are skipped so callers may pass an
+# optional path without branching.
+#
+# Returns the count of targets written.
+# ---------------------------------------------------------------------------
+function Adopt-ManagedFile {
+    param(
+        [Parameter(Mandatory)][string]$SourceFile,
+        [string[]]$Targets
+    )
+
+    if (-not (Test-Path $SourceFile)) {
+        LogError "Adopt-ManagedFile: adopted source not found: $SourceFile"
+        return 0
+    }
+
+    $written = 0
+    foreach ($target in $Targets) {
+        if (-not $target) { continue }
+        Backup-File -FilePath $target          # rotation; no-op if target absent
+        $targetDir = Split-Path -Parent $target
+        if ($targetDir -and -not (Test-Path $targetDir)) {
+            New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+        }
+        try {
+            Copy-Item -Path $SourceFile -Destination $target -Force -ErrorAction Stop
+            LogOk "Adopted -> $target"
+            $written++
+        } catch {
+            LogError "Adopt-ManagedFile: failed to write ${target}: $_"
+        }
+    }
+
+    return $written
+}
+
+# ---------------------------------------------------------------------------
 # Deploy tracker: centralizes outcome counting and summary writing for
 # loops that deploy multiple managed files (rules, skills, hooks).
 # ---------------------------------------------------------------------------

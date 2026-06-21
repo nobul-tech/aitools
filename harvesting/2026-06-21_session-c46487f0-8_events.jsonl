@@ -1,0 +1,11 @@
+{"t":"2026-06-21T19:05:35Z","type":"hook_block","src":"sog","d":{"check":"subshell"}}
+{"t":"2026-06-21T19:05:55Z","type":"hook_fire","src":"fixup","d":{"file":"inspect-db.sh","action":"+x"}}
+{"t":"2026-06-21T19:06:18Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":37.2,"context_used":74498,"agentic_turns":11,"intel_count":0}}
+{"t":"2026-06-21T19:09:12Z","type":"hook_fire","src":"fixup","d":{"file":"set-schwerpunkt.sh","action":"+x"}}
+{"t":"2026-06-21T19:18:46Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":50.9,"context_used":101783,"agentic_turns":14,"intel_count":0}}
+{"t":"2026-06-21T19:44:14Z","type":"hook_fire","src":"fixup","d":{"file":"test-identity.sh","action":"+x"}}
+{"t":"2026-06-21T19:44:39Z","type":"hook_fire","src":"fixup","d":{"file":"smoke-hook.sh","action":"+x"}}
+{"t":"2026-06-21T19:59:14Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":67.4,"context_used":134717,"agentic_turns":5,"intel_count":0}}
+{"t":"2026-06-21T20:05:05Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":76.2,"context_used":152468,"agentic_turns":13,"intel_count":0}}
+{"t":"2026-06-21T20:16:22Z","type":"hook_fire","src":"fixup","d":{"file":"test-adopt-helper.sh","action":"+x"}}
+{"t":"2026-06-21T20:16:44Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":117.1,"context_used":234199,"agentic_turns":12,"intel_count":0}}

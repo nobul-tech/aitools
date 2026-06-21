@@ -1,0 +1,6 @@
+{"t":"2026-06-21T18:21:47Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":32.5,"context_used":65095,"agentic_turns":2,"intel_count":0}}
+{"t":"2026-06-21T18:24:46Z","type":"hook_block","src":"sog","d":{"check":"cat"}}
+{"t":"2026-06-21T18:25:54Z","type":"hook_block","src":"bea","d":{"blocked":"Explore"}}
+{"t":"2026-06-21T18:25:54Z","type":"hook_block","src":"bccg","d":{"blocked":"claude-code-guide"}}
+{"t":"2026-06-21T18:26:38Z","type":"hook_block","src":"sog","d":{"check":"scratch"}}
+{"t":"2026-06-21T18:27:40Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":48.2,"context_used":96445,"agentic_turns":15,"intel_count":0}}

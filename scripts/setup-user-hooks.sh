@@ -149,16 +149,22 @@ else
 
         case "$MANAGED_FILE_RESULT" in
             "accept & adopt")
-                if [ -n "$USER_REPO_PATH" ]; then
-                    mkdir -p "$USER_REPO_PATH/claude/hooks"
-                    cp "$hook_dst" "$USER_REPO_PATH/claude/hooks/$hook_name"
-                    log_ok "Adopted hook to dotprofile: $hook_name"
-                    if [ -c /dev/tty ]; then
+                # Adopt: deployed (local) wins -> write back to BOTH canonical
+                # sources via adopt_managed_file (rotated backups + copy + log).
+                # Hooks deploy verbatim, so shared/ + dotprofile each get a
+                # straight copy. shared/hooks is absent in MDM deploys; dotprofile
+                # is absent when no user repo is configured -- empty targets skip.
+                _adopt_targets=()
+                [ -d "$REPO_DIR/shared/hooks" ] && _adopt_targets+=("$REPO_DIR/shared/hooks/$hook_name")
+                [ -n "$USER_REPO_PATH" ] && _adopt_targets+=("$USER_REPO_PATH/claude/hooks/$hook_name")
+                if [ "${#_adopt_targets[@]}" -gt 0 ]; then
+                    adopt_managed_file "$hook_dst" "${_adopt_targets[@]}"
+                    if [ -n "$USER_REPO_PATH" ] && [ -c /dev/tty ]; then
                         printf '  Review: cd %s && git diff\n' \
                             "$(display_path "$USER_REPO_PATH")" > /dev/tty
                     fi
                 else
-                    log_warn "Cannot adopt: no user repo configured (run 'aitools user init')"
+                    log_warn "Cannot adopt: no shared/ or user repo target (run 'aitools user init')"
                 fi
                 ;;
             created|updated)
@@ -214,9 +220,9 @@ else
                 read -r choice < /dev/tty
                 case "$choice" in
                     a|adopt)
-                        mkdir -p "$USER_REPO_PATH/claude/hooks"
-                        cp "$hook_file" "$USER_REPO_PATH/claude/hooks/$hook_name"
-                        log_ok "Adopted user hook to dotprofile: $hook_name"
+                        # Net-new user hook -> dotprofile only (not a managed
+                        # shared/ hook). Same helper for consistent backups.
+                        adopt_managed_file "$hook_file" "$USER_REPO_PATH/claude/hooks/$hook_name"
                         ;;
                     *)
                         log "Skipped adoption of $hook_name"

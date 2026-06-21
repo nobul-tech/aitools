@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS session (
     ended_at TEXT,
     version REAL NOT NULL DEFAULT 1.0,
     platform TEXT,
-    agent_identity TEXT
+    agent_identity TEXT  -- 'Session Commander <session_id[:10]>', set at session start
 );
 
 CREATE TABLE IF NOT EXISTS missions (
@@ -443,6 +443,11 @@ def session_prefix(session_id: str) -> str:
     return session_id[:10]
 
 
+def commander_name(session_id: str) -> str:
+    """Session agent identity: 'Session Commander <short-id>' (short-id == DB-file prefix)."""
+    return f"Session Commander {session_prefix(session_id)}"
+
+
 def get_session_db_path(project_root: Path, session_id: str) -> Path:
     """Return the path to a session's DB file."""
     return project_root / ".aitools" / "sessions" / f"{session_prefix(session_id)}.db"
@@ -550,16 +555,27 @@ def cmd_session_start(args: argparse.Namespace) -> int:
         (session_id,),
     ).fetchone()
 
+    identity = commander_name(session_id)
+
     if existing is None:
         conn.execute(
             """INSERT INTO session
-               (session_id, schwerpunkt, started_at, updated_at, platform)
-               VALUES (?, ?, ?, ?, ?)""",
-            (session_id, schwerpunkt, now, now, platform),
+               (session_id, schwerpunkt, started_at, updated_at, platform, agent_identity)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (session_id, schwerpunkt, now, now, platform, identity),
         )
         conn.commit()
         print(f"Session started: {session_id}")
     else:
+        # Idempotent back-fill: populate identity for sessions created before
+        # identity tracking existed; never clobber an already-set value.
+        conn.execute(
+            """UPDATE session SET agent_identity = ?
+               WHERE session_id = ?
+                 AND (agent_identity IS NULL OR agent_identity = '')""",
+            (identity, session_id),
+        )
+        conn.commit()
         print(f"Session already exists: {session_id}")
 
     conn.close()

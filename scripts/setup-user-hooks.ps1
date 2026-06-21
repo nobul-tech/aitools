@@ -120,15 +120,19 @@ if ($DryRun) {
 
         switch ($hookResult) {
             "accept & adopt" {
-                if ($userRepoPath) {
-                    $adoptDir = Join-Path $userRepoPath "claude\hooks"
-                    if (-not (Test-Path $adoptDir)) {
-                        New-Item -ItemType Directory -Path $adoptDir -Force | Out-Null
-                    }
-                    Copy-Item -Path $dst -Destination (Join-Path $adoptDir $hookName) -Force -ErrorAction Stop
-                    LogOk "Adopted hook to dotprofile: $hookName"
+                # Adopt: deployed (local) wins -> write back to BOTH canonical
+                # sources via Adopt-ManagedFile (rotated backups + copy + log).
+                # Hooks deploy verbatim, so shared/ + dotprofile each get a
+                # straight copy. shared/hooks is absent in MDM deploys; dotprofile
+                # is absent when no user repo is configured -- empty targets skip.
+                $adoptTargets = @()
+                $sharedHooks = Join-Path $repoDir "shared\hooks"
+                if (Test-Path $sharedHooks) { $adoptTargets += (Join-Path $sharedHooks $hookName) }
+                if ($userRepoPath) { $adoptTargets += (Join-Path $userRepoPath "claude\hooks\$hookName") }
+                if ($adoptTargets.Count -gt 0) {
+                    Adopt-ManagedFile -SourceFile $dst -Targets $adoptTargets | Out-Null
                 } else {
-                    LogWarn "Cannot adopt: no user repo configured (run 'aitools user init')"
+                    LogWarn "Cannot adopt: no shared/ or user repo target (run 'aitools user init')"
                 }
             }
             { $_ -in @("created", "updated") } {
@@ -186,12 +190,10 @@ if ($DryRun) {
                 }
                 switch ($choice) {
                     { $_ -in @("a", "adopt") } {
-                        $adoptDir = Join-Path $userRepoPath "claude\hooks"
-                        if (-not (Test-Path $adoptDir)) {
-                            New-Item -ItemType Directory -Path $adoptDir -Force | Out-Null
-                        }
-                        Copy-Item -Path $hookFile.FullName -Destination (Join-Path $adoptDir $hookName) -Force
-                        LogOk "Adopted user hook to dotprofile: $hookName"
+                        # Net-new user hook -> dotprofile only (not a managed
+                        # shared/ hook). Same helper for consistent backups.
+                        Adopt-ManagedFile -SourceFile $hookFile.FullName `
+                            -Targets @(Join-Path $userRepoPath "claude\hooks\$hookName") | Out-Null
                     }
                     default {
                         Log "Skipped adoption of $hookName"
