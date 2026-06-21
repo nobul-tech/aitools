@@ -1,0 +1,14 @@
+{"t":"2026-06-21T20:47:49Z","type":"hook_block","src":"sog","d":{"check":"semicolon"}}
+{"t":"2026-06-21T20:47:50Z","type":"hook_block","src":"sog","d":{"check":"semicolon"}}
+{"t":"2026-06-21T20:48:14Z","type":"hook_block","src":"sog","d":{"check":"or"}}
+{"t":"2026-06-21T20:48:29Z","type":"hook_fire","src":"fixup","d":{"file":"run-hooktest.sh","action":"+x"}}
+{"t":"2026-06-21T20:48:32Z","type":"hook_block","src":"sog","d":{"check":"scratch"}}
+{"t":"2026-06-21T20:49:26Z","type":"hook_fire","src":"fixup","d":{"file":"test-jsonfield.sh","action":"+x"}}
+{"t":"2026-06-21T20:59:45Z","type":"hook_block","src":"sog","d":{"check":"scratch"}}
+{"t":"2026-06-21T20:59:45Z","type":"hook_block","src":"sog","d":{"check":"scratch"}}
+{"t":"2026-06-21T20:59:45Z","type":"hook_fire","src":"sog","d":{"result":"allow"}}
+{"t":"2026-06-21T20:59:45Z","type":"hook_block","src":"sog","d":{"check":"sed"}}
+{"t":"2026-06-21T20:59:45Z","type":"hook_block","src":"sog","d":{"check":"echo-redirect"}}
+{"t":"2026-06-21T21:04:23Z","type":"hook_block","src":"sog","d":{"check":"scratch"}}
+{"t":"2026-06-21T21:04:49Z","type":"hook_fire","src":"sog","d":{"result":"allow"}}
+{"t":"2026-06-21T21:05:13Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":65.1,"context_used":130221,"agentic_turns":17,"intel_count":0}}

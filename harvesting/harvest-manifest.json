@@ -3373,6 +3373,116 @@
       "status": "harvested",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
+    },
+    "2026-06-21_session-9f2f2f47-e_.intelligence-last-check": {
+      "harvested": "2026-06-21",
+      "session": "aitools/2026-06-21_9f2f2f47-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-21"
+    },
+    "2026-06-21_session-9f2f2f47-e_events.jsonl": {
+      "harvested": "2026-06-21",
+      "session": "aitools/2026-06-21_9f2f2f47-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-21"
+    },
+    "2026-06-21_session-9f2f2f47-e_f-clean.json": {
+      "harvested": "2026-06-21",
+      "session": "aitools/2026-06-21_9f2f2f47-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-21"
+    },
+    "2026-06-21_session-9f2f2f47-e_f-pipe.json": {
+      "harvested": "2026-06-21",
+      "session": "aitools/2026-06-21_9f2f2f47-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-21"
+    },
+    "2026-06-21_session-9f2f2f47-e_f-redir.json": {
+      "harvested": "2026-06-21",
+      "session": "aitools/2026-06-21_9f2f2f47-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-21"
+    },
+    "2026-06-21_session-9f2f2f47-e_f-sed.json": {
+      "harvested": "2026-06-21",
+      "session": "aitools/2026-06-21_9f2f2f47-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-21"
+    },
+    "2026-06-21_session-9f2f2f47-e_ml-gitquotes.json": {
+      "harvested": "2026-06-21",
+      "session": "aitools/2026-06-21_9f2f2f47-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-21"
+    },
+    "2026-06-21_session-9f2f2f47-e_ml-noquotes.json": {
+      "harvested": "2026-06-21",
+      "session": "aitools/2026-06-21_9f2f2f47-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-21"
+    },
+    "2026-06-21_session-9f2f2f47-e_ml-quotes.json": {
+      "harvested": "2026-06-21",
+      "session": "aitools/2026-06-21_9f2f2f47-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-21"
+    },
+    "2026-06-21_session-9f2f2f47-e_run-hooktest.sh": {
+      "harvested": "2026-06-21",
+      "session": "aitools/2026-06-21_9f2f2f47-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-21"
+    },
+    "2026-06-21_session-9f2f2f47-e_test-jsonfield.sh": {
+      "harvested": "2026-06-21",
+      "session": "aitools/2026-06-21_9f2f2f47-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-21"
     }
   }
 }
