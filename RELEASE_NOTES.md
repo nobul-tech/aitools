@@ -12,6 +12,47 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.73.0 -- settings.json ↔ profile.json sync; deny-rule deprecation (2026-06-22)
+
+Fixes the reported "`aitools install` overwrites `~/.claude/settings.json`". Two root causes: `setup-user-mcp` force-added obsolete `permissions.deny` rules on every run regardless of `profile.json`/`settings.json`, and both deployers re-serialized via `sortKeys` (alphabetizing while Claude Code writes insertion order), so any managed-field change rewrote the whole file. `profile.json` (`claude.settings`) is now the source of truth for `settings.json` (except the manifest-owned `hooks`), reconciled by a generic, granular sync engine.
+
+### New features
+
+| # | Change |
+|---|--------|
+| 1 | **Settings sync engine** -- `sync_managed_json` / `prompt_json_field_review` in `aitools-lib.{sh,ps1}` (identical embedded node logic). Per managed leaf (arbitrary keys; `permissions` per-rule across allow/ask/deny): live-only → auto-adopt into `profile.json` (no prompt); equal → no-op; differ/live-missing → granular per-leaf menu `[o]verwrite / [a]dopt / [s]kip / [x]abort` (abort global). No-op runs do zero writes/backups. |
+| 2 | **`setup-user-settings.{sh,ps1}`** -- new script pair orchestrating the sync; resolves `profile.json` via `config.json` `userRepoPath` (works in dev and MDM). Migrates legacy flat `claude.{autoMemory,alwaysThinking,effortLevel}` into `claude.settings`. Wired into `aitools-install` Step 21 + entry-point dispatch (both platforms). |
+
+### Improvements
+
+| # | Change |
+|---|--------|
+| 3 | **Deny-rule deprecation** -- `setup-user-mcp.{sh,ps1}` no longer write `settings.json` (MCP registration only). Obsolete rules `MCP(vercel)` / `MCP(webflow)` / `Agent(claude-code-guide)` are purged by the sync engine before adopt; `tool-ops.json` drops `cc-deny-guide-subagent` (the working `block-claude-code-guide.sh` hook is kept -- CC honors the hook where it does not honor deny for built-in subagents). vercel/webflow MCP are now enabled by default. |
+| 4 | **`setup-user-hooks.{sh,ps1}` slimmed to hooks-only** -- preference handling moved to the sync engine; `sortKeys` write churn dropped (key order preserved; sort retained only for the order-independent unchanged comparison). |
+
+### Bug fixes
+
+| # | Severity | Change |
+|---|----------|--------|
+| 5 | Medium | **`build-deploy.sh` heredoc bug** (pre-existing, shipped in v0.72.0): hook source files lacking a trailing newline glued the embedding delimiter onto the last content line, producing an unterminated heredoc and an unparseable `deploy/setup-user-hooks.sh`. Fixed defensively on both platforms (newline guarded before the delimiter / here-string terminator). |
+| 6 | Low | `sync_managed_json` `decision_count` used `grep -c \. \|\| echo 0`, which doubled to `"0\n0"` on an empty decisions file (`[: integer expected`). Changed to `\|\| true` with an empty-guard. |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 7 | 11 protected docs/registries truthed up: `claude-shared.md` + dotprofile `CLAUDE.md` (MCP no longer disabled by default; prefs synced by `setup-user-settings`), `managed-file-deployment.md` + `.mdc`, `interactive-menus.md` (JSON field-level review now implemented + per-leaf semantics), `config-file-safety.md`, `deploy-paths.md` (duplication table: mcp/hooks now pure-extract), `reference/user-repo.md` (`claude.settings` schema + sync model), `aitool-ops` + `tool-ops` skills and tests. |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `scripts/setup-user-settings.sh` / `.ps1` | Orchestrate settings.json ↔ profile.json sync |
+
+**Verified on:** macOS + PowerShell (pwsh installed). 15 bash + 9 pwsh + 6 apply-branch + 17 end-to-end assertions, all green; `build-deploy.sh` and every generated deploy script parse on both platforms; first-run adopt (legacy migration + settings capture) and no-op idempotence (zero backups) verified live against the real profile.
+
+---
+
 ## v0.72.0 -- Unified logging to ~/.aitools/logs with rotation (issue #7) (2026-06-20)
 
 Completes the logging migration ([#7](https://github.com/nobul-tech/aitools/issues/7)): all aitools logging moves to a single cross-platform directory `~/.aitools/logs/` with size-based rotation, dissolving the prior 3-way native split (macOS `~/Library/Logs`, Linux `~/.local/state`, Windows `%LOCALAPPDATA%`) and the latent bash↔PS1 Windows divergence it caused.
