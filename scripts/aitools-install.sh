@@ -462,23 +462,32 @@ fi
 
 # Harness Python CLIs -> ~/.aitools/bin (deployed copy, called by hooks via
 # absolute path so every project's hooks resolve them — not run from the repo).
-# Uses deploy_managed_file (aitools-lib): backup + deploy-state tracking, so an
-# unedited deployed copy auto-updates silently and a user-edited one prompts —
-# same managed-file discipline as hooks (config-file-safety.md).
+# These are sole-owned generated artifacts (the user never edits the deployed
+# copy), so per config-file-safety.md we back up + diff-log + overwrite, with
+# NO interactive review. deploy_managed_file's prompt is for user-customizable
+# files; under the non-interactive install wrapper its tty read aborts the run.
 AITOOLS_BIN="$HOME/.aitools/bin"
 mkdir -p "$AITOOLS_BIN"
-deploy_tracker_init
+_hbin_deployed=0
 for _hcli in harness-db.py read-session.py read-session-full.py; do
     _src="$SCRIPT_DIR/$_hcli"
-    if [ -f "$_src" ]; then
-        _content=$(cat "$_src")
-        deploy_managed_file "$_content" "$AITOOLS_BIN/$_hcli" "harness bin" "$_hcli"
-        deploy_tracker_record "$MANAGED_FILE_RESULT" "harness bin" "$_hcli"
-    else
+    _dst="$AITOOLS_BIN/$_hcli"
+    if [ ! -f "$_src" ]; then
         log_warn "$_hcli not found at $(display_path "$_src") (MDM deploy — skipping)"
+        continue
     fi
+    if [ -f "$_dst" ] && diff -q "$_src" "$_dst" >/dev/null 2>&1; then
+        continue  # identical — nothing to deploy
+    fi
+    if [ -f "$_dst" ]; then
+        backup_file "$_dst"                                  # backup + rotate (aitools-lib)
+        diff -u "$_dst" "$_src" >> "$LOG_FILE" 2>/dev/null || true  # log diff before overwrite
+    fi
+    cp "$_src" "$_dst"
+    log_ok "Deployed $_hcli -> $(display_path "$_dst")"
+    _hbin_deployed=$((_hbin_deployed + 1))
 done
-deploy_tracker_summary "harness bin"
+write_summary OK "harness bin" "$_hbin_deployed deployed to ~/.aitools/bin"
 
 # ============================================================
 # 7. Shell integration

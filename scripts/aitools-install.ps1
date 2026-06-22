@@ -361,23 +361,29 @@ if (Test-Path $hhPs1Src) {
 
 # Harness Python CLIs -> ~/.aitools/bin (deployed copy, called by hooks via
 # absolute path so every project's hooks resolve them -- not run from the repo).
-# Uses Deploy-ManagedFile (aitools-lib): backup + deploy-state tracking, so an
-# unedited deployed copy auto-updates silently and a user-edited one prompts --
-# same managed-file discipline as hooks (config-file-safety.md).
+# These are sole-owned generated artifacts (the user never edits the deployed
+# copy), so per config-file-safety.md we back up + overwrite, with NO
+# interactive review. Deploy-ManagedFile's prompt is for user-customizable
+# files; under the non-interactive install wrapper its tty read aborts the run.
 $aitoolsBin = Join-Path $env:USERPROFILE ".aitools\bin"
 if (-not (Test-Path $aitoolsBin)) { New-Item -ItemType Directory -Path $aitoolsBin -Force | Out-Null }
-Initialize-DeployTracker
+$hbinDeployed = 0
 foreach ($hcli in @("harness-db.py", "read-session.py", "read-session-full.py")) {
     $hsrc = Join-Path $PSScriptRoot $hcli
-    if (Test-Path $hsrc) {
-        $hcontent = Get-Content $hsrc -Raw
-        $hresult = Deploy-ManagedFile -Content $hcontent -DestPath (Join-Path $aitoolsBin $hcli) -ToolName "harness bin" -ItemName $hcli
-        Record-DeployOutcome -Outcome $hresult -ToolName "harness bin" -ItemName $hcli
-    } else {
+    $hdst = Join-Path $aitoolsBin $hcli
+    if (-not (Test-Path $hsrc)) {
         LogWarn "$hcli not found (MDM deploy -- skipping)"
+        continue
     }
+    if ((Test-Path $hdst) -and -not (Compare-Object (Get-Content $hsrc) (Get-Content $hdst))) {
+        continue  # identical -- nothing to deploy
+    }
+    if (Test-Path $hdst) { Backup-File $hdst }
+    Copy-Item $hsrc $hdst -Force
+    LogOk "Deployed $hcli -> $hdst"
+    $hbinDeployed++
 }
-Write-DeployTrackerSummary -ToolName "harness bin"
+Write-Summary "OK" "harness bin" "$hbinDeployed deployed to ~/.aitools/bin"
 
 # ============================================================
 # 7. Shell integration
