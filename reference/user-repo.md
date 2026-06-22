@@ -44,9 +44,14 @@ aitools-<username>/
     "cli": { "vimMode": true, "model": "auto" }
   },
   "claude": {
-    "autoMemory": false,
-    "alwaysThinking": true,
-    "effortLevel": "high"
+    "settings": {
+      "autoMemoryEnabled": false,
+      "alwaysThinkingEnabled": true,
+      "effortLevel": "high",
+      "model": "<model-id>",
+      "theme": "<theme>",
+      "permissions": { "defaultMode": "default", "allow": [], "ask": [], "deny": [] }
+    }
   },
   "profiles": {
     "<alias>": {
@@ -73,7 +78,7 @@ aitools-<username>/
 
 - **`identity`** -- global, shared across all machines. Git identity, GitHub username, primary email.
 - **`cursor`** -- Cursor CLI preferences. Read by `setup-user-cursor`.
-- **`claude`** -- Claude Code settings preferences. Read by `setup-user-hooks`. Keys: `autoMemory` (default true), `alwaysThinking` (default true), `effortLevel` (optional, `"low"`/`"medium"`/`"high"`). Maps to `autoMemoryEnabled` / `alwaysThinkingEnabled` / `effortLevel` in `~/.claude/settings.json`.
+- **`claude.settings`** -- the source of truth for `~/.claude/settings.json` (verbatim keys, EXCEPT `hooks`, which the manifest owns via `setup-user-hooks`). Synced by `setup-user-settings` via `sync_managed_json`: a key absent here is auto-adopted from settings.json (no prompt); on divergence a granular per-leaf menu (overwrite/adopt/skip/abort) runs; `permissions.{allow,ask,deny}` are reconciled per rule. Legacy flat keys (`autoMemory`/`alwaysThinking`/`effortLevel` under `claude`) are auto-migrated into `claude.settings` as `autoMemoryEnabled`/`alwaysThinkingEnabled`/`effortLevel`.
 - **`profiles`** -- keyed by user-chosen alias (e.g., "laptop", "workstation"). Display name and company can vary per machine.
 - **`overrides`** -- intentional deviations from upstream tool defaults. Informational only -- CLI does not read this yet. Mirrors the Overrides table in `reference/tool-registry.md` in machine-readable form. Future `aitools audit` could validate overrides against live config.
 - **Machine matching** -- `config.json` stores `"machineAlias"` on each machine. Fallback: hostname match, then first profile.

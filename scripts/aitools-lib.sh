@@ -1158,6 +1158,332 @@ deploy_tracker_summary() {
 }
 
 # ---------------------------------------------------------------------------
+# Granular per-leaf review prompt for JSON settings sync.
+# One prompt per divergent setting/rule. overwrite/adopt/skip are per-leaf;
+# abort (x) is global and exits the run (code 2).
+#
+# Args:
+#   $1 = leaf display name (e.g. "theme" or "permissions.deny MCP(vercel)")
+#   $2 = current value display (settings.json side)
+#   $3 = proposed value display (profile.json side)
+#   $4 = source label (e.g. "profile.json")
+#   $5 = adopt-allowed flag ("1" to offer adopt, else hidden)
+#
+# Sets JSON_FIELD_REVIEW_RESULT to "overwrite", "adopt", or "skip".
+# --force / AITOOLS_FORCE / non-interactive -> "overwrite" (source wins).
+# ---------------------------------------------------------------------------
+JSON_FIELD_REVIEW_RESULT=""
+prompt_json_field_review() {
+    local leaf="$1" current="$2" proposed="$3" source_label="${4:-profile.json}" adopt_allowed="${5:-1}"
+
+    JSON_FIELD_REVIEW_RESULT="overwrite"
+
+    # --force / AITOOLS_FORCE: source wins
+    if [ "${AITOOLS_FORCE:-}" = "1" ] || [ "${FORCE:-}" = "true" ]; then
+        log "Divergence in $leaf -- overwriting from $source_label (--force)"
+        return 0
+    fi
+    # Non-interactive: source wins
+    if ! (printf '' > /dev/tty) 2>/dev/null; then
+        log "Divergence in $leaf -- overwriting from $source_label (non-interactive)"
+        return 0
+    fi
+
+    printf '\n\033[33m[REVIEW]\033[0m %s differs from %s.\n' "$leaf" "$source_label" > /dev/tty
+    printf '  settings.json : %s\n' "$current" > /dev/tty
+    printf '  %s : %s\n' "$source_label" "$proposed" > /dev/tty
+    printf '\n' > /dev/tty
+    printf '  [o]verwrite : %s value -> settings.json\n' "$source_label" > /dev/tty
+    if [ "$adopt_allowed" = "1" ]; then
+        printf '  [a]dopt     : keep settings.json value -> write to %s\n' "$source_label" > /dev/tty
+    fi
+    printf '  [s]kip      : leave this setting unchanged\n' > /dev/tty
+    printf '  [x]abort    : stop the run\n' > /dev/tty
+    if [ "$adopt_allowed" = "1" ]; then
+        printf '  choice [o/a/s/x]: ' > /dev/tty
+    else
+        printf '  choice [o/s/x]: ' > /dev/tty
+    fi
+
+    local choice
+    read -r choice < /dev/tty
+    case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
+        a)  if [ "$adopt_allowed" = "1" ]; then
+                printf '  >> adopted: settings.json value kept -> %s\n' "$source_label" > /dev/tty
+                JSON_FIELD_REVIEW_RESULT="adopt"
+            else
+                printf '  >> overwritten from %s\n' "$source_label" > /dev/tty
+                JSON_FIELD_REVIEW_RESULT="overwrite"
+            fi ;;
+        s)  printf '  >> skipped: %s unchanged\n' "$leaf" > /dev/tty
+            JSON_FIELD_REVIEW_RESULT="skip" ;;
+        x)  log_error "Aborted by user"
+            exit 2 ;;
+        *)  printf '  >> overwritten from %s\n' "$source_label" > /dev/tty
+            JSON_FIELD_REVIEW_RESULT="overwrite" ;;
+    esac
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Generic settings.json <-> profile.json sync engine.
+#
+# profile.json (under a sub-path, e.g. "claude.settings") is the source of
+# truth for the live JSON file (settings.json), EXCLUDING harness-managed keys
+# (e.g. "hooks"). For every managed leaf (arbitrary keys; permissions handled
+# per-rule across allow/ask/deny):
+#   - in live, not in profile  -> auto-adopt into profile (no prompt)
+#   - equal                    -> no-op
+#   - differ / live-missing    -> granular per-leaf prompt (prompt_json_field_review)
+# Deprecated permission rules are stripped from live before the scan so they
+# are never adopted. Writes preserve key order (no sort). Both files are backed
+# up before write and validated after.
+#
+# Args:
+#   $1 = live JSON file (e.g. ~/.claude/settings.json)
+#   $2 = profile JSON file (dotprofile profile.json)
+#   $3 = profile sub-path holding the mirror, dot form (e.g. "claude.settings")
+#   $4 = exclude keys, comma-separated (default "hooks")
+#   $5 = deprecated permission rules, comma-separated (default "")
+#
+# Sets SYNC_MANAGED_JSON_RESULT to "unchanged", "updated", or "created".
+# Requires node. Honors DRY_RUN (plan only, no writes). Exits 2 on user abort.
+# ---------------------------------------------------------------------------
+SYNC_MANAGED_JSON_RESULT=""
+sync_managed_json() {
+    local live_file="$1" profile_file="$2" subpath="$3"
+    local exclude_keys="${4:-hooks}" deprecated_rules="${5:-}"
+
+    SYNC_MANAGED_JSON_RESULT="unchanged"
+
+    if ! command -v node >/dev/null 2>&1; then
+        log_error "sync_managed_json: node required for JSON sync"
+        return 1
+    fi
+
+    local nodescript plan_json decisions_tsv choices_tsv
+    nodescript=$(mktemp) || { log_error "sync_managed_json: mktemp failed"; return 1; }
+    plan_json=$(mktemp); decisions_tsv=$(mktemp); choices_tsv=$(mktemp)
+
+    cat > "$nodescript" <<'SYNC_NODE_EOF'
+const fs = require('fs');
+const mode = process.argv[2];
+const PERM_CATS = ['allow', 'ask', 'deny'];
+
+function readJson(p) {
+    try { return JSON.parse(fs.readFileSync(p, 'utf8')); }
+    catch (e) { if (e.code === 'ENOENT') return null; throw e; }
+}
+function jeq(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+function getSub(obj, parts) { let o = obj; for (const k of parts) { if (o == null || typeof o !== 'object') return undefined; o = o[k]; } return o; }
+function ensureSub(obj, parts) { let o = obj; for (const k of parts) { if (o[k] == null || typeof o[k] !== 'object') o[k] = {}; o = o[k]; } return o; }
+function setPath(obj, parts, val) { let o = obj; for (let i = 0; i < parts.length - 1; i++) { if (o[parts[i]] == null || typeof o[parts[i]] !== 'object') o[parts[i]] = {}; o = o[parts[i]]; } o[parts[parts.length - 1]] = val; }
+function delPath(obj, parts) { let o = obj; for (let i = 0; i < parts.length - 1; i++) { if (o[parts[i]] == null) return; o = o[parts[i]]; } delete o[parts[parts.length - 1]]; }
+function disp(v) { return v === undefined ? '(not in settings.json)' : JSON.stringify(v); }
+
+function buildPlan(live, profile, subParts, excludeKeys, deprecated) {
+    live = live || {};
+    const mirror = getSub(profile, subParts) || {};
+    const deprecatedRemoved = [];
+    if (live.permissions) {
+        for (const cat of PERM_CATS) {
+            if (Array.isArray(live.permissions[cat])) {
+                for (const r of live.permissions[cat]) if (deprecated.includes(r)) deprecatedRemoved.push({ cat, rule: r });
+                live.permissions[cat] = live.permissions[cat].filter(r => !deprecated.includes(r));
+            }
+        }
+    }
+    const decisions = {}; const autoAdopts = [];
+    const keys = new Set([...Object.keys(live), ...Object.keys(mirror)]);
+    for (const k of excludeKeys) keys.delete(k);
+    for (const k of keys) {
+        if (k === 'permissions') {
+            const lp = live.permissions || {}; const mp = mirror.permissions || {};
+            const lHas = Object.prototype.hasOwnProperty.call(lp, 'defaultMode');
+            const mHas = Object.prototype.hasOwnProperty.call(mp, 'defaultMode');
+            if (lHas && !mHas) autoAdopts.push({ kind: 'scalar', path: ['permissions', 'defaultMode'], value: lp.defaultMode });
+            else if (mHas && !lHas) decisions['permissions.defaultMode'] = { type: 'permScalar', path: ['permissions', 'defaultMode'], kind: 'live-missing', currentDisplay: disp(undefined), proposedDisplay: disp(mp.defaultMode), profileValue: mp.defaultMode };
+            else if (lHas && mHas && !jeq(lp.defaultMode, mp.defaultMode)) decisions['permissions.defaultMode'] = { type: 'permScalar', path: ['permissions', 'defaultMode'], kind: 'differ', currentDisplay: disp(lp.defaultMode), proposedDisplay: disp(mp.defaultMode), liveValue: lp.defaultMode, profileValue: mp.defaultMode };
+            for (const cat of PERM_CATS) {
+                const lr = Array.isArray(lp[cat]) ? lp[cat] : [];
+                const mr = Array.isArray(mp[cat]) ? mp[cat] : [];
+                for (const rule of new Set([...lr, ...mr])) {
+                    const inL = lr.includes(rule), inM = mr.includes(rule);
+                    if (inL && !inM) autoAdopts.push({ kind: 'permRule', cat, rule });
+                    else if (inM && !inL) decisions['permissions.' + cat + ' ' + rule] = { type: 'permRule', cat, rule, kind: 'live-missing', currentDisplay: '(not in settings.json)', proposedDisplay: 'rule present in profile.json' };
+                }
+            }
+        } else {
+            const lHas = Object.prototype.hasOwnProperty.call(live, k);
+            const mHas = Object.prototype.hasOwnProperty.call(mirror, k);
+            if (lHas && !mHas) autoAdopts.push({ kind: 'scalar', path: [k], value: live[k] });
+            else if (mHas && !lHas) decisions[k] = { type: 'scalar', path: [k], kind: 'live-missing', currentDisplay: disp(undefined), proposedDisplay: disp(mirror[k]), profileValue: mirror[k] };
+            else if (lHas && mHas && !jeq(live[k], mirror[k])) decisions[k] = { type: 'scalar', path: [k], kind: 'differ', currentDisplay: disp(live[k]), proposedDisplay: disp(mirror[k]), liveValue: live[k], profileValue: mirror[k] };
+        }
+    }
+    return { decisions, autoAdopts, deprecatedRemoved };
+}
+
+const subParts = process.argv[5] ? process.argv[5].split('.') : [];
+const excludeKeys = process.argv[6] ? process.argv[6].split(',').filter(Boolean) : [];
+const deprecated = process.argv[7] ? process.argv[7].split(',').filter(Boolean) : [];
+
+if (mode === 'plan') {
+    const livePath = process.argv[3], profilePath = process.argv[4], planOut = process.argv[8];
+    const live = readJson(livePath) || {};
+    const profile = readJson(profilePath) || {};
+    const plan = buildPlan(live, profile, subParts, excludeKeys, deprecated);
+    fs.writeFileSync(planOut, JSON.stringify(plan));
+    // TSV for the bash prompt loop: id \t kind \t currentDisplay \t proposedDisplay \t adoptAllowed
+    const lines = [];
+    for (const [id, d] of Object.entries(plan.decisions)) {
+        lines.push([id, d.kind, d.currentDisplay, d.proposedDisplay, '1'].join('\t'));
+    }
+    // Trailing newline required: the bash `while read` loop drops a final line
+    // that lacks one, silently losing the last decision.
+    process.stdout.write(lines.length ? lines.join('\n') + '\n' : '');
+    // counts to stderr for logging
+    process.stderr.write('adopts=' + plan.autoAdopts.length + ' deprecated=' + plan.deprecatedRemoved.length + ' decisions=' + Object.keys(plan.decisions).length + '\n');
+} else if (mode === 'apply') {
+    const livePath = process.argv[3], profilePath = process.argv[4];
+    const planPath = process.argv[8], choicesPath = process.argv[9];
+    const plan = readJson(planPath);
+    const live = readJson(livePath) || {};
+    const profile = readJson(profilePath) || {};
+    const mirror = ensureSub(profile, subParts);
+    const origLive = JSON.stringify(live), origProfile = JSON.stringify(profile);
+
+    // deprecated removals (already stripped in plan's view; re-apply to actual live)
+    for (const d of plan.deprecatedRemoved) {
+        if (live.permissions && Array.isArray(live.permissions[d.cat])) {
+            live.permissions[d.cat] = live.permissions[d.cat].filter(r => r !== d.rule);
+        }
+    }
+    // auto-adopts -> mirror
+    for (const a of plan.autoAdopts) {
+        if (a.kind === 'scalar') setPath(mirror, a.path, a.value);
+        else if (a.kind === 'permRule') {
+            if (!mirror.permissions || typeof mirror.permissions !== 'object') mirror.permissions = {};
+            const arr = Array.isArray(mirror.permissions[a.cat]) ? mirror.permissions[a.cat] : [];
+            if (!arr.includes(a.rule)) arr.push(a.rule);
+            mirror.permissions[a.cat] = arr;
+        }
+    }
+    // decisions
+    const choices = {};
+    try {
+        const raw = fs.readFileSync(choicesPath, 'utf8');
+        for (const ln of raw.split('\n')) { if (!ln) continue; const i = ln.indexOf('\t'); if (i < 0) continue; choices[ln.slice(0, i)] = ln.slice(i + 1); }
+    } catch (e) { if (e.code !== 'ENOENT') throw e; }
+    for (const [id, action] of Object.entries(choices)) {
+        const d = plan.decisions[id]; if (!d || action === 'skip') continue;
+        if (d.type === 'scalar' || d.type === 'permScalar') {
+            if (action === 'overwrite') setPath(live, d.path, d.profileValue);
+            else if (action === 'adopt') { if (d.kind === 'live-missing') delPath(mirror, d.path); else setPath(mirror, d.path, d.liveValue); }
+        } else if (d.type === 'permRule') {
+            if (action === 'overwrite') {
+                if (!live.permissions || typeof live.permissions !== 'object') live.permissions = {};
+                const arr = Array.isArray(live.permissions[d.cat]) ? live.permissions[d.cat] : [];
+                if (!arr.includes(d.rule)) arr.push(d.rule);
+                live.permissions[d.cat] = arr;
+            } else if (action === 'adopt') {
+                if (mirror.permissions && Array.isArray(mirror.permissions[d.cat])) mirror.permissions[d.cat] = mirror.permissions[d.cat].filter(r => r !== d.rule);
+            }
+        }
+    }
+    // drop empty permission arrays in live for cleanliness
+    if (live.permissions && typeof live.permissions === 'object') {
+        for (const cat of PERM_CATS) if (Array.isArray(live.permissions[cat]) && live.permissions[cat].length === 0) delete live.permissions[cat];
+    }
+    const liveChanged = JSON.stringify(live) !== origLive;
+    const profileChanged = JSON.stringify(profile) !== origProfile;
+    if (liveChanged) fs.writeFileSync(livePath, JSON.stringify(live, null, 2) + '\n');
+    if (profileChanged) fs.writeFileSync(profilePath, JSON.stringify(profile, null, 2) + '\n');
+    process.stdout.write((liveChanged ? 'live-changed' : 'live-unchanged') + ' ' + (profileChanged ? 'profile-changed' : 'profile-unchanged'));
+}
+SYNC_NODE_EOF
+
+    local live_existed="false"
+    [ -f "$live_file" ] && live_existed="true"
+
+    # --- Plan pass ---
+    local plan_stderr
+    plan_stderr=$(node "$nodescript" plan "$live_file" "$profile_file" "$subpath" "$exclude_keys" "$deprecated_rules" "$plan_json" 2>&1 1>"$decisions_tsv") || {
+        log_error "sync_managed_json: plan pass failed: $plan_stderr"
+        rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv"
+        return 1
+    }
+    log "Settings sync plan: $plan_stderr"
+
+    # grep -c prints "0" and exits 1 on no matches; `|| true` avoids set -e abort
+    # without the double-"0" that `|| echo 0` would append (-> "integer expected").
+    local decision_count
+    decision_count=$(grep -c . "$decisions_tsv" 2>/dev/null || true)
+    [ -n "$decision_count" ] || decision_count=0
+
+    if [ "${DRY_RUN:-}" = "true" ]; then
+        log "[DRY RUN] settings sync: $plan_stderr (would prompt for $decision_count divergent leaf/leaves)"
+        rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv"
+        SYNC_MANAGED_JSON_RESULT="unchanged"
+        return 0
+    fi
+
+    # Nothing to adopt, purge, or decide -> no write, no backups (avoid churn).
+    case "$plan_stderr" in
+        "adopts=0 deprecated=0 decisions=0")
+            log_ok "Settings unchanged: $(display_path "$live_file")"
+            rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv"
+            SYNC_MANAGED_JSON_RESULT="unchanged"
+            return 0 ;;
+    esac
+
+    # --- Prompt loop (granular, per leaf) ---
+    : > "$choices_tsv"
+    if [ "$decision_count" -gt 0 ]; then
+        local id kind cur prop adoptf
+        while IFS=$'\t' read -r id kind cur prop adoptf; do
+            [ -n "$id" ] || continue
+            prompt_json_field_review "$id" "$cur" "$prop" "profile.json" "$adoptf"
+            printf '%s\t%s\n' "$id" "$JSON_FIELD_REVIEW_RESULT" >> "$choices_tsv"
+        done < "$decisions_tsv"
+    fi
+
+    # --- Backup before apply ---
+    backup_file "$live_file"
+    [ -f "$profile_file" ] && backup_file "$profile_file"
+
+    # --- Apply pass ---
+    local apply_out
+    apply_out=$(node "$nodescript" apply "$live_file" "$profile_file" "$subpath" "$exclude_keys" "$deprecated_rules" "$plan_json" "$choices_tsv") || {
+        log_error "sync_managed_json: apply pass failed"
+        rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv"
+        return 1
+    }
+
+    # --- Post-write validation ---
+    if [ -f "$live_file" ] && ! node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "$live_file" 2>/dev/null; then
+        log_error "sync_managed_json: $(display_path "$live_file") is not valid JSON after write"
+        rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv"
+        return 1
+    fi
+
+    case "$apply_out" in
+        live-changed*)
+            log_ok "Settings synced: $(display_path "$live_file")"
+            SYNC_MANAGED_JSON_RESULT=$([ "$live_existed" = "true" ] && echo "updated" || echo "created") ;;
+        *)
+            log_ok "Settings unchanged: $(display_path "$live_file")"
+            SYNC_MANAGED_JSON_RESULT="unchanged" ;;
+    esac
+    case "$apply_out" in
+        *profile-changed) log_ok "Profile updated: $(display_path "$profile_file")" ;;
+    esac
+
+    rm -f "$nodescript" "$plan_json" "$decisions_tsv" "$choices_tsv"
+    return 0
+}
+
+# ---------------------------------------------------------------------------
 # Repair broken uv tool environment (cross-platform)
 # ---------------------------------------------------------------------------
 # When `uv tool upgrade <tool>` fails with "missing a valid environment",

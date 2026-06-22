@@ -59,29 +59,37 @@ PowerShell pipeline encoding.
 
 JSON config deployments use field-level review rather than text diff
 review. Only managed fields are shown; preserved fields are never
-displayed or changed.
+displayed or changed. Implemented by `prompt_json_field_review` /
+`Prompt-JsonFieldReview` (one prompt per leaf), driven by
+`sync_managed_json` / `Sync-ManagedJson` in `@scripts/aitools-lib.sh` / `.ps1`.
 
-**Review display** (when managed fields differ):
+**Granularity**: review is per-leaf — one independent prompt per divergent
+setting, and per rule string for `permissions.{allow,ask,deny}`. When the
+source (`profile.json`) has a value the live file lacks, that leaf is auto-adopted
+into the source with no prompt. `overwrite`/`adopt`/`skip` are per-leaf; only
+`abort` is global (stops the run).
+
+**Review display** (when a managed leaf differs):
 
 ```
-  <field>: "current" → "proposed"  (source: profile.json | script)
+  <field>: "current" → "proposed"  (source: profile.json)
 ```
 
 **Menu**:
 
 ```
-  [o]verwrite : proposed values win
-  [a]dopt     : local values win → sync to profile.json
+  [o]verwrite : proposed (source) value wins → settings.json
+  [a]dopt     : local value wins → write back to profile.json
   [s]kip
-  [x]abort
+  [x]abort    : stop the run (global)
 ```
 
-- **Adopt** available only for fields sourced from `profile.json`.
-  Fields hardcoded in scripts (MCP server URLs, `--isolated`, deny
-  rules) cannot be adopted — adopt option omitted when all changed
-  fields are script-sourced
+- **Adopt** available only for fields sourced from `profile.json` (the
+  settings sync mirrors all of settings.json there, so adopt applies to every
+  managed leaf, including permission rules). Fields hardcoded in scripts cannot
+  be adopted — adopt omitted when a changed field is script-sourced
 - **No `[m]erge`** — JSON fields are discrete values, not text blocks
-- **Non-interactive**: auto-select overwrite (same as text types)
+- **Non-interactive / `--force`**: auto-select overwrite (same as text types)
 
 Cross-ref: `@reference/managed-file-deployment.md` "JSON Config Review
 Detail"

@@ -13,7 +13,7 @@ All setup scripts that deploy files to user directories must follow the deployme
 | Type | Merge strategy | Files |
 |------|---------------|-------|
 | Markdown | Interactive diff review via `deploy_managed_file` | CLAUDE.md, `~/.claude/rules/*.md`, skill SKILL.md files |
-| JSON config | Read-then-merge on managed fields only | settings.json, cli-config.json, mcp.json |
+| JSON config | Read-then-merge on managed fields. Profile-sourced fields use granular field-level review (`sync_managed_json`: auto-adopt when profile silent, per-leaf overwrite/adopt/skip/abort on divergence); harness-managed keys (e.g. `hooks`) reconcile silently | settings.json, cli-config.json, mcp.json |
 | Shell script | Interactive diff review via `deploy_managed_file` | Hook scripts (`~/.claude/hooks/*.sh`) |
 
 `deploy_managed_file()` / `Deploy-ManagedFile` is defined in `@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1`. Full state machine spec: `@reference/managed-file-deployment.md`.

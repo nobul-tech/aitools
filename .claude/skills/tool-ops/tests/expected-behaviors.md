@@ -12,9 +12,10 @@ skill behavior, `/audit` skill.
 ### Look up existing tool
 
 **Input**: "What deny rules does Claude Code have?"
-**Expected**: Skill reads `reference/tool-ops.json`, returns
-`tools.claude-code.denyRules` array with `cc-deny-guide-subagent`
-entry including permission pattern, hook, reason, and incident ref.
+**Expected**: Skill reads `reference/tool-ops.json`, reports Claude Code has
+no `permissions.deny` rules. The built-in `claude-code-guide` subagent is
+blocked by the `block-claude-code-guide.sh` hook (see `tools.claude-code.hooks`),
+not a deny rule — CC does not reliably honor deny for built-in subagents.
 
 ### Look up nonexistent tool
 
@@ -32,15 +33,15 @@ docs.
 
 ### Look up governance modes
 
-**Input**: "What governance mode are Claude Code deny rules in?"
+**Input**: "What governance mode are Claude Code hooks in?"
 **Expected**: Returns `"audit"` from
-`tools.claude-code.governanceModes.denyRules`.
+`tools.claude-code.governanceModes.hooks`.
 
 ## Write operations
 
 ### Mode promotion
 
-**Input**: "Promote Claude Code deny rules to active"
+**Input**: "Promote Claude Code verifications to active"
 **Expected**: Skill asks for zero-drift evidence before proceeding.
 If evidence provided, drafts the change (`"audit"` -> `"active"`),
 presents for user review, writes only after approval. Updates

@@ -46,17 +46,21 @@ When one changes, update the other. The user repo template takes priority at run
 
 ### Scripts with deploy templates (duplication risk)
 
-Four script pairs have **duplicated setup logic** between `scripts/` and
+Three script pairs have **duplicated setup logic** between `scripts/` and
 `build-deploy.sh`. Fixing a bug in one requires manually porting to the other.
 Running `build-deploy.sh` does NOT auto-fix stale template logic — it faithfully
 reproduces whatever is hardcoded in the template.
 
-| Script | Template in build-deploy.sh | What's duplicated |
-|--------|---------------------------|-------------------|
-| `setup-user-claude.sh/.ps1` | Sections 5-6 | Template interpolation, footer generation |
-| `setup-user-cursor.sh/.ps1` | Sections 7-8 | CLI config merge logic (Node.js/PS1) |
-| `setup-user-mcp.sh/.ps1` | Sections 11-12 | Settings.json merge, validation |
-| `setup-user-hooks.sh/.ps1` | Sections 13-14 | Settings.json hook merge, dedup, validation |
+| Script | What's duplicated |
+|--------|-------------------|
+| `setup-user-claude.sh/.ps1` | Template interpolation, footer generation |
+| `setup-user-cursor.sh/.ps1` | CLI config merge logic (Node.js/PS1) |
+| `setup-user-hooks.sh/.ps1` | Hook-script embedding + REGS_JSON injection (build-time self-containment; the settings.json hooks merge itself is extracted, not duplicated) |
+
+`setup-user-mcp.sh/.ps1` and `setup-user-settings.sh/.ps1` are **pure extract**
+(body markers + `inline_lib_*`) — no duplicated logic. The settings.json merge
+formerly duplicated in `setup-user-mcp` was removed in the settings-sync refactor
+(`sync_managed_json` now owns settings.json), progress toward the I6 structural fix.
 
 **What IS auto-embedded** (safe — single source of truth):
 - `shared/hooks/*.sh` → read via `cat` at build time
@@ -64,7 +68,7 @@ reproduces whatever is hardcoded in the template.
 - `@shared/claude-shared.md` → read via `cat` at build time
 - `<userRepoPath>/claude/rules/*.md` → read via `cat` at build time
 
-**When changing setup logic in any of the 4 scripts above**:
+**When changing setup logic in any of the 3 scripts above**:
 
 1. Fix the bug in `scripts/setup-*.sh` and/or `.ps1`
 2. **Find and fix the same logic in `build-deploy.sh`** (search for the function

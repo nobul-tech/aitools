@@ -82,17 +82,18 @@ use `npx`, `bunx`, or other package runners.
 
 ## MCP Servers
 
-Three servers at user level. Chrome DevTools enabled globally; Vercel/Webflow disabled by default.
+Three servers at user level (chrome-devtools, vercel, webflow), all enabled. Permission
+rules (allow/ask/deny) are profile-sourced and synced by `setup-user-settings` — the
+harness no longer force-disables vercel/webflow.
 
-- **Enable for project**: `aitools --addmcp vercel` (or `vercel webflow`)
+- **Restrict an MCP**: add a deny rule to `profile.json` `claude.settings.permissions.deny`
+  (synced to `settings.json`), or per-project in `.claude/settings.local.json`.
 - **Check status**: `aitools mcp`
-- **Manual enable** (Claude Code): add `MCP(vercel)` to `.claude/settings.local.json` `permissions.allow`
-- **Manual enable** (Cursor CLI): `agent mcp enable vercel`
 - **Prefer chrome-devtools skill for official docs**: When reading web content that will be recorded verbatim (install commands, config steps, API references), use the chrome-devtools skill instead of WebFetch. WebFetch summarizes via a smaller model and misses JS-rendered content. WebFetch is fine for general research, blog posts, and quick fact-checks.
 
 ## Knowledge Management
 
-- **Claude Code preferences** are managed via `profile.json` and deployed by `setup-user-hooks` to `~/.claude/settings.json`:
+- **Claude Code preferences** are stored in `profile.json` (`claude.settings`) and synced by `setup-user-settings` to `~/.claude/settings.json`:
   - `autoMemory: false` -- auto memory disabled. Durable knowledge belongs in git-tracked files: `CLAUDE.md`, `.claude/rules/`, or project docs.
   - `alwaysThinking: true` -- extended thinking enabled by default for all sessions.
   - `effortLevel: "high"` -- reasoning effort level (low/medium/high). CC 2.1.68+ defaults to medium for Opus 4.6; "ultrathink" keyword forces high for one turn.

@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# setup-user-hooks.sh — Deploys Claude Code hooks and preferences to ~/.claude/settings.json
-# Safe to re-run — merges managed fields without clobbering existing settings.
+# setup-user-hooks.sh — Deploys Claude Code hooks to ~/.claude/settings.json
+# Safe to re-run — merges the `hooks` key without clobbering existing settings.
 #
 # Hook deployment + registration are GENERATED from shared/hooks/hooks-manifest.json
 # (the single source of truth). Adding a hook = one manifest entry; no edits to this
 # script. This closes the recurring "deployed but not registered" / parallel-list-drift
 # incident class (RCA: .scratch investigation 2026-06-20; issue #7 / plan §5).
 #
-# Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
+# Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop
 # Preserved: permissions, enabledPlugins, all other fields
 #
-# Reads claude preferences from profile.json (via config.json -> userRepoPath).
+# Claude preferences (autoMemoryEnabled/alwaysThinkingEnabled/effortLevel) and all
+# other non-hook settings are profile-sourced and synced by setup-user-settings.
 # See reference/user-repo.md, shared/hooks/hooks-manifest.json, and shared/hooks/ for details.
 
 # --- BEGIN hooks body (extracted by build-deploy) ---
@@ -259,28 +260,9 @@ const regs = JSON.parse(regsJson).map(r => ({
     cmd: 'bash \"' + path.join(home, '.claude', 'hooks', r.file) + '\"'
 }));
 
-// --- BEGIN claude preferences (replaced by build-deploy) ---
-let autoMemory = true;
-let alwaysThinking = true;
-let effortLevel = null;
-const validEffortLevels = ['low', 'medium', 'high'];
-try {
-    const cfgPath = path.join(process.env.HOME || process.env.USERPROFILE, '.aitools', 'config.json');
-    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-    if (cfg.userRepoPath) {
-        const pf = JSON.parse(fs.readFileSync(path.join(cfg.userRepoPath, 'profile.json'), 'utf8'));
-        if (pf.claude) {
-            if (typeof pf.claude.autoMemory === 'boolean') autoMemory = pf.claude.autoMemory;
-            if (typeof pf.claude.alwaysThinking === 'boolean') alwaysThinking = pf.claude.alwaysThinking;
-            if (typeof pf.claude.effortLevel === 'string' && validEffortLevels.includes(pf.claude.effortLevel)) {
-                effortLevel = pf.claude.effortLevel;
-            } else if (pf.claude.effortLevel !== undefined) {
-                console.error('Warning: invalid effortLevel \"' + pf.claude.effortLevel + '\" (valid: ' + validEffortLevels.join(', ') + ')');
-            }
-        }
-    }
-} catch (e) { if (e.code !== 'ENOENT') console.error('Warning: could not read profile preferences: ' + e.message); }
-// --- END claude preferences (replaced by build-deploy) ---
+// Claude preferences (autoMemoryEnabled / alwaysThinkingEnabled / effortLevel)
+// are NOT managed here -- they are profile-sourced and synced by
+// setup-user-settings. This script manages only the \`hooks\` key.
 
 // --- Read existing settings.json ---
 let settings = {};
@@ -351,23 +333,8 @@ removeHookEntry('Stop', 'intent-sentinel-stop.sh');
 // Register every manifest hook (generated -- no hardcoded list).
 for (const r of regs) mergeHookEntry(r.event, r.hookId, r.matcher, r.cmd);
 
-// --- Track old values for change reporting ---
-const oldAutoMemory = settings.autoMemoryEnabled;
-const oldAlwaysThinking = settings.alwaysThinkingEnabled;
-const oldEffortLevel = settings.effortLevel;
-
-// --- Merge claude preferences ---
-settings.autoMemoryEnabled = autoMemory;
-settings.alwaysThinkingEnabled = alwaysThinking;
-if (effortLevel) settings.effortLevel = effortLevel;
-
-const prefChanges = [];
-if (oldAutoMemory !== settings.autoMemoryEnabled) prefChanges.push('CHANGED: autoMemoryEnabled: ' + (oldAutoMemory !== undefined ? oldAutoMemory : '(not set)') + ' -> ' + settings.autoMemoryEnabled);
-if (oldAlwaysThinking !== settings.alwaysThinkingEnabled) prefChanges.push('CHANGED: alwaysThinkingEnabled: ' + (oldAlwaysThinking !== undefined ? oldAlwaysThinking : '(not set)') + ' -> ' + settings.alwaysThinkingEnabled);
-if (effortLevel && oldEffortLevel !== settings.effortLevel) prefChanges.push('CHANGED: effortLevel: ' + (oldEffortLevel || '(not set)') + ' -> ' + settings.effortLevel);
-
 // --- Clobber detection ---
-const managedKeys = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled', 'effortLevel'];
+const managedKeys = ['hooks'];
 const afterKeys = Object.keys(settings);
 const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
 
@@ -377,9 +344,6 @@ if (dryRun) {
     if (lostKeys.length > 0) console.error('  CLOBBER WARNING: would lose: ' + lostKeys.join(', '));
     if (corrupt) console.error('  File is corrupt -- --force required');
     console.error('  Registered hooks: ' + regs.length);
-    console.error('  autoMemoryEnabled: ' + autoMemory);
-    console.error('  alwaysThinkingEnabled: ' + alwaysThinking);
-    if (effortLevel) console.error('  effortLevel: ' + effortLevel);
     console.log('dry-run');
 } else if (corrupt && !force) {
     console.error('ERROR: ' + settingsFile + ' is corrupt. Use --force to overwrite, or fix manually.');
@@ -390,7 +354,9 @@ if (dryRun) {
 } else {
     if (corrupt) console.error('Warning: proceeding with --force on corrupt file');
     if (lostKeys.length > 0) console.error('Warning: proceeding with --force, losing fields: ' + lostKeys.join(', '));
-    const newJson = JSON.stringify(sortKeys(settings), null, 2) + '\n';
+    // Preserve key order on write (no sort); sortKeys is used only for the
+    // order-independent unchanged comparison so reordering alone never rewrites.
+    const newJson = JSON.stringify(settings, null, 2) + '\n';
     let existingJson = '';
     try { existingJson = fs.readFileSync(settingsFile, 'utf8'); } catch(e) { /* file may not exist */ }
     const existingNorm = existingJson ? JSON.stringify(sortKeys(JSON.parse(existingJson))) : '';
@@ -402,8 +368,7 @@ if (dryRun) {
 
         // Post-write validation
         const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-        const _required = ['hooks', 'autoMemoryEnabled', 'alwaysThinkingEnabled'];
-        if (effortLevel) _required.push('effortLevel');
+        const _required = ['hooks'];
         const _missing = _required.filter(k => !(k in _v));
         if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
 
@@ -437,7 +402,6 @@ if (dryRun) {
         }
 
         console.log('ok');
-        prefChanges.forEach(c => console.log(c));
     }
 }
 " "$SETTINGS_FILE" "$REGS_JSON" "$DRY_RUN" "$FORCE")
@@ -447,12 +411,8 @@ MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)
 
 case "$MERGE_STATUS" in
     ok)
-        log_ok "Settings deployed to $(display_path "$SETTINGS_FILE")"
+        log_ok "Hooks deployed to $(display_path "$SETTINGS_FILE")"
         HOOKS_CHANGED=true
-        log "  autoMemoryEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).autoMemoryEnabled)")"
-        log "  alwaysThinkingEnabled: $(node -e "console.log(JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')).alwaysThinkingEnabled)")"
-        log "  effortLevel: $(node -e "const s=JSON.parse(require('fs').readFileSync('$SETTINGS_FILE','utf8')); console.log(s.effortLevel || '(not set)')")"
-        emit_merge_details "$MERGE_RESULT" "claude hooks"
         ;;
     unchanged)
         log_ok "Settings unchanged: $(display_path "$SETTINGS_FILE")"

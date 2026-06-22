@@ -54,14 +54,12 @@ For now, the content is manually authored.
 
 ---
 
-## Claude Code — Deny Rules
+## Claude Code — guide-subagent block
 
-| ID | Permission Pattern | Hook | Reason |
-|----|-------------------|------|--------|
-| cc-deny-guide-subagent | `Agent(claude-code-guide)` | `block-claude-code-guide.sh` | Haiku model returns inaccurate schema — caused incident where all hooks were disabled (#34730) |
-
-The deny rule blocks the built-in guide subagent and injects corrective
-harness context instead.
+The built-in `claude-code-guide` subagent is blocked by the
+`block-claude-code-guide.sh` PreToolUse(Agent) hook, which denies it and injects
+correct hook-schema context (#34730). No `permissions.deny` rule is used — CC does
+not reliably honor deny for built-in subagents, so the hook is the enforcement.
 
 ## Claude Code — Hooks
 
@@ -95,7 +93,6 @@ not enforce):
 
 | Category | Mode | What it covers |
 |----------|------|----------------|
-| denyRules | audit | Permission pattern blocking |
 | hooks | audit | Hook fire/fail tracking |
 | contextInjection | audit | Doc URL injection into subagents |
 | kpis | audit | Operational metrics collection |

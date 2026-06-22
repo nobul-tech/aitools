@@ -1,5 +1,5 @@
-# setup-user-hooks.ps1 -- Deploys Claude Code hooks and preferences to ~/.claude/settings.json
-# Safe to re-run -- merges managed fields without clobbering existing settings.
+# setup-user-hooks.ps1 -- Deploys Claude Code hooks to ~/.claude/settings.json
+# Safe to re-run -- merges the `hooks` key without clobbering existing settings.
 # UNTESTED on Windows: authored on macOS (no pwsh). Mirrors setup-user-hooks.sh.
 #
 # Hook deployment + registration are GENERATED from shared/hooks/hooks-manifest.json
@@ -7,10 +7,11 @@
 # Closes the recurring "deployed but not registered" / parallel-list-drift class
 # (RCA: .scratch investigation 2026-06-20; issue #7 / plan §5).
 #
-# Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
+# Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop
 # Preserved: permissions, enabledPlugins, all other fields
 #
-# Reads claude preferences from profile.json (via config.json -> userRepoPath).
+# Claude preferences (autoMemoryEnabled/alwaysThinkingEnabled/effortLevel) and all
+# other non-hook settings are profile-sourced and synced by setup-user-settings.
 # See reference/user-repo.md and shared/hooks/hooks-manifest.json for details.
 #
 # Note: Hook scripts are bash-only (Claude Code hooks always run in bash on
@@ -205,40 +206,9 @@ if ($DryRun) {
 }
 # --- END hook deployment (replaced by build-deploy) ---
 
-# --- BEGIN claude preferences (replaced by build-deploy) ---
-$autoMemory = $true
-$alwaysThinking = $true
-$effortLevel = $null
-$validEffortLevels = @("low", "medium", "high")
-
-$configFile = Join-Path $env:USERPROFILE ".aitools\config.json"
-if (Test-Path $configFile) {
-    try {
-        $cfg = ConvertPSObjectToHashtable (Get-Content $configFile -Raw | ConvertFrom-Json)
-        if ($cfg.ContainsKey("userRepoPath") -and $cfg["userRepoPath"]) {
-            $profilePath = Join-Path $cfg["userRepoPath"] "profile.json"
-            if (Test-Path $profilePath) {
-                $pf = ConvertPSObjectToHashtable (Get-Content $profilePath -Raw | ConvertFrom-Json)
-                if ($pf.ContainsKey("claude")) {
-                    $claudePrefs = $pf["claude"]
-                    if ($claudePrefs.ContainsKey("autoMemory")) { $autoMemory = [bool]$claudePrefs["autoMemory"] }
-                    if ($claudePrefs.ContainsKey("alwaysThinking")) { $alwaysThinking = [bool]$claudePrefs["alwaysThinking"] }
-                    if ($claudePrefs.ContainsKey("effortLevel")) {
-                        $val = $claudePrefs["effortLevel"]
-                        if ($val -is [string] -and $val -in $validEffortLevels) {
-                            $effortLevel = $val
-                        } else {
-                            LogWarn "Invalid effortLevel '$val' in profile (valid: $($validEffortLevels -join ', '))"
-                        }
-                    }
-                }
-            }
-        }
-    } catch {
-        LogWarn "Could not read profile preferences: $_"
-    }
-}
-# --- END claude preferences (replaced by build-deploy) ---
+# Claude preferences (autoMemoryEnabled/alwaysThinkingEnabled/effortLevel) are NOT
+# managed here -- they are profile-sourced and synced by setup-user-settings.
+# This script manages only the `hooks` key.
 
 # --- Merge hooks + preferences into ~/.claude/settings.json ---
 # Registrations are GENERATED from the manifest ($regs) -- loop MergeHookEntry +
@@ -360,33 +330,8 @@ foreach ($r in $regs) {
     MergeHookEntry $r.event $r.file $matcherVal $rCmd
 }
 
-# --- Track old values for change reporting ---
-$oldAutoMemory = $settings["autoMemoryEnabled"]
-$oldAlwaysThinking = $settings["alwaysThinkingEnabled"]
-$oldEffortLevel = $settings["effortLevel"]
-
-# --- Merge claude preferences ---
-$settings["autoMemoryEnabled"] = $autoMemory
-$settings["alwaysThinkingEnabled"] = $alwaysThinking
-if ($effortLevel) { $settings["effortLevel"] = $effortLevel }
-
-# --- Detect preference changes ---
-$prefChanges = @()
-if ($oldAutoMemory -ne $settings["autoMemoryEnabled"]) {
-    $oldVal = if ($null -ne $oldAutoMemory) { $oldAutoMemory } else { "(not set)" }
-    $prefChanges += "autoMemoryEnabled: $oldVal -> $($settings['autoMemoryEnabled'])"
-}
-if ($oldAlwaysThinking -ne $settings["alwaysThinkingEnabled"]) {
-    $oldVal = if ($null -ne $oldAlwaysThinking) { $oldAlwaysThinking } else { "(not set)" }
-    $prefChanges += "alwaysThinkingEnabled: $oldVal -> $($settings['alwaysThinkingEnabled'])"
-}
-if ($effortLevel -and $oldEffortLevel -ne $settings["effortLevel"]) {
-    $oldEL = if ($oldEffortLevel) { $oldEffortLevel } else { "(not set)" }
-    $prefChanges += "effortLevel: $oldEL -> $($settings['effortLevel'])"
-}
-
 # --- Clobber detection ---
-$managedKeys = @("hooks", "autoMemoryEnabled", "alwaysThinkingEnabled", "effortLevel")
+$managedKeys = @("hooks")
 $lostKeys = @($beforeKeys | Where-Object { $_ -notin $settings.Keys })
 
 if ($DryRun) {
@@ -399,9 +344,6 @@ if ($DryRun) {
         LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
     }
     Log "[DRY RUN] Registered hooks: $($regs.Count)"
-    Log "[DRY RUN] autoMemoryEnabled: $autoMemory"
-    Log "[DRY RUN] alwaysThinkingEnabled: $alwaysThinking"
-    if ($effortLevel) { Log "[DRY RUN] effortLevel: $effortLevel" }
 } else {
     if ($corrupt -and -not $Force) {
         LogError "$settingsFile is corrupt. Use -Force to overwrite, or fix manually."
@@ -430,8 +372,7 @@ if ($DryRun) {
             try {
                 $vContent = [System.IO.File]::ReadAllText($resolvedPath)
                 $vParsed = $vContent | ConvertFrom-Json
-                $requiredKeys = @("hooks", "autoMemoryEnabled", "alwaysThinkingEnabled")
-                if ($effortLevel) { $requiredKeys += "effortLevel" }
+                $requiredKeys = @("hooks")
                 foreach ($rk in $requiredKeys) {
                     if (-not ($vParsed.PSObject.Properties.Name -contains $rk)) {
                         LogError "Validation failed: $settingsFile missing required field '$rk'"
@@ -467,14 +408,7 @@ if ($DryRun) {
                 }
             }
 
-            LogOk "Settings deployed to $settingsFile"
-            Log "  autoMemoryEnabled: $autoMemory"
-            Log "  alwaysThinkingEnabled: $alwaysThinking"
-            $effortDisplay = if ($effortLevel) { $effortLevel } else { "(not set)" }
-            Log "  effortLevel: $effortDisplay"
-            if ($prefChanges.Count -gt 0) {
-                Emit-MergeDetails -Changes $prefChanges -ToolName "claude hooks"
-            }
+            LogOk "Hooks deployed to $settingsFile"
         }
     }
 }

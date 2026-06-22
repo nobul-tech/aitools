@@ -164,8 +164,8 @@ These scripts demonstrate the patterns above. Do not assume they are
 violation-free -- always verify copied code against these rules.
 
 - Node.js merge: `@scripts/setup-user-cursor.sh` (cli-config.json)
-- PowerShell merge: `@scripts/setup-user-mcp.ps1` (settings.json read-then-merge)
+- Settings sync (field-level review): `@scripts/setup-user-settings.sh` via `sync_managed_json` (settings.json <-> profile.json)
 - Hook merge: `@scripts/setup-user-hooks.sh` (settings.json hooks array)
 - Bash `validate_json_config`: `@scripts/aitools-install.sh`
 - PS1 `ValidateJsonConfig`: `@scripts/aitools-install.ps1`
-- Inline Node.js validation: `@scripts/setup-user-mcp.sh`
+- Inline Node.js validation: `@scripts/setup-user-hooks.sh`

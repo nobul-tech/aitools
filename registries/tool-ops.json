@@ -12,22 +12,12 @@
   "tools": {
     "claude-code": {
       "governanceModes": {
-        "denyRules": "audit",
         "hooks": "audit",
         "contextInjection": "audit",
         "kpis": "audit",
         "versionDeps": "audit",
         "verifications": "audit"
       },
-      "denyRules": [
-        {
-          "id": "cc-deny-guide-subagent",
-          "permissionPattern": "Agent(claude-code-guide)",
-          "hook": "block-claude-code-guide.sh",
-          "reason": "Haiku model returns inaccurate schema — caused incident where all hooks were disabled",
-          "incidentRef": "#34730"
-        }
-      ],
       "hooks": [
         {
           "event": "PreToolUse",
@@ -43,7 +33,7 @@
       },
       "kpis": [
         { "name": "hookFireRate", "source": "hook logs", "unit": "fires/session" },
-        { "name": "denyRuleBlocks", "source": "hook logs", "unit": "blocks/session" },
+        { "name": "guardBlocks", "source": "hook logs", "unit": "blocks/session" },
         { "name": "versionDepDrift", "source": "check script", "unit": "stale items" }
       ],
       "verifications": [

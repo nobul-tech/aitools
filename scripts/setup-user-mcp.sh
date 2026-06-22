@@ -2,9 +2,12 @@
 # setup-user-mcp.sh — Installs/updates user-level MCP servers for Claude Code on macOS/Linux
 # Safe to re-run — checks existing config, only re-adds when changed or --force used.
 #
-# All three servers at user level. Chrome DevTools enabled globally;
-# Vercel and Webflow are present but disabled by default (deny rules).
-# Use `aitools --addmcp` to enable per project.
+# Registers all three servers at user level (chrome-devtools, vercel, webflow).
+# This script does NOT write ~/.claude/settings.json: permission rules
+# (allow/ask/deny) are profile-sourced and reconciled by setup-user-settings.
+#
+# Managed: MCP server registration (via `claude mcp add`).
+# Preserved: ~/.claude/settings.json (not touched here).
 
 # --- BEGIN mcp body (extracted by build-deploy) ---
 set -euo pipefail
@@ -141,7 +144,7 @@ else
     fi
 fi
 
-# Vercel — remote HTTP server (disabled by default via deny rules below)
+# Vercel — remote HTTP server
 if [ "$FORCE" = "true" ]; then
     if [ "$DRY_RUN" = "true" ]; then
         log "[DRY RUN] Would re-add MCP server: vercel (--force)"
@@ -158,7 +161,7 @@ else
     fi
 fi
 
-# Webflow — remote HTTP server (disabled by default via deny rules below)
+# Webflow — remote HTTP server
 if [ "$FORCE" = "true" ]; then
     if [ "$DRY_RUN" = "true" ]; then
         log "[DRY RUN] Would re-add MCP server: webflow (--force)"
@@ -175,112 +178,15 @@ else
     fi
 fi
 
-# --- Merge deny rules into ~/.claude/settings.json ---
-# Vercel and Webflow are disabled by default at user level.
-# Projects enable them via .claude/settings.local.json (aitools --addmcp).
-
-settings_file="$HOME/.claude/settings.json"
-if [ "$DRY_RUN" != "true" ]; then
-    backup_file "$settings_file"
-fi
-log "Merging deny rules into $(display_path "$settings_file")..."
-
-DENY_RESULT=$(node -e "
-$SORT_KEYS_JS
-const fs = require('fs');
-const path = require('path');
-const f = process.argv[1];
-const dryRun = process.argv[2] === 'true';
-const force = process.argv[3] === 'true';
-const dir = path.dirname(f);
-
-// Ensure directory exists
-if (!dryRun && !fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-// Read existing settings
-let settings = {};
-let corrupt = false;
-try {
-    settings = JSON.parse(fs.readFileSync(f, 'utf8'));
-} catch (e) {
-    if (e.code !== 'ENOENT') {
-        corrupt = true;
-        console.error('Warning: ' + f + ' is invalid JSON');
-    }
-}
-const beforeKeys = Object.keys(settings);
-
-// Ensure permissions.deny exists
-if (!settings.permissions) settings.permissions = {};
-if (!Array.isArray(settings.permissions.deny)) settings.permissions.deny = [];
-
-// Add deny rules if not already present
-const denyRules = ['MCP(vercel)', 'MCP(webflow)', 'Agent(claude-code-guide)'];
-for (const rule of denyRules) {
-    if (!settings.permissions.deny.includes(rule)) {
-        settings.permissions.deny.push(rule);
-    }
-}
-
-// Clobber detection
-const managedKeys = ['permissions'];
-const afterKeys = Object.keys(settings);
-const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
-
-if (dryRun) {
-    console.error('[DRY RUN] ' + f + ': merge deny rules');
-    console.error('  Managed fields: permissions.deny');
-    if (lostKeys.length > 0) console.error('  CLOBBER WARNING: would lose: ' + lostKeys.join(', '));
-    if (corrupt) console.error('  File is corrupt -- --force required');
-    console.log('dry-run');
-} else if (corrupt && !force) {
-    console.error('ERROR: ' + f + ' is corrupt. Use --force to overwrite, or fix manually.');
-    console.log('error-corrupt');
-} else if (lostKeys.length > 0 && !force) {
-    console.error('ERROR: merge would lose fields: ' + lostKeys.join(', ') + '. Use --force to proceed.');
-    console.log('error-clobber');
-} else {
-    if (corrupt) console.error('Warning: proceeding with --force on corrupt file');
-    if (lostKeys.length > 0) console.error('Warning: proceeding with --force, losing fields: ' + lostKeys.join(', '));
-    const newJson = JSON.stringify(sortKeys(settings), null, 2) + '\n';
-    let existingJson = '';
-    try { existingJson = fs.readFileSync(f, 'utf8'); } catch(e) { /* may not exist yet */ }
-    const mergedNorm = JSON.stringify(sortKeys(settings));
-    const existingNorm = existingJson ? JSON.stringify(sortKeys(JSON.parse(existingJson))) : '';
-    if (!corrupt && lostKeys.length === 0 && mergedNorm === existingNorm) {
-        console.log('unchanged');
-    } else {
-        fs.writeFileSync(f, newJson);
-
-        // Post-write validation
-        const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
-        if (!_v.permissions) { console.error('Validation failed: missing permissions'); process.exit(1); }
-        console.log('ok');
-    }
-}
-" "$settings_file" "$DRY_RUN" "$FORCE")
-
-case "$DENY_RESULT" in
-    unchanged)
-        log_ok "Deny rules unchanged in $(display_path "$settings_file")" ;;
-    ok)
-        log_ok "Deny rules set for vercel, webflow in $(display_path "$settings_file")"
-        MCP_CHANGED=true ;;
-    dry-run)
-        log "[DRY RUN] Would set deny rules for vercel, webflow" ;;
-    error-corrupt)
-        log_error "$(display_path "$settings_file") is corrupt. Use --force to overwrite."
-        write_summary ERROR "claude mcp" "settings corrupt" ;;
-    error-clobber)
-        log_error "$(display_path "$settings_file") merge would lose fields. Use --force to proceed."
-        write_summary ERROR "claude mcp" "merge would lose fields" ;;
-    *)
-        log_error "Unexpected deny merge result: $DENY_RESULT"
-        write_summary ERROR "claude mcp" "unexpected error" ;;
-esac
+# --- Settings.json: not managed here ---
+# This script no longer writes ~/.claude/settings.json. Permission rules
+# (allow/ask/deny) are profile-sourced and reconciled by setup-user-settings
+# against profile.json. Obsolete deny rules (MCP(vercel)/MCP(webflow)/
+# Agent(claude-code-guide)) are purged there. setup-user-mcp only registers
+# MCP servers via `claude mcp add`.
 
 if [ "$DRY_RUN" != "true" ]; then
-    log_ok "User-level MCP configured (all servers; vercel/webflow disabled by default)"
+    log_ok "User-level MCP configured (chrome-devtools, vercel, webflow)"
     if [ "$ERRORS" -eq 0 ]; then
         if [ "$MCP_CHANGED" = "true" ]; then
             write_summary OK "claude mcp" "configured"
@@ -289,9 +195,8 @@ if [ "$DRY_RUN" != "true" ]; then
         fi
     fi
 else
-    log "[DRY RUN] Would configure user-level MCP (all servers; vercel/webflow disabled by default)"
+    log "[DRY RUN] Would configure user-level MCP (chrome-devtools, vercel, webflow)"
 fi
-log "To enable per project: aitools --addmcp vercel"
 log "To check status: aitools mcp"
 
 # Display cloud MCP servers configured at claude.ai.

@@ -1004,6 +1004,34 @@ blog "Generating deploy/setup-user-mcp.ps1"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
+# deploy/setup-user-settings.sh and .ps1 (settings.json <-> profile.json sync)
+# ============================================================
+# Self-contained via inline_lib_* (sync_managed_json + prompt_json_field_review).
+# Resolves profile.json at runtime via config.json userRepoPath -- no build-time
+# value embedding needed (works identically in dev and MDM).
+blog "Generating deploy/setup-user-settings.sh"
+{
+    echo '#!/usr/bin/env bash'
+    echo "$HEADER_COMMENT_BASH"
+    extract_between "$SCRIPTS_DIR/setup-user-settings.sh" \
+        '^# --- BEGIN settings body' '^# --- END settings body'
+    extract_between "$SCRIPTS_DIR/setup-user-settings.sh" \
+        '^# --- BEGIN exit' '^# --- END exit'
+} | inline_lib_bash > "$DEPLOY_DIR/setup-user-settings.sh"
+chmod +x "$DEPLOY_DIR/setup-user-settings.sh"
+GENERATED=$((GENERATED + 1))
+
+blog "Generating deploy/setup-user-settings.ps1"
+{
+    echo "$HEADER_COMMENT_PS1"
+    extract_between "$SCRIPTS_DIR/setup-user-settings.ps1" \
+        '^# --- BEGIN settings body' '^# --- END settings body' --crlf
+    extract_between "$SCRIPTS_DIR/setup-user-settings.ps1" \
+        '^# --- BEGIN exit' '^# --- END exit' --crlf
+} | inline_lib_ps1 > "$DEPLOY_DIR/setup-user-settings.ps1"
+GENERATED=$((GENERATED + 1))
+
+# ============================================================
 # 31-32. deploy/setup-user-skills.sh and .ps1 (with dynamically embedded skills)
 # ============================================================
 # The scripts/ versions discover skills from shared/skills/ at runtime.
@@ -1242,12 +1270,12 @@ blog "Generating deploy/setup-user-hooks.sh (extracted + embedded hooks)"
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
     cat <<'BLOCK'
-# setup-user-hooks.sh -- Deploys Claude Code hooks and preferences to ~/.claude/settings.json
-# Self-contained: hook script and preferences are embedded below. No repo needed.
-# Safe to re-run -- merges managed fields without clobbering existing settings.
+# setup-user-hooks.sh -- Deploys Claude Code hooks to ~/.claude/settings.json
+# Self-contained: hook scripts are embedded below. No repo needed.
+# Safe to re-run -- merges the `hooks` key without clobbering existing settings.
 #
-# Managed fields: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
-# Preserved: permissions, enabledPlugins, all other fields
+# Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop
+# Preserved: permissions, enabledPlugins, all other fields (prefs synced by setup-user-settings)
 #
 # Hooks deployed:
 #   SessionEnd: session-archive.sh (archives transcripts to user repo)
@@ -1284,6 +1312,10 @@ BLOCK
         _delim="__EMB_$(echo "$_hookfile" | tr 'a-z.-' 'A-Z__')__"
         echo "cat > \"\$HOOKS_DIR/$_hookfile\" <<'${_delim}'"
         cat "$_src"
+        # Guarantee the delimiter lands on its own line even when the source hook
+        # lacks a trailing newline (POSIX-incomplete file) -- otherwise the heredoc
+        # never closes and the generated script is unparseable.
+        [ -n "$(tail -c1 "$_src")" ] && echo ""
         echo "$_delim"
     done < <(node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));console.log([...m.hooks.map(h=>h.file),...((m.deploy)||[])].join("\n"))' "$_MANIFEST")
     cat <<'BLOCK'
@@ -1304,33 +1336,11 @@ BLOCK
     echo "REGS_JSON='$_REGS'"
     echo ""
 
-    # Extract: merge setup (SETTINGS_FILE, mkdir, HOOK_CMD, GUARD_CMD, node block start)
-    # up to the profile preference reading inside the node block
+    # Extract: merge section (settings.json hooks merge, mergeHookEntry, clobber,
+    # validation) + case statement. Prefs are no longer handled here -- they are
+    # profile-sourced and synced by setup-user-settings.
     extract_between "$SCRIPTS_DIR/setup-user-hooks.sh" \
-        '^# --- END hook deployment' '^// --- BEGIN claude preferences'
-
-    # REPLACE: embedded preferences (from profile.json at build time)
-    # Precompute the effortLevel JS literal in bash. Use SINGLE quotes for the JS
-    # string: the merge node block is wrapped in a bash double-quoted string
-    # (node -e "..."), so embedding double quotes ("high") breaks out of the bash
-    # quote and node receives an unquoted identifier (const effortLevel = high;
-    # -> ReferenceError). Single quotes are safe inside the bash double-quote.
-    if [ -n "${CLAUDE_EFFORT_LEVEL:-}" ]; then
-        _EFFORT_JS="'$CLAUDE_EFFORT_LEVEL'"
-    else
-        _EFFORT_JS="null"
-    fi
-    cat <<BLOCK_INTERP
-// --- Embedded preferences (from profile.json at build time) ---
-const autoMemory = $CLAUDE_AUTO_MEMORY;
-const alwaysThinking = $CLAUDE_ALWAYS_THINKING;
-const effortLevel = $_EFFORT_JS;
-const validEffortLevels = ['low', 'medium', 'high'];
-BLOCK_INTERP
-
-    # Extract: rest of node block (merge logic, clobber, validation) + case statement
-    extract_between "$SCRIPTS_DIR/setup-user-hooks.sh" \
-        '^// --- END claude preferences' '^# --- END hooks body'
+        '^# --- END hook deployment' '^# --- END hooks body'
 
     # Extract: exit footer
     extract_between "$SCRIPTS_DIR/setup-user-hooks.sh" \
@@ -1348,12 +1358,12 @@ blog "Generating deploy/setup-user-hooks.ps1 (extracted + embedded hooks)"
 {
     echo "$HEADER_COMMENT_PS1"
     cat <<'BLOCK'
-# setup-user-hooks.ps1 -- Deploys Claude Code hooks and preferences to ~/.claude/settings.json
-# Self-contained: hook scripts and preferences are embedded below. No repo needed.
-# Safe to re-run -- merges managed fields without clobbering existing settings.
+# setup-user-hooks.ps1 -- Deploys Claude Code hooks to ~/.claude/settings.json
+# Self-contained: hook scripts are embedded below. No repo needed.
+# Safe to re-run -- merges the `hooks` key without clobbering existing settings.
 #
-# Managed fields: hooks.SessionEnd, hooks.PreToolUse, autoMemoryEnabled, alwaysThinkingEnabled, effortLevel
-# Preserved: permissions, enabledPlugins, all other fields
+# Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop
+# Preserved: permissions, enabledPlugins, all other fields (prefs synced by setup-user-settings)
 #
 # Hooks deployed:
 #   SessionEnd: session-archive.sh (archives transcripts to user repo)
@@ -1388,6 +1398,9 @@ BLOCK
         fi
         printf '$hookFiles["%s"] = @'"'"'\r\n' "$_hookfile"
         perl -pe 's/\r?\n$/\r\n/' "$_src"
+        # Guarantee the here-string terminator ('@) lands on its own line even when
+        # the source hook lacks a trailing newline.
+        [ -n "$(tail -c1 "$_src")" ] && printf '\r\n'
         printf ''"'"'@\r\n'
         printf '\r\n'
     done < <(node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));console.log([...m.hooks.map(h=>h.file),...((m.deploy)||[])].join("\n"))' "$_PS_MANIFEST")
@@ -1412,21 +1425,13 @@ BLOCK
     done < <(node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));for(const h of m.hooks){console.log("    [pscustomobject]@{ event = \""+h.event+"\"; file = \""+h.file+"\"; matcher = \""+(h.matcher||"")+"\" }")}' "$SHARED_DIR/hooks/hooks-manifest.json")
     printf ')\r\n'
 
-    # REPLACE: embedded preferences (no extraction between — sentinels are adjacent in PS1)
     printf '\r\n'
-    printf '# --- Embedded preferences (from profile.json at build time) ---\r\n'
-    printf '$autoMemory = $%s\r\n' "$CLAUDE_AUTO_MEMORY"
-    printf '$alwaysThinking = $%s\r\n' "$CLAUDE_ALWAYS_THINKING"
-    if [ -n "${CLAUDE_EFFORT_LEVEL:-}" ]; then
-        printf '$effortLevel = "%s"\r\n' "$CLAUDE_EFFORT_LEVEL"
-    else
-        printf '$effortLevel = $null\r\n'
-    fi
-    printf '$validEffortLevels = @("low", "medium", "high")\r\n'
 
-    # Extract: merge section (settings.json merge, MergeHookEntry, clobber, validation)
+    # Extract: merge section (settings.json hooks merge, MergeHookEntry, clobber,
+    # validation). Prefs are no longer handled here -- they are profile-sourced
+    # and synced by setup-user-settings.
     extract_between "$SCRIPTS_DIR/setup-user-hooks.ps1" \
-        '^# --- END claude preferences' '^# --- END hooks body' --crlf
+        '^# --- END hook deployment' '^# --- END hooks body' --crlf
 
     # Extract: exit footer
     extract_between "$SCRIPTS_DIR/setup-user-hooks.ps1" \

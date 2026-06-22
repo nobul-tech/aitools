@@ -1,9 +1,12 @@
 # setup-user-mcp.ps1 — Installs/updates user-level MCP servers for Claude Code on Windows
 # Safe to re-run — checks existing config, only re-adds when changed or -Force used.
 #
-# All three servers at user level. Chrome DevTools enabled globally;
-# Vercel and Webflow are present but disabled by default (deny rules).
-# Use `aitools --addmcp` to enable per project.
+# Registers all three servers at user level (chrome-devtools, vercel, webflow).
+# This script does NOT write ~/.claude/settings.json: permission rules
+# (allow/ask/deny) are profile-sourced and reconciled by setup-user-settings.
+#
+# Managed: MCP server registration (via `claude mcp add`).
+# Preserved: ~/.claude/settings.json (not touched here).
 
 # --- BEGIN mcp body (extracted by build-deploy) ---
 param(
@@ -134,7 +137,7 @@ if ($Force) {
     }
 }
 
-# Vercel -- remote HTTP server (disabled by default via deny rules below)
+# Vercel -- remote HTTP server
 if ($Force) {
     if ($DryRun) {
         Log "[DRY RUN] Would re-add MCP server: vercel (-Force)"
@@ -151,7 +154,7 @@ if ($Force) {
     }
 }
 
-# Webflow -- remote HTTP server (disabled by default via deny rules below)
+# Webflow -- remote HTTP server
 if ($Force) {
     if ($DryRun) {
         Log "[DRY RUN] Would re-add MCP server: webflow (-Force)"
@@ -168,111 +171,21 @@ if ($Force) {
     }
 }
 
-# --- Merge deny rules into ~/.claude/settings.json ---
-# Vercel and Webflow are disabled by default at user level.
-# Projects enable them via .claude/settings.local.json (aitools --addmcp).
-
-$settingsFile = Join-Path (Join-Path $env:USERPROFILE ".claude") "settings.json"
-$settingsDir = Split-Path $settingsFile -Parent
-Log "Merging deny rules into $settingsFile..."
-
-if (-not (Test-Path $settingsDir)) {
-    if (-not $DryRun) {
-        New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
-    }
-}
-
-# Back up before merge
-if (-not $DryRun) {
-    Backup-File -FilePath $settingsFile
-}
-
-# Read existing settings or start fresh
-$settings = @{}
-$corrupt = $false
-if (Test-Path $settingsFile) {
-    try {
-        $raw = Get-Content $settingsFile -Raw
-        $settings = ConvertPSObjectToHashtable ($raw | ConvertFrom-Json)
-    } catch {
-        $corrupt = $true
-        LogWarn "$settingsFile could not be parsed ($_)"
-    }
-}
-$beforeKeys = @($settings.Keys)
-
-# Ensure permissions.deny exists
-if (-not $settings.ContainsKey("permissions")) { $settings["permissions"] = @{} }
-if (-not $settings["permissions"].ContainsKey("deny")) { $settings["permissions"]["deny"] = @() }
-
-# Add deny rules if not already present
-$denyRules = @("MCP(vercel)", "MCP(webflow)", "Agent(claude-code-guide)")
-foreach ($rule in $denyRules) {
-    if ($rule -notin $settings["permissions"]["deny"]) {
-        $settings["permissions"]["deny"] += $rule
-    }
-}
-
-# Clobber detection
-$managedKeys = @("permissions")
-$lostKeys = @($beforeKeys | Where-Object { $_ -notin $settings.Keys })
+# --- Settings.json: not managed here ---
+# This script no longer writes ~/.claude/settings.json. Permission rules
+# (allow/ask/deny) are profile-sourced and reconciled by setup-user-settings
+# against profile.json. Obsolete deny rules (MCP(vercel)/MCP(webflow)/
+# Agent(claude-code-guide)) are purged there. setup-user-mcp only registers
+# MCP servers via `claude mcp add`.
 
 if ($DryRun) {
-    Log "[DRY RUN] $settingsFile`: merge deny rules"
-    Log "  Managed fields: permissions.deny"
-    if ($lostKeys.Count -gt 0) {
-        LogWarn "[DRY RUN] CLOBBER: would lose non-managed fields: $($lostKeys -join ', ')"
-    }
-    if ($corrupt) {
-        LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
-    }
-} elseif ($corrupt -and -not $Force) {
-    LogError "$settingsFile is corrupt. Use -Force to overwrite, or fix manually."
-    Write-Summary "ERROR" "claude mcp" "settings corrupt"
-} elseif ($lostKeys.Count -gt 0 -and -not $Force) {
-    LogError "$settingsFile merge would lose fields: $($lostKeys -join ', '). Use -Force to proceed."
-    Write-Summary "ERROR" "claude mcp" "merge would lose fields"
+    Log "[DRY RUN] Would configure user-level MCP (chrome-devtools, vercel, webflow)"
 } else {
-    if ($corrupt) { LogWarn "Proceeding with -Force on corrupt file" }
-    if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
-
-    $mergedNorm = Normalize-JsonForComparison $settings -Depth 10
-    $existingNorm = if ($raw -and -not $corrupt) {
-        Normalize-JsonForComparison (ConvertPSObjectToHashtable ($raw | ConvertFrom-Json)) -Depth 10
-    } else { $null }
-
-    if (-not $corrupt -and $lostKeys.Count -eq 0 -and $mergedNorm -eq $existingNorm) {
-        LogOk "Deny rules unchanged in $settingsFile"
-    } else {
-        $json = $settings | ConvertTo-Json -Depth 10
-        $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($settingsFile)
-        [System.IO.File]::WriteAllText($resolvedPath, $json, [System.Text.UTF8Encoding]::new($false))
-
-        # Post-write validation
-        try {
-            $vContent = [System.IO.File]::ReadAllText($resolvedPath)
-            $vParsed = $vContent | ConvertFrom-Json
-            if (-not ($vParsed.PSObject.Properties.Name -contains "permissions")) {
-                LogError "Validation failed: $settingsFile missing required field 'permissions'"
-            }
-        } catch {
-            LogError "Validation failed: $settingsFile is not valid JSON -- $_"
-        }
-
-        LogOk "Deny rules set for vercel, webflow in $settingsFile"
-        $mcpChanged = $true
-    }
-}
-
-if ($DryRun) {
-    Log "[DRY RUN] Would configure user-level MCP (all servers; vercel/webflow disabled by default)"
-} else {
-    LogOk "User-level MCP configured (all servers; vercel/webflow disabled by default)"
+    LogOk "User-level MCP configured (chrome-devtools, vercel, webflow)"
     if ($errors -eq 0) {
         Write-Summary "OK" "claude mcp" $(if ($mcpChanged) { "configured" } else { "verified" })
     }
 }
-Log "To enable per project: aitools --addmcp vercel"
 Log "To check status: aitools mcp"
 
 # Display cloud MCP servers configured at claude.ai.
