@@ -46,7 +46,10 @@ CREATE TABLE IF NOT EXISTS session (
     ended_at TEXT,                    -- ISO 8601 UTC (Z suffix), NULL while active
     version REAL NOT NULL DEFAULT 1.0,
     platform TEXT,                    -- darwin, win32, linux
-    agent_identity TEXT               -- e.g. "S3-Victor"
+    agent_identity TEXT,              -- e.g. "S3-Victor"
+    project_dir TEXT,                 -- absolute repo/working dir (git root), set at session start
+    project_claude_md TEXT,           -- <project_dir>/CLAUDE.md
+    user_claude_md TEXT               -- ~/.claude/CLAUDE.md
 );
 
 -- Missions: delegated agent missions (self-referential for nesting)

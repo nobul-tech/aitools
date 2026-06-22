@@ -3483,6 +3483,56 @@
       "status": "harvested",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
+    },
+    "2026-06-21_session-5a95b268-9_.intelligence-last-check": {
+      "harvested": "2026-06-21",
+      "session": "aitools/2026-06-21_5a95b268-9",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-21"
+    },
+    "2026-06-21_session-5a95b268-9_deploy-hook.sh": {
+      "harvested": "2026-06-21",
+      "session": "aitools/2026-06-21_5a95b268-9",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-21"
+    },
+    "2026-06-21_session-5a95b268-9_diag.sh": {
+      "harvested": "2026-06-21",
+      "session": "aitools/2026-06-21_5a95b268-9",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-21"
+    },
+    "2026-06-21_session-5a95b268-9_events.jsonl": {
+      "harvested": "2026-06-21",
+      "session": "aitools/2026-06-21_5a95b268-9",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-21"
+    },
+    "2026-06-21_session-5a95b268-9_verify-hook.sh": {
+      "harvested": "2026-06-21",
+      "session": "aitools/2026-06-21_5a95b268-9",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-21"
     }
   }
 }

@@ -54,10 +54,15 @@ if [ -z "$PYTHON" ]; then
     exit 0
 fi
 
-HELPER="$PROJECT_ROOT/scripts/harness-db.py"
+# Resolve harness-db.py: prefer the deployed copy (~/.aitools/bin) so it
+# works in every project; fall back to the repo for dev in aitools itself.
+HELPER=""
+for _cand in "$HOME/.aitools/bin/harness-db.py" "$PROJECT_ROOT/scripts/harness-db.py" "$HOME/repos/aitools/scripts/harness-db.py"; do
+    if [ -f "$_cand" ]; then HELPER="$_cand"; break; fi
+done
 
 # Check helper script exists
-if [ ! -f "$HELPER" ]; then
+if [ -z "$HELPER" ]; then
     exit 0
 fi
 

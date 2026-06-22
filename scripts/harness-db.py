@@ -68,7 +68,7 @@ from typing import Any
 
 # -- Constants ----------------------------------------------------------------
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Session DB tables (Tier 1)
 SESSION_SCHEMA = """\
@@ -83,7 +83,10 @@ CREATE TABLE IF NOT EXISTS session (
     ended_at TEXT,
     version REAL NOT NULL DEFAULT 1.0,
     platform TEXT,
-    agent_identity TEXT  -- 'Session Commander <session_id[:10]>', set at session start
+    agent_identity TEXT,  -- 'Session Commander <session_id[:10]>', set at session start
+    project_dir TEXT,  -- absolute repo/working dir (git root), set at session start
+    project_claude_md TEXT,  -- <project_dir>/CLAUDE.md
+    user_claude_md TEXT  -- ~/.claude/CLAUDE.md
 );
 
 CREATE TABLE IF NOT EXISTS missions (
@@ -476,6 +479,24 @@ def ensure_schema(conn: sqlite3.Connection, schema_sql: str) -> None:
         conn.commit()
 
 
+def migrate_session_columns(conn: sqlite3.Connection) -> None:
+    """Idempotently add session-table columns introduced after initial creation.
+
+    CREATE TABLE IF NOT EXISTS does not alter existing tables, so session DBs
+    created before a column existed need an explicit ALTER. Safe to re-run:
+    only adds columns that are missing. Column names are hardcoded literals
+    (no user input), so the f-string interpolation is injection-safe.
+    """
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(session)")}
+    added = False
+    for col in ("project_dir", "project_claude_md", "user_claude_md"):
+        if col not in existing:
+            conn.execute(f"ALTER TABLE session ADD COLUMN {col} TEXT")
+            added = True
+    if added:
+        conn.commit()
+
+
 def find_active_session_id(project_root: Path) -> str | None:
     """Find the active session ID from the scratch .current-session file."""
     current_file = project_root / ".scratch" / ".current-session"
@@ -537,6 +558,12 @@ def cmd_session_start(args: argparse.Namespace) -> int:
     session_id = args.id
     schwerpunkt = args.schwerpunkt or "unspecified"
 
+    # Resolve the working dir and the two CLAUDE.md paths. --project-dir comes
+    # from the SessionStart hook (git root); fall back to the resolved root.
+    project_dir = args.project_dir or str(project_root)
+    project_claude_md = str(Path(project_dir) / "CLAUDE.md")
+    user_claude_md = str(Path.home() / ".claude" / "CLAUDE.md")
+
     # Ensure directories
     sessions_dir = project_root / ".aitools" / "sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
@@ -545,6 +572,7 @@ def cmd_session_start(args: argparse.Namespace) -> int:
     db_path = get_session_db_path(project_root, session_id)
     conn = open_db(db_path)
     ensure_schema(conn, SESSION_SCHEMA)
+    migrate_session_columns(conn)
 
     now = utcnow()
     platform = detect_platform()
@@ -560,9 +588,11 @@ def cmd_session_start(args: argparse.Namespace) -> int:
     if existing is None:
         conn.execute(
             """INSERT INTO session
-               (session_id, schwerpunkt, started_at, updated_at, platform, agent_identity)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (session_id, schwerpunkt, now, now, platform, identity),
+               (session_id, schwerpunkt, started_at, updated_at, platform, agent_identity,
+                project_dir, project_claude_md, user_claude_md)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (session_id, schwerpunkt, now, now, platform, identity,
+             project_dir, project_claude_md, user_claude_md),
         )
         conn.commit()
         print(f"Session started: {session_id}")
@@ -574,6 +604,15 @@ def cmd_session_start(args: argparse.Namespace) -> int:
                WHERE session_id = ?
                  AND (agent_identity IS NULL OR agent_identity = '')""",
             (identity, session_id),
+        )
+        # Idempotent back-fill: populate path columns for sessions created
+        # before they existed; never clobber an already-set value.
+        conn.execute(
+            """UPDATE session
+               SET project_dir = ?, project_claude_md = ?, user_claude_md = ?
+               WHERE session_id = ?
+                 AND (project_dir IS NULL OR project_dir = '')""",
+            (project_dir, project_claude_md, user_claude_md, session_id),
         )
         conn.commit()
         print(f"Session already exists: {session_id}")
@@ -2624,6 +2663,7 @@ def build_parser() -> argparse.ArgumentParser:
     session_start = session_sub.add_parser("start", help="Start a new session")
     session_start.add_argument("--id", required=True, help="Session ID")
     session_start.add_argument("--schwerpunkt", help="Session focus area")
+    session_start.add_argument("--project-dir", help="Absolute repo/working dir (git root)")
 
     session_end = session_sub.add_parser("end", help="End a session")
     session_end.add_argument("--id", required=True, help="Session ID")

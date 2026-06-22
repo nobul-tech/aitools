@@ -460,6 +460,26 @@ else
     log_warn "hh.sh not found — skipping"
 fi
 
+# Harness Python CLIs -> ~/.aitools/bin (deployed copy, called by hooks via
+# absolute path so every project's hooks resolve them — not run from the repo).
+# Uses deploy_managed_file (aitools-lib): backup + deploy-state tracking, so an
+# unedited deployed copy auto-updates silently and a user-edited one prompts —
+# same managed-file discipline as hooks (config-file-safety.md).
+AITOOLS_BIN="$HOME/.aitools/bin"
+mkdir -p "$AITOOLS_BIN"
+deploy_tracker_init
+for _hcli in harness-db.py read-session.py read-session-full.py; do
+    _src="$SCRIPT_DIR/$_hcli"
+    if [ -f "$_src" ]; then
+        _content=$(cat "$_src")
+        deploy_managed_file "$_content" "$AITOOLS_BIN/$_hcli" "harness bin" "$_hcli"
+        deploy_tracker_record "$MANAGED_FILE_RESULT" "harness bin" "$_hcli"
+    else
+        log_warn "$_hcli not found at $(display_path "$_src") (MDM deploy — skipping)"
+    fi
+done
+deploy_tracker_summary "harness bin"
+
 # ============================================================
 # 7. Shell integration
 # ============================================================

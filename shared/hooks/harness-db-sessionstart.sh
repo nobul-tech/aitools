@@ -58,10 +58,15 @@ if ! "$PYTHON" -c "import sqlite3" 2>/dev/null; then
     exit 0
 fi
 
-HELPER="$PROJECT_ROOT/scripts/harness-db.py"
+# Resolve harness-db.py: prefer the deployed copy (~/.aitools/bin) so it
+# works in every project; fall back to the repo for dev in aitools itself.
+HELPER=""
+for _cand in "$HOME/.aitools/bin/harness-db.py" "$PROJECT_ROOT/scripts/harness-db.py" "$HOME/repos/aitools/scripts/harness-db.py"; do
+    if [ -f "$_cand" ]; then HELPER="$_cand"; break; fi
+done
 
 # Check helper script exists
-if [ ! -f "$HELPER" ]; then
+if [ -z "$HELPER" ]; then
     exit 0
 fi
 
@@ -69,8 +74,9 @@ fi
 # Let stderr through (warnings visible to Claude), but don't block on failure
 "$PYTHON" "$HELPER" init || true
 
-# Register this session
-"$PYTHON" "$HELPER" session start --id "$SESSION_ID" || true
+# Register this session (pass the resolved project root so it is recorded
+# in the session table — avoids delegations hardcoding per-machine paths)
+"$PYTHON" "$HELPER" session start --id "$SESSION_ID" --project-dir "$PROJECT_ROOT" || true
 
 printf 'Harness DB: session %s registered\n' "$SESSION_ID"
 
