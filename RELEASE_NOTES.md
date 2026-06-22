@@ -12,6 +12,18 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.73.1 -- Fix: `aitools install` skipped tool installs after deploy-list reload (2026-06-22)
+
+### Bug fixes
+
+| # | Severity | Change |
+|---|----------|--------|
+| 1 | High | `aitools install` ran only the config-deploy (sync) path and skipped the tool installer (uv, python, go, pup, node checks, …) whenever the smart-reload fired — i.e. when the deploy-script list changed, as it did when v0.73.0 added `setup-user-settings`. The reload's `exec "$HOME/.local/bin/aitools" "$@"` replayed an already-empty `"$@"` (the arg parser consumes args via `shift`), dropping the `install` intent, so the re-exec'd entry fell through to the no-arg sync path. Fix: capture the original args before parsing (`_ORIG_ARGS`) and replay them on re-exec (bash-3.2-safe `${arr[@]+...}` expansion). The PS1 entry was unaffected — it binds `$Command` via `param()`, which survives `@PSBoundParameters` across the re-exec. |
+
+**Verified on:** macOS bash; `bash -n` clean; an arg-replay harness confirms `install` survives the `shift` parse loop and the empty-arg case replays nothing without `set -u` errors. After this fix the deploy-list reload re-execs `aitools install` (not the sync path), so the tool installer runs.
+
+---
+
 ## v0.73.0 -- settings.json ↔ profile.json sync; deny-rule deprecation (2026-06-22)
 
 Fixes the reported "`aitools install` overwrites `~/.claude/settings.json`". Two root causes: `setup-user-mcp` force-added obsolete `permissions.deny` rules on every run regardless of `profile.json`/`settings.json`, and both deployers re-serialized via `sortKeys` (alphabetizing while Claude Code writes insertion order), so any managed-field change rewrote the whole file. `profile.json` (`claude.settings`) is now the source of truth for `settings.json` (except the manifest-owned `hooks`), reconciled by a generic, granular sync engine.

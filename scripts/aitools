@@ -536,6 +536,11 @@ dry_run=false
 force=false
 passthrough=()
 
+# Capture original args before the parse loop consumes them (shift). The
+# smart-reload re-exec below must replay the user's intent (e.g. `install`);
+# by that point "$@" is empty, so it would silently degrade to the sync path.
+_ORIG_ARGS=("$@")
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --version|-v) show_version=true; shift ;;
@@ -1506,7 +1511,9 @@ if [ -f "$repo_path/scripts/aitools" ]; then
             chmod +x "$HOME/.local/bin/aitools"
             export AITOOLS_PREBUILD_DONE=1
             [ "$pulled_updates" = "true" ] && export AITOOLS_PULLED_UPDATES=1
-            exec "$HOME/.local/bin/aitools" "$@"
+            # Replay the ORIGINAL args (parse loop already shifted "$@" empty);
+            # otherwise `install` degrades to the sync path on reload.
+            exec "$HOME/.local/bin/aitools" ${_ORIG_ARGS[@]+"${_ORIG_ARGS[@]}"}
         else
             log_warn "Repo scripts/aitools has syntax errors -- continuing with current list"
         fi
