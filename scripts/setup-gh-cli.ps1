@@ -18,6 +18,7 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 }
 
 # --- Install/update ---
+# Get-Command exempt: command-existence check with if/else fallback
 if (Get-Command gh -ErrorAction SilentlyContinue) {
     $ghVersion = (gh --version | Select-Object -First 1)
     $ghPath = (Get-Command gh).Source
@@ -26,34 +27,36 @@ if (Get-Command gh -ErrorAction SilentlyContinue) {
 
     Log "Checking for updates via winget..."
     $upgradeResult = winget upgrade --exact --id GitHub.cli --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+    $upgradeRc = $LASTEXITCODE
+    Log-WingetOutput $upgradeResult
     if ($upgradeResult -match "No available upgrade found|No newer package versions") {
         LogOk "gh CLI already up to date"
         Write-Summary "OK" "gh cli" "$ghVersion"
-    } elseif ($LASTEXITCODE -eq 0) {
+    } elseif ($upgradeRc -eq 0) {
         Refresh-Path
         $ghVersion = (gh --version | Select-Object -First 1)
         LogOk "gh CLI updated ($ghVersion)"
         Write-Summary "OK" "gh cli" "$ghVersion"
     } else {
-        LogWarn "winget upgrade returned non-zero (exit $LASTEXITCODE) -- gh CLI may be installed via another method"
-        Write-Summary "WARN" "gh cli" "$ghVersion (upgrade check failed)"
+        LogWarn "winget upgrade returned non-zero (exit $upgradeRc) -- gh CLI may be installed via another method. See $logFile"
+        Write-Summary "WARN" "gh cli" "$ghVersion (upgrade check failed, exit $upgradeRc)"
     }
 } else {
     Log "Installing gh CLI via winget..."
     $wingetOutput = winget install --source winget --exact --id GitHub.cli --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+    $installRc = $LASTEXITCODE
     Log-WingetOutput $wingetOutput
-    if ($LASTEXITCODE -ne 0) {
-        LogError "winget install failed (exit code $LASTEXITCODE)"
-        Write-Summary "ERROR" "gh cli" "winget install failed (exit $LASTEXITCODE)"
-    }
     Refresh-Path
 
-    if (Get-Command gh -ErrorAction SilentlyContinue) {
+    # Get-Command exempt: command-existence check with if/else fallback
+    if ($installRc -ne 0) {
+        LogError "winget install gh failed (exit $installRc) -- see $logFile"
+        Write-Summary "ERROR" "gh cli" "winget install failed (exit $installRc)"
+    } elseif (Get-Command gh -ErrorAction SilentlyContinue) {
         $ghVersion = (gh --version | Select-Object -First 1)
         $ghPath = (Get-Command gh).Source
         LogOk "gh CLI installed ($ghVersion)"
         Log "Install path: $ghPath"
-        Write-Summary "OK" "gh cli" "$ghVersion"
 
         # Verify the install directory is in persistent PATH
         $ghDir = Split-Path $ghPath -Parent
@@ -63,10 +66,12 @@ if (Get-Command gh -ErrorAction SilentlyContinue) {
             Write-Summary "ERROR" "gh cli" "installed but not on PATH"
             LogWarn "Add $ghDir to PATH -- tool not accessible to Claude Code"
             Write-Summary "ACTION" "" "Add $ghDir to PATH -- gh not accessible"
+        } else {
+            Write-Summary "OK" "gh cli" "$ghVersion"
         }
     } else {
-        LogError "gh CLI install failed"
-        Write-Summary "ERROR" "gh cli" "install failed"
+        LogError "winget install completed but 'gh' not found in PATH"
+        Write-Summary "ERROR" "gh cli" "installed but not on PATH"
     }
 }
 

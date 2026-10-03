@@ -1142,10 +1142,11 @@ Main agent, direct (no code). Every item below is part of **this review**:
 > PR C2 (batches C3b, C4b, T1, D-C2) shipped 2026-10-03 (#37).
 > PR C3 (batch C5, D-C3) shipped 2026-10-03 (#38).
 > PR C4 (batch C6, D-C4) shipped 2026-10-03 (#39).
-> PR C5 (batches C7, C7b, D-C5) approved for execution 2026-10-03.**
+> PR C5 (batches C7, C7b, D-C5) shipped 2026-10-03 (#40).
+> PR C6 (batch C8, D-C6) approved for execution 2026-10-03.**
 > Verbatim edits, the error-handling audits and the prototype test evidence are in
-> the "PR C1/C2/C3/C4/C5 — verbatim edits" sections below; the logging audit plan is in
-> the PR C2 section. Batches C8–C15 remain scoped only: each needs its own verbatim-edit
+> the "PR C1–C6 — verbatim edits" sections below; the logging audit plan is in
+> the PR C2 section. Batches C9–C15 remain scoped only: each needs its own verbatim-edit
 > revision of this section, presented for approval, before code is written.
 
 ### Origin
@@ -1236,11 +1237,17 @@ PR C5 (approved 2026-10-03; verbatim edits in "PR C5 — verbatim edits"):
 | C7b | `setup-rust.sh` | `check-script-compliance` step 7 WARN added in PR C3 |
 | D-C5 | protected docs (approved 2026-10-03) | this plan. RELEASE_NOTES deferred (Windows Python-gate note recorded in the PR C5 section) |
 
-Later PRs (scoped, not approved):
+PR C6 (approved 2026-10-03; verbatim edits in "PR C6 — verbatim edits"):
 
 | Batch | Files | Issues |
 |---|---|---|
 | C8 | `setup-vercelcli.sh`, `setup-vercelcli.ps1`, `setup-gh-cli.ps1` | #23, #26a, #27a, auth WARN row |
+| D-C6 | protected docs (approved 2026-10-03) | exemptions table: `setup-vercelcli.sh` row removed; this plan. RELEASE_NOTES deferred |
+
+Later PRs (scoped, not approved):
+
+| Batch | Files | Issues |
+|---|---|---|
 | C9 | `setup-user-cursor.sh`, `setup-user-cursor.ps1` | #23, #25, #26b–d |
 | C10 | `setup-user-hooks.sh`, `setup-user-hooks.ps1` | #25, #26a–c, #26f, #27b |
 | C11 | `setup-user-settings.sh`, `setup-user-settings.ps1`, `setup-gh-cli.sh` | #26a–c; remove the "No settings.json yet" early exit (#31 caller half) |
@@ -5176,6 +5183,443 @@ index db3e664..a2af991 100755
          write_summary OK "rust/cargo" "$(cargo --version 2>&1)"
      else
          log_error "rustup install completed but 'cargo' not found in PATH"
+```
+
+## PR C6 — verbatim edits (batch C8)
+
+Base: `main` @ c573948 (after PR C5). Prototyped on a copy of the base (scratch:
+`.scratch/session-3030c86a-9/proto-c8/`); the diff below is the exact edit. Decisions
+C-F2, C-F3 and C-F4 apply. Install methods are unchanged (Homebrew on macOS, npm on
+Linux and Windows for vercel; winget for gh).
+
+### What changes
+
+| File | Issue / check | Change |
+|---|---|---|
+| `setup-vercelcli.sh` | #26a, A5 | Homebrew missing: `write_summary ERROR "vercel cli" "Homebrew not found"` before `exit 1` (was no row) |
+| `setup-vercelcli.sh` | C-F2, A4, A3 | `brew upgrade vercel-cli`: exit code captured (was `\|\| true`); non-zero exit is an ERROR even without "error" in the output; output logged via a here-string loop; ERROR row names the exit code and the log path. The Standard 3 output grep stays (same pattern as `setup-pandoc.sh`, C6) |
+| `setup-vercelcli.sh` | #23, A4 | npm-to-Homebrew migration: `npm uninstall -g vercel` output logged as detail, a failure warns with the exit code (was `2>/dev/null \|\| true`; its exemptions-table row goes) |
+| `setup-vercelcli.sh` | #27a, A4 | Linux `npm install -g vercel`: exit code decides (was a grep for "ERR!\|error": a dependency name containing "error" failed a good install, an exit-1 run without the word passed on to the PATH check); output logged as detail; ERROR row names the exit code |
+| `setup-vercelcli.sh` | C-F3 | Install results are if/elif/else chains: one row per outcome (was ERROR and then a second "not on PATH" ERROR, or OK, after a failed `brew install`) |
+| `setup-vercelcli.sh` | #23, A4 | `vercel --version` via `read_vercel_version`: first output line with a version number; a failed probe's output is logged and the row says "version unknown" (was six `2>/dev/null \| head -1` probes, empty on failure). With stderr merged the row may read "Vercel CLI 41.1.4" instead of "41.1.4" |
+| both vercel scripts | auth WARN row | Not authenticated: `write_summary WARN "vercel cli" "not authenticated"` plus the ACTION (was ACTION only); `vercel whoami` output logged; the check is skipped after an install error -- the `script-standards-detail.md` "command exit code" auth pattern |
+| `setup-vercelcli.ps1` | #26a, A5 | npm missing: ERROR row before `exit 1` (was no row) |
+| `setup-vercelcli.ps1` | C-F2, C-F3, #23 | `npm install` exit code saved before logging, output logged as detail (was printed at info); if/elseif/else results (was OK after the ERROR, or a second ERROR); the persistent-PATH check runs before the OK row, so a PATH failure writes ERROR + ACTION and no OK row; `npm config get prefix` checked (was `2>$null`, unchecked) |
+| `setup-vercelcli.ps1` | #23, A4 | `Get-VercelVersion`: same rule as the bash helper (was `2>$null \| Select-Object -First 1`) |
+| `setup-gh-cli.ps1` | #23 | `winget upgrade` output logged (was captured and dropped); exit codes saved before logging; the upgrade WARN row names the exit code |
+| `setup-gh-cli.ps1` | C-F3 | Install: if/elseif/else results (was a second "install failed" ERROR after the winget ERROR); persistent-PATH check before the OK row |
+| all three | A4 | `Get-Command ... SilentlyContinue` lines carry the command-existence comment |
+
+Generated `deploy/` (dotprofile): `setup-vercelcli.sh`, `setup-vercelcli.ps1` and
+`setup-gh-cli.ps1` change; the build gives 40 scripts and every generated script passes
+`bash -n` / ParseFile.
+
+### Error-handling audit
+
+| Pattern | Where | Check |
+|---|---|---|
+| `x=$(cmd 2>&1) \|\| rc=$?` | brew upgrade, npm uninstall / install, `vercel --version`, `vercel whoami` | `rc` tested on the next statement; output logged first |
+| `& cmd 2>&1 \| Out-String` + `$LASTEXITCODE` saved on the next line | npm, vercel, winget | exit code saved before any other native call |
+| `brew install ... \| while read; do log; done` in `if !` | macOS install / migration | pipefail: a brew failure fails the condition (unchanged pattern, as in `setup-pandoc.sh`) |
+| `Get-Command ... -ErrorAction SilentlyContinue` | 6 sites | command-existence check with explicit fallback (exempt) |
+
+### Tests (Linux)
+
+| Suite | Prototype | `main` |
+|---|---|---|
+| `test-c8.sh` (scratch): `setup-vercelcli.sh` macOS branch (uname stubbed) and Linux branch with stub brew/npm/vercel: Homebrew missing, `brew upgrade` exit 1 without "error", auth skipped after an ERROR, up to date, failed npm uninstall, `brew install` failure, npm exit 1 without "error", npm exit 0 with "error" in the output, already installed, `vercel --version` failing, not authenticated | 13/13 | 3/13 |
+| `test-c8-ps1.sh` (scratch): `setup-vercelcli.ps1` / `setup-gh-cli.ps1` with the OS guard stripped and a minimal PATH (stub npm/vercel/winget/gh): npm missing, npm failure, install dir not in persistent PATH, not authenticated, `vercel --version` failing; winget upgrade failure / up to date, winget install failure | 10/10 | 1/10 |
+| `check-script-compliance.sh` | 13 PASS | 13 PASS |
+| `bash -n` / ParseFile; `build-deploy.sh` into a dotprofile copy | pass; 40 scripts, 3 changed, all parse | -- |
+
+The `main` passes are the regression checks. Not testable here: real Homebrew / npm /
+winget runs (macOS, Windows), and the real `vercel --version` output layout.
+
+### Logging audit (after C8)
+
+| Check | Before C8 | After C8 | C8 files |
+|---|---|---|---|
+| A3 | 187 in 14 | 185 in 13 | 0 |
+| A4 | 302 in 37 | 282 in 36 | 6, all command-existence checks |
+| A5 | 23 in 13 | 21 in 11 | 0 |
+| A8 | 7 in 7 | 7 in 7 | 1 in `setup-vercelcli.sh`: the `brew upgrade` output grep, allowed by Standard 3 (C-F6 pending) |
+
+### D-C6: protected doc edits
+
+- `reference/script-standards-detail.md` exemptions table: remove the `setup-vercelcli.sh`
+  row (line 69, `2>/dev/null \|\| true`, npm uninstall); that discard is fixed.
+- This plan: status line, batch table (C8 -> PR C6), this section.
+
+### Verbatim diff
+
+```diff
+diff --git a/scripts/setup-vercelcli.sh b/scripts/setup-vercelcli.sh
+index b368139..a1fca2b 100755
+--- a/scripts/setup-vercelcli.sh
++++ b/scripts/setup-vercelcli.sh
+@@ -23,6 +23,29 @@ esac
+ 
+ OS_NAME="$(uname -s)"
+ 
++# Log captured command output to the log file as detail lines (blank lines skipped).
++write_output_detail() {  # label, output
++    local line
++    while IFS= read -r line; do
++        if [ -n "${line// /}" ]; then log_detail "$1: $line"; fi
++    done <<< "$2"
++}
++
++# Set VERCEL_VERSION from `vercel --version` (first line with a version number). A failed
++# probe logs its output and leaves "version unknown"; install results are decided by
++# the brew/npm exit code, not by this probe.
++read_vercel_version() {
++    local out rc=0 line
++    out=$(vercel --version 2>&1) || rc=$?
++    VERCEL_VERSION="version unknown"
++    if [ "$rc" -eq 0 ]; then
++        while IFS= read -r line; do
++            if [[ "$line" =~ [0-9]+\.[0-9]+\.[0-9]+ ]]; then VERCEL_VERSION="$line"; return 0; fi
++        done <<< "$out"
++    fi
++    write_output_detail "vercel-version (exit $rc)" "$out"
++}
++
+ # --- Install/update ---
+ case "$OS_NAME" in
+     Darwin)
+@@ -35,29 +58,33 @@ case "$OS_NAME" in
+             log_error "Homebrew not found. Install Vercel CLI manually:"
+             log_error "  1. Install Homebrew: https://brew.sh"
+             log_error "  2. brew install vercel-cli"
++            write_summary ERROR "vercel cli" "Homebrew not found"
+             exit 1
+         fi
+ 
+         if command -v vercel &>/dev/null; then
+             vercel_path="$(command -v vercel)"
+-            vercel_version="$(vercel --version 2>/dev/null | head -1)"
+-            log "Vercel CLI $vercel_version found at $vercel_path"
++            read_vercel_version
++            log "Vercel CLI $VERCEL_VERSION found at $vercel_path"
+ 
+             # Check if installed via Homebrew (path contains /opt/homebrew/ or /usr/local/)
+             if [[ "$vercel_path" == /opt/homebrew/* ]] || [[ "$vercel_path" == /usr/local/* ]]; then
+                 log "Already installed via Homebrew — upgrading..."
+-                UPGRADE_OUTPUT=$(brew upgrade vercel-cli 2>&1) || true
+-                if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
++                upgrade_rc=0
++                UPGRADE_OUTPUT=$(brew upgrade vercel-cli 2>&1) || upgrade_rc=$?
++                if [ "$upgrade_rc" -eq 0 ] && printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+                     log_ok "Vercel CLI already up to date"
+-                    write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
++                    write_summary OK "vercel cli" "$VERCEL_VERSION"
+                 else
+-                    printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
+-                    if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+-                        log_error "brew upgrade vercel-cli failed (see log above)"
+-                        write_summary ERROR "vercel cli" "brew upgrade failed"
++                    while IFS= read -r line; do log "$line"; done <<< "$UPGRADE_OUTPUT"
++                    # Exit code first (C-F2); the output grep stays for brew upgrade (Standard 3).
++                    if [ "$upgrade_rc" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
++                        log_error "brew upgrade vercel-cli failed (exit $upgrade_rc) -- see $(display_path "$LOG_FILE")"
++                        write_summary ERROR "vercel cli" "brew upgrade failed (exit $upgrade_rc)"
+                     else
+-                        log_ok "Vercel CLI $(vercel --version 2>/dev/null | head -1)"
+-                        write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
++                        read_vercel_version
++                        log_ok "Vercel CLI $VERCEL_VERSION"
++                        write_summary OK "vercel cli" "$VERCEL_VERSION"
+                     fi
+                 fi
+             else
+@@ -65,17 +92,22 @@ case "$OS_NAME" in
+                 log_warn "Vercel CLI installed via npm at $vercel_path"
+                 log "Migrating to Homebrew for Claude Code PATH compatibility..."
+ 
+-                # Cleanup: npm uninstall may fail if partially removed; non-blocking
+-                npm uninstall -g vercel 2>/dev/null || true
++                # Non-blocking: brew install below proceeds; the npm copy may shadow it on PATH.
++                uninstall_rc=0
++                uninstall_out=$(npm uninstall -g vercel 2>&1) || uninstall_rc=$?
++                write_output_detail "npm-uninstall-vercel" "$uninstall_out"
++                if [ "$uninstall_rc" -ne 0 ]; then
++                    log_warn "npm uninstall -g vercel failed (exit $uninstall_rc) -- see $(display_path "$LOG_FILE")"
++                fi
++                hash -r
+                 if ! brew install vercel-cli 2>&1 | while IFS= read -r line; do log "$line"; done; then
+                     log_error "brew install vercel-cli failed"
+                     write_summary ERROR "vercel cli" "brew install failed"
+-                fi
+-
+-                if command -v vercel &>/dev/null; then
+-                    log_ok "Migrated to Homebrew: Vercel CLI $(vercel --version 2>/dev/null | head -1)"
++                elif command -v vercel &>/dev/null; then
++                    read_vercel_version
++                    log_ok "Migrated to Homebrew: Vercel CLI $VERCEL_VERSION"
+                     log_ok "Install path: $(command -v vercel)"
+-                    write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
++                    write_summary OK "vercel cli" "$VERCEL_VERSION"
+                 else
+                     log_error "Homebrew install succeeded but 'vercel' not found in PATH"
+                     write_summary ERROR "vercel cli" "installed but not on PATH"
+@@ -87,12 +119,11 @@ case "$OS_NAME" in
+             if ! brew install vercel-cli 2>&1 | while IFS= read -r line; do log "$line"; done; then
+                 log_error "brew install vercel-cli failed"
+                 write_summary ERROR "vercel cli" "brew install failed"
+-            fi
+-
+-            if command -v vercel &>/dev/null; then
+-                log_ok "Vercel CLI installed ($(vercel --version 2>/dev/null | head -1))"
++            elif command -v vercel &>/dev/null; then
++                read_vercel_version
++                log_ok "Vercel CLI installed ($VERCEL_VERSION)"
+                 log_ok "Install path: $(command -v vercel)"
+-                write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
++                write_summary OK "vercel cli" "$VERCEL_VERSION"
+             else
+                 log_error "brew install completed but 'vercel' not found in PATH"
+                 write_summary ERROR "vercel cli" "installed but not on PATH"
+@@ -109,32 +140,39 @@ case "$OS_NAME" in
+         fi
+ 
+         if command -v vercel &>/dev/null; then
+-            log_ok "Vercel CLI already installed ($(vercel --version 2>/dev/null | head -1))"
+-            write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
++            read_vercel_version
++            log_ok "Vercel CLI already installed ($VERCEL_VERSION)"
++            write_summary OK "vercel cli" "$VERCEL_VERSION"
+         else
+             log "Installing Vercel CLI via npm..."
+-            NPM_OUTPUT=$(npm install -g vercel 2>&1) || true
+-            printf '%s\n' "$NPM_OUTPUT" | while IFS= read -r line; do log "$line"; done
+-            if printf '%s\n' "$NPM_OUTPUT" | grep -qi 'ERR!\|error'; then
+-                log_error "npm install vercel reported errors (see log above)"
+-                write_summary ERROR "vercel cli" "npm install failed"
+-            fi
+-
+-            if command -v vercel &>/dev/null; then
+-                log_ok "Vercel CLI installed ($(vercel --version 2>/dev/null | head -1))"
+-                write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
++            # Exit code decides (C-F2); the full output goes to the log as detail.
++            npm_rc=0
++            NPM_OUTPUT=$(npm install -g vercel 2>&1) || npm_rc=$?
++            write_output_detail "npm-install-vercel" "$NPM_OUTPUT"
++            hash -r
++            if [ "$npm_rc" -ne 0 ]; then
++                log_error "npm install -g vercel failed (exit $npm_rc) -- see $(display_path "$LOG_FILE")"
++                write_summary ERROR "vercel cli" "npm install failed (exit $npm_rc)"
++            elif command -v vercel &>/dev/null; then
++                read_vercel_version
++                log_ok "Vercel CLI installed ($VERCEL_VERSION)"
++                write_summary OK "vercel cli" "$VERCEL_VERSION"
+             else
+-                log_error "Vercel CLI install failed"
+-                write_summary ERROR "vercel cli" "install failed"
++                log_error "npm install completed but 'vercel' not found in PATH"
++                write_summary ERROR "vercel cli" "installed but not on PATH"
+             fi
+         fi
+         ;;
+ esac
+ 
+-# Only suggest auth if vercel is installed but not authenticated
+-if command -v vercel >/dev/null 2>&1; then
+-    if ! vercel whoami >/dev/null 2>&1; then
++# --- Auth status check (script-standards-detail.md: command exit code pattern) ---
++if command -v vercel >/dev/null 2>&1 && [ "$ERRORS" -eq 0 ]; then
++    whoami_rc=0
++    whoami_out=$(vercel whoami 2>&1) || whoami_rc=$?
++    if [ "$whoami_rc" -ne 0 ]; then
++        write_output_detail "vercel-whoami (exit $whoami_rc)" "$whoami_out"
+         log_warn "Authentication required: run 'vercel login' to authenticate"
++        write_summary WARN "vercel cli" "not authenticated"
+         write_summary ACTION "" "vercel login -- authenticate vercel CLI"
+     fi
+ fi
+diff --git a/scripts/setup-vercelcli.ps1 b/scripts/setup-vercelcli.ps1
+index a244c03..c4a9cc8 100644
+--- a/scripts/setup-vercelcli.ps1
++++ b/scripts/setup-vercelcli.ps1
+@@ -16,33 +16,55 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+     exit 1
+ }
+ 
++# Log captured command output to the log file as detail lines (blank lines skipped).
++function Write-OutputDetail([string]$Label, [string]$Output) {
++    foreach ($l in $Output.Split("`n")) { if ($l.Trim()) { LogDetail "${Label}: $($l.TrimEnd())" } }
++}
++
++# Get-VercelVersion: first line of `vercel --version` with a version number. A failed
++# probe logs its output and returns "version unknown"; the install result is decided
++# by the npm exit code, not by this probe.
++function Get-VercelVersion {
++    $out = & vercel --version 2>&1 | Out-String
++    $rc = $LASTEXITCODE
++    if ($rc -eq 0) {
++        foreach ($l in $out.Split("`n")) { if ($l -match '\d+\.\d+\.\d+') { return $l.Trim() } }
++    }
++    Write-OutputDetail "vercel-version (exit $rc)" $out
++    return "version unknown"
++}
++
+ # --- Check npm ---
++# Get-Command exempt: command-existence check with if/else fallback
+ if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+     LogError "npm not found -- install Node.js first (aitools install handles this)"
++    Write-Summary "ERROR" "vercel cli" "npm not found (install Node.js)"
+     exit 1
+ }
+ 
+ # --- Install/update ---
++# Get-Command exempt: command-existence check with if/else fallback
+ if (Get-Command vercel -ErrorAction SilentlyContinue) {
+-    $vercelVersion = (vercel --version 2>$null | Select-Object -First 1)
++    $vercelVersion = Get-VercelVersion
+     LogOk "Vercel CLI already installed ($vercelVersion)"
+     Write-Summary "OK" "vercel cli" "$vercelVersion"
+ } else {
+     Log "Installing Vercel CLI via npm..."
++    # Exit code decides (C-F2); the full output goes to the log as detail.
+     $npmOutput = npm install -g vercel 2>&1 | Out-String
+-    $npmOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+-    if ($LASTEXITCODE -ne 0) {
+-        LogError "npm install failed (exit code $LASTEXITCODE)"
+-        Write-Summary "ERROR" "vercel cli" "npm install failed (exit $LASTEXITCODE)"
+-    }
++    $npmRc = $LASTEXITCODE
++    Write-OutputDetail "npm-install-vercel" $npmOutput
+     Refresh-Path
+ 
+-    if (Get-Command vercel -ErrorAction SilentlyContinue) {
+-        $vercelVersion = (vercel --version 2>$null | Select-Object -First 1)
++    # Get-Command exempt: command-existence check with if/else fallback
++    if ($npmRc -ne 0) {
++        LogError "npm install -g vercel failed (exit $npmRc) -- see $logFile"
++        Write-Summary "ERROR" "vercel cli" "npm install failed (exit $npmRc)"
++    } elseif (Get-Command vercel -ErrorAction SilentlyContinue) {
++        $vercelVersion = Get-VercelVersion
+         $vercelPath = (Get-Command vercel).Source
+         LogOk "Vercel CLI installed ($vercelVersion)"
+         Log "Install path: $vercelPath"
+-        Write-Summary "OK" "vercel cli" "$vercelVersion"
+ 
+         # Verify the install directory is in persistent PATH (not just this session)
+         $vercelDir = Split-Path $vercelPath -Parent
+@@ -52,22 +74,31 @@ if (Get-Command vercel -ErrorAction SilentlyContinue) {
+             Write-Summary "ERROR" "vercel cli" "installed but not on PATH"
+             LogWarn "Add $vercelDir to PATH -- tool not accessible to Claude Code"
+             Write-Summary "ACTION" "" "Add $vercelDir to PATH -- vercel not accessible"
++        } else {
++            Write-Summary "OK" "vercel cli" "$vercelVersion"
+         }
+     } else {
+-        LogError "Vercel CLI install failed"
+-        Write-Summary "ERROR" "vercel cli" "install failed"
+-        $npmPrefix = (npm config get prefix 2>$null)
+-        Log "npm global prefix: $npmPrefix"
+-        Log "Check that $npmPrefix is in your PATH"
++        LogError "npm install completed but 'vercel' not found in PATH"
++        Write-Summary "ERROR" "vercel cli" "installed but not on PATH"
++        $npmPrefix = npm config get prefix 2>&1 | Out-String
++        $prefixRc = $LASTEXITCODE
++        if ($prefixRc -eq 0) {
++            Log "Check that the npm global prefix is in your PATH: $($npmPrefix.Trim())"
++        } else {
++            Write-OutputDetail "npm-config-get-prefix (exit $prefixRc)" $npmPrefix
++        }
+     }
+ }
+ 
+-# Only suggest auth if vercel is installed but not authenticated
+-# Get-Command exempt: command-existence check with if/else fallback
+-if (Get-Command vercel -ErrorAction SilentlyContinue) {
+-    $vercelWhoami = & vercel whoami 2>$null
+-    if ($LASTEXITCODE -ne 0) {
++# --- Auth status check (script-standards-detail.md: command exit code pattern) ---
++# Get-Command exempt: command-existence check with explicit fallback
++if ((Get-Command vercel -ErrorAction SilentlyContinue) -and $errors -eq 0) {
++    $whoamiOutput = & vercel whoami 2>&1 | Out-String
++    $whoamiRc = $LASTEXITCODE
++    if ($whoamiRc -ne 0) {
++        Write-OutputDetail "vercel-whoami (exit $whoamiRc)" $whoamiOutput
+         LogWarn "Authentication required: run 'vercel login' to authenticate"
++        Write-Summary "WARN" "vercel cli" "not authenticated"
+         Write-Summary "ACTION" "" "vercel login -- authenticate vercel CLI"
+     }
+ }
+diff --git a/scripts/setup-gh-cli.ps1 b/scripts/setup-gh-cli.ps1
+index 3c78b89..7a710cb 100644
+--- a/scripts/setup-gh-cli.ps1
++++ b/scripts/setup-gh-cli.ps1
+@@ -18,6 +18,7 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+ }
+ 
+ # --- Install/update ---
++# Get-Command exempt: command-existence check with if/else fallback
+ if (Get-Command gh -ErrorAction SilentlyContinue) {
+     $ghVersion = (gh --version | Select-Object -First 1)
+     $ghPath = (Get-Command gh).Source
+@@ -26,34 +27,36 @@ if (Get-Command gh -ErrorAction SilentlyContinue) {
+ 
+     Log "Checking for updates via winget..."
+     $upgradeResult = winget upgrade --exact --id GitHub.cli --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
++    $upgradeRc = $LASTEXITCODE
++    Log-WingetOutput $upgradeResult
+     if ($upgradeResult -match "No available upgrade found|No newer package versions") {
+         LogOk "gh CLI already up to date"
+         Write-Summary "OK" "gh cli" "$ghVersion"
+-    } elseif ($LASTEXITCODE -eq 0) {
++    } elseif ($upgradeRc -eq 0) {
+         Refresh-Path
+         $ghVersion = (gh --version | Select-Object -First 1)
+         LogOk "gh CLI updated ($ghVersion)"
+         Write-Summary "OK" "gh cli" "$ghVersion"
+     } else {
+-        LogWarn "winget upgrade returned non-zero (exit $LASTEXITCODE) -- gh CLI may be installed via another method"
+-        Write-Summary "WARN" "gh cli" "$ghVersion (upgrade check failed)"
++        LogWarn "winget upgrade returned non-zero (exit $upgradeRc) -- gh CLI may be installed via another method. See $logFile"
++        Write-Summary "WARN" "gh cli" "$ghVersion (upgrade check failed, exit $upgradeRc)"
+     }
+ } else {
+     Log "Installing gh CLI via winget..."
+     $wingetOutput = winget install --source winget --exact --id GitHub.cli --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
++    $installRc = $LASTEXITCODE
+     Log-WingetOutput $wingetOutput
+-    if ($LASTEXITCODE -ne 0) {
+-        LogError "winget install failed (exit code $LASTEXITCODE)"
+-        Write-Summary "ERROR" "gh cli" "winget install failed (exit $LASTEXITCODE)"
+-    }
+     Refresh-Path
+ 
+-    if (Get-Command gh -ErrorAction SilentlyContinue) {
++    # Get-Command exempt: command-existence check with if/else fallback
++    if ($installRc -ne 0) {
++        LogError "winget install gh failed (exit $installRc) -- see $logFile"
++        Write-Summary "ERROR" "gh cli" "winget install failed (exit $installRc)"
++    } elseif (Get-Command gh -ErrorAction SilentlyContinue) {
+         $ghVersion = (gh --version | Select-Object -First 1)
+         $ghPath = (Get-Command gh).Source
+         LogOk "gh CLI installed ($ghVersion)"
+         Log "Install path: $ghPath"
+-        Write-Summary "OK" "gh cli" "$ghVersion"
+ 
+         # Verify the install directory is in persistent PATH
+         $ghDir = Split-Path $ghPath -Parent
+@@ -63,10 +66,12 @@ if (Get-Command gh -ErrorAction SilentlyContinue) {
+             Write-Summary "ERROR" "gh cli" "installed but not on PATH"
+             LogWarn "Add $ghDir to PATH -- tool not accessible to Claude Code"
+             Write-Summary "ACTION" "" "Add $ghDir to PATH -- gh not accessible"
++        } else {
++            Write-Summary "OK" "gh cli" "$ghVersion"
+         }
+     } else {
+-        LogError "gh CLI install failed"
+-        Write-Summary "ERROR" "gh cli" "install failed"
++        LogError "winget install completed but 'gh' not found in PATH"
++        Write-Summary "ERROR" "gh cli" "installed but not on PATH"
+     }
+ }
+ 
 ```
 
 ## Risks

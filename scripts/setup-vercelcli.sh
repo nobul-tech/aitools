@@ -23,6 +23,29 @@ esac
 
 OS_NAME="$(uname -s)"
 
+# Log captured command output to the log file as detail lines (blank lines skipped).
+write_output_detail() {  # label, output
+    local line
+    while IFS= read -r line; do
+        if [ -n "${line// /}" ]; then log_detail "$1: $line"; fi
+    done <<< "$2"
+}
+
+# Set VERCEL_VERSION from `vercel --version` (first line with a version number). A failed
+# probe logs its output and leaves "version unknown"; install results are decided by
+# the brew/npm exit code, not by this probe.
+read_vercel_version() {
+    local out rc=0 line
+    out=$(vercel --version 2>&1) || rc=$?
+    VERCEL_VERSION="version unknown"
+    if [ "$rc" -eq 0 ]; then
+        while IFS= read -r line; do
+            if [[ "$line" =~ [0-9]+\.[0-9]+\.[0-9]+ ]]; then VERCEL_VERSION="$line"; return 0; fi
+        done <<< "$out"
+    fi
+    write_output_detail "vercel-version (exit $rc)" "$out"
+}
+
 # --- Install/update ---
 case "$OS_NAME" in
     Darwin)
@@ -35,29 +58,33 @@ case "$OS_NAME" in
             log_error "Homebrew not found. Install Vercel CLI manually:"
             log_error "  1. Install Homebrew: https://brew.sh"
             log_error "  2. brew install vercel-cli"
+            write_summary ERROR "vercel cli" "Homebrew not found"
             exit 1
         fi
 
         if command -v vercel &>/dev/null; then
             vercel_path="$(command -v vercel)"
-            vercel_version="$(vercel --version 2>/dev/null | head -1)"
-            log "Vercel CLI $vercel_version found at $vercel_path"
+            read_vercel_version
+            log "Vercel CLI $VERCEL_VERSION found at $vercel_path"
 
             # Check if installed via Homebrew (path contains /opt/homebrew/ or /usr/local/)
             if [[ "$vercel_path" == /opt/homebrew/* ]] || [[ "$vercel_path" == /usr/local/* ]]; then
                 log "Already installed via Homebrew — upgrading..."
-                UPGRADE_OUTPUT=$(brew upgrade vercel-cli 2>&1) || true
-                if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+                upgrade_rc=0
+                UPGRADE_OUTPUT=$(brew upgrade vercel-cli 2>&1) || upgrade_rc=$?
+                if [ "$upgrade_rc" -eq 0 ] && printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
                     log_ok "Vercel CLI already up to date"
-                    write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
+                    write_summary OK "vercel cli" "$VERCEL_VERSION"
                 else
-                    printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
-                    if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
-                        log_error "brew upgrade vercel-cli failed (see log above)"
-                        write_summary ERROR "vercel cli" "brew upgrade failed"
+                    while IFS= read -r line; do log "$line"; done <<< "$UPGRADE_OUTPUT"
+                    # Exit code first (C-F2); the output grep stays for brew upgrade (Standard 3).
+                    if [ "$upgrade_rc" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+                        log_error "brew upgrade vercel-cli failed (exit $upgrade_rc) -- see $(display_path "$LOG_FILE")"
+                        write_summary ERROR "vercel cli" "brew upgrade failed (exit $upgrade_rc)"
                     else
-                        log_ok "Vercel CLI $(vercel --version 2>/dev/null | head -1)"
-                        write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
+                        read_vercel_version
+                        log_ok "Vercel CLI $VERCEL_VERSION"
+                        write_summary OK "vercel cli" "$VERCEL_VERSION"
                     fi
                 fi
             else
@@ -65,17 +92,22 @@ case "$OS_NAME" in
                 log_warn "Vercel CLI installed via npm at $vercel_path"
                 log "Migrating to Homebrew for Claude Code PATH compatibility..."
 
-                # Cleanup: npm uninstall may fail if partially removed; non-blocking
-                npm uninstall -g vercel 2>/dev/null || true
+                # Non-blocking: brew install below proceeds; the npm copy may shadow it on PATH.
+                uninstall_rc=0
+                uninstall_out=$(npm uninstall -g vercel 2>&1) || uninstall_rc=$?
+                write_output_detail "npm-uninstall-vercel" "$uninstall_out"
+                if [ "$uninstall_rc" -ne 0 ]; then
+                    log_warn "npm uninstall -g vercel failed (exit $uninstall_rc) -- see $(display_path "$LOG_FILE")"
+                fi
+                hash -r
                 if ! brew install vercel-cli 2>&1 | while IFS= read -r line; do log "$line"; done; then
                     log_error "brew install vercel-cli failed"
                     write_summary ERROR "vercel cli" "brew install failed"
-                fi
-
-                if command -v vercel &>/dev/null; then
-                    log_ok "Migrated to Homebrew: Vercel CLI $(vercel --version 2>/dev/null | head -1)"
+                elif command -v vercel &>/dev/null; then
+                    read_vercel_version
+                    log_ok "Migrated to Homebrew: Vercel CLI $VERCEL_VERSION"
                     log_ok "Install path: $(command -v vercel)"
-                    write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
+                    write_summary OK "vercel cli" "$VERCEL_VERSION"
                 else
                     log_error "Homebrew install succeeded but 'vercel' not found in PATH"
                     write_summary ERROR "vercel cli" "installed but not on PATH"
@@ -87,12 +119,11 @@ case "$OS_NAME" in
             if ! brew install vercel-cli 2>&1 | while IFS= read -r line; do log "$line"; done; then
                 log_error "brew install vercel-cli failed"
                 write_summary ERROR "vercel cli" "brew install failed"
-            fi
-
-            if command -v vercel &>/dev/null; then
-                log_ok "Vercel CLI installed ($(vercel --version 2>/dev/null | head -1))"
+            elif command -v vercel &>/dev/null; then
+                read_vercel_version
+                log_ok "Vercel CLI installed ($VERCEL_VERSION)"
                 log_ok "Install path: $(command -v vercel)"
-                write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
+                write_summary OK "vercel cli" "$VERCEL_VERSION"
             else
                 log_error "brew install completed but 'vercel' not found in PATH"
                 write_summary ERROR "vercel cli" "installed but not on PATH"
@@ -109,32 +140,39 @@ case "$OS_NAME" in
         fi
 
         if command -v vercel &>/dev/null; then
-            log_ok "Vercel CLI already installed ($(vercel --version 2>/dev/null | head -1))"
-            write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
+            read_vercel_version
+            log_ok "Vercel CLI already installed ($VERCEL_VERSION)"
+            write_summary OK "vercel cli" "$VERCEL_VERSION"
         else
             log "Installing Vercel CLI via npm..."
-            NPM_OUTPUT=$(npm install -g vercel 2>&1) || true
-            printf '%s\n' "$NPM_OUTPUT" | while IFS= read -r line; do log "$line"; done
-            if printf '%s\n' "$NPM_OUTPUT" | grep -qi 'ERR!\|error'; then
-                log_error "npm install vercel reported errors (see log above)"
-                write_summary ERROR "vercel cli" "npm install failed"
-            fi
-
-            if command -v vercel &>/dev/null; then
-                log_ok "Vercel CLI installed ($(vercel --version 2>/dev/null | head -1))"
-                write_summary OK "vercel cli" "$(vercel --version 2>/dev/null | head -1)"
+            # Exit code decides (C-F2); the full output goes to the log as detail.
+            npm_rc=0
+            NPM_OUTPUT=$(npm install -g vercel 2>&1) || npm_rc=$?
+            write_output_detail "npm-install-vercel" "$NPM_OUTPUT"
+            hash -r
+            if [ "$npm_rc" -ne 0 ]; then
+                log_error "npm install -g vercel failed (exit $npm_rc) -- see $(display_path "$LOG_FILE")"
+                write_summary ERROR "vercel cli" "npm install failed (exit $npm_rc)"
+            elif command -v vercel &>/dev/null; then
+                read_vercel_version
+                log_ok "Vercel CLI installed ($VERCEL_VERSION)"
+                write_summary OK "vercel cli" "$VERCEL_VERSION"
             else
-                log_error "Vercel CLI install failed"
-                write_summary ERROR "vercel cli" "install failed"
+                log_error "npm install completed but 'vercel' not found in PATH"
+                write_summary ERROR "vercel cli" "installed but not on PATH"
             fi
         fi
         ;;
 esac
 
-# Only suggest auth if vercel is installed but not authenticated
-if command -v vercel >/dev/null 2>&1; then
-    if ! vercel whoami >/dev/null 2>&1; then
+# --- Auth status check (script-standards-detail.md: command exit code pattern) ---
+if command -v vercel >/dev/null 2>&1 && [ "$ERRORS" -eq 0 ]; then
+    whoami_rc=0
+    whoami_out=$(vercel whoami 2>&1) || whoami_rc=$?
+    if [ "$whoami_rc" -ne 0 ]; then
+        write_output_detail "vercel-whoami (exit $whoami_rc)" "$whoami_out"
         log_warn "Authentication required: run 'vercel login' to authenticate"
+        write_summary WARN "vercel cli" "not authenticated"
         write_summary ACTION "" "vercel login -- authenticate vercel CLI"
     fi
 fi
