@@ -1522,6 +1522,9 @@ fi
 
 fi  # _prebuild_done
 
+# Overall exit status: any failed installer/deploy step makes `aitools` exit non-zero
+overall_rc=0
+
 if $do_install; then
     # --- install: pull + rebuild + run installer (includes deploy) ---
     log "Step 3/$STEPS: Running installer"
@@ -1562,6 +1565,7 @@ if $do_install; then
         check_profile interactive
     else
         log "Completed with errors (see $LOG_DISPLAY)" "error"
+        overall_rc=1
     fi
 
 elif $do_gitpull; then
@@ -1572,7 +1576,8 @@ elif $do_gitpull; then
     if [ $deploy_rc -eq 0 ]; then
         log_ok "Done"
     else
-        log "Completed with $deploy_rc error(s)" "warn"
+        log "Completed with $deploy_rc error(s)" "error"
+        overall_rc=1
     fi
 
     log "Step 4/$STEPS: Tagging version"
@@ -1628,7 +1633,8 @@ else
     if [ $deploy_rc -eq 0 ]; then
         log_ok "Done"
     else
-        log "Completed with $deploy_rc error(s)" "warn"
+        log "Completed with $deploy_rc error(s)" "error"
+        overall_rc=1
     fi
 
     log_ok "Configs deployed ($(repo_version "$repo_path"))"
@@ -1698,6 +1704,7 @@ unset AITOOLS_RUN_ID
 unset AITOOLS_SUMMARY_FILE
 unset AITOOLS_SUPPRESS_SUMMARY_DISPLAY
 
+return "$overall_rc"
 }
 
 main "$@"; exit

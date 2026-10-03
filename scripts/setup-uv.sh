@@ -2,7 +2,9 @@
 # setup-uv.sh -- Installs/updates uv (fast Python package installer)
 # Safe to re-run -- detects existing install and upgrades as needed.
 #
-# macOS: Uses Homebrew (preferred).
+# macOS: Uses Homebrew (preferred). An existing non-Homebrew uv is kept (WARN)
+#        when Homebrew is unavailable or its install fails -- the tool still works.
+# Linux: Homebrew-only until Linux support lands (nobul-tech/aitools#14).
 #
 # See reference/tool-registry.md for install source details.
 
@@ -41,21 +43,34 @@ if command -v uv >/dev/null 2>&1; then
             fi
         fi
     else
-        log_warn "uv installed via non-preferred method at $uv_path"
-        log "Installing via Homebrew (will take precedence on PATH)..."
-        if ! brew install uv 2>&1 | while IFS= read -r line; do log "$line"; done; then
-            log_error "brew install uv failed"
-            write_summary ERROR "uv" "brew install failed"
-        fi
-        if command -v uv >/dev/null 2>&1; then
-            UV_VERSION=$(uv --version 2>/dev/null || echo "version unknown")
-            log_ok "uv installed via Homebrew ($UV_VERSION)"
-            write_summary OK "uv" "$UV_VERSION"
+        # 2>/dev/null: version probe only; falls back to a placeholder string
+        UV_VERSION=$(uv --version 2>/dev/null || echo "version unknown")
+        if ! command -v brew >/dev/null 2>&1; then
+            # The existing uv works; without Homebrew there is nothing to migrate to
+            log_warn "uv at $uv_path ($UV_VERSION) is not a Homebrew install and Homebrew is not available -- keeping it"
+            write_summary WARN "uv" "$UV_VERSION (not Homebrew)"
         else
-            log_error "brew install completed but 'uv' not found in PATH"
-            write_summary ERROR "uv" "installed but not on PATH"
+            log_warn "uv installed via non-preferred method at $uv_path"
+            log "Installing via Homebrew (will take precedence on PATH)..."
+            BREW_RC=0
+            # || records the pipeline status (pipefail) so set -e does not abort before it is reported
+            brew install uv 2>&1 | while IFS= read -r line; do log "$line"; done || BREW_RC=$?
+            BREW_UV="$(brew --prefix)/bin/uv"
+            if [ "$BREW_RC" -eq 0 ] && [ -x "$BREW_UV" ]; then
+                # 2>/dev/null: version probe only; falls back to a placeholder string
+                UV_VERSION=$("$BREW_UV" --version 2>/dev/null || echo "version unknown")
+                log_ok "uv installed via Homebrew ($UV_VERSION)"
+                write_summary OK "uv" "$UV_VERSION"
+            else
+                # The pre-existing uv still works, so this is a warning, not a failure
+                log_warn "brew install uv failed (exit $BREW_RC) -- keeping existing uv at $uv_path ($UV_VERSION)"
+                write_summary WARN "uv" "$UV_VERSION (brew failed)"
+            fi
         fi
     fi
+elif ! command -v brew >/dev/null 2>&1; then
+    log_error "uv is not installed and Homebrew is not available -- cannot install uv"
+    write_summary ERROR "uv" "Homebrew not found"
 else
     log "Installing uv via Homebrew..."
     if ! brew install uv 2>&1 | while IFS= read -r line; do log "$line"; done; then

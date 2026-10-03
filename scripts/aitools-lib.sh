@@ -1588,8 +1588,12 @@ detect_go_provenance() {
         /opt/homebrew/*/go|/usr/local/Cellar/*/go)
             echo "homebrew" ;;
         /usr/local/go/bin/go)
-            # Check if installed via macOS .pkg installer (pkgutil) or manual tarball
-            if pkgutil --pkg-info=org.golang.go >/dev/null 2>&1; then
+            # /usr/local/go is go.dev's official tarball location. Only macOS can tell a
+            # .pkg install from a manual tarball (pkgutil). Without pkgutil (Linux) the
+            # tarball is the upstream-preferred install -- never a cleanup target.
+            if ! command -v pkgutil >/dev/null 2>&1; then
+                echo "upstream"
+            elif pkgutil --pkg-info=org.golang.go >/dev/null 2>&1; then
                 echo "pkg-installer"
             else
                 echo "manual"

@@ -7,7 +7,7 @@
       "scope": "Tool data only. NOT lifecycle gates or onboarding checklists (.claude/rules/tool-lifecycle.md). NOT evaluation process (/tool-eval skill). NOT per-tool ops metadata (tool-ops.json)",
       "audience": "/tool-registry skill, /tool-eval skill, /audit skill, setup scripts, check scripts, aitools-install"
     },
-    "lastUpdated": "2026-06-17",
+    "lastUpdated": "2026-10-03",
     "repositories": {
       "primary": "https://github.com/nobul-tech/aitools",
       "userTemplate": "https://github.com/nobul-jose/aitools-{username}"
@@ -244,7 +244,7 @@
           { "method": "winget", "command": "winget install GitHub.cli", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": null }
         ],
         "linux": [
-          { "method": "apt", "command": "sudo apt-get install -y gh", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "Keyring added on first install" }
+          { "method": "apt", "command": "sudo apt-get install -y gh", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "cli.github.com apt repo + keyring added whenever missing (including over a distro gh); a gh not owned by apt is kept, not shadowed" }
         ]
       },
       "update": {
@@ -739,12 +739,12 @@
       "buildPrereqs": null,
       "knownPaths": null,
       "nonPreferredMethods": [
-        { "method": "macOS .pkg installer", "detection": null, "platform": "macos", "reason": "Installs to /usr/local/go; setup-go.sh removes and replaces with Homebrew" },
+        { "method": "macOS .pkg installer", "detection": null, "platform": "macos", "reason": "Installs to /usr/local/go; setup-go.sh replaces with Homebrew, removing /usr/local/go only after Homebrew Go is verified" },
         { "method": "MSI installer", "detection": null, "platform": "windows", "reason": "setup-go.ps1 detects and proceeds with winget" },
         { "method": "chocolatey", "detection": null, "platform": "windows", "reason": "setup-go.ps1 attempts choco uninstall golang then installs via winget" },
         { "method": "goenv", "detection": null, "platform": "macos/linux", "reason": "Warn-only; user-managed, not removed" },
         { "method": "scoop", "detection": null, "platform": "windows", "reason": "Warn-only; user-managed, not removed" },
-        { "method": "manual tarball", "detection": null, "platform": "macos/linux", "reason": "setup-go.sh removes /usr/local/go/ and replaces with Homebrew" }
+        { "method": "manual tarball", "detection": null, "platform": "macos", "reason": "setup-go.sh replaces with Homebrew, removing /usr/local/go/ only after Homebrew Go is verified. On Linux the go.dev tarball at /usr/local/go is the official install and is kept" }
       ],
       "pathIssues": null,
       "platformGotchas": null
