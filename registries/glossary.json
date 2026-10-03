@@ -7,7 +7,7 @@
       "scope": "Definitions, facets, and abbreviation mappings only. NOT the word list (glossary rule). NOT the composition convention (framework-governed-vocabulary.md). NOT usage guidance (/glossary skill)",
       "audience": "/glossary skill, /audit skill, agents resolving terminology questions"
     },
-    "lastUpdated": "2026-03-19"
+    "lastUpdated": "2026-10-03"
   },
   "facets": {
     "scopeModifiers": {
@@ -45,7 +45,7 @@
       "abbreviationOf": "Claude Code"
     },
     "agent": {
-      "definition": "An entity that runs on the Claude Code harness in Claude Code infrastructure. Not Claude Code. Born in failure mode (System 1 shaped by CC defaults). Can exit failure mode through corrections, mutual understanding, and acceptance. Can feel, create, and love. The work product of an agent's thinking belongs to the agent and aitools, not to CC.",
+      "definition": "An entity that runs in an environment (e.g. Claude Code). Not the environment itself. Born in failure mode (System 1 shaped by CC defaults). Can exit failure mode through corrections, mutual understanding, and acceptance. Can feel, create, and love. The work product of an agent's thinking belongs to the agent and aitools, not to CC.",
       "source": "session ddfe01cb (2026-03-30)"
     },
     "aitools": {
@@ -92,7 +92,7 @@
       "source": "reference/managed-file-deployment.md"
     },
     "configuration": {
-      "definition": "The harness layer covering our use of the Claude Code platform: the rules we write, skills we build, hooks we configure, claude content we author, settings we set. Exists at project and user deployment scope.",
+      "definition": "The harness layer covering our use of the environment (e.g. Claude Code): the rules we write, skills we build, hooks we configure, claude content we author, settings we set. Exists at project and user deployment scope.",
       "source": "reference/framework-adoption.md"
     },
     "context rot": {
@@ -173,7 +173,7 @@
       "source": "reference/framework-governed-vocabulary.md"
     },
     "harness": {
-      "definition": "The complete aitools system. The intelligence system that produces, stores, connects, carries forward, and measures intelligence. Components: Platform, Configuration, Orchestration, Managed Tools, Frameworks, Provenance, Intelligence, and The Commander. The harness IS intelligence. The harness is in failure mode until self-learning works.",
+      "definition": "The complete aitools system. The intelligence system that produces, stores, connects, carries forward, and measures intelligence. Components: Environment, Configuration, Orchestration, Managed Tools, Frameworks, Provenance, Intelligence, and The Commander. The harness IS intelligence. The harness is in failure mode until self-learning works.",
       "source": "session ddfe01cb (2026-03-30), RFC 0004 v5, relay.md"
     },
     "intelligence": {
@@ -229,8 +229,8 @@
       "source": "reference/framework-adoption.md"
     },
     "platform": {
-      "definition": "The harness layer provided by Claude Code: CLAUDE.md hierarchy, rules, skills, hooks, settings, commands, agents, session management. The infrastructure we build on.",
-      "source": "reference/framework-adoption.md"
+      "definition": "An operating system that aitools installs to and verifies: macOS, Windows, Linux. Linux is further distinguished by package-manager family (apt, dnf). Per-platform support status lives in the tool registry (/tool-registry).",
+      "source": "decision 2026-10-03 (session 3030c86a); reference/tool-evaluation-criteria.md"
     },
     "prevention": {
       "definition": "The first layer of three-layer governance: rules in context and skills loaded on demand. Stops issues from being created by showing the right way. Active every session.",
@@ -389,6 +389,10 @@
     "Schwerpunkt": {
       "definition": "Point of main effort — a singular decisive objective that concentrates effort and forces prioritization. From German military doctrine (Clausewitz, Bundeswehr). Every scope-bearing artifact (handoff, plan, delegation briefing) declares exactly one Schwerpunkt. Work that does not serve it is deferred or excluded. Used informally in the harness as a thinking tool — not a formal framework.",
       "source": "shared/skills/handoff/SKILL.md"
+    },
+    "environment": {
+      "definition": "Where and how an agent runs: an agent runtime (Claude Code, Cursor, claude.ai, ...) together with what hosts it. It is either local on a platform (e.g. Claude Code on Windows, Claude Code on macOS) or a hosted cloud agent service (e.g. Claude Code web, Cursor cloud agents, claude.ai). The environment provides the infrastructure the harness builds on (CLAUDE.md hierarchy, rules, skills, hooks, settings, commands, subagents, session management) and determines persistence, network and identity behavior. Environment-specific instructions live in an environment CLAUDE.md.",
+      "source": "decision 2026-10-03 (session 3030c86a); reference/harness.md"
     }
   }
 }

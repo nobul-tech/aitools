@@ -125,7 +125,7 @@ context to be actionable.
 Propose how the relevant frameworks would map into our harness.
 This is the creative step — translating external concepts into
 concrete artifacts:
-- Which harness level? (platform, configuration, orchestration,
+- Which harness level? (environment, configuration, orchestration,
   managed tools, frameworks — see `@reference/harness.md`)
 - Which artifact type? (rule, skill, hook, reference file, design
   principle, JSON registry entry)
