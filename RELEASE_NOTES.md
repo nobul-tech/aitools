@@ -32,6 +32,8 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 |---|--------|
 | 8 | `aitools config` added to the summary tool-name table; plan `plans/linux-install-hardening.md`. |
 
+Resolves Incident #52, #53. Partial corrective action recorded on Incidents #55, #56, #57.
+
 **Verified on:** Linux (Ubuntu 24.04, Claude Code web, no Homebrew): `bash -n` clean on all edited `.sh`; 65/65 behavior checks across six sandboxed harnesses (stubbed brew/pkgutil/apt/uv/pup/cargo); `aitools install` run twice end-to-end from branch clones in an isolated HOME. Results on both runs:
   - wrapper exit was 1 with errors logged (#13 fixed)
   - `config.json` stayed valid, with `userRepoPath`/`machineAlias` preserved; the run 1 seed had an inline `googleDrives: []` before `userRepoPath` (#11 repro), and both runs reported it `Unchanged`
