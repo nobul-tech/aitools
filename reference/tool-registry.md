@@ -838,12 +838,12 @@ go version
 
 | Method | Platform | Notes |
 |--------|----------|-------|
-| macOS .pkg installer | macOS | Installs to /usr/local/go; setup-go.sh removes and replaces with Homebrew |
+| macOS .pkg installer | macOS | Installs to /usr/local/go; setup-go.sh replaces with Homebrew, removing /usr/local/go only after Homebrew Go is verified |
 | MSI installer | Windows | setup-go.ps1 detects and proceeds with winget |
 | Chocolatey | Windows | setup-go.ps1 attempts `choco uninstall golang` then installs via winget |
 | goenv | macOS/Linux | Warn-only; user-managed, not removed |
 | Scoop | Windows | Warn-only; user-managed, not removed |
-| Manual tarball | macOS/Linux | setup-go.sh removes /usr/local/go/ and replaces with Homebrew |
+| Manual tarball | macOS | setup-go.sh replaces with Homebrew, removing /usr/local/go/ only after Homebrew Go is verified. On Linux the go.dev tarball at /usr/local/go is the official install and is kept |
 
 ### Notes
 
