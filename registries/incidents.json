@@ -1168,53 +1168,6 @@
       "updated": "2026-06-20"
     },
     {
-      "id": 52,
-      "title": "aitools-install.sh Step 5 rewrites co-owned config.json via heredoc from regex-parsed fields, with no backup",
-      "status": "planned",
-      "severity": "critical",
-      "affected": [
-        "scripts/aitools-install.sh"
-      ],
-      "linked": "nobul-tech/aitools#11 (epic #10)",
-      "referenceFile": null,
-      "observation": "read_config_drives() in scripts/aitools-install.sh extracts googleDrives with sed -n '/\"googleDrives\"/,/^[[:space:]]*\\]/p'. For an inline \"googleDrives\": [] followed by more keys (the order `aitools user init` produces), the range runs to EOF; the captured text (trailing keys + '}') becomes $DRIVES_JSON and is spliced into `cat > \"$CONFIG_FILE\" << CONFIGEOF`. Observed 2026-10-03 on Ubuntu 24.04: config.json ended with a duplicate userRepoPath and an extra '}', node JSON.parse failed at position 212. No backup_file call precedes the write. scripts/aitools-install.ps1 Step 5 parses with ConvertFrom-Json and is correct.",
-      "expected": ".claude/rules/config-file-safety.md 'Default: read-then-merge' and 'Anti-patterns' (`cat > file << EOF` for any JSON file not solely owned by the script) and 'Backup before overwrite' (caller MUST call backup_file before the write). reference/user-repo.md 'Config Schema': 'All fields use read-then-merge: re-running the installer preserves existing values'.",
-      "impact": "Every second `aitools install` after `aitools user init` (the standard bootstrap flow) on macOS/Linux corrupts ~/.aitools/config.json; damage compounds per run. Cascade: setup-user-claude cannot resolve the profile, so ~/.claude/CLAUDE.md deploys with literal {{PROFILE_NAME}}/{{IDENTITY_GIT_*}} tokens (observed live), and userRepoPath-dependent features (session archive) read an unparseable file.",
-      "discoveryContext": "Found while running `aitools install --skip-gh-auth --repos-path /root/repos --skip-drive-detection` in a Claude Code web container, then RCA via /investigate. Audited: scripts/aitools-install.sh read_config_drives/Step 5/validate_json_config, scripts/aitools-install.ps1 Step 5, scripts/aitools user init node writer, .claude/rules/config-file-safety.md, reference/user-repo.md, registries incident #2. Session 3030c86a, 2026-10-03.",
-      "discipline": null,
-      "frameworks": null,
-      "suggestedResolution": "Replace Step 5 with backup_file + read-then-merge via node (python3 fallback) mirroring aitools-install.ps1, write to temp, validate_json_config, atomic mv; on failure keep old file and pair log_error with write_summary ERROR; recover a corrupt file from newest valid backup. Recurrence of #2's pattern (bash JSON write without backup) — consider a structural detection: check-pre-commit step flagging `cat >` targeting *.json in scripts/ (post-push #19 already describes the audit).",
-      "rootCause": "JSON regex-parsed and blind-overwritten instead of parsed/merged/atomically written; bash/PS1 parity gap; validation logs but does not prevent the write.",
-      "correctiveAction": null,
-      "preventionLayer": "Detection (pre-commit config-merge audit) + Audit (Linux CI install x2)",
-      "created": "2026-10-03",
-      "updated": "2026-10-03"
-    },
-    {
-      "id": 53,
-      "title": "aitools / aitools.ps1 entry points exit 0 when the installer or deploy step fails",
-      "status": "planned",
-      "severity": "high",
-      "affected": [
-        "scripts/aitools",
-        "scripts/aitools.ps1"
-      ],
-      "linked": "nobul-tech/aitools#13 (epic #10)",
-      "referenceFile": null,
-      "observation": "scripts/aitools install path: installer_rc=$? is logged ('Completed with errors (see ...)') and never used as the process exit status; same for $installerRc in scripts/aitools.ps1 and deploy_rc/$deployRc in the gitpull path. Observed 2026-10-03: aitools-install.sh ended 'FAILED with 6 error(s)' + exit 1; `aitools install` exited 0.",
-      "expected": ".claude/rules/script-standards.md 'Exit footer' and reference/script-standards-detail.md 'Exit footer' (exit 1 when ERRORS > 0).",
-      "impact": "Any caller (CI, MDM, bootstrap.sh, agents) treats a failed install as success; failures surface only to someone reading the log.",
-      "discoveryContext": "Same session as #52. Audited: scripts/aitools (install + gitpull branches), scripts/aitools.ps1 (install + gitpull branches), scripts/aitools-install.sh exit footer, .claude/rules/script-standards.md. Session 3030c86a, 2026-10-03.",
-      "discipline": null,
-      "frameworks": null,
-      "suggestedResolution": "Track an overall rc across install/gitpull/sync in both entry points and exit 1 on failure; Linux CI asserts the exit code.",
-      "rootCause": "Entry-point exit status not treated as a contract; no check asserts it.",
-      "correctiveAction": null,
-      "preventionLayer": "Audit (CI asserts exit code)",
-      "created": "2026-10-03",
-      "updated": "2026-10-03"
-    },
-    {
       "id": 54,
       "title": "Linux is not a defined platform in the governance framework, yet the tool registry declares every tool 'Linux: supported'",
       "status": "planned",
@@ -1268,7 +1221,7 @@
       "frameworks": null,
       "suggestedResolution": "Amend tool-lifecycle 'Install cleanup' to require install-verify-then-cleanup; amend registry Go entry (Linux preferred = go.dev tarball, via /tool-eval); setup-go.sh: pkgutil only on Darwin, Linux /usr/local/go = upstream, cleanup after verified replacement; apply same ordering to setup-typst.sh.",
       "rootCause": "Destructive cleanup not gated on a verified replacement, and licensed by a spec written for macOS.",
-      "correctiveAction": null,
+      "correctiveAction": "v0.73.2 (#33): setup-go.sh/aitools-lib.sh classify the Linux /usr/local/go as upstream and keep it; macOS cleanup runs only after Homebrew Go is verified at the formula prefix; Go registry 'manual tarball' scoped to macOS. Remaining: tool-lifecycle.md 'Install cleanup' install-verify-then-cleanup amendment; setup-typst.sh ordering.",
       "preventionLayer": "Prevention (rule amendment) + Audit (CI pre-seeds /usr/local/go)",
       "created": "2026-10-03",
       "updated": "2026-10-03"
@@ -1292,7 +1245,7 @@
       "frameworks": null,
       "suggestedResolution": "Scope Standard 3 explicitly to upgrades; add an install pattern: capability check (command -v) first, then exit code + post-install binary check. Fix setup-datadog.sh accordingly.",
       "rootCause": "Ambiguous spec scope; pattern copied out of context.",
-      "correctiveAction": null,
+      "correctiveAction": "v0.73.2 (#33): setup-datadog.sh decides fallback by binary presence, not output grep. Remaining: scope Standard 3 to upgrades in script-standards-detail.md (see also nobul-tech/aitools#27c).",
       "preventionLayer": "Prevention (spec clarified)",
       "created": "2026-10-03",
       "updated": "2026-10-03"
@@ -1319,7 +1272,7 @@
       "frameworks": null,
       "suggestedResolution": "Lib helpers (IS_LINUX, detect_pkg_manager apt|dnf|none, as_root, checksum-verified install_release_binary); per-tool Linux method via /tool-eval; branch on capability after the guard per cross-platform.md. See #54 for the governance side.",
       "rootCause": "Linux treated as implied by the .sh variant without an implementation or verification requirement (#54).",
-      "correctiveAction": null,
+      "correctiveAction": "v0.73.2 (#33): uv/pup keep existing installs with WARN when Homebrew is absent; pup builds via cargo. Remaining: Linux install paths per tool (PR B, #14).",
       "preventionLayer": "Audit (Linux CI)",
       "created": "2026-10-03",
       "updated": "2026-10-03"
@@ -1414,6 +1367,18 @@
       "title": "Subagent skill preloading — additionalContext verified via docs",
       "closedIn": "v0.55",
       "closedDate": "2026-03-14"
+    },
+    {
+      "id": 52,
+      "title": "aitools-install.sh Step 5 rewrites co-owned config.json via heredoc from regex-parsed fields, with no backup",
+      "closedIn": "v0.73.2",
+      "closedDate": "2026-10-03"
+    },
+    {
+      "id": 53,
+      "title": "aitools / aitools.ps1 entry points exit 0 when the installer or deploy step fails",
+      "closedIn": "v0.73.2",
+      "closedDate": "2026-10-03"
     }
   ]
 }
