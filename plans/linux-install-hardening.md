@@ -1140,10 +1140,11 @@ Main agent, direct (no code). Every item below is part of **this review**:
 
 > **Status: PR C1 (batches C1, C2, C3a, C4a) shipped in v0.73.3 (2026-10-03).
 > PR C2 (batches C3b, C4b, T1, D-C2) shipped 2026-10-03 (#37).
-> PR C3 (batch C5, D-C3) approved for execution 2026-10-03.**
+> PR C3 (batch C5, D-C3) shipped 2026-10-03 (#38).
+> PR C4 (batch C6, D-C4) approved for execution 2026-10-03.**
 > Verbatim edits, the error-handling audits and the prototype test evidence are in
-> the "PR C1/C2/C3 — verbatim edits" sections below; the logging audit plan is in the
-> PR C2 section. Batches C6–C15 remain scoped only: each needs its own verbatim-edit
+> the "PR C1/C2/C3/C4 — verbatim edits" sections below; the logging audit plan is in
+> the PR C2 section. Batches C7–C15 remain scoped only: each needs its own verbatim-edit
 > revision of this section, presented for approval, before code is written.
 
 ### Origin
@@ -1219,11 +1220,17 @@ PR C3 (approved 2026-10-03; verbatim edits in "PR C3 — verbatim edits"):
 | C5 | `setup-rust.sh`, `setup-rust.ps1`, `setup-typst.sh` | #22, #23, #24, #27 |
 | D-C3 | protected docs (approved 2026-10-03) | exemptions table: `setup-rust.sh` and `setup-typst.sh` rows removed; this plan. RELEASE_NOTES deferred |
 
-Later PRs (scoped, not approved):
+PR C4 (approved 2026-10-03; verbatim edits in "PR C4 — verbatim edits"):
 
 | Batch | Files | Issues |
 |---|---|---|
 | C6 | `setup-typst.ps1`, `setup-pandoc.sh`, `setup-pandoc.ps1` | #23, #26a |
+| D-C4 | protected docs (approved 2026-10-03) | exemptions table: `setup-pandoc.sh` and `setup-typst.ps1` rows removed; this plan. RELEASE_NOTES deferred |
+
+Later PRs (scoped, not approved):
+
+| Batch | Files | Issues |
+|---|---|---|
 | C7 | `setup-modal.sh`, `setup-modal.ps1`, `setup-go.ps1` | #23, #26d, #27a |
 | C8 | `setup-vercelcli.sh`, `setup-vercelcli.ps1`, `setup-gh-cli.ps1` | #23, #26a, #27a, auth WARN row |
 | C9 | `setup-user-cursor.sh`, `setup-user-cursor.ps1` | #23, #25, #26b–d |
@@ -4284,6 +4291,337 @@ index d56b10b..18f9e75 100644
  }
  
  # ---------------------------------------------------------------------------
+```
+
+## PR C4 — verbatim edits (batch C6)
+
+Base: `main` @ c80dd1e (after PR C3). Prototyped on a copy of the base (scratch:
+`.scratch/session-3030c86a-9/proto-c6/`); the diff below is the exact edit. Decisions
+C-F2 and C-F3 apply. `setup-pandoc.sh` keeps its install methods (Homebrew on macOS,
+apt on Linux); only its logging and checks change.
+
+### What changes
+
+| File | Issue / check | Change |
+|---|---|---|
+| `setup-pandoc.sh` | #26a, A5 | Homebrew missing: `write_summary ERROR "pandoc" "Homebrew not found"` before `exit 1` (was no summary row) |
+| `setup-pandoc.sh` | C-F2, A4, A3 | `brew upgrade pandoc`: exit code captured (was `\|\| true`); non-zero exit is an ERROR even without "error" in the output; output logged via a here-string loop; ERROR row names the exit code and the log path (was "see log above"); the Standard 3 output grep stays |
+| `setup-pandoc.sh` | #23, A4 | Migration cleanups: conda / MacPorts pandoc removed only when listed (`^pandoc ` -- conda `pandoc-crossref` alone no longer triggers a removal); probe failures warn; removal output logged and a failed removal warns with the exit code (was `2>/dev/null \|\| true`); cabal binary removal reported |
+| `setup-typst.ps1` | #23, A4 | cargo `typst-cli` / npm `typst` removed only when installed (`cargo install --list`, `npm ls -g`); removal output logged as detail; failure warns with the exit code (was `2>$null \| Out-Null`, unconditional) -- parity with `setup-typst.sh` (C5) |
+| `setup-typst.ps1` | C-F2 | winget upgrade / install exit codes saved before logging; ERROR rows name them; the post-install `typst --version` result is now checked (was logged even when empty) |
+| `setup-pandoc.ps1` | #23 | `winget upgrade` output logged (was captured and dropped); exit codes saved before logging |
+| `setup-pandoc.ps1` | A4 | `choco list pandoc`: `2>&1` with the exit code checked (a failed probe warns); match narrowed to a `pandoc ` line |
+| both PS1 | A4 | `Get-Command ... SilentlyContinue` lines carry the "command-existence check" comment |
+
+Generated `deploy/` (dotprofile): `setup-pandoc.sh`, `setup-pandoc.ps1` and
+`setup-typst.ps1` change; the build gives 40 scripts and every generated script passes
+`bash -n` / ParseFile.
+
+### Error-handling audit
+
+| Pattern | Where | Check |
+|---|---|---|
+| `x=$(cmd 2>&1) \|\| rc=$?` | brew upgrade, conda/port probes, removals | `rc` tested on the next statement; output logged first |
+| `& cmd 2>&1 \| Out-String` + `$LASTEXITCODE` saved on the next line | winget, cargo, npm, choco | exit code checked before any other native call |
+| `2>$null` kept, commented, result checked | `typst --version` (2) | an empty result is an ERROR |
+| `Get-Command ... -ErrorAction SilentlyContinue` | 7 sites | command-existence check with explicit fallback (exempt) |
+
+### Tests (Linux)
+
+| Suite | Prototype | `main` |
+|---|---|---|
+| `test-c6.sh` (scratch): `setup-pandoc.sh` macOS branch (uname stubbed): Homebrew missing, `brew upgrade` exit 1 without "error", up to date, failed conda removal, conda `pandoc-crossref` only, cabal binary | 8/8 | 2/8 |
+| `test-c6-ps1.sh` (scratch): `setup-typst.ps1` / `setup-pandoc.ps1` with the OS guard stripped and stub winget/cargo/npm/choco: failed cargo uninstall, nothing installed, up to date, winget output logged, failed choco probe, Chocolatey pandoc | 8/8 | 2/8 |
+| `bash -n` / ParseFile; `build-deploy.sh` into a dotprofile copy | pass; 40 scripts, 3 changed, all parse | -- |
+
+Not testable here: real winget/Homebrew runs (Windows / macOS).
+
+### Logging audit (after C6)
+
+| Check | Before C6 | After C6 | C6 files |
+|---|---|---|---|
+| A3 | 191 in 16 | 190 in 15 | 0 |
+| A4 | 328 in 39 | 316 in 38 | 9, all allowed: 7 command-existence checks, 2 commented and checked `typst --version` probes |
+| A5 | 24 in 14 | 23 in 13 | 0 |
+| A8 | 9 in 8 | 9 in 8 | 1 in `setup-pandoc.sh`: the `brew upgrade` output grep, allowed by Standard 3 (C-F6 pending) |
+
+### D-C4: protected doc edits
+
+- `reference/script-standards-detail.md` exemptions table: remove the `setup-pandoc.sh`
+  (lines 68, 73, 78) and `setup-typst.ps1` (lines 25, 33) rows; those discards are fixed.
+- This plan: status line, batch table (C6 -> PR C4), this section.
+
+### Verbatim diff
+
+```diff
+diff --git a/scripts/setup-typst.ps1 b/scripts/setup-typst.ps1
+index 398a643..e880f86 100644
+--- a/scripts/setup-typst.ps1
++++ b/scripts/setup-typst.ps1
+@@ -16,21 +16,40 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+ }
+ 
+ # --- Cleanup non-preferred installs ---
++# Only packages that are actually installed are removed; a failed removal is a
++# warning (non-blocking -- the winget install below proceeds), with the output logged.
++function Remove-NonPreferred([string]$Label, [scriptblock]$Command) {
++    $out = & $Command 2>&1 | Out-String
++    $rc = $LASTEXITCODE
++    foreach ($l in $out.Split("`n")) { if ($l.Trim()) { LogDetail "${Label}: $($l.TrimEnd())" } }
++    if ($rc -eq 0) {
++        Log "Removed non-preferred install ($Label)"
++    } else {
++        LogWarn "$Label failed (exit $rc) -- see $logFile"
++    }
++}
+ # Cargo typst-cli: different binary path, may shadow winget install
+ $cargoCmd = Get-Command cargo -ErrorAction SilentlyContinue
+ # Get-Command exempt: command-existence check with if/else fallback
+ if ($cargoCmd) {
+-    Log "Checking for cargo typst-cli..."
+-    # Cleanup: cargo stderr may contain "not installed" msg; non-blocking, winget install follows
+-    & cargo uninstall typst-cli 2>$null | Out-Null
++    $cargoList = & cargo install --list 2>&1 | Out-String
++    $cargoListRc = $LASTEXITCODE
++    if ($cargoListRc -ne 0) {
++        LogDetail "cargo-install-list: $($cargoList.Trim())"
++        LogWarn "cargo install --list failed (exit $cargoListRc) -- skipping cargo typst-cli cleanup"
++    } elseif ($cargoList -match '(?m)^typst-cli ') {
++        Remove-NonPreferred "cargo uninstall typst-cli" { cargo uninstall typst-cli }
++    }
+ }
+-# npm typst: third-party wrapper, not official
++# npm typst: third-party wrapper, not official. `npm ls` exits non-zero when absent.
+ $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
+ # Get-Command exempt: command-existence check with if/else fallback
+ if ($npmCmd) {
+-    Log "Checking for npm typst..."
+-    # Cleanup: npm stderr may contain "not installed" msg; non-blocking, winget install follows
+-    & npm uninstall -g typst 2>$null | Out-Null
++    $npmTypst = & npm ls -g --depth=0 typst 2>&1 | Out-String
++    if ($LASTEXITCODE -eq 0) {
++        LogDetail "npm-ls-typst: $($npmTypst.Trim())"
++        Remove-NonPreferred "npm uninstall -g typst" { npm uninstall -g typst }
++    }
+ }
+ 
+ # --- Install/update ---
+@@ -39,12 +58,13 @@ $typstCmd = Get-Command typst -ErrorAction SilentlyContinue
+ if ($typstCmd) {
+     Log "Typst found -- upgrading via winget..."
+     $wingetOutput = winget upgrade --id Typst.Typst --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
++    $upgradeRc = $LASTEXITCODE
+     Log-WingetOutput $wingetOutput
+     if ($wingetOutput -match 'No available upgrade|No newer package versions') {
+         LogOk "Typst already up to date"
+-    } elseif ($LASTEXITCODE -ne 0) {
+-        LogError "winget upgrade typst failed (exit code $LASTEXITCODE)"
+-        Write-Summary "ERROR" "typst" "winget upgrade failed (exit $LASTEXITCODE)"
++    } elseif ($upgradeRc -ne 0) {
++        LogError "winget upgrade typst failed (exit $upgradeRc) -- see $logFile"
++        Write-Summary "ERROR" "typst" "winget upgrade failed (exit $upgradeRc)"
+     }
+     Refresh-Path
+     if ($errors -eq 0) {
+@@ -61,19 +81,25 @@ if ($typstCmd) {
+ } else {
+     Log "Installing Typst via winget..."
+     $wingetOutput = winget install --id Typst.Typst --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
++    $installRc = $LASTEXITCODE
+     Log-WingetOutput $wingetOutput
+-    if ($LASTEXITCODE -ne 0) {
+-        LogError "winget install typst failed (exit code $LASTEXITCODE)"
+-        Write-Summary "ERROR" "typst" "winget install failed (exit $LASTEXITCODE)"
++    if ($installRc -ne 0) {
++        LogError "winget install typst failed (exit $installRc) -- see $logFile"
++        Write-Summary "ERROR" "typst" "winget install failed (exit $installRc)"
+     }
+     Refresh-Path
+     $typstCmd = Get-Command typst -ErrorAction SilentlyContinue
+     # Get-Command exempt: command-existence check with if/else fallback
+     if ($typstCmd) {
+-        # Suppress stderr: typst may emit warnings on some configs; result used in log
++        # Suppress stderr: typst may emit warnings on some configs; result checked immediately
+         $version = (typst --version 2>$null)
+-        LogOk "Typst installed ($version)"
+-        Write-Summary "OK" "typst" "$version"
++        if ($version) {
++            LogOk "Typst installed ($version)"
++            Write-Summary "OK" "typst" "$version"
++        } else {
++            LogError "typst --version failed after install"
++            Write-Summary "ERROR" "typst" "version check failed after install"
++        }
+     } else {
+         LogError "winget install completed but 'typst' not found in PATH"
+         Write-Summary "ERROR" "typst" "install failed (not on PATH)"
+diff --git a/scripts/setup-pandoc.sh b/scripts/setup-pandoc.sh
+index 461a205..8c319d7 100755
+--- a/scripts/setup-pandoc.sh
++++ b/scripts/setup-pandoc.sh
+@@ -23,6 +23,22 @@ esac
+ 
+ OS_NAME="$(uname -s)"
+ 
++# Remove a non-preferred install: output goes to the log; a failed removal is a
++# warning (non-blocking -- the Homebrew install below proceeds).
++remove_package() {  # label, command...
++    local label="$1"; shift
++    local out rc=0 line
++    out=$("$@" 2>&1) || rc=$?
++    while IFS= read -r line; do
++        if [ -n "${line// /}" ]; then log_detail "$label: $line"; fi
++    done <<< "$out"
++    if [ "$rc" -eq 0 ]; then
++        log "Removed non-preferred install ($label)"
++    else
++        log_warn "$label failed (exit $rc) -- see $(display_path "$LOG_FILE")"
++    fi
++}
++
+ # --- Install/update ---
+ case "$OS_NAME" in
+     Darwin)
+@@ -31,6 +47,7 @@ case "$OS_NAME" in
+             log_error "Homebrew not found. Install pandoc manually:"
+             log_error "  1. Install Homebrew: https://brew.sh"
+             log_error "  2. brew install pandoc"
++            write_summary ERROR "pandoc" "Homebrew not found"
+             exit 1
+         fi
+ 
+@@ -42,15 +59,17 @@ case "$OS_NAME" in
+             # Check if installed via Homebrew (path contains /opt/homebrew/ or /usr/local/)
+             if [[ "$pandoc_path" == /opt/homebrew/* ]] || [[ "$pandoc_path" == /usr/local/* ]]; then
+                 log "Already installed via Homebrew — upgrading..."
+-                UPGRADE_OUTPUT=$(brew upgrade pandoc 2>&1) || true
+-                if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
++                upgrade_rc=0
++                UPGRADE_OUTPUT=$(brew upgrade pandoc 2>&1) || upgrade_rc=$?
++                if [ "$upgrade_rc" -eq 0 ] && printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+                     log_ok "Pandoc already up to date"
+                     write_summary OK "pandoc" "$(pandoc --version | head -1)"
+                 else
+-                    printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
+-                    if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+-                        log_error "brew upgrade pandoc failed (see log above)"
+-                        write_summary ERROR "pandoc" "brew upgrade failed"
++                    while IFS= read -r line; do log "$line"; done <<< "$UPGRADE_OUTPUT"
++                    # Exit code first (C-F2); the output grep stays for brew upgrade (Standard 3).
++                    if [ "$upgrade_rc" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
++                        log_error "brew upgrade pandoc failed (exit $upgrade_rc) -- see $(display_path "$LOG_FILE")"
++                        write_summary ERROR "pandoc" "brew upgrade failed (exit $upgrade_rc)"
+                     else
+                         log_ok "Pandoc $(pandoc --version | head -1)"
+                         write_summary OK "pandoc" "$(pandoc --version | head -1)"
+@@ -61,21 +80,33 @@ case "$OS_NAME" in
+                 log_warn "Pandoc installed via non-preferred method at $pandoc_path"
+                 log "Migrating to Homebrew..."
+ 
+-                # Detect and clean up known non-preferred installs
+-                if command -v conda &>/dev/null && conda list pandoc 2>/dev/null | grep -q pandoc; then
+-                    log_warn "Removing conda pandoc..."
+-                    # Cleanup: conda remove may fail if partially removed; non-blocking
+-                    conda remove -y pandoc 2>/dev/null || true
++                # Detect and clean up known non-preferred installs (only those present;
++                # the probes' output goes to the log so a failed probe is visible).
++                if command -v conda &>/dev/null; then
++                    conda_rc=0
++                    conda_list=$(conda list pandoc 2>&1) || conda_rc=$?
++                    if [ "$conda_rc" -ne 0 ]; then
++                        log_detail "conda-list-pandoc: $conda_list"
++                        log_warn "conda list pandoc failed (exit $conda_rc) -- skipping conda cleanup"
++                    elif printf '%s\n' "$conda_list" | grep -q '^pandoc '; then
++                        log_warn "Removing conda pandoc..."
++                        remove_package "conda remove -y pandoc" conda remove -y pandoc
++                    fi
+                 fi
+-                if command -v port &>/dev/null && port installed pandoc 2>/dev/null | grep -q pandoc; then
+-                    log_warn "Removing MacPorts pandoc..."
+-                    # Cleanup: port uninstall may fail if partially removed; non-blocking
+-                    sudo port uninstall pandoc 2>/dev/null || true
++                if command -v port &>/dev/null; then
++                    port_rc=0
++                    port_list=$(port installed pandoc 2>&1) || port_rc=$?
++                    if [ "$port_rc" -ne 0 ]; then
++                        log_detail "port-installed-pandoc: $port_list"
++                        log_warn "port installed pandoc failed (exit $port_rc) -- skipping MacPorts cleanup"
++                    elif printf '%s\n' "$port_list" | grep -q '^ *pandoc '; then
++                        log_warn "Removing MacPorts pandoc..."
++                        remove_package "sudo port uninstall pandoc" sudo port uninstall pandoc
++                    fi
+                 fi
+                 if [ -f "$HOME/.cabal/bin/pandoc" ]; then
+                     log_warn "Removing Cabal pandoc..."
+-                    # Cleanup: cabal binary may already be gone; non-blocking
+-                    rm -f "$HOME/.cabal/bin/pandoc" 2>/dev/null || true
++                    remove_package "rm ~/.cabal/bin/pandoc" rm -f "$HOME/.cabal/bin/pandoc"
+                 fi
+ 
+                 if ! brew install pandoc 2>&1 | while IFS= read -r line; do log "$line"; done; then
+diff --git a/scripts/setup-pandoc.ps1 b/scripts/setup-pandoc.ps1
+index 479ba1a..a32b854 100644
+--- a/scripts/setup-pandoc.ps1
++++ b/scripts/setup-pandoc.ps1
+@@ -17,6 +17,7 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+ }
+ 
+ # --- Install/update ---
++# Get-Command exempt: command-existence check with if/else fallback
+ if (Get-Command pandoc -ErrorAction SilentlyContinue) {
+     $pandocVersion = (pandoc --version | Select-Object -First 1)
+     $pandocPath = (Get-Command pandoc).Source
+@@ -26,20 +27,27 @@ if (Get-Command pandoc -ErrorAction SilentlyContinue) {
+     # Check if installed via winget by attempting upgrade
+     Log "Checking for updates via winget..."
+     $upgradeResult = winget upgrade --exact --id JohnMacFarlane.Pandoc --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
++    $upgradeRc = $LASTEXITCODE
++    Log-WingetOutput $upgradeResult
+     if ($upgradeResult -match "No available upgrade found|No newer package versions") {
+         LogOk "Pandoc already up to date"
+         Write-Summary "OK" "pandoc" "$pandocVersion"
+-    } elseif ($LASTEXITCODE -eq 0) {
++    } elseif ($upgradeRc -eq 0) {
+         Refresh-Path
+         $pandocVersion = (pandoc --version | Select-Object -First 1)
+         LogOk "Pandoc updated ($pandocVersion)"
+         Write-Summary "OK" "pandoc" "$pandocVersion"
+     } else {
+-        LogWarn "winget upgrade returned non-zero (exit $LASTEXITCODE) -- pandoc may be installed via another method"
++        LogWarn "winget upgrade returned non-zero (exit $upgradeRc) -- pandoc may be installed via another method"
+         # Detect non-preferred installs
++        # Get-Command exempt: command-existence check with if/else fallback
+         if (Get-Command choco -ErrorAction SilentlyContinue) {
+-            $chocoList = choco list pandoc 2>$null | Out-String
+-            if ($chocoList -match "pandoc") {
++            $chocoList = choco list pandoc 2>&1 | Out-String
++            $chocoRc = $LASTEXITCODE
++            if ($chocoRc -ne 0) {
++                LogDetail "choco-list-pandoc: $($chocoList.Trim())"
++                LogWarn "choco list pandoc failed (exit $chocoRc) -- Chocolatey install not checked"
++            } elseif ($chocoList -match '(?m)^pandoc ') {
+                 LogWarn "Pandoc appears to be installed via Chocolatey. Prefer winget for managed installs."
+             }
+         }
+@@ -48,13 +56,15 @@ if (Get-Command pandoc -ErrorAction SilentlyContinue) {
+ } else {
+     Log "Installing Pandoc via winget..."
+     $wingetOutput = winget install --source winget --exact --id JohnMacFarlane.Pandoc --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
++    $installRc = $LASTEXITCODE
+     Log-WingetOutput $wingetOutput
+-    if ($LASTEXITCODE -ne 0) {
+-        LogError "winget install failed (exit code $LASTEXITCODE)"
+-        Write-Summary "ERROR" "pandoc" "winget install failed (exit $LASTEXITCODE)"
++    if ($installRc -ne 0) {
++        LogError "winget install failed (exit $installRc) -- see $logFile"
++        Write-Summary "ERROR" "pandoc" "winget install failed (exit $installRc)"
+     }
+     Refresh-Path
+ 
++    # Get-Command exempt: command-existence check with if/else fallback
+     if (Get-Command pandoc -ErrorAction SilentlyContinue) {
+         $pandocVersion = (pandoc --version | Select-Object -First 1)
+         $pandocPath = (Get-Command pandoc).Source
 ```
 
 ## Risks

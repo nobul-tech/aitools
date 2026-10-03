@@ -17,6 +17,7 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 }
 
 # --- Install/update ---
+# Get-Command exempt: command-existence check with if/else fallback
 if (Get-Command pandoc -ErrorAction SilentlyContinue) {
     $pandocVersion = (pandoc --version | Select-Object -First 1)
     $pandocPath = (Get-Command pandoc).Source
@@ -26,20 +27,27 @@ if (Get-Command pandoc -ErrorAction SilentlyContinue) {
     # Check if installed via winget by attempting upgrade
     Log "Checking for updates via winget..."
     $upgradeResult = winget upgrade --exact --id JohnMacFarlane.Pandoc --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+    $upgradeRc = $LASTEXITCODE
+    Log-WingetOutput $upgradeResult
     if ($upgradeResult -match "No available upgrade found|No newer package versions") {
         LogOk "Pandoc already up to date"
         Write-Summary "OK" "pandoc" "$pandocVersion"
-    } elseif ($LASTEXITCODE -eq 0) {
+    } elseif ($upgradeRc -eq 0) {
         Refresh-Path
         $pandocVersion = (pandoc --version | Select-Object -First 1)
         LogOk "Pandoc updated ($pandocVersion)"
         Write-Summary "OK" "pandoc" "$pandocVersion"
     } else {
-        LogWarn "winget upgrade returned non-zero (exit $LASTEXITCODE) -- pandoc may be installed via another method"
+        LogWarn "winget upgrade returned non-zero (exit $upgradeRc) -- pandoc may be installed via another method"
         # Detect non-preferred installs
+        # Get-Command exempt: command-existence check with if/else fallback
         if (Get-Command choco -ErrorAction SilentlyContinue) {
-            $chocoList = choco list pandoc 2>$null | Out-String
-            if ($chocoList -match "pandoc") {
+            $chocoList = choco list pandoc 2>&1 | Out-String
+            $chocoRc = $LASTEXITCODE
+            if ($chocoRc -ne 0) {
+                LogDetail "choco-list-pandoc: $($chocoList.Trim())"
+                LogWarn "choco list pandoc failed (exit $chocoRc) -- Chocolatey install not checked"
+            } elseif ($chocoList -match '(?m)^pandoc ') {
                 LogWarn "Pandoc appears to be installed via Chocolatey. Prefer winget for managed installs."
             }
         }
@@ -48,13 +56,15 @@ if (Get-Command pandoc -ErrorAction SilentlyContinue) {
 } else {
     Log "Installing Pandoc via winget..."
     $wingetOutput = winget install --source winget --exact --id JohnMacFarlane.Pandoc --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+    $installRc = $LASTEXITCODE
     Log-WingetOutput $wingetOutput
-    if ($LASTEXITCODE -ne 0) {
-        LogError "winget install failed (exit code $LASTEXITCODE)"
-        Write-Summary "ERROR" "pandoc" "winget install failed (exit $LASTEXITCODE)"
+    if ($installRc -ne 0) {
+        LogError "winget install failed (exit $installRc) -- see $logFile"
+        Write-Summary "ERROR" "pandoc" "winget install failed (exit $installRc)"
     }
     Refresh-Path
 
+    # Get-Command exempt: command-existence check with if/else fallback
     if (Get-Command pandoc -ErrorAction SilentlyContinue) {
         $pandocVersion = (pandoc --version | Select-Object -First 1)
         $pandocPath = (Get-Command pandoc).Source

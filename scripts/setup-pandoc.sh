@@ -23,6 +23,22 @@ esac
 
 OS_NAME="$(uname -s)"
 
+# Remove a non-preferred install: output goes to the log; a failed removal is a
+# warning (non-blocking -- the Homebrew install below proceeds).
+remove_package() {  # label, command...
+    local label="$1"; shift
+    local out rc=0 line
+    out=$("$@" 2>&1) || rc=$?
+    while IFS= read -r line; do
+        if [ -n "${line// /}" ]; then log_detail "$label: $line"; fi
+    done <<< "$out"
+    if [ "$rc" -eq 0 ]; then
+        log "Removed non-preferred install ($label)"
+    else
+        log_warn "$label failed (exit $rc) -- see $(display_path "$LOG_FILE")"
+    fi
+}
+
 # --- Install/update ---
 case "$OS_NAME" in
     Darwin)
@@ -31,6 +47,7 @@ case "$OS_NAME" in
             log_error "Homebrew not found. Install pandoc manually:"
             log_error "  1. Install Homebrew: https://brew.sh"
             log_error "  2. brew install pandoc"
+            write_summary ERROR "pandoc" "Homebrew not found"
             exit 1
         fi
 
@@ -42,15 +59,17 @@ case "$OS_NAME" in
             # Check if installed via Homebrew (path contains /opt/homebrew/ or /usr/local/)
             if [[ "$pandoc_path" == /opt/homebrew/* ]] || [[ "$pandoc_path" == /usr/local/* ]]; then
                 log "Already installed via Homebrew — upgrading..."
-                UPGRADE_OUTPUT=$(brew upgrade pandoc 2>&1) || true
-                if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+                upgrade_rc=0
+                UPGRADE_OUTPUT=$(brew upgrade pandoc 2>&1) || upgrade_rc=$?
+                if [ "$upgrade_rc" -eq 0 ] && printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
                     log_ok "Pandoc already up to date"
                     write_summary OK "pandoc" "$(pandoc --version | head -1)"
                 else
-                    printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
-                    if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
-                        log_error "brew upgrade pandoc failed (see log above)"
-                        write_summary ERROR "pandoc" "brew upgrade failed"
+                    while IFS= read -r line; do log "$line"; done <<< "$UPGRADE_OUTPUT"
+                    # Exit code first (C-F2); the output grep stays for brew upgrade (Standard 3).
+                    if [ "$upgrade_rc" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+                        log_error "brew upgrade pandoc failed (exit $upgrade_rc) -- see $(display_path "$LOG_FILE")"
+                        write_summary ERROR "pandoc" "brew upgrade failed (exit $upgrade_rc)"
                     else
                         log_ok "Pandoc $(pandoc --version | head -1)"
                         write_summary OK "pandoc" "$(pandoc --version | head -1)"
@@ -61,21 +80,33 @@ case "$OS_NAME" in
                 log_warn "Pandoc installed via non-preferred method at $pandoc_path"
                 log "Migrating to Homebrew..."
 
-                # Detect and clean up known non-preferred installs
-                if command -v conda &>/dev/null && conda list pandoc 2>/dev/null | grep -q pandoc; then
-                    log_warn "Removing conda pandoc..."
-                    # Cleanup: conda remove may fail if partially removed; non-blocking
-                    conda remove -y pandoc 2>/dev/null || true
+                # Detect and clean up known non-preferred installs (only those present;
+                # the probes' output goes to the log so a failed probe is visible).
+                if command -v conda &>/dev/null; then
+                    conda_rc=0
+                    conda_list=$(conda list pandoc 2>&1) || conda_rc=$?
+                    if [ "$conda_rc" -ne 0 ]; then
+                        log_detail "conda-list-pandoc: $conda_list"
+                        log_warn "conda list pandoc failed (exit $conda_rc) -- skipping conda cleanup"
+                    elif printf '%s\n' "$conda_list" | grep -q '^pandoc '; then
+                        log_warn "Removing conda pandoc..."
+                        remove_package "conda remove -y pandoc" conda remove -y pandoc
+                    fi
                 fi
-                if command -v port &>/dev/null && port installed pandoc 2>/dev/null | grep -q pandoc; then
-                    log_warn "Removing MacPorts pandoc..."
-                    # Cleanup: port uninstall may fail if partially removed; non-blocking
-                    sudo port uninstall pandoc 2>/dev/null || true
+                if command -v port &>/dev/null; then
+                    port_rc=0
+                    port_list=$(port installed pandoc 2>&1) || port_rc=$?
+                    if [ "$port_rc" -ne 0 ]; then
+                        log_detail "port-installed-pandoc: $port_list"
+                        log_warn "port installed pandoc failed (exit $port_rc) -- skipping MacPorts cleanup"
+                    elif printf '%s\n' "$port_list" | grep -q '^ *pandoc '; then
+                        log_warn "Removing MacPorts pandoc..."
+                        remove_package "sudo port uninstall pandoc" sudo port uninstall pandoc
+                    fi
                 fi
                 if [ -f "$HOME/.cabal/bin/pandoc" ]; then
                     log_warn "Removing Cabal pandoc..."
-                    # Cleanup: cabal binary may already be gone; non-blocking
-                    rm -f "$HOME/.cabal/bin/pandoc" 2>/dev/null || true
+                    remove_package "rm ~/.cabal/bin/pandoc" rm -f "$HOME/.cabal/bin/pandoc"
                 fi
 
                 if ! brew install pandoc 2>&1 | while IFS= read -r line; do log "$line"; done; then
