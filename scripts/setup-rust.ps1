@@ -23,14 +23,18 @@ if (Test-Path $cargoPath) {
     Log "rustup found -- updating toolchain..."
     $rustupExe = Join-Path $env:USERPROFILE ".cargo\bin\rustup.exe"
     $rustupOutput = & $rustupExe update 2>&1 | Out-String
-    $rustupOutput.Trim().Split("`n") | Select-Object -Last 3 | ForEach-Object { $l = $_.TrimEnd(); if ($l.Trim()) { Log $l } }
-    if ($LASTEXITCODE -ne 0) {
-        LogError "rustup update failed (exit code $LASTEXITCODE)"
-        Write-Summary "ERROR" "rust/cargo" "rustup update failed (exit $LASTEXITCODE)"
+    $updateRc = $LASTEXITCODE
+    # Full output to the log as detail (C-F2); the exit code decides.
+    foreach ($l in $rustupOutput.Split("`n")) {
+        if ($l.Trim()) { LogDetail "rustup-update: $($l.TrimEnd())" }
+    }
+    if ($updateRc -ne 0) {
+        LogError "rustup update failed (exit $updateRc) -- see $logFile"
+        Write-Summary "ERROR" "rust/cargo" "rustup update failed (exit $updateRc)"
     } else {
-        $cargoVersion = (& $cargoPath --version 2>$null)
+        $cargoVersion = (& $cargoPath --version 2>&1)
         $rustcPath = Join-Path $env:USERPROFILE ".cargo\bin\rustc.exe"
-        $rustcVersion = (& $rustcPath --version 2>$null)
+        $rustcVersion = (& $rustcPath --version 2>&1)
         LogOk "cargo $cargoVersion"
         LogOk "rustc $rustcVersion"
         Write-Summary "OK" "rust/cargo" "$cargoVersion"
@@ -46,9 +50,9 @@ if (Test-Path $cargoPath) {
     Refresh-Path
 
     if (Test-Path $cargoPath) {
-        $cargoVersion = (& $cargoPath --version 2>$null)
+        $cargoVersion = (& $cargoPath --version 2>&1)
         $rustcPath = Join-Path $env:USERPROFILE ".cargo\bin\rustc.exe"
-        $rustcVersion = (& $rustcPath --version 2>$null)
+        $rustcVersion = (& $rustcPath --version 2>&1)
         LogOk "Rust toolchain installed"
         LogOk "cargo $cargoVersion"
         LogOk "rustc $rustcVersion"
@@ -65,6 +69,8 @@ if (Test-Path $cargoPath) {
 $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 $hasMSVC = $false
 if (Test-Path $vsWhere) {
+    # 2>$null: vswhere prints nothing on stdout when no install matches; stderr text
+    # would make $vsInstalls non-empty and fake a match. Checked on the next line.
     $vsInstalls = & $vsWhere -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
     if ($vsInstalls) { $hasMSVC = $true }
 }
@@ -101,6 +107,7 @@ if (-not $nasmCheck) {
     }
 }
 if ($nasmCheck) {
+    # 2>$null: the version is parsed from stdout only; an empty result is checked below.
     $nasmVer = (nasm --version 2>$null)
     if ($nasmVer) { $nasmVer = ($nasmVer -split '\s+' | Select-Object -Index 2) }
     LogOk "NASM found ($nasmVer)"
