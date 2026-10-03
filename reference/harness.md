@@ -16,7 +16,9 @@ adoption work, `/audit` skill.
 
 ## Components
 
-**Platform** — Claude Code provides the infrastructure: CLAUDE.md
+**Environment** — the agent runtime the harness runs in (Claude Code
+locally on a platform, or a hosted service such as Claude Code web)
+provides the infrastructure: CLAUDE.md
 (5-level hierarchy), rules, skills, hooks, settings, commands, agents,
 session management. Full capability set documented upstream. Our
 reference files track what we depend on and what's available but not
@@ -82,7 +84,7 @@ and adoption rationale.
 The six components form a dependency chain:
 
 ```
-Platform (external, provided by Claude Code)
+Environment (external, e.g. Claude Code)
     -> Configuration (our use of the platform)
         -> Orchestration (manages configuration lifecycle)
             -> Managed Tools (governed by orchestration)
