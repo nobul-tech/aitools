@@ -1091,7 +1091,7 @@ Main agent, direct (no code). Every item below is part of **this review**:
 2. **Go registry entry via `/tool-registry`** (protected): the non-preferred "manual
    tarball" cleanup applies to **macOS only**, not macOS/Linux. Note the install-first/cleanup-after
    ordering. The hand-maintained `reference/tool-registry.md` Go section gets the same edit:
-   it duplicates the registry, #21. The exact old→new text is drafted at execution time from a
+   it duplicates the registry (incident #21, not GitHub #21). The exact old→new text is drafted at execution time from a
    `/tool-registry` read and shown in the batch D checkpoint before writing.
 3. **`RELEASE_NOTES.md`**: new entry above v0.73.1:
 
@@ -1135,6 +1135,100 @@ Main agent, direct (no code). Every item below is part of **this review**:
 6. `check-pre-push.sh`, then push `-u origin claude/fable-status-q9ch93`. Open a PR in both repos (aitools PR links #10–#18), then run `check-post-push.sh`.
 7. The tag/version bump is confirmed with the commander before tagging.
 8. After merge, update via `/incident`: `correctiveAction` on each incident filed in nobul-tech/aitools#20 whose linked issue is one of #11–#18, plus the `/investigate` barrier analysis per issue before closing.
+
+## PR C: logging conformance (epic #21, issues #22–#30, plus #31)
+
+> **Status: scoped, not yet approved for execution.** This section scopes the work. Execution
+> needs the same gate as PR A (`plan-execution.md`):
+> - verbatim old/new edits per batch
+> - an error-handling audit per batch
+> - prototype tests on a copy of the base commit
+>
+> Those are drafted later, in a revision of this section, and presented for approval
+> before any code is written. PR C starts from `main` after PR A merges.
+
+### Origin
+
+PR A's end-to-end Linux run (two installs from branch clones under an isolated HOME) surfaced
+three defects:
+- `setup-rust` logged a 3-line backtrace tail under "see log above".
+- `setup-user-settings` died at a prompt with no `[error]` line or summary row.
+- `setup-cursor-ide-mcp` logged a false "likely not configured".
+
+A follow-up sub-agent audit then covered:
+- every `setup-*.sh/.ps1`, both installers and both entry points, read in full or by pattern
+- the four `*-lib` files, read in full by the main agent
+
+It checked them against `script-standards.md`, `script-standards-detail.md` and `logging.md`.
+The main agent spot-checked the audit's findings: `aitools:345` "exit 0", `aitools:1405` override clobber, `setup-user-cursor.sh:70`.
+
+### Issues
+
+| Issue | Root cause | Main files |
+|---|---|---|
+| #22 | Output truncated before logging | `setup-rust.sh/.ps1`, `aitools`, `aitools.ps1` |
+| #23 | Output discarded or never logged (32 sites) | most `setup-*`, `aitools-install.*`, `aitools*` |
+| #24 | `[ -n ] && log` piped loops abort under `set -e` | `setup-rust.sh`, `aitools-lib.sh` |
+| #25 | Console output bypassing the logging framework | node merge blocks in `setup-user-cursor/hooks`, `setup-cursor-ide-mcp`; `setup-user-claude.sh`; `ReadConfigKey`; `aitools*` |
+| #26 | Failure paths without `write_summary ERROR`; PS1 OK-after-LogError | most `setup-user-*`, `setup-cursor-ide-mcp.*`, installers, entry points |
+| #27 | Output-grep success checks; misleading pointers (`exit $?` always 0) | `setup-rust`, `setup-modal`, `setup-vercelcli`, `aitools-install.sh`, `aitools-lib.sh`, `aitools`, `setup-cursor-ide-mcp` |
+| #28 | Entry-point log override clobbered | `aitools`, `aitools.ps1` |
+| #29 | Prompts die silently on EOF; inconsistent non-interactive detection | `aitools-lib.sh/.ps1` |
+| #30 | Malformed or misattributed records; unguarded backup; silent manifest wipe | `aitools-lib.sh/.ps1`, `check-lib.ps1` |
+| #31 | Fresh install: settings synced before `settings.json` exists | `aitools-lib.sh/.ps1` (`sync_managed_json`), deploy order |
+
+### Foundational decisions (proposed; confirm at plan review)
+
+| # | Decision |
+|---|---|
+| C-F1 | **Lib first.** Fix the shared helpers (#29 EOF-safe `read_tty_choice`/`Read-ConsoleChoice`, #30 guarded `backup_file`, checked deploy-state writes, `log_detail` diffs) before the scripts, so per-script fixes can call them. |
+| C-F2 | **Exit code decides; output is logged in full.** Every install/update/uninstall: capture `2>&1`, `\|\| RC=$?`, log every line (verbose output via `log_detail`), decide on `RC` plus a binary check. Output grep stays only where Standard 3 allows it (`brew upgrade`). |
+| C-F3 | **Every exit path writes a summary row.** `write_summary ERROR` before each `exit 1`. PS1 validation blocks compare error counts before and after and write ERROR instead of OK. Orchestrators add `ERROR "<script>" "script failed (exit N)"` when a child dies. |
+| C-F4 | **Bash/PS1 parity is part of each fix.** Every row in the audit's parity table is closed in the same batch as its counterpart. |
+| C-F5 | **#31: create from profile when `settings.json` is absent** (option 2 in the issue). `sync_managed_json` writes the profile mirror without prompting; deploy order is unchanged. |
+| C-F6 | **Spec questions go through `/incident`, not code:** Standard 3 WARN-vs-ERROR for `brew upgrade` (#27c), and the `aitools` logging-overrides table (#28) if console output becomes the intent. |
+
+### Proposed batches (≤3 files; `aitools-lib.*` changes ⇒ fresh sub-agent per batch)
+
+| Batch | Files | Issues |
+|---|---|---|
+| C1 | `aitools-lib.sh` | #29, #30, #24 (`repair_uv_tool_env`), #27a (repair exit code), #31 |
+| C2 | `aitools-lib.ps1`, `check-lib.ps1` | #29, #30, #25 (`ReadConfigKey`), #31 |
+| C3 | `aitools`, `aitools.ps1` | #22, #23, #25, #26e, #27b, #28 |
+| C4 | `aitools-install.sh`, `aitools-install.ps1` | #23, #25, #26b (Step 5 PS1 row, out of scope for PR A), #26e (`$LASTEXITCODE`), #27a (`claude update`); remove dead winget branch |
+| C5 | `setup-rust.sh`, `setup-rust.ps1`, `setup-typst.sh` | #22, #23, #24, #27 |
+| C6 | `setup-typst.ps1`, `setup-pandoc.sh`, `setup-pandoc.ps1` | #23, #26a |
+| C7 | `setup-modal.sh`, `setup-modal.ps1`, `setup-go.ps1` | #23, #26d, #27a |
+| C8 | `setup-vercelcli.sh`, `setup-vercelcli.ps1`, `setup-gh-cli.ps1` | #23, #26a, #27a, auth WARN row |
+| C9 | `setup-user-cursor.sh`, `setup-user-cursor.ps1` | #23, #25, #26b–d |
+| C10 | `setup-user-hooks.sh`, `setup-user-hooks.ps1` | #25, #26a–c, #26f, #27b |
+| C11 | `setup-user-settings.sh`, `setup-user-settings.ps1`, `setup-gh-cli.sh` | #26a–c |
+| C12 | `setup-cursor-ide-mcp.sh`, `setup-cursor-ide-mcp.ps1` | #25, #26a–c, #27b (Cursor `mcp` verbs, re-verified via `/tool-eval` first) |
+| C13 | `setup-user-mcp.sh`, `setup-user-mcp.ps1`, `setup-datadog.ps1` | #23, #26a |
+| C14 | `setup-user-claude.sh`, `setup-user-claude.ps1` | #23, #25, #26a |
+| D-C | protected docs (batch-presented) | Exemptions table in `script-standards-detail.md`: remove the typst/pandoc/vercel/rust entries once those discards are fixed. Logging-overrides table (#28) if needed. Standard 3 outcome via `/incident`. RELEASE_NOTES. |
+
+`setup-user-claude`, `setup-user-cursor` and `setup-user-hooks` have logic duplicated in
+`build-deploy.sh` (`deploy-paths.md`). Batches C9, C10 and C14 must port each fix there and
+confirm the regenerated dotprofile `deploy/` contains it (pre-commit step 13).
+
+### Verification (each batch)
+
+- `bash -n` and `pwsh` ParseFile (pwsh is now installable here from packages.microsoft.com).
+- A stub-driven behavior test per fixed failure path. For example, a pty prompt with `/dev/null` input must log a line and default to overwrite (#29). An empty rustup output must not abort (#24).
+- Grep the changed files for the old patterns: `tail -3`, `head -3`, `&& log "$line"; done`, `exit $?` inside `if !`.
+- A final end-to-end install ×2 (same harness as PR A). Both runs must:
+  - write a summary row for every script that ran
+  - have zero raw lines in `deploy.log`
+  - pass the second run with no prompts on a fresh HOME (#31)
+
+### Detection (prevent recurrence)
+
+Add check-pre-commit steps, starting in observe/WARN mode per `hook-rollout.md` practice:
+- piped `[ … ] && log` loops
+- `tail -N`/`head -N` piped into `log`
+- `exit $?` inside an `if !` branch
+- `exit 1` without a `write_summary` in the preceding 3 lines
 
 ## Risks
 

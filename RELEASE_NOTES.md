@@ -32,7 +32,15 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 |---|--------|
 | 8 | `aitools config` added to the summary tool-name table; plan `plans/linux-install-hardening.md`. |
 
-**Verified on:** Linux (Ubuntu 24.04, Claude Code web, no Homebrew): `bash -n` clean on all edited `.sh`; 65/65 behavior checks across six sandboxed harnesses (stubbed brew/pkgutil/apt/uv/pup/cargo); `aitools install` run end-to-end (see PR). macOS/Windows: CI only — `.ps1` edits (`aitools.ps1`, `setup-python.ps1`) not executed locally; macOS Homebrew paths exercised only with stubs.
+**Verified on:** Linux (Ubuntu 24.04, Claude Code web, no Homebrew): `bash -n` clean on all edited `.sh`; 65/65 behavior checks across six sandboxed harnesses (stubbed brew/pkgutil/apt/uv/pup/cargo); `aitools install` run twice end-to-end from branch clones in an isolated HOME. Results on both runs:
+  - wrapper exit was 1 with errors logged (#13 fixed)
+  - `config.json` stayed valid, with `userRepoPath`/`machineAlias` preserved; the run 1 seed had an inline `googleDrives: []` before `userRepoPath` (#11 repro), and both runs reported it `Unchanged`
+  - `/usr/local/go` was kept as `upstream`
+  - gh moved to cli.github.com 2.102.0
+  - uv and Python were kept/handled with WARN
+  - pup built through the cargo fallback (#18)
+
+  The remaining errors are outside this release: typst is Homebrew-only (#14); `rustup` self-update and the pup PATH check fail only because of the isolated HOME; a `setup-user-settings` prompt hit EOF on run 2 (#29, #31). macOS/Windows: CI only — `.ps1` edits (`aitools.ps1`, `setup-python.ps1`) not executed locally; macOS Homebrew paths exercised only with stubs.
 
 ---
 
