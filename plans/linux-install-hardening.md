@@ -1141,10 +1141,11 @@ Main agent, direct (no code). Every item below is part of **this review**:
 > **Status: PR C1 (batches C1, C2, C3a, C4a) shipped in v0.73.3 (2026-10-03).
 > PR C2 (batches C3b, C4b, T1, D-C2) shipped 2026-10-03 (#37).
 > PR C3 (batch C5, D-C3) shipped 2026-10-03 (#38).
-> PR C4 (batch C6, D-C4) approved for execution 2026-10-03.**
+> PR C4 (batch C6, D-C4) shipped 2026-10-03 (#39).
+> PR C5 (batches C7, C7b, D-C5) approved for execution 2026-10-03.**
 > Verbatim edits, the error-handling audits and the prototype test evidence are in
-> the "PR C1/C2/C3/C4 — verbatim edits" sections below; the logging audit plan is in
-> the PR C2 section. Batches C7–C15 remain scoped only: each needs its own verbatim-edit
+> the "PR C1/C2/C3/C4/C5 — verbatim edits" sections below; the logging audit plan is in
+> the PR C2 section. Batches C8–C15 remain scoped only: each needs its own verbatim-edit
 > revision of this section, presented for approval, before code is written.
 
 ### Origin
@@ -1227,11 +1228,18 @@ PR C4 (approved 2026-10-03; verbatim edits in "PR C4 — verbatim edits"):
 | C6 | `setup-typst.ps1`, `setup-pandoc.sh`, `setup-pandoc.ps1` | #23, #26a |
 | D-C4 | protected docs (approved 2026-10-03) | exemptions table: `setup-pandoc.sh` and `setup-typst.ps1` rows removed; this plan. RELEASE_NOTES deferred |
 
-Later PRs (scoped, not approved):
+PR C5 (approved 2026-10-03; verbatim edits in "PR C5 — verbatim edits"):
 
 | Batch | Files | Issues |
 |---|---|---|
 | C7 | `setup-modal.sh`, `setup-modal.ps1`, `setup-go.ps1` | #23, #26d, #27a |
+| C7b | `setup-rust.sh` | `check-script-compliance` step 7 WARN added in PR C3 |
+| D-C5 | protected docs (approved 2026-10-03) | this plan. RELEASE_NOTES deferred (Windows Python-gate note recorded in the PR C5 section) |
+
+Later PRs (scoped, not approved):
+
+| Batch | Files | Issues |
+|---|---|---|
 | C8 | `setup-vercelcli.sh`, `setup-vercelcli.ps1`, `setup-gh-cli.ps1` | #23, #26a, #27a, auth WARN row |
 | C9 | `setup-user-cursor.sh`, `setup-user-cursor.ps1` | #23, #25, #26b–d |
 | C10 | `setup-user-hooks.sh`, `setup-user-hooks.ps1` | #25, #26a–c, #26f, #27b |
@@ -1240,6 +1248,7 @@ Later PRs (scoped, not approved):
 | C13 | `setup-user-mcp.sh`, `setup-user-mcp.ps1`, `setup-datadog.ps1` | #23, #26a |
 | C14 | `setup-user-claude.sh`, `setup-user-claude.ps1` | #23, #25, #26a |
 | C15 | `check-pre-commit.sh`, `check-pre-commit.ps1` (+ allowlist) | Logging audit checks A1-A11 as pre-commit steps, observe/WARN first, FAIL per check once its count is zero (see "Logging audit plan") |
+| V1 | `aitools-lib.sh/.ps1`, `aitools`, `aitools.ps1`, installers | `--verbose` / `-Verbose` on `aitools` and `aitools install` (and `AITOOLS_VERBOSE=1` for direct script runs) prints detail lines on the console as well as to the log (commander 2026-10-03) |
 | D-C | protected docs (batch-presented) | Exemptions table: remove the typst/pandoc/vercel/rust entries once those discards are fixed. Standard 3 outcome via `/incident`. RELEASE_NOTES. |
 
 `setup-user-claude`, `setup-user-cursor` and `setup-user-hooks` have logic duplicated in
@@ -1252,6 +1261,7 @@ confirm the regenerated dotprofile `deploy/` contains it (pre-commit step 13).
 - A stub-driven behavior test per fixed failure path. For example, a pty prompt with `/dev/null` input must log a line and default to overwrite (#29). An empty rustup output must not abort (#24).
 - Grep the changed files for the old patterns: `tail -3`, `head -3`, `&& log "$line"; done`, `exit $?` inside `if !`.
 - Any batch touching `aitools-lib.*` or a setup script: run `bash scripts/build-deploy.sh` and commit the regenerated `deploy/` in the dotprofile repo (`deploy-paths.md`).
+- `bash scripts/check-script-compliance.sh`: no new WARN or FAIL against `main`. It otherwise runs only as post-push step 23; PR C3's step 7 WARN went unnoticed until C7.
 - A final end-to-end install ×2 (same harness as PR A). Both runs must:
   - write a summary row for every script that ran
   - have zero raw lines in `deploy.log`
@@ -4622,6 +4632,550 @@ index 479ba1a..a32b854 100644
      if (Get-Command pandoc -ErrorAction SilentlyContinue) {
          $pandocVersion = (pandoc --version | Select-Object -First 1)
          $pandocPath = (Get-Command pandoc).Source
+```
+
+## PR C5 — verbatim edits (batches C7, C7b)
+
+Base: `main` @ 8cdd762 (after PR C4). Prototyped on a copy of the base (scratch:
+`.scratch/session-3030c86a-9/proto-c7/`); the diffs below are the exact edits. Decisions
+C-F2, C-F3 and C-F4 apply. Install methods are unchanged (uv tool, pip fallback; winget).
+uv 0.8.17 (here): `uv tool upgrade modal` for a tool uv does not manage exits 1 with
+"`modal` is not installed", so the migration can be gated on the exit code (the PS1
+already was).
+
+### What changes
+
+| File | Issue / check | Change |
+|---|---|---|
+| `setup-modal.sh` | #27a, A8, A4 | `uv tool upgrade` / `uv tool install` / `pip install --user`: exit code decides (was a case-insensitive grep for "error\|failed" -- uv's exit-0 "warning: Failed to hardlink files" was an ERROR and an exit-137 kill was OK; pip's exit-0 resolver notice "ERROR: pip's dependency resolver ..." was an ERROR). ERROR rows name the exit code and the log path (was "see log above") |
+| `setup-modal.sh` | #23, A3 | The upgrade output is logged before the migration (`is not installed`) or the env repair (`missing a valid environment`) runs; it was overwritten by the install output or replaced by "Repaired". Command output goes to the log as detail lines (was printed at info by a `printf \| while` loop); the console keeps the outcome line |
+| `setup-modal.sh` | #26d | Upgrade exit 0 but `modal` no longer on PATH: ERROR row "not on PATH after upgrade" (was no row, exit 0) |
+| `setup-modal.sh` | C-F3, A4 | Python version probe (pip fallback only): `2>&1`, exit code checked; an unreadable version is an ERROR row and exit 1 (was a silent `set -e` exit: no output, no row) |
+| `setup-modal.sh` | #23, A4 | `modal --version` via `read_modal_version`: keeps the last output line (Python warnings print first); a failed probe's output is logged; the row still says "version unknown" (was `2>/dev/null \|\| echo`) |
+| `setup-modal.ps1` | C-F4 | The same changes. Upgrade / install / pip / `python -m pip` results are if/elseif/else chains with one row per outcome (was a second "installed but not on PATH" ERROR after a failed install, and ERROR then OK after pip's resolver notice) |
+| `setup-modal.ps1` | known gap, kept (commander 2026-10-03) | The Python 3.10+ gate still runs when uv is present (`setup-modal.sh` gates only the pip fallback since 2e702a9); aligning Windows waits for validation on Windows. Noted in the commit and for the release notes. An unreadable version (e.g. the Microsoft Store `python` alias, exit 9009) is now logged as detail: with uv the install continues (was: skipped silently); without uv it is an ERROR row and exit 1, as in `setup-modal.sh` |
+| `setup-go.ps1` | #23 | `choco uninstall golang` output logged as detail (was captured and dropped); the warning names the exit code and the log path |
+| `setup-go.ps1` | C-F2 | winget upgrade / install exit codes saved before logging; ERROR rows name them |
+| `setup-go.ps1` | C-F3 | After a failed winget upgrade or install the PATH / version rows are skipped (`$errors -eq 0`, as in `setup-uv.ps1` and `setup-typst.ps1`): no OK row after the upgrade ERROR, no second "installed but not on PATH" ERROR after the install ERROR |
+| `setup-go.ps1` | A4 | The three `go version 2>$null` probes are commented (result checked on the next line) |
+| `setup-rust.sh` (C7b) | compliance step 7 | `rustup --version 2>&1 \| grep -m1 '^rustup '` becomes `grep -m1 '^rustup ' <<< "$(rustup --version 2>&1)"`: same output, no pipeline. PR C3 (batch C5) added the pipeline and with it a `check-script-compliance` step 7 WARN; that check runs only as post-push step 23, which the batch flow did not run. Found while running it for C7 |
+
+Generated `deploy/` (dotprofile): `setup-modal.sh`, `setup-modal.ps1`, `setup-go.ps1` and
+`setup-rust.sh` change; the build gives 40 scripts and every generated script passes
+`bash -n` / ParseFile.
+
+### Error-handling audit
+
+| Pattern | Where | Check |
+|---|---|---|
+| `x=$(cmd 2>&1) \|\| rc=$?` | uv upgrade / install, pip install, Python probe, `modal --version` | `rc` tested on the next statement; output logged first |
+| `& cmd 2>&1 \| Out-String` + `$LASTEXITCODE` saved on the next line | uv, pip, python, modal, winget, choco | exit code saved before any other native call |
+| `grep -q 'is not installed' <<< "$TOOL_OUTPUT"` | migration trigger | classifies a failure only (gated on a non-zero exit); does not decide success |
+| `repair_uv_tool_env` / `Repair-UvToolEnv` | upgrade failure | lib contract unchanged: returns failure without logging when not applicable; a failed repair logs its own ERROR line and the caller's ERROR row follows |
+| `2>$null` kept, commented, result checked | `go version` (3), sysconfig scripts-dir probe (1) | empty result: ERROR / WARN row (go); skipped PATH update, reported by the modal PATH check (sysconfig) |
+| `Get-Command ... -ErrorAction SilentlyContinue` | 14 sites | command-existence check with explicit fallback (exempt) |
+
+### Tests (Linux)
+
+| Suite | Prototype | `main` |
+|---|---|---|
+| `test-c7.sh` (scratch): `setup-modal.sh` with stub uv/modal/pip3/python3: upgrade killed (exit 137), "Failed to hardlink" warning on success, migration, env repair, modal gone after upgrade, `modal --version` failing / warning on stderr, install killed, pip resolver notice, pip failure, failing / old Python probe; `setup-rust.sh` fresh install (C7b) | 20/20 | 8/20 |
+| `test-c7-ps1.sh` (scratch): `setup-modal.ps1` / `setup-go.ps1` with the OS guard stripped, stub uv/modal/pip/python/winget/choco/go, Go provenance injected: the modal cases above plus uv with Python 3.9 (still stops), uv with an unreadable Python (continues) and the Store-alias probe without uv; failed choco uninstall, winget upgrade / install failures, up to date | 22/22 | 6/22 |
+| `check-script-compliance.sh` | 13 PASS | 12 PASS, 1 WARN (step 7, `setup-rust.sh`) |
+| `bash -n` / ParseFile; `build-deploy.sh` into a dotprofile copy | pass; 40 scripts, 4 changed, all parse | -- |
+
+The `main` passes are the regression checks. Not testable here: real uv / pip / winget /
+Chocolatey runs (macOS, Windows).
+
+### Logging audit (after C7)
+
+| Check | Before C7 | After C7 | C7 files |
+|---|---|---|---|
+| A2 | 8 in 2 | 8 in 2 | 0 (the new output helpers are `write_output_detail` / `Write-OutputDetail`, outside the `log*` / `Log*` namespace) |
+| A3 | 190 in 15 | 187 in 14 | 0 |
+| A4 | 316 in 38 | 302 in 37 | 18, all allowed: 14 command-existence checks, 4 commented and checked probes |
+| A8 | 9 in 8 | 7 in 7 | 0 |
+
+### D-C5: protected doc edits
+
+- This plan: status line, batch table (C7 and C7b -> PR C5), "Verification (each batch)"
+  gains a `check-script-compliance.sh` line, this section.
+- No exemptions-table rows: none cover these files.
+- Release-notes item (release notes deferred): "Windows: `setup-modal.ps1` still requires
+  Python 3.10+ on PATH even when uv is present (macOS/Linux check it only for the pip
+  fallback); aligning it is pending validation on Windows."
+- Later PRs gain a scoped row V1: `--verbose` / `-Verbose` on `aitools` and `aitools
+  install` (and `AITOOLS_VERBOSE=1` for direct script runs) prints detail lines on the
+  console as well as to the log (commander 2026-10-03, after C7 moved uv/pip output to
+  detail).
+
+### Verbatim diff
+
+```diff
+diff --git a/scripts/setup-modal.sh b/scripts/setup-modal.sh
+index 11b4568..7d9cb42 100755
+--- a/scripts/setup-modal.sh
++++ b/scripts/setup-modal.sh
+@@ -25,6 +25,28 @@ esac
+ # Refresh PATH hash to pick up tools installed by prior steps (e.g., setup-python, setup-uv)
+ hash -r
+ 
++# Log captured command output to the log file as detail lines (blank lines skipped).
++write_output_detail() {  # label, output
++    local line
++    while IFS= read -r line; do
++        if [ -n "${line// /}" ]; then log_detail "$1: $line"; fi
++    done <<< "$2"
++}
++
++# Set MODAL_VERSION from `modal --version`. Python warnings print before the version
++# line, so the last line is kept. A failed probe logs its output and leaves "version
++# unknown"; the install result is decided by the uv/pip exit code, not by this probe.
++read_modal_version() {
++    local out rc=0
++    out=$(modal --version 2>&1) || rc=$?
++    if [ "$rc" -eq 0 ] && [ -n "$out" ]; then
++        MODAL_VERSION=${out##*$'\n'}
++    else
++        write_output_detail "modal-version (exit $rc)" "$out"
++        MODAL_VERSION="version unknown"
++    fi
++}
++
+ # Verify Python 3.10+ -- but ONLY as a gate for the pip fallback. When uv is
+ # available (the preferred path), uv provisions its own Python for the tool, so
+ # the system python3 version is irrelevant. On macOS, bare `python3` is often
+@@ -40,7 +62,14 @@ fi
+ if command -v uv >/dev/null 2>&1; then
+     log "uv available -- uv provisions Python for Modal (system Python version not required)"
+ elif [ -n "$PYTHON_CMD" ]; then
+-    PY_VERSION=$("$PYTHON_CMD" -c "import sys; print(str(sys.version_info.major) + '.' + str(sys.version_info.minor))" 2>/dev/null)
++    py_rc=0
++    PY_VERSION=$("$PYTHON_CMD" -c "import sys; print(str(sys.version_info.major) + '.' + str(sys.version_info.minor))" 2>&1) || py_rc=$?
++    if [ "$py_rc" -ne 0 ] || ! [[ "$PY_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
++        write_output_detail "python-version (exit $py_rc)" "$PY_VERSION"
++        log_error "Could not read the $PYTHON_CMD version (exit $py_rc) -- see $(display_path "$LOG_FILE")"
++        write_summary ERROR "modal cli" "Python version check failed"
++        exit 1
++    fi
+     PY_MAJOR=$(printf '%s' "$PY_VERSION" | cut -d. -f1)
+     PY_MINOR=$(printf '%s' "$PY_VERSION" | cut -d. -f2)
+     if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]; }; then
+@@ -52,37 +81,43 @@ elif [ -n "$PYTHON_CMD" ]; then
+ fi
+ 
+ # --- Install/update ---
++# Exit codes decide (C-F2); each command's full output goes to the log as detail.
+ if command -v uv >/dev/null 2>&1; then
+     if command -v modal >/dev/null 2>&1; then
+-        MODAL_VERSION=$(modal --version 2>/dev/null || echo "version unknown")
++        read_modal_version
+         log "Modal CLI already installed ($MODAL_VERSION) -- upgrading via uv..."
+-        TOOL_OUTPUT=$(uv tool upgrade modal 2>&1) || true
+-        if printf '%s\n' "$TOOL_OUTPUT" | grep -q 'is not installed'; then
++        tool_rc=0
++        TOOL_OUTPUT=$(uv tool upgrade modal 2>&1) || tool_rc=$?
++        write_output_detail "uv-tool-upgrade" "$TOOL_OUTPUT"
++        if [ "$tool_rc" -ne 0 ] && grep -q 'is not installed' <<< "$TOOL_OUTPUT"; then
+             log_warn "Modal was not installed via uv -- migrating to uv tool..."
+-            TOOL_OUTPUT=$(uv tool install modal 2>&1) || true
+-        elif printf '%s\n' "$TOOL_OUTPUT" | grep -q 'missing a valid environment'; then
+-            if repair_uv_tool_env "modal" "$TOOL_OUTPUT"; then
+-                TOOL_OUTPUT="Repaired"
+-            fi
++            tool_rc=0
++            TOOL_OUTPUT=$(uv tool install modal 2>&1) || tool_rc=$?
++            write_output_detail "uv-tool-install" "$TOOL_OUTPUT"
++        elif [ "$tool_rc" -ne 0 ] && repair_uv_tool_env "modal" "$TOOL_OUTPUT"; then
++            tool_rc=0
+         fi
+-        printf '%s\n' "$TOOL_OUTPUT" | while IFS= read -r line; do log "$line"; done
+-        if printf '%s\n' "$TOOL_OUTPUT" | grep -qi 'error\|failed'; then
+-            log_error "uv tool install/upgrade modal failed (see log above)"
+-            write_summary ERROR "modal cli" "uv tool install/upgrade failed"
++        if [ "$tool_rc" -ne 0 ]; then
++            log_error "uv tool install/upgrade modal failed (exit $tool_rc) -- see $(display_path "$LOG_FILE")"
++            write_summary ERROR "modal cli" "uv tool install/upgrade failed (exit $tool_rc)"
+         elif command -v modal >/dev/null 2>&1; then
+-            MODAL_VERSION=$(modal --version 2>/dev/null || echo "version unknown")
++            read_modal_version
+             log_ok "Modal CLI upgraded ($MODAL_VERSION)"
+             write_summary OK "modal cli" "$MODAL_VERSION"
++        else
++            log_error "uv tool upgrade completed but 'modal' not found in PATH"
++            write_summary ERROR "modal cli" "not on PATH after upgrade"
+         fi
+     else
+         log "Installing Modal CLI via uv tool..."
+-        TOOL_OUTPUT=$(uv tool install modal 2>&1) || true
+-        printf '%s\n' "$TOOL_OUTPUT" | while IFS= read -r line; do log "$line"; done
+-        if printf '%s\n' "$TOOL_OUTPUT" | grep -qi 'error\|failed'; then
+-            log_error "uv tool install modal failed (see log above)"
+-            write_summary ERROR "modal cli" "uv tool install failed"
++        tool_rc=0
++        TOOL_OUTPUT=$(uv tool install modal 2>&1) || tool_rc=$?
++        write_output_detail "uv-tool-install" "$TOOL_OUTPUT"
++        if [ "$tool_rc" -ne 0 ]; then
++            log_error "uv tool install modal failed (exit $tool_rc) -- see $(display_path "$LOG_FILE")"
++            write_summary ERROR "modal cli" "uv tool install failed (exit $tool_rc)"
+         elif command -v modal >/dev/null 2>&1; then
+-            MODAL_VERSION=$(modal --version 2>/dev/null || echo "version unknown")
++            read_modal_version
+             log_ok "Modal CLI installed ($MODAL_VERSION)"
+             write_summary OK "modal cli" "$MODAL_VERSION"
+         else
+@@ -94,13 +129,14 @@ if command -v uv >/dev/null 2>&1; then
+ elif command -v pip3 >/dev/null 2>&1 || command -v pip >/dev/null 2>&1; then
+     PIP_CMD=$(command -v pip3 || command -v pip)
+     log "uv not found -- installing Modal CLI via pip (--user)..."
+-    PIP_OUTPUT=$("$PIP_CMD" install --user modal 2>&1) || true
+-    printf '%s\n' "$PIP_OUTPUT" | while IFS= read -r line; do log "$line"; done
+-    if printf '%s\n' "$PIP_OUTPUT" | grep -qi '^ERROR:'; then
+-        log_error "pip install --user modal failed (see log above)"
+-        write_summary ERROR "modal cli" "pip install failed"
++    pip_rc=0
++    PIP_OUTPUT=$("$PIP_CMD" install --user modal 2>&1) || pip_rc=$?
++    write_output_detail "pip-install" "$PIP_OUTPUT"
++    if [ "$pip_rc" -ne 0 ]; then
++        log_error "pip install --user modal failed (exit $pip_rc) -- see $(display_path "$LOG_FILE")"
++        write_summary ERROR "modal cli" "pip install failed (exit $pip_rc)"
+     elif command -v modal >/dev/null 2>&1; then
+-        MODAL_VERSION=$(modal --version 2>/dev/null || echo "version unknown")
++        read_modal_version
+         log_ok "Modal CLI installed ($MODAL_VERSION)"
+         write_summary OK "modal cli" "$MODAL_VERSION"
+     else
+diff --git a/scripts/setup-modal.ps1 b/scripts/setup-modal.ps1
+index db5c61a..7bc8ec7 100644
+--- a/scripts/setup-modal.ps1
++++ b/scripts/setup-modal.ps1
+@@ -21,7 +21,8 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+ # Helper: find Python user scripts directory and add to PATH if needed
+ function Ensure-PythonUserScriptsOnPath {
+     if (-not $pythonCmd) { return }
+-    # nt_user scheme gives the user-install scripts directory on Windows
++    # nt_user scheme gives the user-install scripts directory on Windows.
++    # Suppress stderr: an empty result skips the PATH update; the caller's modal PATH check reports it.
+     $scriptsDir = & $pythonCmd -c "import sysconfig; print(sysconfig.get_path('scripts', 'nt_user'))" 2>$null
+     if (-not $scriptsDir -or -not (Test-Path $scriptsDir)) { return }
+     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+@@ -34,11 +35,30 @@ function Ensure-PythonUserScriptsOnPath {
+     }
+ }
+ 
++# Log captured command output to the log file as detail lines (blank lines skipped).
++function Write-OutputDetail([string]$Label, [string]$Output) {
++    foreach ($l in $Output.Split("`n")) { if ($l.Trim()) { LogDetail "${Label}: $($l.TrimEnd())" } }
++}
++
++# Get-ModalVersion: `modal --version`. Python warnings print before the version line,
++# so the last line is kept. A failed probe logs its output and returns "version
++# unknown"; the install result is decided by the uv/pip exit code, not by this probe.
++function Get-ModalVersion {
++    $out = & modal --version 2>&1 | Out-String
++    $rc = $LASTEXITCODE
++    $lines = @($out.Split("`n") | ForEach-Object { $_.TrimEnd() } | Where-Object { $_ })
++    if ($rc -eq 0 -and $lines.Count -gt 0) { return $lines[-1] }
++    Write-OutputDetail "modal-version (exit $rc)" $out
++    return "version unknown"
++}
++
+ # Refresh PATH to pick up tools installed by prior steps (e.g., setup-python, setup-uv)
+ Refresh-Path
+ 
+-# Verify Python 3.10+
++# Verify Python 3.10+. Unlike setup-modal.sh (pip fallback only), this gate also runs
++# when uv is present -- the Windows side of that change is pending validation on Windows.
+ $pythonCmd = $null
++# Get-Command exempt: command-existence check with if/else fallback
+ if (Get-Command python -ErrorAction SilentlyContinue) {
+     $pythonCmd = "python"
+ } elseif (Get-Command python3 -ErrorAction SilentlyContinue) {
+@@ -46,8 +66,10 @@ if (Get-Command python -ErrorAction SilentlyContinue) {
+ }
+ 
+ if ($pythonCmd) {
+-    $pyVersionStr = & $pythonCmd -c "import sys; print(str(sys.version_info.major) + '.' + str(sys.version_info.minor))" 2>$null
+-    if ($pyVersionStr -match '^(\d+)\.(\d+)') {
++    $pyOutput = & $pythonCmd -c "import sys; print(str(sys.version_info.major) + '.' + str(sys.version_info.minor))" 2>&1 | Out-String
++    $pyRc = $LASTEXITCODE
++    $pyVersionStr = $pyOutput.Trim()
++    if ($pyRc -eq 0 -and $pyVersionStr -match '^(\d+)\.(\d+)$') {
+         $pyMajor = [int]$Matches[1]
+         $pyMinor = [int]$Matches[2]
+         if ($pyMajor -lt 3 -or ($pyMajor -eq 3 -and $pyMinor -lt 10)) {
+@@ -56,48 +78,65 @@ if ($pythonCmd) {
+             exit 1
+         }
+         Log "Python $pyVersionStr found ($pythonCmd)"
++    } else {
++        Write-OutputDetail "python-version (exit $pyRc)" $pyOutput
++        # Get-Command exempt: command-existence check with if/else fallback
++        if (Get-Command uv -ErrorAction SilentlyContinue) {
++            # uv provisions its own Python for the tool; only the pip fallback needs this one
++            Log "Could not read the $pythonCmd version (exit $pyRc) -- continuing with uv"
++        } else {
++            LogError "Could not read the $pythonCmd version (exit $pyRc) -- see $logFile"
++            Write-Summary "ERROR" "modal cli" "Python version check failed"
++            exit 1
++        }
+     }
+ }
+ 
+ # --- Install/update ---
++# Exit codes decide (C-F2); each command's full output goes to the log as detail.
+ # Get-Command exempt: command-existence check with if/else fallback
+ if (Get-Command uv -ErrorAction SilentlyContinue) {
+     # Get-Command exempt: command-existence check with if/else fallback
+     if (Get-Command modal -ErrorAction SilentlyContinue) {
+-        $modalVersion = & modal --version 2>$null
+-        if (-not $modalVersion) { $modalVersion = "version unknown" }
++        $modalVersion = Get-ModalVersion
+         LogOk "Modal CLI already installed ($modalVersion)"
+         Log "Upgrading via uv tool..."
+         $toolOutput = & uv tool upgrade modal 2>&1 | Out-String
+-        if ($LASTEXITCODE -ne 0 -and $toolOutput -match 'is not installed') {
++        $toolRc = $LASTEXITCODE
++        Write-OutputDetail "uv-tool-upgrade" $toolOutput
++        if ($toolRc -ne 0 -and $toolOutput -match 'is not installed') {
+             LogWarn "Modal was not installed via uv -- migrating to uv tool..."
+             $toolOutput = & uv tool install modal 2>&1 | Out-String
+-        } elseif ($LASTEXITCODE -ne 0 -and (Repair-UvToolEnv -ToolName "modal" -UpgradeOutput $toolOutput)) {
+-            $toolOutput = ""
++            $toolRc = $LASTEXITCODE
++            Write-OutputDetail "uv-tool-install" $toolOutput
++        } elseif ($toolRc -ne 0 -and (Repair-UvToolEnv -ToolName "modal" -UpgradeOutput $toolOutput)) {
++            $toolRc = 0
+         }
+-        $toolOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+-        if ($LASTEXITCODE -ne 0) {
+-            LogError "uv tool install/upgrade modal failed (exit code $LASTEXITCODE)"
+-            Write-Summary "ERROR" "modal cli" "uv tool install/upgrade failed"
++        Refresh-Path
++        # Get-Command exempt: command-existence check with if/else fallback
++        if ($toolRc -ne 0) {
++            LogError "uv tool install/upgrade modal failed (exit $toolRc) -- see $logFile"
++            Write-Summary "ERROR" "modal cli" "uv tool install/upgrade failed (exit $toolRc)"
+         } elseif (Get-Command modal -ErrorAction SilentlyContinue) {
+-            $modalVersion = & modal --version 2>$null
+-            if (-not $modalVersion) { $modalVersion = "version unknown" }
++            $modalVersion = Get-ModalVersion
+             LogOk "Modal CLI upgraded ($modalVersion)"
+             Write-Summary "OK" "modal cli" "$modalVersion"
++        } else {
++            LogError "uv tool upgrade completed but 'modal' not found in PATH"
++            Write-Summary "ERROR" "modal cli" "not on PATH after upgrade"
+         }
+     } else {
+         Log "Installing Modal CLI via uv tool..."
+         $toolOutput = & uv tool install modal 2>&1 | Out-String
+-        $toolOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+-        if ($LASTEXITCODE -ne 0) {
+-            LogError "uv tool install modal failed (exit code $LASTEXITCODE)"
+-            Write-Summary "ERROR" "modal cli" "uv tool install failed"
+-        }
++        $toolRc = $LASTEXITCODE
++        Write-OutputDetail "uv-tool-install" $toolOutput
+         Refresh-Path
+         # Get-Command exempt: command-existence check with if/else fallback
+-        if (Get-Command modal -ErrorAction SilentlyContinue) {
+-            $modalVersion = & modal --version 2>$null
+-            if (-not $modalVersion) { $modalVersion = "version unknown" }
++        if ($toolRc -ne 0) {
++            LogError "uv tool install modal failed (exit $toolRc) -- see $logFile"
++            Write-Summary "ERROR" "modal cli" "uv tool install failed (exit $toolRc)"
++        } elseif (Get-Command modal -ErrorAction SilentlyContinue) {
++            $modalVersion = Get-ModalVersion
+             $modalPath = (Get-Command modal).Source
+             LogOk "Modal CLI installed ($modalVersion)"
+             Log "Install path: $modalPath"
+@@ -112,17 +151,16 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
+     $pipCmd = "pip"
+     Log "uv not found -- installing Modal CLI via pip (--user)..."
+     $pipOutput = & $pipCmd install --user modal 2>&1 | Out-String
+-    $pipOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+-    if ($LASTEXITCODE -ne 0 -or $pipOutput -match '(?m)^ERROR:') {
+-        LogError "pip install --user modal failed (see log above)"
+-        Write-Summary "ERROR" "modal cli" "pip install failed"
+-    }
++    $pipRc = $LASTEXITCODE
++    Write-OutputDetail "pip-install" $pipOutput
+     Refresh-Path
+     Ensure-PythonUserScriptsOnPath
+     # Get-Command exempt: command-existence check with if/else fallback
+-    if (Get-Command modal -ErrorAction SilentlyContinue) {
+-        $modalVersion = & modal --version 2>$null
+-        if (-not $modalVersion) { $modalVersion = "version unknown" }
++    if ($pipRc -ne 0) {
++        LogError "pip install --user modal failed (exit $pipRc) -- see $logFile"
++        Write-Summary "ERROR" "modal cli" "pip install failed (exit $pipRc)"
++    } elseif (Get-Command modal -ErrorAction SilentlyContinue) {
++        $modalVersion = Get-ModalVersion
+         LogOk "Modal CLI installed ($modalVersion)"
+         Write-Summary "OK" "modal cli" "$modalVersion"
+     } else {
+@@ -133,17 +171,16 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
+     # PEP 773: standalone pip deprecated on Windows; try python -m pip
+     Log "uv and pip not found -- trying python -m pip (--user)..."
+     $pipOutput = & $pythonCmd -m pip install --user modal 2>&1 | Out-String
+-    $pipOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+-    if ($LASTEXITCODE -ne 0 -or $pipOutput -match '(?m)^ERROR:') {
+-        LogError "python -m pip install --user modal failed (see log above)"
+-        Write-Summary "ERROR" "modal cli" "pip module install failed"
+-    }
++    $pipRc = $LASTEXITCODE
++    Write-OutputDetail "python-m-pip-install" $pipOutput
+     Refresh-Path
+     Ensure-PythonUserScriptsOnPath
+     # Get-Command exempt: command-existence check with if/else fallback
+-    if (Get-Command modal -ErrorAction SilentlyContinue) {
+-        $modalVersion = & modal --version 2>$null
+-        if (-not $modalVersion) { $modalVersion = "version unknown" }
++    if ($pipRc -ne 0) {
++        LogError "python -m pip install --user modal failed (exit $pipRc) -- see $logFile"
++        Write-Summary "ERROR" "modal cli" "pip module install failed (exit $pipRc)"
++    } elseif (Get-Command modal -ErrorAction SilentlyContinue) {
++        $modalVersion = Get-ModalVersion
+         LogOk "Modal CLI installed ($modalVersion)"
+         Write-Summary "OK" "modal cli" "$modalVersion"
+     } else {
+diff --git a/scripts/setup-go.ps1 b/scripts/setup-go.ps1
+index 1dc93e0..353969a 100644
+--- a/scripts/setup-go.ps1
++++ b/scripts/setup-go.ps1
+@@ -27,8 +27,10 @@ switch ($provenance) {
+     "chocolatey" {
+         LogWarn "Go installed via Chocolatey -- attempting removal..."
+         $chocoOutput = choco uninstall golang -y 2>&1 | Out-String
+-        if ($LASTEXITCODE -ne 0) {
+-            LogWarn "choco uninstall golang failed (may need admin) -- proceeding with winget install"
++        $chocoRc = $LASTEXITCODE
++        foreach ($l in $chocoOutput.Split("`n")) { if ($l.Trim()) { LogDetail "choco-uninstall-golang: $($l.TrimEnd())" } }
++        if ($chocoRc -ne 0) {
++            LogWarn "choco uninstall golang failed (exit $chocoRc; may need admin) -- proceeding with winget install. See $logFile"
+         } else {
+             LogOk "Chocolatey Go removed"
+             $provenance = "none"
+@@ -48,35 +50,41 @@ if ($provenance -eq "winget") {
+     # Upgrade existing winget Go
+     Log "Go already installed via winget -- checking for updates..."
+     $wingetOutput = winget upgrade $goWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
++    $upgradeRc = $LASTEXITCODE
+     Log-WingetOutput $wingetOutput
+     if ($wingetOutput -match 'No available upgrade|No newer package versions') {
+         LogOk "Go already up to date"
+-    } elseif ($LASTEXITCODE -ne 0) {
+-        LogError "winget upgrade Go failed (exit code $LASTEXITCODE)"
+-        Write-Summary "ERROR" "go" "winget upgrade failed"
++    } elseif ($upgradeRc -ne 0) {
++        LogError "winget upgrade Go failed (exit $upgradeRc) -- see $logFile"
++        Write-Summary "ERROR" "go" "winget upgrade failed (exit $upgradeRc)"
+     }
+     Refresh-Path
+ 
+-    # Get-Command exempt: command-existence check with if/else fallback
+-    $goCheck = Get-Command go -ErrorAction SilentlyContinue
+-    if ($goCheck) {
+-        $goVersion = go version 2>$null
+-        if ($goVersion) {
+-            LogOk "$goVersion"
+-            Write-Summary "OK" "go" "$goVersion"
++    # After a failed upgrade its ERROR row stands alone (no OK row after it).
++    if ($errors -eq 0) {
++        # Get-Command exempt: command-existence check with if/else fallback
++        $goCheck = Get-Command go -ErrorAction SilentlyContinue
++        if ($goCheck) {
++            # Suppress stderr: result checked immediately (empty -> ERROR below)
++            $goVersion = go version 2>$null
++            if ($goVersion) {
++                LogOk "$goVersion"
++                Write-Summary "OK" "go" "$goVersion"
++            } else {
++                LogError "go found on PATH but 'go version' failed"
++                Write-Summary "ERROR" "go" "version check failed"
++            }
+         } else {
+-            LogError "go found on PATH but 'go version' failed"
+-            Write-Summary "ERROR" "go" "version check failed"
++            LogError "winget upgrade completed but 'go' not found in PATH"
++            Write-Summary "ERROR" "go" "not on PATH after upgrade"
+         }
+-    } else {
+-        LogError "winget upgrade completed but 'go' not found in PATH"
+-        Write-Summary "ERROR" "go" "not on PATH after upgrade"
+     }
+ } elseif ($provenance -eq "scoop") {
+     # Scoop users manage their own Go -- just verify and report
+     # Get-Command exempt: command-existence check with if/else fallback
+     $goCheck = Get-Command go -ErrorAction SilentlyContinue
+     if ($goCheck) {
++        # Suppress stderr: result checked immediately (empty -> WARN below)
+         $goVersion = go version 2>$null
+         if ($goVersion) {
+             LogOk "Go via Scoop: $goVersion"
+@@ -93,29 +101,34 @@ if ($provenance -eq "winget") {
+     # Fresh install via winget
+     Log "Installing Go via winget ($goWingetId)..."
+     $wingetOutput = winget install $goWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
++    $installRc = $LASTEXITCODE
+     Log-WingetOutput $wingetOutput
+     if ($wingetOutput -match 'already installed') {
+         LogOk "Go already installed (winget)"
+-    } elseif ($LASTEXITCODE -ne 0) {
+-        LogError "winget install Go failed (exit code $LASTEXITCODE)"
+-        Write-Summary "ERROR" "go" "winget install failed"
++    } elseif ($installRc -ne 0) {
++        LogError "winget install Go failed (exit $installRc) -- see $logFile"
++        Write-Summary "ERROR" "go" "winget install failed (exit $installRc)"
+     }
+     Refresh-Path
+ 
+-    # Get-Command exempt: command-existence check with if/else fallback
+-    $goCheck = Get-Command go -ErrorAction SilentlyContinue
+-    if ($goCheck) {
+-        $goVersion = go version 2>$null
+-        if ($goVersion) {
+-            LogOk "Go installed ($goVersion)"
+-            Write-Summary "OK" "go" "$goVersion"
++    # After a failed install its ERROR row stands alone (no second row after it).
++    if ($errors -eq 0) {
++        # Get-Command exempt: command-existence check with if/else fallback
++        $goCheck = Get-Command go -ErrorAction SilentlyContinue
++        if ($goCheck) {
++            # Suppress stderr: result checked immediately (empty -> ERROR below)
++            $goVersion = go version 2>$null
++            if ($goVersion) {
++                LogOk "Go installed ($goVersion)"
++                Write-Summary "OK" "go" "$goVersion"
++            } else {
++                LogError "go found on PATH but 'go version' failed"
++                Write-Summary "ERROR" "go" "version check failed"
++            }
+         } else {
+-            LogError "go found on PATH but 'go version' failed"
+-            Write-Summary "ERROR" "go" "version check failed"
++            LogError "winget install completed but 'go' not found in PATH"
++            Write-Summary "ERROR" "go" "installed but not on PATH"
+         }
+-    } else {
+-        LogError "winget install completed but 'go' not found in PATH"
+-        Write-Summary "ERROR" "go" "installed but not on PATH"
+     }
+ }
+ 
+diff --git a/scripts/setup-rust.sh b/scripts/setup-rust.sh
+index db3e664..a2af991 100755
+--- a/scripts/setup-rust.sh
++++ b/scripts/setup-rust.sh
+@@ -72,7 +72,7 @@ else
+         log_ok "cargo $(cargo --version 2>&1)"
+         log_ok "rustc $(rustc --version 2>&1)"
+         # rustup --version prints an "info:" line on stderr; keep only the version line.
+-        log_ok "$(rustup --version 2>&1 | grep -m1 '^rustup ')"
++        log_ok "$(grep -m1 '^rustup ' <<< "$(rustup --version 2>&1)")"
+         write_summary OK "rust/cargo" "$(cargo --version 2>&1)"
+     else
+         log_error "rustup install completed but 'cargo' not found in PATH"
 ```
 
 ## Risks

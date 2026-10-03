@@ -72,7 +72,7 @@ else
         log_ok "cargo $(cargo --version 2>&1)"
         log_ok "rustc $(rustc --version 2>&1)"
         # rustup --version prints an "info:" line on stderr; keep only the version line.
-        log_ok "$(rustup --version 2>&1 | grep -m1 '^rustup ')"
+        log_ok "$(grep -m1 '^rustup ' <<< "$(rustup --version 2>&1)")"
         write_summary OK "rust/cargo" "$(cargo --version 2>&1)"
     else
         log_error "rustup install completed but 'cargo' not found in PATH"
