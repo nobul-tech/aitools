@@ -276,10 +276,11 @@ if ($hasSetupUser -and -not $hasBuildDeploy) {
 # ---------------------------------------------------------------------------
 $prereqFail = $false
 
-# Check: any script using 'cargo install' must call Check-BuildPrereqs or Diagnose-BuildFailure
+# Check: any script using 'cargo install' must call Check-BuildPrereqs or Diagnose-BuildFailure.
+# `cargo install --list` only lists installed packages (no build) and is not counted.
 foreach ($script in Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "setup-*.ps1" -ErrorAction SilentlyContinue) {
     $content = Get-Content $script.FullName -Raw -ErrorAction SilentlyContinue
-    if ($content -match 'cargo install') {
+    if ($content -match 'cargo install(?! --list)') {
         if ($content -notmatch 'Check-BuildPrereqs|Diagnose-BuildFailure') {
             Write-Host "      $($script.Name) uses 'cargo install' without build prereq framework"
             $prereqFail = $true
@@ -288,7 +289,7 @@ foreach ($script in Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter
 }
 foreach ($script in Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "setup-*.sh" -ErrorAction SilentlyContinue) {
     $content = Get-Content $script.FullName -Raw -ErrorAction SilentlyContinue
-    if ($content -match 'cargo install') {
+    if ($content -match 'cargo install(?! --list)') {
         if ($content -notmatch 'check_build_prereqs|diagnose_build_failure') {
             Write-Host "      $($script.Name) uses 'cargo install' without build prereq framework"
             $prereqFail = $true

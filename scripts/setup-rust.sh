@@ -25,25 +25,37 @@ esac
 export PATH="$HOME/.cargo/bin:$PATH"
 
 # --- Cleanup non-preferred installs ---
-# Homebrew "rust" formula is a brew-managed toolchain that conflicts with rustup
-if command -v brew &>/dev/null && brew list rust &>/dev/null 2>&1; then
-    log_warn "Found Homebrew-managed rust (conflicts with rustup). Removing..."
-    # Cleanup: brew uninstall may fail if formula not fully installed; log warning only
-    brew uninstall rust 2>/dev/null || log_warn "Failed to uninstall brew rust"
+# Homebrew "rust" formula is a brew-managed toolchain that conflicts with rustup.
+# `brew list --versions rust` exits non-zero when the formula is not installed.
+if command -v brew &>/dev/null && brew_rust=$(brew list --versions rust 2>&1); then
+    log_warn "Found Homebrew-managed rust ($brew_rust; conflicts with rustup). Removing..."
+    uninstall_rc=0
+    uninstall_out=$(brew uninstall rust 2>&1) || uninstall_rc=$?
+    while IFS= read -r line; do
+        if [ -n "${line// /}" ]; then log_detail "brew-uninstall-rust: $line"; fi
+    done <<< "$uninstall_out"
+    if [ "$uninstall_rc" -ne 0 ]; then
+        # Non-blocking: rustup installs alongside; the brew copy may shadow it on PATH.
+        log_warn "brew uninstall rust failed (exit $uninstall_rc) -- see $(display_path "$LOG_FILE")"
+    fi
 fi
 
 # --- Install/update ---
 if command -v rustup &>/dev/null; then
     log "rustup found — updating toolchain..."
-    RUSTUP_OUTPUT=$(rustup update 2>&1) || true
-    printf '%s\n' "$RUSTUP_OUTPUT" | tail -3 | while IFS= read -r line; do [ -n "${line// /}" ] && log "$line"; done
-    if printf '%s\n' "$RUSTUP_OUTPUT" | grep -qi 'error\|fatal'; then
-        log_error "rustup update reported errors (see log above)"
-        write_summary ERROR "rust/cargo" "rustup update failed"
+    # Exit code decides (C-F2); the full output goes to the log as detail.
+    update_rc=0
+    RUSTUP_OUTPUT=$(rustup update 2>&1) || update_rc=$?
+    while IFS= read -r line; do
+        if [ -n "${line// /}" ]; then log_detail "rustup-update: $line"; fi
+    done <<< "$RUSTUP_OUTPUT"
+    if [ "$update_rc" -ne 0 ]; then
+        log_error "rustup update failed (exit $update_rc) -- see $(display_path "$LOG_FILE")"
+        write_summary ERROR "rust/cargo" "rustup update failed (exit $update_rc)"
     else
-        log_ok "cargo $(cargo --version 2>/dev/null)"
-        log_ok "rustc $(rustc --version 2>/dev/null)"
-        write_summary OK "rust/cargo" "$(cargo --version 2>/dev/null)"
+        log_ok "cargo $(cargo --version 2>&1)"
+        log_ok "rustc $(rustc --version 2>&1)"
+        write_summary OK "rust/cargo" "$(cargo --version 2>&1)"
     fi
 else
     log "Installing Rust toolchain via rustup..."
@@ -57,10 +69,11 @@ else
 
     if command -v cargo &>/dev/null; then
         log_ok "Rust toolchain installed"
-        log_ok "cargo $(cargo --version 2>/dev/null)"
-        log_ok "rustc $(rustc --version 2>/dev/null)"
-        log_ok "rustup $(rustup --version 2>/dev/null | head -1)"
-        write_summary OK "rust/cargo" "$(cargo --version 2>/dev/null)"
+        log_ok "cargo $(cargo --version 2>&1)"
+        log_ok "rustc $(rustc --version 2>&1)"
+        # rustup --version prints an "info:" line on stderr; keep only the version line.
+        log_ok "$(rustup --version 2>&1 | grep -m1 '^rustup ')"
+        write_summary OK "rust/cargo" "$(cargo --version 2>&1)"
     else
         log_error "rustup install completed but 'cargo' not found in PATH"
         log_error "Expected location: ~/.cargo/bin"

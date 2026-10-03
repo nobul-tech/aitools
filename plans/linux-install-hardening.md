@@ -1139,11 +1139,12 @@ Main agent, direct (no code). Every item below is part of **this review**:
 ## PR C: logging conformance (epic #21, issues #22–#30, plus #31)
 
 > **Status: PR C1 (batches C1, C2, C3a, C4a) shipped in v0.73.3 (2026-10-03).
-> PR C2 (batches C3b, C4b, T1, D-C2) approved for execution 2026-10-03.**
+> PR C2 (batches C3b, C4b, T1, D-C2) shipped 2026-10-03 (#37).
+> PR C3 (batch C5, D-C3) approved for execution 2026-10-03.**
 > Verbatim edits, the error-handling audits and the prototype test evidence are in
-> "PR C1 — verbatim edits" and "PR C2 — verbatim edits" below; the logging audit plan
-> is in the PR C2 section. Batches C5–C15 remain scoped only: each needs its own
-> verbatim-edit revision of this section, presented for approval, before code is written.
+> the "PR C1/C2/C3 — verbatim edits" sections below; the logging audit plan is in the
+> PR C2 section. Batches C6–C15 remain scoped only: each needs its own verbatim-edit
+> revision of this section, presented for approval, before code is written.
 
 ### Origin
 
@@ -1211,11 +1212,17 @@ PR C2 (approved 2026-10-03; verbatim edits in "PR C2 — verbatim edits"):
 | T1 | `tests/logging/test-logging.sh`, `tests/logging/test-logging.ps1` (new), `.github/workflows/check.yml` | Logging unit tests (audit checks U1, U2), run on all three CI runners |
 | D-C2 | protected docs (approved 2026-10-03) | `script-standards-detail.md` logging overrides (`scripts/aitools` row removed, entry-point text); `CLAUDE.md` `tests/` line; this plan. RELEASE_NOTES deferred |
 
-Later PRs (scoped, not approved):
+PR C3 (approved 2026-10-03; verbatim edits in "PR C3 — verbatim edits"):
 
 | Batch | Files | Issues |
 |---|---|---|
 | C5 | `setup-rust.sh`, `setup-rust.ps1`, `setup-typst.sh` | #22, #23, #24, #27 |
+| D-C3 | protected docs (approved 2026-10-03) | exemptions table: `setup-rust.sh` and `setup-typst.sh` rows removed; this plan. RELEASE_NOTES deferred |
+
+Later PRs (scoped, not approved):
+
+| Batch | Files | Issues |
+|---|---|---|
 | C6 | `setup-typst.ps1`, `setup-pandoc.sh`, `setup-pandoc.ps1` | #23, #26a |
 | C7 | `setup-modal.sh`, `setup-modal.ps1`, `setup-go.ps1` | #23, #26d, #27a |
 | C8 | `setup-vercelcli.sh`, `setup-vercelcli.ps1`, `setup-gh-cli.ps1` | #23, #26a, #27a, auth WARN row |
@@ -3757,6 +3764,526 @@ index 6c5cfd7..4612585 100644
        - name: Build deploy scripts (via Git Bash)
          shell: bash
          run: bash scripts/build-deploy.sh
+```
+
+## PR C3 — verbatim edits (batch C5)
+
+Base: `main` @ f6fe6cb (after PR C2). Prototyped on a copy of the base (scratch:
+`.scratch/session-3030c86a-9/proto-c5/`); the diff below is the exact edit. Decisions
+C-F2 (exit code decides, full output logged) and C-F3 (summary row on every failure path)
+apply. `setup-typst.sh` stays Homebrew-only: its Linux install path is #14 (PR B); this
+batch changes only its logging and checks.
+
+### What changes
+
+| File | Issue / check | Change |
+|---|---|---|
+| `setup-rust.sh` | #22, A6 | `rustup update`: every output line logged as `[detail] rustup-update:` (was `tail -3`) |
+| `setup-rust.sh` | #24, A9 | The piped `[ -n ] && log` loop is gone (a blank last output line aborted the script under `set -e`; reproduced) |
+| `setup-rust.sh` | #27a, #27b, A8 | Exit code decides (was a grep for "error"/"fatal"); ERROR row names the exit code; "see log above" replaced by the log path |
+| `setup-rust.sh` | #23, A4 | Homebrew rust: detected with `brew list --versions rust`; `brew uninstall rust` output logged, failure warns with the exit code (was `2>/dev/null`) |
+| `setup-rust.sh` | A4 | Version probes `2>&1` instead of `2>/dev/null`; `rustup --version` keeps only its `rustup ` line |
+| `setup-rust.ps1` | #22, A6 | `rustup update` output logged in full as detail (was `Select-Object -Last 3`); exit code saved before logging |
+| `setup-rust.ps1` | A4 | cargo/rustc version probes `2>&1`; the vswhere and nasm probes keep `2>$null` with a comment (stderr would fake a match / break the parse; both results are checked) |
+| `setup-typst.sh` | #23, A4 | cargo `typst-cli` and npm `typst` are removed only when installed (`cargo install --list`, `npm ls -g`); removal output logged; a failed removal warns with the exit code (was `>/dev/null 2>&1 \|\| true`, unconditional) |
+| `setup-typst.sh` | C-F2, A4 | `brew upgrade typst`: exit code captured (was `\|\| true`); non-zero exit is an ERROR even without "error" in the output; the Standard 3 output grep stays |
+
+**Addendum (commander, 2026-10-03, found by pre-commit during execution):** pre-commit
+step 14 flagged `setup-typst.sh` because its read-only `cargo install --list` matched the
+literal `cargo install` grep for source builds. Step 14 in `check-pre-commit.sh` / `.ps1`
+now matches `cargo install(?! --list)` (perl / .NET lookahead, no pipe). Verified: `--list`
+alone not counted; `cargo install <pkg>` still counted; across all setup scripts only
+`setup-datadog.sh/.ps1` are counted (as before), and they use the prereq framework.
+
+**Addendum 2 (commander, 2026-10-03, found by pre-push during execution):** pre-push
+step 7 ("deploy/ matches source") required `deploy/` changes in the aitools push whenever
+a setup script changed, but `aitools/deploy/` is frozen and generated scripts live in the
+dotprofile repo (`deploy-paths.md`), so it failed on every setup-script change (PR C1
+changed only the lib, which the step did not count). Step 7 in `check-pre-push.sh` /
+`.ps1` now:
+- triggers on setup scripts, `build-deploy.sh`, `shared/`, and `aitools-lib.*` (inlined
+  into every deploy script; previously not counted);
+- SKIPs when `userRepoPath` is not configured (PS1: WARN when Git Bash is not found);
+- otherwise extracts the dotprofile's committed tree (`git archive HEAD`) twice into a
+  temp dir, runs this branch's `build-deploy.sh` into one copy (temp HOME whose config
+  points `userRepoPath` at it), and compares its `deploy/` with the committed one: PASS
+  when identical, FAIL naming each stale file, FAIL with the build output in
+  `checks.log` when the rebuild fails.
+
+Verified (bash, and PS1 with the OS guard stripped): dotprofile with the C5 rebuild ->
+PASS; dotprofile at `main` without it -> FAIL naming exactly `setup-rust.ps1
+setup-rust.sh setup-typst.sh`; `userRepoPath` missing -> SKIP. The simulation also caught
+a `Join-Path` crash on an empty `LOCALAPPDATA` (fixed: plain string path). The rebuild is
+HOME-independent: a build in a temp HOME reproduces the committed files byte for byte.
+
+Generated `deploy/` (dotprofile): `setup-rust.sh`, `setup-rust.ps1` and `setup-typst.sh`
+change; the build gives 40 scripts and every generated script passes `bash -n` / ParseFile.
+
+### Error-handling audit
+
+| Pattern | Where | Check |
+|---|---|---|
+| `x=$(cmd 2>&1) \|\| rc=$?` | rustup update, brew uninstall, brew upgrade, cargo/npm removal, `cargo install --list` | `rc` tested on the next statement; output logged first |
+| `if x=$(probe 2>&1); then` | `brew list --versions rust`, `npm ls -g typst` | the probe's exit code is the answer (installed or not); output kept for the log |
+| `2>$null` kept, with comment | `setup-rust.ps1` vswhere, nasm | stderr would corrupt the parsed value; result checked on the next line |
+| `Get-Command ... -ErrorAction SilentlyContinue` | `setup-rust.ps1` nasm (2) | command-existence check with explicit fallback (exempt) |
+
+### Tests (Linux)
+
+| Suite | Prototype | `main` |
+|---|---|---|
+| `test-c5.sh` (scratch): stubbed rustup/cargo/rustc/brew/npm/typst; rustup update failure, exit 0 with "error" text, blank trailing output, failed brew uninstall, brew rust absent; typst-cli present/absent, npm removal failure, up to date, `brew upgrade` exit 1 without "error" | 17/17 | 4/17: error line lost to `tail -3`, false ERROR on "error" text, `set -e` abort on a blank line, uninstall output discarded, unconditional uninstalls, quiet `brew upgrade` failure reported OK |
+| `test-c5-ps1.sh` (scratch): `setup-rust.ps1` with the OS guard stripped, stub `rustup.exe` under a fake USERPROFILE | 4/4 | 2/4 |
+| `bash -n` / ParseFile; `build-deploy.sh` into a dotprofile copy | pass; 40 scripts, 3 changed, all parse | -- |
+
+Not testable here: the MSVC / NASM / persistent-PATH parts of `setup-rust.ps1` (Windows only;
+unchanged except comments). macOS run needed for the Homebrew paths.
+
+### Logging audit (after C5)
+
+| Check | Before C5 | After C5 | C5 files |
+|---|---|---|---|
+| A3 | 193 in 18 | 191 in 16 | 0 |
+| A4 | 344 in 41 | 328 in 39 | 4 in `setup-rust.ps1`, all allowed (2 command-existence checks, 2 commented and checked probes) |
+| A6 | 3 in 3 | 1 in 1 | 0 |
+| A8 | 10 in 9 | 9 in 8 | 1 in `setup-typst.sh`: the `brew upgrade` output grep, allowed by Standard 3 (WARN-vs-ERROR still pending, C-F6) |
+| A9 | 9 in 8 | 8 in 7 | 0 |
+
+### D-C3: protected doc edits
+
+- `reference/script-standards-detail.md` exemptions table: remove the `setup-rust.sh` (line
+  32) and `setup-typst.sh` (lines 26, 31) rows; those discards are fixed. The
+  `setup-typst.ps1` row stays until C6.
+- This plan: status line, batch table (C5 -> PR C3), this section.
+
+### Verbatim diff
+
+```diff
+diff --git a/scripts/setup-rust.sh b/scripts/setup-rust.sh
+index 5794bb4..db3e664 100755
+--- a/scripts/setup-rust.sh
++++ b/scripts/setup-rust.sh
+@@ -25,25 +25,37 @@ esac
+ export PATH="$HOME/.cargo/bin:$PATH"
+ 
+ # --- Cleanup non-preferred installs ---
+-# Homebrew "rust" formula is a brew-managed toolchain that conflicts with rustup
+-if command -v brew &>/dev/null && brew list rust &>/dev/null 2>&1; then
+-    log_warn "Found Homebrew-managed rust (conflicts with rustup). Removing..."
+-    # Cleanup: brew uninstall may fail if formula not fully installed; log warning only
+-    brew uninstall rust 2>/dev/null || log_warn "Failed to uninstall brew rust"
++# Homebrew "rust" formula is a brew-managed toolchain that conflicts with rustup.
++# `brew list --versions rust` exits non-zero when the formula is not installed.
++if command -v brew &>/dev/null && brew_rust=$(brew list --versions rust 2>&1); then
++    log_warn "Found Homebrew-managed rust ($brew_rust; conflicts with rustup). Removing..."
++    uninstall_rc=0
++    uninstall_out=$(brew uninstall rust 2>&1) || uninstall_rc=$?
++    while IFS= read -r line; do
++        if [ -n "${line// /}" ]; then log_detail "brew-uninstall-rust: $line"; fi
++    done <<< "$uninstall_out"
++    if [ "$uninstall_rc" -ne 0 ]; then
++        # Non-blocking: rustup installs alongside; the brew copy may shadow it on PATH.
++        log_warn "brew uninstall rust failed (exit $uninstall_rc) -- see $(display_path "$LOG_FILE")"
++    fi
+ fi
+ 
+ # --- Install/update ---
+ if command -v rustup &>/dev/null; then
+     log "rustup found — updating toolchain..."
+-    RUSTUP_OUTPUT=$(rustup update 2>&1) || true
+-    printf '%s\n' "$RUSTUP_OUTPUT" | tail -3 | while IFS= read -r line; do [ -n "${line// /}" ] && log "$line"; done
+-    if printf '%s\n' "$RUSTUP_OUTPUT" | grep -qi 'error\|fatal'; then
+-        log_error "rustup update reported errors (see log above)"
+-        write_summary ERROR "rust/cargo" "rustup update failed"
++    # Exit code decides (C-F2); the full output goes to the log as detail.
++    update_rc=0
++    RUSTUP_OUTPUT=$(rustup update 2>&1) || update_rc=$?
++    while IFS= read -r line; do
++        if [ -n "${line// /}" ]; then log_detail "rustup-update: $line"; fi
++    done <<< "$RUSTUP_OUTPUT"
++    if [ "$update_rc" -ne 0 ]; then
++        log_error "rustup update failed (exit $update_rc) -- see $(display_path "$LOG_FILE")"
++        write_summary ERROR "rust/cargo" "rustup update failed (exit $update_rc)"
+     else
+-        log_ok "cargo $(cargo --version 2>/dev/null)"
+-        log_ok "rustc $(rustc --version 2>/dev/null)"
+-        write_summary OK "rust/cargo" "$(cargo --version 2>/dev/null)"
++        log_ok "cargo $(cargo --version 2>&1)"
++        log_ok "rustc $(rustc --version 2>&1)"
++        write_summary OK "rust/cargo" "$(cargo --version 2>&1)"
+     fi
+ else
+     log "Installing Rust toolchain via rustup..."
+@@ -57,10 +69,11 @@ else
+ 
+     if command -v cargo &>/dev/null; then
+         log_ok "Rust toolchain installed"
+-        log_ok "cargo $(cargo --version 2>/dev/null)"
+-        log_ok "rustc $(rustc --version 2>/dev/null)"
+-        log_ok "rustup $(rustup --version 2>/dev/null | head -1)"
+-        write_summary OK "rust/cargo" "$(cargo --version 2>/dev/null)"
++        log_ok "cargo $(cargo --version 2>&1)"
++        log_ok "rustc $(rustc --version 2>&1)"
++        # rustup --version prints an "info:" line on stderr; keep only the version line.
++        log_ok "$(rustup --version 2>&1 | grep -m1 '^rustup ')"
++        write_summary OK "rust/cargo" "$(cargo --version 2>&1)"
+     else
+         log_error "rustup install completed but 'cargo' not found in PATH"
+         log_error "Expected location: ~/.cargo/bin"
+diff --git a/scripts/setup-rust.ps1 b/scripts/setup-rust.ps1
+index a581213..d04ea49 100644
+--- a/scripts/setup-rust.ps1
++++ b/scripts/setup-rust.ps1
+@@ -23,14 +23,18 @@ if (Test-Path $cargoPath) {
+     Log "rustup found -- updating toolchain..."
+     $rustupExe = Join-Path $env:USERPROFILE ".cargo\bin\rustup.exe"
+     $rustupOutput = & $rustupExe update 2>&1 | Out-String
+-    $rustupOutput.Trim().Split("`n") | Select-Object -Last 3 | ForEach-Object { $l = $_.TrimEnd(); if ($l.Trim()) { Log $l } }
+-    if ($LASTEXITCODE -ne 0) {
+-        LogError "rustup update failed (exit code $LASTEXITCODE)"
+-        Write-Summary "ERROR" "rust/cargo" "rustup update failed (exit $LASTEXITCODE)"
++    $updateRc = $LASTEXITCODE
++    # Full output to the log as detail (C-F2); the exit code decides.
++    foreach ($l in $rustupOutput.Split("`n")) {
++        if ($l.Trim()) { LogDetail "rustup-update: $($l.TrimEnd())" }
++    }
++    if ($updateRc -ne 0) {
++        LogError "rustup update failed (exit $updateRc) -- see $logFile"
++        Write-Summary "ERROR" "rust/cargo" "rustup update failed (exit $updateRc)"
+     } else {
+-        $cargoVersion = (& $cargoPath --version 2>$null)
++        $cargoVersion = (& $cargoPath --version 2>&1)
+         $rustcPath = Join-Path $env:USERPROFILE ".cargo\bin\rustc.exe"
+-        $rustcVersion = (& $rustcPath --version 2>$null)
++        $rustcVersion = (& $rustcPath --version 2>&1)
+         LogOk "cargo $cargoVersion"
+         LogOk "rustc $rustcVersion"
+         Write-Summary "OK" "rust/cargo" "$cargoVersion"
+@@ -46,9 +50,9 @@ if (Test-Path $cargoPath) {
+     Refresh-Path
+ 
+     if (Test-Path $cargoPath) {
+-        $cargoVersion = (& $cargoPath --version 2>$null)
++        $cargoVersion = (& $cargoPath --version 2>&1)
+         $rustcPath = Join-Path $env:USERPROFILE ".cargo\bin\rustc.exe"
+-        $rustcVersion = (& $rustcPath --version 2>$null)
++        $rustcVersion = (& $rustcPath --version 2>&1)
+         LogOk "Rust toolchain installed"
+         LogOk "cargo $cargoVersion"
+         LogOk "rustc $rustcVersion"
+@@ -65,6 +69,8 @@ if (Test-Path $cargoPath) {
+ $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+ $hasMSVC = $false
+ if (Test-Path $vsWhere) {
++    # 2>$null: vswhere prints nothing on stdout when no install matches; stderr text
++    # would make $vsInstalls non-empty and fake a match. Checked on the next line.
+     $vsInstalls = & $vsWhere -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
+     if ($vsInstalls) { $hasMSVC = $true }
+ }
+@@ -101,6 +107,7 @@ if (-not $nasmCheck) {
+     }
+ }
+ if ($nasmCheck) {
++    # 2>$null: the version is parsed from stdout only; an empty result is checked below.
+     $nasmVer = (nasm --version 2>$null)
+     if ($nasmVer) { $nasmVer = ($nasmVer -split '\s+' | Select-Object -Index 2) }
+     LogOk "NASM found ($nasmVer)"
+diff --git a/scripts/setup-typst.sh b/scripts/setup-typst.sh
+index 8d9b181..b1d99a6 100755
+--- a/scripts/setup-typst.sh
++++ b/scripts/setup-typst.sh
+@@ -20,15 +20,36 @@ case "$(uname -s)" in
+ esac
+ 
+ # --- Cleanup non-preferred installs ---
++# Only packages that are actually installed are removed; a failed removal is a
++# warning (non-blocking -- the Homebrew install below proceeds), with the output logged.
++remove_package() {  # label, command...
++    local label="$1"; shift
++    local out rc=0 line
++    out=$("$@" 2>&1) || rc=$?
++    while IFS= read -r line; do
++        if [ -n "${line// /}" ]; then log_detail "$label: $line"; fi
++    done <<< "$out"
++    if [ "$rc" -eq 0 ]; then
++        log "Removed non-preferred install ($label)"
++    else
++        log_warn "$label failed (exit $rc) -- see $(display_path "$LOG_FILE")"
++    fi
++}
+ # Cargo typst-cli conflicts with Homebrew typst (different binary paths)
+ if command -v cargo &>/dev/null; then
+-    # Cleanup: cargo package may not be installed; non-blocking -- Homebrew install follows
+-    cargo uninstall typst-cli >/dev/null 2>&1 || true
++    cargo_list_rc=0
++    cargo_list=$(cargo install --list 2>&1) || cargo_list_rc=$?
++    if [ "$cargo_list_rc" -ne 0 ]; then
++        log_detail "cargo-install-list: $cargo_list"
++        log_warn "cargo install --list failed (exit $cargo_list_rc) -- skipping cargo typst-cli cleanup"
++    elif printf '%s\n' "$cargo_list" | grep -q '^typst-cli '; then
++        remove_package "cargo uninstall typst-cli" cargo uninstall typst-cli
++    fi
+ fi
+-# npm typst is a third-party wrapper, not official
+-if command -v npm &>/dev/null; then
+-    # Cleanup: npm package may not be installed; non-blocking -- Homebrew install follows
+-    npm uninstall -g typst >/dev/null 2>&1 || true
++# npm typst is a third-party wrapper, not official. `npm ls` exits non-zero when absent.
++if command -v npm &>/dev/null && npm_typst=$(npm ls -g --depth=0 typst 2>&1); then
++    log_detail "npm-ls-typst: $npm_typst"
++    remove_package "npm uninstall -g typst" npm uninstall -g typst
+ fi
+ 
+ # --- Install/update ---
+@@ -36,15 +57,17 @@ if command -v typst &>/dev/null; then
+     typst_path=$(command -v typst)
+     if [[ "$typst_path" == /opt/homebrew/* ]] || [[ "$typst_path" == /usr/local/* ]]; then
+         log "Already installed via Homebrew -- upgrading..."
+-        UPGRADE_OUTPUT=$(brew upgrade typst 2>&1) || true
+-        if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
++        upgrade_rc=0
++        UPGRADE_OUTPUT=$(brew upgrade typst 2>&1) || upgrade_rc=$?
++        if [ "$upgrade_rc" -eq 0 ] && printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+             log_ok "Typst already up to date"
+             write_summary OK "typst" "$(typst --version)"
+         else
+-            printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
+-            if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+-                log_error "brew upgrade typst failed (see log above)"
+-                write_summary ERROR "typst" "brew upgrade failed"
++            while IFS= read -r line; do log "$line"; done <<< "$UPGRADE_OUTPUT"
++            # Exit code first (C-F2); the output grep stays for brew upgrade (Standard 3).
++            if [ "$upgrade_rc" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
++                log_error "brew upgrade typst failed (exit $upgrade_rc) -- see $(display_path "$LOG_FILE")"
++                write_summary ERROR "typst" "brew upgrade failed (exit $upgrade_rc)"
+             else
+                 log_ok "$(typst --version)"
+                 write_summary OK "typst" "$(typst --version)"
+diff --git a/scripts/check-pre-commit.sh b/scripts/check-pre-commit.sh
+index 23890a3..730c61c 100755
+--- a/scripts/check-pre-commit.sh
++++ b/scripts/check-pre-commit.sh
+@@ -284,10 +284,14 @@ fi
+ # ---------------------------------------------------------------------------
+ PREREQ_FAIL=false
+ 
+-# Check: any script using 'cargo install' must call Check-BuildPrereqs or check_build_prereqs
++# Check: any script using 'cargo install' must call Check-BuildPrereqs or check_build_prereqs.
++# `cargo install --list` only lists installed packages (no build) and is not counted.
++uses_cargo_install() {
++    perl -ne '$f = 1 if /cargo install(?! --list)/; END { exit($f ? 0 : 1) }' "$1"
++}
+ for script in "$REPO_ROOT"/scripts/setup-*.ps1; do
+     [ -f "$script" ] || continue
+-    if grep -q 'cargo install' "$script" 2>/dev/null; then
++    if uses_cargo_install "$script"; then
+         if ! grep -q 'Check-BuildPrereqs\|Diagnose-BuildFailure' "$script" 2>/dev/null; then
+             echo "      $(basename "$script") uses 'cargo install' without build prereq framework"
+             PREREQ_FAIL=true
+@@ -296,7 +300,7 @@ for script in "$REPO_ROOT"/scripts/setup-*.ps1; do
+ done
+ for script in "$REPO_ROOT"/scripts/setup-*.sh; do
+     [ -f "$script" ] || continue
+-    if grep -q 'cargo install' "$script" 2>/dev/null; then
++    if uses_cargo_install "$script"; then
+         if ! grep -q 'check_build_prereqs\|diagnose_build_failure' "$script" 2>/dev/null; then
+             echo "      $(basename "$script") uses 'cargo install' without build prereq framework"
+             PREREQ_FAIL=true
+diff --git a/scripts/check-pre-commit.ps1 b/scripts/check-pre-commit.ps1
+index 61ad5a3..9544bbc 100644
+--- a/scripts/check-pre-commit.ps1
++++ b/scripts/check-pre-commit.ps1
+@@ -276,10 +276,11 @@ if ($hasSetupUser -and -not $hasBuildDeploy) {
+ # ---------------------------------------------------------------------------
+ $prereqFail = $false
+ 
+-# Check: any script using 'cargo install' must call Check-BuildPrereqs or Diagnose-BuildFailure
++# Check: any script using 'cargo install' must call Check-BuildPrereqs or Diagnose-BuildFailure.
++# `cargo install --list` only lists installed packages (no build) and is not counted.
+ foreach ($script in Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "setup-*.ps1" -ErrorAction SilentlyContinue) {
+     $content = Get-Content $script.FullName -Raw -ErrorAction SilentlyContinue
+-    if ($content -match 'cargo install') {
++    if ($content -match 'cargo install(?! --list)') {
+         if ($content -notmatch 'Check-BuildPrereqs|Diagnose-BuildFailure') {
+             Write-Host "      $($script.Name) uses 'cargo install' without build prereq framework"
+             $prereqFail = $true
+@@ -288,7 +289,7 @@ foreach ($script in Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter
+ }
+ foreach ($script in Get-ChildItem (Join-Path $script:RepoRoot "scripts") -Filter "setup-*.sh" -ErrorAction SilentlyContinue) {
+     $content = Get-Content $script.FullName -Raw -ErrorAction SilentlyContinue
+-    if ($content -match 'cargo install') {
++    if ($content -match 'cargo install(?! --list)') {
+         if ($content -notmatch 'check_build_prereqs|diagnose_build_failure') {
+             Write-Host "      $($script.Name) uses 'cargo install' without build prereq framework"
+             $prereqFail = $true
+diff --git a/scripts/check-pre-push.sh b/scripts/check-pre-push.sh
+index bc91497..c618bb4 100755
+--- a/scripts/check-pre-push.sh
++++ b/scripts/check-pre-push.sh
+@@ -105,15 +105,55 @@ step_warn "6" "Roadmap reflects reality" "check if push completes or starts a ro
+ # ---------------------------------------------------------------------------
+ # 7. deploy/ matches source
+ # ---------------------------------------------------------------------------
+-# Match only deploy-relevant sources: setup scripts, build script, and all shared/ content
+-scripts_shared_changed=$(echo "$PUSH_FILES" | grep -E '^(scripts/(setup-.*|build-deploy)\.(sh|ps1)$|shared/)' || true)
+-deploy_changed=$(echo "$PUSH_FILES" | grep -E '^deploy/' || true)
+-if [ -z "$scripts_shared_changed" ]; then
+-    step_skip "7" "deploy/ matches source" "no scripts/shared changes"
+-elif [ -n "$deploy_changed" ]; then
+-    step_pass "7" "deploy/ matches source"
++# Generated deploy scripts live in the dotprofile repo (deploy-paths.md; aitools/deploy/
++# is frozen). When a deploy-relevant source changes (setup scripts, the build script,
++# aitools-lib -- inlined into every deploy script -- or shared/), rebuild from this branch
++# into a temporary copy of the dotprofile's committed tree and compare its deploy/.
++deploy_sources=$(echo "$PUSH_FILES" | grep -E '^(scripts/(setup-.*|build-deploy|aitools-lib)\.(sh|ps1)$|shared/)' || true)
++if [ -z "$deploy_sources" ]; then
++    step_skip "7" "deploy/ matches source" "no deploy-relevant source changes"
++elif [ -z "$USER_REPO_PATH" ] || [ ! -e "$USER_REPO_PATH/.git" ]; then
++    step_skip "7" "deploy/ matches source" "userRepoPath not configured -- dotprofile deploy/ not verified"
++elif ! command -v node &>/dev/null; then
++    step_warn "7" "deploy/ matches source" "node not found -- dotprofile deploy/ not verified"
+ else
+-    step_fail "7" "deploy/ matches source" "scripts/shared changed but deploy/ not updated"
++    d7_tmp=$(mktemp -d)
++    mkdir -p "$d7_tmp/home/.aitools" "$d7_tmp/dot" "$d7_tmp/committed"
++    d7_rc=0
++    d7_out=$( {
++        git -C "$USER_REPO_PATH" archive -o "$d7_tmp/dot.tar" HEAD &&
++        tar -xf "$d7_tmp/dot.tar" -C "$d7_tmp/dot" &&
++        tar -xf "$d7_tmp/dot.tar" -C "$d7_tmp/committed" &&
++        node -e '
++const fs = require("fs");
++let c = {};
++try { c = JSON.parse(fs.readFileSync(process.argv[1], "utf8").replace(/^﻿/, "")); }
++catch (e) { if (e.code !== "ENOENT") { console.error("config.json unreadable: " + e.message); process.exit(1); } }
++c.repoPath = process.argv[3]; c.userRepoPath = process.argv[4];
++fs.writeFileSync(process.argv[2], JSON.stringify(c, null, 2) + "\n");
++' "$CONFIG_FILE" "$d7_tmp/home/.aitools/config.json" "$REPO_ROOT" "$d7_tmp/dot" &&
++        HOME="$d7_tmp/home" bash "$REPO_ROOT/scripts/build-deploy.sh"
++    } 2>&1 ) || d7_rc=$?
++    if [ "$d7_rc" -ne 0 ]; then
++        while IFS= read -r d7_line; do
++            if [ -n "$d7_line" ]; then log_detail "pre-push 7 build: $d7_line"; fi
++        done <<< "$d7_out"
++        step_fail "7" "deploy/ matches source" "rebuild into a dotprofile copy failed (exit $d7_rc) -- see checks.log"
++    else
++        # diff -rq exit codes: 0 identical, 1 differences (listed), 2 trouble.
++        d7_diff_rc=0
++        d7_diff=$(diff -rq "$d7_tmp/committed/deploy" "$d7_tmp/dot/deploy" 2>&1) || d7_diff_rc=$?
++        if [ "$d7_diff_rc" -eq 0 ]; then
++            step_pass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build"
++        elif [ "$d7_diff_rc" -eq 1 ]; then
++            d7_files=$(printf '%s\n' "$d7_diff" | perl -ne 'print "$1 " if m{/deploy/(\S+) and } || m{/deploy: (\S+)}')
++            step_fail "7" "deploy/ matches source" "dotprofile deploy/ is stale (${d7_files% }) -- run build-deploy.sh and commit in $USER_REPO_PATH"
++        else
++            log_detail "pre-push 7 diff: $d7_diff"
++            step_fail "7" "deploy/ matches source" "could not compare deploy/ (diff exit $d7_diff_rc) -- see checks.log"
++        fi
++    fi
++    rm -rf "$d7_tmp"
+ fi
+ 
+ # ---------------------------------------------------------------------------
+diff --git a/scripts/check-pre-push.ps1 b/scripts/check-pre-push.ps1
+index d56b10b..18f9e75 100644
+--- a/scripts/check-pre-push.ps1
++++ b/scripts/check-pre-push.ps1
+@@ -108,15 +108,87 @@ StepWarn "6" "Roadmap reflects reality" "check if push completes or starts a roa
+ # ---------------------------------------------------------------------------
+ # 7. deploy/ matches source
+ # ---------------------------------------------------------------------------
+-# Match only deploy-relevant sources: setup scripts, build script, and all shared/ content
+-$scriptsSharedChanged = @($pushFiles | Where-Object { $_ -match '^(scripts/(setup-.*|build-deploy)\.(sh|ps1)$|shared/)' })
+-$deployChanged = @($pushFiles | Where-Object { $_ -match '^deploy/' })
+-if ($scriptsSharedChanged.Count -eq 0) {
+-    StepSkip "7" "deploy/ matches source" "no scripts/shared changes"
+-} elseif ($deployChanged.Count -gt 0) {
+-    StepPass "7" "deploy/ matches source"
++# Generated deploy scripts live in the dotprofile repo (deploy-paths.md; aitools/deploy/
++# is frozen). When a deploy-relevant source changes (setup scripts, the build script,
++# aitools-lib -- inlined into every deploy script -- or shared/), rebuild from this branch
++# into a temporary copy of the dotprofile's committed tree and compare its deploy/.
++$deploySources = @($pushFiles | Where-Object { $_ -match '^(scripts/(setup-.*|build-deploy|aitools-lib)\.(sh|ps1)$|shared/)' })
++# build-deploy.sh runs under Git Bash (approved cross-language exception); same lookup
++# order as check-pre-commit step 3 after the known Git for Windows locations.
++$d7Bash = @(
++    "$env:ProgramFiles\Git\bin\bash.exe",
++    "${env:ProgramFiles(x86)}\Git\bin\bash.exe",
++    "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe"
++) | Where-Object { Test-Path $_ } | Select-Object -First 1
++if (-not $d7Bash) {
++    $d7BashCmd = Get-Command bash -ErrorAction SilentlyContinue
++    if ($d7BashCmd) { $d7Bash = $d7BashCmd.Source }
++}
++if ($deploySources.Count -eq 0) {
++    StepSkip "7" "deploy/ matches source" "no deploy-relevant source changes"
++} elseif (-not $script:UserRepoPath -or -not (Test-Path (Join-Path $script:UserRepoPath ".git"))) {
++    StepSkip "7" "deploy/ matches source" "userRepoPath not configured -- dotprofile deploy/ not verified"
++} elseif (-not $d7Bash) {
++    StepWarn "7" "deploy/ matches source" "Git Bash not found -- dotprofile deploy/ not verified"
+ } else {
+-    StepFail "7" "deploy/ matches source" "scripts/shared changed but deploy/ not updated"
++    $d7Tmp = Join-Path ([IO.Path]::GetTempPath()) ("aitools-prepush7-" + [guid]::NewGuid())
++    $d7Dot = Join-Path $d7Tmp "dot"
++    $d7Committed = Join-Path $d7Tmp "committed"
++    $d7Home = Join-Path $d7Tmp "home"
++    $d7Tar = Join-Path $d7Tmp "dot.tar"
++    $prevEap = $ErrorActionPreference
++    $prevHome = $env:HOME
++    # Native tools write progress and warnings to stderr; Stop would turn those into
++    # terminating errors (see InvokeGit). Every step's exit code is checked instead.
++    $ErrorActionPreference = "Continue"
++    $d7Log = ""
++    $d7Rc = 0
++    try {
++        $d7CfgDir = Join-Path $d7Home ".aitools"
++        New-Item -ItemType Directory -Path $d7Dot, $d7Committed, $d7CfgDir -Force | Out-Null
++        $d7Log += & git -C $script:UserRepoPath archive -o $d7Tar HEAD 2>&1 | Out-String
++        $d7Rc = $LASTEXITCODE
++        if ($d7Rc -eq 0) { $d7Log += & tar -xf $d7Tar -C $d7Dot 2>&1 | Out-String; $d7Rc = $LASTEXITCODE }
++        if ($d7Rc -eq 0) { $d7Log += & tar -xf $d7Tar -C $d7Committed 2>&1 | Out-String; $d7Rc = $LASTEXITCODE }
++        if ($d7Rc -eq 0) {
++            $d7Cfg = [pscustomobject]@{}
++            if (Test-Path $script:ConfigFile) {
++                $d7Cfg = Get-Content $script:ConfigFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
++            }
++            $d7Cfg | Add-Member -NotePropertyName "repoPath" -NotePropertyValue $script:RepoRoot -Force
++            $d7Cfg | Add-Member -NotePropertyName "userRepoPath" -NotePropertyValue $d7Dot -Force
++            [IO.File]::WriteAllText((Join-Path $d7CfgDir "config.json"), ($d7Cfg | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
++            $env:HOME = $d7Home
++            $d7Log += & $d7Bash "$script:RepoRoot/scripts/build-deploy.sh" 2>&1 | Out-String
++            $d7Rc = $LASTEXITCODE
++        }
++    } catch {
++        $d7Log += "$_"
++        $d7Rc = 1
++    } finally {
++        $env:HOME = $prevHome
++        $ErrorActionPreference = $prevEap
++    }
++    if ($d7Rc -ne 0) {
++        foreach ($l in $d7Log.Split("`n")) { if ($l.Trim()) { LogDetail "pre-push 7 build: $($l.TrimEnd())" } }
++        StepFail "7" "deploy/ matches source" "rebuild into a dotprofile copy failed (exit $d7Rc) -- see checks.log"
++    } else {
++        $d7Stale = @()
++        $d7Built = Join-Path $d7Dot "deploy"
++        $d7Ref = Join-Path $d7Committed "deploy"
++        $d7Names = @(Get-ChildItem $d7Built -File | ForEach-Object Name) + @(Get-ChildItem $d7Ref -File | ForEach-Object Name) | Sort-Object -Unique
++        foreach ($n in $d7Names) {
++            $a = Join-Path $d7Ref $n
++            $b = Join-Path $d7Built $n
++            if (-not (Test-Path $a) -or -not (Test-Path $b) -or (Get-FileHash $a).Hash -ne (Get-FileHash $b).Hash) { $d7Stale += $n }
++        }
++        if ($d7Stale.Count -eq 0) {
++            StepPass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build"
++        } else {
++            StepFail "7" "deploy/ matches source" "dotprofile deploy/ is stale ($($d7Stale -join ' ')) -- run build-deploy.sh and commit in $($script:UserRepoPath)"
++        }
++    }
++    if (Test-Path $d7Tmp) { Remove-Item -Recurse -Force $d7Tmp }
+ }
+ 
+ # ---------------------------------------------------------------------------
 ```
 
 ## Risks

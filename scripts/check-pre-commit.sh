@@ -284,10 +284,14 @@ fi
 # ---------------------------------------------------------------------------
 PREREQ_FAIL=false
 
-# Check: any script using 'cargo install' must call Check-BuildPrereqs or check_build_prereqs
+# Check: any script using 'cargo install' must call Check-BuildPrereqs or check_build_prereqs.
+# `cargo install --list` only lists installed packages (no build) and is not counted.
+uses_cargo_install() {
+    perl -ne '$f = 1 if /cargo install(?! --list)/; END { exit($f ? 0 : 1) }' "$1"
+}
 for script in "$REPO_ROOT"/scripts/setup-*.ps1; do
     [ -f "$script" ] || continue
-    if grep -q 'cargo install' "$script" 2>/dev/null; then
+    if uses_cargo_install "$script"; then
         if ! grep -q 'Check-BuildPrereqs\|Diagnose-BuildFailure' "$script" 2>/dev/null; then
             echo "      $(basename "$script") uses 'cargo install' without build prereq framework"
             PREREQ_FAIL=true
@@ -296,7 +300,7 @@ for script in "$REPO_ROOT"/scripts/setup-*.ps1; do
 done
 for script in "$REPO_ROOT"/scripts/setup-*.sh; do
     [ -f "$script" ] || continue
-    if grep -q 'cargo install' "$script" 2>/dev/null; then
+    if uses_cargo_install "$script"; then
         if ! grep -q 'check_build_prereqs\|diagnose_build_failure' "$script" 2>/dev/null; then
             echo "      $(basename "$script") uses 'cargo install' without build prereq framework"
             PREREQ_FAIL=true

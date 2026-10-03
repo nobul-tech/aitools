@@ -20,15 +20,36 @@ case "$(uname -s)" in
 esac
 
 # --- Cleanup non-preferred installs ---
+# Only packages that are actually installed are removed; a failed removal is a
+# warning (non-blocking -- the Homebrew install below proceeds), with the output logged.
+remove_package() {  # label, command...
+    local label="$1"; shift
+    local out rc=0 line
+    out=$("$@" 2>&1) || rc=$?
+    while IFS= read -r line; do
+        if [ -n "${line// /}" ]; then log_detail "$label: $line"; fi
+    done <<< "$out"
+    if [ "$rc" -eq 0 ]; then
+        log "Removed non-preferred install ($label)"
+    else
+        log_warn "$label failed (exit $rc) -- see $(display_path "$LOG_FILE")"
+    fi
+}
 # Cargo typst-cli conflicts with Homebrew typst (different binary paths)
 if command -v cargo &>/dev/null; then
-    # Cleanup: cargo package may not be installed; non-blocking -- Homebrew install follows
-    cargo uninstall typst-cli >/dev/null 2>&1 || true
+    cargo_list_rc=0
+    cargo_list=$(cargo install --list 2>&1) || cargo_list_rc=$?
+    if [ "$cargo_list_rc" -ne 0 ]; then
+        log_detail "cargo-install-list: $cargo_list"
+        log_warn "cargo install --list failed (exit $cargo_list_rc) -- skipping cargo typst-cli cleanup"
+    elif printf '%s\n' "$cargo_list" | grep -q '^typst-cli '; then
+        remove_package "cargo uninstall typst-cli" cargo uninstall typst-cli
+    fi
 fi
-# npm typst is a third-party wrapper, not official
-if command -v npm &>/dev/null; then
-    # Cleanup: npm package may not be installed; non-blocking -- Homebrew install follows
-    npm uninstall -g typst >/dev/null 2>&1 || true
+# npm typst is a third-party wrapper, not official. `npm ls` exits non-zero when absent.
+if command -v npm &>/dev/null && npm_typst=$(npm ls -g --depth=0 typst 2>&1); then
+    log_detail "npm-ls-typst: $npm_typst"
+    remove_package "npm uninstall -g typst" npm uninstall -g typst
 fi
 
 # --- Install/update ---
@@ -36,15 +57,17 @@ if command -v typst &>/dev/null; then
     typst_path=$(command -v typst)
     if [[ "$typst_path" == /opt/homebrew/* ]] || [[ "$typst_path" == /usr/local/* ]]; then
         log "Already installed via Homebrew -- upgrading..."
-        UPGRADE_OUTPUT=$(brew upgrade typst 2>&1) || true
-        if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+        upgrade_rc=0
+        UPGRADE_OUTPUT=$(brew upgrade typst 2>&1) || upgrade_rc=$?
+        if [ "$upgrade_rc" -eq 0 ] && printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
             log_ok "Typst already up to date"
             write_summary OK "typst" "$(typst --version)"
         else
-            printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
-            if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
-                log_error "brew upgrade typst failed (see log above)"
-                write_summary ERROR "typst" "brew upgrade failed"
+            while IFS= read -r line; do log "$line"; done <<< "$UPGRADE_OUTPUT"
+            # Exit code first (C-F2); the output grep stays for brew upgrade (Standard 3).
+            if [ "$upgrade_rc" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+                log_error "brew upgrade typst failed (exit $upgrade_rc) -- see $(display_path "$LOG_FILE")"
+                write_summary ERROR "typst" "brew upgrade failed (exit $upgrade_rc)"
             else
                 log_ok "$(typst --version)"
                 write_summary OK "typst" "$(typst --version)"

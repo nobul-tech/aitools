@@ -108,15 +108,87 @@ StepWarn "6" "Roadmap reflects reality" "check if push completes or starts a roa
 # ---------------------------------------------------------------------------
 # 7. deploy/ matches source
 # ---------------------------------------------------------------------------
-# Match only deploy-relevant sources: setup scripts, build script, and all shared/ content
-$scriptsSharedChanged = @($pushFiles | Where-Object { $_ -match '^(scripts/(setup-.*|build-deploy)\.(sh|ps1)$|shared/)' })
-$deployChanged = @($pushFiles | Where-Object { $_ -match '^deploy/' })
-if ($scriptsSharedChanged.Count -eq 0) {
-    StepSkip "7" "deploy/ matches source" "no scripts/shared changes"
-} elseif ($deployChanged.Count -gt 0) {
-    StepPass "7" "deploy/ matches source"
+# Generated deploy scripts live in the dotprofile repo (deploy-paths.md; aitools/deploy/
+# is frozen). When a deploy-relevant source changes (setup scripts, the build script,
+# aitools-lib -- inlined into every deploy script -- or shared/), rebuild from this branch
+# into a temporary copy of the dotprofile's committed tree and compare its deploy/.
+$deploySources = @($pushFiles | Where-Object { $_ -match '^(scripts/(setup-.*|build-deploy|aitools-lib)\.(sh|ps1)$|shared/)' })
+# build-deploy.sh runs under Git Bash (approved cross-language exception); same lookup
+# order as check-pre-commit step 3 after the known Git for Windows locations.
+$d7Bash = @(
+    "$env:ProgramFiles\Git\bin\bash.exe",
+    "${env:ProgramFiles(x86)}\Git\bin\bash.exe",
+    "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe"
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $d7Bash) {
+    $d7BashCmd = Get-Command bash -ErrorAction SilentlyContinue
+    if ($d7BashCmd) { $d7Bash = $d7BashCmd.Source }
+}
+if ($deploySources.Count -eq 0) {
+    StepSkip "7" "deploy/ matches source" "no deploy-relevant source changes"
+} elseif (-not $script:UserRepoPath -or -not (Test-Path (Join-Path $script:UserRepoPath ".git"))) {
+    StepSkip "7" "deploy/ matches source" "userRepoPath not configured -- dotprofile deploy/ not verified"
+} elseif (-not $d7Bash) {
+    StepWarn "7" "deploy/ matches source" "Git Bash not found -- dotprofile deploy/ not verified"
 } else {
-    StepFail "7" "deploy/ matches source" "scripts/shared changed but deploy/ not updated"
+    $d7Tmp = Join-Path ([IO.Path]::GetTempPath()) ("aitools-prepush7-" + [guid]::NewGuid())
+    $d7Dot = Join-Path $d7Tmp "dot"
+    $d7Committed = Join-Path $d7Tmp "committed"
+    $d7Home = Join-Path $d7Tmp "home"
+    $d7Tar = Join-Path $d7Tmp "dot.tar"
+    $prevEap = $ErrorActionPreference
+    $prevHome = $env:HOME
+    # Native tools write progress and warnings to stderr; Stop would turn those into
+    # terminating errors (see InvokeGit). Every step's exit code is checked instead.
+    $ErrorActionPreference = "Continue"
+    $d7Log = ""
+    $d7Rc = 0
+    try {
+        $d7CfgDir = Join-Path $d7Home ".aitools"
+        New-Item -ItemType Directory -Path $d7Dot, $d7Committed, $d7CfgDir -Force | Out-Null
+        $d7Log += & git -C $script:UserRepoPath archive -o $d7Tar HEAD 2>&1 | Out-String
+        $d7Rc = $LASTEXITCODE
+        if ($d7Rc -eq 0) { $d7Log += & tar -xf $d7Tar -C $d7Dot 2>&1 | Out-String; $d7Rc = $LASTEXITCODE }
+        if ($d7Rc -eq 0) { $d7Log += & tar -xf $d7Tar -C $d7Committed 2>&1 | Out-String; $d7Rc = $LASTEXITCODE }
+        if ($d7Rc -eq 0) {
+            $d7Cfg = [pscustomobject]@{}
+            if (Test-Path $script:ConfigFile) {
+                $d7Cfg = Get-Content $script:ConfigFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            }
+            $d7Cfg | Add-Member -NotePropertyName "repoPath" -NotePropertyValue $script:RepoRoot -Force
+            $d7Cfg | Add-Member -NotePropertyName "userRepoPath" -NotePropertyValue $d7Dot -Force
+            [IO.File]::WriteAllText((Join-Path $d7CfgDir "config.json"), ($d7Cfg | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
+            $env:HOME = $d7Home
+            $d7Log += & $d7Bash "$script:RepoRoot/scripts/build-deploy.sh" 2>&1 | Out-String
+            $d7Rc = $LASTEXITCODE
+        }
+    } catch {
+        $d7Log += "$_"
+        $d7Rc = 1
+    } finally {
+        $env:HOME = $prevHome
+        $ErrorActionPreference = $prevEap
+    }
+    if ($d7Rc -ne 0) {
+        foreach ($l in $d7Log.Split("`n")) { if ($l.Trim()) { LogDetail "pre-push 7 build: $($l.TrimEnd())" } }
+        StepFail "7" "deploy/ matches source" "rebuild into a dotprofile copy failed (exit $d7Rc) -- see checks.log"
+    } else {
+        $d7Stale = @()
+        $d7Built = Join-Path $d7Dot "deploy"
+        $d7Ref = Join-Path $d7Committed "deploy"
+        $d7Names = @(Get-ChildItem $d7Built -File | ForEach-Object Name) + @(Get-ChildItem $d7Ref -File | ForEach-Object Name) | Sort-Object -Unique
+        foreach ($n in $d7Names) {
+            $a = Join-Path $d7Ref $n
+            $b = Join-Path $d7Built $n
+            if (-not (Test-Path $a) -or -not (Test-Path $b) -or (Get-FileHash $a).Hash -ne (Get-FileHash $b).Hash) { $d7Stale += $n }
+        }
+        if ($d7Stale.Count -eq 0) {
+            StepPass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build"
+        } else {
+            StepFail "7" "deploy/ matches source" "dotprofile deploy/ is stale ($($d7Stale -join ' ')) -- run build-deploy.sh and commit in $($script:UserRepoPath)"
+        }
+    }
+    if (Test-Path $d7Tmp) { Remove-Item -Recurse -Force $d7Tmp }
 }
 
 # ---------------------------------------------------------------------------
