@@ -3795,6 +3795,27 @@ now matches `cargo install(?! --list)` (perl / .NET lookahead, no pipe). Verifie
 alone not counted; `cargo install <pkg>` still counted; across all setup scripts only
 `setup-datadog.sh/.ps1` are counted (as before), and they use the prereq framework.
 
+**Addendum 2 (commander, 2026-10-03, found by pre-push during execution):** pre-push
+step 7 ("deploy/ matches source") required `deploy/` changes in the aitools push whenever
+a setup script changed, but `aitools/deploy/` is frozen and generated scripts live in the
+dotprofile repo (`deploy-paths.md`), so it failed on every setup-script change (PR C1
+changed only the lib, which the step did not count). Step 7 in `check-pre-push.sh` /
+`.ps1` now:
+- triggers on setup scripts, `build-deploy.sh`, `shared/`, and `aitools-lib.*` (inlined
+  into every deploy script; previously not counted);
+- SKIPs when `userRepoPath` is not configured (PS1: WARN when Git Bash is not found);
+- otherwise extracts the dotprofile's committed tree (`git archive HEAD`) twice into a
+  temp dir, runs this branch's `build-deploy.sh` into one copy (temp HOME whose config
+  points `userRepoPath` at it), and compares its `deploy/` with the committed one: PASS
+  when identical, FAIL naming each stale file, FAIL with the build output in
+  `checks.log` when the rebuild fails.
+
+Verified (bash, and PS1 with the OS guard stripped): dotprofile with the C5 rebuild ->
+PASS; dotprofile at `main` without it -> FAIL naming exactly `setup-rust.ps1
+setup-rust.sh setup-typst.sh`; `userRepoPath` missing -> SKIP. The simulation also caught
+a `Join-Path` crash on an empty `LOCALAPPDATA` (fixed: plain string path). The rebuild is
+HOME-independent: a build in a temp HOME reproduces the committed files byte for byte.
+
 Generated `deploy/` (dotprofile): `setup-rust.sh`, `setup-rust.ps1` and `setup-typst.sh`
 change; the build gives 40 scripts and every generated script passes `bash -n` / ParseFile.
 
@@ -4095,6 +4116,174 @@ index 61ad5a3..9544bbc 100644
          if ($content -notmatch 'check_build_prereqs|diagnose_build_failure') {
              Write-Host "      $($script.Name) uses 'cargo install' without build prereq framework"
              $prereqFail = $true
+diff --git a/scripts/check-pre-push.sh b/scripts/check-pre-push.sh
+index bc91497..c618bb4 100755
+--- a/scripts/check-pre-push.sh
++++ b/scripts/check-pre-push.sh
+@@ -105,15 +105,55 @@ step_warn "6" "Roadmap reflects reality" "check if push completes or starts a ro
+ # ---------------------------------------------------------------------------
+ # 7. deploy/ matches source
+ # ---------------------------------------------------------------------------
+-# Match only deploy-relevant sources: setup scripts, build script, and all shared/ content
+-scripts_shared_changed=$(echo "$PUSH_FILES" | grep -E '^(scripts/(setup-.*|build-deploy)\.(sh|ps1)$|shared/)' || true)
+-deploy_changed=$(echo "$PUSH_FILES" | grep -E '^deploy/' || true)
+-if [ -z "$scripts_shared_changed" ]; then
+-    step_skip "7" "deploy/ matches source" "no scripts/shared changes"
+-elif [ -n "$deploy_changed" ]; then
+-    step_pass "7" "deploy/ matches source"
++# Generated deploy scripts live in the dotprofile repo (deploy-paths.md; aitools/deploy/
++# is frozen). When a deploy-relevant source changes (setup scripts, the build script,
++# aitools-lib -- inlined into every deploy script -- or shared/), rebuild from this branch
++# into a temporary copy of the dotprofile's committed tree and compare its deploy/.
++deploy_sources=$(echo "$PUSH_FILES" | grep -E '^(scripts/(setup-.*|build-deploy|aitools-lib)\.(sh|ps1)$|shared/)' || true)
++if [ -z "$deploy_sources" ]; then
++    step_skip "7" "deploy/ matches source" "no deploy-relevant source changes"
++elif [ -z "$USER_REPO_PATH" ] || [ ! -e "$USER_REPO_PATH/.git" ]; then
++    step_skip "7" "deploy/ matches source" "userRepoPath not configured -- dotprofile deploy/ not verified"
++elif ! command -v node &>/dev/null; then
++    step_warn "7" "deploy/ matches source" "node not found -- dotprofile deploy/ not verified"
+ else
+-    step_fail "7" "deploy/ matches source" "scripts/shared changed but deploy/ not updated"
++    d7_tmp=$(mktemp -d)
++    mkdir -p "$d7_tmp/home/.aitools" "$d7_tmp/dot" "$d7_tmp/committed"
++    d7_rc=0
++    d7_out=$( {
++        git -C "$USER_REPO_PATH" archive -o "$d7_tmp/dot.tar" HEAD &&
++        tar -xf "$d7_tmp/dot.tar" -C "$d7_tmp/dot" &&
++        tar -xf "$d7_tmp/dot.tar" -C "$d7_tmp/committed" &&
++        node -e '
++const fs = require("fs");
++let c = {};
++try { c = JSON.parse(fs.readFileSync(process.argv[1], "utf8").replace(/^﻿/, "")); }
++catch (e) { if (e.code !== "ENOENT") { console.error("config.json unreadable: " + e.message); process.exit(1); } }
++c.repoPath = process.argv[3]; c.userRepoPath = process.argv[4];
++fs.writeFileSync(process.argv[2], JSON.stringify(c, null, 2) + "\n");
++' "$CONFIG_FILE" "$d7_tmp/home/.aitools/config.json" "$REPO_ROOT" "$d7_tmp/dot" &&
++        HOME="$d7_tmp/home" bash "$REPO_ROOT/scripts/build-deploy.sh"
++    } 2>&1 ) || d7_rc=$?
++    if [ "$d7_rc" -ne 0 ]; then
++        while IFS= read -r d7_line; do
++            if [ -n "$d7_line" ]; then log_detail "pre-push 7 build: $d7_line"; fi
++        done <<< "$d7_out"
++        step_fail "7" "deploy/ matches source" "rebuild into a dotprofile copy failed (exit $d7_rc) -- see checks.log"
++    else
++        # diff -rq exit codes: 0 identical, 1 differences (listed), 2 trouble.
++        d7_diff_rc=0
++        d7_diff=$(diff -rq "$d7_tmp/committed/deploy" "$d7_tmp/dot/deploy" 2>&1) || d7_diff_rc=$?
++        if [ "$d7_diff_rc" -eq 0 ]; then
++            step_pass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build"
++        elif [ "$d7_diff_rc" -eq 1 ]; then
++            d7_files=$(printf '%s\n' "$d7_diff" | perl -ne 'print "$1 " if m{/deploy/(\S+) and } || m{/deploy: (\S+)}')
++            step_fail "7" "deploy/ matches source" "dotprofile deploy/ is stale (${d7_files% }) -- run build-deploy.sh and commit in $USER_REPO_PATH"
++        else
++            log_detail "pre-push 7 diff: $d7_diff"
++            step_fail "7" "deploy/ matches source" "could not compare deploy/ (diff exit $d7_diff_rc) -- see checks.log"
++        fi
++    fi
++    rm -rf "$d7_tmp"
+ fi
+ 
+ # ---------------------------------------------------------------------------
+diff --git a/scripts/check-pre-push.ps1 b/scripts/check-pre-push.ps1
+index d56b10b..18f9e75 100644
+--- a/scripts/check-pre-push.ps1
++++ b/scripts/check-pre-push.ps1
+@@ -108,15 +108,87 @@ StepWarn "6" "Roadmap reflects reality" "check if push completes or starts a roa
+ # ---------------------------------------------------------------------------
+ # 7. deploy/ matches source
+ # ---------------------------------------------------------------------------
+-# Match only deploy-relevant sources: setup scripts, build script, and all shared/ content
+-$scriptsSharedChanged = @($pushFiles | Where-Object { $_ -match '^(scripts/(setup-.*|build-deploy)\.(sh|ps1)$|shared/)' })
+-$deployChanged = @($pushFiles | Where-Object { $_ -match '^deploy/' })
+-if ($scriptsSharedChanged.Count -eq 0) {
+-    StepSkip "7" "deploy/ matches source" "no scripts/shared changes"
+-} elseif ($deployChanged.Count -gt 0) {
+-    StepPass "7" "deploy/ matches source"
++# Generated deploy scripts live in the dotprofile repo (deploy-paths.md; aitools/deploy/
++# is frozen). When a deploy-relevant source changes (setup scripts, the build script,
++# aitools-lib -- inlined into every deploy script -- or shared/), rebuild from this branch
++# into a temporary copy of the dotprofile's committed tree and compare its deploy/.
++$deploySources = @($pushFiles | Where-Object { $_ -match '^(scripts/(setup-.*|build-deploy|aitools-lib)\.(sh|ps1)$|shared/)' })
++# build-deploy.sh runs under Git Bash (approved cross-language exception); same lookup
++# order as check-pre-commit step 3 after the known Git for Windows locations.
++$d7Bash = @(
++    "$env:ProgramFiles\Git\bin\bash.exe",
++    "${env:ProgramFiles(x86)}\Git\bin\bash.exe",
++    "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe"
++) | Where-Object { Test-Path $_ } | Select-Object -First 1
++if (-not $d7Bash) {
++    $d7BashCmd = Get-Command bash -ErrorAction SilentlyContinue
++    if ($d7BashCmd) { $d7Bash = $d7BashCmd.Source }
++}
++if ($deploySources.Count -eq 0) {
++    StepSkip "7" "deploy/ matches source" "no deploy-relevant source changes"
++} elseif (-not $script:UserRepoPath -or -not (Test-Path (Join-Path $script:UserRepoPath ".git"))) {
++    StepSkip "7" "deploy/ matches source" "userRepoPath not configured -- dotprofile deploy/ not verified"
++} elseif (-not $d7Bash) {
++    StepWarn "7" "deploy/ matches source" "Git Bash not found -- dotprofile deploy/ not verified"
+ } else {
+-    StepFail "7" "deploy/ matches source" "scripts/shared changed but deploy/ not updated"
++    $d7Tmp = Join-Path ([IO.Path]::GetTempPath()) ("aitools-prepush7-" + [guid]::NewGuid())
++    $d7Dot = Join-Path $d7Tmp "dot"
++    $d7Committed = Join-Path $d7Tmp "committed"
++    $d7Home = Join-Path $d7Tmp "home"
++    $d7Tar = Join-Path $d7Tmp "dot.tar"
++    $prevEap = $ErrorActionPreference
++    $prevHome = $env:HOME
++    # Native tools write progress and warnings to stderr; Stop would turn those into
++    # terminating errors (see InvokeGit). Every step's exit code is checked instead.
++    $ErrorActionPreference = "Continue"
++    $d7Log = ""
++    $d7Rc = 0
++    try {
++        $d7CfgDir = Join-Path $d7Home ".aitools"
++        New-Item -ItemType Directory -Path $d7Dot, $d7Committed, $d7CfgDir -Force | Out-Null
++        $d7Log += & git -C $script:UserRepoPath archive -o $d7Tar HEAD 2>&1 | Out-String
++        $d7Rc = $LASTEXITCODE
++        if ($d7Rc -eq 0) { $d7Log += & tar -xf $d7Tar -C $d7Dot 2>&1 | Out-String; $d7Rc = $LASTEXITCODE }
++        if ($d7Rc -eq 0) { $d7Log += & tar -xf $d7Tar -C $d7Committed 2>&1 | Out-String; $d7Rc = $LASTEXITCODE }
++        if ($d7Rc -eq 0) {
++            $d7Cfg = [pscustomobject]@{}
++            if (Test-Path $script:ConfigFile) {
++                $d7Cfg = Get-Content $script:ConfigFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
++            }
++            $d7Cfg | Add-Member -NotePropertyName "repoPath" -NotePropertyValue $script:RepoRoot -Force
++            $d7Cfg | Add-Member -NotePropertyName "userRepoPath" -NotePropertyValue $d7Dot -Force
++            [IO.File]::WriteAllText((Join-Path $d7CfgDir "config.json"), ($d7Cfg | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
++            $env:HOME = $d7Home
++            $d7Log += & $d7Bash "$script:RepoRoot/scripts/build-deploy.sh" 2>&1 | Out-String
++            $d7Rc = $LASTEXITCODE
++        }
++    } catch {
++        $d7Log += "$_"
++        $d7Rc = 1
++    } finally {
++        $env:HOME = $prevHome
++        $ErrorActionPreference = $prevEap
++    }
++    if ($d7Rc -ne 0) {
++        foreach ($l in $d7Log.Split("`n")) { if ($l.Trim()) { LogDetail "pre-push 7 build: $($l.TrimEnd())" } }
++        StepFail "7" "deploy/ matches source" "rebuild into a dotprofile copy failed (exit $d7Rc) -- see checks.log"
++    } else {
++        $d7Stale = @()
++        $d7Built = Join-Path $d7Dot "deploy"
++        $d7Ref = Join-Path $d7Committed "deploy"
++        $d7Names = @(Get-ChildItem $d7Built -File | ForEach-Object Name) + @(Get-ChildItem $d7Ref -File | ForEach-Object Name) | Sort-Object -Unique
++        foreach ($n in $d7Names) {
++            $a = Join-Path $d7Ref $n
++            $b = Join-Path $d7Built $n
++            if (-not (Test-Path $a) -or -not (Test-Path $b) -or (Get-FileHash $a).Hash -ne (Get-FileHash $b).Hash) { $d7Stale += $n }
++        }
++        if ($d7Stale.Count -eq 0) {
++            StepPass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build"
++        } else {
++            StepFail "7" "deploy/ matches source" "dotprofile deploy/ is stale ($($d7Stale -join ' ')) -- run build-deploy.sh and commit in $($script:UserRepoPath)"
++        }
++    }
++    if (Test-Path $d7Tmp) { Remove-Item -Recurse -Force $d7Tmp }
+ }
+ 
+ # ---------------------------------------------------------------------------
 ```
 
 ## Risks

@@ -105,15 +105,55 @@ step_warn "6" "Roadmap reflects reality" "check if push completes or starts a ro
 # ---------------------------------------------------------------------------
 # 7. deploy/ matches source
 # ---------------------------------------------------------------------------
-# Match only deploy-relevant sources: setup scripts, build script, and all shared/ content
-scripts_shared_changed=$(echo "$PUSH_FILES" | grep -E '^(scripts/(setup-.*|build-deploy)\.(sh|ps1)$|shared/)' || true)
-deploy_changed=$(echo "$PUSH_FILES" | grep -E '^deploy/' || true)
-if [ -z "$scripts_shared_changed" ]; then
-    step_skip "7" "deploy/ matches source" "no scripts/shared changes"
-elif [ -n "$deploy_changed" ]; then
-    step_pass "7" "deploy/ matches source"
+# Generated deploy scripts live in the dotprofile repo (deploy-paths.md; aitools/deploy/
+# is frozen). When a deploy-relevant source changes (setup scripts, the build script,
+# aitools-lib -- inlined into every deploy script -- or shared/), rebuild from this branch
+# into a temporary copy of the dotprofile's committed tree and compare its deploy/.
+deploy_sources=$(echo "$PUSH_FILES" | grep -E '^(scripts/(setup-.*|build-deploy|aitools-lib)\.(sh|ps1)$|shared/)' || true)
+if [ -z "$deploy_sources" ]; then
+    step_skip "7" "deploy/ matches source" "no deploy-relevant source changes"
+elif [ -z "$USER_REPO_PATH" ] || [ ! -e "$USER_REPO_PATH/.git" ]; then
+    step_skip "7" "deploy/ matches source" "userRepoPath not configured -- dotprofile deploy/ not verified"
+elif ! command -v node &>/dev/null; then
+    step_warn "7" "deploy/ matches source" "node not found -- dotprofile deploy/ not verified"
 else
-    step_fail "7" "deploy/ matches source" "scripts/shared changed but deploy/ not updated"
+    d7_tmp=$(mktemp -d)
+    mkdir -p "$d7_tmp/home/.aitools" "$d7_tmp/dot" "$d7_tmp/committed"
+    d7_rc=0
+    d7_out=$( {
+        git -C "$USER_REPO_PATH" archive -o "$d7_tmp/dot.tar" HEAD &&
+        tar -xf "$d7_tmp/dot.tar" -C "$d7_tmp/dot" &&
+        tar -xf "$d7_tmp/dot.tar" -C "$d7_tmp/committed" &&
+        node -e '
+const fs = require("fs");
+let c = {};
+try { c = JSON.parse(fs.readFileSync(process.argv[1], "utf8").replace(/^﻿/, "")); }
+catch (e) { if (e.code !== "ENOENT") { console.error("config.json unreadable: " + e.message); process.exit(1); } }
+c.repoPath = process.argv[3]; c.userRepoPath = process.argv[4];
+fs.writeFileSync(process.argv[2], JSON.stringify(c, null, 2) + "\n");
+' "$CONFIG_FILE" "$d7_tmp/home/.aitools/config.json" "$REPO_ROOT" "$d7_tmp/dot" &&
+        HOME="$d7_tmp/home" bash "$REPO_ROOT/scripts/build-deploy.sh"
+    } 2>&1 ) || d7_rc=$?
+    if [ "$d7_rc" -ne 0 ]; then
+        while IFS= read -r d7_line; do
+            if [ -n "$d7_line" ]; then log_detail "pre-push 7 build: $d7_line"; fi
+        done <<< "$d7_out"
+        step_fail "7" "deploy/ matches source" "rebuild into a dotprofile copy failed (exit $d7_rc) -- see checks.log"
+    else
+        # diff -rq exit codes: 0 identical, 1 differences (listed), 2 trouble.
+        d7_diff_rc=0
+        d7_diff=$(diff -rq "$d7_tmp/committed/deploy" "$d7_tmp/dot/deploy" 2>&1) || d7_diff_rc=$?
+        if [ "$d7_diff_rc" -eq 0 ]; then
+            step_pass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build"
+        elif [ "$d7_diff_rc" -eq 1 ]; then
+            d7_files=$(printf '%s\n' "$d7_diff" | perl -ne 'print "$1 " if m{/deploy/(\S+) and } || m{/deploy: (\S+)}')
+            step_fail "7" "deploy/ matches source" "dotprofile deploy/ is stale (${d7_files% }) -- run build-deploy.sh and commit in $USER_REPO_PATH"
+        else
+            log_detail "pre-push 7 diff: $d7_diff"
+            step_fail "7" "deploy/ matches source" "could not compare deploy/ (diff exit $d7_diff_rc) -- see checks.log"
+        fi
+    fi
+    rm -rf "$d7_tmp"
 fi
 
 # ---------------------------------------------------------------------------
