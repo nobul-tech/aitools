@@ -1152,5 +1152,4 @@ Protected -- requires user approval to modify.
 
 | Script | Line(s) | Pattern | Reason |
 |--------|---------|---------|--------|
-| `setup-vercelcli.sh` | 69 | `2>/dev/null \|\| true` | Cleanup: npm uninstall may fail if not installed; brew install follows |
 | `check-lib.ps1` | 177 | `2>$null` (InvokeGit) | Git stderr triggers PS ErrorActionPreference=Stop; caller checks result |
