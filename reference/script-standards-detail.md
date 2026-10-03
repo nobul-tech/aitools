@@ -110,41 +110,53 @@ PowerShell:
 Initialize-Logging "setup-toolname"
 ```
 
-**Entry points** (override logging after sourcing):
+**Entry points** load the lib as early as they can. `scripts/aitools` / `aitools.ps1`
+source it once `repoPath` is known (only `--help`, `--version` and a missing-repo clone
+run before it) and use its logging unchanged; warnings found before it loads are queued
+and logged right after. `aitools-install` sources it first and overrides the log
+functions only to add JSONL output:
 
-Bash:
+Bash (`scripts/aitools-install.sh`):
 ```bash
-source "$repo_path/scripts/aitools-lib.sh"
-logging_init "aitools"
-# Override: file-only logging, errors/warns to stderr
+source "$SCRIPT_DIR/aitools-lib.sh"
+logging_init "aitools-install"
+# Override: JSONL dual-format (human-readable + structured JSON)
 log() {
     local level="${2:-info}"
-    printf '[%s] [%s] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$level" "$1" >> "$LOG_FILE"
+    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '[%s] [%s] [%s] %s\n' "$ts" "$SCRIPT_NAME" "$level" "$1" | tee -a "$LOG_FILE"
+    printf '{"ts":"%s","host":"%s","os":"%s","script":"%s","run_id":"%s","level":"%s","msg":"%s"}\n' \
+        "$ts" "$HOST_NAME" "$OS_NAME" "$SCRIPT_NAME" "$RUN_ID" "$level" "$1" >> "$LOG_JSONL"
 }
-log_error() { log "$1" "error"; printf 'error: %s\n' "$1" >&2; ERRORS=$((ERRORS + 1)); }
-log_warn()  { log "$1" "warn"; printf 'warning: %s\n' "$1" >&2; WARNINGS=$((WARNINGS + 1)); }
+log_ok()    { log "$1" "ok"; }
+log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
+log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
 ```
 
-PowerShell:
+PowerShell (`scripts/aitools-install.ps1`):
 ```powershell
-. (Join-Path $repoPath "scripts" "aitools-lib.ps1")
-Initialize-Logging "aitools"
-# Override: file-only logging, errors/warns to stderr
+# Override: JSONL dual-format (human-readable + structured JSON)
 function Log($msg, $level = "info") {
-    Add-Content -Path $logFile -Value "[$([DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'))] [aitools] [$level] $msg"
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $line = "[$ts] [$scriptName] [$level] $msg"
+    Write-Host $line
+    Add-Content -Path $logFile -Value $line
+    $json = @{ ts=$ts; host=$hostName; os=$osName; script=$scriptName; run_id=$runId; level=$level; msg=$msg } | ConvertTo-Json -Compress
+    Add-Content -Path $logJsonl -Value $json
 }
-function LogError($msg) { Log $msg "error"; Write-Host "error: $msg" -ForegroundColor Red; $script:errors++ }
-function LogWarn($msg)  { Log $msg "warn"; Write-Host "warning: $msg" -ForegroundColor Yellow; $script:warnings++ }
+function LogOk($msg)    { Log $msg "ok" }
+function LogError($msg) { Log $msg "error"; $script:errors++ }
+function LogWarn($msg)  { Log $msg "warn"; $script:warnings++ }
 ```
 
 ### Logging overrides
 
-Entry points override the lib's default logging functions after sourcing.
-Setup scripts and check scripts use the defaults -- no overrides.
+Only the scripts below override the lib's default logging functions (after sourcing).
+`scripts/aitools` / `aitools.ps1`, setup scripts and check scripts use the defaults --
+no overrides. `tests/logging/` checks that the entry points define no log functions.
 
 | Script | Bash overrides | PS1 overrides | Reason |
 |--------|---------------|---------------|--------|
-| `scripts/aitools` | `log`, `log_error`, `log_warn` | `Log`, `LogError`, `LogWarn` | File-only logging (no tee to stdout); errors/warns to stderr |
 | `scripts/aitools-install` | `log`, `log_ok`, `log_error`, `log_warn` | `Log`, `LogOk`, `LogError`, `LogWarn` | JSONL dual-format (human-readable + structured JSON) |
 | `scripts/build-deploy.sh` | `blog`, `blog_ok`, `blog_error` | n/a | Standalone build tool; doesn't source aitools-lib.sh; defines own logging functions |
 

@@ -87,7 +87,8 @@ if (-not $env:AITOOLS_SUMMARY_FILE) {
 $installInteractive = ($env:AITOOLS_FORCE -ne "1") -and (Test-InteractiveConsole)
 
 # --- Script validation helper ---
-# Validates PS1 syntax with ParseFile before executing. Skips with warning on parse errors.
+# Validates PS1 syntax with ParseFile before executing. A parse error or a failed
+# script logs an error and writes an ERROR summary row; the install continues.
 function Invoke-ValidatedScript {
     param([string]$ScriptPath)
     $name = Split-Path $ScriptPath -Leaf
@@ -95,13 +96,26 @@ function Invoke-ValidatedScript {
     $null = [System.Management.Automation.Language.Parser]::ParseFile(
         $ScriptPath, [ref]$null, [ref]$parseErrors)
     if ($parseErrors.Count -gt 0) {
-        LogWarn "$name has parse errors on this PowerShell version -- skipping"
         foreach ($err in $parseErrors) {
-            Log "  line $($err.Extent.StartLineNumber): $($err.Message)" "warn"
+            LogDetail "$name parse: line $($err.Extent.StartLineNumber): $($err.Message)"
         }
+        LogError "$name has parse errors on this PowerShell version -- skipped"
+        Write-Summary "ERROR" ($name -replace '\.ps1$', '') "parse errors -- skipped"
         return
     }
-    try { & $ScriptPath } catch { LogError "$name failed: $_" }
+    $global:LASTEXITCODE = 0
+    try {
+        & $ScriptPath
+    } catch {
+        LogError "$name failed: $_"
+        Write-Summary "ERROR" ($name -replace '\.ps1$', '') "script failed (exception)"
+        return
+    }
+    $scriptRc = $LASTEXITCODE
+    if ($scriptRc -and $scriptRc -ne 0) {
+        LogError "$name failed (exit $scriptRc)"
+        Write-Summary "ERROR" ($name -replace '\.ps1$', '') "script failed (exit $scriptRc)"
+    }
 }
 
 # --- Post-write JSON validation ---
@@ -167,8 +181,16 @@ if ($longPathsEnabled) {
 $gitLongPaths = git config --global core.longpaths 2>$null
 if ($gitLongPaths -ne "true") {
     Log "Setting git config --global core.longpaths true..."
-    git config --global core.longpaths true
-    LogOk "git core.longpaths enabled"
+    $longPathsOut = git config --global core.longpaths true 2>&1 | Out-String
+    $longPathsRc = $LASTEXITCODE
+    foreach ($lpLine in $longPathsOut.Split("`n")) {
+        if ($lpLine.Trim()) { LogDetail "git-longpaths: $($lpLine.TrimEnd())" }
+    }
+    if ($longPathsRc -eq 0) {
+        LogOk "git core.longpaths enabled"
+    } else {
+        LogWarn "git config --global core.longpaths true failed (exit $longPathsRc) -- deep paths may fail"
+    }
 } else {
     LogOk "git core.longpaths already enabled"
 }
@@ -200,12 +222,18 @@ if ($SkipGhAuth) {
         LogOk "gh already authenticated"
     } elseif ($installInteractive) {
         Log "Not authenticated. Starting gh auth login..."
+        # Interactive: gh talks to the console directly, so only the exit code is captured.
         gh auth login
-        if ($LASTEXITCODE -ne 0) {
-            LogError "gh auth login failed"
+        $ghAuthRc = $LASTEXITCODE
+        if ($ghAuthRc -ne 0) {
+            LogError "gh auth login failed (exit $ghAuthRc)"
+            Write-Summary "ERROR" "gh auth" "login failed (exit $ghAuthRc)"
+            Write-Summary "ACTION" "" "Run: gh auth login"
         }
     } else {
-        LogWarn "Not authenticated and not interactive -- skipping gh auth"
+        LogWarn "Not authenticated and not interactive -- skipping gh auth (use -SkipGhAuth to suppress)"
+        Write-Summary "WARN" "gh auth" "not authenticated"
+        Write-Summary "ACTION" "" "Run: gh auth login"
     }
 }
 
@@ -325,9 +353,28 @@ if ($existingUserRepoPath) { $config["userRepoPath"] = $existingUserRepoPath }
 if ($existingMachineAlias) { $config["machineAlias"] = $existingMachineAlias }
 
 $jsonContent = $config | ConvertTo-Json -Depth 10
-[System.IO.File]::WriteAllText($configFile, $jsonContent, [System.Text.UTF8Encoding]::new($false))
-LogOk "Config written to $configFile"
-ValidateJsonConfig -File $configFile -RequiredKeys @("version", "reposPath", "repoPath")
+$configExisted = Test-Path $configFile
+Backup-File $configFile
+$configWritten = $false
+try {
+    [System.IO.File]::WriteAllText($configFile, $jsonContent, [System.Text.UTF8Encoding]::new($false))
+    $configWritten = $true
+} catch {
+    LogError "Failed to write $configFile`: $_"
+    Write-Summary "ERROR" "aitools config" "write failed"
+}
+if ($configWritten) {
+    LogOk "Config written to $configFile"
+    $errorsBeforeValidation = $script:errors
+    ValidateJsonConfig -File $configFile -RequiredKeys @("version", "reposPath", "repoPath")
+    if ($script:errors -gt $errorsBeforeValidation) {
+        Write-Summary "ERROR" "aitools config" "validation failed"
+    } elseif ($configExisted) {
+        Write-Summary "OK" "aitools config" "updated"
+    } else {
+        Write-Summary "OK" "aitools config" "created"
+    }
+}
 
 # ============================================================
 # 6. Install aitools command
@@ -514,14 +561,25 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
     Write-Summary "OK" "claude code" "$(claude --version 2>$null | Select-Object -First 1)"
     Log "Running claude update..."
     $claudeOutput = claude update 2>&1 | Out-String
-    $claudeOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
-    if ($LASTEXITCODE -ne 0) {
-        LogWarn "claude update returned non-zero (exit $LASTEXITCODE)"
+    $updateRc = $LASTEXITCODE
+    foreach ($updateLine in $claudeOutput.Split("`n")) {
+        if ($updateLine.Trim()) { Log $updateLine.TrimEnd() }
+    }
+    if ($updateRc -ne 0) {
+        LogWarn "claude update failed (exit $updateRc) -- see $logFile"
+    } elseif ($claudeOutput -match '(?i)already.*up.to.date|no update') {
+        LogOk "Already up to date"
+    } else {
+        LogOk "claude update finished"
     }
 } else {
     Log "Installing Claude Code CLI..."
     try {
-        Invoke-Expression (Invoke-RestMethod 'https://claude.ai/install.ps1')
+        # Capture every stream of the official installer so its output reaches the log.
+        $installOut = Invoke-Expression (Invoke-RestMethod 'https://claude.ai/install.ps1') *>&1 | Out-String
+        foreach ($installLine in $installOut.Split("`n")) {
+            if ($installLine.Trim()) { Log $installLine.TrimEnd() }
+        }
         Refresh-Path
         if (Get-Command claude -ErrorAction SilentlyContinue) {
             LogOk "Claude Code installed ($(claude --version 2>$null | Select-Object -First 1))"

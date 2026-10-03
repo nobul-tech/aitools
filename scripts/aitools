@@ -26,7 +26,10 @@ if [ "$(uname -s)" = "Darwin" ] && ! command -v brew >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Bootstrap helpers -- needed to find aitools-lib.sh (repoPath in config.json).
+# Everything else (logging, display_path, write_summary, ...) comes from the lib,
+# which is sourced as soon as repoPath is known (see "Load aitools-lib" below).
+# The lib defines an identical read_config_key, which replaces this one.
 # ---------------------------------------------------------------------------
 
 # Read a top-level string value from a JSON config file.
@@ -52,35 +55,6 @@ to_native_path() {
         printf '%s' "$1"
     fi
 }
-
-# Display-friendly path for user-facing messages (native Windows on MSYS).
-display_path() {
-    if command -v cygpath &>/dev/null; then
-        cygpath -w "$1"
-    else
-        printf '%s' "$1"
-    fi
-}
-
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-
-# Unified log dir (reference/logging.md §1): ~/.aitools/logs on all platforms.
-LOG_DIR="${AITOOLS_LOG_DIR:-$HOME/.aitools/logs}"
-LOG_FILE="$LOG_DIR/deploy.log"
-mkdir -p "$LOG_DIR"
-LOG_DISPLAY=$(display_path "$LOG_FILE")
-ERRORS=0
-WARNINGS=0
-
-log() {
-    local level="${2:-info}"
-    printf '[%s] [aitools] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$level" "$1" >> "$LOG_FILE"
-}
-log_ok()    { log "$1" "ok"; }
-log_error() { log "$1" "error"; printf 'error: %s\n' "$1" >&2; ERRORS=$((ERRORS + 1)); }
-log_warn()  { log "$1" "warn"; printf 'warning: %s\n' "$1" >&2; WARNINGS=$((WARNINGS + 1)); }
 
 # Check profile.json for issues and optionally prompt for fixes.
 # Usage: check_profile <warn|interactive>
@@ -183,7 +157,7 @@ migrate_profile_v1_to_v2() {
     read -r machine_alias < /dev/tty
 
     if [ -z "$machine_alias" ]; then
-        echo "Migration cancelled (alias required)."
+        log_warn "profile migration cancelled (alias required)"
         return 1
     fi
 
@@ -277,10 +251,24 @@ fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
                 git -C "$user_repo_dir" config user.name "$git_name"
                 git -C "$user_repo_dir" config user.email "$git_email"
             fi
-            git -C "$user_repo_dir" add -A
-            git -C "$user_repo_dir" commit -m "Migrate profile.json from v1 to v2"
-            git -C "$user_repo_dir" push 2>/dev/null || echo "  (push failed -- run 'git push' manually in $(display_path "$user_repo_dir"))"
-            echo "Profile migrated and committed."
+            local git_out git_rc=0 git_line
+            git_out=$( { git -C "$user_repo_dir" add -A && git -C "$user_repo_dir" commit -m "Migrate profile.json from v1 to v2"; } 2>&1) || git_rc=$?
+            while IFS= read -r git_line; do
+                if [ -n "$git_line" ]; then log_detail "profile-migrate commit: $git_line"; fi
+            done <<< "$git_out"
+            if [ "$git_rc" -ne 0 ]; then
+                log_warn "profile migration commit failed (exit $git_rc) -- commit manually in $(display_path "$user_repo_dir")"
+                return 0
+            fi
+            git_rc=0
+            git_out=$(git -C "$user_repo_dir" push 2>&1) || git_rc=$?
+            while IFS= read -r git_line; do
+                if [ -n "$git_line" ]; then log_detail "profile-migrate push: $git_line"; fi
+            done <<< "$git_out"
+            if [ "$git_rc" -ne 0 ]; then
+                log_warn "profile migration push failed (exit $git_rc) -- run 'git push' manually in $(display_path "$user_repo_dir")"
+            fi
+            log_ok "Profile migrated and committed."
         fi
     fi
 }
@@ -327,22 +315,33 @@ deploy_configs() {
             for script in $deploy_scripts; do
                 local script_path="$script_dir/$script"
                 if [ -f "$script_path" ]; then
-                    # Validate PS1 syntax before executing
-                    if ! pwsh -NoProfile -Command "
+                    # Validate PS1 syntax before executing; each parse error is
+                    # printed by the check and logged as detail.
+                    local parse_out parse_rc=0 parse_line
+                    parse_out=$(pwsh -NoProfile -Command "
                         \$e = \$null
                         \$null = [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$script_path")', [ref]\$null, [ref]\$e)
+                        foreach (\$x in \$e) { 'line ' + \$x.Extent.StartLineNumber + ': ' + \$x.Message }
                         if (\$e.Count -gt 0) { exit 1 }
-                    " 2>/dev/null; then
-                        log_warn "$script has parse errors -- skipping"
+                    " 2>&1) || parse_rc=$?
+                    if [ "$parse_rc" -ne 0 ]; then
+                        while IFS= read -r parse_line; do
+                            if [ -n "$parse_line" ]; then log_detail "$script parse: $parse_line"; fi
+                        done <<< "$parse_out"
+                        log_error "$script has parse errors -- skipped (see $LOG_DISPLAY)"
+                        write_summary ERROR "${script%.ps1}" "parse errors -- skipped"
                         errors=$((errors + 1))
                         continue
                     fi
                     # Run without output redirection -- child PS1 scripts log to
                     # deploy.log via [IO.File]::AppendAllText. PowerShell's 2>> holds
                     # an exclusive file lock that blocks the child's AppendAllText.
-                    if ! pwsh -NoProfile -ExecutionPolicy Bypass \
-                        -File "$(cygpath -w "$script_path")"; then
-                        log_error "$script failed (exit $?) -- see $LOG_DISPLAY"
+                    local script_rc=0
+                    pwsh -NoProfile -ExecutionPolicy Bypass \
+                        -File "$(cygpath -w "$script_path")" || script_rc=$?
+                    if [ "$script_rc" -ne 0 ]; then
+                        log_error "$script failed (exit $script_rc) -- see $LOG_DISPLAY"
+                        write_summary ERROR "${script%.ps1}" "script failed (exit $script_rc)"
                         errors=$((errors + 1))
                     fi
                 else
@@ -359,17 +358,27 @@ deploy_configs() {
             for script in $deploy_scripts; do
                 local script_path="$script_dir/$script"
                 if [ -f "$script_path" ]; then
-                    # Validate bash syntax before executing
-                    if ! bash -n "$script_path" 2>/dev/null; then
-                        log_warn "$script has syntax errors -- skipping"
+                    # Validate bash syntax before executing; bash -n's messages
+                    # are logged as detail.
+                    local syntax_out syntax_rc=0 syntax_line
+                    syntax_out=$(bash -n "$script_path" 2>&1) || syntax_rc=$?
+                    if [ "$syntax_rc" -ne 0 ]; then
+                        while IFS= read -r syntax_line; do
+                            if [ -n "$syntax_line" ]; then log_detail "$script syntax: $syntax_line"; fi
+                        done <<< "$syntax_out"
+                        log_error "$script has syntax errors -- skipped (see $LOG_DISPLAY)"
+                        write_summary ERROR "${script%.sh}" "syntax errors -- skipped"
                         errors=$((errors + 1))
                         continue
                     fi
                     # Run without output redirection -- child scripts log to
                     # deploy.log via >> append. Removing redirection ensures
                     # parity with the Windows fix and lets errors surface.
-                    if ! bash "$script_path"; then
-                        log_error "$script failed (exit $?) -- see $LOG_DISPLAY"
+                    local script_rc=0
+                    bash "$script_path" || script_rc=$?
+                    if [ "$script_rc" -ne 0 ]; then
+                        log_error "$script failed (exit $script_rc) -- see $LOG_DISPLAY"
+                        write_summary ERROR "${script%.sh}" "script failed (exit $script_rc)"
                         errors=$((errors + 1))
                     fi
                 else
@@ -597,23 +606,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Reject unknown arguments when not installing (typos like "installs", "mcpp", etc.)
-if ! $do_install && [ ${#passthrough[@]} -gt 0 ]; then
-    log_error "unknown argument '${passthrough[0]}'"
-    echo "Run 'aitools --help' for usage."
-    return 1
-fi
-
-# Reject --addmcp with no server names
-if $addmcp_seen && [ ${#addmcp_servers[@]} -eq 0 ]; then
-    log_error "--addmcp requires at least one server name (vercel, webflow)"
-    return 1
-fi
-
 if $show_help; then
     usage
     return 0
 fi
+
+# Warnings found before the lib is loaded (it holds the logging); logged right after.
+_pre_lib_warnings=()
 
 # ---------------------------------------------------------------------------
 # Migrate config directory: ~/.config/ai-tooling/ -> ~/.aitools/
@@ -625,7 +624,7 @@ new_config_dir="$HOME/.aitools"
 if [ -d "$old_config_dir" ] && [ ! -d "$new_config_dir" ]; then
     mv "$old_config_dir" "$new_config_dir"
 elif [ -d "$old_config_dir" ] && [ -d "$new_config_dir" ]; then
-    log_warn "both $old_config_dir and $new_config_dir exist -- using $new_config_dir"
+    _pre_lib_warnings+=("both $old_config_dir and $new_config_dir exist -- using $new_config_dir")
 fi
 
 # ---------------------------------------------------------------------------
@@ -658,12 +657,63 @@ try {
     console.error('config migration failed: ' + e.message);
     process.exit(1);
 }
-" "$config" 2>&1) || log_warn "config key migration failed: $migrate_out"
+" "$config" 2>&1) || _pre_lib_warnings+=("config key migration failed: $migrate_out")
         # Re-read repo_path after migration
         if raw=$(read_config_key "$config" "repoPath"); then
             repo_path=$(to_native_path "$raw")
         fi
     fi
+fi
+
+# ---------------------------------------------------------------------------
+# Verify repo exists (clone fresh if missing). Runs before the lib is loaded --
+# the lib lives in the repo -- so status goes to the console directly and the
+# event is logged as a warning once the lib is up.
+# ---------------------------------------------------------------------------
+
+if [ ! -d "$repo_path/.git" ] && ! $show_version; then
+    printf 'aitools: repo not found at %s -- cloning fresh...\n' "$repo_path"
+    mkdir -p "$(dirname "$repo_path")"
+    if ! git clone https://github.com/nobul-tech/aitools.git "$repo_path"; then
+        printf 'error: failed to clone the aitools repo to %s\n' "$repo_path" >&2
+        return 1
+    fi
+    _pre_lib_warnings+=("Repo was not found at $repo_path -- cloned fresh")
+fi
+
+# ---------------------------------------------------------------------------
+# Load aitools-lib (logging, display_path, write_summary, ...) for every command.
+# Without the repo nothing below can run; --version still answers.
+# ---------------------------------------------------------------------------
+
+aitools_lib="$repo_path/scripts/aitools-lib.sh"
+if [ ! -f "$aitools_lib" ]; then
+    if $show_version; then
+        echo "aitools $AITOOLS_INSTALLED_VERSION"
+        echo "  repo: not found at $repo_path"
+        return 0
+    fi
+    printf 'error: aitools-lib.sh not found at %s -- check repoPath in %s\n' "$aitools_lib" "$config" >&2
+    return 1
+fi
+source "$aitools_lib"
+logging_init "aitools"
+LOG_DISPLAY=$(display_path "$LOG_FILE")
+for _w in ${_pre_lib_warnings[@]+"${_pre_lib_warnings[@]}"}; do
+    log_warn "$_w"
+done
+
+# Reject unknown arguments when not installing (typos like "installs", "mcpp", etc.)
+if ! $do_install && [ ${#passthrough[@]} -gt 0 ]; then
+    log_error "unknown argument '${passthrough[0]}'"
+    echo "Run 'aitools --help' for usage."
+    return 1
+fi
+
+# Reject --addmcp with no server names
+if $addmcp_seen && [ ${#addmcp_servers[@]} -eq 0 ]; then
+    log_error "--addmcp requires at least one server name (vercel, webflow)"
+    return 1
 fi
 
 # ---------------------------------------------------------------------------
@@ -1373,22 +1423,6 @@ if $do_sessions; then
 fi
 
 # ---------------------------------------------------------------------------
-# Verify repo exists (clone fresh if missing)
-# ---------------------------------------------------------------------------
-
-if [ ! -d "$repo_path/.git" ]; then
-    log_warn "Repo not found at $(display_path "$repo_path") -- cloning fresh..."
-    repos_dir=$(dirname "$repo_path")
-    mkdir -p "$repos_dir"
-    if git clone https://github.com/nobul-tech/aitools.git "$repo_path"; then
-        log_ok "Clone successful"
-    else
-        log_error "Failed to clone repo to $(display_path "$repo_path")"
-        return 1
-    fi
-fi
-
-# ---------------------------------------------------------------------------
 # Run update (pull + rebuild + deploy/install)
 # ---------------------------------------------------------------------------
 
@@ -1401,10 +1435,6 @@ rm -f "$AITOOLS_SUMMARY_FILE"
 touch "$AITOOLS_SUMMARY_FILE"
 export AITOOLS_SUMMARY_FILE
 export AITOOLS_SUPPRESS_SUMMARY_DISPLAY=1
-
-# Source shared lib (provides write_summary, show_summary)
-source "$repo_path/scripts/aitools-lib.sh"
-logging_init "aitools"
 
 log "aitools $AITOOLS_INSTALLED_VERSION"
 
@@ -1443,8 +1473,11 @@ if $do_gitpull; then
             log_ok "Updated"
         fi
     else
-        log_error "git pull failed"
-        echo "$pull_out" >&2
+        while IFS= read -r _pull_line; do
+            if [ -n "$_pull_line" ]; then log_detail "git-pull: $_pull_line"; fi
+        done <<< "$pull_out"
+        log_error "git pull failed (see $LOG_DISPLAY)"
+        printf '%s\n' "$pull_out" >&2
         return 1
     fi
 else
@@ -1461,11 +1494,15 @@ else
             log_ok "Updated"
         fi
     else
+        # Full output to the log first; the console keeps a 3-line preview.
+        while IFS= read -r _pull_line; do
+            if [ -n "$_pull_line" ]; then log_detail "git-pull: $_pull_line"; fi
+        done <<< "$pull_out"
         if echo "$pull_out" | grep -qiE "could not resolve|unable to access|connection refused|connection timed out|no route to host"; then
             log_warn "Could not reach remote — deploying from local checkout"
         else
-            log_warn "git pull failed -- deploying from local checkout"
-            echo "$pull_out" | head -3 | sed 's/^/    /' >&2
+            log_warn "git pull failed -- deploying from local checkout (see $LOG_DISPLAY)"
+            printf '%s\n' "$pull_out" | head -3 | sed 's/^/    /' >&2
         fi
         write_summary WARN "source" "stale local checkout (git pull failed)"
     fi
@@ -1506,7 +1543,9 @@ if [ -f "$repo_path/scripts/aitools" ]; then
     if [ -n "$_repo_list" ] && [ "$_repo_list" != "$_self_list" ]; then
         log "Deploy script list changed -- reloading entry point"
         _nv=$(repo_version "$repo_path")
-        if bash -n "$repo_path/scripts/aitools" 2>/dev/null; then
+        _syntax_rc=0
+        _syntax_out=$(bash -n "$repo_path/scripts/aitools" 2>&1) || _syntax_rc=$?
+        if [ "$_syntax_rc" -eq 0 ]; then
             sed "s/^AITOOLS_INSTALLED_VERSION=.*/AITOOLS_INSTALLED_VERSION=\"$_nv\"/" \
                 "$repo_path/scripts/aitools" > "$HOME/.local/bin/aitools"
             chmod +x "$HOME/.local/bin/aitools"
@@ -1516,7 +1555,10 @@ if [ -f "$repo_path/scripts/aitools" ]; then
             # otherwise `install` degrades to the sync path on reload.
             exec "$HOME/.local/bin/aitools" ${_ORIG_ARGS[@]+"${_ORIG_ARGS[@]}"}
         else
-            log_warn "Repo scripts/aitools has syntax errors -- continuing with current list"
+            while IFS= read -r _syntax_line; do
+                if [ -n "$_syntax_line" ]; then log_detail "aitools syntax: $_syntax_line"; fi
+            done <<< "$_syntax_out"
+            log_warn "Repo scripts/aitools has syntax errors -- continuing with current list (see $LOG_DISPLAY)"
         fi
     fi
 fi
@@ -1668,27 +1710,38 @@ if [ -f "$repo_path/scripts/aitools" ]; then
     new_version=$(repo_version "$repo_path")
 
     # Validate bash syntax before overwriting installed copy
-    if bash -n "$repo_path/scripts/aitools" 2>/dev/null; then
+    _syntax_rc=0
+    _syntax_out=$(bash -n "$repo_path/scripts/aitools" 2>&1) || _syntax_rc=$?
+    if [ "$_syntax_rc" -eq 0 ]; then
         sed "s/^AITOOLS_INSTALLED_VERSION=.*/AITOOLS_INSTALLED_VERSION=\"$new_version\"/" \
             "$repo_path/scripts/aitools" > "$HOME/.local/bin/aitools"
         chmod +x "$HOME/.local/bin/aitools"
     else
-        log_warn "skipping bash self-update (new aitools has syntax errors)"
+        while IFS= read -r _syntax_line; do
+            if [ -n "$_syntax_line" ]; then log_detail "aitools syntax: $_syntax_line"; fi
+        done <<< "$_syntax_out"
+        log_warn "skipping bash self-update (new aitools has syntax errors; see $LOG_DISPLAY)"
     fi
 
     # On Windows, also self-update aitools.ps1 (validate with current PS version first)
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
             if [ -f "$repo_path/scripts/aitools.ps1" ]; then
-                if pwsh -NoProfile -Command "
+                _parse_rc=0
+                _parse_out=$(pwsh -NoProfile -Command "
                     \$e = \$null
-                    [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$repo_path/scripts/aitools.ps1")', [ref]\$null, [ref]\$e)
+                    \$null = [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$repo_path/scripts/aitools.ps1")', [ref]\$null, [ref]\$e)
+                    foreach (\$x in \$e) { 'line ' + \$x.Extent.StartLineNumber + ': ' + \$x.Message }
                     if (\$e.Count -gt 0) { exit 1 }
-                " 2>/dev/null; then
+                " 2>&1) || _parse_rc=$?
+                if [ "$_parse_rc" -eq 0 ]; then
                     sed 's/^\$AITOOLS_INSTALLED_VERSION = ".*"/$AITOOLS_INSTALLED_VERSION = "'"$new_version"'"/' \
                         "$repo_path/scripts/aitools.ps1" > "$HOME/.local/bin/aitools.ps1"
                 else
-                    log_warn "skipping PS1 self-update (parse errors on this PowerShell version)"
+                    while IFS= read -r _parse_line; do
+                        if [ -n "$_parse_line" ]; then log_detail "aitools.ps1 parse: $_parse_line"; fi
+                    done <<< "$_parse_out"
+                    log_warn "skipping PS1 self-update (parse errors on this PowerShell version; see $LOG_DISPLAY)"
                 fi
             fi
             ;;

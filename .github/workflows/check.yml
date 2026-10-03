@@ -1,5 +1,5 @@
 # .github/workflows/check.yml
-# CI pipeline for aitools: syntax validation, build, cross-platform checks
+# CI pipeline for aitools: syntax validation, logging unit tests, build, cross-platform checks
 # 3 runners: macOS (ARM), Linux (Ubuntu), Windows
 #
 # Bash management:
@@ -112,6 +112,12 @@ jobs:
             exit 1
           fi
           echo "All .py files passed syntax validation"
+
+      - name: Logging unit tests (bash)
+        run: bash tests/logging/test-logging.sh
+
+      - name: Logging unit tests (PowerShell)
+        run: pwsh -NoProfile -File tests/logging/test-logging.ps1
 
       - name: Build deploy scripts
         run: |
@@ -237,6 +243,12 @@ jobs:
           fi
           echo "All .py files passed syntax validation"
 
+      - name: Logging unit tests (bash)
+        run: bash tests/logging/test-logging.sh
+
+      - name: Logging unit tests (PowerShell)
+        run: pwsh -NoProfile -File tests/logging/test-logging.ps1
+
       - name: Build deploy scripts
         run: bash scripts/build-deploy.sh
 
@@ -318,6 +330,14 @@ jobs:
               exit 1
           }
           Write-Host "All .ps1 files passed syntax validation"
+
+      - name: Logging unit tests (bash, via Git Bash)
+        shell: bash
+        run: bash tests/logging/test-logging.sh
+
+      - name: Logging unit tests (PowerShell, native)
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/logging/test-logging.ps1
 
       - name: Build deploy scripts (via Git Bash)
         shell: bash

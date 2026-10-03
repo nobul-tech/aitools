@@ -1138,11 +1138,12 @@ Main agent, direct (no code). Every item below is part of **this review**:
 
 ## PR C: logging conformance (epic #21, issues #22–#30, plus #31)
 
-> **Status: PR C1 (batches C1, C2, C3a, C4a) approved for execution 2026-10-03.**
-> Verbatim edits, the error-handling audit and the prototype test evidence are in
-> "PR C1 — verbatim edits" below. Batches C3b, C4b and C5–C14 remain scoped only:
-> each needs its own verbatim-edit revision of this section, presented for approval,
-> before code is written.
+> **Status: PR C1 (batches C1, C2, C3a, C4a) shipped in v0.73.3 (2026-10-03).
+> PR C2 (batches C3b, C4b, T1, D-C2) approved for execution 2026-10-03.**
+> Verbatim edits, the error-handling audits and the prototype test evidence are in
+> "PR C1 — verbatim edits" and "PR C2 — verbatim edits" below; the logging audit plan
+> is in the PR C2 section. Batches C5–C15 remain scoped only: each needs its own
+> verbatim-edit revision of this section, presented for approval, before code is written.
 
 ### Origin
 
@@ -1180,13 +1181,14 @@ The main agent spot-checked the audit's findings: `aitools:345` "exit 0", `aitoo
 | # | Decision | Status |
 |---|---|---|
 | C-F1 | **Lib first.** Fix the shared helpers (#29 EOF-safe `read_tty_choice`/`Read-ConsoleChoice`, #30 guarded `backup_file`, checked deploy-state writes, `log_detail` diffs) before the scripts, so per-script fixes can call them. | Approved 2026-10-03 |
-| C-F2 | **Exit code decides; output is logged in full.** Every install/update/uninstall: capture `2>&1`, `\|\| RC=$?`, log every line (verbose output via `log_detail`), decide on `RC` plus a binary check. Output grep stays only where Standard 3 allows it (`brew upgrade`). | Proposed (C3b+) |
-| C-F3 | **Every exit path writes a summary row.** `write_summary ERROR` before each `exit 1`. PS1 validation blocks compare error counts before and after and write ERROR instead of OK. Orchestrators add `ERROR "<script>" "script failed (exit N)"` when a child dies. | Proposed (C3b+) |
+| C-F2 | **Exit code decides; output is logged in full.** Every install/update/uninstall: capture `2>&1`, `\|\| RC=$?`, log every line (verbose output via `log_detail`), decide on `RC` plus a binary check. Output grep stays only where Standard 3 allows it (`brew upgrade`). | Approved 2026-10-03 |
+| C-F3 | **Every exit path writes a summary row.** `write_summary ERROR` before each `exit 1`. PS1 validation blocks compare error counts before and after and write ERROR instead of OK. Orchestrators add `ERROR "<script>" "script failed (exit N)"` when a child dies. | Approved 2026-10-03 |
 | C-F4 | **Bash/PS1 parity is part of each fix.** Every row in the audit's parity table is closed in the same batch as its counterpart. | Approved 2026-10-03 |
 | C-F5 | **#31: create from profile when `settings.json` is absent** (option 2 in the issue). `sync_managed_json` writes the profile mirror without prompting; deploy order is unchanged. | Approved 2026-10-03 |
-| C-F6 | **Spec questions go through `/incident`, not code:** Standard 3 WARN-vs-ERROR for `brew upgrade` (#27c), and the `aitools` logging-overrides table (#28) if console output becomes the intent. | Proposed (C3b+) |
+| C-F6 | **Spec questions go through `/incident`, not code:** Standard 3 WARN-vs-ERROR for `brew upgrade` (#27c), and the `aitools` logging-overrides table (#28) if console output becomes the intent. | Standard 3: proposed (C5+). #28: resolved by C-F9 2026-10-03 |
 | C-F7 | **One interactivity rule, both commands, every platform.** `aitools` and `aitools install` each run interactive or non-interactive, decided by the caller: interactive iff stdin is a terminal and neither `--force`/`-Force` nor `AITOOLS_FORCE=1` is set. Applies to the review prompts and to the installers' own prompts (gh login, repos path). Non-interactive: source wins (backup kept, WARN), installer prompts take their defaults. EOF at a prompt: WARN, then the same default. The `< /dev/null` on the bash install path is removed (it made macOS/Linux install non-interactive while Windows install was interactive). | Approved 2026-10-03 |
 | C-F8 | **C1 (lib rule) and C3a (entry-point redirect) ship in the same PR.** C1 alone would make macOS/Linux `aitools install` non-interactive. | Approved 2026-10-03 |
+| C-F9 | **Entry points load aitools-lib as early as they can and define no logging of their own (#28).** `scripts/aitools` / `aitools.ps1` source the lib as soon as `repoPath` is read; only `--help`, `--version` and the missing-repo clone run before it, and warnings found before it are logged right after it loads. The `scripts/aitools` row leaves the logging-overrides table. `aitools-install` keeps its JSONL override until JSONL moves into the lib (follow-up). | Approved 2026-10-03 |
 
 ### Batches
 
@@ -1200,12 +1202,19 @@ PR C1 (this revision; ≤3 code files per batch; `aitools-lib.*` changes ⇒ fre
 | C4a | `aitools-install.sh`, `aitools-install.ps1` | C-F7 (installer prompts), #29 (Step 3 read EOF-safe), stale "non-interactive install wrapper" comment |
 | D-C1 | protected docs (approved 2026-10-03) | `interactive-menus.md` non-interactive fallback; `script-standards-detail.md` exemptions table rows; RELEASE_NOTES |
 
+PR C2 (approved 2026-10-03; verbatim edits in "PR C2 — verbatim edits"):
+
+| Batch | Files | Issues |
+|---|---|---|
+| C3b | `aitools`, `aitools.ps1` | #22, #23, #25, #26e, #27b, #28 (C-F9) |
+| C4b | `aitools-install.sh`, `aitools-install.ps1` | #23, #25, #26b (Step 5 PS1 row), #26e (`$LASTEXITCODE`), #27a (`claude update`); remove dead Windows branches |
+| T1 | `tests/logging/test-logging.sh`, `tests/logging/test-logging.ps1` (new), `.github/workflows/check.yml` | Logging unit tests (audit checks U1, U2), run on all three CI runners |
+| D-C2 | protected docs (approved 2026-10-03) | `script-standards-detail.md` logging overrides (`scripts/aitools` row removed, entry-point text); `CLAUDE.md` `tests/` line; this plan. RELEASE_NOTES deferred |
+
 Later PRs (scoped, not approved):
 
 | Batch | Files | Issues |
 |---|---|---|
-| C3b | `aitools`, `aitools.ps1` | #22, #23, #25, #26e, #27b, #28 |
-| C4b | `aitools-install.sh`, `aitools-install.ps1` | #23, #25, #26b (Step 5 PS1 row), #26e (`$LASTEXITCODE`), #27a (`claude update`); remove dead winget branch |
 | C5 | `setup-rust.sh`, `setup-rust.ps1`, `setup-typst.sh` | #22, #23, #24, #27 |
 | C6 | `setup-typst.ps1`, `setup-pandoc.sh`, `setup-pandoc.ps1` | #23, #26a |
 | C7 | `setup-modal.sh`, `setup-modal.ps1`, `setup-go.ps1` | #23, #26d, #27a |
@@ -1216,7 +1225,8 @@ Later PRs (scoped, not approved):
 | C12 | `setup-cursor-ide-mcp.sh`, `setup-cursor-ide-mcp.ps1` | #25, #26a–c, #27b (Cursor `mcp` verbs, re-verified via `/tool-eval` first) |
 | C13 | `setup-user-mcp.sh`, `setup-user-mcp.ps1`, `setup-datadog.ps1` | #23, #26a |
 | C14 | `setup-user-claude.sh`, `setup-user-claude.ps1` | #23, #25, #26a |
-| D-C | protected docs (batch-presented) | Exemptions table: remove the typst/pandoc/vercel/rust entries once those discards are fixed. Logging-overrides table (#28) if needed. Standard 3 outcome via `/incident`. RELEASE_NOTES. |
+| C15 | `check-pre-commit.sh`, `check-pre-commit.ps1` (+ allowlist) | Logging audit checks A1-A11 as pre-commit steps, observe/WARN first, FAIL per check once its count is zero (see "Logging audit plan") |
+| D-C | protected docs (batch-presented) | Exemptions table: remove the typst/pandoc/vercel/rust entries once those discards are fixed. Standard 3 outcome via `/incident`. RELEASE_NOTES. |
 
 `setup-user-claude`, `setup-user-cursor` and `setup-user-hooks` have logic duplicated in
 `build-deploy.sh` (`deploy-paths.md`). Batches C9, C10 and C14 must port each fix there and
@@ -2169,6 +2179,1584 @@ index ead8c86..2b2e6db 100644
  $aitoolsBin = Join-Path $env:USERPROFILE ".aitools\bin"
  if (-not (Test-Path $aitoolsBin)) { New-Item -ItemType Directory -Path $aitoolsBin -Force | Out-Null }
  $hbinDeployed = 0
+```
+
+## PR C2 — verbatim edits (batches C3b, C4b, T1)
+
+Base: `main` @ 5a010c2 (v0.73.3 + #36). Prototyped on a copy of the base
+(scratch: `.scratch/session-3030c86a-9/proto-c2/`); each diff below is the exact edit.
+No `aitools-lib.*` change, so no `deploy/` rebuild: `build-deploy.sh` does not embed the
+entry points or the installers.
+
+### Decisions applied
+
+- **C-F2** (exit code decides, output logged in full) and **C-F3** (summary row on every
+  failure path; orchestrators add `ERROR "<script>" "script failed (exit N)"`): approved
+  2026-10-03.
+- **C-F9 (#28): the entry points load aitools-lib as early as they can and define no
+  logging of their own** (commander, 2026-10-03). `scripts/aitools` / `aitools.ps1`
+  dot-source the lib as soon as `repoPath` is read from `config.json`. Only `--help`,
+  `--version` and the missing-repo clone run before it; warnings found before it are
+  queued and logged right after it loads. The entry points' own `log*` / `Log*`
+  functions, their log-dir setup and the duplicate `display_path` are removed. Missing
+  lib: one stderr line naming the path, exit 1 (`--version` still answers). The
+  logging-overrides table loses its `scripts/aitools` row (D-C2).
+- **Unit tests for logging** (commander, 2026-10-03): `tests/logging/` (bash + PS1), run
+  on all three CI runners (batch T1).
+
+### What changes
+
+| Batch | File | Issue | Change |
+|---|---|---|---|
+| C3b | `aitools`, `aitools.ps1` | #28, C-F9 | Lib loaded right after `repoPath` resolution; own logging functions, log-dir setup and duplicate `display_path` removed; pre-lib warnings (old config dir, config-key migration, repo cloned fresh) queued and logged after the lib loads; unknown-argument checks moved after the lib load; missing lib -> stderr line + exit 1; missing-repo clone moved ahead of the lib load |
+| C3b | `aitools` | #26e, #27b | `deploy_configs`: exit code captured before the `if` (the log said "exit 0" for every failure); `ERROR "<script>" "script failed (exit N)"` row per failed child |
+| C3b | `aitools` | #23, C-F3 | Child syntax check: `bash -n` / PS1 parse messages logged as `[detail]` (were discarded); a skipped script is `log_error` + ERROR row (was `log_warn`, but already counted as a failure) |
+| C3b | `aitools` | #22, #23 | `git pull` failure: every output line logged as `[detail] git-pull:`; console keeps its 3-line preview (`gitpull`: full output on stderr) |
+| C3b | `aitools` | #23 | Self-update syntax checks (bash and PS1 copies, deploy-list reload): messages logged as detail |
+| C3b | `aitools` | #23, #25 | Profile migration: `echo` lines -> `log_warn` / `log_ok`; commit and push output logged, exit codes checked |
+| C3b | `aitools.ps1` | same | Parity: `Deploy-Configs` ERROR rows + detail parse errors; pull output as detail; migration via `LogWarn`/`LogOk` with checked git exit codes; parse errors logged on both self-update paths |
+| C4b | `aitools-install.sh` | #25 | Lib sourced before flag parsing: unknown option, Windows forwarding and the pwsh bootstrap now log (were bare `echo`) |
+| C4b | `aitools-install.sh` | #23 | pwsh bootstrap: winget output captured and logged, exit code checked, ERROR row |
+| C4b | `aitools-install.sh` | #26e, C-F3 | `validate_and_run`: syntax messages as detail, ERROR row on syntax error or failed child (exit code in log and row) |
+| C4b | `aitools-install.sh` | #26e | gh auth login failure: ERROR + ACTION rows. Not authenticated without a terminal: WARN + ACTION rows (`script-standards.md` post-install auth check) |
+| C4b | `aitools-install.sh` | #27a | `claude update`: exit code decides; output logged line by line (was: grep for "error"/"fatal") |
+| C4b | `aitools-install.sh` | dead code | Windows branches in Step 8 (node) and Step 9 (Claude) removed: Windows is forwarded to the PS1 installer at the top (`cross-platform.md` "Dead code from platform guards") |
+| C4b | `aitools-install.ps1` | #26e | `Invoke-ValidatedScript`: `$LASTEXITCODE` checked after the child (was only `catch`); ERROR rows for exit code, exception and parse errors; parse lines via the lib's `LogDetail` (file-only; the installer's own `Log` prints every level, found in the C4b batch audit) |
+| C4b | `aitools-install.ps1` | #23 | `git config --global core.longpaths`: output and exit code checked (was an unconditional `LogOk`) |
+| C4b | `aitools-install.ps1` | #26e | gh auth rows (parity with bash) |
+| C4b | `aitools-install.ps1` | #26b | Step 5: `Backup-File` before the write (bash parity, `config-file-safety.md`); write in try/catch; `aitools config` row on every path (created / updated / validation failed / write failed) |
+| C4b | `aitools-install.ps1` | #27a, #23 | `claude update`: exit code captured before logging; Claude installer output captured (`*>&1`) and logged |
+| T1 | `tests/logging/test-logging.sh` (new) | U1, U2 | 24 cases: lib format, levels, ANSI on console only, `log_detail` file-only, counters, `logging_init` reset, `write_summary` (no-op, row, OK->WARN), 5 MB rotation; entry point defines no log functions, unknown argument in lib format and in `deploy.log`, pre-lib warning logged, missing lib, `--version` without repo |
+| T1 | `tests/logging/test-logging.ps1` (new) | U1, U2 | PS1 twin: 15 lib cases + AST check that `aitools.ps1` defines no `Log*`; 3 entry-point run cases on Windows (SKIP elsewhere: OS guard) |
+| T1 | `.github/workflows/check.yml` | U1, U2 | "Logging unit tests (bash)" and "(PowerShell)" steps on macOS, Linux and Windows |
+
+### Error-handling audit
+
+| Pattern added | Where | Check |
+|---|---|---|
+| `x=$(cmd 2>&1) \|\| rc=$?` | every captured command above | `rc` tested on the next statement; output logged before the decision |
+| `cmd \|\| rc=$?` (no capture) | `bash "$script"`, `pwsh -File`, `gh auth login` | interactive or self-logging children; `rc` tested immediately |
+| `2>&1 \| Out-String` + `$LASTEXITCODE` | PS1 git, claude update, longpaths | exit code saved to a variable on the next line, before any other native call |
+| `try/catch` | PS1 `Invoke-ValidatedScript`, Step 5 write | catch logs `LogError` and writes an ERROR row |
+| `2>/dev/null` removed | `bash -n`, PS1 parse checks, migration push | now captured |
+| pre-lib console output | `aitools` missing lib / failed clone | one line to stderr (no logger exists yet), exit 1; the clone itself is recorded as a warning once the lib loads |
+| tests | `tests/logging/*` | no suppressions; temp dirs removed on exit (`trap` / `finally`); env vars reset by assignment |
+
+Not changed (outside the issue list, noted as follow-ups): `git checkout HEAD -- deploy/ 2>/dev/null || true`
+before each pull; the `profile:` lines printed with raw `printf`/`Write-Host` in the profile
+check; `Read-Host` for the machine alias in `aitools.ps1` migration; the `aitools-lib.sh`
+header comment still says both entry points override the log functions (fix with the
+JSONL follow-up below, which changes the lib anyway); `aitools-install`'s JSONL override
+(move JSONL into the lib so no script overrides logging).
+
+### Tests (Linux)
+
+| Suite | Prototype | `main` |
+|---|---|---|
+| `tests/logging/test-logging.sh` (T1, in repo) | 24/24 | 19/24: entry point defines its own log functions, unknown argument printed as bare `error:`, pre-lib warning lost, missing lib not detected, `--version` fails without the repo |
+| `tests/logging/test-logging.ps1` (T1, in repo) | 15/15 + 3 SKIP; the 3 Windows cases pass (6/6 entry cases) on a guard-stripped copy | -- |
+| `test-c2b.sh` (scratch): real `aitools` + installer, stubbed setup scripts; child exit 3, child syntax error, installer child exit 4, git pull failure, `claude update` exit 2, `claude update` exit 0 printing "error", unknown installer option, gh not authenticated | 17/17 | 4/17 |
+| `test-c2b-ps1.ps1` (scratch): `Invoke-ValidatedScript` and `Deploy-Configs` extracted from the AST | 9/9 | 1/9 |
+| `test-mode-e2e.sh` (PR C1 mode matrix, regression) | 18/18 | -- |
+| `bash -n` / pwsh ParseFile, all changed files | pass | -- |
+
+Not testable here: the PS1 entry point and installer run only on Windows (OS guard), so
+their top-level blocks (Step 5, longpaths, claude update/install, pull) are parse-checked
+only; the T1 Windows cases first run for real in CI. macOS run needed for the bash paths.
+Commits carry `(tested: Linux)`.
+
+### Logging audit plan (epic #21)
+
+**Purpose.** Measure logging conformance across every reusable script, drive each
+batch's files to zero on the checks it owns, and keep them there.
+
+**Scope.** `scripts/aitools`, `aitools.ps1`, `aitools-install.*`, `setup-*.sh/.ps1`,
+`aitools-lib.*` and `check-lib.*` (the libs through the unit tests). Hooks and
+`build-deploy.sh` keep their own logging (logging-overrides table); only A4 applies to them.
+
+**Checks and baseline.** Static counts are leads, not verdicts: every hit is fixed or
+classified "allowed" with a reason (CLI output and usage text are allowed for A3; A4
+hits are allowed only if listed in the exemptions table).
+
+| Id | Check | Rule | Method | `main` @ 5a010c2 | After PR C2 | Owner |
+|---|---|---|---|---|---|---|
+| A1 | Script sources the lib + `logging_init` / `Initialize-Logging` | `script-standards.md` block order | static | 0 | 0 | -- |
+| A2 | Script defines its own `log*` / `Log*` | `script-standards.md` "Do not define inline copies"; overrides table | static | 16 in 4 files | 8 in 2 (installer JSONL override, allowed until the JSONL follow-up) | JSONL follow-up |
+| A3 | Bare `echo` / `printf` / `Write-Host` | `script-standards.md` "Logging framework is required" (#25) | static + manual classification | 198 in 18 | 193 in 18 | C5-C14 |
+| A4 | `2>/dev/null`, `\|\| true`, `SilentlyContinue`, `Out-Null` | error-handling table, exemptions table | static + manual against exemptions | 356 in 41 | 344 in 41 | C5-C14, D-C |
+| A5 | `exit 1` with no summary row in the 3 lines before (OS guards and exit footers excluded) | C-F3, #26a | static | 24 in 14 | 24 in 14 (all in setup scripts) | C5-C14 |
+| A6 | Output truncated (`tail`/`head -N`, `Select-Object -First/-Last N`) before logging | #22 | static | 3 in 3 | 3 in 3 (setup scripts) | C5 |
+| A7 | `$?` read inside an `if !` branch | #27b | static | 2 in 1 | 0 | done |
+| A8 | Success decided by grepping output for "error"/"fatal" | #27a, Standard 3 | static | 11 in 10 | 10 in 9 (7 are `brew upgrade`, pending the Standard 3 `/incident`) | C5-C8, C-F6 |
+| A9 | `[ ... ] && log` inside a loop body (aborts under `set -e`) | #24 | static | 9 in 8 | 9 in 8 | C5-C14 |
+| A10 | `while read ... done < file` loop whose body calls a review prompt | C1 finding | manual (static step to add) | 0 known | 0 | -- |
+| A11 | Exit footer checks `ERRORS` | `script-standards.md` exit footer | static | 0 | 0 | -- |
+| U1 | Lib logging contract: format, levels, console colours, file without ANSI, `log_detail` file-only, counters, init reset, summary rows, rotation | `script-standards.md`, `logging.md` | unit (`tests/logging`), CI on 3 runners | -- | 24 + 15 cases | T1 |
+| U2 | Entry points use the lib: no own log functions, lib-format errors, pre-lib warnings logged, missing-lib error, `--version` without repo | C-F9 | unit (`tests/logging`), CI | -- | in U1 counts | T1 |
+| E1 | Install x2 on a fresh HOME: a summary row for every script, zero lines in `deploy.log` outside the `[ts] [script] [level]` format, no prompts on the second run | PR C verification | end-to-end harness (scratch today) | -- | -- | final PR C batch |
+
+**Process.**
+1. Each PR records the table above (scanner: `.scratch/session-3030c86a-9/audit-logging-baseline.sh`
+   for now).
+2. Each batch re-runs the scan. For the checks it owns, its files reach zero or each
+   remaining hit is classified "allowed" in the plan with a reason. No count may rise
+   anywhere else (ratchet).
+3. New batch **C15**: turn the scanner into `check-pre-commit` steps (bash + PS1) in
+   observe/WARN mode, per `hook-rollout.md`; promote a check to FAIL once its count is
+   zero. Classified A3 hits get an allowlist; A4 classifications go to the exemptions
+   table (protected). The existing "Detection" list above becomes these steps.
+4. Promote the end-to-end harness (E1) to `tests/` once it no longer depends on scratch
+   paths, and run it in CI on Linux.
+
+**Exit criteria for epic #21.** A1, A5-A11 at zero; A2 at zero once the JSONL override
+moves into the lib; every remaining A3/A4 hit classified; U1/U2 green on macOS, Linux and
+Windows; E1 passes on all three.
+
+### D-C2: protected doc edits (approved 2026-10-03)
+
+- `reference/script-standards-detail.md`: the "Entry points" example now says entry
+  points load the lib as early as they can (C-F9) and shows the `aitools-install` JSONL
+  override as the only remaining one; the `scripts/aitools` row leaves the
+  logging-overrides table.
+- `CLAUDE.md` "How the harness is organized": `tests/` line.
+- This plan: status, C-F2/C-F3 approved, C-F6 note, C-F9, batch tables, this section.
+- RELEASE_NOTES: deferred by the commander.
+
+### Verbatim diffs
+
+#### Batch C3b
+
+```diff
+diff --git a/scripts/aitools b/scripts/aitools
+index 36b72f2..b6b3ef5 100755
+--- a/scripts/aitools
++++ b/scripts/aitools
+@@ -26,7 +26,10 @@ if [ "$(uname -s)" = "Darwin" ] && ! command -v brew >/dev/null 2>&1; then
+ fi
+ 
+ # ---------------------------------------------------------------------------
+-# Helpers
++# Bootstrap helpers -- needed to find aitools-lib.sh (repoPath in config.json).
++# Everything else (logging, display_path, write_summary, ...) comes from the lib,
++# which is sourced as soon as repoPath is known (see "Load aitools-lib" below).
++# The lib defines an identical read_config_key, which replaces this one.
+ # ---------------------------------------------------------------------------
+ 
+ # Read a top-level string value from a JSON config file.
+@@ -53,35 +56,6 @@ to_native_path() {
+     fi
+ }
+ 
+-# Display-friendly path for user-facing messages (native Windows on MSYS).
+-display_path() {
+-    if command -v cygpath &>/dev/null; then
+-        cygpath -w "$1"
+-    else
+-        printf '%s' "$1"
+-    fi
+-}
+-
+-# ---------------------------------------------------------------------------
+-# Logging
+-# ---------------------------------------------------------------------------
+-
+-# Unified log dir (reference/logging.md §1): ~/.aitools/logs on all platforms.
+-LOG_DIR="${AITOOLS_LOG_DIR:-$HOME/.aitools/logs}"
+-LOG_FILE="$LOG_DIR/deploy.log"
+-mkdir -p "$LOG_DIR"
+-LOG_DISPLAY=$(display_path "$LOG_FILE")
+-ERRORS=0
+-WARNINGS=0
+-
+-log() {
+-    local level="${2:-info}"
+-    printf '[%s] [aitools] [%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$level" "$1" >> "$LOG_FILE"
+-}
+-log_ok()    { log "$1" "ok"; }
+-log_error() { log "$1" "error"; printf 'error: %s\n' "$1" >&2; ERRORS=$((ERRORS + 1)); }
+-log_warn()  { log "$1" "warn"; printf 'warning: %s\n' "$1" >&2; WARNINGS=$((WARNINGS + 1)); }
+-
+ # Check profile.json for issues and optionally prompt for fixes.
+ # Usage: check_profile <warn|interactive>
+ # Requires: node, $repo_path, $config
+@@ -183,7 +157,7 @@ migrate_profile_v1_to_v2() {
+     read -r machine_alias < /dev/tty
+ 
+     if [ -z "$machine_alias" ]; then
+-        echo "Migration cancelled (alias required)."
++        log_warn "profile migration cancelled (alias required)"
+         return 1
+     fi
+ 
+@@ -277,10 +251,24 @@ fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
+                 git -C "$user_repo_dir" config user.name "$git_name"
+                 git -C "$user_repo_dir" config user.email "$git_email"
+             fi
+-            git -C "$user_repo_dir" add -A
+-            git -C "$user_repo_dir" commit -m "Migrate profile.json from v1 to v2"
+-            git -C "$user_repo_dir" push 2>/dev/null || echo "  (push failed -- run 'git push' manually in $(display_path "$user_repo_dir"))"
+-            echo "Profile migrated and committed."
++            local git_out git_rc=0 git_line
++            git_out=$( { git -C "$user_repo_dir" add -A && git -C "$user_repo_dir" commit -m "Migrate profile.json from v1 to v2"; } 2>&1) || git_rc=$?
++            while IFS= read -r git_line; do
++                if [ -n "$git_line" ]; then log_detail "profile-migrate commit: $git_line"; fi
++            done <<< "$git_out"
++            if [ "$git_rc" -ne 0 ]; then
++                log_warn "profile migration commit failed (exit $git_rc) -- commit manually in $(display_path "$user_repo_dir")"
++                return 0
++            fi
++            git_rc=0
++            git_out=$(git -C "$user_repo_dir" push 2>&1) || git_rc=$?
++            while IFS= read -r git_line; do
++                if [ -n "$git_line" ]; then log_detail "profile-migrate push: $git_line"; fi
++            done <<< "$git_out"
++            if [ "$git_rc" -ne 0 ]; then
++                log_warn "profile migration push failed (exit $git_rc) -- run 'git push' manually in $(display_path "$user_repo_dir")"
++            fi
++            log_ok "Profile migrated and committed."
+         fi
+     fi
+ }
+@@ -327,22 +315,33 @@ deploy_configs() {
+             for script in $deploy_scripts; do
+                 local script_path="$script_dir/$script"
+                 if [ -f "$script_path" ]; then
+-                    # Validate PS1 syntax before executing
+-                    if ! pwsh -NoProfile -Command "
++                    # Validate PS1 syntax before executing; each parse error is
++                    # printed by the check and logged as detail.
++                    local parse_out parse_rc=0 parse_line
++                    parse_out=$(pwsh -NoProfile -Command "
+                         \$e = \$null
+                         \$null = [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$script_path")', [ref]\$null, [ref]\$e)
++                        foreach (\$x in \$e) { 'line ' + \$x.Extent.StartLineNumber + ': ' + \$x.Message }
+                         if (\$e.Count -gt 0) { exit 1 }
+-                    " 2>/dev/null; then
+-                        log_warn "$script has parse errors -- skipping"
++                    " 2>&1) || parse_rc=$?
++                    if [ "$parse_rc" -ne 0 ]; then
++                        while IFS= read -r parse_line; do
++                            if [ -n "$parse_line" ]; then log_detail "$script parse: $parse_line"; fi
++                        done <<< "$parse_out"
++                        log_error "$script has parse errors -- skipped (see $LOG_DISPLAY)"
++                        write_summary ERROR "${script%.ps1}" "parse errors -- skipped"
+                         errors=$((errors + 1))
+                         continue
+                     fi
+                     # Run without output redirection -- child PS1 scripts log to
+                     # deploy.log via [IO.File]::AppendAllText. PowerShell's 2>> holds
+                     # an exclusive file lock that blocks the child's AppendAllText.
+-                    if ! pwsh -NoProfile -ExecutionPolicy Bypass \
+-                        -File "$(cygpath -w "$script_path")"; then
+-                        log_error "$script failed (exit $?) -- see $LOG_DISPLAY"
++                    local script_rc=0
++                    pwsh -NoProfile -ExecutionPolicy Bypass \
++                        -File "$(cygpath -w "$script_path")" || script_rc=$?
++                    if [ "$script_rc" -ne 0 ]; then
++                        log_error "$script failed (exit $script_rc) -- see $LOG_DISPLAY"
++                        write_summary ERROR "${script%.ps1}" "script failed (exit $script_rc)"
+                         errors=$((errors + 1))
+                     fi
+                 else
+@@ -359,17 +358,27 @@ deploy_configs() {
+             for script in $deploy_scripts; do
+                 local script_path="$script_dir/$script"
+                 if [ -f "$script_path" ]; then
+-                    # Validate bash syntax before executing
+-                    if ! bash -n "$script_path" 2>/dev/null; then
+-                        log_warn "$script has syntax errors -- skipping"
++                    # Validate bash syntax before executing; bash -n's messages
++                    # are logged as detail.
++                    local syntax_out syntax_rc=0 syntax_line
++                    syntax_out=$(bash -n "$script_path" 2>&1) || syntax_rc=$?
++                    if [ "$syntax_rc" -ne 0 ]; then
++                        while IFS= read -r syntax_line; do
++                            if [ -n "$syntax_line" ]; then log_detail "$script syntax: $syntax_line"; fi
++                        done <<< "$syntax_out"
++                        log_error "$script has syntax errors -- skipped (see $LOG_DISPLAY)"
++                        write_summary ERROR "${script%.sh}" "syntax errors -- skipped"
+                         errors=$((errors + 1))
+                         continue
+                     fi
+                     # Run without output redirection -- child scripts log to
+                     # deploy.log via >> append. Removing redirection ensures
+                     # parity with the Windows fix and lets errors surface.
+-                    if ! bash "$script_path"; then
+-                        log_error "$script failed (exit $?) -- see $LOG_DISPLAY"
++                    local script_rc=0
++                    bash "$script_path" || script_rc=$?
++                    if [ "$script_rc" -ne 0 ]; then
++                        log_error "$script failed (exit $script_rc) -- see $LOG_DISPLAY"
++                        write_summary ERROR "${script%.sh}" "script failed (exit $script_rc)"
+                         errors=$((errors + 1))
+                     fi
+                 else
+@@ -597,24 +606,14 @@ while [[ $# -gt 0 ]]; do
+     esac
+ done
+ 
+-# Reject unknown arguments when not installing (typos like "installs", "mcpp", etc.)
+-if ! $do_install && [ ${#passthrough[@]} -gt 0 ]; then
+-    log_error "unknown argument '${passthrough[0]}'"
+-    echo "Run 'aitools --help' for usage."
+-    return 1
+-fi
+-
+-# Reject --addmcp with no server names
+-if $addmcp_seen && [ ${#addmcp_servers[@]} -eq 0 ]; then
+-    log_error "--addmcp requires at least one server name (vercel, webflow)"
+-    return 1
+-fi
+-
+ if $show_help; then
+     usage
+     return 0
+ fi
+ 
++# Warnings found before the lib is loaded (it holds the logging); logged right after.
++_pre_lib_warnings=()
++
+ # ---------------------------------------------------------------------------
+ # Migrate config directory: ~/.config/ai-tooling/ -> ~/.aitools/
+ # ---------------------------------------------------------------------------
+@@ -625,7 +624,7 @@ new_config_dir="$HOME/.aitools"
+ if [ -d "$old_config_dir" ] && [ ! -d "$new_config_dir" ]; then
+     mv "$old_config_dir" "$new_config_dir"
+ elif [ -d "$old_config_dir" ] && [ -d "$new_config_dir" ]; then
+-    log_warn "both $old_config_dir and $new_config_dir exist -- using $new_config_dir"
++    _pre_lib_warnings+=("both $old_config_dir and $new_config_dir exist -- using $new_config_dir")
+ fi
+ 
+ # ---------------------------------------------------------------------------
+@@ -658,7 +657,7 @@ try {
+     console.error('config migration failed: ' + e.message);
+     process.exit(1);
+ }
+-" "$config" 2>&1) || log_warn "config key migration failed: $migrate_out"
++" "$config" 2>&1) || _pre_lib_warnings+=("config key migration failed: $migrate_out")
+         # Re-read repo_path after migration
+         if raw=$(read_config_key "$config" "repoPath"); then
+             repo_path=$(to_native_path "$raw")
+@@ -666,6 +665,57 @@ try {
+     fi
+ fi
+ 
++# ---------------------------------------------------------------------------
++# Verify repo exists (clone fresh if missing). Runs before the lib is loaded --
++# the lib lives in the repo -- so status goes to the console directly and the
++# event is logged as a warning once the lib is up.
++# ---------------------------------------------------------------------------
++
++if [ ! -d "$repo_path/.git" ] && ! $show_version; then
++    printf 'aitools: repo not found at %s -- cloning fresh...\n' "$repo_path"
++    mkdir -p "$(dirname "$repo_path")"
++    if ! git clone https://github.com/nobul-tech/aitools.git "$repo_path"; then
++        printf 'error: failed to clone the aitools repo to %s\n' "$repo_path" >&2
++        return 1
++    fi
++    _pre_lib_warnings+=("Repo was not found at $repo_path -- cloned fresh")
++fi
++
++# ---------------------------------------------------------------------------
++# Load aitools-lib (logging, display_path, write_summary, ...) for every command.
++# Without the repo nothing below can run; --version still answers.
++# ---------------------------------------------------------------------------
++
++aitools_lib="$repo_path/scripts/aitools-lib.sh"
++if [ ! -f "$aitools_lib" ]; then
++    if $show_version; then
++        echo "aitools $AITOOLS_INSTALLED_VERSION"
++        echo "  repo: not found at $repo_path"
++        return 0
++    fi
++    printf 'error: aitools-lib.sh not found at %s -- check repoPath in %s\n' "$aitools_lib" "$config" >&2
++    return 1
++fi
++source "$aitools_lib"
++logging_init "aitools"
++LOG_DISPLAY=$(display_path "$LOG_FILE")
++for _w in ${_pre_lib_warnings[@]+"${_pre_lib_warnings[@]}"}; do
++    log_warn "$_w"
++done
++
++# Reject unknown arguments when not installing (typos like "installs", "mcpp", etc.)
++if ! $do_install && [ ${#passthrough[@]} -gt 0 ]; then
++    log_error "unknown argument '${passthrough[0]}'"
++    echo "Run 'aitools --help' for usage."
++    return 1
++fi
++
++# Reject --addmcp with no server names
++if $addmcp_seen && [ ${#addmcp_servers[@]} -eq 0 ]; then
++    log_error "--addmcp requires at least one server name (vercel, webflow)"
++    return 1
++fi
++
+ # ---------------------------------------------------------------------------
+ # --version
+ # ---------------------------------------------------------------------------
+@@ -1372,22 +1422,6 @@ if $do_sessions; then
+     return 0
+ fi
+ 
+-# ---------------------------------------------------------------------------
+-# Verify repo exists (clone fresh if missing)
+-# ---------------------------------------------------------------------------
+-
+-if [ ! -d "$repo_path/.git" ]; then
+-    log_warn "Repo not found at $(display_path "$repo_path") -- cloning fresh..."
+-    repos_dir=$(dirname "$repo_path")
+-    mkdir -p "$repos_dir"
+-    if git clone https://github.com/nobul-tech/aitools.git "$repo_path"; then
+-        log_ok "Clone successful"
+-    else
+-        log_error "Failed to clone repo to $(display_path "$repo_path")"
+-        return 1
+-    fi
+-fi
+-
+ # ---------------------------------------------------------------------------
+ # Run update (pull + rebuild + deploy/install)
+ # ---------------------------------------------------------------------------
+@@ -1402,10 +1436,6 @@ touch "$AITOOLS_SUMMARY_FILE"
+ export AITOOLS_SUMMARY_FILE
+ export AITOOLS_SUPPRESS_SUMMARY_DISPLAY=1
+ 
+-# Source shared lib (provides write_summary, show_summary)
+-source "$repo_path/scripts/aitools-lib.sh"
+-logging_init "aitools"
+-
+ log "aitools $AITOOLS_INSTALLED_VERSION"
+ 
+ if $do_install; then
+@@ -1443,8 +1473,11 @@ if $do_gitpull; then
+             log_ok "Updated"
+         fi
+     else
+-        log_error "git pull failed"
+-        echo "$pull_out" >&2
++        while IFS= read -r _pull_line; do
++            if [ -n "$_pull_line" ]; then log_detail "git-pull: $_pull_line"; fi
++        done <<< "$pull_out"
++        log_error "git pull failed (see $LOG_DISPLAY)"
++        printf '%s\n' "$pull_out" >&2
+         return 1
+     fi
+ else
+@@ -1461,11 +1494,15 @@ else
+             log_ok "Updated"
+         fi
+     else
++        # Full output to the log first; the console keeps a 3-line preview.
++        while IFS= read -r _pull_line; do
++            if [ -n "$_pull_line" ]; then log_detail "git-pull: $_pull_line"; fi
++        done <<< "$pull_out"
+         if echo "$pull_out" | grep -qiE "could not resolve|unable to access|connection refused|connection timed out|no route to host"; then
+             log_warn "Could not reach remote — deploying from local checkout"
+         else
+-            log_warn "git pull failed -- deploying from local checkout"
+-            echo "$pull_out" | head -3 | sed 's/^/    /' >&2
++            log_warn "git pull failed -- deploying from local checkout (see $LOG_DISPLAY)"
++            printf '%s\n' "$pull_out" | head -3 | sed 's/^/    /' >&2
+         fi
+         write_summary WARN "source" "stale local checkout (git pull failed)"
+     fi
+@@ -1506,7 +1543,9 @@ if [ -f "$repo_path/scripts/aitools" ]; then
+     if [ -n "$_repo_list" ] && [ "$_repo_list" != "$_self_list" ]; then
+         log "Deploy script list changed -- reloading entry point"
+         _nv=$(repo_version "$repo_path")
+-        if bash -n "$repo_path/scripts/aitools" 2>/dev/null; then
++        _syntax_rc=0
++        _syntax_out=$(bash -n "$repo_path/scripts/aitools" 2>&1) || _syntax_rc=$?
++        if [ "$_syntax_rc" -eq 0 ]; then
+             sed "s/^AITOOLS_INSTALLED_VERSION=.*/AITOOLS_INSTALLED_VERSION=\"$_nv\"/" \
+                 "$repo_path/scripts/aitools" > "$HOME/.local/bin/aitools"
+             chmod +x "$HOME/.local/bin/aitools"
+@@ -1516,7 +1555,10 @@ if [ -f "$repo_path/scripts/aitools" ]; then
+             # otherwise `install` degrades to the sync path on reload.
+             exec "$HOME/.local/bin/aitools" ${_ORIG_ARGS[@]+"${_ORIG_ARGS[@]}"}
+         else
+-            log_warn "Repo scripts/aitools has syntax errors -- continuing with current list"
++            while IFS= read -r _syntax_line; do
++                if [ -n "$_syntax_line" ]; then log_detail "aitools syntax: $_syntax_line"; fi
++            done <<< "$_syntax_out"
++            log_warn "Repo scripts/aitools has syntax errors -- continuing with current list (see $LOG_DISPLAY)"
+         fi
+     fi
+ fi
+@@ -1668,27 +1710,38 @@ if [ -f "$repo_path/scripts/aitools" ]; then
+     new_version=$(repo_version "$repo_path")
+ 
+     # Validate bash syntax before overwriting installed copy
+-    if bash -n "$repo_path/scripts/aitools" 2>/dev/null; then
++    _syntax_rc=0
++    _syntax_out=$(bash -n "$repo_path/scripts/aitools" 2>&1) || _syntax_rc=$?
++    if [ "$_syntax_rc" -eq 0 ]; then
+         sed "s/^AITOOLS_INSTALLED_VERSION=.*/AITOOLS_INSTALLED_VERSION=\"$new_version\"/" \
+             "$repo_path/scripts/aitools" > "$HOME/.local/bin/aitools"
+         chmod +x "$HOME/.local/bin/aitools"
+     else
+-        log_warn "skipping bash self-update (new aitools has syntax errors)"
++        while IFS= read -r _syntax_line; do
++            if [ -n "$_syntax_line" ]; then log_detail "aitools syntax: $_syntax_line"; fi
++        done <<< "$_syntax_out"
++        log_warn "skipping bash self-update (new aitools has syntax errors; see $LOG_DISPLAY)"
+     fi
+ 
+     # On Windows, also self-update aitools.ps1 (validate with current PS version first)
+     case "$(uname -s)" in
+         MINGW*|MSYS*|CYGWIN*)
+             if [ -f "$repo_path/scripts/aitools.ps1" ]; then
+-                if pwsh -NoProfile -Command "
++                _parse_rc=0
++                _parse_out=$(pwsh -NoProfile -Command "
+                     \$e = \$null
+-                    [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$repo_path/scripts/aitools.ps1")', [ref]\$null, [ref]\$e)
++                    \$null = [System.Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$repo_path/scripts/aitools.ps1")', [ref]\$null, [ref]\$e)
++                    foreach (\$x in \$e) { 'line ' + \$x.Extent.StartLineNumber + ': ' + \$x.Message }
+                     if (\$e.Count -gt 0) { exit 1 }
+-                " 2>/dev/null; then
++                " 2>&1) || _parse_rc=$?
++                if [ "$_parse_rc" -eq 0 ]; then
+                     sed 's/^\$AITOOLS_INSTALLED_VERSION = ".*"/$AITOOLS_INSTALLED_VERSION = "'"$new_version"'"/' \
+                         "$repo_path/scripts/aitools.ps1" > "$HOME/.local/bin/aitools.ps1"
+                 else
+-                    log_warn "skipping PS1 self-update (parse errors on this PowerShell version)"
++                    while IFS= read -r _parse_line; do
++                        if [ -n "$_parse_line" ]; then log_detail "aitools.ps1 parse: $_parse_line"; fi
++                    done <<< "$_parse_out"
++                    log_warn "skipping PS1 self-update (parse errors on this PowerShell version; see $LOG_DISPLAY)"
+                 fi
+             fi
+             ;;
+diff --git a/scripts/aitools.ps1 b/scripts/aitools.ps1
+index 869e42d..68016c4 100644
+--- a/scripts/aitools.ps1
++++ b/scripts/aitools.ps1
+@@ -59,7 +59,9 @@ if ($Remaining -and $Remaining -contains "--force") {
+ }
+ 
+ # ---------------------------------------------------------------------------
+-# Helpers
++# Bootstrap helper -- needed to find aitools-lib.ps1 (repoPath in config.json).
++# Everything else (logging, Write-Summary, ...) comes from the lib, which is
++# dot-sourced as soon as repoPath is known (see "Load aitools-lib" below).
+ # ---------------------------------------------------------------------------
+ 
+ function Read-ConfigKey {
+@@ -75,23 +77,6 @@ function Read-ConfigKey {
+     return $null
+ }
+ 
+-# ---------------------------------------------------------------------------
+-# Logging (bootstrap -- overridden after lib is sourced below)
+-# ---------------------------------------------------------------------------
+-
+-$logDir = if ($env:AITOOLS_LOG_DIR) { $env:AITOOLS_LOG_DIR } else { Join-Path $HOME ".aitools" "logs" }
+-$logFile = Join-Path $logDir "deploy.log"
+-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+-$script:errors = 0
+-$script:warnings = 0
+-
+-function Log($msg, $level = "info") {
+-    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+-    Add-Content -Path $logFile -Value "[$ts] [aitools] [$level] $msg"
+-}
+-function LogOk($msg)    { Log $msg "ok" }
+-function LogError($msg) { Log $msg "error"; Write-Host "error: $msg" -ForegroundColor Red; $script:errors++ }
+-function LogWarn($msg)  { Log $msg "warn"; Write-Host "warning: $msg" -ForegroundColor Yellow; $script:warnings++ }
+ 
+ # Check profile.json for issues and optionally prompt for fixes.
+ # Usage: Invoke-ProfileCheck -Mode "warn" or "interactive"
+@@ -161,7 +146,7 @@ function Invoke-ProfileMigration {
+     $userRepoDir = Split-Path $profilePath -Parent
+     $machAlias = Read-Host "Machine alias for this machine (e.g., laptop, workstation)"
+     if (-not $machAlias) {
+-        Write-Host "Migration cancelled (alias required)."
++        LogWarn "profile migration cancelled (alias required)"
+         return
+     }
+ 
+@@ -257,13 +242,28 @@ fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
+                 git -C $userRepoDir config user.name $gitName
+                 git -C $userRepoDir config user.email $gitEmail
+             }
+-            git -C $userRepoDir add -A
+-            git -C $userRepoDir commit -m "Migrate profile.json from v1 to v2"
+-            $pushResult = git -C $userRepoDir push 2>&1
+-            if ($LASTEXITCODE -ne 0) {
+-                Write-Host "  (push failed -- run 'git push' manually in $userRepoDir)"
++            $gitOut = git -C $userRepoDir add -A 2>&1 | Out-String
++            $gitRc = $LASTEXITCODE
++            if ($gitRc -eq 0) {
++                $gitOut += git -C $userRepoDir commit -m "Migrate profile.json from v1 to v2" 2>&1 | Out-String
++                $gitRc = $LASTEXITCODE
++            }
++            foreach ($gitLine in $gitOut.Split("`n")) {
++                if ($gitLine.Trim()) { LogDetail "profile-migrate commit: $($gitLine.TrimEnd())" }
++            }
++            if ($gitRc -ne 0) {
++                LogWarn "profile migration commit failed (exit $gitRc) -- commit manually in $userRepoDir"
++                return
++            }
++            $pushOut = git -C $userRepoDir push 2>&1 | Out-String
++            $pushRc = $LASTEXITCODE
++            foreach ($gitLine in $pushOut.Split("`n")) {
++                if ($gitLine.Trim()) { LogDetail "profile-migrate push: $($gitLine.TrimEnd())" }
++            }
++            if ($pushRc -ne 0) {
++                LogWarn "profile migration push failed (exit $pushRc) -- run 'git push' manually in $userRepoDir"
+             }
+-            Write-Host "Profile migrated and committed."
++            LogOk "Profile migrated and committed."
+         }
+     }
+ }
+@@ -308,7 +308,11 @@ function Deploy-Configs {
+             $null = [System.Management.Automation.Language.Parser]::ParseFile(
+                 $scriptPath, [ref]$null, [ref]$parseErrors)
+             if ($parseErrors.Count -gt 0) {
+-                LogWarn "$script has parse errors -- skipping"
++                foreach ($err in $parseErrors) {
++                    LogDetail "$script parse: line $($err.Extent.StartLineNumber): $($err.Message)"
++                }
++                LogError "$script has parse errors -- skipped (see $logFile)"
++                Write-Summary "ERROR" ($script -replace '\.ps1$', '') "parse errors -- skipped"
+                 $errors++
+                 continue
+             }
+@@ -321,11 +325,14 @@ function Deploy-Configs {
+                 & $scriptPath
+             } catch {
+                 LogError "$script failed: $_"
++                Write-Summary "ERROR" ($script -replace '\.ps1$', '') "script failed (exception)"
+                 $errors++
+                 continue
+             }
+-            if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+-                LogError "$script failed (exit code $LASTEXITCODE)"
++            $scriptRc = $LASTEXITCODE
++            if ($scriptRc -and $scriptRc -ne 0) {
++                LogError "$script failed (exit $scriptRc) -- see $logFile"
++                Write-Summary "ERROR" ($script -replace '\.ps1$', '') "script failed (exit $scriptRc)"
+                 $errors++
+             }
+         } else {
+@@ -540,19 +547,9 @@ if ($doUser -or $doSessions) {
+     }
+ }
+ 
+-# Reject unknown commands (typos like "installs", "mcpp", etc.)
+-$knownCommands = @("install", "gitpull", "mcp", "user", "sessions", "dashboard", "")
+-if ($Command -and $Command -notin $knownCommands) {
+-    LogError "unknown command '$Command'"
+-    Write-Host "Run 'aitools --help' for usage."
+-    exit 1
+-}
+-
+-# Reject --addmcp with no server names
+-if ($PSBoundParameters.ContainsKey('AddMcp') -and $AddMcp.Count -eq 0) {
+-    LogError "--addmcp requires at least one server name (vercel, webflow)"
+-    exit 1
+-}
++# Warnings and notes found before the lib is loaded (it holds the logging); logged right after.
++$preLibWarnings = @()
++$preLibNotes = @()
+ 
+ # ---------------------------------------------------------------------------
+ # Migrate config directory: ~\.config\ai-tooling\ -> ~\.aitools\
+@@ -564,7 +561,7 @@ $newConfigDir = Join-Path $env:USERPROFILE ".aitools"
+ if ((Test-Path $oldConfigDir) -and -not (Test-Path $newConfigDir)) {
+     Move-Item -Path $oldConfigDir -Destination $newConfigDir
+ } elseif ((Test-Path $oldConfigDir) -and (Test-Path $newConfigDir)) {
+-    LogWarn "both $oldConfigDir and $newConfigDir exist -- using $newConfigDir"
++    $preLibWarnings += "both $oldConfigDir and $newConfigDir exist -- using $newConfigDir"
+ }
+ 
+ # ---------------------------------------------------------------------------
+@@ -592,15 +589,67 @@ if ($oldKey) {
+         $json = $cfgObj | ConvertTo-Json -Depth 10
+         $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($configFile)
+         [System.IO.File]::WriteAllText($resolved, $json + "`n", [System.Text.UTF8Encoding]::new($false))
+-        Log "Migrated config: aiToolingRepoPath -> repoPath"
++        $preLibNotes += "Migrated config: aiToolingRepoPath -> repoPath"
+         # Re-read after migration
+         $repoPath = Read-ConfigKey -File $configFile -Key "repoPath"
+     } catch {
+-        LogWarn "Config key migration failed: $_"
++        $preLibWarnings += "Config key migration failed: $_"
+         # Non-fatal: continue with whatever repoPath was already resolved
+     }
+ }
+ 
++# ---------------------------------------------------------------------------
++# Verify repo exists (clone fresh if missing). Runs before the lib is loaded --
++# the lib lives in the repo -- so status goes to the console directly and the
++# event is logged as a warning once the lib is up.
++# ---------------------------------------------------------------------------
++
++if (-not (Test-Path (Join-Path $repoPath ".git")) -and -not $Version) {
++    Write-Host "aitools: repo not found at $repoPath -- cloning fresh..."
++    $reposDir = Split-Path $repoPath -Parent
++    if (-not (Test-Path $reposDir)) { New-Item -ItemType Directory -Path $reposDir -Force | Out-Null }
++    git clone https://github.com/nobul-tech/aitools.git $repoPath
++    if ($LASTEXITCODE -ne 0) {
++        [Console]::Error.WriteLine("error: failed to clone the aitools repo to $repoPath")
++        exit 1
++    }
++    $preLibWarnings += "Repo was not found at $repoPath -- cloned fresh"
++}
++
++# ---------------------------------------------------------------------------
++# Load aitools-lib (logging, Write-Summary, ...) for every command.
++# Without the repo nothing below can run; -Version still answers.
++# ---------------------------------------------------------------------------
++
++$aitoolsLib = Join-Path $repoPath "scripts" "aitools-lib.ps1"
++if (-not (Test-Path $aitoolsLib)) {
++    if ($Version) {
++        Write-Host "aitools $AITOOLS_INSTALLED_VERSION"
++        Write-Host "  repo: not found at $repoPath"
++        exit 0
++    }
++    [Console]::Error.WriteLine("error: aitools-lib.ps1 not found at $aitoolsLib -- check repoPath in $configFile")
++    exit 1
++}
++. $aitoolsLib
++Initialize-Logging "aitools"
++foreach ($note in $preLibNotes) { Log $note }
++foreach ($w in $preLibWarnings) { LogWarn $w }
++
++# Reject unknown commands (typos like "installs", "mcpp", etc.)
++$knownCommands = @("install", "gitpull", "mcp", "user", "sessions", "dashboard", "")
++if ($Command -and $Command -notin $knownCommands) {
++    LogError "unknown command '$Command'"
++    Write-Host "Run 'aitools --help' for usage."
++    exit 1
++}
++
++# Reject --addmcp with no server names
++if ($PSBoundParameters.ContainsKey('AddMcp') -and $AddMcp.Count -eq 0) {
++    LogError "--addmcp requires at least one server name (vercel, webflow)"
++    exit 1
++}
++
+ # ---------------------------------------------------------------------------
+ # --version
+ # ---------------------------------------------------------------------------
+@@ -1284,22 +1333,6 @@ if ($doSessions) {
+     exit 0
+ }
+ 
+-# ---------------------------------------------------------------------------
+-# Verify repo exists (clone fresh if missing)
+-# ---------------------------------------------------------------------------
+-
+-if (-not (Test-Path (Join-Path $repoPath ".git"))) {
+-    LogWarn "Repo not found at $repoPath -- cloning fresh..."
+-    $reposDir = Split-Path $repoPath -Parent
+-    if (-not (Test-Path $reposDir)) { New-Item -ItemType Directory -Path $reposDir -Force | Out-Null }
+-    git clone https://github.com/nobul-tech/aitools.git $repoPath
+-    if ($LASTEXITCODE -ne 0) {
+-        LogError "Failed to clone repo to $repoPath"
+-        exit 1
+-    }
+-    LogOk "Clone successful"
+-}
+-
+ # ---------------------------------------------------------------------------
+ # Run update (pull + rebuild + deploy/install)
+ # ---------------------------------------------------------------------------
+@@ -1313,9 +1346,6 @@ Remove-Item $env:AITOOLS_SUMMARY_FILE -ErrorAction SilentlyContinue
+ New-Item -ItemType File -Path $env:AITOOLS_SUMMARY_FILE -Force | Out-Null
+ $env:AITOOLS_SUPPRESS_SUMMARY_DISPLAY = "1"
+ 
+-# Source shared lib (provides Write-Summary, Show-Summary)
+-. (Join-Path $repoPath "scripts" "aitools-lib.ps1")
+-Initialize-Logging "aitools"
+ 
+ Log "aitools $AITOOLS_INSTALLED_VERSION"
+ 
+@@ -1353,15 +1383,19 @@ try {
+         $pullOut = git pull origin main 2>&1 | Out-String
+     }
+     if ($LASTEXITCODE -ne 0) {
++        # Full output to the log first; the console keeps its preview.
++        foreach ($pullLine in $pullOut.Split("`n")) {
++            if ($pullLine.Trim()) { LogDetail "git-pull: $($pullLine.TrimEnd())" }
++        }
+         if ($doGitpull) {
+-            LogError "git pull failed"
++            LogError "git pull failed (see $logFile)"
+             Write-Host $pullOut
+             exit 1
+         } else {
+             if ($pullOut -match "(?i)(could not resolve|unable to access|connection refused|connection timed out|no route to host)") {
+                 LogWarn "Could not reach remote - deploying from local checkout"
+             } else {
+-                LogWarn "git pull failed -- deploying from local checkout."
++                LogWarn "git pull failed -- deploying from local checkout (see $logFile)"
+                 $pullOut.Trim().Split("`n") | Select-Object -First 3 | ForEach-Object { Write-Host "    $_" }
+             }
+             Write-Summary "WARN" "source" "stale local checkout (git pull failed)"
+@@ -1433,7 +1467,10 @@ if (Test-Path $repoAitools) {
+             & $installedPath @PSBoundParameters
+             exit $LASTEXITCODE
+         } else {
+-            LogWarn "Repo scripts/aitools.ps1 has parse errors -- continuing with current list"
++            foreach ($err in $parseErrors) {
++                LogDetail "aitools.ps1 parse: line $($err.Extent.StartLineNumber): $($err.Message)"
++            }
++            LogWarn "Repo scripts/aitools.ps1 has parse errors -- continuing with current list (see $logFile)"
+         }
+     }
+ }
+@@ -1581,7 +1618,10 @@ if (Test-Path $aitoolsSrc) {
+     $parseErrors = $null
+     $null = [System.Management.Automation.Language.Parser]::ParseFile($aitoolsSrc, [ref]$null, [ref]$parseErrors)
+     if ($parseErrors.Count -gt 0) {
+-        LogWarn "skipping PS1 self-update (new aitools.ps1 has parse errors on this PowerShell version)"
++        foreach ($err in $parseErrors) {
++            LogDetail "aitools.ps1 parse: line $($err.Extent.StartLineNumber): $($err.Message)"
++        }
++        LogWarn "skipping PS1 self-update (new aitools.ps1 has parse errors on this PowerShell version; see $logFile)"
+     } else {
+         $srcContent = Get-Content $aitoolsSrc -Raw
+         $stampedContent = $srcContent -replace '^\$AITOOLS_INSTALLED_VERSION = ".*"', "`$AITOOLS_INSTALLED_VERSION = `"$newVersion`""
+```
+
+#### Batch C4b
+
+```diff
+diff --git a/scripts/aitools-install.sh b/scripts/aitools-install.sh
+index 37799ba..652b02c 100755
+--- a/scripts/aitools-install.sh
++++ b/scripts/aitools-install.sh
+@@ -9,6 +9,11 @@
+ 
+ set -euo pipefail
+ 
++# --- Shared library (first, so flag errors and Windows forwarding are logged) ---
++SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
++source "$SCRIPT_DIR/aitools-lib.sh"
++logging_init "aitools-install"
++
+ # --- Defaults ---
+ REPOS_PATH=""
+ SKIP_DRIVE_DETECTION=false
+@@ -40,7 +45,7 @@ while [[ $# -gt 0 ]]; do
+             shift
+             ;;
+         *)
+-            echo "Unknown option: $1" >&2
++            log_warn "Unknown option: $1"
+             SHOW_HELP=true
+             shift
+             ;;
+@@ -74,9 +79,10 @@ fi
+ # --- Windows forwarding (safety net for direct invocation) ---
+ case "$(uname -s)" in
+     MINGW*|MSYS*|CYGWIN*)
+-        ps1_installer="$(dirname "$0")/aitools-install.ps1"
++        ps1_installer="$SCRIPT_DIR/aitools-install.ps1"
+         if [ ! -f "$ps1_installer" ]; then
+-            echo "error: aitools-install.ps1 not found" >&2
++            log_error "aitools-install.ps1 not found"
++            write_summary ERROR "aitools install" "aitools-install.ps1 missing"
+             exit 1
+         fi
+         ps_args=()
+@@ -86,15 +92,25 @@ case "$(uname -s)" in
+         if [ -n "$REPOS_PATH" ]; then
+             ps_args+=("-ReposPath" "$(cygpath -w "$REPOS_PATH")")
+         fi
+-        echo "Windows detected -- forwarding to PowerShell installer..."
++        log "Windows detected -- forwarding to PowerShell installer..."
+         # Bootstrap: if pwsh not installed, use powershell.exe to install it via winget
+         if ! command -v pwsh &>/dev/null; then
+-            echo "pwsh (PowerShell 7) not found -- installing via winget..."
+-            powershell.exe -NoProfile -Command 'winget install --id Microsoft.PowerShell --source winget --accept-package-agreements --accept-source-agreements'
++            log "pwsh (PowerShell 7) not found -- installing via winget..."
++            pwsh_install_rc=0
++            pwsh_install_out=$(powershell.exe -NoProfile -Command 'winget install --id Microsoft.PowerShell --source winget --accept-package-agreements --accept-source-agreements' 2>&1) || pwsh_install_rc=$?
++            while IFS= read -r line; do
++                if [ -n "$line" ]; then log_detail "winget-pwsh: $line"; fi
++            done <<< "$pwsh_install_out"
+             # Refresh PATH hash so pwsh is found
+             hash -r
+             if ! command -v pwsh &>/dev/null; then
+-                echo "error: pwsh install succeeded but not in PATH. Restart terminal and re-run." >&2
++                if [ "$pwsh_install_rc" -ne 0 ]; then
++                    log_error "winget install of PowerShell 7 failed (exit $pwsh_install_rc) -- see $(display_path "$LOG_FILE")"
++                    write_summary ERROR "pwsh" "winget install failed (exit $pwsh_install_rc)"
++                else
++                    log_error "pwsh install succeeded but not in PATH. Restart terminal and re-run."
++                    write_summary ERROR "pwsh" "installed but not on PATH"
++                fi
+                 exit 1
+             fi
+         fi
+@@ -104,11 +120,6 @@ case "$(uname -s)" in
+         ;;
+ esac
+ 
+-# --- Shared library ---
+-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+-source "$SCRIPT_DIR/aitools-lib.sh"
+-logging_init "aitools-install"
+-
+ # JSONL logging (extends standard pattern with structured JSON)
+ LOG_JSONL="$LOG_DIR/deploy.jsonl"
+ RUN_ID="${AITOOLS_RUN_ID:-$(head -c 6 /dev/urandom | od -An -tx1 | tr -d ' \n')}"
+@@ -138,15 +149,27 @@ if [ -z "${AITOOLS_SUMMARY_FILE:-}" ]; then
+ fi
+ 
+ # --- Script validation helper ---
+-# Validates bash syntax with bash -n before executing. Skips with warning on errors.
++# Validates bash syntax with bash -n before executing. A syntax error or a failed
++# script logs an error and writes an ERROR summary row; the install continues.
+ validate_and_run() {
+     local script="$1"
+     local name; name=$(basename "$script")
+-    if ! bash -n "$script" 2>/dev/null; then
+-        log_warn "$name has syntax errors -- skipping"
++    local syntax_out syntax_rc=0 syntax_line
++    syntax_out=$(bash -n "$script" 2>&1) || syntax_rc=$?
++    if [ "$syntax_rc" -ne 0 ]; then
++        while IFS= read -r syntax_line; do
++            if [ -n "$syntax_line" ]; then log_detail "$name syntax: $syntax_line"; fi
++        done <<< "$syntax_out"
++        log_error "$name has syntax errors -- skipped (see $(display_path "$LOG_FILE"))"
++        write_summary ERROR "${name%.sh}" "syntax errors -- skipped"
+         return 0
+     fi
+-    bash "$script" || log_error "$name failed"
++    local script_rc=0
++    bash "$script" || script_rc=$?
++    if [ "$script_rc" -ne 0 ]; then
++        log_error "$name failed (exit $script_rc)"
++        write_summary ERROR "${name%.sh}" "script failed (exit $script_rc)"
++    fi
+ }
+ 
+ # display_path is provided by aitools-lib.sh
+@@ -283,9 +306,18 @@ elif gh auth status &>/dev/null; then
+     log_ok "gh already authenticated"
+ elif $INSTALL_INTERACTIVE; then
+     log "Not authenticated. Starting gh auth login..."
+-    gh auth login || log_error "gh auth login failed"
++    # Interactive: gh talks to the terminal directly, so only the exit code is captured.
++    gh_auth_rc=0
++    gh auth login || gh_auth_rc=$?
++    if [ "$gh_auth_rc" -ne 0 ]; then
++        log_error "gh auth login failed (exit $gh_auth_rc)"
++        write_summary ERROR "gh auth" "login failed (exit $gh_auth_rc)"
++        write_summary ACTION "" "Run: gh auth login"
++    fi
+ else
+     log_warn "Not authenticated and not interactive — skipping gh auth (use --skip-gh-auth to suppress)"
++    write_summary WARN "gh auth" "not authenticated"
++    write_summary ACTION "" "Run: gh auth login"
+ fi
+ 
+ # ============================================================
+@@ -633,9 +665,6 @@ else
+                 write_summary ERROR "node.js" "Homebrew not found"
+             fi
+             ;;
+-        MINGW*|MSYS*)
+-            log "Windows detected — install Node.js via winget (use aitools-install.ps1)"
+-            ;;
+         *)
+             log_warn "Install Node.js manually: https://nodejs.org"
+             write_summary WARN "node.js" "install manually (https://nodejs.org)"
+@@ -653,49 +682,33 @@ if command -v claude &>/dev/null; then
+     log_ok "Claude Code already installed ($(claude --version 2>/dev/null | head -1))"
+     write_summary OK "claude code" "$(claude --version 2>/dev/null | head -1)"
+     log "Running claude update..."
+-    UPDATE_OUTPUT=$(claude update 2>&1) || true
+-    if printf '%s\n' "$UPDATE_OUTPUT" | grep -qi 'already.*up.to.date\|no update'; then
++    # Exit code decides (C-F2); every output line is logged.
++    update_rc=0
++    UPDATE_OUTPUT=$(claude update 2>&1) || update_rc=$?
++    while IFS= read -r line; do
++        if [ -n "$line" ]; then log "$line"; fi
++    done <<< "$UPDATE_OUTPUT"
++    if [ "$update_rc" -ne 0 ]; then
++        log_warn "claude update failed (exit $update_rc) -- see $(display_path "$LOG_FILE")"
++    elif printf '%s\n' "$UPDATE_OUTPUT" | grep -qi 'already.*up.to.date\|no update'; then
+         log_ok "Already up to date"
+     else
+-        printf '%s\n' "$UPDATE_OUTPUT" | while IFS= read -r line; do log "$line"; done
+-        if printf '%s\n' "$UPDATE_OUTPUT" | grep -qi 'error\|fatal'; then
+-            log_warn "claude update returned unexpected output (see log above)"
+-        fi
++        log_ok "claude update finished"
+     fi
+ else
+     log "Installing Claude Code CLI..."
+-    case "$OS_NAME" in
+-        MINGW*|MSYS*)
+-            # WinGet works from Git Bash
+-            if command -v winget &>/dev/null; then
+-                # Suppress winget progress noise; install success checked via command -v below
+-                winget install Anthropic.ClaudeCode --accept-package-agreements --accept-source-agreements 2>/dev/null
+-                if command -v claude &>/dev/null; then
+-                    log_ok "Claude Code installed ($(claude --version 2>/dev/null | head -1))"
+-                    write_summary OK "claude code" "$(claude --version 2>/dev/null | head -1)"
+-                else
+-                    log_warn "Claude Code installed — restart terminal to use"
+-                    write_summary WARN "claude code" "installed -- restart terminal to use"
+-                fi
+-            else
+-                log "winget not available — install manually:"
+-                log "  PowerShell: irm https://claude.ai/install.ps1 | iex"
+-            fi
+-            ;;
+-        *)
+-            if ! curl -fsSL https://claude.ai/install.sh | bash 2>&1 | while IFS= read -r line; do log "$line"; done; then
+-                log_error "Claude Code install script failed"
+-                write_summary ERROR "claude code" "install failed"
+-            fi
+-            if command -v claude &>/dev/null; then
+-                log_ok "Claude Code installed ($(claude --version 2>/dev/null | head -1))"
+-                write_summary OK "claude code" "$(claude --version 2>/dev/null | head -1)"
+-            else
+-                log_error "Claude Code install failed"
+-                write_summary ERROR "claude code" "install failed"
+-            fi
+-            ;;
+-    esac
++    # Windows never reaches here: it is forwarded to aitools-install.ps1 at the top.
++    if ! curl -fsSL https://claude.ai/install.sh | bash 2>&1 | while IFS= read -r line; do log "$line"; done; then
++        log_error "Claude Code install script failed"
++        write_summary ERROR "claude code" "install failed"
++    fi
++    if command -v claude &>/dev/null; then
++        log_ok "Claude Code installed ($(claude --version 2>/dev/null | head -1))"
++        write_summary OK "claude code" "$(claude --version 2>/dev/null | head -1)"
++    else
++        log_error "Claude Code install failed"
++        write_summary ERROR "claude code" "install failed"
++    fi
+ fi
+ 
+ # ============================================================
+diff --git a/scripts/aitools-install.ps1 b/scripts/aitools-install.ps1
+index 2b2e6db..cd5c462 100644
+--- a/scripts/aitools-install.ps1
++++ b/scripts/aitools-install.ps1
+@@ -87,7 +87,8 @@ if (-not $env:AITOOLS_SUMMARY_FILE) {
+ $installInteractive = ($env:AITOOLS_FORCE -ne "1") -and (Test-InteractiveConsole)
+ 
+ # --- Script validation helper ---
+-# Validates PS1 syntax with ParseFile before executing. Skips with warning on parse errors.
++# Validates PS1 syntax with ParseFile before executing. A parse error or a failed
++# script logs an error and writes an ERROR summary row; the install continues.
+ function Invoke-ValidatedScript {
+     param([string]$ScriptPath)
+     $name = Split-Path $ScriptPath -Leaf
+@@ -95,13 +96,26 @@ function Invoke-ValidatedScript {
+     $null = [System.Management.Automation.Language.Parser]::ParseFile(
+         $ScriptPath, [ref]$null, [ref]$parseErrors)
+     if ($parseErrors.Count -gt 0) {
+-        LogWarn "$name has parse errors on this PowerShell version -- skipping"
+         foreach ($err in $parseErrors) {
+-            Log "  line $($err.Extent.StartLineNumber): $($err.Message)" "warn"
++            LogDetail "$name parse: line $($err.Extent.StartLineNumber): $($err.Message)"
+         }
++        LogError "$name has parse errors on this PowerShell version -- skipped"
++        Write-Summary "ERROR" ($name -replace '\.ps1$', '') "parse errors -- skipped"
+         return
+     }
+-    try { & $ScriptPath } catch { LogError "$name failed: $_" }
++    $global:LASTEXITCODE = 0
++    try {
++        & $ScriptPath
++    } catch {
++        LogError "$name failed: $_"
++        Write-Summary "ERROR" ($name -replace '\.ps1$', '') "script failed (exception)"
++        return
++    }
++    $scriptRc = $LASTEXITCODE
++    if ($scriptRc -and $scriptRc -ne 0) {
++        LogError "$name failed (exit $scriptRc)"
++        Write-Summary "ERROR" ($name -replace '\.ps1$', '') "script failed (exit $scriptRc)"
++    }
+ }
+ 
+ # --- Post-write JSON validation ---
+@@ -167,8 +181,16 @@ if ($longPathsEnabled) {
+ $gitLongPaths = git config --global core.longpaths 2>$null
+ if ($gitLongPaths -ne "true") {
+     Log "Setting git config --global core.longpaths true..."
+-    git config --global core.longpaths true
+-    LogOk "git core.longpaths enabled"
++    $longPathsOut = git config --global core.longpaths true 2>&1 | Out-String
++    $longPathsRc = $LASTEXITCODE
++    foreach ($lpLine in $longPathsOut.Split("`n")) {
++        if ($lpLine.Trim()) { LogDetail "git-longpaths: $($lpLine.TrimEnd())" }
++    }
++    if ($longPathsRc -eq 0) {
++        LogOk "git core.longpaths enabled"
++    } else {
++        LogWarn "git config --global core.longpaths true failed (exit $longPathsRc) -- deep paths may fail"
++    }
+ } else {
+     LogOk "git core.longpaths already enabled"
+ }
+@@ -200,12 +222,18 @@ if ($SkipGhAuth) {
+         LogOk "gh already authenticated"
+     } elseif ($installInteractive) {
+         Log "Not authenticated. Starting gh auth login..."
++        # Interactive: gh talks to the console directly, so only the exit code is captured.
+         gh auth login
+-        if ($LASTEXITCODE -ne 0) {
+-            LogError "gh auth login failed"
++        $ghAuthRc = $LASTEXITCODE
++        if ($ghAuthRc -ne 0) {
++            LogError "gh auth login failed (exit $ghAuthRc)"
++            Write-Summary "ERROR" "gh auth" "login failed (exit $ghAuthRc)"
++            Write-Summary "ACTION" "" "Run: gh auth login"
+         }
+     } else {
+-        LogWarn "Not authenticated and not interactive -- skipping gh auth"
++        LogWarn "Not authenticated and not interactive -- skipping gh auth (use -SkipGhAuth to suppress)"
++        Write-Summary "WARN" "gh auth" "not authenticated"
++        Write-Summary "ACTION" "" "Run: gh auth login"
+     }
+ }
+ 
+@@ -325,9 +353,28 @@ if ($existingUserRepoPath) { $config["userRepoPath"] = $existingUserRepoPath }
+ if ($existingMachineAlias) { $config["machineAlias"] = $existingMachineAlias }
+ 
+ $jsonContent = $config | ConvertTo-Json -Depth 10
+-[System.IO.File]::WriteAllText($configFile, $jsonContent, [System.Text.UTF8Encoding]::new($false))
+-LogOk "Config written to $configFile"
+-ValidateJsonConfig -File $configFile -RequiredKeys @("version", "reposPath", "repoPath")
++$configExisted = Test-Path $configFile
++Backup-File $configFile
++$configWritten = $false
++try {
++    [System.IO.File]::WriteAllText($configFile, $jsonContent, [System.Text.UTF8Encoding]::new($false))
++    $configWritten = $true
++} catch {
++    LogError "Failed to write $configFile`: $_"
++    Write-Summary "ERROR" "aitools config" "write failed"
++}
++if ($configWritten) {
++    LogOk "Config written to $configFile"
++    $errorsBeforeValidation = $script:errors
++    ValidateJsonConfig -File $configFile -RequiredKeys @("version", "reposPath", "repoPath")
++    if ($script:errors -gt $errorsBeforeValidation) {
++        Write-Summary "ERROR" "aitools config" "validation failed"
++    } elseif ($configExisted) {
++        Write-Summary "OK" "aitools config" "updated"
++    } else {
++        Write-Summary "OK" "aitools config" "created"
++    }
++}
+ 
+ # ============================================================
+ # 6. Install aitools command
+@@ -514,14 +561,25 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
+     Write-Summary "OK" "claude code" "$(claude --version 2>$null | Select-Object -First 1)"
+     Log "Running claude update..."
+     $claudeOutput = claude update 2>&1 | Out-String
+-    $claudeOutput.Trim().Split("`n") | ForEach-Object { Log $_.TrimEnd() }
+-    if ($LASTEXITCODE -ne 0) {
+-        LogWarn "claude update returned non-zero (exit $LASTEXITCODE)"
++    $updateRc = $LASTEXITCODE
++    foreach ($updateLine in $claudeOutput.Split("`n")) {
++        if ($updateLine.Trim()) { Log $updateLine.TrimEnd() }
++    }
++    if ($updateRc -ne 0) {
++        LogWarn "claude update failed (exit $updateRc) -- see $logFile"
++    } elseif ($claudeOutput -match '(?i)already.*up.to.date|no update') {
++        LogOk "Already up to date"
++    } else {
++        LogOk "claude update finished"
+     }
+ } else {
+     Log "Installing Claude Code CLI..."
+     try {
+-        Invoke-Expression (Invoke-RestMethod 'https://claude.ai/install.ps1')
++        # Capture every stream of the official installer so its output reaches the log.
++        $installOut = Invoke-Expression (Invoke-RestMethod 'https://claude.ai/install.ps1') *>&1 | Out-String
++        foreach ($installLine in $installOut.Split("`n")) {
++            if ($installLine.Trim()) { Log $installLine.TrimEnd() }
++        }
+         Refresh-Path
+         if (Get-Command claude -ErrorAction SilentlyContinue) {
+             LogOk "Claude Code installed ($(claude --version 2>$null | Select-Object -First 1))"
+```
+
+#### Batch T1
+
+```diff
+diff --git a/tests/logging/test-logging.sh b/tests/logging/test-logging.sh
+new file mode 100755
+index 0000000..979b132
+--- /dev/null
++++ b/tests/logging/test-logging.sh
+@@ -0,0 +1,142 @@
++#!/usr/bin/env bash
++# test-logging.sh -- unit tests for the shared logging framework (scripts/aitools-lib.sh)
++# and for the bash entry point's use of it (scripts/aitools).
++#
++# Safe to re-run: every case runs in its own temp HOME / log dir, removed on exit.
++# Platform: macOS, Linux, Windows (Git Bash). Exit 1 if any case fails.
++# Spec: .claude/rules/script-standards.md (log line format, levels, counters,
++# end-of-run summary), reference/logging.md (location, rotation),
++# reference/script-standards-detail.md "Logging overrides".
++#
++# Usage: bash tests/logging/test-logging.sh [--help]
++
++set -uo pipefail
++
++if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
++    sed -n '2,12p' "$0"
++    exit 0
++fi
++
++ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
++LIB="$ROOT/scripts/aitools-lib.sh"
++ENTRY="$ROOT/scripts/aitools"
++TMP_ROOT="$(mktemp -d)"
++trap 'rm -rf "$TMP_ROOT"' EXIT
++
++PASS=0
++FAIL=0
++ESC=$(printf '\033')
++TS_RE='\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\]'
++
++check() {  # name, condition (eval'd)
++    if eval "$2"; then
++        printf 'PASS %s\n' "$1"; PASS=$((PASS + 1))
++    else
++        printf 'FAIL %s\n' "$1"; FAIL=$((FAIL + 1))
++    fi
++}
++
++# run_lib <case> <snippet>: source the lib in a fresh bash with an isolated log dir.
++# Console output -> $C/out, the log -> $C/logs/deploy.log, rc -> $C/rc.
++run_lib() {
++    C="$TMP_ROOT/$1"
++    mkdir -p "$C/home"
++    env HOME="$C/home" AITOOLS_LOG_DIR="$C/logs" AITOOLS_SUMMARY_FILE="${SUMMARY:-}" \
++        bash -c "set -uo pipefail; source '$LIB'; logging_init t; $2" > "$C/out" 2>&1
++    echo $? > "$C/rc"
++    LOG="$C/logs/deploy.log"
++    [ -f "$LOG" ] || : > "$LOG"
++}
++
++# ---------------------------------------------------------------------------
++# aitools-lib.sh
++# ---------------------------------------------------------------------------
++
++run_lib format 'log "hello world"'
++check "lib: log line format [ts] [script] [level] message" \
++    "grep -Eq '^${TS_RE} \[t\] \[info\] hello world\$' '$LOG'"
++check "lib: log file is AITOOLS_LOG_DIR/deploy.log" "[ -s '$C/logs/deploy.log' ]"
++
++run_lib levels 'log_ok a; log_warn b; log_error c; log d info'
++check "lib: levels ok/warn/error/info recorded" \
++    "grep -q '\[ok\] a' '$LOG' && grep -q '\[warn\] b' '$LOG' && grep -q '\[error\] c' '$LOG' && grep -q '\[info\] d' '$LOG'"
++check "lib: log file has no ANSI codes" "! grep -q '$ESC' '$LOG'"
++check "lib: warn is yellow on the console" "grep -q '${ESC}\[33m.*\[warn\] b' '$C/out'"
++check "lib: error is red on the console" "grep -q '${ESC}\[31m.*\[error\] c' '$C/out'"
++check "lib: info is plain on the console" "grep -Eq '^${TS_RE} \[t\] \[info\] d\$' '$C/out'"
++
++run_lib detail 'log_detail "secret diff line"'
++check "lib: log_detail writes the log" "grep -q '\[detail\] secret diff line' '$LOG'"
++check "lib: log_detail stays off the console" "! grep -q 'secret diff line' '$C/out'"
++
++run_lib counters 'log_error x; log_error y; log_warn z; echo "COUNTS=$ERRORS/$WARNINGS"'
++check "lib: log_error/log_warn increment ERRORS/WARNINGS" "grep -q 'COUNTS=2/1' '$C/out'"
++
++run_lib reset 'log_error x; logging_init t2; echo "COUNTS=$ERRORS/$WARNINGS"'
++check "lib: logging_init resets the counters" "grep -q 'COUNTS=0/0' '$C/out'"
++
++SUMMARY="" run_lib nosummary 'write_summary ERROR tool detail; echo "RC=$?"'
++check "lib: write_summary is a no-op without AITOOLS_SUMMARY_FILE" "grep -q 'RC=0' '$C/out'"
++
++SUMMARY="$TMP_ROOT/summary.txt" run_lib summary 'write_summary ERROR tool "it failed"; write_summary OK tool2 v1'
++check "lib: write_summary writes CAT|tool|detail" "grep -qx 'ERROR|tool|it failed' '$TMP_ROOT/summary.txt'"
++check "lib: write_summary OK stays OK with no warnings" "grep -qx 'OK|tool2|v1' '$TMP_ROOT/summary.txt'"
++
++SUMMARY="$TMP_ROOT/summary2.txt" run_lib promote 'log_warn w; write_summary OK tool v1'
++check "lib: write_summary promotes OK to WARN after a warning" "grep -qx 'WARN|tool|v1' '$TMP_ROOT/summary2.txt'"
++
++C="$TMP_ROOT/rotate"; mkdir -p "$C/logs"
++head -c 5242880 /dev/zero | tr '\0' 'x' > "$C/logs/deploy.log"
++# Console output is irrelevant here; the check below inspects the rotated files.
++env HOME="$C" AITOOLS_LOG_DIR="$C/logs" bash -c "source '$LIB'; logging_init t; log after" > /dev/null 2>&1
++check "lib: logging_init rotates a 5 MB log to deploy.log.1" \
++    "[ -f '$C/logs/deploy.log.1' ] && grep -q '\[info\] after' '$C/logs/deploy.log' && [ \$(wc -c < '$C/logs/deploy.log') -lt 1000 ]"
++
++# ---------------------------------------------------------------------------
++# scripts/aitools (entry point) -- uses the lib's logging, defines none of its own
++# ---------------------------------------------------------------------------
++
++check "entry: defines no log functions (uses aitools-lib)" \
++    "! grep -Eq '^[[:space:]]*(log|log_ok|log_warn|log_error|log_detail)\(\)' '$ENTRY'"
++
++# fake_repo <case> [with-lib]: HOME with config.json -> a repo dir holding the lib.
++fake_repo() {
++    C="$TMP_ROOT/$1"
++    mkdir -p "$C/home/.aitools" "$C/repo/.git" "$C/repo/scripts"
++    if [ "${2:-}" = "with-lib" ]; then cp "$LIB" "$C/repo/scripts/"; fi
++    printf '{"version":2,"repoPath":"%s"}\n' "$C/repo" > "$C/home/.aitools/config.json"
++}
++run_entry() {  # args... (uses $C from fake_repo)
++    env HOME="$C/home" AITOOLS_LOG_DIR="$C/logs" bash "$ENTRY" "$@" < /dev/null > "$C/out" 2> "$C/err"
++    echo $? > "$C/rc"
++    LOG="$C/logs/deploy.log"
++    [ -f "$LOG" ] || { mkdir -p "$C/logs"; : > "$LOG"; }
++}
++
++fake_repo unknown with-lib
++run_entry --bogus-flag
++check "entry: unknown argument exits 1" "[ \"\$(cat '$C/rc')\" = 1 ]"
++check "entry: unknown argument written to deploy.log" \
++    "grep -Eq '^${TS_RE} \[aitools\] \[error\] unknown argument .--bogus-flag.' '$LOG'"
++check "entry: unknown argument shown in the lib's console format (not a bare 'error:')" \
++    "grep -Eq '${TS_RE} \[aitools\] \[error\] unknown argument' '$C/out' && ! grep -q '^error: unknown argument' '$C/err'"
++
++fake_repo prelib with-lib
++mkdir -p "$C/home/.config/ai-tooling"
++run_entry --bogus-flag
++check "entry: warnings found before the lib loads are logged after it loads" \
++    "grep -q '\[aitools\] \[warn\] both .*ai-tooling.* exist' '$LOG'"
++
++fake_repo nolib
++run_entry --bogus-flag
++check "entry: missing aitools-lib exits 1" "[ \"\$(cat '$C/rc')\" = 1 ]"
++check "entry: missing aitools-lib names the path on stderr" "grep -q 'aitools-lib.sh not found at $C/repo/scripts' '$C/err'"
++
++fake_repo version
++rm -rf "$C/repo"
++run_entry --version
++check "entry: --version answers without the repo" \
++    "[ \"\$(cat '$C/rc')\" = 0 ] && grep -q '^aitools ' '$C/out' && grep -q 'repo: not found' '$C/out'"
++
++printf -- '---- %d passed, %d failed\n' "$PASS" "$FAIL"
++[ "$FAIL" -eq 0 ]
+diff --git a/tests/logging/test-logging.ps1 b/tests/logging/test-logging.ps1
+new file mode 100644
+index 0000000..5e2f928
+--- /dev/null
++++ b/tests/logging/test-logging.ps1
+@@ -0,0 +1,157 @@
++# test-logging.ps1 -- unit tests for the shared logging framework (scripts/aitools-lib.ps1)
++# and for the PowerShell entry point's use of it (scripts/aitools.ps1).
++#
++# Safe to re-run: every case uses its own temp log dir, removed on exit.
++# Platform: Windows, macOS, Linux (pwsh 7). Entry-point run cases need Windows
++# (aitools.ps1 has a Windows OS guard) and are reported as SKIP elsewhere.
++# Exit 1 if any case fails.
++# Spec: .claude/rules/script-standards.md (log line format, levels, counters,
++# end-of-run summary), reference/logging.md, reference/script-standards-detail.md
++# "Logging overrides".
++#
++# Usage: pwsh -NoProfile -File tests/logging/test-logging.ps1 [-Help]
++
++param([switch]$Help)
++
++if ($Help) {
++    Get-Content $PSCommandPath | Select-Object -Skip 1 -First 11
++    exit 0
++}
++
++$root = (Resolve-Path (Join-Path $PSScriptRoot ".." "..")).Path
++$lib = Join-Path $root "scripts" "aitools-lib.ps1"
++$entry = Join-Path $root "scripts" "aitools.ps1"
++$tmpRoot = Join-Path ([IO.Path]::GetTempPath()) ("aitools-logtest-" + [guid]::NewGuid())
++New-Item -ItemType Directory -Path $tmpRoot | Out-Null
++
++$script:pass = 0
++$script:fail = 0
++$script:skip = 0
++$tsRe = '\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\]'
++
++function Check([string]$Name, [bool]$Ok) {
++    if ($Ok) { Write-Output "PASS $Name"; $script:pass++ } else { Write-Output "FAIL $Name"; $script:fail++ }
++}
++function Skip([string]$Name, [string]$Why) { Write-Output "SKIP $Name ($Why)"; $script:skip++ }
++
++# Run a snippet in a fresh pwsh with the lib dot-sourced and an isolated log dir.
++# Returns @{ Out = console text; Log = deploy.log text; Dir = case dir }.
++function Invoke-LibCase([string]$Case, [string]$Snippet, [string]$SummaryFile = "") {
++    $dir = Join-Path $tmpRoot $Case
++    New-Item -ItemType Directory -Path $dir -Force | Out-Null
++    $env:AITOOLS_LOG_DIR = Join-Path $dir "logs"
++    $env:AITOOLS_SUMMARY_FILE = $SummaryFile
++    $code = ". '$lib'; Initialize-Logging 't'; $Snippet"
++    $out = & pwsh -NoProfile -Command $code *>&1 | Out-String
++    $logPath = Join-Path $env:AITOOLS_LOG_DIR "deploy.log"
++    $log = if (Test-Path $logPath) { [IO.File]::ReadAllText($logPath) } else { "" }
++    $env:AITOOLS_LOG_DIR = $null
++    $env:AITOOLS_SUMMARY_FILE = $null
++    return @{ Out = $out; Log = $log; Dir = $dir }
++}
++
++try {
++    # -----------------------------------------------------------------------
++    # aitools-lib.ps1
++    # -----------------------------------------------------------------------
++    $r = Invoke-LibCase "format" 'Log "hello world"'
++    Check "lib: log line format [ts] [script] [level] message" ($r.Log -match "(?m)^$tsRe \[t\] \[info\] hello world$")
++    Check "lib: log file is AITOOLS_LOG_DIR/deploy.log" (Test-Path (Join-Path $r.Dir "logs" "deploy.log"))
++
++    $r = Invoke-LibCase "levels" 'LogOk a; LogWarn b; LogError c; Log d'
++    Check "lib: levels ok/warn/error/info recorded" (($r.Log -match '\[ok\] a') -and ($r.Log -match '\[warn\] b') -and ($r.Log -match '\[error\] c') -and ($r.Log -match '\[info\] d'))
++    Check "lib: log file has no ANSI codes" (-not ($r.Log -match "`e\["))
++    Check "lib: console shows every level" (($r.Out -match '\[warn\] b') -and ($r.Out -match '\[error\] c') -and ($r.Out -match '\[info\] d'))
++
++    $r = Invoke-LibCase "detail" 'LogDetail "secret diff line"'
++    Check "lib: LogDetail writes the log" ($r.Log -match '\[detail\] secret diff line')
++    Check "lib: LogDetail stays off the console" (-not ($r.Out -match 'secret diff line'))
++
++    $r = Invoke-LibCase "counters" 'LogError x; LogError y; LogWarn z; Write-Output "COUNTS=$($script:errors)/$($script:warnings)"'
++    Check "lib: LogError/LogWarn increment the counters" ($r.Out -match 'COUNTS=2/1')
++
++    $r = Invoke-LibCase "reset" 'LogError x; Initialize-Logging "t2"; Write-Output "COUNTS=$($script:errors)/$($script:warnings)"'
++    Check "lib: Initialize-Logging resets the counters" ($r.Out -match 'COUNTS=0/0')
++
++    $r = Invoke-LibCase "nosummary" 'Write-Summary "ERROR" "tool" "detail"; Write-Output "DONE"'
++    Check "lib: Write-Summary is a no-op without AITOOLS_SUMMARY_FILE" ($r.Out -match 'DONE')
++
++    $sum = Join-Path $tmpRoot "summary.txt"
++    $r = Invoke-LibCase "summary" 'Write-Summary "ERROR" "tool" "it failed"; Write-Summary "OK" "tool2" "v1"' $sum
++    $rows = if (Test-Path $sum) { Get-Content $sum } else { @() }
++    Check "lib: Write-Summary writes CAT|tool|detail" ($rows -contains "ERROR|tool|it failed")
++    Check "lib: Write-Summary OK stays OK with no warnings" ($rows -contains "OK|tool2|v1")
++
++    $sum2 = Join-Path $tmpRoot "summary2.txt"
++    $r = Invoke-LibCase "promote" 'LogWarn w; Write-Summary "OK" "tool" "v1"' $sum2
++    $rows = if (Test-Path $sum2) { Get-Content $sum2 } else { @() }
++    Check "lib: Write-Summary promotes OK to WARN after a warning" ($rows -contains "WARN|tool|v1")
++
++    $rotDir = Join-Path $tmpRoot "rotate" "logs"
++    New-Item -ItemType Directory -Path $rotDir -Force | Out-Null
++    [IO.File]::WriteAllText((Join-Path $rotDir "deploy.log"), ("x" * 5242880))
++    $env:AITOOLS_LOG_DIR = $rotDir
++    # Console output is irrelevant here; the check below inspects the rotated files.
++    & pwsh -NoProfile -Command ". '$lib'; Initialize-Logging 't'; Log 'after'" *>&1 | Out-Null
++    $env:AITOOLS_LOG_DIR = $null
++    $rotated = Test-Path (Join-Path $rotDir "deploy.log.1")
++    $fresh = (Test-Path (Join-Path $rotDir "deploy.log")) -and ((Get-Item (Join-Path $rotDir "deploy.log")).Length -lt 1000)
++    Check "lib: Initialize-Logging rotates a 5 MB log to deploy.log.1" ($rotated -and $fresh)
++
++    # -----------------------------------------------------------------------
++    # scripts/aitools.ps1 (entry point) -- uses the lib's logging, defines none of its own
++    # -----------------------------------------------------------------------
++    $ast = [System.Management.Automation.Language.Parser]::ParseFile($entry, [ref]$null, [ref]$null)
++    $own = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -match '^(Log|LogOk|LogWarn|LogError|LogDetail)$' }, $true))
++    Check "entry: defines no log functions (uses aitools-lib)" ($own.Count -eq 0)
++
++    if ($IsWindows) {
++        # Fake USERPROFILE with config.json -> a repo dir holding the lib.
++        function New-FakeRepo([string]$Case, [bool]$WithLib) {
++            $d = Join-Path $tmpRoot $Case
++            New-Item -ItemType Directory -Path (Join-Path $d "home" ".aitools"), (Join-Path $d "repo" ".git"), (Join-Path $d "repo" "scripts") -Force | Out-Null
++            if ($WithLib) { Copy-Item $lib (Join-Path $d "repo" "scripts") }
++            $cfg = @{ version = 2; repoPath = (Join-Path $d "repo") } | ConvertTo-Json
++            [IO.File]::WriteAllText((Join-Path $d "home" ".aitools" "config.json"), $cfg)
++            return $d
++        }
++        function Invoke-Entry([string]$Dir, [string[]]$EntryArgs) {
++            $savedProfile = $env:USERPROFILE
++            $env:USERPROFILE = Join-Path $Dir "home"
++            $env:AITOOLS_LOG_DIR = Join-Path $Dir "logs"
++            $out = & pwsh -NoProfile -File $entry @EntryArgs *>&1 | Out-String
++            $rc = $LASTEXITCODE
++            $env:USERPROFILE = $savedProfile
++            $env:AITOOLS_LOG_DIR = $null
++            $logPath = Join-Path $Dir "logs" "deploy.log"
++            $log = if (Test-Path $logPath) { [IO.File]::ReadAllText($logPath) } else { "" }
++            return @{ Out = $out; Rc = $rc; Log = $log }
++        }
++        $d = New-FakeRepo "unknown" $true
++        $r = Invoke-Entry $d @("bogus-command")
++        Check "entry: unknown command exits 1" ($r.Rc -eq 1)
++        Check "entry: unknown command logged by the lib ([aitools] [error])" ($r.Log -match "$tsRe \[aitools\] \[error\] unknown command 'bogus-command'")
++
++        $d = New-FakeRepo "nolib" $false
++        $r = Invoke-Entry $d @("bogus-command")
++        Check "entry: missing aitools-lib exits 1" ($r.Rc -eq 1)
++        Check "entry: missing aitools-lib names the path" ($r.Out -match 'aitools-lib.ps1 not found at')
++
++        $d = New-FakeRepo "version" $false
++        Remove-Item -Recurse -Force (Join-Path $d "repo")
++        $r = Invoke-Entry $d @("-Version")
++        Check "entry: -Version answers without the repo" (($r.Rc -eq 0) -and ($r.Out -match 'repo: not found'))
++    } else {
++        foreach ($n in @("entry: unknown command exits 1", "entry: unknown command logged by the lib ([aitools] [error])",
++                         "entry: missing aitools-lib exits 1", "entry: missing aitools-lib names the path",
++                         "entry: -Version answers without the repo")) {
++            Skip $n "aitools.ps1 runs on Windows only"
++        }
++    }
++} finally {
++    if (Test-Path $tmpRoot) { Remove-Item -Recurse -Force $tmpRoot }
++}
++
++Write-Output "---- $($script:pass) passed, $($script:fail) failed, $($script:skip) skipped"
++if ($script:fail -gt 0) { exit 1 }
++exit 0
+diff --git a/.github/workflows/check.yml b/.github/workflows/check.yml
+index 6c5cfd7..4612585 100644
+--- a/.github/workflows/check.yml
++++ b/.github/workflows/check.yml
+@@ -1,5 +1,5 @@
+ # .github/workflows/check.yml
+-# CI pipeline for aitools: syntax validation, build, cross-platform checks
++# CI pipeline for aitools: syntax validation, logging unit tests, build, cross-platform checks
+ # 3 runners: macOS (ARM), Linux (Ubuntu), Windows
+ #
+ # Bash management:
+@@ -113,6 +113,12 @@ jobs:
+           fi
+           echo "All .py files passed syntax validation"
+ 
++      - name: Logging unit tests (bash)
++        run: bash tests/logging/test-logging.sh
++
++      - name: Logging unit tests (PowerShell)
++        run: pwsh -NoProfile -File tests/logging/test-logging.ps1
++
+       - name: Build deploy scripts
+         run: |
+           echo "::group::Running build-deploy.sh"
+@@ -237,6 +243,12 @@ jobs:
+           fi
+           echo "All .py files passed syntax validation"
+ 
++      - name: Logging unit tests (bash)
++        run: bash tests/logging/test-logging.sh
++
++      - name: Logging unit tests (PowerShell)
++        run: pwsh -NoProfile -File tests/logging/test-logging.ps1
++
+       - name: Build deploy scripts
+         run: bash scripts/build-deploy.sh
+ 
+@@ -319,6 +331,14 @@ jobs:
+           }
+           Write-Host "All .ps1 files passed syntax validation"
+ 
++      - name: Logging unit tests (bash, via Git Bash)
++        shell: bash
++        run: bash tests/logging/test-logging.sh
++
++      - name: Logging unit tests (PowerShell, native)
++        shell: pwsh
++        run: pwsh -NoProfile -File tests/logging/test-logging.ps1
++
+       - name: Build deploy scripts (via Git Bash)
+         shell: bash
+         run: bash scripts/build-deploy.sh
 ```
 
 ## Risks
