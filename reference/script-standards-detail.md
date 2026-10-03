@@ -1153,6 +1153,4 @@ Protected -- requires user approval to modify.
 | Script | Line(s) | Pattern | Reason |
 |--------|---------|---------|--------|
 | `setup-vercelcli.sh` | 69 | `2>/dev/null \|\| true` | Cleanup: npm uninstall may fail if not installed; brew install follows |
-| `setup-pandoc.sh` | 68, 73, 78 | `2>/dev/null \|\| true` | Cleanup: non-preferred package managers may not be installed |
 | `check-lib.ps1` | 177 | `2>$null` (InvokeGit) | Git stderr triggers PS ErrorActionPreference=Stop; caller checks result |
-| `setup-typst.ps1` | 25, 33 | `2>$null \| Out-Null` | Cleanup: cargo/npm stderr noise; non-blocking, winget install follows |
