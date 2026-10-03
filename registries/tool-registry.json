@@ -244,7 +244,7 @@
           { "method": "winget", "command": "winget install GitHub.cli", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": null }
         ],
         "linux": [
-          { "method": "apt", "command": "sudo apt-get install -y gh", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "Keyring added on first install" }
+          { "method": "apt", "command": "sudo apt-get install -y gh", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "cli.github.com apt repo + keyring added whenever missing (including over a distro gh); a gh not owned by apt is kept, not shadowed" }
         ]
       },
       "update": {

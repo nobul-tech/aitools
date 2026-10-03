@@ -382,7 +382,7 @@ Required for: Chrome DevTools MCP (npx), Vercel CLI (npm), settings JSON merge i
 |----------|--------|---------|
 | macOS | Homebrew (preferred) | `brew install gh` |
 | Windows | winget (preferred) | `winget install GitHub.cli` |
-| Linux | apt + GitHub keyring | `sudo apt-get install -y gh` (keyring added on first install) |
+| Linux | apt + GitHub keyring | `sudo apt-get install -y gh` (cli.github.com apt repo + keyring added whenever missing (including over a distro gh); a gh not owned by apt is kept, not shadowed) |
 
 ### Update
 
@@ -400,7 +400,7 @@ gh --version
 
 - Required by aitools-install as a prerequisite (installed as Step 1)
 - Auth step (`gh auth login`) is interactive — handled by aitools-install Step 2, not setup-gh-cli
-- Linux first install adds the GitHub CLI apt keyring automatically (one-time)
+- Linux: cli.github.com apt repo + keyring added whenever missing (including over a distro gh); a gh not owned by apt is kept, not shadowed
 
 ### Lifecycle
 
