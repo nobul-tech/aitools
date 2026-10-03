@@ -309,9 +309,24 @@ backup_file() {
     [ -f "$file" ] || return 0
     local ts
     ts=$(date -u +%Y-%m-%dT%H%M%SZ)
-    cp "$file" "${file}.bak.${ts}"
-    # Prune oldest beyond limit
-    ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1)) | xargs rm -f 2>/dev/null
+    # A failed backup is non-fatal (config-file-safety.md "Backup before overwrite"):
+    # warn and let the caller proceed.
+    if ! cp "$file" "${file}.bak.${ts}"; then
+        log_warn "Could not back up $(display_path "$file") -- proceeding without backup"
+        return 0
+    fi
+    # Prune oldest beyond limit.
+    # 2>/dev/null: ls errors only if no backup matches; the backup just written always does,
+    # and an empty list is handled by the -n check below.
+    local old_backups old
+    old_backups=$(ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1))) || old_backups=""
+    if [ -n "$old_backups" ]; then
+        while IFS= read -r old; do
+            if [ -n "$old" ] && ! rm -f "$old"; then
+                log_warn "Could not prune old backup $(display_path "$old")"
+            fi
+        done <<< "$old_backups"
+    fi
     log "Backed up $(display_path "$file")"
 }
 
@@ -363,10 +378,16 @@ _deploy_state_key() {
 
 initialize_deploy_state() {
     local manifest_path="$_DEPLOY_STATE_DIR/manifest.json"
-    if [ -f "$manifest_path" ]; then
+    _DEPLOY_MANIFEST='{"version":1,"files":{}}'
+    [ -f "$manifest_path" ] || return 0
+    # Validate once here so the per-file node calls below only fail if node itself fails.
+    if node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "$manifest_path"; then
         _DEPLOY_MANIFEST=$(cat "$manifest_path")
     else
-        _DEPLOY_MANIFEST='{"version":1,"files":{}}'
+        log_warn "Deploy-state manifest unreadable -- starting fresh (old copy kept as .corrupt)"
+        if ! mv "$manifest_path" "${manifest_path}.corrupt"; then
+            log_warn "Could not move aside $(display_path "$manifest_path")"
+        fi
     fi
 }
 
@@ -375,13 +396,16 @@ get_deploy_state_hash() {
     if [ -z "$_DEPLOY_MANIFEST" ]; then initialize_deploy_state; fi
     local key
     key=$(_deploy_state_key "$file_path")
-    # node is already a dependency (used by read_config_key)
+    # node is already a dependency (used by read_config_key). Empty output = no record.
+    # Called via $(...): it must not log (stdout is the hash). Returns node's exit code;
+    # the caller logs. The manifest was validated in initialize_deploy_state, so a
+    # failure here is node itself.
     printf '%s' "$_DEPLOY_MANIFEST" | node -e "
         const m = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
         const f = m.files || {};
         const e = f[process.argv[1]];
         if (e && e.hash) process.stdout.write(e.hash);
-    " "$key" 2>/dev/null
+    " "$key"
 }
 
 update_deploy_state() {
@@ -395,13 +419,18 @@ update_deploy_state() {
 
     mkdir -p "$_DEPLOY_STATE_DIR"
 
-    # Update manifest via node
-    _DEPLOY_MANIFEST=$(printf '%s' "$_DEPLOY_MANIFEST" | node -e "
+    # Update manifest via node; on failure keep the previous manifest rather than writing an empty one.
+    local updated
+    if ! updated=$(printf '%s' "$_DEPLOY_MANIFEST" | node -e "
         const m = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
         if (!m.files) m.files = {};
         m.files[process.argv[1]] = { hash: process.argv[2], deployedAt: process.argv[3] };
         process.stdout.write(JSON.stringify(m, null, 2));
-    " "$key" "$hash" "$ts" 2>/dev/null)
+    " "$key" "$hash" "$ts") || [ -z "$updated" ]; then
+        log_warn "Could not update deploy state for $key -- next run may re-prompt"
+        return 0
+    fi
+    _DEPLOY_MANIFEST=$updated
 
     printf '%s\n' "$_DEPLOY_MANIFEST" > "$_DEPLOY_STATE_DIR/manifest.json"
 
@@ -673,6 +702,35 @@ _stop_spinner() {
 }
 
 # ---------------------------------------------------------------------------
+# Interactive = stdin is a terminal AND the controlling terminal can be opened.
+# Spec (managed-file-deployment.md, interactive-menus.md): non-terminal stdin ->
+# no prompt, source wins. Prompts still read /dev/tty so data piped on stdin is
+# never consumed as an answer. Parity: Test-InteractiveConsole in aitools-lib.ps1.
+# ---------------------------------------------------------------------------
+tty_interactive() {
+    [ -t 0 ] || return 1
+    # 2>/dev/null: the open fails when there is no controlling terminal; that
+    # failure is the answer (return 1), not an error to report.
+    (printf '' > /dev/tty) 2>/dev/null
+}
+
+# ---------------------------------------------------------------------------
+# EOF-safe prompt read. Usage: read_tty_choice <var> <what-the-default-does>
+# Bare `read -r x < /dev/tty` returns 1 at EOF (closed stdin under a pty), which
+# aborts the caller under set -e with no log line. This logs and returns 0 with
+# <var> empty, so each caller's `*)` default branch applies.
+# ---------------------------------------------------------------------------
+read_tty_choice() {
+    local __var="$1" __default_desc="$2" __line=""
+    if ! IFS= read -r __line < /dev/tty; then
+        printf '\n' > /dev/tty
+        log_warn "No input at prompt (EOF) -- defaulting to $__default_desc"
+        __line=""
+    fi
+    printf -v "$__var" '%s' "$__line"
+}
+
+# ---------------------------------------------------------------------------
 # Agentic merge via invoke_ai with refinement loop.
 # Uses structured prompts from _ai_prompt_merge / _ai_prompt_merge_refine.
 # Sets DIFF_REVIEW_RESULT="merge" + MERGED_CONTENT, or falls back.
@@ -715,7 +773,7 @@ _invoke_ai_merge() {
         else
             local feedback
             printf '  refinement feedback: ' > /dev/tty
-            IFS= read -r feedback < /dev/tty
+            read_tty_choice feedback "no feedback"
             prompt_text=$(_ai_prompt_merge_refine "$source_content" "$local_content" "$current_merge" "$feedback")
         fi
 
@@ -735,7 +793,7 @@ _invoke_ai_merge() {
             log_error "AI merge failed (iteration $iteration): ${AI_REJECT_REASON:-unknown error}"
             printf '  fallback [o]verwrite / [s]kip: ' > /dev/tty
             local fb
-            read -r fb < /dev/tty
+            read_tty_choice fb "overwrite"
             case "$(printf '%s' "$fb" | tr '[:upper:]' '[:lower:]')" in
                 s) DIFF_REVIEW_RESULT="skip" ;;
                 *) DIFF_REVIEW_RESULT="overwrite" ;;
@@ -755,7 +813,7 @@ _invoke_ai_merge() {
         fi
         printf '\n  [y]es accept / [r]efine / [n]o reject: ' > /dev/tty
         local accept
-        read -r accept < /dev/tty
+        read_tty_choice accept "reject merge (overwrite)"
         case "$(printf '%s' "$accept" | tr '[:upper:]' '[:lower:]')" in
             y)
                 MERGED_CONTENT="$merged"
@@ -811,7 +869,7 @@ prompt_diff_review() {
     fi
 
     # Non-interactive: auto-overwrite
-    if ! (printf '' > /dev/tty) 2>/dev/null; then
+    if ! tty_interactive; then
         log_warn "Diff in $(display_path "$file_path") -- overwriting (non-interactive)"
         return 0
     fi
@@ -840,8 +898,12 @@ prompt_diff_review() {
         printf '%s\n' "$diff_output" | head -30 > /dev/tty
         printf '  ... (%d more lines -- full diff in deploy log)\n' \
             "$((diff_lines - 30))" > /dev/tty
-        printf '%s\n' "$diff_output" >> "${LOG_FILE:-/dev/null}"
     fi
+    # Full diff as structured [detail] records at every size (raw appends broke the log format).
+    local diff_line
+    while IFS= read -r diff_line; do
+        log_detail "diff $(basename "$file_path"): $diff_line"
+    done <<< "$diff_output"
 
     # Attempt automatic merge if ancestor available
     if [ -n "$ancestor_content" ]; then
@@ -870,7 +932,7 @@ prompt_diff_review() {
             printf '  [x]abort\n' > /dev/tty
             printf '  choice [a/o/s/x]: ' > /dev/tty
             local merge_choice
-            read -r merge_choice < /dev/tty
+            read_tty_choice merge_choice "overwrite"
             case "$(printf '%s' "$merge_choice" | tr '[:upper:]' '[:lower:]')" in
                 a)  MERGED_CONTENT="$AUTO_MERGED_CONTENT"
                     if [ -n "$adopt_label" ]; then
@@ -913,7 +975,7 @@ prompt_diff_review() {
     fi
 
     local choice
-    read -r choice < /dev/tty
+    read_tty_choice choice "overwrite"
     case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
         a)  if [ -n "$adopt_label" ]; then
                 printf '  >> adopted: local version copied back to %s\n' "$adopt_label" > /dev/tty
@@ -996,7 +1058,13 @@ deploy_managed_file() {
 
         # Content differs — check deploy state for auto-deploy eligibility
         local state_hash existing_hash
-        state_hash=$(get_deploy_state_hash "$dest")
+        # Initialize in this shell (not inside the $(...) below) so its warnings are
+        # counted and the parsed manifest is cached for later calls.
+        if [ -z "$_DEPLOY_MANIFEST" ]; then initialize_deploy_state; fi
+        if ! state_hash=$(get_deploy_state_hash "$dest"); then
+            log_warn "Could not read deploy state for $item_name -- treating as not deployed"
+            state_hash=""
+        fi
         if [ -n "$state_hash" ]; then
             existing_hash=$(get_content_hash "$existing")
             if [ "$existing_hash" = "$state_hash" ]; then
@@ -1184,7 +1252,7 @@ prompt_json_field_review() {
         return 0
     fi
     # Non-interactive: source wins
-    if ! (printf '' > /dev/tty) 2>/dev/null; then
+    if ! tty_interactive; then
         log "Divergence in $leaf -- overwriting from $source_label (non-interactive)"
         return 0
     fi
@@ -1206,7 +1274,7 @@ prompt_json_field_review() {
     fi
 
     local choice
-    read -r choice < /dev/tty
+    read_tty_choice choice "overwrite from $source_label"
     case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
         a)  if [ "$adopt_allowed" = "1" ]; then
                 printf '  >> adopted: settings.json value kept -> %s\n' "$source_label" > /dev/tty
@@ -1441,11 +1509,23 @@ SYNC_NODE_EOF
     : > "$choices_tsv"
     if [ "$decision_count" -gt 0 ]; then
         local id kind cur prop adoptf
-        while IFS=$'\t' read -r id kind cur prop adoptf; do
+        if [ "$live_existed" = "false" ]; then
+            # No live file yet (fresh HOME): nothing local to protect, so every leaf is
+            # created from the profile without prompting (#31).
+            log "No $(display_path "$live_file") yet -- creating from profile ($decision_count setting(s))"
+            mkdir -p "$(dirname "$live_file")"
+        fi
+        # Read decisions on fd 3, not stdin: the prompt's interactivity test
+        # (tty_interactive) checks stdin, which must stay the caller's terminal.
+        while IFS=$'\t' read -r -u 3 id kind cur prop adoptf; do
             [ -n "$id" ] || continue
-            prompt_json_field_review "$id" "$cur" "$prop" "profile.json" "$adoptf"
+            if [ "$live_existed" = "false" ]; then
+                JSON_FIELD_REVIEW_RESULT="overwrite"
+            else
+                prompt_json_field_review "$id" "$cur" "$prop" "profile.json" "$adoptf"
+            fi
             printf '%s\t%s\n' "$id" "$JSON_FIELD_REVIEW_RESULT" >> "$choices_tsv"
-        done < "$decisions_tsv"
+        done 3< "$decisions_tsv"
     fi
 
     # --- Backup before apply ---
@@ -1503,6 +1583,8 @@ repair_uv_tool_env() {
     # Find a working Python -- uv's own Pythons first, then system
     local working_python=""
     local uv_python
+    # 2>/dev/null + || true: "no Python found" is an expected outcome here; the -n/-x
+    # check below handles it and falls through to system Python.
     uv_python=$(uv python find 2>/dev/null) || true
     if [ -n "$uv_python" ] && [ -x "$uv_python" ]; then
         working_python="$uv_python"
@@ -1519,13 +1601,16 @@ repair_uv_tool_env() {
 
     log "Repairing with: uv tool install --force --python $working_python $tool_name"
     local repair_output
-    repair_output=$(uv tool install --force --python "$working_python" "$tool_name" 2>&1) || true
-    printf '%s\n' "$repair_output" | while IFS= read -r line; do
-        [ -n "$line" ] && log "$line"
-    done
+    # Capture the exit code instead of aborting under set -e; it decides success below.
+    local repair_rc=0
+    repair_output=$(uv tool install --force --python "$working_python" "$tool_name" 2>&1) || repair_rc=$?
+    local line
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then log "$line"; fi
+    done <<< "$repair_output"
 
-    if printf '%s\n' "$repair_output" | grep -qi 'error.*failed'; then
-        log_error "$tool_name environment repair failed"
+    if [ "$repair_rc" -ne 0 ]; then
+        log_error "$tool_name environment repair failed (uv exit $repair_rc)"
         return 1
     fi
 

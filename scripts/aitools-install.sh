@@ -62,8 +62,10 @@ Options:
   --help, -h                Show this help
 
 Interactive behavior:
-  When stdin is a terminal, prompts for repos path and drive confirmation.
+  When stdin is a terminal, prompts for gh login, repos path, and file reviews.
   When piped or run non-interactively, uses defaults and flags.
+  AITOOLS_FORCE=1 (aitools install --force): no prompts even in a terminal;
+  managed files take the source version (backups kept).
   When config.json already exists, uses saved values without prompting.
 USAGE
     exit 0
@@ -148,6 +150,13 @@ validate_and_run() {
 }
 
 # display_path is provided by aitools-lib.sh
+
+# Interactive mode (same rule as the lib's review prompts): a terminal on stdin and
+# no --force / AITOOLS_FORCE. Otherwise every prompt takes its default.
+INSTALL_INTERACTIVE=false
+if [ "${AITOOLS_FORCE:-}" != "1" ] && tty_interactive; then
+    INSTALL_INTERACTIVE=true
+fi
 
 # --- Post-write JSON validation ---
 # Validates a JSON config file after writing: checks non-empty, valid JSON,
@@ -272,7 +281,7 @@ elif ! command -v gh &>/dev/null; then
     log_warn "gh not installed, skipping auth"
 elif gh auth status &>/dev/null; then
     log_ok "gh already authenticated"
-elif [ -t 0 ]; then
+elif $INSTALL_INTERACTIVE; then
     log "Not authenticated. Starting gh auth login..."
     gh auth login || log_error "gh auth login failed"
 else
@@ -292,10 +301,10 @@ elif REPOS_PATH=$(read_config_key "$CONFIG_FILE" "reposPath"); then
     log "Using repos path from config: $REPOS_PATH"
 fi
 if [ -z "$REPOS_PATH" ]; then
-    if [ -t 0 ]; then
-        # Interactive — prompt
+    if $INSTALL_INTERACTIVE; then
+        # Interactive — prompt (EOF-safe: read_tty_choice logs and returns empty)
         printf 'Where should new repos live? [~/repos]: '
-        read -r user_path
+        read_tty_choice user_path "~/repos"
         if [ -n "$user_path" ]; then
             REPOS_PATH="${user_path/#\~/$HOME}"
         else
@@ -532,7 +541,7 @@ fi
 # These are sole-owned generated artifacts (the user never edits the deployed
 # copy), so per config-file-safety.md we back up + diff-log + overwrite, with
 # NO interactive review. deploy_managed_file's prompt is for user-customizable
-# files; under the non-interactive install wrapper its tty read aborts the run.
+# files only.
 AITOOLS_BIN="$HOME/.aitools/bin"
 mkdir -p "$AITOOLS_BIN"
 _hbin_deployed=0

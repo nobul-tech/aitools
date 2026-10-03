@@ -506,7 +506,8 @@ Commands:
 Options:
   --addmcp <name...>   Enable MCP server(s) for current project (vercel, webflow)
   --dry-run            Preview what would change without writing any files
-  --force              Overwrite all files without prompting for review
+  --force              No prompts: managed files take the source version (backups
+                       kept); with install, also skips gh login and path prompts
   --version, -v        Show installed and repo version
   --help, -h           Show this help
 
@@ -1528,6 +1529,10 @@ overall_rc=0
 if $do_install; then
     # --- install: pull + rebuild + run installer (includes deploy) ---
     log "Step 3/$STEPS: Running installer"
+    # Interactive iff run from a terminal: the installer and its setup scripts
+    # inherit this stdin and decide for themselves. --force makes every review
+    # prompt take the source version (backup kept), terminal or not.
+    if $force; then export AITOOLS_FORCE=1; fi
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
             # Windows: forward to PowerShell installer with translated flags
@@ -1551,10 +1556,11 @@ if $do_install; then
                 "${ps_args[@]}"
             ;;
         *)
-            bash "$repo_path/scripts/aitools-install.sh" "${passthrough[@]}" < /dev/null
+            bash "$repo_path/scripts/aitools-install.sh" "${passthrough[@]}"
             ;;
     esac
     installer_rc=$?
+    unset AITOOLS_FORCE
     echo ""
     if [ $installer_rc -eq 0 ]; then
         log_ok "All up to date ($(repo_version "$repo_path"))"

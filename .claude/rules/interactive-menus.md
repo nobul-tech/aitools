@@ -37,8 +37,12 @@ Check scripts validate caller completeness (`check-post-push` step 30).
 ### Non-interactive fallback
 
 Both menu functions MUST handle:
-- `AITOOLS_FORCE` env var: auto-select `overwrite`
+- `AITOOLS_FORCE` env var (`--force` / `-Force` on `aitools` and `aitools install`): auto-select `overwrite`
 - Non-terminal stdin: auto-select `overwrite`
+- EOF at the prompt (interactive, input ended): log a warning, auto-select `overwrite`
+
+The installers apply the same rule to their own prompts (gh login, repos path):
+terminal and not forced = prompt; otherwise use the default.
 
 ### Console I/O
 

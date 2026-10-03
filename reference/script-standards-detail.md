@@ -1141,10 +1141,8 @@ Protected -- requires user approval to modify.
 | Script | Line(s) | Pattern | Reason |
 |--------|---------|---------|--------|
 | `setup-vercelcli.sh` | 69 | `2>/dev/null \|\| true` | Cleanup: npm uninstall may fail if not installed; brew install follows |
-| `setup-pandoc.sh` | 68, 73, 77 | `2>/dev/null \|\| true` | Cleanup: non-preferred package managers may not be installed |
-| `setup-rust.sh` | 44 | `2>/dev/null \|\| log_warn` | Cleanup: brew formula may not be fully installed; warned on failure |
-| `aitools-install.sh` | 273 | `2>/dev/null \|\| true` | Update: apt-get may need sudo; gh already works at current version |
-| `check-lib.ps1` | 110 | `2>$null` (InvokeGit) | Git stderr triggers PS ErrorActionPreference=Stop; caller checks result |
-| `check-lib.ps1` | 79-81 | `try/catch` (ReadConfigKey) | Config parse: catch logs warning; callers handle null return via ResolveConfig |
-| `setup-typst.sh` | 38, 43 | `2>/dev/null \|\| true` | Cleanup: cargo/npm may not have typst installed; Homebrew install follows |
-| `setup-typst.ps1` | 45, 53 | `2>$null` | Cleanup: cargo/npm stderr noise; non-blocking, winget install follows |
+| `setup-pandoc.sh` | 68, 73, 78 | `2>/dev/null \|\| true` | Cleanup: non-preferred package managers may not be installed |
+| `setup-rust.sh` | 32 | `2>/dev/null \|\| log_warn` | Cleanup: brew formula may not be fully installed; warned on failure |
+| `check-lib.ps1` | 177 | `2>$null` (InvokeGit) | Git stderr triggers PS ErrorActionPreference=Stop; caller checks result |
+| `setup-typst.sh` | 26, 31 | `>/dev/null 2>&1 \|\| true` | Cleanup: cargo/npm may not have typst installed; Homebrew install follows |
+| `setup-typst.ps1` | 25, 33 | `2>$null \| Out-Null` | Cleanup: cargo/npm stderr noise; non-blocking, winget install follows |

@@ -27,8 +27,10 @@ function ReadConfigKey {
         if ($val) { return $val }
     } catch {
         # File exists but is invalid JSON -- warn so callers know the null
-        # return means "corrupt", not "missing key"
-        Write-Host "      WARN: could not parse $File" -ForegroundColor Yellow
+        # return means "corrupt", not "missing key". Callers may run before
+        # Initialize-Logging; without a log file, fall back to the warning stream.
+        if ($script:logFile) { LogWarn "Could not parse $File" }
+        else { Write-Warning "Could not parse $File" }
     }
     return $null
 }
@@ -261,11 +263,21 @@ function Backup-File {
     if (-not (Test-Path $FilePath)) { return }
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
     $backupPath = "${FilePath}.bak.${ts}"
-    Copy-Item -Path $FilePath -Destination $backupPath
+    # A failed backup is non-fatal (config-file-safety.md "Backup before overwrite"):
+    # warn and let the caller proceed.
+    try {
+        Copy-Item -Path $FilePath -Destination $backupPath -ErrorAction Stop
+    } catch {
+        LogWarn "Could not back up $FilePath -- proceeding without backup: $_"
+        return
+    }
     # Prune oldest beyond limit
-    $backups = Get-ChildItem -Path "${FilePath}.bak.*" | Sort-Object LastWriteTime -Descending
+    $backups = @(Get-ChildItem -Path "${FilePath}.bak.*" | Sort-Object LastWriteTime -Descending)
     if ($backups.Count -gt $MaxBackups) {
-        $backups | Select-Object -Skip $MaxBackups | Remove-Item -Force
+        foreach ($old in ($backups | Select-Object -Skip $MaxBackups)) {
+            try { Remove-Item $old.FullName -Force -ErrorAction Stop }
+            catch { LogWarn "Could not prune old backup $($old.FullName)" }
+        }
     }
     Log "Backed up $FilePath"
 }
@@ -330,7 +342,9 @@ function Initialize-DeployState {
                 $script:DeployManifest | Add-Member -NotePropertyName files -NotePropertyValue @{} -Force
             }
         } catch {
-            LogWarn "Corrupt deploy manifest, resetting: $_"
+            LogWarn "Deploy-state manifest unreadable -- starting fresh (old copy kept as .corrupt): $_"
+            try { Move-Item $manifestPath "$manifestPath.corrupt" -Force -ErrorAction Stop }
+            catch { LogWarn "Could not move aside ${manifestPath}: $_" }
             $script:DeployManifest = [PSCustomObject]@{ version = 1; files = @{} }
         }
     } else {
@@ -381,21 +395,27 @@ function Update-DeployState {
     }
 
     $manifestDir = $script:DeployStateDir
-    if (-not (Test-Path $manifestDir)) {
-        New-Item -ItemType Directory -Path $manifestDir -Force | Out-Null
-    }
     $manifestPath = Join-Path $manifestDir "manifest.json"
     $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($manifestPath)
-    $json = $script:DeployManifest | ConvertTo-Json -Depth 5
-    [System.IO.File]::WriteAllText($resolved, $json, [System.Text.UTF8Encoding]::new($false))
+    # A failed state write is non-fatal (parity with update_deploy_state): the
+    # file itself is deployed; the next run just may re-prompt.
+    try {
+        if (-not (Test-Path $manifestDir)) {
+            New-Item -ItemType Directory -Path $manifestDir -Force -ErrorAction Stop | Out-Null
+        }
+        $json = $script:DeployManifest | ConvertTo-Json -Depth 5
+        [System.IO.File]::WriteAllText($resolved, $json, [System.Text.UTF8Encoding]::new($false))
 
-    $shadowPath = Join-Path $manifestDir "shadows" $key
-    $shadowDir = Split-Path $shadowPath -Parent
-    if (-not (Test-Path $shadowDir)) {
-        New-Item -ItemType Directory -Path $shadowDir -Force | Out-Null
+        $shadowPath = Join-Path $manifestDir "shadows" $key
+        $shadowDir = Split-Path $shadowPath -Parent
+        if (-not (Test-Path $shadowDir)) {
+            New-Item -ItemType Directory -Path $shadowDir -Force -ErrorAction Stop | Out-Null
+        }
+        $resolvedShadow = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($shadowPath)
+        [System.IO.File]::WriteAllText($resolvedShadow, $Content, [System.Text.UTF8Encoding]::new($false))
+    } catch {
+        LogWarn "Could not update deploy state for $key -- next run may re-prompt: $_"
     }
-    $resolvedShadow = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($shadowPath)
-    [System.IO.File]::WriteAllText($resolvedShadow, $Content, [System.Text.UTF8Encoding]::new($false))
 }
 
 function Get-DeployShadow {
@@ -406,6 +426,8 @@ function Get-DeployShadow {
         try {
             return Get-Content $shadowPath -Raw -ErrorAction Stop
         } catch {
+            # Caller treats $null as "no ancestor" and bootstraps from the deployed file.
+            LogWarn "Could not read deploy shadow for $FilePath -- no merge ancestor: $_"
             return $null
         }
     }
@@ -440,6 +462,8 @@ function Try-AutoMerge {
         }
         return $null
     } catch {
+        # Caller treats $null as "no clean merge" and falls back to the manual menu.
+        LogWarn "Auto-merge failed -- falling back to manual review: $_"
         return $null
     } finally {
         Remove-Item $tmpLocal, $tmpAncestor, $tmpSource -ErrorAction SilentlyContinue
@@ -670,6 +694,29 @@ function Stop-AiSpinner {
 }
 
 # ---------------------------------------------------------------------------
+# Prompt helpers (parity with aitools-lib.sh read_tty_choice / the /dev/tty check).
+# Test-InteractiveConsole: one non-interactive test for every prompt -- a
+# redirected stdin or a non-interactive session never prompts.
+# Read-ConsoleChoice: [Console]::ReadLine() returns $null at EOF, and the
+# callers' .ToLower() then threw. This logs and returns "" so each caller's
+# default branch applies.
+# ---------------------------------------------------------------------------
+function Test-InteractiveConsole {
+    return ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected)
+}
+
+function Read-ConsoleChoice {
+    param([string]$DefaultDesc)
+    $line = [Console]::ReadLine()
+    if ($null -eq $line) {
+        [Console]::WriteLine("")
+        LogWarn "No input at prompt (EOF) -- defaulting to $DefaultDesc"
+        return ""
+    }
+    return $line
+}
+
+# ---------------------------------------------------------------------------
 # Agentic merge via Invoke-AI with refinement loop.
 # Uses structured prompts from Get-AiMergePrompt / Get-AiMergeRefinePrompt.
 # Returns "merge" (sets $script:MergedContent) or "overwrite"/"skip".
@@ -708,7 +755,7 @@ function Invoke-AiMerge {
                 -LocalContent $LocalContent -DiffOutput $DiffOutput
         } else {
             [Console]::Write("  refinement feedback: ")
-            $feedback = [Console]::ReadLine()
+            $feedback = Read-ConsoleChoice "no feedback"
             $promptText = Get-AiMergeRefinePrompt -SourceContent $SourceContent `
                 -LocalContent $LocalContent -CurrentMerge $currentMerge -Feedback $feedback
         }
@@ -728,7 +775,7 @@ function Invoke-AiMerge {
             [Console]::WriteLine("  >> AI merge failed (iteration $iteration): $reason")
             LogError "AI merge failed (iteration $iteration): $reason"
             [Console]::Write("  fallback [o]verwrite / [s]kip: ")
-            $fb = [Console]::ReadLine()
+            $fb = Read-ConsoleChoice "overwrite"
             if ($fb.ToLower() -eq "s") { return "skip" }
             return "overwrite"
         }
@@ -746,7 +793,7 @@ function Invoke-AiMerge {
         }
         [Console]::WriteLine("")
         [Console]::Write("  [y]es accept / [r]efine / [n]o reject: ")
-        $accept = [Console]::ReadLine()
+        $accept = Read-ConsoleChoice "reject merge (overwrite)"
         switch ($accept.ToLower()) {
             "y" {
                 $script:MergedContent = $merged
@@ -794,7 +841,7 @@ function Prompt-DiffReview {
     }
 
     # Non-interactive: auto-overwrite
-    if (-not [Environment]::UserInteractive) {
+    if (-not (Test-InteractiveConsole)) {
         LogWarn "Diff in $FilePath -- overwriting (non-interactive)"
         return "overwrite"
     }
@@ -831,6 +878,9 @@ function Prompt-DiffReview {
             $diffLines += "${prefix}$($d.InputObject)"
         }
         $diffOutput = $diffLines -join "`n"
+        # Full diff as [detail] records at every size (the console truncates at 30).
+        $leafName = Split-Path -Leaf $FilePath
+        foreach ($dl in $diffLines) { LogDetail "diff ${leafName}: $dl" }
     }
 
     if ($diffCount -eq 0) {
@@ -879,7 +929,7 @@ function Prompt-DiffReview {
             [Console]::WriteLine("  [s]kip")
             [Console]::WriteLine("  [x]abort")
             [Console]::Write("  choice [a/o/s/x]: ")
-            $choice = [Console]::ReadLine()
+            $choice = Read-ConsoleChoice "overwrite"
             switch ($choice.ToLower()) {
                 "a" {
                     $script:MergedContent = $autoMerged
@@ -926,7 +976,7 @@ function Prompt-DiffReview {
         [Console]::Write("  choice [o/m/s/x]: ")
     }
 
-    $choice = [Console]::ReadLine()
+    $choice = Read-ConsoleChoice "overwrite"
     switch ($choice.ToLower()) {
         "a" {
             if ($AdoptLabel) {
@@ -1189,7 +1239,7 @@ function Prompt-JsonFieldReview {
         Log "Divergence in $Leaf -- overwriting from $SourceLabel (--force)"
         return "overwrite"
     }
-    if ([Console]::IsInputRedirected) {
+    if (-not (Test-InteractiveConsole)) {
         Log "Divergence in $Leaf -- overwriting from $SourceLabel (non-interactive)"
         return "overwrite"
     }
@@ -1211,8 +1261,7 @@ function Prompt-JsonFieldReview {
         [Console]::Write("  choice [o/s/x]: ")
     }
 
-    $choice = [Console]::ReadLine()
-    if ($null -eq $choice) { return "overwrite" }
+    $choice = Read-ConsoleChoice "overwrite from $SourceLabel"
     switch ($choice.ToLower()) {
         "a" {
             if ($AdoptAllowed -eq "1") {
@@ -1427,10 +1476,21 @@ if (mode === 'plan') {
 
     # --- Prompt loop (granular, per leaf) ---
     $choiceLines = @()
+    if (-not $liveExisted -and $decisions.Count -gt 0) {
+        # No live file yet (fresh HOME): nothing local to protect, so every leaf is
+        # created from the profile without prompting (#31).
+        Log "No $LiveFile yet -- creating from profile ($($decisions.Count) setting(s))"
+        $liveDir = Split-Path $LiveFile -Parent
+        if (-not (Test-Path $liveDir)) { New-Item -ItemType Directory -Path $liveDir -Force | Out-Null }
+    }
     foreach ($line in $decisions) {
         $cols = $line -split "`t"
         $id = $cols[0]; $cur = $cols[2]; $prop = $cols[3]; $adoptf = $cols[4]
-        $action = Prompt-JsonFieldReview -Leaf $id -Current $cur -Proposed $prop -SourceLabel "profile.json" -AdoptAllowed $adoptf
+        if ($liveExisted) {
+            $action = Prompt-JsonFieldReview -Leaf $id -Current $cur -Proposed $prop -SourceLabel "profile.json" -AdoptAllowed $adoptf
+        } else {
+            $action = "overwrite"
+        }
         $choiceLines += "$id`t$action"
     }
     [System.IO.File]::WriteAllText($choicesTsv, (($choiceLines -join "`n") + "`n"), [System.Text.UTF8Encoding]::new($false))

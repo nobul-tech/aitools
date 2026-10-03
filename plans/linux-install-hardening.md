@@ -1138,14 +1138,11 @@ Main agent, direct (no code). Every item below is part of **this review**:
 
 ## PR C: logging conformance (epic #21, issues #22–#30, plus #31)
 
-> **Status: scoped, not yet approved for execution.** This section scopes the work. Execution
-> needs the same gate as PR A (`plan-execution.md`):
-> - verbatim old/new edits per batch
-> - an error-handling audit per batch
-> - prototype tests on a copy of the base commit
->
-> Those are drafted later, in a revision of this section, and presented for approval
-> before any code is written. PR C starts from `main` after PR A merges.
+> **Status: PR C1 (batches C1, C2, C3a, C4a) approved for execution 2026-10-03.**
+> Verbatim edits, the error-handling audit and the prototype test evidence are in
+> "PR C1 — verbatim edits" below. Batches C3b, C4b and C5–C14 remain scoped only:
+> each needs its own verbatim-edit revision of this section, presented for approval,
+> before code is written.
 
 ### Origin
 
@@ -1176,37 +1173,50 @@ The main agent spot-checked the audit's findings: `aitools:345` "exit 0", `aitoo
 | #29 | Prompts die silently on EOF; inconsistent non-interactive detection | `aitools-lib.sh/.ps1` |
 | #30 | Malformed or misattributed records; unguarded backup; silent manifest wipe | `aitools-lib.sh/.ps1`, `check-lib.ps1` |
 | #31 | Fresh install: settings synced before `settings.json` exists | `aitools-lib.sh/.ps1` (`sync_managed_json`), deploy order |
+| -- | `aitools install --force` / `-Force` never reached the installer (found during C1 review; fixed directly, no issue filed, per commander) | `aitools`, `aitools.ps1` |
 
-### Foundational decisions (proposed; confirm at plan review)
+### Foundational decisions
 
-| # | Decision |
-|---|---|
-| C-F1 | **Lib first.** Fix the shared helpers (#29 EOF-safe `read_tty_choice`/`Read-ConsoleChoice`, #30 guarded `backup_file`, checked deploy-state writes, `log_detail` diffs) before the scripts, so per-script fixes can call them. |
-| C-F2 | **Exit code decides; output is logged in full.** Every install/update/uninstall: capture `2>&1`, `\|\| RC=$?`, log every line (verbose output via `log_detail`), decide on `RC` plus a binary check. Output grep stays only where Standard 3 allows it (`brew upgrade`). |
-| C-F3 | **Every exit path writes a summary row.** `write_summary ERROR` before each `exit 1`. PS1 validation blocks compare error counts before and after and write ERROR instead of OK. Orchestrators add `ERROR "<script>" "script failed (exit N)"` when a child dies. |
-| C-F4 | **Bash/PS1 parity is part of each fix.** Every row in the audit's parity table is closed in the same batch as its counterpart. |
-| C-F5 | **#31: create from profile when `settings.json` is absent** (option 2 in the issue). `sync_managed_json` writes the profile mirror without prompting; deploy order is unchanged. |
-| C-F6 | **Spec questions go through `/incident`, not code:** Standard 3 WARN-vs-ERROR for `brew upgrade` (#27c), and the `aitools` logging-overrides table (#28) if console output becomes the intent. |
+| # | Decision | Status |
+|---|---|---|
+| C-F1 | **Lib first.** Fix the shared helpers (#29 EOF-safe `read_tty_choice`/`Read-ConsoleChoice`, #30 guarded `backup_file`, checked deploy-state writes, `log_detail` diffs) before the scripts, so per-script fixes can call them. | Approved 2026-10-03 |
+| C-F2 | **Exit code decides; output is logged in full.** Every install/update/uninstall: capture `2>&1`, `\|\| RC=$?`, log every line (verbose output via `log_detail`), decide on `RC` plus a binary check. Output grep stays only where Standard 3 allows it (`brew upgrade`). | Proposed (C3b+) |
+| C-F3 | **Every exit path writes a summary row.** `write_summary ERROR` before each `exit 1`. PS1 validation blocks compare error counts before and after and write ERROR instead of OK. Orchestrators add `ERROR "<script>" "script failed (exit N)"` when a child dies. | Proposed (C3b+) |
+| C-F4 | **Bash/PS1 parity is part of each fix.** Every row in the audit's parity table is closed in the same batch as its counterpart. | Approved 2026-10-03 |
+| C-F5 | **#31: create from profile when `settings.json` is absent** (option 2 in the issue). `sync_managed_json` writes the profile mirror without prompting; deploy order is unchanged. | Approved 2026-10-03 |
+| C-F6 | **Spec questions go through `/incident`, not code:** Standard 3 WARN-vs-ERROR for `brew upgrade` (#27c), and the `aitools` logging-overrides table (#28) if console output becomes the intent. | Proposed (C3b+) |
+| C-F7 | **One interactivity rule, both commands, every platform.** `aitools` and `aitools install` each run interactive or non-interactive, decided by the caller: interactive iff stdin is a terminal and neither `--force`/`-Force` nor `AITOOLS_FORCE=1` is set. Applies to the review prompts and to the installers' own prompts (gh login, repos path). Non-interactive: source wins (backup kept, WARN), installer prompts take their defaults. EOF at a prompt: WARN, then the same default. The `< /dev/null` on the bash install path is removed (it made macOS/Linux install non-interactive while Windows install was interactive). | Approved 2026-10-03 |
+| C-F8 | **C1 (lib rule) and C3a (entry-point redirect) ship in the same PR.** C1 alone would make macOS/Linux `aitools install` non-interactive. | Approved 2026-10-03 |
 
-### Proposed batches (≤3 files; `aitools-lib.*` changes ⇒ fresh sub-agent per batch)
+### Batches
+
+PR C1 (this revision; ≤3 code files per batch; `aitools-lib.*` changes ⇒ fresh sub-agent per batch):
 
 | Batch | Files | Issues |
 |---|---|---|
-| C1 | `aitools-lib.sh` | #29, #30, #24 (`repair_uv_tool_env`), #27a (repair exit code), #31 |
-| C2 | `aitools-lib.ps1`, `check-lib.ps1` | #29, #30, #25 (`ReadConfigKey`), #31 |
-| C3 | `aitools`, `aitools.ps1` | #22, #23, #25, #26e, #27b, #28 |
-| C4 | `aitools-install.sh`, `aitools-install.ps1` | #23, #25, #26b (Step 5 PS1 row, out of scope for PR A), #26e (`$LASTEXITCODE`), #27a (`claude update`); remove dead winget branch |
+| C1 | `aitools-lib.sh` | #29, #30, #24 (`repair_uv_tool_env`), #27a (repair exit code), #31, C-F7 (`tty_interactive`) |
+| C2 | `aitools-lib.ps1`, `check-lib.ps1`, `check-lib.sh` | #29, #30, #25 (`ReadConfigKey`), #31, C-F7 (`Test-InteractiveConsole`); audit: silent catches in `Get-DeployShadow`/`Try-AutoMerge`, uncommented suppressions in `check-lib.sh` |
+| C3a | `aitools`, `aitools.ps1` | C-F7 (install no longer forced non-interactive), `--force` reaches install |
+| C4a | `aitools-install.sh`, `aitools-install.ps1` | C-F7 (installer prompts), #29 (Step 3 read EOF-safe), stale "non-interactive install wrapper" comment |
+| D-C1 | protected docs (approved 2026-10-03) | `interactive-menus.md` non-interactive fallback; `script-standards-detail.md` exemptions table rows; RELEASE_NOTES |
+
+Later PRs (scoped, not approved):
+
+| Batch | Files | Issues |
+|---|---|---|
+| C3b | `aitools`, `aitools.ps1` | #22, #23, #25, #26e, #27b, #28 |
+| C4b | `aitools-install.sh`, `aitools-install.ps1` | #23, #25, #26b (Step 5 PS1 row), #26e (`$LASTEXITCODE`), #27a (`claude update`); remove dead winget branch |
 | C5 | `setup-rust.sh`, `setup-rust.ps1`, `setup-typst.sh` | #22, #23, #24, #27 |
 | C6 | `setup-typst.ps1`, `setup-pandoc.sh`, `setup-pandoc.ps1` | #23, #26a |
 | C7 | `setup-modal.sh`, `setup-modal.ps1`, `setup-go.ps1` | #23, #26d, #27a |
 | C8 | `setup-vercelcli.sh`, `setup-vercelcli.ps1`, `setup-gh-cli.ps1` | #23, #26a, #27a, auth WARN row |
 | C9 | `setup-user-cursor.sh`, `setup-user-cursor.ps1` | #23, #25, #26b–d |
 | C10 | `setup-user-hooks.sh`, `setup-user-hooks.ps1` | #25, #26a–c, #26f, #27b |
-| C11 | `setup-user-settings.sh`, `setup-user-settings.ps1`, `setup-gh-cli.sh` | #26a–c |
+| C11 | `setup-user-settings.sh`, `setup-user-settings.ps1`, `setup-gh-cli.sh` | #26a–c; remove the "No settings.json yet" early exit (#31 caller half) |
 | C12 | `setup-cursor-ide-mcp.sh`, `setup-cursor-ide-mcp.ps1` | #25, #26a–c, #27b (Cursor `mcp` verbs, re-verified via `/tool-eval` first) |
 | C13 | `setup-user-mcp.sh`, `setup-user-mcp.ps1`, `setup-datadog.ps1` | #23, #26a |
 | C14 | `setup-user-claude.sh`, `setup-user-claude.ps1` | #23, #25, #26a |
-| D-C | protected docs (batch-presented) | Exemptions table in `script-standards-detail.md`: remove the typst/pandoc/vercel/rust entries once those discards are fixed. Logging-overrides table (#28) if needed. Standard 3 outcome via `/incident`. RELEASE_NOTES. |
+| D-C | protected docs (batch-presented) | Exemptions table: remove the typst/pandoc/vercel/rust entries once those discards are fixed. Logging-overrides table (#28) if needed. Standard 3 outcome via `/incident`. RELEASE_NOTES. |
 
 `setup-user-claude`, `setup-user-cursor` and `setup-user-hooks` have logic duplicated in
 `build-deploy.sh` (`deploy-paths.md`). Batches C9, C10 and C14 must port each fix there and
@@ -1217,6 +1227,7 @@ confirm the regenerated dotprofile `deploy/` contains it (pre-commit step 13).
 - `bash -n` and `pwsh` ParseFile (pwsh is now installable here from packages.microsoft.com).
 - A stub-driven behavior test per fixed failure path. For example, a pty prompt with `/dev/null` input must log a line and default to overwrite (#29). An empty rustup output must not abort (#24).
 - Grep the changed files for the old patterns: `tail -3`, `head -3`, `&& log "$line"; done`, `exit $?` inside `if !`.
+- Any batch touching `aitools-lib.*` or a setup script: run `bash scripts/build-deploy.sh` and commit the regenerated `deploy/` in the dotprofile repo (`deploy-paths.md`).
 - A final end-to-end install ×2 (same harness as PR A). Both runs must:
   - write a summary row for every script that ran
   - have zero raw lines in `deploy.log`
@@ -1229,6 +1240,936 @@ Add check-pre-commit steps, starting in observe/WARN mode per `hook-rollout.md` 
 - `tail -N`/`head -N` piped into `log`
 - `exit $?` inside an `if !` branch
 - `exit 1` without a `write_summary` in the preceding 3 lines
+- a `while read … done < file` loop whose body calls a review prompt (stdin is no longer the terminal; found in C1, `sync_managed_json`)
+
+## PR C1 — verbatim edits (batches C1, C2, C3a, C4a)
+
+Base: `main` @ 19a744e. Each diff below is the exact edit for its batch, prototyped on a
+copy of the base and tested there (scratch: `.scratch/session-3030c86a-9/proto-c/`).
+
+
+### Tests (stub-driven, isolated HOME per case)
+
+| Suite | Prototype | `main` (same tests) |
+|---|---|---|
+| `test-c1.sh` (bash lib) | 24/24 pass | prompt cases die silently at the prompt, corrupt manifest kills the script with no output, uv repair reports false success |
+| `test-c2.sh` (PS1 libs) | 26/26 pass | redirected stdin crashes `Prompt-DiffReview`, failed backup/state write throws, `"os":"Windows"` on Linux |
+| `build-proto.sh` (gap 3) | `build-deploy.sh` exit 0, 40 scripts, all PS1 parse, all 20 `.sh` pass `bash -n`, every deploy script carries the new helpers | -- |
+
+### Revision 3 (interactive/non-interactive mode, C1/C3 approved 2026-10-03)
+
+Requirement: `aitools` and `aitools install` must each run interactive and non-interactive.
+
+| Run as | Mode | Review prompts | Installer prompts (gh login, repos path) |
+|---|---|---|---|
+| From a terminal | interactive | shown; EOF -> source wins, backup, WARN | shown; EOF -> default |
+| No terminal (piped, CI, agent, MDM) | non-interactive | source wins, backup, WARN | skipped (defaults) |
+| `--force` / `AITOOLS_FORCE=1` | non-interactive | source wins, backup, WARN | skipped (defaults) |
+
+| File | Change |
+|---|---|
+| `aitools-lib.sh` | `tty_interactive` (stdin is a terminal AND `/dev/tty` opens) used by both review prompts; `sync_managed_json` reads its decision list on fd 3 so the prompt still sees the caller's stdin (found by the e2e matrix: the old loop fed the TSV on stdin) |
+| `aitools` (C3) | `< /dev/null` removed from the install path; `--force` now exported as `AITOOLS_FORCE` for install (bug: install ignored `--force`); usage text |
+| `aitools.ps1` (C3) | `-Force` now exported as `AITOOLS_FORCE` for install (same bug); usage text |
+| `aitools-install.sh` (C4) | `INSTALL_INTERACTIVE` = terminal and not forced, for Steps 2-3; Step 3 read is EOF-safe (`read_tty_choice`); help text; stale "non-interactive install wrapper" comment |
+| `aitools-install.ps1` (C4) | `$installInteractive` = `Test-InteractiveConsole` and not forced (was `UserInteractive`, which is true with piped stdin); Step 3 `Read-Host` -> `Read-ConsoleChoice`; help text; same comment |
+
+Tests (Linux):
+
+| Suite | Prototype | `main` |
+|---|---|---|
+| `test-mode.sh` (lib prompts under a real pty: typed answers, EOF, forced, redirected stdin, no tty) | 15/15 | -- |
+| `test-mode-e2e.sh` (real `aitools` + installer, stubbed tools; install x4 modes, sync x3) | 18/18 | 11/18: install never interactive, EOF kills the run, `--force` still shows REVIEW |
+| `parse-entry.sh` (`bash -n` / pwsh ParseFile on all 4 entry points + installers) | pass | -- |
+
+Not testable here: PS1 entry point and installer behaviour (OS guard: Windows only) -- parse-checked only; needs a Windows run. macOS run needed for the bash path. Commits carry `(tested: Linux)`.
+
+Ordering: C1 (lib) and C3 (entry points) ship in one PR -- C1 alone would make macOS/Linux `aitools install` non-interactive.
+
+Pending protected edit (drafted for review with the plan section): `interactive-menus.md` "Non-interactive fallback" -- name `--force` and the installer prompts.
+
+### Revision 2 (gaps 1-4, approved 2026-10-03)
+
+| Gap | Change |
+|---|---|
+| 1 | `Get-DeployShadow` and `Try-AutoMerge` catches now `LogWarn` (were silent `return $null`); test `shadow-fail` added |
+| 2 | `check-lib.sh` added to C2: comments on `resolve_config` and `get_mtime` suppressions (callers verified: `check-post-push.sh` newest-transcript scan and plan-age check) |
+| 3 | C1/C2 verification adds: run `bash scripts/build-deploy.sh`, commit regenerated `deploy/` in aitools-nobul-jose (`deploy-paths.md`) |
+| 4 | Exemptions table in `reference/script-standards-detail.md` (protected) -- draft below |
+
+#### Gap 4 draft: `reference/script-standards-detail.md` "Exemptions table"
+
+Every row re-checked against current code. Line numbers for `check-lib.ps1` assume C2 is applied.
+
+```diff
+ | Script | Line(s) | Pattern | Reason |
+ |--------|---------|---------|--------|
+ | `setup-vercelcli.sh` | 69 | `2>/dev/null \|\| true` | Cleanup: npm uninstall may fail if not installed; brew install follows |
+-| `setup-pandoc.sh` | 68, 73, 77 | `2>/dev/null \|\| true` | Cleanup: non-preferred package managers may not be installed |
+-| `setup-rust.sh` | 44 | `2>/dev/null \|\| log_warn` | Cleanup: brew formula may not be fully installed; warned on failure |
+-| `aitools-install.sh` | 273 | `2>/dev/null \|\| true` | Update: apt-get may need sudo; gh already works at current version |
+-| `check-lib.ps1` | 110 | `2>$null` (InvokeGit) | Git stderr triggers PS ErrorActionPreference=Stop; caller checks result |
+-| `check-lib.ps1` | 79-81 | `try/catch` (ReadConfigKey) | Config parse: catch logs warning; callers handle null return via ResolveConfig |
+-| `setup-typst.sh` | 38, 43 | `2>/dev/null \|\| true` | Cleanup: cargo/npm may not have typst installed; Homebrew install follows |
+-| `setup-typst.ps1` | 45, 53 | `2>$null` | Cleanup: cargo/npm stderr noise; non-blocking, winget install follows |
++| `setup-pandoc.sh` | 68, 73, 78 | `2>/dev/null \|\| true` | Cleanup: non-preferred package managers may not be installed |
++| `setup-rust.sh` | 32 | `2>/dev/null \|\| log_warn` | Cleanup: brew formula may not be fully installed; warned on failure |
++| `check-lib.ps1` | 177 | `2>$null` (InvokeGit) | Git stderr triggers PS ErrorActionPreference=Stop; caller checks result |
++| `setup-typst.sh` | 26, 31 | `>/dev/null 2>&1 \|\| true` | Cleanup: cargo/npm may not have typst installed; Homebrew install follows |
++| `setup-typst.ps1` | 25, 33 | `2>$null \| Out-Null` | Cleanup: cargo/npm stderr noise; non-blocking, winget install follows |
+```
+
+- Removed `aitools-install.sh:273`: the apt-get gh update moved to `setup-gh-cli.sh` in v0.73.2 (#33); the line no longer exists.
+- Removed `check-lib.ps1:79-81` (ReadConfigKey): the function lives in `aitools-lib.ps1`, and after C2 its catch logs via `LogWarn`, so it is compliant and needs no exemption.
+- Later batches (#23) capture the cleanup output in typst/pandoc/vercel/rust; those rows are removed by the batch that fixes each script.
+
+PS1 EOF note: a pty cannot deliver EOF to pwsh (`[Console]::ReadLine` switches the terminal to raw
+mode and hangs). The PS1 EOF cases use stdin at EOF with `Test-InteractiveConsole` stubbed true,
+which drives the same `ReadLine()` -> `$null` path.
+
+### Error-handling audit (`plan-execution-detail.md` §audit)
+
+| # | Site | Before | After | Issue |
+|---|---|---|---|---|
+| 1 | `backup_file` cp | unguarded; set -e abort, no log | `if ! cp` -> `log_warn`, proceed | #30 |
+| 2 | `backup_file` prune | `ls … 2>/dev/null \| xargs rm -f 2>/dev/null`, no check | commented `2>/dev/null` (empty list handled), per-file `rm` checked -> `log_warn` | #30 |
+| 3 | `initialize_deploy_state` | corrupt manifest read raw; later node calls fail | validated once; corrupt -> `log_warn`, moved to `.corrupt`, fresh start; `mv` checked | #30 |
+| 4 | `get_deploy_state_hash` node | `2>/dev/null`, unchecked | stderr visible; returns node's rc; caller (`deploy_managed_file`) logs `log_warn`; init hoisted out of `$(...)` so warnings are counted | #30 |
+| 5 | `update_deploy_state` node | `2>/dev/null`; failure wrote an **empty manifest** | rc + empty-output checked -> `log_warn`, previous manifest kept | #30 |
+| 6 | 6 × `read -r … < /dev/tty` | EOF -> rc 1 -> silent set -e abort | `read_tty_choice`: `log_warn` "No input at prompt (EOF) -- defaulting to …", caller default applies | #29 |
+| 7 | `prompt_diff_review` log | raw diff appended to log only when > 40 lines (broke log format) | every diff line as `[detail] diff <file>: …`, all sizes | #30 |
+| 8 | `sync_managed_json`, live file absent | prompted every profile key; died at EOF | creates from profile without prompts (logged), `mkdir -p` parent | #31 |
+| 9 | `repair_uv_tool_env` output loop | piped `[ -n ] && log` (set -e hazard) | here-string + `if … fi` | #24 |
+| 10 | `repair_uv_tool_env` result | grep `error.*failed` (missed real failures) | exit code decides; logged with rc | #27a |
+| 11 | `repair_uv_tool_env` `uv python find` | `2>/dev/null \|\| true` uncommented | comment added; result already checked by `-n/-x` | audit |
+| 12 | `ReadConfigKey` (PS1) | `Write-Host` console bypass | `LogWarn` when logging is initialized, else `Write-Warning` | #25 |
+| 13 | `Backup-File` (PS1) | unguarded `Copy-Item`/`Remove-Item` | try/catch -> `LogWarn`, proceed | #30 |
+| 14 | `Initialize-DeployState` (PS1) | corrupt manifest silently overwritten | moved to `.corrupt` (checked), same message as bash | #30 |
+| 15 | `Update-DeployState` (PS1) | write failure threw (fatal under Stop) | try/catch -> `LogWarn` | #30 |
+| 16 | 6 × `[Console]::ReadLine()` (PS1) | `$null.ToLower()` threw at EOF | `Read-ConsoleChoice` (same log line as bash) | #29 |
+| 17 | non-interactive test (PS1) | `UserInteractive` in one prompt, `IsInputRedirected` in the other | `Test-InteractiveConsole` (both) used by both prompts | #29 |
+| 18 | `Prompt-DiffReview` log (PS1) | console said "see deploy log"; nothing was logged | every diff line as `[detail]` | #30 |
+| 19 | `Sync-ManagedJson`, live file absent (PS1) | prompted | same as #8 | #31 |
+| 20 | `CheckLogInit` (PS1) | `"os":"Windows"` hardcoded | `Windows`/`macOS`/`Linux` from `$Is*` | #30 |
+
+Behavior changes to note:
+- EOF at any prompt now continues with the default (overwrite) **plus a WARN**, instead of killing
+  the run. The summary row turns WARN via auto-promotion.
+- PS1 `Prompt-DiffReview` with redirected stdin (e.g. run from an agent) now auto-overwrites with
+  a WARN, matching `Prompt-JsonFieldReview` and bash. Previously it prompted and crashed.
+- Fresh HOME: profile settings land on the **first** run (#31, lib half). Removing the
+  `setup-user-settings.sh` "No settings.json yet" short-circuit is batch C11.
+
+Not in C1/C2 (later batches): `x)abort` paths lack `write_summary ERROR` (#26, per-script batches);
+`backup_dir` prune loop is piped but has no `&&` hazard (left as is).
+
+
+### Batch C1 — aitools-lib.sh
+
+#### `scripts/aitools-lib.sh`
+
+```diff
+diff --git ascripts/aitools-lib.sh bscripts/aitools-lib.sh
+index 58a2771..308f445 100755
+--- ascripts/aitools-lib.sh
++++ bscripts/aitools-lib.sh
+@@ -309,9 +309,24 @@ backup_file() {
+     [ -f "$file" ] || return 0
+     local ts
+     ts=$(date -u +%Y-%m-%dT%H%M%SZ)
+-    cp "$file" "${file}.bak.${ts}"
+-    # Prune oldest beyond limit
+-    ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1)) | xargs rm -f 2>/dev/null
++    # A failed backup is non-fatal (config-file-safety.md "Backup before overwrite"):
++    # warn and let the caller proceed.
++    if ! cp "$file" "${file}.bak.${ts}"; then
++        log_warn "Could not back up $(display_path "$file") -- proceeding without backup"
++        return 0
++    fi
++    # Prune oldest beyond limit.
++    # 2>/dev/null: ls errors only if no backup matches; the backup just written always does,
++    # and an empty list is handled by the -n check below.
++    local old_backups old
++    old_backups=$(ls -1t "${file}.bak."* 2>/dev/null | tail -n +$((max_backups + 1))) || old_backups=""
++    if [ -n "$old_backups" ]; then
++        while IFS= read -r old; do
++            if [ -n "$old" ] && ! rm -f "$old"; then
++                log_warn "Could not prune old backup $(display_path "$old")"
++            fi
++        done <<< "$old_backups"
++    fi
+     log "Backed up $(display_path "$file")"
+ }
+ 
+@@ -363,10 +378,16 @@ _deploy_state_key() {
+ 
+ initialize_deploy_state() {
+     local manifest_path="$_DEPLOY_STATE_DIR/manifest.json"
+-    if [ -f "$manifest_path" ]; then
++    _DEPLOY_MANIFEST='{"version":1,"files":{}}'
++    [ -f "$manifest_path" ] || return 0
++    # Validate once here so the per-file node calls below only fail if node itself fails.
++    if node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "$manifest_path"; then
+         _DEPLOY_MANIFEST=$(cat "$manifest_path")
+     else
+-        _DEPLOY_MANIFEST='{"version":1,"files":{}}'
++        log_warn "Deploy-state manifest unreadable -- starting fresh (old copy kept as .corrupt)"
++        if ! mv "$manifest_path" "${manifest_path}.corrupt"; then
++            log_warn "Could not move aside $(display_path "$manifest_path")"
++        fi
+     fi
+ }
+ 
+@@ -375,13 +396,16 @@ get_deploy_state_hash() {
+     if [ -z "$_DEPLOY_MANIFEST" ]; then initialize_deploy_state; fi
+     local key
+     key=$(_deploy_state_key "$file_path")
+-    # node is already a dependency (used by read_config_key)
++    # node is already a dependency (used by read_config_key). Empty output = no record.
++    # Called via $(...): it must not log (stdout is the hash). Returns node's exit code;
++    # the caller logs. The manifest was validated in initialize_deploy_state, so a
++    # failure here is node itself.
+     printf '%s' "$_DEPLOY_MANIFEST" | node -e "
+         const m = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+         const f = m.files || {};
+         const e = f[process.argv[1]];
+         if (e && e.hash) process.stdout.write(e.hash);
+-    " "$key" 2>/dev/null
++    " "$key"
+ }
+ 
+ update_deploy_state() {
+@@ -395,13 +419,18 @@ update_deploy_state() {
+ 
+     mkdir -p "$_DEPLOY_STATE_DIR"
+ 
+-    # Update manifest via node
+-    _DEPLOY_MANIFEST=$(printf '%s' "$_DEPLOY_MANIFEST" | node -e "
++    # Update manifest via node; on failure keep the previous manifest rather than writing an empty one.
++    local updated
++    if ! updated=$(printf '%s' "$_DEPLOY_MANIFEST" | node -e "
+         const m = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+         if (!m.files) m.files = {};
+         m.files[process.argv[1]] = { hash: process.argv[2], deployedAt: process.argv[3] };
+         process.stdout.write(JSON.stringify(m, null, 2));
+-    " "$key" "$hash" "$ts" 2>/dev/null)
++    " "$key" "$hash" "$ts") || [ -z "$updated" ]; then
++        log_warn "Could not update deploy state for $key -- next run may re-prompt"
++        return 0
++    fi
++    _DEPLOY_MANIFEST=$updated
+ 
+     printf '%s\n' "$_DEPLOY_MANIFEST" > "$_DEPLOY_STATE_DIR/manifest.json"
+ 
+@@ -672,6 +701,35 @@ _stop_spinner() {
+     printf '\r  \033[K' > /dev/tty  # clear spinner line
+ }
+ 
++# ---------------------------------------------------------------------------
++# Interactive = stdin is a terminal AND the controlling terminal can be opened.
++# Spec (managed-file-deployment.md, interactive-menus.md): non-terminal stdin ->
++# no prompt, source wins. Prompts still read /dev/tty so data piped on stdin is
++# never consumed as an answer. Parity: Test-InteractiveConsole in aitools-lib.ps1.
++# ---------------------------------------------------------------------------
++tty_interactive() {
++    [ -t 0 ] || return 1
++    # 2>/dev/null: the open fails when there is no controlling terminal; that
++    # failure is the answer (return 1), not an error to report.
++    (printf '' > /dev/tty) 2>/dev/null
++}
++
++# ---------------------------------------------------------------------------
++# EOF-safe prompt read. Usage: read_tty_choice <var> <what-the-default-does>
++# Bare `read -r x < /dev/tty` returns 1 at EOF (closed stdin under a pty), which
++# aborts the caller under set -e with no log line. This logs and returns 0 with
++# <var> empty, so each caller's `*)` default branch applies.
++# ---------------------------------------------------------------------------
++read_tty_choice() {
++    local __var="$1" __default_desc="$2" __line=""
++    if ! IFS= read -r __line < /dev/tty; then
++        printf '\n' > /dev/tty
++        log_warn "No input at prompt (EOF) -- defaulting to $__default_desc"
++        __line=""
++    fi
++    printf -v "$__var" '%s' "$__line"
++}
++
+ # ---------------------------------------------------------------------------
+ # Agentic merge via invoke_ai with refinement loop.
+ # Uses structured prompts from _ai_prompt_merge / _ai_prompt_merge_refine.
+@@ -715,7 +773,7 @@ _invoke_ai_merge() {
+         else
+             local feedback
+             printf '  refinement feedback: ' > /dev/tty
+-            IFS= read -r feedback < /dev/tty
++            read_tty_choice feedback "no feedback"
+             prompt_text=$(_ai_prompt_merge_refine "$source_content" "$local_content" "$current_merge" "$feedback")
+         fi
+ 
+@@ -735,7 +793,7 @@ _invoke_ai_merge() {
+             log_error "AI merge failed (iteration $iteration): ${AI_REJECT_REASON:-unknown error}"
+             printf '  fallback [o]verwrite / [s]kip: ' > /dev/tty
+             local fb
+-            read -r fb < /dev/tty
++            read_tty_choice fb "overwrite"
+             case "$(printf '%s' "$fb" | tr '[:upper:]' '[:lower:]')" in
+                 s) DIFF_REVIEW_RESULT="skip" ;;
+                 *) DIFF_REVIEW_RESULT="overwrite" ;;
+@@ -755,7 +813,7 @@ _invoke_ai_merge() {
+         fi
+         printf '\n  [y]es accept / [r]efine / [n]o reject: ' > /dev/tty
+         local accept
+-        read -r accept < /dev/tty
++        read_tty_choice accept "reject merge (overwrite)"
+         case "$(printf '%s' "$accept" | tr '[:upper:]' '[:lower:]')" in
+             y)
+                 MERGED_CONTENT="$merged"
+@@ -811,7 +869,7 @@ prompt_diff_review() {
+     fi
+ 
+     # Non-interactive: auto-overwrite
+-    if ! (printf '' > /dev/tty) 2>/dev/null; then
++    if ! tty_interactive; then
+         log_warn "Diff in $(display_path "$file_path") -- overwriting (non-interactive)"
+         return 0
+     fi
+@@ -840,8 +898,12 @@ prompt_diff_review() {
+         printf '%s\n' "$diff_output" | head -30 > /dev/tty
+         printf '  ... (%d more lines -- full diff in deploy log)\n' \
+             "$((diff_lines - 30))" > /dev/tty
+-        printf '%s\n' "$diff_output" >> "${LOG_FILE:-/dev/null}"
+     fi
++    # Full diff as structured [detail] records at every size (raw appends broke the log format).
++    local diff_line
++    while IFS= read -r diff_line; do
++        log_detail "diff $(basename "$file_path"): $diff_line"
++    done <<< "$diff_output"
+ 
+     # Attempt automatic merge if ancestor available
+     if [ -n "$ancestor_content" ]; then
+@@ -870,7 +932,7 @@ prompt_diff_review() {
+             printf '  [x]abort\n' > /dev/tty
+             printf '  choice [a/o/s/x]: ' > /dev/tty
+             local merge_choice
+-            read -r merge_choice < /dev/tty
++            read_tty_choice merge_choice "overwrite"
+             case "$(printf '%s' "$merge_choice" | tr '[:upper:]' '[:lower:]')" in
+                 a)  MERGED_CONTENT="$AUTO_MERGED_CONTENT"
+                     if [ -n "$adopt_label" ]; then
+@@ -913,7 +975,7 @@ prompt_diff_review() {
+     fi
+ 
+     local choice
+-    read -r choice < /dev/tty
++    read_tty_choice choice "overwrite"
+     case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
+         a)  if [ -n "$adopt_label" ]; then
+                 printf '  >> adopted: local version copied back to %s\n' "$adopt_label" > /dev/tty
+@@ -996,7 +1058,13 @@ deploy_managed_file() {
+ 
+         # Content differs — check deploy state for auto-deploy eligibility
+         local state_hash existing_hash
+-        state_hash=$(get_deploy_state_hash "$dest")
++        # Initialize in this shell (not inside the $(...) below) so its warnings are
++        # counted and the parsed manifest is cached for later calls.
++        if [ -z "$_DEPLOY_MANIFEST" ]; then initialize_deploy_state; fi
++        if ! state_hash=$(get_deploy_state_hash "$dest"); then
++            log_warn "Could not read deploy state for $item_name -- treating as not deployed"
++            state_hash=""
++        fi
+         if [ -n "$state_hash" ]; then
+             existing_hash=$(get_content_hash "$existing")
+             if [ "$existing_hash" = "$state_hash" ]; then
+@@ -1184,7 +1252,7 @@ prompt_json_field_review() {
+         return 0
+     fi
+     # Non-interactive: source wins
+-    if ! (printf '' > /dev/tty) 2>/dev/null; then
++    if ! tty_interactive; then
+         log "Divergence in $leaf -- overwriting from $source_label (non-interactive)"
+         return 0
+     fi
+@@ -1206,7 +1274,7 @@ prompt_json_field_review() {
+     fi
+ 
+     local choice
+-    read -r choice < /dev/tty
++    read_tty_choice choice "overwrite from $source_label"
+     case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
+         a)  if [ "$adopt_allowed" = "1" ]; then
+                 printf '  >> adopted: settings.json value kept -> %s\n' "$source_label" > /dev/tty
+@@ -1441,11 +1509,23 @@ SYNC_NODE_EOF
+     : > "$choices_tsv"
+     if [ "$decision_count" -gt 0 ]; then
+         local id kind cur prop adoptf
+-        while IFS=$'\t' read -r id kind cur prop adoptf; do
++        if [ "$live_existed" = "false" ]; then
++            # No live file yet (fresh HOME): nothing local to protect, so every leaf is
++            # created from the profile without prompting (#31).
++            log "No $(display_path "$live_file") yet -- creating from profile ($decision_count setting(s))"
++            mkdir -p "$(dirname "$live_file")"
++        fi
++        # Read decisions on fd 3, not stdin: the prompt's interactivity test
++        # (tty_interactive) checks stdin, which must stay the caller's terminal.
++        while IFS=$'\t' read -r -u 3 id kind cur prop adoptf; do
+             [ -n "$id" ] || continue
+-            prompt_json_field_review "$id" "$cur" "$prop" "profile.json" "$adoptf"
++            if [ "$live_existed" = "false" ]; then
++                JSON_FIELD_REVIEW_RESULT="overwrite"
++            else
++                prompt_json_field_review "$id" "$cur" "$prop" "profile.json" "$adoptf"
++            fi
+             printf '%s\t%s\n' "$id" "$JSON_FIELD_REVIEW_RESULT" >> "$choices_tsv"
+-        done < "$decisions_tsv"
++        done 3< "$decisions_tsv"
+     fi
+ 
+     # --- Backup before apply ---
+@@ -1503,6 +1583,8 @@ repair_uv_tool_env() {
+     # Find a working Python -- uv's own Pythons first, then system
+     local working_python=""
+     local uv_python
++    # 2>/dev/null + || true: "no Python found" is an expected outcome here; the -n/-x
++    # check below handles it and falls through to system Python.
+     uv_python=$(uv python find 2>/dev/null) || true
+     if [ -n "$uv_python" ] && [ -x "$uv_python" ]; then
+         working_python="$uv_python"
+@@ -1519,13 +1601,16 @@ repair_uv_tool_env() {
+ 
+     log "Repairing with: uv tool install --force --python $working_python $tool_name"
+     local repair_output
+-    repair_output=$(uv tool install --force --python "$working_python" "$tool_name" 2>&1) || true
+-    printf '%s\n' "$repair_output" | while IFS= read -r line; do
+-        [ -n "$line" ] && log "$line"
+-    done
+-
+-    if printf '%s\n' "$repair_output" | grep -qi 'error.*failed'; then
+-        log_error "$tool_name environment repair failed"
++    # Capture the exit code instead of aborting under set -e; it decides success below.
++    local repair_rc=0
++    repair_output=$(uv tool install --force --python "$working_python" "$tool_name" 2>&1) || repair_rc=$?
++    local line
++    while IFS= read -r line; do
++        if [ -n "$line" ]; then log "$line"; fi
++    done <<< "$repair_output"
++
++    if [ "$repair_rc" -ne 0 ]; then
++        log_error "$tool_name environment repair failed (uv exit $repair_rc)"
+         return 1
+     fi
+ 
+```
+
+### Batch C2 — aitools-lib.ps1, check-lib.ps1, check-lib.sh
+
+#### `scripts/aitools-lib.ps1`
+
+```diff
+diff --git ascripts/aitools-lib.ps1 bscripts/aitools-lib.ps1
+index 756f363..afd6b46 100644
+--- ascripts/aitools-lib.ps1
++++ bscripts/aitools-lib.ps1
+@@ -27,8 +27,10 @@ function ReadConfigKey {
+         if ($val) { return $val }
+     } catch {
+         # File exists but is invalid JSON -- warn so callers know the null
+-        # return means "corrupt", not "missing key"
+-        Write-Host "      WARN: could not parse $File" -ForegroundColor Yellow
++        # return means "corrupt", not "missing key". Callers may run before
++        # Initialize-Logging; without a log file, fall back to the warning stream.
++        if ($script:logFile) { LogWarn "Could not parse $File" }
++        else { Write-Warning "Could not parse $File" }
+     }
+     return $null
+ }
+@@ -261,11 +263,21 @@ function Backup-File {
+     if (-not (Test-Path $FilePath)) { return }
+     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
+     $backupPath = "${FilePath}.bak.${ts}"
+-    Copy-Item -Path $FilePath -Destination $backupPath
++    # A failed backup is non-fatal (config-file-safety.md "Backup before overwrite"):
++    # warn and let the caller proceed.
++    try {
++        Copy-Item -Path $FilePath -Destination $backupPath -ErrorAction Stop
++    } catch {
++        LogWarn "Could not back up $FilePath -- proceeding without backup: $_"
++        return
++    }
+     # Prune oldest beyond limit
+-    $backups = Get-ChildItem -Path "${FilePath}.bak.*" | Sort-Object LastWriteTime -Descending
++    $backups = @(Get-ChildItem -Path "${FilePath}.bak.*" | Sort-Object LastWriteTime -Descending)
+     if ($backups.Count -gt $MaxBackups) {
+-        $backups | Select-Object -Skip $MaxBackups | Remove-Item -Force
++        foreach ($old in ($backups | Select-Object -Skip $MaxBackups)) {
++            try { Remove-Item $old.FullName -Force -ErrorAction Stop }
++            catch { LogWarn "Could not prune old backup $($old.FullName)" }
++        }
+     }
+     Log "Backed up $FilePath"
+ }
+@@ -330,7 +342,9 @@ function Initialize-DeployState {
+                 $script:DeployManifest | Add-Member -NotePropertyName files -NotePropertyValue @{} -Force
+             }
+         } catch {
+-            LogWarn "Corrupt deploy manifest, resetting: $_"
++            LogWarn "Deploy-state manifest unreadable -- starting fresh (old copy kept as .corrupt): $_"
++            try { Move-Item $manifestPath "$manifestPath.corrupt" -Force -ErrorAction Stop }
++            catch { LogWarn "Could not move aside ${manifestPath}: $_" }
+             $script:DeployManifest = [PSCustomObject]@{ version = 1; files = @{} }
+         }
+     } else {
+@@ -381,21 +395,27 @@ function Update-DeployState {
+     }
+ 
+     $manifestDir = $script:DeployStateDir
+-    if (-not (Test-Path $manifestDir)) {
+-        New-Item -ItemType Directory -Path $manifestDir -Force | Out-Null
+-    }
+     $manifestPath = Join-Path $manifestDir "manifest.json"
+     $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($manifestPath)
+-    $json = $script:DeployManifest | ConvertTo-Json -Depth 5
+-    [System.IO.File]::WriteAllText($resolved, $json, [System.Text.UTF8Encoding]::new($false))
++    # A failed state write is non-fatal (parity with update_deploy_state): the
++    # file itself is deployed; the next run just may re-prompt.
++    try {
++        if (-not (Test-Path $manifestDir)) {
++            New-Item -ItemType Directory -Path $manifestDir -Force -ErrorAction Stop | Out-Null
++        }
++        $json = $script:DeployManifest | ConvertTo-Json -Depth 5
++        [System.IO.File]::WriteAllText($resolved, $json, [System.Text.UTF8Encoding]::new($false))
+ 
+-    $shadowPath = Join-Path $manifestDir "shadows" $key
+-    $shadowDir = Split-Path $shadowPath -Parent
+-    if (-not (Test-Path $shadowDir)) {
+-        New-Item -ItemType Directory -Path $shadowDir -Force | Out-Null
++        $shadowPath = Join-Path $manifestDir "shadows" $key
++        $shadowDir = Split-Path $shadowPath -Parent
++        if (-not (Test-Path $shadowDir)) {
++            New-Item -ItemType Directory -Path $shadowDir -Force -ErrorAction Stop | Out-Null
++        }
++        $resolvedShadow = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($shadowPath)
++        [System.IO.File]::WriteAllText($resolvedShadow, $Content, [System.Text.UTF8Encoding]::new($false))
++    } catch {
++        LogWarn "Could not update deploy state for $key -- next run may re-prompt: $_"
+     }
+-    $resolvedShadow = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($shadowPath)
+-    [System.IO.File]::WriteAllText($resolvedShadow, $Content, [System.Text.UTF8Encoding]::new($false))
+ }
+ 
+ function Get-DeployShadow {
+@@ -406,6 +426,8 @@ function Get-DeployShadow {
+         try {
+             return Get-Content $shadowPath -Raw -ErrorAction Stop
+         } catch {
++            # Caller treats $null as "no ancestor" and bootstraps from the deployed file.
++            LogWarn "Could not read deploy shadow for $FilePath -- no merge ancestor: $_"
+             return $null
+         }
+     }
+@@ -440,6 +462,8 @@ function Try-AutoMerge {
+         }
+         return $null
+     } catch {
++        # Caller treats $null as "no clean merge" and falls back to the manual menu.
++        LogWarn "Auto-merge failed -- falling back to manual review: $_"
+         return $null
+     } finally {
+         Remove-Item $tmpLocal, $tmpAncestor, $tmpSource -ErrorAction SilentlyContinue
+@@ -669,6 +693,29 @@ function Stop-AiSpinner {
+     }
+ }
+ 
++# ---------------------------------------------------------------------------
++# Prompt helpers (parity with aitools-lib.sh read_tty_choice / the /dev/tty check).
++# Test-InteractiveConsole: one non-interactive test for every prompt -- a
++# redirected stdin or a non-interactive session never prompts.
++# Read-ConsoleChoice: [Console]::ReadLine() returns $null at EOF, and the
++# callers' .ToLower() then threw. This logs and returns "" so each caller's
++# default branch applies.
++# ---------------------------------------------------------------------------
++function Test-InteractiveConsole {
++    return ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected)
++}
++
++function Read-ConsoleChoice {
++    param([string]$DefaultDesc)
++    $line = [Console]::ReadLine()
++    if ($null -eq $line) {
++        [Console]::WriteLine("")
++        LogWarn "No input at prompt (EOF) -- defaulting to $DefaultDesc"
++        return ""
++    }
++    return $line
++}
++
+ # ---------------------------------------------------------------------------
+ # Agentic merge via Invoke-AI with refinement loop.
+ # Uses structured prompts from Get-AiMergePrompt / Get-AiMergeRefinePrompt.
+@@ -708,7 +755,7 @@ function Invoke-AiMerge {
+                 -LocalContent $LocalContent -DiffOutput $DiffOutput
+         } else {
+             [Console]::Write("  refinement feedback: ")
+-            $feedback = [Console]::ReadLine()
++            $feedback = Read-ConsoleChoice "no feedback"
+             $promptText = Get-AiMergeRefinePrompt -SourceContent $SourceContent `
+                 -LocalContent $LocalContent -CurrentMerge $currentMerge -Feedback $feedback
+         }
+@@ -728,7 +775,7 @@ function Invoke-AiMerge {
+             [Console]::WriteLine("  >> AI merge failed (iteration $iteration): $reason")
+             LogError "AI merge failed (iteration $iteration): $reason"
+             [Console]::Write("  fallback [o]verwrite / [s]kip: ")
+-            $fb = [Console]::ReadLine()
++            $fb = Read-ConsoleChoice "overwrite"
+             if ($fb.ToLower() -eq "s") { return "skip" }
+             return "overwrite"
+         }
+@@ -746,7 +793,7 @@ function Invoke-AiMerge {
+         }
+         [Console]::WriteLine("")
+         [Console]::Write("  [y]es accept / [r]efine / [n]o reject: ")
+-        $accept = [Console]::ReadLine()
++        $accept = Read-ConsoleChoice "reject merge (overwrite)"
+         switch ($accept.ToLower()) {
+             "y" {
+                 $script:MergedContent = $merged
+@@ -794,7 +841,7 @@ function Prompt-DiffReview {
+     }
+ 
+     # Non-interactive: auto-overwrite
+-    if (-not [Environment]::UserInteractive) {
++    if (-not (Test-InteractiveConsole)) {
+         LogWarn "Diff in $FilePath -- overwriting (non-interactive)"
+         return "overwrite"
+     }
+@@ -831,6 +878,9 @@ function Prompt-DiffReview {
+             $diffLines += "${prefix}$($d.InputObject)"
+         }
+         $diffOutput = $diffLines -join "`n"
++        # Full diff as [detail] records at every size (the console truncates at 30).
++        $leafName = Split-Path -Leaf $FilePath
++        foreach ($dl in $diffLines) { LogDetail "diff ${leafName}: $dl" }
+     }
+ 
+     if ($diffCount -eq 0) {
+@@ -879,7 +929,7 @@ function Prompt-DiffReview {
+             [Console]::WriteLine("  [s]kip")
+             [Console]::WriteLine("  [x]abort")
+             [Console]::Write("  choice [a/o/s/x]: ")
+-            $choice = [Console]::ReadLine()
++            $choice = Read-ConsoleChoice "overwrite"
+             switch ($choice.ToLower()) {
+                 "a" {
+                     $script:MergedContent = $autoMerged
+@@ -926,7 +976,7 @@ function Prompt-DiffReview {
+         [Console]::Write("  choice [o/m/s/x]: ")
+     }
+ 
+-    $choice = [Console]::ReadLine()
++    $choice = Read-ConsoleChoice "overwrite"
+     switch ($choice.ToLower()) {
+         "a" {
+             if ($AdoptLabel) {
+@@ -1189,7 +1239,7 @@ function Prompt-JsonFieldReview {
+         Log "Divergence in $Leaf -- overwriting from $SourceLabel (--force)"
+         return "overwrite"
+     }
+-    if ([Console]::IsInputRedirected) {
++    if (-not (Test-InteractiveConsole)) {
+         Log "Divergence in $Leaf -- overwriting from $SourceLabel (non-interactive)"
+         return "overwrite"
+     }
+@@ -1211,8 +1261,7 @@ function Prompt-JsonFieldReview {
+         [Console]::Write("  choice [o/s/x]: ")
+     }
+ 
+-    $choice = [Console]::ReadLine()
+-    if ($null -eq $choice) { return "overwrite" }
++    $choice = Read-ConsoleChoice "overwrite from $SourceLabel"
+     switch ($choice.ToLower()) {
+         "a" {
+             if ($AdoptAllowed -eq "1") {
+@@ -1427,10 +1476,21 @@ if (mode === 'plan') {
+ 
+     # --- Prompt loop (granular, per leaf) ---
+     $choiceLines = @()
++    if (-not $liveExisted -and $decisions.Count -gt 0) {
++        # No live file yet (fresh HOME): nothing local to protect, so every leaf is
++        # created from the profile without prompting (#31).
++        Log "No $LiveFile yet -- creating from profile ($($decisions.Count) setting(s))"
++        $liveDir = Split-Path $LiveFile -Parent
++        if (-not (Test-Path $liveDir)) { New-Item -ItemType Directory -Path $liveDir -Force | Out-Null }
++    }
+     foreach ($line in $decisions) {
+         $cols = $line -split "`t"
+         $id = $cols[0]; $cur = $cols[2]; $prop = $cols[3]; $adoptf = $cols[4]
+-        $action = Prompt-JsonFieldReview -Leaf $id -Current $cur -Proposed $prop -SourceLabel "profile.json" -AdoptAllowed $adoptf
++        if ($liveExisted) {
++            $action = Prompt-JsonFieldReview -Leaf $id -Current $cur -Proposed $prop -SourceLabel "profile.json" -AdoptAllowed $adoptf
++        } else {
++            $action = "overwrite"
++        }
+         $choiceLines += "$id`t$action"
+     }
+     [System.IO.File]::WriteAllText($choicesTsv, (($choiceLines -join "`n") + "`n"), [System.Text.UTF8Encoding]::new($false))
+```
+
+#### `scripts/check-lib.ps1`
+
+```diff
+diff --git ascripts/check-lib.ps1 bscripts/check-lib.ps1
+index 9134bed..873aac2 100644
+--- ascripts/check-lib.ps1
++++ bscripts/check-lib.ps1
+@@ -48,8 +48,10 @@ function CheckLogInit {
+     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+     $hostName = $env:COMPUTERNAME
+     if (-not $hostName) { $hostName = hostname }
++    # Record the real platform (pwsh also runs these checks on macOS and Linux).
++    $osName = if ($IsWindows) { "Windows" } elseif ($IsMacOS) { "macOS" } elseif ($IsLinux) { "Linux" } else { "unknown" }
+     Add-Content -Path $script:CheckLog -Value "[$ts] [$Name] === RUN START ==="
+-    Add-Content -Path $script:CheckJsonl -Value "{`"ts`":`"$ts`",`"check`":`"$Name`",`"event`":`"run_start`",`"host`":`"$hostName`",`"os`":`"Windows`"}"
++    Add-Content -Path $script:CheckJsonl -Value "{`"ts`":`"$ts`",`"check`":`"$Name`",`"event`":`"run_start`",`"host`":`"$hostName`",`"os`":`"$osName`"}"
+ 
+     # Bridge: initialize aitools-lib logging vars so lib functions
+     # (Log, Ensure-ToolOnPath, Deploy-ManagedFile, etc.) work in check context.
+```
+
+#### `scripts/check-lib.sh`
+
+```diff
+diff --git ascripts/check-lib.sh bscripts/check-lib.sh
+index 2cfa5b4..908fd17 100755
+--- ascripts/check-lib.sh
++++ bscripts/check-lib.sh
+@@ -152,6 +152,8 @@ resolve_config() {
+     CONFIG_FILE="$HOME/.aitools/config.json"
+     USER_REPO_PATH=""
+     if [ -f "$CONFIG_FILE" ]; then
++        # read_config_key returns 1 when the key is absent (before 'aitools user init');
++        # USER_REPO_PATH stays empty and callers test it with [ -n ] before use.
+         USER_REPO_PATH=$(read_config_key "$CONFIG_FILE" "userRepoPath" 2>/dev/null || true)
+     fi
+ }
+@@ -163,6 +165,8 @@ resolve_config() {
+ # ---------------------------------------------------------------------------
+ get_mtime() {
+     local file="$1"
++    # stat fails only if the file vanished; 0 (epoch) makes it read as oldest, so
++    # check-post-push never picks it as "newest" and flags it stale (conservative).
+     if $IS_MACOS; then
+         stat -f %m "$file" 2>/dev/null || echo 0
+     else
+```
+
+### Batch C3a — aitools, aitools.ps1
+
+#### `scripts/aitools`
+
+```diff
+diff --git ascripts/aitools bscripts/aitools
+index 1a2baa2..36b72f2 100755
+--- ascripts/aitools
++++ bscripts/aitools
+@@ -506,7 +506,8 @@ Commands:
+ Options:
+   --addmcp <name...>   Enable MCP server(s) for current project (vercel, webflow)
+   --dry-run            Preview what would change without writing any files
+-  --force              Overwrite all files without prompting for review
++  --force              No prompts: managed files take the source version (backups
++                       kept); with install, also skips gh login and path prompts
+   --version, -v        Show installed and repo version
+   --help, -h           Show this help
+ 
+@@ -1528,6 +1529,10 @@ overall_rc=0
+ if $do_install; then
+     # --- install: pull + rebuild + run installer (includes deploy) ---
+     log "Step 3/$STEPS: Running installer"
++    # Interactive iff run from a terminal: the installer and its setup scripts
++    # inherit this stdin and decide for themselves. --force makes every review
++    # prompt take the source version (backup kept), terminal or not.
++    if $force; then export AITOOLS_FORCE=1; fi
+     case "$(uname -s)" in
+         MINGW*|MSYS*|CYGWIN*)
+             # Windows: forward to PowerShell installer with translated flags
+@@ -1551,10 +1556,11 @@ if $do_install; then
+                 "${ps_args[@]}"
+             ;;
+         *)
+-            bash "$repo_path/scripts/aitools-install.sh" "${passthrough[@]}" < /dev/null
++            bash "$repo_path/scripts/aitools-install.sh" "${passthrough[@]}"
+             ;;
+     esac
+     installer_rc=$?
++    unset AITOOLS_FORCE
+     echo ""
+     if [ $installer_rc -eq 0 ]; then
+         log_ok "All up to date ($(repo_version "$repo_path"))"
+```
+
+#### `scripts/aitools.ps1`
+
+```diff
+diff --git ascripts/aitools.ps1 bscripts/aitools.ps1
+index d302a59..869e42d 100644
+--- ascripts/aitools.ps1
++++ bscripts/aitools.ps1
+@@ -493,7 +493,8 @@ Commands:
+ Options:
+   --addmcp <name...>   Enable MCP server(s) for current project (vercel, webflow)
+   --dry-run            Preview what would change without writing any files
+-  --force              Overwrite all files without prompting for review
++  --force              No prompts: managed files take the source version (backups
++                       kept); with install, also skips gh login and path prompts
+   --version, -v        Show installed and repo version
+   --help, -h           Show this help
+ 
+@@ -1449,8 +1450,13 @@ if ($doInstall) {
+     if ($SkipGhAuth) { $installerArgs += "-SkipGhAuth" }
+     if ($SkipDriveDetection) { $installerArgs += "-SkipDriveDetection" }
+     if ($ReposPath) { $installerArgs += "-ReposPath"; $installerArgs += $ReposPath }
++    # Interactive iff run from a console: the installer and its setup scripts decide
++    # for themselves. -Force makes every review prompt take the source version
++    # (backup kept), console or not.
++    if ($Force) { $env:AITOOLS_FORCE = "1" }
+     & "$repoPath\scripts\aitools-install.ps1" @installerArgs
+     $installerRc = $LASTEXITCODE
++    if (Test-Path Env:\AITOOLS_FORCE) { Remove-Item Env:\AITOOLS_FORCE }
+     Write-Host ""
+     if ($installerRc -eq 0) {
+         LogOk "All up to date ($(Get-RepoVersion $repoPath))"
+```
+
+### Batch C4a — aitools-install.sh, aitools-install.ps1
+
+#### `scripts/aitools-install.sh`
+
+```diff
+diff --git ascripts/aitools-install.sh bscripts/aitools-install.sh
+index 77f2289..37799ba 100755
+--- ascripts/aitools-install.sh
++++ bscripts/aitools-install.sh
+@@ -62,8 +62,10 @@ Options:
+   --help, -h                Show this help
+ 
+ Interactive behavior:
+-  When stdin is a terminal, prompts for repos path and drive confirmation.
++  When stdin is a terminal, prompts for gh login, repos path, and file reviews.
+   When piped or run non-interactively, uses defaults and flags.
++  AITOOLS_FORCE=1 (aitools install --force): no prompts even in a terminal;
++  managed files take the source version (backups kept).
+   When config.json already exists, uses saved values without prompting.
+ USAGE
+     exit 0
+@@ -149,6 +151,13 @@ validate_and_run() {
+ 
+ # display_path is provided by aitools-lib.sh
+ 
++# Interactive mode (same rule as the lib's review prompts): a terminal on stdin and
++# no --force / AITOOLS_FORCE. Otherwise every prompt takes its default.
++INSTALL_INTERACTIVE=false
++if [ "${AITOOLS_FORCE:-}" != "1" ] && tty_interactive; then
++    INSTALL_INTERACTIVE=true
++fi
++
+ # --- Post-write JSON validation ---
+ # Validates a JSON config file after writing: checks non-empty, valid JSON,
+ # required keys present, and no double-slash paths (excluding protocol prefixes).
+@@ -272,7 +281,7 @@ elif ! command -v gh &>/dev/null; then
+     log_warn "gh not installed, skipping auth"
+ elif gh auth status &>/dev/null; then
+     log_ok "gh already authenticated"
+-elif [ -t 0 ]; then
++elif $INSTALL_INTERACTIVE; then
+     log "Not authenticated. Starting gh auth login..."
+     gh auth login || log_error "gh auth login failed"
+ else
+@@ -292,10 +301,10 @@ elif REPOS_PATH=$(read_config_key "$CONFIG_FILE" "reposPath"); then
+     log "Using repos path from config: $REPOS_PATH"
+ fi
+ if [ -z "$REPOS_PATH" ]; then
+-    if [ -t 0 ]; then
+-        # Interactive — prompt
++    if $INSTALL_INTERACTIVE; then
++        # Interactive — prompt (EOF-safe: read_tty_choice logs and returns empty)
+         printf 'Where should new repos live? [~/repos]: '
+-        read -r user_path
++        read_tty_choice user_path "~/repos"
+         if [ -n "$user_path" ]; then
+             REPOS_PATH="${user_path/#\~/$HOME}"
+         else
+@@ -532,7 +541,7 @@ fi
+ # These are sole-owned generated artifacts (the user never edits the deployed
+ # copy), so per config-file-safety.md we back up + diff-log + overwrite, with
+ # NO interactive review. deploy_managed_file's prompt is for user-customizable
+-# files; under the non-interactive install wrapper its tty read aborts the run.
++# files only.
+ AITOOLS_BIN="$HOME/.aitools/bin"
+ mkdir -p "$AITOOLS_BIN"
+ _hbin_deployed=0
+```
+
+#### `scripts/aitools-install.ps1`
+
+```diff
+diff --git ascripts/aitools-install.ps1 bscripts/aitools-install.ps1
+index ead8c86..2b2e6db 100644
+--- ascripts/aitools-install.ps1
++++ bscripts/aitools-install.ps1
+@@ -28,8 +28,10 @@ Options:
+   -Help                     Show this help
+ 
+ Interactive behavior:
+-  When stdin is a terminal, prompts for repos path and drive confirmation.
++  When stdin is a terminal, prompts for gh login, repos path, and file reviews.
+   When piped or run non-interactively, uses defaults and flags.
++  AITOOLS_FORCE=1 (aitools install --force): no prompts even in a terminal;
++  managed files take the source version (backups kept).
+   When config.json already exists, uses saved values without prompting.
+ "@
+     exit 0
+@@ -80,6 +82,10 @@ if (-not $env:AITOOLS_SUMMARY_FILE) {
+     New-Item -ItemType File -Path $env:AITOOLS_SUMMARY_FILE -Force | Out-Null
+ }
+ 
++# Interactive mode (same rule as the lib's review prompts): a console on stdin and
++# no -Force / AITOOLS_FORCE. Otherwise every prompt takes its default.
++$installInteractive = ($env:AITOOLS_FORCE -ne "1") -and (Test-InteractiveConsole)
++
+ # --- Script validation helper ---
+ # Validates PS1 syntax with ParseFile before executing. Skips with warning on parse errors.
+ function Invoke-ValidatedScript {
+@@ -192,7 +198,7 @@ if ($SkipGhAuth) {
+     $authStatus = gh auth status 2>&1
+     if ($LASTEXITCODE -eq 0) {
+         LogOk "gh already authenticated"
+-    } elseif ([Environment]::UserInteractive) {
++    } elseif ($installInteractive) {
+         Log "Not authenticated. Starting gh auth login..."
+         gh auth login
+         if ($LASTEXITCODE -ne 0) {
+@@ -225,9 +231,10 @@ if ($ReposPath) {
+     }
+ }
+ if (-not $resolvedReposPath) {
+-    if ([Environment]::UserInteractive) {
++    if ($installInteractive) {
+         $defaultPath = Join-Path $env:USERPROFILE "repos"
+-        $userInput = Read-Host "Where should new repos live? [$defaultPath]"
++        [Console]::Write("Where should new repos live? [$defaultPath]: ")
++        $userInput = Read-ConsoleChoice $defaultPath
+         if ($userInput) {
+             $resolvedReposPath = $userInput -replace '^~', $env:USERPROFILE
+         } else {
+@@ -364,7 +371,7 @@ if (Test-Path $hhPs1Src) {
+ # These are sole-owned generated artifacts (the user never edits the deployed
+ # copy), so per config-file-safety.md we back up + overwrite, with NO
+ # interactive review. Deploy-ManagedFile's prompt is for user-customizable
+-# files; under the non-interactive install wrapper its tty read aborts the run.
++# files only.
+ $aitoolsBin = Join-Path $env:USERPROFILE ".aitools\bin"
+ if (-not (Test-Path $aitoolsBin)) { New-Item -ItemType Directory -Path $aitoolsBin -Force | Out-Null }
+ $hbinDeployed = 0
+```
 
 ## Risks
 

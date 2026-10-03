@@ -12,6 +12,33 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.73.3 -- Fix: prompts survive EOF, `aitools install` interactive or non-interactive on every platform, `--force` reaches install (2026-10-03)
+
+### Bug fixes
+
+| # | Severity | Change |
+|---|----------|--------|
+| 1 | High | Review prompts died silently at end of input: bash `read < /dev/tty` returned 1 under `set -e`, PS1 called `.ToLower()` on `$null`. New `read_tty_choice` / `Read-ConsoleChoice` log a WARN and take the default (overwrite, backup kept). (#29) |
+| 2 | High | `aitools install` on macOS/Linux was never interactive (installer ran with `< /dev/null`), while Windows install was. Both commands now follow one rule on every platform: interactive iff stdin is a terminal and not forced. The installers' gh-login and repos-path prompts use the same rule; their Step 3 read is EOF-safe. PS1 non-interactive detection unified (`Test-InteractiveConsole`; was `UserInteractive` in one prompt, `IsInputRedirected` in the other). (#29) |
+| 3 | High | `aitools install --force` / `-Force` never reached the installer, so install could not run non-interactively from a terminal. Both entry points now export `AITOOLS_FORCE=1` for install. |
+| 4 | High | Fresh HOME: settings sync prompted for every profile key (and died at EOF) because `settings.json` did not exist yet. When the live file is absent it is now created from the profile without prompting. (#31, library half; the `setup-user-settings` early exit is removed in a later batch) |
+| 5 | Medium | A failed deploy-state update wrote an empty `manifest.json`, silently losing all deploy history. Node failures are now checked: WARN and keep the previous manifest; a corrupt manifest is moved aside as `.corrupt`. Same hardening in PS1. (#30) |
+| 6 | Medium | `backup_file` / `Backup-File`: a failed copy aborted the run or threw; it now warns and proceeds, per `config-file-safety.md`. Pruning failures are logged. (#30) |
+| 7 | Medium | Reviewed diffs reached `deploy.log` only as raw unprefixed lines, and only when over 40 lines (bash) or never (PS1). Every diff line is now a `[detail]` record at every size. (#30) |
+| 8 | Low | `checks.jsonl` run_start recorded `"os":"Windows"` for PS1 checks on every platform; now the real platform. (#30) |
+| 9 | Low | `repair_uv_tool_env` decided success by grepping for `error.*failed` and had a piped `[ -n ] && log` loop that aborts under `set -e`; it now uses uv's exit code and an `if` loop. (#24, #27) |
+| 10 | Low | `ReadConfigKey` printed its parse warning with `Write-Host` (not logged, not counted); `Get-DeployShadow` and `Try-AutoMerge` swallowed errors silently. All now log a WARN. (#25) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 11 | `interactive-menus.md`: non-interactive fallback names `--force`, EOF, and the installers' prompts. |
+| 12 | `script-standards-detail.md` exemptions table re-synced with current code (two obsolete rows removed, line numbers corrected). |
+| 13 | Plan `plans/linux-install-hardening.md`: PR C1 section (decisions C-F7, C-F8; verbatim edits for batches C1, C2, C3a, C4a). |
+
+**Verified on:** Linux (Ubuntu 24.04, Claude Code web). `bash -n` / pwsh ParseFile clean on all eight edited scripts. Bash library 24/24 and PS1 library 26/26 behavior checks (same tests on `main`: 6/24 and 9/26). Mode matrix through the real `aitools` entry point and installer (stubbed tool installs, real prompts): 18/18 (on `main`: 11/18 -- install never interactive, EOF stopped the run, `--force` still prompted). Prompt-level matrix under a real pty: 15/15. `build-deploy.sh`: 40 scripts, all PS1 parse. macOS/Windows: not run -- PS1 entry point and installer exit at their OS guard here, parse-checked only; the bash install path needs a macOS run.
+
 ## v0.73.2 -- Fix: safe re-runs on Linux -- config merge, Go/pup cleanup order, exit status (2026-10-03)
 
 ### Bug fixes
