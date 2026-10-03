@@ -27,8 +27,10 @@ switch ($provenance) {
     "chocolatey" {
         LogWarn "Go installed via Chocolatey -- attempting removal..."
         $chocoOutput = choco uninstall golang -y 2>&1 | Out-String
-        if ($LASTEXITCODE -ne 0) {
-            LogWarn "choco uninstall golang failed (may need admin) -- proceeding with winget install"
+        $chocoRc = $LASTEXITCODE
+        foreach ($l in $chocoOutput.Split("`n")) { if ($l.Trim()) { LogDetail "choco-uninstall-golang: $($l.TrimEnd())" } }
+        if ($chocoRc -ne 0) {
+            LogWarn "choco uninstall golang failed (exit $chocoRc; may need admin) -- proceeding with winget install. See $logFile"
         } else {
             LogOk "Chocolatey Go removed"
             $provenance = "none"
@@ -48,35 +50,41 @@ if ($provenance -eq "winget") {
     # Upgrade existing winget Go
     Log "Go already installed via winget -- checking for updates..."
     $wingetOutput = winget upgrade $goWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+    $upgradeRc = $LASTEXITCODE
     Log-WingetOutput $wingetOutput
     if ($wingetOutput -match 'No available upgrade|No newer package versions') {
         LogOk "Go already up to date"
-    } elseif ($LASTEXITCODE -ne 0) {
-        LogError "winget upgrade Go failed (exit code $LASTEXITCODE)"
-        Write-Summary "ERROR" "go" "winget upgrade failed"
+    } elseif ($upgradeRc -ne 0) {
+        LogError "winget upgrade Go failed (exit $upgradeRc) -- see $logFile"
+        Write-Summary "ERROR" "go" "winget upgrade failed (exit $upgradeRc)"
     }
     Refresh-Path
 
-    # Get-Command exempt: command-existence check with if/else fallback
-    $goCheck = Get-Command go -ErrorAction SilentlyContinue
-    if ($goCheck) {
-        $goVersion = go version 2>$null
-        if ($goVersion) {
-            LogOk "$goVersion"
-            Write-Summary "OK" "go" "$goVersion"
+    # After a failed upgrade its ERROR row stands alone (no OK row after it).
+    if ($errors -eq 0) {
+        # Get-Command exempt: command-existence check with if/else fallback
+        $goCheck = Get-Command go -ErrorAction SilentlyContinue
+        if ($goCheck) {
+            # Suppress stderr: result checked immediately (empty -> ERROR below)
+            $goVersion = go version 2>$null
+            if ($goVersion) {
+                LogOk "$goVersion"
+                Write-Summary "OK" "go" "$goVersion"
+            } else {
+                LogError "go found on PATH but 'go version' failed"
+                Write-Summary "ERROR" "go" "version check failed"
+            }
         } else {
-            LogError "go found on PATH but 'go version' failed"
-            Write-Summary "ERROR" "go" "version check failed"
+            LogError "winget upgrade completed but 'go' not found in PATH"
+            Write-Summary "ERROR" "go" "not on PATH after upgrade"
         }
-    } else {
-        LogError "winget upgrade completed but 'go' not found in PATH"
-        Write-Summary "ERROR" "go" "not on PATH after upgrade"
     }
 } elseif ($provenance -eq "scoop") {
     # Scoop users manage their own Go -- just verify and report
     # Get-Command exempt: command-existence check with if/else fallback
     $goCheck = Get-Command go -ErrorAction SilentlyContinue
     if ($goCheck) {
+        # Suppress stderr: result checked immediately (empty -> WARN below)
         $goVersion = go version 2>$null
         if ($goVersion) {
             LogOk "Go via Scoop: $goVersion"
@@ -93,29 +101,34 @@ if ($provenance -eq "winget") {
     # Fresh install via winget
     Log "Installing Go via winget ($goWingetId)..."
     $wingetOutput = winget install $goWingetId --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+    $installRc = $LASTEXITCODE
     Log-WingetOutput $wingetOutput
     if ($wingetOutput -match 'already installed') {
         LogOk "Go already installed (winget)"
-    } elseif ($LASTEXITCODE -ne 0) {
-        LogError "winget install Go failed (exit code $LASTEXITCODE)"
-        Write-Summary "ERROR" "go" "winget install failed"
+    } elseif ($installRc -ne 0) {
+        LogError "winget install Go failed (exit $installRc) -- see $logFile"
+        Write-Summary "ERROR" "go" "winget install failed (exit $installRc)"
     }
     Refresh-Path
 
-    # Get-Command exempt: command-existence check with if/else fallback
-    $goCheck = Get-Command go -ErrorAction SilentlyContinue
-    if ($goCheck) {
-        $goVersion = go version 2>$null
-        if ($goVersion) {
-            LogOk "Go installed ($goVersion)"
-            Write-Summary "OK" "go" "$goVersion"
+    # After a failed install its ERROR row stands alone (no second row after it).
+    if ($errors -eq 0) {
+        # Get-Command exempt: command-existence check with if/else fallback
+        $goCheck = Get-Command go -ErrorAction SilentlyContinue
+        if ($goCheck) {
+            # Suppress stderr: result checked immediately (empty -> ERROR below)
+            $goVersion = go version 2>$null
+            if ($goVersion) {
+                LogOk "Go installed ($goVersion)"
+                Write-Summary "OK" "go" "$goVersion"
+            } else {
+                LogError "go found on PATH but 'go version' failed"
+                Write-Summary "ERROR" "go" "version check failed"
+            }
         } else {
-            LogError "go found on PATH but 'go version' failed"
-            Write-Summary "ERROR" "go" "version check failed"
+            LogError "winget install completed but 'go' not found in PATH"
+            Write-Summary "ERROR" "go" "installed but not on PATH"
         }
-    } else {
-        LogError "winget install completed but 'go' not found in PATH"
-        Write-Summary "ERROR" "go" "installed but not on PATH"
     }
 }
 
