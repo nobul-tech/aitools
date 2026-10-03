@@ -59,7 +59,9 @@ if ($Remaining -and $Remaining -contains "--force") {
 }
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Bootstrap helper -- needed to find aitools-lib.ps1 (repoPath in config.json).
+# Everything else (logging, Write-Summary, ...) comes from the lib, which is
+# dot-sourced as soon as repoPath is known (see "Load aitools-lib" below).
 # ---------------------------------------------------------------------------
 
 function Read-ConfigKey {
@@ -75,23 +77,6 @@ function Read-ConfigKey {
     return $null
 }
 
-# ---------------------------------------------------------------------------
-# Logging (bootstrap -- overridden after lib is sourced below)
-# ---------------------------------------------------------------------------
-
-$logDir = if ($env:AITOOLS_LOG_DIR) { $env:AITOOLS_LOG_DIR } else { Join-Path $HOME ".aitools" "logs" }
-$logFile = Join-Path $logDir "deploy.log"
-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
-$script:errors = 0
-$script:warnings = 0
-
-function Log($msg, $level = "info") {
-    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-    Add-Content -Path $logFile -Value "[$ts] [aitools] [$level] $msg"
-}
-function LogOk($msg)    { Log $msg "ok" }
-function LogError($msg) { Log $msg "error"; Write-Host "error: $msg" -ForegroundColor Red; $script:errors++ }
-function LogWarn($msg)  { Log $msg "warn"; Write-Host "warning: $msg" -ForegroundColor Yellow; $script:warnings++ }
 
 # Check profile.json for issues and optionally prompt for fixes.
 # Usage: Invoke-ProfileCheck -Mode "warn" or "interactive"
@@ -161,7 +146,7 @@ function Invoke-ProfileMigration {
     $userRepoDir = Split-Path $profilePath -Parent
     $machAlias = Read-Host "Machine alias for this machine (e.g., laptop, workstation)"
     if (-not $machAlias) {
-        Write-Host "Migration cancelled (alias required)."
+        LogWarn "profile migration cancelled (alias required)"
         return
     }
 
@@ -257,13 +242,28 @@ fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
                 git -C $userRepoDir config user.name $gitName
                 git -C $userRepoDir config user.email $gitEmail
             }
-            git -C $userRepoDir add -A
-            git -C $userRepoDir commit -m "Migrate profile.json from v1 to v2"
-            $pushResult = git -C $userRepoDir push 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "  (push failed -- run 'git push' manually in $userRepoDir)"
+            $gitOut = git -C $userRepoDir add -A 2>&1 | Out-String
+            $gitRc = $LASTEXITCODE
+            if ($gitRc -eq 0) {
+                $gitOut += git -C $userRepoDir commit -m "Migrate profile.json from v1 to v2" 2>&1 | Out-String
+                $gitRc = $LASTEXITCODE
             }
-            Write-Host "Profile migrated and committed."
+            foreach ($gitLine in $gitOut.Split("`n")) {
+                if ($gitLine.Trim()) { LogDetail "profile-migrate commit: $($gitLine.TrimEnd())" }
+            }
+            if ($gitRc -ne 0) {
+                LogWarn "profile migration commit failed (exit $gitRc) -- commit manually in $userRepoDir"
+                return
+            }
+            $pushOut = git -C $userRepoDir push 2>&1 | Out-String
+            $pushRc = $LASTEXITCODE
+            foreach ($gitLine in $pushOut.Split("`n")) {
+                if ($gitLine.Trim()) { LogDetail "profile-migrate push: $($gitLine.TrimEnd())" }
+            }
+            if ($pushRc -ne 0) {
+                LogWarn "profile migration push failed (exit $pushRc) -- run 'git push' manually in $userRepoDir"
+            }
+            LogOk "Profile migrated and committed."
         }
     }
 }
@@ -308,7 +308,11 @@ function Deploy-Configs {
             $null = [System.Management.Automation.Language.Parser]::ParseFile(
                 $scriptPath, [ref]$null, [ref]$parseErrors)
             if ($parseErrors.Count -gt 0) {
-                LogWarn "$script has parse errors -- skipping"
+                foreach ($err in $parseErrors) {
+                    LogDetail "$script parse: line $($err.Extent.StartLineNumber): $($err.Message)"
+                }
+                LogError "$script has parse errors -- skipped (see $logFile)"
+                Write-Summary "ERROR" ($script -replace '\.ps1$', '') "parse errors -- skipped"
                 $errors++
                 continue
             }
@@ -321,11 +325,14 @@ function Deploy-Configs {
                 & $scriptPath
             } catch {
                 LogError "$script failed: $_"
+                Write-Summary "ERROR" ($script -replace '\.ps1$', '') "script failed (exception)"
                 $errors++
                 continue
             }
-            if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
-                LogError "$script failed (exit code $LASTEXITCODE)"
+            $scriptRc = $LASTEXITCODE
+            if ($scriptRc -and $scriptRc -ne 0) {
+                LogError "$script failed (exit $scriptRc) -- see $logFile"
+                Write-Summary "ERROR" ($script -replace '\.ps1$', '') "script failed (exit $scriptRc)"
                 $errors++
             }
         } else {
@@ -540,19 +547,9 @@ if ($doUser -or $doSessions) {
     }
 }
 
-# Reject unknown commands (typos like "installs", "mcpp", etc.)
-$knownCommands = @("install", "gitpull", "mcp", "user", "sessions", "dashboard", "")
-if ($Command -and $Command -notin $knownCommands) {
-    LogError "unknown command '$Command'"
-    Write-Host "Run 'aitools --help' for usage."
-    exit 1
-}
-
-# Reject --addmcp with no server names
-if ($PSBoundParameters.ContainsKey('AddMcp') -and $AddMcp.Count -eq 0) {
-    LogError "--addmcp requires at least one server name (vercel, webflow)"
-    exit 1
-}
+# Warnings and notes found before the lib is loaded (it holds the logging); logged right after.
+$preLibWarnings = @()
+$preLibNotes = @()
 
 # ---------------------------------------------------------------------------
 # Migrate config directory: ~\.config\ai-tooling\ -> ~\.aitools\
@@ -564,7 +561,7 @@ $newConfigDir = Join-Path $env:USERPROFILE ".aitools"
 if ((Test-Path $oldConfigDir) -and -not (Test-Path $newConfigDir)) {
     Move-Item -Path $oldConfigDir -Destination $newConfigDir
 } elseif ((Test-Path $oldConfigDir) -and (Test-Path $newConfigDir)) {
-    LogWarn "both $oldConfigDir and $newConfigDir exist -- using $newConfigDir"
+    $preLibWarnings += "both $oldConfigDir and $newConfigDir exist -- using $newConfigDir"
 }
 
 # ---------------------------------------------------------------------------
@@ -592,13 +589,65 @@ if ($oldKey) {
         $json = $cfgObj | ConvertTo-Json -Depth 10
         $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($configFile)
         [System.IO.File]::WriteAllText($resolved, $json + "`n", [System.Text.UTF8Encoding]::new($false))
-        Log "Migrated config: aiToolingRepoPath -> repoPath"
+        $preLibNotes += "Migrated config: aiToolingRepoPath -> repoPath"
         # Re-read after migration
         $repoPath = Read-ConfigKey -File $configFile -Key "repoPath"
     } catch {
-        LogWarn "Config key migration failed: $_"
+        $preLibWarnings += "Config key migration failed: $_"
         # Non-fatal: continue with whatever repoPath was already resolved
     }
+}
+
+# ---------------------------------------------------------------------------
+# Verify repo exists (clone fresh if missing). Runs before the lib is loaded --
+# the lib lives in the repo -- so status goes to the console directly and the
+# event is logged as a warning once the lib is up.
+# ---------------------------------------------------------------------------
+
+if (-not (Test-Path (Join-Path $repoPath ".git")) -and -not $Version) {
+    Write-Host "aitools: repo not found at $repoPath -- cloning fresh..."
+    $reposDir = Split-Path $repoPath -Parent
+    if (-not (Test-Path $reposDir)) { New-Item -ItemType Directory -Path $reposDir -Force | Out-Null }
+    git clone https://github.com/nobul-tech/aitools.git $repoPath
+    if ($LASTEXITCODE -ne 0) {
+        [Console]::Error.WriteLine("error: failed to clone the aitools repo to $repoPath")
+        exit 1
+    }
+    $preLibWarnings += "Repo was not found at $repoPath -- cloned fresh"
+}
+
+# ---------------------------------------------------------------------------
+# Load aitools-lib (logging, Write-Summary, ...) for every command.
+# Without the repo nothing below can run; -Version still answers.
+# ---------------------------------------------------------------------------
+
+$aitoolsLib = Join-Path $repoPath "scripts" "aitools-lib.ps1"
+if (-not (Test-Path $aitoolsLib)) {
+    if ($Version) {
+        Write-Host "aitools $AITOOLS_INSTALLED_VERSION"
+        Write-Host "  repo: not found at $repoPath"
+        exit 0
+    }
+    [Console]::Error.WriteLine("error: aitools-lib.ps1 not found at $aitoolsLib -- check repoPath in $configFile")
+    exit 1
+}
+. $aitoolsLib
+Initialize-Logging "aitools"
+foreach ($note in $preLibNotes) { Log $note }
+foreach ($w in $preLibWarnings) { LogWarn $w }
+
+# Reject unknown commands (typos like "installs", "mcpp", etc.)
+$knownCommands = @("install", "gitpull", "mcp", "user", "sessions", "dashboard", "")
+if ($Command -and $Command -notin $knownCommands) {
+    LogError "unknown command '$Command'"
+    Write-Host "Run 'aitools --help' for usage."
+    exit 1
+}
+
+# Reject --addmcp with no server names
+if ($PSBoundParameters.ContainsKey('AddMcp') -and $AddMcp.Count -eq 0) {
+    LogError "--addmcp requires at least one server name (vercel, webflow)"
+    exit 1
 }
 
 # ---------------------------------------------------------------------------
@@ -1285,22 +1334,6 @@ if ($doSessions) {
 }
 
 # ---------------------------------------------------------------------------
-# Verify repo exists (clone fresh if missing)
-# ---------------------------------------------------------------------------
-
-if (-not (Test-Path (Join-Path $repoPath ".git"))) {
-    LogWarn "Repo not found at $repoPath -- cloning fresh..."
-    $reposDir = Split-Path $repoPath -Parent
-    if (-not (Test-Path $reposDir)) { New-Item -ItemType Directory -Path $reposDir -Force | Out-Null }
-    git clone https://github.com/nobul-tech/aitools.git $repoPath
-    if ($LASTEXITCODE -ne 0) {
-        LogError "Failed to clone repo to $repoPath"
-        exit 1
-    }
-    LogOk "Clone successful"
-}
-
-# ---------------------------------------------------------------------------
 # Run update (pull + rebuild + deploy/install)
 # ---------------------------------------------------------------------------
 
@@ -1313,9 +1346,6 @@ Remove-Item $env:AITOOLS_SUMMARY_FILE -ErrorAction SilentlyContinue
 New-Item -ItemType File -Path $env:AITOOLS_SUMMARY_FILE -Force | Out-Null
 $env:AITOOLS_SUPPRESS_SUMMARY_DISPLAY = "1"
 
-# Source shared lib (provides Write-Summary, Show-Summary)
-. (Join-Path $repoPath "scripts" "aitools-lib.ps1")
-Initialize-Logging "aitools"
 
 Log "aitools $AITOOLS_INSTALLED_VERSION"
 
@@ -1353,15 +1383,19 @@ try {
         $pullOut = git pull origin main 2>&1 | Out-String
     }
     if ($LASTEXITCODE -ne 0) {
+        # Full output to the log first; the console keeps its preview.
+        foreach ($pullLine in $pullOut.Split("`n")) {
+            if ($pullLine.Trim()) { LogDetail "git-pull: $($pullLine.TrimEnd())" }
+        }
         if ($doGitpull) {
-            LogError "git pull failed"
+            LogError "git pull failed (see $logFile)"
             Write-Host $pullOut
             exit 1
         } else {
             if ($pullOut -match "(?i)(could not resolve|unable to access|connection refused|connection timed out|no route to host)") {
                 LogWarn "Could not reach remote - deploying from local checkout"
             } else {
-                LogWarn "git pull failed -- deploying from local checkout."
+                LogWarn "git pull failed -- deploying from local checkout (see $logFile)"
                 $pullOut.Trim().Split("`n") | Select-Object -First 3 | ForEach-Object { Write-Host "    $_" }
             }
             Write-Summary "WARN" "source" "stale local checkout (git pull failed)"
@@ -1433,7 +1467,10 @@ if (Test-Path $repoAitools) {
             & $installedPath @PSBoundParameters
             exit $LASTEXITCODE
         } else {
-            LogWarn "Repo scripts/aitools.ps1 has parse errors -- continuing with current list"
+            foreach ($err in $parseErrors) {
+                LogDetail "aitools.ps1 parse: line $($err.Extent.StartLineNumber): $($err.Message)"
+            }
+            LogWarn "Repo scripts/aitools.ps1 has parse errors -- continuing with current list (see $logFile)"
         }
     }
 }
@@ -1581,7 +1618,10 @@ if (Test-Path $aitoolsSrc) {
     $parseErrors = $null
     $null = [System.Management.Automation.Language.Parser]::ParseFile($aitoolsSrc, [ref]$null, [ref]$parseErrors)
     if ($parseErrors.Count -gt 0) {
-        LogWarn "skipping PS1 self-update (new aitools.ps1 has parse errors on this PowerShell version)"
+        foreach ($err in $parseErrors) {
+            LogDetail "aitools.ps1 parse: line $($err.Extent.StartLineNumber): $($err.Message)"
+        }
+        LogWarn "skipping PS1 self-update (new aitools.ps1 has parse errors on this PowerShell version; see $logFile)"
     } else {
         $srcContent = Get-Content $aitoolsSrc -Raw
         $stampedContent = $srcContent -replace '^\$AITOOLS_INSTALLED_VERSION = ".*"', "`$AITOOLS_INSTALLED_VERSION = `"$newVersion`""

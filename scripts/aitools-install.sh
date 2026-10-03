@@ -9,6 +9,11 @@
 
 set -euo pipefail
 
+# --- Shared library (first, so flag errors and Windows forwarding are logged) ---
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/aitools-lib.sh"
+logging_init "aitools-install"
+
 # --- Defaults ---
 REPOS_PATH=""
 SKIP_DRIVE_DETECTION=false
@@ -40,7 +45,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         *)
-            echo "Unknown option: $1" >&2
+            log_warn "Unknown option: $1"
             SHOW_HELP=true
             shift
             ;;
@@ -74,9 +79,10 @@ fi
 # --- Windows forwarding (safety net for direct invocation) ---
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
-        ps1_installer="$(dirname "$0")/aitools-install.ps1"
+        ps1_installer="$SCRIPT_DIR/aitools-install.ps1"
         if [ ! -f "$ps1_installer" ]; then
-            echo "error: aitools-install.ps1 not found" >&2
+            log_error "aitools-install.ps1 not found"
+            write_summary ERROR "aitools install" "aitools-install.ps1 missing"
             exit 1
         fi
         ps_args=()
@@ -86,15 +92,25 @@ case "$(uname -s)" in
         if [ -n "$REPOS_PATH" ]; then
             ps_args+=("-ReposPath" "$(cygpath -w "$REPOS_PATH")")
         fi
-        echo "Windows detected -- forwarding to PowerShell installer..."
+        log "Windows detected -- forwarding to PowerShell installer..."
         # Bootstrap: if pwsh not installed, use powershell.exe to install it via winget
         if ! command -v pwsh &>/dev/null; then
-            echo "pwsh (PowerShell 7) not found -- installing via winget..."
-            powershell.exe -NoProfile -Command 'winget install --id Microsoft.PowerShell --source winget --accept-package-agreements --accept-source-agreements'
+            log "pwsh (PowerShell 7) not found -- installing via winget..."
+            pwsh_install_rc=0
+            pwsh_install_out=$(powershell.exe -NoProfile -Command 'winget install --id Microsoft.PowerShell --source winget --accept-package-agreements --accept-source-agreements' 2>&1) || pwsh_install_rc=$?
+            while IFS= read -r line; do
+                if [ -n "$line" ]; then log_detail "winget-pwsh: $line"; fi
+            done <<< "$pwsh_install_out"
             # Refresh PATH hash so pwsh is found
             hash -r
             if ! command -v pwsh &>/dev/null; then
-                echo "error: pwsh install succeeded but not in PATH. Restart terminal and re-run." >&2
+                if [ "$pwsh_install_rc" -ne 0 ]; then
+                    log_error "winget install of PowerShell 7 failed (exit $pwsh_install_rc) -- see $(display_path "$LOG_FILE")"
+                    write_summary ERROR "pwsh" "winget install failed (exit $pwsh_install_rc)"
+                else
+                    log_error "pwsh install succeeded but not in PATH. Restart terminal and re-run."
+                    write_summary ERROR "pwsh" "installed but not on PATH"
+                fi
                 exit 1
             fi
         fi
@@ -103,11 +119,6 @@ case "$(uname -s)" in
         exit $?
         ;;
 esac
-
-# --- Shared library ---
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "$SCRIPT_DIR/aitools-lib.sh"
-logging_init "aitools-install"
 
 # JSONL logging (extends standard pattern with structured JSON)
 LOG_JSONL="$LOG_DIR/deploy.jsonl"
@@ -138,15 +149,27 @@ if [ -z "${AITOOLS_SUMMARY_FILE:-}" ]; then
 fi
 
 # --- Script validation helper ---
-# Validates bash syntax with bash -n before executing. Skips with warning on errors.
+# Validates bash syntax with bash -n before executing. A syntax error or a failed
+# script logs an error and writes an ERROR summary row; the install continues.
 validate_and_run() {
     local script="$1"
     local name; name=$(basename "$script")
-    if ! bash -n "$script" 2>/dev/null; then
-        log_warn "$name has syntax errors -- skipping"
+    local syntax_out syntax_rc=0 syntax_line
+    syntax_out=$(bash -n "$script" 2>&1) || syntax_rc=$?
+    if [ "$syntax_rc" -ne 0 ]; then
+        while IFS= read -r syntax_line; do
+            if [ -n "$syntax_line" ]; then log_detail "$name syntax: $syntax_line"; fi
+        done <<< "$syntax_out"
+        log_error "$name has syntax errors -- skipped (see $(display_path "$LOG_FILE"))"
+        write_summary ERROR "${name%.sh}" "syntax errors -- skipped"
         return 0
     fi
-    bash "$script" || log_error "$name failed"
+    local script_rc=0
+    bash "$script" || script_rc=$?
+    if [ "$script_rc" -ne 0 ]; then
+        log_error "$name failed (exit $script_rc)"
+        write_summary ERROR "${name%.sh}" "script failed (exit $script_rc)"
+    fi
 }
 
 # display_path is provided by aitools-lib.sh
@@ -283,9 +306,18 @@ elif gh auth status &>/dev/null; then
     log_ok "gh already authenticated"
 elif $INSTALL_INTERACTIVE; then
     log "Not authenticated. Starting gh auth login..."
-    gh auth login || log_error "gh auth login failed"
+    # Interactive: gh talks to the terminal directly, so only the exit code is captured.
+    gh_auth_rc=0
+    gh auth login || gh_auth_rc=$?
+    if [ "$gh_auth_rc" -ne 0 ]; then
+        log_error "gh auth login failed (exit $gh_auth_rc)"
+        write_summary ERROR "gh auth" "login failed (exit $gh_auth_rc)"
+        write_summary ACTION "" "Run: gh auth login"
+    fi
 else
     log_warn "Not authenticated and not interactive — skipping gh auth (use --skip-gh-auth to suppress)"
+    write_summary WARN "gh auth" "not authenticated"
+    write_summary ACTION "" "Run: gh auth login"
 fi
 
 # ============================================================
@@ -633,9 +665,6 @@ else
                 write_summary ERROR "node.js" "Homebrew not found"
             fi
             ;;
-        MINGW*|MSYS*)
-            log "Windows detected — install Node.js via winget (use aitools-install.ps1)"
-            ;;
         *)
             log_warn "Install Node.js manually: https://nodejs.org"
             write_summary WARN "node.js" "install manually (https://nodejs.org)"
@@ -653,49 +682,33 @@ if command -v claude &>/dev/null; then
     log_ok "Claude Code already installed ($(claude --version 2>/dev/null | head -1))"
     write_summary OK "claude code" "$(claude --version 2>/dev/null | head -1)"
     log "Running claude update..."
-    UPDATE_OUTPUT=$(claude update 2>&1) || true
-    if printf '%s\n' "$UPDATE_OUTPUT" | grep -qi 'already.*up.to.date\|no update'; then
+    # Exit code decides (C-F2); every output line is logged.
+    update_rc=0
+    UPDATE_OUTPUT=$(claude update 2>&1) || update_rc=$?
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then log "$line"; fi
+    done <<< "$UPDATE_OUTPUT"
+    if [ "$update_rc" -ne 0 ]; then
+        log_warn "claude update failed (exit $update_rc) -- see $(display_path "$LOG_FILE")"
+    elif printf '%s\n' "$UPDATE_OUTPUT" | grep -qi 'already.*up.to.date\|no update'; then
         log_ok "Already up to date"
     else
-        printf '%s\n' "$UPDATE_OUTPUT" | while IFS= read -r line; do log "$line"; done
-        if printf '%s\n' "$UPDATE_OUTPUT" | grep -qi 'error\|fatal'; then
-            log_warn "claude update returned unexpected output (see log above)"
-        fi
+        log_ok "claude update finished"
     fi
 else
     log "Installing Claude Code CLI..."
-    case "$OS_NAME" in
-        MINGW*|MSYS*)
-            # WinGet works from Git Bash
-            if command -v winget &>/dev/null; then
-                # Suppress winget progress noise; install success checked via command -v below
-                winget install Anthropic.ClaudeCode --accept-package-agreements --accept-source-agreements 2>/dev/null
-                if command -v claude &>/dev/null; then
-                    log_ok "Claude Code installed ($(claude --version 2>/dev/null | head -1))"
-                    write_summary OK "claude code" "$(claude --version 2>/dev/null | head -1)"
-                else
-                    log_warn "Claude Code installed — restart terminal to use"
-                    write_summary WARN "claude code" "installed -- restart terminal to use"
-                fi
-            else
-                log "winget not available — install manually:"
-                log "  PowerShell: irm https://claude.ai/install.ps1 | iex"
-            fi
-            ;;
-        *)
-            if ! curl -fsSL https://claude.ai/install.sh | bash 2>&1 | while IFS= read -r line; do log "$line"; done; then
-                log_error "Claude Code install script failed"
-                write_summary ERROR "claude code" "install failed"
-            fi
-            if command -v claude &>/dev/null; then
-                log_ok "Claude Code installed ($(claude --version 2>/dev/null | head -1))"
-                write_summary OK "claude code" "$(claude --version 2>/dev/null | head -1)"
-            else
-                log_error "Claude Code install failed"
-                write_summary ERROR "claude code" "install failed"
-            fi
-            ;;
-    esac
+    # Windows never reaches here: it is forwarded to aitools-install.ps1 at the top.
+    if ! curl -fsSL https://claude.ai/install.sh | bash 2>&1 | while IFS= read -r line; do log "$line"; done; then
+        log_error "Claude Code install script failed"
+        write_summary ERROR "claude code" "install failed"
+    fi
+    if command -v claude &>/dev/null; then
+        log_ok "Claude Code installed ($(claude --version 2>/dev/null | head -1))"
+        write_summary OK "claude code" "$(claude --version 2>/dev/null | head -1)"
+    else
+        log_error "Claude Code install failed"
+        write_summary ERROR "claude code" "install failed"
+    fi
 fi
 
 # ============================================================
