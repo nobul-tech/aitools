@@ -43,8 +43,21 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
 # --default: install unversioned python/python3 executables into uv's bin dir.
 # --preview-features python-install-default: silence the experimental warning and
 #   pin the behavior (the --default flag is gated behind this preview feature).
+# --upgrade: only on uv versions that support it (older uv rejects the flag and the
+#   whole install fails); without it an already-installed $targetPyVersion is kept as is.
+$upgradeArgs = @()
+# The help text is the result -- checked for the flag immediately below
+$uvInstallHelp = uv python install --help 2>&1 | Out-String
+if ($uvInstallHelp -match '--upgrade') {
+    $upgradeArgs = @('--upgrade')
+} else {
+    $uvVersion = (uv --version 2>&1 | Out-String).Trim()
+    LogWarn "$uvVersion does not support 'uv python install --upgrade' -- installing without it"
+    Write-Summary "WARN" "python" "uv too old for --upgrade"
+    Write-Summary "ACTION" "" "Upgrade uv, then re-run aitools install"
+}
 Log "Installing/updating uv-managed Python $targetPyVersion as default..."
-$installOutput = uv python install $targetPyVersion --default --upgrade --preview-features python-install-default 2>&1 | Out-String
+$installOutput = uv python install $targetPyVersion --default @upgradeArgs --preview-features python-install-default 2>&1 | Out-String
 $installOutput.Trim().Split("`n") | ForEach-Object {
     $l = $_.TrimEnd()
     if ($l.Trim()) { Log $l }

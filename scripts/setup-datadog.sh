@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# setup-datadog.sh -- Installs/updates Datadog CLI (pup) on macOS
+# setup-datadog.sh -- Installs/updates Datadog CLI (pup) on macOS/Linux
 # Safe to re-run -- detects existing install and upgrades as needed.
 #
 # macOS: Uses Homebrew tap datadog-labs/pack (preferred).
-#        Falls back to cargo install if Homebrew fails.
+#        Falls back to cargo install when Homebrew is unavailable or the tap
+#        install does not produce `pup` (judged by the binary, not by output text).
+#        A non-Homebrew pup is replaced only after the Homebrew copy is verified.
+# Linux: cargo fallback until Linux support lands (nobul-tech/aitools#14).
 # Windows: Uses cargo install -- see setup-datadog.ps1.
 #
 # See reference/tool-registry.md for install source details.
@@ -27,9 +30,19 @@ PUP_PATH=$(command -v pup 2>/dev/null) || PUP_PATH=""
 # --- Migrate old Homebrew tap (datadog/pack -> datadog-labs/pack) ---
 if [ -n "$PUP_PATH" ] && brew list datadog/pack/pup >/dev/null 2>&1; then
     log_warn "Pup installed from old tap (datadog/pack) -- migrating to datadog-labs/pack..."
-    UNINSTALL_OUTPUT=$(brew uninstall datadog/pack/pup 2>&1) || true
-    printf '%s\n' "$UNINSTALL_OUTPUT" | while IFS= read -r line; do [ -n "$line" ] && log "$line"; done
-    brew untap datadog/pack 2>/dev/null || true
+    UNINSTALL_EC=0
+    # || records brew's exit status; checked below
+    UNINSTALL_OUTPUT=$(brew uninstall datadog/pack/pup 2>&1) || UNINSTALL_EC=$?
+    printf '%s\n' "$UNINSTALL_OUTPUT" | while IFS= read -r line; do
+        if [ -n "$line" ]; then log "$line"; fi
+    done
+    if [ "$UNINSTALL_EC" -ne 0 ]; then
+        log_warn "brew uninstall datadog/pack/pup exited $UNINSTALL_EC -- reinstalling from the correct tap anyway"
+    fi
+    # A leftover tap entry is harmless (the formula is gone); report it, do not fail
+    if ! brew untap datadog/pack >/dev/null 2>&1; then
+        log_warn "Could not untap datadog/pack (left in place)"
+    fi
     log_ok "Old tap removed -- will reinstall from correct tap"
     PUP_PATH=""
 fi
@@ -57,36 +70,60 @@ if [ -n "$PUP_PATH" ]; then
             write_summary OK "datadog cli" "$PUP_VERSION"
         fi
     else
-        # Installed via go install or other method -- migrate to Homebrew
+        # Installed via go install or another method -- migrate to Homebrew.
+        # Install first; remove the old binary only after the Homebrew copy is verified.
+        # 2>/dev/null: version probe only; falls back to a placeholder string
         PUP_VERSION=$(pup version 2>/dev/null || echo "version unknown")
-        log_warn "Pup found at $PUP_PATH ($PUP_VERSION) -- not via Homebrew, migrating..."
-        # Remove old binary (likely from go install)
-        if [ -f "$PUP_PATH" ]; then
-            rm -f "$PUP_PATH" 2>/dev/null || log_warn "Could not remove old binary at $PUP_PATH"
-        fi
-        INSTALL_EC=0
-        INSTALL_OUTPUT=$(brew install datadog-labs/pack/pup 2>&1) || INSTALL_EC=$?
-        printf '%s\n' "$INSTALL_OUTPUT" | while IFS= read -r line; do [ -n "$line" ] && log "$line"; done
-        if [ "$INSTALL_EC" -ne 0 ] || printf '%s\n' "$INSTALL_OUTPUT" | grep -qi 'error\|fatal'; then
-            log_error "brew install datadog-labs/pack/pup failed during migration"
-            write_summary ERROR "datadog cli" "brew install failed (migration)"
+        if ! command -v brew >/dev/null 2>&1; then
+            log_warn "Pup found at $PUP_PATH ($PUP_VERSION) -- not via Homebrew, and Homebrew is not available; keeping it"
+            write_summary WARN "datadog cli" "$PUP_VERSION (not Homebrew)"
         else
-            PUP_VERSION=$(pup version 2>/dev/null || echo "version unknown")
-            log_ok "Migrated to Homebrew ($PUP_VERSION)"
-        fi
-        if [ "$ERRORS" -eq 0 ]; then
-            PUP_VERSION=$(pup version 2>/dev/null || echo "version unknown")
-            write_summary OK "datadog cli" "$PUP_VERSION"
+            log_warn "Pup found at $PUP_PATH ($PUP_VERSION) -- not via Homebrew, migrating..."
+            INSTALL_EC=0
+            # || records brew's exit status; the binary check below decides success
+            INSTALL_OUTPUT=$(brew install datadog-labs/pack/pup 2>&1) || INSTALL_EC=$?
+            printf '%s\n' "$INSTALL_OUTPUT" | while IFS= read -r line; do
+                if [ -n "$line" ]; then log "$line"; fi
+            done
+            BREW_PUP="$(brew --prefix)/bin/pup"
+            if [ ! -x "$BREW_PUP" ]; then
+                # The old pup still works, so this is a warning, not a failure
+                log_warn "brew install datadog-labs/pack/pup did not produce $BREW_PUP (exit $INSTALL_EC) -- kept $PUP_PATH"
+                write_summary WARN "datadog cli" "$PUP_VERSION (migration failed)"
+            else
+                if [ "$PUP_PATH" != "$BREW_PUP" ] && [ -f "$PUP_PATH" ]; then
+                    if rm -f "$PUP_PATH"; then
+                        log "Removed old binary $PUP_PATH"
+                    else
+                        log_warn "Could not remove old binary at $PUP_PATH"
+                    fi
+                fi
+                # 2>/dev/null: version probe only; falls back to a placeholder string
+                PUP_VERSION=$("$BREW_PUP" version 2>/dev/null || echo "version unknown")
+                log_ok "Migrated to Homebrew ($PUP_VERSION)"
+                write_summary OK "datadog cli" "$PUP_VERSION"
+            fi
         fi
     fi
 else
-    # Fresh install
-    log "Installing Pup via Homebrew (datadog-labs/pack tap)..."
-    # brew install can exit non-zero for non-fatal warnings; check output for real errors
-    INSTALL_OUTPUT=$(brew install datadog-labs/pack/pup 2>&1) || true
-    printf '%s\n' "$INSTALL_OUTPUT" | while IFS= read -r line; do [ -n "$line" ] && log "$line"; done
-    if printf '%s\n' "$INSTALL_OUTPUT" | grep -qi 'error\|fatal'; then
-        log_warn "brew install datadog-labs/pack/pup failed -- trying cargo install fallback..."
+    # Fresh install: Homebrew tap when available, else build from source with cargo.
+    # Success is judged by `pup` being on PATH afterwards -- not by grepping output
+    # (brew can exit non-zero on non-fatal warnings; a missing brew prints neither word).
+    if command -v brew >/dev/null 2>&1; then
+        log "Installing Pup via Homebrew (datadog-labs/pack tap)..."
+        INSTALL_EC=0
+        # || records brew's exit status; the binary check below decides success
+        INSTALL_OUTPUT=$(brew install datadog-labs/pack/pup 2>&1) || INSTALL_EC=$?
+        printf '%s\n' "$INSTALL_OUTPUT" | while IFS= read -r line; do
+            if [ -n "$line" ]; then log "$line"; fi
+        done
+        log "brew install exit code: $INSTALL_EC"
+    else
+        log "Homebrew not found -- skipping the datadog-labs/pack tap"
+    fi
+    hash -r
+    if ! command -v pup >/dev/null 2>&1; then
+        log_warn "Pup not installed via Homebrew -- trying cargo install fallback..."
         if command -v cargo >/dev/null 2>&1; then
             # Pre-flight: check build prerequisites
             hash -r 2>/dev/null  # Refresh command cache -- picks up tools installed by earlier steps
@@ -98,7 +135,9 @@ else
             fi
             CARGO_EC=0
             CARGO_OUTPUT=$(cargo install --git https://github.com/datadog-labs/pup 2>&1) || CARGO_EC=$?
-            printf '%s\n' "$CARGO_OUTPUT" | while IFS= read -r line; do [ -n "$line" ] && log "$line"; done
+            printf '%s\n' "$CARGO_OUTPUT" | while IFS= read -r line; do
+                if [ -n "$line" ]; then log "$line"; fi
+            done
             if [ "$CARGO_EC" -ne 0 ]; then
                 # Diagnose: scan for known failure signatures
                 DIAGNOSIS=$(diagnose_build_failure "$CARGO_OUTPUT") || true

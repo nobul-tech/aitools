@@ -203,6 +203,7 @@ These are the canonical tool names for field 2. Always use these exact strings.
 | `go` | setup-go |
 | `datadog cli` | setup-datadog |
 | `cursor cli` | setup-user-cursor |
+| `aitools config` | aitools-install |
 
 ### Severity categories
 

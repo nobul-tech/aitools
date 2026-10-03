@@ -40,12 +40,24 @@ fi
 # --default: install unversioned python/python3 executables into uv's bin dir.
 # --preview-features python-install-default: silence the experimental warning and
 #   pin the behavior (the --default flag is gated behind this preview feature).
+# --upgrade: only on uv versions that support it (older uv rejects the flag and the
+#   whole install fails); without it an already-installed $TARGET_PY_VERSION is kept as is.
+UPGRADE_ARGS=()
+# || true: the help text is the result -- checked for the flag immediately below
+UV_INSTALL_HELP=$(uv python install --help 2>&1) || true
+if [[ "$UV_INSTALL_HELP" == *"--upgrade"* ]]; then
+    UPGRADE_ARGS=(--upgrade)
+else
+    log_warn "$(uv --version 2>&1 || echo "uv") does not support 'uv python install --upgrade' -- installing without it"
+    write_summary WARN "python" "uv too old for --upgrade"
+    write_summary ACTION "" "Upgrade uv, then re-run aitools install"
+fi
 log "Installing/updating uv-managed Python $TARGET_PY_VERSION as default..."
 INSTALL_RC=0
-INSTALL_OUTPUT=$(uv python install "$TARGET_PY_VERSION" --default --upgrade \
+INSTALL_OUTPUT=$(uv python install "$TARGET_PY_VERSION" --default ${UPGRADE_ARGS[@]+"${UPGRADE_ARGS[@]}"} \
     --preview-features python-install-default 2>&1) || INSTALL_RC=$?
 printf '%s\n' "$INSTALL_OUTPUT" | while IFS= read -r line; do
-    [ -n "$line" ] && log "$line"
+    if [ -n "$line" ]; then log "$line"; fi
 done
 if [ "$INSTALL_RC" -ne 0 ]; then
     log_error "uv python install failed (see log above)"

@@ -1439,6 +1439,9 @@ if (Test-Path $repoAitools) {
 
 }  # _prebuildDone
 
+# Overall exit status: any failed installer/deploy step makes `aitools` exit non-zero
+$overallRc = 0
+
 if ($doInstall) {
     # --- install: pull + rebuild + run installer (includes deploy) ---
     Log "Step 3/$steps`: Running installer"
@@ -1459,6 +1462,7 @@ if ($doInstall) {
         Invoke-ProfileCheck -Mode "interactive"
     } else {
         Log "Completed with errors (see $logFile)" "error"
+        $overallRc = 1
     }
 
 } elseif ($doGitpull) {
@@ -1468,7 +1472,8 @@ if ($doInstall) {
     if ($deployRc -eq 0) {
         LogOk "Done"
     } else {
-        Log "Completed with $deployRc error(s)" "warn"
+        Log "Completed with $deployRc error(s)" "error"
+        $overallRc = 1
     }
 
     Log "Step 4/$steps`: Tagging version"
@@ -1533,7 +1538,8 @@ if ($doInstall) {
     if ($deployRc -eq 0) {
         LogOk "Done"
     } else {
-        Log "Completed with $deployRc error(s)" "warn"
+        Log "Completed with $deployRc error(s)" "error"
+        $overallRc = 1
     }
 
     LogOk "Configs deployed ($(Get-RepoVersion $repoPath))"
@@ -1598,3 +1604,5 @@ if (Test-Path $relayPrompt) {
 Remove-Item Env:\AITOOLS_RUN_ID -ErrorAction SilentlyContinue
 Remove-Item Env:\AITOOLS_SUMMARY_FILE -ErrorAction SilentlyContinue
 Remove-Item Env:\AITOOLS_SUPPRESS_SUMMARY_DISPLAY -ErrorAction SilentlyContinue
+
+exit $overallRc

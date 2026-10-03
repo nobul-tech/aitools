@@ -12,6 +12,30 @@ Multiple changes on the same day roll into one release. Bug fixes ship alongside
 
 ---
 
+## v0.73.2 -- Fix: safe re-runs on Linux -- config merge, Go/pup cleanup order, exit status (2026-10-03)
+
+### Bug fixes
+
+| # | Severity | Change |
+|---|----------|--------|
+| 1 | Critical | Re-running `aitools install` corrupted `~/.aitools/config.json`: the bash Step 5 `read_config_drives` sed range ran to EOF on an inline `"googleDrives": []` and spliced the rest of the file into a `cat >` heredoc. Step 5 is now a node read-then-merge (temp file → `validate_json_config` → `backup_file` → `mv`), preserves `userRepoPath`/`machineAlias`, rebuilds a corrupt file (WARN, invalid copy backed up), and honors `--dry-run`. (#11) |
+| 2 | Critical | `setup-go.sh` deleted `/usr/local/go` before checking for Homebrew, leaving Linux with no Go. On Linux the go.dev tarball is now classified `upstream` and kept; on macOS non-preferred installs are removed only after Homebrew Go is verified at the formula prefix (`brew --prefix go`) — not `$(brew --prefix)/bin`, which on Intel Macs can be a symlink into the install being removed. (#12) |
+| 3 | High | `aitools` exited 0 when the installer or deploy reported errors. Both entry points now exit 1 (install, gitpull, sync). (#13) |
+| 4 | Medium | `setup-gh-cli.sh` "updated" an existing gh from the distro archive (2.45) and shadowed non-apt installs. It now adds the cli.github.com repo whenever missing and leaves non-apt gh untouched (WARN). (#15) |
+| 5 | Medium | `setup-python` failed outright on uv versions without `uv python install --upgrade`; the flag is now feature-detected (WARN + ACTION to upgrade uv). (#16) |
+| 6 | Low | `setup-uv.sh` reported `[ok] uv installed via Homebrew` when Homebrew had not run; a kept non-Homebrew uv is now WARN. (#17) |
+| 7 | Medium | `setup-datadog.sh` never reached the cargo fallback when Homebrew was absent, and deleted a non-Homebrew pup before the replacement installed. Fallback now keys on the binary; migration is install-first. Output-logging loops no longer abort under `set -e` on empty output. (#18) |
+
+### Documentation
+
+| # | Change |
+|---|--------|
+| 8 | `aitools config` added to the summary tool-name table; plan `plans/linux-install-hardening.md`. |
+
+**Verified on:** Linux (Ubuntu 24.04, Claude Code web, no Homebrew): `bash -n` clean on all edited `.sh`; 65/65 behavior checks across six sandboxed harnesses (stubbed brew/pkgutil/apt/uv/pup/cargo); `aitools install` run end-to-end (see PR). macOS/Windows: CI only — `.ps1` edits (`aitools.ps1`, `setup-python.ps1`) not executed locally; macOS Homebrew paths exercised only with stubs.
+
+---
+
 ## v0.73.1 -- Fix: `aitools install` skipped tool installs after deploy-list reload (2026-06-22)
 
 ### Bug fixes
