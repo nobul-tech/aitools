@@ -493,7 +493,8 @@ Commands:
 Options:
   --addmcp <name...>   Enable MCP server(s) for current project (vercel, webflow)
   --dry-run            Preview what would change without writing any files
-  --force              Overwrite all files without prompting for review
+  --force              No prompts: managed files take the source version (backups
+                       kept); with install, also skips gh login and path prompts
   --version, -v        Show installed and repo version
   --help, -h           Show this help
 
@@ -1449,8 +1450,13 @@ if ($doInstall) {
     if ($SkipGhAuth) { $installerArgs += "-SkipGhAuth" }
     if ($SkipDriveDetection) { $installerArgs += "-SkipDriveDetection" }
     if ($ReposPath) { $installerArgs += "-ReposPath"; $installerArgs += $ReposPath }
+    # Interactive iff run from a console: the installer and its setup scripts decide
+    # for themselves. -Force makes every review prompt take the source version
+    # (backup kept), console or not.
+    if ($Force) { $env:AITOOLS_FORCE = "1" }
     & "$repoPath\scripts\aitools-install.ps1" @installerArgs
     $installerRc = $LASTEXITCODE
+    if (Test-Path Env:\AITOOLS_FORCE) { Remove-Item Env:\AITOOLS_FORCE }
     Write-Host ""
     if ($installerRc -eq 0) {
         LogOk "All up to date ($(Get-RepoVersion $repoPath))"

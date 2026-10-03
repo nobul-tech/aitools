@@ -28,8 +28,10 @@ Options:
   -Help                     Show this help
 
 Interactive behavior:
-  When stdin is a terminal, prompts for repos path and drive confirmation.
+  When stdin is a terminal, prompts for gh login, repos path, and file reviews.
   When piped or run non-interactively, uses defaults and flags.
+  AITOOLS_FORCE=1 (aitools install --force): no prompts even in a terminal;
+  managed files take the source version (backups kept).
   When config.json already exists, uses saved values without prompting.
 "@
     exit 0
@@ -79,6 +81,10 @@ if (-not $env:AITOOLS_SUMMARY_FILE) {
     }
     New-Item -ItemType File -Path $env:AITOOLS_SUMMARY_FILE -Force | Out-Null
 }
+
+# Interactive mode (same rule as the lib's review prompts): a console on stdin and
+# no -Force / AITOOLS_FORCE. Otherwise every prompt takes its default.
+$installInteractive = ($env:AITOOLS_FORCE -ne "1") -and (Test-InteractiveConsole)
 
 # --- Script validation helper ---
 # Validates PS1 syntax with ParseFile before executing. Skips with warning on parse errors.
@@ -192,7 +198,7 @@ if ($SkipGhAuth) {
     $authStatus = gh auth status 2>&1
     if ($LASTEXITCODE -eq 0) {
         LogOk "gh already authenticated"
-    } elseif ([Environment]::UserInteractive) {
+    } elseif ($installInteractive) {
         Log "Not authenticated. Starting gh auth login..."
         gh auth login
         if ($LASTEXITCODE -ne 0) {
@@ -225,9 +231,10 @@ if ($ReposPath) {
     }
 }
 if (-not $resolvedReposPath) {
-    if ([Environment]::UserInteractive) {
+    if ($installInteractive) {
         $defaultPath = Join-Path $env:USERPROFILE "repos"
-        $userInput = Read-Host "Where should new repos live? [$defaultPath]"
+        [Console]::Write("Where should new repos live? [$defaultPath]: ")
+        $userInput = Read-ConsoleChoice $defaultPath
         if ($userInput) {
             $resolvedReposPath = $userInput -replace '^~', $env:USERPROFILE
         } else {
@@ -364,7 +371,7 @@ if (Test-Path $hhPs1Src) {
 # These are sole-owned generated artifacts (the user never edits the deployed
 # copy), so per config-file-safety.md we back up + overwrite, with NO
 # interactive review. Deploy-ManagedFile's prompt is for user-customizable
-# files; under the non-interactive install wrapper its tty read aborts the run.
+# files only.
 $aitoolsBin = Join-Path $env:USERPROFILE ".aitools\bin"
 if (-not (Test-Path $aitoolsBin)) { New-Item -ItemType Directory -Path $aitoolsBin -Force | Out-Null }
 $hbinDeployed = 0

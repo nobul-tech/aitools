@@ -48,8 +48,10 @@ function CheckLogInit {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $hostName = $env:COMPUTERNAME
     if (-not $hostName) { $hostName = hostname }
+    # Record the real platform (pwsh also runs these checks on macOS and Linux).
+    $osName = if ($IsWindows) { "Windows" } elseif ($IsMacOS) { "macOS" } elseif ($IsLinux) { "Linux" } else { "unknown" }
     Add-Content -Path $script:CheckLog -Value "[$ts] [$Name] === RUN START ==="
-    Add-Content -Path $script:CheckJsonl -Value "{`"ts`":`"$ts`",`"check`":`"$Name`",`"event`":`"run_start`",`"host`":`"$hostName`",`"os`":`"Windows`"}"
+    Add-Content -Path $script:CheckJsonl -Value "{`"ts`":`"$ts`",`"check`":`"$Name`",`"event`":`"run_start`",`"host`":`"$hostName`",`"os`":`"$osName`"}"
 
     # Bridge: initialize aitools-lib logging vars so lib functions
     # (Log, Ensure-ToolOnPath, Deploy-ManagedFile, etc.) work in check context.

@@ -152,6 +152,8 @@ resolve_config() {
     CONFIG_FILE="$HOME/.aitools/config.json"
     USER_REPO_PATH=""
     if [ -f "$CONFIG_FILE" ]; then
+        # read_config_key returns 1 when the key is absent (before 'aitools user init');
+        # USER_REPO_PATH stays empty and callers test it with [ -n ] before use.
         USER_REPO_PATH=$(read_config_key "$CONFIG_FILE" "userRepoPath" 2>/dev/null || true)
     fi
 }
@@ -163,6 +165,8 @@ resolve_config() {
 # ---------------------------------------------------------------------------
 get_mtime() {
     local file="$1"
+    # stat fails only if the file vanished; 0 (epoch) makes it read as oldest, so
+    # check-post-push never picks it as "newest" and flags it stale (conservative).
     if $IS_MACOS; then
         stat -f %m "$file" 2>/dev/null || echo 0
     else
