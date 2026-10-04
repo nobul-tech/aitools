@@ -32,9 +32,15 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
+# Log captured command output to the log file as detail lines (blank lines skipped).
+function Write-OutputDetail([string]$Label, [string]$Output) {
+    foreach ($l in $Output.Split("`n")) { if ($l.Trim()) { LogDetail "${Label}: $($l.TrimEnd())" } }
+}
+
 # --- Require node ---
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     LogError "node required for settings sync"
+    Write-Summary "ERROR" "claude settings" "node not found"
     exit 1
 }
 
@@ -51,20 +57,27 @@ if (-not $userRepoPath -or -not (Test-Path $userRepoPath)) {
 } elseif (-not (Test-Path $profileFile)) {
     LogWarn "profile.json not found at $profileFile -- skipping settings sync"
     Write-Summary "WARN" "claude settings" "profile.json missing"
-} elseif (-not (Test-Path $settingsFile)) {
-    Log "No settings.json yet at $settingsFile -- nothing to sync"
-    Write-Summary "OK" "claude settings" "no settings.json"
 } else {
+    # A missing settings.json is not skipped: Sync-ManagedJson creates it from the
+    # profile without prompting (#31, C-F5).
+
     # --- Legacy migration: claude.{autoMemory,alwaysThinking,effortLevel} ---
     #     -> claude.settings.{autoMemoryEnabled,alwaysThinkingEnabled,effortLevel}
     if (-not $DryRun) {
       # Only back up + migrate when legacy flat keys are actually present.
-      & node -e 'const c=(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).claude)||{}; process.exit(["autoMemory","alwaysThinking","effortLevel"].some(k=>Object.prototype.hasOwnProperty.call(c,k))?0:1)' $profileFile 2>$null
-      if ($LASTEXITCODE -eq 0) {
+      # Probe exit codes: 0 = legacy keys present, 1 = none, 2 = profile.json
+      # unreadable (the sync below then reports the parse error).
+      $legacyOut = & node -e 'try { const c=(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).claude)||{}; process.exit(["autoMemory","alwaysThinking","effortLevel"].some(k=>Object.prototype.hasOwnProperty.call(c,k))?0:1) } catch (e) { console.log(e.message); process.exit(2) }' $profileFile 2>&1 | Out-String
+      $legacyRc = $LASTEXITCODE
+      if ($legacyRc -ge 2) {
+        Write-OutputDetail "legacy-probe (exit $legacyRc)" $legacyOut
+        LogWarn "Could not read $profileFile for the legacy preference check -- skipped"
+      }
+      if ($legacyRc -eq 0) {
         Backup-File -FilePath $profileFile
         $migrateJs = @'
 const fs = require("fs");
-const p = process.argv[1];
+const p = process.argv[2];  // run as `node <script-file> <profile>`: argv[1] is the script
 const o = JSON.parse(fs.readFileSync(p, "utf8"));
 const c = o.claude = o.claude || {};
 const s = c.settings = (c.settings && typeof c.settings === "object") ? c.settings : {};
@@ -81,21 +94,33 @@ process.stdout.write(migrated.join(", "));
 '@
         $migrateFile = [System.IO.Path]::GetTempFileName()
         [System.IO.File]::WriteAllText($migrateFile, $migrateJs, [System.Text.UTF8Encoding]::new($false))
-        $migrated = & node $migrateFile $profileFile
+        $migrated = & node $migrateFile $profileFile 2>&1 | Out-String
+        $migrateRc = $LASTEXITCODE
+        # ErrorAction exempt: temp file cleanup; the file may already be gone
         Remove-Item $migrateFile -ErrorAction SilentlyContinue
-        if ($migrated) { LogOk "Migrated legacy prefs into claude.settings: $migrated" }
+        if ($migrateRc -ne 0) {
+            Write-OutputDetail "legacy-migration (exit $migrateRc)" $migrated
+            LogWarn "Legacy preference migration failed (exit $migrateRc, non-fatal) -- see $logFile"
+        } elseif ($migrated.Trim()) {
+            LogOk "Migrated legacy prefs into claude.settings: $($migrated.Trim())"
+        }
       }
     }
 
     # --- Sync settings.json <-> profile.json (granular per-leaf review) ---
-    if ($DryRun) {
-        Sync-ManagedJson -LiveFile $settingsFile -ProfileFile $profileFile -SubPath "claude.settings" -ExcludeKeys "hooks" -DeprecatedRules $deprecatedRules
+    # Sync-ManagedJson reports failure through LogError only: compare the error
+    # count so a failed sync writes an ERROR row instead of OK (#26b).
+    $errorsBeforeSync = $errors
+    Sync-ManagedJson -LiveFile $settingsFile -ProfileFile $profileFile -SubPath "claude.settings" -ExcludeKeys "hooks" -DeprecatedRules $deprecatedRules
+    if ($errors -gt $errorsBeforeSync) {
+        Write-Summary "ERROR" "claude settings" "sync failed"
+    } elseif ($DryRun) {
         Write-Summary "OK" "claude settings" "dry-run"
     } else {
-        Sync-ManagedJson -LiveFile $settingsFile -ProfileFile $profileFile -SubPath "claude.settings" -ExcludeKeys "hooks" -DeprecatedRules $deprecatedRules
         switch ($script:SyncManagedJsonResult) {
-            { $_ -in @("updated", "created") } { Write-Summary "OK" "claude settings" "synced" }
-            default { Write-Summary "OK" "claude settings" "verified" }
+            "created" { Write-Summary "OK" "claude settings" "created" }
+            "updated" { Write-Summary "OK" "claude settings" "synced" }
+            default   { Write-Summary "OK" "claude settings" "verified" }
         }
     }
 }
