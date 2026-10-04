@@ -39,9 +39,18 @@ esac
 
 [ "$DRY_RUN" = "true" ] && log "[DRY RUN] Preview mode -- no files will be written"
 
+# Log captured command output to the log file as detail lines (blank lines skipped).
+write_output_detail() {  # label, output
+    local line
+    while IFS= read -r line; do
+        if [ -n "${line// /}" ]; then log_detail "$1: $line"; fi
+    done <<< "$2"
+}
+
 # --- Require node for JSON manipulation ---
 if ! command -v node &>/dev/null; then
     log_error "node required for settings sync"
+    write_summary ERROR "claude settings" "node not found"
     exit 1
 fi
 
@@ -62,16 +71,31 @@ if [ -z "$USER_REPO_PATH" ] || [ ! -d "$USER_REPO_PATH" ]; then
 elif [ ! -f "$PROFILE_FILE" ]; then
     log_warn "profile.json not found at $(display_path "$PROFILE_FILE") -- skipping settings sync"
     write_summary WARN "claude settings" "profile.json missing"
-elif [ ! -f "$SETTINGS_FILE" ]; then
-    log "No settings.json yet at $(display_path "$SETTINGS_FILE") -- nothing to sync"
-    write_summary OK "claude settings" "no settings.json"
 else
+    # A missing settings.json is not skipped: sync_managed_json creates it from the
+    # profile without prompting (#31, C-F5).
+
     # --- Legacy migration: claude.{autoMemory,alwaysThinking,effortLevel} ---
     #     -> claude.settings.{autoMemoryEnabled,alwaysThinkingEnabled,effortLevel}
     # Renames the old flat prefs into the settings mirror (only if the mirror lacks
     # them), then removes the legacy keys. Idempotent; safe once migrated.
-    if [ "$DRY_RUN" != "true" ] && node -e 'const c=(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).claude)||{}; process.exit(["autoMemory","alwaysThinking","effortLevel"].some(k=>Object.prototype.hasOwnProperty.call(c,k))?0:1)' "$PROFILE_FILE" 2>/dev/null; then
+    # Probe exit codes: 0 = legacy keys present, 1 = none, 2 = profile.json unreadable
+    # (the sync below then reports the parse error).
+    LEGACY_RC=1
+    if [ "$DRY_RUN" != "true" ]; then
+        if LEGACY_OUT=$(node -e 'try { const c=(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).claude)||{}; process.exit(["autoMemory","alwaysThinking","effortLevel"].some(k=>Object.prototype.hasOwnProperty.call(c,k))?0:1) } catch (e) { console.log(e.message); process.exit(2) }' "$PROFILE_FILE" 2>&1); then
+            LEGACY_RC=0
+        else
+            LEGACY_RC=$?
+        fi
+        if [ "$LEGACY_RC" -ge 2 ]; then
+            write_output_detail "legacy-probe (exit $LEGACY_RC)" "$LEGACY_OUT"
+            log_warn "Could not read $(display_path "$PROFILE_FILE") for the legacy preference check -- skipped"
+        fi
+    fi
+    if [ "$LEGACY_RC" -eq 0 ]; then
         backup_file "$PROFILE_FILE"
+        MIGRATE_RC=0
         MIGRATED=$(node -e '
 const fs = require("fs");
 const p = process.argv[1];
@@ -88,19 +112,27 @@ for (const [legacy, target] of Object.entries(map)) {
 }
 if (migrated.length) fs.writeFileSync(p, JSON.stringify(o, null, 2) + "\n");
 process.stdout.write(migrated.join(", "));
-' "$PROFILE_FILE") || log_warn "legacy preference migration failed (non-fatal)"
-        [ -n "$MIGRATED" ] && log_ok "Migrated legacy prefs into claude.settings: $MIGRATED"
+' "$PROFILE_FILE" 2>&1) || MIGRATE_RC=$?
+        if [ "$MIGRATE_RC" -ne 0 ]; then
+            write_output_detail "legacy-migration (exit $MIGRATE_RC)" "$MIGRATED"
+            log_warn "Legacy preference migration failed (exit $MIGRATE_RC, non-fatal) -- see $(display_path "$LOG_FILE")"
+        elif [ -n "$MIGRATED" ]; then
+            log_ok "Migrated legacy prefs into claude.settings: $MIGRATED"
+        fi
     fi
 
     # --- Sync settings.json <-> profile.json (granular per-leaf review) ---
-    if [ "$DRY_RUN" = "true" ]; then
-        sync_managed_json "$SETTINGS_FILE" "$PROFILE_FILE" "claude.settings" "hooks" "$DEPRECATED_RULES"
+    # Called in an `if` so a failed sync (already logged by the lib) writes an ERROR
+    # row instead of aborting under set -e with no row (#26c).
+    if ! sync_managed_json "$SETTINGS_FILE" "$PROFILE_FILE" "claude.settings" "hooks" "$DEPRECATED_RULES"; then
+        write_summary ERROR "claude settings" "sync failed"
+    elif [ "$DRY_RUN" = "true" ]; then
         write_summary OK "claude settings" "dry-run"
     else
-        sync_managed_json "$SETTINGS_FILE" "$PROFILE_FILE" "claude.settings" "hooks" "$DEPRECATED_RULES"
         case "$SYNC_MANAGED_JSON_RESULT" in
-            updated|created) write_summary OK "claude settings" "synced" ;;
-            *)               write_summary OK "claude settings" "verified" ;;
+            created) write_summary OK "claude settings" "created" ;;
+            updated) write_summary OK "claude settings" "synced" ;;
+            *)       write_summary OK "claude settings" "verified" ;;
         esac
     fi
 fi

@@ -61,24 +61,27 @@ case "$OS_NAME" in
             log_error "Homebrew not found. Install gh manually:"
             log_error "  1. Install Homebrew: https://brew.sh"
             log_error "  2. brew install gh"
+            write_summary ERROR "gh cli" "Homebrew not found"
             exit 1
         fi
 
         if command -v gh &>/dev/null; then
-            log "gh CLI already installed ($(gh --version | head -1))"
+            log "gh CLI already installed ($(gh_version_line))"
             log "Checking for updates via Homebrew..."
-            UPGRADE_OUTPUT=$(brew upgrade gh 2>&1) || true
-            if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+            upgrade_rc=0
+            UPGRADE_OUTPUT=$(brew upgrade gh 2>&1) || upgrade_rc=$?
+            if [ "$upgrade_rc" -eq 0 ] && printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
                 log_ok "gh CLI already up to date"
-                write_summary OK "gh cli" "$(gh --version | head -1)"
+                write_summary OK "gh cli" "$(gh_version_line)"
             else
-                printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
-                if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
-                    log_error "brew upgrade gh failed (see log above)"
-                    write_summary ERROR "gh cli" "brew upgrade failed"
+                while IFS= read -r line; do log "$line"; done <<< "$UPGRADE_OUTPUT"
+                # Exit code first (C-F2); the output grep stays for brew upgrade (Standard 3).
+                if [ "$upgrade_rc" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+                    log_error "brew upgrade gh failed (exit $upgrade_rc) -- see $(display_path "$LOG_FILE")"
+                    write_summary ERROR "gh cli" "brew upgrade failed (exit $upgrade_rc)"
                 else
-                    log_ok "gh CLI $(gh --version | head -1)"
-                    write_summary OK "gh cli" "$(gh --version | head -1)"
+                    log_ok "gh CLI $(gh_version_line)"
+                    write_summary OK "gh cli" "$(gh_version_line)"
                 fi
             fi
         else
@@ -86,12 +89,10 @@ case "$OS_NAME" in
             if ! brew install gh 2>&1 | while IFS= read -r line; do log "$line"; done; then
                 log_error "brew install gh failed"
                 write_summary ERROR "gh cli" "brew install failed"
-            fi
-
-            if command -v gh &>/dev/null; then
-                log_ok "gh CLI installed ($(gh --version | head -1))"
+            elif command -v gh &>/dev/null; then
+                log_ok "gh CLI installed ($(gh_version_line))"
                 log_ok "Install path: $(command -v gh)"
-                write_summary OK "gh cli" "$(gh --version | head -1)"
+                write_summary OK "gh cli" "$(gh_version_line)"
             else
                 log_error "brew install completed but 'gh' not found in PATH"
                 write_summary ERROR "gh cli" "installed but not on PATH"

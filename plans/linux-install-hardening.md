@@ -1145,10 +1145,11 @@ Main agent, direct (no code). Every item below is part of **this review**:
 > PR C5 (batches C7, C7b, D-C5) shipped 2026-10-03 (#40).
 > PR C6 (batch C8, D-C6) shipped 2026-10-04 (#41).
 > PR C7 (batch C9, D-C7) shipped 2026-10-04 (#42).
-> PR C8 (batch C10, D-C8) approved for execution 2026-10-04.**
+> PR C8 (batch C10, D-C8) shipped 2026-10-04 (#43).
+> PR C9 (batch C11, D-C9) approved for execution 2026-10-04.**
 > Verbatim edits, the error-handling audits and the prototype test evidence are in
-> the "PR C1–C8 — verbatim edits" sections below; the logging audit plan is in
-> the PR C2 section. Batches C11–C15 remain scoped only: each needs its own verbatim-edit
+> the "PR C1–C9 — verbatim edits" sections below; the logging audit plan is in
+> the PR C2 section. Batches C12–C15 remain scoped only: each needs its own verbatim-edit
 > revision of this section, presented for approval, before code is written.
 
 ### Origin
@@ -1260,11 +1261,17 @@ PR C8 (approved 2026-10-04; verbatim edits in "PR C8 — verbatim edits"):
 | C10 | `setup-user-hooks.sh`, `setup-user-hooks.ps1` | #25, #26a–c, #26f, #27b (no `build-deploy.sh` port needed: its hook-deployment replacement has no counterpart code) |
 | D-C8 | protected docs (approved 2026-10-04) | this plan. RELEASE_NOTES deferred |
 
+PR C9 (approved 2026-10-04; verbatim edits in "PR C9 — verbatim edits"):
+
+| Batch | Files | Issues |
+|---|---|---|
+| C11 | `setup-user-settings.sh`, `setup-user-settings.ps1`, `setup-gh-cli.sh` | #26a–c, #27a–b, #31 caller half ("No settings.json yet" branch removed); PS1 legacy-migration argv bug (no `build-deploy.sh` port needed: extract / copy-as-is) |
+| D-C9 | protected docs (approved 2026-10-04) | this plan. RELEASE_NOTES deferred |
+
 Later PRs (scoped, not approved):
 
 | Batch | Files | Issues |
 |---|---|---|
-| C11 | `setup-user-settings.sh`, `setup-user-settings.ps1`, `setup-gh-cli.sh` | #26a–c; remove the "No settings.json yet" early exit (#31 caller half) |
 | C12 | `setup-cursor-ide-mcp.sh`, `setup-cursor-ide-mcp.ps1` | #25, #26a–c, #27b (Cursor `mcp` verbs, re-verified via `/tool-eval` first) |
 | C13 | `setup-user-mcp.sh`, `setup-user-mcp.ps1`, `setup-datadog.ps1` | #23, #26a |
 | C14 | `setup-user-claude.sh`, `setup-user-claude.ps1` | #23, #25, #26a |
@@ -6357,6 +6364,338 @@ index 1a3a8da..1022317 100644
          }
      }
  }
+```
+
+## PR C9 — verbatim edits (batch C11)
+
+Base: the PR C8 branch head 0213ae8 (#43, not yet merged; C11 touches other files).
+Prototyped on a copy of the base (scratch: `.scratch/session-3030c86a-9/proto-c11/`); the
+diff below is the exact edit. Decisions C-F2, C-F3, C-F4 and C-F5 apply.
+
+`setup-user-settings` and `setup-gh-cli` are pure extract / copy-as-is in `build-deploy.sh`,
+so no port is needed: the regenerated `deploy/` scripts carry the fixes and pass the same
+tests.
+
+### What changes
+
+| File | Issue / check | Change |
+|---|---|---|
+| `setup-user-settings.sh` | #26a, A5 | node missing: `ERROR "claude settings" "node not found"` before `exit 1` (was no row) |
+| `setup-user-settings.sh` | #31 (caller half), C-F5 | "No settings.json yet -- nothing to sync" branch removed: on a fresh HOME the sync runs and the lib creates `settings.json` from the profile without prompts. New row `OK "claude settings" "created"` (`updated` keeps "synced") |
+| `setup-user-settings.sh` | #26c | `sync_managed_json` called in an `if`: a failed sync (corrupt settings.json or profile.json, apply or validation failure; already logged by the lib) writes `ERROR "claude settings" "sync failed"` (was a `set -e` abort with no row). The dry run now calls the sync once and writes its row only on success |
+| `setup-user-settings.sh` | #26c, A4 | legacy-key probe: `2>/dev/null` removed; exit 0/1/2 = present / none / profile.json unreadable; 2 logs the node message as detail plus a WARN (was: an unreadable profile read as "no legacy keys", silently) |
+| `setup-user-settings.sh` | #25, A9 | legacy migration: stderr captured (`2>&1`) and the exit code checked; a failure logs the output as detail plus a WARN that points at the log (was node's stack trace on the console only); `[ -n ] && log_ok` becomes an `elif` |
+| `setup-user-settings.ps1` | #26a, A5 | node missing: ERROR row before `exit 1` |
+| `setup-user-settings.ps1` | #31, C-F5 | same branch removal and `created` row as bash |
+| `setup-user-settings.ps1` | #26b | `Sync-ManagedJson` reports failure only through `LogError`: the error count is compared, and a failed sync writes `ERROR "claude settings" "sync failed"` instead of `OK "verified"` |
+| `setup-user-settings.ps1` | #26c, A4 | legacy probe as in bash (`2>$null` removed; exit 2 = unreadable, logged) |
+| `setup-user-settings.ps1` | bug (found by the new check) | legacy migration never worked on Windows: the script runs as `node <file> <profile>`, so `process.argv[1]` was the script itself and node failed parsing it as JSON. Every run backed up profile.json, printed a node stack trace on the console, and left the legacy key in place. Now `argv[2]`; output and exit code captured and logged as in bash |
+| `setup-gh-cli.sh` | #26a, A5 | macOS, Homebrew missing: `ERROR "gh cli" "Homebrew not found"` before `exit 1` |
+| `setup-gh-cli.sh` | #27a, #27b | `brew upgrade gh`: exit code captured and checked first, Standard 3 grep kept (same pattern as `setup-vercelcli.sh`, C8); "see log above" becomes the log path; the error row names the exit code (was `\|\| true`: a non-zero exit without "error"/"fatal" in the text gave OK) |
+| `setup-gh-cli.sh` | #26b | `brew install gh` failure no longer falls through to the PATH check (an `elif`), so a failed install cannot also write an OK row |
+| `setup-gh-cli.sh` | -- | macOS version text from `gh_version_line` (already used on Linux): a non-gh banner reads "version unknown" (was `gh --version \| head -1`) |
+
+Not changed: the Linux apt pipelines in `setup-gh-cli.sh` (`... 2>&1 | while read; do log`)
+keep logging apt output at info level -- they already fail on a non-zero exit under
+`pipefail`; moving apt output to detail is C-F2 cleanup for a later batch. The profile
+with no `claude.settings` and no `settings.json` still reports `OK "verified"` with no file
+written (nothing to create) -- unchanged lib behaviour.
+
+Generated `deploy/` (dotprofile): `setup-user-settings.sh`, `setup-user-settings.ps1` and
+`setup-gh-cli.sh` change; the build gives 40 scripts and every generated script passes
+`bash -n` / ParseFile.
+
+### Error-handling audit
+
+| Pattern | Where | Check |
+|---|---|---|
+| `if out=$(node ... 2>&1); then rc=0; else rc=$?; fi` | legacy probe | `rc` tested on the next statement; exit 2 logged |
+| `x=$(node ... 2>&1) \|\| rc=$?` | legacy migration, `brew upgrade gh` | `rc` tested on the next statement |
+| `if ! sync_managed_json ...` | sync | failure writes an ERROR row; the lib already logged the error. `set -e` is off inside the function in this position; every lib failure path returns 1 explicitly, and the abort prompt still exits 2 |
+| error-count before/after | PS1 sync | an increase writes the ERROR row instead of OK |
+| `Remove-Item -ErrorAction SilentlyContinue` | PS1 temp-file cleanup | exempt (comment added): the file may already be gone |
+
+### Tests (Linux)
+
+| Suite | Prototype | Base (0213ae8) |
+|---|---|---|
+| `test-c11.sh` (scratch), `setup-user-settings.sh`: settings equal profile, fresh HOME (no settings.json), node missing, corrupt settings.json, corrupt profile.json, legacy-key migration, dry run; `setup-gh-cli.sh` macOS branch via a `uname` stub: Homebrew missing, up to date, `brew upgrade` exit 1 with no error text, non-gh version banner | 11/11 | 4/11 |
+| `test-c11-ps1.sh` (scratch), `setup-user-settings.ps1` with the OS guard stripped: equal, fresh HOME, node missing, corrupt settings.json, corrupt profile.json, legacy migration | 6/6 | 1/6 |
+| `test-c11-deploy.sh` (scratch): `test-c11.sh` against the generated `deploy/` scripts | 11/11 | -- |
+| `check-script-compliance.sh` | 13 PASS | 13 PASS |
+| `bash -n` / ParseFile; `build-deploy.sh` into a dotprofile copy | pass; 40 scripts, 3 changed, all parse | -- |
+
+Not tested: the `setup-gh-cli.sh` Linux apt paths (unchanged), the per-leaf prompts (they
+need a TTY), and real Windows / macOS runs.
+
+### Logging audit (after C11)
+
+| Check | Before C11 | After C11 | C11 files |
+|---|---|---|---|
+| A3 | 185 in 13 | 184 in 12 | `setup-gh-cli.sh` 1 -> 0 |
+| A4 | 280 in 36 | 277 in 36 | `setup-user-settings.sh` 2 -> 1, `.ps1` 3 -> 2 (the probe suppressions); `setup-gh-cli.sh` 2 -> 1 (`\|\| true` on `brew upgrade`) |
+| A5 | 14 in 9 | 11 in 6 | 0 (3 early exits now write a row) |
+| A9 | 8 in 7 | 7 in 7 | `setup-user-settings.sh` 2 -> 1 (the `[ -n ] && log_ok`) |
+
+The remaining hits in these files are reviewed and stay: A4 `dpkg -S ... 2>&1` in
+`setup-gh-cli.sh` (commented ownership probe), the commented `\|\| true` on
+`read_config_key` in `setup-user-settings.sh`, and the `Get-Command`/temp-cleanup
+exemptions in the PS1; A8 is the Standard 3 `brew upgrade` grep.
+
+### D-C9: protected doc edits
+
+- This plan: status line, batch table (C11 -> PR C9), this section.
+
+### Verbatim diff
+
+```diff
+diff --git a/scripts/setup-user-settings.sh b/scripts/setup-user-settings.sh
+index d5e1b55..4956cf3 100755
+--- a/scripts/setup-user-settings.sh
++++ b/scripts/setup-user-settings.sh
+@@ -39,9 +39,18 @@ esac
+ 
+ [ "$DRY_RUN" = "true" ] && log "[DRY RUN] Preview mode -- no files will be written"
+ 
++# Log captured command output to the log file as detail lines (blank lines skipped).
++write_output_detail() {  # label, output
++    local line
++    while IFS= read -r line; do
++        if [ -n "${line// /}" ]; then log_detail "$1: $line"; fi
++    done <<< "$2"
++}
++
+ # --- Require node for JSON manipulation ---
+ if ! command -v node &>/dev/null; then
+     log_error "node required for settings sync"
++    write_summary ERROR "claude settings" "node not found"
+     exit 1
+ fi
+ 
+@@ -62,16 +71,31 @@ if [ -z "$USER_REPO_PATH" ] || [ ! -d "$USER_REPO_PATH" ]; then
+ elif [ ! -f "$PROFILE_FILE" ]; then
+     log_warn "profile.json not found at $(display_path "$PROFILE_FILE") -- skipping settings sync"
+     write_summary WARN "claude settings" "profile.json missing"
+-elif [ ! -f "$SETTINGS_FILE" ]; then
+-    log "No settings.json yet at $(display_path "$SETTINGS_FILE") -- nothing to sync"
+-    write_summary OK "claude settings" "no settings.json"
+ else
++    # A missing settings.json is not skipped: sync_managed_json creates it from the
++    # profile without prompting (#31, C-F5).
++
+     # --- Legacy migration: claude.{autoMemory,alwaysThinking,effortLevel} ---
+     #     -> claude.settings.{autoMemoryEnabled,alwaysThinkingEnabled,effortLevel}
+     # Renames the old flat prefs into the settings mirror (only if the mirror lacks
+     # them), then removes the legacy keys. Idempotent; safe once migrated.
+-    if [ "$DRY_RUN" != "true" ] && node -e 'const c=(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).claude)||{}; process.exit(["autoMemory","alwaysThinking","effortLevel"].some(k=>Object.prototype.hasOwnProperty.call(c,k))?0:1)' "$PROFILE_FILE" 2>/dev/null; then
++    # Probe exit codes: 0 = legacy keys present, 1 = none, 2 = profile.json unreadable
++    # (the sync below then reports the parse error).
++    LEGACY_RC=1
++    if [ "$DRY_RUN" != "true" ]; then
++        if LEGACY_OUT=$(node -e 'try { const c=(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).claude)||{}; process.exit(["autoMemory","alwaysThinking","effortLevel"].some(k=>Object.prototype.hasOwnProperty.call(c,k))?0:1) } catch (e) { console.log(e.message); process.exit(2) }' "$PROFILE_FILE" 2>&1); then
++            LEGACY_RC=0
++        else
++            LEGACY_RC=$?
++        fi
++        if [ "$LEGACY_RC" -ge 2 ]; then
++            write_output_detail "legacy-probe (exit $LEGACY_RC)" "$LEGACY_OUT"
++            log_warn "Could not read $(display_path "$PROFILE_FILE") for the legacy preference check -- skipped"
++        fi
++    fi
++    if [ "$LEGACY_RC" -eq 0 ]; then
+         backup_file "$PROFILE_FILE"
++        MIGRATE_RC=0
+         MIGRATED=$(node -e '
+ const fs = require("fs");
+ const p = process.argv[1];
+@@ -88,19 +112,27 @@ for (const [legacy, target] of Object.entries(map)) {
+ }
+ if (migrated.length) fs.writeFileSync(p, JSON.stringify(o, null, 2) + "\n");
+ process.stdout.write(migrated.join(", "));
+-' "$PROFILE_FILE") || log_warn "legacy preference migration failed (non-fatal)"
+-        [ -n "$MIGRATED" ] && log_ok "Migrated legacy prefs into claude.settings: $MIGRATED"
++' "$PROFILE_FILE" 2>&1) || MIGRATE_RC=$?
++        if [ "$MIGRATE_RC" -ne 0 ]; then
++            write_output_detail "legacy-migration (exit $MIGRATE_RC)" "$MIGRATED"
++            log_warn "Legacy preference migration failed (exit $MIGRATE_RC, non-fatal) -- see $(display_path "$LOG_FILE")"
++        elif [ -n "$MIGRATED" ]; then
++            log_ok "Migrated legacy prefs into claude.settings: $MIGRATED"
++        fi
+     fi
+ 
+     # --- Sync settings.json <-> profile.json (granular per-leaf review) ---
+-    if [ "$DRY_RUN" = "true" ]; then
+-        sync_managed_json "$SETTINGS_FILE" "$PROFILE_FILE" "claude.settings" "hooks" "$DEPRECATED_RULES"
++    # Called in an `if` so a failed sync (already logged by the lib) writes an ERROR
++    # row instead of aborting under set -e with no row (#26c).
++    if ! sync_managed_json "$SETTINGS_FILE" "$PROFILE_FILE" "claude.settings" "hooks" "$DEPRECATED_RULES"; then
++        write_summary ERROR "claude settings" "sync failed"
++    elif [ "$DRY_RUN" = "true" ]; then
+         write_summary OK "claude settings" "dry-run"
+     else
+-        sync_managed_json "$SETTINGS_FILE" "$PROFILE_FILE" "claude.settings" "hooks" "$DEPRECATED_RULES"
+         case "$SYNC_MANAGED_JSON_RESULT" in
+-            updated|created) write_summary OK "claude settings" "synced" ;;
+-            *)               write_summary OK "claude settings" "verified" ;;
++            created) write_summary OK "claude settings" "created" ;;
++            updated) write_summary OK "claude settings" "synced" ;;
++            *)       write_summary OK "claude settings" "verified" ;;
+         esac
+     fi
+ fi
+diff --git a/scripts/setup-user-settings.ps1 b/scripts/setup-user-settings.ps1
+index 5f19dc8..1884442 100644
+--- a/scripts/setup-user-settings.ps1
++++ b/scripts/setup-user-settings.ps1
+@@ -32,9 +32,15 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+ 
+ if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
+ 
++# Log captured command output to the log file as detail lines (blank lines skipped).
++function Write-OutputDetail([string]$Label, [string]$Output) {
++    foreach ($l in $Output.Split("`n")) { if ($l.Trim()) { LogDetail "${Label}: $($l.TrimEnd())" } }
++}
++
+ # --- Require node ---
+ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+     LogError "node required for settings sync"
++    Write-Summary "ERROR" "claude settings" "node not found"
+     exit 1
+ }
+ 
+@@ -51,20 +57,27 @@ if (-not $userRepoPath -or -not (Test-Path $userRepoPath)) {
+ } elseif (-not (Test-Path $profileFile)) {
+     LogWarn "profile.json not found at $profileFile -- skipping settings sync"
+     Write-Summary "WARN" "claude settings" "profile.json missing"
+-} elseif (-not (Test-Path $settingsFile)) {
+-    Log "No settings.json yet at $settingsFile -- nothing to sync"
+-    Write-Summary "OK" "claude settings" "no settings.json"
+ } else {
++    # A missing settings.json is not skipped: Sync-ManagedJson creates it from the
++    # profile without prompting (#31, C-F5).
++
+     # --- Legacy migration: claude.{autoMemory,alwaysThinking,effortLevel} ---
+     #     -> claude.settings.{autoMemoryEnabled,alwaysThinkingEnabled,effortLevel}
+     if (-not $DryRun) {
+       # Only back up + migrate when legacy flat keys are actually present.
+-      & node -e 'const c=(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).claude)||{}; process.exit(["autoMemory","alwaysThinking","effortLevel"].some(k=>Object.prototype.hasOwnProperty.call(c,k))?0:1)' $profileFile 2>$null
+-      if ($LASTEXITCODE -eq 0) {
++      # Probe exit codes: 0 = legacy keys present, 1 = none, 2 = profile.json
++      # unreadable (the sync below then reports the parse error).
++      $legacyOut = & node -e 'try { const c=(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).claude)||{}; process.exit(["autoMemory","alwaysThinking","effortLevel"].some(k=>Object.prototype.hasOwnProperty.call(c,k))?0:1) } catch (e) { console.log(e.message); process.exit(2) }' $profileFile 2>&1 | Out-String
++      $legacyRc = $LASTEXITCODE
++      if ($legacyRc -ge 2) {
++        Write-OutputDetail "legacy-probe (exit $legacyRc)" $legacyOut
++        LogWarn "Could not read $profileFile for the legacy preference check -- skipped"
++      }
++      if ($legacyRc -eq 0) {
+         Backup-File -FilePath $profileFile
+         $migrateJs = @'
+ const fs = require("fs");
+-const p = process.argv[1];
++const p = process.argv[2];  // run as `node <script-file> <profile>`: argv[1] is the script
+ const o = JSON.parse(fs.readFileSync(p, "utf8"));
+ const c = o.claude = o.claude || {};
+ const s = c.settings = (c.settings && typeof c.settings === "object") ? c.settings : {};
+@@ -81,21 +94,33 @@ process.stdout.write(migrated.join(", "));
+ '@
+         $migrateFile = [System.IO.Path]::GetTempFileName()
+         [System.IO.File]::WriteAllText($migrateFile, $migrateJs, [System.Text.UTF8Encoding]::new($false))
+-        $migrated = & node $migrateFile $profileFile
++        $migrated = & node $migrateFile $profileFile 2>&1 | Out-String
++        $migrateRc = $LASTEXITCODE
++        # ErrorAction exempt: temp file cleanup; the file may already be gone
+         Remove-Item $migrateFile -ErrorAction SilentlyContinue
+-        if ($migrated) { LogOk "Migrated legacy prefs into claude.settings: $migrated" }
++        if ($migrateRc -ne 0) {
++            Write-OutputDetail "legacy-migration (exit $migrateRc)" $migrated
++            LogWarn "Legacy preference migration failed (exit $migrateRc, non-fatal) -- see $logFile"
++        } elseif ($migrated.Trim()) {
++            LogOk "Migrated legacy prefs into claude.settings: $($migrated.Trim())"
++        }
+       }
+     }
+ 
+     # --- Sync settings.json <-> profile.json (granular per-leaf review) ---
+-    if ($DryRun) {
+-        Sync-ManagedJson -LiveFile $settingsFile -ProfileFile $profileFile -SubPath "claude.settings" -ExcludeKeys "hooks" -DeprecatedRules $deprecatedRules
++    # Sync-ManagedJson reports failure through LogError only: compare the error
++    # count so a failed sync writes an ERROR row instead of OK (#26b).
++    $errorsBeforeSync = $errors
++    Sync-ManagedJson -LiveFile $settingsFile -ProfileFile $profileFile -SubPath "claude.settings" -ExcludeKeys "hooks" -DeprecatedRules $deprecatedRules
++    if ($errors -gt $errorsBeforeSync) {
++        Write-Summary "ERROR" "claude settings" "sync failed"
++    } elseif ($DryRun) {
+         Write-Summary "OK" "claude settings" "dry-run"
+     } else {
+-        Sync-ManagedJson -LiveFile $settingsFile -ProfileFile $profileFile -SubPath "claude.settings" -ExcludeKeys "hooks" -DeprecatedRules $deprecatedRules
+         switch ($script:SyncManagedJsonResult) {
+-            { $_ -in @("updated", "created") } { Write-Summary "OK" "claude settings" "synced" }
+-            default { Write-Summary "OK" "claude settings" "verified" }
++            "created" { Write-Summary "OK" "claude settings" "created" }
++            "updated" { Write-Summary "OK" "claude settings" "synced" }
++            default   { Write-Summary "OK" "claude settings" "verified" }
+         }
+     }
+ }
+diff --git a/scripts/setup-gh-cli.sh b/scripts/setup-gh-cli.sh
+index 3abd3ef..7bcd79e 100755
+--- a/scripts/setup-gh-cli.sh
++++ b/scripts/setup-gh-cli.sh
+@@ -61,24 +61,27 @@ case "$OS_NAME" in
+             log_error "Homebrew not found. Install gh manually:"
+             log_error "  1. Install Homebrew: https://brew.sh"
+             log_error "  2. brew install gh"
++            write_summary ERROR "gh cli" "Homebrew not found"
+             exit 1
+         fi
+ 
+         if command -v gh &>/dev/null; then
+-            log "gh CLI already installed ($(gh --version | head -1))"
++            log "gh CLI already installed ($(gh_version_line))"
+             log "Checking for updates via Homebrew..."
+-            UPGRADE_OUTPUT=$(brew upgrade gh 2>&1) || true
+-            if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
++            upgrade_rc=0
++            UPGRADE_OUTPUT=$(brew upgrade gh 2>&1) || upgrade_rc=$?
++            if [ "$upgrade_rc" -eq 0 ] && printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'already installed\|up.to.date\|No available upgrade'; then
+                 log_ok "gh CLI already up to date"
+-                write_summary OK "gh cli" "$(gh --version | head -1)"
++                write_summary OK "gh cli" "$(gh_version_line)"
+             else
+-                printf '%s\n' "$UPGRADE_OUTPUT" | while IFS= read -r line; do log "$line"; done
+-                if printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
+-                    log_error "brew upgrade gh failed (see log above)"
+-                    write_summary ERROR "gh cli" "brew upgrade failed"
++                while IFS= read -r line; do log "$line"; done <<< "$UPGRADE_OUTPUT"
++                # Exit code first (C-F2); the output grep stays for brew upgrade (Standard 3).
++                if [ "$upgrade_rc" -ne 0 ] || printf '%s\n' "$UPGRADE_OUTPUT" | grep -qi 'error\|fatal'; then
++                    log_error "brew upgrade gh failed (exit $upgrade_rc) -- see $(display_path "$LOG_FILE")"
++                    write_summary ERROR "gh cli" "brew upgrade failed (exit $upgrade_rc)"
+                 else
+-                    log_ok "gh CLI $(gh --version | head -1)"
+-                    write_summary OK "gh cli" "$(gh --version | head -1)"
++                    log_ok "gh CLI $(gh_version_line)"
++                    write_summary OK "gh cli" "$(gh_version_line)"
+                 fi
+             fi
+         else
+@@ -86,12 +89,10 @@ case "$OS_NAME" in
+             if ! brew install gh 2>&1 | while IFS= read -r line; do log "$line"; done; then
+                 log_error "brew install gh failed"
+                 write_summary ERROR "gh cli" "brew install failed"
+-            fi
+-
+-            if command -v gh &>/dev/null; then
+-                log_ok "gh CLI installed ($(gh --version | head -1))"
++            elif command -v gh &>/dev/null; then
++                log_ok "gh CLI installed ($(gh_version_line))"
+                 log_ok "Install path: $(command -v gh)"
+-                write_summary OK "gh cli" "$(gh --version | head -1)"
++                write_summary OK "gh cli" "$(gh_version_line)"
+             else
+                 log_error "brew install completed but 'gh' not found in PATH"
+                 write_summary ERROR "gh cli" "installed but not on PATH"
 ```
 
 ## Risks
