@@ -55,7 +55,7 @@ Six disciplines converge. Each solves a different facet of the problem
   propagate through lineage. Classifications like
   `commander_directive`, `verified_fact`, `agent_observation`,
   `unverified_assumption` annotate every knowledge item with its trust
-  level. The governed vocabulary (glossary.json) integrates with the
+  level. The governed vocabulary (`/glossary` skill) integrates with the
   provenance graph.
 
 ## How We Adopted It

@@ -200,9 +200,8 @@ IDENTITY_GIT_NAME="Jose"
 IDENTITY_GIT_EMAIL="jose@nobul.tech"
 CURSOR_CLI_VIMMODE=false
 CURSOR_CLI_MODEL="auto"
-CLAUDE_AUTO_MEMORY=false
-CLAUDE_ALWAYS_THINKING=true
-CLAUDE_EFFORT_LEVEL="high"
+# Claude settings are not embedded: setup-user-settings syncs ~/.claude/settings.json
+# from profile.json (claude.settings) at runtime, in dev and deploy alike.
 
 CONFIG="$HOME/.aitools/config.json"
 if [ -f "$CONFIG" ] && command -v node &>/dev/null; then
@@ -231,16 +230,6 @@ try {
         if (typeof p.cursor.cli.vimMode === 'boolean') cursorCli.vimMode = p.cursor.cli.vimMode;
         if (typeof p.cursor.cli.model === 'string') cursorCli.model = p.cursor.cli.model;
     }
-    // Claude preferences
-    let claudePrefs = { autoMemory: true, alwaysThinking: true, effortLevel: null };
-    const validEffortLevels = ['low', 'medium', 'high'];
-    if (p.claude) {
-        if (typeof p.claude.autoMemory === 'boolean') claudePrefs.autoMemory = p.claude.autoMemory;
-        if (typeof p.claude.alwaysThinking === 'boolean') claudePrefs.alwaysThinking = p.claude.alwaysThinking;
-        if (typeof p.claude.effortLevel === 'string' && validEffortLevels.includes(p.claude.effortLevel)) {
-            claudePrefs.effortLevel = p.claude.effortLevel;
-        }
-    }
     // Output as KEY=VALUE lines for bash eval
     console.log('PROFILE_NAME=' + JSON.stringify(prof.name));
     console.log('PROFILE_COMPANY=' + JSON.stringify(prof.company));
@@ -248,9 +237,6 @@ try {
     console.log('IDENTITY_GIT_EMAIL=' + JSON.stringify(ident.git.email));
     console.log('CURSOR_CLI_VIMMODE=' + JSON.stringify(cursorCli.vimMode));
     console.log('CURSOR_CLI_MODEL=' + JSON.stringify(cursorCli.model));
-    console.log('CLAUDE_AUTO_MEMORY=' + JSON.stringify(claudePrefs.autoMemory));
-    console.log('CLAUDE_ALWAYS_THINKING=' + JSON.stringify(claudePrefs.alwaysThinking));
-    console.log('CLAUDE_EFFORT_LEVEL=' + JSON.stringify(claudePrefs.effortLevel || ''));
 } catch(e) { process.exit(1); }
 " "$CONFIG" 2>/dev/null) && eval "$PROFILE_VALS"
 fi
@@ -263,7 +249,6 @@ CLAUDE_SHARED_CONTENT="${CLAUDE_SHARED_CONTENT//\{\{IDENTITY_GIT_EMAIL\}\}/$IDEN
 
 blog "Profile interpolation: name=$PROFILE_NAME company=$PROFILE_COMPANY"
 blog "Cursor CLI prefs: vimMode=$CURSOR_CLI_VIMMODE model=$CURSOR_CLI_MODEL"
-blog "Claude prefs: autoMemory=$CLAUDE_AUTO_MEMORY alwaysThinking=$CLAUDE_ALWAYS_THINKING effortLevel=${CLAUDE_EFFORT_LEVEL:-}"
 
 # Clean and recreate deploy/
 rm -rf "$DEPLOY_DIR"

@@ -1146,9 +1146,10 @@ Main agent, direct (no code). Every item below is part of **this review**:
 > PR C6 (batch C8, D-C6) shipped 2026-10-04 (#41).
 > PR C7 (batch C9, D-C7) shipped 2026-10-04 (#42).
 > PR C8 (batch C10, D-C8) shipped 2026-10-04 (#43).
-> PR C9 (batch C11, D-C9) approved for execution 2026-10-04.**
+> PR C9 (batch C11, D-C9) shipped 2026-10-04 (#44).
+> PR C10 (batch C11b, D-C10) approved for execution 2026-10-04.**
 > Verbatim edits, the error-handling audits and the prototype test evidence are in
-> the "PR C1–C9 — verbatim edits" sections below; the logging audit plan is in
+> the "PR C1–C10 — verbatim edits" sections below; the logging audit plan is in
 > the PR C2 section. Batches C12–C15 remain scoped only: each needs its own verbatim-edit
 > revision of this section, presented for approval, before code is written.
 
@@ -1267,6 +1268,13 @@ PR C9 (approved 2026-10-04; verbatim edits in "PR C9 — verbatim edits"):
 |---|---|---|
 | C11 | `setup-user-settings.sh`, `setup-user-settings.ps1`, `setup-gh-cli.sh` | #26a–c, #27a–b, #31 caller half ("No settings.json yet" branch removed); PS1 legacy-migration argv bug (no `build-deploy.sh` port needed: extract / copy-as-is) |
 | D-C9 | protected docs (approved 2026-10-04) | this plan. RELEASE_NOTES deferred |
+
+PR C10 (approved 2026-10-04; verbatim edits in "PR C10 — verbatim edits"):
+
+| Batch | Files | Issues |
+|---|---|---|
+| C11b | `aitools-install.ps1`, `build-deploy.sh` | Step 5 read-then-merge (RCA #1 PS1 half, C-F4); `Refresh-Path` override removed; dead legacy Claude-prefs parsing removed (generated `deploy/` unchanged) |
+| D-C10 | protected docs (approved 2026-10-04) | `reference/framework-*.md` (7) and `tool-ops-claude-code.md`: governed-data-access fixes, stale links; `reference/README.md` (not protected) rewritten; this plan. RELEASE_NOTES deferred |
 
 Later PRs (scoped, not approved):
 
@@ -6696,6 +6704,552 @@ index 3abd3ef..7bcd79e 100755
              else
                  log_error "brew install completed but 'gh' not found in PATH"
                  write_summary ERROR "gh cli" "installed but not on PATH"
+```
+
+## PR C10 — verbatim edits (batch C11b, D-C10)
+
+Base: `main` @ 770f275 (PR C9, #44, merged; the C11b files are byte-identical to the
+prototype base 8a53e54). Ships as PR C10. Findings from a full read of `reference/*`, the entry
+points, both installers, both libs and `build-deploy.sh` (2026-10-04). Prototyped on a
+copy of the base (scratch: `.scratch/session-3030c86a-9/proto-c11b/`).
+
+### What changes
+
+| File | Finding | Change |
+|---|---|---|
+| `aitools-install.ps1` | Step 5 was a blind overwrite (RCA #1 PS1 half; C-F4 parity, `config-file-safety.md`): it rebuilt `config.json` from scratch, keeping only `userRepoPath`, `machineAlias`, `googleDrives`; every other key was dropped, an invalid file was replaced without a trace, and `-DryRun` still wrote | Read-then-merge, same contract as `aitools-install.sh` Step 5: managed `version`, `reposPath`, `repoPath`, `googleDrives` (only when drives were detected, else the existing array or `[]`); all other keys preserved in place (key order kept). Unchanged -> no write, `OK "verified"`. Invalid JSON -> rebuilt with `userRepoPath`/`machineAlias` salvaged by pattern, `WARN "rebuilt (was invalid)"`. Write path: temp file -> `ValidateJsonConfig` -> `Backup-File` -> move; a read, write or validation failure leaves the existing file untouched with an ERROR row. Changed keys logged old -> new with DETAIL rows. `-DryRun` writes nothing |
+| `aitools-install.ps1` | Local `Refresh-Path` override (Step 8) replaced `$env:Path` with the registry value, dropping session additions (`Ensure-ToolOnPath`, inherited entries) for the installer and every child it starts after Step 8; `cross-platform-detail.md` specifies the additive lib version | Override removed; the lib's additive `Refresh-Path` (already dot-sourced) is used |
+| `build-deploy.sh` | Read the legacy `claude.autoMemory` / `alwaysThinking` / `effortLevel` keys (moved to `claude.settings.*`, `user-repo.md`) and logged wrong values (`autoMemory=true effortLevel=` for a profile with `autoMemoryEnabled: false`, `effortLevel: high`); the values feed nothing else since setup-user-settings syncs settings at runtime | The dead Claude-prefs parsing, defaults and log line removed. Generated `deploy/` is byte-identical before and after |
+| `reference/README.md` (not protected) | Listed 2 files deleted in b504c43 (`gh-issue-7490-comment.md`, `session-showcase.md`) and 6 of 39 current files | Rewritten: every current file, grouped (harness/frameworks, scripts/deployment, tools/agents); governed registries reached through their skills |
+| `reference/tool-ops-claude-code.md` | Cross-reference to the deleted `gh-issue-7490-comment.md` | Line removed (the upstream issues stay linked in the tables) |
+| `reference/framework-{hook-rollout,incident-investigation,intent-documentation,managed-file-deployment,source-of-truth}.md` | `@reference/framework-registry.json`: wrong path (the registry is under `registries/`) and a direct JSON reference (`governed-data-access.md`: reference files cite the skill) | `Framework registry: /frameworks skill` |
+| `reference/framework-incident-governance.md`, `framework-tool-ops.md` | Direct `@registries/incidents.json`, `registries/tool-ops.json`, `@registries/framework-registry.json` references | Replaced with the `/incident`, `/tool-ops`, `/frameworks` skills |
+| `reference/framework-provenance.md` | `(glossary.json)` | `(/glossary skill)` |
+
+Intent statements are untouched. Not changed: `post-push-checklist.md` names
+`tool-versions.json` (it describes what the check script reads; no governing skill exists
+for that registry) and `path-targeted-hooks-analysis.md` (a dated 2026-03-13 analysis;
+historical paths kept).
+
+### Error-handling audit
+
+| Pattern | Where | Check |
+|---|---|---|
+| `[IO.File]::ReadAllText` in try/catch | Step 5 read | catch logs `LogError` + ERROR row; the file is not touched |
+| `ConvertFrom-Json -ErrorAction Stop` in try/catch | Step 5 parse | catch is the recovery path (WARN on success, WARN per key it cannot salvage) |
+| error-count before/after | temp write, validation, move | an increase writes one ERROR row naming the failed stage; no OK row |
+| `Remove-Item -ErrorAction Stop` in try/catch behind `Test-Path` | temp cleanup | catch logs `LogWarn` (no `SilentlyContinue`) |
+
+### Tests (Linux)
+
+| Suite | Prototype | Base (8a53e54 = 770f275 for these files) |
+|---|---|---|
+| `test-c11b-ps1.sh` (scratch): Step 5 extracted from the installer, run after the lib under pwsh: fresh, unmanaged key kept + DETAIL row, unchanged (no write, no backup), existing drives kept, invalid JSON rebuilt with key salvage, validation failure leaves the file untouched, dry run writes nothing | 7/7 | 2/7 |
+| `build-deploy.sh` base vs prototype into dotprofile copies | `deploy/` byte-identical; the wrong "Claude prefs" log line gone | -- |
+| `check-script-compliance.sh` | 13 PASS | 13 PASS |
+| `bash -n` / ParseFile | pass | -- |
+
+Not tested: the full Windows installer run (Steps 0-22 need winget) and `Refresh-Path`
+on Windows (the lib version is already used by every setup script).
+
+### D-C10: protected doc edits
+
+- `reference/framework-*.md` (7 files) and `reference/tool-ops-claude-code.md`: the edits
+  in the table above.
+- This plan: status line, batch table (PR C10), this section.
+
+### Verbatim diff
+
+```diff
+diff --git a/scripts/aitools-install.ps1 b/scripts/aitools-install.ps1
+index cd5c462..ef8d806 100644
+--- a/scripts/aitools-install.ps1
++++ b/scripts/aitools-install.ps1
+@@ -315,64 +315,137 @@ if ($SkipDriveDetection) {
+ # ============================================================
+ Log "Step 5: Writing config"
+ 
+-# If config already exists, preserve fields we don't manage
+-$existingUserRepoPath = $null
+-$existingMachineAlias = $null
+-if (Test-Path $configFile) {
+-    try {
+-        $existingConfig = Get-Content $configFile -Raw | ConvertFrom-Json
+-        # Preserve googleDrives if we didn't detect any
+-        if (($drives.Count -eq 0) -and $existingConfig.googleDrives -and $existingConfig.googleDrives.Count -gt 0) {
+-            $drives = @($existingConfig.googleDrives | ForEach-Object {
+-                @{ path = $_.path; account = $_.account; label = $_.label }
+-            })
+-            Log "Preserved existing Google Drive entries from config"
+-        }
+-        # Preserve userRepoPath (set by 'aitools user init')
+-        if ($existingConfig.userRepoPath) {
+-            $existingUserRepoPath = $existingConfig.userRepoPath
++# Managed fields: version, reposPath, repoPath; googleDrives only when drives were
++#   detected this run (otherwise the existing array is kept, or [] when absent)
++# Preserved: userRepoPath, machineAlias (set by 'aitools user init') and all other keys
++# Write path: merge in memory -> temp file -> ValidateJsonConfig -> Backup-File -> move.
++#   A read, write or validation failure leaves the existing file untouched (parity with
++#   aitools-install.sh Step 5).
++$configTmp = "$configFile.tmp.$PID"
++$managedConfigKeys = @("version", "reposPath", "repoPath", "googleDrives")
++if ($DryRun) {
++    Log "[DRY RUN] Would merge version/reposPath/repoPath/googleDrives into $configFile"
++} else {
++    $configState = "created"
++    $configReadOk = $true
++    $cfg = [pscustomobject]@{}
++    if (Test-Path $configFile) {
++        $rawConfig = $null
++        try {
++            $rawConfig = [System.IO.File]::ReadAllText($configFile)
++        } catch {
++            LogError "Failed: ${configFile}: could not read -- $_ -- existing file left untouched"
++            Write-Summary "ERROR" "aitools config" "read failed"
++            $configReadOk = $false
+         }
+-        # Preserve machineAlias (set by 'aitools user init')
+-        if ($existingConfig.machineAlias) {
+-            $existingMachineAlias = $existingConfig.machineAlias
++        if ($configReadOk) {
++            $rawConfig = $rawConfig.TrimStart([char]0xFEFF)  # PowerShell 5.x writes a BOM
++            try {
++                $parsed = $rawConfig | ConvertFrom-Json -ErrorAction Stop
++                if ($parsed -isnot [System.Management.Automation.PSCustomObject]) { throw "top level is not an object" }
++                $cfg = $parsed
++                $configState = "updated"
++            } catch {
++                # Invalid JSON: rebuild from managed fields, salvaging the user-init keys by pattern
++                $corruptReason = "$_"
++                $cfg = [pscustomobject]@{}
++                foreach ($k in @("userRepoPath", "machineAlias")) {
++                    $m = [regex]::Match($rawConfig, '"' + $k + '"\s*:\s*"((?:[^"\\]|\\.)*)"')
++                    if ($m.Success) {
++                        try {
++                            $val = ('"' + $m.Groups[1].Value + '"') | ConvertFrom-Json -ErrorAction Stop
++                            $cfg | Add-Member -NotePropertyName $k -NotePropertyValue $val -Force
++                            Log "Recovered $k from the invalid config"
++                        } catch {
++                            LogWarn "Could not recover $k from the invalid config: $_"
++                        }
++                    }
++                }
++                $configState = "recovered"
++            }
+         }
+-    } catch {
+-        LogWarn "Failed to read existing config, writing fresh"
+     }
+-}
+ 
+-$config = [ordered]@{
+-    version          = 2
+-    reposPath        = $resolvedReposPath
+-    repoPath          = $aitoolsRepo
+-    googleDrives     = @($drives | ForEach-Object {
+-        [ordered]@{ path = $_.path; account = $_.account; label = $_.label }
+-    })
+-}
+-if ($existingUserRepoPath) { $config["userRepoPath"] = $existingUserRepoPath }
+-if ($existingMachineAlias) { $config["machineAlias"] = $existingMachineAlias }
++    if ($configReadOk) {
++        $beforeJson = @{}
++        foreach ($k in $managedConfigKeys) {
++            $beforeJson[$k] = if ($cfg.PSObject.Properties.Name -contains $k) { ConvertTo-Json -InputObject $cfg.$k -Depth 10 -Compress } else { $null }
++        }
++        # Existing keys keep their position (bash Object.assign parity); new keys are appended.
++        function Set-ConfigKey($Name, $Value) {
++            if ($cfg.PSObject.Properties.Name -contains $Name) { $cfg.$Name = $Value }
++            else { $cfg | Add-Member -NotePropertyName $Name -NotePropertyValue $Value }
++        }
++        Set-ConfigKey "version" 2
++        Set-ConfigKey "reposPath" $resolvedReposPath
++        Set-ConfigKey "repoPath" $aitoolsRepo
++        if ($drives.Count -gt 0) {
++            Set-ConfigKey "googleDrives" @($drives | ForEach-Object { [ordered]@{ path = $_.path; account = $_.account; label = $_.label } })
++        } elseif (-not ($cfg.PSObject.Properties.Name -contains "googleDrives") -or $cfg.googleDrives -isnot [array]) {
++            Set-ConfigKey "googleDrives" @()
++        }
++        $configChanges = @()
++        foreach ($k in $managedConfigKeys) {
++            $after = ConvertTo-Json -InputObject $cfg.$k -Depth 10 -Compress
++            if ($beforeJson[$k] -ne $after) {
++                $old = if ($null -eq $beforeJson[$k]) { "(unset)" } else { $beforeJson[$k] }
++                $configChanges += "${k}: $old -> $after"
++            }
++        }
+ 
+-$jsonContent = $config | ConvertTo-Json -Depth 10
+-$configExisted = Test-Path $configFile
+-Backup-File $configFile
+-$configWritten = $false
+-try {
+-    [System.IO.File]::WriteAllText($configFile, $jsonContent, [System.Text.UTF8Encoding]::new($false))
+-    $configWritten = $true
+-} catch {
+-    LogError "Failed to write $configFile`: $_"
+-    Write-Summary "ERROR" "aitools config" "write failed"
+-}
+-if ($configWritten) {
+-    LogOk "Config written to $configFile"
+-    $errorsBeforeValidation = $script:errors
+-    ValidateJsonConfig -File $configFile -RequiredKeys @("version", "reposPath", "repoPath")
+-    if ($script:errors -gt $errorsBeforeValidation) {
+-        Write-Summary "ERROR" "aitools config" "validation failed"
+-    } elseif ($configExisted) {
+-        Write-Summary "OK" "aitools config" "updated"
+-    } else {
+-        Write-Summary "OK" "aitools config" "created"
++        if ($configState -eq "updated" -and $configChanges.Count -eq 0) {
++            LogOk "Unchanged: $configFile"
++            Write-Summary "OK" "aitools config" "verified"
++        } else {
++            $errorsBeforeWrite = $script:errors
++            $configFailure = "write failed"
++            try {
++                $jsonContent = ConvertTo-Json -InputObject $cfg -Depth 10
++                [System.IO.File]::WriteAllText($configTmp, $jsonContent + "`n", [System.Text.UTF8Encoding]::new($false))
++            } catch {
++                LogError "Failed: ${configFile}: could not write the merged config -- $_"
++            }
++            if ($script:errors -eq $errorsBeforeWrite) {
++                $configFailure = "validation failed"
++                ValidateJsonConfig -File $configTmp -RequiredKeys @("version", "reposPath", "repoPath")
++            }
++            if ($script:errors -eq $errorsBeforeWrite) {
++                $configFailure = "write failed"
++                Backup-File $configFile
++                try {
++                    Move-Item -Path $configTmp -Destination $configFile -Force -ErrorAction Stop
++                } catch {
++                    LogError "Failed: ${configFile}: could not replace the config file -- $_"
++                }
++            }
++            if ($script:errors -gt $errorsBeforeWrite) {
++                if (Test-Path $configTmp) {
++                    try { Remove-Item $configTmp -Force -ErrorAction Stop }
++                    catch { LogWarn "Could not remove temp file ${configTmp}: $_" }
++                }
++                Write-Summary "ERROR" "aitools config" $configFailure
++            } else {
++                switch ($configState) {
++                    "recovered" {
++                        LogWarn "$configFile was not valid JSON ($corruptReason) -- rebuilt; the invalid copy was backed up"
++                        Write-Summary "WARN" "aitools config" "rebuilt (was invalid)"
++                    }
++                    "created" {
++                        LogOk "Created: $configFile"
++                        Write-Summary "OK" "aitools config" "created"
++                    }
++                    default {
++                        LogOk "Updated: $configFile"
++                        Write-Summary "OK" "aitools config" "updated"
++                    }
++                }
++                # Changed keys: full old -> new in the log, key names as DETAIL lines
++                foreach ($change in $configChanges) {
++                    Log "  $change"
++                    Write-Summary "DETAIL" "aitools config" "$(($change -split ':')[0]) updated"
++                }
++            }
++        }
+     }
+ }
+ 
+@@ -522,13 +595,6 @@ function hh { & "`$HOME\.local\bin\hh.ps1" @args }
+ # Source: https://nodejs.org
+ Log "Step 8: Node.js"
+ 
+-# Helper: refresh PATH from registry (picks up winget/npm installs in same session)
+-function Refresh-Path {
+-    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+-    $env:Path = "$machinePath;$userPath"
+-}
+-
+ if (Get-Command node -ErrorAction SilentlyContinue) {
+     LogOk "Node.js already installed ($(node --version))"
+     Write-Summary "OK" "node.js" "$(node --version)"
+diff --git a/scripts/build-deploy.sh b/scripts/build-deploy.sh
+index 861dbd9..b323103 100755
+--- a/scripts/build-deploy.sh
++++ b/scripts/build-deploy.sh
+@@ -200,9 +200,8 @@ IDENTITY_GIT_NAME="Jose"
+ IDENTITY_GIT_EMAIL="jose@nobul.tech"
+ CURSOR_CLI_VIMMODE=false
+ CURSOR_CLI_MODEL="auto"
+-CLAUDE_AUTO_MEMORY=false
+-CLAUDE_ALWAYS_THINKING=true
+-CLAUDE_EFFORT_LEVEL="high"
++# Claude settings are not embedded: setup-user-settings syncs ~/.claude/settings.json
++# from profile.json (claude.settings) at runtime, in dev and deploy alike.
+ 
+ CONFIG="$HOME/.aitools/config.json"
+ if [ -f "$CONFIG" ] && command -v node &>/dev/null; then
+@@ -231,16 +230,6 @@ try {
+         if (typeof p.cursor.cli.vimMode === 'boolean') cursorCli.vimMode = p.cursor.cli.vimMode;
+         if (typeof p.cursor.cli.model === 'string') cursorCli.model = p.cursor.cli.model;
+     }
+-    // Claude preferences
+-    let claudePrefs = { autoMemory: true, alwaysThinking: true, effortLevel: null };
+-    const validEffortLevels = ['low', 'medium', 'high'];
+-    if (p.claude) {
+-        if (typeof p.claude.autoMemory === 'boolean') claudePrefs.autoMemory = p.claude.autoMemory;
+-        if (typeof p.claude.alwaysThinking === 'boolean') claudePrefs.alwaysThinking = p.claude.alwaysThinking;
+-        if (typeof p.claude.effortLevel === 'string' && validEffortLevels.includes(p.claude.effortLevel)) {
+-            claudePrefs.effortLevel = p.claude.effortLevel;
+-        }
+-    }
+     // Output as KEY=VALUE lines for bash eval
+     console.log('PROFILE_NAME=' + JSON.stringify(prof.name));
+     console.log('PROFILE_COMPANY=' + JSON.stringify(prof.company));
+@@ -248,9 +237,6 @@ try {
+     console.log('IDENTITY_GIT_EMAIL=' + JSON.stringify(ident.git.email));
+     console.log('CURSOR_CLI_VIMMODE=' + JSON.stringify(cursorCli.vimMode));
+     console.log('CURSOR_CLI_MODEL=' + JSON.stringify(cursorCli.model));
+-    console.log('CLAUDE_AUTO_MEMORY=' + JSON.stringify(claudePrefs.autoMemory));
+-    console.log('CLAUDE_ALWAYS_THINKING=' + JSON.stringify(claudePrefs.alwaysThinking));
+-    console.log('CLAUDE_EFFORT_LEVEL=' + JSON.stringify(claudePrefs.effortLevel || ''));
+ } catch(e) { process.exit(1); }
+ " "$CONFIG" 2>/dev/null) && eval "$PROFILE_VALS"
+ fi
+@@ -263,7 +249,6 @@ CLAUDE_SHARED_CONTENT="${CLAUDE_SHARED_CONTENT//\{\{IDENTITY_GIT_EMAIL\}\}/$IDEN
+ 
+ blog "Profile interpolation: name=$PROFILE_NAME company=$PROFILE_COMPANY"
+ blog "Cursor CLI prefs: vimMode=$CURSOR_CLI_VIMMODE model=$CURSOR_CLI_MODEL"
+-blog "Claude prefs: autoMemory=$CLAUDE_AUTO_MEMORY alwaysThinking=$CLAUDE_ALWAYS_THINKING effortLevel=${CLAUDE_EFFORT_LEVEL:-}"
+ 
+ # Clean and recreate deploy/
+ rm -rf "$DEPLOY_DIR"
+diff --git a/reference/README.md b/reference/README.md
+index d306923..9d95823 100644
+--- a/reference/README.md
++++ b/reference/README.md
+@@ -1,14 +1,58 @@
+ # Reference
+ 
+-Setup notes, how-tos, and knowledge base for AI tooling practices.
++Implementation detail, specs and knowledge base behind the rules in `.claude/rules/`.
++Governed registries (tools, incidents, frameworks, glossary, tool-ops) are reached
++through their skills, not listed here.
++
++## Harness and frameworks
++
++| File | Topic |
++|------|-------|
++| `harness.md` | Harness definition: the components and how they relate |
++| `framework-adoption.md` | Discovery-to-continuation cycle (DTCC) and the cross-reference convention |
++| `framework-artifact-harvesting.md` | Artifact harvesting: source discipline and adoption |
++| `framework-governed-data-access.md` | Skill-gated access to governed registries |
++| `framework-governed-vocabulary.md` | Governed vocabulary: composition convention, glossary maintenance |
++| `framework-hook-rollout.md` | Observe-then-enforce hook rollout |
++| `framework-incident-governance.md` | Incident tracking (defect management) |
++| `framework-incident-investigation.md` | Root-cause analysis: 5 Whys, Swiss cheese, barrier analysis |
++| `framework-intent-documentation.md` | Intent statements: purpose, scope, audience |
++| `framework-managed-file-deployment.md` | Configuration management behind managed file deployment |
++| `framework-provenance.md` | Provenance tracking: dependency chains, staleness, invalidation |
++| `framework-source-of-truth.md` | Source-of-truth review gate (change management) |
++| `framework-three-layer-governance.md` | Prevention / detection / audit layers and the registry convention |
++| `framework-tool-lifecycle.md` | Tool lifecycle: phases, gates, health flags |
++| `framework-tool-ops.md` | Tool operations: SRE-grounded per-tool ops metadata |
++| `harness-db-schema.sql` | SQLite schema for the session and harness databases |
++| `incident-020-process-discipline.md` | Incident #20 discovery context (process discipline) |
++
++## Scripts and deployment
++
++| File | Topic |
++|------|-------|
++| `script-standards-detail.md` | Script standards: patterns, summary rows, error handling, exemptions |
++| `logging.md` | Logging standard: location, rotation, format |
++| `cross-platform-detail.md` | Cross-platform background: OS guards, Windows gotchas, PERLIO |
++| `managed-file-deployment.md` | Managed file deployment state machine, menus, return values |
++| `user-repo.md` | Dotprofile repo pattern, profile/config schemas, session archive |
++| `ait-shellintegration.md` | Shell integration and PATH ownership (managed login-profile block) |
++| `plan-execution-detail.md` | Sub-agent execution pattern and error-handling audit checklist |
++| `smoke-test-pattern-detail.md` | Running setup scripts as smoke tests (redirect-and-check) |
++| `pre-commit-checklist.md` | Pre-commit checklist (`check-pre-commit`) |
++| `pre-push-checklist.md` | Pre-push checklist (`check-pre-push`) |
++| `post-push-checklist.md` | Post-push checklist (`check-post-push`) |
++| `path-targeted-hooks-analysis.md` | 2026-03-13 analysis of path-targeted PreToolUse hooks |
++
++## Tools and agents
+ 
+ | File | Topic |
+ |------|-------|
+-| `tool-ops-claude-code.md` | Claude Code operations — version deps, session behavior, platform workarounds, setup notes |
+-| `cursor-practices.md` | Cursor rules system, MCP config, CLI, skills overview |
+-| `tool-registry.md` | Registry of managed tools — install commands, lifecycle, per-platform version tracking |
+-| `tool-evaluation-criteria.md` | Framework for evaluating tools, extensions, and packages before recommending |
+-| `claude-code-effectiveness.md` | Self-assessment tracker for Claude Code usage effectiveness |
+-| `user-repo.md` | User repo pattern: session archive naming, project derivation, CLI commands |
+-| `gh-issue-7490-comment.md` | Upstream GitHub comment for Windows shell configuration tracking |
+-| `session-showcase.md` | Case study: cross-platform AI tooling setup and automation |
++| `tool-registry.md` | Managed tools: install commands, lifecycle, per-platform versions |
++| `tool-evaluation-criteria.md` | Tool evaluation framework and lifecycle phases |
++| `tool-evaluation-playbook.md` | Install method discovery process |
++| `tool-ops-claude-code.md` | Claude Code operations: version dependencies, session behavior, workarounds |
++| `cursor-practices.md` | Cursor rules system, MCP config, CLI, skills |
++| `agentic-framework.md` | `invoke_ai` / `Invoke-AI`: speed and permission tiers, retries, telemetry |
++| `agentic-prompt-patterns.md` | Prompt patterns for AI CLI calls in scripts |
++| `claude-code-effectiveness.md` | Self-assessment tracker for Claude Code usage |
++| `do-what-feels-right.md` | The original failure-mode briefing, preserved verbatim |
+diff --git a/reference/framework-hook-rollout.md b/reference/framework-hook-rollout.md
+index ba493ef..9ea9980 100644
+--- a/reference/framework-hook-rollout.md
++++ b/reference/framework-hook-rollout.md
+@@ -39,5 +39,5 @@ observe first, then enforce.
+ 
+ ## Cross-References
+ 
+-- Framework registry: `@reference/framework-registry.json`
++- Framework registry: `/frameworks` skill
+ - Three-layer governance: `@reference/framework-three-layer-governance.md`
+diff --git a/reference/framework-incident-governance.md b/reference/framework-incident-governance.md
+index 9c48c51..da98835 100644
+--- a/reference/framework-incident-governance.md
++++ b/reference/framework-incident-governance.md
+@@ -6,7 +6,7 @@ resolving harness deficiencies through structured defect management.
+ this way, how it's maintained, and how it fits the three-layer model.
+ NOT the operational filing process (that's in
+ `@.claude/rules/incident-governance.md`). NOT the incident data itself
+-(that's in `@registries/incidents.json`). **Audience**: Agents
++(the `/incident` skill gates the incident registry). **Audience**: Agents
+ encountering the incident system for the first time, framework
+ adoption work.
+ 
+@@ -19,7 +19,7 @@ staleness rules mirror defect tracking practices.
+ 
+ ## How We Adopted It
+ 
+-- **Defect tracking** → `@registries/incidents.json` with structured
++- **Defect tracking** → the incident registry (via `/incident` skill) with structured
+   fields, severity classification, lifecycle states
+ - **Continuous improvement** → surfacing duty (every session looks for
+   ambiguities), staleness rule (90 days without a plan = stale)
+@@ -42,12 +42,12 @@ staleness rules mirror defect tracking practices.
+ ## Implementing Artifacts
+ 
+ - `@.claude/rules/incident-governance.md` (operational rule)
+-- `@registries/incidents.json` (data)
++- Incident registry (data, via `/incident` skill)
+ - `@.claude/skills/incident/SKILL.md` (filing)
+ - `@.claude/skills/audit/SKILL.md` (health checking)
+ 
+ ## Cross-References
+ 
+-- Framework registry: `@registries/framework-registry.json`
++- Framework registry: `/frameworks` skill
+ - Three-layer governance: `@reference/framework-three-layer-governance.md`
+ - Discovery cycle: `@reference/framework-adoption.md`
+diff --git a/reference/framework-incident-investigation.md b/reference/framework-incident-investigation.md
+index 5b8e030..9f26ed6 100644
+--- a/reference/framework-incident-investigation.md
++++ b/reference/framework-incident-investigation.md
+@@ -46,6 +46,6 @@ Safety engineering:
+ 
+ ## Cross-References
+ 
+-- Framework registry: `@reference/framework-registry.json`
++- Framework registry: `/frameworks` skill
+ - Three-layer governance: `@reference/framework-three-layer-governance.md`
+ - Incident governance: `@reference/framework-incident-governance.md`
+diff --git a/reference/framework-intent-documentation.md b/reference/framework-intent-documentation.md
+index 78f674f..db21520 100644
+--- a/reference/framework-intent-documentation.md
++++ b/reference/framework-intent-documentation.md
+@@ -59,7 +59,7 @@ Knowledge management — specifically:
+ 
+ ## Cross-References
+ 
+-- Framework registry: `@reference/framework-registry.json`
++- Framework registry: `/frameworks` skill
+ - Framework adoption: `@reference/framework-adoption.md`
+ - Three-layer governance: `@reference/framework-three-layer-governance.md`
+ - Governed vocabulary: `@reference/framework-governed-vocabulary.md`
+diff --git a/reference/framework-managed-file-deployment.md b/reference/framework-managed-file-deployment.md
+index c68bae0..33eece9 100644
+--- a/reference/framework-managed-file-deployment.md
++++ b/reference/framework-managed-file-deployment.md
+@@ -48,6 +48,6 @@ options, and track outcomes.
+ 
+ ## Cross-References
+ 
+-- Framework registry: `@reference/framework-registry.json`
++- Framework registry: `/frameworks` skill
+ - Three-layer governance: `@reference/framework-three-layer-governance.md`
+ - Source-of-truth protection: `@reference/framework-source-of-truth.md`
+diff --git a/reference/framework-provenance.md b/reference/framework-provenance.md
+index fd43edd..db1fa36 100644
+--- a/reference/framework-provenance.md
++++ b/reference/framework-provenance.md
+@@ -55,7 +55,7 @@ Six disciplines converge. Each solves a different facet of the problem
+   propagate through lineage. Classifications like
+   `commander_directive`, `verified_fact`, `agent_observation`,
+   `unverified_assumption` annotate every knowledge item with its trust
+-  level. The governed vocabulary (glossary.json) integrates with the
++  level. The governed vocabulary (`/glossary` skill) integrates with the
+   provenance graph.
+ 
+ ## How We Adopted It
+diff --git a/reference/framework-source-of-truth.md b/reference/framework-source-of-truth.md
+index de1c7f0..1cc8027 100644
+--- a/reference/framework-source-of-truth.md
++++ b/reference/framework-source-of-truth.md
+@@ -37,6 +37,6 @@ machines is high.
+ 
+ ## Cross-References
+ 
+-- Framework registry: `@reference/framework-registry.json`
++- Framework registry: `/frameworks` skill
+ - Three-layer governance: `@reference/framework-three-layer-governance.md`
+ - Intent documentation: `/intent-writing` and `/intent-audit` skills
+diff --git a/reference/framework-tool-ops.md b/reference/framework-tool-ops.md
+index be94abb..ecefb47 100644
+--- a/reference/framework-tool-ops.md
++++ b/reference/framework-tool-ops.md
+@@ -33,7 +33,7 @@ Three disciplines converge:
+   (`reference/tool-ops-*.md`) that consolidate scattered operational
+   knowledge — deny rules, hooks, context injection, KPIs, version
+   dependencies — into a single governed location per tool.
+-- **Observe-then-enforce** -> governance modes in `tool-ops.json`.
++- **Observe-then-enforce** -> governance modes in the tool-ops registry (`/tool-ops` skill).
+   Each metadata category (denyRules, hooks, contextInjection, kpis,
+   versionDeps, verifications) has its own mode: `audit` (logged,
+   advisory) or `active` (enforced, blocking). Categories promote
+@@ -46,7 +46,7 @@ Three disciplines converge:
+ 
+ ## How It's Maintained
+ 
+-- Governance modes tracked in `registries/tool-ops.json` per tool,
++- Governance modes tracked in the tool-ops registry (`/tool-ops` skill) per tool,
+   per category
+ - SessionEnd hook (`tool-ops-session-audit.sh`) collects drift
+   telemetry: did deny rules fire? Did hooks behave as specified?
+@@ -59,13 +59,13 @@ Three disciplines converge:
+ 
+ - `.claude/rules/tool-ops.md` (governance rule — always in context)
+ - `.claude/skills/tool-ops/SKILL.md` (governed access to registry)
+-- `registries/tool-ops.json` (registry — per-tool metadata)
++- Tool-ops registry (per-tool metadata, via `/tool-ops` skill)
+ - `reference/tool-ops-*.md` (per-tool ops references — full detail)
+ - `shared/hooks/tool-ops-session-audit.sh` (SessionEnd drift telemetry)
+ 
+ ## Cross-References
+ 
+-- Framework registry: `@registries/framework-registry.json`
++- Framework registry: `/frameworks` skill
+ - Three-layer governance: `@reference/framework-three-layer-governance.md`
+ - Hook rollout (observe-to-enforce source): `@reference/framework-hook-rollout.md`
+ - Tool lifecycle (install/version tracking): `@reference/framework-tool-lifecycle.md`
+diff --git a/reference/tool-ops-claude-code.md b/reference/tool-ops-claude-code.md
+index fc8f8a1..e65850e 100644
+--- a/reference/tool-ops-claude-code.md
++++ b/reference/tool-ops-claude-code.md
+@@ -401,4 +401,3 @@ Once Anthropic fixes the upstream issues, we can simplify by setting `CLAUDE_COD
+ - Incident registry: `/incident` skill
+ - User repo spec: `reference/user-repo.md`
+ - Cross-platform rules: `.claude/rules/cross-platform.md`
+-- Upstream shell issue comment: `reference/gh-issue-7490-comment.md`
 ```
 
 ## Risks

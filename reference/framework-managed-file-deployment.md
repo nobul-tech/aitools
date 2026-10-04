@@ -48,6 +48,6 @@ options, and track outcomes.
 
 ## Cross-References
 
-- Framework registry: `@reference/framework-registry.json`
+- Framework registry: `/frameworks` skill
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
 - Source-of-truth protection: `@reference/framework-source-of-truth.md`
