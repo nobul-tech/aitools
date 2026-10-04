@@ -1143,10 +1143,11 @@ Main agent, direct (no code). Every item below is part of **this review**:
 > PR C3 (batch C5, D-C3) shipped 2026-10-03 (#38).
 > PR C4 (batch C6, D-C4) shipped 2026-10-03 (#39).
 > PR C5 (batches C7, C7b, D-C5) shipped 2026-10-03 (#40).
-> PR C6 (batch C8, D-C6) approved for execution 2026-10-03.**
+> PR C6 (batch C8, D-C6) shipped 2026-10-04 (#41).
+> PR C7 (batch C9, D-C7) approved for execution 2026-10-04.**
 > Verbatim edits, the error-handling audits and the prototype test evidence are in
-> the "PR C1–C6 — verbatim edits" sections below; the logging audit plan is in
-> the PR C2 section. Batches C9–C15 remain scoped only: each needs its own verbatim-edit
+> the "PR C1–C7 — verbatim edits" sections below; the logging audit plan is in
+> the PR C2 section. Batches C10–C15 remain scoped only: each needs its own verbatim-edit
 > revision of this section, presented for approval, before code is written.
 
 ### Origin
@@ -1244,11 +1245,17 @@ PR C6 (approved 2026-10-03; verbatim edits in "PR C6 — verbatim edits"):
 | C8 | `setup-vercelcli.sh`, `setup-vercelcli.ps1`, `setup-gh-cli.ps1` | #23, #26a, #27a, auth WARN row |
 | D-C6 | protected docs (approved 2026-10-03) | exemptions table: `setup-vercelcli.sh` row removed; this plan. RELEASE_NOTES deferred |
 
+PR C7 (approved 2026-10-04; verbatim edits in "PR C7 — verbatim edits"):
+
+| Batch | Files | Issues |
+|---|---|---|
+| C9 | `setup-user-cursor.sh`, `setup-user-cursor.ps1` | #23, #25, #26b–d (no `build-deploy.sh` port needed: edits are inside the extracted body) |
+| D-C7 | protected docs (approved 2026-10-04) | this plan. RELEASE_NOTES deferred |
+
 Later PRs (scoped, not approved):
 
 | Batch | Files | Issues |
 |---|---|---|
-| C9 | `setup-user-cursor.sh`, `setup-user-cursor.ps1` | #23, #25, #26b–d |
 | C10 | `setup-user-hooks.sh`, `setup-user-hooks.ps1` | #25, #26a–c, #26f, #27b |
 | C11 | `setup-user-settings.sh`, `setup-user-settings.ps1`, `setup-gh-cli.sh` | #26a–c; remove the "No settings.json yet" early exit (#31 caller half) |
 | C12 | `setup-cursor-ide-mcp.sh`, `setup-cursor-ide-mcp.ps1` | #25, #26a–c, #27b (Cursor `mcp` verbs, re-verified via `/tool-eval` first) |
@@ -5620,6 +5627,367 @@ index 3c78b89..7a710cb 100644
      }
  }
  
+```
+
+## PR C7 — verbatim edits (batch C9)
+
+Base: `main` @ 6622acc (after PR C6; prototyped on the identical PR C6 branch head
+6a0f29f before #41 merged). Prototyped on a copy of the base (scratch: `.scratch/session-3030c86a-9/proto-c9/`); the
+diff below is the exact edit. Decisions C-F2, C-F3 and C-F4 apply. Install methods are
+unchanged. `build-deploy.sh` needs no port: every edit sits inside the extracted "cursor
+body" and outside the "profile preferences" block it replaces (`deploy-paths.md`); the
+regenerated `deploy/setup-user-cursor.sh` passes the same tests as the source.
+
+### What changes
+
+| File | Issue / check | Change |
+|---|---|---|
+| `setup-user-cursor.sh` | #23, RC5c | `brew install ripgrep`: output captured and logged as detail, exit code decides (was fire-and-forget; a failure aborted the script under `set -e`, skipping the Cursor CLI and cli-config steps) |
+| `setup-user-cursor.sh` | #23 | Cursor CLI installer (`curl ... \| bash`): output captured and logged, exit code decides with pipefail (was fire-and-forget and aborting on failure) |
+| `setup-user-cursor.sh` | #26c, #26d | ripgrep and Cursor CLI outcomes get rows: install failure = ERROR, Homebrew missing / not on PATH after install = WARN (were `STATUS_*` variables that nothing reads). Rows use the `cursor cli` tool name (no new name in the tool-name table); success adds no row, the config row stays the tool's OK row |
+| `setup-user-cursor.sh` | #25 | node merge diagnostics go to stdout as `MSG:` / `WARN:` / `DETAIL:` lines and are logged (`log` / `log_warn` / `log_detail`); the status is the first unprefixed line (were `console.error` lines that reached the console only: corrupt-file warning, clobber list, dry-run preview, validation failure). The corrupt-file and clobber warnings now count as warnings, as in the PS1 |
+| `setup-user-cursor.sh` | #26b | node exit code captured: a non-zero exit (post-write validation, uncaught error) writes an ERROR row "config merge failed (exit N)" (was a silent `set -e` abort with no row) |
+| `setup-user-cursor.ps1` | #23, #26c | winget ripgrep install: output logged via `Log-WingetOutput`, exit code checked ("already installed" text excepted), ERROR / WARN rows as in bash |
+| `setup-user-cursor.ps1` | #23, #26d | Cursor installer in try/catch, all output streams logged as detail; a throw is an ERROR row; agent not on PATH = WARN row |
+| `setup-user-cursor.ps1` | #26b | cli-config write in try/catch; a failed write or post-write validation writes an ERROR row and no OK row (was OK "created"/"updated" after the LogError) |
+
+Not changed: the `console.error` in the "profile preferences" block (that block is
+replaced by `build-deploy.sh`; follow-up with C14's build-deploy work), and the unused
+`STATUS_*` / `$status` bookkeeping.
+
+Generated `deploy/` (dotprofile): `setup-user-cursor.sh` and `setup-user-cursor.ps1`
+change; the build gives 40 scripts and every generated script passes `bash -n` /
+ParseFile.
+
+### Error-handling audit
+
+| Pattern | Where | Check |
+|---|---|---|
+| `if out=$(cmd 2>&1); then rc=0; else rc=$?; fi` / `x=$(cmd 2>&1) \|\| rc=$?` | brew install ripgrep, Cursor installer, node merge | `rc` tested on the next statement; output logged first |
+| `& cmd 2>&1 \| Out-String` + `$LASTEXITCODE` saved on the next line | winget | exit code saved before any other native call |
+| try/catch | Cursor installer, cli-config write | catch logs with `LogError` and the row follows |
+| `Get-Command ... -ErrorAction SilentlyContinue` | existing sites + 2 commented | command-existence check with explicit fallback (exempt) |
+
+### Tests (Linux)
+
+| Suite | Prototype | Base (6a0f29f) |
+|---|---|---|
+| `test-c9.sh` (scratch): `setup-user-cursor.sh`, minimal PATH (stubs + real node): happy path, `brew install ripgrep` failure, no Homebrew, Cursor installer failure, corrupt cli-config.json, node exit 3, dry run | 9/9 (also 9/9 on the generated `deploy/setup-user-cursor.sh`) | 1/9 |
+| `test-c9-ps1.sh` (scratch): `setup-user-cursor.ps1`, OS guard stripped, stubs, `Invoke-RestMethod` overridden: happy path, winget failure, installer throw, cli-config write failure | 5/5 | 1/5 |
+| `check-script-compliance.sh` | 13 PASS | 13 PASS |
+| `bash -n` / ParseFile; `build-deploy.sh` into a dotprofile copy | pass; 40 scripts, 2 changed, all parse | -- |
+
+The base passes are the happy-path regression checks. Not testable here: real Homebrew /
+winget / Cursor installer runs (macOS, Windows).
+
+### Logging audit (after C9)
+
+Counts unchanged (A3 185 in 13, A4 282 in 36, A5 21 in 11, A8 7 in 7): the C9 defects
+(fire-and-forget installs, console-only node output, unread status variables) are not
+patterns the static scanner counts; the stub tests above are the evidence.
+
+### D-C7: protected doc edits
+
+- This plan: status line, batch table (C9 -> PR C7), this section.
+
+### Verbatim diff
+
+```diff
+diff --git a/scripts/setup-user-cursor.sh b/scripts/setup-user-cursor.sh
+index 6ca9752..00f49e6 100755
+--- a/scripts/setup-user-cursor.sh
++++ b/scripts/setup-user-cursor.sh
+@@ -38,6 +38,14 @@ esac
+ 
+ [ "$DRY_RUN" = "true" ] && log "[DRY RUN] Preview mode -- no files will be written"
+ 
++# Log captured command output to the log file as detail lines (blank lines skipped).
++write_output_detail() {  # label, output
++    local line
++    while IFS= read -r line; do
++        if [ -n "${line// /}" ]; then log_detail "$1: $line"; fi
++    done <<< "$2"
++}
++
+ CURSOR_DIR="$HOME/.cursor"
+ CLI_CONFIG="$CURSOR_DIR/cli-config.json"
+ 
+@@ -67,19 +75,28 @@ else
+     else
+         if command -v brew &>/dev/null; then
+             log "Installing ripgrep via brew..."
+-            brew install ripgrep
+-
+-            if command -v rg &>/dev/null; then
++            # Exit code decides (C-F2); the full output goes to the log as detail.
++            if rg_out=$(brew install ripgrep 2>&1); then rg_rc=0; else rg_rc=$?; fi
++            write_output_detail "brew-install-ripgrep" "$rg_out"
++            hash -r
++
++            if [ "$rg_rc" -ne 0 ]; then
++                log_error "brew install ripgrep failed (exit $rg_rc) -- see $(display_path "$LOG_FILE")"
++                STATUS_ripgrep="FAILED (exit $rg_rc)"
++                write_summary ERROR "cursor cli" "ripgrep install failed (exit $rg_rc)"
++            elif command -v rg &>/dev/null; then
+                 RG_VERSION=$(rg --version | head -1)
+                 log_ok "Installed: $RG_VERSION"
+                 STATUS_ripgrep="installed ($RG_VERSION)"
+             else
+                 log_warn "brew install completed but 'rg' not found in PATH. Restart terminal to verify."
+                 STATUS_ripgrep="installed (restart terminal to verify)"
++                write_summary WARN "cursor cli" "ripgrep not on PATH (restart terminal)"
+             fi
+         else
+             log_warn "Homebrew not found. Install ripgrep manually: brew install ripgrep"
+             STATUS_ripgrep="SKIPPED (brew not found)"
++            write_summary WARN "cursor cli" "ripgrep missing (Homebrew not found)"
+         fi
+     fi
+ fi
+@@ -104,15 +121,24 @@ else
+         STATUS_cursorCli="already installed ($AGENT_VERSION)"
+     else
+         log "Installing Cursor CLI..."
+-        curl https://cursor.com/install -fsS | bash
+-
+-        if command -v agent &>/dev/null; then
++        # Exit code decides (pipefail: a curl failure fails the pipeline); output logged as detail.
++        cursor_rc=0
++        cursor_out=$({ curl https://cursor.com/install -fsS | bash; } 2>&1) || cursor_rc=$?
++        write_output_detail "cursor-installer" "$cursor_out"
++        hash -r
++
++        if [ "$cursor_rc" -ne 0 ]; then
++            log_error "Cursor CLI installer failed (exit $cursor_rc) -- see $(display_path "$LOG_FILE")"
++            STATUS_cursorCli="FAILED (exit $cursor_rc)"
++            write_summary ERROR "cursor cli" "installer failed (exit $cursor_rc)"
++        elif command -v agent &>/dev/null; then
+             AGENT_VERSION=$(agent --version)
+             log_ok "Installed: $AGENT_VERSION"
+             STATUS_cursorCli="installed ($AGENT_VERSION)"
+         else
+             log_warn "Cursor CLI install completed but 'agent' not found in PATH. Restart terminal to verify."
+             STATUS_cursorCli="installed (restart terminal to verify)"
++            write_summary WARN "cursor cli" "agent not on PATH (restart terminal)"
+         fi
+     fi
+ fi
+@@ -154,6 +180,7 @@ else
+     # Read cursor.cli preferences from profile.json (via config.json -> userRepoPath).
+     # Falls back to defaults if profile not found.
+ 
++    merge_rc=0
+     MERGE_RESULT=$(node -e "
+ $SORT_KEYS_JS
+ const fs = require('fs');
+@@ -186,7 +213,7 @@ try {
+ } catch (e) {
+     if (e.code !== 'ENOENT') {
+         corrupt = true;
+-        console.error('Warning: ' + f + ' is invalid JSON');
++        console.log('WARN: ' + f + ' is invalid JSON');
+     }
+ }
+ const beforeKeys = Object.keys(config);
+@@ -225,30 +252,32 @@ const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
+ 
+ const after = JSON.stringify(sortKeys(config));
+ 
++// Diagnostics go to stdout with a prefix (MSG: info, WARN: warning, DETAIL: log only)
++// so bash can log them; the first unprefixed line is the status.
+ if (dryRun) {
+-    console.error('[DRY RUN] ' + f + ': merge');
+-    console.error('  Managed fields: ' + managedKeys.join(', '));
+-    if (lostKeys.length > 0) console.error('  CLOBBER WARNING: would lose: ' + lostKeys.join(', '));
+-    if (corrupt) console.error('  File is corrupt -- --force required');
++    console.log('MSG: [DRY RUN] ' + f + ': merge');
++    console.log('MSG:   Managed fields: ' + managedKeys.join(', '));
++    if (lostKeys.length > 0) console.log('WARN: [DRY RUN] CLOBBER: would lose: ' + lostKeys.join(', '));
++    if (corrupt) console.log('WARN: [DRY RUN] File is corrupt -- --force required');
+     console.log(before === after && !corrupt ? 'unchanged' : 'would-merge');
+ } else if (corrupt && !force) {
+-    console.error('ERROR: ' + f + ' is corrupt. Use --force to overwrite, or fix manually.');
++    console.log('DETAIL: ' + f + ' is corrupt. Use --force to overwrite, or fix manually.');
+     console.log('error-corrupt');
+ } else if (lostKeys.length > 0 && !force) {
+-    console.error('ERROR: merge would lose fields: ' + lostKeys.join(', ') + '. Use --force to proceed.');
++    console.log('DETAIL: merge would lose fields: ' + lostKeys.join(', ') + '. Use --force to proceed.');
+     console.log('error-clobber');
+ } else {
+     if (before === after) {
+         console.log('unchanged');
+     } else {
+-        if (corrupt) console.error('Warning: proceeding with --force on corrupt file');
+-        if (lostKeys.length > 0) console.error('Warning: proceeding with --force, losing fields: ' + lostKeys.join(', '));
++        if (corrupt) console.log('WARN: proceeding with --force on corrupt file');
++        if (lostKeys.length > 0) console.log('WARN: proceeding with --force, losing fields: ' + lostKeys.join(', '));
+         fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\n');
+ 
+         // Post-write validation
+         const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
+         const _missing = ['version'].filter(k => !(k in _v));
+-        if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
++        if (_missing.length) { console.log('DETAIL: validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+ 
+         const changed = [];
+         for (const k of snapshotKeys) {
+@@ -260,9 +289,21 @@ if (dryRun) {
+         changed.forEach(c => console.log('CHANGED: ' + c));
+     }
+ }
+-" "$CLI_CONFIG" "$DRY_RUN" "$FORCE")
+-
+-    MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)
++" "$CLI_CONFIG" "$DRY_RUN" "$FORCE") || merge_rc=$?
++
++    # Log node's prefixed diagnostics; the first unprefixed line is the status.
++    MERGE_STATUS=""
++    while IFS= read -r line; do
++        case "$line" in
++            "MSG: "*)    log "${line#MSG: }" ;;
++            "WARN: "*)   log_warn "${line#WARN: }" ;;
++            "DETAIL: "*) log_detail "cli-config: ${line#DETAIL: }" ;;
++            "CHANGED: "*) ;;
++            *) if [ -z "$MERGE_STATUS" ]; then MERGE_STATUS="$line"; fi ;;
++        esac
++    done <<< "$MERGE_RESULT"
++    # A non-zero node exit (post-write validation, uncaught error) overrides the status.
++    if [ "$merge_rc" -ne 0 ]; then MERGE_STATUS="error-exit"; fi
+     case "$MERGE_STATUS" in
+         unchanged)
+             log_ok "Already up to date: $(display_path "$CLI_CONFIG")"
+@@ -289,6 +330,10 @@ if (dryRun) {
+             log_error "$(display_path "$CLI_CONFIG") merge would lose fields. Use --force to proceed."
+             STATUS_cliConfig="ERROR (clobber, needs --force)"
+             write_summary ERROR "cursor cli" "merge would lose fields" ;;
++        error-exit)
++            log_error "$(display_path "$CLI_CONFIG") merge failed (node exit $merge_rc) -- see $(display_path "$LOG_FILE")"
++            STATUS_cliConfig="ERROR (merge failed)"
++            write_summary ERROR "cursor cli" "config merge failed (exit $merge_rc)" ;;
+         *)
+             log_error "Unexpected merge result: $MERGE_STATUS"
+             STATUS_cliConfig="ERROR"
+diff --git a/scripts/setup-user-cursor.ps1 b/scripts/setup-user-cursor.ps1
+index 622bcaf..c69b1a3 100644
+--- a/scripts/setup-user-cursor.ps1
++++ b/scripts/setup-user-cursor.ps1
+@@ -31,6 +31,11 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
+ 
+ if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
+ 
++# Log captured command output to the log file as detail lines (blank lines skipped).
++function Write-OutputDetail([string]$Label, [string]$Output) {
++    foreach ($l in $Output.Split("`n")) { if ($l.Trim()) { LogDetail "${Label}: $($l.TrimEnd())" } }
++}
++
+ $cursorDir = Join-Path $env:USERPROFILE ".cursor"
+ $cliConfig = Join-Path $cursorDir "cli-config.json"
+ 
+@@ -63,17 +68,26 @@ if ($DryRun) {
+         $status.ripgrep = "already installed ($rgVersion)"
+     } else {
+         Log "Installing ripgrep via winget..."
+-        winget install BurntSushi.ripgrep.MSVC --accept-package-agreements --accept-source-agreements
++        # Exit code decides (C-F2); the output goes to the log.
++        $rgOutput = winget install BurntSushi.ripgrep.MSVC --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
++        $rgRc = $LASTEXITCODE
++        Log-WingetOutput $rgOutput
+         Refresh-Path
+ 
++        # Get-Command exempt: command-existence check with if/else fallback
+         $rgCmd = Get-Command rg -ErrorAction SilentlyContinue
+-        if ($rgCmd) {
++        if ($rgRc -ne 0 -and $rgOutput -notmatch 'already installed') {
++            LogError "winget install ripgrep failed (exit $rgRc) -- see $logFile"
++            $status.ripgrep = "FAILED (exit $rgRc)"
++            Write-Summary "ERROR" "cursor cli" "ripgrep install failed (exit $rgRc)"
++        } elseif ($rgCmd) {
+             $rgVersion = (rg --version | Select-Object -First 1)
+             LogOk "Installed: $rgVersion"
+             $status.ripgrep = "installed ($rgVersion)"
+         } else {
+             LogWarn "winget install completed but 'rg' not found in PATH. Restart terminal to verify."
+             $status.ripgrep = "installed (restart terminal to verify)"
++            Write-Summary "WARN" "cursor cli" "ripgrep not on PATH (restart terminal)"
+         }
+     }
+ }
+@@ -100,16 +114,31 @@ if ($DryRun) {
+         $status.cursorCli = "already installed ($agentVersion)"
+     } else {
+         Log "Installing Cursor CLI..."
+-        Invoke-Expression (Invoke-RestMethod 'https://cursor.com/install?win32=true')
++        # Installer output (all streams) goes to the log; a failed download or script is an ERROR.
++        $installerFailed = $false
++        try {
++            $installerOutput = Invoke-Expression (Invoke-RestMethod 'https://cursor.com/install?win32=true' -ErrorAction Stop) *>&1 | Out-String
++            Write-OutputDetail "cursor-installer" $installerOutput
++        } catch {
++            $installerFailed = $true
++            LogError "Cursor CLI installer failed: $_"
++            $status.cursorCli = "FAILED"
++            Write-Summary "ERROR" "cursor cli" "installer failed"
++        }
++        Refresh-Path
+ 
+-        $agentCmd = Get-Command agent -ErrorAction SilentlyContinue
+-        if ($agentCmd) {
+-            $agentVersion = agent --version
+-            LogOk "Installed: $agentVersion"
+-            $status.cursorCli = "installed ($agentVersion)"
+-        } else {
+-            LogWarn "Cursor CLI install completed but 'agent' not found in PATH. Restart terminal to verify."
+-            $status.cursorCli = "installed (restart terminal to verify)"
++        if (-not $installerFailed) {
++            # Get-Command exempt: command-existence check with if/else fallback
++            $agentCmd = Get-Command agent -ErrorAction SilentlyContinue
++            if ($agentCmd) {
++                $agentVersion = agent --version
++                LogOk "Installed: $agentVersion"
++                $status.cursorCli = "installed ($agentVersion)"
++            } else {
++                LogWarn "Cursor CLI install completed but 'agent' not found in PATH. Restart terminal to verify."
++                $status.cursorCli = "installed (restart terminal to verify)"
++                Write-Summary "WARN" "cursor cli" "agent not on PATH (restart terminal)"
++            }
+         }
+     }
+ }
+@@ -255,11 +284,16 @@ if ($DryRun) {
+         if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
+ 
+         $json = $config | ConvertTo-Json -Depth 10
+-        [System.IO.File]::WriteAllText(
+-            $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($cliConfig),
+-            $json,
+-            [System.Text.UTF8Encoding]::new($false)
+-        )
++        $errorsBeforeWrite = $errors
++        try {
++            [System.IO.File]::WriteAllText(
++                $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($cliConfig),
++                $json,
++                [System.Text.UTF8Encoding]::new($false)
++            )
++        } catch {
++            LogError "Could not write $cliConfig -- $_"
++        }
+ 
+         # Post-write validation
+         try {
+@@ -285,7 +319,11 @@ if ($DryRun) {
+             }
+         }
+ 
+-        if ($beforeKeys.Count -eq 0) {
++        if ($errors -gt $errorsBeforeWrite) {
++            # Write or post-write validation failed: ERROR row, never OK after it
++            $status.cliConfig = "ERROR (write or validation failed)"
++            Write-Summary "ERROR" "cursor cli" "config write/validation failed"
++        } elseif ($beforeKeys.Count -eq 0) {
+             LogOk "Created: $cliConfig"
+             $status.cliConfig = "created"
+             if ($keyChanges.Count -gt 0) {
 ```
 
 ## Risks

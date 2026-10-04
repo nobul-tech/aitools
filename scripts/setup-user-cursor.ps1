@@ -31,6 +31,11 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 
 if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
+# Log captured command output to the log file as detail lines (blank lines skipped).
+function Write-OutputDetail([string]$Label, [string]$Output) {
+    foreach ($l in $Output.Split("`n")) { if ($l.Trim()) { LogDetail "${Label}: $($l.TrimEnd())" } }
+}
+
 $cursorDir = Join-Path $env:USERPROFILE ".cursor"
 $cliConfig = Join-Path $cursorDir "cli-config.json"
 
@@ -63,17 +68,26 @@ if ($DryRun) {
         $status.ripgrep = "already installed ($rgVersion)"
     } else {
         Log "Installing ripgrep via winget..."
-        winget install BurntSushi.ripgrep.MSVC --accept-package-agreements --accept-source-agreements
+        # Exit code decides (C-F2); the output goes to the log.
+        $rgOutput = winget install BurntSushi.ripgrep.MSVC --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+        $rgRc = $LASTEXITCODE
+        Log-WingetOutput $rgOutput
         Refresh-Path
 
+        # Get-Command exempt: command-existence check with if/else fallback
         $rgCmd = Get-Command rg -ErrorAction SilentlyContinue
-        if ($rgCmd) {
+        if ($rgRc -ne 0 -and $rgOutput -notmatch 'already installed') {
+            LogError "winget install ripgrep failed (exit $rgRc) -- see $logFile"
+            $status.ripgrep = "FAILED (exit $rgRc)"
+            Write-Summary "ERROR" "cursor cli" "ripgrep install failed (exit $rgRc)"
+        } elseif ($rgCmd) {
             $rgVersion = (rg --version | Select-Object -First 1)
             LogOk "Installed: $rgVersion"
             $status.ripgrep = "installed ($rgVersion)"
         } else {
             LogWarn "winget install completed but 'rg' not found in PATH. Restart terminal to verify."
             $status.ripgrep = "installed (restart terminal to verify)"
+            Write-Summary "WARN" "cursor cli" "ripgrep not on PATH (restart terminal)"
         }
     }
 }
@@ -100,16 +114,31 @@ if ($DryRun) {
         $status.cursorCli = "already installed ($agentVersion)"
     } else {
         Log "Installing Cursor CLI..."
-        Invoke-Expression (Invoke-RestMethod 'https://cursor.com/install?win32=true')
+        # Installer output (all streams) goes to the log; a failed download or script is an ERROR.
+        $installerFailed = $false
+        try {
+            $installerOutput = Invoke-Expression (Invoke-RestMethod 'https://cursor.com/install?win32=true' -ErrorAction Stop) *>&1 | Out-String
+            Write-OutputDetail "cursor-installer" $installerOutput
+        } catch {
+            $installerFailed = $true
+            LogError "Cursor CLI installer failed: $_"
+            $status.cursorCli = "FAILED"
+            Write-Summary "ERROR" "cursor cli" "installer failed"
+        }
+        Refresh-Path
 
-        $agentCmd = Get-Command agent -ErrorAction SilentlyContinue
-        if ($agentCmd) {
-            $agentVersion = agent --version
-            LogOk "Installed: $agentVersion"
-            $status.cursorCli = "installed ($agentVersion)"
-        } else {
-            LogWarn "Cursor CLI install completed but 'agent' not found in PATH. Restart terminal to verify."
-            $status.cursorCli = "installed (restart terminal to verify)"
+        if (-not $installerFailed) {
+            # Get-Command exempt: command-existence check with if/else fallback
+            $agentCmd = Get-Command agent -ErrorAction SilentlyContinue
+            if ($agentCmd) {
+                $agentVersion = agent --version
+                LogOk "Installed: $agentVersion"
+                $status.cursorCli = "installed ($agentVersion)"
+            } else {
+                LogWarn "Cursor CLI install completed but 'agent' not found in PATH. Restart terminal to verify."
+                $status.cursorCli = "installed (restart terminal to verify)"
+                Write-Summary "WARN" "cursor cli" "agent not on PATH (restart terminal)"
+            }
         }
     }
 }
@@ -255,11 +284,16 @@ if ($DryRun) {
         if ($lostKeys.Count -gt 0) { LogWarn "Proceeding with -Force, losing fields: $($lostKeys -join ', ')" }
 
         $json = $config | ConvertTo-Json -Depth 10
-        [System.IO.File]::WriteAllText(
-            $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($cliConfig),
-            $json,
-            [System.Text.UTF8Encoding]::new($false)
-        )
+        $errorsBeforeWrite = $errors
+        try {
+            [System.IO.File]::WriteAllText(
+                $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($cliConfig),
+                $json,
+                [System.Text.UTF8Encoding]::new($false)
+            )
+        } catch {
+            LogError "Could not write $cliConfig -- $_"
+        }
 
         # Post-write validation
         try {
@@ -285,7 +319,11 @@ if ($DryRun) {
             }
         }
 
-        if ($beforeKeys.Count -eq 0) {
+        if ($errors -gt $errorsBeforeWrite) {
+            # Write or post-write validation failed: ERROR row, never OK after it
+            $status.cliConfig = "ERROR (write or validation failed)"
+            Write-Summary "ERROR" "cursor cli" "config write/validation failed"
+        } elseif ($beforeKeys.Count -eq 0) {
             LogOk "Created: $cliConfig"
             $status.cliConfig = "created"
             if ($keyChanges.Count -gt 0) {

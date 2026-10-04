@@ -38,6 +38,14 @@ esac
 
 [ "$DRY_RUN" = "true" ] && log "[DRY RUN] Preview mode -- no files will be written"
 
+# Log captured command output to the log file as detail lines (blank lines skipped).
+write_output_detail() {  # label, output
+    local line
+    while IFS= read -r line; do
+        if [ -n "${line// /}" ]; then log_detail "$1: $line"; fi
+    done <<< "$2"
+}
+
 CURSOR_DIR="$HOME/.cursor"
 CLI_CONFIG="$CURSOR_DIR/cli-config.json"
 
@@ -67,19 +75,28 @@ else
     else
         if command -v brew &>/dev/null; then
             log "Installing ripgrep via brew..."
-            brew install ripgrep
+            # Exit code decides (C-F2); the full output goes to the log as detail.
+            if rg_out=$(brew install ripgrep 2>&1); then rg_rc=0; else rg_rc=$?; fi
+            write_output_detail "brew-install-ripgrep" "$rg_out"
+            hash -r
 
-            if command -v rg &>/dev/null; then
+            if [ "$rg_rc" -ne 0 ]; then
+                log_error "brew install ripgrep failed (exit $rg_rc) -- see $(display_path "$LOG_FILE")"
+                STATUS_ripgrep="FAILED (exit $rg_rc)"
+                write_summary ERROR "cursor cli" "ripgrep install failed (exit $rg_rc)"
+            elif command -v rg &>/dev/null; then
                 RG_VERSION=$(rg --version | head -1)
                 log_ok "Installed: $RG_VERSION"
                 STATUS_ripgrep="installed ($RG_VERSION)"
             else
                 log_warn "brew install completed but 'rg' not found in PATH. Restart terminal to verify."
                 STATUS_ripgrep="installed (restart terminal to verify)"
+                write_summary WARN "cursor cli" "ripgrep not on PATH (restart terminal)"
             fi
         else
             log_warn "Homebrew not found. Install ripgrep manually: brew install ripgrep"
             STATUS_ripgrep="SKIPPED (brew not found)"
+            write_summary WARN "cursor cli" "ripgrep missing (Homebrew not found)"
         fi
     fi
 fi
@@ -104,15 +121,24 @@ else
         STATUS_cursorCli="already installed ($AGENT_VERSION)"
     else
         log "Installing Cursor CLI..."
-        curl https://cursor.com/install -fsS | bash
+        # Exit code decides (pipefail: a curl failure fails the pipeline); output logged as detail.
+        cursor_rc=0
+        cursor_out=$({ curl https://cursor.com/install -fsS | bash; } 2>&1) || cursor_rc=$?
+        write_output_detail "cursor-installer" "$cursor_out"
+        hash -r
 
-        if command -v agent &>/dev/null; then
+        if [ "$cursor_rc" -ne 0 ]; then
+            log_error "Cursor CLI installer failed (exit $cursor_rc) -- see $(display_path "$LOG_FILE")"
+            STATUS_cursorCli="FAILED (exit $cursor_rc)"
+            write_summary ERROR "cursor cli" "installer failed (exit $cursor_rc)"
+        elif command -v agent &>/dev/null; then
             AGENT_VERSION=$(agent --version)
             log_ok "Installed: $AGENT_VERSION"
             STATUS_cursorCli="installed ($AGENT_VERSION)"
         else
             log_warn "Cursor CLI install completed but 'agent' not found in PATH. Restart terminal to verify."
             STATUS_cursorCli="installed (restart terminal to verify)"
+            write_summary WARN "cursor cli" "agent not on PATH (restart terminal)"
         fi
     fi
 fi
@@ -154,6 +180,7 @@ else
     # Read cursor.cli preferences from profile.json (via config.json -> userRepoPath).
     # Falls back to defaults if profile not found.
 
+    merge_rc=0
     MERGE_RESULT=$(node -e "
 $SORT_KEYS_JS
 const fs = require('fs');
@@ -186,7 +213,7 @@ try {
 } catch (e) {
     if (e.code !== 'ENOENT') {
         corrupt = true;
-        console.error('Warning: ' + f + ' is invalid JSON');
+        console.log('WARN: ' + f + ' is invalid JSON');
     }
 }
 const beforeKeys = Object.keys(config);
@@ -225,30 +252,32 @@ const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
 
 const after = JSON.stringify(sortKeys(config));
 
+// Diagnostics go to stdout with a prefix (MSG: info, WARN: warning, DETAIL: log only)
+// so bash can log them; the first unprefixed line is the status.
 if (dryRun) {
-    console.error('[DRY RUN] ' + f + ': merge');
-    console.error('  Managed fields: ' + managedKeys.join(', '));
-    if (lostKeys.length > 0) console.error('  CLOBBER WARNING: would lose: ' + lostKeys.join(', '));
-    if (corrupt) console.error('  File is corrupt -- --force required');
+    console.log('MSG: [DRY RUN] ' + f + ': merge');
+    console.log('MSG:   Managed fields: ' + managedKeys.join(', '));
+    if (lostKeys.length > 0) console.log('WARN: [DRY RUN] CLOBBER: would lose: ' + lostKeys.join(', '));
+    if (corrupt) console.log('WARN: [DRY RUN] File is corrupt -- --force required');
     console.log(before === after && !corrupt ? 'unchanged' : 'would-merge');
 } else if (corrupt && !force) {
-    console.error('ERROR: ' + f + ' is corrupt. Use --force to overwrite, or fix manually.');
+    console.log('DETAIL: ' + f + ' is corrupt. Use --force to overwrite, or fix manually.');
     console.log('error-corrupt');
 } else if (lostKeys.length > 0 && !force) {
-    console.error('ERROR: merge would lose fields: ' + lostKeys.join(', ') + '. Use --force to proceed.');
+    console.log('DETAIL: merge would lose fields: ' + lostKeys.join(', ') + '. Use --force to proceed.');
     console.log('error-clobber');
 } else {
     if (before === after) {
         console.log('unchanged');
     } else {
-        if (corrupt) console.error('Warning: proceeding with --force on corrupt file');
-        if (lostKeys.length > 0) console.error('Warning: proceeding with --force, losing fields: ' + lostKeys.join(', '));
+        if (corrupt) console.log('WARN: proceeding with --force on corrupt file');
+        if (lostKeys.length > 0) console.log('WARN: proceeding with --force, losing fields: ' + lostKeys.join(', '));
         fs.writeFileSync(f, JSON.stringify(config, null, 2) + '\n');
 
         // Post-write validation
         const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
         const _missing = ['version'].filter(k => !(k in _v));
-        if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+        if (_missing.length) { console.log('DETAIL: validation failed: missing ' + _missing.join(', ')); process.exit(1); }
 
         const changed = [];
         for (const k of snapshotKeys) {
@@ -260,9 +289,21 @@ if (dryRun) {
         changed.forEach(c => console.log('CHANGED: ' + c));
     }
 }
-" "$CLI_CONFIG" "$DRY_RUN" "$FORCE")
+" "$CLI_CONFIG" "$DRY_RUN" "$FORCE") || merge_rc=$?
 
-    MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)
+    # Log node's prefixed diagnostics; the first unprefixed line is the status.
+    MERGE_STATUS=""
+    while IFS= read -r line; do
+        case "$line" in
+            "MSG: "*)    log "${line#MSG: }" ;;
+            "WARN: "*)   log_warn "${line#WARN: }" ;;
+            "DETAIL: "*) log_detail "cli-config: ${line#DETAIL: }" ;;
+            "CHANGED: "*) ;;
+            *) if [ -z "$MERGE_STATUS" ]; then MERGE_STATUS="$line"; fi ;;
+        esac
+    done <<< "$MERGE_RESULT"
+    # A non-zero node exit (post-write validation, uncaught error) overrides the status.
+    if [ "$merge_rc" -ne 0 ]; then MERGE_STATUS="error-exit"; fi
     case "$MERGE_STATUS" in
         unchanged)
             log_ok "Already up to date: $(display_path "$CLI_CONFIG")"
@@ -289,6 +330,10 @@ if (dryRun) {
             log_error "$(display_path "$CLI_CONFIG") merge would lose fields. Use --force to proceed."
             STATUS_cliConfig="ERROR (clobber, needs --force)"
             write_summary ERROR "cursor cli" "merge would lose fields" ;;
+        error-exit)
+            log_error "$(display_path "$CLI_CONFIG") merge failed (node exit $merge_rc) -- see $(display_path "$LOG_FILE")"
+            STATUS_cliConfig="ERROR (merge failed)"
+            write_summary ERROR "cursor cli" "config merge failed (exit $merge_rc)" ;;
         *)
             log_error "Unexpected merge result: $MERGE_STATUS"
             STATUS_cliConfig="ERROR"
