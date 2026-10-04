@@ -46,6 +46,6 @@ Safety engineering:
 
 ## Cross-References
 
-- Framework registry: `@reference/framework-registry.json`
+- Framework registry: `/frameworks` skill
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
 - Incident governance: `@reference/framework-incident-governance.md`

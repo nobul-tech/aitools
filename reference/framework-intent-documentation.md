@@ -59,7 +59,7 @@ Knowledge management — specifically:
 
 ## Cross-References
 
-- Framework registry: `@reference/framework-registry.json`
+- Framework registry: `/frameworks` skill
 - Framework adoption: `@reference/framework-adoption.md`
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
 - Governed vocabulary: `@reference/framework-governed-vocabulary.md`

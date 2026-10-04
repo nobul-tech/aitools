@@ -401,4 +401,3 @@ Once Anthropic fixes the upstream issues, we can simplify by setting `CLAUDE_COD
 - Incident registry: `/incident` skill
 - User repo spec: `reference/user-repo.md`
 - Cross-platform rules: `.claude/rules/cross-platform.md`
-- Upstream shell issue comment: `reference/gh-issue-7490-comment.md`

@@ -33,7 +33,7 @@ Three disciplines converge:
   (`reference/tool-ops-*.md`) that consolidate scattered operational
   knowledge — deny rules, hooks, context injection, KPIs, version
   dependencies — into a single governed location per tool.
-- **Observe-then-enforce** -> governance modes in `tool-ops.json`.
+- **Observe-then-enforce** -> governance modes in the tool-ops registry (`/tool-ops` skill).
   Each metadata category (denyRules, hooks, contextInjection, kpis,
   versionDeps, verifications) has its own mode: `audit` (logged,
   advisory) or `active` (enforced, blocking). Categories promote
@@ -46,7 +46,7 @@ Three disciplines converge:
 
 ## How It's Maintained
 
-- Governance modes tracked in `registries/tool-ops.json` per tool,
+- Governance modes tracked in the tool-ops registry (`/tool-ops` skill) per tool,
   per category
 - SessionEnd hook (`tool-ops-session-audit.sh`) collects drift
   telemetry: did deny rules fire? Did hooks behave as specified?
@@ -59,13 +59,13 @@ Three disciplines converge:
 
 - `.claude/rules/tool-ops.md` (governance rule — always in context)
 - `.claude/skills/tool-ops/SKILL.md` (governed access to registry)
-- `registries/tool-ops.json` (registry — per-tool metadata)
+- Tool-ops registry (per-tool metadata, via `/tool-ops` skill)
 - `reference/tool-ops-*.md` (per-tool ops references — full detail)
 - `shared/hooks/tool-ops-session-audit.sh` (SessionEnd drift telemetry)
 
 ## Cross-References
 
-- Framework registry: `@registries/framework-registry.json`
+- Framework registry: `/frameworks` skill
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
 - Hook rollout (observe-to-enforce source): `@reference/framework-hook-rollout.md`
 - Tool lifecycle (install/version tracking): `@reference/framework-tool-lifecycle.md`

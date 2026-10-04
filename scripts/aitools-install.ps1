@@ -315,64 +315,137 @@ if ($SkipDriveDetection) {
 # ============================================================
 Log "Step 5: Writing config"
 
-# If config already exists, preserve fields we don't manage
-$existingUserRepoPath = $null
-$existingMachineAlias = $null
-if (Test-Path $configFile) {
-    try {
-        $existingConfig = Get-Content $configFile -Raw | ConvertFrom-Json
-        # Preserve googleDrives if we didn't detect any
-        if (($drives.Count -eq 0) -and $existingConfig.googleDrives -and $existingConfig.googleDrives.Count -gt 0) {
-            $drives = @($existingConfig.googleDrives | ForEach-Object {
-                @{ path = $_.path; account = $_.account; label = $_.label }
-            })
-            Log "Preserved existing Google Drive entries from config"
+# Managed fields: version, reposPath, repoPath; googleDrives only when drives were
+#   detected this run (otherwise the existing array is kept, or [] when absent)
+# Preserved: userRepoPath, machineAlias (set by 'aitools user init') and all other keys
+# Write path: merge in memory -> temp file -> ValidateJsonConfig -> Backup-File -> move.
+#   A read, write or validation failure leaves the existing file untouched (parity with
+#   aitools-install.sh Step 5).
+$configTmp = "$configFile.tmp.$PID"
+$managedConfigKeys = @("version", "reposPath", "repoPath", "googleDrives")
+if ($DryRun) {
+    Log "[DRY RUN] Would merge version/reposPath/repoPath/googleDrives into $configFile"
+} else {
+    $configState = "created"
+    $configReadOk = $true
+    $cfg = [pscustomobject]@{}
+    if (Test-Path $configFile) {
+        $rawConfig = $null
+        try {
+            $rawConfig = [System.IO.File]::ReadAllText($configFile)
+        } catch {
+            LogError "Failed: ${configFile}: could not read -- $_ -- existing file left untouched"
+            Write-Summary "ERROR" "aitools config" "read failed"
+            $configReadOk = $false
         }
-        # Preserve userRepoPath (set by 'aitools user init')
-        if ($existingConfig.userRepoPath) {
-            $existingUserRepoPath = $existingConfig.userRepoPath
+        if ($configReadOk) {
+            $rawConfig = $rawConfig.TrimStart([char]0xFEFF)  # PowerShell 5.x writes a BOM
+            try {
+                $parsed = $rawConfig | ConvertFrom-Json -ErrorAction Stop
+                if ($parsed -isnot [System.Management.Automation.PSCustomObject]) { throw "top level is not an object" }
+                $cfg = $parsed
+                $configState = "updated"
+            } catch {
+                # Invalid JSON: rebuild from managed fields, salvaging the user-init keys by pattern
+                $corruptReason = "$_"
+                $cfg = [pscustomobject]@{}
+                foreach ($k in @("userRepoPath", "machineAlias")) {
+                    $m = [regex]::Match($rawConfig, '"' + $k + '"\s*:\s*"((?:[^"\\]|\\.)*)"')
+                    if ($m.Success) {
+                        try {
+                            $val = ('"' + $m.Groups[1].Value + '"') | ConvertFrom-Json -ErrorAction Stop
+                            $cfg | Add-Member -NotePropertyName $k -NotePropertyValue $val -Force
+                            Log "Recovered $k from the invalid config"
+                        } catch {
+                            LogWarn "Could not recover $k from the invalid config: $_"
+                        }
+                    }
+                }
+                $configState = "recovered"
+            }
         }
-        # Preserve machineAlias (set by 'aitools user init')
-        if ($existingConfig.machineAlias) {
-            $existingMachineAlias = $existingConfig.machineAlias
-        }
-    } catch {
-        LogWarn "Failed to read existing config, writing fresh"
     }
-}
 
-$config = [ordered]@{
-    version          = 2
-    reposPath        = $resolvedReposPath
-    repoPath          = $aitoolsRepo
-    googleDrives     = @($drives | ForEach-Object {
-        [ordered]@{ path = $_.path; account = $_.account; label = $_.label }
-    })
-}
-if ($existingUserRepoPath) { $config["userRepoPath"] = $existingUserRepoPath }
-if ($existingMachineAlias) { $config["machineAlias"] = $existingMachineAlias }
+    if ($configReadOk) {
+        $beforeJson = @{}
+        foreach ($k in $managedConfigKeys) {
+            $beforeJson[$k] = if ($cfg.PSObject.Properties.Name -contains $k) { ConvertTo-Json -InputObject $cfg.$k -Depth 10 -Compress } else { $null }
+        }
+        # Existing keys keep their position (bash Object.assign parity); new keys are appended.
+        function Set-ConfigKey($Name, $Value) {
+            if ($cfg.PSObject.Properties.Name -contains $Name) { $cfg.$Name = $Value }
+            else { $cfg | Add-Member -NotePropertyName $Name -NotePropertyValue $Value }
+        }
+        Set-ConfigKey "version" 2
+        Set-ConfigKey "reposPath" $resolvedReposPath
+        Set-ConfigKey "repoPath" $aitoolsRepo
+        if ($drives.Count -gt 0) {
+            Set-ConfigKey "googleDrives" @($drives | ForEach-Object { [ordered]@{ path = $_.path; account = $_.account; label = $_.label } })
+        } elseif (-not ($cfg.PSObject.Properties.Name -contains "googleDrives") -or $cfg.googleDrives -isnot [array]) {
+            Set-ConfigKey "googleDrives" @()
+        }
+        $configChanges = @()
+        foreach ($k in $managedConfigKeys) {
+            $after = ConvertTo-Json -InputObject $cfg.$k -Depth 10 -Compress
+            if ($beforeJson[$k] -ne $after) {
+                $old = if ($null -eq $beforeJson[$k]) { "(unset)" } else { $beforeJson[$k] }
+                $configChanges += "${k}: $old -> $after"
+            }
+        }
 
-$jsonContent = $config | ConvertTo-Json -Depth 10
-$configExisted = Test-Path $configFile
-Backup-File $configFile
-$configWritten = $false
-try {
-    [System.IO.File]::WriteAllText($configFile, $jsonContent, [System.Text.UTF8Encoding]::new($false))
-    $configWritten = $true
-} catch {
-    LogError "Failed to write $configFile`: $_"
-    Write-Summary "ERROR" "aitools config" "write failed"
-}
-if ($configWritten) {
-    LogOk "Config written to $configFile"
-    $errorsBeforeValidation = $script:errors
-    ValidateJsonConfig -File $configFile -RequiredKeys @("version", "reposPath", "repoPath")
-    if ($script:errors -gt $errorsBeforeValidation) {
-        Write-Summary "ERROR" "aitools config" "validation failed"
-    } elseif ($configExisted) {
-        Write-Summary "OK" "aitools config" "updated"
-    } else {
-        Write-Summary "OK" "aitools config" "created"
+        if ($configState -eq "updated" -and $configChanges.Count -eq 0) {
+            LogOk "Unchanged: $configFile"
+            Write-Summary "OK" "aitools config" "verified"
+        } else {
+            $errorsBeforeWrite = $script:errors
+            $configFailure = "write failed"
+            try {
+                $jsonContent = ConvertTo-Json -InputObject $cfg -Depth 10
+                [System.IO.File]::WriteAllText($configTmp, $jsonContent + "`n", [System.Text.UTF8Encoding]::new($false))
+            } catch {
+                LogError "Failed: ${configFile}: could not write the merged config -- $_"
+            }
+            if ($script:errors -eq $errorsBeforeWrite) {
+                $configFailure = "validation failed"
+                ValidateJsonConfig -File $configTmp -RequiredKeys @("version", "reposPath", "repoPath")
+            }
+            if ($script:errors -eq $errorsBeforeWrite) {
+                $configFailure = "write failed"
+                Backup-File $configFile
+                try {
+                    Move-Item -Path $configTmp -Destination $configFile -Force -ErrorAction Stop
+                } catch {
+                    LogError "Failed: ${configFile}: could not replace the config file -- $_"
+                }
+            }
+            if ($script:errors -gt $errorsBeforeWrite) {
+                if (Test-Path $configTmp) {
+                    try { Remove-Item $configTmp -Force -ErrorAction Stop }
+                    catch { LogWarn "Could not remove temp file ${configTmp}: $_" }
+                }
+                Write-Summary "ERROR" "aitools config" $configFailure
+            } else {
+                switch ($configState) {
+                    "recovered" {
+                        LogWarn "$configFile was not valid JSON ($corruptReason) -- rebuilt; the invalid copy was backed up"
+                        Write-Summary "WARN" "aitools config" "rebuilt (was invalid)"
+                    }
+                    "created" {
+                        LogOk "Created: $configFile"
+                        Write-Summary "OK" "aitools config" "created"
+                    }
+                    default {
+                        LogOk "Updated: $configFile"
+                        Write-Summary "OK" "aitools config" "updated"
+                    }
+                }
+                # Changed keys: full old -> new in the log, key names as DETAIL lines
+                foreach ($change in $configChanges) {
+                    Log "  $change"
+                    Write-Summary "DETAIL" "aitools config" "$(($change -split ':')[0]) updated"
+                }
+            }
+        }
     }
 }
 
@@ -521,13 +594,6 @@ function hh { & "`$HOME\.local\bin\hh.ps1" @args }
 # ============================================================
 # Source: https://nodejs.org
 Log "Step 8: Node.js"
-
-# Helper: refresh PATH from registry (picks up winget/npm installs in same session)
-function Refresh-Path {
-    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $env:Path = "$machinePath;$userPath"
-}
 
 if (Get-Command node -ErrorAction SilentlyContinue) {
     LogOk "Node.js already installed ($(node --version))"

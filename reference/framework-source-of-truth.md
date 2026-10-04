@@ -37,6 +37,6 @@ machines is high.
 
 ## Cross-References
 
-- Framework registry: `@reference/framework-registry.json`
+- Framework registry: `/frameworks` skill
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
 - Intent documentation: `/intent-writing` and `/intent-audit` skills
