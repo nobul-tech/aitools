@@ -44,6 +44,7 @@ esac
 # --- Require node for JSON manipulation ---
 if ! command -v node &>/dev/null; then
     log_error "node required for JSON manipulation"
+    write_summary ERROR "claude hooks" "node not found"
     exit 1
 fi
 
@@ -56,6 +57,7 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 MANIFEST="$REPO_DIR/shared/hooks/hooks-manifest.json"
 if [ ! -f "$MANIFEST" ]; then
     log_error "Hook manifest not found: $MANIFEST"
+    write_summary ERROR "claude hooks" "hook manifest not found"
     exit 1
 fi
 
@@ -96,19 +98,23 @@ console.log(files.join("\n"));
 
 if [ "${#HOOK_FILES[@]}" -eq 0 ]; then
     log_error "Manifest produced no hook files -- aborting"
+    write_summary ERROR "claude hooks" "manifest lists no hooks"
     exit 1
 fi
 
 # Registration list (event/file/matcher) from the manifest -- passed to the node
 # merge block as an argv. build-deploy embeds this statically for the
 # self-contained MDM path, so the node block is identical dev and deploy.
+# The exit code is captured (a bare assignment would abort under set -e with no row).
+regs_rc=0
 REGS_JSON=$(node -e '
 const fs = require("fs");
 const m = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
 console.log(JSON.stringify(m.hooks.map(h => ({event: h.event, file: h.file, matcher: h.matcher || ""}))));
-' "$MANIFEST")
-if [ -z "$REGS_JSON" ]; then
-    log_error "Failed to build registration list from manifest"
+' "$MANIFEST") || regs_rc=$?
+if [ "$regs_rc" -ne 0 ] || [ -z "$REGS_JSON" ]; then
+    log_error "Failed to build registration list from manifest (node exit $regs_rc)"
+    write_summary ERROR "claude hooks" "registration list failed"
     exit 1
 fi
 
@@ -117,6 +123,7 @@ for hook_name in "${HOOK_FILES[@]}"; do
     src=$(resolve_hook "$hook_name")
     if [ ! -f "$src" ]; then
         log_error "Hook script not found: $src"
+        write_summary ERROR "claude hooks" "hook script missing: $hook_name"
         exit 1
     fi
 done
@@ -159,7 +166,12 @@ else
                 [ -d "$REPO_DIR/shared/hooks" ] && _adopt_targets+=("$REPO_DIR/shared/hooks/$hook_name")
                 [ -n "$USER_REPO_PATH" ] && _adopt_targets+=("$USER_REPO_PATH/claude/hooks/$hook_name")
                 if [ "${#_adopt_targets[@]}" -gt 0 ]; then
-                    adopt_managed_file "$hook_dst" "${_adopt_targets[@]}"
+                    # A failed write is logged by the lib; the row is written here
+                    # (returns 1 only when no target was written -- checked, not fatal).
+                    _errors_before=$ERRORS
+                    if ! adopt_managed_file "$hook_dst" "${_adopt_targets[@]}" || [ "$ERRORS" -gt "$_errors_before" ]; then
+                        write_summary ERROR "claude hooks" "adopt failed: $hook_name"
+                    fi
                     if [ -n "$USER_REPO_PATH" ] && [ -c /dev/tty ]; then
                         printf '  Review: cd %s && git diff\n' \
                             "$(display_path "$USER_REPO_PATH")" > /dev/tty
@@ -223,7 +235,10 @@ else
                     a|adopt)
                         # Net-new user hook -> dotprofile only (not a managed
                         # shared/ hook). Same helper for consistent backups.
-                        adopt_managed_file "$hook_file" "$USER_REPO_PATH/claude/hooks/$hook_name"
+                        _errors_before=$ERRORS
+                        if ! adopt_managed_file "$hook_file" "$USER_REPO_PATH/claude/hooks/$hook_name" || [ "$ERRORS" -gt "$_errors_before" ]; then
+                            write_summary ERROR "claude hooks" "adopt failed: $hook_name"
+                        fi
                         ;;
                     *)
                         log "Skipped adoption of $hook_name"
@@ -242,6 +257,9 @@ fi
 SETTINGS_FILE="$HOME/.claude/settings.json"
 mkdir -p "$HOME/.claude"
 
+# node prints diagnostics on stdout as MSG:/WARN:/DETAIL: lines (logged below) and the
+# status as the first unprefixed line; its exit code is captured (validation exits 1).
+merge_rc=0
 MERGE_RESULT=$(node -e "
 $SORT_KEYS_JS
 const fs = require('fs');
@@ -272,7 +290,7 @@ try {
 } catch (e) {
     if (e.code !== 'ENOENT') {
         corrupt = true;
-        console.error('Warning: ' + settingsFile + ' is invalid JSON');
+        console.log('WARN: ' + settingsFile + ' is invalid JSON');
     }
 }
 const beforeKeys = Object.keys(settings);
@@ -339,21 +357,21 @@ const afterKeys = Object.keys(settings);
 const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
 
 if (dryRun) {
-    console.error('[DRY RUN] ' + settingsFile + ': merge');
-    console.error('  Managed fields: ' + managedKeys.join(', '));
-    if (lostKeys.length > 0) console.error('  CLOBBER WARNING: would lose: ' + lostKeys.join(', '));
-    if (corrupt) console.error('  File is corrupt -- --force required');
-    console.error('  Registered hooks: ' + regs.length);
+    console.log('MSG: [DRY RUN] ' + settingsFile + ': merge');
+    console.log('MSG:   Managed fields: ' + managedKeys.join(', '));
+    if (lostKeys.length > 0) console.log('WARN: [DRY RUN] CLOBBER: would lose: ' + lostKeys.join(', '));
+    if (corrupt) console.log('WARN: [DRY RUN] File is corrupt -- --force required');
+    console.log('MSG:   Registered hooks: ' + regs.length);
     console.log('dry-run');
 } else if (corrupt && !force) {
-    console.error('ERROR: ' + settingsFile + ' is corrupt. Use --force to overwrite, or fix manually.');
+    console.log('DETAIL: ' + settingsFile + ' is corrupt. Use --force to overwrite, or fix manually.');
     console.log('error-corrupt');
 } else if (lostKeys.length > 0 && !force) {
-    console.error('ERROR: merge would lose fields: ' + lostKeys.join(', ') + '. Use --force to proceed.');
+    console.log('DETAIL: merge would lose fields: ' + lostKeys.join(', ') + '. Use --force to proceed.');
     console.log('error-clobber');
 } else {
-    if (corrupt) console.error('Warning: proceeding with --force on corrupt file');
-    if (lostKeys.length > 0) console.error('Warning: proceeding with --force, losing fields: ' + lostKeys.join(', '));
+    if (corrupt) console.log('WARN: proceeding with --force on corrupt file');
+    if (lostKeys.length > 0) console.log('WARN: proceeding with --force, losing fields: ' + lostKeys.join(', '));
     // Preserve key order on write (no sort); sortKeys is used only for the
     // order-independent unchanged comparison so reordering alone never rewrites.
     const newJson = JSON.stringify(settings, null, 2) + '\n';
@@ -370,12 +388,12 @@ if (dryRun) {
         const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
         const _required = ['hooks'];
         const _missing = _required.filter(k => !(k in _v));
-        if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+        if (_missing.length) { console.log('DETAIL: validation failed: missing ' + _missing.join(', ')); process.exit(1); }
 
         // Validate: every manifest hook registered exactly once (generated check).
         for (const r of regs) {
             const c = (_v.hooks[r.event] || []).filter(rule => rule.hooks && rule.hooks.some(h => h.command && h.command.includes(r.hookId))).length;
-            if (c !== 1) { console.error('Validation failed: expected 1 ' + r.event + ' ' + r.hookId + ' hook, got ' + c); process.exit(1); }
+            if (c !== 1) { console.log('DETAIL: validation failed: expected 1 ' + r.event + ' ' + r.hookId + ' hook, got ' + c); process.exit(1); }
         }
 
         // Validate hook schema: command-type must have command field,
@@ -384,16 +402,16 @@ if (dryRun) {
             for (const rule of (rules || [])) {
                 for (const h of (rule.hooks || [])) {
                     if (h.type === 'command' && !h.command) {
-                        console.error('Validation failed: ' + event + ' hook has type \"command\" but no command field');
+                        console.log('DETAIL: validation failed: ' + event + ' hook has type \"command\" but no command field');
                         process.exit(1);
                     }
                     if (h.type === 'prompt') {
                         if (!h.prompt) {
-                            console.error('Validation failed: ' + event + ' hook has type \"prompt\" but no prompt field.');
+                            console.log('DETAIL: validation failed: ' + event + ' hook has type \"prompt\" but no prompt field.');
                             process.exit(1);
                         }
                         if (h.command) {
-                            console.error('Validation failed: ' + event + ' hook has type \"prompt\" with a command field.');
+                            console.log('DETAIL: validation failed: ' + event + ' hook has type \"prompt\" with a command field.');
                             process.exit(1);
                         }
                     }
@@ -404,10 +422,21 @@ if (dryRun) {
         console.log('ok');
     }
 }
-" "$SETTINGS_FILE" "$REGS_JSON" "$DRY_RUN" "$FORCE")
+" "$SETTINGS_FILE" "$REGS_JSON" "$DRY_RUN" "$FORCE") || merge_rc=$?
 
-# Parse merge result: first line is status, CHANGED: lines are key changes
-MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)
+# Log node's prefixed diagnostics; the first unprefixed line is the status.
+MERGE_STATUS=""
+while IFS= read -r line; do
+    case "$line" in
+        "MSG: "*)    log "${line#MSG: }" ;;
+        "WARN: "*)   log_warn "${line#WARN: }" ;;
+        "DETAIL: "*) log_detail "settings-merge: ${line#DETAIL: }" ;;
+        "CHANGED: "*) ;;
+        *) if [ -z "$MERGE_STATUS" ]; then MERGE_STATUS="$line"; fi ;;
+    esac
+done <<< "$MERGE_RESULT"
+# A non-zero node exit (post-write validation, uncaught error) overrides the status.
+if [ "$merge_rc" -ne 0 ]; then MERGE_STATUS="error-exit"; fi
 
 case "$MERGE_STATUS" in
     ok)
@@ -418,7 +447,7 @@ case "$MERGE_STATUS" in
         log_ok "Settings unchanged: $(display_path "$SETTINGS_FILE")"
         ;;
     dry-run)
-        log "[DRY RUN] Would merge settings (see above)"
+        log "[DRY RUN] Would merge settings"
         ;;
     error-corrupt)
         log_error "$(display_path "$SETTINGS_FILE") is corrupt. Use --force to overwrite."
@@ -427,6 +456,10 @@ case "$MERGE_STATUS" in
     error-clobber)
         log_error "$(display_path "$SETTINGS_FILE") merge would lose fields. Use --force to proceed."
         write_summary ERROR "claude hooks" "merge would lose fields"
+        ;;
+    error-exit)
+        log_error "$(display_path "$SETTINGS_FILE") hooks merge failed (node exit $merge_rc) -- see $(display_path "$LOG_FILE")"
+        write_summary ERROR "claude hooks" "settings merge failed (exit $merge_rc)"
         ;;
     *)
         log_error "Unexpected merge result: $MERGE_RESULT"

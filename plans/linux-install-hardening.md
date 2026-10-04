@@ -1144,10 +1144,11 @@ Main agent, direct (no code). Every item below is part of **this review**:
 > PR C4 (batch C6, D-C4) shipped 2026-10-03 (#39).
 > PR C5 (batches C7, C7b, D-C5) shipped 2026-10-03 (#40).
 > PR C6 (batch C8, D-C6) shipped 2026-10-04 (#41).
-> PR C7 (batch C9, D-C7) approved for execution 2026-10-04.**
+> PR C7 (batch C9, D-C7) shipped 2026-10-04 (#42).
+> PR C8 (batch C10, D-C8) approved for execution 2026-10-04.**
 > Verbatim edits, the error-handling audits and the prototype test evidence are in
-> the "PR C1–C7 — verbatim edits" sections below; the logging audit plan is in
-> the PR C2 section. Batches C10–C15 remain scoped only: each needs its own verbatim-edit
+> the "PR C1–C8 — verbatim edits" sections below; the logging audit plan is in
+> the PR C2 section. Batches C11–C15 remain scoped only: each needs its own verbatim-edit
 > revision of this section, presented for approval, before code is written.
 
 ### Origin
@@ -1252,11 +1253,17 @@ PR C7 (approved 2026-10-04; verbatim edits in "PR C7 — verbatim edits"):
 | C9 | `setup-user-cursor.sh`, `setup-user-cursor.ps1` | #23, #25, #26b–d (no `build-deploy.sh` port needed: edits are inside the extracted body) |
 | D-C7 | protected docs (approved 2026-10-04) | this plan. RELEASE_NOTES deferred |
 
+PR C8 (approved 2026-10-04; verbatim edits in "PR C8 — verbatim edits"):
+
+| Batch | Files | Issues |
+|---|---|---|
+| C10 | `setup-user-hooks.sh`, `setup-user-hooks.ps1` | #25, #26a–c, #26f, #27b (no `build-deploy.sh` port needed: its hook-deployment replacement has no counterpart code) |
+| D-C8 | protected docs (approved 2026-10-04) | this plan. RELEASE_NOTES deferred |
+
 Later PRs (scoped, not approved):
 
 | Batch | Files | Issues |
 |---|---|---|
-| C10 | `setup-user-hooks.sh`, `setup-user-hooks.ps1` | #25, #26a–c, #26f, #27b |
 | C11 | `setup-user-settings.sh`, `setup-user-settings.ps1`, `setup-gh-cli.sh` | #26a–c; remove the "No settings.json yet" early exit (#31 caller half) |
 | C12 | `setup-cursor-ide-mcp.sh`, `setup-cursor-ide-mcp.ps1` | #25, #26a–c, #27b (Cursor `mcp` verbs, re-verified via `/tool-eval` first) |
 | C13 | `setup-user-mcp.sh`, `setup-user-mcp.ps1`, `setup-datadog.ps1` | #23, #26a |
@@ -5988,6 +5995,368 @@ index 622bcaf..c69b1a3 100644
              LogOk "Created: $cliConfig"
              $status.cliConfig = "created"
              if ($keyChanges.Count -gt 0) {
+```
+
+## PR C8 — verbatim edits (batch C10)
+
+Base: the PR C7 branch head 953ddff (#42, not yet merged; C10 touches other files).
+Prototyped on a copy of the base (scratch: `.scratch/session-3030c86a-9/proto-c10/`); the
+diff below is the exact edit. Decisions C-F2, C-F3 and C-F4 apply.
+
+`build-deploy.sh` needs no port. Its "hook deployment" replacement only embeds and writes
+the hook files: no manifest checks, no adopt, no prompts, so the fixes inside the source's
+hook-deployment block have no deploy counterpart. The merge section and the node check are
+extracted, so those fixes reach the generated scripts (the regenerated
+`deploy/setup-user-hooks.sh` passes the applicable tests).
+
+### What changes
+
+| File | Issue / check | Change |
+|---|---|---|
+| `setup-user-hooks.sh` | #26a, A5 | ERROR row before each early `exit 1`: node missing, manifest missing, manifest lists no hooks, registration list failed, hook script missing (was 5 exits with no row) |
+| `setup-user-hooks.sh` | #26c | Registration-list `node` exit code captured (a bare `REGS_JSON=$(node ...)` aborted under `set -e` with no row) |
+| `setup-user-hooks.sh` | #26c, #26f | `adopt_managed_file` (2 sites): checked with `if !` plus the error count; a failed adopt writes `ERROR "claude hooks" "adopt failed: <hook>"` (was ignored, and aborted the script under `set -e` when no target was written) |
+| `setup-user-hooks.sh` | #25 | node merge diagnostics go to stdout as `MSG:` / `WARN:` / `DETAIL:` lines and are logged (were `console.error`, console only: corrupt-file warning, clobber list, dry-run preview, validation failures) -- same pattern as `setup-user-cursor.sh` (C9) |
+| `setup-user-hooks.sh` | #26c | node merge exit code captured: a post-write validation failure writes `ERROR "claude hooks" "settings merge failed (exit N)"` (was a silent `set -e` abort with no row) |
+| `setup-user-hooks.sh` | #27b | dry run: "Would merge settings (see above)" becomes "Would merge settings"; the preview itself is now in the log |
+| `setup-user-hooks.ps1` | #26a, A5 | ERROR row before the 2 early exits (manifest missing, hook script missing) |
+| `setup-user-hooks.ps1` | #26f, A4 | `Adopt-ManagedFile` (2 sites): result and error count checked, ERROR row on failure (was `\| Out-Null`) |
+| `setup-user-hooks.ps1` | #26b | settings.json write in try/catch; a failed write or post-write validation writes `ERROR "claude hooks" "settings write/validation failed"` instead of "Hooks deployed" (was `LogError` lines followed by `LogOk` and no ERROR row) |
+
+Not changed: `build-deploy.sh`'s embedded PS1 hook writes (`WriteAllText` with no try/catch) --
+deploy-only code, outside these two files; noted for C14 (build-deploy work).
+
+Generated `deploy/` (dotprofile): `setup-user-hooks.sh` and `setup-user-hooks.ps1` change;
+the build gives 40 scripts and every generated script passes `bash -n` / ParseFile.
+
+### Error-handling audit
+
+| Pattern | Where | Check |
+|---|---|---|
+| `x=$(node ...) \|\| rc=$?` | registration list, settings merge | `rc` tested on the next statement |
+| `if ! adopt_managed_file ... \|\| [ "$ERRORS" -gt "$before" ]` | 2 adopt sites | failure (none written or any write error) gets an ERROR row; the lib already logged the error |
+| error-count before/after | PS1 adopt, PS1 settings write + validation | an increase writes an ERROR row instead of the OK path |
+| try/catch | PS1 settings write | catch logs with `LogError`; the row follows |
+
+### Tests (Linux)
+
+| Suite | Prototype | Base (953ddff) |
+|---|---|---|
+| `test-c10.sh` (scratch): `setup-user-hooks.sh` on a per-case copy of `scripts/` + `shared/`: happy path, node missing, manifest missing, hook script missing, corrupt settings.json, post-write validation failure (prompt-type hook without a prompt), dry run | 7/7 | 1/7 |
+| `test-c10-ps1.sh` (scratch): `setup-user-hooks.ps1`, OS guard stripped: happy path, manifest missing, hook script missing, validation failure, write failure | 5/5 | 1/5 |
+| `test-c10-deploy.sh` (scratch): generated `deploy/setup-user-hooks.sh`: happy path, corrupt settings, validation failure, dry run | 4/4 | -- |
+| `check-script-compliance.sh` | 13 PASS | 13 PASS |
+| `bash -n` / ParseFile; `build-deploy.sh` into a dotprofile copy | pass; 40 scripts, 2 changed, all parse | -- |
+
+Not tested: the adopt paths (they need an interactive menu choice or a TTY prompt), and
+real Windows runs.
+
+### Logging audit (after C10)
+
+| Check | Before C10 | After C10 | C10 files |
+|---|---|---|---|
+| A4 | 282 in 36 | 280 in 36 | `setup-user-hooks.ps1` 5 -> 3 (the two `\| Out-Null` adopt discards) |
+| A5 | 21 in 11 | 14 in 9 | 0 (7 early exits now write a row) |
+
+A3 for `setup-user-hooks.sh` stays 8: the `/dev/tty` adopt prompts, excluded by the audit
+plan.
+
+### D-C8: protected doc edits
+
+- This plan: status line, batch table (C10 -> PR C8), this section.
+
+### Verbatim diff
+
+```diff
+diff --git a/scripts/setup-user-hooks.sh b/scripts/setup-user-hooks.sh
+index 4aaf3c4..89574ab 100755
+--- a/scripts/setup-user-hooks.sh
++++ b/scripts/setup-user-hooks.sh
+@@ -44,6 +44,7 @@ esac
+ # --- Require node for JSON manipulation ---
+ if ! command -v node &>/dev/null; then
+     log_error "node required for JSON manipulation"
++    write_summary ERROR "claude hooks" "node not found"
+     exit 1
+ fi
+ 
+@@ -56,6 +57,7 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ MANIFEST="$REPO_DIR/shared/hooks/hooks-manifest.json"
+ if [ ! -f "$MANIFEST" ]; then
+     log_error "Hook manifest not found: $MANIFEST"
++    write_summary ERROR "claude hooks" "hook manifest not found"
+     exit 1
+ fi
+ 
+@@ -96,19 +98,23 @@ console.log(files.join("\n"));
+ 
+ if [ "${#HOOK_FILES[@]}" -eq 0 ]; then
+     log_error "Manifest produced no hook files -- aborting"
++    write_summary ERROR "claude hooks" "manifest lists no hooks"
+     exit 1
+ fi
+ 
+ # Registration list (event/file/matcher) from the manifest -- passed to the node
+ # merge block as an argv. build-deploy embeds this statically for the
+ # self-contained MDM path, so the node block is identical dev and deploy.
++# The exit code is captured (a bare assignment would abort under set -e with no row).
++regs_rc=0
+ REGS_JSON=$(node -e '
+ const fs = require("fs");
+ const m = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+ console.log(JSON.stringify(m.hooks.map(h => ({event: h.event, file: h.file, matcher: h.matcher || ""}))));
+-' "$MANIFEST")
+-if [ -z "$REGS_JSON" ]; then
+-    log_error "Failed to build registration list from manifest"
++' "$MANIFEST") || regs_rc=$?
++if [ "$regs_rc" -ne 0 ] || [ -z "$REGS_JSON" ]; then
++    log_error "Failed to build registration list from manifest (node exit $regs_rc)"
++    write_summary ERROR "claude hooks" "registration list failed"
+     exit 1
+ fi
+ 
+@@ -117,6 +123,7 @@ for hook_name in "${HOOK_FILES[@]}"; do
+     src=$(resolve_hook "$hook_name")
+     if [ ! -f "$src" ]; then
+         log_error "Hook script not found: $src"
++        write_summary ERROR "claude hooks" "hook script missing: $hook_name"
+         exit 1
+     fi
+ done
+@@ -159,7 +166,12 @@ else
+                 [ -d "$REPO_DIR/shared/hooks" ] && _adopt_targets+=("$REPO_DIR/shared/hooks/$hook_name")
+                 [ -n "$USER_REPO_PATH" ] && _adopt_targets+=("$USER_REPO_PATH/claude/hooks/$hook_name")
+                 if [ "${#_adopt_targets[@]}" -gt 0 ]; then
+-                    adopt_managed_file "$hook_dst" "${_adopt_targets[@]}"
++                    # A failed write is logged by the lib; the row is written here
++                    # (returns 1 only when no target was written -- checked, not fatal).
++                    _errors_before=$ERRORS
++                    if ! adopt_managed_file "$hook_dst" "${_adopt_targets[@]}" || [ "$ERRORS" -gt "$_errors_before" ]; then
++                        write_summary ERROR "claude hooks" "adopt failed: $hook_name"
++                    fi
+                     if [ -n "$USER_REPO_PATH" ] && [ -c /dev/tty ]; then
+                         printf '  Review: cd %s && git diff\n' \
+                             "$(display_path "$USER_REPO_PATH")" > /dev/tty
+@@ -223,7 +235,10 @@ else
+                     a|adopt)
+                         # Net-new user hook -> dotprofile only (not a managed
+                         # shared/ hook). Same helper for consistent backups.
+-                        adopt_managed_file "$hook_file" "$USER_REPO_PATH/claude/hooks/$hook_name"
++                        _errors_before=$ERRORS
++                        if ! adopt_managed_file "$hook_file" "$USER_REPO_PATH/claude/hooks/$hook_name" || [ "$ERRORS" -gt "$_errors_before" ]; then
++                            write_summary ERROR "claude hooks" "adopt failed: $hook_name"
++                        fi
+                         ;;
+                     *)
+                         log "Skipped adoption of $hook_name"
+@@ -242,6 +257,9 @@ fi
+ SETTINGS_FILE="$HOME/.claude/settings.json"
+ mkdir -p "$HOME/.claude"
+ 
++# node prints diagnostics on stdout as MSG:/WARN:/DETAIL: lines (logged below) and the
++# status as the first unprefixed line; its exit code is captured (validation exits 1).
++merge_rc=0
+ MERGE_RESULT=$(node -e "
+ $SORT_KEYS_JS
+ const fs = require('fs');
+@@ -272,7 +290,7 @@ try {
+ } catch (e) {
+     if (e.code !== 'ENOENT') {
+         corrupt = true;
+-        console.error('Warning: ' + settingsFile + ' is invalid JSON');
++        console.log('WARN: ' + settingsFile + ' is invalid JSON');
+     }
+ }
+ const beforeKeys = Object.keys(settings);
+@@ -339,21 +357,21 @@ const afterKeys = Object.keys(settings);
+ const lostKeys = beforeKeys.filter(k => !afterKeys.includes(k));
+ 
+ if (dryRun) {
+-    console.error('[DRY RUN] ' + settingsFile + ': merge');
+-    console.error('  Managed fields: ' + managedKeys.join(', '));
+-    if (lostKeys.length > 0) console.error('  CLOBBER WARNING: would lose: ' + lostKeys.join(', '));
+-    if (corrupt) console.error('  File is corrupt -- --force required');
+-    console.error('  Registered hooks: ' + regs.length);
++    console.log('MSG: [DRY RUN] ' + settingsFile + ': merge');
++    console.log('MSG:   Managed fields: ' + managedKeys.join(', '));
++    if (lostKeys.length > 0) console.log('WARN: [DRY RUN] CLOBBER: would lose: ' + lostKeys.join(', '));
++    if (corrupt) console.log('WARN: [DRY RUN] File is corrupt -- --force required');
++    console.log('MSG:   Registered hooks: ' + regs.length);
+     console.log('dry-run');
+ } else if (corrupt && !force) {
+-    console.error('ERROR: ' + settingsFile + ' is corrupt. Use --force to overwrite, or fix manually.');
++    console.log('DETAIL: ' + settingsFile + ' is corrupt. Use --force to overwrite, or fix manually.');
+     console.log('error-corrupt');
+ } else if (lostKeys.length > 0 && !force) {
+-    console.error('ERROR: merge would lose fields: ' + lostKeys.join(', ') + '. Use --force to proceed.');
++    console.log('DETAIL: merge would lose fields: ' + lostKeys.join(', ') + '. Use --force to proceed.');
+     console.log('error-clobber');
+ } else {
+-    if (corrupt) console.error('Warning: proceeding with --force on corrupt file');
+-    if (lostKeys.length > 0) console.error('Warning: proceeding with --force, losing fields: ' + lostKeys.join(', '));
++    if (corrupt) console.log('WARN: proceeding with --force on corrupt file');
++    if (lostKeys.length > 0) console.log('WARN: proceeding with --force, losing fields: ' + lostKeys.join(', '));
+     // Preserve key order on write (no sort); sortKeys is used only for the
+     // order-independent unchanged comparison so reordering alone never rewrites.
+     const newJson = JSON.stringify(settings, null, 2) + '\n';
+@@ -370,12 +388,12 @@ if (dryRun) {
+         const _v = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+         const _required = ['hooks'];
+         const _missing = _required.filter(k => !(k in _v));
+-        if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
++        if (_missing.length) { console.log('DETAIL: validation failed: missing ' + _missing.join(', ')); process.exit(1); }
+ 
+         // Validate: every manifest hook registered exactly once (generated check).
+         for (const r of regs) {
+             const c = (_v.hooks[r.event] || []).filter(rule => rule.hooks && rule.hooks.some(h => h.command && h.command.includes(r.hookId))).length;
+-            if (c !== 1) { console.error('Validation failed: expected 1 ' + r.event + ' ' + r.hookId + ' hook, got ' + c); process.exit(1); }
++            if (c !== 1) { console.log('DETAIL: validation failed: expected 1 ' + r.event + ' ' + r.hookId + ' hook, got ' + c); process.exit(1); }
+         }
+ 
+         // Validate hook schema: command-type must have command field,
+@@ -384,16 +402,16 @@ if (dryRun) {
+             for (const rule of (rules || [])) {
+                 for (const h of (rule.hooks || [])) {
+                     if (h.type === 'command' && !h.command) {
+-                        console.error('Validation failed: ' + event + ' hook has type \"command\" but no command field');
++                        console.log('DETAIL: validation failed: ' + event + ' hook has type \"command\" but no command field');
+                         process.exit(1);
+                     }
+                     if (h.type === 'prompt') {
+                         if (!h.prompt) {
+-                            console.error('Validation failed: ' + event + ' hook has type \"prompt\" but no prompt field.');
++                            console.log('DETAIL: validation failed: ' + event + ' hook has type \"prompt\" but no prompt field.');
+                             process.exit(1);
+                         }
+                         if (h.command) {
+-                            console.error('Validation failed: ' + event + ' hook has type \"prompt\" with a command field.');
++                            console.log('DETAIL: validation failed: ' + event + ' hook has type \"prompt\" with a command field.');
+                             process.exit(1);
+                         }
+                     }
+@@ -404,10 +422,21 @@ if (dryRun) {
+         console.log('ok');
+     }
+ }
+-" "$SETTINGS_FILE" "$REGS_JSON" "$DRY_RUN" "$FORCE")
+-
+-# Parse merge result: first line is status, CHANGED: lines are key changes
+-MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)
++" "$SETTINGS_FILE" "$REGS_JSON" "$DRY_RUN" "$FORCE") || merge_rc=$?
++
++# Log node's prefixed diagnostics; the first unprefixed line is the status.
++MERGE_STATUS=""
++while IFS= read -r line; do
++    case "$line" in
++        "MSG: "*)    log "${line#MSG: }" ;;
++        "WARN: "*)   log_warn "${line#WARN: }" ;;
++        "DETAIL: "*) log_detail "settings-merge: ${line#DETAIL: }" ;;
++        "CHANGED: "*) ;;
++        *) if [ -z "$MERGE_STATUS" ]; then MERGE_STATUS="$line"; fi ;;
++    esac
++done <<< "$MERGE_RESULT"
++# A non-zero node exit (post-write validation, uncaught error) overrides the status.
++if [ "$merge_rc" -ne 0 ]; then MERGE_STATUS="error-exit"; fi
+ 
+ case "$MERGE_STATUS" in
+     ok)
+@@ -418,7 +447,7 @@ case "$MERGE_STATUS" in
+         log_ok "Settings unchanged: $(display_path "$SETTINGS_FILE")"
+         ;;
+     dry-run)
+-        log "[DRY RUN] Would merge settings (see above)"
++        log "[DRY RUN] Would merge settings"
+         ;;
+     error-corrupt)
+         log_error "$(display_path "$SETTINGS_FILE") is corrupt. Use --force to overwrite."
+@@ -428,6 +457,10 @@ case "$MERGE_STATUS" in
+         log_error "$(display_path "$SETTINGS_FILE") merge would lose fields. Use --force to proceed."
+         write_summary ERROR "claude hooks" "merge would lose fields"
+         ;;
++    error-exit)
++        log_error "$(display_path "$SETTINGS_FILE") hooks merge failed (node exit $merge_rc) -- see $(display_path "$LOG_FILE")"
++        write_summary ERROR "claude hooks" "settings merge failed (exit $merge_rc)"
++        ;;
+     *)
+         log_error "Unexpected merge result: $MERGE_RESULT"
+         write_summary ERROR "claude hooks" "unexpected error"
+diff --git a/scripts/setup-user-hooks.ps1 b/scripts/setup-user-hooks.ps1
+index 1a3a8da..1022317 100644
+--- a/scripts/setup-user-hooks.ps1
++++ b/scripts/setup-user-hooks.ps1
+@@ -46,6 +46,7 @@ $repoDir = Split-Path -Parent $scriptDir
+ $manifestPath = Join-Path $repoDir "shared\hooks\hooks-manifest.json"
+ if (-not (Test-Path $manifestPath)) {
+     LogError "Hook manifest not found: $manifestPath"
++    Write-Summary "ERROR" "claude hooks" "hook manifest not found"
+     exit 1
+ }
+ $manifestObj = Get-Content $manifestPath -Raw | ConvertFrom-Json
+@@ -84,6 +85,7 @@ foreach ($hookName in $hookFiles) {
+     $src = Resolve-HookSource $hookName
+     if (-not (Test-Path $src)) {
+         LogError "Hook script not found: $src"
++        Write-Summary "ERROR" "claude hooks" "hook script missing: $hookName"
+         exit 1
+     }
+ }
+@@ -131,7 +133,12 @@ if ($DryRun) {
+                 if (Test-Path $sharedHooks) { $adoptTargets += (Join-Path $sharedHooks $hookName) }
+                 if ($userRepoPath) { $adoptTargets += (Join-Path $userRepoPath "claude\hooks\$hookName") }
+                 if ($adoptTargets.Count -gt 0) {
+-                    Adopt-ManagedFile -SourceFile $dst -Targets $adoptTargets | Out-Null
++                    # A failed write is logged by the lib (LogError); the row is written here.
++                    $errorsBeforeAdopt = $errors
++                    $adoptedCount = Adopt-ManagedFile -SourceFile $dst -Targets $adoptTargets
++                    if ($errors -gt $errorsBeforeAdopt -or -not $adoptedCount) {
++                        Write-Summary "ERROR" "claude hooks" "adopt failed: $hookName"
++                    }
+                 } else {
+                     LogWarn "Cannot adopt: no shared/ or user repo target (run 'aitools user init')"
+                 }
+@@ -193,8 +200,12 @@ if ($DryRun) {
+                     { $_ -in @("a", "adopt") } {
+                         # Net-new user hook -> dotprofile only (not a managed
+                         # shared/ hook). Same helper for consistent backups.
+-                        Adopt-ManagedFile -SourceFile $hookFile.FullName `
+-                            -Targets @(Join-Path $userRepoPath "claude\hooks\$hookName") | Out-Null
++                        $errorsBeforeAdopt = $errors
++                        $adoptedCount = Adopt-ManagedFile -SourceFile $hookFile.FullName `
++                            -Targets @(Join-Path $userRepoPath "claude\hooks\$hookName")
++                        if ($errors -gt $errorsBeforeAdopt -or -not $adoptedCount) {
++                            Write-Summary "ERROR" "claude hooks" "adopt failed: $hookName"
++                        }
+                     }
+                     default {
+                         Log "Skipped adoption of $hookName"
+@@ -365,7 +376,12 @@ if ($DryRun) {
+             LogOk "Settings unchanged: $settingsFile"
+         } else {
+             $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($settingsFile)
+-            [System.IO.File]::WriteAllText($resolvedPath, $mergedJson, [System.Text.UTF8Encoding]::new($false))
++            $errorsBeforeWrite = $errors
++            try {
++                [System.IO.File]::WriteAllText($resolvedPath, $mergedJson, [System.Text.UTF8Encoding]::new($false))
++            } catch {
++                LogError "Could not write $settingsFile -- $_"
++            }
+             $hooksChanged = $true
+ 
+             # Post-write validation
+@@ -408,7 +424,12 @@ if ($DryRun) {
+                 }
+             }
+ 
+-            LogOk "Hooks deployed to $settingsFile"
++            if ($errors -gt $errorsBeforeWrite) {
++                # Write or post-write validation failed: ERROR row, never "deployed"
++                Write-Summary "ERROR" "claude hooks" "settings write/validation failed"
++            } else {
++                LogOk "Hooks deployed to $settingsFile"
++            }
+         }
+     }
+ }
 ```
 
 ## Risks

@@ -46,6 +46,7 @@ $repoDir = Split-Path -Parent $scriptDir
 $manifestPath = Join-Path $repoDir "shared\hooks\hooks-manifest.json"
 if (-not (Test-Path $manifestPath)) {
     LogError "Hook manifest not found: $manifestPath"
+    Write-Summary "ERROR" "claude hooks" "hook manifest not found"
     exit 1
 }
 $manifestObj = Get-Content $manifestPath -Raw | ConvertFrom-Json
@@ -84,6 +85,7 @@ foreach ($hookName in $hookFiles) {
     $src = Resolve-HookSource $hookName
     if (-not (Test-Path $src)) {
         LogError "Hook script not found: $src"
+        Write-Summary "ERROR" "claude hooks" "hook script missing: $hookName"
         exit 1
     }
 }
@@ -131,7 +133,12 @@ if ($DryRun) {
                 if (Test-Path $sharedHooks) { $adoptTargets += (Join-Path $sharedHooks $hookName) }
                 if ($userRepoPath) { $adoptTargets += (Join-Path $userRepoPath "claude\hooks\$hookName") }
                 if ($adoptTargets.Count -gt 0) {
-                    Adopt-ManagedFile -SourceFile $dst -Targets $adoptTargets | Out-Null
+                    # A failed write is logged by the lib (LogError); the row is written here.
+                    $errorsBeforeAdopt = $errors
+                    $adoptedCount = Adopt-ManagedFile -SourceFile $dst -Targets $adoptTargets
+                    if ($errors -gt $errorsBeforeAdopt -or -not $adoptedCount) {
+                        Write-Summary "ERROR" "claude hooks" "adopt failed: $hookName"
+                    }
                 } else {
                     LogWarn "Cannot adopt: no shared/ or user repo target (run 'aitools user init')"
                 }
@@ -193,8 +200,12 @@ if ($DryRun) {
                     { $_ -in @("a", "adopt") } {
                         # Net-new user hook -> dotprofile only (not a managed
                         # shared/ hook). Same helper for consistent backups.
-                        Adopt-ManagedFile -SourceFile $hookFile.FullName `
-                            -Targets @(Join-Path $userRepoPath "claude\hooks\$hookName") | Out-Null
+                        $errorsBeforeAdopt = $errors
+                        $adoptedCount = Adopt-ManagedFile -SourceFile $hookFile.FullName `
+                            -Targets @(Join-Path $userRepoPath "claude\hooks\$hookName")
+                        if ($errors -gt $errorsBeforeAdopt -or -not $adoptedCount) {
+                            Write-Summary "ERROR" "claude hooks" "adopt failed: $hookName"
+                        }
                     }
                     default {
                         Log "Skipped adoption of $hookName"
@@ -365,7 +376,12 @@ if ($DryRun) {
             LogOk "Settings unchanged: $settingsFile"
         } else {
             $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($settingsFile)
-            [System.IO.File]::WriteAllText($resolvedPath, $mergedJson, [System.Text.UTF8Encoding]::new($false))
+            $errorsBeforeWrite = $errors
+            try {
+                [System.IO.File]::WriteAllText($resolvedPath, $mergedJson, [System.Text.UTF8Encoding]::new($false))
+            } catch {
+                LogError "Could not write $settingsFile -- $_"
+            }
             $hooksChanged = $true
 
             # Post-write validation
@@ -408,7 +424,12 @@ if ($DryRun) {
                 }
             }
 
-            LogOk "Hooks deployed to $settingsFile"
+            if ($errors -gt $errorsBeforeWrite) {
+                # Write or post-write validation failed: ERROR row, never "deployed"
+                Write-Summary "ERROR" "claude hooks" "settings write/validation failed"
+            } else {
+                LogOk "Hooks deployed to $settingsFile"
+            }
         }
     }
 }
