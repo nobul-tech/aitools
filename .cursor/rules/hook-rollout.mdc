@@ -8,7 +8,7 @@ alwaysApply: false
 
 PreToolUse hooks must go through observe-then-enforce:
 
-1. **Observe** (1+ week): `MODE_REST="observe"`, log only, exit 0
+1. **Observe** (1+ week): per-check mode variable set to `"observe"`, log only (`~/.aitools/logs/<hook-name>.log`), exit 0
 2. **Review**: Audit logs for false positives, fix matching
 3. **Enforce**: per-check mode variable set to `"enforce"`, blocks violations (exit 2)
 
@@ -24,4 +24,4 @@ Reset a check to observe after adding new patterns, changing matching logic, or 
 
 `bash -n` cannot catch `-u` unset variable errors. Always smoke-test. (I12: stale `$MODE` caused crash-on-every-call.)
 
-**Current state (standing-order-guard.sh):** `&&` and `$()` enforcing; `||`, `;`, backticks observing.
+**Current state (standing-order-guard.sh):** every check enforcing (`&&`, `||`, `;`, `$()`, backticks, scratch files; `||`, `;`, backticks promoted 2026-03-24). **delegation-duty-guard.sh:** observe (hardcoded, stderr reminder only).

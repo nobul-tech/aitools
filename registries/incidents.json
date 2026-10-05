@@ -7,7 +7,7 @@
       "scope": "Incident entries only. NOT the filing process (incident-governance.md rule). NOT the framework documentation (framework-incident-governance.md). NOT incident reference files (reference/incident-*.md)",
       "audience": "/incident skill, /audit skill, check scripts, hooks, agents checking whether a deficiency has already been filed"
     },
-    "lastUpdated": "2026-10-03"
+    "lastUpdated": "2026-10-05"
   },
   "incidents": [
     {
@@ -1353,6 +1353,32 @@
       "preventionLayer": null,
       "created": "2026-10-03",
       "updated": "2026-10-03"
+    },
+    {
+      "id": 61,
+      "title": "Hook rollout rule's enforcement-state table and log path were not updated when standing-order-guard checks were promoted to enforce (2026-03-24) and its log moved to ~/.aitools/logs (2026-06-21)",
+      "status": "open",
+      "severity": "medium",
+      "affected": [
+        ".claude/rules/hook-rollout.md",
+        ".cursor/rules/hook-rollout.mdc",
+        "reference/framework-hook-rollout.md",
+        "shared/skills/aitool-ops/SKILL.md"
+      ],
+      "linked": null,
+      "referenceFile": null,
+      "observation": ".claude/rules/hook-rollout.md lines 73-75 list `||`, `;` and backticks under variable `MODE_REST` in state `observe` (`;` noted as having unfixed pwsh `-Command` / `perl -e` false positives); line 62 says 'Global default `MODE_REST=\"observe\"` covers all checks not yet promoted'; lines 23 and 26 use `MODE=\"observe\"` / `MODE=\"enforce\"`; lines 24, 61 and 77 give the log location as `~/.claude/hooks/logs/` ('Review logs with: `cat ~/.claude/hooks/logs/standing-order-guard.log`'). The deployed hook /root/.claude/hooks/standing-order-guard.sh (identical to shared/hooks/standing-order-guard.sh except a trailing newline) declares no MODE_REST or MODE: lines 46-51 set MODE_AND, MODE_SUBSHELL, MODE_SCRATCH, MODE_OR, MODE_SEMICOLON and MODE_BACKTICK, all \"enforce\" (OR, SEMICOLON, BACKTICK 'promoted 2026-03-24', commit 154fd46); the glob-in-rm, cat/head/tail, sed/awk and echo/printf-redirect checks pass a literal \"enforce\" (lines 207-273); `;` is exempt for commands starting with pwsh/powershell/perl (line 178); lines 53-54 set LOG_DIR=\"$HOME/.aitools/logs\", LOG_FILE=standing-order-guard.log (changed from $HOME/.claude/hooks/logs in commit 5a42255, 2026-06-21), written only in observe mode (lines 91-96). Smoke test 2026-10-05 against the deployed hook: `||`, `;`, backtick, `&&`, `$()` and 4-line inputs exit 2; `perl -e \"print 1; print 2\"` exits 0. `~/.claude/hooks/logs` does not exist; `~/.aitools/logs` has no standing-order-guard.log. Neither commit 154fd46 nor 5a42255 touched the rule. The same stale facts are in .cursor/rules/hook-rollout.mdc lines 11 and 27 and reference/framework-hook-rollout.md line 38; shared/skills/aitool-ops/SKILL.md line 79 lists the hook as 'PreToolUse (Bash git) ... Checklist reminder for git operations' (settings.json matcher is `Bash`). delegation-duty-guard.sh (PreToolUse, matcher Agent, shipped 2026-03-24) is hardcoded observe (header line 6, unconditional exit 0 line 171) and is absent from the rule's table.",
+      "expected": ".claude/rules/hook-rollout.md 'Implementation' presents the table as 'Current enforcement state (standing-order-guard.sh)', and the hook's header (standing-order-guard.sh line 28) defers to that rule; reference/framework-hook-rollout.md 'How It's Maintained': 'Enforcement state table in hook-rollout.md tracks current mode per check'; reference/logging.md decision 1: all aitools logging goes to ~/.aitools/logs/; .claude/rules/documentation-standards.md 'Layered reference architecture': one authoritative location per fact. No spec exists for: updating the enforcement-state table in the same change as a hook's MODE_* value or log path.",
+      "impact": "Agents load the rule (paths include scripts/**, shared/**, .claude/rules/**) and the Cursor mirror and are told `||`, `;` and backticks are only logged, so they plan Bash calls the hook then blocks (exit 2), costing turns; they are told `;` has unfixed pwsh/perl false positives that were fixed. Anyone following 'Review logs with' reads a directory that does not exist and may conclude the hook never fired. A promotion or reset decision made from the table starts from wrong state; an edit that references `$MODE_REST` as the rule describes, without declaring it, would fail under `set -u` (the I12 crash class in reference/claude-code-effectiveness.md). The /aitool-ops reference card, deployed to every machine, misstates what the hook does.",
+      "discoveryContext": "Session 3030c86a-9 (Claude Code web), 2026-10-05. The commander approved 'Proceed with hook-rollout.md update' after an operational-learning note that the deployed guard enforces every check and logs to $HOME/.aitools/logs; delegated mission S5-HookRollout verified it. Audited: shared/hooks/*.sh vs /root/.claude/hooks/ with cmp (17 identical, standing-order-guard.sh and harness-db-sessionstart.sh differ only by a trailing newline), /root/.claude/settings.json hooks block, shared/hooks/hooks-manifest.json, git log -S for MODE_REST, MODE_OR, MODE_SCRATCH and .aitools/logs, .claude/rules/hook-rollout.md, .cursor/rules/hook-rollout.mdc, reference/framework-hook-rollout.md, reference/logging.md, reference/claude-code-effectiveness.md (I11, I12), shared/skills/aitool-ops/SKILL.md, open incidents #25, #51, #59 (none covers this). Per-check smoke test of the deployed hook. Draft updates prepared for review in the same mission.",
+      "discipline": "Configuration management (configuration status accounting)",
+      "frameworks": "Configuration status accounting (ISO 10007; IEEE 828): the recorded state of a configuration item is updated as part of the change that alters the item, and configuration audits compare recorded state with the item itself. Docs-as-code single source of truth: derive documented state from the code (or check it against the code) instead of maintaining a hand-written copy.",
+      "suggestedResolution": "1) Apply the drafted updates: hook-rollout.md Phases, Implementation, enforcement-state table (real MODE_* variables, literal-enforce checks, delegation-duty-guard.sh row) and log path; the .mdc mirror; reference/framework-hook-rollout.md artifact path; the /aitool-ops hook row. 2) Detection: a check-pre-commit (or check-post-push) step that parses `MODE_[A-Z]+=\"(observe|enforce)\"` from shared/hooks/*.sh and compares them with the hook-rollout.md table rows, failing on a mismatch or on a variable the rule names but the hook does not declare (e.g. MODE_REST); scripts/check-pre-commit.sh/.ps1 and the rule's Pre-deploy verification list would change. 3) Alternative to 2: drop the hand-written table and name the hook header (standing-order-guard.sh lines 21-27) as the state of record, or generate the table in build-deploy.sh. 4) Prevention: add 'update the enforcement-state table and the .mdc mirror in the same commit as any MODE_* or log-path change' to hook-rollout.md Pre-deploy verification. Open questions for the commander: whether checks with no mode variable and the block-claude-code-guide.sh / block-explore-agent.sh deny hooks are exempt from 'All PreToolUse hooks must go through an observe-then-enforce cycle' (rule line 19); whether delegation-duty-guard.sh, in observe since 2026-03-24, is due for review (mission S4-Delegation owns that hook).",
+      "rootCause": "Proposed: enforcement state is recorded by hand in two places (the hook's MODE_* lines and header comment; the rule table and its Cursor mirror) with no check linking them. Commits 154fd46 (promotion) and 5a42255 (log move) changed only shared/hooks/, and no check, hook or rule step flagged the rule as stale.",
+      "correctiveAction": "Drafted 2026-10-05 by mission S5-HookRollout, pending commander approval: hook-rollout.md, hook-rollout.mdc, framework-hook-rollout.md, /aitool-ops SKILL.md hook row.",
+      "preventionLayer": "Proposed: Detection - check script comparing each hook's MODE_* declarations and LOG_DIR with hook-rollout.md (option 2). Prevention - rule step requiring the table update in the same commit (option 4).",
+      "created": "2026-10-05",
+      "updated": "2026-10-05"
     }
   ],
   "closed": [

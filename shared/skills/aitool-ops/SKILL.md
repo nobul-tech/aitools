@@ -76,7 +76,7 @@ part of the operational landscape):
 | SessionEnd | `session-archive.sh` | Archive session transcript to user repo |
 | SessionEnd | `harvest-session.sh` | Classify and harvest scratch artifacts |
 | PostToolUse (Write/Edit) | `sh-file-fixup.sh` | Fix CRLF line endings and chmod +x on .sh files |
-| PreToolUse (Bash git) | `standing-order-guard.sh` | Checklist reminder for git operations |
+| PreToolUse (Bash) | `standing-order-guard.sh` | Block USO violations in Bash commands (every check in enforce mode) |
 | Stop | `surfacing-duty-stop.sh` | Periodic surfacing duty reminder |
 | Stop | `estimate-refresh-stop.sh` | Running estimate refresh reminder |
 | PreToolUse (Read glossary.json) | `glossary-skill-guard.sh` | Redirect direct JSON access to /glossary skill |
