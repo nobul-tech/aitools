@@ -944,6 +944,25 @@ blog "Copying deploy/setup-bash.ps1"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
+# deploy/setup-google-chrome.sh and .ps1 (copy as-is)
+# ============================================================
+blog "Copying deploy/setup-google-chrome.sh"
+{
+    echo '#!/usr/bin/env bash'
+    echo "$HEADER_COMMENT_BASH"
+    tail -n +2 "$SCRIPTS_DIR/setup-google-chrome.sh" | inline_lib_bash
+} > "$DEPLOY_DIR/setup-google-chrome.sh"
+chmod +x "$DEPLOY_DIR/setup-google-chrome.sh"
+GENERATED=$((GENERATED + 1))
+
+blog "Copying deploy/setup-google-chrome.ps1"
+{
+    echo "$HEADER_COMMENT_PS1"
+    cat "$SCRIPTS_DIR/setup-google-chrome.ps1" | inline_lib_ps1
+} > "$DEPLOY_DIR/setup-google-chrome.ps1"
+GENERATED=$((GENERATED + 1))
+
+# ============================================================
 # deploy/setup-user-shell.sh and .ps1 (copy as-is) -- login-profile PATH block
 # ============================================================
 blog "Copying deploy/setup-user-shell.sh"

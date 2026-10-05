@@ -181,9 +181,12 @@ Add them per-project only via `aitools --addmcp`.
 | Platform | chrome-devtools stdio command |
 |----------|------------------------------|
 | Windows | `cmd /c npx -y chrome-devtools-mcp@latest --isolated` |
-| macOS | `npx -y chrome-devtools-mcp@latest --isolated` |
+| macOS / Linux (local) | `npx -y chrome-devtools-mcp@latest --isolated` |
+| Claude Code web environment (Linux) | `npx -y chrome-devtools-mcp@latest --isolated --headless --chromeArg=--no-sandbox` (D-CHR2) |
 
-The `cmd /c` wrapper is required on Windows for npx PATH resolution.
+The `cmd /c` wrapper is required on Windows for npx PATH resolution. The environment
+row is chosen by `AITOOLS_ENVIRONMENT` (`.claude/rules/cross-platform.md` "Environment
+branches").
 OS guards in setup scripts ensure the correct variant is deployed. See
 `@reference/managed-file-deployment.md` "Platform-Specific Config Values".
 
@@ -209,6 +212,11 @@ claude mcp add chrome-devtools --scope user -- npx chrome-devtools-mcp@latest --
 { "command": "npx", "args": ["-y", "chrome-devtools-mcp@latest", "--isolated"] }
 ```
 Windows variant uses `"command": "cmd", "args": ["/c", "npx", "-y", "chrome-devtools-mcp@latest", "--isolated"]`.
+
+**Claude Code web environment** (D-CHR2): both `setup-user-mcp.sh` and
+`setup-cursor-ide-mcp.sh` write `["-y", "chrome-devtools-mcp@latest", "--isolated", "--headless", "--chromeArg=--no-sandbox"]`
+when `AITOOLS_ENVIRONMENT=claude-code-web`. Claude Code's default args lack `-y`
+(drift, see `/incident` skill).
 
 **Skills** (deployed by `setup-user-mcp`):
 
@@ -984,6 +992,20 @@ pup version
 
 The package adds Google's apt repo (`https://dl.google.com/linux/chrome-stable/deb/ stable main`) and `/etc/cron.daily/google-chrome`. Its runtime libraries are installed by apt from the package `Depends` (managed transitively; list in `reference/tool-ops-google-chrome.md`).
 
+### Setup script
+
+`scripts/setup-google-chrome.sh` (run by `aitools install` Step 20b and by the Claude Code
+web environment Setup script) installs Chrome and `libnss3-tools` with `apt-get install -y`
+(one `apt-get update` + retry on failure) and makes every certificate of
+`/root/.ccr/agent-proxy-ca.crt` (a bundle) a trusted CA in root's NSS store. Certificates
+are matched by SHA-256 fingerprint under any nickname; a missing one is imported as
+`ccr-agent-proxy` / `ccr-agent-proxy-<n>` with trust `C,,`; a nickname is deleted only when
+that import needs it and it holds a certificate not in the bundle. Summary rows: `google chrome`, `nss tools`,
+`chrome proxy ca`. Outside the Claude Code web environment it reports `n/a (<environment>)`
+and changes nothing; `setup-google-chrome.ps1` (Windows) always reports `n/a (local)`.
+No check-post-push version check: Chrome updates itself daily through its apt cron job,
+so a pinned `tool-versions.json` value would drift constantly.
+
 ### Update
 
 - apt: `apt-get install -y --only-upgrade google-chrome-stable`
@@ -1027,11 +1049,10 @@ google-chrome --version
 
 ### Post-install (Claude Code web)
 
-```bash
-mkdir -p /root/.pki/nssdb
-certutil -N -d sql:/root/.pki/nssdb --empty-password   # only when cert9.db is missing
-certutil -A -d sql:/root/.pki/nssdb -n ccr-agent-proxy -t C,, -i /root/.ccr/agent-proxy-ca.crt
-```
+Run `scripts/setup-google-chrome.sh` (see Google Chrome "Setup script"). The CA file is a
+bundle and `certutil -A -i <file>` imports only its first certificate, so a single
+`certutil -A` is not enough; the manual equivalent is the fallback in
+`reference/tool-ops-google-chrome.md` "Environment setup script block".
 
 ### Lifecycle
 

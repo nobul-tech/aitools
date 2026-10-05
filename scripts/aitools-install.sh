@@ -844,6 +844,21 @@ else
 fi
 
 # ============================================================
+# 20b. Google Chrome (managed in the Claude Code web environment only, D-CHR1)
+# ============================================================
+# Before Step 21 so setup-user-mcp writes the chrome-devtools args for a browser that
+# exists. The script decides by environment and reports "n/a (<environment>)" elsewhere
+# (D-ENV8), so this step has no environment branch.
+log "Step 20b: Google Chrome"
+
+chrome_script="$SCRIPT_DIR/setup-google-chrome.sh"
+if [ -f "$chrome_script" ]; then
+    validate_and_run "$chrome_script"
+else
+    log_warn "setup-google-chrome.sh not found -- skipping (MDM deploy)"
+fi
+
+# ============================================================
 # 21. Deploy configurations
 # ============================================================
 log "Step 21: Deploy configurations"
