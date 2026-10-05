@@ -230,11 +230,12 @@ Standalone skills + our user-scope MCP config provide the same functionality wit
 
 **Lifecycle:**
 - **Platform Status:** macOS: supported | Windows: supported | Linux: evaluating
+- **Environments:** Claude Code web: approved (D-CHR2) -- args `-y chrome-devtools-mcp@latest --isolated --headless --chromeArg=--no-sandbox`, Chrome runs as root without its sandbox. See `reference/tool-ops-google-chrome.md`.
 - **Concurrency:** **Yes with `--isolated`**; No without (Chrome profile lock prevents concurrent sessions)
 - **Post-Install Config:** Skills deployed automatically by `setup-user-mcp`. No auth required.
-- **Dependencies:** Node.js (npx)
+- **Dependencies:** Node.js (npx), Google Chrome (see "Google Chrome" below)
 - **Invocation:** N/A (MCP server; launched via npx in server config)
-- **Last reviewed:** 2026-03-02
+- **Last reviewed:** 2026-10-05 (chrome-devtools-mcp 1.10.1: `--headless` defaults to false for the MCP server; `--chromeArg` is repeatable; `--executablePath` overrides the stable-channel path `/opt/google/chrome/chrome`)
 
 ### Vercel MCP
 
@@ -969,6 +970,80 @@ pup version
 
 ---
 
+## Google Chrome
+
+**Source**: https://www.google.com/linuxrepositories/
+**Purpose**: Browser launched by chrome-devtools-mcp, which officially supports Google Chrome and Chrome for Testing only. Managed per D-CHR1; decisions, requirements and sources of truth in `reference/tool-ops-google-chrome.md`.
+
+### Install
+
+| Platform | Method | Command |
+|----------|--------|---------|
+| Linux (amd64, Debian/Ubuntu) | Google `.deb` (preferred) | `curl -fsSL -o /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb` then `apt-get install -y /tmp/google-chrome-stable_current_amd64.deb` |
+| macOS / Windows | -- | Not yet evaluated (user-installed today) |
+
+The package adds Google's apt repo (`https://dl.google.com/linux/chrome-stable/deb/ stable main`) and `/etc/cron.daily/google-chrome`. Its runtime libraries are installed by apt from the package `Depends` (managed transitively; list in `reference/tool-ops-google-chrome.md`).
+
+### Update
+
+- apt: `apt-get install -y --only-upgrade google-chrome-stable`
+
+### Check Version
+
+```bash
+google-chrome --version
+```
+
+### Non-Preferred Install Methods
+
+| Method | Detection | Why not preferred |
+|--------|-----------|-------------------|
+| Playwright Chromium (image-provided) | `/opt/pw-browsers/chromium-*/chrome-linux/chrome` | Not supported by chrome-devtools-mcp; 13 majors behind stable (141 vs 154, 2026-10-05). Left in place, not used |
+| Chrome for Testing | `npx @puppeteer/browsers list` | Supported, but versioned install path; Google: trustworthy content only, no auto-update |
+
+### Lifecycle
+
+- **Platform Status:** macOS: not evaluated | Windows: not evaluated | Linux: approved
+- **Environments:** Claude Code web: approved (D-CHR2: root, `--headless`, `--chromeArg=--no-sandbox`)
+- **Concurrency:** Yes with chrome-devtools-mcp `--isolated` (temporary profile per session)
+- **Post-Install Config:** Claude Code web: root NSS store with the agent-proxy CA (NSS tools below); chrome-devtools-mcp args `--headless --chromeArg=--no-sandbox`
+- **Dependencies:** package `Depends` (apt, transitive); NSS tools (Claude Code web)
+- **Invocation:** `google-chrome` (direct). Anti-patterns: symlink or wrapper script at `/opt/google/chrome/chrome`; Playwright Chromium as a substitute
+- **Last verified version:** macOS: pending | Windows: pending | Linux: 154.0.8037.97 (2026-10-05)
+- **Evaluation:** `reference/evaluations/google-chrome-linux-2026-10-05.md`
+
+---
+
+## NSS tools (certutil)
+
+**Source**: https://packages.ubuntu.com/noble/libnss3-tools
+**Purpose**: `certutil`, used to trust the Claude Code web agent-proxy CA in the NSS store Chrome reads (D-CHR3).
+
+### Install
+
+| Platform | Method | Command |
+|----------|--------|---------|
+| Linux | apt (preferred) | `apt-get install -y libnss3-tools` (upgrades `libnss3` to the matching version) |
+
+### Post-install (Claude Code web)
+
+```bash
+mkdir -p /root/.pki/nssdb
+certutil -N -d sql:/root/.pki/nssdb --empty-password   # only when cert9.db is missing
+certutil -A -d sql:/root/.pki/nssdb -n ccr-agent-proxy -t C,, -i /root/.ccr/agent-proxy-ca.crt
+```
+
+### Lifecycle
+
+- **Platform Status:** macOS: n/a | Windows: n/a | Linux: approved
+- **Environments:** Claude Code web: approved (D-CHR3)
+- **Concurrency:** Yes -- stateless CLI
+- **Dependencies:** libnss3, libnspr4
+- **Invocation:** `certutil` (direct)
+- **Last verified version:** Linux: 2:3.98-1ubuntu0.2 (2026-10-05)
+
+---
+
 ## Overrides
 
 Intentional deviations from upstream defaults. When comparing our install
@@ -977,4 +1052,6 @@ commands against official docs, these are expected discrepancies — not bugs.
 | Tool | Override | Upstream Default | Our Value | Reason | Added | Last verified |
 |------|----------|-----------------|-----------|--------|-------|---------------|
 | Chrome DevTools MCP | `--isolated` flag | Not included | Added to all install commands | Enables concurrent Claude Code + Cursor sessions by using throwaway temp Chrome profiles | 2026-02-19 | 2026-02-27 |
+| Chrome DevTools MCP | `--headless` (Claude Code web) | Headed browser | Added in the Claude Code web environment | No X server in the container (D-CHR2) | 2026-10-05 | 2026-10-05 |
+| Chrome DevTools MCP | `--chromeArg=--no-sandbox` (Claude Code web) | Sandbox on; README: run as non-root | Added in the Claude Code web environment | Sessions run as root; commander accepted the sandbox-off risk (D-CHR2) | 2026-10-05 | 2026-10-05 |
 
