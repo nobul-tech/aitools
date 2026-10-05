@@ -8,6 +8,13 @@
 #
 # Managed: MCP server registration (via `claude mcp add`).
 # Preserved: ~/.claude/settings.json (not touched here).
+#
+# chrome-devtools arguments depend on the environment (AITOOLS_ENVIRONMENT, aitools-lib):
+#   local            npx chrome-devtools-mcp@latest --isolated
+#   claude-code-web  npx -y chrome-devtools-mcp@latest --isolated --headless --chromeArg=--no-sandbox
+#                    (D-CHR2, reference/tool-ops-google-chrome.md: root, no display)
+# setup-user-mcp.ps1 has no such branch: Windows is never the Claude Code web
+# environment (cross-platform.md "Environment branches", D-ENV4).
 
 # --- BEGIN mcp body (extracted by build-deploy) ---
 set -euo pipefail
@@ -39,16 +46,29 @@ esac
 # Check that claude CLI is available
 if ! command -v claude &> /dev/null; then
     log_error "'claude' CLI not found in PATH. Install Claude Code first: https://claude.ai/download"
+    write_summary ERROR "claude mcp" "claude CLI not found"
     exit 1
 fi
 
 # Check that Node.js is available (required for Chrome DevTools MCP and settings merge)
 if ! command -v node &> /dev/null; then
     log_error "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"
+    write_summary ERROR "claude mcp" "node not found"
     exit 1
 else
     log_ok "Node.js $(node --version) found"
 fi
+
+# --- chrome-devtools arguments for this environment ---
+if is_claude_code_web; then
+    # D-CHR2: sessions run as root with no display -- Chrome headless, sandbox off.
+    CHROME_MCP_CMD=(npx -y chrome-devtools-mcp@latest --isolated --headless --chromeArg=--no-sandbox)
+    log "Environment: claude-code-web -- chrome-devtools runs headless with Chrome's sandbox off (D-CHR2)"
+else
+    CHROME_MCP_CMD=(npx chrome-devtools-mcp@latest --isolated)
+fi
+# `claude mcp list` prints a stdio server as its command and args joined by spaces.
+CHROME_MCP_EXPECTED="${CHROME_MCP_CMD[*]}"
 
 # --- Check existing MCP server configs via claude mcp list ---
 # Stores parsed output as newline-separated "name=details" pairs.
@@ -132,15 +152,15 @@ if [ "$FORCE" = "true" ]; then
     if [ "$DRY_RUN" = "true" ]; then
         log "[DRY RUN] Would re-add MCP server: chrome-devtools (--force)"
     else
-        add_mcp_server "chrome-devtools" chrome-devtools --scope user -- npx chrome-devtools-mcp@latest --isolated
+        add_mcp_server "chrome-devtools" chrome-devtools --scope user -- "${CHROME_MCP_CMD[@]}"
     fi
-elif server_config_matches "chrome-devtools" "npx chrome-devtools-mcp@latest --isolated"; then
+elif server_config_matches "chrome-devtools" "$CHROME_MCP_EXPECTED"; then
     log_ok "chrome-devtools already configured, skipping (use --force to re-add)"
 else
     if [ "$DRY_RUN" = "true" ]; then
-        log "[DRY RUN] Would add MCP server: chrome-devtools (stdio, --isolated)"
+        log "[DRY RUN] Would add MCP server: chrome-devtools (stdio: $CHROME_MCP_EXPECTED)"
     else
-        add_mcp_server "chrome-devtools" chrome-devtools --scope user -- npx chrome-devtools-mcp@latest --isolated
+        add_mcp_server "chrome-devtools" chrome-devtools --scope user -- "${CHROME_MCP_CMD[@]}"
     fi
 fi
 
