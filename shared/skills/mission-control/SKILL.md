@@ -125,6 +125,12 @@ indicates a generate-then-assemble strategy. `merge-final.py` +
 `add-pillar2.py` indicates iterative assembly. This is richer than
 any self-reported status.
 
+Markdown files carry the producing mission's name as a prefix
+(D-DEL1: `S2-report.md`), so `ls <dir>/S2-*` lists one mission's
+Markdown output even in a shared directory. An unprefixed `.md` file
+from a mission means its prompt lacked the prefix element, or the
+file came from somewhere else -- check before trusting it.
+
 **Pattern 5: Deliverable size and growth**
 
 ```bash
@@ -191,6 +197,11 @@ Before launching concurrent missions, verify ALL of these:
    ```bash
    bash scripts/aitools-dashboard.sh --status
    ```
+
+6. **Delegation duty**: Each mission prompt carries the seven
+   delegation-duty elements (`/delegate` skill), including a distinct
+   name prefix per mission (D-DEL1). Distinct prefixes are what make
+   Pattern 4 attribute files to missions.
 
 ## Running estimate maintenance
 
@@ -259,10 +270,14 @@ def update_running_estimate(path, phase_description, completed_item=None, delega
         "context": True,
         "output": True,
         "writeBlocked": True,
+        "mdPrefix": True,   # D-DEL1: prompt required name-prefixed .md files
         "verify": True
     }
 }
 ```
+
+The dashboard counts whatever keys `dutyFulfilled` holds, so `mdPrefix`
+needs no dashboard change.
 
 ## Mission health assessment
 
@@ -334,6 +349,7 @@ To identify which transcript belongs to which mission:
 - Session scratch: `/scratch` skill
 - Session handoff: `/handoff` skill
 - Session planning: `/planning` skill
+- Writing mission prompts (delegation duty): `/delegate` skill
 - Governed vocabulary: `/glossary` skill (terms: Schwerpunkt,
   Lagebeurteilung, Reibung, FRAGORD, running estimate)
 - UCI ineffectiveness: Decision #35 (running estimate v9)

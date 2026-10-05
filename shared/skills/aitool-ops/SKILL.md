@@ -28,7 +28,8 @@ Invoke `/aitool-ops` when ANY of these arise:
 - Checking CC version dependencies (what breaks if CC upgrades)
 - Checking doc access methods (chrome-devtools vs WebFetch)
 - Checking governance modes (audit vs active per category)
-- Checking subagent limitations (cross-repo access, SendMessage gap)
+- Checking subagent limitations (cross-repo access, SendMessage gap,
+  Markdown file-name block, nesting depth cap)
 - Checking session management commands
 - Checking hook portability rules (BSD vs GNU command divergences)
 - User says `/aitool-ops` or asks about tool operations
@@ -81,6 +82,7 @@ part of the operational landscape):
 | Stop | `estimate-refresh-stop.sh` | Running estimate refresh reminder |
 | PreToolUse (Read glossary.json) | `glossary-skill-guard.sh` | Redirect direct JSON access to /glossary skill |
 | PreToolUse (Agent) | `block-claude-code-guide.sh` | Block guide subagent + context injection |
+| PreToolUse (Agent) | `delegation-duty-guard.sh` | Check delegation prompts for the seven duty elements (observe mode) |
 | SessionStart | `tool-ops-session-audit.sh` | Audit tool-ops coverage at session start |
 | SessionStart | `dashboard-serve.sh` | Start dashboard server if running estimate exists |
 | SessionStart | `harness-db-sessionstart.sh` | Record session start in harness DB |
@@ -154,6 +156,8 @@ Items that would break workflows or produce wrong results.
 | 23 | `claude update` triggers SessionEnd hooks then cancels them (benign noise) | 2.1.81 | 2.1.81 |
 | 24 | Subagent cross-repo file access restriction | 2.1.74 | 2.1.74 |
 | 25 | SendMessage for agent continuation unavailable (gated behind Agent Teams flag) | 2.1.77 | 2.1.81 |
+| 26 | Sub-agent Markdown file-name block (`REPORT*`/`SUMMARY*`/`FINDINGS*`/`ANALYSIS*` `.md` refused) | 2.1.289 | 2.1.289 |
+| 27 | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` nesting cap (default 3; 1 in Claude Code web) | 2.1.219 | 2.1.289 |
 
 ## Claude Code — Version Dependencies (MEDIUM)
 
@@ -191,6 +195,28 @@ another repo, include the file content in the delegation prompt
 (inline via XML delimiters) rather than expecting the subagent to
 read it. Alternatively, use Read with explicit paths for known
 file locations.
+
+## Sub-agent Markdown File-Name Block (#26)
+
+Since at least 2.1.289, the Write tool refuses a sub-agent write whose
+file name matches `^(REPORT|SUMMARY|FINDINGS|ANALYSIS).*\.md$`
+(case-insensitive), with "Subagents should return findings as text,
+not write report files. Include this content in your final response
+instead." The check is built into the binary, runs before permission
+rules, and no setting controls it. The main agent is not affected.
+
+**Workaround (D-DEL1)**: every delegation prompt tells the delegate to
+start every `*.md` file name with its own name (`S2-report.md`). The
+delegate's name must not itself start with one of the four words. See
+the `/delegate` skill.
+
+## Sub-agent Nesting Depth (#27)
+
+`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` caps how deep sub-agents nest
+(documented default 3; raised from 1 in 2.1.219). The Claude Code web
+environment sets it to 1: a sub-agent there has no Agent tool. Past the
+cap the launch fails with "Subagent nesting limit reached (depth N of
+M)". Plan delegation chains to fit the cap.
 
 ## Agent Continuation Gap — SendMessage (#25)
 
@@ -312,3 +338,4 @@ dir exists for the transient update session). This is benign noise.
 - Framework documentation: `reference/framework-tool-ops.md` (aitools repo)
 - Tool evaluation: `/tool-eval` skill
 - Tool install registry: `/tool-registry` skill
+- Delegation duty (uses #24-#27): `/delegate` skill

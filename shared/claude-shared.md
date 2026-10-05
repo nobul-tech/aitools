@@ -128,6 +128,10 @@ Repeated violations will end the working relationship.
 
 **In plan mode**: Always review these areas and proactively suggest relevant improvements (e.g., "consider breaking this into smaller batches" or "this would be a good candidate for a hook").
 
+## Delegation Duty
+
+Applies on every platform and in every environment, to every delegate (sub-agent, parallel or background session, cloud agent). Before writing a delegation prompt, invoke the `/delegate` skill. Every delegation prompt carries seven elements: identity, rules, skills, operational learning, the `WRITE_BLOCKED` signal, access (explicit paths), and the name prefix -- **the delegate writes every `*.md` file with its name as a prefix**, e.g. `S2-report.md` (decision D-DEL1, 2026-10-05). The prefix avoids Claude Code's block on sub-agent writes named `REPORT*.md`, `SUMMARY*.md`, `FINDINGS*.md` or `ANALYSIS*.md`, and the file name records which delegate produced it. Verify a delegate's output before relying on it. Rule: `~/.claude/rules/delegation.md`.
+
 ## Git Conventions
 
 - Commit messages: imperative mood, concise

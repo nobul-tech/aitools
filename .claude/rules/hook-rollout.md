@@ -83,7 +83,7 @@ but cannot catch unset variable errors (`-u`) or runtime failures. Always smoke-
 
 | Hook | Variable | State | Notes |
 |------|----------|-------|-------|
-| `delegation-duty-guard.sh` | none (hardcoded) | observe | Since 2026-03-24; always exits 0; missing duty elements go to stderr as a reminder, not to a log file |
+| `delegation-duty-guard.sh` | `MODE_DUTY` | observe | Since 2026-03-24; element 7 (`md-prefix`, D-DEL1) added 2026-10-05; exits 0 and prints missing elements to stderr (`enforce` exits 2); no log file -- a `delegation` event goes to `<session dir>/events.jsonl` when `.scratch/.current-session` exists at the git root |
 
 Review logs with: `cat ~/.aitools/logs/standing-order-guard.log` (absent while every
 check enforces). Blocks are not written to that log; when the hook runs inside a git

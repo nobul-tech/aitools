@@ -34,6 +34,12 @@ The `setup-user-cursor` script copies this to your clipboard automatically.
 - Commit messages: imperative mood, concise
 - Branch naming: `feature/`, `fix/`, `docs/` prefixes
 
+## Delegation Duty
+
+- Every delegation prompt (sub-agent, background agent, cloud agent) carries: identity, rules, skills, operational learning, the `WRITE_BLOCKED` signal, explicit paths, and the name prefix -- the delegate writes every `*.md` file with its name as a prefix, e.g. `S2-report.md` (D-DEL1)
+- Process and prompt skeleton: `delegate` skill (`~/.cursor/skills/delegate/SKILL.md`)
+- Verify a delegate's output before relying on it
+
 ## Communication Style
 
 - Be concise -- skip filler and caveats

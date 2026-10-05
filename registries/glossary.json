@@ -7,7 +7,7 @@
       "scope": "Definitions, facets, and abbreviation mappings only. NOT the word list (glossary rule). NOT the composition convention (framework-governed-vocabulary.md). NOT usage guidance (/glossary skill)",
       "audience": "/glossary skill, /audit skill, agents resolving terminology questions"
     },
-    "lastUpdated": "2026-10-03"
+    "lastUpdated": "2026-10-05"
   },
   "facets": {
     "scopeModifiers": {
@@ -365,6 +365,14 @@
     "delegating agent": {
       "definition": "The agent that launches a subagent or produces a handoff for a future session. The delegating agent bears the delegation duty: inspecting output, verifying assumptions, ensuring lifecycle survival of artifacts. Recursive per decision #7 — when the delegating agent is itself a subagent, it inherits the duty from its parent. Replaces the fixed 'S3' reference in delegation contexts.",
       "source": "shared/skills/handoff/SKILL.md"
+    },
+    "delegate": {
+      "definition": "An agent launched by a delegating agent to carry out a scoped mission: a Claude Code sub-agent, a parallel or background session, or a cloud agent. Receives its context only through the delegation prompt. Owes the delegating agent the inbound delegation duty. A delegate that delegates becomes a delegating agent toward its own delegates.",
+      "source": "dotprofile claude/rules/delegation.md; decision D-DEL2 (2026-10-05)"
+    },
+    "delegation duty": {
+      "definition": "What a delegating agent puts into a delegation prompt and checks on return, on every platform and in every environment. Outbound: seven elements — identity, rules, skills, operational learning, the WRITE_BLOCKED signal, access (explicit paths), and the name prefix: the delegate writes every *.md file with its name as a prefix, e.g. S2-report.md (D-DEL1). Inbound (owed by the delegate): the WRITE_BLOCKED signal, output at the designated path, INCIDENT: markers, scope adherence, and cited sources. Recursive.",
+      "source": "dotprofile claude/rules/delegation.md; /delegate skill; decisions D-DEL1, D-DEL2, D-DEL3 (2026-10-05)"
     },
     "handoff": {
       "definition": "Two distinct meanings distinguished by context: (1) handoff prompt — the self-contained document written at session end that enables a fresh agent to continue work. A file artifact written to a permanent tracked location. (2) handoff process — the 8-step workflow (Schwerpunkt declaration through commit) governed by the /handoff skill. The process produces the prompt. When ambiguous, use 'handoff prompt' or 'handoff process' explicitly.",

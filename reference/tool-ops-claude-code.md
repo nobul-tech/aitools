@@ -58,6 +58,8 @@ Post-push checklist #20 triggers this review automatically.
 | 24 | Subagent cross-repo file access restriction (Glob/Grep denied outside CWD repo, Read with explicit paths works) | 2.1.74 | 2.1.74 (2026-03-24) | `shared/claude-shared.md` (delegation duty), delegation prompts | -- |
 | 19 | `effortLevel` setting (`settings.json` key controlling reasoning effort) | 2.1.68 | 2.1.74 (2026-03-13) | `scripts/setup-user-hooks.sh/.ps1`, `reference/user-repo.md`, `shared/claude-shared.md` | -- |
 | 25 | SendMessage for agent continuation unavailable (gated behind Agent Teams flag; old `resume` param removed in 2.1.77) | 2.1.77 | 2.1.81 (2026-03-24) | Agent tool documentation, delegation prompts | [#35240](https://github.com/anthropics/claude-code/issues/35240), [#37051](https://github.com/anthropics/claude-code/issues/37051), [#38183](https://github.com/anthropics/claude-code/issues/38183) |
+| 26 | Sub-agent Markdown file-name block: Write refuses a sub-agent write whose basename matches `^(REPORT\|SUMMARY\|FINDINGS\|ANALYSIS).*\.md$` (case-insensitive) | 2.1.289 | 2.1.289 (2026-10-05) | "Sub-agent Markdown File-Name Block" section below, dotprofile `claude/rules/delegation.md` (D-DEL1), `shared/skills/delegate/SKILL.md`, `shared/hooks/delegation-duty-guard.sh`, `shared/claude-shared.md` + dotprofile `claude/CLAUDE.md` (Delegation Duty) | -- (not in the official docs) |
+| 27 | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` caps sub-agent nesting (documented default 3; the Claude Code web environment sets 1) | 2.1.219 | 2.1.289 (2026-10-05) | "Sub-agent Nesting Depth" section below, `shared/skills/delegate/SKILL.md`, `shared/skills/aitool-continue/SKILL.md` | -- |
 
 ### MEDIUM -- Affects developer experience or specific features
 
@@ -90,6 +92,16 @@ Post-push checklist #20 triggers this review automatically.
 ### Release notes watch
 
 Notable changes in CC releases that may affect this registry.
+
+#### 2.1.289 (observed 2026-10-05)
+
+- **Sub-agent Markdown file-name block** in the Write tool. See item #26.
+- **`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`** in effect (set to 1 by the Claude Code web environment). See item #27.
+- Items #1-#25 were not re-verified against this version (see "Current version" above).
+
+#### 2.1.219
+
+- **Default sub-agent nesting depth raised from 1 to 3** (`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`), per the changelog as reported on 2026-10-05. See item #27.
 
 #### 2.1.63 (2026-02-28)
 
@@ -243,6 +255,51 @@ work, passing prior output as context.
 Upstream: [#35240](https://github.com/anthropics/claude-code/issues/35240),
 [#37051](https://github.com/anthropics/claude-code/issues/37051),
 [#38183](https://github.com/anthropics/claude-code/issues/38183)
+
+### Sub-agent Markdown File-Name Block
+
+Observed in 2.1.289 (2026-10-05, Claude Code web environment). When the caller
+is a sub-agent, the Write tool's input validation refuses any file whose
+basename matches `^(REPORT|SUMMARY|FINDINGS|ANALYSIS).*\.md$`
+(case-insensitive) and returns:
+
+```
+Subagents should return findings as text, not write report files. Include this content in your final response instead.
+```
+
+- Built into the binary (`validateInput`, telemetry event
+  `tengu_subagent_md_report_blocked`, error code 5); the check is gated on the
+  caller having an agent ID, so the main agent is not affected.
+- It runs before permission rules. No setting, allow rule or hook output
+  overrides it. Not in the official docs.
+- Allowed names observed: `notes.txt`, `plain.md`, `s3-report.md`.
+- Edit and other write paths: not verified.
+
+**Workaround (decision D-DEL1, 2026-10-05):** every delegation prompt tells
+the delegate to start every `*.md` file name with its own name
+(`S2-report.md`). The name prefix never matches the anchored pattern, as long
+as the delegate's name does not itself start with one of the four words. The
+prefix also records which delegate wrote the file. Governed by the user rule
+`delegation.md` and the `/delegate` skill; detected by
+`delegation-duty-guard.sh` (element 7, observe mode).
+
+### Sub-agent Nesting Depth
+
+`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` sets how deep sub-agents may nest.
+Documented default 3; the 2.1.219 changelog raised the default from 1 to 3
+(as reported by the delegating session 3030c86a on 2026-10-05; changelog not
+re-read for this entry). The Claude Code web environment runner sets it to 1
+(observed: `printenv CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` -> `1`, 2026-10-05),
+so a sub-agent there has no Agent tool and cannot delegate further. A launch
+past the cap fails with:
+
+```
+Subagent nesting limit reached (depth N of M). Complete this task directly using your tools instead of spawning another agent. If the user explicitly requested deeper nesting, ask them to raise CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH.
+```
+
+**Impact on delegation:** a delegation chain must fit the cap of the
+environment it runs in. A delegate at the cap does the whole task itself; plan
+its scope accordingly (`/delegate` skill).
 
 ### Session Storage Internals
 
