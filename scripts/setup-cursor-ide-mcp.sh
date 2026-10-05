@@ -11,6 +11,13 @@
 #
 # Cursor uses its own MCP config at ~/.cursor/mcp.json (separate from Claude Code's ~/.claude.json).
 # Remote servers use the "url" key directly. Local stdio servers use "command" + "args".
+#
+# chrome-devtools args depend on the environment (AITOOLS_ENVIRONMENT, aitools-lib):
+#   local            ["-y","chrome-devtools-mcp@latest","--isolated"]
+#   claude-code-web  adds "--headless","--chromeArg=--no-sandbox" (D-CHR2,
+#                    reference/tool-ops-google-chrome.md: root, no display)
+# setup-cursor-ide-mcp.ps1 has no such branch: Windows is never the Claude Code web
+# environment (cross-platform.md "Environment branches", D-ENV4).
 
 set -euo pipefail
 
@@ -54,6 +61,14 @@ mkdir -p "$cursor_dir"
 
 mcp_json="$cursor_dir/mcp.json"
 
+# chrome-devtools args for this environment (JSON array, passed to the merge below)
+if is_claude_code_web; then
+    CHROME_MCP_ARGS_JSON='["-y","chrome-devtools-mcp@latest","--isolated","--headless","--chromeArg=--no-sandbox"]'
+    log "Environment: claude-code-web -- chrome-devtools runs headless with Chrome's sandbox off (D-CHR2)"
+else
+    CHROME_MCP_ARGS_JSON='["-y","chrome-devtools-mcp@latest","--isolated"]'
+fi
+
 if [ "$DRY_RUN" != "true" ]; then
     backup_file "$mcp_json"
 fi
@@ -70,6 +85,7 @@ const fs = require('fs');
 const f = process.argv[1];
 const dryRun = process.argv[2] === 'true';
 const force = process.argv[3] === 'true';
+const chromeArgs = JSON.parse(process.argv[4]);
 
 // Read existing config (ENOENT = start fresh, parse error = warn)
 let config = {};
@@ -95,10 +111,10 @@ const managedServers = ['chrome-devtools', 'vercel', 'webflow'];
 const serversBefore = {};
 for (const s of managedServers) serversBefore[s] = JSON.stringify(sortKeys(config.mcpServers[s]));
 
-// Set managed servers (macOS uses npx directly, no cmd /c wrapper)
+// Set managed servers (macOS/Linux use npx directly, no cmd /c wrapper)
 config.mcpServers['chrome-devtools'] = {
     command: 'npx',
-    args: ['-y', 'chrome-devtools-mcp@latest', '--isolated']
+    args: chromeArgs
 };
 config.mcpServers['vercel'] = { url: 'https://mcp.vercel.com' };
 config.mcpServers['webflow'] = { url: 'https://mcp.webflow.com/mcp' };
@@ -142,7 +158,7 @@ if (dryRun) {
         changed.forEach(c => console.log('CHANGED: ' + c));
     }
 }
-" "$mcp_json" "$DRY_RUN" "$FORCE")
+" "$mcp_json" "$DRY_RUN" "$FORCE" "$CHROME_MCP_ARGS_JSON")
 
 MCP_CHANGED=false
 MERGE_STATUS=$(echo "$MERGE_RESULT" | head -1)

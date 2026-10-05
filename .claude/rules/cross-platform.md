@@ -33,6 +33,40 @@ Scripts come in platform pairs: `.sh` targets macOS/Linux, `.ps1` targets
 Windows. Every script must have both variants unless listed in the exemptions
 table. The OS guard enforces at runtime; header comments document platform.
 
+### One script per tool (D-ENV0)
+
+One `.sh` per tool for every POSIX platform and environment, paired with one
+`.ps1`. Do not split scripts per OS or per environment. Divergence (package
+managers, paths, environment behaviour) goes into library helpers chosen by
+capability or by the environment API (e.g. `install_via_brew` /
+`install_via_apt`). A script may be split only when its OS paths share almost
+nothing; record the split as an exception in this file. Decided 2026-10-05.
+
+### Environment branches
+
+**Platform** is the operating system; **environment** is where and how the
+agent runs (governed terms, `/glossary` skill). A script may branch on the
+environment only where a recorded decision names that environment (e.g.
+D-CHR2 for the Claude Code web chrome-devtools args).
+
+- **Detect** only through the library API: `is_claude_code_web` /
+  `Test-ClaudeCodeWeb`, `$AITOOLS_ENVIRONMENT` / `$AitoolsEnvironment`
+  (`claude-code-web` or `local`), `$AITOOLS_PLATFORM` / `$AitoolsPlatform`.
+  Never read `CLAUDE_CODE_REMOTE` directly. Override: `AITOOLS_ENVIRONMENT`.
+  `claude-code-web` exists only on Linux. Detail:
+  `@reference/cross-platform-detail.md` "Environment detection".
+- **PowerShell parity** is at the library level. A `.ps1` behind the Windows
+  guard never branches on the environment (always `local` there, so the branch
+  is dead code); the `.sh` header says so.
+- **Hooks** cannot source the library: copy the block between
+  `# --- BEGIN aitools environment block ---` and `# --- END ... ---` in
+  `@scripts/aitools-lib.sh` verbatim, markers included.
+- **Not applicable here**: report one `OK` row `n/a (<environment>)` with
+  `write_environment_skip` / `Write-EnvironmentSkip`. Not `WARN`, not "skipped"
+  (a governed deployment outcome).
+- **Test** both values with `CLAUDE_CODE_REMOTE` / `AITOOLS_ENVIRONMENT` set
+  per case, under an isolated `HOME`; never against the live user config.
+
 ### OS guard patterns
 
 Canonical, copyable patterns. Rationale: `@reference/cross-platform-detail.md`
@@ -73,7 +107,8 @@ Guards MUST use structured logging. Source `init-logging` before the guard.
 
 Do not write platform branches for the rejected platform below an OS guard.
 After the guard, branch on capability (`command -v pwsh`) not identity
-(`$IS_MACOS`).
+(`$IS_MACOS`, `$IS_LINUX`, `$AITOOLS_PLATFORM`). Environment branches follow
+"Environment branches" above.
 
 ### OS guard + dispatch rule
 

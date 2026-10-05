@@ -16,6 +16,80 @@ not raw output (`Write-Host`/`echo`). This requires logging to be initialized
 before the guard. Source `init-logging.ps1`/`init-logging.sh` after the lib
 source and before the guard. See `script-standards.md` block order.
 
+## Environment detection
+
+Rule: `.claude/rules/cross-platform.md` "Environment branches". Decisions D-ENV1..D-ENV9
+(2026-10-05) are recorded in the PR that introduced the API.
+
+### Resolution (both libraries, at load time)
+
+1. **Platform** from `uname -s` (bash) or `$IsWindows`/`$IsMacOS`/`$IsLinux` (PowerShell;
+   PS 5.1, where they are undefined, is `windows`): `macos`, `linux`, `windows`, `unknown`.
+2. **Environment**: an `AITOOLS_ENVIRONMENT` already set to `claude-code-web` or `local`
+   (case-sensitive) is an override; otherwise `CLAUDE_CODE_REMOTE=true` gives
+   `claude-code-web`; otherwise `local`.
+3. `claude-code-web` exists only on Linux: on any other platform the environment is `local`.
+4. An override that is invalid, or `claude-code-web` off Linux, is replaced by the resolved
+   value; `logging_init` / `Initialize-Logging` logs one warning. When `AITOOLS_ENVIRONMENT`
+   came from the process environment it stays exported with the resolved value, so child
+   scripts resolve the same value without repeating the warning.
+5. Every `logging_init` / `Initialize-Logging` writes one detail line:
+   `platform=<p> environment=<e> (AITOOLS_ENVIRONMENT='...' CLAUDE_CODE_REMOTE='...' type='...')`.
+   `CLAUDE_CODE_REMOTE_ENVIRONMENT_TYPE` is logged, not used.
+
+Signals: `CLAUDE_CODE_REMOTE=true` is documented by Claude Code for hooks and setup scripts
+to detect a cloud session. Rejected signals: a `config.json` key (lost on container reclaim),
+a CLI flag (does not reach hooks or children), `profile.json` (shared across machines), and a
+root + no-display probe (would apply the sandbox-off chrome-devtools args to any root Linux
+host). The environment Setup script runs before Claude Code starts and is not documented
+to receive `CLAUDE_CODE_REMOTE` (unverified); it sets `AITOOLS_ENVIRONMENT=claude-code-web`
+explicitly.
+
+### API
+
+| Bash (`aitools-lib.sh`) | PowerShell (`aitools-lib.ps1`) | Value / behaviour |
+|---|---|---|
+| `AITOOLS_PLATFORM` | `$AitoolsPlatform` | `macos`, `linux`, `windows`, `unknown` |
+| `IS_MACOS`, `IS_WINDOWS`, `IS_LINUX` | (`$IsWindows` etc. built in) | `true` / `false` |
+| `AITOOLS_ENVIRONMENT` | `$AitoolsEnvironment` | `claude-code-web` or `local` |
+| `is_claude_code_web` | `Test-ClaudeCodeWeb` | true in Claude Code web |
+| `is_local_environment` | `Test-LocalEnvironment` | true for a local agent |
+| `write_environment_skip TOOL REASON` | `Write-EnvironmentSkip -Tool -Reason` | info line + `OK` row `n/a (<environment>)` |
+| -- | `Resolve-AitoolsPlatform`, `Resolve-AitoolsEnvironment` | pure resolvers (testable from any platform) |
+
+The value list is closed. A new environment (for example a hosted Cursor agent) is added by
+decision: a new value, its signal, and the scripts that branch on it.
+
+### Hooks
+
+Hooks cannot source the library. A hook that needs the platform or environment copies the
+code between `# --- BEGIN aitools environment block ---` and
+`# --- END aitools environment block ---` in `scripts/aitools-lib.sh` verbatim, markers
+included. The block is bash 3.2 compatible, `set -u` safe and depends only on `uname`.
+Embedding rather than deploy-time injection keeps `shared/hooks/*.sh` runnable as-is for the
+hook-rollout smoke tests and avoids a third copy of template logic in `setup-user-hooks.sh`,
+`.ps1` and `build-deploy.sh` (`deploy-paths.md`). A check that compares each hook's copy with
+the library is planned.
+
+### Reporting a step that does not apply
+
+`write_environment_skip` / `Write-EnvironmentSkip` writes `OK` with detail
+`n/a (<environment>)`, matching the tool platform state `n/a`. Not `WARN`: nothing is wrong,
+and a WARN row promotes the script's later OK rows. Not "skipped": that word is governed as
+the user's choice in managed file deployment.
+
+### Example (setup-user-mcp.sh, D-CHR2)
+
+```bash
+if is_claude_code_web; then
+    CHROME_MCP_CMD=(npx -y chrome-devtools-mcp@latest --isolated --headless --chromeArg=--no-sandbox)
+else
+    CHROME_MCP_CMD=(npx chrome-devtools-mcp@latest --isolated)
+fi
+```
+
+`setup-user-mcp.ps1` has no branch: on Windows the environment is always `local`.
+
 ## PowerShell 7 baseline — legacy workarounds
 
 PS 7 (`pwsh`) is the project baseline. Existing PS 5.1 workarounds remain in

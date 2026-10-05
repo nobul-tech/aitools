@@ -250,15 +250,26 @@ JSON config files may contain values that differ by platform. OS guards
 in setup scripts ensure the correct variant is deployed. Never run a
 `.sh` setup script on Windows or a `.ps1` on macOS — cross-platform
 dispatch rules in `@.claude/rules/cross-platform.md` prevent this.
+A few values also differ by environment; the `.sh` setup script selects
+them through the environment API (`@.claude/rules/cross-platform.md`
+"Environment branches").
 
-| Config file | Field | Windows | macOS |
-|-------------|-------|---------|-------|
-| `mcp.json` | chrome-devtools command | `"cmd", "/c", "npx", "-y", "chrome-devtools-mcp@latest", "--isolated"` | `"npx", "-y", "chrome-devtools-mcp@latest", "--isolated"` |
-| `settings.json` | hook command paths | `bash "C:/Users/<user>/.claude/hooks/<hook>.sh"` | `bash "/Users/<user>/.claude/hooks/<hook>.sh"` |
-| `cli-config.json` | (no platform differences) | identical | identical |
+| Config file | Field | Windows | macOS | Linux |
+|-------------|-------|---------|-------|-------|
+| `mcp.json` | chrome-devtools command | `"cmd", "/c", "npx", "-y", "chrome-devtools-mcp@latest", "--isolated"` | `"npx", "-y", "chrome-devtools-mcp@latest", "--isolated"` | same as macOS |
+| `mcp.json` (Cursor), `~/.claude.json` (Claude Code) | chrome-devtools command, Claude Code web environment (D-CHR2) | n/a | n/a | `"npx", "-y", "chrome-devtools-mcp@latest", "--isolated", "--headless", "--chromeArg=--no-sandbox"` |
+| `settings.json` | hook command paths | `bash "C:/Users/<user>/.claude/hooks/<hook>.sh"` | `bash "/Users/<user>/.claude/hooks/<hook>.sh"` | `bash "/home/<user>/.claude/hooks/<hook>.sh"` (`/root/...` as root) |
+| `cli-config.json` | (no platform differences) | identical | identical | identical |
 
-**`--isolated` flag**: platform-independent, MUST be present on both
-platforms. Enables throwaway temp Chrome profiles for concurrent Claude
+**Claude Code web environment args**: `--headless` because the container
+has no display; `--chromeArg=--no-sandbox` because the agent runs as root
+and Chrome refuses to start as root with its sandbox on. Written by
+`setup-user-mcp.sh` and `setup-cursor-ide-mcp.sh` only when the
+environment is `claude-code-web`. Detail and security note:
+`@reference/tool-ops-google-chrome.md`.
+
+**`--isolated` flag**: platform-independent, MUST be present on every
+platform and environment. Enables throwaway temp Chrome profiles for concurrent Claude
 Code + Cursor sessions. See `@reference/tool-registry.md` "Chrome DevTools
 MCP" and `@.claude/rules/tool-lifecycle.md` "MCP server isolation".
 

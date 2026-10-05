@@ -793,6 +793,19 @@ if (Test-Path $bashScript) {
 }
 
 # ============================================================
+# 20b. Google Chrome (managed in the Claude Code web environment only, D-CHR1)
+# ============================================================
+# Parity with aitools-install.sh (D-ENV8): on Windows the script reports "n/a (local)".
+Log "Step 20b: Google Chrome"
+
+$chromeScript = Join-Path $PSScriptRoot "setup-google-chrome.ps1"
+if (Test-Path $chromeScript) {
+    Invoke-ValidatedScript $chromeScript
+} else {
+    LogWarn "setup-google-chrome.ps1 not found -- skipping (MDM deploy)"
+}
+
+# ============================================================
 # 21. Deploy configurations
 # ============================================================
 Log "Step 21: Deploy configurations"

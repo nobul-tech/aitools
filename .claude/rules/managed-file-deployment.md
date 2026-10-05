@@ -60,17 +60,21 @@ These apply equally regardless of file type:
 
 ### Platform-specific config values
 
-JSON config files may contain values that differ by platform. OS guards
-in setup scripts ensure the correct variant is deployed. Examples:
+JSON config files may contain values that differ by platform, and a few
+by environment. OS guards in setup scripts ensure the correct platform
+variant is deployed; the environment API selects environment variants.
+Examples:
 
-| Config | Field | Windows | macOS |
-|--------|-------|---------|-------|
-| mcp.json | chrome-devtools command | `cmd /c npx -y chrome-devtools-mcp@latest --isolated` | `npx -y chrome-devtools-mcp@latest --isolated` |
-| settings.json | hook paths | `bash "C:/Users/.../hooks/session-archive.sh"` | `bash "/Users/.../hooks/session-archive.sh"` |
+| Config | Field | Windows | macOS | Linux |
+|--------|-------|---------|-------|-------|
+| mcp.json | chrome-devtools command | `cmd /c npx -y chrome-devtools-mcp@latest --isolated` | `npx -y chrome-devtools-mcp@latest --isolated` | same as macOS |
+| mcp.json, ~/.claude.json | chrome-devtools command, Claude Code web environment (D-CHR2) | n/a | n/a | `npx -y chrome-devtools-mcp@latest --isolated --headless --chromeArg=--no-sandbox` |
+| settings.json | hook paths | `bash "C:/Users/.../hooks/session-archive.sh"` | `bash "/Users/.../hooks/session-archive.sh"` | `bash "/home/.../hooks/session-archive.sh"` (`/root/...` as root) |
 
 Scripts must NEVER write cross-platform values (e.g., macOS paths on
-Windows). The OS guard + platform dispatch pattern prevents this — see
-`@.claude/rules/cross-platform.md`.
+Windows) or another environment's values. The OS guard + platform
+dispatch pattern and the environment API prevent this — see
+`@.claude/rules/cross-platform.md` "Environment branches".
 
 ### Updating this table
 

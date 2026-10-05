@@ -869,12 +869,17 @@
         "linux": { "packageMaintainer": "Google", "upstreamSource": "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb", "officialEndorsement": "chrome-devtools-mcp README: officially supports Google Chrome and Chrome for Testing only", "provenanceVerified": "2026-10-05 (.deb SHA256 equals the SHA256 in Google's signed apt index)" }
       },
       "health": {
-        "linux": { "flag": "yellow", "reasons": ["Active workaround: runs as root with --no-sandbox in the Claude Code web environment (D-CHR2)", "Install does not survive a container reclaim; depends on the environment setup script", "Onboarding incomplete: no setup script or installer step yet"] }
+        "linux": { "flag": "yellow", "reasons": ["Active workaround: runs as root with --no-sandbox in the Claude Code web environment (D-CHR2)", "Install does not survive a container reclaim; depends on the environment setup script (which runs setup-google-chrome.sh)"] }
       },
       "evaluation": {
         "status": "current",
         "provenance": "reference/evaluations/google-chrome-linux-2026-10-05.md",
-        "pendingChanges": "Onboarding checklist (tool-lifecycle.md); MCP args written by setup-user-mcp / setup-cursor-ide-mcp when CLAUDE_CODE_REMOTE=true"
+        "pendingChanges": "macOS and Windows not evaluated (setup-google-chrome reports n/a outside the Claude Code web environment)"
+      },
+      "setupScript": {
+        "scripts": "scripts/setup-google-chrome.sh + .ps1 (installer Step 20b, unconditional; D-ENV8)",
+        "environments": { "claude-code-web": "Installs Chrome (.deb), libnss3-tools, and trusts every certificate of the agent-proxy CA bundle in the root NSS store, matched by SHA-256 fingerprint under any nickname (D-ENV9)", "local": "OK row n/a (local); nothing changed (D-ENV7)" },
+        "versionCheck": "None in check scripts: Chrome updates itself through the apt repo and cron job the package installs"
       },
       "lifecycle": {
         "platformStatus": { "macos": null, "windows": null, "linux": "approved" },
@@ -937,7 +942,7 @@
           "claude-code-web": { "status": "approved", "decision": "D-CHR3", "reference": "reference/tool-ops-google-chrome.md" }
         },
         "concurrency": "Yes — stateless CLI",
-        "postInstallConfig": "certutil -N -d sql:/root/.pki/nssdb --empty-password; certutil -A -d sql:/root/.pki/nssdb -n ccr-agent-proxy -t C,, -i /root/.ccr/agent-proxy-ca.crt",
+        "postInstallConfig": "certutil -N -d sql:/root/.pki/nssdb --empty-password; then each certificate of /root/.ccr/agent-proxy-ca.crt (a bundle) trusted C,,: matched by SHA-256 fingerprint under any nickname, a missing one imported as ccr-agent-proxy / ccr-agent-proxy-<n> (D-ENV9). Done by setup-google-chrome.sh.",
         "dependencies": ["libnss3", "libnspr4"],
         "invocation": { "command": "certutil", "antiPatterns": [] }
       },
@@ -965,8 +970,12 @@
       "auth": "None",
       "scope": "User (enabled by default)",
       "installClaudeCode": "claude mcp add chrome-devtools --scope user -- npx chrome-devtools-mcp@latest --isolated",
+      "installClaudeCodeByEnvironment": {
+        "claude-code-web": "claude mcp add chrome-devtools --scope user -- npx -y chrome-devtools-mcp@latest --isolated --headless --chromeArg=--no-sandbox"
+      },
       "installCursor": {
         "macos": { "command": "npx", "args": ["-y", "chrome-devtools-mcp@latest", "--isolated"] },
+        "linux": { "command": "npx", "args": ["-y", "chrome-devtools-mcp@latest", "--isolated"], "claudeCodeWebArgs": ["-y", "chrome-devtools-mcp@latest", "--isolated", "--headless", "--chromeArg=--no-sandbox"] },
         "windows": { "command": "cmd", "args": ["/c", "npx", "-y", "chrome-devtools-mcp@latest", "--isolated"] }
       },
       "skills": {
@@ -982,7 +991,7 @@
       "lifecycle": {
         "platformStatus": { "macos": "supported", "windows": "supported", "linux": "evaluating" },
         "environments": {
-          "claude-code-web": { "status": "approved", "decision": "D-CHR2", "args": ["-y", "chrome-devtools-mcp@latest", "--isolated", "--headless", "--chromeArg=--no-sandbox"], "reference": "reference/tool-ops-google-chrome.md" }
+          "claude-code-web": { "status": "approved", "decision": "D-CHR2; written by setup-user-mcp and setup-cursor-ide-mcp when AITOOLS_ENVIRONMENT=claude-code-web (D-ENV2)", "args":["-y", "chrome-devtools-mcp@latest", "--isolated", "--headless", "--chromeArg=--no-sandbox"], "reference": "reference/tool-ops-google-chrome.md" }
         },
         "concurrency": "Yes with --isolated; No without (Chrome profile lock prevents concurrent sessions)",
         "postInstallConfig": "Skills deployed automatically by setup-user-mcp. No auth required.",
