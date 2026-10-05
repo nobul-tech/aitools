@@ -7,7 +7,7 @@
       "scope": "Operational metadata and governance modes only. NOT the ops knowledge itself. NOT install/versions. NOT incidents. NOT the framework definition",
       "audience": "/tool-ops skill, /audit skill, tool-ops-session-audit.sh hook, setup scripts"
     },
-    "lastUpdated": "2026-03-15"
+    "lastUpdated": "2026-10-05"
   },
   "tools": {
     "claude-code": {
@@ -24,6 +24,12 @@
           "matcher": "Agent",
           "script": "block-claude-code-guide.sh",
           "purpose": "Deny built-in guide subagent, inject corrective harness context"
+        },
+        {
+          "event": "PreToolUse",
+          "matcher": "Agent",
+          "script": "delegation-duty-guard.sh",
+          "purpose": "Check each delegation prompt for the seven delegation-duty elements (identity, rules, skills, operational learning, WRITE_BLOCKED, access, D-DEL1 Markdown name prefix); remind on gaps, observe mode"
         }
       ],
       "contextInjection": {
@@ -34,7 +40,8 @@
       "kpis": [
         { "name": "hookFireRate", "source": "hook logs", "unit": "fires/session" },
         { "name": "guardBlocks", "source": "hook logs", "unit": "blocks/session" },
-        { "name": "versionDepDrift", "source": "check script", "unit": "stale items" }
+        { "name": "versionDepDrift", "source": "check script", "unit": "stale items" },
+        { "name": "delegationDutyScore", "source": "delegation-duty-guard.sh events (session events.jsonl)", "unit": "elements present / 7" }
       ],
       "verifications": [
         {
@@ -52,10 +59,34 @@
               "expectStdout": null
             }
           ]
+        },
+        {
+          "type": "mock-json-pipe",
+          "target": "delegation-duty-guard.sh",
+          "cases": [
+            {
+              "input": {"tool_name":"Agent","tool_input":{"prompt":"You are S2-Audit. Read CLAUDE.md and .claude/rules/ by explicit path. Invoke the /glossary skills. Operational learning (carry forward): none. Name every .md file you write with the prefix S2-Audit-. If Write is denied, output WRITE_BLOCKED. Access: explicit paths only."}},
+              "expectExit": 0,
+              "expectStdout": null,
+              "expectStderr": null
+            },
+            {
+              "input": {"tool_name":"Agent","tool_input":{"prompt":"You are S2-Audit. Read CLAUDE.md and .claude/rules/ by explicit path. Invoke the /glossary skills. Operational learning (carry forward): none. Write notes to notes.md. If Write is denied, output WRITE_BLOCKED. Access: explicit paths only."}},
+              "expectExit": 0,
+              "expectStdout": null,
+              "expectStderr": "Delegation 6/7 duty elements. Missing: md-prefix"
+            },
+            {
+              "input": {"tool_name":"Bash","tool_input":{"command":"git status"}},
+              "expectExit": 0,
+              "expectStdout": null,
+              "expectStderr": null
+            }
+          ]
         }
       ],
       "docAccess": "chrome-devtools skill navigates to code.claude.com/docs/en/*.md",
-      "verificationMethod": "echo JSON | bash hook.sh — check exit code and stdout"
+      "verificationMethod": "echo JSON | bash hook.sh — check exit code, stdout, and (where expectStderr is set) stderr"
     }
   }
 }

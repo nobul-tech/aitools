@@ -107,6 +107,8 @@ blast radius
 blocker
 cross-boundary
 delegating agent
+delegate
+delegation duty
 handoff
 Lagebeurteilung
 lifecycle transition

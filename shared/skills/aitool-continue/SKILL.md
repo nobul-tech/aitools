@@ -77,9 +77,13 @@ whether the agent is synthesizing or pattern-matching. "How did you
 produce your response?" is a verification gate.
 
 **Correctness of context over efficiency of tokens.** Every subagent
-gets full context. No depth limit on recursion. No token concern. A
-subagent with wrong context wastes MORE time than one with expensive
-context.
+gets full context, at every level of the delegation chain. No token
+concern. A subagent with wrong context wastes MORE time than one with
+expensive context. Nesting depth is not unlimited: Claude Code caps it
+with `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (documented default 3; the
+Claude Code web environment sets 1, so a delegate there cannot
+delegate further). Plan delegation chains to fit the cap (`/delegate`
+skill).
 
 **Self-learning as the product.** Code changes are outputs of the
 discipline. The harness's ability to improve itself through use is
@@ -117,7 +121,9 @@ exists, it contains:
   how he works, how he corrects, what earns his trust
 - **Part 2: Delegation Principles** -- what works (P1-P7), what
   does not work (anti-patterns 1-4), what propagates errors,
-  what catches errors, the six delegation duty elements
+  what catches errors, the delegation duty elements (the
+  consolidated OL lists six; D-DEL1 added a seventh on 2026-10-05,
+  see below)
 - **Part 3: Operational Learning Principles** -- OL-1 through
   OL-14, each with evidence, counter-evidence, and carry-forward
   instructions
@@ -334,20 +340,25 @@ known but actively governing behavior:
 - Do not use Explore agents for delegation
 - Do not launch verifiers without rules context
 
-**From the Six Delegation Duty Elements (outbound):**
+**From the Seven Delegation Duty Elements (outbound):**
 1. Identity (role: S2, S3, Verifier)
 2. Rules instruction (explicit paths to governing rules)
 3. Skills instruction (which skills to invoke -- MOST MISSING)
 4. Operational learning (carry-forward OL)
 5. WRITE_BLOCKED signal (always include)
 6. Access workaround (explicit file paths)
+7. Name prefix (D-DEL1, 2026-10-05): the delegate writes every `*.md`
+   file with its name as a prefix (`S2-report.md`)
 
 **From the Inbound Delegation Duty:**
 1. WRITE_BLOCKED signal when Write/Edit denied
-2. Structured output to designated path
+2. Structured output to designated path, Markdown files name-prefixed
 3. INCIDENT: markers for deficiencies found
 4. Scope adherence (report gaps, do not expand)
 5. Provenance preservation (cite sources for factual claims)
+
+The duty is governed by the user rule `delegation.md`; the prompt
+skeleton and verification steps are in the `/delegate` skill.
 
 **From Commander Correction Patterns:**
 - Corrections are fast, direct, non-repetitive
@@ -484,10 +495,17 @@ When you delegate (launch subagents), carry forward:
 4. The relevant skills (THE MOST CONSISTENTLY MISSING ELEMENT)
 5. The agent identity and role
 6. Explicit file paths (subagents cannot discover locations)
+7. The name prefix (D-DEL1): every `*.md` file the delegate writes
+   starts with its name (`S2-report.md`). Claude Code refuses
+   sub-agent writes named `REPORT*.md`, `SUMMARY*.md`, `FINDINGS*.md`
+   or `ANALYSIS*.md`; the prefix avoids that and records provenance.
 
 Every delegation chain carries forward operational learning
-recursively. No depth limit. No token concern. A subagent with
-wrong context wastes MORE time than one with expensive context.
+recursively, as deep as the environment allows:
+`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` caps nesting (documented
+default 3; 1 in the Claude Code web environment). No token concern. A
+subagent with wrong context wastes MORE time than one with expensive
+context. Prompt skeleton and return checks: `/delegate` skill.
 
 ### Inbound (delegate -> delegating agent)
 
@@ -496,7 +514,8 @@ Every delegate owes the delegating agent:
 1. **WRITE_BLOCKED signal**: If Write/Edit is denied, output
    `WRITE_BLOCKED` as the first line with full content in response
 2. **Structured output**: Write findings to the designated output
-   path. Do not dump findings inline if a scratch path was specified.
+   path, every Markdown file name starting with your name (D-DEL1).
+   Do not dump findings inline if a scratch path was specified.
 3. **Incident surfacing**: Report deficiencies found during work as
    `INCIDENT:` markers in output. Delegates are sensors, not filers
    -- the main agent or `/incident` skill handles filing.
@@ -537,6 +556,7 @@ the full chain.
 - Does NOT file incidents -- use `/incident`
 - Does NOT evaluate tools -- use `/aitool-eval`
 - Does NOT check tool operations -- use `/aitool-ops`
+- Does NOT write delegation prompts -- use `/delegate`
 
 ## Staleness warning
 
@@ -557,6 +577,7 @@ to add, modify, or retire based on new evidence.
 - Provenance framework: `reference/framework-provenance.md`
   (proposed, not yet shipped)
 - Handoff skill: `/handoff`
+- Delegation duty: `/delegate` skill, user rule `delegation.md`
 - Scratch skill: `/scratch`
 - Incident skill: `/incident`
 - Frameworks skill: `/frameworks`

@@ -1,36 +1,54 @@
 #!/usr/bin/env bash
 # delegation-duty-guard.sh — Claude Code PreToolUse hook (matcher: Agent)
-# Checks subagent delegation prompts for 6 duty elements and injects
+# Checks subagent delegation prompts for 7 duty elements and injects
 # a corrective reminder via stderr when elements are missing.
 #
-# OBSERVE mode: always allows (exit 0), reminds on gaps.
-# Future: promote to enforce after observation period.
+# Intent: Detect delegation prompts that omit delegation-duty elements
+# (detection layer for the user rule delegation.md and the /delegate
+# skill). NOT the duty itself (rule + skill). NOT a prompt rewriter.
+# Consumed by: Claude Code PreToolUse(Agent), registered via
+# hooks-manifest.json; rollout governed by .claude/rules/hook-rollout.md.
 #
-# Six delegation duty elements:
+# OBSERVE mode: always allows (exit 0), reminds on gaps.
+# MODE_DUTY="enforce" blocks (exit 2) when any element is missing;
+# promote only per .claude/rules/hook-rollout.md (zero false positives).
+#
+# Seven delegation duty elements:
 #   1. Identity (role name, "you are", etc.)
 #   2. Rules instruction (CLAUDE.md, .claude/rules)
 #   3. Skills instruction (skills, SKILL.md, shared/skills)
 #   4. Operational learning (OL, carry forward)
 #   5. WRITE_BLOCKED signal
 #   6. Access workaround (explicit paths, Glob/Grep, OL-O12)
+#   7. Markdown name prefix (decision D-DEL1, 2026-10-05): the prompt
+#      tells the delegate to start every *.md file name with its name.
+#      Matches either the decision ID "D-DEL1", or a name-prefix
+#      phrase within 160 characters of ".md"/"markdown" (either order).
+#      Name-prefix phrase: "name" and "prefix" within 60 characters of
+#      each other, or "start(s)/begin(s) with your/the (agent) name".
+#      A bare "prefix" (e.g. "date prefix") does not count.
 #
 # Hook contract:
 #   - PreToolUse hook, matcher: Agent
 #   - Receives JSON on stdin (tool_name, tool_input)
-#   - Exit 0 = allow (always, OBSERVE mode)
-#   - stderr -> shown to agent as feedback
+#   - Exit 0 = allow (OBSERVE mode); exit 2 = block (ENFORCE mode only)
+#   - stderr -> feedback text
 #   - Must be fast (<50ms)
 #   - Must never crash or hang
 #   - Standalone — cannot source aitools-lib.sh
 #
-# KPI definitions (logged to harness DB):
-#   - delegation.score: duty elements present / 6
+# KPI definitions (logged to harness DB via session events.jsonl):
+#   - delegation.score: duty elements present / 7
 #   - delegation.missing: comma-separated list of missing elements
-#   - delegation.promptLength: approximate prompt length
 #
+# Framework: reference/framework-hook-rollout.md (observe-then-enforce)
 # Platform: macOS + Linux + Windows Git Bash
 
 set -euo pipefail
+
+MODE_DUTY="observe"
+DUTY_TOTAL=7
+ALL_ELEMENTS="identity,rules,skills,OL,WRITE_BLOCKED,access,md-prefix"
 
 # --- Telemetry: JSONL event emission ---
 # Appends one structured line to the session event log (~0.1ms).
@@ -52,14 +70,23 @@ emit_hook_event() {
 # --- Read JSON from stdin ---
 input=$(cat)
 
-# --- Extract tool_input content ---
-# The Agent tool_input contains the prompt text. We need to search
-# within the full input for delegation duty elements.
-# The prompt is inside "tool_input" which contains "prompt" or "task".
+# --- Only delegation launches are checked ---
+# The manifest matcher is Agent; this guard keeps a mis-registered or
+# manually piped non-Agent payload from producing a false reminder.
+# "Task" is the tool's former name. Depends on perl like the main check;
+# without perl every launch is allowed unchecked (observe semantics).
+if ! printf '%s' "$input" | perl -0777 -ne 'exit(/"tool_name"\s*:\s*"(?:Agent|Task)"/ ? 0 : 1)'; then
+    exit 0
+fi
 
 # --- Check duty elements using Perl (portable, no grep -P) ---
+# -0777 slurps the whole input so a pretty-printed (multi-line) JSON
+# payload is checked as one text; the previous per-line -ne printed one
+# score per input line and the caller read only the first.
+# perl failure falls back to "all missing" (|| printf ...), which the
+# score check below treats as 0/7 -- visible, never a silent pass.
 result=$(printf '%s' "$input" | \
-    perl -ne '
+    perl -0777 -ne '
         my $score = 0;
         my @missing;
         my @present;
@@ -106,22 +133,32 @@ result=$(printf '%s' "$input" | \
             push @missing, "access";
         }
 
+        # 7. Markdown name prefix (D-DEL1)
+        my $md = qr/(?:\.md\b|markdown)/i;
+        my $pfx = qr/(?:name.{0,60}?prefix|prefix.{0,60}?name|(?:start|begin)s?\s+with\s+(?:your|the)\s+(?:agent\s+)?name)/is;
+        if (/D-DEL1/ || /$pfx.{0,160}?$md/is || /$md.{0,160}?$pfx/is) {
+            $score++; push @present, "md-prefix";
+        } else {
+            push @missing, "md-prefix";
+        }
+
         print "$score\n";
         print join(",", @missing) . "\n";
         print join(",", @present) . "\n";
-    ' 2>/dev/null || echo "0
-identity,rules,skills,OL,WRITE_BLOCKED,access
-")
+    ' 2>/dev/null || printf '0\n%s\n\n' "$ALL_ELEMENTS")
 
 # Parse result
-score=$(printf '%s' "$result" | head -1)
-missing=$(printf '%s' "$result" | head -2 | tail -1)
+score=$(printf '%s\n' "$result" | head -1)
+missing=$(printf '%s\n' "$result" | head -2 | tail -1)
 
-if ! [[ "$score" =~ ^[0-9]+$ ]]; then score=0; fi
+if ! [[ "$score" =~ ^[0-9]+$ ]]; then
+    score=0
+    missing="$ALL_ELEMENTS"
+fi
 
 # --- Inject reminder if elements are missing ---
-if [ "$score" -lt 6 ] && [ -n "$missing" ]; then
-    reminder="[delegation-guard] Delegation ${score}/6 duty elements."
+if [ "$score" -lt "$DUTY_TOTAL" ] && [ -n "$missing" ]; then
+    reminder="[delegation-guard] Delegation ${score}/${DUTY_TOTAL} duty elements."
     reminder="${reminder} Missing: ${missing}."
 
     # Build specific guidance for each missing element
@@ -156,16 +193,23 @@ if [ "$score" -lt 6 ] && [ -n "$missing" ]; then
             guidance="${guidance} Access: note cross-repo paths and Glob/Grep workarounds (OL-O12)."
             ;;
     esac
+    case ",$missing," in
+        *,md-prefix,*)
+            guidance="${guidance} Name prefix (D-DEL1): tell the delegate to start every .md file name with its name, e.g. 'S2-report.md'."
+            ;;
+    esac
 
-    if [ -n "$guidance" ]; then
-        reminder="${reminder}${guidance}"
+    reminder="${reminder}${guidance} See the /delegate skill."
+
+    printf '%s\n' "$reminder" >&2
+
+    # --- Emit telemetry event (JSONL) ---
+    emit_hook_event "delegation" "{\"score\":$score,\"total\":$DUTY_TOTAL,\"missing\":\"$missing\",\"mode\":\"$MODE_DUTY\"}"
+
+    if [ "$MODE_DUTY" = "enforce" ]; then
+        exit 2
     fi
-
-    printf '%s' "$reminder" >&2
-
-    # --- Emit telemetry event (JSONL, replaces Python subprocess KPI logging) ---
-    emit_hook_event "delegation" "{\"score\":$score,\"missing\":\"$missing\"}"
 fi
 
-# OBSERVE mode: always allow
+# OBSERVE mode (or all elements present): allow
 exit 0

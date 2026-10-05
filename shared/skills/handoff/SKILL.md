@@ -129,7 +129,9 @@ Produce a report with these sections:
 5. **Metrics**: scratch file count, findings, decisions, commits,
    incidents filed, open threads.
 
-Write the report to: [SESSION_DIR]/session-state-audit.md
+Write the report to: [SESSION_DIR]/S2-session-state-audit.md
+
+Name prefix (D-DEL1): start every Markdown file you write with `S2-`.
 
 CRITICAL: If Write is denied, output "WRITE_BLOCKED" as the first line
 of your response and include the full report content in your response
@@ -154,7 +156,7 @@ You are S2 (Intelligence). Your task: assess the feasibility of
 producing a handoff prompt for this session and propose the accepting
 session's Schwerpunkt.
 
-Read: [SESSION_DIR]/session-state-audit.md
+Read: [SESSION_DIR]/S2-session-state-audit.md
 
 Produce a structured assessment with these sections:
 
@@ -205,7 +207,9 @@ Produce a structured assessment with these sections:
    exclusions (allowed if naturally encountered). Each exclusion
    must have specific rationale.
 
-Write the assessment to: [SESSION_DIR]/schwerpunkt-assessment.md
+Write the assessment to: [SESSION_DIR]/S2-schwerpunkt-assessment.md
+
+Name prefix (D-DEL1): start every Markdown file you write with `S2-`.
 
 CRITICAL: If Write is denied, output "WRITE_BLOCKED" as the first line
 of your response and include the full assessment content in your
@@ -231,8 +235,8 @@ You are S3 (Operations). Your task: write a handoff prompt that enables
 a fresh agent to continue this session's work.
 
 Read these files IN ORDER:
-1. [SESSION_DIR]/session-state-audit.md
-2. [SESSION_DIR]/schwerpunkt-assessment.md
+1. [SESSION_DIR]/S2-session-state-audit.md
+2. [SESSION_DIR]/S2-schwerpunkt-assessment.md
 3. [EXISTING_HANDOFF_PATH] (if one exists -- check plans/*/handoff-prompt.md)
 4. Any planning brief referenced in the assessment
 
@@ -320,6 +324,9 @@ available handoffs and announce their presence. This enables the
 accepting session to discover handoffs without prior knowledge of
 their existence.
 
+Name prefix (D-DEL1): the handoff itself goes to [HANDOFF_PATH] exactly
+as named above. Start every other Markdown file you write with `S3-`.
+
 CRITICAL: If Write is denied, output "WRITE_BLOCKED" as the first line
 of your response and include the full handoff content in your response
 text instead.
@@ -344,8 +351,8 @@ You are a Verifier. Your task: test whether a fresh agent could use this
 handoff prompt to continue the session's work.
 
 Read the handoff at: [HANDOFF_PATH]
-Read the session state audit at: [SESSION_DIR]/session-state-audit.md
-Read the schwerpunkt assessment at: [SESSION_DIR]/schwerpunkt-assessment.md
+Read the session state audit at: [SESSION_DIR]/S2-session-state-audit.md
+Read the schwerpunkt assessment at: [SESSION_DIR]/S2-schwerpunkt-assessment.md
 
 Test these 9 criteria:
 
@@ -399,7 +406,9 @@ required with section references.
 
 Overall verdict: READY / NEEDS AMENDMENTS / REWRITE
 
-Write the report to: [SESSION_DIR]/handoff-verification.md
+Write the report to: [SESSION_DIR]/Verifier-handoff-verification.md
+
+Name prefix (D-DEL1): start every Markdown file you write with `Verifier-`.
 
 CRITICAL: If Write is denied, output "WRITE_BLOCKED" as the first line
 of your response and include the full report content in your response
@@ -428,7 +437,7 @@ prompt based on the verification report.
 
 Read:
 1. [HANDOFF_PATH] (the handoff to amend)
-2. [SESSION_DIR]/handoff-verification.md (the verification report)
+2. [SESSION_DIR]/Verifier-handoff-verification.md (the verification report)
 
 Apply each required amendment from the "Required amendments" section
 of the verification report. For each:
@@ -443,6 +452,9 @@ After applying all amendments, re-check:
 - No naming collisions between section labels and decision identifiers
 - No broken cross-references introduced by edits
 - No content lost during restructuring
+
+Name prefix (D-DEL1): amend [HANDOFF_PATH] in place. Start every other
+Markdown file you write with `S3-`.
 
 CRITICAL: If Write is denied, output "WRITE_BLOCKED" as the first line
 of your response and include the amended handoff content in your
@@ -505,7 +517,12 @@ Every subagent launch in this workflow must follow the delegation duty.
 The delegating agent (not a fixed "S3" -- any agent that launches a
 subagent or produces a handoff) bears this duty. It is recursive per
 decision #7: when the delegating agent is itself a subagent, it
-inherits the duty from its parent.
+inherits the duty from its parent. The full duty -- seven prompt
+elements and return verification -- is in the user rule
+`delegation.md` and the `/delegate` skill; the items below are what
+this workflow adds or stresses. The templates above carry identity,
+output and WRITE_BLOCKED; add rules, skills, operational learning and
+explicit paths per the `/delegate` skill when you fill them in.
 
 1. **Identity**: Name the subagent role (S2, S3, Verifier)
 2. **Context**: List every file the subagent must read, in order
@@ -531,6 +548,13 @@ inherits the duty from its parent.
    `reference/`, `.aitools/channel/`). If the subagent writes to
    scratch, the delegating agent must move the artifact to a permanent
    location before the session ends.
+10. **Name prefix (D-DEL1)**: Every delegation prompt tells the subagent
+   to start every Markdown file it writes with its name (`S2-`, `S3-`,
+   `Verifier-`). Exception: the handoff itself, written to the exact
+   [HANDOFF_PATH] the delegating agent names. The prefix avoids Claude
+   Code's refusal of sub-agent writes named `REPORT*.md`,
+   `SUMMARY*.md`, `FINDINGS*.md` or `ANALYSIS*.md`, and records which
+   subagent produced each file.
 
 ## Handoff quality criteria
 
@@ -608,6 +632,8 @@ Each assumption gets tracked with:
 ## Cross-References
 
 - Session planning: `/planning` skill
+- Delegation duty (seven elements, prompt skeleton): `/delegate` skill,
+  user rule `delegation.md`
 - Scratch files: `/scratch` skill (includes lifecycle warning)
 - Investigation methodology: `/investigate` skill
 - Intent writing: `/intent-writing` skill (for intent on new files)
@@ -616,5 +642,6 @@ Each assumption gets tracked with:
 - Handoff exemplar: `plans/mission-command-briefing/handoff-prompt.md`
   (the first handoff produced by this workflow)
 - Governed vocabulary: `/glossary` skill (terms: handoff, accepting
-  session, delegating agent, lifecycle transition, assumption,
+  session, delegating agent, delegate, delegation duty, lifecycle
+  transition, assumption,
   Schwerpunkt, Lagebeurteilung, Reibung, Mitdenken, Auftrag)

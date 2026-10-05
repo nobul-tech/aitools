@@ -35,9 +35,19 @@ Every code batch in the plan must include:
 
 ## Sub-agent prompt template
 
+The template carries the error-handling rules this pattern exists for. The
+other delegation-duty elements (rules, skills, operational learning,
+`WRITE_BLOCKED`, explicit paths, name prefix) come from the `/delegate`
+skill; the lines below include the ones every batch needs.
+
 ```
-You are modifying files in the aitools repo. Apply the exact edits below.
-Do NOT improvise or add code not specified in the edits.
+You are [NAME] (e.g. S3-Batch2), modifying files in the aitools repo.
+Apply the exact edits below. Do NOT improvise or add code not specified
+in the edits.
+
+If you write any Markdown file, start its name with `[NAME]-` (D-DEL1).
+If a write or tool call is denied, output `WRITE_BLOCKED: <what> --
+<denial text>` and do not retry it in another form.
 
 ## Error-handling rules (non-negotiable)
 

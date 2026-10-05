@@ -43,6 +43,10 @@ When you're uncertain, ask — and suggest an answer with the question.
 - `reference/` — implementation detail and the origins behind the rules.
 - `.aitools/channel/` — the relay and carry-forward operational learning.
 
+When you delegate, the delegation duty applies (`/delegate` skill; user rule
+`delegation.md`): seven prompt elements, including D-DEL1 — the delegate names
+every `*.md` file it writes with its own name as a prefix (`S2-report.md`).
+
 ## The process (every prompt)
 
 1. Parse for high-impact words

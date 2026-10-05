@@ -132,6 +132,21 @@ from immediately.
 Do NOT duplicate work — if you delegate research to a subagent, don't
 also perform the same searches yourself.
 
+### Delegation duty
+
+Every delegation prompt carries seven elements: identity, rules,
+skills, operational learning, the `WRITE_BLOCKED` signal, access
+(explicit paths), and the name prefix -- the delegate writes every
+`*.md` file with its name as a prefix (`S2-report.md`, decision
+D-DEL1). Use the `/delegate` skill to write the prompt and to verify
+what comes back.
+
+When planning parallel or chained delegation, check the nesting cap
+first: `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (documented default 3;
+1 in the Claude Code web environment, where a subagent cannot
+delegate further). Size each delegate's scope to what it can finish
+without delegating.
+
 ## User Collaboration
 
 ### User as co-architect

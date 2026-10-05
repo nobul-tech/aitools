@@ -35,7 +35,7 @@ observe first, then enforce.
 
 - `@.claude/rules/hook-rollout.md` (operational rule + state table)
 - `@shared/hooks/standing-order-guard.sh` (primary hook using this)
-- `~/.claude/hooks/logs/` (observation logs)
+- `~/.aitools/logs/` (observation logs, `<hook-name>.log`)
 
 ## Cross-References
 
