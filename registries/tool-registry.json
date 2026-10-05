@@ -7,7 +7,7 @@
       "scope": "Tool data only. NOT lifecycle gates or onboarding checklists (.claude/rules/tool-lifecycle.md). NOT evaluation process (/tool-eval skill). NOT per-tool ops metadata (tool-ops.json)",
       "audience": "/tool-registry skill, /tool-eval skill, /audit skill, setup scripts, check scripts, aitools-install"
     },
-    "lastUpdated": "2026-10-03",
+    "lastUpdated": "2026-10-05",
     "repositories": {
       "primary": "https://github.com/nobul-tech/aitools",
       "userTemplate": "https://github.com/nobul-jose/aitools-{username}"
@@ -847,6 +847,113 @@
       "nonPreferredMethods": null,
       "pathIssues": null,
       "platformGotchas": null
+    },
+    "google-chrome": {
+      "displayName": "Google Chrome",
+      "source": "https://www.google.com/linuxrepositories/",
+      "purpose": "Browser launched by the chrome-devtools-mcp MCP server, which officially supports Google Chrome and Chrome for Testing only. Managed per D-CHR1 (reference/tool-ops-google-chrome.md).",
+      "install": {
+        "macos": [],
+        "windows": [],
+        "linux": [
+          { "method": "deb", "command": "curl -fsSL -o /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && apt-get install -y /tmp/google-chrome-stable_current_amd64.deb", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "The package adds Google's apt repo (https://dl.google.com/linux/chrome-stable/deb/ stable main) and /etc/cron.daily/google-chrome; runtime libraries come from the package Depends via apt. Claude Code web: run from the environment setup script (reference/tool-ops-google-chrome.md)." }
+        ]
+      },
+      "update": {
+        "apt": "apt-get install -y --only-upgrade google-chrome-stable"
+      },
+      "versionCheck": "google-chrome --version",
+      "systemRequirements": "Linux amd64 (.deb, Debian/Ubuntu)",
+      "notes": "macOS and Windows not yet evaluated (Chrome is user-installed there today).",
+      "delivery": {
+        "linux": { "packageMaintainer": "Google", "upstreamSource": "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb", "officialEndorsement": "chrome-devtools-mcp README: officially supports Google Chrome and Chrome for Testing only", "provenanceVerified": "2026-10-05 (.deb SHA256 equals the SHA256 in Google's signed apt index)" }
+      },
+      "health": {
+        "linux": { "flag": "yellow", "reasons": ["Active workaround: runs as root with --no-sandbox in the Claude Code web environment (D-CHR2)", "Install does not survive a container reclaim; depends on the environment setup script", "Onboarding incomplete: no setup script or installer step yet"] }
+      },
+      "evaluation": {
+        "status": "current",
+        "provenance": "reference/evaluations/google-chrome-linux-2026-10-05.md",
+        "pendingChanges": "Onboarding checklist (tool-lifecycle.md); MCP args written by setup-user-mcp / setup-cursor-ide-mcp when CLAUDE_CODE_REMOTE=true"
+      },
+      "lifecycle": {
+        "platformStatus": { "macos": null, "windows": null, "linux": "approved" },
+        "environments": {
+          "claude-code-web": { "status": "approved", "decision": "D-CHR2: root, chrome-devtools-mcp --headless --chromeArg=--no-sandbox", "reference": "reference/tool-ops-google-chrome.md" }
+        },
+        "concurrency": "Yes with chrome-devtools-mcp --isolated (temporary profile per session)",
+        "postInstallConfig": "Claude Code web: root NSS store with the agent-proxy CA (nss-tools); MCP args --headless --chromeArg=--no-sandbox",
+        "dependencies": ["Package Depends (apt, transitive)", "nss-tools (Claude Code web)"],
+        "invocation": { "command": "google-chrome", "antiPatterns": ["Symlink or wrapper script at /opt/google/chrome/chrome", "Playwright Chromium as a substitute (unsupported by chrome-devtools-mcp, behind stable)"] }
+      },
+      "versions": {
+        "macos": { "lastVerifiedVersion": null, "lastVerified": null },
+        "windows": { "lastVerifiedVersion": null, "lastVerified": null },
+        "linux": { "lastVerifiedVersion": "154.0.8037.97", "lastVerified": "2026-10-05" },
+        "minVersion": null,
+        "blocked": []
+      },
+      "authentication": null,
+      "buildPrereqs": null,
+      "knownPaths": { "linux": ["/opt/google/chrome/chrome"] },
+      "nonPreferredMethods": [
+        { "method": "playwright-chromium", "detection": "/opt/pw-browsers/chromium-*/chrome-linux/chrome", "reason": "Not supported by chrome-devtools-mcp; 13 majors behind stable (141 vs 154, 2026-10-05). Image-provided: left in place, not used." },
+        { "method": "chrome-for-testing", "detection": "npx @puppeteer/browsers list", "reason": "Supported, but versioned install path; Google: trustworthy content only, no auto-update" }
+      ],
+      "pathIssues": null,
+      "platformGotchas": "Linux as root: Chrome exits 'Running as root without --no-sandbox is not supported' (crbug.com/638180). Chrome trusts the NSS store, not the system CA bundle."
+    },
+    "nss-tools": {
+      "displayName": "NSS tools (certutil)",
+      "source": "https://packages.ubuntu.com/noble/libnss3-tools",
+      "purpose": "certutil, used to trust the Claude Code web agent-proxy CA in the NSS store Chrome reads (D-CHR3, reference/tool-ops-google-chrome.md).",
+      "install": {
+        "macos": [],
+        "windows": [],
+        "linux": [
+          { "method": "apt", "command": "apt-get install -y libnss3-tools", "preferred": true, "autoUpdates": false, "ccCompatible": true, "notes": "Upgrades libnss3 to the matching version." }
+        ]
+      },
+      "update": {
+        "apt": "apt-get install -y --only-upgrade libnss3-tools"
+      },
+      "versionCheck": "dpkg-query -W -f '${Version}\\n' libnss3-tools",
+      "systemRequirements": null,
+      "notes": "Dependency of google-chrome in the Claude Code web environment only.",
+      "delivery": {
+        "linux": { "packageMaintainer": "Ubuntu", "upstreamSource": "Ubuntu noble archive", "officialEndorsement": "Distribution package", "provenanceVerified": "2026-10-05 (apt, configured Ubuntu archive)" }
+      },
+      "health": {
+        "linux": { "flag": "yellow", "reasons": ["Install does not survive a container reclaim; depends on the environment setup script"] }
+      },
+      "evaluation": {
+        "status": "current",
+        "provenance": "reference/evaluations/google-chrome-linux-2026-10-05.md",
+        "pendingChanges": null
+      },
+      "lifecycle": {
+        "platformStatus": { "macos": "n/a", "windows": "n/a", "linux": "approved" },
+        "environments": {
+          "claude-code-web": { "status": "approved", "decision": "D-CHR3", "reference": "reference/tool-ops-google-chrome.md" }
+        },
+        "concurrency": "Yes — stateless CLI",
+        "postInstallConfig": "certutil -N -d sql:/root/.pki/nssdb --empty-password; certutil -A -d sql:/root/.pki/nssdb -n ccr-agent-proxy -t C,, -i /root/.ccr/agent-proxy-ca.crt",
+        "dependencies": ["libnss3", "libnspr4"],
+        "invocation": { "command": "certutil", "antiPatterns": [] }
+      },
+      "versions": {
+        "macos": { "lastVerifiedVersion": null, "lastVerified": null },
+        "windows": { "lastVerifiedVersion": null, "lastVerified": null },
+        "linux": { "lastVerifiedVersion": "2:3.98-1ubuntu0.2", "lastVerified": "2026-10-05" },
+        "minVersion": null,
+        "blocked": []
+      },
+      "authentication": null,
+      "buildPrereqs": null,
+      "knownPaths": { "linux": ["/usr/bin/certutil"] },
+      "nonPreferredMethods": null,
+      "pathIssues": null,
+      "platformGotchas": null
     }
   },
   "mcpServers": {
@@ -874,15 +981,18 @@
       "notes": "The Claude Code plugin (/plugin install chrome-devtools-mcp) is NOT used. It bundles its own MCP server config without --isolated, causing config conflicts. Standalone skills + our user-scope MCP config provide the same functionality without conflicts.",
       "lifecycle": {
         "platformStatus": { "macos": "supported", "windows": "supported", "linux": "evaluating" },
+        "environments": {
+          "claude-code-web": { "status": "approved", "decision": "D-CHR2", "args": ["-y", "chrome-devtools-mcp@latest", "--isolated", "--headless", "--chromeArg=--no-sandbox"], "reference": "reference/tool-ops-google-chrome.md" }
+        },
         "concurrency": "Yes with --isolated; No without (Chrome profile lock prevents concurrent sessions)",
         "postInstallConfig": "Skills deployed automatically by setup-user-mcp. No auth required.",
-        "dependencies": ["Node.js (npx)"],
+        "dependencies": ["Node.js (npx)", "Google Chrome (google-chrome)"],
         "invocation": null
       },
       "versions": {
         "pinned": false,
-        "lastReviewed": "2026-03-02",
-        "assumptions": ["--isolated flag required for concurrent Claude Code + Cursor sessions"]
+        "lastReviewed": "2026-10-05",
+        "assumptions": ["--isolated flag required for concurrent Claude Code + Cursor sessions", "1.10.1: --headless defaults to false for the MCP server; --chromeArg is repeatable; --executablePath overrides the stable-channel path /opt/google/chrome/chrome"]
       }
     },
     "vercel-mcp": {
@@ -988,6 +1098,24 @@
       "reason": "Enables concurrent Claude Code + Cursor sessions by using throwaway temp Chrome profiles",
       "added": "2026-02-19",
       "lastVerified": "2026-02-27"
+    },
+    {
+      "tool": "chrome-devtools-mcp",
+      "override": "--headless (Claude Code web)",
+      "upstreamDefault": "Headed browser (headless false)",
+      "ourValue": "Added in the Claude Code web environment",
+      "reason": "No X server in the container (D-CHR2)",
+      "added": "2026-10-05",
+      "lastVerified": "2026-10-05"
+    },
+    {
+      "tool": "chrome-devtools-mcp",
+      "override": "--chromeArg=--no-sandbox (Claude Code web)",
+      "upstreamDefault": "Sandbox on; README: run as a non-root user",
+      "ourValue": "Added in the Claude Code web environment",
+      "reason": "Sessions run as root; commander accepted the sandbox-off risk (D-CHR2)",
+      "added": "2026-10-05",
+      "lastVerified": "2026-10-05"
     }
   ]
 }
