@@ -75,7 +75,9 @@ Check scripts source `check-lib.sh`/`.ps1` which in turn sources `aitools-lib.sh
 
 | Function | Bash | PowerShell | Purpose |
 |----------|------|-----------|---------|
-| Platform detection | `IS_MACOS`, `IS_WINDOWS` | (built-in) | OS branching |
+| Platform detection | `AITOOLS_PLATFORM`, `IS_MACOS`, `IS_WINDOWS`, `IS_LINUX` | `$AitoolsPlatform` (built on `$IsWindows`/`$IsMacOS`/`$IsLinux`) | OS branching below the guard |
+| Environment detection | `AITOOLS_ENVIRONMENT`, `is_claude_code_web`, `is_local_environment` | `$AitoolsEnvironment`, `Test-ClaudeCodeWeb`, `Test-LocalEnvironment` | Environment branches (`cross-platform.md` "Environment branches") |
+| Environment skip row | `write_environment_skip` | `Write-EnvironmentSkip` | OK row `n/a (<environment>)` + reason in the log |
 | Log directory | `AITOOLS_LOG_DIR` | via `Initialize-Logging` | Platform-aware log path |
 | `display_path` | `display_path()` | (not needed) | cygpath wrapper for Windows |
 | Config reader | `read_config_key()` | `ReadConfigKey` | JSON key extraction (BOM-safe) |
@@ -216,6 +218,9 @@ These are the canonical tool names for field 2. Always use these exact strings.
 | `datadog cli` | setup-datadog |
 | `cursor cli` | setup-user-cursor |
 | `aitools config` | aitools-install |
+| `google chrome` | setup-google-chrome |
+| `nss tools` | setup-google-chrome |
+| `chrome proxy ca` | setup-google-chrome |
 
 ### Severity categories
 
@@ -298,6 +303,7 @@ definitions — do not substitute synonyms.
 | `"created"` | File did not exist, now written | First-time deployment |
 | `"configured"` | Server/service set up or reconfigured | MCP server, integration setup |
 | `"accepted"` | User chose to adopt local value back to source | Adopt menu outcome |
+| `"n/a (<environment>)"` | Step does not apply in this environment (tool platform state `n/a`) | `write_environment_skip` / `Write-EnvironmentSkip`, category OK (`.claude/rules/cross-platform.md` "Environment branches") |
 
 Non-governed detail values (version strings, error descriptions, counts)
 are free-text and not subject to this table.

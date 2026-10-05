@@ -12,6 +12,21 @@ This repo targets macOS and Windows equally.
 
 - Provide both `.ps1` and `.sh` variants for setup/utility scripts
 - Use forward slashes in paths; `$HOME`/`~` for user directory references
+- One script per tool (D-ENV0): one `.sh` for every POSIX platform and
+  environment, paired with one `.ps1`; divergence goes into library helpers.
+  Splits are recorded exceptions in `.claude/rules/cross-platform.md`
+
+### Environment branches
+
+Platform = operating system; environment = where and how the agent runs
+(`claude-code-web` or `local`). Branch on the environment only where a recorded
+decision names it. Detect only via the library API (`is_claude_code_web` /
+`Test-ClaudeCodeWeb`, `AITOOLS_ENVIRONMENT`, `AITOOLS_PLATFORM`), never by
+reading `CLAUDE_CODE_REMOTE`. `.ps1` scripts behind the Windows guard never
+branch on the environment. Hooks copy the library's environment block verbatim.
+Not applicable: `OK` row `n/a (<environment>)` via `write_environment_skip` /
+`Write-EnvironmentSkip`. Test both values under an isolated `HOME`. Details:
+`.claude/rules/cross-platform.md` "Environment branches".
 
 ### Windows managed bash (Git Bash, not WSL)
 
@@ -33,7 +48,8 @@ Exemptions: libraries (aitools-lib, check-lib, init-logging), hooks, build
 scripts, scratch files. Full table in `.claude/rules/cross-platform.md`.
 
 Dead code rule: Do not write platform branches for the rejected platform
-below an OS guard. Branch on capability, not identity.
+below an OS guard. Branch on capability, not identity (`IS_MACOS`,
+`IS_LINUX`, `AITOOLS_PLATFORM`).
 
 - Never call `.sh` setup scripts without a `uname -s` dispatch
 - On Windows, call `.ps1` via `pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$path")"`

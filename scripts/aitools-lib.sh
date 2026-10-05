@@ -1,9 +1,11 @@
 # aitools-lib.sh -- shared helpers for all aitools bash scripts
 # Sourced, not executed directly. No shebang, no set -euo pipefail (caller sets it).
 #
-# Provides: platform detection, display_path, read_config_key, logging_init,
-# log/log_ok/log_error/log_warn/log_detail, invoke_ai, write_summary,
-# show_summary, SORT_KEYS_JS, normalize_json.
+# Provides: platform and environment detection (AITOOLS_PLATFORM, IS_MACOS,
+# IS_WINDOWS, IS_LINUX, AITOOLS_ENVIRONMENT, is_claude_code_web,
+# is_local_environment, write_environment_skip), display_path, read_config_key,
+# logging_init, log/log_ok/log_error/log_warn/log_detail, invoke_ai,
+# write_summary, show_summary, SORT_KEYS_JS, normalize_json.
 #
 # Usage:
 #   source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/aitools-lib.sh"
@@ -13,14 +15,52 @@
 # for specialized logging (file-only, JSONL, etc.).
 
 # ---------------------------------------------------------------------------
-# Platform detection
+# Platform and environment detection (.claude/rules/cross-platform.md
+# "Environment branches"; reference/cross-platform-detail.md "Platform and
+# environment API"). Resolved once, when this library is sourced.
+#   AITOOLS_PLATFORM     macos | linux | windows | unknown       (uname -s)
+#   AITOOLS_ENVIRONMENT  claude-code-web | local
+#     override: AITOOLS_ENVIRONMENT=claude-code-web|local already set
+#     detect:   CLAUDE_CODE_REMOTE=true -> claude-code-web, else local
+#     rule:     claude-code-web exists only on linux
+# The code between the BEGIN/END markers is the canonical block that hooks embed
+# verbatim (hooks cannot source this library). Change it here and in every hook
+# that embeds it. A check-pre-commit step comparing the copies is planned (rollout
+# batch R4); no hook embeds the block yet.
 # ---------------------------------------------------------------------------
+_AITOOLS_ENVIRONMENT_REQUESTED="${AITOOLS_ENVIRONMENT:-}"
+# --- BEGIN aitools environment block ---
+case "$(uname -s)" in
+    Darwin*)              AITOOLS_PLATFORM="macos" ;;
+    Linux*)               AITOOLS_PLATFORM="linux" ;;
+    MINGW*|MSYS*|CYGWIN*) AITOOLS_PLATFORM="windows" ;;
+    *)                    AITOOLS_PLATFORM="unknown" ;;
+esac
+case "${AITOOLS_ENVIRONMENT:-}" in
+    claude-code-web|local) ;;
+    *)
+        if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
+            AITOOLS_ENVIRONMENT="claude-code-web"
+        else
+            AITOOLS_ENVIRONMENT="local"
+        fi ;;
+esac
+if [ "$AITOOLS_PLATFORM" != "linux" ]; then
+    AITOOLS_ENVIRONMENT="local"
+fi
+# --- END aitools environment block ---
 IS_MACOS=false
 IS_WINDOWS=false
-case "$(uname -s)" in
-    Darwin*)              IS_MACOS=true ;;
-    MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=true ;;
+IS_LINUX=false
+case "$AITOOLS_PLATFORM" in
+    macos)   IS_MACOS=true ;;
+    windows) IS_WINDOWS=true ;;
+    linux)   IS_LINUX=true ;;
 esac
+
+# Predicates for environment branches (below the OS guard only).
+is_claude_code_web()   { [ "$AITOOLS_ENVIRONMENT" = "claude-code-web" ]; }
+is_local_environment() { [ "$AITOOLS_ENVIRONMENT" = "local" ]; }
 
 # ---------------------------------------------------------------------------
 # Log directory -- unified cross-platform location (reference/logging.md §1):
@@ -107,6 +147,17 @@ logging_init() {
     _rotate_log "$LOG_FILE"
     ERRORS=0
     WARNINGS=0
+    _log_aitools_environment
+}
+
+# Record the resolved platform/environment (file-only detail line); warn when an
+# AITOOLS_ENVIRONMENT override was invalid or not possible on this platform. The
+# resolved value replaces an exported override, so child scripts do not warn again.
+_log_aitools_environment() {
+    log_detail "platform=$AITOOLS_PLATFORM environment=$AITOOLS_ENVIRONMENT (AITOOLS_ENVIRONMENT='$_AITOOLS_ENVIRONMENT_REQUESTED' CLAUDE_CODE_REMOTE='${CLAUDE_CODE_REMOTE:-}' type='${CLAUDE_CODE_REMOTE_ENVIRONMENT_TYPE:-}')"
+    if [ -n "$_AITOOLS_ENVIRONMENT_REQUESTED" ] && [ "$_AITOOLS_ENVIRONMENT_REQUESTED" != "$AITOOLS_ENVIRONMENT" ]; then
+        log_warn "AITOOLS_ENVIRONMENT='$_AITOOLS_ENVIRONMENT_REQUESTED' ignored (valid: local; claude-code-web on Linux only) -- environment is $AITOOLS_ENVIRONMENT"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -299,6 +350,19 @@ write_summary() {
         fi
         printf '%s|%s|%s\n' "$cat" "$2" "$3" >> "$AITOOLS_SUMMARY_FILE"
     fi
+}
+
+# ---------------------------------------------------------------------------
+# Environment skip: a step that does not apply in this environment reports one
+# OK row "n/a (<environment>)" plus the reason in the log (cross-platform.md
+# "Environment branches"). Not WARN (nothing is wrong) and not "skipped" (a
+# governed term for the user's deployment choice).
+# Usage: write_environment_skip "google chrome" "managed only in Claude Code web (D-CHR1)"
+# ---------------------------------------------------------------------------
+write_environment_skip() {
+    local tool="$1" reason="$2"
+    log "n/a in the $AITOOLS_ENVIRONMENT environment: $reason"
+    write_summary OK "$tool" "n/a ($AITOOLS_ENVIRONMENT)"
 }
 
 # ---------------------------------------------------------------------------

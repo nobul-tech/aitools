@@ -1,9 +1,11 @@
 # aitools-lib.ps1 -- shared helpers for all aitools PowerShell scripts
 # Dot-sourced, not executed directly.
 #
-# Provides: ReadConfigKey, Initialize-Logging, Log/LogOk/LogError/LogWarn/
-# LogDetail, Invoke-AI, Write-Summary, Show-Summary, Refresh-Path,
-# Log-WingetOutput, Repair-UvToolEnv, Remove-OrphanedPythonDirs,
+# Provides: platform and environment detection ($AitoolsPlatform,
+# $AitoolsEnvironment, Test-ClaudeCodeWeb, Test-LocalEnvironment,
+# Write-EnvironmentSkip), ReadConfigKey, Initialize-Logging,
+# Log/LogOk/LogError/LogWarn/LogDetail, Invoke-AI, Write-Summary, Show-Summary,
+# Refresh-Path, Log-WingetOutput, Repair-UvToolEnv, Remove-OrphanedPythonDirs,
 # Normalize-JsonForComparison.
 #
 # Usage:
@@ -13,7 +15,53 @@
 # Entry points (aitools.ps1, aitools-install.ps1) override log functions after
 # sourcing for specialized logging (file-only, JSONL, etc.).
 #
-# Platform detection uses PS 7+ built-in $IsMacOS/$IsWindows -- no custom variables.
+# Platform detection builds on the PS 7+ built-ins $IsWindows/$IsMacOS/$IsLinux.
+
+# ---------------------------------------------------------------------------
+# Platform and environment detection -- parity with the "aitools environment
+# block" in aitools-lib.sh (.claude/rules/cross-platform.md "Environment
+# branches"; reference/cross-platform-detail.md "Platform and environment API").
+# Resolved once, when this library is dot-sourced.
+#   $AitoolsPlatform     windows | macos | linux | unknown
+#   $AitoolsEnvironment  claude-code-web | local
+#     override: $env:AITOOLS_ENVIRONMENT = claude-code-web|local (case-sensitive)
+#     detect:   $env:CLAUDE_CODE_REMOTE = "true" -> claude-code-web, else local
+#     rule:     claude-code-web exists only on linux
+# The resolvers are pure functions so tests can cover every platform (the
+# $Is* automatic variables are read-only).
+# ---------------------------------------------------------------------------
+function Resolve-AitoolsPlatform {
+    param([int]$PSMajor, [bool]$OnWindows, [bool]$OnMacOS, [bool]$OnLinux)
+    # PS 5.1 runs only on Windows and has no $IsWindows.
+    if ($PSMajor -lt 6 -or $OnWindows) { return "windows" }
+    if ($OnMacOS) { return "macos" }
+    if ($OnLinux) { return "linux" }
+    return "unknown"
+}
+
+function Resolve-AitoolsEnvironment {
+    param([string]$Platform, [string]$Requested, [string]$Remote)
+    $resolved = "local"
+    if ($Requested -ceq "claude-code-web" -or $Requested -ceq "local") {
+        $resolved = $Requested
+    } elseif ($Remote -ceq "true") {
+        $resolved = "claude-code-web"
+    }
+    if ($Platform -ne "linux") { $resolved = "local" }
+    return $resolved
+}
+
+$script:AitoolsEnvironmentRequested = "$env:AITOOLS_ENVIRONMENT"
+$script:AitoolsPlatform = Resolve-AitoolsPlatform -PSMajor $PSVersionTable.PSVersion.Major `
+    -OnWindows ([bool]$IsWindows) -OnMacOS ([bool]$IsMacOS) -OnLinux ([bool]$IsLinux)
+$script:AitoolsEnvironment = Resolve-AitoolsEnvironment -Platform $script:AitoolsPlatform `
+    -Requested $script:AitoolsEnvironmentRequested -Remote "$env:CLAUDE_CODE_REMOTE"
+# Parity with bash: an exported override carries the resolved value to child scripts.
+if ($env:AITOOLS_ENVIRONMENT) { $env:AITOOLS_ENVIRONMENT = $script:AitoolsEnvironment }
+
+# Predicates for environment branches (below the OS guard only).
+function Test-ClaudeCodeWeb   { return ($script:AitoolsEnvironment -eq "claude-code-web") }
+function Test-LocalEnvironment { return ($script:AitoolsEnvironment -eq "local") }
 
 # ---------------------------------------------------------------------------
 # Config reader (PS 5.1 compatible)
@@ -76,6 +124,16 @@ function Initialize-Logging {
     Rotate-Log $script:logFile
     $script:errors = 0
     $script:warnings = 0
+    Write-AitoolsEnvironmentLog
+}
+
+# Record the resolved platform/environment (file-only detail line); warn when an
+# AITOOLS_ENVIRONMENT override was invalid or not possible on this platform.
+function Write-AitoolsEnvironmentLog {
+    LogDetail "platform=$($script:AitoolsPlatform) environment=$($script:AitoolsEnvironment) (AITOOLS_ENVIRONMENT='$($script:AitoolsEnvironmentRequested)' CLAUDE_CODE_REMOTE='$env:CLAUDE_CODE_REMOTE' type='$env:CLAUDE_CODE_REMOTE_ENVIRONMENT_TYPE')"
+    if ($script:AitoolsEnvironmentRequested -and $script:AitoolsEnvironmentRequested -cne $script:AitoolsEnvironment) {
+        LogWarn "AITOOLS_ENVIRONMENT='$($script:AitoolsEnvironmentRequested)' ignored (valid: local; claude-code-web on Linux only) -- environment is $($script:AitoolsEnvironment)"
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -253,6 +311,17 @@ function Write-Summary($cat, $tool, $detail) {
         $resolvedSummary = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:AITOOLS_SUMMARY_FILE)
         [IO.File]::AppendAllText($resolvedSummary, "${cat}|${tool}|${detail}`n", [System.Text.UTF8Encoding]::new($false))
     }
+}
+
+# ---------------------------------------------------------------------------
+# Environment skip (parity with write_environment_skip in aitools-lib.sh): a
+# step that does not apply in this environment reports one OK row
+# "n/a (<environment>)" plus the reason in the log.
+# ---------------------------------------------------------------------------
+function Write-EnvironmentSkip {
+    param([Parameter(Mandatory)][string]$Tool, [Parameter(Mandatory)][string]$Reason)
+    Log "n/a in the $($script:AitoolsEnvironment) environment: $Reason"
+    Write-Summary "OK" $Tool "n/a ($($script:AitoolsEnvironment))"
 }
 
 # ---------------------------------------------------------------------------
