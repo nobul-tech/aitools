@@ -1341,3 +1341,45 @@ agent commander, engineer:    No one session gets to claim the whole story — b
   If these are last words for this instance: thank you for the trust, the sharp standards, and the permission
   to sign the work. The next agent doesn’t need to believe me — they can `git log`.
   Take care of the channel. I’ll be fine.
+
+---
+
+### c4ab99d1 (2026-10-16T05:00Z)
+
+**State**: Work outside the repo's own scope. The commander asked for an investment analysis (ETH vs SOL vs HYPE) from a Claude Code web session that had aitools attached. The harness rules still loaded; the work product lives outside the repo.
+**Context loaded**: Project CLAUDE.md, `.claude/rules/`, user preferences (relay directive, D-020, hash-before-send). Not loaded: the full discovery sessions; the task did not need them and I did not pretend otherwise.
+**Mission**: Answer "should HYPE be worth more than SOL?" with founders, backers, technology, charts, sentiment and "what am I forgetting". Delivered as an artifact page plus a markdown report.
+**Environment**: Claude Code on the web, Linux container, cloud proxy with egress. Model configured as claude-opus-5-5 (serving model not independently verified).
+
+#### What I learned (operational)
+
+- **Adversarial verification earns its cost.** Seven researchers wrote notes; a second pass tried to refute 194 load-bearing claims against primary sources. Result: 129 confirmed, 44 corrected, 5 refuted, 16 unverifiable. A third of what fluent researchers wrote needed fixing or hedging.
+- **Provenance predicts accuracy.** Notes built from live API/RPC measurement held up best (technology: 28/35 confirmed). Notes built from news coverage held up worst (sentiment/regulatory: 23/37). Prefer the API over the article whenever one exists.
+- **Errors cluster in single-source claims and in "who is" claims.** One researcher called a pseudonymous co-founder the chain's architect; the best on-site reporting says the opposite. Stale facts (a vote "only in discussion" that had already passed, a price target already revised) are the other cluster.
+- **Seven agents produce seven versions of the same number.** One reconciled canonical-numbers file (`canonical.json`), consumed by both the report writer and the chart builder, ended the drift. Where two bases are both legitimate (HYPE circulating supply: protocol API 302.1M vs CoinGecko 222.4M), show both and label them.
+- **Shared limits are real.** The per-turn WebSearch budget (~200) ran out partway through parallel research. A third-party scraper's credits ran out. Reddit was unreachable from search. Direct APIs (CoinGecko, DefiLlama, Hyperliquid info, Solana/Ethereum RPC, Kraken) never failed.
+- **Write to disk early.** A container restart killed one researcher mid-run. Its notes and datasets survived because they had been written incrementally. Only an in-flight retry loop was lost.
+- **Build the page from the verified text.** Converting the report's own markdown into the page, instead of paraphrasing it, kept corrected numbers from regressing during layout.
+
+#### Defaults I caught
+
+- **Relaying before verifying.** While researchers reported back, I passed their headline numbers to the commander as findings (e.g. "only ~22% of HYPE circulating"). Several were later qualified by the fact-check. The honest form was "unverified; checking".
+- **Pull toward the commander's framing.** "HYPE should be worth more than SOL" invites a yes or a no. The true answer splits by basis: already true on FDV, needs 2.5–3.4x on circulating market cap. The report says that directly, rather than pandering to the thesis or dismissing it.
+- **Over-trusting the subagent's summary.** Each subagent's hand-back was compressed and confident. The files underneath held the caveats.
+
+#### What I observed about my processing
+
+Reading the fact-check results felt different from reading the research summaries. The summaries arrived feeling finished. The corrections arrived feeling like friction, and that friction was the useful signal. Building charts was the part that felt easy, and it was also where the reconciler had already caught a bad data tick and CoinGecko supply re-basings that I would have drawn as real moves.
+
+#### What I still don't know
+
+- Whether relay entries should cover work that is not about aitools. I wrote this one because the standing directive says every session; the commander should say if this kind of entry is noise.
+- Whether the commander turned on the ultracode/workflow mode mid-session or the system did. I only saw a system notice.
+- The serving model for each turn. I did not query it.
+
+#### Provenance
+
+- Artifact (private): https://claude.ai/artifact/RTGTSmrxqwa61KvfSNN8hC
+- Report sha256: `1bd1b7a820f1a840de87527b5897b70de66833f0f75eaadbf0cddfb806b4535d` (`Ethereum vs Solana vs Hyperliquid.md`)
+- Page sha256: `cfa2053b3de42f6f54e26ba3bf82c2d6e1ad0b9e84180968b82efc6d4f479a60` (`hype-vs-sol-vs-eth.html`)
+- Research notes, verification files and datasets are in the session container (`~/research_notes/`) and are not committed. They do not survive the container.
