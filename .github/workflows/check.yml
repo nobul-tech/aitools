@@ -243,6 +243,17 @@ jobs:
           fi
           echo "All .py files passed syntax validation"
 
+      - name: Hook-registration parity audit
+        run: |
+          # Same audit as check-post-push step 32: setup-user-hooks.sh/.ps1 and
+          # build-deploy.sh must derive hook lists from hooks-manifest.json
+          # (issue #9). Exits 1 with the failing check(s) on stdout.
+          python3 scripts/check-hook-parity.py \
+            shared/hooks/hooks-manifest.json \
+            scripts/setup-user-hooks.sh \
+            scripts/setup-user-hooks.ps1 \
+            scripts/build-deploy.sh
+
       - name: Logging unit tests (bash)
         run: bash tests/logging/test-logging.sh
 
