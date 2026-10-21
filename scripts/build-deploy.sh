@@ -72,12 +72,15 @@ if [ ! -f "$HOOKS_MANIFEST" ]; then
     blog_error "Required manifest not found: $HOOKS_MANIFEST"
     exit 1
 fi
-# node is a hard build dependency: manifest parsing here and the hook embed
-# loops below all shell out to node. Without this check a missing node yields
-# empty process substitutions and a silently broken deploy artifact.
+# node is required to build: manifest parsing here, the dotprofile lookup below,
+# and the hook embed loops all shell out to node. A node-less machine has never
+# been able to build (the dotprofile lookup needs node, so the build skipped);
+# keep that a graceful skip (exit 0) so 'aitools' continues to the installer
+# step that installs node. The silent-failure case this preflight closes is node
+# PRESENT but the manifest unparseable -- that is handled (exit 1) just below.
 if ! command -v node >/dev/null 2>&1; then
-    blog_error "node is required (parses hooks-manifest.json for preflight + embed)"
-    exit 1
+    blog_warn "node not found -- skipping deploy build (node is installed by 'aitools install')"
+    exit 0
 fi
 _manifest_files=$(node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));console.log([...m.hooks.map(h=>h.file),...(m.deploy||[])].join("\n"))' "$HOOKS_MANIFEST") || {
     blog_error "Failed to parse $HOOKS_MANIFEST"
@@ -1307,8 +1310,12 @@ BLOCK
         elif [ -f "$SCRIPTS_DIR/$_hookfile" ]; then
             _src="$SCRIPTS_DIR/$_hookfile"
         else
+            # Unreachable after the manifest preflight; fail loudly (never skip)
+            # so a future edit to one side cannot reintroduce a silent drop.
+            # exit leaves the { } | inline_lib_bash subshell; pipefail + set -e
+            # then abort the build.
             blog_error "Hook source not found for embed: $_hookfile"
-            continue
+            exit 1
         fi
         _delim="__EMB_$(echo "$_hookfile" | tr 'a-z.-' 'A-Z__')__"
         echo "cat > \"\$HOOKS_DIR/$_hookfile\" <<'${_delim}'"
@@ -1393,8 +1400,12 @@ BLOCK
         elif [ -f "$SCRIPTS_DIR/$_hookfile" ]; then
             _src="$SCRIPTS_DIR/$_hookfile"
         else
+            # Unreachable after the manifest preflight; fail loudly (never skip)
+            # so a future edit to one side cannot reintroduce a silent drop.
+            # exit leaves the { } pipeline subshell; pipefail + set -e then abort
+            # the build.
             blog_error "Hook source not found for PS1 embed: $_hookfile"
-            continue
+            exit 1
         fi
         printf '$hookFiles["%s"] = @'"'"'\r\n' "$_hookfile"
         perl -pe 's/\r?\n$/\r\n/' "$_src"
