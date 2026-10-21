@@ -1,0 +1,79 @@
+PROTECTED-BY-INTENT? reference/script-standards-detail.md is not listed in the
+sources-of-truth table, but it is the severity guide that D-TS11 names and that
+S4-Review §5.1 row 16 puts in the approval batch. Drafted by S3-Gate, 2026-10-21.
+The file has no intent statement, and this edit adds none.
+Six edits, each an exact old -> new, applied in order. They depend on gate
+answers: D-TS11 (edits 2 and 3, SHADOWED), D-TS10 (edits 3 and 4, KEEP and the
+ACTION-pairing exception), T-Q12 (edits 1 and 5, platform skip), D-TS12 (the
+"under evaluation" example in edit 5), D-TS13 (edit 6, exit 2 with the abort
+marker). If a decision is rejected, drop that decision's lines.
+
+==== Edit 1 -- section "Shared library" > "Contents" table: add rows after "Environment skip row"
+old:
+| Environment skip row | `write_environment_skip` | `Write-EnvironmentSkip` | OK row `n/a (<environment>)` + reason in the log |
+new:
+| Environment skip row | `write_environment_skip` | `Write-EnvironmentSkip` | OK row `n/a (<environment>)` + reason in the log |
+| Platform skip row | `write_platform_skip` | `Write-PlatformSkip` | OK row `n/a (<platform>)` + reason in the log (tool registry status `n/a` for this platform) |
+| Tool support | `tool_support_run` and the `tool_*` helpers | `Invoke-ToolSupport` and the `*-Tool*` helpers | The tool support decision tree (`@reference/tool-support-decision-tree.md` "Library helpers") |
+
+==== Edit 2 -- section "Severity categories": key distinction paragraph
+old:
+**Key distinction**: WARN means the tool itself works; ERROR means it doesn't.
+A tool that installed but isn't on persistent PATH is ERROR (Claude Code can't find it).
+A tool where `brew upgrade` returned unexpected output but the existing version works is WARN.
+new:
+**Key distinction**: WARN means the tool itself works; ERROR means it doesn't.
+A tool that installed but isn't on persistent PATH is ERROR (Claude Code can't find it).
+A tool where `brew upgrade` returned unexpected output but the existing version works is WARN.
+For managed tools, "works" means the command resolves to the managed copy
+(`plans/tooling-resolution-and-artifact-registry.md` decision 10); see the severity
+decision guide for shadowing.
+
+==== Edit 3 -- section "Severity decision guide": add two lines at the end of the list
+old:
+- `log_warn` + `write_summary ACTION` -- user action required; always pair ACTION with a log_warn carrying the same instruction
+new:
+- `log_warn` + `write_summary ACTION` -- user action required; always pair ACTION with a log_warn carrying the same instruction (one exception: the tool exception carry-forward ACTION, below)
+- `log_error` + `write_summary ERROR` for a managed tool whose command resolves to a different copy than the managed one (SHADOWED), even though that other copy runs (D-TS11): the harness invokes what resolves, so an unmanaged copy is not "supported"
+- A user-recorded tool exception (KEEP, EXCEPTION) is OK `<ver> (kept)`, not WARN (D-TS10): the user decided it. Its carry-forward ACTION `commit profile.json in <userRepoPath>` is written once per run with an info log, not a `log_warn`, so the OK row is not promoted
+
+==== Edit 4 -- section "ACTION items": first paragraph
+old:
+ACTION entries appear in a separate block at the bottom of the summary panel with the
+header "ACTION REQUIRED -- run before tools are ready:". The tool field is empty for
+ACTION entries (field 2 = ""). Always pair with a `log_warn` carrying the same text.
+new:
+ACTION entries appear in a separate block at the bottom of the summary panel with the
+header "ACTION REQUIRED -- run before tools are ready:". The tool field is empty for
+ACTION entries (field 2 = ""). Always pair with a `log_warn` carrying the same text,
+except the tool exception carry-forward ACTION (`@reference/tool-support-decision-tree.md`
+"Tool exception contract", "Carry-forward").
+
+==== Edit 5 -- section "Governed summary outcomes": add rows after the "n/a (<environment>)" row
+old:
+| `"n/a (<environment>)"` | Step does not apply in this environment (tool platform state `n/a`) | `write_environment_skip` / `Write-EnvironmentSkip`, category OK (`.claude/rules/cross-platform.md` "Environment branches") |
+new:
+| `"n/a (<environment>)"` | Step does not apply in this environment (tool platform state `n/a`) | `write_environment_skip` / `Write-EnvironmentSkip`, category OK (`.claude/rules/cross-platform.md` "Environment branches") |
+| `"n/a (<platform>)"` | Tool is not supported on this platform (registry `platformStatus` `n/a`) | `write_platform_skip` / `Write-PlatformSkip`, category OK |
+
+and, after the sentence "Non-governed detail values (version strings, error descriptions, counts)
+are free-text and not subject to this table.", add:
+
+Tool support leaves use fixed detail templates, listed with their categories in
+`@reference/tool-support-decision-tree.md` "Leaves: log line, summary row, ACTION,
+exit" (for example `<ver> (kept)` OK, `under evaluation` WARN, `shadowed (see log)`
+ERROR). They are not governed terms; the reference is their single source.
+
+==== Edit 6 -- section "Exit footer": add a paragraph after the PowerShell block
+(anchor: the line "## Shared library (`scripts/aitools-lib.sh` / `.ps1`)" that follows the
+exit-footer section; insert the paragraph immediately before it)
+old:
+## Shared library (`scripts/aitools-lib.sh` / `.ps1`)
+new:
+**Exit 2 (user abort).** A tool setup script whose decision tree returns 2 exits 2
+before the footer, after the menu helper has written the abort marker
+(`@reference/tool-support-decision-tree.md` "Contract with the installers and
+entry points"). That is the only exit that skips the footer. A script never exits 2
+for any other reason, and never passes a helper's return code through.
+
+## Shared library (`scripts/aitools-lib.sh` / `.ps1`)

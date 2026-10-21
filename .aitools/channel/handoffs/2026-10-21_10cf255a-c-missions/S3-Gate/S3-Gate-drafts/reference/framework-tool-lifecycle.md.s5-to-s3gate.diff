@@ -1,0 +1,50 @@
+diff --git a/Users/new-jose/repos/aitools/.aitools/channel/handoffs/2026-10-21_360aa8f3-8-missions/S5-Tools/S5-Tools-drafts/reference/framework-tool-lifecycle.md b/Users/new-jose/repos/aitools/.claude/worktrees/wf_b4d5e039-e6e-1/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Gate/S3-Gate-drafts/reference/framework-tool-lifecycle.md
+index 9d33f61..e2c4b31 100644
+--- a/Users/new-jose/repos/aitools/.aitools/channel/handoffs/2026-10-21_360aa8f3-8-missions/S5-Tools/S5-Tools-drafts/reference/framework-tool-lifecycle.md
++++ b/Users/new-jose/repos/aitools/.claude/worktrees/wf_b4d5e039-e6e-1/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Gate/S3-Gate-drafts/reference/framework-tool-lifecycle.md
+@@ -1,5 +1,8 @@
+ # Tool Lifecycle
+ 
++> DRAFT — needs commander approval (modified intent statement).
++> S3-Gate copy: S4-Review-C C-09, C-13, C-23, C-26, C-27, C-33 applied (S3-Gate-drafts-fixes.md).
++
+ **Intent**: **Purpose**: Document the framework for evaluating,
+ approving, integrating, maintaining, and health-tracking managed tools,
+ including the desired-state model behind the tool support decision tree.
+@@ -11,8 +14,6 @@ principles we adopted and why. NOT the evaluation requirements
+ `/tool-registry` skill). **Audience**: Agents onboarding new tools, agents
+ running `/tool-adopt`, framework adoption work.
+ 
+-> DRAFT — needs commander approval (modified intent statement).
+-
+ ## Source Discipline
+ 
+ Software asset management — lifecycle phases, approval gates,
+@@ -61,9 +62,9 @@ standard, with owner and date) supplies the tool exception.
+ | Change only what differs, idempotently | Decision tree: install when absent, update when preferred, otherwise ask (`@reference/tool-support-decision-tree.md`) |
+ | Change control for deviations | Interactive menu for non-preferred and unknown installs; non-interactive runs change nothing and report WARN + ACTION |
+ | Exception register | Tool exception per machine in the dotprofile profile (`profiles.<alias>.toolExceptions`) |
+-| Release management | Update channels (`latest-stable` default, `lts`, `pinned-*`, `vendor-auto`) |
+-| Make-before-break change | Replace installs and verifies the preferred copy before removing the old one (issue #12) |
+-| Verification after change | Post-check: the command resolves to the managed binary (script-standards Standard 4) |
++| Release management | Update channels (reference "Update channels") |
++| Make-before-break change | Replace installs and verifies the preferred copy before removing the old one (GitHub issue #12) |
++| Verification after change | Post-check: the command resolves to the managed binary (`@reference/script-standards-detail.md` "Standard 4") |
+ 
+ What we did not adopt: automatic remediation of unknown installs (DSC would
+ enforce the declared state; the harness never removes what it cannot
+@@ -100,7 +101,7 @@ runs when the installer runs).
+ - `scripts/setup-*.sh/.ps1` (per-tool setup scripts)
+ - `scripts/gen-tool-specs.py` and `generated/tool-specs/` (registry data for setup scripts)
+ - `scripts/check-pre-commit.sh/.ps1` "Tool support conformance" step (pre-commit check)
+-- Planned hook (detection layer): PreToolUse reminder on edits to `scripts/setup-*` (spec in the decision tree reference)
++- Planned hook (detection layer): PreToolUse reminder on edits to a tool setup script (one named by a registry `lifecycle.setupScript`; spec in the decision tree reference)
+ 
+ ## Cross-References
+ 
+@@ -108,4 +109,4 @@ runs when the installer runs).
+ - Three-layer governance: `@reference/framework-three-layer-governance.md`
+ - Governed data access: `@.claude/rules/governed-data-access.md`
+ - Tool operations (resolution, verification): `@reference/framework-tool-ops.md`
+-- Managed file deployment (the other "adopt"): `@reference/framework-managed-file-deployment.md`
++- Managed file deployment (the managed-file "adopt"): `@reference/framework-managed-file-deployment.md`

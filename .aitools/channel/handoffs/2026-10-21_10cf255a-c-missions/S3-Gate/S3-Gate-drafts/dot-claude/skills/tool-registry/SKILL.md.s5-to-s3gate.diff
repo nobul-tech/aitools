@@ -1,0 +1,71 @@
+diff --git a/Users/new-jose/repos/aitools/.aitools/channel/handoffs/2026-10-21_360aa8f3-8-missions/S5-Tools/S5-Tools-drafts/dot-claude/skills/tool-registry/SKILL.md b/Users/new-jose/repos/aitools/.claude/worktrees/wf_b4d5e039-e6e-1/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Gate/S3-Gate-drafts/dot-claude/skills/tool-registry/SKILL.md
+index b26c129..7ca7fd2 100644
+--- a/Users/new-jose/repos/aitools/.aitools/channel/handoffs/2026-10-21_360aa8f3-8-missions/S5-Tools/S5-Tools-drafts/dot-claude/skills/tool-registry/SKILL.md
++++ b/Users/new-jose/repos/aitools/.claude/worktrees/wf_b4d5e039-e6e-1/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Gate/S3-Gate-drafts/dot-claude/skills/tool-registry/SKILL.md
+@@ -9,6 +9,7 @@ description: "Read and update managed tool entries in the registry.
+ ## Intent
+ 
+ > DRAFT — needs commander approval (modified intent statement).
++> S3-Gate copy: S4-Review-C C-08, C-28 applied (S3-Gate-drafts-fixes.md).
+ 
+ **Purpose**: Provide governed access to the tool registry — reading
+ tool entries, adding new entries, updating install methods, update
+@@ -43,19 +44,17 @@ provides the exact content to write.
+ 1. Verify all required data fields are present:
+    - **source** — official project URL
+    - **purpose** — what the tool does and why we manage it
+-   - **install** — per platform: every known method; exactly one
+-     `preferred: true` per environment; each with `kind`, `package`,
+-     `command`, `detection`; non-preferred ones with `removal` (or null)
+-   - **update** — update command per preferred method id (or `all`), or
+-     `autoUpdates: true` on the method
+-   - **updateChannel** — channel (default `latest-stable`), `pin` and
+-     `reason` when pinned
++   - **Decision-tree data** — every field in the
++     `@reference/tool-support-decision-tree.md` section "Tool registry
++     schema 1.1" (install methods, update channel, detection, removal,
++     known paths, lifecycle enums, setupScript), validated by the
++     reference "Pre-commit conformance check", checks 1-6
+    - **delivery** — per platform: package maintainer, upstream
+      source, official endorsement, provenance verified date
+    - **health** — per platform: flag (green/yellow/red) with reasons
+-   - **lifecycle** — platform status (enum), environment status where it
+-     differs, setupScript, concurrency, post-install config, dependencies,
+-     invocation command and anti-patterns
++   - **lifecycle** — concurrency, post-install config, dependencies,
++     invocation command and anti-patterns (status enums and setupScript
++     are decision-tree data, above)
+    - **versions** — per platform: last verified version and date
+    - **maintenance** — harness, last run per platform, workarounds,
+      upstream risks
+@@ -66,8 +65,8 @@ provides the exact content to write.
+ 2. Verify the onboarding artifacts exist or are planned, per the
+    `/tool-adopt` skill step 5 (the single onboarding checklist)
+ 3. Draft the registry entry
+-4. Validate the draft against the "Tool support conformance" checks
+-   (`@reference/tool-support-decision-tree.md` section 9, checks 1-6)
++4. Validate the draft against the reference "Pre-commit conformance
++   check" ("Tool support conformance"), checks 1-6
+ 5. Present for review — protected per `@.claude/rules/sources-of-truth.md`
+ 6. Write if approved
+ 
+@@ -88,14 +87,14 @@ When a tool is verified on a platform:
+ `registries/tool-registry.json` uses `schemaVersion: "1.1"`. Top-level
+ keys: `meta`, `tools`, `mcpServers`, `mcpManagement`, `overrides`.
+ Field rules for everything the tool support decision tree reads
+-(`install[]` method fields, `update`, `updateChannel`, `knownPaths`,
+-lifecycle enums, `setupScript`) are defined only in
+-`@reference/tool-support-decision-tree.md` section 6; do not restate them
+-here. Other sections per CLI tool (`tools.<slug>`):
++(`install[]` method fields, `update`, `updateChannel`, `resolveBy`,
++`knownPaths`, lifecycle enums, `setupScript`) are defined only in the
++`@reference/tool-support-decision-tree.md` section "Tool registry schema
++1.1"; do not restate them here. Other sections per CLI tool (`tools.<slug>`):
+ 
+ | Section | Purpose |
+ |---------|---------|
+-| `install`, `update`, `updateChannel`, `knownPaths` | Decision-tree data (reference section 6) |
++| `install`, `update`, `updateChannel`, `resolveBy`, `knownPaths` | Decision-tree data (reference "Tool registry schema 1.1") |
+ | `delivery` | Provenance: who maintains the package, upstream source, endorsement |
+ | `health` | Per-platform green/yellow/red flags with reasons |
+ | `evaluation` | Status (current/stale/pending-migration), provenance link |
