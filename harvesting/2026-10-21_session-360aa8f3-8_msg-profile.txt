@@ -1,0 +1,11 @@
+profile.json: rename machine alias new-mac -> nobul-mac; track adopted settings
+
+- profiles.new-mac -> profiles.nobul-mac to match this Mac's configured
+  ComputerName/LocalHostName (config.json machineAlias set to match).
+- claude.settings adopted by the settings sync: model "opus" (the [1m]
+  suffix is no longer how models are named), the document-skills plugin
+  and its anthropic-agent-skills marketplace, and modelSettings.
+
+Refs nobul-tech/aitools incidents #74-#76.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

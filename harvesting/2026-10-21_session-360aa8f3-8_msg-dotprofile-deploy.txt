@@ -1,0 +1,10 @@
+Regenerate deploy/setup-user-hooks for aitools#9 (comment-only)
+
+Companion to nobul-tech/aitools#50: build-deploy.sh now derives the hook
+list from hooks-manifest.json, so the generated "# Hooks deployed:"
+header comment in setup-user-hooks.{sh,ps1} changes. No functional change.
+Verified identical to a clean isolated-HOME build of the PR branch.
+
+(tested: macOS)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

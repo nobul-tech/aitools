@@ -1,0 +1,5 @@
+{"t":"2026-06-24T19:35:18Z","type":"hook_block","src":"sog","d":{"check":"semicolon"}}
+{"t":"2026-06-24T19:35:19Z","type":"hook_fire","src":"sog","d":{"result":"allow"}}
+{"t":"2026-06-24T19:35:31Z","type":"hook_fire","src":"sog","d":{"result":"allow"}}
+{"t":"2026-06-24T19:35:33Z","type":"hook_block","src":"sog","d":{"check":"or"}}
+{"t":"2026-06-24T19:36:13Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":42.4,"context_used":84741,"agentic_turns":9,"intel_count":0}}

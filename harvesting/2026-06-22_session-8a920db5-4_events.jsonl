@@ -1,0 +1,2 @@
+{"t":"2026-06-22T22:30:18Z","type":"hook_fire","src":"sog","d":{"result":"allow"}}
+{"t":"2026-06-22T22:30:43Z","type":"intelligence_stop","src":"intelligence-stop","d":{"context_pct":33.5,"context_used":67089,"agentic_turns":4,"intel_count":0}}
