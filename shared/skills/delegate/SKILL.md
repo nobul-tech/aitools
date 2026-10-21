@@ -161,6 +161,15 @@ Verify these before relying on them; versions move. Source of record:
   cannot delegate further. A launch past the cap fails with "Subagent nesting
   limit reached (depth N of M)". Plan the chain to fit the cap; give a delegate
   that cannot delegate the whole task.
+- **Launch path decides whether a delegate can delegate.** Observed in Claude
+  Code 2.1.307 (macOS, 2026-10-21): delegates launched with the Agent tool
+  have it at levels 1-2 and lose it at level 3. A Workflow `agent()` has
+  neither Agent nor Workflow, so it cannot delegate at all, and no delegate has
+  Workflow. Launch a mission commander that must delegate with the Agent tool,
+  not from a workflow. Source of record: `/aitool-ops` skill.
+- **Worktree isolation blocks `HOME` overrides.** A worktree-isolated delegate
+  cannot run a command that sets `HOME`. Run isolated-`HOME` work (for example
+  `build-deploy.sh`) from a non-isolated delegate or the delegating agent.
 - **Sub-agent Markdown file-name block.** Claude Code's Write tool refuses a
   sub-agent write whose file name matches
   `^(REPORT|SUMMARY|FINDINGS|ANALYSIS).*\.md$` (case-insensitive), with
