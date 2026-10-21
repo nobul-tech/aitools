@@ -1,0 +1,343 @@
+{
+  "_draft": {
+    "status": "DRAFT -- needs commander approval; protected file (registries/tool-registry.json), write only via /tool-registry",
+    "author": "S5-Tools for Session Commander 360aa8f3-8, 2026-10-20",
+    "what": "Schema 1.1 additions the tool support decision tree reads (reference/tool-support-decision-tree.md section 6), shown as two complete tool entries. Only the changed keys of meta are shown. Unchanged sections (delivery, health, maintenance, authentication, versions) are abbreviated with the current values where relevant.",
+    "verification": "node values are ILLUSTRATIVE: mission M4 must verify every package name, path and channel through /tool-eval before anything is written. Keys marked _unverified are placeholders, not facts. go macOS/Windows values restate the current registry and setup-go behaviour; the go Linux preferred method is a PROPOSAL that needs /tool-eval (D-TS2), because install.linux is [] today."
+  },
+  "meta": {
+    "schemaVersion": "1.1",
+    "schemaRules": "reference/tool-support-decision-tree.md section 6 (single authority for 1.1 field rules)",
+    "intent": {
+      "purpose": "Source of truth for all managed tools — preferred install method per platform and environment, update channels, install-method detection and removal data, platform versions, lifecycle status, operational knowledge, MCP servers, and overrides",
+      "scope": "Tool data only. NOT lifecycle gates or the decision tree (.claude/rules/tool-lifecycle.md, reference/tool-support-decision-tree.md). NOT the onboarding checklist (/tool-adopt skill). NOT evaluation process (/tool-eval skill). NOT per-tool ops metadata (tool-ops.json)",
+      "audience": "/tool-registry, /tool-eval, /tool-adopt, /audit skills; scripts/gen-tool-specs.py (setup scripts read its generated specs); check scripts; aitools-install",
+      "_draft": "modified meta.intent (D-TS9) -- needs commander approval"
+    }
+  },
+  "tools": {
+    "node": {
+      "displayName": "Node.js",
+      "source": "https://nodejs.org",
+      "purpose": "JavaScript runtime. Required for: Chrome DevTools MCP (npx), Vercel CLI (npm), settings JSON merge in setup scripts.",
+      "updateChannel": {
+        "channel": "lts",
+        "pin": null,
+        "reason": "_unverified: harness consumers (chrome-devtools-mcp via npx, vercel via npm, sync_managed_json) need a supported runtime, not the newest; the Windows preferred package OpenJS.NodeJS.LTS already tracks LTS. M4 confirms against nodejs.org release guidance."
+      },
+      "install": {
+        "macos": [
+          {
+            "method": "homebrew-lts",
+            "kind": "brew",
+            "package": "node@24",
+            "command": "brew install node@24",
+            "preferred": true,
+            "autoUpdates": false,
+            "ccCompatible": true,
+            "detection": "brew-formula:node@24",
+            "removal": null,
+            "notes": "_unverified: package name tracks the current LTS line; versioned formulae are keg-only, so {brew_opt:node@24}/bin must be on PATH (setup-user-shell managed block, plans/tooling-resolution-and-artifact-registry.md A2) or the post-check reports NOT-ON-PATH. Observed on nobul-mac 2026-10-20 (brew info node@22 --json; which -a node): node@22 22.22.3 is installed, keg_only (versioned_formula), and not on PATH; `node` resolves to /opt/homebrew/bin/node -> Cellar/node/26.3.1 (the non-preferred homebrew-current formula). The registry's macOS lastVerifiedVersion 24.1.0 matches neither. Under the tree this machine is class non-preferred (homebrew-current); [r]eplace installs the preferred formula and then stops at REPLACE-BLOCKED (its keg-only opt bin is not on PATH), keeping `node` working. M4 must solve PATH for keg-only formulae before replace can complete. The package line here (node@24) is illustrative; the observed preferred line today is node@22."
+          },
+          {
+            "method": "homebrew-current",
+            "kind": "brew",
+            "package": "node",
+            "command": "brew install node",
+            "preferred": false,
+            "autoUpdates": false,
+            "ccCompatible": true,
+            "detection": "brew-formula:node",
+            "removal": "brew-uninstall:node",
+            "notes": "Current (non-LTS) line. Other formulae may depend on it; brew uninstall refuses while dependents exist, which surfaces as a REMOVE-FAIL note (old copy kept). This is what `node` resolves to on nobul-mac (26.3.1, 2026-10-20)."
+          },
+          {
+            "method": "homebrew-node22",
+            "kind": null,
+            "package": null,
+            "command": "brew install node@22",
+            "preferred": false,
+            "detection": "brew-formula:node@22",
+            "removal": "brew-uninstall:node@22",
+            "notes": "The previous preferred line, kept as a non-preferred method so installs on it are not reclassified as unknown (check 10). Installed, keg-only and off PATH on nobul-mac."
+          },
+          {
+            "method": "nodejs-org-pkg",
+            "kind": null,
+            "package": null,
+            "command": "nodejs.org macOS installer (.pkg)",
+            "preferred": false,
+            "detection": ["path:/usr/local/bin/node", "pkgutil:org.nodejs.node.pkg"],
+            "removal": null,
+            "notes": "_unverified pkg id. No supported uninstaller; never removed automatically (REMOVE-MANUAL)."
+          },
+          {
+            "method": "nvm",
+            "kind": null,
+            "package": null,
+            "command": "nvm install --lts",
+            "preferred": false,
+            "detection": "path:{home}/.nvm/versions/node/*/bin/node",
+            "removal": null,
+            "versionedPath": true,
+            "notes": "User-managed version manager; keep or replace only by choice."
+          },
+          {
+            "method": "volta",
+            "kind": null,
+            "package": null,
+            "command": "volta install node",
+            "preferred": false,
+            "detection": "path:{home}/.volta/*",
+            "removal": null,
+            "notes": "User-managed."
+          }
+        ],
+        "windows": [
+          {
+            "method": "winget-lts",
+            "kind": "winget",
+            "package": "OpenJS.NodeJS.LTS",
+            "command": "winget install --exact --id OpenJS.NodeJS.LTS --source winget",
+            "preferred": true,
+            "autoUpdates": false,
+            "ccCompatible": true,
+            "detection": "winget:OpenJS.NodeJS.LTS",
+            "removal": null,
+            "notes": "Installs to %ProgramFiles%\\nodejs; detection order (preferred first) separates it from a plain MSI at the same path."
+          },
+          {
+            "method": "winget-current",
+            "kind": "winget",
+            "package": "OpenJS.NodeJS",
+            "command": "winget install --exact --id OpenJS.NodeJS --source winget",
+            "preferred": false,
+            "detection": "winget:OpenJS.NodeJS",
+            "removal": null,
+            "notes": "Shares %ProgramFiles%\\nodejs with the LTS package; removal null until a /tool-eval trial proves winget-uninstall:OpenJS.NodeJS is safe after LTS is installed."
+          },
+          {
+            "method": "nodejs-org-msi",
+            "kind": null,
+            "package": null,
+            "command": "nodejs.org Windows installer (.msi)",
+            "preferred": false,
+            "detection": "path:{programfiles}\\nodejs\\node.exe",
+            "removal": null,
+            "notes": "Matches only after both winget probes failed."
+          },
+          {
+            "method": "nvm-windows",
+            "kind": null,
+            "package": null,
+            "command": "nvm install lts",
+            "preferred": false,
+            "detection": "path:{userprofile}\\AppData\\Local\\nvm\\*",
+            "removal": null,
+            "notes": "_unverified path (nvm-windows symlinks into %ProgramFiles%\\nodejs by default; M4 must trial it)."
+          },
+          {
+            "method": "chocolatey",
+            "kind": null,
+            "package": null,
+            "command": "choco install nodejs-lts",
+            "preferred": false,
+            "detection": "choco:nodejs-lts",
+            "removal": "choco-uninstall:nodejs-lts",
+            "notes": null
+          }
+        ],
+        "linux": [
+          {
+            "method": "image-provided",
+            "kind": "system",
+            "package": null,
+            "command": null,
+            "preferred": true,
+            "autoUpdates": true,
+            "environments": ["claude-code-web"],
+            "_placeholder": "Not writable until M4 fills detection; check 3 would fail on this entry as drafted.",
+            "detection": null,
+            "removal": null,
+            "notes": "_unverified: the Claude Code web image ships node; M4 records where (and whether it is nvm-managed) and whether it is acceptable as the preferred method there."
+          },
+          {
+            "method": "distro-apt",
+            "kind": "apt",
+            "package": "nodejs",
+            "command": "sudo apt-get install -y nodejs",
+            "preferred": false,
+            "detection": "dpkg:nodejs",
+            "removal": null,
+            "notes": "Distro versions are usually behind LTS. No preferred method exists for linux/local until /tool-eval decides (NodeSource apt vs nvm vs official tarball): setup-node reports NO-METHOD there, which replaces today's 'install manually' WARN in aitools-install Step 8."
+          }
+        ]
+      },
+      "update": {
+        "homebrew-lts": "brew upgrade node@24",
+        "winget-lts": "winget upgrade --exact --id OpenJS.NodeJS.LTS"
+      },
+      "versionCheck": "node --version",
+      "lifecycle": {
+        "platformStatus": { "macos": "supported", "windows": "supported", "linux": "evaluating" },
+        "_statusChange": "COMMANDER/M4 DECISION: live registry says linux 'supported' with a non-installable 'nodesource-or-nvm' entry (command null); this draft proposes 'evaluating' and drops that entry, so linux/local reports EVALUATING (WARN, D-TS12) instead of today's 'install manually' WARN.",
+        "environments": {
+          "claude-code-web": { "status": "approved", "decision": "_unverified: needs an M4 decision", "reference": null }
+        },
+        "setupScript": "setup-node",
+        "concurrency": "Yes — runtime",
+        "postInstallConfig": "macOS keg-only formula: opt bin on PATH (managed shell block)",
+        "dependencies": [],
+        "invocation": { "command": "node", "antiPatterns": ["npx for a managed CLI tool"] }
+      },
+      "versions": {
+        "macos": { "lastVerifiedVersion": "24.1.0", "lastVerified": "2026-03-02" },
+        "windows": { "lastVerifiedVersion": "24.13.1", "lastVerified": "2026-03-13" },
+        "linux": { "lastVerifiedVersion": null, "lastVerified": null },
+        "minVersion": null,
+        "blocked": []
+      },
+      "knownPaths": {
+        "macos": [{ "path": "{brew_opt:node@24}/bin/node", "verified": null }],
+        "windows": [{ "path": "{programfiles}\\nodejs\\node.exe", "verified": null }],
+        "_note": "verified null = not yet trialled; T3 ignores unverified entries"
+      },
+      "nonPreferredMethods": null
+    },
+    "go": {
+      "displayName": "Go",
+      "source": "https://go.dev",
+      "updateChannel": { "channel": "latest-stable", "pin": null, "reason": null },
+      "install": {
+        "macos": [
+          {
+            "method": "homebrew",
+            "kind": "brew",
+            "package": "go",
+            "command": "brew install go",
+            "preferred": true,
+            "autoUpdates": false,
+            "ccCompatible": true,
+            "detection": "brew-formula:go",
+            "removal": null,
+            "notes": null
+          },
+          {
+            "method": "pkg-installer",
+            "kind": null,
+            "package": null,
+            "command": "go.dev macOS installer (.pkg)",
+            "preferred": false,
+            "detection": ["path:/usr/local/go/bin/go", "pkgutil:org.golang.go"],
+            "removal": "path:/usr/local/go",
+            "notes": "Current setup-go.sh behaviour (detect_go_provenance): replaced by Homebrew, removed only after Homebrew Go is verified. Under the tree this happens only on [r]eplace."
+          },
+          {
+            "method": "manual-tarball",
+            "kind": null,
+            "package": null,
+            "command": "go.dev tarball extracted to /usr/local/go",
+            "preferred": false,
+            "detection": "path:/usr/local/go/bin/go",
+            "removal": "path:/usr/local/go",
+            "notes": "Matches after pkg-installer fails (registry order)."
+          },
+          {
+            "method": "goenv",
+            "kind": null,
+            "package": null,
+            "command": "goenv install",
+            "preferred": false,
+            "detection": "path:{home}/.goenv/*",
+            "removal": null,
+            "versionedPath": true,
+            "notes": "User-managed; never removed automatically."
+          }
+        ],
+        "windows": [
+          {
+            "method": "winget",
+            "kind": "winget",
+            "package": "GoLang.Go",
+            "command": "winget install --exact --id GoLang.Go --source winget",
+            "preferred": true,
+            "autoUpdates": false,
+            "ccCompatible": true,
+            "detection": "winget:GoLang.Go",
+            "removal": null,
+            "notes": null
+          },
+          {
+            "method": "msi",
+            "kind": null,
+            "package": null,
+            "command": "go.dev Windows installer (.msi)",
+            "preferred": false,
+            "detection": "path:{programfiles}\\Go\\bin\\go.exe",
+            "removal": null,
+            "notes": "Same path as the winget package; matches only when winget does not list GoLang.Go (Get-GoProvenance logic)."
+          },
+          {
+            "method": "chocolatey",
+            "kind": null,
+            "package": null,
+            "command": "choco install golang",
+            "preferred": false,
+            "detection": "choco:golang",
+            "removal": "choco-uninstall:golang",
+            "notes": "setup-go.ps1 uninstalls this BEFORE installing winget Go today (violates install-first); under the tree removal runs only after the winget copy is verified."
+          },
+          {
+            "method": "scoop",
+            "kind": null,
+            "package": null,
+            "command": "scoop install go",
+            "preferred": false,
+            "detection": "scoop:go",
+            "removal": null,
+            "notes": "User-managed."
+          }
+        ],
+        "linux": [
+          {
+            "method": "go-dev-tarball",
+            "kind": "custom",
+            "package": "https://go.dev/dl/",
+            "command": "go.dev tarball extracted to /usr/local/go (https://go.dev/doc/install)",
+            "preferred": true,
+            "autoUpdates": false,
+            "detection": "path:/usr/local/go/bin/go",
+            "removal": null,
+            "notes": "PROPOSAL, needs /tool-eval (D-TS2). setup-go.sh already treats this as the official Linux install and keeps it (F4), but install.linux is [] today, so the tree would report NO-METHOD on Linux until an evaluation records it."
+          },
+          {
+            "method": "distro-apt",
+            "kind": "apt",
+            "package": "golang-go",
+            "command": "sudo apt-get install -y golang-go",
+            "preferred": false,
+            "detection": "dpkg:golang-go",
+            "removal": null,
+            "notes": "_unverified package/binary ownership (/usr/bin/go is an alternatives symlink into /usr/lib/go-1.x)."
+          }
+        ]
+      },
+      "update": {
+        "homebrew": "brew upgrade go",
+        "winget": "winget upgrade --exact --id GoLang.Go",
+        "go-dev-tarball": "custom: tool_custom_update in setup-go.sh replaces /usr/local/go with the latest go.dev release after verifying the download (PROPOSAL with the method above)"
+      },
+      "versionCheck": "go version",
+      "lifecycle": {
+        "platformStatus": { "macos": "supported", "windows": "supported", "linux": "supported" },
+        "setupScript": "setup-go",
+        "concurrency": "Yes — stateless CLI",
+        "postInstallConfig": "GOPATH/bin on PATH (automated by setup script, after the tree)",
+        "_knownPathsProposal": "add knownPaths.linux [{\"path\": \"/usr/local/go/bin/go\", \"verified\": null}] with the go-dev-tarball proposal, so T3 finds a tarball install that is off PATH instead of reinstalling over it",
+        "dependencies": [],
+        "invocation": { "command": "go", "antiPatterns": [] }
+      },
+      "nonPreferredMethods": null
+    }
+  }
+}

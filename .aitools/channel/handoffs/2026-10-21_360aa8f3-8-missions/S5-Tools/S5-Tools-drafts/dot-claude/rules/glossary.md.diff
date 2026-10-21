@@ -1,0 +1,13 @@
+--- a/.claude/rules/glossary.md
++++ b/.claude/rules/glossary.md
+@@ -92,7 +92,10 @@
+ surfacing duty
+ The Commander
+ three-layer governance
++tool adoption
++tool exception
+ trigger
++update channel
+ updated
+ user coaching item
+ UCI

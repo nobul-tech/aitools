@@ -1,0 +1,246 @@
+diff --git a/scripts/build-deploy.sh b/scripts/build-deploy.sh
+index 861dbd9..98ca01e 100755
+--- a/scripts/build-deploy.sh
++++ b/scripts/build-deploy.sh
+@@ -63,18 +63,36 @@ if [ "$_skill_count" -eq 0 ]; then
+     exit 1
+ fi
+ blog "Found $_skill_count skill(s) in shared/skills/"
+-for _hook_file in session-archive.sh session-catchup.sh standing-order-guard.sh sh-file-fixup.sh scratch-init.sh harvest-session.sh glossary-skill-guard.sh block-claude-code-guide.sh tool-ops-session-audit.sh dashboard-serve.sh harness-db-sessionstart.sh harness-db-sessionend.sh delegation-duty-guard.sh command-channel-stop.sh failure-mode-identity-stop.sh failure-mode-verify-stop.sh intelligence-stop.sh intelligence-stop.py; do
+-    if [ ! -f "$SHARED_DIR/hooks/$_hook_file" ]; then
+-        blog_error "Required hook file not found: $SHARED_DIR/hooks/$_hook_file"
+-        exit 1
+-    fi
+-done
+-# ait-harvest.py lives in scripts/ but is deployed to ~/.claude/hooks/ (it is the
+-# helper that the archive/harvest/catchup shims call).
+-if [ ! -f "$SCRIPTS_DIR/ait-harvest.py" ]; then
+-    blog_error "Required helper not found: $SCRIPTS_DIR/ait-harvest.py"
++# Hook + helper preflight: file list derived from hooks-manifest.json (single
++# source of truth -- no hardcoded hook filenames in this script; see issue #9).
++# Resolution mirrors the embed loops: shared/hooks/ first, then scripts/ (the
++# manifest 'deploy' helpers may live in either).
++HOOKS_MANIFEST="$SHARED_DIR/hooks/hooks-manifest.json"
++if [ ! -f "$HOOKS_MANIFEST" ]; then
++    blog_error "Required manifest not found: $HOOKS_MANIFEST"
++    exit 1
++fi
++# node is a hard build dependency: manifest parsing here and the hook embed
++# loops below all shell out to node. Without this check a missing node yields
++# empty process substitutions and a silently broken deploy artifact.
++if ! command -v node >/dev/null 2>&1; then
++    blog_error "node is required (parses hooks-manifest.json for preflight + embed)"
+     exit 1
+ fi
++_manifest_files=$(node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));console.log([...m.hooks.map(h=>h.file),...(m.deploy||[])].join("\n"))' "$HOOKS_MANIFEST") || {
++    blog_error "Failed to parse $HOOKS_MANIFEST"
++    exit 1
++}
++_hook_count=0
++while IFS= read -r _hook_file; do
++    [ -n "$_hook_file" ] || continue
++    if [ ! -f "$SHARED_DIR/hooks/$_hook_file" ] && [ ! -f "$SCRIPTS_DIR/$_hook_file" ]; then
++        blog_error "Manifest-listed hook file not found: $_hook_file (searched shared/hooks/ and scripts/)"
++        exit 1
++    fi
++    _hook_count=$((_hook_count + 1))
++done <<< "$_manifest_files"
++blog "Preflight OK: $_hook_count hook/helper file(s) from hooks-manifest.json"
+ 
+ # Cursor AGENTS mirror (repo runtime — requires .aitools/channel/relay.md; not in deploy/)
+ if [ ! -f "$SCRIPTS_DIR/sync-relay-to-cursor-agents.py" ]; then
+@@ -84,30 +102,10 @@ fi
+ blog "Found sync-relay-to-cursor-agents.py (relay→AGENTS runs from aitools deploy, not from deploy/)"
+ 
+ # Read shared content
++# (Hook contents are NOT read into variables here -- the embed loops read each
++# file directly from the hooks-manifest.json list. Keeping per-hook variables
++# was dead code and a hardcoded list that drifted; see issue #9.)
+ CLAUDE_SHARED_CONTENT=$(cat "$CLAUDE_SHARED")
+-HOOK_SESSION_ARCHIVE=$(cat "$SHARED_DIR/hooks/session-archive.sh")
+-HOOK_SESSION_CATCHUP=$(cat "$SHARED_DIR/hooks/session-catchup.sh")
+-HOOK_AIT_HARVEST=$(cat "$SCRIPTS_DIR/ait-harvest.py")
+-HOOK_STANDING_ORDER_GUARD=$(cat "$SHARED_DIR/hooks/standing-order-guard.sh")
+-HOOK_SH_FILE_FIXUP=$(cat "$SHARED_DIR/hooks/sh-file-fixup.sh")
+-HOOK_SCRATCH_INIT=$(cat "$SHARED_DIR/hooks/scratch-init.sh")
+-HOOK_HARVEST_SESSION=$(cat "$SHARED_DIR/hooks/harvest-session.sh")
+-HOOK_GLOSSARY_GUARD=$(cat "$SHARED_DIR/hooks/glossary-skill-guard.sh")
+-HOOK_BLOCK_GUIDE=$(cat "$SHARED_DIR/hooks/block-claude-code-guide.sh")
+-HOOK_TOOL_OPS_AUDIT=$(cat "$SHARED_DIR/hooks/tool-ops-session-audit.sh")
+-HOOK_DASHBOARD_SERVE=$(cat "$SHARED_DIR/hooks/dashboard-serve.sh")
+-HOOK_HARNESS_DB_START=$(cat "$SHARED_DIR/hooks/harness-db-sessionstart.sh")
+-HOOK_HARNESS_DB_END=$(cat "$SHARED_DIR/hooks/harness-db-sessionend.sh")
+-HOOK_DELEGATION_GUARD=$(cat "$SHARED_DIR/hooks/delegation-duty-guard.sh")
+-HOOK_COMMAND_CHANNEL_STOP=$(cat "$SHARED_DIR/hooks/command-channel-stop.sh")
+-HOOK_FM_IDENTITY=$(cat "$SHARED_DIR/hooks/failure-mode-identity-stop.sh")
+-HOOK_FM_VERIFY=$(cat "$SHARED_DIR/hooks/failure-mode-verify-stop.sh")
+-HOOK_INTEL_STOP=$(cat "$SHARED_DIR/hooks/intelligence-stop.sh")
+-HOOK_INTEL_STOP_PY=$(cat "$SHARED_DIR/hooks/intelligence-stop.py")
+-
+-# Read shared library content for inlining into deploy scripts
+-AITOOLS_LIB_BASH=$(cat "$SCRIPTS_DIR/aitools-lib.sh")
+-AITOOLS_LIB_PS1=$(cat "$SCRIPTS_DIR/aitools-lib.ps1")
+ 
+ # inline_lib_bash: replaces `source.*aitools-lib.sh` line with lib content (stdin -> stdout)
+ # Uses perl for performance (single process vs ~2 subprocesses per line with while-read)
+@@ -1277,9 +1275,8 @@ blog "Generating deploy/setup-user-hooks.sh (extracted + embedded hooks)"
+ # Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop
+ # Preserved: permissions, enabledPlugins, all other fields (prefs synced by setup-user-settings)
+ #
+-# Hooks deployed:
+-#   SessionEnd: session-archive.sh (archives transcripts to user repo)
+-#   PreToolUse[Bash]: standing-order-guard.sh (enforces standing orders on Bash commands)
++# Hooks deployed: every hook registered in shared/hooks/hooks-manifest.json
++# at build time (embedded below), plus its deploy-only helper scripts.
+ 
+ BLOCK
+     # Extract: set -euo pipefail, flag parsing, logging, OS guard, DRY_RUN, require node
+@@ -1365,9 +1362,8 @@ blog "Generating deploy/setup-user-hooks.ps1 (extracted + embedded hooks)"
+ # Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop
+ # Preserved: permissions, enabledPlugins, all other fields (prefs synced by setup-user-settings)
+ #
+-# Hooks deployed:
+-#   SessionEnd: session-archive.sh (archives transcripts to user repo)
+-#   PreToolUse[Bash]: standing-order-guard.sh (enforces standing orders on Bash commands)
++# Hooks deployed: every hook registered in shared/hooks/hooks-manifest.json
++# at build time (embedded below), plus its deploy-only helper scripts.
+ #
+ # Note: Hook scripts are bash-only (Claude Code hooks always run in bash on
+ # both platforms). This PS1 script only deploys the hook configuration.
+diff --git a/scripts/check-hook-parity.py b/scripts/check-hook-parity.py
+index e5b92e7..c548820 100755
+--- a/scripts/check-hook-parity.py
++++ b/scripts/check-hook-parity.py
+@@ -9,7 +9,11 @@
+ # list has resurfaced (the recurring drift class: RCA .scratch investigation
+ # 2026-06-20; issue #7 / plan §5).
+ #
+-# Usage:  check-hook-parity.py <manifest.json> <setup-user-hooks.sh> <setup-user-hooks.ps1>
++# Optional 4th arg: build-deploy.sh. Its preflight + embed lists must also be
++# manifest-driven, and NO manifest-listed hook filename may appear literally in
++# the script (the hardcoded preflight list drifted -- issue #9).
++#
++# Usage:  check-hook-parity.py <manifest.json> <setup-user-hooks.sh> <setup-user-hooks.ps1> [<build-deploy.sh>]
+ # Exit 0 + a one-line OK summary on stdout if the invariant holds; exit 1 + the diff if not.
+ import json
+ import re
+@@ -17,17 +21,24 @@ import sys
+ 
+ 
+ def main() -> int:
+-    if len(sys.argv) != 4:
+-        print("usage: check-hook-parity.py <manifest> <sh_setup> <ps1_setup>")
++    if len(sys.argv) not in (4, 5):
++        print("usage: check-hook-parity.py <manifest> <sh_setup> <ps1_setup> [<build_deploy>]")
+         return 2
+     manifest_path, sh_path, ps1_path = sys.argv[1], sys.argv[2], sys.argv[3]
++    bd_path = sys.argv[4] if len(sys.argv) == 5 else None
+     try:
+         with open(manifest_path, encoding="utf-8") as f:
+-            manifest = {h["file"] for h in json.load(f)["hooks"]}
++            mdata = json.load(f)
++        manifest = {h["file"] for h in mdata["hooks"]}
++        deploy_files = set(mdata.get("deploy", []))
+         with open(sh_path, encoding="utf-8") as f:
+             sh = f.read()
+         with open(ps1_path, encoding="utf-8") as f:
+             ps1 = f.read()
++        bd = None
++        if bd_path:
++            with open(bd_path, encoding="utf-8") as f:
++                bd = f.read()
+     except (OSError, ValueError, KeyError) as exc:
+         print("parity audit error: %s" % exc)
+         return 1
+@@ -56,10 +67,20 @@ def main() -> int:
+     if ps1_hard:
+         issues.append("ps1: hardcoded MergeHookEntry calls resurfaced [" + ",".join(sorted(ps1_hard)) + "]")
+ 
++    # build-deploy.sh (optional): preflight + embed must be manifest-driven and
++    # contain zero literal hook filenames (the drift vector of issue #9).
++    if bd is not None:
++        if "hooks-manifest.json" not in bd:
++            issues.append("build-deploy: does not read hooks-manifest.json")
++        bd_hard = sorted(name for name in (manifest | deploy_files) if name in bd)
++        if bd_hard:
++            issues.append("build-deploy: hardcoded hook filename(s) resurfaced [" + ",".join(bd_hard) + "]")
++
+     if issues:
+         print("; ".join(issues))
+         return 1
+-    print("bash + ps1 generate registrations from manifest (%d hooks)" % len(manifest))
++    scope = "bash + ps1" if bd is None else "bash + ps1 + build-deploy"
++    print("%s generate hook lists from manifest (%d hooks)" % (scope, len(manifest)))
+     return 0
+ 
+ 
+diff --git a/scripts/check-post-push.ps1 b/scripts/check-post-push.ps1
+index 911cb97..c7a45c7 100644
+--- a/scripts/check-post-push.ps1
++++ b/scripts/check-post-push.ps1
+@@ -948,23 +948,26 @@ if ($Extensive) {
+ # ---------------------------------------------------------------------------
+ # Single-source check: every hook in shared/hooks/hooks-manifest.json must be
+ # registered in BOTH setup-user-hooks.sh and .ps1. Closes the bash<->PS1 drift
+-# that left scratch-init/harvest unregistered on Windows (RCA, plan §5).
++# that left scratch-init/harvest unregistered on Windows (RCA, plan §5). Also
++# audits build-deploy.sh: manifest-driven preflight/embed, no literal hook
++# filenames (issue #9).
+ if ($Extensive) {
+     $manifest = Join-Path $script:RepoRoot "shared\hooks\hooks-manifest.json"
+     $shSetup = Join-Path $script:RepoRoot "scripts\setup-user-hooks.sh"
+     $ps1Setup = Join-Path $script:RepoRoot "scripts\setup-user-hooks.ps1"
++    $bdScript = Join-Path $script:RepoRoot "scripts\build-deploy.sh"
+     $pyCmd = $null
+     if (Get-Command python -ErrorAction SilentlyContinue) { $pyCmd = "python" }
+     elseif (Get-Command python3 -ErrorAction SilentlyContinue) { $pyCmd = "python3" }
+-    if (-not (Test-Path $manifest) -or -not (Test-Path $shSetup) -or -not (Test-Path $ps1Setup)) {
+-        StepSkip "32" "Hook-registration parity audit" "manifest or setup script missing"
++    if (-not (Test-Path $manifest) -or -not (Test-Path $shSetup) -or -not (Test-Path $ps1Setup) -or -not (Test-Path $bdScript)) {
++        StepSkip "32" "Hook-registration parity audit" "manifest, setup script, or build-deploy missing"
+     } elseif (-not $pyCmd) {
+         StepSkip "32" "Hook-registration parity audit" "python not available"
+     } else {
+         # Parity comparison done entirely in python (scripts/check-hook-parity.py) --
+         # set-based, no perl-in-PowerShell quoting or platform sort-order fragility.
+         $parityScript = Join-Path $script:RepoRoot "scripts\check-hook-parity.py"
+-        $parityOut = (& $pyCmd $parityScript $manifest $shSetup $ps1Setup 2>&1 | Out-String).Trim()
++        $parityOut = (& $pyCmd $parityScript $manifest $shSetup $ps1Setup $bdScript 2>&1 | Out-String).Trim()
+         if ($LASTEXITCODE -eq 0) {
+             StepPass "32" "Hook-registration parity audit" $parityOut
+         } else {
+diff --git a/scripts/check-post-push.sh b/scripts/check-post-push.sh
+index 2d0b349..947257c 100755
+--- a/scripts/check-post-push.sh
++++ b/scripts/check-post-push.sh
+@@ -824,14 +824,17 @@ fi
+ # Single-source check: every hook in shared/hooks/hooks-manifest.json must be
+ # registered in BOTH setup-user-hooks.sh (node block: mergeHookEntry) and
+ # setup-user-hooks.ps1 (MergeHookEntry). Closes the bash<->PS1 drift that let
+-# scratch-init/harvest go unregistered on Windows (RCA, plan §5). Uses perl
+-# extraction mirroring step 29 (never grep -P -- BSD grep lacks it).
++# scratch-init/harvest go unregistered on Windows (RCA, plan §5). Also audits
++# build-deploy.sh: manifest-driven preflight/embed, no literal hook filenames
++# (issue #9). Uses perl extraction mirroring step 29 (never grep -P -- BSD
++# grep lacks it).
+ if $EXTENSIVE; then
+     manifest="$REPO_ROOT/shared/hooks/hooks-manifest.json"
+     sh_setup="$REPO_ROOT/scripts/setup-user-hooks.sh"
+     ps1_setup="$REPO_ROOT/scripts/setup-user-hooks.ps1"
+-    if [ ! -f "$manifest" ] || [ ! -f "$sh_setup" ] || [ ! -f "$ps1_setup" ]; then
+-        step_skip "32" "Hook-registration parity audit" "manifest or setup script missing"
++    bd_script="$REPO_ROOT/scripts/build-deploy.sh"
++    if [ ! -f "$manifest" ] || [ ! -f "$sh_setup" ] || [ ! -f "$ps1_setup" ] || [ ! -f "$bd_script" ]; then
++        step_skip "32" "Hook-registration parity audit" "manifest, setup script, or build-deploy missing"
+     elif ! command -v python3 >/dev/null 2>&1 && ! command -v python >/dev/null 2>&1; then
+         step_skip "32" "Hook-registration parity audit" "python not available"
+     else
+@@ -839,7 +842,7 @@ if $EXTENSIVE; then
+         command -v python3 >/dev/null 2>&1 || py=python
+         # Parity comparison done entirely in python (scripts/check-hook-parity.py) --
+         # set-based, no platform sort-order fragility. Capture exit without set -e abort.
+-        parity_out=$("$py" "$REPO_ROOT/scripts/check-hook-parity.py" "$manifest" "$sh_setup" "$ps1_setup" 2>&1) && parity_rc=0 || parity_rc=$?
++        parity_out=$("$py" "$REPO_ROOT/scripts/check-hook-parity.py" "$manifest" "$sh_setup" "$ps1_setup" "$bd_script" 2>&1) && parity_rc=0 || parity_rc=$?
+         if [ "$parity_rc" -eq 0 ]; then
+             step_pass "32" "Hook-registration parity audit" "$parity_out"
+         else

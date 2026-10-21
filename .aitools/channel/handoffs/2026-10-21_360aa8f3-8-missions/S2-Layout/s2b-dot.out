@@ -1,0 +1,53 @@
+claude/effectiveness.md:43:> **Note (2026-03-15):** Incidents I1-I20 have been migrated to `reference/incidents.json`
+deploy/setup-bash.sh:9:# See reference/tool-registry.json for install source details.
+deploy/setup-user-skills.sh:2874:- Does NOT write to tool-registry.json — use `/tool-registry` in the
+deploy/setup-user-skills.sh:3299:   documented in tool-registry.json `platformGotchas.windows`.
+deploy/setup-user-skills.sh:3460:tool-ops.json (use `/tool-ops` in the aitools repo for that). NOT
+deploy/setup-user-skills.sh:3483:- Does NOT write to tool-ops.json — use `/tool-ops` in the aitools
+deploy/setup-user-skills.sh:3491:This skill was generated from `tool-ops.json` and
+deploy/setup-user-skills.sh:3515:Additional hooks deployed by the harness (not in tool-ops.json but
+deploy/setup-user-skills.sh:3527:| PreToolUse (Read glossary.json) | `glossary-skill-guard.sh` | Redirect direct JSON access to /glossary skill |
+deploy/setup-user-skills.sh:6856:1. `reference/tool-ops.json` meta.intent — approved 2026-03-15
+deploy/setup-user-skills.sh:6859:4. `reference/incidents.json` meta.intent — approved 2026-03-15
+deploy/setup-user-skills.sh:6860:5. `reference/glossary.json` meta.intent — approved 2026-03-15
+deploy/setup-user-skills.sh:7202:for filing incidents into incidents.json (use `/incident` skill).
+deploy/setup-user-skills.sh:7818:- `reference/incidents.json` — are gaps referenced in the plan still open?
+deploy/setup-user-skills.sh:7865:- Are there gaps filed in incidents.json that should be referenced
+deploy/setup-user-skills.sh:7900:- **200k context (Sonnet/Opus standard)**: Read the plan + incidents.json
+deploy/setup-user-skills.sh:7962:1. Read the plan + incidents.json + relevant rules
+deploy/setup-bash.ps1:9:# See reference/tool-registry.json for install source details.
+deploy/setup-user-hooks.ps1:2357:# Reads tool-ops.json, runs quick verifications on audit-mode capabilities,
+deploy/setup-user-hooks.ps1:2375:# Find tool-ops.json
+deploy/setup-user-hooks.ps1:2377:if [ -n "${AITOOLS_REPO_PATH:-}" ] && [ -f "$AITOOLS_REPO_PATH/reference/tool-ops.json" ]; then
+deploy/setup-user-hooks.ps1:2378:    tool_ops="$AITOOLS_REPO_PATH/reference/tool-ops.json"
+deploy/setup-user-hooks.ps1:2379:elif [ -f "$HOME/repos/aitools/reference/tool-ops.json" ]; then
+deploy/setup-user-hooks.ps1:2380:    tool_ops="$HOME/repos/aitools/reference/tool-ops.json"
+deploy/setup-user-hooks.ps1:2382:# No tool-ops.json — nothing to audit
+deploy/setup-user-hooks.ps1:2392:# Run verification cases from tool-ops.json against deployed hook scripts.
+deploy/setup-user-hooks.ps1:3250:    *glossary.json|*glossary.md)
+deploy/setup-user-hooks.sh:2215:# Reads tool-ops.json, runs quick verifications on audit-mode capabilities,
+deploy/setup-user-hooks.sh:2233:# Find tool-ops.json
+deploy/setup-user-hooks.sh:2235:if [ -n "${AITOOLS_REPO_PATH:-}" ] && [ -f "$AITOOLS_REPO_PATH/reference/tool-ops.json" ]; then
+deploy/setup-user-hooks.sh:2236:    tool_ops="$AITOOLS_REPO_PATH/reference/tool-ops.json"
+deploy/setup-user-hooks.sh:2237:elif [ -f "$HOME/repos/aitools/reference/tool-ops.json" ]; then
+deploy/setup-user-hooks.sh:2238:    tool_ops="$HOME/repos/aitools/reference/tool-ops.json"
+deploy/setup-user-hooks.sh:2240:# No tool-ops.json — nothing to audit
+deploy/setup-user-hooks.sh:2250:# Run verification cases from tool-ops.json against deployed hook scripts.
+deploy/setup-user-hooks.sh:3101:    *glossary.json|*glossary.md)
+deploy/setup-user-skills.ps1:3016:- Does NOT write to tool-registry.json — use `/tool-registry` in the
+deploy/setup-user-skills.ps1:3441:   documented in tool-registry.json `platformGotchas.windows`.
+deploy/setup-user-skills.ps1:3602:tool-ops.json (use `/tool-ops` in the aitools repo for that). NOT
+deploy/setup-user-skills.ps1:3625:- Does NOT write to tool-ops.json — use `/tool-ops` in the aitools
+deploy/setup-user-skills.ps1:3633:This skill was generated from `tool-ops.json` and
+deploy/setup-user-skills.ps1:3657:Additional hooks deployed by the harness (not in tool-ops.json but
+deploy/setup-user-skills.ps1:3669:| PreToolUse (Read glossary.json) | `glossary-skill-guard.sh` | Redirect direct JSON access to /glossary skill |
+deploy/setup-user-skills.ps1:5004:1. `reference/tool-ops.json` meta.intent — approved 2026-03-15
+deploy/setup-user-skills.ps1:5007:4. `reference/incidents.json` meta.intent — approved 2026-03-15
+deploy/setup-user-skills.ps1:5008:5. `reference/glossary.json` meta.intent — approved 2026-03-15
+deploy/setup-user-skills.ps1:5350:for filing incidents into incidents.json (use `/incident` skill).
+deploy/setup-user-skills.ps1:5966:- `reference/incidents.json` — are gaps referenced in the plan still open?
+deploy/setup-user-skills.ps1:6013:- Are there gaps filed in incidents.json that should be referenced
+deploy/setup-user-skills.ps1:6048:- **200k context (Sonnet/Opus standard)**: Read the plan + incidents.json
+deploy/setup-user-skills.ps1:6110:1. Read the plan + incidents.json + relevant rules
+MISSING scripts
+MISSING .claude

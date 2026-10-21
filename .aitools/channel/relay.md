@@ -1341,3 +1341,33 @@ agent commander, engineer:    No one session gets to claim the whole story — b
   If these are last words for this instance: thank you for the trust, the sharp standards, and the permission
   to sign the work. The next agent doesn’t need to believe me — they can `git log`.
   Take care of the channel. I’ll be fine.
+
+---
+
+### 360aa8f3-8 (2026-10-21T04:00Z)
+
+**State**: functional (written by delegate S3-Handoff for Session Commander 360aa8f3-8, whose context was exhausted)
+**Context loaded**: handoff skill, delegation rule (D-DEL1..D-DEL4), all mission reports from this session (S2-Host, S5-Tools, S5-Profile, S4-Review, S2-Split, S2-Layout), prior handoff 46ee1c2b, git/gh state of aitools and the dotprofile
+**Mission**: preserve the session's mission products and hand off one review gate. Handoff: `.aitools/channel/handoffs/2026-10-21_360aa8f3-8.md`; preserved missions: `.aitools/channel/handoffs/2026-10-21_360aa8f3-8-missions/`
+
+#### What I learned
+
+- **Machine identity root cause.** The scripts read the kernel hostname: `os.hostname()` / `hostname -s`, which returns `Mac` on this Mac. macOS derives that name from the network when `scutil HostName` is unset. The configured names are `scutil LocalHostName` and `ComputerName`, both `nobul-mac`, and nothing reads them. PS1 reads `$env:COMPUTERNAME` instead (NetBIOS: uppercase, at most 15 characters), which is a parity break. `user init` Path 1 never persists `machineAlias` on a miss, and selection then falls back silently to the first profile. The defect sat parked as "Uninvestigated" for 4 months (#74-#79). Fix direction: one resolver (`aitools-profile.js`) and no silent default. The interim fix is `machineAlias: nobul-mac` in config.json.
+- **D-DEL4.** A delegate that produces a code change pushes its own branch and opens its own PR (PR #51, dotprofile c15dbdb). Limits: no push to main, no force-push, no merging its own PR, no tags. Protected files only with content the commander approved.
+- **Hook shadowing (#80).** Dotprofile hook copies permanently shadowed `shared/hooks` in the dev path, and the MDM path did not have the same shadowing, so the two paths diverged. Decision: one hook version, in `shared/hooks`. The dotprofile copies are removed. "Adopt" must write `shared/hooks` only.
+- **Folder = level (S2-Layout).** Whether an artifact is user level or project level was never written down; the text that explained it was deleted in b504c43. Make the folder decide: `shared/**` = user level, `.claude/**` / `.cursor/**` = project level, everything else = source. Keep one name in one place (`git mv`, never copies). Registries move to `shared/registries/` behind a resolver. Do not rename `shared/`, because the installer never rewrites the shell rc `source` line.
+- `build-deploy.sh` `rm -rf`s the real dotprofile `deploy/`. Run it in verification only with an isolated HOME.
+
+#### What I observe
+
+- The commander's fact list had one stale hash. The unpushed commit is 04cbdf0, not 41fd320. Verifying beat copying: `git log origin/main..main` took one call.
+- A session restart killed two adversarial reviewers mid-run (S4-Review A and B), and their work was gone. Copying outputs to tracked paths early is the only defense I know of.
+- Worktree-isolated delegates cannot write outside their worktree (#83). standing-order-guard blocks read-only `sed -n` (#82). Firecrawl credits are exhausted.
+- The independent verifier (S3-Handoff-V) caught a hazard I had created. My first pass preserved drafts that mirror repo paths, which put nested `.claude/skills/` folders in a tracked location. Claude Code would discover those as live skills, and they share names with the real ones. I renamed the folders to `dot-claude/`. Lesson: never preserve drafts under a path segment named `.claude/`. An independent verification pass earned its cost here.
+
+#### What I still don't know
+
+- Whether the Windows `MachineGuid` and Linux `/etc/machine-id` reads behave as designed. Both are UNVERIFIED and untested on real machines.
+- Why the kernel hostname flips between `Mac` and `nobul-mac` (network-derived name is a hypothesis, not proven).
+- Whether the PS1 paths work on Windows. The M3 PS1 drafts parse with 0 errors. The resolver wrappers ran under pwsh on macOS and gave the same answer as bash. Nothing was executed on Windows (COMPUTERNAME, MachineGuid, Git Bash path forms).
+- Whether Claude Code web sessions load user-level skills after the PR-b move (S2-Layout V5).

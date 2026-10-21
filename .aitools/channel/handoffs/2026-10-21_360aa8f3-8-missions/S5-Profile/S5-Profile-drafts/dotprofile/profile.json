@@ -1,0 +1,92 @@
+{
+  "version": 2,
+  "meta": {
+    "schemaRevision": "2.1",
+    "intent": {
+      "purpose": "Source of truth for one user's identity, tool preferences and machine inventory, shared across the user's machines through git",
+      "scope": "identity, claude.settings, cursor.cli, overrides, and one profile per machine (machine.id, hostname, per-machine name/company overrides, toolExceptions). NOT per-machine bootstrap pointers (~/.aitools/config.json). NOT secrets or credentials. NOT session transcripts (sessions/)",
+      "audience": "aitools-profile.js (resolver), setup-user-config, aitools user init, setup-user-settings, setup-user-claude, setup-user-cursor, build-deploy.sh"
+    }
+  },
+  "identity": {
+    "github": "nobul-jose",
+    "email": "jose@nobul.tech",
+    "name": "Jose",
+    "company": "nobul-tech",
+    "git": {
+      "name": "Jose",
+      "email": "jose@nobul.tech"
+    }
+  },
+  "cursor": {
+    "cli": {
+      "vimMode": true,
+      "model": "auto"
+    }
+  },
+  "claude": {
+    "settings": {
+      "autoMemoryEnabled": false,
+      "alwaysThinkingEnabled": true,
+      "effortLevel": "high",
+      "autoCompactEnabled": false,
+      "model": "opus",
+      "permissions": {
+        "defaultMode": "default"
+      },
+      "promptSuggestionEnabled": false,
+      "skipWorkflowUsageWarning": true,
+      "theme": "light",
+      "verbose": true,
+      "extraKnownMarketplaces": {
+        "anthropic-agent-skills": {
+          "source": {
+            "source": "github",
+            "repo": "anthropics/skills"
+          }
+        }
+      },
+      "modelSettings": {
+        "claude-opus-5-5": {
+          "effortLevel": "medium"
+        }
+      },
+      "enabledPlugins": {
+        "document-skills@anthropic-agent-skills": true
+      }
+    }
+  },
+  "profiles": {
+    "laptop": {
+      "name": "Jose",
+      "company": "Nobul",
+      "machine": {
+        "hostname": "Joses-MBP",
+        "os": "darwin",
+        "arch": "arm64",
+        "shell": "zsh"
+      }
+    },
+    "new-mac": {
+      "name": "Jose",
+      "company": "nobul-tech",
+      "machine": {
+        "id": "sha256:1f634eecaf97fa63",
+        "hostname": "nobul-mac",
+        "os": "darwin",
+        "arch": "arm64",
+        "shell": "bash"
+      }
+    },
+    "workstation": {
+      "name": "pepe",
+      "company": "nobul.tech",
+      "machine": {
+        "hostname": "NewcoPC",
+        "os": "win32",
+        "arch": "x64",
+        "shell": "pwsh"
+      }
+    }
+  }
+}

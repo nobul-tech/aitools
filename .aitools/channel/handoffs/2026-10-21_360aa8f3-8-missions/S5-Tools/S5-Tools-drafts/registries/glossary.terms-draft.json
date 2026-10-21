@@ -1,0 +1,31 @@
+{
+  "_draft": {
+    "status": "DRAFT -- needs commander approval; protected files registries/glossary.json and .claude/rules/glossary.md, written together via the /glossary skill",
+    "author": "S5-Tools for Session Commander 360aa8f3-8, 2026-10-20",
+    "rule_lines": "Add to .claude/rules/glossary.md '### Terms' (alphabetical position in the first block): 'tool adoption', 'tool exception', 'update channel'. See glossary.md.diff",
+    "why": "D-TS6: /tool-adopt reuses 'adopt', already governed twice: 'accept & adopt' ([a] menu option and outcome in managed-file deployment) and 'adoption' (framework adoption, DTCC steps 4-6). The new term names the third meaning and states the other two so no reader conflates them."
+  },
+  "terms_add": {
+    "tool adoption": {
+      "definition": "The /tool-adopt process that makes a managed tool supported on a platform and environment: an approved preferred method in the tool registry (running /tool-eval when there is none), the registry data the tool support decision tree reads, setup scripts that run the tree, installer and build integration, and verification. Runs after /tool-eval. Not the managed-file [a]dopt choice or its 'accept & adopt' outcome (local content written back to its source), and not framework 'adoption' (mapping a discipline's concepts into the harness).",
+      "source": ".claude/skills/tool-adopt/SKILL.md; reference/tool-support-decision-tree.md"
+    },
+    "tool exception": {
+      "definition": "A recorded per-machine decision to keep a non-preferred or unknown-source install of a managed tool instead of replacing it, made with [k]eep in the install-method menu and stored in the dotprofile profile under profiles.<alias>.toolExceptions. While it matches the detected method and path, setup scripts log it as a known exception and do not prompt, update, or post-check that tool.",
+      "source": "reference/tool-support-decision-tree.md",
+      "sourceDiscipline": "Software asset management (exception register)"
+    },
+    "update channel": {
+      "definition": "The release stream a managed tool's preferred install follows, set per tool in the tool registry (updateChannel): latest-stable (default), lts, pinned-major, pinned-minor, or vendor-auto. Every installer run (aitools install, or aitools sync running the installer) updates the preferred install to its channel's latest and verifies it.",
+      "source": ".claude/rules/tool-lifecycle.md; reference/tool-support-decision-tree.md"
+    }
+  },
+  "terms_modify": {
+    "managed tool": {
+      "old": "A CLI tool, dependency, or build tool governed by reference/tool-registry.md. Each gets setup scripts, platform lifecycle tracking, and a corresponding user skill. Standing orders and hooks enforce tool selection.",
+      "new": "A CLI tool, dependency, or build tool with an entry in the tool registry (/tool-registry skill). Each gets setup scripts that run the tool support decision tree, platform and environment lifecycle tracking, and a corresponding user skill. Standing orders and hooks enforce tool selection.",
+      "why": "The JSON registry is canonical since the registries/ consolidation; reference/tool-registry.md is a stale human copy."
+    }
+  },
+  "open_glossary_item": "TODO(glossary): 'provenance' is governed as the aitools provenance component, while tool documents use 'provenance verification' (supply chain) and code uses 'provenance' for install origin (detect_go_provenance, Get-GoProvenance). The drafts avoid the word for install origin ('install class'); renaming the existing helpers and the tool-eval phrase is a separate glossary resolution."
+}

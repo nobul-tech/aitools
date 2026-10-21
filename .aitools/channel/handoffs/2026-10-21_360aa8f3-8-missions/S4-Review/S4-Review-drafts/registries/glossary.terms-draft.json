@@ -1,0 +1,62 @@
+{
+  "_draft": {
+    "status": "DRAFT -- needs commander approval; protected files registries/glossary.json and .claude/rules/glossary.md, written together via the /glossary skill in ONE batch for both missions",
+    "author": "S4-Review merge of S5-Tools (M2) glossary.terms-draft.json and S5-Profile (M3) report section 5 'Glossary drafts', for Session Commander 360aa8f3-8, 2026-10-21",
+    "rule_lines": "Add to .claude/rules/glossary.md '### Terms' first block: 'aitools config', 'machine alias', 'machine id', 'machine profile', 'tool adoption', 'tool exception', 'update channel' (see S4-Review-drafts/.claude/rules/glossary.md)",
+    "fixes_vs_mission_drafts": [
+      "tool exception: M2 text said kept tools are not post-checked; the decision tree (reference section 2 'Kept / held copies') still runs the version half of T7, so the definition now says the minimum-version check still runs",
+      "tool exception: storage shape now follows the merged contract (reference/user-repo.md 'Profile Schema' + reference/tool-support-decision-tree.md section 8); source names both files",
+      "machine alias: example new-mac -> nobul-mac (dotprofile commit bce27bb); states it is not the base artifact 'alias' (shell alias file)",
+      "machine profile: states it is not a shell profile (the base artifact 'alias' is described as 'deployed to profile')",
+      "machine identity -> renamed 'machine id' (S4-Review-C C-15: profile.json 'identity' is the user's identity); names the HMAC as implemented in aitools-profile.js machineId()",
+      "derived config -> renamed 'aitools config' (S4-Review-C C-17: 'derived' is not a scope modifier, so the composed form fails /audit)",
+      "tool exception: 'do not post-check' -> 'do not check its PATH resolution; the minimum-version check still runs' (C-07); 'dotprofile profile' -> 'this machine's machine profile' (C-30)",
+      "managed tool: 'setup scripts' -> 'a setup script or an installer step that owns it inline' (C-29)",
+      "update channel: channel list points at the reference instead of restating it (C-09)"
+    ]
+  },
+  "terms_add": {
+    "tool adoption": {
+      "definition": "The /tool-adopt process that makes a managed tool supported on a platform and environment: an approved preferred method in the tool registry (running /tool-eval when there is none), the registry data the tool support decision tree reads, setup scripts that run the tree, installer and build integration, and verification. Runs after /tool-eval. Not the managed-file [a]dopt choice or its 'accept & adopt' outcome (local content written back to its source), and not framework 'adoption' (mapping a discipline's concepts into the harness).",
+      "source": ".claude/skills/tool-adopt/SKILL.md; reference/tool-support-decision-tree.md"
+    },
+    "tool exception": {
+      "definition": "A recorded per-machine decision to keep a non-preferred or unknown-source install of a managed tool instead of replacing it, made with [k]eep in the install-method menu and stored in this machine's machine profile under toolExceptions. While it matches the detected method and path, setup scripts log it as a known exception and do not prompt, update, or check its PATH resolution; the minimum-version check still runs.",
+      "source": "reference/tool-support-decision-tree.md (semantics); reference/user-repo.md (storage)",
+      "sourceDiscipline": "Software asset management (exception register)"
+    },
+    "update channel": {
+      "definition": "The release stream a managed tool's preferred install follows, set per tool in the tool registry (updateChannel, default latest-stable; channel list in reference/tool-support-decision-tree.md 'Update channels'). Every installer run (aitools install, or aitools sync running the installer) updates the preferred install to its channel's latest and verifies it.",
+      "source": ".claude/rules/tool-lifecycle.md; reference/tool-support-decision-tree.md"
+    },
+    "machine profile": {
+      "definition": "An entry in the dotprofile profile.json 'profiles' object, keyed by machine alias, holding one machine's (or one hosted environment's) identity overrides, machine identity, and tool exceptions. Chosen on every run by the machine resolver (aitools-profile.js); never another machine's profile as a fallback. Not a shell profile (.zshrc, PowerShell $PROFILE).",
+      "source": "reference/user-repo.md"
+    },
+    "machine alias": {
+      "definition": "The key of a machine profile (for example nobul-mac). Chosen or registered at aitools user init and cached per machine in config.json machineAlias, which setup-user-config re-derives. Not the base artifact 'alias' (a shell alias file).",
+      "source": "reference/user-repo.md"
+    },
+    "machine id": {
+      "definition": "The keyed hash (HMAC-SHA256, key aitools-machine-id-v1, 'sha256:' plus 16 hex) of the platform's stable id (macOS IOPlatformUUID, Windows MachineGuid, Linux machine-id), stored as machine.id in a machine profile and matched by the machine resolver before any alias or hostname. Hosted environments such as Claude Code web have none and match by machine.environment. Not the user's identity (profile.json identity).",
+      "source": "reference/user-repo.md"
+    },
+    "aitools config": {
+      "definition": "~/.aitools/config.json: per-machine bootstrap pointers plus values derived from profile.json (githubUser, userRepoPath, machineAlias), written only by setup-user-config. Hand edits to derived keys are replaced on the next run; change profile.json instead. A standalone term, not a composed '<scope modifier> config'.",
+      "source": "reference/user-repo.md"
+    }
+  },
+  "terms_modify": {
+    "managed tool": {
+      "old": "A CLI tool, dependency, or build tool governed by reference/tool-registry.md. Each gets setup scripts, platform lifecycle tracking, and a corresponding user skill. Standing orders and hooks enforce tool selection.",
+      "new": "A CLI tool, dependency, or build tool with an entry in the tool registry (/tool-registry skill). Each is installed through the tool support decision tree (a setup script, or an installer step that owns it inline), platform and environment lifecycle tracking, and a corresponding user skill. Standing orders and hooks enforce tool selection.",
+      "why": "The JSON registry is canonical since the registries/ consolidation; reference/tool-registry.md is a stale human copy."
+    }
+  },
+  "open_glossary_items": [
+    "TODO(glossary): 'provenance' is governed as the aitools provenance component, while tool documents use 'provenance verification' (supply chain) and code uses 'provenance' for install origin (detect_go_provenance, Get-GoProvenance). The drafts avoid the word for install origin ('install class').",
+    "TODO(glossary): 'detection' is governed as the hook layer of three-layer governance; the tool registry field 'detection' (install-method probes) predates the drafts and keeps its name.",
+    "TODO(glossary): 'verified' is a governed deployment outcome; M2's knownPaths entry field 'verified' holds a date and version (a trial record), a different meaning. Proposed (S4-Review-C C-18): keep the field name, and state in the reference section 6 that it records empirical path verification per script-standards 'KnownPaths empirical verification', not the deployment outcome.",
+    "TODO(glossary): deployment outcome 'recovered' (setup-user-config, reference/user-repo.md 'Config Schema') is not governed while created/updated/verified are."
+  ]
+}

@@ -1,0 +1,23 @@
+PROTECTED: .claude/rules/managed-file-deployment.md (+ mirror .cursor/rules/managed-file-deployment.mdc)
+S4-Review merge of one M3 edit (S5-Profile-report.md section 5 "Rule edit drafts") and one M2
+companion edit (S5-Tools-report.md section 2 "Companion edits", I-14). One approval, one batch.
+
+Edit 1 (M3) -- section "Content sources"
+old:
+- **Machine profile selection**: `config.json` `machineAlias` → `profile.json` `profiles[alias]`. Fallback: hostname match, then first profile
+new:
+- **Machine profile selection**: one resolver (`aitools-profile.js` via `resolve_machine_profile` / `Resolve-MachineProfile`): override → environment → machine.id → `config.json` `machineAlias` → hostname (warns) → no match = ERROR (never another machine's profile). Order and failure behaviour: `@reference/user-repo.md` "Resolution"
+
+Edit 2 (M2, I-14) -- section "Updating this table"
+old:
+the `/incident` skill if there are implementation gaps. See
+`@.claude/rules/tool-lifecycle.md` "Deployment pattern updates".
+new:
+the `/incident` skill if there are implementation gaps. Tool onboarding checks
+this table through `/tool-adopt` step 5 ("deployment types table for a new file type").
+
+(Reason: the cited section does not exist in .claude/rules/tool-lifecycle.md; it survives only in
+.cursor/rules/tool-lifecycle.mdc:135 ("When onboarding a new tool that deploys config files,
+check the deployment types table ..."), I-23. The M2 /tool-adopt draft step 5 already carries
+that item (S5-Tools-drafts/.claude/skills/tool-adopt/SKILL.md "5. Onboarding checklist"), so the
+pointer is retargeted there. The /tool-adopt path depends on S2-Split.)

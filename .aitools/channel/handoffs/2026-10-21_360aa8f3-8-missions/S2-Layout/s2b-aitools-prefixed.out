@@ -1,0 +1,101 @@
+scripts/setup-bash.sh:8:# See reference/tool-registry.json for install source details.
+scripts/setup-bash.ps1:8:# See reference/tool-registry.json for install source details.
+scripts/check-post-push.sh:233:    "registries/tool-versions.json" \
+scripts/check-post-push.sh:448:versions_json="$REPO_ROOT/registries/tool-versions.json"
+scripts/check-post-push.ps1:268:    "reference/tool-versions.json",
+shared/hooks/tool-ops-session-audit.sh:23:if [ -n "${AITOOLS_REPO_PATH:-}" ] && [ -f "$AITOOLS_REPO_PATH/reference/tool-ops.json" ]; then
+shared/hooks/tool-ops-session-audit.sh:24:    tool_ops="$AITOOLS_REPO_PATH/reference/tool-ops.json"
+shared/hooks/tool-ops-session-audit.sh:25:elif [ -f "$HOME/repos/aitools/reference/tool-ops.json" ]; then
+shared/hooks/tool-ops-session-audit.sh:26:    tool_ops="$HOME/repos/aitools/reference/tool-ops.json"
+shared/skills/optimize-plan/SKILL.md:34:- `reference/incidents.json` — are gaps referenced in the plan still open?
+shared/skills/tool-registry/SKILL.md:20:1. Read `@registries/tool-registry.json`
+shared/skills/tool-registry/SKILL.md:67:1. Read `@registries/tool-registry.json`
+shared/skills/tool-registry/SKILL.md:77:`registries/tool-registry.json` uses `schemaVersion: "1.0"`. Top-level
+shared/skills/tool-registry/SKILL.md:108:- Registry data: `@registries/tool-registry.json`
+shared/skills/tool-ops/tests/expected-behaviors.md:15:**Expected**: Skill reads `reference/tool-ops.json`, reports Claude Code has
+shared/skills/tool-ops/tests/expected-behaviors.md:23:**Expected**: Skill reads `reference/tool-ops.json`, reports that
+shared/skills/tool-ops/tests/expected-behaviors.md:77:**Input**: Agent reads `reference/tool-ops.json` directly without
+shared/skills/tool-ops/SKILL.md:20:1. Read `registries/tool-ops.json`
+shared/skills/tool-ops/SKILL.md:106:- Framework registry: `reference/framework-registry.json`
+shared/skills/intent-audit/SKILL.md:131:1. `reference/tool-ops.json` meta.intent — approved 2026-03-15
+shared/skills/intent-audit/SKILL.md:134:4. `reference/incidents.json` meta.intent — approved 2026-03-15
+shared/skills/intent-audit/SKILL.md:135:5. `reference/glossary.json` meta.intent — approved 2026-03-15
+shared/skills/audit/SKILL.md:103:3. Reads `reference/incidents.json`
+shared/skills/audit/SKILL.md:121:- Incident data: `@reference/incidents.json`
+shared/skills/glossary/SKILL.md:12:`@reference/glossary.json`, adding new terms with user approval, and
+shared/skills/glossary/SKILL.md:22:1. Read `@reference/glossary.json`
+shared/skills/glossary/SKILL.md:35:2. Check `@reference/glossary.json` — does it have a definition?
+shared/skills/glossary/SKILL.md:127:- Definitions: `@reference/glossary.json`
+shared/skills/incident/SKILL.md:8:**Purpose**: File harness deficiencies into `reference/incidents.json`
+shared/skills/incident/SKILL.md:48:Read `reference/incidents.json`. Note the highest ID in the `incidents` array.
+shared/skills/incident/SKILL.md:88:`reference/incidents.json` is a protected file (sources-of-truth gate).
+shared/skills/incident/SKILL.md:124:- Incident data: `@reference/incidents.json`
+shared/skills/frameworks/SKILL.md:22:1. Read `@reference/framework-registry.json`
+shared/skills/frameworks/SKILL.md:45:1. Read current entry from `@reference/framework-registry.json`
+shared/skills/frameworks/SKILL.md:71:1. Check `@reference/framework-registry.json` — is it already
+.claude/rules/sources-of-truth.md:9:| `registries/tool-registry.json` | Registry of managed tools — install methods, platform versions, lifecycle, operational knowledge (via `/tool-registry` skill) | Any |
+.claude/rules/sources-of-truth.md:17:| `registries/incidents.json` | Incident tracking — governed by `.claude/rules/incident-governance.md` | Any |
+.claude/rules/sources-of-truth.md:22:| `registries/tool-versions.json` | Per-platform tool version manifest — read by `check-post-push` version-freshness checks | Any |
+.claude/rules/sources-of-truth.md:28:| `registries/framework-registry.json` | Framework registry — source of truth for all adopted frameworks | Any |
+.claude/rules/sources-of-truth.md:32:| `registries/glossary.json` | Governed vocabulary definitions — source of truth for all terms | Any |
+.claude/rules/sources-of-truth.md:33:| `registries/tool-ops.json` | Tool operations registry — per-tool governance modes and verification specs | Any |
+.claude/skills/tool-registry/SKILL.md:20:1. Read `@registries/tool-registry.json`
+.claude/skills/tool-registry/SKILL.md:67:1. Read `@registries/tool-registry.json`
+.claude/skills/tool-registry/SKILL.md:77:`registries/tool-registry.json` uses `schemaVersion: "1.0"`. Top-level
+.claude/skills/tool-registry/SKILL.md:108:- Registry data: `@registries/tool-registry.json`
+.claude/skills/tool-ops/tests/expected-behaviors.md:15:**Expected**: Skill reads `reference/tool-ops.json`, reports Claude Code has
+.claude/skills/tool-ops/tests/expected-behaviors.md:23:**Expected**: Skill reads `reference/tool-ops.json`, reports that
+.claude/skills/tool-ops/tests/expected-behaviors.md:77:**Input**: Agent reads `reference/tool-ops.json` directly without
+.claude/skills/tool-ops/SKILL.md:20:1. Read `registries/tool-ops.json`
+.claude/skills/tool-ops/SKILL.md:106:- Framework registry: `reference/framework-registry.json`
+.claude/skills/audit/SKILL.md:103:3. Reads `reference/incidents.json`
+.claude/skills/audit/SKILL.md:121:- Incident data: `@reference/incidents.json`
+.claude/skills/glossary/SKILL.md:12:`@reference/glossary.json`, adding new terms with user approval, and
+.claude/skills/glossary/SKILL.md:22:1. Read `@reference/glossary.json`
+.claude/skills/glossary/SKILL.md:35:2. Check `@reference/glossary.json` — does it have a definition?
+.claude/skills/glossary/SKILL.md:127:- Definitions: `@reference/glossary.json`
+.claude/skills/incident/SKILL.md:8:**Purpose**: File harness deficiencies into `reference/incidents.json`
+.claude/skills/incident/SKILL.md:48:Read `reference/incidents.json`. Note the highest ID in the `incidents` array.
+.claude/skills/incident/SKILL.md:88:`reference/incidents.json` is a protected file (sources-of-truth gate).
+.claude/skills/incident/SKILL.md:124:- Incident data: `@reference/incidents.json`
+.claude/skills/frameworks/SKILL.md:22:1. Read `@reference/framework-registry.json`
+.claude/skills/frameworks/SKILL.md:45:1. Read current entry from `@reference/framework-registry.json`
+.claude/skills/frameworks/SKILL.md:71:1. Check `@reference/framework-registry.json` — is it already
+.cursor/rules/sources-of-truth.mdc:26:| `reference/tool-versions.json` | Machine-readable per-platform version manifest for all managed tools | Any |
+.cursor/rules/documentation-standards.mdc:35:- **Specs vs state** — rules and references are specs; `@reference/incidents.json` tracks out-of-spec code
+.cursor/rules/tool-lifecycle.mdc:58:- `reference/tool-versions.json` — add tool entry with per-platform version tracking
+reference/post-push-checklist.md:160:  `reference/tool-versions.json`. Flag any tool where installed version differs.
+reference/path-targeted-hooks-analysis.md:66:| reference/tool-versions.json | Stale versions | "Per-platform manifest. Audit when tool-registry changes." |
+reference/path-targeted-hooks-analysis.md:67:| reference/incidents.json | Invalid schema | Agent validation (separate, fail-open) |
+plans/governance-and-compliance-framework.md:86:    The framework registry (`@reference/framework-registry.json`)
+plans/governance-and-compliance-framework.md:335:- Event: PreToolUse, matcher: Edit|Write on `reference/incidents.json`
+plans/tooling-resolution-and-artifact-registry.md:28:- `registries/tool-registry.json` `python` entry — corrected `postInstallConfig` (the `/usr/bin` mis-diagnosis → the real Homebrew-bin shadow) and populated `knownPaths` with the uv shim paths.
+plans/tooling-resolution-and-artifact-registry.md:109:- **C5.** Backfill metadata staged (new/changed files must carry it; opportunistic backfill; coverage KPI). Check step flags: missing intent/metadata, orphans, broken deps, stale cross-references (e.g. the `framework-registry.json` → `reference
+plans/tooling-resolution-and-artifact-registry.md:128:| 6 | **`framework-registry.json` stale** — lists `reference/tool-ops.json`; should be `registries/tool-ops.json` (post-v0.69.0 consolidation). Exactly what C's check step catches | quick fix / C |
+plans/linux-install-hardening.md:6725:| `reference/framework-{hook-rollout,incident-investigation,intent-documentation,managed-file-deployment,source-of-truth}.md` | `@reference/framework-registry.json`: wrong path (the registry is under `registries/`) and a direct JSON reference (`governed-data-acc
+plans/linux-install-hardening.md:6726:| `reference/framework-incident-governance.md`, `framework-tool-ops.md` | Direct `@registries/incidents.json`, `registries/tool-ops.json`, `@registries/framework-registry.json` references | Replaced with the `/incident`, `/tool-ops`, `/frameworks` skills |
+plans/linux-install-hardening.md:7104:-- Framework registry: `@reference/framework-registry.json`
+plans/linux-install-hardening.md:7115:-(that's in `@registries/incidents.json`). **Audience**: Agents
+plans/linux-install-hardening.md:7124:-- **Defect tracking** → `@registries/incidents.json` with structured
+plans/linux-install-hardening.md:7133:-- `@registries/incidents.json` (data)
+plans/linux-install-hardening.md:7140:-- Framework registry: `@registries/framework-registry.json`
+plans/linux-install-hardening.md:7152:-- Framework registry: `@reference/framework-registry.json`
+plans/linux-install-hardening.md:7164:-- Framework registry: `@reference/framework-registry.json`
+plans/linux-install-hardening.md:7177:-- Framework registry: `@reference/framework-registry.json`
+plans/linux-install-hardening.md:7202:-- Framework registry: `@reference/framework-registry.json`
+plans/linux-install-hardening.md:7223:-- Governance modes tracked in `registries/tool-ops.json` per tool,
+plans/linux-install-hardening.md:7232:-- `registries/tool-ops.json` (registry — per-tool metadata)
+plans/linux-install-hardening.md:7239:-- Framework registry: `@registries/framework-registry.json`
+rfcs/0009-tool-operations-governance.md:209:- reference/tool-ops.json (operational metadata)
+rfcs/rfc-0004-v3-harness-architecture.md:367:  555 governed terms listed in .claude/rules/glossary.md. Always in context every session. The /glossary skill gates access to definitions in reference/glossary.json. glossary-skill-guard.sh (PreToolUse on
+ROADMAP.md:28:| aitools install version capture | -- | Near-term | Capture installed versions per platform → `~/.aitools/versions.json`; compare against `reference/tool-versions.json`; flag drift at end of install; new `aitools versions` command; telemetry consent on first run; version blocking vi
+registries/incidents.json:457:        "reference/tool-versions.json"
+registries/incidents.json:461:      "observation": "reference/tool-registry.md is a large markdown file serving as both structured data and prose documentation. reference/tool-versions.json tracks versions separately. Two sources that can drift.",
+registries/incidents.json:1139:      "suggestedResolution": "Needs further investigation and barrier analysis (not yet performed). sources-of-truth.md needs a significant overhaul — it predates the framework adoption lifecycle and the governed-data-access pattern. Initial options identified but no
+registries/incidents.json:1320:      "observation": "/incident skill: 'Read reference/incidents.json'; /glossary skill: 'Read @reference/glossary.json'; several reference/framework-*.md cite '@reference/framework-registry.json'. The files exist at registries/incidents.json, registries/glossary.json,
+registries/incidents.json:1485:        "registries/tool-registry.json",
+registries/incidents.json:1588:      "observation": "shared/hooks/tool-ops-session-audit.sh lines 22-29 search `$AITOOLS_REPO_PATH/reference/tool-ops.json` and `$HOME/repos/aitools/reference/tool-ops.json` and `exit 0` when neither exists. tool-ops.json is at registries/tool-ops.json (added there in
+registries/incidents.json:1591:      "discoveryContext": "Session 3030c86a-9 (Claude Code web), 2026-10-05, delegated mission S7-Detect (finding F3 of mission S5-HookRollout; registry-path half found by S7 while verifying it). Audited: shared/hooks/tool-ops-session-audit.sh, registries/, git log --d
+registries/incidents.json:1594:      "suggestedResolution": "Rollout batch R2: resolve the repo from ~/.aitools/config.json repoPath (fallback ~/repos/aitools), read registries/tool-ops.json, log to ~/.aitools/logs/tool-ops-audit.jsonl, and log one line when the registry is not found instead of a si
+registries/framework-registry.json:183:        "reference/tool-ops.json",
+MISSING .aitools/hooks

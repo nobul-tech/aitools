@@ -1,0 +1,209 @@
+--- a/.claude/rules/tool-lifecycle.md
++++ b/.claude/rules/tool-lifecycle.md
+@@ -4,9 +4,11 @@
+   - deploy/**
+   - shared/**
+   - reference/**
++  - registries/**
+   - plans/**
+   - rfcs/**
+   - .claude/rules/**
++  - .claude/skills/**
+   - .cursor/rules/**
+   - CLAUDE.md
+   - RELEASE_NOTES.md
+@@ -16,118 +18,104 @@
+ 
+ ## Tool Lifecycle (this repo)
+ 
+-**Intent**: **Purpose**: Govern the lifecycle gates and onboarding
+-requirements for managed tools — ensuring tools pass evaluation
+-before integration, and all onboarding artifacts are completed.
+-**Scope**: Phase 2 gate, Under Evaluation guard, onboarding
+-checklist, bundled dependency graduation. NOT evaluation principles
+-(`@.claude/rules/tool-evaluation.md`). NOT the evaluation process
+-(`/tool-eval` skill). NOT registry data (`/tool-registry` skill).
+-**Audience**: Every agent adding, modifying, or removing a managed
+-tool.
++> DRAFT — needs commander approval (modified intent statement).
+ 
++**Intent**: **Purpose**: Govern the lifecycle gates, the tool support
++decision tree, and the update policy for managed tools, so a tool is
++installed only by its registry-preferred method, kept current on its
++update channel, and never silently replaced or left shadowed. **Scope**:
++Phase 2 gate, Under Evaluation guard, decision-tree directives, update
++policy, install cleanup, onboarding, trigger directives for `/tool-registry`
++and `/tool-adopt`. NOT evaluation principles
++(`@.claude/rules/tool-evaluation.md`). NOT the tree detail, leaves, helper
++contract, or schema (`@reference/tool-support-decision-tree.md`). NOT
++registry data (`/tool-registry` skill). **Audience**: Every agent adding,
++changing, or removing a managed tool or a `scripts/setup-*` script.
++
+ ### Phase 2 gate
+ 
+-**Hard stop.** After installing and providing a test command, MUST
+-wait for the user's explicit approval before writing integration
+-code.
++**Hard stop.** After installing and providing a test command, MUST wait for
++the user's explicit approval before writing integration code. Do not plan or
++batch Phase 3+ with it. Rejected: uninstall, remove the "Under Evaluation"
++entry, stop. Approved: promote the entry, proceed. Plans with Phases 3-5 MUST
++note the gate.
+ 
+-- Do not plan Phase 3+ until Phase 2 is approved
+-- Do not batch Phase 2 approval with Phase 3+ work
+-- If rejected: uninstall, remove "Under Evaluation" entry, stop
+-- If approved: promote to full entry, proceed to Phase 3+
+-- Plans that include Phases 3-5 MUST note the gate
+-
+ ### Under Evaluation guard
+ 
+-Tools with `evaluating` status on ALL platforms MUST NOT have:
+-- Setup scripts in `scripts/`
+-- Entries in `aitools-install.sh/.ps1`
+-- Aliases in `shared/shell/`
+-- Build pipeline entries in `build-deploy.sh`
+-- Entry in CLAUDE.md Managed CLI Tools table
++Tools with `evaluating` status on ALL platforms MUST NOT have setup scripts,
++installer entries, aliases in `shared/shell/`, build pipeline entries, or a
++row in the CLAUDE.md Managed CLI Tools table.
+ 
+-### Bundled dependency graduation
++### Tool support decision tree
+ 
+-Bundled tools used incidentally may remain as dependencies. If a
+-bundled tool becomes a project requirement (USO, standing order,
+-or widespread script dependency), it MUST graduate to a full
+-managed tool via the standard lifecycle phases.
++Every managed-tool setup script MUST run the tree in
++`@reference/tool-support-decision-tree.md` through `tool_support_run` /
++`Invoke-ToolSupport` (`@scripts/aitools-lib.sh` / `.ps1`):
+ 
+-### PATH refresh after install
++1. **Registry decides.** The preferred method for the platform and
++   environment comes from the tool registry. None: ERROR + ACTION to run
++   `/tool-eval` (text per the reference). A script never picks a method itself.
++2. **Detect first.** Classify the install by the registry's detection
++   signatures: none, preferred, non-preferred, unknown.
++3. **Non-interactive and `--force` change nothing** for a non-preferred or
++   unknown install: WARN in the summary panel and the log, plus ACTION.
++4. **Interactive**: replace / keep / abort. Replace installs the preferred
++   method FIRST, verifies it resolves, THEN removes the old copy (#12).
++   Keep is remembered per machine as a tool exception.
++5. **Unknown-source installs are never removed** or offered for removal.
++6. **Post-check**: "supported" means the command resolves to the managed
++   binary (tooling-resolution plan decision 10); shadowed or off PATH is
++   ERROR (script-standards Standard 4).
+ 
+-When installed via a package manager, the binary may not be on
+-PATH. Do not hardcode package manager paths. Ask the user to
+-relaunch Claude Code, then verify.
++### Update policy
+ 
++Each tool has an `updateChannel` in the registry, default `latest-stable`
++(others: `lts`, `pinned-major` / `pinned-minor` with `pin` and `reason`,
++`vendor-auto`). Every installer run updates a preferred install to its
++channel's latest and verifies it. Moving a pin or LTS line is a registry
++change via `/tool-eval` that keeps the old line as a non-preferred method.
++Kept (exception) installs are not updated.
++
+ ### Install cleanup
+ 
+-Setup scripts installing via a preferred method SHOULD detect and
+-remove old installs from non-preferred sources. Prevents PATH
+-shadowing.
++Removal happens only in the replace branch, only after the preferred copy is
++verified, and only through the registry's removal recipe. Setup scripts MUST
++NOT uninstall or delete a tool before its replacement is verified.
+ 
+-### Install method discovery
++### PATH refresh after install
+ 
+-Install methods and `BuildPrereqs` entries in setup scripts MUST
+-be derived from official tool documentation via the `/tool-eval`
+-skill — never chosen from assumption or memory. The `/tool-eval`
+-skill uses the chrome-devtools skill to navigate to the tool's
+-official documentation and extract verified install commands.
++A package-manager install may not be on PATH yet. Do not hardcode package
++manager paths. Ask the user to relaunch Claude Code, then verify.
+ 
+-### Onboarding checklist
++### Install method discovery
+ 
+-When approved (Phase 2 passed), complete ALL steps. Use the
+-`/tool-eval` skill for evaluation and the `/tool-registry` skill
+-for registry writes.
++Install methods, detection signatures, removal recipes, and `BuildPrereqs`
++entries MUST come from official documentation via `/tool-eval` — never from
++assumption or memory.
+ 
+-#### Prerequisite
+-- Verify upstream install method via `/tool-eval` skill
+-- Record via `/tool-registry` skill (protected)
++### Onboarding and graduation
+ 
+-#### Non-protected (implement directly)
+-- `scripts/setup-<tool>.sh` + `.ps1`
+-- `@scripts/aitools-install.sh` + `.ps1` — add step
+-- `@scripts/build-deploy.sh` — add copy block pair
+-- If auth required: add status check in setup scripts
++Onboard a tool that passed Phase 2 with `/tool-adopt`; it carries the full
++checklist (registry, setup scripts, installer, build pipeline, check entries,
++CLAUDE.md and dotprofile template rows, rebuild). A bundled tool that becomes
++a project requirement (USO, standing order, widespread script dependency)
++MUST graduate to a managed tool through the same lifecycle.
+ 
+-#### Protected (present for review)
+-- Registry entry via `/tool-registry` skill
+-- `@shared/claude-shared.md` — Managed CLI Tools table
+-- `<userRepoPath>/claude/CLAUDE.md` — same row
+-- `CLAUDE.md` — deploy list
+-- Check script entries (`TOOL_CMDS` dictionaries)
+-- Deployment types table if new file type
++### When to invoke /tool-registry and /tool-adopt
+ 
+-#### Rebuild + propagate
+-1. `bash scripts/build-deploy.sh` — verify count increments by 2
+-2. `bash scripts/setup-user-claude.sh` — propagate CLAUDE.md
+-3. `bash scripts/check-post-push.sh` — all checks pass
+-4. Commit + push both repos
++- `/tool-registry`: checking or changing a tool's methods, channel, version,
++  or health; adding an entry after `/tool-eval`; user says /tool-registry or /tools
++- `/tool-adopt`: integrating a tool that passed Phase 2; creating, migrating,
++  or fixing a `scripts/setup-*` script; a script reports `no method for
++  <platform>`; user says /tool-adopt
+ 
+-### Dotprofile priority
++`/tool-adopt` runs after `/tool-eval` and invokes it when the registry has no
++preferred method. Both read and maintain the registry and this rule: a
++decision that changes a directive above is drafted here for review.
+ 
+-`setup-user-claude.sh/.ps1` reads dotprofile first. Rows added to
+-`@shared/claude-shared.md` MUST also be added to the dotprofile
+-template.
+-
+-### When to invoke /tool-registry
+-
+-Invoke the `/tool-registry` skill when ANY of these arise:
+-
+-- Checking a tool's install method, version, or health status
+-- Adding a new tool entry (after `/tool-eval` completes)
+-- Updating an existing entry's fields or version
+-- User says /tool-registry or /tools
+-
+-The skill provides the governed process for reading and writing
+-the tool registry JSON. Accessing the registry data directly
+-bypasses that process.
+-
+ ### Cross-references
+ 
+-- Evaluation principles: `@.claude/rules/tool-evaluation.md`
+-- Evaluation process: `/tool-eval` skill
+-- Registry access: `/tool-registry` skill
+-- Discovery playbook: `@reference/tool-evaluation-playbook.md`
+-- Evaluation criteria: `@reference/tool-evaluation-criteria.md`
+-- Registry data: `/tool-registry` skill
++- Tree, leaves, helpers, schema: `@reference/tool-support-decision-tree.md`
++- Framework: `@reference/framework-tool-lifecycle.md`
++- Principles: `@.claude/rules/tool-evaluation.md`; menus: `@.claude/rules/interactive-menus.md`
++- Skills: `/tool-eval`, `/tool-adopt`, `/tool-registry`
