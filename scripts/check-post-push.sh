@@ -707,7 +707,9 @@ if command -v cargo >/dev/null 2>&1; then
             [ -z "$pname" ] && continue
             echo "      Missing: $pname -- $pinstall"
         done <<< "$prereq_output"
-        prereq_names=$(echo "$prereq_output" | cut -d'|' -f1 | paste -sd ', ')
+        # '-' operand: BSD paste (macOS) requires an explicit file; without it
+        # paste prints usage, exits 1, and set -e aborts the whole checklist.
+        prereq_names=$(echo "$prereq_output" | cut -d'|' -f1 | paste -sd ', ' -)
         step_warn "27" "Build prerequisites installed" "missing: $prereq_names"
     else
         step_pass "27" "Build prerequisites installed"
@@ -826,8 +828,8 @@ fi
 # setup-user-hooks.ps1 (MergeHookEntry). Closes the bash<->PS1 drift that let
 # scratch-init/harvest go unregistered on Windows (RCA, plan §5). Also audits
 # build-deploy.sh: manifest-driven preflight/embed, no literal hook filenames
-# (issue #9). Uses perl extraction mirroring step 29 (never grep -P -- BSD
-# grep lacks it).
+# outside comments (issue #9). The comparison runs in python
+# (scripts/check-hook-parity.py) -- same script as the PS1 step 32.
 if $EXTENSIVE; then
     manifest="$REPO_ROOT/shared/hooks/hooks-manifest.json"
     sh_setup="$REPO_ROOT/scripts/setup-user-hooks.sh"

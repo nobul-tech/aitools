@@ -950,7 +950,8 @@ if ($Extensive) {
 # registered in BOTH setup-user-hooks.sh and .ps1. Closes the bash<->PS1 drift
 # that left scratch-init/harvest unregistered on Windows (RCA, plan §5). Also
 # audits build-deploy.sh: manifest-driven preflight/embed, no literal hook
-# filenames (issue #9).
+# filenames outside comments (issue #9). The comparison runs in python
+# (scripts/check-hook-parity.py) -- same script as the bash step 32.
 if ($Extensive) {
     $manifest = Join-Path $script:RepoRoot "shared\hooks\hooks-manifest.json"
     $shSetup = Join-Path $script:RepoRoot "scripts\setup-user-hooks.sh"
