@@ -9,7 +9,11 @@
 # list has resurfaced (the recurring drift class: RCA .scratch investigation
 # 2026-06-20; issue #7 / plan §5).
 #
-# Usage:  check-hook-parity.py <manifest.json> <setup-user-hooks.sh> <setup-user-hooks.ps1>
+# Optional 4th arg: build-deploy.sh. Its preflight + embed lists must also be
+# manifest-driven, and NO manifest-listed hook filename may appear literally in
+# the script (the hardcoded preflight list drifted -- issue #9).
+#
+# Usage:  check-hook-parity.py <manifest.json> <setup-user-hooks.sh> <setup-user-hooks.ps1> [<build-deploy.sh>]
 # Exit 0 + a one-line OK summary on stdout if the invariant holds; exit 1 + the diff if not.
 import json
 import re
@@ -17,17 +21,24 @@ import sys
 
 
 def main() -> int:
-    if len(sys.argv) != 4:
-        print("usage: check-hook-parity.py <manifest> <sh_setup> <ps1_setup>")
+    if len(sys.argv) not in (4, 5):
+        print("usage: check-hook-parity.py <manifest> <sh_setup> <ps1_setup> [<build_deploy>]")
         return 2
     manifest_path, sh_path, ps1_path = sys.argv[1], sys.argv[2], sys.argv[3]
+    bd_path = sys.argv[4] if len(sys.argv) == 5 else None
     try:
         with open(manifest_path, encoding="utf-8") as f:
-            manifest = {h["file"] for h in json.load(f)["hooks"]}
+            mdata = json.load(f)
+        manifest = {h["file"] for h in mdata["hooks"]}
+        deploy_files = set(mdata.get("deploy", []))
         with open(sh_path, encoding="utf-8") as f:
             sh = f.read()
         with open(ps1_path, encoding="utf-8") as f:
             ps1 = f.read()
+        bd = None
+        if bd_path:
+            with open(bd_path, encoding="utf-8") as f:
+                bd = f.read()
     except (OSError, ValueError, KeyError) as exc:
         print("parity audit error: %s" % exc)
         return 1
@@ -56,10 +67,20 @@ def main() -> int:
     if ps1_hard:
         issues.append("ps1: hardcoded MergeHookEntry calls resurfaced [" + ",".join(sorted(ps1_hard)) + "]")
 
+    # build-deploy.sh (optional): preflight + embed must be manifest-driven and
+    # contain zero literal hook filenames (the drift vector of issue #9).
+    if bd is not None:
+        if "hooks-manifest.json" not in bd:
+            issues.append("build-deploy: does not read hooks-manifest.json")
+        bd_hard = sorted(name for name in (manifest | deploy_files) if name in bd)
+        if bd_hard:
+            issues.append("build-deploy: hardcoded hook filename(s) resurfaced [" + ",".join(bd_hard) + "]")
+
     if issues:
         print("; ".join(issues))
         return 1
-    print("bash + ps1 generate registrations from manifest (%d hooks)" % len(manifest))
+    scope = "bash + ps1" if bd is None else "bash + ps1 + build-deploy"
+    print("%s generate hook lists from manifest (%d hooks)" % (scope, len(manifest)))
     return 0
 
 
