@@ -707,7 +707,9 @@ if command -v cargo >/dev/null 2>&1; then
             [ -z "$pname" ] && continue
             echo "      Missing: $pname -- $pinstall"
         done <<< "$prereq_output"
-        prereq_names=$(echo "$prereq_output" | cut -d'|' -f1 | paste -sd ', ')
+        # '-' operand: BSD paste (macOS) requires an explicit file; without it
+        # paste prints usage, exits 1, and set -e aborts the whole checklist.
+        prereq_names=$(echo "$prereq_output" | cut -d'|' -f1 | paste -sd ', ' -)
         step_warn "27" "Build prerequisites installed" "missing: $prereq_names"
     else
         step_pass "27" "Build prerequisites installed"
@@ -824,14 +826,17 @@ fi
 # Single-source check: every hook in shared/hooks/hooks-manifest.json must be
 # registered in BOTH setup-user-hooks.sh (node block: mergeHookEntry) and
 # setup-user-hooks.ps1 (MergeHookEntry). Closes the bash<->PS1 drift that let
-# scratch-init/harvest go unregistered on Windows (RCA, plan §5). Uses perl
-# extraction mirroring step 29 (never grep -P -- BSD grep lacks it).
+# scratch-init/harvest go unregistered on Windows (RCA, plan §5). Also audits
+# build-deploy.sh: manifest-driven preflight/embed, no literal hook filenames
+# outside comments (issue #9). The comparison runs in python
+# (scripts/check-hook-parity.py) -- same script as the PS1 step 32.
 if $EXTENSIVE; then
     manifest="$REPO_ROOT/shared/hooks/hooks-manifest.json"
     sh_setup="$REPO_ROOT/scripts/setup-user-hooks.sh"
     ps1_setup="$REPO_ROOT/scripts/setup-user-hooks.ps1"
-    if [ ! -f "$manifest" ] || [ ! -f "$sh_setup" ] || [ ! -f "$ps1_setup" ]; then
-        step_skip "32" "Hook-registration parity audit" "manifest or setup script missing"
+    bd_script="$REPO_ROOT/scripts/build-deploy.sh"
+    if [ ! -f "$manifest" ] || [ ! -f "$sh_setup" ] || [ ! -f "$ps1_setup" ] || [ ! -f "$bd_script" ]; then
+        step_skip "32" "Hook-registration parity audit" "manifest, setup script, or build-deploy missing"
     elif ! command -v python3 >/dev/null 2>&1 && ! command -v python >/dev/null 2>&1; then
         step_skip "32" "Hook-registration parity audit" "python not available"
     else
@@ -839,7 +844,7 @@ if $EXTENSIVE; then
         command -v python3 >/dev/null 2>&1 || py=python
         # Parity comparison done entirely in python (scripts/check-hook-parity.py) --
         # set-based, no platform sort-order fragility. Capture exit without set -e abort.
-        parity_out=$("$py" "$REPO_ROOT/scripts/check-hook-parity.py" "$manifest" "$sh_setup" "$ps1_setup" 2>&1) && parity_rc=0 || parity_rc=$?
+        parity_out=$("$py" "$REPO_ROOT/scripts/check-hook-parity.py" "$manifest" "$sh_setup" "$ps1_setup" "$bd_script" 2>&1) && parity_rc=0 || parity_rc=$?
         if [ "$parity_rc" -eq 0 ]; then
             step_pass "32" "Hook-registration parity audit" "$parity_out"
         else

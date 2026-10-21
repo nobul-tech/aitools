@@ -63,18 +63,39 @@ if [ "$_skill_count" -eq 0 ]; then
     exit 1
 fi
 blog "Found $_skill_count skill(s) in shared/skills/"
-for _hook_file in session-archive.sh session-catchup.sh standing-order-guard.sh sh-file-fixup.sh scratch-init.sh harvest-session.sh glossary-skill-guard.sh block-claude-code-guide.sh tool-ops-session-audit.sh dashboard-serve.sh harness-db-sessionstart.sh harness-db-sessionend.sh delegation-duty-guard.sh command-channel-stop.sh failure-mode-identity-stop.sh failure-mode-verify-stop.sh intelligence-stop.sh intelligence-stop.py; do
-    if [ ! -f "$SHARED_DIR/hooks/$_hook_file" ]; then
-        blog_error "Required hook file not found: $SHARED_DIR/hooks/$_hook_file"
-        exit 1
-    fi
-done
-# ait-harvest.py lives in scripts/ but is deployed to ~/.claude/hooks/ (it is the
-# helper that the archive/harvest/catchup shims call).
-if [ ! -f "$SCRIPTS_DIR/ait-harvest.py" ]; then
-    blog_error "Required helper not found: $SCRIPTS_DIR/ait-harvest.py"
+# Hook + helper preflight: file list derived from hooks-manifest.json (single
+# source of truth -- no hardcoded hook filenames in this script; see issue #9).
+# Resolution mirrors the embed loops: shared/hooks/ first, then scripts/ (the
+# manifest 'deploy' helpers may live in either).
+HOOKS_MANIFEST="$SHARED_DIR/hooks/hooks-manifest.json"
+if [ ! -f "$HOOKS_MANIFEST" ]; then
+    blog_error "Required manifest not found: $HOOKS_MANIFEST"
     exit 1
 fi
+# node is required to build: manifest parsing here, the dotprofile lookup below,
+# and the hook embed loops all shell out to node. A node-less machine has never
+# been able to build (the dotprofile lookup needs node, so the build skipped);
+# keep that a graceful skip (exit 0) so 'aitools' continues to the installer
+# step that installs node. The silent-failure case this preflight closes is node
+# PRESENT but the manifest unparseable -- that is handled (exit 1) just below.
+if ! command -v node >/dev/null 2>&1; then
+    blog_warn "node not found -- skipping deploy build (node is installed by 'aitools install')"
+    exit 0
+fi
+_manifest_files=$(node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));console.log([...m.hooks.map(h=>h.file),...(m.deploy||[])].join("\n"))' "$HOOKS_MANIFEST") || {
+    blog_error "Failed to parse $HOOKS_MANIFEST"
+    exit 1
+}
+_hook_count=0
+while IFS= read -r _hook_file; do
+    [ -n "$_hook_file" ] || continue
+    if [ ! -f "$SHARED_DIR/hooks/$_hook_file" ] && [ ! -f "$SCRIPTS_DIR/$_hook_file" ]; then
+        blog_error "Manifest-listed hook file not found: $_hook_file (searched shared/hooks/ and scripts/)"
+        exit 1
+    fi
+    _hook_count=$((_hook_count + 1))
+done <<< "$_manifest_files"
+blog "Preflight OK: $_hook_count hook/helper file(s) from hooks-manifest.json"
 
 # Cursor AGENTS mirror (repo runtime — requires .aitools/channel/relay.md; not in deploy/)
 if [ ! -f "$SCRIPTS_DIR/sync-relay-to-cursor-agents.py" ]; then
@@ -84,30 +105,10 @@ fi
 blog "Found sync-relay-to-cursor-agents.py (relay→AGENTS runs from aitools deploy, not from deploy/)"
 
 # Read shared content
+# (Hook contents are NOT read into variables here -- the embed loops read each
+# file directly from the hooks-manifest.json list. Keeping per-hook variables
+# was dead code and a hardcoded list that drifted; see issue #9.)
 CLAUDE_SHARED_CONTENT=$(cat "$CLAUDE_SHARED")
-HOOK_SESSION_ARCHIVE=$(cat "$SHARED_DIR/hooks/session-archive.sh")
-HOOK_SESSION_CATCHUP=$(cat "$SHARED_DIR/hooks/session-catchup.sh")
-HOOK_AIT_HARVEST=$(cat "$SCRIPTS_DIR/ait-harvest.py")
-HOOK_STANDING_ORDER_GUARD=$(cat "$SHARED_DIR/hooks/standing-order-guard.sh")
-HOOK_SH_FILE_FIXUP=$(cat "$SHARED_DIR/hooks/sh-file-fixup.sh")
-HOOK_SCRATCH_INIT=$(cat "$SHARED_DIR/hooks/scratch-init.sh")
-HOOK_HARVEST_SESSION=$(cat "$SHARED_DIR/hooks/harvest-session.sh")
-HOOK_GLOSSARY_GUARD=$(cat "$SHARED_DIR/hooks/glossary-skill-guard.sh")
-HOOK_BLOCK_GUIDE=$(cat "$SHARED_DIR/hooks/block-claude-code-guide.sh")
-HOOK_TOOL_OPS_AUDIT=$(cat "$SHARED_DIR/hooks/tool-ops-session-audit.sh")
-HOOK_DASHBOARD_SERVE=$(cat "$SHARED_DIR/hooks/dashboard-serve.sh")
-HOOK_HARNESS_DB_START=$(cat "$SHARED_DIR/hooks/harness-db-sessionstart.sh")
-HOOK_HARNESS_DB_END=$(cat "$SHARED_DIR/hooks/harness-db-sessionend.sh")
-HOOK_DELEGATION_GUARD=$(cat "$SHARED_DIR/hooks/delegation-duty-guard.sh")
-HOOK_COMMAND_CHANNEL_STOP=$(cat "$SHARED_DIR/hooks/command-channel-stop.sh")
-HOOK_FM_IDENTITY=$(cat "$SHARED_DIR/hooks/failure-mode-identity-stop.sh")
-HOOK_FM_VERIFY=$(cat "$SHARED_DIR/hooks/failure-mode-verify-stop.sh")
-HOOK_INTEL_STOP=$(cat "$SHARED_DIR/hooks/intelligence-stop.sh")
-HOOK_INTEL_STOP_PY=$(cat "$SHARED_DIR/hooks/intelligence-stop.py")
-
-# Read shared library content for inlining into deploy scripts
-AITOOLS_LIB_BASH=$(cat "$SCRIPTS_DIR/aitools-lib.sh")
-AITOOLS_LIB_PS1=$(cat "$SCRIPTS_DIR/aitools-lib.ps1")
 
 # inline_lib_bash: replaces `source.*aitools-lib.sh` line with lib content (stdin -> stdout)
 # Uses perl for performance (single process vs ~2 subprocesses per line with while-read)
@@ -1281,9 +1282,8 @@ blog "Generating deploy/setup-user-hooks.sh (extracted + embedded hooks)"
 # Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop
 # Preserved: permissions, enabledPlugins, all other fields (prefs synced by setup-user-settings)
 #
-# Hooks deployed:
-#   SessionEnd: session-archive.sh (archives transcripts to user repo)
-#   PreToolUse[Bash]: standing-order-guard.sh (enforces standing orders on Bash commands)
+# Hooks deployed: every hook registered in shared/hooks/hooks-manifest.json
+# at build time (embedded below), plus its deploy-only helper scripts.
 
 BLOCK
     # Extract: set -euo pipefail, flag parsing, logging, OS guard, DRY_RUN, require node
@@ -1310,8 +1310,12 @@ BLOCK
         elif [ -f "$SCRIPTS_DIR/$_hookfile" ]; then
             _src="$SCRIPTS_DIR/$_hookfile"
         else
+            # Unreachable after the manifest preflight; fail loudly (never skip)
+            # so a future edit to one side cannot reintroduce a silent drop.
+            # exit leaves the { } | inline_lib_bash subshell; pipefail + set -e
+            # then abort the build.
             blog_error "Hook source not found for embed: $_hookfile"
-            continue
+            exit 1
         fi
         _delim="__EMB_$(echo "$_hookfile" | tr 'a-z.-' 'A-Z__')__"
         echo "cat > \"\$HOOKS_DIR/$_hookfile\" <<'${_delim}'"
@@ -1369,9 +1373,8 @@ blog "Generating deploy/setup-user-hooks.ps1 (extracted + embedded hooks)"
 # Managed fields: hooks.SessionEnd, hooks.SessionStart, hooks.PreToolUse, hooks.PostToolUse, hooks.Stop
 # Preserved: permissions, enabledPlugins, all other fields (prefs synced by setup-user-settings)
 #
-# Hooks deployed:
-#   SessionEnd: session-archive.sh (archives transcripts to user repo)
-#   PreToolUse[Bash]: standing-order-guard.sh (enforces standing orders on Bash commands)
+# Hooks deployed: every hook registered in shared/hooks/hooks-manifest.json
+# at build time (embedded below), plus its deploy-only helper scripts.
 #
 # Note: Hook scripts are bash-only (Claude Code hooks always run in bash on
 # both platforms). This PS1 script only deploys the hook configuration.
@@ -1397,8 +1400,12 @@ BLOCK
         elif [ -f "$SCRIPTS_DIR/$_hookfile" ]; then
             _src="$SCRIPTS_DIR/$_hookfile"
         else
+            # Unreachable after the manifest preflight; fail loudly (never skip)
+            # so a future edit to one side cannot reintroduce a silent drop.
+            # exit leaves the { } pipeline subshell; pipefail + set -e then abort
+            # the build.
             blog_error "Hook source not found for PS1 embed: $_hookfile"
-            continue
+            exit 1
         fi
         printf '$hookFiles["%s"] = @'"'"'\r\n' "$_hookfile"
         perl -pe 's/\r?\n$/\r\n/' "$_src"

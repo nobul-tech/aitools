@@ -948,23 +948,27 @@ if ($Extensive) {
 # ---------------------------------------------------------------------------
 # Single-source check: every hook in shared/hooks/hooks-manifest.json must be
 # registered in BOTH setup-user-hooks.sh and .ps1. Closes the bash<->PS1 drift
-# that left scratch-init/harvest unregistered on Windows (RCA, plan §5).
+# that left scratch-init/harvest unregistered on Windows (RCA, plan §5). Also
+# audits build-deploy.sh: manifest-driven preflight/embed, no literal hook
+# filenames outside comments (issue #9). The comparison runs in python
+# (scripts/check-hook-parity.py) -- same script as the bash step 32.
 if ($Extensive) {
     $manifest = Join-Path $script:RepoRoot "shared\hooks\hooks-manifest.json"
     $shSetup = Join-Path $script:RepoRoot "scripts\setup-user-hooks.sh"
     $ps1Setup = Join-Path $script:RepoRoot "scripts\setup-user-hooks.ps1"
+    $bdScript = Join-Path $script:RepoRoot "scripts\build-deploy.sh"
     $pyCmd = $null
     if (Get-Command python -ErrorAction SilentlyContinue) { $pyCmd = "python" }
     elseif (Get-Command python3 -ErrorAction SilentlyContinue) { $pyCmd = "python3" }
-    if (-not (Test-Path $manifest) -or -not (Test-Path $shSetup) -or -not (Test-Path $ps1Setup)) {
-        StepSkip "32" "Hook-registration parity audit" "manifest or setup script missing"
+    if (-not (Test-Path $manifest) -or -not (Test-Path $shSetup) -or -not (Test-Path $ps1Setup) -or -not (Test-Path $bdScript)) {
+        StepSkip "32" "Hook-registration parity audit" "manifest, setup script, or build-deploy missing"
     } elseif (-not $pyCmd) {
         StepSkip "32" "Hook-registration parity audit" "python not available"
     } else {
         # Parity comparison done entirely in python (scripts/check-hook-parity.py) --
         # set-based, no perl-in-PowerShell quoting or platform sort-order fragility.
         $parityScript = Join-Path $script:RepoRoot "scripts\check-hook-parity.py"
-        $parityOut = (& $pyCmd $parityScript $manifest $shSetup $ps1Setup 2>&1 | Out-String).Trim()
+        $parityOut = (& $pyCmd $parityScript $manifest $shSetup $ps1Setup $bdScript 2>&1 | Out-String).Trim()
         if ($LASTEXITCODE -eq 0) {
             StepPass "32" "Hook-registration parity audit" $parityOut
         } else {

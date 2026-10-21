@@ -200,6 +200,31 @@ Verify the return value sets match between PS1 and bash:
 - `Deploy-ManagedFile` return values == `deploy_managed_file` MANAGED_FILE_RESULT values
 - `Record-DeployOutcome` cases == `deploy_tracker_record` cases
 
+### 32. Hook-registration parity audit
+
+`shared/hooks/hooks-manifest.json` is the single source of truth for hook
+registration (`hooks`: file + event + matcher) and for deploy-only helper
+files (`deploy`: e.g. Python siblings and `ait-harvest.py`). The step runs
+`scripts/check-hook-parity.py` (python3, or python as fallback) against four
+files and verifies that each stays manifest-driven:
+
+- `scripts/setup-user-hooks.sh`: reads `hooks-manifest.json` and registers
+  hooks through the node block's manifest loop (`for (const r of regs)`). No
+  hardcoded `mergeHookEntry('<event>', '<file>'...)` calls.
+- `scripts/setup-user-hooks.ps1`: reads `hooks-manifest.json` and registers
+  hooks through `foreach ($r in $regs)`. No hardcoded
+  `MergeHookEntry "<event>" "<file>"` calls.
+- `scripts/build-deploy.sh`: its hook preflight (required-file check) and both
+  embed loops (`deploy/setup-user-hooks.sh` and `.ps1`) read their file lists
+  from the manifest, so no manifest-listed hook or helper filename appears
+  literally outside comments. Full-line comments are ignored, and names match
+  as whole tokens, so a comment that mentions a hook passes.
+
+PASS: all four files are manifest-driven. FAIL: a check failed (the output
+names it, e.g. `build-deploy: hardcoded hook filename(s) resurfaced [...]`).
+SKIP: a file is missing or python is unavailable. The same audit runs in CI
+(Linux job, "Hook-registration parity audit").
+
 ---
 
 ## Version tag (after all checks pass)
