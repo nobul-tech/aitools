@@ -37,7 +37,7 @@ platform or environment; any agent reviewing a delegate's output.
 | # | Element | What the prompt must contain |
 |---|---------|------------------------------|
 | 1 | Identity | Name and role: `You are S2-Audit, ...`. Pick the name first; the prefix derives from it |
-| 2 | Rules | Explicit paths to every governing rule, plus the critical ones restated |
+| 2 | Rules | An explicit instruction to read every project-scope and user-scope rule not already in its context, by absolute path; the critical ones restated |
 | 3 | Skills | The skills to invoke, by name, and what to do if one will not load |
 | 4 | Operational learning | Carry-forward items relevant to the task, each with its source |
 | 5 | `WRITE_BLOCKED` | The exact signal format and "do not retry or route around a denial" |
@@ -61,8 +61,17 @@ URL (D-DEL4).
 3. **State intent.** Purpose, scope (with NOT exclusions), audience. If the
    delegate will write intent statements that need approval, get them
    approved first and pass them verbatim.
-4. **List rules and skills** by path and name. Restate what the delegate must
-   not get wrong; do not rely on it reading a rule you only named.
+4. **Instruct the delegate to read all rules.** It is the delegation duty to
+   tell the delegate explicitly to read every project-scope and user-scope
+   rule that is not already in its context, before other work. Do not assume
+   it inherited them: what a delegate receives varies by environment and
+   version. List each file by absolute path:
+   - Project scope: `<repo>/CLAUDE.md` and every `<repo>/.claude/rules/*.md`
+   - User scope: `~/.claude/CLAUDE.md` and every `~/.claude/rules/*.md`
+     (expanded to absolute paths; list the files, not a glob)
+
+   Then name the skills to invoke. Restate what the delegate must not get
+   wrong; do not rely on it reading a rule you only named.
 5. **Carry operational learning**, including environment limits below that
    affect the task.
 6. **Give access**: every path absolute. Discover file lists yourself and pass
@@ -96,8 +105,12 @@ You are <NAME>, delegated by <delegating agent>. <Parallel missions and their
 scopes, so you do not overlap.>
 
 ## Rules
-Read these in full before other work: <absolute paths>. Critical rules
-restated: <list>.
+Before other work, read in full every project-scope and user-scope rule
+below that is not already in your context:
+- Project: <repo>/CLAUDE.md, <each <repo>/.claude/rules/*.md, absolute>
+- User: <~/.claude/CLAUDE.md, each ~/.claude/rules/*.md, absolute>
+- Mission-specific: <other governing files, absolute>
+Critical rules restated: <list>.
 
 ## Skills
 Invoke: <skill names>. If one will not load, read its SKILL.md at <path> and
