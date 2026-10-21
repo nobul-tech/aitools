@@ -51,7 +51,10 @@ if (-not (Test-Path $manifestPath)) {
 }
 $manifestObj = Get-Content $manifestPath -Raw | ConvertFrom-Json
 
-# User repo for dotprofile overrides and adopt target
+# User repo: home of user-created (non-manifest) hooks only (SD-2, incident #80).
+# Manifest hooks have one version, in shared/hooks; a dotprofile copy is never
+# deployed (it would freeze the hook on this machine and diverge from the MDM
+# path, which embeds shared/hooks only).
 $userRepoPath = ReadConfigKey -File (Join-Path $env:USERPROFILE ".aitools\config.json") -Key "userRepoPath"
 $dotprofileHooks = $null
 if ($userRepoPath) {
@@ -61,13 +64,11 @@ if ($userRepoPath) {
     }
 }
 
-# Resolve hook source: dotprofile wins over shared/hooks, then scripts/ (for
-# deploy-only .py helpers like ait-harvest.py that live in scripts/).
+# Resolve hook source: shared/hooks, then scripts/ (for deploy-only .py helpers
+# like ait-harvest.py that live in scripts/). Same order as build-deploy.sh's
+# embed loops, so the dev and MDM paths deploy the same file.
 function Resolve-HookSource {
     param([string]$HookName)
-    if ($dotprofileHooks -and (Test-Path (Join-Path $dotprofileHooks $HookName))) {
-        return (Join-Path $dotprofileHooks $HookName)
-    }
     if (Test-Path (Join-Path $repoDir "shared\hooks\$HookName")) {
         return (Join-Path $repoDir "shared\hooks\$HookName")
     }
@@ -88,6 +89,12 @@ foreach ($hookName in $hookFiles) {
         Write-Summary "ERROR" "claude hooks" "hook script missing: $hookName"
         exit 1
     }
+    # A dotprofile copy of a manifest hook is ignored (SD-2): say so, so the
+    # user can delete it instead of believing their edit is live.
+    if ($dotprofileHooks -and (Test-Path (Join-Path $dotprofileHooks $hookName))) {
+        LogWarn "Ignoring dotprofile copy of managed hook $hookName ($(Join-Path $dotprofileHooks $hookName)): shared/hooks is the only source -- delete the copy"
+        Write-Summary "WARN" "claude hooks" "dotprofile copy ignored"
+    }
 }
 
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
@@ -95,8 +102,11 @@ $hooksDir = Join-Path $claudeDir "hooks"
 
 $hooksChanged = $false
 
+# Adopt target for manifest hooks: shared/hooks only (SD-2, incident #80;
+# reference/managed-file-deployment.md "Shell Script Deployment Detail").
+$sharedHooksDir = Join-Path $repoDir "shared\hooks"
 $hookAdoptLabel = ""
-if ($userRepoPath) { $hookAdoptLabel = "dotprofile" }
+if (Test-Path $sharedHooksDir) { $hookAdoptLabel = "aitools shared/hooks" }
 
 if ($DryRun) {
     foreach ($hookName in $hookFiles) {
@@ -123,24 +133,23 @@ if ($DryRun) {
 
         switch ($hookResult) {
             "accept & adopt" {
-                # Adopt: deployed (local) wins -> write back to BOTH canonical
-                # sources via Adopt-ManagedFile (rotated backups + copy + log).
-                # Hooks deploy verbatim, so shared/ + dotprofile each get a
-                # straight copy. shared/hooks is absent in MDM deploys; dotprofile
-                # is absent when no user repo is configured -- empty targets skip.
-                $adoptTargets = @()
-                $sharedHooks = Join-Path $repoDir "shared\hooks"
-                if (Test-Path $sharedHooks) { $adoptTargets += (Join-Path $sharedHooks $hookName) }
-                if ($userRepoPath) { $adoptTargets += (Join-Path $userRepoPath "claude\hooks\$hookName") }
-                if ($adoptTargets.Count -gt 0) {
+                # Adopt: deployed (local) wins -> write back to the ONE canonical
+                # source, shared/hooks, via Adopt-ManagedFile (rotated backup +
+                # copy + log). Never the dotprofile (SD-2, incident #80): a
+                # dotprofile copy is ignored by Resolve-HookSource and by build-deploy.
+                if (Test-Path $sharedHooksDir) {
                     # A failed write is logged by the lib (LogError); the row is written here.
                     $errorsBeforeAdopt = $errors
-                    $adoptedCount = Adopt-ManagedFile -SourceFile $dst -Targets $adoptTargets
+                    $adoptedCount = Adopt-ManagedFile -SourceFile $dst -Targets @(Join-Path $sharedHooksDir $hookName)
                     if ($errors -gt $errorsBeforeAdopt -or -not $adoptedCount) {
                         Write-Summary "ERROR" "claude hooks" "adopt failed: $hookName"
                     }
+                    if (Test-InteractiveConsole) {
+                        [Console]::WriteLine("  Review: cd $repoDir && git diff")
+                    }
                 } else {
-                    LogWarn "Cannot adopt: no shared/ or user repo target (run 'aitools user init')"
+                    LogWarn "Cannot adopt ${hookName}: shared/hooks not found at $sharedHooksDir"
+                    Write-Summary "WARN" "claude hooks" "adopt skipped: $hookName"
                 }
             }
             { $_ -in @("created", "updated") } {
@@ -187,15 +196,20 @@ if ($DryRun) {
 
             if ($userRepoPath) {
                 Log "Found user-created hook: $hookName"
-                try {
-                    [Console]::WriteLine("")
-                    [Console]::WriteLine("  User-created hook detected: $hookName")
-                    [Console]::WriteLine("  [a]dopt to dotprofile  [s]kip")
-                    [Console]::Write("  > ")
-                    $choice = [Console]::ReadLine()
-                } catch {
-                    $choice = "s"
+                # Test-InteractiveConsole + Read-ConsoleChoice (incident #81, GitHub
+                # #29): a redirected stdin never prompts, and EOF at the prompt
+                # ([Console]::ReadLine() -> $null) logs a warning and takes the
+                # default, [s]kip -- the choice that writes nothing (this menu has
+                # no overwrite option).
+                if (-not (Test-InteractiveConsole)) {
+                    Log "Non-interactive: skipped adoption prompt for $hookName"
+                    continue
                 }
+                [Console]::WriteLine("")
+                [Console]::WriteLine("  User-created hook detected: $hookName")
+                [Console]::WriteLine("  [a]dopt to dotprofile  [s]kip")
+                [Console]::Write("  > ")
+                $choice = Read-ConsoleChoice "skip"
                 switch ($choice) {
                     { $_ -in @("a", "adopt") } {
                         # Net-new user hook -> dotprofile only (not a managed

@@ -1,0 +1,17 @@
+---
+description: Hook lifecycle -- one source per hook, adopt target, user-created hooks, retirement
+globs: "shared/hooks/**,scripts/setup-user-hooks.sh,scripts/setup-user-hooks.ps1,scripts/build-deploy.sh,reference/managed-file-deployment.md"
+alwaysApply: false
+---
+
+## Hook Lifecycle
+
+Mirror of `.claude/rules/hook-lifecycle.md` (authoritative).
+
+- **One source (SD-2, 2026-10-21):** a harness hook is one `shared/hooks/hooks-manifest.json` entry plus one file in `shared/hooks/` (or `scripts/` for deploy-only helpers). Dotprofile and `~/.claude/hooks/` copies are never sources.
+- **Deploy:** dev path (`scripts/setup-user-hooks.*`) and MDM path (`build-deploy.sh` embed) both resolve `shared/hooks/` then `scripts/`. A dotprofile copy of a manifest hook is ignored with a WARN row.
+- **Adopt:** `[a]dopt` on a manifest hook writes `shared/hooks/<file>` only; the user reviews and ships it by PR. MDM has no adopt.
+- **User-created hooks:** live in `<userRepoPath>/claude/hooks/` only; reverse discovery offers `[a]dopt to dotprofile` / `[s]kip`; never deployed or registered by setup-user-hooks.
+- **Prompts:** `tty_interactive` / `Test-InteractiveConsole` gate + `read_tty_choice` / `Read-ConsoleChoice`; EOF or non-interactive takes the logged default (reverse discovery: skip).
+- **Retire:** remove manifest entry + file; add to `STALE_HOOKS` / `$staleHooks` and `removeHookEntry` / `RemoveHookEntry` in both scripts. MDM removes the registration, not the file.
+- **Verify:** hook-rollout pre-deploy checks; `bash -n` + pwsh parse; isolated-HOME runs (adopt + EOF paths); isolated-HOME build-deploy. Never against the real HOME.
