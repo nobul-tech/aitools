@@ -1,0 +1,14 @@
+/delegate: delegates push and open their own PRs (D-DEL4)
+
+Commander decision D-DEL4 (user rule delegation.md): a delegate whose
+mission produces a code change pushes its branch and opens the PR itself,
+then returns the PR URL. Prompt step 9 now sets the shipping terms
+(repo, base, branch, pre-push checks, limits) instead of "no pushes or PRs
+unless authorized"; the skeleton gains a Shipping section; verification
+reviews the delegate's PR rather than re-pushing.
+
+Also records an environment limit observed 2026-10-21: worktree-isolated
+delegates cannot Write outside their worktree, so their output path must be
+in the worktree or their scratchpad.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

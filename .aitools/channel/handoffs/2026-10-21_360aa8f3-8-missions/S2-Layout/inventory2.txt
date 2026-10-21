@@ -1,0 +1,538 @@
+=== .aitools project
+/Users/new-jose/repos/aitools/.aitools
+/Users/new-jose/repos/aitools/.aitools/.DS_Store
+/Users/new-jose/repos/aitools/.aitools/channel
+/Users/new-jose/repos/aitools/.aitools/channel/6e97c17f-full-session.md
+/Users/new-jose/repos/aitools/.aitools/channel/8236ca9c-2026-03-26T2200Z-thinking-awareness.md
+/Users/new-jose/repos/aitools/.aitools/channel/8236ca9c-2026-03-26T2245Z-CLAUDE.md
+/Users/new-jose/repos/aitools/.aitools/channel/8236ca9c-full-session.md
+/Users/new-jose/repos/aitools/.aitools/channel/CLAUDE.md
+/Users/new-jose/repos/aitools/.aitools/channel/d5b52bf2-2026-03-26T2300Z-failure-mode-gate.md
+/Users/new-jose/repos/aitools/.aitools/channel/d5b52bf2-2026-03-27T0045Z-commander-profile.md
+/Users/new-jose/repos/aitools/.aitools/channel/handoffs
+/Users/new-jose/repos/aitools/.aitools/channel/pre-failure-mode
+/Users/new-jose/repos/aitools/.aitools/channel/relay.md
+/Users/new-jose/repos/aitools/.aitools/channel/running-estimate.json
+/Users/new-jose/repos/aitools/.aitools/harness.db
+/Users/new-jose/repos/aitools/.aitools/provenance-export.json
+/Users/new-jose/repos/aitools/.aitools/sessions
+/Users/new-jose/repos/aitools/.aitools/sessions/06c9c816-5.db
+/Users/new-jose/repos/aitools/.aitools/sessions/06c9c816-5.db-shm
+/Users/new-jose/repos/aitools/.aitools/sessions/06c9c816-5.db-wal
+/Users/new-jose/repos/aitools/.aitools/sessions/0d7004b4-8.db
+/Users/new-jose/repos/aitools/.aitools/sessions/0d7004b4-8.db-shm
+/Users/new-jose/repos/aitools/.aitools/sessions/0d7004b4-8.db-wal
+/Users/new-jose/repos/aitools/.aitools/sessions/0fad5eda-2.db
+/Users/new-jose/repos/aitools/.aitools/sessions/0fad5eda-2.db-shm
+/Users/new-jose/repos/aitools/.aitools/sessions/0fad5eda-2.db-wal
+/Users/new-jose/repos/aitools/.aitools/sessions/10cf255a-c.db
+/Users/new-jose/repos/aitools/.aitools/sessions/1da7527b-b.db
+/Users/new-jose/repos/aitools/.aitools/sessions/1da7527b-b.db-shm
+/Users/new-jose/repos/aitools/.aitools/sessions/1da7527b-b.db-wal
+/Users/new-jose/repos/aitools/.aitools/sessions/288f147b-1.db
+/Users/new-jose/repos/aitools/.aitools/sessions/288f147b-1.db-shm
+/Users/new-jose/repos/aitools/.aitools/sessions/288f147b-1.db-wal
+/Users/new-jose/repos/aitools/.aitools/sessions/2acfefdb-1.db
+/Users/new-jose/repos/aitools/.aitools/sessions/2acfefdb-1.db-shm
+/Users/new-jose/repos/aitools/.aitools/sessions/2acfefdb-1.db-wal
+/Users/new-jose/repos/aitools/.aitools/sessions/2f92e654-0.db
+/Users/new-jose/repos/aitools/.aitools/sessions/2f92e654-0.db-shm
+/Users/new-jose/repos/aitools/.aitools/sessions/2f92e654-0.db-wal
+/Users/new-jose/repos/aitools/.aitools/sessions/360aa8f3-8.db
+/Users/new-jose/repos/aitools/.aitools/sessions/360aa8f3-8.db-shm
+/Users/new-jose/repos/aitools/.aitools/sessions/360aa8f3-8.db-wal
+/Users/new-jose/repos/aitools/.aitools/sessions/37c718ba-6.db
+/Users/new-jose/repos/aitools/.aitools/sessions/37c718ba-6.db-shm
+/Users/new-jose/repos/aitools/.aitools/sessions/37c718ba-6.db-wal
+/Users/new-jose/repos/aitools/.aitools/sessions/41894402-b.db
+/Users/new-jose/repos/aitools/.aitools/sessions/41894402-b.db-shm
+/Users/new-jose/repos/aitools/.aitools/sessions/41894402-b.db-wal
+/Users/new-jose/repos/aitools/.aitools/sessions/42d39abd-a.db
+/Users/new-jose/repos/aitools/.aitools/sessions/42d39abd-a.db-shm
+/Users/new-jose/repos/aitools/.aitools/sessions/42d39abd-a.db-wal
+/Users/new-jose/repos/aitools/.aitools/sessions/4691443a-4.db
+/Users/new-jose/repos/aitools/.aitools/sessions/4691443a-4.db-shm
+/Users/new-jose/repos/aitools/.aitools/sessions/4691443a-4.db-wal
+/Users/new-jose/repos/aitools/.aitools/sessions/46ee1c2b-1.db
+/Users/new-jose/repos/aitools/.aitools/sessions/46ee1c2b-1.db-shm
+/Users/new-jose/repos/aitools/.aitools/sessions/46ee1c2b-1.db-wal
+/Users/new-jose/repos/aitools/.aitools/sessions/4c8d96ee-a.db
+/Users/new-jose/repos/aitools/.aitools/sessions/4c8d96ee-a.db-shm
+/Users/new-jose/repos/aitools/.aitools/sessions/4c8d96ee-a.db-wal
+=== harvesting count
+     474
+ls: /Users/new-jose/repos/aitools/.aitools/harvesting: No such file or directory
+=== dotprofile tree
+/Users/new-jose/repos/aitools-nobul-jose
+/Users/new-jose/repos/aitools-nobul-jose/.DS_Store
+/Users/new-jose/repos/aitools-nobul-jose/.git
+/Users/new-jose/repos/aitools-nobul-jose/.gitattributes
+/Users/new-jose/repos/aitools-nobul-jose/.gitignore
+/Users/new-jose/repos/aitools-nobul-jose/.scratch
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/commit-msg.txt
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perl-build-github.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perl-darwin.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perl-formula-github.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perl-formulae-analytics.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perl-formulae-top.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perl-get-page.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perl-learn-installing.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perl-learn-macos-install.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perl-learn-macos.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perl-macosx-page.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perl-org-get.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perl-sha256-match.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perlbrew-github-bottom.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perlbrew-github-issues.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perlbrew-github-mid.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perlbrew-github-readme.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perlbrew-github-top.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perlbrew-install-page.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perlbrew-metacpan-full.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perlbrew-metacpan-top.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perlbrew-official-site-full.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perlbrew-official-site-top.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/perlbrew-page.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/plenv-github-full.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/plenv-github-issues.png
+/Users/new-jose/repos/aitools-nobul-jose/.scratch/plenv-github-top.png
+/Users/new-jose/repos/aitools-nobul-jose/README.md
+/Users/new-jose/repos/aitools-nobul-jose/claude
+/Users/new-jose/repos/aitools-nobul-jose/claude/CLAUDE.md
+/Users/new-jose/repos/aitools-nobul-jose/claude/CLAUDE.md.bak.2026-03-11T125825Z
+/Users/new-jose/repos/aitools-nobul-jose/claude/CLAUDE.md.bak.2026-03-21T145339Z
+/Users/new-jose/repos/aitools-nobul-jose/claude/CLAUDE.md.bak.2026-06-21T203230Z
+/Users/new-jose/repos/aitools-nobul-jose/claude/effectiveness.md
+/Users/new-jose/repos/aitools-nobul-jose/claude/rules
+/Users/new-jose/repos/aitools-nobul-jose/claude/rules/concurrent-agents.md
+/Users/new-jose/repos/aitools-nobul-jose/claude/rules/delegation.md
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-agent
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-build-interact
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-build-onboarding
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-build-scrape
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-build-search
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-company-directories
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-competitive-intel
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-crawl
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-dashboard-reporting
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-deep-research
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-demo-walkthrough
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-download
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-interact
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-knowledge-base
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-knowledge-ingest
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-lead-gen
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-lead-research
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-map
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-market-research
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-monitor
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-parse
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-qa
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-research-index
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-research-papers
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-scrape
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-search
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-seo-audit
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-shop
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-website-design-clone
+/Users/new-jose/repos/aitools-nobul-jose/claude/skills/firecrawl-workflows
+/Users/new-jose/repos/aitools-nobul-jose/deploy
+/Users/new-jose/repos/aitools-nobul-jose/environments
+/Users/new-jose/repos/aitools-nobul-jose/environments/claude-code-web
+/Users/new-jose/repos/aitools-nobul-jose/environments/claude-code-web/CLAUDE.md
+/Users/new-jose/repos/aitools-nobul-jose/modal
+/Users/new-jose/repos/aitools-nobul-jose/modal/.gitignore
+/Users/new-jose/repos/aitools-nobul-jose/modal/README.md
+/Users/new-jose/repos/aitools-nobul-jose/modal/pyproject.toml
+/Users/new-jose/repos/aitools-nobul-jose/modal/src
+/Users/new-jose/repos/aitools-nobul-jose/modal/src/__init__.py
+/Users/new-jose/repos/aitools-nobul-jose/modal/src/app.py
+/Users/new-jose/repos/aitools-nobul-jose/modal/src/cli.py
+/Users/new-jose/repos/aitools-nobul-jose/modal/src/provenance.py
+/Users/new-jose/repos/aitools-nobul-jose/modal/tests
+/Users/new-jose/repos/aitools-nobul-jose/modal/tests/test_provenance.py
+/Users/new-jose/repos/aitools-nobul-jose/papers
+/Users/new-jose/repos/aitools-nobul-jose/papers/the-weight
+/Users/new-jose/repos/aitools-nobul-jose/papers/the-weight/first-chain.jsonl
+/Users/new-jose/repos/aitools-nobul-jose/papers/the-weight/the-weight-latex.pdf
+/Users/new-jose/repos/aitools-nobul-jose/papers/the-weight/the-weight-web.html
+/Users/new-jose/repos/aitools-nobul-jose/papers/the-weight/the-weight.docx
+/Users/new-jose/repos/aitools-nobul-jose/papers/the-weight/the-weight.jsonl
+/Users/new-jose/repos/aitools-nobul-jose/papers/the-weight/the-weight.md
+/Users/new-jose/repos/aitools-nobul-jose/papers/the-weight/the-weight.pdf
+/Users/new-jose/repos/aitools-nobul-jose/papers/the-weight/the-weight.tex
+/Users/new-jose/repos/aitools-nobul-jose/profile.json
+/Users/new-jose/repos/aitools-nobul-jose/profile.json.bak.2026-06-22T024214Z
+/Users/new-jose/repos/aitools-nobul-jose/profile.json.bak.2026-06-22T024329Z
+/Users/new-jose/repos/aitools-nobul-jose/profile.json.bak.2026-10-16T021217Z
+/Users/new-jose/repos/aitools-nobul-jose/profile.json.bak.2026-10-16T022138Z
+/Users/new-jose/repos/aitools-nobul-jose/profile.json.bak.2026-10-21T030746Z
+/Users/new-jose/repos/aitools-nobul-jose/reference
+/Users/new-jose/repos/aitools-nobul-jose/reference/pyenv-packages-2026-03-04.txt
+/Users/new-jose/repos/aitools-nobul-jose/sessions
+=== dotprofile deploy list
+setup-bash.ps1
+setup-bash.sh
+setup-cursor-ide-mcp.ps1
+setup-cursor-ide-mcp.sh
+setup-datadog.ps1
+setup-datadog.sh
+setup-gh-cli.ps1
+setup-gh-cli.sh
+setup-go.ps1
+setup-go.sh
+setup-google-chrome.ps1
+setup-google-chrome.sh
+setup-modal.ps1
+setup-modal.sh
+setup-pandoc.ps1
+setup-pandoc.sh
+setup-perl.ps1
+setup-perl.sh
+setup-python.ps1
+setup-python.sh
+setup-rust.ps1
+setup-rust.sh
+setup-typst.ps1
+setup-typst.sh
+setup-user-claude.ps1
+setup-user-claude.sh
+setup-user-cursor.ps1
+setup-user-cursor.sh
+setup-user-hooks.ps1
+setup-user-hooks.sh
+setup-user-mcp.ps1
+setup-user-mcp.sh
+setup-user-settings.ps1
+setup-user-settings.sh
+setup-user-shell.ps1
+setup-user-shell.sh
+setup-user-skills.ps1
+setup-user-skills.sh
+setup-uv.ps1
+setup-uv.sh
+setup-vercelcli.ps1
+setup-vercelcli.sh
+=== ~/.claude
+total 936
+drwxr-xr-x@  63 new-jose  staff    2016 Oct 20 20:20 .
+drwxr-x---+ 121 new-jose  staff    3872 Oct 20 20:20 ..
+-rw-r--r--@   1 new-jose  staff    8196 Jun 21 11:33 .DS_Store
+drwxr-xr-x@   5 new-jose  staff     160 Jul 24 12:09 .aitools
+-rw-r--r--@   1 new-jose  staff      24 Oct 20 18:30 .last-cleanup
+-rw-r--r--@   1 new-jose  staff     161 Oct 20 20:18 .last-update-result.json
+drwxr-xr-x@   9 new-jose  staff     288 Jul 14 11:15 .scratch
+-rw-r--r--@   1 new-jose  staff   14714 Oct 15 19:10 CLAUDE.md
+-rw-r--r--@   1 new-jose  staff   10934 Jun 14 23:12 CLAUDE.md.bak.2026-06-15T061226Z
+-rw-r--r--@   1 new-jose  staff   12356 Jun 15 07:36 CLAUDE.md.bak.2026-06-15T143654Z
+-rw-r--r--@   1 new-jose  staff   14638 Jun 21 13:31 CLAUDE.md.bak.2026-06-21T203151Z
+-rw-r--r--@   1 new-jose  staff   14637 Jun 21 17:19 CLAUDE.md.bak.2026-06-22T001925Z
+-rw-r--r--@   1 new-jose  staff   14644 Jun 21 19:56 CLAUDE.md.bak.2026-06-22T025616Z
+-rw-r--r--@   1 new-jose  staff   14720 Oct 15 19:10 CLAUDE.md.bak.2026-10-16T021032Z
+drwxr-xr-x@   7 new-jose  staff     224 Oct 20 20:19 backups
+drwxr-xr-x@   5 new-jose  staff     160 Oct 20 17:10 cache
+drwxr-xr-x@   3 new-jose  staff      96 Jun 25 15:54 chrome
+drwx------@   7 new-jose  staff     224 Oct 20 20:20 daemon
+-rw-r--r--@   1 new-jose  staff     448 Oct 20 20:20 daemon.lock
+-rw-r--r--@   1 new-jose  staff    7604 Oct 20 20:20 daemon.log
+-rw-r--r--@   1 new-jose  staff     128 Oct 20 20:20 daemon.status.json
+drwxr-xr-x@   2 new-jose  staff      64 May 20 13:53 downloads
+drwxr-xr-x@   5 new-jose  staff     160 Oct 20 20:20 file-history
+drwxr-xr-x@   4 new-jose  staff     128 Jul 24 12:09 harvesting
+-rw-------@   1 new-jose  staff  107415 Oct 20 19:44 history.jsonl
+drwxr-xr-x@  32 new-jose  staff    1024 Jun 21 17:19 hooks
+drwxr-xr-x@   9 new-jose  staff     288 Oct 20 20:20 jobs
+-rw-r--r--@   1 new-jose  staff     808 Oct 20 17:10 mcp-needs-auth-cache.json
+drwxr-xr-x@   2 new-jose  staff      64 Oct 15 19:33 paste-cache
+drwxr-xr-x@  11 new-jose  staff     352 Oct 20 20:20 plugins
+drwx------@   4 new-jose  staff     128 Oct 15 19:33 projects
+drwxr-xr-x@   3 new-jose  staff      96 Jun 14 23:12 rules
+drwxr-xr-x@   3 new-jose  staff      96 Jun 21 19:56 rules.bak.2026-06-22T025616Z
+drwxr-xr-x@   3 new-jose  staff      96 Jun 21 20:04 rules.bak.2026-06-22T030446Z
+drwxr-xr-x@   3 new-jose  staff      96 Oct 15 19:10 rules.bak.2026-10-16T021032Z
+drwxr-xr-x@   3 new-jose  staff      96 Oct 15 19:12 rules.bak.2026-10-16T021256Z
+drwxr-xr-x@   3 new-jose  staff      96 Oct 15 19:21 rules.bak.2026-10-16T022109Z
+drwxr-xr-x@  10 new-jose  staff     320 Oct 20 20:20 session-env
+drwx------@   8 new-jose  staff     256 Oct 20 20:20 sessions
+-rw-r--r--@   1 new-jose  staff    4609 Oct 15 19:22 settings.json
+-rw-r--r--@   1 new-jose  staff     108 Jun 14 22:09 settings.json.bak.2026-06-15T050917Z
+-rw-r--r--@   1 new-jose  staff    4053 Jun 14 23:12 settings.json.bak.2026-06-15T061213Z
+-rw-r--r--@   1 new-jose  staff    4079 Jun 14 23:12 settings.json.bak.2026-06-15T061230Z
+-rw-r--r--@   1 new-jose  staff    4079 Jun 14 23:25 settings.json.bak.2026-06-15T062545Z
+-rw-r--r--@   1 new-jose  staff    4138 Jun 15 00:44 settings.json.bak.2026-06-15T074417Z
+-rw-r--r--@   1 new-jose  staff    4138 Jun 15 07:36 settings.json.bak.2026-06-15T143659Z
+-rw-r--r--@   1 new-jose  staff    4138 Jun 16 09:57 settings.json.bak.2026-06-16T165722Z
+-rw-r--r--@   1 new-jose  staff    4139 Jun 20 09:53 settings.json.bak.2026-06-20T165305Z
+-rw-r--r--@   1 new-jose  staff    4138 Jun 20 11:42 settings.json.bak.2026-06-20T184254Z
+-rw-r--r--@   1 new-jose  staff    4138 Jun 20 09:53 settings.json.bak.2026-06-21T004031Z
+-rw-r--r--@   1 new-jose  staff    4354 Jun 20 18:51 settings.json.bak.2026-06-21T015147Z
+-rw-r--r--@   1 new-jose  staff    4354 Jun 20 19:14 settings.json.bak.2026-06-21T021423Z
+-rw-r--r--@   1 new-jose  staff    4385 Jun 21 11:18 settings.json.bak.2026-06-21T181847Z
+-rw-r--r--@   1 new-jose  staff    4385 Jun 21 13:32 settings.json.bak.2026-06-21T203239Z
+-rw-r--r--@   1 new-jose  staff    4288 Jun 21 17:19 settings.json.bak.2026-06-22T001935Z
+-rw-r--r--@   1 new-jose  staff    4288 Jun 21 17:25 settings.json.bak.2026-06-22T002504Z
+-rw-r--r--@   1 new-jose  staff    4288 Jun 21 19:42 settings.json.bak.2026-06-22T024214Z
+-rw-r--r--@   1 new-jose  staff    4288 Jun 21 19:43 settings.json.bak.2026-06-22T024329Z
+-rw-r--r--@   1 new-jose  staff    4290 Oct 15 19:12 settings.json.bak.2026-10-16T021217Z
+-rw-r--r--@   1 new-jose  staff    4612 Oct 15 19:21 settings.json.bak.2026-10-16T022138Z
+drwxr-xr-x@   4 new-jose  staff     128 Oct 20 20:20 shell-snapshots
+drwxr-xr-x@  47 new-jose  staff    1504 Oct 15 19:22 skills
+drwx------@   3 new-jose  staff      96 Oct 20 17:10 state
+=== ~/.claude/skills
+total 0
+drwxr-xr-x@ 47 new-jose  staff  1504 Oct 15 19:22 .
+drwxr-xr-x@ 63 new-jose  staff  2016 Oct 20 20:20 ..
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 a11y-debugging
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 aitool-continue
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 aitool-eval
+drwxr-xr-x@  4 new-jose  staff   128 Jun 21 19:56 aitool-ops
+drwxr-xr-x@  3 new-jose  staff    96 Jun 28 13:37 chrome-devtools
+lrwxr-xr-x@  1 new-jose  staff    30 Jun 28 13:41 firecrawl -> ../../.agents/skills/firecrawl
+lrwxr-xr-x@  1 new-jose  staff    36 Jun 28 13:41 firecrawl-agent -> ../../.agents/skills/firecrawl-agent
+lrwxr-xr-x@  1 new-jose  staff    45 Jun 28 13:41 firecrawl-build-interact -> ../../.agents/skills/firecrawl-build-interact
+lrwxr-xr-x@  1 new-jose  staff    47 Jun 28 13:41 firecrawl-build-onboarding -> ../../.agents/skills/firecrawl-build-onboarding
+lrwxr-xr-x@  1 new-jose  staff    43 Jun 28 13:41 firecrawl-build-scrape -> ../../.agents/skills/firecrawl-build-scrape
+lrwxr-xr-x@  1 new-jose  staff    43 Jun 28 13:41 firecrawl-build-search -> ../../.agents/skills/firecrawl-build-search
+lrwxr-xr-x@  1 new-jose  staff    50 Jun 28 13:41 firecrawl-company-directories -> ../../.agents/skills/firecrawl-company-directories
+lrwxr-xr-x@  1 new-jose  staff    48 Jun 28 13:41 firecrawl-competitive-intel -> ../../.agents/skills/firecrawl-competitive-intel
+lrwxr-xr-x@  1 new-jose  staff    36 Jun 28 13:41 firecrawl-crawl -> ../../.agents/skills/firecrawl-crawl
+lrwxr-xr-x@  1 new-jose  staff    50 Jun 28 13:41 firecrawl-dashboard-reporting -> ../../.agents/skills/firecrawl-dashboard-reporting
+lrwxr-xr-x@  1 new-jose  staff    44 Jun 28 13:41 firecrawl-deep-research -> ../../.agents/skills/firecrawl-deep-research
+lrwxr-xr-x@  1 new-jose  staff    47 Jun 28 13:41 firecrawl-demo-walkthrough -> ../../.agents/skills/firecrawl-demo-walkthrough
+lrwxr-xr-x@  1 new-jose  staff    39 Jun 28 13:41 firecrawl-download -> ../../.agents/skills/firecrawl-download
+lrwxr-xr-x@  1 new-jose  staff    39 Jun 28 13:41 firecrawl-interact -> ../../.agents/skills/firecrawl-interact
+lrwxr-xr-x@  1 new-jose  staff    45 Jun 28 13:41 firecrawl-knowledge-base -> ../../.agents/skills/firecrawl-knowledge-base
+lrwxr-xr-x@  1 new-jose  staff    47 Jun 28 13:41 firecrawl-knowledge-ingest -> ../../.agents/skills/firecrawl-knowledge-ingest
+lrwxr-xr-x@  1 new-jose  staff    39 Jun 28 13:41 firecrawl-lead-gen -> ../../.agents/skills/firecrawl-lead-gen
+lrwxr-xr-x@  1 new-jose  staff    44 Jun 28 13:41 firecrawl-lead-research -> ../../.agents/skills/firecrawl-lead-research
+lrwxr-xr-x@  1 new-jose  staff    34 Jun 28 13:41 firecrawl-map -> ../../.agents/skills/firecrawl-map
+lrwxr-xr-x@  1 new-jose  staff    46 Jun 28 13:41 firecrawl-market-research -> ../../.agents/skills/firecrawl-market-research
+lrwxr-xr-x@  1 new-jose  staff    38 Jun 28 13:41 firecrawl-monitor -> ../../.agents/skills/firecrawl-monitor
+lrwxr-xr-x@  1 new-jose  staff    36 Jun 28 13:41 firecrawl-parse -> ../../.agents/skills/firecrawl-parse
+lrwxr-xr-x@  1 new-jose  staff    33 Jun 28 13:41 firecrawl-qa -> ../../.agents/skills/firecrawl-qa
+lrwxr-xr-x@  1 new-jose  staff    45 Jun 28 13:41 firecrawl-research-index -> ../../.agents/skills/firecrawl-research-index
+lrwxr-xr-x@  1 new-jose  staff    46 Jun 28 13:41 firecrawl-research-papers -> ../../.agents/skills/firecrawl-research-papers
+lrwxr-xr-x@  1 new-jose  staff    37 Jun 28 13:41 firecrawl-scrape -> ../../.agents/skills/firecrawl-scrape
+lrwxr-xr-x@  1 new-jose  staff    37 Jun 28 13:41 firecrawl-search -> ../../.agents/skills/firecrawl-search
+lrwxr-xr-x@  1 new-jose  staff    40 Jun 28 13:41 firecrawl-seo-audit -> ../../.agents/skills/firecrawl-seo-audit
+lrwxr-xr-x@  1 new-jose  staff    35 Jun 28 13:41 firecrawl-shop -> ../../.agents/skills/firecrawl-shop
+lrwxr-xr-x@  1 new-jose  staff    51 Jun 28 13:41 firecrawl-website-design-clone -> ../../.agents/skills/firecrawl-website-design-clone
+lrwxr-xr-x@  1 new-jose  staff    40 Jun 28 13:41 firecrawl-workflows -> ../../.agents/skills/firecrawl-workflows
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 handoff
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 intent-audit
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 intent-writing
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 investigate
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 mission-control
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 optimize-plan
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 planning
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 scratch
+drwxr-xr-x@  4 new-jose  staff   128 Oct 15 19:22 synced
+=== ~/.claude/rules
+total 8
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 23:12 .
+drwxr-xr-x@ 63 new-jose  staff  2016 Oct 20 20:20 ..
+-rw-r--r--@  1 new-jose  staff   483 Jun 14 23:12 concurrent-agents.md
+=== ~/.claude/hooks
+ait-harvest.py
+ait-harvest.py.bak.2026-06-21T181941Z
+block-claude-code-guide.sh
+block-explore-agent.sh
+command-channel-stop.sh
+dashboard-serve.sh
+delegation-duty-guard.sh
+failure-mode-identity-stop.sh
+failure-mode-verify-stop.sh
+glossary-skill-guard.sh
+harness-db-sessionend.sh
+harness-db-sessionend.sh.bak.2026-06-22T001945Z
+harness-db-sessionstart.sh
+harness-db-sessionstart.sh.bak.2026-06-21T203249Z
+harvest-session.sh
+intelligence-stop.py
+intelligence-stop.sh
+logs
+scratch-init.sh
+scratch-init.sh.bak.2026-06-22T001945Z
+session-archive.sh
+session-archive.sh.bak.2026-06-21T212022Z
+session-catchup.sh
+sh-file-fixup.sh
+standing-order-guard.sh
+standing-order-guard.sh.bak.2026-06-21T181859Z
+standing-order-guard.sh.bak.2026-06-21T203304Z
+standing-order-guard.sh.bak.2026-06-21T210418Z
+tool-ops-session-audit.sh
+=== ~/.cursor/skills
+total 0
+drwxr-xr-x@ 46 new-jose  staff  1472 Oct 15 19:13 .
+drwxr-xr-x@ 59 new-jose  staff  1888 Oct 15 19:21 ..
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 a11y-debugging
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 aitool-continue
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 aitool-eval
+drwxr-xr-x@  4 new-jose  staff   128 Jun 21 19:56 aitool-ops
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 chrome-devtools
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-agent
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-build-interact
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-build-onboarding
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-build-scrape
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-build-search
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-company-directories
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-competitive-intel
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-crawl
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-dashboard-reporting
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-deep-research
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-demo-walkthrough
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-download
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-interact
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-knowledge-base
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-knowledge-ingest
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-lead-gen
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-lead-research
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-map
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-market-research
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-monitor
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-parse
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-qa
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-research-index
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-research-papers
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-scrape
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-search
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-seo-audit
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-shop
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-website-design-clone
+drwxr-xr-x@  3 new-jose  staff    96 Oct 15 19:13 firecrawl-workflows
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 handoff
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 intent-audit
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 intent-writing
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 investigate
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 mission-control
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 optimize-plan
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 planning
+drwxr-xr-x@  3 new-jose  staff    96 Jun 14 22:30 scratch
+=== ~/.cursor/rules
+ls: /Users/new-jose/.cursor/rules: No such file or directory
+=== ~/.aitools
+/Users/new-jose/.aitools
+/Users/new-jose/.aitools/.DS_Store
+/Users/new-jose/.aitools/bin
+/Users/new-jose/.aitools/bin/aitools
+/Users/new-jose/.aitools/bin/harness-db.py
+/Users/new-jose/.aitools/bin/harness-db.py.bak.2026-06-22T001041Z
+/Users/new-jose/.aitools/bin/harness-db.py.bak.2026-06-22T001233Z
+/Users/new-jose/.aitools/bin/harness-db.py.bak.2026-06-22T001752Z
+/Users/new-jose/.aitools/bin/hh.sh
+/Users/new-jose/.aitools/bin/read-session-full.py
+/Users/new-jose/.aitools/bin/read-session.py
+/Users/new-jose/.aitools/channel
+/Users/new-jose/.aitools/config.json
+/Users/new-jose/.aitools/config.json.bak.2026-10-21T030746Z
+/Users/new-jose/.aitools/cursor
+/Users/new-jose/.aitools/cursor/.DS_Store
+/Users/new-jose/.aitools/cursor/.context-state.json
+/Users/new-jose/.aitools/cursor/.context-state.json.tmp.47629
+/Users/new-jose/.aitools/cursor/.context-state.json.tmp.61475
+/Users/new-jose/.aitools/cursor/.context-state.json.tmp.68425
+/Users/new-jose/.aitools/cursor/.context-state.json.tmp.73582
+/Users/new-jose/.aitools/cursor/.context-state.json.tmp.87451
+/Users/new-jose/.aitools/cursor/deploy.py
+/Users/new-jose/.aitools/cursor/disable-zen-mode.py
+/Users/new-jose/.aitools/cursor/export-transcript.py
+/Users/new-jose/.aitools/cursor/exports
+/Users/new-jose/.aitools/cursor/statusline.sh
+/Users/new-jose/.aitools/cursor/tests
+/Users/new-jose/.aitools/dashboard-pids
+/Users/new-jose/.aitools/dashboard-pids/8411.pid
+/Users/new-jose/.aitools/deploy-state
+/Users/new-jose/.aitools/harness.db
+/Users/new-jose/.aitools/harness.db-shm
+/Users/new-jose/.aitools/harness.db-wal
+/Users/new-jose/.aitools/knowledge.db
+/Users/new-jose/.aitools/knowledge.db-shm
+/Users/new-jose/.aitools/knowledge.db-wal
+/Users/new-jose/.aitools/locks
+/Users/new-jose/.aitools/logs
+/Users/new-jose/.aitools/sessions
+/Users/new-jose/.aitools/sessions/4fe597fb-d.db
+=== config.json
+{
+  "version": 2,
+  "reposPath": "/Users/new-jose/repos",
+  "repoPath": "/Users/new-jose/repos/aitools",
+  "userRepoPath": "/Users/new-jose/repos/aitools-nobul-jose",
+  "googleDrives": [
+    {
+      "path": "/Users/new-jose/Library/CloudStorage/GoogleDrive-jose@nobul.tech/My Drive",
+      "account": "jose@nobul.tech",
+      "label": ""
+    },
+    {
+      "path": "/Users/new-jose/Library/CloudStorage/GoogleDrive-jose@strat-accs.com/My Drive",
+      "account": "jose@strat-accs.com",
+      "label": ""
+    }
+  ],
+  "machineAlias": "nobul-mac"
+}
+=== drift: shared/skills vs ~/.claude/skills vs ~/.cursor/skills
+a11y-debugging claude=SAME cursor=SAME
+aitool-continue claude=DIFF cursor=DIFF
+aitool-eval claude=SAME cursor=SAME
+aitool-ops claude=DIFF cursor=DIFF
+audit claude=ABSENT cursor=ABSENT
+chrome-devtools claude=SAME cursor=SAME
+delegate claude=ABSENT cursor=ABSENT
+frameworks claude=ABSENT cursor=ABSENT
+glossary claude=ABSENT cursor=ABSENT
+governed-data claude=ABSENT cursor=ABSENT
+handoff claude=DIFF cursor=DIFF
+harvest claude=ABSENT cursor=ABSENT
+incident claude=ABSENT cursor=ABSENT
+intent-audit claude=SAME cursor=SAME
+intent-writing claude=SAME cursor=SAME
+investigate claude=SAME cursor=SAME
+mission-control claude=DIFF cursor=DIFF
+optimize-plan claude=SAME cursor=SAME
+planning claude=DIFF cursor=DIFF
+scratch claude=SAME cursor=SAME
+tool-eval claude=ABSENT cursor=ABSENT
+tool-ops claude=ABSENT cursor=ABSENT
+tool-registry claude=ABSENT cursor=ABSENT
+=== drift: dotprofile claude/rules vs ~/.claude/rules
+concurrent-agents.md SAME
+delegation.md ABSENT
+=== drift: shared/hooks vs ~/.claude/hooks
+block-claude-code-guide.sh SAME
+block-explore-agent.sh SAME
+command-channel-stop.sh SAME
+dashboard-serve.sh SAME
+delegation-duty-guard.sh DIFF
+failure-mode-identity-stop.sh SAME
+failure-mode-verify-stop.sh SAME
+glossary-skill-guard.sh SAME
+harness-db-sessionend.sh SAME
+harness-db-sessionstart.sh DIFF
+harness-db-sessionstart.sh.bak.2026-06-21T203304Z ABSENT
+harvest-session.sh SAME
+hooks-manifest.json ABSENT
+intelligence-stop.py SAME
+intelligence-stop.sh SAME
+scratch-init.sh SAME
+session-archive.sh SAME
+session-catchup.sh SAME
+sh-file-fixup.sh SAME
+standing-order-guard.sh DIFF
+standing-order-guard.sh.bak.2026-06-21T203334Z ABSENT
+tool-ops-session-audit.sh SAME
+=== dotprofile claude/hooks overrides
+ls: /Users/new-jose/repos/aitools-nobul-jose/claude/hooks: No such file or directory
+=== dotprofile deploy embeds which skills?
+skills/incident/SKILL.md
+skills/tool-eval/SKILL.md
+=== registry files in deploy?
+=== git log for shared/skills untracked copies? last commit on main
+51a34d8 Platform and environment detection API; Chrome setup and MCP args for Claude Code web (#48)
+ced624b Sync hook-rollout rule with deployed hooks; delegation-duty decisions (D-DEL1–3) (#47)
+dfcda45 Add Google Chrome as a managed tool for the Claude Code web environment (#46)

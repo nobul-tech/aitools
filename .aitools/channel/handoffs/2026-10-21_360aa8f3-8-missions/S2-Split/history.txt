@@ -1,0 +1,367 @@
+=== .claude/skills/audit
+5be24cf 2026-03-15 Tool-ops framework, incidents rename, CC ops consolidation
+650fc5f 2026-03-14 Framework adoption infrastructure: harness definition, governed vocabulary, enriched gap schema (v0.55)
+c6d289d 2026-03-13 Build /gap and /audit project-level skills with eval tests (step 3)
+=== .claude/skills/frameworks
+5be24cf 2026-03-15 Tool-ops framework, incidents rename, CC ops consolidation
+60194f2 2026-03-15 Governance overhaul: tool evaluation, artifact harvesting, governed data access
+4fa9ea8 2026-03-14 Frameworks skill, governed data access, bugs #49/#50/#51, outcome renames, glossary hook
+=== .claude/skills/glossary
+650fc5f 2026-03-14 Framework adoption infrastructure: harness definition, governed vocabulary, enriched gap schema (v0.55)
+=== .claude/skills/governed-data
+5be24cf 2026-03-15 Tool-ops framework, incidents rename, CC ops consolidation
+60194f2 2026-03-15 Governance overhaul: tool evaluation, artifact harvesting, governed data access
+=== .claude/skills/harvest
+c6ab931 2026-03-16 Harvest session artifacts, refine rules/skills, add tool-registry.json and mission-command-briefing plan
+60194f2 2026-03-15 Governance overhaul: tool evaluation, artifact harvesting, governed data access
+=== .claude/skills/incident
+c6ab931 2026-03-16 Harvest session artifacts, refine rules/skills, add tool-registry.json and mission-command-briefing plan
+5be24cf 2026-03-15 Tool-ops framework, incidents rename, CC ops consolidation
+=== .claude/skills/tool-eval
+60194f2 2026-03-15 Governance overhaul: tool evaluation, artifact harvesting, governed data access
+=== .claude/skills/tool-ops
+b2641c0 2026-06-15 Consolidate registries under registries/; uv Python docs; owner migration (v0.69.0)
+5be24cf 2026-03-15 Tool-ops framework, incidents rename, CC ops consolidation
+=== .claude/skills/tool-registry
+b2641c0 2026-06-15 Consolidate registries under registries/; uv Python docs; owner migration (v0.69.0)
+c6ab931 2026-03-16 Harvest session artifacts, refine rules/skills, add tool-registry.json and mission-command-briefing plan
+60194f2 2026-03-15 Governance overhaul: tool evaluation, artifact harvesting, governed data access
+=== shared/skills/a11y-debugging
+7564ae7 2026-03-24 Add structured intent to 5 skills, rebuild deploy
+6485cdd 2026-03-11 Centralize diff review deploy flow into lib functions (v0.49.0)
+ca1de53 2026-02-21 Add standalone Chrome DevTools skills, replace plugin dependency
+=== shared/skills/aitool-continue
+ced624b 2026-10-04 Sync hook-rollout rule with deployed hooks; delegation-duty decisions (D-DEL1–3) (#47)
+0e01902 2026-03-25 Add provenance schema tables and rewind-aware /aitool-continue
+e070043 2026-03-25 Rebuild telemetry: delete 3 Stop hooks, add JSONL events, ship /aitool-continue
+=== shared/skills/aitool-eval
+a3b7242 2026-03-24 Deepen /aitool-eval with platform gotchas, Perl exemplar, carry-forwards
+cb0ca08 2026-03-24 Add /aitool-eval user-level reference-card skill + governance rule
+=== shared/skills/aitool-ops
+ced624b 2026-10-04 Sync hook-rollout rule with deployed hooks; delegation-duty decisions (D-DEL1–3) (#47)
+15eb5e3 2026-06-21 feat: profile.json-driven settings.json sync; deprecate hardcoded deny rules
+9a2125b 2026-03-24 Add /aitool-ops user-level reference-card skill + governance rule
+=== shared/skills/audit
+=== shared/skills/chrome-devtools
+7564ae7 2026-03-24 Add structured intent to 5 skills, rebuild deploy
+60194f2 2026-03-15 Governance overhaul: tool evaluation, artifact harvesting, governed data access
+7d5abfb 2026-03-11 Fix adopt clobber, case inconsistency, add accordion skill (v0.48.1)
+ca1de53 2026-02-21 Add standalone Chrome DevTools skills, replace plugin dependency
+=== shared/skills/delegate
+ced624b 2026-10-04 Sync hook-rollout rule with deployed hooks; delegation-duty decisions (D-DEL1–3) (#47)
+=== shared/skills/frameworks
+=== shared/skills/glossary
+=== shared/skills/governed-data
+=== shared/skills/handoff
+ced624b 2026-10-04 Sync hook-rollout rule with deployed hooks; delegation-duty decisions (D-DEL1–3) (#47)
+bf21f21 2026-03-19 v0.62.4: /handoff governance, 13 glossary terms, ambiguity routing, Lagebeurteilung
+ec938e6 2026-03-18 v0.62.3: /handoff skill, harness verification, cross-boundary RCA
+f09a0d2 2026-03-18 Fix /handoff skill scratch deletion gap, save handoff to permanent location
+7bc69ad 2026-03-18 Add /handoff skill, harness verification findings, harvested artifacts
+=== shared/skills/harvest
+=== shared/skills/incident
+=== shared/skills/intent-audit
+c6ab931 2026-03-16 Harvest session artifacts, refine rules/skills, add tool-registry.json and mission-command-briefing plan
+5be24cf 2026-03-15 Tool-ops framework, incidents rename, CC ops consolidation
+650fc5f 2026-03-14 Framework adoption infrastructure: harness definition, governed vocabulary, enriched gap schema (v0.55)
+=== shared/skills/intent-writing
+c6ab931 2026-03-16 Harvest session artifacts, refine rules/skills, add tool-registry.json and mission-command-briefing plan
+650fc5f 2026-03-14 Framework adoption infrastructure: harness definition, governed vocabulary, enriched gap schema (v0.55)
+=== shared/skills/investigate
+7564ae7 2026-03-24 Add structured intent to 5 skills, rebuild deploy
+5be24cf 2026-03-15 Tool-ops framework, incidents rename, CC ops consolidation
+4fa9ea8 2026-03-14 Frameworks skill, governed data access, bugs #49/#50/#51, outcome renames, glossary hook
+650fc5f 2026-03-14 Framework adoption infrastructure: harness definition, governed vocabulary, enriched gap schema (v0.55)
+69d8546 2026-03-13 Rename /incident-response to /investigate, capture decisions 16-20, final audit
+2928073 2026-03-13 Merge /rca into /incident-response, fix conversation inconsistency
+6276c75 2026-03-13 Build 4 user-level process skills: planning, optimize-plan, incident-response, rca
+=== shared/skills/mission-control
+ced624b 2026-10-04 Sync hook-rollout rule with deployed hooks; delegation-duty decisions (D-DEL1–3) (#47)
+d5efd0c 2026-03-24 SQLite foundation: schema, helper script, session lifecycle hooks
+=== shared/skills/optimize-plan
+7564ae7 2026-03-24 Add structured intent to 5 skills, rebuild deploy
+5be24cf 2026-03-15 Tool-ops framework, incidents rename, CC ops consolidation
+6276c75 2026-03-13 Build 4 user-level process skills: planning, optimize-plan, incident-response, rca
+=== shared/skills/planning
+ced624b 2026-10-04 Sync hook-rollout rule with deployed hooks; delegation-duty decisions (D-DEL1–3) (#47)
+ea9c60d 2026-03-24 v0.65.0: SQLite foundation, mission control, dashboard fixes, hook improvements
+00776fe 2026-03-24 Ship issues #53/#54, document subagent access restriction + SendMessage gap
+5be24cf 2026-03-15 Tool-ops framework, incidents rename, CC ops consolidation
+b66ac42 2026-03-13 Add decision evaluation criteria to /planning skill
+1f9efcc 2026-03-13 Add UCI: suggest answers with questions, update /planning skill
+6276c75 2026-03-13 Build 4 user-level process skills: planning, optimize-plan, incident-response, rca
+=== shared/skills/scratch
+bf21f21 2026-03-19 v0.62.4: /handoff governance, 13 glossary terms, ambiguity routing, Lagebeurteilung
+60194f2 2026-03-15 Governance overhaul: tool evaluation, artifact harvesting, governed data access
+=== shared/skills/tool-eval
+=== shared/skills/tool-ops
+=== shared/skills/tool-registry
+=== RENAMES touching skills
+--- ced624b 2026-10-04 Sync hook-rollout rule with deployed hooks; delegation-duty decisions (D-DEL1–3) (#47)
+
+A	shared/skills/delegate/SKILL.md
+A	shared/skills/delegate/tests/expected-behaviors.md
+--- e070043 2026-03-25 Rebuild telemetry: delete 3 Stop hooks, add JSONL events, ship /aitool-continue
+
+A	shared/skills/aitool-continue/SKILL.md
+--- cb0ca08 2026-03-24 Add /aitool-eval user-level reference-card skill + governance rule
+
+A	shared/skills/aitool-eval/SKILL.md
+--- 9a2125b 2026-03-24 Add /aitool-ops user-level reference-card skill + governance rule
+
+A	shared/skills/aitool-ops/SKILL.md
+--- d5efd0c 2026-03-24 SQLite foundation: schema, helper script, session lifecycle hooks
+
+A	shared/skills/mission-control/SKILL.md
+--- 7bc69ad 2026-03-18 Add /handoff skill, harness verification findings, harvested artifacts
+
+A	shared/skills/handoff/SKILL.md
+--- 5be24cf 2026-03-15 Tool-ops framework, incidents rename, CC ops consolidation
+
+D	.claude/skills/gap/SKILL.md
+A	.claude/skills/incident/SKILL.md
+R059	.claude/skills/gap/tests/expected-behaviors.md	.claude/skills/incident/tests/expected-behaviors.md
+A	.claude/skills/tool-ops/SKILL.md
+A	.claude/skills/tool-ops/tests/expected-behaviors.md
+--- 60194f2 2026-03-15 Governance overhaul: tool evaluation, artifact harvesting, governed data access
+
+A	.claude/skills/governed-data/SKILL.md
+A	.claude/skills/harvest/SKILL.md
+A	.claude/skills/tool-eval/SKILL.md
+A	.claude/skills/tool-registry/SKILL.md
+A	shared/skills/scratch/SKILL.md
+--- 4fa9ea8 2026-03-14 Frameworks skill, governed data access, bugs #49/#50/#51, outcome renames, glossary hook
+
+A	.claude/skills/frameworks/SKILL.md
+--- 650fc5f 2026-03-14 Framework adoption infrastructure: harness definition, governed vocabulary, enriched gap schema (v0.55)
+
+A	.claude/skills/glossary/SKILL.md
+A	shared/skills/intent-audit/SKILL.md
+A	shared/skills/intent-writing/SKILL.md
+--- 69d8546 2026-03-13 Rename /incident-response to /investigate, capture decisions 16-20, final audit
+
+R096	shared/skills/incident-response/SKILL.md	shared/skills/investigate/SKILL.md
+R082	shared/skills/incident-response/tests/expected-behaviors.md	shared/skills/investigate/tests/expected-behaviors.md
+--- 2928073 2026-03-13 Merge /rca into /incident-response, fix conversation inconsistency
+
+D	shared/skills/rca/SKILL.md
+D	shared/skills/rca/tests/expected-behaviors.md
+--- 6276c75 2026-03-13 Build 4 user-level process skills: planning, optimize-plan, incident-response, rca
+
+A	shared/skills/incident-response/SKILL.md
+A	shared/skills/incident-response/tests/expected-behaviors.md
+A	shared/skills/optimize-plan/SKILL.md
+A	shared/skills/optimize-plan/tests/expected-behaviors.md
+A	shared/skills/planning/SKILL.md
+A	shared/skills/planning/tests/expected-behaviors.md
+A	shared/skills/rca/SKILL.md
+A	shared/skills/rca/tests/expected-behaviors.md
+--- c6d289d 2026-03-13 Build /gap and /audit project-level skills with eval tests (step 3)
+
+A	.claude/skills/audit/SKILL.md
+A	.claude/skills/audit/tests/expected-behaviors.md
+A	.claude/skills/gap/SKILL.md
+A	.claude/skills/gap/tests/expected-behaviors.md
+--- ca1de53 2026-02-21 Add standalone Chrome DevTools skills, replace plugin dependency
+
+A	shared/skills/a11y-debugging/SKILL.md
+A	shared/skills/chrome-devtools/SKILL.md
+=== .claude/rules adds/deletes/renames
+--- de7aabf 2026-03-31 feat(harness): [RELAY] outbound prompt after aitools / hh — docs + rules
+
+A	.claude/rules/relay-outbound.md
+A	.cursor/rules/relay-outbound.mdc
+--- cb0ca08 2026-03-24 Add /aitool-eval user-level reference-card skill + governance rule
+
+A	.claude/rules/aitool-eval.md
+--- 9a2125b 2026-03-24 Add /aitool-ops user-level reference-card skill + governance rule
+
+A	.claude/rules/aitool-ops.md
+--- 69cfd78 2026-03-16 Add aitools-workspace rule and cross-machine carry-forward intent
+
+A	.claude/rules/aitools-workspace.md
+--- 5be24cf 2026-03-15 Tool-ops framework, incidents rename, CC ops consolidation
+
+R059	.claude/rules/gap-governance.md	.claude/rules/incident-governance.md
+A	.claude/rules/tool-ops.md
+--- 60194f2 2026-03-15 Governance overhaul: tool evaluation, artifact harvesting, governed data access
+
+A	.claude/rules/artifact-harvesting.md
+A	.claude/rules/governed-data-access.md
+A	.claude/rules/tool-evaluation.md
+--- 650fc5f 2026-03-14 Framework adoption infrastructure: harness definition, governed vocabulary, enriched gap schema (v0.55)
+
+A	.claude/rules/frameworks.md
+A	.claude/rules/glossary.md
+--- 03933a5 2026-03-13 Governance and compliance framework: design principles, gap governance, 30-skill plan (v0.54)
+
+D	.claude/rules/cursor-rule-parity.md
+A	.claude/rules/gap-governance.md
+--- dac8263 2026-03-13 Close documentation gaps for managed file deployment (v0.53)
+
+A	.claude/rules/managed-file-deployment.md
+A	.cursor/rules/managed-file-deployment.mdc
+--- 9b2e83a 2026-03-12 Merge UX fixes, deployment flow documentation (#42-#44) (v0.52.4)
+
+A	.claude/rules/interactive-menus.md
+A	.cursor/rules/interactive-menus.mdc
+--- 0239cd6 2026-03-12 Fix pre-pull checkout destroying scripts/, resume merge fixes (#32-37)
+
+A	.claude/rules/git-safety.md
+A	.cursor/rules/git-safety.mdc
+--- dba12fb 2026-03-12 Agentic framework, merge overhaul, clip2md refactor (v0.52.0)
+
+A	.claude/rules/agentic-standards.md
+A	.cursor/rules/agentic-standards.mdc
+--- 19eb2b0 2026-03-06 Add missing cursor rule parity: smoke-test-pattern.mdc
+
+A	.cursor/rules/smoke-test-pattern.mdc
+--- 508d9a9 2026-03-06 Add smoke test pattern rule and reference doc
+
+A	.claude/rules/smoke-test-pattern.md
+--- 3dc6c20 2026-03-05 Add plan execution rules, DETAIL summary, effortLevel, config reporting (v0.38.0)
+
+A	.claude/rules/plan-execution.md
+A	.cursor/rules/plan-execution.mdc
+--- 2fa61ed 2026-03-01 Consolidate rules, move checklists to reference, add path-scoping
+
+D	.claude/rules/error-handling.md
+D	.claude/rules/post-push.md
+D	.claude/rules/pre-commit.md
+D	.claude/rules/pre-push.md
+D	.claude/rules/python-style.md
+D	.claude/rules/surface-silent-failures.md
+D	.cursor/rules/error-handling.mdc
+D	.cursor/rules/post-push.mdc
+D	.cursor/rules/pre-commit.mdc
+D	.cursor/rules/pre-push.mdc
+--- f89dd99 2026-03-01 Add user-level rules deployment, update CLAUDE.md structure and shared template
+
+D	.claude/rules/concurrent-agents.md
+A	.claude/rules/cursor-rule-parity.md
+D	.cursor/rules/concurrent-agents.mdc
+A	.cursor/rules/cursor-rule-parity.mdc
+--- a79e1b9 2026-03-01 Restructure CLAUDE.md: USO/PSO/UCI/PCI naming, drop imports, adopt RFC 0001
+
+D	.claude/rules/git-identity.md
+--- dfac44a 2026-02-28 Add hook observe/enforce mode, fix pipeline false positive
+
+A	.claude/rules/hook-rollout.md
+A	.cursor/rules/hook-rollout.mdc
+--- 069c228 2026-02-27 Add error handling rules and audit all scripts for silent failures
+
+A	.claude/rules/error-handling.md
+A	.cursor/rules/error-handling.mdc
+--- 5b6d1ac 2026-02-26 Add Invocation lifecycle field and dual deployment path rules
+
+A	.claude/rules/deploy-paths.md
+A	.cursor/rules/deploy-paths.mdc
+--- 9e4262d 2026-02-21 Add config-write-safety rule, fix cursor-mcp overwrite, improve catch blocks
+
+A	.claude/rules/config-file-safety.md
+A	.cursor/rules/config-file-safety.mdc
+--- fdfaf9a 2026-02-21 Add plugin docs, overrides framework, and web source reading rule (v3.13)
+
+A	.claude/rules/web-sources.md
+A	.cursor/rules/web-sources.mdc
+--- c16d514 2026-02-19 Add audit & governance rules, fix error tracking in setup scripts (v3.10)
+
+A	.claude/rules/documentation-standards.md
+A	.claude/rules/script-standards.md
+A	.cursor/rules/documentation-standards.mdc
+A	.cursor/rules/script-standards.mdc
+--- 334d845 2026-02-19 Add post-push checklist rule (always + extensive tiers)
+
+A	.claude/rules/post-push.md
+A	.cursor/rules/post-push.mdc
+--- ef12c53 2026-02-19 Add pre-push checklist rule for both agents
+
+A	.claude/rules/pre-push.md
+A	.cursor/rules/pre-push.mdc
+--- 073d7c2 2026-02-19 MCP concurrency fix, Cursor rule parity, tool lifecycle fields (v3.9)
+
+A	.claude/rules/concurrent-agents.md
+A	.claude/rules/pre-commit.md
+A	.claude/rules/surface-silent-failures.md
+A	.cursor/rules/concurrent-agents.mdc
+A	.cursor/rules/cross-platform.mdc
+A	.cursor/rules/pre-commit.mdc
+A	.cursor/rules/sources-of-truth.mdc
+A	.cursor/rules/tool-lifecycle.mdc
+--- 881848a 2026-02-17 Add pandoc integration, tool lifecycle rules, and source-of-truth gate
+
+A	.claude/rules/sources-of-truth.md
+A	.claude/rules/tool-lifecycle.md
+--- 02f3cc5 2026-02-12 Add Cursor IDE support: setup scripts, rules, and reference docs
+
+D	.cursor/rules/python.mdc
+A	shared/cursor-rules/user-rules.md
+--- ef4837f 2026-02-12 Restructure as AI tooling hub with shared configs, rules, and scripts
+
+A	.claude/rules/cross-platform.md
+A	.claude/rules/git-identity.md
+A	.claude/rules/python-style.md
+A	.cursor/rules/general.mdc
+A	.cursor/rules/python.mdc
+A	shared/cursor-rules/default.mdc
+=== hooks adds/deletes
+--- 5a42255 2026-06-21 fixed standing guard of newlines that contained a quote character before a newline, truncating command string to a single line and throwing the rest away, never firing on those
+
+A	shared/hooks/harness-db-sessionstart.sh.bak.2026-06-21T203304Z
+A	shared/hooks/standing-order-guard.sh.bak.2026-06-21T203334Z
+--- 4b75e7b 2026-06-20 Generate hook registration from manifest; block Explore agent (v0.71.0)
+
+A	shared/hooks/block-explore-agent.sh
+--- bda38a2 2026-06-14 feat(harvest): resilient session/scratch harvesting + Windows harvest RCA fix
+
+A	shared/hooks/hooks-manifest.json
+A	shared/hooks/session-catchup.sh
+--- 9e3dc17 2026-03-30 Add intelligence-stop hook, fix context warning death spiral, define 8 glossary terms
+
+A	shared/hooks/failure-mode-identity-stop.sh
+A	shared/hooks/failure-mode-verify-stop.sh
+A	shared/hooks/intelligence-stop.py
+A	shared/hooks/intelligence-stop.sh
+--- 934d50c 2026-03-25 Rebuild deploy/ and add command-channel-stop.sh hook
+
+A	shared/hooks/command-channel-stop.sh
+--- e070043 2026-03-25 Rebuild telemetry: delete 3 Stop hooks, add JSONL events, ship /aitool-continue
+
+D	shared/hooks/estimate-refresh-stop.sh
+D	shared/hooks/intent-sentinel-stop.sh
+D	shared/hooks/surfacing-duty-stop.sh
+--- 33bbc25 2026-03-24 Ship intent-sentinel + delegation-duty-guard hooks
+
+A	shared/hooks/delegation-duty-guard.sh
+A	shared/hooks/intent-sentinel-stop.sh
+--- d5efd0c 2026-03-24 SQLite foundation: schema, helper script, session lifecycle hooks
+
+A	shared/hooks/harness-db-sessionend.sh
+A	shared/hooks/harness-db-sessionstart.sh
+--- 2cd4111 2026-03-21 Add dynamic mission control dashboard with CLI integration
+
+A	shared/hooks/dashboard-serve.sh
+A	shared/hooks/estimate-refresh-stop.sh
+--- 5be24cf 2026-03-15 Tool-ops framework, incidents rename, CC ops consolidation
+
+A	shared/hooks/block-claude-code-guide.sh
+A	shared/hooks/tool-ops-session-audit.sh
+--- 82c3aef 2026-03-15 Add Stop hook for surfacing duty enforcement
+
+A	shared/hooks/surfacing-duty-stop.sh
+--- 46b3179 2026-03-15 Add PostToolUse hook to auto-fix .sh files after Write/Edit
+
+A	shared/hooks/sh-file-fixup.sh
+--- 60194f2 2026-03-15 Governance overhaul: tool evaluation, artifact harvesting, governed data access
+
+A	shared/hooks/harvest-session.sh
+A	shared/hooks/scratch-init.sh
+--- 4fa9ea8 2026-03-14 Frameworks skill, governed data access, bugs #49/#50/#51, outcome renames, glossary hook
+
+A	shared/hooks/glossary-skill-guard.sh
+--- c58da48 2026-02-28 Add standing order enforcement hooks and incident tracking
+
+A	shared/hooks/standing-order-guard.sh
+--- 500913a 2026-02-19 Add session auto-archive via Claude Code SessionEnd hook
+
+A	shared/hooks/session-archive.sh

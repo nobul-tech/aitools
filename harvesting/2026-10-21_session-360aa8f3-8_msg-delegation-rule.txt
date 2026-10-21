@@ -1,0 +1,10 @@
+Delegation rule: delegates ship their own code changes (D-DEL4)
+
+A delegate whose mission produces a code change pushes its own branch and
+opens the PR itself, returning the PR URL, instead of handing the push back
+to the delegating agent and waiting on the user. Adds inbound element 6, a
+Shipping section with limits (no push to main, no force-push, merge,
+self-approval or tags; protected files keep their review gate), and PR
+review on return. Companion skill change: nobul-tech/aitools /delegate.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

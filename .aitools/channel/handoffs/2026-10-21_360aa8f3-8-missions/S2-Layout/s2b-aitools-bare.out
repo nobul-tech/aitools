@@ -1,0 +1,35 @@
+scripts/check-post-push.sh:450:    step_skip "21" "Tool version freshness" "tool-versions.json not found"
+scripts/check-post-push.ps1:520:$versionsJson = Join-Path (Join-Path $script:RepoRoot "reference") "tool-versions.json"
+scripts/check-post-push.ps1:522:    StepSkip "21" "Tool version freshness" "tool-versions.json not found"
+shared/hooks/glossary-skill-guard.sh:32:    *glossary.json|*glossary.md)
+shared/hooks/tool-ops-session-audit.sh:3:# Reads tool-ops.json, runs quick verifications on audit-mode capabilities,
+shared/hooks/tool-ops-session-audit.sh:21:# Find tool-ops.json
+shared/hooks/tool-ops-session-audit.sh:28:# No tool-ops.json — nothing to audit
+shared/hooks/tool-ops-session-audit.sh:38:# Run verification cases from tool-ops.json against deployed hook scripts.
+shared/skills/optimize-plan/tests/expected-behaviors.md:37:- Should cross-check incidents.json Open Questions
+shared/skills/optimize-plan/SKILL.md:81:- Are there gaps filed in incidents.json that should be referenced
+shared/skills/optimize-plan/SKILL.md:116:- **200k context (Sonnet/Opus standard)**: Read the plan + incidents.json
+shared/skills/tool-ops/tests/expected-behaviors.md:6:governed access to tool-ops.json. **Scope**: Behavioral expectations
+shared/skills/tool-ops/SKILL.md:8:**Purpose**: Governed access to tool-ops.json — read operational
+shared/skills/tool-ops/SKILL.md:10:**Scope**: CRUD operations on tool-ops.json only. NOT the governance
+shared/skills/investigate/SKILL.md:16:for filing incidents into incidents.json (use `/incident` skill).
+shared/skills/planning/SKILL.md:42:1. Read the plan + incidents.json + relevant rules
+shared/skills/aitool-ops/SKILL.md:16:tool-ops.json (use `/tool-ops` in the aitools repo for that). NOT
+shared/skills/aitool-ops/SKILL.md:39:- Does NOT write to tool-ops.json — use `/tool-ops` in the aitools
+shared/skills/aitool-ops/SKILL.md:47:This skill was generated from `tool-ops.json` and
+shared/skills/aitool-ops/SKILL.md:71:Additional hooks deployed by the harness (not in tool-ops.json but
+shared/skills/aitool-ops/SKILL.md:83:| PreToolUse (Read glossary.json) | `glossary-skill-guard.sh` | Redirect direct JSON access to /glossary skill |
+shared/skills/audit/SKILL.md:10:rules, references, CLAUDE.md, incidents.json, and the codebase to report
+shared/skills/incident/SKILL.md:3:description: "File an incident in incidents.json. Use when a spec deviation, broken cross-reference, ambiguity, or operational failure is found that should be tracked. Also use when the user says /incident or asks to file an incident."
+shared/skills/aitool-eval/SKILL.md:42:- Does NOT write to tool-registry.json — use `/tool-registry` in the
+shared/skills/aitool-eval/SKILL.md:467:   documented in tool-registry.json `platformGotchas.windows`.
+.claude/rules/aitool-ops.md:18:| Project (full CRUD) | `/tool-ops` | Read and write tool-ops.json | aitools repo only |
+.claude/rules/incident-governance.md:177:- Reads `incidents.json`, determines next ID
+.claude/rules/incident-governance.md:195:"Foundational Decisions" section — not here. incidents.json is for
+.claude/rules/incident-governance.md:220:- **PreToolUse on incidents.json** (agent): validates required fields,
+.claude/skills/tool-ops/tests/expected-behaviors.md:6:governed access to tool-ops.json. **Scope**: Behavioral expectations
+.claude/skills/tool-ops/SKILL.md:8:**Purpose**: Governed access to tool-ops.json — read operational
+.claude/skills/tool-ops/SKILL.md:10:**Scope**: CRUD operations on tool-ops.json only. NOT the governance
+.claude/skills/audit/SKILL.md:10:rules, references, CLAUDE.md, incidents.json, and the codebase to report
+.claude/skills/incident/SKILL.md:3:description: "File an incident in incidents.json. Use when a spec deviation, broken cross-reference, ambiguity, or operational failure is found that should be tracked. Also use when the user says /incident or asks to file an incident."
+.cursor/rules/tool-lifecycle.mdc:32:Every tool in `reference/tool-registry.md` (including Under Evaluation) must have all 6 fields: Platform Status, Concurrency, Post-Install Config, Dependencies, Invocation, and Last verified version. Last verified version format: `macOS: X.Y.Z (YYYY-MM-DD) | Windo

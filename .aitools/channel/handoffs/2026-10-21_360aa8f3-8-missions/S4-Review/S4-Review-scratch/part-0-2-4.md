@@ -1,0 +1,14 @@
+# S4-Review report: M2 + M3 reconciliation, decision-tree re-review, one decision list
+
+**Intent**: **Purpose**: Give Session Commander 360aa8f3-8 one consistent decision package for the M2 (tool support) and M3 (profile/config) drafts, so the commander can approve both in one pass. **Scope**: Cross-mission conflicts and their fixes, the adversarial re-review of the decision-tree reference, merged open questions, merged incident drafts, the combined protected-file list and batch order. NOT a rewrite of either design. NOT the .claude vs shared/ skill placement (S2-Split). **Audience**: Session Commander 360aa8f3-8, then Jose.
+
+## Summary
+
+1. The two designs agree in substance; they conflict in 22 places (section 1). Two conflicts were blockers. First, the toolExceptions shape was defined twice, differently. Second, M2's writer rule assumed config.json `machineAlias` plus a "first profile" fallback that M3 removes, so after registration it would never write. Both are fixed in `S4-Review-drafts/`: user-repo.md owns the shape, the tree §8 owns the semantics, and node `aitools-profile.js` is the one engine.
+2. The decision-tree re-review drew 35 findings from reviewer C (2 blockers, 16 majors, 17 minors) and 9 more of my own (section 2). Reviewers A (correctness vs rules) and B (cross-platform/bootstrap) produced no output: the session restarted mid-run. I covered those lenses only with targeted checks, so a fresh A/B pass is still owed before the tree is approved.
+3. There are 25 mission questions plus 6 new ones (section 3). Fourteen are blocking: nine block the docs approval gate and five block a named batch. The new blocking ones are N-Q1 (exception shape/engine) and N-Q3 (glossary renames: `machine id`, `aitools config`). D-TS10/11/12 are still pending and are now marked that way in the tree.
+4. Incidents: 27 drafts (#87-#113) in `S4-Review-incidents-draft.json`. The remaining mission findings were dropped as covered by #21, #50, #54, #55, #59, #74-#78 and #84; four existing incidents need their `affected` lists extended.
+5. One protected-file batch (25 rows), one batch order of 19 steps, with 4 new cross-mission batches X-B1 to X-B4. Two things changed since the briefs. PR #50 and PR #52 are already merged, and B0 is done (`nobul-mac`). One blocking pre-step: this checkout still holds stale pre-merge S3-Nine edits, and a commit from here would revert merged fixes.
+
+Files: `S4-Review-report.md` (this), `S4-Review-incidents-draft.json`, `S4-Review-C-review.md` (full reviewer C table), `S4-Review-drafts/` (`reference/tool-support-decision-tree.md` rev 3, `reference/user-repo.md`, `dotprofile/profile.json`, `.claude/rules/{interactive-menus,sources-of-truth,glossary,tool-lifecycle}.md`, `.claude/rules/managed-file-deployment.md.edit.txt`, `registries/glossary.terms-draft.json`), `S4-Review-scratch/` (helper scripts, origin/main incidents copy). No WRITE_BLOCKED. Nothing was written outside `missions/S4-Review/`.
+

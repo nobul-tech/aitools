@@ -1,0 +1,60 @@
+{
+  "_draft": {
+    "status": "DRAFT -- needs commander approval; protected file registries/framework-registry.json, write via /frameworks skill (update an existing framework)",
+    "author": "S5-Tools for Session Commander 360aa8f3-8, 2026-10-20",
+    "why": "Current entry lastUpdated 2026-03-15 (>90 days: stale per /frameworks staleness rule); D-TS8 extends it with the tool support decision tree. Artifact paths verified to exist except the three marked 'new' (created by this mission's drafts once approved)."
+  },
+  "old": {
+    "name": "Tool lifecycle",
+    "governs": "Evaluation, approval, integration, maintenance, and health tracking of managed tools",
+    "discipline": "Software asset management",
+    "concepts": ["Lifecycle phases", "Approval gates", "Health flags", "Provenance verification", "Evaluation provenance"],
+    "referenceFile": "reference/framework-tool-lifecycle.md",
+    "artifacts": [
+      ".claude/rules/tool-lifecycle.md",
+      ".claude/rules/tool-evaluation.md",
+      "reference/tool-evaluation-criteria.md",
+      "reference/tool-evaluation-playbook.md",
+      "reference/evaluations/",
+      ".claude/skills/tool-registry/SKILL.md",
+      ".claude/skills/tool-eval/SKILL.md"
+    ],
+    "lastUpdated": "2026-03-15"
+  },
+  "new": {
+    "name": "Tool lifecycle",
+    "governs": "Evaluation, approval, integration, install-method support (decision tree), updates, maintenance, and health tracking of managed tools",
+    "discipline": "Software asset management; configuration management (desired-state reconciliation)",
+    "concepts": [
+      "Lifecycle phases",
+      "Approval gates",
+      "Health flags",
+      "Provenance verification",
+      "Evaluation provenance",
+      "Desired-state reconciliation",
+      "Make-before-break replacement",
+      "Exception register",
+      "Update channels"
+    ],
+    "referenceFile": "reference/framework-tool-lifecycle.md",
+    "artifacts": [
+      ".claude/rules/tool-lifecycle.md",
+      ".claude/rules/tool-evaluation.md",
+      "reference/tool-support-decision-tree.md",
+      "reference/tool-evaluation-criteria.md",
+      "reference/tool-evaluation-playbook.md",
+      "reference/evaluations/",
+      ".claude/skills/tool-registry/SKILL.md",
+      ".claude/skills/tool-eval/SKILL.md",
+      ".claude/skills/tool-adopt/SKILL.md",
+      "scripts/aitools-lib.sh",
+      "scripts/aitools-lib.ps1",
+      "scripts/gen-tool-specs.py",
+      "generated/tool-specs/",
+      "scripts/check-pre-commit.sh",
+      "scripts/check-pre-commit.ps1"
+    ],
+    "_note": "Write this entry only after every listed path exists (new: tool-support-decision-tree.md, tool-adopt/SKILL.md, gen-tool-specs.py, generated/tool-specs/; check-pre-commit gains the conformance step).",
+    "lastUpdated": "2026-10-20"
+  }
+}

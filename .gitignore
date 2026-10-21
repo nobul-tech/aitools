@@ -37,6 +37,9 @@ ENV/
 .claude/worktrees/
 CLAUDE.local.md
 *.local.md
+# Project MCP configs (machine-local; may embed API keys in server URLs)
+.mcp.json
+.cursor/mcp.json
 
 # Windows artifacts
 nul

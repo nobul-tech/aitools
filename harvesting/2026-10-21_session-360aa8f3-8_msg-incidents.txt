@@ -1,0 +1,15 @@
+File incidents #74-#86 (machine identity, hook shadowing, deploy safety)
+
+Commander-approved batch from session 360aa8f3-8 (2026-10-21):
+- #74-#79 machine identity: kernel hostname instead of scutil names,
+  user init never saves machineAlias, silent first-profile fallback,
+  console-only late detection, per-machine values baked into the shared
+  dotprofile deploy/, defect parked unfiled for 4 months (S2-Host RCA)
+- #80-#82 hooks: dotprofile copies shadow shared/hooks, reverse-discovery
+  EOF prompt missed by #29, standing-order-guard false positive on sed -n
+- #83 /delegate worktree output limit (planned, PR #51)
+- #84 /incident skill points at reference/incidents.json
+- #85-#86 build-deploy/check-post-push: paste delimiter cycling, half-built
+  deploy/ after a failed build
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

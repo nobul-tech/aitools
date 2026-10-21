@@ -1,0 +1,7 @@
+{"t":"2026-06-22T00:27:24Z","type":"hook_fire","src":"sog","d":{"result":"allow"}}
+{"t":"2026-06-22T00:27:25Z","type":"hook_fire","src":"sog","d":{"result":"allow"}}
+{"t":"2026-06-22T00:27:31Z","type":"hook_fire","src":"sog","d":{"result":"allow"}}
+{"t":"2026-06-22T00:28:23Z","type":"hook_fire","src":"sog","d":{"result":"allow"}}
+{"t":"2026-06-22T00:28:25Z","type":"hook_block","src":"sog","d":{"check":"cat"}}
+{"t":"2026-06-22T00:28:34Z","type":"hook_block","src":"sog","d":{"check":"scratch"}}
+{"t":"2026-06-22T00:28:42Z","type":"hook_fire","src":"fixup","d":{"file":"diff-settings.sh","action":"+x"}}

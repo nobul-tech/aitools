@@ -1,0 +1,407 @@
+=== aitools top level
+total 608
+drwxr-xr-x@  27 new-jose  staff     864 Oct 20 19:05 .
+drwx------@  17 new-jose  staff     544 Oct 15 19:14 ..
+-rw-r--r--@   1 new-jose  staff   18436 Jun 21 20:34 .DS_Store
+drwxr-xr-x@   8 new-jose  staff     256 Oct 20 17:37 .aitools
+drwxr-xr-x@   7 new-jose  staff     224 Oct 20 17:47 .claude
+drwxr-xr-x@   4 new-jose  staff     128 Jun 28 13:43 .cursor
+-rw-r--r--@   1 new-jose  staff     753 Jun 14 22:02 .cursorignore
+drwxr-xr-x@  17 new-jose  staff     544 Oct 20 20:13 .git
+-rw-r--r--@   1 new-jose  staff      98 Jun 14 22:02 .gitattributes
+drwxr-xr-x@   3 new-jose  staff      96 Jun 14 22:02 .github
+-rw-r--r--@   1 new-jose  staff     980 Oct 20 19:05 .gitignore
+-rw-r--r--@   1 new-jose  staff     156 Jun 28 13:43 .mcp.json
+drwxr-xr-x@  42 new-jose  staff    1344 Oct 20 17:37 .scratch
+-rw-r--r--@   1 new-jose  staff    4105 Oct 20 19:05 CLAUDE.md
+-rw-r--r--@   1 new-jose  staff    1067 Jun 15 00:25 LICENSE
+-rw-r--r--@   1 new-jose  staff    7617 Jun 15 00:34 README.md
+-rw-r--r--@   1 new-jose  staff  240979 Oct 20 19:05 RELEASE_NOTES.md
+-rw-r--r--@   1 new-jose  staff    8423 Oct 20 19:05 ROADMAP.md
+drwxr-xr-x@  38 new-jose  staff    1216 Jun 14 22:32 deploy
+drwxr-xr-x@ 465 new-jose  staff   14880 Oct 20 19:05 harvesting
+drwxr-xr-x@  16 new-jose  staff     512 Oct 20 19:05 plans
+drwxr-xr-x@  43 new-jose  staff    1376 Oct 20 19:05 reference
+drwxr-xr-x@   8 new-jose  staff     256 Oct 20 19:44 registries
+drwxr-xr-x@  22 new-jose  staff     704 Jun 14 22:02 rfcs
+drwxr-xr-x@  87 new-jose  staff    2784 Oct 20 19:05 scripts
+drwxr-xr-x@   9 new-jose  staff     288 Oct 20 19:05 shared
+drwxr-xr-x@   3 new-jose  staff      96 Oct 20 19:05 tests
+=== aitools git status (short)
+ M .gitignore
+MM harvesting/harvest-manifest.json
+M  scripts/build-deploy.sh
+M  scripts/check-hook-parity.py
+M  scripts/check-post-push.ps1
+M  scripts/check-post-push.sh
+?? harvesting/2026-10-21_session-0d7004b4-8_.intelligence-last-check
+?? shared/skills/audit/
+?? shared/skills/frameworks/
+?? shared/skills/glossary/
+?? shared/skills/governed-data/
+?? shared/skills/harvest/
+?? shared/skills/incident/
+?? shared/skills/tool-eval/
+?? shared/skills/tool-ops/
+?? shared/skills/tool-registry/
+=== .claude tree
+/Users/new-jose/repos/aitools/.claude
+/Users/new-jose/repos/aitools/.claude/commands
+/Users/new-jose/repos/aitools/.claude/commands/pre-update.md
+/Users/new-jose/repos/aitools/.claude/rules
+/Users/new-jose/repos/aitools/.claude/rules/agentic-standards.md
+/Users/new-jose/repos/aitools/.claude/rules/aitool-eval.md
+/Users/new-jose/repos/aitools/.claude/rules/aitool-ops.md
+/Users/new-jose/repos/aitools/.claude/rules/aitools-workspace.md
+/Users/new-jose/repos/aitools/.claude/rules/artifact-harvesting.md
+/Users/new-jose/repos/aitools/.claude/rules/config-file-safety.md
+/Users/new-jose/repos/aitools/.claude/rules/cross-platform.md
+/Users/new-jose/repos/aitools/.claude/rules/deploy-paths.md
+/Users/new-jose/repos/aitools/.claude/rules/documentation-standards.md
+/Users/new-jose/repos/aitools/.claude/rules/frameworks.md
+/Users/new-jose/repos/aitools/.claude/rules/git-safety.md
+/Users/new-jose/repos/aitools/.claude/rules/glossary.md
+/Users/new-jose/repos/aitools/.claude/rules/governed-data-access.md
+/Users/new-jose/repos/aitools/.claude/rules/hook-rollout.md
+/Users/new-jose/repos/aitools/.claude/rules/incident-governance.md
+/Users/new-jose/repos/aitools/.claude/rules/interactive-menus.md
+/Users/new-jose/repos/aitools/.claude/rules/managed-file-deployment.md
+/Users/new-jose/repos/aitools/.claude/rules/plan-execution.md
+/Users/new-jose/repos/aitools/.claude/rules/relay-outbound.md
+/Users/new-jose/repos/aitools/.claude/rules/script-standards.md
+/Users/new-jose/repos/aitools/.claude/rules/smoke-test-pattern.md
+/Users/new-jose/repos/aitools/.claude/rules/sources-of-truth.md
+/Users/new-jose/repos/aitools/.claude/rules/tool-evaluation.md
+/Users/new-jose/repos/aitools/.claude/rules/tool-lifecycle.md
+/Users/new-jose/repos/aitools/.claude/rules/tool-ops.md
+/Users/new-jose/repos/aitools/.claude/rules/web-sources.md
+/Users/new-jose/repos/aitools/.claude/settings.local.json
+/Users/new-jose/repos/aitools/.claude/skills
+/Users/new-jose/repos/aitools/.claude/skills/audit
+/Users/new-jose/repos/aitools/.claude/skills/audit/SKILL.md
+/Users/new-jose/repos/aitools/.claude/skills/audit/tests
+/Users/new-jose/repos/aitools/.claude/skills/frameworks
+/Users/new-jose/repos/aitools/.claude/skills/frameworks/SKILL.md
+/Users/new-jose/repos/aitools/.claude/skills/glossary
+/Users/new-jose/repos/aitools/.claude/skills/glossary/SKILL.md
+/Users/new-jose/repos/aitools/.claude/skills/governed-data
+/Users/new-jose/repos/aitools/.claude/skills/governed-data/SKILL.md
+/Users/new-jose/repos/aitools/.claude/skills/harvest
+/Users/new-jose/repos/aitools/.claude/skills/harvest/SKILL.md
+/Users/new-jose/repos/aitools/.claude/skills/incident
+/Users/new-jose/repos/aitools/.claude/skills/incident/SKILL.md
+/Users/new-jose/repos/aitools/.claude/skills/incident/tests
+/Users/new-jose/repos/aitools/.claude/skills/tool-eval
+/Users/new-jose/repos/aitools/.claude/skills/tool-eval/SKILL.md
+/Users/new-jose/repos/aitools/.claude/skills/tool-ops
+/Users/new-jose/repos/aitools/.claude/skills/tool-ops/SKILL.md
+/Users/new-jose/repos/aitools/.claude/skills/tool-ops/tests
+/Users/new-jose/repos/aitools/.claude/skills/tool-registry
+/Users/new-jose/repos/aitools/.claude/skills/tool-registry/SKILL.md
+/Users/new-jose/repos/aitools/.claude/worktrees
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/.aitools
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/.claude
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/.cursor
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/.cursorignore
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/.git
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/.gitattributes
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/.github
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/.gitignore
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/CLAUDE.md
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/LICENSE
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/README.md
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/RELEASE_NOTES.md
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/ROADMAP.md
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/deploy
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/harvesting
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/plans
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/reference
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/registries
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/rfcs
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/scripts
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/shared
+/Users/new-jose/repos/aitools/.claude/worktrees/agent-af74c885292445076/tests
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/.aitools
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/.claude
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/.cursor
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/.cursorignore
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/.git
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/.gitattributes
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/.github
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/.gitignore
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/CLAUDE.md
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/LICENSE
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/README.md
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/RELEASE_NOTES.md
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/ROADMAP.md
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/deploy
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/harvesting
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/plans
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/reference
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/registries
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/rfcs
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/scripts
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/shared
+/Users/new-jose/repos/aitools/.claude/worktrees/wf_4ae752d8-def-5/tests
+=== .cursor tree
+/Users/new-jose/repos/aitools/.cursor
+/Users/new-jose/repos/aitools/.cursor/mcp.json
+/Users/new-jose/repos/aitools/.cursor/rules
+/Users/new-jose/repos/aitools/.cursor/rules/agentic-standards.mdc
+/Users/new-jose/repos/aitools/.cursor/rules/config-file-safety.mdc
+/Users/new-jose/repos/aitools/.cursor/rules/cross-platform.mdc
+/Users/new-jose/repos/aitools/.cursor/rules/cursor-rule-parity.mdc
+/Users/new-jose/repos/aitools/.cursor/rules/deploy-paths.mdc
+/Users/new-jose/repos/aitools/.cursor/rules/documentation-standards.mdc
+/Users/new-jose/repos/aitools/.cursor/rules/general.mdc
+/Users/new-jose/repos/aitools/.cursor/rules/git-safety.mdc
+/Users/new-jose/repos/aitools/.cursor/rules/hook-rollout.mdc
+/Users/new-jose/repos/aitools/.cursor/rules/interactive-menus.mdc
+/Users/new-jose/repos/aitools/.cursor/rules/managed-file-deployment.mdc
+/Users/new-jose/repos/aitools/.cursor/rules/plan-execution.mdc
+/Users/new-jose/repos/aitools/.cursor/rules/relay-outbound.mdc
+/Users/new-jose/repos/aitools/.cursor/rules/script-standards.mdc
+/Users/new-jose/repos/aitools/.cursor/rules/smoke-test-pattern.mdc
+/Users/new-jose/repos/aitools/.cursor/rules/sources-of-truth.mdc
+/Users/new-jose/repos/aitools/.cursor/rules/tool-lifecycle.mdc
+/Users/new-jose/repos/aitools/.cursor/rules/web-sources.mdc
+=== shared tree
+/Users/new-jose/repos/aitools/shared
+/Users/new-jose/repos/aitools/shared/.DS_Store
+/Users/new-jose/repos/aitools/shared/claude-shared.md
+/Users/new-jose/repos/aitools/shared/cursor-rules
+/Users/new-jose/repos/aitools/shared/cursor-rules/default.mdc
+/Users/new-jose/repos/aitools/shared/cursor-rules/user-rules.md
+/Users/new-jose/repos/aitools/shared/hooks
+/Users/new-jose/repos/aitools/shared/hooks/block-claude-code-guide.sh
+/Users/new-jose/repos/aitools/shared/hooks/block-explore-agent.sh
+/Users/new-jose/repos/aitools/shared/hooks/command-channel-stop.sh
+/Users/new-jose/repos/aitools/shared/hooks/dashboard-serve.sh
+/Users/new-jose/repos/aitools/shared/hooks/delegation-duty-guard.sh
+/Users/new-jose/repos/aitools/shared/hooks/failure-mode-identity-stop.sh
+/Users/new-jose/repos/aitools/shared/hooks/failure-mode-verify-stop.sh
+/Users/new-jose/repos/aitools/shared/hooks/glossary-skill-guard.sh
+/Users/new-jose/repos/aitools/shared/hooks/harness-db-sessionend.sh
+/Users/new-jose/repos/aitools/shared/hooks/harness-db-sessionstart.sh
+/Users/new-jose/repos/aitools/shared/hooks/harness-db-sessionstart.sh.bak.2026-06-21T203304Z
+/Users/new-jose/repos/aitools/shared/hooks/harvest-session.sh
+/Users/new-jose/repos/aitools/shared/hooks/hooks-manifest.json
+/Users/new-jose/repos/aitools/shared/hooks/intelligence-stop.py
+/Users/new-jose/repos/aitools/shared/hooks/intelligence-stop.sh
+/Users/new-jose/repos/aitools/shared/hooks/scratch-init.sh
+/Users/new-jose/repos/aitools/shared/hooks/session-archive.sh
+/Users/new-jose/repos/aitools/shared/hooks/session-catchup.sh
+/Users/new-jose/repos/aitools/shared/hooks/sh-file-fixup.sh
+/Users/new-jose/repos/aitools/shared/hooks/standing-order-guard.sh
+/Users/new-jose/repos/aitools/shared/hooks/standing-order-guard.sh.bak.2026-06-21T203334Z
+/Users/new-jose/repos/aitools/shared/hooks/tool-ops-session-audit.sh
+/Users/new-jose/repos/aitools/shared/mcp
+/Users/new-jose/repos/aitools/shared/mcp/README.md
+/Users/new-jose/repos/aitools/shared/shell
+/Users/new-jose/repos/aitools/shared/shell/aliases.ps1
+/Users/new-jose/repos/aitools/shared/shell/aliases.sh
+/Users/new-jose/repos/aitools/shared/skills
+/Users/new-jose/repos/aitools/shared/skills/.DS_Store
+/Users/new-jose/repos/aitools/shared/skills/a11y-debugging
+/Users/new-jose/repos/aitools/shared/skills/aitool-continue
+/Users/new-jose/repos/aitools/shared/skills/aitool-eval
+/Users/new-jose/repos/aitools/shared/skills/aitool-ops
+/Users/new-jose/repos/aitools/shared/skills/audit
+/Users/new-jose/repos/aitools/shared/skills/chrome-devtools
+/Users/new-jose/repos/aitools/shared/skills/delegate
+/Users/new-jose/repos/aitools/shared/skills/frameworks
+/Users/new-jose/repos/aitools/shared/skills/glossary
+/Users/new-jose/repos/aitools/shared/skills/governed-data
+/Users/new-jose/repos/aitools/shared/skills/handoff
+/Users/new-jose/repos/aitools/shared/skills/harvest
+/Users/new-jose/repos/aitools/shared/skills/incident
+/Users/new-jose/repos/aitools/shared/skills/intent-audit
+/Users/new-jose/repos/aitools/shared/skills/intent-writing
+/Users/new-jose/repos/aitools/shared/skills/investigate
+/Users/new-jose/repos/aitools/shared/skills/mission-control
+/Users/new-jose/repos/aitools/shared/skills/optimize-plan
+/Users/new-jose/repos/aitools/shared/skills/planning
+/Users/new-jose/repos/aitools/shared/skills/scratch
+/Users/new-jose/repos/aitools/shared/skills/tool-eval
+/Users/new-jose/repos/aitools/shared/skills/tool-ops
+/Users/new-jose/repos/aitools/shared/skills/tool-registry
+=== registries
+total 536
+drwxr-xr-x@  8 new-jose  staff     256 Oct 20 19:44 .
+drwxr-xr-x@ 27 new-jose  staff     864 Oct 20 19:05 ..
+-rw-r--r--@  1 new-jose  staff    9232 Jun 20 09:32 framework-registry.json
+-rw-r--r--@  1 new-jose  staff   31931 Oct 20 19:05 glossary.json
+-rw-r--r--@  1 new-jose  staff  143359 Oct 20 19:44 incidents.json
+-rw-r--r--@  1 new-jose  staff    4268 Oct 20 19:05 tool-ops.json
+-rw-r--r--@  1 new-jose  staff   66547 Oct 20 19:05 tool-registry.json
+-rw-r--r--@  1 new-jose  staff    7053 Jun 15 00:31 tool-versions.json
+=== reference (count + list)
+      41
+README.md
+agentic-framework.md
+agentic-prompt-patterns.md
+ait-shellintegration.md
+claude-code-effectiveness.md
+cross-platform-detail.md
+cursor-practices.md
+do-what-feels-right.md
+evaluations
+framework-adoption.md
+framework-artifact-harvesting.md
+framework-governed-data-access.md
+framework-governed-vocabulary.md
+framework-hook-rollout.md
+framework-incident-governance.md
+framework-incident-investigation.md
+framework-intent-documentation.md
+framework-managed-file-deployment.md
+framework-provenance.md
+framework-source-of-truth.md
+framework-three-layer-governance.md
+framework-tool-lifecycle.md
+framework-tool-ops.md
+harness-db-schema.sql
+harness.md
+incident-020-process-discipline.md
+logging.md
+managed-file-deployment.md
+path-targeted-hooks-analysis.md
+plan-execution-detail.md
+post-push-checklist.md
+pre-commit-checklist.md
+pre-push-checklist.md
+script-standards-detail.md
+smoke-test-pattern-detail.md
+tool-evaluation-criteria.md
+tool-evaluation-playbook.md
+tool-ops-claude-code.md
+tool-ops-google-chrome.md
+tool-registry.md
+user-repo.md
+=== scripts list
+README.md
+__pycache__
+_validate-ps1.ps1
+ait-harvest.py
+aitools
+aitools-dashboard.ps1
+aitools-dashboard.sh
+aitools-install.ps1
+aitools-install.sh
+aitools-lib.ps1
+aitools-lib.sh
+aitools.ps1
+analyze-session.sh
+bootstrap.ps1
+bootstrap.sh
+build-deploy.sh
+check-hook-parity.py
+check-lib.ps1
+check-lib.sh
+check-post-push.ps1
+check-post-push.sh
+check-pre-commit.ps1
+check-pre-commit.sh
+check-pre-push.ps1
+check-pre-push.sh
+check-prereq-detection.ps1
+check-prereq-detection.sh
+check-script-compliance.ps1
+check-script-compliance.sh
+generate-dashboard.py
+githooks
+harness-db.py
+hh.ps1
+hh.sh
+init-hh-hooks.sh
+init-logging.ps1
+init-logging.sh
+profile-check.js
+read-session-full.py
+read-session.py
+relay-outbound-prompt.ps1
+relay-outbound-prompt.sh
+setup-bash.ps1
+setup-bash.sh
+setup-cursor-ide-mcp.ps1
+setup-cursor-ide-mcp.sh
+setup-datadog.ps1
+setup-datadog.sh
+setup-gh-cli.ps1
+setup-gh-cli.sh
+setup-go.ps1
+setup-go.sh
+setup-google-chrome.ps1
+setup-google-chrome.sh
+setup-modal.ps1
+setup-modal.sh
+setup-pandoc.ps1
+setup-pandoc.sh
+setup-perl.ps1
+setup-perl.sh
+setup-python.ps1
+setup-python.sh
+setup-rust.ps1
+setup-rust.sh
+setup-typst.ps1
+setup-typst.sh
+setup-user-claude.ps1
+setup-user-claude.sh
+setup-user-cursor.ps1
+setup-user-cursor.sh
+setup-user-hooks.ps1
+setup-user-hooks.sh
+setup-user-mcp.ps1
+setup-user-mcp.sh
+setup-user-settings.ps1
+setup-user-settings.sh
+setup-user-shell.ps1
+setup-user-shell.sh
+setup-user-skills.ps1
+setup-user-skills.sh
+setup-uv.ps1
+setup-uv.sh
+setup-vercelcli.ps1
+setup-vercelcli.sh
+sync-relay-to-cursor-agents.py
+=== deploy (aitools frozen)
+setup-bash.ps1
+setup-bash.sh
+setup-cursor-ide-mcp.ps1
+setup-cursor-ide-mcp.sh
+setup-datadog.ps1
+setup-datadog.sh
+setup-gh-cli.ps1
+setup-gh-cli.sh
+setup-go.ps1
+setup-go.sh
+setup-modal.ps1
+setup-modal.sh
+setup-pandoc.ps1
+setup-pandoc.sh
+setup-perl.ps1
+setup-perl.sh
+setup-python.ps1
+setup-python.sh
+setup-rust.ps1
+setup-rust.sh
+setup-typst.ps1
+setup-typst.sh
+setup-user-claude.ps1
+setup-user-claude.sh
+setup-user-cursor.ps1
+setup-user-cursor.sh
+setup-user-hooks.ps1
+setup-user-hooks.sh
+setup-user-mcp.ps1
+setup-user-mcp.sh
+setup-user-skills.ps1
+setup-user-skills.sh
+setup-uv.ps1
+setup-uv.sh
+setup-vercelcli.ps1
+setup-vercelcli.sh
+=== generated?
+ls: /Users/new-jose/repos/aitools/generated: No such file or directory

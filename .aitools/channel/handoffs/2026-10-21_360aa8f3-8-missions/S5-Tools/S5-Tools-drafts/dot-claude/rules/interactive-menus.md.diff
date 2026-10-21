@@ -1,0 +1,46 @@
+--- a/.claude/rules/interactive-menus.md
++++ b/.claude/rules/interactive-menus.md
+@@ -1,5 +1,18 @@
+ ## Interactive Deploy Menus (this repo)
+ 
++> DRAFT — needs commander approval (new intent statement; the file had none).
++
++**Intent**: **Purpose**: Govern the interactive menus setup scripts show —
++option parity between bash and PowerShell, return-value handling,
++non-interactive defaults, console I/O, and encoding — for managed-file
++deployment and for the tool install-method menu. **Scope**: Menu behaviour,
++defaults, and the JSON field-level review contract. NOT the managed-file state machine
++(`@reference/managed-file-deployment.md`). NOT the tool support decision
++tree (`@reference/tool-support-decision-tree.md`). NOT JSON write safety
++(`@.claude/rules/config-file-safety.md`). **Audience**: Agents writing or
++changing menu code in `scripts/aitools-lib.sh` / `.ps1` or calling it from
++setup scripts.
++
+ ### Pattern
+ 
+ Setup scripts that write managed files use `Deploy-ManagedFile` /
+@@ -36,7 +49,7 @@
+ 
+ ### Non-interactive fallback
+ 
+-Both menu functions MUST handle:
++Both managed-file menu functions MUST handle:
+ - `AITOOLS_FORCE` env var (`--force` / `-Force` on `aitools` and `aitools install`): auto-select `overwrite`
+ - Non-terminal stdin: auto-select `overwrite`
+ - EOF at the prompt (interactive, input ended): log a warning, auto-select `overwrite`
+@@ -44,6 +57,15 @@
+ The installers apply the same rule to their own prompts (gh login, repos path):
+ terminal and not forced = prompt; otherwise use the default.
+ 
++### Tool install-method menu
++
++The menu of the tool support decision tree (`tool_method_menu` /
++`Read-ToolMethodChoice`, `@reference/tool-support-decision-tree.md`) follows
++the parity, console I/O, and encoding sections of this rule, with one
++difference: `AITOOLS_FORCE`, non-terminal stdin, EOF, and unrecognised input
++change nothing (a tool install has no overwrite equivalent; D-TS3). `[x]abort`
++exits 2 and stops the run, as for managed files.
++
+ ### Console I/O
+ 
+ - PS1: `[Console]::ReadLine()` / `[Console]::WriteLine()` -- NOT `Read-Host`

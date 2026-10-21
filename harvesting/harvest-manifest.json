@@ -1,7 +1,7 @@
 {
   "meta": {
     "schemaVersion": "1.0",
-    "lastAudit": "2026-06-21"
+    "lastAudit": "2026-10-21"
   },
   "artifacts": {
     "2026-03-15_gh-issue-comment.md": {
@@ -2780,7 +2780,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2790,7 +2790,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2800,7 +2800,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2810,7 +2810,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "python",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2820,7 +2820,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2830,7 +2830,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2840,7 +2840,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2850,7 +2850,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2860,7 +2860,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "markdown",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2870,7 +2870,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "markdown",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2880,7 +2880,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "markdown",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2890,7 +2890,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "markdown",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2900,7 +2900,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "markdown",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2910,7 +2910,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "powershell",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2920,7 +2920,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "powershell",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2930,7 +2930,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "python",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2940,7 +2940,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2950,7 +2950,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2960,7 +2960,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2970,7 +2970,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "powershell",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2980,7 +2980,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -2990,7 +2990,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "powershell",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3000,7 +3000,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "powershell",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3010,7 +3010,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3020,7 +3020,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3030,7 +3030,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3040,7 +3040,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3050,7 +3050,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3060,7 +3060,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3070,7 +3070,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3080,7 +3080,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "markdown",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3090,7 +3090,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3100,7 +3100,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3110,7 +3110,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3120,7 +3120,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3130,7 +3130,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3140,7 +3140,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3150,7 +3150,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3160,7 +3160,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3170,7 +3170,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3180,7 +3180,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3190,7 +3190,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "python",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3200,7 +3200,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3210,7 +3210,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "python",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3220,7 +3220,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "python",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3230,7 +3230,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "python",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3240,7 +3240,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3250,7 +3250,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3260,7 +3260,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3270,7 +3270,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3280,7 +3280,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "python",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3290,7 +3290,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3300,7 +3300,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3310,7 +3310,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3320,7 +3320,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3330,7 +3330,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3340,7 +3340,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3350,7 +3350,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3360,7 +3360,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3370,7 +3370,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3380,7 +3380,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3390,7 +3390,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3400,7 +3400,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3410,7 +3410,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3420,7 +3420,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3430,7 +3430,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3440,7 +3440,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3450,7 +3450,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3460,7 +3460,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3470,7 +3470,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3480,7 +3480,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3490,7 +3490,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3500,7 +3500,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3510,7 +3510,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3520,7 +3520,7 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": null,
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
     },
@@ -3530,9 +3530,769 @@
       "description": "Auto-harvested from session scratch",
       "type": "code",
       "language": "bash",
-      "status": "harvested",
+      "status": "candidate",
       "promotedTo": null,
       "pruneAfter": "2026-07-21"
+    },
+    "2026-06-22_session-3fb694ce-1_.intelligence-last-check": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_3fb694ce-1",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-3fb694ce-1_cleanup-testwire.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_3fb694ce-1",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-3fb694ce-1_dump-exemplar.py": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_3fb694ce-1",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-3fb694ce-1_events.jsonl": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_3fb694ce-1",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-3fb694ce-1_extract-delegations.py": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_3fb694ce-1",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-3fb694ce-1_fix-and-deploy-hbin.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_3fb694ce-1",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-3fb694ce-1_scan-delegations.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_3fb694ce-1",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-3fb694ce-1_test-deploy-block.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_3fb694ce-1",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-3fb694ce-1_validate-codify.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_3fb694ce-1",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-f3f6466a-e_.harvested": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_f3f6466a-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-f3f6466a-e_.intelligence-last-check": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_f3f6466a-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-f3f6466a-e_cleanup-testwire.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_f3f6466a-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-f3f6466a-e_dump-exemplar.py": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_f3f6466a-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-f3f6466a-e_events.jsonl": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_f3f6466a-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-f3f6466a-e_extract-delegations.py": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_f3f6466a-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-f3f6466a-e_fix-and-deploy-hbin.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_f3f6466a-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-f3f6466a-e_scan-delegations.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_f3f6466a-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-f3f6466a-e_test-deploy-block.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_f3f6466a-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-f3f6466a-e_validate-codify.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_f3f6466a-e",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_diff-settings.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_events.jsonl": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-b759f4eb-8_.harvested": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_b759f4eb-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-b759f4eb-8_check-toolops-refs.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_b759f4eb-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-b759f4eb-8_diff-settings.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_b759f4eb-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-b759f4eb-8_events.jsonl": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_b759f4eb-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-b759f4eb-8_find-json-review.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_b759f4eb-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-b759f4eb-8_scope-deny-removal.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_b759f4eb-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-b759f4eb-8_verify-batch1.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_b759f4eb-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_.harvested": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_.intelligence-last-check": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_check-toolops-refs.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_diag-hooks-deploy.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_1_session-4c8d96ee-a_diff-settings.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_1_session-4c8d96ee-a_events.jsonl": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_final-regression.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_final-syntax.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_find-json-review.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_find-wiring.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_read-protected.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_run-builddeploy.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_scope-deny-removal.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_test-sync-applybranches.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_test-sync.ps1": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "powershell",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_test-sync.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_verify-batch1.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_verify-batch3.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_verify-batch4.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_verify-churnfix.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_verify-ps1.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4c8d96ee-a_verify-reloadfix.sh": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4c8d96ee-a",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4691443a-4_.intelligence-last-check": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4691443a-4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-4691443a-4_events.jsonl": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_4691443a-4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-8a920db5-4_.intelligence-last-check": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_8a920db5-4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-22_session-8a920db5-4_events.jsonl": {
+      "harvested": "2026-06-22",
+      "session": "aitools/2026-06-22_8a920db5-4",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-22"
+    },
+    "2026-06-25_session-bac1f15c-2_.intelligence-last-check": {
+      "harvested": "2026-06-25",
+      "session": "aitools/2026-06-25_bac1f15c-2",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-25"
+    },
+    "2026-06-25_session-bac1f15c-2_events.jsonl": {
+      "harvested": "2026-06-25",
+      "session": "aitools/2026-06-25_bac1f15c-2",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-25"
+    },
+    "2026-06-28_session-06c9c816-5_.intelligence-last-check": {
+      "harvested": "2026-06-28",
+      "session": "aitools/2026-06-28_06c9c816-5",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-28"
+    },
+    "2026-06-28_session-06c9c816-5_events.jsonl": {
+      "harvested": "2026-06-28",
+      "session": "aitools/2026-06-28_06c9c816-5",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-28"
+    },
+    "2026-06-28_session-06c9c816-5_make_test_pdf.py": {
+      "harvested": "2026-06-28",
+      "session": "aitools/2026-06-28_06c9c816-5",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-28"
+    },
+    "2026-06-28_session-06c9c816-5_test.pdf": {
+      "harvested": "2026-06-28",
+      "session": "aitools/2026-06-28_06c9c816-5",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-07-28"
+    },
+    "2026-07-09_session-ba4c0c12-7_.intelligence-last-check": {
+      "harvested": "2026-07-09",
+      "session": "aitools/2026-07-09_ba4c0c12-7",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-08-08"
+    },
+    "2026-07-09_session-ba4c0c12-7_build-deploy-prefix.sh": {
+      "harvested": "2026-07-09",
+      "session": "aitools/2026-07-09_ba4c0c12-7",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "bash",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-08-08"
+    },
+    "2026-07-09_session-ba4c0c12-7_events.jsonl": {
+      "harvested": "2026-07-09",
+      "session": "aitools/2026-07-09_ba4c0c12-7",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-08-08"
+    },
+    "2026-07-09_session-ba4c0c12-7_issue-preflight-drift.md": {
+      "harvested": "2026-07-09",
+      "session": "aitools/2026-07-09_ba4c0c12-7",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "pruned",
+      "promotedTo": null,
+      "pruneAfter": "2026-08-08"
+    },
+    "2026-10-21_session-0d7004b4-8_.intelligence-last-check": {
+      "harvested": "2026-10-21",
+      "session": "aitools/2026-10-21_0d7004b4-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-11-20"
+    },
+    "2026-10-21_session-360aa8f3-8_.intelligence-last-check": {
+      "harvested": "2026-10-21",
+      "session": "aitools/2026-10-21_360aa8f3-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-11-20"
+    },
+    "2026-10-21_session-360aa8f3-8_append-incidents.py": {
+      "harvested": "2026-10-21",
+      "session": "aitools/2026-10-21_360aa8f3-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-11-20"
+    },
+    "2026-10-21_session-360aa8f3-8_events.jsonl": {
+      "harvested": "2026-10-21",
+      "session": "aitools/2026-10-21_360aa8f3-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-11-20"
+    },
+    "2026-10-21_session-360aa8f3-8_incidents-draft-74-86.json": {
+      "harvested": "2026-10-21",
+      "session": "aitools/2026-10-21_360aa8f3-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-11-20"
+    },
+    "2026-10-21_session-360aa8f3-8_msg-delegate-skill.txt": {
+      "harvested": "2026-10-21",
+      "session": "aitools/2026-10-21_360aa8f3-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-11-20"
+    },
+    "2026-10-21_session-360aa8f3-8_msg-delegation-rule.txt": {
+      "harvested": "2026-10-21",
+      "session": "aitools/2026-10-21_360aa8f3-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-11-20"
+    },
+    "2026-10-21_session-360aa8f3-8_msg-dotprofile-deploy.txt": {
+      "harvested": "2026-10-21",
+      "session": "aitools/2026-10-21_360aa8f3-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-11-20"
+    },
+    "2026-10-21_session-360aa8f3-8_msg-incidents.txt": {
+      "harvested": "2026-10-21",
+      "session": "aitools/2026-10-21_360aa8f3-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-11-20"
+    },
+    "2026-10-21_session-360aa8f3-8_msg-profile.txt": {
+      "harvested": "2026-10-21",
+      "session": "aitools/2026-10-21_360aa8f3-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": null,
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-11-20"
+    },
+    "2026-10-21_session-360aa8f3-8_pr-issue9-body.md": {
+      "harvested": "2026-10-21",
+      "session": "aitools/2026-10-21_360aa8f3-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "markdown",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-11-20"
+    },
+    "2026-10-21_session-360aa8f3-8_rename-alias.py": {
+      "harvested": "2026-10-21",
+      "session": "aitools/2026-10-21_360aa8f3-8",
+      "description": "Auto-harvested from session scratch",
+      "type": "code",
+      "language": "python",
+      "status": "harvested",
+      "promotedTo": null,
+      "pruneAfter": "2026-11-20"
     }
   }
 }
