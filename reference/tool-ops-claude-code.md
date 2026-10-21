@@ -59,7 +59,7 @@ Post-push checklist #20 triggers this review automatically.
 | 19 | `effortLevel` setting (`settings.json` key controlling reasoning effort) | 2.1.68 | 2.1.74 (2026-03-13) | `scripts/setup-user-hooks.sh/.ps1`, `reference/user-repo.md`, `shared/claude-shared.md` | -- |
 | 25 | SendMessage for agent continuation unavailable (gated behind Agent Teams flag; old `resume` param removed in 2.1.77) | 2.1.77 | 2.1.81 (2026-03-24) | Agent tool documentation, delegation prompts | [#35240](https://github.com/anthropics/claude-code/issues/35240), [#37051](https://github.com/anthropics/claude-code/issues/37051), [#38183](https://github.com/anthropics/claude-code/issues/38183) |
 | 26 | Sub-agent Markdown file-name block: Write refuses a sub-agent write whose basename matches `^(REPORT\|SUMMARY\|FINDINGS\|ANALYSIS).*\.md$` (case-insensitive) | 2.1.289 | 2.1.289 (2026-10-05) | "Sub-agent Markdown File-Name Block" section below, dotprofile `claude/rules/delegation.md` (D-DEL1), `shared/skills/delegate/SKILL.md`, `shared/hooks/delegation-duty-guard.sh`, `shared/claude-shared.md` + dotprofile `claude/CLAUDE.md` (Delegation Duty) | -- (not in the official docs) |
-| 27 | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` caps sub-agent nesting (documented default 3; the Claude Code web environment sets 1) | 2.1.219 | 2.1.289 (2026-10-05) | "Sub-agent Nesting Depth" section below, `shared/skills/delegate/SKILL.md`, `shared/skills/aitool-continue/SKILL.md` | -- |
+| 27 | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` caps sub-agent nesting (documented default 3; the Claude Code web environment sets 1); the launch path decides whether a delegate gets the Agent tool (Workflow agents never do) | 2.1.219 | 2.1.307 (2026-10-21) | "Sub-agent Nesting Depth" section below, `shared/skills/delegate/SKILL.md`, `shared/skills/aitool-continue/SKILL.md` | -- |
 
 ### MEDIUM -- Affects developer experience or specific features
 
@@ -300,6 +300,27 @@ Subagent nesting limit reached (depth N of M). Complete this task directly using
 **Impact on delegation:** a delegation chain must fit the cap of the
 environment it runs in. A delegate at the cap does the whole task itself; plan
 its scope accordingly (`/delegate` skill).
+
+**Launch path decides whether a delegate can delegate** (observed 2.1.307,
+macOS, local environment, 2026-10-21; `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`
+unset at every level):
+
+| Launched via | Has Agent | Has Workflow | Deepest level that ran |
+|---|---|---|---|
+| Agent tool from the main session | yes at levels 1-2, no at level 3 | no | 3 |
+| A Workflow `agent()` call | no (not even deferred via ToolSearch) | no | 1 |
+
+- At the default cap (3), the third delegate has no Agent tool at all, so a
+  chain runs main → L1 → L2 → L3.
+- Workflow agents cannot delegate, whatever the cap: a workflow is one level
+  of fan-out under the session that runs it. Encode deeper structure in the
+  script itself (stages, `pipeline()`, one-level `workflow()` calls), or launch
+  mission commanders with the Agent tool when they must delegate.
+- No delegate has the Workflow tool, so a delegate cannot start a workflow.
+- Worktree-isolated agents also refuse any command that sets `HOME`
+  ("this command sets HOME, injecting git configuration ... Refusing to run
+  it"), so isolated-`HOME` runs (`build-deploy.sh`, #86) must run from a
+  non-isolated agent or the main session.
 
 ### Session Storage Internals
 
