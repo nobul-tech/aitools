@@ -1,0 +1,1496 @@
+{
+  "meta": {
+    "intent": {
+      "purpose": "Every open decision that M2 (tool support), M3 (machine profile), the S2-Layout PRs and the early /tool-adopt ship depend on, one item per decision, for the session commander to publish as one review page Artifact and for the commander to answer.",
+      "scope": "Sections ta (TOOL-ADOPT approval), k (approved context, not questions), a (blocking gate questions), b (protected-file batch rows), c (glossary), d (non-blocking, pre-answer), e (known defects left in drafts). NOT re-asking approved decisions (SD-1..SD-8, D-TS13, the managed-file model: section k). NOT the decision record plans/tool-support-and-machine-profile.md (written after the answers).",
+      "audience": "The session commander (publishes it); the commander (answers it); missions TOOL-ADOPT, LAYOUT and PROFILE-TOOLS (consume the answers)."
+    },
+    "title": "S3-GateFix review page: tool support, machine profile, skill layout, /tool-adopt",
+    "author": "S3-GateFix (mission GATE-FIX, Session Commander 10cf255a-c), 2026-10-21; built on the S3-Gate page merged in PR #58",
+    "sections": {
+      "ta": {
+        "title": "TOOL-ADOPT approval: ship /tool-adopt now as a process-only user-level skill",
+        "kind": "question"
+      },
+      "k": {
+        "title": "CONTEXT: approved, not questions",
+        "kind": "context"
+      },
+      "a": {
+        "title": "BLOCKING: decide at the gate",
+        "kind": "question"
+      },
+      "b": {
+        "title": "PROTECTED-FILE BATCH: approve each row's draft",
+        "kind": "row"
+      },
+      "c": {
+        "title": "GLOSSARY decisions",
+        "kind": "question"
+      },
+      "d": {
+        "title": "NON-BLOCKING: pre-answer before the named batch",
+        "kind": "question"
+      },
+      "e": {
+        "title": "KNOWN DEFECTS left in drafts: accept or send back",
+        "kind": "question"
+      }
+    },
+    "answerOrder": [
+      "Section ta (TA-PLACE, TA-SKILL, TA-INTENT, TA-GLOSSARY, TA-M2): these alone let mission TOOL-ADOPT ship /tool-adopt now",
+      "N-Q1 and D-TS10..D-TS12: every M2/M3 code batch waits on them (D-TS13 is already approved)",
+      "REV5 and the row batch (section b)",
+      "The S2-Layout items: PR-a can start as soon as item PR-a is answered"
+    ],
+    "pathKey": "MISSIONS = .aitools/channel/handoffs/2026-10-21_360aa8f3-8-missions/ (read-only provenance). GATE = .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Gate/ (merged in PR #58; provenance). FIX = .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-GateFix/. Paths are relative to the aitools repo root."
+  },
+  "items": [
+    {
+      "id": "N-Q1",
+      "section": "a",
+      "question": "toolExceptions: which shape, who owns it, and who writes it?",
+      "options": [
+        "(a) {decision:\"keep\", detected:{platform, method, path, version}, decidedAt, decidedBy, reason}; shape owned by reference/user-repo.md; tree section 8 owns when it is written, read and matched; writer and reader = aitools-profile.js exception-set / exception-get",
+        "(b) M2 shape {decision, method, path, platform, environment, decided, by, note}, read and written with perl JSON::PP / ConvertFrom-Json",
+        "(c) M3 shape as drafted {decision, detected:{method, path, version}, decidedAt, reason}"
+      ],
+      "recommendation": "(a)",
+      "why": "One owner, and one write path for a shared, git-tracked file in both shells (temp, validate, backup, move, like register). Node is present whenever a dotprofile exists. (b) fails on minimal Linux (perl-base has no JSON::PP) and ConvertTo-Json reformats the file. (c) has no platform and uses install kinds that never match T5",
+      "blocks": "Gate; SD-6 pending half; X-B1; M2 B2/B3",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 1 X1, X3, X4 and section 3 N-Q1; handoff 2026-10-21_360aa8f3-8.md D.3 SD-6; GATE/S3-Gate-drafts/reference/tool-support-decision-tree.md section 8",
+      "kind": "question"
+    },
+    {
+      "id": "D-TS10",
+      "section": "a",
+      "question": "A recorded tool exception (KEEP, EXCEPTION): report OK or WARN?",
+      "options": [
+        "OK <ver> (kept)",
+        "WARN <ver> (kept)"
+      ],
+      "recommendation": "OK <ver> (kept)",
+      "why": "The user decided it, so it is not a caveat, and a permanent WARN trains people to ignore WARN. It departs from F3 ('kept as-is is WARN') for recorded exceptions only; HOLD, REPLACE-FAIL and REPLACE-BLOCKED stay WARN",
+      "blocks": "Gate; tree section 3; script-standards-detail edits 3-4 (row 16)",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 (T-Q2 = D-TS10); MISSIONS/S5-Tools/S5-Tools-report.md section 3 Q2",
+      "kind": "question"
+    },
+    {
+      "id": "D-TS11",
+      "section": "a",
+      "question": "SHADOWED (the command resolves to another copy that runs): ERROR or WARN?",
+      "options": [
+        "ERROR shadowed (see log) + ACTION",
+        "WARN"
+      ],
+      "recommendation": "ERROR",
+      "why": "'Supported' means the command resolves to the managed copy (tooling-resolution plan decision 10). WARN is how the python shadow went unnoticed. Needs the severity-guide line in script-standards-detail.md (row 16 edits 2-3)",
+      "blocks": "Gate; tree section 3; tool-lifecycle.md item 6; row 16",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 (T-Q10 = D-TS11); plans/tooling-resolution-and-artifact-registry.md 'Confirmed decisions' 10",
+      "kind": "question"
+    },
+    {
+      "id": "D-TS12",
+      "section": "a",
+      "question": "A platform whose registry status is still 'evaluating': WARN or ERROR?",
+      "options": [
+        "WARN under evaluation + ACTION run /tool-eval",
+        "ERROR"
+      ],
+      "recommendation": "WARN",
+      "why": "Nothing the user caused is broken. ERROR would fire on every Linux run for node",
+      "blocks": "Gate; tree T0 and section 3",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 (T-Q11 = D-TS12)",
+      "kind": "question"
+    },
+    {
+      "id": "D-TS13",
+      "section": "a",
+      "question": "NEW from the A/B pass: should exit 2 count as a user abort only when an abort marker file exists?",
+      "options": [
+        "(a) Installers export AITOOLS_ABORT_FILE. Every [x]abort (tool menu and managed-file menus) writes it, then exits 2. Exit 2 without the marker = ordinary failure (ERROR row, run continues). No helper uses return code 2",
+        "(b) Bare exit 2 = abort, as in rev 3",
+        "(c) A different exit code for abort (for example 77)"
+      ],
+      "recommendation": "(a)",
+      "why": "Measured on /bin/bash 3.2: under set -e, a script exits 2 when grep or diff fail, when a function returns 2, and when a sourced file (a malformed generated tool spec) has a syntax error. With (b), those ordinary failures stop the whole install and print 'aborted by user'. (c) still collides with any command that exits 77 and changes the documented managed-file contract. A marker is unambiguous in bash and PowerShell. It refines SD-5 ('exit 2, stops the run'); it does not reverse it",
+      "blocks": "Gate; M2 B4a/B4b (installers, entry points); the fix for incident draft #87; row 16 edit 6",
+      "source": "GATE/S3-Gate-B-review.md B-01 and probe table; GATE/S3-Gate-drafts/reference/tool-support-decision-tree.md section 7.5",
+      "kind": "question",
+      "status": "approved",
+      "statusNote": "Commander, 2026-10-21 (mission packet section 6). Rev 5 section 7.5 applies it to all four runners, including deploy_configs / Deploy-Configs",
+      "changed": "changed"
+    },
+    {
+      "id": "REV4",
+      "section": "a",
+      "question": "Approve decision tree rev 4 (rev 3 plus the A/B blocker and major fixes) as the version that lands as reference/tool-support-decision-tree.md?",
+      "options": [
+        "Approve rev 4",
+        "Approve rev 3 and treat rev 4 changes as follow-ups",
+        "Send back with changes"
+      ],
+      "recommendation": "Approve rev 4",
+      "why": "Rev 3 has one blocker (B-01 exit 2) and 9 majors that implementers would hit. Examples: the brew-formula probe can never match (brew --prefix prints the opt symlink), RP cannot be evaluated, replace skips the build-prereq gate, a dry run reports ERROR for every tool it would install, and Windows bash resolves to WSL. Rev 4 adds one schema field (resolveBy) and one proposed decision (D-TS13). The intent statement is unchanged",
+      "blocks": "Gate row R1; every M2 batch",
+      "source": "GATE/S3-Gate-rev4-changelog.md; GATE/S3-Gate-A-review.md; GATE/S3-Gate-B-review.md",
+      "kind": "question",
+      "status": "superseded",
+      "statusNote": "by REV5 (S3-GateFix): rev 5 = rev 4 plus the PR #58 review fixes and the S3-GateFix-B fixes"
+    },
+    {
+      "id": "REV5",
+      "kind": "question",
+      "section": "a",
+      "question": "Approve decision tree rev 5 (rev 4 plus the PR #58 review fixes and the independent B-pass fixes) as the version that lands as reference/tool-support-decision-tree.md?",
+      "options": [
+        "Approve rev 5",
+        "Approve rev 4 and treat rev 5 changes as follow-ups",
+        "Send back with changes"
+      ],
+      "recommendation": "Approve rev 5",
+      "why": "Rev 4 made only the installers export the abort marker. Most managed-file [x]abort choices happen in setup-user-* scripts launched by deploy_configs (plain 'aitools' and 'aitools gitpull'), which exported nothing, so an abort there would still be an ERROR 'script failed (exit 2)' and the run would continue. Rev 5 covers all four runners, defines the unset-marker case, keeps the entry point from reading deploy_configs' error count as an abort, and fixes the generator wording. The intent statement is unchanged",
+      "blocks": "Gate row R1; every M2 batch",
+      "source": "FIX/S3-GateFix-rev5-changelog.md; FIX/S3-GateFix-B-review.md; scripts/aitools deploy_configs ('return $errors'); scripts/aitools.ps1 Deploy-Configs",
+      "changed": "new"
+    },
+    {
+      "id": "N-Q3",
+      "section": "a",
+      "question": "Glossary renames from M3: keep 'machine identity' and 'derived config', or rename them to 'machine id' and 'aitools config'?",
+      "options": [
+        "Rename to machine id / aitools config",
+        "Keep machine identity / derived config"
+      ],
+      "recommendation": "Rename",
+      "why": "profile.json 'identity' already means the user. 'derived' is not a scope modifier, so the composed form fails /audit (reference/framework-governed-vocabulary.md)",
+      "blocks": "Gate (glossary batch, rows R9-R10)",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 N-Q3; MISSIONS/S4-Review/S4-Review-C-review.md C-15, C-17",
+      "kind": "question"
+    },
+    {
+      "id": "T-Q1",
+      "section": "a",
+      "question": "How do setup scripts get registry data?",
+      "options": [
+        "(A) generated, committed spec files in generated/tool-specs/; only the agent making an approved registry write runs the generator; pre-commit check 7 regenerates into a temporary directory and compares; build-deploy embedding for MDM is deferred (X-B4)",
+        "(B) parse the JSON at run time",
+        "(C) hard-coded values plus a pre-commit compare"
+      ],
+      "recommendation": "(A), with (C) as the stopgap for batches that land before the generator",
+      "why": "One source; MDM deploy scripts stay self-contained; registry text is never evaluated. (B) fails on minimal Linux. build-deploy, the installers and the setup scripts never run the generator, so 'aitools' still syncs on a machine without harness python (S3-Gate-B B-06). Rev 5 fixes the rev 4 wording that said the generator 'runs only when registry data changes' while check 7 runs it on every commit, and drops 'embedded by build-deploy.sh' from the spec header (PR #58 review finding 3). Needs the git-safety.md edit (row R15)",
+      "blocks": "Gate; M2 B1",
+      "source": "MISSIONS/S5-Tools/S5-Tools-report.md section 3 Q1; MISSIONS/S4-Review/S4-Review-report.md section 3 T-Q1; GATE/S3-Gate-drafts/reference/tool-support-decision-tree.md section 7.1",
+      "kind": "question",
+      "changed": "changed"
+    },
+    {
+      "id": "T-Q9",
+      "section": "a",
+      "question": "Where is the tool registry schema documented?",
+      "options": [
+        "Reference section 'Tool registry schema 1.1' only (skills and registry meta point to it)",
+        "In the rule",
+        "In the /tool-registry skill"
+      ],
+      "recommendation": "Reference only; amend framework-three-layer-governance.md 'Schema' separately",
+      "why": "A single authority. C-08 showed the skills restated the schema and contradicted it; S3-Gate's copies of the skills now only point to it",
+      "blocks": "Gate",
+      "source": "MISSIONS/S5-Tools/S5-Tools-report.md section 3 Q9; GATE/S3-Gate-drafts-fixes.md",
+      "kind": "question"
+    },
+    {
+      "id": "P-Q1",
+      "section": "a",
+      "question": "Where do company and name live in profile.json?",
+      "options": [
+        "identity-level defaults plus per-profile overrides",
+        "per-profile only"
+      ],
+      "recommendation": "identity.company = \"nobul-tech\", identity.name = \"Jose\". Delete the per-profile Nobul / nobul.tech / pepe values only after all 3 machines run 2.1 code",
+      "why": "Matches the GitHub org and CLAUDE.md. Older code still reads the per-profile company",
+      "blocks": "M3 B10",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 P-Q1; MISSIONS/S5-Profile/S5-Profile-report.md section 8",
+      "kind": "question"
+    },
+    {
+      "id": "P-Q2",
+      "section": "a",
+      "question": "Hash machine ids before storing them in git?",
+      "options": [
+        "HMAC-SHA256 with fixed key aitools-machine-id-v1",
+        "raw ids"
+      ],
+      "recommendation": "HMAC-SHA256, key aitools-machine-id-v1",
+      "why": "No raw hardware ids in a git repo; still deterministic. Windows MachineGuid and Linux /etc/machine-id reads are UNVERIFIED (handoff G15)",
+      "blocks": "Gate; M3 B1",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 P-Q2",
+      "kind": "question"
+    },
+    {
+      "id": "P-Q3",
+      "section": "a",
+      "question": "Machine resolver: one JS module, or native bash plus PS1?",
+      "options": [
+        "One JS module (aitools-profile.js)",
+        "Native bash and PowerShell"
+      ],
+      "recommendation": "JS",
+      "why": "One definition, and build-deploy can call it. It needs node, which deploy already needs. N-Q1 (a) extends the same module to tool exceptions",
+      "blocks": "Gate; M3 B1",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 P-Q3",
+      "kind": "question"
+    },
+    {
+      "id": "P-Q8..Q11",
+      "section": "a",
+      "question": "MDM and build-deploy batch: approve the four answers together?",
+      "options": [
+        "Approve all four as recommended",
+        "Answer individually: P-Q8 MDM template, P-Q9 corrupt profile.json, P-Q10 deploy read-only, P-Q11 MDM without node"
+      ],
+      "recommendation": "Approve all four. P-Q8: build-deploy switches deploy/ to the dotprofile template (M3 B5). P-Q9: a corrupt profile.json fails the build (exit 1); a corrupt config.json is skipped with WARN. P-Q10: deploy/ is read-only (USER_REPO_PATH=\"\" after resolving); MDM endpoints never push. P-Q11: without node, MDM uses identity-level strings, WARNs for an unregistered machine in deploy/ only, and documents AITOOLS_MACHINE_ALIAS",
+      "why": "Dev and MDM output must match (deploy-paths.md). A corrupt source of truth is a real error, while config.json must stay repairable. Unregistered MDM endpoints would otherwise ERROR on every run",
+      "blocks": "M3 B5",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 P-Q8, P-Q9, P-Q10, P-Q11",
+      "kind": "question"
+    },
+    {
+      "id": "S2L-QA",
+      "section": "a",
+      "question": "S2-Layout Q-A: when a skill moves level, git mv it (no copies), or keep both copies?",
+      "options": [
+        "git mv, never two copies",
+        "keep both"
+      ],
+      "recommendation": "git mv",
+      "why": "Claude Code resolves a shared name as personal over project, so the deployed (often stale) copy wins. documentation-standards.md already forbids same-name skills at both levels, and symlinks don't help on Windows. Cost: Claude Code web loses project-level loading of those skills; test V5 before PR-b merges",
+      "blocks": "PR-b",
+      "source": "MISSIONS/S2-Layout/S2-Layout-report.md section 4 Q-A",
+      "kind": "question"
+    },
+    {
+      "id": "S2L-QB",
+      "section": "a",
+      "question": "S2-Layout Q-B (= S2-Layout section 6 Q2): approve the protected spec in S2-Layout-evidence E6 (path map) and E7 (drafts D1-D6) up front as the review step, then ship 3 small PRs?",
+      "options": [
+        "Approve E6/E7 now; the delegate ships exactly that content; anything beyond comes back as a draft",
+        "Draft PR with the protected edits",
+        "Drafts first, separate approval per PR"
+      ],
+      "recommendation": "Approve E6/E7 now",
+      "why": "An unprotected-only PR would leave rules pointing at moved files; that one-pass failure left 52 stale paths after v0.69.0. One big PR goes against smaller batches. The PR review is a second check, not the approval",
+      "blocks": "PR-b (and PR-c)",
+      "source": "MISSIONS/S2-Layout/S2-Layout-report.md section 4 Q-B, section 6 Q2; MISSIONS/S2-Layout/S2-Layout-evidence.md E6, E7",
+      "kind": "question"
+    },
+    {
+      "id": "S2L-Q1",
+      "section": "a",
+      "question": "Do audit and governed-data stay project-level?",
+      "options": [
+        "Keep audit and governed-data project-level (/tool-adopt placement is item TA-PLACE)",
+        "Move all 9 skills to shared/"
+      ],
+      "recommendation": "Keep them project-level",
+      "why": "They only make sense inside the aitools tree (naming rule N3). 'Move all 9' adds 2 skills to PR-b batch 3",
+      "blocks": "PR-b batch 3",
+      "source": "MISSIONS/S2-Layout/S2-Layout-report.md section 6 Q1",
+      "kind": "question",
+      "changed": "changed",
+      "changeNote": "S3-Gate's first option also kept /tool-adopt project-level; that is now item TA-PLACE"
+    },
+    {
+      "id": "S2L-Q3",
+      "section": "a",
+      "question": "Delete the 9 untracked shared/skills copies before any aitools run?",
+      "options": [
+        "Already done: no action",
+        "Re-check"
+      ],
+      "recommendation": "Already done: no action",
+      "why": "Verified 2026-10-21: ls /Users/new-jose/repos/aitools/shared/skills lists 14 entries and none of the 9 copies (audit, frameworks, glossary, governed-data, harvest, incident, tool-eval, tool-ops, tool-registry). Handoff exclusion F1 no longer applies",
+      "blocks": "nothing (was: any aitools run)",
+      "source": "MISSIONS/S2-Layout/S2-Layout-report.md section 6 Q3; handoff G1; ls output in this mission",
+      "kind": "question"
+    },
+    {
+      "id": "S2L-Q4",
+      "section": "a",
+      "question": "If PR-b check V5 fails (Claude Code web does not list the user-level skills), how does Claude Code web get them?",
+      "options": [
+        "claude.ai account skills for the moved skills",
+        "Keep project copies",
+        "An environment setup script that installs before session start"
+      ],
+      "recommendation": "claude.ai account skills; never keep project copies",
+      "why": "Keeping copies breaks the one-name rule (N2) and brings back the shadowing problem",
+      "blocks": "PR-b merge (only if V5 fails)",
+      "source": "MISSIONS/S2-Layout/S2-Layout-report.md section 6 Q4",
+      "kind": "question"
+    },
+    {
+      "id": "S2L-Q5",
+      "section": "a",
+      "question": "Rename shared/ (for example to user/ or home/)?",
+      "options": [
+        "Not now; revisit after PR-b with an rc-rewrite fix",
+        "Rename to user/ now"
+      ],
+      "recommendation": "Not now",
+      "why": "The installer never rewrites the shell rc source line, so a rename breaks every shell startup (aitools-install.sh lines 614-628). It touches about 89 files, and 'user' already has two meanings",
+      "blocks": "nothing now",
+      "source": "MISSIONS/S2-Layout/S2-Layout-report.md section 3 option B, section 6 Q5",
+      "kind": "question"
+    },
+    {
+      "id": "S2L-Q6",
+      "section": "a",
+      "question": "Does tool-versions.json (no skill, hand-edited) move with the registries?",
+      "options": [
+        "Yes, into shared/registries/; give it a governing skill later",
+        "No"
+      ],
+      "recommendation": "Yes",
+      "why": "All governed data then lives in one place. It is already stale (handoff C.1)",
+      "blocks": "PR-b batch 2",
+      "source": "MISSIONS/S2-Layout/S2-Layout-report.md section 6 Q6",
+      "kind": "question"
+    },
+    {
+      "id": "SD-8-ext",
+      "section": "a",
+      "question": "SD-8 pending half (1): do incident, glossary and frameworks also move to user level (shared/skills/)?",
+      "options": [
+        "Yes, with the 4 already approved (7 total)",
+        "No, only the 4 approved in SD-8"
+      ],
+      "recommendation": "Yes",
+      "why": "They are used in every repo: harvest runs everywhere, and /investigate and the glossary hook route to them. Today 4 of the 7 cite dead reference/*.json paths",
+      "blocks": "PR-b batch 3",
+      "source": "handoff D.3 SD-8; MISSIONS/S2-Layout/S2-Layout-report.md section 2 and section 3 'Recommended structure'",
+      "kind": "question"
+    },
+    {
+      "id": "SD-8-reg",
+      "section": "a",
+      "question": "SD-8 pending half (2): registries at shared/registries/, read through the deployed aitools-registry.py resolver (live clone, then the ~/.aitools/registries/ read-only snapshot, then 'unavailable')?",
+      "options": [
+        "Approve shared/registries + aitools-registry.py",
+        "Registries move, no resolver",
+        "Registries stay in registries/"
+      ],
+      "recommendation": "Approve",
+      "why": "No consumer can reach a registry from another repo today (all paths are cwd-relative). The resolver gives user-level skills a path, a read-only fallback, and next-id for incidents.json (2,027 lines, over Read's default)",
+      "blocks": "PR-b batches 1-2; row R8 sibling impact",
+      "source": "MISSIONS/S2-Layout/S2-Layout-report.md section 3 'Registries (L2)'; MISSIONS/S2-Layout/S2-Layout-B-registry-consumers.md section 0",
+      "kind": "question"
+    },
+    {
+      "id": "C.1",
+      "section": "a",
+      "question": "Does M2 absorb tooling-resolution Workstream A?",
+      "options": [
+        "Yes: M2 absorbs Workstream A's resolver and verification scope (A5 resolver, the decision-10 verification gate via tree T7). B (tool-ops for every tool) and C (artifact registry) stay as separate later work",
+        "No: M2 and Workstream A stay separate",
+        "M2 absorbs all of A, including A1-A4 and A6-A8 (setup-user-shell, login-profile PATH block, agent symlink)"
+      ],
+      "recommendation": "Yes, first option",
+      "why": "M2's T7 is the resolution verification that decision 10 requires, so keeping A5 separate would build two post-checks. The PATH-ownership half of A (A1-A4, A6-A8) is still needed before M4 node can replace (keg-only node@22 off PATH ends at REPLACE-BLOCKED), but it is shell work with its own reference (A8). I suggest keeping it in the tooling-resolution plan and sequencing it before M2 B18+",
+      "blocks": "Gate; ROADMAP.md row 'Managed-tool resolution + artifact registry' (protected) update",
+      "source": "handoff C.1; ROADMAP.md In Progress row 2; plans/tooling-resolution-and-artifact-registry.md 'Workstream A', 'Confirmed decisions' 10",
+      "kind": "question"
+    },
+    {
+      "id": "C-SEQ",
+      "section": "a",
+      "question": "Sequencing of S2-Layout PR-b against the M2 skill and registry edits?",
+      "options": [
+        "PR-a, then PR-b, then the M2 skill/registry edits retargeted to shared/ paths",
+        "M2 first, then PR-b moves the edited skills",
+        "In parallel"
+      ],
+      "recommendation": "PR-a, then PR-b, then M2",
+      "why": "PR-b moves .claude/skills/tool-eval, tool-registry and registries/ to shared/. M2 drafts target the old paths; landing M2 first means editing the same protected files twice. PR-a is independent and lowers risk for both",
+      "blocks": "M2 B1 and every skill write; PR-b",
+      "source": "handoff E step 5; MISSIONS/S2-Layout/S2-Layout-report.md section 5 'Sibling-mission impacts'",
+      "kind": "question"
+    },
+    {
+      "id": "PR-a",
+      "section": "a",
+      "question": "Approve the protected-file path fixes that S2-Layout PR-a batch 2 makes (the stale reference/*.json paths in S2-Layout-B tables 1.1-1.5)?",
+      "options": [
+        "Approve: the fixes are path repoints only (reference/<x>.json to registries/<x>.json, or the governing skill), no meaning change",
+        "Approve per file",
+        "Reject"
+      ],
+      "recommendation": "Approve as path repoints",
+      "why": "Protected files in that set: .claude/skills/{glossary, incident, frameworks, audit, tool-ops}/SKILL.md; shared/skills/{optimize-plan, intent-audit}/SKILL.md; .cursor/rules/{sources-of-truth, documentation-standards, tool-lifecycle}.mdc; ROADMAP.md line 28; registries/framework-registry.json line 183. Unprotected: scripts/check-post-push.ps1 lines 268, 520; shared/hooks/tool-ops-session-audit.sh; scripts/setup-bash.sh/.ps1 headers; reference/post-push-checklist.md, path-targeted-hooks-analysis.md. If PR-b is approved, files that PR-b moves should be repointed once, to the resolver or the skill, not twice. PR-a then takes only the files PR-b does not touch. Closes #84 and part of #59 and #70",
+      "blocks": "PR-a",
+      "source": "MISSIONS/S2-Layout/S2-Layout-B-registry-consumers.md tables 1.1-1.5; MISSIONS/S2-Layout/S2-Layout-report.md section 5 PR-a",
+      "kind": "question"
+    },
+    {
+      "id": "R1",
+      "kind": "row",
+      "section": "b",
+      "title": "reference/tool-support-decision-tree.md (new; new intent)",
+      "state": "drafted",
+      "draftedBy": "S3-GateFix",
+      "draftStatus": "drafted by S3-GateFix (rev 5; intent unchanged from rev 3)",
+      "options": [
+        "approve the draft",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve rev 5 (see REV5)",
+      "blocks": "every M2 batch",
+      "draft": "FIX/S3-GateFix-drafts/reference/tool-support-decision-tree.md (+ .rev4-to-rev5.diff; FIX/S3-GateFix-rev5-changelog.md)",
+      "changed": "changed"
+    },
+    {
+      "id": "R2",
+      "kind": "row",
+      "section": "b",
+      "title": ".claude/rules/tool-lifecycle.md (rewrite; modified intent)",
+      "state": "drafted",
+      "draftedBy": "earlier mission",
+      "draftStatus": "drafted (S4-Review fixes C-06, C-09, C-10, C-12, C-13, C-26, C-27, C-31). Consistent with rev 4: item 4 says replace installs the preferred method first; rev 4 adds a prereq check before that install, which is detail in the reference",
+      "options": [
+        "approve the draft",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve",
+      "blocks": "M2 B1+",
+      "draft": "MISSIONS/S4-Review/S4-Review-drafts/dot-claude/rules/tool-lifecycle.md"
+    },
+    {
+      "id": "R3",
+      "kind": "row",
+      "section": "b",
+      "title": "reference/framework-tool-lifecycle.md (edit; modified intent)",
+      "state": "drafted",
+      "draftedBy": "S3-Gate",
+      "draftStatus": "drafted by S3-Gate (fixed copy: C-09, C-13, C-23, C-26, C-27, C-33)",
+      "options": [
+        "approve the draft",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve",
+      "blocks": "M2 docs",
+      "draft": "GATE/S3-Gate-drafts/reference/framework-tool-lifecycle.md (+ .s5-to-s3gate.diff)"
+    },
+    {
+      "id": "R4",
+      "kind": "row",
+      "section": "b",
+      "title": "tool-adopt SKILL.md (new; new intent). Now proposed at shared/skills/tool-adopt/ (section ta)",
+      "state": "drafted",
+      "draftedBy": "S3-GateFix",
+      "draftStatus": "revised by S3-GateFix for the early ship; decided by items TA-PLACE, TA-SKILL, TA-INTENT",
+      "options": [
+        "approve the draft",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "answer in section ta",
+      "blocks": "M2 B5+",
+      "draft": "FIX/S3-GateFix-drafts/shared/skills/tool-adopt/SKILL.md (+ .s3gate-to-s3gatefix.diff)",
+      "changed": "changed"
+    },
+    {
+      "id": "R5",
+      "kind": "row",
+      "section": "b",
+      "title": "tool-eval SKILL.md (edit; modified intent)",
+      "state": "drafted",
+      "draftedBy": "S3-Gate",
+      "draftStatus": "drafted by S3-Gate (fixed copy: C-08, C-09, C-22, C-28). The path moves under PR-b",
+      "options": [
+        "approve the draft",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve; land at shared/skills/tool-eval/ after PR-b (C-SEQ)",
+      "blocks": "M2 B1",
+      "draft": "GATE/S3-Gate-drafts/dot-claude/skills/tool-eval/SKILL.md (+ .s5-to-s3gate.diff)"
+    },
+    {
+      "id": "R6",
+      "kind": "row",
+      "section": "b",
+      "title": "tool-registry SKILL.md (edit; modified intent)",
+      "state": "drafted",
+      "draftedBy": "S3-Gate",
+      "draftStatus": "drafted by S3-Gate (fixed copy: C-08, C-28; names rev 4's resolveBy)",
+      "options": [
+        "approve the draft",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve; land at shared/skills/tool-registry/ after PR-b, with the registry path read through aitools-registry.py",
+      "blocks": "M2 B1",
+      "draft": "GATE/S3-Gate-drafts/dot-claude/skills/tool-registry/SKILL.md (+ .s5-to-s3gate.diff)"
+    },
+    {
+      "id": "R7",
+      "kind": "row",
+      "section": "b",
+      "title": ".claude/rules/interactive-menus.md (edit; new intent)",
+      "state": "drafted",
+      "draftedBy": "earlier mission",
+      "draftStatus": "drafted (S4 merge of M2 and M3). D-TS13 is approved, so at write time the 'Tool install-method menu' sentence 'Exit 2 from a setup script means user abort only' becomes '... means user abort only when the abort marker is written (reference \"Contract with the installers and entry points\")'",
+      "options": [
+        "approve the draft",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve with the abort-marker sentence",
+      "blocks": "M2 B2/B3; M3 B6/B7",
+      "draft": "MISSIONS/S4-Review/S4-Review-drafts/dot-claude/rules/interactive-menus.md",
+      "changed": "changed"
+    },
+    {
+      "id": "R8",
+      "kind": "row",
+      "section": "b",
+      "title": ".claude/rules/sources-of-truth.md (edit; new intent)",
+      "state": "drafted",
+      "draftedBy": "earlier mission",
+      "draftStatus": "drafted (S4). Sibling impact: once PR-b is approved, the registry rows must list shared/registries/ paths (or cite the governing skills, closing #50), and the tool-eval/tool-registry skill rows must move to shared/skills/",
+      "options": [
+        "approve the draft",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve with the S2-Layout section 5 sibling change if SD-8-reg is approved",
+      "blocks": "Gate",
+      "draft": "MISSIONS/S4-Review/S4-Review-drafts/dot-claude/rules/sources-of-truth.md; MISSIONS/S2-Layout/S2-Layout-report.md section 5 'Sibling-mission impacts'"
+    },
+    {
+      "id": "R9",
+      "kind": "row",
+      "section": "b",
+      "title": ".claude/rules/glossary.md (7 term lines)",
+      "state": "drafted",
+      "draftedBy": "earlier mission",
+      "draftStatus": "drafted (S4)",
+      "options": [
+        "approve the draft",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve together with section c",
+      "blocks": "glossary batch",
+      "draft": "MISSIONS/S4-Review/S4-Review-drafts/dot-claude/rules/glossary.md"
+    },
+    {
+      "id": "R10",
+      "kind": "row",
+      "section": "b",
+      "title": "registries/glossary.json (7 terms added, managed tool modified)",
+      "state": "drafted",
+      "draftedBy": "earlier mission",
+      "draftStatus": "drafted (S4); one inconsistency (known defect E-glossary-1)",
+      "options": [
+        "approve the draft",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve with the fix in E-glossary-1",
+      "blocks": "glossary batch",
+      "draft": "MISSIONS/S4-Review/S4-Review-drafts/registries/glossary.terms-draft.json"
+    },
+    {
+      "id": "R11",
+      "kind": "row",
+      "section": "b",
+      "title": "registries/tool-registry.json schema 1.1 (+ node/go illustrative entries; modified meta.intent)",
+      "state": "drafted",
+      "draftedBy": "earlier mission",
+      "draftStatus": "drafted (S5-Tools); the node values are ILLUSTRATIVE and _unverified (the draft says so). The node linux status change is an M4 decision",
+      "options": [
+        "approve the schema and meta.intent; entries only after /tool-eval",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve the schema and meta.intent; node and go values only after /tool-eval verifies them",
+      "blocks": "M2 B1",
+      "draft": "MISSIONS/S5-Tools/S5-Tools-drafts/registries/tool-registry.schema-1.1-draft.json"
+    },
+    {
+      "id": "R12",
+      "kind": "row",
+      "section": "b",
+      "title": "registries/framework-registry.json (Tool lifecycle entry)",
+      "state": "drafted",
+      "draftedBy": "earlier mission",
+      "draftStatus": "drafted (S5-Tools)",
+      "options": [
+        "approve; write only once every listed path exists",
+        "reject"
+      ],
+      "recommendation": "approve; write after the paths exist",
+      "blocks": "after M2 B1-B3",
+      "draft": "MISSIONS/S5-Tools/S5-Tools-drafts/registries/framework-registry.tool-lifecycle-entry-draft.json"
+    },
+    {
+      "id": "R13",
+      "kind": "row",
+      "section": "b",
+      "title": ".claude/rules/managed-file-deployment.md (2 edits)",
+      "state": "drafted",
+      "draftedBy": "earlier mission",
+      "draftStatus": "drafted (S4 edit file: resolver order replaces 'first profile'; dangling pointer retargeted to /tool-adopt step 5)",
+      "options": [
+        "approve the draft",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve",
+      "blocks": "M3 B9",
+      "draft": "MISSIONS/S4-Review/S4-Review-drafts/dot-claude/rules/managed-file-deployment.md.edit.txt"
+    },
+    {
+      "id": "R14",
+      "kind": "row",
+      "section": "b",
+      "title": ".cursor/rules/managed-file-deployment.mdc, interactive-menus.mdc, tool-lifecycle.mdc (mirrors)",
+      "state": "drafted",
+      "draftedBy": "S3-Gate",
+      "draftStatus": "drafted by S3-Gate. managed-file-deployment.mdc: the 2 edits of row 13. interactive-menus.mdc: tool menu and registration menu paragraphs. tool-lifecycle.mdc: rewritten to mirror row 2 and keep the 3 Cursor-only sections (cross-platform vetting, MCP isolation, MCP disable scope). It drops 'Lifecycle field completeness' (it cited reference/tool-registry.md and a stale reference/tool-versions.json path) and 'Dotprofile priority' (moved to /tool-adopt)",
+      "options": [
+        "approve the drafts",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve",
+      "blocks": "with rows 2, 7, 13",
+      "draft": "GATE/S3-Gate-drafts/dot-cursor/rules/"
+    },
+    {
+      "id": "R15",
+      "kind": "row",
+      "section": "b",
+      "title": ".claude/rules/git-safety.md (generated/ is generated and tracked)",
+      "state": "drafted",
+      "draftedBy": "S3-Gate",
+      "draftStatus": "drafted by S3-Gate. generated/ is never hand-edited and regenerated only with its source; NOT in the pre-pull reset (nothing rewrites it during a run)",
+      "options": [
+        "approve the draft",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve",
+      "blocks": "M2 B1",
+      "draft": "GATE/S3-Gate-drafts/dot-claude/rules/git-safety.md"
+    },
+    {
+      "id": "R16",
+      "kind": "row",
+      "section": "b",
+      "title": "reference/script-standards-detail.md (6 edits)",
+      "state": "drafted",
+      "draftedBy": "S3-GateFix",
+      "draftStatus": "drafted by S3-Gate; edit 6 reworded by S3-GateFix (PR #58 review finding 2). Platform skip row and outcome; tool helper row; SHADOWED severity line (D-TS11); KEEP OK and the ACTION-pairing exception (D-TS10); tool-support detail templates pointer; exit-2 exception to the exit footer (D-TS13, approved)",
+      "options": [
+        "approve the edits",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve, dropping the lines of any rejected pending decision (D-TS10, D-TS11, D-TS12, T-Q12)",
+      "blocks": "M2 B2/B3",
+      "draft": "FIX/S3-GateFix-drafts/reference/script-standards-detail.md.edit.txt",
+      "changed": "changed"
+    },
+    {
+      "id": "R17",
+      "kind": "row",
+      "section": "b",
+      "title": "shared/skills/aitool-eval/SKILL.md (refresh derived card)",
+      "state": "void",
+      "draftedBy": "earlier mission",
+      "draftStatus": "void if PR-c is approved. S2-Layout PR-c folds the card's unique sections into /tool-eval and the playbook, then deletes it. Not drafted; it needs a draft only if PR-c is rejected",
+      "options": [
+        "void: PR-c retires the card",
+        "draft a refresh (only if PR-c is rejected)"
+      ],
+      "recommendation": "void",
+      "blocks": "nothing (PR-c)",
+      "draft": "MISSIONS/S2-Layout/S2-Layout-report.md section 5 PR-c"
+    },
+    {
+      "id": "R18",
+      "kind": "row",
+      "section": "b",
+      "title": "reference/user-repo.md (rewrite; new intent; owns the toolExceptions shape)",
+      "state": "drafted",
+      "draftedBy": "earlier mission",
+      "draftStatus": "drafted (S4). Not re-reviewed by S3-Gate (outside this mission's lens)",
+      "options": [
+        "approve the draft",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve together with N-Q1 (a)",
+      "blocks": "M3 B9; X-B1",
+      "draft": "MISSIONS/S4-Review/S4-Review-drafts/reference/user-repo.md"
+    },
+    {
+      "id": "R19",
+      "kind": "row",
+      "section": "b",
+      "title": "shared/claude-shared.md + dotprofile claude/CLAUDE.md (Cross-Platform Awareness lines)",
+      "state": "drafted",
+      "draftedBy": "earlier mission",
+      "draftStatus": "drafted (S5-Profile edit file)",
+      "options": [
+        "approve the draft",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve",
+      "blocks": "M3 B9",
+      "draft": "MISSIONS/S5-Profile/S5-Profile-drafts/shared/claude-shared.md.edit.txt"
+    },
+    {
+      "id": "R20",
+      "kind": "row",
+      "section": "b",
+      "title": ".claude/rules/deploy-paths.md (setup-user-claude row; aitools-profile.js auto-embedded)",
+      "state": "text-only",
+      "draftedBy": "earlier mission",
+      "draftStatus": "drafted as text in the S5-Profile report section 5 (no separate file)",
+      "options": [
+        "approve the text",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve; also add generated/tool-specs to 'What IS auto-embedded' when X-B4 lands",
+      "blocks": "M3 B5",
+      "draft": "MISSIONS/S5-Profile/S5-Profile-report.md section 5 (lines starting 'deploy-paths.md')"
+    },
+    {
+      "id": "R21",
+      "kind": "row",
+      "section": "b",
+      "title": ".claude/rules/config-file-safety.md (reference example)",
+      "state": "text-only",
+      "draftedBy": "earlier mission",
+      "draftStatus": "drafted as text in the S5-Profile report section 5",
+      "options": [
+        "approve the text",
+        "reject"
+      ],
+      "recommendation": "approve",
+      "blocks": "M3 B3",
+      "draft": "MISSIONS/S5-Profile/S5-Profile-report.md section 5 (line starting 'config-file-safety.md')"
+    },
+    {
+      "id": "R22",
+      "kind": "row",
+      "section": "b",
+      "title": "code intents for scripts/aitools-profile.js, scripts/setup-user-config.sh/.ps1, lib section intents (both libs)",
+      "state": "drafted",
+      "draftedBy": "earlier mission",
+      "draftStatus": "drafted (S5-Profile drafts)",
+      "options": [
+        "approve the drafts",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve",
+      "blocks": "M3 B1-B3",
+      "draft": "MISSIONS/S5-Profile/S5-Profile-drafts/scripts/"
+    },
+    {
+      "id": "R23",
+      "kind": "row",
+      "section": "b",
+      "title": "meta.intent of ~/.aitools/config.json (in the writers) and dotprofile profile.json",
+      "state": "drafted",
+      "draftedBy": "earlier mission",
+      "draftStatus": "drafted (S5-Profile writer; S4 profile.json audience fix)",
+      "options": [
+        "approve the drafts",
+        "approve with changes",
+        "reject"
+      ],
+      "recommendation": "approve; re-derive profile.json from the live file (X17), do not copy the draft",
+      "blocks": "M3 B10",
+      "draft": "MISSIONS/S5-Profile/S5-Profile-drafts/scripts/setup-user-config.sh; MISSIONS/S4-Review/S4-Review-drafts/dotprofile/profile.json"
+    },
+    {
+      "id": "R24",
+      "kind": "row",
+      "section": "b",
+      "title": "registries/incidents.json (27 new entries #87-#113 + affected updates)",
+      "state": "carved-out",
+      "draftedBy": "earlier mission",
+      "draftStatus": "carved out. Mission LEDGER (S3-Ledger, branch docs/incidents-87-plus) owns incident filing this session. S3-Gate adds three INCIDENT markers for LEDGER's triage (see the S3-Gate result)",
+      "options": [
+        "carved out to mission LEDGER"
+      ],
+      "recommendation": "carved out",
+      "blocks": "nothing in this gate",
+      "draft": "MISSIONS/S4-Review/S4-Review-incidents-draft.json; GATE mission brief"
+    },
+    {
+      "id": "R25",
+      "kind": "row",
+      "section": "b",
+      "title": "intent headers for the 26 migrated tool setup scripts (M2 B5-B17)",
+      "state": "drafted",
+      "draftedBy": "S3-Gate",
+      "draftStatus": "drafted by S3-Gate (template, per-script table, one filled example). Approving it lets each batch be delegated with an approved intent (D-TS9)",
+      "options": [
+        "approve the template and table",
+        "approve with changes",
+        "draft per batch instead"
+      ],
+      "recommendation": "approve the template and table",
+      "blocks": "M2 B5-B17",
+      "draft": "GATE/S3-Gate-drafts/S3-Gate-row25-setup-script-intents.md"
+    },
+    {
+      "id": "R-S2L5",
+      "section": "b",
+      "question": "S2-Layout section 5 sibling impact: after PR-b, should the sources-of-truth.md draft (row 8) list the registries at shared/registries/ and cite the skills instead of JSON paths?",
+      "options": [
+        "Yes (fold into row 8)",
+        "No"
+      ],
+      "recommendation": "Yes",
+      "why": "It keeps the protected list true after PR-b, and citing skills closes incident #50 (rules must not name governed JSON paths)",
+      "blocks": "row 8 final text",
+      "source": "MISSIONS/S2-Layout/S2-Layout-report.md section 5 'Sibling-mission impacts'",
+      "kind": "question"
+    },
+    {
+      "id": "C-14",
+      "section": "c",
+      "question": "Govern 'detection signature' for the tool registry field (typed probes that identify an install method), separate from the governed 'detection' (the hook layer)?",
+      "options": [
+        "(a) Govern 'detection signature'; keep the JSON key 'detection'",
+        "(b) Leave 'detection' overloaded",
+        "(c) Rename the JSON key"
+      ],
+      "recommendation": "(a)",
+      "why": "The rule draft already says 'detection signatures'. The framework doc uses both meanings in one list. Renaming the key churns data and scripts. This also closes open glossary item 2 ('detection')",
+      "blocks": "glossary batch; the wording in rows 1, 3, 6",
+      "source": "MISSIONS/S4-Review/S4-Review-C-review.md C-14; MISSIONS/S4-Review/S4-Review-drafts/registries/glossary.terms-draft.json open_glossary_items[1]",
+      "kind": "question"
+    },
+    {
+      "id": "G-provenance",
+      "section": "c",
+      "question": "'provenance' is governed as an aitools component, but tool documents say 'provenance verification' (supply chain) and code says 'provenance' for install origin. What to do?",
+      "options": [
+        "(a) Keep 'provenance' for the component; use 'install class' for install origin (as the drafts do) and add a disambiguation sentence to the provenance definition",
+        "(b) Govern 'install provenance' as a second term"
+      ],
+      "recommendation": "(a)",
+      "why": "The drafts already avoid the word for install origin. detect_go_provenance / Get-GoProvenance are replaced by tool_detect_method in M2",
+      "blocks": "glossary batch",
+      "source": "MISSIONS/S4-Review/S4-Review-drafts/registries/glossary.terms-draft.json open_glossary_items[0]; MISSIONS/S5-Tools/S5-Tools-report.md I-20",
+      "kind": "question"
+    },
+    {
+      "id": "G-verified",
+      "section": "c",
+      "question": "knownPaths entry field 'verified' (a date and version trial record) vs the governed outcome 'verified': rename or keep and define? (= N-Q4)",
+      "options": [
+        "Keep the field and define it in tree section 6",
+        "Rename the field (for example 'trialled')"
+      ],
+      "recommendation": "Keep and define (already in rev 3 and rev 4 section 6)",
+      "why": "No churn; the meaning is tied to script-standards 'KnownPaths empirical verification'",
+      "blocks": "M2 B1",
+      "source": "MISSIONS/S4-Review/S4-Review-drafts/registries/glossary.terms-draft.json open_glossary_items[2]; S4-Review-C-review.md C-18",
+      "kind": "question"
+    },
+    {
+      "id": "G-recovered",
+      "section": "c",
+      "question": "The deployment outcome 'recovered' (setup-user-config, user-repo.md 'Config Schema (v3)') is not governed, while created, updated and verified are. Govern it?",
+      "options": [
+        "Govern 'recovered' with the M3 batch",
+        "Map it to an existing outcome"
+      ],
+      "recommendation": "Govern it, with the definition taken from the approved user-repo.md 'Config Schema (v3)' text",
+      "why": "It names a distinct state (config.json rebuilt after it was found missing or unreadable). Its exact wording is M3's; S3-Gate did not review user-repo.md",
+      "blocks": "M3 B3 summary text",
+      "source": "MISSIONS/S4-Review/S4-Review-drafts/registries/glossary.terms-draft.json open_glossary_items[3]",
+      "kind": "question"
+    },
+    {
+      "id": "G-terms",
+      "section": "c",
+      "question": "Approve the 7 proposed terms (tool adoption, tool exception, update channel, machine profile, machine alias, machine id, aitools config) and the modified 'managed tool'?",
+      "options": [
+        "Approve with the E-glossary-1 fix",
+        "Approve as drafted",
+        "Revise"
+      ],
+      "recommendation": "Approve with the E-glossary-1 fix",
+      "why": "One batch for both missions. The renames depend on N-Q3",
+      "blocks": "glossary batch (rows R9, R10)",
+      "source": "MISSIONS/S4-Review/S4-Review-drafts/registries/glossary.terms-draft.json terms_add, terms_modify",
+      "kind": "question"
+    },
+    {
+      "id": "G-profile",
+      "section": "c",
+      "question": "'profile' has three ungoverned meanings (shell profile, profile.json, machine profile). Add a governed disambiguation?",
+      "options": [
+        "Rely on the 'machine profile' definition ('Not a shell profile')",
+        "Govern 'profile' itself"
+      ],
+      "recommendation": "Rely on the machine profile definition for now",
+      "why": "The new definition already separates the two meanings that collide in these missions. A standalone 'profile' entry can follow if /audit flags it",
+      "blocks": "nothing",
+      "source": "MISSIONS/S4-Review/S4-Review-C-review.md 'INCIDENT / TODO(glossary) findings'",
+      "kind": "question"
+    },
+    {
+      "id": "G-userconfig",
+      "section": "c",
+      "question": "The composition example 'user config' resolves only to ~/.claude/settings.json, while ~/.aitools/config.json is also a user-deployed config. Fix the example?",
+      "options": [
+        "Keep 'user config' = settings.json and say so; ~/.aitools/config.json = 'aitools config'",
+        "Widen 'user config' to both files"
+      ],
+      "recommendation": "Keep it narrow and name 'aitools config' beside it",
+      "why": "Widening it makes the composed term ambiguous; 'aitools config' (N-Q3) already names the other file",
+      "blocks": "nothing",
+      "source": "MISSIONS/S4-Review/S4-Review-C-review.md C-17 and TODO(glossary) list; reference/framework-governed-vocabulary.md 'Examples'",
+      "kind": "question"
+    },
+    {
+      "id": "T-Q3",
+      "section": "d",
+      "question": "[x]abort scope: the whole run or only this tool?",
+      "options": [
+        "Answered by SD-5: the whole run (exit 2)"
+      ],
+      "recommendation": "Answered by SD-5 (whole run). D-TS13 (approved 2026-10-21) refines how exit 2 is recognised",
+      "why": "SD-5 approved '[x]abort (exit 2, stops the run)'",
+      "blocks": "M2 B4a/B4b",
+      "source": "handoff D.3 SD-5; MISSIONS/S4-Review/S4-Review-report.md section 3 T-Q3",
+      "kind": "question"
+    },
+    {
+      "id": "T-Q4",
+      "section": "d",
+      "question": "Keep automatic fallback methods (modal pip, datadog cargo on macOS)?",
+      "options": [
+        "Remove them; a missing manager = PREREQ ERROR + ACTION",
+        "Keep"
+      ],
+      "recommendation": "Remove",
+      "why": "Fallbacks install non-preferred methods without a decision (tool-evaluation.md governing principle). Cargo stays where it is the preferred method (datadog Windows)",
+      "blocks": "M2 B10, B14",
+      "source": "MISSIONS/S5-Tools/S5-Tools-report.md section 3 Q4",
+      "kind": "question"
+    },
+    {
+      "id": "T-Q5",
+      "section": "d",
+      "question": "Below minVersion (bash < 5.0, perl < 5.010): ERROR or WARN?",
+      "options": [
+        "ERROR + ACTION",
+        "WARN"
+      ],
+      "recommendation": "ERROR + ACTION",
+      "why": "The harness cannot run on it; today's WARN hides a broken environment",
+      "blocks": "M2 B15, B16",
+      "source": "MISSIONS/S5-Tools/S5-Tools-report.md section 3 Q5",
+      "kind": "question"
+    },
+    {
+      "id": "T-Q6",
+      "section": "d",
+      "question": "Must verification query upstream for the channel's newest version number?",
+      "options": [
+        "No; the update command is the mechanism",
+        "Yes"
+      ],
+      "recommendation": "No",
+      "why": "Querying differs per manager and is unreliable. Revisit if health flags need it",
+      "blocks": "nothing",
+      "source": "MISSIONS/S5-Tools/S5-Tools-report.md section 3 Q6",
+      "kind": "question"
+    },
+    {
+      "id": "T-Q7",
+      "section": "d",
+      "question": "Resolve the reference/tool-registry.md duplication how?",
+      "options": [
+        "JSON canonical; banner now; generator later (same for tool-versions.json)",
+        "Keep both hand-edited"
+      ],
+      "recommendation": "JSON canonical; banner now; generator later",
+      "why": "The md has drifted (for example the vercel versions), yet checks parse it. Covered by incident #21 (extend it)",
+      "blocks": "later batch",
+      "source": "MISSIONS/S5-Tools/S5-Tools-report.md section 3 Q7",
+      "kind": "question"
+    },
+    {
+      "id": "T-Q8",
+      "section": "d",
+      "question": "Protect all project skills in sources-of-truth.md?",
+      "options": [
+        "All, as a separate decision, after the skill layout is settled",
+        "The three tool skills only"
+      ],
+      "recommendation": "All, as a separate decision after PR-b",
+      "why": "Skill intents are already protected, but the table does not say so (incident draft #102)",
+      "blocks": "after PR-b",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 T-Q8",
+      "kind": "question"
+    },
+    {
+      "id": "T-Q12",
+      "section": "d",
+      "question": "Platform-level n/a row: a new write_platform_skip, or reuse the environment helper?",
+      "options": [
+        "New platform variant (write_platform_skip / Write-PlatformSkip, n/a (<platform>))",
+        "Reuse write_environment_skip"
+      ],
+      "recommendation": "New platform variant",
+      "why": "The environment helper prints the environment name, which is wrong for 'typst on Linux'. Row 16 edits 1 and 5 carry it",
+      "blocks": "M2 B2/B3",
+      "source": "MISSIONS/S5-Tools/S5-Tools-report.md section 3 Q12",
+      "kind": "question"
+    },
+    {
+      "id": "P-Q4",
+      "section": "d",
+      "question": "Does the config writer prompt?",
+      "options": [
+        "Writer silent; aitools user init prompts",
+        "Writer prompts"
+      ],
+      "recommendation": "As drafted (writer silent)",
+      "why": "Sync and installer stay non-interactive",
+      "blocks": "M3 B3",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 P-Q4",
+      "kind": "question"
+    },
+    {
+      "id": "P-Q5",
+      "section": "d",
+      "question": "Pin the kernel HostName (sudo scutil --set HostName nobul-mac)?",
+      "options": [
+        "Skip",
+        "Pin"
+      ],
+      "recommendation": "Skip",
+      "why": "The resolver reads LocalHostName (= nobul-mac); registration makes it moot. The cause of the flip is unproven (handoff G14)",
+      "blocks": "nothing",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 P-Q5",
+      "kind": "question"
+    },
+    {
+      "id": "P-Q6",
+      "section": "d",
+      "question": "Move googleDrives into profile.json now?",
+      "options": [
+        "Later, under profiles.<alias>.googleDrives",
+        "Now"
+      ],
+      "recommendation": "Later",
+      "why": "It is detected machine state; labels do not mean anything yet",
+      "blocks": "nothing",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 P-Q6",
+      "kind": "question"
+    },
+    {
+      "id": "P-Q7",
+      "section": "d",
+      "question": "Generate deploy/setup-user-config and embed tool specs and helpers for MDM (+ T-Q1 MDM part)?",
+      "options": [
+        "Yes, one follow-up MDM batch (X-B4) after M3 B8 and M2 B3",
+        "No"
+      ],
+      "recommendation": "Yes, X-B4",
+      "why": "It keeps dual-path parity in one build-deploy batch instead of two",
+      "blocks": "X-B4",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 P-Q7",
+      "kind": "question"
+    },
+    {
+      "id": "P-Q12",
+      "section": "d",
+      "question": "Non-interactive registration: add aitools user init --alias <A>?",
+      "options": [
+        "Add --alias",
+        "None"
+      ],
+      "recommendation": "Add --alias",
+      "why": "Claude Code web and scripted setups need it; the interactive-menus draft's ACTION text uses it (drop that text if rejected)",
+      "blocks": "M3 B6/B7",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 P-Q12",
+      "kind": "question"
+    },
+    {
+      "id": "P-Q13",
+      "section": "d",
+      "question": "Token reverse order on adopt: {{PROFILE_NAME}} wins, or the git name wins?",
+      "options": [
+        "{{PROFILE_NAME}} wins (today)",
+        "git name wins"
+      ],
+      "recommendation": "{{PROFILE_NAME}} wins",
+      "why": "'Jose' is both values today, and this keeps current behaviour",
+      "blocks": "M3 B4",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 P-Q13",
+      "kind": "question"
+    },
+    {
+      "id": "N-Q2",
+      "section": "d",
+      "question": "Dotprofile commits: register auto-commits and pushes, while [k]eep only adds an ACTION?",
+      "options": [
+        "As drafted",
+        "Both auto-commit",
+        "Neither"
+      ],
+      "recommendation": "As drafted",
+      "why": "user init is an explicit dotprofile command; setup scripts must never touch git (P-Q10 logic)",
+      "blocks": "X-B1",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 N-Q2",
+      "kind": "question"
+    },
+    {
+      "id": "N-Q4",
+      "section": "d",
+      "question": "knownPaths field name 'verified' collides with the governed outcome: rename, or keep and define?",
+      "options": [
+        "Keep and define",
+        "Rename"
+      ],
+      "recommendation": "Keep and define (same as G-verified)",
+      "why": "No churn",
+      "blocks": "M2 B1",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 N-Q4",
+      "kind": "question"
+    },
+    {
+      "id": "N-Q6",
+      "section": "d",
+      "question": "Ambiguous preferred methods: their own detail, or reuse 'no method for <platform>'?",
+      "options": [
+        "Own detail 'two methods for <platform>'",
+        "Reuse"
+      ],
+      "recommendation": "Own detail (already in rev 3 and rev 4)",
+      "why": "A registry conflict is not a missing method",
+      "blocks": "M2 B2",
+      "source": "MISSIONS/S4-Review/S4-Review-report.md section 3 N-Q6",
+      "kind": "question"
+    },
+    {
+      "id": "N-Q5",
+      "section": "d",
+      "question": "Local checkout carries stale pre-merge S3-Nine edits: reset?",
+      "options": [
+        "Resolved"
+      ],
+      "recommendation": "Resolved: no action",
+      "why": "Handoff section E: git status on 2026-10-21 showed no modified tracked files; the git diff origin/main..main touched only .gitignore and harvesting/",
+      "blocks": "nothing",
+      "source": "handoff 2026-10-21_360aa8f3-8.md section E (closing paragraph)",
+      "kind": "question"
+    },
+    {
+      "id": "B-09",
+      "section": "d",
+      "question": "NEW from the B pass: on Windows, do you run Git Bash inside Windows Terminal (ConPTY), or in mintty?",
+      "options": [
+        "Windows Terminal",
+        "mintty",
+        "I use PowerShell for aitools"
+      ],
+      "recommendation": "Answer before M2 B3. If mintty, tell the delegate to test whether menus reach the non-interactive path",
+      "why": "Under mintty without ConPTY, stdin is a pipe, so Test-InteractiveConsole is false and every menu (tool and managed-file) takes the non-interactive default when aitools is run from Git Bash. Unverified",
+      "blocks": "M2 B3 test plan",
+      "source": "GATE/S3-Gate-B-review.md B-09",
+      "kind": "question"
+    },
+    {
+      "id": "E-rev4-minors",
+      "section": "e",
+      "question": "Rev 4 leaves the minor A/B findings open. Accept them as known defects for a later revision?",
+      "options": [
+        "Accept",
+        "Fix before approval"
+      ],
+      "recommendation": "Accept",
+      "why": "S3-Gate-A A-05..A-16 (A-08/A-09 are handled by row 16) and S3-Gate-B B-07, B-08 (Windows guard roots), B-10..B-13. One affects a stated fact: rev 4 section 3 still says show_summary keeps one row per tool, but the installer's 'setup-<x>' row and the script's '<label>' row both show (A-05)",
+      "blocks": "nothing",
+      "source": "GATE/S3-Gate-rev4-changelog.md 'Findings not applied'",
+      "kind": "question"
+    },
+    {
+      "id": "E-S4-7",
+      "section": "e",
+      "question": "The S4 interactive-menus.md draft (row 7) does not mention the abort marker (D-TS13 is approved)",
+      "options": [
+        "Fix at write time"
+      ],
+      "recommendation": "Fix at write time (text in item R7)",
+      "why": "The draft predates the A/B pass",
+      "blocks": "row 7",
+      "source": "MISSIONS/S4-Review/S4-Review-drafts/dot-claude/rules/interactive-menus.md 'Tool install-method menu'",
+      "kind": "question"
+    },
+    {
+      "id": "E-glossary-1",
+      "section": "e",
+      "question": "The glossary terms draft still says 'machine identity' and 'identity overrides' inside the 'machine profile' definition after renaming the term to 'machine id' (C-15 applied only to the term name)",
+      "options": [
+        "Fix at write time: '...holding one machine's (or one hosted environment's) per-machine overrides of identity name/company, machine id, and tool exceptions...'"
+      ],
+      "recommendation": "Fix at write time",
+      "why": "Otherwise the glossary contradicts its own rename",
+      "blocks": "row 10",
+      "source": "MISSIONS/S4-Review/S4-Review-drafts/registries/glossary.terms-draft.json terms_add['machine profile']",
+      "kind": "question"
+    },
+    {
+      "id": "E-paths-PRb",
+      "section": "e",
+      "question": "Skill and registry paths in rows 3-6, 8, 11, 12 are the current .claude/skills/ and registries/ paths",
+      "options": [
+        "Retarget after PR-b (C-SEQ)"
+      ],
+      "recommendation": "Retarget after PR-b",
+      "why": "PR-b moves tool-eval, tool-registry and registries/ to shared/",
+      "blocks": "rows 3-6, 8, 11, 12",
+      "source": "GATE/S3-Gate-drafts-fixes.md 'Known defects'",
+      "kind": "question"
+    },
+    {
+      "id": "E-registry-resolveBy",
+      "section": "e",
+      "question": "The registry schema 1.1 draft predates rev 4: it has no resolveBy",
+      "options": [
+        "Add when the bash entry migrates (M2 B16)"
+      ],
+      "recommendation": "Add in M2 B16",
+      "why": "Only the bash tool on Windows needs it today; the draft carries only node and go entries",
+      "blocks": "M2 B16",
+      "source": "MISSIONS/S5-Tools/S5-Tools-drafts/registries/tool-registry.schema-1.1-draft.json; rev 4 section 6",
+      "kind": "question"
+    },
+    {
+      "id": "E-go-knownPaths",
+      "section": "e",
+      "question": "The go Linux knownPaths proposal has verified: null, so the generator drops it and T3 cannot use it until it is verified",
+      "options": [
+        "Verify on Linux in M2 B9"
+      ],
+      "recommendation": "Verify in M2 B9",
+      "why": "By design (only verified paths count, script-standards 'KnownPaths empirical verification')",
+      "blocks": "M2 B9",
+      "source": "MISSIONS/S5-Tools/S5-Tools-drafts/registries/tool-registry.schema-1.1-draft.json go _knownPathsProposal",
+      "kind": "question"
+    },
+    {
+      "id": "E-unreviewed",
+      "section": "e",
+      "question": "Drafts not re-reviewed by S3-Gate: user-repo.md (row 18), the M3 code and intents (rows 22-23), claude-shared.md edit (row 19)",
+      "options": [
+        "Accept S4/S5-Profile review",
+        "Request a review pass"
+      ],
+      "recommendation": "Accept S4-Review plus S5-Profile-A as the review of record",
+      "why": "Outside this mission's lens; S5-Profile-A and S4-Review covered them",
+      "blocks": "rows 18-23",
+      "source": "MISSIONS/S5-Profile/S5-Profile-A-review.md; MISSIONS/S4-Review/S4-Review-report.md section 1",
+      "kind": "question"
+    },
+    {
+      "id": "E-independence",
+      "section": "e",
+      "question": "The A/B pass was done by one agent (S3-Gate), not two independent reviewers: the Agent tool was not provisioned in this session",
+      "options": [
+        "Accept with spot-checks",
+        "Re-run A and B as independent delegates"
+      ],
+      "recommendation": "Accept with spot-checks of A-03 and B-01 (both carry command evidence)",
+      "why": "Every blocker and major has file or command evidence; independence still matters for what was not found",
+      "blocks": "nothing",
+      "source": "GATE/S3-Gate-A-review.md and S3-Gate-B-review.md summaries",
+      "kind": "question",
+      "status": "resolved",
+      "statusNote": "S3-GateFix-B, an independent delegate that did not read S3-Gate-B-review.md first, re-ran the cross-platform and bootstrap pass on rev 5 (FIX/S3-GateFix-B-review.md). S3-Gate-A (rule correctness) has not been repeated independently",
+      "changed": "changed"
+    },
+    {
+      "id": "TA-PLACE",
+      "kind": "question",
+      "section": "ta",
+      "question": "Where does /tool-adopt live: user level (shared/skills/tool-adopt/, deployed to ~/.claude/skills/) or project level (.claude/skills/tool-adopt/ in aitools)?",
+      "options": [
+        "(a) User level, process-only now, next to /tool-eval and /tool-registry, which SD-8 already moves to user level",
+        "(b) Project level, as S2-Layout naming rule N3, item S2L-Q1 and row R4 assumed",
+        "(c) User level, plus a one-line documentation-standards.md 'Skill placement' edit that names harness-process skills as user-level"
+      ],
+      "recommendation": "(a), and (c) if you read the placement rule as forbidding it",
+      "why": "/tool-adopt calls /tool-eval and /tool-registry. If those two move to user level (SD-8) and /tool-adopt stays in the project, it is the only one of the three missing outside aitools, while tool requests start in other repos (RFC-0001). The draft says the work itself always happens in the aitools repo. Cost: documentation-standards.md 'Skill placement' says user-level skill content is 'factual (patterns, gotchas, platform behavior), not project-specific opinions', and project-level holds 'governance workflows'. /tool-adopt is an aitools governance workflow, so (a) leans on the SD-8 precedent (harvest, tool-eval, tool-registry are also harness processes), and (c) removes the ambiguity",
+      "blocks": "TA-SKILL; S2L-Q1 option text; row R4",
+      "source": "mission GATE-FIX brief ('ship /tool-adopt early as a process-only user-level skill at shared/skills/tool-adopt/'); handoff 2026-10-21_360aa8f3-8.md D.3 SD-8; .claude/rules/documentation-standards.md 'Skill placement'; MISSIONS/S2-Layout/S2-Layout-report.md section 6 Q1",
+      "changed": "new"
+    },
+    {
+      "id": "TA-SKILL",
+      "kind": "question",
+      "section": "ta",
+      "question": "Approve the /tool-adopt skill text for shipping now at shared/skills/tool-adopt/SKILL.md?",
+      "options": [
+        "(a) Approve the S3-GateFix draft as written",
+        "(b) Approve with changes (name them)",
+        "(c) Do not ship early; land the full skill with M2"
+      ],
+      "recommendation": "(a)",
+      "why": "The process (scope, /tool-eval when no preferred method, registry data via /tool-registry, setup scripts, onboarding checklist, verify, maintain the rule) is usable today. A 'Today and after M2' table keeps it truthful before the decision tree exists, with an explicit switch-on condition. Changes against S3-Gate's draft: user-level 'Where this runs' section; registry only through /tool-registry ('never read or name a registry JSON file directly'); managed-file wording matches the approved model ([a]ccept & adopt and [m]erge & adopt, not '[a]dopt'); aitools-relative paths instead of @ links that would not resolve in other repos; step numbers kept (/tool-registry cites step 5, /tool-eval returns to step 2); the RFC-0001 issue path for requests from other repos. (c) leaves tool onboarding without a process skill until M2",
+      "blocks": "mission TOOL-ADOPT ship; row R4",
+      "source": "FIX/S3-GateFix-drafts/shared/skills/tool-adopt/SKILL.md (+ .s3gate-to-s3gatefix.diff); GATE/S3-Gate-drafts/dot-claude/skills/tool-adopt/SKILL.md",
+      "changed": "new"
+    },
+    {
+      "id": "TA-INTENT",
+      "kind": "question",
+      "section": "ta",
+      "question": "Approve the /tool-adopt intent statement (new intent; protected wherever it appears)?",
+      "options": [
+        "(a) Approve the revised intent (verbatim from the draft's '## Intent' block): \"Purpose: Carry a managed tool from 'evaluated' to 'supported' on each target platform and environment, so its registry entry and setup scripts meet the tool lifecycle rule today and the tool support decision tree once it lands. Scope: Preferred-method confirmation (invoking /tool-eval when missing), registry data through /tool-registry, setup-script creation or migration in the aitools repo, onboarding integration, verification, and maintenance of the registry and the tool-lifecycle rule; which steps wait for the decision-tree machinery (M2). NOT install-method research or health flags (/tool-eval). NOT the registry write process (/tool-registry). NOT the managed-file review choices [a]ccept & adopt and [m]erge & adopt, which copy the deployed file or an AI merge back to the repo (the source of truth) and are unrelated to tool adoption (aitools reference/managed-file-deployment.md). NOT framework adoption (aitools reference/framework-adoption.md). Audience: Any agent, in any repo, that integrates a tool, migrates a setup script, or answers a 'no method for <platform>' ERROR; the commander, who approves every protected change it drafts.\"",
+        "(b) Approve S3-Gate's intent unchanged (project-level wording)",
+        "(c) Revise"
+      ],
+      "recommendation": "(a)",
+      "why": "Intent statements need approval before they are written (sources-of-truth.md 'Intent statements'). The revision keeps S3-Gate's purpose and exclusions and changes three things: the purpose says 'meet the tool lifecycle rule today and the tool support decision tree once it lands'; the scope adds 'setup-script creation or migration in the aitools repo' and 'which steps wait for the decision-tree machinery (M2)'; the managed-file exclusion now names '[a]ccept & adopt and [m]erge & adopt, which copy the deployed file or an AI merge back to the repo (the source of truth)'. Audience: 'any agent, in any repo'",
+      "blocks": "TA-SKILL",
+      "source": "FIX/S3-GateFix-drafts/shared/skills/tool-adopt/SKILL.md '## Intent'; .claude/rules/sources-of-truth.md 'Intent statements'",
+      "changed": "new"
+    },
+    {
+      "id": "TA-GLOSSARY",
+      "kind": "question",
+      "section": "ta",
+      "question": "Approve the glossary entry 'tool adoption' (SD-3 named the skill; D-TS6 requires the disambiguation), so it can land with the skill ahead of the rest of the glossary batch?",
+      "options": [
+        "(a) Revised definition: \"The /tool-adopt process that makes a managed tool supported on a platform and environment: an approved preferred method in the tool registry (running /tool-eval when there is none), the registry data its setup scripts need (after M2: the data the tool support decision tree reads), setup scripts in the aitools repo, installer and build integration, and verification. Runs after /tool-eval. Not the managed-file review choices '[a]ccept & adopt' and '[m]erge & adopt' (the deployed file, or an AI merge, copied back to the repo, the source of truth), and not framework 'adoption' (mapping a discipline's concepts into the harness).\" Source: shared/skills/tool-adopt/SKILL.md; reference/tool-support-decision-tree.md (after M2). Plus the term line 'tool adoption' in .claude/rules/glossary.md",
+        "(b) The S4-Review draft definition unchanged",
+        "(c) Wait for the full glossary batch (rows R9, R10)"
+      ],
+      "recommendation": "(a)",
+      "why": "The S4 draft says 'Not the managed-file [a]dopt choice or its accept & adopt outcome (local content written back to its source)'. Under the approved model there is no bare [a]dopt: the choices are [a]ccept & adopt and [m]erge & adopt, and both copy to the repo. The S4 draft also cites .claude/skills/tool-adopt/SKILL.md, which moves under TA-PLACE (a). Both files are protected (glossary.json via the /glossary skill, glossary.md is a rule)",
+      "blocks": "TA-SKILL ship (the skill name needs its disambiguation, D-TS6); rows R9, R10 for this one term",
+      "source": "MISSIONS/S4-Review/S4-Review-drafts/registries/glossary.terms-draft.json terms_add['tool adoption']; mission packet section 6 (managed-file model); handoff D.3 SD-3; GATE/S3-Gate-drafts/reference/tool-support-decision-tree.md section 1 D-TS6",
+      "changed": "new"
+    },
+    {
+      "id": "TA-M2",
+      "kind": "question",
+      "section": "ta",
+      "question": "Which parts of /tool-adopt wait for M2?",
+      "options": [
+        "(a) As in the draft's 'Today and after M2' table: registry schema 1.1 fields (step 3), the decision-tree setup-script shape and tool_* helpers (step 4), generated tool specs and gen-tool-specs.py (step 5), the test matrix and the 'Tool support conformance' pre-commit step (step 6). Everything else ships now",
+        "(b) Ship nothing until M2"
+      ],
+      "recommendation": "(a)",
+      "why": "Each M2 element is named with the condition that switches it on (reference/tool-support-decision-tree.md exists and /tool-registry reports schema 1.1), so the skill never tells an agent to run a script or check that does not exist yet. Until then, steps 3-6 follow the rules in force today (script-standards.md, tool-lifecycle.md 'Install cleanup')",
+      "blocks": "TA-SKILL",
+      "source": "FIX/S3-GateFix-drafts/shared/skills/tool-adopt/SKILL.md 'Today and after M2'; GATE/S3-Gate-drafts/reference/tool-support-decision-tree.md sections 6, 7.1, 9, 10",
+      "changed": "new"
+    },
+    {
+      "id": "CTX-SD",
+      "kind": "context",
+      "section": "k",
+      "title": "Approved in the prior session (SD-1..SD-8)",
+      "text": "SD-1 D-DEL4; SD-2 one hook version in shared/hooks; SD-3 /tool-adopt name; SD-4 updateChannel default latest-stable; SD-5 non-preferred = HOLD non-interactive, menu replace/keep/abort (exit 2), unknown gets install alongside and is never removed; SD-6 [k]eep stored in profiles.<alias>.toolExceptions (shape pending = N-Q1); SD-7 profile.json is the source of truth, config.json derived, resolver order ending in none = ERROR; SD-8 tool-ops, tool-eval, tool-registry, harvest become user-level and registries move to user level (extension pending = items SD-8-ext, SD-8-reg).",
+      "source": "handoff 2026-10-21_360aa8f3-8.md section D.3"
+    },
+    {
+      "id": "CTX-DTS13",
+      "kind": "context",
+      "section": "k",
+      "title": "D-TS13 approved (2026-10-21): exit 2 is a user abort only with the abort marker",
+      "text": "An [x]abort exits 2 AND writes an abort marker; runners treat exit 2 as a user abort only when the marker exists. Rev 5 section 7.5 names the four runners (validate_and_run, Invoke-ValidatedScript, deploy_configs, Deploy-Configs), has the entry points create the marker path for every run, defines that a script run without AITOOLS_ABORT_FILE still exits 2 but writes nothing (and its caller treats exit 2 as a failure), and has the entry point decide 'aborted' from the marker, never from deploy_configs' return value (an error count). The library half (write the line only when AITOOLS_ABORT_FILE is set) is mission SOURCE-TRUTH's.",
+      "source": "mission packet section 6; FIX/S3-GateFix-drafts/reference/tool-support-decision-tree.md section 7.5"
+    },
+    {
+      "id": "CTX-MF",
+      "kind": "context",
+      "section": "k",
+      "title": "Managed-file model approved (2026-10-21)",
+      "text": "SOURCE is the source of truth; no ancestor, no deploy state. One review menu: [o]verwrite / [a]ccept & adopt / [m]erge & adopt (AI merge, text only) / [s]kip / [x]abort (unchanged, exit 2). Adopt and merge are copied to the repo immediately by the library. JSON is reviewed field by field and SOURCE owns every field. Before a write: back up; after: validate; on failure: restore, log, ERROR row, continue. Checked against it: rev 5 (T6 note 'force/non-interactive = overwrite', section 7.5 menu names, the section 7 helper-name note) and the tool-adopt, tool-eval, tool-registry and framework-tool-lifecycle drafts. The tool-adopt draft and the 'tool adoption' glossary text said '[a]dopt' and were fixed (TA-SKILL, TA-GLOSSARY). /tool-eval, /tool-registry and the framework draft do not describe adopt or merge. One mirror still conflicts: known defect E-mdc-model.",
+      "source": "mission packet section 6; .claude/worktrees/mfchoices/.claude/rules/agentic-standards.md 'Managed-file review choices and merge' (branch docs/managed-file-choices, not merged)"
+    },
+    {
+      "id": "E-node-corrupt",
+      "kind": "question",
+      "section": "e",
+      "question": "bash deploy state needs node and moves the manifest aside as .corrupt",
+      "options": [
+        "Accept as known; resolved by mission SOURCE-TRUTH"
+      ],
+      "recommendation": "Accept; SOURCE-TRUTH removes deploy state",
+      "why": "initialize_deploy_state validates ~/.aitools/deploy-state/manifest.json with 'node -e JSON.parse(...)'. Without node the command fails, the valid manifest is treated as unreadable, renamed to manifest.json.corrupt, and a warning is logged. The approved model has no deploy state, so the code path goes away",
+      "blocks": "nothing in this gate",
+      "source": "scripts/aitools-lib.sh initialize_deploy_state; mission packet section 6 ('no ancestor, no deploy state')",
+      "changed": "new"
+    },
+    {
+      "id": "E-merge-revert",
+      "kind": "question",
+      "section": "e",
+      "question": "Accepted merges are reverted on the next run",
+      "options": [
+        "Accept as known; resolved by mission SOURCE-TRUTH"
+      ],
+      "recommendation": "Accept; SOURCE-TRUTH implements merge & adopt",
+      "why": "Today [m]erge writes the AI merge to LOCAL only (state machine: '[m]erge --> AI merge --> updated'); SOURCE is unchanged, so the next run finds LOCAL different from SOURCE again, and a non-interactive run overwrites the merge. Under the approved model, merge & adopt copies the result to the repo in the same step",
+      "blocks": "nothing in this gate",
+      "source": "reference/managed-file-deployment.md 'State Machine' and 'Merge-Conflict Menu'; mission packet section 6",
+      "changed": "new"
+    },
+    {
+      "id": "E-mdc-model",
+      "kind": "question",
+      "section": "e",
+      "question": "The row R14 mirror managed-file-deployment.mdc describes JSON review as 'per-leaf overwrite/adopt/skip/abort', and the .claude rule it mirrors says the same",
+      "options": [
+        "Re-mirror after the managed-file spec rewrite lands",
+        "Fix the S3-Gate mirror now"
+      ],
+      "recommendation": "Re-mirror after the spec rewrite",
+      "why": "The approved model names the choice 'accept & adopt' and makes SOURCE own every field. The .claude rule is outside this mission and is being rewritten by the managed-file spec work (S3-SpecRewrite), so fixing only the mirror now would make the two disagree",
+      "blocks": "row R14 (managed-file-deployment.mdc only)",
+      "source": "GATE/S3-Gate-drafts/dot-cursor/rules/managed-file-deployment.mdc line 16; .claude/rules/managed-file-deployment.md 'Deployment types'",
+      "changed": "new"
+    },
+    {
+      "id": "E-relay-exit2",
+      "kind": "question",
+      "section": "e",
+      "question": "The relay outbound prompt's [q] makes 'aitools' exit 2 after the summary, the same code as a user abort",
+      "options": [
+        "Accept: documented as outside the D-TS13 contract (rev 5 section 7.5)",
+        "Change [q] to another exit code"
+      ],
+      "recommendation": "Accept for now",
+      "why": "It runs in the entry point after the summary, not in a setup script, so no runner reads it. Only a caller of 'aitools' itself (a wrapper or CI) could confuse it with an abort; none is known",
+      "blocks": "nothing",
+      "source": "scripts/aitools ('relay_outbound_prompt \"$repo_path\" || return $?'); scripts/aitools.ps1 ('if ($relayRc -eq 2) { exit 2 }'); .claude/rules/relay-outbound.md ('[q] exit with code 2')",
+      "changed": "new"
+    }
+  ]
+}
