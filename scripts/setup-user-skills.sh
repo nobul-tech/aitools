@@ -42,10 +42,18 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKILLS_SRC="$REPO_DIR/shared/skills"
 
-# User repo for dotprofile overrides and adopt target.
-# `|| true`: key is absent until 'aitools user init' runs; without the guard,
-# set -e silently aborts before falling back to shared-only skills.
-USER_REPO_PATH=$(read_config_key "$HOME/.aitools/config.json" "userRepoPath") || true
+# User repo for dotprofile overrides and adopt target: the one dotprofile
+# resolver (reference/user-repo.md "Resolution"; SD-7). The rc is captured, not
+# suppressed: 0 found, 1 no dotprofile (shared-only mode, expected), 3 resolver
+# error (the lib already logged it: log_error + ERROR row "dotprofile"). On 1
+# and 3 USER_REPO_PATH is empty: shared skills only, no adopt offer.
+URP_RC=0
+resolve_user_repo_path || URP_RC=$?
+USER_REPO_PATH="$AITLIB_USER_REPO_PATH"
+if [ "$URP_RC" -ne 0 ] && [ "$URP_RC" -ne 1 ]; then
+    # Not counted again: the resolver error is already an error and an ERROR row.
+    log "Dotprofile unresolved (resolver error above) -- deploying shared skills only"
+fi
 DOTPROFILE_SKILLS=""
 if [ -n "$USER_REPO_PATH" ] && [ -d "$USER_REPO_PATH/claude/skills" ]; then
     DOTPROFILE_SKILLS="$USER_REPO_PATH/claude/skills"

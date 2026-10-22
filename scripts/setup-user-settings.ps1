@@ -10,7 +10,7 @@
 # are purged before the scan.
 #
 # Managed: all of ~/.claude/settings.json except `hooks`.
-# Source of truth: profile.json (dotprofile repo, via config.json userRepoPath).
+# Source of truth: profile.json (dotprofile repo, found by Resolve-UserRepoPath).
 
 # --- BEGIN settings body (extracted by build-deploy) ---
 param(
@@ -47,13 +47,21 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
 $settingsFile = Join-Path (Join-Path $env:USERPROFILE ".claude") "settings.json"
 $deprecatedRules = "MCP(vercel),MCP(webflow),Agent(claude-code-guide)"
 
-# --- Resolve profile.json (source of truth) via config.json userRepoPath ---
-$userRepoPath = ReadConfigKey -File (Join-Path $env:USERPROFILE ".aitools\config.json") -Key "userRepoPath"
+# --- Resolve profile.json (source of truth): the one dotprofile resolver ---
+# (reference/user-repo.md "Resolution"; SD-7). Return: 0 found, 1 no dotprofile
+# (shared-only mode, expected), 3 resolver error (the lib already logged it:
+# LogError + ERROR row "dotprofile").
+$urpRc = Resolve-UserRepoPath
+$userRepoPath = $script:AitLibUserRepoPath
 $profileFile = if ($userRepoPath) { Join-Path $userRepoPath "profile.json" } else { "" }
 
-if (-not $userRepoPath -or -not (Test-Path $userRepoPath)) {
-    LogWarn "No user repo configured (run 'aitools user init') -- skipping settings sync"
-    Write-Summary "WARN" "claude settings" "no profile (run aitools user init)"
+if ($urpRc -ne 0 -and $urpRc -ne 1) {
+    # Not counted again: the resolver error is already an error and an ERROR row.
+    Log "Dotprofile unresolved (resolver error above) -- skipping settings sync"
+    Write-Summary "ERROR" "claude settings" "not synced: dotprofile error"
+} elseif (-not $userRepoPath -or -not (Test-Path -LiteralPath $userRepoPath -PathType Container)) {
+    LogWarn "No dotprofile found (shared-only mode; run 'aitools user init') -- skipping settings sync"
+    Write-Summary "WARN" "claude settings" "not synced: no dotprofile"
 } elseif (-not (Test-Path $profileFile)) {
     LogWarn "profile.json not found at $profileFile -- skipping settings sync"
     Write-Summary "WARN" "claude settings" "profile.json missing"
