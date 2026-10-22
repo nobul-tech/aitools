@@ -27,6 +27,10 @@ reference/tool-support-decision-tree.md|generated/tool-specs/|planned: generated
 reference/tool-support-decision-tree.md|generated/|planned: generated, tracked directory (M2 B1; git-safety.md row R15)
 shared/skills/tool-adopt/SKILL.md|scripts/gen-tool-specs.py|planned: the tool spec generator (M2 B1)
 
+# Optional source directories (read when present; absent on main)
+reference/harness.md|.claude/hooks/|deploy-harness hook source, read when present (absent on main)
+.claude/rules/aitools-workspace.md|.claude/hooks/|deploy-harness hook source, read when present (absent on main)
+
 # Conventions, not repo paths
 reference/cursor-practices.md|.cursor/skills/|describes Cursor's project skill directory convention
 

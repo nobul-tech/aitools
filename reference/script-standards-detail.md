@@ -218,6 +218,7 @@ These are the canonical tool names for field 2. Always use these exact strings.
 | `datadog cli` | setup-datadog |
 | `cursor cli` | setup-user-cursor |
 | `aitools config` | aitools-install |
+| `harness files` | deploy-harness |
 | `google chrome` | setup-google-chrome |
 | `nss tools` | setup-google-chrome |
 | `chrome proxy ca` | setup-google-chrome |
