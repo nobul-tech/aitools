@@ -29,6 +29,7 @@ accept & adopt
 adoption
 agent
 aitools
+aitools config
 aitools repo
 ambiguity
 Anthropic
@@ -48,6 +49,7 @@ deployment scope
 design principle
 DP
 detection
+detection signature
 discovery context
 discovery-to-continuation cycle
 DTCC
@@ -63,12 +65,16 @@ governed file
 governed vocabulary
 harness
 impact
+install provenance
 intelligence
 intent
 intent scope
 intent verification
 key decision
 KD
+machine alias
+machine id
+machine profile
 managed tool
 merge-conflict menu
 observation
@@ -77,12 +83,14 @@ platform
 preserved
 prevention
 process deviation
+profile
 provenance
 project coaching item
 PCI
 project standing order
 PSO
 purpose
+recovered
 registry
 scope creep
 skill-as-capability
@@ -92,7 +100,10 @@ suggested resolution
 surfacing duty
 The Commander
 three-layer governance
+tool adoption
+tool exception
 trigger
+update channel
 updated
 user coaching item
 UCI

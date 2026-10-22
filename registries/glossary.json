@@ -217,8 +217,8 @@
       "source": "reference/managed-file-deployment.md"
     },
     "managed tool": {
-      "definition": "A CLI tool, dependency, or build tool governed by reference/tool-registry.md. Each gets setup scripts, platform lifecycle tracking, and a corresponding user skill. Standing orders and hooks enforce tool selection.",
-      "source": "reference/framework-adoption.md"
+      "definition": "A CLI tool, dependency, or build tool with an entry in the tool registry (/tool-registry skill). Each is installed through the tool support decision tree (a setup script, or an installer step that owns it inline), platform and environment lifecycle tracking, and a corresponding user skill. Standing orders and hooks enforce tool selection.",
+      "source": "reference/framework-adoption.md; /tool-registry skill; reference/tool-support-decision-tree.md (after M2)"
     },
     "observation": {
       "definition": "An incident schema field stating concrete facts about what was observed. Quote specific text, cite files and line numbers, name behaviors. No interpretation — facts only.",
@@ -429,6 +429,23 @@
     "recovered": {
       "definition": "Deployment outcome: the existing file was not valid JSON, so the writer rebuilt it from the keys it could salvage plus freshly derived values, after backing up the invalid copy. Reported as WARN ('rebuilt (was invalid)'). Used for ~/.aitools/config.json by the installer config step today and by setup-user-config after M3.",
       "source": "scripts/aitools-install.sh/.ps1 (config step, today); reference/user-repo.md 'Config Schema (v3)' and scripts/setup-user-config.sh/.ps1 (after M3); decision G-recovered (plans/tool-support-and-machine-profile.md)"
+    },
+    "tool exception": {
+      "definition": "A recorded per-machine decision to keep a non-preferred or unknown-source install of a managed tool instead of replacing it, made with [k]eep in the install-method menu and stored in this machine's machine profile under toolExceptions ({decision: keep, detected: {platform, method, path, version}, decidedAt, decidedBy, reason}). While it matches the detected method and path, setup scripts report OK <version> (kept), and do not prompt, update, or check its PATH resolution; the minimum-version check still runs.",
+      "source": "reference/tool-support-decision-tree.md section 8 (semantics, after M2); reference/user-repo.md (storage shape); decisions N-Q1, D-TS10 (plans/tool-support-and-machine-profile.md)",
+      "sourceDiscipline": "Software asset management (exception register)"
+    },
+    "update channel": {
+      "definition": "The release stream a managed tool's preferred install follows, set per tool in the tool registry (updateChannel, default latest-stable; channel list in reference/tool-support-decision-tree.md 'Update channels'). Every installer run (aitools install, or aitools sync running the installer) runs the preferred method's update command for its channel and verifies the result; it does not query upstream for the newest version number.",
+      "source": ".claude/rules/tool-lifecycle.md; reference/tool-support-decision-tree.md section 4 (after M2); decisions D-TS5, T-Q6 (plans/tool-support-and-machine-profile.md)"
+    },
+    "machine profile": {
+      "definition": "A field inside the profile (profile.json): one entry of its 'profiles' object, keyed by machine alias, holding one machine's (or one hosted environment's) per-machine overrides of identity name/company, machine id, and tool exceptions. Chosen on every run by the machine resolver (scripts/aitools-profile.sh/.ps1); never another machine's profile as a fallback. Not a separate file and not a shell profile (.zshrc, PowerShell $PROFILE).",
+      "source": "reference/user-repo.md (after M3); decisions G-profile, E-glossary-1, P-Q3 (plans/tool-support-and-machine-profile.md)"
+    },
+    "machine alias": {
+      "definition": "The key of a machine profile (for example nobul-mac). Chosen or registered at aitools user init (non-interactively with --alias) and cached per machine in ~/.aitools/config.json machineAlias, which is re-derived on every run. Not the base artifact 'alias' (a shell alias file).",
+      "source": "reference/user-repo.md (after M3); decision P-Q12 (plans/tool-support-and-machine-profile.md)"
     }
   }
 }
