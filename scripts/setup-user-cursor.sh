@@ -3,13 +3,22 @@
 # Safe to re-run — checks each step and skips what's already done.
 # Install commands reference: /tool-registry skill (registries/tool-registry.json)
 #
-# Does three things:
+# Does four things:
 #   1. Installs ripgrep (rg) if not already present (required by Cursor CLI)
 #   2. Installs Cursor CLI (agent command) if not already present
 #   3. Merges preferences into ~/.cursor/cli-config.json (preserves CLI-managed fields)
+#   4. Fans the harness rules (~/.aitools/rules) out to Cursor's user rule files
+#      (~/.cursor/rules/*.mdc), converting each Claude Code .md rule to .mdc
 #
-# Managed fields: version, editor, permissions, model, hasChangedDefaultModel
-# Preserved: authInfo, privacyCache, network, statsigBootstrap, maxMode, all other fields
+# cli-config.json:
+#   Managed fields: version, editor, permissions, model, hasChangedDefaultModel
+#   Preserved: authInfo, privacyCache, network, statsigBootstrap, maxMode, all other fields
+# ~/.cursor/rules/ (additive deploy):
+#   Managed: one file per regular file in ~/.aitools/rules (<name>.md -> <name>.mdc,
+#            converted; any other name copied as is)
+#   Preserved: ~/.cursor/rules/ files not produced from ~/.aitools/rules
+#   Location and format: S3-H-Cursor-research.md (.aitools/channel/handoffs/
+#   2026-10-21_10cf255a-c-missions/S3-H-Cursor/)
 
 # --- BEGIN cursor body (extracted by build-deploy) ---
 set -euo pipefail
@@ -339,6 +348,193 @@ if (dryRun) {
             STATUS_cliConfig="ERROR"
             write_summary ERROR "cursor cli" "unexpected error" ;;
     esac
+fi
+
+# --- 4. User rules fan-out: ~/.aitools/rules -> ~/.cursor/rules ---
+# Cursor (IDE and CLI) loads <dir>/.cursor/rules/**/*.mdc for the workspace and
+# every ancestor directory, so ~/.cursor/rules reaches every workspace under
+# $HOME. Plain .md files are ignored there, and a .mdc needs a leading ---
+# frontmatter block, so each Claude Code .md rule is converted
+# (cursor_rule_from_md). Adopt is not offered (ADOPT_PATH ""): ~/.aitools/rules
+# is the harness copy, not the repo source, and the deployed file is a
+# converted form of it. Parity: step 4 in setup-user-cursor.ps1.
+
+log "Step 4: Cursor user rules"
+
+HARNESS_RULES_DIR="$HOME/.aitools/rules"
+CURSOR_RULES_DIR="$CURSOR_DIR/rules"
+
+# Print the Cursor .mdc form of the Claude Code rule file $1 on stdout.
+#   - No frontmatter: "alwaysApply: true" is added (always loaded, as in Claude Code).
+#   - A top-level "paths:" key (Claude Code path scoping; a list or one value)
+#     becomes "globs:" with the same value; "alwaysApply: false" is added unless
+#     the frontmatter sets alwaysApply (Cursor auto-attaches on matching files).
+#   - Every other frontmatter line and the body are kept; CRLF becomes LF and a
+#     UTF-8 BOM is dropped. Parity: ConvertTo-CursorRule in setup-user-cursor.ps1.
+cursor_rule_from_md() {
+    perl -e '
+        local $/; my $t = <STDIN>; $t = "" unless defined $t;
+        $t =~ s/\A\xEF\xBB\xBF//; $t =~ s/\r\n/\n/g;
+        if ($t =~ /\A---[ \t]*\n(?:(.*?)\n)?---[ \t]*(?:\n|\z)(.*)\z/s) {
+            my ($fm, $body) = (defined $1 ? $1 : "", $2);
+            my (@out, $always, $globs, $in_paths);
+            for my $line (split /\n/, $fm, -1) {
+                if ($line =~ /^paths:(.*)$/) { push @out, "globs:$1"; $globs = 1; $in_paths = 1; next; }
+                if ($in_paths && $line =~ /^\s+-\s/) { push @out, $line; next; }
+                $in_paths = 0;
+                $always = 1 if $line =~ /^alwaysApply:/;
+                $globs = 1 if $line =~ /^globs:/;
+                push @out, $line;
+            }
+            push @out, ($globs ? "alwaysApply: false" : "alwaysApply: true") unless $always;
+            print "---\n", join("\n", @out), "\n---\n", $body;
+        } else {
+            print "---\nalwaysApply: true\n---\n", $t;
+        }
+    ' < "$1"
+}
+
+if [ ! -d "$HARNESS_RULES_DIR" ]; then
+    log "No harness rules at $(display_path "$HARNESS_RULES_DIR") (deploy-harness has not run) -- skipping"
+    write_summary OK "cursor rules" "n/a (no harness rules)"
+else
+    # Source files: every regular, non-hidden file, flat (the deploy-harness contract)
+    RULE_SOURCES=""
+    for rule_src in "$HARNESS_RULES_DIR"/*; do
+        [ -e "$rule_src" ] || continue
+        rule_base=$(basename "$rule_src")
+        if [ ! -f "$rule_src" ]; then
+            log "Ignoring non-file in harness rules: $rule_base"
+            continue
+        fi
+        RULE_SOURCES="${RULE_SOURCES}${rule_src}
+"
+    done
+
+    if [ -z "$RULE_SOURCES" ]; then
+        log "Harness rules directory $(display_path "$HARNESS_RULES_DIR") is empty -- skipping"
+        write_summary OK "cursor rules" "n/a (no harness rules)"
+    else
+        if [ "$DRY_RUN" != "true" ]; then
+            backup_dir "$CURSOR_RULES_DIR"
+            if ! mkdir -p "$CURSOR_RULES_DIR"; then
+                log_error "Cannot create $(display_path "$CURSOR_RULES_DIR")"
+            fi
+        fi
+
+        deploy_tracker_init
+        ERRORS_BEFORE_CURSOR_RULES=$ERRORS
+        RULE_DESTS=""   # newline-separated deployed names (bash 3.2: no associative arrays)
+        while IFS= read -r rule_src; do
+            [ -n "$rule_src" ] || continue
+            rule_base=$(basename "$rule_src")
+            case "$rule_base" in
+                *.md)  dest_name="${rule_base%.md}.mdc" ;;
+                *)     dest_name="$rule_base" ;;
+            esac
+            case "$rule_base" in
+                *.md|*.mdc) ;;
+                *) log "Copying $rule_base as is (Cursor loads only *.mdc rule files)" ;;
+            esac
+
+            # Two sources mapping to one target (x.md and x.mdc): the first wins
+            case "
+$RULE_DESTS" in
+                *"
+$dest_name
+"*)
+                    log_error "Skipped duplicate: $rule_base -> $dest_name (already deployed from another harness rule)"
+                    deploy_tracker_record "failed" "cursor rules" "$rule_base"
+                    continue ;;
+            esac
+            RULE_DESTS="${RULE_DESTS}${dest_name}
+"
+
+            rule_content=""
+            if [ "$dest_name" != "$rule_base" ]; then
+                if ! rule_content=$(cursor_rule_from_md "$rule_src"); then
+                    log_error "Failed: $rule_base: conversion to .mdc failed"
+                    deploy_tracker_record "failed" "cursor rules" "$dest_name"
+                    continue
+                fi
+            elif ! rule_content=$(cat "$rule_src"); then
+                log_error "Failed: $rule_base: cannot read $(display_path "$rule_src")"
+                deploy_tracker_record "failed" "cursor rules" "$dest_name"
+                continue
+            fi
+            if [ -z "$rule_content" ]; then
+                log_error "Failed: $rule_base: empty after conversion -- nothing written"
+                deploy_tracker_record "failed" "cursor rules" "$dest_name"
+                continue
+            fi
+
+            deploy_managed_file "$rule_content" "$CURSOR_RULES_DIR/$dest_name" "cursor rules" "$dest_name" ""
+            case "$MANAGED_FILE_RESULT" in
+                created|updated|verified|skipped|failed)
+                    # The library wrote (or left) LOCAL; the tracker records every
+                    # outcome (failed -> ERROR row, skipped -> WARN row).
+                    ;;
+                "accept & adopt")
+                    # Not reachable: adopt is not offered without an adopt target
+                    log_error "Unexpected accept & adopt for $dest_name (no adopt target)" ;;
+                *)
+                    log_error "Unexpected deploy result for ${dest_name}: $MANAGED_FILE_RESULT"
+                    MANAGED_FILE_RESULT="failed" ;;
+            esac
+            deploy_tracker_record "$MANAGED_FILE_RESULT" "cursor rules" "$dest_name"
+        done <<< "$RULE_SOURCES"
+
+        if [ "$DRY_RUN" = "true" ]; then
+            write_summary OK "cursor rules" "dry run (no files written)"
+        else
+            # Preserved: files in ~/.cursor/rules not produced from ~/.aitools/rules
+            for existing in "$CURSOR_RULES_DIR"/*; do
+                [ -f "$existing" ] || continue
+                exist_name=$(basename "$existing")
+                case "$exist_name" in *.bak.*) continue ;; esac
+                case "
+$RULE_DESTS" in
+                    *"
+$exist_name
+"*) ;;
+                    *)  log "Preserved unmanaged rule: $exist_name"
+                        deploy_tracker_record "preserved" "cursor rules" "$exist_name" ;;
+                esac
+            done
+
+            # Post-write validation: non-empty, and a .mdc starts with frontmatter
+            while IFS= read -r dest_name; do
+                [ -n "$dest_name" ] || continue
+                dest_path="$CURSOR_RULES_DIR/$dest_name"
+                [ -f "$dest_path" ] || continue
+                if [ ! -s "$dest_path" ]; then
+                    log_error "Validation failed: $dest_name is empty after deploy"
+                    continue
+                fi
+                case "$dest_name" in
+                    *.mdc)
+                        first_line=""
+                        # read fails on a last line without a newline; first_line is still set and checked below
+                        IFS= read -r first_line < "$dest_path" || true
+                        case "$first_line" in
+                            ---*) ;;
+                            *) log_error "Validation failed: $dest_name has no frontmatter (Cursor skips it)" ;;
+                        esac ;;
+                esac
+            done <<< "$RULE_DESTS"
+
+            if [ "$_DT_FAILED" -gt 0 ]; then
+                # deploy_tracker_summary writes the ERROR row ("N failed")
+                deploy_tracker_summary "cursor rules"
+                log "Cursor rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$CURSOR_RULES_DIR")"
+            elif [ "$ERRORS" -eq "$ERRORS_BEFORE_CURSOR_RULES" ]; then
+                deploy_tracker_summary "cursor rules"
+                log_ok "Cursor rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$CURSOR_RULES_DIR")"
+            else
+                write_summary ERROR "cursor rules" "validation failed"
+            fi
+        fi
+    fi
 fi
 
 # --- END cursor body (extracted by build-deploy) ---
