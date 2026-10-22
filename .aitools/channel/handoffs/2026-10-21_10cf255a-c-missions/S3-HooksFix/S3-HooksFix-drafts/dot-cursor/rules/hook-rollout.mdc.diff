@@ -1,0 +1,29 @@
+diff --git a/.cursor/rules/hook-rollout.mdc b/Users/new-jose/repos/aitools/.claude/worktrees/sed-guard-enforce/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-HooksFix/S3-HooksFix-drafts/dot-cursor/rules/hook-rollout.mdc
+index 6002b1c..5638438 100644
+--- a/.cursor/rules/hook-rollout.mdc
++++ b/Users/new-jose/repos/aitools/.claude/worktrees/sed-guard-enforce/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-HooksFix/S3-HooksFix-drafts/dot-cursor/rules/hook-rollout.mdc
+@@ -12,16 +12,21 @@ PreToolUse hooks must go through observe-then-enforce:
+ 2. **Review**: Audit logs for false positives, fix matching
+ 3. **Enforce**: per-check mode variable set to `"enforce"`, blocks violations (exit 2)
+ 
+-Per-check mode variables (`MODE_AND`, `MODE_SUBSHELL`, etc.) allow promoting individual checks
++Per-check mode variables (`MODE_AND`, `MODE_SUBSHELL`, `MODE_SED`, etc.) allow promoting individual checks
+ independently. `violation "message" "$MODE_VAR"` — second arg drives observe vs. enforce.
+ 
+-Reset a check to observe after adding new patterns, changing matching logic, or CC version upgrades.
++Reset a check to observe after adding new patterns, changing matching logic so it blocks more, or CC version upgrades.
++A matching change that only narrows what is blocked (an exemption) keeps the current mode; a widening change resets to observe.
++A check with no mode variable gets one when it is reset.
+ 
+ **Pre-deploy verification** (required before any hook change goes live):
+ 1. `bash -n <hook>.sh` — syntax only, insufficient alone
+ 2. Smoke-test clean input: `echo '{"tool_name":"Bash","tool_input":{"command":"git status"}}' | bash <hook>` → must exit 0
+ 3. Violation test: same with a known-bad command → must exit 2 (enforce) or log entry (observe)
++4. Exemption test (when adding an exemption): the exempted form exits 0 with no log entry; each near-miss write form is still blocked
+ 
+ `bash -n` cannot catch `-u` unset variable errors. Always smoke-test. (I12: stale `$MODE` caused crash-on-every-call.)
+ 
+-**Current state (standing-order-guard.sh):** every check enforcing (`&&`, `||`, `;`, `$()`, backticks, scratch files; `||`, `;`, backticks promoted 2026-03-24). **delegation-duty-guard.sh:** observe (hardcoded, stderr reminder only).
++**Current state (standing-order-guard.sh):** every check enforcing (`&&`, `||`, `;`, `$()`, backticks, scratch files, `rm` globs, `cat`/`head`/`tail`/`awk` outside a pipeline, echo/printf redirects; `||`, `;`, backticks promoted 2026-03-24), and `sed` outside a pipeline (`MODE_SED`, enforce; read-only `sed -n '<N[,M]>p' <file>` exempt since 2026-10-21, incident #82, a narrowing change). **delegation-duty-guard.sh:** observe (`MODE_DUTY`, stderr reminder only).
++
++Hook lifecycle beyond rollout (source, deploy, adopt, retire): user-level rule `shared/rules/hook-lifecycle.md` (not yet deployed).

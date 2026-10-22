@@ -1,0 +1,40 @@
+--- /Users/new-jose/repos/aitools/.claude/worktrees/gatefix/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Gate/S3-Gate-drafts/reference/script-standards-detail.md.edit.txt	2026-10-21 18:02:01
++++ /Users/new-jose/repos/aitools/.claude/worktrees/gatefix/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-GateFix/S3-GateFix-drafts/reference/script-standards-detail.md.edit.txt	2026-10-21 18:06:48
+@@ -1,12 +1,16 @@
+ PROTECTED-BY-INTENT? reference/script-standards-detail.md is not listed in the
+ sources-of-truth table, but it is the severity guide that D-TS11 names and that
+ S4-Review §5.1 row 16 puts in the approval batch. Drafted by S3-Gate, 2026-10-21.
++Revised by S3-GateFix, 2026-10-21: edit 6 reworded (PR #58 review finding 2);
++D-TS13 is approved, so edit 6 no longer depends on a pending answer. Edits 1-5
++are unchanged from S3-Gate.
+ The file has no intent statement, and this edit adds none.
+ Six edits, each an exact old -> new, applied in order. They depend on gate
+ answers: D-TS11 (edits 2 and 3, SHADOWED), D-TS10 (edits 3 and 4, KEEP and the
+ ACTION-pairing exception), T-Q12 (edits 1 and 5, platform skip), D-TS12 (the
+ "under evaluation" example in edit 5), D-TS13 (edit 6, exit 2 with the abort
+-marker). If a decision is rejected, drop that decision's lines.
++marker; approved 2026-10-21). If a pending decision is rejected, drop that
++decision's lines.
+ 
+ ==== Edit 1 -- section "Shared library" > "Contents" table: add rows after "Environment skip row"
+ old:
+@@ -70,10 +74,15 @@
+ old:
+ ## Shared library (`scripts/aitools-lib.sh` / `.ps1`)
+ new:
+-**Exit 2 (user abort).** A tool setup script whose decision tree returns 2 exits 2
+-before the footer, after the menu helper has written the abort marker
++**Exit 2 (user abort).** A setup script whose `[x]abort` was chosen (the tool
++install-method menu, or a managed-file review menu) exits 2 before the footer,
++after the menu helper has written the abort marker when the runner exported one
+ (`@reference/tool-support-decision-tree.md` "Contract with the installers and
+-entry points"). That is the only exit that skips the footer. A script never exits 2
+-for any other reason, and never passes a helper's return code through.
++entry points"). Like the OS guard and a missing tool spec (exit 1), it leaves
++before the footer; it is the only deliberate exit 2. A script never exits 2 on
++purpose for any other reason, and never passes a helper's return code through.
++An unintended exit 2 (bash `set -e` dying on a command that returns 2, or a
++syntax error in a sourced file) writes no marker, so the runner treats it as a
++failure (`script failed (exit 2)`).
+ 
+ ## Shared library (`scripts/aitools-lib.sh` / `.ps1`)

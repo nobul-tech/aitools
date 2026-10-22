@@ -1,0 +1,130 @@
+diff --git a/Users/new-jose/repos/aitools/.claude/worktrees/sed-guard-enforce/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Hooks/S3-Hooks-drafts/dot-claude/rules/hook-lifecycle.md b/Users/new-jose/repos/aitools/.claude/worktrees/sed-guard-enforce/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-HooksFix/S3-HooksFix-drafts/shared/rules/hook-lifecycle.md
+index 6958cbe..aa47e99 100644
+--- a/Users/new-jose/repos/aitools/.claude/worktrees/sed-guard-enforce/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Hooks/S3-Hooks-drafts/dot-claude/rules/hook-lifecycle.md
++++ b/Users/new-jose/repos/aitools/.claude/worktrees/sed-guard-enforce/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-HooksFix/S3-HooksFix-drafts/shared/rules/hook-lifecycle.md
+@@ -5,32 +5,40 @@ paths:
+   - scripts/setup-user-hooks.ps1
+   - scripts/build-deploy.sh
+   - .claude/rules/hook-rollout.md
+-  - .claude/rules/hook-lifecycle.md
++  - shared/rules/hook-lifecycle.md
+   - reference/managed-file-deployment.md
+ ---
+ 
+-## Hook Lifecycle (this repo)
++## Hook Lifecycle
+ 
+ **Intent**: **Purpose**: Govern the lifecycle of every Claude Code hook the
+-harness manages: one source per hook, equivalent deployment on the dev and MDM
+-paths, the single target of an `[a]dopt`, the place of user-created hooks, and
+-the steps to retire a hook. **Scope**: Source of truth, deployment equivalence,
+-the adopt target, user-created hooks, dotprofile shadow warnings, prompt safety
+-in the hook deploy, retirement, verification. NOT the observe-then-enforce
+-rollout of a check (`@.claude/rules/hook-rollout.md`). NOT the managed-file
+-state machine or menu options (`@reference/managed-file-deployment.md`,
+-`@.claude/rules/interactive-menus.md`). NOT hook portability
+-(`@.claude/rules/cross-platform.md` "Hook portability"). NOT what an individual
+-hook enforces (its header comment). **Audience**: Every agent that adds,
+-changes, adopts or retires a hook, or edits `scripts/setup-user-hooks.*`,
+-`shared/hooks/hooks-manifest.json`, or the hook sections of
+-`scripts/build-deploy.sh`.
++aitools harness manages: one source per hook, equivalent deployment on the dev
++and MDM paths, the single target of an `[a]dopt`, the place of user-created
++hooks, and the steps to retire a hook. **Scope**: Source of truth, deployment
++equivalence, the adopt target, user-created hooks, dotprofile shadow warnings,
++prompt safety in the hook deploy, retirement, verification. NOT the
++observe-then-enforce rollout of a check (aitools `.claude/rules/hook-rollout.md`).
++NOT the managed-file state machine or menu options (aitools
++`reference/managed-file-deployment.md`, `.claude/rules/interactive-menus.md`).
++NOT hook portability (aitools `.claude/rules/cross-platform.md` "Hook
++portability"). NOT what an individual hook enforces (its header comment).
++**Audience**: Every agent, in any repo on any machine, that adds, changes,
++adopts or retires an aitools-managed hook, or edits the aitools files
++`scripts/setup-user-hooks.*`, `shared/hooks/hooks-manifest.json`, or the hook
++sections of `scripts/build-deploy.sh`.
++
++Paths below are relative to the aitools clone (`~/repos/aitools/` on macOS,
++`%USERPROFILE%\repos\aitools\` on Windows) unless they start with `~/` or
++`<userRepoPath>/`.
+ 
+ ### Decisions
+ 
+ | ID | Decision | Date | By |
+ |----|----------|------|----|
+-| SD-2 | One version per hook, in `shared/hooks/`. Dotprofile hook copies are removed. The setup-user-hooks adopt path writes `shared/hooks` only | 2026-10-21 | commander |
++| SD-2 | One hook version, in `shared/hooks/`. The dotprofile hook copies are removed (verified: no `claude/hooks/` in the dotprofile). The setup-user-hooks "adopt" path must write `shared/hooks` only | 2026-10-21 | commander |
++
++SD-2 removed the copies once, by hand. The scripts do not delete a dotprofile
++copy that appears later: they ignore it and warn (see "Deployment" below).
+ 
+ ### One source per hook
+ 
+@@ -52,10 +60,11 @@ changes, adopts or retires a hook, or edits `scripts/setup-user-hooks.*`,
+ | MDM: `<userRepoPath>/deploy/setup-user-hooks.*` | embedded by `build-deploy.sh` at build time, same order | `~/.claude/hooks/` overwritten, no review |
+ 
+ - The resolution order lives in both `setup-user-hooks.*` and the
+-  `build-deploy.sh` embed loops (duplicated logic, `@.claude/rules/deploy-paths.md`).
+-  Change it in all of them together.
+-- A dotprofile copy of a manifest hook is ignored. The dev path logs a warning
+-  and a `WARN` summary row (`dotprofile copy ignored`); delete the copy.
++  `build-deploy.sh` embed loops (duplicated logic, aitools
++  `.claude/rules/deploy-paths.md`). Change it in all of them together.
++- A dotprofile copy of a manifest hook is ignored, not deleted. The dev path
++  logs a warning and a `WARN` summary row (`dotprofile copy ignored`); delete
++  the copy by hand.
+ 
+ ### Adopt writes `shared/hooks` only
+ 
+@@ -81,9 +90,13 @@ changes, adopts or retires a hook, or edits `scripts/setup-user-hooks.*`,
+ - Every prompt is gated by `tty_interactive` / `Test-InteractiveConsole` and
+   read with `read_tty_choice` / `Read-ConsoleChoice`. Never a bare `read` or
+   `[Console]::ReadLine()`.
+-- Non-interactive stdin, `--force`, or EOF at the prompt: log a warning and take
+-  the default. Diff review defaults to overwrite (`@.claude/rules/interactive-menus.md`);
+-  reverse discovery defaults to `[s]kip`, the choice that writes nothing.
++- EOF at a prompt: `read_tty_choice` / `Read-ConsoleChoice` log a warning and
++  take the default.
++- Diff review of a manifest hook: non-interactive stdin, `--force`, or EOF take
++  overwrite (aitools `.claude/rules/interactive-menus.md`).
++- Reverse discovery: non-interactive stdin skips the prompt and logs it at info
++  (`Non-interactive: skipped adoption prompt for <hook>`); EOF takes `[s]kip`,
++  the choice that writes nothing. `--force` does not change this menu.
+ 
+ ### Retiring a hook
+ 
+@@ -96,19 +109,26 @@ changes, adopts or retires a hook, or edits `scripts/setup-user-hooks.*`,
+ 
+ ### Verification
+ 
+-- Any hook change: the pre-deploy verification in `@.claude/rules/hook-rollout.md`.
++- Any hook change: the pre-deploy verification in aitools
++  `.claude/rules/hook-rollout.md`.
+ - Any `setup-user-hooks.*` change: `bash -n` and the pwsh parser on both
+   scripts; a run under an isolated `HOME` (fake config and dotprofile) through
+   the adopt path and the EOF path; an isolated-`HOME` `build-deploy.sh` run with
+   `bash -n` and the pwsh parser on the generated `deploy/setup-user-hooks.*`.
+-  Never run `build-deploy.sh` or `setup-user-hooks` against the real `HOME`.
++- These verification runs, by an agent or a delegate, use an isolated `HOME`,
++  never the real one: `build-deploy.sh` deletes and rebuilds the real dotprofile
++  `deploy/` (#86). This does not change the propagation steps that deploy a
++  merged change to the machine (aitools `.claude/rules/deploy-paths.md` step 2,
++  `.claude/rules/tool-lifecycle.md` "Rebuild + propagate"); those run against
++  the real `HOME` by design.
+ 
+ ### Cross-references
+ 
+-- Rollout of a check: `@.claude/rules/hook-rollout.md`
+-- Deployment types and the shell-script adopt target: `@.claude/rules/managed-file-deployment.md`,
+-  `@reference/managed-file-deployment.md` "Shell Script Deployment Detail"
+-- Duplicated setup logic: `@.claude/rules/deploy-paths.md`
+-- Menus and non-interactive fallback: `@.claude/rules/interactive-menus.md`
+-- Hook portability: `@.claude/rules/cross-platform.md`
+-- Incidents #80, #81, #82: `/incident` skill
++- Rollout of a check: aitools `.claude/rules/hook-rollout.md`
++- Deployment types and the shell-script adopt target: aitools
++  `.claude/rules/managed-file-deployment.md`,
++  `reference/managed-file-deployment.md` "Shell Script Deployment Detail"
++- Duplicated setup logic: aitools `.claude/rules/deploy-paths.md`
++- Menus and non-interactive fallback: aitools `.claude/rules/interactive-menus.md`
++- Hook portability: aitools `.claude/rules/cross-platform.md`
++- Incidents #80, #81, #82, #86: `/incident` skill (aitools repo)
