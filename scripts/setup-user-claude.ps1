@@ -50,22 +50,33 @@ $claudeMd = Join-Path $claudeDir "CLAUDE.md"
 # Ensure ~/.claude/ exists
 if (-not (Test-Path $claudeDir)) {
     if (-not $DryRun) {
-        New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
+        try {
+            New-Item -ItemType Directory -Path $claudeDir -Force -ErrorAction Stop | Out-Null
+        } catch {
+            LogError "Cannot create $claudeDir ($_)"
+            Write-Summary "ERROR" "claude.md" "cannot create ~/.claude"
+            exit 1
+        }
         Log "Created $claudeDir"
     }
 }
 
 # --- Dotprofile and this machine's profile: one resolver (reference/user-repo.md
-# "Resolution"). A miss never takes another machine's values: on no match the
-# Profile*/Identity* values are identity-level only (the resolver logged the
-# ERROR row and ACTION). ---
+# "Resolution"). This script reads only the wrapper results (PR #80 contract),
+# never profile.json or config.json itself: no alias lookup, no hostname or
+# first-profile fallback. A miss never takes another machine's values: on no
+# match the profile/identity values are identity-level only. The wrappers write
+# the ERROR row and ACTION for their own failures; this script adds none. ---
 $urpRc = Resolve-UserRepoPath       # 1 = shared-only (expected); 3 = logged error + ERROR row
-$userRepoPath = $script:UserRepoPath
+$userRepoPath = $script:AitLibUserRepoPath
 $profileRc = Resolve-MachineProfile # 1 = shared-only; 3 = no match / error (logged + ERROR row + ACTION)
-$profileName = $script:ProfileName
-$profileCompany = $script:ProfileCompany
-$identityGitName = $script:IdentityGitName
-$identityGitEmail = $script:IdentityGitEmail
+$machineAlias = $script:AitLibMachineAlias
+$machineVia = $script:AitLibMachineVia
+$profileName = $script:AitLibProfileName
+$profileCompany = $script:AitLibProfileCompany
+$identityGitName = $script:AitLibIdentityGitName
+$identityGitEmail = $script:AitLibIdentityGitEmail
+LogDetail "setup-user-claude: dotprofile rc=$urpRc via=$($script:AitLibUserRepoVia); machine profile rc=$profileRc"
 $userRepoDisplay = ""
 if ($userRepoPath) {
     $userRepoDisplay = $userRepoPath
@@ -93,6 +104,7 @@ if (-not $sourcePath) {
         $sourceLabel = "shared template"
     } else {
         LogError "No template found. Checked user repo and $SharedPath"
+        Write-Summary "ERROR" "claude.md" "no template found"
         exit 1
     }
 }
@@ -104,10 +116,12 @@ try {
     $sharedContent = Get-Content -Path $sourcePath -Raw -ErrorAction Stop
 } catch {
     LogError "Cannot read template: $sourcePath ($_)"
+    Write-Summary "ERROR" "claude.md" "template unreadable"
     exit 1
 }
 if (-not $sharedContent) {
     LogError "Template is empty: $sourcePath"
+    Write-Summary "ERROR" "claude.md" "template empty"
     exit 1
 }
 
@@ -123,7 +137,7 @@ foreach ($t in $tokens.Keys) {
     if ($tokens[$t]) { $sharedContent = $sharedContent.Replace("{{$t}}", [string]$tokens[$t]) }
 }
 if ($profileRc -eq 0) {
-    Log "Profile interpolation: alias=$($script:MachineAlias) via=$($script:MachineVia) name=$profileName company=$profileCompany"
+    Log "Profile interpolation: alias=$machineAlias via=$machineVia name=$profileName company=$profileCompany"
 } elseif ($profileRc -eq 1) {
     LogWarn "No dotprofile -- {{PLACEHOLDER}} tokens will not be resolved"
     Write-Summary "WARN" "claude.md" "template tokens unresolved"
@@ -132,16 +146,24 @@ if ($profileRc -eq 0) {
 }
 
 # --- Write or preview CLAUDE.md ---
-$osInfo = (Get-CimInstance Win32_OperatingSystem).Caption
-$hostname = if ($script:MachineHostname) { $script:MachineHostname } else { $env:COMPUTERNAME }
-$profileShown = if ($script:MachineAlias) { $script:MachineAlias } else { "unresolved" }
+try {
+    $osInfo = (Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).Caption
+} catch {
+    LogDetail "footer OS: Get-CimInstance Win32_OperatingSystem failed ($_) -- using 'Windows'"
+    $osInfo = ""
+}
+if (-not $osInfo) { $osInfo = "Windows" }
+# Footer hostname, same source as the resolver (COMPUTERNAME). The PR #80
+# contract has no hostname result, so it is read here.
+$machineHost = $env:COMPUTERNAME
+$profileShown = if ($machineAlias) { $machineAlias } else { "unresolved" }
 
 $content = @"
 $sharedContent
 
 ## Machine-Specific
 
-- Machine: $osInfo ($hostname; profile $profileShown)
+- Machine: $osInfo ($machineHost; profile $profileShown)
 - Shell: bash (Claude Code requires Git Bash on Windows)
 "@
 
@@ -326,7 +348,8 @@ if ($rulesSrc) {
             try {
                 $ruleContent = Get-Content $rf.FullName -Raw -ErrorAction Stop
             } catch {
-                LogWarn "Cannot read source rule $($rf.Name): $_"
+                LogError "Cannot read source rule $($rf.Name): $_"
+                Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $rf.Name
                 continue
             }
             $ruleResult = Deploy-ManagedFile -Content $ruleContent -DestPath $destFile -ToolName "claude rules" -ItemName $rf.Name -AdoptPath $ruleAdoptPath
@@ -357,6 +380,7 @@ if ($rulesSrc) {
                     }
                 } catch {
                     LogWarn "Failed to push merged $($rf.Name) to user repo: $_"
+                    Write-Summary "WARN" "claude rules" "$($rf.Name) not pushed"
                 } finally {
                     Pop-Location
                 }

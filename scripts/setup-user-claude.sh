@@ -56,16 +56,47 @@ CLAUDE_DIR="$HOME/.claude"
 CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
 
 # Ensure ~/.claude/ exists
-mkdir -p "$CLAUDE_DIR"
+if ! mkdir -p "$CLAUDE_DIR"; then
+    log_error "Cannot create $(display_path "$CLAUDE_DIR")"
+    write_summary ERROR "claude.md" "cannot create ~/.claude"
+    exit 1
+fi
 
 # --- Dotprofile and this machine's profile: one resolver (reference/user-repo.md
-# "Resolution"). A miss never takes another machine's values: on no match the
-# PROFILE_/IDENTITY_ values are identity-level only (the resolver logged the
-# ERROR row and ACTION). ---
+# "Resolution"). This script reads only the wrapper results (PR #80 contract),
+# never profile.json or config.json itself: no alias lookup, no hostname or
+# first-profile fallback. A miss never takes another machine's values: on no
+# match the profile/identity values are identity-level only. The wrappers write
+# the ERROR row and ACTION for their own failures; this script adds none. ---
 URP_RC=0
 resolve_user_repo_path || URP_RC=$?    # 1 = shared-only (expected); 3 = logged error + ERROR row
+USER_REPO_PATH="$AITLIB_USER_REPO_PATH"
 PROFILE_RC=0
 resolve_machine_profile || PROFILE_RC=$?   # 1 = shared-only; 3 = no match / error (logged + ERROR row + ACTION)
+MACHINE_ALIAS="$AITLIB_MACHINE_ALIAS"
+MACHINE_VIA="$AITLIB_MACHINE_VIA"
+PROFILE_NAME="$AITLIB_PROFILE_NAME"
+PROFILE_COMPANY="$AITLIB_PROFILE_COMPANY"
+IDENTITY_GIT_NAME="$AITLIB_IDENTITY_GIT_NAME"
+IDENTITY_GIT_EMAIL="$AITLIB_IDENTITY_GIT_EMAIL"
+log_detail "setup-user-claude: dotprofile rc=$URP_RC via=$AITLIB_USER_REPO_VIA; machine profile rc=$PROFILE_RC"
+
+# Footer hostname, same source as the resolver (P-Q5: macOS LocalHostName, not
+# the DNS-derived kernel name). The PR #80 contract has no hostname result, so it
+# is read here; on failure the kernel name is shown and the reason logged.
+MACHINE_HOST=""
+if [ -x /usr/sbin/scutil ]; then
+    _host_rc=0
+    MACHINE_HOST=$(/usr/sbin/scutil --get LocalHostName 2>&1) || _host_rc=$?
+    if [ "$_host_rc" -ne 0 ]; then
+        log_detail "footer hostname: scutil --get LocalHostName failed (exit $_host_rc): $MACHINE_HOST -- using uname -n"
+        MACHINE_HOST=""
+    fi
+fi
+if [ -z "$MACHINE_HOST" ]; then
+    MACHINE_HOST=$(uname -n)
+    MACHINE_HOST="${MACHINE_HOST%%.*}"
+fi
 USER_REPO_DISPLAY=""
 if [ -n "$USER_REPO_PATH" ]; then
     USER_REPO_DISPLAY=$(printf '%s' "$USER_REPO_PATH" | HOME_DIR="$HOME" perl -pe 's/^\Q$ENV{HOME_DIR}\E(?=\/|$)/~/')
@@ -86,6 +117,7 @@ if [ -z "$SOURCE_PATH" ]; then
         SOURCE_LABEL="shared template"
     else
         log_error "No template found. Checked user repo and $(display_path "$SHARED_PATH")"
+        write_summary ERROR "claude.md" "no template found"
         exit 1
     fi
 fi
@@ -93,14 +125,23 @@ fi
 log "Template source: $(display_path "$SOURCE_PATH") ($SOURCE_LABEL)"
 
 # --- Read template content ---
-SHARED_CONTENT=$(cat "$SOURCE_PATH")
+if ! SHARED_CONTENT=$(cat "$SOURCE_PATH"); then
+    log_error "Cannot read template: $(display_path "$SOURCE_PATH")"
+    write_summary ERROR "claude.md" "template unreadable"
+    exit 1
+fi
+if [ -z "$SHARED_CONTENT" ]; then
+    log_error "Template is empty: $(display_path "$SOURCE_PATH")"
+    write_summary ERROR "claude.md" "template empty"
+    exit 1
+fi
 
 # --- Profile interpolation ---
 # Values come from resolve_machine_profile above. Substitution runs in perl with
 # the values passed through the environment, so "&", "$", "@" and "/" in a value
 # are literal (bash ${var//pat/rep} treats "&" as the match in bash 5.2). An
 # empty value leaves its token in place (visible, not silently blank).
-SHARED_CONTENT=$(printf '%s' "$SHARED_CONTENT" | \
+if ! SHARED_CONTENT=$(printf '%s' "$SHARED_CONTENT" | \
     T_PROFILE_NAME="$PROFILE_NAME" T_PROFILE_COMPANY="$PROFILE_COMPANY" \
     T_IDENTITY_GIT_NAME="$IDENTITY_GIT_NAME" T_IDENTITY_GIT_EMAIL="$IDENTITY_GIT_EMAIL" \
     T_USER_REPO_PATH="$USER_REPO_DISPLAY" \
@@ -108,7 +149,11 @@ SHARED_CONTENT=$(printf '%s' "$SHARED_CONTENT" | \
         my $v = $ENV{"T_$k"};
         next unless defined $v && length $v;
         s/\{\{\Q$k\E\}\}/$v/g;
-    }')
+    }'); then
+    log_error "Template interpolation failed (perl)"
+    write_summary ERROR "claude.md" "interpolation failed"
+    exit 1
+fi
 
 case "$PROFILE_RC" in
     0) log "Profile interpolation: alias=$MACHINE_ALIAS via=$MACHINE_VIA name=$PROFILE_NAME company=$PROFILE_COMPANY" ;;
@@ -122,7 +167,7 @@ NEW_CONTENT="${SHARED_CONTENT}
 
 ## Machine-Specific
 
-- Machine: $(uname -s) $(uname -m) (${MACHINE_HOSTNAME:-$(uname -n)}; profile ${MACHINE_ALIAS:-unresolved})
+- Machine: $(uname -s) $(uname -m) (${MACHINE_HOST}; profile ${MACHINE_ALIAS:-unresolved})
 - Shell: $(basename "$SHELL")"
 
 # ---------------------------------------------------------------------------
@@ -284,7 +329,12 @@ if [ -n "$RULES_SRC" ]; then
             if [ -n "${USER_REPO_PATH:-}" ]; then
                 _rule_adopt_path="$USER_REPO_PATH/claude/rules/$rule_name"
             fi
-            deploy_managed_file "$(cat "$rule_file")" "$RULES_DEST/$rule_name" "claude rules" "$rule_name" "$_rule_adopt_path"
+            if ! _rule_content=$(cat "$rule_file"); then
+                log_error "Cannot read source rule $rule_name"
+                deploy_tracker_record "failed" "claude rules" "$rule_name"
+                continue
+            fi
+            deploy_managed_file "$_rule_content" "$RULES_DEST/$rule_name" "claude rules" "$rule_name" "$_rule_adopt_path"
 
             case "$MANAGED_FILE_RESULT" in
                 created|updated|verified|"accept & adopt"|skipped|failed)
@@ -312,6 +362,7 @@ if [ -n "$RULES_SRC" ]; then
                         log_ok "Pushed merged $rule_name to user repo"
                     else
                         log_warn "Failed to push merged $rule_name to user repo"
+                        write_summary WARN "claude rules" "$rule_name not pushed"
                     fi
                 fi
             fi
