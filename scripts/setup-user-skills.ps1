@@ -35,8 +35,17 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoDir = Split-Path -Parent $scriptDir
 $skillsSrc = Join-Path (Join-Path $repoDir "shared") "skills"
 
-# User repo for dotprofile overrides and adopt target
-$userRepoPath = ReadConfigKey -File (Join-Path $env:USERPROFILE ".aitools\config.json") -Key "userRepoPath"
+# User repo for dotprofile overrides and adopt target: the one dotprofile
+# resolver (reference/user-repo.md "Resolution"; SD-7). The rc is captured, not
+# suppressed: 0 found, 1 no dotprofile (shared-only mode, expected), 3 resolver
+# error (the lib already logged it: LogError + ERROR row "dotprofile").
+# On 1 and 3 $userRepoPath is empty: shared skills only, no adopt offer.
+$urpRc = Resolve-UserRepoPath
+$userRepoPath = $script:AitLibUserRepoPath
+if ($urpRc -ne 0 -and $urpRc -ne 1) {
+    # Not counted again: the resolver error is already an error and an ERROR row.
+    Log "Dotprofile unresolved (resolver error above) -- deploying shared skills only"
+}
 $dotprofileSkills = $null
 if ($userRepoPath) {
     $dpSkillsPath = Join-Path $userRepoPath "claude\skills"

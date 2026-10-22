@@ -177,8 +177,18 @@ if ! command -v node &>/dev/null; then
     log_warn "node not found -- skipping cli-config.json merge"
     STATUS_cliConfig="SKIPPED (node not found)"
 else
-    # Read cursor.cli preferences from profile.json (via config.json -> userRepoPath).
-    # Falls back to defaults if profile not found.
+    # Read cursor.cli preferences from <dotprofile>/profile.json. The dotprofile
+    # comes from the one resolver (reference/user-repo.md "Resolution"; SD-7) and
+    # reaches node as arguments (path, rc); node never reads config.json itself.
+    # rc is captured, not suppressed: 0 found, 1 no dotprofile (shared-only
+    # mode: default preferences), 3 resolver error (the lib already logged it:
+    # log_error + ERROR row "dotprofile"). On 3 the node preferences
+    # block skips the merge rather than write defaults over the user's choices.
+    # The generated deploy/ copy replaces that block with build-time values, so
+    # there the arguments are unused (build-deploy follow-up: B5).
+    URP_RC=0
+    resolve_user_repo_path || URP_RC=$?
+    USER_REPO_PATH="$AITLIB_USER_REPO_PATH"
 
     merge_rc=0
     MERGE_RESULT=$(node -e "
@@ -190,19 +200,28 @@ const dryRun = process.argv[2] === 'true';
 const force = process.argv[3] === 'true';
 
 // --- BEGIN profile preferences (replaced by build-deploy) ---
+// argv[4] = dotprofile path (resolve_user_repo_path), argv[5] = its rc.
 let vimMode = false;
 let modelId = 'auto';
-try {
-    const cfgPath = path.join(process.env.HOME || process.env.USERPROFILE, '.aitools', 'config.json');
-    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-    if (cfg.userRepoPath) {
-        const pf = JSON.parse(fs.readFileSync(path.join(cfg.userRepoPath, 'profile.json'), 'utf8'));
+const userRepoPath = process.argv[4] || '';
+const urpRc = process.argv[5] || '0';
+if (urpRc !== '0' && urpRc !== '1') {
+    console.log('skipped-dotprofile');
+    process.exit(0);
+}
+if (userRepoPath) {
+    const pfPath = path.join(userRepoPath, 'profile.json');
+    try {
+        const pf = JSON.parse(fs.readFileSync(pfPath, 'utf8'));
         if (pf.cursor && pf.cursor.cli) {
             if (typeof pf.cursor.cli.vimMode === 'boolean') vimMode = pf.cursor.cli.vimMode;
             if (typeof pf.cursor.cli.model === 'string') modelId = pf.cursor.cli.model;
         }
+    } catch (e) {
+        if (e.code === 'ENOENT') console.log('DETAIL: no profile.json in ' + userRepoPath + ' -- default preferences');
+        else console.log('WARN: could not read profile preferences from ' + pfPath + ': ' + e.message + ' -- default preferences');
     }
-} catch (e) { if (e.code !== 'ENOENT') console.error('Warning: could not read profile preferences: ' + e.message); }
+}
 // --- END profile preferences (replaced by build-deploy) ---
 
 // --- Read existing cli-config.json ---
@@ -289,7 +308,7 @@ if (dryRun) {
         changed.forEach(c => console.log('CHANGED: ' + c));
     }
 }
-" "$CLI_CONFIG" "$DRY_RUN" "$FORCE") || merge_rc=$?
+" "$CLI_CONFIG" "$DRY_RUN" "$FORCE" "$USER_REPO_PATH" "$URP_RC") || merge_rc=$?
 
     # Log node's prefixed diagnostics; the first unprefixed line is the status.
     MERGE_STATUS=""
@@ -322,6 +341,12 @@ if (dryRun) {
         would-merge)
             log "[DRY RUN] Would write merged config"
             STATUS_cliConfig="would merge (dry-run)" ;;
+        skipped-dotprofile)
+            # Not counted again: the resolver error is already an error and the
+            # ERROR row "dotprofile" (the lib wrote both).
+            log "Skipped the $(display_path "$CLI_CONFIG") merge: dotprofile unresolved (resolver error above), so the profile preferences are unknown"
+            STATUS_cliConfig="SKIPPED (dotprofile error)"
+            write_summary ERROR "cursor cli" "skipped (dotprofile error)" ;;
         error-corrupt)
             log_error "$(display_path "$CLI_CONFIG") is corrupt. Use --force to overwrite."
             STATUS_cliConfig="ERROR (corrupt, needs --force)"
