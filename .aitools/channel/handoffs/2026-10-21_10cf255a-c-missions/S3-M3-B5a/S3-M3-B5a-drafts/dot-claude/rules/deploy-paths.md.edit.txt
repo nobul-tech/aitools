@@ -1,0 +1,97 @@
+DRAFT (S3-M3-B5a, 2026-10-22) -- protected file .claude/rules/deploy-paths.md
+Status: awaiting commander approval. NOT applied.
+Supersedes: the approved R20 text (S5-Profile-report.md line 158), which named
+scripts/aitools-profile.js and BEGIN/END "profile resolution" / "profile
+interpolation" sentinels. The resolver is native (decision 4) and those
+sentinels were never added; after PR "M3 B5" setup-user-claude and
+setup-user-cursor are no longer duplicated in build-deploy.sh.
+
+================================================================
+Edit 1 -- section "Scripts with deploy templates (duplication risk)"
+================================================================
+OLD:
+Three script pairs have **duplicated setup logic** between `scripts/` and
+`build-deploy.sh`. Fixing a bug in one requires manually porting to the other.
+Running `build-deploy.sh` does NOT auto-fix stale template logic — it faithfully
+reproduces whatever is hardcoded in the template.
+
+| Script | What's duplicated |
+|--------|-------------------|
+| `setup-user-claude.sh/.ps1` | Template interpolation, footer generation |
+| `setup-user-cursor.sh/.ps1` | CLI config merge logic (Node.js/PS1) |
+| `setup-user-hooks.sh/.ps1` | Hook-script embedding + REGS_JSON injection (build-time self-containment; the settings.json hooks merge itself is extracted, not duplicated) |
+
+`setup-user-mcp.sh/.ps1` and `setup-user-settings.sh/.ps1` are **pure extract**
+(body markers + `inline_lib_*`) — no duplicated logic. The settings.json merge
+formerly duplicated in `setup-user-mcp` was removed in the settings-sync refactor
+(`sync_managed_json` now owns settings.json), progress toward the I6 structural fix.
+
+NEW:
+One script pair has **duplicated setup logic** between `scripts/` and
+`build-deploy.sh`. Fixing a bug in it requires manually porting to the other.
+Running `build-deploy.sh` does NOT auto-fix stale template logic — it faithfully
+reproduces whatever is hardcoded in the template.
+
+| Script | What's duplicated |
+|--------|-------------------|
+| `setup-user-hooks.sh/.ps1` | Hook-script embedding + REGS_JSON injection (build-time self-containment; the settings.json hooks merge itself is extracted, not duplicated) |
+
+These pairs are **pure extract** (body markers + `inline_lib_*`) — no duplicated
+logic:
+- `setup-user-mcp.sh/.ps1` and `setup-user-settings.sh/.ps1`. The settings.json
+  merge formerly duplicated in `setup-user-mcp` was removed in the settings-sync
+  refactor (`sync_managed_json` now owns settings.json).
+- `setup-user-claude.sh/.ps1` (M3 B5): template interpolation, footer, managed-file
+  deploy and rules logic are extracted from `scripts/`. `build-deploy.sh` adds only
+  the profile/template source block (the live dotprofile on the machine wins, else
+  the embedded build-time copies) and the rules fallback.
+- `setup-user-cursor.sh/.ps1` (M3 B5): the whole cursor body is extracted; only the
+  two preference defaults in the profile preferences block are replaced with the
+  build-time `profile.json` `cursor.cli` values (the fallback when the machine has
+  no dotprofile).
+
+Every resolver-consuming deploy script (`setup-user-claude`, `-settings`,
+`-cursor`) resolves the dotprofile and this machine's profile when it runs,
+never at build time: no machine's values are interpolated into `deploy/`.
+
+================================================================
+Edit 2 -- list "What IS auto-embedded (safe — single source of truth)"
+================================================================
+OLD:
+**What IS auto-embedded** (safe — single source of truth):
+- `shared/hooks/*.sh` → read via `cat` at build time
+- `shared/skills/*.md` → read via `cat` at build time
+- `@shared/claude-shared.md` → read via `cat` at build time
+- `<userRepoPath>/claude/rules/*.md` → read via `cat` at build time
+
+NEW:
+**What IS auto-embedded** (safe — single source of truth):
+- `shared/hooks/*.sh` → read via `cat` at build time
+- `shared/skills/*.md` → read via `cat` at build time
+- `<userRepoPath>/claude/CLAUDE.md` (else `@shared/claude-shared.md`) → read at
+  build time, tokens left in place (the fallback template; resolved at runtime)
+- `<userRepoPath>/profile.json` → its snapshot (`aitools-json.pl snapshot`:
+  version, identity, cursor, profiles), the fallback when the machine has no
+  dotprofile
+- `<userRepoPath>/claude/rules/*.md` → read at build time (the fallback rules)
+- `scripts/aitools-profile.sh/.ps1`, `scripts/aitools-lib.sh/.ps1`,
+  `scripts/aitools-json.pl/.ps1` → copied at build time into the resolver-consuming
+  deploy scripts and written to a temp dir at runtime (`AITOOLS_PROFILE_SH` /
+  `AITOOLS_PROFILE_PS1`); a file the resolver loads that the embed does not carry
+  fails the build
+
+`check-pre-push` step 7 rebuilds into a temp copy of the dotprofile and dry-runs
+the generated resolver consumers, so a deploy script that cannot find its resolver
+fails the push, not an endpoint.
+
+================================================================
+Edit 3 -- section "When changing `scripts/setup-*.sh/.ps1`", step 2
+================================================================
+OLD:
+2. Run `bash scripts/build-deploy.sh` to regenerate the `<userRepoPath>/deploy/` counterpart
+
+NEW:
+2. Run `bash scripts/build-deploy.sh` to regenerate the `<userRepoPath>/deploy/` counterpart
+   (it takes the dotprofile from `AITOOLS_USER_REPO_PATH`, else from the resolver;
+   an agent runs it only under an isolated `HOME` with a copy of the dotprofile:
+   it deletes and rebuilds `<dotprofile>/deploy/`)

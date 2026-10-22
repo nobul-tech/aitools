@@ -223,12 +223,12 @@ if ($deploySources.Count -eq 0) {
     }
     if ($d7Rc -ne 0) {
         foreach ($l in $d7Log.Split("`n")) { if ($l.Trim()) { LogDetail "pre-push 7 build: $($l.TrimEnd())" } }
-        StepFail "7" "deploy/ matches source" "rebuild into a dotprofile copy failed (exit $d7Rc) -- see checks.log"
+        StepFail "7" "deploy/ matches source" "rebuild into a dotprofile copy failed (exit $d7Rc) -- see deploy.log"
     } elseif (-not $d7Built) {
         # The copy's committed deploy/ was removed before the build, and build-deploy
         # exits 0 without building when it finds no dotprofile.
         foreach ($l in $d7Log.Split("`n")) { if ($l.Trim()) { LogDetail "pre-push 7 build: $($l.TrimEnd())" } }
-        StepFail "7" "deploy/ matches source" "build-deploy built nothing into the dotprofile copy -- see checks.log"
+        StepFail "7" "deploy/ matches source" "build-deploy built nothing into the dotprofile copy -- see deploy.log"
     } else {
         $d7Problems = @()
         $d7Stale = @()
@@ -244,7 +244,7 @@ if ($deploySources.Count -eq 0) {
             $d7Problems += "dotprofile deploy/ is stale ($($d7Stale -join ' ')) -- run build-deploy.sh and commit in $($script:UserRepoPath)"
         }
         if ($d7Smoke.Count -gt 0) {
-            $d7Problems += "generated deploy scripts failed a dry run: $($d7Smoke -join ' ') -- see checks.log"
+            $d7Problems += "generated deploy scripts failed a dry run: $($d7Smoke -join ' ') -- see deploy.log"
         }
         if ($d7Problems.Count -eq 0) {
             StepPass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build; resolver consumers dry-run clean"

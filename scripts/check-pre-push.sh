@@ -151,14 +151,14 @@ fs.writeFileSync(process.argv[2], JSON.stringify(c, null, 2) + "\n");
         while IFS= read -r d7_line; do
             if [ -n "$d7_line" ]; then log_detail "pre-push 7 build: $d7_line"; fi
         done <<< "$d7_out"
-        step_fail "7" "deploy/ matches source" "rebuild into a dotprofile copy failed (exit $d7_rc) -- see checks.log"
+        step_fail "7" "deploy/ matches source" "rebuild into a dotprofile copy failed (exit $d7_rc) -- see deploy.log"
     elif [ ! -d "$d7_tmp/dot/deploy" ]; then
         # The copy's committed deploy/ was removed before the build, and build-deploy
         # exits 0 without building when it finds no dotprofile.
         while IFS= read -r d7_line; do
             if [ -n "$d7_line" ]; then log_detail "pre-push 7 build: $d7_line"; fi
         done <<< "$d7_out"
-        step_fail "7" "deploy/ matches source" "build-deploy built nothing into the dotprofile copy -- see checks.log"
+        step_fail "7" "deploy/ matches source" "build-deploy built nothing into the dotprofile copy -- see deploy.log"
     else
         d7_problems=""
         # diff -rq exit codes: 0 identical, 1 differences (listed), 2 trouble.
@@ -169,7 +169,7 @@ fs.writeFileSync(process.argv[2], JSON.stringify(c, null, 2) + "\n");
             d7_problems="dotprofile deploy/ is stale (${d7_files% }) -- run build-deploy.sh and commit in $USER_REPO_PATH"
         elif [ "$d7_diff_rc" -ne 0 ]; then
             log_detail "pre-push 7 diff: $d7_diff"
-            d7_problems="could not compare deploy/ (diff exit $d7_diff_rc) -- see checks.log"
+            d7_problems="could not compare deploy/ (diff exit $d7_diff_rc) -- see deploy.log"
         fi
         # Smoke run of the fresh build's resolver consumers. Exit 0/1 is a run (1 = a
         # counted error such as this machine having no profile); 2+ is a crash or a
@@ -196,7 +196,7 @@ fs.writeFileSync(process.argv[2], JSON.stringify(c, null, 2) + "\n");
             fi
         done
         if [ -n "$d7_smoke" ]; then
-            d7_problems="${d7_problems:+$d7_problems; }generated deploy scripts failed a dry run:$d7_smoke -- see checks.log"
+            d7_problems="${d7_problems:+$d7_problems; }generated deploy scripts failed a dry run:$d7_smoke -- see deploy.log"
         fi
         if [ -z "$d7_problems" ]; then
             step_pass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build; resolver consumers dry-run clean"
