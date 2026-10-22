@@ -112,10 +112,27 @@ if (profile.version !== 2) {
 
 // --- v2 validation ---
 const issues = [];
+// config.json caches this machine's profile key (machineId: the raw machine id,
+// lower-cased -- profiles are keyed by it, re-key design (e)); machineAlias is a
+// display value, and the cache of a revision 2.1 (alias-keyed) profile.
+const machineId = config.machineId || '';
 const machineAlias = config.machineAlias || '';
 // Machine matching is the native resolver's job (scripts/aitools-profile.sh /
 // .ps1; reported by setup-user-config on every run). os.hostname() is the
-// DNS/DHCP-derived kernel name and is never used (P-Q5).
+// DNS/DHCP-derived kernel name and is never used (P-Q5). Here only the cached
+// key is checked: profiles[machineId] (keys ignore case), or a 2.1 profile keyed
+// by alias whose machine.id is machineId (legacy read).
+if (machineId && profile.profiles && typeof profile.profiles === 'object') {
+    const idl = String(machineId).toLowerCase();
+    const known = Object.keys(profile.profiles).some(k => {
+        const p = profile.profiles[k];
+        const mid = (p && p.machine && p.machine.id) ? String(p.machine.id).toLowerCase() : '';
+        return k.toLowerCase() === idl || mid === idl;
+    });
+    if (!known) {
+        issues.push({ code: 'MACHINE_ID_UNKNOWN', message: 'config.json machineId ' + machineId + ' is not a profile in profile.json', field: 'machineId', fix: 'run aitools user init' });
+    }
+}
 
 // Identity checks
 if (!profile.identity) {
@@ -147,6 +164,7 @@ output({
     status: status,
     version: 2,
     profilePath: profilePath,
+    machineId: machineId,
     machineAlias: machineAlias,
     issues: issues
 });

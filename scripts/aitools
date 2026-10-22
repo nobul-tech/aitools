@@ -103,222 +103,322 @@ check_profile() {
             ;;
         migrate)
             printf '\033[33mprofile: profile.json is v1 (legacy). Migration to v2 recommended.\033[0m\n'
-            if [ "$mode" = "interactive" ] && [ -t 0 ]; then
-                printf "Migrate profile.json to v2 now? [y/N]: "
-                read -r answer < /dev/tty
+            if [ "$mode" = "interactive" ] && ui_can_ask; then
+                local answer="" ppath=""
+                printf "Migrate profile.json to v2 now? [y/N]: " > /dev/tty
+                read_tty_choice answer "no"
                 if [[ "$answer" =~ ^[Yy] ]]; then
-                    migrate_profile_v1_to_v2 "$result"
+                    ppath=$(printf '%s' "$result" | node -e "
+                        let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
+                            try{console.log(JSON.parse(d).profilePath||'')}catch(e){console.error('profile-check output unreadable: '+e.message)}
+                        })
+                    ") || ppath=""  # unreadable output: the -n test below skips the migration (node printed why)
+                    if [ -n "$ppath" ]; then migrate_profile_v1_to_v2 "$(dirname "$ppath")"; fi
                 fi
             fi
             ;;
     esac
 }
 
-# Migrate a v1 profile.json to v2 format.
-# Usage: migrate_profile_v1_to_v2 <profile-check-json-output>
-# Prompts for machineAlias (only field not in v1). Preserves non-v1 sections
-# (e.g., cursor). Commits + pushes user repo.
-migrate_profile_v1_to_v2() {
-    local check_result="$1"
-
-    # Extract migration defaults
-    local defaults
-    defaults=$(printf '%s' "$check_result" | node -e "
-        let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
-            try{
-                const r=JSON.parse(d);
-                const m=r.migrationData||{};
-                console.log(m.name||'');
-                console.log(m.email||'');
-                console.log(m.github||'');
-                console.log(m.company||'');
-                console.log(r.profilePath||'');
-            }catch(e){console.error('migration data parse error: '+e.message)}
-        })
-    " 2>/dev/null)
-
-    local mig_name mig_email mig_github mig_company profile_path
-    mig_name=$(echo "$defaults" | sed -n '1p')
-    mig_email=$(echo "$defaults" | sed -n '2p')
-    mig_github=$(echo "$defaults" | sed -n '3p')
-    mig_company=$(echo "$defaults" | sed -n '4p')
-    profile_path=$(echo "$defaults" | sed -n '5p')
-
-    if [ -z "$profile_path" ] || [ ! -f "$profile_path" ]; then
-        printf '\033[33mprofile: cannot locate profile.json for migration\033[0m\n'
-        return 1
-    fi
-
-    local user_repo_dir
-    user_repo_dir=$(dirname "$profile_path")
-
-    # Prompt for machine alias (not in v1)
-    printf "Machine alias for this machine (e.g., laptop, workstation): "
-    read -r machine_alias < /dev/tty
-
-    if [ -z "$machine_alias" ]; then
-        log_warn "profile migration cancelled (alias required)"
-        return 1
-    fi
-
-    local shell_name
-    shell_name=$(basename "${SHELL:-/bin/bash}")
-
-    # Write v2 profile, preserving non-v1 sections
-    node -e "
-const fs = require('fs'), os = require('os');
-const profilePath = process.argv[1];
-const alias = process.argv[2];
-const migName = process.argv[3];
-const migEmail = process.argv[4];
-const migGithub = process.argv[5];
-const migCompany = process.argv[6];
-const shellName = process.argv[7];
-
-let old = {};
-try { old = JSON.parse(fs.readFileSync(profilePath, 'utf8')); } catch {}
-
-// Build v2 profile
-const v2 = {
-    version: 2,
-    identity: {
-        github: migGithub,
-        email: migEmail,
-        git: { name: migName, email: migEmail }
-    },
-    profiles: {}
-};
-
-v2.profiles[alias] = {
-    name: migName,
-    company: migCompany,
-    machine: {
-        hostname: os.hostname(),
-        os: process.platform,
-        arch: process.arch,
-        shell: shellName
-    }
-};
-
-// Preserve non-v1 sections (e.g., cursor)
-const v1Keys = ['name', 'email', 'github', 'company', 'git', 'machines', 'version'];
-for (const key of Object.keys(old)) {
-    if (!v1Keys.includes(key) && !(key in v2)) {
-        v2[key] = old[key];
-    }
-}
-
-// Handle multiple machines from v1 (add non-current ones with generated aliases)
-if (Array.isArray(old.machines)) {
-    const currentHost = os.hostname().split('.')[0];
-    let counter = 1;
-    for (const m of old.machines) {
-        const mHost = (m.hostname || '').split('.')[0];
-        if (mHost === currentHost) continue;
-        const mAlias = 'machine' + counter;
-        counter++;
-        if (!v2.profiles[mAlias]) {
-            v2.profiles[mAlias] = {
-                name: migName,
-                company: migCompany,
-                machine: m
-            };
-        }
-    }
-}
-
-fs.writeFileSync(profilePath, JSON.stringify(v2, null, 2) + '\n');
-console.log('Migrated profile.json to v2 (alias: ' + alias + ')');
-" "$profile_path" "$machine_alias" "$mig_name" "$mig_email" "$mig_github" "$mig_company" "$shell_name"
-
-    # Update machineAlias in config.json
-    node -e "
-const fs = require('fs');
-const f = process.argv[1];
-let cfg = {};
-try { cfg = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + f + ' is invalid JSON, starting with empty config'); }
-cfg.machineAlias = process.argv[2];
-fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
-" "$config" "$machine_alias"
-
-    # Commit and push user repo
-    if [ -d "$user_repo_dir/.git" ]; then
-        if [ -n "$(git -C "$user_repo_dir" status --porcelain)" ]; then
-            local git_name git_email
-            git_name=$(node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.identity.git.name||'')}catch(e){console.error('profile read error: '+e.message)}" "$profile_path" 2>/dev/null)
-            git_email=$(node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.identity.git.email||'')}catch(e){console.error('profile read error: '+e.message)}" "$profile_path" 2>/dev/null)
-            if [ -n "$git_name" ] && [ -n "$git_email" ]; then
-                git -C "$user_repo_dir" config user.name "$git_name"
-                git -C "$user_repo_dir" config user.email "$git_email"
-            fi
-            local git_out git_rc=0 git_line
-            git_out=$( { git -C "$user_repo_dir" add -A && git -C "$user_repo_dir" commit -m "Migrate profile.json from v1 to v2"; } 2>&1) || git_rc=$?
-            while IFS= read -r git_line; do
-                if [ -n "$git_line" ]; then log_detail "profile-migrate commit: $git_line"; fi
-            done <<< "$git_out"
-            if [ "$git_rc" -ne 0 ]; then
-                log_warn "profile migration commit failed (exit $git_rc) -- commit manually in $(display_path "$user_repo_dir")"
-                return 0
-            fi
-            git_rc=0
-            git_out=$(git -C "$user_repo_dir" push 2>&1) || git_rc=$?
-            while IFS= read -r git_line; do
-                if [ -n "$git_line" ]; then log_detail "profile-migrate push: $git_line"; fi
-            done <<< "$git_out"
-            if [ "$git_rc" -ne 0 ]; then
-                log_warn "profile migration push failed (exit $git_rc) -- run 'git push' manually in $(display_path "$user_repo_dir")"
-            fi
-            log_ok "Profile migrated and committed."
-        fi
-    fi
-}
-
 # ---------------------------------------------------------------------------
-# Machine registration for `aitools user init` (reference/user-repo.md
-# "Registration"). The resolver (aitools-profile, through the lib runner) decides
-# which profile this machine is; when it is not registered, the user picks one
-# (numbered aliases, [n]ew, [s]kip; identical in aitools.ps1) or passes --alias.
-# register writes profile.json via temp -> validate -> backup -> move, then only
-# profile.json is committed and pushed (N-Q2).
+# aitools user init: this machine's profile (reference/user-repo.md
+# "Registration"; re-key design S3-M3-Register-keydesign.md sections b, c, f, g;
+# PR #86 batch 5). Machine profiles are keyed by this machine's id
+# (profiles.<machine id, lower-cased>); the human-readable name is the profile's
+# alias field. The native resolver (aitools-profile) decides which profile this
+# machine is, writes only this machine's key (register, to a temp file that is
+# validated, backed up and moved here) and re-keys alias-keyed revision 2.1
+# profiles (migrate). Only profile.json is committed and pushed (N-Q2). Menus,
+# prompts, summary rows and exit codes are identical in aitools.ps1
+# (interactive-menus.md). Without a terminal, with --force or AITOOLS_FORCE=1,
+# nothing prompts: the default applies, or the step reports ERROR + ACTION.
 # ---------------------------------------------------------------------------
 
-# ui_resolve DIR -- this machine's profile in DIR/profile.json. Sets UI_ALIAS and
-# UI_VIA (none when nothing matched). --alias (user_alias) is passed as override.
-ui_resolve() {
-    local dir="$1"
-    UI_ALIAS=""; UI_VIA="none"
-    local args=(resolve --profile "$(display_path "$dir/profile.json")" --environment "$AITOOLS_ENVIRONMENT")
-    if [ -n "$user_alias" ]; then args+=(--alias "$user_alias"); fi
-    if ! _aitools_profile_run "${args[@]}"; then
-        log_error "machine profile: resolver aitools-profile not found in $(display_path "$repo_path/scripts")"
+# Decision 2 (PENDING with the commander -- S3-M3Lead plan section 2 item 2; re-key
+# design (b) step 4L): config.json's cached machineAlias names an alias-keyed
+# profile without machine.id (resolver via=alias). 0 = today's behaviour: ask on a
+# terminal (that profile suggested), ERROR + ACTION without one. 1 = claim that
+# profile for this machine without asking. Flipping the decision is this one line
+# (and $script:RegisterCachedAliasSilently in aitools.ps1).
+AITOOLS_REGISTER_CACHED_ALIAS_SILENTLY=0
+
+# ui_lc TEXT -- ASCII lower case (the resolver's rule for profile keys)
+ui_lc() { printf '%s' "$1" | tr 'A-Z' 'a-z'; }
+
+# ui_can_ask -- 0 when user init may prompt: a terminal, and neither --force nor
+# AITOOLS_FORCE=1 (interactive-menus.md "Non-interactive fallback")
+ui_can_ask() {
+    if $force || [ "${AITOOLS_FORCE:-}" = "1" ]; then return 1; fi
+    tty_interactive
+}
+
+# ui_machine_shell -- the machine.shell value (Review3 #82 minor 6): one stable
+# value per platform, so the two Windows entry points (Git Bash aitools and
+# aitools.ps1) do not rewrite it on alternate runs. Windows: pwsh, the managed
+# shell there, whichever entry point runs. macOS/Linux: the login shell ($SHELL).
+ui_machine_shell() {
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*) printf 'pwsh' ;;
+        *) basename "${SHELL:-/bin/bash}" ;;
+    esac
+}
+
+# ui_log_lines PREFIX TEXT -- each non-empty line of TEXT as a detail line
+ui_log_lines() {
+    local l
+    while IFS= read -r l; do
+        l="${l//$'\r'/}"
+        if [ -n "$l" ]; then log_detail "$1$l"; fi
+    done <<< "$2"
+}
+
+# ui_action TEXT -- one ACTION row TEXT per run (show_summary does not dedupe
+# ACTIONs). The caller's log_warn / log_error line carries the same instruction.
+ui_action() {
+    if [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && [ -f "$AITOOLS_SUMMARY_FILE" ] \
+        && grep -qxF -- "ACTION||$1" "$AITOOLS_SUMMARY_FILE"; then
+        log_detail "ACTION already in the run summary: $1"
         return 0
     fi
-    UI_ALIAS=$(_profile_tag alias)
-    UI_VIA=$(_profile_tag via)
-    if [ -z "$UI_ALIAS" ]; then UI_VIA="none"; fi
-    local e
-    while IFS= read -r e; do if [ -n "$e" ]; then log_detail "machine profile: $e"; fi; done <<< "$(_profile_lines error)"
-    log "machine profile: alias=${UI_ALIAS:-none} via=$UI_VIA"
+    write_summary ACTION "" "$1"
 }
 
-# ui_choose DIR SUGGESTED -- ask which profile this machine is. Sets machine_alias
-# (empty on skip). Returns 0 chosen, 1 skipped or not possible (logged).
-ui_choose() {
-    local dir="$1" suggested="$2" aliases=() a i choice keys
-    machine_alias=""
-    keys=$(perl "$repo_path/scripts/aitools-json.pl" keys "$dir/profile.json" profiles) || keys=""  # unreadable = no aliases (checked below)
-    while IFS= read -r a; do if [ -n "$a" ]; then aliases+=("$a"); fi; done <<< "$keys"
-    if [ "${AITOOLS_FORCE:-}" = "1" ] || ! tty_interactive; then
-        log_error "No registered machine profile for this machine and no terminal to ask -- run 'aitools user init' interactively, or 'aitools user init --alias <alias>'"
-        write_summary ERROR "machine profile" "not registered"
-        write_summary ACTION "" "Run: aitools user init --alias <alias>"
+# ui_rm_tmp FILE -- remove a temp file; a failure is a warning, never silent
+ui_rm_tmp() {
+    if [ -e "$1" ] && ! rm -f "$1"; then log_warn "could not remove $(display_path "$1")"; fi
+    return 0
+}
+
+# ui_profile_run ARGS... -- run the resolver: aitools-profile.sh, or under Git
+# Bash on Windows aitools-profile.ps1 through pwsh (the .sh refuses to run
+# there). Sets UI_PROF_OUT (key<TAB>value lines, CR stripped) and UI_PROF_RC (the
+# resolver's exit code: 0 ok, 1 nothing found, 2 error, 3 refused, 4 alias in
+# use). Its own log lines (stderr) become detail lines. Returns 1 when no
+# resolver is found (UI_PROF_RC=2 with an error line), else 0.
+# Not the lib runner (_aitlib_profile_run): that one reads an exit 0/1 without a
+# "via" line as a resolver crash, and register and migrate print no "via" line.
+# UNVERIFIED on Windows: the pwsh branch (cygpath path arguments, UTF-8 output).
+ui_profile_run() {
+    local sd="$repo_path/scripts" errf="" a w prev="" args=()
+    UI_PROF_OUT=""; UI_PROF_RC=0
+    if ! errf="$(mktemp)"; then
+        errf=""
+        log_warn "aitools-profile: mktemp failed -- the resolver's own log lines are not captured"
+    fi
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            if [ ! -f "$sd/aitools-profile.ps1" ] || ! command -v pwsh >/dev/null 2>&1; then
+                if [ -n "$errf" ]; then rm -f "$errf"; fi
+                UI_PROF_RC=2; UI_PROF_OUT="error"$'\t'"resolver aitools-profile.ps1 or pwsh not found ($(display_path "$sd"))"
+                return 1
+            fi
+            for a in "$@"; do
+                case "$prev" in
+                    --profile|--out|--config)
+                        if w="$(cygpath -w "$a")"; then a="$w"; else log_detail "aitools-profile: cygpath -w failed for $a -- passed unchanged"; fi ;;
+                esac
+                args+=("$a"); prev="$a"
+            done
+            UI_PROF_OUT=$(pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$(cygpath -w "$sd/aitools-profile.ps1")" \
+                ${args[@]+"${args[@]}"} 2>"${errf:-/dev/null}") || UI_PROF_RC=$?
+            UI_PROF_OUT="${UI_PROF_OUT//$'\r'/}" ;;
+        *)
+            if [ ! -f "$sd/aitools-profile.sh" ]; then
+                if [ -n "$errf" ]; then rm -f "$errf"; fi
+                UI_PROF_RC=2; UI_PROF_OUT="error"$'\t'"resolver aitools-profile.sh not found ($(display_path "$sd"))"
+                return 1
+            fi
+            # The resolver runs under this bash (macOS /bin/bash 3.2 stays 3.2)
+            UI_PROF_OUT=$("${BASH:-bash}" "$sd/aitools-profile.sh" "$@" 2>"${errf:-/dev/null}") || UI_PROF_RC=$? ;;
+    esac
+    if [ -n "$errf" ]; then
+        ui_log_lines "aitools-profile $1: " "$(cat "$errf")"
+        rm -f "$errf"
+    fi
+    return 0
+}
+
+# ui_tag KEY -- the value of the first KEY line of the last resolver call
+ui_tag() {
+    local k v
+    while IFS=$'\t' read -r k v; do
+        if [ "$k" = "$1" ]; then printf '%s' "$v"; return 0; fi
+    done <<< "$UI_PROF_OUT"
+    return 0
+}
+# ui_lines KIND -- every warn or error value of the last resolver call, one per line
+ui_lines() {
+    local k v
+    while IFS=$'\t' read -r k v; do
+        if [ "$k" = "$1" ]; then printf '%s\n' "$v"; fi
+    done <<< "$UI_PROF_OUT"
+    return 0
+}
+# ui_first_error -- the first error line of the last resolver call ("" when none)
+ui_first_error() { ui_lines error | perl -ne 'print, exit if /\S/'; }
+
+# ui_handled MSG -- 0 when MSG is a resolver warning or error that user init
+# resolves itself (it registers, claims, re-keys or refreshes the profile); those
+# are logged at info, every other one at its own level (the resolver's
+# library-style contract: it returns diagnostics, the caller logs them -- re-key
+# design (j) finding 1, Review3 #82 M2)
+ui_handled() {
+    case "$1" in
+        *"keyed by alias -- run: aitools-profile migrate"*|*"has no machine.id -- run: aitools user init"*) return 0 ;;
+        *"has no machine.id -- left as is"*|*"matched by hostname only"*|*"no profile matches this machine"*) return 0 ;;
+        *"profile.json has no machine profiles"*|*"was registered with hostname"*) return 0 ;;
+    esac
+    return 1
+}
+
+# ui_relay_warnings -- log the last resolver call's warn lines (handled: info)
+ui_relay_warnings() {
+    local w
+    while IFS= read -r w; do
+        if [ -z "$w" ]; then continue; fi
+        if ui_handled "$w"; then log "machine profile: $w (user init handles this)"
+        else log_warn "machine profile: $w"; fi
+    done <<< "$(ui_lines warn)"
+}
+
+# ui_push_action DIR -- the ACTION for a commit or push the resolver reported as
+# failed (its warning, logged by ui_relay_warnings, says why)
+ui_push_action() {
+    local d
+    d=$(display_path "$1")
+    if [ "$(ui_tag committed)" != "true" ]; then ui_action "commit and push profile.json in $d"
+    elif grep -q "pull --rebase" <<< "$(ui_lines warn)"; then ui_action "git pull --rebase, then git push in $d"
+    else ui_action "run git push in $d"; fi
+}
+
+# ui_push DIR -- push DIR. Without a terminal git may not prompt
+# (GIT_TERMINAL_PROMPT=0; ssh BatchMode unless GIT_SSH_COMMAND is set). A push the
+# remote rejected (it has newer commits) is told to pull --rebase first (Review3
+# #82 minor 4). Returns 0 pushed, 1 not pushed (log_warn + ACTION).
+ui_push() {
+    local dir="$1" out rc=0 d
+    d=$(display_path "$dir")
+    if ui_can_ask; then
+        out=$(git -C "$dir" push 2>&1) || rc=$?
+    else
+        out=$(GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}" git -C "$dir" push 2>&1) || rc=$?
+    fi
+    ui_log_lines "git push: " "$out"
+    if [ "$rc" -eq 0 ]; then return 0; fi
+    case "$out" in
+        *rejected*|*non-fast-forward*|*"fetch first"*)
+            log_warn "dotprofile push rejected (exit $rc): the remote has newer commits -- run git pull --rebase, then git push in $d"
+            ui_action "git pull --rebase, then git push in $d" ;;
+        *)
+            log_warn "dotprofile push failed (exit $rc) -- run git push in $d"
+            ui_action "run git push in $d" ;;
+    esac
+    return 1
+}
+
+# ui_commit DIR MESSAGE FILE... -- commit only FILE... in DIR, then push (N-Q2).
+# No git identity on this machine yet: commits as the profile's identity.git (the
+# person the dotprofile belongs to). Returns 0 committed and pushed, 1 commit
+# failed, 2 committed but not pushed; each failure is a log_warn + one ACTION.
+ui_commit() {
+    local dir="$1" msg="$2"; shift 2
+    local out rc=0 who=() gname="" gmail="" cur_name="" cur_mail="" d
+    d=$(display_path "$dir")
+    cur_name=$(git -C "$dir" config user.name) || cur_name=""  # unset = exit 1; handled by the -z test
+    cur_mail=$(git -C "$dir" config user.email) || cur_mail=""  # unset = exit 1; handled by the -z test
+    if { [ -z "$cur_name" ] || [ -z "$cur_mail" ]; } && [ -f "$dir/profile.json" ]; then
+        gname=$(perl "$repo_path/scripts/aitools-json.pl" get "$dir/profile.json" identity git name) || gname=""  # absent: git reports the missing identity below
+        gmail=$(perl "$repo_path/scripts/aitools-json.pl" get "$dir/profile.json" identity git email) || gmail=""  # absent: git reports the missing identity below
+        if [ -n "$gname" ] && [ -n "$gmail" ]; then who=(-c "user.name=$gname" -c "user.email=$gmail"); fi
+    fi
+    out=$(git -C "$dir" add -- "$@" 2>&1) || rc=$?
+    if [ "$rc" -eq 0 ]; then out=$(git -C "$dir" ${who[@]+"${who[@]}"} commit -m "$msg" -- "$@" 2>&1) || rc=$?; fi
+    ui_log_lines "git commit: " "$out"
+    if [ "$rc" -ne 0 ]; then
+        log_warn "dotprofile commit failed (exit $rc) -- commit and push $* in $d by hand"
+        ui_action "commit and push $* in $d"
         return 1
     fi
+    if ! ui_push "$dir"; then return 2; fi
+    log_ok "machine profile: $* committed and pushed ($msg)"
+    return 0
+}
+
+# ui_profile_dirty DIR -- 0 when DIR/profile.json is tracked and has uncommitted
+# changes (Review3 #82 minor 5: a hand edit must not be committed under this
+# run's message); 1 when clean, untracked, or DIR is not a git repository
+ui_profile_dirty() {
+    local dir="$1" rc=0
+    git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1  # not a repository: nothing is committed there
+    git -C "$dir" ls-files --error-unmatch -- profile.json >/dev/null 2>&1 || return 1  # untracked: no committed version to protect
+    git -C "$dir" diff --quiet -- profile.json || rc=$?
+    if [ "$rc" -eq 0 ]; then git -C "$dir" diff --cached --quiet -- profile.json || rc=$?; fi
+    [ "$rc" -ne 0 ]
+}
+
+# ui_entries PF THIS_ID -- the profiles in PF, in file order: UI_E_KEY,
+# UI_E_ALIAS (alias field, else the key) and UI_E_OWNER (this | other |
+# unregistered: whose profile it is, by machine.id / machine.environment -- the
+# resolver's owner rule)
+ui_entries() {
+    local pf="$1" js="$repo_path/scripts/aitools-json.pl" tid keys k kl t al mid menv owner
+    UI_E_KEY=(); UI_E_ALIAS=(); UI_E_OWNER=()
+    tid=$(ui_lc "$2")
+    keys=$(perl "$js" keys "$pf" profiles) || keys=""  # no profiles object = no entries (the resolver reported why)
+    while IFS= read -r k; do
+        if [ -z "$k" ]; then continue; fi
+        t=$(perl "$js" type "$pf" profiles "$k") || t=""  # null = not a profile
+        if [ "$t" != "object" ]; then continue; fi
+        al=$(perl "$js" get "$pf" profiles "$k" alias) || al=""  # absent: the key is the name
+        mid=$(perl "$js" get "$pf" profiles "$k" machine id) || mid=""  # absent: no machine registered it
+        menv=$(perl "$js" get "$pf" profiles "$k" machine environment) || menv=""  # absent: not an environment profile
+        kl=$(ui_lc "$k")
+        case "$kl" in
+            environment:*) if [ "$kl" = "environment:$AITOOLS_ENVIRONMENT" ]; then owner=this; else owner=other; fi ;;
+            *)
+                if [ -n "$menv" ]; then
+                    if [ "$menv" = "$AITOOLS_ENVIRONMENT" ]; then owner=this; else owner=other; fi
+                elif [ -z "$mid" ]; then
+                    if [ -n "$tid" ] && [ "$kl" = "$tid" ]; then owner=this; else owner=unregistered; fi
+                elif [ -n "$tid" ] && [ "$(ui_lc "$mid")" = "$tid" ]; then owner=this
+                else owner=other; fi ;;
+        esac
+        UI_E_KEY+=("$k"); UI_E_ALIAS+=("${al:-$k}"); UI_E_OWNER+=("$owner")
+    done <<< "$keys"
+}
+
+# ui_choose PF SUGGESTED_KEY THIS_ID -- ask which profile this machine is. Every
+# profile is listed in file order: one that belongs to no machine is numbered
+# (picking it claims it: register --claim KEY, Resolver Q2); one registered to
+# another machine is shown as "[-] ... (registered to another machine)" and cannot
+# be picked; the profile the resolver suggests (cached alias, hostname match) is
+# marked "(suggested)". Sets UI_CHOICE_KIND (claim | new) and UI_CHOICE (the key to
+# claim, or the new alias). Returns 0 chosen; 1 no terminal to ask (log_error +
+# ERROR row + ACTION); 2 skipped at the prompt (log_warn; the caller writes the row).
+ui_choose() {
+    local pf="$1" sug="$2" i n=0 nums=() label choice
+    UI_CHOICE_KIND=""; UI_CHOICE=""
+    if ! ui_can_ask; then
+        log_error "machine profile: this machine has no profile and there is no terminal to ask -- run: aitools user init --alias <name> (or aitools user init on a terminal)"
+        write_summary ERROR "machine profile" "not registered (no terminal)"
+        ui_action "Run: aitools user init --alias <name> (or on a terminal)"
+        return 1
+    fi
+    ui_entries "$pf" "$3"
     printf 'Which profile is this machine?\n' > /dev/tty
-    i=1
-    for a in ${aliases[@]+"${aliases[@]}"}; do
-        if [ "$a" = "$suggested" ]; then printf '  [%d] %s (suggested)\n' "$i" "$a" > /dev/tty
-        else printf '  [%d] %s\n' "$i" "$a" > /dev/tty; fi
+    i=0
+    while [ "$i" -lt "${#UI_E_KEY[@]}" ]; do
+        label="${UI_E_ALIAS[i]}"
+        case "${UI_E_OWNER[i]}" in
+            unregistered)
+                n=$((n + 1)); nums+=("$i")
+                if [ "${UI_E_KEY[i]}" = "$sug" ]; then label="$label (suggested)"; fi
+                printf '  [%d] %s\n' "$n" "$label" > /dev/tty ;;
+            other)
+                if [ "${UI_E_KEY[i]}" = "$sug" ]; then label="$label (suggested, registered to another machine)"
+                else label="$label (registered to another machine)"; fi
+                printf '  [-] %s\n' "$label" > /dev/tty ;;
+        esac
         i=$((i + 1))
     done
     printf '  [n] new profile for this machine\n  [s] skip\nChoice: ' > /dev/tty
@@ -326,123 +426,612 @@ ui_choose() {
     case "$choice" in
         [sS]|"")
             log_warn "machine profile: registration skipped -- deploys will report no machine match"
-            return 1 ;;
+            return 2 ;;
         [nN])
             printf 'New alias (e.g., laptop, workstation): ' > /dev/tty
-            read_tty_choice machine_alias "skip"
-            if [ -z "$machine_alias" ]; then log_warn "machine profile: no alias entered -- registration skipped"; return 1; fi ;;
+            read_tty_choice UI_CHOICE "skip"
+            if [ -z "$UI_CHOICE" ]; then
+                log_warn "machine profile: no alias entered -- registration skipped"
+                return 2
+            fi
+            UI_CHOICE_KIND=new ;;
         *)
-            if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#aliases[@]}" ]; then
-                machine_alias="${aliases[$((choice - 1))]}"
+            if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "$n" ]; then
+                UI_CHOICE="${UI_E_KEY[${nums[$((choice - 1))]}]}"; UI_CHOICE_KIND=claim
             else
-                log_warn "machine profile: invalid choice '$choice' -- registration skipped"; return 1
+                log_warn "machine profile: invalid choice '$choice' -- registration skipped"
+                return 2
             fi ;;
     esac
     return 0
 }
 
-# ui_commit DIR MESSAGE -- commit only profile.json and push (N-Q2); failures warn
-ui_commit() {
-    local dir="$1" msg="$2" out rc=0 who=() gname gmail cur_name cur_mail
-    # No git identity on this machine yet: commit as the profile's identity.git
-    cur_name=$(git -C "$dir" config user.name) || cur_name=""  # unset = exit 1; handled by the -z test
-    cur_mail=$(git -C "$dir" config user.email) || cur_mail=""  # unset = exit 1; handled by the -z test
-    if [ -z "$cur_name" ] || [ -z "$cur_mail" ]; then
-        gname=$(perl "$repo_path/scripts/aitools-json.pl" get "$dir/profile.json" identity git name) || gname=""  # absent = git's own error below
-        gmail=$(perl "$repo_path/scripts/aitools-json.pl" get "$dir/profile.json" identity git email) || gmail=""  # absent = git's own error below
-        if [ -n "$gname" ] && [ -n "$gmail" ]; then who=(-c "user.name=$gname" -c "user.email=$gmail"); fi
-    fi
-    out=$(git -C "$dir" add -- profile.json 2>&1) || rc=$?
-    if [ "$rc" -eq 0 ]; then out=$(git -C "$dir" ${who[@]+"${who[@]}"} commit -m "$msg" -- profile.json 2>&1) || rc=$?; fi
-    if [ "$rc" -ne 0 ]; then
-        log_detail "git: $out"
-        log_warn "machine profile: dotprofile commit failed (exit $rc) -- commit profile.json in $(display_path "$dir") by hand"
-        write_summary ACTION "" "commit and push profile.json in $(display_path "$dir")"
-        return 0
-    fi
-    rc=0
-    out=$(GIT_TERMINAL_PROMPT=0 git -C "$dir" push 2>&1) || rc=$?
-    if [ "$rc" -ne 0 ]; then
-        log_detail "git push: $out"
-        log_warn "machine profile: push failed (exit $rc) -- run git push in $(display_path "$dir")"
-        write_summary ACTION "" "run git push in $(display_path "$dir")"
-        return 0
-    fi
-    log_ok "machine profile: profile.json committed and pushed"
+# ui_ask_name_company ALIAS -- on a terminal, a new profile's display name and
+# company (Enter = the identity's). Sets UI_NAME, UI_COMPANY ("" = identity's).
+ui_ask_name_company() {
+    UI_NAME=""; UI_COMPANY=""
+    if ! ui_can_ask; then return 0; fi
+    printf 'Display name for %s (Enter = identity name): ' "$1" > /dev/tty
+    read_tty_choice UI_NAME "identity name"
+    printf 'Company for %s (Enter = identity company): ' "$1" > /dev/tty
+    read_tty_choice UI_COMPANY "identity company"
 }
 
-# ui_register DIR ALIAS NAME COMPANY EMAIL COMMIT -- register this machine under
-# ALIAS (creating profile.json when missing). COMMIT=true commits and pushes.
-# Returns 0 registered or already registered, 1 failed (logged + ERROR row).
+# ui_register DIR MODE VALUE COMMIT [NAME COMPANY EMAIL] -- register this machine
+# in DIR/profile.json (created when missing: --create with NAME, COMPANY, EMAIL
+# and the GitHub user). MODE: refresh (this machine's profile; VALUE "" keeps its
+# alias), alias (VALUE = the alias: a new profile, or this machine's renamed; ""
+# = the short hostname), claim (VALUE = the key of a profile no machine owns).
+# Resolver exit 4 (the alias is used by another profile; decision 1): a profile
+# that belongs to no machine is claimed instead (the explicit alias names it);
+# another machine's needs a confirm on a terminal, then --allow-duplicate-alias
+# (that profile is never rewritten); without a terminal it is refused.
+# COMMIT=true commits and pushes profile.json. Sets UI_KEY, UI_ALIAS, UI_OWNER.
+# Writes the "machine profile" row. Returns 0 registered or verified, 1 failed
+# (log_error + ERROR row), 2 skipped at the confirm (log_warn + WARN row).
 ui_register() {
-    local dir="$1" alias="$2" name="$3" company="$4" email="$5" commit="$6" pf tmp result e
-    pf="$dir/profile.json"; tmp="$pf.tmp.$$"
-    local args=(register --profile "$(display_path "$pf")" --alias "$alias" --out "$(display_path "$tmp")"
-        --shell "$(basename "${SHELL:-/bin/bash}")" --environment "$AITOOLS_ENVIRONMENT")
-    if [ -n "$name" ]; then args+=(--name "$name"); fi
-    if [ -n "$company" ]; then args+=(--company "$company"); fi
-    if [ ! -f "$pf" ]; then args+=(--create --github-user "$gh_user" --email "$email"); fi
-    if ! _aitools_profile_run "${args[@]}"; then
-        log_error "machine profile: resolver aitools-profile not found in $(display_path "$repo_path/scripts")"
-        write_summary ERROR "machine profile" "resolver missing"
+    local dir="$1" mode="$2" value="$3" commit="$4" name="${5:-}" company="${6:-}" email="${7:-}"
+    local pf="$1/profile.json" tmp extra=() tries=0 rc result owner okey e ans claimed js="$repo_path/scripts/aitools-json.pl"
+    tmp="$pf.tmp.$$"
+    if [ "$mode" = "claim" ]; then extra=(--claim "$value")
+    elif [ -n "$value" ]; then extra=(--alias "$value"); fi
+    while :; do
+        tries=$((tries + 1))
+        local args=(register --profile "$pf" --out "$tmp" --shell "$(ui_machine_shell)" --environment "$AITOOLS_ENVIRONMENT")
+        if [ -n "$name" ]; then args+=(--name "$name"); fi
+        if [ -n "$company" ]; then args+=(--company "$company"); fi
+        if [ ! -f "$pf" ]; then args+=(--create --github-user "$gh_user" --email "$email"); fi
+        ui_profile_run "${args[@]}" ${extra[@]+"${extra[@]}"}
+        rc=$UI_PROF_RC
+        ui_relay_warnings
+        if [ "$rc" -ne 4 ] || [ "$mode" = "claim" ] || [ "$tries" -ge 3 ]; then break; fi
+        ui_rm_tmp "$tmp"
+        owner=$(ui_tag owner); okey=$(ui_tag ownerKey)
+        if [ "$owner" = "unregistered" ] && [ -n "$okey" ]; then
+            log "machine profile: alias \"$value\" names profile $okey, which belongs to no machine -- claiming it for this machine"
+            extra+=(--claim "$okey"); mode=claim
+            continue
+        fi
+        if ! ui_can_ask; then
+            log_error "machine profile: alias \"$value\" is used by another machine's profile ($okey) -- not registered without a confirm on a terminal; run: aitools user init --alias <another name>"
+            write_summary ERROR "machine profile" "alias used by another machine"
+            ui_action "Run: aitools user init --alias <another name> (or confirm on a terminal)"
+            return 1
+        fi
+        printf 'Alias "%s" is used by another machine'\''s profile (%s). Use it for this machine too? [y/N]: ' "$value" "$okey" > /dev/tty
+        read_tty_choice ans "no"
+        case "$ans" in
+            [yY]*)
+                log "machine profile: alias \"$value\" shared with profile $okey (confirmed at the prompt)"
+                extra+=(--allow-duplicate-alias) ;;
+            *)
+                log_warn "machine profile: alias \"$value\" is used by another machine's profile ($okey) -- registration skipped"
+                write_summary WARN "machine profile" "skipped"
+                return 2 ;;
+        esac
+    done
+    if [ "$rc" -ne 0 ]; then
+        ui_rm_tmp "$tmp"
+        e=$(ui_first_error)
+        if [ "$rc" -eq 3 ] || [ "$rc" -eq 4 ]; then
+            log_error "machine profile: registration refused (resolver exit $rc): ${e:-see deploy.log}"
+            write_summary ERROR "machine profile" "registration refused"
+        else
+            log_error "machine profile: register failed (resolver exit $rc): ${e:-see deploy.log}"
+            write_summary ERROR "machine profile" "register failed"
+        fi
+        ui_action "see deploy.log -- fix profile.json, then run: aitools user init"
         return 1
     fi
-    if [ "$PROFILE_RC" -ne 0 ]; then
-        rm -f "$tmp"
-        e=$(_profile_lines error | perl -ne 'print, exit if /\S/')
-        log_error "machine profile: register '$alias' failed (exit $PROFILE_RC): ${e:-see deploy.log}"
-        write_summary ERROR "machine profile" "register failed"
-        return 1
-    fi
-    result=$(_profile_tag result)
+    result=$(ui_tag result); UI_KEY=$(ui_tag key); UI_ALIAS=$(ui_tag alias); UI_OWNER=$(ui_tag owner); claimed=$(ui_tag claimed)
     if [ "$result" = "unchanged" ]; then
-        rm -f "$tmp"
-        log_ok "machine profile: '$alias' is already registered to this machine"
+        ui_rm_tmp "$tmp"
+        log_ok "machine profile: this machine is '$UI_ALIAS' (profile $UI_KEY, verified)"
+        write_summary OK "machine profile" "verified ($UI_ALIAS)"
         return 0
     fi
-    if ! perl "$repo_path/scripts/aitools-json.pl" check "$tmp"; then
-        rm -f "$tmp"
-        log_error "machine profile: register '$alias' wrote an invalid file -- profile.json left untouched"
+    if ! e=$(perl "$js" check "$tmp" 2>&1); then
+        ui_rm_tmp "$tmp"
+        log_error "machine profile: register wrote an invalid file ($e) -- profile.json left untouched"
         write_summary ERROR "machine profile" "register validation failed"
         return 1
     fi
     backup_file "$pf"
     if ! mv "$tmp" "$pf"; then
-        rm -f "$tmp"
+        ui_rm_tmp "$tmp"
         log_error "machine profile: could not replace $(display_path "$pf")"
         write_summary ERROR "machine profile" "write failed"
         return 1
     fi
-    log_ok "machine profile: registered this machine as '$alias' ($result, id $(_profile_tag machineId))"
-    if [ "$commit" = "true" ] && [ -d "$dir/.git" ]; then ui_commit "$dir" "Register machine profile: $alias"; fi
+    log_ok "machine profile: registered this machine as '$UI_ALIAS' ($result, profile $UI_KEY${claimed:+, claimed from $claimed})"
+    if [ "$commit" = "true" ] && [ -d "$dir/.git" ]; then
+        ui_commit "$dir" "Register machine profile: $UI_ALIAS" profile.json  # failures: log_warn + ACTION inside
+    fi
+    write_summary OK "machine profile" "$result ($UI_ALIAS)"
     return 0
 }
 
-# ui_register_flow DIR COMMIT -- resolve, ask when not registered, register
-ui_register_flow() {
-    local dir="$1" commit="$2" name="" company=""
-    ui_resolve "$dir"
-    case "$UI_VIA" in
-        id|environment)
-            machine_alias="$UI_ALIAS"
-            log_ok "machine profile: this machine is '$machine_alias' (via $UI_VIA)"
-            # Refresh machine facts (shell, os, arch) without changing the match
-            ui_register "$dir" "$machine_alias" "" "" "" "$commit" || true  # failure logged + summarized inside
-            return 0 ;;
-        override)
-            machine_alias="$UI_ALIAS" ;;
-        *)
-            if ! ui_choose "$dir" "$UI_ALIAS"; then machine_alias=""; return 0; fi ;;
-    esac
-    if tty_interactive && [ "${AITOOLS_FORCE:-}" != "1" ] \
-        && [ -z "$(perl "$repo_path/scripts/aitools-json.pl" type "$dir/profile.json" profiles "$machine_alias" || true)" ]; then  # absent alias = a new profile (result checked: empty)
-        printf 'Display name for %s (Enter = identity name): ' "$machine_alias" > /dev/tty
-        read_tty_choice name "identity name"
-        printf 'Company for %s (Enter = identity company): ' "$machine_alias" > /dev/tty
-        read_tty_choice company "identity company"
+# ui_migrate DIR -- re-key alias-keyed (revision 2.1) profiles by machine id
+# (resolver migrate: temp, validate, backup, move, commit profile.json, push --
+# design (f); clears setup-user-config's "re-keys machine profiles" ACTION). Row
+# "profile keys": OK when it re-keyed, ERROR when it failed. Returns 0, 1 failed.
+ui_migrate() {
+    local dir="$1" rc e
+    ui_profile_run migrate --profile "$dir/profile.json"
+    rc=$UI_PROF_RC
+    ui_relay_warnings
+    if [ "$rc" -ne 0 ]; then
+        while IFS= read -r e; do if [ -n "$e" ]; then log_error "machine profile: re-key failed: $e"; fi; done <<< "$(ui_lines error)"
+        if [ -z "$(ui_first_error)" ]; then log_error "machine profile: re-key failed (resolver exit $rc)"; fi
+        write_summary ERROR "profile keys" "re-key failed"
+        ui_action "see deploy.log -- fix profile.json, then run: aitools user init"
+        return 1
     fi
-    ui_register "$dir" "$machine_alias" "$name" "$company" "" "$commit" || machine_alias=""  # failure logged + summarized inside
+    case "$(ui_tag result)" in
+        migrated)
+            log_ok "machine profile: profiles re-keyed by machine id: $(ui_tag renamed)"
+            if [ "$(ui_tag pushed)" != "true" ]; then ui_push_action "$dir"; fi
+            write_summary OK "profile keys" "re-keyed by machine id" ;;
+        *) log_detail "machine profile: re-key: $(ui_tag result) (every profile is keyed by machine id)" ;;
+    esac
     return 0
+}
+
+# ui_resolve DIR -- which profile this machine is. No override is passed: --alias
+# goes to register, which creates a new profile (Review3 #82 M1). Sets UI_VIA,
+# UI_KEY, UI_ALIAS, UI_OWNER, UI_THIS_ID. Returns 0, or 1 on a resolver error user
+# init cannot resolve (log_error + ERROR row + ACTION).
+ui_resolve() {
+    local dir="$1" e real=false
+    ui_profile_run resolve --profile "$dir/profile.json" --environment "$AITOOLS_ENVIRONMENT"
+    UI_VIA=$(ui_tag via); UI_KEY=$(ui_tag key); UI_ALIAS=$(ui_tag alias); UI_OWNER=$(ui_tag owner); UI_THIS_ID=$(ui_tag machineId)
+    if [ -z "$UI_KEY" ]; then UI_VIA=none; fi
+    ui_relay_warnings
+    log "machine profile: alias=${UI_ALIAS:-none} via=$UI_VIA key=${UI_KEY:-none} owner=${UI_OWNER:-absent}"
+    if [ "$UI_PROF_RC" -eq 0 ]; then return 0; fi
+    while IFS= read -r e; do
+        if [ -z "$e" ]; then continue; fi
+        if ui_handled "$e"; then log "machine profile: $e (user init handles this)"
+        else log_error "machine profile: $e"; real=true; fi
+    done <<< "$(ui_lines error)"
+    if [ -z "$(ui_first_error)" ]; then log_error "machine profile: resolver failed (exit $UI_PROF_RC)"; real=true; fi
+    if ! $real; then return 0; fi
+    write_summary ERROR "machine profile" "resolver error"
+    ui_action "see deploy.log -- fix profile.json, then run: aitools user init"
+    return 1
+}
+
+# ui_identity DIR -- identity for a new profile.json: name and email from git
+# (DIR's config, else the global one; the name falls back to the login name),
+# company empty; each asked on a terminal with that default. Sets UI_ID_NAME,
+# UI_ID_EMAIL, UI_ID_COMPANY.
+ui_identity() {
+    local dir="$1" v=""
+    UI_ID_NAME=$(git -C "$dir" config user.name 2>/dev/null) || UI_ID_NAME=""  # unset (exit 1) or no repo yet: the fallback below
+    if [ -z "$UI_ID_NAME" ]; then UI_ID_NAME=$(whoami) || UI_ID_NAME=""; fi
+    UI_ID_EMAIL=$(git -C "$dir" config user.email 2>/dev/null) || UI_ID_EMAIL=""  # unset or no repo yet: asked below, else empty
+    UI_ID_COMPANY=""
+    if ! ui_can_ask; then return 0; fi
+    printf 'Display name [%s]: ' "$UI_ID_NAME" > /dev/tty
+    read_tty_choice v "$UI_ID_NAME"; if [ -n "$v" ]; then UI_ID_NAME="$v"; fi
+    printf 'Email [%s]: ' "$UI_ID_EMAIL" > /dev/tty
+    v=""; read_tty_choice v "${UI_ID_EMAIL:-none}"; if [ -n "$v" ]; then UI_ID_EMAIL="$v"; fi
+    printf 'Company: ' > /dev/tty
+    read_tty_choice UI_ID_COMPANY "none"
+}
+
+# ui_scaffold DIR COMMIT -- decision 6: DIR has no profile.json. It is created
+# (register --create) with the identity (GitHub user; name and email from git,
+# asked on a terminal) and this machine's profile under its id (alias: --alias,
+# else asked on a terminal, else the short hostname); COMMIT=true commits and
+# pushes it. Returns ui_register's code.
+# TODO(PR #96): profile.json meta.intent is protected text pending approval -- the
+# scaffold writes no meta.intent until it is approved (S3-M3Lead, 2026-10-22).
+ui_scaffold() {
+    local dir="$1" commit="$2" alias="$user_alias"
+    log "machine profile: no profile.json in $(display_path "$dir") -- creating it (identity + this machine's profile)"
+    ui_identity "$dir"
+    if [ -z "$alias" ] && ui_can_ask; then
+        printf 'Alias for this machine (Enter = hostname): ' > /dev/tty
+        read_tty_choice alias "the hostname"
+    fi
+    ui_register "$dir" alias "$alias" "$commit" "$UI_ID_NAME" "$UI_ID_COMPANY" "$UI_ID_EMAIL"
+}
+
+# ui_register_flow DIR COMMIT -- register this machine in DIR (decisions 1, 2, 5,
+# 6): scaffold a missing profile.json; refuse to write over uncommitted edits of
+# profile.json; re-key legacy profiles; resolve; then register (--alias /
+# AITOOLS_MACHINE_ALIAS, a refresh of this machine's profile, decision 2's cached
+# alias, or the menu). Sets machine_key, machine_alias, machine_owner ("" when not
+# registered). Returns 0 registered, verified or skipped by the user (WARN row),
+# 1 not registered (ERROR row).
+ui_register_flow() {
+    local dir="$1" commit="$2" want="$user_alias" rc=0 sug="" d
+    machine_key=""; machine_alias=""; machine_owner=""
+    d=$(display_path "$dir")
+    if [ ! -f "$dir/profile.json" ]; then
+        ui_scaffold "$dir" "$commit"; rc=$?
+    elif ui_profile_dirty "$dir"; then
+        ui_resolve "$dir" || return 1
+        if [ "$UI_OWNER" = "this" ] && { [ "$UI_VIA" = "id" ] || [ "$UI_VIA" = "environment" ]; }; then
+            machine_key="$UI_KEY"; machine_alias="$UI_ALIAS"; machine_owner=this
+            log_warn "machine profile: profile.json in $d has uncommitted changes -- this machine's profile ('$UI_ALIAS') was not refreshed; commit or discard them, then run: aitools user init"
+            write_summary WARN "machine profile" "not refreshed (local edits)"
+            ui_action "commit or discard the changes to profile.json in $d, then run: aitools user init"
+            return 0
+        fi
+        log_error "machine profile: profile.json in $d has uncommitted changes -- not registered (they would be committed with it); commit or discard them, then run: aitools user init"
+        write_summary ERROR "machine profile" "not registered (local edits)"
+        ui_action "commit or discard the changes to profile.json in $d, then run: aitools user init"
+        return 1
+    else
+        ui_migrate "$dir"  # failure: logged + ERROR row; resolution still reads legacy profiles
+        ui_resolve "$dir" || return 1
+        # AITOOLS_MACHINE_ALIAS (resolver via=override) is an explicit choice, as --alias is
+        if [ -z "$want" ] && [ "$UI_VIA" = "override" ]; then want="$UI_ALIAS"; fi
+        if [ -n "$want" ]; then
+            if [ "$UI_OWNER" != "this" ]; then ui_ask_name_company "$want"; else UI_NAME=""; UI_COMPANY=""; fi
+            ui_register "$dir" alias "$want" "$commit" "$UI_NAME" "$UI_COMPANY" ""; rc=$?
+        else
+            case "$UI_VIA" in
+                id|environment)
+                    # Refresh the machine facts (hostname, os, arch, shell) of this machine's profile
+                    ui_register "$dir" refresh "" "$commit"; rc=$? ;;
+                config)
+                    # This machine's id cannot be detected: config.json's cached key vouches for
+                    # the profile, but register needs the id (it would refuse with exit 3)
+                    log_warn "machine profile: this machine's id cannot be detected -- profile '$UI_ALIAS' (from config.json machineId) was not refreshed"
+                    write_summary WARN "machine profile" "not refreshed (no machine id)"
+                    machine_key="$UI_KEY"; machine_alias="$UI_ALIAS"; machine_owner=this
+                    return 0 ;;
+                alias)
+                    if [ "$AITOOLS_REGISTER_CACHED_ALIAS_SILENTLY" = "1" ]; then
+                        log "machine profile: config.json names profile '$UI_KEY' (no machine.id) -- claiming it for this machine (decision 2)"
+                        ui_register "$dir" claim "$UI_KEY" "$commit"; rc=$?
+                    else
+                        sug="$UI_KEY"; rc=100
+                    fi ;;
+                hostname) sug="$UI_KEY"; rc=100 ;;
+                *) rc=100 ;;
+            esac
+            if [ "$rc" -eq 100 ]; then
+                ui_choose "$dir/profile.json" "$sug" "$UI_THIS_ID"; rc=$?
+                case "$rc" in
+                    0)
+                        if [ "$UI_CHOICE_KIND" = "claim" ]; then
+                            ui_register "$dir" claim "$UI_CHOICE" "$commit"; rc=$?
+                        else
+                            ui_ask_name_company "$UI_CHOICE"
+                            ui_register "$dir" alias "$UI_CHOICE" "$commit" "$UI_NAME" "$UI_COMPANY" ""; rc=$?
+                        fi ;;
+                    2) write_summary WARN "machine profile" "skipped" ;;
+                esac
+            fi
+        fi
+    fi
+    case "$rc" in
+        0) machine_key="$UI_KEY"; machine_alias="$UI_ALIAS"; machine_owner="$UI_OWNER"; return 0 ;;
+        2) return 0 ;;
+    esac
+    return 1
+}
+
+# ui_v1_migrate DIR -- DIR/profile.json is v1 (no "version": 2): convert it to v2
+# revision 2.2 (identity from the v1 fields, non-v1 sections kept, the other v1
+# machines kept as profiles no machine owns: machine1, ...), then register this
+# machine under its id (register: alias from --alias, else asked on a terminal,
+# else the short hostname). Write path: temp -> validate -> backup -> move; then
+# only profile.json is committed and pushed (N-Q2). config.json is not written
+# here (setup-user-config is its only writer). A profile.json with uncommitted
+# changes is not migrated. Returns 0 (also when nothing to do), 1 failed.
+migrate_profile_v1_to_v2() {
+    local dir="$1" pf="$1/profile.json" js="$repo_path/scripts/aitools-json.pl" ver tmp out rc=0 reg=0 host alias="$user_alias" d
+    d=$(display_path "$dir")
+    if [ ! -f "$pf" ]; then return 0; fi
+    ver=$(perl "$js" get "$pf" version 2>/dev/null) || ver=""  # absent or unreadable: v1 (the node step below reports a parse error)
+    if [ "$ver" = "2" ]; then return 0; fi
+    if ! command -v node >/dev/null 2>&1; then
+        log_warn "profile.json in $d is v1 (legacy) -- node is needed to migrate it; install node, then run: aitools user init"
+        write_summary WARN "machine profile" "v1 profile not migrated"
+        return 0
+    fi
+    if ui_profile_dirty "$dir"; then
+        log_warn "profile.json in $d is v1 and has uncommitted changes -- not migrated; commit or discard them, then run: aitools user init"
+        write_summary WARN "machine profile" "v1 profile not migrated"
+        ui_action "commit or discard the changes to profile.json in $d, then run: aitools user init"
+        return 0
+    fi
+    log "profile.json in $d is v1 (legacy) -- migrating to v2 (profiles keyed by machine id)"
+    ui_profile_run hostname
+    host="$UI_PROF_OUT"; if [ "$UI_PROF_RC" -ne 0 ]; then host=""; fi
+    tmp="$pf.tmp.$$"
+    out=$(node -e '
+const fs = require("fs");
+const [src, dst, host] = process.argv.slice(1);
+const old = JSON.parse(fs.readFileSync(src, "utf8").replace(/^﻿/, ""));
+const name = (old.git && old.git.name) || old.name || "";
+const email = (old.git && old.git.email) || old.email || "";
+const v2 = { version: 2, meta: { schemaRevision: "2.2" },
+    identity: { github: old.github || "", email: email, name: name, company: old.company || "", git: { name: name, email: email } },
+    profiles: {} };
+// The other v1 machines: profiles that belong to no machine yet (claimable)
+if (Array.isArray(old.machines)) {
+    let n = 1;
+    for (const m of old.machines) {
+        const h = String((m && m.hostname) || "").split(".")[0].toLowerCase();
+        if (host && h === host) continue;
+        while (v2.profiles["machine" + n]) n++;
+        v2.profiles["machine" + n] = { machine: m };
+    }
+}
+// Non-v1 sections (e.g. cursor) are kept
+const v1Keys = ["name", "email", "github", "company", "git", "machines", "version"];
+for (const k of Object.keys(old)) { if (!v1Keys.includes(k) && !(k in v2)) v2[k] = old[k]; }
+fs.writeFileSync(dst, JSON.stringify(v2, null, 2) + "\n");
+' "$pf" "$tmp" "$host" 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ] || ! perl "$js" check "$tmp" > /dev/null 2>&1; then  # check prints its reason to stderr; the log line below names the failure
+        ui_log_lines "v1 migration: " "$out"
+        ui_rm_tmp "$tmp"
+        log_error "profile.json in $d could not be migrated from v1 (see deploy.log) -- left untouched"
+        write_summary ERROR "machine profile" "v1 migration failed"
+        return 1
+    fi
+    backup_file "$pf"
+    if ! mv "$tmp" "$pf"; then
+        ui_rm_tmp "$tmp"
+        log_error "profile.json in $d could not be replaced -- v1 migration not written"
+        write_summary ERROR "machine profile" "v1 migration failed"
+        return 1
+    fi
+    log_ok "profile.json in $d migrated to v2"
+    if [ -z "$alias" ] && ui_can_ask; then
+        printf 'Alias for this machine (Enter = hostname): ' > /dev/tty
+        read_tty_choice alias "the hostname"
+    fi
+    ui_register "$dir" alias "$alias" false || reg=$?  # failure or skip: logged + row inside; the migration is committed either way
+    if [ -d "$dir/.git" ]; then ui_commit "$dir" "Migrate profile.json from v1 to v2" profile.json; fi  # failures: log_warn + ACTION inside
+    if [ "$reg" -eq 1 ]; then return 1; fi
+    return 0
+}
+
+# ui_create_dotprofile DIR -- Path 3: a new local dotprofile in DIR: profile.json
+# scaffolded with this machine's profile (decision 6), sessions/, .gitattributes,
+# .gitignore, README; committed; then a private GitHub repo is created and pushed
+# (the scaffold reaches the remote, N-Q2; asked on a terminal, default yes).
+# Writes the "dotprofile" row. Returns 0, 1 failed (ERROR row).
+ui_create_dotprofile() {
+    local dir="$1" out grc=0 ans="y" reg=0 d
+    d=$(display_path "$dir")
+    log "user init: creating the dotprofile $d"
+    if ! mkdir -p "$dir/sessions"; then
+        log_error "user init: could not create $d"
+        write_summary ERROR "dotprofile" "create failed"
+        return 1
+    fi
+    ui_register_flow "$dir" false || reg=1  # failure: logged + ERROR row inside; the repo is still created
+    if ! { printf '* text=auto eol=lf\n*.jsonl text eol=lf\n' > "$dir/.gitattributes" \
+        && printf '.scratch/\n*.bak.*\n.DS_Store\n' > "$dir/.gitignore" \
+        && printf '# %s\n\nPrivate user repo for session archives and profile data.\nSee [aitools](https://github.com/%s/aitools) for details.\n' \
+            "$repo_name" "$gh_user" > "$dir/README.md"; }; then
+        log_error "user init: could not write the dotprofile files in $d"
+        write_summary ERROR "dotprofile" "create failed"
+        return 1
+    fi
+    out=$(git -C "$dir" init -b main 2>&1) || grc=$?
+    if [ "$grc" -eq 0 ] && [ -n "${UI_ID_NAME:-}" ]; then out=$(git -C "$dir" config user.name "$UI_ID_NAME" 2>&1) || grc=$?; fi
+    if [ "$grc" -eq 0 ] && [ -n "${UI_ID_EMAIL:-}" ]; then out=$(git -C "$dir" config user.email "$UI_ID_EMAIL" 2>&1) || grc=$?; fi
+    if [ "$grc" -eq 0 ]; then out=$(git -C "$dir" add -A 2>&1) || grc=$?; fi
+    if [ "$grc" -eq 0 ]; then out=$(git -C "$dir" commit -m "Initial commit: profile and session archive structure" 2>&1) || grc=$?; fi
+    ui_log_lines "git: " "$out"
+    if [ "$grc" -ne 0 ]; then
+        log_error "user init: git init / first commit failed in $d (exit $grc, see deploy.log) -- commit it by hand, then run: aitools user init"
+        write_summary ERROR "dotprofile" "first commit failed"
+        ui_action "commit the dotprofile in $d, then run: aitools user init"
+        return 1
+    fi
+    log_ok "user init: dotprofile created and committed"
+    if ! command -v gh >/dev/null 2>&1; then
+        log_warn "user init: gh not found -- the dotprofile was not pushed; create the private GitHub repo $repo_name and push it"
+        write_summary WARN "dotprofile" "created, not pushed"
+        ui_action "Run: gh repo create $repo_name --private --source $d --push"
+        return "$reg"
+    fi
+    if ui_can_ask; then
+        printf "Create the private GitHub repo '%s' and push? [Y/n]: " "$repo_name" > /dev/tty
+        read_tty_choice ans "yes"
+        if [ -z "$ans" ]; then ans="y"; fi
+    fi
+    case "$ans" in
+        [yY]*) ;;
+        *)
+            log_warn "user init: GitHub repo not created -- the dotprofile stays local; create it and push: gh repo create $repo_name --private --source $d --push"
+            write_summary WARN "dotprofile" "created, not pushed"
+            ui_action "Run: gh repo create $repo_name --private --source $d --push"
+            return "$reg" ;;
+    esac
+    grc=0
+    if ui_can_ask; then
+        out=$(gh repo create "$repo_name" --private --source "$dir" --push 2>&1) || grc=$?
+    else
+        out=$(GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}" gh repo create "$repo_name" --private --source "$dir" --push 2>&1) || grc=$?
+    fi
+    ui_log_lines "gh repo create: " "$out"
+    if [ "$grc" -ne 0 ]; then
+        log_warn "user init: gh repo create failed (exit $grc, see deploy.log) -- the dotprofile stays local; run: gh repo create $repo_name --private --source $d --push"
+        write_summary WARN "dotprofile" "created, not pushed"
+        ui_action "Run: gh repo create $repo_name --private --source $d --push"
+        return "$reg"
+    fi
+    log_ok "user init: private GitHub repo $gh_user/$repo_name created and pushed"
+    write_summary OK "dotprofile" "created"
+    return "$reg"
+}
+
+# ui_scaffold_claude_md DIR -- the dotprofile's claude/CLAUDE.md from the shared
+# template when it is missing, committed (only that file) and pushed (Review3
+# INCIDENT: identity fallback, results checked, no `|| true`). Returns 0, 1 failed.
+ui_scaffold_claude_md() {
+    local dir="$1" dest="$1/claude/CLAUDE.md" src="$repo_path/shared/claude-shared.md"
+    if [ -f "$dest" ]; then return 0; fi
+    if [ ! -f "$src" ]; then
+        log_warn "user init: $(display_path "$src") not found -- claude/CLAUDE.md not created in the dotprofile"
+        write_summary WARN "claude template" "template missing"
+        return 0
+    fi
+    if ! { mkdir -p "$dir/claude" && cp "$src" "$dest"; }; then
+        log_error "user init: could not create $(display_path "$dest")"
+        write_summary ERROR "claude template" "create failed"
+        return 1
+    fi
+    log_ok "user init: created claude/CLAUDE.md in the dotprofile (template with placeholders)"
+    if [ -d "$dir/.git" ]; then ui_commit "$dir" "Add claude/CLAUDE.md template" claude/CLAUDE.md; fi  # failures: log_warn + ACTION inside
+    write_summary OK "claude template" "created"
+    return 0
+}
+
+# user_init -- `aitools user init`: the dotprofile (Path 1 present, Path 2 cloned
+# from GitHub, Path 3 created), this machine's profile, the CLAUDE.md template,
+# config.json (setup-user-config, its only writer) and the session archive hook.
+# Returns 0 done (warnings possible), 1 any failure, 2 user abort in a review menu
+# (D-TS13). The caller creates and shows the run summary (decision 3).
+user_init() {
+    local rc=0 raw repos_dir user_repo_dir out crc=0 dn de wrc=0 hook_rc=0 hook_setup
+    local writer_args=()
+    gh_user=""; repo_name=""; machine_key=""; machine_alias=""; machine_owner=""
+    # --force: no prompts here, and the review menus of setup-user-hooks take the source
+    if $force; then export AITOOLS_FORCE=1; fi
+
+    # GitHub user: gh, else config.json githubUser, else asked on a terminal
+    if command -v gh >/dev/null 2>&1; then
+        # gh exits non-zero when it is not signed in: the -z test below falls back
+        if gh_user=$(gh api user --jq '.login' 2>/dev/null); then :; else gh_user=""; fi
+    fi
+    if [ -z "$gh_user" ]; then gh_user=$(read_config_key "$config" githubUser) || gh_user=""; fi  # absent: asked below
+    if [ -z "$gh_user" ] && ui_can_ask; then
+        printf 'GitHub username: ' > /dev/tty
+        read_tty_choice gh_user "none"
+    fi
+    if [ -z "$gh_user" ]; then
+        log_error "user init: GitHub username unknown (gh not signed in, no githubUser in config.json, no terminal to ask) -- run: gh auth login, then aitools user init"
+        write_summary ERROR "dotprofile" "GitHub user unknown"
+        ui_action "Run: gh auth login, then aitools user init"
+        return 1
+    fi
+    log "user init: GitHub user $gh_user"
+    repo_name="aitools-${gh_user}"
+
+    # Repos directory from config.json (a leading ~ is the home directory)
+    repos_dir=""
+    if raw=$(read_config_key "$config" "reposPath"); then repos_dir=$(to_native_path "$raw"); fi
+    case "$repos_dir" in
+        "~") repos_dir="$HOME" ;;
+        "~/"*) repos_dir="$HOME/${repos_dir#\~/}" ;;
+    esac
+    repos_dir="${repos_dir:-$HOME/repos}"
+    user_repo_dir="$repos_dir/$repo_name"
+
+    if [ -d "$user_repo_dir/.git" ]; then
+        # --- Path 1: local dotprofile present ---
+        log "user init: dotprofile $(display_path "$user_repo_dir") (present)"
+        write_summary OK "dotprofile" "verified"
+        migrate_profile_v1_to_v2 "$user_repo_dir" || rc=1
+        ui_register_flow "$user_repo_dir" true || rc=1
+    elif command -v gh >/dev/null 2>&1 && gh repo view "$gh_user/$repo_name" --json name >/dev/null 2>&1; then
+        # gh repo view exits non-zero when the repo does not exist (or gh is not signed in): that is the test
+        # --- Path 2: GitHub repo present, no local clone ---
+        log "user init: cloning $gh_user/$repo_name to $(display_path "$user_repo_dir")"
+        out=$(gh repo clone "$gh_user/$repo_name" "$user_repo_dir" 2>&1) || crc=$?
+        ui_log_lines "gh repo clone: " "$out"
+        if [ "$crc" -ne 0 ]; then
+            log_error "user init: gh repo clone $gh_user/$repo_name failed (exit $crc, see deploy.log) -- clone it, then run: aitools user init"
+            write_summary ERROR "dotprofile" "clone failed"
+            ui_action "Run: gh repo clone $gh_user/$repo_name $(display_path "$user_repo_dir"), then aitools user init"
+            return 1
+        fi
+        write_summary OK "dotprofile" "cloned"
+        # Git identity for this clone from the profile, so the commits below work on a
+        # fresh machine (Review3 #82 minor 8: results checked)
+        if [ -f "$user_repo_dir/profile.json" ]; then
+            dn=$(perl "$repo_path/scripts/aitools-json.pl" get "$user_repo_dir/profile.json" identity git name) || dn=""  # absent: keep git's own identity
+            de=$(perl "$repo_path/scripts/aitools-json.pl" get "$user_repo_dir/profile.json" identity git email) || de=""  # absent: keep git's own identity
+            if [ -n "$dn" ] && [ -n "$de" ]; then
+                crc=0
+                out=$(git -C "$user_repo_dir" config user.name "$dn" 2>&1) || crc=$?
+                if [ "$crc" -eq 0 ]; then out=$(git -C "$user_repo_dir" config user.email "$de" 2>&1) || crc=$?; fi
+                if [ "$crc" -ne 0 ]; then
+                    log_warn "user init: could not set the git identity of the clone (exit $crc: $out) -- commits use git's own identity"
+                fi
+            fi
+        fi
+        migrate_profile_v1_to_v2 "$user_repo_dir" || rc=1
+        ui_register_flow "$user_repo_dir" true || rc=1
+    else
+        # --- Path 3: fresh setup ---
+        ui_create_dotprofile "$user_repo_dir" || rc=1
+    fi
+    # This machine without a profile at the end (skipped at a prompt, refused, failed)
+    # is one outcome with one exit code, 1 (Review3 #82 minor 3)
+    if [ -z "$machine_key" ]; then rc=1; fi
+
+    if [ -d "$user_repo_dir" ]; then ui_scaffold_claude_md "$user_repo_dir" || rc=1; fi
+
+    # config.json has one writer (setup-user-config): GitHub user, dotprofile path and
+    # this machine's profile key (--machine-id; ConfigKey contract). Another
+    # machine's key is never passed (ConfigKey Q3).
+    if [ -n "$machine_key" ] && [ "$machine_owner" != "this" ]; then
+        log_error "user init: profile $machine_key is not this machine's (owner ${machine_owner:-unknown}) -- not passed to setup-user-config"
+        write_summary ERROR "machine profile" "not this machine's profile"
+        machine_key=""; rc=1
+    fi
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            writer_args=(-GithubUser "$gh_user" -UserRepoPath "$(cygpath -w "$user_repo_dir")")
+            if [ -n "$machine_key" ]; then writer_args+=(-MachineId "$machine_key"); fi
+            pwsh -NoProfile -ExecutionPolicy Bypass \
+                -File "$(cygpath -w "$repo_path/scripts/setup-user-config.ps1")" "${writer_args[@]}" || wrc=$?
+            ;;
+        *)
+            writer_args=(--github-user "$gh_user" --user-repo-path "$user_repo_dir")
+            if [ -n "$machine_key" ]; then writer_args+=(--machine-id "$machine_key"); fi
+            "${BASH:-bash}" "$repo_path/scripts/setup-user-config.sh" "${writer_args[@]}" || wrc=$?
+            ;;
+    esac
+    if [ "$wrc" -ne 0 ]; then
+        log_error "user init: setup-user-config failed (exit $wrc) -- see $LOG_DISPLAY"
+        rc=1
+    fi
+
+    # Session archive hook. Exit 2 = the user aborted in the review menu (D-TS13):
+    # stop with exit 2; any other failure is logged.
+    log "user init: deploying the session archive hook"
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            hook_setup="$repo_path/scripts/setup-user-hooks.ps1"
+            if [ -f "$hook_setup" ]; then
+                pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$hook_setup")" || hook_rc=$?
+            else hook_rc=127; fi
+            ;;
+        *)
+            hook_setup="$repo_path/scripts/setup-user-hooks.sh"
+            if [ -f "$hook_setup" ]; then "${BASH:-bash}" "$hook_setup" || hook_rc=$?; else hook_rc=127; fi
+            ;;
+    esac
+    if [ "$hook_rc" -eq 2 ]; then
+        log "user init: aborted by user"
+        return 2
+    fi
+    if [ "$hook_rc" -eq 127 ]; then
+        log_error "user init: $(display_path "$hook_setup") not found -- the session archive hook was not deployed"
+        write_summary ERROR "claude hooks" "setup script missing"
+        rc=1
+    elif [ "$hook_rc" -ne 0 ]; then
+        log_error "user init: $(basename "$hook_setup") failed (exit $hook_rc) -- see $LOG_DISPLAY"
+        rc=1
+    fi
+    if [ "$rc" -eq 0 ]; then
+        log_ok "user init: done -- sessions will be archived to $(display_path "$user_repo_dir/sessions/")"
+    fi
+    return "$rc"
 }
 
 # Version string from a git repo using tag-based scheme.
@@ -1127,219 +1716,19 @@ fi
 if $do_user; then
     case "$user_subcmd" in
         init)
-            # Detect GitHub username
-            gh_user=""
-            if command -v gh &>/dev/null; then
-                # gh api may fail if not authenticated; fallback to manual input below
-                gh_user=$(gh api user --jq '.login' 2>/dev/null || true)
+            # Decision 3: user init has its own run summary -- created before the user
+            # block (its rows and those of its child scripts), shown before it returns
+            AITOOLS_SUMMARY_FILE="$HOME/.aitools/run-summary.txt"
+            rm -f "$AITOOLS_SUMMARY_FILE"
+            if ! { mkdir -p "$HOME/.aitools" && touch "$AITOOLS_SUMMARY_FILE"; }; then
+                log_warn "user init: could not create the run summary $(display_path "$AITOOLS_SUMMARY_FILE") -- the summary panel is not shown"
             fi
-            if [ -z "$gh_user" ]; then
-                printf "GitHub username: "
-                read -r gh_user < /dev/tty
-            else
-                echo "Detected GitHub user: $gh_user"
-            fi
-
-            if [ -z "$gh_user" ]; then
-                log_error "GitHub username required"
-                return 1
-            fi
-
-            repo_name="aitools-${gh_user}"
-            machine_alias=""
-
-            # Determine repos directory from config
-            repos_dir=""
-            if raw=$(read_config_key "$config" "reposPath"); then
-                repos_dir=$(to_native_path "$raw")
-            fi
-            repos_dir="${repos_dir:-$HOME/repos}"
-
-            user_repo_dir="$repos_dir/$repo_name"
-
-            if [ -d "$user_repo_dir/.git" ]; then
-                # --- Path 1: local repo already exists ---
-                echo "User repo already exists: $(display_path "$user_repo_dir")"
-
-                # Detect v1 profile and offer migration
-                if command -v node &>/dev/null && [ -f "$user_repo_dir/profile.json" ]; then
-                    local prof_version
-                    prof_version=$(node -e "
-try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.version||'')}catch(e){console.error('profile read error: '+e.message)}
-" "$user_repo_dir/profile.json" 2>/dev/null)
-                    if [ "$prof_version" != "2" ]; then
-                        echo "profile.json is v1 (legacy). Migrating to v2..."
-                        local check_result
-                        check_result=$(node "$repo_path/scripts/profile-check.js" --config "$config" 2>/dev/null)
-                        if [ -n "$check_result" ]; then
-                            migrate_profile_v1_to_v2 "$check_result"
-                        fi
-                    fi
-                fi
-
-                # Resolve this machine's profile; ask (or take --alias) when it is not registered
-                if [ -f "$user_repo_dir/profile.json" ]; then
-                    ui_register_flow "$user_repo_dir" true
-                fi
-
-            elif command -v gh &>/dev/null && gh repo view "$gh_user/$repo_name" --json name &>/dev/null; then
-                # --- Path 2: GitHub repo exists, no local clone ---
-                echo "GitHub repo exists. Cloning to $(display_path "$user_repo_dir")..."
-                gh repo clone "$gh_user/$repo_name" "$user_repo_dir"
-
-                # Detect v1 profile and offer migration
-                if command -v node &>/dev/null && [ -f "$user_repo_dir/profile.json" ]; then
-                    local prof_version
-                    prof_version=$(node -e "
-try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.version||'')}catch(e){console.error('profile read error: '+e.message)}
-" "$user_repo_dir/profile.json" 2>/dev/null)
-                    if [ "$prof_version" != "2" ]; then
-                        echo "profile.json is v1 (legacy). Migrating to v2..."
-                        local check_result
-                        check_result=$(node "$repo_path/scripts/profile-check.js" --config "$config" 2>/dev/null)
-                        if [ -n "$check_result" ]; then
-                            migrate_profile_v1_to_v2 "$check_result"
-                        fi
-                    fi
-                fi
-
-                # Git identity for this clone from the profile (so the commits below work
-                # on a fresh machine), then resolve this machine and ask when unregistered
-                if [ -f "$user_repo_dir/profile.json" ]; then
-                    default_name=$(perl "$repo_path/scripts/aitools-json.pl" get "$user_repo_dir/profile.json" identity git name) || default_name=""  # absent = keep git's own identity
-                    default_email=$(perl "$repo_path/scripts/aitools-json.pl" get "$user_repo_dir/profile.json" identity git email) || default_email=""  # absent = keep git's own identity
-                    if [ -n "$default_name" ] && [ -n "$default_email" ]; then
-                        git -C "$user_repo_dir" config user.name "$default_name"
-                        git -C "$user_repo_dir" config user.email "$default_email"
-                    fi
-                    ui_register_flow "$user_repo_dir" true
-                fi
-
-            else
-                # --- Path 3: fresh setup ---
-                echo "Creating user repo: $(display_path "$user_repo_dir")"
-                mkdir -p "$user_repo_dir/sessions"
-
-                # Prompt for profile info
-                printf "Display name [$(whoami)]: "
-                read -r prof_name < /dev/tty
-                prof_name="${prof_name:-$(whoami)}"
-
-                printf "Email: "
-                read -r prof_email < /dev/tty
-
-                printf "Company: "
-                read -r prof_company < /dev/tty
-
-                machine_alias="$user_alias"
-                if [ -z "$machine_alias" ]; then
-                    printf "Machine alias (e.g., laptop, workstation): "
-                    read -r machine_alias < /dev/tty
-                fi
-                machine_alias="${machine_alias:-default}"
-
-                # Create the v2 profile.json with this machine registered (identity
-                # name/company are the defaults for every machine; committed below)
-                ui_register "$user_repo_dir" "$machine_alias" "$prof_name" "$prof_company" "$prof_email" false || machine_alias=""  # failure logged + summarized inside
-
-                # Create .gitattributes
-                printf '* text=auto eol=lf\n*.jsonl text eol=lf\n' > "$user_repo_dir/.gitattributes"
-
-                # Create .gitignore
-                printf '.scratch/\n*.bak.*\n.DS_Store\n' > "$user_repo_dir/.gitignore"
-
-                # Create README
-                printf '# %s\n\nPrivate user repo for session archives and profile data.\nSee [aitools](https://github.com/%s/aitools) for details.\n' \
-                    "$repo_name" "$gh_user" > "$user_repo_dir/README.md"
-
-                # Git init
-                git -C "$user_repo_dir" init -b main
-                git -C "$user_repo_dir" config user.name "$prof_name"
-                git -C "$user_repo_dir" config user.email "$prof_email"
-                git -C "$user_repo_dir" add -A
-                git -C "$user_repo_dir" commit -m "Initial commit: profile and session archive structure"
-
-                echo "User repo created."
-
-                # Offer to create GitHub repo
-                if command -v gh &>/dev/null; then
-                    printf "Create private GitHub repo '%s'? [y/N]: " "$repo_name"
-                    read -r create_gh < /dev/tty
-                    if [[ "$create_gh" =~ ^[Yy] ]]; then
-                        gh repo create "$repo_name" --private --source "$user_repo_dir" --push
-                        echo "GitHub repo created and pushed."
-                    fi
-                fi
-            fi
-
-            # Scaffold claude/CLAUDE.md in user repo if missing
-            claude_md_dest="$user_repo_dir/claude/CLAUDE.md"
-            if [ ! -f "$claude_md_dest" ] && [ -f "$repo_path/shared/claude-shared.md" ]; then
-                mkdir -p "$user_repo_dir/claude"
-                cp "$repo_path/shared/claude-shared.md" "$claude_md_dest"
-                echo "Created claude/CLAUDE.md in user repo (template with placeholders)"
-                if [ -d "$user_repo_dir/.git" ]; then
-                    git -C "$user_repo_dir" add claude/CLAUDE.md
-                    if [ -n "$(git -C "$user_repo_dir" status --porcelain)" ]; then
-                        git -C "$user_repo_dir" commit -m "Add claude/CLAUDE.md template"
-                        git -C "$user_repo_dir" push 2>/dev/null || true
-                    fi
-                fi
-            fi
-
-            # config.json has one writer (setup-user-config): GitHub user, dotprofile
-            # path and the chosen alias; the writer derives and validates the rest
-            writer_rc=0
-            case "$(uname -s)" in
-                MINGW*|MSYS*|CYGWIN*)
-                    writer_args=(-GithubUser "$gh_user" -UserRepoPath "$(cygpath -w "$user_repo_dir")")
-                    if [ -n "${machine_alias:-}" ]; then writer_args+=(-MachineAlias "$machine_alias"); fi
-                    pwsh -NoProfile -ExecutionPolicy Bypass \
-                        -File "$(cygpath -w "$repo_path/scripts/setup-user-config.ps1")" "${writer_args[@]}" || writer_rc=$?
-                    ;;
-                *)
-                    writer_args=(--github-user "$gh_user" --user-repo-path "$user_repo_dir")
-                    if [ -n "${machine_alias:-}" ]; then writer_args+=(--machine-alias "$machine_alias"); fi
-                    bash "$repo_path/scripts/setup-user-config.sh" "${writer_args[@]}" || writer_rc=$?
-                    ;;
-            esac
-            if [ "$writer_rc" -ne 0 ]; then
-                log_error "user init: setup-user-config failed (exit $writer_rc) -- see $LOG_DISPLAY"
-            fi
-
-            # Deploy session archive hook. Exit 2 = the user aborted in the review
-            # menu (D-TS13): stop with exit 2; any other failure is logged.
-            echo ""
-            echo "Deploying session archive hook..."
-            hook_rc=0
-            case "$(uname -s)" in
-                MINGW*|MSYS*|CYGWIN*)
-                    hook_setup="$repo_path/scripts/setup-user-hooks.ps1"
-                    if [ -f "$hook_setup" ]; then
-                        pwsh -NoProfile -ExecutionPolicy Bypass \
-                            -File "$(cygpath -w "$hook_setup")" || hook_rc=$?
-                    fi
-                    ;;
-                *)
-                    hook_setup="$repo_path/scripts/setup-user-hooks.sh"
-                    if [ -f "$hook_setup" ]; then
-                        bash "$hook_setup" || hook_rc=$?
-                    fi
-                    ;;
-            esac
-            if [ "$hook_rc" -eq 2 ]; then
-                echo ""
-                echo "aborted by user"
-                return 2
-            fi
-            if [ "$hook_rc" -ne 0 ]; then
-                log_error "user init: $(basename "$hook_setup") failed (exit $hook_rc) -- see $LOG_DISPLAY"
-                return 1
-            fi
-            if [ "$writer_rc" -ne 0 ]; then return 1; fi
-
-            echo ""
-            echo "Done. Sessions will be archived to $(display_path "$user_repo_dir/sessions/")"
+            export AITOOLS_SUMMARY_FILE
+            user_init_rc=0
+            user_init || user_init_rc=$?
+            show_summary
+            unset AITOOLS_SUMMARY_FILE
+            return "$user_init_rc"
             ;;
         "")
             log_error "missing subcommand"
@@ -1352,7 +1741,6 @@ try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));conso
             return 1
             ;;
     esac
-    return 0
 fi
 
 # ---------------------------------------------------------------------------
@@ -1604,9 +1992,13 @@ else
     fi
 fi
 
-# Pull user repo (quiet, non-blocking — stale local data is better than failing)
-if raw=$(read_config_key "$config" "userRepoPath"); then
-    user_repo_path=$(to_native_path "$raw")
+# The dotprofile, as the resolver finds it (env, config.json, convention, scan):
+# pulled here (quiet, non-blocking -- stale local data is better than failing) and
+# passed to build-deploy below. A resolver error is logged with its ERROR row and
+# ACTION by the lib; the build then resolves (and skips) on its own.
+build_env=()
+if resolve_user_repo_path; then
+    user_repo_path="$AITLIB_USER_REPO_PATH"
     if [ -d "$user_repo_path/.git" ]; then
         ur_pull_exit=0
         ur_pull_out=$(git -C "$user_repo_path" pull --ff-only --quiet 2>&1) || ur_pull_exit=$?
@@ -1615,11 +2007,19 @@ if raw=$(read_config_key "$config" "userRepoPath"); then
             log_detail "user-repo-pull: $ur_pull_out"
         fi
     fi
+    # Forward slashes on Windows (C:/Users/...), the form Git Bash and pwsh both read
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            if _urp_m=$(cygpath -m "$user_repo_path"); then user_repo_path="$_urp_m"
+            else log_detail "cygpath -m failed for $user_repo_path -- passed to build-deploy unchanged"; fi ;;
+    esac
+    build_env=(AITOOLS_USER_REPO_PATH="$user_repo_path")
 fi
 
-# [2/N] Rebuild deploy scripts
+# [2/N] Rebuild deploy scripts. The dotprofile resolved above reaches the build as
+# AITOOLS_USER_REPO_PATH, scoped to this one call (B5a Q1; PR #95 follow-up)
 log "Step 2/$STEPS: Rebuilding deploy scripts"
-if bash "$repo_path/scripts/build-deploy.sh" >> "$LOG_FILE" 2>&1; then
+if env ${build_env[@]+"${build_env[@]}"} bash "$repo_path/scripts/build-deploy.sh" >> "$LOG_FILE" 2>&1; then
     log_ok "Rebuilt"
 else
     log_error "build failed (see $LOG_DISPLAY)"
