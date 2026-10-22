@@ -243,6 +243,22 @@ case_run c13-unregistered 0 fix_unreg
 has_row "WARN|aitools config|updated"
 has_row "ACTION||Run: aitools user init (registers this machine)"
 
+# C14 relative bootstrap path: bad arguments, nothing written
+case_run c14-relative 1 fix_nodp --repos-path repos --repo-path "$H/repos/aitools"
+has_row "ERROR|aitools config|bad arguments"
+if [ ! -s "$OUTJ" ]; then ok "c14-relative: no config written"; else bad "c14-relative: config written"; fi
+
+# C15 double slash in a path value: validation failed, existing file untouched
+case_run c15-double-slash 1 fix_v2 --repos-path "$H/repos//x"
+has_row "ERROR|aitools config|validation failed"
+if grep -q '"version": 2' "$OUTJ"; then ok "c15-double-slash: config untouched"; else bad "c15-double-slash: config changed"; fi
+
+# C16 invalid profile.json: its own ERROR row, not "no machine match"
+fix_badprofile() { fix_v2; printf '{ "version": 2, ' > "$DP/profile.json"; }
+case_run c16-bad-profile 1 fix_badprofile
+has_row "ERROR|profile.json|invalid (see log)"
+no_row_like "no machine match"
+
 # C12 bad arguments
 case_run c12-bad-arg 1 fix_nodp --bogus
 has_row "ERROR|aitools config|bad arguments"

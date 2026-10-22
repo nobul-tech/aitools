@@ -725,18 +725,38 @@ cmd_exception_get() {
 # (N-Q2: dotprofile writes auto-commit and push). Failures are warnings: the file
 # is already written; the user can commit by hand. Sets COMMITTED / PUSHED.
 COMMITTED=false; PUSHED=false
+# profile_dirty_before DIR -- 0 when profile.json has uncommitted changes in git
+# (checked BEFORE this command writes, so an unrelated hand edit is not committed
+# under this command's message); 1 when clean, untracked or not a repository.
+profile_dirty_before() {
+    local dir="$1" rc=0
+    command -v git >/dev/null 2>&1 || return 1
+    git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1  # not a repo: handled by commit_profile
+    git -C "$dir" ls-files --error-unmatch -- profile.json >/dev/null 2>&1 || return 1  # untracked: nothing to protect
+    git -C "$dir" diff --quiet -- profile.json || rc=$?
+    if [ "$rc" -eq 0 ]; then git -C "$dir" diff --cached --quiet -- profile.json || rc=$?; fi
+    [ "$rc" -ne 0 ]
+}
 commit_profile() {
-    local dir="$1" msg="$2" out rc=0
+    local dir="$1" msg="$2" dirty="$3" out rc=0
     COMMITTED=false; PUSHED=false
+    if ! command -v git >/dev/null 2>&1; then
+        add_warn "git not found -- profile.json written but not committed"; return 0
+    fi
     out=$(git -C "$dir" rev-parse --is-inside-work-tree 2>&1) || rc=$?
     if [ "$rc" -ne 0 ] || [ "$out" != "true" ]; then
         add_warn "$dir is not a git repository -- profile.json written but not committed"; return 0
     fi
+    if $dirty; then
+        add_warn "profile.json had uncommitted changes before this write -- not committed automatically; review and commit profile.json in $dir by hand"
+        return 0
+    fi
     # No git identity on this machine yet (fresh machine): commit as the profile's
     # identity.git, the person the dotprofile belongs to. Empty = git's own error.
-    local who=() gname="" gmail="" cur=""
-    cur=$(git -C "$dir" config user.email) || cur=""  # unset = exit 1; handled by the -z test
-    if [ -z "$cur" ]; then
+    local who=() gname="" gmail="" cur_name="" cur_mail=""
+    cur_name=$(git -C "$dir" config user.name) || cur_name=""  # unset = exit 1; handled by the -z test
+    cur_mail=$(git -C "$dir" config user.email) || cur_mail=""  # unset = exit 1; handled by the -z test
+    if [ -z "$cur_name" ] || [ -z "$cur_mail" ]; then
         jread gname "$PF" identity git name
         jread gmail "$PF" identity git email
         if [ -n "$gname" ] && [ -n "$gmail" ]; then who=(-c "user.name=$gname" -c "user.email=$gmail"); fi
@@ -787,56 +807,81 @@ cmd_exception_set() {
     cfg config_alias machineAlias
     rc=0
     resolve_machine "$PF" "$config_alias" || rc=$?
-    if [ "$rc" -ne 0 ] || [ "$RM_VIA" = "hostname" ]; then
+    # Writes need a profile registered to THIS machine. via=alias while this
+    # machine has an id means the profile is unregistered or registered to another
+    # machine (a registered one would resolve via=id): refuse, or this machine's
+    # choice would be recorded in -- and honoured by -- another machine's profile.
+    if [ "$rc" -ne 0 ]; then
+        state="refused"; add_err "tool choice not saved -- run: aitools user init to remember tool choices"; put_set; finish 3
+    fi
+    if [ "$RM_VIA" = "hostname" ]; then
         state="refused"
-        if [ "$RM_VIA" = "hostname" ]; then
-            add_err "machine profile \"$RM_ALIAS\" matched by hostname only -- run: aitools user init to remember tool choices"
-        else
-            add_err "no machine profile for this machine -- run: aitools user init to remember tool choices"
-        fi
+        add_err "machine profile \"$RM_ALIAS\" matched by hostname only -- run: aitools user init to remember tool choices"
         put_set; finish 3
     fi
+    if [ "$RM_VIA" = "alias" ] && [ -n "$THIS_ID" ]; then
+        state="refused"
+        add_err "machine profile \"$RM_ALIAS\" is not registered to this machine -- run: aitools user init to remember tool choices"
+        put_set; finish 3
+    fi
+    local old_at=""
     jtype t "$PF" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG"
     if [ -n "$t" ]; then
         state="updated"
         jsub before "$PF" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG"
+        jread old_at "$PF" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" decidedAt
     fi
+    # An identical decision keeps its original timestamp (no commit, no push):
+    # unless --decided-at is given, the first comparison uses the stored decidedAt.
+    if [ -z "$OPT_DECIDED_AT" ] && [ -n "$old_at" ]; then at="$old_at"; fi
     if [ "${AITOOLS_DRY_RUN:-}" = "1" ]; then
         state="dry-run"; log_detail "[DRY RUN] would record toolExceptions.$OPT_SLUG in $PF"; put_set; finish 0
     fi
-    jtype t "$PF" profiles "$RM_ALIAS" toolExceptions
-    if [ "$t" != "object" ]; then edit_set json '{}' profiles "$RM_ALIAS" toolExceptions; fi
-    edit_set json '{}' profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG"
-    edit_set string keep profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" decision
-    edit_set string "$OPT_PLATFORM" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" detected platform
-    edit_set string "$OPT_METHOD" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" detected method
-    edit_set string "$OPT_PATH" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" detected path
-    edit_set string "$OPT_VERSION" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" detected version
-    edit_set string "$at" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" decidedAt
-    edit_set string "$OPT_BY" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" decidedBy
-    if [ -n "$OPT_REASON" ]; then edit_set string "$OPT_REASON" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" reason
-    else edit_set null "" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" reason; fi
-    # Write path: temp -> validate -> backup -> move (config-file-safety.md)
     tmp="$PF.tmp.$$"
-    rc=0
-    msg=$(printf '%s' "$EDIT_OPS" | pj edit "$PF" "$tmp" 2>&1) || rc=$?
-    if [ "$rc" -ne 0 ]; then
-        rm -f "$tmp"; state="failed"; add_err "exception-set failed: $msg"; put_set; finish 2
-    fi
-    jtype t "$tmp" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG"
-    if [ "$t" != "object" ]; then
-        rm -f "$tmp"; state="failed"; add_err "validation failed: toolExceptions.$OPT_SLUG missing after write"; put_set; finish 2
-    fi
-    jsub after "$tmp" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG"
+    # write_entry AT -- build the entry with decidedAt AT into $tmp, validate it
+    write_entry() {
+        EDIT_OPS=""
+        jtype t "$PF" profiles "$RM_ALIAS" toolExceptions
+        if [ "$t" != "object" ]; then edit_set json '{}' profiles "$RM_ALIAS" toolExceptions; fi
+        edit_set json '{}' profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG"
+        edit_set string keep profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" decision
+        edit_set string "$OPT_PLATFORM" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" detected platform
+        edit_set string "$OPT_METHOD" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" detected method
+        edit_set string "$OPT_PATH" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" detected path
+        edit_set string "$OPT_VERSION" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" detected version
+        edit_set string "$1" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" decidedAt
+        edit_set string "$OPT_BY" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" decidedBy
+        if [ -n "$OPT_REASON" ]; then edit_set string "$OPT_REASON" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" reason
+        else edit_set null "" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" reason; fi
+        # Write path: temp -> validate -> backup -> move (config-file-safety.md)
+        local wrc=0
+        msg=$(printf '%s' "$EDIT_OPS" | pj edit "$PF" "$tmp" 2>&1) || wrc=$?
+        if [ "$wrc" -ne 0 ]; then
+            rm -f "$tmp"; state="failed"; add_err "exception-set failed: $msg"; put_set; finish 2
+        fi
+        jtype t "$tmp" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG"
+        if [ "$t" != "object" ]; then
+            rm -f "$tmp"; state="failed"; add_err "validation failed: toolExceptions.$OPT_SLUG missing after write"; put_set; finish 2
+        fi
+        jsub after "$tmp" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG"
+    }
+    write_entry "$at"
     if [ "$state" = "updated" ] && [ "$before" = "$after" ]; then
         rm -f "$tmp"; state="unchanged"; put_set; finish 0
     fi
+    # A changed decision gets a fresh timestamp
+    if [ -z "$OPT_DECIDED_AT" ] && [ "$at" = "$old_at" ]; then
+        at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        write_entry "$at"
+    fi
+    local dirty=false
+    if profile_dirty_before "$(dirname "$PF")"; then dirty=true; fi
     backup_file "$PF"
     if ! mv "$tmp" "$PF"; then
         rm -f "$tmp"; state="failed"; add_err "could not replace $PF"; put_set; finish 2
     fi
     log_detail "exception-set: toolExceptions.$OPT_SLUG ($OPT_PLATFORM $OPT_METHOD $OPT_PATH) written to $PF (profile $RM_ALIAS)"
-    commit_profile "$(dirname "$PF")" "Record tool exception: keep $OPT_SLUG ($OPT_METHOD) on $RM_ALIAS"
+    commit_profile "$(dirname "$PF")" "Record tool exception: keep $OPT_SLUG ($OPT_METHOD) on $RM_ALIAS" "$dirty"
     put_set
     finish 0
 }
@@ -879,6 +924,10 @@ cmd_derive_config() {
     if [ -n "$RM_ALIAS" ]; then
         if [ "$RM_VIA" = "override" ] && [ "$RM_OVERRIDE_SOURCE" = "env" ]; then
             add_warn "machine alias from AITOOLS_MACHINE_ALIAS -- not saved to config.json"
+        elif [ "$RM_VIA" = "hostname" ]; then
+            # A hostname match is a legacy guess, not a registration: caching it would
+            # turn it into via=alias on the next run (PR #76 review M1)
+            add_warn "machine alias \"$RM_ALIAS\" matched by hostname only -- not saved to config.json"
         else
             d_alias="$RM_ALIAS"
         fi
