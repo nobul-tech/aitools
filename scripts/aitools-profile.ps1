@@ -676,22 +676,47 @@ function Invoke-ExceptionGet {
     Complete-Command 0
 }
 
-# Invoke-ProfileCommit DIR MESSAGE -- commit only profile.json in the dotprofile and
-# push (N-Q2: dotprofile writes auto-commit and push). Failures are warnings: the
-# file is already written. Sets $script:Committed / $script:Pushed.
+# Test-ProfileDirtyBefore DIR -- $true when profile.json has uncommitted changes in
+# git (checked BEFORE this command writes, so an unrelated hand edit is not
+# committed under this command's message); $false when clean, untracked or not a
+# repository.
+function Test-ProfileDirtyBefore([string]$Dir) {
+    if (-not (Get-Command git -CommandType Application -ErrorAction SilentlyContinue)) { return $false }
+    $null = & git -C $Dir rev-parse --is-inside-work-tree 2>&1
+    if ($LASTEXITCODE -ne 0) { return $false }   # not a repo: Invoke-ProfileCommit reports it
+    $null = & git -C $Dir ls-files --error-unmatch -- profile.json 2>&1
+    if ($LASTEXITCODE -ne 0) { return $false }   # untracked: nothing to protect
+    $null = & git -C $Dir diff --quiet -- profile.json 2>&1
+    if ($LASTEXITCODE -ne 0) { return $true }
+    $null = & git -C $Dir diff --cached --quiet -- profile.json 2>&1
+    return ($LASTEXITCODE -ne 0)
+}
+
+# Invoke-ProfileCommit DIR MESSAGE DIRTY -- commit only profile.json in the dotprofile
+# and push (N-Q2: dotprofile writes auto-commit and push). Failures are warnings:
+# the file is already written. Sets $script:Committed / $script:Pushed.
 $script:Committed = "false"; $script:Pushed = "false"
-function Invoke-ProfileCommit([string]$Dir, [string]$Message) {
+function Invoke-ProfileCommit([string]$Dir, [string]$Message, [bool]$Dirty) {
     $script:Committed = "false"; $script:Pushed = "false"
+    if (-not (Get-Command git -CommandType Application -ErrorAction SilentlyContinue)) {
+        Add-Warn "git not found -- profile.json written but not committed"; return
+    }
     $out = (& git -C $Dir rev-parse --is-inside-work-tree 2>&1 | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or $out -ne "true") {
         Add-Warn "$Dir is not a git repository -- profile.json written but not committed"; return
     }
+    if ($Dirty) {
+        Add-Warn "profile.json had uncommitted changes before this write -- not committed automatically; review and commit profile.json in $Dir by hand"
+        return
+    }
     # No git identity on this machine yet (fresh machine): commit as the profile's
     # identity.git, the person the dotprofile belongs to. Empty = git's own error.
     $who = @()
-    $cur = (& git -C $Dir config user.email 2>&1 | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0) { $cur = "" }   # unset = exit 1
-    if (-not $cur) {
+    $curName = (& git -C $Dir config user.name 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) { $curName = "" }   # unset = exit 1
+    $curMail = (& git -C $Dir config user.email 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) { $curMail = "" }   # unset = exit 1
+    if (-not $curName -or -not $curMail) {
         $gname = Get-JText $script:PfValue @("identity", "git", "name")
         $gmail = Get-JText $script:PfValue @("identity", "git", "email")
         if ($gname -and $gmail) { $who = @("-c", "user.name=$gname", "-c", "user.email=$gmail") }
@@ -749,70 +774,95 @@ function Invoke-ExceptionSet {
     }
     $p = $script:PfValue
     $rc = Resolve-Machine $p (Get-Cfg "machineAlias")
-    if ($rc -ne 0 -or $script:RmVia -eq "hostname") {
+    # Writes need a profile registered to THIS machine. via=alias while this
+    # machine has an id means the profile is unregistered or registered to another
+    # machine (a registered one would resolve via=id): refuse, or this machine's
+    # choice would be recorded in -- and honoured by -- another machine's profile.
+    if ($rc -ne 0) {
+        $s.state = "refused"; Add-Err "tool choice not saved -- run: aitools user init to remember tool choices"; & $putSet; Complete-Command 3
+    }
+    if ($script:RmVia -eq "hostname") {
         $s.state = "refused"
-        if ($script:RmVia -eq "hostname") {
-            Add-Err "machine profile `"$($script:RmAlias)`" matched by hostname only -- run: aitools user init to remember tool choices"
-        } else {
-            Add-Err "no machine profile for this machine -- run: aitools user init to remember tool choices"
-        }
+        Add-Err "machine profile `"$($script:RmAlias)`" matched by hostname only -- run: aitools user init to remember tool choices"
+        & $putSet; Complete-Command 3
+    }
+    if ($script:RmVia -eq "alias" -and $script:ThisId) {
+        $s.state = "refused"
+        Add-Err "machine profile `"$($script:RmAlias)`" is not registered to this machine -- run: aitools user init to remember tool choices"
         & $putSet; Complete-Command 3
     }
     $alias = $script:RmAlias
     $before = ""
-    $n = Get-JNode $p @("profiles", $alias, "toolExceptions", $slug)
-    if ($n.Found) {
+    $oldAt = ""
+    if (Get-JType $p @("profiles", $alias, "toolExceptions", $slug)) {
         $s.state = "updated"
-        $before = ConvertTo-NodeJson $n.Value -Compress
+        $before = ConvertTo-NodeJson (Get-JNode $p @("profiles", $alias, "toolExceptions", $slug)).Value -Compress
+        $oldAt = Get-JText $p @("profiles", $alias, "toolExceptions", $slug, "decidedAt")
     }
+    # An identical decision keeps its original timestamp (no commit, no push):
+    # unless --decided-at is given, the first comparison uses the stored decidedAt.
+    if (-not $opt["decided-at"] -and $oldAt) { $at = $oldAt }
     if ($env:AITOOLS_DRY_RUN -eq "1") {
         $s.state = "dry-run"; LogDetail "[DRY RUN] would record toolExceptions.$slug in $($script:Pf)"; & $putSet; Complete-Command 0
     }
-    if ((Get-JType $p @("profiles", $alias, "toolExceptions")) -ne "object") {
-        Set-JValue $p ([PSCustomObject]@{}) @("profiles", $alias, "toolExceptions")
-    }
-    $detected = [PSCustomObject]@{}
-    $detected | Add-Member -NotePropertyName platform -NotePropertyValue $opt["platform"]
-    $detected | Add-Member -NotePropertyName method -NotePropertyValue $opt["method"]
-    $detected | Add-Member -NotePropertyName path -NotePropertyValue $opt["path"]
-    $detected | Add-Member -NotePropertyName version -NotePropertyValue $opt["version"]
-    $entry = [PSCustomObject]@{}
-    $entry | Add-Member -NotePropertyName decision -NotePropertyValue "keep"
-    $entry | Add-Member -NotePropertyName detected -NotePropertyValue $detected
-    $entry | Add-Member -NotePropertyName decidedAt -NotePropertyValue $at
-    $entry | Add-Member -NotePropertyName decidedBy -NotePropertyValue $opt["by"]
-    $reason = if ($opt["reason"]) { $opt["reason"] } else { $null }
-    $entry | Add-Member -NotePropertyName reason -NotePropertyValue $reason
-    Set-JValue $p $entry @("profiles", $alias, "toolExceptions", $slug)
-    # Write path: temp -> validate -> backup -> move (config-file-safety.md)
     $tmp = "$($script:Pf).tmp.$PID"
-    try {
-        [IO.File]::WriteAllText($tmp, (ConvertTo-NodeJson $p) + "`n", $script:Utf8NoBom)
-    } catch {
-        $s.state = "failed"; Add-Err "exception-set failed: cannot write ${tmp}: $($_.Exception.Message)"; & $putSet; Complete-Command 2
-    }
-    $v = Read-JsonFile $tmp
-    if ($v.State -ne "valid" -or (Get-JType $v.Value @("profiles", $alias, "toolExceptions", $slug)) -ne "object") {
+    $removeTmp = {
         Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
         if (Test-Path -LiteralPath $tmp) { LogDetail "could not remove $tmp" }
-        $s.state = "failed"; Add-Err "validation failed: toolExceptions.$slug missing after write"; & $putSet; Complete-Command 2
     }
-    $after = ConvertTo-NodeJson (Get-JNode $v.Value @("profiles", $alias, "toolExceptions", $slug)).Value -Compress
+    # Write-Entry AT -- build the entry with decidedAt AT into $tmp, validate it;
+    # returns the compact JSON of the written entry
+    $writeEntry = {
+        param([string]$When)
+        if ((Get-JType $p @("profiles", $alias, "toolExceptions")) -ne "object") {
+            Set-JValue $p ([PSCustomObject]@{}) @("profiles", $alias, "toolExceptions")
+        }
+        $detected = [PSCustomObject]@{}
+        $detected | Add-Member -NotePropertyName platform -NotePropertyValue $opt["platform"]
+        $detected | Add-Member -NotePropertyName method -NotePropertyValue $opt["method"]
+        $detected | Add-Member -NotePropertyName path -NotePropertyValue $opt["path"]
+        $detected | Add-Member -NotePropertyName version -NotePropertyValue $opt["version"]
+        $entry = [PSCustomObject]@{}
+        $entry | Add-Member -NotePropertyName decision -NotePropertyValue "keep"
+        $entry | Add-Member -NotePropertyName detected -NotePropertyValue $detected
+        $entry | Add-Member -NotePropertyName decidedAt -NotePropertyValue $When
+        $entry | Add-Member -NotePropertyName decidedBy -NotePropertyValue $opt["by"]
+        $reason = if ($opt["reason"]) { $opt["reason"] } else { $null }
+        $entry | Add-Member -NotePropertyName reason -NotePropertyValue $reason
+        Set-JValue $p $entry @("profiles", $alias, "toolExceptions", $slug)
+        # Write path: temp -> validate -> backup -> move (config-file-safety.md)
+        try {
+            [IO.File]::WriteAllText($tmp, (ConvertTo-NodeJson $p) + "`n", $script:Utf8NoBom)
+        } catch {
+            $s.state = "failed"; Add-Err "exception-set failed: cannot write ${tmp}: $($_.Exception.Message)"; & $putSet; Complete-Command 2
+        }
+        $v = Read-JsonFile $tmp
+        if ($v.State -ne "valid" -or (Get-JType $v.Value @("profiles", $alias, "toolExceptions", $slug)) -ne "object") {
+            & $removeTmp
+            $s.state = "failed"; Add-Err "validation failed: toolExceptions.$slug missing after write"; & $putSet; Complete-Command 2
+        }
+        return (ConvertTo-NodeJson (Get-JNode $v.Value @("profiles", $alias, "toolExceptions", $slug)).Value -Compress)
+    }
+    $after = & $writeEntry $at
     if ($s.state -eq "updated" -and $before -ceq $after) {
-        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
-        if (Test-Path -LiteralPath $tmp) { LogDetail "could not remove $tmp" }
+        & $removeTmp
         $s.state = "unchanged"; & $putSet; Complete-Command 0
     }
+    # A changed decision gets a fresh timestamp
+    if (-not $opt["decided-at"] -and $at -eq $oldAt) {
+        $at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+        $after = & $writeEntry $at
+    }
+    $dirty = Test-ProfileDirtyBefore (Split-Path -Parent $script:Pf)
     Backup-File $script:Pf
     try {
         Move-Item -LiteralPath $tmp -Destination $script:Pf -Force -ErrorAction Stop
     } catch {
-        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
-        if (Test-Path -LiteralPath $tmp) { LogDetail "could not remove $tmp" }
+        & $removeTmp
         $s.state = "failed"; Add-Err "could not replace $($script:Pf)"; & $putSet; Complete-Command 2
     }
     LogDetail "exception-set: toolExceptions.$slug ($($opt['platform']) $($opt['method']) $($opt['path'])) written to $($script:Pf) (profile $alias)"
-    Invoke-ProfileCommit (Split-Path -Parent $script:Pf) "Record tool exception: keep $slug ($($opt['method'])) on $alias"
+    Invoke-ProfileCommit (Split-Path -Parent $script:Pf) "Record tool exception: keep $slug ($($opt['method'])) on $alias" $dirty
     & $putSet
     Complete-Command 0
 }
@@ -852,6 +902,10 @@ function Invoke-DeriveConfig {
     if ($script:RmAlias) {
         if ($script:RmVia -eq "override" -and $script:RmOverrideSource -eq "env") {
             Add-Warn "machine alias from AITOOLS_MACHINE_ALIAS -- not saved to config.json"
+        } elseif ($script:RmVia -eq "hostname") {
+            # A hostname match is a legacy guess, not a registration: caching it would
+            # turn it into via=alias on the next run (PR #76 review M1)
+            Add-Warn "machine alias `"$($script:RmAlias)`" matched by hostname only -- not saved to config.json"
         } else {
             $d.alias = $script:RmAlias
         }
