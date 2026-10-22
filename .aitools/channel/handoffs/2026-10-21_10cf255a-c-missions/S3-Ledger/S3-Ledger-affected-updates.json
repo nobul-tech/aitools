@@ -1,0 +1,115 @@
+{
+  "meta": {
+    "producedBy": "S3-Ledger (mission LEDGER, session 10cf255a-c)",
+    "date": "2026-10-21",
+    "baseline": "origin/main c8573ed, registries/incidents.json (2,027 lines, 86 ids, max 86)",
+    "status": "DRAFT for commander approval. registries/incidents.json is NOT modified.",
+    "howToApply": "For each entry: replace 'affected' with 'new'; where 'observationAppend' is present, append it to the existing observation with a leading space; set 'updated' to the apply date. 'suggestedNoteUpdates' are optional and outside the four requested incidents."
+  },
+  "updates": [
+    {
+      "id": 21,
+      "title": "Tool registry is markdown — needs migration to three-layer pattern",
+      "old": [
+        "reference/tool-registry.md",
+        "reference/tool-versions.json"
+      ],
+      "new": [
+        "reference/tool-registry.md",
+        "registries/tool-registry.json",
+        "registries/tool-versions.json",
+        "scripts/check-post-push.sh",
+        "scripts/check-post-push.ps1"
+      ],
+      "reason": "reference/tool-versions.json was removed in v0.69.0 and lives at registries/tool-versions.json (RELEASE_NOTES.md:285). registries/tool-registry.json now exists, so the drift is between it and reference/tool-registry.md. The check scripts still parse the markdown: check-post-push.sh step 9 (:214-215), step 10 (:230) and step 25 (:633-636); check-post-push.ps1 :248, :265, :739. Source: S4-Review report section 4 'Dropped as covered' (M2 I-06, I-11). Also folds S2-Layout section 7 finding 16 (tool-versions.json has no governing skill), which is the same three-layer gap.",
+      "observationAppend": "UPDATED 2026-10-21 (S3-Ledger, origin/main c8573ed): registries/tool-registry.json exists and reference/tool-versions.json moved to registries/tool-versions.json in v0.69.0; reference/tool-registry.md is still parsed by check-post-push steps 9, 10 and 25 (sh :214-215, :230, :633-636; ps1 :248, :265, :739), and tool-versions.json, read by step 21, still has no governing skill (S2-Layout finding 16)."
+    },
+    {
+      "id": 55,
+      "title": "Tool registry prescribes deleting go.dev tarball installs on Linux; 'Install cleanup' rule has no install-before-cleanup ordering",
+      "old": [
+        "reference/tool-registry.md",
+        ".claude/rules/tool-lifecycle.md",
+        "scripts/setup-go.sh",
+        "scripts/aitools-lib.sh",
+        "scripts/setup-typst.sh"
+      ],
+      "new": [
+        "reference/tool-registry.md",
+        ".claude/rules/tool-lifecycle.md",
+        "scripts/setup-go.sh",
+        "scripts/aitools-lib.sh",
+        "scripts/setup-typst.sh",
+        "scripts/setup-pandoc.sh",
+        "scripts/setup-rust.sh",
+        "scripts/setup-vercelcli.sh",
+        "scripts/setup-go.ps1",
+        "scripts/setup-datadog.sh"
+      ],
+      "reason": "Five more scripts remove a non-preferred install before the replacement is installed and verified, the ordering #55 names: setup-rust.sh:33 `brew uninstall rust` before the rustup install (:61); setup-vercelcli.sh:97 `npm uninstall -g vercel` before `brew install vercel-cli` (:103); setup-go.ps1:29 `choco uninstall golang -y` before `winget install` (:103); setup-pandoc.sh:93-109 remove_package (conda, port, cabal) before `brew install pandoc` (:112); setup-datadog.sh:35 `brew uninstall datadog/pack/pup` before the reinstall (:84, :116). Spec: plans/linux-install-hardening.md:30 F1 'Install first, clean up second'. Source: S4-Review report section 4 (M2 I-01, '7 scripts remove before verify'); re-verified by S3-Ledger grep.",
+      "observationAppend": "UPDATED 2026-10-21 (S3-Ledger, origin/main c8573ed): the same remove-before-verify ordering is in setup-rust.sh:33, setup-vercelcli.sh:97, setup-go.ps1:29, setup-pandoc.sh:93-109 and setup-datadog.sh:35 (S5-Tools I-01)."
+    },
+    {
+      "id": 59,
+      "title": "Skills and framework references point at registry JSON under reference/ after the registries moved to registries/",
+      "old": [
+        ".claude/skills/incident/SKILL.md",
+        ".claude/skills/glossary/SKILL.md",
+        "reference/framework-incident-investigation.md",
+        "reference/framework-source-of-truth.md",
+        "reference/framework-hook-rollout.md",
+        "reference/framework-managed-file-deployment.md",
+        "reference/framework-intent-documentation.md"
+      ],
+      "new": [
+        ".claude/skills/incident/SKILL.md",
+        ".claude/skills/glossary/SKILL.md",
+        ".claude/skills/frameworks/SKILL.md",
+        ".claude/skills/audit/SKILL.md",
+        ".claude/skills/tool-ops/SKILL.md",
+        ".claude/skills/tool-ops/tests/expected-behaviors.md",
+        "shared/skills/intent-audit/SKILL.md",
+        "shared/skills/optimize-plan/SKILL.md",
+        "scripts/setup-bash.sh",
+        "scripts/setup-bash.ps1",
+        ".cursor/rules/documentation-standards.mdc",
+        ".cursor/rules/sources-of-truth.mdc",
+        ".cursor/rules/tool-lifecycle.mdc",
+        "reference/path-targeted-hooks-analysis.md",
+        "reference/post-push-checklist.md"
+      ],
+      "reason": "Removed: the five reference/framework-*.md files no longer contain any .json path (grep '\\.json': no hits; framework-source-of-truth.md:40 now cites the /frameworks skill), so that half of #59 is fixed. Added (grep for the six registry names under reference/ on c8573ed): .claude/skills/frameworks/SKILL.md:22,45,71; .claude/skills/audit/SKILL.md:103,121; .claude/skills/tool-ops/SKILL.md:106; .claude/skills/tool-ops/tests/expected-behaviors.md (3 hits); shared/skills/intent-audit/SKILL.md:131,134,135; shared/skills/optimize-plan/SKILL.md:34; scripts/setup-bash.sh:8 and .ps1:8; .cursor/rules/{documentation-standards,sources-of-truth,tool-lifecycle}.mdc (1 hit each); reference/path-targeted-hooks-analysis.md (2); reference/post-push-checklist.md (1). Not added because tracked elsewhere: shared/hooks/tool-ops-session-audit.sh (#70), scripts/check-post-push.ps1 (#114). Sources: S2-Layout report section 7 trailing note ('#59 incomplete: /frameworks, /audit, /tool-ops:106, intent-audit and optimize-plan are also stale'), S4-Review report section 4 (M2 I-04, I-18).",
+      "observationAppend": "UPDATED 2026-10-21 (S3-Ledger, origin/main c8573ed): the reference/framework-*.md files now cite the /frameworks skill (fixed). Still stale: /frameworks (:22, :45, :71), /audit (:103, :121), /tool-ops (:106) and its tests, /intent-audit (:131-135), /optimize-plan (:34), setup-bash.sh/.ps1 headers (:8), three .cursor/rules mirrors, reference/path-targeted-hooks-analysis.md and reference/post-push-checklist.md. Detection gap: #115."
+    },
+    {
+      "id": 76,
+      "title": "Profile selection silently falls back to the first profile when neither machineAlias nor hostname matches, and the spec endorses the silent fallback",
+      "old": [
+        "scripts/build-deploy.sh",
+        "scripts/setup-user-claude.sh",
+        "scripts/setup-user-claude.ps1",
+        "reference/user-repo.md"
+      ],
+      "new": [
+        "scripts/build-deploy.sh",
+        "scripts/setup-user-claude.sh",
+        "scripts/setup-user-claude.ps1",
+        "reference/user-repo.md",
+        ".claude/rules/managed-file-deployment.md",
+        ".cursor/rules/managed-file-deployment.mdc",
+        "reference/managed-file-deployment.md"
+      ],
+      "reason": "Three more specs endorse the same silent fallback: .claude/rules/managed-file-deployment.md:37 and .cursor/rules/managed-file-deployment.mdc:29 ('Fallback: hostname match, then first profile'), reference/managed-file-deployment.md:236 ('hostname match, then first profile'). reference/user-repo.md:84 (already listed) says the same. Source: S4-Review report section 4 (reviewer C finding on managed-file-deployment.md); the .mdc and reference rows were found by S3-Ledger grep.",
+      "observationAppend": "UPDATED 2026-10-21 (S3-Ledger, origin/main c8573ed): the same fallback is endorsed in .claude/rules/managed-file-deployment.md:37, .cursor/rules/managed-file-deployment.mdc:29 and reference/managed-file-deployment.md:236."
+    }
+  ],
+  "suggestedNoteUpdates": [
+    {
+      "id": 51,
+      "title": "Harness launches subagents with a reduced toolset (missing Grep), but standing-order-guard blocks bash grep — leaving no way to search file contents",
+      "affectedChange": "none",
+      "reason": "Handoff G17 item 3 ('Grep tool sometimes not provisioned to delegates') is a recurrence of #51, not a new incident. The second half of #51 no longer reproduces: bash grep as the first token ran unblocked for S3-Handoff-V and for S3-Ledger.",
+      "observationAppend": "RECURRENCE 2026-10-21: the Grep tool was absent for delegate S3-Handoff-V (S3-Handoff-V-verification.md, lines 69, 82 and 169) and for mission commander S3-Ledger (session 10cf255a-c; its tool list has no Grep or Glob). In both sessions bash `grep` as the first token ran unblocked, so the hook dead-end described above no longer reproduces; the provisioning gap remains."
+    }
+  ]
+}
