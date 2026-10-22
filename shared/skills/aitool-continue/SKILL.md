@@ -554,8 +554,8 @@ the full chain.
 - Does NOT plan sessions -- use `/planning`
 - Does NOT harvest artifacts -- use `/harvest`
 - Does NOT file incidents -- use `/incident`
-- Does NOT evaluate tools -- use `/aitool-eval`
-- Does NOT check tool operations -- use `/aitool-ops`
+- Does NOT evaluate tools -- use `/tool-eval`
+- Does NOT check tool operations -- use `/tool-ops`
 - Does NOT write delegation prompts -- use `/delegate`
 
 ## Staleness warning
