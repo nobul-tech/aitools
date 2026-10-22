@@ -442,6 +442,134 @@ else bad "reg-create-file: per-profile name/company written"; fi
 case_run reg-missing-nocreate 1 register --profile "$H/none.json" --alias x --out "$H/o.json" "${M[@]}"
 case_run reg-bad-alias 2 register --profile "$H/none.json" --alias "bad alias" --out "$H/o.json" "${M[@]}"
 
+# --- tool exceptions -----------------------------------------------------------------
+# case_fresh NAME RC SETUP ARGS... -- like case_run, but SETUP rebuilds the fixture
+# before each implementation (exception-set changes state).
+case_fresh() {
+    local name="$1" want="$2" setup="$3"; shift 3
+    CASE="$name"
+    OUT="$WORK/$name.bash.out"
+    "$setup"
+    run_impl bash "$OUT" "$@"
+    local brc=$RC
+    cp "$EXC_PF" "$WORK/$name.bash.profile.json" 2>/dev/null || : > "$WORK/$name.bash.profile.json"  # absent profile = empty copy
+    if [ "$brc" -eq "$want" ]; then ok "$name: bash exit $brc"
+    else bad "$name: bash exit $brc, want $want"; sed 's/^/       /' "$OUT" "$OUT.err"; fi
+    if $USE_PS; then
+        local pout="$WORK/$name.ps.out"
+        "$setup"
+        run_impl ps "$pout" "$@"
+        cp "$EXC_PF" "$WORK/$name.ps.profile.json" 2>/dev/null || : > "$WORK/$name.ps.profile.json"  # absent profile = empty copy
+        if [ "$RC" -ne "$brc" ]; then bad "$name: pwsh exit $RC, bash $brc"; sed 's/^/       /' "$pout" "$pout.err"; fi
+        if diff "$OUT" "$pout" > "$WORK/$name.diff"; then ok "$name: bash and pwsh output identical"
+        else bad "$name: bash and pwsh output differ"; sed 's/^/       /' "$WORK/$name.diff"; fi
+        if cmp -s "$WORK/$name.bash.profile.json" "$WORK/$name.ps.profile.json"; then ok "$name: profile.json bytes identical"
+        else bad "$name: profile.json differs"; diff "$WORK/$name.bash.profile.json" "$WORK/$name.ps.profile.json" | sed 's/^/       /' || true; fi
+    fi
+}
+
+fresh_home exc
+EXC_DIR="$H/repos/aitools-nobul-jose"
+EXC_PF="$EXC_DIR/profile.json"
+EXC_REMOTE="$WORK/exc-remote.git"
+exc_profile() {
+    base_profile | perl -0pe "s/\"hostname\": \"nobul-mac.local\"/\"id\": \"$ID_MAC\",\n        \"hostname\": \"nobul-mac.local\"/"
+}
+setup_exc_git() {
+    rm -rf "$EXC_DIR" "$EXC_REMOTE"
+    exc_profile | write_profile "$EXC_DIR"
+    printf '{ "githubUser": "nobul-jose" }\n' > "$H/.aitools/config.json"
+    git init -q --bare "$EXC_REMOTE"
+    git -C "$EXC_DIR" init -q
+    git -C "$EXC_DIR" config user.name "Test"
+    git -C "$EXC_DIR" config user.email "test@example.com"
+    git -C "$EXC_DIR" add profile.json
+    git -C "$EXC_DIR" commit -q -m init
+    git -C "$EXC_DIR" remote add origin "$EXC_REMOTE"
+    git -C "$EXC_DIR" push -q -u origin HEAD 2>/dev/null  # bare remote in a temp dir; result checked by the pushed=true assertion
+    printf 'unrelated\n' > "$EXC_DIR/other.txt"
+    git -C "$EXC_DIR" add other.txt
+}
+setup_exc_plain() {
+    rm -rf "$EXC_DIR"
+    exc_profile | write_profile "$EXC_DIR"
+    printf '{ "githubUser": "nobul-jose" }\n' > "$H/.aitools/config.json"
+}
+setup_exc_hostname() {
+    rm -rf "$EXC_DIR"
+    base_profile | write_profile "$EXC_DIR"
+    printf '{ "githubUser": "nobul-jose" }\n' > "$H/.aitools/config.json"
+}
+setup_exc_none() { rm -rf "$EXC_DIR"; printf '{ "githubUser": "nobul-jose" }\n' > "$H/.aitools/config.json"; }
+SET_ARGS=(exception-set --slug go --platform macos --method pkg-installer --path /usr/local/bin/go --version 1.22.5 \
+    --by setup-go --decided-at 2026-10-21T12:00:00Z)
+
+case_fresh exc-set-git 0 setup_exc_git "${SET_ARGS[@]}" "${M[@]}"
+expect result created; expect alias nobul-mac; expect via id; expect committed true; expect pushed true
+OUT="$WORK/exc-set-git.bash.profile.json"; CASE=exc-set-git-file
+if perl -0ne 'exit(/"toolExceptions": \{\n        "go": \{\n          "decision": "keep",\n          "detected": \{\n            "platform": "macos",\n            "method": "pkg-installer",\n            "path": "\/usr\/local\/bin\/go",\n            "version": "1.22.5"\n          \},\n          "decidedAt": "2026-10-21T12:00:00Z",\n          "decidedBy": "setup-go",\n          "reason": null\n        \}/ ? 0 : 1)' "$OUT"; then
+    ok "exc-set-git: entry shape and order as reference/user-repo.md"
+else bad "exc-set-git: entry shape"; sed 's/^/       /' "$OUT"; fi
+committed_files=$(git -C "$EXC_DIR" show --name-only --format=%s HEAD | perl -ne 'print if /\S/' | paste -sd '|' -)
+if [ "$committed_files" = "Record tool exception: keep go (pkg-installer) on nobul-mac|profile.json" ]; then
+    ok "exc-set-git: commit holds only profile.json (staged other.txt left alone)"
+else bad "exc-set-git: commit was '$committed_files'"; fi
+if [ "$(git -C "$EXC_REMOTE" rev-parse HEAD)" = "$(git -C "$EXC_DIR" rev-parse HEAD)" ]; then ok "exc-set-git: pushed to the remote"
+else bad "exc-set-git: remote not updated"; fi
+
+# The state left by the PowerShell run (or bash when pwsh is absent) feeds the reads below
+case_run exc-get 0 exception-get --slug go "${M[@]}"
+expect found true; expect platform macos; expect method pkg-installer; expect path /usr/local/bin/go
+expect version 1.22.5; expect decidedAt 2026-10-21T12:00:00Z; expect decidedBy setup-go; expect reason ""
+case_run exc-get-other 0 exception-get --slug typst "${M[@]}"
+expect found false; expect alias nobul-mac
+case_run exc-set-unchanged 0 "${SET_ARGS[@]}" "${M[@]}"
+expect result unchanged; expect committed false
+
+setup_exc_noident() {
+    setup_exc_git
+    git -C "$EXC_DIR" config --unset user.name
+    git -C "$EXC_DIR" config --unset user.email
+    # A distinctive owner, so the assertion cannot pass on the real global identity
+    perl -pi -e 's/jose\@nobul\.tech/owner\@example.test/g' "$EXC_PF"
+}
+case_fresh exc-set-noident 0 setup_exc_noident "${SET_ARGS[@]}" "${M[@]}"
+expect committed true
+author=$(git -C "$EXC_DIR" log -1 --format='%an <%ae>')
+if [ "$author" = "Jose <owner@example.test>" ]; then ok "exc-set-noident: committed as the profile's identity.git"
+else bad "exc-set-noident: author '$author'"; fi
+
+case_fresh exc-set-plain 0 setup_exc_plain "${SET_ARGS[@]}" "${M[@]}" --reason "corporate MDM pin"
+expect result created; expect committed false
+expect_line '^warn\t.* is not a git repository -- profile.json written but not committed$'
+OUT="$WORK/exc-set-plain.bash.profile.json"; CASE=exc-set-plain-file
+expect_line '"reason": "corporate MDM pin"'
+
+case_fresh exc-set-hostname 3 setup_exc_hostname "${SET_ARGS[@]}" "${M[@]}"
+expect result refused; expect via hostname
+expect_line '^error\tmachine profile "nobul-mac" matched by hostname only -- run: aitools user init to remember tool choices$'
+if cmp -s "$WORK/exc-set-hostname.bash.profile.json" <(base_profile); then ok "exc-set-hostname: profile.json untouched"
+else bad "exc-set-hostname: profile.json changed"; fi
+
+case_fresh exc-set-none 3 setup_exc_none "${SET_ARGS[@]}" "${M[@]}"
+expect result refused; expect_line '^error\tno dotprofile profile.json -- run: aitools user init'
+
+CASE_ENV="AITOOLS_PROFILE_FILE=$H/snap.json"
+base_profile > "$H/snap.json"
+case_fresh exc-set-snapshot 3 setup_exc_plain "${SET_ARGS[@]}" "${M[@]}"
+expect_line '^error\tprofile from AITOOLS_PROFILE_FILE is a read-only snapshot'
+CASE_ENV="AITOOLS_DRY_RUN=1"
+case_fresh exc-set-dry 0 setup_exc_plain "${SET_ARGS[@]}" "${M[@]}"
+expect result dry-run
+if cmp -s "$WORK/exc-set-dry.bash.profile.json" <(exc_profile); then ok "exc-set-dry: profile.json untouched"
+else bad "exc-set-dry: profile.json changed"; fi
+CASE_ENV=""
+
+case_fresh exc-get-none 2 setup_exc_hostname exception-get --slug go --machine-id-value "$ID_OTHER" --hostname-value elsewhere
+expect found false; expect_line '^error\tno profile matches this machine'
+case_run exc-bad-platform 2 exception-set --slug go --platform darwin --method m --path /p --by setup-go "${M[@]}"
+case_run exc-bad-slug 2 exception-get --slug "Go Lang" "${M[@]}"
+
 # --- regressions from the PR #73 review (S3-Profile-Review) --------------------------
 fresh_home rev
 base_profile | write_profile "$H/repos/aitools-nobul-jose"

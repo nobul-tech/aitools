@@ -7,17 +7,21 @@
 # the config.json values that come from them. NOT a writer of config.json
 # (setup-user-config.sh/.ps1 is the only writer). NOT a writer of profile.json
 # except the `register` subcommand, which writes to a temp file the caller
-# validates, backs up and moves. NOT the settings.json sync (Sync-ManagedJson).
-# Consumed by: the PowerShell shared-lib wrappers Resolve-UserRepoPath /
-# Resolve-MachineProfile, setup-user-config.ps1, aitools.ps1 `user init`, and
-# the generated deploy/setup-user-claude.ps1 (embedded copy).
+# validates, backs up and moves, and the `exception-set` subcommand, the only
+# writer of toolExceptions, which writes in place (temp, validate, backup, move)
+# and commits and pushes profile.json. NOT the settings.json sync
+# (Sync-ManagedJson). Consumed by: the PowerShell shared-lib wrappers
+# Resolve-UserRepoPath / Resolve-MachineProfile / Get-ToolException /
+# Set-ToolException, setup-user-config.ps1, aitools.ps1 `user init`, and the
+# generated deploy/setup-user-claude.ps1 (embedded copy).
 #
 # Usage: aitools-profile.ps1 <command> [options]   (--help for details)
 #   In-process: $out = & aitools-profile.ps1 resolve; $rc = $LASTEXITCODE
 # Exit codes: 0 resolved / ok; 1 nothing found (expected states, e.g. before
 #   `aitools user init`); 2 error (bad input, unreadable or invalid JSON,
-#   ambiguous match). Callers must not pass 2 through as their own exit code:
-#   exit 2 from a setup script means a user abort (D-TS13).
+#   ambiguous match); 3 refused (exception-set without a registered machine
+#   profile). Callers must not pass 2 through as their own exit code: exit 2
+#   from a setup script means a user abort (D-TS13).
 # Output: data on the success stream only -- key<TAB>value lines (default) or
 #   one JSON object (--json). Diagnostics go to deploy.log and stderr.
 # JSON: ConvertFrom-Json / ConvertTo-Json (PS 7). Key order is kept and the
@@ -26,8 +30,9 @@
 #   holds). Known PowerShell-side limits: property names are case-insensitive
 #   (keys differing only in case, or an empty key, are rejected; lookups ignore
 #   case), and non-integer number literals are re-formatted.
-# Safe to re-run: every command except `register` is read-only; `register`
-#   writes only the --out file.
+# Safe to re-run: every command except `register` and `exception-set` is
+#   read-only; `register` writes only the --out file; `exception-set` rewrites
+#   one toolExceptions entry and reports "unchanged" when it is identical.
 # Platform: Windows. Reference: reference/user-repo.md "Resolution".
 # Decisions: P-Q2 (raw machine ids), P-Q3 (native bash + PowerShell, no node).
 # Tests only: AITOOLS_PROFILE_TEST_ANY_OS=1 lets the parity tests run this file
@@ -84,12 +89,21 @@ Commands:
                   to --out TMP. Options: --name N, --company C, --shell S,
                   --environment E, --create (new profile.json; with
                   --github-user U, --email E)
+  exception-get   This machine's recorded tool exception for --slug S (found
+                  true/false and the stored fields). Options: --config F,
+                  --profile F, --alias A, --environment E
+  exception-set   Record a [k]eep decision for --slug S: --platform P, --method M,
+                  --path PATH, --version V, --by SCRIPT [--reason R]
+                  [--decided-at UTC]. Writes profile.json in place (temp,
+                  validate, backup, move), then commits profile.json and pushes.
+                  Exit 3 = refused (no dotprofile, or the machine profile is
+                  matched by hostname only or not at all)
 
 Output: key<TAB>value lines; --json prints one JSON object instead.
 Environment: AITOOLS_USER_REPO_PATH, AITOOLS_MACHINE_ALIAS, AITOOLS_PROFILE_FILE,
   AITOOLS_ENVIRONMENT (see reference/user-repo.md "Resolution").
 Test options: --machine-id-value ID, --hostname-value NAME (replace detection).
-Exit: 0 ok, 1 not found, 2 error.
+Exit: 0 ok, 1 not found, 2 error, 3 refused (exception-set).
 '@ -split "`n" | ForEach-Object { Write-Output ($_ -replace "`r$", "") }
 }
 
@@ -250,7 +264,8 @@ if ($cliArgs.Count -gt 0) { $script:Cmd = [string]$cliArgs[0] }
 # Option names are case-sensitive, as in bash (an ordinal dictionary, not a hashtable)
 $opt = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
 foreach ($k in @("config", "profile", "alias", "environment", "github-user", "user-repo-path", "repos-path",
-        "name", "company", "shell", "email", "out", "machine-id-value", "hostname-value")) { $opt[$k] = "" }
+        "name", "company", "shell", "email", "out", "machine-id-value", "hostname-value",
+        "slug", "platform", "method", "path", "version", "by", "reason", "decided-at")) { $opt[$k] = "" }
 $opt["path-form"] = "native"
 $script:OptCreate = $false; $script:OptJson = $false; $script:OptPlain = $false
 for ($i = 1; $i -lt $cliArgs.Count; $i++) {
@@ -563,34 +578,243 @@ function Add-ResolveHead([string]$ProfileFile) {
     Put "userRepoPath" (Format-OutPath $script:RurPath); Put "userRepoVia" $script:RurVia
 }
 
-function Invoke-Resolve {
-    Import-Config
+# Find-ThisMachine -- machine id + hostname, unavailability reported as warnings
+function Find-ThisMachine {
     Find-MachineId
     Find-Hostname
     if ($script:ThisIdError) { Add-Warn "machine id unavailable: $($script:ThisIdError)" }
     if ($script:ThisHostError) { Add-Warn "hostname unavailable: $($script:ThisHostError)" }
-    $pf = $opt["profile"]
-    $fromEnv = $false
-    if (-not $pf -and $env:AITOOLS_PROFILE_FILE) { $pf = $env:AITOOLS_PROFILE_FILE; $fromEnv = $true }
-    if ($pf) {
-        if (-not (Test-Path -LiteralPath $pf -PathType Leaf)) {
-            if ($fromEnv) { Add-Err "profile file set but missing: $pf (AITOOLS_PROFILE_FILE)" } else { Add-Err "profile file set but missing: $pf" }
-            Add-ResolveHead $pf; Add-IdentityLines; Complete-Command 2
+}
+
+# Find-ProfileFile -- $script:Pf = the profile.json to read: --profile, else
+# AITOOLS_PROFILE_FILE, else <dotprofile>\profile.json; $script:PfFromEnv for
+# AITOOLS_PROFILE_FILE (a read-only snapshot in generated deploy scripts);
+# $script:PfValue = the parsed file. Returns 0 readable, 1 none (shared-only
+# mode), 2 error.
+$script:Pf = ""; $script:PfFromEnv = $false; $script:PfValue = $null
+function Find-ProfileFile {
+    $script:Pf = $opt["profile"]; $script:PfFromEnv = $false; $script:PfValue = $null
+    if (-not $script:Pf -and $env:AITOOLS_PROFILE_FILE) { $script:Pf = $env:AITOOLS_PROFILE_FILE; $script:PfFromEnv = $true }
+    if ($script:Pf) {
+        if (-not (Test-Path -LiteralPath $script:Pf -PathType Leaf)) {
+            if ($script:PfFromEnv) { Add-Err "profile file set but missing: $($script:Pf) (AITOOLS_PROFILE_FILE)" }
+            else { Add-Err "profile file set but missing: $($script:Pf)" }
+            return 2
         }
     } else {
         $repoRc = Resolve-UserRepo
-        if ($repoRc -ne 0) { Add-ResolveHead ""; Add-IdentityLines; Complete-Command $repoRc }
-        $pf = Join-Path $script:RurPath "profile.json"
+        if ($repoRc -ne 0) { return $repoRc }
+        $script:Pf = Join-Path $script:RurPath "profile.json"
     }
-    $r = Read-JsonFile $pf
-    if ($r.State -eq "missing") { Add-Warn "profile.json not found: $pf"; Add-ResolveHead $pf; Add-IdentityLines; Complete-Command 1 }
-    if ($r.State -eq "invalid") { Add-Err $r.Message; Add-ResolveHead $pf; Add-IdentityLines; Complete-Command 2 }
-    $rc = Resolve-Machine $r.Value (Get-Cfg "machineAlias")
+    $r = Read-JsonFile $script:Pf
+    if ($r.State -eq "missing") { Add-Warn "profile.json not found: $($script:Pf)"; return 1 }
+    if ($r.State -eq "invalid") { Add-Err $r.Message; return 2 }
+    $script:PfValue = $r.Value
+    return 0
+}
+
+function Invoke-Resolve {
+    Import-Config
+    Find-ThisMachine
+    $rc = Find-ProfileFile
+    if ($rc -ne 0) { Add-ResolveHead $script:Pf; Add-IdentityLines; Complete-Command $rc }
+    $rc = Resolve-Machine $script:PfValue (Get-Cfg "machineAlias")
     # No machine match: report identity-level values only (never another profile's)
-    if (-not $script:RmAlias) { Set-IdentityValues $r.Value }
-    Add-ResolveHead $pf
+    if (-not $script:RmAlias) { Set-IdentityValues $script:PfValue }
+    Add-ResolveHead $script:Pf
     Add-IdentityLines
     Complete-Command $rc
+}
+
+# ---------------------------------------------------------------------------
+# Tool exceptions (reference/tool-support-decision-tree.md section 8; storage
+# shape in reference/user-repo.md "Profile Schema"). Location:
+# profiles.<alias>.toolExceptions.<slug>, <alias> = this machine's resolved profile.
+# exception-get returns the stored entry; matching it against the detected
+# install (platform, method, path unless versionedPath) is the caller's job,
+# because it needs the registry.
+# ---------------------------------------------------------------------------
+function Test-Slug {
+    if (-not $opt["slug"]) { Stop-Usage "$($script:Cmd) needs --slug" }
+    if ($opt["slug"] -cnotmatch '^[a-z0-9][a-z0-9._-]*$') { Stop-Usage "invalid slug: $($opt['slug'])" }
+}
+
+function Invoke-ExceptionGet {
+    Test-Slug
+    Import-Config
+    Find-ThisMachine
+    $e = [ordered]@{ found = "false"; platform = ""; method = ""; path = ""; version = ""; decidedAt = ""; decidedBy = ""; reason = "" }
+    $putExc = {
+        Put "slug" $opt["slug"]; Put "alias" $script:RmAlias; Put "via" $script:RmVia; Put "profileFile" $script:Pf
+        foreach ($k in $e.Keys) { Put $k $e[$k] }
+    }
+    $rc = Find-ProfileFile
+    if ($rc -ne 0) { & $putExc; Complete-Command $rc }
+    $rc = Resolve-Machine $script:PfValue (Get-Cfg "machineAlias")
+    if ($rc -ne 0) { & $putExc; Complete-Command $rc }
+    $slug = $opt["slug"]
+    $base = @("profiles", $script:RmAlias, "toolExceptions", $slug)
+    $t = Get-JType $script:PfValue $base
+    if ($t -eq "object") {
+        $decision = Get-JText $script:PfValue ($base + "decision")
+        if ($decision -ceq "keep") {
+            $e.found = "true"
+            $e.platform = Get-JText $script:PfValue ($base + @("detected", "platform"))
+            $e.method = Get-JText $script:PfValue ($base + @("detected", "method"))
+            $e.path = Get-JText $script:PfValue ($base + @("detected", "path"))
+            $e.version = Get-JText $script:PfValue ($base + @("detected", "version"))
+            $e.decidedAt = Get-JText $script:PfValue ($base + "decidedAt")
+            $e.decidedBy = Get-JText $script:PfValue ($base + "decidedBy")
+            $e.reason = Get-JText $script:PfValue ($base + "reason")
+        } else {
+            Add-Warn "toolExceptions.$slug in profile `"$($script:RmAlias)`" has decision `"$decision`" (only `"keep`" is defined) -- ignored"
+        }
+    } elseif ($t) {
+        Add-Warn "toolExceptions.$slug in profile `"$($script:RmAlias)`" is not an object -- ignored"
+    }
+    & $putExc
+    Complete-Command 0
+}
+
+# Invoke-ProfileCommit DIR MESSAGE -- commit only profile.json in the dotprofile and
+# push (N-Q2: dotprofile writes auto-commit and push). Failures are warnings: the
+# file is already written. Sets $script:Committed / $script:Pushed.
+$script:Committed = "false"; $script:Pushed = "false"
+function Invoke-ProfileCommit([string]$Dir, [string]$Message) {
+    $script:Committed = "false"; $script:Pushed = "false"
+    $out = (& git -C $Dir rev-parse --is-inside-work-tree 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $out -ne "true") {
+        Add-Warn "$Dir is not a git repository -- profile.json written but not committed"; return
+    }
+    # No git identity on this machine yet (fresh machine): commit as the profile's
+    # identity.git, the person the dotprofile belongs to. Empty = git's own error.
+    $who = @()
+    $cur = (& git -C $Dir config user.email 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) { $cur = "" }   # unset = exit 1
+    if (-not $cur) {
+        $gname = Get-JText $script:PfValue @("identity", "git", "name")
+        $gmail = Get-JText $script:PfValue @("identity", "git", "email")
+        if ($gname -and $gmail) { $who = @("-c", "user.name=$gname", "-c", "user.email=$gmail") }
+    }
+    $out = (& git -C $Dir add -- profile.json 2>&1 | Out-String).Trim()
+    $rc = $LASTEXITCODE
+    if ($rc -eq 0) {
+        $out = (& git -C $Dir @who commit -m $Message -- profile.json 2>&1 | Out-String).Trim()
+        $rc = $LASTEXITCODE
+    }
+    if ($rc -ne 0) {
+        LogDetail "git commit in ${Dir}: $out"
+        Add-Warn "dotprofile commit failed (exit $rc) -- commit profile.json in $Dir by hand"; return
+    }
+    $script:Committed = "true"
+    $prevPrompt = $env:GIT_TERMINAL_PROMPT
+    try {
+        $env:GIT_TERMINAL_PROMPT = "0"
+        $out = (& git -C $Dir push 2>&1 | Out-String).Trim()
+        $rc = $LASTEXITCODE
+    } finally {
+        $env:GIT_TERMINAL_PROMPT = $prevPrompt
+    }
+    if ($rc -ne 0) {
+        LogDetail "git push in ${Dir}: $out"
+        Add-Warn "dotprofile push failed (exit $rc) -- run git push in $Dir"; return
+    }
+    $script:Pushed = "true"
+}
+
+function Invoke-ExceptionSet {
+    Test-Slug
+    if (@("macos", "linux", "windows") -cnotcontains $opt["platform"]) { Stop-Usage "--platform must be macos, linux or windows" }
+    if (-not $opt["method"] -or -not $opt["path"] -or -not $opt["by"]) {
+        Stop-Usage "exception-set needs --slug, --platform, --method, --path and --by"
+    }
+    foreach ($o in @($opt["method"], $opt["path"], $opt["version"], $opt["by"], $opt["reason"], $opt["decided-at"])) {
+        if ($o -match "[`t`r`n]") { Stop-Usage "exception-set values must be one line (no tab or newline)" }
+    }
+    $at = $opt["decided-at"]
+    if (-not $at) { $at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") }
+    Import-Config
+    Find-ThisMachine
+    $slug = $opt["slug"]
+    $s = @{ state = "created" }
+    $putSet = {
+        Put "result" $s.state; Put "slug" $slug; Put "alias" $script:RmAlias; Put "via" $script:RmVia
+        Put "profileFile" $script:Pf; Put "committed" $script:Committed; Put "pushed" $script:Pushed
+    }
+    $rc = Find-ProfileFile
+    if ($rc -eq 1) { $s.state = "refused"; Add-Err "no dotprofile profile.json -- run: aitools user init to remember tool choices"; & $putSet; Complete-Command 3 }
+    if ($rc -ne 0) { $s.state = "failed"; & $putSet; Complete-Command 2 }
+    if ($script:PfFromEnv) {
+        $s.state = "refused"; Add-Err "profile from AITOOLS_PROFILE_FILE is a read-only snapshot -- not written"; & $putSet; Complete-Command 3
+    }
+    $p = $script:PfValue
+    $rc = Resolve-Machine $p (Get-Cfg "machineAlias")
+    if ($rc -ne 0 -or $script:RmVia -eq "hostname") {
+        $s.state = "refused"
+        if ($script:RmVia -eq "hostname") {
+            Add-Err "machine profile `"$($script:RmAlias)`" matched by hostname only -- run: aitools user init to remember tool choices"
+        } else {
+            Add-Err "no machine profile for this machine -- run: aitools user init to remember tool choices"
+        }
+        & $putSet; Complete-Command 3
+    }
+    $alias = $script:RmAlias
+    $before = ""
+    $n = Get-JNode $p @("profiles", $alias, "toolExceptions", $slug)
+    if ($n.Found) {
+        $s.state = "updated"
+        $before = ConvertTo-NodeJson $n.Value -Compress
+    }
+    if ($env:AITOOLS_DRY_RUN -eq "1") {
+        $s.state = "dry-run"; LogDetail "[DRY RUN] would record toolExceptions.$slug in $($script:Pf)"; & $putSet; Complete-Command 0
+    }
+    if ((Get-JType $p @("profiles", $alias, "toolExceptions")) -ne "object") {
+        Set-JValue $p ([PSCustomObject]@{}) @("profiles", $alias, "toolExceptions")
+    }
+    $detected = [PSCustomObject]@{}
+    $detected | Add-Member -NotePropertyName platform -NotePropertyValue $opt["platform"]
+    $detected | Add-Member -NotePropertyName method -NotePropertyValue $opt["method"]
+    $detected | Add-Member -NotePropertyName path -NotePropertyValue $opt["path"]
+    $detected | Add-Member -NotePropertyName version -NotePropertyValue $opt["version"]
+    $entry = [PSCustomObject]@{}
+    $entry | Add-Member -NotePropertyName decision -NotePropertyValue "keep"
+    $entry | Add-Member -NotePropertyName detected -NotePropertyValue $detected
+    $entry | Add-Member -NotePropertyName decidedAt -NotePropertyValue $at
+    $entry | Add-Member -NotePropertyName decidedBy -NotePropertyValue $opt["by"]
+    $reason = if ($opt["reason"]) { $opt["reason"] } else { $null }
+    $entry | Add-Member -NotePropertyName reason -NotePropertyValue $reason
+    Set-JValue $p $entry @("profiles", $alias, "toolExceptions", $slug)
+    # Write path: temp -> validate -> backup -> move (config-file-safety.md)
+    $tmp = "$($script:Pf).tmp.$PID"
+    try {
+        [IO.File]::WriteAllText($tmp, (ConvertTo-NodeJson $p) + "`n", $script:Utf8NoBom)
+    } catch {
+        $s.state = "failed"; Add-Err "exception-set failed: cannot write ${tmp}: $($_.Exception.Message)"; & $putSet; Complete-Command 2
+    }
+    $v = Read-JsonFile $tmp
+    if ($v.State -ne "valid" -or (Get-JType $v.Value @("profiles", $alias, "toolExceptions", $slug)) -ne "object") {
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $tmp) { LogDetail "could not remove $tmp" }
+        $s.state = "failed"; Add-Err "validation failed: toolExceptions.$slug missing after write"; & $putSet; Complete-Command 2
+    }
+    $after = ConvertTo-NodeJson (Get-JNode $v.Value @("profiles", $alias, "toolExceptions", $slug)).Value -Compress
+    if ($s.state -eq "updated" -and $before -ceq $after) {
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $tmp) { LogDetail "could not remove $tmp" }
+        $s.state = "unchanged"; & $putSet; Complete-Command 0
+    }
+    Backup-File $script:Pf
+    try {
+        Move-Item -LiteralPath $tmp -Destination $script:Pf -Force -ErrorAction Stop
+    } catch {
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $tmp) { LogDetail "could not remove $tmp" }
+        $s.state = "failed"; Add-Err "could not replace $($script:Pf)"; & $putSet; Complete-Command 2
+    }
+    LogDetail "exception-set: toolExceptions.$slug ($($opt['platform']) $($opt['method']) $($opt['path'])) written to $($script:Pf) (profile $alias)"
+    Invoke-ProfileCommit (Split-Path -Parent $script:Pf) "Record tool exception: keep $slug ($($opt['method'])) on $alias"
+    & $putSet
+    Complete-Command 0
 }
 
 function Invoke-DeriveConfig {
@@ -757,6 +981,8 @@ switch -CaseSensitive ($script:Cmd) {
     "derive-config" { Invoke-DeriveConfig }
     "snapshot" { Invoke-Snapshot }
     "register" { Invoke-Register }
+    "exception-get" { Invoke-ExceptionGet }
+    "exception-set" { Invoke-ExceptionSet }
     "" { Show-Usage; exit 2 }
     default { Stop-Usage "unknown command: $($script:Cmd)" }
 }
