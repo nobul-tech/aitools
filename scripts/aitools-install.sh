@@ -130,13 +130,15 @@ if $DRY_RUN; then export AITOOLS_DRY_RUN=1; fi
 
 # --- BEGIN install log helpers (tests/profile/test-config.sh extracts this block) ---
 # jsonl_write TS SCRIPT LEVEL MSG -- append one deploy.jsonl record. The message is
-# JSON-escaped (backslash, quote, tab; CR dropped): log lines quote paths and values.
+# JSON-escaped (backslash, quote, tab, newline); every other control character
+# (CR, ESC colour codes, ...) is dropped, so each record is one valid JSON line.
 jsonl_write() {
     local m="$4"
     m="${m//\\/\\\\}"
     m="${m//\"/\\\"}"
     m="${m//$'\t'/\\t}"
-    m="${m//$'\r'/}"
+    m="${m//$'\n'/\\n}"
+    m="${m//[[:cntrl:]]/}"
     printf '{"ts":"%s","host":"%s","os":"%s","script":"%s","run_id":"%s","level":"%s","msg":"%s"}\n' \
         "$1" "$HOST_NAME" "$OS_NAME" "$2" "$RUN_ID" "$3" "$m" >> "$LOG_JSONL"
 }
@@ -144,9 +146,10 @@ jsonl_write() {
 # relay_child_log TEXT -- the console output of a child script that logs through
 # aitools-lib (setup-user-config.sh): print each line, mirror each structured line
 # ("[ts] [script] [level] msg", colour codes removed) to deploy.jsonl -- the child
-# already wrote it to deploy.log -- and count its warnings in WARNINGS. Its errors
-# are not counted line by line: a child with errors exits non-zero and the caller
-# logs one error for it.
+# already wrote it to deploy.log -- and count its warnings in WARNINGS. The child's
+# exit footer ("COMPLETED with N warning(s)", logged at warn) is relayed but not
+# counted: it restates the warnings already counted. Its errors are not counted
+# line by line: a child with errors exits non-zero and the caller logs one error.
 relay_child_log() {
     local line clean level esc=$'\033'
     local re='^\[([^]]+)\] \[([^]]+)\] \[([a-z]+)\] (.*)$'
@@ -159,7 +162,10 @@ relay_child_log() {
         if [[ "$clean" =~ $re ]]; then
             level="${BASH_REMATCH[3]}"
             jsonl_write "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "$level" "${BASH_REMATCH[4]}"
-            if [ "$level" = "warn" ]; then WARNINGS=$((WARNINGS + 1)); fi
+            case "${BASH_REMATCH[4]}" in
+                "COMPLETED with "*|"FAILED with "*) ;;
+                *) if [ "$level" = "warn" ]; then WARNINGS=$((WARNINGS + 1)); fi ;;
+            esac
         fi
     done <<< "$1"
 }
@@ -170,20 +176,22 @@ relay_child_log() {
 run_config_writer() {
     local writer="$1"; shift
     local out="" rc=0
-    out=$(bash "$writer" "$@") || rc=$?
+    out=$("${BASH:-bash}" "$writer" "$@") || rc=$?
     relay_child_log "$out"
     if [ "$rc" -ne 0 ]; then
         log_error "Step 5: setup-user-config.sh failed (exit $rc) -- see $(display_path "$LOG_FILE")"
     fi
 }
 
-# absolute_repos_path PATH -- print PATH as an absolute path. A relative answer is
-# taken relative to the current directory, where Step 3's mkdir -p creates it (the
-# pre-#79 installer kept it relative; the config writer accepts absolute paths only).
+# absolute_repos_path PATH -- print PATH as an absolute path. A relative PATH must
+# already exist (Step 3 creates it first, relative to the current directory, as the
+# pre-#79 installer did); it is resolved with cd + pwd, which normalises ./, ../ and
+# a run from / (like GetFullPath in the .ps1). Returns 1 when it cannot be entered.
+# The config writer accepts absolute paths only.
 absolute_repos_path() {
     case "$1" in
         /*) printf '%s' "$1" ;;
-        *)  printf '%s/%s' "$PWD" "${1#./}" ;;
+        *)  (CDPATH='' cd -- "$1" && pwd) ;;
     esac
 }
 # --- END install log helpers ---
@@ -410,14 +418,18 @@ if [ -z "$REPOS_PATH" ]; then
     fi
 fi
 
+mkdir -p "$REPOS_PATH"
 case "$REPOS_PATH" in
     /*) ;;
     *)
-        REPOS_ABS=$(absolute_repos_path "$REPOS_PATH")
-        log "Repos path '$REPOS_PATH' is relative -- using $REPOS_ABS (relative to the current directory)"
-        REPOS_PATH="$REPOS_ABS" ;;
+        REPOS_ABS=""
+        if REPOS_ABS=$(absolute_repos_path "$REPOS_PATH") && [ -n "$REPOS_ABS" ]; then
+            log "Repos path '$REPOS_PATH' is relative -- using $REPOS_ABS (relative to the current directory)"
+            REPOS_PATH="$REPOS_ABS"
+        else
+            log_error "Repos path '$REPOS_PATH' is relative and could not be resolved -- config.json will not be written"
+        fi ;;
 esac
-mkdir -p "$REPOS_PATH"
 log_ok "Repos directory: $REPOS_PATH"
 
 # ============================================================

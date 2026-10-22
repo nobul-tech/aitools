@@ -85,7 +85,9 @@ function Send-ChildLogLine($record) {
         default { Write-Host $line }
     }
     Write-JsonlRecord $m.Groups[1].Value $m.Groups[2].Value $level $m.Groups[4].Value
-    if ($level -eq "warn") { $script:warnings++ }
+    # The child's exit footer ("COMPLETED with N warning(s)", logged at warn) restates
+    # the warnings already counted: relayed, not counted
+    if ($level -eq "warn" -and $m.Groups[4].Value -notmatch '^(COMPLETED|FAILED) with ') { $script:warnings++ }
 }
 
 # Invoke-ConfigWriter WRITER ARGS -- Step 5: run setup-user-config.ps1 in-process

@@ -292,6 +292,7 @@ if [ -z "$block" ]; then printf 'no helper block\n'; exit 3; fi
 eval "$block"
 case "$mode" in
     abs) absolute_repos_path "$1"; printf '\n' ;;
+    jsonl) jsonl_write "2026-01-01T00:00:00Z" "t" "info" "$(printf 'q"b\\t\tn\nc\001e\033[31mr\rz')" ;;
     run) run_config_writer "$repo/scripts/setup-user-config.sh" "$@"
          printf 'COUNTS errors=%s warnings=%s\n' "$ERRORS" "$WARNINGS" ;;
 esac
@@ -306,6 +307,7 @@ $m = [regex]::Match($text, '(?ms)^# --- BEGIN install log helpers[^\n]*\n(.*?)^#
 if (-not $m.Success) { Write-Output "no helper block"; exit 3 }
 Invoke-Expression $m.Groups[1].Value
 if ($Mode -eq "abs") { Write-Output (Get-AbsoluteReposPath $ReposPath); exit 0 }
+if ($Mode -eq "jsonl") { Write-JsonlRecord "2026-01-01T00:00:00Z" "t" "info" "q`"b\t`tn`nc$([char]1)e$([char]27)[31mr`rz"; exit 0 }
 Invoke-ConfigWriter (Join-Path $Repo "scripts/setup-user-config.ps1") @{ ReposPath = $ReposPath; RepoPath = $RepoPath }
 Write-Output "COUNTS errors=$($script:errors) warnings=$($script:warnings)"
 HARNESS
@@ -316,12 +318,12 @@ inst_run() {
     RC=0
     : > "$H/summary.txt"
     if [ "$impl" = "bash" ]; then
-        (cd "$H" && env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" \
+        (cd "${INST_CWD:-$H}" && env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" \
             AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac \
             "$BASH_BIN" "$WORK/inst-harness.sh" "$REPO" "$@") > "$WORK/inst.out" 2>&1 || RC=$?
     else
         local mode="$1"; shift
-        (cd "$H" && env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" \
+        (cd "${INST_CWD:-$H}" && env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" \
             AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac AITOOLS_PROFILE_TEST_ANY_OS=1 \
             pwsh -NoProfile -File "$WORK/inst-harness.ps1" -Repo "$REPO" -Mode "$mode" "$@") > "$WORK/inst.out" 2>&1 || RC=$?
     fi
@@ -329,7 +331,7 @@ inst_run() {
 inst_counts() { perl -ne 'print "$1 $2" if /^COUNTS errors=(\d+) warnings=(\d+)/' "$WORK/inst.out"; }
 jsonl_check() {  # jsonl_check IMPL -- every deploy.jsonl line is valid JSON; prints the writer's warn count
     local j="$H/.aitools/logs/deploy.jsonl"
-    if perl -MJSON::PP -ne 'BEGIN { $n = 0; $s = 0 } $r = decode_json($_); $n++ if $r->{script} eq "setup-user-config" && $r->{level} eq "warn"; $s++ if $r->{script} eq "setup-user-config"; END { print "$s $n" }' "$j" > "$WORK/jsonl.res" 2> "$WORK/jsonl.err"; then
+    if perl -MJSON::PP -ne 'BEGIN { $n = 0; $s = 0 } $r = decode_json($_); $n++ if $r->{script} eq "setup-user-config" && $r->{level} eq "warn" && $r->{msg} !~ /^(COMPLETED|FAILED) with /; $s++ if $r->{script} eq "setup-user-config"; $f = $1 if $r->{script} eq "setup-user-config" && $r->{msg} =~ /^COMPLETED with (\d+) warning/; END { print "$s $n ", (defined $f ? $f : 0) }' "$j" > "$WORK/jsonl.res" 2> "$WORK/jsonl.err"; then
         ok "$1 step5: deploy.jsonl lines are valid JSON"
     else
         bad "$1 step5: deploy.jsonl has an invalid line"; sed 's/^/       /' "$WORK/jsonl.err"
@@ -350,6 +352,21 @@ for impl in $IMPLS; do
     if [ "$impl" = "bash" ]; then inst_run bash abs /abs/repos; else inst_run ps abs -ReposPath /abs/repos; fi
     got=$(perl -ne 'print if /\S/' "$WORK/inst.out")
     if [ "$got" = "/abs/repos" ]; then ok "$impl step3: absolute path unchanged"; else bad "$impl step3: absolute -> '$got'"; fi
+    # normalised: ../ collapsed, and a run from / gives no double slash
+    if [ "$impl" = "bash" ]; then inst_run bash abs ../home/repos; else inst_run ps abs -ReposPath ../home/repos; fi
+    got=$(perl -ne 'print if /\S/' "$WORK/inst.out")
+    if [ "$got" = "$want" ] || [ "$got" = "$want_l" ]; then ok "$impl step3: '../home/repos' normalised"; else bad "$impl step3: '../home/repos' -> '$got'"; fi
+    INST_CWD="/"
+    if [ "$impl" = "bash" ]; then inst_run bash abs tmp; else inst_run ps abs -ReposPath tmp; fi
+    INST_CWD=""
+    got=$(perl -ne 'print if /\S/' "$WORK/inst.out")
+    if [ "$got" = "/tmp" ]; then ok "$impl step3: relative from / -> /tmp"; else bad "$impl step3: relative from / -> '$got'"; fi
+    # JSONL records stay valid with quotes, backslashes and control characters
+    mkdir -p "$H/.aitools/logs"
+    rm -f "$H/.aitools/logs/deploy.jsonl"
+    inst_run "$impl" jsonl
+    if perl -MJSON::PP -ne 'decode_json($_)' "$H/.aitools/logs/deploy.jsonl" 2> "$WORK/jsonl.err"; then ok "$impl jsonl: control characters give valid JSON"
+    else bad "$impl jsonl: invalid record"; sed 's/^/       /' "$H/.aitools/logs/deploy.jsonl" "$WORK/jsonl.err"; fi
 
     # Step 5 relays the writer: its lines reach deploy.jsonl, its warnings are counted
     # (C13 fixture: an unregistered profile warns), and the relative-path regression
@@ -362,10 +379,11 @@ for impl in $IMPLS; do
     counts=$(inst_counts)
     if [ "$RC" -eq 0 ] && [ -s "$CFG" ]; then ok "$impl step5: config.json written"; else bad "$impl step5: rc=$RC, config missing"; sed 's/^/       /' "$WORK/inst.out"; fi
     jsonl_check "$impl"
-    read -r jl_all jl_warn < "$WORK/jsonl.res" || true  # empty result = 0 0, reported below
+    read -r jl_all jl_warn jl_footer < "$WORK/jsonl.res" || true  # empty result = unset, reported below
     if [ "${jl_all:-0}" -gt 0 ]; then ok "$impl step5: writer lines in deploy.jsonl ($jl_all)"; else bad "$impl step5: no writer lines in deploy.jsonl"; fi
-    if [ "${counts#* }" = "${jl_warn:-x}" ] && [ "${jl_warn:-0}" -gt 0 ]; then ok "$impl step5: writer warnings counted (${counts#* })"
-    else bad "$impl step5: counts '$counts', writer warn lines ${jl_warn:-none}"; sed 's/^/       /' "$WORK/inst.out"; fi
+    # the installer's count = the writer's own N (its footer) = its warn lines minus the footer
+    if [ "${counts#* }" = "${jl_footer:-x}" ] && [ "${jl_warn:-x}" = "${jl_footer:-y}" ] && [ "${jl_footer:-0}" -gt 0 ]; then ok "$impl step5: writer warnings counted (${counts#* })"
+    else bad "$impl step5: counts '$counts', writer warn lines ${jl_warn:-none}, writer footer N ${jl_footer:-none}"; sed 's/^/       /' "$WORK/inst.out"; fi
     if grep -q '\[setup-user-config\] \[warn\]' "$WORK/inst.out"; then ok "$impl step5: writer lines shown on the console"; else bad "$impl step5: writer lines not shown"; fi
 
     # A failing writer (relative path reaching it) is one installer error
