@@ -17,22 +17,46 @@
 #
 # Usage: aitools-profile.ps1 <command> [options]   (--help for details)
 #   In-process: $out = & aitools-profile.ps1 resolve; $rc = $LASTEXITCODE
+# Writers: `migrate` also writes profile.json (re-keys profiles in place: temp,
+#   validate, backup, move, commit, push). The intent statement above predates
+#   it; its update is drafted for commander approval (S3-M3-Resolver report).
+# Machine profiles (profile.json revision 2.2, re-key design): keyed by this
+#   machine's raw id, lower-cased (`profiles.<machineId>`; `machine.id` repeats
+#   the key), or `environment:<name>` for an environment without a stable id
+#   (claude-code-web). The human-readable name is the profile's `alias` field.
+#   Profiles keyed by alias (revision 2.1, "legacy") are still read; `migrate`
+#   re-keys them. Key lookups ignore case; `alias` lookups do not.
 # Exit codes: 0 resolved / ok; 1 nothing found (expected states, e.g. before
 #   `aitools user init`); 2 error (bad input, unreadable or invalid JSON,
-#   ambiguous match); 3 refused (exception-set without a registered machine
-#   profile). Callers must not pass 2 through as their own exit code: exit 2
-#   from a setup script means a user abort (D-TS13).
+#   ambiguous match, machine id on two profiles); 3 refused (exception-set
+#   without a profile registered to this machine; register without a machine
+#   id; a write to an AITOOLS_PROFILE_FILE snapshot); 4 refused (register: the
+#   alias is used by another profile; pass --allow-duplicate-alias only after an
+#   interactive confirm). Callers must not pass 2 through as their own exit
+#   code: exit 2 from a setup script means a user abort (D-TS13).
 # Output: data on the success stream only -- key<TAB>value lines (default) or
 #   one JSON object (--json). Diagnostics go to deploy.log and stderr.
+#   Logging contract (library-style tool): every warning and error is returned
+#   as a `warn` / `error` line (and logged at detail); the caller logs each at
+#   its level and owns the summary rows and counters.
+# Machine fields in resolve / derive-config / exception-get output:
+#   key (the profiles key that matched), alias (its alias field, else the key),
+#   via (override|environment|id|config|alias|hostname|none), owner (this |
+#   other | unregistered | absent: whose profile it is), legacy (true when the
+#   profile is still keyed by alias).
 # JSON: ConvertFrom-Json / ConvertTo-Json (PS 7). Key order is kept and the
 #   written layout (2-space indent, LF) is byte-identical to node and to the
 #   bash engine for strings, integers, booleans and null (what profile.json
 #   holds). Known PowerShell-side limits: property names are case-insensitive
-#   (keys differing only in case, or an empty key, are rejected; lookups ignore
-#   case), and non-integer number literals are re-formatted.
-# Safe to re-run: every command except `register` and `exception-set` is
-#   read-only; `register` writes only the --out file; `exception-set` rewrites
-#   one toolExceptions entry and reports "unchanged" when it is identical.
+#   (keys differing only in case, or an empty key, are rejected), and
+#   non-integer number literals are re-formatted. Path lookups (Get-JNode) are
+#   case-sensitive, as in the perl engine; the case-insensitive profile-key
+#   lookups are explicit (ConvertTo-AsciiLower).
+# Safe to re-run: every command except `register`, `exception-set` and
+#   `migrate` is read-only; `register` writes only the --out file;
+#   `exception-set` rewrites one toolExceptions entry and reports "unchanged"
+#   when it is identical; `migrate` reports "unchanged" once every profile is
+#   keyed by id.
 # Platform: Windows. Reference: reference/user-repo.md "Resolution".
 # Decisions: P-Q2 (raw machine ids), P-Q3 (native bash + PowerShell, no node).
 # Tests only: AITOOLS_PROFILE_TEST_ANY_OS=1 lets the parity tests run this file
@@ -64,7 +88,7 @@ trap {
 
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows -and $env:AITOOLS_PROFILE_TEST_ANY_OS -ne "1") {
     LogError "This script is for Windows. On macOS/Linux, use aitools-profile.sh."
-    exit 2
+    exit 1
 }
 
 function Show-Usage {
@@ -78,17 +102,25 @@ Commands:
   machine-id      Print this machine's stable id (MachineGuid, UNVERIFIED on
                   the commander's workstation); stored raw in profile.json
   hostname        Print this machine's name ($env:COMPUTERNAME, short form)
-  resolve         Which profile this machine uses and why.
-                  Options: --config F, --profile F, --alias A, --environment E
-  derive-config   The config.json values derived from profile.json.
-                  Options: --config F, --github-user U, --user-repo-path P,
-                  --repos-path P, --alias A, --environment E
+  resolve         Which profile this machine uses and why (key, alias, via,
+                  owner, legacy). Options: --config F, --profile F,
+                  --alias A (a profiles key, else an alias field), --environment E
+  derive-config   The config.json values derived from profile.json
+                  (derived.machineId, derived.machineAlias). Options: --config F,
+                  --github-user U, --user-repo-path P, --repos-path P,
+                  --alias A, --environment E
   snapshot        Compact JSON of version, identity, cursor, profiles from
                   --profile F (for embedding in generated deploy scripts)
-  register        Write --profile F with this machine registered under --alias A
-                  to --out TMP. Options: --name N, --company C, --shell S,
-                  --environment E, --create (new profile.json; with
-                  --github-user U, --email E)
+  register        Write --profile F with this machine's profile,
+                  profiles.<machine id> (claude-code-web: environment:<name>),
+                  to --out TMP. Options: --alias A (default: short hostname),
+                  --allow-duplicate-alias (after an interactive confirm only),
+                  --name N, --company C, --shell S, --environment E,
+                  --create (new profile.json; with --github-user U, --email E).
+                  Exit 3 = no machine id; exit 4 = alias used by another profile
+  migrate         Re-key alias-keyed profiles by machine.id (alias = old key):
+                  --profile F (default: the dotprofile's), --dry-run. Writes
+                  in place (temp, validate, backup, move), commits, pushes
   exception-get   This machine's recorded tool exception for --slug S (found
                   true/false and the stored fields). Options: --config F,
                   --profile F, --alias A, --environment E
@@ -96,14 +128,15 @@ Commands:
                   --path PATH, --version V, --by SCRIPT [--reason R]
                   [--decided-at UTC]. Writes profile.json in place (temp,
                   validate, backup, move), then commits profile.json and pushes.
-                  Exit 3 = refused (no dotprofile, or the machine profile is
-                  matched by hostname only or not at all)
+                  Exit 3 = refused (no dotprofile, or no profile registered to
+                  this machine: matched by hostname, cache or another machine)
 
 Output: key<TAB>value lines; --json prints one JSON object instead.
 Environment: AITOOLS_USER_REPO_PATH, AITOOLS_MACHINE_ALIAS, AITOOLS_PROFILE_FILE,
   AITOOLS_ENVIRONMENT (see reference/user-repo.md "Resolution").
-Test options: --machine-id-value ID, --hostname-value NAME (replace detection).
-Exit: 0 ok, 1 not found, 2 error, 3 refused (exception-set).
+Test options: --machine-id-value ID, --hostname-value NAME (replace detection;
+  --machine-id-value none = no detectable id).
+Exit: 0 ok, 1 not found, 2 error, 3 refused, 4 refused (alias in use).
 '@ -split "`n" | ForEach-Object { Write-Output ($_ -replace "`r$", "") }
 }
 
@@ -160,12 +193,15 @@ foreach ($k in @("config", "profile", "alias", "environment", "github-user", "us
         "slug", "platform", "method", "path", "version", "by", "reason", "decided-at")) { $opt[$k] = "" }
 $opt["path-form"] = "native"
 $script:OptCreate = $false; $script:OptJson = $false; $script:OptPlain = $false
+$script:OptDryRun = $false; $script:OptAllowDup = $false
 for ($i = 1; $i -lt $cliArgs.Count; $i++) {
     $a = [string]$cliArgs[$i]
     switch -CaseSensitive ($a) {
         "--create" { $script:OptCreate = $true; continue }
         "--json" { $script:OptJson = $true; continue }
         "--plain" { $script:OptPlain = $true; continue }
+        "--dry-run" { $script:OptDryRun = $true; continue }
+        "--allow-duplicate-alias" { $script:OptAllowDup = $true; continue }
         { $_ -eq "--help" -or $_ -eq "-h" } { Show-Usage; exit 0 }
         default {
             if ($a.StartsWith("--") -and $opt.ContainsKey($a.Substring(2))) {
@@ -212,6 +248,8 @@ $script:ThisId = ""; $script:ThisIdSource = ""; $script:ThisIdError = ""
 if (-not $opt["machine-id-value"] -and $env:AITOOLS_PROFILE_TEST_MACHINE_ID) { $opt["machine-id-value"] = $env:AITOOLS_PROFILE_TEST_MACHINE_ID }
 if (-not $opt["hostname-value"] -and $env:AITOOLS_PROFILE_TEST_HOSTNAME) { $opt["hostname-value"] = $env:AITOOLS_PROFILE_TEST_HOSTNAME }
 function Find-MachineId {
+    # Tests: the value "none" stands for "this machine's id cannot be detected"
+    if ($opt["machine-id-value"] -ceq "none") { $script:ThisId = ""; $script:ThisIdError = "no machine id (test value)"; return }
     if ($opt["machine-id-value"]) { $script:ThisId = $opt["machine-id-value"]; $script:ThisIdSource = "argument"; return }
     try {
         $script:ThisId = [string](Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Cryptography' -Name MachineGuid -ErrorAction Stop).MachineGuid
@@ -319,18 +357,72 @@ function Resolve-UserRepo {
 }
 
 # ---------------------------------------------------------------------------
-# Which machine profile (reference/user-repo.md "Which machine profile"),
-# first decisive step wins:
-#   1 override alias (--alias, AITOOLS_MACHINE_ALIAS)          via=override
-#   2 environment claude-code-web: that machine.environment    via=environment
-#   3 machine.id equals this machine's id                      via=id
-#   4 config.json machineAlias                                 via=alias
-#   5 hostname (legacy; warns)                                 via=hostname
+# Which machine profile (reference/user-repo.md "Which machine profile"; re-key
+# design section b), first decisive step wins:
+#   1 override (--alias, AITOOLS_MACHINE_ALIAS): a profiles key (ignoring
+#     case), else an alias field; one alias on two profiles = error  via=override
+#   2 environment claude-code-web: key environment:claude-code-web
+#     (legacy: the profile whose machine.environment matches)         via=environment
+#   3 profiles[<this machine's id>] (legacy: the alias-keyed profile
+#     whose machine.id equals it; warns: migrate)                     via=id
+#   4 config.json machineId, only when this machine's id is unknown  via=config
+#   4L config.json machineAlias naming an alias-keyed profile without
+#     machine.id (legacy cache; skipped when config.json has machineId) via=alias
+#   5 hostname (legacy; warns)                                        via=hostname
 #   6 none: error; never another profile's values
 # Returns 0 resolved, 2 no match or error.
 # ---------------------------------------------------------------------------
-$script:RmAlias = ""; $script:RmVia = "none"; $script:RmOverrideSource = ""; $script:Aliases = @()
+$script:RmKey = ""; $script:RmAlias = ""; $script:RmVia = "none"; $script:RmOwner = "absent"; $script:RmLegacy = "false"
+$script:RmKind = ""; $script:RmOverrideSource = ""
 $script:Rm = @{ name = ""; company = ""; gitName = ""; gitEmail = ""; github = "" }
+
+# ConvertTo-AsciiLower TEXT -- ASCII lower case (the same rule as lc in the .sh)
+function ConvertTo-AsciiLower([string]$s) {
+    return [regex]::Replace([string]$s, '[A-Z]', { param($m) $m.Value.ToLowerInvariant() })
+}
+
+# Profile entries (objects only), in file order. Kind: id (key equals its
+# machine.id, ignoring case), env (key environment:<name>), legacy (keyed by
+# alias). Alias: the alias field, else the key.
+$script:Entries = @()
+function Import-Entries($P) {
+    $list = [System.Collections.Generic.List[object]]::new()
+    $ignored = $false
+    foreach ($k in (Get-JKeys $P @("profiles"))) {
+        if (-not $k) { continue }
+        if ((Get-JType $P @("profiles", $k)) -ne "object") { $ignored = $true; continue }
+        $al = Get-JText $P @("profiles", $k, "alias")
+        $mid = Get-JText $P @("profiles", $k, "machine", "id")
+        $e = [ordered]@{
+            Key = $k; KeyLc = (ConvertTo-AsciiLower $k); Mid = $mid; MidLc = (ConvertTo-AsciiLower $mid)
+            Env = (Get-JText $P @("profiles", $k, "machine", "environment")); HasAlias = [bool]$al
+            Alias = $(if ($al) { $al } else { $k }); Kind = "legacy"
+        }
+        if ($e.KeyLc.StartsWith("environment:")) { $e.Kind = "env" }
+        elseif ($mid -and $e.MidLc -ceq $e.KeyLc) { $e.Kind = "id" }
+        $list.Add($e)
+    }
+    if ($ignored) { Add-Warn "profile.json has profile entries that are not objects -- ignored" }
+    $script:Entries = $list.ToArray()
+}
+function Get-AliasCsv { return (@($script:Entries | ForEach-Object { $_.Alias }) -join ", ") }
+function Get-KeysCsv($List) { return (@($List | ForEach-Object { $_.Key }) -join ", ") }
+
+# Get-EntryOwner ENTRY VIA -- this | other | unregistered: whose profile it is
+function Get-EntryOwner($E, [string]$Via) {
+    if ($E.Kind -eq "env") { if ($E.KeyLc -ceq "environment:$($script:ThisEnv)") { return "this" } else { return "other" } }
+    if ($Via -eq "environment") { return "this" }
+    if (-not $E.Mid) {
+        if ($E.Kind -eq "legacy" -and $script:ThisId -and $E.KeyLc -ceq (ConvertTo-AsciiLower $script:ThisId)) { return "this" }
+        return "unregistered"
+    }
+    if (-not $script:ThisId) {
+        # This machine's id is unknown: only the cached key (config.json machineId) vouches for it
+        if ($Via -eq "config") { return "this" } else { return "other" }
+    }
+    if ($E.MidLc -ceq (ConvertTo-AsciiLower $script:ThisId)) { return "this" }
+    return "other"
+}
 
 function Set-IdentityValues($P) {
     $n = Read-JScalar $P @("identity", "name")
@@ -341,85 +433,137 @@ function Set-IdentityValues($P) {
     $script:Rm.github = Get-JText $P @("identity", "github")
 }
 
-function Set-ProfileValues($P, [string]$A) {
+function Set-ProfileValues($P, [string]$K) {
     Set-IdentityValues $P
-    $n = Read-JScalar $P @("profiles", $A, "name")
+    $n = Read-JScalar $P @("profiles", $K, "name")
     if ($n.Found) { $script:Rm.name = $n.Text }
-    $c = Read-JScalar $P @("profiles", $A, "company")
+    $c = Read-JScalar $P @("profiles", $K, "company")
     if ($c.Found) { $script:Rm.company = $c.Text }
 }
 
-function Complete-Match($P, [string]$A, [string]$Via) {
-    $script:RmAlias = $A; $script:RmVia = $Via
-    Set-ProfileValues $P $A
-    $pid_ = Get-JText $P @("profiles", $A, "machine", "id")
-    if ($Via -ne "id" -and $Via -ne "environment" -and $script:ThisId -and $pid_ -and $pid_.ToLowerInvariant() -ne $script:ThisId.ToLowerInvariant()) {
-        Add-Warn "profile `"$A`" is registered to another machine (machine.id $pid_, this machine $($script:ThisId))"
+# Complete-Match P ENTRY VIA -- ENTRY is this run's profile: values, owner, warnings
+function Complete-Match($P, $E, [string]$Via) {
+    $script:RmKey = $E.Key; $script:RmAlias = $E.Alias; $script:RmVia = $Via; $script:RmKind = $E.Kind
+    $script:RmOwner = Get-EntryOwner $E $Via
+    $script:RmLegacy = if ($E.Kind -eq "legacy") { "true" } else { "false" }
+    Set-ProfileValues $P $E.Key
+    $a = $E.Alias
+    if ($Via -ne "id" -and $Via -ne "environment" -and $E.Kind -ne "env") {
+        if ($script:RmOwner -eq "other" -and $script:ThisId) {
+            Add-Warn "profile `"$a`" is registered to another machine (machine.id $($E.Mid), this machine $($script:ThisId))"
+        }
+        if ($Via -ne "hostname" -and $script:ThisId -and -not $E.Mid) {
+            Add-Warn "profile `"$a`" has no machine.id -- run: aitools user init (registers this machine)"
+        }
     }
-    if ($Via -ne "id" -and $Via -ne "environment" -and $Via -ne "hostname" -and $script:ThisId -and -not $pid_) {
-        Add-Warn "profile `"$A`" has no machine.id -- run: aitools user init (registers this machine)"
+    # A cloned machine shares its id: a differing stored hostname is the only signal
+    if ($Via -eq "id" -and $script:ThisHost) {
+        $names = @(@(Get-JText $P @("profiles", $E.Key, "machine", "hostname")) + @(Get-JItems $P @("profiles", $E.Key, "machine", "hostnames")) | Where-Object { $_ })
+        if ($names.Count -gt 0 -and @($names | Where-Object { (ConvertTo-ShortHost $_) -ceq $script:ThisHost }).Count -eq 0) {
+            Add-Warn "profile `"$a`" was registered with hostname `"$($names[0])`", this machine is `"$($script:ThisHost)`" -- renamed, or a clone that shares machine id $($script:ThisId)?"
+        }
     }
+    # An alias on two profiles (allowed after an interactive confirm) warns on every run
+    $dups = @($script:Entries | Where-Object { $_.Alias -ceq $a })
+    if ($dups.Count -gt 1) { Add-Warn "alias `"$a`" is used by $($dups.Count) machines ($(Get-KeysCsv $dups))" }
     return 0
 }
 
-function Resolve-Machine($P, [string]$ConfigAlias) {
-    $script:RmAlias = ""; $script:RmVia = "none"; $script:RmOverrideSource = ""; $script:Aliases = @()
+function Resolve-Machine($P, [string]$ConfigId, [string]$ConfigAlias) {
+    $script:RmKey = ""; $script:RmAlias = ""; $script:RmVia = "none"; $script:RmOwner = "absent"; $script:RmLegacy = "false"
+    $script:RmKind = ""; $script:RmOverrideSource = ""
     if ((Get-JText $P @("version")) -ne "2" -or (Get-JType $P @("profiles")) -ne "object") {
         Add-Err "profile.json is not v2 or has no profiles"; return 2
     }
-    $all = Get-JKeys $P @("profiles")
-    $script:Aliases = @($all | Where-Object { (Get-JType $P @("profiles", $_)) -eq "object" })
-    if ($script:Aliases.Count -ne $all.Count) { Add-Warn "profile.json has profile entries that are not objects -- ignored" }
-    if ($script:Aliases.Count -eq 0) { Add-Err "profile.json has no machine profiles"; return 2 }
-    $csv = $script:Aliases -join ", "
+    Import-Entries $P
+    $E = $script:Entries
+    if ($E.Count -eq 0) { Add-Err "profile.json has no machine profiles"; return 2 }
 
     $override = $opt["alias"]
     if ($override) { $script:RmOverrideSource = "argument" }
     elseif ($env:AITOOLS_MACHINE_ALIAS) { $override = $env:AITOOLS_MACHINE_ALIAS; $script:RmOverrideSource = "env" }
     if ($override) {
-        if ($script:Aliases -ccontains $override) { return (Complete-Match $P $override "override") }
-        Add-Err "override alias `"$override`" not in profiles ($csv)"; return 2
+        $ol = ConvertTo-AsciiLower $override
+        $kh = @($E | Where-Object { $_.KeyLc -ceq $ol })
+        if ($kh.Count -eq 1) { return (Complete-Match $P $kh[0] "override") }
+        if ($kh.Count -gt 1) { Add-Err "override `"$override`" matches more than one profile key: $(Get-KeysCsv $kh)"; return 2 }
+        $lh = @($E | Where-Object { $_.Alias -ceq $override })
+        if ($lh.Count -eq 1) { return (Complete-Match $P $lh[0] "override") }
+        if ($lh.Count -gt 1) { Add-Err "alias `"$override`" is used by more than one profile: $(Get-KeysCsv $lh) -- select one by its key"; return 2 }
+        Add-Err "override alias `"$override`" not in profiles ($(Get-AliasCsv))"; return 2
     }
 
     if ($script:ThisEnv -eq "claude-code-web") {
-        $m = @($script:Aliases | Where-Object { (Get-JText $P @("profiles", $_, "machine", "environment")) -ceq "claude-code-web" })
-        if ($m.Count -eq 1) { return (Complete-Match $P $m[0] "environment") }
-        if ($m.Count -gt 1) { Add-Err "more than one claude-code-web profile: $($m -join ', ')"; return 2 }
+        $kh = @($E | Where-Object { $_.KeyLc -ceq "environment:claude-code-web" })
+        $lh = @($E | Where-Object { $_.KeyLc -cne "environment:claude-code-web" -and $_.Kind -ne "env" -and $_.Env -ceq "claude-code-web" })
+        if ($kh.Count -eq 1) { return (Complete-Match $P $kh[0] "environment") }
+        if ($lh.Count -eq 1) {
+            Add-Warn "profile `"$($lh[0].Key)`" is keyed by alias -- run: aitools-profile migrate (re-keys profiles by machine id)"
+            return (Complete-Match $P $lh[0] "environment")
+        }
+        if ($lh.Count -gt 1) { Add-Err "more than one claude-code-web profile: $(Get-KeysCsv $lh)"; return 2 }
         Add-Warn "no profile has machine.environment `"claude-code-web`""
     } elseif ($script:ThisId) {
-        $idl = $script:ThisId.ToLowerInvariant()
-        $m = @($script:Aliases | Where-Object { $v = Get-JText $P @("profiles", $_, "machine", "id"); $v -and $v.ToLowerInvariant() -eq $idl })
-        if ($m.Count -eq 1) {
-            if ($ConfigAlias -and $ConfigAlias -cne $m[0]) {
-                Add-Warn "config.json machineAlias `"$ConfigAlias`" disagrees with machine.id match `"$($m[0])`" -- machine.id wins"
+        $idl = ConvertTo-AsciiLower $script:ThisId
+        $hits = @($E | Where-Object { $_.KeyLc -ceq $idl -or ($_.Mid -and $_.MidLc -ceq $idl) })
+        if ($hits.Count -eq 1) {
+            $h = $hits[0]
+            if ($h.KeyLc -cne $idl) {
+                Add-Warn "profile `"$($h.Key)`" is keyed by alias -- run: aitools-profile migrate (re-keys profiles by machine id)"
             }
-            return (Complete-Match $P $m[0] "id")
+            if ($ConfigId -and (ConvertTo-AsciiLower $ConfigId) -cne $h.KeyLc) {
+                Add-Warn "config.json machineId `"$ConfigId`" disagrees with machine.id match `"$($h.Key)`" -- machine.id wins"
+            } elseif (-not $ConfigId -and $ConfigAlias -and $ConfigAlias -cne $h.Alias -and $ConfigAlias -cne $h.Key) {
+                Add-Warn "config.json machineAlias `"$ConfigAlias`" disagrees with machine.id match `"$($h.Alias)`" -- machine.id wins"
+            }
+            return (Complete-Match $P $h "id")
         }
-        if ($m.Count -gt 1) { Add-Err "machine.id $($script:ThisId) is registered on more than one profile: $($m -join ', ')"; return 2 }
+        if ($hits.Count -gt 1) { Add-Err "machine.id $($script:ThisId) is registered on more than one profile: $(Get-KeysCsv $hits)"; return 2 }
     }
 
-    if ($ConfigAlias) {
-        if ($script:Aliases -ccontains $ConfigAlias) { return (Complete-Match $P $ConfigAlias "alias") }
-        Add-Warn "config.json machineAlias `"$ConfigAlias`" not in profiles ($csv)"
+    # 4: the cached key, only when this machine's id cannot be detected
+    if ($script:ThisEnv -ne "claude-code-web" -and -not $script:ThisId -and $ConfigId) {
+        $cl = ConvertTo-AsciiLower $ConfigId
+        $hits = @($E | Where-Object { $_.KeyLc -ceq $cl })
+        if ($hits.Count -eq 1) { return (Complete-Match $P $hits[0] "config") }
+        Add-Warn "config.json machineId `"$ConfigId`" not in profiles -- ignored"
+    }
+
+    # 4L: legacy cache (config.json machineAlias names an alias-keyed profile)
+    if (-not $ConfigId -and $ConfigAlias) {
+        $hits = @($E | Where-Object { $_.Kind -eq "legacy" -and $_.Key -ceq $ConfigAlias })
+        if ($hits.Count -gt 0) {
+            $h = $hits[0]
+            if ($h.Mid -and $script:ThisId -and $h.MidLc -cne (ConvertTo-AsciiLower $script:ThisId)) {
+                Add-Warn "config.json machineAlias `"$ConfigAlias`" names a profile registered to another machine (machine.id $($h.Mid)) -- ignored"
+            } else {
+                return (Complete-Match $P $h "alias")
+            }
+        } else {
+            Add-Warn "config.json machineAlias `"$ConfigAlias`" not in profiles ($(Get-AliasCsv))"
+        }
     }
 
     $m = @()
     if ($script:ThisHost) {
-        $m = @($script:Aliases | Where-Object {
-            $names = @(Get-JText $P @("profiles", $_, "machine", "hostname")) + @(Get-JItems $P @("profiles", $_, "machine", "hostnames"))
-            @($names | Where-Object { $_ -and (ConvertTo-ShortHost $_) -eq $script:ThisHost }).Count -gt 0
+        $m = @($E | Where-Object {
+            $names = @(Get-JText $P @("profiles", $_.Key, "machine", "hostname")) + @(Get-JItems $P @("profiles", $_.Key, "machine", "hostnames"))
+            @($names | Where-Object { $_ -and (ConvertTo-ShortHost $_) -ceq $script:ThisHost }).Count -gt 0
         })
     }
     if ($m.Count -eq 1) {
         Add-Warn "matched by hostname only (legacy) -- run: aitools user init (registers machine.id)"
         return (Complete-Match $P $m[0] "hostname")
     }
-    if ($m.Count -gt 1) { Add-Err "hostname matches more than one profile: $($m -join ', ')"; return 2 }
+    if ($m.Count -gt 1) { Add-Err "hostname matches more than one profile: $(Get-KeysCsv $m)"; return 2 }
     $idText = if ($script:ThisId) { $script:ThisId } else { "unavailable" }
     $hostText = if ($script:ThisHost) { $script:ThisHost } else { "unavailable" }
     Add-Err "no profile matches this machine (machine.id $idText, hostname $hostText) -- run: aitools user init"
     return 2
 }
+
+# Resolve-This P -- Resolve-Machine with the config.json cache values
+function Resolve-This($P) { return (Resolve-Machine $P (Get-Cfg "machineId") (Get-Cfg "machineAlias")) }
 
 # ---------------------------------------------------------------------------
 # Commands
@@ -469,8 +613,10 @@ function Add-IdentityLines {
     Put "name" $script:Rm.name; Put "company" $script:Rm.company; Put "gitName" $script:Rm.gitName
     Put "gitEmail" $script:Rm.gitEmail; Put "github" $script:Rm.github
 }
+# Add-MatchLines -- the machine fields of a resolution (key, owner, legacy)
+function Add-MatchLines { Put "key" $script:RmKey; Put "owner" $script:RmOwner; Put "legacy" $script:RmLegacy }
 function Add-ResolveHead([string]$ProfileFile) {
-    Put "alias" $script:RmAlias; Put "via" $script:RmVia; Put "environment" $script:ThisEnv
+    Put "alias" $script:RmAlias; Put "via" $script:RmVia; Add-MatchLines; Put "environment" $script:ThisEnv
     Put "machineId" $script:ThisId; Put "hostname" $script:ThisHost; Put "profileFile" (Format-OutPath $ProfileFile)
     Put "userRepoPath" (Format-OutPath $script:RurPath); Put "userRepoVia" $script:RurVia
 }
@@ -515,9 +661,9 @@ function Invoke-Resolve {
     Find-ThisMachine
     $rc = Find-ProfileFile
     if ($rc -ne 0) { Add-ResolveHead $script:Pf; Add-IdentityLines; Complete-Command $rc }
-    $rc = Resolve-Machine $script:PfValue (Get-Cfg "machineAlias")
+    $rc = Resolve-This $script:PfValue
     # No machine match: report identity-level values only (never another profile's)
-    if (-not $script:RmAlias) { Set-IdentityValues $script:PfValue }
+    if (-not $script:RmKey) { Set-IdentityValues $script:PfValue }
     Add-ResolveHead $script:Pf
     Add-IdentityLines
     Complete-Command $rc
@@ -526,7 +672,8 @@ function Invoke-Resolve {
 # ---------------------------------------------------------------------------
 # Tool exceptions (reference/tool-support-decision-tree.md section 8; storage
 # shape in reference/user-repo.md "Profile Schema"). Location:
-# profiles.<alias>.toolExceptions.<slug>, <alias> = this machine's resolved profile.
+# profiles.<key>.toolExceptions.<slug>, <key> = this machine's resolved profile
+# (its machine id; a legacy alias key until `migrate`).
 # exception-get returns the stored entry; matching it against the detected
 # install (platform, method, path unless versionedPath) is the caller's job,
 # because it needs the registry.
@@ -542,15 +689,15 @@ function Invoke-ExceptionGet {
     Find-ThisMachine
     $e = [ordered]@{ found = "false"; platform = ""; method = ""; path = ""; version = ""; decidedAt = ""; decidedBy = ""; reason = "" }
     $putExc = {
-        Put "slug" $opt["slug"]; Put "alias" $script:RmAlias; Put "via" $script:RmVia; Put "profileFile" $script:Pf
+        Put "slug" $opt["slug"]; Put "alias" $script:RmAlias; Put "via" $script:RmVia; Add-MatchLines; Put "profileFile" $script:Pf
         foreach ($k in $e.Keys) { Put $k $e[$k] }
     }
     $rc = Find-ProfileFile
     if ($rc -ne 0) { & $putExc; Complete-Command $rc }
-    $rc = Resolve-Machine $script:PfValue (Get-Cfg "machineAlias")
+    $rc = Resolve-This $script:PfValue
     if ($rc -ne 0) { & $putExc; Complete-Command $rc }
     $slug = $opt["slug"]
-    $base = @("profiles", $script:RmAlias, "toolExceptions", $slug)
+    $base = @("profiles", $script:RmKey, "toolExceptions", $slug)
     $t = Get-JType $script:PfValue $base
     if ($t -eq "object") {
         $decision = Get-JText $script:PfValue ($base + "decision")
@@ -629,19 +776,36 @@ function Invoke-ProfileCommit([string]$Dir, [string]$Message, [bool]$Dirty) {
         Add-Warn "dotprofile commit failed (exit $rc) -- commit profile.json in $Dir by hand"; return
     }
     $script:Committed = "true"
+    # No prompts: GIT_TERMINAL_PROMPT covers https; BatchMode covers ssh (unless the
+    # user already set GIT_SSH_COMMAND)
     $prevPrompt = $env:GIT_TERMINAL_PROMPT
+    $prevSsh = $env:GIT_SSH_COMMAND
     try {
         $env:GIT_TERMINAL_PROMPT = "0"
+        if (-not $prevSsh) { $env:GIT_SSH_COMMAND = "ssh -o BatchMode=yes" }
         $out = (& git -C $Dir push 2>&1 | Out-String).Trim()
         $rc = $LASTEXITCODE
     } finally {
         $env:GIT_TERMINAL_PROMPT = $prevPrompt
+        $env:GIT_SSH_COMMAND = $prevSsh
     }
     if ($rc -ne 0) {
         LogDetail "git push in ${Dir}: $out"
-        Add-Warn "dotprofile push failed (exit $rc) -- run git push in $Dir"; return
+        if ($out -cmatch 'rejected|non-fast-forward|fetch first') {
+            Add-Warn "dotprofile push rejected (exit $rc): the remote has newer commits -- run git pull --rebase, then git push in $Dir"
+        } else {
+            Add-Warn "dotprofile push failed (exit $rc) -- run git push in $Dir"
+        }
+        return
     }
     $script:Pushed = "true"
+}
+
+# Remove-TempFile FILE -- delete a temp file; a failure is a warning, never silent
+function Remove-TempFile([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    try { Remove-Item -LiteralPath $Path -Force -ErrorAction Stop }
+    catch { LogDetail "remove ${Path}: $($_.Exception.Message)"; Add-Warn "could not remove $Path" }
 }
 
 function Invoke-ExceptionSet {
@@ -660,7 +824,7 @@ function Invoke-ExceptionSet {
     $slug = $opt["slug"]
     $s = @{ state = "created" }
     $putSet = {
-        Put "result" $s.state; Put "slug" $slug; Put "alias" $script:RmAlias; Put "via" $script:RmVia
+        Put "result" $s.state; Put "slug" $slug; Put "alias" $script:RmAlias; Put "via" $script:RmVia; Add-MatchLines
         Put "profileFile" $script:Pf; Put "committed" $script:Committed; Put "pushed" $script:Pushed
     }
     $rc = Find-ProfileFile
@@ -670,11 +834,13 @@ function Invoke-ExceptionSet {
         $s.state = "refused"; Add-Err "profile from AITOOLS_PROFILE_FILE is a read-only snapshot -- not written"; & $putSet; Complete-Command 3
     }
     $p = $script:PfValue
-    $rc = Resolve-Machine $p (Get-Cfg "machineAlias")
-    # Writes need a profile registered to THIS machine. via=alias while this
-    # machine has an id means the profile is unregistered or registered to another
-    # machine (a registered one would resolve via=id): refuse, or this machine's
-    # choice would be recorded in -- and honoured by -- another machine's profile.
+    $rc = Resolve-This $p
+    # Writes need THIS machine's profile: profiles[<this id>] (a legacy alias-keyed
+    # profile whose machine.id is this id is accepted; resolve warned "migrate"),
+    # the environment profile, or an override naming one of those. A hostname,
+    # cache (machineId/machineAlias) or another machine's profile is refused, or
+    # this machine's choice would be recorded in -- and honoured by -- another
+    # machine's profile.
     if ($rc -ne 0) {
         $s.state = "refused"; Add-Err "tool choice not saved -- run: aitools user init to remember tool choices"; & $putSet; Complete-Command 3
     }
@@ -683,18 +849,24 @@ function Invoke-ExceptionSet {
         Add-Err "machine profile `"$($script:RmAlias)`" matched by hostname only -- run: aitools user init to remember tool choices"
         & $putSet; Complete-Command 3
     }
-    if ($script:RmVia -eq "alias" -and $script:ThisId) {
+    if ($script:RmVia -eq "config") {
+        $s.state = "refused"
+        Add-Err "machine profile `"$($script:RmAlias)`" matched by config.json machineId only (machine id unavailable) -- tool choice not saved"
+        & $putSet; Complete-Command 3
+    }
+    if ($script:RmOwner -ne "this" -or $script:RmVia -eq "alias") {
         $s.state = "refused"
         Add-Err "machine profile `"$($script:RmAlias)`" is not registered to this machine -- run: aitools user init to remember tool choices"
         & $putSet; Complete-Command 3
     }
     $alias = $script:RmAlias
+    $k = $script:RmKey
     $before = ""
     $oldAt = ""
-    if (Get-JType $p @("profiles", $alias, "toolExceptions", $slug)) {
+    if (Get-JType $p @("profiles", $k, "toolExceptions", $slug)) {
         $s.state = "updated"
-        $before = ConvertTo-NodeJson (Get-JNode $p @("profiles", $alias, "toolExceptions", $slug)).Value -Compress
-        $oldAt = Get-JText $p @("profiles", $alias, "toolExceptions", $slug, "decidedAt")
+        $before = ConvertTo-NodeJson (Get-JNode $p @("profiles", $k, "toolExceptions", $slug)).Value -Compress
+        $oldAt = Get-JText $p @("profiles", $k, "toolExceptions", $slug, "decidedAt")
     }
     # An identical decision keeps its original timestamp (no commit, no push):
     # unless --decided-at is given, the first comparison uses the stored decidedAt.
@@ -703,16 +875,12 @@ function Invoke-ExceptionSet {
         $s.state = "dry-run"; LogDetail "[DRY RUN] would record toolExceptions.$slug in $($script:Pf)"; & $putSet; Complete-Command 0
     }
     $tmp = "$($script:Pf).tmp.$PID"
-    $removeTmp = {
-        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
-        if (Test-Path -LiteralPath $tmp) { LogDetail "could not remove $tmp" }
-    }
     # Write-Entry AT -- build the entry with decidedAt AT into $tmp, validate it;
     # returns the compact JSON of the written entry
     $writeEntry = {
         param([string]$When)
-        if ((Get-JType $p @("profiles", $alias, "toolExceptions")) -ne "object") {
-            Set-JValue $p ([PSCustomObject]@{}) @("profiles", $alias, "toolExceptions")
+        if ((Get-JType $p @("profiles", $k, "toolExceptions")) -ne "object") {
+            Set-JValue $p ([PSCustomObject]@{}) @("profiles", $k, "toolExceptions")
         }
         $detected = [PSCustomObject]@{}
         $detected | Add-Member -NotePropertyName platform -NotePropertyValue $opt["platform"]
@@ -726,7 +894,7 @@ function Invoke-ExceptionSet {
         $entry | Add-Member -NotePropertyName decidedBy -NotePropertyValue $opt["by"]
         $reason = if ($opt["reason"]) { $opt["reason"] } else { $null }
         $entry | Add-Member -NotePropertyName reason -NotePropertyValue $reason
-        Set-JValue $p $entry @("profiles", $alias, "toolExceptions", $slug)
+        Set-JValue $p $entry @("profiles", $k, "toolExceptions", $slug)
         # Write path: temp -> validate -> backup -> move (config-file-safety.md)
         try {
             [IO.File]::WriteAllText($tmp, (ConvertTo-NodeJson $p) + "`n", $script:Utf8NoBom)
@@ -734,15 +902,15 @@ function Invoke-ExceptionSet {
             $s.state = "failed"; Add-Err "exception-set failed: cannot write ${tmp}: $($_.Exception.Message)"; & $putSet; Complete-Command 2
         }
         $v = Read-JsonFile $tmp
-        if ($v.State -ne "valid" -or (Get-JType $v.Value @("profiles", $alias, "toolExceptions", $slug)) -ne "object") {
-            & $removeTmp
+        if ($v.State -ne "valid" -or (Get-JType $v.Value @("profiles", $k, "toolExceptions", $slug)) -ne "object") {
+            Remove-TempFile $tmp
             $s.state = "failed"; Add-Err "validation failed: toolExceptions.$slug missing after write"; & $putSet; Complete-Command 2
         }
-        return (ConvertTo-NodeJson (Get-JNode $v.Value @("profiles", $alias, "toolExceptions", $slug)).Value -Compress)
+        return (ConvertTo-NodeJson (Get-JNode $v.Value @("profiles", $k, "toolExceptions", $slug)).Value -Compress)
     }
     $after = & $writeEntry $at
     if ($s.state -eq "updated" -and $before -ceq $after) {
-        & $removeTmp
+        Remove-TempFile $tmp
         $s.state = "unchanged"; & $putSet; Complete-Command 0
     }
     # A changed decision gets a fresh timestamp
@@ -755,10 +923,10 @@ function Invoke-ExceptionSet {
     try {
         Move-Item -LiteralPath $tmp -Destination $script:Pf -Force -ErrorAction Stop
     } catch {
-        & $removeTmp
+        Remove-TempFile $tmp
         $s.state = "failed"; Add-Err "could not replace $($script:Pf)"; & $putSet; Complete-Command 2
     }
-    LogDetail "exception-set: toolExceptions.$slug ($($opt['platform']) $($opt['method']) $($opt['path'])) written to $($script:Pf) (profile $alias)"
+    LogDetail "exception-set: toolExceptions.$slug ($($opt['platform']) $($opt['method']) $($opt['path'])) written to $($script:Pf) (profile $k, alias $alias)"
     Invoke-ProfileCommit (Split-Path -Parent $script:Pf) "Record tool exception: keep $slug ($($opt['method'])) on $alias" $dirty
     & $putSet
     Complete-Command 0
@@ -770,11 +938,12 @@ function Invoke-DeriveConfig {
     Find-Hostname
     if ($script:ThisIdError) { Add-Warn "machine id unavailable: $($script:ThisIdError)" }
     if ($script:ThisHostError) { Add-Warn "hostname unavailable: $($script:ThisHostError)" }
-    $d = @{ gh = ""; urp = ""; alias = "" }
+    $d = @{ gh = ""; urp = ""; id = ""; alias = "" }
     $putDerived = {
-        Put "derived.githubUser" $d.gh; Put "derived.userRepoPath" $d.urp; Put "derived.machineAlias" $d.alias
-        Put "userRepoVia" $script:RurVia; Put "via" $script:RmVia; Put "company" $script:Rm.company
-        Put "machineId" $script:ThisId; Put "hostname" $script:ThisHost; Put "aliases" ($script:Aliases -join ", ")
+        Put "derived.githubUser" $d.gh; Put "derived.userRepoPath" $d.urp; Put "derived.machineId" $d.id
+        Put "derived.machineAlias" $d.alias
+        Put "userRepoVia" $script:RurVia; Put "via" $script:RmVia; Add-MatchLines; Put "company" $script:Rm.company
+        Put "machineId" $script:ThisId; Put "hostname" $script:ThisHost; Put "aliases" (Get-AliasCsv)
     }
     $repoRc = Resolve-UserRepo
     if ($repoRc -eq 2) { & $putDerived; Complete-Command 2 }
@@ -795,8 +964,8 @@ function Invoke-DeriveConfig {
     if (-not $gh) { $gh = Get-JText $r.Value @("identity", "github") }
     if (-not $gh) { $gh = Get-Cfg "githubUser" }
     $d.gh = $gh
-    $rc = Resolve-Machine $r.Value (Get-Cfg "machineAlias")
-    if ($script:RmAlias) {
+    $rc = Resolve-This $r.Value
+    if ($script:RmKey) {
         if ($script:RmVia -eq "override" -and $script:RmOverrideSource -eq "env") {
             Add-Warn "machine alias from AITOOLS_MACHINE_ALIAS -- not saved to config.json"
         } elseif ($script:RmVia -eq "hostname") {
@@ -804,6 +973,10 @@ function Invoke-DeriveConfig {
             # turn it into via=alias on the next run (PR #76 review M1)
             Add-Warn "machine alias `"$($script:RmAlias)`" matched by hostname only -- not saved to config.json"
         } else {
+            # machineId: the matched key, only for this machine's id-keyed profile
+            # (read back only when live id detection fails). machineAlias: display
+            # value, and the legacy cache for an alias-keyed profile (step 4L).
+            if ($script:RmKind -eq "id" -and $script:RmOwner -eq "this") { $d.id = $script:RmKey }
             $d.alias = $script:RmAlias
         }
     } else {
@@ -830,17 +1003,21 @@ function Invoke-Snapshot {
 }
 
 function Invoke-Register {
-    $alias = $opt["alias"]
-    if (-not $opt["profile"] -or -not $alias -or -not $opt["out"]) { Stop-Usage "register needs --profile, --alias and --out" }
-    if ($alias -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_-]*$') { Stop-Usage "invalid alias: $alias" }
+    if (-not $opt["profile"] -or -not $opt["out"]) { Stop-Usage "register needs --profile and --out" }
+    if ($opt["alias"] -and $opt["alias"] -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_-]*$') { Stop-Usage "invalid alias: $($opt['alias'])" }
     foreach ($o in @($opt["name"], $opt["company"], $opt["shell"], $opt["email"], $opt["github-user"])) {
         if ($o -match "[`t`r`n]") { Stop-Usage "register values must be one line (no tab or newline)" }
     }
+    $g = @{ state = "created"; key = ""; alias = ""; owner = ""; ownerKey = ""; claimed = "" }
+    $putReg = {
+        Put "result" $g.state; Put "key" $g.key; Put "alias" $g.alias; Put "owner" $g.owner; Put "ownerKey" $g.ownerKey
+        Put "claimed" $g.claimed; Put "machineId" $script:ThisId; Put "hostname" $script:ThisHost
+    }
     $r = Read-JsonFile $opt["profile"]
     $created = $false
-    if ($r.State -eq "invalid") { Add-Err $r.Message; Complete-Command 2 }
+    if ($r.State -eq "invalid") { $g.state = "failed"; Add-Err $r.Message; & $putReg; Complete-Command 2 }
     if ($r.State -eq "missing") {
-        if (-not $script:OptCreate) { Add-Err "profile.json not found (use --create): $($opt['profile'])"; Complete-Command 1 }
+        if (-not $script:OptCreate) { $g.state = "failed"; Add-Err "profile.json not found (use --create): $($opt['profile'])"; & $putReg; Complete-Command 1 }
         $created = $true
         $git = [PSCustomObject]@{}
         $git | Add-Member -NotePropertyName name -NotePropertyValue $opt["name"]
@@ -851,76 +1028,248 @@ function Invoke-Register {
         if ($opt["name"]) { $ident | Add-Member -NotePropertyName name -NotePropertyValue $opt["name"] }
         if ($opt["company"]) { $ident | Add-Member -NotePropertyName company -NotePropertyValue $opt["company"] }
         $ident | Add-Member -NotePropertyName git -NotePropertyValue $git
+        $meta = [PSCustomObject]@{}
+        $meta | Add-Member -NotePropertyName schemaRevision -NotePropertyValue "2.2"
         $p = [PSCustomObject]@{}
         $p | Add-Member -NotePropertyName version -NotePropertyValue 2
+        $p | Add-Member -NotePropertyName meta -NotePropertyValue $meta
         $p | Add-Member -NotePropertyName identity -NotePropertyValue $ident
         $p | Add-Member -NotePropertyName profiles -NotePropertyValue ([PSCustomObject]@{})
     } else {
         $p = $r.Value
-        if ((Get-JText $p @("version")) -ne "2") { Add-Err "profile.json is not v2 -- migrate first"; Complete-Command 2 }
+        if ((Get-JText $p @("version")) -ne "2") { $g.state = "failed"; Add-Err "profile.json is not v2 -- migrate first"; & $putReg; Complete-Command 2 }
         if ((Get-JType $p @("profiles")) -ne "object") { Set-JValue $p ([PSCustomObject]@{}) @("profiles") }
     }
     Find-Hostname
-    if ($script:ThisEnv -ne "claude-code-web") {
+    # The one key this command writes: this machine's id, lower-cased, or the
+    # environment profile on claude-code-web (no stable id there)
+    $web = ($script:ThisEnv -eq "claude-code-web")
+    if ($web) {
+        $key = "environment:claude-code-web"
+    } else {
         Find-MachineId
-        if ($script:ThisIdError) { Add-Warn "$($script:ThisIdError) -- profile registered without machine.id" }
-    }
-    if ($script:ThisId -and -not $created) {
-        $idl = $script:ThisId.ToLowerInvariant()
-        foreach ($a in (Get-JKeys $p @("profiles"))) {
-            if ($a -ceq $alias) { continue }
-            $v = Get-JText $p @("profiles", $a, "machine", "id")
-            if ($v -and $v.ToLowerInvariant() -eq $idl) { Add-Err "machine.id $($script:ThisId) is already registered on profile `"$a`""; Complete-Command 2 }
+        if (-not $script:ThisId) {
+            $g.state = "refused"
+            $why = if ($script:ThisIdError) { $script:ThisIdError } else { "empty machine id" }
+            Add-Err "no machine id: $why -- a machine profile is keyed by this machine's id"
+            & $putReg; Complete-Command 3
         }
+        $key = ConvertTo-AsciiLower $script:ThisId
     }
-    $state = "created"
+    $g.key = $key
+    $script:Entries = @()
+    if (-not $created) { Import-Entries $p }
+    $E = $script:Entries
+    # This machine's entry: profiles[<key>] (any case), or a legacy alias-keyed entry
+    # whose machine.id (machine.environment on claude-code-web) is this machine's
+    $own = @($E | Where-Object { $_.KeyLc -ceq $key })
+    if ($own.Count -gt 1) { $g.state = "failed"; Add-Err "profiles has two keys for $key ($($own[0].Key), $($own[1].Key))"; & $putReg; Complete-Command 2 }
+    $leg = @($E | Where-Object {
+        $_.KeyLc -cne $key -and $_.Kind -eq "legacy" -and (
+            ($web -and $_.Env -ceq "claude-code-web") -or (-not $web -and $_.Mid -and $_.MidLc -ceq $key))
+    })
+    if ($own.Count -eq 1 -and $leg.Count -gt 0) {
+        $g.state = "failed"; Add-Err "machine.id $($script:ThisId) is already registered on profile `"$($leg[0].Key)`" -- run: aitools-profile migrate after removing the duplicate"; & $putReg; Complete-Command 2
+    }
+    if ($leg.Count -gt 1) {
+        $g.state = "failed"; Add-Err "machine.id $($script:ThisId) is already registered on profile `"$($leg[0].Key)`" and another profile"; & $putReg; Complete-Command 2
+    }
+    # The alias: --alias, else this entry's alias, else the short hostname
+    $src = $null
+    if ($own.Count -eq 1) { $src = $own[0] }
+    elseif ($leg.Count -eq 1) { $src = $leg[0]; $g.claimed = $leg[0].Key }
+    $alias = $opt["alias"]
+    if (-not $alias -and $src) { $alias = $src.Alias }
+    if (-not $alias) { $alias = $script:ThisHost }
+    $g.alias = $alias
+    if (-not $alias) {
+        $why = if ($script:ThisHostError) { $script:ThisHostError } else { "empty" }
+        $g.state = "failed"; Add-Err "no alias: pass --alias (hostname unavailable: $why)"; & $putReg; Complete-Command 2
+    }
+    if ($alias -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_-]*$') { $g.state = "failed"; Add-Err "invalid alias: $alias (pass --alias)"; & $putReg; Complete-Command 2 }
+    # Another profile already answers to this alias (its alias field, or its key)
+    $al = ConvertTo-AsciiLower $alias
+    $conf = @($E | Where-Object { -not [object]::ReferenceEquals($_, $src) -and ($_.Alias -ceq $alias -or $_.KeyLc -ceq $al) })
+    if ($conf.Count -eq 1 -and -not $src -and $opt["alias"] -and $conf[0].Kind -eq "legacy" -and -not $conf[0].Mid -and -not $conf[0].Env) {
+        # --alias names an alias-keyed profile that belongs to no machine: claim it
+        $src = $conf[0]; $g.claimed = $conf[0].Key; $conf = @()
+    }
+    if ($conf.Count -gt 0) {
+        $g.ownerKey = $conf[0].Key
+        $g.owner = Get-EntryOwner $conf[0] ""
+        if (-not $script:OptAllowDup) {
+            $g.state = "refused"
+            Add-Err "alias `"$alias`" is used by another machine's profile ($($g.ownerKey)) -- choose another alias, or confirm interactively (--allow-duplicate-alias)"
+            & $putReg; Complete-Command 4
+        }
+        Add-Warn "alias `"$alias`" is used by $($conf.Count + 1) machines ($(Get-KeysCsv $conf), $key)"
+        $g.owner = ""; $g.ownerKey = ""
+    }
     $before = ""
-    $t = Get-JType $p @("profiles", $alias)
-    if ($t) {
-        if ($t -ne "object") { Add-Err "profiles.$alias is not an object"; Complete-Command 2 }
-        $state = "updated"
-        $before = ConvertTo-NodeJson (Get-JNode $p @("profiles", $alias)).Value -Compress
-    }
     try {
+    if ($src) {
+        $g.state = "updated"
+        $before = ConvertTo-NodeJson (Get-JNode $p @("profiles", $src.Key)).Value -Compress
+        $srcName = Read-JScalar $p @("profiles", $src.Key, "name")
+        $srcCompany = Read-JScalar $p @("profiles", $src.Key, "company")
+        $srcHost = Get-JText $p @("profiles", $src.Key, "machine", "hostname")
+        # Re-key a claimed or differently-cased entry under this machine's key (position kept)
+        if ($src.Key -cne $key) { Rename-JKey $p $key @("profiles", $src.Key) }
+        if ($alias -cne $src.Alias -or (-not $src.HasAlias -and $g.claimed)) {
+            if ((ConvertTo-AsciiLower $alias) -cne $key) { Set-JValue $p $alias @("profiles", $key, "alias") }
+        }
+    } else {
+        $srcName = @{ Found = $false }; $srcCompany = @{ Found = $false }; $srcHost = ""
+        Set-JValue $p $alias @("profiles", $key, "alias")
+    }
     # Per-profile name/company only when neither the profile nor identity has one
     if ($opt["name"] -and -not $created) {
-        $hasProf = ($state -eq "updated") -and (Read-JScalar $p @("profiles", $alias, "name")).Found
-        $hasIdent = (Read-JScalar $p @("identity", "name")).Found
-        if (-not $hasProf -and -not $hasIdent) { Set-JValue $p $opt["name"] @("profiles", $alias, "name") }
+        if (-not $srcName.Found -and -not (Read-JScalar $p @("identity", "name")).Found) { Set-JValue $p $opt["name"] @("profiles", $key, "name") }
     }
     if ($opt["company"] -and -not $created) {
-        $hasProf = ($state -eq "updated") -and (Read-JScalar $p @("profiles", $alias, "company")).Found
-        $hasIdent = (Read-JScalar $p @("identity", "company")).Found
-        if (-not $hasProf -and -not $hasIdent) { Set-JValue $p $opt["company"] @("profiles", $alias, "company") }
+        if (-not $srcCompany.Found -and -not (Read-JScalar $p @("identity", "company")).Found) { Set-JValue $p $opt["company"] @("profiles", $key, "company") }
     }
-    if ($script:ThisId) { Set-JValue $p $script:ThisId @("profiles", $alias, "machine", "id") }
-    if ($script:ThisEnv -eq "claude-code-web") { Set-JValue $p "claude-code-web" @("profiles", $alias, "machine", "environment") }
-    if (-not (Get-JText $p @("profiles", $alias, "machine", "hostname")) -and $script:ThisHost) {
-        Set-JValue $p $script:ThisHost @("profiles", $alias, "machine", "hostname")
+    if ($web) {
+        Set-JValue $p "claude-code-web" @("profiles", $key, "machine", "environment")
+    } else {
+        # machine.id repeats the key; an existing value differing only in case is kept
+        $mid = if ($src) { $src.Mid } else { "" }
+        if (-not $mid -or (ConvertTo-AsciiLower $mid) -cne $key) { Set-JValue $p $key @("profiles", $key, "machine", "id") }
     }
+    if (-not $srcHost -and $script:ThisHost) { Set-JValue $p $script:ThisHost @("profiles", $key, "machine", "hostname") }
     $os = switch ($script:AitoolsPlatform) { "windows" { "win32" } "macos" { "darwin" } default { $script:AitoolsPlatform } }
     $arch = ([string][System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture).ToLowerInvariant()
-    Set-JValue $p $os @("profiles", $alias, "machine", "os")
-    Set-JValue $p $arch @("profiles", $alias, "machine", "arch")
-    if ($opt["shell"]) { Set-JValue $p $opt["shell"] @("profiles", $alias, "machine", "shell") }
+    Set-JValue $p $os @("profiles", $key, "machine", "os")
+    Set-JValue $p $arch @("profiles", $key, "machine", "arch")
+    if ($opt["shell"]) { Set-JValue $p $opt["shell"] @("profiles", $key, "machine", "shell") }
     } catch {
-        Add-Err "register failed: $($_.Exception.Message)"; Complete-Command 2
+        $g.state = "failed"; Add-Err "register failed: $($_.Exception.Message)"; & $putReg; Complete-Command 2
     }
     try {
         [IO.File]::WriteAllText($opt["out"], (ConvertTo-NodeJson $p) + "`n", $script:Utf8NoBom)
     } catch {
-        Add-Err "register failed: cannot write $($opt['out']): $($_.Exception.Message)"; Complete-Command 2
+        $g.state = "failed"; Add-Err "register failed: cannot write $($opt['out']): $($_.Exception.Message)"; & $putReg; Complete-Command 2
     }
     $v = Read-JsonFile $opt["out"]
-    if ($v.State -ne "valid" -or (Get-JType $v.Value @("profiles", $alias)) -ne "object") {
-        Add-Err "validation failed: profile $alias missing after write"; Complete-Command 2
+    if ($v.State -ne "valid" -or (Get-JType $v.Value @("profiles", $key)) -ne "object") {
+        $g.state = "failed"; Add-Err "validation failed: profile $key missing after write"; & $putReg; Complete-Command 2
     }
-    $after = ConvertTo-NodeJson (Get-JNode $v.Value @("profiles", $alias)).Value -Compress
-    if ($state -eq "updated" -and $before -ceq $after) { $state = "unchanged" }
-    Put "result" $state
-    Put "alias" $alias
-    Put "machineId" $script:ThisId
-    Put "hostname" $script:ThisHost
+    if (-not $web) {
+        $vid = Get-JText $v.Value @("profiles", $key, "machine", "id")
+        if ((ConvertTo-AsciiLower $vid) -cne $key) { $g.state = "failed"; Add-Err "validation failed: profiles.$key machine.id is `"$vid`""; & $putReg; Complete-Command 2 }
+    }
+    $after = ConvertTo-NodeJson (Get-JNode $v.Value @("profiles", $key)).Value -Compress
+    if ($g.state -eq "updated" -and -not $g.claimed -and $src.Key -ceq $key -and $before -ceq $after) { $g.state = "unchanged" }
+    $g.owner = "this"
+    & $putReg
+    Complete-Command 0
+}
+
+# ---------------------------------------------------------------------------
+# migrate (re-key design section f): every alias-keyed profile with machine.id is
+# renamed to that id, lower-cased (with machine.environment: environment:<name>),
+# keeping its position; `alias` is set to the old key when the profile has none.
+# Profiles with neither stay as they are (unclaimed; registration claims them).
+# Two profiles with one id = error, nothing written. Write path: temp -> validate
+# (every re-keyed profile's key = its machine.id) -> backup -> move, then commit
+# only profile.json and push (N-Q2). The one command that changes profiles other
+# than this machine's: a mechanical rename of keys, never of their contents.
+# ---------------------------------------------------------------------------
+function Invoke-Migrate {
+    Import-Config
+    $g = @{ state = "unchanged"; renamed = ""; unclaimed = "" }
+    $putMig = {
+        Put "result" $g.state; Put "profileFile" $script:Pf; Put "renamed" $g.renamed; Put "unclaimed" $g.unclaimed
+        Put "committed" $script:Committed; Put "pushed" $script:Pushed
+    }
+    $rc = Find-ProfileFile
+    if ($rc -eq 1) { $g.state = "failed"; & $putMig; Complete-Command 1 }
+    if ($rc -ne 0) { $g.state = "failed"; & $putMig; Complete-Command 2 }
+    if ($script:PfFromEnv) {
+        $g.state = "refused"; Add-Err "profile from AITOOLS_PROFILE_FILE is a read-only snapshot -- not written"; & $putMig; Complete-Command 3
+    }
+    $p = $script:PfValue
+    if ((Get-JText $p @("version")) -ne "2" -or (Get-JType $p @("profiles")) -ne "object") {
+        $g.state = "failed"; Add-Err "profile.json is not v2 or has no profiles"; & $putMig; Complete-Command 2
+    }
+    Import-Entries $p
+    $E = $script:Entries
+    # Target: the key each entry ends up with
+    $targets = [System.Collections.Generic.List[string]]::new()
+    $unclaimed = [System.Collections.Generic.List[string]]::new()
+    # (the loop variable is not $e: PowerShell names ignore case, $e would be $E)
+    foreach ($en in $E) {
+        $t = $en.Key
+        if ($en.Kind -eq "id" -or $en.Kind -eq "env") { $t = $en.KeyLc }
+        elseif ($en.Mid) { $t = $en.MidLc }
+        elseif ($en.Env) { $t = "environment:$(ConvertTo-AsciiLower $en.Env)" }
+        else {
+            $unclaimed.Add($en.Key)
+            Add-Warn "profile `"$($en.Key)`" has no machine.id -- left as is (aitools user init claims it)"
+        }
+        $targets.Add($t)
+    }
+    $g.unclaimed = $unclaimed -join ", "
+    # Two profiles that would share a key: nothing is written
+    for ($i = 0; $i -lt $E.Count; $i++) {
+        for ($j = $i + 1; $j -lt $E.Count; $j++) {
+            if ((ConvertTo-AsciiLower $targets[$i]) -ceq (ConvertTo-AsciiLower $targets[$j])) {
+                $g.state = "failed"
+                Add-Err "profiles `"$($E[$i].Key)`" and `"$($E[$j].Key)`" would both be keyed `"$($targets[$i])`" (one machine id on two profiles) -- nothing written"
+                & $putMig; Complete-Command 2
+            }
+        }
+    }
+    $renamed = [System.Collections.Generic.List[string]]::new()
+    try {
+        for ($i = 0; $i -lt $E.Count; $i++) {
+            if ($targets[$i] -cne $E[$i].Key) {
+                $renamed.Add("$($E[$i].Key) -> $($targets[$i])")
+                Rename-JKey $p $targets[$i] @("profiles", $E[$i].Key)
+                if ($E[$i].Kind -eq "legacy" -and -not $E[$i].HasAlias) { Set-JValue $p $E[$i].Key @("profiles", $targets[$i], "alias") }
+            }
+        }
+    } catch {
+        $g.state = "failed"; Add-Err "migrate failed: $($_.Exception.Message)"; & $putMig; Complete-Command 2
+    }
+    $g.renamed = $renamed -join ", "
+    if ($renamed.Count -eq 0) { & $putMig; Complete-Command 0 }
+    if ($script:OptDryRun -or $env:AITOOLS_DRY_RUN -eq "1") {
+        $g.state = "dry-run"; LogDetail "[DRY RUN] would re-key in $($script:Pf): $($g.renamed)"; & $putMig; Complete-Command 0
+    }
+    $tmp = "$($script:Pf).tmp.$PID"
+    try {
+        [IO.File]::WriteAllText($tmp, (ConvertTo-NodeJson $p) + "`n", $script:Utf8NoBom)
+    } catch {
+        Remove-TempFile $tmp
+        $g.state = "failed"; Add-Err "migrate failed: cannot write ${tmp}: $($_.Exception.Message)"; & $putMig; Complete-Command 2
+    }
+    $v = Read-JsonFile $tmp
+    for ($i = 0; $i -lt $E.Count; $i++) {
+        if ($targets[$i] -cne $E[$i].Key -and $E[$i].Kind -ne "env") {
+            $t = $targets[$i]
+            $got = if ($t.StartsWith("environment:")) { "environment:" + (ConvertTo-AsciiLower (Get-JText $v.Value @("profiles", $t, "machine", "environment"))) }
+                   else { ConvertTo-AsciiLower (Get-JText $v.Value @("profiles", $t, "machine", "id")) }
+            if ($v.State -ne "valid" -or (Get-JType $v.Value @("profiles", $t)) -ne "object" -or $got -cne $t) {
+                Remove-TempFile $tmp
+                $g.state = "failed"; Add-Err "validation failed: profile `"$t`" does not match its machine.id after the re-key"
+                & $putMig; Complete-Command 2
+            }
+        }
+    }
+    $dirty = Test-ProfileDirtyBefore (Split-Path -Parent $script:Pf)
+    Backup-File $script:Pf
+    try {
+        Move-Item -LiteralPath $tmp -Destination $script:Pf -Force -ErrorAction Stop
+    } catch {
+        Remove-TempFile $tmp
+        $g.state = "failed"; Add-Err "could not replace $($script:Pf)"; & $putMig; Complete-Command 2
+    }
+    $g.state = "migrated"
+    LogDetail "migrate: re-keyed $($g.renamed) in $($script:Pf)"
+    $script:PfValue = $v.Value
+    Invoke-ProfileCommit (Split-Path -Parent $script:Pf) "Migrate machine profiles to id keys" $dirty
+    & $putMig
     Complete-Command 0
 }
 
@@ -932,6 +1281,7 @@ switch -CaseSensitive ($script:Cmd) {
     "derive-config" { Invoke-DeriveConfig }
     "snapshot" { Invoke-Snapshot }
     "register" { Invoke-Register }
+    "migrate" { Invoke-Migrate }
     "exception-get" { Invoke-ExceptionGet }
     "exception-set" { Invoke-ExceptionSet }
     "" { Show-Usage; exit 2 }

@@ -43,12 +43,16 @@ function Read-JsonFile([string]$Path) {
     return @{ State = "valid"; Value = $v; Message = "" }
 }
 
-# Get-JNode ROOT SEG... -> @{ Found; Value } (Found=$false when a segment is absent)
+# Get-JNode ROOT SEG... -> @{ Found; Value } (Found=$false when a segment is absent).
+# Segments match case-sensitively, as in the perl engine (nav): PowerShell's own
+# property lookup ignores case, so the names are compared one by one. Callers that
+# need a case-insensitive key lookup (profile keys) do it explicitly.
 function Get-JNode($Root, [string[]]$Segs) {
     $o = $Root
     foreach ($s in $Segs) {
         if ($o -isnot [System.Management.Automation.PSCustomObject]) { return @{ Found = $false; Value = $null } }
-        $p = $o.PSObject.Properties[$s]
+        $p = $null
+        foreach ($q in $o.PSObject.Properties) { if ($q.Name -ceq $s) { $p = $q; break } }
         if (-not $p) { return @{ Found = $false; Value = $null } }
         $o = $p.Value
     }
