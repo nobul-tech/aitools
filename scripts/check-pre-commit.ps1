@@ -417,7 +417,7 @@ if (-not $python20) {
         StepPass "21" "Skill levels" "no skill name at two levels"
     } elseif ($skillRc -eq 1) {
         $skillOut | ForEach-Object { Write-Host "  $_" }
-        StepFail "21" "Skill levels" "same skill name at two levels (keep one; git mv, never copies)"
+        StepFail "21" "Skill levels" "same skill name at two levels (keep one: git mv within aitools; delete a dotprofile copy of a shared skill)"
     } else {
         $skillOut | ForEach-Object { Write-Host "  $_" }
         StepFail "21" "Skill levels" "check-skill-levels.py error (exit $skillRc)"

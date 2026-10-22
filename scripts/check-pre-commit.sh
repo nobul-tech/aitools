@@ -514,7 +514,7 @@ else
         step_pass "21" "Skill levels" "no skill name at two levels"
     elif [ "$skill_rc" -eq 1 ]; then
         echo "$skill_out"
-        step_fail "21" "Skill levels" "same skill name at two levels (keep one; git mv, never copies)"
+        step_fail "21" "Skill levels" "same skill name at two levels (keep one: git mv within aitools; delete a dotprofile copy of a shared skill)"
     else
         echo "$skill_out"
         step_fail "21" "Skill levels" "check-skill-levels.py error (exit $skill_rc)"

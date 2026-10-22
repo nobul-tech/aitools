@@ -8,8 +8,9 @@ mechanics (`reference/managed-file-deployment.md`). NOT project-level artifacts 
 
 ## The rule
 
-1. `shared/**` deploys to **user level** (`~/.claude`, `~/.cursor`, `~/.aitools`, the shell rc) and
-   works in every repo.
+1. `shared/**` is the source of everything aitools deploys to **user level** (`~/.claude`,
+   `~/.cursor`, `~/.aitools`, the shell rc); what it deploys works in every repo. Two folders are
+   templates or docs and are not deployed (table below).
 2. `.claude/**` and `.cursor/**` are **project level**: they load only in sessions on the aitools repo
    and are never deployed.
 3. Everything else (`scripts/`, `reference/`, `registries/`, `plans/`, `deploy/`) is aitools source or
@@ -20,7 +21,7 @@ mechanics (`reference/managed-file-deployment.md`). NOT project-level artifacts 
 | Source | Deployed to | Deployed by |
 |--------|-------------|-------------|
 | `shared/skills/<name>/SKILL.md` | `~/.claude/skills/<name>/`, `~/.cursor/skills/<name>/` | `scripts/setup-user-skills.sh/.ps1` (dev); embedded by `scripts/build-deploy.sh` (MDM) |
-| `shared/hooks/*.sh` (+ `hooks-manifest.json`) | `~/.claude/hooks/`, registered in `~/.claude/settings.json` | `scripts/setup-user-hooks.sh/.ps1`; embedded by `scripts/build-deploy.sh` |
+| `shared/hooks/` scripts listed in `hooks-manifest.json` (`.sh`, plus `.py` helpers; some helpers come from `scripts/`) | `~/.claude/hooks/`, registered in `~/.claude/settings.json` | `scripts/setup-user-hooks.sh/.ps1`; embedded by `scripts/build-deploy.sh` |
 | `shared/claude-shared.md` | `~/.claude/CLAUDE.md` (fallback when the dotprofile has no template) | `scripts/setup-user-claude.sh/.ps1`; embedded by `scripts/build-deploy.sh` |
 | `shared/shell/aliases.sh`, `aliases.ps1` | sourced from the shell rc / PowerShell profile | `scripts/aitools-install.sh/.ps1` |
 | `shared/cursor-rules/` | not deployed: templates to paste into Cursor User Rules by hand | none |

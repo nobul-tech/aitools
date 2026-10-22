@@ -86,7 +86,8 @@ Create a `plans/*.md` file when work:
 - **One name, one place**: a skill name exists in exactly one of the
   three folders. User-level takes priority in Claude Code, so a same-name
   pair leaves the project copy dead. Pre-commit step 21 fails on a
-  `shared/skills/` and `.claude/skills/` collision.
+  collision between `shared/skills/`, `.claude/skills/` and the
+  dotprofile's `claude/skills/`.
 - **Governed data**: user-level skills say where their repo paths
   resolve (a "Where the files live" section): the aitools clone, else
   `repoPath` in `~/.aitools/config.json`, else the read-only
