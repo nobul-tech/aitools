@@ -1,0 +1,20 @@
+        for rule_file in "$RULES_SRC"/*.md; do
+            [ -f "$rule_file" ] || continue
+            rule_name=$(basename "$rule_file")
+            # Adopt target: the dotprofile rule (the file deployed from). Empty
+            # in the MDM deploy script (no user repo): adopt and merge not offered.
+            _rule_adopt_path=""
+            if [ -n "${USER_REPO_PATH:-}" ]; then
+                _rule_adopt_path="$USER_REPO_PATH/claude/rules/$rule_name"
+            fi
+            deploy_managed_file "$(cat "$rule_file")" "$RULES_DEST/$rule_name" "claude rules" "$rule_name" "$_rule_adopt_path"
+
+            case "$MANAGED_FILE_RESULT" in
+                created|updated|verified|"accept & adopt"|skipped|failed)
+                    # The library wrote LOCAL and the adopt target itself (and
+                    # never commits or pushes); the tracker records every
+                    # outcome (failed -> ERROR row).
+                    ;;
+            esac
+            deploy_tracker_record "$MANAGED_FILE_RESULT" "claude rules" "$rule_name"
+        done

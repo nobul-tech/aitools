@@ -1,0 +1,27 @@
+# ---------------------------------------------------------------------------
+# Adopt filter for CLAUDE.md (Deploy-ManagedFile -AdoptFilter): takes LOCAL
+# content, returns the dotprofile template. Strips the machine-specific footer
+# and reverse-tokenizes profile values, so the next run rebuilds the same
+# CLAUDE.md from the template and verifies it. Empty profile values are never
+# substituted (an empty pattern would match everywhere).
+# ---------------------------------------------------------------------------
+$claudeMdAdoptFilter = {
+    param([string]$Deployed)
+    $idx = $Deployed.IndexOf("`n## Machine-Specific")
+    if ($idx -ge 0) {
+        $Deployed = $Deployed.Substring(0, $idx)
+    }
+    $Deployed = $Deployed.TrimEnd()
+    if ($profileName) {
+        foreach ($pair in @(
+                @($profileName, '{{PROFILE_NAME}}'),
+                @($profileCompany, '{{PROFILE_COMPANY}}'),
+                @($identityGitName, '{{IDENTITY_GIT_NAME}}'),
+                @($identityGitEmail, '{{IDENTITY_GIT_EMAIL}}'))) {
+            if ($pair[0]) {
+                $Deployed = $Deployed.Replace([string]$pair[0], [string]$pair[1])
+            }
+        }
+    }
+    return $Deployed
+}

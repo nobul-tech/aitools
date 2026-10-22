@@ -1,0 +1,22 @@
+        foreach ($rf in $sourceRules) {
+            $destFile = Join-Path $rulesDest $rf.Name
+            # Adopt target: the dotprofile rule (the file deployed from). Empty
+            # in the MDM deploy script (no user repo): adopt and merge not offered.
+            $ruleAdoptPath = ""
+            if ($userRepoPath) { $ruleAdoptPath = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name }
+
+            try {
+                $ruleContent = Get-Content $rf.FullName -Raw -ErrorAction Stop
+            } catch {
+                LogWarn "Cannot read source rule $($rf.Name): $_"
+                continue
+            }
+            $ruleResult = Deploy-ManagedFile -Content $ruleContent -DestPath $destFile -ToolName "claude rules" -ItemName $rf.Name -AdoptPath $ruleAdoptPath
+
+            if ($ruleResult -in @("created", "updated", "verified", "accept & adopt", "skipped", "failed")) {
+                # The library wrote LOCAL and the adopt target itself (and never
+                # commits or pushes); the tracker records every outcome
+                # (failed -> ERROR row).
+            }
+            Record-DeployOutcome -Outcome $ruleResult -ToolName "claude rules" -ItemName $rf.Name
+        }

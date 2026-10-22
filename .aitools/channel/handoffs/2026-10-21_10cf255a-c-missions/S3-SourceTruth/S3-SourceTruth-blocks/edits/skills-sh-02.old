@@ -1,0 +1,24 @@
+        # Found a user-created skill not in any source
+        if [ -n "$USER_REPO_PATH" ]; then
+            log "Found user-created skill: $skill_name"
+            if [ "$DRY_RUN" = "true" ]; then
+                log "[DRY RUN] Would offer to adopt $skill_name to dotprofile"
+            elif [ -c /dev/tty ]; then
+                printf '\n  User-created skill detected: %s\n' "$skill_name" > /dev/tty
+                printf '  [a]dopt to dotprofile  [s]kip\n' > /dev/tty
+                printf '  > ' > /dev/tty
+                local choice
+                read -r choice < /dev/tty
+                case "$choice" in
+                    a|adopt)
+                        local adopt_dir="$USER_REPO_PATH/claude/skills/$skill_name"
+                        mkdir -p "$adopt_dir"
+                        cp "$skill_dir/SKILL.md" "$adopt_dir/SKILL.md"
+                        log_ok "Adopted user skill to dotprofile: $skill_name"
+                        ;;
+                    *)
+                        log "Skipped adoption of $skill_name"
+                        ;;
+                esac
+            fi
+        fi

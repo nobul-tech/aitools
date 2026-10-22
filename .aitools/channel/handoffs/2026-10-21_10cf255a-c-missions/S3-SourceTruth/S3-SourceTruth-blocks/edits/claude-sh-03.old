@@ -1,0 +1,46 @@
+        for rule_file in "$RULES_SRC"/*.md; do
+            [ -f "$rule_file" ] || continue
+            rule_name=$(basename "$rule_file")
+            _adopt_label=""
+            if [ -n "${USER_REPO_PATH:-}" ]; then
+                _adopt_label="profile"
+            fi
+            deploy_managed_file "$(cat "$rule_file")" "$RULES_DEST/$rule_name" "claude rules" "$rule_name" "$_adopt_label"
+
+            case "$MANAGED_FILE_RESULT" in
+                "accept & adopt")
+                    mkdir -p "$USER_REPO_PATH/claude/rules"
+                    cp "$RULES_DEST/$rule_name" "$USER_REPO_PATH/claude/rules/$rule_name"
+                    log_ok "Adopted rule to profile: $rule_name"
+                    ;;
+                skipped|verified|created|updated)
+                    # No action needed — tracker records the outcome
+                    ;;
+            esac
+            deploy_tracker_record "$MANAGED_FILE_RESULT" "claude rules" "$rule_name"
+            # Write-back: sync merged content to dotprofile repo
+            if [ "$MANAGED_FILE_RESULT" = "accept & adopt" ] && [ -n "${MERGED_CONTENT:-}" ] && [ -n "${USER_REPO_PATH:-}" ]; then
+                wb_dest="$USER_REPO_PATH/claude/rules/$rule_name"
+                mkdir -p "$(dirname "$wb_dest")"
+                printf '%s\n' "$MERGED_CONTENT" > "$wb_dest"
+                log "Wrote merged $rule_name back to $(display_path "$wb_dest")"
+                # Auto commit+push to keep dotprofile in sync
+                # Suppress git stderr noise; failure handled by if/else branches
+                if (cd "$USER_REPO_PATH" && \
+                    git add "claude/rules/$rule_name" && \
+                    git diff --cached --quiet "claude/rules/$rule_name") 2>/dev/null; then
+                    # git diff --cached --quiet exits 0 = no staged changes
+                    log "No diff to commit in user repo for $rule_name"
+                else
+                    # Suppress git stderr noise; failure handled by if/else branches
+                    if (cd "$USER_REPO_PATH" && \
+                        git add "claude/rules/$rule_name" && \
+                        git commit -m "Sync merged $rule_name from deploy" && \
+                        git push) 2>/dev/null; then
+                        log_ok "Pushed merged $rule_name to user repo"
+                    else
+                        log_warn "Failed to push merged $rule_name to user repo"
+                    fi
+                fi
+            fi
+        done
