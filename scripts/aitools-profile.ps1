@@ -206,6 +206,11 @@ if ($opt["environment"]) {
 # HKLM\SOFTWARE\Microsoft\Cryptography. UNVERIFIED on the commander's workstation;
 # it changes on OS reinstall and is duplicated on clones that were not sysprepped.
 $script:ThisId = ""; $script:ThisIdSource = ""; $script:ThisIdError = ""
+# Tests only: AITOOLS_PROFILE_TEST_MACHINE_ID / AITOOLS_PROFILE_TEST_HOSTNAME act as
+# --machine-id-value / --hostname-value for callers that do not pass options
+# (setup-user-config tests).
+if (-not $opt["machine-id-value"] -and $env:AITOOLS_PROFILE_TEST_MACHINE_ID) { $opt["machine-id-value"] = $env:AITOOLS_PROFILE_TEST_MACHINE_ID }
+if (-not $opt["hostname-value"] -and $env:AITOOLS_PROFILE_TEST_HOSTNAME) { $opt["hostname-value"] = $env:AITOOLS_PROFILE_TEST_HOSTNAME }
 function Find-MachineId {
     if ($opt["machine-id-value"]) { $script:ThisId = $opt["machine-id-value"]; $script:ThisIdSource = "argument"; return }
     try {

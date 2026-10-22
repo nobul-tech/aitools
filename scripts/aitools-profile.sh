@@ -283,6 +283,11 @@ fi
 #   macOS: IOPlatformUUID (ioreg) -- hardware-bound, survives OS reinstall.
 #   Linux: /etc/machine-id, then /var/lib/dbus/machine-id (duplicated on cloned images).
 THIS_ID=""; THIS_ID_SOURCE=""; THIS_ID_ERROR=""
+# Tests only: AITOOLS_PROFILE_TEST_MACHINE_ID / AITOOLS_PROFILE_TEST_HOSTNAME act as
+# --machine-id-value / --hostname-value for callers that do not pass options
+# (setup-user-config tests).
+if [ -z "$OPT_MACHINE_ID_VALUE" ] && [ -n "${AITOOLS_PROFILE_TEST_MACHINE_ID:-}" ]; then OPT_MACHINE_ID_VALUE="$AITOOLS_PROFILE_TEST_MACHINE_ID"; fi
+if [ -z "$OPT_HOSTNAME_VALUE" ] && [ -n "${AITOOLS_PROFILE_TEST_HOSTNAME:-}" ]; then OPT_HOSTNAME_VALUE="$AITOOLS_PROFILE_TEST_HOSTNAME"; fi
 detect_machine_id() {
     if [ -n "$OPT_MACHINE_ID_VALUE" ]; then
         THIS_ID="$OPT_MACHINE_ID_VALUE"; THIS_ID_SOURCE="argument"; return 0
