@@ -197,23 +197,36 @@ def sanitize_project(name: str) -> str:
 def read_config_user_repo() -> Optional[Path]:
     """Read userRepoPath (the dotprofile) from ~/.aitools/config.json.
 
-    Returns the path if it exists on disk, else None (logged)."""
+    Returns the path if it exists on disk, else None (logged).
+
+    utf-8-sig: a config.json written with a UTF-8 BOM (Windows PowerShell 5.1
+    and some editors) parses instead of failing, so a BOM does not disable
+    archiving (M3 B8c). ValueError covers JSONDecodeError and
+    UnicodeDecodeError (a non-UTF-8 file, e.g. UTF-16), which used to escape
+    uncaught."""
     config_file = Path.home() / ".aitools" / "config.json"
     if not config_file.exists():
         log_detail("skipped: aitools config.json not found")
         return None
     try:
-        data = json.loads(config_file.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as e:
-        log_warn(f"could not read config.json: {e}")
+        data: Any = json.loads(config_file.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as e:
+        log_warn(f"could not read config.json -- sessions not archived: {e}")
+        return None
+    if not isinstance(data, dict):
+        log_warn("config.json is not a JSON object -- sessions not archived")
         return None
     raw = data.get("userRepoPath")
     if not raw:
         log_detail("skipped: userRepoPath not set in config.json")
         return None
+    if not isinstance(raw, str):
+        log_warn(f"config.json userRepoPath is not a string ({type(raw).__name__}) -- sessions not archived")
+        return None
     repo = Path(raw).expanduser()
     if not repo.is_dir():
-        log_detail(f"skipped: userRepoPath does not exist: {repo}")
+        # A configured dotprofile that is missing stops archiving: warn, not detail.
+        log_warn(f"userRepoPath does not exist -- sessions not archived: {repo}")
         return None
     return repo
 

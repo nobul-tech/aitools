@@ -1,7 +1,8 @@
 # check-lib.sh -- shared library for check-pre-commit/pre-push/post-push scripts
 # Sourced, not executed directly. No shebang, no set -euo pipefail (caller sets it).
 
-# Source base lib (provides IS_MACOS, IS_WINDOWS, AITOOLS_LOG_DIR, read_config_key, display_path)
+# Source base lib (provides IS_MACOS, IS_WINDOWS, AITOOLS_LOG_DIR, read_config_key, display_path,
+# resolve_user_repo_path)
 _CHECK_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$_CHECK_LIB_DIR/aitools-lib.sh"
 
@@ -148,13 +149,24 @@ print_summary() {
 # REPO_ROOT must be set by the sourcing script (via BASH_SOURCE or similar).
 # This library does NOT set it -- the caller knows its own location.
 
+# resolve_config -- sets CONFIG_FILE (the config.json path; check-pre-push step 7
+# copies it) and USER_REPO_PATH (the dotprofile), taken from the lib's one resolver
+# (resolve_user_repo_path in aitools-lib.sh; reference/user-repo.md "Resolution"),
+# so a check sees the same dotprofile as the setup scripts.
+# Called before check_log_init: the resolver's lines go to deploy.log under the
+# init-logging name (bridge pattern, reference/script-standards-detail.md).
+# rc 1 (no dotprofile, shared-only mode) is not an error in a check: USER_REPO_PATH
+# stays empty and callers skip their dotprofile steps ([ -n ] before use).
+# rc 3 was already logged by the lib (log_error, ERROR row when a run summary
+# exists); USER_REPO_PATH stays empty, so those steps skip too.
 resolve_config() {
     CONFIG_FILE="$HOME/.aitools/config.json"
     USER_REPO_PATH=""
-    if [ -f "$CONFIG_FILE" ]; then
-        # read_config_key returns 1 when the key is absent (before 'aitools user init');
-        # USER_REPO_PATH stays empty and callers test it with [ -n ] before use.
-        USER_REPO_PATH=$(read_config_key "$CONFIG_FILE" "userRepoPath" 2>/dev/null || true)
+    local rc=0
+    resolve_user_repo_path || rc=$?
+    USER_REPO_PATH="$AITLIB_USER_REPO_PATH"
+    if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+        log "dotprofile unresolved (resolver error above) -- dotprofile steps skip as 'not configured'"
     fi
 }
 
