@@ -442,6 +442,67 @@ else bad "reg-create-file: per-profile name/company written"; fi
 case_run reg-missing-nocreate 1 register --profile "$H/none.json" --alias x --out "$H/o.json" "${M[@]}"
 case_run reg-bad-alias 2 register --profile "$H/none.json" --alias "bad alias" --out "$H/o.json" "${M[@]}"
 
+# --- regressions from the PR #73 review (S3-Profile-Review) --------------------------
+fresh_home rev
+base_profile | write_profile "$H/repos/aitools-nobul-jose"
+printf '{ "githubUser": "nobul-jose" }\n' > "$H/.aitools/config.json"
+CASE_ENV="AITOOLS_ENVIRONMENT=bogus"
+case_run rev-m1-stdout 0 user-repo-path --plain   # M1: the lib's environment warning must not reach stdout
+if [ "$(cat "$OUT")" = "$H/repos/aitools-nobul-jose" ]; then ok "rev-m1-stdout: stdout holds only the path"
+else bad "rev-m1-stdout: stdout was '$(cat "$OUT")'"; fi
+CASE_ENV=""
+
+write_profile "$H/m2" <<'JSON'
+{ "version": 2, "profiles": { "a": { "machine": null } } }
+JSON
+case_run rev-m2-throw 2 register --profile "$H/m2/profile.json" --alias a --out "$H/m2.out" "${M[@]}"
+expect_line "^error\tregister failed: set: 'machine' is not an object"
+
+write_profile "$H/m3" <<'JSON'
+{
+  "version": 2,
+  "claude": {
+    "settings": {
+      "a": 0.30000000000000004,
+      "b": 0.3333333333333333,
+      "c": 12345678901234567890
+    }
+  },
+  "profiles": {
+    "a": {
+      "machine": {
+        "id": "3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5"
+      }
+    }
+  }
+}
+JSON
+NO_PARITY=1 case_run rev-m3-numbers 0 register --profile "$H/m3/profile.json" --alias a --out "$H/m3.out" "${M[@]}"
+if perl -0ne 'exit(/"a": 0\.30000000000000004,\n      "b": 0\.3333333333333333,\n      "c": 12345678901234567890\n/ ? 0 : 1)' "$H/m3.out"; then
+    ok "rev-m3-numbers: number literals kept byte for byte (bash)"
+else bad "rev-m3-numbers: numbers changed"; sed 's/^/       /' "$H/m3.out"; fi
+
+NO_PARITY=1 case_run rev-help 0 --help   # help text names each platform's sources
+expect_line '^aitools-profile\.(sh|ps1) -- dotprofile and machine-profile resolver'
+case_run rev-opt-case 2 resolve --PROFILE "$H/m2/profile.json"
+
+write_profile "$H/m7" <<'JSON'
+{ "version": 2, "identity": { "github": "x" }, "profiles": { "a": { "machine": { "id": "3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5", "hostname": "nobul-mac", "os": "OS", "arch": "ARCH" } } } }
+JSON
+perl -pi -e "s/\"OS\"/\"$OSNAME\"/; s/\"ARCH\"/\"$ARCH\"/" "$H/m7/profile.json"
+case_run rev-m7-name 0 register --profile "$H/m7/profile.json" --alias a --name NewName --out "$H/m7.out" "${M[@]}"
+expect result updated
+case_run rev-m8-tab 2 register --profile "$H/m7/profile.json" --alias a --name "$(printf 'a\tb')" --out "$H/m8.out" "${M[@]}"
+
+write_profile "$H/m9" <<'JSON'
+{ "version": 2, "identity": {}, "cursor": ["only"], "profiles": {} }
+JSON
+case_run rev-m9-snapshot 0 snapshot --profile "$H/m9/profile.json"
+expect_line '"cursor":\["only"\]'
+
+case_run rev-host-trim 0 resolve --machine-id-value "$ID_OTHER" --hostname-value "  NewcoPC.corp  "
+expect alias workstation; expect via hostname
+
 # --- usage ------------------------------------------------------------------------
 case_run usage-unknown 2 resolve --bogus
 NO_PARITY=1 case_run usage-nocmd 2   # help text names each platform's sources

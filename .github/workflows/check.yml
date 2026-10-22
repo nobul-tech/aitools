@@ -391,6 +391,20 @@ jobs:
           $out = & pwsh -NoProfile -File scripts/aitools-profile.ps1 resolve
           if ($LASTEXITCODE -ne 1) { Write-Error "resolve without a dotprofile: exit $LASTEXITCODE, want 1"; $out; exit 1 }
           Write-Host "resolve without a dotprofile: exit 1 (shared-only)"
+          # register on win32 (native id, CRLF-free output) and the mixed path form
+          $d = Join-Path $env:RUNNER_TEMP "aitools-nobul-ci"
+          New-Item -ItemType Directory -Path $d -Force | Out-Null
+          [IO.File]::WriteAllText((Join-Path $d "profile.json"), "{`n  `"version`": 2,`n  `"profiles`": {}`n}`n", [Text.UTF8Encoding]::new($false))
+          $reg = & pwsh -NoProfile -File scripts/aitools-profile.ps1 register --profile (Join-Path $d "profile.json") --alias ci --shell pwsh --out (Join-Path $d "out.json")
+          if ($LASTEXITCODE -ne 0 -or ($reg -join "`n") -notmatch "result`tcreated") { Write-Error "register failed (exit $LASTEXITCODE): $reg"; exit 1 }
+          $written = [IO.File]::ReadAllText((Join-Path $d "out.json"))
+          if ($written.Contains("`r") -or $written -notmatch '"os": "win32"' -or $written -notmatch [regex]::Escape("`"id`": `"$id`"")) { Write-Error "register output unexpected:`n$written"; exit 1 }
+          Write-Host "register on win32: ok (LF only, os win32, raw MachineGuid)"
+          $env:AITOOLS_USER_REPO_PATH = $d
+          $p = & pwsh -NoProfile -File scripts/aitools-profile.ps1 user-repo-path --plain --path-form mixed
+          $env:AITOOLS_USER_REPO_PATH = $null
+          if ($LASTEXITCODE -ne 0 -or $p -ne ($d -replace '\\', '/')) { Write-Error "user-repo-path --path-form mixed: '$p' (exit $LASTEXITCODE)"; exit 1 }
+          Write-Host "user-repo-path --path-form mixed: $p"
           # The runner appends `exit $LASTEXITCODE` to pwsh steps; the expected
           # exit 1 from resolve would otherwise fail the step.
           exit 0

@@ -22,7 +22,10 @@
 #   one JSON object (--json). Diagnostics go to deploy.log and stderr.
 # JSON: ConvertFrom-Json / ConvertTo-Json (PS 7). Key order is kept and the
 #   written layout (2-space indent, LF) is byte-identical to node and to the
-#   bash engine, so every writer of the shared profile.json produces the same file.
+#   bash engine for strings, integers, booleans and null (what profile.json
+#   holds). Known PowerShell-side limits: property names are case-insensitive
+#   (keys differing only in case, or an empty key, are rejected; lookups ignore
+#   case), and non-integer number literals are re-formatted.
 # Safe to re-run: every command except `register` is read-only; `register`
 #   writes only the --out file.
 # Platform: Windows. Reference: reference/user-repo.md "Resolution".
@@ -31,16 +34,27 @@
 #   with pwsh on macOS/Linux, always with --machine-id-value and --hostname-value.
 
 $cliArgs = @($args)
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    [Console]::Error.WriteLine("aitools-profile: PowerShell 7 (pwsh) is required; this is $($PSVersionTable.PSVersion)")
+    exit 2
+}
 . (Join-Path $PSScriptRoot "aitools-lib.ps1")
-Initialize-Logging "aitools-profile"
-
-# The success stream carries data: console log lines go to stderr (deploy.log unchanged)
+# The success stream carries data: console log lines go to stderr (deploy.log unchanged).
+# Defined before Initialize-Logging, whose environment check may already log a warning.
 function Log($msg, $level = "info") {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $line = "[$ts] [$scriptName] [$level] $msg"
     $resolvedLog = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($logFile)
     [IO.File]::AppendAllText($resolvedLog, "$line`n", [System.Text.UTF8Encoding]::new($false))
     [Console]::Error.WriteLine($line)
+}
+Initialize-Logging "aitools-profile"
+
+# Any exception that escapes a command is an error (exit 2), never "not found" (1)
+trap {
+    LogDetail "unhandled: $($_.Exception.Message)"
+    [Console]::Error.WriteLine("aitools-profile: $($_.Exception.Message)")
+    exit 2
 }
 
 if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows -and $env:AITOOLS_PROFILE_TEST_ANY_OS -ne "1") {
@@ -233,11 +247,11 @@ function Stop-Usage([string]$m) {
 # ---------------------------------------------------------------------------
 $script:Cmd = ""
 if ($cliArgs.Count -gt 0) { $script:Cmd = [string]$cliArgs[0] }
-$opt = @{
-    config = ""; profile = ""; alias = ""; environment = ""; "github-user" = ""; "user-repo-path" = ""
-    "repos-path" = ""; name = ""; company = ""; shell = ""; email = ""; out = ""
-    "machine-id-value" = ""; "hostname-value" = ""; "path-form" = "native"
-}
+# Option names are case-sensitive, as in bash (an ordinal dictionary, not a hashtable)
+$opt = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
+foreach ($k in @("config", "profile", "alias", "environment", "github-user", "user-repo-path", "repos-path",
+        "name", "company", "shell", "email", "out", "machine-id-value", "hostname-value")) { $opt[$k] = "" }
+$opt["path-form"] = "native"
 $script:OptCreate = $false; $script:OptJson = $false; $script:OptPlain = $false
 for ($i = 1; $i -lt $cliArgs.Count; $i++) {
     $a = [string]$cliArgs[$i]
@@ -258,6 +272,15 @@ for ($i = 1; $i -lt $cliArgs.Count; $i++) {
     }
 }
 if ($script:Cmd -eq "--help" -or $script:Cmd -eq "-h") { Show-Usage; exit 0 }
+
+# Paths: resolve against the PowerShell location, because .NET file APIs use the
+# process working directory, which differs when this runs in-process (& script)
+# after Set-Location (cross-platform.md ".NET working directory").
+function Resolve-OptPath([string]$p) {
+    if (-not $p) { return $p }
+    return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($p)
+}
+foreach ($k in @("config", "profile", "out", "user-repo-path", "repos-path")) { $opt[$k] = Resolve-OptPath $opt[$k] }
 
 # ---------------------------------------------------------------------------
 # This machine: environment, stable id, hostname
@@ -289,7 +312,12 @@ function Find-MachineId {
 
 # Hostname: $env:COMPUTERNAME, short and lower-cased (one source, as on macOS P-Q5)
 $script:ThisHost = ""; $script:ThisHostError = ""
-function ConvertTo-ShortHost([string]$h) { return ((([string]$h) -split '\.')[0]).Trim().ToLowerInvariant() }
+# ConvertTo-ShortHost NAME -- text before the first dot, ends trimmed, ASCII
+# lower-cased (the same rule as short_host in aitools-profile.sh)
+function ConvertTo-ShortHost([string]$h) {
+    $s = ((([string]$h) -split '\.')[0]).Trim([char[]]" `t`r`n")
+    return [regex]::Replace($s, '[A-Z]', { param($m) $m.Value.ToLowerInvariant() })
+}
 function Find-Hostname {
     $raw = $opt["hostname-value"]
     if (-not $raw) { $raw = $env:COMPUTERNAME }
@@ -618,7 +646,8 @@ function Invoke-Snapshot {
     $snap = [ordered]@{}
     foreach ($k in @("version", "identity", "cursor", "profiles")) {
         $n = Get-JNode $r.Value @($k)
-        $snap[$k] = if ($n.Found) { $n.Value } else { [PSCustomObject]@{} }
+        # Assign directly: capturing an if-expression would unroll an array value
+        if ($n.Found) { $snap[$k] = $n.Value } else { $snap[$k] = [PSCustomObject]@{} }
     }
     LogDetail "snapshot of $($opt['profile'])"
     Write-Output (ConvertTo-NodeJson $snap -Compress)
@@ -629,6 +658,9 @@ function Invoke-Register {
     $alias = $opt["alias"]
     if (-not $opt["profile"] -or -not $alias -or -not $opt["out"]) { Stop-Usage "register needs --profile, --alias and --out" }
     if ($alias -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_-]*$') { Stop-Usage "invalid alias: $alias" }
+    foreach ($o in @($opt["name"], $opt["company"], $opt["shell"], $opt["email"], $opt["github-user"])) {
+        if ($o -match "[`t`r`n]") { Stop-Usage "register values must be one line (no tab or newline)" }
+    }
     $r = Read-JsonFile $opt["profile"]
     $created = $false
     if ($r.State -eq "invalid") { Add-Err $r.Message; Complete-Command 2 }
@@ -672,9 +704,9 @@ function Invoke-Register {
     if ($t) {
         if ($t -ne "object") { Add-Err "profiles.$alias is not an object"; Complete-Command 2 }
         $state = "updated"
-        $n = Get-JNode $p @("profiles", $alias, "machine")
-        if ($n.Found) { $before = ConvertTo-NodeJson $n.Value -Compress }
+        $before = ConvertTo-NodeJson (Get-JNode $p @("profiles", $alias)).Value -Compress
     }
+    try {
     # Per-profile name/company only when neither the profile nor identity has one
     if ($opt["name"] -and -not $created) {
         $hasProf = ($state -eq "updated") -and (Read-JScalar $p @("profiles", $alias, "name")).Found
@@ -696,6 +728,9 @@ function Invoke-Register {
     Set-JValue $p $os @("profiles", $alias, "machine", "os")
     Set-JValue $p $arch @("profiles", $alias, "machine", "arch")
     if ($opt["shell"]) { Set-JValue $p $opt["shell"] @("profiles", $alias, "machine", "shell") }
+    } catch {
+        Add-Err "register failed: $($_.Exception.Message)"; Complete-Command 2
+    }
     try {
         [IO.File]::WriteAllText($opt["out"], (ConvertTo-NodeJson $p) + "`n", $script:Utf8NoBom)
     } catch {
@@ -705,7 +740,7 @@ function Invoke-Register {
     if ($v.State -ne "valid" -or (Get-JType $v.Value @("profiles", $alias)) -ne "object") {
         Add-Err "validation failed: profile $alias missing after write"; Complete-Command 2
     }
-    $after = ConvertTo-NodeJson (Get-JNode $v.Value @("profiles", $alias, "machine")).Value -Compress
+    $after = ConvertTo-NodeJson (Get-JNode $v.Value @("profiles", $alias)).Value -Compress
     if ($state -eq "updated" -and $before -ceq $after) { $state = "unchanged" }
     Put "result" $state
     Put "alias" $alias
