@@ -80,7 +80,7 @@ aitools-<username>/
 - **`cursor`** -- Cursor CLI preferences. Read by `setup-user-cursor`.
 - **`claude.settings`** -- the source of truth for `~/.claude/settings.json` (verbatim keys, EXCEPT `hooks`, which the manifest owns via `setup-user-hooks`). Synced by `setup-user-settings` via `sync_managed_json`: a key absent here is auto-adopted from settings.json (no prompt); on divergence a granular per-leaf menu (overwrite/adopt/skip/abort) runs; `permissions.{allow,ask,deny}` are reconciled per rule. Legacy flat keys (`autoMemory`/`alwaysThinking`/`effortLevel` under `claude`) are auto-migrated into `claude.settings` as `autoMemoryEnabled`/`alwaysThinkingEnabled`/`effortLevel`.
 - **`profiles`** -- keyed by user-chosen alias (e.g., "laptop", "workstation"). Display name and company can vary per machine.
-- **`overrides`** -- intentional deviations from upstream tool defaults. Informational only -- CLI does not read this yet. Mirrors the Overrides table in `reference/tool-registry.md` in machine-readable form. Future `aitools audit` could validate overrides against live config.
+- **`overrides`** -- intentional deviations from upstream tool defaults. Informational only -- CLI does not read this yet. Mirrors the `overrides` section of the tool registry (`/tool-registry` skill) in machine-readable form. Future `aitools audit` could validate overrides against live config.
 - **Machine matching** -- `config.json` stores `"machineAlias"` on each machine. Fallback: hostname match, then first profile.
 - **v1 migration** -- v1 (flat schema) is auto-detected by absence of `"version": 2`. Future `aitools user init` will migrate v1 to v2.
 

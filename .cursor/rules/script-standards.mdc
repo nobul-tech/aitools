@@ -93,7 +93,7 @@ External install/upgrade commands must have output captured and exit codes check
 
 ### Post-install authentication check
 
-Setup scripts for tools requiring auth must check auth status on every run (not just fresh install). After successful install/upgrade: check via tool command or config file presence. Not authenticated: `log_warn` + `write_summary WARN` + `write_summary ACTION`. Authenticated: silent. Auth commands documented per-tool in `reference/tool-registry.md` Authentication section. See `reference/script-standards-detail.md` for code patterns.
+Setup scripts for tools requiring auth must check auth status on every run (not just fresh install). After successful install/upgrade: check via tool command or config file presence. Not authenticated: `log_warn` + `write_summary WARN` + `write_summary ACTION`. Authenticated: silent. Auth commands documented per-tool in the tool registry (`/tool-registry` skill, `authentication` field). See `reference/script-standards-detail.md` for code patterns.
 
 ### Build prerequisite validation
 

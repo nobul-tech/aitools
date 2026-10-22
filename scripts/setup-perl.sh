@@ -5,7 +5,7 @@
 # macOS: Uses Homebrew (brew install perl).
 # Linux: Logs error and directs user to install via package manager.
 #
-# See reference/tool-registry.md for install source details.
+# See the /tool-registry skill (registries/tool-registry.json) for install source details.
 
 set -euo pipefail
 

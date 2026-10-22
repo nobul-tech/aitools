@@ -7,7 +7,7 @@
 # Authentication (modal setup) is interactive and must be run separately
 # after install — not automated by this script.
 #
-# See reference/tool-registry.md for install source details.
+# See the /tool-registry skill (registries/tool-registry.json) for install source details.
 
 set -euo pipefail
 

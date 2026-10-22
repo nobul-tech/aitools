@@ -4,7 +4,7 @@
 Claude Code as a managed tool — version dependencies, session
 behavior, platform workarounds, and setup notes that affect harness
 scripts and hooks. **Scope**: Operational knowledge only. NOT
-install/upgrade (tool-registry.md). NOT governance modes or deny
+install/upgrade (`/tool-registry` skill). NOT governance modes or deny
 rules (`/tool-ops` skill). NOT incidents (`/incident` skill). NOT
 configuration deployment (setup scripts). **Audience**: Agents
 modifying CC-related scripts or hooks, agents troubleshooting CC
@@ -475,7 +475,7 @@ Once Anthropic fixes the upstream issues, we can simplify by setting `CLAUDE_COD
 ## Cross-References
 
 - Tool-ops registry: `/tool-ops` skill
-- Tool registry: `reference/tool-registry.md`
+- Tool registry: `/tool-registry` skill
 - Incident registry: `/incident` skill
 - User repo spec: `reference/user-repo.md`
 - Cross-platform rules: `.claude/rules/cross-platform.md`

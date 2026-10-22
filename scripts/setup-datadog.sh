@@ -9,7 +9,7 @@
 # Linux: cargo fallback until Linux support lands (nobul-tech/aitools#14).
 # Windows: Uses cargo install -- see setup-datadog.ps1.
 #
-# See reference/tool-registry.md for install source details.
+# See the /tool-registry skill (registries/tool-registry.json) for install source details.
 
 set -euo pipefail
 

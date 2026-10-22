@@ -9,7 +9,7 @@ pseudocode in `plans/*.md`, and any code you propose in conversation.
 
 ### Block order (bash reusable scripts)
 
-1. Shebang + header comment (name, purpose, "safe to re-run", platform, reference to `tool-registry.md`)
+1. Shebang + header comment (name, purpose, "safe to re-run", platform, reference to the `/tool-registry` skill)
 2. `set -euo pipefail`
 3. `source aitools-lib.sh` + `logging_init "script-name"` (provides platform detection, display_path, read_config_key, log/log_ok/log_error/log_warn, write_summary, backup_file, backup_dir, emit_merge_details, ERRORS/WARNINGS counters)
 4. OS guard -- see `@.claude/rules/cross-platform.md` "OS guard patterns"
@@ -18,7 +18,7 @@ pseudocode in `plans/*.md`, and any code you propose in conversation.
 
 ### Block order (PowerShell reusable scripts)
 
-1. Header comment (name, purpose, "safe to re-run", platform, reference to `tool-registry.md`)
+1. Header comment (name, purpose, "safe to re-run", platform, reference to the `/tool-registry` skill)
 2. `. aitools-lib.ps1` + `Initialize-Logging "script-name"` (provides ReadConfigKey, Log/LogOk/LogError/LogWarn, Write-Summary, Backup-File, Backup-Dir, ConvertPSObjectToHashtable, Emit-MergeDetails, $errors/$warnings counters)
 3. OS guard -- see `@.claude/rules/cross-platform.md` "OS guard patterns"
 4. Script body
@@ -207,7 +207,7 @@ not just fresh installs. After successful install/upgrade:
 2. Not authenticated: `log_warn` + `write_summary WARN` + `write_summary ACTION`
 3. Authenticated: no extra output (silent success)
 
-Auth check commands are documented per-tool in `@reference/tool-registry.md` (Authentication section).
+Auth check commands are documented per-tool in the tool registry (`/tool-registry` skill, `authentication` field).
 
 | Tool | Check method | Type |
 |------|-------------|------|
@@ -243,7 +243,7 @@ All `KnownPaths` entries in `$script:BuildPrereqs`, `ensure_tool_on_path` calls,
 and any other hardcoded install-path arrays MUST be empirically verified on the
 actual platform before shipping. This applies to:
 
-- **Directly managed tools** from `@reference/tool-registry.md`
+- **Directly managed tools** from the tool registry (`/tool-registry` skill)
 - **Build dependencies** discovered during installation (NASM, CMake, etc.)
 - **Any tool** where we specify filesystem paths for fallback detection
 

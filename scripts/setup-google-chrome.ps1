@@ -6,7 +6,7 @@
 # environment is always "local" (cross-platform.md "Environment branches", D-ENV4), so this
 # script reports one "n/a (local)" summary row and exits. It exists so the .sh/.ps1 pair is
 # complete and both installers run the same step (D-ENV8). Install source details:
-# reference/tool-registry.md (Google Chrome).
+# the /tool-registry skill (google-chrome entry).
 
 # --- Shared library ---
 . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")

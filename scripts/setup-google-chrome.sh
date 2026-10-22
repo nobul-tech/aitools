@@ -2,7 +2,7 @@
 # setup-google-chrome.sh — Installs Google Chrome and NSS tools, and trusts the agent-proxy
 # CA certificates in Chrome's NSS store, in the Claude Code web environment (D-CHR1–D-CHR3,
 # reference/tool-ops-google-chrome.md). Install commands: /tool-registry skill entries
-# google-chrome and nss-tools (reference/tool-registry.md).
+# google-chrome and nss-tools (registries/tool-registry.json).
 # Safe to re-run — every step checks the current state and changes only what differs.
 # Platform: Linux (amd64, apt), Claude Code web environment only. In any other environment
 # it writes an "n/a (<environment>)" summary row and changes nothing (D-ENV7).

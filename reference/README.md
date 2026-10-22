@@ -47,7 +47,7 @@ through their skills, not listed here.
 
 | File | Topic |
 |------|-------|
-| `tool-registry.md` | Managed tools: install commands, lifecycle, per-platform versions |
+| `tool-registry.md` | DEPRECATED (T-Q7): use the `/tool-registry` skill (`registries/tool-registry.json`) |
 | `tool-evaluation-criteria.md` | Tool evaluation framework and lifecycle phases |
 | `tool-evaluation-playbook.md` | Install method discovery process |
 | `tool-ops-claude-code.md` | Claude Code operations: version dependencies, session behavior, workarounds |
