@@ -56,11 +56,11 @@ $userRepoPath = $script:AitLibUserRepoPath
 $profileFile = if ($userRepoPath) { Join-Path $userRepoPath "profile.json" } else { "" }
 
 if ($urpRc -ne 0 -and $urpRc -ne 1) {
-    # Not counted again: the resolver error is already an error and an ERROR row.
-    Log "Dotprofile unresolved (resolver error above) -- skipping settings sync"
+    # Counted (S3-M3Lead decision): this step fails too, not only the resolver.
+    LogError "Dotprofile unresolved (resolver error above) -- settings not synced"
     Write-Summary "ERROR" "claude settings" "not synced: dotprofile error"
 } elseif (-not $userRepoPath -or -not (Test-Path -LiteralPath $userRepoPath -PathType Container)) {
-    LogWarn "No dotprofile found (shared-only mode; run 'aitools user init') -- skipping settings sync"
+    LogWarn "No dotprofile found (shared-only mode; run 'aitools user init'; details in deploy.log) -- skipping settings sync"
     Write-Summary "WARN" "claude settings" "not synced: no dotprofile"
 } elseif (-not (Test-Path $profileFile)) {
     LogWarn "profile.json not found at $profileFile -- skipping settings sync"

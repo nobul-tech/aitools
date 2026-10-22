@@ -70,11 +70,11 @@ PROFILE_FILE=""
 [ -n "$USER_REPO_PATH" ] && PROFILE_FILE="$USER_REPO_PATH/profile.json"
 
 if [ "$URP_RC" -ne 0 ] && [ "$URP_RC" -ne 1 ]; then
-    # Not counted again: the resolver error is already an error and an ERROR row.
-    log "Dotprofile unresolved (resolver error above) -- skipping settings sync"
+    # Counted (S3-M3Lead decision): this step fails too, not only the resolver.
+    log_error "Dotprofile unresolved (resolver error above) -- settings not synced"
     write_summary ERROR "claude settings" "not synced: dotprofile error"
 elif [ -z "$USER_REPO_PATH" ] || [ ! -d "$USER_REPO_PATH" ]; then
-    log_warn "No dotprofile found (shared-only mode; run 'aitools user init') -- skipping settings sync"
+    log_warn "No dotprofile found (shared-only mode; run 'aitools user init'; details in deploy.log) -- skipping settings sync"
     write_summary WARN "claude settings" "not synced: no dotprofile"
 elif [ ! -f "$PROFILE_FILE" ]; then
     log_warn "profile.json not found at $(display_path "$PROFILE_FILE") -- skipping settings sync"
