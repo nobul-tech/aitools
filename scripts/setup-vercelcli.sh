@@ -6,7 +6,7 @@
 #        If vercel was previously installed via npm, migrates to Homebrew automatically.
 # Linux: Uses npm install -g vercel (no Homebrew available).
 #
-# See reference/tool-registry.md for install source details.
+# See the /tool-registry skill (registries/tool-registry.json) for install source details.
 
 set -euo pipefail
 

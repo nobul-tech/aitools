@@ -6,7 +6,7 @@
 #              If rust was previously installed via Homebrew (brew install rust),
 #              removes it and installs via rustup instead.
 #
-# See reference/tool-registry.md for install source details.
+# See the /tool-registry skill (registries/tool-registry.json) for install source details.
 
 set -euo pipefail
 

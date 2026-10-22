@@ -194,9 +194,10 @@ if ($unverifiedPaths.Count -eq 0) {
 }
 
 # ---------------------------------------------------------------------------
-# 11. KnownPaths vs tool-registry.md: code paths must match documented paths
+# 11. KnownPaths vs the tool registry: code paths must match documented paths
+#     (registries/tool-registry.json; reference/tool-registry.md is deprecated, T-Q7)
 # ---------------------------------------------------------------------------
-$registryPath = Join-Path $scriptDir "..\reference\tool-registry.md"
+$registryPath = Join-Path $scriptDir "..\registries\tool-registry.json"
 if (Test-Path $registryPath) {
     $regContent = Get-Content $registryPath -Raw
     $mismatches = @()
@@ -215,22 +216,24 @@ if (Test-Path $registryPath) {
                 }
                 $found = $false
                 foreach ($variant in $searchVariants) {
-                    $escaped = [regex]::Escape($variant)
+                    # The registry is JSON text: a backslash is stored as \\.
+                    $jsonVariant = $variant -replace '\\', '\\'
+                    $escaped = [regex]::Escape($jsonVariant)
                     if ($regContent -match $escaped) { $found = $true; break }
                 }
                 if (-not $found) {
-                    $mismatches += "$($entry.Name): $kp not in tool-registry.md"
+                    $mismatches += "$($entry.Name): $kp not in registries/tool-registry.json"
                 }
             }
         }
     }
     if ($mismatches.Count -eq 0) {
-        StepPass "11" "KnownPaths match tool-registry.md" "all code paths documented"
+        StepPass "11" "KnownPaths match tool registry" "all code paths documented"
     } else {
-        StepWarn "11" "KnownPaths match tool-registry.md" ($mismatches -join '; ')
+        StepWarn "11" "KnownPaths match tool registry" ($mismatches -join '; ')
     }
 } else {
-    StepSkip "11" "KnownPaths match tool-registry.md" "tool-registry.md not found"
+    StepSkip "11" "KnownPaths match tool registry" "registries/tool-registry.json not found"
 }
 
 # ---------------------------------------------------------------------------

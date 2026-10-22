@@ -19,7 +19,6 @@ Certain files are authoritative references that feed scripts, deploy pipelines, 
 | `ROADMAP.md` | Active/planned work items — drives project priorities | Any |
 | `plans/*.md` | Detailed implementation plans — referenced by roadmap | Any |
 | `reference/tool-ops-claude-code.md` | Claude Code operations — version deps, session behavior, platform workarounds | Any |
-| `registries/tool-versions.json` | Per-platform tool version manifest — read by `check-post-push` version-freshness checks | Any |
 | `reference/user-repo.md` | User repo pattern, template resolution, session archive — scripts reference this | Any |
 | `reference/agentic-framework.md` | Agentic AI invocation spec — speed/permission tiers, prompt design, validation patterns | Any |
 | `reference/managed-file-deployment.md` | Managed file deployment state machine -- menus, return values, caller contracts | Any |

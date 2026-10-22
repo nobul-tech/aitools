@@ -744,7 +744,7 @@ if ((Get-Command toolname -ErrorAction SilentlyContinue) -and $errors -eq 0) {
 - Only runs when `$ERRORS -eq 0` / `$errors -eq 0` (skip if install itself failed)
 - Always pairs: `log_warn` + `write_summary WARN` + `write_summary ACTION`
 - Prefer command exit code over file presence when the tool provides a status command
-- Auth check method documented per-tool in `reference/tool-registry.md` (Authentication section)
+- Auth check method documented per-tool in the tool registry (`/tool-registry` skill, `authentication` field)
 
 ## Anti-pattern examples
 
@@ -1017,7 +1017,7 @@ When a user reports a new build failure:
 5. **Add to `aitools-lib.sh`:**
    - Entry in `check_build_prereqs()` case block
    - Entry in `diagnose_build_failure()` patterns array
-6. **Document** in `reference/tool-registry.md` under the relevant tool's Prerequisites section
+6. **Document** via the `/tool-registry` skill in the tool's `buildPrereqs`
 7. **Run** `bash scripts/build-deploy.sh` to propagate to deploy scripts
 8. **Verify** with `check-pre-commit` (framework audit passes) and smoke test
 
@@ -1066,7 +1066,7 @@ then uses `ensure_tool_on_path` with known paths if `command -v` fails.
 1. Determine the standard install location(s) for the tool on each platform
 2. PS1: add `ToolName` and `KnownPaths` to the `$script:BuildPrereqs` entry
 3. Bash: add paths to the `ensure_tool_on_path` call in `check_build_prereqs()`
-4. Document the paths in `reference/tool-registry.md` under the tool's Prerequisites section
+4. Document the paths via the `/tool-registry` skill in the tool's `buildPrereqs`
 
 **Standard install locations (Windows):**
 

@@ -9,7 +9,7 @@
 #        Other Linux install paths arrive with Linux support (nobul-tech/aitools#14).
 # Windows: Uses winget -- see setup-go.ps1.
 #
-# See reference/tool-registry.md for install source details.
+# See the /tool-registry skill (registries/tool-registry.json) for install source details.
 
 set -euo pipefail
 

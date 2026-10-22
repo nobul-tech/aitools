@@ -210,15 +210,19 @@ fi
 # ---------------------------------------------------------------------------
 # 9. Source-of-truth consistency
 # ---------------------------------------------------------------------------
-# Count tool sections (## headings between --- separators) vs lifecycle field count
-tool_sections=$(grep -c '^## ' "$REPO_ROOT/reference/tool-registry.md" 2>/dev/null || echo 0)
-lifecycle_fields=$(grep -c '^\- \*\*Platform Status' "$REPO_ROOT/reference/tool-registry.md" 2>/dev/null || echo 0)
-# Subtract non-tool headings (Overrides, Under Evaluation, MCP Management)
-# Approximate: each tool should have exactly one Platform Status line
+# Count registry tools that carry lifecycle.platformStatus (the registry JSON is
+# the source of truth; reference/tool-registry.md is deprecated, T-Q7).
+registry_json="$REPO_ROOT/registries/tool-registry.json"
+lifecycle_fields=0
+if [ -f "$registry_json" ] && command -v python3 >/dev/null 2>&1; then
+    # A parse error prints nothing; the non-numeric guard below turns it into the WARN path.
+    lifecycle_fields=$(python3 -c 'import json,sys; t=json.load(open(sys.argv[1]))["tools"]; print(sum(1 for v in t.values() if (v.get("lifecycle") or {}).get("platformStatus")))' "$registry_json" 2>/dev/null || echo 0)
+    case "$lifecycle_fields" in ''|*[!0-9]*) lifecycle_fields=0 ;; esac
+fi
 if [ "$lifecycle_fields" -gt 0 ]; then
-    step_pass "9" "Source-of-truth consistency" "$lifecycle_fields lifecycle blocks found"
+    step_pass "9" "Source-of-truth consistency" "$lifecycle_fields tools with lifecycle.platformStatus"
 else
-    step_warn "9" "Source-of-truth consistency" "could not parse lifecycle fields"
+    step_warn "9" "Source-of-truth consistency" "could not read lifecycle fields from registries/tool-registry.json"
 fi
 
 # ---------------------------------------------------------------------------
@@ -227,10 +231,9 @@ fi
 inventory_errors=0
 # Check that key protected files exist
 for pf in \
-    "reference/tool-registry.md" \
+    "registries/tool-registry.json" \
     "reference/tool-evaluation-criteria.md" \
     "reference/tool-evaluation-playbook.md" \
-    "registries/tool-versions.json" \
     "CLAUDE.md" \
     "shared/claude-shared.md" \
     "ROADMAP.md" \
@@ -445,9 +448,11 @@ fi
 # ---------------------------------------------------------------------------
 # 21. Tool version freshness
 # ---------------------------------------------------------------------------
-versions_json="$REPO_ROOT/registries/tool-versions.json"
+# Versions come from registries/tool-registry.json tools.<key>.versions
+# (tool-versions.json was deleted, S2L-Q6).
+versions_json="$REPO_ROOT/registries/tool-registry.json"
 if [ ! -f "$versions_json" ]; then
-    step_skip "21" "Tool version freshness" "tool-versions.json not found"
+    step_skip "21" "Tool version freshness" "registries/tool-registry.json not found"
 elif ! command -v python3 >/dev/null 2>&1; then
     step_skip "21" "Tool version freshness" "python3 not available"
 else
@@ -484,24 +489,14 @@ TOOL_CMDS = {
 }
 plat_key = {'Darwin': 'macos', 'Windows': 'windows'}.get(platform.system(), 'linux')
 plat_name = {'macos': 'macOS', 'windows': 'Windows', 'linux': 'Linux'}[plat_key]
-for key, val in data['tools'].items():
-    if 'maintenanceFile' in val:
+for key, tool in data['tools'].items():
+    val = tool.get('versions') or {}
+    if val.get('maintenanceFile'):
         continue  # covered by step 20
-    elif 'pinned' in val:
-        last_reviewed = val.get('lastReviewed')
-        if not last_reviewed:
-            print(f"WARN|{key}|lastReviewed not set")
-        else:
-            reviewed = datetime.date.fromisoformat(last_reviewed)
-            days = (today - reviewed).days
-            if days > 30:
-                print(f"WARN|{key}|lastReviewed {last_reviewed} ({days}d ago, >30d)")
-            else:
-                print(f"OK|{key}|")
     else:
         plat_ver = (val.get(plat_key) or {}).get('lastVerifiedVersion')
         if not plat_ver:
-            print(f"SKIP|{key}|no {plat_name} version in manifest")
+            print(f"SKIP|{key}|no {plat_name} version in registry")
             continue
         cmd = TOOL_CMDS.get(key)
         if not cmd:
@@ -520,6 +515,18 @@ for key, val in data['tools'].items():
             print(f"SKIP|{key}|not installed (manifest: {plat_ver})")
         except subprocess.TimeoutExpired:
             print(f"WARN|{key}|version check timed out (manifest: {plat_ver})")
+# MCP servers (@latest / remote): mcpServers.<key>.versions.lastReviewed must be
+# within 30 days (the check tool-versions.json carried before S2L-Q6).
+for key, srv in (data.get('mcpServers') or {}).items():
+    last_reviewed = (srv.get('versions') or {}).get('lastReviewed')
+    if not last_reviewed:
+        print(f"WARN|{key}|lastReviewed not set")
+        continue
+    days = (today - datetime.date.fromisoformat(last_reviewed)).days
+    if days > 30:
+        print(f"WARN|{key}|lastReviewed {last_reviewed} ({days}d ago, >30d)")
+    else:
+        print(f"OK|{key}|")
 PYEOF
     python3 "$_ver21_pyscript" "$versions_json" > "$_ver21_output" 2>/dev/null || true
     while IFS='|' read -r v21_status v21_tool v21_msg; do
@@ -630,10 +637,15 @@ fi
 # ---------------------------------------------------------------------------
 # 25. CLI tools table sync
 # ---------------------------------------------------------------------------
-# Extract direct invocation commands from tool-registry.md
-# Lines like: - **Invocation:** `go` (direct)
-registry_cmds=$(perl -ne 'print "$1\n" if /\*\*Invocation:\*\*\s*`([^`]+)`.*\(direct\)/' \
-    "$REPO_ROOT/reference/tool-registry.md" | sort -u)
+# Extract direct invocation commands from registries/tool-registry.json:
+# tools.<key>.lifecycle.invocation.command when it is a single command word
+# (reference/tool-registry.md is deprecated, T-Q7).
+registry_cmds=""
+if command -v python3 >/dev/null 2>&1; then
+    # A parse error yields an empty list, which takes the SKIP branch below.
+    registry_cmds=$(python3 -c 'import json,re,sys; t=json.load(open(sys.argv[1]))["tools"]; [print(c) for c in sorted({((v.get("lifecycle") or {}).get("invocation") or {}).get("command") or "" for v in t.values()}) if re.fullmatch(r"[A-Za-z0-9._-]+", c)]' \
+        "$REPO_ROOT/registries/tool-registry.json" 2>/dev/null || true)
+fi
 # Fallback: if no matches, skip
 if [ -z "$registry_cmds" ]; then
     step_skip "25" "CLI tools table sync" "could not parse registry invocations"

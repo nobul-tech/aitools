@@ -4,7 +4,7 @@
 # Windows: Uses winget (preferred). Warns for Chocolatey/Scoop installs.
 # macOS/Linux: Uses Homebrew -- see setup-go.sh.
 #
-# See reference/tool-registry.md for install source details.
+# See the /tool-registry skill (registries/tool-registry.json) for install source details.
 
 # --- Shared library ---
 . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")

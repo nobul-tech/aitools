@@ -1,0 +1,31 @@
+# check-path-refs allowlist: intentional citations of paths that do not exist.
+# Format: <citing file>|<cited path>|<reason>. Read by scripts/check-path-refs.py
+# (pre-commit step 20). Add an entry only for a fixture, an example, history,
+# or a planned file; fix a stale path instead of listing it. Entries marked
+# "follow-up" are known stale text in files this change did not own or could
+# not reword without changing meaning.
+
+# Test fixtures and examples
+.claude/skills/audit/tests/expected-behaviors.md|reference/nonexistent.md|test fixture: a broken reference the audit must detect
+.claude/skills/audit/tests/expected-behaviors.md|.claude/rules/cursor-rule-parity.md|test fixture: a rule deleted in v0.54 the audit must detect
+.claude/skills/tool-ops/tests/expected-behaviors.md|reference/tool-ops-cursor.md|test fixture: a future per-tool ops reference
+shared/skills/tool-ops/tests/expected-behaviors.md|reference/tool-ops-cursor.md|test fixture: a future per-tool ops reference
+shared/skills/handoff/SKILL.md|plans/mission-command-briefing/handoff-2026-03-19_Z1IhGrcgGO.md|example file name in prose
+
+# History (the text records a file that existed then)
+reference/claude-code-effectiveness.md|.claude/rules/surface-silent-failures.md|history: rule added 2026-02-19, later folded into script-standards
+reference/logging.md|plans/imperative-gliding-newell.md|history: plan removed in v0.54 (03933a5)
+
+# Planned files (framework pending adoption)
+reference/framework-provenance.md|.claude/rules/provenance.md|planned artifact of the pending provenance framework
+reference/framework-provenance.md|.claude/skills/provenance/SKILL.md|planned artifact of the pending provenance framework
+reference/framework-provenance.md|shared/skills/aitool-provenance/SKILL.md|planned artifact of the pending provenance framework
+
+# Conventions, not repo paths
+reference/cursor-practices.md|.cursor/skills/|describes Cursor's project skill directory convention
+
+# Follow-up: stale text, needs a reword (not a path repoint)
+.cursor/rules/documentation-standards.mdc|.claude/rules/cursor-rule-parity.md|follow-up: rule deleted in v0.54 (03933a5); the .claude twin has no such line
+reference/cursor-practices.md|.claude/rules/cursor-rule-parity.md|follow-up: parity table lists a rule deleted in v0.54
+reference/tool-ops-claude-code.md|.claude/rules/post-push.md|follow-up: rule removed; now reference/post-push-checklist.md (confirm before repointing)
+reference/tool-ops-claude-code.md|.claude/rules/pre-commit.md|follow-up: rule removed; now reference/pre-commit-checklist.md (confirm before repointing)
