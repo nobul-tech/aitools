@@ -515,6 +515,18 @@ for key, tool in data['tools'].items():
             print(f"SKIP|{key}|not installed (manifest: {plat_ver})")
         except subprocess.TimeoutExpired:
             print(f"WARN|{key}|version check timed out (manifest: {plat_ver})")
+# MCP servers (@latest / remote): mcpServers.<key>.versions.lastReviewed must be
+# within 30 days (the check tool-versions.json carried before S2L-Q6).
+for key, srv in (data.get('mcpServers') or {}).items():
+    last_reviewed = (srv.get('versions') or {}).get('lastReviewed')
+    if not last_reviewed:
+        print(f"WARN|{key}|lastReviewed not set")
+        continue
+    days = (today - datetime.date.fromisoformat(last_reviewed)).days
+    if days > 30:
+        print(f"WARN|{key}|lastReviewed {last_reviewed} ({days}d ago, >30d)")
+    else:
+        print(f"OK|{key}|")
 PYEOF
     python3 "$_ver21_pyscript" "$versions_json" > "$_ver21_output" 2>/dev/null || true
     while IFS='|' read -r v21_status v21_tool v21_msg; do

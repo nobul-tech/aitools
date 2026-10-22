@@ -619,6 +619,27 @@ if (-not (Test-Path $versionsJson)) {
             }
         }
     }
+    # MCP servers (@latest / remote): mcpServers.<key>.versions.lastReviewed must be
+    # within 30 days (the check tool-versions.json carried before S2L-Q6).
+    if ($toolData.mcpServers) {
+        foreach ($srv in $toolData.mcpServers.PSObject.Properties) {
+            $lastReviewed = $null
+            if ($srv.Value.versions) { $lastReviewed = $srv.Value.versions.lastReviewed }
+            if (-not $lastReviewed) {
+                $ver21Details += ("      WARN {0}: lastReviewed not set" -f $srv.Name)
+                $ver21Warns++
+                continue
+            }
+            $reviewedDate = [datetime]::ParseExact($lastReviewed, 'yyyy-MM-dd', $null)
+            $days = ($today - $reviewedDate).Days
+            if ($days -gt 30) {
+                $ver21Details += ("      WARN {0}: lastReviewed {1} ({2}d ago, >30d)" -f $srv.Name, $lastReviewed, $days)
+                $ver21Warns++
+            } else {
+                $ver21Ok++
+            }
+        }
+    }
     foreach ($line in $ver21Details) { Write-Host $line }
     if ($ver21Warns -eq 0) {
         StepPass "21" "Tool version freshness" "$ver21Ok OK, $ver21Skip skipped"
