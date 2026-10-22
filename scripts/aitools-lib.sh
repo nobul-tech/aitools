@@ -1031,6 +1031,73 @@ _invoke_ai_merge() {
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
+# Review diff shown by prompt_diff_review: LOCAL -> SOURCE, unified format.
+# "-" lines are only on this machine, "+" lines only in the repo, so the diff
+# reads as what [o]verwrite changes here. The hunks come from
+# `git diff --no-index` (the same engine and options as Get-ReviewDiff in
+# aitools-lib.ps1, so bash and PS1 print identical hunks); its own headers are
+# replaced by:
+#   --- this machine  <LOCAL path>
+#   +++ repo          <SOURCE path, or "source (embedded)" when there is none>
+# Spec: reference/managed-file-deployment.md "Diff Mechanism Detail".
+#
+# Args: $1 = LOCAL content, $2 = SOURCE content, $3 = LOCAL path (header),
+#       $4 = SOURCE path (header; "" -> "source (embedded)")
+# Sets REVIEW_DIFF (plain text, no colour; "" when git reports no line
+# difference). Returns 1 when the diff cannot be produced, with the reason in
+# REVIEW_DIFF_ERROR; the caller logs it.
+# ---------------------------------------------------------------------------
+REVIEW_DIFF=""
+REVIEW_DIFF_ERROR=""
+_review_diff() {
+    local cur_content="$1"
+    local new_content="$2"
+    local local_label="$3"
+    local source_label="${4:-}"
+    REVIEW_DIFF=""
+    REVIEW_DIFF_ERROR=""
+    if [ -z "$source_label" ]; then source_label="source (embedded)"; fi
+
+    local tmp_dir
+    if ! tmp_dir=$(mktemp -d); then
+        REVIEW_DIFF_ERROR="could not create a temp directory"
+        return 1
+    fi
+    if ! printf '%s\n' "$cur_content" > "$tmp_dir/local" \
+        || ! printf '%s\n' "$new_content" > "$tmp_dir/source"; then
+        rm -rf "$tmp_dir"
+        REVIEW_DIFF_ERROR="could not write the temp files"
+        return 1
+    fi
+
+    # git diff exits 1 when the files differ (expected) and >1 on error.
+    local raw rc=0 err=""
+    raw=$(git -c core.quotePath=false diff --no-index --no-color --no-ext-diff \
+        --no-textconv --diff-algorithm=myers --indent-heuristic -U3 \
+        -- "$tmp_dir/local" "$tmp_dir/source" 2> "$tmp_dir/err") || rc=$?
+    if [ -s "$tmp_dir/err" ]; then err=$(cat "$tmp_dir/err"); fi
+    rm -rf "$tmp_dir"
+    if [ "$rc" -gt 1 ]; then
+        REVIEW_DIFF_ERROR="git diff failed (exit $rc): ${err:-no output}"
+        return 1
+    fi
+
+    # Drop git's own header lines (everything before the first hunk).
+    local hunks
+    hunks=$(printf '%s\n' "$raw" | perl -ne 'print if $seen ||= /^@@ /')
+    if [ -z "$hunks" ]; then return 0; fi
+    REVIEW_DIFF=$(printf -- '--- this machine  %s\n+++ repo          %s\n%s' \
+        "$local_label" "$source_label" "$hunks")
+    return 0
+}
+
+# Colour for the review diff: on unless NO_COLOR is set or TERM is "dumb".
+# Only called on an interactive terminal; the deploy log never gets colour.
+_review_colour() {
+    [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != "dumb" ]
+}
+
+# ---------------------------------------------------------------------------
 # Show SOURCE against LOCAL and ask what to do ("Review choices" above).
 #
 # Args:
@@ -1083,38 +1150,71 @@ prompt_diff_review() {
     fi
     printf '\n' > /dev/tty
 
-    # Show diff
+    # AI merge input ([m]erge & adopt): SOURCE -> LOCAL diff, unchanged from
+    # before the display change; the display below does not use it.
     local diff_output
     # diff exits 1 on differences (expected), suppress set -e abort
     diff_output=$(diff -u <(printf '%s' "$new_content") <(printf '%s' "$cur_content") \
         --label "source (would deploy)" --label "local (on disk)" 2>&1) || true
-    local diff_lines
-    diff_lines=$(printf '%s\n' "$diff_output" | wc -l | tr -d ' ')
-    if [ "$diff_lines" -le 40 ]; then
-        printf '%s\n' "$diff_output" > /dev/tty
-    else
-        printf '%s\n' "$diff_output" | head -30 > /dev/tty
-        printf '  ... (%d more lines -- full diff in deploy log)\n' \
-            "$((diff_lines - 30))" > /dev/tty
-    fi
-    # Full diff as structured [detail] records at every size (raw appends broke the log format).
-    local diff_line
-    while IFS= read -r diff_line; do
-        log_detail "diff $(basename "$file_path"): $diff_line"
-    done <<< "$diff_output"
 
-    # Menu (parity: Prompt-DiffReview in aitools-lib.ps1). A rejected merge
-    # preview ("menu") shows the menu again.
+    # Show the review diff: LOCAL -> SOURCE (_review_diff). Parity:
+    # Prompt-DiffReview in aitools-lib.ps1 prints the same lines.
+    local use_colour=0
+    if _review_colour; then use_colour=1; fi
+    local adopt_label="the repo"
+    if [ -n "$_PDR_ADOPT_TARGET" ]; then adopt_label=$(display_path "$_PDR_ADOPT_TARGET"); fi
+    local src_label=""
+    if [ -n "$_PDR_ADOPT_TARGET" ]; then src_label="$adopt_label"; fi
+    if [ "$use_colour" = "1" ]; then
+        printf '  \033[31mred -\033[0m = only on this machine   \033[32mgreen +\033[0m = only in the repo\n\n' > /dev/tty
+    else
+        printf '  red - = only on this machine   green + = only in the repo\n\n' > /dev/tty
+    fi
+    local leaf
+    leaf=$(basename "$file_path")
+    if ! _review_diff "$cur_content" "$new_content" "$(display_path "$file_path")" "$src_label"; then
+        log_warn "Review diff unavailable for $(display_path "$file_path"): $REVIEW_DIFF_ERROR"
+        printf '  (diff unavailable -- see deploy log)\n' > /dev/tty
+    elif [ -z "$REVIEW_DIFF" ]; then
+        printf '  (whitespace-only differences)\n' > /dev/tty
+    else
+        local diff_lines shown
+        diff_lines=$(printf '%s\n' "$REVIEW_DIFF" | wc -l | tr -d ' ')
+        shown="$REVIEW_DIFF"
+        if [ "$diff_lines" -gt 40 ]; then
+            shown=$(printf '%s\n' "$REVIEW_DIFF" | head -n 30)
+        fi
+        if [ "$use_colour" = "1" ]; then
+            printf '%s\n' "$shown" \
+                | perl -pe 's/^(-.*)$/\e[31m$1\e[0m/; s/^(\+.*)$/\e[32m$1\e[0m/' > /dev/tty
+        else
+            printf '%s\n' "$shown" > /dev/tty
+        fi
+        if [ "$diff_lines" -gt 40 ]; then
+            printf '  ... (%d more lines -- full diff in deploy log)\n' \
+                "$((diff_lines - 30))" > /dev/tty
+        fi
+        # Full diff as structured [detail] records at every size, plain text
+        # (raw appends broke the log format).
+        local diff_line
+        while IFS= read -r diff_line; do
+            log_detail "diff ${leaf}: $diff_line"
+        done <<< "$REVIEW_DIFF"
+    fi
+
+    # Menu (parity: Prompt-DiffReview in aitools-lib.ps1). Each line says what
+    # the choice does to the lines shown. A rejected merge preview ("menu")
+    # shows the menu again.
     local choice
     while true; do
         printf '\n' > /dev/tty
-        printf '  [o]verwrite      : source wins -> written to local (backup kept)\n' > /dev/tty
+        printf '  [o]verwrite       : this machine gets the green + lines (backup kept)\n' > /dev/tty
         if [ "$adopt_offered" = "1" ]; then
-            printf '  [a]ccept & adopt : local wins -> copied to the repo now\n' > /dev/tty
-            printf '  [m]erge & adopt  : AI merge of source + local -> local and the repo\n' > /dev/tty
+            printf '  [a]ccept & adopt  : the repo gets the red - lines (your version) -> %s\n' "$adopt_label" > /dev/tty
+            printf '  [m]erge & adopt   : AI combines both; written to this machine and %s\n' "$adopt_label" > /dev/tty
         fi
-        printf '  [s]kip           : nothing written; asked again next run\n' > /dev/tty
-        printf '  [x]abort         : stop this script (exit 2)\n' > /dev/tty
+        printf '  [s]kip            : nothing written; asked again next run\n' > /dev/tty
+        printf '  [x]abort          : stop this script (exit 2)\n' > /dev/tty
         if [ "$adopt_offered" = "1" ]; then
             printf '  choice [o/a/m/s/x]: ' > /dev/tty
         else
