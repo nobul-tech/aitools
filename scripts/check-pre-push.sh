@@ -191,10 +191,31 @@ fs.writeFileSync(process.argv[2], JSON.stringify(c, null, 2) + "\n");
                 d7_smoke="$d7_smoke $d7_s(exit $d7_s_rc)"
             elif printf '%s\n' "$d7_s_out" | grep -q 'resolver missing' || grep -q 'resolver missing' "$d7_sum"; then
                 d7_smoke="$d7_smoke $d7_s(resolver missing)"
-            elif [ "$d7_s" = "setup-user-claude.sh" ] && ! printf '%s\n' "$d7_s_out" | grep -q 'Profile source:'; then
-                d7_smoke="$d7_smoke $d7_s(no profile source line)"
+            elif [ "$d7_s" = "setup-user-claude.sh" ] && [ -f "$d7_tmp/dot/profile.json" ] \
+                && ! printf '%s\n' "$d7_s_out" | grep -q 'Profile source: live'; then
+                d7_smoke="$d7_smoke $d7_s(live profile not used)"
             fi
         done
+        # The endpoint path (review m2): the same claude script on a machine without
+        # the dotprofile (empty config.json, no AITOOLS_USER_REPO_PATH) must resolve
+        # from the embedded build-time snapshot.
+        if [ -f "$d7_tmp/dot/profile.json" ]; then
+            mkdir -p "$d7_tmp/endpoint/.aitools"
+            printf '{}\n' > "$d7_tmp/endpoint/.aitools/config.json"
+            : > "$d7_sum"
+            d7_s_rc=0
+            d7_s_out=$(env -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE -u AITOOLS_MACHINE_ALIAS -u AITOOLS_PROFILE_SH -u AITOOLS_PROFILE_PS1 \
+                HOME="$d7_tmp/endpoint" AITOOLS_LOG_DIR="$d7_tmp/logs" AITOOLS_SUMMARY_FILE="$d7_sum" \
+                bash "$d7_tmp/dot/deploy/setup-user-claude.sh" --dry-run < /dev/null 2>&1) || d7_s_rc=$?
+            while IFS= read -r d7_line; do
+                if [ -n "$d7_line" ]; then log_detail "pre-push 7 smoke endpoint setup-user-claude.sh: $d7_line"; fi
+            done <<< "$d7_s_out"
+            if [ "$d7_s_rc" -gt 1 ]; then
+                d7_smoke="$d7_smoke endpoint:setup-user-claude.sh(exit $d7_s_rc)"
+            elif ! printf '%s\n' "$d7_s_out" | grep -q 'Profile source: embedded build-time snapshot'; then
+                d7_smoke="$d7_smoke endpoint:setup-user-claude.sh(snapshot not used)"
+            fi
+        fi
         if [ -n "$d7_smoke" ]; then
             d7_problems="${d7_problems:+$d7_problems; }generated deploy scripts failed a dry run:$d7_smoke -- see deploy.log"
         fi

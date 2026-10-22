@@ -85,6 +85,19 @@ the generated resolver consumers, so a deploy script that cannot find its resolv
 fails the push, not an endpoint.
 
 ================================================================
+Edit 2b -- heading after the auto-embedded list (review n1)
+================================================================
+OLD:
+**When changing setup logic in any of the 3 scripts above**:
+
+NEW:
+**When changing setup logic in the script above** (`setup-user-hooks`):
+
+(Follow-up, not a rule edit: check-pre-commit step 13 still lists
+setup-user-claude and setup-user-cursor as duplicated templates and will warn
+needlessly when they change.)
+
+================================================================
 Edit 3 -- section "When changing `scripts/setup-*.sh/.ps1`", step 2
 ================================================================
 OLD:

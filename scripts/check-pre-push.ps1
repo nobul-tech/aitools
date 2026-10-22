@@ -209,8 +209,29 @@ if ($deploySources.Count -eq 0) {
                     $d7Smoke += "$s(exit $sRc)"
                 } elseif ($sOut -match 'resolver missing' -or $sSum -match 'resolver missing') {
                     $d7Smoke += "$s(resolver missing)"
-                } elseif ($s -eq "setup-user-claude.ps1" -and $sOut -notmatch 'Profile source:') {
-                    $d7Smoke += "$s(no profile source line)"
+                } elseif ($s -eq "setup-user-claude.ps1" -and (Test-Path (Join-Path $d7Dot "profile.json")) -and $sOut -notmatch 'Profile source: live') {
+                    $d7Smoke += "$s(live profile not used)"
+                }
+            }
+            # The endpoint path (review m2): the same claude script on a machine without
+            # the dotprofile (empty config.json, no AITOOLS_USER_REPO_PATH) must resolve
+            # from the embedded build-time snapshot.
+            if (Test-Path (Join-Path $d7Dot "profile.json")) {
+                $d7Endpoint = Join-Path $d7Tmp "endpoint"
+                $d7EndpointCfg = Join-Path $d7Endpoint ".aitools"
+                New-Item -ItemType Directory -Path $d7EndpointCfg -Force -ErrorAction Stop | Out-Null
+                [IO.File]::WriteAllText((Join-Path $d7EndpointCfg "config.json"), "{}`n", (New-Object System.Text.UTF8Encoding($false)))
+                [IO.File]::WriteAllText($d7Sum, "", (New-Object System.Text.UTF8Encoding($false)))
+                $env:HOME = $d7Endpoint
+                $env:USERPROFILE = $d7Endpoint
+                [Environment]::SetEnvironmentVariable("AITOOLS_USER_REPO_PATH", $null)
+                $sOut = & pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path (Join-Path $d7Dot "deploy") "setup-user-claude.ps1") -DryRun 2>&1 | Out-String
+                $sRc = $LASTEXITCODE
+                foreach ($l in $sOut.Split("`n")) { if ($l.Trim()) { LogDetail "pre-push 7 smoke endpoint setup-user-claude.ps1: $($l.TrimEnd())" } }
+                if ($sRc -gt 1) {
+                    $d7Smoke += "endpoint:setup-user-claude.ps1(exit $sRc)"
+                } elseif ($sOut -notmatch 'Profile source: embedded build-time snapshot') {
+                    $d7Smoke += "endpoint:setup-user-claude.ps1(snapshot not used)"
                 }
             }
         }
