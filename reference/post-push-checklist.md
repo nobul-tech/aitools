@@ -162,9 +162,8 @@ For each versioned tool in the tool registry (`/tool-registry` skill):
   `/tool-registry` skill, and review upstream changelog for breaking changes.
 
 For `@latest` / remote tools (MCP servers):
-- Review upstream for changes to flags, config options, or behavior the registry entry assumes.
-  (The 30-day `lastReviewed` check ended with `tool-versions.json`, deleted per S2L-Q6;
-  the registry has no review-date field for MCP servers yet.)
+- Check `mcpServers.<name>.versions.lastReviewed` in the registry. Flag if older than 30 days.
+- Review upstream for changes to flags, config options, or behavior affecting `assumptions`.
 
 ### 22. Logging hygiene audit
 

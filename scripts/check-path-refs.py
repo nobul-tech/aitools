@@ -15,8 +15,10 @@ Usage:
 What is checked:
     - Markdown (.md, .mdc): every `backticked` span and every @path token
       whose first segment is a repo top-level directory (see TOP_DIRS).
-    - Shell hooks (shared/hooks/*.sh): every literal registries/<x>.json or
-      reference/<x>.(md|json) token.
+    - Code (shared/hooks/*.sh, scripts/*.sh, *.ps1, *.py): every literal
+      registries/<x>.json or reference/<x>.(md|json) token. A path built from
+      separate arguments (Join-Path "reference" "x.json") is not seen.
+    - A trailing #anchor, :NN line suffix or :L45 suffix is ignored.
 
 Skipped tokens: placeholders and globs (< > { } * ? $ space |), URLs,
 paths under ~/ or /, and paths git ignores (git check-ignore).
@@ -55,7 +57,11 @@ SCAN = (
     (".cursor/rules", "*.mdc", False),
     ("reference", "*.md", False),
     ("shared/hooks", "*.sh", False),
+    ("scripts", "*.sh", False),
+    ("scripts", "*.ps1", False),
+    ("scripts", "*.py", False),
 )
+CODE_SUFFIXES = (".sh", ".ps1", ".py")
 SCAN_FILES = ("CLAUDE.md", "shared/claude-shared.md", "shared/README.md")
 
 BACKTICK = re.compile(r"`([^`\n]+)`")
@@ -71,8 +77,10 @@ def candidate(token: str) -> str | None:
     tok = token.strip()
     if tok.startswith("@"):
         tok = tok[1:]
+    tok = tok.split("#", 1)[0]
     tok = tok.rstrip(".,;:)")
     tok = LINE_SUFFIX.sub("", tok)
+    tok = re.sub(r":L\d+(?:-L?\d+)?$", "", tok)
     if not tok or any(c in BAD_CHARS for c in tok):
         return None
     if "://" in tok or tok.startswith(("~", "/")):
@@ -160,7 +168,7 @@ def scan(root: Path) -> list[tuple[str, int, str]]:
         except (OSError, UnicodeDecodeError) as exc:
             print(f"check-path-refs: cannot read {rel_file}: {exc}", file=sys.stderr)
             raise SystemExit(2)
-        is_hook = path.suffix == ".sh"
+        is_hook = path.suffix in CODE_SUFFIXES
         for lineno, line in enumerate(text.splitlines(), 1):
             if IGNORE_MARKER in line:
                 continue
