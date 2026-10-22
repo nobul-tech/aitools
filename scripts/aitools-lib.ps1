@@ -99,177 +99,241 @@ function ReadConfigKey {
 # to their embedded copy). Return codes follow the decision tree's helper rule:
 # none returns 2. Functions write nothing to the output stream except their
 # declared return value.
+#
+# Result-variable contract (PR #80 review3 B1/M1): this library is dot-sourced,
+# so its script scope IS the caller's script scope, and PowerShell names are
+# case-insensitive. Every result variable is therefore $script:AitLib* and every
+# private helper is named *-AitLib*, so nothing can collide with a caller's
+# parameter or variable ($UserRepoPath, $machineAlias, $profileFile, ...). They
+# are assigned only inside these functions -- this section has no top-level
+# assignment (a top-level assignment would run in the caller's scope at
+# dot-source time). Read them only after the call; callers copy what they need
+# right after it, e.g.:  $rc = Resolve-UserRepoPath; $userRepoPath = $script:AitLibUserRepoPath
+# ACTION rows: the wrapper emits the one ACTION for its failure (once per run:
+# Write-AitLibActionOnce skips a row the run summary already holds); callers do
+# not add their own ACTION for the same failure.
 # ---------------------------------------------------------------------------
-$script:AitoolsLibDir = $PSScriptRoot
 
-# Invoke-AitoolsProfile ARGS -- run the resolver in-process; sets
-# $script:ProfileOut (tagged lines) and $script:ProfileRc. Returns $true when
-# it ran, $false when no resolver is available.
-$script:ProfileOut = @()
-$script:ProfileRc = 0
-function Invoke-AitoolsProfile([string[]]$Arguments) {
-    $script:ProfileOut = @(); $script:ProfileRc = 0
-    $ps1 = if ($env:AITOOLS_PROFILE_PS1) { $env:AITOOLS_PROFILE_PS1 } else { Join-Path $script:AitoolsLibDir "aitools-profile.ps1" }
+# Invoke-AitLibProfile ARGS -- run the resolver in-process; sets
+# $script:AitLibProfileOut (tagged lines) and $script:AitLibProfileRc. Returns
+# $true when it ran, $false when no resolver is available. $PSScriptRoot inside
+# a function is the directory of the file that defines it (this library, or the
+# generated deploy script it is inlined into). The resolver's stderr (its own
+# log lines, written with [Console]::Error) is captured and copied to
+# deploy.log as detail lines, as in bash. The exit code is trusted only with the
+# result lines: exit 0 or 1 without a "via" line is rewritten to 2 with an
+# "error" line (parity with _aitlib_profile_run).
+function Invoke-AitLibProfile([string[]]$Arguments) {
+    $script:AitLibProfileOut = @(); $script:AitLibProfileRc = 0
+    $ps1 = if ($env:AITOOLS_PROFILE_PS1) { $env:AITOOLS_PROFILE_PS1 } else { Join-Path $PSScriptRoot "aitools-profile.ps1" }
     if (-not (Test-Path -LiteralPath $ps1 -PathType Leaf)) { return $false }
     $global:LASTEXITCODE = 0
+    $origErr = [Console]::Error
+    $errBuf = [IO.StringWriter]::new()
+    [Console]::SetError($errBuf)
     try {
-        $script:ProfileOut = @(& $ps1 @Arguments | ForEach-Object { [string]$_ })
-        $script:ProfileRc = $LASTEXITCODE
+        $script:AitLibProfileOut = @(& $ps1 @Arguments | ForEach-Object { [string]$_ })
+        $script:AitLibProfileRc = $LASTEXITCODE
     } catch {
+        # The caller logs the failure (LogError / LogWarn with the "error" line below)
         LogDetail "aitools-profile $($Arguments[0]) threw: $($_.Exception.Message)"
-        $script:ProfileRc = 99
+        $script:AitLibProfileRc = 2
+    } finally {
+        [Console]::SetError($origErr)
+    }
+    foreach ($l in ($errBuf.ToString() -split "`r?`n")) {
+        if ($l) { LogDetail "aitools-profile $($Arguments[0]): $l" }
+    }
+    if ($script:AitLibProfileRc -eq 0 -or $script:AitLibProfileRc -eq 1) {
+        if (-not @($script:AitLibProfileOut | Where-Object { $_.StartsWith("via`t") }).Count) {
+            LogDetail "aitools-profile $($Arguments[0]): exit $($script:AitLibProfileRc) without result lines -- treated as a resolver error"
+            $script:AitLibProfileOut = @($script:AitLibProfileOut) + @("error`tresolver exited $($script:AitLibProfileRc) without result lines (see deploy.log)")
+            $script:AitLibProfileRc = 2
+        }
     }
     return $true
 }
 
-function Get-ProfileTag([string]$Key) {
-    foreach ($l in $script:ProfileOut) {
+function Get-AitLibProfileTag([string]$Key) {
+    foreach ($l in $script:AitLibProfileOut) {
         $kv = $l -split "`t", 2
         if ($kv.Count -eq 2 -and $kv[0] -ceq $Key) { return $kv[1] }
     }
     return ""
 }
-function Get-ProfileLines([string]$Kind) {
-    return @($script:ProfileOut | ForEach-Object { $kv = $_ -split "`t", 2; if ($kv.Count -eq 2 -and $kv[0] -ceq $Kind) { $kv[1] } })
+function Get-AitLibProfileLines([string]$Kind) {
+    return @($script:AitLibProfileOut | ForEach-Object { $kv = $_ -split "`t", 2; if ($kv.Count -eq 2 -and $kv[0] -ceq $Kind) { $kv[1] } })
 }
 
-# Resolve-UserRepoPath -- sets $script:UserRepoPath and $script:UserRepoVia
-# (env|argument|config|convention|scan|none). Returns 0 found, 1 no dotprofile
-# (shared-only mode; not an error), 3 resolver error (LogError + ERROR row).
-$script:UserRepoPath = ""
-$script:UserRepoVia = "none"
+# Write-AitLibActionOnce TEXT -- write ACTION row TEXT unless the run summary
+# already holds it (several setup scripts in one run hit the same failure;
+# Show-Summary does not dedupe)
+function Write-AitLibActionOnce([string]$Text) {
+    if ($env:AITOOLS_SUMMARY_FILE) {
+        $sf = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:AITOOLS_SUMMARY_FILE)
+        if (Test-Path -LiteralPath $sf -PathType Leaf) {
+            $have = $false
+            try {
+                $have = @([IO.File]::ReadAllLines($sf, [System.Text.UTF8Encoding]::new($false)) | Where-Object { $_ -ceq "ACTION||$Text" }).Count -gt 0
+            } catch {
+                LogDetail "run summary unreadable ($($_.Exception.Message)) -- ACTION written without the duplicate check"
+            }
+            if ($have) { LogDetail "ACTION already in the run summary: $Text"; return }
+        }
+    }
+    Write-Summary "ACTION" "" $Text
+}
+
+# Resolve-UserRepoPath -- sets $script:AitLibUserRepoPath and
+# $script:AitLibUserRepoVia (env|argument|config|convention|scan|none). Returns 0
+# found, 1 no dotprofile (shared-only mode; not an error), 3 resolver error
+# (LogError + ERROR row "dotprofile").
 function Resolve-UserRepoPath {
-    $script:UserRepoPath = ""; $script:UserRepoVia = "none"
-    if (-not (Invoke-AitoolsProfile @("user-repo-path"))) {
+    $script:AitLibUserRepoPath = ""; $script:AitLibUserRepoVia = "none"
+    if (-not (Invoke-AitLibProfile @("user-repo-path"))) {
         LogError "dotprofile: resolver aitools-profile.ps1 not found next to aitools-lib.ps1"
         Write-Summary "ERROR" "dotprofile" "resolver missing"
         return 3
     }
-    $script:UserRepoVia = Get-ProfileTag "via"
-    foreach ($w in (Get-ProfileLines "warn")) { LogDetail "dotprofile: $w" }
-    if ($script:ProfileRc -eq 0) {
-        $script:UserRepoPath = Get-ProfileTag "path"
-        LogDetail "dotprofile=$($script:UserRepoPath) via=$($script:UserRepoVia)"
+    $script:AitLibUserRepoVia = Get-AitLibProfileTag "via"
+    foreach ($w in (Get-AitLibProfileLines "warn")) { LogDetail "dotprofile: $w" }
+    if ($script:AitLibProfileRc -eq 0) {
+        $script:AitLibUserRepoPath = Get-AitLibProfileTag "path"
+        LogDetail "dotprofile=$($script:AitLibUserRepoPath) via=$($script:AitLibUserRepoVia)"
         return 0
     }
-    if ($script:ProfileRc -eq 1) { LogDetail "dotprofile: none found (shared-only mode)"; return 1 }
-    $errs = Get-ProfileLines "error"
+    if ($script:AitLibProfileRc -eq 1) { LogDetail "dotprofile: none found (shared-only mode)"; return 1 }
+    $errs = @(Get-AitLibProfileLines "error")
     foreach ($e in $errs) { LogError "dotprofile: $e" }
-    if ($errs.Count -eq 0) { LogError "dotprofile: resolver failed (exit $($script:ProfileRc))" }
+    if ($errs.Count -eq 0) { LogError "dotprofile: resolver failed (exit $($script:AitLibProfileRc))" }
     Write-Summary "ERROR" "dotprofile" "resolver failed"
     return 3
 }
 
-# Resolve-MachineProfile -- sets $script:MachineAlias, MachineVia, ProfileFile,
-# ProfileName, ProfileCompany, IdentityGitName, IdentityGitEmail,
-# IdentityGithub. Logs one detail line. Resolver warnings are detail lines here:
-# setup-user-config, the first script of every run, reports them once (a
-# successful step stays OK, D-TS12). Returns 0 resolved, 1 no dotprofile
-# (shared-only), 3 no match or error (LogError + ERROR row "machine profile" +
-# ACTION; the Profile*/Identity* values then hold identity-level values only).
+# Resolve-MachineProfile -- sets $script:AitLibMachineAlias, AitLibMachineVia,
+# AitLibProfileFile, AitLibProfileName, AitLibProfileCompany,
+# AitLibIdentityGitName, AitLibIdentityGitEmail, AitLibIdentityGithub. Logs one
+# detail line. Resolver warnings are detail lines here: setup-user-config, the
+# first script of every run, reports them once (a successful step stays OK,
+# D-TS12). Returns 0 resolved, 1 no dotprofile (shared-only), 3 no match or
+# error (LogError + ERROR row "machine profile" + one ACTION per run; the
+# AitLibProfile*/AitLibIdentity* values then hold identity-level values only).
 function Resolve-MachineProfile {
-    $script:MachineAlias = ""; $script:MachineVia = "none"; $script:ProfileFile = ""
-    $script:ProfileName = ""; $script:ProfileCompany = ""; $script:IdentityGitName = ""
-    $script:IdentityGitEmail = ""; $script:IdentityGithub = ""
-    if (-not (Invoke-AitoolsProfile @("resolve", "--environment", $script:AitoolsEnvironment))) {
+    $script:AitLibMachineAlias = ""; $script:AitLibMachineVia = "none"; $script:AitLibProfileFile = ""
+    $script:AitLibProfileName = ""; $script:AitLibProfileCompany = ""; $script:AitLibIdentityGitName = ""
+    $script:AitLibIdentityGitEmail = ""; $script:AitLibIdentityGithub = ""
+    if (-not (Invoke-AitLibProfile @("resolve", "--environment", $script:AitoolsEnvironment))) {
         LogError "machine profile: resolver aitools-profile.ps1 not found next to aitools-lib.ps1"
         Write-Summary "ERROR" "machine profile" "resolver missing"
         return 3
     }
-    $script:MachineAlias = Get-ProfileTag "alias"
-    $script:MachineVia = Get-ProfileTag "via"
-    $script:ProfileFile = Get-ProfileTag "profileFile"
-    $script:ProfileName = Get-ProfileTag "name"
-    $script:ProfileCompany = Get-ProfileTag "company"
-    $script:IdentityGitName = Get-ProfileTag "gitName"
-    $script:IdentityGitEmail = Get-ProfileTag "gitEmail"
-    $script:IdentityGithub = Get-ProfileTag "github"
-    foreach ($w in (Get-ProfileLines "warn")) { LogDetail "machine profile: $w" }
-    $aliasShown = if ($script:MachineAlias) { $script:MachineAlias } else { "none" }
-    LogDetail "machine profile: alias=$aliasShown via=$($script:MachineVia) company=$($script:ProfileCompany) host=$(Get-ProfileTag 'hostname') id=$(Get-ProfileTag 'machineId')"
-    if ($script:ProfileRc -eq 0 -and $script:MachineAlias) { return 0 }
-    if ($script:ProfileRc -eq 1) { LogDetail "machine profile: no dotprofile -- shared-only mode"; return 1 }
-    $errs = Get-ProfileLines "error"
+    $script:AitLibMachineAlias = Get-AitLibProfileTag "alias"
+    $script:AitLibMachineVia = Get-AitLibProfileTag "via"
+    $script:AitLibProfileFile = Get-AitLibProfileTag "profileFile"
+    $script:AitLibProfileName = Get-AitLibProfileTag "name"
+    $script:AitLibProfileCompany = Get-AitLibProfileTag "company"
+    $script:AitLibIdentityGitName = Get-AitLibProfileTag "gitName"
+    $script:AitLibIdentityGitEmail = Get-AitLibProfileTag "gitEmail"
+    $script:AitLibIdentityGithub = Get-AitLibProfileTag "github"
+    foreach ($w in (Get-AitLibProfileLines "warn")) { LogDetail "machine profile: $w" }
+    $aliasShown = if ($script:AitLibMachineAlias) { $script:AitLibMachineAlias } else { "none" }
+    LogDetail "machine profile: alias=$aliasShown via=$($script:AitLibMachineVia) company=$($script:AitLibProfileCompany) host=$(Get-AitLibProfileTag 'hostname') id=$(Get-AitLibProfileTag 'machineId')"
+    if ($script:AitLibProfileRc -eq 0 -and $script:AitLibMachineAlias) { return 0 }
+    if ($script:AitLibProfileRc -eq 1) { LogDetail "machine profile: no dotprofile -- shared-only mode"; return 1 }
+    $errs = @(Get-AitLibProfileLines "error")
     foreach ($e in $errs) { LogError "machine profile: $e" }
-    if ($errs.Count -eq 0) { LogError "machine profile: resolver failed (exit $($script:ProfileRc))" }
+    if ($errs.Count -eq 0) { LogError "machine profile: resolver failed (exit $($script:AitLibProfileRc))" }
     LogError "machine profile: unresolved -- no other machine's values are used"
     Write-Summary "ERROR" "machine profile" "no machine match"
-    Write-Summary "ACTION" "" "Run: aitools user init (pick or register this machine's profile)"
+    Write-AitLibActionOnce "Run: aitools user init (pick or register this machine's profile)"
     return 3
 }
 
 # Get-ToolException SLUG -- this machine's recorded tool exception (tree section
 # 8 Reader; call only at T5). Returns @{ Found; Platform; Method; Path;
 # DecidedAt }, or $null when the store is unavailable (one LogWarn; treated as
-# no exception). Resolver warnings are detail lines.
+# no exception; no summary row -- the warning promotes the caller's OK row to
+# WARN). Sets no result variable. Resolver warnings are detail lines.
 function Get-ToolException([string]$Slug) {
-    if (-not (Invoke-AitoolsProfile @("exception-get", "--slug", $Slug, "--environment", $script:AitoolsEnvironment))) {
+    if (-not (Invoke-AitLibProfile @("exception-get", "--slug", $Slug, "--environment", $script:AitoolsEnvironment))) {
         LogWarn "tool exceptions unavailable (resolver missing)"
         return $null
     }
-    foreach ($w in (Get-ProfileLines "warn")) { LogDetail "tool exceptions: $w" }
-    if ($script:ProfileRc -ne 0) {
-        $reason = @(Get-ProfileLines "error") | Select-Object -First 1
-        if ($script:ProfileRc -eq 1) { $reason = "no dotprofile" }
-        if (-not $reason) { $reason = "resolver exit $($script:ProfileRc)" }
+    foreach ($w in (Get-AitLibProfileLines "warn")) { LogDetail "tool exceptions: $w" }
+    if ($script:AitLibProfileRc -ne 0) {
+        $reason = @(Get-AitLibProfileLines "error") | Select-Object -First 1
+        if ($script:AitLibProfileRc -eq 1) { $reason = "no dotprofile" }
+        if (-not $reason) { $reason = "resolver exit $($script:AitLibProfileRc)" }
         LogWarn "tool exceptions unavailable ($reason)"
         return $null
     }
     $r = @{ Found = $false; Platform = ""; Method = ""; Path = ""; DecidedAt = "" }
-    if ((Get-ProfileTag "found") -ceq "true") {
+    if ((Get-AitLibProfileTag "found") -ceq "true") {
         $r.Found = $true
-        $r.Platform = Get-ProfileTag "platform"
-        $r.Method = Get-ProfileTag "method"
-        $r.Path = Get-ProfileTag "path"
-        $r.DecidedAt = Get-ProfileTag "decidedAt"
+        $r.Platform = Get-AitLibProfileTag "platform"
+        $r.Method = Get-AitLibProfileTag "method"
+        $r.Path = Get-AitLibProfileTag "path"
+        $r.DecidedAt = Get-AitLibProfileTag "decidedAt"
     }
-    LogDetail "tool exceptions: $Slug found=$($r.Found) profile=$(Get-ProfileTag 'alias') via=$(Get-ProfileTag 'via')"
+    LogDetail "tool exceptions: $Slug found=$($r.Found) profile=$(Get-AitLibProfileTag 'alias') via=$(Get-AitLibProfileTag 'via')"
     return $r
 }
 
 # Set-ToolException SLUG METHOD PATH VERSION [REASON] -- record a [k]eep decision
 # (tree section 8 Writer; only after [k]eep, never in dry run or non-interactive
 # runs). decidedBy = the calling script's name. The resolver writes profile.json
-# and commits and pushes it (N-Q2). Sets $script:ToolExcPushed. Returns 0
-# written (a failed commit or push is a LogWarn + ACTION "run git push in
-# <dotprofile>"), 1 failed, 3 refused (no dotprofile, or the machine profile
-# matched by hostname only or not at all); 1 and 3 LogWarn + ACTION
-# "run aitools user init to remember tool choices".
-$script:ToolExcPushed = $false
+# and commits and pushes it (N-Q2). Sets $script:AitLibToolExcResult
+# (created|updated|unchanged|dry-run|refused|failed; never empty after the
+# call) and $script:AitLibToolExcPushed. Returns 0 written or nothing to
+# write (created/updated: a failed commit or push is a LogWarn + ACTION "run git
+# push in <dotprofile>"; unchanged and dry-run write nothing, so they need no
+# push and get no warning), 1 failed, 3 refused (no dotprofile, or the machine
+# profile matched by hostname only or not at all). 3 is LogWarn + ACTION "run
+# aitools user init to remember tool choices"; 1 (resolver missing, usage
+# error, crash) is LogWarn + ACTION "see deploy.log -- a tool choice (tool
+# exception) was not saved". The tool itself is fine, so no ERROR row (D-TS12).
 function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [string]$Version, [string]$Reason = "") {
-    $script:ToolExcPushed = $false
+    $script:AitLibToolExcPushed = $false; $script:AitLibToolExcResult = ""
     $by = if ($script:scriptName) { $script:scriptName } else { "unknown" }
     $a = @("exception-set", "--slug", $Slug, "--platform", $script:AitoolsPlatform, "--method", $Method,
         "--path", $Path, "--version", $Version, "--by", $by, "--environment", $script:AitoolsEnvironment)
     if ($Reason) { $a += @("--reason", $Reason) }
-    if (-not (Invoke-AitoolsProfile $a)) {
+    if (-not (Invoke-AitLibProfile $a)) {
+        $script:AitLibToolExcResult = "failed"
         LogWarn "tool exception for $Slug not saved (resolver missing)"
-        Write-Summary "ACTION" "" "run aitools user init to remember tool choices"
+        Write-AitLibActionOnce "see deploy.log -- a tool choice (tool exception) was not saved"
         return 1
     }
-    foreach ($w in (Get-ProfileLines "warn")) { LogDetail "tool exceptions: $w" }
-    if ($script:ProfileRc -eq 0) {
-        if ((Get-ProfileTag "pushed") -ceq "true") {
-            $script:ToolExcPushed = $true
-            LogDetail "tool exceptions: $Slug recorded in $(Get-ProfileTag 'profileFile') (committed and pushed)"
+    $script:AitLibToolExcResult = Get-AitLibProfileTag "result"
+    foreach ($w in (Get-AitLibProfileLines "warn")) { LogDetail "tool exceptions: $w" }
+    if ($script:AitLibProfileRc -eq 0) {
+        if ((Get-AitLibProfileTag "pushed") -ceq "true") {
+            $script:AitLibToolExcPushed = $true
+            LogDetail "tool exceptions: $Slug recorded in $(Get-AitLibProfileTag 'profileFile') (committed and pushed)"
+        } elseif ($script:AitLibToolExcResult -ceq "unchanged" -or $script:AitLibToolExcResult -ceq "dry-run") {
+            LogDetail "tool exceptions: $Slug $($script:AitLibToolExcResult) -- nothing written, nothing to push"
         } else {
-            $msg = @(Get-ProfileLines "warn" | Where-Object { $_ -match 'commit|push|git repository' }) | Select-Object -First 1
+            $msg = @(Get-AitLibProfileLines "warn" | Where-Object { $_ -match 'commit|push|git repository' }) | Select-Object -First 1
             if (-not $msg) { $msg = "see deploy.log" }
             LogWarn "tool exception for $Slug saved but not pushed ($msg)"
-            Write-Summary "ACTION" "" "run git push in $(Split-Path -Parent (Get-ProfileTag 'profileFile'))"
+            $pf = Get-AitLibProfileTag "profileFile"
+            $dpDir = if ($pf) { Split-Path -Parent $pf } else { "your dotprofile" }
+            Write-AitLibActionOnce "run git push in $dpDir"
         }
         return 0
     }
-    $msg = @(Get-ProfileLines "error") | Select-Object -First 1
-    if ($script:ProfileRc -eq 3) {
+    $msg = @(Get-AitLibProfileLines "error") | Select-Object -First 1
+    if ($script:AitLibProfileRc -eq 3) {
+        $script:AitLibToolExcResult = "refused"
         if (-not $msg) { $msg = "refused" }
         LogWarn "tool exception for $Slug not saved ($msg)"
-        Write-Summary "ACTION" "" "run aitools user init to remember tool choices"
+        Write-AitLibActionOnce "run aitools user init to remember tool choices"
         return 3
     }
-    if (-not $msg) { $msg = "resolver exit $($script:ProfileRc)" }
+    $script:AitLibToolExcResult = "failed"
+    if (-not $msg) { $msg = "resolver exit $($script:AitLibProfileRc)" }
     LogWarn "tool exception for $Slug not saved ($msg)"
-    Write-Summary "ACTION" "" "run aitools user init to remember tool choices"
+    Write-AitLibActionOnce "see deploy.log -- a tool choice (tool exception) was not saved"
     return 1
 }
 
