@@ -70,7 +70,7 @@ case "$1 ${2:-}" in
     "repo view") exit "${GH_REPO_VIEW_RC:-1}" ;;
     "repo create")
         src=""; while [ $# -gt 0 ]; do if [ "$1" = "--source" ]; then src="$2"; fi; shift; done
-        git init -q --bare "$GH_REMOTE" || exit 1
+        git init -q --bare -b main "$GH_REMOTE" || exit 1
         git -C "$src" remote add origin "$GH_REMOTE" || exit 1
         git -C "$src" push -q -u origin main || exit 1
         exit 0 ;;
@@ -109,7 +109,7 @@ fixture() {
     printf '[user]\n\tname = Tester\n\temail = tester@example.com\n[init]\n\tdefaultBranch = main\n' > "$H/.gitconfig"
     printf '{\n  "version": 3,\n  "reposPath": "%s",\n  "repoPath": "%s"%s\n}\n' "$H/repos" "$R" "$extra" > "$H/.aitools/config.json"
     if [ "$pj" = "-" ]; then return 0; fi
-    git init -q --bare "$BARE"
+    git init -q --bare -b main "$BARE"
     mkdir -p "$DP"
     printf 'notes\n' > "$DP/notes.txt"
     # A dotprofile with a profile.json also has its CLAUDE.md template (no scaffold commit)
@@ -353,7 +353,7 @@ echo "== Review3 #82 minor 4: a rejected push (remote ahead) is told to pull --r
 fx_ahead() {
     fx_two "$1"
     local w="$D/other"
-    git clone -q "$BARE" "$w"; printf 'x\n' > "$w/other.txt"; git -C "$w" add other.txt
+    git clone -q -b main "$BARE" "$w"; printf 'x\n' > "$w/other.txt"; git -C "$w" add other.txt
     git -C "$w" -c user.name=O -c user.email=o@x commit -q -m other; git -C "$w" push -q origin main
 }
 case_run push-rejected 0 fx_ahead --alias spare
