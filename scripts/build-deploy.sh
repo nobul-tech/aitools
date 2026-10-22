@@ -306,7 +306,10 @@ extract_between() {
 extract_span() {
     local file="$1" start="$2" end="$3" crlf="${4:-}"
     local errf
-    errf=$(mktemp)
+    if ! errf=$(mktemp); then
+        blog_error "Extraction from $(basename "$file"): cannot create a temp file"
+        exit 1
+    fi
     if ! perl -e '
         my ($file, $start, $end, $crlf) = @ARGV;
         open my $fh, "<", $file or die "cannot read $file: $!\n";
@@ -1556,13 +1559,23 @@ MDM_SOURCES=$(perl -ne '
     }' "$HARNESS_SH")
 _mdm_calls=$(perl -ne '$n++ if /^\s*add_source\s/; END { print $n + 0 }' "$HARNESS_SH")
 _mdm_parsed=$(printf '%s\n' "$MDM_SOURCES" | perl -ne '$n++ if /\S/; END { print $n + 0 }')
-_mdm_ps1_calls=$(perl -ne '$n++ if /^\s*Add-Source\s+-Kind\s/; END { print $n + 0 }' "$HARNESS_PS1")
+# The .ps1 list, from its -SrcDir (Join-Path ... $repoDir|$dotprofile "a") "b") chains
+MDM_SOURCES_PS1=$(perl -ne '
+    next unless /^\s*Add-Source\s+-Kind\s/;
+    $n++;
+    if (/-SrcDir\s+(.*?)\s+-DestDir/) {
+        my $s = $1;
+        my ($b) = $s =~ /\$(repoDir|dotprofile)\b/;
+        my @p = $s =~ /"([^"]+)"/g;
+        if ($b && @p) { print(($b eq "repoDir" ? "aitools" : "dotprofile"), "\t", join("/", @p), "\n"); $ok++ }
+    }
+    END { exit($n && $n == $ok ? 0 : 1) }' "$HARNESS_PS1") || MDM_SOURCES_PS1="(unparsed)"
 if [ "$_mdm_calls" -eq 0 ] || [ "$_mdm_calls" -ne "$_mdm_parsed" ]; then
     blog_error "deploy-harness.sh: parsed $_mdm_parsed of $_mdm_calls add_source calls -- update the parser in build-deploy.sh"
     exit 1
 fi
-if [ "$_mdm_ps1_calls" -ne "$_mdm_calls" ]; then
-    blog_error "deploy-harness parity: $_mdm_calls add_source calls in .sh, $_mdm_ps1_calls Add-Source calls in .ps1"
+if [ "$MDM_SOURCES_PS1" != "$MDM_SOURCES" ]; then
+    blog_error "deploy-harness parity: the .ps1 Add-Source directories differ from the .sh add_source directories (or the .ps1 parser in build-deploy.sh needs an update)"
     exit 1
 fi
 # bin CLIs: the dev script's `for cli in ...; do` list (and the .ps1 list must match)
@@ -1583,20 +1596,30 @@ fi
 # add the listing and every listed file to the manifest.
 MDM_DIRS=0
 mdm_snapshot_dir() {
-    local stage_rel="$1" dir="$2" lsf
+    local stage_rel="$1" dir="$2" lsf raw mode st
     if [ ! -d "$dir" ]; then
         blog "Harness snapshot: $stage_rel not found -- not embedded (deploy-harness logs the missing source)"
         return 0
     fi
     MDM_DIRS=$((MDM_DIRS + 1))
     lsf="$MDM_TMP/ls.$MDM_DIRS"
+    raw="$MDM_TMP/raw.$MDM_DIRS"
     # 2>/dev/null: rev-parse fails outside a git work tree; that failure selects the fallback.
     if git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-        if ! git -C "$dir" ls-files -z > "$lsf"; then
+        mode="git"
+        # -s: the executable bit comes from the git mode (100755), the same on
+        # every build machine (Win32 perl -x and MSYS [ -x ] do not read it).
+        if ! git -C "$dir" ls-files -s -z > "$raw"; then
             blog_error "Harness snapshot: git ls-files failed in $dir"
             exit 1
         fi
+        if ! st=$(git -C "$dir" status --porcelain -- . 2>&1); then
+            blog_warn "Harness snapshot: git status failed in $dir ($st) -- cannot tell whether uncommitted changes are embedded"
+        elif [ -n "$st" ]; then
+            blog_warn "Harness snapshot: $dir has uncommitted changes -- the working tree is what gets embedded"
+        fi
     else
+        mode="disk"
         # e.g. pre-push step 7 builds into a git-archive copy of the dotprofile
         blog_warn "Harness snapshot: $dir is not in a git work tree -- embedding every file on disk, listed as git would"
         if ! perl -MFile::Find -e '
@@ -1607,26 +1630,43 @@ mdm_snapshot_dir() {
                 push @f, substr($_, length($root) + 1) if -f $_;
             } }, $root);
             print map { "$_\0" } sort @f;
-        ' "$dir" > "$lsf"; then
+        ' "$dir" > "$raw"; then
             blog_error "Harness snapshot: cannot list $dir"
             exit 1
         fi
     fi
-    printf '%s\t%s\t0\n' "$stage_rel/.aitools-mdm-ls-files" "$lsf" >> "$MDM_MANIFEST"
+    # One perl writes the listing (exactly what `git ls-files -z` prints) and the
+    # manifest lines. Every path it opens comes from its arguments: on Windows,
+    # MSYS converts arguments for native perl, never file contents.
     # Listed but missing on disk: not embedded; deploy-harness WARNs at run time, as in dev.
     if ! perl -e '
-        my ($lsf, $dir, $stage) = @ARGV;
-        open my $h, "<:raw", $lsf or die "cannot read $lsf: $!\n";
+        my ($mode, $raw, $lsf, $dir, $stage, $manifest) = @ARGV;
+        open my $in, "<:raw", $raw or die "cannot read $raw: $!\n";
+        open my $ls, ">:raw", $lsf or die "cannot write $lsf: $!\n";
+        open my $mf, ">>", $manifest or die "cannot write $manifest: $!\n";
+        print $mf "$stage/.aitools-mdm-ls-files\t$lsf\t0\n";
         local $/ = "\0";
-        while (my $rel = <$h>) {
-            chomp $rel;
-            next if $rel eq "";
+        my $last = "";
+        while (my $e = <$in>) {
+            chomp $e;
+            next if $e eq "";
+            my ($m, $rel) = ("", $e);
+            if ($mode eq "git") {
+                ($m, $rel) = $e =~ /\A(\d+) [0-9a-f]+ \d+\t(.*)\z/s
+                    or die "unexpected git ls-files -s entry: $e\n";
+            }
+            next if $rel eq $last;   # an unmerged path is listed once per stage
+            $last = $rel;
             die "path with a tab or line break cannot be embedded: $dir/$rel\n" if $rel =~ /[\t\r\n]/;
+            print $ls "$rel\0";
             my $src = "$dir/$rel";
             next unless -f $src;
-            print "$stage/$rel\t$src\t", (-x $src ? 1 : 0), "\n";
+            my $x = $mode eq "git" ? ($m eq "100755" ? 1 : 0) : (-x $src ? 1 : 0);
+            print $mf "$stage/$rel\t$src\t$x\n";
         }
-    ' "$lsf" "$dir" "$stage_rel" >> "$MDM_MANIFEST"; then
+        close $ls or die "cannot write $lsf: $!\n";
+        close $mf or die "cannot write $manifest: $!\n";
+    ' "$mode" "$raw" "$lsf" "$dir" "$stage_rel" "$MDM_MANIFEST"; then
         blog_error "Harness snapshot: cannot add the files of $dir"
         exit 1
     fi
@@ -1646,11 +1686,25 @@ while IFS= read -r _mdm_cli; do
         blog_warn "Harness snapshot: bin $_mdm_cli not found -- not embedded (deploy-harness WARNs at run time)"
         continue
     fi
+    # Executable bit: the git mode when tracked (same on every build machine), else -x.
+    if ! _mdm_mode=$(git -C "$SCRIPTS_DIR" ls-files -s -- "$_mdm_cli" 2>&1); then
+        blog_warn "Harness snapshot: git ls-files failed for bin $_mdm_cli ($_mdm_mode) -- executable bit read from disk"
+        _mdm_mode=""
+    fi
     _mdm_x=0
-    if [ -x "$SCRIPTS_DIR/$_mdm_cli" ]; then _mdm_x=1; fi
-    printf 'aitools/scripts/%s\t%s\t%s\n' "$_mdm_cli" "$SCRIPTS_DIR/$_mdm_cli" "$_mdm_x" >> "$MDM_MANIFEST"
+    case "$_mdm_mode" in
+        100755\ *) _mdm_x=1 ;;
+        "") if [ -x "$SCRIPTS_DIR/$_mdm_cli" ]; then _mdm_x=1; fi ;;
+    esac
+    # Written by perl from its arguments (MSYS converts them on Windows; see above).
+    if ! perl -e 'open my $m, ">>", $ARGV[0] or die "cannot write $ARGV[0]: $!\n"; print $m "$ARGV[1]\t$ARGV[2]\t$ARGV[3]\n"; close $m or die "cannot write $ARGV[0]: $!\n"' \
+            "$MDM_MANIFEST" "aitools/scripts/$_mdm_cli" "$SCRIPTS_DIR/$_mdm_cli" "$_mdm_x"; then
+        blog_error "Harness snapshot: cannot add bin $_mdm_cli"
+        exit 1
+    fi
 done <<< "$MDM_BIN"
 MDM_FILES=$(perl -ne '$n++ unless /\/\.aitools-mdm-ls-files\t/; END { print $n + 0 }' "$MDM_MANIFEST")
+MDM_RECORDS=$(perl -ne '$n++; END { print $n + 0 }' "$MDM_MANIFEST")
 blog "Harness snapshot: $MDM_FILES files from $MDM_DIRS source directories (+ bin)"
 
 # mdm_emit_payload MANIFEST sh|ps1 -- one unpack call per manifest line, the file
@@ -1667,15 +1721,16 @@ mdm_emit_payload() {
             my $data = do { local $/; <$fh> };
             close $fh;
             $data = "" unless defined $data;
-            printf "# %s (%d bytes, sha256 %s)\n", $rel, length($data), sha256_hex($data);
+            my ($size, $sha) = (length($data), sha256_hex($data));
+            printf "# %s (%d bytes, sha256 %s)\n", $rel, $size, $sha;
             my $b64 = encode_base64($data);
             if ($mode eq "sh") {
                 (my $q = $rel) =~ s/\x27/\x27\\\x27\x27/g;
-                print "mdm_unpack \x27$q\x27 $exec <<\x27__AITOOLS_MDM_B64__\x27 || MDM_UNPACK_FAILED=\$((MDM_UNPACK_FAILED + 1))\n";
+                print "mdm_unpack \x27$q\x27 $exec $size $sha <<\x27__AITOOLS_MDM_B64__\x27 || MDM_UNPACK_FAILED=\$((MDM_UNPACK_FAILED + 1))\n";
                 print $b64, "__AITOOLS_MDM_B64__\n";
             } else {
                 (my $q = $rel) =~ s/\x27/\x27\x27/g;
-                print "Expand-MdmPayload \x27$q\x27 \@\x27\n", $b64, "\x27\@\n";
+                print "Expand-MdmPayload \x27$q\x27 $size \x27$sha\x27 \@\x27\n", $b64, "\x27\@\n";
             }
         }
     ' "$1" "$2"; then
@@ -1692,29 +1747,41 @@ blog "Generating deploy/deploy-harness.sh (extracted + embedded harness snapshot
 # deploy-harness.sh -- populate ~/.aitools, the deployed harness, from a
 # build-time snapshot (macOS/Linux; MDM path of scripts/deploy-harness.sh)
 #
-# Self-contained: every harness source file is embedded below (base64, one block
-# per file, each with its size and sha256). No repo, dotprofile checkout or git
-# is needed at run time. Safe to re-run: a file equal to its source is verified
-# and not written. Platform: macOS/Linux. On Windows use deploy-harness.ps1.
+# Ships with its deploy/ directory: the config.json writer it calls
+# (setup-user-config.sh, aitools-profile.sh, aitools-json.pl) sits beside it.
+# Every harness source file is embedded below (base64, one block per file with
+# its size and sha256, both verified when unpacked). No repo, dotprofile
+# checkout or git is needed at run time. Safe to re-run: a file equal to its
+# source is verified and not written. Platform: macOS/Linux. On Windows use
+# deploy-harness.ps1.
 #
 # Run it FIRST in an MDM sequence: setup-user-cursor (and the other rules
 # fan-out consumers) read ~/.aitools/rules, which this script fills.
+#
+# config.json, as on the dev path, needs the installer's bootstrap keys
+# (reposPath, repoPath) in ~/.aitools/config.json. Where aitools-install has
+# not run, the harness files still deploy, but the run reports ERROR
+# "config.json not generated" and exits 1.
 #
 # Same directories, plan, name conflicts (first source wins, ERROR row per
 # duplicate), outcomes, summary rows ("harness files") and exit codes as
 # scripts/deploy-harness.sh, whose code is extracted below at build time. MDM
 # differences:
 #   - sources are the snapshot taken when deploy/ was built (per source
-#     directory: its git ls-files list, the listed files, their executable bit);
+#     directory: its git ls-files list, the listed files, their git mode);
 #   - dotprofile rules are those of the dotprofile deploy/ was built from;
 #   - accept & adopt / merge & adopt are not offered (the source is the embed);
 #   - config.json is generated by setup-user-config.sh in this directory.
 #
+# Scope, from scripts/deploy-harness.sh (<aitools>, <dotprofile> = the snapshot):
+BLOCK
+    extract_span "$HARNESS_SH" '^# Managed \(' '^# Usage:'
+    cat <<'BLOCK'
 # Usage: deploy-harness.sh [--dry-run] [--force] [--help]
 #   --dry-run   report what would change; write nothing (also AITOOLS_DRY_RUN=1)
 #   --force     no review menu: source wins (also AITOOLS_FORCE=1)
 # Exit: 0 done (warnings possible), 1 errors (incl. duplicates, config.json
-#   not generated), 2 aborted by the user at a review menu.
+#   not generated, a damaged embedded file), 2 aborted by the user at a review menu.
 
 BLOCK
     extract_span "$HARNESS_SH" '^set -euo pipefail$' '^# 2\. Dotprofile'
@@ -1735,18 +1802,35 @@ if ! command -v perl >/dev/null 2>&1; then
     write_summary ERROR "$TOOL" "perl not found"
     exit 1
 fi
+# A truncated copy (upload, transport) would end inside the payload with no
+# error from bash: require the end marker written after the last line.
+if ! perl -ne '$f = 1 if $_ eq "# --- END OF GENERATED SCRIPT (deploy-harness.sh) ---\n"; END { exit($f ? 0 : 1) }' "${BASH_SOURCE[0]}"; then
+    log_error "MDM: $(display_path "${BASH_SOURCE[0]}") is truncated or damaged (end marker missing) -- nothing deployed"
+    write_summary ERROR "$TOOL" "script truncated"
+    exit 1
+fi
 MDM_STAGE="$WORK/src"
 MDM_UNPACK_FAILED=0
+MDM_UNPACKED=0
 
-# mdm_unpack REL EXEC -- decode base64 on stdin into $MDM_STAGE/REL (EXEC 1: executable)
+# mdm_unpack REL EXEC SIZE SHA256 -- decode base64 on stdin into $MDM_STAGE/REL,
+# after checking its size and sha256 (EXEC 1: executable)
 mdm_unpack() {
-    local dest="$MDM_STAGE/$1"
+    local dest="$MDM_STAGE/$1" err
     if ! mkdir -p "${dest%/*}"; then
         log_error "MDM: cannot create the directory for embedded $1"
         return 1
     fi
-    if ! perl -MMIME::Base64 -0777 -ne 'print decode_base64($_)' > "$dest"; then
-        log_error "MDM: cannot unpack embedded $1"
+    if ! err=$(perl -MMIME::Base64 -MDigest::SHA=sha256_hex -e '
+        my ($dest, $size, $sha) = @ARGV;
+        my $d = decode_base64(do { local $/; <STDIN> });
+        die "size " . length($d) . ", expected $size\n" unless length($d) == $size;
+        die "sha256 mismatch\n" unless sha256_hex($d) eq $sha;
+        open my $o, ">:raw", $dest or die "cannot write: $!\n";
+        print $o $d;
+        close $o or die "cannot write: $!\n";
+    ' -- "$dest" "$3" "$4" 2>&1); then
+        log_error "MDM: embedded $1 is damaged or cannot be written ($err) -- not unpacked"
         return 1
     fi
     if [ "$2" = "1" ]; then
@@ -1755,6 +1839,7 @@ mdm_unpack() {
             return 1
         fi
     fi
+    MDM_UNPACKED=$((MDM_UNPACKED + 1))
     return 0
 }
 
@@ -1777,12 +1862,14 @@ git() {
 # --- Embedded harness snapshot (generated from the repos at build time) ---
 BLOCK
     printf 'MDM_EMBEDDED_FILES=%s\n' "$MDM_FILES"
+    printf 'MDM_EMBEDDED_BLOCKS=%s\n' "$MDM_RECORDS"
     mdm_emit_payload "$MDM_MANIFEST" sh
     cat <<'BLOCK'
 # --- End of embedded harness snapshot ---
 
-if [ "$MDM_UNPACK_FAILED" -gt 0 ]; then
-    write_summary ERROR "$TOOL" "$(short "$MDM_UNPACK_FAILED embedded file(s) not unpacked")"
+if [ "$MDM_UNPACKED" -ne "$MDM_EMBEDDED_BLOCKS" ]; then
+    log_error "MDM: $MDM_UNPACKED of $MDM_EMBEDDED_BLOCKS embedded blocks unpacked ($MDM_UNPACK_FAILED failed) -- the script is damaged"
+    write_summary ERROR "$TOOL" "$(short "$((MDM_EMBEDDED_BLOCKS - MDM_UNPACKED)) embedded file(s) damaged")"
 fi
 log "MDM: sources are the build-time snapshot ($MDM_EMBEDDED_FILES files), unpacked in $(display_path "$MDM_STAGE")"
 REPO_DIR="$MDM_STAGE/aitools"
@@ -1798,6 +1885,7 @@ BLOCK
     extract_span "$HARNESS_SH" '^# 3\. The six directories' EOF \
         | replace_once 'deploy_managed_file "$content" "$dest" "$TOOL" "$item" "$src"' \
                        'deploy_managed_file "$content" "$dest" "$TOOL" "$item" ""  # MDM: no adopt target (the source is the embed)'
+    echo '# --- END OF GENERATED SCRIPT (deploy-harness.sh) ---'
 } >> "$DEPLOY_DIR/deploy-harness.sh"
 chmod +x "$DEPLOY_DIR/deploy-harness.sh"
 GENERATED=$((GENERATED + 1))
@@ -1809,13 +1897,21 @@ blog "Generating deploy/deploy-harness.ps1 (extracted + embedded harness snapsho
 # deploy-harness.ps1 -- populate %USERPROFILE%\.aitools, the deployed harness, from
 # a build-time snapshot (Windows; MDM path of scripts/deploy-harness.ps1)
 #
-# Self-contained: every harness source file is embedded below (base64, one block
-# per file, each with its size and sha256). No repo, dotprofile checkout or git
-# is needed at run time. Safe to re-run: a file equal to its source is verified
-# and not written. Platform: Windows. On macOS/Linux use deploy-harness.sh.
+# Ships with its deploy\ directory: the config.json writer it calls
+# (setup-user-config.ps1, aitools-profile.ps1, aitools-json.ps1) sits beside it.
+# Every harness source file is embedded below (base64, one block per file with
+# its size and sha256, both verified when unpacked). No repo, dotprofile
+# checkout or git is needed at run time. Safe to re-run: a file equal to its
+# source is verified and not written. Platform: Windows. On macOS/Linux use
+# deploy-harness.sh.
 #
 # Run it FIRST in an MDM sequence: setup-user-cursor (and the other rules
 # fan-out consumers) read .aitools\rules, which this script fills.
+#
+# config.json, as on the dev path, needs the installer's bootstrap keys
+# (reposPath, repoPath) in .aitools\config.json. Where aitools-install has
+# not run, the harness files still deploy, but the run reports ERROR
+# "config.json not generated" and exits 1.
 #
 # Same directories, plan, name conflicts (first source wins, ERROR row per
 # duplicate), outcomes, summary rows ("harness files") and exit codes as
@@ -1827,11 +1923,15 @@ blog "Generating deploy/deploy-harness.ps1 (extracted + embedded harness snapsho
 #   - accept & adopt / merge & adopt are not offered (the source is the embed);
 #   - config.json is generated by setup-user-config.ps1 in this directory.
 #
+# Scope, from scripts/deploy-harness.ps1 (<aitools>, <dotprofile> = the snapshot):
+BLOCK
+    extract_span "$HARNESS_PS1" '^# Managed \(' '^# Usage:'
+    cat <<'BLOCK'
 # Usage: deploy-harness.ps1 [-DryRun] [-Force] [-Help]
 #   -DryRun   report what would change; write nothing (also AITOOLS_DRY_RUN=1)
 #   -Force    no review menu: source wins (also AITOOLS_FORCE=1)
 # Exit: 0 done (warnings possible), 1 errors (incl. duplicates, config.json
-#   not generated), 2 aborted by the user at a review menu.
+#   not generated, a damaged embedded file), 2 aborted by the user at a review menu.
 
 BLOCK
     extract_span "$HARNESS_PS1" '^param\($' '^# 2\. Dotprofile'
@@ -1851,19 +1951,31 @@ BLOCK
 $mdmStage = Join-Path ([IO.Path]::GetTempPath()) ("aitools-harness-" + [guid]::NewGuid().ToString("N"))
 try {
 $mdmUnpackFailed = 0
+$mdmUnpacked = 0
 
-# Expand-MdmPayload REL BASE64 -- decode into $mdmStage\REL
+# Expand-MdmPayload REL SIZE SHA256 BASE64 -- decode into $mdmStage\REL after
+# checking its size and sha256
 function Expand-MdmPayload {
-    param([string]$Rel, [string]$B64)
+    param([string]$Rel, [long]$Size, [string]$Sha256, [string]$B64)
     $dest = Join-Path $mdmStage ($Rel -replace '/', [IO.Path]::DirectorySeparatorChar)
     try {
+        $bytes = [Convert]::FromBase64String($B64)
+        if ($bytes.Length -ne $Size) { throw "size $($bytes.Length), expected $Size" }
+        $hasher = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            $hash = ([BitConverter]::ToString($hasher.ComputeHash($bytes)) -replace '-', '').ToLowerInvariant()
+        } finally {
+            $hasher.Dispose()
+        }
+        if ($hash -ne $Sha256) { throw "sha256 mismatch" }
         $dir = Split-Path -Parent $dest
         if (-not (Test-Path -LiteralPath $dir -PathType Container)) {
             New-Item -ItemType Directory -Path $dir -Force -ErrorAction Stop | Out-Null
         }
-        [IO.File]::WriteAllBytes($dest, [Convert]::FromBase64String($B64))
+        [IO.File]::WriteAllBytes($dest, $bytes)
+        $script:mdmUnpacked++
     } catch {
-        LogError "MDM: cannot unpack embedded ${Rel}: $_"
+        LogError "MDM: embedded $Rel is damaged or cannot be written ($_) -- not unpacked"
         $script:mdmUnpackFailed++
     }
 }
@@ -1900,12 +2012,14 @@ function git {
 # --- Embedded harness snapshot (generated from the repos at build time) ---
 BLOCK
     printf '$mdmEmbeddedFiles = %s\n' "$MDM_FILES"
+    printf '$mdmEmbeddedBlocks = %s\n' "$MDM_RECORDS"
     mdm_emit_payload "$MDM_MANIFEST" ps1
     cat <<'BLOCK'
 # --- End of embedded harness snapshot ---
 
-if ($mdmUnpackFailed -gt 0) {
-    Write-Summary "ERROR" $tool (Get-ShortDetail "$mdmUnpackFailed embedded file(s) not unpacked")
+if ($mdmUnpacked -ne $mdmEmbeddedBlocks) {
+    LogError "MDM: $mdmUnpacked of $mdmEmbeddedBlocks embedded blocks unpacked ($mdmUnpackFailed failed) -- the script is damaged"
+    Write-Summary "ERROR" $tool (Get-ShortDetail "$($mdmEmbeddedBlocks - $mdmUnpacked) embedded file(s) damaged")
 }
 Log "MDM: sources are the build-time snapshot ($mdmEmbeddedFiles files), unpacked in $mdmStage"
 $repoDir = Join-Path $mdmStage "aitools"

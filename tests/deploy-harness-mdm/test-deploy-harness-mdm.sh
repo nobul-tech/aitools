@@ -11,7 +11,8 @@
 # Cases: build output and parse (bash -n, pwsh parser), cursor header port and
 # step 4 (MDM), no adopt target in MDM, first run / rerun / edit / dry run
 # equivalence (trees, exec bits, summary rows, exit codes), no git needed at
-# run time, --help, conflicts (same ERROR rows, exit 1), build from a non-git
+# run time, --help, a corrupted block or truncated script (ERROR, exit 1, .sh
+# and .ps1), conflicts (same ERROR rows, exit 1), build from a non-git
 # dotprofile (pre-push step 7's git-archive copy) gives the same output, and
 # the .ps1 pair on pwsh with the OS guards disabled in temp copies.
 # Platform: macOS, Linux (needs node, perl, git; pwsh optional). Exit 1 if any
@@ -194,6 +195,23 @@ check "--help: exit 0, MDM header, nothing deployed" \
 check "runs: MDM never called git" "no_fake_git"
 
 # ---------------------------------------------------------------------------
+# Damaged payload: a corrupted block and a truncated script fail loudly
+# ---------------------------------------------------------------------------
+mkdir -p "$TMP_ROOT/bad/deploy"
+cp -Rp "$TMP_ROOT/b1/deploy/." "$TMP_ROOT/bad/deploy/"
+perl -i -ne 'if ($skip) { print "QUJD\n"; $skip = 0; next } $skip = 1 if /^mdm_unpack \x27dotprofile\/claude\/rules\/user1\.md\x27 /; print' \
+    "$TMP_ROOT/bad/deploy/deploy-harness.sh"
+BUILD=bad
+run mdm corrupt
+check "corrupted block: exit 1, ERROR row, file not deployed" \
+    "[ \"\$(rc_of corrupt-mdm)\" = 1 ] && grep -q '^ERROR|harness files|1 embedded file(s) damaged' '$TMP_ROOT/corrupt-mdm.summary' && grep -q 'user1.md is damaged' '$TMP_ROOT/corrupt-mdm.out' && [ ! -e '$TMP_ROOT/corrupt-mdm/.aitools/rules/user1.md' ]"
+perl -e 'my ($f) = @ARGV; my $s = -s $f; truncate($f, int($s / 2)) or die "truncate: $!\n"' "$TMP_ROOT/bad/deploy/deploy-harness.sh"
+run mdm trunc
+check "truncated script: exit 1, ERROR row, nothing deployed" \
+    "[ \"\$(rc_of trunc-mdm)\" = 1 ] && row trunc-mdm 'ERROR|harness files|script truncated' && [ ! -e '$TMP_ROOT/trunc-mdm/.aitools/rules' ]"
+BUILD=b1
+
+# ---------------------------------------------------------------------------
 # Conflicts: a dotprofile rule named like a project rule (case differs)
 # ---------------------------------------------------------------------------
 printf 'dotprofile copy\n' > "$DOT/claude/rules/Git-Safety.md"
@@ -251,6 +269,18 @@ exit 0'
     done
     check "ps1: same exit code (0), summary rows and files" \
         "[ \"\$(rc_of ps-dev)\" = 0 ] && same_rc ps && same_summary ps && diff -r -x logs -x config.json '$TMP_ROOT/ps-dev/.aitools' '$TMP_ROOT/ps-mdm/.aitools' > /dev/null"
+    # Corrupted block in the .ps1: ERROR row, exit 1, file not deployed
+    perl -i -ne 'if ($skip) { print "QUJD\n"; $skip = 0; next } $skip = 1 if /^Expand-MdmPayload \x27dotprofile\/claude\/rules\/user1\.md\x27 /; print' \
+        "$P/mdm/deploy/deploy-harness.ps1"
+    h="$TMP_ROOT/ps-bad"; write_config "$h"
+    OUT="$TMP_ROOT/ps-bad.out"
+    : > "$TMP_ROOT/ps-bad.summary"
+    env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN HOME="$h" USERPROFILE="$h" AITOOLS_LOG_DIR="$h/logs" \
+        AITOOLS_SUMMARY_FILE="$TMP_ROOT/ps-bad.summary" \
+        pwsh -NoProfile -File "$P/mdm/deploy/deploy-harness.ps1" < /dev/null > "$OUT" 2>&1
+    echo $? > "$TMP_ROOT/ps-bad.rc"
+    check "ps1 corrupted block: exit 1, ERROR row, file not deployed" \
+        "[ \"\$(rc_of ps-bad)\" = 1 ] && grep -q '^ERROR|harness files|1 embedded file(s) damaged' '$TMP_ROOT/ps-bad.summary' && [ ! -e '$h/.aitools/rules/user1.md' ]"
 else
     printf 'SKIP ps1 pair (pwsh not found)\n'; SKIP=$((SKIP + 1))
 fi
