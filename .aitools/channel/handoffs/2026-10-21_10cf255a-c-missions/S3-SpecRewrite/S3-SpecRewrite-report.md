@@ -6,7 +6,7 @@
 4. Biggest contract defect: CLAUDE.md is a template; adopting LOCAL verbatim into it would bake interpolated values and the machine footer into the template (Q1).
 5. Independent reviewer S3-SpecRewrite-Check found 5 contradictions; 4 are fixed in the drafts. The fifth is cli-config.json, which needs the commander (Q9). 14 open questions in total.
 
-PR: PR_URL_PLACEHOLDER
+PR: https://github.com/nobul-tech/aitools/pull/63 (commits ea21bb2, 8eb3051, + this report update)
 Branch: `docs/managed-file-spec-drafts` (from origin/main db4b3c5)
 
 ## Files (all under `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-SpecRewrite/`)
@@ -29,7 +29,9 @@ The intent statement: `reference/managed-file-deployment.md`, `.claude/rules/man
 - `bash .scratch/session-S3-SpecRewrite/check-sm.sh` -> `STATE MACHINE: identical` (26 lines each, cmp).
 - `bash .scratch/session-S3-SpecRewrite/make-diffs.sh` -> five `.diff` files written (670, 54, 92, 35, 28 lines).
 - Code facts cited below were read in this session from the specdrafts worktree (origin/main db4b3c5).
-- Pre-commit / pre-push results: see PR body.
+- `bash scripts/check-pre-commit.sh` (worktree): 6 PASS / 11 SKIP / 2 WARN / 1 FAIL. The FAIL is step 6, the known harvesting/ file tracked 100644, and pre-dates this branch.
+- `bash scripts/check-pre-push.sh` (worktree; its step 7 uses an isolated HOME): 6 PASS / 1 SKIP / 3 WARN / 0 FAIL.
+- Note: my first pre-commit invocation used a relative path, so it ran against the main checkout. The check is read-only apart from checks.log, and it was re-run against the worktree.
 
 ## Not run
 
