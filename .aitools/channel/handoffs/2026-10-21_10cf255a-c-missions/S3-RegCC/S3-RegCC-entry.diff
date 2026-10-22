@@ -1,0 +1,302 @@
+# S3-RegCC: tools.claude-code field-by-field diff
+# old = registries/tool-registry.json on origin/main db4b3c5; new = S3-RegCC-claude-code-entry.json
+# '-' removed or old value, '+' added or new value; unchanged fields omitted
+
+- authentication
+-   null
++ authentication.auth0MigrationPhase
++   null
++ authentication.checkCommand
++   "claude auth status --json"
++ authentication.checkNotes
++   "JSON field loggedIn (true/false). Verified 2026-10-21 on macOS (2.1.307): keys include loggedIn and authMethod. Exit code on logged-out state not verified."
++ authentication.checkType
++   "command-output"
++ authentication.envOverride
++   "ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, apiKeyHelper setting; third-party providers (Bedrock, Vertex/Agent Platform, Foundry) use their own credentials; CLAUDE_CODE_OAUTH_TOKEN (long-lived OAuth token printed by `claude setup-token`, subscription; not read in --bare mode)"
++ authentication.logoutCommand
++   "claude auth logout"
++ authentication.method
++   "claude.ai account login (Pro, Max, Team, Enterprise) or Console/API credentials; browser flow on first `claude` run, `/login`, or `claude auth login`"
++ authentication.refreshCommand
++   "/login (startup warns 3 days before the login expires)"
++ authentication.setupCommand
++   "claude auth login"
++ authentication.tokenStorage
++   "macOS: Keychain (fallback ~/.claude/.credentials.json, mode 0600, when the Keychain rejects the write); Linux: ~/.claude/.credentials.json (0600); Windows: %USERPROFILE%\\.claude\\.credentials.json; CLAUDE_CONFIG_DIR moves it"
++ delivery.linux.officialEndorsement
++   "code.claude.com/docs/en/setup: 'Native Install (Recommended)'; signed apt, dnf and apk repositories published by Anthropic"
++ delivery.linux.packageMaintainer
++   "Anthropic"
++ delivery.linux.provenanceVerified
++   null
++ delivery.linux.upstreamSource
++   "https://claude.ai/install.sh -> https://downloads.claude.ai/claude-code-releases/<version>/linux-<arch>[-musl]/claude; signed apt/dnf/apk repos under https://downloads.claude.ai/claude-code/"
++ delivery.macos.officialEndorsement
++   "code.claude.com/docs/en/setup: 'Native Install (Recommended)'; Homebrew cask listed as an alternative (cask maintained by Homebrew, homebrew/cask tap, autobumped by BrewTestBot; url downloads.claude.ai; sha256 for 2.1.304 darwin-arm64 equals the release manifest)"
++ delivery.macos.packageMaintainer
++   "Anthropic"
++ delivery.macos.provenanceVerified
++   "2026-10-21 (installed 2.1.307 SHA-256 5b113a77...58fb2a equals manifest.json platforms.darwin-arm64.checksum; codesign valid, notarized Developer ID Application: Anthropic PBC (Q6L2SF6YDW); manifest GPG signature NOT verified: gpg not installed)"
++ delivery.macos.upstreamSource
++   "https://claude.ai/install.sh -> https://downloads.claude.ai/claude-code-releases/<version>/darwin-<arch>/claude"
++ delivery.windows.officialEndorsement
++   "code.claude.com/docs/en/setup: 'Native Install (Recommended)'; WinGet listed as an alternative (manifest Anthropic.ClaudeCode in microsoft/winget-pkgs, submitted by community bot spectobot (GitHub account spectopo, a SpecterShell bot) via Dumplings, Publisher Anthropic PBC, InstallerUrl downloads.claude.ai; 2.1.302 InstallerSha256 equals the release manifest)"
++ delivery.windows.packageMaintainer
++   "Anthropic"
++ delivery.windows.provenanceVerified
++   null
++ delivery.windows.upstreamSource
++   "https://claude.ai/install.ps1 -> https://downloads.claude.ai/claude-code-releases/<version>/win32-<arch>/claude.exe"
++ evaluation.pendingChanges
++   "Draft evaluation in the S3-RegCC mission folder awaits approval; status can become current once it is written and the items below are done. Pending: Windows and Linux trials (version, provenance, knownPaths); re-verify tool-ops-claude-code.md items #1-#25 at 2.1.307; schema 1.1 updateChannel (SD-4) for this entry: proposed vendor-auto."
++ evaluation.provenance
++   "reference/evaluations/claude-code-macos-2026-10-21.md"
++ evaluation.status
++   "stale"
++ health.linux.flag
++   "yellow"
++ health.linux.reasons
++   ["Version unverified: lastVerifiedVersion null", "Provenance not verified on Linux"]
++ health.macos.flag
++   "yellow"
++ health.macos.reasons
++   ["Active workaround on this platform: D-DEL1 Markdown name prefix for sub-agent writes (tool-ops-claude-code.md item #26; reproduced on macOS 2.1.307, 2026-10-21)", "Evaluation status is stale until the draft evaluation is approved and items #1-#25 are re-verified", "Operational reference stale: tool-ops-claude-code.md 'Current version' is 2.1.81 against 2.1.307 installed (check-post-push step 20 warns)"]
++ health.windows.flag
++   "yellow"
++ health.windows.reasons
++   ["Version unverified: lastVerifiedVersion null. The last Windows date on record is 2026-03-13 (2.1.74), the last-verified date of workaround item #1 in tool-ops-claude-code.md, 222 days before 2026-10-21; if the commander reads that as the version verification, the red criterion (>180 days) applies and needs a migration plan", "Active workaround (item #1: Bash tool on Git Bash, pwsh -File dispatch) predates upstream changes: PowerShell tool (2.1.84), PowerShell as primary shell when enabled (2.1.126), Git for Windows optional (2.1.120); needs re-verification", "Provenance not verified on Windows"]
++ install.deprecated[0].notes
++   "Kept deprecated per the harness decision. The setup page (2026-10-21) lists npm under 'Advanced installation options' without the word deprecated; changelog 2.1.15 added an npm deprecation notification. Requires Node.js 22+; installs the same native binary through a per-platform optional dependency. Upgrade: npm install -g @anthropic-ai/claude-code@latest (not npm update -g)."
+~ install.linux[0].notes
+-   null
++   "Alpine/musl: needs bash, curl, libgcc, libstdc++, ripgrep and env USE_BUILTIN_RIPGREP=0."
++ install.linux[1].autoUpdates
++   false
++ install.linux[1].ccCompatible
++   true
++ install.linux[1].command
++   "sudo apt install claude-code"
++ install.linux[1].method
++   "apt"
++ install.linux[1].notes
++   "After registering the signed repo (docs: 'Install with Linux package managers'): key https://downloads.claude.ai/keys/claude-code.asc, fingerprint 31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE, deb line https://downloads.claude.ai/claude-code/apt/stable stable main (or apt/latest latest main). Needs sudo."
++ install.linux[1].preferred
++   false
++ install.linux[2].autoUpdates
++   false
++ install.linux[2].ccCompatible
++   true
++ install.linux[2].command
++   "sudo dnf install claude-code"
++ install.linux[2].method
++   "dnf"
++ install.linux[2].notes
++   "After writing /etc/yum.repos.d/claude-code.repo with baseurl https://downloads.claude.ai/claude-code/rpm/stable (or rpm/latest), gpgcheck=1, gpgkey https://downloads.claude.ai/keys/claude-code.asc. Needs sudo."
++ install.linux[2].preferred
++   false
++ install.linux[3].autoUpdates
++   false
++ install.linux[3].ccCompatible
++   true
++ install.linux[3].command
++   "apk add claude-code"
++ install.linux[3].method
++   "apk"
++ install.linux[3].notes
++   "After adding key /etc/apk/keys/claude-code.rsa.pub (sha256 395759c1f7449ef4cdef305a42e820f3c766d6090d142634ebdb049f113168b6) and repo https://downloads.claude.ai/claude-code/apk/stable (or apk/latest)."
++ install.linux[3].preferred
++   false
+~ install.macos[0].notes
+-   null
++   "Official 'Native Install (Recommended)'. Launcher ~/.local/bin/claude is a symlink into ~/.local/share/claude/versions/; a replaced launcher stops claude update from managing it. Channel at install time: `bash -s stable` or `bash -s <version>`."
+~ install.macos[1].notes
+-   "Update: brew upgrade claude-code"
++   "Cask claude-code tracks the stable channel (about a week behind); claude-code@latest tracks latest. Update: brew upgrade claude-code (or claude-code@latest). Opt-in auto-upgrade: CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE=1. Homebrew keeps old versions: brew cleanup."
+~ install.windows[0].notes
+-   null
++   "No Administrator needed. Channel or version: & ([scriptblock]::Create((irm https://claude.ai/install.ps1))) stable"
+~ install.windows[2].notes
+-   "Update: winget upgrade Anthropic.ClaudeCode"
++   "Update: winget upgrade Anthropic.ClaudeCode. Opt-in auto-upgrade: CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE=1 (may fail while claude runs: Windows locks the executable). Manifest is community-submitted (see delivery)."
+- knownPaths
+-   null
++ knownPaths.linux[0].installMethod
++   "native"
++ knownPaths.linux[0].notes
++   "UNVERIFIED: docs say the native installer manages ~/.local/bin/claude on macOS and Linux"
++ knownPaths.linux[0].standardPath
++   "~/.local/bin/claude"
++ knownPaths.linux[0].tool
++   "Claude Code"
++ knownPaths.linux[0].verified
++   null
++ knownPaths.macos[0].installMethod
++   "native"
++ knownPaths.macos[0].notes
++   "Symlink to ~/.local/share/claude/versions/2.1.307 (ls -la)"
++ knownPaths.macos[0].standardPath
++   "~/.local/bin/claude"
++ knownPaths.macos[0].tool
++   "Claude Code"
++ knownPaths.macos[0].verified
++   "2026-10-21 (v2.1.307)"
++ knownPaths.windows[0].installMethod
++   "native"
++ knownPaths.windows[0].notes
++   "UNVERIFIED: from the docs uninstall section, not observed on a machine"
++ knownPaths.windows[0].standardPath
++   "%USERPROFILE%\\.local\\bin\\claude.exe"
++ knownPaths.windows[0].tool
++   "Claude Code"
++ knownPaths.windows[0].verified
++   null
+~ lifecycle.dependencies
+-   ["Git", "Git Bash (Windows)"]
++   ["Git", "Git Bash (Windows; harness requirement, optional for Claude Code since 2.1.120)", "ripgrep (bundled; Alpine: system ripgrep)"]
+~ lifecycle.invocation.antiPatterns
+-   []
++   ["npx @anthropic-ai/claude-code"]
+~ lifecycle.postInstallConfig
+-   "~/.claude/CLAUDE.md (via setup script), git identity"
++   "Login (claude.ai account or API credentials, see authentication); ~/.claude/CLAUDE.md, rules, skills, hooks, settings.json and MCP servers via aitools setup scripts; git identity"
++ maintenance.harness
++   "scripts/aitools-install.sh/.ps1 Step 9 (no setup-claude-code script): claude on PATH -> log version, run `claude update`; otherwise run the native installer (install.sh / install.ps1). Configuration: setup-user-claude, setup-user-settings, setup-user-hooks, setup-user-skills, setup-user-mcp. Version-dep review: check-post-push step 20."
++ maintenance.lastRun.linux
++   null
++ maintenance.lastRun.macos
++   "2026-10-21T16:20:22Z (deploy.log: Step 9, 2.1.306 up to date at the time)"
++ maintenance.lastRun.windows
++   null
++ maintenance.upstreamRisks
++   ["Release cadence: 2.1.304 (Oct 19) to 2.1.307 (Oct 21, 2026); version-dependent behaviour drifts faster than tool-ops-claude-code.md is re-verified", "Security advisories are frequent (GHSA list on anthropics/claude-code, many high); all published CLI advisories are patched at or below 2.1.260. Package-manager channels lag latest (2026-10-21: Homebrew stable cask 2.1.304, @latest 2.1.306, WinGet 2.1.302, native 2.1.307)", "Windows shell model changed upstream (PowerShell tool, Git for Windows optional): harness text saying Claude Code on Windows always uses Git Bash may be wrong", "Harness relies on undocumented behaviour: sub-agent Markdown name block (#26), JSONL session storage and path sanitization (#4, #16, #17)", "Proprietary licence (repo LICENSE.md: 'All rights reserved', use subject to Anthropic Commercial Terms of Service; GitHub API reports license null because it is not SPDX; WinGet manifest: License Proprietary)"]
++ maintenance.workarounds[0].item
++   26
++ maintenance.workarounds[0].lastVerified
++   "2.1.307 (2026-10-21, macOS: sub-agent Write of REPORT-probe.md refused by S3-RegCC-Check)"
++ maintenance.workarounds[0].platforms
++   ["macos", "windows", "linux"]
++ maintenance.workarounds[0].severity
++   "high"
++ maintenance.workarounds[0].summary
++   "Sub-agent Write refuses ^(REPORT|SUMMARY|FINDINGS|ANALYSIS).*\\.md$; D-DEL1 name prefix"
++ maintenance.workarounds[1].item
++   27
++ maintenance.workarounds[1].lastVerified
++   "2.1.307 (2026-10-21)"
++ maintenance.workarounds[1].platforms
++   ["macos", "windows", "linux"]
++ maintenance.workarounds[1].severity
++   "high"
++ maintenance.workarounds[1].summary
++   "Sub-agent nesting cap (default 3; web sets 1); Workflow agents cannot delegate"
++ maintenance.workarounds[2].item
++   1
++ maintenance.workarounds[2].lastVerified
++   "2.1.74 (2026-03-13); upstream changed since (2.1.84, 2.1.120)"
++ maintenance.workarounds[2].platforms
++   ["windows"]
++ maintenance.workarounds[2].severity
++   "critical"
++ maintenance.workarounds[2].summary
++   "Windows Bash tool on Git Bash; PowerShell via pwsh -File"
++ maintenance.workarounds[3].item
++   5
++ maintenance.workarounds[3].lastVerified
++   "2.1.74 (2026-03-13)"
++ maintenance.workarounds[3].platforms
++   ["macos", "windows", "linux"]
++ maintenance.workarounds[3].severity
++   "high"
++ maintenance.workarounds[3].summary
++   "Sub-agents do not inherit rules/CLAUDE.md; delegation duty restates them"
++ maintenance.workarounds[4].item
++   24
++ maintenance.workarounds[4].lastVerified
++   "2.1.74 (2026-03-24)"
++ maintenance.workarounds[4].platforms
++   ["macos", "windows", "linux"]
++ maintenance.workarounds[4].severity
++   "high"
++ maintenance.workarounds[4].summary
++   "Sub-agent Glob/Grep denied outside the CWD repo; explicit-path Read works"
++ maintenance.workarounds[5].item
++   25
++ maintenance.workarounds[5].lastVerified
++   "2.1.81 (2026-03-24); likely obsolete: changelog 2.1.77 says use SendMessage({to: agentId}), and SendMessage is offered in 2.1.307 sessions"
++ maintenance.workarounds[5].platforms
++   ["macos", "windows", "linux"]
++ maintenance.workarounds[5].severity
++   "high"
++ maintenance.workarounds[5].summary
++   "No agent continuation (SendMessage); self-contained launch prompts"
++ maintenance.workarounds[6].item
++   11
++ maintenance.workarounds[6].lastVerified
++   "2.1.51"
++ maintenance.workarounds[6].platforms
++   ["macos"]
++ maintenance.workarounds[6].severity
++   "medium"
++ maintenance.workarounds[6].summary
++   "npm global bin not on Claude Code PATH (node fallback in setup-user-mcp)"
++ maintenance.workarounds[7].item
++   10
++ maintenance.workarounds[7].lastVerified
++   "2.1.51; did not reproduce on 2.1.307 (2026-10-21, `file` reports ASCII text for Write output): candidate for removal"
++ maintenance.workarounds[7].platforms
++   ["macos"]
++ maintenance.workarounds[7].severity
++   "medium"
++ maintenance.workarounds[7].summary
++   "Write tool produced CRLF on macOS"
+- nonPreferredMethods
+-   null
++ nonPreferredMethods[0].detection
++   "npm ls -g @anthropic-ai/claude-code"
++ nonPreferredMethods[0].method
++   "npm"
++ nonPreferredMethods[0].reason
++   "Deprecated in the harness; can shadow the native launcher on PATH. Remove: npm uninstall -g @anthropic-ai/claude-code. Detection: absent case observed on macOS 2026-10-21 (exit 1, prints '(empty)'); present case UNVERIFIED (no npm install on this machine)."
+~ notes
+-   "On Windows Git Bash (MSYS), the bash curl installer works. WinGet also works from Git Bash. `claude doctor` verifies installation type and version. Release channels: `latest` (default) or `stable`."
++   "`claude doctor` prints read-only install diagnostics (install method, channel, last update attempt) without starting a session. Release channels: `latest` (default) or `stable` (about a week old, skips releases with major regressions). DISABLE_AUTOUPDATER=1 stops background checks only; DISABLE_UPDATES blocks every update path. On Windows Git Bash (MSYS), the bash curl installer works and WinGet also works from Git Bash (recorded earlier; not re-verified 2026-10-21)."
+~ pathIssues
+-   null
++   "Native install puts the launcher in ~/.local/bin (%USERPROFILE%\\.local\\bin on Windows); if `claude` is not found, that directory is not on PATH (docs: 'Fix your PATH'). A second install or an old shell alias can shadow it (docs: 'Check for conflicting installations')."
+~ platformGotchas
+-   null
++   "Windows: with Git for Windows the Bash tool uses Git Bash (set CLAUDE_CODE_GIT_BASH_PATH if not found) and the PowerShell tool is also on by default for claude.ai and Console accounts, and when it is enabled Claude treats PowerShell as the primary shell (changelog 2.1.126); without it the PowerShell tool is the shell. Native Windows has no sandboxing (WSL 2 does). WinGet upgrades can fail while claude runs (locked executable). Linux binaries are not individually code-signed: verify with the signed manifest or use apt/dnf/apk."
+~ purpose
+-   null
++   "Anthropic's agentic coding CLI (claude). It is the primary agent runtime of the aitools harness: aitools install deploys its user configuration (~/.claude/CLAUDE.md, rules, skills, hooks, settings.json, MCP servers) and the harness hooks (session archive, harvesting, standing-order and delegation guards) run inside its sessions. Managed so every machine runs a current, verified build with the same harness behaviour."
+~ systemRequirements
+-   "macOS 13.0+, Windows 10 1809+, Ubuntu 20.04+, Debian 10+. 4 GB+ RAM, internet. Windows: requires Git Bash (Git for Windows). Node.js 18+ only for deprecated npm install."
++   "macOS 13.0+, Windows 10 1809+ or Windows Server 2019+, Ubuntu 20.04+, Debian 10+, Alpine Linux 3.19+. 4 GB+ RAM, x64 or ARM64, internet connection, shell Bash/Zsh/PowerShell/CMD, Anthropic supported country. Windows: Git for Windows optional for Claude Code itself (without it the PowerShell tool is the shell tool) but required by the harness (managed bash for hooks and build-deploy.sh, cross-platform.md). npm method only: Node.js 22+."
++ update.apk
++   "apk update && apk upgrade claude-code"
++ update.apt
++   "sudo apt update && sudo apt upgrade claude-code"
++ update.dnf
++   "sudo dnf upgrade claude-code"
+~ update.homebrew
+-   "brew upgrade claude-code"
++   "brew upgrade claude-code (or brew upgrade claude-code@latest)"
+~ update.native
+-   "Auto-updates in background, or `claude update` for manual"
++   "Auto-updates in the background (checks on startup and periodically; takes effect on next start), or `claude update` for manual. Channel: autoUpdatesChannel latest (default) or stable; floor: minimumVersion"
++ update.npm
++   "npm install -g @anthropic-ai/claude-code@latest"
+~ versions.macos.lastVerified
+-   null
++   "2026-10-21"
+~ versions.macos.lastVerifiedVersion
+-   null
++   "2.1.307"
+~ versions.maintenanceFile
+-   "tool-ops-claude-code.md"
++   "reference/tool-ops-claude-code.md"
++ versions.notes
++   "macOS: claude --version -> 2.1.307 (Claude Code); claude doctor: native, channel latest, last update success -> 2.1.307 (2026-10-21); 2.1.307 is the newest changelog entry (October 21, 2026). Windows and Linux: unknown, no machine checked 2026-10-21. maintenanceFile: the deployed copy will live under ~/.aitools/reference/ once mission HARNESS ships deploy-harness."
+
+# totals: 18 changed, 118 added, 3 removed
