@@ -162,6 +162,7 @@ $d = @{ gh = ""; urp = ""; mid = ""; alias = ""; uvia = "none"; mvia = "none"; c
 $seen = $false
 $script:NeedInit = $false
 $script:NeedMigrate = $false
+$script:NeedUpdate = $false
 $profileBad = $false
 # Route one resolver warning (the resolver returns its warnings; this caller logs
 # them at their level and owns the rows):
@@ -183,7 +184,8 @@ function Write-DeriveWarning([string]$w) {
         $script:NeedMigrate = $true
     } else {
         LogWarn "config: $w"
-        if ($w.Contains("run: aitools user init")) { $script:NeedInit = $true }
+        if ($w.Contains("renamed (run: aitools user init")) { $script:NeedUpdate = $true }
+        elseif ($w.Contains("run: aitools user init")) { $script:NeedInit = $true }
     }
 }
 foreach ($line in $deriveOut) {
@@ -230,7 +232,7 @@ if (-not $seen -or $deriveRc -gt 2) {
 # --- 2. Merge (read-then-merge; managed keys only) ---
 $configIntentJson = '{"purpose":"Per-machine pointers that let aitools find its repos and this machine profile, built from profile.json","scope":"Bootstrap pointers (reposPath, repoPath), detected googleDrives, and values derived from profile.json (githubUser, userRepoPath, machineAlias). NOT identity or preferences (profile.json). NOT hand-edited: setup-user-config is the only writer","audience":"read_config_key/ReadConfigKey callers, resolve_user_repo_path/Resolve-UserRepoPath, ait-harvest.py, hh, check-lib; written by setup-user-config.sh/.ps1"}'
 
-$configState = "updated"; $corruptReason = ""
+$configState = "updated"; $corruptReason = ""; $midHad = ""
 $old = $null
 $r = Read-JsonFile $configFile
 if ($r.State -eq "valid") {
@@ -249,11 +251,15 @@ if ($r.State -eq "valid") {
         $m = [regex]::Match($rawConfig, '"' + [regex]::Escape($k) + '"\s*:\s*"((?:[^"\\\n]|\\.)*)"')
         if ($m.Success) {
             $sv = [regex]::Replace($m.Groups[1].Value, '\\(["\\/])', '$1')
-            if ($sv) { Set-JValue $cfg $sv @($k); Log "Recovered $k from the invalid config" }
+            if ($sv) {
+                Set-JValue $cfg $sv @($k); Log "Recovered $k from the invalid config"
+                if ($k -ceq "machineId") { $midHad = $sv }
+            }
         }
     }
 }
 $existingUrp = if ($old) { Get-JText $old @("userRepoPath") } else { "" }
+if ($old) { $midHad = Get-JText $old @("machineId") }
 $failed = $false
 try {
     Set-JValue $cfg 3 @("version")
@@ -268,6 +274,13 @@ try {
     if ($d.gh) { Set-JValue $cfg $d.gh @("githubUser") }
     if ($d.urp) { Set-JValue $cfg $d.urp @("userRepoPath") }
     if ($d.mid) { Set-JValue $cfg $d.mid @("machineId") }
+    elseif ($d.alias -and $midHad) {
+        # The derivation matched a profile that is not this machine's id-keyed one (a 2.1
+        # alias-keyed profile, or a choice of another profile): a cached machineId is stale.
+        # Removing it keeps resolver step 4L (the machineAlias cache) usable.
+        $cfg.PSObject.Properties.Remove("machineId")
+        Log "config: cached machineId `"$midHad`" removed (the matched profile `"$($d.alias)`" is not keyed by this machine's id)"
+    }
     if ($d.alias) { Set-JValue $cfg $d.alias @("machineAlias") }
     $derivedFrom = if ($d.urp -or $existingUrp) { "profile.json" } else { "bootstrap only" }
     $meta = [PSCustomObject]@{}
@@ -348,12 +361,16 @@ if (-not $failed) {
     }
 }
 
-# --- 3. One ACTION for the advisory warnings (after the config row: that row reports
-# the write; this warning, paired with the ACTION, is counted in the footer) ---
+# --- 3. One ACTION for the advice. It must stay after the config row: Write-Summary
+# promotes an OK row to WARN once a warning is counted, and the LogWarn paired with
+# the ACTION (script-standards-detail "Severity decision guide") is counted. The row
+# reports the write; the footer still counts this warning. ---
+# The re-key advice assumes user init calls aitools-profile migrate (re-key batch 5).
 if ($deriveRc -eq 0) {
     $advice = ""
     if ($script:NeedInit) { $advice = "Run: aitools user init (registers this machine)" }
     elseif ($script:NeedMigrate) { $advice = "Run: aitools user init (re-keys machine profiles by machine id)" }
+    elseif ($script:NeedUpdate) { $advice = "Run: aitools user init (updates this machine's profile)" }
     if ($advice) {
         LogWarn "config: $advice"
         Write-Summary "ACTION" "" $advice

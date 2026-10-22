@@ -160,6 +160,7 @@ D_GH=""; D_URP=""; D_MID=""; D_ALIAS=""; U_VIA="none"; M_VIA="none"; D_COMPANY="
 SEEN=false
 NEED_INIT=false
 NEED_MIGRATE=false
+NEED_UPDATE=false
 PROFILE_BAD=false
 # derive_warn TEXT -- route one resolver warning (the resolver returns its warnings;
 # this caller logs them at their level and owns the rows):
@@ -180,7 +181,10 @@ derive_warn() {
             log "config: $1 (see ACTION)"; NEED_MIGRATE=true ;;
         *)
             log_warn "config: $1"
-            case "$1" in *"run: aitools user init"*) NEED_INIT=true ;; esac ;;
+            case "$1" in
+                *"renamed (run: aitools user init"*) NEED_UPDATE=true ;;
+                *"run: aitools user init"*) NEED_INIT=true ;;
+            esac ;;
     esac
 }
 while IFS=$'\t' read -r k v; do
@@ -236,7 +240,7 @@ cfg_get() {  # cfg_get VAR KEY -- top-level string of the existing config ("" wh
     printf -v "$1" '%s' "$__v"
 }
 
-CONFIG_STATE="updated"; CHECK_RC=0; IN="$CONFIG_FILE"; CORRUPT_REASON=""
+CONFIG_STATE="updated"; CHECK_RC=0; IN="$CONFIG_FILE"; CORRUPT_REASON=""; MID_HAD=""
 CHECK_MSG=$(pj check "$CONFIG_FILE" 2>&1) || CHECK_RC=$?
 case "$CHECK_RC" in
     0) CONFIG_STATE="updated" ;;
@@ -246,12 +250,15 @@ case "$CHECK_RC" in
         CONFIG_STATE="recovered"; IN="-"; CORRUPT_REASON="$CHECK_MSG"
         for k in reposPath repoPath githubUser userRepoPath machineId machineAlias; do
             sv=$(perl -0777 -ne 'BEGIN { $k = shift @ARGV } if (/"\Q$k\E"\s*:\s*"((?:[^"\\\n]|\\.)*)"/) { $v = $1; $v =~ s/\\(["\\\/])/$1/g; print $v }' "$k" "$CONFIG_FILE") || sv=""  # unreadable = nothing salvaged
-            if [ -n "$sv" ]; then op_set string "$sv" "$k"; log "Recovered $k from the invalid config"; fi
+            if [ -n "$sv" ]; then
+                op_set string "$sv" "$k"; log "Recovered $k from the invalid config"
+                if [ "$k" = "machineId" ]; then MID_HAD="$sv"; fi
+            fi
         done ;;
 esac
 
 EXISTING_URP=""
-if [ "$IN" != "-" ]; then cfg_get EXISTING_URP userRepoPath; fi
+if [ "$IN" != "-" ]; then cfg_get EXISTING_URP userRepoPath; cfg_get MID_HAD machineId; fi
 op_set number 3 version
 if [ -n "$REPOS_PATH_ARG" ]; then op_set string "$REPOS_PATH_ARG" reposPath; fi
 if [ -n "$REPO_PATH_ARG" ]; then op_set string "$REPO_PATH_ARG" repoPath; fi
@@ -264,7 +271,14 @@ else
 fi
 if [ -n "$D_GH" ]; then op_set string "$D_GH" githubUser; fi
 if [ -n "$D_URP" ]; then op_set string "$D_URP" userRepoPath; fi
-if [ -n "$D_MID" ]; then op_set string "$D_MID" machineId; fi
+if [ -n "$D_MID" ]; then op_set string "$D_MID" machineId
+elif [ -n "$D_ALIAS" ] && [ -n "$MID_HAD" ]; then
+    # The derivation matched a profile that is not this machine's id-keyed one (a 2.1
+    # alias-keyed profile, or a choice of another profile): a cached machineId is stale.
+    # Removing it keeps resolver step 4L (the machineAlias cache) usable.
+    OPS="${OPS}del"$'\t'"machineId"$'\n'
+    log "config: cached machineId \"$MID_HAD\" removed (the matched profile \"$D_ALIAS\" is not keyed by this machine's id)"
+fi
 if [ -n "$D_ALIAS" ]; then op_set string "$D_ALIAS" machineAlias; fi
 DERIVED_FROM="bootstrap only"
 if [ -n "$D_URP" ] || [ -n "$EXISTING_URP" ]; then DERIVED_FROM="profile.json"; fi
@@ -350,12 +364,16 @@ else
     fi
 fi
 
-# --- 3. One ACTION for the advisory warnings (after the config row: that row reports
-# the write; this warning, paired with the ACTION, is counted in the footer) ---
+# --- 3. One ACTION for the advice. It must stay after the config row: write_summary
+# promotes an OK row to WARN once a warning is counted, and the log_warn paired with
+# the ACTION (script-standards-detail "Severity decision guide") is counted. The row
+# reports the write; the footer still counts this warning. ---
+# The re-key advice assumes user init calls aitools-profile migrate (re-key batch 5).
 if [ "$DERIVE_RC" -eq 0 ]; then
     ADVICE=""
     if $NEED_INIT; then ADVICE="Run: aitools user init (registers this machine)"
-    elif $NEED_MIGRATE; then ADVICE="Run: aitools user init (re-keys machine profiles by machine id)"; fi
+    elif $NEED_MIGRATE; then ADVICE="Run: aitools user init (re-keys machine profiles by machine id)"
+    elif $NEED_UPDATE; then ADVICE="Run: aitools user init (updates this machine's profile)"; fi
     if [ -n "$ADVICE" ]; then
         log_warn "config: $ADVICE"
         write_summary ACTION "" "$ADVICE"

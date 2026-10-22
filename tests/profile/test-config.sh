@@ -134,6 +134,7 @@ case_run() {
         map_args "$@"
         run_writer ps ${PS_ARGS[@]+"${PS_ARGS[@]}"}
         cp "$CFG" "$WORK/$name.ps.json" 2>/dev/null || : > "$WORK/$name.ps.json"  # no config = empty copy
+        cp "$WORK/out.txt" "$WORK/$name.ps.out"
         if [ "$RC" -ne "$brc" ]; then bad "$name: pwsh exit $RC, bash $brc"; sed 's/^/       /' "$WORK/out.txt"; fi
         if cmp -s "$WORK/$name.bash.json" "$WORK/$name.ps.json"; then ok "$name: config.json bytes identical"
         else bad "$name: config.json differs"; diff "$WORK/$name.bash.json" "$WORK/$name.ps.json" | sed 's/^/       /' || true; fi
@@ -161,9 +162,13 @@ rows_n() {  # rows_n N PREFIX -- the bash summary has exactly N rows starting wi
     n=$(grep -c "^$2" "$SUMM") || n=0  # grep -c exits 1 on zero matches; the count is still printed
     if [ "$n" -eq "$1" ]; then ok "$CASE: $1 row(s) $2"; else bad "$CASE: $n row(s) $2, want $1"; sed 's/^/       /' "$SUMM"; fi
 }
-out_has() {  # out_has TEXT -- the bash writer's console output contains TEXT
-    if grep -qF "$1" "$WORK/$CASE.bash.out"; then ok "$CASE: output has '$1'"
-    else bad "$CASE: output lacks '$1'"; sed 's/^/       /' "$WORK/$CASE.bash.out"; fi
+out_has() {  # out_has TEXT -- each writer's console output (bash, and pwsh when run) contains TEXT
+    local impl
+    for impl in bash ps; do
+        if [ "$impl" = "ps" ] && ! $USE_PS; then continue; fi
+        if grep -qF "$1" "$WORK/$CASE.$impl.out"; then ok "$CASE: $impl output has '$1'"
+        else bad "$CASE: $impl output lacks '$1'"; sed 's/^/       /' "$WORK/$CASE.$impl.out"; fi
+    done
 }
 log_has() {  # log_has TEXT -- deploy.log (of the last writer run) contains TEXT
     if grep -qF "$1" "$H/.aitools/logs/deploy.log"; then ok "$CASE: deploy.log has '$1'"
@@ -275,6 +280,7 @@ has_json '"path": "\/gd"'
 # its key (any case); machineId + display machineAlias are saved
 case_run c10-machine-id 0 fix_v2 --machine-id "$ID_MAC"
 has_row "OK|aitools config|updated"
+out_has "machineAlias=nobul-mac via=override"
 has_json '"machineAlias": "nobul-mac"'
 has_json '"machineId": "'"$KEY_MAC"'"'
 # C10b the deprecated --machine-alias is still accepted for one release (detail line);
@@ -335,6 +341,7 @@ log_has "run: aitools-profile migrate"
 fix_clone() { reset_home; write_profile "$KEY_MAC" '"alias": "nobul-mac",' "$KEY_MAC" other-host; }
 case_run c18-real-warning 0 fix_clone "${BOOT[@]}"
 has_row "WARN|aitools config|created"
+has_row "ACTION||Run: aitools user init (updates this machine's profile)"
 rows_n 1 "ACTION"
 out_has "COMPLETED with 2 warning(s)"
 has_json '"machineId": "'"$KEY_MAC"'"'
@@ -348,6 +355,33 @@ CASE_ENV=""
 has_row "WARN|aitools config|verified"
 if cmp -s "$OUTJ" "$WORK/c1-fresh.bash.json"; then ok "c19-id-unavailable: machineId kept, file unchanged"; else bad "c19-id-unavailable: file changed"; fi
 log_has "machineAlias=nobul-mac via=config"
+
+# C20 a cached machineId that the match does not confirm (2.1 profile matched by
+# machine.id) is removed, so the machineAlias cache (resolver step 4L) stays usable
+fix_stale_mid() {
+    reset_home; profile_legacy
+    printf '{ "version": 3, "reposPath": "%s", "repoPath": "%s", "machineId": "%s", "machineAlias": "nobul-mac" }\n' \
+        "$H/repos" "$H/repos/aitools" "$KEY_OTHER" > "$CFG"
+}
+case_run c20-stale-machine-id 0 fix_stale_mid
+has_row "OK|aitools config|updated"
+has_row "DETAIL|aitools config|machineId updated"
+no_json '"machineId"'
+has_json '"machineAlias": "nobul-mac"'
+out_has "cached machineId \"$KEY_OTHER\" removed"
+
+# C21 machineId is salvaged from a corrupt config (the id is undetectable, so no
+# machineId is derived: the salvaged value is the one written)
+fix_corrupt_mid() {
+    reset_home; profile_with_id
+    printf '{ "reposPath": "%s", "repoPath": "%s", "machineId": "%s", oops\n' "$H/repos" "$H/repos/aitools" "$KEY_MAC" > "$CFG"
+}
+CASE_ENV="AITOOLS_PROFILE_TEST_MACHINE_ID=none"
+case_run c21-salvage-machine-id 0 fix_corrupt_mid
+CASE_ENV=""
+has_row "WARN|aitools config|rebuilt (was invalid)"
+has_json '"machineId": "'"$KEY_MAC"'"'
+out_has "Recovered machineId from the invalid config"
 
 # C14 relative bootstrap path: bad arguments, nothing written
 case_run c14-relative 1 fix_nodp --repos-path repos --repo-path "$H/repos/aitools"
