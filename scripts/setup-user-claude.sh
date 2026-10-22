@@ -71,6 +71,15 @@ fi
 URP_RC=0
 resolve_user_repo_path || URP_RC=$?    # 1 = shared-only (expected); 3 = logged error + ERROR row
 USER_REPO_PATH="$AITLIB_USER_REPO_PATH"
+USER_REPO_VIA="$AITLIB_USER_REPO_VIA"
+if [ "$URP_RC" -eq 3 ]; then
+    # A dotprofile error is not "no dotprofile": deploying the shared template
+    # would replace the personal CLAUDE.md and rules. The wrapper wrote the
+    # ERROR "dotprofile" row; this is the claude.md outcome row (no ACTION).
+    log_error "CLAUDE.md and rules not deployed: the dotprofile could not be resolved"
+    write_summary ERROR "claude.md" "not deployed: dotprofile unresolved"
+    exit 1
+fi
 PROFILE_RC=0
 resolve_machine_profile || PROFILE_RC=$?   # 1 = shared-only; 3 = no match / error (logged + ERROR row + ACTION)
 MACHINE_ALIAS="$AITLIB_MACHINE_ALIAS"
@@ -79,24 +88,25 @@ PROFILE_NAME="$AITLIB_PROFILE_NAME"
 PROFILE_COMPANY="$AITLIB_PROFILE_COMPANY"
 IDENTITY_GIT_NAME="$AITLIB_IDENTITY_GIT_NAME"
 IDENTITY_GIT_EMAIL="$AITLIB_IDENTITY_GIT_EMAIL"
-log_detail "setup-user-claude: dotprofile rc=$URP_RC via=$AITLIB_USER_REPO_VIA; machine profile rc=$PROFILE_RC"
+log_detail "setup-user-claude: dotprofile rc=$URP_RC via=$USER_REPO_VIA; machine profile rc=$PROFILE_RC"
 
-# Footer hostname, same source as the resolver (P-Q5: macOS LocalHostName, not
-# the DNS-derived kernel name). The PR #80 contract has no hostname result, so it
-# is read here; on failure the kernel name is shown and the reason logged.
-MACHINE_HOST=""
+# Footer hostname, same source and form as the resolver's detect_hostname (P-Q5:
+# macOS `scutil --get LocalHostName` only, never the DNS-derived kernel name;
+# elsewhere `uname -n`; short and lower-case). The PR #80 contract has no
+# hostname result, so it is read here until the lib exposes one. On failure the
+# footer shows "unknown" and the reason is a detail line.
+_host_rc=0
 if [ -x /usr/sbin/scutil ]; then
-    _host_rc=0
     MACHINE_HOST=$(/usr/sbin/scutil --get LocalHostName 2>&1) || _host_rc=$?
-    if [ "$_host_rc" -ne 0 ]; then
-        log_detail "footer hostname: scutil --get LocalHostName failed (exit $_host_rc): $MACHINE_HOST -- using uname -n"
-        MACHINE_HOST=""
-    fi
+else
+    MACHINE_HOST=$(uname -n 2>&1) || _host_rc=$?
 fi
-if [ -z "$MACHINE_HOST" ]; then
-    MACHINE_HOST=$(uname -n)
-    MACHINE_HOST="${MACHINE_HOST%%.*}"
+if [ "$_host_rc" -ne 0 ]; then
+    log_detail "footer hostname unavailable (exit $_host_rc): $MACHINE_HOST"
+    MACHINE_HOST=""
 fi
+MACHINE_HOST=$(printf '%s' "${MACHINE_HOST%%.*}" | perl -pe 's/^\s+|\s+$//g; tr/A-Z/a-z/')
+if [ -z "$MACHINE_HOST" ]; then MACHINE_HOST="unknown"; fi
 USER_REPO_DISPLAY=""
 if [ -n "$USER_REPO_PATH" ]; then
     USER_REPO_DISPLAY=$(printf '%s' "$USER_REPO_PATH" | HOME_DIR="$HOME" perl -pe 's/^\Q$ENV{HOME_DIR}\E(?=\/|$)/~/')
@@ -140,16 +150,13 @@ fi
 # Values come from resolve_machine_profile above. Substitution runs in perl with
 # the values passed through the environment, so "&", "$", "@" and "/" in a value
 # are literal (bash ${var//pat/rep} treats "&" as the match in bash 5.2). An
-# empty value leaves its token in place (visible, not silently blank).
+# empty value leaves its token in place (visible, not silently blank). One pass:
+# a value that contains token text is not substituted again.
 if ! SHARED_CONTENT=$(printf '%s' "$SHARED_CONTENT" | \
     T_PROFILE_NAME="$PROFILE_NAME" T_PROFILE_COMPANY="$PROFILE_COMPANY" \
     T_IDENTITY_GIT_NAME="$IDENTITY_GIT_NAME" T_IDENTITY_GIT_EMAIL="$IDENTITY_GIT_EMAIL" \
     T_USER_REPO_PATH="$USER_REPO_DISPLAY" \
-    perl -0777 -pe 'for my $k (qw(PROFILE_NAME PROFILE_COMPANY IDENTITY_GIT_NAME IDENTITY_GIT_EMAIL USER_REPO_PATH)) {
-        my $v = $ENV{"T_$k"};
-        next unless defined $v && length $v;
-        s/\{\{\Q$k\E\}\}/$v/g;
-    }'); then
+    perl -0777 -pe 's/\{\{(PROFILE_NAME|PROFILE_COMPANY|IDENTITY_GIT_NAME|IDENTITY_GIT_EMAIL|USER_REPO_PATH)\}\}/my $v = $ENV{"T_$1"}; (defined $v && length $v) ? $v : $&/ge'); then
     log_error "Template interpolation failed (perl)"
     write_summary ERROR "claude.md" "interpolation failed"
     exit 1
@@ -182,17 +189,27 @@ claude_md_adopt_filter() {
     # Everything before ## Machine-Specific; trailing blank lines removed
     content=$(perl -pe 'last if /^## Machine-Specific/')
     content=$(printf '%s' "$content" | perl -0777 -pe 's/\n+\z//')
-    # USER_REPO_PATH first: the path can contain the other values. {{PROFILE_NAME}}
-    # wins over {{IDENTITY_GIT_NAME}} when both are the same text (P-Q13).
+    # One pass over all values, longest first: a value inside a longer one
+    # (company "nobul.tech" in email "jose@nobul.tech") never breaks the longer
+    # one's token. Equal text keeps the first token in this order, so
+    # {{PROFILE_NAME}} wins over {{IDENTITY_GIT_NAME}} (P-Q13).
     content=$(printf '%s' "$content" | \
         AMF_USER_REPO_PATH="${USER_REPO_DISPLAY:-}" \
         AMF_PROFILE_NAME="${PROFILE_NAME:-}" AMF_PROFILE_COMPANY="${PROFILE_COMPANY:-}" \
         AMF_IDENTITY_GIT_NAME="${IDENTITY_GIT_NAME:-}" AMF_IDENTITY_GIT_EMAIL="${IDENTITY_GIT_EMAIL:-}" \
-        perl -pe 'for my $k (qw(USER_REPO_PATH PROFILE_NAME PROFILE_COMPANY IDENTITY_GIT_NAME IDENTITY_GIT_EMAIL)) {
-            my $v = $ENV{"AMF_$k"};
-            next unless defined $v && length $v;
-            s/\Q$v\E/"{{" . $k . "}}"/ge;
-        }')
+        perl -pe 'BEGIN {
+            our (%tok, $re); my (@vals, $i);
+            for my $k (qw(USER_REPO_PATH PROFILE_NAME PROFILE_COMPANY IDENTITY_GIT_NAME IDENTITY_GIT_EMAIL)) {
+                my $v = $ENV{"AMF_$k"}; $i++;
+                next unless defined $v && length $v;
+                next if exists $tok{$v};
+                $tok{$v} = $k; push @vals, [$v, $i];
+            }
+            @vals = sort { length($b->[0]) <=> length($a->[0]) || $a->[1] <=> $b->[1] } @vals;
+            $re = @vals ? join("|", map { quotemeta($_->[0]) } @vals) : "";
+        }
+        our (%tok, $re);
+        s/($re)/"{{" . $tok{$1} . "}}"/ge if length $re;')
     printf '%s\n' "$content"
 }
 
@@ -316,7 +333,11 @@ if [ -n "$RULES_SRC" ]; then
         fi
     else
         backup_dir "$RULES_DEST"
-        mkdir -p "$RULES_DEST"
+        if ! mkdir -p "$RULES_DEST"; then
+            log_error "Cannot create $(display_path "$RULES_DEST")"
+            write_summary ERROR "claude rules" "cannot create rules dir"
+            exit 1
+        fi
 
         deploy_tracker_init
         ERRORS_BEFORE_RULES=$ERRORS
