@@ -8,23 +8,28 @@
 # the config.json values that come from them. NOT a writer of config.json
 # (setup-user-config.sh/.ps1 is the only writer). NOT a writer of profile.json
 # except the `register` subcommand, which writes to a temp file the caller
-# validates, backs up and moves. NOT the settings.json sync (sync_managed_json).
-# Consumed by: the bash shared-lib wrappers resolve_user_repo_path /
-# resolve_machine_profile, setup-user-config.sh, build-deploy.sh, aitools
+# validates, backs up and moves, and the `exception-set` subcommand, the only
+# writer of toolExceptions, which writes in place (temp, validate, backup, move)
+# and commits and pushes profile.json. NOT the settings.json sync
+# (sync_managed_json). Consumed by: the bash shared-lib wrappers
+# resolve_user_repo_path / resolve_machine_profile / tool_exception_get /
+# tool_exception_record, setup-user-config.sh, build-deploy.sh, aitools
 # `user init`, and the generated deploy/setup-user-claude.sh (embedded copy).
 #
 # Usage: aitools-profile.sh <command> [options]   (--help for details)
 # Exit codes: 0 resolved / ok; 1 nothing found (expected states, e.g. before
 #   `aitools user init`); 2 error (bad input, unreadable or invalid JSON,
-#   ambiguous match). Callers must not pass 2 through as their own exit code:
-#   exit 2 from a setup script means a user abort (D-TS13).
+#   ambiguous match); 3 refused (exception-set without a registered machine
+#   profile). Callers must not pass 2 through as their own exit code: exit 2
+#   from a setup script means a user abort (D-TS13).
 # Output: data on stdout only -- key<TAB>value lines (default) or one JSON
 #   object (--json). Diagnostics go to deploy.log (detail lines) and stderr.
 # JSON engine: the embedded perl program below (core perl only, no modules).
 #   It keeps key order and writes the node JSON.stringify(v, null, 2) layout, so
 #   bash, PowerShell (ConvertTo-Json) and node writers produce the same bytes.
-# Safe to re-run: every command except `register` is read-only; `register`
-#   writes only the --out file.
+# Safe to re-run: every command except `register` and `exception-set` is
+#   read-only; `register` writes only the --out file; `exception-set` rewrites
+#   one toolExceptions entry and reports "unchanged" when it is identical.
 # Platform: macOS/Linux. Reference: reference/user-repo.md "Resolution".
 # Decisions: P-Q2 (raw machine ids), P-Q3 (native bash + PowerShell, no node),
 #   P-Q5 (macOS hostname = `scutil --get LocalHostName` only).
@@ -72,12 +77,21 @@ Commands:
                   to --out TMP. Options: --name N, --company C, --shell S,
                   --environment E, --create (new profile.json; with
                   --github-user U, --email E)
+  exception-get   This machine's recorded tool exception for --slug S (found
+                  true/false and the stored fields). Options: --config F,
+                  --profile F, --alias A, --environment E
+  exception-set   Record a [k]eep decision for --slug S: --platform P, --method M,
+                  --path PATH, --version V, --by SCRIPT [--reason R]
+                  [--decided-at UTC]. Writes profile.json in place (temp,
+                  validate, backup, move), then commits profile.json and pushes.
+                  Exit 3 = refused (no dotprofile, or the machine profile is
+                  matched by hostname only or not at all)
 
 Output: key<TAB>value lines; --json prints one JSON object instead.
 Environment: AITOOLS_USER_REPO_PATH, AITOOLS_MACHINE_ALIAS, AITOOLS_PROFILE_FILE,
   AITOOLS_ENVIRONMENT (see reference/user-repo.md "Resolution").
 Test options: --machine-id-value ID, --hostname-value NAME (replace detection).
-Exit: 0 ok, 1 not found, 2 error.
+Exit: 0 ok, 1 not found, 2 error, 3 refused (exception-set).
 EOF
 }
 
@@ -454,6 +468,8 @@ if [ $# -gt 0 ]; then shift; fi
 OPT_CONFIG=""; OPT_PROFILE=""; OPT_ALIAS=""; OPT_ENVIRONMENT=""; OPT_GITHUB_USER=""
 OPT_USER_REPO_PATH=""; OPT_REPOS_PATH=""; OPT_NAME=""; OPT_COMPANY=""; OPT_SHELL=""
 OPT_EMAIL=""; OPT_OUT=""; OPT_MACHINE_ID_VALUE=""; OPT_HOSTNAME_VALUE=""
+OPT_SLUG=""; OPT_PLATFORM=""; OPT_METHOD=""; OPT_PATH=""; OPT_VERSION=""; OPT_BY=""
+OPT_REASON=""; OPT_DECIDED_AT=""
 OPT_CREATE=false; OPT_JSON=false; OPT_PLAIN=false
 need_value() { if [ "$1" -lt 2 ]; then usage_error "$2 needs a value"; fi; }
 while [ $# -gt 0 ]; do
@@ -472,6 +488,14 @@ while [ $# -gt 0 ]; do
         --out)             need_value $# "$1"; OPT_OUT="$2"; shift 2 ;;
         --machine-id-value) need_value $# "$1"; OPT_MACHINE_ID_VALUE="$2"; shift 2 ;;
         --hostname-value)  need_value $# "$1"; OPT_HOSTNAME_VALUE="$2"; shift 2 ;;
+        --slug)            need_value $# "$1"; OPT_SLUG="$2"; shift 2 ;;
+        --platform)        need_value $# "$1"; OPT_PLATFORM="$2"; shift 2 ;;
+        --method)          need_value $# "$1"; OPT_METHOD="$2"; shift 2 ;;
+        --path)            need_value $# "$1"; OPT_PATH="$2"; shift 2 ;;
+        --version)         need_value $# "$1"; OPT_VERSION="$2"; shift 2 ;;
+        --by)              need_value $# "$1"; OPT_BY="$2"; shift 2 ;;
+        --reason)          need_value $# "$1"; OPT_REASON="$2"; shift 2 ;;
+        --decided-at)      need_value $# "$1"; OPT_DECIDED_AT="$2"; shift 2 ;;
         --path-form)       need_value $# "$1"; shift 2 ;;  # PowerShell parity; paths are already native here
         --create)          OPT_CREATE=true; shift ;;
         --json)            OPT_JSON=true; shift ;;
@@ -822,43 +846,227 @@ put_identity_lines() {
     put github "$RM_GITHUB"
 }
 
-cmd_resolve() {
-    load_config
+# detect_this_machine -- machine id + hostname, unavailability reported as warnings
+detect_this_machine() {
     detect_machine_id
     detect_hostname
     if [ -n "$THIS_ID_ERROR" ]; then add_warn "machine id unavailable: $THIS_ID_ERROR"; fi
     if [ -n "$THIS_HOST_ERROR" ]; then add_warn "hostname unavailable: $THIS_HOST_ERROR"; fi
-    local pf="${OPT_PROFILE:-${AITOOLS_PROFILE_FILE:-}}" from_env=false repo_rc=0 rc=0 config_alias=""
-    if [ -z "$OPT_PROFILE" ] && [ -n "${AITOOLS_PROFILE_FILE:-}" ]; then from_env=true; fi
-    put_head() {
-        put alias "$RM_ALIAS"; put via "$RM_VIA"; put environment "$THIS_ENV"
-        put machineId "$THIS_ID"; put hostname "$THIS_HOST"; put profileFile "$1"
-        put userRepoPath "$RUR_PATH"; put userRepoVia "$RUR_VIA"
-    }
-    if [ -n "$pf" ]; then
-        if [ ! -f "$pf" ]; then
-            if $from_env; then add_err "profile file set but missing: $pf (AITOOLS_PROFILE_FILE)"
-            else add_err "profile file set but missing: $pf"; fi
-            put_head "$pf"; put_identity_lines; finish 2
+}
+
+# locate_profile -- PF = the profile.json to read: --profile, else AITOOLS_PROFILE_FILE,
+# else <dotprofile>/profile.json. PF_FROM_ENV=true for AITOOLS_PROFILE_FILE (a
+# read-only snapshot in generated deploy scripts). Returns 0 readable, 1 none
+# (no dotprofile, or no profile.json in it: shared-only mode), 2 error.
+PF=""; PF_FROM_ENV=false
+locate_profile() {
+    local repo_rc=0
+    PF="${OPT_PROFILE:-${AITOOLS_PROFILE_FILE:-}}"; PF_FROM_ENV=false
+    if [ -z "$OPT_PROFILE" ] && [ -n "${AITOOLS_PROFILE_FILE:-}" ]; then PF_FROM_ENV=true; fi
+    if [ -n "$PF" ]; then
+        if [ ! -f "$PF" ]; then
+            if $PF_FROM_ENV; then add_err "profile file set but missing: $PF (AITOOLS_PROFILE_FILE)"
+            else add_err "profile file set but missing: $PF"; fi
+            return 2
         fi
     else
         resolve_user_repo || repo_rc=$?
-        if [ "$repo_rc" -eq 2 ]; then put_head ""; put_identity_lines; finish 2; fi
-        if [ "$repo_rc" -eq 1 ]; then put_head ""; put_identity_lines; finish 1; fi
-        pf="$RUR_PATH/profile.json"
+        if [ "$repo_rc" -ne 0 ]; then return "$repo_rc"; fi
+        PF="$RUR_PATH/profile.json"
     fi
-    jcheck "$pf"
+    jcheck "$PF"
     case "$JCHECK_STATE" in
-        missing) add_warn "profile.json not found: $pf"; put_head "$pf"; put_identity_lines; finish 1 ;;
-        invalid) add_err "$JCHECK_MSG"; put_head "$pf"; put_identity_lines; finish 2 ;;
+        missing) add_warn "profile.json not found: $PF"; return 1 ;;
+        invalid) add_err "$JCHECK_MSG"; return 2 ;;
     esac
+    return 0
+}
+
+cmd_resolve() {
+    load_config
+    detect_this_machine
+    local rc=0 config_alias=""
+    put_head() {
+        put alias "$RM_ALIAS"; put via "$RM_VIA"; put environment "$THIS_ENV"
+        put machineId "$THIS_ID"; put hostname "$THIS_HOST"; put profileFile "$PF"
+        put userRepoPath "$RUR_PATH"; put userRepoVia "$RUR_VIA"
+    }
+    locate_profile || rc=$?
+    if [ "$rc" -ne 0 ]; then put_head; put_identity_lines; finish "$rc"; fi
     cfg config_alias machineAlias
-    resolve_machine "$pf" "$config_alias" || rc=$?
+    resolve_machine "$PF" "$config_alias" || rc=$?
     # No machine match: report identity-level values only (never another profile's)
-    if [ -z "$RM_ALIAS" ]; then identity_values "$pf"; fi
-    put_head "$pf"
+    if [ -z "$RM_ALIAS" ]; then identity_values "$PF"; fi
+    put_head
     put_identity_lines
     finish "$rc"
+}
+
+# ---------------------------------------------------------------------------
+# Tool exceptions (reference/tool-support-decision-tree.md section 8; storage
+# shape in reference/user-repo.md "Profile Schema"). Location:
+# profiles.<alias>.toolExceptions.<slug>, <alias> = this machine's resolved profile.
+# exception-get returns the stored entry; matching it against the detected
+# install (platform, method, path unless versionedPath) is the caller's job,
+# because it needs the registry.
+# ---------------------------------------------------------------------------
+check_slug() {
+    if [ -z "$OPT_SLUG" ]; then usage_error "$CMD needs --slug"; fi
+    if ! [[ "$OPT_SLUG" =~ ^[a-z0-9][a-z0-9._-]*$ ]]; then usage_error "invalid slug: $OPT_SLUG"; fi
+}
+
+cmd_exception_get() {
+    check_slug
+    load_config
+    detect_this_machine
+    local rc=0 config_alias="" t="" found=false decision=""
+    local e_platform="" e_method="" e_path="" e_version="" e_at="" e_by="" e_reason=""
+    put_exc() {
+        put slug "$OPT_SLUG"; put alias "$RM_ALIAS"; put via "$RM_VIA"; put profileFile "$PF"
+        put found "$found"; put platform "$e_platform"; put method "$e_method"; put path "$e_path"
+        put version "$e_version"; put decidedAt "$e_at"; put decidedBy "$e_by"; put reason "$e_reason"
+    }
+    locate_profile || rc=$?
+    if [ "$rc" -ne 0 ]; then put_exc; finish "$rc"; fi
+    cfg config_alias machineAlias
+    resolve_machine "$PF" "$config_alias" || rc=$?
+    if [ "$rc" -ne 0 ]; then put_exc; finish "$rc"; fi
+    jtype t "$PF" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG"
+    if [ "$t" = "object" ]; then
+        jread decision "$PF" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" decision
+        if [ "$decision" = "keep" ]; then
+            found=true
+            jread e_platform "$PF" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" detected platform
+            jread e_method "$PF" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" detected method
+            jread e_path "$PF" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" detected path
+            jread e_version "$PF" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" detected version
+            jread e_at "$PF" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" decidedAt
+            jread e_by "$PF" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" decidedBy
+            jread e_reason "$PF" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" reason
+        else
+            add_warn "toolExceptions.$OPT_SLUG in profile \"$RM_ALIAS\" has decision \"$decision\" (only \"keep\" is defined) -- ignored"
+        fi
+    elif [ -n "$t" ]; then
+        add_warn "toolExceptions.$OPT_SLUG in profile \"$RM_ALIAS\" is not an object -- ignored"
+    fi
+    put_exc
+    finish 0
+}
+
+# commit_profile DIR MESSAGE -- commit only profile.json in the dotprofile and push
+# (N-Q2: dotprofile writes auto-commit and push). Failures are warnings: the file
+# is already written; the user can commit by hand. Sets COMMITTED / PUSHED.
+COMMITTED=false; PUSHED=false
+commit_profile() {
+    local dir="$1" msg="$2" out rc=0
+    COMMITTED=false; PUSHED=false
+    out=$(git -C "$dir" rev-parse --is-inside-work-tree 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ] || [ "$out" != "true" ]; then
+        add_warn "$dir is not a git repository -- profile.json written but not committed"; return 0
+    fi
+    # No git identity on this machine yet (fresh machine): commit as the profile's
+    # identity.git, the person the dotprofile belongs to. Empty = git's own error.
+    local who=() gname="" gmail="" cur=""
+    cur=$(git -C "$dir" config user.email) || cur=""  # unset = exit 1; handled by the -z test
+    if [ -z "$cur" ]; then
+        jread gname "$PF" identity git name
+        jread gmail "$PF" identity git email
+        if [ -n "$gname" ] && [ -n "$gmail" ]; then who=(-c "user.name=$gname" -c "user.email=$gmail"); fi
+    fi
+    out=$(git -C "$dir" add -- profile.json 2>&1) || rc=$?
+    if [ "$rc" -eq 0 ]; then out=$(git -C "$dir" ${who[@]+"${who[@]}"} commit -m "$msg" -- profile.json 2>&1) || rc=$?; fi
+    if [ "$rc" -ne 0 ]; then
+        log_detail "git commit in $dir: $out"
+        add_warn "dotprofile commit failed (exit $rc) -- commit profile.json in $dir by hand"; return 0
+    fi
+    COMMITTED=true
+    out=$(GIT_TERMINAL_PROMPT=0 git -C "$dir" push 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        log_detail "git push in $dir: $out"
+        add_warn "dotprofile push failed (exit $rc) -- run git push in $dir"; return 0
+    fi
+    PUSHED=true
+}
+
+cmd_exception_set() {
+    check_slug
+    case "$OPT_PLATFORM" in
+        macos|linux|windows) : ;;
+        *) usage_error "--platform must be macos, linux or windows" ;;
+    esac
+    if [ -z "$OPT_METHOD" ] || [ -z "$OPT_PATH" ] || [ -z "$OPT_BY" ]; then
+        usage_error "exception-set needs --slug, --platform, --method, --path and --by"
+    fi
+    local at="$OPT_DECIDED_AT"
+    if [ -z "$at" ]; then at=$(date -u +%Y-%m-%dT%H:%M:%SZ); fi
+    load_config
+    detect_this_machine
+    local rc=0 config_alias="" t="" before="" after="" state="created" tmp msg
+    put_set() {
+        put result "$state"; put slug "$OPT_SLUG"; put alias "$RM_ALIAS"; put via "$RM_VIA"
+        put profileFile "$PF"; put committed "$COMMITTED"; put pushed "$PUSHED"
+    }
+    locate_profile || rc=$?
+    if [ "$rc" -eq 1 ]; then state="refused"; add_err "no dotprofile profile.json -- run: aitools user init to remember tool choices"; put_set; finish 3; fi
+    if [ "$rc" -ne 0 ]; then state="failed"; put_set; finish 2; fi
+    if $PF_FROM_ENV; then
+        state="refused"; add_err "profile from AITOOLS_PROFILE_FILE is a read-only snapshot -- not written"; put_set; finish 3
+    fi
+    cfg config_alias machineAlias
+    rc=0
+    resolve_machine "$PF" "$config_alias" || rc=$?
+    if [ "$rc" -ne 0 ] || [ "$RM_VIA" = "hostname" ]; then
+        state="refused"
+        if [ "$RM_VIA" = "hostname" ]; then
+            add_err "machine profile \"$RM_ALIAS\" matched by hostname only -- run: aitools user init to remember tool choices"
+        else
+            add_err "no machine profile for this machine -- run: aitools user init to remember tool choices"
+        fi
+        put_set; finish 3
+    fi
+    jtype t "$PF" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG"
+    if [ -n "$t" ]; then
+        state="updated"
+        before=$(pj json "$PF" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG") || before=""  # compared below
+    fi
+    if [ "${AITOOLS_DRY_RUN:-}" = "1" ]; then
+        state="dry-run"; log_detail "[DRY RUN] would record toolExceptions.$OPT_SLUG in $PF"; put_set; finish 0
+    fi
+    jtype t "$PF" profiles "$RM_ALIAS" toolExceptions
+    if [ "$t" != "object" ]; then edit_set json '{}' profiles "$RM_ALIAS" toolExceptions; fi
+    edit_set json '{}' profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG"
+    edit_set string keep profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" decision
+    edit_set string "$OPT_PLATFORM" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" detected platform
+    edit_set string "$OPT_METHOD" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" detected method
+    edit_set string "$OPT_PATH" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" detected path
+    edit_set string "$OPT_VERSION" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" detected version
+    edit_set string "$at" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" decidedAt
+    edit_set string "$OPT_BY" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" decidedBy
+    if [ -n "$OPT_REASON" ]; then edit_set string "$OPT_REASON" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" reason
+    else edit_set null "" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG" reason; fi
+    # Write path: temp -> validate -> backup -> move (config-file-safety.md)
+    tmp="$PF.tmp.$$"
+    rc=0
+    msg=$(printf '%s' "$EDIT_OPS" | pj edit "$PF" "$tmp" 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        rm -f "$tmp"; state="failed"; add_err "exception-set failed: $msg"; put_set; finish 2
+    fi
+    jtype t "$tmp" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG"
+    if [ "$t" != "object" ]; then
+        rm -f "$tmp"; state="failed"; add_err "validation failed: toolExceptions.$OPT_SLUG missing after write"; put_set; finish 2
+    fi
+    after=$(pj json "$tmp" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG") || after=""  # compared below
+    if [ "$state" = "updated" ] && [ "$before" = "$after" ]; then
+        rm -f "$tmp"; state="unchanged"; put_set; finish 0
+    fi
+    backup_file "$PF"
+    if ! mv "$tmp" "$PF"; then
+        rm -f "$tmp"; state="failed"; add_err "could not replace $PF"; put_set; finish 2
+    fi
+    log_detail "exception-set: toolExceptions.$OPT_SLUG ($OPT_PLATFORM $OPT_METHOD $OPT_PATH) written to $PF (profile $RM_ALIAS)"
+    commit_profile "$(dirname "$PF")" "Record tool exception: keep $OPT_SLUG ($OPT_METHOD) on $RM_ALIAS"
+    put_set
+    finish 0
 }
 
 cmd_derive_config() {
@@ -1040,6 +1248,8 @@ case "$CMD" in
     derive-config)  cmd_derive_config ;;
     snapshot)       cmd_snapshot ;;
     register)       cmd_register ;;
+    exception-get)  cmd_exception_get ;;
+    exception-set)  cmd_exception_set ;;
     "")             usage; exit 2 ;;
     *)              usage_error "unknown command: $CMD" ;;
 esac
