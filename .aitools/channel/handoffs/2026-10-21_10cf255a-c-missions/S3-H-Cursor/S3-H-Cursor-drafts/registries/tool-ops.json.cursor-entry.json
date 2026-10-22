@@ -1,0 +1,34 @@
+{
+  "_draft": "S3-H-Cursor DRAFT (not applied). Insert as tools.cursor in registries/tool-ops.json via the /tool-ops skill after commander approval, and set meta.lastUpdated to the apply date. Evidence: S3-H-Cursor-research.md.",
+  "cursor": {
+    "governanceModes": {
+      "contextInjection": "audit",
+      "versionDeps": "audit"
+    },
+    "contextInjection": {
+      "docBaseUrl": "https://cursor.com/docs/",
+      "keyPages": [
+        "rules.md",
+        "cli/using.md",
+        "skills.md",
+        "hooks.md",
+        "subagents.md",
+        "cli/reference/configuration.md"
+      ],
+      "helpPages": [
+        "https://cursor.com/help/customization/rules.md"
+      ],
+      "userRules": {
+        "location": "~/.cursor/rules/ (Windows: %USERPROFILE%\\.cursor\\rules\\)",
+        "format": "*.mdc with a leading --- frontmatter block (alwaysApply / globs / description); plain .md is ignored; a .mdc without frontmatter is skipped",
+        "loading": "IDE and CLI walk the workspace and every ancestor directory and load <dir>/.cursor/rules/**/*.mdc, so user rule files reach only workspaces under the home directory",
+        "globAnchoring": "IDE matches a relative glob against the path relative to the directory owning .cursor/rules (home for user rules); use **/<pattern> to match inside repos; inline globs are comma-split, so use an indented block list; CLI anchoring unknown",
+        "deployedBy": "setup-user-cursor step 4 (fan-out of ~/.aitools/rules, .md converted to .mdc)",
+        "verifiedOn": "Cursor IDE 3.13.10 and CLI 2026.05.21-f84ab11, bundle inspection 2026-10-22; live canary not run (CLI unauthenticated)"
+      },
+      "quickRef": "User Rules in Customize -> Rules live on the Cursor account (not files); user rule FILES live in ~/.cursor/rules; ~/.cursor/AGENTS.md is not read by the rules loader (loader reads <ancestor>/AGENTS.md)"
+    },
+    "docAccess": "chrome-devtools skill: navigate to cursor.com, then fetch the .md variant of each page in-page (index: https://cursor.com/llms.txt); help center pages under cursor.com/help/*.md",
+    "verificationMethod": "manual canary: put a .mdc with alwaysApply: true and a unique token in ~/.cursor/rules, run agent -p --trust --mode ask from a workspace under ~ asking for the token without tools, remove the file (requires agent login)"
+  }
+}
