@@ -16,8 +16,11 @@
 #
 # Managed fields: version, meta, reposPath, repoPath (from parameters; kept when not passed),
 #   googleDrives (from -DrivesJson when it is a non-empty array; else kept, or []),
-#   githubUser, userRepoPath, machineAlias (derived; kept when
-#   derivation is unavailable or fails)
+#   githubUser, userRepoPath, machineId, machineAlias (derived; kept when
+#   derivation is unavailable or fails, or does not yield the value).
+#   machineId: the matched profiles key, only for this machine's id-keyed profile
+#   (profile.json revision 2.2). machineAlias: display only (the profile's alias),
+#   kept for one release for 2.1 readers; the legacy cache for an alias-keyed profile.
 # Preserved: all other keys, in place (key order kept)
 # Write path: merge to temp -> validate -> Backup-File -> move.
 #   A read, merge or validation failure leaves the existing file untouched.
@@ -27,7 +30,9 @@
 #   with pwsh on macOS/Linux.
 #
 # Usage: setup-user-config.ps1 [-ReposPath P] [-RepoPath P] [-DrivesJson JSON]
-#          [-GithubUser U] [-UserRepoPath P] [-MachineAlias A] [-DryRun] [-Help]
+#          [-GithubUser U] [-UserRepoPath P] [-MachineId ID] [-DryRun] [-Help]
+#   -MachineAlias A is still accepted for one release (deprecated; logged at detail).
+# Exit: 0 done (warnings possible), 1 any error. Never prompts, never exits 2.
 
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -36,7 +41,8 @@ param(
     [string]$DrivesJson = "[]",
     [string]$GithubUser = "",
     [string]$UserRepoPath = "",
-    [string]$MachineAlias = "",
+    [string]$MachineId = "",
+    [string]$MachineAlias = "",   # deprecated (one release): use -MachineId
     [switch]$DryRun,
     [switch]$Force,   # accepted for deploy-list parity; this script has no review menu
     [switch]$Help,
@@ -61,11 +67,13 @@ Parameters:
   -DrivesJson JSON   Detected Google Drives, JSON array (installer Step 4)
   -GithubUser U      GitHub user; names the dotprofile aitools-<U> (user init)
   -UserRepoPath P    Dotprofile path chosen by user init
-  -MachineAlias A    Profile alias chosen by user init (explicit choice)
+  -MachineId ID      This machine's profile key chosen by user init (explicit choice)
+  -MachineAlias A    Deprecated (one release): a profile alias or key; use -MachineId
   -DryRun            Show what would change; write nothing
   -Help              This text
 
-Without parameters: re-derive userRepoPath / githubUser / machineAlias from profile.json.
+Without parameters: re-derive userRepoPath / githubUser / machineId / machineAlias from profile.json.
+Exit: 0 done (warnings possible), 1 any error.
 '@ -split "`n" | ForEach-Object { Write-Output ($_ -replace "`r$", "") }
     exit 0
 }
@@ -75,12 +83,24 @@ if ($Rest -and $Rest.Count -gt 0) {
     Write-Summary "ERROR" "aitools config" "bad arguments"
     exit 1
 }
-foreach ($v in @($ReposPath, $RepoPath, $DrivesJson, $GithubUser, $UserRepoPath, $MachineAlias)) {
+foreach ($v in @($ReposPath, $RepoPath, $DrivesJson, $GithubUser, $UserRepoPath, $MachineAlias, $MachineId)) {
     if ($v -match "[`t`r`n]") {
         LogError "option values must be one line (no tab or newline)"
         Write-Summary "ERROR" "aitools config" "bad arguments"
         exit 1
     }
+}
+$deprecatedAlias = $PSBoundParameters.ContainsKey("MachineAlias")
+if ($MachineId -and $deprecatedAlias) {
+    LogError "pass -MachineId or -MachineAlias, not both (see -Help)"
+    Write-Summary "ERROR" "aitools config" "bad arguments"
+    exit 1
+}
+# The profile choice goes to the resolver as an override (a key, ignoring case, else an alias)
+$choiceArg = $MachineId
+if ($deprecatedAlias) {
+    LogDetail "deprecated flag: -MachineAlias (use -MachineId; accepted for one release)"
+    $choiceArg = $MachineAlias
 }
 foreach ($v in @($ReposPath, $RepoPath, $UserRepoPath)) {
     if ($v -and -not [IO.Path]::IsPathRooted($v)) {
@@ -127,7 +147,7 @@ $deriveArgs = @("derive-config", "--config", $configFile)
 if ($ReposPath) { $deriveArgs += @("--repos-path", $ReposPath) }
 if ($GithubUser) { $deriveArgs += @("--github-user", $GithubUser) }
 if ($UserRepoPath) { $deriveArgs += @("--user-repo-path", $UserRepoPath) }
-if ($MachineAlias) { $deriveArgs += @("--alias", $MachineAlias) }
+if ($choiceArg) { $deriveArgs += @("--alias", $choiceArg) }
 $global:LASTEXITCODE = 0
 $deriveOut = @()
 try {
@@ -138,16 +158,29 @@ try {
     LogDetail "derive-config threw: $($_.Exception.Message)"
     $deriveRc = 99
 }
-$d = @{ gh = ""; urp = ""; alias = ""; uvia = "none"; mvia = "none"; company = ""; id = ""; host = ""; aliases = "" }
+$d = @{ gh = ""; urp = ""; mid = ""; alias = ""; uvia = "none"; mvia = "none"; company = ""; id = ""; host = ""; aliases = "" }
 $seen = $false
 $script:NeedInit = $false
+$script:NeedMigrate = $false
 $profileBad = $false
-# Resolver warnings about the cached config.json (or the expected shared-only
-# state) are corrected or recorded by this write: info, so a successful write
-# stays OK (D-TS12). The rest are real warnings.
+# Route one resolver warning (the resolver returns its warnings; this caller logs
+# them at their level and owns the rows):
+#   handled  -- about the cached config.json or the expected shared-only state; this
+#               write corrects or records it: info, so a successful write stays OK (D-TS12)
+#   advisory -- this machine's values are right and the only follow-up is the command
+#               that the single ACTION row (section 3) names: info here; section 3 logs
+#               one warning with the ACTION
+#   real     -- something is off for this run (a clone, a duplicate alias, a hostname
+#               guess, an undetectable id): LogWarn, counted; the config row becomes WARN
 function Write-DeriveWarning([string]$w) {
     if ($w.StartsWith("config.json ") -or $w.Contains("not saved to config.json") -or $w.StartsWith("no dotprofile found") -or $w.StartsWith("githubUser unknown")) {
         Log "config: $w (handled by this write)"
+    } elseif ($w.Contains("has no machine.id -- run: aitools user init")) {
+        Log "config: $w (see ACTION)"
+        $script:NeedInit = $true
+    } elseif ($w.Contains("run: aitools-profile migrate")) {
+        Log "config: $w (see ACTION)"
+        $script:NeedMigrate = $true
     } else {
         LogWarn "config: $w"
         if ($w.Contains("run: aitools user init")) { $script:NeedInit = $true }
@@ -159,6 +192,7 @@ foreach ($line in $deriveOut) {
     switch -CaseSensitive ($kv[0]) {
         "derived.githubUser" { $d.gh = $kv[1]; $seen = $true }
         "derived.userRepoPath" { $d.urp = $kv[1] }
+        "derived.machineId" { $d.mid = $kv[1] }
         "derived.machineAlias" { $d.alias = $kv[1] }
         "userRepoVia" { $d.uvia = $kv[1] }
         "via" { $d.mvia = $kv[1] }
@@ -176,10 +210,10 @@ foreach ($line in $deriveOut) {
 if (-not $seen -or $deriveRc -gt 2) {
     LogError "Failed: profile derivation produced no result (exit $deriveRc) -- see $($script:logFile)"
     Write-Summary "ERROR" "aitools config" "derivation failed"
-    $d.gh = ""; $d.urp = ""; $d.alias = ""; $deriveRc = 2
+    $d.gh = ""; $d.urp = ""; $d.mid = ""; $d.alias = ""; $deriveRc = 2
 } else {
     $show = { param($v, $dflt) if ($v) { $v } else { $dflt } }
-    Log "config: dotprofile=$(& $show $d.urp 'none') via=$($d.uvia) machineAlias=$(& $show $d.alias 'none') via=$($d.mvia) company=$($d.company) id=$(& $show $d.id 'unavailable') host=$(& $show $d.host 'unavailable')"
+    Log "config: dotprofile=$(& $show $d.urp 'none') via=$($d.uvia) machineId=$(& $show $d.mid 'none') machineAlias=$(& $show $d.alias 'none') via=$($d.mvia) company=$($d.company) id=$(& $show $d.id 'unavailable') host=$(& $show $d.host 'unavailable')"
     if ($deriveRc -eq 1) {
         Log "config: no dotprofile yet -- writing bootstrap keys only (shared-only mode)"
     } elseif ($deriveRc -ne 0) {
@@ -190,9 +224,6 @@ if (-not $seen -or $deriveRc -gt 2) {
             Write-Summary "ERROR" "machine profile" "no machine match"
             Write-Summary "ACTION" "" "Run: aitools user init (profiles: $(& $show $d.aliases 'none'))"
         }
-    }
-    if ($deriveRc -eq 0 -and $script:NeedInit) {
-        Write-Summary "ACTION" "" "Run: aitools user init (registers this machine)"
     }
 }
 
@@ -214,7 +245,7 @@ if ($r.State -eq "valid") {
     $cfg = [PSCustomObject]@{}
     $rawConfig = ""
     try { $rawConfig = [IO.File]::ReadAllText($configFile) } catch { LogDetail "could not read the invalid config: $($_.Exception.Message)" }
-    foreach ($k in @("reposPath", "repoPath", "githubUser", "userRepoPath", "machineAlias")) {
+    foreach ($k in @("reposPath", "repoPath", "githubUser", "userRepoPath", "machineId", "machineAlias")) {
         $m = [regex]::Match($rawConfig, '"' + [regex]::Escape($k) + '"\s*:\s*"((?:[^"\\\n]|\\.)*)"')
         if ($m.Success) {
             $sv = [regex]::Replace($m.Groups[1].Value, '\\(["\\/])', '$1')
@@ -236,6 +267,7 @@ try {
     }
     if ($d.gh) { Set-JValue $cfg $d.gh @("githubUser") }
     if ($d.urp) { Set-JValue $cfg $d.urp @("userRepoPath") }
+    if ($d.mid) { Set-JValue $cfg $d.mid @("machineId") }
     if ($d.alias) { Set-JValue $cfg $d.alias @("machineAlias") }
     $derivedFrom = if ($d.urp -or $existingUrp) { "profile.json" } else { "bootstrap only" }
     $meta = [PSCustomObject]@{}
@@ -259,7 +291,7 @@ if (-not $failed) {
     else { $missing = @(@("version", "reposPath", "repoPath") | Where-Object { -not (Get-JType $v.Value @($_)) }) }
     # Changed keys (meta excluded: it describes the file, not the machine)
     $changes = @()
-    foreach ($k in @("version", "reposPath", "repoPath", "googleDrives", "githubUser", "userRepoPath", "machineAlias")) {
+    foreach ($k in @("version", "reposPath", "repoPath", "googleDrives", "githubUser", "userRepoPath", "machineId", "machineAlias")) {
         $a = ""; $b = ""
         if ($old) { $n = Get-JNode $old @($k); if ($n.Found) { $a = ConvertTo-NodeJson $n.Value -Compress } }
         if ($v.State -eq "valid") { $n = Get-JNode $v.Value @($k); if ($n.Found) { $b = ConvertTo-NodeJson $n.Value -Compress } }
@@ -313,6 +345,18 @@ if (-not $failed) {
                 Write-Summary "DETAIL" "aitools config" "$(($c -split ':')[0]) updated"
             }
         }
+    }
+}
+
+# --- 3. One ACTION for the advisory warnings (after the config row: that row reports
+# the write; this warning, paired with the ACTION, is counted in the footer) ---
+if ($deriveRc -eq 0) {
+    $advice = ""
+    if ($script:NeedInit) { $advice = "Run: aitools user init (registers this machine)" }
+    elseif ($script:NeedMigrate) { $advice = "Run: aitools user init (re-keys machine profiles by machine id)" }
+    if ($advice) {
+        LogWarn "config: $advice"
+        Write-Summary "ACTION" "" $advice
     }
 }
 
