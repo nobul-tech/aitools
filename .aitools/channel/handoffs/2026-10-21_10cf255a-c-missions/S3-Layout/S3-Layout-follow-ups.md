@@ -16,8 +16,15 @@ entry gives the file, the exact change and why.
      `backup_dir` / `Backup-Dir`, remove the directory, `log_ok "retired skill removed: <name>"`, one
      `write_summary OK "skills" "retired: <names>"` row; a failed removal is `log_error` + ERROR row;
    - `reverse_discover_skills` / its PS1 twin skips names in the retired list.
-2. No change is needed for PR-b's move: discovery globs `shared/skills/*/SKILL.md` (verified by an
+2. Discovery needs no change for PR-b's move: it globs `shared/skills/*/SKILL.md` (verified by an
    isolated-HOME dev deploy and an isolated build-deploy run, PR #74 body).
+3. **SD-2 for skills (PR #74 review M1).** The 7 governance skills now deploy, so they can be
+   adopted. Adopt copies them to the dotprofile (setup-user-skills.sh :115-120, build-deploy.sh
+   :1086-1091), and from then on the dotprofile copy wins (:93-98), which is the #80 shadowing
+   pattern. Change: a skill name present in `shared/skills/` always deploys from `shared/skills/`.
+   A dotprofile copy of it is ignored with a `log_warn` + WARN row (as setup-user-hooks does for
+   manifest hooks), and `[a]ccept & adopt` writes to `shared/skills/<name>/SKILL.md` in the repo,
+   not to the dotprofile.
 
 ## APPLY-DRAFTS (shared/rules/*, shared/claude-shared.md, shared/skills/delegate, reference/managed-file-deployment.md, registries/tool-registry.json)
 
