@@ -128,13 +128,72 @@ OS_NAME="$(uname -s)"
 
 if $DRY_RUN; then export AITOOLS_DRY_RUN=1; fi
 
+# --- BEGIN install log helpers (tests/profile/test-config.sh extracts this block) ---
+# jsonl_write TS SCRIPT LEVEL MSG -- append one deploy.jsonl record. The message is
+# JSON-escaped (backslash, quote, tab; CR dropped): log lines quote paths and values.
+jsonl_write() {
+    local m="$4"
+    m="${m//\\/\\\\}"
+    m="${m//\"/\\\"}"
+    m="${m//$'\t'/\\t}"
+    m="${m//$'\r'/}"
+    printf '{"ts":"%s","host":"%s","os":"%s","script":"%s","run_id":"%s","level":"%s","msg":"%s"}\n' \
+        "$1" "$HOST_NAME" "$OS_NAME" "$2" "$RUN_ID" "$3" "$m" >> "$LOG_JSONL"
+}
+
+# relay_child_log TEXT -- the console output of a child script that logs through
+# aitools-lib (setup-user-config.sh): print each line, mirror each structured line
+# ("[ts] [script] [level] msg", colour codes removed) to deploy.jsonl -- the child
+# already wrote it to deploy.log -- and count its warnings in WARNINGS. Its errors
+# are not counted line by line: a child with errors exits non-zero and the caller
+# logs one error for it.
+relay_child_log() {
+    local line clean level esc=$'\033'
+    local re='^\[([^]]+)\] \[([^]]+)\] \[([a-z]+)\] (.*)$'
+    while IFS= read -r line; do
+        if [ -z "$line" ]; then continue; fi
+        printf '%s\n' "$line"
+        clean="${line//"${esc}[31m"/}"
+        clean="${clean//"${esc}[33m"/}"
+        clean="${clean//"${esc}[0m"/}"
+        if [[ "$clean" =~ $re ]]; then
+            level="${BASH_REMATCH[3]}"
+            jsonl_write "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "$level" "${BASH_REMATCH[4]}"
+            if [ "$level" = "warn" ]; then WARNINGS=$((WARNINGS + 1)); fi
+        fi
+    done <<< "$1"
+}
+
+# run_config_writer WRITER ARGS... -- Step 5: run setup-user-config.sh (it logs and
+# writes its own summary rows), relay its log lines, record a non-zero exit as one
+# error. Its stdout is only log lines (it never prompts); stderr is not captured.
+run_config_writer() {
+    local writer="$1"; shift
+    local out="" rc=0
+    out=$(bash "$writer" "$@") || rc=$?
+    relay_child_log "$out"
+    if [ "$rc" -ne 0 ]; then
+        log_error "Step 5: setup-user-config.sh failed (exit $rc) -- see $(display_path "$LOG_FILE")"
+    fi
+}
+
+# absolute_repos_path PATH -- print PATH as an absolute path. A relative answer is
+# taken relative to the current directory, where Step 3's mkdir -p creates it (the
+# pre-#79 installer kept it relative; the config writer accepts absolute paths only).
+absolute_repos_path() {
+    case "$1" in
+        /*) printf '%s' "$1" ;;
+        *)  printf '%s/%s' "$PWD" "${1#./}" ;;
+    esac
+}
+# --- END install log helpers ---
+
 # Override: JSONL dual-format (human-readable + structured JSON)
 log() {
     local level="${2:-info}"
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf '[%s] [%s] [%s] %s\n' "$ts" "$SCRIPT_NAME" "$level" "$1" | tee -a "$LOG_FILE"
-    printf '{"ts":"%s","host":"%s","os":"%s","script":"%s","run_id":"%s","level":"%s","msg":"%s"}\n' \
-        "$ts" "$HOST_NAME" "$OS_NAME" "$SCRIPT_NAME" "$RUN_ID" "$level" "$1" >> "$LOG_JSONL"
+    jsonl_write "$ts" "$SCRIPT_NAME" "$level" "$1"
 }
 log_ok()    { log "$1" "ok"; }
 log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
@@ -181,14 +240,14 @@ if [ "${AITOOLS_FORCE:-}" != "1" ] && tty_interactive; then
     INSTALL_INTERACTIVE=true
 fi
 
+$DRY_RUN && log "[DRY RUN] Preview mode -- no files will be written"
+
 # --- Post-write JSON validation ---
 # Validates a JSON config file after writing: checks non-empty, valid JSON,
 # required keys present, and no double-slash paths (excluding protocol prefixes).
-# No caller here since config.json moved to setup-user-config.sh (M3 B3b); kept
-# because config-file-safety.md cites it as the reference example, until it moves
-# to aitools-lib (M3 B2).
-$DRY_RUN && log "[DRY RUN] Preview mode -- no files will be written"
-
+# No caller here since config.json moved to setup-user-config.sh (M3 B3b). It stays
+# in this installer (M3 B2 kept it out of aitools-lib) because config-file-safety.md
+# cites it as the reference example for validate_json_config.
 validate_json_config() {
     local file="$1"; shift
     local required_keys=("$@")
@@ -351,6 +410,13 @@ if [ -z "$REPOS_PATH" ]; then
     fi
 fi
 
+case "$REPOS_PATH" in
+    /*) ;;
+    *)
+        REPOS_ABS=$(absolute_repos_path "$REPOS_PATH")
+        log "Repos path '$REPOS_PATH' is relative -- using $REPOS_ABS (relative to the current directory)"
+        REPOS_PATH="$REPOS_ABS" ;;
+esac
 mkdir -p "$REPOS_PATH"
 log_ok "Repos directory: $REPOS_PATH"
 
@@ -426,12 +492,7 @@ if [ ! -f "$CONFIG_WRITER" ]; then
 else
     writer_args=(--repos-path "$REPOS_PATH_NATIVE" --repo-path "$AITOOLS_NATIVE" --drives-json "$DRIVES_JSON")
     if $DRY_RUN; then writer_args+=(--dry-run); fi
-    writer_rc=0
-    # The writer logs and writes its own summary rows; its exit code is recorded here
-    bash "$CONFIG_WRITER" "${writer_args[@]}" || writer_rc=$?
-    if [ "$writer_rc" -ne 0 ]; then
-        log_error "Step 5: setup-user-config.sh failed (exit $writer_rc) -- see $(display_path "$LOG_FILE")"
-    fi
+    run_config_writer "$CONFIG_WRITER" "${writer_args[@]}"
 fi
 
 
