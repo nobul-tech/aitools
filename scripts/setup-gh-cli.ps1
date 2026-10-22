@@ -5,7 +5,7 @@
 #
 # Auth (gh auth login) is interactive -- handled by aitools-install Step 2, not here.
 #
-# See reference/tool-registry.md for install source details.
+# See the /tool-registry skill (registries/tool-registry.json) for install source details.
 
 # --- Shared library ---
 . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")

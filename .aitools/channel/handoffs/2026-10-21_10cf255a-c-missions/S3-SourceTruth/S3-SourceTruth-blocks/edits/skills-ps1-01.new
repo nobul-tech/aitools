@@ -1,0 +1,40 @@
+    $destDir = Join-Path $DestBase $SkillName
+    $dest = Join-Path $destDir "SKILL.md"
+
+    try {
+        $srcContent = Get-Content $src -Raw -ErrorAction Stop
+    } catch {
+        LogError "Cannot read skill source $SkillName`: $_"
+        return
+    }
+
+    # Adopt target: the file actually read (the dotprofile copy when that was
+    # the source, else shared\skills in the aitools repo). The library writes it.
+    $skillResult = Deploy-ManagedFile -Content $srcContent -DestPath $dest -ToolName $ToolName -ItemName $SkillName -AdoptPath $src
+
+    switch ($skillResult) {
+        "accept & adopt" {
+            # Copy the adopted content to the other deploy targets too, so their
+            # deploy sees LOCAL == SOURCE instead of asking again.
+            foreach ($otherBase in $allSkillDests) {
+                if ($otherBase -eq $DestBase) { continue }
+                $otherDir = Join-Path $otherBase $SkillName
+                $other = Join-Path $otherDir "SKILL.md"
+                try {
+                    if (-not (Test-Path $otherDir)) {
+                        New-Item -ItemType Directory -Path $otherDir -Force -ErrorAction Stop | Out-Null
+                    }
+                    Backup-File -FilePath $other
+                    Copy-Item -Path $dest -Destination $other -Force -ErrorAction Stop
+                    Log "Synced adopted skill to $other"
+                } catch {
+                    LogError "Failed: ${SkillName}: could not copy the adopted skill to ${other}: $_"
+                }
+            }
+        }
+        { $_ -in @("created", "updated", "skipped", "verified", "failed") } {
+            # The tracker records the outcome (failed -> ERROR row).
+        }
+    }
+    Record-DeployOutcome -Outcome $skillResult -ToolName $ToolName -ItemName $SkillName
+}

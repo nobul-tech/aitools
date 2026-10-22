@@ -29,7 +29,7 @@ tool-lifecycle.md Bundled dependencies section.
 
 ### Lifecycle field completeness
 
-Every tool in `reference/tool-registry.md` (including Under Evaluation) must have all 6 fields: Platform Status, Concurrency, Post-Install Config, Dependencies, Invocation, and Last verified version. Last verified version format: `macOS: X.Y.Z (YYYY-MM-DD) | Windows: X.Y.Z | Linux: X.Y.Z` (use `pending` for unverified). Tools with `maintenanceFile` in `tool-versions.json`: `See <filename>`. `@latest`/remote: `Last reviewed: YYYY-MM-DD`. Verify all 6 before committing.
+Every tool in the registry (`/tool-registry` skill; including Under Evaluation) must have all 6 fields: Platform Status, Concurrency, Post-Install Config, Dependencies, Invocation, and Last verified version. Last verified version format: `macOS: X.Y.Z (YYYY-MM-DD) | Windows: X.Y.Z | Linux: X.Y.Z` (use `pending` for unverified). Tools with `versions.maintenanceFile` in the registry: `See <filename>`. `@latest`/remote: `Last reviewed: YYYY-MM-DD`. Verify all 6 before committing.
 
 ### Under Evaluation guard
 
@@ -41,7 +41,7 @@ When a tool is approved (Phase 2 gate passed), complete ALL of these steps in or
 
 #### Prerequisite
 - Verify upstream install method via Chrome DevTools MCP skill (see "Install command verification gate")
-- Record verified install commands in `reference/tool-registry.md` (protected -- present for review)
+- Record verified install commands via the `/tool-registry` skill (protected -- present for review)
 
 #### Non-protected (implement directly)
 - `scripts/setup-<tool>.sh` — install/update (macOS+Linux; OS guard exits on Windows)
@@ -49,13 +49,12 @@ When a tool is approved (Phase 2 gate passed), complete ALL of these steps in or
 - `scripts/aitools-install.sh` — add `validate_and_run "$SCRIPT_DIR/setup-<tool>.sh"` step
 - `scripts/aitools-install.ps1` — add `Invoke-ValidatedScript $toolScript` step
 - `scripts/build-deploy.sh` — add numbered copy-as-is block pair after last tool block
-- If tool requires auth: add auth status check in both setup scripts (see script-standards "Post-install authentication check") and document auth commands in `reference/tool-registry.md` Authentication section
+- If tool requires auth: add auth status check in both setup scripts (see script-standards "Post-install authentication check") and document auth commands via the `/tool-registry` skill (`authentication` field)
 
 #### Protected (present for review before writing)
-- `reference/tool-registry.md` — full entry with all 6 lifecycle fields
+- Registry entry via the `/tool-registry` skill — full entry with all lifecycle fields
 - `shared/claude-shared.md` — add row to Managed CLI Tools table (shared template + MDM source)
 - `<userRepoPath>/claude/CLAUDE.md` (dotprofile repo) — same row addition; commit + push dotprofile repo separately
-- `reference/tool-versions.json` — add tool entry with per-platform version tracking
 - `CLAUDE.md` — add `setup-<tool>` to "Deploy using MDM" tool scripts list
 - `.claude/rules/tool-lifecycle.md` + `.cursor/rules/tool-lifecycle.mdc` — update this checklist if pattern changes
 - `scripts/check-post-push.ps1` — add entry to `$toolCmds` dictionary
@@ -88,7 +87,7 @@ Required checks (via chrome-devtools):
 2. GitHub releases page -- available platforms, architectures, asset formats
 3. Package manager presence (Homebrew formula/tap, crates.io, npm, winget ID, etc.)
 
-Record findings in `reference/tool-registry.md` before modifying scripts. Include the verification date and source URL. If the upstream method has changed, update tool-registry first, then update scripts to match.
+Record findings via the `/tool-registry` skill before modifying scripts. Include the verification date and source URL. If the upstream method has changed, update tool-registry first, then update scripts to match.
 
 For build prerequisites, this gate also applies -- verify official install methods
 before writing `BuildPrereqs` entries or `BuildFailureSignatures` remedies.
@@ -104,7 +103,7 @@ prerequisite, follow the discovery process:
 3. **Evaluate** each method against classification criteria: official support (highest),
    elevation requirement, update model, PATH integration, existing toolchain fit
 4. **Trial install** on target platform -- record actual install path, version, any issues
-5. **Document** in `tool-registry.md`: source URL, chosen method, rationale, trial results
+5. **Document** via the `/tool-registry` skill: source URL, chosen method, rationale, trial results
 
 This applies to managed tools AND build prerequisites (`BuildPrereqs` entries,
 `BuildFailureSignatures` remedies). The tool's official documentation is the starting
@@ -128,9 +127,9 @@ When adding MCP servers to configuration:
 - **Always-available** servers (chrome-devtools): user-level config is correct — no disable needed
 - **Opt-in per-project** servers (vercel, webflow): prefer project-level config only. Adding to user-level `~/.cursor/mcp.json` then disabling is fragile — the disable doesn't propagate to new projects
 
-Claude Code handles this differently: `permissions.deny` in `~/.claude/settings.json` is user-scoped and applies globally. Per-project enable via `.claude/settings.local.json` `permissions.allow`. This asymmetry between tools must be documented in `@reference/tool-registry.md` for each MCP server entry.
+Claude Code handles this differently: `permissions.deny` in `~/.claude/settings.json` is user-scoped and applies globally. Per-project enable via `.claude/settings.local.json` `permissions.allow`. This asymmetry between tools must be documented via the `/tool-registry` skill for each MCP server entry.
 
-See `@reference/tool-registry.md` "Cursor Agent CLI > Config Behavior" for the known issue and planned fix.
+See the `/tool-registry` skill (cursor-agent-cli entry, config behavior) for the known issue and planned fix.
 
 ### Deployment pattern updates
 

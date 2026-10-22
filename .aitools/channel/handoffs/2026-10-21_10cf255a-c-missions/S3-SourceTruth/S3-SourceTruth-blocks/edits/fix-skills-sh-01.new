@@ -1,0 +1,12 @@
+                if ! mkdir -p "$_other_base/$skill_name"; then
+                    log_error "Failed: $skill_name: cannot create $(display_path "$_other_base/$skill_name")"
+                    write_summary ERROR "$tool_name" "sync failed: $skill_name"
+                    continue
+                fi
+                backup_file "$_other"
+                if cp "$dest" "$_other"; then
+                    log "Synced adopted skill to $(display_path "$_other")"
+                else
+                    log_error "Failed: $skill_name: could not copy the adopted skill to $(display_path "$_other")"
+                    write_summary ERROR "$tool_name" "sync failed: $skill_name"
+                fi

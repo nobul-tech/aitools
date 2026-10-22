@@ -245,16 +245,25 @@ if ($bashExe) {
 # ---------------------------------------------------------------------------
 # 9. Source-of-truth consistency
 # ---------------------------------------------------------------------------
-$toolSourcesFile = Join-Path (Join-Path $script:RepoRoot "reference") "tool-registry.md"
+# Count registry tools that carry lifecycle.platformStatus (the registry JSON is
+# the source of truth; reference/tool-registry.md is deprecated, T-Q7).
+$registryJson = Join-Path (Join-Path $script:RepoRoot "registries") "tool-registry.json"
 $lifecycleCount = 0
-if (Test-Path $toolSourcesFile) {
-    $lines = Get-Content $toolSourcesFile
-    $lifecycleCount = @($lines | Where-Object { $_ -match '^\- \*\*Platform Status' }).Count
+if (Test-Path $registryJson) {
+    try {
+        $registryData = Get-Content $registryJson -Raw | ConvertFrom-Json
+        foreach ($t in $registryData.tools.PSObject.Properties) {
+            if ($t.Value.lifecycle -and $t.Value.lifecycle.platformStatus) { $lifecycleCount++ }
+        }
+    } catch {
+        Write-Host "      registries/tool-registry.json: $($_.Exception.Message)"
+        $lifecycleCount = 0
+    }
 }
 if ($lifecycleCount -gt 0) {
-    StepPass "9" "Source-of-truth consistency" "$lifecycleCount lifecycle blocks found"
+    StepPass "9" "Source-of-truth consistency" "$lifecycleCount tools with lifecycle.platformStatus"
 } else {
-    StepWarn "9" "Source-of-truth consistency" "could not parse lifecycle fields"
+    StepWarn "9" "Source-of-truth consistency" "could not read lifecycle fields from registries/tool-registry.json"
 }
 
 # ---------------------------------------------------------------------------
@@ -262,10 +271,9 @@ if ($lifecycleCount -gt 0) {
 # ---------------------------------------------------------------------------
 $inventoryErrors = 0
 $protectedFiles = @(
-    "reference/tool-registry.md",
+    "registries/tool-registry.json",
     "reference/tool-evaluation-criteria.md",
     "reference/tool-evaluation-playbook.md",
-    "reference/tool-versions.json",
     "CLAUDE.md",
     "shared/claude-shared.md",
     "ROADMAP.md",
@@ -517,9 +525,12 @@ if ($ccVersion -eq "unknown") {
 # ---------------------------------------------------------------------------
 # 21. Tool version freshness
 # ---------------------------------------------------------------------------
-$versionsJson = Join-Path (Join-Path $script:RepoRoot "reference") "tool-versions.json"
+# Versions come from registries/tool-registry.json tools.<key>.versions
+# (tool-versions.json was deleted, S2L-Q6; this step read the dead
+# reference/ path on Windows since v0.69.0, #114).
+$versionsJson = Join-Path (Join-Path $script:RepoRoot "registries") "tool-registry.json"
 if (-not (Test-Path $versionsJson)) {
-    StepSkip "21" "Tool version freshness" "tool-versions.json not found"
+    StepSkip "21" "Tool version freshness" "registries/tool-registry.json not found"
 } else {
     $toolData = Get-Content $versionsJson -Raw | ConvertFrom-Json
     $today = [datetime]::UtcNow.Date
@@ -544,24 +555,14 @@ if (-not (Test-Path $versionsJson)) {
     }
     foreach ($entry in $toolData.tools.PSObject.Properties) {
         $key = $entry.Name
-        $val = $entry.Value
-        if ($val.PSObject.Properties['maintenanceFile']) {
+        $val = $entry.Value.versions
+        if (-not $val) {
+            $ver21Details += ("      SKIP {0}: no versions block in registry" -f $key)
+            $ver21Skip++
+            continue
+        }
+        if ($val.PSObject.Properties['maintenanceFile'] -and $val.maintenanceFile) {
             continue  # covered by step 20
-        } elseif ($val.PSObject.Properties['pinned']) {
-            $lastReviewed = $val.lastReviewed
-            if (-not $lastReviewed) {
-                $ver21Details += ("      WARN {0}: lastReviewed not set" -f $key)
-                $ver21Warns++
-            } else {
-                $reviewedDate = [datetime]::ParseExact($lastReviewed, 'yyyy-MM-dd', $null)
-                $days = ($today - $reviewedDate).Days
-                if ($days -gt 30) {
-                    $ver21Details += ("      WARN {0}: lastReviewed {1} ({2}d ago, >30d)" -f $key, $lastReviewed, $days)
-                    $ver21Warns++
-                } else {
-                    $ver21Ok++
-                }
-            }
         } else {
             $platformVer = $null
             $platformProp = $val.PSObject.Properties[$platformKey]
@@ -569,7 +570,7 @@ if (-not (Test-Path $versionsJson)) {
                 $platformVer = $platformProp.Value.lastVerifiedVersion
             }
             if (-not $platformVer) {
-                $ver21Details += ("      SKIP {0}: no {1} version in manifest" -f $key, $platformKey)
+                $ver21Details += ("      SKIP {0}: no {1} version in registry" -f $key, $platformKey)
                 $ver21Skip++
                 continue
             }
@@ -615,6 +616,27 @@ if (-not (Test-Path $versionsJson)) {
             } catch {
                 $ver21Details += ("      SKIP {0}: not installed (manifest: {1})" -f $key, $platformVer)
                 $ver21Skip++
+            }
+        }
+    }
+    # MCP servers (@latest / remote): mcpServers.<key>.versions.lastReviewed must be
+    # within 30 days (the check tool-versions.json carried before S2L-Q6).
+    if ($toolData.mcpServers) {
+        foreach ($srv in $toolData.mcpServers.PSObject.Properties) {
+            $lastReviewed = $null
+            if ($srv.Value.versions) { $lastReviewed = $srv.Value.versions.lastReviewed }
+            if (-not $lastReviewed) {
+                $ver21Details += ("      WARN {0}: lastReviewed not set" -f $srv.Name)
+                $ver21Warns++
+                continue
+            }
+            $reviewedDate = [datetime]::ParseExact($lastReviewed, 'yyyy-MM-dd', $null)
+            $days = ($today - $reviewedDate).Days
+            if ($days -gt 30) {
+                $ver21Details += ("      WARN {0}: lastReviewed {1} ({2}d ago, >30d)" -f $srv.Name, $lastReviewed, $days)
+                $ver21Warns++
+            } else {
+                $ver21Ok++
             }
         }
     }
@@ -735,16 +757,25 @@ if ($Extensive) {
 # ---------------------------------------------------------------------------
 # 25. CLI tools table sync
 # ---------------------------------------------------------------------------
-# Extract direct invocation commands from tool-registry.md
-$registryFile = Join-Path $script:RepoRoot "reference" "tool-registry.md"
+# Extract direct invocation commands from registries/tool-registry.json:
+# tools.<key>.lifecycle.invocation.command when it is a single command word
+# (reference/tool-registry.md is deprecated, T-Q7).
+$registryFile = Join-Path $script:RepoRoot "registries" "tool-registry.json"
 $sharedFile = Join-Path $script:RepoRoot "shared" "claude-shared.md"
 $registryCmds = @()
 if (Test-Path $registryFile) {
-    $registryLines = Get-Content $registryFile -ErrorAction Stop
-    foreach ($line in $registryLines) {
-        if ($line -match '\*\*Invocation:\*\*\s*`([^`]+)`.*\(direct\)') {
-            $registryCmds += $Matches[1]
+    try {
+        $registry25 = Get-Content $registryFile -Raw -ErrorAction Stop | ConvertFrom-Json
+        foreach ($t in $registry25.tools.PSObject.Properties) {
+            $inv = $null
+            if ($t.Value.lifecycle -and $t.Value.lifecycle.invocation) { $inv = $t.Value.lifecycle.invocation.command }
+            if ($inv -and $inv -match '^[A-Za-z0-9._-]+$' -and $inv -notin $registryCmds) {
+                $registryCmds += $inv
+            }
         }
+    } catch {
+        # Parse failure: report it; the empty list takes the SKIP branch below.
+        Write-Host "      registries/tool-registry.json: $($_.Exception.Message)"
     }
 }
 if ($registryCmds.Count -eq 0) {
@@ -836,35 +867,11 @@ if ($cargoInstalled) {
 }
 
 # ---------------------------------------------------------------------------
-# 28. Deploy state integrity: manifest and shadows consistent
+# 28. Deploy state integrity (retired)
 # ---------------------------------------------------------------------------
-$deployStateDir = "$env:USERPROFILE\.aitools\deploy-state"
-$manifestPath = Join-Path $deployStateDir "manifest.json"
-if (Test-Path $manifestPath) {
-    $issues = @()
-    try {
-        $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-        if ($manifest.files) {
-            $files = $manifest.files
-            $keys = if ($files -is [hashtable]) { $files.Keys } else { $files.PSObject.Properties.Name }
-            foreach ($key in $keys) {
-                $shadowPath = Join-Path $deployStateDir "shadows" $key
-                if (-not (Test-Path $shadowPath)) {
-                    $issues += "missing shadow: $key"
-                }
-            }
-        }
-    } catch {
-        $issues += "manifest parse error: $_"
-    }
-    if ($issues.Count -eq 0) {
-        StepPass "28" "Deploy state integrity" "manifest and shadows consistent"
-    } else {
-        StepWarn "28" "Deploy state integrity" ($issues -join '; ')
-    }
-} else {
-    StepSkip "28" "Deploy state integrity" "no deploy state (first run will create)"
-}
+# The managed-file model has no deploy state (SOURCE is the source of truth);
+# ~/.aitools/deploy-state/ from older versions is left on disk and unused.
+StepSkip "28" "Deploy state integrity" "retired: managed files keep no deploy state"
 
 # ---------------------------------------------------------------------------
 # 29. Deployment menu parity audit

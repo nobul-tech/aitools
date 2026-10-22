@@ -5,13 +5,13 @@ and build prerequisites. Referenced by `.claude/rules/tool-lifecycle.md`.
 
 ## Purpose
 
-Every install command in `tool-registry.md`, `BuildPrereqs` entries, and
+Every install command in the tool registry (`/tool-registry` skill), `BuildPrereqs` entries, and
 `BuildFailureSignatures` remedies must be derived from official tool documentation --
 never chosen from assumption or memory. This playbook defines the discovery process.
 
 ## Scope
 
-- **Managed tools** in `reference/tool-registry.md`
+- **Managed tools** in the tool registry (`/tool-registry` skill)
 - **Build prerequisites** in `aitools-lib.ps1` (`$script:BuildPrereqs`) and `aitools-lib.sh` (`check_build_prereqs`)
 - **Any dependency** where we specify install commands in code
 
@@ -95,7 +95,7 @@ been tested on the target platform. See KnownPaths verification rules in
 
 ### Step 6: Document
 
-Record in `reference/tool-registry.md`:
+Record in the tool registry (`/tool-registry` skill):
 - Source URL (where docs were read)
 - Chosen method per platform with rationale
 - Trial installation results

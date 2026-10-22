@@ -78,7 +78,7 @@ Any diff means deploy/ was stale at push time. Should be empty.
 
 ### 9. Source-of-truth consistency
 
-For each tool in `reference/tool-registry.md`:
+For each tool in the tool registry (`/tool-registry` skill):
 - Verify the install command matches what the corresponding `setup-*.sh/.ps1`
   script actually runs.
 - Verify all 6 lifecycle fields (Platform Status, Concurrency, Post-Install
@@ -155,14 +155,14 @@ Check `claude --version` against the "Current version" in
 
 ### 21. Tool version freshness
 
-For each versioned tool in `reference/tool-registry.md`:
-- Run `<tool> --version` and compare against the current platform's entry in
-  `reference/tool-versions.json`. Flag any tool where installed version differs.
-- If different: update `tool-versions.json` for this platform, update `Last verified version`
-  in `tool-registry.md`, and review upstream changelog for breaking changes.
+For each versioned tool in the tool registry (`/tool-registry` skill):
+- Run `<tool> --version` and compare against the current platform's
+  `versions.<platform>.lastVerifiedVersion`. Flag any tool where installed version differs.
+- If different: update that platform's `lastVerifiedVersion` and `lastVerified` via the
+  `/tool-registry` skill, and review upstream changelog for breaking changes.
 
-For `@latest` / remote tools:
-- Check `lastReviewed` in `tool-versions.json`. Flag if older than 30 days.
+For `@latest` / remote tools (MCP servers):
+- Check `mcpServers.<name>.versions.lastReviewed` in the registry. Flag if older than 30 days.
 - Review upstream for changes to flags, config options, or behavior affecting `assumptions`.
 
 ### 22. Logging hygiene audit

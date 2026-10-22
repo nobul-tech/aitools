@@ -183,7 +183,7 @@ setup_staged=$(echo "$STAGED_FILES" | grep -E '^scripts/setup-' || true)
 if [ -z "$setup_staged" ]; then
     step_skip "7" "Install cmd consistency" "no setup-* staged"
 else
-    step_warn "7" "Install cmd consistency" "verify against reference/tool-registry.md"
+    step_warn "7" "Install cmd consistency" "verify against the /tool-registry skill entry"
 fi
 
 # ---------------------------------------------------------------------------
@@ -334,10 +334,14 @@ echo ""
 echo "${BOLD}--- Step 16: Capability bypass audit ---${RESET}"
 # Governed JSON files that require skill access (capability-based security, Dennis & Van Horn 1966)
 # @reference/ prefix loads file into context, bypassing the governing skill
-# Scope: .claude/rules/, CLAUDE.md, and any @-referenced files in CLAUDE.md
+# Scope: .claude/rules/*.md, .cursor/rules/*.mdc and CLAUDE.md (the @-referenced
+# files of CLAUDE.md are not scanned). Markdown table rows are exempt (#50).
+# Same pattern and governed list as check-pre-commit.ps1 step 16 (#116 parity).
 # See .claude/rules/governed-data-access.md for the principle
-hits=$(grep -rnE '@?(reference|registries)/[a-z0-9-]*\.json' .claude/rules/ CLAUDE.md \
-    | perl -ne 'print if /glossary\.json|framework-registry\.json|incidents\.json|tool-registry\.json/' \
+# grep exits 1 when nothing matches; || true keeps set -e from aborting, and
+# an empty $hits is the pass result checked below.
+hits=$(grep -rnE '@?(reference|registries)/[a-z0-9-]*\.json' .claude/rules/ .cursor/rules/ CLAUDE.md \
+    | perl -ne 'print if /glossary\.json|framework-registry\.json|incidents\.json|tool-registry\.json|tool-ops\.json/' \
     | grep -v '^.*:.*|.*|.*|.*|' || true)
 if [ -n "$hits" ]; then
     step_fail "16" "Capability bypass audit" "rules/CLAUDE.md load governed JSON directly (use governing skill)"
@@ -458,6 +462,36 @@ if [ -f "$REPO_ROOT/reference/harness-db-schema.sql" ]; then
     step_pass "19" "Harness DB schema file" "reference/harness-db-schema.sql exists"
 else
     step_fail "19" "Harness DB schema file" "reference/harness-db-schema.sql missing"
+fi
+
+# ---------------------------------------------------------------------------
+# 20. Path references (#115): every repo path cited in skills, rules, Cursor
+#     rules, reference docs, hooks and CLAUDE.md must exist. One Python
+#     implementation (scripts/check-path-refs.py) serves both platforms.
+# ---------------------------------------------------------------------------
+echo ""
+echo "${BOLD}--- Step 20: Path references ---${RESET}"
+PYTHON20=""
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON20="python3"
+elif command -v python >/dev/null 2>&1; then
+    PYTHON20="python"
+fi
+if [ -z "$PYTHON20" ]; then
+    step_fail "20" "Path references" "python3 not found (required to run scripts/check-path-refs.py)"
+else
+    # The helper exits 1 on dead paths and 2 on errors; capture both, do not abort.
+    path_rc=0
+    path_out=$("$PYTHON20" "$REPO_ROOT/scripts/check-path-refs.py" --root "$REPO_ROOT" 2>&1) || path_rc=$?
+    if [ "$path_rc" -eq 0 ]; then
+        step_pass "20" "Path references" "every cited repo path exists"
+    elif [ "$path_rc" -eq 1 ]; then
+        echo "$path_out"
+        step_fail "20" "Path references" "dead repo path references (fix the path or see scripts/check-path-refs-allow.txt)"
+    else
+        echo "$path_out"
+        step_fail "20" "Path references" "check-path-refs.py error (exit $path_rc)"
+    fi
 fi
 
 # ---------------------------------------------------------------------------

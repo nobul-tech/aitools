@@ -5,7 +5,7 @@ description: "File an incident in incidents.json. Use when a spec deviation, bro
 
 ## Intent
 
-**Purpose**: File harness deficiencies into `reference/incidents.json`
+**Purpose**: File harness deficiencies into `registries/incidents.json`
 with structured fields, severity classification, and root cause
 tracking — the operational tool for the surfacing duty. **Scope**:
 Filing process, classification, and entry formatting only. NOT for
@@ -45,8 +45,15 @@ and incident #48.
 
 ### Step 1: Read current state
 
-Read `reference/incidents.json`. Note the highest ID in the `incidents` array.
-The new entry gets `highest + 1`.
+Read `registries/incidents.json` in full. It is longer than the Read tool's
+2,000-line default: read it in parts with `offset`/`limit` until the end of the
+file, and never choose an id from a partial read (#122). Note the highest ID
+across both the `incidents` and the `closed` arrays. The new entry gets
+`highest + 1`. Cross-check with a one-line count when a shell is available:
+
+```bash
+python3 -c 'import json; d=json.load(open("registries/incidents.json")); print(max(i["id"] for i in d["incidents"] + d["closed"]))'
+```
 
 ### Step 2: Classify severity
 
@@ -85,7 +92,7 @@ The new entry gets `highest + 1`.
 
 ### Step 4: Present for review
 
-`reference/incidents.json` is a protected file (sources-of-truth gate).
+`registries/incidents.json` is a protected file (sources-of-truth gate).
 Present the proposed entry to the user before writing. Show:
 - The severity rationale
 - The full JSON entry
@@ -98,10 +105,19 @@ Add the entry to the `incidents` array. Update `meta.lastUpdated` to today.
 ## Closing an incident
 
 When an incident is resolved:
-1. Move the entry from `incidents` to `closed` array
-2. Add `closedIn` (version) and `closedDate` fields
-3. Remove the detailed fields (keep id, title, closedIn, closedDate)
-4. Mention in release notes: "Resolves Incident #N"
+1. **Record the corrective action.** Set `correctiveAction` to what was done:
+   the PR or commit, the files and functions changed, and how the fix was
+   verified. Fill `rootCause` and `preventionLayer` too when they are known;
+   operational incidents need both before closing
+   (`.claude/rules/incident-governance.md`, "Field quality rules"). Update
+   `updated` to today. This is a protected write: present it for review
+   with the close.
+2. Move the entry from `incidents` to `closed` array
+3. Add `closedIn` (version, or PR and commit) and `closedDate` fields
+4. Remove the other detailed fields. Keep `id`, `title`, `correctiveAction`,
+   `closedIn` and `closedDate` (and `rootCause` and `preventionLayer` when
+   set), so the closed entry still says how it was fixed.
+5. Mention in release notes: "Resolves Incident #N"
 
 ## Quick filing from subagent output
 
@@ -121,5 +137,5 @@ for user review if filing multiple incidents at once.
 - Framework: `@reference/framework-incident-governance.md`
 - Operational rule: `@.claude/rules/incident-governance.md`
 - Discovery cycle: `@reference/framework-adoption.md`
-- Incident data: `@reference/incidents.json`
+- Incident data: `@registries/incidents.json`
 - Audit skill: `.claude/skills/audit/SKILL.md`

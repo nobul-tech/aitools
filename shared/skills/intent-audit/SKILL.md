@@ -128,11 +128,11 @@ current best exemplars (weight recent > old):
 
 **Exemplar ranking** (as of 2026-03-16, most recent first):
 
-1. `reference/tool-ops.json` meta.intent — approved 2026-03-15
+1. `registries/tool-ops.json` meta.intent — approved 2026-03-15
 2. `.claude/rules/tool-ops.md` **Intent** — approved 2026-03-15
 3. `.claude/rules/governed-data-access.md` **Intent** — approved 2026-03-14
-4. `reference/incidents.json` meta.intent — approved 2026-03-15
-5. `reference/glossary.json` meta.intent — approved 2026-03-15
+4. `registries/incidents.json` meta.intent — approved 2026-03-15
+5. `registries/glossary.json` meta.intent — approved 2026-03-15
 
 **Comparison dimensions**:
 - **Structure**: Does it follow the same purpose/scope/audience pattern?

@@ -184,7 +184,7 @@ $setupStaged = @($stagedFiles | Where-Object { $_ -match '^scripts/setup-' })
 if ($setupStaged.Count -eq 0) {
     StepSkip "7" "Install cmd consistency" "no setup-* staged"
 } else {
-    StepWarn "7" "Install cmd consistency" "verify against reference/tool-registry.md"
+    StepWarn "7" "Install cmd consistency" "verify against the /tool-registry skill entry"
 }
 
 # ---------------------------------------------------------------------------
@@ -323,20 +323,26 @@ Write-Host ""
 Write-Host "--- Step 16: Capability bypass audit ---" -ForegroundColor White
 # Governed JSON files that require skill access (capability-based security, Dennis & Van Horn 1966)
 # @reference/ prefix loads file into context, bypassing the governing skill
-# Scope: .claude/rules/, CLAUDE.md, and any @-referenced files in CLAUDE.md
+# Scope: .claude/rules/*.md, .cursor/rules/*.mdc and CLAUDE.md (the @-referenced
+# files of CLAUDE.md are not scanned). Markdown table rows are exempt (#50).
+# Same pattern and governed list as check-pre-commit.sh step 16 (#116 parity).
 # See .claude/rules/governed-data-access.md for the principle
 $rulesDir = Join-Path $script:RepoRoot ".claude/rules"
+$cursorRulesDir = Join-Path $script:RepoRoot ".cursor/rules"
 $claudeMd = Join-Path $script:RepoRoot "CLAUDE.md"
 $scanFiles = @()
+# A missing rules directory yields $null; the null checks below handle it.
 $ruleFiles = Get-ChildItem "$rulesDir/*.md" -ErrorAction SilentlyContinue
 if ($ruleFiles) { $scanFiles += $ruleFiles }
+$cursorRuleFiles = Get-ChildItem "$cursorRulesDir/*.mdc" -ErrorAction SilentlyContinue
+if ($cursorRuleFiles) { $scanFiles += $cursorRuleFiles }
 if (Test-Path $claudeMd) { $scanFiles += Get-Item $claudeMd }
 $capHits = @()
 if ($scanFiles.Count -gt 0) {
-    $rawHits = Select-String -Path $scanFiles -Pattern '@?reference/.*\.json' -ErrorAction SilentlyContinue
+    $rawHits = Select-String -Path $scanFiles -Pattern '@?(reference|registries)/[a-z0-9-]*\.json' -ErrorAction SilentlyContinue
     if ($rawHits) {
         foreach ($h in $rawHits) {
-            if ($h.Line -match 'glossary\.json|framework-registry\.json|incidents\.json|tool-registry\.json' -and $h.Line -notmatch '^\|.*\|.*\|.*\|') {
+            if ($h.Line -match 'glossary\.json|framework-registry\.json|incidents\.json|tool-registry\.json|tool-ops\.json' -and $h.Line -notmatch '^\|.*\|.*\|.*\|') {
                 $capHits += $h
             }
         }
@@ -347,6 +353,43 @@ if ($capHits.Count -gt 0) {
     $capHits | ForEach-Object { Write-Host "  $_" }
 } else {
     StepPass "16" "Capability bypass audit" "no direct governed JSON references in rules/CLAUDE.md"
+}
+
+# ---------------------------------------------------------------------------
+# 20. Path references (#115): every repo path cited in skills, rules, Cursor
+#     rules, reference docs, hooks and CLAUDE.md must exist. One Python
+#     implementation (scripts/check-path-refs.py) serves both platforms.
+#     (Steps 17-19 exist only in check-pre-commit.sh today.)
+# ---------------------------------------------------------------------------
+Write-Host ""
+Write-Host "--- Step 20: Path references ---" -ForegroundColor White
+$python20 = $null
+foreach ($candidate in @("python", "python3")) {
+    $cmd20 = Get-Command $candidate -ErrorAction SilentlyContinue
+    if ($cmd20) { $python20 = $cmd20.Source; break }
+}
+if (-not $python20) {
+    StepFail "20" "Path references" "python not found (required to run scripts/check-path-refs.py)"
+} else {
+    $pathScript = Join-Path $script:RepoRoot "scripts/check-path-refs.py"
+    # The helper exits 1 on dead paths and 2 on errors; native stderr must not throw.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $pathOut = @(& $python20 $pathScript --root $script:RepoRoot 2>&1)
+        $pathRc = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEAP
+    }
+    if ($pathRc -eq 0) {
+        StepPass "20" "Path references" "every cited repo path exists"
+    } elseif ($pathRc -eq 1) {
+        $pathOut | ForEach-Object { Write-Host "  $_" }
+        StepFail "20" "Path references" "dead repo path references (fix the path or see scripts/check-path-refs-allow.txt)"
+    } else {
+        $pathOut | ForEach-Object { Write-Host "  $_" }
+        StepFail "20" "Path references" "check-path-refs.py error (exit $pathRc)"
+    }
 }
 
 # ---------------------------------------------------------------------------

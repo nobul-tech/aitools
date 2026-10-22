@@ -1,0 +1,14 @@
+        # Post-write validation: each deployed file is non-empty
+        foreach ($rf in $sourceRules) {
+            $destFile = Join-Path $rulesDest $rf.Name
+            if ((Test-Path $destFile) -and (Get-Item $destFile).Length -eq 0) {
+                LogError "Validation failed: $($rf.Name) is empty after deploy"
+            }
+        }
+
+        if ($errors -eq $errorsBefore) {
+            Write-DeployTrackerSummary -ToolName "claude rules"
+            LogOk "Rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $rulesDest"
+        } else {
+            Write-Summary "ERROR" "claude rules" "validation failed"
+        }

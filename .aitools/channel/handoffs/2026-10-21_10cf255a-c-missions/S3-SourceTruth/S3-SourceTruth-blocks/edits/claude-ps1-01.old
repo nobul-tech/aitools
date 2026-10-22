@@ -1,0 +1,41 @@
+# ---------------------------------------------------------------------------
+# Adopt deployed CLAUDE.md back to profile template.
+# Strips machine-specific footer and reverse-tokenizes profile values.
+# ---------------------------------------------------------------------------
+function Adopt-ClaudeMd {
+    param([string]$DeployedPath, [string]$DestPath)
+
+    try {
+        $deployed = Get-Content $DeployedPath -Raw -ErrorAction Stop
+    } catch {
+        LogError "Cannot read deployed CLAUDE.md: $_"
+        return $false
+    }
+
+    # Strip ## Machine-Specific section to end
+    $idx = $deployed.IndexOf("`n## Machine-Specific")
+    if ($idx -ge 0) {
+        $deployed = $deployed.Substring(0, $idx).TrimEnd() + "`n"
+    }
+
+    # Reverse-substitute profile values back to {{PLACEHOLDER}} tokens
+    if ($profileName) {
+        $deployed = $deployed -replace [regex]::Escape($profileName), '{{PROFILE_NAME}}'
+        $deployed = $deployed -replace [regex]::Escape($profileCompany), '{{PROFILE_COMPANY}}'
+        $deployed = $deployed -replace [regex]::Escape($identityGitName), '{{IDENTITY_GIT_NAME}}'
+        $deployed = $deployed -replace [regex]::Escape($identityGitEmail), '{{IDENTITY_GIT_EMAIL}}'
+    }
+
+    $destDir = Split-Path -Parent $DestPath
+    if (-not (Test-Path $destDir)) {
+        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+    }
+    Backup-File -FilePath $DestPath
+    $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
+    [System.IO.File]::WriteAllText($resolved, $deployed, [System.Text.UTF8Encoding]::new($false))
+    LogOk "Adopted CLAUDE.md to profile: $DestPath"
+    if ([Environment]::UserInteractive) {
+        [Console]::WriteLine("  Review: cd $(Split-Path -Parent $destDir) && git diff")
+    }
+    return $true
+}

@@ -31,7 +31,7 @@ mid-session discoveries, or when the plan feels unwieldy.
 ### Step 1: Load current state
 
 Read the plan file. Then read these for comparison:
-- `reference/incidents.json` — are gaps referenced in the plan still open?
+- `registries/incidents.json` — are gaps referenced in the plan still open?
 - `ROADMAP.md` — does the plan's scope match the roadmap entry?
 - Recent git log (`git log --oneline -20`) — what changed since the plan
   was last updated?

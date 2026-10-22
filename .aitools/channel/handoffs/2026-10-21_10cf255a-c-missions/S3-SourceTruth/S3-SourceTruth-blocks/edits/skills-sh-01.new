@@ -1,0 +1,33 @@
+    local dest_dir="$dest_base/$skill_name"
+    local dest="$dest_dir/SKILL.md"
+
+    # Adopt target: the file actually read (the dotprofile copy when that was
+    # the source, else shared/skills in the aitools repo). The library writes it.
+    deploy_managed_file "$(cat "$src")" "$dest" "$tool_name" "$skill_name" "$src"
+
+    case "$MANAGED_FILE_RESULT" in
+        "accept & adopt")
+            # Copy the adopted content to the other deploy targets too, so their
+            # deploy sees LOCAL == SOURCE instead of asking again.
+            local _other_base _other
+            for _other_base in $ALL_SKILL_DESTS; do
+                [ "$_other_base" = "$dest_base" ] && continue
+                _other="$_other_base/$skill_name/SKILL.md"
+                if ! mkdir -p "$_other_base/$skill_name"; then
+                    log_error "Failed: $skill_name: cannot create $(display_path "$_other_base/$skill_name")"
+                    continue
+                fi
+                backup_file "$_other"
+                if cp "$dest" "$_other"; then
+                    log "Synced adopted skill to $(display_path "$_other")"
+                else
+                    log_error "Failed: $skill_name: could not copy the adopted skill to $(display_path "$_other")"
+                fi
+            done
+            ;;
+        created|updated|skipped|verified|failed)
+            # The tracker records the outcome (failed -> ERROR row).
+            ;;
+    esac
+    deploy_tracker_record "$MANAGED_FILE_RESULT" "$tool_name" "$skill_name"
+}

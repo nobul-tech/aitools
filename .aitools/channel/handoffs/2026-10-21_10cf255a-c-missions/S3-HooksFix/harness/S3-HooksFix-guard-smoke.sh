@@ -8,9 +8,9 @@
 #   BASH_BIN=/bin/bash S3-HooksFix-guard-smoke.sh   # run the hook under bash 3.2
 set -euo pipefail
 
-WT="${1:-/Users/new-jose/repos/aitools/.claude/worktrees/sed-guard-enforce}"
+WT="${1:-/Users/new-jose/repos/aitools/.claude/worktrees/applydrafts}"
 HOOK="$WT/shared/hooks/standing-order-guard.sh"
-FAKE_HOME="$WT/.scratch/session-S3-HooksFix/home-guard"
+FAKE_HOME="$WT/.scratch/session-S3Apply/home-guard"
 rm -rf "$FAKE_HOME"
 mkdir -p "$FAKE_HOME"
 LOGF="$FAKE_HOME/.aitools/logs/standing-order-guard.log"
@@ -80,10 +80,17 @@ run_case "rm glob"                          2 "rm -f *.tmp"
 run_case "echo redirect"                    2 "echo hi > f.txt"
 run_case "sed -n 1p a && ls (and-check)"    2 "sed -n 1p a.txt && ls"
 
-echo "--- recorded limitation (first-token scope; see report) ---"
-# Two-line command: line 1 matches the exemption, line 2 is a write-form sed.
-# Exit 0 is the CURRENT behavior, asserted so a future change is noticed.
-run_case "2-line: sed -n 1p f / sed s/a/b/wout f" 0 'sed -n 1p f\nsed s/a/b/wout f'
+echo "--- multi-line: the sed -n exemption is single-line only (exit 2) ---"
+# S3-Apply, 2026-10-21: line 1 matches the exemption, line 2 is a write-form
+# sed. Before the single-line limit this exited 0 (S3-HooksFix report).
+run_case "2-line: sed -n 1p f / sed s/a/b/wout f" 2 'sed -n 1p f\nsed s/a/b/wout f'
+run_case "2-line: sed -n 1p f / sed -i s/a/b/ f"  2 'sed -n 1p f\nsed -i s/a/b/ f'
+run_case "2-line: both lines read-only sed -n"     2 'sed -n 1p f\nsed -n 2p f'
+
+echo "--- recorded limitation (first-token scope; not sed-specific) ---"
+# Line 1 is not sed and line 2 is a write-form sed: the guard checks only the
+# first token, so this exits 0 (current behavior, asserted so a change is noticed).
+run_case "2-line: ls / sed -i s/a/b/ f"            0 'ls\nsed -i s/a/b/ f'
 
 echo ""
 echo "RESULT: $pass passed, $fail failed"

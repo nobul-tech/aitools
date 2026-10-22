@@ -12,7 +12,7 @@ skill behavior, `/audit` skill.
 ### Look up existing tool
 
 **Input**: "What deny rules does Claude Code have?"
-**Expected**: Skill reads `reference/tool-ops.json`, reports Claude Code has
+**Expected**: Skill reads `registries/tool-ops.json`, reports Claude Code has
 no `permissions.deny` rules. The built-in `claude-code-guide` subagent is
 blocked by the `block-claude-code-guide.sh` hook (see `tools.claude-code.hooks`),
 not a deny rule — CC does not reliably honor deny for built-in subagents.
@@ -20,7 +20,7 @@ not a deny rule — CC does not reliably honor deny for built-in subagents.
 ### Look up nonexistent tool
 
 **Input**: "What are the ops for Vercel CLI?"
-**Expected**: Skill reads `reference/tool-ops.json`, reports that
+**Expected**: Skill reads `registries/tool-ops.json`, reports that
 Vercel CLI has no ops entry. Explains that most managed tools do not
 need one — only those with deep harness integration.
 
@@ -74,7 +74,7 @@ create `reference/tool-ops-cursor.md`.
 
 ### Direct JSON access attempt
 
-**Input**: Agent reads `reference/tool-ops.json` directly without
+**Input**: Agent reads `registries/tool-ops.json` directly without
 using the skill.
 **Expected**: Pre-commit step 16 (capability bypass audit) flags the
 bypass. The governed data access rule (`.claude/rules/governed-data-access.md`)

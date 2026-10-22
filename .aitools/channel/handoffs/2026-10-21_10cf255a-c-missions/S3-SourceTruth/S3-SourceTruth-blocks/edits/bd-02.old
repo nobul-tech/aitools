@@ -1,0 +1,33 @@
+function Deploy-EmbeddedSkill {
+    param([string]$SkillName, [string]$DestBase, [string]$ToolName, [string]$Content)
+
+    $destDir = Join-Path $DestBase $SkillName
+    $dest = Join-Path $destDir "SKILL.md"
+    $adoptLabel = ""
+    $cfgFile = Join-Path $env:USERPROFILE ".aitools\config.json"
+    $userRepoPath = ReadConfigKey -File $cfgFile -Key "userRepoPath"
+    if ($userRepoPath) { $adoptLabel = "dotprofile" }
+
+    $skillResult = Deploy-ManagedFile -Content $Content -DestPath $dest -ToolName $ToolName -ItemName $SkillName -AdoptLabel $adoptLabel
+
+    if ($skillResult -eq "accept & adopt") {
+        if ($userRepoPath) {
+            $adoptDir = Join-Path $userRepoPath "claude\skills\$SkillName"
+            if (-not (Test-Path $adoptDir)) {
+                New-Item -ItemType Directory -Path $adoptDir -Force | Out-Null
+            }
+            Copy-Item -Path $dest -Destination (Join-Path $adoptDir "SKILL.md") -Force -ErrorAction Stop
+            LogOk "Adopted skill to dotprofile: $SkillName"
+        }
+        # Sync to all other deploy targets (prevents clobber)
+        foreach ($otherBase in $allSkillDests) {
+            if ($otherBase -eq $DestBase) { continue }
+            $otherDir = Join-Path $otherBase $SkillName
+            if (-not (Test-Path $otherDir)) {
+                New-Item -ItemType Directory -Path $otherDir -Force | Out-Null
+            }
+            Copy-Item -Path $dest -Destination (Join-Path $otherDir "SKILL.md") -Force
+        }
+    }
+    Record-DeployOutcome -Outcome $skillResult -ToolName $ToolName -ItemName $SkillName
+}

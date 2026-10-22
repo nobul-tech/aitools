@@ -1,0 +1,8 @@
+# scripts/aitools-lib.ps1 at origin/main db4b3c5: START	END	FIRST	LAST	BLOCK
+327	352	^# -{20}	^\}\s*$	ps1-G-backup.ps1
+383	541	^# -{20}	^\}\s*$	ps1-A-helpers.ps1
+788	883	^# -{20}	^\}\s*$	ps1-F-merge.ps1
+885	1074	^# -{20}	^\}\s*$	ps1-B-review.ps1
+1076	1196	^# -{20}	^\}\s*$	ps1-C-deploy.ps1.tmpl
+1245	1289	^# -{20}	^\}\s*$	ps1-D-tracker.ps1
+1291	1347	^# -{20}	^\}\s*$	ps1-E-fieldprompt.ps1

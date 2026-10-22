@@ -1,6 +1,6 @@
-hook: /Users/new-jose/repos/aitools/.claude/worktrees/sed-guard-enforce/shared/hooks/standing-order-guard.sh
+hook: /Users/new-jose/repos/aitools/.claude/worktrees/applydrafts/shared/hooks/standing-order-guard.sh
 hook interpreter: /bin/bash (3.2.57(1)-release)
-MODE_SED line: 56:MODE_SED="enforce"       # sed — #82 sed -n exemption (2026-10-21) only narrowed matching; enforce
+MODE_SED line: 57:MODE_SED="enforce"       # sed — #82 sed -n exemption (2026-10-21) only narrowed matching; enforce
 --- clean / read-only (exit 0) ---
 PASS | clean: git status                        | exit=0 (want 0) | observe-log-lines=+0 | cmd: git status
 PASS | clean: ls -la                            | exit=0 (want 0) | observe-log-lines=+0 | cmd: ls -la
@@ -40,7 +40,11 @@ PASS | awk outside pipeline                     | exit=2 (want 2) | observe-log-
 PASS | rm glob                                  | exit=2 (want 2) | observe-log-lines=+0 | cmd: rm -f *.tmp
 PASS | echo redirect                            | exit=2 (want 2) | observe-log-lines=+0 | cmd: echo hi > f.txt
 PASS | sed -n 1p a && ls (and-check)            | exit=2 (want 2) | observe-log-lines=+0 | cmd: sed -n 1p a.txt && ls
---- recorded limitation (first-token scope; see report) ---
-PASS | 2-line: sed -n 1p f / sed s/a/b/wout f   | exit=0 (want 0) | observe-log-lines=+0 | cmd: sed -n 1p f\nsed s/a/b/wout f
+--- multi-line: the sed -n exemption is single-line only (exit 2) ---
+PASS | 2-line: sed -n 1p f / sed s/a/b/wout f   | exit=2 (want 2) | observe-log-lines=+0 | cmd: sed -n 1p f\nsed s/a/b/wout f
+PASS | 2-line: sed -n 1p f / sed -i s/a/b/ f    | exit=2 (want 2) | observe-log-lines=+0 | cmd: sed -n 1p f\nsed -i s/a/b/ f
+PASS | 2-line: both lines read-only sed -n      | exit=2 (want 2) | observe-log-lines=+0 | cmd: sed -n 1p f\nsed -n 2p f
+--- recorded limitation (first-token scope; not sed-specific) ---
+PASS | 2-line: ls / sed -i s/a/b/ f             | exit=0 (want 0) | observe-log-lines=+0 | cmd: ls\nsed -i s/a/b/ f
 
-RESULT: 37 passed, 0 failed
+RESULT: 40 passed, 0 failed

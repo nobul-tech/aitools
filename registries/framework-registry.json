@@ -180,7 +180,7 @@
       "artifacts": [
         ".claude/rules/tool-ops.md",
         ".claude/skills/tool-ops/SKILL.md",
-        "reference/tool-ops.json",
+        "registries/tool-ops.json",
         "reference/tool-ops-claude-code.md",
         "shared/hooks/tool-ops-session-audit.sh"
       ],

@@ -7,7 +7,7 @@
       "scope": "Definitions, facets, and abbreviation mappings only. NOT the word list (glossary rule). NOT the composition convention (framework-governed-vocabulary.md). NOT usage guidance (/glossary skill)",
       "audience": "/glossary skill, /audit skill, agents resolving terminology questions"
     },
-    "lastUpdated": "2026-10-05"
+    "lastUpdated": "2026-10-21"
   },
   "facets": {
     "scopeModifiers": {
@@ -217,8 +217,8 @@
       "source": "reference/managed-file-deployment.md"
     },
     "managed tool": {
-      "definition": "A CLI tool, dependency, or build tool governed by reference/tool-registry.md. Each gets setup scripts, platform lifecycle tracking, and a corresponding user skill. Standing orders and hooks enforce tool selection.",
-      "source": "reference/framework-adoption.md"
+      "definition": "A CLI tool, dependency, or build tool with an entry in the tool registry (/tool-registry skill). Each is installed through the tool support decision tree (a setup script, or an installer step that owns it inline), platform and environment lifecycle tracking, and a corresponding user skill. Standing orders and hooks enforce tool selection.",
+      "source": "reference/framework-adoption.md; /tool-registry skill; reference/tool-support-decision-tree.md (after M2)"
     },
     "observation": {
       "definition": "An incident schema field stating concrete facts about what was observed. Quote specific text, cite files and line numbers, name behaviors. No interpretation — facts only.",
@@ -332,8 +332,8 @@
       "source": "shared/claude-shared.md"
     },
     "verified": {
-      "definition": "Deployment outcome: deployed content matches source. Active confirmation that the file is correct — no write needed.",
-      "source": "reference/managed-file-deployment.md"
+      "definition": "Deployment outcome: deployed content matches source. Active confirmation that the file is correct — no write needed. Separate meaning: the 'verified' field of a knownPaths entry in the tool registry ('YYYY-MM-DD (vX.Y.Z)') records empirical path verification per the script-standards rule 'KnownPaths empirical verification', not this deployment outcome; entries without it are unverified and ignored.",
+      "source": "reference/managed-file-deployment.md; reference/tool-support-decision-tree.md section 6 (knownPaths field, after M2); decision G-verified"
     },
     "USO": {
       "abbreviationOf": "user standing order"
@@ -401,6 +401,51 @@
     "environment": {
       "definition": "Where and how an agent runs: an agent runtime (Claude Code, Cursor, claude.ai, ...) together with what hosts it. It is either local on a platform (e.g. Claude Code on Windows, Claude Code on macOS) or a hosted cloud agent service (e.g. Claude Code web, Cursor cloud agents, claude.ai). The environment provides the infrastructure the harness builds on (CLAUDE.md hierarchy, rules, skills, hooks, settings, commands, subagents, session management) and determines persistence, network and identity behavior. Environment-specific instructions live in an environment CLAUDE.md.",
       "source": "decision 2026-10-03 (session 3030c86a); reference/harness.md"
+    },
+    "tool adoption": {
+      "definition": "The /tool-adopt process that makes a managed tool supported on a platform and environment: an approved preferred method in the tool registry (running /tool-eval when there is none), the registry data its setup scripts need (after M2: the data the tool support decision tree reads), setup scripts in the aitools repo, installer and build integration, and verification. Runs after /tool-eval. Not the managed-file review choices '[a]ccept & adopt' and '[m]erge & adopt' (the deployed file, or an AI merge, copied back to the repo, the source of truth), and not framework 'adoption' (mapping a discipline's concepts into the harness).",
+      "source": "shared/skills/tool-adopt/SKILL.md; reference/tool-support-decision-tree.md (after M2)"
+    },
+    "install provenance": {
+      "definition": "Where the installed copy of a managed tool came from: the install method and upstream distribution (vendor installer, package manager formula or id, crate, or unknown) and who publishes it. Identified on a machine by the method's detection signature (its result is the install class in the tool support decision tree) and verified before adoption by the /tool-eval provenance checks (official endorsement, publisher, signing). Also called tool distribution provenance. Not 'provenance', the aitools component that tracks what every harness artifact is based on.",
+      "source": "/tool-eval skill; reference/tool-support-decision-tree.md sections 1 and 5 (after M2); decision G-provenance (plans/tool-support-and-machine-profile.md)"
+    },
+    "detection signature": {
+      "definition": "The typed, read-only probes on one install method in the tool registry (JSON key 'detection': one probe, or an array whose probes must all pass, such as brew-formula:<name>, winget:<id>, path:<glob>) that identify which method installed the binary a command resolves to. The library implements each probe kind; the registry never holds shell code. Not 'detection', the hook layer of three-layer governance.",
+      "source": "/tool-registry skill; reference/tool-support-decision-tree.md section 5 (after M2); decision C-14 (plans/tool-support-and-machine-profile.md)"
+    },
+    "machine id": {
+      "definition": "The platform's stable machine identifier (macOS IOPlatformUUID, Windows MachineGuid, Linux machine-id), stored raw (not hashed) as the machine id in a machine profile inside profile.json and matched by the machine resolver (scripts/aitools-profile.sh/.ps1) to choose this machine's machine profile. Hosted environments such as Claude Code web have none and match by environment. Not the user's identity (profile.json identity).",
+      "source": "reference/user-repo.md (after M3); decisions N-Q3, P-Q2, P-Q3 (plans/tool-support-and-machine-profile.md)"
+    },
+    "aitools config": {
+      "definition": "The aitools harness config, for short: all managed configuration data aitools deploys and keeps for a user, for every tool it manages. It includes Claude Code configuration (settings, CLAUDE.md, rules, skills, hooks), Cursor and Cursor CLI configuration, shell variables and aliases, and ~/.aitools/config.json itself (per-machine bootstrap pointers plus values derived from the profile). A standalone term, not a composed '<scope modifier> config'.",
+      "source": "decisions N-Q3 and G-userconfig (plans/tool-support-and-machine-profile.md); reference/user-repo.md"
+    },
+    "profile": {
+      "definition": "The user profile: profile.json in the user's dotprofile repo, holding the user's preferences, identity, and machine profiles. A machine profile is a field inside it (one entry of its 'profiles' object, keyed by machine alias), not a separate file. Not a shell profile (.zshrc, .bashrc, PowerShell $PROFILE), which is always called a shell profile.",
+      "source": "decision G-profile (plans/tool-support-and-machine-profile.md); reference/user-repo.md"
+    },
+    "recovered": {
+      "definition": "Deployment outcome: the existing file was not valid JSON, so the writer rebuilt it from the keys it could salvage plus freshly derived values, after backing up the invalid copy. Reported as WARN ('rebuilt (was invalid)'). Used for ~/.aitools/config.json by the installer config step today and by setup-user-config after M3.",
+      "source": "scripts/aitools-install.sh/.ps1 (config step, today); reference/user-repo.md 'Config Schema (v3)' and scripts/setup-user-config.sh/.ps1 (after M3); decision G-recovered (plans/tool-support-and-machine-profile.md)"
+    },
+    "tool exception": {
+      "definition": "A recorded per-machine decision to keep a non-preferred or unknown-source install of a managed tool instead of replacing it, made with [k]eep in the install-method menu and stored in this machine's machine profile under toolExceptions ({decision: keep, detected: {platform, method, path, version}, decidedAt, decidedBy, reason}). While it matches the detected method and path, setup scripts report OK <version> (kept), and do not prompt, update, or check its PATH resolution; the minimum-version check still runs.",
+      "source": "reference/tool-support-decision-tree.md section 8 (semantics, after M2); reference/user-repo.md (storage shape); decisions N-Q1, D-TS10 (plans/tool-support-and-machine-profile.md)",
+      "sourceDiscipline": "Software asset management (exception register)"
+    },
+    "update channel": {
+      "definition": "The release stream a managed tool's preferred install follows, set per tool in the tool registry (updateChannel, default latest-stable; channel list in reference/tool-support-decision-tree.md 'Update channels'). Every installer run (aitools install, or aitools sync running the installer) runs the preferred method's update command for its channel and verifies the result; it does not query upstream for the newest version number.",
+      "source": ".claude/rules/tool-lifecycle.md; reference/tool-support-decision-tree.md section 4 (after M2); decisions D-TS5, T-Q6 (plans/tool-support-and-machine-profile.md)"
+    },
+    "machine profile": {
+      "definition": "A field inside the profile (profile.json): one entry of its 'profiles' object, keyed by machine alias, holding one machine's (or one hosted environment's) per-machine overrides of identity name/company, machine id, and tool exceptions. Chosen on every run by the machine resolver (scripts/aitools-profile.sh/.ps1); never another machine's profile as a fallback. Not a separate file and not a shell profile (.zshrc, PowerShell $PROFILE).",
+      "source": "reference/user-repo.md (after M3); decisions G-profile, E-glossary-1, P-Q3 (plans/tool-support-and-machine-profile.md)"
+    },
+    "machine alias": {
+      "definition": "The key of a machine profile (for example nobul-mac). Chosen or registered at aitools user init (non-interactively with --alias) and cached per machine in ~/.aitools/config.json machineAlias, which is re-derived on every run. Not the base artifact 'alias' (a shell alias file).",
+      "source": "reference/user-repo.md (after M3); decision P-Q12 (plans/tool-support-and-machine-profile.md)"
     }
   }
 }

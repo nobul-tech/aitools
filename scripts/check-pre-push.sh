@@ -53,7 +53,9 @@ step_warn "1" "Pre-commit passed" "confirm pre-commit checklist was run for each
 # ---------------------------------------------------------------------------
 # 2. No scratch/sensitive files
 # ---------------------------------------------------------------------------
-blocklist_pattern='(chat\.txt|\.tmp$|\.env$|credentials|\.secret|scratch\.|temp\.|TODO\.txt)'
+# scratch.<ext> is limited to throwaway extensions so the user rule
+# shared/rules/scratch.md is not flagged (2026-10-21; keep in sync with .ps1).
+blocklist_pattern='(chat\.txt|\.tmp$|\.env$|credentials|\.secret|scratch\.(txt|sh|ps1|py|js|log|out|json)$|temp\.|TODO\.txt)'
 bad_files=$(echo "$PUSH_FILES" | grep -iE "$blocklist_pattern" || true)
 if [ -z "$bad_files" ]; then
     step_pass "2" "No scratch/sensitive files"

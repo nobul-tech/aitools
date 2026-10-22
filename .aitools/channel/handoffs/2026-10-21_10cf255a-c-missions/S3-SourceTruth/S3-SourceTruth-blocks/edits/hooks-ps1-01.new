@@ -1,0 +1,5 @@
+# Adopt target for manifest hooks: the file the hook is deployed from --
+# shared\hooks\<name>, or scripts\<name> for deploy-only helpers
+# (Resolve-HookSource). Never the dotprofile (SD-2, incident #80). The library
+# writes it.
+

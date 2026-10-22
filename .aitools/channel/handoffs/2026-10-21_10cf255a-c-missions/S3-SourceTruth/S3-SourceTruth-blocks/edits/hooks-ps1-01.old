@@ -1,0 +1,5 @@
+# Adopt target for manifest hooks: shared/hooks only (SD-2, incident #80;
+# reference/managed-file-deployment.md "Shell Script Deployment Detail").
+$sharedHooksDir = Join-Path $repoDir "shared\hooks"
+$hookAdoptLabel = ""
+if (Test-Path $sharedHooksDir) { $hookAdoptLabel = "aitools shared/hooks" }

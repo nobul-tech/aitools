@@ -1,0 +1,15 @@
+function Deploy-EmbeddedSkill {
+    param([string]$SkillName, [string]$DestBase, [string]$ToolName, [string]$Content)
+
+    $destDir = Join-Path $DestBase $SkillName
+    $dest = Join-Path $destDir "SKILL.md"
+
+    # No adopt target: the content here is the build-time embed, not a repo
+    # file (contract default #9), so adopt and merge are not offered.
+    $skillResult = Deploy-ManagedFile -Content $Content -DestPath $dest -ToolName $ToolName -ItemName $SkillName -AdoptPath ""
+
+    if ($skillResult -in @("created", "updated", "verified", "skipped", "failed", "accept & adopt")) {
+        # The tracker records the outcome (failed -> ERROR row).
+    }
+    Record-DeployOutcome -Outcome $skillResult -ToolName $ToolName -ItemName $SkillName
+}

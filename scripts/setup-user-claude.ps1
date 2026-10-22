@@ -197,45 +197,33 @@ $sharedContent
 "@
 
 # ---------------------------------------------------------------------------
-# Adopt deployed CLAUDE.md back to profile template.
-# Strips machine-specific footer and reverse-tokenizes profile values.
+# Adopt filter for CLAUDE.md (Deploy-ManagedFile -AdoptFilter): takes LOCAL
+# content, returns the dotprofile template. Strips the machine-specific footer
+# and reverse-tokenizes profile values, so the next run rebuilds the same
+# CLAUDE.md from the template and verifies it. Empty profile values are never
+# substituted (an empty pattern would match everywhere).
 # ---------------------------------------------------------------------------
-function Adopt-ClaudeMd {
-    param([string]$DeployedPath, [string]$DestPath)
-
-    try {
-        $deployed = Get-Content $DeployedPath -Raw -ErrorAction Stop
-    } catch {
-        LogError "Cannot read deployed CLAUDE.md: $_"
-        return $false
+$claudeMdAdoptFilter = {
+    param([string]$Deployed)
+    # Everything before ## Machine-Specific; trailing newlines removed (parity
+    # with claude_md_adopt_filter in setup-user-claude.sh)
+    $m = [regex]::Match($Deployed, '(?m)^## Machine-Specific')
+    if ($m.Success) {
+        $Deployed = $Deployed.Substring(0, $m.Index)
     }
-
-    # Strip ## Machine-Specific section to end
-    $idx = $deployed.IndexOf("`n## Machine-Specific")
-    if ($idx -ge 0) {
-        $deployed = $deployed.Substring(0, $idx).TrimEnd() + "`n"
-    }
-
-    # Reverse-substitute profile values back to {{PLACEHOLDER}} tokens
+    $Deployed = $Deployed -replace '[\r\n]+$', ''
     if ($profileName) {
-        $deployed = $deployed -replace [regex]::Escape($profileName), '{{PROFILE_NAME}}'
-        $deployed = $deployed -replace [regex]::Escape($profileCompany), '{{PROFILE_COMPANY}}'
-        $deployed = $deployed -replace [regex]::Escape($identityGitName), '{{IDENTITY_GIT_NAME}}'
-        $deployed = $deployed -replace [regex]::Escape($identityGitEmail), '{{IDENTITY_GIT_EMAIL}}'
+        foreach ($pair in @(
+                @($profileName, '{{PROFILE_NAME}}'),
+                @($profileCompany, '{{PROFILE_COMPANY}}'),
+                @($identityGitName, '{{IDENTITY_GIT_NAME}}'),
+                @($identityGitEmail, '{{IDENTITY_GIT_EMAIL}}'))) {
+            if ($pair[0]) {
+                $Deployed = $Deployed.Replace([string]$pair[0], [string]$pair[1])
+            }
+        }
     }
-
-    $destDir = Split-Path -Parent $DestPath
-    if (-not (Test-Path $destDir)) {
-        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-    }
-    Backup-File -FilePath $DestPath
-    $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
-    [System.IO.File]::WriteAllText($resolved, $deployed, [System.Text.UTF8Encoding]::new($false))
-    LogOk "Adopted CLAUDE.md to profile: $DestPath"
-    if ([Environment]::UserInteractive) {
-        [Console]::WriteLine("  Review: cd $(Split-Path -Parent $destDir) && git diff")
-    }
-    return $true
+    return $Deployed
 }
 
 if ($DryRun) {
@@ -265,40 +253,15 @@ if ($DryRun) {
     }
 } else {
     # --- Deploy CLAUDE.md via managed-file flow ---
-    $adoptLabel = ""
-    if ($userRepoPath) { $adoptLabel = "profile" }
-    $claudeResult = Deploy-ManagedFile -Content $content -DestPath $claudeMd -ToolName "claude.md" -ItemName "CLAUDE.md" -AdoptLabel $adoptLabel
+    # Adopt target: the dotprofile template (the source of truth when a user
+    # repo is configured). The library writes it, through $claudeMdAdoptFilter.
+    $claudeAdoptPath = ""
+    if ($userRepoPath) { $claudeAdoptPath = Join-Path $userRepoPath "claude\CLAUDE.md" }
+    $claudeResult = Deploy-ManagedFile -Content $content -DestPath $claudeMd -ToolName "claude.md" -ItemName "CLAUDE.md" `
+        -AdoptPath $claudeAdoptPath -AdoptFilter $claudeMdAdoptFilter
 
     switch ($claudeResult) {
-        "accept & adopt" {
-            # Validate
-            if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
-                LogError "Validation failed: $claudeMd is empty or missing"
-            } else {
-                $written = Get-Content $claudeMd -Raw
-                if ($written -notmatch '## Machine-Specific') {
-                    LogError "Validation failed: $claudeMd missing Machine-Specific section"
-                }
-                if ($written -notmatch '## Coaching|## Code Style|## Tool') {
-                    LogError "Validation failed: $claudeMd missing template body"
-                }
-            }
-            # Adopt back to profile
-            $adoptDest = Join-Path $userRepoPath "claude\CLAUDE.md"
-            if (Adopt-ClaudeMd -DeployedPath $claudeMd -DestPath $adoptDest) {
-                if ($errors -eq 0) {
-                    Write-Summary "OK" "claude.md" "accepted to profile"
-                } else {
-                    Write-Summary "ERROR" "claude.md" "validation failed"
-                }
-            } else {
-                Write-Summary "ERROR" "claude.md" "adopt failed"
-            }
-        }
-        "skipped" {
-            Write-Summary "WARN" "claude.md" "skipped (user review)"
-        }
-        { $_ -eq "created" -or $_ -eq "updated" } {
+        { $_ -eq "created" -or $_ -eq "updated" -or $_ -eq "accept & adopt" } {
             # --- BEGIN post-write validation (extracted by build-deploy) ---
             # Post-write validation: check structure AND content (not just a marker)
             if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
@@ -314,15 +277,24 @@ if ($DryRun) {
                 }
             }
             # --- END post-write validation (extracted by build-deploy) ---
-            if ($errors -eq 0) {
-                Write-Summary "OK" "claude.md" "$claudeResult"
-            } else {
+            if ($errors -ne 0) {
                 Write-Summary "ERROR" "claude.md" "validation failed"
+            } elseif ($claudeResult -eq "accept & adopt") {
+                Write-Summary "OK" "claude.md" "accepted to profile"
+            } else {
+                Write-Summary "OK" "claude.md" "$claudeResult"
             }
+        }
+        "skipped" {
+            Write-Summary "WARN" "claude.md" "skipped (user review)"
         }
         "verified" {
             Log "CLAUDE.md verified (no differences)"
             Write-Summary "OK" "claude.md" "verified"
+        }
+        "failed" {
+            # The library restored the files and logged the reason (LogError).
+            Write-Summary "ERROR" "claude.md" "deploy failed"
         }
     }
 }
@@ -393,8 +365,10 @@ if ($rulesSrc) {
         $errorsBefore = $errors
         foreach ($rf in $sourceRules) {
             $destFile = Join-Path $rulesDest $rf.Name
-            $ruleAdoptLabel = ""
-            if ($userRepoPath) { $ruleAdoptLabel = "profile" }
+            # Adopt target: the dotprofile rule (the file deployed from). Empty
+            # in the MDM deploy script (no user repo): adopt and merge not offered.
+            $ruleAdoptPath = ""
+            if ($userRepoPath) { $ruleAdoptPath = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name }
 
             try {
                 $ruleContent = Get-Content $rf.FullName -Raw -ErrorAction Stop
@@ -402,38 +376,24 @@ if ($rulesSrc) {
                 LogWarn "Cannot read source rule $($rf.Name): $_"
                 continue
             }
-            $ruleResult = Deploy-ManagedFile -Content $ruleContent -DestPath $destFile -ToolName "claude rules" -ItemName $rf.Name -AdoptLabel $ruleAdoptLabel
+            $ruleResult = Deploy-ManagedFile -Content $ruleContent -DestPath $destFile -ToolName "claude rules" -ItemName $rf.Name -AdoptPath $ruleAdoptPath
 
-            if ($ruleResult -eq "accept & adopt") {
-                $adoptRuleDest = Join-Path (Join-Path $userRepoPath "claude\rules") $rf.Name
-                $adoptRuleDir = Split-Path -Parent $adoptRuleDest
-                if (-not (Test-Path $adoptRuleDir)) {
-                    New-Item -ItemType Directory -Path $adoptRuleDir -Force | Out-Null
-                }
-                Copy-Item -Path $destFile -Destination $adoptRuleDest -Force -ErrorAction Stop
-                LogOk "Adopted rule to profile: $($rf.Name)"
-            }
-            if ($ruleResult -eq "skipped" -or $ruleResult -eq "verified" -or
-                $ruleResult -eq "created" -or $ruleResult -eq "updated") {
-                # No action needed -- tracker records the outcome
+            if ($ruleResult -in @("created", "updated", "verified", "accept & adopt", "skipped", "failed")) {
+                # The library wrote LOCAL and the adopt target itself; the
+                # tracker records every outcome (failed -> ERROR row).
             }
             Record-DeployOutcome -Outcome $ruleResult -ToolName "claude rules" -ItemName $rf.Name
-            # Write-back: sync merged content to dotprofile repo
+            # After a merge & adopt (the library already wrote the merge to the
+            # dotprofile), auto commit+push to keep the dotprofile in sync.
+            # Kept: commander confirmed 2026-10-21 (contract item #11).
             if ($ruleResult -eq "accept & adopt" -and $script:MergedContent -and $userRepoPath) {
-                $wbDest = Join-Path $userRepoPath "claude\rules\$($rf.Name)"
-                $wbDir = Split-Path -Parent $wbDest
-                if (-not (Test-Path $wbDir)) { New-Item -ItemType Directory -Path $wbDir -Force | Out-Null }
-                $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($wbDest)
-                [System.IO.File]::WriteAllText($resolved, "$($script:MergedContent)`n")
-                Log "Wrote merged $($rf.Name) back to $(Display-Path $wbDest)"
-                # Auto commit+push to keep dotprofile in sync
                 try {
                     Push-Location $userRepoPath
                     & git add "claude/rules/$($rf.Name)"
                     # Suppress git stderr noise; LASTEXITCODE checked on next line
                     & git diff --cached --quiet "claude/rules/$($rf.Name)" 2>$null
                     if ($LASTEXITCODE -ne 0) {
-                        # Has staged changes — commit and push
+                        # Has staged changes -- commit and push
                         & git commit -m "Sync merged $($rf.Name) from deploy"
                         if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
                         & git push
@@ -462,7 +422,8 @@ if ($rulesSrc) {
             }
         }
 
-        # Post-write validation: each deployed file is non-empty
+        # Post-write validation: each deployed file is non-empty (a file whose
+        # deploy failed is already reported; the library left it as it was)
         foreach ($rf in $sourceRules) {
             $destFile = Join-Path $rulesDest $rf.Name
             if ((Test-Path $destFile) -and (Get-Item $destFile).Length -eq 0) {
@@ -470,7 +431,11 @@ if ($rulesSrc) {
             }
         }
 
-        if ($errors -eq $errorsBefore) {
+        if ($script:dtFailed -gt 0) {
+            # Write-DeployTrackerSummary writes the ERROR row ("N failed")
+            Write-DeployTrackerSummary -ToolName "claude rules"
+            Log "Rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $rulesDest"
+        } elseif ($errors -eq $errorsBefore) {
             Write-DeployTrackerSummary -ToolName "claude rules"
             LogOk "Rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $rulesDest"
         } else {

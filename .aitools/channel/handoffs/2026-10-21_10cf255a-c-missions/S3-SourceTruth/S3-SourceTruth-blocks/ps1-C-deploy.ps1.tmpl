@@ -1,0 +1,333 @@
+# ---------------------------------------------------------------------------
+# Deploy one managed file. SOURCE is the source of truth ("Review choices"
+# above Prompt-DiffReview). Parity: deploy_managed_file in aitools-lib.sh.
+#
+# Params:
+#   -Content      content to deploy (SOURCE)
+#   -DestPath     deployed path (LOCAL). A name ending in .json is reviewed
+#                 field by field (Review-JsonFields).
+#   -ToolName     summary tool name (e.g. "claude rules")
+#   -ItemName     item name for log lines (e.g. "concurrent-agents.md")
+#   -AdoptPath    absolute path of the repo file that is the source of truth;
+#                 "" = adopt and merge are not offered
+#   -AdoptFilter  optional, text files only: scriptblock that takes LOCAL
+#                 content and returns the content the adopt target gets
+#                 (e.g. CLAUDE.md strips its machine footer). $null = copy.
+#
+# Returns "created", "updated", "verified", "accept & adopt", "skipped" or
+# "failed". On "failed" nothing is left half-written (snapshots restored) and
+# the reason is logged with LogError; the caller records the outcome
+# (Record-DeployOutcome, or its own ERROR row). Exits 2 on [x]abort.
+# Honors $DryRun (reports, writes nothing).
+# ---------------------------------------------------------------------------
+function Deploy-ManagedFile {
+    param(
+        [string]$Content,
+        [string]$DestPath,
+        [string]$ToolName,
+        [string]$ItemName,
+        [string]$AdoptPath = "",
+        [scriptblock]$AdoptFilter = $null
+    )
+
+    Write-ManagedStateNotice
+
+    # Normalize trailing newlines for a stable comparison (parity with the bash
+    # twin); every write adds exactly one back.
+    $Content = $Content -replace '[\r\n]+$', ''
+
+    # Dry run: report what would happen without writing
+    if ($DryRun) {
+        if (Test-Path -LiteralPath $DestPath) {
+            try {
+                $existing = Get-Content -LiteralPath $DestPath -Raw -ErrorAction Stop
+            } catch {
+                LogWarn "Cannot read $DestPath for the dry-run comparison: $_"
+                $existing = ""
+            }
+            $existing = "$existing" -replace '[\r\n]+$', ''
+            if ($existing -ceq $Content) {
+                Log "[DRY RUN] Unchanged: $ItemName"
+            } else {
+                Log "[DRY RUN] Would update: $ItemName -> $DestPath"
+            }
+        } else {
+            Log "[DRY RUN] Would create: $ItemName -> $DestPath"
+        }
+        return "verified"
+    }
+
+    # JSON: field-by-field review
+    if ($DestPath -like '*.json') {
+        $srcTmp = $null
+        try {
+            $srcTmp = [IO.Path]::GetTempFileName()
+            [IO.File]::WriteAllText($srcTmp, "$Content`n", [System.Text.UTF8Encoding]::new($false))
+        } catch {
+            LogError "Failed: ${ItemName}: could not write a temp file for the JSON review: $_"
+            if ($srcTmp) {
+                Remove-Item -LiteralPath $srcTmp -Force -ErrorAction SilentlyContinue
+                # ErrorAction exempt: temp file cleanup; the failure is already reported
+            }
+            return "failed"
+        }
+        $jsonResult = Review-JsonFields -SourceFile $srcTmp -DestPath $DestPath -AdoptPath $AdoptPath
+        Remove-Item -LiteralPath $srcTmp -Force -ErrorAction SilentlyContinue
+        # ErrorAction exempt: temp file cleanup; nothing depends on it
+        return $jsonResult
+    }
+
+    # New file: create
+    if (-not (Test-Path -LiteralPath $DestPath -PathType Leaf)) {
+        if (Write-ManagedFiles -LocalPath $DestPath -LocalContent $Content) {
+            LogOk "Created: $ItemName -> $DestPath"
+            return "created"
+        }
+        LogError "Failed: ${ItemName}: $($script:ManagedWriteError)"
+        return "failed"
+    }
+
+    try {
+        $existing = Get-Content -LiteralPath $DestPath -Raw -ErrorAction Stop
+    } catch {
+        LogError "Failed: ${ItemName}: cannot read ${DestPath}: $_"
+        return "failed"
+    }
+    $existing = "$existing" -replace '[\r\n]+$', ''
+    if ($existing -ceq $Content) {
+        return "verified"
+    }
+
+    # LOCAL differs from SOURCE: review (non-interactive / EOF / -Force -> overwrite)
+    $script:PdrAdoptTarget = $AdoptPath
+    $choice = Prompt-DiffReview -FilePath $DestPath -NewContent $Content `
+        -AdoptOffered ([bool]$AdoptPath) -CurrentContent $existing
+    $script:PdrAdoptTarget = ""
+
+    if ($choice -eq "skip") {
+        LogWarn "Skipped: $ItemName (local differs from source; reviewed again next run)"
+        return "skipped"
+    }
+    if ($choice -eq "failed") {
+        $mergeReason = if ($script:ManagedMergeError) { $script:ManagedMergeError } else { "AI merge failed" }
+        LogError "Failed: ${ItemName}: $mergeReason -- nothing written"
+        return "failed"
+    }
+
+    $localPath = $DestPath
+    $localOut = $Content
+    $repoPath = ""
+    $repoContent = ""
+    if ($choice -eq "adopt") {
+        $localPath = ""
+        $localOut = ""
+        $repoPath = $AdoptPath
+        $repoContent = $existing
+    } elseif ($choice -eq "merge") {
+        $localOut = "$($script:MergedContent)" -replace '[\r\n]+$', ''
+        $repoPath = $AdoptPath
+        $repoContent = $localOut
+    }
+
+    # The adopt target gets LOCAL (or the merge), passed through the filter if any
+    if ($repoPath -and $AdoptFilter) {
+        try {
+            $filtered = (& $AdoptFilter $repoContent) -join "`n"
+        } catch {
+            LogError "Failed: ${ItemName}: adopt filter failed -- nothing written: $_"
+            return "failed"
+        }
+        if ([string]::IsNullOrEmpty($filtered)) {
+            LogError "Failed: ${ItemName}: adopt filter returned nothing -- nothing written"
+            return "failed"
+        }
+        $repoContent = $filtered -replace '[\r\n]+$', ''
+    }
+
+    if (-not (Write-ManagedFiles -LocalPath $localPath -LocalContent $localOut -AdoptPath $repoPath -AdoptContent $repoContent)) {
+        LogError "Failed: ${ItemName}: $($script:ManagedWriteError) (files restored)"
+        return "failed"
+    }
+
+    if ($repoPath) {
+        LogOk "Accept & adopt: $ItemName -> $repoPath"
+        Write-ManagedAdoptNotice -Target $repoPath
+        return "accept & adopt"
+    }
+    LogOk "Updated: $ItemName -> $DestPath"
+    return "updated"
+}
+
+# ---------------------------------------------------------------------------
+# Review a JSON managed file field by field ("Review choices" above).
+# Parity: review_json_fields in aitools-lib.sh (same embedded node script).
+#
+# Params: -SourceFile (file holding the SOURCE JSON), -DestPath (LOCAL JSON),
+# -AdoptPath (repo JSON file that is the source of truth; "" = no adopt).
+# Returns one result per file by precedence failed > accept & adopt > skipped
+# > updated > verified: "created" (LOCAL was missing), "failed" (files
+# restored, LogError), "accept & adopt" (a field was adopted into AdoptPath;
+# overwrites chosen in the same run are written too), "skipped" (a field was
+# left differing), "updated" (fields overwritten from SOURCE), "verified"
+# (nothing written). Requires node. Exits 2 on [x]abort.
+# ---------------------------------------------------------------------------
+$script:ReviewJsonNode = @'
+__REVIEW_JSON_NODE__
+'@
+function Review-JsonFields {
+    param(
+        [string]$SourceFile,
+        [string]$DestPath,
+        [string]$AdoptPath = ""
+    )
+    $item = Split-Path -Leaf $DestPath
+
+    # Get-Command exempt: command-existence check with explicit failure branch
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+        LogError "Failed: ${item}: node is required for the JSON field review"
+        return "failed"
+    }
+
+    $work = Join-Path ([IO.Path]::GetTempPath()) ("aitools-jf-" + [guid]::NewGuid().ToString("N"))
+    try {
+        New-Item -ItemType Directory -Path $work -Force -ErrorAction Stop | Out-Null
+        $js = Join-Path $work "review.js"
+        [IO.File]::WriteAllText($js, $script:ReviewJsonNode, [System.Text.UTF8Encoding]::new($false))
+    } catch {
+        LogError "Failed: ${item}: could not create a work directory for the JSON review: $_"
+        return "failed"
+    }
+    $destResolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
+
+    # node writes every output file itself (UTF-8), so nothing passes through
+    # the console encoding (cross-platform-detail.md "PowerShell pipeline encoding").
+    if (-not (Test-Path -LiteralPath $DestPath -PathType Leaf)) {
+        $keysFile = Join-Path $work "keys.json"
+        $nodeErr = & node $js keys $SourceFile $keysFile 2>&1
+        $keysRc = $LASTEXITCODE
+        try {
+            if ($keysRc -ne 0) { throw "node exit ${keysRc}: $nodeErr" }
+            $srcJson = [IO.File]::ReadAllText($SourceFile, [Text.Encoding]::UTF8) -replace '[\r\n]+$', ''
+            $reqKeys = [IO.File]::ReadAllText($keysFile, [Text.Encoding]::UTF8).Trim()
+        } catch {
+            LogError "Failed: ${item}: cannot read the source JSON: $_"
+            Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+            # ErrorAction exempt: work directory cleanup; the failure is already reported
+            return "failed"
+        }
+        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+        # ErrorAction exempt: work directory cleanup; nothing depends on it
+        if (Write-ManagedFiles -LocalPath $DestPath -LocalContent $srcJson -LocalRequiredKeys $reqKeys) {
+            LogOk "Created: $item -> $DestPath"
+            return "created"
+        }
+        LogError "Failed: ${item}: $($script:ManagedWriteError)"
+        return "failed"
+    }
+
+    $planFile = Join-Path $work "plan.tsv"
+    $nodeErr = & node $js plan $SourceFile $destResolved $planFile 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        LogError "Failed: ${item}: field comparison failed (node exit $LASTEXITCODE): $nodeErr"
+        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+        # ErrorAction exempt: work directory cleanup; the failure is already reported
+        return "failed"
+    }
+    $planLines = @([IO.File]::ReadAllLines($planFile, [Text.Encoding]::UTF8) | Where-Object { $_ })
+    if ($planLines.Count -eq 0) {
+        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+        # ErrorAction exempt: work directory cleanup; nothing depends on it
+        return "verified"
+    }
+
+    # One review per differing field
+    $adoptOk = if ($AdoptPath) { "1" } else { "0" }
+    $canPrompt = ($env:AITOOLS_FORCE -ne "1") -and (-not $Force) -and (Test-InteractiveConsole)
+    $choices = [System.Collections.Generic.List[string]]::new()
+    foreach ($pl in $planLines) {
+        $f = $pl -split "`t"
+        $idx = $f[0]; $kind = $f[1]; $key = $f[2]; $lDisp = $f[3]; $sDisp = $f[4]
+        if ($kind -eq "local-only") {
+            # A field only in LOCAL: [a]dopt / [s]kip / [x]abort, no overwrite.
+            # Without an adopt target or a console it is kept, no prompt.
+            if ($adoptOk -eq "1" -and $canPrompt) {
+                $choice = Prompt-JsonFieldReview -Leaf $key -Current $lDisp -Proposed "(not in source)" `
+                    -SourceLabel "source" -AdoptAllowed "1" -LocalLabel "local" -OverwriteAllowed "0"
+            } else {
+                LogDetail "${item}: $key only in local -- kept"
+                $choice = "keep"
+            }
+        } else {
+            $choice = Prompt-JsonFieldReview -Leaf $key -Current $lDisp -Proposed $sDisp `
+                -SourceLabel "source" -AdoptAllowed $adoptOk -LocalLabel "local"
+        }
+        $choices.Add("$idx`t$choice")
+    }
+    $choicesFile = Join-Path $work "choices.tsv"
+    $localOutFile = Join-Path $work "local.out"
+    $adoptOutFile = Join-Path $work "adopt.out"
+    $resultFile = Join-Path $work "result.txt"
+    $reqLocalFile = Join-Path $work "req-local.json"
+    $reqAdoptFile = Join-Path $work "req-adopt.json"
+    try {
+        [IO.File]::WriteAllText($choicesFile, (($choices -join "`n") + "`n"), [System.Text.UTF8Encoding]::new($false))
+    } catch {
+        LogError "Failed: ${item}: could not record the field choices: $_"
+        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+        # ErrorAction exempt: work directory cleanup; the failure is already reported
+        return "failed"
+    }
+
+    # "-" = no adopt target (an empty argument can be dropped by native-argument passing)
+    $adoptArg = if ($AdoptPath) { $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($AdoptPath) } else { "-" }
+    $nodeErr = & node $js apply $SourceFile $destResolved $adoptArg $choicesFile $localOutFile $adoptOutFile $resultFile $reqLocalFile $reqAdoptFile 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        LogError "Failed: ${item}: applying the field choices failed (node exit $LASTEXITCODE): $nodeErr"
+        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+        # ErrorAction exempt: work directory cleanup; the failure is already reported
+        return "failed"
+    }
+    try {
+        $counts = [IO.File]::ReadAllText($resultFile, [Text.Encoding]::UTF8).Trim()
+        $cLocal = [IO.File]::ReadAllText($localOutFile, [Text.Encoding]::UTF8) -replace '[\r\n]+$', ''
+        $cAdopt = [IO.File]::ReadAllText($adoptOutFile, [Text.Encoding]::UTF8) -replace '[\r\n]+$', ''
+        $rLocal = [IO.File]::ReadAllText($reqLocalFile, [Text.Encoding]::UTF8).Trim()
+        $rAdopt = [IO.File]::ReadAllText($reqAdoptFile, [Text.Encoding]::UTF8).Trim()
+    } catch {
+        LogError "Failed: ${item}: could not read the field review result: $_"
+        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+        # ErrorAction exempt: work directory cleanup; the failure is already reported
+        return "failed"
+    }
+    Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+    # ErrorAction exempt: work directory cleanup; nothing depends on it
+    LogDetail "${item}: field review $counts"
+    $nOver = 0; $nAdopt = 0; $nSkip = 0
+    if ($counts -match 'over=(\d+)') { $nOver = [int]$Matches[1] }
+    if ($counts -match 'adopt=(\d+)') { $nAdopt = [int]$Matches[1] }
+    if ($counts -match 'skip=(\d+)') { $nSkip = [int]$Matches[1] }
+
+    $pLocal = if ($cLocal) { $DestPath } else { "" }
+    $pAdopt = if ($cAdopt) { $AdoptPath } else { "" }
+    if ($pLocal -or $pAdopt) {
+        if (-not (Write-ManagedFiles -LocalPath $pLocal -LocalContent $cLocal -AdoptPath $pAdopt -AdoptContent $cAdopt `
+                -LocalRequiredKeys $rLocal -AdoptRequiredKeys $rAdopt)) {
+            LogError "Failed: ${item}: $($script:ManagedWriteError) (files restored)"
+            return "failed"
+        }
+    }
+    if ($nOver -gt 0) {
+        LogOk "Updated: $item -> $DestPath ($nOver field(s) from source)"
+    }
+    if ($nAdopt -gt 0) {
+        LogOk "Accept & adopt: $item -> $AdoptPath ($nAdopt field(s))"
+        Write-ManagedAdoptNotice -Target $AdoptPath
+    }
+    if ($nSkip -gt 0) {
+        LogWarn "Skipped: $item ($nSkip field(s) differ from source; reviewed again next run)"
+    }
+    if ($nAdopt -gt 0) { return "accept & adopt" }
+    if ($nSkip -gt 0) { return "skipped" }
+    if ($nOver -gt 0) { return "updated" }
+    return "verified"
+}

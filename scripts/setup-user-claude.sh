@@ -150,37 +150,28 @@ NEW_CONTENT="${SHARED_CONTENT}
 - Shell: $(basename "$SHELL")"
 
 # ---------------------------------------------------------------------------
-# Adopt deployed CLAUDE.md back to profile template.
-# Strips machine-specific footer and reverse-tokenizes profile values.
+# Adopt filter for CLAUDE.md (deploy_managed_file ADOPT_FILTER): LOCAL content
+# on stdin -> the dotprofile template on stdout. Strips the machine-specific
+# footer and reverse-tokenizes profile values, so the next run rebuilds the
+# same CLAUDE.md from the template and verifies it. Empty profile values are
+# never substituted (an empty pattern would match everywhere).
 # ---------------------------------------------------------------------------
-adopt_claude_md() {
-    local deployed="$1"
-    local dest="$2"
-
-    # Read deployed content, strip ## Machine-Specific section to end
+claude_md_adopt_filter() {
     local content
-    content=$(perl -pe 'last if /^## Machine-Specific/' "$deployed")
-    # Remove trailing blank lines
-    content=$(printf '%s' "$content" | perl -0777 -pe 's/\n+$/\n/')
-
-    # Reverse-substitute profile values back to {{PLACEHOLDER}} tokens
+    # Everything before ## Machine-Specific; trailing blank lines removed
+    content=$(perl -pe 'last if /^## Machine-Specific/')
+    content=$(printf '%s' "$content" | perl -0777 -pe 's/\n+\z//')
     if [ -n "${PROFILE_NAME:-}" ]; then
-        content=$(printf '%s' "$content" | perl -pe "
-            s/\\Q${PROFILE_NAME}\\E/{{PROFILE_NAME}}/g;
-            s/\\Q${PROFILE_COMPANY}\\E/{{PROFILE_COMPANY}}/g;
-            s/\\Q${IDENTITY_GIT_NAME}\\E/{{IDENTITY_GIT_NAME}}/g;
-            s/\\Q${IDENTITY_GIT_EMAIL}\\E/{{IDENTITY_GIT_EMAIL}}/g;
-        ")
+        content=$(printf '%s' "$content" | \
+            AMF_PROFILE_NAME="$PROFILE_NAME" AMF_PROFILE_COMPANY="$PROFILE_COMPANY" \
+            AMF_IDENTITY_GIT_NAME="$IDENTITY_GIT_NAME" AMF_IDENTITY_GIT_EMAIL="$IDENTITY_GIT_EMAIL" \
+            perl -pe 'for my $k (qw(PROFILE_NAME PROFILE_COMPANY IDENTITY_GIT_NAME IDENTITY_GIT_EMAIL)) {
+                my $v = $ENV{"AMF_$k"};
+                next unless defined $v && length $v;
+                s/\Q$v\E/"{{" . $k . "}}"/ge;
+            }')
     fi
-
-    mkdir -p "$(dirname "$dest")"
-    backup_file "$dest"
-    printf '%s\n' "$content" > "$dest"
-    log_ok "Adopted CLAUDE.md to profile: $(display_path "$dest")"
-    if [ -c /dev/tty ]; then
-        printf '  Review: cd %s && git diff\n' \
-            "$(display_path "$(dirname "$dest")/..")" > /dev/tty
-    fi
+    printf '%s\n' "$content"
 }
 
 if [ "$DRY_RUN" = "true" ]; then
@@ -208,32 +199,16 @@ if [ "$DRY_RUN" = "true" ]; then
     fi
 else
     # --- Deploy CLAUDE.md via managed-file flow ---
-    _adopt_label=""
+    # Adopt target: the dotprofile template (the source of truth when a user
+    # repo is configured). The library writes it, through claude_md_adopt_filter.
+    _claude_adopt_path=""
     if [ -n "${USER_REPO_PATH:-}" ]; then
-        _adopt_label="profile"
+        _claude_adopt_path="$USER_REPO_PATH/claude/CLAUDE.md"
     fi
-    deploy_managed_file "$NEW_CONTENT" "$CLAUDE_MD" "claude.md" "CLAUDE.md" "$_adopt_label"
+    deploy_managed_file "$NEW_CONTENT" "$CLAUDE_MD" "claude.md" "CLAUDE.md" "$_claude_adopt_path" "claude_md_adopt_filter"
 
     case "$MANAGED_FILE_RESULT" in
-        "accept & adopt")
-            if [ ! -s "$CLAUDE_MD" ]; then
-                log_error "Validation failed: $CLAUDE_MD is empty or missing"
-            elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
-                log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
-            elif ! grep -qE "## (Coaching|Code Style|Tool)" "$CLAUDE_MD"; then
-                log_error "Validation failed: $CLAUDE_MD missing template body"
-            fi
-            adopt_claude_md "$CLAUDE_MD" "$USER_REPO_PATH/claude/CLAUDE.md"
-            if [ "$ERRORS" -eq 0 ]; then
-                write_summary OK "claude.md" "accepted to profile"
-            else
-                write_summary ERROR "claude.md" "validation failed"
-            fi
-            ;;
-        skipped)
-            write_summary WARN "claude.md" "skipped (user review)"
-            ;;
-        created|updated)
+        created|updated|"accept & adopt")
             # --- BEGIN post-write validation (extracted by build-deploy) ---
             # Post-write validation: check structure AND content (not just a marker)
             if [ ! -s "$CLAUDE_MD" ]; then
@@ -245,15 +220,24 @@ else
                 log_error "Validation failed: $CLAUDE_MD missing template body (only footer present?)"
             fi
             # --- END post-write validation (extracted by build-deploy) ---
-            if [ "$ERRORS" -eq 0 ]; then
-                write_summary OK "claude.md" "$MANAGED_FILE_RESULT"
-            else
+            if [ "$ERRORS" -ne 0 ]; then
                 write_summary ERROR "claude.md" "validation failed"
+            elif [ "$MANAGED_FILE_RESULT" = "accept & adopt" ]; then
+                write_summary OK "claude.md" "accepted to profile"
+            else
+                write_summary OK "claude.md" "$MANAGED_FILE_RESULT"
             fi
+            ;;
+        skipped)
+            write_summary WARN "claude.md" "skipped (user review)"
             ;;
         verified)
             log "CLAUDE.md verified (no differences)"
             write_summary OK "claude.md" "verified"
+            ;;
+        failed)
+            # The library restored the files and logged the reason (log_error).
+            write_summary ERROR "claude.md" "deploy failed"
             ;;
     esac
 fi
@@ -314,30 +298,25 @@ if [ -n "$RULES_SRC" ]; then
         for rule_file in "$RULES_SRC"/*.md; do
             [ -f "$rule_file" ] || continue
             rule_name=$(basename "$rule_file")
-            _adopt_label=""
+            # Adopt target: the dotprofile rule (the file deployed from). Empty
+            # in the MDM deploy script (no user repo): adopt and merge not offered.
+            _rule_adopt_path=""
             if [ -n "${USER_REPO_PATH:-}" ]; then
-                _adopt_label="profile"
+                _rule_adopt_path="$USER_REPO_PATH/claude/rules/$rule_name"
             fi
-            deploy_managed_file "$(cat "$rule_file")" "$RULES_DEST/$rule_name" "claude rules" "$rule_name" "$_adopt_label"
+            deploy_managed_file "$(cat "$rule_file")" "$RULES_DEST/$rule_name" "claude rules" "$rule_name" "$_rule_adopt_path"
 
             case "$MANAGED_FILE_RESULT" in
-                "accept & adopt")
-                    mkdir -p "$USER_REPO_PATH/claude/rules"
-                    cp "$RULES_DEST/$rule_name" "$USER_REPO_PATH/claude/rules/$rule_name"
-                    log_ok "Adopted rule to profile: $rule_name"
-                    ;;
-                skipped|verified|created|updated)
-                    # No action needed — tracker records the outcome
+                created|updated|verified|"accept & adopt"|skipped|failed)
+                    # The library wrote LOCAL and the adopt target itself; the
+                    # tracker records every outcome (failed -> ERROR row).
                     ;;
             esac
             deploy_tracker_record "$MANAGED_FILE_RESULT" "claude rules" "$rule_name"
-            # Write-back: sync merged content to dotprofile repo
+            # After a merge & adopt (the library already wrote the merge to the
+            # dotprofile), auto commit+push to keep the dotprofile in sync.
+            # Kept: commander confirmed 2026-10-21 (contract item #11).
             if [ "$MANAGED_FILE_RESULT" = "accept & adopt" ] && [ -n "${MERGED_CONTENT:-}" ] && [ -n "${USER_REPO_PATH:-}" ]; then
-                wb_dest="$USER_REPO_PATH/claude/rules/$rule_name"
-                mkdir -p "$(dirname "$wb_dest")"
-                printf '%s\n' "$MERGED_CONTENT" > "$wb_dest"
-                log "Wrote merged $rule_name back to $(display_path "$wb_dest")"
-                # Auto commit+push to keep dotprofile in sync
                 # Suppress git stderr noise; failure handled by if/else branches
                 if (cd "$USER_REPO_PATH" && \
                     git add "claude/rules/$rule_name" && \
@@ -370,16 +349,21 @@ if [ -n "$RULES_SRC" ]; then
             done
         fi
 
-        # Post-write validation: each deployed file is non-empty
+        # Post-write validation: each deployed file is non-empty (a file whose
+        # deploy failed is already reported; the library left it as it was)
         for rule_file in "$RULES_SRC"/*.md; do
             [ -f "$rule_file" ] || continue
             rule_name=$(basename "$rule_file")
-            if [ ! -s "$RULES_DEST/$rule_name" ]; then
+            if [ -f "$RULES_DEST/$rule_name" ] && [ ! -s "$RULES_DEST/$rule_name" ]; then
                 log_error "Validation failed: $rule_name is empty after deploy"
             fi
         done
 
-        if [ "$ERRORS" -eq "$ERRORS_BEFORE_RULES" ]; then
+        if [ "$_DT_FAILED" -gt 0 ]; then
+            # deploy_tracker_summary writes the ERROR row ("N failed")
+            deploy_tracker_summary "claude rules"
+            log "Rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$RULES_DEST")"
+        elif [ "$ERRORS" -eq "$ERRORS_BEFORE_RULES" ]; then
             deploy_tracker_summary "claude rules"
             log_ok "Rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$RULES_DEST")"
         else
