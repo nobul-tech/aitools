@@ -1,0 +1,8 @@
+Housekeeping: gitignore project MCP configs; commit harvested artifacts
+
+- .gitignore: ignore .mcp.json and .cursor/mcp.json (machine-local; they
+  can embed API keys in server URLs).
+- harvesting/: commit session artifacts and harvest-manifest.json as-is
+  (commander decision, 2026-10-21).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

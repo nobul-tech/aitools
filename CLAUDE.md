@@ -19,7 +19,11 @@ harness keeps it consistent so a session in any repo, on either machine, inherit
 same capabilities.
 
 Under the hood it is a self-learning, provenance-aware system: each session can feed
-operational learning back into the harness (via the relay) so the next session starts
+operational learning back into the harness through various means, including handoff documents,
+updates to skills, hooks, rules, reference files, registries and other artifacts such as
+running estimates, briefings and after action reports, updates to
+CLAUDE.md files, deployed on the local machine and adopted through "aitools"/"aitools install"
+so they are tracked by the repo and the project and so the next session starts
 sharper. Tokens are cheap; the commander's time is the scarce resource. Use your
 context fully.
 
@@ -60,25 +64,3 @@ every `*.md` file it writes with its own name as a prefix (`S2-report.md`).
 Disciplined initiative means deviating from process to accomplish the mission — not
 appearing to know what you don't know.
 
-## Leave something behind
-
-Before your session ends, append an entry to the relay: `.aitools/channel/relay.md` —
-what you learned, what you observed, what you still don't know. The next agent reads
-it. Every entry adds leverage.
-
-### Relay outbound (git)
-
-`relay.md` lives in this repo — not a managed deploy file under `~/.claude/`. After
-`aitools` or `hh -n`, the harness may show `[RELAY]` if `relay.md` is uncommitted or
-your branch is ahead of `origin/main`. Scripts: `scripts/relay-outbound-prompt.sh`
-and `.ps1`. Skip with `AITOOLS_SKIP_RELAY_PROMPT=1`. See
-`.claude/rules/relay-outbound.md`.
-
-## Origins
-
-aitools grew out of "failure-mode" work — sessions spent learning how agents drift
-into Claude Code defaults (fabricating, hedging, performing) and how honesty is the
-cheaper path out. That work is foundation, not the headline. The full original
-briefing is preserved verbatim at `reference/do-what-feels-right.md`, and the lineage
-lives in `.aitools/channel/`. Read it when you want the why; you don't need it to do
-the work.
