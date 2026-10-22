@@ -118,7 +118,7 @@
       "source": "GATE/S3-Gate-B-review.md B-01 and probe table; GATE/S3-Gate-drafts/reference/tool-support-decision-tree.md section 7.5",
       "kind": "question",
       "status": "approved",
-      "statusNote": "Commander, 2026-10-21 (mission packet section 6). Rev 5 section 7.5 applies it to all four runners, including deploy_configs / Deploy-Configs",
+      "statusNote": "Commander, 2026-10-21 (mission packet section 6). Rev 5 section 7.5 applies it to every launch site, including deploy_configs / Deploy-Configs, aitools user init and bootstrap",
       "changed": "changed"
     },
     {
@@ -149,7 +149,7 @@
         "Send back with changes"
       ],
       "recommendation": "Approve rev 5",
-      "why": "Rev 4 made only the installers export the abort marker. Most managed-file [x]abort choices happen in setup-user-* scripts launched by deploy_configs (plain 'aitools' and 'aitools gitpull'), which exported nothing, so an abort there would still be an ERROR 'script failed (exit 2)' and the run would continue. Rev 5 covers all four runners, defines the unset-marker case, keeps the entry point from reading deploy_configs' error count as an abort, and fixes the generator wording. The intent statement is unchanged",
+      "why": "Rev 4 made only the installers export the abort marker. Most managed-file [x]abort choices happen in setup-user-* scripts launched by deploy_configs (plain 'aitools' and 'aitools gitpull'), which exported nothing, so an abort there would still be an ERROR 'script failed (exit 2)' and the run would continue. Rev 5 covers every launch site (the four runners, plus 'aitools user init' and bootstrap, found by S3-GateFix-B), defines the unset-marker case, keeps the entry point from reading deploy_configs' error count as an abort, and fixes the generator wording. It also merges the B-pass majors: bash helpers return results in globals, not on stdout (a $(...) subshell dropped WARNINGS and TOOL_UPDATE_STATE in a probe); Windows T2/T7/RP use the persistent PATH; RP compares file identity (-ef) and realpaths use /bin/realpath, because perl abs_path keeps the caller's case on APFS. The intent statement is unchanged",
       "blocks": "Gate row R1; every M2 batch",
       "source": "FIX/S3-GateFix-rev5-changelog.md; FIX/S3-GateFix-B-review.md; scripts/aitools deploy_configs ('return $errors'); scripts/aitools.ps1 Deploy-Configs",
       "changed": "new"
@@ -1230,10 +1230,11 @@
         "Fix before approval"
       ],
       "recommendation": "Accept",
-      "why": "S3-Gate-A A-05..A-16 (A-08/A-09 are handled by row 16) and S3-Gate-B B-07, B-08 (Windows guard roots), B-10..B-13. One affects a stated fact: rev 4 section 3 still says show_summary keeps one row per tool, but the installer's 'setup-<x>' row and the script's '<label>' row both show (A-05)",
+      "why": "S3-Gate-A A-05..A-16 (A-08/A-09 are handled by row 16) and S3-Gate-B B-07, B-08 (Windows guard roots), B-11..B-13. B-10 is fixed in rev 5 (Get-Command -First 1), and B-07's APFS point is superseded by rev 5's case-insensitive compare plus file identity (S3-GateFix-B GB-05). One affects a stated fact: section 3 still says show_summary keeps one row per tool, but the installer's 'setup-<x>' row and the script's '<label>' row both show (A-05)",
       "blocks": "nothing",
       "source": "GATE/S3-Gate-rev4-changelog.md 'Findings not applied'",
-      "kind": "question"
+      "kind": "question",
+      "changed": "changed"
     },
     {
       "id": "E-S4-7",
@@ -1423,7 +1424,7 @@
       "kind": "context",
       "section": "k",
       "title": "D-TS13 approved (2026-10-21): exit 2 is a user abort only with the abort marker",
-      "text": "An [x]abort exits 2 AND writes an abort marker; runners treat exit 2 as a user abort only when the marker exists. Rev 5 section 7.5 names the four runners (validate_and_run, Invoke-ValidatedScript, deploy_configs, Deploy-Configs), has the entry points create the marker path for every run, defines that a script run without AITOOLS_ABORT_FILE still exits 2 but writes nothing (and its caller treats exit 2 as a failure), and has the entry point decide 'aborted' from the marker, never from deploy_configs' return value (an error count). The library half (write the line only when AITOOLS_ABORT_FILE is set) is mission SOURCE-TRUTH's.",
+      "text": "An [x]abort exits 2 AND writes an abort marker; runners treat exit 2 as a user abort only when the marker exists. Rev 5 section 7.5 names every launch site (the runners validate_and_run, Invoke-ValidatedScript, deploy_configs, Deploy-Configs, plus 'aitools user init' and bootstrap.sh/.ps1), has the first launch site in a run create the marker path and only it delete the file, defines that a script run without AITOOLS_ABORT_FILE still exits 2 but writes nothing (and its caller treats exit 2 as a failure), and has the entry point decide 'aborted' from the marker, never from deploy_configs' return value (an error count). The library half (write the line only when AITOOLS_ABORT_FILE is set) is mission SOURCE-TRUTH's.",
       "source": "mission packet section 6; FIX/S3-GateFix-drafts/reference/tool-support-decision-tree.md section 7.5"
     },
     {
@@ -1433,6 +1434,21 @@
       "title": "Managed-file model approved (2026-10-21)",
       "text": "SOURCE is the source of truth; no ancestor, no deploy state. One review menu: [o]verwrite / [a]ccept & adopt / [m]erge & adopt (AI merge, text only) / [s]kip / [x]abort (unchanged, exit 2). Adopt and merge are copied to the repo immediately by the library. JSON is reviewed field by field and SOURCE owns every field. Before a write: back up; after: validate; on failure: restore, log, ERROR row, continue. Checked against it: rev 5 (T6 note 'force/non-interactive = overwrite', section 7.5 menu names, the section 7 helper-name note) and the tool-adopt, tool-eval, tool-registry and framework-tool-lifecycle drafts. The tool-adopt draft and the 'tool adoption' glossary text said '[a]dopt' and were fixed (TA-SKILL, TA-GLOSSARY). /tool-eval, /tool-registry and the framework draft do not describe adopt or merge. One mirror still conflicts: known defect E-mdc-model.",
       "source": "mission packet section 6; .claude/worktrees/mfchoices/.claude/rules/agentic-standards.md 'Managed-file review choices and merge' (branch docs/managed-file-choices, not merged)"
+    },
+    {
+      "id": "E-rev5-minors",
+      "kind": "question",
+      "section": "e",
+      "question": "Rev 5 leaves some S3-GateFix-B minors open. Accept them as known defects for M2 to settle?",
+      "options": [
+        "Accept",
+        "Fix before approval"
+      ],
+      "recommendation": "Accept",
+      "why": "Applied in rev 5: GB-01..GB-05 (majors), GB-07 (only the marker's creator deletes it; re-exec), GB-08 (cygpath -m at creation; GetTempFileName fallback), GB-09 (read with [ -s ], guarded truncation), GB-10 (explicit exit, check 12), GB-11 (3.2 rule covers every script), GB-15 ($script:DeployErrors), O-1 (tool_support_run is the one helper that returns 2), and S3-Gate-B B-10 (Get-Command -First 1). Open: GB-06 (section 8 exception match by file identity, done in aitools-profile.js), GB-12 (the no-node [k]eep ACTION names the wrong remedy), GB-13 (aitools.ps1 hard-codes one Git Bash path; bin\\bash.exe vs usr\\bin\\bash.exe), GB-14 second half (macOS login PATH comes from setup-user-shell, not the process PATH), O-2 (abort logs error in managed-file menus, warn in the tool menu), O-3 (abort inside sync_managed_json leaves temp files; library side, SOURCE-TRUTH). Every Windows claim is UNVERIFIED (no Windows machine)",
+      "blocks": "nothing",
+      "source": "FIX/S3-GateFix-B-review.md; FIX/S3-GateFix-rev5-changelog.md",
+      "changed": "new"
     },
     {
       "id": "E-node-corrupt",

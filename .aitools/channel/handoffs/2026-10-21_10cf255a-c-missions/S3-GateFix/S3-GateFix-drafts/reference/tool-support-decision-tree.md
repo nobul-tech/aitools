@@ -45,7 +45,7 @@ check step, reviewers of setup-script changes.
 | update channel | The release stream a preferred install follows (section 4) |
 | interactive | `tty_interactive` / `Test-InteractiveConsole` is true AND `AITOOLS_FORCE` is not `1` AND `AITOOLS_DRY_RUN` is not `1` |
 | abort marker | The file named by `AITOOLS_ABORT_FILE` that an `[x]abort` choice writes before the script exits 2; exit 2 is a user abort only when the runner exported the marker path and the marker is non-empty (section 7.5, D-TS13) |
-| runner | A loop that launches setup scripts and reads their exit codes: `validate_and_run` / `Invoke-ValidatedScript` in the installers, and `deploy_configs` / `Deploy-Configs` in the entry points `scripts/aitools` / `aitools.ps1` (section 7.5) |
+| runner | A loop that launches setup scripts and reads their exit codes: `validate_and_run` / `Invoke-ValidatedScript` in the installers, and `deploy_configs` / `Deploy-Configs` in the entry points `scripts/aitools` / `aitools.ps1`. Section 7.5 also binds the other launch sites (`aitools user init`, `bootstrap.sh` / `.ps1`) |
 
 "Install class" is used instead of "provenance" (a governed term for an aitools
 component). The existing helpers `detect_go_provenance` / `Get-GoProvenance`
@@ -132,7 +132,7 @@ with detail `dry-run: <leaf>`.
 |------|------|--------|
 | T0 | Status = `lifecycle.environments.<environment>.status` (non-`local` environments only) when present, else `lifecycle.platformStatus.<platform>`. `n/a` → NA; `evaluating` → EVALUATING | D-CHR1; D-TS12 |
 | T1 | Candidates = `install.<platform>[]` entries with `preferred: true` whose `family` (Linux) matches the detected family or is absent, and whose `environments` contains the current environment or is absent. Specificity = the number of explicit dimensions (`environments`, `family`) that match; the highest wins. Zero candidates = NO-METHOD; two with equal specificity = NO-METHOD with detail `two methods for <platform>` (a registry conflict, not a missing method; check 1 fails either way) | D-TS1, D-TS2 |
-| T2 | Resolve the command (`hash -r` + `command -v` / `Refresh-Path` + `Get-Command -CommandType Application`). When the tool's `resolveBy` is `knownPaths` (section 6), resolution is the first verified known path that exists instead of PATH. Probe order: the preferred method first; then every method whose detection uses a package-database probe (`brew-*`, `dpkg`, `winget`, `choco`, `scoop`, `pkgutil`, `uv-tool`, `cargo-crate`, `npm-global`); then path-only methods; registry order within each group. First match wins; no match = `unknown` | D-TS3; review D-04; `@.claude/rules/cross-platform.md` "Windows: managed bash" |
+| T2 | Resolve the command (`hash -r` + `command -v` / `Refresh-Path` + `Get-Command -CommandType Application`). When the tool's `resolveBy` is `knownPaths` (section 6), resolution is the first verified known path that exists instead of PATH. Probe order: the preferred method first; then every method whose detection uses a package-database probe (`brew-*`, `dpkg`, `winget`, `choco`, `scoop`, `pkgutil`, `uv-tool`, `cargo-crate`, `npm-global`); then path-only methods; registry order within each group. First match wins; no match = `unknown`. On Windows (PowerShell) the PATH searched by T2, T7 and RP is the persistent Machine PATH then User PATH, each entry environment-expanded, not the inherited process PATH: a PS1 setup script launched from Git Bash `aitools` inherits Git's `usr\bin` ahead of the managed directories, and `Refresh-Path` only adds entries, so the process PATH would give SHADOWED under one entry point and OK under the other (S3-GateFix-B GB-04; UNVERIFIED, read not run). `Get-Command` takes the first result (`Select-Object -First 1`) | D-TS3; review D-04; `@.claude/rules/cross-platform.md` "Windows: managed bash" |
 | T3 | Only `knownPaths` entries recorded as verified (section 6) count. A hit = installed the preferred way but off PATH: do not reinstall; T7 reports NOT-ON-PATH | script-standards-detail "Standard 4" |
 | P | `kind` `system` / `bundled` are not installable: absent → PREREQ `not provided by <platform or environment>`. Otherwise the method's manager is on PATH and `check_build_prereqs` / `Check-BuildPrereqs` passes for source builds. No fallback to another method (Q4). The same checks run before R1 (node RQ) and before a T4 update that builds from source: a failure there is REPLACE-FAIL `(prereq missing)` with the PREREQ ACTION (the old copy is kept), or for T4 a failed update (warn, continue to T7) | `@.claude/rules/script-standards.md` "Build prerequisite validation" |
 | I | Success judged by the binary the method installs, matched by its detection probe, not by output text | F2 |
@@ -140,7 +140,7 @@ with detail `dry-run: <leaf>`.
 | T5 | Section 8 match rule. A stale exception is logged (info) and ignored; continue at T6 | D-TS4 |
 | T6 | Non-interactive, `--force`, and dry run change nothing. This deliberately differs from managed-file menus (force/non-interactive = overwrite) | D-TS3; `interactive-menus.md` |
 | R1 | Runs only after the RQ checks pass. Install the preferred method, or update an existing shadowed preferred copy; verify its binary; `tool_install` / `tool_update` print the preferred binary path (section 7.2). Failure leaves the old copy untouched | D-TS3; F1; GitHub issue #12 |
-| RP | Before any removal: some directory on PATH (Windows: on the persistent User or Machine PATH) holds `<cmd>` whose realpath equals the realpath of the preferred binary path R1 printed, AND that realpath differs from the old copy's realpath. A linked Homebrew formula passes through its `{brew_prefix}/bin` symlink; a keg-only formula whose opt `bin` is off PATH fails. Separate reasons are logged for each sub-check. Example (nobul-mac, 2026-10-20): `node@22` is keg-only, so `opt/node@22/bin` is off PATH while `node` resolves to the `node` formula; removing that formula would leave no `node` | D-TS3 ("verify it resolves on PATH") |
+| RP | Before any removal: some directory on PATH (Windows: on the persistent User or Machine PATH, entries expanded, `<cmd>` tried with each PATHEXT extension so npm `.cmd` shims count) holds `<cmd>` that is the same file as the preferred binary path R1 reported, AND that file is not the same file as the old copy. "Same file" is file identity, not a string compare: bash `[ "$a" -ef "$b" ]`; PowerShell compares `Resolve-ToolRealPath` results case-insensitively (on case-insensitive APFS, perl `abs_path` keeps the caller's spelling, so two spellings of one file compare unequal as strings; S3-GateFix-B P2). A linked Homebrew formula passes through its `{brew_prefix}/bin` symlink; a keg-only formula whose opt `bin` is off PATH fails. Separate reasons are logged for each sub-check. Example (nobul-mac, 2026-10-20): `node@22` is keg-only, so `opt/node@22/bin` is off PATH while `node` resolves to the `node` formula; removing that formula would leave no `node` | D-TS3 ("verify it resolves on PATH") |
 | R3 | Only the registered `removal`, through `tool_remove` / `Remove-ToolMethod`, which refuses unsafe targets (section 7.3) | F1 |
 | Unknown | Never removed and never offered for removal. After `[i]nstall alongside`, T7 usually reports SHADOWED naming the unknown copy; later interactive runs show the menu again until the user removes that copy or records `[k]eep` | D-TS3 |
 | T7 | Resolves to a binary matched by the preferred method's detection (when tool-ops `resolution` exists for the tool, its `managedPath` is used — `plans/tooling-resolution-and-artifact-registry.md` B1; when `resolveBy` is `knownPaths`, the T2 resolution rule applies and SHADOWED does not); the version probe prints a version; it satisfies `versions.minVersion` and is not in `versions.blocked` | script-standards-detail "Standard 4"; D-TS11 |
@@ -214,7 +214,7 @@ kind; the registry never holds shell code that the library executes.
 
 | Probe | Passes when | bash | PowerShell |
 |-------|-------------|------|------------|
-| `path:<glob>` | the resolved binary's realpath matches the glob | perl `Cwd::abs_path` (macOS `/bin/bash` 3.2 has no `realpath` builtin) | `Resolve-ToolRealPath`: walks the path from the root and replaces every component that is a symbolic link or junction (`(Get-Item -Force <component>).LinkTarget`, PS 7.0+) until none remains; `[IO.FileInfo]::ResolveLinkTarget` alone resolves only the last component |
+| `path:<glob>` | the resolved binary's realpath matches the glob (case-insensitively on macOS and Windows) | `/bin/realpath` when present (it returns the on-disk case: probe P5, macOS), else perl `Cwd::abs_path`, which keeps the caller's spelling on case-insensitive APFS (P2) | `Resolve-ToolRealPath`: walks the path from the root and replaces every component that is a symbolic link or junction (`(Get-Item -Force <component>).LinkTarget`, PS 7.0+) until none remains; `[IO.FileInfo]::ResolveLinkTarget` alone resolves only the last component |
 | `brew-formula:<name>` | `brew list --versions <name>` exits 0 AND the binary's realpath is inside the realpath of `brew --prefix <name>` (`brew --prefix` prints the `opt/<name>` symlink; its realpath is the Cellar keg) | yes | n/a |
 | `brew-cask:<name>` | `brew list --cask <name>` exits 0 | yes | n/a |
 | `dpkg:<package>` | `dpkg -S <path>` exits 0 and names `<package>` (`dpkg:*` = any) | yes | n/a |
@@ -233,7 +233,12 @@ value makes the probe a non-match (logged as detail).
 Rules:
 - "Inside" and "under" compare realpaths at a path-component boundary (the
   directory plus a separator), so `/usr/local/go` does not contain
-  `/usr/local/gox/bin/go`.
+  `/usr/local/gox/bin/go`. On macOS and Windows the compare is
+  case-insensitive (the default volumes are case-insensitive; a
+  case-sensitive APFS volume is not supported for harness paths). Lowercase
+  with `perl -CSD -ne 'print lc'`, not `tr`: BSD `tr` leaves non-ASCII
+  letters unchanged (P1-8: `JOSÉ` became `josÉ`), so bash and PowerShell
+  would disagree.
 - Path-only probes only where no package database exists (system binaries,
   go.dev tarball, rustup, version managers). A bare `/usr/local/*` prefix is never
   a Homebrew signature.
@@ -280,10 +285,27 @@ exit code (script-standards-detail "Standard 1"-"Standard 3"), and never suppres
 bash code must run under macOS `/bin/bash` 3.2 (setup scripts run before
 `setup-bash`, installer Steps 1-19): no associative arrays, no `mapfile`; expand
 arrays as `${a[@]+"${a[@]}"}` (an empty `"${a[@]}"` is an unbound-variable
-error under `set -u` in 3.2); lowercase with `tr '[:upper:]' '[:lower:]'` or
-perl, never `${x,,}` / `${x^^}` (bad substitution in 3.2); `printf -v` is
+error under `set -u` in 3.2); lowercase with perl (`perl -CSD`; `tr` only
+for ASCII-only values), never `${x,,}` / `${x^^}` (bad substitution in 3.2); `printf -v` is
 allowed. Every helper whose normal results include a non-zero return is called
-in conditional context, and no helper uses return code 2 (section 7.5).
+in conditional context, and no helper except `tool_support_run` uses return
+code 2 (section 7.5). bash helpers that log or count (`log_warn`, `log_error`
+increment `WARNINGS` / `ERRORS`) or set globals never return their result on
+stdout: a caller would have to run them in `$(...)`, a subshell that drops
+every counter increment and global they set (probe: after
+`p=$(tool_update ...)`, `WARNINGS=0 TOOL_UPDATE_STATE=none`; S3-GateFix-B
+P1-7). They return results in globals instead, as the lib already does with
+`DIFF_REVIEW_RESULT` and `JSON_FIELD_REVIEW_RESULT`: `TOOL_BIN_PATH`
+(`tool_install`, `tool_update`, `tool_known_path_hit`), `TOOL_CLASS` /
+`TOOL_METHOD` / `TOOL_PATH` (`tool_detect_method`), `TOOL_MENU_CHOICE`
+(`tool_method_menu`), `TOOL_EXC_PLATFORM` / `TOOL_EXC_METHOD` /
+`TOOL_EXC_PATH` / `TOOL_EXC_DECIDED_AT` (`tool_exception_get`), `TOOL_VER`
+(`tool_version`), `TOOL_RESOLUTION` (`tool_resolution_check`). Pure,
+non-logging helpers (`tool_realpath`, `tool_linux_family`, `tool_status`,
+`tool_preferred_method`) may print. The 3.2 rule covers every bash script the
+harness runs (setup scripts, runners, entry points, bootstrap), not only
+installer Steps 1-19; runners launch children with `bash` from PATH, which on
+a fresh Mac is `/bin/bash` 3.2.
 PowerShell helpers write nothing to the output stream except their declared
 return value: native command output is captured (`$out = & <cmd> 2>&1`) and
 logged, never left on the pipeline. Helper names avoid "adopt", which is
@@ -335,6 +357,14 @@ The script sets its summary name (`TOOL_LABEL`) from the tool name table in
 `reference/script-standards-detail.md`.
 
 ### 7.2 Functions
+
+"Prints" below, for the helpers that log or count (`tool_detect_method`,
+`tool_known_path_hit`, `tool_install`, `tool_update`, `tool_version`,
+`tool_resolution_check`, `tool_method_menu`, `tool_exception_get`), means: the
+bash helper sets the global named in the section 7 introduction and prints
+nothing; the PowerShell helper returns the value. Only the pure helpers
+(`tool_status`, `tool_linux_family`, `tool_preferred_method`,
+`tool_realpath`) print in bash.
 
 | bash | PowerShell | Arguments | Returns / outputs |
 |------|------------|-----------|-------------------|
@@ -410,26 +440,51 @@ letter not offered, empty input, or EOF = HOLD.
   (a setup script run by hand, or by a runner that predates this contract) the
   menu still logs the abort and exits 2, and writes nothing. The library side
   is implemented by mission SOURCE-TRUTH (S3-SourceTruth).
-- **Who exports and reads it: every runner.** There are four, and all four
-  follow the same rules:
+- **Who exports and reads it: every launch site.** Every place that launches
+  a setup script or an installer follows the same rules:
   - `validate_and_run` (`scripts/aitools-install.sh`: the tool setup-script
     steps and the Step 21 managed-file deploy loop) and
     `Invoke-ValidatedScript` (`scripts/aitools-install.ps1`);
   - `deploy_configs` (`scripts/aitools`, used by the no-args sync and the
     `gitpull` branch) and `Deploy-Configs` (`scripts/aitools.ps1`, same two
     branches). These launch the `setup-user-*` and `setup-cursor-*` scripts,
-    where most managed-file `[x]abort` choices happen.
-- **Creating the path.** `scripts/aitools` and `aitools.ps1` create the marker
-  at the start of every run (`mktemp` / `[IO.Path]::GetTempFileName()`),
-  export `AITOOLS_ABORT_FILE`, and delete the file when the run ends. The
-  installers create one only when `AITOOLS_ABORT_FILE` is unset (an installer
-  run directly) and then delete it themselves; otherwise they use the
-  inherited path, so the entry point can read the marker after the installer
-  returns. On Windows, a bash runner that launches `pwsh` exports the path in
-  mixed form (`cygpath -m`, `C:/...`), which both Git Bash and PowerShell open
-  (UNVERIFIED: confirm in the M2 B4a Windows test).
+    where most managed-file `[x]abort` choices happen;
+  - `aitools user init` in both entry points, which launches
+    `setup-user-hooks` directly and today ignores its exit code (it prints
+    "Done" regardless). It must read the exit code and the marker like the
+    runners: abort = print "aborted by user" instead of "Done" and exit 2;
+    any other non-zero = log_error and exit 1;
+  - `scripts/bootstrap.sh` and `scripts/bootstrap.ps1`, which launch the
+    installer and then `aitools user init` and `aitools`. On installer exit 2
+    with a non-empty marker they skip the later steps and exit 2.
+    `bootstrap.ps1` launches the installer with `powershell` (5.1) and never
+    checks `$LASTEXITCODE`; it must use `pwsh` (PowerShell 7 baseline) and
+    check the exit code.
+- **Creating the path.** The first launch site in a process tree creates the
+  marker: it checks `AITOOLS_ABORT_FILE`, and only when it is unset creates a
+  file (`mktemp` / `[IO.Path]::GetTempFileName()`), exports the path, and
+  deletes the file when it finishes (bash `trap ... EXIT`, PowerShell
+  `try/finally`). Only the creator deletes it. Every other launch site
+  (installers under an entry point, an entry point re-executing itself after
+  a self-update, bootstrap's later steps) uses the inherited path, so the
+  outermost caller can read the marker after its child returns. In practice
+  the entry points create it for every `aitools` run, bootstrap for a
+  bootstrap run, and an installer only when run directly. On Windows Git Bash
+  the creator converts the path once, at creation, to mixed form
+  (`cygpath -m`, `C:/...`) and exports that, so Git Bash and PowerShell open
+  the same string and no MSYS environment conversion is relied on
+  (UNVERIFIED: confirm in the M2 B4a Windows test). `GetTempFileName` fails
+  once a user's temp directory holds 65,535 `tmp*.tmp` files (documented
+  Win32 limit); on that exception, fall back to `Join-Path
+  ([IO.Path]::GetTempPath()) ("aitools-abort-" + [guid]::NewGuid() + ".txt")`
+  and create it empty.
 - **Before each script** the runner empties the marker (truncates it to zero
-  bytes).
+  bytes); a failed truncation is logged with log_error and the marker is
+  treated as unusable for that script (exit 2 then counts as a failure).
+- **Reading it.** bash reads the marker only with `[ -s "${AITOOLS_ABORT_FILE:-}" ]`
+  (exit 1 for a missing file, safe under `set -e`); never with `grep` on the
+  file, which returns 2 for a missing file and would itself kill a `set -e`
+  runner with exit 2. PowerShell: `(Test-Path $f) -and ((Get-Item $f).Length -gt 0)`.
 - **After each script:**
   - exit 2 and a non-empty marker = user abort. The runner writes no failure
     row, logs `aborted by user in <script>` (info), skips the remaining
@@ -450,9 +505,22 @@ letter not offered, empty input, or EOF = HOLD.
   runner not yet migrated) treats exit 2 as an ordinary failure. A script never
   needs the marker to run correctly; only the runner's reading of exit 2
   depends on it.
-- No helper uses return code 2 (`tool_detect_method` internal error = 3,
-  `tool_remove` refused = 4), and a script never passes a helper's return code
-  through as its exit code.
+- No helper uses return code 2 except `tool_support_run`, whose 2 means
+  ABORT (marker written) and which the script turns into `exit 2` as in
+  section 7.6 (`tool_detect_method` internal error = 3, `tool_remove`
+  refused = 4). A script never passes any other helper's return code through
+  as its exit code.
+- **Stale exit codes (PowerShell).** A PS1 child run in-process (`& $script`)
+  that ends without `exit` leaves `$LASTEXITCODE` from its last native
+  command, so a native command that returned 2 reads as exit 2 there, while
+  the same script under `pwsh -File` exits 0. Every setup script therefore
+  ends with the exit footer (an explicit `exit`), and pre-commit check 12
+  enforces it.
+- **PowerShell runner return values.** `Deploy-Configs` runs children
+  in-process, so stray output from a child joins its return value
+  (`$deployRc = Deploy-Configs ...` becomes an array). It reports its error
+  count through `$script:DeployErrors` and returns nothing, like
+  `Invoke-ToolSupport`.
 - Outside this contract: the relay outbound prompt's `[q]` (exit 2,
   `relay-outbound-prompt.sh` / `.ps1`) runs in the entry point after the
   summary and is not a setup script; its exit 2 is the entry point's own.
@@ -597,6 +665,7 @@ conformance"), WARN while migration batches are open, FAIL once every
 | 9 | No ad hoc removal | a staged setup script calls `brew uninstall`, `npm uninstall`, `cargo uninstall`, `choco uninstall`, `winget uninstall`, or `rm -rf` on a path that is not a `mktemp` result, outside a line marked `# tool-support: allowed` |
 | 10 | Line moves keep the old line | a registry diff changes a preferred `package` and the old package does not appear as a `preferred: false` method with `detection` |
 | 11 | Summary templates | a summary detail template in `tool_report` or a staged setup script exceeds 30 characters with typical values |
+| 12 | Explicit exit | a staged setup script (`scripts/setup-*.sh/.ps1`) has no exit footer ending in an explicit `exit` (a PS1 child run in-process otherwise reports a stale `$LASTEXITCODE`, section 7.5) |
 
 The existing menu parity audit (`check-post-push` step 29) extends to
 `tool_method_menu` / `Read-ToolMethodChoice` (sequence after mission S3-Nine,
@@ -652,6 +721,11 @@ stubs on PATH, both `AITOOLS_ENVIRONMENT` values where relevant.
 | sync path, two failures | two deploy-script stubs exit 1 (`deploy_configs` returns 2) | "Completed with 2 error(s)", exit 1; not reported as an abort |
 | install path, managed-file `x` | `aitools install`, Step 21 review answered `x` | installer exits 2; the entry point reads its own marker path and prints "aborted by user"; exit 2 |
 | script run by hand, `x` | `AITOOLS_ABORT_FILE` unset, pty | menu logs the abort, exits 2; no marker file is created |
+| `aitools user init`, hooks review `x` | pty, `setup-user-hooks` review answered `x` | "aborted by user", not "Done"; exit 2 |
+| bootstrap, installer `x` | `bootstrap.sh` / `.ps1`, a review answered `x` during the install | `user init` and the rebuild skipped; exit 2 |
+| entry point re-exec | deploy list changed, `aitools` re-executes itself | one marker for the run (the re-executed process inherits it); deleted once |
+| bash helper result in a global | failed update stub, bash 3.2 | `TOOL_UPDATE_STATE=failed` and `WARNINGS` incremented in the script's shell; OK row promoted to WARN |
+| RP, case spelling (macOS) | PATH spells the preferred dir in another case than the disk | RP uses `-ef`: same file, so the removal is not blocked by a spelling difference |
 | Windows bash runner, pwsh child, `x` | Git Bash `aitools` sync, `setup-user-*.ps1` answered `x` | the pwsh child writes the `cygpath -m` path; bash reads it; abort reported (UNVERIFIED until run on Windows) |
 | malformed spec | spec file with an unterminated quote | `tool_spec_load` rc 1 → ERROR `tool spec missing`, exit 1 (not 2) |
 | bash 3.2, empty method list | no methods for the platform, `/bin/bash` 3.2, `set -u` | NO-METHOD; no unbound-variable crash |
