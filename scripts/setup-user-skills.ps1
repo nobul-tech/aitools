@@ -39,12 +39,16 @@ $skillsSrc = Join-Path (Join-Path $repoDir "shared") "skills"
 # resolver (reference/user-repo.md "Resolution"; SD-7). The rc is captured, not
 # suppressed: 0 found, 1 no dotprofile (shared-only mode, expected), 3 resolver
 # error (the lib already logged it: LogError + ERROR row "dotprofile").
-# On 1 and 3 $userRepoPath is empty: shared skills only, no adopt offer.
+# On 1 $userRepoPath is empty: shared skills only, no adopt offer. On 3 the
+# skills deploy is SKIPPED (S3-M3Lead decision): shared copies must never
+# overwrite deployed dotprofile versions when the dotprofile is unknown.
 $urpRc = Resolve-UserRepoPath
 $userRepoPath = $script:AitLibUserRepoPath
+$skillsSkipped = $false
 if ($urpRc -ne 0 -and $urpRc -ne 1) {
-    # Not counted again: the resolver error is already an error and an ERROR row.
-    Log "Dotprofile unresolved (resolver error above) -- deploying shared skills only"
+    $skillsSkipped = $true
+    LogError "Skills deploy skipped: dotprofile unresolved (resolver error above) -- shared skills would overwrite dotprofile versions"
+    Write-Summary "ERROR" "skills" "skipped (dotprofile error)"
 }
 $dotprofileSkills = $null
 if ($userRepoPath) {
@@ -76,7 +80,10 @@ if ($dotprofileSkills) {
     }
 }
 
-if ($skillNames.Count -eq 0) {
+if ($skillsSkipped) {
+    # Nothing is deployed or offered for adoption (the ERROR row is above).
+    $skillNames = @()
+} elseif ($skillNames.Count -eq 0) {
     LogWarn "No skills found in shared\skills\ or dotprofile"
     Write-Summary "WARN" "claude skills" "no skills found"
 }
@@ -168,7 +175,7 @@ if ($skillNames.Count -gt 0) {
 
 # --- Reverse discovery ---
 # Scan deployed skills for user-created skills not in shared or dotprofile
-if (Test-Path $skillsDest) {
+if (-not $skillsSkipped -and (Test-Path $skillsDest)) {
     foreach ($skillDir in Get-ChildItem -Path $skillsDest -Directory) {
         $skillName = $skillDir.Name
         if (-not (Test-Path (Join-Path $skillDir.FullName "SKILL.md"))) { continue }

@@ -92,7 +92,8 @@ S3-M3-B8b-Review: https://github.com/nobul-tech/aitools/pull/92#pullrequestrevie
    - Switch the generated PS1 settings/skills blocks off config.json (L8).
    - I suggest embedding the resolver, because settings needs it anyway.
 2. **Lib:** a dotprofile resolver error writes no ACTION row; the machine-profile resolver does. I suggest `_aitlib_action_once "see deploy.log -- the dotprofile could not be resolved"` in the B2 lib.
-3. **skills on rc 3:** deploying shared skills when the dotprofile cannot be resolved can, under `--force` or a non-interactive run, overwrite deployed dotprofile versions of those skills. B8a has the same behaviour. I suggest that both skip the skills deploy on rc 3. That is a B8a + B8b decision for S3-M3Lead.
+3. **skills on rc 3: decided and applied.** S3-M3Lead decided that on a resolver error `setup-user-skills.ps1` skips the skills deploy entirely: the error is logged and counted, and the run gets the ERROR row `skills | skipped (dotprofile error)`. rc 1 still deploys shared skills. Applied in the third commit on this branch; the PS1 block harness passes 16/0. B8a gets the same instruction for the .sh.
+   - S3-M3Lead also answered the other two questions. Q1: B5 embeds the resolver (queued). Q2: queued for the lib batch.
 
 INCIDENT: none. (The deploy-template duplication behind M1 is the known I6 debt.)
 WRITE_BLOCKED: none.
