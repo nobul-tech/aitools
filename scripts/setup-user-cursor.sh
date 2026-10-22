@@ -410,6 +410,7 @@ cursor_rule_from_md() {
                     for my $i (@items) { my $g = anchor($i); if ($g ne "") { push @out, "  - $g"; $globs = 1 } }
                     next;
                 }
+                next if $in_paths && $line =~ /^\s*#/;   # YAML comment inside the list
                 if ($in_paths && $line =~ /^\s*-\s+(.*)$/) {
                     my $g = anchor($1); if ($g ne "") { push @out, "  - $g"; $globs = 1 }
                     next;
@@ -437,6 +438,7 @@ cursor_rule_check() {
     perl -e '
         local $/; my $t = <STDIN>; $t = "" unless defined $t;
         $t =~ s/\A\s+//;
+        exit 0 unless $t =~ /\A---/;   # no frontmatter: already an error in the caller
         my @p = grep { length } split /---/, $t, -1;
         my $fm = @p ? $p[0] : "";
         print "Cursor would not see alwaysApply in its frontmatter (a --- inside a frontmatter value?)" unless $fm =~ /^alwaysApply:/m;

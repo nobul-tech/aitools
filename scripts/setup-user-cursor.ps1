@@ -424,6 +424,7 @@ function ConvertTo-CursorRule([string]$Text) {
             }
             continue
         }
+        if ($inPaths -and $line -cmatch '^\s*#') { continue }   # YAML comment inside the list
         if ($inPaths -and $line -cmatch '^\s*-\s+(.*)$') {
             $g = Get-AnchoredGlob $Matches[1]
             if ($g -ne "") { $out.Add("  - $g"); $hasGlobs = $true }
@@ -478,7 +479,12 @@ if (-not (Test-Path -LiteralPath $harnessRulesDir -PathType Container)) {
                 Log "Ignoring non-rule file in harness rules: $($entry.Name) (only *.md is fanned out)"
                 continue
             }
-            if ($entry.LinkType -and -not (Test-Path -LiteralPath $entry.FullName)) { $ruleBroken += $entry.Name; continue }
+            if ($entry.LinkType) {
+                # Test-Path is true for a dangling link on pwsh 7; check the final target
+                $linkOk = $false
+                try { $linkOk = [bool]$entry.ResolveLinkTarget($true).Exists } catch { $linkOk = $false }
+                if (-not $linkOk) { $ruleBroken += $entry.Name; continue }
+            }
             if ($entry.PSIsContainer) { Log "Ignoring non-file in harness rules: $($entry.Name)"; continue }
             $ruleSources += $entry
         }

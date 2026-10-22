@@ -109,7 +109,10 @@ printf -- '---\nglobs:\n  - **/src/**/*.{ts,tsx}\nalwaysApply: false\n---\nB\n' 
 # Already anchored, absolute, and ./ patterns
 printf -- '---\npaths:\n  - "**/x"\n  - /abs/y\n  - ./rel/z\n---\nB\n' > "$GOLD/keep.md"
 printf -- '---\nglobs:\n  - **/x\n  - /abs/y\n  - **/rel/z\nalwaysApply: false\n---\nB\n' > "$GOLD/keep.want"
-GOLDEN="nofm paths inline native emptyfm crlf col0 flow brace keep"
+# A YAML comment inside the paths: list does not end it
+printf -- '---\npaths:\n  - a/**\n  # note\n  - b/**\n---\nB\n' > "$GOLD/comment.md"
+printf -- '---\nglobs:\n  - **/a/**\n  - **/b/**\nalwaysApply: false\n---\nB\n' > "$GOLD/comment.want"
+GOLDEN="nofm paths inline native emptyfm crlf col0 flow brace keep comment"
 
 for g in $GOLDEN; do
     conv "$GOLD/$g.md" > "$GOLD/$g.got"
