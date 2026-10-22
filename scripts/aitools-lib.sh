@@ -121,164 +121,239 @@ read_config_key() {
 # generated deploy/ scripts (they set AITOOLS_PROFILE_SH to their embedded copy).
 # Return codes follow the decision tree's helper rule: none returns 2.
 # Results are globals, never stdout (counters and globals must survive).
+#
+# Result-global contract (PR #80 review3 B1/M1): every result global carries the
+# AITLIB_ prefix and every private helper the _aitlib_ prefix, so they cannot
+# collide with a caller's own variables (USER_REPO_PATH, PROFILE_FILE, ...).
+# They are assigned only inside these functions -- this section has no top-level
+# assignment -- so read them only after the call (under set -u an unset one is an
+# error). Callers copy what they need into their own variables right after the
+# call, e.g.:  resolve_user_repo_path || rc=$?;  USER_REPO_PATH="$AITLIB_USER_REPO_PATH"
+# ACTION rows: the wrapper emits the one ACTION for its failure (once per run:
+# _aitlib_action_once skips a row the run summary already holds); callers do not
+# add their own ACTION for the same failure.
 # ---------------------------------------------------------------------------
 
-# _aitools_profile_run ARGS... -- run the resolver; sets PROFILE_OUT (tagged
-# lines, CR stripped) and PROFILE_RC. Returns 0 when it ran, 1 when no
-# resolver is available (logged as detail by the caller).
-PROFILE_OUT=""
-PROFILE_RC=0
-_aitools_profile_run() {
-    PROFILE_OUT=""; PROFILE_RC=0
-    local d sh ps1 errf
+# _aitlib_profile_run ARGS... -- run the resolver; sets AITLIB_PROFILE_OUT
+# (tagged lines, CR stripped) and AITLIB_PROFILE_RC. Returns 0 when it ran, 1
+# when no resolver is available (the caller logs it). The resolver's stderr
+# (its own log lines) is copied to deploy.log as detail lines.
+# The exit code is trusted only with the result lines: every resolver command
+# prints a "via" line on 0 (found) and 1 (none). Exit 0 or 1 without one (a
+# crash, a parse failure, a policy refusal -- pwsh exits 0 or 1 for those) is
+# rewritten to 2 with an "error" line, so no caller mistakes it for "found" or
+# "shared-only".
+# Windows (Git Bash) branch: aitools-profile.ps1 through pwsh
+# (-ExecutionPolicy Bypass, as the OS dispatch rule calls .ps1 files; a throw
+# exits 2). Path arguments (--path) are passed in Windows form (cygpath -w;
+# unchanged when cygpath fails), stdout is forced to UTF-8 and CRs are
+# stripped. AITLIB_PROFILE_VIA_PWSH=1 forces this branch on any OS (tests;
+# cygpath is then used only when present).
+# UNVERIFIED on Windows (tested on macOS only, through the forced branch):
+# cygpath conversion, MSYS argument and environment translation, and the
+# UTF-8 decoding of non-ASCII values.
+_aitlib_profile_run() {
+    AITLIB_PROFILE_OUT=""; AITLIB_PROFILE_RC=0
+    local d sh ps1 errf="" line
     d="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     sh="${AITOOLS_PROFILE_SH:-$d/aitools-profile.sh}"
     ps1="${AITOOLS_PROFILE_PS1:-$d/aitools-profile.ps1}"
-    errf="$(mktemp)"
-    if [ "$AITOOLS_PLATFORM" = "windows" ]; then
-        # Git Bash: the PowerShell resolver; its stdout is CRLF in the console code page
-        if [ ! -f "$ps1" ] || ! command -v pwsh >/dev/null 2>&1; then rm -f "$errf"; return 1; fi
-        PROFILE_OUT=$(pwsh -NoProfile -File "$(cygpath -w "$ps1")" "$@" 2>"$errf") || PROFILE_RC=$?
-        PROFILE_OUT="${PROFILE_OUT//$'\r'/}"
-    else
-        if [ ! -f "$sh" ]; then rm -f "$errf"; return 1; fi
-        # The resolver runs under the caller's bash (macOS /bin/bash 3.2 stays 3.2)
-        PROFILE_OUT=$("${BASH:-bash}" "$sh" "$@" 2>"$errf") || PROFILE_RC=$?
+    if ! errf="$(mktemp)"; then
+        errf=""
+        log_warn "aitools-profile: mktemp failed -- the resolver's own log lines are not captured"
     fi
-    local line
-    while IFS= read -r line; do
-        if [ -n "$line" ]; then log_detail "aitools-profile $1: $line"; fi
-    done < "$errf"
-    rm -f "$errf"
+    if [ "$AITOOLS_PLATFORM" = "windows" ] || [ "${AITLIB_PROFILE_VIA_PWSH:-}" = "1" ]; then
+        if [ ! -f "$ps1" ] || ! command -v pwsh >/dev/null 2>&1; then
+            if [ -n "$errf" ]; then rm -f "$errf"; fi
+            return 1
+        fi
+        local a w prev="" ps1_arg="$ps1" arglist=""
+        if command -v cygpath >/dev/null 2>&1; then
+            if w="$(cygpath -w "$ps1")"; then ps1_arg="$w"; else log_detail "aitools-profile: cygpath -w failed for $ps1 -- passed unchanged"; fi
+        fi
+        for a in "$@"; do
+            if [ "$prev" = "--path" ] && command -v cygpath >/dev/null 2>&1; then
+                case "$a" in
+                    /*) if w="$(cygpath -w "$a")"; then a="$w"; else log_detail "aitools-profile: cygpath -w failed for $a -- passed unchanged"; fi ;;
+                esac
+            fi
+            arglist="$arglist$a"$'\n'
+            prev="$a"
+        done
+        # Arguments travel in an environment variable, one per line (resolver
+        # values are one line by contract), so pwsh -Command can set UTF-8 output
+        # before it runs the resolver.
+        AITLIB_PROFILE_OUT=$(AITLIB_PS1="$ps1_arg" AITLIB_PS_ARGS="$arglist" pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command 'try { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $a = @(); if ($env:AITLIB_PS_ARGS) { $a = @($env:AITLIB_PS_ARGS.Substring(0, $env:AITLIB_PS_ARGS.Length - 1) -split "`n") }; $global:LASTEXITCODE = 0; & $env:AITLIB_PS1 @a; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine("aitools-profile threw: $($_.Exception.Message)"); exit 2 }' 2>"${errf:-/dev/null}") || AITLIB_PROFILE_RC=$?
+        AITLIB_PROFILE_OUT="${AITLIB_PROFILE_OUT//$'\r'/}"
+    else
+        if [ ! -f "$sh" ]; then
+            if [ -n "$errf" ]; then rm -f "$errf"; fi
+            return 1
+        fi
+        # The resolver runs under the caller's bash (macOS /bin/bash 3.2 stays 3.2)
+        AITLIB_PROFILE_OUT=$("${BASH:-bash}" "$sh" "$@" 2>"${errf:-/dev/null}") || AITLIB_PROFILE_RC=$?
+    fi
+    if [ -n "$errf" ]; then
+        while IFS= read -r line; do
+            line="${line//$'\r'/}"
+            if [ -n "$line" ]; then log_detail "aitools-profile $1: $line"; fi
+        done < "$errf"
+        rm -f "$errf"
+    fi
+    case "$AITLIB_PROFILE_RC" in
+        0|1)
+            case $'\n'"$AITLIB_PROFILE_OUT" in
+                *$'\n'via$'\t'*) : ;;
+                *)
+                    log_detail "aitools-profile $1: exit $AITLIB_PROFILE_RC without result lines -- treated as a resolver error"
+                    AITLIB_PROFILE_OUT="${AITLIB_PROFILE_OUT}"$'\n'"error"$'\t'"resolver exited $AITLIB_PROFILE_RC without result lines (see deploy.log)"
+                    AITLIB_PROFILE_RC=2 ;;
+            esac ;;
+    esac
     return 0
 }
 
-# _profile_tag KEY -- value of the first KEY<TAB> line in PROFILE_OUT (pure)
-_profile_tag() {
+# _aitlib_profile_tag KEY -- value of the first KEY<TAB> line in AITLIB_PROFILE_OUT (pure)
+_aitlib_profile_tag() {
     local k v
     while IFS=$'\t' read -r k v; do
         if [ "$k" = "$1" ]; then printf '%s' "$v"; return 0; fi
-    done <<< "$PROFILE_OUT"
+    done <<< "$AITLIB_PROFILE_OUT"
     return 0
 }
 
-# _profile_lines KIND -- every warn or error value in PROFILE_OUT, one per line (pure)
-_profile_lines() {
+# _aitlib_profile_lines KIND -- every warn or error value in AITLIB_PROFILE_OUT, one per line (pure)
+_aitlib_profile_lines() {
     local k v
     while IFS=$'\t' read -r k v; do
         if [ "$k" = "$1" ]; then printf '%s\n' "$v"; fi
-    done <<< "$PROFILE_OUT"
+    done <<< "$AITLIB_PROFILE_OUT"
     return 0
 }
 
-# _bash_path P -- the Git Bash form of a Windows path; unchanged elsewhere (pure)
-_bash_path() {
-    if [ -n "$1" ] && command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi
+# _aitlib_bash_path P -- the Git Bash form of a Windows path; unchanged elsewhere
+# or when cygpath fails (pure)
+_aitlib_bash_path() {
+    local p=""
+    if [ -n "$1" ] && command -v cygpath >/dev/null 2>&1; then
+        if p="$(cygpath -u "$1")"; then printf '%s' "$p"; return 0; fi
+    fi
+    printf '%s' "$1"
 }
 
-# resolve_user_repo_path -- sets USER_REPO_PATH (bash path form) and USER_REPO_VIA
-# (env|argument|config|convention|scan|none). Returns 0 found, 1 no dotprofile
-# (shared-only mode; not an error), 3 resolver error (logged: log_error +
-# ERROR row "dotprofile").
-USER_REPO_PATH=""
-USER_REPO_VIA="none"
+# _aitlib_action_once TEXT -- write ACTION row TEXT unless the run summary already
+# holds it (several setup scripts in one run hit the same failure; show_summary
+# does not dedupe)
+_aitlib_action_once() {
+    if [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && [ -f "$AITOOLS_SUMMARY_FILE" ] \
+        && grep -qxF -- "ACTION||$1" "$AITOOLS_SUMMARY_FILE"; then
+        log_detail "ACTION already in the run summary: $1"
+        return 0
+    fi
+    write_summary ACTION "" "$1"
+}
+
+# resolve_user_repo_path -- sets AITLIB_USER_REPO_PATH (bash path form) and
+# AITLIB_USER_REPO_VIA (env|argument|config|convention|scan|none). Returns 0
+# found, 1 no dotprofile (shared-only mode; not an error), 3 resolver error
+# (logged: log_error + ERROR row "dotprofile").
 resolve_user_repo_path() {
-    USER_REPO_PATH=""; USER_REPO_VIA="none"
+    AITLIB_USER_REPO_PATH=""; AITLIB_USER_REPO_VIA="none"
     local w
-    if ! _aitools_profile_run user-repo-path; then
+    if ! _aitlib_profile_run user-repo-path; then
         log_error "dotprofile: resolver aitools-profile not found next to aitools-lib.sh"
         write_summary ERROR "dotprofile" "resolver missing"
         return 3
     fi
-    USER_REPO_VIA=$(_profile_tag via)
-    while IFS= read -r w; do if [ -n "$w" ]; then log_detail "dotprofile: $w"; fi; done <<< "$(_profile_lines warn)"
-    case "$PROFILE_RC" in
+    AITLIB_USER_REPO_VIA=$(_aitlib_profile_tag via)
+    while IFS= read -r w; do if [ -n "$w" ]; then log_detail "dotprofile: $w"; fi; done <<< "$(_aitlib_profile_lines warn)"
+    case "$AITLIB_PROFILE_RC" in
         0)
-            USER_REPO_PATH=$(_bash_path "$(_profile_tag path)")
-            log_detail "dotprofile=$USER_REPO_PATH via=$USER_REPO_VIA"
+            AITLIB_USER_REPO_PATH=$(_aitlib_bash_path "$(_aitlib_profile_tag path)")
+            log_detail "dotprofile=$AITLIB_USER_REPO_PATH via=$AITLIB_USER_REPO_VIA"
             return 0 ;;
         1)
             log_detail "dotprofile: none found (shared-only mode)"
             return 1 ;;
     esac
-    while IFS= read -r w; do if [ -n "$w" ]; then log_error "dotprofile: $w"; fi; done <<< "$(_profile_lines error)"
-    if [ -z "$(_profile_lines error)" ]; then log_error "dotprofile: resolver failed (exit $PROFILE_RC)"; fi
+    while IFS= read -r w; do if [ -n "$w" ]; then log_error "dotprofile: $w"; fi; done <<< "$(_aitlib_profile_lines error)"
+    if [ -z "$(_aitlib_profile_lines error)" ]; then log_error "dotprofile: resolver failed (exit $AITLIB_PROFILE_RC)"; fi
     write_summary ERROR "dotprofile" "resolver failed"
     return 3
 }
 
-# resolve_machine_profile -- sets MACHINE_ALIAS, MACHINE_VIA, PROFILE_FILE,
-# PROFILE_NAME, PROFILE_COMPANY, IDENTITY_GIT_NAME, IDENTITY_GIT_EMAIL,
-# IDENTITY_GITHUB, MACHINE_HOSTNAME (the resolver's hostname: macOS
-# LocalHostName, never the DNS-derived kernel name). Logs one detail line ("machine profile: alias=.. via=..").
+# resolve_machine_profile -- sets AITLIB_MACHINE_ALIAS, AITLIB_MACHINE_VIA,
+# AITLIB_PROFILE_FILE, AITLIB_PROFILE_NAME, AITLIB_PROFILE_COMPANY,
+# AITLIB_IDENTITY_GIT_NAME, AITLIB_IDENTITY_GIT_EMAIL, AITLIB_IDENTITY_GITHUB.
+# Logs one detail line ("machine profile: alias=.. via=..").
 # Resolver warnings are detail lines here: setup-user-config, the first script
 # of every run, reports them once (a successful step stays OK, D-TS12).
 # Returns 0 resolved, 1 no dotprofile (shared-only), 3 no match or error
-# (log_error + ERROR row "machine profile" + ACTION; callers must not substitute
-# another machine's values; the PROFILE_/IDENTITY_ values then hold the
-# identity-level, machine-independent values only).
-MACHINE_ALIAS=""; MACHINE_VIA="none"; PROFILE_FILE=""; MACHINE_HOSTNAME=""
-PROFILE_NAME=""; PROFILE_COMPANY=""; IDENTITY_GIT_NAME=""; IDENTITY_GIT_EMAIL=""; IDENTITY_GITHUB=""
+# (log_error + ERROR row "machine profile" + one ACTION per run; callers must not
+# substitute another machine's values; the AITLIB_PROFILE_/AITLIB_IDENTITY_
+# values then hold the identity-level, machine-independent values only).
 resolve_machine_profile() {
-    MACHINE_ALIAS=""; MACHINE_VIA="none"; PROFILE_FILE=""; MACHINE_HOSTNAME=""
-    PROFILE_NAME=""; PROFILE_COMPANY=""; IDENTITY_GIT_NAME=""; IDENTITY_GIT_EMAIL=""; IDENTITY_GITHUB=""
+    AITLIB_MACHINE_ALIAS=""; AITLIB_MACHINE_VIA="none"; AITLIB_PROFILE_FILE=""
+    AITLIB_PROFILE_NAME=""; AITLIB_PROFILE_COMPANY=""
+    AITLIB_IDENTITY_GIT_NAME=""; AITLIB_IDENTITY_GIT_EMAIL=""; AITLIB_IDENTITY_GITHUB=""
     local w
-    if ! _aitools_profile_run resolve --environment "$AITOOLS_ENVIRONMENT"; then
+    if ! _aitlib_profile_run resolve --environment "$AITOOLS_ENVIRONMENT"; then
         log_error "machine profile: resolver aitools-profile not found next to aitools-lib.sh"
         write_summary ERROR "machine profile" "resolver missing"
         return 3
     fi
-    MACHINE_ALIAS=$(_profile_tag alias)
-    MACHINE_VIA=$(_profile_tag via)
-    PROFILE_FILE=$(_bash_path "$(_profile_tag profileFile)")
-    PROFILE_NAME=$(_profile_tag name)
-    PROFILE_COMPANY=$(_profile_tag company)
-    IDENTITY_GIT_NAME=$(_profile_tag gitName)
-    IDENTITY_GIT_EMAIL=$(_profile_tag gitEmail)
-    IDENTITY_GITHUB=$(_profile_tag github)
-    MACHINE_HOSTNAME=$(_profile_tag hostname)
-    while IFS= read -r w; do if [ -n "$w" ]; then log_detail "machine profile: $w"; fi; done <<< "$(_profile_lines warn)"
-    log_detail "machine profile: alias=${MACHINE_ALIAS:-none} via=${MACHINE_VIA:-none} company=$PROFILE_COMPANY host=$(_profile_tag hostname) id=$(_profile_tag machineId)"
-    case "$PROFILE_RC" in
-        0) if [ -n "$MACHINE_ALIAS" ]; then return 0; fi ;;
+    AITLIB_MACHINE_ALIAS=$(_aitlib_profile_tag alias)
+    AITLIB_MACHINE_VIA=$(_aitlib_profile_tag via)
+    AITLIB_PROFILE_FILE=$(_aitlib_bash_path "$(_aitlib_profile_tag profileFile)")
+    AITLIB_PROFILE_NAME=$(_aitlib_profile_tag name)
+    AITLIB_PROFILE_COMPANY=$(_aitlib_profile_tag company)
+    AITLIB_IDENTITY_GIT_NAME=$(_aitlib_profile_tag gitName)
+    AITLIB_IDENTITY_GIT_EMAIL=$(_aitlib_profile_tag gitEmail)
+    AITLIB_IDENTITY_GITHUB=$(_aitlib_profile_tag github)
+    while IFS= read -r w; do if [ -n "$w" ]; then log_detail "machine profile: $w"; fi; done <<< "$(_aitlib_profile_lines warn)"
+    log_detail "machine profile: alias=${AITLIB_MACHINE_ALIAS:-none} via=${AITLIB_MACHINE_VIA:-none} company=$AITLIB_PROFILE_COMPANY host=$(_aitlib_profile_tag hostname) id=$(_aitlib_profile_tag machineId)"
+    case "$AITLIB_PROFILE_RC" in
+        0) if [ -n "$AITLIB_MACHINE_ALIAS" ]; then return 0; fi ;;
         1) log_detail "machine profile: no dotprofile -- shared-only mode"; return 1 ;;
     esac
-    while IFS= read -r w; do if [ -n "$w" ]; then log_error "machine profile: $w"; fi; done <<< "$(_profile_lines error)"
-    if [ -z "$(_profile_lines error)" ]; then log_error "machine profile: resolver failed (exit $PROFILE_RC)"; fi
+    while IFS= read -r w; do if [ -n "$w" ]; then log_error "machine profile: $w"; fi; done <<< "$(_aitlib_profile_lines error)"
+    if [ -z "$(_aitlib_profile_lines error)" ]; then log_error "machine profile: resolver failed (exit $AITLIB_PROFILE_RC)"; fi
     log_error "machine profile: unresolved -- no other machine's values are used"
     write_summary ERROR "machine profile" "no machine match"
-    write_summary ACTION "" "Run: aitools user init (pick or register this machine's profile)"
+    _aitlib_action_once "Run: aitools user init (pick or register this machine's profile)"
     return 3
 }
 
 # tool_exception_get SLUG -- this machine's recorded tool exception (tree section
-# 8 Reader; call only at T5). Sets TOOL_EXC_FOUND (true/false), TOOL_EXC_PLATFORM,
-# TOOL_EXC_METHOD, TOOL_EXC_PATH, TOOL_EXC_DECIDED_AT. Returns 0 looked up
-# (found or not), 1 store unavailable (one log_warn; treated as no exception).
-# Resolver warnings are detail lines, so a kept tool's OK row is not promoted.
-TOOL_EXC_FOUND=false; TOOL_EXC_PLATFORM=""; TOOL_EXC_METHOD=""; TOOL_EXC_PATH=""; TOOL_EXC_DECIDED_AT=""
+# 8 Reader; call only at T5). Sets AITLIB_TOOL_EXC_FOUND (true/false),
+# AITLIB_TOOL_EXC_PLATFORM, AITLIB_TOOL_EXC_METHOD, AITLIB_TOOL_EXC_PATH,
+# AITLIB_TOOL_EXC_DECIDED_AT. Returns 0 looked up (found or not), 1 store
+# unavailable (one log_warn; treated as no exception; no summary row -- the
+# warning promotes the caller's OK row to WARN). Resolver warnings are detail
+# lines, so a kept tool's OK row is not promoted.
 tool_exception_get() {
-    TOOL_EXC_FOUND=false; TOOL_EXC_PLATFORM=""; TOOL_EXC_METHOD=""; TOOL_EXC_PATH=""; TOOL_EXC_DECIDED_AT=""
+    AITLIB_TOOL_EXC_FOUND=false; AITLIB_TOOL_EXC_PLATFORM=""; AITLIB_TOOL_EXC_METHOD=""
+    AITLIB_TOOL_EXC_PATH=""; AITLIB_TOOL_EXC_DECIDED_AT=""
     local slug="$1" w reason
-    if ! _aitools_profile_run exception-get --slug "$slug" --environment "$AITOOLS_ENVIRONMENT"; then
+    if ! _aitlib_profile_run exception-get --slug "$slug" --environment "$AITOOLS_ENVIRONMENT"; then
         log_warn "tool exceptions unavailable (resolver missing)"
         return 1
     fi
-    while IFS= read -r w; do if [ -n "$w" ]; then log_detail "tool exceptions: $w"; fi; done <<< "$(_profile_lines warn)"
-    if [ "$PROFILE_RC" -ne 0 ]; then
-        reason=$(_profile_lines error | perl -ne 'print, exit if /\S/')
-        if [ "$PROFILE_RC" -eq 1 ]; then reason="no dotprofile"; fi
-        log_warn "tool exceptions unavailable (${reason:-resolver exit $PROFILE_RC})"
+    while IFS= read -r w; do if [ -n "$w" ]; then log_detail "tool exceptions: $w"; fi; done <<< "$(_aitlib_profile_lines warn)"
+    if [ "$AITLIB_PROFILE_RC" -ne 0 ]; then
+        reason=$(_aitlib_profile_lines error | perl -ne 'print, exit if /\S/')
+        if [ "$AITLIB_PROFILE_RC" -eq 1 ]; then reason="no dotprofile"; fi
+        log_warn "tool exceptions unavailable (${reason:-resolver exit $AITLIB_PROFILE_RC})"
         return 1
     fi
-    if [ "$(_profile_tag found)" = "true" ]; then
-        TOOL_EXC_FOUND=true
-        TOOL_EXC_PLATFORM=$(_profile_tag platform)
-        TOOL_EXC_METHOD=$(_profile_tag method)
-        TOOL_EXC_PATH=$(_profile_tag path)
-        TOOL_EXC_DECIDED_AT=$(_profile_tag decidedAt)
+    if [ "$(_aitlib_profile_tag found)" = "true" ]; then
+        AITLIB_TOOL_EXC_FOUND=true
+        AITLIB_TOOL_EXC_PLATFORM=$(_aitlib_profile_tag platform)
+        AITLIB_TOOL_EXC_METHOD=$(_aitlib_profile_tag method)
+        AITLIB_TOOL_EXC_PATH=$(_aitlib_profile_tag path)
+        AITLIB_TOOL_EXC_DECIDED_AT=$(_aitlib_profile_tag decidedAt)
     fi
-    log_detail "tool exceptions: $slug found=$TOOL_EXC_FOUND profile=$(_profile_tag alias) via=$(_profile_tag via)"
+    log_detail "tool exceptions: $slug found=$AITLIB_TOOL_EXC_FOUND profile=$(_aitlib_profile_tag alias) via=$(_aitlib_profile_tag via)"
     return 0
 }
 
@@ -286,44 +361,60 @@ tool_exception_get() {
 # decision (tree section 8 Writer; only after [k]eep, never in dry run or
 # non-interactive runs). decidedBy = the calling script's name (SCRIPT_NAME).
 # The resolver writes profile.json and commits and pushes it (N-Q2).
-# Sets TOOL_EXC_PUSHED (true/false). Returns 0 written (a failed commit or push
-# is a log_warn + ACTION "run git push in <dotprofile>", TOOL_EXC_PUSHED=false),
-# 1 failed, 3 refused (no dotprofile, or the machine profile matched by
-# hostname only or not at all). 1 and 3 log_warn + ACTION
-# "run aitools user init to remember tool choices".
-TOOL_EXC_PUSHED=false
+# Sets AITLIB_TOOL_EXC_RESULT (created|updated|unchanged|dry-run|refused|failed;
+# never empty after the call) and AITLIB_TOOL_EXC_PUSHED (true/false).
+# Returns 0 written or nothing to write (created/updated: a failed commit or
+# push is a log_warn + ACTION "run git push in <dotprofile>",
+# AITLIB_TOOL_EXC_PUSHED=false; unchanged and dry-run write nothing, so they
+# need no push and get no warning), 1 failed, 3 refused (no dotprofile, or the
+# machine profile matched by hostname only or not at all). 3 is log_warn +
+# ACTION "run aitools user init to remember tool choices"; 1 (resolver missing,
+# usage error, crash) is log_warn + ACTION "see deploy.log -- a tool choice
+# (tool exception) was not saved". The tool itself is fine, so no ERROR row
+# (D-TS12).
 tool_exception_record() {
-    TOOL_EXC_PUSHED=false
+    AITLIB_TOOL_EXC_PUSHED=false; AITLIB_TOOL_EXC_RESULT=""
     local slug="$1" method="$2" path="$3" version="$4" reason="${5:-}" w msg
     local args=(exception-set --slug "$slug" --platform "$AITOOLS_PLATFORM" --method "$method" --path "$path"
         --version "$version" --by "${SCRIPT_NAME:-unknown}" --environment "$AITOOLS_ENVIRONMENT")
     if [ -n "$reason" ]; then args+=(--reason "$reason"); fi
-    if ! _aitools_profile_run "${args[@]}"; then
+    if ! _aitlib_profile_run "${args[@]}"; then
+        AITLIB_TOOL_EXC_RESULT=failed
         log_warn "tool exception for $slug not saved (resolver missing)"
-        write_summary ACTION "" "run aitools user init to remember tool choices"
+        _aitlib_action_once "see deploy.log -- a tool choice (tool exception) was not saved"
         return 1
     fi
-    while IFS= read -r w; do if [ -n "$w" ]; then log_detail "tool exceptions: $w"; fi; done <<< "$(_profile_lines warn)"
-    case "$PROFILE_RC" in
+    AITLIB_TOOL_EXC_RESULT=$(_aitlib_profile_tag result)
+    while IFS= read -r w; do if [ -n "$w" ]; then log_detail "tool exceptions: $w"; fi; done <<< "$(_aitlib_profile_lines warn)"
+    case "$AITLIB_PROFILE_RC" in
         0)
-            if [ "$(_profile_tag pushed)" = "true" ]; then
-                TOOL_EXC_PUSHED=true
-                log_detail "tool exceptions: $slug recorded in $(_profile_tag profileFile) (committed and pushed)"
+            if [ "$(_aitlib_profile_tag pushed)" = "true" ]; then
+                AITLIB_TOOL_EXC_PUSHED=true
+                log_detail "tool exceptions: $slug recorded in $(_aitlib_profile_tag profileFile) (committed and pushed)"
             else
-                msg=$(_profile_lines warn | perl -ne 'print, exit if /commit|push|git repository/')
-                log_warn "tool exception for $slug saved but not pushed (${msg:-see deploy.log})"
-                write_summary ACTION "" "run git push in $(dirname "$(_bash_path "$(_profile_tag profileFile)")")"
+                case "$AITLIB_TOOL_EXC_RESULT" in
+                    unchanged|dry-run)
+                        log_detail "tool exceptions: $slug $AITLIB_TOOL_EXC_RESULT -- nothing written, nothing to push" ;;
+                    *)
+                        msg=$(_aitlib_profile_lines warn | perl -ne 'print, exit if /commit|push|git repository/')
+                        log_warn "tool exception for $slug saved but not pushed (${msg:-see deploy.log})"
+                        w=$(_aitlib_profile_tag profileFile)
+                        if [ -n "$w" ]; then w=$(dirname "$(_aitlib_bash_path "$w")"); else w="your dotprofile"; fi
+                        _aitlib_action_once "run git push in $w" ;;
+                esac
             fi
             return 0 ;;
         3)
-            msg=$(_profile_lines error | perl -ne 'print, exit if /\S/')
+            AITLIB_TOOL_EXC_RESULT=refused
+            msg=$(_aitlib_profile_lines error | perl -ne 'print, exit if /\S/')
             log_warn "tool exception for $slug not saved (${msg:-refused})"
-            write_summary ACTION "" "run aitools user init to remember tool choices"
+            _aitlib_action_once "run aitools user init to remember tool choices"
             return 3 ;;
     esac
-    msg=$(_profile_lines error | perl -ne 'print, exit if /\S/')
-    log_warn "tool exception for $slug not saved (${msg:-resolver exit $PROFILE_RC})"
-    write_summary ACTION "" "run aitools user init to remember tool choices"
+    AITLIB_TOOL_EXC_RESULT=failed
+    msg=$(_aitlib_profile_lines error | perl -ne 'print, exit if /\S/')
+    log_warn "tool exception for $slug not saved (${msg:-resolver exit $AITLIB_PROFILE_RC})"
+    _aitlib_action_once "see deploy.log -- a tool choice (tool exception) was not saved"
     return 1
 }
 
