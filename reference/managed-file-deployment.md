@@ -33,7 +33,7 @@ merge". This file is the implementation detail.
 | `Initialize-DeployTracker` | `deploy_tracker_init` | Reset the outcome counters before a deploy loop |
 | `Record-DeployOutcome` | `deploy_tracker_record` | Count one outcome (including `failed`) and write its DETAIL row |
 | `Write-DeployTrackerSummary` | `deploy_tracker_summary` | Write the loop's summary row (ERROR when any file failed) |
-| `Adopt-ManagedFile` | `adopt_managed_file` | Internal to the library: back up and write the adopt target. Callers do not call it |
+| `Adopt-ManagedFile` | `adopt_managed_file` | Back up and write an adopt target. Used inside `deploy_managed_file` for review adopts; called directly only by reverse discovery of user-created hooks and skills (no SOURCE; see "Shell Script Deployment Detail") |
 | `Sync-ManagedJson` | `sync_managed_json` | Profile-mirror regime for `settings.json` (see "JSON Config Review Detail"); unchanged |
 | `Prompt-JsonFieldReview` | `prompt_json_field_review` | Per-leaf prompt used by `sync_managed_json`; unchanged |
 
@@ -433,15 +433,18 @@ caller passes `""` and adopt and merge are not offered.
 After `created`, `updated`, or a merge & adopt (LOCAL written), the caller
 sets the executable bit on LOCAL.
 
-**Reverse discovery** (S3-SpecRewrite Q2): `setup-user-hooks` today also
-finds hooks in `~/.claude/hooks/` that have no SOURCE and offers
-`[a]dopt to dotprofile  [s]kip`, calling `adopt_managed_file` directly. It
-is outside the review-menu model (there is no SOURCE to compare) and it is
-the one remaining direct caller of `adopt_managed_file`. Its dotprofile
-target conflicts with SD-2. The approved direction is to drop reverse
-discovery, which leaves `adopt_managed_file` internal; until mission
-SOURCE-TRUTH removes it, it behaves as described in the user rule
-`hook-lifecycle.md` "User-created hooks".
+**Reverse discovery** (S3-SpecRewrite Q2: kept, 2026-10-21): `setup-user-hooks`
+also finds user-created hooks, a `*.sh` in `~/.claude/hooks/` with no SOURCE
+(in neither `shared/hooks/` nor `<userRepoPath>/claude/hooks/`), and offers
+`[a]dopt to dotprofile  [s]kip`. `[a]dopt` copies the hook into
+`<userRepoPath>/claude/hooks/` through the library helper
+`adopt_managed_file` / `Adopt-ManagedFile` (backup, checked copy). It is
+outside the review-menu model: there is no SOURCE to compare. It does not
+conflict with SD-2, which covers manifest hooks only. `setup-user-skills`
+does the same for user-created skills (target
+`<userRepoPath>/claude/skills/<name>/SKILL.md`). Prompts, non-interactive
+and EOF behavior: user rule `hook-lifecycle.md` "User-created hooks" and
+"Prompts in the hook deploy".
 
 ## JSON Config Review Detail
 
