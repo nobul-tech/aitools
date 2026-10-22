@@ -7,7 +7,7 @@
       "scope": "Tool data only. NOT lifecycle gates or onboarding checklists (.claude/rules/tool-lifecycle.md). NOT evaluation process (/tool-eval skill). NOT per-tool ops metadata (tool-ops.json)",
       "audience": "/tool-registry skill, /tool-eval skill, /audit skill, setup scripts, check scripts, aitools-install"
     },
-    "lastUpdated": "2026-10-05",
+    "lastUpdated": "2026-10-21",
     "repositories": {
       "primary": "https://github.com/nobul-tech/aitools",
       "userTemplate": "https://github.com/nobul-jose/aitools-{username}"
@@ -27,53 +27,124 @@
     "claude-code": {
       "displayName": "Claude Code CLI",
       "source": "https://code.claude.com/docs/en/setup",
-      "purpose": null,
+      "purpose": "Anthropic's agentic coding CLI (claude). It is the primary agent runtime of the aitools harness: aitools install deploys its user configuration (~/.claude/CLAUDE.md, rules, skills, hooks, settings.json, MCP servers) and the harness hooks (session archive, harvesting, standing-order and delegation guards) run inside its sessions. Managed so every machine runs a current, verified build with the same harness behaviour.",
       "install": {
         "macos": [
-          { "method": "native", "command": "curl -fsSL https://claude.ai/install.sh | bash", "preferred": true, "autoUpdates": true, "ccCompatible": true, "notes": null },
-          { "method": "homebrew", "command": "brew install --cask claude-code", "preferred": false, "autoUpdates": false, "ccCompatible": true, "notes": "Update: brew upgrade claude-code" }
+          { "method": "native", "command": "curl -fsSL https://claude.ai/install.sh | bash", "preferred": true, "autoUpdates": true, "ccCompatible": true, "notes": "Official 'Native Install (Recommended)'. Launcher ~/.local/bin/claude is a symlink into ~/.local/share/claude/versions/; a replaced launcher stops claude update from managing it. Channel at install time: `bash -s stable` or `bash -s <version>`." },
+          { "method": "homebrew", "command": "brew install --cask claude-code", "preferred": false, "autoUpdates": false, "ccCompatible": true, "notes": "Cask claude-code tracks the stable channel (about a week behind); claude-code@latest tracks latest. Update: brew upgrade claude-code (or claude-code@latest). Opt-in auto-upgrade: CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE=1. Homebrew keeps old versions: brew cleanup." }
         ],
         "windows": [
-          { "method": "native-powershell", "command": "irm https://claude.ai/install.ps1 | iex", "preferred": true, "autoUpdates": true, "ccCompatible": true, "notes": null },
+          { "method": "native-powershell", "command": "irm https://claude.ai/install.ps1 | iex", "preferred": true, "autoUpdates": true, "ccCompatible": true, "notes": "No Administrator needed. Channel or version: & ([scriptblock]::Create((irm https://claude.ai/install.ps1))) stable" },
           { "method": "native-cmd", "command": "curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd", "preferred": false, "autoUpdates": true, "ccCompatible": true, "notes": null },
-          { "method": "winget", "command": "winget install Anthropic.ClaudeCode", "preferred": false, "autoUpdates": false, "ccCompatible": true, "notes": "Update: winget upgrade Anthropic.ClaudeCode" }
+          { "method": "winget", "command": "winget install Anthropic.ClaudeCode", "preferred": false, "autoUpdates": false, "ccCompatible": true, "notes": "Update: winget upgrade Anthropic.ClaudeCode. Opt-in auto-upgrade: CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE=1 (may fail while claude runs: Windows locks the executable). Manifest is community-submitted (see delivery)." }
         ],
         "linux": [
-          { "method": "native", "command": "curl -fsSL https://claude.ai/install.sh | bash", "preferred": true, "autoUpdates": true, "ccCompatible": true, "notes": null }
+          { "method": "native", "command": "curl -fsSL https://claude.ai/install.sh | bash", "preferred": true, "autoUpdates": true, "ccCompatible": true, "notes": "Alpine/musl: needs bash, curl, libgcc, libstdc++, ripgrep and env USE_BUILTIN_RIPGREP=0." },
+          { "method": "apt", "command": "sudo apt install claude-code", "preferred": false, "autoUpdates": false, "ccCompatible": true, "notes": "After registering the signed repo (docs: 'Install with Linux package managers'): key https://downloads.claude.ai/keys/claude-code.asc, fingerprint 31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE, deb line https://downloads.claude.ai/claude-code/apt/stable stable main (or apt/latest latest main). Needs sudo." },
+          { "method": "dnf", "command": "sudo dnf install claude-code", "preferred": false, "autoUpdates": false, "ccCompatible": true, "notes": "After writing /etc/yum.repos.d/claude-code.repo with baseurl https://downloads.claude.ai/claude-code/rpm/stable (or rpm/latest), gpgcheck=1, gpgkey https://downloads.claude.ai/keys/claude-code.asc. Needs sudo." },
+          { "method": "apk", "command": "apk add claude-code", "preferred": false, "autoUpdates": false, "ccCompatible": true, "notes": "After adding key /etc/apk/keys/claude-code.rsa.pub (sha256 395759c1f7449ef4cdef305a42e820f3c766d6090d142634ebdb049f113168b6) and repo https://downloads.claude.ai/claude-code/apk/stable (or apk/latest)." }
         ],
         "deprecated": [
-          { "method": "npm", "command": "npm install -g @anthropic-ai/claude-code", "autoUpdates": false }
+          { "method": "npm", "command": "npm install -g @anthropic-ai/claude-code", "autoUpdates": false, "notes": "Kept deprecated per the harness decision. The setup page (2026-10-21) lists npm under 'Advanced installation options' without the word deprecated; changelog 2.1.15 added an npm deprecation notification. Requires Node.js 22+; installs the same native binary through a per-platform optional dependency. Upgrade: npm install -g @anthropic-ai/claude-code@latest (not npm update -g)." }
         ]
       },
       "update": {
-        "native": "Auto-updates in background, or `claude update` for manual",
-        "homebrew": "brew upgrade claude-code",
-        "winget": "winget upgrade Anthropic.ClaudeCode"
+        "native": "Auto-updates in the background (checks on startup and periodically; takes effect on next start), or `claude update` for manual. Channel: autoUpdatesChannel latest (default) or stable; floor: minimumVersion",
+        "homebrew": "brew upgrade claude-code (or brew upgrade claude-code@latest)",
+        "winget": "winget upgrade Anthropic.ClaudeCode",
+        "apt": "sudo apt update && sudo apt upgrade claude-code",
+        "dnf": "sudo dnf upgrade claude-code",
+        "apk": "apk update && apk upgrade claude-code",
+        "npm": "npm install -g @anthropic-ai/claude-code@latest"
       },
       "versionCheck": "claude --version",
-      "systemRequirements": "macOS 13.0+, Windows 10 1809+, Ubuntu 20.04+, Debian 10+. 4 GB+ RAM, internet. Windows: requires Git Bash (Git for Windows). Node.js 18+ only for deprecated npm install.",
-      "notes": "On Windows Git Bash (MSYS), the bash curl installer works. WinGet also works from Git Bash. `claude doctor` verifies installation type and version. Release channels: `latest` (default) or `stable`.",
+      "systemRequirements": "macOS 13.0+, Windows 10 1809+ or Windows Server 2019+, Ubuntu 20.04+, Debian 10+, Alpine Linux 3.19+. 4 GB+ RAM, x64 or ARM64, internet connection, shell Bash/Zsh/PowerShell/CMD, Anthropic supported country. Windows: Git for Windows optional for Claude Code itself (without it the PowerShell tool is the shell tool) but required by the harness (managed bash for hooks and build-deploy.sh, cross-platform.md). npm method only: Node.js 22+.",
+      "notes": "`claude doctor` prints read-only install diagnostics (install method, channel, last update attempt) without starting a session. Release channels: `latest` (default) or `stable` (about a week old, skips releases with major regressions). DISABLE_AUTOUPDATER=1 stops background checks only; DISABLE_UPDATES blocks every update path. On Windows Git Bash (MSYS), the bash curl installer works and WinGet also works from Git Bash (recorded earlier; not re-verified 2026-10-21).",
+      "delivery": {
+        "macos": { "packageMaintainer": "Anthropic", "upstreamSource": "https://claude.ai/install.sh -> https://downloads.claude.ai/claude-code-releases/<version>/darwin-<arch>/claude", "officialEndorsement": "code.claude.com/docs/en/setup: 'Native Install (Recommended)'; Homebrew cask listed as an alternative (cask maintained by Homebrew, homebrew/cask tap, autobumped by BrewTestBot; url downloads.claude.ai; sha256 for 2.1.304 darwin-arm64 equals the release manifest)", "provenanceVerified": "2026-10-21 (installed 2.1.307 SHA-256 5b113a77...58fb2a equals manifest.json platforms.darwin-arm64.checksum; codesign valid, notarized Developer ID Application: Anthropic PBC (Q6L2SF6YDW); manifest GPG signature NOT verified: gpg not installed)" },
+        "windows": { "packageMaintainer": "Anthropic", "upstreamSource": "https://claude.ai/install.ps1 -> https://downloads.claude.ai/claude-code-releases/<version>/win32-<arch>/claude.exe", "officialEndorsement": "code.claude.com/docs/en/setup: 'Native Install (Recommended)'; WinGet listed as an alternative (manifest Anthropic.ClaudeCode in microsoft/winget-pkgs, submitted by community bot spectobot (GitHub account spectopo, a SpecterShell bot) via Dumplings, Publisher Anthropic PBC, InstallerUrl downloads.claude.ai; 2.1.302 InstallerSha256 equals the release manifest)", "provenanceVerified": null },
+        "linux": { "packageMaintainer": "Anthropic", "upstreamSource": "https://claude.ai/install.sh -> https://downloads.claude.ai/claude-code-releases/<version>/linux-<arch>[-musl]/claude; signed apt/dnf/apk repos under https://downloads.claude.ai/claude-code/", "officialEndorsement": "code.claude.com/docs/en/setup: 'Native Install (Recommended)'; signed apt, dnf and apk repositories published by Anthropic", "provenanceVerified": null }
+      },
+      "health": {
+        "macos": { "flag": "yellow", "reasons": ["Active workaround on this platform: D-DEL1 Markdown name prefix for sub-agent writes (tool-ops-claude-code.md item #26; reproduced on macOS 2.1.307, 2026-10-21)", "Evaluation status is stale until the Windows and Linux trials and the re-verification of items #1-#25 are done", "Operational reference stale: tool-ops-claude-code.md 'Current version' is 2.1.81 against 2.1.307 installed (check-post-push step 20 warns)"] },
+        "windows": { "flag": "yellow", "reasons": ["Version unverified: lastVerifiedVersion null. The last Windows date on record is 2026-03-13 (2.1.74), the last-verified date of workaround item #1 in tool-ops-claude-code.md, 222 days before 2026-10-21; if the commander reads that as the version verification, the red criterion (>180 days) applies and needs a migration plan", "Active workaround (item #1: Bash tool on Git Bash, pwsh -File dispatch) predates upstream changes: PowerShell tool (2.1.84), PowerShell as primary shell when enabled (2.1.126), Git for Windows optional (2.1.120); needs re-verification", "Provenance not verified on Windows"] },
+        "linux": { "flag": "yellow", "reasons": ["Version unverified: lastVerifiedVersion null", "Provenance not verified on Linux"] }
+      },
+      "evaluation": {
+        "status": "stale",
+        "provenance": "reference/evaluations/claude-code-macos-2026-10-21.md",
+        "pendingChanges": "Evaluation approved and written 2026-10-21 (status kept stale, commander); status can become current once the items below are done. Pending: Windows and Linux trials (version, provenance, knownPaths); re-verify tool-ops-claude-code.md items #1-#25 at 2.1.307; schema 1.1 updateChannel (SD-4) for this entry: proposed vendor-auto."
+      },
       "lifecycle": {
         "platformStatus": { "macos": "supported", "windows": "supported", "linux": "supported" },
         "concurrency": "Yes — independent sessions per directory",
-        "postInstallConfig": "~/.claude/CLAUDE.md (via setup script), git identity",
-        "dependencies": ["Git", "Git Bash (Windows)"],
-        "invocation": { "command": "claude", "antiPatterns": [] }
+        "postInstallConfig": "Login (claude.ai account or API credentials, see authentication); ~/.claude/CLAUDE.md, rules, skills, hooks, settings.json and MCP servers via aitools setup scripts; git identity",
+        "dependencies": ["Git", "Git Bash (Windows; harness requirement, optional for Claude Code since 2.1.120)", "ripgrep (bundled; Alpine: system ripgrep)"],
+        "invocation": { "command": "claude", "antiPatterns": ["npx @anthropic-ai/claude-code"] }
       },
       "versions": {
-        "macos": { "lastVerifiedVersion": null, "lastVerified": null },
+        "macos": { "lastVerifiedVersion": "2.1.307", "lastVerified": "2026-10-21" },
         "windows": { "lastVerifiedVersion": null, "lastVerified": null },
         "linux": { "lastVerifiedVersion": null, "lastVerified": null },
         "minVersion": null,
         "blocked": [],
-        "maintenanceFile": "tool-ops-claude-code.md"
+        "maintenanceFile": "reference/tool-ops-claude-code.md",
+        "notes": "macOS: claude --version -> 2.1.307 (Claude Code); claude doctor: native, channel latest, last update success -> 2.1.307 (2026-10-21); 2.1.307 is the newest changelog entry (October 21, 2026). Windows and Linux: unknown, no machine checked 2026-10-21. maintenanceFile: the deployed copy will live under ~/.aitools/reference/ once mission HARNESS ships deploy-harness."
       },
-      "authentication": null,
+      "maintenance": {
+        "harness": "scripts/aitools-install.sh/.ps1 Step 9 (no setup-claude-code script): claude on PATH -> log version, run `claude update`; otherwise run the native installer (install.sh / install.ps1). Configuration: setup-user-claude, setup-user-settings, setup-user-hooks, setup-user-skills, setup-user-mcp. Version-dep review: check-post-push step 20.",
+        "lastRun": {
+          "macos": "2026-10-21T16:20:22Z (deploy.log: Step 9, 2.1.306 up to date at the time)",
+          "windows": null,
+          "linux": null
+        },
+        "workarounds": [
+          { "item": 26, "summary": "Sub-agent Write refuses ^(REPORT|SUMMARY|FINDINGS|ANALYSIS).*\\.md$; D-DEL1 name prefix", "platforms": ["macos", "windows", "linux"], "severity": "high", "lastVerified": "2.1.307 (2026-10-21, macOS: sub-agent Write of REPORT-probe.md refused by S3-RegCC-Check)" },
+          { "item": 27, "summary": "Sub-agent nesting cap (default 3; web sets 1); Workflow agents cannot delegate", "platforms": ["macos", "windows", "linux"], "severity": "high", "lastVerified": "2.1.307 (2026-10-21)" },
+          { "item": 1, "summary": "Windows Bash tool on Git Bash; PowerShell via pwsh -File", "platforms": ["windows"], "severity": "critical", "lastVerified": "2.1.74 (2026-03-13); upstream changed since (2.1.84, 2.1.120)" },
+          { "item": 5, "summary": "Sub-agents do not inherit rules/CLAUDE.md; delegation duty restates them", "platforms": ["macos", "windows", "linux"], "severity": "high", "lastVerified": "2.1.74 (2026-03-13)" },
+          { "item": 24, "summary": "Sub-agent Glob/Grep denied outside the CWD repo; explicit-path Read works", "platforms": ["macos", "windows", "linux"], "severity": "high", "lastVerified": "2.1.74 (2026-03-24)" },
+          { "item": 25, "summary": "No agent continuation (SendMessage); self-contained launch prompts", "platforms": ["macos", "windows", "linux"], "severity": "high", "lastVerified": "2.1.81 (2026-03-24); likely obsolete: changelog 2.1.77 says use SendMessage({to: agentId}), and SendMessage is offered in 2.1.307 sessions" },
+          { "item": 11, "summary": "npm global bin not on Claude Code PATH (node fallback in setup-user-mcp)", "platforms": ["macos"], "severity": "medium", "lastVerified": "2.1.51" },
+          { "item": 10, "summary": "Write tool produced CRLF on macOS", "platforms": ["macos"], "severity": "medium", "lastVerified": "2.1.51; did not reproduce on 2.1.307 (2026-10-21, `file` reports ASCII text for Write output): candidate for removal" }
+        ],
+        "upstreamRisks": [
+          "Release cadence: 2.1.304 (Oct 19) to 2.1.307 (Oct 21, 2026); version-dependent behaviour drifts faster than tool-ops-claude-code.md is re-verified",
+          "Security advisories are frequent (GHSA list on anthropics/claude-code, many high); all published CLI advisories are patched at or below 2.1.260. Package-manager channels lag latest (2026-10-21: Homebrew stable cask 2.1.304, @latest 2.1.306, WinGet 2.1.302, native 2.1.307)",
+          "Windows shell model changed upstream (PowerShell tool, Git for Windows optional): harness text saying Claude Code on Windows always uses Git Bash may be wrong",
+          "Harness relies on undocumented behaviour: sub-agent Markdown name block (#26), JSONL session storage and path sanitization (#4, #16, #17)",
+          "Proprietary licence (repo LICENSE.md: 'All rights reserved', use subject to Anthropic Commercial Terms of Service; GitHub API reports license null because it is not SPDX; WinGet manifest: License Proprietary)"
+        ]
+      },
+      "authentication": {
+        "method": "claude.ai account login (Pro, Max, Team, Enterprise) or Console/API credentials; browser flow on first `claude` run, `/login`, or `claude auth login`",
+        "setupCommand": "claude auth login",
+        "checkCommand": "claude auth status --json",
+        "checkType": "command-output",
+        "checkNotes": "JSON field loggedIn (true/false). Verified 2026-10-21 on macOS (2.1.307): keys include loggedIn and authMethod. Exit code on logged-out state not verified.",
+        "refreshCommand": "/login (startup warns 3 days before the login expires)",
+        "logoutCommand": "claude auth logout",
+        "tokenStorage": "macOS: Keychain (fallback ~/.claude/.credentials.json, mode 0600, when the Keychain rejects the write); Linux: ~/.claude/.credentials.json (0600); Windows: %USERPROFILE%\\.claude\\.credentials.json; CLAUDE_CONFIG_DIR moves it",
+        "envOverride": "ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, apiKeyHelper setting; third-party providers (Bedrock, Vertex/Agent Platform, Foundry) use their own credentials; CLAUDE_CODE_OAUTH_TOKEN (long-lived OAuth token printed by `claude setup-token`, subscription; not read in --bare mode)",
+        "auth0MigrationPhase": null
+      },
       "buildPrereqs": null,
-      "knownPaths": null,
-      "nonPreferredMethods": null,
-      "pathIssues": null,
-      "platformGotchas": null
+      "knownPaths": {
+        "macos": [
+          { "tool": "Claude Code", "installMethod": "native", "standardPath": "~/.local/bin/claude", "verified": "2026-10-21 (v2.1.307)", "notes": "Symlink to ~/.local/share/claude/versions/2.1.307 (ls -la)" }
+        ],
+        "windows": [
+          { "tool": "Claude Code", "installMethod": "native", "standardPath": "%USERPROFILE%\\.local\\bin\\claude.exe", "verified": null, "notes": "UNVERIFIED: from the docs uninstall section, not observed on a machine" }
+        ],
+        "linux": [
+          { "tool": "Claude Code", "installMethod": "native", "standardPath": "~/.local/bin/claude", "verified": null, "notes": "UNVERIFIED: docs say the native installer manages ~/.local/bin/claude on macOS and Linux" }
+        ]
+      },
+      "nonPreferredMethods": [
+        { "method": "npm", "detection": "npm ls -g @anthropic-ai/claude-code", "reason": "Deprecated in the harness; can shadow the native launcher on PATH. Remove: npm uninstall -g @anthropic-ai/claude-code. Detection: absent case observed on macOS 2026-10-21 (exit 1, prints '(empty)'); present case UNVERIFIED (no npm install on this machine)." }
+      ],
+      "pathIssues": "Native install puts the launcher in ~/.local/bin (%USERPROFILE%\\.local\\bin on Windows); if `claude` is not found, that directory is not on PATH (docs: 'Fix your PATH'). A second install or an old shell alias can shadow it (docs: 'Check for conflicting installations').",
+      "platformGotchas": "Windows: with Git for Windows the Bash tool uses Git Bash (set CLAUDE_CODE_GIT_BASH_PATH if not found) and the PowerShell tool is also on by default for claude.ai and Console accounts, and when it is enabled Claude treats PowerShell as the primary shell (changelog 2.1.126); without it the PowerShell tool is the shell. Native Windows has no sandboxing (WSL 2 does). WinGet upgrades can fail while claude runs (locked executable). Linux binaries are not individually code-signed: verify with the signed manifest or use apt/dnf/apk."
     },
     "vercel-cli": {
       "displayName": "Vercel CLI",
