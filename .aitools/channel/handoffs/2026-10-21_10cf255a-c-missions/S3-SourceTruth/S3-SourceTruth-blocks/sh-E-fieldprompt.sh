@@ -2,7 +2,7 @@
 # Granular per-leaf review prompt for JSON settings sync (sync_managed_json)
 # and the JSON field review (review_json_fields).
 # One prompt per divergent setting/rule. overwrite/adopt/skip are per-leaf;
-# abort (x) is global and exits the run (code 2, abort marker per D-TS13).
+# abort (x) is global and exits the run (code 2).
 #
 # Args:
 #   $1 = leaf display name (e.g. "theme" or "permissions.deny MCP(vercel)")

@@ -4,16 +4,11 @@
 # state (see the "Review choices" block above prompt_diff_review).
 # ---------------------------------------------------------------------------
 
-# [x]abort (D-TS13): log, append the abort marker when the runner asked for one
-# (AITOOLS_ABORT_FILE set and non-empty), then exit 2. A failed marker write is
-# logged; the exit code stays 2. Parity: Invoke-ManagedAbort in aitools-lib.ps1.
+# [x]abort: log, then exit 2 (a bare exit 2 means user abort; commander
+# decision 2026-10-21, D-TS13 reversed: no marker file). One helper for every
+# review prompt. Parity: Invoke-ManagedAbort in aitools-lib.ps1.
 _managed_abort() {
     log_error "Aborted by user"
-    if [ -n "${AITOOLS_ABORT_FILE:-}" ]; then
-        if ! printf 'abort %s %s\n' "${SCRIPT_NAME:-unknown}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$AITOOLS_ABORT_FILE"; then
-            log_error "Could not write the abort marker to $(display_path "$AITOOLS_ABORT_FILE")"
-        fi
-    fi
     exit 2
 }
 

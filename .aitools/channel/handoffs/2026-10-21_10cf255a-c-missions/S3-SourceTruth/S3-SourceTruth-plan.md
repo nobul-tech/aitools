@@ -1,7 +1,9 @@
 # S3-SourceTruth plan -- managed files: SOURCE is the source of truth
 
 Mission SOURCE-TRUTH (Session Commander 10cf255a-c). Branch
-`feature/managed-file-source-of-truth`, rebased on origin/main 6eb2b0b.
+`feature/managed-file-source-of-truth`, with origin/main 6eb2b0b merged in
+(a merge, not a rebase: the branch was already pushed and force-push is not
+allowed).
 Target files are byte-identical between db4b3c5 and 6eb2b0b (`git diff --stat
 db4b3c5 origin/main -- <targets>` empty, 2026-10-22), so the line ranges below
 (taken at db4b3c5) are valid on the rebased branch.
@@ -43,12 +45,17 @@ replacement patterns beyond the pre-existing `source`/dot-source lines.
 | Range (db4b3c5) | Old | New block |
 |---|---|---|
 | 368-395 | `backup_file` | `sh-G-backup.sh`: sets `BACKUP_FILE_OK` (false on a failed copy); still non-fatal |
-| 426-549 | deploy state: `_DEPLOY_STATE_DIR`, `_DEPLOY_MANIFEST`, `get_content_hash`, `_deploy_state_key`, `initialize_deploy_state`, `get_deploy_state_hash`, `update_deploy_state`, `get_deploy_shadow`, `AUTO_MERGED_CONTENT`, `try_auto_merge` (all removed) | `sh-A-helpers.sh`: `_managed_abort` (D-TS13), `_managed_state_notice`, `_managed_protected_note`, `_managed_adopt_notice`, `_managed_write` |
+| 426-549 | deploy state: `_DEPLOY_STATE_DIR`, `_DEPLOY_MANIFEST`, `get_content_hash`, `_deploy_state_key`, `initialize_deploy_state`, `get_deploy_state_hash`, `update_deploy_state`, `get_deploy_shadow`, `AUTO_MERGED_CONTENT`, `try_auto_merge` (all removed) | `sh-A-helpers.sh`: `_managed_abort` (log_error + exit 2, one helper for all prompts), `_managed_state_notice`, `_managed_protected_note`, `_managed_adopt_notice`, `_managed_write` |
 | 797-900 | `_invoke_ai_merge` | `sh-F-merge.sh`: [n]o -> `menu`; no valid output -> `failed` + `MANAGED_MERGE_ERROR`; no fallback prompt |
 | 902-1060 | `prompt_diff_review` (auto-merge menu, adopt label) | `sh-B-review.sh`: "Review choices" block + `prompt_diff_review DEST NEW ADOPT_OFFERED [CUR]`, one menu, loops on `menu` |
 | 1062-1189 | `deploy_managed_file` (deploy state, auto-deploy, caller-side adopt) | `sh-C-deploy.sh.tmpl`: `deploy_managed_file SRC DEST TOOL ITEM [ADOPT_PATH] [ADOPT_FILTER]` + `review_json_fields SRC_FILE DEST ADOPT_PATH` |
 | 1238-1290 | tracker | `sh-D-tracker.sh`: `failed` outcome; summary ERROR when failed > 0 |
 | 1292-1358 | `prompt_json_field_review` | `sh-E-fieldprompt.sh`: optional `$6` local label (default `settings.json`, so `sync_managed_json` output is unchanged), `$7` overwrite-allowed; abort via `_managed_abort` |
+
+Plus one edit pair after the ranges, `edits/libsh-01`: `_merge_validate`
+returned the status of its last command (an assignment, always 0), so bash AI
+merge validation never rejected any output (found by the merge-fail test; the
+PS1 wrapper returns its result correctly). It now returns the validator's status.
 
 `adopt_managed_file` stays (reverse discovery of user-created hooks/skills).
 `sync_managed_json` is not touched.
@@ -94,8 +101,9 @@ As briefed, plus the "Contract change" items in section 6.
 - `review_json_fields SRC_FILE DEST ADOPT_PATH` -> same result set.
 - `deploy_tracker_record failed` (count + `DETAIL failed: <item>`);
   `deploy_tracker_summary` ERROR when failed > 0.
-- Abort: `_managed_abort` appends `abort <script> <UTC>` to `$AITOOLS_ABORT_FILE`
-  only when it is set and non-empty; always `exit 2`.
+- Abort: `_managed_abort` / `Invoke-ManagedAbort`: log_error + `exit 2`, as on
+  main. No abort marker: the commander reversed D-TS13 on 2026-10-21 (a bare
+  exit 2 means user abort).
 - PS1 twins as briefed, plus `-AdoptFilter [scriptblock]`.
 
 ## 5. Error-handling audit (every suppression in the new code)
@@ -131,7 +139,7 @@ function or variable to change.
 8. A failed backup of an existing file fails the step, nothing written (`BACKUP_FILE_OK` checked in `_managed_write`).
 9. Skills adopt target = the file read (dotprofile or shared/skills); the MDM embedded deploy has no adopt target.
 10. Reverse discovery of user-created hooks keeps `adopt_managed_file` into the dotprofile.
-11. Dotprofile auto-commit/push kept pending confirmation (ported unchanged; runs after a merge & adopt of a rule, as before: condition `accept & adopt` + `MERGED_CONTENT` set).
+11. Dotprofile auto-commit/push kept (commander confirmed 2026-10-21; ported unchanged: runs after a merge & adopt of a rule, as before: condition `accept & adopt` + `MERGED_CONTENT` set).
 12. cli-config.json (setup-user-cursor's own merge) untouched.
 Own additions: `prompt_json_field_review $6/$7` and `Prompt-JsonFieldReview -LocalLabel/-OverwriteAllowed` (optional, defaults keep sync_managed_json output); the library logs "Uncommitted change in <repo>" after every adopt (it never commits).
 
@@ -139,7 +147,7 @@ Own additions: `prompt_json_field_review $6/$7` and `Prompt-JsonFieldReview -Loc
 
 | Batch | Files | Apply | Verify |
 |---|---|---|---|
-| B1 | scripts/aitools-lib.sh | `apply-lib.pl` spec-sh.tsv | bash -n; node cmp; grep removed helpers; tests/logging |
+| B1 | scripts/aitools-lib.sh | `apply-lib.pl` spec-sh.tsv, then `apply-edits.pl` libsh | bash -n; node cmp; grep removed helpers; tests/logging |
 | B2 | scripts/aitools-lib.ps1 | `apply-lib.pl` spec-ps1.tsv | pwsh parser; node cmp; tests/logging .ps1 |
 | B3 | setup-user-claude.sh, setup-user-skills.sh, setup-user-hooks.sh | `apply-edits.pl` claude-sh, skills-sh, hooks-sh | bash -n; isolated-HOME smoke runs |
 | B4 | the three .ps1 | claude-ps1, skills-ps1, hooks-ps1 | pwsh parser |
@@ -152,8 +160,7 @@ created; verified; non-interactive overwrite; EOF at the prompt; --force;
 adopt writes LOCAL-kept + repo file and the next run is verified; merge & adopt
 with a stub `claude` on PATH writes both and the next run is verified; merge
 [n]o returns to the menu; failed AI merge -> failed, nothing written; skip;
-abort writes the marker when AITOOLS_ABORT_FILE is set and exits 2 (no marker
-when unset); forced write failure (read-only adopt target during merge & adopt)
+abort exits 2 with "Aborted by user" logged and LOCAL unchanged; forced write failure (read-only adopt target during merge & adopt)
 restores LOCAL, returns failed, run continues; new file in a read-only dir ->
 failed, nothing left; JSON per-field overwrite/adopt/skip, LOCAL-only kept,
 key order preserved, invalid JSON result restored; tracker ERROR row;

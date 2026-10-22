@@ -30,8 +30,7 @@
 #                       now; "accept & adopt". [n]: back to this menu. No valid
 #                       merge output: nothing written; "failed".
 #   [s]kip           -> nothing written; "skipped"; reviewed again next run
-#   [x]abort         -> log_error, abort marker (AITOOLS_ABORT_FILE, D-TS13),
-#                       exit 2: ends this script
+#   [x]abort         -> log_error, exit 2: ends this script
 # After adopt or merge, SOURCE, LOCAL and the adopt target agree, so the next
 # run verifies the file and asks nothing. A caller whose adopt target is not a
 # plain copy of LOCAL (CLAUDE.md: machine footer stripped, profile tokens

@@ -4,21 +4,11 @@
 # state (see the "Review choices" block above Prompt-DiffReview).
 # ---------------------------------------------------------------------------
 
-# [x]abort (D-TS13): log, append the abort marker when the runner asked for one
-# ($env:AITOOLS_ABORT_FILE set and non-empty), then exit 2. A failed marker
-# write is logged; the exit code stays 2. Parity: _managed_abort in aitools-lib.sh.
+# [x]abort: log, then exit 2 (a bare exit 2 means user abort; commander
+# decision 2026-10-21, D-TS13 reversed: no marker file). One helper for every
+# review prompt. Parity: _managed_abort in aitools-lib.sh.
 function Invoke-ManagedAbort {
     LogError "Aborted by user"
-    if ($env:AITOOLS_ABORT_FILE) {
-        $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-        $name = if ($script:scriptName) { $script:scriptName } else { "unknown" }
-        try {
-            $abortPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:AITOOLS_ABORT_FILE)
-            [IO.File]::AppendAllText($abortPath, "abort $name $ts`n", [System.Text.UTF8Encoding]::new($false))
-        } catch {
-            LogError "Could not write the abort marker to $($env:AITOOLS_ABORT_FILE): $_"
-        }
-    }
     exit 2
 }
 
@@ -101,11 +91,12 @@ function Write-ManagedAdoptNotice {
 # ---------------------------------------------------------------------------
 $script:ManagedWriteError = ""
 $script:ManagedJsonCheck = @'
+// node check.js FILE REQUIRED_KEYS_FILE (argv[1] is this script's own path)
 const fs = require('fs');
 let v;
-try { v = JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); }
+try { v = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')); }
 catch (e) { console.error('not valid JSON: ' + e.message); process.exit(1); }
-const req = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const req = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
 const isObj = v !== null && typeof v === 'object' && !Array.isArray(v);
 const miss = isObj ? req.filter(k => !Object.prototype.hasOwnProperty.call(v, k)) : req;
 if (miss.length) { console.error('missing required keys: ' + miss.join(', ')); process.exit(1); }

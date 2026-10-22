@@ -2,8 +2,7 @@
 # Granular per-leaf review prompt for JSON settings sync (Sync-ManagedJson)
 # and the JSON field review (Review-JsonFields). Mirror of
 # prompt_json_field_review in aitools-lib.sh. One prompt per divergent
-# setting/rule. overwrite/adopt/skip are per-leaf; abort (x) exits (code 2,
-# abort marker per D-TS13).
+# setting/rule. overwrite/adopt/skip are per-leaf; abort (x) exits (code 2).
 # -LocalLabel names the local file's side (default "settings.json").
 # -OverwriteAllowed "0" (a field only in the local file): no [o]verwrite, and
 # the default answer is skip.
