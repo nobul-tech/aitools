@@ -36,20 +36,23 @@ DP="$H/repos/aitools-nobul-jose"
 
 FIX_KIND=""
 FIX_NAME="Jose"
-fixture() {  # fixture with-id|hostname-only|none  (identity name: $FIX_NAME)
+fixture() {  # fixture with-id|with-exc|hostname-only|none  (identity name: $FIX_NAME)
     FIX_KIND="$1"
     rm -rf "$H"; mkdir -p "$H/repos" "$H/.aitools"
     printf '{ "githubUser": "nobul-jose" }\n' > "$H/.aitools/config.json"
     [ "$1" = "none" ] && return 0
     mkdir -p "$DP"
-    local idline=""
-    if [ "$1" = "with-id" ]; then idline="\"id\": \"$ID_MAC\","; fi
+    local idline="" excline=""
+    if [ "$1" = "with-id" ] || [ "$1" = "with-exc" ]; then idline="\"id\": \"$ID_MAC\","; fi
+    if [ "$1" = "with-exc" ]; then
+        excline=', "toolExceptions": { "go": { "decision": "keep", "detected": { "platform": "macos", "method": "pkg-installer", "path": "/usr/local/bin/go", "version": "1.22.5" }, "decidedAt": "2026-10-01T00:00:00Z", "decidedBy": "setup-go", "reason": null } }'
+    fi
     cat > "$DP/profile.json" <<JSON
 {
   "version": 2,
   "identity": { "github": "nobul-jose", "name": "$FIX_NAME", "company": "nobul-tech", "git": { "name": "Jose", "email": "jose@nobul.tech" } },
   "profiles": {
-    "nobul-mac": { "machine": { $idline "hostname": "nobul-mac" } }
+    "nobul-mac": { "machine": { $idline "hostname": "nobul-mac" }$excline }
   }
 }
 JSON
@@ -63,6 +66,11 @@ JSON
 # Resolver stubs for the AITOOLS_PROFILE_SH / AITOOLS_PROFILE_PS1 override cases
 printf '#!/usr/bin/env bash\nprintf "path\\t/stub/aitools-dp\\nvia\\tenv\\n"\nexit 0\n' > "$WORK/stub.sh"
 printf '"path`t/stub/aitools-dp"\n"via`tenv"\nexit 0\n' > "$WORK/stub.ps1"
+# Broken resolvers (PR #80 review 2, M1): silent exit 0 / exit 1, a throw, a parse error
+printf 'exit 0\n' > "$WORK/silent0.sh"; printf 'exit 0\n' > "$WORK/silent0.ps1"
+printf 'exit 1\n' > "$WORK/silent1.sh"; printf 'exit 1\n' > "$WORK/silent1.ps1"
+printf 'throw "boom"\n' > "$WORK/throw.ps1"
+printf 'if (\n' > "$WORK/parse.ps1"
 
 # Bash driver: source the lib, run one call, print the results
 cat > "$WORK/drive.sh" <<'DRIVE'
@@ -256,6 +264,43 @@ run_case override-stub urp "rc=0
 path=/stub/aitools-dp via=env
 warnings=0 errors=0" "" "AITOOLS_PROFILE_SH=$WORK/stub.sh AITOOLS_PROFILE_PS1=$WORK/stub.ps1"
 
+fixture with-exc
+run_case eget-found eget "rc=0
+found=true method=pkg-installer path=/usr/local/bin/go
+warnings=0 errors=0" ""
+
+# Review 2 M1: a resolver exit 0 or 1 without result lines is an error, not
+# "found" or "shared-only"; a throw or parse error is an error too
+fixture with-id
+run_case broken-silent0-urp urp "rc=3
+path= via=
+warnings=0 errors=1" "ERROR|dotprofile|resolver failed" "AITOOLS_PROFILE_SH=$WORK/silent0.sh AITOOLS_PROFILE_PS1=$WORK/silent0.ps1"
+
+run_case broken-silent1-urp urp "rc=3
+path= via=
+warnings=0 errors=1" "ERROR|dotprofile|resolver failed" "AITOOLS_PROFILE_SH=$WORK/silent1.sh AITOOLS_PROFILE_PS1=$WORK/silent1.ps1"
+
+run_case broken-silent1-rmp rmp "rc=3
+alias= via= company= name=
+warnings=0 errors=2" "ERROR|machine profile|no machine match
+ACTION||Run: aitools user init (pick or register this machine's profile)" "AITOOLS_PROFILE_SH=$WORK/silent1.sh AITOOLS_PROFILE_PS1=$WORK/silent1.ps1"
+
+run_case broken-silent0-eget eget "rc=1
+found=false method= path=
+warnings=1 errors=0" "" "AITOOLS_PROFILE_SH=$WORK/silent0.sh AITOOLS_PROFILE_PS1=$WORK/silent0.ps1"
+
+run_case broken-silent0-eset eset "rc=1
+result=failed pushed=false
+warnings=1 errors=0" "ACTION||see deploy.log -- a tool choice (tool exception) was not saved" "AITOOLS_PROFILE_SH=$WORK/silent0.sh AITOOLS_PROFILE_PS1=$WORK/silent0.ps1"
+
+run_case broken-throw-urp urp "rc=3
+path= via=
+warnings=0 errors=1" "ERROR|dotprofile|resolver failed" "AITOOLS_PROFILE_PS1=$WORK/throw.ps1" ps
+
+run_case broken-parse-urp urp "rc=3
+path= via=
+warnings=0 errors=1" "ERROR|dotprofile|resolver failed" "AITOOLS_PROFILE_PS1=$WORK/parse.ps1" ps
+
 # m2: the bash -> pwsh branch (Git Bash on Windows), forced on this OS. A
 # non-ASCII identity value must arrive intact (UTF-8 output).
 if $USE_PS; then
@@ -281,6 +326,12 @@ warnings=1 errors=0" "ACTION||run aitools user init to remember tool choices" "$
     run_case via-pwsh-stub urp "rc=0
 path=/stub/aitools-dp via=env
 warnings=0 errors=0" "" "$PWSH_ENV AITOOLS_PROFILE_PS1=$WORK/stub.ps1" bash
+
+    for broken in silent0 silent1 throw parse; do
+        run_case "via-pwsh-broken-$broken" urp "rc=3
+path= via=
+warnings=0 errors=1" "ERROR|dotprofile|resolver failed" "$PWSH_ENV AITOOLS_PROFILE_PS1=$WORK/$broken.ps1" bash
+    done
 fi
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"

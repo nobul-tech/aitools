@@ -118,19 +118,38 @@ function ReadConfigKey {
 # $script:AitLibProfileOut (tagged lines) and $script:AitLibProfileRc. Returns
 # $true when it ran, $false when no resolver is available. $PSScriptRoot inside
 # a function is the directory of the file that defines it (this library, or the
-# generated deploy script it is inlined into).
+# generated deploy script it is inlined into). The resolver's stderr (its own
+# log lines, written with [Console]::Error) is captured and copied to
+# deploy.log as detail lines, as in bash. The exit code is trusted only with the
+# result lines: exit 0 or 1 without a "via" line is rewritten to 2 with an
+# "error" line (parity with _aitlib_profile_run).
 function Invoke-AitLibProfile([string[]]$Arguments) {
     $script:AitLibProfileOut = @(); $script:AitLibProfileRc = 0
     $ps1 = if ($env:AITOOLS_PROFILE_PS1) { $env:AITOOLS_PROFILE_PS1 } else { Join-Path $PSScriptRoot "aitools-profile.ps1" }
     if (-not (Test-Path -LiteralPath $ps1 -PathType Leaf)) { return $false }
     $global:LASTEXITCODE = 0
+    $origErr = [Console]::Error
+    $errBuf = [IO.StringWriter]::new()
+    [Console]::SetError($errBuf)
     try {
         $script:AitLibProfileOut = @(& $ps1 @Arguments | ForEach-Object { [string]$_ })
         $script:AitLibProfileRc = $LASTEXITCODE
     } catch {
-        # The caller logs the failure (LogError / LogWarn with the exit code below)
+        # The caller logs the failure (LogError / LogWarn with the "error" line below)
         LogDetail "aitools-profile $($Arguments[0]) threw: $($_.Exception.Message)"
-        $script:AitLibProfileRc = 99
+        $script:AitLibProfileRc = 2
+    } finally {
+        [Console]::SetError($origErr)
+    }
+    foreach ($l in ($errBuf.ToString() -split "`r?`n")) {
+        if ($l) { LogDetail "aitools-profile $($Arguments[0]): $l" }
+    }
+    if ($script:AitLibProfileRc -eq 0 -or $script:AitLibProfileRc -eq 1) {
+        if (-not @($script:AitLibProfileOut | Where-Object { $_.StartsWith("via`t") }).Count) {
+            LogDetail "aitools-profile $($Arguments[0]): exit $($script:AitLibProfileRc) without result lines -- treated as a resolver error"
+            $script:AitLibProfileOut = @($script:AitLibProfileOut) + @("error`tresolver exited $($script:AitLibProfileRc) without result lines (see deploy.log)")
+            $script:AitLibProfileRc = 2
+        }
     }
     return $true
 }
@@ -264,14 +283,15 @@ function Get-ToolException([string]$Slug) {
 # (tree section 8 Writer; only after [k]eep, never in dry run or non-interactive
 # runs). decidedBy = the calling script's name. The resolver writes profile.json
 # and commits and pushes it (N-Q2). Sets $script:AitLibToolExcResult
-# (created|updated|unchanged|dry-run|refused|failed, "" when the resolver is
-# missing) and $script:AitLibToolExcPushed. Returns 0 written or nothing to
+# (created|updated|unchanged|dry-run|refused|failed; never empty after the
+# call) and $script:AitLibToolExcPushed. Returns 0 written or nothing to
 # write (created/updated: a failed commit or push is a LogWarn + ACTION "run git
 # push in <dotprofile>"; unchanged and dry-run write nothing, so they need no
 # push and get no warning), 1 failed, 3 refused (no dotprofile, or the machine
-# profile matched by hostname only or not at all); 1 and 3 LogWarn + ACTION
-# "run aitools user init to remember tool choices" (the tool itself is fine,
-# so no ERROR row: D-TS12).
+# profile matched by hostname only or not at all). 3 is LogWarn + ACTION "run
+# aitools user init to remember tool choices"; 1 (resolver missing, usage
+# error, crash) is LogWarn + ACTION "see deploy.log -- a tool choice (tool
+# exception) was not saved". The tool itself is fine, so no ERROR row (D-TS12).
 function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [string]$Version, [string]$Reason = "") {
     $script:AitLibToolExcPushed = $false; $script:AitLibToolExcResult = ""
     $by = if ($script:scriptName) { $script:scriptName } else { "unknown" }
@@ -279,8 +299,9 @@ function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [strin
         "--path", $Path, "--version", $Version, "--by", $by, "--environment", $script:AitoolsEnvironment)
     if ($Reason) { $a += @("--reason", $Reason) }
     if (-not (Invoke-AitLibProfile $a)) {
+        $script:AitLibToolExcResult = "failed"
         LogWarn "tool exception for $Slug not saved (resolver missing)"
-        Write-AitLibActionOnce "run aitools user init to remember tool choices"
+        Write-AitLibActionOnce "see deploy.log -- a tool choice (tool exception) was not saved"
         return 1
     }
     $script:AitLibToolExcResult = Get-AitLibProfileTag "result"
@@ -303,14 +324,16 @@ function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [strin
     }
     $msg = @(Get-AitLibProfileLines "error") | Select-Object -First 1
     if ($script:AitLibProfileRc -eq 3) {
+        $script:AitLibToolExcResult = "refused"
         if (-not $msg) { $msg = "refused" }
         LogWarn "tool exception for $Slug not saved ($msg)"
         Write-AitLibActionOnce "run aitools user init to remember tool choices"
         return 3
     }
+    $script:AitLibToolExcResult = "failed"
     if (-not $msg) { $msg = "resolver exit $($script:AitLibProfileRc)" }
     LogWarn "tool exception for $Slug not saved ($msg)"
-    Write-AitLibActionOnce "run aitools user init to remember tool choices"
+    Write-AitLibActionOnce "see deploy.log -- a tool choice (tool exception) was not saved"
     return 1
 }
 

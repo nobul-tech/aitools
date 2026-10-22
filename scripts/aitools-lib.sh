@@ -138,10 +138,17 @@ read_config_key() {
 # (tagged lines, CR stripped) and AITLIB_PROFILE_RC. Returns 0 when it ran, 1
 # when no resolver is available (the caller logs it). The resolver's stderr
 # (its own log lines) is copied to deploy.log as detail lines.
-# Windows (Git Bash) branch: aitools-profile.ps1 through pwsh. Path arguments
-# (--path) are passed in Windows form (cygpath -w), stdout is forced to UTF-8
-# and CRs are stripped. AITLIB_PROFILE_VIA_PWSH=1 forces this branch on any OS
-# (tests; cygpath is then used only when present).
+# The exit code is trusted only with the result lines: every resolver command
+# prints a "via" line on 0 (found) and 1 (none). Exit 0 or 1 without one (a
+# crash, a parse failure, a policy refusal -- pwsh exits 0 or 1 for those) is
+# rewritten to 2 with an "error" line, so no caller mistakes it for "found" or
+# "shared-only".
+# Windows (Git Bash) branch: aitools-profile.ps1 through pwsh
+# (-ExecutionPolicy Bypass, as the OS dispatch rule calls .ps1 files; a throw
+# exits 2). Path arguments (--path) are passed in Windows form (cygpath -w;
+# unchanged when cygpath fails), stdout is forced to UTF-8 and CRs are
+# stripped. AITLIB_PROFILE_VIA_PWSH=1 forces this branch on any OS (tests;
+# cygpath is then used only when present).
 # UNVERIFIED on Windows (tested on macOS only, through the forced branch):
 # cygpath conversion, MSYS argument and environment translation, and the
 # UTF-8 decoding of non-ASCII values.
@@ -160,11 +167,15 @@ _aitlib_profile_run() {
             if [ -n "$errf" ]; then rm -f "$errf"; fi
             return 1
         fi
-        local a prev="" ps1_arg="$ps1" arglist=""
-        if command -v cygpath >/dev/null 2>&1; then ps1_arg="$(cygpath -w "$ps1")"; fi
+        local a w prev="" ps1_arg="$ps1" arglist=""
+        if command -v cygpath >/dev/null 2>&1; then
+            if w="$(cygpath -w "$ps1")"; then ps1_arg="$w"; else log_detail "aitools-profile: cygpath -w failed for $ps1 -- passed unchanged"; fi
+        fi
         for a in "$@"; do
             if [ "$prev" = "--path" ] && command -v cygpath >/dev/null 2>&1; then
-                case "$a" in /*) a="$(cygpath -w "$a")" ;; esac
+                case "$a" in
+                    /*) if w="$(cygpath -w "$a")"; then a="$w"; else log_detail "aitools-profile: cygpath -w failed for $a -- passed unchanged"; fi ;;
+                esac
             fi
             arglist="$arglist$a"$'\n'
             prev="$a"
@@ -172,7 +183,7 @@ _aitlib_profile_run() {
         # Arguments travel in an environment variable, one per line (resolver
         # values are one line by contract), so pwsh -Command can set UTF-8 output
         # before it runs the resolver.
-        AITLIB_PROFILE_OUT=$(AITLIB_PS1="$ps1_arg" AITLIB_PS_ARGS="$arglist" pwsh -NoProfile -NonInteractive -Command '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $a = @(); if ($env:AITLIB_PS_ARGS) { $a = @($env:AITLIB_PS_ARGS.Substring(0, $env:AITLIB_PS_ARGS.Length - 1) -split "`n") }; & $env:AITLIB_PS1 @a; exit $LASTEXITCODE' 2>"${errf:-/dev/null}") || AITLIB_PROFILE_RC=$?
+        AITLIB_PROFILE_OUT=$(AITLIB_PS1="$ps1_arg" AITLIB_PS_ARGS="$arglist" pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command 'try { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $a = @(); if ($env:AITLIB_PS_ARGS) { $a = @($env:AITLIB_PS_ARGS.Substring(0, $env:AITLIB_PS_ARGS.Length - 1) -split "`n") }; $global:LASTEXITCODE = 0; & $env:AITLIB_PS1 @a; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine("aitools-profile threw: $($_.Exception.Message)"); exit 2 }' 2>"${errf:-/dev/null}") || AITLIB_PROFILE_RC=$?
         AITLIB_PROFILE_OUT="${AITLIB_PROFILE_OUT//$'\r'/}"
     else
         if [ ! -f "$sh" ]; then
@@ -189,6 +200,16 @@ _aitlib_profile_run() {
         done < "$errf"
         rm -f "$errf"
     fi
+    case "$AITLIB_PROFILE_RC" in
+        0|1)
+            case $'\n'"$AITLIB_PROFILE_OUT" in
+                *$'\n'via$'\t'*) : ;;
+                *)
+                    log_detail "aitools-profile $1: exit $AITLIB_PROFILE_RC without result lines -- treated as a resolver error"
+                    AITLIB_PROFILE_OUT="${AITLIB_PROFILE_OUT}"$'\n'"error"$'\t'"resolver exited $AITLIB_PROFILE_RC without result lines (see deploy.log)"
+                    AITLIB_PROFILE_RC=2 ;;
+            esac ;;
+    esac
     return 0
 }
 
@@ -340,15 +361,17 @@ tool_exception_get() {
 # decision (tree section 8 Writer; only after [k]eep, never in dry run or
 # non-interactive runs). decidedBy = the calling script's name (SCRIPT_NAME).
 # The resolver writes profile.json and commits and pushes it (N-Q2).
-# Sets AITLIB_TOOL_EXC_RESULT (created|updated|unchanged|dry-run|refused|failed,
-# "" when the resolver is missing) and AITLIB_TOOL_EXC_PUSHED (true/false).
+# Sets AITLIB_TOOL_EXC_RESULT (created|updated|unchanged|dry-run|refused|failed;
+# never empty after the call) and AITLIB_TOOL_EXC_PUSHED (true/false).
 # Returns 0 written or nothing to write (created/updated: a failed commit or
 # push is a log_warn + ACTION "run git push in <dotprofile>",
 # AITLIB_TOOL_EXC_PUSHED=false; unchanged and dry-run write nothing, so they
 # need no push and get no warning), 1 failed, 3 refused (no dotprofile, or the
-# machine profile matched by hostname only or not at all). 1 and 3 log_warn +
-# ACTION "run aitools user init to remember tool choices" (the tool itself is
-# fine, so no ERROR row: D-TS12).
+# machine profile matched by hostname only or not at all). 3 is log_warn +
+# ACTION "run aitools user init to remember tool choices"; 1 (resolver missing,
+# usage error, crash) is log_warn + ACTION "see deploy.log -- a tool choice
+# (tool exception) was not saved". The tool itself is fine, so no ERROR row
+# (D-TS12).
 tool_exception_record() {
     AITLIB_TOOL_EXC_PUSHED=false; AITLIB_TOOL_EXC_RESULT=""
     local slug="$1" method="$2" path="$3" version="$4" reason="${5:-}" w msg
@@ -356,8 +379,9 @@ tool_exception_record() {
         --version "$version" --by "${SCRIPT_NAME:-unknown}" --environment "$AITOOLS_ENVIRONMENT")
     if [ -n "$reason" ]; then args+=(--reason "$reason"); fi
     if ! _aitlib_profile_run "${args[@]}"; then
+        AITLIB_TOOL_EXC_RESULT=failed
         log_warn "tool exception for $slug not saved (resolver missing)"
-        _aitlib_action_once "run aitools user init to remember tool choices"
+        _aitlib_action_once "see deploy.log -- a tool choice (tool exception) was not saved"
         return 1
     fi
     AITLIB_TOOL_EXC_RESULT=$(_aitlib_profile_tag result)
@@ -381,14 +405,16 @@ tool_exception_record() {
             fi
             return 0 ;;
         3)
+            AITLIB_TOOL_EXC_RESULT=refused
             msg=$(_aitlib_profile_lines error | perl -ne 'print, exit if /\S/')
             log_warn "tool exception for $slug not saved (${msg:-refused})"
             _aitlib_action_once "run aitools user init to remember tool choices"
             return 3 ;;
     esac
+    AITLIB_TOOL_EXC_RESULT=failed
     msg=$(_aitlib_profile_lines error | perl -ne 'print, exit if /\S/')
     log_warn "tool exception for $slug not saved (${msg:-resolver exit $AITLIB_PROFILE_RC})"
-    _aitlib_action_once "run aitools user init to remember tool choices"
+    _aitlib_action_once "see deploy.log -- a tool choice (tool exception) was not saved"
     return 1
 }
 
