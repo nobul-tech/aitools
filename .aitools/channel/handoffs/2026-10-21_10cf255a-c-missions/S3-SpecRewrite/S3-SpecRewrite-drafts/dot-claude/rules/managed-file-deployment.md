@@ -17,7 +17,7 @@ only in merge strategy.
 | Type | Merge strategy | Files |
 |------|---------------|-------|
 | Markdown | Interactive diff review via `deploy_managed_file` (SOURCE is the source of truth; one menu: overwrite / accept & adopt / merge & adopt / skip / abort) | CLAUDE.md, `~/.claude/rules/*.md`, skill SKILL.md files |
-| JSON config | Read-then-merge on managed fields. Profile-sourced fields use granular field-level review (`sync_managed_json` / `Sync-ManagedJson`: auto-adopt when profile silent, per-leaf overwrite/adopt/skip/abort on divergence); harness-managed keys (e.g. `hooks`) reconcile silently. JSON deployed through `deploy_managed_file` is reviewed field by field with SOURCE owning every field (`review_json_fields` / `Review-JsonFields`; no merge) | settings.json, cli-config.json, mcp.json, deployed JSON |
+| JSON config | Read-then-merge on managed fields. Profile-sourced fields (settings.json) use granular field-level review (`sync_managed_json` / `Sync-ManagedJson`: auto-adopt when profile silent, per-leaf overwrite/adopt/skip/abort on divergence); harness-managed keys (e.g. `hooks`) reconcile silently. JSON deployed through `deploy_managed_file` is reviewed field by field with SOURCE owning every field (`review_json_fields` / `Review-JsonFields`; no merge) | settings.json, cli-config.json, mcp.json, deployed JSON |
 | Shell script | Interactive diff review via `deploy_managed_file` (same menu as markdown) | Hook scripts (`~/.claude/hooks/*.sh`) |
 
 `deploy_managed_file()` / `Deploy-ManagedFile` is defined in
@@ -30,7 +30,10 @@ state.
 **Adopt target.** Callers pass the absolute path of the repo file the
 content came from (`ADOPT_PATH` / `-AdoptPath`, `""` for none). On accept &
 adopt or merge & adopt the library writes that file itself, in the same
-step. Callers never copy files back.
+step. Callers never copy files back. Adopt and merge write the working tree
+only: neither the library nor a caller commits or pushes. Exception until
+decided (S3-SpecRewrite Q1): CLAUDE.md adopts through its template
+transform (`adopt_claude_md`).
 
 ### Content sources
 
@@ -65,7 +68,7 @@ These apply equally regardless of file type:
 3. **Post-write validation**: verify the written file immediately.
    JSON: valid parse + required keys. Markdown: non-empty + required
    sections. Shell: non-empty + executable bit.
-4. **Three-outcome tracking**: every deployment must resolve to
+4. **Outcome tracking**: every deployment must resolve to
    created, updated, or unchanged — and report via `write_summary`.
    `deploy_managed_file` results (created, updated, verified, accept &
    adopt, skipped, failed) are recorded with the deploy tracker; `failed`

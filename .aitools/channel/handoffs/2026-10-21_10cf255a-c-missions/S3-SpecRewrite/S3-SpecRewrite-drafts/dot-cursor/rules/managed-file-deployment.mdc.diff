@@ -1,5 +1,5 @@
 diff --git a.cursor/rules/managed-file-deployment.mdc b.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-SpecRewrite/S3-SpecRewrite-drafts/dot-cursor/rules/managed-file-deployment.mdc
-index 84a1a47..cbe6df0 100644
+index 84a1a47..c756969 100644
 --- a.cursor/rules/managed-file-deployment.mdc
 +++ b.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-SpecRewrite/S3-SpecRewrite-drafts/dot-cursor/rules/managed-file-deployment.mdc
 @@ -12,11 +12,13 @@ All setup scripts that deploy files to user directories must follow the deployme
@@ -10,13 +10,13 @@ index 84a1a47..cbe6df0 100644
 -| JSON config | Read-then-merge on managed fields. Profile-sourced fields use granular field-level review (`sync_managed_json`: auto-adopt when profile silent, per-leaf overwrite/adopt/skip/abort on divergence); harness-managed keys (e.g. `hooks`) reconcile silently | settings.json, cli-config.json, mcp.json |
 -| Shell script | Interactive diff review via `deploy_managed_file` | Hook scripts (`~/.claude/hooks/*.sh`) |
 +| Markdown | Interactive diff review via `deploy_managed_file` (SOURCE is the source of truth; one menu: overwrite / accept & adopt / merge & adopt / skip / abort) | CLAUDE.md, `~/.claude/rules/*.md`, skill SKILL.md files |
-+| JSON config | Read-then-merge on managed fields. Profile-sourced fields use granular field-level review (`sync_managed_json`: auto-adopt when profile silent, per-leaf overwrite/adopt/skip/abort on divergence); harness-managed keys (e.g. `hooks`) reconcile silently. JSON deployed through `deploy_managed_file` is reviewed field by field with SOURCE owning every field (`review_json_fields`; no merge) | settings.json, cli-config.json, mcp.json, deployed JSON |
++| JSON config | Read-then-merge on managed fields. Profile-sourced fields (settings.json) use granular field-level review (`sync_managed_json`: auto-adopt when profile silent, per-leaf overwrite/adopt/skip/abort on divergence); harness-managed keys (e.g. `hooks`) reconcile silently. JSON deployed through `deploy_managed_file` is reviewed field by field with SOURCE owning every field (`review_json_fields`; no merge) | settings.json, cli-config.json, mcp.json, deployed JSON |
 +| Shell script | Interactive diff review via `deploy_managed_file` (same menu as markdown) | Hook scripts (`~/.claude/hooks/*.sh`) |
  
 -`deploy_managed_file()` / `Deploy-ManagedFile` is defined in `@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1`. Full state machine spec: `@reference/managed-file-deployment.md`.
 +`deploy_managed_file()` / `Deploy-ManagedFile` is defined in `@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1`. Full state machine spec: `@reference/managed-file-deployment.md`. Choices and failure handling: `@.claude/rules/agentic-standards.md` "Managed-file review choices and merge". There is no ancestor and no deploy state.
 +
-+**Adopt target.** Callers pass the absolute path of the repo file the content came from (`ADOPT_PATH` / `-AdoptPath`, `""` for none). On accept & adopt or merge & adopt the library writes that file itself, in the same step. Callers never copy files back.
++**Adopt target.** Callers pass the absolute path of the repo file the content came from (`ADOPT_PATH` / `-AdoptPath`, `""` for none). On accept & adopt or merge & adopt the library writes that file itself, in the same step. Callers never copy files back. Adopt and merge write the working tree only: neither the library nor a caller commits or pushes. Exception until decided (S3-SpecRewrite Q1): CLAUDE.md adopts through its template transform (`adopt_claude_md`).
  
  ### Content sources
  
@@ -29,7 +29,7 @@ index 84a1a47..cbe6df0 100644
  2. **Diff logging**: log what changed to deploy.log before writing.
  3. **Post-write validation**: verify the written file immediately. JSON: valid parse + required keys. Markdown: non-empty + required sections. Shell: non-empty + executable bit.
 -4. **Three-outcome tracking**: every deployment must resolve to created, updated, or unchanged — and report via `write_summary`.
-+4. **Three-outcome tracking**: every deployment must resolve to created, updated, or unchanged — and report via `write_summary`. `deploy_managed_file` results (created, updated, verified, accept & adopt, skipped, failed) are recorded with the deploy tracker; `failed` is an ERROR row and the run continues with the next file.
++4. **Outcome tracking**: every deployment must resolve to created, updated, or unchanged — and report via `write_summary`. `deploy_managed_file` results (created, updated, verified, accept & adopt, skipped, failed) are recorded with the deploy tracker; `failed` is an ERROR row and the run continues with the next file.
  
  ### Platform-specific config values
  

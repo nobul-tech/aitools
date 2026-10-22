@@ -41,4 +41,11 @@ Status: **agree**, or **open** (the drafts agree with each other, but a source i
 | 27 | Hooks adopt target | -- | -- | -- | shared/hooks path, written by library; "" when shared/hooks absent | -- | agree with SD-2 / incident #80 |
 | 28 | SM intro sentence | -- | "code implements it in mission HARNESS batch B1; until then the Menus, Return Values and Deploy State sections below describe the code as it is today" | -- | sections below now describe the target | -- | **stale once drafts apply**; SM kept verbatim per orders; replacement proposed (Q10) |
 
+| 29 | Abort scope (review A2) | exits 2 | exit 2 | exit 2 + marker | ends this setup script; installer continues | IM/CIM: same (was "global (stops the run)" from main) | agree after fix |
+| 30 | Commit/push of an adopt (review A5) | working tree only; review gate at commit and PR | -- | -- | no commit, no push | MFD/CMFD: same | agree after fix (code to change: `setup-user-claude.sh:335-356`) |
+| 31 | Hooks reverse discovery (review A4) | -- | -- | adopt_managed_file internal | documented as outside the model, Q2 | -- | open (Q2) |
+| 32 | CLAUDE.md template adopt (review B3) | callers do not copy back | -- | ADOPT_PATH plain copy | exception noted, Q1 | MFD/CMFD exception line | open (Q1) |
+| 33 | LOCAL-only JSON field review (review B4) | "never written to SOURCE without a review" | -- | "without a prompt" | no review defined | IM: approved wording | open (Q7) |
+| 34 | Backup failure (review B7) | never half-written | -- | -- | non-fatal (unchanged) | -- | open (Q13) |
+
 Reviewer: S3-SpecRewrite-Check (independent delegate) -- results in `S3-SpecRewrite-Check-findings.md`.

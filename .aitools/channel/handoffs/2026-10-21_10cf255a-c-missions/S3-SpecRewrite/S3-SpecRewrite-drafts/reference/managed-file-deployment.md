@@ -59,8 +59,8 @@ PowerShell:
 Deploy-ManagedFile -Content -DestPath -ToolName -ItemName [-AdoptPath]
 Prompt-DiffReview -FilePath -NewContent -AdoptOffered [-CurrentContent]
 Review-JsonFields -SourceFile -DestPath -AdoptPath
-Record-DeployOutcome failed
-Write-DeployTrackerSummary
+Record-DeployOutcome -Outcome failed -ToolName <tool> -ItemName <item>
+Write-DeployTrackerSummary -ToolName <tool>
 ```
 
 - `ADOPT_PATH` / `-AdoptPath` is the absolute path of the repo file that is
@@ -99,7 +99,8 @@ JSON files: the same choices per differing field (no [m]erge); SOURCE owns every
 
 There is one review menu. It appears only when LOCAL differs from SOURCE in
 an interactive run. The options and their order are normative; the exact
-wording is the code's (identical in bash and PS1, `check-post-push` step 29).
+wording is set by the implementation (mission SOURCE-TRUTH), identical in
+bash and PS1 (`check-post-push` step 29).
 
 ### Text files (`prompt_diff_review`)
 
@@ -147,8 +148,10 @@ script.
 `[x]abort` logs an error and exits 2. When `AITOOLS_ABORT_FILE` is set, the
 library first appends a marker line (the file or tool name) to that file;
 runners treat exit 2 as a user abort only when the marker exists (D-TS13,
-approved 2026-10-21). Abort ends the setup script, not the installer run:
-the installer records the script as aborted and continues.
+approved 2026-10-21). Abort ends this setup script (exit 2); the installer
+continues with the next script. (Today the installer records any non-zero
+exit as an ERROR row, `aitools-install.sh` `validate_and_run`; reporting a
+marked exit 2 as a user abort is the D-TS13 runner change.)
 
 ## Non-Interactive Behavior
 
@@ -194,9 +197,9 @@ Sets `MANAGED_FILE_RESULT` (bash) / returns (PS1) one of:
 
 **File-level result for JSON** (proposed; S3-SpecRewrite report Q5): a JSON
 file reviewed field by field reports one value, by precedence `failed` >
-`skipped` (any field skipped) > `accept & adopt` (any field adopted) >
-`updated` (any field overwritten) > `verified`. Each field's choice is
-logged to deploy.log.
+`accept & adopt` (any field adopted: the repo was written) > `skipped` (any
+field skipped) > `updated` (any field overwritten) > `verified`. Each
+field's choice is logged to deploy.log.
 
 On `failed` the library has already restored every file it backed up and
 written a `log_error` with the reason. The caller records the outcome
@@ -224,6 +227,19 @@ continues with the next file.
 
 - **Single-file callers** without a tracker loop (CLAUDE.md) write the
   equivalent `write_summary` row themselves; `failed` is an ERROR row.
+- **No commit, no push.** Adopt and merge write the repo working tree only.
+  Neither the library nor a caller commits or pushes; the user decides
+  (today `setup-user-claude` commits and pushes merged rules: code to
+  remove).
+- **Several LOCALs for one SOURCE** (skills: `~/.claude/skills` and
+  `~/.cursor/skills`): each LOCAL goes through `deploy_managed_file`. After
+  an adopt into the first, the caller reads SOURCE again for the next, which
+  then verifies. Callers do not copy one LOCAL to another.
+- **Adopting into a protected file** (any path in the
+  `.claude/rules/sources-of-truth.md` table) is allowed; the library writes
+  the working tree and logs a WARN naming the file. How the library knows
+  the protected list: open question Q14.
+- **CLAUDE.md exception** until Q1 is decided: see "Markdown files".
 - **Exit 2** is not trapped by the caller: it ends the script.
 
 ## Deploy State
@@ -408,6 +424,13 @@ caller passes `""` and adopt and merge are not offered.
 After `created`, `updated`, or a merge & adopt (LOCAL written), the caller
 sets the executable bit on LOCAL.
 
+**Reverse discovery** (open question Q2): `setup-user-hooks` also finds
+hooks in `~/.claude/hooks/` that have no SOURCE and offers
+`[a]dopt to dotprofile  [s]kip`, calling `adopt_managed_file` directly. It
+is outside the review-menu model (there is no SOURCE to compare) and it is
+the one remaining direct caller of `adopt_managed_file`. Its dotprofile
+target conflicts with SD-2. Until Q2 is decided it stays as is.
+
 ## JSON Config Review Detail
 
 JSON config files use field-level review rather than text diff review.
@@ -424,7 +447,8 @@ For a JSON file deployed from a JSON SOURCE through `deploy_managed_file`.
 - **A field only in LOCAL** is kept in LOCAL and never written to SOURCE
   without a review.
 - **Adopted values** are written into `ADOPT_PATH` immediately, before the
-  next file is reviewed.
+  next file is reviewed. The field choices for one file are applied after
+  its last field is reviewed; `[x]abort` on any field writes nothing.
 - **Key order is preserved** in both files; no sorting.
 - **No text or AI merge.**
 - Both files are backed up before writing and validated (parse, required
@@ -444,8 +468,8 @@ For a JSON file deployed from a JSON SOURCE through `deploy_managed_file`.
   `permissions.{allow,ask,deny}`. Deprecated permission rules are stripped
   from the live file first and never adopted.
 - Menu: `[o]verwrite` (profile.json value → settings.json) / `[a]dopt`
-  (settings.json value → profile.json) / `[s]kip` / `[x]abort` (exit 2,
-  global).
+  (settings.json value → profile.json) / `[s]kip` / `[x]abort` (exit 2;
+  ends the script, nothing applied: prompts run before the apply pass).
 - Writes preserve key order. Both files are backed up before write and
   validated after.
 

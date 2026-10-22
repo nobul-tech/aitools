@@ -57,7 +57,8 @@ No AI merge runs in a non-interactive run.
 
 `[x]abort` logs an error and exits 2. When `AITOOLS_ABORT_FILE` is set, it
 first appends a marker line; runners treat exit 2 as a user abort only when
-the marker exists (D-TS13).
+the marker exists (D-TS13). Abort ends this setup script; the installer
+continues with the next script.
 
 The installers apply the same rule to their own prompts (gh login, repos path):
 terminal and not forced = prompt; otherwise use the default.
@@ -100,7 +101,7 @@ displayed or changed. Implemented by `prompt_json_field_review` /
 setting, and per rule string for `permissions.{allow,ask,deny}`. When the
 live file has a leaf that `profile.json` lacks, that leaf is auto-adopted
 into `profile.json` with no prompt. `overwrite`/`adopt`/`skip` are per-leaf; only
-`abort` is global (stops the run).
+`abort` is not: it ends the script (exit 2) and nothing is applied.
 
 **Review display** (when a managed leaf differs):
 
@@ -111,16 +112,17 @@ into `profile.json` with no prompt. `overwrite`/`adopt`/`skip` are per-leaf; onl
 **Menu** (profile mirror):
 
 ```
-  [o]verwrite : proposed (source) value wins → settings.json
-  [a]dopt     : local value wins → write back to profile.json
-  [s]kip
-  [x]abort    : stop the run (global)
+  [o]verwrite : profile.json value -> settings.json
+  [a]dopt     : keep settings.json value -> write to profile.json
+  [s]kip      : leave this setting unchanged
+  [x]abort    : stop the run
 ```
 
-- **Adopt** available only for fields sourced from `profile.json` (the
-  settings sync mirrors all of settings.json there, so adopt applies to every
-  managed leaf, including permission rules). Fields hardcoded in scripts cannot
-  be adopted — adopt omitted when a changed field is script-sourced
+(`[x]abort` ends this setup script with exit 2; the installer continues
+with the next script.)
+
+- **Adopt** available for every managed leaf (the settings sync mirrors all
+  of settings.json in `profile.json`, including permission rules)
 - **No `[m]erge`** — JSON fields are discrete values, not text blocks
 - **Non-interactive / `--force`**: auto-select overwrite (same as text types)
 

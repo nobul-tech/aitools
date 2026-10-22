@@ -1,5 +1,5 @@
 diff --git a.cursor/rules/interactive-menus.mdc b.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-SpecRewrite/S3-SpecRewrite-drafts/dot-cursor/rules/interactive-menus.mdc
-index 70406fa..7e1c456 100644
+index 70406fa..e438714 100644
 --- a.cursor/rules/interactive-menus.mdc
 +++ b.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-SpecRewrite/S3-SpecRewrite-drafts/dot-cursor/rules/interactive-menus.mdc
 @@ -6,13 +6,21 @@ alwaysApply: false
@@ -22,7 +22,7 @@ index 70406fa..7e1c456 100644
  call-site level -- manual audit required for multi-deployment scripts.
 -Non-interactive fallback required (`AITOOLS_FORCE`/`--force`, non-terminal stdin, EOF at prompt -> overwrite + warn); installers apply the same rule to their own prompts.
 +Non-interactive fallback required (`AITOOLS_FORCE`/`--force`, non-terminal stdin, EOF at prompt -> overwrite + warn; no AI merge); installers apply the same rule to their own prompts.
-+`[x]abort` logs an error and exits 2, after appending a marker to `AITOOLS_ABORT_FILE` when set (D-TS13).
++`[x]abort` logs an error and exits 2, after appending a marker to `AITOOLS_ABORT_FILE` when set (D-TS13); it ends this setup script and the installer continues with the next script.
  
  PS1 console I/O: `[Console]::ReadLine/WriteLine`. Read external command output
  via temp file + `[IO.File]::ReadAllText(..., UTF8)` (not pipeline capture).

@@ -20,7 +20,7 @@ deploys both CLAUDE.md and rules) must handle all return values at each site
 independently. **Known limitation:** Step 30 validates at file level, not
 call-site level -- manual audit required for multi-deployment scripts.
 Non-interactive fallback required (`AITOOLS_FORCE`/`--force`, non-terminal stdin, EOF at prompt -> overwrite + warn; no AI merge); installers apply the same rule to their own prompts.
-`[x]abort` logs an error and exits 2, after appending a marker to `AITOOLS_ABORT_FILE` when set (D-TS13).
+`[x]abort` logs an error and exits 2, after appending a marker to `AITOOLS_ABORT_FILE` when set (D-TS13); it ends this setup script and the installer continues with the next script.
 
 PS1 console I/O: `[Console]::ReadLine/WriteLine`. Read external command output
 via temp file + `[IO.File]::ReadAllText(..., UTF8)` (not pipeline capture).
