@@ -200,6 +200,8 @@ must be under `~`. A second run from `/tmp/x` should print `NONE`.
 ## D. Consequences for the fan-out
 
 1. Target: `$HOME/.cursor/rules/` (bash) and `$env:USERPROFILE\.cursor\rules` (PS1).
+   Source, per the S3-Harness contract correction of 2026-10-22: only
+   `~/.aitools/rules/*.md`. `*.bak.*` backups and other files are skipped.
 2. Convert `<name>.md` to `<name>.mdc`:
    - No frontmatter: prepend `---\nalwaysApply: true\n---\n` (this matches
      Claude Code, where a rule without `paths:` is always loaded).

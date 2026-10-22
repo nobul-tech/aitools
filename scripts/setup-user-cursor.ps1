@@ -13,8 +13,8 @@
 #   Managed fields: version, editor, permissions, model, hasChangedDefaultModel
 #   Preserved: authInfo, privacyCache, network, statsigBootstrap, maxMode, all other fields
 # %USERPROFILE%\.cursor\rules\ (additive deploy):
-#   Managed: one file per regular file in %USERPROFILE%\.aitools\rules (<name>.md -> <name>.mdc,
-#            converted; any other name copied as is)
+#   Managed: one <name>.mdc per %USERPROFILE%\.aitools\rules\<name>.md (converted); *.bak.*
+#            backups and non-.md files in .aitools\rules are not fanned out
 #   Preserved: .cursor\rules files not produced from .aitools\rules
 #   Location and format: S3-H-Cursor-research.md (.aitools/channel/handoffs/
 #   2026-10-21_10cf255a-c-missions/S3-H-Cursor/)
@@ -471,6 +471,13 @@ if (-not (Test-Path -LiteralPath $harnessRulesDir -PathType Container)) {
         $ruleBroken = @()   # dangling symlinks: reported as failed in the deploy loop
         foreach ($entry in $entries) {
             if ($entry.Name.StartsWith(".")) { continue }
+            # Contract (S3-Harness correction): only *.md rules; *.bak.* are the
+            # backups Deploy-ManagedFile leaves next to updated harness files
+            if ($entry.Name -clike "*.bak.*") { continue }
+            if (-not ($entry.Name -clike "*.md")) {
+                Log "Ignoring non-rule file in harness rules: $($entry.Name) (only *.md is fanned out)"
+                continue
+            }
             if ($entry.LinkType -and -not (Test-Path -LiteralPath $entry.FullName)) { $ruleBroken += $entry.Name; continue }
             if ($entry.PSIsContainer) { Log "Ignoring non-file in harness rules: $($entry.Name)"; continue }
             $ruleSources += $entry
@@ -497,20 +504,12 @@ if (-not (Test-Path -LiteralPath $harnessRulesDir -PathType Container)) {
             }
             $ruleDests = New-Object System.Collections.Generic.List[string]       # deployed names
             $ruleDestsLc = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
-            $ruleConverted = New-Object System.Collections.Generic.List[string]   # deployed names converted from .md
             foreach ($src in $ruleSources) {
                 $ruleBase = $src.Name
-                if ($ruleBase -clike "*.md") {
-                    $destName = $ruleBase.Substring(0, $ruleBase.Length - 3) + ".mdc"
-                } else {
-                    $destName = $ruleBase
-                }
-                if (-not ($ruleBase -clike "*.md" -or $ruleBase -clike "*.mdc")) {
-                    Log "Copying $ruleBase as is (Cursor loads only *.mdc rule files)"
-                }
+                $destName = $ruleBase.Substring(0, $ruleBase.Length - 3) + ".mdc"
 
-                # Two sources mapping to one target (x.md and x.mdc; names compared
-                # case-insensitively): the first wins
+                # Two sources mapping to one target (names that differ only in case,
+                # possible on a case-sensitive file system): the first wins
                 if ($ruleDestsLc.Contains($destName)) {
                     LogError "Skipped duplicate: $ruleBase -> $destName (already deployed from another harness rule)"
                     Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $ruleBase
@@ -518,7 +517,6 @@ if (-not (Test-Path -LiteralPath $harnessRulesDir -PathType Container)) {
                 }
                 $ruleDests.Add($destName)
                 [void]$ruleDestsLc.Add($destName)
-                if ($destName -cne $ruleBase) { $ruleConverted.Add($destName) }
 
                 try {
                     $raw = [System.IO.File]::ReadAllText($src.FullName, [System.Text.UTF8Encoding]::new($false))
@@ -527,11 +525,7 @@ if (-not (Test-Path -LiteralPath $harnessRulesDir -PathType Container)) {
                     Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $destName
                     continue
                 }
-                if ($destName -cne $ruleBase) {
-                    $ruleContent = ConvertTo-CursorRule $raw
-                } else {
-                    $ruleContent = $raw
-                }
+                $ruleContent = ConvertTo-CursorRule $raw
                 if (-not $ruleContent) {
                     LogError "Failed: ${ruleBase}: empty after conversion -- nothing written"
                     Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $destName
@@ -593,8 +587,8 @@ if (-not (Test-Path -LiteralPath $harnessRulesDir -PathType Container)) {
                         }
                         if (-not $deployed.TrimStart([char]0xFEFF).StartsWith("---")) {
                             LogError "Validation failed: $destName has no frontmatter (Cursor skips it)"
-                        } elseif ($ruleConverted.Contains($destName)) {
-                            # Converted rules: check them as Cursor parses them (warn: the
+                        } else {
+                            # Check each deployed rule as Cursor parses it (warn: the
                             # rule is deployed but Cursor would misread its frontmatter)
                             $parseProblem = Test-CursorRuleParse $deployed
                             if ($parseProblem) {

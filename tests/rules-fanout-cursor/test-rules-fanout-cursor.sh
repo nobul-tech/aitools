@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # test-rules-fanout-cursor.sh -- tests for step 4 of scripts/setup-user-cursor.sh:
-# the harness rules fan-out ~/.aitools/rules -> ~/.cursor/rules/*.mdc (convert
-# .md to .mdc, copy everything else, preserve unmanaged files, review on diff).
+# the harness rules fan-out ~/.aitools/rules/*.md -> ~/.cursor/rules/*.mdc
+# (convert, skip *.bak.* and non-.md, preserve unmanaged files, review on diff).
 #
 # Safe to re-run: every case runs the real script in its own temp HOME (removed
 # on exit) with stub rg/agent on PATH, so no installer runs and the real
@@ -60,6 +60,9 @@ seed_rules() {
     printf -- '---\npaths:\n  - scripts/**\n  - "shared/**"\n---\n\n## Scoped rule\n\nBody with a table:\n\n| a | b |\n|---|---|\n' > "$H/.aitools/rules/scoped.md"
     printf -- '---\ndescription: native cursor rule\nalwaysApply: false\n---\nNative body.\n' > "$H/.aitools/rules/native.mdc"
     printf 'not a rule\n' > "$H/.aitools/rules/notes.txt"
+    # backups deploy-harness's deploy_managed_file leaves next to updated files
+    printf 'old plain\n' > "$H/.aitools/rules/plain.md.bak.2026-10-22T010203Z"
+    printf 'old odd\n' > "$H/.aitools/rules/odd.bak.2026.md"
     printf 'hidden\n' > "$H/.aitools/rules/.hidden.md"
     printf 'nested\n' > "$H/.aitools/rules/subdir/nested.md"
 }
@@ -187,17 +190,18 @@ check "first: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "first: plain.md -> plain.mdc (alwaysApply true)" "[ \"\$(head -n 3 '$R/plain.mdc')\" = \"\$(printf -- '---\nalwaysApply: true\n---')\" ]"
 check "first: scoped.md -> anchored globs list, alwaysApply false" "grep -qx 'globs:' '$R/scoped.mdc' && grep -qxF '  - **/scripts/**' '$R/scoped.mdc' && grep -qxF '  - **/shared/**' '$R/scoped.mdc' && grep -qx 'alwaysApply: false' '$R/scoped.mdc' && ! grep -q '^paths:' '$R/scoped.mdc'"
 check "first: scoped body kept (table ---)" "grep -qxF '|---|---|' '$R/scoped.mdc'"
-check "first: native.mdc copied unchanged" "cmp -s '$R/native.mdc' '$H/.aitools/rules/native.mdc'"
-check "first: notes.txt copied as is" "cmp -s '$R/notes.txt' '$H/.aitools/rules/notes.txt'"
+check "first: native.mdc source not fanned out (contract: *.md only)" "[ ! -e '$R/native.mdc' ] && grep -q 'Ignoring non-rule file in harness rules: native.mdc' '$C/out'"
+check "first: notes.txt not fanned out" "[ ! -e '$R/notes.txt' ] && grep -q 'Ignoring non-rule file in harness rules: notes.txt' '$C/out'"
+check "first: *.bak.* backups skipped" "! ls '$R' | grep -q '^plain\.md\.bak\.' && [ ! -e '$R/odd.bak.2026.mdc' ] && ! grep -q 'odd.bak' '$C/out'"
 check "first: no .md left in target" "[ ! -e '$R/plain.md' ] && [ ! -e '$R/scoped.md' ]"
 check "first: hidden file not deployed" "[ ! -e '$R/.hidden.mdc' ] && [ ! -e '$R/.hidden.md' ]"
-check "first: subdirectory not deployed" "[ ! -e '$R/subdir' ] && grep -q 'Ignoring non-file in harness rules: subdir' '$C/out'"
+check "first: subdirectory not deployed" "[ ! -e '$R/subdir' ] && grep -q 'Ignoring non-rule file in harness rules: subdir' '$C/out'"
 check "first: user rule preserved" "[ \"\$(cat '$R/mine.mdc')\" = \"\$(printf -- '---\nalwaysApply: true\n---\nmine')\" ] && grep -q 'Preserved unmanaged rule: mine.mdc' '$C/out'"
-check "first: OK row 4 added" "grep -qxF 'OK|cursor rules|4 added' '$C/summary'"
+check "first: OK row 2 added" "grep -qxF 'OK|cursor rules|2 added' '$C/summary'"
 
 run_script
 check "rerun: exit 0" "[ \"\$(rc)\" = 0 ]"
-check "rerun: OK row 4 verified" "grep -qxF 'OK|cursor rules|4 verified' '$C/summary'"
+check "rerun: OK row 2 verified" "grep -qxF 'OK|cursor rules|2 verified' '$C/summary'"
 check "rerun: no backups (nothing written)" "! ls '$R' | grep -q '\.bak\.'"
 
 printf 'local edit\n' >> "$R/plain.mdc"
@@ -206,7 +210,7 @@ check "edited: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "edited: non-interactive overwrite" "grep -q 'plain.mdc -- overwriting (non-interactive)' '$C/out'"
 check "edited: source content restored" "! grep -q 'local edit' '$R/plain.mdc'"
 check "edited: backup kept, not loadable by Cursor" "ls '$R' | grep -q '^plain\.mdc\.bak\.' && ! ls '$R' | grep '\.bak\.' | grep -q '\.mdc$'"
-check "edited: row reports 1 updated" "row | grep -q '|cursor rules|1 updated, 3 verified'"
+check "edited: row reports 1 updated" "row | grep -q '|cursor rules|1 updated, 1 verified'"
 check "edited: backup not reported as preserved" "! grep -q 'Preserved unmanaged rule: plain.mdc.bak' '$C/out'"
 
 printf 'local edit 2\n' >> "$R/scoped.mdc"
@@ -215,26 +219,30 @@ check "force: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "force: overwrite (--force)" "grep -q 'scoped.mdc -- overwriting (--force)' '$C/out'"
 check "force: source content restored" "! grep -q 'local edit 2' '$R/scoped.mdc'"
 
-# --- case: duplicate target (x.md and x.mdc) -> first wins, ERROR, exit 1 -----
-setup_case dup
+# --- case: an x.mdc next to x.md is not a second source (contract: *.md only) -
+setup_case mdcnext
 mkdir -p "$H/.aitools/rules"
 printf 'from md\n' > "$H/.aitools/rules/dup.md"
 printf -- '---\nalwaysApply: true\n---\nfrom mdc\n' > "$H/.aitools/rules/dup.mdc"
 run_script
-check "dup: exit 1" "[ \"\$(rc)\" = 1 ]"
-check "dup: first source (dup.md) wins" "grep -q 'from md' '$H/.cursor/rules/dup.mdc'"
-check "dup: error names the duplicate" "grep -q 'Skipped duplicate: dup.mdc -> dup.mdc' '$C/out'"
-check "dup: ERROR row" "grep -qxF 'ERROR|cursor rules|1 failed' '$C/summary'"
+check "mdcnext: exit 0" "[ \"\$(rc)\" = 0 ]"
+check "mdcnext: dup.mdc deployed from dup.md" "grep -q 'from md' '$H/.cursor/rules/dup.mdc'"
+check "mdcnext: OK row 1 added" "grep -qxF 'OK|cursor rules|1 added' '$C/summary'"
 
-# --- case: names differing only in case (Foo.md, foo.mdc) are one target -----
+# --- case: names differing only in case (Foo.md, foo.md) are one target -------
+# Possible only on a case-sensitive file system (Linux); APFS/NTFS hold one file.
 setup_case dupcase
 mkdir -p "$H/.aitools/rules"
 printf 'upper\n' > "$H/.aitools/rules/Foo.md"
-printf -- '---\nalwaysApply: true\n---\nlower\n' > "$H/.aitools/rules/foo.mdc"
-run_script
-check "dupcase: exit 1" "[ \"\$(rc)\" = 1 ]"
-check "dupcase: duplicate reported" "grep -Eq 'Skipped duplicate: (foo\.mdc -> foo\.mdc|Foo\.md -> Foo\.mdc)' '$C/out'"
-check "dupcase: ERROR row" "grep -qxF 'ERROR|cursor rules|1 failed' '$C/summary'"
+printf 'lower\n' > "$H/.aitools/rules/foo.md"
+if [ "$(ls "$H/.aitools/rules" | wc -l | tr -d ' ')" -lt 2 ]; then
+    printf 'SKIP dupcase (case-insensitive file system holds one file)\n'; SKIP=$((SKIP + 1))
+else
+    run_script
+    check "dupcase: exit 1" "[ \"\$(rc)\" = 1 ]"
+    check "dupcase: duplicate reported" "grep -Eq 'Skipped duplicate: (foo\.md -> foo\.mdc|Foo\.md -> Foo\.mdc)' '$C/out'"
+    check "dupcase: ERROR row" "grep -qxF 'ERROR|cursor rules|1 failed' '$C/summary'"
+fi
 
 # --- case: dangling symlink in the source -> error, not a silent skip ---------
 setup_case broken
@@ -284,7 +292,7 @@ check "dry: dry-run row" "grep -q '|cursor rules|dry run (no files written)' '$C
 setup_case drydup
 mkdir -p "$H/.aitools/rules"
 printf 'a\n' > "$H/.aitools/rules/d.md"
-printf -- '---\nalwaysApply: true\n---\nb\n' > "$H/.aitools/rules/d.mdc"
+ln -s "$H/nowhere.md" "$H/.aitools/rules/gone.md"
 run_script --dry-run
 check "drydup: exit 1" "[ \"\$(rc)\" = 1 ]"
 check "drydup: ERROR row" "grep -qxF 'ERROR|cursor rules|1 failed (dry run)' '$C/summary'"

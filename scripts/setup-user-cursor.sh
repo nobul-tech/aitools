@@ -14,8 +14,8 @@
 #   Managed fields: version, editor, permissions, model, hasChangedDefaultModel
 #   Preserved: authInfo, privacyCache, network, statsigBootstrap, maxMode, all other fields
 # ~/.cursor/rules/ (additive deploy):
-#   Managed: one file per regular file in ~/.aitools/rules (<name>.md -> <name>.mdc,
-#            converted; any other name copied as is)
+#   Managed: one <name>.mdc per ~/.aitools/rules/<name>.md (converted); *.bak.*
+#            backups and non-.md files in ~/.aitools/rules are not fanned out
 #   Preserved: ~/.cursor/rules/ files not produced from ~/.aitools/rules
 #   Location and format: S3-H-Cursor-research.md (.aitools/channel/handoffs/
 #   2026-10-21_10cf255a-c-missions/S3-H-Cursor/)
@@ -457,13 +457,23 @@ else
     RULE_SOURCES=""
     RULE_BROKEN=""   # dangling symlinks: reported as failed in the deploy loop
     for rule_src in "$HARNESS_RULES_DIR"/*; do
+        if [ ! -e "$rule_src" ] && [ ! -L "$rule_src" ]; then
+            continue   # the unexpanded glob of an empty directory
+        fi
+        rule_base=$(basename "$rule_src")
+        # Contract (S3-Harness correction): only *.md rules; *.bak.* are the
+        # backups deploy_managed_file leaves next to updated harness files
+        case "$rule_base" in
+            *.bak.*) continue ;;
+            *.md) ;;
+            *) log "Ignoring non-rule file in harness rules: $rule_base (only *.md is fanned out)"
+               continue ;;
+        esac
         if [ -L "$rule_src" ] && [ ! -e "$rule_src" ]; then
-            RULE_BROKEN="${RULE_BROKEN}$(basename "$rule_src")
+            RULE_BROKEN="${RULE_BROKEN}${rule_base}
 "
             continue
         fi
-        [ -e "$rule_src" ] || continue   # the unexpanded glob of an empty directory
-        rule_base=$(basename "$rule_src")
         if [ ! -f "$rule_src" ]; then
             log "Ignoring non-file in harness rules: $rule_base"
             continue
@@ -494,21 +504,13 @@ else
         # Newline-separated name lists (bash 3.2: no associative arrays)
         RULE_DESTS=""       # deployed names
         RULE_DESTS_LC=""    # the same, lower-cased (duplicate and preserved checks)
-        RULE_CONVERTED=""   # deployed names converted from .md
         while IFS= read -r rule_src; do
             [ -n "$rule_src" ] || continue
             rule_base=$(basename "$rule_src")
-            case "$rule_base" in
-                *.md)  dest_name="${rule_base%.md}.mdc" ;;
-                *)     dest_name="$rule_base" ;;
-            esac
-            case "$rule_base" in
-                *.md|*.mdc) ;;
-                *) log "Copying $rule_base as is (Cursor loads only *.mdc rule files)" ;;
-            esac
+            dest_name="${rule_base%.md}.mdc"
 
-            # Two sources mapping to one target (x.md and x.mdc; names compared
-            # case-insensitively): the first wins
+            # Two sources mapping to one target (names that differ only in case,
+            # possible on a case-sensitive file system): the first wins
             dest_lc=$(lower_name "$dest_name")
             case "
 $RULE_DESTS_LC" in
@@ -523,20 +525,10 @@ $dest_lc
 "
             RULE_DESTS_LC="${RULE_DESTS_LC}${dest_lc}
 "
-            if [ "$dest_name" != "$rule_base" ]; then
-                RULE_CONVERTED="${RULE_CONVERTED}${dest_name}
-"
-            fi
 
             rule_content=""
-            if [ "$dest_name" != "$rule_base" ]; then
-                if ! rule_content=$(cursor_rule_from_md "$rule_src"); then
-                    log_error "Failed: $rule_base: conversion to .mdc failed"
-                    deploy_tracker_record "failed" "cursor rules" "$dest_name"
-                    continue
-                fi
-            elif ! rule_content=$(cat "$rule_src"); then
-                log_error "Failed: $rule_base: cannot read $(display_path "$rule_src")"
+            if ! rule_content=$(cursor_rule_from_md "$rule_src"); then
+                log_error "Failed: $rule_base: conversion to .mdc failed"
                 deploy_tracker_record "failed" "cursor rules" "$dest_name"
                 continue
             fi
@@ -606,7 +598,7 @@ $exist_lc
                 esac
             done <<< "$RULE_DESTS"
 
-            # Converted rules: check them as Cursor parses them (warn: the rule is
+            # Check each deployed rule as Cursor parses it (warn: the rule is
             # deployed but Cursor would misread its frontmatter)
             while IFS= read -r dest_name; do
                 [ -n "$dest_name" ] || continue
@@ -617,7 +609,7 @@ $exist_lc
                 elif [ -n "$parse_problem" ]; then
                     log_warn "$dest_name: $parse_problem -- fix the source rule in ~/.aitools/rules"
                 fi
-            done <<< "$RULE_CONVERTED"
+            done <<< "$RULE_DESTS"
 
             if [ "$_DT_FAILED" -gt 0 ]; then
                 # deploy_tracker_summary writes the ERROR row ("N failed")
