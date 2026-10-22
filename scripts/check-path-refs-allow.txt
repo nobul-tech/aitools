@@ -21,6 +21,12 @@ reference/framework-provenance.md|.claude/rules/provenance.md|planned artifact o
 reference/framework-provenance.md|.claude/skills/provenance/SKILL.md|planned artifact of the pending provenance framework
 reference/framework-provenance.md|shared/skills/aitool-provenance/SKILL.md|planned artifact of the pending provenance framework
 
+# Planned files (tool support, mission M2 B1 -- remove each line when the file lands)
+reference/tool-support-decision-tree.md|scripts/gen-tool-specs.py|planned: the tool spec generator (M2 B1)
+reference/tool-support-decision-tree.md|generated/tool-specs/|planned: generated tool specs (M2 B1)
+reference/tool-support-decision-tree.md|generated/|planned: generated, tracked directory (M2 B1; git-safety.md row R15)
+shared/skills/tool-adopt/SKILL.md|scripts/gen-tool-specs.py|planned: the tool spec generator (M2 B1)
+
 # Conventions, not repo paths
 reference/cursor-practices.md|.cursor/skills/|describes Cursor's project skill directory convention
 

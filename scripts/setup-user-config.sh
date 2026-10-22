@@ -22,6 +22,8 @@
 # Preserved: all other keys, in place (key order kept)
 # Write path: merge to temp -> validate -> backup_file -> mv.
 #   A read, merge or validation failure leaves the existing file untouched.
+#   --dry-run merges into a system temp directory: nothing under ~/.aitools is
+#   created or changed (deploy.log still records the run).
 #
 # Usage: setup-user-config.sh [--repos-path P] [--repo-path P] [--drives-json JSON]
 #          [--github-user U] [--user-repo-path P] [--machine-alias A] [--dry-run] [--help]
@@ -92,10 +94,18 @@ done
 
 CONFIG_DIR="$HOME/.aitools"
 CONFIG_FILE="$CONFIG_DIR/config.json"
-CONFIG_TMP="${CONFIG_FILE}.tmp.$$"
 PROFILE_SH="$SCRIPT_DIR/aitools-profile.sh"
 JSON_PL="$SCRIPT_DIR/aitools-json.pl"
-WORK_DIR=$(mktemp -d)
+WORK_DIR=""
+if ! WORK_DIR=$(mktemp -d) || [ -z "$WORK_DIR" ]; then
+    log_error "Failed: could not create a temp directory -- config.json not written"
+    write_summary ERROR "aitools config" "temp dir failed"
+    exit 1
+fi
+# The merge result goes next to config.json (same filesystem, so mv replaces it in
+# one step); a dry run merges into the temp directory and never touches ~/.aitools.
+CONFIG_TMP="${CONFIG_FILE}.tmp.$$"
+if $DRY_RUN; then CONFIG_TMP="$WORK_DIR/config.json"; fi
 cleanup() { rm -rf "$WORK_DIR"; rm -f "$CONFIG_TMP"; }
 trap cleanup EXIT
 
@@ -112,7 +122,11 @@ for f in "$PROFILE_SH" "$JSON_PL"; do
     fi
 done
 pj() { perl "$JSON_PL" "$@"; }
-mkdir -p "$CONFIG_DIR"
+if ! $DRY_RUN && ! mkdir -p "$CONFIG_DIR"; then
+    log_error "Failed: could not create $(display_path "$CONFIG_DIR") -- config.json not written"
+    write_summary ERROR "aitools config" "write failed"
+    exit 1
+fi
 
 # --- 1. Derive values from profile.json (aitools-profile.sh derive-config) ---
 derive_args=(derive-config --config "$CONFIG_FILE")
@@ -262,8 +276,13 @@ else
         if [ "$A" = "$B" ]; then SAME=true; fi
     fi
     # No "//" inside a path value (protocol prefixes excepted), as validate_json_config
-    DOUBLE=$(perl -ne 'print "$1\n" while /("[^"]*(?<!http:)(?<!https:)\/\/[^"]*")/g' "$CONFIG_TMP" | perl -ne 'print, exit')
-    if [ -n "$DOUBLE" ]; then
+    # (one perl, first match only: a two-stage pipe could die of SIGPIPE under pipefail)
+    DOUBLE=""; DOUBLE_RC=0
+    DOUBLE=$(perl -ne 'if (/("[^"]*(?<!http:)(?<!https:)\/\/[^"]*")/) { print "$1"; exit }' "$CONFIG_TMP") || DOUBLE_RC=$?
+    if [ "$DOUBLE_RC" -ne 0 ]; then
+        log_error "Failed: $(display_path "$CONFIG_FILE"): could not check the merged config (perl exit $DOUBLE_RC) -- existing file left untouched"
+        write_summary ERROR "aitools config" "validation failed"
+    elif [ -n "$DOUBLE" ]; then
         log_error "Failed: $(display_path "$CONFIG_FILE"): double slash in a path value: $DOUBLE -- existing file left untouched"
         write_summary ERROR "aitools config" "validation failed"
     elif [ -n "$MISSING" ]; then
