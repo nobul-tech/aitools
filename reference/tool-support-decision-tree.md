@@ -616,11 +616,16 @@ an exception keeps a whole install; an override changes a setting.
 - **Writer**: `tool_exception_record` / `Set-ToolException`, only after `[k]eep`,
   never in dry run or non-interactive runs (`exception-set` also refuses to
   write under `AITOOLS_DRY_RUN=1`). Allowed when `MACHINE_VIA` is `id`,
-  `environment`, `alias`, or `override`; refused (exit 3 -> return 3,
-  `log_warn` + ACTION `run aitools user init to remember tool choices`) when it
-  is `hostname` or `none`, when there is no dotprofile, or when the profile was
-  read from `AITOOLS_PROFILE_FILE` (the read-only snapshot in generated deploy
-  scripts).
+  `environment` or `override`, and `alias` only when this machine has no id
+  (a registered profile resolves `via=id`, so `alias` on a machine with an id
+  means the profile is unregistered or registered to another machine, whose
+  later runs would honour the exception). Refused (exit 3 -> return 3,
+  `log_warn` + ACTION `run aitools user init to remember tool choices`) in every
+  other case: `hostname`, `none`, `alias` on a machine with an id, no
+  dotprofile, or a profile read from `AITOOLS_PROFILE_FILE` (the read-only
+  snapshot in generated deploy scripts). The resolver's `derive-config` never
+  caches a hostname match as config.json `machineAlias`, so a hostname match
+  cannot turn into `via=alias` on the next run (PR #76 review M1).
 - **Carry-forward (N-Q2)**: `exception-set` commits only `profile.json` in the
   dotprofile (other staged or modified files are left alone) and pushes it
   (`GIT_TERMINAL_PROMPT=0`, so a push never waits for credentials). On a machine
@@ -730,6 +735,7 @@ stubs on PATH, both `AITOOLS_ENVIRONMENT` values where relevant.
 | T-Q5 | bash and perl below minVersion: update, and on failure WARN and continue (section 1 row, BELOW-MIN leaf) |
 | T-Q1, P-Q7 | The registry is the only source of tool specs (section 7.1) |
 | T-Q9, N-Q6 | Notes in section 6 |
+| PR #76 review M1 (stricter than rev 5; for commander confirmation) | Section 8 Writer: `via=alias` allowed only on a machine without an id; hostname matches are never cached as `machineAlias` |
 
 ## Cross-references
 
