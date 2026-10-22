@@ -219,7 +219,7 @@ check "conflict: ERROR row per duplicate" \
 check "conflict: log_error names both sources" "grep -q '\[error\] Duplicate rules name: scratch.md in dotprofile .* kept scratch.md from shared/rules' '$LOG'"
 check "conflict: first source wins (rules, skills)" \
     "cmp -s '$R/shared/rules/scratch.md' '$(A)/rules/scratch.md' && cmp -s '$R/shared/rules/hook-lifecycle.md' '$(A)/rules/hook-lifecycle.md' && cmp -s '$R/shared/skills/s1/SKILL.md' '$(A)/skills/s1/SKILL.md'"
-check "conflict: case-insensitive duplicate not deployed" "[ \"\$(ls '$(A)/rules' | grep -ci '^hook-lifecycle.md\$')\" = 1 ]"
+check "conflict: case-insensitive duplicate not deployed" "grep -qx 'shared hook lifecycle' '$(A)/rules/hook-lifecycle.md' && ! ls '$(A)/rules' | grep -qx 'Hook-Lifecycle.md'"
 check "conflict: other files still deployed" "[ -f '$(A)/rules/user1.md' ] && [ -f '$(A)/skills/s1/tests/t.md' ]"
 
 # ---------------------------------------------------------------------------

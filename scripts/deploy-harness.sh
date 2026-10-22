@@ -220,6 +220,7 @@ add_source() {
             lc=$(printf '%s' "$unit" | tr '[:upper:]' '[:lower:]')
             if ! winner=$(seen_winner "$kind" "$lc"); then
                 log_error "Source $label: conflict lookup failed for $unit -- skipped"
+                write_summary ERROR "$TOOL" "$(short "$unit: lookup failed")"
                 keep_unit=false
                 continue
             fi
@@ -283,6 +284,7 @@ fix_exec() {
             log "Set executable: $(display_path "$2")"
         else
             log_error "Cannot set the executable bit on $(display_path "$2")"
+            write_summary ERROR "$TOOL" "$(short "chmod failed: ${2##*/}")"
         fi
     fi
 }
@@ -355,13 +357,15 @@ for kind in $KINDS; do
         my ($dests, $found) = @ARGV;
         my %d;
         open my $h, "<", $dests or die "cannot read $dests: $!\n";
-        while (<$h>) { chomp; $d{$_} = 1; }
+        # Case-insensitive, as the conflict check and the PS1 twin (macOS and
+        # Windows file systems are case-insensitive).
+        while (<$h>) { chomp; $d{lc $_} = 1; }
         open my $f, "<", $found or die "cannot read $found: $!\n";
         while (<$f>) {
             chomp;
             my $b = $_; $b =~ s{.*/}{};
-            next if $b =~ /\.bak\./;
-            print "$_\n" unless $d{$_};
+            next if $b =~ /\.bak\./i;
+            print "$_\n" unless $d{lc $_};
         }
     ' "$WORK/dests.txt" "$WORK/found.txt" > "$WORK/preserved.txt"; then
         log_warn "Cannot compare $(display_path "$d") with the plan -- preserved files not checked"
