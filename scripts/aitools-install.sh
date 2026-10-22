@@ -128,13 +128,80 @@ OS_NAME="$(uname -s)"
 
 if $DRY_RUN; then export AITOOLS_DRY_RUN=1; fi
 
+# --- BEGIN install log helpers (tests/profile/test-config.sh extracts this block) ---
+# jsonl_write TS SCRIPT LEVEL MSG -- append one deploy.jsonl record. The message is
+# JSON-escaped (backslash, quote, tab, newline); every other control character
+# (CR, ESC colour codes, ...) is dropped, so each record is one valid JSON line.
+jsonl_write() {
+    local m="$4"
+    m="${m//\\/\\\\}"
+    m="${m//\"/\\\"}"
+    m="${m//$'\t'/\\t}"
+    m="${m//$'\n'/\\n}"
+    m="${m//[[:cntrl:]]/}"
+    printf '{"ts":"%s","host":"%s","os":"%s","script":"%s","run_id":"%s","level":"%s","msg":"%s"}\n' \
+        "$1" "$HOST_NAME" "$OS_NAME" "$2" "$RUN_ID" "$3" "$m" >> "$LOG_JSONL"
+}
+
+# relay_child_log TEXT -- the console output of a child script that logs through
+# aitools-lib (setup-user-config.sh): print each line, mirror each structured line
+# ("[ts] [script] [level] msg", colour codes removed) to deploy.jsonl -- the child
+# already wrote it to deploy.log -- and count its warnings in WARNINGS. The child's
+# exit footer ("COMPLETED with N warning(s)", logged at warn) is relayed but not
+# counted: it restates the warnings already counted. Its errors are not counted
+# line by line: a child with errors exits non-zero and the caller logs one error.
+relay_child_log() {
+    local line clean level esc=$'\033'
+    local re='^\[([^]]+)\] \[([^]]+)\] \[([a-z]+)\] (.*)$'
+    while IFS= read -r line; do
+        if [ -z "$line" ]; then continue; fi
+        printf '%s\n' "$line"
+        clean="${line//"${esc}[31m"/}"
+        clean="${clean//"${esc}[33m"/}"
+        clean="${clean//"${esc}[0m"/}"
+        if [[ "$clean" =~ $re ]]; then
+            level="${BASH_REMATCH[3]}"
+            jsonl_write "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "$level" "${BASH_REMATCH[4]}"
+            case "${BASH_REMATCH[4]}" in
+                "COMPLETED with "*|"FAILED with "*) ;;
+                *) if [ "$level" = "warn" ]; then WARNINGS=$((WARNINGS + 1)); fi ;;
+            esac
+        fi
+    done <<< "$1"
+}
+
+# run_config_writer WRITER ARGS... -- Step 5: run setup-user-config.sh (it logs and
+# writes its own summary rows), relay its log lines, record a non-zero exit as one
+# error. Its stdout is only log lines (it never prompts); stderr is not captured.
+run_config_writer() {
+    local writer="$1"; shift
+    local out="" rc=0
+    out=$("${BASH:-bash}" "$writer" "$@") || rc=$?
+    relay_child_log "$out"
+    if [ "$rc" -ne 0 ]; then
+        log_error "Step 5: setup-user-config.sh failed (exit $rc) -- see $(display_path "$LOG_FILE")"
+    fi
+}
+
+# absolute_repos_path PATH -- print PATH as an absolute path. A relative PATH must
+# already exist (Step 3 creates it first, relative to the current directory, as the
+# pre-#79 installer did); it is resolved with cd + pwd, which normalises ./, ../ and
+# a run from / (like GetFullPath in the .ps1). Returns 1 when it cannot be entered.
+# The config writer accepts absolute paths only.
+absolute_repos_path() {
+    case "$1" in
+        /*) printf '%s' "$1" ;;
+        *)  (CDPATH='' cd -- "$1" && pwd) ;;
+    esac
+}
+# --- END install log helpers ---
+
 # Override: JSONL dual-format (human-readable + structured JSON)
 log() {
     local level="${2:-info}"
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf '[%s] [%s] [%s] %s\n' "$ts" "$SCRIPT_NAME" "$level" "$1" | tee -a "$LOG_FILE"
-    printf '{"ts":"%s","host":"%s","os":"%s","script":"%s","run_id":"%s","level":"%s","msg":"%s"}\n' \
-        "$ts" "$HOST_NAME" "$OS_NAME" "$SCRIPT_NAME" "$RUN_ID" "$level" "$1" >> "$LOG_JSONL"
+    jsonl_write "$ts" "$SCRIPT_NAME" "$level" "$1"
 }
 log_ok()    { log "$1" "ok"; }
 log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
@@ -181,14 +248,14 @@ if [ "${AITOOLS_FORCE:-}" != "1" ] && tty_interactive; then
     INSTALL_INTERACTIVE=true
 fi
 
+$DRY_RUN && log "[DRY RUN] Preview mode -- no files will be written"
+
 # --- Post-write JSON validation ---
 # Validates a JSON config file after writing: checks non-empty, valid JSON,
 # required keys present, and no double-slash paths (excluding protocol prefixes).
-# No caller here since config.json moved to setup-user-config.sh (M3 B3b); kept
-# because config-file-safety.md cites it as the reference example, until it moves
-# to aitools-lib (M3 B2).
-$DRY_RUN && log "[DRY RUN] Preview mode -- no files will be written"
-
+# No caller here since config.json moved to setup-user-config.sh (M3 B3b). It stays
+# in this installer (M3 B2 kept it out of aitools-lib) because config-file-safety.md
+# cites it as the reference example for validate_json_config.
 validate_json_config() {
     local file="$1"; shift
     local required_keys=("$@")
@@ -352,6 +419,17 @@ if [ -z "$REPOS_PATH" ]; then
 fi
 
 mkdir -p "$REPOS_PATH"
+case "$REPOS_PATH" in
+    /*) ;;
+    *)
+        REPOS_ABS=""
+        if REPOS_ABS=$(absolute_repos_path "$REPOS_PATH") && [ -n "$REPOS_ABS" ]; then
+            log "Repos path '$REPOS_PATH' is relative -- using $REPOS_ABS (relative to the current directory)"
+            REPOS_PATH="$REPOS_ABS"
+        else
+            log_error "Repos path '$REPOS_PATH' is relative and could not be resolved -- config.json will not be written"
+        fi ;;
+esac
 log_ok "Repos directory: $REPOS_PATH"
 
 # ============================================================
@@ -426,12 +504,7 @@ if [ ! -f "$CONFIG_WRITER" ]; then
 else
     writer_args=(--repos-path "$REPOS_PATH_NATIVE" --repo-path "$AITOOLS_NATIVE" --drives-json "$DRIVES_JSON")
     if $DRY_RUN; then writer_args+=(--dry-run); fi
-    writer_rc=0
-    # The writer logs and writes its own summary rows; its exit code is recorded here
-    bash "$CONFIG_WRITER" "${writer_args[@]}" || writer_rc=$?
-    if [ "$writer_rc" -ne 0 ]; then
-        log_error "Step 5: setup-user-config.sh failed (exit $writer_rc) -- see $(display_path "$LOG_FILE")"
-    fi
+    run_config_writer "$CONFIG_WRITER" "${writer_args[@]}"
 fi
 
 
