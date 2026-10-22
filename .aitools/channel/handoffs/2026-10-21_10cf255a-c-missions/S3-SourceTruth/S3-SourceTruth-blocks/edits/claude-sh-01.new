@@ -1,0 +1,24 @@
+# ---------------------------------------------------------------------------
+# Adopt filter for CLAUDE.md (deploy_managed_file ADOPT_FILTER): LOCAL content
+# on stdin -> the dotprofile template on stdout. Strips the machine-specific
+# footer and reverse-tokenizes profile values, so the next run rebuilds the
+# same CLAUDE.md from the template and verifies it. Empty profile values are
+# never substituted (an empty pattern would match everywhere).
+# ---------------------------------------------------------------------------
+claude_md_adopt_filter() {
+    local content
+    # Everything before ## Machine-Specific; trailing blank lines removed
+    content=$(perl -pe 'last if /^## Machine-Specific/')
+    content=$(printf '%s' "$content" | perl -0777 -pe 's/\n+\z//')
+    if [ -n "${PROFILE_NAME:-}" ]; then
+        content=$(printf '%s' "$content" | \
+            AMF_PROFILE_NAME="$PROFILE_NAME" AMF_PROFILE_COMPANY="$PROFILE_COMPANY" \
+            AMF_IDENTITY_GIT_NAME="$IDENTITY_GIT_NAME" AMF_IDENTITY_GIT_EMAIL="$IDENTITY_GIT_EMAIL" \
+            perl -pe 'for my $k (qw(PROFILE_NAME PROFILE_COMPANY IDENTITY_GIT_NAME IDENTITY_GIT_EMAIL)) {
+                my $v = $ENV{"AMF_$k"};
+                next unless defined $v && length $v;
+                s/\Q$v\E/"{{" . $k . "}}"/ge;
+            }')
+    fi
+    printf '%s\n' "$content"
+}

@@ -1,0 +1,62 @@
+} else {
+    # --- Deploy CLAUDE.md via managed-file flow ---
+    $adoptLabel = ""
+    if ($userRepoPath) { $adoptLabel = "profile" }
+    $claudeResult = Deploy-ManagedFile -Content $content -DestPath $claudeMd -ToolName "claude.md" -ItemName "CLAUDE.md" -AdoptLabel $adoptLabel
+
+    switch ($claudeResult) {
+        "accept & adopt" {
+            # Validate
+            if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
+                LogError "Validation failed: $claudeMd is empty or missing"
+            } else {
+                $written = Get-Content $claudeMd -Raw
+                if ($written -notmatch '## Machine-Specific') {
+                    LogError "Validation failed: $claudeMd missing Machine-Specific section"
+                }
+                if ($written -notmatch '## Coaching|## Code Style|## Tool') {
+                    LogError "Validation failed: $claudeMd missing template body"
+                }
+            }
+            # Adopt back to profile
+            $adoptDest = Join-Path $userRepoPath "claude\CLAUDE.md"
+            if (Adopt-ClaudeMd -DeployedPath $claudeMd -DestPath $adoptDest) {
+                if ($errors -eq 0) {
+                    Write-Summary "OK" "claude.md" "accepted to profile"
+                } else {
+                    Write-Summary "ERROR" "claude.md" "validation failed"
+                }
+            } else {
+                Write-Summary "ERROR" "claude.md" "adopt failed"
+            }
+        }
+        "skipped" {
+            Write-Summary "WARN" "claude.md" "skipped (user review)"
+        }
+        { $_ -eq "created" -or $_ -eq "updated" } {
+            # --- BEGIN post-write validation (extracted by build-deploy) ---
+            # Post-write validation: check structure AND content (not just a marker)
+            if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
+                LogError "Validation failed: $claudeMd is empty or missing"
+            } else {
+                $written = Get-Content $claudeMd -Raw
+                if ($written -notmatch '## Machine-Specific') {
+                    LogError "Validation failed: $claudeMd missing Machine-Specific section"
+                }
+                # Template body must be present -- a file with only the footer is corrupt
+                if ($written -notmatch '## Coaching|## Code Style|## Tool') {
+                    LogError "Validation failed: $claudeMd missing template body (only footer present?)"
+                }
+            }
+            # --- END post-write validation (extracted by build-deploy) ---
+            if ($errors -eq 0) {
+                Write-Summary "OK" "claude.md" "$claudeResult"
+            } else {
+                Write-Summary "ERROR" "claude.md" "validation failed"
+            }
+        }
+        "verified" {
+            Log "CLAUDE.md verified (no differences)"
+            Write-Summary "OK" "claude.md" "verified"
+        }
+    }

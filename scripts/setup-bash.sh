@@ -5,7 +5,7 @@
 # macOS: Installs bash 5.x via Homebrew (system bash 3.2 is GPLv2-frozen).
 # Linux: Verifies system bash >= 5.0 (usually already there).
 #
-# See reference/tool-registry.json for install source details.
+# See registries/tool-registry.json for install source details.
 
 set -euo pipefail
 

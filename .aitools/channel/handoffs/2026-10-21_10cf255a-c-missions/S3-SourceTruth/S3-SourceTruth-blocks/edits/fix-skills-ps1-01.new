@@ -1,0 +1,2 @@
+                    LogError "Failed: ${SkillName}: could not copy the adopted skill to ${other}: $_"
+                    Write-Summary "ERROR" $ToolName "sync failed: $SkillName"

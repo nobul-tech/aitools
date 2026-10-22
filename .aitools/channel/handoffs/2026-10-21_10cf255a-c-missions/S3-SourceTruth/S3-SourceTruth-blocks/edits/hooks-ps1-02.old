@@ -1,0 +1,37 @@
+    foreach ($hookName in $hookFiles) {
+        $src = Resolve-HookSource $hookName
+        $dst = Join-Path $hooksDir $hookName
+        $srcContent = Get-Content $src -Raw -ErrorAction Stop
+
+        $hookResult = Deploy-ManagedFile -Content $srcContent -DestPath $dst -ToolName "claude hooks" -ItemName $hookName -AdoptLabel $hookAdoptLabel
+
+        switch ($hookResult) {
+            "accept & adopt" {
+                # Adopt: deployed (local) wins -> write back to the ONE canonical
+                # source, shared/hooks, via Adopt-ManagedFile (rotated backup +
+                # copy + log). Never the dotprofile (SD-2, incident #80): a
+                # dotprofile copy is ignored by Resolve-HookSource and by build-deploy.
+                if (Test-Path $sharedHooksDir) {
+                    # A failed write is logged by the lib (LogError); the row is written here.
+                    $errorsBeforeAdopt = $errors
+                    $adoptedCount = Adopt-ManagedFile -SourceFile $dst -Targets @(Join-Path $sharedHooksDir $hookName)
+                    if ($errors -gt $errorsBeforeAdopt -or -not $adoptedCount) {
+                        Write-Summary "ERROR" "claude hooks" "adopt failed: $hookName"
+                    }
+                    if (Test-InteractiveConsole) {
+                        [Console]::WriteLine("  Review: cd $repoDir && git diff")
+                    }
+                } else {
+                    LogWarn "Cannot adopt ${hookName}: shared/hooks not found at $sharedHooksDir"
+                    Write-Summary "WARN" "claude hooks" "adopt skipped: $hookName"
+                }
+            }
+            { $_ -in @("created", "updated") } {
+                $hooksChanged = $true
+            }
+            { $_ -in @("skipped", "verified") } {
+                # No action needed
+            }
+        }
+        Record-DeployOutcome -Outcome $hookResult -ToolName "claude hooks" -ItemName $hookName
+    }

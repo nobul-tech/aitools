@@ -1,0 +1,18 @@
+    foreach ($hookName in $hookFiles) {
+        $src = Resolve-HookSource $hookName
+        $dst = Join-Path $hooksDir $hookName
+        $srcContent = Get-Content $src -Raw -ErrorAction Stop
+
+        $hookResult = Deploy-ManagedFile -Content $srcContent -DestPath $dst -ToolName "claude hooks" -ItemName $hookName -AdoptPath $src
+
+        switch ($hookResult) {
+            { $_ -in @("created", "updated", "accept & adopt") } {
+                # accept & adopt: the library also wrote the source file in the repo.
+                $hooksChanged = $true
+            }
+            { $_ -in @("skipped", "verified", "failed") } {
+                # The tracker records the outcome (failed -> ERROR row).
+            }
+        }
+        Record-DeployOutcome -Outcome $hookResult -ToolName "claude hooks" -ItemName $hookName
+    }

@@ -201,7 +201,7 @@ Done (2026-10-05):
 
 - Onboarding: `scripts/setup-google-chrome.sh` (Linux, Claude Code web; n/a elsewhere) and
   `.ps1` (Windows: reports n/a, D-ENV4), installer Step 20b in `aitools-install.sh/.ps1`
-  (unconditional, D-ENV8), `build-deploy.sh` copy block pair, `reference/tool-registry.md`
+  (unconditional, D-ENV8), `build-deploy.sh` copy block pair, registry entry (`/tool-registry` skill)
   and script-standards tool names. No check-script `TOOL_CMDS` entry: no version check is
   added, because Chrome updates itself through the package's apt repo and cron job. No
   CLAUDE.md Managed CLI Tools row: Chrome is not a CLI agents invoke.

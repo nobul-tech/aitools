@@ -15,7 +15,7 @@ The skill should NOT auto-load for:
 - Normal code writing tasks
 - Bug fixing with clear repro steps (those are GH issues)
 - Feature requests (those are ROADMAP items)
-- Tool evaluation (those go in tool-registry.md)
+- Tool evaluation (those go through the `/tool-eval` skill)
 
 ## Filing accuracy
 

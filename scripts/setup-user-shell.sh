@@ -20,7 +20,7 @@
 # instead of $HOME.
 #
 # See plans/tooling-resolution-and-artifact-registry.md (Workstream A) and
-# reference/tool-registry.md for context.
+# the /tool-registry skill for context.
 
 set -euo pipefail
 

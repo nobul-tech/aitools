@@ -1,0 +1,46 @@
+} else {
+    # --- Deploy CLAUDE.md via managed-file flow ---
+    # Adopt target: the dotprofile template (the source of truth when a user
+    # repo is configured). The library writes it, through $claudeMdAdoptFilter.
+    $claudeAdoptPath = ""
+    if ($userRepoPath) { $claudeAdoptPath = Join-Path $userRepoPath "claude\CLAUDE.md" }
+    $claudeResult = Deploy-ManagedFile -Content $content -DestPath $claudeMd -ToolName "claude.md" -ItemName "CLAUDE.md" `
+        -AdoptPath $claudeAdoptPath -AdoptFilter $claudeMdAdoptFilter
+
+    switch ($claudeResult) {
+        { $_ -eq "created" -or $_ -eq "updated" -or $_ -eq "accept & adopt" } {
+            # --- BEGIN post-write validation (extracted by build-deploy) ---
+            # Post-write validation: check structure AND content (not just a marker)
+            if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
+                LogError "Validation failed: $claudeMd is empty or missing"
+            } else {
+                $written = Get-Content $claudeMd -Raw
+                if ($written -notmatch '## Machine-Specific') {
+                    LogError "Validation failed: $claudeMd missing Machine-Specific section"
+                }
+                # Template body must be present -- a file with only the footer is corrupt
+                if ($written -notmatch '## Coaching|## Code Style|## Tool') {
+                    LogError "Validation failed: $claudeMd missing template body (only footer present?)"
+                }
+            }
+            # --- END post-write validation (extracted by build-deploy) ---
+            if ($errors -ne 0) {
+                Write-Summary "ERROR" "claude.md" "validation failed"
+            } elseif ($claudeResult -eq "accept & adopt") {
+                Write-Summary "OK" "claude.md" "accepted to profile"
+            } else {
+                Write-Summary "OK" "claude.md" "$claudeResult"
+            }
+        }
+        "skipped" {
+            Write-Summary "WARN" "claude.md" "skipped (user review)"
+        }
+        "verified" {
+            Log "CLAUDE.md verified (no differences)"
+            Write-Summary "OK" "claude.md" "verified"
+        }
+        "failed" {
+            # The library restored the files and logged the reason (LogError).
+            Write-Summary "ERROR" "claude.md" "deploy failed"
+        }
+    }

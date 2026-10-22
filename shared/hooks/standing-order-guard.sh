@@ -27,8 +27,9 @@
 #   MODE_BACKTICK="enforce"  — backticks: zero false positives, promoted 2026-03-24
 #   MODE_SED="enforce"       — sed outside a pipeline: the 2026-10-21 change
 #                              (read-only `sed -n '<N[,M]>p' <file>` exemption,
-#                              incident #82) only narrowed what is blocked, so
-#                              the check stays at enforce (commander, 2026-10-21)
+#                              incident #82; single-line commands only) only
+#                              narrowed what is blocked, so the check stays at
+#                              enforce (commander, 2026-10-21)
 #   See .claude/rules/hook-rollout.md for the observe-then-enforce practice.
 #
 # Design decisions:
@@ -260,7 +261,10 @@ esac
 # -i / --in-place after the script) and no argument may contain < > | ; & (no
 # redirection). `w`, `e`, `s///w`, multiple -e scripts and -i all fall through
 # to the check. Commands that use \" are truncated by json_field and fall
-# through too (conservative).
+# through too (conservative). The exemption applies only to single-line
+# commands (NEWLINE_COUNT 0, counted on the escape-aware COMMAND_FULL): the
+# checks above look only at the first token, so a second line could otherwise
+# carry a write form (2026-10-21, a narrowing change; MODE_SED stays enforce).
 _sq="'"
 SED_READONLY_RE="^sed[[:space:]]+-n[[:space:]]+${_sq}?([0-9]+|[$])(,([0-9]+|[$]))?p${_sq}?([[:space:]]+[^-[:space:]<>|;&${_sq}][^[:space:]<>|;&]*)+[[:space:]]*$"
 case "$FIRST_TOKEN" in
@@ -268,8 +272,8 @@ case "$FIRST_TOKEN" in
         case "$COMMAND" in
             *\|*) ;;  # Pipeline — legitimate shell use
             *)
-                if [[ "$COMMAND" =~ $SED_READONLY_RE ]]; then
-                    :  # read-only line print (#82) — allowed
+                if [ "$NEWLINE_COUNT" -eq 0 ] && [[ "$COMMAND" =~ $SED_READONLY_RE ]]; then
+                    :  # read-only line print (#82), single-line command only — allowed
                 else
                     violation "USO: Dedicated tools --: Use the Edit tool instead of 'sed' to modify files. For non-trivial string manipulation, use Perl (USO: Perl for string manipulation). Read-only line prints (sed -n 'N,Mp' file) are allowed; the Read tool with offset/limit is preferred." "$MODE_SED" "sed"
                 fi

@@ -4,7 +4,7 @@
 #
 # macOS: Uses Homebrew (preferred). Removes non-preferred installs (cargo, npm).
 #
-# See reference/tool-registry.md for install source details.
+# See the /tool-registry skill (registries/tool-registry.json) for install source details.
 
 set -euo pipefail
 

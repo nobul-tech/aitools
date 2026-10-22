@@ -136,11 +136,10 @@ for hook_name in "${HOOK_FILES[@]}"; do
     fi
 done
 
-# Adopt target for manifest hooks: shared/hooks only (SD-2, incident #80;
-# reference/managed-file-deployment.md "Shell Script Deployment Detail").
-SHARED_HOOKS_DIR="$REPO_DIR/shared/hooks"
-_hook_adopt_label=""
-if [ -d "$SHARED_HOOKS_DIR" ]; then _hook_adopt_label="aitools shared/hooks"; fi
+# Adopt target for manifest hooks: the file the hook is deployed from --
+# shared/hooks/<name>, or scripts/<name> for deploy-only helpers (resolve_hook).
+# Never the dotprofile (SD-2, incident #80). The library writes it.
+
 
 HOOKS_CHANGED=false
 
@@ -164,35 +163,20 @@ else
         hook_src=$(resolve_hook "$hook_name")
         hook_dst="$HOME/.claude/hooks/$hook_name"
 
-        deploy_managed_file "$(cat "$hook_src")" "$hook_dst" "claude hooks" "$hook_name" "$_hook_adopt_label"
+        deploy_managed_file "$(cat "$hook_src")" "$hook_dst" "claude hooks" "$hook_name" "$hook_src"
 
         case "$MANAGED_FILE_RESULT" in
-            "accept & adopt")
-                # Adopt: deployed (local) wins -> write back to the ONE canonical
-                # source, shared/hooks, via adopt_managed_file (rotated backup +
-                # copy + log). Never the dotprofile (SD-2, incident #80): a
-                # dotprofile copy is ignored by resolve_hook and by build-deploy.
-                if [ -d "$SHARED_HOOKS_DIR" ]; then
-                    # A failed write is logged by the lib; the row is written here
-                    # (returns 1 only when no target was written -- checked, not fatal).
-                    _errors_before=$ERRORS
-                    if ! adopt_managed_file "$hook_dst" "$SHARED_HOOKS_DIR/$hook_name" || [ "$ERRORS" -gt "$_errors_before" ]; then
-                        write_summary ERROR "claude hooks" "adopt failed: $hook_name"
-                    fi
-                    if tty_interactive; then
-                        printf '  Review: cd %s && git diff\n' \
-                            "$(display_path "$REPO_DIR")" > /dev/tty
-                    fi
-                else
-                    log_warn "Cannot adopt $hook_name: shared/hooks not found at $(display_path "$SHARED_HOOKS_DIR")"
-                    write_summary WARN "claude hooks" "adopt skipped: $hook_name"
+            created|updated|"accept & adopt")
+                # accept & adopt: the library also wrote the source file in the
+                # repo; a merge rewrote the deployed hook, so keep it executable.
+                if ! chmod +x "$hook_dst"; then
+                    log_error "Failed: $hook_name: chmod +x $(display_path "$hook_dst")"
+                    write_summary ERROR "claude hooks" "chmod failed: $hook_name"
                 fi
-                ;;
-            created|updated)
-                chmod +x "$hook_dst"
                 HOOKS_CHANGED=true
                 ;;
-            skipped|verified)
+            skipped|verified|failed)
+                # The tracker records the outcome (failed -> ERROR row).
                 ;;
         esac
         deploy_tracker_record "$MANAGED_FILE_RESULT" "claude hooks" "$hook_name"

@@ -62,9 +62,9 @@ Injects: "Exit footer must check both counters."
 
 | File | What it prevents | What it injects |
 |------|-----------------|-----------------|
-| reference/tool-registry.md | Incomplete lifecycle fields | "6 required fields. Verify upstream via chrome-devtools." |
-| reference/tool-versions.json | Stale versions | "Per-platform manifest. Audit when tool-registry changes." |
-| reference/incidents.json | Invalid schema | Agent validation (separate, fail-open) |
+| registries/tool-registry.json (was reference/tool-registry.md, now deprecated) | Incomplete lifecycle fields | "6 required fields. Verify upstream via chrome-devtools." |
+| registries/tool-registry.json `versions` (was tool-versions.json, deleted per S2L-Q6) | Stale versions | "Per-platform versions. Audit when tool-registry changes." |
+| registries/incidents.json | Invalid schema | Agent validation (separate, fail-open) |
 | shared/skills/*/SKILL.md | Deployment path gap | "Won't be discoverable until deployed. Gap #15." |
 | .claude/skills/*/SKILL.md | Name collision | "No same-name overrides with user-level." |
 | scripts/setup-*.sh | Missing .ps1 pair | "Dual-script + block order." |

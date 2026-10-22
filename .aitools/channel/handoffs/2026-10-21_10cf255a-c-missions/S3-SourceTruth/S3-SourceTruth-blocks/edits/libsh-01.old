@@ -1,0 +1,4 @@
+_merge_validate() {
+    validate_ai_merge_output "$1" "$_MERGE_VALIDATE_SOURCE" "$_MERGE_VALIDATE_LOCAL"
+    AI_REJECT_REASON="$MERGE_REJECT_REASON"
+}

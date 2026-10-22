@@ -13,8 +13,10 @@
 # and commits and pushes profile.json. NOT the settings.json sync
 # (sync_managed_json). Consumed by: the bash shared-lib wrappers
 # resolve_user_repo_path / resolve_machine_profile / tool_exception_get /
-# tool_exception_record, setup-user-config.sh, build-deploy.sh, aitools
-# `user init`, and the generated deploy/setup-user-claude.sh (embedded copy).
+# tool_exception_record, setup-user-config.sh, build-deploy.sh (on macOS/Linux;
+# under Git Bash on Windows it uses the AITOOLS_USER_REPO_PATH the entry point
+# exports), aitools `user init`, and the generated deploy/setup-user-claude.sh
+# (embedded copy).
 #
 # Usage: aitools-profile.sh <command> [options]   (--help for details)
 # Exit codes: 0 resolved / ok; 1 nothing found (expected states, e.g. before
@@ -26,7 +28,10 @@
 #   object (--json). Diagnostics go to deploy.log (detail lines) and stderr.
 # JSON engine: the embedded perl program below (core perl only, no modules).
 #   It keeps key order and writes the node JSON.stringify(v, null, 2) layout, so
-#   bash, PowerShell (ConvertTo-Json) and node writers produce the same bytes.
+#   bash, PowerShell (ConvertTo-Json) and node writers produce the same bytes for
+#   strings, integers, booleans and null (what profile.json holds). Other number
+#   literals are kept verbatim here and re-formatted by PowerShell and node; a
+#   lone UTF-16 surrogate escape is written differently by each engine.
 # Safe to re-run: every command except `register` and `exception-set` is
 #   read-only; `register` writes only the --out file; `exception-set` rewrites
 #   one toolExceptions entry and reports "unchanged" when it is identical.
@@ -38,9 +43,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/aitools-lib.sh"
-logging_init "aitools-profile"
-
-# stdout carries data: console log lines go to stderr (deploy.log unchanged)
+# stdout carries data: console log lines go to stderr (deploy.log unchanged).
+# Defined before logging_init, whose environment check may already log a warning.
 log() {
     local level="${2:-info}"
     local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -48,6 +52,7 @@ log() {
     printf '%s\n' "$line" >> "$LOG_FILE"
     printf '%s\n' "$line" >&2
 }
+logging_init "aitools-profile"
 
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
@@ -139,12 +144,9 @@ sub pstr {
         perr('invalid string');
     }
 }
-sub numnorm {
-    my $n = shift;
-    if ($n =~ /^-?[0-9]+$/) { return $n eq '-0' ? '0' : $n }
-    my $v = 0 + $n;
-    return "$v";
-}
+# Numbers keep their source lexeme byte for byte: re-formatting through perl's
+# %.15g would silently change 16-17 digit values in a file this engine rewrites.
+sub numnorm { return $_[0] }
 sub pval {
     ws();
     if ($T =~ /\G\{/gc) {
@@ -366,7 +368,7 @@ if [ -z "$_PJ" ]; then
 fi
 if ! command -v perl >/dev/null 2>&1; then
     log_detail "perl not found -- aitools-profile cannot read JSON"
-    printf 'error\tperl not found (the harness manages perl; run aitools install)\n'
+    printf 'aitools-profile: perl not found (the harness manages perl; run aitools install)\n' >&2
     exit 2
 fi
 
@@ -411,6 +413,19 @@ jtype() {
         0) : ;;
         1) __v="" ;;
         *) printf 'aitools-profile: internal error typing %s (engine exit %s)\n' "$1" "$__rc" >&2; exit 2 ;;
+    esac
+    printf -v "$__var" '%s' "$__v"
+}
+
+# jsub VAR FILE SEG... -- VAR = compact JSON of the value at the path, "" when absent
+jsub() {
+    local __var="$1"; shift
+    local __v="" __rc=0
+    __v=$(pj json "$@") || __rc=$?
+    case "$__rc" in
+        0) : ;;
+        1) __v="" ;;
+        *) printf 'aitools-profile: internal error reading %s (engine exit %s)\n' "$1" "$__rc" >&2; exit 2 ;;
     esac
     printf -v "$__var" '%s' "$__v"
 }
@@ -465,6 +480,7 @@ usage_error() {
 # ---------------------------------------------------------------------------
 CMD="${1:-}"
 if [ $# -gt 0 ]; then shift; fi
+case "$CMD" in --help|-h) usage; exit 0 ;; esac
 OPT_CONFIG=""; OPT_PROFILE=""; OPT_ALIAS=""; OPT_ENVIRONMENT=""; OPT_GITHUB_USER=""
 OPT_USER_REPO_PATH=""; OPT_REPOS_PATH=""; OPT_NAME=""; OPT_COMPANY=""; OPT_SHELL=""
 OPT_EMAIL=""; OPT_OUT=""; OPT_MACHINE_ID_VALUE=""; OPT_HOSTNAME_VALUE=""
@@ -550,7 +566,9 @@ detect_machine_id() {
 # (the Bonjour name; the kernel hostname is derived from DNS/DHCP and changes with
 # the network, so it is never used). Linux: `uname -n`, short form.
 THIS_HOST=""; THIS_HOST_ERROR=""
-short_host() { local h="${1%%.*}"; printf '%s' "$h" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]'; }
+# short_host NAME -- text before the first dot, ends trimmed, ASCII lower-cased
+# (the same rule as ConvertTo-ShortHost in aitools-profile.ps1)
+short_host() { local h="${1%%.*}"; printf '%s' "$h" | perl -pe 's/^[ \t\r\n]+|[ \t\r\n]+$//g; tr/A-Z/a-z/'; }
 detect_hostname() {
     local raw="" rc=0
     if [ -n "$OPT_HOSTNAME_VALUE" ]; then
@@ -559,7 +577,8 @@ detect_hostname() {
         raw=$(/usr/sbin/scutil --get LocalHostName 2>&1) || rc=$?
         if [ "$rc" -ne 0 ]; then THIS_HOST_ERROR="scutil --get LocalHostName failed: $raw"; raw=""; fi
     else
-        raw=$(uname -n)
+        raw=$(uname -n 2>&1) || rc=$?
+        if [ "$rc" -ne 0 ]; then THIS_HOST_ERROR="uname -n failed (exit $rc): $raw"; raw=""; fi
     fi
     THIS_HOST=$(short_host "$raw")
 }
@@ -997,6 +1016,10 @@ cmd_exception_set() {
     if [ -z "$OPT_METHOD" ] || [ -z "$OPT_PATH" ] || [ -z "$OPT_BY" ]; then
         usage_error "exception-set needs --slug, --platform, --method, --path and --by"
     fi
+    local o
+    for o in "$OPT_METHOD" "$OPT_PATH" "$OPT_VERSION" "$OPT_BY" "$OPT_REASON" "$OPT_DECIDED_AT"; do
+        case "$o" in *$'\t'*|*$'\n'*|*$'\r'*) usage_error "exception-set values must be one line (no tab or newline)" ;; esac
+    done
     local at="$OPT_DECIDED_AT"
     if [ -z "$at" ]; then at=$(date -u +%Y-%m-%dT%H:%M:%SZ); fi
     load_config
@@ -1027,7 +1050,7 @@ cmd_exception_set() {
     jtype t "$PF" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG"
     if [ -n "$t" ]; then
         state="updated"
-        before=$(pj json "$PF" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG") || before=""  # compared below
+        jsub before "$PF" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG"
     fi
     if [ "${AITOOLS_DRY_RUN:-}" = "1" ]; then
         state="dry-run"; log_detail "[DRY RUN] would record toolExceptions.$OPT_SLUG in $PF"; put_set; finish 0
@@ -1055,7 +1078,7 @@ cmd_exception_set() {
     if [ "$t" != "object" ]; then
         rm -f "$tmp"; state="failed"; add_err "validation failed: toolExceptions.$OPT_SLUG missing after write"; put_set; finish 2
     fi
-    after=$(pj json "$tmp" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG") || after=""  # compared below
+    jsub after "$tmp" profiles "$RM_ALIAS" toolExceptions "$OPT_SLUG"
     if [ "$state" = "updated" ] && [ "$before" = "$after" ]; then
         rm -f "$tmp"; state="unchanged"; put_set; finish 0
     fi
@@ -1148,6 +1171,10 @@ cmd_register() {
         usage_error "register needs --profile, --alias and --out"
     fi
     if ! [[ "$OPT_ALIAS" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]]; then usage_error "invalid alias: $OPT_ALIAS"; fi
+    local o
+    for o in "$OPT_NAME" "$OPT_COMPANY" "$OPT_SHELL" "$OPT_EMAIL" "$OPT_GITHUB_USER"; do
+        case "$o" in *$'\t'*|*$'\n'*|*$'\r'*) usage_error "register values must be one line (no tab or newline)" ;; esac
+    done
     local in="$OPT_PROFILE" state before="" after="" v a all t ver os arch rc=0 msg pid
     jcheck "$OPT_PROFILE"
     case "$JCHECK_STATE" in
@@ -1192,7 +1219,7 @@ cmd_register() {
         if [ -n "$t" ]; then
             if [ "$t" != "object" ]; then add_err "profiles.$OPT_ALIAS is not an object"; finish 2; fi
             state="updated"
-            before=$(pj json "$in" profiles "$OPT_ALIAS" machine) || before=""  # absent machine: compared as ""
+            jsub before "$in" profiles "$OPT_ALIAS"
         fi
     fi
     # Per-profile name/company only when neither the profile nor identity has one
@@ -1231,7 +1258,7 @@ cmd_register() {
     if [ "$rc" -ne 0 ]; then add_err "register failed: $msg"; finish 2; fi
     jtype t "$OPT_OUT" profiles "$OPT_ALIAS"
     if [ "$t" != "object" ]; then add_err "validation failed: profile $OPT_ALIAS missing after write"; finish 2; fi
-    after=$(pj json "$OPT_OUT" profiles "$OPT_ALIAS" machine) || after=""  # result check: compared below
+    jsub after "$OPT_OUT" profiles "$OPT_ALIAS"
     if [ "$state" = "updated" ] && [ "$before" = "$after" ]; then state="unchanged"; fi
     put result "$state"
     put alias "$OPT_ALIAS"

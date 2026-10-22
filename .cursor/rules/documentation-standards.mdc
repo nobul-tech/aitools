@@ -31,8 +31,8 @@ Spans multiple sessions, has phased gates, or needs detailed design beyond a roa
 - **Rules** (`.claude/rules/` / `.cursor/rules/`) = concise behavioral directives, ~40-100 lines
 - **References** (`reference/`) = implementation detail, unlimited length
 - **No duplication** — one authoritative location per fact
-- **Tool configs** documented per-tool in `@reference/tool-registry.md`
-- **Specs vs state** — rules and references are specs; `@reference/incidents.json` tracks out-of-spec code
+- **Tool configs** documented per-tool via the `/tool-registry` skill
+- **Specs vs state** — rules and references are specs; the `/incident` skill tracks out-of-spec code
 - **Cursor parity** — `.cursor/rules/*.mdc` mirrors `.claude/rules/*.md`. See `@.claude/rules/cursor-rule-parity.md`
 
 ### `@` link convention

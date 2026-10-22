@@ -1,0 +1,8 @@
+# scripts/aitools-lib.sh at origin/main db4b3c5: START	END	FIRST	LAST	BLOCK
+368	395	^# -{20}	^\}\s*$	sh-G-backup.sh
+426	549	^# -{20}	^\}\s*$	sh-A-helpers.sh
+797	900	^# -{20}	^\}\s*$	sh-F-merge.sh
+902	1060	^# -{20}	^\}\s*$	sh-B-review.sh
+1062	1189	^# -{20}	^\}\s*$	sh-C-deploy.sh.tmpl
+1238	1290	^# -{20}	^\}\s*$	sh-D-tracker.sh
+1292	1358	^# -{20}	^\}\s*$	sh-E-fieldprompt.sh

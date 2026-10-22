@@ -1,0 +1,30 @@
+        # Found a user-created skill
+        if ($userRepoPath) {
+            Log "Found user-created skill: $skillName"
+            if ($DryRun) {
+                Log "[DRY RUN] Would offer to adopt $skillName to dotprofile"
+            } else {
+                try {
+                    [Console]::WriteLine("")
+                    [Console]::WriteLine("  User-created skill detected: $skillName")
+                    [Console]::WriteLine("  [a]dopt to dotprofile  [s]kip")
+                    [Console]::Write("  > ")
+                    $choice = [Console]::ReadLine()
+                } catch {
+                    $choice = "s"
+                }
+                switch ($choice) {
+                    { $_ -in @("a", "adopt") } {
+                        $adoptDir = Join-Path $userRepoPath "claude\skills\$skillName"
+                        if (-not (Test-Path $adoptDir)) {
+                            New-Item -ItemType Directory -Path $adoptDir -Force | Out-Null
+                        }
+                        Copy-Item -Path (Join-Path $skillDir.FullName "SKILL.md") -Destination (Join-Path $adoptDir "SKILL.md") -Force
+                        LogOk "Adopted user skill to dotprofile: $skillName"
+                    }
+                    default {
+                        Log "Skipped adoption of $skillName"
+                    }
+                }
+            }
+        }

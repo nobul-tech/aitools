@@ -12,7 +12,7 @@
 #
 # Auth (gh auth login) is interactive — handled by aitools-install Step 2, not here.
 #
-# See reference/tool-registry.md for install source details.
+# See the /tool-registry skill (registries/tool-registry.json) for install source details.
 
 set -euo pipefail
 

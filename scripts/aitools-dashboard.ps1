@@ -19,7 +19,7 @@
 #
 # Called by: aitools dashboard (entry point dispatch)
 # Called by: SessionStart hook (dashboard-serve.sh) via aitools dashboard --background
-# See: reference/tool-registry.md (Python managed tool)
+# See: /tool-registry skill (python entry)
 
 param(
     [switch]$Background,

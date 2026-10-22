@@ -1,0 +1,42 @@
+    # --- Deploy CLAUDE.md via managed-file flow ---
+    # Adopt target: the dotprofile template (the source of truth when a user
+    # repo is configured). The library writes it, through claude_md_adopt_filter.
+    _claude_adopt_path=""
+    if [ -n "${USER_REPO_PATH:-}" ]; then
+        _claude_adopt_path="$USER_REPO_PATH/claude/CLAUDE.md"
+    fi
+    deploy_managed_file "$NEW_CONTENT" "$CLAUDE_MD" "claude.md" "CLAUDE.md" "$_claude_adopt_path" "claude_md_adopt_filter"
+
+    case "$MANAGED_FILE_RESULT" in
+        created|updated|"accept & adopt")
+            # --- BEGIN post-write validation (extracted by build-deploy) ---
+            # Post-write validation: check structure AND content (not just a marker)
+            if [ ! -s "$CLAUDE_MD" ]; then
+                log_error "Validation failed: $CLAUDE_MD is empty or missing"
+            elif ! grep -q "## Machine-Specific" "$CLAUDE_MD"; then
+                log_error "Validation failed: $CLAUDE_MD missing Machine-Specific section"
+            elif ! grep -qE "## (Coaching|Code Style|Tool)" "$CLAUDE_MD"; then
+                # Template body must be present -- a file with only the footer is corrupt
+                log_error "Validation failed: $CLAUDE_MD missing template body (only footer present?)"
+            fi
+            # --- END post-write validation (extracted by build-deploy) ---
+            if [ "$ERRORS" -ne 0 ]; then
+                write_summary ERROR "claude.md" "validation failed"
+            elif [ "$MANAGED_FILE_RESULT" = "accept & adopt" ]; then
+                write_summary OK "claude.md" "accepted to profile"
+            else
+                write_summary OK "claude.md" "$MANAGED_FILE_RESULT"
+            fi
+            ;;
+        skipped)
+            write_summary WARN "claude.md" "skipped (user review)"
+            ;;
+        verified)
+            log "CLAUDE.md verified (no differences)"
+            write_summary OK "claude.md" "verified"
+            ;;
+        failed)
+            # The library restored the files and logged the reason (log_error).
+            write_summary ERROR "claude.md" "deploy failed"
+            ;;
+    esac

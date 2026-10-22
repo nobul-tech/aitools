@@ -4,7 +4,7 @@
 # Windows: Uses winget to install rustup, which manages the Rust toolchain.
 # Checks for MSVC Build Tools (required for linking) and warns if missing.
 #
-# See reference/tool-registry.md for install source details.
+# See the /tool-registry skill (registries/tool-registry.json) for install source details.
 
 # --- Shared library ---
 . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")

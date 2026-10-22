@@ -20,10 +20,10 @@ fi
 
 # Find tool-ops.json
 tool_ops=""
-if [ -n "${AITOOLS_REPO_PATH:-}" ] && [ -f "$AITOOLS_REPO_PATH/reference/tool-ops.json" ]; then
-    tool_ops="$AITOOLS_REPO_PATH/reference/tool-ops.json"
-elif [ -f "$HOME/repos/aitools/reference/tool-ops.json" ]; then
-    tool_ops="$HOME/repos/aitools/reference/tool-ops.json"
+if [ -n "${AITOOLS_REPO_PATH:-}" ] && [ -f "$AITOOLS_REPO_PATH/registries/tool-ops.json" ]; then
+    tool_ops="$AITOOLS_REPO_PATH/registries/tool-ops.json"
+elif [ -f "$HOME/repos/aitools/registries/tool-ops.json" ]; then
+    tool_ops="$HOME/repos/aitools/registries/tool-ops.json"
 fi
 # No tool-ops.json — nothing to audit
 [ -n "$tool_ops" ] || exit 0

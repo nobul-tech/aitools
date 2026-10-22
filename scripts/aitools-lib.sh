@@ -367,15 +367,20 @@ write_environment_skip() {
 
 # ---------------------------------------------------------------------------
 # Backup a file before overwriting. Keeps at most $max_backups copies.
+# A failed copy is non-fatal here (warn, return 0) and sets BACKUP_FILE_OK=false;
+# callers that must not write without a backup check it (_managed_write).
 # ---------------------------------------------------------------------------
+BACKUP_FILE_OK=true
 backup_file() {
     local file="$1" max_backups=20
+    BACKUP_FILE_OK=true
     [ -f "$file" ] || return 0
     local ts
     ts=$(date -u +%Y-%m-%dT%H%M%SZ)
     # A failed backup is non-fatal (config-file-safety.md "Backup before overwrite"):
     # warn and let the caller proceed.
     if ! cp "$file" "${file}.bak.${ts}"; then
+        BACKUP_FILE_OK=false
         log_warn "Could not back up $(display_path "$file") -- proceeding without backup"
         return 0
     fi
@@ -424,128 +429,186 @@ backup_dir() {
 }
 
 # ---------------------------------------------------------------------------
-# Deploy state tracking: manifest + shadow copies for auto-deploy detection.
-# Tracks what was last deployed to each managed file.
+# Managed-file helpers for deploy_managed_file, review_json_fields and the
+# review prompts below. SOURCE is the source of truth; there is no deploy
+# state (see the "Review choices" block above prompt_diff_review).
 # ---------------------------------------------------------------------------
-_DEPLOY_STATE_DIR="$HOME/.aitools/deploy-state"
-_DEPLOY_MANIFEST=""
 
-get_content_hash() {
-    printf '%s' "$1" | sha256sum | cut -d' ' -f1
+# [x]abort: log, then exit 2 (a bare exit 2 means user abort; commander
+# decision 2026-10-21, D-TS13 reversed: no marker file). One helper for every
+# review prompt. Parity: Invoke-ManagedAbort in aitools-lib.ps1.
+_managed_abort() {
+    log_error "Aborted by user"
+    exit 2
 }
 
-_deploy_state_key() {
-    local file_path="$1"
-    # Normalize: strip $HOME prefix, use forward slashes
-    printf '%s' "$file_path" | perl -pe "s{^\Q$HOME\E/}{}"
+# Deploy state (~/.aitools/deploy-state/) is no longer used. Files from older
+# versions are left on disk; say so once per script run (detail level).
+_MANAGED_STATE_NOTED=false
+_managed_state_notice() {
+    if [ "$_MANAGED_STATE_NOTED" = "true" ]; then return 0; fi
+    _MANAGED_STATE_NOTED=true
+    if [ -d "$HOME/.aitools/deploy-state" ]; then
+        log_detail "deploy state is no longer used (SOURCE is the source of truth); $(display_path "$HOME/.aitools/deploy-state") left on disk"
+    fi
 }
 
-initialize_deploy_state() {
-    local manifest_path="$_DEPLOY_STATE_DIR/manifest.json"
-    _DEPLOY_MANIFEST='{"version":1,"files":{}}'
-    [ -f "$manifest_path" ] || return 0
-    # Validate once here so the per-file node calls below only fail if node itself fails.
-    if node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "$manifest_path"; then
-        _DEPLOY_MANIFEST=$(cat "$manifest_path")
-    else
-        log_warn "Deploy-state manifest unreadable -- starting fresh (old copy kept as .corrupt)"
-        if ! mv "$manifest_path" "${manifest_path}.corrupt"; then
-            log_warn "Could not move aside $(display_path "$manifest_path")"
+# Adopting into a protected file is allowed: it writes only the working tree.
+# WARN, naming the file, when the adopt target is listed in the protected-files
+# table (.claude/rules/sources-of-truth.md) of the git repo that contains it.
+# Table entries are backticked paths in the first column; * matches within one
+# path segment.
+_managed_protected_note() {
+    local target="$1" dir top prefix rel table
+    dir=$(dirname "$target")
+    [ -d "$dir" ] || return 0
+    # 2>/dev/null: git fails outside a repo; that means "not protected" (empty result checked).
+    top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || top=""
+    [ -n "$top" ] || return 0
+    # 2>/dev/null: same as above; an empty prefix is valid (file at the repo root).
+    prefix=$(git -C "$dir" rev-parse --show-prefix 2>/dev/null) || prefix=""
+    table="$top/.claude/rules/sources-of-truth.md"
+    [ -f "$table" ] || return 0
+    rel="${prefix}$(basename "$target")"
+    if perl -e '
+        my ($table, $rel) = @ARGV;
+        open my $fh, "<", $table or exit 1;
+        while (my $line = <$fh>) {
+            next unless $line =~ /^\|\s*`([^`]+)`/;
+            my $pat = quotemeta($1);
+            $pat =~ s/\\\*/[^\/]*/g;
+            exit 0 if $rel =~ /^$pat$/;
+        }
+        exit 1;
+    ' "$table" "$rel"; then
+        log_warn "Adopted into protected file $(display_path "$target") -- working tree only; the review gate (.claude/rules/sources-of-truth.md) applies at commit"
+    fi
+}
+
+# After adopt or merge: the library never commits or pushes. Say that the
+# adopt target's repo has an uncommitted change to review, and WARN when the
+# target is protected (_managed_protected_note).
+_managed_adopt_notice() {
+    local target="$1" top
+    _managed_protected_note "$target"
+    # 2>/dev/null: outside a git repo there is nothing to commit (empty result checked).
+    top=$(git -C "$(dirname "$target")" rev-parse --show-toplevel 2>/dev/null) || top=""
+    if [ -n "$top" ]; then
+        log "Uncommitted change in $(display_path "$top"): $(basename "$target") -- review and commit it (cd $(display_path "$top") && git diff)"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Write LOCAL and/or the adopt target as one step.
+#   $1 = LOCAL path   ("" = LOCAL not written)    $2 = LOCAL content
+#   $3 = adopt path   ("" = adopt target not written)  $4 = adopt content
+# Content is written with exactly one trailing newline. Before anything is
+# written, each existing file is snapshotted (for restore) and backed up
+# (backup_file: rotated .bak.<ts>); a failed backup fails the step with
+# nothing written. After writing, each file is validated: non-empty, and for
+# a name ending in .json: valid JSON that has every top-level key listed in
+# MANAGED_WRITE_REQUIRED_1 / _2 (JSON arrays for $1 / $3; unset = none; the
+# caller sets them just before the call; they are cleared on return). On any
+# failure every file this call touched is restored from its snapshot (a file
+# that did not exist is removed), MANAGED_WRITE_ERROR is set, and 1 is
+# returned. The caller logs MANAGED_WRITE_ERROR with log_error.
+# ---------------------------------------------------------------------------
+MANAGED_WRITE_ERROR=""
+MANAGED_WRITE_REQUIRED_1=""
+MANAGED_WRITE_REQUIRED_2=""
+_managed_write() {
+    local p1="$1" c1="$2" p2="$3" c2="$4"
+    local req1="${MANAGED_WRITE_REQUIRED_1:-[]}" req2="${MANAGED_WRITE_REQUIRED_2:-[]}"
+    MANAGED_WRITE_REQUIRED_1=""; MANAGED_WRITE_REQUIRED_2=""
+    MANAGED_WRITE_ERROR=""
+    local snapdir
+    if ! snapdir=$(mktemp -d); then
+        MANAGED_WRITE_ERROR="could not create a restore snapshot directory -- nothing written"
+        return 1
+    fi
+
+    # Snapshot: s<N> holds the prior content; e<N> marks "did not exist".
+    local i p c werr
+    for i in 1 2; do
+        if [ "$i" = "1" ]; then p="$p1"; else p="$p2"; fi
+        [ -n "$p" ] || continue
+        if [ -f "$p" ]; then
+            if ! cp -p "$p" "$snapdir/s$i"; then
+                MANAGED_WRITE_ERROR="could not snapshot $(display_path "$p") for restore -- nothing written"
+                rm -rf "$snapdir"
+                return 1
+            fi
+            backup_file "$p"
+            if [ "$BACKUP_FILE_OK" != "true" ]; then
+                MANAGED_WRITE_ERROR="backup of $(display_path "$p") failed -- nothing written"
+                rm -rf "$snapdir"
+                return 1
+            fi
+        elif ! : > "$snapdir/e$i"; then
+            MANAGED_WRITE_ERROR="could not record restore state for $(display_path "$p") -- nothing written"
+            rm -rf "$snapdir"
+            return 1
         fi
+    done
+
+    local rc=0 req
+    for i in 1 2; do
+        if [ "$i" = "1" ]; then p="$p1"; c="$c1"; req="$req1"; else p="$p2"; c="$c2"; req="$req2"; fi
+        [ -n "$p" ] || continue
+        if ! werr=$(mkdir -p "$(dirname "$p")" 2>&1); then
+            MANAGED_WRITE_ERROR="cannot create the directory for $(display_path "$p"): $werr"
+            rc=1; break
+        fi
+        if ! werr=$( { printf '%s\n' "$c" > "$p"; } 2>&1 ); then
+            MANAGED_WRITE_ERROR="write failed for $(display_path "$p"): $werr"
+            rc=1; break
+        fi
+        if [ ! -s "$p" ]; then
+            MANAGED_WRITE_ERROR="validation failed: $(display_path "$p") is empty after the write"
+            rc=1; break
+        fi
+        case "$p" in
+            *.json)
+                if ! werr=$(node -e "
+const fs = require('fs');
+let v;
+try { v = JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); }
+catch (e) { console.error('not valid JSON: ' + e.message); process.exit(1); }
+const req = JSON.parse(process.argv[2]);
+const isObj = v !== null && typeof v === 'object' && !Array.isArray(v);
+const miss = isObj ? req.filter(k => !Object.prototype.hasOwnProperty.call(v, k)) : req;
+if (miss.length) { console.error('missing required keys: ' + miss.join(', ')); process.exit(1); }
+" "$p" "$req" 2>&1); then
+                    MANAGED_WRITE_ERROR="validation failed: $(display_path "$p"): $werr"
+                    rc=1; break
+                fi ;;
+        esac
+    done
+
+    if [ "$rc" -ne 0 ]; then
+        for i in 1 2; do
+            if [ "$i" = "1" ]; then p="$p1"; else p="$p2"; fi
+            [ -n "$p" ] || continue
+            if [ -f "$snapdir/s$i" ]; then
+                # Restore only what changed (a write refused at open changed nothing).
+                if ! cmp -s "$snapdir/s$i" "$p"; then
+                    if cp -p "$snapdir/s$i" "$p"; then
+                        log "Restored $(display_path "$p")"
+                    else
+                        log_error "Restore failed for $(display_path "$p") -- its backup is next to it (.bak.*)"
+                    fi
+                fi
+            elif [ -f "$snapdir/e$i" ] && [ -e "$p" ]; then
+                if rm -f "$p"; then
+                    log "Removed partial $(display_path "$p")"
+                else
+                    log_error "Could not remove partial $(display_path "$p")"
+                fi
+            fi
+        done
     fi
-}
-
-get_deploy_state_hash() {
-    local file_path="$1"
-    if [ -z "$_DEPLOY_MANIFEST" ]; then initialize_deploy_state; fi
-    local key
-    key=$(_deploy_state_key "$file_path")
-    # node is already a dependency (used by read_config_key). Empty output = no record.
-    # Called via $(...): it must not log (stdout is the hash). Returns node's exit code;
-    # the caller logs. The manifest was validated in initialize_deploy_state, so a
-    # failure here is node itself.
-    printf '%s' "$_DEPLOY_MANIFEST" | node -e "
-        const m = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-        const f = m.files || {};
-        const e = f[process.argv[1]];
-        if (e && e.hash) process.stdout.write(e.hash);
-    " "$key"
-}
-
-update_deploy_state() {
-    local file_path="$1"
-    local content="$2"
-    if [ -z "$_DEPLOY_MANIFEST" ]; then initialize_deploy_state; fi
-    local key hash ts
-    key=$(_deploy_state_key "$file_path")
-    hash=$(get_content_hash "$content")
-    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-
-    mkdir -p "$_DEPLOY_STATE_DIR"
-
-    # Update manifest via node; on failure keep the previous manifest rather than writing an empty one.
-    local updated
-    if ! updated=$(printf '%s' "$_DEPLOY_MANIFEST" | node -e "
-        const m = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-        if (!m.files) m.files = {};
-        m.files[process.argv[1]] = { hash: process.argv[2], deployedAt: process.argv[3] };
-        process.stdout.write(JSON.stringify(m, null, 2));
-    " "$key" "$hash" "$ts") || [ -z "$updated" ]; then
-        log_warn "Could not update deploy state for $key -- next run may re-prompt"
-        return 0
-    fi
-    _DEPLOY_MANIFEST=$updated
-
-    printf '%s\n' "$_DEPLOY_MANIFEST" > "$_DEPLOY_STATE_DIR/manifest.json"
-
-    # Write shadow copy
-    local shadow_path="$_DEPLOY_STATE_DIR/shadows/$key"
-    mkdir -p "$(dirname "$shadow_path")"
-    printf '%s' "$content" > "$shadow_path"
-}
-
-get_deploy_shadow() {
-    local file_path="$1"
-    local key
-    key=$(_deploy_state_key "$file_path")
-    local shadow_path="$_DEPLOY_STATE_DIR/shadows/$key"
-    if [ -f "$shadow_path" ]; then
-        cat "$shadow_path"
-    fi
-}
-
-# ---------------------------------------------------------------------------
-# Non-agentic 3-way merge using shadow as common ancestor.
-# Backend: git merge-file (guaranteed prerequisite -- no discovery needed).
-# Sets AUTO_MERGED_CONTENT on clean merge. Returns 0 on success, 1 on failure.
-# ---------------------------------------------------------------------------
-AUTO_MERGED_CONTENT=""
-try_auto_merge() {
-    local local_content="$1"
-    local ancestor_content="$2"
-    local source_content="$3"
-    AUTO_MERGED_CONTENT=""
-
-    local tmp_local tmp_ancestor tmp_source
-    tmp_local=$(mktemp)
-    tmp_ancestor=$(mktemp)
-    tmp_source=$(mktemp)
-    printf '%s' "$local_content" > "$tmp_local"
-    printf '%s' "$ancestor_content" > "$tmp_ancestor"
-    printf '%s' "$source_content" > "$tmp_source"
-
-    local merged
-    # 2>/dev/null: git merge-file writes conflict markers to stderr on exit 1;
-    # we only want stdout. Exit code checked via $rc immediately below.
-    merged=$(git merge-file -p "$tmp_local" "$tmp_ancestor" "$tmp_source" 2>/dev/null)
-    local rc=$?
-    rm -f "$tmp_local" "$tmp_ancestor" "$tmp_source"
-
-    if [ "$rc" -eq 0 ]; then
-        AUTO_MERGED_CONTENT="$merged"
-        return 0
-    fi
-    return 1
+    rm -rf "$snapdir"
+    return "$rc"
 }
 
 # ---------------------------------------------------------------------------
@@ -663,8 +726,12 @@ ${feedback}
 _MERGE_VALIDATE_SOURCE=""
 _MERGE_VALIDATE_LOCAL=""
 _merge_validate() {
-    validate_ai_merge_output "$1" "$_MERGE_VALIDATE_SOURCE" "$_MERGE_VALIDATE_LOCAL"
+    # Return the validator's status: the assignment below would otherwise make
+    # this function return 0 and accept every output (parity: _MergeValidateWrapper).
+    local rc=0
+    validate_ai_merge_output "$1" "$_MERGE_VALIDATE_SOURCE" "$_MERGE_VALIDATE_LOCAL" || rc=$?
     AI_REJECT_REASON="$MERGE_REJECT_REASON"
+    return "$rc"
 }
 
 MERGE_REJECT_REASON=""
@@ -795,15 +862,23 @@ read_tty_choice() {
 }
 
 # ---------------------------------------------------------------------------
-# Agentic merge via invoke_ai with refinement loop.
+# Agentic merge via invoke_ai with refinement loop ([m]erge & adopt).
 # Uses structured prompts from _ai_prompt_merge / _ai_prompt_merge_refine.
-# Sets DIFF_REVIEW_RESULT="merge" + MERGED_CONTENT, or falls back.
+# Sets DIFF_REVIEW_RESULT to:
+#   "merge"  -- [y]es: MERGED_CONTENT holds the accepted merge
+#   "menu"   -- [n]o: the preview was rejected; prompt_diff_review shows its
+#               menu again (nothing written)
+#   "failed" -- the AI merge produced no valid output; MANAGED_MERGE_ERROR
+#               holds the reason (deploy_managed_file logs it; nothing written)
 # ---------------------------------------------------------------------------
+MANAGED_MERGE_ERROR=""
 _invoke_ai_merge() {
     local file_path="$1"
     local source_content="$2"
     local local_content="${3:-}"
     local diff_output="${4:-}"
+
+    MANAGED_MERGE_ERROR=""
 
     # Read local from disk if not provided (backward compat)
     if [ -z "$local_content" ] && [ -f "$file_path" ]; then
@@ -844,6 +919,7 @@ _invoke_ai_merge() {
         local merged
         _start_spinner "merging $display_name (attempt $iteration)..."
         # invoke_ai returns 1 on failure with no stdout; || true suppresses set -e abort
+        # (the empty result is checked just below)
         merged=$(printf '%s' "$prompt_text" | invoke_ai balanced none _merge_validate 1) || true
         _stop_spinner
 
@@ -853,15 +929,9 @@ _invoke_ai_merge() {
         fi
 
         if [ -z "$merged" ]; then
-            printf '  >> AI merge failed (iteration %d): %s\n' "$iteration" "${AI_REJECT_REASON:-unknown error}" > /dev/tty
-            log_error "AI merge failed (iteration $iteration): ${AI_REJECT_REASON:-unknown error}"
-            printf '  fallback [o]verwrite / [s]kip: ' > /dev/tty
-            local fb
-            read_tty_choice fb "overwrite"
-            case "$(printf '%s' "$fb" | tr '[:upper:]' '[:lower:]')" in
-                s) DIFF_REVIEW_RESULT="skip" ;;
-                *) DIFF_REVIEW_RESULT="overwrite" ;;
-            esac
+            MANAGED_MERGE_ERROR="AI merge failed (iteration $iteration): ${AI_REJECT_REASON:-unknown error}"
+            printf '  >> %s -- nothing written\n' "$MANAGED_MERGE_ERROR" > /dev/tty
+            DIFF_REVIEW_RESULT="failed"
             return 0
         fi
 
@@ -877,7 +947,7 @@ _invoke_ai_merge() {
         fi
         printf '\n  [y]es accept / [r]efine / [n]o reject: ' > /dev/tty
         local accept
-        read_tty_choice accept "reject merge (overwrite)"
+        read_tty_choice accept "reject the merge (back to the review menu)"
         case "$(printf '%s' "$accept" | tr '[:upper:]' '[:lower:]')" in
             y)
                 MERGED_CONTENT="$merged"
@@ -891,8 +961,8 @@ _invoke_ai_merge() {
                 continue
                 ;;
             *)
-                printf '  >> merge rejected, falling back to overwrite\n' > /dev/tty
-                DIFF_REVIEW_RESULT="overwrite"
+                printf '  >> merge rejected -- back to the review menu\n' > /dev/tty
+                DIFF_REVIEW_RESULT="menu"
                 return 0
                 ;;
         esac
@@ -900,28 +970,88 @@ _invoke_ai_merge() {
 }
 
 # ---------------------------------------------------------------------------
-# Prompt user before overwriting a managed file with different content.
-# Shows diff, attempts diff3 auto-merge, offers interactive options.
+# Review choices -- what each one does. Applies to prompt_diff_review,
+# deploy_managed_file and review_json_fields below (PS1 twins:
+# Prompt-DiffReview, Deploy-ManagedFile, Review-JsonFields). Spec:
+# reference/managed-file-deployment.md. Model and AI merge rules:
+# .claude/rules/agentic-standards.md "Managed-file review choices and merge".
+#
+# Terms:
+#   SOURCE       the content being deployed (repo or dotprofile); the source
+#                of truth
+#   LOCAL        the deployed file on disk
+#   ADOPT TARGET the repo file SOURCE comes from (ADOPT_PATH). The caller
+#                passes its path; this library writes it. "" = no adopt
+#                target: adopt and merge are not offered.
+# There is no ancestor and no deploy state: the only comparison is SOURCE
+# against LOCAL (trailing newlines normalized).
+#
+# No menu is shown when:
+#   LOCAL missing                       -> SOURCE written, "created"
+#   LOCAL == SOURCE                     -> nothing written, "verified"
+#   no terminal, EOF, or AITOOLS_FORCE  -> SOURCE written (backup), "updated"
+#
+# Text files (DEST not ending in .json), one review per file:
+#   [o]verwrite      -> SOURCE written to LOCAL (backup kept); "updated"
+#   [a]ccept & adopt -> LOCAL kept; LOCAL copied to the adopt target now;
+#                       "accept & adopt"
+#   [m]erge & adopt  -> AI merge (_invoke_ai_merge: invoke_ai balanced/none,
+#                       validated, previewed; [y]es / [r]efine / [n]o). [y]:
+#                       the merge is written to LOCAL and to the adopt target
+#                       now; "accept & adopt". [n]: back to this menu. No valid
+#                       merge output: nothing written; "failed".
+#   [s]kip           -> nothing written; "skipped"; reviewed again next run
+#   [x]abort         -> log_error, exit 2: ends this script
+# After adopt or merge, SOURCE, LOCAL and the adopt target agree, so the next
+# run verifies the file and asks nothing. A caller whose adopt target is not a
+# plain copy of LOCAL (CLAUDE.md: machine footer stripped, profile tokens
+# restored) passes an adopt filter; the adopt target gets the filtered content.
+#
+# JSON files (DEST ending in .json; review_json_fields): node compares SOURCE
+# and LOCAL field by field (key path; a whole array is one field). Each
+# differing field is one prompt_json_field_review: [o]verwrite (SOURCE value
+# to LOCAL), [a]dopt (LOCAL value to the adopt target), [s]kip, [x]abort. No
+# merge. A field only in LOCAL stays in LOCAL: with an adopt target and a
+# terminal it gets [a]dopt / [s]kip / [x]abort (no overwrite); otherwise it is
+# kept without a prompt. Key order is preserved in both files. One result per
+# file, by precedence: failed > accept & adopt > skipped > updated > verified.
+#
+# Failure: every file a step writes (LOCAL, and the adopt target for adopt or
+# merge) is snapshotted and backed up first (a failed backup of an existing
+# file fails the step: nothing written) and validated after (non-empty; JSON
+# parses and keeps SOURCE's top-level keys, except keys the review chose to
+# leave absent). If a write, the merge or a validation fails, the files are
+# restored, the reason is logged (log_error), the result is "failed" (the
+# caller records it; deploy_tracker_summary writes an ERROR row) and the run
+# continues with the next file. An adopt target listed in its repo's
+# protected-files table (.claude/rules/sources-of-truth.md) gets a WARN that
+# names it: working tree only; the review gate applies at commit. The library
+# never commits or pushes: after adopt or merge it logs that the adopt
+# target's repo has an uncommitted change to review and ship.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Show SOURCE against LOCAL and ask what to do ("Review choices" above).
 #
 # Args:
-#   $1 = file path (deployed file on disk)
-#   $2 = new content that would be written (from source template)
-#   $3 = adopt target label (e.g., "profile", "shared/") or "" to hide adopt
-#   $4 = current content of local file (optional, read from disk if empty)
-#   $5 = ancestor content from shadow (optional, enables diff3 merge)
+#   $1 = DEST, the deployed file on disk (LOCAL)
+#   $2 = NEW_CONTENT, the SOURCE content
+#   $3 = ADOPT_OFFERED: 1 offers [a]ccept & adopt and [m]erge & adopt; 0 hides them
+#   $4 = CUR_CONTENT, LOCAL content (optional; read from DEST when empty)
 #
-# Sets global DIFF_REVIEW_RESULT to: "overwrite", "adopt", "merge", or "skip"
-# When "merge": also sets MERGED_CONTENT with the merged result.
-# Exits with code 2 on abort.
-# Non-interactive / --force: sets "overwrite" and returns.
+# Sets DIFF_REVIEW_RESULT to "overwrite", "adopt", "merge", "skip" or
+# "failed"; "merge" also sets MERGED_CONTENT; "failed" (the AI merge produced
+# no valid output) sets MANAGED_MERGE_ERROR. Exits 2 on [x]abort
+# (_managed_abort).
+# Non-interactive, EOF at the prompt, --force / AITOOLS_FORCE: "overwrite".
 # ---------------------------------------------------------------------------
 DIFF_REVIEW_RESULT=""
+_PDR_ADOPT_TARGET=""   # set by deploy_managed_file; shown in the review header only
 prompt_diff_review() {
     local file_path="$1"
     local new_content="$2"
-    local adopt_label="${3:-}"
+    local adopt_offered="${3:-0}"
     local cur_content="${4:-}"
-    local ancestor_content="${5:-}"
 
     DIFF_REVIEW_RESULT="overwrite"
     MERGED_CONTENT=""
@@ -946,8 +1076,12 @@ prompt_diff_review() {
     # Context header
     printf '\n\033[33m[REVIEW]\033[0m %s differs from source.\n' \
         "$(display_path "$file_path")" > /dev/tty
-    printf '  source = template (would deploy)\n' > /dev/tty
-    printf '  local  = current file on disk\n\n' > /dev/tty
+    printf '  source = the repo version (would deploy)\n' > /dev/tty
+    printf '  local  = current file on disk\n' > /dev/tty
+    if [ "$adopt_offered" = "1" ] && [ -n "$_PDR_ADOPT_TARGET" ]; then
+        printf '  repo   = %s (adopt target)\n' "$(display_path "$_PDR_ADOPT_TARGET")" > /dev/tty
+    fi
+    printf '\n' > /dev/tty
 
     # Show diff
     local diff_output
@@ -969,112 +1103,72 @@ prompt_diff_review() {
         log_detail "diff $(basename "$file_path"): $diff_line"
     done <<< "$diff_output"
 
-    # Attempt automatic merge if ancestor available
-    if [ -n "$ancestor_content" ]; then
-        printf '\n  Attempting automatic merge...\n' > /dev/tty
-        if try_auto_merge "$cur_content" "$ancestor_content" "$new_content"; then
-            printf '  Clean merge -- no conflicts.\n\n' > /dev/tty
-            local total_m_lines preview_count
-            total_m_lines=$(printf '%s\n' "$AUTO_MERGED_CONTENT" | wc -l | tr -d ' ')
-            preview_count=$total_m_lines
-            if [ "$preview_count" -gt 30 ]; then preview_count=30; fi
-            printf '  --- merged result preview (first %d lines) ---\n' "$preview_count" > /dev/tty
-            printf '%s\n' "$AUTO_MERGED_CONTENT" | head -"$preview_count" | while IFS= read -r line; do
-                printf '  | %s\n' "$line" > /dev/tty
-            done
-            if [ "$total_m_lines" -gt 30 ]; then
-                printf '  | ... (%d more lines)\n' "$((total_m_lines - 30))" > /dev/tty
-            fi
-            printf '\n' > /dev/tty
-            if [ -n "$adopt_label" ]; then
-                printf '  [a]ccept    : deploy merge + update %s\n' "$adopt_label" > /dev/tty
-            else
-                printf '  [a]ccept\n' > /dev/tty
-            fi
-            printf '  [o]verwrite\n' > /dev/tty
-            printf '  [s]kip\n' > /dev/tty
-            printf '  [x]abort\n' > /dev/tty
-            printf '  choice [a/o/s/x]: ' > /dev/tty
-            local merge_choice
-            read_tty_choice merge_choice "overwrite"
-            case "$(printf '%s' "$merge_choice" | tr '[:upper:]' '[:lower:]')" in
-                a)  MERGED_CONTENT="$AUTO_MERGED_CONTENT"
-                    if [ -n "$adopt_label" ]; then
-                        printf '  >> accepted: merge deployed + %s updated\n' "$adopt_label" > /dev/tty
-                        DIFF_REVIEW_RESULT="merge-adopt"
-                    else
-                        printf '  >> accepted: merge deployed\n' > /dev/tty
-                        DIFF_REVIEW_RESULT="merge"
-                    fi
-                    return 0 ;;
-                s)  printf '  >> skipped: local file unchanged\n' > /dev/tty
-                    DIFF_REVIEW_RESULT="skip"
-                    return 0 ;;
-                x)  log_error "Aborted by user"
-                    exit 2 ;;
-                *)  printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
-                    DIFF_REVIEW_RESULT="overwrite"
-                    return 0 ;;
-            esac
-        else
-            printf '  Merge has conflicts -- manual choice required.\n' > /dev/tty
-        fi
-    fi
-
-    # Options (no auto-merge or merge had conflicts)
-    printf '\n' > /dev/tty
-    if [ -n "$adopt_label" ]; then
-        printf '  [o]verwrite : source wins -> deploy to local (backup kept)\n' > /dev/tty
-        printf '  [a]dopt     : local wins -> copy back to %s\n' "$adopt_label" > /dev/tty
-        printf '  [m]erge     : AI-assisted merge of source + local\n' > /dev/tty
-        printf '  [s]kip      : keep local as-is (no changes)\n' > /dev/tty
-        printf '  [x]abort    : stop deployment\n' > /dev/tty
-        printf '  choice [o/a/m/s/x]: ' > /dev/tty
-    else
-        printf '  [o]verwrite : source wins -> deploy to local (backup kept)\n' > /dev/tty
-        printf '  [m]erge     : AI-assisted merge of source + local\n' > /dev/tty
-        printf '  [s]kip      : keep local as-is (no changes)\n' > /dev/tty
-        printf '  [x]abort    : stop deployment\n' > /dev/tty
-        printf '  choice [o/m/s/x]: ' > /dev/tty
-    fi
-
+    # Menu (parity: Prompt-DiffReview in aitools-lib.ps1). A rejected merge
+    # preview ("menu") shows the menu again.
     local choice
-    read_tty_choice choice "overwrite"
-    case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
-        a)  if [ -n "$adopt_label" ]; then
-                printf '  >> adopted: local version copied back to %s\n' "$adopt_label" > /dev/tty
-                DIFF_REVIEW_RESULT="adopt"
-            else
-                printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
-                DIFF_REVIEW_RESULT="overwrite"
-            fi ;;
-        m)  _invoke_ai_merge "$file_path" "$new_content" "$cur_content" "$diff_output" ;;
-        s)  printf '  >> skipped: local file unchanged\n' > /dev/tty
-            DIFF_REVIEW_RESULT="skip" ;;
-        x)  log_error "Aborted by user"
-            exit 2 ;;
-        *)  printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
-            DIFF_REVIEW_RESULT="overwrite" ;;
-    esac
+    while true; do
+        printf '\n' > /dev/tty
+        printf '  [o]verwrite      : source wins -> written to local (backup kept)\n' > /dev/tty
+        if [ "$adopt_offered" = "1" ]; then
+            printf '  [a]ccept & adopt : local wins -> copied to the repo now\n' > /dev/tty
+            printf '  [m]erge & adopt  : AI merge of source + local -> local and the repo\n' > /dev/tty
+        fi
+        printf '  [s]kip           : nothing written; asked again next run\n' > /dev/tty
+        printf '  [x]abort         : stop this script (exit 2)\n' > /dev/tty
+        if [ "$adopt_offered" = "1" ]; then
+            printf '  choice [o/a/m/s/x]: ' > /dev/tty
+        else
+            printf '  choice [o/s/x]: ' > /dev/tty
+        fi
+
+        read_tty_choice choice "overwrite"
+        case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
+            a)  if [ "$adopt_offered" = "1" ]; then
+                    printf '  >> accept & adopt: local kept, copied to the repo\n' > /dev/tty
+                    DIFF_REVIEW_RESULT="adopt"
+                else
+                    printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
+                    DIFF_REVIEW_RESULT="overwrite"
+                fi ;;
+            m)  if [ "$adopt_offered" = "1" ]; then
+                    _invoke_ai_merge "$file_path" "$new_content" "$cur_content" "$diff_output"
+                else
+                    printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
+                    DIFF_REVIEW_RESULT="overwrite"
+                fi ;;
+            s)  printf '  >> skipped: local file unchanged\n' > /dev/tty
+                DIFF_REVIEW_RESULT="skip" ;;
+            x)  _managed_abort ;;
+            *)  printf '  >> overwritten: source deployed to local (backup kept)\n' > /dev/tty
+                DIFF_REVIEW_RESULT="overwrite" ;;
+        esac
+        if [ "$DIFF_REVIEW_RESULT" != "menu" ]; then break; fi
+    done
     return 0
 }
 
 # ---------------------------------------------------------------------------
-# Deploy a managed file with diff review and deploy state tracking.
-# Uses manifest to auto-deploy when user hasn't edited the local file.
-# Falls back to interactive review with merge options when both sides differ.
+# Deploy one managed file. SOURCE is the source of truth ("Review choices"
+# above prompt_diff_review). Parity: Deploy-ManagedFile in aitools-lib.ps1.
 #
 # Args:
-#   $1 = source content (string to deploy)
-#   $2 = dest file path (deployed location)
-#   $3 = tool name (for summary, e.g., "claude rules")
-#   $4 = item name (for DETAIL summary, e.g., "concurrent-agents.md")
-#   $5 = adopt label ("profile", "shared/", or "" to hide adopt option)
+#   $1 = SRC_CONTENT   content to deploy (SOURCE)
+#   $2 = DEST          deployed path (LOCAL). A name ending in .json is
+#                      reviewed field by field (review_json_fields).
+#   $3 = TOOL_NAME     summary tool name (e.g. "claude rules")
+#   $4 = ITEM_NAME     item name for log lines (e.g. "concurrent-agents.md")
+#   $5 = ADOPT_PATH    absolute path of the repo file that is the source of
+#                      truth; "" = adopt and merge are not offered
+#   $6 = ADOPT_FILTER  optional, text files only: name of a function that
+#                      reads LOCAL content on stdin and prints the content the
+#                      adopt target gets (CLAUDE.md strips its machine footer
+#                      and restores profile tokens). "" = plain copy.
 #
-# Sets MANAGED_FILE_RESULT to: "created", "updated", "verified", "accept & adopt", "skipped"
-# Exits with code 2 on abort (from prompt_diff_review).
-# On "accept & adopt"/"skipped": does NOT write the file (caller decides).
-# On "created"/"updated": writes src_content to dest + updates deploy state.
+# Sets MANAGED_FILE_RESULT to "created", "updated", "verified",
+# "accept & adopt", "skipped" or "failed". On "failed" nothing is left
+# half-written (snapshots restored) and the reason is logged with log_error;
+# the caller records the outcome (deploy_tracker_record, or its own ERROR
+# row). Exits 2 on [x]abort. Honors DRY_RUN (reports, writes nothing).
 # ---------------------------------------------------------------------------
 MANAGED_FILE_RESULT=""
 deploy_managed_file() {
@@ -1082,13 +1176,15 @@ deploy_managed_file() {
     local dest="$2"
     local tool_name="$3"
     local item_name="$4"
-    local adopt_label="${5:-}"
-
-    # Normalize trailing whitespace for consistent comparison.
-    # Prevents round-trip diff noise (deploy -> adopt strips trailing blanks -> deploy sees diff).
-    src_content=$(printf '%s' "$src_content" | perl -0777 -pe 's/[\r\n]+$/\n/')
+    local adopt_path="${5:-}"
+    local adopt_filter="${6:-}"
 
     MANAGED_FILE_RESULT="verified"
+    _managed_state_notice
+
+    # Normalize trailing newlines for a stable comparison: command substitution
+    # strips them, and every write adds exactly one back.
+    src_content=$(printf '%s' "$src_content" | perl -0777 -pe 's/[\r\n]+$/\n/')
 
     # Dry run: report what would happen without writing
     if [ "${DRY_RUN:-}" = "true" ]; then
@@ -1107,84 +1203,395 @@ deploy_managed_file() {
         return 0
     fi
 
-    mkdir -p "$(dirname "$dest")"
-
-    if [ -f "$dest" ]; then
-        local existing
-        existing=$(cat "$dest")
-        existing=$(printf '%s' "$existing" | perl -0777 -pe 's/[\r\n]+$/\n/')
-        if [ "$existing" = "$src_content" ]; then
-            # Content identical — update deploy state (bootstraps manifest)
-            update_deploy_state "$dest" "$src_content"
-            MANAGED_FILE_RESULT="verified"
-            return 0
-        fi
-
-        # Content differs — check deploy state for auto-deploy eligibility
-        local state_hash existing_hash
-        # Initialize in this shell (not inside the $(...) below) so its warnings are
-        # counted and the parsed manifest is cached for later calls.
-        if [ -z "$_DEPLOY_MANIFEST" ]; then initialize_deploy_state; fi
-        if ! state_hash=$(get_deploy_state_hash "$dest"); then
-            log_warn "Could not read deploy state for $item_name -- treating as not deployed"
-            state_hash=""
-        fi
-        if [ -n "$state_hash" ]; then
-            existing_hash=$(get_content_hash "$existing")
-            if [ "$existing_hash" = "$state_hash" ]; then
-                # User didn't edit since last deploy → auto-deploy silently
-                backup_file "$dest"
-                printf '%s\n' "$src_content" > "$dest"
-                update_deploy_state "$dest" "$src_content"
-                log "Auto-deployed: $item_name (no local edits detected)"
-                MANAGED_FILE_RESULT="updated"
+    # JSON: field-by-field review
+    case "$dest" in
+        *.json)
+            local _src_tmp
+            if ! _src_tmp=$(mktemp); then
+                log_error "Failed: $item_name: could not create a temp file for the JSON review"
+                MANAGED_FILE_RESULT="failed"
                 return 0
             fi
-        fi
+            if ! printf '%s\n' "$src_content" > "$_src_tmp"; then
+                rm -f "$_src_tmp"
+                log_error "Failed: $item_name: could not write a temp file for the JSON review"
+                MANAGED_FILE_RESULT="failed"
+                return 0
+            fi
+            review_json_fields "$_src_tmp" "$dest" "$adopt_path"
+            rm -f "$_src_tmp"
+            return 0 ;;
+    esac
 
-        # User edited AND source changed — backup + interactive review
-        backup_file "$dest"
-        local ancestor_content
-        ancestor_content=$(get_deploy_shadow "$dest")
-        # Bootstrap: seed shadow from current deployed content if empty
-        if [ -z "$ancestor_content" ]; then
-            log "Bootstrapping deploy shadow from existing: $(display_path "$dest")"
-            ancestor_content="$existing"
+    # New file: create
+    if [ ! -f "$dest" ]; then
+        if _managed_write "$dest" "$src_content" "" ""; then
+            log_ok "Created: $item_name -> $(display_path "$dest")"
+            MANAGED_FILE_RESULT="created"
+        else
+            log_error "Failed: $item_name: $MANAGED_WRITE_ERROR"
+            MANAGED_FILE_RESULT="failed"
         fi
-        prompt_diff_review "$dest" "$src_content" "$adopt_label" "$existing" "$ancestor_content"
-        case "$DIFF_REVIEW_RESULT" in
-            adopt)
-                MANAGED_FILE_RESULT="accept & adopt"
-                return 0
-                ;;
-            skip)
-                log_warn "Skipped: $item_name"
-                MANAGED_FILE_RESULT="skipped"
-                return 0
-                ;;
-            merge-adopt)
-                src_content="$MERGED_CONTENT"
-                printf '%s' "$src_content" > "$dest"
-                update_deploy_state "$dest" "$src_content"
-                log_ok "Updated (merge-adopt): $item_name"
-                MANAGED_FILE_RESULT="accept & adopt"
-                return 0
-                ;;
-            merge)
-                src_content="$MERGED_CONTENT"
-                ;;
-        esac
-        # overwrite or merge: write content to dest
-        printf '%s\n' "$src_content" > "$dest"
-        update_deploy_state "$dest" "$src_content"
-        MANAGED_FILE_RESULT="updated"
-        log_ok "Updated: $item_name -> $(display_path "$dest")"
+        return 0
+    fi
+
+    local existing
+    if ! existing=$(cat "$dest"); then
+        log_error "Failed: $item_name: cannot read $(display_path "$dest")"
+        MANAGED_FILE_RESULT="failed"
+        return 0
+    fi
+    existing=$(printf '%s' "$existing" | perl -0777 -pe 's/[\r\n]+$/\n/')
+    if [ "$existing" = "$src_content" ]; then
+        MANAGED_FILE_RESULT="verified"
+        return 0
+    fi
+
+    # LOCAL differs from SOURCE: review (non-interactive / EOF / --force -> overwrite)
+    local adopt_offered=0
+    if [ -n "$adopt_path" ]; then adopt_offered=1; fi
+    _PDR_ADOPT_TARGET="$adopt_path"
+    prompt_diff_review "$dest" "$src_content" "$adopt_offered" "$existing"
+    _PDR_ADOPT_TARGET=""
+
+    local p_local="$dest" local_out="$src_content" p_repo="" repo_content=""
+    case "$DIFF_REVIEW_RESULT" in
+        skip)
+            log_warn "Skipped: $item_name (local differs from source; reviewed again next run)"
+            MANAGED_FILE_RESULT="skipped"
+            return 0 ;;
+        failed)
+            log_error "Failed: $item_name: ${MANAGED_MERGE_ERROR:-AI merge failed} -- nothing written"
+            MANAGED_FILE_RESULT="failed"
+            return 0 ;;
+        adopt)
+            p_local=""; local_out=""
+            p_repo="$adopt_path"; repo_content="$existing" ;;
+        merge)
+            local_out=$(printf '%s' "$MERGED_CONTENT" | perl -0777 -pe 's/[\r\n]+$/\n/')
+            p_repo="$adopt_path"; repo_content="$local_out" ;;
+    esac
+
+    # The adopt target gets LOCAL (or the merge), passed through the filter if any
+    if [ -n "$p_repo" ] && [ -n "$adopt_filter" ]; then
+        local filtered
+        if ! filtered=$(printf '%s\n' "$repo_content" | "$adopt_filter") || [ -z "$filtered" ]; then
+            log_error "Failed: $item_name: adopt filter $adopt_filter failed -- nothing written"
+            MANAGED_FILE_RESULT="failed"
+            return 0
+        fi
+        repo_content="$filtered"
+    fi
+
+    if ! _managed_write "$p_local" "$local_out" "$p_repo" "$repo_content"; then
+        log_error "Failed: $item_name: $MANAGED_WRITE_ERROR (files restored)"
+        MANAGED_FILE_RESULT="failed"
+        return 0
+    fi
+
+    if [ -n "$p_repo" ]; then
+        log_ok "Accept & adopt: $item_name -> $(display_path "$p_repo")"
+        _managed_adopt_notice "$p_repo"
+        MANAGED_FILE_RESULT="accept & adopt"
     else
-        # New file — create
-        printf '%s\n' "$src_content" > "$dest"
-        update_deploy_state "$dest" "$src_content"
-        MANAGED_FILE_RESULT="created"
-        log_ok "Created: $item_name -> $(display_path "$dest")"
+        log_ok "Updated: $item_name -> $(display_path "$dest")"
+        MANAGED_FILE_RESULT="updated"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Review a JSON managed file field by field ("Review choices" above).
+# Parity: Review-JsonFields in aitools-lib.ps1 (same embedded node script).
+#
+# Args:
+#   $1 = SRC_FILE    file holding the SOURCE JSON
+#   $2 = DEST        deployed JSON file (LOCAL)
+#   $3 = ADOPT_PATH  repo JSON file that is the source of truth; "" = no adopt
+#
+# Sets MANAGED_FILE_RESULT, one per file by precedence failed > accept & adopt
+# > skipped > updated > verified: "created" (LOCAL was missing), "failed"
+# (files restored, log_error), "accept & adopt" (a field was adopted into
+# ADOPT_PATH; overwrites chosen in the same run are written too), "skipped"
+# (a field was left differing), "updated" (fields overwritten from SOURCE),
+# "verified" (nothing written). Requires node. Exits 2 on [x]abort.
+# ---------------------------------------------------------------------------
+review_json_fields() {
+    local src_file="$1" dest="$2" adopt_path="${3:-}"
+    local item
+    item=$(basename "$dest")
+    MANAGED_FILE_RESULT="verified"
+
+    if ! command -v node >/dev/null 2>&1; then
+        log_error "Failed: $item: node is required for the JSON field review"
+        MANAGED_FILE_RESULT="failed"
+        return 0
+    fi
+
+    local work
+    if ! work=$(mktemp -d); then
+        log_error "Failed: $item: could not create a work directory for the JSON review"
+        MANAGED_FILE_RESULT="failed"
+        return 0
+    fi
+    cat > "$work/review.js" <<'REVIEW_JSON_NODE_EOF'
+// review_json_fields / Review-JsonFields: SOURCE against LOCAL, field by field.
+// The same text is embedded in aitools-lib.sh and aitools-lib.ps1: keep them identical.
+//   plan  SRC LOCAL OUT_PLAN
+//     OUT_PLAN: one line per differing field: idx<TAB>kind<TAB>key<TAB>local<TAB>source
+//     kind: differ | source-only | local-only. A whole array is one field.
+//   apply SRC LOCAL ADOPT CHOICES OUT_LOCAL OUT_ADOPT OUT_RESULT OUT_REQ_LOCAL OUT_REQ_ADOPT
+//     ADOPT: the adopt target, or "-" for none.
+//     CHOICES: idx<TAB>overwrite|adopt|skip|keep per field (missing = skip).
+//     OUT_LOCAL / OUT_ADOPT: new file content, or empty when that file is unchanged.
+//     OUT_RESULT: "over=N adopt=N skip=N kept=N".
+//     OUT_REQ_LOCAL / OUT_REQ_ADOPT: JSON array of SOURCE's top-level keys the
+//     written file must keep (keys the review chose to leave absent excluded).
+//   keys  SRC OUT_KEYS
+//     OUT_KEYS: JSON array of SOURCE's top-level keys ([] when not an object).
+// Key order is preserved: existing keys keep their position, new keys are appended.
+// Exit 3 with the reason on stderr when a file cannot be read or parsed.
+const fs = require('fs');
+const mode = process.argv[2];
+function readJson(p, label) {
+    let text;
+    try { text = fs.readFileSync(p, 'utf8'); }
+    catch (e) {
+        if (e.code === 'ENOENT') return undefined;
+        throw new Error(label + ': cannot read ' + p + ': ' + e.message);
+    }
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    try { return JSON.parse(text); }
+    catch (e) { throw new Error(label + ': ' + p + ' is not valid JSON: ' + e.message); }
+}
+function isObj(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+function canon(v) {
+    if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+    if (isObj(v)) return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}';
+    return JSON.stringify(v);
+}
+function fields(src, loc) {
+    const out = [];
+    if (!isObj(src) || !isObj(loc)) {
+        if (canon(src) !== canon(loc)) out.push({ path: [], kind: 'differ', s: src, l: loc });
+        return out;
+    }
+    (function walk(s, l, path) {
+        const keys = Object.keys(s).concat(Object.keys(l).filter(k => !has(s, k)));
+        for (const k of keys) {
+            const p = path.concat([k]);
+            const inS = has(s, k), inL = has(l, k);
+            if (inS && inL) {
+                if (isObj(s[k]) && isObj(l[k])) walk(s[k], l[k], p);
+                else if (canon(s[k]) !== canon(l[k])) out.push({ path: p, kind: 'differ', s: s[k], l: l[k] });
+            } else if (inS) {
+                out.push({ path: p, kind: 'source-only', s: s[k] });
+            } else {
+                out.push({ path: p, kind: 'local-only', l: l[k] });
+            }
+        }
+    })(src, loc, []);
+    return out;
+}
+function disp(v) {
+    if (v === undefined) return '(absent)';
+    let t = JSON.stringify(v);
+    if (t.length > 200) t = t.slice(0, 197) + '...';
+    return t;
+}
+function clean(t) { return String(t).replace(/[\t\r\n]/g, ' '); }
+function clone(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
+function setPath(obj, path, val) {
+    let o = obj;
+    for (let i = 0; i < path.length - 1; i++) {
+        if (!isObj(o[path[i]])) o[path[i]] = {};
+        o = o[path[i]];
+    }
+    o[path[path.length - 1]] = val;
+}
+function delPath(obj, path) {
+    let o = obj;
+    for (let i = 0; i < path.length - 1; i++) {
+        if (!isObj(o[path[i]])) return;
+        o = o[path[i]];
+    }
+    delete o[path[path.length - 1]];
+}
+function keptKeys(src, obj) {
+    if (!isObj(src) || !isObj(obj)) return [];
+    return Object.keys(src).filter(k => has(obj, k));
+}
+try {
+    const src = readJson(process.argv[3], 'source');
+    if (src === undefined) throw new Error('source: ' + process.argv[3] + ' not found');
+    if (mode === 'keys') {
+        fs.writeFileSync(process.argv[4], JSON.stringify(isObj(src) ? Object.keys(src) : []) + '\n');
+        process.exit(0);
+    }
+    const loc = readJson(process.argv[4], 'local');
+    if (loc === undefined) throw new Error('local: ' + process.argv[4] + ' not found');
+    const list = fields(src, loc);
+    if (mode === 'plan') {
+        const lines = list.map((f, i) => [i, f.kind, f.path.length ? clean(f.path.join('.')) : '(document)',
+            clean(disp(f.l)), clean(disp(f.s))].join('\t'));
+        fs.writeFileSync(process.argv[5], lines.length ? lines.join('\n') + '\n' : '');
+    } else if (mode === 'apply') {
+        const adoptPath = (process.argv[5] && process.argv[5] !== '-') ? process.argv[5] : '';
+        const choices = {};
+        for (const line of fs.readFileSync(process.argv[6], 'utf8').split(/\r?\n/)) {
+            const m = /^(\d+)\t(\w+)$/.exec(line);
+            if (m) choices[m[1]] = m[2];
+        }
+        let newLocal = clone(loc);
+        let adoptObj;
+        if (adoptPath) {
+            adoptObj = readJson(adoptPath, 'adopt target');
+            if (adoptObj === undefined) adoptObj = clone(src);
+        }
+        let over = 0, adopt = 0, skip = 0, kept = 0;
+        list.forEach((f, i) => {
+            const c = choices[String(i)] || 'skip';
+            if (c === 'adopt' && adoptPath) {
+                adopt++;
+                if (f.path.length === 0) adoptObj = clone(f.l);
+                else if (f.kind === 'source-only') delPath(adoptObj, f.path);
+                else setPath(adoptObj, f.path, clone(f.l));
+            } else if (c === 'overwrite' && f.kind !== 'local-only') {
+                over++;
+                if (f.path.length === 0) newLocal = clone(f.s);
+                else setPath(newLocal, f.path, clone(f.s));
+            } else if (f.kind === 'local-only' && c !== 'skip') {
+                kept++;
+            } else {
+                skip++;
+            }
+        });
+        fs.writeFileSync(process.argv[7], over ? JSON.stringify(newLocal, null, 2) + '\n' : '');
+        fs.writeFileSync(process.argv[8], adopt ? JSON.stringify(adoptObj, null, 2) + '\n' : '');
+        fs.writeFileSync(process.argv[9], 'over=' + over + ' adopt=' + adopt + ' skip=' + skip + ' kept=' + kept + '\n');
+        fs.writeFileSync(process.argv[10], JSON.stringify(keptKeys(src, newLocal)) + '\n');
+        fs.writeFileSync(process.argv[11], JSON.stringify(adoptPath ? keptKeys(src, adoptObj) : []) + '\n');
+    } else {
+        throw new Error('unknown mode: ' + mode);
+    }
+} catch (e) {
+    process.stderr.write(String((e && e.message) || e) + '\n');
+    process.exit(3);
+}
+REVIEW_JSON_NODE_EOF
+
+    local rc=0
+    if [ ! -f "$dest" ]; then
+        local src_json
+        node "$work/review.js" keys "$src_file" "$work/keys.json" 2> "$work/err" || rc=$?
+        if [ "$rc" -ne 0 ] || ! src_json=$(cat "$src_file"); then
+            log_error "Failed: $item: cannot read the source JSON (node exit $rc): $(cat "$work/err")"
+            rm -rf "$work"
+            MANAGED_FILE_RESULT="failed"
+            return 0
+        fi
+        MANAGED_WRITE_REQUIRED_1=$(cat "$work/keys.json")
+        rm -rf "$work"
+        if _managed_write "$dest" "$src_json" "" ""; then
+            log_ok "Created: $item -> $(display_path "$dest")"
+            MANAGED_FILE_RESULT="created"
+        else
+            log_error "Failed: $item: $MANAGED_WRITE_ERROR"
+            MANAGED_FILE_RESULT="failed"
+        fi
+        return 0
+    fi
+
+    node "$work/review.js" plan "$src_file" "$dest" "$work/plan.tsv" 2> "$work/err" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        log_error "Failed: $item: field comparison failed (node exit $rc): $(cat "$work/err")"
+        rm -rf "$work"
+        MANAGED_FILE_RESULT="failed"
+        return 0
+    fi
+    if [ ! -s "$work/plan.tsv" ]; then
+        rm -rf "$work"
+        MANAGED_FILE_RESULT="verified"
+        return 0
+    fi
+
+    # One review per differing field. fd 3 carries the plan so stdin stays the
+    # terminal (tty_interactive tests stdin).
+    local adopt_ok=0 can_prompt=0
+    if [ -n "$adopt_path" ]; then adopt_ok=1; fi
+    if [ "${AITOOLS_FORCE:-}" != "1" ] && [ "${FORCE:-}" != "true" ] && tty_interactive; then can_prompt=1; fi
+    : > "$work/choices.tsv"
+    local idx kind key ldisp sdisp choice
+    while IFS=$'\t' read -r idx kind key ldisp sdisp <&3; do
+        [ -n "$idx" ] || continue
+        if [ "$kind" = "local-only" ]; then
+            # A field only in LOCAL: [a]dopt / [s]kip / [x]abort, no overwrite.
+            # Without an adopt target or a terminal it is kept, no prompt.
+            if [ "$adopt_ok" = "1" ] && [ "$can_prompt" = "1" ]; then
+                prompt_json_field_review "$key" "$ldisp" "(not in source)" "source" "1" "local" "0"
+                choice="$JSON_FIELD_REVIEW_RESULT"
+            else
+                log_detail "$item: $key only in local -- kept"
+                choice="keep"
+            fi
+        else
+            prompt_json_field_review "$key" "$ldisp" "$sdisp" "source" "$adopt_ok" "local"
+            choice="$JSON_FIELD_REVIEW_RESULT"
+        fi
+        printf '%s\t%s\n' "$idx" "$choice" >> "$work/choices.tsv"
+    done 3< "$work/plan.tsv"
+
+    rc=0
+    node "$work/review.js" apply "$src_file" "$dest" "${adopt_path:--}" "$work/choices.tsv" \
+        "$work/local.out" "$work/adopt.out" "$work/result.txt" \
+        "$work/req-local.json" "$work/req-adopt.json" 2> "$work/err" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        log_error "Failed: $item: applying the field choices failed (node exit $rc): $(cat "$work/err")"
+        rm -rf "$work"
+        MANAGED_FILE_RESULT="failed"
+        return 0
+    fi
+    local counts n_over n_adopt n_skip
+    counts=$(cat "$work/result.txt")
+    n_over=$(printf '%s' "$counts" | perl -ne 'print $1 if /over=(\d+)/')
+    n_adopt=$(printf '%s' "$counts" | perl -ne 'print $1 if /adopt=(\d+)/')
+    n_skip=$(printf '%s' "$counts" | perl -ne 'print $1 if /skip=(\d+)/')
+    log_detail "$item: field review $counts"
+
+    local p_local="" c_local="" p_adopt="" c_adopt="" r_local r_adopt
+    r_local=$(cat "$work/req-local.json")
+    r_adopt=$(cat "$work/req-adopt.json")
+    if [ -s "$work/local.out" ]; then p_local="$dest"; c_local=$(cat "$work/local.out"); fi
+    if [ -s "$work/adopt.out" ]; then p_adopt="$adopt_path"; c_adopt=$(cat "$work/adopt.out"); fi
+    rm -rf "$work"
+
+    if [ -n "$p_local" ] || [ -n "$p_adopt" ]; then
+        MANAGED_WRITE_REQUIRED_1="$r_local"
+        MANAGED_WRITE_REQUIRED_2="$r_adopt"
+        if ! _managed_write "$p_local" "$c_local" "$p_adopt" "$c_adopt"; then
+            log_error "Failed: $item: $MANAGED_WRITE_ERROR (files restored)"
+            MANAGED_FILE_RESULT="failed"
+            return 0
+        fi
+    fi
+    if [ "${n_over:-0}" -gt 0 ]; then
+        log_ok "Updated: $item -> $(display_path "$dest") ($n_over field(s) from source)"
+    fi
+    if [ "${n_adopt:-0}" -gt 0 ]; then
+        log_ok "Accept & adopt: $item -> $(display_path "$adopt_path") ($n_adopt field(s))"
+        _managed_adopt_notice "$adopt_path"
+    fi
+    if [ "${n_skip:-0}" -gt 0 ]; then
+        log_warn "Skipped: $item ($n_skip field(s) differ from source; reviewed again next run)"
+    fi
+    if [ "${n_adopt:-0}" -gt 0 ]; then
+        MANAGED_FILE_RESULT="accept & adopt"
+    elif [ "${n_skip:-0}" -gt 0 ]; then
+        MANAGED_FILE_RESULT="skipped"
+    elif [ "${n_over:-0}" -gt 0 ]; then
+        MANAGED_FILE_RESULT="updated"
+    else
+        MANAGED_FILE_RESULT="verified"
     fi
 }
 
@@ -1242,12 +1649,12 @@ adopt_managed_file() {
 
 # Reset all deploy tracker counters. Call before a deploy loop.
 _DT_ADDED=0; _DT_UPDATED=0; _DT_VERIFIED=0
-_DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0
+_DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0; _DT_FAILED=0
 DEPLOY_TRACKER_TEXT=""
 
 deploy_tracker_init() {
     _DT_ADDED=0; _DT_UPDATED=0; _DT_VERIFIED=0
-    _DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0
+    _DT_ACCEPTED=0; _DT_SKIPPED=0; _DT_PRESERVED=0; _DT_FAILED=0
     DEPLOY_TRACKER_TEXT=""
 }
 
@@ -1264,25 +1671,31 @@ deploy_tracker_record() {
                        write_summary DETAIL "$tool_name" "accept & adopt: $item_name" ;;
         skipped)   _DT_SKIPPED=$((_DT_SKIPPED + 1))
                    write_summary DETAIL "$tool_name" "skipped: $item_name" ;;
+        failed)    _DT_FAILED=$((_DT_FAILED + 1))
+                   write_summary DETAIL "$tool_name" "failed: $item_name" ;;
         verified)  _DT_VERIFIED=$((_DT_VERIFIED + 1)) ;;
         preserved) _DT_PRESERVED=$((_DT_PRESERVED + 1)) ;;
     esac
 }
 
 # Write aggregate summary for a deploy loop. Uses non-zero counts.
+# ERROR when any file failed, WARN when any was skipped, else OK.
 # Sets DEPLOY_TRACKER_TEXT for use in log lines.
 # Args: $1=tool_name
 deploy_tracker_summary() {
     local tool_name="$1"
     local parts=""
-    [ "$_DT_ADDED" -gt 0 ]     && parts="$_DT_ADDED added"
-    [ "$_DT_UPDATED" -gt 0 ]   && parts="${parts:+$parts, }$_DT_UPDATED updated"
-    [ "$_DT_ACCEPTED" -gt 0 ]  && parts="${parts:+$parts, }$_DT_ACCEPTED accepted"
-    [ "$_DT_VERIFIED" -gt 0 ]  && parts="${parts:+$parts, }$_DT_VERIFIED verified"
-    [ -z "$parts" ] && parts="verified"
+    if [ "$_DT_ADDED" -gt 0 ];    then parts="$_DT_ADDED added"; fi
+    if [ "$_DT_UPDATED" -gt 0 ];  then parts="${parts:+$parts, }$_DT_UPDATED updated"; fi
+    if [ "$_DT_ACCEPTED" -gt 0 ]; then parts="${parts:+$parts, }$_DT_ACCEPTED accepted"; fi
+    if [ "$_DT_VERIFIED" -gt 0 ]; then parts="${parts:+$parts, }$_DT_VERIFIED verified"; fi
+    if [ "$_DT_FAILED" -gt 0 ];   then parts="${parts:+$parts, }$_DT_FAILED failed"; fi
+    if [ -z "$parts" ]; then parts="verified"; fi
     DEPLOY_TRACKER_TEXT="$parts"
 
-    if [ "$_DT_SKIPPED" -gt 0 ]; then
+    if [ "$_DT_FAILED" -gt 0 ]; then
+        write_summary ERROR "$tool_name" "$_DT_FAILED failed"
+    elif [ "$_DT_SKIPPED" -gt 0 ]; then
         write_summary WARN "$tool_name" "$_DT_SKIPPED skipped (user review)"
     else
         write_summary OK "$tool_name" "$parts"
@@ -1290,69 +1703,90 @@ deploy_tracker_summary() {
 }
 
 # ---------------------------------------------------------------------------
-# Granular per-leaf review prompt for JSON settings sync.
+# Granular per-leaf review prompt for JSON settings sync (sync_managed_json)
+# and the JSON field review (review_json_fields).
 # One prompt per divergent setting/rule. overwrite/adopt/skip are per-leaf;
 # abort (x) is global and exits the run (code 2).
 #
 # Args:
 #   $1 = leaf display name (e.g. "theme" or "permissions.deny MCP(vercel)")
-#   $2 = current value display (settings.json side)
-#   $3 = proposed value display (profile.json side)
+#   $2 = current value display (the local file's side)
+#   $3 = proposed value display (the source side)
 #   $4 = source label (e.g. "profile.json")
 #   $5 = adopt-allowed flag ("1" to offer adopt, else hidden)
+#   $6 = local label (default "settings.json")
+#   $7 = overwrite-allowed flag (default "1"; "0" for a field only in the
+#        local file: no [o]verwrite, and the default answer is skip)
 #
 # Sets JSON_FIELD_REVIEW_RESULT to "overwrite", "adopt", or "skip".
-# --force / AITOOLS_FORCE / non-interactive -> "overwrite" (source wins).
+# --force / AITOOLS_FORCE / non-interactive -> "overwrite" (source wins), or
+# "skip" when overwrite is not allowed.
 # ---------------------------------------------------------------------------
 JSON_FIELD_REVIEW_RESULT=""
 prompt_json_field_review() {
     local leaf="$1" current="$2" proposed="$3" source_label="${4:-profile.json}" adopt_allowed="${5:-1}"
+    local local_label="${6:-settings.json}" overwrite_allowed="${7:-1}"
+    local default_choice="overwrite" default_desc="overwriting from $source_label"
+    if [ "$overwrite_allowed" != "1" ]; then
+        default_choice="skip"; default_desc="skipping (only in $local_label)"
+    fi
 
-    JSON_FIELD_REVIEW_RESULT="overwrite"
+    JSON_FIELD_REVIEW_RESULT="$default_choice"
 
     # --force / AITOOLS_FORCE: source wins
     if [ "${AITOOLS_FORCE:-}" = "1" ] || [ "${FORCE:-}" = "true" ]; then
-        log "Divergence in $leaf -- overwriting from $source_label (--force)"
+        log "Divergence in $leaf -- $default_desc (--force)"
         return 0
     fi
     # Non-interactive: source wins
     if ! tty_interactive; then
-        log "Divergence in $leaf -- overwriting from $source_label (non-interactive)"
+        log "Divergence in $leaf -- $default_desc (non-interactive)"
         return 0
     fi
 
     printf '\n\033[33m[REVIEW]\033[0m %s differs from %s.\n' "$leaf" "$source_label" > /dev/tty
-    printf '  settings.json : %s\n' "$current" > /dev/tty
+    printf '  %s : %s\n' "$local_label" "$current" > /dev/tty
     printf '  %s : %s\n' "$source_label" "$proposed" > /dev/tty
     printf '\n' > /dev/tty
-    printf '  [o]verwrite : %s value -> settings.json\n' "$source_label" > /dev/tty
+    if [ "$overwrite_allowed" = "1" ]; then
+        printf '  [o]verwrite : %s value -> %s\n' "$source_label" "$local_label" > /dev/tty
+    fi
     if [ "$adopt_allowed" = "1" ]; then
-        printf '  [a]dopt     : keep settings.json value -> write to %s\n' "$source_label" > /dev/tty
+        printf '  [a]dopt     : keep %s value -> write to %s\n' "$local_label" "$source_label" > /dev/tty
     fi
     printf '  [s]kip      : leave this setting unchanged\n' > /dev/tty
     printf '  [x]abort    : stop the run\n' > /dev/tty
-    if [ "$adopt_allowed" = "1" ]; then
+    if [ "$overwrite_allowed" != "1" ]; then
+        printf '  choice [a/s/x]: ' > /dev/tty
+    elif [ "$adopt_allowed" = "1" ]; then
         printf '  choice [o/a/s/x]: ' > /dev/tty
     else
         printf '  choice [o/s/x]: ' > /dev/tty
     fi
 
     local choice
-    read_tty_choice choice "overwrite from $source_label"
+    read_tty_choice choice "$default_desc"
     case "$(printf '%s' "$choice" | tr '[:upper:]' '[:lower:]')" in
         a)  if [ "$adopt_allowed" = "1" ]; then
-                printf '  >> adopted: settings.json value kept -> %s\n' "$source_label" > /dev/tty
+                printf '  >> adopted: %s value kept -> %s\n' "$local_label" "$source_label" > /dev/tty
                 JSON_FIELD_REVIEW_RESULT="adopt"
-            else
+            elif [ "$overwrite_allowed" = "1" ]; then
                 printf '  >> overwritten from %s\n' "$source_label" > /dev/tty
                 JSON_FIELD_REVIEW_RESULT="overwrite"
+            else
+                printf '  >> skipped: %s unchanged\n' "$leaf" > /dev/tty
+                JSON_FIELD_REVIEW_RESULT="skip"
             fi ;;
         s)  printf '  >> skipped: %s unchanged\n' "$leaf" > /dev/tty
             JSON_FIELD_REVIEW_RESULT="skip" ;;
-        x)  log_error "Aborted by user"
-            exit 2 ;;
-        *)  printf '  >> overwritten from %s\n' "$source_label" > /dev/tty
-            JSON_FIELD_REVIEW_RESULT="overwrite" ;;
+        x)  _managed_abort ;;
+        *)  if [ "$overwrite_allowed" = "1" ]; then
+                printf '  >> overwritten from %s\n' "$source_label" > /dev/tty
+                JSON_FIELD_REVIEW_RESULT="overwrite"
+            else
+                printf '  >> skipped: %s unchanged\n' "$leaf" > /dev/tty
+                JSON_FIELD_REVIEW_RESULT="skip"
+            fi ;;
     esac
     return 0
 }
