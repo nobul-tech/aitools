@@ -201,6 +201,28 @@ printf '{ "githubUser": ' > "$H/.aitools/config.json"
 case_run urp-corrupt-config 0 user-repo-path
 expect via scan; expect_line '^warn\t.*config.json is invalid JSON'
 
+# `~` in config.json paths expands to HOME in both resolvers (S3-M3-B8c parity finding)
+fresh_home urp-tilde
+base_profile | write_profile "$H/repos/aitools-nobul-jose"
+printf '{ "userRepoPath": "~/repos/aitools-nobul-jose" }\n' > "$H/.aitools/config.json"
+case_run urp-tilde 0 user-repo-path
+expect via config; expect path "$H/repos/aitools-nobul-jose"
+printf '{ "reposPath": "~/repos", "githubUser": "nobul-jose" }\n' > "$H/.aitools/config.json"
+case_run urp-tilde-repos 0 user-repo-path
+expect via convention; expect path "$H/repos/aitools-nobul-jose"
+
+# A UTF-16 config.json or profile.json is rejected by both, with one message
+# (S3-M3-B8c parity finding: PowerShell used to decode it, perl could not)
+fresh_home urp-utf16
+base_profile | write_profile "$H/repos/aitools-nobul-jose"
+perl -e 'use Encode; print "\xff\xfe", Encode::encode("UTF-16LE", qq({ "userRepoPath": "$ARGV[0]" }\n))' "$H/repos/aitools-nobul-jose" > "$H/.aitools/config.json"
+case_run urp-utf16 0 user-repo-path
+expect via scan
+expect_line '^warn\t.*/\.aitools/config\.json is UTF-16 encoded, not UTF-8 -- save it as UTF-8 -- resolving without it$'
+perl -e 'use Encode; local $/; my $t = <STDIN>; print "\xff\xfe", Encode::encode("UTF-16LE", $t)' < "$H/repos/aitools-nobul-jose/profile.json" > "$H/u16.json"
+case_run rm-utf16-profile 2 resolve "${M[@]}" --profile "$H/u16.json"
+expect_line '^error\t.*/u16\.json is UTF-16 encoded, not UTF-8 -- save it as UTF-8$'
+
 # --- Which machine profile ---------------------------------------------------
 fresh_home rm-alias
 base_profile | write_profile "$H/repos/aitools-nobul-jose"
@@ -393,11 +415,16 @@ JSON
 ARCH=$(uname -m); case "$ARCH" in x86_64|amd64) ARCH=x64 ;; arm64|aarch64) ARCH=arm64 ;; esac
 OSNAME=darwin; if $PLATFORM_LINUX; then OSNAME=linux; fi
 perl -pi -e "s/\"ARCH\"/\"$ARCH\"/; s/\"os\": \"darwin\"/\"os\": \"$OSNAME\"/" "$H/p.json"
-# --alias names an alias-keyed profile without machine.id: claimed, re-keyed under
-# this machine's id (position kept), alias = the old key, machine.id added
 ID_MAC_LC=$(printf '%s' "$ID_MAC" | tr 'A-Z' 'a-z')
 ID_OTHER_LC=$(printf '%s' "$ID_OTHER" | tr 'A-Z' 'a-z')
-case_run reg-update 0 register --profile "$H/p.json" --alias nobul-mac --shell bash --out "$H/out.bash.json" "${M[@]}"
+# --alias alone never claims an alias-keyed profile without machine.id (no terminal
+# choice behind it: design c); the refusal names the profile and the --claim way
+case_run reg-noclaim 4 register --profile "$H/p.json" --alias nobul-mac --shell bash --out "$H/out0.json" "${M[@]}"
+expect result refused; expect owner unregistered; expect ownerKey nobul-mac
+expect_line '^error\talias "nobul-mac" is used by profile nobul-mac, which is not registered to any machine -- claim it \(--claim nobul-mac\) or choose another alias$'
+# --claim KEY (after the user picked it): re-keyed under this machine's id (position
+# kept), alias = the old key, machine.id added
+case_run reg-update 0 register --profile "$H/p.json" --claim nobul-mac --shell bash --out "$H/out.bash.json" "${M[@]}"
 expect result updated; expect machineId "$ID_MAC"; expect key "$ID_MAC_LC"; expect alias nobul-mac
 expect claimed nobul-mac; expect owner this
 perl -0pe "s/\"nobul-mac\": \\{/\"$ID_MAC_LC\": {/; s/(\"shell\": \"bash\")\\n      \\}/\$1,\\n        \"id\": \"$ID_MAC_LC\"\\n      },\\n      \"alias\": \"nobul-mac\"/" "$H/p.json" > "$WORK/reg-update.want.json"
@@ -407,7 +434,7 @@ else
     bad "reg-update: unexpected changes"; diff "$WORK/reg-update.want.json" "$H/out.bash.json" | sed 's/^/       /' || true
 fi
 if $USE_PS; then
-    run_impl ps "$WORK/reg-ps.out" register --profile "$H/p.json" --alias nobul-mac --shell bash --out "$H/out.ps.json" "${M[@]}"
+    run_impl ps "$WORK/reg-ps.out" register --profile "$H/p.json" --claim nobul-mac --shell bash --out "$H/out.ps.json" "${M[@]}"
     if cmp -s "$H/out.bash.json" "$H/out.ps.json"; then ok "reg-update: bash and pwsh wrote identical bytes"
     else bad "reg-update: written files differ"; diff "$H/out.bash.json" "$H/out.ps.json" | sed 's/^/       /' || true; fi
 fi
@@ -468,6 +495,28 @@ expect_line '^error\tno machine id: no machine id \(test value\) -- a machine pr
 # No --alias: a new profile takes the short hostname
 case_run reg-default-alias 0 register --profile "$H/out3.json" --out "$H/out10.json" --machine-id-value AAAA-BBBB --hostname-value Box-One.local
 expect result created; expect key aaaa-bbbb; expect alias box-one
+
+# Review S3-M3-Resolver-Review (PR #86) fixes
+# M2: re-registering after a confirmed duplicate alias is not refused (safe to re-run)
+case_run reg-dup-rerun 0 register --profile "$H/out6.json" --out "$H/out11.json" "${M[@]}"
+expect alias spare; expect_line "^warn\\talias \"spare\" is used by 2 machines"
+case_run reg-dup-rerun-same 0 register --profile "$H/out6.json" --alias spare --out "$H/out12.json" "${M[@]}"
+expect alias spare
+# M3: --claim refuses a profile registered to another machine, and an unknown key
+case_run reg-claim-foreign 4 register --profile "$H/m2leg/profile.json" --claim laptop --out "$H/out13.json" "${M[@]}"
+expect owner other; expect ownerKey laptop
+expect_line '^error\t--claim: profile "laptop" is registered to another machine -- not claimed$'
+case_run reg-claim-missing 2 register --profile "$H/m2leg/profile.json" --claim nope --out "$H/out14.json" "${M[@]}"
+expect_line '^error\t--claim: no profile "nope"$'
+# M4: a renamed machine's registration updates machine.hostname (clears the clone warning)
+case_run reg-hostname 0 register --profile "$H/out3.json" --out "$H/out15.json" --machine-id-value "$ID_MAC" --hostname-value renamed-mac
+expect result updated
+if [ "$(perl "$REPO/scripts/aitools-json.pl" get "$H/out15.json" profiles "$ID_MAC_LC" machine hostname)" = "renamed-mac" ]; then ok "reg-hostname: machine.hostname updated"
+else bad "reg-hostname: machine.hostname not updated"; fi
+# minor 6: aliases differing only in case conflict; nit 4: an id-shaped alias is refused
+case_run reg-alias-case 4 register --profile "$H/out3.json" --alias SPARE --out "$H/out16.json" "${M[@]}"
+expect ownerKey "$ID_OTHER_LC"
+case_run reg-alias-idshape 2 register --profile "$H/out3.json" --alias "$ID_OTHER" --out "$H/out17.json" "${M[@]}"
 
 fresh_home reg-create
 case_run reg-create 0 register --profile "$H/new/profile.json" --alias nobul-mac --create --github-user nobul-jose \
@@ -761,7 +810,7 @@ expect key ""; expect owner absent; expect via none; expect legacy false
 # A stored hostname that differs from the live one: the only clone signal
 case_run idk-host-mismatch 0 resolve --machine-id-value "$ID_MAC" --hostname-value renamed-mac
 expect via id
-expect_line "^warn\\tprofile \"nobul-mac\" was registered with hostname \"nobul-mac\", this machine is \"renamed-mac\" -- renamed, or a clone that shares machine id $ID_MAC\\?$"
+expect_line "^warn\\tprofile \"nobul-mac\" was registered with hostname \"nobul-mac\", this machine is \"renamed-mac\" -- renamed \\(run: aitools user init to update it\\), or a clone that shares machine id $ID_MAC$"
 # Hostname match on another machine's id-keyed profile: owner other (Review3 #82-M2 warning)
 case_run idk-host-other 0 resolve --machine-id-value 99999999-0000 --hostname-value joses-mbp
 expect via hostname; expect key "$ID_OTHER_LC"; expect owner other
@@ -833,6 +882,31 @@ setup_idk_exc_cfg() { setup_idk_exc; printf '{ "githubUser": "nobul-jose", "mach
 case_fresh idk-exc-cfg 3 setup_idk_exc_cfg "${SET_ARGS[@]}" --machine-id-value none --hostname-value nobul-mac
 expect via config
 expect_line '^error\tmachine profile "nobul-mac" matched by config.json machineId only \(machine id unavailable\) -- tool choice not saved$'
+# Review minor 1: another machine's recorded decision is never returned
+setup_idk_exc_other() {
+    setup_idk_exc
+    perl -0pi -e 's/("hostname": "Joses-MBP",\n        "os": "darwin"\n      \})/$1,\n      "toolExceptions": {\n        "go": {\n          "decision": "keep",\n          "detected": {\n            "platform": "macos",\n            "method": "brew",\n            "path": "\/x",\n            "version": "1"\n          },\n          "decidedAt": "2026-01-01T00:00:00Z",\n          "decidedBy": "setup-go",\n          "reason": null\n        }\n      }/' "$EXC_PF"
+}
+case_fresh idk-exc-get-other 0 setup_idk_exc_other exception-get --slug go --machine-id-value 99999999-0000 --hostname-value joses-mbp
+expect via hostname; expect owner other; expect found false; expect method ""
+expect_line '^warn\ttoolExceptions.go in profile "laptop" is not this machine.s \(owner other\) -- ignored$'
+# Review minor 2: owner unknown when this machine's id cannot be detected
+case_run idk-owner-unknown 0 resolve --machine-id-value none --hostname-value nobul-mac --alias nobul-mac
+expect owner unknown; expect key "$ID_MAC_LC"
+# Review minor 3: a key that disagrees with its machine.id is reported; migrate refuses it
+fresh_home idk-mismatch
+id_profile | perl -0pe "s/(\"id\": \")\Q$ID_MAC_LC\E\"/\${1}$ID_OTHER\"/" | perl -0pe "s/\"\Q$ID_OTHER_LC\E\": \\{/\"other-laptop\": {/" \
+    | write_profile "$H/repos/aitools-nobul-jose"
+printf '{ "githubUser": "nobul-jose" }\n' > "$H/.aitools/config.json"
+case_run idk-mismatch 0 resolve "${M[@]}"
+expect via id; expect key "$ID_MAC_LC"
+expect_line "^warn\\tprofile key \"$ID_MAC_LC\" disagrees with its machine.id \"$ID_OTHER\" -- fix profile.json by hand$"
+cp "$H/repos/aitools-nobul-jose/profile.json" "$WORK/idk-mismatch.before.json"
+case_run idk-mismatch-migrate 2 migrate
+expect result failed
+expect_line "^error\\tprofile key \"$ID_MAC_LC\" disagrees with its machine.id \"$ID_OTHER\" -- fix profile.json by hand; nothing written$"
+if cmp -s "$WORK/idk-mismatch.before.json" "$H/repos/aitools-nobul-jose/profile.json"; then ok "idk-mismatch-migrate: nothing written"
+else bad "idk-mismatch-migrate: profile.json changed"; fi
 
 # --- migrate (re-key design section f) --------------------------------------------------
 fresh_home mig
@@ -923,7 +997,7 @@ CASE_ENV=""
 write_profile "$H/m2" <<'JSON'
 { "version": 2, "profiles": { "a": { "machine": null } } }
 JSON
-case_run rev-m2-throw 2 register --profile "$H/m2/profile.json" --alias a --out "$H/m2.out" "${M[@]}"
+case_run rev-m2-throw 2 register --profile "$H/m2/profile.json" --claim a --out "$H/m2.out" "${M[@]}"
 expect_line "^error\tregister failed: set: 'machine' is not an object"
 
 write_profile "$H/m3" <<'JSON'

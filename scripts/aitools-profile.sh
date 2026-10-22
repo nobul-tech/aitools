@@ -21,7 +21,7 @@
 # Usage: aitools-profile.sh <command> [options]   (--help for details)
 # Writers: `migrate` also writes profile.json (re-keys profiles in place: temp,
 #   validate, backup, move, commit, push). The intent statement above predates
-#   it; its update is drafted for commander approval (S3-M3-Resolver report).
+#   it; its update awaits commander approval.
 # Machine profiles (profile.json revision 2.2, re-key design): keyed by this
 #   machine's raw id, lower-cased (`profiles.<machineId>`; `machine.id` repeats
 #   the key), or `environment:<name>` for an environment without a stable id
@@ -44,8 +44,10 @@
 # Machine fields in resolve / derive-config / exception-get output:
 #   key (the profiles key that matched), alias (its alias field, else the key),
 #   via (override|environment|id|config|alias|hostname|none), owner (this |
-#   other | unregistered | absent: whose profile it is), legacy (true when the
-#   profile is still keyed by alias).
+#   other | unregistered | unknown | absent: whose profile it is; unknown = it
+#   has a machine.id but this machine's id cannot be detected), legacy (true
+#   when the profile is still keyed by alias). exception-get returns only this
+#   machine's decisions (owner this); another profile's are ignored with a warning.
 # JSON engine: scripts/aitools-json.pl (core perl only, no modules).
 #   It keeps key order and writes the node JSON.stringify(v, null, 2) layout, so
 #   bash, PowerShell (ConvertTo-Json) and node writers produce the same bytes for
@@ -106,6 +108,8 @@ Commands:
                   profiles.<machine id> (claude-code-web: environment:<name>),
                   to --out TMP. Options: --alias A (default: short hostname),
                   --allow-duplicate-alias (after an interactive confirm only),
+                  --claim KEY (move an alias-keyed profile without machine.id
+                  under this machine's key; after an interactive choice only),
                   --name N, --company C, --shell S, --environment E,
                   --create (new profile.json; with --github-user U, --email E).
                   Exit 3 = no machine id; exit 4 = alias used by another profile
@@ -205,7 +209,14 @@ jsub() {
     printf -v "$__var" '%s' "$__v"
 }
 
-# jcheck FILE -- sets JCHECK_STATE=valid|missing|invalid and JCHECK_MSG
+# utf16_bom FILE -- 0 when FILE starts with a UTF-16 byte order mark
+utf16_bom() {
+    perl -e 'open(my $f, "<:raw", $ARGV[0]) or exit 1; my $b = ""; read($f, $b, 2); exit(($b eq "\xff\xfe" || $b eq "\xfe\xff") ? 0 : 1)' "$1"
+}
+
+# jcheck FILE -- sets JCHECK_STATE=valid|missing|invalid and JCHECK_MSG. A UTF-16
+# file is invalid in both resolvers, with the same message (PowerShell's reader
+# would otherwise decode it while perl cannot).
 jcheck() {
     local rc=0
     JCHECK_MSG=$(pj check "$1" 2>&1) || rc=$?
@@ -213,7 +224,17 @@ jcheck() {
         0) JCHECK_STATE=valid ;;
         1) JCHECK_STATE=missing ;;
         *) JCHECK_STATE=invalid
-           if [ -z "$JCHECK_MSG" ]; then JCHECK_MSG="$1 could not be read (engine exit $rc)"; fi ;;
+           if utf16_bom "$1"; then JCHECK_MSG="$1 is UTF-16 encoded, not UTF-8 -- save it as UTF-8"
+           elif [ -z "$JCHECK_MSG" ]; then JCHECK_MSG="$1 could not be read (engine exit $rc)"; fi ;;
+    esac
+}
+
+# expand_home PATH -- a leading ~ (alone, or ~/...) becomes $HOME, as in a shell
+expand_home() {
+    case "$1" in
+        "~")   printf '%s' "$HOME" ;;
+        "~/"*) printf '%s/%s' "$HOME" "${1#\~/}" ;;
+        *)     printf '%s' "$1" ;;
     esac
 }
 
@@ -261,7 +282,7 @@ OPT_USER_REPO_PATH=""; OPT_REPOS_PATH=""; OPT_NAME=""; OPT_COMPANY=""; OPT_SHELL
 OPT_EMAIL=""; OPT_OUT=""; OPT_MACHINE_ID_VALUE=""; OPT_HOSTNAME_VALUE=""
 OPT_SLUG=""; OPT_PLATFORM=""; OPT_METHOD=""; OPT_PATH=""; OPT_VERSION=""; OPT_BY=""
 OPT_REASON=""; OPT_DECIDED_AT=""
-OPT_CREATE=false; OPT_JSON=false; OPT_PLAIN=false; OPT_DRY_RUN=false; OPT_ALLOW_DUP=false
+OPT_CREATE=false; OPT_JSON=false; OPT_PLAIN=false; OPT_DRY_RUN=false; OPT_ALLOW_DUP=false; OPT_CLAIM=""
 need_value() { if [ "$1" -lt 2 ]; then usage_error "$2 needs a value"; fi; }
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -293,6 +314,7 @@ while [ $# -gt 0 ]; do
         --plain)           OPT_PLAIN=true; shift ;;
         --dry-run)         OPT_DRY_RUN=true; shift ;;
         --allow-duplicate-alias) OPT_ALLOW_DUP=true; shift ;;
+        --claim)           need_value $# "$1"; OPT_CLAIM="$2"; shift 2 ;;
         --help|-h)         usage; exit 0 ;;
         *)                 usage_error "unknown option: $1" ;;
     esac
@@ -417,12 +439,13 @@ resolve_user_repo() {
         add_err "--user-repo-path does not exist: $OPT_USER_REPO_PATH"; return 2
     fi
     cfg p userRepoPath
+    p=$(expand_home "$p")
     if [ -n "$p" ]; then
         if [ -d "$p" ]; then RUR_PATH=$(strip_slash "$p"); RUR_VIA="config"; return 0; fi
         add_warn "config.json userRepoPath does not exist: $p"
     fi
     base="$OPT_REPOS_PATH"
-    if [ -z "$base" ]; then cfg base reposPath; fi
+    if [ -z "$base" ]; then cfg base reposPath; base=$(expand_home "$base"); fi
     if [ -z "$base" ]; then base="$HOME/repos"; fi
     base=$(strip_slash "$base")
     user="$OPT_GITHUB_USER"
@@ -473,11 +496,20 @@ RM_NAME=""; RM_COMPANY=""; RM_GIT_NAME=""; RM_GIT_EMAIL=""; RM_GITHUB=""
 # machine.id, ignoring case), env (key environment:<name>), legacy (keyed by
 # alias). E_ALIAS: the alias field, else the key.
 E_N=0
-E_KEY=(); E_KEYLC=(); E_ALIAS=(); E_MID=(); E_MIDLC=(); E_ENV=(); E_KIND=(); E_HASALIAS=()
+E_KEY=(); E_KEYLC=(); E_ALIAS=(); E_ALIASLC=(); E_MID=(); E_MIDLC=(); E_ENV=(); E_KIND=(); E_HASALIAS=()
+
+# looks_like_id TEXT -- 0 when TEXT has the shape of a machine id (a UUID, as
+# IOPlatformUUID and MachineGuid, or 32 hex digits, as /etc/machine-id)
+looks_like_id() {
+    local s
+    s=$(lc "$1")
+    [[ "$s" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || [[ "$s" =~ ^[0-9a-f]{32}$ ]]
+}
+
 # load_entries PF -- fill the E_ arrays; warns about entries that are not objects
 load_entries() {
     local pf="$1" all k t al mid menv kind ignored=false
-    E_N=0; E_KEY=(); E_KEYLC=(); E_ALIAS=(); E_MID=(); E_MIDLC=(); E_ENV=(); E_KIND=(); E_HASALIAS=()
+    E_N=0; E_KEY=(); E_KEYLC=(); E_ALIAS=(); E_ALIASLC=(); E_MID=(); E_MIDLC=(); E_ENV=(); E_KIND=(); E_HASALIAS=()
     jlist all keys "$pf" profiles
     while IFS= read -r k; do
         [ -n "$k" ] || continue
@@ -489,6 +521,7 @@ load_entries() {
         E_KEY[E_N]="$k"; E_KEYLC[E_N]=$(lc "$k"); E_MID[E_N]="$mid"; E_MIDLC[E_N]=$(lc "$mid"); E_ENV[E_N]="$menv"
         E_HASALIAS[E_N]=false
         if [ -n "$al" ]; then E_ALIAS[E_N]="$al"; E_HASALIAS[E_N]=true; else E_ALIAS[E_N]="$k"; fi
+        E_ALIASLC[E_N]=$(lc "${E_ALIAS[E_N]}")
         kind=legacy
         case "${E_KEYLC[E_N]}" in environment:*) kind=env ;; esac
         if [ "$kind" = "legacy" ] && [ -n "$mid" ] && [ "${E_MIDLC[E_N]}" = "${E_KEYLC[E_N]}" ]; then kind=id; fi
@@ -511,7 +544,8 @@ alias_csv() {
     printf '%s' "$out"
 }
 
-# entry_owner I VIA -- this | other | unregistered: whose profile entry I is
+# entry_owner I VIA -- this | other | unregistered | unknown: whose profile entry I
+# is (unknown: it has a machine.id, but this machine's id cannot be detected)
 entry_owner() {
     local i="$1" via="$2"
     if [ "${E_KIND[i]}" = "env" ]; then
@@ -526,7 +560,7 @@ entry_owner() {
     fi
     if [ -z "$THIS_ID" ]; then
         # This machine's id is unknown: only the cached key (config.json machineId) vouches for it
-        if [ "$via" = "config" ]; then printf 'this'; else printf 'other'; fi
+        if [ "$via" = "config" ]; then printf 'this'; else printf 'unknown'; fi
         return 0
     fi
     if [ "${E_MIDLC[i]}" = "$(lc "$THIS_ID")" ]; then printf 'this'; else printf 'other'; fi
@@ -581,7 +615,7 @@ machine_done() {
             if [ "$(short_host "$h")" = "$THIS_HOST" ]; then hit=true; break; fi
         done <<< "$names"
         if [ -n "$first" ] && ! $hit; then
-            add_warn "profile \"$a\" was registered with hostname \"$first\", this machine is \"$THIS_HOST\" -- renamed, or a clone that shares machine id $THIS_ID?"
+            add_warn "profile \"$a\" was registered with hostname \"$first\", this machine is \"$THIS_HOST\" -- renamed (run: aitools user init to update it), or a clone that shares machine id $THIS_ID"
         fi
     fi
     # An alias on two profiles (allowed after an interactive confirm) warns on every run
@@ -658,6 +692,8 @@ resolve_machine() {
             idx="${idx# }"
             if [ "$kn" -eq 0 ]; then
                 add_warn "profile \"${E_KEY[idx]}\" is keyed by alias -- run: aitools-profile migrate (re-keys profiles by machine id)"
+            elif [ -n "${E_MID[idx]}" ] && [ "${E_MIDLC[idx]}" != "$idl" ]; then
+                add_warn "profile key \"${E_KEY[idx]}\" disagrees with its machine.id \"${E_MID[idx]}\" -- fix profile.json by hand"
             fi
             if [ -n "$config_id" ] && [ "$(lc "$config_id")" != "${E_KEYLC[idx]}" ]; then
                 add_warn "config.json machineId \"$config_id\" disagrees with machine.id match \"${E_KEY[idx]}\" -- machine.id wins"
@@ -878,6 +914,11 @@ cmd_exception_get() {
     if [ "$rc" -ne 0 ]; then put_exc; finish "$rc"; fi
     local k="$RM_KEY"
     jtype t "$PF" profiles "$k" toolExceptions "$OPT_SLUG"
+    # Never another machine's decision (R18): only this machine's profile counts
+    if [ -n "$t" ] && [ "$RM_OWNER" != "this" ]; then
+        add_warn "toolExceptions.$OPT_SLUG in profile \"$RM_ALIAS\" is not this machine's (owner $RM_OWNER) -- ignored"
+        t=""
+    fi
     if [ "$t" = "object" ]; then
         jread decision "$PF" profiles "$k" toolExceptions "$OPT_SLUG" decision
         if [ "$decision" = "keep" ]; then
@@ -961,6 +1002,14 @@ commit_profile() {
         return 0
     fi
     PUSHED=true
+}
+
+# backup_pf -- backup_file "$PF"; a failed backup is returned as a warning (the
+# write goes ahead, config-file-safety.md: backup failures are non-fatal)
+backup_pf() {
+    backup_file "$PF"
+    if [ "$BACKUP_FILE_OK" != "true" ]; then add_warn "could not back up $PF -- written without a backup"; fi
+    return 0
 }
 
 # remove_tmp FILE -- delete a temp file; a failure is a warning, never silent
@@ -1075,7 +1124,7 @@ cmd_exception_set() {
     fi
     local dirty=false
     if profile_dirty_before "$(dirname "$PF")"; then dirty=true; fi
-    backup_file "$PF"
+    backup_pf
     if ! mv "$tmp" "$PF"; then
         remove_tmp "$tmp"; state="failed"; add_err "could not replace $PF"; put_set; finish 2
     fi
@@ -1172,8 +1221,9 @@ cmd_register() {
         usage_error "register needs --profile and --out"
     fi
     if [ -n "$OPT_ALIAS" ] && ! [[ "$OPT_ALIAS" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]]; then usage_error "invalid alias: $OPT_ALIAS"; fi
+    if [ -n "$OPT_ALIAS" ] && looks_like_id "$OPT_ALIAS"; then usage_error "invalid alias: $OPT_ALIAS (looks like a machine id)"; fi
     local o
-    for o in "$OPT_NAME" "$OPT_COMPANY" "$OPT_SHELL" "$OPT_EMAIL" "$OPT_GITHUB_USER"; do
+    for o in "$OPT_NAME" "$OPT_COMPANY" "$OPT_SHELL" "$OPT_EMAIL" "$OPT_GITHUB_USER" "$OPT_CLAIM"; do
         case "$o" in *$'\t'*|*$'\n'*|*$'\r'*) usage_error "register values must be one line (no tab or newline)" ;; esac
     done
     local in="$OPT_PROFILE" state="created" before="" after="" v t ver os arch rc=0 msg mid=""
@@ -1236,41 +1286,68 @@ cmd_register() {
         fi
         i=$((i + 1))
     done
+    local who="machine.id $THIS_ID"
+    if [ "$THIS_ENV" = "claude-code-web" ]; then who="machine.environment claude-code-web"; fi
     if [ -n "$own" ] && [ "$nleg" -gt 0 ]; then
-        state="failed"; add_err "machine.id $THIS_ID is already registered on profile \"${E_KEY[leg]}\" -- run: aitools-profile migrate after removing the duplicate"; put_reg; finish 2
+        state="failed"; add_err "$who is already registered on profile \"${E_KEY[leg]}\" -- run: aitools-profile migrate after removing the duplicate"; put_reg; finish 2
     fi
     if [ "$nleg" -gt 1 ]; then
-        state="failed"; add_err "machine.id $THIS_ID is already registered on profile \"${E_KEY[leg]}\" and another profile"; put_reg; finish 2
+        state="failed"; add_err "$who is already registered on profile \"${E_KEY[leg]}\" and another profile"; put_reg; finish 2
+    fi
+    if [ -n "$own" ]; then src="$own"
+    elif [ -n "$leg" ]; then src="$leg"; claimed="${E_KEY[leg]}"; fi
+    # --claim KEY (passed by user init only after the user picked KEY at a terminal):
+    # move an alias-keyed profile that belongs to no machine under this machine's key
+    if [ -n "$OPT_CLAIM" ]; then
+        local c=""
+        j=0
+        while [ "$j" -lt "$E_N" ]; do
+            if [ "${E_KEY[j]}" = "$OPT_CLAIM" ]; then c="$j"; break; fi
+            j=$((j + 1))
+        done
+        if [ -z "$c" ]; then state="failed"; add_err "--claim: no profile \"$OPT_CLAIM\""; put_reg; finish 2; fi
+        if [ -n "$src" ] && [ "$src" != "$c" ]; then
+            state="failed"; add_err "--claim: this machine already has profile \"${E_KEY[src]}\""; put_reg; finish 2
+        fi
+        if [ "$src" != "$c" ]; then
+            if [ "${E_KIND[c]}" != "legacy" ] || [ -n "${E_MID[c]}" ] || [ -n "${E_ENV[c]}" ]; then
+                state="refused"; owner=$(entry_owner "$c" ""); owner_key="${E_KEY[c]}"
+                add_err "--claim: profile \"$OPT_CLAIM\" is registered to another machine -- not claimed"
+                put_reg; finish 4
+            fi
+            src="$c"; claimed="${E_KEY[c]}"
+        fi
     fi
     # The alias: --alias, else this entry's alias, else the short hostname
     alias="$OPT_ALIAS"
-    if [ -n "$own" ]; then src="$own"
-    elif [ -n "$leg" ]; then src="$leg"; claimed="${E_KEY[leg]}"; fi
     if [ -z "$alias" ] && [ -n "$src" ]; then alias="${E_ALIAS[src]}"; fi
     if [ -z "$alias" ]; then alias="$THIS_HOST"; fi
     if [ -z "$alias" ]; then state="failed"; add_err "no alias: pass --alias (hostname unavailable: ${THIS_HOST_ERROR:-empty})"; put_reg; finish 2; fi
-    if ! [[ "$alias" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]]; then state="failed"; add_err "invalid alias: $alias (pass --alias)"; put_reg; finish 2; fi
-    # Another profile already answers to this alias (its alias field, or its key)
+    if ! [[ "$alias" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || looks_like_id "$alias"; then
+        state="failed"; add_err "invalid alias: $alias (pass --alias)"; put_reg; finish 2
+    fi
+    # Another profile already answers to this alias (its alias field or its key,
+    # ignoring case: laptop and Laptop are the same name to a person)
     local conf="" nconf=0
     idl=$(lc "$alias"); j=0
     while [ "$j" -lt "$E_N" ]; do
-        if [ "$j" != "$src" ] && { [ "${E_ALIAS[j]}" = "$alias" ] || [ "${E_KEYLC[j]}" = "$idl" ]; }; then
+        if [ "$j" != "$src" ] && { [ "${E_ALIASLC[j]}" = "$idl" ] || [ "${E_KEYLC[j]}" = "$idl" ]; }; then
             conf="${conf:+$conf }$j"; nconf=$((nconf + 1))
         fi
         j=$((j + 1))
     done
-    if [ "$nconf" -gt 0 ] && [ -z "$src" ] && [ -n "$OPT_ALIAS" ] && [ "$nconf" -eq 1 ] \
-        && [ "${E_KIND[conf]}" = "legacy" ] && [ -z "${E_MID[conf]}" ] && [ -z "${E_ENV[conf]}" ]; then
-        # --alias names an alias-keyed profile that belongs to no machine: claim it
-        src="$conf"; claimed="${E_KEY[conf]}"; conf=""; nconf=0
-    fi
     if [ "$nconf" -gt 0 ]; then
         j="${conf%% *}"
         owner_key="${E_KEY[j]}"
         owner=$(entry_owner "$j" "")
-        if ! $OPT_ALLOW_DUP; then
+        # An alias this profile already has (a duplicate confirmed earlier) is not a new conflict
+        if ! $OPT_ALLOW_DUP && ! { [ -n "$src" ] && [ "$alias" = "${E_ALIAS[src]}" ]; }; then
             state="refused"
-            add_err "alias \"$alias\" is used by another machine's profile ($owner_key) -- choose another alias, or confirm interactively (--allow-duplicate-alias)"
+            if [ "$owner" = "unregistered" ]; then
+                add_err "alias \"$alias\" is used by profile $owner_key, which is not registered to any machine -- claim it (--claim $owner_key) or choose another alias"
+            else
+                add_err "alias \"$alias\" is used by another machine's profile ($owner_key) -- choose another alias, or confirm interactively (--allow-duplicate-alias)"
+            fi
             put_reg; finish 4
         fi
         local keys_all
@@ -1313,8 +1390,18 @@ cmd_register() {
         if [ -n "$src" ]; then mid="${E_MID[src]}"; fi
         if [ -z "$mid" ] || [ "$(lc "$mid")" != "$key" ]; then edit_set string "$key" profiles "$key" machine id; fi
     fi
-    v=""; if [ -n "$src" ]; then jread v "$in" profiles "${E_KEY[src]}" machine hostname; fi
-    if [ -z "$v" ] && [ -n "$THIS_HOST" ]; then edit_set string "$THIS_HOST" profiles "$key" machine hostname; fi
+    # machine.hostname follows the live name unless it (or machine.hostnames) already
+    # matches: a renamed machine clears the clone warning on its next registration
+    local hnames="" hh hmatch=false
+    if [ -n "$src" ]; then
+        jread v "$in" profiles "${E_KEY[src]}" machine hostname
+        jlist hnames items "$in" profiles "${E_KEY[src]}" machine hostnames
+        hnames="${v}"$'\n'"${hnames}"
+    fi
+    while IFS= read -r hh; do
+        if [ -n "$hh" ] && [ "$(short_host "$hh")" = "$THIS_HOST" ]; then hmatch=true; break; fi
+    done <<< "$hnames"
+    if ! $hmatch && [ -n "$THIS_HOST" ]; then edit_set string "$THIS_HOST" profiles "$key" machine hostname; fi
     case "$(uname -s)" in
         Darwin*) os="darwin" ;;
         Linux*)  os="linux" ;;
@@ -1380,7 +1467,13 @@ cmd_migrate() {
         case "${E_KIND[i]}" in
             id|env) target="${E_KEYLC[i]}" ;;
             legacy)
-                if [ -n "${E_MID[i]}" ]; then target="${E_MIDLC[i]}"
+                if [ -n "${E_MID[i]}" ] && looks_like_id "${E_KEY[i]}"; then
+                    # A key that is itself an id but disagrees with machine.id: a hand
+                    # edit; re-keying it could move this machine's key onto another id
+                    state="failed"
+                    add_err "profile key \"${E_KEY[i]}\" disagrees with its machine.id \"${E_MID[i]}\" -- fix profile.json by hand; nothing written"
+                    put_mig; finish 2
+                elif [ -n "${E_MID[i]}" ]; then target="${E_MIDLC[i]}"
                 elif [ -n "${E_ENV[i]}" ]; then target="environment:$(lc "${E_ENV[i]}")"
                 else
                     unclaimed="${unclaimed:+$unclaimed, }${E_KEY[i]}"
@@ -1422,6 +1515,8 @@ cmd_migrate() {
     rc=0
     msg=$(printf '%s' "$EDIT_OPS" | pj edit "$PF" "$tmp" 2>&1) || rc=$?
     if [ "$rc" -ne 0 ]; then remove_tmp "$tmp"; state="failed"; add_err "migrate failed: $msg"; put_mig; finish 2; fi
+    jcheck "$tmp"
+    if [ "$JCHECK_STATE" != "valid" ]; then remove_tmp "$tmp"; state="failed"; add_err "validation failed: $JCHECK_MSG"; put_mig; finish 2; fi
     i=0
     while [ "$i" -lt "$E_N" ]; do
         if [ "${T_[i]}" != "${E_KEY[i]}" ] && [ "${E_KIND[i]}" != "env" ]; then
@@ -1441,7 +1536,7 @@ cmd_migrate() {
     done
     local dirty=false
     if profile_dirty_before "$(dirname "$PF")"; then dirty=true; fi
-    backup_file "$PF"
+    backup_pf
     if ! mv "$tmp" "$PF"; then
         remove_tmp "$tmp"; state="failed"; add_err "could not replace $PF"; put_mig; finish 2
     fi
