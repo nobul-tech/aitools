@@ -15,9 +15,13 @@ use File::Basename qw(dirname);
 
 my ($file, $spec) = @ARGV;
 die "usage: apply-lib.pl FILE SPEC\n" unless $file && $spec;
-open my $fh, '<', $file or die "cannot read $file: $!\n";
+open my $fh, '<:raw', $file or die "cannot read $file: $!\n";
 my @lines = <$fh>;
 close $fh;
+# Line endings: a CRLF working-tree file (PS1, eol=crlf) is edited as LF and
+# written back as CRLF, so the result has one line-ending style.
+my $crlf = (@lines && $lines[0] =~ /\r\n\z/) ? 1 : 0;
+s/\r\n\z/\n/ for @lines;
 
 open my $sh, '<', $spec or die "cannot read $spec: $!\n";
 my @ranges;
@@ -48,6 +52,7 @@ for my $r (@ranges) {
     open my $bh, '<', $path or die "cannot read $path: $!\n";
     my @new = <$bh>;
     close $bh;
+    s/\r\n\z/\n/ for @new;
     if ($block =~ /\.tmpl$/) {
         open my $jh, '<', "$dir/review-json.js" or die "cannot read review-json.js: $!\n";
         my @js = <$jh>;
@@ -64,7 +69,10 @@ for my $r (@ranges) {
     splice @lines, $s - 1, $e - $s + 1, @new;
     print "replaced $s-$e with $block (" . scalar(@new) . " lines)\n";
 }
-open my $oh, '>', $file or die "cannot write $file: $!\n";
-print $oh @lines;
+my $out = join '', @lines;
+die "mixed line endings after edit -- nothing written\n" if $out =~ /\r/;
+$out =~ s/\n/\r\n/g if $crlf;
+open my $oh, '>:raw', $file or die "cannot write $file: $!\n";
+print $oh $out;
 close $oh or die "cannot close $file: $!\n";
-print "wrote $file\n";
+print "wrote $file" . ($crlf ? " (CRLF)" : "") . "\n";

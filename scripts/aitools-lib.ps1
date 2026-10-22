@@ -326,9 +326,14 @@ function Write-EnvironmentSkip {
 
 # ---------------------------------------------------------------------------
 # Backup a file before overwriting. Keeps at most $MaxBackups copies.
+# A failed copy is non-fatal here (warn, return) and sets
+# $script:BackupFileOk = $false; callers that must not write without a backup
+# check it (Write-ManagedFiles).
 # ---------------------------------------------------------------------------
+$script:BackupFileOk = $true
 function Backup-File {
     param([string]$FilePath, [int]$MaxBackups = 20)
+    $script:BackupFileOk = $true
     if (-not (Test-Path $FilePath)) { return }
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
     $backupPath = "${FilePath}.bak.${ts}"
@@ -337,6 +342,7 @@ function Backup-File {
     try {
         Copy-Item -Path $FilePath -Destination $backupPath -ErrorAction Stop
     } catch {
+        $script:BackupFileOk = $false
         LogWarn "Could not back up $FilePath -- proceeding without backup: $_"
         return
     }
@@ -381,163 +387,234 @@ function Backup-Dir {
 }
 
 # ---------------------------------------------------------------------------
-# Deploy state tracking: manifest + shadow copies for auto-deploy detection.
-# Tracks what was last deployed to each managed file. When the local file
-# matches the last-deployed hash, content changes are auto-deployed without
-# prompting (user didn't edit). Shadows provide the common ancestor for diff3.
+# Managed-file helpers for Deploy-ManagedFile, Review-JsonFields and the
+# review prompts below. SOURCE is the source of truth; there is no deploy
+# state (see the "Review choices" block above Prompt-DiffReview).
 # ---------------------------------------------------------------------------
-$script:DeployManifest = $null
-$script:DeployStateDir = if ($IsWindows) { "$env:USERPROFILE\.aitools\deploy-state" } else { "$HOME/.aitools/deploy-state" }
 
-function Get-ContentHash {
-    param([string]$Content)
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes($Content)
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    try {
-        $hash = $sha.ComputeHash($bytes)
-        return [BitConverter]::ToString($hash) -replace '-'
-    } finally {
-        $sha.Dispose()
+# [x]abort: log, then exit 2 (a bare exit 2 means user abort; commander
+# decision 2026-10-21, D-TS13 reversed: no marker file). One helper for every
+# review prompt. Parity: _managed_abort in aitools-lib.sh.
+function Invoke-ManagedAbort {
+    LogError "Aborted by user"
+    exit 2
+}
+
+# Deploy state (~/.aitools/deploy-state/) is no longer used. Files from older
+# versions are left on disk; say so once per script run (detail level).
+$script:ManagedStateNoted = $false
+function Write-ManagedStateNotice {
+    if ($script:ManagedStateNoted) { return }
+    $script:ManagedStateNoted = $true
+    $homeDir = if ($IsWindows) { $env:USERPROFILE } else { $HOME }
+    $stateDir = Join-Path (Join-Path $homeDir ".aitools") "deploy-state"
+    if (Test-Path -LiteralPath $stateDir) {
+        LogDetail "deploy state is no longer used (SOURCE is the source of truth); $stateDir left on disk"
     }
 }
 
-function Initialize-DeployState {
-    $manifestPath = Join-Path $script:DeployStateDir "manifest.json"
-    if (Test-Path $manifestPath) {
-        try {
-            $raw = Get-Content $manifestPath -Raw -ErrorAction Stop
-            $script:DeployManifest = ($raw | ConvertFrom-Json)
-            if (-not $script:DeployManifest.files) {
-                $script:DeployManifest | Add-Member -NotePropertyName files -NotePropertyValue @{} -Force
+# Adopting into a protected file is allowed: it writes only the working tree.
+# LogWarn, naming the file, when the adopt target is listed in the
+# protected-files table (.claude/rules/sources-of-truth.md) of the git repo
+# that contains it. Table entries are backticked paths in the first column;
+# * matches within one path segment. Parity: _managed_protected_note.
+function Write-ManagedProtectedNote {
+    param([string]$Target)
+    $dir = Split-Path -Parent $Target
+    if (-not $dir -or -not (Test-Path -LiteralPath $dir)) { return }
+    # 2>$null: git fails outside a repo; that means "not protected" ($LASTEXITCODE and the result are checked).
+    $top = & git -C $dir rev-parse --show-toplevel 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $top) { return }
+    $prefix = & git -C $dir rev-parse --show-prefix 2>$null
+    # 2>$null: same as above; an empty prefix is valid (file at the repo root).
+    if ($LASTEXITCODE -ne 0) { return }
+    $table = Join-Path $top ".claude/rules/sources-of-truth.md"
+    if (-not (Test-Path -LiteralPath $table)) { return }
+    $rel = "$prefix" + (Split-Path -Leaf $Target)
+    try {
+        $lines = [IO.File]::ReadAllLines($table, [Text.Encoding]::UTF8)
+    } catch {
+        LogDetail "Could not read $table for the protected-file check: $_"
+        return
+    }
+    foreach ($line in $lines) {
+        if ($line -match '^\|\s*`([^`]+)`') {
+            $pat = [regex]::Escape($Matches[1]) -replace '\\\*', '[^/]*'
+            if ($rel -match "^$pat$") {
+                LogWarn "Adopted into protected file $Target -- working tree only; the review gate (.claude/rules/sources-of-truth.md) applies at commit"
+                return
             }
-        } catch {
-            LogWarn "Deploy-state manifest unreadable -- starting fresh (old copy kept as .corrupt): $_"
-            try { Move-Item $manifestPath "$manifestPath.corrupt" -Force -ErrorAction Stop }
-            catch { LogWarn "Could not move aside ${manifestPath}: $_" }
-            $script:DeployManifest = [PSCustomObject]@{ version = 1; files = @{} }
         }
-    } else {
-        $script:DeployManifest = [PSCustomObject]@{ version = 1; files = @{} }
     }
 }
 
-function Get-DeployStateKey {
-    param([string]$FilePath)
-    $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($FilePath)
-    $homeDir = if ($IsWindows) { $env:USERPROFILE } else { $env:HOME }
-    if ($resolved.StartsWith($homeDir, [System.StringComparison]::OrdinalIgnoreCase)) {
-        return $resolved.Substring($homeDir.Length).Replace('\', '/').TrimStart('/')
+# After adopt or merge: the library never commits or pushes. Say that the
+# adopt target's repo has an uncommitted change to review, and WARN when the
+# target is protected (Write-ManagedProtectedNote). Parity: _managed_adopt_notice.
+function Write-ManagedAdoptNotice {
+    param([string]$Target)
+    Write-ManagedProtectedNote -Target $Target
+    $dir = Split-Path -Parent $Target
+    if (-not $dir -or -not (Test-Path -LiteralPath $dir)) { return }
+    # 2>$null: outside a git repo there is nothing to commit ($LASTEXITCODE and the result are checked).
+    $top = & git -C $dir rev-parse --show-toplevel 2>$null
+    if ($LASTEXITCODE -eq 0 -and $top) {
+        Log "Uncommitted change in ${top}: $(Split-Path -Leaf $Target) -- review and commit it (cd $top && git diff)"
     }
-    return $resolved.Replace('\', '/')
-}
-
-function Get-DeployState {
-    param([string]$FilePath)
-    if (-not $script:DeployManifest) { Initialize-DeployState }
-    $key = Get-DeployStateKey $FilePath
-    $files = $script:DeployManifest.files
-    if ($files -is [hashtable]) {
-        if ($files.ContainsKey($key)) { return $files[$key] }
-    } else {
-        $val = $files.$key
-        if ($val) { return $val }
-    }
-    return $null
-}
-
-function Update-DeployState {
-    param([string]$FilePath, [string]$Content)
-    if (-not $script:DeployManifest) { Initialize-DeployState }
-    $key = Get-DeployStateKey $FilePath
-    $hash = Get-ContentHash $Content
-    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-
-    $entry = [PSCustomObject]@{ hash = $hash; deployedAt = $ts }
-    $files = $script:DeployManifest.files
-    if ($files -is [hashtable]) {
-        $files[$key] = $entry
-    } else {
-        $ht = @{}
-        $files.PSObject.Properties | ForEach-Object { $ht[$_.Name] = $_.Value }
-        $ht[$key] = $entry
-        $script:DeployManifest | Add-Member -NotePropertyName files -NotePropertyValue $ht -Force
-    }
-
-    $manifestDir = $script:DeployStateDir
-    $manifestPath = Join-Path $manifestDir "manifest.json"
-    $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($manifestPath)
-    # A failed state write is non-fatal (parity with update_deploy_state): the
-    # file itself is deployed; the next run just may re-prompt.
-    try {
-        if (-not (Test-Path $manifestDir)) {
-            New-Item -ItemType Directory -Path $manifestDir -Force -ErrorAction Stop | Out-Null
-        }
-        $json = $script:DeployManifest | ConvertTo-Json -Depth 5
-        [System.IO.File]::WriteAllText($resolved, $json, [System.Text.UTF8Encoding]::new($false))
-
-        $shadowPath = Join-Path $manifestDir "shadows" $key
-        $shadowDir = Split-Path $shadowPath -Parent
-        if (-not (Test-Path $shadowDir)) {
-            New-Item -ItemType Directory -Path $shadowDir -Force -ErrorAction Stop | Out-Null
-        }
-        $resolvedShadow = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($shadowPath)
-        [System.IO.File]::WriteAllText($resolvedShadow, $Content, [System.Text.UTF8Encoding]::new($false))
-    } catch {
-        LogWarn "Could not update deploy state for $key -- next run may re-prompt: $_"
-    }
-}
-
-function Get-DeployShadow {
-    param([string]$FilePath)
-    $key = Get-DeployStateKey $FilePath
-    $shadowPath = Join-Path $script:DeployStateDir "shadows" $key
-    if (Test-Path $shadowPath) {
-        try {
-            return Get-Content $shadowPath -Raw -ErrorAction Stop
-        } catch {
-            # Caller treats $null as "no ancestor" and bootstraps from the deployed file.
-            LogWarn "Could not read deploy shadow for $FilePath -- no merge ancestor: $_"
-            return $null
-        }
-    }
-    return $null
 }
 
 # ---------------------------------------------------------------------------
-# Non-agentic 3-way merge using shadow as common ancestor.
-# Backend: git merge-file (guaranteed prerequisite -- no discovery needed).
-# Returns merged content string on clean merge, $null on conflicts/error.
+# Write LOCAL and/or the adopt target as one step (parity: _managed_write).
+#   -LocalPath ("" = LOCAL not written) / -LocalContent
+#   -AdoptPath ("" = adopt target not written) / -AdoptContent
+# Content is written as UTF-8 (no BOM) with exactly one trailing newline.
+# Before anything is written, each existing file is snapshotted (for restore)
+# and backed up (Backup-File: rotated .bak.<ts>); a failed backup fails the
+# step with nothing written. After writing, each file is validated: non-empty,
+# and for a name ending in .json: valid JSON (node) that has every top-level
+# key in -LocalRequiredKeys / -AdoptRequiredKeys (JSON arrays; "" = none). On
+# any failure every file this call touched is restored from its snapshot (a
+# file that did not exist is removed), $script:ManagedWriteError is set, and
+# $false is returned. The caller logs the error with LogError.
 # ---------------------------------------------------------------------------
-function Try-AutoMerge {
+$script:ManagedWriteError = ""
+$script:ManagedJsonCheck = @'
+// node check.js FILE REQUIRED_KEYS_FILE (argv[1] is this script's own path)
+const fs = require('fs');
+let v;
+try { v = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')); }
+catch (e) { console.error('not valid JSON: ' + e.message); process.exit(1); }
+const req = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
+const isObj = v !== null && typeof v === 'object' && !Array.isArray(v);
+const miss = isObj ? req.filter(k => !Object.prototype.hasOwnProperty.call(v, k)) : req;
+if (miss.length) { console.error('missing required keys: ' + miss.join(', ')); process.exit(1); }
+'@
+function Write-ManagedFiles {
     param(
-        [string]$LocalContent,
-        [string]$AncestorContent,
-        [string]$SourceContent
+        [string]$LocalPath = "",
+        [string]$LocalContent = "",
+        [string]$AdoptPath = "",
+        [string]$AdoptContent = "",
+        [string]$LocalRequiredKeys = "",
+        [string]$AdoptRequiredKeys = ""
     )
-    $tmpLocal = [System.IO.Path]::GetTempFileName()
-    $tmpAncestor = [System.IO.Path]::GetTempFileName()
-    $tmpSource = [System.IO.Path]::GetTempFileName()
-    try {
-        [IO.File]::WriteAllText($tmpLocal, $LocalContent)
-        [IO.File]::WriteAllText($tmpAncestor, $AncestorContent)
-        [IO.File]::WriteAllText($tmpSource, $SourceContent)
-
-        # In-place merge: modifies $tmpLocal with merged result.
-        # Avoids -p (stdout) which decodes UTF-8 through [Console]::OutputEncoding
-        # (OEM codepage on Windows), mangling non-ASCII characters.
-        git merge-file $tmpLocal $tmpAncestor $tmpSource 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            return [System.IO.File]::ReadAllText($tmpLocal, [System.Text.Encoding]::UTF8)
-        }
-        return $null
-    } catch {
-        # Caller treats $null as "no clean merge" and falls back to the manual menu.
-        LogWarn "Auto-merge failed -- falling back to manual review: $_"
-        return $null
-    } finally {
-        Remove-Item $tmpLocal, $tmpAncestor, $tmpSource -ErrorAction SilentlyContinue
-        # ErrorAction exempt: temp file cleanup; files may already be gone
+    $script:ManagedWriteError = ""
+    $entries = [System.Collections.Generic.List[object]]::new()
+    foreach ($pair in @(@{ P = $LocalPath; C = $LocalContent; R = $LocalRequiredKeys },
+                        @{ P = $AdoptPath; C = $AdoptContent; R = $AdoptRequiredKeys })) {
+        if (-not $pair.P) { continue }
+        $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($pair.P)
+        $entries.Add([PSCustomObject]@{
+            Path     = $resolved
+            Content  = $pair.C
+            Required = $(if ($pair.R) { $pair.R } else { "[]" })
+            Existed  = (Test-Path -LiteralPath $resolved -PathType Leaf)
+            Snapshot = $null
+        })
     }
+
+    $snapDir = Join-Path ([IO.Path]::GetTempPath()) ("aitools-mf-" + [guid]::NewGuid().ToString("N"))
+    try {
+        New-Item -ItemType Directory -Path $snapDir -Force -ErrorAction Stop | Out-Null
+    } catch {
+        $script:ManagedWriteError = "could not create a restore snapshot directory -- nothing written: $_"
+        return $false
+    }
+
+    $n = 0
+    foreach ($e in $entries) {
+        $n++
+        if (-not $e.Existed) { continue }
+        $e.Snapshot = Join-Path $snapDir "s$n"
+        try {
+            Copy-Item -LiteralPath $e.Path -Destination $e.Snapshot -ErrorAction Stop
+        } catch {
+            $script:ManagedWriteError = "could not snapshot $($e.Path) for restore -- nothing written: $_"
+            Remove-Item -LiteralPath $snapDir -Recurse -Force -ErrorAction SilentlyContinue
+            # ErrorAction exempt: temp snapshot cleanup; the failure is already reported
+            return $false
+        }
+        Backup-File -FilePath $e.Path
+        if (-not $script:BackupFileOk) {
+            $script:ManagedWriteError = "backup of $($e.Path) failed -- nothing written"
+            Remove-Item -LiteralPath $snapDir -Recurse -Force -ErrorAction SilentlyContinue
+            # ErrorAction exempt: temp snapshot cleanup; the failure is already reported
+            return $false
+        }
+    }
+
+    $ok = $true
+    foreach ($e in $entries) {
+        try {
+            $dir = Split-Path -Parent $e.Path
+            if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+                New-Item -ItemType Directory -Path $dir -Force -ErrorAction Stop | Out-Null
+            }
+            [IO.File]::WriteAllText($e.Path, "$($e.Content)`n", [System.Text.UTF8Encoding]::new($false))
+        } catch {
+            $script:ManagedWriteError = "write failed for $($e.Path): $($_.Exception.Message)"
+            $ok = $false
+            break
+        }
+        if ((Get-Item -LiteralPath $e.Path).Length -eq 0) {
+            $script:ManagedWriteError = "validation failed: $($e.Path) is empty after the write"
+            $ok = $false
+            break
+        }
+        if ($e.Path -like '*.json') {
+            # Script and required keys go through files, not arguments (native
+            # argument quoting differs across PowerShell versions on Windows).
+            $checkJs = Join-Path $snapDir "check.js"
+            $reqFile = Join-Path $snapDir "req.json"
+            try {
+                [IO.File]::WriteAllText($checkJs, $script:ManagedJsonCheck, [System.Text.UTF8Encoding]::new($false))
+                [IO.File]::WriteAllText($reqFile, $e.Required, [System.Text.UTF8Encoding]::new($false))
+            } catch {
+                $script:ManagedWriteError = "validation failed: could not prepare the JSON check for $($e.Path): $_"
+                $ok = $false
+                break
+            }
+            $nodeOut = & node $checkJs $e.Path $reqFile 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                $script:ManagedWriteError = "validation failed: $($e.Path): $nodeOut"
+                $ok = $false
+                break
+            }
+        }
+    }
+
+    if (-not $ok) {
+        foreach ($e in $entries) {
+            if ($e.Snapshot) {
+                # Restore only what changed (a write refused at open changed nothing).
+                $same = $false
+                try {
+                    $same = ([IO.File]::ReadAllText($e.Path) -ceq [IO.File]::ReadAllText($e.Snapshot))
+                } catch {
+                    LogDetail "Restore compare failed for $($e.Path) -- restoring: $_"
+                    $same = $false
+                }
+                if (-not $same) {
+                    try {
+                        Copy-Item -LiteralPath $e.Snapshot -Destination $e.Path -Force -ErrorAction Stop
+                        Log "Restored $($e.Path)"
+                    } catch {
+                        LogError "Restore failed for $($e.Path) -- its backup is next to it (.bak.*): $_"
+                    }
+                }
+            } elseif (-not $e.Existed -and (Test-Path -LiteralPath $e.Path)) {
+                try {
+                    Remove-Item -LiteralPath $e.Path -Force -ErrorAction Stop
+                    Log "Removed partial $($e.Path)"
+                } catch {
+                    LogError "Could not remove partial $($e.Path): $_"
+                }
+            }
+        }
+    }
+    Remove-Item -LiteralPath $snapDir -Recurse -Force -ErrorAction SilentlyContinue
+    # ErrorAction exempt: temp snapshot cleanup; nothing depends on it
+    return $ok
 }
 
 # ---------------------------------------------------------------------------
@@ -786,10 +863,16 @@ function Read-ConsoleChoice {
 }
 
 # ---------------------------------------------------------------------------
-# Agentic merge via Invoke-AI with refinement loop.
+# Agentic merge via Invoke-AI with refinement loop ([m]erge & adopt).
 # Uses structured prompts from Get-AiMergePrompt / Get-AiMergeRefinePrompt.
-# Returns "merge" (sets $script:MergedContent) or "overwrite"/"skip".
+# Parity: _invoke_ai_merge in aitools-lib.sh. Returns:
+#   "merge"  -- [y]es: $script:MergedContent holds the accepted merge
+#   "menu"   -- [n]o: the preview was rejected; Prompt-DiffReview shows its
+#               menu again (nothing written)
+#   "failed" -- the AI merge produced no valid output; $script:ManagedMergeError
+#               holds the reason (Deploy-ManagedFile logs it; nothing written)
 # ---------------------------------------------------------------------------
+$script:ManagedMergeError = ""
 function Invoke-AiMerge {
     param(
         [string]$FilePath,
@@ -797,6 +880,8 @@ function Invoke-AiMerge {
         [string]$LocalContent,
         [string]$DiffOutput = ""
     )
+
+    $script:ManagedMergeError = ""
 
     # Detect backend for transparency display
     # Get-Command exempt: command-existence check with explicit fallback
@@ -841,12 +926,9 @@ function Invoke-AiMerge {
 
         if (-not $merged) {
             $reason = if ($script:AIRejectReason) { $script:AIRejectReason } else { "unknown error" }
-            [Console]::WriteLine("  >> AI merge failed (iteration $iteration): $reason")
-            LogError "AI merge failed (iteration $iteration): $reason"
-            [Console]::Write("  fallback [o]verwrite / [s]kip: ")
-            $fb = Read-ConsoleChoice "overwrite"
-            if ($fb.ToLower() -eq "s") { return "skip" }
-            return "overwrite"
+            $script:ManagedMergeError = "AI merge failed (iteration $iteration): $reason"
+            [Console]::WriteLine("  >> $($script:ManagedMergeError) -- nothing written")
+            return "failed"
         }
 
         # Show merge preview
@@ -862,7 +944,7 @@ function Invoke-AiMerge {
         }
         [Console]::WriteLine("")
         [Console]::Write("  [y]es accept / [r]efine / [n]o reject: ")
-        $accept = Read-ConsoleChoice "reject merge (overwrite)"
+        $accept = Read-ConsoleChoice "reject the merge (back to the review menu)"
         switch ($accept.ToLower()) {
             "y" {
                 $script:MergedContent = $merged
@@ -875,30 +957,93 @@ function Invoke-AiMerge {
                 # continue loop
             }
             default {
-                [Console]::WriteLine("  >> merge rejected, falling back to overwrite")
-                return "overwrite"
+                [Console]::WriteLine("  >> merge rejected -- back to the review menu")
+                return "menu"
             }
         }
     }
 }
 
 # ---------------------------------------------------------------------------
-# Prompt user before overwriting a managed file with different content.
-# Shows diff, attempts diff3 auto-merge, offers interactive options.
+# Review choices -- what each one does. Applies to Prompt-DiffReview,
+# Deploy-ManagedFile and Review-JsonFields below (bash twins:
+# prompt_diff_review, deploy_managed_file, review_json_fields). Spec:
+# reference/managed-file-deployment.md. Model and AI merge rules:
+# .claude/rules/agentic-standards.md "Managed-file review choices and merge".
 #
-# Returns: "overwrite", "adopt", "merge", or "skip"
-# Exits with code 2 on abort.
-# Non-interactive / -Force: returns "overwrite".
-# When returning "merge", sets $script:MergedContent with the merged result.
+# Terms:
+#   SOURCE       the content being deployed (repo or dotprofile); the source
+#                of truth
+#   LOCAL        the deployed file on disk
+#   ADOPT TARGET the repo file SOURCE comes from (-AdoptPath). The caller
+#                passes its path; this library writes it. "" = no adopt
+#                target: adopt and merge are not offered.
+# There is no ancestor and no deploy state: the only comparison is SOURCE
+# against LOCAL (trailing newlines normalized, case-sensitive).
+#
+# No menu is shown when:
+#   LOCAL missing                       -> SOURCE written, "created"
+#   LOCAL == SOURCE                     -> nothing written, "verified"
+#   no console, EOF, or AITOOLS_FORCE   -> SOURCE written (backup), "updated"
+#
+# Text files (DestPath not ending in .json), one review per file:
+#   [o]verwrite      -> SOURCE written to LOCAL (backup kept); "updated"
+#   [a]ccept & adopt -> LOCAL kept; LOCAL copied to the adopt target now;
+#                       "accept & adopt"
+#   [m]erge & adopt  -> AI merge (Invoke-AiMerge: Invoke-AI balanced/none,
+#                       validated, previewed; [y]es / [r]efine / [n]o). [y]:
+#                       the merge is written to LOCAL and to the adopt target
+#                       now; "accept & adopt". [n]: back to this menu. No valid
+#                       merge output: nothing written; "failed".
+#   [s]kip           -> nothing written; "skipped"; reviewed again next run
+#   [x]abort         -> LogError, exit 2: ends this script
+# After adopt or merge, SOURCE, LOCAL and the adopt target agree, so the next
+# run verifies the file and asks nothing. A caller whose adopt target is not a
+# plain copy of LOCAL (CLAUDE.md: machine footer stripped, profile tokens
+# restored) passes -AdoptFilter; the adopt target gets the filtered content.
+#
+# JSON files (DestPath ending in .json; Review-JsonFields): node compares
+# SOURCE and LOCAL field by field (key path; a whole array is one field). Each
+# differing field is one Prompt-JsonFieldReview: [o]verwrite (SOURCE value to
+# LOCAL), [a]dopt (LOCAL value to the adopt target), [s]kip, [x]abort. No
+# merge. A field only in LOCAL stays in LOCAL: with an adopt target and a
+# console it gets [a]dopt / [s]kip / [x]abort (no overwrite); otherwise it is
+# kept without a prompt. Key order is preserved in both files. One result per
+# file, by precedence: failed > accept & adopt > skipped > updated > verified.
+#
+# Failure: every file a step writes (LOCAL, and the adopt target for adopt or
+# merge) is snapshotted and backed up first (a failed backup of an existing
+# file fails the step: nothing written) and validated after (non-empty; JSON
+# parses and keeps SOURCE's top-level keys, except keys the review chose to
+# leave absent). If a write, the merge or a validation fails, the files are
+# restored, the reason is logged (LogError), the result is "failed" (the
+# caller records it; Write-DeployTrackerSummary writes an ERROR row) and the
+# run continues with the next file. An adopt target listed in its repo's
+# protected-files table (.claude/rules/sources-of-truth.md) gets a WARN that
+# names it: working tree only; the review gate applies at commit. The library
+# never commits or pushes: after adopt or merge it logs that the adopt
+# target's repo has an uncommitted change to review and ship.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Show SOURCE against LOCAL and ask what to do ("Review choices" above).
+#
+# Params: -FilePath (LOCAL), -NewContent (SOURCE), -AdoptOffered ($true offers
+# [a]ccept & adopt and [m]erge & adopt), -CurrentContent (optional; read from
+# FilePath when empty).
+# Returns "overwrite", "adopt", "merge", "skip" or "failed"; "merge" also sets
+# $script:MergedContent; "failed" (the AI merge produced no valid output) sets
+# $script:ManagedMergeError. Exits 2 on [x]abort (Invoke-ManagedAbort).
+# Non-interactive, EOF at the prompt, -Force / AITOOLS_FORCE: "overwrite".
 # ---------------------------------------------------------------------------
 $script:MergedContent = $null
+$script:PdrAdoptTarget = ""   # set by Deploy-ManagedFile; shown in the review header only
 function Prompt-DiffReview {
     param(
         [string]$FilePath,
         [string]$NewContent,
-        [string]$CurrentContent = "",
-        [string]$AncestorContent = "",
-        [string]$AdoptLabel = ""
+        [bool]$AdoptOffered = $false,
+        [string]$CurrentContent = ""
     )
 
     $script:MergedContent = $null
@@ -928,14 +1073,17 @@ function Prompt-DiffReview {
     # Context header
     [Console]::WriteLine("")
     [Console]::WriteLine("[REVIEW] $FilePath differs from source.")
-    [Console]::WriteLine("  source = template (would deploy)")
+    [Console]::WriteLine("  source = the repo version (would deploy)")
     [Console]::WriteLine("  local  = current file on disk")
+    if ($AdoptOffered -and $script:PdrAdoptTarget) {
+        [Console]::WriteLine("  repo   = $($script:PdrAdoptTarget) (adopt target)")
+    }
     [Console]::WriteLine("")
 
     # Generate line-level diff
     $srcLines = @($NewContent -split "`n")
     $curLines = @($CurrentContent -split "`n")
-    $diffs = Compare-Object $srcLines $curLines
+    $diffs = Compare-Object $srcLines $curLines -CaseSensitive
     $diffCount = 0
     $diffOutput = ""
     if ($diffs) {
@@ -970,118 +1118,78 @@ function Prompt-DiffReview {
         [Console]::WriteLine("  ... ($($diffCount - 30) more lines -- see deploy log)")
     }
 
-    # Attempt automatic merge if ancestor available
-    if ($AncestorContent) {
+    # Menu (parity: prompt_diff_review in aitools-lib.sh). A rejected merge
+    # preview ("menu") shows the menu again.
+    while ($true) {
         [Console]::WriteLine("")
-        [Console]::WriteLine("  Attempting automatic merge...")
-        $autoMerged = Try-AutoMerge -LocalContent $CurrentContent `
-            -AncestorContent $AncestorContent -SourceContent $NewContent
-        if ($autoMerged) {
-            [Console]::WriteLine("  Clean merge -- no conflicts.")
-            [Console]::WriteLine("")
-            $mergedLines = $autoMerged -split "`n"
-            $previewCount = [Math]::Min(30, $mergedLines.Count)
-            [Console]::WriteLine("  --- merged result preview (first $previewCount lines) ---")
-            for ($i = 0; $i -lt $previewCount; $i++) {
-                [Console]::WriteLine("  | $($mergedLines[$i])")
-            }
-            if ($mergedLines.Count -gt 30) {
-                [Console]::WriteLine("  | ... ($($mergedLines.Count - 30) more lines)")
-            }
-            [Console]::WriteLine("")
-            if ($AdoptLabel) {
-                [Console]::WriteLine("  [a]ccept    : deploy merge + update $AdoptLabel")
-            } else {
-                [Console]::WriteLine("  [a]ccept")
-            }
-            [Console]::WriteLine("  [o]verwrite")
-            [Console]::WriteLine("  [s]kip")
-            [Console]::WriteLine("  [x]abort")
-            [Console]::Write("  choice [a/o/s/x]: ")
-            $choice = Read-ConsoleChoice "overwrite"
-            switch ($choice.ToLower()) {
-                "a" {
-                    $script:MergedContent = $autoMerged
-                    if ($AdoptLabel) {
-                        [Console]::WriteLine("  >> accepted: merge deployed + $AdoptLabel updated")
-                        return "merge-adopt"
-                    } else {
-                        [Console]::WriteLine("  >> accepted: merge deployed")
-                        return "merge"
-                    }
+        [Console]::WriteLine("  [o]verwrite      : source wins -> written to local (backup kept)")
+        if ($AdoptOffered) {
+            [Console]::WriteLine("  [a]ccept & adopt : local wins -> copied to the repo now")
+            [Console]::WriteLine("  [m]erge & adopt  : AI merge of source + local -> local and the repo")
+        }
+        [Console]::WriteLine("  [s]kip           : nothing written; asked again next run")
+        [Console]::WriteLine("  [x]abort         : stop this script (exit 2)")
+        if ($AdoptOffered) {
+            [Console]::Write("  choice [o/a/m/s/x]: ")
+        } else {
+            [Console]::Write("  choice [o/s/x]: ")
+        }
+
+        $choice = Read-ConsoleChoice "overwrite"
+        switch ($choice.ToLower()) {
+            "a" {
+                if ($AdoptOffered) {
+                    [Console]::WriteLine("  >> accept & adopt: local kept, copied to the repo")
+                    return "adopt"
                 }
-                "s" {
-                    [Console]::WriteLine("  >> skipped: local file unchanged")
-                    return "skip"
-                }
-                "x" {
-                    LogError "Aborted by user"
-                    exit 2
-                }
-                default {
+                [Console]::WriteLine("  >> overwritten: source deployed to local (backup kept)")
+                return "overwrite"
+            }
+            "m" {
+                if ($AdoptOffered) {
+                    $mergeResult = Invoke-AiMerge -FilePath $FilePath -SourceContent $NewContent -LocalContent $CurrentContent -DiffOutput $diffOutput
+                    if ($mergeResult -ne "menu") { return $mergeResult }
+                } else {
                     [Console]::WriteLine("  >> overwritten: source deployed to local (backup kept)")
                     return "overwrite"
                 }
             }
-        } else {
-            [Console]::WriteLine("  Merge has conflicts -- manual choice required.")
-        }
-    }
-
-    # Options (no auto-merge available or merge had conflicts)
-    [Console]::WriteLine("")
-    if ($AdoptLabel) {
-        [Console]::WriteLine("  [o]verwrite : source wins -> deploy to local (backup kept)")
-        [Console]::WriteLine("  [a]dopt     : local wins -> copy back to $AdoptLabel")
-        [Console]::WriteLine("  [m]erge     : AI-assisted merge of source + local")
-        [Console]::WriteLine("  [s]kip      : keep local as-is (no changes)")
-        [Console]::WriteLine("  [x]abort    : stop deployment")
-        [Console]::Write("  choice [o/a/m/s/x]: ")
-    } else {
-        [Console]::WriteLine("  [o]verwrite : source wins -> deploy to local (backup kept)")
-        [Console]::WriteLine("  [m]erge     : AI-assisted merge of source + local")
-        [Console]::WriteLine("  [s]kip      : keep local as-is (no changes)")
-        [Console]::WriteLine("  [x]abort    : stop deployment")
-        [Console]::Write("  choice [o/m/s/x]: ")
-    }
-
-    $choice = Read-ConsoleChoice "overwrite"
-    switch ($choice.ToLower()) {
-        "a" {
-            if ($AdoptLabel) {
-                [Console]::WriteLine("  >> adopted: local version copied back to $AdoptLabel")
-                return "adopt"
+            "s" {
+                [Console]::WriteLine("  >> skipped: local file unchanged")
+                return "skip"
             }
-            [Console]::WriteLine("  >> overwritten: source deployed to local (backup kept)")
-            return "overwrite"
-        }
-        "m" {
-            return (Invoke-AiMerge -FilePath $FilePath -SourceContent $NewContent -LocalContent $CurrentContent -DiffOutput $diffOutput)
-        }
-        "s" {
-            [Console]::WriteLine("  >> skipped: local file unchanged")
-            return "skip"
-        }
-        "x" {
-            LogError "Aborted by user"
-            exit 2
-        }
-        default {
-            [Console]::WriteLine("  >> overwritten: source deployed to local (backup kept)")
-            return "overwrite"
+            "x" {
+                Invoke-ManagedAbort
+            }
+            default {
+                [Console]::WriteLine("  >> overwritten: source deployed to local (backup kept)")
+                return "overwrite"
+            }
         }
     }
 }
 
 # ---------------------------------------------------------------------------
-# Deploy a managed file with diff review and deploy state tracking.
-# Uses manifest to auto-deploy when user hasn't edited the local file.
-# Falls back to interactive review with merge options when both sides differ.
+# Deploy one managed file. SOURCE is the source of truth ("Review choices"
+# above Prompt-DiffReview). Parity: deploy_managed_file in aitools-lib.sh.
 #
-# Returns: "created", "updated", "verified", "accept & adopt", or "skipped"
-# Exits with code 2 on abort.
-# On "accept & adopt"/"skipped": does NOT write the file.
-# On "created"/"updated": writes content to dest + updates deploy state.
+# Params:
+#   -Content      content to deploy (SOURCE)
+#   -DestPath     deployed path (LOCAL). A name ending in .json is reviewed
+#                 field by field (Review-JsonFields).
+#   -ToolName     summary tool name (e.g. "claude rules")
+#   -ItemName     item name for log lines (e.g. "concurrent-agents.md")
+#   -AdoptPath    absolute path of the repo file that is the source of truth;
+#                 "" = adopt and merge are not offered
+#   -AdoptFilter  optional, text files only: scriptblock that takes LOCAL
+#                 content and returns the content the adopt target gets
+#                 (e.g. CLAUDE.md strips its machine footer). $null = copy.
+#
+# Returns "created", "updated", "verified", "accept & adopt", "skipped" or
+# "failed". On "failed" nothing is left half-written (snapshots restored) and
+# the reason is logged with LogError; the caller records the outcome
+# (Record-DeployOutcome, or its own ERROR row). Exits 2 on [x]abort.
+# Honors $DryRun (reports, writes nothing).
 # ---------------------------------------------------------------------------
 function Deploy-ManagedFile {
     param(
@@ -1089,23 +1197,27 @@ function Deploy-ManagedFile {
         [string]$DestPath,
         [string]$ToolName,
         [string]$ItemName,
-        [string]$AdoptLabel = ""
+        [string]$AdoptPath = "",
+        [scriptblock]$AdoptFilter = $null
     )
 
-    # Normalize trailing whitespace for consistent comparison.
-    # Prevents round-trip diff noise (deploy -> adopt strips trailing blanks -> deploy sees diff).
-    $Content = $Content -replace '[\r\n]+$', "`n"
+    Write-ManagedStateNotice
+
+    # Normalize trailing newlines for a stable comparison (parity with the bash
+    # twin); every write adds exactly one back.
+    $Content = $Content -replace '[\r\n]+$', ''
 
     # Dry run: report what would happen without writing
     if ($DryRun) {
-        if (Test-Path $DestPath) {
+        if (Test-Path -LiteralPath $DestPath) {
             try {
-                $existing = Get-Content $DestPath -Raw -ErrorAction Stop
+                $existing = Get-Content -LiteralPath $DestPath -Raw -ErrorAction Stop
             } catch {
+                LogWarn "Cannot read $DestPath for the dry-run comparison: $_"
                 $existing = ""
             }
-            if ($existing) { $existing = $existing -replace '[\r\n]+$', "`n" }
-            if ($existing -eq $Content) {
+            $existing = "$existing" -replace '[\r\n]+$', ''
+            if ($existing -ceq $Content) {
                 Log "[DRY RUN] Unchanged: $ItemName"
             } else {
                 Log "[DRY RUN] Would update: $ItemName -> $DestPath"
@@ -1116,83 +1228,422 @@ function Deploy-ManagedFile {
         return "verified"
     }
 
-    $destDir = Split-Path -Parent $DestPath
-    if (-not (Test-Path $destDir)) {
-        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-    }
-
-    if (Test-Path $DestPath) {
+    # JSON: field-by-field review
+    if ($DestPath -like '*.json') {
+        $srcTmp = $null
         try {
-            $existing = Get-Content $DestPath -Raw -ErrorAction Stop
+            $srcTmp = [IO.Path]::GetTempFileName()
+            [IO.File]::WriteAllText($srcTmp, "$Content`n", [System.Text.UTF8Encoding]::new($false))
         } catch {
-            LogWarn "Cannot read $DestPath for comparison: $_"
-            $existing = ""
-        }
-        if ($existing) { $existing = $existing -replace '[\r\n]+$', "`n" }
-        if ($existing -eq $Content) {
-            # Content identical — update deploy state (bootstraps manifest)
-            Update-DeployState -FilePath $DestPath -Content $Content
-            return "verified"
-        }
-
-        # Content differs — check deploy state for auto-deploy eligibility
-        $state = Get-DeployState -FilePath $DestPath
-        if ($state -and $state.hash) {
-            $existingHash = Get-ContentHash $existing
-            if ($existingHash -eq $state.hash) {
-                # User didn't edit since last deploy → auto-deploy silently
-                Backup-File -FilePath $DestPath
-                $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
-                [System.IO.File]::WriteAllText($resolved, $Content, [System.Text.UTF8Encoding]::new($false))
-                Update-DeployState -FilePath $DestPath -Content $Content
-                Log "Auto-deployed: $ItemName (no local edits detected)"
-                return "updated"
+            LogError "Failed: ${ItemName}: could not write a temp file for the JSON review: $_"
+            if ($srcTmp) {
+                Remove-Item -LiteralPath $srcTmp -Force -ErrorAction SilentlyContinue
+                # ErrorAction exempt: temp file cleanup; the failure is already reported
             }
+            return "failed"
         }
-
-        # User edited AND source changed — backup + interactive review
-        Backup-File -FilePath $DestPath
-        $ancestorContent = Get-DeployShadow -FilePath $DestPath
-        # Bootstrap: seed shadow from current deployed content if empty
-        if (-not $ancestorContent) {
-            Log "Bootstrapping deploy shadow from existing: $DestPath"
-            $ancestorContent = $existing
-        }
-        $result = Prompt-DiffReview -FilePath $DestPath -NewContent $Content `
-            -CurrentContent $existing -AncestorContent $ancestorContent `
-            -AdoptLabel $AdoptLabel
-        switch ($result) {
-            "adopt" { return "accept & adopt" }
-            "skip" {
-                LogWarn "Skipped: $ItemName"
-                return "skipped"
-            }
-            "merge-adopt" {
-                $Content = $script:MergedContent
-                $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
-                [System.IO.File]::WriteAllText($resolved, $Content, [System.Text.UTF8Encoding]::new($false))
-                Update-DeployState -FilePath $DestPath -Content $Content
-                LogOk "Updated (merge-adopt): $ItemName"
-                return "accept & adopt"
-            }
-            "merge" {
-                $Content = $script:MergedContent
-            }
-        }
-        # overwrite or merge: write content to dest
-        $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
-        [System.IO.File]::WriteAllText($resolved, $Content, [System.Text.UTF8Encoding]::new($false))
-        Update-DeployState -FilePath $DestPath -Content $Content
-        LogOk "Updated: $ItemName -> $DestPath"
-        return "updated"
-    } else {
-        # New file — create
-        $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
-        [System.IO.File]::WriteAllText($resolved, $Content, [System.Text.UTF8Encoding]::new($false))
-        Update-DeployState -FilePath $DestPath -Content $Content
-        LogOk "Created: $ItemName -> $DestPath"
-        return "created"
+        $jsonResult = Review-JsonFields -SourceFile $srcTmp -DestPath $DestPath -AdoptPath $AdoptPath
+        Remove-Item -LiteralPath $srcTmp -Force -ErrorAction SilentlyContinue
+        # ErrorAction exempt: temp file cleanup; nothing depends on it
+        return $jsonResult
     }
+
+    # New file: create
+    if (-not (Test-Path -LiteralPath $DestPath -PathType Leaf)) {
+        if (Write-ManagedFiles -LocalPath $DestPath -LocalContent $Content) {
+            LogOk "Created: $ItemName -> $DestPath"
+            return "created"
+        }
+        LogError "Failed: ${ItemName}: $($script:ManagedWriteError)"
+        return "failed"
+    }
+
+    try {
+        $existing = Get-Content -LiteralPath $DestPath -Raw -ErrorAction Stop
+    } catch {
+        LogError "Failed: ${ItemName}: cannot read ${DestPath}: $_"
+        return "failed"
+    }
+    $existing = "$existing" -replace '[\r\n]+$', ''
+    if ($existing -ceq $Content) {
+        return "verified"
+    }
+
+    # LOCAL differs from SOURCE: review (non-interactive / EOF / -Force -> overwrite)
+    $script:PdrAdoptTarget = $AdoptPath
+    $choice = Prompt-DiffReview -FilePath $DestPath -NewContent $Content `
+        -AdoptOffered ([bool]$AdoptPath) -CurrentContent $existing
+    $script:PdrAdoptTarget = ""
+
+    if ($choice -eq "skip") {
+        LogWarn "Skipped: $ItemName (local differs from source; reviewed again next run)"
+        return "skipped"
+    }
+    if ($choice -eq "failed") {
+        $mergeReason = if ($script:ManagedMergeError) { $script:ManagedMergeError } else { "AI merge failed" }
+        LogError "Failed: ${ItemName}: $mergeReason -- nothing written"
+        return "failed"
+    }
+
+    $localPath = $DestPath
+    $localOut = $Content
+    $repoPath = ""
+    $repoContent = ""
+    if ($choice -eq "adopt") {
+        $localPath = ""
+        $localOut = ""
+        $repoPath = $AdoptPath
+        $repoContent = $existing
+    } elseif ($choice -eq "merge") {
+        $localOut = "$($script:MergedContent)" -replace '[\r\n]+$', ''
+        $repoPath = $AdoptPath
+        $repoContent = $localOut
+    }
+
+    # The adopt target gets LOCAL (or the merge), passed through the filter if any
+    if ($repoPath -and $AdoptFilter) {
+        try {
+            $filtered = (& $AdoptFilter $repoContent) -join "`n"
+        } catch {
+            LogError "Failed: ${ItemName}: adopt filter failed -- nothing written: $_"
+            return "failed"
+        }
+        if ([string]::IsNullOrEmpty($filtered)) {
+            LogError "Failed: ${ItemName}: adopt filter returned nothing -- nothing written"
+            return "failed"
+        }
+        $repoContent = $filtered -replace '[\r\n]+$', ''
+    }
+
+    if (-not (Write-ManagedFiles -LocalPath $localPath -LocalContent $localOut -AdoptPath $repoPath -AdoptContent $repoContent)) {
+        LogError "Failed: ${ItemName}: $($script:ManagedWriteError) (files restored)"
+        return "failed"
+    }
+
+    if ($repoPath) {
+        LogOk "Accept & adopt: $ItemName -> $repoPath"
+        Write-ManagedAdoptNotice -Target $repoPath
+        return "accept & adopt"
+    }
+    LogOk "Updated: $ItemName -> $DestPath"
+    return "updated"
+}
+
+# ---------------------------------------------------------------------------
+# Review a JSON managed file field by field ("Review choices" above).
+# Parity: review_json_fields in aitools-lib.sh (same embedded node script).
+#
+# Params: -SourceFile (file holding the SOURCE JSON), -DestPath (LOCAL JSON),
+# -AdoptPath (repo JSON file that is the source of truth; "" = no adopt).
+# Returns one result per file by precedence failed > accept & adopt > skipped
+# > updated > verified: "created" (LOCAL was missing), "failed" (files
+# restored, LogError), "accept & adopt" (a field was adopted into AdoptPath;
+# overwrites chosen in the same run are written too), "skipped" (a field was
+# left differing), "updated" (fields overwritten from SOURCE), "verified"
+# (nothing written). Requires node. Exits 2 on [x]abort.
+# ---------------------------------------------------------------------------
+$script:ReviewJsonNode = @'
+// review_json_fields / Review-JsonFields: SOURCE against LOCAL, field by field.
+// The same text is embedded in aitools-lib.sh and aitools-lib.ps1: keep them identical.
+//   plan  SRC LOCAL OUT_PLAN
+//     OUT_PLAN: one line per differing field: idx<TAB>kind<TAB>key<TAB>local<TAB>source
+//     kind: differ | source-only | local-only. A whole array is one field.
+//   apply SRC LOCAL ADOPT CHOICES OUT_LOCAL OUT_ADOPT OUT_RESULT OUT_REQ_LOCAL OUT_REQ_ADOPT
+//     ADOPT: the adopt target, or "-" for none.
+//     CHOICES: idx<TAB>overwrite|adopt|skip|keep per field (missing = skip).
+//     OUT_LOCAL / OUT_ADOPT: new file content, or empty when that file is unchanged.
+//     OUT_RESULT: "over=N adopt=N skip=N kept=N".
+//     OUT_REQ_LOCAL / OUT_REQ_ADOPT: JSON array of SOURCE's top-level keys the
+//     written file must keep (keys the review chose to leave absent excluded).
+//   keys  SRC OUT_KEYS
+//     OUT_KEYS: JSON array of SOURCE's top-level keys ([] when not an object).
+// Key order is preserved: existing keys keep their position, new keys are appended.
+// Exit 3 with the reason on stderr when a file cannot be read or parsed.
+const fs = require('fs');
+const mode = process.argv[2];
+function readJson(p, label) {
+    let text;
+    try { text = fs.readFileSync(p, 'utf8'); }
+    catch (e) {
+        if (e.code === 'ENOENT') return undefined;
+        throw new Error(label + ': cannot read ' + p + ': ' + e.message);
+    }
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    try { return JSON.parse(text); }
+    catch (e) { throw new Error(label + ': ' + p + ' is not valid JSON: ' + e.message); }
+}
+function isObj(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+function canon(v) {
+    if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+    if (isObj(v)) return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}';
+    return JSON.stringify(v);
+}
+function fields(src, loc) {
+    const out = [];
+    if (!isObj(src) || !isObj(loc)) {
+        if (canon(src) !== canon(loc)) out.push({ path: [], kind: 'differ', s: src, l: loc });
+        return out;
+    }
+    (function walk(s, l, path) {
+        const keys = Object.keys(s).concat(Object.keys(l).filter(k => !has(s, k)));
+        for (const k of keys) {
+            const p = path.concat([k]);
+            const inS = has(s, k), inL = has(l, k);
+            if (inS && inL) {
+                if (isObj(s[k]) && isObj(l[k])) walk(s[k], l[k], p);
+                else if (canon(s[k]) !== canon(l[k])) out.push({ path: p, kind: 'differ', s: s[k], l: l[k] });
+            } else if (inS) {
+                out.push({ path: p, kind: 'source-only', s: s[k] });
+            } else {
+                out.push({ path: p, kind: 'local-only', l: l[k] });
+            }
+        }
+    })(src, loc, []);
+    return out;
+}
+function disp(v) {
+    if (v === undefined) return '(absent)';
+    let t = JSON.stringify(v);
+    if (t.length > 200) t = t.slice(0, 197) + '...';
+    return t;
+}
+function clean(t) { return String(t).replace(/[\t\r\n]/g, ' '); }
+function clone(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
+function setPath(obj, path, val) {
+    let o = obj;
+    for (let i = 0; i < path.length - 1; i++) {
+        if (!isObj(o[path[i]])) o[path[i]] = {};
+        o = o[path[i]];
+    }
+    o[path[path.length - 1]] = val;
+}
+function delPath(obj, path) {
+    let o = obj;
+    for (let i = 0; i < path.length - 1; i++) {
+        if (!isObj(o[path[i]])) return;
+        o = o[path[i]];
+    }
+    delete o[path[path.length - 1]];
+}
+function keptKeys(src, obj) {
+    if (!isObj(src) || !isObj(obj)) return [];
+    return Object.keys(src).filter(k => has(obj, k));
+}
+try {
+    const src = readJson(process.argv[3], 'source');
+    if (src === undefined) throw new Error('source: ' + process.argv[3] + ' not found');
+    if (mode === 'keys') {
+        fs.writeFileSync(process.argv[4], JSON.stringify(isObj(src) ? Object.keys(src) : []) + '\n');
+        process.exit(0);
+    }
+    const loc = readJson(process.argv[4], 'local');
+    if (loc === undefined) throw new Error('local: ' + process.argv[4] + ' not found');
+    const list = fields(src, loc);
+    if (mode === 'plan') {
+        const lines = list.map((f, i) => [i, f.kind, f.path.length ? clean(f.path.join('.')) : '(document)',
+            clean(disp(f.l)), clean(disp(f.s))].join('\t'));
+        fs.writeFileSync(process.argv[5], lines.length ? lines.join('\n') + '\n' : '');
+    } else if (mode === 'apply') {
+        const adoptPath = (process.argv[5] && process.argv[5] !== '-') ? process.argv[5] : '';
+        const choices = {};
+        for (const line of fs.readFileSync(process.argv[6], 'utf8').split(/\r?\n/)) {
+            const m = /^(\d+)\t(\w+)$/.exec(line);
+            if (m) choices[m[1]] = m[2];
+        }
+        let newLocal = clone(loc);
+        let adoptObj;
+        if (adoptPath) {
+            adoptObj = readJson(adoptPath, 'adopt target');
+            if (adoptObj === undefined) adoptObj = clone(src);
+        }
+        let over = 0, adopt = 0, skip = 0, kept = 0;
+        list.forEach((f, i) => {
+            const c = choices[String(i)] || 'skip';
+            if (c === 'adopt' && adoptPath) {
+                adopt++;
+                if (f.path.length === 0) adoptObj = clone(f.l);
+                else if (f.kind === 'source-only') delPath(adoptObj, f.path);
+                else setPath(adoptObj, f.path, clone(f.l));
+            } else if (c === 'overwrite' && f.kind !== 'local-only') {
+                over++;
+                if (f.path.length === 0) newLocal = clone(f.s);
+                else setPath(newLocal, f.path, clone(f.s));
+            } else if (f.kind === 'local-only' && c !== 'skip') {
+                kept++;
+            } else {
+                skip++;
+            }
+        });
+        fs.writeFileSync(process.argv[7], over ? JSON.stringify(newLocal, null, 2) + '\n' : '');
+        fs.writeFileSync(process.argv[8], adopt ? JSON.stringify(adoptObj, null, 2) + '\n' : '');
+        fs.writeFileSync(process.argv[9], 'over=' + over + ' adopt=' + adopt + ' skip=' + skip + ' kept=' + kept + '\n');
+        fs.writeFileSync(process.argv[10], JSON.stringify(keptKeys(src, newLocal)) + '\n');
+        fs.writeFileSync(process.argv[11], JSON.stringify(adoptPath ? keptKeys(src, adoptObj) : []) + '\n');
+    } else {
+        throw new Error('unknown mode: ' + mode);
+    }
+} catch (e) {
+    process.stderr.write(String((e && e.message) || e) + '\n');
+    process.exit(3);
+}
+'@
+function Review-JsonFields {
+    param(
+        [string]$SourceFile,
+        [string]$DestPath,
+        [string]$AdoptPath = ""
+    )
+    $item = Split-Path -Leaf $DestPath
+
+    # Get-Command exempt: command-existence check with explicit failure branch
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+        LogError "Failed: ${item}: node is required for the JSON field review"
+        return "failed"
+    }
+
+    $work = Join-Path ([IO.Path]::GetTempPath()) ("aitools-jf-" + [guid]::NewGuid().ToString("N"))
+    try {
+        New-Item -ItemType Directory -Path $work -Force -ErrorAction Stop | Out-Null
+        $js = Join-Path $work "review.js"
+        [IO.File]::WriteAllText($js, $script:ReviewJsonNode, [System.Text.UTF8Encoding]::new($false))
+    } catch {
+        LogError "Failed: ${item}: could not create a work directory for the JSON review: $_"
+        return "failed"
+    }
+    $destResolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
+
+    # node writes every output file itself (UTF-8), so nothing passes through
+    # the console encoding (cross-platform-detail.md "PowerShell pipeline encoding").
+    if (-not (Test-Path -LiteralPath $DestPath -PathType Leaf)) {
+        $keysFile = Join-Path $work "keys.json"
+        $nodeErr = & node $js keys $SourceFile $keysFile 2>&1
+        $keysRc = $LASTEXITCODE
+        try {
+            if ($keysRc -ne 0) { throw "node exit ${keysRc}: $nodeErr" }
+            $srcJson = [IO.File]::ReadAllText($SourceFile, [Text.Encoding]::UTF8) -replace '[\r\n]+$', ''
+            $reqKeys = [IO.File]::ReadAllText($keysFile, [Text.Encoding]::UTF8).Trim()
+        } catch {
+            LogError "Failed: ${item}: cannot read the source JSON: $_"
+            Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+            # ErrorAction exempt: work directory cleanup; the failure is already reported
+            return "failed"
+        }
+        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+        # ErrorAction exempt: work directory cleanup; nothing depends on it
+        if (Write-ManagedFiles -LocalPath $DestPath -LocalContent $srcJson -LocalRequiredKeys $reqKeys) {
+            LogOk "Created: $item -> $DestPath"
+            return "created"
+        }
+        LogError "Failed: ${item}: $($script:ManagedWriteError)"
+        return "failed"
+    }
+
+    $planFile = Join-Path $work "plan.tsv"
+    $nodeErr = & node $js plan $SourceFile $destResolved $planFile 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        LogError "Failed: ${item}: field comparison failed (node exit $LASTEXITCODE): $nodeErr"
+        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+        # ErrorAction exempt: work directory cleanup; the failure is already reported
+        return "failed"
+    }
+    $planLines = @([IO.File]::ReadAllLines($planFile, [Text.Encoding]::UTF8) | Where-Object { $_ })
+    if ($planLines.Count -eq 0) {
+        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+        # ErrorAction exempt: work directory cleanup; nothing depends on it
+        return "verified"
+    }
+
+    # One review per differing field
+    $adoptOk = if ($AdoptPath) { "1" } else { "0" }
+    $canPrompt = ($env:AITOOLS_FORCE -ne "1") -and (-not $Force) -and (Test-InteractiveConsole)
+    $choices = [System.Collections.Generic.List[string]]::new()
+    foreach ($pl in $planLines) {
+        $f = $pl -split "`t"
+        $idx = $f[0]; $kind = $f[1]; $key = $f[2]; $lDisp = $f[3]; $sDisp = $f[4]
+        if ($kind -eq "local-only") {
+            # A field only in LOCAL: [a]dopt / [s]kip / [x]abort, no overwrite.
+            # Without an adopt target or a console it is kept, no prompt.
+            if ($adoptOk -eq "1" -and $canPrompt) {
+                $choice = Prompt-JsonFieldReview -Leaf $key -Current $lDisp -Proposed "(not in source)" `
+                    -SourceLabel "source" -AdoptAllowed "1" -LocalLabel "local" -OverwriteAllowed "0"
+            } else {
+                LogDetail "${item}: $key only in local -- kept"
+                $choice = "keep"
+            }
+        } else {
+            $choice = Prompt-JsonFieldReview -Leaf $key -Current $lDisp -Proposed $sDisp `
+                -SourceLabel "source" -AdoptAllowed $adoptOk -LocalLabel "local"
+        }
+        $choices.Add("$idx`t$choice")
+    }
+    $choicesFile = Join-Path $work "choices.tsv"
+    $localOutFile = Join-Path $work "local.out"
+    $adoptOutFile = Join-Path $work "adopt.out"
+    $resultFile = Join-Path $work "result.txt"
+    $reqLocalFile = Join-Path $work "req-local.json"
+    $reqAdoptFile = Join-Path $work "req-adopt.json"
+    try {
+        [IO.File]::WriteAllText($choicesFile, (($choices -join "`n") + "`n"), [System.Text.UTF8Encoding]::new($false))
+    } catch {
+        LogError "Failed: ${item}: could not record the field choices: $_"
+        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+        # ErrorAction exempt: work directory cleanup; the failure is already reported
+        return "failed"
+    }
+
+    # "-" = no adopt target (an empty argument can be dropped by native-argument passing)
+    $adoptArg = if ($AdoptPath) { $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($AdoptPath) } else { "-" }
+    $nodeErr = & node $js apply $SourceFile $destResolved $adoptArg $choicesFile $localOutFile $adoptOutFile $resultFile $reqLocalFile $reqAdoptFile 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        LogError "Failed: ${item}: applying the field choices failed (node exit $LASTEXITCODE): $nodeErr"
+        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+        # ErrorAction exempt: work directory cleanup; the failure is already reported
+        return "failed"
+    }
+    try {
+        $counts = [IO.File]::ReadAllText($resultFile, [Text.Encoding]::UTF8).Trim()
+        $cLocal = [IO.File]::ReadAllText($localOutFile, [Text.Encoding]::UTF8) -replace '[\r\n]+$', ''
+        $cAdopt = [IO.File]::ReadAllText($adoptOutFile, [Text.Encoding]::UTF8) -replace '[\r\n]+$', ''
+        $rLocal = [IO.File]::ReadAllText($reqLocalFile, [Text.Encoding]::UTF8).Trim()
+        $rAdopt = [IO.File]::ReadAllText($reqAdoptFile, [Text.Encoding]::UTF8).Trim()
+    } catch {
+        LogError "Failed: ${item}: could not read the field review result: $_"
+        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+        # ErrorAction exempt: work directory cleanup; the failure is already reported
+        return "failed"
+    }
+    Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+    # ErrorAction exempt: work directory cleanup; nothing depends on it
+    LogDetail "${item}: field review $counts"
+    $nOver = 0; $nAdopt = 0; $nSkip = 0
+    if ($counts -match 'over=(\d+)') { $nOver = [int]$Matches[1] }
+    if ($counts -match 'adopt=(\d+)') { $nAdopt = [int]$Matches[1] }
+    if ($counts -match 'skip=(\d+)') { $nSkip = [int]$Matches[1] }
+
+    $pLocal = if ($cLocal) { $DestPath } else { "" }
+    $pAdopt = if ($cAdopt) { $AdoptPath } else { "" }
+    if ($pLocal -or $pAdopt) {
+        if (-not (Write-ManagedFiles -LocalPath $pLocal -LocalContent $cLocal -AdoptPath $pAdopt -AdoptContent $cAdopt `
+                -LocalRequiredKeys $rLocal -AdoptRequiredKeys $rAdopt)) {
+            LogError "Failed: ${item}: $($script:ManagedWriteError) (files restored)"
+            return "failed"
+        }
+    }
+    if ($nOver -gt 0) {
+        LogOk "Updated: $item -> $DestPath ($nOver field(s) from source)"
+    }
+    if ($nAdopt -gt 0) {
+        LogOk "Accept & adopt: $item -> $AdoptPath ($nAdopt field(s))"
+        Write-ManagedAdoptNotice -Target $AdoptPath
+    }
+    if ($nSkip -gt 0) {
+        LogWarn "Skipped: $item ($nSkip field(s) differ from source; reviewed again next run)"
+    }
+    if ($nAdopt -gt 0) { return "accept & adopt" }
+    if ($nSkip -gt 0) { return "skipped" }
+    if ($nOver -gt 0) { return "updated" }
+    return "verified"
 }
 
 # ---------------------------------------------------------------------------
@@ -1248,12 +1699,12 @@ function Adopt-ManagedFile {
 # ---------------------------------------------------------------------------
 
 $script:dtAdded = 0; $script:dtUpdated = 0; $script:dtVerified = 0
-$script:dtAccepted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0
+$script:dtAccepted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0; $script:dtFailed = 0
 $script:deployTrackerText = ""
 
 function Initialize-DeployTracker {
     $script:dtAdded = 0; $script:dtUpdated = 0; $script:dtVerified = 0
-    $script:dtAccepted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0
+    $script:dtAccepted = 0; $script:dtSkipped = 0; $script:dtPreserved = 0; $script:dtFailed = 0
     $script:deployTrackerText = ""
 }
 
@@ -1265,12 +1716,14 @@ function Record-DeployOutcome {
         "updated"   { $script:dtUpdated++;   Write-Summary "DETAIL" $ToolName "updated: $ItemName" }
         "accept & adopt" { $script:dtAccepted++;  Write-Summary "DETAIL" $ToolName "accept & adopt: $ItemName" }
         "skipped"   { $script:dtSkipped++;   Write-Summary "DETAIL" $ToolName "skipped: $ItemName" }
+        "failed"    { $script:dtFailed++;    Write-Summary "DETAIL" $ToolName "failed: $ItemName" }
         "verified"  { $script:dtVerified++ }
         "preserved" { $script:dtPreserved++ }
     }
 }
 
 # Write aggregate summary for a deploy loop. Uses non-zero counts.
+# ERROR when any file failed, WARN when any was skipped, else OK.
 function Write-DeployTrackerSummary {
     param([string]$ToolName)
     $parts = @()
@@ -1278,10 +1731,13 @@ function Write-DeployTrackerSummary {
     if ($script:dtUpdated -gt 0)   { $parts += "$($script:dtUpdated) updated" }
     if ($script:dtAccepted -gt 0)  { $parts += "$($script:dtAccepted) accepted" }
     if ($script:dtVerified -gt 0)  { $parts += "$($script:dtVerified) verified" }
+    if ($script:dtFailed -gt 0)    { $parts += "$($script:dtFailed) failed" }
     $text = if ($parts.Count -gt 0) { $parts -join ", " } else { "verified" }
     $script:deployTrackerText = $text
 
-    if ($script:dtSkipped -gt 0) {
+    if ($script:dtFailed -gt 0) {
+        Write-Summary "ERROR" $ToolName "$($script:dtFailed) failed"
+    } elseif ($script:dtSkipped -gt 0) {
         Write-Summary "WARN" $ToolName "$($script:dtSkipped) skipped (user review)"
     } else {
         Write-Summary "OK" $ToolName $text
@@ -1289,11 +1745,16 @@ function Write-DeployTrackerSummary {
 }
 
 # ---------------------------------------------------------------------------
-# Granular per-leaf review prompt for JSON settings sync (mirror of
-# prompt_json_field_review in aitools-lib.sh). One prompt per divergent
+# Granular per-leaf review prompt for JSON settings sync (Sync-ManagedJson)
+# and the JSON field review (Review-JsonFields). Mirror of
+# prompt_json_field_review in aitools-lib.sh. One prompt per divergent
 # setting/rule. overwrite/adopt/skip are per-leaf; abort (x) exits (code 2).
+# -LocalLabel names the local file's side (default "settings.json").
+# -OverwriteAllowed "0" (a field only in the local file): no [o]verwrite, and
+# the default answer is skip.
 # Returns "overwrite", "adopt", or "skip".
-# -Force / AITOOLS_FORCE / non-interactive -> "overwrite" (source wins).
+# -Force / AITOOLS_FORCE / non-interactive -> "overwrite" (source wins), or
+# "skip" when overwrite is not allowed.
 # ---------------------------------------------------------------------------
 function Prompt-JsonFieldReview {
     param(
@@ -1301,48 +1762,72 @@ function Prompt-JsonFieldReview {
         [string]$Current,
         [string]$Proposed,
         [string]$SourceLabel = "profile.json",
-        [string]$AdoptAllowed = "1"
+        [string]$AdoptAllowed = "1",
+        [string]$LocalLabel = "settings.json",
+        [string]$OverwriteAllowed = "1"
     )
 
+    $defaultChoice = "overwrite"
+    $defaultDesc = "overwriting from $SourceLabel"
+    if ($OverwriteAllowed -ne "1") {
+        $defaultChoice = "skip"
+        $defaultDesc = "skipping (only in $LocalLabel)"
+    }
+
     if ($env:AITOOLS_FORCE -eq "1" -or $Force) {
-        Log "Divergence in $Leaf -- overwriting from $SourceLabel (--force)"
-        return "overwrite"
+        Log "Divergence in $Leaf -- $defaultDesc (--force)"
+        return $defaultChoice
     }
     if (-not (Test-InteractiveConsole)) {
-        Log "Divergence in $Leaf -- overwriting from $SourceLabel (non-interactive)"
-        return "overwrite"
+        Log "Divergence in $Leaf -- $defaultDesc (non-interactive)"
+        return $defaultChoice
     }
 
     [Console]::WriteLine("")
     [Console]::WriteLine("[REVIEW] $Leaf differs from $SourceLabel.")
-    [Console]::WriteLine("  settings.json : $Current")
+    [Console]::WriteLine("  ${LocalLabel} : $Current")
     [Console]::WriteLine("  ${SourceLabel} : $Proposed")
     [Console]::WriteLine("")
-    [Console]::WriteLine("  [o]verwrite : $SourceLabel value -> settings.json")
+    if ($OverwriteAllowed -eq "1") {
+        [Console]::WriteLine("  [o]verwrite : $SourceLabel value -> $LocalLabel")
+    }
     if ($AdoptAllowed -eq "1") {
-        [Console]::WriteLine("  [a]dopt     : keep settings.json value -> write to $SourceLabel")
+        [Console]::WriteLine("  [a]dopt     : keep $LocalLabel value -> write to $SourceLabel")
     }
     [Console]::WriteLine("  [s]kip      : leave this setting unchanged")
     [Console]::WriteLine("  [x]abort    : stop the run")
-    if ($AdoptAllowed -eq "1") {
+    if ($OverwriteAllowed -ne "1") {
+        [Console]::Write("  choice [a/s/x]: ")
+    } elseif ($AdoptAllowed -eq "1") {
         [Console]::Write("  choice [o/a/s/x]: ")
     } else {
         [Console]::Write("  choice [o/s/x]: ")
     }
 
-    $choice = Read-ConsoleChoice "overwrite from $SourceLabel"
+    $choice = Read-ConsoleChoice $defaultDesc
     switch ($choice.ToLower()) {
         "a" {
             if ($AdoptAllowed -eq "1") {
-                [Console]::WriteLine("  >> adopted: settings.json value kept -> $SourceLabel")
+                [Console]::WriteLine("  >> adopted: $LocalLabel value kept -> $SourceLabel")
                 return "adopt"
             }
-            [Console]::WriteLine("  >> overwritten from $SourceLabel")
-            return "overwrite"
+            if ($OverwriteAllowed -eq "1") {
+                [Console]::WriteLine("  >> overwritten from $SourceLabel")
+                return "overwrite"
+            }
+            [Console]::WriteLine("  >> skipped: $Leaf unchanged")
+            return "skip"
         }
         "s" { [Console]::WriteLine("  >> skipped: $Leaf unchanged"); return "skip" }
-        "x" { LogError "Aborted by user"; exit 2 }
-        default { [Console]::WriteLine("  >> overwritten from $SourceLabel"); return "overwrite" }
+        "x" { Invoke-ManagedAbort }
+        default {
+            if ($OverwriteAllowed -eq "1") {
+                [Console]::WriteLine("  >> overwritten from $SourceLabel")
+                return "overwrite"
+            }
+            [Console]::WriteLine("  >> skipped: $Leaf unchanged")
+            return "skip"
+        }
     }
 }
 

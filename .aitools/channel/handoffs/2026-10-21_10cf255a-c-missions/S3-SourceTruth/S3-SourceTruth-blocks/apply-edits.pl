@@ -11,7 +11,10 @@ use warnings;
 
 my ($file, $dir, $prefix) = @ARGV;
 die "usage: apply-edits.pl FILE EDITS_DIR PREFIX\n" unless $file && $dir && $prefix;
-sub slurp { my $p = shift; open my $h, '<', $p or die "cannot read $p: $!\n"; local $/; my $c = <$h>; close $h; return $c; }
+sub slurp { my $p = shift; open my $h, '<:raw', $p or die "cannot read $p: $!\n"; local $/; my $c = <$h>; close $h; $c =~ s/\r\n/\n/g; return $c; }
+# Line endings: a CRLF working-tree file (PS1, eol=crlf) is edited as LF and
+# written back as CRLF, so the result has one line-ending style.
+my $crlf = do { open my $h, '<:raw', $file or die "cannot read $file: $!\n"; my $l = <$h>; close $h; (defined $l && $l =~ /\r\n\z/) ? 1 : 0 };
 my $text = slurp($file);
 opendir my $dh, $dir or die "cannot open $dir: $!\n";
 my @olds = sort grep { /^\Q$prefix\E-\d+\.old$/ } readdir $dh;
@@ -27,7 +30,9 @@ for my $o (@olds) {
     substr($text, $i, length($old)) = $new;
     print "applied $o\n";
 }
-open my $oh, '>', $file or die "cannot write $file: $!\n";
+die "mixed line endings after edit -- nothing written\n" if $text =~ /\r/;
+$text =~ s/\n/\r\n/g if $crlf;
+open my $oh, '>:raw', $file or die "cannot write $file: $!\n";
 print $oh $text;
 close $oh or die "cannot close $file: $!\n";
-print "wrote $file\n";
+print "wrote $file" . ($crlf ? " (CRLF)" : "") . "\n";

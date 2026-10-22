@@ -7,11 +7,13 @@
 # ---------------------------------------------------------------------------
 $claudeMdAdoptFilter = {
     param([string]$Deployed)
-    $idx = $Deployed.IndexOf("`n## Machine-Specific")
-    if ($idx -ge 0) {
-        $Deployed = $Deployed.Substring(0, $idx)
+    # Everything before ## Machine-Specific; trailing newlines removed (parity
+    # with claude_md_adopt_filter in setup-user-claude.sh)
+    $m = [regex]::Match($Deployed, '(?m)^## Machine-Specific')
+    if ($m.Success) {
+        $Deployed = $Deployed.Substring(0, $m.Index)
     }
-    $Deployed = $Deployed.TrimEnd()
+    $Deployed = $Deployed -replace '[\r\n]+$', ''
     if ($profileName) {
         foreach ($pair in @(
                 @($profileName, '{{PROFILE_NAME}}'),

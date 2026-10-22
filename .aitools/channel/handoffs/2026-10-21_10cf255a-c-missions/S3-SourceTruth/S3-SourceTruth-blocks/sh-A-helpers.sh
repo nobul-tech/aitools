@@ -114,8 +114,10 @@ _managed_write() {
                 rm -rf "$snapdir"
                 return 1
             fi
-        else
-            : > "$snapdir/e$i"
+        elif ! : > "$snapdir/e$i"; then
+            MANAGED_WRITE_ERROR="could not record restore state for $(display_path "$p") -- nothing written"
+            rm -rf "$snapdir"
+            return 1
         fi
     done
 

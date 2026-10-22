@@ -141,6 +141,7 @@ function or variable to change.
 10. Reverse discovery of user-created hooks keeps `adopt_managed_file` into the dotprofile.
 11. Dotprofile auto-commit/push kept (commander confirmed 2026-10-21; ported unchanged: runs after a merge & adopt of a rule, as before: condition `accept & adopt` + `MERGED_CONTENT` set).
 12. cli-config.json (setup-user-cursor's own merge) untouched.
+13. CLAUDE.md adopt target when the dotprofile has no `claude/CLAUDE.md` (SOURCE came from shared/claude-shared.md): adopt creates the dotprofile template, as on main (adopt was offered whenever a user repo is configured); the next run reads it and verifies. Alternative: offer adopt only when SOURCE is the dotprofile file (one `if` in setup-user-claude).
 Own additions: `prompt_json_field_review $6/$7` and `Prompt-JsonFieldReview -LocalLabel/-OverwriteAllowed` (optional, defaults keep sync_managed_json output); the library logs "Uncommitted change in <repo>" after every adopt (it never commits).
 
 ## 7. Batches (fresh delegate each; verification between)
