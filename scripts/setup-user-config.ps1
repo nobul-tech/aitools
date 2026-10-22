@@ -80,6 +80,13 @@ foreach ($v in @($ReposPath, $RepoPath, $DrivesJson, $GithubUser, $UserRepoPath,
         exit 1
     }
 }
+foreach ($v in @($ReposPath, $RepoPath, $UserRepoPath)) {
+    if ($v -and -not [IO.Path]::IsPathRooted($v)) {
+        LogError "paths must be absolute: $v (see -Help)"
+        Write-Summary "ERROR" "aitools config" "bad arguments"
+        exit 1
+    }
+}
 
 $configDir = Join-Path $HOME ".aitools"
 $configFile = Join-Path $configDir "config.json"
@@ -122,6 +129,7 @@ try {
 $d = @{ gh = ""; urp = ""; alias = ""; uvia = "none"; mvia = "none"; company = ""; id = ""; host = ""; aliases = "" }
 $seen = $false
 $script:NeedInit = $false
+$profileBad = $false
 # Resolver warnings about the cached config.json (or the expected shared-only
 # state) are corrected or recorded by this write: info, so a successful write
 # stays OK (D-TS12). The rest are real warnings.
@@ -147,7 +155,10 @@ foreach ($line in $deriveOut) {
         "hostname" { $d.host = $kv[1] }
         "aliases" { $d.aliases = $kv[1] }
         "warn" { Write-DeriveWarning $kv[1] }
-        "error" { LogError "config: $($kv[1])" }
+        "error" {
+            LogError "config: $($kv[1])"
+            if ($kv[1].Contains("is invalid JSON") -or $kv[1].Contains("is not v2")) { $profileBad = $true }
+        }
     }
 }
 if (-not $seen -or $deriveRc -gt 2) {
@@ -160,8 +171,13 @@ if (-not $seen -or $deriveRc -gt 2) {
     if ($deriveRc -eq 1) {
         Log "config: no dotprofile yet -- writing bootstrap keys only (shared-only mode)"
     } elseif ($deriveRc -ne 0) {
-        Write-Summary "ERROR" "machine profile" "no machine match"
-        Write-Summary "ACTION" "" "Run: aitools user init (profiles: $(& $show $d.aliases 'none'))"
+        if ($profileBad) {
+            Write-Summary "ERROR" "profile.json" "invalid (see log)"
+            Write-Summary "ACTION" "" "Fix profile.json in the dotprofile (details in deploy.log)"
+        } else {
+            Write-Summary "ERROR" "machine profile" "no machine match"
+            Write-Summary "ACTION" "" "Run: aitools user init (profiles: $(& $show $d.aliases 'none'))"
+        }
     }
     if ($deriveRc -eq 0 -and $script:NeedInit) {
         Write-Summary "ACTION" "" "Run: aitools user init (registers this machine)"
@@ -241,7 +257,15 @@ if (-not $failed) {
         }
     }
     $same = $configState -eq "updated" -and $v.State -eq "valid" -and ((ConvertTo-NodeJson $old -Compress) -ceq (ConvertTo-NodeJson $v.Value -Compress))
-    if ($missing.Count -gt 0) {
+    # No "//" inside a path value (protocol prefixes excepted), as ValidateJsonConfig
+    $tmpText = ""
+    try { $tmpText = [IO.File]::ReadAllText($configTmp) } catch { LogDetail "could not re-read ${configTmp}: $($_.Exception.Message)" }
+    $double = [regex]::Match($tmpText, '"[^"]*(?<!http:)(?<!https:)//[^"]*"')
+    if ($double.Success) {
+        LogError "Failed: ${configFile}: double slash in a path value: $($double.Value) -- existing file left untouched"
+        Write-Summary "ERROR" "aitools config" "validation failed"
+        Remove-ConfigTmp
+    } elseif ($missing.Count -gt 0) {
         LogError "Failed: ${configFile}: missing bootstrap $($missing -join ', ') (run aitools install) -- existing file left untouched"
         Write-Summary "ERROR" "aitools config" "missing bootstrap values"
         Remove-ConfigTmp
