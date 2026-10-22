@@ -77,18 +77,25 @@ Create a `plans/*.md` file when work:
 
 ### Skill placement
 
-- **User-level** (`shared/skills/` → deployed to `~/.claude/skills/`):
-  managed tool patterns, project-agnostic conventions, USO enablement.
-  Content must be factual (patterns, gotchas, platform behavior), not
-  project-specific opinions.
-- **Project-level** (`.claude/skills/` in repo): project-specific
-  frameworks, governance workflows, development patterns. Auto-discovered
-  by Claude Code, not deployed.
-- **Split threshold**: A tool needs both user and project skills only
+- **Folder decides level.** `shared/skills/` = user level (deployed to
+  `~/.claude/skills/` and `~/.cursor/skills/`, every repo).
+  `.claude/skills/` = project level (aitools sessions only, never
+  deployed). Dotprofile `claude/skills/` = personal user level.
+- **Test**: user level if the skill is useful in a session on any repo,
+  even read-only. Project level only if it is meaningful solely inside
+  the aitools working tree (it edits or audits aitools source).
+- **One name, one place**: a skill name exists in exactly one of the
+  three folders. User-level takes priority in Claude Code, so a same-name
+  pair leaves the project copy dead. Pre-commit step 21 fails on a
+  `shared/skills/` and `.claude/skills/` collision.
+- **Governed data**: user-level skills say where their repo paths
+  resolve (a "Where the files live" section): the aitools clone, else
+  `repoPath` in `~/.aitools/config.json`, else the read-only
+  `~/.aitools/registries/` copy deploy-harness installs.
+- **Split personas**: a tool needs both user and project skills only
   when it serves two distinct personas (end user vs developer). Use
-  `<name>` for user-level and `<name>-dev` for project-level.
-- **No project overrides of user skills**: User-level takes priority
-  in Claude Code. Never create same-name skills at both levels.
+  `<name>` for user-level and `<name>-dev` for project-level. No level
+  prefixes (`aitool-`, `aitools-`) in new names.
 - Full inventory and architecture:
   `@plans/governance-and-compliance-framework.md`
 

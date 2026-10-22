@@ -119,4 +119,4 @@ User invokes `/audit` explicitly. The skill:
   - Incident governance: `@reference/framework-incident-governance.md`
 - Operational rule: `@.claude/rules/incident-governance.md`
 - Incident data: `@registries/incidents.json`
-- Incident filing: `.claude/skills/incident/SKILL.md`
+- Incident filing: `shared/skills/incident/SKILL.md`

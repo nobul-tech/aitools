@@ -20,6 +20,20 @@ discipline (`reference/framework-artifact-harvesting.md`).
 **Audience**: Any agent harvesting session artifacts, evaluating
 candidates, or running generalization reviews.
 
+## Where the files live
+
+This is a user-level skill: `aitools install` deploys it to
+`~/.claude/skills/` and `~/.cursor/skills/`, so it loads in every repo.
+Its source is `shared/skills/harvest/` in the aitools repo.
+
+- `.scratch/`, `harvesting/` and `harvesting/harvest-manifest.json` belong
+  to the **current** repo (harvesting runs in every project).
+- The governance and inventory paths (`.claude/rules/`, `reference/`,
+  `scripts/`, `shared/skills/`) are in the aitools clone: on aitools they
+  resolve from the repo root; elsewhere use the clone named by `repoPath` in
+  `~/.aitools/config.json` (`%USERPROFILE%\.aitools\config.json` on Windows).
+  A promotion into the harness is a change to that clone.
+
 ## Harvesting an artifact
 
 When a session produces reusable code, prompts, or patterns:

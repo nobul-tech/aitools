@@ -599,7 +599,7 @@ Source files in the aitools repo:
 - `reference/tool-evaluation-playbook.md` (discovery process)
 - `.claude/rules/tool-evaluation.md` (governance principles)
 - `.claude/rules/tool-lifecycle.md` (lifecycle gates)
-- `.claude/skills/tool-eval/SKILL.md` (project-level skill)
+- `shared/skills/tool-eval/SKILL.md` (user-level skill)
 
 ## Cross-references
 

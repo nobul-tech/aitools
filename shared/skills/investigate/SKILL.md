@@ -232,4 +232,4 @@ but logging them in the session helps `/audit` identify trends.
 
 - Framework: `@reference/framework-incident-investigation.md`
 - Three-layer governance: `@reference/framework-three-layer-governance.md`
-- Incident filing: `.claude/skills/incident/SKILL.md`
+- Incident filing: `shared/skills/incident/SKILL.md`

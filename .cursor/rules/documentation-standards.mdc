@@ -36,6 +36,10 @@ Spans multiple sessions, has phased gates, or needs detailed design beyond a roa
 - **Specs vs state** — rules and references are specs; the `/incident` skill tracks out-of-spec code
 - **Cursor parity** — `.cursor/rules/*.mdc` mirrors `.claude/rules/*.md`. See `@.claude/rules/cursor-rule-parity.md`
 
+### Skill placement
+
+Folder decides level: `shared/skills/` = user level (deployed to `~/.claude/skills/` and `~/.cursor/skills/`, every repo); `.claude/skills/` = project level (aitools sessions only, never deployed); dotprofile `claude/skills/` = personal. User level if useful in a session on any repo; project level only if meaningful solely inside the aitools tree. One name, one place (pre-commit step 21). No `aitool-`/`aitools-` level prefixes in new names.
+
 ### `@` link convention
 
 - `@` can reference ANY repo file: `@reference/`, `@.claude/rules/`, `@shared/`, `@scripts/`, `@plans/`
