@@ -19,7 +19,7 @@ point, updating a framework's artifacts, or adding a new framework.
 
 ## Reading frameworks
 
-1. Read `@reference/framework-registry.json`
+1. Read `@registries/framework-registry.json`
 2. Look up in `frameworks` array by name, discipline, or governed
    domain
 3. Present the entry with: name, what it governs, source discipline,
@@ -42,7 +42,7 @@ Given a domain or decision point:
 
 When a framework's artifacts, concepts, or governance scope change:
 
-1. Read current entry from `@reference/framework-registry.json`
+1. Read current entry from `@registries/framework-registry.json`
 2. Identify what changed:
    - **Artifacts** — new rules, skills, data files added or removed?
      Verify each artifact path exists.
@@ -68,7 +68,7 @@ without the registry being updated.
 When a new framework has been designed through the DTCC (steps 4-6
 of `@reference/framework-adoption.md`):
 
-1. Check `@reference/framework-registry.json` — is it already
+1. Check `@registries/framework-registry.json` — is it already
    registered?
 2. Check the `pending` array — is it tracked as pending adoption?
 3. If not registered, draft the entry:

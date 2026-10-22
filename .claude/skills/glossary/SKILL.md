@@ -9,7 +9,7 @@ description: "Read governed vocabulary definitions and add new terms.
 
 **Purpose**: Provide access to governed vocabulary definitions and
 the process for adding new terms. **Scope**: Reading definitions from
-`@reference/glossary.json`, adding new terms with user approval, and
+`@registries/glossary.json`, adding new terms with user approval, and
 resolving terminology ambiguities. NOT the word list itself (that's
 in `@.claude/rules/glossary.md`, always in context). NOT the
 composition convention or framework documentation (see
@@ -19,7 +19,7 @@ any agent that needs to add a new term.
 
 ## Reading definitions
 
-1. Read `@reference/glossary.json`
+1. Read `@registries/glossary.json`
 2. Look up the term in `terms`, `facets.scopeModifiers`, or
    `facets.baseArtifacts`
 3. If the term has `abbreviationOf`, follow the reference to the
@@ -32,7 +32,7 @@ When a word is used repeatedly in conversation or appears in multiple
 files without a consistent definition, it should be governed.
 
 1. Check `@.claude/rules/glossary.md` — is it already listed?
-2. Check `@reference/glossary.json` — does it have a definition?
+2. Check `@registries/glossary.json` — does it have a definition?
 3. If not governed, determine what type it is:
 
 ### Adding a term
@@ -124,7 +124,7 @@ Optional:
 ## Cross-References
 
 - Word list: `@.claude/rules/glossary.md`
-- Definitions: `@reference/glossary.json`
+- Definitions: `@registries/glossary.json`
 - Framework: `@reference/framework-governed-vocabulary.md`
 - Intent audit: `/intent-audit` skill (catches undefined terms)
 - Governance audit: `/audit` skill (validates glossary health)

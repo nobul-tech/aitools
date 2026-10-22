@@ -100,7 +100,7 @@ This is the audit layer of the three-layer governance model.
 User invokes `/audit` explicitly. The skill:
 1. Reads all rules files (`.claude/rules/*.md`)
 2. Reads CLAUDE.md and plan file
-3. Reads `reference/incidents.json`
+3. Reads `registries/incidents.json`
 4. Scans for `TODO(incident):` markers via Grep
 5. Checks skill directories for completeness
 6. Produces the report above
@@ -118,5 +118,5 @@ User invokes `/audit` explicitly. The skill:
   - Three-layer governance: `@reference/framework-three-layer-governance.md`
   - Incident governance: `@reference/framework-incident-governance.md`
 - Operational rule: `@.claude/rules/incident-governance.md`
-- Incident data: `@reference/incidents.json`
+- Incident data: `@registries/incidents.json`
 - Incident filing: `.claude/skills/incident/SKILL.md`

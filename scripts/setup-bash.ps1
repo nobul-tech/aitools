@@ -5,7 +5,7 @@
 # Git for Windows release. Git Bash 5.x ships with Git for Windows 2.42+.
 # If bash is below 5.0, directs user to update Git for Windows.
 #
-# See reference/tool-registry.json for install source details.
+# See registries/tool-registry.json for install source details.
 
 . (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "aitools-lib.ps1")
 Initialize-Logging "setup-bash"

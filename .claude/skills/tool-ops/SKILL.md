@@ -103,5 +103,5 @@ To add a new tool:
 - Governance rule: `.claude/rules/tool-ops.md`
 - Framework documentation: `reference/framework-tool-ops.md`
 - Per-tool ops references: `reference/tool-ops-*.md`
-- Framework registry: `reference/framework-registry.json`
+- Framework registry: `registries/framework-registry.json`
 - Governed data access pattern: `.claude/rules/governed-data-access.md`
