@@ -5,8 +5,13 @@
 # tool_exception_record / Set-ToolException.
 #
 # Each case sources the lib in a fresh shell with an isolated HOME, calls one
-# wrapper, and prints its return code, globals, WARNINGS/ERRORS counters and the
-# summary rows; the bash and PowerShell results must match the expectation.
+# wrapper, and prints its return code, AITLIB_* / $script:AitLib* results,
+# WARNINGS/ERRORS counters and the summary rows; the bash and PowerShell results
+# must match the expectation. Also covered: a caller's own variables and
+# parameters survive sourcing the lib and calling the wrappers (PR #80 B1/M1),
+# unchanged and dry-run records do not warn (m1), one ACTION per run (m3), the
+# AITOOLS_PROFILE_SH/PS1 overrides, and the bash -> pwsh (Git Bash) branch forced
+# on this OS with AITLIB_PROFILE_VIA_PWSH=1 (m2).
 # Platform: macOS/Linux (pwsh runs with AITOOLS_PROFILE_TEST_ANY_OS=1). Safe to re-run.
 # Usage: bash tests/profile/test-lib.sh [--bash-only]
 
@@ -30,7 +35,8 @@ H="$WORK/home"
 DP="$H/repos/aitools-nobul-jose"
 
 FIX_KIND=""
-fixture() {  # fixture with-id|hostname-only|none
+FIX_NAME="Jose"
+fixture() {  # fixture with-id|hostname-only|none  (identity name: $FIX_NAME)
     FIX_KIND="$1"
     rm -rf "$H"; mkdir -p "$H/repos" "$H/.aitools"
     printf '{ "githubUser": "nobul-jose" }\n' > "$H/.aitools/config.json"
@@ -41,7 +47,7 @@ fixture() {  # fixture with-id|hostname-only|none
     cat > "$DP/profile.json" <<JSON
 {
   "version": 2,
-  "identity": { "github": "nobul-jose", "name": "Jose", "company": "nobul-tech", "git": { "name": "Jose", "email": "jose@nobul.tech" } },
+  "identity": { "github": "nobul-jose", "name": "$FIX_NAME", "company": "nobul-tech", "git": { "name": "Jose", "email": "jose@nobul.tech" } },
   "profiles": {
     "nobul-mac": { "machine": { $idline "hostname": "nobul-mac" } }
   }
@@ -54,70 +60,106 @@ JSON
     git -C "$DP" commit -q -m init
 }
 
+# Resolver stubs for the AITOOLS_PROFILE_SH / AITOOLS_PROFILE_PS1 override cases
+printf '#!/usr/bin/env bash\nprintf "path\\t/stub/aitools-dp\\nvia\\tenv\\n"\nexit 0\n' > "$WORK/stub.sh"
+printf '"path`t/stub/aitools-dp"\n"via`tenv"\nexit 0\n' > "$WORK/stub.ps1"
+
 # Bash driver: source the lib, run one call, print the results
 cat > "$WORK/drive.sh" <<'DRIVE'
 set -euo pipefail
+if [ "$CALL" = "keep" ]; then
+    # A caller's own variables with the names the lib used before PR #80's fix
+    USER_REPO_PATH=/caller/urp; PROFILE_FILE=/caller/pf; MACHINE_ALIAS=caller; PROFILE_NAME=caller-name
+fi
 source "$REPO/scripts/aitools-lib.sh"
 logging_init "test-lib"
 rc=0
 case "$CALL" in
     urp)  resolve_user_repo_path || rc=$? ;;
     rmp)  resolve_machine_profile || rc=$? ;;
+    rmp2) resolve_machine_profile || rc=$?; rc=0; resolve_machine_profile || rc=$? ;;
     eget) tool_exception_get go || rc=$? ;;
     eset) tool_exception_record go pkg-installer /usr/local/bin/go 1.22.5 || rc=$? ;;
+    eset2)
+        tool_exception_record go pkg-installer /usr/local/bin/go 1.22.5 || rc=$?
+        WARNINGS=0; : > "$AITOOLS_SUMMARY_FILE"; rc=0   # judge the second, identical call only
+        tool_exception_record go pkg-installer /usr/local/bin/go 1.22.5 || rc=$? ;;
+    keep) resolve_user_repo_path || rc=$?; resolve_machine_profile || rc=$? ;;
 esac
 printf 'rc=%s\n' "$rc"
 case "$CALL" in
-    urp)  printf 'path=%s via=%s\n' "$USER_REPO_PATH" "$USER_REPO_VIA" ;;
-    rmp)  printf 'alias=%s via=%s company=%s name=%s\n' "$MACHINE_ALIAS" "$MACHINE_VIA" "$PROFILE_COMPANY" "$PROFILE_NAME" ;;
-    eget) printf 'found=%s method=%s path=%s\n' "$TOOL_EXC_FOUND" "$TOOL_EXC_METHOD" "$TOOL_EXC_PATH" ;;
-    eset) printf 'pushed=%s\n' "$TOOL_EXC_PUSHED" ;;
+    urp)  printf 'path=%s via=%s\n' "$AITLIB_USER_REPO_PATH" "$AITLIB_USER_REPO_VIA" ;;
+    rmp|rmp2) printf 'alias=%s via=%s company=%s name=%s\n' "$AITLIB_MACHINE_ALIAS" "$AITLIB_MACHINE_VIA" "$AITLIB_PROFILE_COMPANY" "$AITLIB_PROFILE_NAME" ;;
+    eget) printf 'found=%s method=%s path=%s\n' "$AITLIB_TOOL_EXC_FOUND" "$AITLIB_TOOL_EXC_METHOD" "$AITLIB_TOOL_EXC_PATH" ;;
+    eset|eset2) printf 'result=%s pushed=%s\n' "$AITLIB_TOOL_EXC_RESULT" "$AITLIB_TOOL_EXC_PUSHED" ;;
+    keep)
+        printf 'kept=urp:%s pf:%s alias:%s name:%s\n' "$USER_REPO_PATH" "$PROFILE_FILE" "$MACHINE_ALIAS" "$PROFILE_NAME"
+        printf 'alias=%s urp-via=%s\n' "$AITLIB_MACHINE_ALIAS" "$AITLIB_USER_REPO_VIA" ;;
 esac
 printf 'warnings=%s errors=%s\n' "$WARNINGS" "$ERRORS"
 DRIVE
+# PowerShell driver. The parameters reproduce PR #80 B1: setup-user-config.ps1
+# declares [string]$UserRepoPath and dot-sources the lib; it must keep its value.
 cat > "$WORK/drive.ps1" <<'DRIVE'
+param([string]$UserRepoPath = "", [string]$MachineAlias = "", [string]$ProfileFile = "")
+$profileName = "caller-name"
 . (Join-Path $env:REPO "scripts/aitools-lib.ps1")
 Initialize-Logging "test-lib"
 $rc = 0
 switch ($env:CALL) {
     "urp"  { $rc = Resolve-UserRepoPath }
     "rmp"  { $rc = Resolve-MachineProfile }
+    "rmp2" { $null = Resolve-MachineProfile; $rc = Resolve-MachineProfile }
     "eget" { $r = Get-ToolException "go"; $rc = if ($null -eq $r) { 1 } else { 0 } }
     "eset" { $rc = Set-ToolException "go" "pkg-installer" "/usr/local/bin/go" "1.22.5" }
+    "eset2" {
+        $null = Set-ToolException "go" "pkg-installer" "/usr/local/bin/go" "1.22.5"
+        $script:warnings = 0; [IO.File]::WriteAllText($env:AITOOLS_SUMMARY_FILE, "")
+        $rc = Set-ToolException "go" "pkg-installer" "/usr/local/bin/go" "1.22.5"
+    }
+    "keep" { $null = Resolve-UserRepoPath; $rc = Resolve-MachineProfile }
 }
 "rc=$rc"
 switch ($env:CALL) {
-    "urp"  { "path=$($script:UserRepoPath) via=$($script:UserRepoVia)" }
-    "rmp"  { "alias=$($script:MachineAlias) via=$($script:MachineVia) company=$($script:ProfileCompany) name=$($script:ProfileName)" }
+    "urp"  { "path=$($script:AitLibUserRepoPath) via=$($script:AitLibUserRepoVia)" }
+    { $_ -in "rmp", "rmp2" } { "alias=$($script:AitLibMachineAlias) via=$($script:AitLibMachineVia) company=$($script:AitLibProfileCompany) name=$($script:AitLibProfileName)" }
     "eget" { $f = if ($r -and $r.Found) { "true" } else { "false" }; $m = if ($r) { $r.Method } else { "" }; $p = if ($r) { $r.Path } else { "" }; "found=$f method=$m path=$p" }
-    "eset" { $pu = if ($script:ToolExcPushed) { "true" } else { "false" }; "pushed=$pu" }
+    { $_ -in "eset", "eset2" } { $pu = if ($script:AitLibToolExcPushed) { "true" } else { "false" }; "result=$($script:AitLibToolExcResult) pushed=$pu" }
+    "keep" {
+        "kept=urp:$UserRepoPath pf:$ProfileFile alias:$MachineAlias name:$profileName"
+        "alias=$($script:AitLibMachineAlias) urp-via=$($script:AitLibUserRepoVia)"
+    }
 }
 "warnings=$($script:warnings) errors=$($script:errors)"
 DRIVE
 
-# run_case NAME CALL EXPECTED-OUTPUT EXPECTED-SUMMARY
+# run_case NAME CALL EXPECTED-OUTPUT EXPECTED-SUMMARY [EXTRA-ENV] [IMPLS]
+# EXTRA-ENV: space-separated VAR=value words (no spaces in values); IMPLS: "bash ps" (default) or "bash"
 run_case() {
-    local name="$1" call="$2" want="$3" wsum="$4" impl got
-    for impl in bash ps; do
+    local name="$1" call="$2" want="$3" wsum="$4" extra="${5:-}" impls="${6:-bash ps}" impl got
+    for impl in $impls; do
         if [ "$impl" = "ps" ] && ! $USE_PS; then continue; fi
         : > "$H/summary.txt"
         if [ "$impl" = "bash" ]; then
+            # shellcheck disable=SC2086  # $extra is word-split on purpose
             got=$(env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" REPO="$REPO" CALL="$call" \
-                AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac \
+                AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac $extra \
                 "$BASH_BIN" "$WORK/drive.sh" 2>/dev/null) || got="driver failed: $?"  # stderr: console log lines
-            got=$(printf '%s\n' "$got" | grep -E '^(rc|path|alias|found|pushed|warnings)=' || true)  # only the driver's result lines (log lines also reach stdout)
+            got=$(printf '%s\n' "$got" | grep -E '^(rc|path|alias|found|result|kept|warnings)=' || true)  # only the driver's result lines (log lines also reach stdout)
         else
+            # shellcheck disable=SC2086  # $extra is word-split on purpose
             got=$(env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" REPO="$REPO" CALL="$call" \
-                AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac AITOOLS_PROFILE_TEST_ANY_OS=1 \
-                pwsh -NoProfile -File "$WORK/drive.ps1" 2>/dev/null | perl -pe 's/\e\[[0-9;]*m//g') || got="driver failed: $?"  # Write-Host console lines dropped by the grep below
-            got=$(printf '%s\n' "$got" | grep -E '^(rc|path|alias|found|pushed|warnings)=' || true)  # only the driver's result lines
+                AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac AITOOLS_PROFILE_TEST_ANY_OS=1 $extra \
+                pwsh -NoProfile -File "$WORK/drive.ps1" -UserRepoPath /caller/urp -MachineAlias caller -ProfileFile /caller/pf \
+                2>/dev/null | perl -pe 's/\e\[[0-9;]*m//g') || got="driver failed: $?"  # Write-Host console lines dropped by the grep below
+            got=$(printf '%s\n' "$got" | grep -E '^(rc|path|alias|found|result|kept|warnings)=' || true)  # only the driver's result lines
         fi
         if [ "$got" = "$want" ]; then ok "$name ($impl): result"
         else bad "$name ($impl): got"; printf '%s\n' "$got" | sed 's/^/         /'; printf '       want\n'; printf '%s\n' "$want" | sed 's/^/         /'; fi
         local sum; sum=$(cat "$H/summary.txt")
         if [ "$sum" = "$wsum" ]; then ok "$name ($impl): summary rows"
         else bad "$name ($impl): summary '$sum', want '$wsum'"; fi
-        if [ "$call" = "eset" ]; then fixture "$FIX_KIND"; fi   # state changed: rebuild for the next implementation
+        case "$call" in eset*) fixture "$FIX_KIND" ;; esac   # state changed: rebuild for the next implementation
     done
 }
 
@@ -156,6 +198,13 @@ alias= via=none company=nobul-tech name=Jose
 warnings=0 errors=2" "ERROR|machine profile|no machine match
 ACTION||Run: aitools user init (pick or register this machine's profile)"
 
+# m3: the same failure twice in one run -> two ERROR rows, one ACTION
+run_case rmp-nomatch-twice rmp2 "rc=3
+alias= via=none company=nobul-tech name=Jose
+warnings=0 errors=4" "ERROR|machine profile|no machine match
+ACTION||Run: aitools user init (pick or register this machine's profile)
+ERROR|machine profile|no machine match"
+
 fixture with-id
 run_case eget-none eget "rc=0
 found=false method= path=
@@ -166,15 +215,73 @@ run_case eget-unavailable eget "rc=1
 found=false method= path=
 warnings=1 errors=0" ""
 
+# No remote: the push fails -> warning + ACTION
 fixture with-id
 run_case eset-written eset "rc=0
-pushed=false
+result=created pushed=false
 warnings=1 errors=0" "ACTION||run git push in $DP"
+
+# m1: an identical second record and a dry run write nothing: no warning, no ACTION
+fixture with-id
+run_case eset-unchanged eset2 "rc=0
+result=unchanged pushed=false
+warnings=0 errors=0" ""
+
+fixture with-id
+run_case eset-dry-run eset "rc=0
+result=dry-run pushed=false
+warnings=0 errors=0" "" "AITOOLS_DRY_RUN=1"
 
 fixture hostname-only
 run_case eset-refused eset "rc=3
-pushed=false
+result=refused pushed=false
 warnings=1 errors=0" "ACTION||run aitools user init to remember tool choices"
+
+# B1/M1: the caller's own variables and parameters survive sourcing the lib and
+# calling the wrappers (bash: USER_REPO_PATH, PROFILE_FILE, MACHINE_ALIAS,
+# PROFILE_NAME; PowerShell: -UserRepoPath, -MachineAlias, -ProfileFile, $profileName)
+fixture with-id
+run_case caller-vars-survive keep "rc=0
+kept=urp:/caller/urp pf:/caller/pf alias:caller name:caller-name
+alias=nobul-mac urp-via=convention
+warnings=0 errors=0" ""
+
+# AITOOLS_PROFILE_SH / AITOOLS_PROFILE_PS1 overrides: a missing resolver, then a stub
+fixture with-id
+run_case override-missing urp "rc=3
+path= via=none
+warnings=0 errors=1" "ERROR|dotprofile|resolver missing" "AITOOLS_PROFILE_SH=$WORK/none.sh AITOOLS_PROFILE_PS1=$WORK/none.ps1"
+
+run_case override-stub urp "rc=0
+path=/stub/aitools-dp via=env
+warnings=0 errors=0" "" "AITOOLS_PROFILE_SH=$WORK/stub.sh AITOOLS_PROFILE_PS1=$WORK/stub.ps1"
+
+# m2: the bash -> pwsh branch (Git Bash on Windows), forced on this OS. A
+# non-ASCII identity value must arrive intact (UTF-8 output).
+if $USE_PS; then
+    PWSH_ENV="AITLIB_PROFILE_VIA_PWSH=1 AITOOLS_PROFILE_TEST_ANY_OS=1"
+    fixture with-id
+    run_case via-pwsh-urp urp "rc=0
+path=$DP via=convention
+warnings=0 errors=0" "" "$PWSH_ENV" bash
+
+    FIX_NAME="José"
+    fixture with-id
+    run_case via-pwsh-rmp-utf8 rmp "rc=0
+alias=nobul-mac via=id company=nobul-tech name=José
+warnings=0 errors=0" "" "$PWSH_ENV" bash
+    FIX_NAME="Jose"
+
+    fixture hostname-only
+    run_case via-pwsh-eset-refused eset "rc=3
+result=refused pushed=false
+warnings=1 errors=0" "ACTION||run aitools user init to remember tool choices" "$PWSH_ENV" bash
+
+    fixture with-id
+    run_case via-pwsh-stub urp "rc=0
+path=/stub/aitools-dp via=env
+warnings=0 errors=0" "" "$PWSH_ENV AITOOLS_PROFILE_PS1=$WORK/stub.ps1" bash
+fi
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 if [ "$FAIL" -gt 0 ]; then exit 1; fi
