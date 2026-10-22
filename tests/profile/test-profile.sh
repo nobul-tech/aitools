@@ -734,7 +734,8 @@ jr_case() {
     CASE="$name"
     JOUT="$JW/$name.pl.json"
     RC=0
-    printf '%b' "$ops" | perl "$JPL" edit "$JW/in.json" "$JOUT" > "$JW/$name.pl.err" 2>&1 || RC=$?
+    local in="${JR_IN:-$JW/in.json}"
+    printf '%b' "$ops" | perl "$JPL" edit "$in" "$JOUT" > "$JW/$name.pl.err" 2>&1 || RC=$?
     if [ "$RC" -eq "$want" ]; then ok "$name: perl exit $RC"
     else bad "$name: perl exit $RC, want $want"; sed 's/^/       /' "$JW/$name.pl.err"; fi
     if [ "$want" -ne 0 ]; then
@@ -743,7 +744,7 @@ jr_case() {
     if $USE_PS; then
         local pout="$JW/$name.ps.json"
         RC=0
-        env AITOOLS_TEST_JSON_PS1="$JPS1" pwsh -NoProfile -File "$JW/driver.ps1" "$JW/in.json" "$pout" "$@" \
+        env AITOOLS_TEST_JSON_PS1="$JPS1" pwsh -NoProfile -File "$JW/driver.ps1" "$in" "$pout" "$@" \
             > "$JW/$name.ps.err" 2>&1 || RC=$?
         if [ "$RC" -eq "$want" ]; then ok "$name: pwsh exit $RC"
         else bad "$name: pwsh exit $RC, want $want"; sed 's/^/       /' "$JW/$name.ps.err"; fi
@@ -804,6 +805,36 @@ jr_case jr-not-object 2 "rename\tx\tversion\ty\n" "rename|x|version|y"
 jr_msg "rename: 'version' is not an object"
 jr_case jr-no-key 2 "rename\tx\n" "rename|x"
 jr_msg "rename: no key given"
+jr_case jr-empty-new 2 "rename\t\tprofiles\tfirst\n" "rename||profiles|first"
+jr_msg "rename: new key is empty"
+
+# Scalar and array values two levels down (review S3-M3-JsonRename-Review, nit 2)
+jr_case jr-deep-scalar 0 "rename\tp2\tclaude\tsettings\tpath\n" "rename|p2|claude|settings|path"
+jr_keys "z,p2,tab,emoji,when" claude settings
+jr_case jr-deep-array 0 "rename\tzz\tclaude\tsettings\tz\n" "rename|zz|claude|settings|z"
+jr_keys "zz,path,tab,emoji,when" claude settings
+
+# Null, empty-array, single-item-array and object values three levels deep; non-ASCII keys
+printf '%s\n' '{' '  "a": {' '    "b": {' '      "n": null,' '      "e": [],' '      "one": [' '        1' '      ],' \
+    '      "Été": {},' '      "k": true' '    }' '  }' '}' > "$JW/uni.json"
+JR_IN="$JW/uni.json"
+jr_case jr-null 0 "rename\tnn\ta\tb\tn\n" "rename|nn|a|b|n"
+jr_keys "nn,e,one,Été,k" a b
+jr_case jr-empty-array 0 "rename\tee\ta\tb\te\n" "rename|ee|a|b|e"
+jr_case jr-one-array 0 "rename\too\ta\tb\tone\n" "rename|oo|a|b|one"
+jr_case jr-unicode-key 0 "rename\tété2\ta\tb\tÉté\n" "rename|été2|a|b|Été"
+jr_keys "n,e,one,été2,k" a b
+# Another key equal ignoring Unicode case: refused by both (PowerShell could not read the result)
+jr_case jr-unicode-exists 2 "rename\tété\ta\tb\tk\n" "rename|été|a|b|k"
+jr_msg "rename: 'été' already exists"
+JR_IN=""
+
+# A failed rename leaves an existing output file untouched (perl writes only on success)
+printf 'sentinel\n' > "$JW/keep.json"
+RC=0
+printf 'rename\tx\tprofiles\tnope\n' | perl "$JPL" edit "$JW/in.json" "$JW/keep.json" 2>/dev/null || RC=$?  # rc checked below
+if [ "$RC" -eq 2 ] && [ "$(cat "$JW/keep.json")" = "sentinel" ]; then ok "jr-keep-out: existing OUT untouched on failure"
+else bad "jr-keep-out: rc $RC, OUT '$(cat "$JW/keep.json")'"; fi
 
 # --- usage ------------------------------------------------------------------------
 case_run usage-unknown 2 resolve --bogus

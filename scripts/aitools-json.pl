@@ -28,13 +28,14 @@
 #                           rename<TAB>NEW<TAB>SEG...  (last SEG = the key to
 #                             rename; it keeps its position and value). Errors
 #                             (exit 2, nothing written): "rename: no key given",
+#                             "rename: new key is empty",
 #                             "rename: '<seg>' not found" (a path segment or the
 #                             key is absent), "rename: '<seg>' is not an object",
 #                             "rename: '<NEW>' already exists" (another key equals
-#                             NEW ignoring ASCII case, as PowerShell property names
-#                             do). NEW equal to the key is a no-op; a case-only
+#                             NEW ignoring case (Unicode, keys read as UTF-8), as
+#                             PowerShell property names do). NEW equal to the key is a no-op; a case-only
 #                             rename (ABC -> abc) is allowed. Segments match exactly.
-#   snapshot FILE          compact {version, identity, cursor, profiles}
+#   snapshot FILE           compact {version, identity, cursor, profiles}
 #   tagged2json             key<TAB>value lines on stdin -> one compact object
 #                           (warn/error lines collected into warnings/errors)
 # For get/type/keys/items/json: 4 = FILE missing, 2 = FILE invalid.
@@ -194,6 +195,7 @@ sub delp {
 sub renp {
     my ($root, $new, @segs) = @_;
     die "rename: no key given\n" unless defined $new && @segs;
+    die "rename: new key is empty\n" if $new eq '';
     my $old = pop @segs;
     my $v = $root;
     for my $s (@segs) {
@@ -207,9 +209,11 @@ sub renp {
     for my $p (@{$v->[1]}) { if ($p->[0] eq $old) { $hit = $p; last } }
     die "rename: '$old' not found\n" unless $hit;
     return if $new eq $old;
+    my $fold = sub { my $s = $_[0]; utf8::decode($s); return lc $s };  # keys are UTF-8 bytes
+    my $want = $fold->($new);
     for my $p (@{$v->[1]}) {
         next if $p == $hit;
-        die "rename: '$new' already exists\n" if lc($p->[0]) eq lc($new);
+        die "rename: '$new' already exists\n" if $fold->($p->[0]) eq $want;
     }
     $hit->[0] = $new;
 }

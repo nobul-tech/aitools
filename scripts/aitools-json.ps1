@@ -118,7 +118,8 @@ function Set-JValue($Root, $Value, [string[]]$Segs) {
 # Rename-JKey ROOT NEWNAME SEG... -- rename the key named by the last SEG to
 # NEWNAME in place, keeping its position and value: the counterpart of the
 # aitools-json.pl edit op "rename", with the same rules and the same messages
-# (thrown): "rename: no key given", "rename: '<seg>' not found",
+# (thrown): "rename: no key given", "rename: new key is empty",
+# "rename: '<seg>' not found",
 # "rename: '<seg>' is not an object", "rename: '<NEWNAME>' already exists"
 # (another key equals NEWNAME ignoring case). NEWNAME equal to the key is a
 # no-op; a case-only rename (ABC -> abc) is allowed. Segments match exactly
@@ -126,6 +127,7 @@ function Set-JValue($Root, $Value, [string[]]$Segs) {
 # every key after it, then adding them back with the key renamed.
 function Rename-JKey($Root, [string]$NewName, [string[]]$Segs) {
     if ($null -eq $Segs -or $Segs.Count -eq 0) { throw "rename: no key given" }
+    if ($NewName -eq "") { throw "rename: new key is empty" }
     $o = $Root
     for ($i = 0; $i -lt $Segs.Count - 1; $i++) {
         $s = $Segs[$i]
@@ -147,9 +149,18 @@ function Rename-JKey($Root, [string]$NewName, [string[]]$Segs) {
     $names = [System.Collections.Generic.List[string]]::new()
     $values = [System.Collections.Generic.List[object]]::new()
     for ($j = $idx; $j -lt $props.Count; $j++) { $names.Add($props[$j].Name); $values.Add($props[$j].Value) }
-    foreach ($n in $names) { $o.PSObject.Properties.Remove($n) }
-    $names[0] = $NewName
-    for ($j = 0; $j -lt $names.Count; $j++) { $o | Add-Member -NotePropertyName $names[$j] -NotePropertyValue $values[$j] }
+    $newNames = [System.Collections.Generic.List[string]]::new($names)
+    $newNames[0] = $NewName
+    try {
+        foreach ($n in $names) { $o.PSObject.Properties.Remove($n) }
+        for ($j = 0; $j -lt $newNames.Count; $j++) { $o | Add-Member -NotePropertyName $newNames[$j] -NotePropertyValue $values[$j] }
+    } catch {
+        # Restore the original keys and order, then report: a failed rename changes nothing
+        $why = $_.Exception.Message
+        foreach ($n in $newNames) { $o.PSObject.Properties.Remove($n) }
+        for ($j = 0; $j -lt $names.Count; $j++) { $o | Add-Member -NotePropertyName $names[$j] -NotePropertyValue $values[$j] -Force }
+        throw "rename: failed, '$old' unchanged: $why"
+    }
 }
 
 # ConvertTo-NodeJson VALUE [-Compress] -- node JSON.stringify layout (LF, no BOM)
