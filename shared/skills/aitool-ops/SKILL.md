@@ -53,6 +53,27 @@ Future enhancement: `build-deploy.sh` could auto-generate this skill's
 content from the source files at build time, keeping it always current.
 For now, the content is manually authored.
 
+### Reading the current source
+
+For anything this card does not cover, or to check an entry against
+the current source, read `tool-ops-claude-code.md` (or any
+`tool-ops-<toolname>.md`) from the first location that has it:
+
+1. **Deployed copy**: `~/.aitools/reference/tool-ops-<toolname>.md`
+   (macOS/Linux), `%USERPROFILE%\.aitools\reference\tool-ops-<toolname>.md`
+   (Windows). `aitools` (deploy-harness) mirrors the aitools repo
+   `reference/` tree there.
+2. **aitools repo copy**: `reference/tool-ops-<toolname>.md` under the
+   `repoPath` key of `~/.aitools/config.json`
+   (`%USERPROFILE%\.aitools\config.json`); default `~/repos/aitools/`
+   (`%USERPROFILE%\repos\aitools\`).
+3. **This card** (the embedded snapshot below).
+
+Neither file is required: when both are absent, this card is the
+answer; say it may be stale. When a file and this card disagree, the
+file wins (it is newer). This skill stays read-only: never edit either
+file from here (use `/tool-ops` in the aitools repo).
+
 ---
 
 ## Claude Code — guide-subagent block
@@ -334,7 +355,9 @@ dir exists for the transient update session). This is benign noise.
 
 - Full tool-ops registry (CRUD): `/tool-ops` skill (aitools repo only)
 - Tool-ops governance rule: `.claude/rules/tool-ops.md` (aitools repo)
-- CC operational reference: `reference/tool-ops-claude-code.md` (aitools repo)
+- CC operational reference: `reference/tool-ops-claude-code.md` (aitools
+  repo; deployed copy `~/.aitools/reference/tool-ops-claude-code.md`; read
+  order in "Reading the current source")
 - Framework documentation: `reference/framework-tool-ops.md` (aitools repo)
 - Tool evaluation: `/tool-eval` skill
 - Tool install registry: `/tool-registry` skill
