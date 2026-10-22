@@ -60,7 +60,7 @@ Extended with concepts from:
 ## Implementing Artifacts
 
 - `@.claude/rules/artifact-harvesting.md` (governance)
-- `.claude/skills/harvest/SKILL.md` (process)
+- `shared/skills/harvest/SKILL.md` (process)
 - `harvesting/` (tracked artifact directory)
 - `/harvest` skill governs manifest data
 - `shared/hooks/harvest-session.sh` (SessionEnd/SessionStart automation)

@@ -18,6 +18,27 @@ CRUD (use `/tool-registry`). NOT the evaluation principles themselves
 evaluating a new tool, questioning an existing install method, or
 updating health flags.
 
+## Where the files live
+
+This is a user-level skill: `aitools install` deploys it to
+`~/.claude/skills/` and `~/.cursor/skills/`, so it loads in every repo.
+Its source is `shared/skills/tool-eval/` in the aitools repo. Every repo path
+below (`registries/`, `reference/`, `.claude/rules/`, `scripts/`) is relative
+to the aitools clone:
+
+- **Session on aitools** (the clone or one of its worktrees): the paths
+  resolve from the repo root. Reads and reviewed writes happen here.
+- **Session on any other repo**: open the clone named by `repoPath` in
+  `~/.aitools/config.json` (`%USERPROFILE%\.aitools\config.json` on
+  Windows) and read from there. A reviewed write lands in that clone; tell
+  the user it needs a commit there.
+- **No clone on this machine**: read the read-only copies under
+  `~/.aitools/registries/` and `~/.aitools/reference/` once deploy-harness
+  installs them. Never edit those copies; propose the change as an issue on
+  `nobul-tech/aitools` instead.
+- **None of these exist**: say the data is unavailable and stop. Do not
+  answer from memory.
+
 ## Running an evaluation
 
 1. **Load principles** — read `@.claude/rules/tool-evaluation.md`

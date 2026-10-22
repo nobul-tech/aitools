@@ -15,6 +15,27 @@ onboarding checklists (`@.claude/rules/tool-lifecycle.md`).
 **Audience**: Any agent that needs to look up a tool's install method,
 verify a version, or write a registry entry after evaluation.
 
+## Where the files live
+
+This is a user-level skill: `aitools install` deploys it to
+`~/.claude/skills/` and `~/.cursor/skills/`, so it loads in every repo.
+Its source is `shared/skills/tool-registry/` in the aitools repo. Every repo path
+below (`registries/`, `reference/`, `.claude/rules/`, `scripts/`) is relative
+to the aitools clone:
+
+- **Session on aitools** (the clone or one of its worktrees): the paths
+  resolve from the repo root. Reads and reviewed writes happen here.
+- **Session on any other repo**: open the clone named by `repoPath` in
+  `~/.aitools/config.json` (`%USERPROFILE%\.aitools\config.json` on
+  Windows) and read from there. A reviewed write lands in that clone; tell
+  the user it needs a commit there.
+- **No clone on this machine**: read the read-only copies under
+  `~/.aitools/registries/` and `~/.aitools/reference/` once deploy-harness
+  installs them. Never edit those copies; propose the change as an issue on
+  `nobul-tech/aitools` instead.
+- **None of these exist**: say the data is unavailable and stop. Do not
+  answer from memory.
+
 ## Reading tool entries
 
 1. Read `@registries/tool-registry.json`
