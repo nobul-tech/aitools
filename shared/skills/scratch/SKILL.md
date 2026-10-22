@@ -9,13 +9,16 @@ description: "Ephemeral session scratch files — the session directory,
 
 ## Intent
 
-**Purpose**: Manage ephemeral scratch files during a session —
-session directory creation, naming conventions, cleanup, and the
-commit message staging pattern. **Scope**: Ephemeral file lifecycle
-only. NOT artifact harvesting (see `/harvest` skill in projects
-that have `harvesting/`). NOT standing-order enforcement (that's
-the standing-order-guard hook). **Audience**: Every agent in every
-project.
+**Purpose**: Equip every agent to find or create its session scratch
+directory and use it for temp scripts, captured logs, commit messages
+and PR bodies — directory location for the main agent, a delegate and
+a git worktree, naming conventions and their harvest outcome, the
+commit-message and PR-body patterns, and the scratch lifecycle.
+**Scope**: Ephemeral file lifecycle only. NOT artifact harvesting (see
+`/harvest` skill in projects that have `harvesting/`). NOT
+standing-order enforcement (that's the standing-order-guard hook). NOT
+the governing principle and delegation duty (user rule `scratch.md`).
+**Audience**: Every agent in every project.
 
 ## Session scratch directory
 
@@ -196,8 +199,9 @@ repo has it. For other projects, add:
 
 ## Cross-References
 
-- Governing rule: user rule `scratch.md` (draft awaiting approval; see
-  the SCRATCH-RULE mission folder under `.aitools/channel/handoffs/`)
+- Governing rule: user rule `scratch.md` (source `shared/rules/scratch.md`
+  in the aitools repo; deployed to `~/.claude/rules/` once
+  deploy-harness ships a path for `shared/rules/`)
 - Standing orders: USO "Scratch files for complex scripting" and USO
   "Simple Bash commands only" (user CLAUDE.md); enforcement in the
   standing-order-guard hook

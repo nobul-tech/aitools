@@ -16,13 +16,26 @@ only in merge strategy.
 
 | Type | Merge strategy | Files |
 |------|---------------|-------|
-| Markdown | Interactive diff review via `deploy_managed_file` | CLAUDE.md, `~/.claude/rules/*.md`, skill SKILL.md files |
-| JSON config | Read-then-merge on managed fields. Profile-sourced fields use granular field-level review (`sync_managed_json` / `Sync-ManagedJson`: auto-adopt when profile silent, per-leaf overwrite/adopt/skip/abort on divergence); harness-managed keys (e.g. `hooks`) reconcile silently | settings.json, cli-config.json, mcp.json |
-| Shell script | Interactive diff review via `deploy_managed_file` | Hook scripts (`~/.claude/hooks/*.sh`) |
+| Markdown | Interactive diff review via `deploy_managed_file` (SOURCE is the source of truth; one menu: overwrite / accept & adopt / merge & adopt / skip / abort) | CLAUDE.md, `~/.claude/rules/*.md`, skill SKILL.md files |
+| JSON config | Read-then-merge on managed fields. Profile-sourced fields (settings.json) use granular field-level review (`sync_managed_json` / `Sync-ManagedJson`: auto-adopt when profile silent, per-leaf overwrite/adopt/skip/abort on divergence); harness-managed keys (e.g. `hooks`) reconcile silently. JSON deployed through `deploy_managed_file` is reviewed field by field with SOURCE owning every field (`review_json_fields` / `Review-JsonFields`; no merge) | settings.json, cli-config.json, mcp.json, deployed JSON |
+| Shell script | Interactive diff review via `deploy_managed_file` (same menu as markdown) | Hook scripts (`~/.claude/hooks/*.sh`) |
 
 `deploy_managed_file()` / `Deploy-ManagedFile` is defined in
 `@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1`.
 Full state machine spec: `@reference/managed-file-deployment.md`.
+Choices and failure handling: `@.claude/rules/agentic-standards.md`
+"Managed-file review choices and merge". There is no ancestor and no deploy
+state.
+
+**Adopt target.** Callers pass the absolute path of the repo file the
+content came from (`ADOPT_PATH` / `-AdoptPath`, `""` for none). On accept &
+adopt or merge & adopt the library writes that file itself, in the same
+step. Callers never copy files back. An adopt target in the aitools repo is
+a working-tree change only (no commit, no push). An adopt target in the
+dotprofile repo is committed and pushed to its main automatically (N-Q2).
+CLAUDE.md, a template, passes an adopt transform that strips the
+machine footer and reverses the interpolation (`ADOPT_TRANSFORM` /
+`-AdoptTransform`; today `adopt_claude_md`).
 
 ### Content sources
 
@@ -46,17 +59,22 @@ Full spec: `@reference/user-repo.md`
 These apply equally regardless of file type:
 
 1. **Backup before write**: call `backup_file` / `Backup-File` before
-   writing to an existing file. For markdown and shell script types,
-   `deploy_managed_file` handles this internally. For JSON config type,
-   the caller MUST call it explicitly.
+   writing to an existing file. For markdown and shell script types and
+   deployed JSON, `deploy_managed_file` handles this internally, for LOCAL
+   and for the adopt target, and restores the backups when a write, merge or
+   validation fails. For the other JSON config writers, the caller MUST call
+   it explicitly.
 2. **Diff logging**: log what changed to deploy.log before writing.
    Markdown/shell: handled by `deploy_managed_file`. JSON config: log
    changed fields with old → new values.
 3. **Post-write validation**: verify the written file immediately.
    JSON: valid parse + required keys. Markdown: non-empty + required
    sections. Shell: non-empty + executable bit.
-4. **Three-outcome tracking**: every deployment must resolve to
+4. **Outcome tracking**: every deployment must resolve to
    created, updated, or unchanged — and report via `write_summary`.
+   `deploy_managed_file` results (created, updated, verified, accept &
+   adopt, skipped, failed) are recorded with the deploy tracker; `failed`
+   is an ERROR row and the run continues with the next file.
 
 ### Platform-specific config values
 
@@ -82,7 +100,8 @@ Adding a row (new file type) or column (new attribute) requires updating:
 this rule, `@reference/managed-file-deployment.md`,
 `@.cursor/rules/managed-file-deployment.mdc`, and
 the `/incident` skill if there are implementation gaps. See
-`@.claude/rules/tool-lifecycle.md` "Deployment pattern updates".
+`@.claude/rules/tool-lifecycle.md` "Onboarding checklist" (deployment types
+table, protected).
 
 ### Cross-references
 

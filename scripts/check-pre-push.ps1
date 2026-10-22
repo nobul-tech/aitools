@@ -54,7 +54,9 @@ StepWarn "1" "Pre-commit passed" "confirm pre-commit checklist was run for each 
 # ---------------------------------------------------------------------------
 # 2. No scratch/sensitive files
 # ---------------------------------------------------------------------------
-$blocklist = '(chat\.txt|\.tmp$|\.env$|credentials|\.secret|scratch\.|temp\.|TODO\.txt)'
+# scratch.<ext> is limited to throwaway extensions so the user rule
+# shared/rules/scratch.md is not flagged (2026-10-21; keep in sync with .sh).
+$blocklist = '(chat\.txt|\.tmp$|\.env$|credentials|\.secret|scratch\.(txt|sh|ps1|py|js|log|out|json)$|temp\.|TODO\.txt)'
 $badFiles = @($pushFiles | Where-Object { $_ -match $blocklist })
 if ($badFiles.Count -eq 0) {
     StepPass "2" "No scratch/sensitive files"
