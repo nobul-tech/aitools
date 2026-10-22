@@ -1,0 +1,29 @@
+DRAFT (S3-M3-Docs, 2026-10-22) -- section intent for the child-log relay section of
+scripts/aitools-lib.sh and scripts/aitools-lib.ps1 (new intent statement; row R22 lib
+section intents). Source: S3-M3-LibKey-report.md "Protected-file drafts awaiting
+approval", wording kept, consumer names checked. Not applied (owned by PR #86).
+
+Where: aitools-lib.sh, immediately after the header line
+"# log helpers", PR #89, so installers and deploy-harness share one copy)" (sh:468);
+aitools-lib.ps1, immediately after the same header line (ps1:398).
+
+NEW (insert, both files):
+# Intent: give every parent script (installers, deploy-harness) one way to run a
+# child setup script and keep its log in deploy.jsonl: show the child's console
+# lines, mirror each structured line to deploy.jsonl with JSON escaping, and count
+# the child's warnings and errors. NOT a copier of the child's lines to deploy.log
+# (the child writes its own; the relay logs one error for a failed child) and NOT a
+# writer of summary rows (the child writes its own; Invoke-ChildRelayed adds one
+# ERROR row only for a throw, when given a summary tool name). Consumed by:
+# aitools-install.sh/.ps1 (after the follow-up that removes their own copies),
+# deploy-harness.sh/.ps1.
+
+(S3-M3-LibKey's wording, with two corrections from S3-M3-Docs-Check F15: the relay
+does log_error to deploy.log for a failed child (aitools-lib.sh:595-617, ps1:518-527),
+and the throw row needs SUMMARYTOOL (ps1:519).)
+
+Facts behind it (origin/feature/m3-rekey:scripts/aitools-lib.sh): jsonl_record :531-540
+(escaping via _aitlib_json_esc :495-503), relay_child_log :569-576, run_child_relayed
+:589-621; counters AITLIB_CHILD_WARNINGS / AITLIB_CHILD_ERRORS. The installers still
+define their own relay_child_log / Write-JsonlRecord (PR #89) and shadow the lib's copy
+until that follow-up (S3-M3-LibKey-report.md "Relay helpers").

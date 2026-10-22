@@ -1,0 +1,54 @@
+DRAFT (S3-M3-Docs, 2026-10-22) -- protected file plans/tool-support-and-machine-profile.md
+(the gate decision record). Edits 1-2 are the re-key design's wording drafts
+(S3-M3-Register-keydesign.md section i), exact against main 15cc56a. Edit 3 records
+commander decisions 5-7 of 2026-10-22 (S3-M3Lead-plan.md section 2), which are not in
+the record yet. Edit 4 is optional. Not applied.
+
+The table rows record the commander's answers; edits 2 and 4 append to an answer
+rather than rewrite it, so the 2026-10-21 answer stays readable.
+
+================================================================
+Edit 1 -- "Decisions that change the drafts", Machine identity bullet (line 23-25)
+================================================================
+OLD:
+- **Machine identity**: raw machine ids (P-Q2); resolver is native `scripts/aitools-profile.sh/.ps1`
+
+NEW:
+- **Machine identity**: raw machine ids (P-Q2), and machine profiles are keyed by them: `profiles.<machineId>` (lower-cased), human-readable name in the profile's `alias` field, tool exceptions at `profiles.<machineId>.toolExceptions`; legacy alias-keyed profiles are still read and re-keyed by `aitools-profile migrate` (commander, 2026-10-22); resolver is native `scripts/aitools-profile.sh/.ps1`
+
+(Only the first line of the bullet changes; "(P-Q3), not JavaScript; one scutil
+command ..." continues unchanged on the next lines.)
+
+================================================================
+Edit 2 -- table row P-Q12, Decision column
+================================================================
+OLD:
+| P-Q12 | Non-blocking | Non-interactive registration: add aitools user init --alias <A>? | Add --alias |  |
+
+NEW:
+| P-Q12 | Non-blocking | Non-interactive registration: add aitools user init --alias <A>? | Add --alias (sets the alias field of this machine's id-keyed profile; an alias used by another machine's profile is refused without a terminal, and needs an interactive confirm otherwise -- commander, 2026-10-22) |  |
+
+================================================================
+Edit 3 -- new bullets at the end of "Decisions that change the drafts"
+(after "- **Re-run the correctness (A) review as an independent delegate** (E-independence).")
+================================================================
+OLD:
+- **Re-run the correctness (A) review as an independent delegate** (E-independence).
+
+NEW:
+- **Re-run the correctness (A) review as an independent delegate** (E-independence).
+- **Registration never overwrites another machine** (commander, 2026-10-22): `aitools user init --alias <new>` without a terminal creates this machine's profile; an alias used by another machine's profile is refused unless the run is interactive and the user confirms.
+- **`aitools user init` scaffolds a missing profile.json** (identity + this machine's profile under its id), commits and pushes it (commander, 2026-10-22).
+- **config.json is generated from profile.json by deploy-harness**, which calls `setup-user-config.sh/.ps1`, the single writer (commander, 2026-10-22).
+
+(Source: S3-M3Lead-plan.md section 2, decisions 1, 6 and 7. Decision 2 is still
+PENDING there and is not recorded. Decision 5 is edit 1.)
+
+================================================================
+Edit 4 (optional) -- table row P-Q6, Decision column
+================================================================
+OLD:
+| P-Q6 | Non-blocking | Move googleDrives into profile.json now? | Later, under profiles.<alias>.googleDrives | later, but it should be under profiles.machineid or whatever.google drives and it should store the path and the name of the drive or whatever we can pull |
+
+NEW:
+| P-Q6 | Non-blocking | Move googleDrives into profile.json now? | Later, under profiles.<alias>.googleDrives (now `profiles.<machineId>.googleDrives`, the commander's note; commander, 2026-10-22) | later, but it should be under profiles.machineid or whatever.google drives and it should store the path and the name of the drive or whatever we can pull |

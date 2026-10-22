@@ -1,0 +1,32 @@
+DRAFT (S3-M3-Docs, 2026-10-22) -- protected file shared/claude-shared.md
+Row R19 (approved 2026-10-21, S5-Profile edit file). Text unchanged from the approved
+draft except one clause: "for my identity and every machine" -> "for my identity and
+every machine (machine profiles keyed by machine id)" (commander decision 5). Not
+applied. The same edit goes into <dotprofile>/claude/CLAUDE.md (deploy-paths.md
+"Template sync"): see dotprofile/claude/CLAUDE.md.edit.txt.
+
+Code cited:
+- {{USER_REPO_PATH}} is a template token only from PR #83:
+  origin/feature/m3-b4-setup-user-claude:scripts/setup-user-claude.sh:110-113 (display
+  form ~/...), :155-159 (substitution); setup-user-claude.ps1:92-94 (%USERPROFILE%\...),
+  :145-148. On main (15cc56a) the token is not substituted.
+- resolve_user_repo_path / Resolve-UserRepoPath: origin/feature/m3-rekey:
+  scripts/aitools-lib.sh:286, scripts/aitools-lib.ps1:218.
+- setup-user-config is the only writer of config.json:
+  origin/feature/m3-rekey:scripts/setup-user-config.sh:2-11.
+
+Depends on: #83 merged (else the line shows the raw token). Behaviour to know: on a
+machine with no dotprofile the token has no value and stays as `{{USER_REPO_PATH}}`
+(an empty value leaves its token in place, setup-user-claude.sh:150-154).
+
+Section: ## Cross-Platform Awareness
+
+OLD:
+- Projects live in git repos under `~/repos/` (macOS) / `%USERPROFILE%\repos\` (Windows)
+- Google Drive paths are auto-discovered by `aitools install` and stored in `~/.aitools/config.json` (`googleDrives` array) -- do not hardcode them
+
+NEW:
+- Projects live in git repos under `~/repos/` (macOS) / `%USERPROFILE%\repos\` (Windows)
+- My dotprofile repo (profile.json, personal CLAUDE.md template, rules, session archives) is `{{USER_REPO_PATH}}` on this machine -- convention `<reposPath>/aitools-<github-user>`. Code finds it with `resolve_user_repo_path` / `Resolve-UserRepoPath` (aitools-lib); never hardcode it
+- `profile.json` in the dotprofile is the source of truth for my identity and every machine (machine profiles keyed by machine id); `~/.aitools/config.json` is derived from it by `setup-user-config` -- change `profile.json`, never edit config.json by hand
+- Google Drive paths are auto-discovered by `aitools install` and stored in `~/.aitools/config.json` (`googleDrives` array) -- do not hardcode them

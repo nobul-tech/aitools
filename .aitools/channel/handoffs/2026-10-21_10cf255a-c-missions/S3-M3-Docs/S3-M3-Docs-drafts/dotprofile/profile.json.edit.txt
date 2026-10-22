@@ -1,0 +1,77 @@
+DRAFT (S3-M3-Docs, 2026-10-22) -- dotprofile profile.json meta (row R23 / batch B10;
+protected: an intent statement). Re-derived from the LIVE file (X17), read-only:
+/Users/new-jose/repos/aitools-nobul-jose/profile.json (dotprofile HEAD db37f89;
+profile.json unchanged since bce27bb) plus one
+uncommitted change by another session (claude.settings.modelSettings.claude-opus-5-5
+.effortLevel "medium" -> "high"; not ours, left alone). Not applied.
+
+What the live file holds today (read 2026-10-22):
+- version 2; NO meta; identity {github nobul-jose, email jose@nobul.tech, git {Jose,
+  jose@nobul.tech}} -- no identity.name / identity.company; cursor.cli {vimMode true,
+  model auto}; claude.settings (13 keys); NO overrides key.
+- profiles, all keyed by alias (revision 2.0 shape), none with machine.id:
+  laptop {name Jose, company Nobul, machine {hostname Joses-MBP, darwin, arm64, zsh}},
+  nobul-mac {name Jose, company nobul-tech, machine {hostname nobul-mac, darwin, arm64,
+  bash}}, workstation {name pepe, company nobul.tech, machine {hostname NewcoPC, win32,
+  x64, pwsh}}.
+
+Why the S4-Review / S5-Profile drafts are not copied: they predate bce27bb (X17), name
+aitools-profile.js (P-Q3), say "keyed by alias", and list "overrides", which the live
+file does not have (kept in scope as optional: the schema defines it).
+
+Consequences for B10 (facts from the shipped code, for the apply mission):
+1. `migrate` re-keys only profiles that have machine.id
+   (origin/feature/m3-rekey:scripts/aitools-profile.sh:1469-1481). The live file has
+   none, so `migrate` alone changes nothing: all three are "unclaimed". nobul-mac is
+   re-keyed when this Mac registers and claims it (`register --claim nobul-mac`,
+   sh:1301-1320); laptop and workstation stay alias-keyed until their machines register.
+2. Today's user init (pre-batch-5) on the live file: resolve matches nobul-mac by
+   hostname; picking it passes `--alias nobul-mac`, which register refuses with exit 4
+   ("alias ... used by profile nobul-mac, which is not registered ... --claim",
+   sh:1339-1351). Registration of the live file needs batch 5's `--claim`.
+   VERIFY after #86 batch 5.
+3. No resolver command writes meta.intent: `register --create` writes only
+   meta.schemaRevision "2.2" (sh:1242) and `migrate` writes no meta. So the meta block
+   below is a hand edit in B10 (backup first, commit, push -- N-Q2), after the
+   registration above.
+4. profile.json is dirty right now. The resolver's commit_profile refuses to commit a
+   profile.json that had uncommitted changes before its write (sh:950-958, 969-972);
+   user init's ui_commit does not check and would commit the other session's change
+   under "Register machine profile: ..." (scripts/aitools:345-356). Commit or revert the
+   pending effortLevel change before B10.
+5. P-Q1 (approved): add identity.name "Jose" and identity.company "nobul-tech"; keep the
+   per-profile Nobul / nobul.tech / pepe values until all machines run 2.1+ code.
+
+================================================================
+Edit -- add "meta" as the second top-level key (after "version")
+================================================================
+OLD:
+{
+  "version": 2,
+  "identity": {
+
+NEW:
+{
+  "version": 2,
+  "meta": {
+    "schemaRevision": "2.2",
+    "intent": {
+      "purpose": "Source of truth for one user's identity, tool preferences and machine profiles, shared across the user's machines through git",
+      "scope": "identity, claude.settings, cursor.cli, overrides, and one machine profile per machine, keyed by its machine id (environment:<name> for a hosted environment), with its alias, machine facts, per-machine name/company overrides and toolExceptions. NOT per-machine bootstrap pointers (~/.aitools/config.json). NOT secrets or credentials. NOT session transcripts (sessions/)",
+      "audience": "aitools-profile.sh/.ps1 (the resolver; the only writer of machine profiles and toolExceptions: register, migrate, exception-set), aitools user init, setup-user-config, setup-user-settings, setup-user-claude, setup-user-cursor, build-deploy.sh, and the tool setup scripts through the tool exception helpers"
+    }
+  },
+  "identity": {
+
+Notes:
+- "schemaRevision": "2.2" is true only once at least one profile is id-keyed; until
+  this Mac registers, the file is a 2.0/2.1 mix. Suggested: write meta in the same B10
+  commit as the nobul-mac claim.
+- The same intent text is in the R18 draft's example (reference/user-repo.md "Profile
+  Schema"), so the reference and the live file agree. Approve them as one text.
+- setup-user-settings also writes profile.json (claude.settings, on adopt); it is in the
+  audience, and "only writer of machine profiles and toolExceptions" stays true -- with
+  one known exception, not named in the intent: the legacy v1 -> v2 migration in
+  `aitools user init` (origin/feature/m3-rekey:scripts/aitools:121-242) writes
+  alias-keyed profiles itself (S3-M3-Docs-Check F4; INCIDENT in the approval page). It
+  only runs on a v1 file, which the live dotprofile is not.

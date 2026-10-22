@@ -1,0 +1,35 @@
+DRAFT (S3-M3-Docs, 2026-10-22) -- governed glossary entries (registries/glossary.json,
+written only through the /glossary skill; protected). Two modified terms. No term is
+added or removed, so .claude/rules/glossary.md (the word list) does not change. Not
+applied.
+
+Process followed (/glossary): both terms are already governed (glossary.md lines 75-77);
+this is a definition change driven by commander decision 5 (2026-10-22); "alias" (base
+artifact) stays distinct, as the current definition already says.
+
+================================================================
+Term "machine alias" (glossary.json, terms["machine alias"])
+================================================================
+OLD definition:
+"The key of a machine profile (for example nobul-mac). Chosen or registered at aitools user init (non-interactively with --alias) and cached per machine in ~/.aitools/config.json machineAlias, which is re-derived on every run. Not the base artifact 'alias' (a shell alias file)."
+
+NEW definition:
+"The human-readable name of a machine profile (its 'alias' field, for example nobul-mac). Since profile.json revision 2.2 it is a label, not the key: machine profiles are keyed by machine id. Chosen at aitools user init (non-interactively with --alias), selectable with --alias or AITOOLS_MACHINE_ALIAS, and written to ~/.aitools/config.json machineAlias as a display value. In a revision 2.1 profile.json the alias was the key. Not the base artifact 'alias' (a shell alias file)."
+
+OLD source: "reference/user-repo.md (after M3); decision P-Q12 (plans/tool-support-and-machine-profile.md)"
+NEW source: "reference/user-repo.md \"Profile Schema\"; decisions P-Q12 and commander decision 5 of 2026-10-22 (plans/tool-support-and-machine-profile.md)"
+
+================================================================
+Term "machine profile" (glossary.json, terms["machine profile"])
+================================================================
+OLD definition:
+"A field inside the profile (profile.json): one entry of its 'profiles' object, keyed by machine alias, holding one machine's (or one hosted environment's) per-machine overrides of identity name/company, machine id, and tool exceptions. Chosen on every run by the machine resolver (scripts/aitools-profile.sh/.ps1); never another machine's profile as a fallback. Not a separate file and not a shell profile (.zshrc, PowerShell $PROFILE)."
+
+NEW definition:
+"A field inside the profile (profile.json): one entry of its 'profiles' object, keyed by machine id (environment:<name> for a hosted environment without one), holding one machine's (or one hosted environment's) machine alias, per-machine overrides of identity name/company, machine id, and tool exceptions. Chosen on every run by the machine resolver (scripts/aitools-profile.sh/.ps1); never another machine's profile as a fallback. Not a separate file and not a shell profile (.zshrc, PowerShell $PROFILE)."
+
+Source unchanged, plus "; commander decision 5 of 2026-10-22".
+
+Code cited: origin/feature/m3-rekey:scripts/aitools-profile.sh:25-30 (keys and the
+alias field), :495-528 (id-keyed vs legacy), :1219-1431 (register writes only this
+machine's key).

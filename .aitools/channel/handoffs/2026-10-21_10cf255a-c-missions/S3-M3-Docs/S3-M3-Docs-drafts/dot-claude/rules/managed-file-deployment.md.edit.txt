@@ -1,0 +1,49 @@
+DRAFT (S3-M3-Docs, 2026-10-22) -- protected file .claude/rules/managed-file-deployment.md
+Row R13 (approved 2026-10-21 as S4-Review's 2 edits), re-derived against main 15cc56a
+and the code as shipped. Not applied.
+
+Why the approved text changed:
+- Edit 1: the approved text named aitools-profile.js (superseded by P-Q3) and
+  config.json machineAlias as step 4 (superseded by id keys, commander decision 5).
+  The "Template interpolation" bullet also said "at deploy time", which is no longer
+  true for deploy/ (#95 resolves at run time on the target machine).
+- Edit 2: the approved "old" text ("Deployment pattern updates") is no longer on main;
+  main already points at tool-lifecycle.md "Onboarding checklist", which the approved
+  R2 rewrite removes. The approved destination (/tool-adopt step 5) exists on main
+  (shared/skills/tool-adopt/SKILL.md "5. Onboarding checklist", item "deployment types
+  table for a new file type").
+
+Code cited:
+- origin/feature/m3-rekey:scripts/aitools-profile.sh:476-488 (resolution order),
+  :631-765 (resolve_machine); :763 (no match = error)
+- origin/feature/m3-b4-setup-user-claude:scripts/setup-user-claude.sh:65-91 (wrapper
+  results only; no alias / hostname / first-profile fallback), :149-163 (interpolation)
+- origin/feature/m3-b5-build-deploy:scripts/build-deploy.sh:233-238 (no build-time
+  interpolation; resolved on the target machine)
+
+Depends on: #83 and #95 merged (the "first profile" fallback is still on main in
+scripts/setup-user-claude.sh and build-deploy.sh until then).
+
+================================================================
+Edit 1 -- section "Content sources"
+================================================================
+OLD:
+- **Template interpolation**: `{{PLACEHOLDER}}` tokens in CLAUDE.md replaced with `profile.json` values at deploy time
+- **Machine profile selection**: `config.json` `machineAlias` → `profile.json` `profiles[alias]`. Fallback: hostname match, then first profile
+
+NEW:
+- **Template interpolation**: `{{PLACEHOLDER}}` tokens in CLAUDE.md replaced with this machine's profile values when the setup script runs on that machine (dev path and generated deploy/ scripts alike)
+- **Machine profile selection**: one resolver (`aitools-profile.sh` / `.ps1`, through `resolve_machine_profile` / `Resolve-MachineProfile`): override → environment → `profiles[<machine id>]` → config.json `machineId` (only when the id cannot be detected) → config.json `machineAlias` (2.1 profiles only) → hostname (warns) → no match = ERROR, never another machine's profile. Order and failure behaviour: `@reference/user-repo.md` "Resolution"
+
+================================================================
+Edit 2 -- section "Updating this table"
+================================================================
+OLD:
+the `/incident` skill if there are implementation gaps. See
+`@.claude/rules/tool-lifecycle.md` "Onboarding checklist" (deployment types
+table, protected).
+
+NEW:
+the `/incident` skill if there are implementation gaps. Tool onboarding checks
+this table through `/tool-adopt` step 5 ("deployment types table for a new file
+type").
