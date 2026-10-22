@@ -366,21 +366,54 @@ CURSOR_RULES_DIR="$CURSOR_DIR/rules"
 
 # Print the Cursor .mdc form of the Claude Code rule file $1 on stdout.
 #   - No frontmatter: "alwaysApply: true" is added (always loaded, as in Claude Code).
-#   - A top-level "paths:" key (Claude Code path scoping; a list or one value)
-#     becomes "globs:" with the same value; "alwaysApply: false" is added unless
-#     the frontmatter sets alwaysApply (Cursor auto-attaches on matching files).
+#   - A top-level "paths:" key (Claude Code path scoping: a block list, a list at
+#     column 0, one value, or a [a, b] flow list) becomes a "globs:" block list,
+#     one "  - " item per pattern (Cursor splits an inline value on commas and
+#     reads only indented items). Each relative pattern is anchored as
+#     "**/<pattern>": Cursor matches a user rule's glob against the file path
+#     relative to the directory that owns .cursor/rules ($HOME), and Claude Code
+#     paths are project-relative. Absolute and "**/" patterns are kept.
+#     "alwaysApply: false" is added unless the frontmatter sets alwaysApply.
 #   - Every other frontmatter line and the body are kept; CRLF becomes LF and a
 #     UTF-8 BOM is dropped. Parity: ConvertTo-CursorRule in setup-user-cursor.ps1.
 cursor_rule_from_md() {
     perl -e '
+        sub anchor {
+            my $g = shift;
+            $g =~ s/\A\s+//; $g =~ s/\s+\z//;
+            if ($g =~ /\A"(.*)"\z/) { $g = $1 } elsif ($g =~ /\A\x27(.*)\x27\z/) { $g = $1 }
+            return "" if $g eq "";
+            return $g if $g eq "**" || $g =~ m{\A(?:/|\*\*/|[A-Za-z]:[\\/]|\\\\)};
+            $g =~ s{\A\./}{};
+            return "**/$g";
+        }
+        sub flow_items {
+            my ($v, $depth, $cur, @items) = (shift, 0, "");
+            for my $c (split //, $v) {
+                if ($c eq "{") { $depth++ } elsif ($c eq "}" && $depth > 0) { $depth-- }
+                if ($c eq "," && $depth == 0) { push @items, $cur; $cur = ""; next }
+                $cur .= $c;
+            }
+            push @items, $cur;
+            return @items;
+        }
         local $/; my $t = <STDIN>; $t = "" unless defined $t;
         $t =~ s/\A\xEF\xBB\xBF//; $t =~ s/\r\n/\n/g;
         if ($t =~ /\A---[ \t]*\n(?:(.*?)\n)?---[ \t]*(?:\n|\z)(.*)\z/s) {
             my ($fm, $body) = (defined $1 ? $1 : "", $2);
             my (@out, $always, $globs, $in_paths);
             for my $line (split /\n/, $fm, -1) {
-                if ($line =~ /^paths:(.*)$/) { push @out, "globs:$1"; $globs = 1; $in_paths = 1; next; }
-                if ($in_paths && $line =~ /^\s+-\s/) { push @out, $line; next; }
+                if ($line =~ /^paths:[ \t]*(.*?)[ \t]*$/) {
+                    my $v = $1; my @items;
+                    if ($v =~ /\A\[(.*)\]\z/) { @items = flow_items($1) } elsif ($v ne "") { @items = ($v) }
+                    push @out, "globs:"; $in_paths = 1;
+                    for my $i (@items) { my $g = anchor($i); if ($g ne "") { push @out, "  - $g"; $globs = 1 } }
+                    next;
+                }
+                if ($in_paths && $line =~ /^\s*-\s+(.*)$/) {
+                    my $g = anchor($1); if ($g ne "") { push @out, "  - $g"; $globs = 1 }
+                    next;
+                }
                 $in_paths = 0;
                 $always = 1 if $line =~ /^alwaysApply:/;
                 $globs = 1 if $line =~ /^globs:/;
@@ -394,14 +427,42 @@ cursor_rule_from_md() {
     ' < "$1"
 }
 
+# Check a converted .mdc ($1) the way Cursor parses it: Cursor splits the whole
+# file on "---" and takes the first non-empty piece as the frontmatter, so a
+# "---" inside a frontmatter value moves the rest of it into the body. The
+# converter always writes alwaysApply, so a parsed frontmatter without it means
+# Cursor would misread the rule. Prints a reason, or nothing when the file is fine.
+# Parity: Test-CursorRuleParse in setup-user-cursor.ps1.
+cursor_rule_check() {
+    perl -e '
+        local $/; my $t = <STDIN>; $t = "" unless defined $t;
+        $t =~ s/\A\s+//;
+        my @p = grep { length } split /---/, $t, -1;
+        my $fm = @p ? $p[0] : "";
+        print "Cursor would not see alwaysApply in its frontmatter (a --- inside a frontmatter value?)" unless $fm =~ /^alwaysApply:/m;
+    ' < "$1"
+}
+
+# Lower-case a name (duplicate detection: APFS and NTFS are case-insensitive)
+lower_name() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
 if [ ! -d "$HARNESS_RULES_DIR" ]; then
     log "No harness rules at $(display_path "$HARNESS_RULES_DIR") (deploy-harness has not run) -- skipping"
     write_summary OK "cursor rules" "n/a (no harness rules)"
+elif [ ! -r "$HARNESS_RULES_DIR" ] || [ ! -x "$HARNESS_RULES_DIR" ]; then
+    log_error "Cannot list $(display_path "$HARNESS_RULES_DIR") (permission denied)"
+    write_summary ERROR "cursor rules" "cannot read harness rules"
 else
     # Source files: every regular, non-hidden file, flat (the deploy-harness contract)
     RULE_SOURCES=""
+    RULE_BROKEN=""   # dangling symlinks: reported as failed in the deploy loop
     for rule_src in "$HARNESS_RULES_DIR"/*; do
-        [ -e "$rule_src" ] || continue
+        if [ -L "$rule_src" ] && [ ! -e "$rule_src" ]; then
+            RULE_BROKEN="${RULE_BROKEN}$(basename "$rule_src")
+"
+            continue
+        fi
+        [ -e "$rule_src" ] || continue   # the unexpanded glob of an empty directory
         rule_base=$(basename "$rule_src")
         if [ ! -f "$rule_src" ]; then
             log "Ignoring non-file in harness rules: $rule_base"
@@ -411,7 +472,7 @@ else
 "
     done
 
-    if [ -z "$RULE_SOURCES" ]; then
+    if [ -z "$RULE_SOURCES" ] && [ -z "$RULE_BROKEN" ]; then
         log "Harness rules directory $(display_path "$HARNESS_RULES_DIR") is empty -- skipping"
         write_summary OK "cursor rules" "n/a (no harness rules)"
     else
@@ -424,7 +485,16 @@ else
 
         deploy_tracker_init
         ERRORS_BEFORE_CURSOR_RULES=$ERRORS
-        RULE_DESTS=""   # newline-separated deployed names (bash 3.2: no associative arrays)
+        while IFS= read -r broken_name; do
+            [ -n "$broken_name" ] || continue
+            log_error "Failed: $broken_name: dangling symlink in $(display_path "$HARNESS_RULES_DIR")"
+            deploy_tracker_record "failed" "cursor rules" "$broken_name"
+        done <<< "$RULE_BROKEN"
+
+        # Newline-separated name lists (bash 3.2: no associative arrays)
+        RULE_DESTS=""       # deployed names
+        RULE_DESTS_LC=""    # the same, lower-cased (duplicate and preserved checks)
+        RULE_CONVERTED=""   # deployed names converted from .md
         while IFS= read -r rule_src; do
             [ -n "$rule_src" ] || continue
             rule_base=$(basename "$rule_src")
@@ -437,11 +507,13 @@ else
                 *) log "Copying $rule_base as is (Cursor loads only *.mdc rule files)" ;;
             esac
 
-            # Two sources mapping to one target (x.md and x.mdc): the first wins
+            # Two sources mapping to one target (x.md and x.mdc; names compared
+            # case-insensitively): the first wins
+            dest_lc=$(lower_name "$dest_name")
             case "
-$RULE_DESTS" in
+$RULE_DESTS_LC" in
                 *"
-$dest_name
+$dest_lc
 "*)
                     log_error "Skipped duplicate: $rule_base -> $dest_name (already deployed from another harness rule)"
                     deploy_tracker_record "failed" "cursor rules" "$rule_base"
@@ -449,6 +521,12 @@ $dest_name
             esac
             RULE_DESTS="${RULE_DESTS}${dest_name}
 "
+            RULE_DESTS_LC="${RULE_DESTS_LC}${dest_lc}
+"
+            if [ "$dest_name" != "$rule_base" ]; then
+                RULE_CONVERTED="${RULE_CONVERTED}${dest_name}
+"
+            fi
 
             rule_content=""
             if [ "$dest_name" != "$rule_base" ]; then
@@ -485,17 +563,22 @@ $dest_name
         done <<< "$RULE_SOURCES"
 
         if [ "$DRY_RUN" = "true" ]; then
-            write_summary OK "cursor rules" "dry run (no files written)"
+            if [ "$_DT_FAILED" -gt 0 ]; then
+                write_summary ERROR "cursor rules" "$_DT_FAILED failed (dry run)"
+            else
+                write_summary OK "cursor rules" "dry run (no files written)"
+            fi
         else
             # Preserved: files in ~/.cursor/rules not produced from ~/.aitools/rules
             for existing in "$CURSOR_RULES_DIR"/*; do
                 [ -f "$existing" ] || continue
                 exist_name=$(basename "$existing")
                 case "$exist_name" in *.bak.*) continue ;; esac
+                exist_lc=$(lower_name "$exist_name")
                 case "
-$RULE_DESTS" in
+$RULE_DESTS_LC" in
                     *"
-$exist_name
+$exist_lc
 "*) ;;
                     *)  log "Preserved unmanaged rule: $exist_name"
                         deploy_tracker_record "preserved" "cursor rules" "$exist_name" ;;
@@ -522,6 +605,19 @@ $exist_name
                         esac ;;
                 esac
             done <<< "$RULE_DESTS"
+
+            # Converted rules: check them as Cursor parses them (warn: the rule is
+            # deployed but Cursor would misread its frontmatter)
+            while IFS= read -r dest_name; do
+                [ -n "$dest_name" ] || continue
+                dest_path="$CURSOR_RULES_DIR/$dest_name"
+                [ -s "$dest_path" ] || continue
+                if ! parse_problem=$(cursor_rule_check "$dest_path"); then
+                    log_error "Validation failed: cannot check $dest_name"
+                elif [ -n "$parse_problem" ]; then
+                    log_warn "$dest_name: $parse_problem -- fix the source rule in ~/.aitools/rules"
+                fi
+            done <<< "$RULE_CONVERTED"
 
             if [ "$_DT_FAILED" -gt 0 ]; then
                 # deploy_tracker_summary writes the ERROR row ("N failed")

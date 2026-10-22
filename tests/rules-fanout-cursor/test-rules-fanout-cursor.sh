@@ -86,24 +86,74 @@ conv() { bash -c "source '$CONV'; cursor_rule_from_md '$1'"; }
 printf 'Body line\n' > "$GOLD/nofm.md"
 printf -- '---\nalwaysApply: true\n---\nBody line\n' > "$GOLD/nofm.want"
 printf -- '---\npaths:\n  - a/**\n  - b/**\n---\nBody\n' > "$GOLD/paths.md"
-printf -- '---\nglobs:\n  - a/**\n  - b/**\nalwaysApply: false\n---\nBody\n' > "$GOLD/paths.want"
+printf -- '---\nglobs:\n  - **/a/**\n  - **/b/**\nalwaysApply: false\n---\nBody\n' > "$GOLD/paths.want"
 printf -- '---\npaths: src/**/*.ts\ndescription: x\n---\nB\n' > "$GOLD/inline.md"
-printf -- '---\nglobs: src/**/*.ts\ndescription: x\nalwaysApply: false\n---\nB\n' > "$GOLD/inline.want"
+printf -- '---\nglobs:\n  - **/src/**/*.ts\ndescription: x\nalwaysApply: false\n---\nB\n' > "$GOLD/inline.want"
 printf -- '---\ndescription: keep\nalwaysApply: true\n---\nB\n' > "$GOLD/native.md"
 printf -- '---\ndescription: keep\nalwaysApply: true\n---\nB\n' > "$GOLD/native.want"
 printf -- '---\n---\nB\n' > "$GOLD/emptyfm.md"
 printf -- '---\nalwaysApply: true\n---\nB\n' > "$GOLD/emptyfm.want"
 printf '\xEF\xBB\xBF---\r\npaths:\r\n  - x/**\r\n---\r\nB\r\n' > "$GOLD/crlf.md"
-printf -- '---\nglobs:\n  - x/**\nalwaysApply: false\n---\nB\n' > "$GOLD/crlf.want"
+printf -- '---\nglobs:\n  - **/x/**\nalwaysApply: false\n---\nB\n' > "$GOLD/crlf.want"
+# N1: a YAML list at column 0 becomes indented items
+printf -- '---\npaths:\n- scripts/**\n---\nB\n' > "$GOLD/col0.md"
+printf -- '---\nglobs:\n  - **/scripts/**\nalwaysApply: false\n---\nB\n' > "$GOLD/col0.want"
+# N2: a flow list and a brace pattern become block items (Cursor splits inline values on commas)
+printf -- "---\npaths: [\"a/**\", 'b/**', src/**/*.{ts,tsx}]\n---\nB\n" > "$GOLD/flow.md"
+printf -- '---\nglobs:\n  - **/a/**\n  - **/b/**\n  - **/src/**/*.{ts,tsx}\nalwaysApply: false\n---\nB\n' > "$GOLD/flow.want"
+printf -- '---\npaths: src/**/*.{ts,tsx}\n---\nB\n' > "$GOLD/brace.md"
+printf -- '---\nglobs:\n  - **/src/**/*.{ts,tsx}\nalwaysApply: false\n---\nB\n' > "$GOLD/brace.want"
+# Already anchored, absolute, and ./ patterns
+printf -- '---\npaths:\n  - "**/x"\n  - /abs/y\n  - ./rel/z\n---\nB\n' > "$GOLD/keep.md"
+printf -- '---\nglobs:\n  - **/x\n  - /abs/y\n  - **/rel/z\nalwaysApply: false\n---\nB\n' > "$GOLD/keep.want"
+GOLDEN="nofm paths inline native emptyfm crlf col0 flow brace keep"
 
-for g in nofm paths inline native emptyfm crlf; do
+for g in $GOLDEN; do
     conv "$GOLD/$g.md" > "$GOLD/$g.got"
     check "convert: $g" "cmp -s '$GOLD/$g.got' '$GOLD/$g.want'"
 done
 
+# --- resolution: converted globs match a repo file as Cursor resolves them ----
+# Model of the IDE matcher (Cursor 3.13.10 cursor-agent-exec main.js, aL/rL): a
+# relative glob of ~/.cursor/rules/x.mdc is matched against the file path
+# relative to the directory owning .cursor/rules, i.e. $HOME. Glob subset:
+# **/, **, *, ?, {a,b}. The un-anchored form is checked too, to show the model
+# reproduces the defect the anchoring fixes.
+glob_match() {  # glob, path-relative-to-HOME -> exit 0 match, 1 no match, other = model error
+    perl -e '
+        my ($g, $p) = @ARGV; my $r = "";
+        while (length $g) {
+            if ($g =~ s#\A\*\*/##) { $r .= "(?:.*/)?" }
+            elsif ($g =~ s#\A\*\*##) { $r .= ".*" }
+            elsif ($g =~ s#\A\*##) { $r .= "[^/]*" }
+            elsif ($g =~ s#\A\?##) { $r .= "[^/]" }
+            elsif ($g =~ s#\A\{([^\}]*)\}##) { $r .= "(?:" . join("|", map { quotemeta } split /,/, $1) . ")" }
+            else { $g =~ s#\A(.)##s; $r .= quotemeta($1) }
+        }
+        exit($p =~ /\A$r\z/ ? 0 : 1);
+    ' "$1" "$2"
+}
+no_match() { glob_match "$1" "$2"; [ "$?" -eq 1 ]; }  # exactly "no match", not a model crash
+check "resolve: **/scripts/** matches repos/aitools/scripts/a.sh" "glob_match '**/scripts/**' 'repos/aitools/scripts/a.sh'"
+check "resolve: un-anchored scripts/** does not (the defect)" "no_match 'scripts/**' 'repos/aitools/scripts/a.sh'"
+check "resolve: un-anchored scripts/** matches only ~/scripts (model sanity)" "glob_match 'scripts/**' 'scripts/a.sh'"
+check "resolve: **/src/**/*.{ts,tsx} matches repos/x/src/a/b.tsx" "glob_match '**/src/**/*.{ts,tsx}' 'repos/x/src/a/b.tsx'"
+check "resolve: **/CLAUDE.md matches repos/aitools/CLAUDE.md" "glob_match '**/CLAUDE.md' 'repos/aitools/CLAUDE.md'"
+# Every glob the converter emits for the repo's own path-scoped rules resolves
+for rf in "$ROOT"/.claude/rules/*.md; do
+    grep -q '^paths:' "$rf" || continue
+    conv "$rf" > "$GOLD/repo-$(basename "$rf").mdc"
+done
+# Frontmatter only (between the first two --- lines): bodies have bullet lists too
+RESOLVE_BAD=$(perl -ne 'if ($. == 1) { $in = /^---/ ? 1 : 0; next } if ($in && /^---/) { $in = 0 } if ($in && /^  - (.*)$/) { print "$ARGV: $1\n" unless $1 =~ m{\A(?:\*\*/|/)} } close ARGV if eof' "$GOLD"/repo-*.mdc)
+RESOLVE_COUNT=$(perl -ne 'if ($. == 1) { $in = /^---/ ? 1 : 0; next } if ($in && /^---/) { $in = 0 } print "x\n" if $in && /^  - /; close ARGV if eof' "$GOLD"/repo-*.mdc | wc -l | tr -d ' ')
+check "resolve: the repo's path-scoped rules produce globs (count $RESOLVE_COUNT)" "[ \"$RESOLVE_COUNT\" -gt 0 ]"
+check "resolve: every repo paths: glob is anchored (**/ or absolute)" "[ -z \"\$RESOLVE_BAD\" ]"
+check "resolve: config-file-safety scripts/** resolves in a repo under HOME" "grep -qxF '  - **/scripts/**' '$GOLD/repo-config-file-safety.md.mdc' && glob_match '**/scripts/**' 'repos/aitools/scripts/setup-x.sh'"
+
 # --- PS1 parity: ConvertTo-CursorRule gives the same bytes --------------------
 if command -v pwsh >/dev/null 2>&1; then
-    for g in nofm paths inline native emptyfm crlf; do
+    for g in $GOLDEN; do
         pwsh -NoProfile -File "$HELPER_PS1" "$SCRIPT_PS1" "$GOLD/$g.md" "$GOLD/$g.ps1.got" > "$GOLD/$g.ps1.log" 2>&1
         check "parity ps1: $g" "cmp -s '$GOLD/$g.ps1.got' '$GOLD/$g.got'"
     done
@@ -135,7 +185,7 @@ R="$H/.cursor/rules"
 run_script
 check "first: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "first: plain.md -> plain.mdc (alwaysApply true)" "[ \"\$(head -n 3 '$R/plain.mdc')\" = \"\$(printf -- '---\nalwaysApply: true\n---')\" ]"
-check "first: scoped.md -> globs list, alwaysApply false" "grep -qx 'globs:' '$R/scoped.mdc' && grep -qx '  - scripts/\*\*' '$R/scoped.mdc' && grep -qx 'alwaysApply: false' '$R/scoped.mdc' && ! grep -q '^paths:' '$R/scoped.mdc'"
+check "first: scoped.md -> anchored globs list, alwaysApply false" "grep -qx 'globs:' '$R/scoped.mdc' && grep -qxF '  - **/scripts/**' '$R/scoped.mdc' && grep -qxF '  - **/shared/**' '$R/scoped.mdc' && grep -qx 'alwaysApply: false' '$R/scoped.mdc' && ! grep -q '^paths:' '$R/scoped.mdc'"
 check "first: scoped body kept (table ---)" "grep -qxF '|---|---|' '$R/scoped.mdc'"
 check "first: native.mdc copied unchanged" "cmp -s '$R/native.mdc' '$H/.aitools/rules/native.mdc'"
 check "first: notes.txt copied as is" "cmp -s '$R/notes.txt' '$H/.aitools/rules/notes.txt'"
@@ -176,6 +226,51 @@ check "dup: first source (dup.md) wins" "grep -q 'from md' '$H/.cursor/rules/dup
 check "dup: error names the duplicate" "grep -q 'Skipped duplicate: dup.mdc -> dup.mdc' '$C/out'"
 check "dup: ERROR row" "grep -qxF 'ERROR|cursor rules|1 failed' '$C/summary'"
 
+# --- case: names differing only in case (Foo.md, foo.mdc) are one target -----
+setup_case dupcase
+mkdir -p "$H/.aitools/rules"
+printf 'upper\n' > "$H/.aitools/rules/Foo.md"
+printf -- '---\nalwaysApply: true\n---\nlower\n' > "$H/.aitools/rules/foo.mdc"
+run_script
+check "dupcase: exit 1" "[ \"\$(rc)\" = 1 ]"
+check "dupcase: duplicate reported" "grep -Eq 'Skipped duplicate: (foo\.mdc -> foo\.mdc|Foo\.md -> Foo\.mdc)' '$C/out'"
+check "dupcase: ERROR row" "grep -qxF 'ERROR|cursor rules|1 failed' '$C/summary'"
+
+# --- case: dangling symlink in the source -> error, not a silent skip ---------
+setup_case broken
+mkdir -p "$H/.aitools/rules"
+printf 'ok\n' > "$H/.aitools/rules/good.md"
+ln -s "$H/nowhere.md" "$H/.aitools/rules/broken.md"
+run_script
+check "broken: exit 1" "[ \"\$(rc)\" = 1 ]"
+check "broken: dangling symlink logged" "grep -q 'Failed: broken.md: dangling symlink' '$C/out'"
+check "broken: good rule still deployed" "[ -f '$H/.cursor/rules/good.mdc' ]"
+check "broken: ERROR row" "grep -qxF 'ERROR|cursor rules|1 failed' '$C/summary'"
+
+# --- case: unreadable harness rules dir -> ERROR row (PS1 parity) -------------
+setup_case unreadable
+mkdir -p "$H/.aitools/rules"
+printf 'x\n' > "$H/.aitools/rules/x.md"
+chmod 000 "$H/.aitools/rules"
+if [ -r "$H/.aitools/rules" ]; then
+    # root or Git Bash: chmod 000 does not block reads here
+    printf 'SKIP unreadable (chmod 000 does not block reads in this environment)\n'; SKIP=$((SKIP + 1))
+else
+    run_script
+    check "unreadable: exit 1" "[ \"\$(rc)\" = 1 ]"
+    check "unreadable: ERROR row" "grep -qxF 'ERROR|cursor rules|cannot read harness rules' '$C/summary'"
+fi
+chmod 755 "$H/.aitools/rules"
+
+# --- case: --- inside a frontmatter value -> warning (Cursor would misparse) ---
+setup_case descdash
+mkdir -p "$H/.aitools/rules"
+printf -- '---\ndescription: before --- after\npaths:\n  - x/**\n---\nBody\n' > "$H/.aitools/rules/dd.md"
+run_script
+check "descdash: exit 0 (warning only)" "[ \"\$(rc)\" = 0 ]"
+check "descdash: misparse warned" "grep -q 'dd.mdc: Cursor would not see alwaysApply' '$C/out'"
+check "descdash: row promoted to WARN" "grep -qxF 'WARN|cursor rules|1 added' '$C/summary'"
+
 # --- case: dry run -> nothing written ------------------------------------------
 setup_case dry
 seed_rules
@@ -184,6 +279,15 @@ check "dry: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "dry: no ~/.cursor/rules files" "[ ! -e '$H/.cursor/rules/plain.mdc' ]"
 check "dry: would-create logged" "grep -q 'Would create: plain.mdc' '$C/out'"
 check "dry: dry-run row" "grep -q '|cursor rules|dry run (no files written)' '$C/summary'"
+
+# --- case: dry run with a failure -> ERROR row, not OK ------------------------
+setup_case drydup
+mkdir -p "$H/.aitools/rules"
+printf 'a\n' > "$H/.aitools/rules/d.md"
+printf -- '---\nalwaysApply: true\n---\nb\n' > "$H/.aitools/rules/d.mdc"
+run_script --dry-run
+check "drydup: exit 1" "[ \"\$(rc)\" = 1 ]"
+check "drydup: ERROR row" "grep -qxF 'ERROR|cursor rules|1 failed (dry run)' '$C/summary'"
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]

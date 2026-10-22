@@ -22,6 +22,7 @@
         "location": "~/.cursor/rules/ (Windows: %USERPROFILE%\\.cursor\\rules\\)",
         "format": "*.mdc with a leading --- frontmatter block (alwaysApply / globs / description); plain .md is ignored; a .mdc without frontmatter is skipped",
         "loading": "IDE and CLI walk the workspace and every ancestor directory and load <dir>/.cursor/rules/**/*.mdc, so user rule files reach only workspaces under the home directory",
+        "globAnchoring": "IDE matches a relative glob against the path relative to the directory owning .cursor/rules (home for user rules); use **/<pattern> to match inside repos; inline globs are comma-split, so use an indented block list; CLI anchoring unknown",
         "deployedBy": "setup-user-cursor step 4 (fan-out of ~/.aitools/rules, .md converted to .mdc)",
         "verifiedOn": "Cursor IDE 3.13.10 and CLI 2026.05.21-f84ab11, bundle inspection 2026-10-22; live canary not run (CLI unauthenticated)"
       },

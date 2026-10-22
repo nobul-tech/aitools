@@ -56,13 +56,30 @@ does not see user rule files.
 | `description:` only | agent decides when relevant |
 | none of these | only when @-mentioned |
 
+### Glob anchoring
+
+Cursor IDE 3.13.10 (`rL` / `aL` in `cursor-agent-exec/dist/main.js`) matches a
+relative glob against the file path relative to the directory that owns
+`.cursor/rules`. For a user rule file, that directory is the home directory. An
+absolute glob is matched against the full path. So a user rule with
+`globs: scripts/**` attaches only to `~/scripts/...`. Use `**/scripts/**` to
+match `scripts/` inside any repo under `~`. The CLI's anchoring is unknown,
+because its bundle has no client-side matcher. `**/` is correct under either
+anchor.
+
+Inline `globs:` values are split on commas, so `*.{ts,tsx}` breaks. Use a block
+list with indented `  - ` items; items at column 0 are not read.
+
 ### Harness deployment
 
 `setup-user-cursor` step 4 fans `~/.aitools/rules` out here. It converts each
 Claude Code `<name>.md` to `<name>.mdc`:
 
 - A rule without frontmatter gets `alwaysApply: true`.
-- A Claude Code `paths:` key becomes `globs:` with `alwaysApply: false`.
+- A Claude Code `paths:` key (any form) becomes an anchored `globs:` block
+  list (`**/<pattern>`) with `alwaysApply: false`.
+- A converted file that Cursor would misparse (a `---` inside a frontmatter
+  value) is reported as a warning.
 
 ## Known gaps
 

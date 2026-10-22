@@ -114,6 +114,23 @@ So:
 - `alwaysApply: true` means the rule is always included.
 - A YAML list under `globs:` is accepted.
 
+B6. **Glob anchoring** (found by S3-H-Cursor-Review and re-verified by the author).
+IDE `cursor-agent-exec/dist/main.js`:
+
+```
+function rL(e){...for(let e=r.length-2;e>=0;e--)if(".cursor"===r[e]&&"rules"===r[e+1]){const t=r.slice(0,e);return 0===t.length?tL:t.join(tL)}return n}
+function aL(e,t){...if("fileGlobbed"===n){const t=e.type?.type.value.globs??[],n=nL(rL(e.fullPath)),s=iL(r,n)?r.slice(n.length+1):void 0;
+  return t.some(e=>{const t=(0,qF.oL)(e);return(0,eL.Z1)(t)?(0,QJ.xF)(r,t,{dot:!0}):!!s&&(0,QJ.xF)(s,t,{dot:!0})})}
+```
+
+The IDE matches a relative glob against the file path relative to the
+directory that owns `.cursor/rules`. For a user rule file that directory is
+`$HOME`. An absolute glob is matched against the full path. So the literal
+`scripts/**` matches only `~/scripts/...`, while `**/scripts/**` matches
+`~/repos/aitools/scripts/...`. The CLI bundle has no client-side glob matcher,
+so its anchoring is **unknown**. A `**/` prefix is correct under either anchor
+(`$HOME` or the workspace).
+
 B5. Neither bundle (CLI `index.js`, IDE `cursor-agent-exec/dist/main.js`,
 `workbench.desktop.main.js`) contains `".cursor","AGENTS.md"` or
 `.cursor/AGENTS.md`. The loader reads `<ancestor>/AGENTS.md`, which is
@@ -186,10 +203,18 @@ must be under `~`. A second run from `/tmp/x` should print `NONE`.
 2. Convert `<name>.md` to `<name>.mdc`:
    - No frontmatter: prepend `---\nalwaysApply: true\n---\n` (this matches
      Claude Code, where a rule without `paths:` is always loaded).
-   - Claude Code `paths:` frontmatter (a list): rewrite it as
-     `globs:` plus the same list and `alwaysApply: false` (A3 row 2, "Auto-attached
-     when a matching file is in context").
+   - Claude Code `paths:` frontmatter (a block list, a list at column 0, one
+     value, or a `[a, b]` flow list): rewrite it as a `globs:` **block list**
+     with indented `  - ` items. Cursor splits an inline value on commas
+     (`src/**/*.{ts,tsx}` would break) and reads only indented items. Anchor each
+     relative pattern as `**/<pattern>` (B6). Keep absolute and `**/` patterns.
+     Add `alwaysApply: false` (A3 row 2, "Auto-attached when a matching file is
+     in context").
    - Every other frontmatter key is kept.
+   - After the deploy, check each converted file the way Cursor parses it (it
+     splits the whole file on `---`). A `---` inside a frontmatter value is
+     reported with `log_warn`.
+   - Revised after review on PR #87 (B1, N1-N3).
 3. Reach: only workspaces under the user's home directory. aitools repos live
    under `~/repos/` (macOS) / `%USERPROFILE%\repos\` (Windows, per the user
    CLAUDE.md), so the rules reach them. `.claude/rules/cross-platform.md` says

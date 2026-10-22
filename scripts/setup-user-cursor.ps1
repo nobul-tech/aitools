@@ -366,13 +366,40 @@ $cursorRulesDir = Join-Path $cursorDir "rules"
 
 # Return the Cursor .mdc form of a Claude Code rule (text in, text out).
 #   - No frontmatter: "alwaysApply: true" is added (always loaded, as in Claude Code).
-#   - A top-level "paths:" key (Claude Code path scoping; a list or one value)
-#     becomes "globs:" with the same value; "alwaysApply: false" is added unless
-#     the frontmatter sets alwaysApply (Cursor auto-attaches on matching files).
+#   - A top-level "paths:" key (Claude Code path scoping: a block list, a list at
+#     column 0, one value, or a [a, b] flow list) becomes a "globs:" block list,
+#     one "  - " item per pattern (Cursor splits an inline value on commas and
+#     reads only indented items). Each relative pattern is anchored as
+#     "**/<pattern>": Cursor matches a user rule's glob against the file path
+#     relative to the directory that owns .cursor\rules (%USERPROFILE%), and
+#     Claude Code paths are project-relative. Absolute and "**/" patterns are kept.
+#     "alwaysApply: false" is added unless the frontmatter sets alwaysApply.
 #   - Every other frontmatter line and the body are kept; CRLF becomes LF and a
 #     UTF-8 BOM is dropped. Parity: cursor_rule_from_md in setup-user-cursor.sh.
 function ConvertTo-CursorRule([string]$Text) {
-    $t = $Text -replace "^﻿", ""
+    function Get-AnchoredGlob([string]$Glob) {
+        $g = $Glob -replace '^\s+', '' -replace '\s+$', ''
+        if ($g -cmatch '^"(.*)"$') { $g = $Matches[1] } elseif ($g -cmatch "^'(.*)'$") { $g = $Matches[1] }
+        if ($g -eq "") { return "" }
+        if ($g -ceq "**" -or $g -cmatch '^(/|\*\*/|[A-Za-z]:[\\/]|\\\\)') { return $g }
+        if ($g.StartsWith("./")) { $g = $g.Substring(2) }
+        return "**/$g"
+    }
+    function Split-FlowItems([string]$Value) {
+        $items = New-Object System.Collections.Generic.List[string]
+        $depth = 0
+        $cur = New-Object System.Text.StringBuilder
+        foreach ($c in $Value.ToCharArray()) {
+            if ($c -eq [char]'{') { $depth++ } elseif ($c -eq [char]'}' -and $depth -gt 0) { $depth-- }
+            if ($c -eq [char]',' -and $depth -eq 0) { $items.Add($cur.ToString()); [void]$cur.Clear(); continue }
+            [void]$cur.Append($c)
+        }
+        $items.Add($cur.ToString())
+        return ,$items
+    }
+
+    $t = $Text
+    if ($t.Length -gt 0 -and $t[0] -eq [char]0xFEFF) { $t = $t.Substring(1) }
     $t = $t -replace "`r`n", "`n"
     $m = [regex]::Match($t, '\A---[ \t]*\n(?:(.*?)\n)?---[ \t]*(?:\n|\z)(.*)\z', [System.Text.RegularExpressions.RegexOptions]::Singleline)
     if (-not $m.Success) {
@@ -386,11 +413,22 @@ function ConvertTo-CursorRule([string]$Text) {
     $inPaths = $false
     $lines = if ($fm.Length -gt 0) { $fm -split "`n" } else { @() }
     foreach ($line in $lines) {
-        if ($line -cmatch '^paths:(.*)$') {
-            $out.Add("globs:" + $Matches[1]); $hasGlobs = $true; $inPaths = $true
+        if ($line -cmatch '^paths:[ \t]*(.*?)[ \t]*$') {
+            $v = $Matches[1]
+            $items = @()
+            if ($v -cmatch '^\[(.*)\]$') { $items = Split-FlowItems $Matches[1] } elseif ($v -ne "") { $items = @($v) }
+            $out.Add("globs:"); $inPaths = $true
+            foreach ($i in $items) {
+                $g = Get-AnchoredGlob $i
+                if ($g -ne "") { $out.Add("  - $g"); $hasGlobs = $true }
+            }
             continue
         }
-        if ($inPaths -and $line -cmatch '^\s+-\s') { $out.Add($line); continue }
+        if ($inPaths -and $line -cmatch '^\s*-\s+(.*)$') {
+            $g = Get-AnchoredGlob $Matches[1]
+            if ($g -ne "") { $out.Add("  - $g"); $hasGlobs = $true }
+            continue
+        }
         $inPaths = $false
         if ($line -cmatch '^alwaysApply:') { $hasAlways = $true }
         if ($line -cmatch '^globs:') { $hasGlobs = $true }
@@ -400,6 +438,19 @@ function ConvertTo-CursorRule([string]$Text) {
         if ($hasGlobs) { $out.Add("alwaysApply: false") } else { $out.Add("alwaysApply: true") }
     }
     return "---`n" + ($out -join "`n") + "`n---`n" + $body
+}
+
+# Check a converted .mdc the way Cursor parses it: Cursor splits the whole file
+# on "---" and takes the first non-empty piece as the frontmatter, so a "---"
+# inside a frontmatter value moves the rest of it into the body. The converter
+# always writes alwaysApply, so a parsed frontmatter without it means Cursor
+# would misread the rule. Returns a reason, or "" when the text is fine.
+# Parity: cursor_rule_check in setup-user-cursor.sh.
+function Test-CursorRuleParse([string]$Text) {
+    $parts = @(($Text -replace '^\s+', '') -split '---' | Where-Object { $_.Length -gt 0 })
+    $fm = if ($parts.Count -gt 0) { $parts[0] } else { "" }
+    if ($fm -cmatch '(?m)^alwaysApply:') { return "" }
+    return "Cursor would not see alwaysApply in its frontmatter (a --- inside a frontmatter value?)"
 }
 
 if (-not (Test-Path -LiteralPath $harnessRulesDir -PathType Container)) {
@@ -417,13 +468,15 @@ if (-not (Test-Path -LiteralPath $harnessRulesDir -PathType Container)) {
     if ($null -eq $entries) {
         Write-Summary "ERROR" "cursor rules" "cannot read harness rules"
     } else {
+        $ruleBroken = @()   # dangling symlinks: reported as failed in the deploy loop
         foreach ($entry in $entries) {
             if ($entry.Name.StartsWith(".")) { continue }
+            if ($entry.LinkType -and -not (Test-Path -LiteralPath $entry.FullName)) { $ruleBroken += $entry.Name; continue }
             if ($entry.PSIsContainer) { Log "Ignoring non-file in harness rules: $($entry.Name)"; continue }
             $ruleSources += $entry
         }
 
-        if ($ruleSources.Count -eq 0) {
+        if ($ruleSources.Count -eq 0 -and $ruleBroken.Count -eq 0) {
             Log "Harness rules directory $harnessRulesDir is empty -- skipping"
             Write-Summary "OK" "cursor rules" "n/a (no harness rules)"
         } else {
@@ -438,7 +491,13 @@ if (-not (Test-Path -LiteralPath $harnessRulesDir -PathType Container)) {
 
             Initialize-DeployTracker
             $errorsBeforeCursorRules = $errors
-            $ruleDests = New-Object System.Collections.Generic.List[string]
+            foreach ($brokenName in $ruleBroken) {
+                LogError "Failed: ${brokenName}: dangling symlink in $harnessRulesDir"
+                Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $brokenName
+            }
+            $ruleDests = New-Object System.Collections.Generic.List[string]       # deployed names
+            $ruleDestsLc = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+            $ruleConverted = New-Object System.Collections.Generic.List[string]   # deployed names converted from .md
             foreach ($src in $ruleSources) {
                 $ruleBase = $src.Name
                 if ($ruleBase -clike "*.md") {
@@ -450,13 +509,16 @@ if (-not (Test-Path -LiteralPath $harnessRulesDir -PathType Container)) {
                     Log "Copying $ruleBase as is (Cursor loads only *.mdc rule files)"
                 }
 
-                # Two sources mapping to one target (x.md and x.mdc): the first wins
-                if ($ruleDests.Contains($destName)) {
+                # Two sources mapping to one target (x.md and x.mdc; names compared
+                # case-insensitively): the first wins
+                if ($ruleDestsLc.Contains($destName)) {
                     LogError "Skipped duplicate: $ruleBase -> $destName (already deployed from another harness rule)"
                     Record-DeployOutcome -Outcome "failed" -ToolName "cursor rules" -ItemName $ruleBase
                     continue
                 }
                 $ruleDests.Add($destName)
+                [void]$ruleDestsLc.Add($destName)
+                if ($destName -cne $ruleBase) { $ruleConverted.Add($destName) }
 
                 try {
                     $raw = [System.IO.File]::ReadAllText($src.FullName, [System.Text.UTF8Encoding]::new($false))
@@ -496,13 +558,17 @@ if (-not (Test-Path -LiteralPath $harnessRulesDir -PathType Container)) {
             }
 
             if ($DryRun) {
-                Write-Summary "OK" "cursor rules" "dry run (no files written)"
+                if ($script:dtFailed -gt 0) {
+                    Write-Summary "ERROR" "cursor rules" "$($script:dtFailed) failed (dry run)"
+                } else {
+                    Write-Summary "OK" "cursor rules" "dry run (no files written)"
+                }
             } else {
                 # Preserved: files in .cursor\rules not produced from .aitools\rules
                 if (Test-Path -LiteralPath $cursorRulesDir -PathType Container) {
                     foreach ($existing in @(Get-ChildItem -LiteralPath $cursorRulesDir -File)) {
                         if ($existing.Name -like "*.bak.*") { continue }
-                        if (-not $ruleDests.Contains($existing.Name)) {
+                        if (-not $ruleDestsLc.Contains($existing.Name)) {
                             Log "Preserved unmanaged rule: $($existing.Name)"
                             Record-DeployOutcome -Outcome "preserved" -ToolName "cursor rules" -ItemName $existing.Name
                         }
@@ -527,6 +593,13 @@ if (-not (Test-Path -LiteralPath $harnessRulesDir -PathType Container)) {
                         }
                         if (-not $deployed.TrimStart([char]0xFEFF).StartsWith("---")) {
                             LogError "Validation failed: $destName has no frontmatter (Cursor skips it)"
+                        } elseif ($ruleConverted.Contains($destName)) {
+                            # Converted rules: check them as Cursor parses them (warn: the
+                            # rule is deployed but Cursor would misread its frontmatter)
+                            $parseProblem = Test-CursorRuleParse $deployed
+                            if ($parseProblem) {
+                                LogWarn "${destName}: $parseProblem -- fix the source rule in $harnessRulesDir"
+                            }
                         }
                     }
                 }
