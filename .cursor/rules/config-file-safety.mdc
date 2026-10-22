@@ -57,6 +57,7 @@ Every config-writing script must validate output after writing:
 
 Do not assume these are violation-free -- verify copied code against the rules.
 
+- Single config writer: `scripts/setup-user-config.sh` / `.ps1` (config.json; bootstrap + derived keys)
 - Node.js merge: `scripts/setup-user-cursor.sh` (cli-config.json)
 - PowerShell merge: `scripts/setup-user-mcp.ps1` (settings.json)
 - Hook merge: `scripts/setup-user-hooks.sh` (settings.json hooks)
