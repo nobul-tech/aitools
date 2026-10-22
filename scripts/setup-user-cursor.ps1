@@ -177,9 +177,11 @@ if ($urpRc -eq 0 -and $userRepoPath) {
     if (Test-Path $profilePath) {
         try {
             $pf = ConvertPSObjectToHashtable (Get-Content $profilePath -Raw -ErrorAction Stop | ConvertFrom-Json)
-            if ($pf.ContainsKey("cursor") -and $pf["cursor"].ContainsKey("cli")) {
+            # Same checks as the .sh: a non-object cursor / cursor.cli is ignored
+            # (defaults), and only a bool vimMode / string model is taken
+            if ($pf.ContainsKey("cursor") -and $pf["cursor"] -is [hashtable] -and
+                $pf["cursor"].ContainsKey("cli") -and $pf["cursor"]["cli"] -is [hashtable]) {
                 $cli = $pf["cursor"]["cli"]
-                # Same type checks as the .sh (typeof boolean / string)
                 if ($cli.ContainsKey("vimMode") -and $cli["vimMode"] -is [bool]) { $vimMode = $cli["vimMode"] }
                 if ($cli.ContainsKey("model") -and $cli["model"] -is [string]) { $modelId = $cli["model"] }
             }
