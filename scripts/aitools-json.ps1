@@ -115,6 +115,43 @@ function Set-JValue($Root, $Value, [string[]]$Segs) {
     if ($p) { $p.Value = $Value } else { $o | Add-Member -NotePropertyName $last -NotePropertyValue $Value }
 }
 
+# Rename-JKey ROOT NEWNAME SEG... -- rename the key named by the last SEG to
+# NEWNAME in place, keeping its position and value: the counterpart of the
+# aitools-json.pl edit op "rename", with the same rules and the same messages
+# (thrown): "rename: no key given", "rename: '<seg>' not found",
+# "rename: '<seg>' is not an object", "rename: '<NEWNAME>' already exists"
+# (another key equals NEWNAME ignoring case). NEWNAME equal to the key is a
+# no-op; a case-only rename (ABC -> abc) is allowed. Segments match exactly
+# (case-sensitive), as in the perl engine. Order is kept by removing the key and
+# every key after it, then adding them back with the key renamed.
+function Rename-JKey($Root, [string]$NewName, [string[]]$Segs) {
+    if ($null -eq $Segs -or $Segs.Count -eq 0) { throw "rename: no key given" }
+    $o = $Root
+    for ($i = 0; $i -lt $Segs.Count - 1; $i++) {
+        $s = $Segs[$i]
+        $p = $null
+        foreach ($q in $o.PSObject.Properties) { if ($q.Name -ceq $s) { $p = $q; break } }
+        if (-not $p) { throw "rename: '$s' not found" }
+        if ($p.Value -isnot [System.Management.Automation.PSCustomObject]) { throw "rename: '$s' is not an object" }
+        $o = $p.Value
+    }
+    $old = $Segs[$Segs.Count - 1]
+    $props = @($o.PSObject.Properties)
+    $idx = -1
+    for ($j = 0; $j -lt $props.Count; $j++) { if ($props[$j].Name -ceq $old) { $idx = $j; break } }
+    if ($idx -lt 0) { throw "rename: '$old' not found" }
+    if ($NewName -ceq $old) { return }
+    for ($j = 0; $j -lt $props.Count; $j++) {
+        if ($j -ne $idx -and $props[$j].Name -ieq $NewName) { throw "rename: '$NewName' already exists" }
+    }
+    $names = [System.Collections.Generic.List[string]]::new()
+    $values = [System.Collections.Generic.List[object]]::new()
+    for ($j = $idx; $j -lt $props.Count; $j++) { $names.Add($props[$j].Name); $values.Add($props[$j].Value) }
+    foreach ($n in $names) { $o.PSObject.Properties.Remove($n) }
+    $names[0] = $NewName
+    for ($j = 0; $j -lt $names.Count; $j++) { $o | Add-Member -NotePropertyName $names[$j] -NotePropertyValue $values[$j] }
+}
+
 # ConvertTo-NodeJson VALUE [-Compress] -- node JSON.stringify layout (LF, no BOM)
 function ConvertTo-NodeJson($Value, [switch]$Compress) {
     $j = ConvertTo-Json -InputObject $Value -Depth 64 -Compress:$Compress

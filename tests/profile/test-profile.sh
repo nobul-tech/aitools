@@ -696,6 +696,115 @@ expect_line '"cursor":\["only"\]'
 case_run rev-host-trim 0 resolve --machine-id-value "$ID_OTHER" --hostname-value "  NewcoPC.corp  "
 expect alias workstation; expect via hostname
 
+# --- JSON engines: rename (re-key design batch 1) ------------------------------------
+# The perl edit op "rename<TAB>NEW<TAB>SEG..." and Rename-JKey in aitools-json.ps1
+# must keep the key's position and every other byte, and write identical bytes.
+JPL="$REPO/scripts/aitools-json.pl"
+JPS1="$REPO/scripts/aitools-json.ps1"
+JW="$WORK/jrename"
+mkdir -p "$JW"
+cat > "$JW/driver.ps1" <<'PS1'
+# Test driver: IN OUT OP... ; each OP is "|"-separated:
+#   rename|NEW|SEG...   set|STRING-VALUE|SEG...
+. $env:AITOOLS_TEST_JSON_PS1
+$r = Read-JsonFile $args[0]
+if ($r.State -ne "valid") { [Console]::Error.WriteLine($r.Message); exit 2 }
+try {
+    for ($i = 2; $i -lt $args.Count; $i++) {
+        $f = ([string]$args[$i]).Split("|")
+        $segs = [string[]]@()
+        if ($f.Count -gt 2) { $segs = [string[]]$f[2..($f.Count - 1)] }
+        if ($f[0] -eq "rename") { Rename-JKey $r.Value $f[1] $segs }
+        elseif ($f[0] -eq "set") { Set-JValue $r.Value $f[1] $segs }
+        else { throw "driver: unknown op $($f[0])" }
+    }
+} catch { [Console]::Error.WriteLine($_.Exception.Message); exit 2 }
+[IO.File]::WriteAllText($args[1], (ConvertTo-NodeJson $r.Value) + "`n", $script:Utf8NoBom)
+exit 0
+PS1
+# The register fixture above ($WORK/reg/home/p.json): escapes, unicode, nested arrays,
+# a fraction, empty containers, a date string. Add a profile before and after the one
+# to rename.
+perl -0pe 's/("profiles": \{\n)/$1    "first": {\n      "machine": {\n        "os": "linux"\n      }\n    },\n/; s/(\n  \}\n\}\n)\z/,\n    "last": {\n      "list": [\n        "a"\n      ]\n    }$1/' "$WORK/reg/home/p.json" > "$JW/in.json"
+if perl "$JPL" check "$JW/in.json"; then ok "jr-fixture: valid JSON"; else bad "jr-fixture: invalid"; sed 's/^/       /' "$JW/in.json"; fi
+
+# jr_case NAME WANT_RC "PERL_OPS" PS_OP... -- run both engines on in.json; sets JOUT
+jr_case() {
+    local name="$1" want="$2" ops="$3"; shift 3
+    CASE="$name"
+    JOUT="$JW/$name.pl.json"
+    RC=0
+    printf '%b' "$ops" | perl "$JPL" edit "$JW/in.json" "$JOUT" > "$JW/$name.pl.err" 2>&1 || RC=$?
+    if [ "$RC" -eq "$want" ]; then ok "$name: perl exit $RC"
+    else bad "$name: perl exit $RC, want $want"; sed 's/^/       /' "$JW/$name.pl.err"; fi
+    if [ "$want" -ne 0 ]; then
+        if [ -e "$JOUT" ]; then bad "$name: perl wrote $JOUT on failure"; else ok "$name: perl wrote nothing"; fi
+    fi
+    if $USE_PS; then
+        local pout="$JW/$name.ps.json"
+        RC=0
+        env AITOOLS_TEST_JSON_PS1="$JPS1" pwsh -NoProfile -File "$JW/driver.ps1" "$JW/in.json" "$pout" "$@" \
+            > "$JW/$name.ps.err" 2>&1 || RC=$?
+        if [ "$RC" -eq "$want" ]; then ok "$name: pwsh exit $RC"
+        else bad "$name: pwsh exit $RC, want $want"; sed 's/^/       /' "$JW/$name.ps.err"; fi
+        if [ "$want" -eq 0 ]; then
+            if cmp -s "$JOUT" "$pout"; then ok "$name: perl and pwsh wrote identical bytes"
+            else bad "$name: written files differ"; diff "$JOUT" "$pout" | sed 's/^/       /' || true; fi
+        elif cmp -s "$JW/$name.pl.err" "$JW/$name.ps.err"; then ok "$name: perl and pwsh messages identical"
+        else bad "$name: messages differ"; diff "$JW/$name.pl.err" "$JW/$name.ps.err" | sed 's/^/       /' || true; fi
+    fi
+}
+# jr_keys WANT SEG... -- keys of the object at SEG in $JOUT, joined with ","
+jr_keys() {
+    local want="$1" got; shift
+    got=$(perl "$JPL" keys "$JOUT" "$@" | paste -sd ',' -)
+    if [ "$got" = "$want" ]; then ok "$CASE: keys $want"; else bad "$CASE: keys '$got', want '$want'"; fi
+}
+# jr_msg TEXT -- the perl stderr is exactly TEXT
+jr_msg() {
+    if [ "$(cat "$JW/$CASE.pl.err")" = "$1" ]; then ok "$CASE: message '$1'"
+    else bad "$CASE: message '$(cat "$JW/$CASE.pl.err")', want '$1'"; fi
+}
+
+ID_MAC_LC=$(printf '%s' "$ID_MAC" | tr 'A-Z' 'a-z')
+jr_case jr-middle 0 "rename\t$ID_MAC_LC\tprofiles\tnobul-mac\n" "rename|$ID_MAC_LC|profiles|nobul-mac"
+jr_keys "first,$ID_MAC_LC,last" profiles
+if [ "$(perl "$JPL" get "$JOUT" profiles "$ID_MAC_LC" machine hostname)" = "nobul-mac" ]; then ok "jr-middle: value moved with the key"
+else bad "jr-middle: value lost"; fi
+diff "$JW/in.json" "$JOUT" > "$JW/jr-middle.diff" || true  # differences expected; counted below
+if perl -ne '$n++ if /^[<>]/; $k++ if /^> +"\Q'"$ID_MAC_LC"'\E": \{$/; END { exit($n == 2 && $k == 1 ? 0 : 1) }' "$JW/jr-middle.diff"; then
+    ok "jr-middle: only the key line changed (other bytes kept)"
+else bad "jr-middle: unexpected changes"; sed 's/^/       /' "$JW/jr-middle.diff"; fi
+
+jr_case jr-first 0 "rename\tfirst-renamed\tprofiles\tfirst\n" "rename|first-renamed|profiles|first"
+jr_keys "first-renamed,nobul-mac,last" profiles
+jr_case jr-last 0 "rename\tz\tprofiles\tlast\n" "rename|z|profiles|last"
+jr_keys "first,nobul-mac,z" profiles
+jr_case jr-top 0 "rename\tident\tidentity\n" "rename|ident|identity"
+jr_keys "version,ident,claude,profiles"
+jr_case jr-then-set 0 "rename\tnew-key\tprofiles\tnobul-mac\nset\tstring\tnobul-mac\tprofiles\tnew-key\talias\n" \
+    "rename|new-key|profiles|nobul-mac" "set|nobul-mac|profiles|new-key|alias"
+jr_keys "name,company,machine,alias" profiles new-key
+jr_case jr-case-only 0 "rename\tNOBUL-MAC\tprofiles\tnobul-mac\n" "rename|NOBUL-MAC|profiles|nobul-mac"
+jr_keys "first,NOBUL-MAC,last" profiles
+jr_case jr-same 0 "rename\tnobul-mac\tprofiles\tnobul-mac\n" "rename|nobul-mac|profiles|nobul-mac"
+if cmp -s "$JW/in.json" "$JOUT"; then ok "jr-same: no-op, bytes unchanged"; else bad "jr-same: file changed"; fi
+
+jr_case jr-missing 2 "rename\tx\tprofiles\tnope\n" "rename|x|profiles|nope"
+jr_msg "rename: 'nope' not found"
+jr_case jr-exists 2 "rename\tlast\tprofiles\tfirst\n" "rename|last|profiles|first"
+jr_msg "rename: 'last' already exists"
+jr_case jr-exists-case 2 "rename\tLAST\tprofiles\tfirst\n" "rename|LAST|profiles|first"
+jr_msg "rename: 'LAST' already exists"
+jr_case jr-old-case 2 "rename\tx\tprofiles\tNOBUL-MAC\n" "rename|x|profiles|NOBUL-MAC"
+jr_msg "rename: 'NOBUL-MAC' not found"
+jr_case jr-path-missing 2 "rename\tx\tnope\tnobul-mac\n" "rename|x|nope|nobul-mac"
+jr_msg "rename: 'nope' not found"
+jr_case jr-not-object 2 "rename\tx\tversion\ty\n" "rename|x|version|y"
+jr_msg "rename: 'version' is not an object"
+jr_case jr-no-key 2 "rename\tx\n" "rename|x"
+jr_msg "rename: no key given"
+
 # --- usage ------------------------------------------------------------------------
 case_run usage-unknown 2 resolve --bogus
 NO_PARITY=1 case_run usage-nocmd 2   # help text names each platform's sources

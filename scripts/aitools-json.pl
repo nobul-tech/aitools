@@ -25,7 +25,16 @@
 #                           re-read OUT to validate. Ops (tab-separated):
 #                           set<TAB>string|number|bool|null|json<TAB>VALUE<TAB>SEG...
 #                           del<TAB>SEG...
-#   snapshot FILE           compact {version, identity, cursor, profiles}
+#                           rename<TAB>NEW<TAB>SEG...  (last SEG = the key to
+#                             rename; it keeps its position and value). Errors
+#                             (exit 2, nothing written): "rename: no key given",
+#                             "rename: '<seg>' not found" (a path segment or the
+#                             key is absent), "rename: '<seg>' is not an object",
+#                             "rename: '<NEW>' already exists" (another key equals
+#                             NEW ignoring ASCII case, as PowerShell property names
+#                             do). NEW equal to the key is a no-op; a case-only
+#                             rename (ABC -> abc) is allowed. Segments match exactly.
+#   snapshot FILE          compact {version, identity, cursor, profiles}
 #   tagged2json             key<TAB>value lines on stdin -> one compact object
 #                           (warn/error lines collected into warnings/errors)
 # For get/type/keys/items/json: 4 = FILE missing, 2 = FILE invalid.
@@ -181,6 +190,29 @@ sub delp {
     return unless $v && $v->[0] eq 'O';
     $v->[1] = [grep { $_->[0] ne $last } @{$v->[1]}];
 }
+# renp ROOT NEW SEG... -- rename the key named by the last SEG to NEW in place
+sub renp {
+    my ($root, $new, @segs) = @_;
+    die "rename: no key given\n" unless defined $new && @segs;
+    my $old = pop @segs;
+    my $v = $root;
+    for my $s (@segs) {
+        my $n;
+        for my $p (@{$v->[1]}) { if ($p->[0] eq $s) { $n = $p->[1]; last } }
+        die "rename: '$s' not found\n" unless defined $n;
+        die "rename: '$s' is not an object\n" unless $n->[0] eq 'O';
+        $v = $n;
+    }
+    my $hit;
+    for my $p (@{$v->[1]}) { if ($p->[0] eq $old) { $hit = $p; last } }
+    die "rename: '$old' not found\n" unless $hit;
+    return if $new eq $old;
+    for my $p (@{$v->[1]}) {
+        next if $p == $hit;
+        die "rename: '$new' already exists\n" if lc($p->[0]) eq lc($new);
+    }
+    $hit->[0] = $new;
+}
 sub typed {
     my ($type, $value) = @_;
     return ['S', $value] if $type eq 'string';
@@ -232,6 +264,7 @@ if ($cmd eq 'edit') {
             my $op = shift @f;
             if ($op eq 'set') { my ($type, $value) = splice(@f, 0, 2); setp($root, typed($type, $value), @f) }
             elsif ($op eq 'del') { delp($root, @f) }
+            elsif ($op eq 'rename') { my $new = shift @f; renp($root, $new, @f) }
             else { die "edit: unknown op '$op'\n" }
         }
         1;
