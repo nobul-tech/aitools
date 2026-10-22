@@ -131,6 +131,12 @@ jobs:
       - name: Profile resolver tests (macOS /bin/bash 3.2)
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/profile/test-profile.sh --bash-only
 
+      - name: Config writer tests (bash 5 + pwsh parity)
+        run: bash tests/profile/test-config.sh
+
+      - name: Config writer tests (macOS /bin/bash 3.2)
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/profile/test-config.sh --bash-only
+
       - name: Build deploy scripts
         run: |
           echo "::group::Running build-deploy.sh"
@@ -281,6 +287,9 @@ jobs:
       - name: Profile resolver tests (bash + pwsh parity, incl. claude-code-web)
         run: bash tests/profile/test-profile.sh
 
+      - name: Config writer tests (bash + pwsh parity)
+        run: bash tests/profile/test-config.sh
+
       - name: Build deploy scripts
         run: bash scripts/build-deploy.sh
 
@@ -405,6 +414,15 @@ jobs:
           $env:AITOOLS_USER_REPO_PATH = $null
           if ($LASTEXITCODE -ne 0 -or $p -ne ($d -replace '\\', '/')) { Write-Error "user-repo-path --path-form mixed: '$p' (exit $LASTEXITCODE)"; exit 1 }
           Write-Host "user-repo-path --path-form mixed: $p"
+          # setup-user-config.ps1 natively (the runner HOME is ephemeral): created, then verified
+          $cfgFile = Join-Path $HOME ".aitools\config.json"
+          & pwsh -NoProfile -File scripts/setup-user-config.ps1 -ReposPath (Join-Path $env:RUNNER_TEMP "repos") -RepoPath $PWD.Path
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $cfgFile)) { Write-Error "setup-user-config.ps1 failed (exit $LASTEXITCODE)"; exit 1 }
+          $cfgText = [IO.File]::ReadAllText($cfgFile)
+          if ($cfgText.Contains("`r") -or $cfgText -notmatch '"version": 3' -or $cfgText -notmatch '"writer": "setup-user-config"') { Write-Error "config.json unexpected:`n$cfgText"; exit 1 }
+          & pwsh -NoProfile -File scripts/setup-user-config.ps1
+          if ($LASTEXITCODE -ne 0 -or [IO.File]::ReadAllText($cfgFile) -cne $cfgText) { Write-Error "setup-user-config.ps1 re-run changed config.json (exit $LASTEXITCODE)"; exit 1 }
+          Write-Host "setup-user-config.ps1: created, then verified (LF only, version 3)"
           # The runner appends `exit $LASTEXITCODE` to pwsh steps; the expected
           # exit 1 from resolve would otherwise fail the step.
           exit 0
