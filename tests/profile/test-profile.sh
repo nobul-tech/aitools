@@ -332,7 +332,8 @@ fresh_home dc-env
 base_profile | write_profile "$H/envdp"
 CASE_ENV="AITOOLS_USER_REPO_PATH=$H/envdp"
 case_run dc-env 0 derive-config "${M[@]}"
-expect derived.userRepoPath ""; expect derived.githubUser nobul-jose; expect derived.machineAlias nobul-mac
+expect derived.userRepoPath ""; expect derived.githubUser nobul-jose
+expect via hostname; expect derived.machineAlias ""   # a hostname match is not cached (PR #76 review M1)
 expect_line '^warn\tdotprofile from AITOOLS_USER_REPO_PATH -- not saved'
 CASE_ENV=""
 
@@ -463,6 +464,9 @@ case_fresh() {
         if [ "$RC" -ne "$brc" ]; then bad "$name: pwsh exit $RC, bash $brc"; sed 's/^/       /' "$pout" "$pout.err"; fi
         if diff "$OUT" "$pout" > "$WORK/$name.diff"; then ok "$name: bash and pwsh output identical"
         else bad "$name: bash and pwsh output differ"; sed 's/^/       /' "$WORK/$name.diff"; fi
+        if [ "${NORM_AT:-}" = "1" ]; then  # a real clock: the two runs are seconds apart
+            perl -pi -e 's/"decidedAt": "[^"]*"/"decidedAt": "<now>"/' "$WORK/$name.bash.profile.json" "$WORK/$name.ps.profile.json"
+        fi
         if cmp -s "$WORK/$name.bash.profile.json" "$WORK/$name.ps.profile.json"; then ok "$name: profile.json bytes identical"
         else bad "$name: profile.json differs"; diff "$WORK/$name.bash.profile.json" "$WORK/$name.ps.profile.json" | sed 's/^/       /' || true; fi
     fi
@@ -528,10 +532,11 @@ expect result unchanged; expect committed false
 
 setup_exc_noident() {
     setup_exc_git
-    git -C "$EXC_DIR" config --unset user.name
-    git -C "$EXC_DIR" config --unset user.email
     # A distinctive owner, so the assertion cannot pass on the real global identity
     perl -pi -e 's/jose\@nobul\.tech/owner\@example.test/g' "$EXC_PF"
+    git -C "$EXC_DIR" commit -q -m owner -- profile.json
+    git -C "$EXC_DIR" config --unset user.name
+    git -C "$EXC_DIR" config --unset user.email
 }
 case_fresh exc-set-noident 0 setup_exc_noident "${SET_ARGS[@]}" "${M[@]}"
 expect committed true
@@ -567,6 +572,66 @@ CASE_ENV=""
 
 case_fresh exc-get-none 2 setup_exc_hostname exception-get --slug go --machine-id-value "$ID_OTHER" --hostname-value elsewhere
 expect found false; expect_line '^error\tno profile matches this machine'
+# --- PR #76 review: alias writes, timestamps, dirty file, push failure ---------
+# via=alias with an unregistered profile (this machine has an id): refused
+setup_exc_alias() {
+    setup_exc_hostname
+    printf '{ "githubUser": "nobul-jose", "machineAlias": "laptop" }\n' > "$H/.aitools/config.json"
+}
+case_fresh exc-set-alias 3 setup_exc_alias "${SET_ARGS[@]}" "${M[@]}"
+expect via alias
+expect_line '^error\tmachine profile "laptop" is not registered to this machine -- run: aitools user init to remember tool choices$'
+# via=alias with a profile registered to another machine: refused
+setup_exc_foreign() {
+    setup_exc_alias
+    perl -0pi -e 's/"hostname": "Joses-MBP"/"id": "OTHER-MACHINE",\n        "hostname": "Joses-MBP"/' "$EXC_PF"
+}
+case_fresh exc-set-foreign 3 setup_exc_foreign "${SET_ARGS[@]}" "${M[@]}"
+expect_line '^warn\tprofile "laptop" is registered to another machine'
+expect_line '^error\tmachine profile "laptop" is not registered to this machine'
+# An explicit override is the caller's choice: allowed
+CASE_ENV="AITOOLS_MACHINE_ALIAS=laptop"
+case_fresh exc-set-override 0 setup_exc_alias "${SET_ARGS[@]}" "${M[@]}"
+expect via override; expect result created
+CASE_ENV=""
+# derive-config does not cache a hostname match
+EXC_H="$H"
+fresh_home dc-host
+base_profile | write_profile "$H/repos/aitools-nobul-jose"
+printf '{ "githubUser": "nobul-jose" }\n' > "$H/.aitools/config.json"
+case_run dc-hostname-not-saved 0 derive-config "${M[@]}"
+expect via hostname; expect derived.machineAlias ""
+expect_line '^warn\tmachine alias "nobul-mac" matched by hostname only -- not saved to config.json$'
+H="$EXC_H"
+
+# Without --decided-at: an identical re-keep is unchanged; a changed one gets a new time
+SET_NOW=(exception-set --slug go --platform macos --method pkg-installer --path /usr/local/bin/go --version 1.22.5 --by setup-go)
+setup_exc_existing() {
+    setup_exc_git
+    perl -0pi -e 's/("hostname": "nobul-mac.local",\n        "os": "darwin")/$1,\n        "x": 1/' "$EXC_PF"
+    perl -0pi -e 's/"x": 1/"x": 1\n      },\n      "toolExceptions": {\n        "go": {\n          "decision": "keep",\n          "detected": {\n            "platform": "macos",\n            "method": "pkg-installer",\n            "path": "\/usr\/local\/bin\/go",\n            "version": "1.22.5"\n          },\n          "decidedAt": "2026-01-01T00:00:00Z",\n          "decidedBy": "setup-go",\n          "reason": null\n        }/' "$EXC_PF"
+    git -C "$EXC_DIR" commit -q -m existing -- profile.json
+}
+case_fresh exc-set-same 0 setup_exc_existing "${SET_NOW[@]}" "${M[@]}"
+expect result unchanged; expect committed false
+NORM_AT=1 case_fresh exc-set-changed 0 setup_exc_existing exception-set --slug go --platform macos --method pkg-installer \
+    --path /usr/local/bin/go --version 1.23.0 --by setup-go "${M[@]}"
+expect result updated; expect committed true
+if grep -q '"decidedAt": "2026-01-01T00:00:00Z"' "$WORK/exc-set-changed.bash.profile.json"; then bad "exc-set-changed: kept the old decidedAt"
+else ok "exc-set-changed: new decidedAt"; fi
+
+# profile.json edited by hand and not committed: written, not auto-committed
+setup_exc_dirty() { setup_exc_git; perl -pi -e 's/"Joses-MBP"/"Joses-MBP-2"/' "$EXC_PF"; }
+case_fresh exc-set-dirty 0 setup_exc_dirty "${SET_ARGS[@]}" "${M[@]}"
+expect result created; expect committed false
+expect_line '^warn\tprofile.json had uncommitted changes before this write -- not committed automatically'
+
+# Push fails (no remote): committed, not pushed, warning
+setup_exc_noremote() { setup_exc_git; git -C "$EXC_DIR" remote remove origin; }
+case_fresh exc-set-nopush 0 setup_exc_noremote "${SET_ARGS[@]}" "${M[@]}"
+expect committed true; expect pushed false
+expect_line '^warn\tdotprofile push failed \(exit [0-9]+\) -- run git push in '
+
 case_run exc-bad-platform 2 exception-set --slug go --platform darwin --method m --path /p --by setup-go "${M[@]}"
 case_run exc-bad-slug 2 exception-get --slug "Go Lang" "${M[@]}"
 
