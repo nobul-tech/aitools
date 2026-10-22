@@ -129,11 +129,19 @@ try {
     Run-Lib "`$src='$C/src.json'; `$dest='$C/dest/c.json'; `$adopt=''; $dmf"
     Check "json: invalid LOCAL -> failed, untouched" ((Result) -eq "failed" -and (Txt "dest/c.json") -eq "not json")
 
+    # --- EOF at a prompt ---
+    # Not sent as Ctrl-D on the pty: EOF there is terminal-driver behavior (Ctrl-D on
+    # Unix, Ctrl-Z Enter on Windows) and pwsh on Linux does not end ReadLine on \x04.
+    # An empty Console.In gives Read-ConsoleChoice the same $null on every platform.
+    Setup-Case "eof"
+    Run-Lib '[Console]::SetIn([IO.StringReader]::new([string]::Empty)); $r = Read-ConsoleChoice "overwrite"; Set-Content -Path "$C/result" -Value "[$r]" -NoNewline'
+    Check "EOF at a prompt: empty choice, warning logged" ((Result) -eq "[]" -and (Log) -match "No input at prompt \(EOF\) -- defaulting to overwrite")
+
     # --- Interactive (pty) ---
     if ($havePty) {
-        Setup-Case "eof"; W "src.md" "new"; W "dest/a.md" "old"
-        Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmf" '\x04'
-        Check "EOF at the menu: overwrite" ((Result) -eq "updated" -and (Txt "dest/a.md") -eq "new")
+        Setup-Case "enter"; W "src.md" "new"; W "dest/a.md" "old"
+        Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmf" "\n"
+        Check "empty choice at the menu: overwrite" ((Result) -eq "updated" -and (Txt "dest/a.md") -eq "new")
 
         Setup-Case "skip"; W "src.md" "new"; W "dest/a.md" "old"
         Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt='$C/repo/a.md'; $dmf" "s\n"
