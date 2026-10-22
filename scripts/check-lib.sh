@@ -151,8 +151,11 @@ print_summary() {
 
 # resolve_config -- sets CONFIG_FILE (the config.json path; check-pre-push step 7
 # copies it) and USER_REPO_PATH (the dotprofile), taken from the lib's one resolver
-# (resolve_user_repo_path in aitools-lib.sh; reference/user-repo.md "Resolution"),
-# so a check sees the same dotprofile as the setup scripts.
+# (resolve_user_repo_path in aitools-lib.sh; order: aitools-profile.sh
+# resolve_user_repo), so a check sees the same dotprofile as the setup scripts.
+# USER_REPO_VIA says how it was found (env|config|convention|scan|none):
+# ait-harvest.py reads only config.json, so a check about archiving must not
+# treat a non-config answer as "archiving works" (check-post-push step 5).
 # Called before check_log_init: the resolver's lines go to deploy.log under the
 # init-logging name (bridge pattern, reference/script-standards-detail.md).
 # rc 1 (no dotprofile, shared-only mode) is not an error in a check: USER_REPO_PATH
@@ -162,9 +165,11 @@ print_summary() {
 resolve_config() {
     CONFIG_FILE="$HOME/.aitools/config.json"
     USER_REPO_PATH=""
+    USER_REPO_VIA="none"
     local rc=0
     resolve_user_repo_path || rc=$?
     USER_REPO_PATH="$AITLIB_USER_REPO_PATH"
+    USER_REPO_VIA="${AITLIB_USER_REPO_VIA:-none}"
     if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
         log "dotprofile unresolved (resolver error above) -- dotprofile steps skip as 'not configured'"
     fi

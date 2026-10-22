@@ -217,7 +217,7 @@ def read_config_user_repo() -> Optional[Path]:
         log_warn("config.json is not a JSON object -- sessions not archived")
         return None
     raw = data.get("userRepoPath")
-    if not raw:
+    if raw is None or raw == "":
         log_detail("skipped: userRepoPath not set in config.json")
         return None
     if not isinstance(raw, str):

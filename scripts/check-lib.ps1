@@ -156,8 +156,11 @@ function PrintSummary {
 
 # ResolveConfig -- sets $script:ConfigFile (the config.json path; check-pre-push
 # step 7 copies it) and $script:UserRepoPath (the dotprofile), taken from the lib's
-# one resolver (Resolve-UserRepoPath in aitools-lib.ps1; reference/user-repo.md
-# "Resolution"), so a check sees the same dotprofile as the setup scripts.
+# one resolver (Resolve-UserRepoPath in aitools-lib.ps1; order: aitools-profile.ps1
+# Resolve-UserRepo), so a check sees the same dotprofile as the setup scripts.
+# $script:UserRepoVia says how it was found (env|config|convention|scan|none):
+# ait-harvest.py reads only config.json, so a check about archiving must not
+# treat a non-config answer as "archiving works" (check-post-push step 5).
 # Called before CheckLogInit: the resolver's lines go to deploy.log under the
 # init-logging name (bridge pattern, reference/script-standards-detail.md).
 # rc 1 (no dotprofile, shared-only mode) is not an error in a check: UserRepoPath
@@ -167,8 +170,10 @@ function PrintSummary {
 function ResolveConfig {
     $script:ConfigFile = Join-Path $HOME ".aitools/config.json"
     $script:UserRepoPath = ""
+    $script:UserRepoVia = "none"
     $rc = Resolve-UserRepoPath
     $script:UserRepoPath = $script:AitLibUserRepoPath
+    if ($script:AitLibUserRepoVia) { $script:UserRepoVia = $script:AitLibUserRepoVia }
     if ($rc -ne 0 -and $rc -ne 1) {
         Log "dotprofile unresolved (resolver error above) -- dotprofile steps skip as 'not configured'"
     }

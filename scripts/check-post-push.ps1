@@ -133,6 +133,9 @@ if (Test-Path $settingsFile) {
 if ($hookPresent) {
     if (-not $script:UserRepoPath -or -not (Test-Path $script:UserRepoPath)) {
         StepWarn "5" "Session archive readiness" "hook present but userRepoPath missing -- run aitools user init"
+    } elseif ($script:UserRepoVia -ne "config") {
+        # ait-harvest.py archives only to config.json userRepoPath (check-lib ResolveConfig)
+        StepWarn "5" "Session archive readiness" "dotprofile found via $($script:UserRepoVia), not config.json -- sessions not archived; run aitools user init"
     } else {
         $sessionsDir = Join-Path $script:UserRepoPath "sessions"
         if (-not (Test-Path $sessionsDir)) {
