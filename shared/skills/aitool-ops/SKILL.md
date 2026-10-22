@@ -71,7 +71,9 @@ the current source, read `tool-ops-claude-code.md` (or any
 
 Neither file is required: when both are absent, this card is the
 answer; say it may be stale. When a file and this card disagree, the
-file wins (it is newer). This skill stays read-only: never edit either
+file wins (it is the source this card is derived from). The deployed
+copy refreshes only on the next `aitools` run, so it can lag the repo.
+This skill stays read-only: never edit either
 file from here (use `/tool-ops` in the aitools repo).
 
 ---
