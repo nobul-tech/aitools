@@ -32,7 +32,8 @@ PASS=0
 FAIL=0
 SKIP=0
 HAVE_PTY=true
-case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) HAVE_PTY=false ;; esac
+HAVE_READONLY=true   # chmod 555/444 does not block writes under Git Bash
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) HAVE_PTY=false; HAVE_READONLY=false ;; esac
 command -v python3 >/dev/null 2>&1 || HAVE_PTY=false
 
 check() {  # name, condition (eval'd)
@@ -111,19 +112,23 @@ run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT=''; $DMF"
 check "deploy state: old files left on disk, noted once (detail)" \
     "[ -f '$C/home/.aitools/deploy-state/manifest.json' ] && [ \"\$(grep -c 'deploy state is no longer used' '$LOG')\" = 1 ]"
 
-setup_case readonly-dir
-printf 'x\n' > "$C/src.md"; mkdir -p "$C/dest/ro"; chmod 555 "$C/dest/ro"
-run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/ro/new.md' ADOPT=''; $DMF; deploy_managed_file 'y' '$C/dest/b.md' tool b ''; printf '%s' \"\$MANAGED_FILE_RESULT\" > '$C/result2'"
-check "write failure: result failed, nothing left" "[ \"\$(result)\" = failed ] && [ ! -e '$C/dest/ro/new.md' ]"
-check "write failure: log_error with the reason" "grep -q '\[error\] Failed: item: write failed' '$LOG'"
-check "write failure: the run continues" "[ \"\$(cat '$C/result2')\" = created ] && [ \"\$(cat '$C/rc')\" = 0 ]"
-chmod 755 "$C/dest/ro"
+if $HAVE_READONLY; then
+    setup_case readonly-dir
+    printf 'x\n' > "$C/src.md"; mkdir -p "$C/dest/ro"; chmod 555 "$C/dest/ro"
+    run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/ro/new.md' ADOPT=''; $DMF; deploy_managed_file 'y' '$C/dest/b.md' tool b ''; printf '%s' \"\$MANAGED_FILE_RESULT\" > '$C/result2'"
+    check "write failure: result failed, nothing left" "[ \"\$(result)\" = failed ] && [ ! -e '$C/dest/ro/new.md' ]"
+    check "write failure: log_error with the reason" "grep -q '\[error\] Failed: item: write failed' '$LOG'"
+    check "write failure: the run continues" "[ \"\$(cat '$C/result2')\" = created ] && [ \"\$(cat '$C/rc')\" = 0 ]"
+    chmod 755 "$C/dest/ro"
 
-setup_case backup-fail
-printf 'new\n' > "$C/src.md"; mkdir -p "$C/dest/ro"; printf 'old\n' > "$C/dest/ro/a.md"; chmod 555 "$C/dest/ro"
-run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/ro/a.md' ADOPT=''; $DMF"
-check "failed backup: step failed, LOCAL unchanged" "[ \"\$(result)\" = failed ] && grep -qx old '$C/dest/ro/a.md'"
-chmod 755 "$C/dest/ro"
+    setup_case backup-fail
+    printf 'new\n' > "$C/src.md"; mkdir -p "$C/dest/ro"; printf 'old\n' > "$C/dest/ro/a.md"; chmod 555 "$C/dest/ro"
+    run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/ro/a.md' ADOPT=''; $DMF"
+    check "failed backup: step failed, LOCAL unchanged" "[ \"\$(result)\" = failed ] && grep -qx old '$C/dest/ro/a.md'"
+    chmod 755 "$C/dest/ro"
+else
+    printf 'SKIP read-only cases (chmod does not block writes on this platform)\n'; SKIP=$((SKIP + 1))
+fi
 
 setup_case tracker
 run_lib "deploy_tracker_init; deploy_tracker_record failed tool x.md; deploy_tracker_record updated tool y.md; deploy_tracker_summary tool"

@@ -102,11 +102,11 @@ $hooksDir = Join-Path $claudeDir "hooks"
 
 $hooksChanged = $false
 
-# Adopt target for manifest hooks: shared/hooks only (SD-2, incident #80;
-# reference/managed-file-deployment.md "Shell Script Deployment Detail").
-$sharedHooksDir = Join-Path $repoDir "shared\hooks"
-$hookAdoptLabel = ""
-if (Test-Path $sharedHooksDir) { $hookAdoptLabel = "aitools shared/hooks" }
+# Adopt target for manifest hooks: the file the hook is deployed from --
+# shared\hooks\<name>, or scripts\<name> for deploy-only helpers
+# (Resolve-HookSource). Never the dotprofile (SD-2, incident #80). The library
+# writes it.
+
 
 if ($DryRun) {
     foreach ($hookName in $hookFiles) {
@@ -129,34 +129,15 @@ if ($DryRun) {
         $dst = Join-Path $hooksDir $hookName
         $srcContent = Get-Content $src -Raw -ErrorAction Stop
 
-        $hookResult = Deploy-ManagedFile -Content $srcContent -DestPath $dst -ToolName "claude hooks" -ItemName $hookName -AdoptLabel $hookAdoptLabel
+        $hookResult = Deploy-ManagedFile -Content $srcContent -DestPath $dst -ToolName "claude hooks" -ItemName $hookName -AdoptPath $src
 
         switch ($hookResult) {
-            "accept & adopt" {
-                # Adopt: deployed (local) wins -> write back to the ONE canonical
-                # source, shared/hooks, via Adopt-ManagedFile (rotated backup +
-                # copy + log). Never the dotprofile (SD-2, incident #80): a
-                # dotprofile copy is ignored by Resolve-HookSource and by build-deploy.
-                if (Test-Path $sharedHooksDir) {
-                    # A failed write is logged by the lib (LogError); the row is written here.
-                    $errorsBeforeAdopt = $errors
-                    $adoptedCount = Adopt-ManagedFile -SourceFile $dst -Targets @(Join-Path $sharedHooksDir $hookName)
-                    if ($errors -gt $errorsBeforeAdopt -or -not $adoptedCount) {
-                        Write-Summary "ERROR" "claude hooks" "adopt failed: $hookName"
-                    }
-                    if (Test-InteractiveConsole) {
-                        [Console]::WriteLine("  Review: cd $repoDir && git diff")
-                    }
-                } else {
-                    LogWarn "Cannot adopt ${hookName}: shared/hooks not found at $sharedHooksDir"
-                    Write-Summary "WARN" "claude hooks" "adopt skipped: $hookName"
-                }
-            }
-            { $_ -in @("created", "updated") } {
+            { $_ -in @("created", "updated", "accept & adopt") } {
+                # accept & adopt: the library also wrote the source file in the repo.
                 $hooksChanged = $true
             }
-            { $_ -in @("skipped", "verified") } {
-                # No action needed
+            { $_ -in @("skipped", "verified", "failed") } {
+                # The tracker records the outcome (failed -> ERROR row).
             }
         }
         Record-DeployOutcome -Outcome $hookResult -ToolName "claude hooks" -ItemName $hookName

@@ -1072,29 +1072,14 @@ deploy_embedded_skill() {
 
     local dest_dir="$dest_base/$skill_name"
     local dest="$dest_dir/SKILL.md"
-    local _adopt_label=""
-    local _user_repo_path
-    # `|| true`: key absent until 'aitools user init'; set -e would otherwise abort the build.
-    _user_repo_path=$(read_config_key "$HOME/.aitools/config.json" "userRepoPath") || true
-    if [ -n "$_user_repo_path" ]; then
-        _adopt_label="dotprofile"
-    fi
 
-    deploy_managed_file "$(cat "$content_file")" "$dest" "$tool_name" "$skill_name" "$_adopt_label"
+    # No adopt target: the file read here is the build-time embed, not a repo
+    # file (contract default #9), so adopt and merge are not offered.
+    deploy_managed_file "$(cat "$content_file")" "$dest" "$tool_name" "$skill_name" ""
 
     case "$MANAGED_FILE_RESULT" in
-        "accept & adopt")
-            if [ -n "$_user_repo_path" ]; then
-                mkdir -p "$_user_repo_path/claude/skills/$skill_name"
-                cp "$dest" "$_user_repo_path/claude/skills/$skill_name/SKILL.md"
-                log_ok "Adopted skill to dotprofile: $skill_name"
-            fi
-            # Sync to all other deploy targets (prevents clobber)
-            for _other_base in $ALL_SKILL_DESTS; do
-                [ "$_other_base" = "$dest_base" ] && continue
-                mkdir -p "$_other_base/$skill_name"
-                cp "$dest" "$_other_base/$skill_name/SKILL.md"
-            done
+        created|updated|verified|skipped|failed|"accept & adopt")
+            # The tracker records the outcome (failed -> ERROR row).
             ;;
     esac
     deploy_tracker_record "$MANAGED_FILE_RESULT" "$tool_name" "$skill_name"
@@ -1180,31 +1165,13 @@ function Deploy-EmbeddedSkill {
 
     $destDir = Join-Path $DestBase $SkillName
     $dest = Join-Path $destDir "SKILL.md"
-    $adoptLabel = ""
-    $cfgFile = Join-Path $env:USERPROFILE ".aitools\config.json"
-    $userRepoPath = ReadConfigKey -File $cfgFile -Key "userRepoPath"
-    if ($userRepoPath) { $adoptLabel = "dotprofile" }
 
-    $skillResult = Deploy-ManagedFile -Content $Content -DestPath $dest -ToolName $ToolName -ItemName $SkillName -AdoptLabel $adoptLabel
+    # No adopt target: the content here is the build-time embed, not a repo
+    # file (contract default #9), so adopt and merge are not offered.
+    $skillResult = Deploy-ManagedFile -Content $Content -DestPath $dest -ToolName $ToolName -ItemName $SkillName -AdoptPath ""
 
-    if ($skillResult -eq "accept & adopt") {
-        if ($userRepoPath) {
-            $adoptDir = Join-Path $userRepoPath "claude\skills\$SkillName"
-            if (-not (Test-Path $adoptDir)) {
-                New-Item -ItemType Directory -Path $adoptDir -Force | Out-Null
-            }
-            Copy-Item -Path $dest -Destination (Join-Path $adoptDir "SKILL.md") -Force -ErrorAction Stop
-            LogOk "Adopted skill to dotprofile: $SkillName"
-        }
-        # Sync to all other deploy targets (prevents clobber)
-        foreach ($otherBase in $allSkillDests) {
-            if ($otherBase -eq $DestBase) { continue }
-            $otherDir = Join-Path $otherBase $SkillName
-            if (-not (Test-Path $otherDir)) {
-                New-Item -ItemType Directory -Path $otherDir -Force | Out-Null
-            }
-            Copy-Item -Path $dest -Destination (Join-Path $otherDir "SKILL.md") -Force
-        }
+    if ($skillResult -in @("created", "updated", "verified", "skipped", "failed", "accept & adopt")) {
+        # The tracker records the outcome (failed -> ERROR row).
     }
     Record-DeployOutcome -Outcome $skillResult -ToolName $ToolName -ItemName $SkillName
 }
