@@ -44,7 +44,6 @@ if ($DryRun) { Log "[DRY RUN] Preview mode -- no files will be written" }
 
 # --- END preamble (extracted by build-deploy) ---
 
-$configFile = Join-Path $env:USERPROFILE ".aitools\config.json"
 $claudeDir = Join-Path $env:USERPROFILE ".claude"
 $claudeMd = Join-Path $claudeDir "CLAUDE.md"
 
@@ -56,25 +55,35 @@ if (-not (Test-Path $claudeDir)) {
     }
 }
 
+# --- Dotprofile and this machine's profile: one resolver (reference/user-repo.md
+# "Resolution"). A miss never takes another machine's values: on no match the
+# Profile*/Identity* values are identity-level only (the resolver logged the
+# ERROR row and ACTION). ---
+$urpRc = Resolve-UserRepoPath       # 1 = shared-only (expected); 3 = logged error + ERROR row
+$userRepoPath = $script:UserRepoPath
+$profileRc = Resolve-MachineProfile # 1 = shared-only; 3 = no match / error (logged + ERROR row + ACTION)
+$profileName = $script:ProfileName
+$profileCompany = $script:ProfileCompany
+$identityGitName = $script:IdentityGitName
+$identityGitEmail = $script:IdentityGitEmail
+$userRepoDisplay = ""
+if ($userRepoPath) {
+    $userRepoDisplay = $userRepoPath
+    $up = $env:USERPROFILE
+    if ($up -and ($userRepoDisplay -eq $up -or $userRepoDisplay.StartsWith($up + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase))) {
+        $userRepoDisplay = '%USERPROFILE%' + $userRepoDisplay.Substring($up.Length)
+    }
+}
+
 # --- Resolve template source ---
 # Priority: user repo claude/CLAUDE.md > shared/claude-shared.md
 $sourcePath = ""
 $sourceLabel = ""
-$userRepoPath = ""
-
-if (Test-Path $configFile) {
-    try {
-        $cfg = ConvertPSObjectToHashtable (Get-Content $configFile -Raw | ConvertFrom-Json)
-        if ($cfg.ContainsKey("userRepoPath") -and $cfg["userRepoPath"]) {
-            $userRepoPath = $cfg["userRepoPath"]
-            $userClaudeMd = Join-Path $userRepoPath "claude\CLAUDE.md"
-            if (Test-Path $userClaudeMd) {
-                $sourcePath = $userClaudeMd
-                $sourceLabel = "user repo"
-            }
-        }
-    } catch {
-        LogWarn "Could not read config: $_"
+if ($userRepoPath) {
+    $userClaudeMd = Join-Path $userRepoPath "claude\CLAUDE.md"
+    if (Test-Path $userClaudeMd) {
+        $sourcePath = $userClaudeMd
+        $sourceLabel = "user repo"
     }
 }
 
@@ -103,96 +112,36 @@ if (-not $sharedContent) {
 }
 
 # --- Profile interpolation ---
-# Read profile.json and replace {{PLACEHOLDER}} tokens.
-$profileName = ""
-$profileCompany = ""
-$identityGitName = ""
-$identityGitEmail = ""
-
-if (Test-Path $configFile) {
-    try {
-        $cfg = ConvertPSObjectToHashtable (Get-Content $configFile -Raw | ConvertFrom-Json)
-        if ($cfg.ContainsKey("userRepoPath") -and $cfg["userRepoPath"]) {
-            $profilePath = Join-Path $cfg["userRepoPath"] "profile.json"
-            if (Test-Path $profilePath) {
-                $pf = ConvertPSObjectToHashtable (Get-Content $profilePath -Raw | ConvertFrom-Json)
-                $alias = ""
-                if ($cfg.ContainsKey("machineAlias")) { $alias = $cfg["machineAlias"] }
-
-                $prof = $null
-                $ident = $null
-                if ($pf.ContainsKey("version") -and $pf["version"] -eq 2) {
-                    # v2: profiles + identity
-                    if ($pf.ContainsKey("profiles")) {
-                        $profiles = $pf["profiles"]
-                        if ($alias -and $profiles.ContainsKey($alias)) {
-                            $prof = $profiles[$alias]
-                        } else {
-                            # Fallback: hostname match, then first profile
-                            $hn = $env:COMPUTERNAME
-                            foreach ($key in $profiles.Keys) {
-                                $p = $profiles[$key]
-                                if ($p.ContainsKey("machine") -and $p["machine"].ContainsKey("hostname")) {
-                                    $phn = ($p["machine"]["hostname"] -split '\.')[0]
-                                    if ($phn -eq $hn) { $prof = $p; break }
-                                }
-                            }
-                            if (-not $prof) {
-                                $firstKey = @($profiles.Keys)[0]
-                                if ($firstKey) { $prof = $profiles[$firstKey] }
-                            }
-                        }
-                    }
-                    if ($pf.ContainsKey("identity")) { $ident = $pf["identity"] }
-                } else {
-                    # v1: flat schema
-                    $prof = @{}
-                    if ($pf.ContainsKey("name")) { $prof["name"] = $pf["name"] }
-                    if ($pf.ContainsKey("company")) { $prof["company"] = $pf["company"] }
-                    $ident = @{ git = @{} }
-                    if ($pf.ContainsKey("git")) {
-                        $ident["git"] = $pf["git"]
-                    } else {
-                        if ($pf.ContainsKey("name")) { $ident["git"]["name"] = $pf["name"] }
-                        if ($pf.ContainsKey("email")) { $ident["git"]["email"] = $pf["email"] }
-                    }
-                }
-
-                if ($prof -and $prof.ContainsKey("name")) { $profileName = $prof["name"] }
-                if ($prof -and $prof.ContainsKey("company")) { $profileCompany = $prof["company"] }
-                if ($ident -and $ident.ContainsKey("git")) {
-                    $gitIdent = $ident["git"]
-                    if ($gitIdent.ContainsKey("name")) { $identityGitName = $gitIdent["name"] }
-                    if ($gitIdent.ContainsKey("email")) { $identityGitEmail = $gitIdent["email"] }
-                }
-            }
-        }
-    } catch {
-        LogWarn "Could not read profile: $_"
-    }
+# Values come from Resolve-MachineProfile above. String.Replace is literal ("$" in
+# a value is not a regex group). An empty value leaves its token in place.
+$tokens = [ordered]@{
+    "PROFILE_NAME" = $profileName; "PROFILE_COMPANY" = $profileCompany
+    "IDENTITY_GIT_NAME" = $identityGitName; "IDENTITY_GIT_EMAIL" = $identityGitEmail
+    "USER_REPO_PATH" = $userRepoDisplay
 }
-
-if ($profileName) {
-    $sharedContent = $sharedContent -replace [regex]::Escape('{{PROFILE_NAME}}'), $profileName
-    $sharedContent = $sharedContent -replace [regex]::Escape('{{PROFILE_COMPANY}}'), $profileCompany
-    $sharedContent = $sharedContent -replace [regex]::Escape('{{IDENTITY_GIT_NAME}}'), $identityGitName
-    $sharedContent = $sharedContent -replace [regex]::Escape('{{IDENTITY_GIT_EMAIL}}'), $identityGitEmail
-    Log "Profile interpolation: name=$profileName company=$profileCompany"
-} else {
-    LogWarn "Profile not available -- {{PLACEHOLDER}} tokens will not be resolved"
+foreach ($t in $tokens.Keys) {
+    if ($tokens[$t]) { $sharedContent = $sharedContent.Replace("{{$t}}", [string]$tokens[$t]) }
+}
+if ($profileRc -eq 0) {
+    Log "Profile interpolation: alias=$($script:MachineAlias) via=$($script:MachineVia) name=$profileName company=$profileCompany"
+} elseif ($profileRc -eq 1) {
+    LogWarn "No dotprofile -- {{PLACEHOLDER}} tokens will not be resolved"
     Write-Summary "WARN" "claude.md" "template tokens unresolved"
+} else {
+    Log "Profile interpolation: identity-level values only (no machine profile) -- machine-specific tokens may stay unresolved"
 }
 
 # --- Write or preview CLAUDE.md ---
 $osInfo = (Get-CimInstance Win32_OperatingSystem).Caption
-$hostname = $env:COMPUTERNAME
+$hostname = if ($script:MachineHostname) { $script:MachineHostname } else { $env:COMPUTERNAME }
+$profileShown = if ($script:MachineAlias) { $script:MachineAlias } else { "unresolved" }
 
 $content = @"
 $sharedContent
 
 ## Machine-Specific
 
-- Machine: $osInfo ($hostname)
+- Machine: $osInfo ($hostname; profile $profileShown)
 - Shell: bash (Claude Code requires Git Bash on Windows)
 "@
 
@@ -212,15 +161,16 @@ $claudeMdAdoptFilter = {
         $Deployed = $Deployed.Substring(0, $m.Index)
     }
     $Deployed = $Deployed -replace '[\r\n]+$', ''
-    if ($profileName) {
-        foreach ($pair in @(
-                @($profileName, '{{PROFILE_NAME}}'),
-                @($profileCompany, '{{PROFILE_COMPANY}}'),
-                @($identityGitName, '{{IDENTITY_GIT_NAME}}'),
-                @($identityGitEmail, '{{IDENTITY_GIT_EMAIL}}'))) {
-            if ($pair[0]) {
-                $Deployed = $Deployed.Replace([string]$pair[0], [string]$pair[1])
-            }
+    # USER_REPO_PATH first: the path can contain the other values. {{PROFILE_NAME}}
+    # wins over {{IDENTITY_GIT_NAME}} when both are the same text (P-Q13).
+    foreach ($pair in @(
+            @($userRepoDisplay, '{{USER_REPO_PATH}}'),
+            @($profileName, '{{PROFILE_NAME}}'),
+            @($profileCompany, '{{PROFILE_COMPANY}}'),
+            @($identityGitName, '{{IDENTITY_GIT_NAME}}'),
+            @($identityGitEmail, '{{IDENTITY_GIT_EMAIL}}'))) {
+        if ($pair[0]) {
+            $Deployed = $Deployed.Replace([string]$pair[0], [string]$pair[1])
         }
     }
     return $Deployed
@@ -262,6 +212,9 @@ if ($DryRun) {
 
     switch ($claudeResult) {
         { $_ -eq "created" -or $_ -eq "updated" -or $_ -eq "accept & adopt" } {
+            # Errors logged before this point (e.g. the machine-profile resolver)
+            # are not validation failures
+            $claudeErrsBefore = $errors
             # --- BEGIN post-write validation (extracted by build-deploy) ---
             # Post-write validation: check structure AND content (not just a marker)
             if (-not (Test-Path $claudeMd) -or (Get-Item $claudeMd).Length -eq 0) {
@@ -277,7 +230,7 @@ if ($DryRun) {
                 }
             }
             # --- END post-write validation (extracted by build-deploy) ---
-            if ($errors -ne 0) {
+            if ($errors -ne $claudeErrsBefore) {
                 Write-Summary "ERROR" "claude.md" "validation failed"
             } elseif ($claudeResult -eq "accept & adopt") {
                 Write-Summary "OK" "claude.md" "accepted to profile"

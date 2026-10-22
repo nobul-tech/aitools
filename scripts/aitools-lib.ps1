@@ -162,13 +162,13 @@ function Resolve-UserRepoPath {
 
 # Resolve-MachineProfile -- sets $script:MachineAlias, MachineVia, ProfileFile,
 # ProfileName, ProfileCompany, IdentityGitName, IdentityGitEmail,
-# IdentityGithub. Logs one detail line. Resolver warnings are detail lines here:
+# IdentityGithub, MachineHostname (the resolver's hostname, COMPUTERNAME). Logs one detail line. Resolver warnings are detail lines here:
 # setup-user-config, the first script of every run, reports them once (a
 # successful step stays OK, D-TS12). Returns 0 resolved, 1 no dotprofile
 # (shared-only), 3 no match or error (LogError + ERROR row "machine profile" +
 # ACTION; the Profile*/Identity* values then hold identity-level values only).
 function Resolve-MachineProfile {
-    $script:MachineAlias = ""; $script:MachineVia = "none"; $script:ProfileFile = ""
+    $script:MachineAlias = ""; $script:MachineVia = "none"; $script:ProfileFile = ""; $script:MachineHostname = ""
     $script:ProfileName = ""; $script:ProfileCompany = ""; $script:IdentityGitName = ""
     $script:IdentityGitEmail = ""; $script:IdentityGithub = ""
     if (-not (Invoke-AitoolsProfile @("resolve", "--environment", $script:AitoolsEnvironment))) {
@@ -184,6 +184,7 @@ function Resolve-MachineProfile {
     $script:IdentityGitName = Get-ProfileTag "gitName"
     $script:IdentityGitEmail = Get-ProfileTag "gitEmail"
     $script:IdentityGithub = Get-ProfileTag "github"
+    $script:MachineHostname = Get-ProfileTag "hostname"
     foreach ($w in (Get-ProfileLines "warn")) { LogDetail "machine profile: $w" }
     $aliasShown = if ($script:MachineAlias) { $script:MachineAlias } else { "none" }
     LogDetail "machine profile: alias=$aliasShown via=$($script:MachineVia) company=$($script:ProfileCompany) host=$(Get-ProfileTag 'hostname') id=$(Get-ProfileTag 'machineId')"

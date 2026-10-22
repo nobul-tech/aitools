@@ -52,31 +52,32 @@ for arg in "$@"; do
         *) SHARED_PATH="$arg"; break ;;
     esac
 done
-CONFIG="$HOME/.aitools/config.json"
-
 CLAUDE_DIR="$HOME/.claude"
 CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
 
 # Ensure ~/.claude/ exists
 mkdir -p "$CLAUDE_DIR"
 
+# --- Dotprofile and this machine's profile: one resolver (reference/user-repo.md
+# "Resolution"). A miss never takes another machine's values: on no match the
+# PROFILE_/IDENTITY_ values are identity-level only (the resolver logged the
+# ERROR row and ACTION). ---
+URP_RC=0
+resolve_user_repo_path || URP_RC=$?    # 1 = shared-only (expected); 3 = logged error + ERROR row
+PROFILE_RC=0
+resolve_machine_profile || PROFILE_RC=$?   # 1 = shared-only; 3 = no match / error (logged + ERROR row + ACTION)
+USER_REPO_DISPLAY=""
+if [ -n "$USER_REPO_PATH" ]; then
+    USER_REPO_DISPLAY=$(printf '%s' "$USER_REPO_PATH" | HOME_DIR="$HOME" perl -pe 's/^\Q$ENV{HOME_DIR}\E(?=\/|$)/~/')
+fi
+
 # --- Resolve template source ---
 # Priority: user repo claude/CLAUDE.md > shared/claude-shared.md
 SOURCE_PATH=""
 SOURCE_LABEL=""
-
-if [ -f "$CONFIG" ] && command -v node &>/dev/null; then
-    USER_REPO_PATH=$(node -e "
-try {
-    const cfg = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
-    if (cfg.userRepoPath) console.log(cfg.userRepoPath);
-} catch (e) { if (e.code !== 'ENOENT') console.error('Warning: could not read config: ' + e.message); }
-" "$CONFIG" 2>/dev/null)
-
-    if [ -n "$USER_REPO_PATH" ] && [ -f "$USER_REPO_PATH/claude/CLAUDE.md" ]; then
-        SOURCE_PATH="$USER_REPO_PATH/claude/CLAUDE.md"
-        SOURCE_LABEL="user repo"
-    fi
+if [ -n "$USER_REPO_PATH" ] && [ -f "$USER_REPO_PATH/claude/CLAUDE.md" ]; then
+    SOURCE_PATH="$USER_REPO_PATH/claude/CLAUDE.md"
+    SOURCE_LABEL="user repo"
 fi
 
 if [ -z "$SOURCE_PATH" ]; then
@@ -95,58 +96,33 @@ log "Template source: $(display_path "$SOURCE_PATH") ($SOURCE_LABEL)"
 SHARED_CONTENT=$(cat "$SOURCE_PATH")
 
 # --- Profile interpolation ---
-# Read profile.json and replace {{PLACEHOLDER}} tokens.
-# Reuses the same pattern as build-deploy.sh (lines 58-100).
-PROFILE_NAME=""
-PROFILE_COMPANY=""
-IDENTITY_GIT_NAME=""
-IDENTITY_GIT_EMAIL=""
+# Values come from resolve_machine_profile above. Substitution runs in perl with
+# the values passed through the environment, so "&", "$", "@" and "/" in a value
+# are literal (bash ${var//pat/rep} treats "&" as the match in bash 5.2). An
+# empty value leaves its token in place (visible, not silently blank).
+SHARED_CONTENT=$(printf '%s' "$SHARED_CONTENT" | \
+    T_PROFILE_NAME="$PROFILE_NAME" T_PROFILE_COMPANY="$PROFILE_COMPANY" \
+    T_IDENTITY_GIT_NAME="$IDENTITY_GIT_NAME" T_IDENTITY_GIT_EMAIL="$IDENTITY_GIT_EMAIL" \
+    T_USER_REPO_PATH="$USER_REPO_DISPLAY" \
+    perl -0777 -pe 'for my $k (qw(PROFILE_NAME PROFILE_COMPANY IDENTITY_GIT_NAME IDENTITY_GIT_EMAIL USER_REPO_PATH)) {
+        my $v = $ENV{"T_$k"};
+        next unless defined $v && length $v;
+        s/\{\{\Q$k\E\}\}/$v/g;
+    }')
 
-if [ -f "$CONFIG" ] && command -v node &>/dev/null; then
-    PROFILE_VALS=$(node -e "
-const fs = require('fs'), path = require('path'), os = require('os');
-try {
-    const cfg = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
-    const repo = cfg.userRepoPath;
-    const alias = cfg.machineAlias || '';
-    if (!repo) throw new Error('no userRepoPath');
-    const pf = path.join(repo, 'profile.json');
-    const p = JSON.parse(fs.readFileSync(pf, 'utf8'));
-    let prof, ident;
-    if (p.version === 2) {
-        prof = p.profiles[alias]
-            || Object.values(p.profiles).find(pr => pr.machine && pr.machine.hostname.split('.')[0] === os.hostname().split('.')[0])
-            || Object.values(p.profiles)[0];
-        ident = p.identity;
-    } else {
-        prof = { name: p.name, company: p.company || '' };
-        ident = { git: { name: (p.git && p.git.name) || p.name, email: (p.git && p.git.email) || p.email } };
-    }
-    console.log('PROFILE_NAME=' + JSON.stringify(prof.name));
-    console.log('PROFILE_COMPANY=' + JSON.stringify(prof.company));
-    console.log('IDENTITY_GIT_NAME=' + JSON.stringify(ident.git.name));
-    console.log('IDENTITY_GIT_EMAIL=' + JSON.stringify(ident.git.email));
-} catch(e) { process.exit(1); }
-" "$CONFIG" 2>/dev/null) && eval "$PROFILE_VALS"
-fi
-
-if [ -n "$PROFILE_NAME" ]; then
-    SHARED_CONTENT="${SHARED_CONTENT//\{\{PROFILE_NAME\}\}/$PROFILE_NAME}"
-    SHARED_CONTENT="${SHARED_CONTENT//\{\{PROFILE_COMPANY\}\}/$PROFILE_COMPANY}"
-    SHARED_CONTENT="${SHARED_CONTENT//\{\{IDENTITY_GIT_NAME\}\}/$IDENTITY_GIT_NAME}"
-    SHARED_CONTENT="${SHARED_CONTENT//\{\{IDENTITY_GIT_EMAIL\}\}/$IDENTITY_GIT_EMAIL}"
-    log "Profile interpolation: name=$PROFILE_NAME company=$PROFILE_COMPANY"
-else
-    log_warn "Profile not available -- {{PLACEHOLDER}} tokens will not be resolved"
-    write_summary WARN "claude.md" "template tokens unresolved"
-fi
+case "$PROFILE_RC" in
+    0) log "Profile interpolation: alias=$MACHINE_ALIAS via=$MACHINE_VIA name=$PROFILE_NAME company=$PROFILE_COMPANY" ;;
+    1) log_warn "No dotprofile -- {{PLACEHOLDER}} tokens will not be resolved"
+       write_summary WARN "claude.md" "template tokens unresolved" ;;
+    *) log "Profile interpolation: identity-level values only (no machine profile) -- machine-specific tokens may stay unresolved" ;;
+esac
 
 # Construct final content (used by both dry-run preview and actual write)
 NEW_CONTENT="${SHARED_CONTENT}
 
 ## Machine-Specific
 
-- Machine: $(uname -s) $(uname -m) ($(hostname -s 2>/dev/null || hostname))
+- Machine: $(uname -s) $(uname -m) (${MACHINE_HOSTNAME:-$(uname -n)}; profile ${MACHINE_ALIAS:-unresolved})
 - Shell: $(basename "$SHELL")"
 
 # ---------------------------------------------------------------------------
@@ -161,16 +137,17 @@ claude_md_adopt_filter() {
     # Everything before ## Machine-Specific; trailing blank lines removed
     content=$(perl -pe 'last if /^## Machine-Specific/')
     content=$(printf '%s' "$content" | perl -0777 -pe 's/\n+\z//')
-    if [ -n "${PROFILE_NAME:-}" ]; then
-        content=$(printf '%s' "$content" | \
-            AMF_PROFILE_NAME="$PROFILE_NAME" AMF_PROFILE_COMPANY="$PROFILE_COMPANY" \
-            AMF_IDENTITY_GIT_NAME="$IDENTITY_GIT_NAME" AMF_IDENTITY_GIT_EMAIL="$IDENTITY_GIT_EMAIL" \
-            perl -pe 'for my $k (qw(PROFILE_NAME PROFILE_COMPANY IDENTITY_GIT_NAME IDENTITY_GIT_EMAIL)) {
-                my $v = $ENV{"AMF_$k"};
-                next unless defined $v && length $v;
-                s/\Q$v\E/"{{" . $k . "}}"/ge;
-            }')
-    fi
+    # USER_REPO_PATH first: the path can contain the other values. {{PROFILE_NAME}}
+    # wins over {{IDENTITY_GIT_NAME}} when both are the same text (P-Q13).
+    content=$(printf '%s' "$content" | \
+        AMF_USER_REPO_PATH="${USER_REPO_DISPLAY:-}" \
+        AMF_PROFILE_NAME="${PROFILE_NAME:-}" AMF_PROFILE_COMPANY="${PROFILE_COMPANY:-}" \
+        AMF_IDENTITY_GIT_NAME="${IDENTITY_GIT_NAME:-}" AMF_IDENTITY_GIT_EMAIL="${IDENTITY_GIT_EMAIL:-}" \
+        perl -pe 'for my $k (qw(USER_REPO_PATH PROFILE_NAME PROFILE_COMPANY IDENTITY_GIT_NAME IDENTITY_GIT_EMAIL)) {
+            my $v = $ENV{"AMF_$k"};
+            next unless defined $v && length $v;
+            s/\Q$v\E/"{{" . $k . "}}"/ge;
+        }')
     printf '%s\n' "$content"
 }
 
@@ -209,6 +186,9 @@ else
 
     case "$MANAGED_FILE_RESULT" in
         created|updated|"accept & adopt")
+            # Errors logged before this point (e.g. the machine-profile resolver)
+            # are not validation failures
+            _claude_errs_before=$ERRORS
             # --- BEGIN post-write validation (extracted by build-deploy) ---
             # Post-write validation: check structure AND content (not just a marker)
             if [ ! -s "$CLAUDE_MD" ]; then
@@ -220,7 +200,7 @@ else
                 log_error "Validation failed: $CLAUDE_MD missing template body (only footer present?)"
             fi
             # --- END post-write validation (extracted by build-deploy) ---
-            if [ "$ERRORS" -ne 0 ]; then
+            if [ "$ERRORS" -ne "$_claude_errs_before" ]; then
                 write_summary ERROR "claude.md" "validation failed"
             elif [ "$MANAGED_FILE_RESULT" = "accept & adopt" ]; then
                 write_summary OK "claude.md" "accepted to profile"

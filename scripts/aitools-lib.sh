@@ -209,17 +209,18 @@ resolve_user_repo_path() {
 
 # resolve_machine_profile -- sets MACHINE_ALIAS, MACHINE_VIA, PROFILE_FILE,
 # PROFILE_NAME, PROFILE_COMPANY, IDENTITY_GIT_NAME, IDENTITY_GIT_EMAIL,
-# IDENTITY_GITHUB. Logs one detail line ("machine profile: alias=.. via=..").
+# IDENTITY_GITHUB, MACHINE_HOSTNAME (the resolver's hostname: macOS
+# LocalHostName, never the DNS-derived kernel name). Logs one detail line ("machine profile: alias=.. via=..").
 # Resolver warnings are detail lines here: setup-user-config, the first script
 # of every run, reports them once (a successful step stays OK, D-TS12).
 # Returns 0 resolved, 1 no dotprofile (shared-only), 3 no match or error
 # (log_error + ERROR row "machine profile" + ACTION; callers must not substitute
 # another machine's values; the PROFILE_/IDENTITY_ values then hold the
 # identity-level, machine-independent values only).
-MACHINE_ALIAS=""; MACHINE_VIA="none"; PROFILE_FILE=""
+MACHINE_ALIAS=""; MACHINE_VIA="none"; PROFILE_FILE=""; MACHINE_HOSTNAME=""
 PROFILE_NAME=""; PROFILE_COMPANY=""; IDENTITY_GIT_NAME=""; IDENTITY_GIT_EMAIL=""; IDENTITY_GITHUB=""
 resolve_machine_profile() {
-    MACHINE_ALIAS=""; MACHINE_VIA="none"; PROFILE_FILE=""
+    MACHINE_ALIAS=""; MACHINE_VIA="none"; PROFILE_FILE=""; MACHINE_HOSTNAME=""
     PROFILE_NAME=""; PROFILE_COMPANY=""; IDENTITY_GIT_NAME=""; IDENTITY_GIT_EMAIL=""; IDENTITY_GITHUB=""
     local w
     if ! _aitools_profile_run resolve --environment "$AITOOLS_ENVIRONMENT"; then
@@ -235,6 +236,7 @@ resolve_machine_profile() {
     IDENTITY_GIT_NAME=$(_profile_tag gitName)
     IDENTITY_GIT_EMAIL=$(_profile_tag gitEmail)
     IDENTITY_GITHUB=$(_profile_tag github)
+    MACHINE_HOSTNAME=$(_profile_tag hostname)
     while IFS= read -r w; do if [ -n "$w" ]; then log_detail "machine profile: $w"; fi; done <<< "$(_profile_lines warn)"
     log_detail "machine profile: alias=${MACHINE_ALIAS:-none} via=${MACHINE_VIA:-none} company=$PROFILE_COMPANY host=$(_profile_tag hostname) id=$(_profile_tag machineId)"
     case "$PROFILE_RC" in
