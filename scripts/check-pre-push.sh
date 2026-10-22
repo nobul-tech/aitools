@@ -109,9 +109,18 @@ step_warn "6" "Roadmap reflects reality" "check if push completes or starts a ro
 # ---------------------------------------------------------------------------
 # Generated deploy scripts live in the dotprofile repo (deploy-paths.md; aitools/deploy/
 # is frozen). When a deploy-relevant source changes (setup scripts, the build script,
-# aitools-lib -- inlined into every deploy script -- or shared/), rebuild from this branch
-# into a temporary copy of the dotprofile's committed tree and compare its deploy/.
-deploy_sources=$(echo "$PUSH_FILES" | grep -E '^(scripts/(setup-.*|build-deploy|aitools-lib)\.(sh|ps1)$|shared/)' || true)
+# aitools-lib -- inlined into every deploy script --, the profile resolver and its JSON
+# engine -- embedded in the resolver-consuming deploy scripts (M3 B5, review M7) -- or
+# shared/), rebuild from this branch into a temporary copy of the dotprofile's committed
+# tree and compare its deploy/. Then smoke-run the generated resolver consumers
+# (--dry-run, isolated HOME): a deploy script that cannot find its resolver fails here,
+# not on an endpoint (B8a INCIDENT). The smoke run lives here, not in build-deploy, so
+# build-deploy stays a pure generator that never executes what it generates.
+# The build gets the temp copy through AITOOLS_USER_REPO_PATH (build-deploy's
+# entry-point input) and no AITOOLS_PROFILE_FILE / AITOOLS_MACHINE_ALIAS from this
+# shell (review H5): an exported value would otherwise point the build, which deletes
+# and rebuilds <dotprofile>/deploy, at the real dotprofile.
+deploy_sources=$(echo "$PUSH_FILES" | grep -E '^(scripts/(setup-.*|build-deploy|aitools-lib|aitools-profile)\.(sh|ps1)$|scripts/aitools-json\.(pl|ps1)$|shared/)' || true)
 if [ -z "$deploy_sources" ]; then
     step_skip "7" "deploy/ matches source" "no deploy-relevant source changes"
 elif [ -z "$USER_REPO_PATH" ] || [ ! -e "$USER_REPO_PATH/.git" ]; then
@@ -126,6 +135,7 @@ else
         git -C "$USER_REPO_PATH" archive -o "$d7_tmp/dot.tar" HEAD &&
         tar -xf "$d7_tmp/dot.tar" -C "$d7_tmp/dot" &&
         tar -xf "$d7_tmp/dot.tar" -C "$d7_tmp/committed" &&
+        rm -rf "$d7_tmp/dot/deploy" &&
         node -e '
 const fs = require("fs");
 let c = {};
@@ -134,25 +144,64 @@ catch (e) { if (e.code !== "ENOENT") { console.error("config.json unreadable: " 
 c.repoPath = process.argv[3]; c.userRepoPath = process.argv[4];
 fs.writeFileSync(process.argv[2], JSON.stringify(c, null, 2) + "\n");
 ' "$CONFIG_FILE" "$d7_tmp/home/.aitools/config.json" "$REPO_ROOT" "$d7_tmp/dot" &&
-        HOME="$d7_tmp/home" bash "$REPO_ROOT/scripts/build-deploy.sh"
+        env -u AITOOLS_PROFILE_FILE -u AITOOLS_MACHINE_ALIAS -u AITOOLS_SUMMARY_FILE \
+            HOME="$d7_tmp/home" AITOOLS_USER_REPO_PATH="$d7_tmp/dot" bash "$REPO_ROOT/scripts/build-deploy.sh"
     } 2>&1 ) || d7_rc=$?
     if [ "$d7_rc" -ne 0 ]; then
         while IFS= read -r d7_line; do
             if [ -n "$d7_line" ]; then log_detail "pre-push 7 build: $d7_line"; fi
         done <<< "$d7_out"
         step_fail "7" "deploy/ matches source" "rebuild into a dotprofile copy failed (exit $d7_rc) -- see checks.log"
+    elif [ ! -d "$d7_tmp/dot/deploy" ]; then
+        # The copy's committed deploy/ was removed before the build, and build-deploy
+        # exits 0 without building when it finds no dotprofile.
+        while IFS= read -r d7_line; do
+            if [ -n "$d7_line" ]; then log_detail "pre-push 7 build: $d7_line"; fi
+        done <<< "$d7_out"
+        step_fail "7" "deploy/ matches source" "build-deploy built nothing into the dotprofile copy -- see checks.log"
     else
+        d7_problems=""
         # diff -rq exit codes: 0 identical, 1 differences (listed), 2 trouble.
         d7_diff_rc=0
         d7_diff=$(diff -rq "$d7_tmp/committed/deploy" "$d7_tmp/dot/deploy" 2>&1) || d7_diff_rc=$?
-        if [ "$d7_diff_rc" -eq 0 ]; then
-            step_pass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build"
-        elif [ "$d7_diff_rc" -eq 1 ]; then
+        if [ "$d7_diff_rc" -eq 1 ]; then
             d7_files=$(printf '%s\n' "$d7_diff" | perl -ne 'print "$1 " if m{/deploy/(\S+) and } || m{/deploy: (\S+)}')
-            step_fail "7" "deploy/ matches source" "dotprofile deploy/ is stale (${d7_files% }) -- run build-deploy.sh and commit in $USER_REPO_PATH"
-        else
+            d7_problems="dotprofile deploy/ is stale (${d7_files% }) -- run build-deploy.sh and commit in $USER_REPO_PATH"
+        elif [ "$d7_diff_rc" -ne 0 ]; then
             log_detail "pre-push 7 diff: $d7_diff"
-            step_fail "7" "deploy/ matches source" "could not compare deploy/ (diff exit $d7_diff_rc) -- see checks.log"
+            d7_problems="could not compare deploy/ (diff exit $d7_diff_rc) -- see checks.log"
+        fi
+        # Smoke run of the fresh build's resolver consumers. Exit 0/1 is a run (1 = a
+        # counted error such as this machine having no profile); 2+ is a crash or a
+        # syntax error. "resolver missing" in the output or the run summary is the
+        # B8a failure. The claude script must also report its profile source.
+        d7_smoke=""
+        for d7_s in setup-user-claude.sh setup-user-settings.sh setup-user-cursor.sh; do
+            d7_sum="$d7_tmp/smoke-summary"
+            : > "$d7_sum"
+            d7_s_rc=0
+            d7_s_out=$(env -u AITOOLS_PROFILE_FILE -u AITOOLS_MACHINE_ALIAS -u AITOOLS_PROFILE_SH -u AITOOLS_PROFILE_PS1 \
+                HOME="$d7_tmp/home" AITOOLS_LOG_DIR="$d7_tmp/logs" AITOOLS_USER_REPO_PATH="$d7_tmp/dot" \
+                AITOOLS_SUMMARY_FILE="$d7_sum" \
+                bash "$d7_tmp/dot/deploy/$d7_s" --dry-run < /dev/null 2>&1) || d7_s_rc=$?
+            while IFS= read -r d7_line; do
+                if [ -n "$d7_line" ]; then log_detail "pre-push 7 smoke $d7_s: $d7_line"; fi
+            done <<< "$d7_s_out"
+            if [ "$d7_s_rc" -gt 1 ]; then
+                d7_smoke="$d7_smoke $d7_s(exit $d7_s_rc)"
+            elif printf '%s\n' "$d7_s_out" | grep -q 'resolver missing' || grep -q 'resolver missing' "$d7_sum"; then
+                d7_smoke="$d7_smoke $d7_s(resolver missing)"
+            elif [ "$d7_s" = "setup-user-claude.sh" ] && ! printf '%s\n' "$d7_s_out" | grep -q 'Profile source:'; then
+                d7_smoke="$d7_smoke $d7_s(no profile source line)"
+            fi
+        done
+        if [ -n "$d7_smoke" ]; then
+            d7_problems="${d7_problems:+$d7_problems; }generated deploy scripts failed a dry run:$d7_smoke -- see checks.log"
+        fi
+        if [ -z "$d7_problems" ]; then
+            step_pass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build; resolver consumers dry-run clean"
+        else
+            step_fail "7" "deploy/ matches source" "$d7_problems"
         fi
     fi
     rm -rf "$d7_tmp"

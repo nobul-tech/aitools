@@ -112,9 +112,18 @@ StepWarn "6" "Roadmap reflects reality" "check if push completes or starts a roa
 # ---------------------------------------------------------------------------
 # Generated deploy scripts live in the dotprofile repo (deploy-paths.md; aitools/deploy/
 # is frozen). When a deploy-relevant source changes (setup scripts, the build script,
-# aitools-lib -- inlined into every deploy script -- or shared/), rebuild from this branch
-# into a temporary copy of the dotprofile's committed tree and compare its deploy/.
-$deploySources = @($pushFiles | Where-Object { $_ -match '^(scripts/(setup-.*|build-deploy|aitools-lib)\.(sh|ps1)$|shared/)' })
+# aitools-lib -- inlined into every deploy script --, the profile resolver and its JSON
+# engine -- embedded in the resolver-consuming deploy scripts (M3 B5, review M7) -- or
+# shared/), rebuild from this branch into a temporary copy of the dotprofile's committed
+# tree and compare its deploy/. Then smoke-run the generated resolver consumers
+# (-DryRun, isolated USERPROFILE): a deploy script that cannot find its resolver fails
+# here, not on an endpoint (B8a INCIDENT). The smoke run lives here, not in
+# build-deploy, so build-deploy stays a pure generator.
+# The build gets the temp copy through AITOOLS_USER_REPO_PATH (build-deploy's
+# entry-point input) and no AITOOLS_PROFILE_FILE / AITOOLS_MACHINE_ALIAS from this
+# session (review H5): an inherited value would otherwise point the build, which
+# deletes and rebuilds <dotprofile>/deploy, at the real dotprofile.
+$deploySources = @($pushFiles | Where-Object { $_ -match '^(scripts/(setup-.*|build-deploy|aitools-lib|aitools-profile)\.(sh|ps1)$|scripts/aitools-json\.(pl|ps1)$|shared/)' })
 # build-deploy.sh runs under Git Bash (approved cross-language exception); same lookup
 # order as check-pre-commit step 3 after the known Git for Windows locations.
 $d7Bash = @(
@@ -139,12 +148,18 @@ if ($deploySources.Count -eq 0) {
     $d7Home = Join-Path $d7Tmp "home"
     $d7Tar = Join-Path $d7Tmp "dot.tar"
     $prevEap = $ErrorActionPreference
-    $prevHome = $env:HOME
+    # Environment the build and the smoke run override; restored in finally
+    $d7EnvNames = @("HOME", "USERPROFILE", "AITOOLS_USER_REPO_PATH", "AITOOLS_PROFILE_FILE", "AITOOLS_MACHINE_ALIAS",
+        "AITOOLS_SUMMARY_FILE", "AITOOLS_PROFILE_SH", "AITOOLS_PROFILE_PS1", "AITOOLS_LOG_DIR")
+    $d7EnvPrev = @{}
+    foreach ($n in $d7EnvNames) { $d7EnvPrev[$n] = [Environment]::GetEnvironmentVariable($n) }
     # Native tools write progress and warnings to stderr; Stop would turn those into
     # terminating errors (see InvokeGit). Every step's exit code is checked instead.
     $ErrorActionPreference = "Continue"
     $d7Log = ""
     $d7Rc = 0
+    $d7Smoke = @()
+    $d7Built = $false
     try {
         $d7CfgDir = Join-Path $d7Home ".aitools"
         New-Item -ItemType Directory -Path $d7Dot, $d7Committed, $d7CfgDir -Force | Out-Null
@@ -160,34 +175,81 @@ if ($deploySources.Count -eq 0) {
             $d7Cfg | Add-Member -NotePropertyName "repoPath" -NotePropertyValue $script:RepoRoot -Force
             $d7Cfg | Add-Member -NotePropertyName "userRepoPath" -NotePropertyValue $d7Dot -Force
             [IO.File]::WriteAllText((Join-Path $d7CfgDir "config.json"), ($d7Cfg | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
+            # The copy's committed deploy/ goes first: a build that skips (exit 0, no
+            # dotprofile found) then leaves no deploy/, instead of passing the compare.
+            $d7DotDeploy = Join-Path $d7Dot "deploy"
+            if (Test-Path $d7DotDeploy) { Remove-Item -Recurse -Force $d7DotDeploy -ErrorAction Stop }
+            foreach ($n in @("AITOOLS_PROFILE_FILE", "AITOOLS_MACHINE_ALIAS", "AITOOLS_SUMMARY_FILE")) { [Environment]::SetEnvironmentVariable($n, $null) }
             $env:HOME = $d7Home
+            # Forward-slash form (C:/...), as the entry point passes it to Git Bash
+            $env:AITOOLS_USER_REPO_PATH = $d7Dot -replace '\\', '/'
             $d7Log += & $d7Bash "$script:RepoRoot/scripts/build-deploy.sh" 2>&1 | Out-String
             $d7Rc = $LASTEXITCODE
+        }
+        $d7Built = ($d7Rc -eq 0) -and (Test-Path (Join-Path $d7Dot "deploy"))
+        if ($d7Built) {
+            # Smoke run of the fresh build's resolver consumers (see the step comment).
+            # Exit 0/1 is a run (1 = a counted error such as this machine having no
+            # profile); 2+ is a crash or a parse error. "resolver missing" in the output
+            # or the run summary is the B8a failure. The claude script must also report
+            # its profile source.
+            $d7Sum = Join-Path $d7Tmp "smoke-summary"
+            foreach ($n in @("AITOOLS_PROFILE_SH", "AITOOLS_PROFILE_PS1")) { [Environment]::SetEnvironmentVariable($n, $null) }
+            $env:USERPROFILE = $d7Home
+            $env:AITOOLS_LOG_DIR = Join-Path $d7Tmp "logs"
+            $env:AITOOLS_USER_REPO_PATH = $d7Dot
+            $env:AITOOLS_SUMMARY_FILE = $d7Sum
+            foreach ($s in @("setup-user-claude.ps1", "setup-user-settings.ps1", "setup-user-cursor.ps1")) {
+                [IO.File]::WriteAllText($d7Sum, "", (New-Object System.Text.UTF8Encoding($false)))
+                $sOut = & pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path (Join-Path $d7Dot "deploy") $s) -DryRun 2>&1 | Out-String
+                $sRc = $LASTEXITCODE
+                foreach ($l in $sOut.Split("`n")) { if ($l.Trim()) { LogDetail "pre-push 7 smoke ${s}: $($l.TrimEnd())" } }
+                $sSum = [IO.File]::ReadAllText($d7Sum)
+                if ($sRc -gt 1) {
+                    $d7Smoke += "$s(exit $sRc)"
+                } elseif ($sOut -match 'resolver missing' -or $sSum -match 'resolver missing') {
+                    $d7Smoke += "$s(resolver missing)"
+                } elseif ($s -eq "setup-user-claude.ps1" -and $sOut -notmatch 'Profile source:') {
+                    $d7Smoke += "$s(no profile source line)"
+                }
+            }
         }
     } catch {
         $d7Log += "$_"
         $d7Rc = 1
     } finally {
-        $env:HOME = $prevHome
+        foreach ($n in $d7EnvNames) { [Environment]::SetEnvironmentVariable($n, $d7EnvPrev[$n]) }
         $ErrorActionPreference = $prevEap
     }
     if ($d7Rc -ne 0) {
         foreach ($l in $d7Log.Split("`n")) { if ($l.Trim()) { LogDetail "pre-push 7 build: $($l.TrimEnd())" } }
         StepFail "7" "deploy/ matches source" "rebuild into a dotprofile copy failed (exit $d7Rc) -- see checks.log"
+    } elseif (-not $d7Built) {
+        # The copy's committed deploy/ was removed before the build, and build-deploy
+        # exits 0 without building when it finds no dotprofile.
+        foreach ($l in $d7Log.Split("`n")) { if ($l.Trim()) { LogDetail "pre-push 7 build: $($l.TrimEnd())" } }
+        StepFail "7" "deploy/ matches source" "build-deploy built nothing into the dotprofile copy -- see checks.log"
     } else {
+        $d7Problems = @()
         $d7Stale = @()
-        $d7Built = Join-Path $d7Dot "deploy"
+        $d7BuiltDir = Join-Path $d7Dot "deploy"
         $d7Ref = Join-Path $d7Committed "deploy"
-        $d7Names = @(Get-ChildItem $d7Built -File | ForEach-Object Name) + @(Get-ChildItem $d7Ref -File | ForEach-Object Name) | Sort-Object -Unique
+        $d7Names = @(Get-ChildItem $d7BuiltDir -File | ForEach-Object Name) + @(Get-ChildItem $d7Ref -File | ForEach-Object Name) | Sort-Object -Unique
         foreach ($n in $d7Names) {
             $a = Join-Path $d7Ref $n
-            $b = Join-Path $d7Built $n
+            $b = Join-Path $d7BuiltDir $n
             if (-not (Test-Path $a) -or -not (Test-Path $b) -or (Get-FileHash $a).Hash -ne (Get-FileHash $b).Hash) { $d7Stale += $n }
         }
-        if ($d7Stale.Count -eq 0) {
-            StepPass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build"
+        if ($d7Stale.Count -gt 0) {
+            $d7Problems += "dotprofile deploy/ is stale ($($d7Stale -join ' ')) -- run build-deploy.sh and commit in $($script:UserRepoPath)"
+        }
+        if ($d7Smoke.Count -gt 0) {
+            $d7Problems += "generated deploy scripts failed a dry run: $($d7Smoke -join ' ') -- see checks.log"
+        }
+        if ($d7Problems.Count -eq 0) {
+            StepPass "7" "deploy/ matches source" "dotprofile deploy/ matches a fresh build; resolver consumers dry-run clean"
         } else {
-            StepFail "7" "deploy/ matches source" "dotprofile deploy/ is stale ($($d7Stale -join ' ')) -- run build-deploy.sh and commit in $($script:UserRepoPath)"
+            StepFail "7" "deploy/ matches source" ($d7Problems -join "; ")
         }
     }
     if (Test-Path $d7Tmp) { Remove-Item -Recurse -Force $d7Tmp }
