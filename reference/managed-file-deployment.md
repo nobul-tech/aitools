@@ -1,160 +1,276 @@
 # Managed File Deployment
 
 Specification for the interactive file deployment system used by setup scripts
-(`setup-user-claude`, `setup-user-mcp`, `setup-user-hooks`).
+(`setup-user-claude`, `setup-user-skills`, `setup-user-hooks`, and the skill
+blocks that `build-deploy.sh` generates).
 
 ## Overview
 
 When `aitools install` deploys a managed file (CLAUDE.md, rules, skills,
-hooks, MCP configs), it compares source content against the local file. If
-they differ, the user is shown a diff preview and menu to choose an action.
+hooks, deployed JSON), it compares SOURCE against LOCAL:
+
+- **SOURCE**: the file in the repo (aitools or dotprofile) being deployed. It
+  is the source of truth.
+- **LOCAL**: the deployed copy on disk.
+
+There is no ancestor and no deploy state: the only comparison is SOURCE
+against LOCAL. When they differ in an interactive run, the user sees a diff
+and one review menu. Accept & adopt and merge & adopt copy the result into
+the repo file (the adopt target) in the same step, so the next run finds
+SOURCE, LOCAL and the repo identical and asks nothing.
+
+The choices, their effects and the failure handling are governed by
+`@.claude/rules/agentic-standards.md` "Managed-file review choices and
+merge". This file is the implementation detail.
 
 ## Functions
 
 | Function (PS1) | Function (bash) | Purpose |
 |----------------|----------------|---------|
-| `Prompt-DiffReview` | `prompt_diff_review` | Show diff + menu, return user's choice |
-| `Deploy-ManagedFile` | `deploy_managed_file` | Orchestrate: compare, review, write |
-| `Record-DeployOutcome` | `deploy_tracker_record` | Count outcomes for summary panel |
-| `Try-AutoMerge` | `try_auto_merge` | 3-way merge via `git merge-file` |
+| `Deploy-ManagedFile` | `deploy_managed_file` | Orchestrate one file: compare, review, back up, write LOCAL and the adopt target, validate, restore on failure |
+| `Prompt-DiffReview` | `prompt_diff_review` | Text files: show the diff and the review menu, return the choice (and the merged content for merge) |
+| `Review-JsonFields` | `review_json_fields` | JSON files: review field by field; SOURCE owns every field; write adopted values into the adopt target |
+| `Initialize-DeployTracker` | `deploy_tracker_init` | Reset the outcome counters before a deploy loop |
+| `Record-DeployOutcome` | `deploy_tracker_record` | Count one outcome (including `failed`) and write its DETAIL row |
+| `Write-DeployTrackerSummary` | `deploy_tracker_summary` | Write the loop's summary row (ERROR when any file failed) |
+| `Adopt-ManagedFile` | `adopt_managed_file` | Internal to the library: back up and write the adopt target. Callers do not call it |
+| `Sync-ManagedJson` | `sync_managed_json` | Profile-mirror regime for `settings.json` (see "JSON Config Review Detail"); unchanged |
+| `Prompt-JsonFieldReview` | `prompt_json_field_review` | Per-leaf prompt used by `sync_managed_json`; unchanged |
+
+Removed 2026-10-21: `Try-AutoMerge` / `try_auto_merge`, the deploy-state
+helpers (`Initialize-DeployState`, `Get-DeployState`, `Update-DeployState`,
+`Get-DeployShadow` and their bash twins), and the auto-merge menu.
+
+### Signatures
+
+bash:
+
+```
+deploy_managed_file SRC_CONTENT DEST TOOL_NAME ITEM_NAME [ADOPT_PATH]
+    reads ADOPT_TRANSFORM when set; sets MANAGED_FILE_RESULT
+prompt_diff_review DEST NEW_CONTENT ADOPT_OFFERED(0|1) [CUR_CONTENT]
+    sets DIFF_REVIEW_RESULT (and MERGED_CONTENT for merge)
+review_json_fields SRC_FILE DEST ADOPT_PATH
+```
+
+PowerShell:
+
+```
+Deploy-ManagedFile -Content -DestPath -ToolName -ItemName [-AdoptPath] [-AdoptTransform]
+Prompt-DiffReview -FilePath -NewContent -AdoptOffered [-CurrentContent]
+Review-JsonFields -SourceFile -DestPath -AdoptPath
+Record-DeployOutcome -Outcome failed -ToolName <tool> -ItemName <item>
+Write-DeployTrackerSummary -ToolName <tool>
+```
+
+- `ADOPT_PATH` / `-AdoptPath` is the absolute path of the repo file that is
+  the source of truth for this LOCAL. Empty means adopt and merge are not
+  offered.
+- `ADOPT_TRANSFORM` (bash, a function name, optional) / `-AdoptTransform`
+  (PS1, a scriptblock, optional) turns LOCAL content into adopt-target
+  content before the write (used for the CLAUDE.md template; see
+  "Markdown files").
+- A `DEST` ending in `.json` is reviewed field by field (`review_json_fields`);
+  anything else is text (`prompt_diff_review`).
 
 ## State Machine
+
+Target model, approved 2026-10-21 (`.claude/rules/agentic-standards.md`
+"Managed-file review choices and merge"). SOURCE is the source of truth;
+there is no ancestor and no deploy state. The code implements it in mission
+SOURCE-TRUTH (`scripts/aitools-lib.sh`, `.ps1`).
 
 ```
 Source content
     |
-    +-- File doesn't exist --> write --> "created"
-    |
-    +-- Content identical --> "verified"
-    |
-    +-- Content differs
-         |
-         +-- Deploy state: user didn't edit --> auto-deploy --> "updated"
-         |
-         +-- User edited + source changed
-              |
-              +-- Ancestor available (deploy state)
-              |    |
-              |    +-- Auto-merge succeeds --> Auto-Merge Menu
-              |    |    |
-              |    |    +-- [a]ccept & adopt (AdoptLabel)  --> write + sync  --> "accept & adopt"
-              |    |    +-- [a]ccept & adopt (no label)    --> write         --> "updated"
-              |    |    +-- [o]verwrite                    --> write source  --> "updated"
-              |    |    +-- [s]kip                         -->               --> "skipped"
-              |    |    +-- [x]abort                       --> exit 2
-              |    |
-              |    +-- Auto-merge conflicts --> Merge-Conflict Menu
-              |
-              +-- No ancestor --> Merge-Conflict Menu
-                   |
-                   +-- [o]verwrite                    --> write source  --> "updated"
-                   +-- [a]ccept & adopt (AdoptLabel)  --> keep + sync   --> "accept & adopt"
-                   +-- [m]erge                        --> AI merge      --> "updated"
-                   +-- [s]kip                         -->               --> "skipped"
-                   +-- [x]abort                       --> exit 2
+    +-- LOCAL missing          --> write SOURCE --> "created"
+    +-- LOCAL == SOURCE        --> "verified"
+    +-- LOCAL differs
+         +-- non-interactive / EOF / --force --> write SOURCE (backup) --> "updated"
+         +-- interactive --> Review Menu
+              +-- [o]verwrite       --> write SOURCE (backup)                 --> "updated"
+              +-- [a]ccept & adopt  --> keep LOCAL + copy to repo now (backup) --> "accept & adopt"
+              +-- [m]erge & adopt   --> AI merge (text only) --> write LOCAL
+              |                         + copy to repo now (backups)          --> "accept & adopt"
+              +-- [s]kip            --> nothing written                       --> "skipped"
+              +-- [x]abort          --> log error, exit 2
+    Any write/merge/validation failure --> restore backups, log, ERROR row, continue
+JSON files: the same choices per differing field (no [m]erge); SOURCE owns every field.
 ```
 
 ## Menus
 
-### Auto-Merge Menu (clean 3-way merge available)
+There is one review menu. It appears only when LOCAL differs from SOURCE in
+an interactive run. The options and their order are normative; the exact
+wording is set by the implementation (mission SOURCE-TRUTH), identical in
+bash and PS1 (`check-post-push` step 29).
 
-With AdoptLabel:
-```
-  [a]ccept & adopt : deploy merge + sync to <AdoptLabel>
-  [o]verwrite      : deploy source (discard merge)
-  [s]kip
-  [x]abort
-  choice [a/o/s/x]:
-```
+### Text files (`prompt_diff_review`)
 
-Without AdoptLabel:
-```
-  [a]ccept   : deploy merge
-  [o]verwrite
-  [s]kip
-  [x]abort
-  choice [a/o/s/x]:
-```
+The diff (`source (would deploy)` against `local (on disk)`) is shown first
+(see "Diff Mechanism Detail"). With an adopt target (`ADOPT_OFFERED=1`):
 
-### Merge-Conflict Menu (no ancestor or merge conflicts)
-
-With AdoptLabel:
 ```
-  [o]verwrite      : source wins --> deploy to local (backup kept)
-  [a]ccept & adopt : local wins --> sync to <AdoptLabel>
-  [m]erge          : AI-assisted merge of source + local
-  [s]kip           : keep local as-is (no changes)
-  [x]abort         : stop deployment
+  [o]verwrite      : source wins -> write source to local (backup kept)
+  [a]ccept & adopt : local wins -> copy local to the repo now
+  [m]erge & adopt  : AI merge of source + local -> local and the repo now
+  [s]kip           : keep local as-is; asked again next run
+  [x]abort         : stop this script (exit 2)
   choice [o/a/m/s/x]:
 ```
 
-Without AdoptLabel:
+Without an adopt target (`ADOPT_OFFERED=0`), adopt and merge are not offered:
+
 ```
-  [o]verwrite : source wins --> deploy to local (backup kept)
-  [m]erge     : AI-assisted merge of source + local
-  [s]kip      : keep local as-is (no changes)
-  [x]abort    : stop deployment
-  choice [o/m/s/x]:
+  [o]verwrite : source wins -> write source to local (backup kept)
+  [s]kip      : keep local as-is; asked again next run
+  [x]abort    : stop this script (exit 2)
+  choice [o/s/x]:
 ```
 
-### Non-Interactive Behavior
+An unrecognised answer selects `overwrite`, as today.
 
-When `AITOOLS_FORCE` is set or stdin is not a terminal:
-- Auto-select `overwrite` (no menu shown)
-- Log the forced decision to deploy.log
+### JSON files (`review_json_fields`)
+
+One review per differing field (key path; a whole array is one field),
+showing the LOCAL and SOURCE values. With an adopt target:
+
+```
+  [o]verwrite      : source value -> local
+  [a]ccept & adopt : keep the local value -> write it to the repo now
+  [s]kip           : leave this field unchanged; asked again next run
+  [x]abort         : stop this script (exit 2)
+```
+
+Without an adopt target, `[a]` is not offered. There is no `[m]erge` for
+JSON. Overwrite, adopt and skip apply to one field; abort applies to the
+script.
+
+### [x]abort
+
+`[x]abort` logs an error and exits 2. A bare exit 2 is a user abort
+(D-TS13 as decided 2026-10-21). Abort ends this setup
+script (exit 2); the installer continues with the next script. (Today the
+installer records any non-zero exit as an ERROR row, `aitools-install.sh`
+`validate_and_run`.)
+
+## Non-Interactive Behavior
+
+The run is non-interactive when any of these holds:
+
+- `AITOOLS_FORCE=1` (`--force` / `-Force` on `aitools` and `aitools install`)
+- stdin is not a terminal, or the controlling terminal cannot be opened
+  (`tty_interactive` / `Test-InteractiveConsole`)
+- EOF at a prompt (input ended): a warning is logged
+
+Then no menu is shown and `overwrite` is selected: SOURCE is written to LOCAL
+(backup kept) and the result is `updated`. No AI merge runs. The decision is
+logged to deploy.log. For JSON, each differing field takes the SOURCE value;
+a field only in LOCAL stays in LOCAL.
+
+`DRY_RUN=true` (`AITOOLS_DRY_RUN`) logs what would happen, writes nothing,
+and reports the file as `verified`.
 
 ## Return Values
 
 ### prompt_diff_review / Prompt-DiffReview
 
-| Value | Menu | Meaning |
-|-------|------|---------|
-| `"accept-adopt"` | Both (with AdoptLabel) | Accept & adopt — content approved + synced to adopt target |
-| `"merge"` | Auto-merge (no label) | Accept merge (no adopt target) |
-| `"overwrite"` | Both | Source wins (deploy to local) |
-| `"skip"` | Both | Keep local unchanged |
-| (exit 2) | Both | User aborted |
+| Value | Offered when | Meaning |
+|-------|-------------|---------|
+| `"overwrite"` | Always; also every non-interactive case | Write SOURCE to LOCAL |
+| `"adopt"` | `ADOPT_OFFERED=1` | Keep LOCAL; copy LOCAL to the adopt target |
+| `"merge"` | `ADOPT_OFFERED=1` | AI merge accepted; `MERGED_CONTENT` holds it. Written to LOCAL and to the adopt target |
+| `"skip"` | Always | Write nothing |
+| `"failed"` | `ADOPT_OFFERED=1` | Merge attempted, no valid output after the retry. Mapped to `MANAGED_FILE_RESULT` `failed`; nothing written |
+| (exit 2) | Always | User aborted |
 
 ### deploy_managed_file / Deploy-ManagedFile
 
-| Value | Meaning | File written? | Adopt target updated? |
-|-------|---------|--------------|----------------------|
-| `"created"` | New file | Yes | No |
-| `"updated"` | Content changed | Yes | No |
-| `"verified"` | Content identical — actively confirmed correct | No | No |
-| `"accept & adopt"` | User accepted content + synced to adopt target | Yes (auto-merge) or No (merge-conflict) | Yes |
-| `"skipped"` | User chose skip | No | No |
+Sets `MANAGED_FILE_RESULT` (bash) / returns (PS1) one of:
+
+| Value | Meaning | LOCAL written? | Adopt target written? |
+|-------|---------|---------------|----------------------|
+| `"created"` | LOCAL did not exist | Yes (SOURCE) | No |
+| `"updated"` | Overwrite chosen, or non-interactive | Yes (SOURCE) | No |
+| `"verified"` | LOCAL equals SOURCE | No | No |
+| `"accept & adopt"` | Accept & adopt, or merge & adopt (text). JSON: see "File-level result for JSON" below | Adopt: no. Merge: yes (merged content) | Yes |
+| `"skipped"` | Skip chosen | No | No |
+| `"failed"` | A write, the AI merge or a validation failed | No: backups restored | No: backups restored |
+| (exit 2) | User aborted | No | No |
+
+**File-level result for JSON** (approved 2026-10-21, S3-SpecRewrite Q5): a
+JSON file reviewed field by field reports one value, by precedence `failed` >
+`accept & adopt` (any field adopted: the repo was written) > `skipped` (any
+field skipped) > `updated` (any field overwritten) > `verified`. Each
+field's choice is logged to deploy.log.
+
+On `failed` the library has already restored every file it backed up and
+written a `log_error` with the reason. The caller records the outcome
+(`deploy_tracker_record failed ...` / `Record-DeployOutcome failed ...`) and
+continues with the next file.
 
 ## Caller Responsibilities
 
-Every caller of `deploy_managed_file` MUST handle all return values:
+- **Pass the adopt target.** Every caller passes `ADOPT_PATH` / `-AdoptPath`:
+  the absolute path of the repo file the SOURCE content came from, or `""`
+  when there is none (no dotprofile configured, or a source that must not be
+  adopted into). The library performs the repo write-back itself. Callers
+  never copy LOCAL back to a repo themselves.
+- **Handle every return value** at every call site
+  (`@.claude/rules/interactive-menus.md` "Return value contract"):
 
-| Return value | Validation? | Adopt flow? | Tracker? |
-|-------------|-------------|-------------|----------|
-| `created` | Yes | If applicable | Yes |
-| `updated` | Yes | If applicable | Yes |
-| `verified` | No | No | Yes |
-| `accept & adopt` | Yes | Adopt done by caller | Yes |
-| `skipped` | No | No | Yes |
+| Return value | Caller-specific validation? | Tracker / summary |
+|-------------|-----------------------------|-------------------|
+| `created` | Yes (e.g. CLAUDE.md sections, hook executable bit) | Record |
+| `updated` | Yes | Record |
+| `verified` | No | Record |
+| `accept & adopt` | Yes when LOCAL was written (merge) | Record |
+| `skipped` | No | Record (summary WARN) |
+| `failed` | No (library restored and logged) | Record (summary ERROR) |
 
-## Deploy State (Shadow System)
+- **Single-file callers** without a tracker loop (CLAUDE.md) write the
+  equivalent `write_summary` row themselves; `failed` is an ERROR row.
+- **Dotprofile writes are committed and pushed** (N-Q2, approved
+  2026-10-21). An adopt or merge whose adopt target is in the dotprofile
+  repo is committed and pushed to the dotprofile's main automatically, as
+  `setup-user-claude` does today for adopted and merged rules (kept). An
+  adopt target in the aitools repo is a working-tree change only: no
+  commit, no push; the user ships it through a PR.
+- **Several LOCALs for one SOURCE** (skills: `~/.claude/skills` and
+  `~/.cursor/skills`): each LOCAL goes through `deploy_managed_file`. After
+  an adopt into the first, the caller reads SOURCE again for the next, which
+  then verifies. Callers do not copy one LOCAL to another.
+- **Adopting into a protected file** (any path in the
+  `.claude/rules/sources-of-truth.md` table) is allowed; the library writes
+  the working tree and logs a WARN naming the file. The library knows the
+  protected files from a path list it holds, kept in sync with the
+  sources-of-truth table by a pre-commit step (Q14, approved 2026-10-21;
+  the list and the step are implemented in mission SOURCE-TRUTH).
+- **CLAUDE.md** passes an adopt transform: see "Markdown files".
+- **Exit 2** is not trapped by the caller: it ends the script.
 
-`Update-DeployState` / `_update_deploy_state` stores the deployed content hash.
-On next run, this becomes the "ancestor" for 3-way merge. Stored in
-`~/.aitools/deploy-state/` as SHA256 hashes with a manifest.
+## Deploy State
+
+Removed 2026-10-21: there is no ancestor and no deploy state. See
+`@.claude/rules/agentic-standards.md` "Managed-file review choices and merge".
 
 ## Normalization
 
-Before comparing source and existing content, both are normalized:
+Before comparing SOURCE and LOCAL, both are normalized:
 - Trailing whitespace: collapse `[\r\n]+$` to single `\n`
 - Prevents round-trip diff noise (deploy --> adopt strips blanks --> deploy
   sees diff)
 
+JSON files are compared after parsing, field by field; formatting and key
+order do not create a difference.
+
 ## Encoding (PS1)
 
-`Try-AutoMerge` uses in-place `git merge-file` (no `-p` flag) and reads the
-result via `[IO.File]::ReadAllText($path, [Text.Encoding]::UTF8)`. This avoids
-PowerShell's OEM codepage mangling UTF-8 from external commands.
+Content displayed in a menu that comes from an external command (diff,
+git) is read via a temp file and `[IO.File]::ReadAllText($path,
+[Text.Encoding]::UTF8)`, never captured through the PowerShell pipeline.
+This avoids PowerShell's OEM codepage mangling UTF-8
+(`@reference/cross-platform-detail.md` "PowerShell pipeline encoding").
 
 ---
 
@@ -162,7 +278,7 @@ PowerShell's OEM codepage mangling UTF-8 from external commands.
 
 Setup scripts deploy three types of managed files. Every type has the
 same correctness requirements (backup, logging, validation). They differ
-in merge strategy, not in importance or priority. See
+in review strategy, not in importance or priority. See
 `@.claude/rules/managed-file-deployment.md` for the concise rule.
 
 ### Markdown files
@@ -171,37 +287,56 @@ in merge strategy, not in importance or priority. See
 
 **Pattern**: `deploy_managed_file` / `Deploy-ManagedFile` in
 `@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1`.
-Backup → compare → diff review menu → write. Full state machine above.
+Compare → review menu → backup → write → validate. Full state machine above.
 
 **Content source**: CLAUDE.md and rules from dotprofile repo (primary) or
-`shared/claude-shared.md` (fallback). Skills from `shared/skills/`.
-Template tokens (`{{PLACEHOLDER}}`) interpolated from `profile.json`.
-See `@reference/user-repo.md` "Template Resolution" and "User Rules
-Deployment".
+`shared/claude-shared.md` (fallback). Skills from `shared/skills/`, or the
+dotprofile's `claude/skills/` when it has the skill. Template tokens
+(`{{PLACEHOLDER}}`) interpolated from `profile.json`. See
+`@reference/user-repo.md` "Template Resolution" and "User Rules Deployment".
+
+**Adopt target**: the file the content was read from (dotprofile or
+`shared/`). Adopting into `shared/claude-shared.md` (a protected file) is
+allowed: it writes the working tree only and logs a WARN naming the file;
+the review gate applies at commit and PR.
+
+**CLAUDE.md is a template** (S3-SpecRewrite Q1, approved 2026-10-21):
+LOCAL is the template with `{{PLACEHOLDER}}` tokens interpolated plus a
+generated `## Machine-Specific` footer. Adopting it into the template must
+strip the footer and reverse the interpolation, not copy LOCAL verbatim.
+`setup-user-claude` therefore passes an adopt transform with the template as
+`ADOPT_PATH` (bash: the function name in `ADOPT_TRANSFORM`; PS1:
+`-AdoptTransform` scriptblock; today's logic is `adopt_claude_md`). The
+library applies the transform to the content before writing `ADOPT_PATH`,
+and compares the adopt target after the transform.
 
 **Scripts**:
 - `setup-user-claude.sh/.ps1` — CLAUDE.md + rules
-- `setup-user-mcp.sh/.ps1` — skill SKILL.md files (4 targets)
+- `setup-user-skills.sh/.ps1` — skill SKILL.md files
 
 ### JSON config files
 
 **Files**: `~/.claude/settings.json`, `~/.cursor/cli-config.json`,
-`~/.cursor/mcp.json`.
+`~/.cursor/mcp.json`, and any JSON file deployed through
+`deploy_managed_file`.
 
-**Pattern**: Read existing JSON → set managed fields only → preserve all
-other fields → validate → write. Implemented as inline Node.js
-(settings.json) or PowerShell/bash merge logic.
+**Pattern**: two regimes; see "JSON Config Review Detail". Read existing
+JSON → set managed fields only → preserve all other fields → validate →
+write.
 
-**Content source**: Field values from `profile.json` (e.g., Claude
-preferences, Cursor CLI settings) or hardcoded in the script (e.g., MCP
-server URLs, `--isolated` flag). Platform-specific values (e.g.,
-`cmd /c npx` vs `npx`) are dispatched by OS guards — see "Platform-
-Specific Config Values" below.
+**Content source**: field values from `profile.json` (e.g., Claude
+preferences, Cursor CLI settings), a JSON file in the repo (deployed JSON),
+or hardcoded in the script (e.g., MCP server URLs, `--isolated` flag).
+Platform-specific values (e.g., `cmd /c npx` vs `npx`) are dispatched by OS
+guards — see "Platform-Specific Config Values" below.
 
 **Scripts**:
-- `setup-user-hooks.sh/.ps1` — settings.json (hooks, preferences from
-  `profile.json` `claude` section)
-- `setup-user-mcp.sh/.ps1` — settings.json (deny rules)
+- `setup-user-settings.sh/.ps1` — settings.json (`sync_managed_json`,
+  mirror at `profile.json` `claude.settings`)
+- `setup-user-hooks.sh/.ps1` — settings.json `hooks` (harness-managed,
+  reconciled without review)
+- `setup-user-mcp.sh/.ps1` — MCP server registration in `~/.claude.json`
+  via `claude mcp add` (the CLI writes the file; no review)
 - `setup-user-cursor.sh/.ps1` — cli-config.json (preferences from
   `profile.json` `cursor.cli` section)
 - `setup-cursor-ide-mcp.sh/.ps1` — mcp.json (MCP server configs)
@@ -210,23 +345,23 @@ Specific Config Values" below.
 
 **Files**: Hook scripts (`~/.claude/hooks/*.sh`).
 
-**Pattern**: Uses `deploy_managed_file` — same as markdown type. Hook
-scripts are text files and benefit from the same diff review, merge,
-and adopt flow.
+**Pattern**: `deploy_managed_file` — same as the markdown type, with the full
+menu including merge & adopt.
 
-**Content source**: `shared/hooks/` in the aitools repo. Hook scripts
-are bash-only on both platforms (Claude Code runs hooks in bash on all
-platforms). No platform-specific variants needed.
+**Content source**: `shared/hooks/` in the aitools repo (SD-2: one hook
+version, in `shared/hooks`). Hook scripts are bash-only on both platforms
+(Claude Code runs hooks in bash on all platforms). No platform-specific
+variants needed.
 
 **Scripts**:
-- `setup-user-hooks.sh/.ps1` — session-archive.sh, standing-order-guard.sh
+- `setup-user-hooks.sh/.ps1` — every hook in the hook manifest
 
 ## Content Sources
 
 Deployed content originates from two repos. The dotprofile repo takes
 priority when present; the aitools `shared/` directory is the fallback.
 
-| Content | Primary source | Merge-Conflict |
+| Content | Primary source | Fallback |
 |---------|---------------|----------|
 | CLAUDE.md template | `<userRepoPath>/claude/CLAUDE.md` | `shared/claude-shared.md` |
 | User rules | `<userRepoPath>/claude/rules/*.md` | (none — no rules deployed) |
@@ -235,8 +370,11 @@ priority when present; the aitools `shared/` directory is the fallback.
 | Identity (git name/email) | `<userRepoPath>/profile.json` `identity` section | (required — no fallback) |
 | Machine profile | `<userRepoPath>/profile.json` `profiles[machineAlias]` section | hostname match, then first profile |
 | Hook scripts | `shared/hooks/*.sh` | (required — no fallback) |
-| Skills | `shared/skills/*/SKILL.md` | (required — no fallback) |
+| Skills | `<userRepoPath>/claude/skills/*/SKILL.md` when present | `shared/skills/*/SKILL.md` |
 | MCP server configs | hardcoded in setup scripts | (required — no fallback) |
+
+The adopt target for a file is the primary or fallback source it was
+actually read from.
 
 **`userRepoPath` resolution**: read from `~/.aitools/config.json`. Set by
 `aitools user init`. If not configured, dotprofile features are skipped
@@ -271,7 +409,7 @@ environment is `claude-code-web`. Detail and security note:
 **`--isolated` flag**: platform-independent, MUST be present on every
 platform and environment. Enables throwaway temp Chrome profiles for concurrent Claude
 Code + Cursor sessions. See `@reference/tool-registry.md` "Chrome DevTools
-MCP" and `@.claude/rules/tool-lifecycle.md` "MCP server isolation".
+MCP".
 
 **Path format in settings.json hooks**: PowerShell setup converts
 backslash paths to forward slashes (`-replace '\\', '/'`) for bash
@@ -281,39 +419,93 @@ bash, even on Windows.
 ## Shell Script Deployment Detail
 
 Shell scripts (hooks) use `deploy_managed_file` with the same state
-machine as markdown files. The adopt label points to the repo source
-(`shared/hooks/<filename>`) rather than the dotprofile repo, since hooks
-are framework code maintained in the aitools repo.
+machine as markdown files. The adopt target is the repo source,
+`shared/hooks/<filename>` in the aitools repo (absolute path), never the
+dotprofile repo: hooks are framework code maintained in the aitools repo,
+and a dotprofile copy would be ignored (SD-2, incident #80).
 
-When a user adopts a local hook, the modified hook is copied back to
-`shared/hooks/` in the aitools repo. This is a local repo change — the
-user decides whether to commit it.
+On accept & adopt or merge & adopt, the library writes the result to
+`shared/hooks/<filename>` itself. This is a working-tree change in the
+aitools repo; the user decides whether to commit it. When
+`shared/hooks/` is not present (MDM path without the aitools repo), the
+caller passes `""` and adopt and merge are not offered.
+
+After `created`, `updated`, or a merge & adopt (LOCAL written), the caller
+sets the executable bit on LOCAL.
+
+**Reverse discovery** (S3-SpecRewrite Q2): `setup-user-hooks` today also
+finds hooks in `~/.claude/hooks/` that have no SOURCE and offers
+`[a]dopt to dotprofile  [s]kip`, calling `adopt_managed_file` directly. It
+is outside the review-menu model (there is no SOURCE to compare) and it is
+the one remaining direct caller of `adopt_managed_file`. Its dotprofile
+target conflicts with SD-2. The approved direction is to drop reverse
+discovery, which leaves `adopt_managed_file` internal; until mission
+SOURCE-TRUTH removes it, it behaves as described in the user rule
+`hook-lifecycle.md` "User-created hooks".
 
 ## JSON Config Review Detail
 
 JSON config files use field-level review rather than text diff review.
-Each managed field is displayed with its current and proposed value.
-Only managed fields are shown; preserved fields are never displayed.
+There are two regimes.
 
-**Diff source resolution per config:**
+### Regime 1: SOURCE owns every field (`review_json_fields`)
 
-| Config file | Managed field source | Adopt target |
-|-------------|---------------------|--------------|
-| `settings.json` (hooks) | `profile.json` `claude` section + hardcoded hook commands | `profile.json` `claude` section (preference fields only) |
-| `settings.json` (deny rules) | hardcoded deny list in script | (not adoptable — script-owned) |
-| `cli-config.json` | `profile.json` `cursor.cli` section | `profile.json` `cursor.cli` section |
-| `mcp.json` | hardcoded server configs in script | (not adoptable — script-owned) |
+For a JSON file deployed from a JSON SOURCE through `deploy_managed_file`.
 
-**Adopt limitations**: Only fields sourced from `profile.json` can be
-adopted — the local value is written back to `profile.json` so future
-deploys use the adopted value. Fields hardcoded in scripts (deny rules,
-MCP server URLs, `--isolated` flag) cannot be adopted.
+- Node compares SOURCE and LOCAL field by field (key path; a whole array is
+  one field). Each differing field is one review (menu above).
+- **SOURCE owns every field.** A field in SOURCE whose LOCAL value differs,
+  or that LOCAL lacks, is a differing field.
+- **A field only in LOCAL** is kept in LOCAL and never written to SOURCE
+  without a review. With an adopt target it gets its own review (Q7,
+  approved 2026-10-21): `[a]ccept & adopt` (write the field to the repo
+  now) / `[s]kip` (keep it in LOCAL only) / `[x]abort`. There is no
+  overwrite: it would delete user data. Non-interactive keeps it in LOCAL.
+- **Adopted values** are written into `ADOPT_PATH` immediately, before the
+  next file is reviewed. The field choices for one file are applied after
+  its last field is reviewed; `[x]abort` on any field writes nothing.
+- **Key order is preserved** in both files; no sorting.
+- **No text or AI merge.**
+- Both files are backed up before writing and validated after writing:
+  each parses, and each still has every top-level key of SOURCE (the
+  required keys; Q8, approved 2026-10-21). On failure both are restored
+  (`failed`).
+- Non-interactive: every differing field takes the SOURCE value; LOCAL-only
+  fields stay in LOCAL.
 
-**When adopt is not available**: If all changed managed fields are
-script-owned (no profile.json source), the adopt option is omitted:
-```
-  [o]verwrite  [s]kip  [x]abort
-```
+### Regime 2: profile mirror (`sync_managed_json`), unchanged
+
+`settings.json` is mirrored at `profile.json` `claude.settings`
+(`setup-user-settings`), excluding harness-managed keys (`hooks`), which
+`setup-user-hooks` reconciles without review.
+
+- A leaf only in the live file auto-adopts into `profile.json` (no prompt).
+- A leaf that differs, or that the live file lacks, gets one per-leaf prompt
+  (`prompt_json_field_review`); per rule string for
+  `permissions.{allow,ask,deny}`. Deprecated permission rules are stripped
+  from the live file first and never adopted.
+- Menu: `[o]verwrite` (profile.json value → settings.json) / `[a]dopt`
+  (settings.json value → profile.json) / `[s]kip` / `[x]abort` (exit 2;
+  ends the script, nothing applied: prompts run before the apply pass).
+- Writes preserve key order. Both files are backed up before write and
+  validated after.
+
+### Script-owned JSON (no review)
+
+`cli-config.json` (`setup-user-cursor`) and `mcp.json`
+(`setup-cursor-ide-mcp`) set script-owned managed fields by read-then-merge
+(`@.claude/rules/config-file-safety.md`) with no review menu and no adopt.
+Their values come from `profile.json` (cursor.cli) or are hardcoded. They
+refuse to write a corrupt file, or a merge that would lose fields, without
+`--force`.
+
+| Config file | Regime | Managed field source | Adopt target |
+|-------------|--------|---------------------|--------------|
+| `settings.json` (non-hook keys) | Profile mirror | `profile.json` `claude.settings` | `profile.json` `claude.settings` |
+| `settings.json` (`hooks`) | Harness-managed | hook manifest | (not adoptable) |
+| `cli-config.json` | Script-owned | `profile.json` `cursor.cli` | (not adoptable) |
+| `mcp.json` | Script-owned | hardcoded server configs | (not adoptable) |
+| JSON deployed via `deploy_managed_file` | SOURCE owns every field | the repo JSON file | `ADOPT_PATH` |
 
 ## Diff Mechanism Detail
 
@@ -332,18 +524,18 @@ $diffs = Compare-Object ($NewContent -split "`n") ($CurrentContent -split "`n")
 Custom prefixes (`+ local`, `- source`). Full diff written to deploy.log.
 Terminal shows first 30–40 entries.
 
-**JSON configs** (field-level): Per-field old → new display. Changed
-fields shown with source attribution (profile.json or script). Unchanged
-managed fields shown as confirmation. Full field list written to
-deploy.log via `Emit-MergeDetails` / `emit_merge_details` in
-`@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1`.
+**JSON configs** (field-level): Per-field old → new display with source
+attribution. Full field list written to deploy.log via `Emit-MergeDetails`
+/ `emit_merge_details` in `@scripts/aitools-lib.sh` /
+`@scripts/aitools-lib.ps1`.
 
 ## AI-Assisted Merge Detail
 
-The `[m]erge` option uses the agentic invocation framework
-(`invoke_ai` / `Invoke-AI` in `@scripts/aitools-lib.sh` /
-`@scripts/aitools-lib.ps1`). Available for text types (markdown, shell
-scripts) only — not for JSON config field-level review.
+`[m]erge & adopt` uses the agentic invocation framework (`invoke_ai` /
+`Invoke-AI` in `@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1`). It
+applies to text types (markdown, shell scripts) only, and only when an
+adopt target exists: an accepted merge is written to LOCAL and copied to
+the adopt target. Merge is adopt.
 
 **Invocation parameters:**
 - Speed tier: `balanced` (Sonnet)
@@ -370,11 +562,19 @@ scripts) only — not for JSON config field-level review.
 
 **Post-merge flow:**
 1. Defense-in-depth: strip code fences even if validation passed
-2. Preview first 30 lines in terminal
+2. Preview first 30 lines in terminal (preview before write)
 3. User chooses: `[y]es` accept, `[r]efine` with feedback, `[n]o` reject
 4. Refine: user provides feedback → refinement prompt → re-validate →
    preview again
-5. On all failures: fallback to `[o]verwrite` / `[s]kip`
+5. `[y]es`: `prompt_diff_review` returns `merge` with `MERGED_CONTENT`;
+   `deploy_managed_file` backs up LOCAL and the adopt target, writes the
+   merge to both, validates, and returns `accept & adopt`
+6. The AI merge fails (no valid output after the retry): no file is
+   written; the outcome is `failed` (log_error with the reject reason,
+   ERROR row) and the run continues with the next file
+7. `[n]o`: no file is written and the review menu is shown again for the
+   same file (Q4, approved 2026-10-21; today the code falls back to
+   overwrite)
 
 **Telemetry**: every invocation logged to deploy.log per
 `@.claude/rules/script-standards.md` "Agentic invocation logging".
@@ -386,13 +586,23 @@ evaluation lifecycle, and speed/permission tier definitions.
 ## Backup Policy
 
 All file deployment (all types) MUST call `backup_file` / `Backup-File`
-before writing to an existing file.
+before writing to an existing file. For a managed file the library backs up
+every file the step will write: LOCAL, and the adopt target for an adopt
+or merge (JSON: LOCAL and `ADOPT_PATH`).
 
 - **Location**: `<file>.bak.<TIMESTAMP>` (same directory as target)
 - **Retention**: max 20 per file, auto-prune oldest
 - **Directory backups**: `<dir>.bak.<TIMESTAMP>/`, max 5, auto-prune
 - **Skip**: Only when target does not yet exist (nothing to back up)
-- **Failure**: Non-fatal (warn and proceed)
+- **Failure to back up**: inside `deploy_managed_file` / `Deploy-ManagedFile`,
+  a failed backup of an existing file makes the step `failed` with nothing
+  written, so a later failure can always be restored (Q13, approved
+  2026-10-21). Other writers: non-fatal (warn and proceed;
+  `@.claude/rules/config-file-safety.md`)
+- **Restore on failure**: when a write, the AI merge or a validation fails,
+  the library restores each file from the backup it just took (a file that
+  did not exist before is removed), logs the error with its reason, and
+  returns `failed`. A failure never leaves a half-written file.
 
 See `/incident` skill (incident #5) for the backup proliferation issue
 with directory backups.
