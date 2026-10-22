@@ -112,6 +112,19 @@ function ReadConfigKey {
 # ACTION rows: the wrapper emits the one ACTION for its failure (once per run:
 # Write-AitLibActionOnce skips a row the run summary already holds); callers do
 # not add their own ACTION for the same failure.
+#
+# Resolver exit codes -> wrapper return codes (re-key batch 3). The resolver
+# (aitools-profile.ps1 --help) exits 0 ok, 1 nothing found, 2 error, 3 refused,
+# 4 refused: alias used by another profile (register only). No wrapper returns
+# 2 (D-TS13: a bare 2 means user abort), and no resolver code other than 1 is
+# read as "nothing found":
+#   resolver exit          0          1               2      3            4
+#   Resolve-UserRepoPath   0 found    1 shared-only   3      3 (refused)  3 (unexpected)
+#   Resolve-MachineProfile 0 match    1 shared-only   3      3 (refused)  3 (unexpected)
+#   Get-ToolException      hashtable  $null           $null  $null        $null
+#   Set-ToolException      0          1 failed        1      3 refused    1 (unexpected)
+# Every 3 and 4 is logged with its code and meaning. An exit 0/1 without the
+# resolver's "via" line is rewritten to 2 first (Invoke-AitLibProfile).
 # ---------------------------------------------------------------------------
 
 # Invoke-AitLibProfile ARGS -- run the resolver in-process; sets
@@ -165,6 +178,19 @@ function Get-AitLibProfileLines([string]$Kind) {
     return @($script:AitLibProfileOut | ForEach-Object { $kv = $_ -split "`t", 2; if ($kv.Count -eq 2 -and $kv[0] -ceq $Kind) { $kv[1] } })
 }
 
+# Get-AitLibExitNote RC -- "" for resolver exit 1 (nothing found) and 2 (the
+# plain error); for any other exit, " (resolver exit N: meaning)", so a 3 or 4 is
+# never logged as a plain error or a "not found" (parity: _aitlib_exit_note)
+function Get-AitLibExitNote([int]$Rc) {
+    switch ($Rc) {
+        1 { return "" }
+        2 { return "" }
+        3 { return " (resolver exit 3: refused)" }
+        4 { return " (resolver exit 4: alias used by another profile -- not a result of this command)" }
+        default { return " (resolver exit $Rc)" }
+    }
+}
+
 # Write-AitLibActionOnce TEXT -- write ACTION row TEXT unless the run summary
 # already holds it (several setup scripts in one run hit the same failure;
 # Show-Summary does not dedupe)
@@ -186,13 +212,15 @@ function Write-AitLibActionOnce([string]$Text) {
 
 # Resolve-UserRepoPath -- sets $script:AitLibUserRepoPath and
 # $script:AitLibUserRepoVia (env|argument|config|convention|scan|none). Returns 0
-# found, 1 no dotprofile (shared-only mode; not an error), 3 resolver error
-# (LogError + ERROR row "dotprofile").
+# found, 1 no dotprofile (shared-only mode; not an error), 3 resolver error or
+# refusal (LogError + ERROR row "dotprofile" + one ACTION per run, "see
+# deploy.log -- the dotprofile could not be resolved").
 function Resolve-UserRepoPath {
     $script:AitLibUserRepoPath = ""; $script:AitLibUserRepoVia = "none"
     if (-not (Invoke-AitLibProfile @("user-repo-path"))) {
         LogError "dotprofile: resolver aitools-profile.ps1 not found next to aitools-lib.ps1"
         Write-Summary "ERROR" "dotprofile" "resolver missing"
+        Write-AitLibActionOnce "see deploy.log -- the dotprofile could not be resolved"
         return 3
     }
     $script:AitLibUserRepoVia = Get-AitLibProfileTag "via"
@@ -203,17 +231,31 @@ function Resolve-UserRepoPath {
         return 0
     }
     if ($script:AitLibProfileRc -eq 1) { LogDetail "dotprofile: none found (shared-only mode)"; return 1 }
+    $note = Get-AitLibExitNote $script:AitLibProfileRc
     $errs = @(Get-AitLibProfileLines "error")
-    foreach ($e in $errs) { LogError "dotprofile: $e" }
-    if ($errs.Count -eq 0) { LogError "dotprofile: resolver failed (exit $($script:AitLibProfileRc))" }
+    foreach ($e in $errs) { LogError "dotprofile: $e$note" }
+    if ($errs.Count -eq 0) {
+        $why = if ($note) { $note } else { " (exit $($script:AitLibProfileRc))" }
+        LogError "dotprofile: resolver failed$why"
+    }
     Write-Summary "ERROR" "dotprofile" "resolver failed"
+    Write-AitLibActionOnce "see deploy.log -- the dotprofile could not be resolved"
     return 3
 }
 
 # Resolve-MachineProfile -- sets $script:AitLibMachineAlias, AitLibMachineVia,
 # AitLibProfileFile, AitLibProfileName, AitLibProfileCompany,
-# AitLibIdentityGitName, AitLibIdentityGitEmail, AitLibIdentityGithub. Logs one
-# detail line. Resolver warnings are detail lines here: setup-user-config, the
+# AitLibIdentityGitName, AitLibIdentityGitEmail, AitLibIdentityGithub, and
+# (re-key batch 3, the resolver's id-key fields):
+#   $script:AitLibMachineKey      the profiles key that matched ("" when none)
+#   $script:AitLibMachineOwner    this|other|unregistered|unknown|absent ("absent" when none)
+#   $script:AitLibMachineLegacy   $true when the matched profile is still keyed by alias, else $false
+#   $script:AitLibMachineHostname this machine's live short hostname ("" when unavailable)
+# AitLibMachineAlias is the profile's alias field (its key for a legacy profile).
+# A resolver without the id-key fields (an older embedded copy) leaves the
+# defaults. Return 0 means a profile matched, not that it is this machine's: a
+# caller that writes per-machine data checks AitLibMachineOwner -ceq "this".
+# Logs one detail line. Resolver warnings are detail lines here: setup-user-config, the
 # first script of every run, reports them once (a successful step stays OK,
 # D-TS12). Returns 0 resolved, 1 no dotprofile (shared-only), 3 no match or
 # error (LogError + ERROR row "machine profile" + one ACTION per run; the
@@ -222,6 +264,8 @@ function Resolve-MachineProfile {
     $script:AitLibMachineAlias = ""; $script:AitLibMachineVia = "none"; $script:AitLibProfileFile = ""
     $script:AitLibProfileName = ""; $script:AitLibProfileCompany = ""; $script:AitLibIdentityGitName = ""
     $script:AitLibIdentityGitEmail = ""; $script:AitLibIdentityGithub = ""
+    $script:AitLibMachineKey = ""; $script:AitLibMachineOwner = "absent"; $script:AitLibMachineLegacy = $false
+    $script:AitLibMachineHostname = ""
     if (-not (Invoke-AitLibProfile @("resolve", "--environment", $script:AitoolsEnvironment))) {
         LogError "machine profile: resolver aitools-profile.ps1 not found next to aitools-lib.ps1"
         Write-Summary "ERROR" "machine profile" "resolver missing"
@@ -235,14 +279,25 @@ function Resolve-MachineProfile {
     $script:AitLibIdentityGitName = Get-AitLibProfileTag "gitName"
     $script:AitLibIdentityGitEmail = Get-AitLibProfileTag "gitEmail"
     $script:AitLibIdentityGithub = Get-AitLibProfileTag "github"
+    $script:AitLibMachineKey = Get-AitLibProfileTag "key"
+    $ownerTag = Get-AitLibProfileTag "owner"
+    if ($ownerTag) { $script:AitLibMachineOwner = $ownerTag }
+    $script:AitLibMachineLegacy = ((Get-AitLibProfileTag "legacy") -ceq "true")
+    $script:AitLibMachineHostname = Get-AitLibProfileTag "hostname"
     foreach ($w in (Get-AitLibProfileLines "warn")) { LogDetail "machine profile: $w" }
     $aliasShown = if ($script:AitLibMachineAlias) { $script:AitLibMachineAlias } else { "none" }
-    LogDetail "machine profile: alias=$aliasShown via=$($script:AitLibMachineVia) company=$($script:AitLibProfileCompany) host=$(Get-AitLibProfileTag 'hostname') id=$(Get-AitLibProfileTag 'machineId')"
+    $keyShown = if ($script:AitLibMachineKey) { $script:AitLibMachineKey } else { "none" }
+    $legacyShown = if ($script:AitLibMachineLegacy) { "true" } else { "false" }
+    LogDetail "machine profile: alias=$aliasShown via=$($script:AitLibMachineVia) key=$keyShown owner=$($script:AitLibMachineOwner) legacy=$legacyShown company=$($script:AitLibProfileCompany) host=$($script:AitLibMachineHostname) id=$(Get-AitLibProfileTag 'machineId')"
     if ($script:AitLibProfileRc -eq 0 -and $script:AitLibMachineAlias) { return 0 }
     if ($script:AitLibProfileRc -eq 1) { LogDetail "machine profile: no dotprofile -- shared-only mode"; return 1 }
+    $note = Get-AitLibExitNote $script:AitLibProfileRc
     $errs = @(Get-AitLibProfileLines "error")
-    foreach ($e in $errs) { LogError "machine profile: $e" }
-    if ($errs.Count -eq 0) { LogError "machine profile: resolver failed (exit $($script:AitLibProfileRc))" }
+    foreach ($e in $errs) { LogError "machine profile: $e$note" }
+    if ($errs.Count -eq 0) {
+        $why = if ($note) { $note } else { " (exit $($script:AitLibProfileRc))" }
+        LogError "machine profile: resolver failed$why"
+    }
     LogError "machine profile: unresolved -- no other machine's values are used"
     Write-Summary "ERROR" "machine profile" "no machine match"
     Write-AitLibActionOnce "Run: aitools user init (pick or register this machine's profile)"
@@ -263,8 +318,8 @@ function Get-ToolException([string]$Slug) {
     if ($script:AitLibProfileRc -ne 0) {
         $reason = @(Get-AitLibProfileLines "error") | Select-Object -First 1
         if ($script:AitLibProfileRc -eq 1) { $reason = "no dotprofile" }
-        if (-not $reason) { $reason = "resolver exit $($script:AitLibProfileRc)" }
-        LogWarn "tool exceptions unavailable ($reason)"
+        if (-not $reason) { $reason = "resolver failed" }
+        LogWarn "tool exceptions unavailable ($reason)$(Get-AitLibExitNote $script:AitLibProfileRc)"
         return $null
     }
     $r = @{ Found = $false; Platform = ""; Method = ""; Path = ""; DecidedAt = "" }
@@ -326,15 +381,146 @@ function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [strin
     if ($script:AitLibProfileRc -eq 3) {
         $script:AitLibToolExcResult = "refused"
         if (-not $msg) { $msg = "refused" }
-        LogWarn "tool exception for $Slug not saved ($msg)"
+        LogWarn "tool exception for $Slug not saved ($msg)$(Get-AitLibExitNote 3)"
         Write-AitLibActionOnce "run aitools user init to remember tool choices"
         return 3
     }
+    # 2 (error), 4 (not a result of exception-set) and any other code: failed
     $script:AitLibToolExcResult = "failed"
-    if (-not $msg) { $msg = "resolver exit $($script:AitLibProfileRc)" }
-    LogWarn "tool exception for $Slug not saved ($msg)"
+    if (-not $msg) { $msg = "resolver failed" }
+    LogWarn "tool exception for $Slug not saved ($msg)$(Get-AitLibExitNote $script:AitLibProfileRc)"
     Write-AitLibActionOnce "see deploy.log -- a tool choice (tool exception) was not saved"
     return 1
+}
+
+# ---------------------------------------------------------------------------
+# Child-script log relay to deploy.jsonl (moved from the installers' "install
+# log helpers", PR #89, so installers and deploy-harness share one copy)
+# A parent that runs a child setup script (one that logs through aitools-lib)
+# shows the child's console lines, mirrors each structured line
+# ("[ts] [script] [level] msg") to deploy.jsonl -- the child already wrote it to
+# deploy.log, the lib's Log writes no JSONL -- and counts the child's warnings
+# and errors. Parity: the bash section of the same name.
+#   Write-JsonlRecord TS SCRIPT LEVEL MSG          append one deploy.jsonl record
+#   Send-ChildLog LINES                            relay captured child output
+#   Invoke-ChildRelayed LABEL SCRIPT [ARGS] [TOOL] run SCRIPT in-process, relay
+#                                                  each line as it comes
+# Results (set by Send-ChildLog and Invoke-ChildRelayed, read after the call):
+#   $script:AitLibChildWarnings  the child's warn lines (the exit footer
+#                                "COMPLETED with N warning(s)" is relayed, not counted)
+#   $script:AitLibChildErrors    the child's error lines ("FAILED with ..." not counted)
+#   $script:AitLibChildRc        Invoke-ChildRelayed only: the child's exit code
+# Every counted warning also increments $script:warnings (it promotes the
+# parent's OK rows, as the child's own rows are). Errors are not added to
+# $script:errors line by line: Invoke-ChildRelayed logs one LogError for a
+# failed child. Private caches: $script:AitLibRunId, AitLibJsonlHost, AitLibJsonlOs.
+# ---------------------------------------------------------------------------
+
+# Initialize-AitLibJsonl -- the host, os and run id fields, computed once
+function Initialize-AitLibJsonl {
+    if (-not $script:AitLibJsonlHost) {
+        $h = ""
+        try { $h = ([Environment]::MachineName -split '\.')[0] } catch { LogDetail "deploy.jsonl: host name unavailable ($($_.Exception.Message))" }
+        $script:AitLibJsonlHost = if ($h) { $h } else { "unknown" }
+    }
+    if (-not $script:AitLibJsonlOs) {
+        # The bash lib records uname -s; the installers recorded "Windows" on Windows
+        $script:AitLibJsonlOs = if ($IsMacOS) { "Darwin" } elseif ($IsLinux) { "Linux" } else { "Windows" }
+    }
+    if (-not $script:AitLibRunId) {
+        $script:AitLibRunId = if ($env:AITOOLS_RUN_ID) { $env:AITOOLS_RUN_ID } else { -join ((1..6) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) }) }
+    }
+}
+
+# ConvertTo-AitLibJsonlText S -- S with every control character except tab and
+# newline dropped (CR, ESC colour codes, ...), as the bash lib does; ConvertTo-Json
+# then escapes backslash, quote, tab and newline
+function ConvertTo-AitLibJsonlText($Value) {
+    return ([string]$Value) -creplace '[\x00-\x08\x0B-\x1F\x7F]', ''
+}
+
+# Write-JsonlRecord TS SCRIPT LEVEL MSG -- append one record to deploy.jsonl in the
+# log directory ($script:logDir, set by Initialize-Logging). Key order: ts, host,
+# os, script, run_id, level, msg (the installers' order). run_id = AITOOLS_RUN_ID,
+# else one random id per process. A failed write is logged at detail and
+# otherwise ignored: logging must not break the run it records (logging.md section 5).
+function Write-JsonlRecord($Ts, $ScriptLabel, $Level, $Msg) {
+    Initialize-AitLibJsonl
+    $rec = [ordered]@{
+        ts = (ConvertTo-AitLibJsonlText $Ts); host = (ConvertTo-AitLibJsonlText $script:AitLibJsonlHost)
+        os = (ConvertTo-AitLibJsonlText $script:AitLibJsonlOs); script = (ConvertTo-AitLibJsonlText $ScriptLabel)
+        run_id = (ConvertTo-AitLibJsonlText $script:AitLibRunId); level = (ConvertTo-AitLibJsonlText $Level)
+        msg = (ConvertTo-AitLibJsonlText $Msg)
+    }
+    try {
+        $f = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $script:logDir "deploy.jsonl"))
+        [IO.File]::AppendAllText($f, (($rec | ConvertTo-Json -Compress) + "`n"), [System.Text.UTF8Encoding]::new($false))
+    } catch {
+        LogDetail "deploy.jsonl: write failed ($($_.Exception.Message))"
+    }
+}
+
+# Send-AitLibChildLine RECORD -- print one child console line (a Write-Host record
+# redirected with 6>&1, or an output line), mirror it to deploy.jsonl when it is a
+# structured log line, count its warn/error level
+function Send-AitLibChildLine($Record) {
+    $line = [string]$Record
+    if (-not $line) { return }
+    $clean = $line -creplace "`r", '' -creplace "$([char]27)\[(31|33|0)m", ''
+    $m = [regex]::Match($clean, '^\[([^\]]+)\] \[([^\]]+)\] \[([a-z]+)\] (.*)$')
+    if (-not $m.Success) { Write-Host $line; return }
+    $level = $m.Groups[3].Value
+    if ($level -ceq "error") { Write-Host $clean -ForegroundColor Red }
+    elseif ($level -ceq "warn") { Write-Host $clean -ForegroundColor Yellow }
+    else { Write-Host $clean }
+    Write-JsonlRecord $m.Groups[1].Value $m.Groups[2].Value $level $m.Groups[4].Value
+    $text = $m.Groups[4].Value
+    # The exit footer restates the counts: relayed, not counted
+    if ($text.StartsWith("COMPLETED with ") -or $text.StartsWith("FAILED with ")) { return }
+    if ($level -ceq "warn") { $script:AitLibChildWarnings++; $script:warnings++ }
+    elseif ($level -ceq "error") { $script:AitLibChildErrors++ }
+}
+
+# Send-ChildLog LINES -- relay the captured console output of a child script, line
+# by line (see the section comment). Sets $script:AitLibChildWarnings and
+# $script:AitLibChildErrors. Returns nothing.
+function Send-ChildLog([object[]]$Lines) {
+    $script:AitLibChildWarnings = 0; $script:AitLibChildErrors = 0
+    foreach ($l in @($Lines)) {
+        foreach ($part in (([string]$l) -split "`n")) { Send-AitLibChildLine $part }
+    }
+}
+
+# Invoke-ChildRelayed LABEL SCRIPT [ARGS] [SUMMARYTOOL] -- run a child .ps1
+# in-process (e.g. Invoke-ChildRelayed "Step 5: setup-user-config.ps1" $writer
+# $writerArgs "aitools config"), its Write-Host output redirected with 6>&1 and
+# relayed line by line as it arrives. The child writes its own summary rows; a
+# throw (the child could not write them) is LogError plus, when SUMMARYTOOL is
+# given, the row "ERROR|SUMMARYTOOL|script failed (exception)" (bash has no
+# in-process throw, so run_child_relayed has no such argument). Sets
+# $script:AitLibChildRc, AitLibChildWarnings, AitLibChildErrors. Returns 0 when
+# the child exited 0 with no error line; otherwise 1 after one LogError naming LABEL.
+function Invoke-ChildRelayed([string]$Label, [string]$ChildScript, [hashtable]$ChildArgs = @{}, [string]$SummaryTool = "") {
+    $script:AitLibChildRc = 0; $script:AitLibChildWarnings = 0; $script:AitLibChildErrors = 0
+    $global:LASTEXITCODE = 0
+    try {
+        & $ChildScript @ChildArgs 6>&1 | ForEach-Object { Send-AitLibChildLine $_ }
+        $script:AitLibChildRc = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+    } catch {
+        $script:AitLibChildRc = 1
+        LogError "${Label} failed: $($_.Exception.Message)"
+        if ($SummaryTool) { Write-Summary "ERROR" $SummaryTool "script failed (exception)" }
+        return 1
+    }
+    if ($script:AitLibChildRc -ne 0) {
+        LogError "$Label failed (exit $($script:AitLibChildRc)) -- see $logFile"
+        return 1
+    }
+    if ($script:AitLibChildErrors -gt 0) {
+        LogError "$Label logged $($script:AitLibChildErrors) error(s) but exited 0 -- see $logFile"
+        return 1
+    }
+    return 0
 }
 
 # ---------------------------------------------------------------------------
