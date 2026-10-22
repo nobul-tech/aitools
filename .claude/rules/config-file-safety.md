@@ -163,6 +163,7 @@ Check non-empty file and required sections (e.g., `## Machine-Specific`).
 These scripts demonstrate the patterns above. Do not assume they are
 violation-free -- always verify copied code against these rules.
 
+- Single config writer: `@scripts/setup-user-config.sh` / `.ps1` (config.json; bootstrap + derived keys)
 - Node.js merge: `@scripts/setup-user-cursor.sh` (cli-config.json)
 - Settings sync (field-level review): `@scripts/setup-user-settings.sh` via `sync_managed_json` (settings.json <-> profile.json)
 - Hook merge: `@scripts/setup-user-hooks.sh` (settings.json hooks array)

@@ -184,6 +184,9 @@ fi
 # --- Post-write JSON validation ---
 # Validates a JSON config file after writing: checks non-empty, valid JSON,
 # required keys present, and no double-slash paths (excluding protocol prefixes).
+# No caller here since config.json moved to setup-user-config.sh (M3 B3b); kept
+# because config-file-safety.md cites it as the reference example, until it moves
+# to aitools-lib (M3 B2).
 $DRY_RUN && log "[DRY RUN] Preview mode -- no files will be written"
 
 validate_json_config() {
@@ -414,130 +417,21 @@ else
     AITOOLS_NATIVE="$AITOOLS_REPO"
 fi
 
-# Escape backslashes for JSON (used only when writing a fresh file without node)
-REPOS_PATH_JSON=$(printf '%s' "$REPOS_PATH_NATIVE" | sed 's/\\/\\\\/g')
-AITOOLS_JSON=$(printf '%s' "$AITOOLS_NATIVE" | sed 's/\\/\\\\/g')
-
-# Managed fields: version, reposPath, repoPath; googleDrives only when drives were
-#   detected this run (otherwise the existing array is kept, or [] when absent)
-# Preserved: userRepoPath, machineAlias (set by 'aitools user init') and all other keys
-# Write path: merge to a temp file -> validate_json_config -> backup_file -> mv.
-#   A merge or validation failure leaves the existing file untouched.
-CONFIG_TMP="${CONFIG_FILE}.tmp.$$"
-# read -d '' returns 1 at end of input by design; the -n check below is the result check
-read -r -d '' CONFIG_MERGE_JS <<'CONFIGJS' || true
-const fs = require('fs');
-const [file, tmp, reposPath, repoPath, drivesJson] = process.argv.slice(1);
-let raw = null;
-try {
-    raw = fs.readFileSync(file, "utf8");
-    if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1);  // strip UTF-8 BOM (PowerShell 5.x writes one)
-} catch (e) {
-    if (e.code !== 'ENOENT') { console.log('ERROR:read ' + e.message); process.exit(2); }
-}
-let cfg = {};
-let state = 'created';
-if (raw !== null) {
-    try {
-        cfg = JSON.parse(raw);
-        if (cfg === null || typeof cfg !== 'object' || Array.isArray(cfg)) throw new Error('top level is not an object');
-        state = 'updated';
-    } catch (e) {
-        // Invalid JSON: rebuild from managed fields, salvaging the user-init keys by pattern
-        console.log('CORRUPT:' + e.message);
-        cfg = {};
-        for (const k of ['userRepoPath', 'machineAlias']) {
-            const m = raw.match(new RegExp('"' + k + '"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"'));
-            if (m) { cfg[k] = JSON.parse('"' + m[1] + '"'); console.log('RECOVERED:' + k); }
-        }
-        state = 'recovered';
-    }
-}
-let drives;
-try { drives = JSON.parse(drivesJson); } catch (e) { console.log('ERROR:drives ' + e.message); process.exit(3); }
-const next = Object.assign({}, cfg, { version: 2, reposPath: reposPath, repoPath: repoPath });
-if (Array.isArray(drives) && drives.length > 0) next.googleDrives = drives;
-else if (!Array.isArray(next.googleDrives)) next.googleDrives = [];
-for (const k of ['version', 'reposPath', 'repoPath', 'googleDrives']) {
-    const a = JSON.stringify(cfg[k]), b = JSON.stringify(next[k]);
-    if (a !== b) console.log('CHANGED:' + k + ': ' + (a === undefined ? '(unset)' : a) + ' -> ' + b);
-}
-if (state === 'updated' && JSON.stringify(next) === JSON.stringify(cfg)) { console.log('RESULT:unchanged'); process.exit(0); }
-fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + '\n');
-const v = JSON.parse(fs.readFileSync(tmp, 'utf8'));
-const missing = ['version', 'reposPath', 'repoPath'].filter(k => !(k in v));
-if (missing.length) { console.log('ERROR:validation missing ' + missing.join(', ')); process.exit(4); }
-console.log('RESULT:' + state);
-CONFIGJS
-
-if $DRY_RUN; then
-    log "[DRY RUN] Would merge version/reposPath/repoPath/googleDrives into $(display_path "$CONFIG_FILE")"
-elif [ -z "$CONFIG_MERGE_JS" ]; then
-    log_error "Failed: $(display_path "$CONFIG_FILE"): internal error -- config merge program is empty"
-    write_summary ERROR "aitools config" "merge program missing"
-elif command -v node >/dev/null 2>&1; then
-    MERGE_EC=0
-    # || records node's exit status so set -e does not abort before it is reported below
-    MERGE_OUTPUT=$(node -e "$CONFIG_MERGE_JS" "$CONFIG_FILE" "$CONFIG_TMP" \
-        "$REPOS_PATH_NATIVE" "$AITOOLS_NATIVE" "$DRIVES_JSON" 2>&1) || MERGE_EC=$?
-    MERGE_RESULT=$(printf '%s\n' "$MERGE_OUTPUT" | perl -ne 'print $1 if /^RESULT:(\w+)/')
-    if [ "$MERGE_EC" -ne 0 ] || [ -z "$MERGE_RESULT" ]; then
-        rm -f "$CONFIG_TMP"
-        printf '%s\n' "$MERGE_OUTPUT" | while IFS= read -r line; do
-            if [ -n "$line" ]; then log_detail "$line"; fi
-        done
-        log_error "Failed: $(display_path "$CONFIG_FILE"): config merge failed (exit $MERGE_EC) -- existing file left untouched"
-        write_summary ERROR "aitools config" "merge failed"
-    elif [ "$MERGE_RESULT" = "unchanged" ]; then
-        log_ok "Unchanged: $(display_path "$CONFIG_FILE")"
-        write_summary OK "aitools config" "verified"
-    elif ! validate_json_config "$CONFIG_TMP" version reposPath repoPath; then
-        # validate_json_config already logged the specific error
-        rm -f "$CONFIG_TMP"
-        write_summary ERROR "aitools config" "validation failed"
-    else
-        backup_file "$CONFIG_FILE"
-        if ! mv "$CONFIG_TMP" "$CONFIG_FILE"; then
-            rm -f "$CONFIG_TMP"
-            log_error "Failed: $(display_path "$CONFIG_FILE"): could not replace the config file"
-            write_summary ERROR "aitools config" "write failed"
-        else
-            case "$MERGE_RESULT" in
-                recovered)
-                    CORRUPT_REASON=$(printf '%s\n' "$MERGE_OUTPUT" | perl -ne 'print $1 if /^CORRUPT:(.+)/')
-                    log_warn "$(display_path "$CONFIG_FILE") was not valid JSON ($CORRUPT_REASON) -- rebuilt; the invalid copy was backed up"
-                    write_summary WARN "aitools config" "rebuilt (was invalid)" ;;
-                created)
-                    log_ok "Created: $(display_path "$CONFIG_FILE")"
-                    write_summary OK "aitools config" "created" ;;
-                *)
-                    log_ok "Updated: $(display_path "$CONFIG_FILE")"
-                    write_summary OK "aitools config" "updated" ;;
-            esac
-            # Changed keys: full old -> new in the log, key names as DETAIL lines (after the parent entry)
-            printf '%s\n' "$MERGE_OUTPUT" | perl -ne 'print "$1\n" if /^CHANGED:(.+)/' | while IFS= read -r change; do
-                log "  $change"
-                write_summary DETAIL "aitools config" "${change%%:*} updated"
-            done
-        fi
-    fi
-elif [ ! -f "$CONFIG_FILE" ]; then
-    # Fresh machine without node (node arrives in Step 8): nothing to preserve, so
-    # writing just the managed fields is safe.
-    if printf '{\n  "version": 2,\n  "reposPath": "%s",\n  "repoPath": "%s",\n  "googleDrives": %s\n}\n' \
-            "$REPOS_PATH_JSON" "$AITOOLS_JSON" "$DRIVES_JSON" > "$CONFIG_TMP" \
-        && validate_json_config "$CONFIG_TMP" version reposPath repoPath \
-        && mv "$CONFIG_TMP" "$CONFIG_FILE"; then
-        log_ok "Created: $(display_path "$CONFIG_FILE")"
-        write_summary OK "aitools config" "created"
-    else
-        rm -f "$CONFIG_TMP"
-        log_error "Failed: $(display_path "$CONFIG_FILE"): could not write the initial config"
-        write_summary ERROR "aitools config" "write failed"
-    fi
+# config.json has one writer: setup-user-config.sh (bootstrap keys from this
+# installer + values derived from profile.json; no node needed, P-Q3).
+CONFIG_WRITER="$SCRIPT_DIR/setup-user-config.sh"
+if [ ! -f "$CONFIG_WRITER" ]; then
+    log_error "Failed: setup-user-config.sh not found next to the installer -- config.json not written"
+    write_summary ERROR "aitools config" "writer missing"
 else
-    log_warn "node not found -- $(display_path "$CONFIG_FILE") left unchanged (read-then-merge needs node, installed in Step 8)"
-    write_summary WARN "aitools config" "not updated (no node)"
+    writer_args=(--repos-path "$REPOS_PATH_NATIVE" --repo-path "$AITOOLS_NATIVE" --drives-json "$DRIVES_JSON")
+    if $DRY_RUN; then writer_args+=(--dry-run); fi
+    writer_rc=0
+    # The writer logs and writes its own summary rows; its exit code is recorded here
+    bash "$CONFIG_WRITER" "${writer_args[@]}" || writer_rc=$?
+    if [ "$writer_rc" -ne 0 ]; then
+        log_error "Step 5: setup-user-config.sh failed (exit $writer_rc) -- see $(display_path "$LOG_FILE")"
+    fi
 fi
 
 
