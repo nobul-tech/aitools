@@ -59,14 +59,70 @@ if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Forc
 if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
 if ($DryRun) { $env:AITOOLS_DRY_RUN = "1" }
 
+# --- BEGIN install log helpers (tests/profile/test-config.sh extracts this block) ---
+# Write-JsonlRecord TS SCRIPT LEVEL MSG -- append one deploy.jsonl record (same key
+# order as the bash installer; ConvertTo-Json escapes the message).
+function Write-JsonlRecord($ts, $scriptLabel, $level, $msg) {
+    $json = [ordered]@{ ts=$ts; host=$hostName; os=$osName; script=$scriptLabel; run_id=$runId; level=$level; msg=[string]$msg } | ConvertTo-Json -Compress
+    Add-Content -Path $logJsonl -Value $json
+}
+
+# Send-ChildLogLine RECORD -- one console line of a child script that logs through
+# aitools-lib (setup-user-config.ps1, its Write-Host output redirected with 6>&1):
+# print it, mirror a structured line ("[ts] [script] [level] msg") to deploy.jsonl --
+# the child already wrote it to deploy.log -- and count its warnings in
+# $script:warnings. Its errors are not counted line by line: a child with errors
+# exits non-zero and the caller logs one error for it.
+function Send-ChildLogLine($record) {
+    $line = [string]$record
+    if (-not $line) { return }
+    $m = [regex]::Match($line, '^\[([^\]]+)\] \[([^\]]+)\] \[([a-z]+)\] (.*)$')
+    if (-not $m.Success) { Write-Host $line; return }
+    $level = $m.Groups[3].Value
+    switch ($level) {
+        "error" { Write-Host $line -ForegroundColor Red }
+        "warn"  { Write-Host $line -ForegroundColor Yellow }
+        default { Write-Host $line }
+    }
+    Write-JsonlRecord $m.Groups[1].Value $m.Groups[2].Value $level $m.Groups[4].Value
+    if ($level -eq "warn") { $script:warnings++ }
+}
+
+# Invoke-ConfigWriter WRITER ARGS -- Step 5: run setup-user-config.ps1 in-process
+# (it logs and writes its own summary rows; it never prompts), relay its log lines,
+# record a non-zero exit or a throw as one error.
+function Invoke-ConfigWriter([string]$Writer, [hashtable]$WriterArgs) {
+    $global:LASTEXITCODE = 0
+    $rc = 0
+    try {
+        & $Writer @WriterArgs 6>&1 | ForEach-Object { Send-ChildLogLine $_ }
+        $rc = $LASTEXITCODE
+    } catch {
+        LogError "Step 5: setup-user-config.ps1 failed: $_"
+        Write-Summary "ERROR" "aitools config" "script failed (exception)"
+        return
+    }
+    if ($rc -and $rc -ne 0) {
+        LogError "Step 5: setup-user-config.ps1 failed (exit $rc) -- see $logFile"
+    }
+}
+
+# Get-AbsoluteReposPath PATH -- PATH as an absolute path. A relative answer is taken
+# relative to the current location, where Step 3 creates it (the pre-#79 installer
+# kept it relative; the config writer accepts absolute paths only).
+function Get-AbsoluteReposPath([string]$Path) {
+    if ([IO.Path]::IsPathRooted($Path)) { return $Path }
+    return [IO.Path]::GetFullPath($Path, (Get-Location).Path)
+}
+# --- END install log helpers ---
+
 # Override: JSONL dual-format (human-readable + structured JSON)
 function Log($msg, $level = "info") {
     $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $line = "[$ts] [$scriptName] [$level] $msg"
     Write-Host $line
     Add-Content -Path $logFile -Value $line
-    $json = @{ ts=$ts; host=$hostName; os=$osName; script=$scriptName; run_id=$runId; level=$level; msg=$msg } | ConvertTo-Json -Compress
-    Add-Content -Path $logJsonl -Value $json
+    Write-JsonlRecord $ts $scriptName $level $msg
 }
 function LogOk($msg)    { Log $msg "ok" }
 function LogError($msg) { Log $msg "error"; $script:errors++ }
@@ -121,9 +177,9 @@ function Invoke-ValidatedScript {
 # --- Post-write JSON validation ---
 # Validates a JSON config file after writing: checks non-empty, valid JSON,
 # required keys present, and no double-slash paths (excluding protocol prefixes).
-# No caller here since config.json moved to setup-user-config.ps1 (M3 B3b); kept
-# because config-file-safety.md cites it as the reference example, until it moves
-# to aitools-lib (M3 B2).
+# No caller here since config.json moved to setup-user-config.ps1 (M3 B3b). It stays
+# in this installer (M3 B2 kept it out of aitools-lib) because config-file-safety.md
+# cites it as the reference example for ValidateJsonConfig.
 function ValidateJsonConfig {
     param([string]$File, [string[]]$RequiredKeys)
     if (-not (Test-Path $File) -or (Get-Item $File).Length -eq 0) {
@@ -276,6 +332,11 @@ if (-not $resolvedReposPath) {
     }
 }
 
+if (-not [IO.Path]::IsPathRooted($resolvedReposPath)) {
+    $reposAbs = Get-AbsoluteReposPath $resolvedReposPath
+    Log "Repos path '$resolvedReposPath' is relative -- using $reposAbs (relative to the current directory)"
+    $resolvedReposPath = $reposAbs
+}
 if (-not (Test-Path $resolvedReposPath)) {
     New-Item -ItemType Directory -Path $resolvedReposPath -Force | Out-Null
 }
@@ -330,18 +391,7 @@ if (-not (Test-Path $configWriter)) {
     $writerArgs = @{ ReposPath = $resolvedReposPath; RepoPath = $aitoolsRepo; DrivesJson = $drivesJson }
     if ($DryRun) { $writerArgs["DryRun"] = $true }
     # In-process like Invoke-ValidatedScript: reset the exit code, catch a throw
-    $global:LASTEXITCODE = 0
-    $writerRc = 0
-    try {
-        & $configWriter @writerArgs
-        $writerRc = $LASTEXITCODE
-    } catch {
-        LogError "Step 5: setup-user-config.ps1 failed: $_"
-        Write-Summary "ERROR" "aitools config" "script failed (exception)"
-    }
-    if ($writerRc -and $writerRc -ne 0) {
-        LogError "Step 5: setup-user-config.ps1 failed (exit $writerRc) -- see $logFile"
-    }
+    Invoke-ConfigWriter $configWriter $writerArgs
 }
 
 # ============================================================

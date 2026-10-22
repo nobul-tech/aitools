@@ -214,6 +214,19 @@ case_run c8-dry-run 0 fix_v2 --dry-run
 has_row "OK|aitools config|dry-run: would update"
 if grep -q '"version": 2' "$OUTJ"; then ok "c8-dry-run: config untouched"; else bad "c8-dry-run: config changed"; fi
 
+# C8b dry run writes nothing under ~/.aitools, not even a temp file: it succeeds
+# with ~/.aitools read-only (logs go to the writable logs/ below it)
+fix_dry_ro() {
+    if [ -d "$H/.aitools" ]; then chmod 755 "$H/.aitools"; fi
+    fix_v2
+    mkdir -p "$H/.aitools/logs"
+    chmod 555 "$H/.aitools"
+}
+case_run c8b-dry-run-readonly 0 fix_dry_ro --dry-run
+chmod 755 "$H/.aitools"
+has_row "OK|aitools config|dry-run: would update"
+no_row_like "merge failed"
+
 # C9 drives: a non-empty array replaces, an empty one keeps
 case_run c9-drives 0 fix_v2 --drives-json '[{"path":"/Volumes/GD/My Drive","account":"x@y.z","label":""}]'
 has_json '"googleDrives": \[\n    \{\n      "path": "\/Volumes\/GD\/My Drive",\n      "account": "x\@y.z",\n      "label": ""\n    \}\n  \]'
@@ -262,6 +275,107 @@ no_row_like "no machine match"
 # C12 bad arguments
 case_run c12-bad-arg 1 fix_nodp --bogus
 has_row "ERROR|aitools config|bad arguments"
+
+# --- Installer Step 3/5 helpers (aitools-install.sh/.ps1 "install log helpers" block) ---
+# The full installer cannot run here (incident #89); its helper block is extracted
+# and run against the real writer under the isolated HOME.
+INST_SH="$REPO/scripts/aitools-install.sh"
+INST_PS="$REPO/scripts/aitools-install.ps1"
+cat > "$WORK/inst-harness.sh" <<'HARNESS'
+set -euo pipefail
+repo="$1"; mode="$2"; shift 2
+source "$repo/scripts/aitools-lib.sh"
+logging_init "aitools-install"
+LOG_JSONL="$LOG_DIR/deploy.jsonl"; RUN_ID="test01"; HOST_NAME="testhost"; OS_NAME="Darwin"
+block=$(perl -0777 -ne 'print $1 if /^# --- BEGIN install log helpers[^\n]*\n(.*?)^# --- END install log helpers ---/ms' "$repo/scripts/aitools-install.sh")
+if [ -z "$block" ]; then printf 'no helper block\n'; exit 3; fi
+eval "$block"
+case "$mode" in
+    abs) absolute_repos_path "$1"; printf '\n' ;;
+    run) run_config_writer "$repo/scripts/setup-user-config.sh" "$@"
+         printf 'COUNTS errors=%s warnings=%s\n' "$ERRORS" "$WARNINGS" ;;
+esac
+HARNESS
+cat > "$WORK/inst-harness.ps1" <<'HARNESS'
+param([string]$Repo, [string]$Mode, [string]$ReposPath = "", [string]$RepoPath = "")
+. (Join-Path $Repo "scripts/aitools-lib.ps1")
+Initialize-Logging "aitools-install"
+$logJsonl = Join-Path $logDir "deploy.jsonl"; $runId = "test01"; $hostName = "testhost"; $osName = "Windows"
+$text = [IO.File]::ReadAllText((Join-Path $Repo "scripts/aitools-install.ps1"))
+$m = [regex]::Match($text, '(?ms)^# --- BEGIN install log helpers[^\n]*\n(.*?)^# --- END install log helpers ---')
+if (-not $m.Success) { Write-Output "no helper block"; exit 3 }
+Invoke-Expression $m.Groups[1].Value
+if ($Mode -eq "abs") { Write-Output (Get-AbsoluteReposPath $ReposPath); exit 0 }
+Invoke-ConfigWriter (Join-Path $Repo "scripts/setup-user-config.ps1") @{ ReposPath = $ReposPath; RepoPath = $RepoPath }
+Write-Output "COUNTS errors=$($script:errors) warnings=$($script:warnings)"
+HARNESS
+
+# inst_run IMPL MODE ARGS... -- run the extracted helpers; output in $WORK/inst.out
+inst_run() {
+    local impl="$1"; shift
+    RC=0
+    : > "$H/summary.txt"
+    if [ "$impl" = "bash" ]; then
+        (cd "$H" && env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" \
+            AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac \
+            "$BASH_BIN" "$WORK/inst-harness.sh" "$REPO" "$@") > "$WORK/inst.out" 2>&1 || RC=$?
+    else
+        local mode="$1"; shift
+        (cd "$H" && env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" \
+            AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac AITOOLS_PROFILE_TEST_ANY_OS=1 \
+            pwsh -NoProfile -File "$WORK/inst-harness.ps1" -Repo "$REPO" -Mode "$mode" "$@") > "$WORK/inst.out" 2>&1 || RC=$?
+    fi
+}
+inst_counts() { perl -ne 'print "$1 $2" if /^COUNTS errors=(\d+) warnings=(\d+)/' "$WORK/inst.out"; }
+jsonl_check() {  # jsonl_check IMPL -- every deploy.jsonl line is valid JSON; prints the writer's warn count
+    local j="$H/.aitools/logs/deploy.jsonl"
+    if perl -MJSON::PP -ne 'BEGIN { $n = 0; $s = 0 } $r = decode_json($_); $n++ if $r->{script} eq "setup-user-config" && $r->{level} eq "warn"; $s++ if $r->{script} eq "setup-user-config"; END { print "$s $n" }' "$j" > "$WORK/jsonl.res" 2> "$WORK/jsonl.err"; then
+        ok "$1 step5: deploy.jsonl lines are valid JSON"
+    else
+        bad "$1 step5: deploy.jsonl has an invalid line"; sed 's/^/       /' "$WORK/jsonl.err"
+    fi
+}
+
+IMPLS="bash"
+if $USE_PS; then IMPLS="bash ps"; fi
+for impl in $IMPLS; do
+    CASE="$impl step3"
+    if [ "$impl" = "bash" ]; then inst_run bash abs repos; else inst_run ps abs -ReposPath repos; fi
+    got=$(perl -ne 'print if /\S/' "$WORK/inst.out")
+    want="$(cd "$H" && pwd -P)/repos"
+    want_l="$H/repos"
+    REL_GOT="$got"
+    if [ "$got" = "$want" ] || [ "$got" = "$want_l" ]; then ok "$impl step3: relative 'repos' -> $got"
+    else bad "$impl step3: relative 'repos' -> '$got', want $want_l"; fi
+    if [ "$impl" = "bash" ]; then inst_run bash abs /abs/repos; else inst_run ps abs -ReposPath /abs/repos; fi
+    got=$(perl -ne 'print if /\S/' "$WORK/inst.out")
+    if [ "$got" = "/abs/repos" ]; then ok "$impl step3: absolute path unchanged"; else bad "$impl step3: absolute -> '$got'"; fi
+
+    # Step 5 relays the writer: its lines reach deploy.jsonl, its warnings are counted
+    # (C13 fixture: an unregistered profile warns), and the relative-path regression
+    # is gone (Step 3's absolute path is accepted and config.json is written)
+    fix_unreg
+    rm -f "$CFG"
+    REL_ABS="$REL_GOT"  # Step 3's answer for the relative 'repos'
+    if [ "$impl" = "bash" ]; then inst_run bash run --repos-path "$REL_ABS" --repo-path "$H/repos/aitools"
+    else inst_run ps run -ReposPath "$REL_ABS" -RepoPath "$H/repos/aitools"; fi
+    counts=$(inst_counts)
+    if [ "$RC" -eq 0 ] && [ -s "$CFG" ]; then ok "$impl step5: config.json written"; else bad "$impl step5: rc=$RC, config missing"; sed 's/^/       /' "$WORK/inst.out"; fi
+    jsonl_check "$impl"
+    read -r jl_all jl_warn < "$WORK/jsonl.res" || true  # empty result = 0 0, reported below
+    if [ "${jl_all:-0}" -gt 0 ]; then ok "$impl step5: writer lines in deploy.jsonl ($jl_all)"; else bad "$impl step5: no writer lines in deploy.jsonl"; fi
+    if [ "${counts#* }" = "${jl_warn:-x}" ] && [ "${jl_warn:-0}" -gt 0 ]; then ok "$impl step5: writer warnings counted (${counts#* })"
+    else bad "$impl step5: counts '$counts', writer warn lines ${jl_warn:-none}"; sed 's/^/       /' "$WORK/inst.out"; fi
+    if grep -q '\[setup-user-config\] \[warn\]' "$WORK/inst.out"; then ok "$impl step5: writer lines shown on the console"; else bad "$impl step5: writer lines not shown"; fi
+
+    # A failing writer (relative path reaching it) is one installer error
+    reset_home
+    if [ "$impl" = "bash" ]; then inst_run bash run --repos-path repos --repo-path "$H/repos/aitools"
+    else inst_run ps run -ReposPath repos -RepoPath "$H/repos/aitools"; fi
+    counts=$(inst_counts)
+    if [ "${counts% *}" = "1" ]; then ok "$impl step5: failed writer = 1 error"; else bad "$impl step5: failed writer counts '$counts'"; sed 's/^/       /' "$WORK/inst.out"; fi
+    if grep -qxF "ERROR|aitools config|bad arguments" "$H/summary.txt"; then ok "$impl step5: writer ERROR row kept"; else bad "$impl step5: no writer ERROR row"; fi
+done
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 if [ "$FAIL" -gt 0 ]; then exit 1; fi
