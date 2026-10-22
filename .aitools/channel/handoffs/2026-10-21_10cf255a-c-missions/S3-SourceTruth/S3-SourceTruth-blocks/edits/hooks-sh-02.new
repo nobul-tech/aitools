@@ -1,0 +1,22 @@
+    for hook_name in "${HOOK_FILES[@]}"; do
+        hook_src=$(resolve_hook "$hook_name")
+        hook_dst="$HOME/.claude/hooks/$hook_name"
+
+        deploy_managed_file "$(cat "$hook_src")" "$hook_dst" "claude hooks" "$hook_name" "$hook_src"
+
+        case "$MANAGED_FILE_RESULT" in
+            created|updated|"accept & adopt")
+                # accept & adopt: the library also wrote the source file in the
+                # repo; a merge rewrote the deployed hook, so keep it executable.
+                if ! chmod +x "$hook_dst"; then
+                    log_error "Failed: $hook_name: chmod +x $(display_path "$hook_dst")"
+                    write_summary ERROR "claude hooks" "chmod failed: $hook_name"
+                fi
+                HOOKS_CHANGED=true
+                ;;
+            skipped|verified|failed)
+                # The tracker records the outcome (failed -> ERROR row).
+                ;;
+        esac
+        deploy_tracker_record "$MANAGED_FILE_RESULT" "claude hooks" "$hook_name"
+    done

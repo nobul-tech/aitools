@@ -1,0 +1,30 @@
+        # Found a user-created skill
+        if ($userRepoPath) {
+            Log "Found user-created skill: $skillName"
+            if ($DryRun) {
+                Log "[DRY RUN] Would offer to adopt $skillName to dotprofile"
+            } elseif (-not (Test-InteractiveConsole)) {
+                Log "Non-interactive: skipped adoption prompt for $skillName"
+            } else {
+                # Test-InteractiveConsole + Read-ConsoleChoice (GitHub #29): EOF at
+                # the prompt logs a warning and takes the default, [s]kip.
+                [Console]::WriteLine("")
+                [Console]::WriteLine("  User-created skill detected: $skillName")
+                [Console]::WriteLine("  [a]dopt to dotprofile  [s]kip")
+                [Console]::Write("  > ")
+                $choice = Read-ConsoleChoice "skip"
+                switch ($choice) {
+                    { $_ -in @("a", "adopt") } {
+                        $errorsBeforeAdopt = $errors
+                        $adoptedCount = Adopt-ManagedFile -SourceFile (Join-Path $skillDir.FullName "SKILL.md") `
+                            -Targets @(Join-Path $userRepoPath "claude\skills\$skillName\SKILL.md")
+                        if ($errors -gt $errorsBeforeAdopt -or -not $adoptedCount) {
+                            Write-Summary "ERROR" "claude skills" "adopt failed: $skillName"
+                        }
+                    }
+                    default {
+                        Log "Skipped adoption of $skillName"
+                    }
+                }
+            }
+        }

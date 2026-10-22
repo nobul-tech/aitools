@@ -1,0 +1,6 @@
+# ---------------------------------------------------------------------------
+# 28. Deploy state integrity (retired)
+# ---------------------------------------------------------------------------
+# The managed-file model has no deploy state (SOURCE is the source of truth);
+# ~/.aitools/deploy-state/ from older versions is left on disk and unused.
+step_skip "28" "Deploy state integrity" "retired: managed files keep no deploy state"
