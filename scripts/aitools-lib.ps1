@@ -434,7 +434,9 @@ function Initialize-AitLibJsonl {
 
 # ConvertTo-AitLibJsonlText S -- S with every control character except tab and
 # newline dropped (CR, ESC colour codes, ...), as the bash lib does; ConvertTo-Json
-# then escapes backslash, quote, tab and newline
+# then escapes backslash, quote, tab and newline. Records match the bash lib byte
+# for byte for valid UTF-8 without U+0085, U+2028 and U+2029 (ConvertTo-Json
+# escapes those; .NET has already replaced invalid bytes with U+FFFD)
 function ConvertTo-AitLibJsonlText($Value) {
     return ([string]$Value) -creplace '[\x00-\x08\x0B-\x1F\x7F]', ''
 }
@@ -500,24 +502,29 @@ function Send-ChildLog([object[]]$Lines) {
 # in-process throw, so run_child_relayed has no such argument). Sets
 # $script:AitLibChildRc, AitLibChildWarnings, AitLibChildErrors. Returns 0 when
 # the child exited 0 with no error line; otherwise 1 after one LogError naming LABEL.
-function Invoke-ChildRelayed([string]$Label, [string]$ChildScript, [hashtable]$ChildArgs = @{}, [string]$SummaryTool = "") {
+# The child must end with an explicit `exit N` (the standard exit footer): a
+# .ps1 that just ends reports the exit code of the last native command it ran.
+# The parameters carry the lib prefix because the in-process child can read this
+# function's variables through dynamic scope (an unset $Label in the child would
+# otherwise see ours).
+function Invoke-ChildRelayed([string]$AitLibLabel, [string]$AitLibChildScript, [hashtable]$AitLibChildArgs = @{}, [string]$AitLibSummaryTool = "") {
     $script:AitLibChildRc = 0; $script:AitLibChildWarnings = 0; $script:AitLibChildErrors = 0
     $global:LASTEXITCODE = 0
     try {
-        & $ChildScript @ChildArgs 6>&1 | ForEach-Object { Send-AitLibChildLine $_ }
+        & $AitLibChildScript @AitLibChildArgs 6>&1 | ForEach-Object { Send-AitLibChildLine $_ }
         $script:AitLibChildRc = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
     } catch {
         $script:AitLibChildRc = 1
-        LogError "${Label} failed: $($_.Exception.Message)"
-        if ($SummaryTool) { Write-Summary "ERROR" $SummaryTool "script failed (exception)" }
+        LogError "${AitLibLabel} failed: $($_.Exception.Message)"
+        if ($AitLibSummaryTool) { Write-Summary "ERROR" $AitLibSummaryTool "script failed (exception)" }
         return 1
     }
     if ($script:AitLibChildRc -ne 0) {
-        LogError "$Label failed (exit $($script:AitLibChildRc)) -- see $logFile"
+        LogError "$AitLibLabel failed (exit $($script:AitLibChildRc)) -- see $logFile"
         return 1
     }
     if ($script:AitLibChildErrors -gt 0) {
-        LogError "$Label logged $($script:AitLibChildErrors) error(s) but exited 0 -- see $logFile"
+        LogError "$AitLibLabel logged $($script:AitLibChildErrors) error(s) but exited 0 -- see $logFile"
         return 1
     }
     return 0

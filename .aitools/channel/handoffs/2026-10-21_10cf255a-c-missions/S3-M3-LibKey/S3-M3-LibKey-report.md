@@ -55,7 +55,7 @@ No wrapper returns 2. 3 and 4 are logged with code and meaning (`(resolver exit 
 - `bash -n` (bash 5.3, /bin/bash 3.2), pwsh parser: clean; no top-level `AITLIB_`/`$script:AitLib` assignment (`.scratch/session-LibKey/syntax.sh`).
 - Baseline after merging #80: test-lib 108/0.
 - test-lib 205/0 (bash 5 + pwsh), 205/0 (/bin/bash 3.2 + pwsh), 90/0 (/bin/bash 3.2 --bash-only). New cases: rmpk-* (id-key, legacy, unregistered, other, none, nomatch, old-resolver, via-pwsh), urp-missing-twice, exit3/exit4 x urp/rmp/eget/eset (+ via-pwsh-exit4-urp), relay-record (+ bash/PS byte identity), relay-run-ok/-fail/-error-exit0, relay-captured.
-- Probe `.scratch/session-LibKey/probe-jsonl.sh`: bash and PS records identical, including `é`; the JSONL checker flags an unescaped quote (negative control for the checker).
+- Probe `.scratch/session-LibKey/probe-jsonl.sh`: bash and PS records identical, including `é`; the JSONL checker flags an unescaped quote (negative control for the checker). Identity holds for valid UTF-8 without U+0085/U+2028/U+2029 (review m1).
 - Negative control `.scratch/session-LibKey/negative.sh`: new test-lib against the pre-batch libs fails every batch 3 case.
 - After merging the batch 4 head (13eeb57): test-config 190/0 (bash 5, 3.2); test-profile 689/0 (5, 3.2); tests/logging sh 24/0 (5, 3.2), ps 15/0 (5 skipped); tests/managed-files sh 42/0, ps 24/0. Before that merge test-config was 85/4 (c1, c2, c3, c8) on the untouched tree too (`baseline-config.sh`).
 - check-pre-commit: FAIL 6 (known). Step 20 failed before the merge (pre-existing tree refs) and passes after it. WARN 11: the live dotprofile has uncommitted changes -- not mine, untouched.
@@ -63,7 +63,16 @@ No wrapper returns 2. 3 and 4 are logged with code and meaning (`(resolver exit 
 
 ## Review
 
-(filled in after S3-M3-LibKey-Review)
+- S3-M3-LibKey-Review (independent, level 3, without this report) reviewed 693a7e7: https://github.com/nobul-tech/aitools/pull/86#pullrequestreview-5621868563 ; file `../S3-M3-LibKey-Review/S3-M3-LibKey-Review-pr86-batch3.md`.
+- Verdict: approve-equivalent, 0 blockers, 0 majors, 4 minors, 4 nits; 8 mutations, all caught (table in its file).
+- Fixed in the follow-up commit:
+  - m1: the "byte-identical, non-ASCII" claim is narrowed in both lib comments and the PR body (identical for valid UTF-8 without U+0085/U+2028/U+2029; invalid UTF-8 gives an unparseable bash record, as the #89 installer code did); `relay-record` now carries `José ✓` and checks bash/PS byte identity.
+  - m2: `Invoke-ChildRelayed` header: the child must end with an explicit `exit N`.
+  - m3: `run_child_relayed` with no command logs an error and returns 1; test `relay-run-no-command` (both shells).
+  - m4: `Invoke-ChildRelayed` parameters renamed `$AitLibLabel`, `$AitLibChildScript`, `$AitLibChildArgs`, `$AitLibSummaryTool`; the test child logs an error if it can see the old names.
+  - n1: header sentence on stdout lifetime.
+- Not changed: n2 (127 vs 1 for a missing command under bash 3.2; both failures), n3 (switch the installers in one commit -- in the call-site text), n4 (shadowing is safe; already stated).
+- After the fixes: test-lib 209/0 (bash 5 + pwsh, /bin/bash 3.2 + pwsh), 92/0 (3.2 --bash-only); every other suite unchanged and green.
 
 ## Not run
 

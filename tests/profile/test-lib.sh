@@ -507,6 +507,8 @@ Log "child info"
 LogWarn "quote `" back \ tab`tend"
 LogWarn "second warning"
 if ($env:CHILD_FAIL -and $env:CHILD_FAIL -ne "0") { LogError "child error" }
+# Review m4: the relay's own parameters must not leak into the child (dynamic scope)
+if ($Label -or $ChildScript -or $ChildArgs -or $SummaryTool) { LogError "parent's Invoke-ChildRelayed variables are visible" }
 if ($errors -gt 0 -and $env:CHILD_FAIL -eq "1") { Log "FAILED with $errors error(s). See log: $logFile" "error"; exit 1 }
 elseif ($warnings -gt 0) { Log "COMPLETED with $warnings warning(s)" "warn"; exit 0 }
 else { Log "COMPLETED successfully" "ok"; exit 0 }
@@ -520,7 +522,10 @@ source "$REPO/scripts/aitools-lib.sh"
 logging_init "test-relay"
 rc=0
 case "$RMODE" in
-    record) jsonl_record 2026-01-01T00:00:00Z test-relay warn "q \" b \\ t"$'\t'"n"$'\n'"l"$'\r'" e"$'\033'"[0m x" ;;
+    record) jsonl_record 2026-01-01T00:00:00Z test-relay warn "q \" b \\ t"$'\t'"n"$'\n'"l"$'\r'" e"$'\033'"[0m x José ✓" ;;
+    noargs)
+        run_child_relayed "no command" || rc=$?
+        printf 'rc=%s child_rc=%s\n' "$rc" "$AITLIB_CHILD_RC" ;;
     run)
         run_child_relayed "child step" "${BASH:-bash}" "$REPO_WORK/child.sh" || rc=$?
         printf 'rc=%s child_rc=%s\n' "$rc" "$AITLIB_CHILD_RC" ;;
@@ -538,7 +543,11 @@ Initialize-Logging "test-relay"
 $rc = 0
 $child = Join-Path $env:REPO_WORK "child.ps1"
 switch ($env:RMODE) {
-    "record" { Write-JsonlRecord "2026-01-01T00:00:00Z" "test-relay" "warn" "q `" b \ t`tn`nl`r e$([char]27)[0m x" }
+    "record" { Write-JsonlRecord "2026-01-01T00:00:00Z" "test-relay" "warn" "q `" b \ t`tn`nl`r e$([char]27)[0m x José ✓" }
+    "noargs" {
+        $rc = Invoke-ChildRelayed "no command" ""
+        "rc=$rc child_rc=$($script:AitLibChildRc)"
+    }
     "run" {
         $rc = Invoke-ChildRelayed "child step" $child @{} "child tool"
         "rc=$rc child_rc=$($script:AitLibChildRc)"
@@ -556,8 +565,9 @@ RELAY
 # check-jsonl.pl FILE WANT-MSG... -- every line valid JSON with the installers'
 # key order; prints "records=N" and, for each WANT-MSG, "msg-ok" / "msg-missing"
 cat > "$WORK/check-jsonl.pl" <<'PERL'
-use strict; use warnings; use JSON::PP;
+use strict; use warnings; use JSON::PP; use Encode qw(decode);
 my $f = shift @ARGV; my %msgs; my $n = 0; my $bad = 0;
+@ARGV = map { decode("UTF-8", $_) } @ARGV;   # decoded msgs are characters, not bytes
 open(my $fh, "<:raw", $f) or do { print "records=0 (no file)\n"; exit 0 };
 while (my $l = <$fh>) {
     chomp $l; $n++;
@@ -590,13 +600,17 @@ relay_case() {
         got=$(printf '%s\n' "$out" | grep -E '^(rc|cw)=' || true)  # only the driver's result lines
         if [ "$got" = "$want" ]; then ok "$name ($impl): result"
         else bad "$name ($impl): got"; printf '%s\n' "$got" | sed 's/^/         /'; printf '       want\n'; printf '%s\n' "$want" | sed 's/^/         /'; fi
+        if [ "$mode" = "noargs" ]; then
+            if [ -f "$jl" ]; then bad "$name ($impl): deploy.jsonl written without a child"; else ok "$name ($impl): no deploy.jsonl"; fi
+            continue
+        fi
         if [ "$mode" != "record" ]; then
             if printf '%s\n' "$out" | grep -qF "second warning"; then ok "$name ($impl): child lines on the console"
             else bad "$name ($impl): child lines not on the console"; fi
         fi
         got=$(perl "$WORK/check-jsonl.pl" "$jl" "$WARN_MSG")
         if [ "$mode" = "record" ]; then
-            got=$(perl "$WORK/check-jsonl.pl" "$jl" "q \" b \\ t"$'\t'"n"$'\n'"l e[0m x")
+            got=$(perl "$WORK/check-jsonl.pl" "$jl" "q \" b \\ t"$'\t'"n"$'\n'"l e[0m x José ✓")
             cp "$jl" "$WORK/record-$impl.jsonl"
         fi
         if [ "$got" = "$wrec" ]; then ok "$name ($impl): deploy.jsonl"
@@ -620,6 +634,9 @@ msg-ok"
 relay_case relay-run-error-exit0 run 2 "rc=1 child_rc=0
 cw=2 ce=1 warnings=2 errors=1" "records=5 invalid=0
 msg-ok"
+# Review m3: no command is a failure, not a silent success
+relay_case relay-run-no-command noargs 0 "rc=1 child_rc=1
+cw=0 ce=0 warnings=0 errors=1" "-"
 relay_case relay-captured captured 0 "rc=0 child_rc=0
 cw=2 ce=0 warnings=2 errors=0" "records=4 invalid=0
 msg-ok"

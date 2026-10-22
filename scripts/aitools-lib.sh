@@ -487,7 +487,11 @@ tool_exception_record() {
 
 # _aitlib_json_esc VAR S -- set VAR to S as a JSON string body: backslash, quote,
 # tab and newline escaped, every other control character (CR, ESC colour codes,
-# ...) dropped, so a record is always one valid JSON line (no subshell)
+# ...) dropped (no subshell). The record is one valid JSON line when S is valid
+# UTF-8; bytes that are not (e.g. a cp1252 path) are written as they are, as the
+# installers did. bash and PowerShell records are byte-identical for valid UTF-8
+# without U+0085, U+2028 and U+2029 (PowerShell escapes those; bash drops U+0085
+# or keeps it raw depending on the locale).
 _aitlib_json_esc() {
     local m="$2"
     m="${m//\\/\\\\}"
@@ -579,11 +583,18 @@ relay_child_log() {
 # changes the caller's variables. The child writes its own summary rows. Sets
 # AITLIB_CHILD_RC, AITLIB_CHILD_WARNINGS, AITLIB_CHILD_ERRORS. Returns 0 when the
 # child exited 0 with no error line; otherwise 1 after one log_error naming LABEL
-# (call it as: run_child_relayed ... || rc=$?).
+# (call it as: run_child_relayed ... || rc=$?). No CMD (e.g. an empty array) is
+# a failure, not a no-op. It returns when every process holding the child's
+# stdout has closed it (a background grandchild keeps it waiting).
 run_child_relayed() {
     local label="$1"; shift
     local line rcf="" rc=""
     AITLIB_CHILD_RC=0; AITLIB_CHILD_WARNINGS=0; AITLIB_CHILD_ERRORS=0
+    if [ "$#" -eq 0 ]; then
+        AITLIB_CHILD_RC=1
+        log_error "$label: not run (no command given)"
+        return 1
+    fi
     if ! rcf="$(mktemp)"; then
         AITLIB_CHILD_RC=1
         log_error "$label: not run (mktemp failed)"
