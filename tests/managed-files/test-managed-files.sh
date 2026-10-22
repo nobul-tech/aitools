@@ -250,6 +250,13 @@ if $HAVE_PTY; then
     check "display >40 lines: first 30 shown, rest in the log" \
         "has_line '$C/plain' '  ... (73 more lines -- full diff in deploy log)' && has_line '$C/plain' '-local 27' && ! has_line '$C/plain' '-local 28' && [ \"\$(grep -c 'diff a.md: ' '$LOG')\" = 103 ] && grep -qF 'diff a.md: +repo 50' '$LOG'"
 
+    setup_case display-huge
+    perl -e 'print "local line $_ " . ("x" x 40) . "\n" for 1..3000' > "$C/dest/a.md"; perl -e 'print "repo line $_ " . ("y" x 40) . "\n" for 1..3000' > "$C/src.md"
+    GIT_DIFF_OPTS=--unified=0 run_lib "export GIT_DIFF_OPTS; C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT=''; $DMF" "s\n"
+    # ~330 KB diff, larger than a pipe buffer (head-based truncation died of SIGPIPE here)
+    check "display, diff over 64 KB: menu shown, run continues, full diff logged" \
+        "[ \"\$(cat '$C/rc')\" = 0 ] && [ \"\$(result)\" = skipped ] && has_line '$C/plain' '  ... (5973 more lines -- full diff in deploy log)' && [ \"\$(grep -c 'diff a.md: ' '$LOG')\" = 6003 ]"
+
     setup_case display-nogit
     printf '#!/usr/bin/env bash\nexit 128\n' > "$C/bin/git"; chmod +x "$C/bin/git"
     printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"

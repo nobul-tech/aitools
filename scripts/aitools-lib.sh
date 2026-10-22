@@ -1072,8 +1072,12 @@ _review_diff() {
 
     # git diff exits 1 when the files differ (expected) and >1 on error.
     local raw rc=0 err=""
-    raw=$(git -c core.quotePath=false diff --no-index --no-color --no-ext-diff \
-        --no-textconv --diff-algorithm=myers --indent-heuristic -U3 \
+    # Pinned so user git config cannot change the hunks (GIT_DIFF_OPTS would
+    # override -U3); --text keeps content with a NUL byte a text diff.
+    raw=$(env -u GIT_DIFF_OPTS git -c core.quotePath=false \
+        -c diff.suppressBlankEmpty=false -c diff.interHunkContext=0 \
+        diff --no-index --no-color --no-ext-diff --no-textconv --text \
+        --diff-algorithm=myers --indent-heuristic -U3 \
         -- "$tmp_dir/local" "$tmp_dir/source" 2> "$tmp_dir/err") || rc=$?
     if [ -s "$tmp_dir/err" ]; then err=$(cat "$tmp_dir/err"); fi
     rm -rf "$tmp_dir"
@@ -1182,7 +1186,9 @@ prompt_diff_review() {
         diff_lines=$(printf '%s\n' "$REVIEW_DIFF" | wc -l | tr -d ' ')
         shown="$REVIEW_DIFF"
         if [ "$diff_lines" -gt 40 ]; then
-            shown=$(printf '%s\n' "$REVIEW_DIFF" | head -n 30)
+            # perl reads all of its input: `head` would exit early and make
+            # printf die of SIGPIPE under pipefail on a large diff (> pipe buffer).
+            shown=$(printf '%s\n' "$REVIEW_DIFF" | perl -ne 'print if $. <= 30')
         fi
         if [ "$use_colour" = "1" ]; then
             printf '%s\n' "$shown" \

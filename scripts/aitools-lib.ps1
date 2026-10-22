@@ -1070,11 +1070,15 @@ function Get-ReviewDiff {
         [IO.File]::WriteAllText($sourceFile, (($SourceContent -replace '[\r\n]+$', '') + "`n"), $utf8)
 
         $psi = [Diagnostics.ProcessStartInfo]::new("git")
-        foreach ($a in @("-c", "core.quotePath=false", "diff", "--no-index", "--no-color",
-                "--no-ext-diff", "--no-textconv", "--diff-algorithm=myers",
+        # Pinned so user git config cannot change the hunks (GIT_DIFF_OPTS would
+        # override -U3); --text keeps content with a NUL byte a text diff.
+        foreach ($a in @("-c", "core.quotePath=false", "-c", "diff.suppressBlankEmpty=false",
+                "-c", "diff.interHunkContext=0", "diff", "--no-index", "--no-color",
+                "--no-ext-diff", "--no-textconv", "--text", "--diff-algorithm=myers",
                 "--indent-heuristic", "-U3", "--", $localFile, $sourceFile)) {
             $psi.ArgumentList.Add($a)
         }
+        $null = $psi.Environment.Remove("GIT_DIFF_OPTS")
         $psi.UseShellExecute = $false
         $psi.RedirectStandardOutput = $true
         $psi.RedirectStandardError = $true

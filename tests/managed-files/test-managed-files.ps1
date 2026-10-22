@@ -232,6 +232,13 @@ try {
         $logDiff = ([regex]::Matches((Log), "diff a\.md: ")).Count
         Check "display >40 lines: first 30 shown, rest in the log" ((HasLine "  ... (73 more lines -- full diff in deploy log)") -and (HasLine "-local 27") -and -not (HasLine "-local 28") -and $logDiff -eq 103 -and (Log).Contains("diff a.md: +repo 50"))
 
+        Setup-Case "display-huge"
+        W "dest/a.md" ((1..3000 | ForEach-Object { "local line $_ " + ("x" * 40) }) -join "`n"); W "src.md" ((1..3000 | ForEach-Object { "repo line $_ " + ("y" * 40) }) -join "`n")
+        $env:GIT_DIFF_OPTS = "--unified=0"
+        try { Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt=''; $dmf" "s\n" } finally { $env:GIT_DIFF_OPTS = $null }
+        $logDiff = ([regex]::Matches((Log), "diff a\.md: ")).Count
+        Check "display, diff over 64 KB: menu shown, run continues, full diff logged" ((Rc) -eq "0" -and (Result) -eq "skipped" -and (HasLine "  ... (5973 more lines -- full diff in deploy log)") -and $logDiff -eq 6003)
+
         Setup-Case "display-nogit"; W "src.md" "new"; W "dest/a.md" "old"
         [IO.File]::WriteAllText((Join-Path $C "bin/git"), "#!/usr/bin/env bash`nexit 128`n"); & chmod +x (Join-Path $C "bin/git")
         Run-Lib "`$src='$C/src.md'; `$dest='$C/dest/a.md'; `$adopt=''; $dmf" "s\n"

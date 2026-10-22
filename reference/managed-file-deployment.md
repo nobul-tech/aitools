@@ -536,9 +536,14 @@ SOURCE (trailing newlines normalized to one LF, UTF-8) to temp files and run
 the same command, so bash and PS1 print identical hunks:
 
 ```
-git -c core.quotePath=false diff --no-index --no-color --no-ext-diff \
-    --no-textconv --diff-algorithm=myers --indent-heuristic -U3 -- <local> <source>
+git -c core.quotePath=false -c diff.suppressBlankEmpty=false \
+    -c diff.interHunkContext=0 diff --no-index --no-color --no-ext-diff \
+    --no-textconv --text --diff-algorithm=myers --indent-heuristic -U3 \
+    -- <local> <source>
 ```
+
+`GIT_DIFF_OPTS` is removed from git's environment and the `-c` settings
+are pinned, so user git config cannot change the hunks.
 
 - **Direction**: LOCAL -> SOURCE. `-` = only on this machine, `+` = only in
   the repo.
