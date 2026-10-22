@@ -1,0 +1,87 @@
+diff --git a/Users/new-jose/repos/aitools/.aitools/channel/handoffs/2026-10-21_360aa8f3-8-missions/S5-Tools/S5-Tools-drafts/dot-claude/skills/tool-adopt/SKILL.md b/Users/new-jose/repos/aitools/.claude/worktrees/wf_b4d5e039-e6e-1/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Gate/S3-Gate-drafts/dot-claude/skills/tool-adopt/SKILL.md
+index 96aa7ff..97faa17 100644
+--- a/Users/new-jose/repos/aitools/.aitools/channel/handoffs/2026-10-21_360aa8f3-8-missions/S5-Tools/S5-Tools-drafts/dot-claude/skills/tool-adopt/SKILL.md
++++ b/Users/new-jose/repos/aitools/.claude/worktrees/wf_b4d5e039-e6e-1/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Gate/S3-Gate-drafts/dot-claude/skills/tool-adopt/SKILL.md
+@@ -5,13 +5,14 @@ description: "Make a managed tool supported on a platform and environment:
+   none), complete the decision-tree data, create or migrate its setup
+   scripts onto the tool support decision tree, integrate, verify, and keep
+   the registry and tool-lifecycle rule current. Use after /tool-eval, when
+-  a setup script reports no method for a platform, or when changing any
+-  scripts/setup-* script."
++  a setup script reports no method for a platform, or when changing a tool
++  setup script (one named by a registry lifecycle.setupScript)."
+ ---
+ 
+ ## Intent
+ 
+ > DRAFT — needs commander approval (new skill, new intent statement).
++> S3-Gate copy: S4-Review-C C-08, C-09, C-13, C-22, C-28 applied (S3-Gate-drafts-fixes.md).
+ 
+ **Purpose**: Carry a managed tool from "evaluated" to "supported" on each
+ target platform and environment, so its setup scripts follow the tool
+@@ -66,23 +67,11 @@ For each target, check that exactly one preferred method applies.
+ 
+ ### 3. Decision-tree data
+ 
+-Draft the fields the tree reads, from `/tool-eval` research only (never
+-from memory):
+-
+-- `updateChannel` (default `latest-stable`; `pin` and `reason` for pinned-*)
+-- `kind`, `package`, `environments`, `family` (Linux) for each preferred
+-  method; method ids unique across the tool's platforms
+-- `versionedPath` for version managers and other version-dependent paths
+-- after a pin or LTS line move: the old line kept as a non-preferred method
+-- `detection` for every method on the platform, preferred and not
+-  (`@reference/tool-support-decision-tree.md` section 5 probe kinds)
+-- `removal` for each non-preferred method, or null when it must never be
+-  removed automatically
+-- `update.<method>` for each preferred method, or `autoUpdates: true`
+-- verified `knownPaths` as `{path, verified}` objects (script-standards
+-  "KnownPaths empirical verification"); migrate string entries
+-- `lifecycle.setupScript`
+-- migrate any `nonPreferredMethods` rows into `install.<platform>[]`
++Draft every field in the decision tree reference section "Tool registry
++schema 1.1" that the entry lacks, for every method on each target platform,
++including the update channel (reference "Update channels"). Validate the
++draft against the reference "Pre-commit conformance check", checks 1-6.
++Take the values from `/tool-eval` research only, never from memory.
+ 
+ Present all drafted registry changes together via `/tool-registry`.
+ 
+@@ -90,7 +79,8 @@ Present all drafted registry changes together via `/tool-registry`.
+ 
+ Create or migrate `scripts/setup-<tool>.sh` and `.ps1`:
+ 
+-- Shape per section 7.6 of the decision tree reference: lib, OS guard, spec,
++- Shape per the decision tree reference "Setup script shape after
++  migration" (bash and PowerShell): lib, OS guard, spec,
+   `rc=0; tool_support_run ... || rc=$?` (never a bare call under `set -e`),
+   exit 2 on abort, tool-specific steps only when `rc` is 0, exit footer.
+ - Remove every hand-written install, upgrade, detection, and removal block
+@@ -121,20 +111,21 @@ then commit and push both repos when the commander authorises it.
+ 
+ ### 6. Verify
+ 
+-- Run the decision tree reference section 10 test matrix for each changed
++- Run the decision tree reference "Test matrix" for each changed
+   script, isolated `HOME`, smoke test pattern (log to file, check exit code).
+ - `bash -n` and the PS1 parser on every changed script.
+ - Run the pre-commit "Tool support conformance" step.
+-- Spot-check one leaf's log line and summary row against section 3.
++- Spot-check one leaf's log line and summary row against the reference
++  "Leaves: log line, summary row, ACTION, exit".
+ 
+ ### 7. Maintain (every run, before reporting)
+ 
+ - **Registry**: record verified versions and dates per platform through
+   `/tool-registry`; mark health flags that changed via `/tool-eval`.
+ - **Rule**: if this run settled a decision the tool-lifecycle rule does not
+-  state (a new channel, a new menu option, a new exception rule), draft the
+-  `@.claude/rules/tool-lifecycle.md` edit and present it — do not leave the
+-  decision only in a script or a plan.
++  state (a new channel, a new menu option, a new deviation from the decision
++  tree), draft the `@.claude/rules/tool-lifecycle.md` edit and present it —
++  do not leave the decision only in a script or a plan.
+ - **Reference**: new probe kinds, install kinds, or leaves go into
+   `@reference/tool-support-decision-tree.md` (protected, present for review).
+ 

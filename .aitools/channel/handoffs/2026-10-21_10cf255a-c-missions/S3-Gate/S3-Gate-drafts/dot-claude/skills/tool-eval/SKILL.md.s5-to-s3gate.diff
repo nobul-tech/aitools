@@ -1,0 +1,51 @@
+diff --git a/Users/new-jose/repos/aitools/.aitools/channel/handoffs/2026-10-21_360aa8f3-8-missions/S5-Tools/S5-Tools-drafts/dot-claude/skills/tool-eval/SKILL.md b/Users/new-jose/repos/aitools/.claude/worktrees/wf_b4d5e039-e6e-1/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Gate/S3-Gate-drafts/dot-claude/skills/tool-eval/SKILL.md
+index 8fbdc1d..0641d26 100644
+--- a/Users/new-jose/repos/aitools/.aitools/channel/handoffs/2026-10-21_360aa8f3-8-missions/S5-Tools/S5-Tools-drafts/dot-claude/skills/tool-eval/SKILL.md
++++ b/Users/new-jose/repos/aitools/.claude/worktrees/wf_b4d5e039-e6e-1/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Gate/S3-Gate-drafts/dot-claude/skills/tool-eval/SKILL.md
+@@ -10,6 +10,7 @@ description: "Evaluate install methods for managed tools. Use when
+ ## Intent
+ 
+ > DRAFT — needs commander approval (modified intent statement).
++> S3-Gate copy: S4-Review-C C-08, C-09, C-22, C-28 applied (S3-Gate-drafts-fixes.md).
+ 
+ **Purpose**: Run the evaluation process for managed tools — official
+ docs discovery, method comparison, provenance verification, health
+@@ -28,9 +29,9 @@ updating health flags, or invoked by `/tool-adopt`.
+ 
+ 1. **Load principles and lifecycle** — read
+    `@.claude/rules/tool-evaluation.md`, `@.claude/rules/tool-lifecycle.md`,
+-   and `@reference/tool-support-decision-tree.md` sections 4-6 (channels,
+-   detection probes, schema fields); read the current entry through
+-   `/tool-registry`
++   and the `@reference/tool-support-decision-tree.md` sections "Update
++   channels", "Install-method detection" and "Tool registry schema 1.1";
++   read the current entry through `/tool-registry`
+ 2. **Discovery** — follow `@reference/tool-evaluation-playbook.md`:
+    - Read official docs (prefer chrome-devtools skill for accuracy)
+    - Catalog all available install methods per platform, and per
+@@ -50,12 +51,10 @@ updating health flags, or invoked by `/tool-adopt`.
+ 7. **Recommend** — for each platform and environment:
+    - exactly one preferred method, with rationale ranked against the
+      evaluation principles
+-   - its `kind`, `package`, `family` (Linux), update command, and `updateChannel`
+-     (default `latest-stable`; give `pin` and `reason` for a pin)
+-   - a `detection` probe for every method found in discovery, including
+-     the ones not chosen, so setup scripts can recognise them
+-   - a `removal` recipe for each non-preferred method, or null when it
+-     must never be removed automatically
++   - its update channel (reference "Update channels")
++   - for every method found in discovery, including the ones not chosen,
++     the data the reference "Tool registry schema 1.1" requires for that
++     method, so setup scripts can recognise, install, update or remove it
+    - trial-verified install paths for `knownPaths`, and a trial-verified
+      classification of each method (which probe matches it; package
+      managers that wrap vendor installers share the vendor path)
+@@ -67,7 +66,7 @@ updating health flags, or invoked by `/tool-adopt`.
+    `/tool-adopt` for integration. When `/tool-adopt` invoked this skill,
+    return to its step 2.
+ 9. **Maintain the rule** — if the evaluation changes a lifecycle
+-   directive (a new channel, an exception to the decision tree), draft the
++   directive (a new channel, a deviation from the decision tree), draft the
+    `@.claude/rules/tool-lifecycle.md` edit and present it with the
+    registry change.
+ 

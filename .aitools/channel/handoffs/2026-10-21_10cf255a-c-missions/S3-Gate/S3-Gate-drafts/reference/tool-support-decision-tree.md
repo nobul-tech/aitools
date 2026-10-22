@@ -1,0 +1,619 @@
+# Tool Support Decision Tree
+
+> DRAFT -- needs commander approval (new protected reference file; intent statement
+> included). Drafted by S5-Tools for Session Commander 360aa8f3-8, 2026-10-20;
+> revision 2 after adversarial review S5-Tools-A; revision 3 (S4-Review,
+> 2026-10-21): section 8 reconciled with mission M3 (S5-Profile), plus the
+> fixes listed in S4-Review-report.md section 2; revision 4 (S3-Gate,
+> 2026-10-21): blocker and major fixes from S3-Gate-A and S3-Gate-B, mapped in
+> S3-Gate-rev4-changelog.md. The intent statement is unchanged from revision 3.
+
+**Intent**: **Purpose**: Define the one decision tree every managed-tool setup
+script follows to install, update, keep, or replace a tool on the current
+platform and environment, with the registry fields, library helpers, tool
+exception record, and pre-commit conformance check it depends on. **Scope**:
+Tree nodes and leaves, the log line and summary row for every leaf, the
+install-method menu, update channels, install-method detection, the
+authoritative field rules of tool registry schema 1.1, the bash/PowerShell
+helper contract, the installer and entry-point contract for exit 2, the tool
+exception contract (when written, read, matched; storage shape in
+`@reference/user-repo.md`), the conformance check, the `/audit` additions and
+planned hook for this domain, and the test matrix. NOT the lifecycle gates or onboarding checklist
+(`@.claude/rules/tool-lifecycle.md`, `/tool-adopt`). NOT how a method is chosen
+(`/tool-eval`, `@.claude/rules/tool-evaluation.md`). NOT registry data
+(`/tool-registry`). NOT managed-file menus (`@.claude/rules/interactive-menus.md`).
+NOT per-tool post-config such as auth or GOPATH (each setup script).
+**Audience**: Agents running `/tool-adopt`, agents writing or migrating
+`scripts/setup-*.sh/.ps1`, implementers of the `aitools-lib` helpers and the
+check step, reviewers of setup-script changes.
+
+---
+
+## 1. Terms and decisions
+
+| Term | Meaning in this file |
+|------|----------------------|
+| platform | Governed term (`/glossary`); API value `$AITOOLS_PLATFORM` / `$AitoolsPlatform` = `macos`, `linux`, `windows`. On Linux the package-manager family (`apt`, `dnf`, ...) also selects methods (section 6 `family`) |
+| environment | Governed term (`/glossary`); here only its API value `$AITOOLS_ENVIRONMENT` / `$AitoolsEnvironment` = `local` or `claude-code-web` |
+| method | One entry of `install.<platform>[]`, identified by its `method` id (unique within the tool across all platforms) |
+| preferred method | The one method with `preferred: true` selected by T1 |
+| install class | Result of T2: `none`, `preferred`, `non-preferred`, `unknown` |
+| tool exception | A recorded per-machine decision to keep a non-preferred or unknown install (section 8) |
+| update channel | The release stream a preferred install follows (section 4) |
+| interactive | `tty_interactive` / `Test-InteractiveConsole` is true AND `AITOOLS_FORCE` is not `1` AND `AITOOLS_DRY_RUN` is not `1` |
+| abort marker | The file named by `AITOOLS_ABORT_FILE` that an `[x]abort` choice writes before the script exits 2; exit 2 is a user abort only when the marker is present (section 7.5, D-TS13) |
+
+"Install class" is used instead of "provenance" (a governed term for an aitools
+component). The existing helpers `detect_go_provenance` / `Get-GoProvenance`
+predate this file and are replaced by `tool_detect_method` / `Get-ToolInstallMethod`.
+
+| Id | Decision | Recorded |
+|----|----------|----------|
+| D-TS1 | Preferred install method per platform and environment lives in the tool registry, protected by the sources-of-truth rule | Commander, session 360aa8f3-8, 2026-10-20 |
+| D-TS2 | No preferred method: setup script ERROR + ACTION to run `/tool-eval`; `/tool-adopt` invokes `/tool-eval` interactively | same |
+| D-TS3 | Found installed: preferred = update and verify; non-preferred or unknown = non-interactive/force changes nothing (WARN + ACTION), interactive = replace (install first, verify it resolves, then remove) / keep / abort; unknown never auto-removed | same |
+| D-TS4 | `[k]eep` remembered per machine in `profiles.<alias>.toolExceptions` (shape in `@reference/user-repo.md`; semantics in section 8) | same |
+| D-TS5 | Per-tool `updateChannel`, default `latest-stable` | same |
+| D-TS6 | Skill named `/tool-adopt`; glossary disambiguates it from managed-file adopt | same |
+| D-TS7 | `/tool-eval` and `/tool-adopt` read and maintain the registry and `tool-lifecycle.md` | same |
+| D-TS8 | Extend the tool-lifecycle framework; new reference file for the tree | same |
+| D-TS9 | Every touched artifact carries an intent header | same |
+| D-TS10 (proposed, Q2) | A recorded tool exception reports OK, not WARN: the user decided it, so it is not a caveat. This deliberately departs from F3 for recorded exceptions only | pending commander |
+| D-TS11 (proposed, Q10) | SHADOWED is ERROR although another copy runs: "supported" means the command resolves to the managed copy (`plans/tooling-resolution-and-artifact-registry.md` decision 10); needs a severity-guide line in `reference/script-standards-detail.md` | pending commander |
+| D-TS12 (proposed, Q11) | A platform still `evaluating` reports WARN `under evaluation` + ACTION, not ERROR | pending commander |
+| D-TS13 (proposed, S3-Gate-B B-01) | Exit 2 is a user abort only when the abort marker exists. Every `[x]abort` (tool menu and managed-file menus) writes the marker before exiting 2; the runners treat exit 2 without a marker as an ordinary failure | pending commander |
+| F1-F4 | Install first, clean up second / judge success by the binary / a working tool kept as-is is WARN / go.dev tarball at `/usr/local/go` is upstream | `plans/linux-install-hardening.md` "Foundational decisions" |
+
+## 2. The tree
+
+```mermaid
+flowchart TD
+  S([setup script starts]) --> T0{T0 status for platform+environment}
+  T0 -- n/a --> NA[[NA]]
+  T0 -- evaluating --> EV[[EVALUATING]]
+  T0 -- approved/supported --> T1{T1 one preferred method?}
+  T1 -- no --> NOM[[NO-METHOD]]
+  T1 -- yes --> T2[T2 detect install class]
+  T2 -- none --> T3{T3 preferred copy at a verified known path, off PATH?}
+  T3 -- yes --> T7
+  T3 -- no --> P{installable kind, manager and build prereqs present?}
+  P -- no --> PRE[[PREREQ]]
+  P -- yes --> I[install preferred, verify binary]
+  I -- fail --> IF[[INSTALL-FAIL]]
+  I -- ok --> T7
+  T2 -- preferred --> T4[T4 update per channel]
+  T4 -- ok or failed --> T7
+  T2 -- non-preferred --> T5{T5 matching tool exception?}
+  T2 -- unknown --> T5
+  T5 -- yes --> EXC[[EXCEPTION]]
+  T5 -- no --> T6{T6 interactive?}
+  T6 -- no --> HOLD[[HOLD]]
+  T6 -- yes --> M{menu}
+  M -- "EOF / empty / letter not offered" --> HOLD
+  M -- "[k]eep" --> KEEP[[KEEP]]
+  M -- "[x]abort" --> AB[[ABORT]]
+  M -- "[r]eplace (non-preferred menu)" --> RQ{P checks for the preferred method}
+  M -- "[i]nstall alongside (unknown menu)" --> RQ
+  RQ -- no --> RF[[REPLACE-FAIL]]
+  RQ -- yes --> R1[install or update preferred FIRST, verify binary]
+  R1 -- fail --> RF
+  R1 -- ok, unknown --> T7
+  R1 -- ok, non-preferred --> RP{RP preferred copy reachable on PATH and a different file?}
+  RP -- no --> RB[[REPLACE-BLOCKED]]
+  RP -- yes --> R2{removal recipe registered?}
+  R2 -- no --> RM[REMOVE-MANUAL note] --> T7
+  R2 -- yes --> R3[guarded removal]
+  R3 -- fail or refused --> RMF[REMOVE-FAIL note] --> T7
+  R3 -- ok --> T7
+  T7{T7 post-check} -- resolves to preferred, version ok --> OK[[OK]]
+  T7 -- resolves elsewhere --> SH[[SHADOWED]]
+  T7 -- not on PATH --> NP[[NOT-ON-PATH]]
+  T7 -- version probe fails --> VU[[VERSION-UNKNOWN]]
+  T7 -- below minVersion or blocked --> BM[[BELOW-MIN]]
+```
+
+Dry run (`AITOOLS_DRY_RUN=1`) is an overlay, not a branch: the tree runs every
+read-only node, never prompts (T6 is "no"), and replaces each acting node (I,
+T4, R1, R3, exception write) with a `[DRY RUN] would <verb>` log line. After a
+replaced acting node the tree stops: T7 is not run (it would only see the
+unchanged machine), and the script reports OK `dry-run: would <verb>`
+(`would install`, `would update`, `would replace`), exit 0. A path that
+reaches a leaf without an acting node (NA, EVALUATING, NO-METHOD, PREREQ,
+EXCEPTION, HOLD, and T7 leaves after T3) reports that leaf in its own category
+with detail `dry-run: <leaf>`.
+
+### Node rules
+
+| Node | Rule | Source |
+|------|------|--------|
+| T0 | Status = `lifecycle.environments.<environment>.status` (non-`local` environments only) when present, else `lifecycle.platformStatus.<platform>`. `n/a` → NA; `evaluating` → EVALUATING | D-CHR1; D-TS12 |
+| T1 | Candidates = `install.<platform>[]` entries with `preferred: true` whose `family` (Linux) matches the detected family or is absent, and whose `environments` contains the current environment or is absent. Specificity = the number of explicit dimensions (`environments`, `family`) that match; the highest wins. Zero candidates = NO-METHOD; two with equal specificity = NO-METHOD with detail `two methods for <platform>` (a registry conflict, not a missing method; check 1 fails either way) | D-TS1, D-TS2 |
+| T2 | Resolve the command (`hash -r` + `command -v` / `Refresh-Path` + `Get-Command -CommandType Application`). When the tool's `resolveBy` is `knownPaths` (section 6), resolution is the first verified known path that exists instead of PATH. Probe order: the preferred method first; then every method whose detection uses a package-database probe (`brew-*`, `dpkg`, `winget`, `choco`, `scoop`, `pkgutil`, `uv-tool`, `cargo-crate`, `npm-global`); then path-only methods; registry order within each group. First match wins; no match = `unknown` | D-TS3; review D-04; `@.claude/rules/cross-platform.md` "Windows: managed bash" |
+| T3 | Only `knownPaths` entries recorded as verified (section 6) count. A hit = installed the preferred way but off PATH: do not reinstall; T7 reports NOT-ON-PATH | script-standards-detail "Standard 4" |
+| P | `kind` `system` / `bundled` are not installable: absent → PREREQ `not provided by <platform or environment>`. Otherwise the method's manager is on PATH and `check_build_prereqs` / `Check-BuildPrereqs` passes for source builds. No fallback to another method (Q4). The same checks run before R1 (node RQ) and before a T4 update that builds from source: a failure there is REPLACE-FAIL `(prereq missing)` with the PREREQ ACTION (the old copy is kept), or for T4 a failed update (warn, continue to T7) | `@.claude/rules/script-standards.md` "Build prerequisite validation" |
+| I | Success judged by the binary the method installs, matched by its detection probe, not by output text | F2 |
+| T4 | Section 4. Source-build kinds pass the P checks first. A failed update only logs a warning and continues to T7; T7's row is then promoted to WARN by `write_summary`, or reports the broken state if the tool no longer works | F3 |
+| T5 | Section 8 match rule. A stale exception is logged (info) and ignored; continue at T6 | D-TS4 |
+| T6 | Non-interactive, `--force`, and dry run change nothing. This deliberately differs from managed-file menus (force/non-interactive = overwrite) | D-TS3; `interactive-menus.md` |
+| R1 | Runs only after the RQ checks pass. Install the preferred method, or update an existing shadowed preferred copy; verify its binary; `tool_install` / `tool_update` print the preferred binary path (section 7.2). Failure leaves the old copy untouched | D-TS3; F1; GitHub issue #12 |
+| RP | Before any removal: some directory on PATH (Windows: on the persistent User or Machine PATH) holds `<cmd>` whose realpath equals the realpath of the preferred binary path R1 printed, AND that realpath differs from the old copy's realpath. A linked Homebrew formula passes through its `{brew_prefix}/bin` symlink; a keg-only formula whose opt `bin` is off PATH fails. Separate reasons are logged for each sub-check. Example (nobul-mac, 2026-10-20): `node@22` is keg-only, so `opt/node@22/bin` is off PATH while `node` resolves to the `node` formula; removing that formula would leave no `node` | D-TS3 ("verify it resolves on PATH") |
+| R3 | Only the registered `removal`, through `tool_remove` / `Remove-ToolMethod`, which refuses unsafe targets (section 7.3) | F1 |
+| Unknown | Never removed and never offered for removal. After `[i]nstall alongside`, T7 usually reports SHADOWED naming the unknown copy; later interactive runs show the menu again until the user removes that copy or records `[k]eep` | D-TS3 |
+| T7 | Resolves to a binary matched by the preferred method's detection (when tool-ops `resolution` exists for the tool, its `managedPath` is used — `plans/tooling-resolution-and-artifact-registry.md` B1; when `resolveBy` is `knownPaths`, the T2 resolution rule applies and SHADOWED does not); the version probe prints a version; it satisfies `versions.minVersion` and is not in `versions.blocked` | script-standards-detail "Standard 4"; D-TS11 |
+| Kept / held copies | EXCEPTION, KEEP and HOLD skip updates and the resolution half of T7 (the copy is not managed) but still run the version half: below `minVersion` or blocked turns the leaf into BELOW-MIN | review C-15 |
+
+## 3. Leaves: log line, summary row, ACTION, exit
+
+Every leaf writes exactly one summary row for the tool (`write_summary` /
+`Write-Summary`). Detail text is at most 30 characters and holds no paths
+(`reference/script-standards-detail.md` "Summary detail text rules"); paths go
+in the log. `<ver>` is the bare version token (`1.26.1`, not the 32-character
+`go version go1.26.1 darwin/arm64`). Every ACTION row pairs with a `log_warn`
+carrying the same text, except the KEEP carry-forward ACTION (section 8). The installer runners add their own `script failed
+(exit 1)` ERROR row for exit-1 leaves; that second row is expected and
+`show_summary` keeps one row per tool (highest severity).
+
+| Leaf | Log | Summary | ACTION | Exit |
+|------|-----|---------|--------|------|
+| NA | via `write_environment_skip` / `Write-EnvironmentSkip` (environment), or the platform variant `write_platform_skip` / `Write-PlatformSkip` (new, Q12) | OK `n/a (<environment>)` / `n/a (<platform>)` | -- | 0 |
+| EVALUATING (D-TS12, pending) | `log_warn "<tool> is under evaluation on <platform>/<environment> -- not installed by aitools"` | WARN `under evaluation` | `run /tool-eval <slug> for <platform>` | 0 |
+| NO-METHOD | `log_error "<tool>: no preferred install method for <platform>/<environment> in the tool registry"` (ambiguous: `"... two equally specific preferred methods: <a>, <b>"`) | ERROR `no method for <platform>` / `two methods for <platform>` | `run /tool-eval <slug> -- no <platform> method` / `run /tool-eval <slug> -- duplicate preferred` | 1 |
+| PREREQ | `log_error "<manager or provider> not found -- cannot install <tool> via <method>"` | ERROR `<manager> not found` / `not in <env> image` | install instruction for the manager, or the prerequisite's setup script | 1 |
+| INSTALL-FAIL | `log_error` with exit code; command output as `log_detail` | ERROR `install failed (exit N)` | remedy from `diagnose_build_failure` when it matches | 1 |
+| HOLD | `log_warn "<tool> <ver> at <path> is a <method or unknown-source> install, not <preferred> -- unchanged (<non-interactive / forced / no answer>)"` | WARN `<ver> (not preferred)` / `<ver> (unknown source)` | `run aitools install in a terminal without --force to replace or keep <tool>` | 0 |
+| EXCEPTION (D-TS10, pending) | `log "known exception: <tool> via <method> at <path>, kept <decidedAt> (profile <alias>)"` (info) | OK `<ver> (kept)` | -- | 0 |
+| KEEP | `log "tool exception recorded: <tool> via <method> at <path>"` (info) | OK `<ver> (kept)`; WARN `<ver> (kept, not saved)` when the write is refused or fails | `commit profile.json in <userRepoPath>` once per run (no paired warn, section 8); refused or failed write: `log_warn` + ACTION `run aitools user init to remember tool choices` | 0 |
+| ABORT | `log_warn "<tool>: aborted by user -- unchanged"`; the menu helper writes the abort marker (section 7.5) | WARN `<ver> (aborted)` | `re-run aitools install to decide <tool>` | 2 |
+| REPLACE-FAIL | `log_warn "<preferred> install failed -- kept <method> copy at <path>"`; RQ variant: `log_warn "<manager or prereq> not found -- cannot replace <method> copy at <path> with <preferred>; kept"` | WARN `<ver> (replace failed)` / `<ver> (prereq missing)` | RQ variant: the PREREQ install instruction | 0 |
+| REPLACE-BLOCKED | `log_warn "<reason: preferred dir <pdir> not on PATH / same file as old copy> -- kept <method> copy at <path>"` | WARN `<ver> (replace blocked)` | `add <pdir> to PATH, then re-run aitools install` (PATH reason only) | 0 |
+| REMOVE-MANUAL note | `log_warn "no removal recipe for <method> -- remove <path> manually"` then T7 | (T7's row) | `remove <path> -- old <tool> copy` | (T7) |
+| REMOVE-FAIL note | `log_warn "<removal> failed or refused (<reason>) -- old copy at <path> remains"` then T7 | (T7's row) | `remove <path> -- old <tool> copy` | (T7) |
+| OK | `log_ok "<tool> <ver> at <path> (<method>)"` | OK `<ver>` | -- | 0 |
+| SHADOWED (D-TS11, pending) | `log_error "<cmd> resolves to <path>, not the <preferred> copy at <ppath>"` | ERROR `shadowed (see log)` | `put <pdir> before <dir> in PATH, or remove <path>` | 1 |
+| NOT-ON-PATH | `log_error "<tool> installed at <ppath> but not on PATH"` | ERROR `installed but not on PATH` | `add <pdir> to PATH -- <tool> not accessible` | 1 |
+| VERSION-UNKNOWN | `log_error "<path> resolves but <version probe> failed (exit N)"`; output as detail | ERROR `version check failed` | -- | 1 |
+| BELOW-MIN | `log_error "<tool> <ver> is below minVersion <min>"` (or `is blocked`) | ERROR `<ver> below <min>` / `<ver> blocked` | `upgrade <tool> to <min> or later` | 1 |
+
+Notes:
+- `write_summary` promotes OK to WARN once the script has logged a warning.
+  EXCEPTION and KEEP therefore log at info level; a failed update (T4) relies on
+  this promotion instead of writing its own row.
+- EOF at the menu is logged by `read_tty_choice` / `Read-ConsoleChoice` (warn) and ends at HOLD.
+- Exit 2 with the abort marker means user abort; exit 2 without it is an
+  ordinary failure (section 7.5).
+
+## 4. Update channels
+
+`updateChannel` in the registry; absent = `latest-stable`. Every run brings a
+preferred install to its channel's latest and verifies it (T4 then T7).
+
+| Channel | Meaning | T4 behaviour | Required fields |
+|---------|---------|--------------|-----------------|
+| `latest-stable` | Newest stable release (default) | Update built from `kind` + `package` (section 7.2); distinguish "already up to date" from failure (script-standards-detail "Standard 3") | -- |
+| `lts` | The vendor's current long-term-support line | Update within the LTS package. Moving to a new line is a `/tool-eval` registry change that keeps the old line as a `preferred: false` method with detection and removal (check 10) | `reason` |
+| `pinned-major` | Stay on one major version | Update within the pin; installed major other than `pin` = HOLD-style WARN `<ver> (pin <pin>)` + ACTION `run /tool-eval <slug> -- pin <pin>` | `pin`, `reason` |
+| `pinned-minor` | Stay on one minor line, take patches | As pinned-major at minor granularity (python `3.14` via `uv python install 3.14 --default --upgrade`) | `pin`, `reason` |
+| `vendor-auto` | The vendor updates it outside aitools (apt cron for Chrome; image-provided runtimes) | No update; verify only | `reason` |
+
+A preferred method with an installable `kind`, or `kind: custom` with a
+script-defined `tool_custom_update` / `Invoke-ToolCustomUpdate`, has an update
+path; `system` and `bundled` kinds require `autoUpdates: true` or channel
+`vendor-auto`. Verification does not query upstream for the newest version
+number (Q6); the update command is the mechanism.
+
+## 5. Install-method detection
+
+Each method carries `detection`: one probe string, or an array whose probes
+must all pass. Probes are typed and read-only; the library implements each
+kind; the registry never holds shell code that the library executes.
+
+| Probe | Passes when | bash | PowerShell |
+|-------|-------------|------|------------|
+| `path:<glob>` | the resolved binary's realpath matches the glob | perl `Cwd::abs_path` (macOS `/bin/bash` 3.2 has no `realpath` builtin) | `Resolve-ToolRealPath`: walks the path from the root and replaces every component that is a symbolic link or junction (`(Get-Item -Force <component>).LinkTarget`, PS 7.0+) until none remains; `[IO.FileInfo]::ResolveLinkTarget` alone resolves only the last component |
+| `brew-formula:<name>` | `brew list --versions <name>` exits 0 AND the binary's realpath is inside the realpath of `brew --prefix <name>` (`brew --prefix` prints the `opt/<name>` symlink; its realpath is the Cellar keg) | yes | n/a |
+| `brew-cask:<name>` | `brew list --cask <name>` exits 0 | yes | n/a |
+| `dpkg:<package>` | `dpkg -S <path>` exits 0 and names `<package>` (`dpkg:*` = any) | yes | n/a |
+| `winget:<id>` | `winget list --exact --id <id> --accept-source-agreements` lists the id | n/a | yes |
+| `uv-tool:<name>` | `uv tool list` lists it and the binary is under `uv tool dir --bin` | yes | yes |
+| `cargo-crate:<name>` | `cargo install --list` has a line starting `<name> ` | yes | yes |
+| `npm-global:<pkg>` | `npm ls -g --depth=0 <pkg>` exits 0 and the binary is under `npm prefix -g` | yes | yes |
+| `pkgutil:<id>` | `pkgutil --pkg-info=<id>` exits 0 | macOS | n/a |
+| `choco:<pkg>` / `scoop:<app>` | package listed by `choco list --local-only` / `scoop list` | n/a | yes |
+
+Path tokens: `{brew_prefix}`, `{brew_opt:<formula>}`, `{home}`, `{userprofile}`,
+`{localappdata}`, `{programfiles}`, `{programfiles_x86}`, `{cargo_home}`,
+`{gopath}`, `{uv_tool_bin}`, `{npm_prefix}`. A token that expands to an empty
+value makes the probe a non-match (logged as detail).
+
+Rules:
+- "Inside" and "under" compare realpaths at a path-component boundary (the
+  directory plus a separator), so `/usr/local/go` does not contain
+  `/usr/local/gox/bin/go`.
+- Path-only probes only where no package database exists (system binaries,
+  go.dev tarball, rustup, version managers). A bare `/usr/local/*` prefix is never
+  a Homebrew signature.
+- A probe whose manager is absent is a non-match. Probes run in conditional
+  context (`if`, `||`) so `set -e` never aborts on a non-match.
+- Package-database probes outrank path-only probes (T2 order), because package
+  managers often wrap vendor installers at the vendor's path (Chocolatey `golang`
+  and `nodejs-lts` are believed to wrap the vendor MSI — unverified; `/tool-eval`
+  trials record the classification per method).
+
+## 6. Tool registry schema 1.1 (authoritative field rules)
+
+This section is the single authority for the fields the tree reads. The
+`/tool-registry` skill points here; `meta.schemaVersion` in the registry
+becomes `1.1`. Changes are additive except where marked.
+
+| Field | Rule |
+|-------|------|
+| `updateChannel` | `{ "channel", "pin", "reason" }`; enum section 4; absent = `latest-stable` |
+| `resolveBy` | `path` (default) or `knownPaths`. `knownPaths` = T2 and T7 resolve the command from the first verified `knownPaths.<platform>` entry that exists, never from PATH, and SHADOWED does not apply; for tools whose PATH name is taken by another product (Git Bash on Windows, where `bash` resolves to WSL — `@.claude/rules/cross-platform.md` "Windows: managed bash"). May be keyed per platform: `{ "windows": "knownPaths" }` |
+| `install.<platform>[]` (scope widened) | Every known method on the platform: preferred, alternatives, cleanup-only |
+| `.method` (tightened) | Unique within the tool across all platforms (today `native` and `npm` repeat in claude-code and vercel-cli) |
+| `.kind` | Required when `preferred: true`; optional (null) otherwise. Enum: `brew`, `brew-cask`, `winget`, `apt`, `dnf`, `deb-url`, `uv-tool`, `uv-python`, `cargo-git`, `npm-global`, `script-url`, `system`, `bundled`, `custom`. `system` / `bundled` are not installable. `custom` = the setup script defines the install and update functions. `script-url` requires https and a host that matches `source` |
+| `.package` | Formula, winget id, apt/dnf package, uv tool, crate URL, npm package, or installer URL. With `kind` it is what the library runs |
+| `.command` | Human-readable form; check 6 verifies it equals the command rendered from `kind` + `package` |
+| `.family` | Linux only; `apt`, `dnf`, ... Absent = any family |
+| `.environments` | Array of environment values; absent = every environment; T1 prefers explicit matches |
+| `.detection` | Required on every method (section 5) |
+| `.removal` | Non-preferred methods only: `brew-uninstall:<formula>`, `brew-uninstall-cask:<name>`, `npm-uninstall-global:<pkg>`, `cargo-uninstall:<crate>`, `uv-tool-uninstall:<name>`, `choco-uninstall:<pkg>`, `winget-uninstall:<id>`, `path:<dir>`; null = never removed automatically. Methods that share an install directory with the preferred method get null unless a `/tool-eval` trial proves the recipe safe |
+| `.versionedPath` | true when the binary path changes with the version (nvm, volta, goenv, brew Cellar); exceptions then match by method id (section 8) |
+| `.autoUpdates` | Existing; true satisfies the update-path rule (section 4) |
+| `update` | Display only (shown in the registry and docs; the library builds updates from `kind` + `package`). Keys are method ids or `all` |
+| `nonPreferredMethods` (deprecated) | Rows move into `install.<platform>[]` with `preferred: false`; readable in 1.1, removed in 2.0. Current values are prose or install commands and cannot drive detection |
+| `knownPaths.<platform>[]` (shape changed) | `{ "path": "<tokens allowed>", "verified": "YYYY-MM-DD (vX.Y.Z)" }`; `verified` records empirical path verification per `@.claude/rules/script-standards.md` "KnownPaths empirical verification" (not the governed deployment outcome "verified"); string entries are read as unverified and ignored by T3. `/tool-adopt` migrates the three existing shapes |
+| `lifecycle.platformStatus` (tightened) | Enum `evaluating`, `approved`, `supported`, `n/a` |
+| `lifecycle.environments.<env>.status` | Same enum; allowed only for non-`local` environments |
+| `lifecycle.setupScript` | Script base name (`setup-go`), or null when an installer step owns the tool inline |
+
+## 7. Library helpers (bash + PowerShell parity)
+
+Helpers live in `scripts/aitools-lib.sh` / `scripts/aitools-lib.ps1`, log
+through the lib's `log*` functions, capture every external command's output and
+exit code (script-standards-detail "Standard 1"-"Standard 3"), and never suppress an error without a result check.
+bash code must run under macOS `/bin/bash` 3.2 (setup scripts run before
+`setup-bash`, installer Steps 1-19): no associative arrays, no `mapfile`; expand
+arrays as `${a[@]+"${a[@]}"}` (an empty `"${a[@]}"` is an unbound-variable
+error under `set -u` in 3.2); lowercase with `tr '[:upper:]' '[:lower:]'` or
+perl, never `${x,,}` / `${x^^}` (bad substitution in 3.2); `printf -v` is
+allowed. Every helper whose normal results include a non-zero return is called
+in conditional context, and no helper uses return code 2 (section 7.5).
+PowerShell helpers write nothing to the output stream except their declared
+return value: native command output is captured (`$out = & <cmd> 2>&1`) and
+logged, never left on the pipeline. Helper names avoid "adopt", which is
+governed twice ("accept & adopt", "adoption") and names the `/tool-adopt`
+process.
+
+### 7.1 Tool spec input
+
+Setup scripts read registry data from generated, committed spec files
+(`generated/tool-specs/<slug>.sh` and `.ps1`, Q1), not from the JSON, because:
+(1) MDM deploy scripts must be self-contained (`@.claude/rules/deploy-paths.md`);
+(2) the registry cannot degrade gracefully — without it the tree has no
+preferred method — and minimal Linux lacks a JSON parser (Debian `perl-base`
+has no `JSON::PP`); (3) the library must not evaluate registry text. The tool
+exception store (section 8) differs: it may degrade to "no exception", so it can
+use a parser when one exists.
+
+The generator (`scripts/gen-tool-specs.py`, harness python) emits
+an intent header, shell-quotes every value, rejects control characters, emits
+only `knownPaths` entries with a non-null `verified`, and writes one file per tool
+with `lifecycle.setupScript` set. It runs only when registry data changes:
+after an approved `/tool-registry` write, and in pre-commit check 7, which fails
+when the committed specs are stale. `build-deploy.sh`, the installers and the
+setup scripts read the committed files and never run the generator, so a
+machine without harness python (a fresh machine before installer Step 15) can
+still run `aitools`. Example:
+
+```bash
+# intent: Tool spec for go generated from the tool registry -- read by
+# tool_spec_load in aitools-lib.sh and embedded by build-deploy.sh. NOT editable:
+# regenerate with scripts/gen-tool-specs.py. Consumers: setup-go.sh.
+TOOL_SLUG='go'
+TOOL_CMD='go'
+TOOL_VERSION_ARGS='version'
+TOOL_CHANNEL='latest-stable'
+TOOL_PIN=''
+TOOL_MIN_VERSION=''
+TOOL_RESOLVE_BY='path'
+# one method per line: platform|family|environments|method|preferred|kind|package|detection|removal|versionedPath
+TOOL_METHODS='macos|||homebrew|1|brew|go|brew-formula:go||0
+macos|||pkg-installer|0||||path:/usr/local/go/bin/go,pkgutil:org.golang.go|path:/usr/local/go|0'
+TOOL_KNOWN_PATHS_macos='/opt/homebrew/bin/go'
+```
+
+The script sets its summary name (`TOOL_LABEL`) from the tool name table in
+`reference/script-standards-detail.md`.
+
+### 7.2 Functions
+
+| bash | PowerShell | Arguments | Returns / outputs |
+|------|------------|-----------|-------------------|
+| `tool_spec_load` | `Import-ToolSpec` | slug | 0 loaded; 1 missing or malformed. bash runs `bash -n` on the spec file before sourcing it (a syntax error in a sourced file exits the script with 2); PS1 parses it with the language parser before dot-sourcing. `Import-ToolSpec` returns `[bool]` and nothing else |
+| `tool_status` | `Get-ToolStatus` | -- | prints `supported`, `approved`, `evaluating`, `n/a` |
+| `tool_linux_family` | `--` (n/a) | -- | prints `apt`, `dnf`, ... from available managers |
+| `tool_preferred_method` | `Get-ToolPreferredMethod` | -- | prints method id; 1 none; 3 ambiguous |
+| `tool_detect_method` | `Get-ToolInstallMethod` | -- | bash prints `<class>|<method>|<path>`; PS1 returns `@{Class; Method; Path}`; exit 0, or 3 on internal error |
+| `tool_probe` | `Test-ToolProbe` | probe, path | 0 match / 1 no match |
+| `tool_realpath` | `Resolve-ToolRealPath` | path | prints the path with every symbolic link and junction resolved (section 5); 1 when the path does not exist |
+| `tool_known_path_hit` | `Find-ToolKnownPath` | method | prints first verified known path the method's probe accepts |
+| `tool_install` | `Install-ToolMethod` | method | 0 installed and binary verified / 1 failed; prints the preferred binary path (first verified known path for the method that exists; for `brew`, `{brew_prefix}/bin/<cmd>` when linked, else `{brew_opt:<formula>}/bin/<cmd>`); builds the command from `kind` + `package`; `custom` calls `tool_custom_install` / `Invoke-ToolCustomInstall`; never removes |
+| `tool_update` | `Update-ToolMethod` | method | 0 upgraded or up to date / 1 failed; prints the preferred binary path as `tool_install`; `TOOL_UPDATE_STATE` / `.State` = `upgraded`, `up-to-date`, `failed`, `none`; `custom` calls `tool_custom_update` / `Invoke-ToolCustomUpdate` |
+| `tool_remove` | `Remove-ToolMethod` | method, path | 0 removed / 1 failed / 4 refused (no recipe or unsafe target, 7.3) |
+| `tool_version` | `Get-ToolVersion` | [binary] | prints bare version token; 1 when the probe fails |
+| `tool_resolution_check` | `Test-ToolResolution` | -- | prints `ok`, `shadowed|<path>`, `missing`, `version-unknown`, `below-min|<ver>`; PS1 adds the persistent PATH test |
+| `tool_interactive` | `Test-ToolInteractive` | -- | 0 when interactive (section 1) |
+| `tool_method_menu` | `Read-ToolMethodChoice` | class, method, path, preferred | prints `r`, `i`, `k`, `x`, or empty; on `x` writes the abort marker (section 7.5) before returning |
+| `tool_exception_get` | `Get-ToolException` | slug | prints `<platform>|<method>|<path>|<decidedAt>` or nothing; 1 store unavailable (one warn; treated as no exception). Wraps `aitools-profile.js exception-get` (section 8) |
+| `tool_exception_record` | `Set-ToolException` | slug, method, path, version | 0 written / 1 failed or no node / 3 no dotprofile or `MACHINE_VIA` hostname/none. Wraps `aitools-profile.js exception-set` |
+| `tool_report` | `Write-ToolReport` | leaf, fields | writes the section 3 log line, summary row and ACTION |
+| `tool_support_run` | `Invoke-ToolSupport` | slug, label | runs the tree. bash returns the section 3 exit code; PS1 sets `$script:ToolSupportRc` to it and returns nothing |
+
+`tool_remove` returns 4, not 2, for "refused" (section 7.5: no helper uses 2).
+
+`tool_install` (or another helper named in the same batch) is also the home of
+the `install_via_brew` / `install_via_apt` helpers that `cross-platform.md`
+"One script per tool" names but that do not exist.
+
+### 7.3 Removal guards (`tool_remove` / `Remove-ToolMethod`)
+
+`path:<dir>` removal runs only when all hold; otherwise it is refused (return 4):
+1. every token in `<dir>` expanded to a non-empty value;
+2. the detected binary's realpath is inside `<dir>`;
+3. `<dir>` is not `/`, `$HOME`, `/usr`, `/usr/local`, `/opt/homebrew`, the
+   `brew --prefix`, `%USERPROFILE%`, `%ProgramFiles%`, or any token root;
+4. `<dir>` is not a symlink;
+5. the last segment of `<dir>` contains the tool slug or command name.
+
+The exact command is logged at warn level before it runs. `sudo` is used only
+when the directory is not owned by the user and the run is interactive.
+
+### 7.4 Menu (identical text and order in bash and PowerShell)
+
+Non-preferred install:
+
+```
+  <tool> <ver> at <path> was installed via <method>; the preferred method is <preferred>.
+  [r]eplace : install <preferred> first, verify it, then remove the <method> copy
+  [k]eep    : keep the <method> copy; remember this choice on this machine
+  [x]abort  : change nothing and stop the run
+  Choice [r/k/x] (default: change nothing this run):
+```
+
+Unknown source: the first line reads `... from an unknown source ...`, the first
+option is `[i]nstall : install <preferred> alongside; the existing copy is not
+removed`, and the prompt is `Choice [i/k/x]`. Letters are case-insensitive; a
+letter not offered, empty input, or EOF = HOLD.
+
+### 7.5 Contract with the installers and entry points
+
+- **Abort marker (D-TS13, pending).** bash exits 2 for reasons other than a
+  user abort: a `set -e` death on any command that returns 2 (`grep` and `diff`
+  on error, a function's `return 2`) and a syntax error in a sourced file
+  (observed with `/bin/bash` 3.2.57 on macOS, 2026-10-21). So exit 2 alone
+  cannot mean "user abort".
+  `validate_and_run` (`aitools-install.sh`) and `Invoke-ValidatedScript`
+  (`aitools-install.ps1`) export `AITOOLS_ABORT_FILE`, a path from `mktemp` /
+  `[IO.Path]::GetTempFileName()`, emptied before each script. Every `[x]abort`
+  writes the tool or file name to it, then the script exits 2: the tool menu
+  (`tool_method_menu` / `Read-ToolMethodChoice`) and the managed-file menus
+  (`prompt_diff_review`, `prompt_json_field_review` and their PowerShell
+  equivalents).
+- A setup script that exits 2 with a non-empty marker = user abort: the runner
+  writes no failure row for it, stops the remaining steps, renders the summary,
+  and exits 2. `scripts/aitools` and `aitools.ps1` propagate 2 and print
+  "aborted by user" instead of "Completed with errors". This also makes the
+  managed-file `[x]abort` behave as documented.
+- Any other non-zero exit, including exit 2 with an empty or missing marker, is
+  an ordinary failure: ERROR row `script failed (exit N)`, and the run continues.
+- No helper uses return code 2 (`tool_detect_method` internal error = 3,
+  `tool_remove` refused = 4), and a script never passes a helper's return code
+  through as its exit code.
+- Setup scripts inherit `AITOOLS_FORCE` (exported by `scripts/aitools` /
+  `aitools.ps1` for `--force`), `AITOOLS_DRY_RUN`, `AITOOLS_SUMMARY_FILE` and
+  `AITOOLS_ABORT_FILE` (exported by the installers).
+- MDM deploy path: out of scope for the first migration batches (the installer
+  skips tool setup scripts there today); embedding specs and helpers through
+  `build-deploy.sh` follows mission S3-Nine's work on that file.
+
+### 7.6 Setup script shape after migration
+
+bash:
+
+```bash
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/aitools-lib.sh"
+logging_init "setup-go"
+# OS guard (cross-platform.md)
+if ! tool_spec_load "go"; then
+    log_error "tool spec for go missing -- regenerate generated/tool-specs"
+    write_summary ERROR "go" "tool spec missing"
+    exit 1
+fi
+rc=0
+tool_support_run "go" "go" || rc=$?
+if [ "$rc" -eq 2 ]; then exit 2; fi
+if [ "$rc" -eq 0 ]; then
+    : # tool-specific post-config needing a working managed tool (GOPATH/bin, auth)
+fi
+# exit footer (script-standards.md)
+```
+
+PowerShell:
+
+```powershell
+. (Join-Path $PSScriptRoot "aitools-lib.ps1")
+Initialize-Logging "setup-go"
+# OS guard (cross-platform.md)
+if (-not (Import-ToolSpec "go")) {
+    LogError "tool spec for go missing -- regenerate generated/tool-specs"
+    Write-Summary "ERROR" "go" "tool spec missing"
+    exit 1
+}
+Invoke-ToolSupport -Slug "go" -Label "go"
+$rc = $script:ToolSupportRc
+if ($rc -eq 2) { exit 2 }
+if ($rc -eq 0) {
+    # tool-specific post-config needing a working managed tool (GOPATH\bin, auth)
+}
+# exit footer (script-standards.md)
+```
+
+`Invoke-ToolSupport` returns nothing; reading its result from the pipeline
+(`$rc = Invoke-ToolSupport ...`) would also collect any stray output and
+turn `$rc` into an array.
+
+## 8. Tool exception contract
+
+The storage shape is owned by `@reference/user-repo.md` "Profile Schema"
+(`toolExceptions`); this section owns when an entry is written, read, and
+matched (D-TS4). Merged by S4-Review from the M2 and M3 drafts.
+
+**Location**: `profiles.<alias>.toolExceptions.<slug>` in the dotprofile
+`profile.json`, where `<alias>` is the machine profile chosen by the machine
+resolver (`resolve_machine_profile` / `Resolve-MachineProfile`; result in
+`MACHINE_ALIAS` / `MACHINE_VIA`) -- not read from `config.json` `machineAlias`,
+which is only the resolver's cached result. Distinct from top-level `overrides`:
+an exception keeps a whole install; an override changes a setting.
+
+```json
+"toolExceptions": {
+  "go": {
+    "decision": "keep",
+    "detected": {
+      "platform": "macos",
+      "method": "pkg-installer",
+      "path": "/usr/local/bin/go",
+      "version": "1.22.5"
+    },
+    "decidedAt": "2026-10-20T19:30:00Z",
+    "decidedBy": "setup-go",
+    "reason": null
+  }
+}
+```
+
+- One entry per tool slug; `decision` is `keep` only; `detected.method` is a
+  registry method id or `unknown` (never an install kind such as `brew`).
+- `detected.path` is the PATH-resolved command path (as `command -v` /
+  `Get-Command` prints it), not the realpath, so a symlinked install survives
+  upgrades. `detected.version` is informational (logs) and never matched.
+- **Match**: same `detected.platform` (`$AITOOLS_PLATFORM` value), same
+  `detected.method`, and -- unless the method has `versionedPath: true` -- the
+  same `detected.path` (case-insensitive on macOS and Windows). A non-matching
+  entry is stale: logged (info) "exception for <tool> no longer matches" and
+  ignored; the stale entry is replaced only by a new `[k]eep`.
+- **Engine**: `scripts/aitools-profile.js` subcommands `exception-get --slug <s>`
+  and `exception-set --slug <s> --platform --method --path --version --by`
+  (tagged output like `resolve`). They resolve the machine profile themselves
+  and write through the same temp -> validate -> backup -> move path as
+  `register`, so profile.json keeps one write implementation for bash and
+  PowerShell (no `ConvertTo-Json` round trip of a shared, git-tracked file).
+- **Reader**: `tool_exception_get` / `Get-ToolException`, called only at T5
+  (install class non-preferred or unknown). It logs resolver warnings as
+  `log_detail`, not `log_warn`, so a kept or preferred tool's OK row is not
+  promoted to WARN by machine-profile warnings that setup-user-config already
+  reports once per run. Returns 1 (no exception; one `log_warn "tool exceptions
+  unavailable (<reason>)"`) when node is absent, there is no dotprofile, or the
+  resolver fails; the menu then shows again. `Get-ToolException` reads the node
+  output through a temp file decoded as UTF-8, like the M3 PS1 wrappers
+  (`@.claude/rules/cross-platform.md` "PowerShell pipeline encoding").
+- **Writer**: `tool_exception_record` / `Set-ToolException`, only after `[k]eep`,
+  never in dry run or non-interactive runs. Allowed when `MACHINE_VIA` is `id`,
+  `environment`, `alias`, or `override`; refused (return 3, `log_warn` + ACTION
+  `run aitools user init to remember tool choices`) when it is `hostname` or
+  `none`, or there is no dotprofile. No node: returns 1, same ACTION.
+- **Carry-forward**: after a write, log the profile path (info) and write
+  ACTION `commit profile.json in <userRepoPath>` once per run, without a paired
+  `log_warn` (the single exception to the section 3 pairing rule, so KEEP stays
+  OK per D-TS10). No setup script commits or pushes the dotprofile.
+- **Bootstrap**: on a fresh machine the gh step (installer Step 1) runs before
+  node and before any dotprofile exists, so there is nothing to read; on later
+  runs node is present.
+
+## 9. Pre-commit conformance check
+
+New step in `scripts/check-pre-commit.sh` and `.ps1` ("Tool support
+conformance"), WARN while migration batches are open, FAIL once every
+`lifecycle.setupScript` is migrated. Both check scripts implement it.
+
+| # | Check | Fails when |
+|---|-------|------------|
+| 1 | One preferred method | a platform+environment(+family) with status approved/supported has zero preferred methods or two equally specific ones |
+| 2 | Update path | a preferred method has no installable `kind`, is not `custom`, and has neither `autoUpdates: true` nor channel `vendor-auto` |
+| 3 | Detection and ids | a method lacks `detection`, a probe kind is unknown, a method id repeats within the tool, or `resolveBy` is `knownPaths` for a platform without a verified `knownPaths` entry |
+| 4 | Channel valid | channel outside the enum, or pinned-* without `pin`/`reason` |
+| 5 | Status and kind enums | status, environment status (non-local only), or `kind` outside its enum |
+| 6 | Kind/package vs command | rendered command differs from `command`; `script-url` not https or host not matching `source` |
+| 7 | Spec freshness | regenerated `generated/tool-specs/*` differs from the committed copy |
+| 8 | Script uses the tree | a staged script named by a `lifecycle.setupScript` does not call `tool_support_run` / `Invoke-ToolSupport` |
+| 9 | No ad hoc removal | a staged setup script calls `brew uninstall`, `npm uninstall`, `cargo uninstall`, `choco uninstall`, `winget uninstall`, or `rm -rf` on a path that is not a `mktemp` result, outside a line marked `# tool-support: allowed` |
+| 10 | Line moves keep the old line | a registry diff changes a preferred `package` and the old package does not appear as a `preferred: false` method with `detection` |
+| 11 | Summary templates | a summary detail template in `tool_report` or a staged setup script exceeds 30 characters with typical values |
+
+The existing menu parity audit (`check-post-push` step 29) extends to
+`tool_method_menu` / `Read-ToolMethodChoice` (sequence after mission S3-Nine,
+which is editing check-post-push). The `/audit` skill gains: every
+approved/supported tool has a setup script or an inline owner; the
+`/tool-adopt` trigger directive exists in the rule.
+
+Planned hook (framework-adoption.md step 7; build later, observe first):
+PreToolUse (command) on Write/Edit of a tool setup script (a script named by a
+registry `lifecycle.setupScript`, read from `generated/tool-specs/`; never
+`setup-user-*` or `setup-cursor-ide-mcp`, which are managed-file deployment), stderr
+`setup scripts follow the tool support decision tree -- use /tool-adopt
+(tool-lifecycle.md)`.
+
+## 10. Test matrix (each migrated script, isolated HOME)
+
+Smoke test pattern (`@.claude/rules/smoke-test-pattern.md`), package-manager
+stubs on PATH, both `AITOOLS_ENVIRONMENT` values where relevant.
+
+| Case | Setup | Expected |
+|------|-------|----------|
+| fresh | no binary | OK, or PREREQ without the manager stub |
+| preferred | binary matching preferred detection | OK; update stub exits 1 → OK row promoted to WARN |
+| preferred, linked Homebrew formula | binary at `{brew_prefix}/bin/<cmd>` → Cellar | class preferred (realpath compared with the realpath of `brew --prefix`) |
+| preferred, broken update | update stub deletes the binary | NOT-ON-PATH |
+| version probe fails | binary prints nothing, exits 1 | VERSION-UNKNOWN |
+| non-preferred, piped stdin | known non-preferred binary | HOLD; nothing removed |
+| non-preferred, `AITOOLS_FORCE=1` in a pty | same | HOLD |
+| non-preferred, pty, `r` | same | OK; stub log order install → verify → remove |
+| non-preferred, pty, `r`, install fails | same | REPLACE-FAIL; old binary present |
+| non-preferred, pty, `r`, manager absent | preferred method's manager not on PATH | REPLACE-FAIL `(prereq missing)` + PREREQ ACTION; install never attempted; old binary present |
+| non-preferred, pty, `r`, preferred dir off PATH | keg-only style copy | REPLACE-BLOCKED; old binary present |
+| non-preferred, pty, `r`, linked formula | preferred reached through a `{brew_prefix}/bin` symlink | RP passes; removal runs |
+| removal guard | recipe `path:{gopath}` with GOPATH empty | REMOVE-FAIL note (refused); nothing deleted |
+| non-preferred, pty, `k` | same | KEEP; second run EXCEPTION, no prompt |
+| exception stale | exception for another path | menu shown again |
+| `k`, profile matched by hostname | resolver `via=hostname` | KEEP with WARN `(kept, not saved)`; nothing written; ACTION `run aitools user init ...` |
+| `k`, no node | node off PATH | KEEP with WARN `(kept, not saved)`; writer rc 1 |
+| exception store unavailable | no dotprofile, non-preferred binary | one warn; menu (pty) or HOLD (piped) |
+| preferred tool, profile matched by hostname | `via=hostname`, preferred binary | OK row not promoted (reader not called outside T5) |
+| dry run, pty | `AITOOLS_DRY_RUN=1`, non-preferred | HOLD with `dry-run:` detail; no prompt; profile.json unchanged |
+| dry run, fresh | `AITOOLS_DRY_RUN=1`, no binary | OK `dry-run: would install`, exit 0; T7 not run; nothing installed |
+| exception, versioned path | nvm-style method, version dir changed | EXCEPTION |
+| unknown, pty, `i` | binary matching no method, earlier on PATH | SHADOWED; unknown binary still present |
+| symlinked binary | `path:` probe through a symlink | correct class |
+| directory symlink or junction (PS1) | binary under a linked directory (nvm-windows style) | `Resolve-ToolRealPath` resolves it; same class as bash |
+| `resolveBy: knownPaths` (Windows bash) | WSL `bash.exe` first on PATH, Git Bash at its verified known path | OK for Git Bash; no SHADOWED |
+| pty, EOF | close stdin at prompt | HOLD with EOF warning |
+| pty, `x` | -- | ABORT, exit 2, marker written; installer stops; `aitools` prints "aborted by user" |
+| exit 2 without marker | a helper returns 2 outside conditional context (stub) | ERROR `script failed (exit 2)`; the run continues |
+| malformed spec | spec file with an unterminated quote | `tool_spec_load` rc 1 → ERROR `tool spec missing`, exit 1 (not 2) |
+| bash 3.2, empty method list | no methods for the platform, `/bin/bash` 3.2, `set -u` | NO-METHOD; no unbound-variable crash |
+| no method | spec without a preferred method | NO-METHOD |
+| evaluating | status evaluating | EVALUATING |
+| n/a | status n/a | NA |
+| dry run | `AITOOLS_DRY_RUN=1`, each class | the leaf it would reach (section 2 "Dry run"), `dry-run:` detail, no writes |
+
+## Cross-references
+
+- Lifecycle rule and update policy: `@.claude/rules/tool-lifecycle.md`
+- Framework: `@reference/framework-tool-lifecycle.md`
+- Process skills: `/tool-adopt`, `/tool-eval`, `/tool-registry`
+- Severity and summary rules: `@reference/script-standards-detail.md`
+- Menus, console I/O, parity: `@.claude/rules/interactive-menus.md`
+- Environment API: `@.claude/rules/cross-platform.md` "Environment branches"
+- Profile schema: `@reference/user-repo.md`
+- Resolution plan (tool-ops `resolution`, PATH ownership): `@plans/tooling-resolution-and-artifact-registry.md`

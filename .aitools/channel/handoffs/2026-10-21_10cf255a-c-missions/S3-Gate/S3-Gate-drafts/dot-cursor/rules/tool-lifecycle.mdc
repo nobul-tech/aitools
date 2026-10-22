@@ -1,0 +1,70 @@
+---
+description: Tool lifecycle gates, the tool support decision tree, and the update policy for managed tools
+globs: "scripts/**,deploy/**,shared/**,reference/**,registries/**,plans/**,rfcs/**,.claude/rules/**,.claude/skills/**,.cursor/rules/**,CLAUDE.md,RELEASE_NOTES.md,ROADMAP.md,README.md"
+alwaysApply: false
+---
+
+## Tool Lifecycle (this repo)
+
+Mirror of `.claude/rules/tool-lifecycle.md`. Keep the two in step; the `.md` rule is authoritative.
+
+### Phase 2 gate
+
+**Hard stop.** After installing and providing a test command, MUST wait for the user's explicit approval before writing integration code. Do not plan or batch Phase 3+ with it. Rejected: uninstall, remove the "Under Evaluation" entry, stop. Approved: promote the entry, proceed. Plans with Phases 3-5 MUST note the gate (plan mode too).
+
+### Under Evaluation guard
+
+Tools with `evaluating` status on ALL platforms MUST NOT have setup scripts, installer entries, aliases in `shared/shell/`, build pipeline entries, or a row in the CLAUDE.md Managed CLI Tools table.
+
+### Tool support decision tree
+
+Every tool setup script (a script named by a registry `lifecycle.setupScript`; not the `setup-user-*` managed-file scripts) MUST run the tree in `reference/tool-support-decision-tree.md` through `tool_support_run` / `Invoke-ToolSupport`. Scripts not yet migrated may be edited only for fixes; any other change migrates the script via `/tool-adopt`.
+
+1. **Registry decides.** The preferred method for the platform and environment comes from the tool registry. None: ERROR + ACTION to run `/tool-eval` (text per the reference). A script never picks a method itself.
+2. **Detect first.** Classify the install by the registry's detection signatures: none, preferred, non-preferred, unknown.
+3. **Non-interactive and `--force` change nothing** for a non-preferred or unknown install: WARN plus ACTION.
+4. **Interactive**: non-preferred installs get replace / keep / abort; unknown-source installs get install alongside / keep / abort. Replace installs the preferred method FIRST, verifies it resolves, THEN removes the old copy (GitHub issue #12). Keep is remembered per machine as a tool exception.
+5. **Unknown-source installs are never removed** or offered for removal.
+6. **Post-check**: "supported" means the command resolves to the managed binary; off PATH is ERROR; shadowed is ERROR once D-TS11 is approved (pending).
+
+### Update policy
+
+Each tool has an `updateChannel` in the registry, default `latest-stable` (channels: reference "Update channels"). Every installer run updates a preferred install to its channel's latest and verifies it. Moving a pin or LTS line is a registry change via `/tool-eval` that keeps the old line as a non-preferred method. Kept (exception) installs are not updated.
+
+### Install cleanup
+
+Removal happens only in the replace branch, only after the preferred copy is verified, and only through the registry's removal recipe. Setup scripts MUST NOT uninstall or delete a tool before its replacement is verified.
+
+### PATH refresh after install
+
+A package-manager install may not be on PATH yet. Do not hardcode package manager paths. Ask the user to relaunch the agent, then verify.
+
+### Install method discovery
+
+Install methods, detection signatures, removal recipes, and `BuildPrereqs` entries MUST come from official documentation via `/tool-eval` (Chrome DevTools MCP skill for the docs) — never from assumption or memory. This covers new tools, changes to existing setup scripts, and install-failure RCA. Detail: `reference/tool-evaluation-playbook.md`.
+
+### Onboarding and graduation
+
+Onboard a tool that passed Phase 2 with `/tool-adopt`; it carries the full checklist (registry, setup scripts, installer, build pipeline, check entries, CLAUDE.md and dotprofile template rows, deployment types table for a new file type, rebuild). A bundled tool that becomes a project requirement MUST graduate to a managed tool through the same lifecycle.
+
+### Cross-platform vetting (Cursor-only section, kept)
+
+When recommending tools in this project, verify availability on both macOS and Windows. Disclose if a tool is single-platform or has limited support on one OS.
+
+### MCP server isolation (Cursor-only section, kept)
+
+Chrome DevTools MCP uses `--isolated` flag for throwaway temp Chrome profiles, enabling concurrent Claude Code + Cursor sessions without Chrome profile lock conflicts. Apply the same pattern to any future stdio MCP server that creates persistent local state.
+
+### MCP server disable scope (Cursor-only section, kept)
+
+`agent mcp disable` (Cursor CLI) stores disable state **per-project**, not per-user. Setup scripts that disable MCP servers only affect the directory from which they run.
+
+When adding MCP servers to configuration:
+- **Always-available** servers (chrome-devtools): user-level config is correct — no disable needed
+- **Opt-in per-project** servers (vercel, webflow): prefer project-level config only. Adding to user-level `~/.cursor/mcp.json` then disabling is fragile — the disable doesn't propagate to new projects
+
+Claude Code handles this differently: `permissions.deny` in `~/.claude/settings.json` is user-scoped and applies globally. Per-project enable via `.claude/settings.local.json` `permissions.allow`. Record this asymmetry per MCP server through the `/tool-registry` skill.
+
+### Skills
+
+`/tool-eval` (evaluation), `/tool-adopt` (integration and script migration), `/tool-registry` (registry data). Tree, leaves, helpers and schema: `reference/tool-support-decision-tree.md`.

@@ -1,0 +1,26 @@
+---
+description: Interactive menu conventions for managed file deployment, the tool install-method menu, and the machine registration menu
+globs: "scripts/**,deploy/**"
+alwaysApply: false
+---
+
+## Interactive Deploy Menus (this repo)
+
+PS1 and bash menus MUST show identical options in identical order. Every return
+value from `Deploy-ManagedFile` / `deploy_managed_file` MUST be handled at
+**every call site**. Scripts with multiple call sites (e.g., setup-user-claude
+deploys both CLAUDE.md and rules) must handle all return values at each site
+independently. **Known limitation:** Step 30 validates at file level, not
+call-site level -- manual audit required for multi-deployment scripts.
+Non-interactive fallback required for managed-file menus (`AITOOLS_FORCE`/`--force`, non-terminal stdin, EOF at prompt -> overwrite + warn); installers apply the same rule to their own prompts.
+
+Tool install-method menu (`tool_method_menu` / `Read-ToolMethodChoice`, `reference/tool-support-decision-tree.md`): same parity, console I/O and encoding rules, but `--force`, non-terminal stdin, EOF and unrecognised input change nothing (HOLD). `[k]eep` is remembered per machine (tool exception); the one-run keep is the empty default, unlike managed-file `[s]kip`. `[x]abort` exits 2 and stops the run once the installer contract in the reference lands. Exit 2 from a setup script means user abort only; a script never passes a helper's return code 2 through as its exit code.
+
+Machine registration menu (`aitools user init`: numbered aliases, `[n]ew`, `[s]kip`): same parity and console I/O rules. Non-terminal stdin, `AITOOLS_FORCE` and EOF never pick a profile: ERROR + ACTION (`aitools user init --alias <alias>`).
+
+PS1 console I/O: `[Console]::ReadLine/WriteLine`. Read external command output
+via temp file + `[IO.File]::ReadAllText(..., UTF8)` (not pipeline capture).
+
+Bash: `read -r < /dev/tty` / `printf ... > /dev/tty`.
+
+Full spec: `.claude/rules/interactive-menus.md`, `reference/managed-file-deployment.md`.
