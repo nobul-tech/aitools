@@ -1,9 +1,12 @@
 ---
 name: tool-eval
-description: "Evaluate install methods for managed tools. Use when
-  adding a new tool, re-evaluating an existing tool's install method,
-  verifying provenance, comparing delivery options, or updating
-  health flags."
+description: "Evaluate tools and install methods, in any repo. Use
+  before recommending or installing any tool, extension, or package;
+  when adding a new tool, re-evaluating an existing tool's install
+  method, verifying provenance (including Homebrew formulas), comparing
+  delivery options across platforms, checking hard blocks and yellow
+  flags, evaluating a system tool upgrade or a capability of an existing
+  tool, or updating health flags."
 ---
 
 ## Intent
@@ -136,6 +139,9 @@ made and is reusable for future evaluations.
 
 ## When to invoke /tool-eval
 
+- Before recommending or installing any tool, extension, or package,
+  in any repo (for a quick check, read the hard blocks and yellow
+  flags in `reference/tool-evaluation-criteria.md` and stop there)
 - Adding a new managed tool (Phase 1-2 of lifecycle)
 - Re-evaluating an existing tool's install method
 - Upstream project changes recommended install method
@@ -147,8 +153,13 @@ made and is reusable for future evaluations.
 ## Cross-References
 
 - Evaluation principles: `@.claude/rules/tool-evaluation.md`
-- Discovery playbook: `@reference/tool-evaluation-playbook.md`
-- Evaluation criteria: `@reference/tool-evaluation-criteria.md`
+- Discovery playbook: `@reference/tool-evaluation-playbook.md` (also:
+  sandbox walkthrough, special contexts for system tool upgrades and
+  capabilities of existing tools, the Perl exemplar, and the platform
+  gotcha catalog, folded in from the retired `/aitool-eval` card)
+- Evaluation criteria: `@reference/tool-evaluation-criteria.md` (hard
+  blocks, yellow flags and their disclosure format, green signals,
+  quick checks by tool type, platform states)
 - Registry writes: `/tool-registry` skill
 - Lifecycle gates: `@.claude/rules/tool-lifecycle.md`
 - Evaluation research: `reference/evaluations/`

@@ -1,6 +1,6 @@
 ---
 name: tool-ops
-description: Read and write per-tool operational metadata — governance modes, deny rules, hooks, context injection, KPIs, and verification specs
+description: "Read and write per-tool operational metadata, in any repo — governance modes, deny rules, hooks, context injection, KPIs, verification specs, and Claude Code operational knowledge. Use when checking tool behavior, deny rules, hook behavior, Claude Code version dependencies, sub-agent limits (cross-repo access, SendMessage, Markdown file-name block, nesting depth), session management commands, hook portability, or how to read a tool's documentation."
 ---
 
 ## Intent
@@ -60,6 +60,24 @@ integration (hooks, deny rules, context injection).
   audit/active status
 - **Verifications**: `tools.<name>.verifications` — how to test hooks
   and deny rules
+
+### Claude Code operational knowledge (read-only lookups)
+
+Where each topic lives (the retired `/aitool-ops` card was a snapshot of
+these sources):
+
+| Question | Source of record |
+|----------|------------------|
+| Deny rules, harness hooks for Claude Code, governance modes, doc access, verification cases | `registries/tool-ops.json` `tools.claude-code` |
+| Version dependencies (CRITICAL to LOW) and release-notes watch | `reference/tool-ops-claude-code.md` "Version Dependencies" |
+| Sub-agent limits: cross-repo access (#24), SendMessage gap (#25), Markdown file-name block (#26), nesting depth (#27), `claude update` hook cancellation (#23) | `reference/tool-ops-claude-code.md` "Session Behavior" |
+| Session management commands, CLAUDE.md hierarchy, session storage | `reference/tool-ops-claude-code.md` "Session Behavior" |
+| Windows shell limitations and PowerShell-from-Bash workarounds | `reference/tool-ops-claude-code.md` "Windows Shell Limitations" |
+| Every hook the harness deploys (event, matcher, script) | `shared/hooks/hooks-manifest.json` |
+| Hook portability (BSD vs GNU command divergences) | `.claude/rules/cross-platform.md` "Hook portability" |
+
+Answer from the source, not from memory; if the source is not reachable
+(see "Where the files live"), say so.
 
 ## Updating tool ops
 

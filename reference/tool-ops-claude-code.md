@@ -256,6 +256,31 @@ Upstream: [#35240](https://github.com/anthropics/claude-code/issues/35240),
 [#37051](https://github.com/anthropics/claude-code/issues/37051),
 [#38183](https://github.com/anthropics/claude-code/issues/38183)
 
+### Subagent Cross-Repo Access Restriction (#24)
+
+Subagents launched via the Agent tool have restricted file access outside
+the CWD repo:
+
+- **Glob/Grep**: Denied outside CWD repo boundaries
+- **Read**: Works with explicit absolute paths (even outside CWD repo)
+- **Write/Edit**: Denied outside CWD repo
+
+**Impact on delegation**: When delegating work that needs files from another
+repo, include the file content in the delegation prompt (inline via XML
+delimiters) rather than expecting the subagent to read it. Alternatively, use
+Read with explicit paths for known file locations. (Folded in from the retired
+`/aitool-ops` card.)
+
+### Built-in guide subagent block
+
+The built-in `claude-code-guide` subagent is blocked by the
+`block-claude-code-guide.sh` PreToolUse(Agent) hook, which denies it and
+injects correct hook-schema context (#34730). No `permissions.deny` rule is
+used: Claude Code does not reliably honor deny for built-in subagents, so the
+hook is the enforcement. Verification cases: `/tool-ops` skill
+(`tools.claude-code.verifications`). (Folded in from the retired `/aitool-ops`
+card.)
+
 ### Sub-agent Markdown File-Name Block
 
 Observed in 2.1.289 (2026-10-05, Claude Code web environment). When the caller
