@@ -229,6 +229,8 @@ if $HAVE_PTY; then
         "grep -qF \"\${ESC}[31m-my local line\${ESC}[0m\" '$C/out' && grep -qF \"\${ESC}[32m+repo line\${ESC}[0m\" '$C/out' && grep -qF \"\${ESC}[31m--- this machine\" '$C/out' && grep -qF \"\${ESC}[32m+++ repo\" '$C/out'"
     check "display: full diff in the log, plain text" \
         "grep -qF 'diff a.md: --- this machine  $C/dest/a.md' '$LOG' && grep -qF 'diff a.md: -my local line' '$LOG' && grep -qF 'diff a.md: +repo line' '$LOG' && ! grep -qF \"\$ESC\" '$LOG'"
+    check "display: [REVIEW] line, no source/local/repo context lines" \
+        "has_line '$P' '[REVIEW] $C/dest/a.md differs from source.' && ! grep -qE '^  (source|local |repo  ) = ' '$P'"
     check "display: choice unchanged (skip)" "[ \"\$(result)\" = skipped ] && grep -qx 'my local line' '$C/dest/a.md'"
 
     setup_case display-nocolor

@@ -112,9 +112,13 @@ The diff is shown first, LOCAL -> SOURCE, under a one-line legend (see
 "Diff Mechanism Detail"): `-` lines are only on this machine, `+` lines
 only in the repo, so the diff reads as what `[o]verwrite` changes here. The
 menu says what each choice does to those lines. With an adopt target
-(`ADOPT_OFFERED=1`; `<adopt path>` is the adopt target's path):
+(`ADOPT_OFFERED=1`; `<adopt path>` is the adopt target's path). The
+`[REVIEW]` line is the only text above the legend; the diff headers name
+both files:
 
 ```
+[REVIEW] <LOCAL path> differs from source.
+
   red - = only on this machine   green + = only in the repo
 
 --- this machine  <LOCAL path>

@@ -214,6 +214,7 @@ try {
         Check "display: menu says what each choice does to the lines" ((HasLine "  [o]verwrite       : this machine gets the green + lines (backup kept)") -and (HasLine "  [a]ccept & adopt  : the repo gets the red - lines (your version) -> $C/repo/a.md") -and (HasLine "  [m]erge & adopt   : AI combines both; written to this machine and $C/repo/a.md") -and (HasLine "  [s]kip            : nothing written; asked again next run") -and (HasLine "  [x]abort          : stop this script (exit 2)"))
         Check "display: red - lines and header, green + lines and header" ((Out).Contains("$esc[31m-my local line$esc[0m") -and (Out).Contains("$esc[32m+repo line$esc[0m") -and (Out).Contains("$esc[31m--- this machine") -and (Out).Contains("$esc[32m+++ repo"))
         Check "display: full diff in the log, plain text" ((Log).Contains("diff a.md: --- this machine  $C/dest/a.md") -and (Log).Contains("diff a.md: -my local line") -and (Log).Contains("diff a.md: +repo line") -and -not (Log).Contains($esc))
+        Check "display: [REVIEW] line, no source/local/repo context lines" ((HasLine "[REVIEW] $C/dest/a.md differs from source.") -and -not ((Plain) -match '^  (source|local |repo  ) = '))
         Check "display: choice unchanged (skip)" ((Result) -eq "skipped" -and (Txt "dest/a.md") -match "my local line")
 
         Setup-Case "display-nocolor"; W "src.md" "new"; W "dest/a.md" "old"

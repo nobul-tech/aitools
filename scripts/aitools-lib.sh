@@ -1117,7 +1117,7 @@ _review_colour() {
 # Non-interactive, EOF at the prompt, --force / AITOOLS_FORCE: "overwrite".
 # ---------------------------------------------------------------------------
 DIFF_REVIEW_RESULT=""
-_PDR_ADOPT_TARGET=""   # set by deploy_managed_file; shown in the review header only
+_PDR_ADOPT_TARGET=""   # set by deploy_managed_file; display only (+++ header, menu)
 prompt_diff_review() {
     local file_path="$1"
     local new_content="$2"
@@ -1145,13 +1145,9 @@ prompt_diff_review() {
     fi
 
     # Context header
+    # (the diff headers below name both paths)
     printf '\n\033[33m[REVIEW]\033[0m %s differs from source.\n' \
         "$(display_path "$file_path")" > /dev/tty
-    printf '  source = the repo version (would deploy)\n' > /dev/tty
-    printf '  local  = current file on disk\n' > /dev/tty
-    if [ "$adopt_offered" = "1" ] && [ -n "$_PDR_ADOPT_TARGET" ]; then
-        printf '  repo   = %s (adopt target)\n' "$(display_path "$_PDR_ADOPT_TARGET")" > /dev/tty
-    fi
     printf '\n' > /dev/tty
 
     # AI merge input ([m]erge & adopt): SOURCE -> LOCAL diff, unchanged from

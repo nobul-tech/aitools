@@ -1133,7 +1133,7 @@ function Test-ReviewColour {
 # Non-interactive, EOF at the prompt, -Force / AITOOLS_FORCE: "overwrite".
 # ---------------------------------------------------------------------------
 $script:MergedContent = $null
-$script:PdrAdoptTarget = ""   # set by Deploy-ManagedFile; shown in the review header only
+$script:PdrAdoptTarget = ""   # set by Deploy-ManagedFile; display only (+++ header, menu)
 function Prompt-DiffReview {
     param(
         [string]$FilePath,
@@ -1168,12 +1168,8 @@ function Prompt-DiffReview {
 
     # Context header
     [Console]::WriteLine("")
+    # (the diff headers below name both paths)
     [Console]::WriteLine("[REVIEW] $FilePath differs from source.")
-    [Console]::WriteLine("  source = the repo version (would deploy)")
-    [Console]::WriteLine("  local  = current file on disk")
-    if ($AdoptOffered -and $script:PdrAdoptTarget) {
-        [Console]::WriteLine("  repo   = $($script:PdrAdoptTarget) (adopt target)")
-    }
     [Console]::WriteLine("")
 
     # AI merge input ([m]erge & adopt): Compare-Object listing, unchanged from
