@@ -4,6 +4,8 @@
 # Provides: platform and environment detection (AITOOLS_PLATFORM, IS_MACOS,
 # IS_WINDOWS, IS_LINUX, AITOOLS_ENVIRONMENT, is_claude_code_web,
 # is_local_environment, write_environment_skip), display_path, read_config_key,
+# resolve_user_repo_path, resolve_machine_profile, tool_exception_get,
+# tool_exception_record,
 # logging_init, log/log_ok/log_error/log_warn/log_detail, invoke_ai,
 # write_summary, show_summary, SORT_KEYS_JS, normalize_json.
 #
@@ -102,6 +104,225 @@ read_config_key() {
     [ -n "$val" ] || return 1
     # Unescape JSON backslashes: \\ -> \
     printf '%b' "$val"
+}
+
+# ---------------------------------------------------------------------------
+# Dotprofile, machine-profile and tool-exception resolution
+# (reference/user-repo.md "Resolution"; tool exceptions:
+# reference/tool-support-decision-tree.md section 8)
+# Intent: give every bash consumer one answer to "where is the dotprofile" and
+# "which profile is this machine", with the reason ("via") logged to deploy.log,
+# and the tool-exception store's reader and writer. The logic lives in the
+# native resolver aitools-profile.sh (aitools-profile.ps1 under Git Bash on
+# Windows, where the .sh refuses to run). NOT a writer of config.json (only
+# setup-user-config writes it). NOT a writer of profile.json beyond
+# tool_exception_record (which delegates to the resolver). Consumed by:
+# setup-user-*.sh, aitools, the tool setup scripts (tool exceptions) and the
+# generated deploy/ scripts (they set AITOOLS_PROFILE_SH to their embedded copy).
+# Return codes follow the decision tree's helper rule: none returns 2.
+# Results are globals, never stdout (counters and globals must survive).
+# ---------------------------------------------------------------------------
+
+# _aitools_profile_run ARGS... -- run the resolver; sets PROFILE_OUT (tagged
+# lines, CR stripped) and PROFILE_RC. Returns 0 when it ran, 1 when no
+# resolver is available (logged as detail by the caller).
+PROFILE_OUT=""
+PROFILE_RC=0
+_aitools_profile_run() {
+    PROFILE_OUT=""; PROFILE_RC=0
+    local d sh ps1 errf
+    d="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    sh="${AITOOLS_PROFILE_SH:-$d/aitools-profile.sh}"
+    ps1="${AITOOLS_PROFILE_PS1:-$d/aitools-profile.ps1}"
+    errf="$(mktemp)"
+    if [ "$AITOOLS_PLATFORM" = "windows" ]; then
+        # Git Bash: the PowerShell resolver; its stdout is CRLF in the console code page
+        if [ ! -f "$ps1" ] || ! command -v pwsh >/dev/null 2>&1; then rm -f "$errf"; return 1; fi
+        PROFILE_OUT=$(pwsh -NoProfile -File "$(cygpath -w "$ps1")" "$@" 2>"$errf") || PROFILE_RC=$?
+        PROFILE_OUT="${PROFILE_OUT//$'\r'/}"
+    else
+        if [ ! -f "$sh" ]; then rm -f "$errf"; return 1; fi
+        # The resolver runs under the caller's bash (macOS /bin/bash 3.2 stays 3.2)
+        PROFILE_OUT=$("${BASH:-bash}" "$sh" "$@" 2>"$errf") || PROFILE_RC=$?
+    fi
+    local line
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then log_detail "aitools-profile $1: $line"; fi
+    done < "$errf"
+    rm -f "$errf"
+    return 0
+}
+
+# _profile_tag KEY -- value of the first KEY<TAB> line in PROFILE_OUT (pure)
+_profile_tag() {
+    local k v
+    while IFS=$'\t' read -r k v; do
+        if [ "$k" = "$1" ]; then printf '%s' "$v"; return 0; fi
+    done <<< "$PROFILE_OUT"
+    return 0
+}
+
+# _profile_lines KIND -- every warn or error value in PROFILE_OUT, one per line (pure)
+_profile_lines() {
+    local k v
+    while IFS=$'\t' read -r k v; do
+        if [ "$k" = "$1" ]; then printf '%s\n' "$v"; fi
+    done <<< "$PROFILE_OUT"
+    return 0
+}
+
+# _bash_path P -- the Git Bash form of a Windows path; unchanged elsewhere (pure)
+_bash_path() {
+    if [ -n "$1" ] && command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi
+}
+
+# resolve_user_repo_path -- sets USER_REPO_PATH (bash path form) and USER_REPO_VIA
+# (env|argument|config|convention|scan|none). Returns 0 found, 1 no dotprofile
+# (shared-only mode; not an error), 3 resolver error (logged: log_error +
+# ERROR row "dotprofile").
+USER_REPO_PATH=""
+USER_REPO_VIA="none"
+resolve_user_repo_path() {
+    USER_REPO_PATH=""; USER_REPO_VIA="none"
+    local w
+    if ! _aitools_profile_run user-repo-path; then
+        log_error "dotprofile: resolver aitools-profile not found next to aitools-lib.sh"
+        write_summary ERROR "dotprofile" "resolver missing"
+        return 3
+    fi
+    USER_REPO_VIA=$(_profile_tag via)
+    while IFS= read -r w; do if [ -n "$w" ]; then log_detail "dotprofile: $w"; fi; done <<< "$(_profile_lines warn)"
+    case "$PROFILE_RC" in
+        0)
+            USER_REPO_PATH=$(_bash_path "$(_profile_tag path)")
+            log_detail "dotprofile=$USER_REPO_PATH via=$USER_REPO_VIA"
+            return 0 ;;
+        1)
+            log_detail "dotprofile: none found (shared-only mode)"
+            return 1 ;;
+    esac
+    while IFS= read -r w; do if [ -n "$w" ]; then log_error "dotprofile: $w"; fi; done <<< "$(_profile_lines error)"
+    if [ -z "$(_profile_lines error)" ]; then log_error "dotprofile: resolver failed (exit $PROFILE_RC)"; fi
+    write_summary ERROR "dotprofile" "resolver failed"
+    return 3
+}
+
+# resolve_machine_profile -- sets MACHINE_ALIAS, MACHINE_VIA, PROFILE_FILE,
+# PROFILE_NAME, PROFILE_COMPANY, IDENTITY_GIT_NAME, IDENTITY_GIT_EMAIL,
+# IDENTITY_GITHUB. Logs one detail line ("machine profile: alias=.. via=..").
+# Resolver warnings are detail lines here: setup-user-config, the first script
+# of every run, reports them once (a successful step stays OK, D-TS12).
+# Returns 0 resolved, 1 no dotprofile (shared-only), 3 no match or error
+# (log_error + ERROR row "machine profile" + ACTION; callers must not substitute
+# another machine's values; the PROFILE_/IDENTITY_ values then hold the
+# identity-level, machine-independent values only).
+MACHINE_ALIAS=""; MACHINE_VIA="none"; PROFILE_FILE=""
+PROFILE_NAME=""; PROFILE_COMPANY=""; IDENTITY_GIT_NAME=""; IDENTITY_GIT_EMAIL=""; IDENTITY_GITHUB=""
+resolve_machine_profile() {
+    MACHINE_ALIAS=""; MACHINE_VIA="none"; PROFILE_FILE=""
+    PROFILE_NAME=""; PROFILE_COMPANY=""; IDENTITY_GIT_NAME=""; IDENTITY_GIT_EMAIL=""; IDENTITY_GITHUB=""
+    local w
+    if ! _aitools_profile_run resolve --environment "$AITOOLS_ENVIRONMENT"; then
+        log_error "machine profile: resolver aitools-profile not found next to aitools-lib.sh"
+        write_summary ERROR "machine profile" "resolver missing"
+        return 3
+    fi
+    MACHINE_ALIAS=$(_profile_tag alias)
+    MACHINE_VIA=$(_profile_tag via)
+    PROFILE_FILE=$(_bash_path "$(_profile_tag profileFile)")
+    PROFILE_NAME=$(_profile_tag name)
+    PROFILE_COMPANY=$(_profile_tag company)
+    IDENTITY_GIT_NAME=$(_profile_tag gitName)
+    IDENTITY_GIT_EMAIL=$(_profile_tag gitEmail)
+    IDENTITY_GITHUB=$(_profile_tag github)
+    while IFS= read -r w; do if [ -n "$w" ]; then log_detail "machine profile: $w"; fi; done <<< "$(_profile_lines warn)"
+    log_detail "machine profile: alias=${MACHINE_ALIAS:-none} via=${MACHINE_VIA:-none} company=$PROFILE_COMPANY host=$(_profile_tag hostname) id=$(_profile_tag machineId)"
+    case "$PROFILE_RC" in
+        0) if [ -n "$MACHINE_ALIAS" ]; then return 0; fi ;;
+        1) log_detail "machine profile: no dotprofile -- shared-only mode"; return 1 ;;
+    esac
+    while IFS= read -r w; do if [ -n "$w" ]; then log_error "machine profile: $w"; fi; done <<< "$(_profile_lines error)"
+    if [ -z "$(_profile_lines error)" ]; then log_error "machine profile: resolver failed (exit $PROFILE_RC)"; fi
+    log_error "machine profile: unresolved -- no other machine's values are used"
+    write_summary ERROR "machine profile" "no machine match"
+    write_summary ACTION "" "Run: aitools user init (pick or register this machine's profile)"
+    return 3
+}
+
+# tool_exception_get SLUG -- this machine's recorded tool exception (tree section
+# 8 Reader; call only at T5). Sets TOOL_EXC_FOUND (true/false), TOOL_EXC_PLATFORM,
+# TOOL_EXC_METHOD, TOOL_EXC_PATH, TOOL_EXC_DECIDED_AT. Returns 0 looked up
+# (found or not), 1 store unavailable (one log_warn; treated as no exception).
+# Resolver warnings are detail lines, so a kept tool's OK row is not promoted.
+TOOL_EXC_FOUND=false; TOOL_EXC_PLATFORM=""; TOOL_EXC_METHOD=""; TOOL_EXC_PATH=""; TOOL_EXC_DECIDED_AT=""
+tool_exception_get() {
+    TOOL_EXC_FOUND=false; TOOL_EXC_PLATFORM=""; TOOL_EXC_METHOD=""; TOOL_EXC_PATH=""; TOOL_EXC_DECIDED_AT=""
+    local slug="$1" w reason
+    if ! _aitools_profile_run exception-get --slug "$slug" --environment "$AITOOLS_ENVIRONMENT"; then
+        log_warn "tool exceptions unavailable (resolver missing)"
+        return 1
+    fi
+    while IFS= read -r w; do if [ -n "$w" ]; then log_detail "tool exceptions: $w"; fi; done <<< "$(_profile_lines warn)"
+    if [ "$PROFILE_RC" -ne 0 ]; then
+        reason=$(_profile_lines error | perl -ne 'print, exit if /\S/')
+        if [ "$PROFILE_RC" -eq 1 ]; then reason="no dotprofile"; fi
+        log_warn "tool exceptions unavailable (${reason:-resolver exit $PROFILE_RC})"
+        return 1
+    fi
+    if [ "$(_profile_tag found)" = "true" ]; then
+        TOOL_EXC_FOUND=true
+        TOOL_EXC_PLATFORM=$(_profile_tag platform)
+        TOOL_EXC_METHOD=$(_profile_tag method)
+        TOOL_EXC_PATH=$(_profile_tag path)
+        TOOL_EXC_DECIDED_AT=$(_profile_tag decidedAt)
+    fi
+    log_detail "tool exceptions: $slug found=$TOOL_EXC_FOUND profile=$(_profile_tag alias) via=$(_profile_tag via)"
+    return 0
+}
+
+# tool_exception_record SLUG METHOD PATH VERSION [REASON] -- record a [k]eep
+# decision (tree section 8 Writer; only after [k]eep, never in dry run or
+# non-interactive runs). decidedBy = the calling script's name (SCRIPT_NAME).
+# The resolver writes profile.json and commits and pushes it (N-Q2).
+# Sets TOOL_EXC_PUSHED (true/false). Returns 0 written (a failed commit or push
+# is a log_warn + ACTION "run git push in <dotprofile>", TOOL_EXC_PUSHED=false),
+# 1 failed, 3 refused (no dotprofile, or the machine profile matched by
+# hostname only or not at all). 1 and 3 log_warn + ACTION
+# "run aitools user init to remember tool choices".
+TOOL_EXC_PUSHED=false
+tool_exception_record() {
+    TOOL_EXC_PUSHED=false
+    local slug="$1" method="$2" path="$3" version="$4" reason="${5:-}" w msg
+    local args=(exception-set --slug "$slug" --platform "$AITOOLS_PLATFORM" --method "$method" --path "$path"
+        --version "$version" --by "${SCRIPT_NAME:-unknown}" --environment "$AITOOLS_ENVIRONMENT")
+    if [ -n "$reason" ]; then args+=(--reason "$reason"); fi
+    if ! _aitools_profile_run "${args[@]}"; then
+        log_warn "tool exception for $slug not saved (resolver missing)"
+        write_summary ACTION "" "run aitools user init to remember tool choices"
+        return 1
+    fi
+    while IFS= read -r w; do if [ -n "$w" ]; then log_detail "tool exceptions: $w"; fi; done <<< "$(_profile_lines warn)"
+    case "$PROFILE_RC" in
+        0)
+            if [ "$(_profile_tag pushed)" = "true" ]; then
+                TOOL_EXC_PUSHED=true
+                log_detail "tool exceptions: $slug recorded in $(_profile_tag profileFile) (committed and pushed)"
+            else
+                msg=$(_profile_lines warn | perl -ne 'print, exit if /commit|push|git repository/')
+                log_warn "tool exception for $slug saved but not pushed (${msg:-see deploy.log})"
+                write_summary ACTION "" "run git push in $(dirname "$(_bash_path "$(_profile_tag profileFile)")")"
+            fi
+            return 0 ;;
+        3)
+            msg=$(_profile_lines error | perl -ne 'print, exit if /\S/')
+            log_warn "tool exception for $slug not saved (${msg:-refused})"
+            write_summary ACTION "" "run aitools user init to remember tool choices"
+            return 3 ;;
+    esac
+    msg=$(_profile_lines error | perl -ne 'print, exit if /\S/')
+    log_warn "tool exception for $slug not saved (${msg:-resolver exit $PROFILE_RC})"
+    write_summary ACTION "" "run aitools user init to remember tool choices"
+    return 1
 }
 
 # ---------------------------------------------------------------------------

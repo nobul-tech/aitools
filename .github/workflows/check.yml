@@ -137,6 +137,12 @@ jobs:
       - name: Config writer tests (macOS /bin/bash 3.2)
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/profile/test-config.sh --bash-only
 
+      - name: Profile lib wrapper tests (bash 5 + pwsh)
+        run: bash tests/profile/test-lib.sh
+
+      - name: Profile lib wrapper tests (macOS /bin/bash 3.2)
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/profile/test-lib.sh --bash-only
+
       - name: Build deploy scripts
         run: |
           echo "::group::Running build-deploy.sh"
@@ -289,6 +295,9 @@ jobs:
 
       - name: Config writer tests (bash + pwsh parity)
         run: bash tests/profile/test-config.sh
+
+      - name: Profile lib wrapper tests (bash + pwsh)
+        run: bash tests/profile/test-lib.sh
 
       - name: Build deploy scripts
         run: bash scripts/build-deploy.sh
