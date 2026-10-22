@@ -2,7 +2,7 @@
 
 1. Drafted the full managed-file spec (reference) for the SOURCE-truth model, plus old->new drafts of the two rules and their two Cursor mirrors; none is applied.
 2. The approved State Machine section is copied byte-for-byte (cmp-verified); every other section is rewritten to the interface contract.
-3. Consistency table: 28 rows, 22 agree, 5 open questions where a source is silent, 1 real disagreement (cli-config.json is not under sync_managed_json in code, the approved text says it is).
+3. Consistency table: 34 rows. 24 agree (2 of them after the review fixes). 9 are open questions, where a source is silent or defective. 1 is a real disagreement: the approved text puts cli-config.json under sync_managed_json, and the code does not.
 4. Biggest contract defect: CLAUDE.md is a template; adopting LOCAL verbatim into it would bake interpolated values and the machine footer into the template (Q1).
 5. Independent reviewer S3-SpecRewrite-Check found 5 contradictions; 4 are fixed in the drafts. The fifth is cli-config.json, which needs the commander (Q9). 14 open questions in total.
 
@@ -27,7 +27,7 @@ The intent statement: `reference/managed-file-deployment.md`, `.claude/rules/man
 ## Verification
 
 - `bash .scratch/session-S3-SpecRewrite/check-sm.sh` -> `STATE MACHINE: identical` (26 lines each, cmp).
-- `bash .scratch/session-S3-SpecRewrite/make-diffs.sh` -> five `.diff` files written (670, 54, 92, 35, 28 lines).
+- `bash .scratch/session-S3-SpecRewrite/make-diffs.sh` -> five `.diff` files written (final: 698, 59, 116, 35, 28 lines).
 - Code facts cited below were read in this session from the specdrafts worktree (origin/main db4b3c5).
 - `bash scripts/check-pre-commit.sh` (worktree): 6 PASS / 11 SKIP / 2 WARN / 1 FAIL. The FAIL is step 6, the known harvesting/ file tracked 100644, and pre-dates this branch.
 - `bash scripts/check-pre-push.sh` (worktree; its step 7 uses an isolated HOME): 6 PASS / 1 SKIP / 3 WARN / 0 FAIL.
