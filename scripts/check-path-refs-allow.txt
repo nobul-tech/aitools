@@ -8,7 +8,6 @@
 # Test fixtures and examples
 .claude/skills/audit/tests/expected-behaviors.md|reference/nonexistent.md|test fixture: a broken reference the audit must detect
 .claude/skills/audit/tests/expected-behaviors.md|.claude/rules/cursor-rule-parity.md|test fixture: a rule deleted in v0.54 the audit must detect
-.claude/skills/tool-ops/tests/expected-behaviors.md|reference/tool-ops-cursor.md|test fixture: a future per-tool ops reference
 shared/skills/tool-ops/tests/expected-behaviors.md|reference/tool-ops-cursor.md|test fixture: a future per-tool ops reference
 shared/skills/handoff/SKILL.md|plans/mission-command-briefing/handoff-2026-03-19_Z1IhGrcgGO.md|example file name in prose
 

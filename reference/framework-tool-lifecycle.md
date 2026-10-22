@@ -52,8 +52,8 @@ go inactive, install methods change upstream.
 
 - `@.claude/rules/tool-lifecycle.md` (operational rule + checklist)
 - `@.claude/rules/tool-evaluation.md` (evaluation principles)
-- `.claude/skills/tool-registry/SKILL.md` (registry data access)
-- `.claude/skills/tool-eval/SKILL.md` (evaluation process)
+- `shared/skills/tool-registry/SKILL.md` (registry data access)
+- `shared/skills/tool-eval/SKILL.md` (evaluation process)
 - `@reference/tool-evaluation-criteria.md` (evaluation framework)
 - `@reference/tool-evaluation-playbook.md` (install discovery process)
 - `reference/evaluations/` (evaluation research)

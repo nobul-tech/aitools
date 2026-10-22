@@ -495,6 +495,33 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 21. Skill levels: one skill name, one level (shared/skills, .claude/skills,
+#     dotprofile claude/skills). See documentation-standards.md "Skill placement".
+# ---------------------------------------------------------------------------
+echo ""
+echo "${BOLD}--- Step 21: Skill levels ---${RESET}"
+if [ -z "$PYTHON20" ]; then
+    step_fail "21" "Skill levels" "python3 not found (required to run scripts/check-skill-levels.py)"
+else
+    skill_args=(--root "$REPO_ROOT")
+    if [ -n "$USER_REPO_PATH" ]; then
+        skill_args+=(--dotprofile "$USER_REPO_PATH")
+    fi
+    # The helper exits 1 on collisions and 2 on errors; capture both, do not abort.
+    skill_rc=0
+    skill_out=$("$PYTHON20" "$REPO_ROOT/scripts/check-skill-levels.py" "${skill_args[@]}" 2>&1) || skill_rc=$?
+    if [ "$skill_rc" -eq 0 ]; then
+        step_pass "21" "Skill levels" "no skill name at two levels"
+    elif [ "$skill_rc" -eq 1 ]; then
+        echo "$skill_out"
+        step_fail "21" "Skill levels" "same skill name at two levels (keep one: git mv within aitools; delete a dotprofile copy of a shared skill)"
+    else
+        echo "$skill_out"
+        step_fail "21" "Skill levels" "check-skill-levels.py error (exit $skill_rc)"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # Summary + exit
 # ---------------------------------------------------------------------------
 print_summary

@@ -42,8 +42,8 @@ Base artifacts combine with scope modifiers:
 
 | Modifier | Meaning |
 |----------|---------|
-| project | In the aitools repo, for this repo's sessions |
-| shared | In `shared/` in the aitools repo, source for deployment |
+| project | In the aitools repo's `.claude/` or `.cursor/` — loaded only in sessions on the aitools repo; never deployed |
+| shared | In `shared/` in the aitools repo — source of everything aitools deploys to user level (`~/.claude`, `~/.cursor`, `~/.aitools`) |
 | dotprofile | In the user's `aitools-<username>` repo, personal source |
 | user | Deployed to `~/`, active on the machine |
 
@@ -67,6 +67,7 @@ Base artifacts combine with scope modifiers:
 | dotprofile claude | `<userRepoPath>/claude/CLAUDE.md` |
 | user claude | `~/.claude/CLAUDE.md` (generated, don't edit directly) |
 | project rule | `.claude/rules/*.md` |
+| project skill | `.claude/skills/*/SKILL.md` (aitools sessions only) |
 | user rule | `~/.claude/rules/*.md` |
 | shared skill | `shared/skills/*/SKILL.md` (source) |
 | user skill | `~/.claude/skills/*/SKILL.md` (deployed) |
