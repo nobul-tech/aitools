@@ -371,6 +371,9 @@ jobs:
           $out = & pwsh -NoProfile -File scripts/aitools-profile.ps1 resolve
           if ($LASTEXITCODE -ne 1) { Write-Error "resolve without a dotprofile: exit $LASTEXITCODE, want 1"; $out; exit 1 }
           Write-Host "resolve without a dotprofile: exit 1 (shared-only)"
+          # The runner appends `exit $LASTEXITCODE` to pwsh steps; the expected
+          # exit 1 from resolve would otherwise fail the step.
+          exit 0
 
       - name: Build deploy scripts (via Git Bash)
         shell: bash
