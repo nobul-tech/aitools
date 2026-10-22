@@ -119,6 +119,12 @@ jobs:
       - name: Logging unit tests (PowerShell)
         run: pwsh -NoProfile -File tests/logging/test-logging.ps1
 
+      - name: Managed-file tests (bash)
+        run: bash tests/managed-files/test-managed-files.sh
+
+      - name: Managed-file tests (PowerShell)
+        run: pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1
+
       - name: Build deploy scripts
         run: |
           echo "::group::Running build-deploy.sh"
@@ -260,6 +266,12 @@ jobs:
       - name: Logging unit tests (PowerShell)
         run: pwsh -NoProfile -File tests/logging/test-logging.ps1
 
+      - name: Managed-file tests (bash)
+        run: bash tests/managed-files/test-managed-files.sh
+
+      - name: Managed-file tests (PowerShell)
+        run: pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1
+
       - name: Build deploy scripts
         run: bash scripts/build-deploy.sh
 
@@ -349,6 +361,14 @@ jobs:
       - name: Logging unit tests (PowerShell, native)
         shell: pwsh
         run: pwsh -NoProfile -File tests/logging/test-logging.ps1
+
+      - name: Managed-file tests (bash, via Git Bash)
+        shell: bash
+        run: bash tests/managed-files/test-managed-files.sh
+
+      - name: Managed-file tests (PowerShell, native)
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1
 
       - name: Build deploy scripts (via Git Bash)
         shell: bash

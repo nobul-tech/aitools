@@ -90,9 +90,6 @@ function Deploy-Skill {
     $destDir = Join-Path $DestBase $SkillName
     $dest = Join-Path $destDir "SKILL.md"
 
-    $adoptLabel = ""
-    if ($userRepoPath) { $adoptLabel = "dotprofile" }
-
     try {
         $srcContent = Get-Content $src -Raw -ErrorAction Stop
     } catch {
@@ -100,35 +97,33 @@ function Deploy-Skill {
         return
     }
 
-    $skillResult = Deploy-ManagedFile -Content $srcContent -DestPath $dest -ToolName $ToolName -ItemName $SkillName -AdoptLabel $adoptLabel
+    # Adopt target: the file actually read (the dotprofile copy when that was
+    # the source, else shared\skills in the aitools repo). The library writes it.
+    $skillResult = Deploy-ManagedFile -Content $srcContent -DestPath $dest -ToolName $ToolName -ItemName $SkillName -AdoptPath $src
 
     switch ($skillResult) {
         "accept & adopt" {
-            if ($userRepoPath) {
-                $adoptDir = Join-Path $userRepoPath "claude\skills\$SkillName"
-                if (-not (Test-Path $adoptDir)) {
-                    New-Item -ItemType Directory -Path $adoptDir -Force | Out-Null
-                }
-                Copy-Item -Path $dest -Destination (Join-Path $adoptDir "SKILL.md") -Force -ErrorAction Stop
-                LogOk "Adopted skill to dotprofile: $SkillName"
-            } else {
-                LogWarn "Cannot adopt: no user repo configured (run 'aitools user init')"
-            }
-            # Sync to all other deploy targets
+            # Copy the adopted content to the other deploy targets too, so their
+            # deploy sees LOCAL == SOURCE instead of asking again.
             foreach ($otherBase in $allSkillDests) {
                 if ($otherBase -eq $DestBase) { continue }
                 $otherDir = Join-Path $otherBase $SkillName
-                if (-not (Test-Path $otherDir)) {
-                    New-Item -ItemType Directory -Path $otherDir -Force | Out-Null
+                $other = Join-Path $otherDir "SKILL.md"
+                try {
+                    if (-not (Test-Path $otherDir)) {
+                        New-Item -ItemType Directory -Path $otherDir -Force -ErrorAction Stop | Out-Null
+                    }
+                    Backup-File -FilePath $other
+                    Copy-Item -Path $dest -Destination $other -Force -ErrorAction Stop
+                    Log "Synced adopted skill to $other"
+                } catch {
+                    LogError "Failed: ${SkillName}: could not copy the adopted skill to ${other}: $_"
+                    Write-Summary "ERROR" $ToolName "sync failed: $SkillName"
                 }
-                Copy-Item -Path $dest -Destination (Join-Path $otherDir "SKILL.md") -Force
             }
         }
-        { $_ -in @("created", "updated") } {
-            # tracked by deploy tracker
-        }
-        { $_ -in @("skipped", "verified") } {
-            # No action needed
+        { $_ -in @("created", "updated", "skipped", "verified", "failed") } {
+            # The tracker records the outcome (failed -> ERROR row).
         }
     }
     Record-DeployOutcome -Outcome $skillResult -ToolName $ToolName -ItemName $SkillName
@@ -179,24 +174,24 @@ if (Test-Path $skillsDest) {
             Log "Found user-created skill: $skillName"
             if ($DryRun) {
                 Log "[DRY RUN] Would offer to adopt $skillName to dotprofile"
+            } elseif (-not (Test-InteractiveConsole)) {
+                Log "Non-interactive: skipped adoption prompt for $skillName"
             } else {
-                try {
-                    [Console]::WriteLine("")
-                    [Console]::WriteLine("  User-created skill detected: $skillName")
-                    [Console]::WriteLine("  [a]dopt to dotprofile  [s]kip")
-                    [Console]::Write("  > ")
-                    $choice = [Console]::ReadLine()
-                } catch {
-                    $choice = "s"
-                }
+                # Test-InteractiveConsole + Read-ConsoleChoice (GitHub #29): EOF at
+                # the prompt logs a warning and takes the default, [s]kip.
+                [Console]::WriteLine("")
+                [Console]::WriteLine("  User-created skill detected: $skillName")
+                [Console]::WriteLine("  [a]dopt to dotprofile  [s]kip")
+                [Console]::Write("  > ")
+                $choice = Read-ConsoleChoice "skip"
                 switch ($choice) {
                     { $_ -in @("a", "adopt") } {
-                        $adoptDir = Join-Path $userRepoPath "claude\skills\$skillName"
-                        if (-not (Test-Path $adoptDir)) {
-                            New-Item -ItemType Directory -Path $adoptDir -Force | Out-Null
+                        $errorsBeforeAdopt = $errors
+                        $adoptedCount = Adopt-ManagedFile -SourceFile (Join-Path $skillDir.FullName "SKILL.md") `
+                            -Targets @(Join-Path $userRepoPath "claude\skills\$skillName\SKILL.md")
+                        if ($errors -gt $errorsBeforeAdopt -or -not $adoptedCount) {
+                            Write-Summary "ERROR" "claude skills" "adopt failed: $skillName"
                         }
-                        Copy-Item -Path (Join-Path $skillDir.FullName "SKILL.md") -Destination (Join-Path $adoptDir "SKILL.md") -Force
-                        LogOk "Adopted user skill to dotprofile: $skillName"
                     }
                     default {
                         Log "Skipped adoption of $skillName"

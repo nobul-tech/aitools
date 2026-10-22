@@ -1,0 +1,8 @@
+_merge_validate() {
+    # Return the validator's status: the assignment below would otherwise make
+    # this function return 0 and accept every output (parity: _MergeValidateWrapper).
+    local rc=0
+    validate_ai_merge_output "$1" "$_MERGE_VALIDATE_SOURCE" "$_MERGE_VALIDATE_LOCAL" || rc=$?
+    AI_REJECT_REASON="$MERGE_REJECT_REASON"
+    return "$rc"
+}

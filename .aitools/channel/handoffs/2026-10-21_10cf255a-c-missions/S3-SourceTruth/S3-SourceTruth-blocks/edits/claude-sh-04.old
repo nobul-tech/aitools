@@ -1,0 +1,15 @@
+        # Post-write validation: each deployed file is non-empty
+        for rule_file in "$RULES_SRC"/*.md; do
+            [ -f "$rule_file" ] || continue
+            rule_name=$(basename "$rule_file")
+            if [ ! -s "$RULES_DEST/$rule_name" ]; then
+                log_error "Validation failed: $rule_name is empty after deploy"
+            fi
+        done
+
+        if [ "$ERRORS" -eq "$ERRORS_BEFORE_RULES" ]; then
+            deploy_tracker_summary "claude rules"
+            log_ok "Rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$RULES_DEST")"
+        else
+            write_summary ERROR "claude rules" "validation failed"
+        fi

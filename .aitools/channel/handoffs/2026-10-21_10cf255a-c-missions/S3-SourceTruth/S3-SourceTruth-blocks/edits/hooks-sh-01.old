@@ -1,0 +1,5 @@
+# Adopt target for manifest hooks: shared/hooks only (SD-2, incident #80;
+# reference/managed-file-deployment.md "Shell Script Deployment Detail").
+SHARED_HOOKS_DIR="$REPO_DIR/shared/hooks"
+_hook_adopt_label=""
+if [ -d "$SHARED_HOOKS_DIR" ]; then _hook_adopt_label="aitools shared/hooks"; fi

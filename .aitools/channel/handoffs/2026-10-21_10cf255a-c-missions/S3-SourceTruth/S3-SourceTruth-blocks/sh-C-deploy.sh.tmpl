@@ -1,0 +1,304 @@
+# ---------------------------------------------------------------------------
+# Deploy one managed file. SOURCE is the source of truth ("Review choices"
+# above prompt_diff_review). Parity: Deploy-ManagedFile in aitools-lib.ps1.
+#
+# Args:
+#   $1 = SRC_CONTENT   content to deploy (SOURCE)
+#   $2 = DEST          deployed path (LOCAL). A name ending in .json is
+#                      reviewed field by field (review_json_fields).
+#   $3 = TOOL_NAME     summary tool name (e.g. "claude rules")
+#   $4 = ITEM_NAME     item name for log lines (e.g. "concurrent-agents.md")
+#   $5 = ADOPT_PATH    absolute path of the repo file that is the source of
+#                      truth; "" = adopt and merge are not offered
+#   $6 = ADOPT_FILTER  optional, text files only: name of a function that
+#                      reads LOCAL content on stdin and prints the content the
+#                      adopt target gets (CLAUDE.md strips its machine footer
+#                      and restores profile tokens). "" = plain copy.
+#
+# Sets MANAGED_FILE_RESULT to "created", "updated", "verified",
+# "accept & adopt", "skipped" or "failed". On "failed" nothing is left
+# half-written (snapshots restored) and the reason is logged with log_error;
+# the caller records the outcome (deploy_tracker_record, or its own ERROR
+# row). Exits 2 on [x]abort. Honors DRY_RUN (reports, writes nothing).
+# ---------------------------------------------------------------------------
+MANAGED_FILE_RESULT=""
+deploy_managed_file() {
+    local src_content="$1"
+    local dest="$2"
+    local tool_name="$3"
+    local item_name="$4"
+    local adopt_path="${5:-}"
+    local adopt_filter="${6:-}"
+
+    MANAGED_FILE_RESULT="verified"
+    _managed_state_notice
+
+    # Normalize trailing newlines for a stable comparison: command substitution
+    # strips them, and every write adds exactly one back.
+    src_content=$(printf '%s' "$src_content" | perl -0777 -pe 's/[\r\n]+$/\n/')
+
+    # Dry run: report what would happen without writing
+    if [ "${DRY_RUN:-}" = "true" ]; then
+        if [ -f "$dest" ]; then
+            local _dr_existing
+            _dr_existing=$(cat "$dest")
+            _dr_existing=$(printf '%s' "$_dr_existing" | perl -0777 -pe 's/[\r\n]+$/\n/')
+            if [ "$_dr_existing" = "$src_content" ]; then
+                log "[DRY RUN] Unchanged: $item_name"
+            else
+                log "[DRY RUN] Would update: $item_name -> $(display_path "$dest")"
+            fi
+        else
+            log "[DRY RUN] Would create: $item_name -> $(display_path "$dest")"
+        fi
+        return 0
+    fi
+
+    # JSON: field-by-field review
+    case "$dest" in
+        *.json)
+            local _src_tmp
+            if ! _src_tmp=$(mktemp); then
+                log_error "Failed: $item_name: could not create a temp file for the JSON review"
+                MANAGED_FILE_RESULT="failed"
+                return 0
+            fi
+            if ! printf '%s\n' "$src_content" > "$_src_tmp"; then
+                rm -f "$_src_tmp"
+                log_error "Failed: $item_name: could not write a temp file for the JSON review"
+                MANAGED_FILE_RESULT="failed"
+                return 0
+            fi
+            review_json_fields "$_src_tmp" "$dest" "$adopt_path"
+            rm -f "$_src_tmp"
+            return 0 ;;
+    esac
+
+    # New file: create
+    if [ ! -f "$dest" ]; then
+        if _managed_write "$dest" "$src_content" "" ""; then
+            log_ok "Created: $item_name -> $(display_path "$dest")"
+            MANAGED_FILE_RESULT="created"
+        else
+            log_error "Failed: $item_name: $MANAGED_WRITE_ERROR"
+            MANAGED_FILE_RESULT="failed"
+        fi
+        return 0
+    fi
+
+    local existing
+    if ! existing=$(cat "$dest"); then
+        log_error "Failed: $item_name: cannot read $(display_path "$dest")"
+        MANAGED_FILE_RESULT="failed"
+        return 0
+    fi
+    existing=$(printf '%s' "$existing" | perl -0777 -pe 's/[\r\n]+$/\n/')
+    if [ "$existing" = "$src_content" ]; then
+        MANAGED_FILE_RESULT="verified"
+        return 0
+    fi
+
+    # LOCAL differs from SOURCE: review (non-interactive / EOF / --force -> overwrite)
+    local adopt_offered=0
+    if [ -n "$adopt_path" ]; then adopt_offered=1; fi
+    _PDR_ADOPT_TARGET="$adopt_path"
+    prompt_diff_review "$dest" "$src_content" "$adopt_offered" "$existing"
+    _PDR_ADOPT_TARGET=""
+
+    local p_local="$dest" local_out="$src_content" p_repo="" repo_content=""
+    case "$DIFF_REVIEW_RESULT" in
+        skip)
+            log_warn "Skipped: $item_name (local differs from source; reviewed again next run)"
+            MANAGED_FILE_RESULT="skipped"
+            return 0 ;;
+        failed)
+            log_error "Failed: $item_name: ${MANAGED_MERGE_ERROR:-AI merge failed} -- nothing written"
+            MANAGED_FILE_RESULT="failed"
+            return 0 ;;
+        adopt)
+            p_local=""; local_out=""
+            p_repo="$adopt_path"; repo_content="$existing" ;;
+        merge)
+            local_out=$(printf '%s' "$MERGED_CONTENT" | perl -0777 -pe 's/[\r\n]+$/\n/')
+            p_repo="$adopt_path"; repo_content="$local_out" ;;
+    esac
+
+    # The adopt target gets LOCAL (or the merge), passed through the filter if any
+    if [ -n "$p_repo" ] && [ -n "$adopt_filter" ]; then
+        local filtered
+        if ! filtered=$(printf '%s\n' "$repo_content" | "$adopt_filter") || [ -z "$filtered" ]; then
+            log_error "Failed: $item_name: adopt filter $adopt_filter failed -- nothing written"
+            MANAGED_FILE_RESULT="failed"
+            return 0
+        fi
+        repo_content="$filtered"
+    fi
+
+    if ! _managed_write "$p_local" "$local_out" "$p_repo" "$repo_content"; then
+        log_error "Failed: $item_name: $MANAGED_WRITE_ERROR (files restored)"
+        MANAGED_FILE_RESULT="failed"
+        return 0
+    fi
+
+    if [ -n "$p_repo" ]; then
+        log_ok "Accept & adopt: $item_name -> $(display_path "$p_repo")"
+        _managed_adopt_notice "$p_repo"
+        MANAGED_FILE_RESULT="accept & adopt"
+    else
+        log_ok "Updated: $item_name -> $(display_path "$dest")"
+        MANAGED_FILE_RESULT="updated"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Review a JSON managed file field by field ("Review choices" above).
+# Parity: Review-JsonFields in aitools-lib.ps1 (same embedded node script).
+#
+# Args:
+#   $1 = SRC_FILE    file holding the SOURCE JSON
+#   $2 = DEST        deployed JSON file (LOCAL)
+#   $3 = ADOPT_PATH  repo JSON file that is the source of truth; "" = no adopt
+#
+# Sets MANAGED_FILE_RESULT, one per file by precedence failed > accept & adopt
+# > skipped > updated > verified: "created" (LOCAL was missing), "failed"
+# (files restored, log_error), "accept & adopt" (a field was adopted into
+# ADOPT_PATH; overwrites chosen in the same run are written too), "skipped"
+# (a field was left differing), "updated" (fields overwritten from SOURCE),
+# "verified" (nothing written). Requires node. Exits 2 on [x]abort.
+# ---------------------------------------------------------------------------
+review_json_fields() {
+    local src_file="$1" dest="$2" adopt_path="${3:-}"
+    local item
+    item=$(basename "$dest")
+    MANAGED_FILE_RESULT="verified"
+
+    if ! command -v node >/dev/null 2>&1; then
+        log_error "Failed: $item: node is required for the JSON field review"
+        MANAGED_FILE_RESULT="failed"
+        return 0
+    fi
+
+    local work
+    if ! work=$(mktemp -d); then
+        log_error "Failed: $item: could not create a work directory for the JSON review"
+        MANAGED_FILE_RESULT="failed"
+        return 0
+    fi
+    cat > "$work/review.js" <<'REVIEW_JSON_NODE_EOF'
+__REVIEW_JSON_NODE__
+REVIEW_JSON_NODE_EOF
+
+    local rc=0
+    if [ ! -f "$dest" ]; then
+        local src_json
+        node "$work/review.js" keys "$src_file" "$work/keys.json" 2> "$work/err" || rc=$?
+        if [ "$rc" -ne 0 ] || ! src_json=$(cat "$src_file"); then
+            log_error "Failed: $item: cannot read the source JSON (node exit $rc): $(cat "$work/err")"
+            rm -rf "$work"
+            MANAGED_FILE_RESULT="failed"
+            return 0
+        fi
+        MANAGED_WRITE_REQUIRED_1=$(cat "$work/keys.json")
+        rm -rf "$work"
+        if _managed_write "$dest" "$src_json" "" ""; then
+            log_ok "Created: $item -> $(display_path "$dest")"
+            MANAGED_FILE_RESULT="created"
+        else
+            log_error "Failed: $item: $MANAGED_WRITE_ERROR"
+            MANAGED_FILE_RESULT="failed"
+        fi
+        return 0
+    fi
+
+    node "$work/review.js" plan "$src_file" "$dest" "$work/plan.tsv" 2> "$work/err" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        log_error "Failed: $item: field comparison failed (node exit $rc): $(cat "$work/err")"
+        rm -rf "$work"
+        MANAGED_FILE_RESULT="failed"
+        return 0
+    fi
+    if [ ! -s "$work/plan.tsv" ]; then
+        rm -rf "$work"
+        MANAGED_FILE_RESULT="verified"
+        return 0
+    fi
+
+    # One review per differing field. fd 3 carries the plan so stdin stays the
+    # terminal (tty_interactive tests stdin).
+    local adopt_ok=0 can_prompt=0
+    if [ -n "$adopt_path" ]; then adopt_ok=1; fi
+    if [ "${AITOOLS_FORCE:-}" != "1" ] && [ "${FORCE:-}" != "true" ] && tty_interactive; then can_prompt=1; fi
+    : > "$work/choices.tsv"
+    local idx kind key ldisp sdisp choice
+    while IFS=$'\t' read -r idx kind key ldisp sdisp <&3; do
+        [ -n "$idx" ] || continue
+        if [ "$kind" = "local-only" ]; then
+            # A field only in LOCAL: [a]dopt / [s]kip / [x]abort, no overwrite.
+            # Without an adopt target or a terminal it is kept, no prompt.
+            if [ "$adopt_ok" = "1" ] && [ "$can_prompt" = "1" ]; then
+                prompt_json_field_review "$key" "$ldisp" "(not in source)" "source" "1" "local" "0"
+                choice="$JSON_FIELD_REVIEW_RESULT"
+            else
+                log_detail "$item: $key only in local -- kept"
+                choice="keep"
+            fi
+        else
+            prompt_json_field_review "$key" "$ldisp" "$sdisp" "source" "$adopt_ok" "local"
+            choice="$JSON_FIELD_REVIEW_RESULT"
+        fi
+        printf '%s\t%s\n' "$idx" "$choice" >> "$work/choices.tsv"
+    done 3< "$work/plan.tsv"
+
+    rc=0
+    node "$work/review.js" apply "$src_file" "$dest" "${adopt_path:--}" "$work/choices.tsv" \
+        "$work/local.out" "$work/adopt.out" "$work/result.txt" \
+        "$work/req-local.json" "$work/req-adopt.json" 2> "$work/err" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        log_error "Failed: $item: applying the field choices failed (node exit $rc): $(cat "$work/err")"
+        rm -rf "$work"
+        MANAGED_FILE_RESULT="failed"
+        return 0
+    fi
+    local counts n_over n_adopt n_skip
+    counts=$(cat "$work/result.txt")
+    n_over=$(printf '%s' "$counts" | perl -ne 'print $1 if /over=(\d+)/')
+    n_adopt=$(printf '%s' "$counts" | perl -ne 'print $1 if /adopt=(\d+)/')
+    n_skip=$(printf '%s' "$counts" | perl -ne 'print $1 if /skip=(\d+)/')
+    log_detail "$item: field review $counts"
+
+    local p_local="" c_local="" p_adopt="" c_adopt="" r_local r_adopt
+    r_local=$(cat "$work/req-local.json")
+    r_adopt=$(cat "$work/req-adopt.json")
+    if [ -s "$work/local.out" ]; then p_local="$dest"; c_local=$(cat "$work/local.out"); fi
+    if [ -s "$work/adopt.out" ]; then p_adopt="$adopt_path"; c_adopt=$(cat "$work/adopt.out"); fi
+    rm -rf "$work"
+
+    if [ -n "$p_local" ] || [ -n "$p_adopt" ]; then
+        MANAGED_WRITE_REQUIRED_1="$r_local"
+        MANAGED_WRITE_REQUIRED_2="$r_adopt"
+        if ! _managed_write "$p_local" "$c_local" "$p_adopt" "$c_adopt"; then
+            log_error "Failed: $item: $MANAGED_WRITE_ERROR (files restored)"
+            MANAGED_FILE_RESULT="failed"
+            return 0
+        fi
+    fi
+    if [ "${n_over:-0}" -gt 0 ]; then
+        log_ok "Updated: $item -> $(display_path "$dest") ($n_over field(s) from source)"
+    fi
+    if [ "${n_adopt:-0}" -gt 0 ]; then
+        log_ok "Accept & adopt: $item -> $(display_path "$adopt_path") ($n_adopt field(s))"
+        _managed_adopt_notice "$adopt_path"
+    fi
+    if [ "${n_skip:-0}" -gt 0 ]; then
+        log_warn "Skipped: $item ($n_skip field(s) differ from source; reviewed again next run)"
+    fi
+    if [ "${n_adopt:-0}" -gt 0 ]; then
+        MANAGED_FILE_RESULT="accept & adopt"
+    elif [ "${n_skip:-0}" -gt 0 ]; then
+        MANAGED_FILE_RESULT="skipped"
+    elif [ "${n_over:-0}" -gt 0 ]; then
+        MANAGED_FILE_RESULT="updated"
+    else
+        MANAGED_FILE_RESULT="verified"
+    fi
+}

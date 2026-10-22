@@ -836,35 +836,11 @@ if ($cargoInstalled) {
 }
 
 # ---------------------------------------------------------------------------
-# 28. Deploy state integrity: manifest and shadows consistent
+# 28. Deploy state integrity (retired)
 # ---------------------------------------------------------------------------
-$deployStateDir = "$env:USERPROFILE\.aitools\deploy-state"
-$manifestPath = Join-Path $deployStateDir "manifest.json"
-if (Test-Path $manifestPath) {
-    $issues = @()
-    try {
-        $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-        if ($manifest.files) {
-            $files = $manifest.files
-            $keys = if ($files -is [hashtable]) { $files.Keys } else { $files.PSObject.Properties.Name }
-            foreach ($key in $keys) {
-                $shadowPath = Join-Path $deployStateDir "shadows" $key
-                if (-not (Test-Path $shadowPath)) {
-                    $issues += "missing shadow: $key"
-                }
-            }
-        }
-    } catch {
-        $issues += "manifest parse error: $_"
-    }
-    if ($issues.Count -eq 0) {
-        StepPass "28" "Deploy state integrity" "manifest and shadows consistent"
-    } else {
-        StepWarn "28" "Deploy state integrity" ($issues -join '; ')
-    }
-} else {
-    StepSkip "28" "Deploy state integrity" "no deploy state (first run will create)"
-}
+# The managed-file model has no deploy state (SOURCE is the source of truth);
+# ~/.aitools/deploy-state/ from older versions is left on disk and unused.
+StepSkip "28" "Deploy state integrity" "retired: managed files keep no deploy state"
 
 # ---------------------------------------------------------------------------
 # 29. Deployment menu parity audit

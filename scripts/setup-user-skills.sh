@@ -104,37 +104,34 @@ deploy_skill() {
     local dest_dir="$dest_base/$skill_name"
     local dest="$dest_dir/SKILL.md"
 
-    local _adopt_label=""
-    if [ -n "$USER_REPO_PATH" ]; then
-        _adopt_label="dotprofile"
-    fi
-
-    deploy_managed_file "$(cat "$src")" "$dest" "$tool_name" "$skill_name" "$_adopt_label"
+    # Adopt target: the file actually read (the dotprofile copy when that was
+    # the source, else shared/skills in the aitools repo). The library writes it.
+    deploy_managed_file "$(cat "$src")" "$dest" "$tool_name" "$skill_name" "$src"
 
     case "$MANAGED_FILE_RESULT" in
         "accept & adopt")
-            if [ -n "$USER_REPO_PATH" ]; then
-                local adopt_dir="$USER_REPO_PATH/claude/skills/$skill_name"
-                mkdir -p "$adopt_dir"
-                cp "$dest" "$adopt_dir/SKILL.md"
-                log_ok "Adopted skill to dotprofile: $skill_name"
-                if [ -c /dev/tty ]; then
-                    printf '  Review: cd %s && git diff\n' \
-                        "$(display_path "$USER_REPO_PATH")" > /dev/tty
-                fi
-            else
-                log_warn "Cannot adopt: no user repo configured (run 'aitools user init')"
-            fi
-            # Sync adopted content to all other deploy targets
+            # Copy the adopted content to the other deploy targets too, so their
+            # deploy sees LOCAL == SOURCE instead of asking again.
+            local _other_base _other
             for _other_base in $ALL_SKILL_DESTS; do
                 [ "$_other_base" = "$dest_base" ] && continue
-                mkdir -p "$_other_base/$skill_name"
-                cp "$dest" "$_other_base/$skill_name/SKILL.md"
+                _other="$_other_base/$skill_name/SKILL.md"
+                if ! mkdir -p "$_other_base/$skill_name"; then
+                    log_error "Failed: $skill_name: cannot create $(display_path "$_other_base/$skill_name")"
+                    write_summary ERROR "$tool_name" "sync failed: $skill_name"
+                    continue
+                fi
+                backup_file "$_other"
+                if cp "$dest" "$_other"; then
+                    log "Synced adopted skill to $(display_path "$_other")"
+                else
+                    log_error "Failed: $skill_name: could not copy the adopted skill to $(display_path "$_other")"
+                    write_summary ERROR "$tool_name" "sync failed: $skill_name"
+                fi
             done
             ;;
-        created|updated)
-            ;;
-        skipped|verified)
+        created|updated|skipped|verified|failed)
+            # The tracker records the outcome (failed -> ERROR row).
             ;;
     esac
     deploy_tracker_record "$MANAGED_FILE_RESULT" "$tool_name" "$skill_name"
@@ -192,23 +189,27 @@ reverse_discover_skills() {
             log "Found user-created skill: $skill_name"
             if [ "$DRY_RUN" = "true" ]; then
                 log "[DRY RUN] Would offer to adopt $skill_name to dotprofile"
-            elif [ -c /dev/tty ]; then
+            elif tty_interactive; then
+                # tty_interactive + read_tty_choice (GitHub #29): EOF at the
+                # prompt logs a warning and takes the default, [s]kip.
                 printf '\n  User-created skill detected: %s\n' "$skill_name" > /dev/tty
                 printf '  [a]dopt to dotprofile  [s]kip\n' > /dev/tty
                 printf '  > ' > /dev/tty
-                local choice
-                read -r choice < /dev/tty
+                local choice=""
+                read_tty_choice choice "skip"
                 case "$choice" in
                     a|adopt)
-                        local adopt_dir="$USER_REPO_PATH/claude/skills/$skill_name"
-                        mkdir -p "$adopt_dir"
-                        cp "$skill_dir/SKILL.md" "$adopt_dir/SKILL.md"
-                        log_ok "Adopted user skill to dotprofile: $skill_name"
+                        local _errors_before=$ERRORS
+                        if ! adopt_managed_file "$skill_dir/SKILL.md" "$USER_REPO_PATH/claude/skills/$skill_name/SKILL.md" || [ "$ERRORS" -gt "$_errors_before" ]; then
+                            write_summary ERROR "claude skills" "adopt failed: $skill_name"
+                        fi
                         ;;
                     *)
                         log "Skipped adoption of $skill_name"
                         ;;
                 esac
+            else
+                log "Non-interactive: skipped adoption prompt for $skill_name"
             fi
         fi
     done

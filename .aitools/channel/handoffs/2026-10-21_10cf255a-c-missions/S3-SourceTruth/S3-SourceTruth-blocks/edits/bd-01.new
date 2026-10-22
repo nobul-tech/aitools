@@ -1,0 +1,20 @@
+deploy_embedded_skill() {
+    local skill_name="$1"
+    local dest_base="$2"
+    local tool_name="$3"
+    local content_file="$4"
+
+    local dest_dir="$dest_base/$skill_name"
+    local dest="$dest_dir/SKILL.md"
+
+    # No adopt target: the file read here is the build-time embed, not a repo
+    # file (contract default #9), so adopt and merge are not offered.
+    deploy_managed_file "$(cat "$content_file")" "$dest" "$tool_name" "$skill_name" ""
+
+    case "$MANAGED_FILE_RESULT" in
+        created|updated|verified|skipped|failed|"accept & adopt")
+            # The tracker records the outcome (failed -> ERROR row).
+            ;;
+    esac
+    deploy_tracker_record "$MANAGED_FILE_RESULT" "$tool_name" "$skill_name"
+}
