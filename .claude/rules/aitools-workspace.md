@@ -46,7 +46,12 @@ User-scoped (`~/.aitools/`):
 |------|---------|
 | `config.json` | Machine identity, repo paths, Google Drive discovery |
 | `deploy-state/` | Last-deployed file hashes for drift detection |
-| `bin/` | Deployed harness Python CLIs (`harness-db.py`, `read-session.py`, `read-session-full.py`) — copied by `aitools install`, called by hooks via absolute path so every project resolves them |
+| `reference/` | Copy of the aitools repo `reference/` tree (git-tracked files, same relative paths) — deployed by `deploy-harness` |
+| `registries/` | Copy of the aitools repo `registries/` (the registries stay in the repo; SD-8-reg) — deployed by `deploy-harness` |
+| `hooks/` | Hook scripts from `shared/hooks/` and `.claude/hooks/`, one flat directory — deployed by `deploy-harness` (settings.json still points at `~/.claude/hooks`) |
+| `rules/` | Rules from `shared/rules/`, `.claude/rules/` and the dotprofile `claude/rules/`, one flat directory — deployed by `deploy-harness`; copied to each tool's rules location by `setup-user-claude` / `setup-user-cursor` |
+| `skills/` | Skill directories from `shared/skills/` and `.claude/skills/` — deployed by `deploy-harness` |
+| `bin/` | Deployed harness Python CLIs (`harness-db.py`, `read-session.py`, `read-session-full.py`) — deployed by `deploy-harness` (`aitools install` also copies them until its bin step is removed), called by hooks via absolute path so every project resolves them |
 | `logs/` | Unified component logs (`deploy.log`, `checks.log`, `ait-harvest.log`, `harness-db.log`), 5 MB × 5 rotation — see `@reference/logging.md` |
 | `auth/` | Per-user credentials (proposed) |
 | `telemetry/` | SQLite KPI aggregation across all projects (proposed) |

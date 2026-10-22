@@ -99,6 +99,71 @@ frameworks. It is both a component (with its own tables, schema, and
 processing) and a cross-cutting concern (every other component
 produces provenance data).
 
+## Deployed harness (`~/.aitools`)
+
+`scripts/deploy-harness.sh` / `.ps1` builds the deployed harness in
+`~/.aitools` (Windows `%USERPROFILE%\.aitools`) from the repos. Every
+file goes through `deploy_managed_file()` in `@scripts/aitools-lib.sh` /
+`Deploy-ManagedFile` in `@scripts/aitools-lib.ps1`, with the summary tool
+name `harness files` and the repo file it came from as the adopt target.
+`config.json` is generated from `profile.json` by calling the only config
+writer, `scripts/setup-user-config.sh` / `.ps1`.
+
+| Deployed to | Sources, in order | Layout | Conflict unit |
+|-------------|-------------------|--------|---------------|
+| `reference/` | `reference/` | tree (relative paths kept) | none (one source) |
+| `registries/` | `registries/` | tree | none (one source) |
+| `hooks/` | `shared/hooks/`, `.claude/hooks/` | flat (top-level files) | file name |
+| `skills/` | `shared/skills/`, `.claude/skills/` | one directory per skill | skill directory name |
+| `rules/` | `shared/rules/`, `.claude/rules/`, `<dotprofile>/claude/rules/` | flat (top-level `*.md`) | file name |
+| `bin/` | `scripts/harness-db.py`, `read-session.py`, `read-session-full.py` | flat | none (fixed list) |
+
+### Conflict handling
+
+- **First source wins.** Sources are read in the order above. The first
+  source that has a unit (a file name for rules and hooks, a directory
+  name for skills) deploys it; the same unit in a later source is
+  skipped.
+- **Each skipped duplicate is an error**: `log_error` naming both
+  sources, plus one ERROR row under `harness files`. The run continues
+  and exits 1. The duplicate stays an error on every run until it is
+  renamed or removed in one of the sources.
+- **Case-insensitive.** Names that differ only in case are duplicates
+  (the macOS and Windows file systems are case-insensitive).
+- **Skills are whole directories.** The winning source's skill directory
+  is deployed as it is; files are never merged from two sources.
+
+### Assumptions and what is not detected
+
+- **Git-tracked files only**, in every source (`git ls-files`). Untracked
+  and ignored files, including the `*.bak.*` backups an adopt leaves in
+  the repo, are never deployed. A source directory outside a git work
+  tree is an error and is skipped. A missing source directory (for
+  example `.claude/hooks/`) is logged as info.
+- **`*.bak.*` names are never deployed**, even when tracked: that is the
+  library's backup naming (`backup_file()`).
+- **Nested files in a flat source** (rules, hooks), non-`.md` files in a
+  rules source, and files outside a skill directory are skipped with a
+  detail log line; they are not reported as conflicts.
+- **Order, not content, picks the winner.** Two copies with identical
+  content are still a duplicate; a later copy is never preferred because
+  it is newer.
+- **Not detected**: the same content under two different names; a name
+  shared across kinds (a skill and a rule both called `scratch`, which
+  land in different directories); conflicts with files already in a
+  tool's own location (`~/.claude/rules/`), which the fan-out in
+  `setup-user-claude` / `setup-user-cursor` handles.
+- **No deletion.** A file in `~/.aitools` with no source (a renamed or
+  removed source, a file the user added) is preserved and logged on
+  every run.
+- **Backups live next to deployed files** (`<file>.bak.<timestamp>`, by
+  the library). Anything that copies out of `~/.aitools` skips `*.bak.*`.
+- **Trailing newlines are normalized**: a deployed copy ends with exactly
+  one newline.
+- **Adopt** writes the winning source file only. Adopting into a file in
+  its repo's protected-files table (`@.claude/rules/sources-of-truth.md`)
+  logs a WARN naming the file; the library never commits or pushes.
+
 ## Cross-References
 
 - Glossary definition: `/glossary` skill (term: harness)
@@ -109,4 +174,6 @@ produces provenance data).
 - Framework rule: `@.claude/rules/frameworks.md`
 - Project description: `@CLAUDE.md`
 - Provenance framework: `@reference/framework-provenance.md`
+- Deployed harness: `@scripts/deploy-harness.sh` / `.ps1`;
+  managed-file model: `@reference/managed-file-deployment.md`
 - Skills: `/frameworks`, `/glossary`, `/audit`, `/intent-audit`, `/incident`
