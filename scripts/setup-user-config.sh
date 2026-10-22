@@ -86,6 +86,9 @@ done
 for v in "$REPOS_PATH_ARG" "$REPO_PATH_ARG" "$DRIVES_JSON" "$GH_USER_ARG" "$URP_ARG" "$ALIAS_ARG"; do
     case "$v" in *$'\t'*|*$'\n'*|*$'\r'*) bad_args "option values must be one line (no tab or newline)" ;; esac
 done
+for v in "$REPOS_PATH_ARG" "$REPO_PATH_ARG" "$URP_ARG"; do
+    if [ -n "$v" ] && [ "${v#/}" = "$v" ]; then bad_args "paths must be absolute: $v"; fi
+done
 
 CONFIG_DIR="$HOME/.aitools"
 CONFIG_FILE="$CONFIG_DIR/config.json"
@@ -119,13 +122,14 @@ if [ -n "$URP_ARG" ]; then derive_args+=(--user-repo-path "$URP_ARG"); fi
 if [ -n "$ALIAS_ARG" ]; then derive_args+=(--alias "$ALIAS_ARG"); fi
 DERIVE_RC=0
 # exit code is the result: 0 derived, 1 no dotprofile, 2 no match / error
-DERIVE_OUT=$(bash "$PROFILE_SH" "${derive_args[@]}" 2>"$WORK_DIR/derive.err") || DERIVE_RC=$?
+DERIVE_OUT=$("${BASH:-bash}" "$PROFILE_SH" "${derive_args[@]}" 2>"$WORK_DIR/derive.err") || DERIVE_RC=$?
 while IFS= read -r line; do
     if [ -n "$line" ]; then log_detail "derive-config stderr: $line"; fi
 done < "$WORK_DIR/derive.err"
 D_GH=""; D_URP=""; D_ALIAS=""; U_VIA="none"; M_VIA="none"; D_COMPANY=""; D_ID=""; D_HOST=""; ALIASES=""
 SEEN=false
 NEED_INIT=false
+PROFILE_BAD=false
 # derive_warn TEXT -- resolver warnings about the cached config.json (or the
 # expected shared-only state) are corrected or recorded by this write: info, so a
 # successful write stays OK (D-TS12). The rest are real warnings.
@@ -150,7 +154,8 @@ while IFS=$'\t' read -r k v; do
         hostname)             D_HOST="$v" ;;
         aliases)              ALIASES="$v" ;;
         warn)                 derive_warn "$v" ;;
-        error)                log_error "config: $v" ;;
+        error)                log_error "config: $v"
+                              case "$v" in *"is invalid JSON"*|*"is not v2"*) PROFILE_BAD=true ;; esac ;;
     esac
 done <<< "$DERIVE_OUT"
 if ! $SEEN || [ "$DERIVE_RC" -gt 2 ]; then
@@ -162,8 +167,13 @@ else
     case "$DERIVE_RC" in
         0) : ;;
         1) log "config: no dotprofile yet -- writing bootstrap keys only (shared-only mode)" ;;
-        *) write_summary ERROR "machine profile" "no machine match"
-           write_summary ACTION "" "Run: aitools user init (profiles: ${ALIASES:-none})" ;;
+        *) if $PROFILE_BAD; then
+               write_summary ERROR "profile.json" "invalid (see log)"
+               write_summary ACTION "" "Fix profile.json in the dotprofile (details in deploy.log)"
+           else
+               write_summary ERROR "machine profile" "no machine match"
+               write_summary ACTION "" "Run: aitools user init (profiles: ${ALIASES:-none})"
+           fi ;;
     esac
     if [ "$DERIVE_RC" -eq 0 ] && $NEED_INIT; then
         write_summary ACTION "" "Run: aitools user init (registers this machine)"
@@ -246,11 +256,17 @@ else
     done
     SAME=false
     if [ "$CONFIG_STATE" = "updated" ]; then
+        # A read failure makes the two sides differ ("a" != "b"): the file is then rewritten
         A=$(pj json "$CONFIG_FILE") || A="a"
         B=$(pj json "$CONFIG_TMP") || B="b"
         if [ "$A" = "$B" ]; then SAME=true; fi
     fi
-    if [ -n "$MISSING" ]; then
+    # No "//" inside a path value (protocol prefixes excepted), as validate_json_config
+    DOUBLE=$(perl -ne 'print "$1\n" while /("[^"]*(?<!http:)(?<!https:)\/\/[^"]*")/g' "$CONFIG_TMP" | perl -ne 'print, exit')
+    if [ -n "$DOUBLE" ]; then
+        log_error "Failed: $(display_path "$CONFIG_FILE"): double slash in a path value: $DOUBLE -- existing file left untouched"
+        write_summary ERROR "aitools config" "validation failed"
+    elif [ -n "$MISSING" ]; then
         log_error "Failed: $(display_path "$CONFIG_FILE"): missing bootstrap $MISSING (run aitools install) -- existing file left untouched"
         write_summary ERROR "aitools config" "missing bootstrap values"
     elif $SAME; then
