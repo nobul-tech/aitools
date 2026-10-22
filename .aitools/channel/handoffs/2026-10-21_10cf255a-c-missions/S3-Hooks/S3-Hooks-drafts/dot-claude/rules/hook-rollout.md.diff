@@ -1,0 +1,47 @@
+--- /Users/new-jose/repos/aitools/.claude/worktrees/wf_b4d5e039-e6e-4/.claude/rules/hook-rollout.md	2026-10-21 15:54:39
++++ /Users/new-jose/repos/aitools/.claude/worktrees/wf_b4d5e039-e6e-4/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-Hooks/S3-Hooks-drafts/dot-claude/rules/hook-rollout.md	2026-10-21 16:02:20
+@@ -44,6 +44,10 @@
+      | bash shared/hooks/standing-order-guard.sh
+    echo "exit: $?"
+    ```
++4. **Exemption test** (when the change adds an exemption): run the exempted form
++   and verify exit 0 with no log entry, and run each near-miss write form and verify
++   it still reaches the check (e.g. for #82: `sed -n '60,75p' file` passes;
++   `sed -n 1p -i file`, `sed -n '1,5w out' file`, `sed -n 1p file > out` do not).
+ 
+ `bash -n` is not sufficient for hooks using `set -euo pipefail` — it passes syntax
+ but cannot catch unset variable errors (`-u`) or runtime failures. Always smoke-test.
+@@ -55,6 +59,8 @@
+ - After changing matching logic (e.g., adding pipeline exemptions)
+ - After Claude Code version upgrades that may change tool input formats
+ 
++A check with no mode variable gets one when it is reset (it cannot observe otherwise).
++
+ ### Implementation
+ 
+ `standing-order-guard.sh` uses the `violation()` helper and declares mode variables:
+@@ -76,7 +82,8 @@
+ | backticks | `MODE_BACKTICK` | enforce | Promoted 2026-03-24; zero false positives |
+ | 4+ lines (scratch files) | `MODE_SCRATCH` | enforce | Zero false positives in log |
+ | `*`/`?` in `rm` | none (literal `"enforce"`) | enforce | No mode variable; cannot be set to observe without adding one |
+-| `cat`/`head`/`tail`/`sed`/`awk` outside a pipeline | none (literal `"enforce"`) | enforce | No mode variable |
++| `cat`/`head`/`tail`/`awk` outside a pipeline | none (literal `"enforce"`) | enforce | No mode variable |
++| `sed` outside a pipeline | `MODE_SED` | observe | Reset 2026-10-21 when read-only `sed -n '<N[,M]>p' <file>` was exempted (incident #82); while observing, sed edits are logged, not blocked; promote after 1+ week with zero false positives |
+ | `echo`/`printf` redirect on first line | none (literal `"enforce"`) | enforce | No mode variable |
+ 
+ **Current enforcement state (other PreToolUse hooks):**
+@@ -85,7 +92,10 @@
+ |------|----------|-------|-------|
+ | `delegation-duty-guard.sh` | `MODE_DUTY` | observe | Since 2026-03-24; element 7 (`md-prefix`, D-DEL1) added 2026-10-05; exits 0 and prints missing elements to stderr (`enforce` exits 2); no log file -- a `delegation` event goes to `<session dir>/events.jsonl` when `.scratch/.current-session` exists at the git root |
+ 
+-Review logs with: `cat ~/.aitools/logs/standing-order-guard.log` (absent while every
+-check enforces). Blocks are not written to that log; when the hook runs inside a git
+-repo whose root has `.scratch/.current-session`, each block is a `hook_block` event
+-in `<session dir>/events.jsonl`.
++Review logs with: `cat ~/.aitools/logs/standing-order-guard.log` (written only while
++a check observes; `MODE_SED` observes since 2026-10-21). Blocks are not written to
++that log; when the hook runs inside a git repo whose root has `.scratch/.current-session`,
++each block is a `hook_block` event in `<session dir>/events.jsonl`.
++
++The hook lifecycle beyond rollout (source, deploy, adopt, user-created hooks,
++retirement) is governed by `@.claude/rules/hook-lifecycle.md`.

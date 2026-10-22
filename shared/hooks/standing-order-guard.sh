@@ -25,6 +25,9 @@
 #   MODE_OR="enforce"        — || : zero false positives, promoted 2026-03-24
 #   MODE_SEMICOLON="enforce" — ;  : pwsh/perl exemptions in place, promoted 2026-03-24
 #   MODE_BACKTICK="enforce"  — backticks: zero false positives, promoted 2026-03-24
+#   MODE_SED="observe"       — sed outside a pipeline: reset to observe 2026-10-21
+#                              when the read-only `sed -n '<N[,M]>p' <file>`
+#                              exemption was added (incident #82)
 #   See .claude/rules/hook-rollout.md for the observe-then-enforce practice.
 #
 # Design decisions:
@@ -49,6 +52,7 @@ MODE_SCRATCH="enforce"   # scratch files — zero false positives confirmed; blo
 MODE_OR="enforce"        # ||  — zero false positives; promoted 2026-03-24
 MODE_SEMICOLON="enforce" # ;   — pwsh/perl exemptions in place; promoted 2026-03-24
 MODE_BACKTICK="enforce"  # backticks — zero false positives; promoted 2026-03-24
+MODE_SED="observe"       # sed — matching changed 2026-10-21 (#82 sed -n exemption); observe
 
 LOG_DIR="$HOME/.aitools/logs"
 LOG_FILE="$LOG_DIR/standing-order-guard.log"
@@ -248,11 +252,27 @@ esac
 
 # Check for file-editing commands (should use Edit tool)
 # Allow in pipelines — Edit tool can't pipe output into other commands.
+# Read-only exemption (incident #82): `sed -n '<addr>p' <file>...` prints lines
+# and modifies nothing. Matched narrowly so no write form slips through: the
+# script must be a single line address or range (N, N,M, N,$, $) followed by p,
+# optionally single-quoted; every later argument must not start with '-' (no
+# -i / --in-place after the script) and no argument may contain < > | ; & (no
+# redirection). `w`, `e`, `s///w`, multiple -e scripts and -i all fall through
+# to the check. Commands that use \" are truncated by json_field and fall
+# through too (conservative).
+_sq="'"
+SED_READONLY_RE="^sed[[:space:]]+-n[[:space:]]+${_sq}?([0-9]+|[$])(,([0-9]+|[$]))?p${_sq}?([[:space:]]+[^-[:space:]<>|;&${_sq}][^[:space:]<>|;&]*)+[[:space:]]*$"
 case "$FIRST_TOKEN" in
     sed)
         case "$COMMAND" in
             *\|*) ;;  # Pipeline — legitimate shell use
-            *) violation "USO: Dedicated tools --: Use the Edit tool instead of 'sed' to modify files. For non-trivial string manipulation, use Perl (USO: Perl for string manipulation)." "enforce" "sed" ;;
+            *)
+                if [[ "$COMMAND" =~ $SED_READONLY_RE ]]; then
+                    :  # read-only line print (#82) — allowed
+                else
+                    violation "USO: Dedicated tools --: Use the Edit tool instead of 'sed' to modify files. For non-trivial string manipulation, use Perl (USO: Perl for string manipulation). Read-only line prints (sed -n 'N,Mp' file) are allowed; the Read tool with offset/limit is preferred." "$MODE_SED" "sed"
+                fi
+                ;;
         esac
         ;;
     awk)

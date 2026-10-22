@@ -61,22 +61,24 @@ if [ ! -f "$MANIFEST" ]; then
     exit 1
 fi
 
-# User repo for dotprofile overrides and adopt target.
+# User repo: home of user-created (non-manifest) hooks only (SD-2, incident #80).
+# Manifest hooks have one version, in shared/hooks; a dotprofile copy is never
+# deployed (it would freeze the hook on this machine and diverge from the MDM
+# path, which embeds shared/hooks only).
 # `|| true`: key is absent until 'aitools user init' runs; without the guard,
-# set -e silently aborts before falling back to shared-only hooks.
+# set -e silently aborts. An empty result is handled below (no dotprofile).
 USER_REPO_PATH=$(read_config_key "$HOME/.aitools/config.json" "userRepoPath") || true
 DOTPROFILE_HOOKS=""
 if [ -n "$USER_REPO_PATH" ] && [ -d "$USER_REPO_PATH/claude/hooks" ]; then
     DOTPROFILE_HOOKS="$USER_REPO_PATH/claude/hooks"
 fi
 
-# Resolve hook source: dotprofile wins over shared/hooks, then scripts/ (for
-# deploy-only .py helpers like ait-harvest.py that live in scripts/).
+# Resolve hook source: shared/hooks, then scripts/ (for deploy-only .py helpers
+# like ait-harvest.py that live in scripts/). Same order as build-deploy.sh's
+# embed loops, so the dev and MDM paths deploy the same file.
 resolve_hook() {
     local hook_name="$1"
-    if [ -n "$DOTPROFILE_HOOKS" ] && [ -f "$DOTPROFILE_HOOKS/$hook_name" ]; then
-        printf '%s\n' "$DOTPROFILE_HOOKS/$hook_name"
-    elif [ -f "$REPO_DIR/shared/hooks/$hook_name" ]; then
+    if [ -f "$REPO_DIR/shared/hooks/$hook_name" ]; then
         printf '%s\n' "$REPO_DIR/shared/hooks/$hook_name"
     elif [ -f "$REPO_DIR/scripts/$hook_name" ]; then
         printf '%s\n' "$REPO_DIR/scripts/$hook_name"
@@ -126,10 +128,19 @@ for hook_name in "${HOOK_FILES[@]}"; do
         write_summary ERROR "claude hooks" "hook script missing: $hook_name"
         exit 1
     fi
+    # A dotprofile copy of a manifest hook is ignored (SD-2): say so, so the
+    # user can delete it instead of believing their edit is live.
+    if [ -n "$DOTPROFILE_HOOKS" ] && [ -f "$DOTPROFILE_HOOKS/$hook_name" ]; then
+        log_warn "Ignoring dotprofile copy of managed hook $hook_name ($(display_path "$DOTPROFILE_HOOKS/$hook_name")): shared/hooks is the only source -- delete the copy"
+        write_summary WARN "claude hooks" "dotprofile copy ignored"
+    fi
 done
 
+# Adopt target for manifest hooks: shared/hooks only (SD-2, incident #80;
+# reference/managed-file-deployment.md "Shell Script Deployment Detail").
+SHARED_HOOKS_DIR="$REPO_DIR/shared/hooks"
 _hook_adopt_label=""
-if [ -n "$USER_REPO_PATH" ]; then _hook_adopt_label="dotprofile"; fi
+if [ -d "$SHARED_HOOKS_DIR" ]; then _hook_adopt_label="aitools shared/hooks"; fi
 
 HOOKS_CHANGED=false
 
@@ -157,27 +168,24 @@ else
 
         case "$MANAGED_FILE_RESULT" in
             "accept & adopt")
-                # Adopt: deployed (local) wins -> write back to BOTH canonical
-                # sources via adopt_managed_file (rotated backups + copy + log).
-                # Hooks deploy verbatim, so shared/ + dotprofile each get a
-                # straight copy. shared/hooks is absent in MDM deploys; dotprofile
-                # is absent when no user repo is configured -- empty targets skip.
-                _adopt_targets=()
-                [ -d "$REPO_DIR/shared/hooks" ] && _adopt_targets+=("$REPO_DIR/shared/hooks/$hook_name")
-                [ -n "$USER_REPO_PATH" ] && _adopt_targets+=("$USER_REPO_PATH/claude/hooks/$hook_name")
-                if [ "${#_adopt_targets[@]}" -gt 0 ]; then
+                # Adopt: deployed (local) wins -> write back to the ONE canonical
+                # source, shared/hooks, via adopt_managed_file (rotated backup +
+                # copy + log). Never the dotprofile (SD-2, incident #80): a
+                # dotprofile copy is ignored by resolve_hook and by build-deploy.
+                if [ -d "$SHARED_HOOKS_DIR" ]; then
                     # A failed write is logged by the lib; the row is written here
                     # (returns 1 only when no target was written -- checked, not fatal).
                     _errors_before=$ERRORS
-                    if ! adopt_managed_file "$hook_dst" "${_adopt_targets[@]}" || [ "$ERRORS" -gt "$_errors_before" ]; then
+                    if ! adopt_managed_file "$hook_dst" "$SHARED_HOOKS_DIR/$hook_name" || [ "$ERRORS" -gt "$_errors_before" ]; then
                         write_summary ERROR "claude hooks" "adopt failed: $hook_name"
                     fi
-                    if [ -n "$USER_REPO_PATH" ] && [ -c /dev/tty ]; then
+                    if tty_interactive; then
                         printf '  Review: cd %s && git diff\n' \
-                            "$(display_path "$USER_REPO_PATH")" > /dev/tty
+                            "$(display_path "$REPO_DIR")" > /dev/tty
                     fi
                 else
-                    log_warn "Cannot adopt: no shared/ or user repo target (run 'aitools user init')"
+                    log_warn "Cannot adopt $hook_name: shared/hooks not found at $(display_path "$SHARED_HOOKS_DIR")"
+                    write_summary WARN "claude hooks" "adopt skipped: $hook_name"
                 fi
                 ;;
             created|updated)
@@ -225,12 +233,16 @@ else
 
         if [ -n "$USER_REPO_PATH" ]; then
             log "Found user-created hook: $hook_name"
-            if [ -c /dev/tty ]; then
+            # tty_interactive + read_tty_choice (incident #81, GitHub #29): a
+            # non-terminal stdin never prompts, and EOF at the prompt logs a
+            # warning and takes the default, [s]kip -- the choice that writes
+            # nothing (this menu has no overwrite option).
+            if tty_interactive; then
                 printf '\n  User-created hook detected: %s\n' "$hook_name" > /dev/tty
                 printf '  [a]dopt to dotprofile  [s]kip\n' > /dev/tty
                 printf '  > ' > /dev/tty
                 choice=""
-                read -r choice < /dev/tty
+                read_tty_choice choice "skip"
                 case "$choice" in
                     a|adopt)
                         # Net-new user hook -> dotprofile only (not a managed
@@ -244,6 +256,8 @@ else
                         log "Skipped adoption of $hook_name"
                         ;;
                 esac
+            else
+                log "Non-interactive: skipped adoption prompt for $hook_name"
             fi
         fi
     done
