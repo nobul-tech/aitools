@@ -1,0 +1,46 @@
+hook: /Users/new-jose/repos/aitools/.claude/worktrees/sed-guard-enforce/shared/hooks/standing-order-guard.sh
+hook interpreter: bash (5.3.15(1)-release)
+MODE_SED line: 56:MODE_SED="enforce"       # sed — #82 sed -n exemption (2026-10-21) only narrowed matching; enforce
+--- clean / read-only (exit 0) ---
+PASS | clean: git status                        | exit=0 (want 0) | observe-log-lines=+0 | cmd: git status
+PASS | clean: ls -la                            | exit=0 (want 0) | observe-log-lines=+0 | cmd: ls -la
+PASS | sed -n '60,75p' file                     | exit=0 (want 0) | observe-log-lines=+0 | cmd: sed -n '60,75p' file.txt
+PASS | sed -n 60,75p file (unquoted)            | exit=0 (want 0) | observe-log-lines=+0 | cmd: sed -n 60,75p file.txt
+PASS | sed -n 12p file                          | exit=0 (want 0) | observe-log-lines=+0 | cmd: sed -n 12p file.txt
+PASS | sed -n '$p' file                         | exit=0 (want 0) | observe-log-lines=+0 | cmd: sed -n '$p' file.txt
+PASS | sed -n '100,$p' file (to end)            | exit=0 (want 0) | observe-log-lines=+0 | cmd: sed -n '100,$p' a.txt
+PASS | sed -n 1,5p two files                    | exit=0 (want 0) | observe-log-lines=+0 | cmd: sed -n 1,5p a.txt b.txt
+PASS | #82 cmd: sed -n '60,75p' setup           | exit=0 (want 0) | observe-log-lines=+0 | cmd: sed -n '60,75p' scripts/setup-user-hooks.sh
+PASS | pipeline: git log | sed -n 1p            | exit=0 (want 0) | observe-log-lines=+0 | cmd: git log | sed -n 1p
+PASS | pipeline: git log | sed -n 1,3p          | exit=0 (want 0) | observe-log-lines=+0 | cmd: git log | sed -n 1,3p
+PASS | pipeline: ls | sed s/a/b/                | exit=0 (want 0) | observe-log-lines=+0 | cmd: ls | sed s/a/b/
+--- sed write/edit forms outside a pipeline (exit 2) ---
+PASS | sed -i s/a/b/ file                       | exit=2 (want 2) | observe-log-lines=+0 | cmd: sed -i s/a/b/ file.txt
+PASS | sed -i '' 's/a/b/' file (BSD)            | exit=2 (want 2) | observe-log-lines=+0 | cmd: sed -i '' 's/a/b/' file.txt
+PASS | sed 's/a/b/w out' f                      | exit=2 (want 2) | observe-log-lines=+0 | cmd: sed 's/a/b/w out' f
+PASS | sed s/a/b/ f > g                         | exit=2 (want 2) | observe-log-lines=+0 | cmd: sed s/a/b/ f > g
+PASS | sed s/a/b/ f (plain)                     | exit=2 (want 2) | observe-log-lines=+0 | cmd: sed s/a/b/ f
+PASS | sed -n 1p -i file                        | exit=2 (want 2) | observe-log-lines=+0 | cmd: sed -n 1p -i file.txt
+PASS | sed -n 1p --in-place file                | exit=2 (want 2) | observe-log-lines=+0 | cmd: sed -n 1p --in-place file.txt
+PASS | sed -n '1,5w out' file                   | exit=2 (want 2) | observe-log-lines=+0 | cmd: sed -n '1,5w out.txt' file.txt
+PASS | sed -n 's/a/b/w out' file                | exit=2 (want 2) | observe-log-lines=+0 | cmd: sed -n 's/a/b/w out.txt' file.txt
+PASS | sed -n 1,5p file > out                   | exit=2 (want 2) | observe-log-lines=+0 | cmd: sed -n 1,5p file.txt > out.txt
+PASS | sed -n '/foo/p' file (regex)             | exit=2 (want 2) | observe-log-lines=+0 | cmd: sed -n '/foo/p' file.txt
+PASS | sed -n 1p (stdin, no file)               | exit=2 (want 2) | observe-log-lines=+0 | cmd: sed -n 1p
+--- other checks unchanged (exit 2) ---
+PASS | && chain                                 | exit=2 (want 2) | observe-log-lines=+0 | cmd: git status && git log
+PASS | || chain                                 | exit=2 (want 2) | observe-log-lines=+0 | cmd: git status || true
+PASS | ; chain                                  | exit=2 (want 2) | observe-log-lines=+0 | cmd: ls ; ls
+PASS | $() substitution                         | exit=2 (want 2) | observe-log-lines=+0 | cmd: echo $(date)
+PASS | backtick substitution                    | exit=2 (want 2) | observe-log-lines=+0 | cmd: echo `date`
+PASS | cat outside pipeline                     | exit=2 (want 2) | observe-log-lines=+0 | cmd: cat file.txt
+PASS | head outside pipeline                    | exit=2 (want 2) | observe-log-lines=+0 | cmd: head -5 file.txt
+PASS | tail outside pipeline                    | exit=2 (want 2) | observe-log-lines=+0 | cmd: tail -5 file.txt
+PASS | awk outside pipeline                     | exit=2 (want 2) | observe-log-lines=+0 | cmd: awk '{print}' file.txt
+PASS | rm glob                                  | exit=2 (want 2) | observe-log-lines=+0 | cmd: rm -f *.tmp
+PASS | echo redirect                            | exit=2 (want 2) | observe-log-lines=+0 | cmd: echo hi > f.txt
+PASS | sed -n 1p a && ls (and-check)            | exit=2 (want 2) | observe-log-lines=+0 | cmd: sed -n 1p a.txt && ls
+--- recorded limitation (first-token scope; see report) ---
+PASS | 2-line: sed -n 1p f / sed s/a/b/wout f   | exit=0 (want 0) | observe-log-lines=+0 | cmd: sed -n 1p f\nsed s/a/b/wout f
+
+RESULT: 37 passed, 0 failed

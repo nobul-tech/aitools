@@ -25,9 +25,10 @@
 #   MODE_OR="enforce"        — || : zero false positives, promoted 2026-03-24
 #   MODE_SEMICOLON="enforce" — ;  : pwsh/perl exemptions in place, promoted 2026-03-24
 #   MODE_BACKTICK="enforce"  — backticks: zero false positives, promoted 2026-03-24
-#   MODE_SED="observe"       — sed outside a pipeline: reset to observe 2026-10-21
-#                              when the read-only `sed -n '<N[,M]>p' <file>`
-#                              exemption was added (incident #82)
+#   MODE_SED="enforce"       — sed outside a pipeline: the 2026-10-21 change
+#                              (read-only `sed -n '<N[,M]>p' <file>` exemption,
+#                              incident #82) only narrowed what is blocked, so
+#                              the check stays at enforce (commander, 2026-10-21)
 #   See .claude/rules/hook-rollout.md for the observe-then-enforce practice.
 #
 # Design decisions:
@@ -52,7 +53,7 @@ MODE_SCRATCH="enforce"   # scratch files — zero false positives confirmed; blo
 MODE_OR="enforce"        # ||  — zero false positives; promoted 2026-03-24
 MODE_SEMICOLON="enforce" # ;   — pwsh/perl exemptions in place; promoted 2026-03-24
 MODE_BACKTICK="enforce"  # backticks — zero false positives; promoted 2026-03-24
-MODE_SED="observe"       # sed — matching changed 2026-10-21 (#82 sed -n exemption); observe
+MODE_SED="enforce"       # sed — #82 sed -n exemption (2026-10-21) only narrowed matching; enforce
 
 LOG_DIR="$HOME/.aitools/logs"
 LOG_FILE="$LOG_DIR/standing-order-guard.log"
