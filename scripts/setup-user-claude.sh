@@ -90,22 +90,11 @@ IDENTITY_GIT_NAME="$AITLIB_IDENTITY_GIT_NAME"
 IDENTITY_GIT_EMAIL="$AITLIB_IDENTITY_GIT_EMAIL"
 log_detail "setup-user-claude: dotprofile rc=$URP_RC via=$USER_REPO_VIA; machine profile rc=$PROFILE_RC"
 
-# Footer hostname, same source and form as the resolver's detect_hostname (P-Q5:
-# macOS `scutil --get LocalHostName` only, never the DNS-derived kernel name;
-# elsewhere `uname -n`; short and lower-case). The PR #80 contract has no
-# hostname result, so it is read here until the lib exposes one. On failure the
-# footer shows "unknown" and the reason is a detail line.
-_host_rc=0
-if [ -x /usr/sbin/scutil ]; then
-    MACHINE_HOST=$(/usr/sbin/scutil --get LocalHostName 2>&1) || _host_rc=$?
-else
-    MACHINE_HOST=$(uname -n 2>&1) || _host_rc=$?
-fi
-if [ "$_host_rc" -ne 0 ]; then
-    log_detail "footer hostname unavailable (exit $_host_rc): $MACHINE_HOST"
-    MACHINE_HOST=""
-fi
-MACHINE_HOST=$(printf '%s' "${MACHINE_HOST%%.*}" | perl -pe 's/^\s+|\s+$//g; tr/A-Z/a-z/')
+# Footer hostname: the resolver's (P-Q5, one hostname source: macOS
+# `scutil --get LocalHostName`, elsewhere `uname -n`; short, lower-case), read
+# from resolve_machine_profile above. "unknown" when the resolver gave none
+# (the resolver says why in a warning, logged as a detail line).
+MACHINE_HOST="${AITLIB_MACHINE_HOSTNAME:-}"
 if [ -z "$MACHINE_HOST" ]; then MACHINE_HOST="unknown"; fi
 USER_REPO_DISPLAY=""
 if [ -n "$USER_REPO_PATH" ]; then
@@ -216,7 +205,8 @@ claude_md_adopt_filter() {
 if [ "$DRY_RUN" = "true" ]; then
     # Show what would happen without writing
     EXISTING_LINES=0
-    [ -f "$CLAUDE_MD" ] && EXISTING_LINES=$(wc -l < "$CLAUDE_MD")
+    # An unreadable CLAUDE.md is a warning below, not a set -e abort here
+    if [ -f "$CLAUDE_MD" ] && [ -r "$CLAUDE_MD" ]; then EXISTING_LINES=$(wc -l < "$CLAUDE_MD"); fi
     NEW_LINES=$(echo "$NEW_CONTENT" | wc -l)
     log "[DRY RUN] $(display_path "$CLAUDE_MD"): overwrite (sole owner)"
     log "  Template source: $(display_path "$SOURCE_PATH") ($SOURCE_LABEL)"
@@ -228,13 +218,23 @@ if [ "$DRY_RUN" = "true" ]; then
     log "  Existing: ${EXISTING_LINES} lines"
     log "  New: ${NEW_LINES} lines"
     if [ -f "$CLAUDE_MD" ]; then
-        if [ "$(cat "$CLAUDE_MD")" = "$NEW_CONTENT" ]; then
+        # Compared as deploy_managed_file compares (trailing newlines removed).
+        # The explicit open dies on an unreadable file (perl -p only warns).
+        if ! _dr_existing=$(perl -0777 -e 'open my $f, "<", $ARGV[0] or die "cannot read $ARGV[0]: $!\n"; my $t = <$f>; $t = "" unless defined $t; $t =~ s/[\r\n]+\z//; print $t' "$CLAUDE_MD"); then
+            log_warn "Cannot read $(display_path "$CLAUDE_MD") for the dry-run comparison"
+            _dr_existing=""
+        fi
+        _dr_new=$(printf '%s' "$NEW_CONTENT" | perl -0777 -pe 's/[\r\n]+\z//')
+        if [ "$_dr_existing" = "$_dr_new" ]; then
             log "[DRY RUN] Content unchanged"
+            write_summary OK "claude.md" "verified"
         else
             log "[DRY RUN] Content differs -- would overwrite"
+            write_summary OK "claude.md" "dry-run: would update"
         fi
     else
         log "[DRY RUN] File does not exist -- would create"
+        write_summary OK "claude.md" "dry-run: would create"
     fi
 else
     # --- Deploy CLAUDE.md via managed-file flow ---
@@ -364,29 +364,9 @@ if [ -n "$RULES_SRC" ]; then
                     ;;
             esac
             deploy_tracker_record "$MANAGED_FILE_RESULT" "claude rules" "$rule_name"
-            # After a merge & adopt (the library already wrote the merge to the
-            # dotprofile), auto commit+push to keep the dotprofile in sync.
-            # Kept: commander confirmed 2026-10-21 (contract item #11).
-            if [ "$MANAGED_FILE_RESULT" = "accept & adopt" ] && [ -n "${MERGED_CONTENT:-}" ] && [ -n "${USER_REPO_PATH:-}" ]; then
-                # Suppress git stderr noise; failure handled by if/else branches
-                if (cd "$USER_REPO_PATH" && \
-                    git add "claude/rules/$rule_name" && \
-                    git diff --cached --quiet "claude/rules/$rule_name") 2>/dev/null; then
-                    # git diff --cached --quiet exits 0 = no staged changes
-                    log "No diff to commit in user repo for $rule_name"
-                else
-                    # Suppress git stderr noise; failure handled by if/else branches
-                    if (cd "$USER_REPO_PATH" && \
-                        git add "claude/rules/$rule_name" && \
-                        git commit -m "Sync merged $rule_name from deploy" && \
-                        git push) 2>/dev/null; then
-                        log_ok "Pushed merged $rule_name to user repo"
-                    else
-                        log_warn "Failed to push merged $rule_name to user repo"
-                        write_summary WARN "claude rules" "$rule_name not pushed"
-                    fi
-                fi
-            fi
+            # After accept & adopt or merge & adopt the library commits that one
+            # dotprofile rule and pushes it (dotprofile_commit_push, N-Q2;
+            # commander confirmed 2026-10-21, contract item #11). No commit here.
         done
 
         # Log preserved files (in target but not in source)

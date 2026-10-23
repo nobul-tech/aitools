@@ -42,8 +42,13 @@ export PERLIO=:perlio
 SCRIPT_NAME="build-deploy"
 blog()       { printf '[%s] [%s] [info] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1"; }
 blog_ok()    { printf '[%s] [%s] [ok] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1"; }
-blog_warn()  { printf '\033[33m[%s] [%s] [warn] %s\033[0m\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" >&2; }
-blog_error() { printf '\033[31m[%s] [%s] [error] %s\033[0m\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" >&2; }
+# Colour only when stderr is a terminal: `aitools` / aitools.ps1 append this
+# output to deploy.log, which is plain text (script-standards-detail "Log file";
+# S3-MF-Audit A-20).
+_BLOG_YELLOW=""; _BLOG_RED=""; _BLOG_RESET=""
+if [ -t 2 ]; then _BLOG_YELLOW=$'\033[33m'; _BLOG_RED=$'\033[31m'; _BLOG_RESET=$'\033[0m'; fi
+blog_warn()  { printf '%s[%s] [%s] [warn] %s%s\n' "$_BLOG_YELLOW" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" "$_BLOG_RESET" >&2; }
+blog_error() { printf '%s[%s] [%s] [error] %s%s\n' "$_BLOG_RED" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_NAME" "$1" "$_BLOG_RESET" >&2; }
 
 # Shared content files
 CLAUDE_SHARED="$SHARED_DIR/claude-shared.md"
@@ -192,6 +197,13 @@ if [ -z "$_urp" ]; then
     _urp_rc=0
     # AITOOLS_SUMMARY_FILE is dropped for the child: the setup scripts report a
     # dotprofile error in the run summary themselves; this build only warns.
+    # The child's lib writes each of its lines to deploy.log itself (logging_init),
+    # so its console copy (stdout) goes to a terminal only. When stderr is not a
+    # terminal (the entry points append this output to deploy.log) it is dropped:
+    # deploy.log gets each line once, without colour codes (S3-MF-Audit A-20). The
+    # child's stderr (a bash error) is kept.
+    _urp_console=/dev/null
+    if [ -t 2 ]; then _urp_console=/dev/stderr; fi
     _urp=$(env -u AITOOLS_SUMMARY_FILE "${BASH:-bash}" -c '
 set -euo pipefail
 source "$1/aitools-lib.sh"
@@ -199,7 +211,7 @@ logging_init "build-deploy"
 rc=0
 resolve_user_repo_path || rc=$?
 printf "%s" "$AITLIB_USER_REPO_PATH" >&3
-exit "$rc"' build-deploy "$SCRIPTS_DIR" 3>&1 1>&2) || _urp_rc=$?
+exit "$rc"' build-deploy "$SCRIPTS_DIR" 3>&1 1>"$_urp_console") || _urp_rc=$?
     case "$_urp_rc" in
         0) : ;;
         1) _urp="" ;;
@@ -544,9 +556,13 @@ write_resolver_block_ps1() {
 # can end its here-string; the prefix and CRs are removed when the file is written.
 # This runs before Initialize-Logging, so a failure is kept in $aitoolsEmbedError and
 # written to stderr; the resolver wrappers then report "resolver missing" (LogError +
-# ERROR row). Remove-AitoolsEmbed (called before the exit footer) deletes the temp dir
-# and restores the environment; an early exit leaves the temp dir behind (PowerShell
-# has no EXIT trap; it holds only these build-time copies).
+# ERROR row). Remove-AitoolsEmbed deletes the temp dir and restores the environment,
+# once: it is called before the exit footer (a failed removal is a counted warning),
+# and the rest of the script runs inside the try { opened at the end of this block,
+# whose finally (emitted by build-deploy.sh after the exit footer) calls it on every
+# exit, an early one included: an OS or PowerShell version guard, an error exit, a
+# user abort (exit 2). PowerShell has no EXIT trap; finally runs on exit (S3-MF-Audit
+# A-19, B5a review m4).
 $aitoolsEmbedDir = Join-Path ([System.IO.Path]::GetTempPath()) ("aitools-embed-" + [guid]::NewGuid().ToString("N"))
 $aitoolsEmbedError = ""
 $aitoolsEmbedPrevProfilePs1 = $env:AITOOLS_PROFILE_PS1
@@ -585,7 +601,10 @@ try {
     $aitoolsEmbedError = "$_"
     [Console]::Error.WriteLine("aitools: embedded profile resolver not written ($aitoolsEmbedError)")
 }
+$aitoolsEmbedRemoved = $false
 function Remove-AitoolsEmbed {
+    if ($script:aitoolsEmbedRemoved) { return }
+    $script:aitoolsEmbedRemoved = $true
     if (Test-Path -LiteralPath $script:aitoolsEmbedDir) {
         Remove-Item -LiteralPath $script:aitoolsEmbedDir -Recurse -Force -ErrorAction SilentlyContinue
         if (Test-Path -LiteralPath $script:aitoolsEmbedDir) { LogWarn "Could not remove the embedded resolver temp dir $($script:aitoolsEmbedDir)" }
@@ -594,6 +613,9 @@ function Remove-AitoolsEmbed {
     $env:AITOOLS_PROFILE_FILE = $script:aitoolsEmbedPrevProfileFile
 }
 # --- End of embedded profile resolver ---
+# The rest of the script runs in this try; its finally, after the exit footer, calls
+# Remove-AitoolsEmbed on every exit (build-deploy.sh, S3-MF-Audit A-19).
+try {
 BLOCK
     } > "$out"
 }
@@ -609,6 +631,9 @@ blog "Embedded resolver: $RESOLVER_SH_FILES / $RESOLVER_PS1_FILES (from scripts/
 
 # PowerShell cleanup line emitted before each exit footer that embeds the resolver
 EMBED_CLEANUP_PS1='Remove-AitoolsEmbed   # embedded resolver temp dir + environment (build-deploy, M3 B5)'
+# ... and the line after that footer that closes the embed block's "try {": the
+# cleanup also runs on an early exit (S3-MF-Audit A-19). Checked per file below.
+EMBED_FINALLY_PS1='} finally { Remove-AitoolsEmbed }   # closes the try { of the embedded profile resolver (build-deploy, A-19)'
 
 # Build into a staging dir; it replaces <dotprofile>/deploy only at the very end, so
 # a build that fails anywhere (inputs, extraction, PS1 validation) leaves the
@@ -800,6 +825,7 @@ BLOCK
     printf '%s\n' "$EMBED_CLEANUP_PS1"
     extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
         '^# --- BEGIN exit' '^# --- END exit' --crlf
+    printf '%s\n' "$EMBED_FINALLY_PS1"
 } | inline_lib_ps1 "$BUILD_TMP/resolver-claude.ps1.blk" > "$DEPLOY_DIR/setup-user-claude.ps1"
 
 GENERATED=$((GENERATED + 1))
@@ -904,6 +930,7 @@ BLOCK
     # Exit footer
     extract_between "$SCRIPTS_DIR/setup-user-cursor.ps1" \
         '^# --- BEGIN exit' '^# --- END exit' --crlf
+    printf '%s\r\n' "$EMBED_FINALLY_PS1"
 } | inline_lib_ps1 "$BUILD_TMP/resolver.ps1.blk" > "$DEPLOY_DIR/setup-user-cursor.ps1"
 
 GENERATED=$((GENERATED + 1))
@@ -1248,6 +1275,7 @@ blog "Generating deploy/setup-user-settings.ps1"
     printf '%s\r\n' "$EMBED_CLEANUP_PS1"
     extract_between "$SCRIPTS_DIR/setup-user-settings.ps1" \
         '^# --- BEGIN exit' '^# --- END exit' --crlf
+    printf '%s\r\n' "$EMBED_FINALLY_PS1"
 } | inline_lib_ps1 "$BUILD_TMP/resolver.ps1.blk" > "$DEPLOY_DIR/setup-user-settings.ps1"
 GENERATED=$((GENERATED + 1))
 
@@ -2216,6 +2244,28 @@ for _emb in setup-user-claude.sh setup-user-claude.ps1 setup-user-settings.sh se
     fi
 done
 blog_ok "Embedded profile resolver present once in each resolver-consuming deploy script"
+# Every .ps1 that embeds the resolver runs inside the block's "try {" and must close
+# it with $EMBED_FINALLY_PS1 as its last line, once; no other .ps1 may hold that line
+# (S3-MF-Audit A-19). A missing brace is also a parse error below; this names the cause.
+for _emb in "$DEPLOY_DIR"/*.ps1; do
+    [ -f "$_emb" ] || continue
+    _emb_state=$(EMB_MARK="$EMBED_MARKER" EMB_FIN="$EMBED_FINALLY_PS1" perl -ne '
+        s/\r?\n\z//;
+        $m++ if $_ eq $ENV{EMB_MARK};
+        $f++ if $_ eq $ENV{EMB_FIN};
+        $last = $_ if /\S/;
+        END {
+            $m //= 0; $f //= 0; $last //= "";
+            if ($m == 0) { print($f == 0 ? "ok" : "finally line without the embed block") }
+            elsif ($f == 1 && $last eq $ENV{EMB_FIN}) { print "ok" }
+            else { print "finally line found $f time(s), last line is not it" }
+        }' "$_emb") || _emb_state="perl failed (exit $?)"
+    if [ "$_emb_state" != "ok" ]; then
+        blog_error "deploy/$(basename "$_emb"): embedded resolver try/finally not closed by the last line ($_emb_state) -- emit \$EMBED_FINALLY_PS1 after its exit footer"
+        exit 1
+    fi
+done
+blog_ok "Embedded resolver cleanup runs on every exit (try/finally) in each resolver-consuming .ps1"
 
 # ============================================================
 # Post-build: Validate PS1 syntax (Windows only)
