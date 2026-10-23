@@ -45,6 +45,7 @@ Deployed content originates from two repos:
 |--------|----------|-----------------|
 | Dotprofile repo (`aitools-<username>`) | Primary (wins if present) | CLAUDE.md template, user rules, profile.json (preferences, identity, machine profiles) |
 | aitools repo (`shared/`) | Fallback | claude-shared.md template, hook scripts, skills, shell aliases |
+| aitools repo + dotprofile -> `~/.aitools/` (`deploy-harness`) | First source wins on a name conflict: `shared/`, then `.claude/`, then dotprofile `claude/rules/` | reference, registries, hooks, skills, rules (one flat directory), bin; config.json generated from profile.json. Rules reach the tools through the `setup-user-claude` / `setup-user-cursor` fan-out. Detail: `@reference/harness.md` "Deployed harness (`~/.aitools`)" |
 
 - **Template interpolation**: `{{PLACEHOLDER}}` tokens in CLAUDE.md replaced with `profile.json` values at deploy time
 - **Machine profile selection**: `config.json` `machineAlias` → `profile.json` `profiles[alias]`. Fallback: hostname match, then first profile
