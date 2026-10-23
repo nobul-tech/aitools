@@ -72,14 +72,14 @@ Verdicts: **new** = filed in the batch; **filed** = an existing incident covers 
 | 45 | S3-MF-Audit-findings.md §8 I-3 | no script-standards exemption category for a library-style tool | merged into #148 | #148 already named the exemptions table. It now adds the resolver header contract (aitools-profile.sh:39-43), the 'Exemptions table' (:1156), and the four bash stderr-only exits (:167, :181, :194, :207) |
 | 47 | PR #103 (945deb5) | adopt_managed_file / Adopt-ManagedFile write the dotprofile, no commit/push | **new #164** | aitools-lib.sh:2346-2369, aitools-lib.ps1:2349-2378; callers setup-user-hooks.sh:235, setup-user-skills.sh:218 (+ .ps1 :199, :206) |
 | 48 | PR #103 | bare `git push`: current branch plus earlier unpushed commits; no spec | **new #165** | aitools-lib.sh:1086, aitools-profile.sh:993; the rule at managed-file-deployment.md:35 says "its main" |
-| 49 | PR #98 review | resolve_machine used one message for "not v2" and "no profiles" | fixed (on PR #114, unmerged) | f8e8fc0: aitools-profile.sh:645 and :646 now have separate messages |
+| 49 | PR #98 review | resolve_machine used one message for "not v2" and "no profiles" | pending: PR #114 (not filed) | Fixed on f8e8fc0, where aitools-profile.sh:645 and :646 have separate messages. origin/main still has one message (aitools-profile.sh:636-637, ps1:513). File it if PR #114 is not merged |
 | 50 | PR #108 I-5 | key-case behaviour of the JSON engines is documented only in their headers | **new #166** | aitools-json.pl:28-40, :176-192; aitools-json.ps1:47-49, :104-133; no spec hit |
 | 51 | PR #109 | setup-user-cursor.sh logs "node not found" with no summary row | **new #167** | 1692959: setup-user-cursor.sh:185-187; the other merge outcomes write rows at :338-375 |
 | 52 | PR #112 | deploy-paths.md still lists setup-user-claude as duplicated | merged into #146 | 52821bd: deploy-paths.md:56-57 |
 | 53 | PR #114 | the resolvers differ on non-integer version 2 (2.0, 20E-1) | **new #168** | aitools-profile.sh:645 and aitools-profile.ps1:514. My probe (probe-final.sh) reproduced it on f8e8fc0 |
 | 54 | PR #116 | `New-Item -Force -ErrorAction Stop` silently returns $null when a parent is a file; 29 call sites unaudited | **new #169** | PR #116 body; git grep New-Item on 1605d6e |
 | 55 | PR #116 review B | Windows PS profile function `& aitools.ps1 @args` drops `--alias` | **new #170** | aitools-install.ps1:530, aitools.ps1:5-21 and :398-401. My probe probe-alias.ps1: `--alias` stays in $Remaining |
-| 56 | PR #116 | macOS `mktemp` with no template ignores TMPDIR | not filed (test-isolation note) | My probe: `TMPDIR=<scratch>/ mktemp` (also with -d and -t) wrote to /var/folders/.../T, in this environment. Users are unaffected: harness temp files go to the user's temp dir and are cleaned up by their scripts. It matters only for tests that expect TMPDIR to confine files, so it belongs in the test harness notes |
+| 56 | PR #116 | macOS `mktemp` with no template ignores TMPDIR | merged into #153 | Documented macOS behaviour (man mktemp: prefers _CS_DARWIN_USER_TEMP_DIR). My probe (with -d and -t too) and the reviewer's reproduce it. It is an isolation leak like the cwd one, so it is tracked in #153 with the remedy `mktemp -p` (re-check R3-m2) |
 | 46 | S3-MF-Audit-findings.md §8 I-4 | no spec on re-counting an error the lib wrapper already logged; B8 consumers differ | **new #163** | setup-user-settings.sh:72-75, setup-user-skills.sh:56-60, setup-user-cursor.sh:353-358. These line numbers were corrected per re-check finding R-M1 |
 
 **Counts:** 42 rows. Rows 1-41 are markers; several cite the same marker in two files. Row 42 is two "INCIDENT: none" lines. Across rows 1-41: 16 new + 5 merged + 3 filed + 12 fixed + 5 dropped = 41. Rows 1 and 14 are counted once, as filed.
@@ -120,7 +120,12 @@ Verdicts: **new** = filed in the batch; **filed** = an existing incident covers 
 | 169 | New-Item -Force silent $null; call sites unaudited | medium | 54 |
 | 170 | Windows PS profile function drops `--alias` | medium | 55 |
 
-The final marker batch (rows 47-56) was added on 2026-10-22: 7 new entries, 1 merged (#146), 1 fixed, and 1 not filed. **Final totals: 25 entries, #146-#170, 14 medium and 11 low.**
+The final marker batch (rows 47-56) was added on 2026-10-22. In the table, rows 47-56 sit above row 46.
+- 7 new entries: #164-#170.
+- 2 merged: row 52 into #146, row 56 into #153.
+- 1 pending: row 49, which PR #114 fixes.
+
+The "42 rows" counts paragraph covers rows 1-42 only. After the third review pass (87284ea), #164-#170 also cite origin/main, where 6 of the 7 defects already exist. The exception is #166: on main the engines also disagree on key case. **Final totals: 25 entries, #146-#170, 14 medium and 11 low.**
 
 Rows 43-46 were added on 2026-10-22, at S3-M3Finish's request, from the S3-MF-Audit markers. #147 (medium) and #148 now also carry I-2 and I-3. Batch totals: 18 entries, #146-#163, with 9 medium and 9 low.
 

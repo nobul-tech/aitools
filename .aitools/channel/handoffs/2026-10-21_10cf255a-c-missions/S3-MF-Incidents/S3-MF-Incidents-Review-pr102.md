@@ -195,3 +195,101 @@ The entry's own discoveryContext gives the right ranges (settings.sh:66-80, skil
 - The S3-M3Lead plan section 2 decision 3 text ("deploy.jsonl coverage"). I took it from the audit and the entry; I did not read the plan on its branch.
 - Whether the S3-M3-Docs logging.md draft (row 16) answers #162's coverage question. The entry says the same.
 - Anything run on Windows.
+
+## Re-check (87284ea)
+
+**Reviewer:** S3-MF-Incidents-Review · **Date:** 2026-10-22 · **PR head:** 87284ea. **Code checked on:** the source PR heads (945deb5, dbcc61a, 1692959, f8e8fc0, 1605d6e, 52821bd; all six PRs are still OPEN, `gh pr list`) and on origin/main 8a9dcb5. Probes: my own, in `.scratch/session-mfirev/probe3.sh` / `probe3.ps1` (pwsh 7.6.3, macOS; scratch only, no user config touched).
+
+**Verdict: changes needed (small).** 0 blockers, 1 major, 4 minor, 3 nits.
+- All seven entries meet the field quality rules.
+- Every citation holds on its PR head.
+- My probes reproduce #168, #169 and #170.
+- None of #164-#170 duplicates #1-#163.
+- The dry run passes.
+- The major is about which baseline the entries cite: open PR branches, not main.
+
+### Major
+
+**R3-M1. #164-#170 cite only open-PR heads, though six of the seven defects are already on origin/main.** An incident in the registry should be verifiable on main. If a PR is reworked or abandoned, the line numbers lose meaning. If a PR fixes the defect before it merges, the entry is wrong at filing time. What main shows for each:
+
+| Entry | On origin/main 8a9dcb5 | Effect |
+|---|---|---|
+| #164 | `adopt_managed_file` at aitools-lib.sh:2238; no `dotprofile_commit_push` at all. The rule's N-Q2 sentence is the same (managed-file-deployment.md:35) | live on main, and broader: no adopt path pushes there |
+| #165 | resolver bare push at aitools-profile.sh:993 | live on main (the lib half arrives with #103) |
+| #166 | depends on PR #108. On main the engines *differ* on key case (audit A-9), so the "rule only in headers" exists only once #108 merges | **conditional** |
+| #167 | setup-user-cursor.sh:186-187 | live on main |
+| #168 | bash :636, :1253, :1458 / ps1 :513, :1093, :1271 (same raw-text vs parsed-text comparisons) | live on main |
+| #169 | 43 `New-Item` lines in scripts/ on main, the same count as on 1605d6e | live on main |
+| #170 | profile function at aitools-install.ps1:511 | live on main |
+
+**Fix:** for each live-on-main entry, add the origin/main citation to `observation`, and keep the PR head as "also on". For #166, either hold it until PR #108 merges, or reword it to cover both states. On main, the gap is A-9 (Set-JValue ignores case, so the engines disagree); after #108, it is "the rule lives only in the headers". I suggest holding it and adding it with a short re-verify after #108 merges.
+
+### Minor
+
+**R3-m1. Row 49 is classed "fixed (on PR #114, unmerged)", but the defect is live on main.**
+- origin/main aitools-profile.sh:636 still has `if [ "$v" != "2" ] || [ "$t" != "object" ]` with one message; PS1 :513 is the same.
+- The fix exists only on f8e8fc0 (:645-:646). If #114 stalls, the marker is lost.
+- **Fix:** class it as "pending: PR #114" and list it under "Close candidates / follow-ups" to re-check after the merge.
+
+**R3-m2. Row 56: the cause is documented macOS behaviour, and the note has no tracked home.**
+- My probe matches the author's: `TMPDIR=<scratch>/ mktemp`, `-d` and `-t probe` all landed in `/var/folders/.../T`. Only an explicit template stayed in scratch.
+- This is not the sandbox. `man mktemp` (macOS) says it uses `_CS_DARWIN_USER_TEMP_DIR` "if available. Fallback locations ... are TMPDIR, the -p option's tmpdir".
+- "Belongs in the test harness notes" names no file, so the finding is dropped in practice. It is the same class as #153 (isolated runs leak outside scratch).
+- **Fix:** merge it into #153 as a second instance, with the remedy `mktemp -p "$dir"` or an explicit template under scratch. Or name the tracked file it goes into.
+
+**R3-m3. #169's count and affected list are incomplete.**
+- `git grep -c New-Item 1605d6e -- scripts` finds 39 lines in .ps1 files (plus 4 in build-deploy.sh, which generates PS1). The entry says "29 other call sites".
+- `affected` omits setup-user-claude.ps1 (2), setup-user-config.ps1 (1), setup-user-cursor.ps1 (2), setup-user-hooks.ps1 (2), setup-user-shell.ps1 (1), setup-user-skills.ps1 (1) and build-deploy.sh (4).
+- Some sites already have `-ErrorAction Stop` (e.g. aitools-lib.ps1:1166, deploy-harness.ps1:135). My probe shows that does not help either: `New-Item -ItemType Directory -Path <file>/sub -Force -ErrorAction Stop` returned `$null` with no throw, and `Test-Path -PathType Container` was False afterwards.
+- **Fix:** correct the count, list the files, say that `-ErrorAction Stop` does not catch it, and replace "the probe was not re-run" with this repro.
+
+**R3-m4. #165 cites only the bash push sites.**
+- The PS1 twins run the same bare push: aitools-lib.ps1:999 `(& git -C $dir push 2>&1 | Out-String)` and aitools-profile.ps1:831 (945deb5). Both are in `affected` but not in `observation`.
+- **Fix:** add both. Also note that the rule text (managed-file-deployment.md:35 "pushed to its main") makes the other-branch case a spec deviation, not only "no spec". `expected` already quotes it; the title could say so.
+
+### Nits
+
+- **R3-n1.** Triage rows 47-56 sit between rows 45 and 46. The "**Counts:** 42 rows" paragraph below them was not updated (the totals line further down is).
+- **R3-n2.** #168: a repro now exists at engine level. Perl `get` returns `2.0` and `20E-1` verbatim, so the bash `!= "2"` check fails. PS `Get-JText` returns `2` for both.
+- **R3-n3.** #170: my probe confirms that option A works. An in-process call through the profile-style function, or a direct `&` call, leaves `Alias=[]` and `Remaining=[--alias,box]`. `pwsh -NoProfile -File stand.ps1 user --alias box` binds `Alias=[box]`. The aitools.ps1:398-401 comment is therefore true only for `-File`.
+
+### Rows asked about
+
+- **Row 49:** wrong class. It is pending, not fixed (R3-m1).
+- **Row 52:** correct. deploy-paths.md:56-57 on 52821bd still lists setup-user-claude and setup-user-cursor as duplicated. This is the same defect as #146, and #146's discoveryContext now records it.
+- **Row 56:** the not-filed decision is defensible for users, but the finding is not tracked anywhere (R3-m2).
+
+### What I verified (re-check 87284ea)
+
+1. **Field quality, #164-#170.**
+   - All 19 fields are present, and the key order matches the registry for all 25 entries.
+   - Titles name the deficiency. Observations quote code with file:line.
+   - Each `expected` cites a rule or says "No spec exists for:" (#165, #166, #168).
+   - Impacts are concrete. Each discoveryContext has the PR, the head, what was read, the date and "Audited #1-#16x".
+   - suggestedResolutions list options where the path is open (#164, #165, #168, #170).
+2. **Citations on the PR heads, all holding:**
+   - #164 (945deb5): aitools-lib.sh:1005-1012, :1105-1114, :2346-2369; aitools-lib.ps1:2349-2378; setup-user-hooks.sh:235, setup-user-skills.sh:218, setup-user-hooks.ps1:199-200, setup-user-skills.ps1:206-207; managed-file-deployment.md:34-35.
+   - #165: aitools-lib.sh:1016-1017, :1077, :1086; aitools-profile.sh:993.
+   - #166 (dbcc61a): aitools-json.pl:26-41, :176-193; aitools-json.ps1:46-49, :104-134. No hits in the three references.
+   - #167 (1692959): setup-user-cursor.sh:185-187. Every other merge outcome writes a row (:339-375). No `node` in the .ps1.
+   - #168 (f8e8fc0): sh :645, :1264, :1469 / ps1 :514, :1120, :1298.
+   - #169 (1605d6e): aitools-install.ps1:103-108, and 13 sampled call sites.
+   - #170 (1605d6e): aitools-install.ps1:530; aitools.ps1:5-21, :398-401.
+3. **Probes** (mine): #168 engine text, #169 New-Item, #170 binding, row 56 mktemp. Results are above.
+4. **Duplicates.** I scanned keywords across #1-#145 and batch #146-#163. The hits I looked at are related, not duplicates:
+   - #81: reverse-discovery prompt EOF.
+   - #156: wrong ACTION.
+   - #135: unpushed check in pre-push.
+   - #62: missing summary row in setup-user-mcp, which #167 names.
+   - #150: number parity, which #166 and #168 name.
+   - #154: PS traps, which #169 names.
+   - #75: alias persistence, which #170 names.
+   - #161: tree text.
+   - No hits for New-Item or `@args`/profile function.
+5. **Dry run** (scratch copy of origin/main's registry, byte-equal to the worktree's): `dry run ok: would append ids 146-170 (25 entries); registry after: 163 incidents, 7 closed, max 170, unique True, lastUpdated 2026-10-22`, exit 0. The copy is unchanged afterwards, and the worktree registry has no diff against origin/main. `--write` was not run.
+
+### Not verified (re-check 87284ea)
+
+- Anything on Windows: #169's Windows behaviour, and #170 under Windows pwsh. The real aitools.ps1 exits at its OS guard on macOS; I used a stand-in with the same param block.
+- The author's own probes (probe-final.sh, probe-alias.ps1). I wrote and ran my own instead.
+- Whether the PR #103 author plans to route `adopt_managed_file` through the new helper before merge.

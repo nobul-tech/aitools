@@ -18,9 +18,10 @@
 
 7. **Final marker batch** (S3-M3Finish, 2026-10-22; 10 markers from PRs #98, #103, #108, #109, #112, #114 and #116). Each was verified on its PR head after `git fetch`.
    - New: #164-#170, seven entries.
-   - Merged: one. The PR #112 deploy-paths.md marker went into #146.
-   - Fixed: one. The resolver messages are fixed on PR #114, which is not merged yet.
-   - Not filed: one. The macOS mktemp/TMPDIR behaviour is a note for test isolation, not a harness defect.
+   - Merged: two. The PR #112 deploy-paths.md marker went into #146, and the macOS mktemp/TMPDIR marker went into #153 (an isolation leak; reviewer R3-m2).
+   - Pending: one. The resolver-message marker is fixed only on PR #114, which is unmerged; file it if #114 does not merge.
+   - Third review pass (87284ea): changes needed (small). All of it is fixed. #164-#170 now cite origin/main too, where 6 of the 7 defects already exist; #169 now has the full call-site count; #165 has the PS1 push sites.
+   - I kept #166 rather than holding it, which the reviewer had suggested. On main the engines also disagree on key case (audit A-9), so the missing spec stands either way.
    - My own probes, under an isolated HOME, reproduced #168 (version 2.0) and #170 (`--alias` through `& @args`).
    - **Final batch: 25 entries, #146-#170, 14 medium and 11 low.** The apply step re-tested 7/7: 163 incidents, 7 closed, ids 1-170.
 
