@@ -205,7 +205,8 @@ claude_md_adopt_filter() {
 if [ "$DRY_RUN" = "true" ]; then
     # Show what would happen without writing
     EXISTING_LINES=0
-    [ -f "$CLAUDE_MD" ] && EXISTING_LINES=$(wc -l < "$CLAUDE_MD")
+    # An unreadable CLAUDE.md is a warning below, not a set -e abort here
+    if [ -f "$CLAUDE_MD" ] && [ -r "$CLAUDE_MD" ]; then EXISTING_LINES=$(wc -l < "$CLAUDE_MD"); fi
     NEW_LINES=$(echo "$NEW_CONTENT" | wc -l)
     log "[DRY RUN] $(display_path "$CLAUDE_MD"): overwrite (sole owner)"
     log "  Template source: $(display_path "$SOURCE_PATH") ($SOURCE_LABEL)"
@@ -217,8 +218,9 @@ if [ "$DRY_RUN" = "true" ]; then
     log "  Existing: ${EXISTING_LINES} lines"
     log "  New: ${NEW_LINES} lines"
     if [ -f "$CLAUDE_MD" ]; then
-        # Compared as deploy_managed_file compares (trailing newlines removed)
-        if ! _dr_existing=$(perl -0777 -pe 's/[\r\n]+\z//' "$CLAUDE_MD"); then
+        # Compared as deploy_managed_file compares (trailing newlines removed).
+        # The explicit open dies on an unreadable file (perl -p only warns).
+        if ! _dr_existing=$(perl -0777 -e 'open my $f, "<", $ARGV[0] or die "cannot read $ARGV[0]: $!\n"; my $t = <$f>; $t = "" unless defined $t; $t =~ s/[\r\n]+\z//; print $t' "$CLAUDE_MD"); then
             log_warn "Cannot read $(display_path "$CLAUDE_MD") for the dry-run comparison"
             _dr_existing=""
         fi

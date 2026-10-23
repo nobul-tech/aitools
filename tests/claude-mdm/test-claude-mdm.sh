@@ -69,6 +69,9 @@ HAVE_PWSH=false
 if command -v pwsh >/dev/null 2>&1; then HAVE_PWSH=true; fi
 HAVE_NODE=false
 if command -v node >/dev/null 2>&1; then HAVE_NODE=true; fi
+CAN_CHMOD_READ=true   # chmod 000 blocks reads (not for root, not under Git Bash)
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) CAN_CHMOD_READ=false ;; esac
+if [ "$(id -u)" = 0 ]; then CAN_CHMOD_READ=false; fi
 HAVE_PTY=false
 if command -v python3 >/dev/null 2>&1 && [ -f "$PTY" ]; then HAVE_PTY=true; fi
 
@@ -104,7 +107,8 @@ done
 # fail: a resolver error (exit 2), so resolve_user_repo_path returns 3
 printf '#!/usr/bin/env bash\nprintf "via\\tnone\\nerror\\tstub resolver failure\\n"\nexit 2\n' > "$W/fail.sh"
 
-LIVE_HOST=$("$TB" "$ROOT/scripts/aitools-profile.sh" hostname 2>/dev/null)
+# Isolated HOME and log dir: the resolver logs (review N-1)
+LIVE_HOST=$(env HOME="$W/home-host" AITOOLS_LOG_DIR="$W/logs-host" "$TB" "$ROOT/scripts/aitools-profile.sh" hostname 2>/dev/null)
 # (stderr dropped: an unavailable hostname is checked through LIVE_HOST being empty)
 if [ -z "$LIVE_HOST" ]; then LIVE_HOST="unknown"; fi
 
@@ -174,10 +178,23 @@ for lang in sh ps; do
     check "$lang A-26: dry run on an edited CLAUDE.md -> 'dry-run: would update', file untouched" \
         "[ \"\$(rc_of $lang-dry)\" = 0 ] && [ \"\$(claude_rows $lang-dry)\" = 'OK|claude.md|dry-run: would update' ] && cmp -s \"\$(md_of $lang-dry)\" '$TMP_ROOT/$lang-dry.edited'"
     claude_rows "$lang-dry" > "$TMP_ROOT/$lang-dry-3.rows"
+    # Unreadable CLAUDE.md (review B-1): a counted warning, a row, exit 0 -- not a
+    # set -e abort. chmod does not block reads for root or under Git Bash.
+    if $CAN_CHMOD_READ; then
+        chmod 000 "$(md_of "$lang-dry")"
+        run_claude "$lang" "$lang-dry" stub-host "$DRY"
+        chmod 644 "$(md_of "$lang-dry")"
+        check "$lang A-26: dry run on an unreadable CLAUDE.md -> warning, 'dry-run: would update' row, exit 0" \
+            "[ \"\$(rc_of $lang-dry)\" = 0 ] && [ \"\$(claude_rows $lang-dry)\" = 'WARN|claude.md|dry-run: would update' ] && grep -q 'for the dry-run comparison' '$TMP_ROOT/$lang-dry/logs/deploy.log'"
+        claude_rows "$lang-dry" > "$TMP_ROOT/$lang-dry-4.rows"
+    else
+        skip "$lang unreadable CLAUDE.md case (chmod does not block reads here)"
+        : > "$TMP_ROOT/$lang-dry-4.rows"
+    fi
 done
 if $HAVE_PWSH; then
     check "parity A-26: same claude.md dry-run rows in .sh and .ps1" \
-        "cmp -s '$TMP_ROOT/sh-dry-1.rows' '$TMP_ROOT/ps-dry-1.rows' && cmp -s '$TMP_ROOT/sh-dry-2.rows' '$TMP_ROOT/ps-dry-2.rows' && cmp -s '$TMP_ROOT/sh-dry-3.rows' '$TMP_ROOT/ps-dry-3.rows'"
+        "cmp -s '$TMP_ROOT/sh-dry-1.rows' '$TMP_ROOT/ps-dry-1.rows' && cmp -s '$TMP_ROOT/sh-dry-2.rows' '$TMP_ROOT/ps-dry-2.rows' && cmp -s '$TMP_ROOT/sh-dry-3.rows' '$TMP_ROOT/ps-dry-3.rows' && cmp -s '$TMP_ROOT/sh-dry-4.rows' '$TMP_ROOT/ps-dry-4.rows'"
 fi
 
 # ---------------------------------------------------------------------------
