@@ -121,6 +121,17 @@ case "$(uname -s)" in
 esac
 
 OS_NAME="$(uname -s)"
+# One run id for this installer's deploy.jsonl records and every relayed child's
+# (the lib's jsonl_record reads AITOOLS_RUN_ID; a child that relays its own children
+# passes it on). 6 random bytes as hex, the lib's form; when that fails it stays
+# unset and the lib picks one id for this process.
+if [ -z "${AITOOLS_RUN_ID:-}" ]; then
+    if _run_id="$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')" && [ -n "$_run_id" ]; then
+        export AITOOLS_RUN_ID="$_run_id"
+    else
+        log_detail "deploy.jsonl: no random run id (od failed) -- the lib picks one for this process"
+    fi
+fi
 
 if $DRY_RUN; then export AITOOLS_DRY_RUN=1; fi
 

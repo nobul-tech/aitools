@@ -49,6 +49,13 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 
+# One run id for this installer's deploy.jsonl records and every relayed child's
+# (the lib's Write-JsonlRecord reads AITOOLS_RUN_ID; a child that relays its own
+# children passes it on). 6 random bytes as hex, the lib's form.
+if (-not $env:AITOOLS_RUN_ID) {
+    $env:AITOOLS_RUN_ID = -join ((1..6) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) })
+}
+
 # Env passthrough from parent (aitools CLI)
 if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
 if ($DryRun) { $env:AITOOLS_DRY_RUN = "1" }
