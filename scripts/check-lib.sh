@@ -164,7 +164,8 @@ print_summary() {
 # rc 3 was already logged by the lib (log_error, ERROR row when a run summary
 # exists); USER_REPO_PATH stays empty, so those steps skip too. check_log_init
 # then resets ERRORS, so the rc is kept in USER_REPO_RC and print_summary adds
-# one WARN step for it: a broken dotprofile never passes a check run (audit A-24).
+# one WARN step for it: a broken dotprofile is never a clean check run (audit
+# A-24; the exit code still follows FAIL steps only).
 resolve_config() {
     CONFIG_FILE="$HOME/.aitools/config.json"
     USER_REPO_PATH=""
