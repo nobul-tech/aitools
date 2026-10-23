@@ -61,13 +61,15 @@ exit $rc
 STUB
 
 # gh stub: api user -> $GH_USER; repo view -> exit $GH_REPO_VIEW_RC (default 1: no repo);
-# repo create NAME --private --source DIR --push -> a bare remote $GH_REMOTE, pushed
+# repo clone U/R DIR -> clone of $GH_CLONE_SRC; repo create NAME --private --source DIR
+# --push -> a bare remote $GH_REMOTE, pushed
 mkdir -p "$WORK/bin"
 cat > "$WORK/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 case "$1 ${2:-}" in
     "api user") if [ -n "${GH_USER:-}" ]; then printf '%s\n' "$GH_USER"; exit 0; fi; exit 1 ;;
     "repo view") exit "${GH_REPO_VIEW_RC:-1}" ;;
+    "repo clone") git clone -q -b main "$GH_CLONE_SRC" "$4" || exit 1; exit 0 ;;
     "repo create")
         src=""; while [ $# -gt 0 ]; do if [ "$1" = "--source" ]; then src="$2"; fi; shift; done
         git init -q --bare -b main "$GH_REMOTE" || exit 1
@@ -128,10 +130,12 @@ fixture() {
 run() {
     local impl="$1"; shift
     RC=0
+    local here="$PWD"
+    cd "$D"
     local e=(env -u AITOOLS_SUMMARY_FILE -u AITOOLS_MACHINE_ALIAS -u AITOOLS_USER_REPO_PATH -u AITOOLS_PROFILE_FILE -u AITOOLS_FORCE
         HOME="$H" PATH="$WORK/bin:$PATH" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_PRESERVE_SUMMARY=1
         SHELL=/test/bin/pwsh
-        GIT_CONFIG_GLOBAL="$H/.gitconfig" GIT_CONFIG_NOSYSTEM=1 GH_USER="$GH_USER" GH_REMOTE="$D/gh-remote.git"
+        GIT_CONFIG_GLOBAL="$H/.gitconfig" GIT_CONFIG_NOSYSTEM=1 GH_USER="$GH_USER" GH_REMOTE="$D/gh-remote.git" GH_CLONE_SRC="$D/remote.git"
         AITOOLS_PROFILE_TEST_MACHINE_ID="$THIS_ID" AITOOLS_PROFILE_TEST_HOSTNAME=probe-host ${CASE_ENV[@]+"${CASE_ENV[@]}"})
     if [ "$impl" = "bash" ]; then
         if [ -n "${PTY_INPUT:-}" ]; then
@@ -152,6 +156,7 @@ run() {
                 < /dev/null > "$D/out.txt" 2>&1 || RC=$?
         fi
     fi
+    cd "$here"
     OUT="$D/out.txt"
     SUM="$D/summary.txt"
     cp "$H/.aitools/logs/last-summary.txt" "$SUM" 2>/dev/null || : > "$SUM"  # no rows = empty copy (asserted by the cases)
@@ -366,6 +371,64 @@ CASE_ENV=(HOOK_RC=2)
 case_run hook-abort 2 fx_two --alias spare
 CASE_ENV=()
 
+echo "== review M1: a relative reposPath is refused (nothing created under the current directory)"
+fx_relative() { fixture "$CASE" "$1" "$PJ_TWO"; perl -pi -e 's/"reposPath": "[^"]*"/"reposPath": "repos"/' "$H/.aitools/config.json"; }
+case_run relative-repos 1 fx_relative --alias spare
+has_row "ERROR|dotprofile|reposPath not absolute"
+if [ -e "$D/repos" ]; then bad "$CASE: a repos/ directory was created under the cwd"; else ok "$CASE: nothing created under the cwd"; fi
+
+echo "== review M2: id undetectable (via=config) -> WARN, the cached machineId survives two runs"
+fx_viaconfig() {
+    fixture "$CASE" "$1" "$PJ_TWO" ',
+  "machineId": "'"$THIS_KEY"'"'
+    perl -0pi -e 's/("profiles": \{)/$1\n    "'"$THIS_KEY"'": { "alias": "mine", "machine": { "id": "'"$THIS_KEY"'", "hostname": "probe-host" } },/' "$DP/profile.json"
+    git -C "$DP" -c user.name=T -c user.email=t@x commit -q -am "register"; git -C "$DP" push -q
+}
+CASE_ENV=(AITOOLS_PROFILE_TEST_MACHINE_ID=none)
+case_run via-config 0 fx_viaconfig
+has_row "WARN|machine profile|not refreshed (no machine id)"
+cfg_id "$THIS_KEY"
+CASE="via-config-rerun"
+run bash
+if [ "$RC" -eq 0 ]; then ok "$CASE: second run exit 0"; else bad "$CASE: second run exit $RC"; perl -pe 's/^/       /' "$OUT"; fi
+cfg_id "$THIS_KEY"
+CASE_ENV=()
+
+echo "== review m3: --alias wins over a stale AITOOLS_MACHINE_ALIAS"
+CASE_ENV=(AITOOLS_MACHINE_ALIAS=bogus)
+case_run env-alias-stale 0 fx_two --alias spare
+pj_alias "$THIS_KEY" spare
+out_has "AITOOLS_MACHINE_ALIAS=bogus ignored"
+CASE_ENV=()
+
+echo "== Path 2: the GitHub repo exists, no local clone -> cloned, identity from the profile, registered"
+fx_path2() { fx_two "$1"; rm -rf "$DP"; }
+CASE_ENV=(GH_REPO_VIEW_RC=0)
+case_run path2 0 fx_path2 --alias spare
+has_row "OK|dotprofile|cloned"
+pj_alias "$THIS_KEY" spare
+remote_has "$BARE" "Register machine profile: spare"
+p2_name=$(git -C "$DP" config user.name) || p2_name=""  # unset = "" (asserted)
+if [ "$p2_name" = "Jose" ]; then ok "$CASE: clone's git identity from identity.git"; else bad "$CASE: clone identity '$p2_name'"; fi
+CASE_ENV=()
+
+echo "== v1 profile.json -> v2 revision 2.2, this machine under its id, other machines kept, committed"
+PJ_V1='{ "name": "Jose", "email": "jose@example.com", "github": "nobul-jose", "company": "nobul-tech",
+  "git": { "name": "Jose", "email": "jose@example.com" },
+  "machines": [ { "hostname": "probe-host.local", "os": "darwin" }, { "hostname": "other-box", "os": "linux" } ],
+  "cursor": { "cli": { "model": "auto" } } }'
+fx_v1() { fixture "$CASE" "$1" "$PJ_V1"; }
+case_run v1-migrate 0 fx_v1 --alias mac1
+pj_alias "$THIS_KEY" mac1
+if [ "$(pj_get version)" = "2" ] && [ "$(pj_get meta schemaRevision)" = "2.2" ]; then ok "$CASE: version 2, revision 2.2"; else bad "$CASE: version '$(pj_get version)'"; fi
+if [ "$(pj_get profiles machine1 machine hostname)" = "other-box" ]; then ok "$CASE: the other v1 machine kept (machine1)"; else bad "$CASE: machine1 '$(pj_get profiles machine1 machine hostname)'"; fi
+if [ "$(pj_get cursor cli model)" = "auto" ]; then ok "$CASE: cursor section kept"; else bad "$CASE: cursor section lost"; fi
+remote_has "$BARE" "Migrate profile.json from v1 to v2"
+if perl "$REPO/scripts/aitools-json.pl" get "$H/.aitools/config.json" machineAlias > /dev/null 2>&1; then
+    v1_alias=$(perl "$REPO/scripts/aitools-json.pl" get "$H/.aitools/config.json" machineAlias)
+    if [ "$v1_alias" = "mac1" ]; then ok "$CASE: config.json written by setup-user-config"; else bad "$CASE: config machineAlias '$v1_alias'"; fi
+else bad "$CASE: config.json has no machineAlias"; fi
+
 echo "== profile-check.js reads machineId (id keys; legacy machineAlias kept)"
 CASE="profile-check"
 fixture "$CASE" bash "$PJ_TWO" ',
@@ -419,7 +482,14 @@ if $USE_PTY; then
     case_run pty-dup-decline 1 fx_two --alias laptop
     has_row "WARN|machine profile|skipped"
     pj_lacks "\"$THIS_KEY\""
+
+    echo "== interactive (pty) with --force: no prompt; an unregistered machine is refused like no terminal"
+    PTY_INPUT=$'1\n'
+    case_run pty-force 1 fx_two --force
+    has_row "ERROR|machine profile|not registered (no terminal)"
+    if grep -q "Which profile is this machine" "$OUT"; then bad "$CASE: --force prompted"; else ok "$CASE: --force did not prompt"; fi
     PTY_INPUT=""
+
 fi
 
 echo ""

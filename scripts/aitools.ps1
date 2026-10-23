@@ -980,7 +980,9 @@ function Get-UiEntries([string]$Pf, [string]$ThisId) {
             $owner = if ($menv -ceq $script:AitoolsEnvironment) { "this" } else { "other" }
         } elseif (-not $mid) {
             $owner = if ($tid -and $kl -ceq $tid) { "this" } else { "unregistered" }
-        } elseif ($tid -and $mid.ToLowerInvariant() -ceq $tid) {
+        } elseif (-not $tid) {
+            $owner = "unknown"   # this machine's id is unknown (review n4)
+        } elseif ($mid.ToLowerInvariant() -ceq $tid) {
             $owner = "this"
         } else {
             $owner = "other"
@@ -1016,6 +1018,8 @@ function Read-UiChoose([string]$Pf, [string]$Suggested, [string]$ThisId) {
             if ($en.Key -ceq $Suggested) { $label = "$label (suggested, registered to another machine)" }
             else { $label = "$label (registered to another machine)" }
             [Console]::WriteLine("  [-] $label")
+        } elseif ($en.Owner -ceq "unknown") {
+            [Console]::WriteLine("  [-] $label (owner unknown: this machine's id cannot be detected)")
         }
     }
     [Console]::WriteLine("  [n] new profile for this machine")
@@ -1265,7 +1269,9 @@ function Invoke-UiRegisterFlow([string]$Dir, [bool]$Commit) {
     } else {
         $null = Invoke-UiMigrate $Dir   # failure: logged + ERROR row; resolution still reads legacy profiles
         if ((Invoke-UiResolve $Dir) -ne 0) { return 1 }
-        # AITOOLS_MACHINE_ALIAS (resolver via=override) is an explicit choice, as -Alias is
+        # AITOOLS_MACHINE_ALIAS naming an existing profile (resolver via=override) is used as
+        # -Alias would be; an unknown one is a resolver error (design (b) step 1). With
+        # -Alias it is ignored (Invoke-UserInit clears it).
         if (-not $want -and $script:UiVia -ceq "override") { $want = $script:UiAlias }
         if ($want) {
             if ($script:UiOwner -cne "this") { Read-UiNameCompany $want } else { $script:UiName = ""; $script:UiCompany = "" }
@@ -1282,7 +1288,9 @@ function Invoke-UiRegisterFlow([string]$Dir, [bool]$Commit) {
                     # the profile, but register needs the id (it would refuse with exit 3)
                     LogWarn "machine profile: this machine's id cannot be detected -- profile '$($script:UiAlias)' (from config.json machineId) was not refreshed"
                     Write-Summary "WARN" "machine profile" "not refreshed (no machine id)"
-                    $script:UiMachineKey = $script:UiKey; $script:UiMachineAlias = $script:UiAlias; $script:UiMachineOwner = "this"
+                    # owner "config": the key is NOT passed to setup-user-config, which re-derives it
+                    # (via=config) and keeps the cached machineId (review M2)
+                    $script:UiMachineKey = $script:UiKey; $script:UiMachineAlias = $script:UiAlias; $script:UiMachineOwner = "config"
                     return 0
                 }
                 "alias" {
@@ -1540,7 +1548,22 @@ function Invoke-UserInit {
     if ($reposDir -ceq "~") { $reposDir = $HOME }
     elseif ($reposDir.StartsWith("~/") -or $reposDir.StartsWith("~\")) { $reposDir = Join-Path $HOME $reposDir.Substring(2) }
     if (-not $reposDir) { $reposDir = Join-Path $HOME "repos" }
+    # A relative reposPath would put the dotprofile (and its GitHub repo) under the
+    # current directory, and setup-user-config refuses it anyway (review M1): refused
+    if (-not [IO.Path]::IsPathRooted($reposDir)) {
+        LogError "user init: reposPath in $configFile is not an absolute path ($reposDir) -- set an absolute reposPath (or run: aitools install --repos-path <absolute path>), then run: aitools user init"
+        Write-Summary "ERROR" "dotprofile" "reposPath not absolute"
+        Write-UiAction "Set an absolute reposPath in $configFile, then run: aitools user init"
+        return 1
+    }
     $userRepoDir = Join-Path $reposDir $script:UiRepoName
+    # -Alias wins over a (possibly stale) AITOOLS_MACHINE_ALIAS, for the resolver and
+    # the writer alike (review m3)
+    if ($script:UserAlias -and $env:AITOOLS_MACHINE_ALIAS) {
+        Log "user init: AITOOLS_MACHINE_ALIAS=$($env:AITOOLS_MACHINE_ALIAS) ignored (--alias $($script:UserAlias) given)"
+        Remove-Item Env:\AITOOLS_MACHINE_ALIAS -ErrorAction SilentlyContinue
+        if ($env:AITOOLS_MACHINE_ALIAS) { LogWarn "user init: AITOOLS_MACHINE_ALIAS could not be cleared" }
+    }
 
     if (Test-Path -LiteralPath (Join-Path $userRepoDir ".git")) {
         # --- Path 1: local dotprofile present ---
@@ -1587,7 +1610,11 @@ function Invoke-UserInit {
     }
     # This machine without a profile at the end (skipped at a prompt, refused, failed)
     # is one outcome with one exit code, 1 (Review3 #82 minor 3)
-    if (-not $script:UiMachineKey) { $rc = 1 }
+    if (-not $script:UiMachineKey) {
+        # A skip at a prompt wrote a WARN row only: name the reason for the exit code (review n1)
+        if ($rc -eq 0) { LogError "machine profile: this machine is not registered (skipped) -- run: aitools user init" }
+        $rc = 1
+    }
 
     if (Test-Path -LiteralPath $userRepoDir) {
         if ((Invoke-UiScaffoldClaudeMd $userRepoDir) -ne 0) { $rc = 1 }
@@ -1595,9 +1622,15 @@ function Invoke-UserInit {
 
     # config.json has one writer (setup-user-config): GitHub user, dotprofile path and
     # this machine's profile key (-MachineId; ConfigKey contract). Another machine's
-    # key is never passed (ConfigKey Q3). In-process: reset the exit code, catch a throw.
+    # key is never passed (ConfigKey Q3); a key that only config.json vouches for (owner
+    # "config") is left to the writer to re-derive (review M2). In-process: reset the
+    # exit code, catch a throw; its output goes to the host, never into this function's
+    # return value (review m1: `exit (Invoke-UserInitCommand)` would otherwise exit 0).
     $machineKey = $script:UiMachineKey
-    if ($machineKey -and $script:UiMachineOwner -cne "this") {
+    if ($script:UiMachineOwner -ceq "config") {
+        LogDetail "user init: machine id undetectable -- -MachineId not passed (the writer keeps the cached machineId)"
+        $machineKey = ""
+    } elseif ($machineKey -and $script:UiMachineOwner -cne "this") {
         LogError "user init: profile $machineKey is not this machine's (owner $($script:UiMachineOwner)) -- not passed to setup-user-config"
         Write-Summary "ERROR" "machine profile" "not this machine's profile"
         $machineKey = ""; $rc = 1
@@ -1607,10 +1640,16 @@ function Invoke-UserInit {
     if ($machineKey) { $writerArgs["MachineId"] = $machineKey }
     $global:LASTEXITCODE = 0
     try {
-        & $configWriter @writerArgs
-        if ($LASTEXITCODE -ne 0) { LogError "user init: setup-user-config failed (exit $LASTEXITCODE) -- see $logFile"; $rc = 1 }
+        & $configWriter @writerArgs | Out-Host
+        $writerRc = $LASTEXITCODE
+        if ($writerRc -ne 0) {
+            LogError "user init: setup-user-config failed (exit $writerRc) -- see $logFile"
+            Write-Summary "ERROR" "aitools config" "setup-user-config failed"
+            $rc = 1
+        }
     } catch {
         LogError "user init: setup-user-config.ps1 failed: $_"
+        Write-Summary "ERROR" "aitools config" "setup-user-config failed"
         $rc = 1
     }
 
@@ -1624,7 +1663,7 @@ function Invoke-UserInit {
     } else {
         $global:LASTEXITCODE = 0
         try {
-            & $hookSetup
+            & $hookSetup | Out-Host
             $hookRc = $LASTEXITCODE
         } catch {
             LogError "user init: setup-user-hooks.ps1 failed: $_"
@@ -1660,7 +1699,12 @@ function Invoke-UserInitCommand {
     } catch {
         LogWarn "user init: could not create the run summary $($env:AITOOLS_SUMMARY_FILE) -- the summary panel is not shown"
     }
-    $initRc = Invoke-UserInit
+    $initOut = @(Invoke-UserInit)
+    # The exit code is the last value; anything before it leaked into the output stream
+    $initRc = 1
+    if ($initOut.Count -gt 0 -and $initOut[-1] -is [int]) { $initRc = $initOut[-1] }
+    else { LogError "user init: no exit code returned (internal error) -- exit 1" }
+    if ($initOut.Count -gt 1) { LogDetail "user init: $($initOut.Count - 1) stray output value(s) before the exit code" }
     Show-Summary
     Remove-Item Env:\AITOOLS_SUMMARY_FILE -ErrorAction SilentlyContinue
     if (Test-Path Env:\AITOOLS_SUMMARY_FILE) { LogDetail "AITOOLS_SUMMARY_FILE could not be cleared" }

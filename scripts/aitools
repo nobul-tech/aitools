@@ -208,7 +208,7 @@ ui_profile_run() {
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
             if [ ! -f "$sd/aitools-profile.ps1" ] || ! command -v pwsh >/dev/null 2>&1; then
-                if [ -n "$errf" ]; then rm -f "$errf"; fi
+                if [ -n "$errf" ]; then ui_rm_tmp "$errf"; fi
                 UI_PROF_RC=2; UI_PROF_OUT="error"$'\t'"resolver aitools-profile.ps1 or pwsh not found ($(display_path "$sd"))"
                 return 1
             fi
@@ -224,7 +224,7 @@ ui_profile_run() {
             UI_PROF_OUT="${UI_PROF_OUT//$'\r'/}" ;;
         *)
             if [ ! -f "$sd/aitools-profile.sh" ]; then
-                if [ -n "$errf" ]; then rm -f "$errf"; fi
+                if [ -n "$errf" ]; then ui_rm_tmp "$errf"; fi
                 UI_PROF_RC=2; UI_PROF_OUT="error"$'\t'"resolver aitools-profile.sh not found ($(display_path "$sd"))"
                 return 1
             fi
@@ -233,7 +233,7 @@ ui_profile_run() {
     esac
     if [ -n "$errf" ]; then
         ui_log_lines "aitools-profile $1: " "$(cat "$errf")"
-        rm -f "$errf"
+        ui_rm_tmp "$errf"
     fi
     return 0
 }
@@ -380,7 +380,8 @@ ui_entries() {
                     if [ "$menv" = "$AITOOLS_ENVIRONMENT" ]; then owner=this; else owner=other; fi
                 elif [ -z "$mid" ]; then
                     if [ -n "$tid" ] && [ "$kl" = "$tid" ]; then owner=this; else owner=unregistered; fi
-                elif [ -n "$tid" ] && [ "$(ui_lc "$mid")" = "$tid" ]; then owner=this
+                elif [ -z "$tid" ]; then owner=unknown  # this machine's id is unknown (review n4)
+                elif [ "$(ui_lc "$mid")" = "$tid" ]; then owner=this
                 else owner=other; fi ;;
         esac
         UI_E_KEY+=("$k"); UI_E_ALIAS+=("${al:-$k}"); UI_E_OWNER+=("$owner")
@@ -418,6 +419,8 @@ ui_choose() {
                 if [ "${UI_E_KEY[i]}" = "$sug" ]; then label="$label (suggested, registered to another machine)"
                 else label="$label (registered to another machine)"; fi
                 printf '  [-] %s\n' "$label" > /dev/tty ;;
+            unknown)
+                printf '  [-] %s (owner unknown: this machine'\''s id cannot be detected)\n' "$label" > /dev/tty ;;
         esac
         i=$((i + 1))
     done
@@ -667,7 +670,9 @@ ui_register_flow() {
     else
         ui_migrate "$dir"  # failure: logged + ERROR row; resolution still reads legacy profiles
         ui_resolve "$dir" || return 1
-        # AITOOLS_MACHINE_ALIAS (resolver via=override) is an explicit choice, as --alias is
+        # AITOOLS_MACHINE_ALIAS naming an existing profile (resolver via=override) is used as
+        # --alias would be; an unknown one is a resolver error (design (b) step 1). With
+        # --alias it is ignored (user_init unsets it).
         if [ -z "$want" ] && [ "$UI_VIA" = "override" ]; then want="$UI_ALIAS"; fi
         if [ -n "$want" ]; then
             if [ "$UI_OWNER" != "this" ]; then ui_ask_name_company "$want"; else UI_NAME=""; UI_COMPANY=""; fi
@@ -682,7 +687,10 @@ ui_register_flow() {
                     # the profile, but register needs the id (it would refuse with exit 3)
                     log_warn "machine profile: this machine's id cannot be detected -- profile '$UI_ALIAS' (from config.json machineId) was not refreshed"
                     write_summary WARN "machine profile" "not refreshed (no machine id)"
-                    machine_key="$UI_KEY"; machine_alias="$UI_ALIAS"; machine_owner=this
+                    # owner "config": the key is NOT passed to setup-user-config, which re-derives it
+                    # (via=config) and keeps the cached machineId (review M2: with --machine-id it
+                    # would read it as an override and drop the cache)
+                    machine_key="$UI_KEY"; machine_alias="$UI_ALIAS"; machine_owner=config
                     return 0 ;;
                 alias)
                     if [ "$AITOOLS_REGISTER_CACHED_ALIAS_SILENTLY" = "1" ]; then
@@ -928,7 +936,23 @@ user_init() {
         "~/"*) repos_dir="$HOME/${repos_dir#\~/}" ;;
     esac
     repos_dir="${repos_dir:-$HOME/repos}"
+    # A relative reposPath would put the dotprofile (and its GitHub repo) under the
+    # current directory, and setup-user-config refuses it anyway (review M1): refused
+    case "$repos_dir" in
+        /*) ;;
+        *)
+            log_error "user init: reposPath in $(display_path "$config") is not an absolute path ($repos_dir) -- set an absolute reposPath (or run: aitools install --repos-path <absolute path>), then run: aitools user init"
+            write_summary ERROR "dotprofile" "reposPath not absolute"
+            ui_action "Set an absolute reposPath in $(display_path "$config"), then run: aitools user init"
+            return 1 ;;
+    esac
     user_repo_dir="$repos_dir/$repo_name"
+    # --alias wins over a (possibly stale) AITOOLS_MACHINE_ALIAS, for the resolver and
+    # the writer alike (review m3)
+    if [ -n "$user_alias" ] && [ -n "${AITOOLS_MACHINE_ALIAS:-}" ]; then
+        log "user init: AITOOLS_MACHINE_ALIAS=$AITOOLS_MACHINE_ALIAS ignored (--alias $user_alias given)"
+        unset AITOOLS_MACHINE_ALIAS
+    fi
 
     if [ -d "$user_repo_dir/.git" ]; then
         # --- Path 1: local dotprofile present ---
@@ -971,14 +995,22 @@ user_init() {
     fi
     # This machine without a profile at the end (skipped at a prompt, refused, failed)
     # is one outcome with one exit code, 1 (Review3 #82 minor 3)
-    if [ -z "$machine_key" ]; then rc=1; fi
+    if [ -z "$machine_key" ]; then
+        # A skip at a prompt wrote a WARN row only: name the reason for the exit code (review n1)
+        if [ "$rc" -eq 0 ]; then log_error "machine profile: this machine is not registered (skipped) -- run: aitools user init"; fi
+        rc=1
+    fi
 
     if [ -d "$user_repo_dir" ]; then ui_scaffold_claude_md "$user_repo_dir" || rc=1; fi
 
     # config.json has one writer (setup-user-config): GitHub user, dotprofile path and
     # this machine's profile key (--machine-id; ConfigKey contract). Another
-    # machine's key is never passed (ConfigKey Q3).
-    if [ -n "$machine_key" ] && [ "$machine_owner" != "this" ]; then
+    # machine's key is never passed (ConfigKey Q3); a key that only config.json
+    # vouches for (owner "config") is left to the writer to re-derive (review M2).
+    if [ "$machine_owner" = "config" ]; then
+        log_detail "user init: machine id undetectable -- --machine-id not passed (the writer keeps the cached machineId)"
+        machine_key=""
+    elif [ -n "$machine_key" ] && [ "$machine_owner" != "this" ]; then
         log_error "user init: profile $machine_key is not this machine's (owner ${machine_owner:-unknown}) -- not passed to setup-user-config"
         write_summary ERROR "machine profile" "not this machine's profile"
         machine_key=""; rc=1
@@ -998,6 +1030,7 @@ user_init() {
     esac
     if [ "$wrc" -ne 0 ]; then
         log_error "user init: setup-user-config failed (exit $wrc) -- see $LOG_DISPLAY"
+        write_summary ERROR "aitools config" "setup-user-config failed"
         rc=1
     fi
 
