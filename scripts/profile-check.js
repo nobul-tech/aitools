@@ -112,8 +112,27 @@ if (profile.version !== 2) {
 
 // --- v2 validation ---
 const issues = [];
+// config.json caches this machine's profile key (machineId: the raw machine id,
+// lower-cased -- profiles are keyed by it, re-key design (e)); machineAlias is a
+// display value, and the cache of a revision 2.1 (alias-keyed) profile.
+const machineId = config.machineId || '';
 const machineAlias = config.machineAlias || '';
-const hostname = os.hostname().split('.')[0];
+// Machine matching is the native resolver's job (scripts/aitools-profile.sh /
+// .ps1; reported by setup-user-config on every run). os.hostname() is the
+// DNS/DHCP-derived kernel name and is never used (P-Q5). Here only the cached
+// key is checked: profiles[machineId] (keys ignore case), or a 2.1 profile keyed
+// by alias whose machine.id is machineId (legacy read).
+if (machineId && profile.profiles && typeof profile.profiles === 'object') {
+    const idl = String(machineId).toLowerCase();
+    const known = Object.keys(profile.profiles).some(k => {
+        const p = profile.profiles[k];
+        const mid = (p && p.machine && p.machine.id) ? String(p.machine.id).toLowerCase() : '';
+        return k.toLowerCase() === idl || mid === idl;
+    });
+    if (!known) {
+        issues.push({ code: 'MACHINE_ID_UNKNOWN', message: 'config.json machineId ' + machineId + ' is not a profile in profile.json', field: 'machineId', fix: 'run aitools user init' });
+    }
+}
 
 // Identity checks
 if (!profile.identity) {
@@ -136,47 +155,16 @@ if (!profile.identity) {
 // Profiles checks
 if (!profile.profiles || Object.keys(profile.profiles).length === 0) {
     issues.push({ code: 'NO_PROFILES', message: 'No machine profiles defined', fix: 'prompt' });
-} else {
-    // Check for hostname match
-    let matchedAlias = '';
-    for (const [alias, prof] of Object.entries(profile.profiles)) {
-        if (prof.machine && prof.machine.hostname && prof.machine.hostname.split('.')[0] === hostname) {
-            matchedAlias = alias;
-            break;
-        }
-    }
-    if (!matchedAlias) {
-        issues.push({ code: 'NO_MACHINE_MATCH', message: 'No profile matches this machine (hostname: ' + hostname + ')', fix: 'prompt' });
-    }
-
-    // Check config alias consistency
-    if (machineAlias && !profile.profiles[machineAlias]) {
-        issues.push({
-            code: 'ALIAS_MISMATCH',
-            message: 'machineAlias "' + machineAlias + '" in config.json not found in profiles (available: ' + Object.keys(profile.profiles).join(', ') + ')',
-            fix: 'prompt'
-        });
-    }
 }
 
 // Build result
-const matchedAlias = (() => {
-    if (!profile.profiles) return '';
-    for (const [alias, prof] of Object.entries(profile.profiles)) {
-        if (prof.machine && prof.machine.hostname && prof.machine.hostname.split('.')[0] === hostname) {
-            return alias;
-        }
-    }
-    return '';
-})();
-
 const status = issues.length === 0 ? 'ok' : 'warn';
 
 output({
     status: status,
     version: 2,
     profilePath: profilePath,
-    machineAlias: machineAlias || matchedAlias,
-    machineMatched: !!matchedAlias,
+    machineId: machineId,
+    machineAlias: machineAlias,
     issues: issues
 });
