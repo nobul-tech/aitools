@@ -90,22 +90,11 @@ IDENTITY_GIT_NAME="$AITLIB_IDENTITY_GIT_NAME"
 IDENTITY_GIT_EMAIL="$AITLIB_IDENTITY_GIT_EMAIL"
 log_detail "setup-user-claude: dotprofile rc=$URP_RC via=$USER_REPO_VIA; machine profile rc=$PROFILE_RC"
 
-# Footer hostname, same source and form as the resolver's detect_hostname (P-Q5:
-# macOS `scutil --get LocalHostName` only, never the DNS-derived kernel name;
-# elsewhere `uname -n`; short and lower-case). The PR #80 contract has no
-# hostname result, so it is read here until the lib exposes one. On failure the
-# footer shows "unknown" and the reason is a detail line.
-_host_rc=0
-if [ -x /usr/sbin/scutil ]; then
-    MACHINE_HOST=$(/usr/sbin/scutil --get LocalHostName 2>&1) || _host_rc=$?
-else
-    MACHINE_HOST=$(uname -n 2>&1) || _host_rc=$?
-fi
-if [ "$_host_rc" -ne 0 ]; then
-    log_detail "footer hostname unavailable (exit $_host_rc): $MACHINE_HOST"
-    MACHINE_HOST=""
-fi
-MACHINE_HOST=$(printf '%s' "${MACHINE_HOST%%.*}" | perl -pe 's/^\s+|\s+$//g; tr/A-Z/a-z/')
+# Footer hostname: the resolver's (P-Q5, one hostname source: macOS
+# `scutil --get LocalHostName`, elsewhere `uname -n`; short, lower-case), read
+# from resolve_machine_profile above. "unknown" when the resolver gave none
+# (the resolver says why in a warning, logged as a detail line).
+MACHINE_HOST="${AITLIB_MACHINE_HOSTNAME:-}"
 if [ -z "$MACHINE_HOST" ]; then MACHINE_HOST="unknown"; fi
 USER_REPO_DISPLAY=""
 if [ -n "$USER_REPO_PATH" ]; then
@@ -228,13 +217,22 @@ if [ "$DRY_RUN" = "true" ]; then
     log "  Existing: ${EXISTING_LINES} lines"
     log "  New: ${NEW_LINES} lines"
     if [ -f "$CLAUDE_MD" ]; then
-        if [ "$(cat "$CLAUDE_MD")" = "$NEW_CONTENT" ]; then
+        # Compared as deploy_managed_file compares (trailing newlines removed)
+        if ! _dr_existing=$(perl -0777 -pe 's/[\r\n]+\z//' "$CLAUDE_MD"); then
+            log_warn "Cannot read $(display_path "$CLAUDE_MD") for the dry-run comparison"
+            _dr_existing=""
+        fi
+        _dr_new=$(printf '%s' "$NEW_CONTENT" | perl -0777 -pe 's/[\r\n]+\z//')
+        if [ "$_dr_existing" = "$_dr_new" ]; then
             log "[DRY RUN] Content unchanged"
+            write_summary OK "claude.md" "verified"
         else
             log "[DRY RUN] Content differs -- would overwrite"
+            write_summary OK "claude.md" "dry-run: would update"
         fi
     else
         log "[DRY RUN] File does not exist -- would create"
+        write_summary OK "claude.md" "dry-run: would create"
     fi
 else
     # --- Deploy CLAUDE.md via managed-file flow ---

@@ -168,10 +168,10 @@ try {
     $osInfo = ""
 }
 if (-not $osInfo) { $osInfo = "Windows" }
-# Footer hostname, same source and form as the resolver (COMPUTERNAME, short and
-# lower-case). The PR #80 contract has no hostname result, so it is read here
-# until the lib exposes one; "unknown" when it is not set.
-$machineHost = ([string]$env:COMPUTERNAME).Split('.')[0].Trim().ToLowerInvariant()
+# Footer hostname: the resolver's (P-Q5, one hostname source: COMPUTERNAME,
+# short, lower-case), read from Resolve-MachineProfile above. "unknown" when the
+# resolver gave none (the resolver says why in a warning, logged as a detail line).
+$machineHost = [string]$script:AitLibMachineHostname
 if (-not $machineHost) { $machineHost = "unknown" }
 $profileShown = if ($machineAlias) { $machineAlias } else { "unresolved" }
 
@@ -243,14 +243,24 @@ if ($DryRun) {
     Log "  Existing: $existingLines lines"
     Log "  New: $newLines lines"
     if (Test-Path $claudeMd) {
-        $existingContent = Get-Content $claudeMd -Raw
-        if ($existingContent -eq $content) {
+        try {
+            $existingContent = Get-Content -LiteralPath $claudeMd -Raw -ErrorAction Stop
+        } catch {
+            LogWarn "Cannot read $claudeMd for the dry-run comparison: $_"
+            $existingContent = ""
+        }
+        # Compared as Deploy-ManagedFile compares (trailing newlines removed,
+        # case-sensitive; parity with setup-user-claude.sh)
+        if (("$existingContent" -replace '[\r\n]+$', '') -ceq ($content -replace '[\r\n]+$', '')) {
             Log "[DRY RUN] Content unchanged"
+            Write-Summary "OK" "claude.md" "verified"
         } else {
             Log "[DRY RUN] Content differs -- would overwrite"
+            Write-Summary "OK" "claude.md" "dry-run: would update"
         }
     } else {
         Log "[DRY RUN] File does not exist -- would create"
+        Write-Summary "OK" "claude.md" "dry-run: would create"
     }
 } else {
     # --- Deploy CLAUDE.md via managed-file flow ---
