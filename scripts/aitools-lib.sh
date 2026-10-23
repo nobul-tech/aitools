@@ -567,15 +567,22 @@ _aitlib_jsonl_init() {
 # jsonl_record TS SCRIPT LEVEL MSG -- append one record to deploy.jsonl in the log
 # directory (logging_init's LOG_DIR). Key order: ts, host, os, script, run_id,
 # level, msg (the installers' order). run_id = AITOOLS_RUN_ID, else one random id
-# per process. A failed write is logged at detail and otherwise ignored: logging
-# must not break the run it records (logging.md section 5).
+# per process. Logging must not break the run it records (logging.md section 5):
+# the first failed write is one log_warn (audit A-16: the run goes on, and the
+# warning says why its records are missing); later calls write nothing
+# (AITLIB_JSONL_FAILED=true, set before the warning so an installer whose log()
+# calls jsonl_record does not recurse). Returns 0.
 jsonl_record() {
     local f="${LOG_DIR:-$AITOOLS_LOG_DIR}/deploy.jsonl" ts sc lv msg
+    if [ "${AITLIB_JSONL_FAILED:-false}" = "true" ]; then return 0; fi
     _aitlib_jsonl_init
     _aitlib_json_esc ts "$1"; _aitlib_json_esc sc "$2"; _aitlib_json_esc lv "$3"; _aitlib_json_esc msg "$4"
+    # 2>/dev/null: the shell's own "cannot open" message; the failure is reported by
+    # the log_warn below (the if is the result check)
     if ! printf '{"ts":"%s","host":"%s","os":"%s","script":"%s","run_id":"%s","level":"%s","msg":"%s"}\n' \
-        "$ts" "$AITLIB_JSONL_HOST" "$AITLIB_JSONL_OS" "$sc" "$AITLIB_RUN_ID" "$lv" "$msg" >> "$f"; then
-        log_detail "deploy.jsonl: write failed ($f)"
+        "$ts" "$AITLIB_JSONL_HOST" "$AITLIB_JSONL_OS" "$sc" "$AITLIB_RUN_ID" "$lv" "$msg" 2>/dev/null >> "$f"; then
+        AITLIB_JSONL_FAILED=true
+        log_warn "deploy.jsonl: cannot write $(display_path "$f") -- structured log records are skipped for the rest of this run"
     fi
     return 0
 }
