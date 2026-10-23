@@ -30,7 +30,7 @@ Verdicts: **new** = filed in the batch; **filed** = an existing incident covers 
 | 3 | S3-M3-B5a-report.md:111 | pre-commit step 13 still lists claude/cursor as duplicated templates | **new #146** | check-pre-commit.sh:267, .ps1:262, deploy-paths.md:56-57, build-deploy.sh:625, :717, :812 |
 | 4 | S3-M3-B8a-report.md:83; S3-M3-B8a-Review-pr91.md:151 | build-deploy inlines the lib but not the resolver; no smoke check | fixed | PR #95: resolver embedded (build-deploy.sh:436-455, :1637-1642) and step 7 smoke run (check-pre-push.sh:115-117, :174-220) |
 | 5 | S3-M3-B8c-report.md:109; S3-M3-B8c-Review-pr90.md:76 | resolver sh/ps1 differ on `~` and UTF-16 config.json | fixed | Both now expand `~` (aitools-profile.sh:232-236, :442; .ps1:168-171, :354) and both reject UTF-16 (sh:212-227; ps1:150-163) |
-| 6 | S3-M3-Claude-report.md:79 | CLAUDE.md adopt reverse-tokenized by fixed order; live template corrupted | fixed (code); repair in progress | The code fix is a87ffce: setup-user-claude.sh:183-192 does one pass, longest value first. The dotprofile origin/main claude/CLAUDE.md:42-43 still read `nobul-{{PROFILE_NAME}}/aitools` at 1st check. Minutes later the dotprofile working copy showed `nobul-jose/aitools`, uncommitted (`git status`: `M claude/CLAUDE.md`), edited by another session. Not filed; see open question 1 |
+| 6 | S3-M3-Claude-report.md:79 | CLAUDE.md adopt reverse-tokenized by fixed order; live template corrupted | fixed (code and data) | Code: a87ffce (setup-user-claude.sh:183-192, one pass, longest value first). Data: the dotprofile template read `nobul-{{PROFILE_NAME}}/aitools` at :42-43 on its origin/main at first check. Another session repaired it in dotprofile commit 525ee49, "Sync CLAUDE.md template with shared and repair aitools links" (2026-10-22 19:14 -0700). Not filed; see the report's open question 1 |
 | 7 | S3-M3-Claude-report.md:80 | managed-file-deployment.md documents the first-profile fallback | filed | #76 (affected already lists .claude/rules/managed-file-deployment.md, .mdc and reference/managed-file-deployment.md). Still stale: rule :51, .mdc :31, reference :393, user-repo.md :84. Drafts are in PR #96 |
 | 8 | S3-M3-Claude-report.md:81 | mission prompt named BEGIN/END "profile resolution" markers that don't exist | dropped | Prompt drift. `git grep -i "profile resolution"` over scripts, reference, .claude and shared: no hits. No live artifact names the markers |
 | 9 | S3-M3-ConfigKey-report.md:87; S3-M3-ConfigKey-Review-pr86-batch4.md:115 | write_summary's OK to WARN promotion is not documented | **new #147** | aitools-lib.sh:860-866, .ps1:752-757, script-standards-detail.md:239-244, setup-user-config.sh:367-370 |
@@ -68,7 +68,7 @@ Verdicts: **new** = filed in the batch; **filed** = an existing incident covers 
 | 41 | S3-M3-LibFix-Review-pr80.md:194 | tree rev 5 contradicts itself on tool_exception_get output / stale globals | **new #161** | tree :300-310, :399, :564-567; also the re-key drift (profiles.<alias>) found while verifying |
 | 42 | S3-M3-B8b-report.md:98; S3-M3-LibKey-Review-pr86-batch3.md:122 | "INCIDENT: none" | n/a | |
 
-**Counts:** 42 rows. 40 are markers; rows 12 and 22 are restatements and row 42 is two "none" lines.
+**Counts:** 42 rows. Rows 1-41 are markers; several cite the same marker in two files. Row 42 is two "INCIDENT: none" lines. Across rows 1-41: 16 new + 5 merged + 3 filed + 12 fixed + 5 dropped = 41. Rows 1 and 14 are counted once, as filed.
 - 16 new (#146-#161).
 - 5 merged into new entries (rows 12, 17, 22, 26, 27).
 - 2 already filed (#76: rows 7 and 14; #98: row 1). Rows 1 and 14 are also fixed in code.
@@ -97,7 +97,7 @@ Verdicts: **new** = filed in the batch; **filed** = an existing incident covers 
 | 160 | lib to .ps1 bridge: cross-language rule ambiguity | low | 40 |
 | 161 | decision tree documents pre-M3 interfaces | medium | 41 |
 
-Severity: 0 high, 4 medium, 12 low. `referenceFile` is null on all 16: none went through the full discovery cycle. `linked` is null on all 16: no approved tracker exists (drafts are named in suggestedResolution).
+Severity: 0 high, 7 medium, 9 low. Review finding m2 raised #146, #150 and #156 from low to medium; the table rows above still show their filing severity. `referenceFile` is null on all 16: none went through the full discovery cycle. `linked` is null on all 16: no approved tracker exists (drafts are named in suggestedResolution).
 
 ## Close candidates for existing incidents (not changed here)
 
@@ -107,5 +107,7 @@ These were found while verifying. They are not part of this batch, because closi
 - **#109:** `eval "$PROFILE_VALS"` removed in PR #95.
 - **#86:** build goes to a staging dir in PR #95 (review m1).
 - **#76:** code half fixed (#83, #95); docs half still open.
+- **#33:** deploy-template drift. The reviewer suggested it; I did not verify it here.
+- **#149 / #9:** #149 now names #9, which already covers entry-point overrides (review M1).
 
 PR #95 and S3-M3-B5a-report.md claim each of these. I verified only #98 and #76 (code) against the code.

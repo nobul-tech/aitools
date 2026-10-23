@@ -3,7 +3,7 @@
     "id": 146,
     "title": "check-pre-commit step 13 and deploy-paths.md still treat setup-user-claude and setup-user-cursor as duplicated deploy templates after PR #95 made their generated copies extracts of scripts/",
     "status": "open",
-    "severity": "low",
+    "severity": "medium",
     "affected": [
       "scripts/check-pre-commit.sh",
       "scripts/check-pre-commit.ps1",
@@ -85,9 +85,9 @@
     "linked": null,
     "referenceFile": null,
     "observation": "scripts/aitools-lib.sh:125-134 (origin/main 8a9dcb5): 'Result-global contract (PR #80 review3 B1/M1): every result global carries the AITLIB_ prefix and every private helper the _aitlib_ prefix, so they cannot collide with a caller's own variables'. grep -i 'AITLIB|dot-sourc|result global|prefix' over reference/script-standards-detail.md, reference/cross-platform-detail.md and .claude/rules/script-standards.md: no hits. Shadowing: aitools-lib.sh:569 defines relay_child_log and scripts/aitools-install.sh:153 defines its own; aitools-lib.ps1:449 defines Write-JsonlRecord and scripts/aitools-install.ps1:65 defines its own (after dot-sourcing the lib, so the caller's copy wins).",
-    "expected": "No spec exists for: naming of shared-library result variables, the scope of a dot-sourced PowerShell library, or what a caller's definition of a lib function name means. .claude/rules/script-standards.md 'Required logging helpers' says 'Do not define inline copies' for logging helpers only.",
+    "expected": "Incident #9 already records 'No spec exists for: when and how entry points may override library functions' for scripts/aitools-install.sh/.ps1; the installer shadowing below is a current instance of that gap. No spec exists for: naming of shared-library result variables, the scope of a dot-sourced PowerShell library, or what a caller's definition of a lib function name means. .claude/rules/script-standards.md 'Required logging helpers' says 'Do not define inline copies' for logging helpers only.",
     "impact": "The PR #80 collisions (review3 B1/M1: lib results overwrote callers' USER_REPO_PATH) can recur in any new lib section, since the rule lives where only readers of that block see it; a lib fix to relay_child_log or Write-JsonlRecord silently does not reach the installers that shadow them.",
-    "discoveryContext": "Markers in S3-M3-LibFix-report.md:129 (repeating the Review3 marker on PR #80) and S3-M3-LibKey-report.md:95. Merged: same missing contract. Filed by S3-MF-Incidents (mission M3-FINISH item 9, Session Commander 10cf255a-c), 2026-10-22. Verified on origin/main 8a9dcb5: read scripts/aitools-lib.sh:120-150, grep for relay_child_log / Write-JsonlRecord / jsonl_record definitions in the lib and installers, grep of the three spec files. The Review3 full report is not in the repo (PR #82 points to it); its other markers are unknown.",
+    "discoveryContext": "Markers in S3-M3-LibFix-report.md:129 (repeating the Review3 marker on PR #80) and S3-M3-LibKey-report.md:95. Merged: same missing contract. Filed by S3-MF-Incidents (mission M3-FINISH item 9, Session Commander 10cf255a-c), 2026-10-22. Verified on origin/main 8a9dcb5: read scripts/aitools-lib.sh:120-150, grep for relay_child_log / Write-JsonlRecord / jsonl_record definitions in the lib and installers, grep of the three spec files. The Review3 full report is not in the repo (PR #82 points to it); its other markers are unknown. Audited #1-#145: #9 (entry point logging override pattern) covers the override half and is named in expected; this entry adds the result-naming/scope contract and the two live shadowed functions.",
     "discipline": null,
     "frameworks": null,
     "suggestedResolution": "Add a 'Library contract' paragraph to reference/script-standards-detail.md 'Shared library' (protected): AITLIB_/_aitlib_ and $script:AitLib* prefixes, assignment only inside functions, callers copy results right after the call, and callers never redefine a lib function (or must name the override, as entry-point logging does). Then remove or rename the installers' relay_child_log / Write-JsonlRecord copies, or record them as deliberate overrides.",
@@ -101,17 +101,17 @@
     "id": 150,
     "title": "The two JSON engines write the same number differently (aitools-json.pl keeps the source text such as 0.10; aitools-json.ps1 writes 0.1), so bash and PowerShell writers of one shared file produce different bytes",
     "status": "open",
-    "severity": "low",
+    "severity": "medium",
     "affected": [
       "scripts/aitools-json.pl",
       "scripts/aitools-json.ps1"
     ],
     "linked": null,
     "referenceFile": null,
-    "observation": "scripts/aitools-json.pl:68-70 (origin/main 8a9dcb5): 'Numbers keep their source lexeme byte for byte' (`sub numnorm { return $_[0] }`). scripts/aitools-json.ps1 ConvertTo-JText (:66-70) formats doubles and decimals with `[System.Convert]::ToString($v, [System.Globalization.CultureInfo]::InvariantCulture)`, which writes 0.10 as 0.1. The S3-M3-JsonRename reviewer verified the difference with a round trip on the base aitools-json.ps1 (PR #86 comment); not re-run here.",
+    "observation": "scripts/aitools-json.pl:68-70 (origin/main 8a9dcb5): 'Numbers keep their source lexeme byte for byte' (`sub numnorm { return $_[0] }`). scripts/aitools-json.ps1 parses with `ConvertFrom-Json` (:35) into a Double and writes with ConvertTo-NodeJson (:170-174), which loses the source lexeme: the PR #102 reviewer's pwsh 7.6.3 probe rewrote 0.10 as 0.1 and 1e2 as 100.0 (ConvertTo-JText :66-69, the `get` output, formats doubles the same way). The S3-M3-JsonRename reviewer verified the difference with a round trip on the base aitools-json.ps1 (PR #86 comment); not re-run here.",
     "expected": ".claude/rules/cross-platform.md 'Platform targeting principle' (paired scripts behave the same); the resolver and profile.json are written by both engines (commander decision: dotprofile writes auto-commit and push, N-Q2).",
     "impact": "A profile.json value with trailing zeros changes bytes when a Windows machine rewrites it, so the dotprofile gets diff-only commits that flip between machines; byte-level comparisons between bash and PS1 test outputs fail.",
-    "discoveryContext": "Marker in S3-M3-JsonRename-report.md:69 (from its reviewer, PR #86 re-key batch 1). Filed by S3-MF-Incidents (mission M3-FINISH item 9, Session Commander 10cf255a-c), 2026-10-22. Verified on origin/main 8a9dcb5 by reading scripts/aitools-json.pl:60-72 and scripts/aitools-json.ps1:60-90; no round trip run. Audited #1-#145: no match.",
+    "discoveryContext": "Marker in S3-M3-JsonRename-report.md:69 (from its reviewer, PR #86 re-key batch 1). Filed by S3-MF-Incidents (mission M3-FINISH item 9, Session Commander 10cf255a-c), 2026-10-22. Verified on origin/main 8a9dcb5 by reading scripts/aitools-json.pl:60-72 and scripts/aitools-json.ps1:14-35 and :170-174; round trip probe by the PR #102 reviewer (S3-MF-Incidents-Review), not by the author. Audited #1-#145: no match.",
     "discipline": null,
     "frameworks": null,
     "suggestedResolution": "Keep the source lexeme in the PS1 engine too (parse numbers into a wrapper that carries the original text, as perl does), and add a parity case with 0.10 and a 17-digit value to tests/profile/test-profile.sh for both engines.",
@@ -200,7 +200,8 @@
     "status": "open",
     "severity": "low",
     "affected": [
-      "reference/cross-platform-detail.md"
+      "reference/cross-platform-detail.md",
+      ".claude/rules/cross-platform.md"
     ],
     "linked": null,
     "referenceFile": null,
@@ -224,12 +225,13 @@
     "severity": "low",
     "affected": [
       "scripts/aitools-profile.sh",
-      "scripts/aitools-profile.ps1"
+      "scripts/aitools-profile.ps1",
+      "tests/profile/test-profile.sh"
     ],
     "linked": null,
     "referenceFile": null,
     "observation": "scripts/aitools-profile.sh:1242 (origin/main 8a9dcb5) writes `edit_set string \"2.2\" meta schemaRevision` for a new profile.json; scripts/aitools-profile.ps1:1085 adds only schemaRevision to meta. grep 'intent' in aitools-profile.sh finds only a header comment (:23). The approved row-4 intent text for profile.json exists as a draft (S3-M3-Docs approval page open question 3, R23, profile.json.edit.txt).",
-    "expected": ".claude/rules/sources-of-truth.md 'Intent statements' and shared/skills/intent-writing (every governed file states its intent); registries carry meta.intent (registries/incidents.json meta.intent). Related #104 (intent statements missing elsewhere).",
+    "expected": "No spec exists for: an intent statement in profile.json. The R23 draft (S3-M3-Docs approval page open question 3, profile.json.edit.txt) proposes one; registries carry meta.intent (registries/incidents.json meta.intent). Related #104 (intent statements missing elsewhere).",
     "impact": "Every dotprofile created by `aitools user init` starts without the intent statement the live dotprofile is to carry, so new users' profile.json and the commander's diverge, and agents reading a scaffolded file get no scope statement.",
     "discoveryContext": "Markers in S3-M3-Docs-approval-page.md:94 (open question 3). Filed by S3-MF-Incidents (mission M3-FINISH item 9, Session Commander 10cf255a-c), 2026-10-22. Verified on origin/main 8a9dcb5: grep schemaRevision/intent in scripts/aitools-profile.sh and .ps1.",
     "discipline": null,
@@ -245,7 +247,7 @@
     "id": 156,
     "title": "When profile.json already had uncommitted changes, tool_exception_record tells the user to 'run git push' although the resolver committed nothing",
     "status": "open",
-    "severity": "low",
+    "severity": "medium",
     "affected": [
       "scripts/aitools-lib.sh",
       "scripts/aitools-lib.ps1"
