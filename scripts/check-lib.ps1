@@ -127,6 +127,7 @@ function StepSkip {
 # Summary
 # ---------------------------------------------------------------------------
 function PrintSummary {
+    Write-DotprofileResolutionStep
     Write-Host ""
     Write-Host "=== SUMMARY: " -NoNewline
     Write-Host "$($script:PassCount) PASS" -ForegroundColor Green -NoNewline
@@ -166,16 +167,32 @@ function PrintSummary {
 # rc 1 (no dotprofile, shared-only mode) is not an error in a check: UserRepoPath
 # stays empty and callers skip their dotprofile steps.
 # rc 3 was already logged by the lib (LogError, ERROR row when a run summary
-# exists); UserRepoPath stays empty, so those steps skip too.
+# exists); UserRepoPath stays empty, so those steps skip too. CheckLogInit
+# then resets $script:errors, so the rc is kept in $script:UserRepoRc and
+# PrintSummary adds one WARN step for it: a broken dotprofile never passes a
+# check run (audit A-24).
+$script:UserRepoRc = 0
 function ResolveConfig {
     $script:ConfigFile = Join-Path $HOME ".aitools/config.json"
     $script:UserRepoPath = ""
     $script:UserRepoVia = "none"
+    $script:UserRepoRc = 0
     $rc = Resolve-UserRepoPath
     $script:UserRepoPath = $script:AitLibUserRepoPath
     if ($script:AitLibUserRepoVia) { $script:UserRepoVia = $script:AitLibUserRepoVia }
+    $script:UserRepoRc = $rc
     if ($rc -ne 0 -and $rc -ne 1) {
-        Log "dotprofile unresolved (resolver error above) -- dotprofile steps skip as 'not configured'"
+        Log "dotprofile unresolved (resolver error above) -- dotprofile steps skip as 'not configured'; the run reports a WARN step"
+    }
+}
+
+# Write-DotprofileResolutionStep -- the WARN step for a resolver error kept by
+# ResolveConfig ($script:UserRepoRc other than 0 or 1). Called by PrintSummary,
+# so it is counted in the run summary. No-op when ResolveConfig did not run.
+function Write-DotprofileResolutionStep {
+    $rc = $script:UserRepoRc
+    if ($rc -ne 0 -and $rc -ne 1) {
+        StepWarn "0" "Dotprofile resolution" "resolver error (rc $rc, see deploy.log) -- dotprofile steps reported 'not configured'"
     }
 }
 
