@@ -2327,7 +2327,8 @@ if ((Get-MdmSha256 ($mdmLatin1.GetBytes($mdmText))) -ne $mdmPayloadSha256) {
     Write-Summary "ERROR" $tool "payload damaged"
     exit 1
 }
-$mdmLines = $mdmText -split "`n"
+# Parse as UTF-8 (record paths may be non-ASCII; review N6), after the check on bytes.
+$mdmLines = [System.Text.Encoding]::UTF8.GetString($mdmLatin1.GetBytes($mdmText)) -split "`n"
 $mdmI = 1   # line 0 is the header
 while ($mdmI -lt $mdmLines.Count) {
     $mdmHead = $mdmLines[$mdmI]; $mdmI++
