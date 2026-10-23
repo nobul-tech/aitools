@@ -19,6 +19,11 @@
 # Write-JsonlRecord, relay_child_log / Send-ChildLog, run_child_relayed /
 # Invoke-ChildRelayed): valid JSONL with escaping, identical records in both
 # shells, warning/error counts, footers not counted, child exit codes.
+# M3-FINISH item 3: the runner itself (_aitlib_profile_run / Invoke-AitLibProfile)
+# accepts "result" lines (register, migrate) and a bare hostname value, passes
+# exits 1-4 through, names a missing resolver (exit 2 + error line), turns a
+# throw into an error line, and converts --path/--profile/--out/--config values
+# on the Git Bash branch (a cygpath stub).
 # Platform: macOS/Linux (pwsh runs with AITOOLS_PROFILE_TEST_ANY_OS=1). Safe to re-run.
 # Usage: bash tests/profile/test-lib.sh [--bash-only]
 
@@ -97,6 +102,22 @@ for n in 3 4; do
 done
 printf '#!/usr/bin/env bash\nprintf "alias\\tnobul-mac\\nvia\\tid\\nhostname\\tnobul-mac\\nname\\tJose\\ncompany\\tnobul-tech\\n"\nexit 0\n' > "$WORK/oldres.sh"
 printf '"alias`tnobul-mac"\n"via`tid"\n"hostname`tnobul-mac"\n"name`tJose"\n"company`tnobul-tech"\nexit 0\n' > "$WORK/oldres.ps1"
+# M3-FINISH item 3: commands that print a "result" line and no "via" line
+# (register, migrate), a bare hostname value, a plain error exit, and a stub that
+# echoes its arguments (the Git Bash path conversion)
+printf '#!/usr/bin/env bash\nprintf "result\\tcreated\\nkey\\tk1\\n"\nexit 0\n' > "$WORK/res0.sh"
+printf '"result`tcreated"\n"key`tk1"\nexit 0\n' > "$WORK/res0.ps1"
+printf '#!/usr/bin/env bash\nprintf "result\\tfailed\\nerror\\tprofile.json not found\\n"\nexit 1\n' > "$WORK/res1.sh"
+printf '"result`tfailed"\n"error`tprofile.json not found"\nexit 1\n' > "$WORK/res1.ps1"
+printf '#!/usr/bin/env bash\nprintf "probe-host\\n"\nexit 0\n' > "$WORK/host.sh"
+printf '"probe-host"\nexit 0\n' > "$WORK/host.ps1"
+printf '#!/usr/bin/env bash\nprintf "error\\tbad input\\n"\nexit 2\n' > "$WORK/exit2.sh"
+printf '"error`tbad input"\nexit 2\n' > "$WORK/exit2.ps1"
+printf '"result`tok"\nforeach ($x in $args) { "arg`t$x" }\nexit 0\n' > "$WORK/args.ps1"
+# A cygpath stub: -w marks paths under /conv/ (W/conv/...), leaves the rest as is
+mkdir -p "$WORK/fakebin"
+printf '#!/usr/bin/env bash\ncase "$2" in /conv/*) printf "W%%s\\n" "$2" ;; *) printf "%%s\\n" "$2" ;; esac\n' > "$WORK/fakebin/cygpath"
+chmod +x "$WORK/fakebin/cygpath"
 
 # Bash driver: source the lib, run one call, print the results
 cat > "$WORK/drive.sh" <<'DRIVE'
@@ -121,6 +142,20 @@ case "$CALL" in
         WARNINGS=0; : > "$AITOOLS_SUMMARY_FILE"; rc=0   # judge the second, identical call only
         tool_exception_record go pkg-installer /usr/local/bin/go 1.22.5 || rc=$? ;;
     keep) resolve_user_repo_path || rc=$?; resolve_machine_profile || rc=$? ;;
+    run)
+        # The runner itself: RUN_ARGS is comma-separated; FAKEBIN goes first on PATH
+        if [ -n "${FAKEBIN:-}" ]; then PATH="$FAKEBIN:$PATH"; fi
+        IFS=, read -r -a run_args <<< "$RUN_ARGS"
+        _aitlib_profile_run "${run_args[@]}" || rc=$?
+        printf 'rc=%s profrc=%s\n' "$rc" "$AITLIB_PROFILE_RC"
+        v=$(_aitlib_profile_tag result); if [ -z "$v" ]; then v=$(_aitlib_profile_tag via); fi
+        if [ -z "$v" ]; then v=$(printf '%s\n' "$AITLIB_PROFILE_OUT" | perl -ne 'print, exit if /^[^\t]+$/'); fi
+        printf 'out=%s\n' "$v"
+        printf 'err=%s\n' "$(_aitlib_profile_lines error | perl -ne 'print, exit if /\S/')"
+        a=$(_aitlib_profile_lines arg | perl -pe 's/\n/ /' | perl -pe 's/ $//')
+        if [ -n "$a" ]; then printf 'args=%s\n' "$a"; fi
+        printf 'warnings=%s errors=%s\n' "$WARNINGS" "$ERRORS"
+        exit 0 ;;
 esac
 printf 'rc=%s\n' "$rc"
 case "$CALL" in
@@ -163,6 +198,20 @@ switch ($env:CALL) {
         $rc = Set-ToolException "go" "pkg-installer" "/usr/local/bin/go" "1.22.5"
     }
     "keep" { $null = Resolve-UserRepoPath; $rc = Resolve-MachineProfile }
+    "run" {
+        # The runner itself: RUN_ARGS is comma-separated
+        $ran = Invoke-AitLibProfile @($env:RUN_ARGS -split ',')
+        $rc = if ($ran) { 0 } else { 1 }
+        "rc=$rc profrc=$($script:AitLibProfileRc)"
+        $v = Get-AitLibProfileTag "result"; if (-not $v) { $v = Get-AitLibProfileTag "via" }
+        if (-not $v) { $v = @($script:AitLibProfileOut | Where-Object { $_ -and -not $_.Contains("`t") }) | Select-Object -First 1 }
+        "out=$v"
+        "err=$(@(Get-AitLibProfileLines 'error' | Where-Object { $_ -match '\S' }) | Select-Object -First 1)"
+        $a = @(Get-AitLibProfileLines "arg")
+        if ($a.Count) { "args=$($a -join ' ')" }
+        "warnings=$($script:warnings) errors=$($script:errors)"
+        exit 0
+    }
 }
 "rc=$rc"
 switch ($env:CALL) {
@@ -198,14 +247,14 @@ run_case() {
             got=$(env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" REPO="$REPO" CALL="$call" \
                 AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac $extra \
                 "$BASH_BIN" "$WORK/drive.sh" 2>/dev/null) || got="driver failed: $?"  # stderr: console log lines
-            got=$(printf '%s\n' "$got" | grep -E '^(rc|path|alias|found|result|kept|warnings|key|notes)=' || true)  # only the driver's result lines (log lines also reach stdout)
+            got=$(printf '%s\n' "$got" | grep -E '^(rc|path|alias|found|result|kept|warnings|key|notes|out|err|args)=' || true)  # only the driver's result lines (log lines also reach stdout)
         else
             # shellcheck disable=SC2086  # $extra is word-split on purpose
             got=$(env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" REPO="$REPO" CALL="$call" \
                 AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac AITOOLS_PROFILE_TEST_ANY_OS=1 $extra \
                 pwsh -NoProfile -File "$WORK/drive.ps1" -UserRepoPath /caller/urp -MachineAlias caller -ProfileFile /caller/pf \
                 2>/dev/null | perl -pe 's/\e\[[0-9;]*m//g') || got="driver failed: $?"  # Write-Host console lines dropped by the grep below
-            got=$(printf '%s\n' "$got" | grep -E '^(rc|path|alias|found|result|kept|warnings|key|notes)=' || true)  # only the driver's result lines
+            got=$(printf '%s\n' "$got" | grep -E '^(rc|path|alias|found|result|kept|warnings|key|notes|out|err|args)=' || true)  # only the driver's result lines
         fi
         if [ "$got" = "$want" ]; then ok "$name ($impl): result"
         else bad "$name ($impl): got"; printf '%s\n' "$got" | sed 's/^/         /'; printf '       want\n'; printf '%s\n' "$want" | sed 's/^/         /'; fi
@@ -435,6 +484,82 @@ result=failed pushed=false
 warnings=1 errors=0
 notes=1" "ACTION||see deploy.log -- a tool choice (tool exception) was not saved" "AITOOLS_PROFILE_SH=$WORK/exit4.sh AITOOLS_PROFILE_PS1=$WORK/exit4.ps1 SHOW_NOTES=1"
 
+# M3-FINISH item 3: the runner itself (_aitlib_profile_run / Invoke-AitLibProfile),
+# as user init calls it. register and migrate print a "result" line and no "via"
+# line; hostname prints a bare value. Each exit code 0-4 and a missing resolver.
+fixture with-id
+stub() { printf 'AITOOLS_PROFILE_SH=%s/%s.sh AITOOLS_PROFILE_PS1=%s/%s.ps1' "$WORK" "$1" "$WORK" "$1"; }
+run_case run-register-result run "rc=0 profrc=0
+out=created
+err=
+warnings=0 errors=0" "" "RUN_ARGS=register $(stub res0)"
+run_case run-migrate-result run "rc=0 profrc=0
+out=created
+err=
+warnings=0 errors=0" "" "RUN_ARGS=migrate $(stub res0)"
+run_case run-register-exit1-result run "rc=0 profrc=1
+out=failed
+err=profile.json not found
+warnings=0 errors=0" "" "RUN_ARGS=register $(stub res1)"
+run_case run-exit2 run "rc=0 profrc=2
+out=
+err=bad input
+warnings=0 errors=0" "" "RUN_ARGS=register $(stub exit2)"
+for n in 3 4; do
+    run_case "run-exit$n" run "rc=0 profrc=$n
+out=none
+err=stub says no
+warnings=0 errors=0" "" "RUN_ARGS=register $(stub "exit$n")"
+done
+for n in 0 1; do
+    run_case "run-silent$n-register" run "rc=0 profrc=2
+out=
+err=resolver exited $n without result lines (see deploy.log)
+warnings=0 errors=0" "" "RUN_ARGS=register $(stub "silent$n")"
+done
+run_case run-hostname-stub run "rc=0 profrc=0
+out=probe-host
+err=
+warnings=0 errors=0" "" "RUN_ARGS=hostname $(stub host)"
+run_case run-hostname-empty run "rc=0 profrc=2
+out=
+err=resolver exited 0 without result lines (see deploy.log)
+warnings=0 errors=0" "" "RUN_ARGS=hostname $(stub silent0)"
+# A bare value is accepted only for hostname and machine-id
+run_case run-bare-value-resolve run "rc=0 profrc=2
+out=probe-host
+err=resolver exited 0 without result lines (see deploy.log)
+warnings=0 errors=0" "" "RUN_ARGS=resolve $(stub host)"
+run_case run-missing run "rc=1 profrc=2
+out=
+err=resolver none.sh not found ($WORK)
+warnings=0 errors=0" "" "RUN_ARGS=register $(stub none)" bash
+if $USE_PS; then
+    run_case run-missing run "rc=1 profrc=2
+out=
+err=resolver none.ps1 not found ($WORK)
+warnings=0 errors=0" "" "RUN_ARGS=register $(stub none)" ps
+    run_case run-throw run "rc=0 profrc=2
+out=
+err=aitools-profile register threw: boom
+warnings=0 errors=0" "" "RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/throw.ps1" ps
+fi
+# The real resolver (this fixture: this machine's id-keyed profile)
+fixture id-key
+run_case run-real-register run "rc=0 profrc=0
+out=updated
+err=
+warnings=0 errors=0" "" "RUN_ARGS=register,--profile,$DP/profile.json,--out,$WORK/reg.tmp,--shell,zsh,--environment,local"
+rm -f "$WORK/reg.tmp"
+run_case run-real-migrate run "rc=0 profrc=0
+out=unchanged
+err=
+warnings=0 errors=0" "" "RUN_ARGS=migrate,--profile,$DP/profile.json"
+run_case run-real-hostname run "rc=0 profrc=0
+out=nobul-mac
+err=
+warnings=0 errors=0" "" "RUN_ARGS=hostname"
+
 # m2: the bash -> pwsh branch (Git Bash on Windows), forced on this OS. A
 # non-ASCII identity value must arrive intact (UTF-8 output).
 if $USE_PS; then
@@ -480,6 +605,45 @@ path= via=
 warnings=0 errors=1" "ERROR|dotprofile|resolver failed
 $A_DP" "$PWSH_ENV AITOOLS_PROFILE_PS1=$WORK/$broken.ps1" bash
     done
+
+    # M3-FINISH item 3 through the pwsh branch: result lines, a bare hostname, a
+    # throw (an "error" line, as in-process), a missing resolver, and the path
+    # arguments that are converted (--path, --profile, --out, --config; --slug not)
+    run_case via-pwsh-run-register-result run "rc=0 profrc=0
+out=created
+err=
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/res0.ps1" bash
+    run_case via-pwsh-run-exit1-result run "rc=0 profrc=1
+out=failed
+err=profile.json not found
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/res1.ps1" bash
+    run_case via-pwsh-run-hostname run "rc=0 profrc=0
+out=probe-host
+err=
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=hostname AITOOLS_PROFILE_PS1=$WORK/host.ps1" bash
+    run_case via-pwsh-run-silent0 run "rc=0 profrc=2
+out=
+err=resolver exited 0 without result lines (see deploy.log)
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=migrate AITOOLS_PROFILE_PS1=$WORK/silent0.ps1" bash
+    run_case via-pwsh-run-throw run "rc=0 profrc=2
+out=
+err=aitools-profile register threw: boom
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/throw.ps1" bash
+    run_case via-pwsh-run-missing run "rc=1 profrc=2
+out=
+err=resolver none.ps1 or pwsh not found ($WORK)
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/none.ps1" bash
+    run_case via-pwsh-run-path-args run "rc=0 profrc=0
+out=ok
+err=
+args=register --profile W/conv/p.json --out W/conv/o.tmp --config W/conv/c.json --path W/conv/x --slug /conv/s
+warnings=0 errors=0" "" "$PWSH_ENV FAKEBIN=$WORK/fakebin RUN_ARGS=register,--profile,/conv/p.json,--out,/conv/o.tmp,--config,/conv/c.json,--path,/conv/x,--slug,/conv/s AITOOLS_PROFILE_PS1=$WORK/args.ps1" bash
+    fixture id-key
+    run_case via-pwsh-run-real-register run "rc=0 profrc=0
+out=updated
+err=
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register,--profile,$DP/profile.json,--out,$WORK/reg.tmp,--shell,zsh,--environment,local" bash
+    rm -f "$WORK/reg.tmp"
 fi
 
 # ---------------------------------------------------------------------------
