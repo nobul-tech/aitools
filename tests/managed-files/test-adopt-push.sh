@@ -59,6 +59,8 @@ g() { git -C "$@" >/dev/null 2>&1; }   # quiet git for fixture setup; each use i
 setup_case() {
     C="$TMP_ROOT/$1"
     DP="$C/dotprofile"; REMOTE="$C/remote.git"; OTHER="$C/other"
+    # DPD: DP as the lib's display_path prints it in ACTION rows (Windows form under Git Bash)
+    if command -v cygpath >/dev/null 2>&1; then DPD=$(cygpath -w "$DP"); else DPD="$DP"; fi
     mkdir -p "$C/home" "$C/dest" "$C/bin" "$DP/claude/rules" "$OTHER"
     git init -q --bare -b main "$REMOTE"
     git init -q -b main "$DP"
@@ -153,7 +155,7 @@ g "$DP" remote remove origin
 printf 'edited rule\n' > "$DP/claude/rules/r.md"
 run_lib "$(dcp "$DP/claude/rules/r.md" "Adopt r.md")"
 check "push failure: push-failed, committed locally" "[ \"\$(push_state)\" = push-failed ] && [ \"\$(commits)\" = 2 ]"
-check "push failure: WARN logged, ACTION 'run git push in <dotprofile>'" "grep -q '\[warn\] dotprofile push failed' '$LOG' && grep -qxF 'ACTION||run git push in $DP' '$C/summary'"
+check "push failure: WARN logged, ACTION 'run git push in <dotprofile>'" "grep -q '\[warn\] dotprofile push failed' '$LOG' && grep -qxF 'ACTION||run git push in $DPD' '$C/summary'"
 check "push failure: exit 0 (the run continues)" "[ \"\$(cat '$C/rc')\" = 0 ]"
 
 setup_case direct-push-rejected
@@ -162,19 +164,19 @@ g "$C/elsewhere" config user.name x; g "$C/elsewhere" config user.email x@exampl
 printf 'from elsewhere\n' > "$C/elsewhere/notes.md"; g "$C/elsewhere" commit -q -am other; g "$C/elsewhere" push -q
 printf 'edited rule\n' > "$DP/claude/rules/r.md"
 run_lib "$(dcp "$DP/claude/rules/r.md" "Adopt r.md")"
-check "push rejected: push-failed, ACTION pull --rebase" "[ \"\$(push_state)\" = push-failed ] && grep -q '\[warn\] dotprofile push rejected' '$LOG' && grep -qxF 'ACTION||git pull --rebase, then git push in $DP' '$C/summary'"
+check "push rejected: push-failed, ACTION pull --rebase" "[ \"\$(push_state)\" = push-failed ] && grep -q '\[warn\] dotprofile push rejected' '$LOG' && grep -qxF 'ACTION||git pull --rebase, then git push in $DPD' '$C/summary'"
 
 setup_case direct-commit-fail
 printf '#!/bin/sh\nexit 1\n' > "$DP/.git/hooks/pre-commit"; chmod +x "$DP/.git/hooks/pre-commit"
 printf 'edited rule\n' > "$DP/claude/rules/r.md"
 run_lib "$(dcp "$DP/claude/rules/r.md" "Adopt r.md")"
-check "commit failure: commit-failed, WARN + ACTION, nothing pushed" "[ \"\$(push_state)\" = commit-failed ] && grep -q '\[warn\] dotprofile commit failed' '$LOG' && grep -qxF 'ACTION||commit and push claude/rules/r.md in $DP' '$C/summary' && remote_has claude/rules/r.md 'source rule'"
+check "commit failure: commit-failed, WARN + ACTION, nothing pushed" "[ \"\$(push_state)\" = commit-failed ] && grep -q '\[warn\] dotprofile commit failed' '$LOG' && grep -qxF 'ACTION||commit and push claude/rules/r.md in $DPD' '$C/summary' && remote_has claude/rules/r.md 'source rule'"
 
 setup_case direct-action-once
 g "$DP" remote remove origin
 printf 'e1\n' > "$DP/claude/rules/r.md"; printf '{"a":9}\n' > "$DP/profile.json"
 run_lib "$(dcp "$DP/claude/rules/r.md" "Adopt r.md"); $(dcp "$DP/profile.json" "Adopt profile.json")"
-check "two push failures in one run: one ACTION row" "[ \"\$(grep -cxF 'ACTION||run git push in $DP' '$C/summary')\" = 1 ]"
+check "two push failures in one run: one ACTION row" "[ \"\$(grep -cxF 'ACTION||run git push in $DPD' '$C/summary')\" = 1 ]"
 
 # ---------------------------------------------------------------------------
 # Through deploy_managed_file (interactive adopt)
@@ -207,7 +209,7 @@ if $HAVE_PTY; then
     printf 'local edit\n' > "$C/dest/r.md"
     run_lib "C='$C' SRCF='$DP/claude/rules/r.md' DEST='$C/dest/r.md' ADOPT='$DP/claude/rules/r.md'; $DMF" "a\n"
     check "adopt, push fails: outcome still accept & adopt, files written" "[ \"\$(result)\" = 'accept & adopt' ] && grep -qx 'local edit' '$DP/claude/rules/r.md' && grep -qx 'local edit' '$C/dest/r.md' && [ \"\$(cat '$C/rc')\" = 0 ]"
-    check "adopt, push fails: push-failed, WARN + ACTION" "[ \"\$(push_state)\" = push-failed ] && grep -q '\[warn\] dotprofile push failed' '$LOG' && grep -qxF 'ACTION||run git push in $DP' '$C/summary'"
+    check "adopt, push fails: push-failed, WARN + ACTION" "[ \"\$(push_state)\" = push-failed ] && grep -q '\[warn\] dotprofile push failed' '$LOG' && grep -qxF 'ACTION||run git push in $DPD' '$C/summary'"
 
     setup_case adopt-other-repo
     printf 'local edit\n' > "$C/dest/o.md"
