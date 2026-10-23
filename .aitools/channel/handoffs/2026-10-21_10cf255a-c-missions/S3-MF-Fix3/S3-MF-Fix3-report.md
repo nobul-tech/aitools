@@ -49,7 +49,16 @@ All four were confirmed in the code before fixing. None were rejected.
 
 ## Review
 
-S3-MF-Fix3-Review (general-purpose, no isolation) was still running at hand-back. Its verdict is unknown. It will write S3-MF-Fix3-Review-pr114.md in this folder and post it with `gh pr comment 114`. That file is not committed yet. The harness forced this hand-back before the review and CI finished.
+S3-MF-Fix3-Review (general-purpose, no isolation) found the PR approve-worthy, with 0 blocking and 4 non-blocking findings.
+- Review comment: https://github.com/nobul-tech/aitools/pull/114#issuecomment-6357137174
+- Review file: S3-MF-Fix3-Review-pr114.md, in this folder.
+- Its test counts are the same as mine.
+
+The non-blocking findings are left as follow-ups:
+- n-1: the bash warning for a temp file that could not be removed does not include rm's reason, which PowerShell's does.
+- n-2: each section-1 failure now counts 2 errors (see I-2 / #147).
+- n-3, pre-existing: a config.json that already holds both `machineId` and `MachineId` is merged differently by the two writers (see I-5).
+- n-4: two test gaps. C23e does not check the deploy.log level, and C25 has no PowerShell twin.
 
 ## Follow-ups
 
