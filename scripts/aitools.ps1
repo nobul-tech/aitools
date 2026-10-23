@@ -502,6 +502,14 @@ if (Test-Path $aitoolsJson) { . $aitoolsJson }
 Initialize-Logging "aitools"
 foreach ($note in $preLibNotes) { Log $note }
 foreach ($w in $preLibWarnings) { LogWarn $w }
+# --alias / -Alias with a value that is an option-like word (audit A-15; same text as
+# bash), e.g. "-x". A missing value -- "--alias" last, or followed by one of this
+# script's own switches such as --force -- is a parameter-binding error that pwsh
+# reports under -File before this script runs (review B m-1), so it never gets here.
+if ($script:UserAlias -and $script:UserAlias.StartsWith("-")) {
+    LogError "--alias needs a value (aitools user init --alias <name>)"
+    exit 1
+}
 
 # Reject unknown commands (typos like "installs", "mcpp", etc.)
 $knownCommands = @("install", "gitpull", "mcp", "user", "sessions", "dashboard", "")
@@ -801,36 +809,20 @@ function Remove-UiTmp([string]$Path) {
     }
 }
 
-# Invoke-UiProfile ARGS -- run the resolver (aitools-profile.ps1, in-process).
-# Sets $script:UiProfOut (key<TAB>value lines) and $script:UiProfRc (0 ok, 1
-# nothing found, 2 error, 3 refused, 4 alias in use). Its own log lines
-# ([Console]::Error) become detail lines. Returns $false when no resolver is
-# found (UiProfRc 2 with an error line), else $true. Not the lib runner
-# (Invoke-AitLibProfile): that one reads an exit 0/1 without a "via" line as a
-# resolver crash, and register and migrate print no "via" line.
+# Invoke-UiProfile ARGS -- run the resolver through the lib runner
+# (Invoke-AitLibProfile in aitools-lib.ps1: aitools-profile.ps1, in-process) and
+# copy its results right after the call (the lib's result-variable contract):
+# $script:UiProfOut (key<TAB>value lines; for hostname the bare value) and
+# $script:UiProfRc (0 ok, 1 nothing found, 2 error -- also no resolver, a throw,
+# or an exit 0/1 without result lines -- 3 refused, 4 alias in use). The
+# resolver's own log lines become detail lines. AITOOLS_PROFILE_PS1 overrides the
+# resolver, as for every lib caller (register and migrate then write through it).
+# Returns nothing.
 function Invoke-UiProfile([string[]]$Arguments) {
-    $script:UiProfOut = @(); $script:UiProfRc = 0
-    $ps1 = Join-Path $repoPath "scripts" "aitools-profile.ps1"
-    if (-not (Test-Path -LiteralPath $ps1 -PathType Leaf)) {
-        $script:UiProfRc = 2
-        $script:UiProfOut = @("error`tresolver aitools-profile.ps1 not found ($(Join-Path $repoPath 'scripts'))")
-        return $false
-    }
-    $global:LASTEXITCODE = 0
-    $origErr = [Console]::Error
-    $errBuf = [IO.StringWriter]::new()
-    [Console]::SetError($errBuf)
-    try {
-        $script:UiProfOut = @(& $ps1 @Arguments | ForEach-Object { [string]$_ })
-        $script:UiProfRc = $LASTEXITCODE
-    } catch {
-        $script:UiProfRc = 2
-        $script:UiProfOut = @($script:UiProfOut) + @("error`taitools-profile $($Arguments[0]) threw: $($_.Exception.Message)")
-    } finally {
-        [Console]::SetError($origErr)
-    }
-    Write-UiLogLines "aitools-profile $($Arguments[0]): " $errBuf.ToString()
-    return $true
+    # $false = no resolver: AitLibProfileRc is then 2 with an "error" line naming
+    # it, which every caller reads (UiProfRc, Get-UiLines): the result check
+    $null = Invoke-AitLibProfile $Arguments
+    $script:UiProfOut = @($script:AitLibProfileOut); $script:UiProfRc = $script:AitLibProfileRc
 }
 
 function Get-UiTag([string]$Key) {
@@ -1610,10 +1602,16 @@ function Invoke-UserInit {
     }
     # This machine without a profile at the end (skipped at a prompt, refused, failed)
     # is one outcome with one exit code, 1 (Review3 #82 minor 3)
+    $noMachine = $false
     if (-not $script:UiMachineKey) {
         # A skip at a prompt wrote a WARN row only: name the reason for the exit code (review n1)
         if ($rc -eq 0) { LogError "machine profile: this machine is not registered (skipped) -- run: aitools user init" }
         $rc = 1
+        # Reported here: setup-user-config gets -NoMachine, so it adds no second
+        # machine-profile ERROR / ACTION (M3-FINISH item 2). Decided here, not from an
+        # empty $machineKey at the writer call: the owner "config" branch below also
+        # empties it for a registered machine whose id cannot be detected.
+        $noMachine = $true
     }
 
     if (Test-Path -LiteralPath $userRepoDir) {
@@ -1623,9 +1621,14 @@ function Invoke-UserInit {
     # config.json has one writer (setup-user-config): GitHub user, dotprofile path and
     # this machine's profile key (-MachineId; ConfigKey contract). Another machine's
     # key is never passed (ConfigKey Q3); a key that only config.json vouches for (owner
-    # "config") is left to the writer to re-derive (review M2). In-process: reset the
-    # exit code, catch a throw; its output goes to the host, never into this function's
-    # return value (review m1: `exit (Invoke-UserInitCommand)` would otherwise exit 0).
+    # "config") is left to the writer to re-derive (review M2); an unregistered machine
+    # ($noMachine) gets -NoMachine instead of a key. Both child scripts run in-process
+    # through the lib relay (Invoke-ChildRelayed; audit A-12, A-13): their lines are
+    # shown and mirrored to deploy.jsonl, their warnings are counted here, and a failed
+    # child (exit code or throw) is one error (logged by the relay) with an ERROR row of
+    # its own, or the relay's when it died before writing one. The relay consumes the
+    # child's output, so none reaches this function's return value (review m1:
+    # `exit (Invoke-UserInitCommand)` would otherwise exit 0).
     $machineKey = $script:UiMachineKey
     if ($script:UiMachineOwner -ceq "config") {
         LogDetail "user init: machine id undetectable -- -MachineId not passed (the writer keeps the cached machineId)"
@@ -1638,36 +1641,24 @@ function Invoke-UserInit {
     $configWriter = Join-Path $repoPath "scripts" "setup-user-config.ps1"
     $writerArgs = @{ GithubUser = $script:UiGhUser; UserRepoPath = $userRepoDir }
     if ($machineKey) { $writerArgs["MachineId"] = $machineKey }
-    $global:LASTEXITCODE = 0
-    try {
-        & $configWriter @writerArgs | Out-Host
-        $writerRc = $LASTEXITCODE
-        if ($writerRc -ne 0) {
-            LogError "user init: setup-user-config failed (exit $writerRc) -- see $logFile"
-            Write-Summary "ERROR" "aitools config" "setup-user-config failed"
-            $rc = 1
-        }
-    } catch {
-        LogError "user init: setup-user-config.ps1 failed: $_"
-        Write-Summary "ERROR" "aitools config" "setup-user-config failed"
-        $rc = 1
-    }
+    elseif ($noMachine) { $writerArgs["NoMachine"] = $true }
+    $writerRelay = Invoke-ChildRelayed "user init: setup-user-config" $configWriter $writerArgs "aitools config"
+    if ($writerRelay -ne 0) { $rc = 1 }   # the relay logged the failure and its row
 
     # Session archive hook. Exit 2 = the user aborted in the review menu (D-TS13):
-    # stop with exit 2; any other failure is logged.
+    # stop with exit 2 (the relay records it: one error, ERROR "claude hooks"
+    # "aborted (exit 2)" unless the hook script wrote a row); any other failure is
+    # logged by the relay.
     Log "user init: deploying the session archive hook"
     $hookSetup = Join-Path $repoPath "scripts" "setup-user-hooks.ps1"
     $hookRc = 0
     if (-not (Test-Path -LiteralPath $hookSetup)) {
         $hookRc = 127
     } else {
-        $global:LASTEXITCODE = 0
-        try {
-            & $hookSetup | Out-Host
-            $hookRc = $LASTEXITCODE
-        } catch {
-            LogError "user init: setup-user-hooks.ps1 failed: $_"
-            $hookRc = 1
+        $hookRelay = Invoke-ChildRelayed "user init: setup-user-hooks.ps1" $hookSetup @{} "claude hooks"
+        if ($hookRelay -ne 0) {
+            $hookRc = $script:AitLibChildRc
+            if ($hookRc -eq 0) { $hookRc = 1 }   # error lines with exit 0: a failure
         }
     }
     if ($hookRc -eq 2) {
@@ -1678,9 +1669,8 @@ function Invoke-UserInit {
         LogError "user init: $hookSetup not found -- the session archive hook was not deployed"
         Write-Summary "ERROR" "claude hooks" "setup script missing"
         $rc = 1
-    } elseif ($hookRc -and $hookRc -ne 0) {
-        LogError "user init: setup-user-hooks.ps1 failed (exit $hookRc) -- see $logFile"
-        $rc = 1
+    } elseif ($hookRc -ne 0) {
+        $rc = 1   # the relay logged the failure and its row
     }
     if ($rc -eq 0) {
         LogOk "user init: done -- sessions will be archived to $(Join-Path $userRepoDir 'sessions')"

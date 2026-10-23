@@ -124,22 +124,33 @@ function ReadConfigKey {
 #   Get-ToolException      hashtable  $null           $null  $null        $null
 #   Set-ToolException      0          1 failed        1      3 refused    1 (unexpected)
 # Every 3 and 4 is logged with its code and meaning. An exit 0/1 without the
-# resolver's "via" line is rewritten to 2 first (Invoke-AitLibProfile).
+# resolver's result lines ("via" or "result"; a value for hostname and
+# machine-id) is rewritten to 2 first (Invoke-AitLibProfile).
 # ---------------------------------------------------------------------------
 
 # Invoke-AitLibProfile ARGS -- run the resolver in-process; sets
 # $script:AitLibProfileOut (tagged lines) and $script:AitLibProfileRc. Returns
-# $true when it ran, $false when no resolver is available. $PSScriptRoot inside
-# a function is the directory of the file that defines it (this library, or the
-# generated deploy script it is inlined into). The resolver's stderr (its own
-# log lines, written with [Console]::Error) is captured and copied to
-# deploy.log as detail lines, as in bash. The exit code is trusted only with the
-# result lines: exit 0 or 1 without a "via" line is rewritten to 2 with an
-# "error" line (parity with _aitlib_profile_run).
+# $true when it ran, $false when no resolver is available ($script:AitLibProfileRc
+# is then 2 with an "error" line naming it; the caller logs it). Callers: the
+# wrappers below and `aitools user init` (aitools.ps1 Invoke-UiProfile copies
+# the results). $PSScriptRoot inside a function is the directory of the file
+# that defines it (this library, or the generated deploy script it is inlined
+# into). The resolver's stderr (its own log lines, written with
+# [Console]::Error) is captured and copied to deploy.log as detail lines, as in
+# bash. A throw is exit 2 with an "error" line, "aitools-profile CMD threw:
+# MESSAGE". The exit code is trusted only with the result lines (parity with
+# _aitlib_profile_run): hostname and machine-id need exit 0 with a non-empty
+# value; every other command exit 0 or 1 with a "via" or a "result" line.
+# Exit 0 or 1 without them is rewritten to 2 with an "error" line.
 function Invoke-AitLibProfile([string[]]$Arguments) {
     $script:AitLibProfileOut = @(); $script:AitLibProfileRc = 0
+    $cmd = if ($Arguments.Count -gt 0) { $Arguments[0] } else { "" }
     $ps1 = if ($env:AITOOLS_PROFILE_PS1) { $env:AITOOLS_PROFILE_PS1 } else { Join-Path $PSScriptRoot "aitools-profile.ps1" }
-    if (-not (Test-Path -LiteralPath $ps1 -PathType Leaf)) { return $false }
+    if (-not (Test-Path -LiteralPath $ps1 -PathType Leaf)) {
+        $script:AitLibProfileRc = 2
+        $script:AitLibProfileOut = @("error`tresolver $(Split-Path -Leaf $ps1) not found ($(Split-Path -Parent $ps1))")
+        return $false
+    }
     $global:LASTEXITCODE = 0
     $origErr = [Console]::Error
     $errBuf = [IO.StringWriter]::new()
@@ -148,18 +159,26 @@ function Invoke-AitLibProfile([string[]]$Arguments) {
         $script:AitLibProfileOut = @(& $ps1 @Arguments | ForEach-Object { [string]$_ })
         $script:AitLibProfileRc = $LASTEXITCODE
     } catch {
-        # The caller logs the failure (LogError / LogWarn with the "error" line below)
-        LogDetail "aitools-profile $($Arguments[0]) threw: $($_.Exception.Message)"
+        # The caller logs the failure (LogError / LogWarn with this "error" line)
+        $m = "aitools-profile $cmd threw: $($_.Exception.Message -replace '\s*\r?\n\s*', ' ')"
+        LogDetail $m
+        $script:AitLibProfileOut = @($script:AitLibProfileOut) + @("error`t$m")
         $script:AitLibProfileRc = 2
     } finally {
         [Console]::SetError($origErr)
     }
     foreach ($l in ($errBuf.ToString() -split "`r?`n")) {
-        if ($l) { LogDetail "aitools-profile $($Arguments[0]): $l" }
+        if ($l) { LogDetail "aitools-profile ${cmd}: $l" }
     }
     if ($script:AitLibProfileRc -eq 0 -or $script:AitLibProfileRc -eq 1) {
-        if (-not @($script:AitLibProfileOut | Where-Object { $_.StartsWith("via`t") }).Count) {
-            LogDetail "aitools-profile $($Arguments[0]): exit $($script:AitLibProfileRc) without result lines -- treated as a resolver error"
+        $ok = $false
+        if ($cmd -ceq "hostname" -or $cmd -ceq "machine-id") {
+            $ok = ($script:AitLibProfileRc -eq 0 -and @($script:AitLibProfileOut | Where-Object { $_ }).Count -gt 0)
+        } else {
+            $ok = @($script:AitLibProfileOut | Where-Object { $_.StartsWith("via`t") -or $_.StartsWith("result`t") }).Count -gt 0
+        }
+        if (-not $ok) {
+            LogDetail "aitools-profile ${cmd}: exit $($script:AitLibProfileRc) without result lines -- treated as a resolver error"
             $script:AitLibProfileOut = @($script:AitLibProfileOut) + @("error`tresolver exited $($script:AitLibProfileRc) without result lines (see deploy.log)")
             $script:AitLibProfileRc = 2
         }
@@ -269,6 +288,8 @@ function Resolve-MachineProfile {
     if (-not (Invoke-AitLibProfile @("resolve", "--environment", $script:AitoolsEnvironment))) {
         LogError "machine profile: resolver aitools-profile.ps1 not found next to aitools-lib.ps1"
         Write-Summary "ERROR" "machine profile" "resolver missing"
+        # Same text as Resolve-UserRepoPath's: one ACTION per run for a missing resolver
+        Write-AitLibActionOnce "see deploy.log -- the dotprofile could not be resolved"
         return 3
     }
     $script:AitLibMachineAlias = Get-AitLibProfileTag "alias"
@@ -413,7 +434,16 @@ function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [strin
 # Every counted warning also increments $script:warnings (it promotes the
 # parent's OK rows, as the child's own rows are). Errors are not added to
 # $script:errors line by line: Invoke-ChildRelayed logs one LogError for a
-# failed child. Private caches: $script:AitLibRunId, AitLibJsonlHost, AitLibJsonlOs.
+# failed child.
+# Summary rows: the child writes its own. With TOOL, a failed child (non-zero
+# exit, a throw or parse error, error lines with exit 0, or not run at all)
+# that wrote no ERROR row of its own gets one: "ERROR|TOOL|script failed
+# (exit N)", "aborted (exit 2)" (D-TS13), "script failed (exception)", "logged
+# errors (exit 0)", or "not run (no command)". A child that wrote an ERROR row
+# (any tool) gets no second one -- also when it crashed after writing it: the
+# panel then shows the child's row, and the crash is the relay's LogError in
+# deploy.log. Parity: run_child_relayed --summary-tool.
+# Private caches: $script:AitLibRunId, AitLibJsonlHost, AitLibJsonlOs.
 # ---------------------------------------------------------------------------
 
 # Initialize-AitLibJsonl -- the host, os and run id fields, computed once
@@ -444,9 +474,13 @@ function ConvertTo-AitLibJsonlText($Value) {
 # Write-JsonlRecord TS SCRIPT LEVEL MSG -- append one record to deploy.jsonl in the
 # log directory ($script:logDir, set by Initialize-Logging). Key order: ts, host,
 # os, script, run_id, level, msg (the installers' order). run_id = AITOOLS_RUN_ID,
-# else one random id per process. A failed write is logged at detail and
-# otherwise ignored: logging must not break the run it records (logging.md section 5).
+# else one random id per process. Logging must not break the run it records
+# (logging.md section 5): the first failed write is one LogWarn (audit A-16: the
+# run goes on, and the warning says why its records are missing); later calls
+# write nothing ($script:AitLibJsonlFailed, set before the warning so an
+# installer whose Log calls Write-JsonlRecord does not recurse). Parity: jsonl_record.
 function Write-JsonlRecord($Ts, $ScriptLabel, $Level, $Msg) {
+    if ($script:AitLibJsonlFailed) { return }
     Initialize-AitLibJsonl
     $rec = [ordered]@{
         ts = (ConvertTo-AitLibJsonlText $Ts); host = (ConvertTo-AitLibJsonlText $script:AitLibJsonlHost)
@@ -454,11 +488,14 @@ function Write-JsonlRecord($Ts, $ScriptLabel, $Level, $Msg) {
         run_id = (ConvertTo-AitLibJsonlText $script:AitLibRunId); level = (ConvertTo-AitLibJsonlText $Level)
         msg = (ConvertTo-AitLibJsonlText $Msg)
     }
+    $f = "deploy.jsonl"
     try {
         $f = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $script:logDir "deploy.jsonl"))
         [IO.File]::AppendAllText($f, (($rec | ConvertTo-Json -Compress) + "`n"), [System.Text.UTF8Encoding]::new($false))
     } catch {
-        LogDetail "deploy.jsonl: write failed ($($_.Exception.Message))"
+        $script:AitLibJsonlFailed = $true
+        LogDetail "deploy.jsonl: $($_.Exception.Message -replace '\s*\r?\n\s*', ' ')"
+        LogWarn "deploy.jsonl: cannot write $f -- structured log records are skipped for the rest of this run"
     }
 }
 
@@ -493,22 +530,56 @@ function Send-ChildLog([object[]]$Lines) {
     }
 }
 
+# Get-AitLibSummaryErrorCount -- the number of ERROR rows in the run summary
+# ($env:AITOOLS_SUMMARY_FILE; 0 without one). An unreadable summary counts 0 and
+# is a detail line. Parity: _aitlib_summary_errors.
+function Get-AitLibSummaryErrorCount {
+    if (-not $env:AITOOLS_SUMMARY_FILE) { return 0 }
+    $sf = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:AITOOLS_SUMMARY_FILE)
+    if (-not (Test-Path -LiteralPath $sf -PathType Leaf)) { return 0 }
+    try {
+        return @([IO.File]::ReadAllLines($sf, [System.Text.UTF8Encoding]::new($false)) | Where-Object { $_.StartsWith("ERROR|", [StringComparison]::Ordinal) }).Count
+    } catch {
+        LogDetail "run summary unreadable ($($_.Exception.Message)) -- its ERROR rows are not counted"
+        return 0
+    }
+}
+
+# Write-AitLibChildRow TOOL BEFORE DETAIL -- for a failed child: write the row
+# "ERROR|TOOL|DETAIL" unless TOOL is "" or the child wrote an ERROR row of its own
+# (the run summary now holds more than BEFORE ERROR rows). Parity: _aitlib_child_row.
+function Write-AitLibChildRow([string]$Tool, [int]$Before, [string]$Detail) {
+    if (-not $Tool) { return }
+    if ((Get-AitLibSummaryErrorCount) -gt $Before) {
+        LogDetail "${Tool}: the child wrote its own ERROR row -- none added"
+        return
+    }
+    Write-Summary "ERROR" $Tool $Detail
+}
+
 # Invoke-ChildRelayed LABEL SCRIPT [ARGS] [SUMMARYTOOL] -- run a child .ps1
 # in-process (e.g. Invoke-ChildRelayed "Step 5: setup-user-config.ps1" $writer
 # $writerArgs "aitools config"), its Write-Host output redirected with 6>&1 and
-# relayed line by line as it arrives. The child writes its own summary rows; a
-# throw (the child could not write them) is LogError plus, when SUMMARYTOOL is
-# given, the row "ERROR|SUMMARYTOOL|script failed (exception)" (bash has no
-# in-process throw, so run_child_relayed has no such argument). Sets
+# relayed line by line as it arrives. The child writes its own summary rows;
+# SUMMARYTOOL names the row for a failed child that wrote none (see the section
+# comment). A throw (or a parse error) is one LogError. Sets
 # $script:AitLibChildRc, AitLibChildWarnings, AitLibChildErrors. Returns 0 when
 # the child exited 0 with no error line; otherwise 1 after one LogError naming LABEL.
+# No SCRIPT ("") is a failure, not a no-op (parity: run_child_relayed).
 # The child must end with an explicit `exit N` (the standard exit footer): a
 # .ps1 that just ends reports the exit code of the last native command it ran.
-# The parameters carry the lib prefix because the in-process child can read this
-# function's variables through dynamic scope (an unset $Label in the child would
-# otherwise see ours).
+# The parameters and locals carry the lib prefix because the in-process child
+# can read this function's variables through dynamic scope (an unset $Label in
+# the child would otherwise see ours).
 function Invoke-ChildRelayed([string]$AitLibLabel, [string]$AitLibChildScript, [hashtable]$AitLibChildArgs = @{}, [string]$AitLibSummaryTool = "") {
     $script:AitLibChildRc = 0; $script:AitLibChildWarnings = 0; $script:AitLibChildErrors = 0
+    if (-not $AitLibChildScript) {
+        $script:AitLibChildRc = 1
+        LogError "${AitLibLabel}: not run (no command given)"
+        if ($AitLibSummaryTool) { Write-Summary "ERROR" $AitLibSummaryTool "not run (no command)" }
+        return 1
+    }
+    $AitLibErrRows = Get-AitLibSummaryErrorCount
     $global:LASTEXITCODE = 0
     try {
         & $AitLibChildScript @AitLibChildArgs 6>&1 | ForEach-Object { Send-AitLibChildLine $_ }
@@ -516,15 +587,18 @@ function Invoke-ChildRelayed([string]$AitLibLabel, [string]$AitLibChildScript, [
     } catch {
         $script:AitLibChildRc = 1
         LogError "${AitLibLabel} failed: $($_.Exception.Message)"
-        if ($AitLibSummaryTool) { Write-Summary "ERROR" $AitLibSummaryTool "script failed (exception)" }
+        Write-AitLibChildRow $AitLibSummaryTool $AitLibErrRows "script failed (exception)"
         return 1
     }
     if ($script:AitLibChildRc -ne 0) {
-        LogError "$AitLibLabel failed (exit $($script:AitLibChildRc)) -- see $logFile"
+        $AitLibDetail = if ($script:AitLibChildRc -eq 2) { "aborted (exit 2)" } else { "script failed (exit $($script:AitLibChildRc))" }
+        LogError "$AitLibLabel $($AitLibDetail -replace '^script ', '') -- see $logFile"
+        Write-AitLibChildRow $AitLibSummaryTool $AitLibErrRows $AitLibDetail
         return 1
     }
     if ($script:AitLibChildErrors -gt 0) {
         LogError "$AitLibLabel logged $($script:AitLibChildErrors) error(s) but exited 0 -- see $logFile"
+        Write-AitLibChildRow $AitLibSummaryTool $AitLibErrRows "logged errors (exit 0)"
         return 1
     }
     return 0
@@ -895,12 +969,139 @@ function Write-ManagedProtectedNote {
     }
 }
 
-# After adopt or merge: the library never commits or pushes. Say that the
-# adopt target's repo has an uncommitted change to review, and WARN when the
-# target is protected (Write-ManagedProtectedNote). Parity: _managed_adopt_notice.
+# ---------------------------------------------------------------------------
+# Invoke-DotprofileCommitPush -File FILE -Message MESSAGE -- commit FILE, and
+# only FILE, in the dotprofile and push it (N-Q2: dotprofile writes are
+# committed and pushed automatically). Parity: dotprofile_commit_push in
+# aitools-lib.sh.
+#   -File     absolute path of a file this run wrote
+#   -Message  commit message
+# "In the dotprofile" is decided by git, not by the path string: FILE's git top
+# level equals the dotprofile's git top level. The dotprofile is
+# $script:AitLibUserRepoPath when the caller already ran Resolve-UserRepoPath
+# (set, even to ""); otherwise the resolver is asked here, quietly (no ERROR
+# row: a resolver failure means "not the dotprofile"; it overwrites
+# $script:AitLibProfileOut / AitLibProfileRc).
+# Pathspec commit (git add -- FILE, then git commit -m MESSAGE -- FILE), so other
+# staged or unstaged changes in the dotprofile are never included. The push
+# never prompts (GIT_TERMINAL_PROMPT=0; ssh BatchMode unless GIT_SSH_COMMAND is
+# set); credential helpers still work. git's output goes to deploy.log (detail).
+# Sets $script:AitLibDotprofilePush (never empty after the call):
+#   committed-pushed  committed and pushed (LogOk)
+#   unchanged         FILE matches HEAD: nothing committed, no push, no warning
+#   commit-failed     LogWarn + ACTION "commit and push <file> in <dotprofile>"
+#   push-failed       committed, not pushed: LogWarn + ACTION "git pull --rebase,
+#                     then git push in <dotprofile>" (remote has newer commits)
+#                     or "run git push in <dotprofile>" (any other failure)
+#   not-dotprofile    FILE is not in the dotprofile, or there is none: nothing done
+# Writes nothing to the output stream (it is called inside Deploy-ManagedFile,
+# whose output is its result): a failed commit or push is a warning, the
+# caller's own outcome (e.g. "accept & adopt") is unchanged and the run continues.
+# ---------------------------------------------------------------------------
+function Invoke-DotprofileCommitPush {
+    param([string]$File, [string]$Message)
+    $script:AitLibDotprofilePush = "not-dotprofile"
+    $dir = Split-Path -Parent $File
+    $base = Split-Path -Leaf $File
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        # Get-Command exempt: command-existence check; this branch is the fallback
+        LogDetail "dotprofile commit: git not found -- $File not committed"
+        return
+    }
+    $dp = ""
+    $known = Get-Variable -Name AitLibUserRepoPath -Scope Script -ErrorAction SilentlyContinue
+    if ($null -ne $known) {
+        # Variable present = the caller ran Resolve-UserRepoPath ($null result checked above)
+        $dp = [string]$known.Value
+    } elseif ((Invoke-AitLibProfile @("user-repo-path")) -and $script:AitLibProfileRc -eq 0) {
+        $dp = Get-AitLibProfileTag "path"
+    }
+    if (-not $dp -or -not (Test-Path -LiteralPath $dp -PathType Container) -or -not $dir -or -not (Test-Path -LiteralPath $dir -PathType Container)) {
+        LogDetail "dotprofile commit: $File -- no dotprofile resolved or no such directory; nothing committed"
+        return
+    }
+    # 2>$null: outside a git repo rev-parse fails; $LASTEXITCODE and the empty result are checked below.
+    $top = (& git -C $dir rev-parse --show-toplevel 2>$null | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) { $top = "" }
+    $dpTop = (& git -C $dp rev-parse --show-toplevel 2>$null | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) { $dpTop = "" }   # same: empty checked below
+    if (-not $dpTop) {
+        $dpFull = [IO.Path]::GetFullPath($dp).TrimEnd('/', '\')
+        $fileFull = [IO.Path]::GetFullPath($File)
+        if ($fileFull.StartsWith($dpFull + [IO.Path]::DirectorySeparatorChar) -or $fileFull.StartsWith($dpFull + '/')) {
+            $script:AitLibDotprofilePush = "commit-failed"
+            LogWarn "dotprofile $dp is not a git repository -- $base written but not committed"
+            Write-AitLibActionOnce "commit and push $base in $dp"
+        } else {
+            LogDetail "dotprofile commit: $dp is not a git repository; $File is outside it"
+        }
+        return
+    }
+    if (-not $top -or $top -cne $dpTop) {
+        LogDetail "dotprofile commit: $File is not in the dotprofile ($dp) -- not committed"
+        return
+    }
+    $prefix = (& git -C $dir rev-parse --show-prefix 2>$null | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) { $prefix = "" }   # "" = file at the repo root (valid)
+    $rel = "$prefix$base"
+    $out = (& git -C $dir add -- $base 2>&1 | Out-String).Trim()
+    $rc = $LASTEXITCODE
+    if ($rc -eq 0) {
+        $null = & git -C $dir diff --cached --quiet -- $base
+        $drc = $LASTEXITCODE
+        if ($drc -eq 0) {
+            $script:AitLibDotprofilePush = "unchanged"
+            LogDetail "dotprofile commit: $rel unchanged in $dp -- nothing to commit or push"
+            return
+        }
+        # drc 1 = a staged change to commit; >1 = diff error: the commit reports a real problem
+        $out = (& git -C $dir commit -m $Message -- $base 2>&1 | Out-String).Trim()
+        $rc = $LASTEXITCODE
+    }
+    if ($out) { LogDetail "git commit in ${dp}: $out" }
+    if ($rc -ne 0) {
+        $script:AitLibDotprofilePush = "commit-failed"
+        LogWarn "dotprofile commit failed (exit $rc) -- commit and push $rel in $dp by hand"
+        Write-AitLibActionOnce "commit and push $rel in $dp"
+        return
+    }
+    $prevPrompt = $env:GIT_TERMINAL_PROMPT
+    $prevSsh = $env:GIT_SSH_COMMAND
+    try {
+        $env:GIT_TERMINAL_PROMPT = "0"
+        if (-not $env:GIT_SSH_COMMAND) { $env:GIT_SSH_COMMAND = "ssh -o BatchMode=yes" }
+        $out = (& git -C $dir push 2>&1 | Out-String).Trim()
+        $rc = $LASTEXITCODE
+    } finally {
+        $env:GIT_TERMINAL_PROMPT = $prevPrompt
+        $env:GIT_SSH_COMMAND = $prevSsh
+    }
+    if ($out) { LogDetail "git push in ${dp}: $out" }
+    if ($rc -ne 0) {
+        $script:AitLibDotprofilePush = "push-failed"
+        if ($out -match 'rejected|non-fast-forward|fetch first') {
+            LogWarn "dotprofile push rejected (exit $rc): the remote has newer commits -- run git pull --rebase, then git push in $dp"
+            Write-AitLibActionOnce "git pull --rebase, then git push in $dp"
+        } else {
+            LogWarn "dotprofile push failed (exit $rc) -- run git push in $dp"
+            Write-AitLibActionOnce "run git push in $dp"
+        }
+        return
+    }
+    $script:AitLibDotprofilePush = "committed-pushed"
+    LogOk "dotprofile: $rel committed and pushed ($Message)"
+}
+
+# After adopt or merge: WARN when the target is protected
+# (Write-ManagedProtectedNote). An adopt target in the dotprofile is committed
+# and pushed (Invoke-DotprofileCommitPush, N-Q2). Any other adopt target (the
+# aitools repo) stays a working-tree change: say that its repo has an
+# uncommitted change to review. Parity: _managed_adopt_notice.
 function Write-ManagedAdoptNotice {
     param([string]$Target)
     Write-ManagedProtectedNote -Target $Target
+    Invoke-DotprofileCommitPush -File $Target -Message "Adopt $(Split-Path -Leaf $Target) from the deployed copy"
+    if ($script:AitLibDotprofilePush -ne "not-dotprofile") { return }
     $dir = Split-Path -Parent $Target
     if (-not $dir -or -not (Test-Path -LiteralPath $dir)) { return }
     # 2>$null: outside a git repo there is nothing to commit ($LASTEXITCODE and the result are checked).
@@ -1467,9 +1668,12 @@ function Invoke-AiMerge {
 # caller records it; Write-DeployTrackerSummary writes an ERROR row) and the
 # run continues with the next file. An adopt target listed in its repo's
 # protected-files table (.claude/rules/sources-of-truth.md) gets a WARN that
-# names it: working tree only; the review gate applies at commit. The library
-# never commits or pushes: after adopt or merge it logs that the adopt
-# target's repo has an uncommitted change to review and ship.
+# names it: working tree only; the review gate applies at commit. After adopt
+# or merge, an adopt target in the dotprofile is committed (that file only) and
+# pushed (Invoke-DotprofileCommitPush, N-Q2; a failed commit or push is a
+# warning + ACTION, the result stays "accept & adopt"). Any other adopt target
+# (the aitools repo) is not committed: the library logs that its repo has an
+# uncommitted change to review and ship.
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------

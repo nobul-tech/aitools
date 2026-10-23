@@ -13,6 +13,9 @@
 # on a fresh copy of the same fixture. Asserts exit codes, summary rows,
 # profile.json, the remote's commits and the config.json machineId, and that
 # both shells give the same exit code, rows, profile.json bytes and commits.
+# M3-FINISH item 2: an unregistered machine runs the writer with --no-machine /
+# -NoMachine and gets one machine-profile ERROR (user init's), none of the
+# writer's; a registered machine (also one whose id cannot be detected) does not.
 # Interactive cases run on a pty (tests/managed-files/pty-run.py) and compare
 # the menus line by line.
 # Platform: macOS/Linux (CI: macOS and Linux runners). Safe to re-run.
@@ -49,12 +52,14 @@ mkdir -p "$SRC"
 cp -R "$REPO/scripts" "$REPO/shared" "$SRC/"
 cat > "$SRC/scripts/setup-user-hooks.sh" <<'STUB'
 #!/usr/bin/env bash
-# test stub: one summary row, exit $HOOK_RC
+# test stub: one structured warn line when HOOK_WARN=1, one summary row, exit $HOOK_RC
+if [ "${HOOK_WARN:-}" = "1" ]; then printf '[2026-01-01T00:00:00Z] [setup-user-hooks] [warn] stub hook warning\n'; fi
 if [ -n "${AITOOLS_SUMMARY_FILE:-}" ]; then printf 'OK|claude hooks|stub\n' >> "$AITOOLS_SUMMARY_FILE"; fi
 exit "${HOOK_RC:-0}"
 STUB
 cat > "$SRC/scripts/setup-user-hooks.ps1" <<'STUB'
-# test stub: one summary row, exit $env:HOOK_RC
+# test stub: one structured warn line when HOOK_WARN=1, one summary row, exit $env:HOOK_RC
+if ($env:HOOK_WARN -eq "1") { Write-Host "[2026-01-01T00:00:00Z] [setup-user-hooks] [warn] stub hook warning" }
 if ($env:AITOOLS_SUMMARY_FILE) { [IO.File]::AppendAllText($env:AITOOLS_SUMMARY_FILE, "OK|claude hooks|stub`n") }
 $rc = 0; if ($env:HOOK_RC) { $rc = [int]$env:HOOK_RC }
 exit $rc
@@ -238,6 +243,31 @@ remote_count() {  # remote_count BARE N
     n=$(git -C "$1" rev-list --count main 2>/dev/null) || n=0  # no branch = 0 commits
     if [ "$n" -eq "$2" ]; then ok "$CASE: remote has $2 commit(s)"; else bad "$CASE: remote has $n commit(s), want $2"; fi
 }
+row_count() {  # row_count PREFIX N -- exactly N summary rows start with PREFIX
+    local n
+    n=$(perl -ne 'BEGIN { $p = shift @ARGV } $n++ if index($_, $p) == 0; END { print $n + 0 }' "$1" "$SUM")
+    if [ "$n" -eq "$2" ]; then ok "$CASE: $2 row(s) '$1'"; else bad "$CASE: $n row(s) '$1', want $2"; perl -pe 's/^/       /' "$SUM"; fi
+}
+# no_machine_flag yes|no -- M3-FINISH item 2: whether setup-user-config ran with
+# --no-machine (bash) / -NoMachine (pwsh), read from its info line in each shell's output
+no_machine_flag() {
+    local f got impl
+    for impl in bash ps; do
+        f="$WORK/$CASE.$impl/out.txt"
+        if [ ! -f "$f" ]; then continue; fi
+        if grep -qF "machine registration is left to the caller" "$f"; then got=yes; else got=no; fi
+        if [ "$got" = "$1" ]; then ok "$CASE ($impl): writer flag --no-machine $1"
+        else bad "$CASE ($impl): writer flag --no-machine $got, want $1"; perl -pe 's/^/       /' "$f"; fi
+    done
+}
+# unregistered_once -- the machine-profile outcome is reported once, by user init:
+# one "machine profile" ERROR row, none of the writer's (no machine match, its ACTION)
+unregistered_once() {
+    row_count "ERROR|machine profile|" 1
+    no_row_like "no machine match"
+    no_row_like "ACTION||Run: aitools user init (profiles:"
+    no_machine_flag yes
+}
 cfg_id() {  # cfg_id ID -- config.json machineId ("" = absent)
     local v
     v=$(perl "$REPO/scripts/aitools-json.pl" get "$H/.aitools/config.json" machineId 2>/dev/null) || v=""  # absent = ""
@@ -257,6 +287,7 @@ has_row "OK|machine profile|created (spare)"
 remote_has "$BARE" "Register machine profile: spare"
 cfg_id "$THIS_KEY"
 out_has "────"
+no_machine_flag no
 # machine.shell (Review3 #82 minor 6): bash records the login shell ($SHELL, here
 # /test/bin/pwsh so both shells write the same bytes), aitools.ps1 records pwsh
 if [ "$(pj_get profiles "$THIS_KEY" machine shell)" = "pwsh" ]; then ok "$CASE: machine.shell from \$SHELL"
@@ -273,6 +304,7 @@ remote_count "$BARE" 2
 echo "== decision 1: --alias of another machine's profile, no terminal -> refused (exit 1)"
 case_run alias-other 1 fx_two --alias laptop
 has_row "ERROR|machine profile|alias used by another machine"
+unregistered_once
 pj_lacks "\"$THIS_KEY\""
 pj_other_intact
 remote_count "$BARE" 1
@@ -281,6 +313,7 @@ echo "== an unregistered machine without --alias and without a terminal -> ERROR
 case_run unregistered-notty 1 fx_two
 has_row "ERROR|machine profile|not registered (no terminal)"
 has_row "ACTION||Run: aitools user init --alias <name> (or on a terminal)"
+unregistered_once
 
 echo "== --alias naming a profile no machine owns: claimed (explicit choice)"
 case_run alias-claim 0 fx_two --alias nobul-mac
@@ -320,6 +353,7 @@ fx_cached() { fixture "$CASE" "$1" "$PJ_TWO" ',
   "machineAlias": "nobul-mac"'; }
 case_run cached-alias-0 1 fx_cached
 has_row "ERROR|machine profile|not registered (no terminal)"
+unregistered_once
 pj_lacks "\"$THIS_KEY\""
 
 echo "== decision 2 switch = 1: cached machineAlias -> claimed without asking"
@@ -341,6 +375,7 @@ echo "== Review3 #82 minor 5: uncommitted edits to profile.json are never commit
 fx_dirty() { fx_two "$1"; perl -pi -e 's/"old-host"/"edited-host"/' "$DP/profile.json"; }
 case_run dirty 1 fx_dirty --alias spare
 has_row "ERROR|machine profile|not registered (local edits)"
+unregistered_once
 pj_has '"edited-host"'
 pj_lacks "\"$THIS_KEY\""
 remote_count "$BARE" 1
@@ -352,6 +387,7 @@ fx_dirty_reg() {
 }
 case_run dirty-registered 0 fx_dirty_reg
 has_row "WARN|machine profile|not refreshed (local edits)"
+no_machine_flag no
 remote_count "$BARE" 2
 
 echo "== Review3 #82 minor 4: a rejected push (remote ahead) is told to pull --rebase"
@@ -369,7 +405,57 @@ has_row "WARN|machine profile|created (spare)"
 echo "== D-TS13: the hooks review aborted (exit 2) -> user init exits 2"
 CASE_ENV=(HOOK_RC=2)
 case_run hook-abort 2 fx_two --alias spare
+# FIX-2 (A-13): the relay records the abort (the stub wrote no ERROR row)
+has_row "ERROR|claude hooks|aborted (exit 2)"
 CASE_ENV=()
+
+# jsonl_count CASE IMPL SCRIPT [LEVEL MSG] -- valid records of SCRIPT (with LEVEL and
+# MSG when given) in that fixture's deploy.jsonl; "invalid" when a line is not JSON
+jsonl_count() {
+    perl -MJSON::PP -e '
+        my ($f, $s, $l, $m) = @ARGV; my $n = 0;
+        open(my $fh, "<:raw", $f) or do { print "0\n"; exit 0 };
+        while (my $r = <$fh>) {
+            my $o = eval { decode_json($r) }; if (!$o) { print "invalid\n"; exit 0 }
+            next unless $o->{script} eq $s;
+            next if defined $l && ($o->{level} ne $l || $o->{msg} ne $m);
+            $n++;
+        }
+        print "$n\n";' "$WORK/$1.$2/home/.aitools/logs/deploy.jsonl" "${@:3}"
+}
+
+echo "== FIX-2 (A-12, A-13): user init runs setup-user-config and setup-user-hooks through the lib relay"
+# A hooks script that dies (exit 3) without an ERROR row: the relay's row, one error, exit 1
+CASE_ENV=(HOOK_RC=3)
+case_run hook-crash 1 fx_two --alias spare
+has_row "ERROR|claude hooks|script failed (exit 3)"
+row_count "ERROR|claude hooks|" 1
+CASE_ENV=()
+# The children's lines reach deploy.jsonl and the console; a hooks warning is relayed
+CASE_ENV=(HOOK_WARN=1)
+case_run relay-jsonl 0 fx_two --alias spare
+out_has "[setup-user-hooks] [warn] stub hook warning"
+for impl in bash ps; do
+    if [ "$impl" = "ps" ] && ! $USE_PS; then continue; fi
+    n=$(jsonl_count relay-jsonl "$impl" setup-user-hooks warn "stub hook warning")
+    if [ "$n" = "1" ]; then ok "relay-jsonl ($impl): hooks warning in deploy.jsonl"
+    else bad "relay-jsonl ($impl): hooks warning records '$n', want 1"; fi
+    n=$(jsonl_count relay-jsonl "$impl" setup-user-config)
+    if [ "$n" != "invalid" ] && [ "$n" -gt 0 ]; then ok "relay-jsonl ($impl): writer lines in deploy.jsonl ($n)"
+    else bad "relay-jsonl ($impl): writer records '$n'"; fi
+done
+CASE_ENV=()
+
+echo "== FIX-2 (A-15): --alias without a value is an error through the lib (bash; pwsh binds it itself)"
+CASE="alias-novalue"
+fx_two bash
+run bash --alias
+if [ "$RC" -eq 1 ]; then ok "$CASE: bash exit 1"; else bad "$CASE: bash exit $RC, want 1"; perl -pe 's/^/       /' "$OUT"; fi
+out_has "[aitools] [error] --alias needs a value (aitools user init --alias <name>)"
+if grep -qF -- "--alias needs a value" "$H/.aitools/logs/deploy.log"; then ok "$CASE: in deploy.log"; else bad "$CASE: not in deploy.log"; fi
+run bash --alias --force
+if [ "$RC" -eq 1 ]; then ok "$CASE: '--alias --force' exit 1"; else bad "$CASE: '--alias --force' exit $RC, want 1"; fi
+out_has "--alias needs a value"
 
 echo "== review M1: a relative reposPath is refused (nothing created under the current directory)"
 fx_relative() { fixture "$CASE" "$1" "$PJ_TWO"; perl -pi -e 's/"reposPath": "[^"]*"/"reposPath": "repos"/' "$H/.aitools/config.json"; }
@@ -388,6 +474,8 @@ CASE_ENV=(AITOOLS_PROFILE_TEST_MACHINE_ID=none)
 case_run via-config 0 fx_viaconfig
 has_row "WARN|machine profile|not refreshed (no machine id)"
 cfg_id "$THIS_KEY"
+# Registered, id undetectable: machine_key is emptied for the writer, but no flag
+no_machine_flag no
 CASE="via-config-rerun"
 run bash
 if [ "$RC" -eq 0 ]; then ok "$CASE: second run exit 0"; else bad "$CASE: second run exit $RC"; perl -pe 's/^/       /' "$OUT"; fi
@@ -481,6 +569,8 @@ if $USE_PTY; then
     PTY_INPUT=$'\n\nn\n'
     case_run pty-dup-decline 1 fx_two --alias laptop
     has_row "WARN|machine profile|skipped"
+    no_machine_flag yes
+    no_row_like "no machine match"
     pj_lacks "\"$THIS_KEY\""
 
     echo "== interactive (pty) with --force: no prompt; an unregistered machine is refused like no terminal"

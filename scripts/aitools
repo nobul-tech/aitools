@@ -189,52 +189,20 @@ ui_rm_tmp() {
     return 0
 }
 
-# ui_profile_run ARGS... -- run the resolver: aitools-profile.sh, or under Git
-# Bash on Windows aitools-profile.ps1 through pwsh (the .sh refuses to run
-# there). Sets UI_PROF_OUT (key<TAB>value lines, CR stripped) and UI_PROF_RC (the
-# resolver's exit code: 0 ok, 1 nothing found, 2 error, 3 refused, 4 alias in
-# use). Its own log lines (stderr) become detail lines. Returns 1 when no
-# resolver is found (UI_PROF_RC=2 with an error line), else 0.
-# Not the lib runner (_aitlib_profile_run): that one reads an exit 0/1 without a
-# "via" line as a resolver crash, and register and migrate print no "via" line.
-# UNVERIFIED on Windows: the pwsh branch (cygpath path arguments, UTF-8 output).
+# ui_profile_run ARGS... -- run the resolver through the lib runner
+# (_aitlib_profile_run in aitools-lib.sh: aitools-profile.sh, or under Git Bash on
+# Windows aitools-profile.ps1 through pwsh) and copy its results right after the
+# call (the lib's result-global contract): UI_PROF_OUT (key<TAB>value lines, CR
+# stripped; for hostname the bare value) and UI_PROF_RC (0 ok, 1 nothing found,
+# 2 error -- also no resolver, a crash, or an exit 0/1 without result lines --
+# 3 refused, 4 alias in use). The resolver's own log lines become detail lines.
+# AITOOLS_PROFILE_SH / AITOOLS_PROFILE_PS1 override the resolver, as for every lib
+# caller (register and migrate then write through it). Returns 0.
 ui_profile_run() {
-    local sd="$repo_path/scripts" errf="" a w prev="" args=()
-    UI_PROF_OUT=""; UI_PROF_RC=0
-    if ! errf="$(mktemp)"; then
-        errf=""
-        log_warn "aitools-profile: mktemp failed -- the resolver's own log lines are not captured"
-    fi
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*)
-            if [ ! -f "$sd/aitools-profile.ps1" ] || ! command -v pwsh >/dev/null 2>&1; then
-                if [ -n "$errf" ]; then ui_rm_tmp "$errf"; fi
-                UI_PROF_RC=2; UI_PROF_OUT="error"$'\t'"resolver aitools-profile.ps1 or pwsh not found ($(display_path "$sd"))"
-                return 1
-            fi
-            for a in "$@"; do
-                case "$prev" in
-                    --profile|--out|--config)
-                        if w="$(cygpath -w "$a")"; then a="$w"; else log_detail "aitools-profile: cygpath -w failed for $a -- passed unchanged"; fi ;;
-                esac
-                args+=("$a"); prev="$a"
-            done
-            UI_PROF_OUT=$(pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$(cygpath -w "$sd/aitools-profile.ps1")" \
-                ${args[@]+"${args[@]}"} 2>"${errf:-/dev/null}") || UI_PROF_RC=$?
-            UI_PROF_OUT="${UI_PROF_OUT//$'\r'/}" ;;
-        *)
-            if [ ! -f "$sd/aitools-profile.sh" ]; then
-                if [ -n "$errf" ]; then ui_rm_tmp "$errf"; fi
-                UI_PROF_RC=2; UI_PROF_OUT="error"$'\t'"resolver aitools-profile.sh not found ($(display_path "$sd"))"
-                return 1
-            fi
-            # The resolver runs under this bash (macOS /bin/bash 3.2 stays 3.2)
-            UI_PROF_OUT=$("${BASH:-bash}" "$sd/aitools-profile.sh" "$@" 2>"${errf:-/dev/null}") || UI_PROF_RC=$? ;;
-    esac
-    if [ -n "$errf" ]; then
-        ui_log_lines "aitools-profile $1: " "$(cat "$errf")"
-        ui_rm_tmp "$errf"
-    fi
+    # Return 1 = no resolver: AITLIB_PROFILE_RC is then 2 with an "error" line
+    # naming it, which every caller reads (UI_PROF_RC, ui_lines): the result check
+    _aitlib_profile_run "$@" || :
+    UI_PROF_OUT="$AITLIB_PROFILE_OUT"; UI_PROF_RC="$AITLIB_PROFILE_RC"
     return 0
 }
 
@@ -903,8 +871,8 @@ ui_scaffold_claude_md() {
 # Returns 0 done (warnings possible), 1 any failure, 2 user abort in a review menu
 # (D-TS13). The caller creates and shows the run summary (decision 3).
 user_init() {
-    local rc=0 raw repos_dir user_repo_dir out crc=0 dn de wrc=0 hook_rc=0 hook_setup
-    local writer_args=()
+    local rc=0 raw repos_dir user_repo_dir out crc=0 dn de hook_rc=0 hook_setup
+    local writer_args=() writer_cmd=() hook_cmd=() no_machine=false hook_direct=false hook_errs0=0 hook_detail=""
     gh_user=""; repo_name=""; machine_key=""; machine_alias=""; machine_owner=""
     # --force: no prompts here, and the review menus of setup-user-hooks take the source
     if $force; then export AITOOLS_FORCE=1; fi
@@ -999,6 +967,11 @@ user_init() {
         # A skip at a prompt wrote a WARN row only: name the reason for the exit code (review n1)
         if [ "$rc" -eq 0 ]; then log_error "machine profile: this machine is not registered (skipped) -- run: aitools user init"; fi
         rc=1
+        # Reported here: setup-user-config gets --no-machine, so it adds no second
+        # machine-profile ERROR / ACTION (M3-FINISH item 2). Decided here, not from an
+        # empty machine_key at the writer call: the owner "config" branch below also
+        # empties it for a registered machine whose id cannot be detected.
+        no_machine=true
     fi
 
     if [ -d "$user_repo_dir" ]; then ui_scaffold_claude_md "$user_repo_dir" || rc=1; fi
@@ -1007,6 +980,7 @@ user_init() {
     # this machine's profile key (--machine-id; ConfigKey contract). Another
     # machine's key is never passed (ConfigKey Q3); a key that only config.json
     # vouches for (owner "config") is left to the writer to re-derive (review M2).
+    # An unregistered machine (no_machine) gets --no-machine instead of a key.
     if [ "$machine_owner" = "config" ]; then
         log_detail "user init: machine id undetectable -- --machine-id not passed (the writer keeps the cached machineId)"
         machine_key=""
@@ -1015,40 +989,66 @@ user_init() {
         write_summary ERROR "machine profile" "not this machine's profile"
         machine_key=""; rc=1
     fi
+    # Both child scripts run through the lib relay (audit A-12, A-13): their lines
+    # are shown and mirrored to deploy.jsonl, their warnings are counted here, and a
+    # failed child is one error (logged by the relay) with an ERROR row of its own,
+    # or the relay's ("script failed (exit N)") when it died before writing one.
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
             writer_args=(-GithubUser "$gh_user" -UserRepoPath "$(cygpath -w "$user_repo_dir")")
-            if [ -n "$machine_key" ]; then writer_args+=(-MachineId "$machine_key"); fi
-            pwsh -NoProfile -ExecutionPolicy Bypass \
-                -File "$(cygpath -w "$repo_path/scripts/setup-user-config.ps1")" "${writer_args[@]}" || wrc=$?
+            if [ -n "$machine_key" ]; then writer_args+=(-MachineId "$machine_key")
+            elif $no_machine; then writer_args+=(-NoMachine); fi
+            writer_cmd=(pwsh -NoProfile -ExecutionPolicy Bypass
+                -File "$(cygpath -w "$repo_path/scripts/setup-user-config.ps1")" "${writer_args[@]}")
             ;;
         *)
             writer_args=(--github-user "$gh_user" --user-repo-path "$user_repo_dir")
-            if [ -n "$machine_key" ]; then writer_args+=(--machine-id "$machine_key"); fi
-            "${BASH:-bash}" "$repo_path/scripts/setup-user-config.sh" "${writer_args[@]}" || wrc=$?
+            if [ -n "$machine_key" ]; then writer_args+=(--machine-id "$machine_key")
+            elif $no_machine; then writer_args+=(--no-machine); fi
+            writer_cmd=("${BASH:-bash}" "$repo_path/scripts/setup-user-config.sh" "${writer_args[@]}")
             ;;
     esac
-    if [ "$wrc" -ne 0 ]; then
-        log_error "user init: setup-user-config failed (exit $wrc) -- see $LOG_DISPLAY"
-        write_summary ERROR "aitools config" "setup-user-config failed"
-        rc=1
+    if ! run_child_relayed --summary-tool "aitools config" "user init: setup-user-config" "${writer_cmd[@]}"; then
+        rc=1   # the relay logged the failure (exit $AITLIB_CHILD_RC) and its row
     fi
 
     # Session archive hook. Exit 2 = the user aborted in the review menu (D-TS13):
-    # stop with exit 2; any other failure is logged.
+    # stop with exit 2 (the relay records it: one error, ERROR "claude hooks"
+    # "aborted (exit 2)" unless the hook script wrote a row); any other failure is
+    # logged by the relay.
     log "user init: deploying the session archive hook"
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
+            # Not relayed (review B M-1): the PowerShell review menus write their prompt
+            # with [Console]::Write and no newline; through the relay's line reader it
+            # would stay hidden until the user answered. Run directly, as before; the
+            # failure is counted and its ERROR row written by the relay's rule below.
             hook_setup="$repo_path/scripts/setup-user-hooks.ps1"
-            if [ -f "$hook_setup" ]; then
-                pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$hook_setup")" || hook_rc=$?
-            else hook_rc=127; fi
+            hook_cmd=(pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$hook_setup")")
+            hook_direct=true
             ;;
         *)
             hook_setup="$repo_path/scripts/setup-user-hooks.sh"
-            if [ -f "$hook_setup" ]; then "${BASH:-bash}" "$hook_setup" || hook_rc=$?; else hook_rc=127; fi
+            hook_cmd=("${BASH:-bash}" "$hook_setup")
             ;;
     esac
+    if [ ! -f "$hook_setup" ]; then
+        hook_rc=127
+    elif $hook_direct; then
+        _aitlib_summary_errors hook_errs0
+        "${hook_cmd[@]}" || hook_rc=$?
+        if [ "$hook_rc" -ne 0 ]; then
+            # The relay's outcome for the same exit (run_child_relayed): one error and
+            # the row "aborted (exit 2)" / "script failed (exit N)" unless the child
+            # wrote an ERROR row of its own
+            if [ "$hook_rc" -eq 2 ]; then hook_detail="aborted (exit 2)"; else hook_detail="script failed (exit $hook_rc)"; fi
+            log_error "user init: $(basename "$hook_setup") ${hook_detail#script } -- see $LOG_DISPLAY"
+            _aitlib_child_row "claude hooks" "$hook_errs0" "$hook_detail"
+        fi
+    elif ! run_child_relayed --summary-tool "claude hooks" "user init: $(basename "$hook_setup")" "${hook_cmd[@]}"; then
+        hook_rc="$AITLIB_CHILD_RC"
+        if [ "$hook_rc" -eq 0 ]; then hook_rc=1; fi   # error lines with exit 0: a failure
+    fi
     if [ "$hook_rc" -eq 2 ]; then
         log "user init: aborted by user"
         return 2
@@ -1058,8 +1058,7 @@ user_init() {
         write_summary ERROR "claude hooks" "setup script missing"
         rc=1
     elif [ "$hook_rc" -ne 0 ]; then
-        log_error "user init: $(basename "$hook_setup") failed (exit $hook_rc) -- see $LOG_DISPLAY"
-        rc=1
+        rc=1   # the relay logged the failure and its row
     fi
     if [ "$rc" -eq 0 ]; then
         log_ok "user init: done -- sessions will be archived to $(display_path "$user_repo_dir/sessions/")"
@@ -1342,6 +1341,10 @@ force=false
 user_alias=""
 passthrough=()
 
+# Argument errors found while parsing, before the lib (and its logging) is loaded:
+# logged right after logging_init, then exit 1 (audit A-15)
+_pre_lib_errors=()
+
 # Capture original args before the parse loop consumes them (shift). The
 # smart-reload re-exec below must replay the user's intent (e.g. `install`);
 # by that point "$@" is empty, so it would silently degrade to the sync path.
@@ -1354,12 +1357,14 @@ while [[ $# -gt 0 ]]; do
         --dry-run)    dry_run=true; shift ;;
         --force)      force=true; shift ;;
         --alias)
-            # aitools user init --alias <alias>: register this machine without a prompt (P-Q12)
-            if [[ $# -lt 2 || "$2" =~ ^-- ]]; then
-                printf 'aitools: --alias needs a value\n' >&2
-                return 1
-            fi
-            user_alias="$2"; shift 2 ;;
+            # aitools user init --alias <alias>: register this machine without a prompt (P-Q12).
+            # No value: an error logged once the lib is loaded, then exit 1 (audit A-15)
+            if [[ $# -lt 2 || "$2" =~ ^- ]]; then
+                _pre_lib_errors+=("--alias needs a value (aitools user init --alias <name>)")
+                shift
+            else
+                user_alias="$2"; shift 2
+            fi ;;
         install)      do_install=true; shift ;;
         gitpull)
             do_gitpull=true; shift
@@ -1505,6 +1510,10 @@ LOG_DISPLAY=$(display_path "$LOG_FILE")
 for _w in ${_pre_lib_warnings[@]+"${_pre_lib_warnings[@]}"}; do
     log_warn "$_w"
 done
+if [ ${#_pre_lib_errors[@]} -gt 0 ]; then
+    for _e in "${_pre_lib_errors[@]}"; do log_error "$_e"; done
+    return 1
+fi
 
 # Reject unknown arguments when not installing (typos like "installs", "mcpp", etc.)
 if ! $do_install && [ ${#passthrough[@]} -gt 0 ]; then
@@ -1752,7 +1761,10 @@ if $do_user; then
             # Decision 3: user init has its own run summary -- created before the user
             # block (its rows and those of its child scripts), shown before it returns
             AITOOLS_SUMMARY_FILE="$HOME/.aitools/run-summary.txt"
-            rm -f "$AITOOLS_SUMMARY_FILE"
+            # A stale summary that cannot be removed would show an earlier run's rows (A-14)
+            if [ -e "$AITOOLS_SUMMARY_FILE" ] && ! rm -f "$AITOOLS_SUMMARY_FILE"; then
+                log_warn "user init: could not remove the old run summary $(display_path "$AITOOLS_SUMMARY_FILE") -- the summary panel may show an earlier run's rows"
+            fi
             if ! { mkdir -p "$HOME/.aitools" && touch "$AITOOLS_SUMMARY_FILE"; }; then
                 log_warn "user init: could not create the run summary $(display_path "$AITOOLS_SUMMARY_FILE") -- the summary panel is not shown"
             fi

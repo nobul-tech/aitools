@@ -19,6 +19,17 @@
 # Write-JsonlRecord, relay_child_log / Send-ChildLog, run_child_relayed /
 # Invoke-ChildRelayed): valid JSONL with escaping, identical records in both
 # shells, warning/error counts, footers not counted, child exit codes.
+# M3-FINISH item 3: the runner itself (_aitlib_profile_run / Invoke-AitLibProfile)
+# accepts "result" lines (register, migrate) and a bare hostname value, passes
+# exits 1-4 through, names a missing resolver (exit 2 + error line), turns a
+# throw into an error line, and converts --path/--profile/--out/--config values
+# on the Git Bash branch (a cygpath stub).
+# M3-FINISH item 7 (FIX-1): the machine-profile "resolver missing" ACTION (A-2,
+# one per run with the dotprofile wrapper's); the relay's ERROR row for a failed
+# child that wrote none -- crash, exit 127, abort, error lines with exit 0, PS
+# throw and parse error, no command -- and none for a child that wrote its own or
+# without a summary tool (A-3); the relay's temp file: mktemp failure and a
+# failed removal (A-4, stubs on PATH).
 # Platform: macOS/Linux (pwsh runs with AITOOLS_PROFILE_TEST_ANY_OS=1). Safe to re-run.
 # Usage: bash tests/profile/test-lib.sh [--bash-only]
 
@@ -97,6 +108,22 @@ for n in 3 4; do
 done
 printf '#!/usr/bin/env bash\nprintf "alias\\tnobul-mac\\nvia\\tid\\nhostname\\tnobul-mac\\nname\\tJose\\ncompany\\tnobul-tech\\n"\nexit 0\n' > "$WORK/oldres.sh"
 printf '"alias`tnobul-mac"\n"via`tid"\n"hostname`tnobul-mac"\n"name`tJose"\n"company`tnobul-tech"\nexit 0\n' > "$WORK/oldres.ps1"
+# M3-FINISH item 3: commands that print a "result" line and no "via" line
+# (register, migrate), a bare hostname value, a plain error exit, and a stub that
+# echoes its arguments (the Git Bash path conversion)
+printf '#!/usr/bin/env bash\nprintf "result\\tcreated\\nkey\\tk1\\n"\nexit 0\n' > "$WORK/res0.sh"
+printf '"result`tcreated"\n"key`tk1"\nexit 0\n' > "$WORK/res0.ps1"
+printf '#!/usr/bin/env bash\nprintf "result\\tfailed\\nerror\\tprofile.json not found\\n"\nexit 1\n' > "$WORK/res1.sh"
+printf '"result`tfailed"\n"error`tprofile.json not found"\nexit 1\n' > "$WORK/res1.ps1"
+printf '#!/usr/bin/env bash\nprintf "probe-host\\n"\nexit 0\n' > "$WORK/host.sh"
+printf '"probe-host"\nexit 0\n' > "$WORK/host.ps1"
+printf '#!/usr/bin/env bash\nprintf "error\\tbad input\\n"\nexit 2\n' > "$WORK/exit2.sh"
+printf '"error`tbad input"\nexit 2\n' > "$WORK/exit2.ps1"
+printf '"result`tok"\nforeach ($x in $args) { "arg`t$x" }\nexit 0\n' > "$WORK/args.ps1"
+# A cygpath stub: -w marks paths under /conv/ (W/conv/...), leaves the rest as is
+mkdir -p "$WORK/fakebin"
+printf '#!/usr/bin/env bash\ncase "$2" in /conv/*) printf "W%%s\\n" "$2" ;; *) printf "%%s\\n" "$2" ;; esac\n' > "$WORK/fakebin/cygpath"
+chmod +x "$WORK/fakebin/cygpath"
 
 # Bash driver: source the lib, run one call, print the results
 cat > "$WORK/drive.sh" <<'DRIVE'
@@ -121,6 +148,20 @@ case "$CALL" in
         WARNINGS=0; : > "$AITOOLS_SUMMARY_FILE"; rc=0   # judge the second, identical call only
         tool_exception_record go pkg-installer /usr/local/bin/go 1.22.5 || rc=$? ;;
     keep) resolve_user_repo_path || rc=$?; resolve_machine_profile || rc=$? ;;
+    run)
+        # The runner itself: RUN_ARGS is comma-separated; FAKEBIN goes first on PATH
+        if [ -n "${FAKEBIN:-}" ]; then PATH="$FAKEBIN:$PATH"; fi
+        IFS=, read -r -a run_args <<< "$RUN_ARGS"
+        _aitlib_profile_run "${run_args[@]}" || rc=$?
+        printf 'rc=%s profrc=%s\n' "$rc" "$AITLIB_PROFILE_RC"
+        v=$(_aitlib_profile_tag result); if [ -z "$v" ]; then v=$(_aitlib_profile_tag via); fi
+        if [ -z "$v" ]; then v=$(printf '%s\n' "$AITLIB_PROFILE_OUT" | perl -ne 'print, exit if /^[^\t]+$/'); fi
+        printf 'out=%s\n' "$v"
+        printf 'err=%s\n' "$(_aitlib_profile_lines error | perl -ne 'print, exit if /\S/')"
+        a=$(_aitlib_profile_lines arg | perl -pe 's/\n/ /' | perl -pe 's/ $//')
+        if [ -n "$a" ]; then printf 'args=%s\n' "$a"; fi
+        printf 'warnings=%s errors=%s\n' "$WARNINGS" "$ERRORS"
+        exit 0 ;;
 esac
 printf 'rc=%s\n' "$rc"
 case "$CALL" in
@@ -163,6 +204,20 @@ switch ($env:CALL) {
         $rc = Set-ToolException "go" "pkg-installer" "/usr/local/bin/go" "1.22.5"
     }
     "keep" { $null = Resolve-UserRepoPath; $rc = Resolve-MachineProfile }
+    "run" {
+        # The runner itself: RUN_ARGS is comma-separated
+        $ran = Invoke-AitLibProfile @($env:RUN_ARGS -split ',')
+        $rc = if ($ran) { 0 } else { 1 }
+        "rc=$rc profrc=$($script:AitLibProfileRc)"
+        $v = Get-AitLibProfileTag "result"; if (-not $v) { $v = Get-AitLibProfileTag "via" }
+        if (-not $v) { $v = @($script:AitLibProfileOut | Where-Object { $_ -and -not $_.Contains("`t") }) | Select-Object -First 1 }
+        "out=$v"
+        "err=$(@(Get-AitLibProfileLines 'error' | Where-Object { $_ -match '\S' }) | Select-Object -First 1)"
+        $a = @(Get-AitLibProfileLines "arg")
+        if ($a.Count) { "args=$($a -join ' ')" }
+        "warnings=$($script:warnings) errors=$($script:errors)"
+        exit 0
+    }
 }
 "rc=$rc"
 switch ($env:CALL) {
@@ -198,14 +253,14 @@ run_case() {
             got=$(env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" REPO="$REPO" CALL="$call" \
                 AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac $extra \
                 "$BASH_BIN" "$WORK/drive.sh" 2>/dev/null) || got="driver failed: $?"  # stderr: console log lines
-            got=$(printf '%s\n' "$got" | grep -E '^(rc|path|alias|found|result|kept|warnings|key|notes)=' || true)  # only the driver's result lines (log lines also reach stdout)
+            got=$(printf '%s\n' "$got" | grep -E '^(rc|path|alias|found|result|kept|warnings|key|notes|out|err|args)=' || true)  # only the driver's result lines (log lines also reach stdout)
         else
             # shellcheck disable=SC2086  # $extra is word-split on purpose
             got=$(env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" REPO="$REPO" CALL="$call" \
                 AITOOLS_PROFILE_TEST_MACHINE_ID="$ID_MAC" AITOOLS_PROFILE_TEST_HOSTNAME=nobul-mac AITOOLS_PROFILE_TEST_ANY_OS=1 $extra \
                 pwsh -NoProfile -File "$WORK/drive.ps1" -UserRepoPath /caller/urp -MachineAlias caller -ProfileFile /caller/pf \
                 2>/dev/null | perl -pe 's/\e\[[0-9;]*m//g') || got="driver failed: $?"  # Write-Host console lines dropped by the grep below
-            got=$(printf '%s\n' "$got" | grep -E '^(rc|path|alias|found|result|kept|warnings|key|notes)=' || true)  # only the driver's result lines
+            got=$(printf '%s\n' "$got" | grep -E '^(rc|path|alias|found|result|kept|warnings|key|notes|out|err|args)=' || true)  # only the driver's result lines
         fi
         if [ "$got" = "$want" ]; then ok "$name ($impl): result"
         else bad "$name ($impl): got"; printf '%s\n' "$got" | sed 's/^/         /'; printf '       want\n'; printf '%s\n' "$want" | sed 's/^/         /'; fi
@@ -405,6 +460,19 @@ warnings=0 errors=2" "ERROR|dotprofile|resolver missing
 $A_DP
 ERROR|dotprofile|resolver missing" "AITOOLS_PROFILE_SH=$WORK/none.sh AITOOLS_PROFILE_PS1=$WORK/none.ps1"
 
+# FIX-1, A-2: the machine-profile wrapper's "resolver missing" path writes the
+# ACTION too; with the dotprofile wrapper in the same run, one ACTION in total
+run_case rmp-missing rmp "rc=3
+alias= via=none company= name=
+warnings=0 errors=1" "ERROR|machine profile|resolver missing
+$A_DP" "AITOOLS_PROFILE_SH=$WORK/none.sh AITOOLS_PROFILE_PS1=$WORK/none.ps1"
+run_case urp-rmp-missing keep "rc=3
+kept=urp:/caller/urp pf:/caller/pf alias:caller name:caller-name
+alias= urp-via=none
+warnings=0 errors=2" "ERROR|dotprofile|resolver missing
+$A_DP
+ERROR|machine profile|resolver missing" "AITOOLS_PROFILE_SH=$WORK/none.sh AITOOLS_PROFILE_PS1=$WORK/none.ps1"
+
 # Item 2: resolver exits 3 and 4 are mapped and logged with their meaning in
 # every wrapper; neither is read as "nothing found"
 for n in 3 4; do
@@ -434,6 +502,82 @@ run_case exit4-eset eset "rc=1
 result=failed pushed=false
 warnings=1 errors=0
 notes=1" "ACTION||see deploy.log -- a tool choice (tool exception) was not saved" "AITOOLS_PROFILE_SH=$WORK/exit4.sh AITOOLS_PROFILE_PS1=$WORK/exit4.ps1 SHOW_NOTES=1"
+
+# M3-FINISH item 3: the runner itself (_aitlib_profile_run / Invoke-AitLibProfile),
+# as user init calls it. register and migrate print a "result" line and no "via"
+# line; hostname prints a bare value. Each exit code 0-4 and a missing resolver.
+fixture with-id
+stub() { printf 'AITOOLS_PROFILE_SH=%s/%s.sh AITOOLS_PROFILE_PS1=%s/%s.ps1' "$WORK" "$1" "$WORK" "$1"; }
+run_case run-register-result run "rc=0 profrc=0
+out=created
+err=
+warnings=0 errors=0" "" "RUN_ARGS=register $(stub res0)"
+run_case run-migrate-result run "rc=0 profrc=0
+out=created
+err=
+warnings=0 errors=0" "" "RUN_ARGS=migrate $(stub res0)"
+run_case run-register-exit1-result run "rc=0 profrc=1
+out=failed
+err=profile.json not found
+warnings=0 errors=0" "" "RUN_ARGS=register $(stub res1)"
+run_case run-exit2 run "rc=0 profrc=2
+out=
+err=bad input
+warnings=0 errors=0" "" "RUN_ARGS=register $(stub exit2)"
+for n in 3 4; do
+    run_case "run-exit$n" run "rc=0 profrc=$n
+out=none
+err=stub says no
+warnings=0 errors=0" "" "RUN_ARGS=register $(stub "exit$n")"
+done
+for n in 0 1; do
+    run_case "run-silent$n-register" run "rc=0 profrc=2
+out=
+err=resolver exited $n without result lines (see deploy.log)
+warnings=0 errors=0" "" "RUN_ARGS=register $(stub "silent$n")"
+done
+run_case run-hostname-stub run "rc=0 profrc=0
+out=probe-host
+err=
+warnings=0 errors=0" "" "RUN_ARGS=hostname $(stub host)"
+run_case run-hostname-empty run "rc=0 profrc=2
+out=
+err=resolver exited 0 without result lines (see deploy.log)
+warnings=0 errors=0" "" "RUN_ARGS=hostname $(stub silent0)"
+# A bare value is accepted only for hostname and machine-id
+run_case run-bare-value-resolve run "rc=0 profrc=2
+out=probe-host
+err=resolver exited 0 without result lines (see deploy.log)
+warnings=0 errors=0" "" "RUN_ARGS=resolve $(stub host)"
+run_case run-missing run "rc=1 profrc=2
+out=
+err=resolver none.sh not found ($WORK)
+warnings=0 errors=0" "" "RUN_ARGS=register $(stub none)" bash
+if $USE_PS; then
+    run_case run-missing run "rc=1 profrc=2
+out=
+err=resolver none.ps1 not found ($WORK)
+warnings=0 errors=0" "" "RUN_ARGS=register $(stub none)" ps
+    run_case run-throw run "rc=0 profrc=2
+out=
+err=aitools-profile register threw: boom
+warnings=0 errors=0" "" "RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/throw.ps1" ps
+fi
+# The real resolver (this fixture: this machine's id-keyed profile)
+fixture id-key
+run_case run-real-register run "rc=0 profrc=0
+out=updated
+err=
+warnings=0 errors=0" "" "RUN_ARGS=register,--profile,$DP/profile.json,--out,$WORK/reg.tmp,--shell,zsh,--environment,local"
+rm -f "$WORK/reg.tmp"
+run_case run-real-migrate run "rc=0 profrc=0
+out=unchanged
+err=
+warnings=0 errors=0" "" "RUN_ARGS=migrate,--profile,$DP/profile.json"
+run_case run-real-hostname run "rc=0 profrc=0
+out=nobul-mac
+err=
+warnings=0 errors=0" "" "RUN_ARGS=hostname"
 
 # m2: the bash -> pwsh branch (Git Bash on Windows), forced on this OS. A
 # non-ASCII identity value must arrive intact (UTF-8 output).
@@ -480,14 +624,62 @@ path= via=
 warnings=0 errors=1" "ERROR|dotprofile|resolver failed
 $A_DP" "$PWSH_ENV AITOOLS_PROFILE_PS1=$WORK/$broken.ps1" bash
     done
+
+    # M3-FINISH item 3 through the pwsh branch: result lines, a bare hostname, a
+    # throw (an "error" line, as in-process), a missing resolver, and the path
+    # arguments that are converted (--path, --profile, --out, --config; --slug not)
+    run_case via-pwsh-run-register-result run "rc=0 profrc=0
+out=created
+err=
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/res0.ps1" bash
+    run_case via-pwsh-run-exit1-result run "rc=0 profrc=1
+out=failed
+err=profile.json not found
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/res1.ps1" bash
+    run_case via-pwsh-run-hostname run "rc=0 profrc=0
+out=probe-host
+err=
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=hostname AITOOLS_PROFILE_PS1=$WORK/host.ps1" bash
+    run_case via-pwsh-run-silent0 run "rc=0 profrc=2
+out=
+err=resolver exited 0 without result lines (see deploy.log)
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=migrate AITOOLS_PROFILE_PS1=$WORK/silent0.ps1" bash
+    run_case via-pwsh-run-throw run "rc=0 profrc=2
+out=
+err=aitools-profile register threw: boom
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/throw.ps1" bash
+    run_case via-pwsh-run-missing run "rc=1 profrc=2
+out=
+err=resolver none.ps1 or pwsh not found ($WORK)
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register AITOOLS_PROFILE_PS1=$WORK/none.ps1" bash
+    run_case via-pwsh-run-path-args run "rc=0 profrc=0
+out=ok
+err=
+args=register --profile W/conv/p.json --out W/conv/o.tmp --config W/conv/c.json --path W/conv/x --slug /conv/s
+warnings=0 errors=0" "" "$PWSH_ENV FAKEBIN=$WORK/fakebin RUN_ARGS=register,--profile,/conv/p.json,--out,/conv/o.tmp,--config,/conv/c.json,--path,/conv/x,--slug,/conv/s AITOOLS_PROFILE_PS1=$WORK/args.ps1" bash
+    fixture id-key
+    run_case via-pwsh-run-real-register run "rc=0 profrc=0
+out=updated
+err=
+warnings=0 errors=0" "" "$PWSH_ENV RUN_ARGS=register,--profile,$DP/profile.json,--out,$WORK/reg.tmp,--shell,zsh,--environment,local" bash
+    rm -f "$WORK/reg.tmp"
 fi
 
 # ---------------------------------------------------------------------------
 # Re-key batch 3, item 4: child-log relay helpers (deploy.jsonl)
 # ---------------------------------------------------------------------------
 # Children that log through the lib: info, a warning with a quote, a backslash
-# and a tab, a second warning, optionally an error (CHILD_FAIL=1: and exit 1;
-# CHILD_FAIL=2: and exit 0 anyway), then the standard exit footer.
+# and a tab, a second warning, then by CHILD_FAIL:
+#   0  the standard exit footer, exit 0
+#   1  an error, its own ERROR row "child tool|child failed", footer, exit 1
+#   2  an error, no row, exit 0 anyway (a child bug)
+#   3  dies before any row or footer: bash `false` under set -e, PS exit 1
+#   4  exit 127: bash runs a missing command, PS exit 127
+#   5  a user abort: "Aborted by user", exit 2 (D-TS13)
+#   6  PS: throws; bash: footer, exit 0
+#   7  bash: makes RO_DIR read-only (it holds the relay's exit-code file, made
+#      by the mktemp stub in $WORK/mkro: the file cannot be removed), then
+#      footer, exit 0
 cat > "$WORK/child.sh" <<'CHILD'
 set -euo pipefail
 source "$REPO/scripts/aitools-lib.sh"
@@ -495,7 +687,14 @@ logging_init "child-sh"
 log "child info"
 log_warn "quote \" back \\ tab"$'\t'"end"
 log_warn "second warning"
-if [ "${CHILD_FAIL:-0}" != "0" ]; then log_error "child error"; fi
+case "${CHILD_FAIL:-0}" in
+    1) log_error "child error"; write_summary ERROR "child tool" "child failed" ;;
+    2) log_error "child error" ;;
+    3) false ;;
+    4) aitools-test-no-such-command ;;
+    5) log_error "Aborted by user"; exit 2 ;;
+    7) chmod 555 "$RO_DIR" ;;
+esac
 if [ "$ERRORS" -gt 0 ] && [ "${CHILD_FAIL:-0}" = "1" ]; then log "FAILED with $ERRORS error(s)" "error"; exit 1
 elif [ "$WARNINGS" -gt 0 ]; then log "COMPLETED with $WARNINGS warning(s)" "warn"; exit 0
 else log "COMPLETED successfully" "ok"; exit 0; fi
@@ -506,27 +705,44 @@ Initialize-Logging "child-ps"
 Log "child info"
 LogWarn "quote `" back \ tab`tend"
 LogWarn "second warning"
-if ($env:CHILD_FAIL -and $env:CHILD_FAIL -ne "0") { LogError "child error" }
-# Review m4: the relay's own parameters must not leak into the child (dynamic scope)
-if ($Label -or $ChildScript -or $ChildArgs -or $SummaryTool) { LogError "parent's Invoke-ChildRelayed variables are visible" }
+switch ($env:CHILD_FAIL) {
+    "1" { LogError "child error"; Write-Summary "ERROR" "child tool" "child failed" }
+    "2" { LogError "child error" }
+    "3" { exit 1 }
+    "4" { exit 127 }
+    "5" { LogError "Aborted by user"; exit 2 }
+    "6" { throw "child died" }
+}
+# Review m4: the relay's own parameters and locals must not leak into the child (dynamic scope)
+if ($Label -or $ChildScript -or $ChildArgs -or $SummaryTool -or $Detail -or $ErrRows) { LogError "parent's Invoke-ChildRelayed variables are visible" }
 if ($errors -gt 0 -and $env:CHILD_FAIL -eq "1") { Log "FAILED with $errors error(s). See log: $logFile" "error"; exit 1 }
 elseif ($warnings -gt 0) { Log "COMPLETED with $warnings warning(s)" "warn"; exit 0 }
 else { Log "COMPLETED successfully" "ok"; exit 0 }
 CHILD
+# A child that does not parse (PowerShell: the relay sees a parse error)
+printf 'Log "never"\nif (\n' > "$WORK/child-parse.ps1"
 # Parents: RMODE=record (one jsonl_record with CR, ESC, newline, tab, quote,
-# backslash), run (run_child_relayed / Invoke-ChildRelayed), captured
-# (relay_child_log / Send-ChildLog on captured output)
+# backslash), run (run_child_relayed / Invoke-ChildRelayed with the summary tool
+# "child tool"), run-notool (no summary tool), parse (PS: a child that does not
+# parse), captured (relay_child_log / Send-ChildLog on captured output)
 cat > "$WORK/relay.sh" <<'RELAY'
 set -euo pipefail
+# FAKEBIN: a mktemp stub goes first on PATH (macOS mktemp ignores TMPDIR)
+if [ -n "${FAKEBIN:-}" ]; then PATH="$FAKEBIN:$PATH"; fi
 source "$REPO/scripts/aitools-lib.sh"
 logging_init "test-relay"
+# PRE_ROW=1: an earlier step's ERROR row is in the summary before the child runs
+if [ "${PRE_ROW:-}" = "1" ]; then write_summary ERROR "earlier step" "failed before"; fi
 rc=0
 case "$RMODE" in
     record) jsonl_record 2026-01-01T00:00:00Z test-relay warn "q \" b \\ t"$'\t'"n"$'\n'"l"$'\r'" e"$'\033'"[0m x José ✓" ;;
     noargs)
-        run_child_relayed "no command" || rc=$?
+        run_child_relayed --summary-tool "child tool" "no command" || rc=$?
         printf 'rc=%s child_rc=%s\n' "$rc" "$AITLIB_CHILD_RC" ;;
     run)
+        run_child_relayed --summary-tool "child tool" "child step" "${BASH:-bash}" "$REPO_WORK/child.sh" || rc=$?
+        printf 'rc=%s child_rc=%s\n' "$rc" "$AITLIB_CHILD_RC" ;;
+    run-notool)
         run_child_relayed "child step" "${BASH:-bash}" "$REPO_WORK/child.sh" || rc=$?
         printf 'rc=%s child_rc=%s\n' "$rc" "$AITLIB_CHILD_RC" ;;
     captured)
@@ -540,16 +756,26 @@ RELAY
 cat > "$WORK/relay.ps1" <<'RELAY'
 . (Join-Path $env:REPO "scripts/aitools-lib.ps1")
 Initialize-Logging "test-relay"
+# PRE_ROW=1: an earlier step's ERROR row is in the summary before the child runs
+if ($env:PRE_ROW -eq "1") { Write-Summary "ERROR" "earlier step" "failed before" }
 $rc = 0
 $child = Join-Path $env:REPO_WORK "child.ps1"
 switch ($env:RMODE) {
     "record" { Write-JsonlRecord "2026-01-01T00:00:00Z" "test-relay" "warn" "q `" b \ t`tn`nl`r e$([char]27)[0m x José ✓" }
     "noargs" {
-        $rc = Invoke-ChildRelayed "no command" ""
+        $rc = Invoke-ChildRelayed "no command" "" @{} "child tool"
         "rc=$rc child_rc=$($script:AitLibChildRc)"
     }
     "run" {
         $rc = Invoke-ChildRelayed "child step" $child @{} "child tool"
+        "rc=$rc child_rc=$($script:AitLibChildRc)"
+    }
+    "run-notool" {
+        $rc = Invoke-ChildRelayed "child step" $child @{}
+        "rc=$rc child_rc=$($script:AitLibChildRc)"
+    }
+    "parse" {
+        $rc = Invoke-ChildRelayed "child step" (Join-Path $env:REPO_WORK "child-parse.ps1") @{} "child tool"
         "rc=$rc child_rc=$($script:AitLibChildRc)"
     }
     "captured" {
@@ -582,28 +808,38 @@ for my $w (@ARGV) { print exists $msgs{$w} ? "msg-ok\n" : "msg-missing: $w\n"; }
 PERL
 
 WARN_MSG="quote \" back \\ tab"$'\t'"end"
-# relay_case NAME MODE CHILD_FAIL WANT-RESULT WANT-RECORDS
+# relay_case NAME MODE CHILD_FAIL WANT-RESULT WANT-RECORDS [WANT-SUMMARY] [IMPLS] [EXTRA-ENV]
+# WANT-RECORDS "-": no deploy.jsonl expected (no child ran); "skip": the child
+# printed nothing (no console or deploy.jsonl check). WANT-SUMMARY: the summary
+# rows (default none). IMPLS: "bash ps" (default), "bash" or "ps". EXTRA-ENV:
+# space-separated VAR=value words.
 relay_case() {
-    local name="$1" mode="$2" fail="$3" want="$4" wrec="$5" impl got out jl
-    for impl in bash ps; do
+    local name="$1" mode="$2" fail="$3" want="$4" wrec="$5" wsum="${6:-}" impls="${7:-bash ps}" extra="${8:-}" impl got out jl sum
+    for impl in $impls; do
         if [ "$impl" = "ps" ] && ! $USE_PS; then continue; fi
         rm -rf "$H"; mkdir -p "$H/.aitools/logs"; : > "$H/summary.txt"
         jl="$H/.aitools/logs/deploy.jsonl"
         if [ "$impl" = "bash" ]; then
+            # shellcheck disable=SC2086  # $extra is word-split on purpose
             out=$(env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" REPO="$REPO" REPO_WORK="$WORK" \
-                RMODE="$mode" CHILD_FAIL="$fail" AITOOLS_RUN_ID=run-fixed "$BASH_BIN" "$WORK/relay.sh" 2>/dev/null) || out="driver failed: $?"  # stderr: none expected
+                RMODE="$mode" CHILD_FAIL="$fail" AITOOLS_RUN_ID=run-fixed $extra "$BASH_BIN" "$WORK/relay.sh" 2>/dev/null) || out="driver failed: $?"  # stderr: a crashing child's own messages
         else
+            # shellcheck disable=SC2086  # $extra is word-split on purpose
             out=$(env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_SUMMARY_FILE="$H/summary.txt" REPO="$REPO" REPO_WORK="$WORK" \
-                RMODE="$mode" CHILD_FAIL="$fail" AITOOLS_RUN_ID=run-fixed pwsh -NoProfile -File "$WORK/relay.ps1" 2>/dev/null \
+                RMODE="$mode" CHILD_FAIL="$fail" AITOOLS_RUN_ID=run-fixed $extra pwsh -NoProfile -File "$WORK/relay.ps1" 2>/dev/null \
                 | perl -pe 's/\e\[[0-9;]*m//g') || out="driver failed: $?"  # colour codes of the relayed console lines
         fi
         got=$(printf '%s\n' "$out" | grep -E '^(rc|cw)=' || true)  # only the driver's result lines
         if [ "$got" = "$want" ]; then ok "$name ($impl): result"
         else bad "$name ($impl): got"; printf '%s\n' "$got" | sed 's/^/         /'; printf '       want\n'; printf '%s\n' "$want" | sed 's/^/         /'; fi
-        if [ "$mode" = "noargs" ]; then
+        sum=$(cat "$H/summary.txt")
+        if [ "$sum" = "$wsum" ]; then ok "$name ($impl): summary rows"
+        else bad "$name ($impl): summary '$sum', want '$wsum'"; fi
+        if [ "$wrec" = "-" ]; then
             if [ -f "$jl" ]; then bad "$name ($impl): deploy.jsonl written without a child"; else ok "$name ($impl): no deploy.jsonl"; fi
             continue
         fi
+        if [ "$wrec" = "skip" ]; then continue; fi
         if [ "$mode" != "record" ]; then
             if printf '%s\n' "$out" | grep -qF "second warning"; then ok "$name ($impl): child lines on the console"
             else bad "$name ($impl): child lines not on the console"; fi
@@ -628,15 +864,64 @@ fi
 relay_case relay-run-ok run 0 "rc=0 child_rc=0
 cw=2 ce=0 warnings=2 errors=0" "records=4 invalid=0
 msg-ok"
+# A failed child that wrote its own ERROR row gets no second one (FIX-1, A-3)
 relay_case relay-run-fail run 1 "rc=1 child_rc=1
 cw=2 ce=1 warnings=2 errors=1" "records=5 invalid=0
-msg-ok"
+msg-ok" "ERROR|child tool|child failed"
+# A child that logged an error but exited 0 and wrote no row: one ERROR row
 relay_case relay-run-error-exit0 run 2 "rc=1 child_rc=0
 cw=2 ce=1 warnings=2 errors=1" "records=5 invalid=0
-msg-ok"
-# Review m3: no command is a failure, not a silent success
+msg-ok" "ERROR|child tool|logged errors (exit 0)"
+# A-3: a child that died before its own rows (set -e abort / exit 1, exit 127)
+# is in the panel as ERROR; a user abort (exit 2) too
+relay_case relay-run-crash run 3 "rc=1 child_rc=1
+cw=2 ce=0 warnings=2 errors=1" "records=3 invalid=0
+msg-ok" "ERROR|child tool|script failed (exit 1)"
+relay_case relay-run-exit127 run 4 "rc=1 child_rc=127
+cw=2 ce=0 warnings=2 errors=1" "records=3 invalid=0
+msg-ok" "ERROR|child tool|script failed (exit 127)"
+relay_case relay-run-abort run 5 "rc=1 child_rc=2
+cw=2 ce=1 warnings=2 errors=1" "records=4 invalid=0
+msg-ok" "ERROR|child tool|aborted (exit 2)"
+# Review A m1: the dedupe compares with the rows before the child, not with zero:
+# an earlier step's ERROR row does not hide the crashed child's row
+relay_case relay-run-crash-prior-row run 3 "rc=1 child_rc=1
+cw=2 ce=0 warnings=2 errors=1" "records=3 invalid=0
+msg-ok" "ERROR|earlier step|failed before
+ERROR|child tool|script failed (exit 1)" "bash ps" "PRE_ROW=1"
+# Without a summary tool: no row (the caller writes its own)
+relay_case relay-run-crash-notool run-notool 3 "rc=1 child_rc=1
+cw=2 ce=0 warnings=2 errors=1" "records=3 invalid=0
+msg-ok" ""
+# PowerShell: a throw and a parse error (in-process) are one LogError and a row
+relay_case relay-run-throw run 6 "rc=1 child_rc=1
+cw=2 ce=0 warnings=2 errors=1" "records=3 invalid=0
+msg-ok" "ERROR|child tool|script failed (exception)" ps
+relay_case relay-run-parse parse 0 "rc=1 child_rc=1
+cw=0 ce=0 warnings=0 errors=1" "skip" "ERROR|child tool|script failed (exception)" ps
+# Review m3: no command is a failure, not a silent success; with a tool, a row
 relay_case relay-run-no-command noargs 0 "rc=1 child_rc=1
-cw=0 ce=0 warnings=0 errors=1" "-"
+cw=0 ce=0 warnings=0 errors=1" "-" "ERROR|child tool|not run (no command)"
+# A-4 (bash only: the relay's exit-code temp file). mktemp fails: not run, a row;
+# the file cannot be removed: a detail line, nothing else changes. mktemp stubs:
+# $WORK/mkfail fails, $WORK/mkro creates the file in $WORK/tmpro
+mkdir -p "$WORK/mkfail" "$WORK/mkro" "$WORK/tmpro"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$WORK/mkfail/mktemp"
+printf '#!/usr/bin/env bash\n: > "%s/tmpro/rc.tmp"\nprintf "%%s\\n" "%s/tmpro/rc.tmp"\n' "$WORK" "$WORK" > "$WORK/mkro/mktemp"
+chmod +x "$WORK/mkfail/mktemp" "$WORK/mkro/mktemp"
+relay_case relay-run-mktemp-fail run 0 "rc=1 child_rc=1
+cw=0 ce=0 warnings=0 errors=1" "-" "ERROR|child tool|not run (mktemp failed)" bash "FAKEBIN=$WORK/mkfail"
+# Review A n3: root ignores the read-only directory (Claude Code web runs as root)
+if [ "$(id -u)" -eq 0 ]; then
+    printf '  skip relay-run-rm-fail (running as root: a read-only directory does not stop rm)\n'
+else
+    relay_case relay-run-rm-fail run 7 "rc=0 child_rc=0
+cw=2 ce=0 warnings=2 errors=0" "records=4 invalid=0
+msg-ok" "" bash "FAKEBIN=$WORK/mkro RO_DIR=$WORK/tmpro"
+    chmod 755 "$WORK/tmpro"
+    if grep -qF "[detail] child step: could not remove temp file $WORK/tmpro/rc.tmp" "$H/.aitools/logs/deploy.log"; then ok "relay-run-rm-fail (bash): detail line in deploy.log"
+    else bad "relay-run-rm-fail (bash): no 'could not remove temp file' detail line"; fi
+fi
 relay_case relay-captured captured 0 "rc=0 child_rc=0
 cw=2 ce=0 warnings=2 errors=0" "records=4 invalid=0
 msg-ok"
