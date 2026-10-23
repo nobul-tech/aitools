@@ -53,7 +53,7 @@ predate this file and are replaced by `tool_detect_method` / `Get-ToolInstallMet
 | D-TS1 | Preferred install method per platform and environment lives in the tool registry, protected by the sources-of-truth rule | Commander, session 360aa8f3-8, 2026-10-20 |
 | D-TS2 | No preferred method: setup script ERROR + ACTION to run `/tool-eval`; `/tool-adopt` invokes `/tool-eval` interactively | same |
 | D-TS3 | Found installed: preferred = update and verify; non-preferred or unknown = non-interactive/force changes nothing (WARN + ACTION), interactive = replace (install first, verify it resolves, then remove) / keep / abort; unknown never auto-removed | same |
-| D-TS4 | `[k]eep` remembered per machine in `profiles.<alias>.toolExceptions` (shape in `@reference/user-repo.md`; semantics in section 8) | same |
+| D-TS4 | `[k]eep` remembered per machine in `profiles.<machineId>.toolExceptions` (shape in `@reference/user-repo.md`; semantics in section 8; machine profiles keyed by machine id since commander decision 5, 2026-10-22) | same |
 | D-TS5 | Per-tool `updateChannel`, default `latest-stable` | same |
 | D-TS6 | Skill named `/tool-adopt`; glossary disambiguates it from managed-file adopt | same |
 | D-TS7 | `/tool-eval` and `/tool-adopt` read and maintain the registry and `tool-lifecycle.md` | same |
@@ -306,8 +306,10 @@ P1-7). They return results in globals instead, as the lib already does with
 `DIFF_REVIEW_RESULT` and `JSON_FIELD_REVIEW_RESULT`: `TOOL_BIN_PATH`
 (`tool_install`, `tool_update`, `tool_known_path_hit`), `TOOL_CLASS` /
 `TOOL_METHOD` / `TOOL_PATH` (`tool_detect_method`), `TOOL_MENU_CHOICE`
-(`tool_method_menu`), `TOOL_EXC_PLATFORM` / `TOOL_EXC_METHOD` /
-`TOOL_EXC_PATH` / `TOOL_EXC_DECIDED_AT` (`tool_exception_get`), `TOOL_VER`
+(`tool_method_menu`), `AITLIB_TOOL_EXC_FOUND` / `AITLIB_TOOL_EXC_PLATFORM` /
+`AITLIB_TOOL_EXC_METHOD` / `AITLIB_TOOL_EXC_PATH` / `AITLIB_TOOL_EXC_DECIDED_AT`
+(`tool_exception_get`; the `AITLIB_` prefix is the aitools-lib result-name
+contract, PR #80), `TOOL_VER`
 (`tool_version`), `TOOL_RESOLUTION` (`tool_resolution_check`). Pure,
 non-logging helpers (`tool_realpath`, `tool_linux_family`, `tool_status`,
 `tool_preferred_method`) may print. The 3.2 rule covers every bash script the
@@ -396,8 +398,8 @@ nothing; the PowerShell helper returns the value. Only the pure helpers
 | `tool_resolution_check` | `Test-ToolResolution` | -- | prints `ok`, `shadowed|<path>`, `missing`, `version-unknown`, `below-min|<ver>`; PS1 adds the persistent PATH test |
 | `tool_interactive` | `Test-ToolInteractive` | -- | 0 when interactive (section 1) |
 | `tool_method_menu` | `Read-ToolMethodChoice` | class, method, path, preferred | prints `r`, `i`, `k`, `x`, or empty |
-| `tool_exception_get` | `Get-ToolException` | slug | prints `<platform>|<method>|<path>|<decidedAt>` or nothing; 1 store unavailable (one warn; treated as no exception). Wraps `aitools-profile.sh` / `.ps1 exception-get` (section 8) |
-| `tool_exception_record` | `Set-ToolException` | slug, method, path, version | 0 written (committed and pushed, or a commit/push warning) / 1 failed / 3 refused: no dotprofile, or the machine profile matched by hostname only or not at all. Wraps `aitools-profile.sh` / `.ps1 exception-set` (its exit 2 maps to 1: no lib helper returns 2) |
+| `tool_exception_get` | `Get-ToolException` | slug | sets `AITLIB_TOOL_EXC_FOUND` (true/false) and `AITLIB_TOOL_EXC_PLATFORM` / `_METHOD` / `_PATH` / `_DECIDED_AT`; PS1 returns `@{Found; Platform; Method; Path; DecidedAt}` or `$null`; 1 store unavailable (one warn; treated as no exception). Wraps `aitools-profile.sh` / `.ps1 exception-get` (section 8) |
+| `tool_exception_record` | `Set-ToolException` | slug, method, path, version | 0 written (committed and pushed, or a commit/push warning) or nothing to write (`unchanged`, `dry-run`) / 1 failed / 3 refused: no dotprofile, or no machine profile registered to this machine (section 8 Writer). Sets `AITLIB_TOOL_EXC_RESULT` / `AITLIB_TOOL_EXC_PUSHED` (PS1 `$script:AitLibToolExcResult` / `AitLibToolExcPushed`). Wraps `aitools-profile.sh` / `.ps1 exception-set` (its exit 2 and 4 map to 1: no lib helper returns 2) |
 | `tool_report` | `Write-ToolReport` | leaf, fields | writes the section 3 log line, summary row and ACTION |
 | `tool_support_run` | `Invoke-ToolSupport` | slug, label | runs the tree. bash returns the section 3 exit code; PS1 sets `$script:ToolSupportRc` to it and returns nothing |
 
@@ -561,12 +563,16 @@ The storage shape is owned by `@reference/user-repo.md` "Profile Schema"
 (`toolExceptions`); this section owns when an entry is written, read, and
 matched (D-TS4). Merged by S4-Review from the M2 and M3 drafts.
 
-**Location**: `profiles.<alias>.toolExceptions.<slug>` in the dotprofile
-`profile.json`, where `<alias>` is the machine profile chosen by the machine
+**Location**: `profiles.<machineId>.toolExceptions.<slug>` in the dotprofile
+`profile.json`, inside this machine's own machine profile: the one the machine
 resolver (`resolve_machine_profile` / `Resolve-MachineProfile`; result in
-`MACHINE_ALIAS` / `MACHINE_VIA`) -- not read from `config.json` `machineAlias`,
-which is only the resolver's cached result. Distinct from top-level `overrides`:
-an exception keeps a whole install; an override changes a setting.
+`AITLIB_MACHINE_KEY` / `AITLIB_MACHINE_VIA` / `AITLIB_MACHINE_OWNER`, PowerShell
+`$script:AitLibMachineKey` / `$script:AitLibMachineVia` /
+`$script:AitLibMachineOwner`) matched with owner `this` -- not read from
+`config.json` `machineId` / `machineAlias`, which are only the resolver's cached
+results. A 2.1 profile keyed by alias whose `machine.id` is this machine's counts as
+this machine's (it warns: migrate). Distinct from top-level `overrides`: an
+exception keeps a whole install; an override changes a setting.
 
 ```json
 "toolExceptions": {
@@ -603,7 +609,10 @@ an exception keeps a whole install; an override changes a setting.
   (temp -> validate -> backup -> move); both implementations keep key order and
   write the same bytes (`aitools-json.pl` / `aitools-json.ps1`), tested by
   `tests/profile/test-profile.sh`. Exit codes: 0 ok, 1 not found, 2 error,
-  3 refused.
+  3 refused, 4 refused (`register` only: the alias is used by another profile, or
+  `--claim` names another machine's profile).
+  `exception-get` returns only this machine's decisions: an entry in a profile
+  whose owner is not `this` is ignored with a warning (`found false`).
 - **Reader**: `tool_exception_get` / `Get-ToolException`, called only at T5
   (install class non-preferred or unknown). It logs resolver warnings as
   `log_detail`, not `log_warn`, so a kept or preferred tool's OK row is not
@@ -614,24 +623,34 @@ an exception keeps a whole install; an override changes a setting.
   resolver in-process (`& aitools-profile.ps1`), so its output is never decoded
   through a console code page.
 - **Writer**: `tool_exception_record` / `Set-ToolException`, only after `[k]eep`,
-  never in dry run or non-interactive runs (`exception-set` also refuses to
-  write under `AITOOLS_DRY_RUN=1`). Allowed when `MACHINE_VIA` is `id`,
-  `environment` or `override`, and `alias` only when this machine has no id
-  (a registered profile resolves `via=id`, so `alias` on a machine with an id
-  means the profile is unregistered or registered to another machine, whose
-  later runs would honour the exception). Refused (exit 3 -> return 3,
-  `log_warn` + ACTION `run aitools user init to remember tool choices`) in every
-  other case: `hostname`, `none`, `alias` on a machine with an id, no
-  dotprofile, or a profile read from `AITOOLS_PROFILE_FILE` (the read-only
-  snapshot in generated deploy scripts). The resolver's `derive-config` never
-  caches a hostname match as config.json `machineAlias`, so a hostname match
-  cannot turn into `via=alias` on the next run (PR #76 review M1).
+  never in dry run or non-interactive runs (`exception-set` also writes nothing
+  under `AITOOLS_DRY_RUN=1` and reports `dry-run`). `exception-set` resolves the
+  machine profile itself (the same order as `resolve`, so the same result as
+  `AITLIB_MACHINE_VIA` / `AITLIB_MACHINE_OWNER`) and writes only when that profile is
+  this machine's (`owner` = `this`) and its via is `id`, `environment` or
+  `override`. Refused (exit 3 ->
+  return 3, `log_warn` + ACTION `run aitools user init to remember tool choices`)
+  in every other case: `hostname`, `config` (this machine's id could not be
+  detected), `alias` (the 2.1 config cache), `none`, an override naming another
+  machine's or an unregistered profile, no dotprofile, or a profile read from
+  `AITOOLS_PROFILE_FILE` (the read-only snapshot in generated deploy scripts).
+  The resolver's `derive-config` never caches a hostname match in config.json, and
+  caches `machineId` only for this machine's id-keyed profile (PR #76 review M1).
+  The writer sets `AITLIB_TOOL_EXC_RESULT` (created, updated, unchanged, dry-run,
+  refused, failed) and `AITLIB_TOOL_EXC_PUSHED`; unchanged and dry-run write
+  nothing and do not warn.
 - **Carry-forward (N-Q2)**: `exception-set` commits only `profile.json` in the
   dotprofile (other staged or modified files are left alone) and pushes it
-  (`GIT_TERMINAL_PROMPT=0`, so a push never waits for credentials). On a machine
-  without a git identity it commits as the profile's `identity.git`. A failed
-  commit or push is a warning: the file is written, KEEP reports WARN
-  `<ver> (kept, not pushed)` + ACTION `run git push in <userRepoPath>`.
+  (`GIT_TERMINAL_PROMPT=0`, and `GIT_SSH_COMMAND="ssh -o BatchMode=yes"` unless
+  the user set one, so a push never waits for credentials). On a machine without
+  a git identity it commits as the profile's `identity.git`. A `profile.json`
+  that already had uncommitted changes before the write is written but not
+  committed (a warning asks for a manual commit; the wrapper currently also adds
+  the push ACTION below, although nothing was committed -- INCIDENT, S3-M3-Docs
+  approval page). A failed commit or push is a
+  warning: the file is written, KEEP reports WARN `<ver> (kept, not pushed)` +
+  ACTION `run git push in <userRepoPath>`; a rejected push (the remote is ahead)
+  advises `git pull --rebase`, then `git push`.
 - **Bootstrap**: on a fresh machine the gh step (installer Step 1) runs before
   any dotprofile exists, so there is nothing to read. The resolver needs no
   node (bash: perl; PowerShell: built in).
@@ -736,6 +755,7 @@ stubs on PATH, both `AITOOLS_ENVIRONMENT` values where relevant.
 | T-Q1, P-Q7 | The registry is the only source of tool specs (section 7.1) |
 | T-Q9, N-Q6 | Notes in section 6 |
 | PR #76 review M1 (stricter than rev 5; for commander confirmation) | Section 8 Writer: `via=alias` allowed only on a machine without an id; hostname matches are never cached as `machineAlias` |
+| Commander decision 5, 2026-10-22 (machine profiles keyed by machine id) and the PR #80 result-name contract | D-TS4 row, sections 7 and 7.2 (`AITLIB_` result names), section 8 Location, Engine (exit 4; only this machine's decisions), Writer (owner `this` required; `via=alias` and `via=config` now always refused, superseding the PR #76 M1 row above), Carry-forward (dirty-file and push details) |
 
 ## Cross-references
 
