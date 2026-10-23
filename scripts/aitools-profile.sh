@@ -641,9 +641,9 @@ resolve_machine() {
     RM_KEY=""; RM_ALIAS=""; RM_VIA="none"; RM_OWNER="absent"; RM_LEGACY=false; RM_OVERRIDE_SOURCE=""; RM_KIND=""
     jread v "$pf" version
     jtype t "$pf" profiles
-    if [ "$v" != "2" ] || [ "$t" != "object" ]; then
-        add_err "profile.json is not v2 or has no profiles"; return 2
-    fi
+    # Two states, two messages (callers tell them apart; PR #98 review m1)
+    if [ "$v" != "2" ]; then add_err "profile.json is not v2"; return 2; fi
+    if [ "$t" != "object" ]; then add_err "profile.json has no profiles object"; return 2; fi
     load_entries "$pf"
     if [ "$E_N" -eq 0 ]; then add_err "profile.json has no machine profiles"; return 2; fi
 
@@ -1466,9 +1466,8 @@ cmd_migrate() {
     fi
     jread v "$PF" version
     jtype t "$PF" profiles
-    if [ "$v" != "2" ] || [ "$t" != "object" ]; then
-        state="failed"; add_err "profile.json is not v2 or has no profiles"; put_mig; finish 2
-    fi
+    if [ "$v" != "2" ]; then state="failed"; add_err "profile.json is not v2"; put_mig; finish 2; fi
+    if [ "$t" != "object" ]; then state="failed"; add_err "profile.json has no profiles object"; put_mig; finish 2; fi
     load_entries "$PF"
     # T_[i]: the key entry i ends up with
     local T_=()
