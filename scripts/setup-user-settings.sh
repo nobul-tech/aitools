@@ -10,7 +10,7 @@
 # (overwrite/adopt/skip/abort). Obsolete deny rules are purged before the scan.
 #
 # Managed: all of ~/.claude/settings.json except `hooks`.
-# Source of truth: profile.json (dotprofile repo, via config.json userRepoPath).
+# Source of truth: profile.json (dotprofile repo, found by resolve_user_repo_path).
 
 # --- BEGIN settings body (extracted by build-deploy) ---
 set -euo pipefail
@@ -59,15 +59,23 @@ SETTINGS_FILE="$HOME/.claude/settings.json"
 # permissions.deny for built-in subagents; vercel/webflow gating retired).
 DEPRECATED_RULES="MCP(vercel),MCP(webflow),Agent(claude-code-guide)"
 
-# --- Resolve profile.json (source of truth) via config.json userRepoPath ---
-# `|| true`: key is absent until 'aitools user init' runs; without the guard set -e aborts.
-USER_REPO_PATH=$(read_config_key "$HOME/.aitools/config.json" "userRepoPath") || true
+# --- Resolve profile.json (source of truth): the one dotprofile resolver ---
+# (reference/user-repo.md "Resolution"; SD-7). The rc is captured, not
+# suppressed: 0 found, 1 no dotprofile (shared-only mode, expected),
+# 3 resolver error (the lib already logged it: log_error + ERROR row "dotprofile").
+URP_RC=0
+resolve_user_repo_path || URP_RC=$?
+USER_REPO_PATH="$AITLIB_USER_REPO_PATH"
 PROFILE_FILE=""
 [ -n "$USER_REPO_PATH" ] && PROFILE_FILE="$USER_REPO_PATH/profile.json"
 
-if [ -z "$USER_REPO_PATH" ] || [ ! -d "$USER_REPO_PATH" ]; then
-    log_warn "No user repo configured (run 'aitools user init') -- skipping settings sync"
-    write_summary WARN "claude settings" "no profile (run aitools user init)"
+if [ "$URP_RC" -ne 0 ] && [ "$URP_RC" -ne 1 ]; then
+    # Counted (S3-M3Lead decision): this step fails too, not only the resolver.
+    log_error "Dotprofile unresolved (resolver error above) -- settings not synced"
+    write_summary ERROR "claude settings" "not synced: dotprofile error"
+elif [ -z "$USER_REPO_PATH" ] || [ ! -d "$USER_REPO_PATH" ]; then
+    log_warn "No dotprofile found (shared-only mode; run 'aitools user init'; details in deploy.log) -- skipping settings sync"
+    write_summary WARN "claude settings" "not synced: no dotprofile"
 elif [ ! -f "$PROFILE_FILE" ]; then
     log_warn "profile.json not found at $(display_path "$PROFILE_FILE") -- skipping settings sync"
     write_summary WARN "claude settings" "profile.json missing"

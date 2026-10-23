@@ -115,6 +115,9 @@ fi
 if $hook_present; then
     if [ -z "$USER_REPO_PATH" ] || [ ! -d "$USER_REPO_PATH" ]; then
         step_warn "5" "Session archive readiness" "hook present but userRepoPath missing -- run aitools user init"
+    elif [ "$USER_REPO_VIA" != "config" ]; then
+        # ait-harvest.py archives only to config.json userRepoPath (check-lib resolve_config)
+        step_warn "5" "Session archive readiness" "dotprofile found via $USER_REPO_VIA, not config.json -- sessions not archived; run aitools user init"
     else
         sessions_dir="$USER_REPO_PATH/sessions"
         if [ ! -d "$sessions_dir" ]; then
