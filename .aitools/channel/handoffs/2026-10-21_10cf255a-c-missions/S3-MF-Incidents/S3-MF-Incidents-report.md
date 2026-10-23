@@ -9,6 +9,13 @@
    - Not changed: n1 (only some discoveryContexts mention the registry audit; the triage doc records the full audit) and n4 (apply-script edge cases that do not affect this batch: a closed id makes the script exit with an error, which is safe, and the batch has no closed entries).
    - I verified m1 and m4 myself: aitools-json.ps1:35 and :171, and dotprofile `git log` 525ee49.
 
+6. **S3-MF-Audit addendum (2026-10-22).** S3-M3Finish asked for the PR #104 markers I-1 to I-4 to be added as #162 onward.
+   - I-1 is filed as #162 and I-4 as #163.
+   - I-2 is merged into #147. The audit itself says it has the same root as the auto-promote finding. #147 is raised to medium and now lists options A/B/C.
+   - I-3 is merged into #148, which already proposed the exemptions-table row.
+   - Batch now: 18 entries, #146-#163, with 9 medium and 9 low. The apply step was re-tested 7/7: 156 incidents, 7 closed, ids 1-163.
+   - Following S3-M3Finish's answers: the dotprofile-template repair is not filed, #98/#76 closure stays a listed follow-up, and markers from the non-M3 missions are out of scope.
+
 ## Files
 
 All in `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Incidents/`:

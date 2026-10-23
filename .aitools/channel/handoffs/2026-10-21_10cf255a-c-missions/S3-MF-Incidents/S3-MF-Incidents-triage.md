@@ -67,6 +67,10 @@ Verdicts: **new** = filed in the batch; **filed** = an existing incident covers 
 | 40 | S3-M3-LibFix-Review-pr80.md:189 | cross-platform.md rules conflict for lib to .ps1 bridge | **new #160** | aitools-lib.sh:159-199; cross-platform.md :124-128 and the dispatch rule |
 | 41 | S3-M3-LibFix-Review-pr80.md:194 | tree rev 5 contradicts itself on tool_exception_get output / stale globals | **new #161** | tree :300-310, :399, :564-567; also the re-key drift (profiles.<alias>) found while verifying |
 | 42 | S3-M3-B8b-report.md:98; S3-M3-LibKey-Review-pr86-batch3.md:122 | "INCIDENT: none" | n/a | |
+| 43 | S3-MF-Audit-findings.md §8 I-1 (PR #104) | logging.md does not define deploy.jsonl; only the installers write it | **new #162** | logging.md :66, :101 (checks.jsonl only); writers only in aitools-install.sh:124, :143 and aitools-install.ps1:65; the lib's jsonl_record has no caller |
+| 44 | S3-MF-Audit-findings.md §8 I-2 | ACTION + same-text log_warn rule conflicts with write_summary auto-promote and D-TS12 | merged into #147 | Same root, as the audit itself says. #147 is rewritten: title, D-TS12 expected (tree :64), options A/B/C; severity raised to medium. aitools-lib.sh:288-294, :322-332 |
+| 45 | S3-MF-Audit-findings.md §8 I-3 | no script-standards exemption category for a library-style tool | merged into #148 | #148 already named the exemptions table. It now adds the resolver header contract (aitools-profile.sh:39-43), the 'Exemptions table' (:1156), and the four bash stderr-only exits (:167, :181, :194, :207) |
+| 46 | S3-MF-Audit-findings.md §8 I-4 | no spec on re-counting an error the lib wrapper already logged; B8 consumers differ | **new #163** | setup-user-settings.sh:80-83, setup-user-skills.sh:110-114, setup-user-cursor.sh:94-99 |
 
 **Counts:** 42 rows. Rows 1-41 are markers; several cite the same marker in two files. Row 42 is two "INCIDENT: none" lines. Across rows 1-41: 16 new + 5 merged + 3 filed + 12 fixed + 5 dropped = 41. Rows 1 and 14 are counted once, as filed.
 - 16 new (#146-#161).
@@ -96,6 +100,10 @@ Verdicts: **new** = filed in the batch; **filed** = an existing incident covers 
 | 159 | logging_init console warn on stdout | low | 39 |
 | 160 | lib to .ps1 bridge: cross-language rule ambiguity | low | 40 |
 | 161 | decision tree documents pre-M3 interfaces | medium | 41 |
+| 162 | logging.md does not define deploy.jsonl | medium | 43 |
+| 163 | no spec on re-counting a lib-logged error; B8 consumers differ | low | 46 |
+
+Rows 43-46 were added on 2026-10-22, at S3-M3Finish's request, from the S3-MF-Audit markers. #147 (medium) and #148 now also carry I-2 and I-3. Batch totals: 18 entries, #146-#163, with 9 medium and 9 low.
 
 Severity: 0 high, 7 medium, 9 low. Review finding m2 raised #146, #150 and #156 from low to medium; the table rows above still show their filing severity. `referenceFile` is null on all 16: none went through the full discovery cycle. `linked` is null on all 16: no approved tracker exists (drafts are named in suggestedResolution).
 
