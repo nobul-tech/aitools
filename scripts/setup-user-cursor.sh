@@ -349,13 +349,14 @@ if (dryRun) {
             write_summary OK "cursor cli" "updated" ;;
         would-merge)
             log "[DRY RUN] Would write merged config"
-            STATUS_cliConfig="would merge (dry-run)" ;;
+            STATUS_cliConfig="would merge (dry-run)"
+            write_summary OK "cursor cli" "dry-run: would update" ;;
         skipped-dotprofile)
-            # Not counted again: the resolver error is already an error and the
-            # ERROR row "dotprofile" (the lib wrote both).
-            log "Skipped the $(display_path "$CLI_CONFIG") merge: dotprofile unresolved (resolver error above), so the profile preferences are unknown"
-            STATUS_cliConfig="SKIPPED (dotprofile error)"
-            write_summary ERROR "cursor cli" "skipped (dotprofile error)" ;;
+            # Counted (S3-M3Lead decision, as setup-user-settings and -skills): this
+            # step fails too, not only the resolver (the lib logged that one).
+            log_error "Dotprofile unresolved (resolver error above) -- $(display_path "$CLI_CONFIG") not merged, so defaults cannot replace the profile preferences"
+            STATUS_cliConfig="ERROR (dotprofile error)"
+            write_summary ERROR "cursor cli" "not merged: dotprofile error" ;;
         error-corrupt)
             log_error "$(display_path "$CLI_CONFIG") is corrupt. Use --force to overwrite."
             STATUS_cliConfig="ERROR (corrupt, needs --force)"
