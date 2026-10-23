@@ -1473,6 +1473,102 @@ function Invoke-AiMerge {
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
+# Review diff shown by Prompt-DiffReview: LOCAL -> SOURCE, unified format.
+# "-" lines are only on this machine, "+" lines only in the repo, so the diff
+# reads as what [o]verwrite changes here. The hunks come from
+# `git diff --no-index` (the same engine and options as _review_diff in
+# aitools-lib.sh, so PS1 and bash print identical hunks); its own headers are
+# replaced by:
+#   --- this machine  <LOCAL path>
+#   +++ repo          <SOURCE path, or "source (embedded)" when there is none>
+# Spec: reference/managed-file-deployment.md "Diff Mechanism Detail".
+# git's output is read as UTF-8 straight from the process stream (never
+# through the PowerShell pipeline; see .claude/rules/interactive-menus.md
+# "Encoding").
+#
+# Params: -LocalContent, -SourceContent, -LocalLabel (header), -SourceLabel
+# (header; "" -> "source (embedded)").
+# Sets $script:ReviewDiffLines (plain text, no colour; empty when git reports
+# no line difference) and returns $true. Returns $false when the diff cannot
+# be produced, with the reason in $script:ReviewDiffError; the caller logs it.
+# ---------------------------------------------------------------------------
+$script:ReviewDiffLines = @()
+$script:ReviewDiffError = ""
+function Get-ReviewDiff {
+    param(
+        [string]$LocalContent,
+        [string]$SourceContent,
+        [string]$LocalLabel,
+        [string]$SourceLabel = ""
+    )
+    $script:ReviewDiffLines = @()
+    $script:ReviewDiffError = ""
+    if (-not $SourceLabel) { $SourceLabel = "source (embedded)" }
+
+    $utf8 = [Text.UTF8Encoding]::new($false)
+    $tmpDir = Join-Path ([IO.Path]::GetTempPath()) ("aitools-diff-" + [guid]::NewGuid().ToString("N"))
+    $raw = ""
+    try {
+        New-Item -ItemType Directory -Path $tmpDir -ErrorAction Stop | Out-Null
+        $localFile = Join-Path $tmpDir "local"
+        $sourceFile = Join-Path $tmpDir "source"
+        # Same bytes as the bash twin: trailing newlines normalized to one LF.
+        [IO.File]::WriteAllText($localFile, (($LocalContent -replace '[\r\n]+$', '') + "`n"), $utf8)
+        [IO.File]::WriteAllText($sourceFile, (($SourceContent -replace '[\r\n]+$', '') + "`n"), $utf8)
+
+        $psi = [Diagnostics.ProcessStartInfo]::new("git")
+        # Pinned so user git config cannot change the hunks (GIT_DIFF_OPTS would
+        # override -U3); --text keeps content with a NUL byte a text diff.
+        foreach ($a in @("-c", "core.quotePath=false", "-c", "diff.suppressBlankEmpty=false",
+                "-c", "diff.interHunkContext=0", "diff", "--no-index", "--no-color",
+                "--no-ext-diff", "--no-textconv", "--text", "--diff-algorithm=myers",
+                "--indent-heuristic", "-U3", "--", $localFile, $sourceFile)) {
+            $psi.ArgumentList.Add($a)
+        }
+        $null = $psi.Environment.Remove("GIT_DIFF_OPTS")
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.StandardOutputEncoding = $utf8
+        $psi.StandardErrorEncoding = $utf8
+        $proc = [Diagnostics.Process]::Start($psi)
+        $errTask = $proc.StandardError.ReadToEndAsync()
+        $raw = $proc.StandardOutput.ReadToEnd()
+        $proc.WaitForExit()
+        $err = $errTask.Result
+        # git diff exits 1 when the files differ (expected) and >1 on error.
+        if ($proc.ExitCode -gt 1) {
+            $detail = if ($err) { $err.Trim() } else { "no output" }
+            $script:ReviewDiffError = "git diff failed (exit $($proc.ExitCode)): $detail"
+            return $false
+        }
+    } catch {
+        $script:ReviewDiffError = "git diff failed: $_"
+        return $false
+    } finally {
+        Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+        # ErrorAction exempt: temp directory cleanup; nothing depends on it
+    }
+
+    # Drop git's own header lines (everything before the first hunk).
+    $lines = @($raw -split "`n")
+    if ($lines.Count -gt 0 -and $lines[-1] -eq "") { $lines = @($lines | Select-Object -SkipLast 1) }
+    $start = -1
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i].StartsWith("@@ ")) { $start = $i; break }
+    }
+    if ($start -lt 0) { return $true }
+    $script:ReviewDiffLines = @("--- this machine  $LocalLabel", "+++ repo          $SourceLabel") + @($lines[$start..($lines.Count - 1)])
+    return $true
+}
+
+# Colour for the review diff: on unless NO_COLOR is set or TERM is "dumb".
+# Only called on an interactive console; the deploy log never gets colour.
+function Test-ReviewColour {
+    return (-not $env:NO_COLOR -and $env:TERM -ne "dumb")
+}
+
+# ---------------------------------------------------------------------------
 # Show SOURCE against LOCAL and ask what to do ("Review choices" above).
 #
 # Params: -FilePath (LOCAL), -NewContent (SOURCE), -AdoptOffered ($true offers
@@ -1484,7 +1580,7 @@ function Invoke-AiMerge {
 # Non-interactive, EOF at the prompt, -Force / AITOOLS_FORCE: "overwrite".
 # ---------------------------------------------------------------------------
 $script:MergedContent = $null
-$script:PdrAdoptTarget = ""   # set by Deploy-ManagedFile; shown in the review header only
+$script:PdrAdoptTarget = ""   # set by Deploy-ManagedFile; display only (+++ header, menu)
 function Prompt-DiffReview {
     param(
         [string]$FilePath,
@@ -1519,63 +1615,74 @@ function Prompt-DiffReview {
 
     # Context header
     [Console]::WriteLine("")
+    # (the diff headers below name both paths)
     [Console]::WriteLine("[REVIEW] $FilePath differs from source.")
-    [Console]::WriteLine("  source = the repo version (would deploy)")
-    [Console]::WriteLine("  local  = current file on disk")
-    if ($AdoptOffered -and $script:PdrAdoptTarget) {
-        [Console]::WriteLine("  repo   = $($script:PdrAdoptTarget) (adopt target)")
-    }
     [Console]::WriteLine("")
 
-    # Generate line-level diff
+    # AI merge input ([m]erge & adopt): Compare-Object listing, unchanged from
+    # before the display change; the display below does not use it.
     $srcLines = @($NewContent -split "`n")
     $curLines = @($CurrentContent -split "`n")
     $diffs = Compare-Object $srcLines $curLines -CaseSensitive
-    $diffCount = 0
     $diffOutput = ""
     if ($diffs) {
-        $diffCount = @($diffs).Count
-        # Build diff text for AI merge prompt
         $diffLines = @()
         foreach ($d in $diffs) {
             $prefix = if ($d.SideIndicator -eq "=>") { "+ " } else { "- " }
             $diffLines += "${prefix}$($d.InputObject)"
         }
         $diffOutput = $diffLines -join "`n"
-        # Full diff as [detail] records at every size (the console truncates at 30).
-        $leafName = Split-Path -Leaf $FilePath
-        foreach ($dl in $diffLines) { LogDetail "diff ${leafName}: $dl" }
     }
 
-    if ($diffCount -eq 0) {
-        [Console]::WriteLine("  (whitespace-only differences)")
-    } elseif ($diffCount -le 40) {
-        foreach ($d in $diffs) {
-            $indicator = if ($d.SideIndicator -eq "=>") { "+ local  " } else { "- source " }
-            [Console]::WriteLine("  $indicator$($d.InputObject)")
-        }
+    # Show the review diff: LOCAL -> SOURCE (Get-ReviewDiff). Parity:
+    # prompt_diff_review in aitools-lib.sh prints the same lines.
+    $esc = [char]27
+    $useColour = Test-ReviewColour
+    $adoptLabel = if ($script:PdrAdoptTarget) { $script:PdrAdoptTarget } else { "the repo" }
+    $srcLabel = if ($script:PdrAdoptTarget) { $script:PdrAdoptTarget } else { "" }
+    if ($useColour) {
+        [Console]::WriteLine("  $esc[31mred -$esc[0m = only on this machine   $esc[32mgreen +$esc[0m = only in the repo")
     } else {
-        $shown = 0
-        foreach ($d in $diffs) {
-            if ($shown -ge 30) { break }
-            $indicator = if ($d.SideIndicator -eq "=>") { "+ local  " } else { "- source " }
-            [Console]::WriteLine("  $indicator$($d.InputObject)")
-            $shown++
+        [Console]::WriteLine("  red - = only on this machine   green + = only in the repo")
+    }
+    [Console]::WriteLine("")
+    $leafName = Split-Path -Leaf $FilePath
+    if (-not (Get-ReviewDiff -LocalContent $CurrentContent -SourceContent $NewContent -LocalLabel $FilePath -SourceLabel $srcLabel)) {
+        LogWarn "Review diff unavailable for ${FilePath}: $($script:ReviewDiffError)"
+        [Console]::WriteLine("  (diff unavailable -- see deploy log)")
+    } elseif ($script:ReviewDiffLines.Count -eq 0) {
+        [Console]::WriteLine("  (whitespace-only differences)")
+    } else {
+        $all = $script:ReviewDiffLines
+        $shown = if ($all.Count -gt 40) { $all[0..29] } else { $all }
+        foreach ($line in $shown) {
+            if ($useColour -and $line.StartsWith("-")) {
+                [Console]::WriteLine("$esc[31m$line$esc[0m")
+            } elseif ($useColour -and $line.StartsWith("+")) {
+                [Console]::WriteLine("$esc[32m$line$esc[0m")
+            } else {
+                [Console]::WriteLine($line)
+            }
         }
-        [Console]::WriteLine("  ... ($($diffCount - 30) more lines -- see deploy log)")
+        if ($all.Count -gt 40) {
+            [Console]::WriteLine("  ... ($($all.Count - 30) more lines -- full diff in deploy log)")
+        }
+        # Full diff as [detail] records at every size, plain text (the console truncates at 30).
+        foreach ($dl in $all) { LogDetail "diff ${leafName}: $dl" }
     }
 
-    # Menu (parity: prompt_diff_review in aitools-lib.sh). A rejected merge
-    # preview ("menu") shows the menu again.
+    # Menu (parity: prompt_diff_review in aitools-lib.sh). Each line says what
+    # the choice does to the lines shown. A rejected merge preview ("menu")
+    # shows the menu again.
     while ($true) {
         [Console]::WriteLine("")
-        [Console]::WriteLine("  [o]verwrite      : source wins -> written to local (backup kept)")
+        [Console]::WriteLine("  [o]verwrite       : this machine gets the green + lines (backup kept)")
         if ($AdoptOffered) {
-            [Console]::WriteLine("  [a]ccept & adopt : local wins -> copied to the repo now")
-            [Console]::WriteLine("  [m]erge & adopt  : AI merge of source + local -> local and the repo")
+            [Console]::WriteLine("  [a]ccept & adopt  : the repo gets the red - lines (your version) -> $adoptLabel")
+            [Console]::WriteLine("  [m]erge & adopt   : AI combines both; written to this machine and $adoptLabel")
         }
-        [Console]::WriteLine("  [s]kip           : nothing written; asked again next run")
-        [Console]::WriteLine("  [x]abort         : stop this script (exit 2)")
+        [Console]::WriteLine("  [s]kip            : nothing written; asked again next run")
+        [Console]::WriteLine("  [x]abort          : stop this script (exit 2)")
         if ($AdoptOffered) {
             [Console]::Write("  choice [o/a/m/s/x]: ")
         } else {

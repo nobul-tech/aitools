@@ -71,20 +71,28 @@ stub_claude() {
 run_lib() {
     local snippet="$1" input="${2:-}"
     printf '%s\n' "set -euo pipefail" "source '$LIB'" "logging_init t" "$snippet" > "$C/snippet.sh"
+    # Terminal for the review-diff colour: TERM=$RUN_TERM (default xterm);
+    # NO_COLOR is unset unless RUN_NO_COLOR is given.
+    local envs=(HOME="$C/home" AITOOLS_LOG_DIR="$C/logs" AITOOLS_SUMMARY_FILE="$C/summary"
+        PATH="$C/bin:$PATH" TERM="${RUN_TERM:-xterm}")
+    if [ -n "${RUN_NO_COLOR:-}" ]; then envs+=(NO_COLOR="$RUN_NO_COLOR"); fi
     if [ -z "$input" ]; then
-        env HOME="$C/home" AITOOLS_LOG_DIR="$C/logs" AITOOLS_SUMMARY_FILE="$C/summary" \
-            PATH="$C/bin:$PATH" bash "$C/snippet.sh" < /dev/null > "$C/out" 2>&1
+        env -u NO_COLOR "${envs[@]}" bash "$C/snippet.sh" < /dev/null > "$C/out" 2>&1
         echo $? > "$C/rc"
     else
-        env HOME="$C/home" AITOOLS_LOG_DIR="$C/logs" AITOOLS_SUMMARY_FILE="$C/summary" \
-            PATH="$C/bin:$PATH" python3 "$PTY" --input "$input" --log "$C/out" -- bash "$C/snippet.sh"
+        env -u NO_COLOR "${envs[@]}" python3 "$PTY" --input "$input" --log "$C/out" -- bash "$C/snippet.sh"
         echo $? > "$C/rc"
     fi
+    # $C/plain: the terminal output without colour codes and carriage returns
+    perl -pe 's/\e\[[0-9;?]*[A-Za-z]//g; s/\e[=>]//g; s/\r//g' "$C/out" > "$C/plain"
     LOG="$C/logs/deploy.log"
     [ -f "$LOG" ] || : > "$LOG"
 }
 
 result() { cat "$C/result" 2>/dev/null; }
+ESC=$(printf '\033')
+# has_line <file> <exact line>: the file has this line (fixed string, whole line)
+has_line() { grep -qxF -- "$2" "$1"; }
 DMF='deploy_managed_file "$(cat "$SRCF")" "$DEST" tool item "$ADOPT"; printf "%s" "$MANAGED_FILE_RESULT" > "$C/result"'
 
 # ---------------------------------------------------------------------------
@@ -104,6 +112,7 @@ run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT='$C/repo/a.md'; $DMF"
 check "non-interactive: SOURCE overwrites LOCAL" "[ \"\$(result)\" = updated ] && cmp -s '$C/src.md' '$C/dest/a.md'"
 check "non-interactive: LOCAL backed up" "ls '$C/dest/'a.md.bak.* >/dev/null 2>&1"
 check "non-interactive: adopt target untouched" "[ ! -e '$C/repo/a.md' ]"
+check "non-interactive: no review diff, no colour" "! grep -q 'this machine' '$C/out' && ! grep -qF \"\${ESC}[31m\" '$C/out' && ! grep -qF \"\${ESC}[32m\" '$C/out'"
 
 setup_case nostate
 mkdir -p "$C/home/.aitools/deploy-state"; printf '{}' > "$C/home/.aitools/deploy-state/manifest.json"
@@ -205,6 +214,57 @@ if $HAVE_PTY; then
     run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT=''; $DMF" "x\n"
     check "abort: exit 2, error logged" "[ \"\$(cat '$C/rc')\" = 2 ] && grep -q 'Aborted by user' '$LOG'"
     check "abort: LOCAL unchanged" "grep -qx old '$C/dest/a.md'"
+
+    # --- Review display: LOCAL -> SOURCE, labelled, coloured (mission DIFF-UX) ---
+    setup_case display
+    printf '# Title\nline one\nrepo line\nend\n' > "$C/repo/a.md"; printf '# Title\nline one\nmy local line\nend\n' > "$C/dest/a.md"
+    run_lib "C='$C' SRCF='$C/repo/a.md' DEST='$C/dest/a.md' ADOPT='$C/repo/a.md'; $DMF" "s\n"
+    P="$C/plain"
+    check "display: diff is LOCAL -> SOURCE (- this machine, + repo)" "has_line '$P' '-my local line' && has_line '$P' '+repo line' && ! has_line '$P' '+my local line'"
+    check "display: headers name both paths, padded" "has_line '$P' '--- this machine  $C/dest/a.md' && has_line '$P' '+++ repo          $C/repo/a.md'"
+    check "display: legend above the diff" "has_line '$P' '  red - = only on this machine   green + = only in the repo' && [ \"\$(grep -n 'red - = only' '$P' | cut -d: -f1)\" -lt \"\$(grep -n '^--- this machine' '$P' | cut -d: -f1)\" ]"
+    check "display: menu says what each choice does to the lines" \
+        "has_line '$P' '  [o]verwrite       : this machine gets the green + lines (backup kept)' && has_line '$P' '  [a]ccept & adopt  : the repo gets the red - lines (your version) -> $C/repo/a.md' && has_line '$P' '  [m]erge & adopt   : AI combines both; written to this machine and $C/repo/a.md' && has_line '$P' '  [s]kip            : nothing written; asked again next run' && has_line '$P' '  [x]abort          : stop this script (exit 2)'"
+    check "display: red - lines and header, green + lines and header" \
+        "grep -qF \"\${ESC}[31m-my local line\${ESC}[0m\" '$C/out' && grep -qF \"\${ESC}[32m+repo line\${ESC}[0m\" '$C/out' && grep -qF \"\${ESC}[31m--- this machine\" '$C/out' && grep -qF \"\${ESC}[32m+++ repo\" '$C/out'"
+    check "display: full diff in the log, plain text" \
+        "grep -qF 'diff a.md: --- this machine  $C/dest/a.md' '$LOG' && grep -qF 'diff a.md: -my local line' '$LOG' && grep -qF 'diff a.md: +repo line' '$LOG' && ! grep -qF \"\$ESC\" '$LOG'"
+    check "display: [REVIEW] line, no source/local/repo context lines" \
+        "has_line '$P' '[REVIEW] $C/dest/a.md differs from source.' && ! grep -qE '^  (source|local |repo  ) = ' '$P'"
+    check "display: choice unchanged (skip)" "[ \"\$(result)\" = skipped ] && grep -qx 'my local line' '$C/dest/a.md'"
+
+    setup_case display-nocolor
+    printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"
+    RUN_NO_COLOR=1 run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT=''; $DMF" "s\n"
+    check "display NO_COLOR: no colour, same lines" "! grep -qF \"\${ESC}[31m\" '$C/out' && ! grep -qF \"\${ESC}[32m\" '$C/out' && has_line '$C/plain' '-old' && has_line '$C/plain' '+new'"
+    check "display, no adopt target: SOURCE header is embedded, menu [o/s/x]" \
+        "has_line '$C/plain' '+++ repo          source (embedded)' && has_line '$C/plain' '  [o]verwrite       : this machine gets the green + lines (backup kept)' && ! grep -q 'accept & adopt' '$C/plain'"
+
+    setup_case display-dumb
+    printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"
+    RUN_TERM=dumb run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT=''; $DMF" "s\n"
+    check "display TERM=dumb: no colour" "! grep -qF \"\${ESC}[31m\" '$C/out' && ! grep -qF \"\${ESC}[32m\" '$C/out' && has_line '$C/plain' '-old'"
+
+    setup_case display-long
+    perl -e 'print "local $_\n" for 1..50' > "$C/dest/a.md"; perl -e 'print "repo $_\n" for 1..50' > "$C/src.md"
+    run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT=''; $DMF" "s\n"
+    # 103 diff lines: 2 headers + 1 hunk header + 50 - + 50 +
+    check "display >40 lines: first 30 shown, rest in the log" \
+        "has_line '$C/plain' '  ... (73 more lines -- full diff in deploy log)' && has_line '$C/plain' '-local 27' && ! has_line '$C/plain' '-local 28' && [ \"\$(grep -c 'diff a.md: ' '$LOG')\" = 103 ] && grep -qF 'diff a.md: +repo 50' '$LOG'"
+
+    setup_case display-huge
+    perl -e 'print "local line $_ " . ("x" x 40) . "\n" for 1..3000' > "$C/dest/a.md"; perl -e 'print "repo line $_ " . ("y" x 40) . "\n" for 1..3000' > "$C/src.md"
+    GIT_DIFF_OPTS=--unified=0 run_lib "export GIT_DIFF_OPTS; C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT=''; $DMF" "s\n"
+    # ~330 KB diff, larger than a pipe buffer (head-based truncation died of SIGPIPE here)
+    check "display, diff over 64 KB: menu shown, run continues, full diff logged" \
+        "[ \"\$(cat '$C/rc')\" = 0 ] && [ \"\$(result)\" = skipped ] && has_line '$C/plain' '  ... (5973 more lines -- full diff in deploy log)' && [ \"\$(grep -c 'diff a.md: ' '$LOG')\" = 6003 ]"
+
+    setup_case display-nogit
+    printf '#!/usr/bin/env bash\nexit 128\n' > "$C/bin/git"; chmod +x "$C/bin/git"
+    printf 'new\n' > "$C/src.md"; printf 'old\n' > "$C/dest/a.md"
+    run_lib "C='$C' SRCF='$C/src.md' DEST='$C/dest/a.md' ADOPT=''; $DMF" "s\n"
+    check "display, git diff fails: warning logged, menu still works" \
+        "grep -q '\[warn\] Review diff unavailable' '$LOG' && has_line '$C/plain' '  (diff unavailable -- see deploy log)' && [ \"\$(result)\" = skipped ]"
 else
     printf 'SKIP interactive cases (no python3 pty on this platform)\n'; SKIP=$((SKIP + 1))
 fi
