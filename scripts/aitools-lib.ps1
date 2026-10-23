@@ -124,22 +124,33 @@ function ReadConfigKey {
 #   Get-ToolException      hashtable  $null           $null  $null        $null
 #   Set-ToolException      0          1 failed        1      3 refused    1 (unexpected)
 # Every 3 and 4 is logged with its code and meaning. An exit 0/1 without the
-# resolver's "via" line is rewritten to 2 first (Invoke-AitLibProfile).
+# resolver's result lines ("via" or "result"; a value for hostname and
+# machine-id) is rewritten to 2 first (Invoke-AitLibProfile).
 # ---------------------------------------------------------------------------
 
 # Invoke-AitLibProfile ARGS -- run the resolver in-process; sets
 # $script:AitLibProfileOut (tagged lines) and $script:AitLibProfileRc. Returns
-# $true when it ran, $false when no resolver is available. $PSScriptRoot inside
-# a function is the directory of the file that defines it (this library, or the
-# generated deploy script it is inlined into). The resolver's stderr (its own
-# log lines, written with [Console]::Error) is captured and copied to
-# deploy.log as detail lines, as in bash. The exit code is trusted only with the
-# result lines: exit 0 or 1 without a "via" line is rewritten to 2 with an
-# "error" line (parity with _aitlib_profile_run).
+# $true when it ran, $false when no resolver is available ($script:AitLibProfileRc
+# is then 2 with an "error" line naming it; the caller logs it). Callers: the
+# wrappers below and `aitools user init` (aitools.ps1 Invoke-UiProfile copies
+# the results). $PSScriptRoot inside a function is the directory of the file
+# that defines it (this library, or the generated deploy script it is inlined
+# into). The resolver's stderr (its own log lines, written with
+# [Console]::Error) is captured and copied to deploy.log as detail lines, as in
+# bash. A throw is exit 2 with an "error" line, "aitools-profile CMD threw:
+# MESSAGE". The exit code is trusted only with the result lines (parity with
+# _aitlib_profile_run): hostname and machine-id need exit 0 with a non-empty
+# value; every other command exit 0 or 1 with a "via" or a "result" line.
+# Exit 0 or 1 without them is rewritten to 2 with an "error" line.
 function Invoke-AitLibProfile([string[]]$Arguments) {
     $script:AitLibProfileOut = @(); $script:AitLibProfileRc = 0
+    $cmd = if ($Arguments.Count -gt 0) { $Arguments[0] } else { "" }
     $ps1 = if ($env:AITOOLS_PROFILE_PS1) { $env:AITOOLS_PROFILE_PS1 } else { Join-Path $PSScriptRoot "aitools-profile.ps1" }
-    if (-not (Test-Path -LiteralPath $ps1 -PathType Leaf)) { return $false }
+    if (-not (Test-Path -LiteralPath $ps1 -PathType Leaf)) {
+        $script:AitLibProfileRc = 2
+        $script:AitLibProfileOut = @("error`tresolver $(Split-Path -Leaf $ps1) not found ($(Split-Path -Parent $ps1))")
+        return $false
+    }
     $global:LASTEXITCODE = 0
     $origErr = [Console]::Error
     $errBuf = [IO.StringWriter]::new()
@@ -148,18 +159,26 @@ function Invoke-AitLibProfile([string[]]$Arguments) {
         $script:AitLibProfileOut = @(& $ps1 @Arguments | ForEach-Object { [string]$_ })
         $script:AitLibProfileRc = $LASTEXITCODE
     } catch {
-        # The caller logs the failure (LogError / LogWarn with the "error" line below)
-        LogDetail "aitools-profile $($Arguments[0]) threw: $($_.Exception.Message)"
+        # The caller logs the failure (LogError / LogWarn with this "error" line)
+        $m = "aitools-profile $cmd threw: $($_.Exception.Message -replace '\s*\r?\n\s*', ' ')"
+        LogDetail $m
+        $script:AitLibProfileOut = @($script:AitLibProfileOut) + @("error`t$m")
         $script:AitLibProfileRc = 2
     } finally {
         [Console]::SetError($origErr)
     }
     foreach ($l in ($errBuf.ToString() -split "`r?`n")) {
-        if ($l) { LogDetail "aitools-profile $($Arguments[0]): $l" }
+        if ($l) { LogDetail "aitools-profile ${cmd}: $l" }
     }
     if ($script:AitLibProfileRc -eq 0 -or $script:AitLibProfileRc -eq 1) {
-        if (-not @($script:AitLibProfileOut | Where-Object { $_.StartsWith("via`t") }).Count) {
-            LogDetail "aitools-profile $($Arguments[0]): exit $($script:AitLibProfileRc) without result lines -- treated as a resolver error"
+        $ok = $false
+        if ($cmd -ceq "hostname" -or $cmd -ceq "machine-id") {
+            $ok = ($script:AitLibProfileRc -eq 0 -and @($script:AitLibProfileOut | Where-Object { $_ }).Count -gt 0)
+        } else {
+            $ok = @($script:AitLibProfileOut | Where-Object { $_.StartsWith("via`t") -or $_.StartsWith("result`t") }).Count -gt 0
+        }
+        if (-not $ok) {
+            LogDetail "aitools-profile ${cmd}: exit $($script:AitLibProfileRc) without result lines -- treated as a resolver error"
             $script:AitLibProfileOut = @($script:AitLibProfileOut) + @("error`tresolver exited $($script:AitLibProfileRc) without result lines (see deploy.log)")
             $script:AitLibProfileRc = 2
         }
