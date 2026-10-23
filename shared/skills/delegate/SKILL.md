@@ -255,10 +255,12 @@ Verify these before relying on them; versions move. Source of record:
    accept.
 5. **Shipped changes**: review the PR the delegate opened (diff, CI, body
    versus its report). Do not re-push or reopen it yourself. An independent
-   reviewer posts its verdict on the PR (`gh pr review <n> --request-changes
-   --body-file <file>` for blocking findings, `gh pr review <n> --comment
-   --body-file <file>` otherwise), so the verdict is visible before merge,
-   not only in a hand-back (incident #144).
+   reviewer posts its verdict as a PR comment (`gh pr comment <n>
+   --body-file <file>`, verdict and blocking findings at the top), so the
+   verdict is visible before merge, not only in a hand-back (incident #144).
+   Not `gh pr review --request-changes`: GitHub refuses it on a PR opened
+   by the same account ("Can not request changes on your own pull
+   request"), and delegates push and review as the commander's account.
 6. **`INCIDENT:` markers**: triage and file through the incident process of
    the repo.
 7. **Lifecycle**: move anything that must outlive the session out of scratch.

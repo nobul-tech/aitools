@@ -109,156 +109,215 @@ if [ ! -f "$SCRIPTS_DIR/sync-relay-to-cursor-agents.py" ]; then
 fi
 blog "Found sync-relay-to-cursor-agents.py (relay→AGENTS runs from aitools deploy, not from deploy/)"
 
-# Read shared content
 # (Hook contents are NOT read into variables here -- the embed loops read each
 # file directly from the hooks-manifest.json list. Keeping per-hook variables
 # was dead code and a hardcoded list that drifted; see issue #9.)
-CLAUDE_SHARED_CONTENT=$(cat "$CLAUDE_SHARED")
 
-# inline_lib_bash: replaces `source.*aitools-lib.sh` line with lib content (stdin -> stdout)
+# inline_lib_bash [BLOCK_FILE]: replaces the script's lib-loading line (the FIRST line
+# that starts with `source` and names aitools-lib.sh) with the lib content, followed
+# by BLOCK_FILE's content when one is given (stdin -> stdout). Only that one line is
+# replaced: text embedded later in the script (skills, hooks, rules, the resolver
+# block) that names the lib is left alone (review H1; before, a SKILL.md line
+# "Hooks cannot source `aitools-lib.sh`" was replaced by the whole lib). A script
+# with no lib-loading line fails the build.
 # Uses perl for performance (single process vs ~2 subprocesses per line with while-read)
 inline_lib_bash() {
     perl -e '
         open my $lib, "<", $ARGV[0] or die "Cannot open lib: $!";
         my $content = do { local $/; <$lib> };
         close $lib;
+        if (defined $ARGV[1] && length $ARGV[1]) {
+            $content .= "\n" unless $content =~ /\n\z/;
+            open my $blk, "<", $ARGV[1] or die "Cannot open embed block: $!";
+            $content .= do { local $/; <$blk> };
+            close $blk;
+        }
+        my $done = 0;
         while (<STDIN>) {
-            if (/source.*aitools-lib\.sh/) {
+            if (!$done && /^\s*source\s.*aitools-lib\.sh/) {
                 print $content;
+                $done = 1;
             } else {
                 print;
             }
         }
-    ' "$SCRIPTS_DIR/aitools-lib.sh"
+        die "build-deploy: no line loads aitools-lib.sh -- nothing inlined\n" unless $done;
+    ' "$SCRIPTS_DIR/aitools-lib.sh" "${1:-}"
 }
 
-# inline_lib_ps1: replaces `. .*aitools-lib.ps1` line with lib content (stdin -> stdout)
+# inline_lib_ps1 [BLOCK_FILE]: same for PowerShell -- the FIRST line that dot-sources
+# aitools-lib.ps1 (starts with ". ").
 # Uses perl for performance (single process vs ~2 subprocesses per line with while-read)
 inline_lib_ps1() {
     perl -e '
         open my $lib, "<", $ARGV[0] or die "Cannot open lib: $!";
         my $content = do { local $/; <$lib> };
         close $lib;
+        if (defined $ARGV[1] && length $ARGV[1]) {
+            $content .= "\n" unless $content =~ /\n\z/;
+            open my $blk, "<", $ARGV[1] or die "Cannot open embed block: $!";
+            $content .= do { local $/; <$blk> };
+            close $blk;
+        }
+        my $done = 0;
         while (<STDIN>) {
-            if (/aitools-lib\.ps1/) {
+            if (!$done && /^\s*\.\s.*aitools-lib\.ps1/) {
                 print $content;
+                $done = 1;
             } else {
                 print;
             }
         }
-    ' "$SCRIPTS_DIR/aitools-lib.ps1"
+        die "build-deploy: no line dot-sources aitools-lib.ps1 -- nothing inlined\n" unless $done;
+    ' "$SCRIPTS_DIR/aitools-lib.ps1" "${1:-}"
 }
 
-# --- Read user rules for embedding ---
-# User rules are embedded at build time into deploy scripts.
-# At runtime, deploy scripts write embedded rules to a temp dir, then use the
-# same additive deploy logic extracted from scripts/setup-user-claude.sh/.ps1.
-USER_RULES_DIR=""
-USER_RULE_COUNT=0
-declare -a USER_RULE_NAMES=()
-declare -a USER_RULE_CONTENTS=()
-
-CONFIG="$HOME/.aitools/config.json"
-if [ -f "$CONFIG" ] && command -v node &>/dev/null; then
-    _urp=$(node -e "
-try {
-    const cfg = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
-    if (cfg.userRepoPath) console.log(cfg.userRepoPath);
-} catch(e) {}
-" "$CONFIG" 2>/dev/null) || true  # node failure is non-fatal; _urp stays empty
-    if [ -n "$_urp" ] && [ -d "$_urp/claude/rules" ]; then
-        USER_RULES_DIR="$_urp/claude/rules"
-        for rf in "$USER_RULES_DIR"/*.md; do
-            [ -f "$rf" ] || continue
-            USER_RULE_NAMES+=("$(basename "$rf")")
-            USER_RULE_CONTENTS+=("$(tr -d '\r' < "$rf")")
-            USER_RULE_COUNT=$((USER_RULE_COUNT + 1))
-        done
-    fi
-fi
-
-if [ "$USER_RULE_COUNT" -gt 0 ]; then
-    blog "User rules: $USER_RULE_COUNT files from $USER_RULES_DIR"
-else
-    blog "WARN: No user rules found at build time -- deploy scripts will not manage ~/.claude/rules/"
-fi
-
-# --- Build target: the user's own dotprofile repo, not the shared aitools repo ---
+# --- Dotprofile: the build target and the source of the embedded user content ---
 # build-deploy produces a PERSONALIZED, self-contained (MDM-ready) artifact into the
 # user's dotprofile repo (aitools-<ghuser>/deploy/). The shared aitools/deploy/ is left
-# untouched. Every user has a dotprofile; 'aitools user init' creates one if missing.
-# If no dotprofile is configured yet, skip gracefully -- the bootstrap flow runs
-# build-deploy only AFTER user init, so userRepoPath is set by the time we build.
-if [ -n "${_urp:-}" ] && [ -d "$_urp" ]; then
-    DEPLOY_DIR="$_urp/deploy"
-    blog "Build target: $DEPLOY_DIR (dotprofile repo)"
-else
-    blog_warn "No dotprofile configured (userRepoPath unset). Run 'aitools user init' first -- skipping deploy build."
+# untouched. The dotprofile comes from the entry point: `aitools` / `aitools.ps1`
+# export AITOOLS_USER_REPO_PATH, and check-pre-push step 7 passes its temp copy that
+# way. A standalone run asks the resolver every setup script uses
+# (resolve_user_repo_path in aitools-lib.sh; SD-7) in a child bash, so this script
+# keeps its own build logging: the child's console lines go to stderr and only the
+# path comes back, on fd 3. config.json is not read here.
+# No dotprofile (rc 1) or a resolver error (rc 3) skips the build with exit 0: a
+# failing prebuild would stop `aitools` before setup-user-config, the one step that
+# can repair config.json (review H3). The bootstrap flow runs build-deploy only after
+# `aitools user init`, so a dotprofile exists by then.
+_urp="${AITOOLS_USER_REPO_PATH:-}"
+_urp_via="AITOOLS_USER_REPO_PATH"
+if [ -z "$_urp" ]; then
+    _urp_via="resolver"
+    _urp_rc=0
+    # AITOOLS_SUMMARY_FILE is dropped for the child: the setup scripts report a
+    # dotprofile error in the run summary themselves; this build only warns.
+    _urp=$(env -u AITOOLS_SUMMARY_FILE "${BASH:-bash}" -c '
+set -euo pipefail
+source "$1/aitools-lib.sh"
+logging_init "build-deploy"
+rc=0
+resolve_user_repo_path || rc=$?
+printf "%s" "$AITLIB_USER_REPO_PATH" >&3
+exit "$rc"' build-deploy "$SCRIPTS_DIR" 3>&1 1>&2) || _urp_rc=$?
+    case "$_urp_rc" in
+        0) : ;;
+        1) _urp="" ;;
+        *) blog_warn "Dotprofile resolver failed (exit $_urp_rc; details in ~/.aitools/logs/deploy.log) -- skipping deploy build; run 'aitools' (setup-user-config repairs config.json)"
+           exit 0 ;;
+    esac
+fi
+if [ -z "$_urp" ]; then
+    blog_warn "No dotprofile found. Run 'aitools user init' first -- skipping deploy build."
     exit 0
 fi
+if [ ! -d "$_urp" ]; then
+    blog_warn "Dotprofile $_urp (from $_urp_via) is not a directory -- skipping deploy build."
+    exit 0
+fi
+DEPLOY_DIR="$_urp/deploy"
+blog "Dotprofile: $_urp (via $_urp_via)"
+blog "Build target: $DEPLOY_DIR (dotprofile repo)"
 
-# --- Profile interpolation ---
-# Read profile from user repo, interpolate identity placeholders.
-# Fallback: use defaults if profile not found (build never fails).
-PROFILE_NAME="Jose"
-PROFILE_COMPANY="Nobul"
-IDENTITY_GIT_NAME="Jose"
-IDENTITY_GIT_EMAIL="jose@nobul.tech"
-CURSOR_CLI_VIMMODE=false
-CURSOR_CLI_MODEL="auto"
-# Claude settings are not embedded: setup-user-settings syncs ~/.claude/settings.json
-# from profile.json (claude.settings) at runtime, in dev and deploy alike.
-
-CONFIG="$HOME/.aitools/config.json"
-if [ -f "$CONFIG" ] && command -v node &>/dev/null; then
-    PROFILE_VALS=$(node -e "
-const fs = require('fs'), path = require('path'), os = require('os');
-try {
-    const cfg = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
-    const repo = cfg.userRepoPath;
-    const alias = cfg.machineAlias || '';
-    if (!repo) throw new Error('no userRepoPath');
-    const pf = path.join(repo, 'profile.json');
-    const p = JSON.parse(fs.readFileSync(pf, 'utf8'));
-    let prof, ident;
-    if (p.version === 2) {
-        prof = p.profiles[alias]
-            || Object.values(p.profiles).find(pr => pr.machine && pr.machine.hostname.split('.')[0] === os.hostname().split('.')[0])
-            || Object.values(p.profiles)[0];
-        ident = p.identity;
-    } else {
-        prof = { name: p.name, company: p.company || '' };
-        ident = { git: { name: (p.git && p.git.name) || p.name, email: (p.git && p.git.email) || p.email } };
-    }
-    // Cursor CLI preferences
-    let cursorCli = { vimMode: false, model: 'auto' };
-    if (p.cursor && p.cursor.cli) {
-        if (typeof p.cursor.cli.vimMode === 'boolean') cursorCli.vimMode = p.cursor.cli.vimMode;
-        if (typeof p.cursor.cli.model === 'string') cursorCli.model = p.cursor.cli.model;
-    }
-    // Output as KEY=VALUE lines for bash eval
-    console.log('PROFILE_NAME=' + JSON.stringify(prof.name));
-    console.log('PROFILE_COMPANY=' + JSON.stringify(prof.company));
-    console.log('IDENTITY_GIT_NAME=' + JSON.stringify(ident.git.name));
-    console.log('IDENTITY_GIT_EMAIL=' + JSON.stringify(ident.git.email));
-    console.log('CURSOR_CLI_VIMMODE=' + JSON.stringify(cursorCli.vimMode));
-    console.log('CURSOR_CLI_MODEL=' + JSON.stringify(cursorCli.model));
-} catch(e) { process.exit(1); }
-" "$CONFIG" 2>/dev/null) && eval "$PROFILE_VALS"
+# --- User rules (embedded as a fallback; see "Embedded dotprofile content") ---
+USER_RULE_COUNT=0
+declare -a USER_RULE_FILES=()
+if [ -d "$_urp/claude/rules" ]; then
+    for rf in "$_urp/claude/rules"/*.md; do
+        [ -f "$rf" ] || continue
+        USER_RULE_FILES+=("$rf")
+        USER_RULE_COUNT=$((USER_RULE_COUNT + 1))
+    done
+fi
+if [ "$USER_RULE_COUNT" -gt 0 ]; then
+    blog "User rules: $USER_RULE_COUNT files from $_urp/claude/rules"
+else
+    blog "No user rules in the dotprofile -- the deploy scripts embed none (a machine with the dotprofile still uses its own claude/rules/)"
 fi
 
-# Interpolate placeholders
-CLAUDE_SHARED_CONTENT="${CLAUDE_SHARED_CONTENT//\{\{PROFILE_NAME\}\}/$PROFILE_NAME}"
-CLAUDE_SHARED_CONTENT="${CLAUDE_SHARED_CONTENT//\{\{PROFILE_COMPANY\}\}/$PROFILE_COMPANY}"
-CLAUDE_SHARED_CONTENT="${CLAUDE_SHARED_CONTENT//\{\{IDENTITY_GIT_NAME\}\}/$IDENTITY_GIT_NAME}"
-CLAUDE_SHARED_CONTENT="${CLAUDE_SHARED_CONTENT//\{\{IDENTITY_GIT_EMAIL\}\}/$IDENTITY_GIT_EMAIL}"
+# --- Embedded dotprofile content: fallbacks, resolved per machine at RUNTIME ---
+# deploy/ is committed once and used by every machine of this user, so no machine's
+# values are interpolated here (M3 B5: the cross-machine defect, decision 4). The
+# generated setup-user-claude.* resolve this machine's profile when they run: from
+# the live dotprofile on that machine when it has one (what scripts/ reads), else
+# from the build-time template, profile snapshot and rules embedded below.
+TEMPLATE_FILE="$CLAUDE_SHARED"
+TEMPLATE_LABEL="shared/claude-shared.md"
+if [ -f "$_urp/claude/CLAUDE.md" ]; then
+    TEMPLATE_FILE="$_urp/claude/CLAUDE.md"
+    TEMPLATE_LABEL="dotprofile claude/CLAUDE.md"
+fi
+if [ ! -s "$TEMPLATE_FILE" ]; then
+    blog_error "CLAUDE.md template is empty or unreadable: $TEMPLATE_FILE"
+    exit 1
+fi
+blog "Template fallback: $TEMPLATE_LABEL (tokens resolved at runtime)"
 
-blog "Profile interpolation: name=$PROFILE_NAME company=$PROFILE_COMPANY"
-blog "Cursor CLI prefs: vimMode=$CURSOR_CLI_VIMMODE model=$CURSOR_CLI_MODEL"
+# JSON reads use the resolver's JSON engine (core perl, every platform), not node.
+JSON_PL="$SCRIPTS_DIR/aitools-json.pl"
+PROFILE_JSON="$_urp/profile.json"
+PROFILE_SNAPSHOT=""
+# Cursor CLI preferences are user-level (profile.json cursor.cli), not per machine.
+# They are the fallback values in the generated setup-user-cursor.*; a machine with
+# the dotprofile reads its live profile.json, as scripts/ does.
+CURSOR_CLI_VIMMODE=false
+CURSOR_CLI_MODEL="auto"
+if [ -f "$PROFILE_JSON" ]; then
+    _pj_rc=0
+    _pj_msg=$(perl "$JSON_PL" check "$PROFILE_JSON" 2>&1) || _pj_rc=$?
+    if [ "$_pj_rc" -ne 0 ]; then
+        blog_error "profile.json unreadable: $PROFILE_JSON (${_pj_msg:-engine exit $_pj_rc}) -- fix it before building deploy/"
+        exit 1
+    fi
+    _pj_rc=0
+    PROFILE_SNAPSHOT=$(perl "$JSON_PL" snapshot "$PROFILE_JSON") || _pj_rc=$?
+    if [ "$_pj_rc" -ne 0 ] || [ -z "$PROFILE_SNAPSHOT" ]; then
+        blog_error "Could not snapshot $PROFILE_JSON (engine exit $_pj_rc)"
+        exit 1
+    fi
+    # type: exit 1 = absent or null (keep the default); other non-zero = engine error
+    _pj_rc=0
+    _pj_type=$(perl "$JSON_PL" type "$PROFILE_JSON" cursor cli vimMode) || _pj_rc=$?
+    if [ "$_pj_rc" -eq 0 ] && [ "$_pj_type" = "boolean" ]; then
+        CURSOR_CLI_VIMMODE=$(perl "$JSON_PL" get "$PROFILE_JSON" cursor cli vimMode) || {
+            blog_error "Could not read cursor.cli.vimMode from $PROFILE_JSON"
+            exit 1
+        }
+    elif [ "$_pj_rc" -gt 1 ]; then
+        blog_error "Could not read cursor.cli.vimMode from $PROFILE_JSON (engine exit $_pj_rc)"
+        exit 1
+    fi
+    _pj_rc=0
+    _pj_type=$(perl "$JSON_PL" type "$PROFILE_JSON" cursor cli model) || _pj_rc=$?
+    if [ "$_pj_rc" -eq 0 ] && [ "$_pj_type" = "string" ]; then
+        _pj_model=$(perl "$JSON_PL" get "$PROFILE_JSON" cursor cli model) || {
+            blog_error "Could not read cursor.cli.model from $PROFILE_JSON"
+            exit 1
+        }
+        # The value becomes code (a JS and a PowerShell string literal): only a
+        # plain model id is embedded.
+        if printf '%s' "$_pj_model" | perl -ne 'exit(/\A[A-Za-z0-9._-]+\z/ ? 0 : 1)'; then
+            CURSOR_CLI_MODEL="$_pj_model"
+        else
+            blog_warn "cursor.cli.model in $PROFILE_JSON is not a plain model id (letters, digits, . _ -) -- the deploy fallback stays 'auto'"
+        fi
+    elif [ "$_pj_rc" -gt 1 ]; then
+        blog_error "Could not read cursor.cli.model from $PROFILE_JSON (engine exit $_pj_rc)"
+        exit 1
+    fi
+    blog "Profile snapshot: $PROFILE_JSON (fallback for machines without the dotprofile)"
+else
+    blog_warn "No profile.json in $_urp -- the deploy scripts embed no profile snapshot"
+fi
+blog "Cursor CLI fallback prefs: vimMode=$CURSOR_CLI_VIMMODE model=$CURSOR_CLI_MODEL"
 
-# Clean and recreate deploy/
-rm -rf "$DEPLOY_DIR"
-mkdir -p "$DEPLOY_DIR"
+# Build scratch: embed blocks and pre-processed bodies (removed on exit)
+if ! BUILD_TMP=$(mktemp -d "${TMPDIR:-/tmp}/build-deploy.XXXXXX"); then
+    blog_error "mktemp -d failed -- cannot build deploy/"
+    exit 1
+fi
+_cleanup_build_tmp() { rm -rf "$BUILD_TMP"; }
+trap _cleanup_build_tmp EXIT
 
 GENERATED=0
 
@@ -356,21 +415,232 @@ replace_once() {
 }
 
 # ============================================================
+# Embedded profile resolver (M3 B5; B8a INCIDENT)
+# ============================================================
+# Generated setup-user-claude/-settings/-cursor call the lib's resolver wrappers
+# (resolve_user_repo_path, resolve_machine_profile). Those run aitools-profile.sh/.ps1
+# as their own program, which loads aitools-lib and the JSON engine from its own
+# directory. Each of those generated scripts therefore carries build-time COPIES of
+# the three files (read from scripts/ here, so a resolver change flows through on
+# the next build) and writes them to a private temp dir at runtime; the lib's lookup
+# override (AITOOLS_PROFILE_SH / AITOOLS_PROFILE_PS1, PR #80) points at it.
+# The block goes right after the inlined lib (inline_lib_* BLOCK_FILE): after the
+# PowerShell param() and the lib, before any resolver call, and outside the inliner's
+# pattern scan.
+#   bash: one quoted heredoc per file; a file holding the delimiter line fails the build.
+#   PowerShell: one here-string per file, every line prefixed with "|", so no line can
+#   end the here-string ('@ at line start, review H1); the prefix and CRs are removed
+#   when the file is written.
+EMBED_EOF="__AITOOLS_EMBED_EOF__"
+EMBED_MARKER="# --- Embedded profile resolver (generated by build-deploy.sh; M3 B5) ---"
+RESOLVER_SH_FILES="aitools-profile.sh aitools-lib.sh aitools-json.pl"
+RESOLVER_PS1_FILES="aitools-profile.ps1 aitools-lib.ps1 aitools-json.ps1"
+
+# The resolver must not load a file the embed does not carry: every
+# "$SCRIPT_DIR/<file>" (bash) and Join-Path $PSScriptRoot "<file>" (PowerShell) it
+# names must be in the lists above (a future resolver change fails here, not on an
+# endpoint).
+_deps=$(perl -ne 'print "$1\n" while /\$SCRIPT_DIR\/([A-Za-z0-9._-]+)/g' "$SCRIPTS_DIR/aitools-profile.sh" | sort -u)
+for _dep in $_deps; do
+    case " $RESOLVER_SH_FILES " in
+        *" $_dep "*) : ;;
+        *) blog_error "aitools-profile.sh loads $_dep, which build-deploy does not embed -- add it to RESOLVER_SH_FILES"
+           exit 1 ;;
+    esac
+done
+_deps=$(perl -ne 'print "$1\n" while /Join-Path \$PSScriptRoot "([A-Za-z0-9._-]+)"/g' "$SCRIPTS_DIR/aitools-profile.ps1" | sort -u)
+for _dep in $_deps; do
+    case " $RESOLVER_PS1_FILES " in
+        *" $_dep "*) : ;;
+        *) blog_error "aitools-profile.ps1 loads $_dep, which build-deploy does not embed -- add it to RESOLVER_PS1_FILES"
+           exit 1 ;;
+    esac
+done
+
+# embed_file_bash REL SRC -- bash code that writes SRC's text (CRLF -> LF, one final
+# newline) to "$_AITOOLS_EMBED_DIR/REL". REL is shell-quoted (printf %q).
+embed_file_bash() {
+    local rel="$1" src="$2"
+    if perl -0777 -pe 's/\r\n/\n/g' "$src" | grep -qxF "$EMBED_EOF"; then
+        blog_error "Cannot embed $src: it contains the heredoc delimiter line $EMBED_EOF"
+        exit 1
+    fi
+    printf '    if [ -z "$_AITOOLS_EMBED_ERR" ] && ! cat > "$_AITOOLS_EMBED_DIR"/%s <<'"'"'%s'"'"'\n' "$(printf '%q' "$rel")" "$EMBED_EOF"
+    perl -0777 -pe 's/\r\n/\n/g; s/\n?\z/\n/' "$src"
+    printf '%s\n' "$EMBED_EOF"
+    printf '    then _AITOOLS_EMBED_ERR="could not write an embedded file in $_AITOOLS_EMBED_DIR"; fi\n'
+}
+
+# embed_file_ps1 REL SRC -- PowerShell here-string entry $aitoolsEmbedFiles['REL']
+embed_file_ps1() {
+    local rel_q
+    rel_q=$(printf '%s' "$1" | perl -pe "s/'/''/g")
+    printf "\$aitoolsEmbedFiles['%s'] = @'\n" "$rel_q"
+    perl -ne 's/\r?\n\z//; print "|$_\n"' "$2"
+    printf "'@\n"
+}
+
+# write_resolver_block_bash OUT [claude] -- the bash embed block; "claude" adds the
+# dotprofile fallbacks (template, profile snapshot, rules).
+write_resolver_block_bash() {
+    local out="$1" with_claude="${2:-}" f i
+    {
+        printf '%s\n' "$EMBED_MARKER"
+        cat <<'BLOCK'
+# Build-time copies of scripts/aitools-profile.sh, aitools-lib.sh and aitools-json.pl
+# (the resolver runs as its own bash process and loads its lib and JSON engine from
+# its own directory), written to a private temp dir; the lib's resolver lookup points
+# there (AITOOLS_PROFILE_SH; a value the caller set wins). This runs before
+# logging_init, so it uses no log helper: a failure is kept in _AITOOLS_EMBED_ERR and
+# printed to stderr, and the resolver wrappers then report "resolver missing"
+# (log_error + ERROR row). The EXIT trap removes the temp dir.
+_AITOOLS_EMBED_DIR=""
+_AITOOLS_EMBED_ERR=""
+_aitools_embed_cleanup() { if [ -n "$_AITOOLS_EMBED_DIR" ]; then rm -rf "$_AITOOLS_EMBED_DIR"; fi; }
+trap _aitools_embed_cleanup EXIT
+if ! _AITOOLS_EMBED_DIR=$(mktemp -d "${TMPDIR:-/tmp}/aitools-embed.XXXXXX"); then
+    _AITOOLS_EMBED_DIR=""
+    _AITOOLS_EMBED_ERR="mktemp -d failed"
+elif ! mkdir -p "$_AITOOLS_EMBED_DIR/claude" "$_AITOOLS_EMBED_DIR/shared" "$_AITOOLS_EMBED_DIR/rules"; then
+    _AITOOLS_EMBED_ERR="mkdir failed in $_AITOOLS_EMBED_DIR"
+fi
+BLOCK
+        for f in $RESOLVER_SH_FILES; do
+            embed_file_bash "$f" "$SCRIPTS_DIR/$f"
+        done
+        if [ "$with_claude" = "claude" ]; then
+            printf '# Dotprofile content at build time: fallbacks for a machine without the dotprofile\n'
+            embed_file_bash "claude/CLAUDE.md" "$TEMPLATE_FILE"
+            embed_file_bash "shared/claude-shared.md" "$CLAUDE_SHARED"
+            if [ -n "$PROFILE_SNAPSHOT" ]; then
+                embed_file_bash "profile.json" "$BUILD_TMP/profile-snapshot.json"
+            fi
+            for i in $(seq 0 $((USER_RULE_COUNT - 1))); do
+                [ "$USER_RULE_COUNT" -gt 0 ] || break
+                embed_file_bash "rules/$(basename "${USER_RULE_FILES[$i]}")" "${USER_RULE_FILES[$i]}"
+            done
+        fi
+        cat <<'BLOCK'
+if [ -z "$_AITOOLS_EMBED_ERR" ]; then
+    if [ -z "${AITOOLS_PROFILE_SH:-}" ]; then export AITOOLS_PROFILE_SH="$_AITOOLS_EMBED_DIR/aitools-profile.sh"; fi
+else
+    printf 'aitools: embedded profile resolver not written (%s)\n' "$_AITOOLS_EMBED_ERR" >&2
+fi
+# --- End of embedded profile resolver ---
+BLOCK
+    } > "$out"
+}
+
+# write_resolver_block_ps1 OUT [claude] -- the PowerShell embed block (same content)
+write_resolver_block_ps1() {
+    local out="$1" with_claude="${2:-}" f i
+    {
+        printf '%s\n' "$EMBED_MARKER"
+        cat <<'BLOCK'
+# Build-time copies of scripts/aitools-profile.ps1, aitools-lib.ps1 and aitools-json.ps1
+# (the resolver dot-sources its lib and JSON helpers from its own directory), written
+# to a private temp dir; the lib's resolver lookup points there (AITOOLS_PROFILE_PS1;
+# a value the caller set wins). Every embedded line carries a "|" prefix so no line
+# can end its here-string; the prefix and CRs are removed when the file is written.
+# This runs before Initialize-Logging, so a failure is kept in $aitoolsEmbedError and
+# written to stderr; the resolver wrappers then report "resolver missing" (LogError +
+# ERROR row). Remove-AitoolsEmbed (called before the exit footer) deletes the temp dir
+# and restores the environment; an early exit leaves the temp dir behind (PowerShell
+# has no EXIT trap; it holds only these build-time copies).
+$aitoolsEmbedDir = Join-Path ([System.IO.Path]::GetTempPath()) ("aitools-embed-" + [guid]::NewGuid().ToString("N"))
+$aitoolsEmbedError = ""
+$aitoolsEmbedPrevProfilePs1 = $env:AITOOLS_PROFILE_PS1
+$aitoolsEmbedPrevProfileFile = $env:AITOOLS_PROFILE_FILE
+$aitoolsEmbedFiles = [ordered]@{}
+BLOCK
+        for f in $RESOLVER_PS1_FILES; do
+            embed_file_ps1 "$f" "$SCRIPTS_DIR/$f"
+        done
+        if [ "$with_claude" = "claude" ]; then
+            printf '# Dotprofile content at build time: fallbacks for a machine without the dotprofile\n'
+            embed_file_ps1 "claude/CLAUDE.md" "$TEMPLATE_FILE"
+            embed_file_ps1 "shared/claude-shared.md" "$CLAUDE_SHARED"
+            if [ -n "$PROFILE_SNAPSHOT" ]; then
+                embed_file_ps1 "profile.json" "$BUILD_TMP/profile-snapshot.json"
+            fi
+            for i in $(seq 0 $((USER_RULE_COUNT - 1))); do
+                [ "$USER_RULE_COUNT" -gt 0 ] || break
+                embed_file_ps1 "rules/$(basename "${USER_RULE_FILES[$i]}")" "${USER_RULE_FILES[$i]}"
+            done
+        fi
+        cat <<'BLOCK'
+try {
+    foreach ($aitoolsEmbedName in $aitoolsEmbedFiles.Keys) {
+        $aitoolsEmbedPath = Join-Path $aitoolsEmbedDir $aitoolsEmbedName
+        $aitoolsEmbedParent = Split-Path -Parent $aitoolsEmbedPath
+        if (-not (Test-Path -LiteralPath $aitoolsEmbedParent)) {
+            New-Item -ItemType Directory -Path $aitoolsEmbedParent -Force -ErrorAction Stop | Out-Null
+        }
+        $aitoolsEmbedText = $aitoolsEmbedFiles[$aitoolsEmbedName] -replace "`r", ''
+        if ($aitoolsEmbedText) { $aitoolsEmbedText = ($aitoolsEmbedText -replace '(?m)^\|', '') + "`n" }
+        [System.IO.File]::WriteAllText($aitoolsEmbedPath, $aitoolsEmbedText, [System.Text.UTF8Encoding]::new($false))
+    }
+    if (-not $env:AITOOLS_PROFILE_PS1) { $env:AITOOLS_PROFILE_PS1 = Join-Path $aitoolsEmbedDir "aitools-profile.ps1" }
+} catch {
+    $aitoolsEmbedError = "$_"
+    [Console]::Error.WriteLine("aitools: embedded profile resolver not written ($aitoolsEmbedError)")
+}
+function Remove-AitoolsEmbed {
+    if (Test-Path -LiteralPath $script:aitoolsEmbedDir) {
+        Remove-Item -LiteralPath $script:aitoolsEmbedDir -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $script:aitoolsEmbedDir) { LogWarn "Could not remove the embedded resolver temp dir $($script:aitoolsEmbedDir)" }
+    }
+    $env:AITOOLS_PROFILE_PS1 = $script:aitoolsEmbedPrevProfilePs1
+    $env:AITOOLS_PROFILE_FILE = $script:aitoolsEmbedPrevProfileFile
+}
+# --- End of embedded profile resolver ---
+BLOCK
+    } > "$out"
+}
+
+if [ -n "$PROFILE_SNAPSHOT" ]; then
+    printf '%s\n' "$PROFILE_SNAPSHOT" > "$BUILD_TMP/profile-snapshot.json"
+fi
+write_resolver_block_bash "$BUILD_TMP/resolver.sh.blk"
+write_resolver_block_bash "$BUILD_TMP/resolver-claude.sh.blk" claude
+write_resolver_block_ps1 "$BUILD_TMP/resolver.ps1.blk"
+write_resolver_block_ps1 "$BUILD_TMP/resolver-claude.ps1.blk" claude
+blog "Embedded resolver: $RESOLVER_SH_FILES / $RESOLVER_PS1_FILES (from scripts/)"
+
+# PowerShell cleanup line emitted before each exit footer that embeds the resolver
+EMBED_CLEANUP_PS1='Remove-AitoolsEmbed   # embedded resolver temp dir + environment (build-deploy, M3 B5)'
+
+# Build into a staging dir; it replaces <dotprofile>/deploy only at the very end, so
+# a build that fails anywhere (inputs, extraction, PS1 validation) leaves the
+# committed deploy/ in place (review m1).
+DEPLOY_DIR_FINAL="$DEPLOY_DIR"
+DEPLOY_DIR="$BUILD_TMP/deploy"
+mkdir -p "$DEPLOY_DIR"
+
+# ============================================================
 # 1. deploy/setup-user-claude.sh
 # ============================================================
 blog "Generating deploy/setup-user-claude.sh"
 
+# Pure extract from scripts/setup-user-claude.sh (template interpolation, footer,
+# managed-file deploy, rules logic: no duplicated logic, I6), plus two generated
+# parts: the profile/template source on this machine (before the body) and the
+# rules fallback (between the rules source selection and the rules logic).
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
     cat <<'BLOCK'
-# setup-user-claude.sh — Creates user-level ~/.claude/CLAUDE.md and deploys user rules
-# Self-contained: shared preferences and user rules are embedded below. No repo needed.
-# Safe to re-run — replaces existing file with latest version.
+# setup-user-claude.sh -- Creates user-level ~/.claude/CLAUDE.md and deploys user rules
+# Self-contained (MDM-ready): the profile resolver and build-time copies of the
+# dotprofile's CLAUDE.md template, profile snapshot and rules are embedded below.
+# This machine's profile is resolved when the script runs, never at build time. On a
+# machine with the dotprofile, its live template, profile.json and rules are used
+# (as by scripts/setup-user-claude.sh); the embedded copies are the fallback.
+# Safe to re-run.
 #
 # Managed: ~/.claude/CLAUDE.md (sole owner, overwrite)
-# Managed: ~/.claude/rules/*.md (additive deploy from embedded rules)
-# Preserved: ~/.claude/rules/ files not in embedded source
+# Managed: ~/.claude/rules/*.md (additive deploy from the rules source)
+# Preserved: ~/.claude/rules/ files not in the rules source
 
 set -euo pipefail
 
@@ -379,138 +649,62 @@ BLOCK
         '^# --- BEGIN preamble' '^# --- END preamble'
     cat <<'BLOCK'
 
-# --- Auto-detect machine info ---
-OS_NAME=$(uname -s)
-ARCH=$(uname -m)
-HOSTNAME=$(hostname -s 2>/dev/null || hostname)
-SHELL_NAME=$(basename "${SHELL:-/bin/bash}")
-
-CLAUDE_DIR="$HOME/.claude"
-CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
-
-mkdir -p "$CLAUDE_DIR"
-log "Ensuring $CLAUDE_DIR exists"
-
-# --- Embedded shared preferences (from shared/claude-shared.md) ---
-BLOCK
-    echo 'read -r -d "" SHARED_CONTENT <<'"'"'__EMBEDDED_CLAUDE_SHARED__'"'"' || true'
-    echo "$CLAUDE_SHARED_CONTENT"
-    echo '__EMBEDDED_CLAUDE_SHARED__'
-    cat <<'BLOCK'
-
-# --- Build content ---
-NEW_CONTENT="${SHARED_CONTENT}
-
-## Machine-Specific
-
-- Machine: ${OS_NAME} ${ARCH} (${HOSTNAME})
-- Shell: ${SHELL_NAME}"
-
-if [ "$DRY_RUN" = "true" ]; then
-    EXISTING_LINES=0
-    [ -f "$CLAUDE_MD" ] && EXISTING_LINES=$(wc -l < "$CLAUDE_MD")
-    NEW_LINES=$(echo "$NEW_CONTENT" | wc -l)
-    log "[DRY RUN] $CLAUDE_MD: overwrite (sole owner)"
-    log "  Template source: embedded (build-time)"
-    log "  Existing: ${EXISTING_LINES} lines"
-    log "  New: ${NEW_LINES} lines"
-    if [ -f "$CLAUDE_MD" ]; then
-        if [ "$(cat "$CLAUDE_MD")" = "$NEW_CONTENT" ]; then
-            log "[DRY RUN] Content unchanged"
-        else
-            log "[DRY RUN] Content differs -- would overwrite"
-        fi
-    else
-        log "[DRY RUN] File does not exist -- would create"
-    fi
+# --- Profile and template source on this machine (generated by build-deploy.sh) ---
+# The live dotprofile on this machine wins (what scripts/setup-user-claude.sh reads);
+# the build-time copies embedded above are the fallback. A dotprofile error ends the
+# run here with the outcome setup-user-claude.sh gives it (same rows, exit 1).
+if [ -n "$_AITOOLS_EMBED_ERR" ]; then log_detail "embedded profile resolver not written: $_AITOOLS_EMBED_ERR"; fi
+_DP_RC=0
+resolve_user_repo_path || _DP_RC=$?   # 1 = no dotprofile on this machine; 3 = logged error + ERROR row
+if [ "$_DP_RC" -eq 3 ]; then
+    log_error "CLAUDE.md and rules not deployed: the dotprofile could not be resolved"
+    write_summary ERROR "claude.md" "not deployed: dotprofile unresolved"
+    exit 1
+fi
+_DP_PATH="$AITLIB_USER_REPO_PATH"
+if [ -n "${AITOOLS_PROFILE_FILE:-}" ]; then
+    log "Profile source: AITOOLS_PROFILE_FILE ($(display_path "$AITOOLS_PROFILE_FILE"))"
+elif [ -n "$_DP_PATH" ] && [ -f "$_DP_PATH/profile.json" ]; then
+    log "Profile source: live $(display_path "$_DP_PATH/profile.json")"
+elif [ "$_DP_RC" -ne 0 ] && [ -n "$_AITOOLS_EMBED_DIR" ] && [ -f "$_AITOOLS_EMBED_DIR/profile.json" ]; then
+    export AITOOLS_PROFILE_FILE="$_AITOOLS_EMBED_DIR/profile.json"
+    log "Profile source: embedded build-time snapshot (no dotprofile on this machine)"
 else
-    backup_file "$CLAUDE_MD"
-    # Capture existing content for post-write comparison
-    OLD_CONTENT=""
-    if [ -f "$CLAUDE_MD" ]; then
-        OLD_CONTENT=$(cat "$CLAUDE_MD")
-    fi
-    if [ -f "$CLAUDE_MD" ]; then
-        rm "$CLAUDE_MD"
-        log "Removed existing $CLAUDE_MD"
-    fi
-
-    # --- Write CLAUDE.md ---
-    cat > "$CLAUDE_MD" << CLAUDE_EOF
-${SHARED_CONTENT}
-
-## Machine-Specific
-
-- Machine: ${OS_NAME} ${ARCH} (${HOSTNAME})
-- Shell: ${SHELL_NAME}
-CLAUDE_EOF
-
-BLOCK
-    # Extract: post-write validation from scripts/ (single source of truth)
-    extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
-        '^\s*# --- BEGIN post-write validation' '^\s*# --- END post-write validation'
-    cat <<'BLOCK'
-
-    log_ok "Wrote $(display_path "$CLAUDE_MD")"
-    if [ "$ERRORS" -eq 0 ]; then
-        write_summary OK "claude.md" "deployed"
+    log "Profile source: none (no profile.json in this machine's dotprofile, or none embedded at build time)"
+fi
+# Template fallback, passed the way scripts/ takes one (the first non-flag argument).
+# With a dotprofile on this machine the body reads its claude/CLAUDE.md and falls
+# back, as scripts/ does, to shared/claude-shared.md (embedded copy). Without one,
+# the build-time dotprofile template is used (review m3).
+if [ -n "$_AITOOLS_EMBED_DIR" ]; then
+    if [ "$_DP_RC" -eq 0 ]; then
+        set -- "$@" "$_AITOOLS_EMBED_DIR/shared/claude-shared.md"
     else
-        write_summary ERROR "claude.md" "validation failed"
-    fi
-    log "Machine: $OS_NAME $ARCH ($HOSTNAME), Shell: $SHELL_NAME"
-    # Log whether content actually changed
-    if [ -z "$OLD_CONTENT" ]; then
-        log "Content: new file"
-    elif [ "$OLD_CONTENT" = "$NEW_CONTENT" ]; then
-        log "Content unchanged (no differences)"
-    else
-        log "Content updated"
-        # Log unified diff to deploy log (not console)
-        diff -u <(echo "$OLD_CONTENT") <(echo "$NEW_CONTENT") \
-            --label "previous/CLAUDE.md" --label "new/CLAUDE.md" \
-            >> "$LOG_FILE" 2>&1 || true  # diff exits 1 on differences (expected)
+        set -- "$@" "$_AITOOLS_EMBED_DIR/claude/CLAUDE.md"
+        log "Template fallback: embedded build-time copy (no dotprofile on this machine)"
     fi
 fi
-
 BLOCK
-    # --- Embedded user rules deployment ---
+    extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
+        '^# --- END preamble' '^# --- BEGIN rules deployment'
+    extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
+        '^# --- BEGIN rules deployment' '^# --- BEGIN rules deploy logic'
     if [ "$USER_RULE_COUNT" -gt 0 ]; then
-        # Set up embedded rules: write to temp dir, then use extracted deploy logic
         cat <<'BLOCK'
-# --- Embedded user rules (from user repo at build time) ---
-RULES_SRC=$(mktemp -d)
-_cleanup_rules() { rm -rf "$RULES_SRC"; }
-trap _cleanup_rules EXIT
-BLOCK
-        # Emit heredocs for each embedded rule file
-        for i in $(seq 0 $((USER_RULE_COUNT - 1))); do
-            local_name="${USER_RULE_NAMES[$i]}"
-            # Sanitize name for heredoc delimiter: replace - and . with _
-            safe_name=$(echo "$local_name" | perl -pe 's/[^a-zA-Z0-9]/_/g')
-            echo "cat > \"\$RULES_SRC/$local_name\" <<'__RULE_${safe_name}__'"
-            echo "${USER_RULE_CONTENTS[$i]}"
-            echo "__RULE_${safe_name}__"
-        done
-        cat <<'BLOCK'
-RULES_DEST="$CLAUDE_DIR/rules"
-BLOCK
-        # Extract deploy logic from scripts/ (single source of truth)
-        extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
-            '^# --- BEGIN rules deploy logic' '^# --- END rules deploy logic'
-        cat <<'BLOCK'
-
-# Clean up temp source dir
-rm -rf "$RULES_SRC"
-trap - EXIT
-BLOCK
-    else
-        cat <<'BLOCK'
-log "No user rules embedded at build time -- ~/.claude/rules/ not managed by this script"
+# --- Rules fallback (generated by build-deploy.sh): the build-time copy when this
+# machine has no dotprofile (a dotprofile without claude/rules/ deploys none, as
+# scripts/ does; review m3) ---
+if [ "$_DP_RC" -ne 0 ] && [ -z "$RULES_SRC" ] && [ -n "$_AITOOLS_EMBED_DIR" ] && [ -d "$_AITOOLS_EMBED_DIR/rules" ]; then
+    RULES_SRC="$_AITOOLS_EMBED_DIR/rules"
+    log "Rules source: embedded build-time copy (no dotprofile on this machine)"
+fi
 BLOCK
     fi
     extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
+        '^# --- BEGIN rules deploy logic' '^# --- END rules deploy logic'
+    extract_between "$SCRIPTS_DIR/setup-user-claude.sh" \
         '^# --- BEGIN exit' '^# --- END exit'
-} | inline_lib_bash > "$DEPLOY_DIR/setup-user-claude.sh"
+} | inline_lib_bash "$BUILD_TMP/resolver-claude.sh.blk" > "$DEPLOY_DIR/setup-user-claude.sh"
 
 chmod +x "$DEPLOY_DIR/setup-user-claude.sh"
 GENERATED=$((GENERATED + 1))
@@ -520,20 +714,25 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 blog "Generating deploy/setup-user-claude.ps1"
 
+# Pure extract from scripts/setup-user-claude.ps1, plus the same two generated parts
+# as the .sh (parity).
 {
     echo "$HEADER_COMMENT_PS1"
     cat <<'BLOCK'
-# setup-user-claude.ps1 — Creates user-level ~/.claude/CLAUDE.md and deploys user rules
-# Self-contained: shared preferences and user rules are embedded below. No repo needed.
-# Safe to re-run — replaces existing file with latest version.
+# setup-user-claude.ps1 -- Creates user-level ~/.claude/CLAUDE.md and deploys user rules
+# Self-contained (MDM-ready): the profile resolver and build-time copies of the
+# dotprofile's CLAUDE.md template, profile snapshot and rules are embedded below.
+# This machine's profile is resolved when the script runs, never at build time. On a
+# machine with the dotprofile, its live template, profile.json and rules are used
+# (as by scripts/setup-user-claude.ps1); the embedded copies are the fallback.
+# Safe to re-run.
 #
 # Managed: ~/.claude/CLAUDE.md (sole owner, overwrite)
-# Managed: ~/.claude/rules/*.md (additive deploy from embedded rules)
-# Preserved: ~/.claude/rules/ files not in embedded source
+# Managed: ~/.claude/rules/*.md (additive deploy from the rules source)
+# Preserved: ~/.claude/rules/ files not in the rules source
 
-BLOCK
-    cat <<'BLOCK'
 param(
+    [string]$SharedPath = "",
     [switch]$DryRun,
     [switch]$Force
 )
@@ -543,142 +742,65 @@ BLOCK
         '^# --- BEGIN preamble' '^# --- END preamble' --crlf
     cat <<'BLOCK'
 
-# --- Auto-detect machine info ---
-$osInfo = (Get-CimInstance Win32_OperatingSystem).Caption
-$hostname = $env:COMPUTERNAME
-
-$claudeDir = Join-Path $env:USERPROFILE ".claude"
-$claudeMd = Join-Path $claudeDir "CLAUDE.md"
-
-if (-not (Test-Path $claudeDir)) {
-    if (-not $DryRun) {
-        New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
-        Log "Created $claudeDir"
-    }
+# --- Profile and template source on this machine (generated by build-deploy.sh) ---
+# The live dotprofile on this machine wins (what scripts/setup-user-claude.ps1 reads);
+# the build-time copies embedded above are the fallback. A dotprofile error ends the
+# run here with the outcome setup-user-claude.ps1 gives it (same rows, exit 1).
+if ($aitoolsEmbedError) { LogDetail "embedded profile resolver not written: $aitoolsEmbedError" }
+$aitoolsDpRc = Resolve-UserRepoPath   # 1 = no dotprofile on this machine; 3 = logged error + ERROR row
+if ($aitoolsDpRc -eq 3) {
+    LogError "CLAUDE.md and rules not deployed: the dotprofile could not be resolved"
+    Write-Summary "ERROR" "claude.md" "not deployed: dotprofile unresolved"
+    Remove-AitoolsEmbed
+    exit 1
 }
-
-# --- Embedded shared preferences (from shared/claude-shared.md) ---
-$sharedContent = @'
-BLOCK
-    echo "$CLAUDE_SHARED_CONTENT"
-    cat <<'BLOCK'
-'@
-
-# --- Build content ---
-$content = @"
-$sharedContent
-
-## Machine-Specific
-
-- Machine: $osInfo ($hostname)
-- Shell: bash (Claude Code requires Git Bash on Windows)
-"@
-
-if ($DryRun) {
-    $existingLines = 0
-    if (Test-Path $claudeMd) {
-        $existingLines = (Get-Content $claudeMd).Count
-    }
-    $newLines = ($content -split "`n").Count
-    Log "[DRY RUN] $claudeMd`: overwrite (sole owner)"
-    Log "  Template source: embedded (build-time)"
-    Log "  Existing: $existingLines lines"
-    Log "  New: $newLines lines"
-    if (Test-Path $claudeMd) {
-        $existingContent = Get-Content $claudeMd -Raw
-        if ($existingContent -eq $content) {
-            Log "[DRY RUN] Content unchanged"
-        } else {
-            Log "[DRY RUN] Content differs -- would overwrite"
-        }
-    } else {
-        Log "[DRY RUN] File does not exist -- would create"
-    }
+$aitoolsDpPath = $script:AitLibUserRepoPath
+$aitoolsSnapshot = Join-Path $aitoolsEmbedDir "profile.json"
+if ($env:AITOOLS_PROFILE_FILE) {
+    Log "Profile source: AITOOLS_PROFILE_FILE ($($env:AITOOLS_PROFILE_FILE))"
+} elseif ($aitoolsDpPath -and (Test-Path -LiteralPath (Join-Path $aitoolsDpPath "profile.json"))) {
+    Log "Profile source: live $(Join-Path $aitoolsDpPath 'profile.json')"
+} elseif ($aitoolsDpRc -ne 0 -and (Test-Path -LiteralPath $aitoolsSnapshot)) {
+    $env:AITOOLS_PROFILE_FILE = $aitoolsSnapshot
+    Log "Profile source: embedded build-time snapshot (no dotprofile on this machine)"
 } else {
-    Backup-File -FilePath $claudeMd
-    # Capture existing content for post-write comparison
-    $oldContent = ""
-    if (Test-Path $claudeMd) {
-        try {
-            $oldContent = Get-Content $claudeMd -Raw -ErrorAction Stop
-        } catch {
-            LogWarn "Cannot read existing CLAUDE.md for comparison: $_"
-        }
-    }
-    if (Test-Path $claudeMd) {
-        Remove-Item $claudeMd
-        Log "Removed existing $claudeMd"
-    }
-
-    $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($claudeMd)
-    [System.IO.File]::WriteAllText($resolvedPath, $content, [System.Text.UTF8Encoding]::new($false))
-
-BLOCK
-    # Extract: post-write validation from scripts/ (single source of truth)
-    extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
-        '^\s*# --- BEGIN post-write validation' '^\s*# --- END post-write validation' --crlf
-    cat <<'BLOCK'
-
-    LogOk "Wrote $claudeMd"
-    if ($errors -eq 0) {
-        Write-Summary "OK" "claude.md" "deployed"
+    Log "Profile source: none (no profile.json in this machine's dotprofile, or none embedded at build time)"
+}
+# Template fallback, passed the way scripts/ takes one (-SharedPath). With a dotprofile
+# on this machine the body reads its claude/CLAUDE.md and falls back, as scripts/
+# does, to shared/claude-shared.md (embedded copy). Without one, the build-time
+# dotprofile template is used (review m3).
+if (-not $SharedPath) {
+    if ($aitoolsDpRc -eq 0) {
+        $SharedPath = Join-Path (Join-Path $aitoolsEmbedDir "shared") "claude-shared.md"
     } else {
-        Write-Summary "ERROR" "claude.md" "validation failed"
-    }
-    Log "Machine: $osInfo ($hostname)"
-    # Log whether content actually changed
-    if (-not $oldContent) {
-        Log "Content: new file"
-    } elseif ($oldContent -eq $content) {
-        Log "Content unchanged (no differences)"
-    } else {
-        Log "Content updated"
-        # Log diff to deploy log (not console)
-        $oldLines = @($oldContent -split "`n")
-        $newLines = @($content -split "`n")
-        $diffResult = Compare-Object $oldLines $newLines -PassThru
-        if ($diffResult) {
-            Add-Content -Path $logFile -Value "  --- previous/CLAUDE.md"
-            Add-Content -Path $logFile -Value "  +++ new/CLAUDE.md"
-            foreach ($line in $diffResult) {
-                $side = if ($line.SideIndicator -eq '<=') { '-' } else { '+' }
-                Add-Content -Path $logFile -Value "  $side $line"
-            }
-        }
+        $SharedPath = Join-Path (Join-Path $aitoolsEmbedDir "claude") "CLAUDE.md"
+        Log "Template fallback: embedded build-time copy (no dotprofile on this machine)"
     }
 }
-
 BLOCK
-    # --- Embedded user rules deployment (PS1) ---
+    extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
+        '^# --- END preamble' '^# --- BEGIN rules deployment' --crlf
+    extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
+        '^# --- BEGIN rules deployment' '^# --- BEGIN rules deploy logic' --crlf
     if [ "$USER_RULE_COUNT" -gt 0 ]; then
-        # Set up embedded rules: write to temp dir, then use extracted deploy logic
-        printf '# --- Embedded user rules (from user repo at build time) ---\r\n'
-        printf '$rulesSrc = Join-Path $env:TEMP "aitools-rules-$(Get-Random)"\r\n'
-        printf 'New-Item -ItemType Directory -Path $rulesSrc -Force | Out-Null\r\n'
-        # Emit here-strings for each embedded rule file
-        for i in $(seq 0 $((USER_RULE_COUNT - 1))); do
-            local_name="${USER_RULE_NAMES[$i]}"
-            safe_name=$(echo "$local_name" | perl -pe 's/[^a-zA-Z0-9]/_/g')
-            printf '$_rule_%s = @'"'"'\r\n' "$safe_name"
-            echo "${USER_RULE_CONTENTS[$i]}" | perl -pe 's/\r?\n$/\r\n/'
-            printf ''"'"'@\r\n'
-            printf '$_ruleDest_%s = Join-Path $rulesSrc "%s"\r\n' "$safe_name" "$local_name"
-            printf '[System.IO.File]::WriteAllText($_ruleDest_%s, $_rule_%s, [System.Text.UTF8Encoding]::new($false))\r\n' "$safe_name" "$safe_name"
-        done
-        printf '$rulesDest = Join-Path $claudeDir "rules"\r\n'
-        printf '\r\n'
-        # Extract deploy logic from scripts/ (single source of truth)
-        extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
-            '^# --- BEGIN rules deploy logic' '^# --- END rules deploy logic' --crlf
-        printf '\r\n'
-        printf '# Clean up temp source dir\r\n'
-        printf 'Remove-Item $rulesSrc -Recurse -Force -ErrorAction SilentlyContinue\r\n'
-    else
-        printf 'Log "No user rules embedded at build time -- ~/.claude/rules/ not managed by this script"\r\n'
+        cat <<'BLOCK'
+# --- Rules fallback (generated by build-deploy.sh): the build-time copy when this
+# machine has no dotprofile (a dotprofile without claude/rules/ deploys none, as
+# scripts/ does; review m3) ---
+$aitoolsEmbedRules = Join-Path $aitoolsEmbedDir "rules"
+if ($aitoolsDpRc -ne 0 -and -not $rulesSrc -and (Test-Path -LiteralPath $aitoolsEmbedRules)) {
+    $rulesSrc = $aitoolsEmbedRules
+    Log "Rules source: embedded build-time copy (no dotprofile on this machine)"
+}
+BLOCK
     fi
     extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
+        '^# --- BEGIN rules deploy logic' '^# --- END rules deploy logic' --crlf
+    printf '%s\n' "$EMBED_CLEANUP_PS1"
+    extract_between "$SCRIPTS_DIR/setup-user-claude.ps1" \
         '^# --- BEGIN exit' '^# --- END exit' --crlf
-} | inline_lib_ps1 > "$DEPLOY_DIR/setup-user-claude.ps1"
+} | inline_lib_ps1 "$BUILD_TMP/resolver-claude.ps1.blk" > "$DEPLOY_DIR/setup-user-claude.ps1"
 
 GENERATED=$((GENERATED + 1))
 
@@ -687,13 +809,49 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 blog "Generating deploy/setup-user-cursor.sh"
 
+# The cursor body is extracted whole (the profile preferences block included, so a
+# machine with the dotprofile reads its live profile.json cursor.cli, as scripts/
+# does). Only the block's two default values are replaced with the build-time
+# profile values (the fallback for a machine without the dotprofile).
+# subst_cursor_defaults FILE BEGIN_RE END_RE VIM_OLD VIM_NEW MODEL_OLD MODEL_NEW:
+# replace, inside the BEGIN..END block, the line VIM_OLD with VIM_NEW and MODEL_OLD
+# with MODEL_NEW (whole lines, leading spaces kept); exit 3 unless each is replaced
+# exactly once.
+subst_cursor_defaults() {
+    perl -e '
+        my ($file, $b, $e, $vo, $vn, $mo, $mn) = @ARGV;
+        open my $fh, "<", $file or die "Cannot open $file: $!";
+        my ($nv, $nm) = (0, 0);
+        while (my $l = <$fh>) {
+            if ($l =~ /$b/ .. $l =~ /$e/) {
+                if ($l =~ /^(\s*)\Q$vo\E(\r?\n)\z/) { $l = "$1$vn$2"; $nv++ }
+                elsif ($l =~ /^(\s*)\Q$mo\E(\r?\n)\z/) { $l = "$1$mn$2"; $nm++ }
+            }
+            print $l;
+        }
+        exit(($nv == 1 && $nm == 1) ? 0 : 3);
+    ' "$@"
+}
+_cursor_rc=0
+extract_between "$SCRIPTS_DIR/setup-user-cursor.sh" \
+    '^# --- BEGIN cursor body' '^# --- END cursor body' > "$BUILD_TMP/cursor-body.sh"
+subst_cursor_defaults "$BUILD_TMP/cursor-body.sh" '^// --- BEGIN profile preferences' '^// --- END profile preferences' \
+    "let vimMode = false;" "let vimMode = $CURSOR_CLI_VIMMODE;   // build-time fallback (profile.json cursor.cli)" \
+    "let modelId = 'auto';" "let modelId = '$CURSOR_CLI_MODEL';   // build-time fallback (profile.json cursor.cli)" \
+    > "$BUILD_TMP/cursor-body-fallback.sh" || _cursor_rc=$?
+if [ "$_cursor_rc" -ne 0 ]; then
+    blog_error "setup-user-cursor.sh: the profile preferences defaults (let vimMode = false; / let modelId = 'auto';) were not found exactly once -- update build-deploy.sh"
+    exit 1
+fi
+
 {
     echo '#!/usr/bin/env bash'
     echo "$HEADER_COMMENT_BASH"
     cat <<'BLOCK'
 # setup-user-cursor.sh — Sets up Cursor CLI + dependencies on macOS/Linux
-# Self-contained. No repo or Drive needed.
-# Safe to re-run — checks each step and skips what's already done.
+# Self-contained (MDM-ready): the profile resolver is embedded below; the cursor.cli
+# preferences come from this machine's dotprofile when it has one, else from the
+# build-time values. Safe to re-run — checks each step and skips what's already done.
 # Run deploy-harness.sh first: step 4 fans out ~/.aitools/rules, which it fills.
 #
 BLOCK
@@ -701,22 +859,11 @@ BLOCK
     # cannot drift from the body below
     extract_span "$SCRIPTS_DIR/setup-user-cursor.sh" \
         '^# Does [a-z]+ things:' '^# --- BEGIN cursor body'
-    # Extract body from scripts/ source up to profile preferences sentinel
-    extract_between "$SCRIPTS_DIR/setup-user-cursor.sh" \
-        '^# --- BEGIN cursor body' '^// --- BEGIN profile preferences'
-    # Emit build-time embedded preferences (replacing runtime profile reading)
-    cat <<BLOCK_INTERP
-// --- Embedded preferences (from profile.json at build time) ---
-const vimMode = $CURSOR_CLI_VIMMODE;
-const modelId = '$CURSOR_CLI_MODEL';
-BLOCK_INTERP
-    # Extract from end of profile preferences to end of cursor body
-    extract_between "$SCRIPTS_DIR/setup-user-cursor.sh" \
-        '^// --- END profile preferences' '^# --- END cursor body'
+    cat "$BUILD_TMP/cursor-body-fallback.sh"
     # Exit footer
     extract_between "$SCRIPTS_DIR/setup-user-cursor.sh" \
         '^# --- BEGIN exit' '^# --- END exit'
-} | inline_lib_bash > "$DEPLOY_DIR/setup-user-cursor.sh"
+} | inline_lib_bash "$BUILD_TMP/resolver.sh.blk" > "$DEPLOY_DIR/setup-user-cursor.sh"
 
 chmod +x "$DEPLOY_DIR/setup-user-cursor.sh"
 GENERATED=$((GENERATED + 1))
@@ -726,12 +873,25 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 blog "Generating deploy/setup-user-cursor.ps1"
 
+_cursor_rc=0
+extract_between "$SCRIPTS_DIR/setup-user-cursor.ps1" \
+    '^# --- BEGIN cursor body' '^# --- END cursor body' --crlf > "$BUILD_TMP/cursor-body.ps1"
+subst_cursor_defaults "$BUILD_TMP/cursor-body.ps1" '^# --- BEGIN profile preferences' '^# --- END profile preferences' \
+    '$vimMode = $false' "\$vimMode = \$$CURSOR_CLI_VIMMODE   # build-time fallback (profile.json cursor.cli)" \
+    '$modelId = "auto"' "\$modelId = \"$CURSOR_CLI_MODEL\"   # build-time fallback (profile.json cursor.cli)" \
+    > "$BUILD_TMP/cursor-body-fallback.ps1" || _cursor_rc=$?
+if [ "$_cursor_rc" -ne 0 ]; then
+    blog_error "setup-user-cursor.ps1: the profile preferences defaults (\$vimMode = \$false / \$modelId = \"auto\") were not found exactly once -- update build-deploy.sh"
+    exit 1
+fi
+
 {
     echo "$HEADER_COMMENT_PS1"
     cat <<'BLOCK'
 # setup-user-cursor.ps1 — Sets up Cursor CLI + dependencies on Windows
-# Self-contained. No repo or Drive needed.
-# Safe to re-run — checks each step and skips what's already done.
+# Self-contained (MDM-ready): the profile resolver is embedded below; the cursor.cli
+# preferences come from this machine's dotprofile when it has one, else from the
+# build-time values. Safe to re-run — checks each step and skips what's already done.
 # Run deploy-harness.ps1 first: step 4 fans out .aitools\rules, which it fills.
 #
 BLOCK
@@ -739,20 +899,12 @@ BLOCK
     # cannot drift from the body below
     extract_span "$SCRIPTS_DIR/setup-user-cursor.ps1" \
         '^# Does [a-z]+ things:' '^# --- BEGIN cursor body' --crlf
-    # Extract body from scripts/ source up to profile preferences sentinel (CRLF for PS1)
-    extract_between "$SCRIPTS_DIR/setup-user-cursor.ps1" \
-        '^# --- BEGIN cursor body' '^# --- BEGIN profile preferences' --crlf
-    # Emit build-time embedded preferences (replacing runtime profile reading)
-    printf '# --- Embedded preferences (from profile.json at build time) ---\r\n'
-    printf '$vimMode = $%s\r\n' "$CURSOR_CLI_VIMMODE"
-    printf '$modelId = "%s"\r\n' "$CURSOR_CLI_MODEL"
-    # Extract from end of profile preferences to end of cursor body (CRLF for PS1)
-    extract_between "$SCRIPTS_DIR/setup-user-cursor.ps1" \
-        '^# --- END profile preferences' '^# --- END cursor body' --crlf
+    cat "$BUILD_TMP/cursor-body-fallback.ps1"
+    printf '%s\r\n' "$EMBED_CLEANUP_PS1"
     # Exit footer
     extract_between "$SCRIPTS_DIR/setup-user-cursor.ps1" \
         '^# --- BEGIN exit' '^# --- END exit' --crlf
-} | inline_lib_ps1 > "$DEPLOY_DIR/setup-user-cursor.ps1"
+} | inline_lib_ps1 "$BUILD_TMP/resolver.ps1.blk" > "$DEPLOY_DIR/setup-user-cursor.ps1"
 
 GENERATED=$((GENERATED + 1))
 
@@ -1071,9 +1223,11 @@ GENERATED=$((GENERATED + 1))
 # ============================================================
 # deploy/setup-user-settings.sh and .ps1 (settings.json <-> profile.json sync)
 # ============================================================
-# Self-contained via inline_lib_* (sync_managed_json + prompt_json_field_review).
-# Resolves profile.json at runtime via config.json userRepoPath -- no build-time
-# value embedding needed (works identically in dev and MDM).
+# Self-contained via inline_lib_* (sync_managed_json + prompt_json_field_review) and
+# the embedded profile resolver. Finds profile.json at runtime through the one
+# dotprofile resolver (resolve_user_repo_path / Resolve-UserRepoPath, SD-7) -- no
+# build-time value embedding (adopt writes back to the live profile.json, so there
+# is no snapshot fallback; without a dotprofile the sync is skipped, as on scripts/).
 blog "Generating deploy/setup-user-settings.sh"
 {
     echo '#!/usr/bin/env bash'
@@ -1082,7 +1236,7 @@ blog "Generating deploy/setup-user-settings.sh"
         '^# --- BEGIN settings body' '^# --- END settings body'
     extract_between "$SCRIPTS_DIR/setup-user-settings.sh" \
         '^# --- BEGIN exit' '^# --- END exit'
-} | inline_lib_bash > "$DEPLOY_DIR/setup-user-settings.sh"
+} | inline_lib_bash "$BUILD_TMP/resolver.sh.blk" > "$DEPLOY_DIR/setup-user-settings.sh"
 chmod +x "$DEPLOY_DIR/setup-user-settings.sh"
 GENERATED=$((GENERATED + 1))
 
@@ -1091,9 +1245,10 @@ blog "Generating deploy/setup-user-settings.ps1"
     echo "$HEADER_COMMENT_PS1"
     extract_between "$SCRIPTS_DIR/setup-user-settings.ps1" \
         '^# --- BEGIN settings body' '^# --- END settings body' --crlf
+    printf '%s\r\n' "$EMBED_CLEANUP_PS1"
     extract_between "$SCRIPTS_DIR/setup-user-settings.ps1" \
         '^# --- BEGIN exit' '^# --- END exit' --crlf
-} | inline_lib_ps1 > "$DEPLOY_DIR/setup-user-settings.ps1"
+} | inline_lib_ps1 "$BUILD_TMP/resolver.ps1.blk" > "$DEPLOY_DIR/setup-user-settings.ps1"
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
@@ -2048,8 +2203,20 @@ BLOCK
 GENERATED=$((GENERATED + 1))
 
 # ============================================================
-# Summary
+# Post-build: the embedded resolver is in every script that calls it, once
 # ============================================================
+# A generation invariant, not a run: the generated scripts are smoke-run by
+# check-pre-push step 7 (keeps this script a pure generator).
+for _emb in setup-user-claude.sh setup-user-claude.ps1 setup-user-settings.sh setup-user-settings.ps1 \
+    setup-user-cursor.sh setup-user-cursor.ps1; do
+    _emb_count=$(EMB_MARK="$EMBED_MARKER" perl -ne '$n++ if /^\Q$ENV{EMB_MARK}\E\r?$/; END { print $n + 0 }' "$DEPLOY_DIR/$_emb")
+    if [ "$_emb_count" != "1" ]; then
+        blog_error "deploy/$_emb holds the embedded profile resolver $_emb_count time(s), expected 1 (the line naming aitools-lib must appear exactly once in its source)"
+        exit 1
+    fi
+done
+blog_ok "Embedded profile resolver present once in each resolver-consuming deploy script"
+
 # ============================================================
 # Post-build: Validate PS1 syntax (Windows only)
 # ============================================================
@@ -2126,6 +2293,17 @@ blog_ok "Set +x on all .sh files in deploy/"
 #    PERLIO=:perlio (set at top) prevents Strawberry Perl text-mode double-CR.
 perl -pi -e 's/(?<!\r)\n/\r\n/' "$DEPLOY_DIR"/*.ps1
 blog_ok "Converted deploy/*.ps1 to CRLF"
+
+# Swap the staged build in
+if ! rm -rf "$DEPLOY_DIR_FINAL"; then
+    blog_error "Could not remove $DEPLOY_DIR_FINAL -- deploy/ not replaced"
+    exit 1
+fi
+if ! mv "$DEPLOY_DIR" "$DEPLOY_DIR_FINAL"; then
+    blog_error "Could not move the build into $DEPLOY_DIR_FINAL"
+    exit 1
+fi
+DEPLOY_DIR="$DEPLOY_DIR_FINAL"
 
 blog_ok "Build complete: $GENERATED scripts generated in deploy/"
 ls -la "$DEPLOY_DIR/"

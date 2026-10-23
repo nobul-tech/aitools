@@ -166,29 +166,42 @@ if (-not $DryRun) {
 
 Log "Step 3: cli-config.json"
 
+# Set inside the profile preferences block when the dotprofile resolver failed;
+# defined outside it so the generated deploy/ copy (block replaced) has it too.
+$prefsUnresolved = $false
+
 # --- BEGIN profile preferences (replaced by build-deploy) ---
-# config.json -> userRepoPath -> profile.json -> cursor.cli prefs
+# dotprofile (the one resolver, reference/user-repo.md "Resolution"; SD-7)
+# -> profile.json -> cursor.cli prefs. The rc is captured, not suppressed:
+# 0 found, 1 no dotprofile (shared-only mode: default preferences), 3 resolver
+# error (the lib already logged it: LogError + ERROR row "dotprofile");
+# on 3 the merge is skipped rather than write defaults over the user's choices.
 $vimMode = $false
 $modelId = "auto"
 
-$configFile = Join-Path $env:USERPROFILE ".aitools\config.json"
-if (Test-Path $configFile) {
-    try {
-        $cfg = ConvertPSObjectToHashtable (Get-Content $configFile -Raw | ConvertFrom-Json)
-        if ($cfg.ContainsKey("userRepoPath") -and $cfg["userRepoPath"]) {
-            $profilePath = Join-Path $cfg["userRepoPath"] "profile.json"
-            if (Test-Path $profilePath) {
-                $pf = ConvertPSObjectToHashtable (Get-Content $profilePath -Raw | ConvertFrom-Json)
-                if ($pf.ContainsKey("cursor") -and $pf["cursor"].ContainsKey("cli")) {
-                    $cli = $pf["cursor"]["cli"]
-                    if ($cli.ContainsKey("vimMode")) { $vimMode = [bool]$cli["vimMode"] }
-                    if ($cli.ContainsKey("model")) { $modelId = [string]$cli["model"] }
-                }
+$urpRc = Resolve-UserRepoPath
+$userRepoPath = $script:AitLibUserRepoPath
+if ($urpRc -eq 0 -and $userRepoPath) {
+    $profilePath = Join-Path $userRepoPath "profile.json"
+    if (Test-Path $profilePath) {
+        try {
+            $pf = ConvertPSObjectToHashtable (Get-Content $profilePath -Raw -ErrorAction Stop | ConvertFrom-Json)
+            # Same checks as the .sh: a non-object cursor / cursor.cli is ignored
+            # (defaults), and only a bool vimMode / string model is taken
+            if ($pf.ContainsKey("cursor") -and $pf["cursor"] -is [hashtable] -and
+                $pf["cursor"].ContainsKey("cli") -and $pf["cursor"]["cli"] -is [hashtable]) {
+                $cli = $pf["cursor"]["cli"]
+                if ($cli.ContainsKey("vimMode") -and $cli["vimMode"] -is [bool]) { $vimMode = $cli["vimMode"] }
+                if ($cli.ContainsKey("model") -and $cli["model"] -is [string]) { $modelId = $cli["model"] }
             }
+        } catch {
+            LogWarn "Could not read profile preferences from $profilePath`: $_ -- default preferences"
         }
-    } catch {
-        LogWarn "Could not read profile preferences: $_"
+    } else {
+        LogDetail "cli-config: no profile.json in $userRepoPath -- default preferences"
     }
+} elseif ($urpRc -ne 0 -and $urpRc -ne 1) {
+    $prefsUnresolved = $true
 }
 # --- END profile preferences (replaced by build-deploy) ---
 
@@ -257,7 +270,13 @@ $lostKeys = @($beforeKeys | Where-Object { $_ -notin $config.Keys })
 
 $afterJson = Normalize-JsonForComparison $config -Depth 10
 
-if ($DryRun) {
+if ($prefsUnresolved) {
+    # Not counted again: the resolver error is already an error and the ERROR
+    # row "dotprofile" (the lib wrote both).
+    Log "Skipped the $cliConfig merge: dotprofile unresolved (resolver error above), so the profile preferences are unknown"
+    $status.cliConfig = "SKIPPED (dotprofile error)"
+    Write-Summary "ERROR" "cursor cli" "skipped (dotprofile error)"
+} elseif ($DryRun) {
     # --- Dry-run output ---
     Log "[DRY RUN] $cliConfig`: merge"
     Log "  Managed fields: $($managedKeys -join ', ')"

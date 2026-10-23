@@ -40,6 +40,26 @@ integration (hooks, deny rules, context injection).
 - **Verifications**: `tools.<name>.verifications` — how to test hooks
   and deny rules
 
+### Per-tool ops references (where to read them)
+
+A tool's full ops reference is `reference/tool-ops-<toolname>.md`
+(e.g. `tool-ops-claude-code.md`). Read it from the first location
+that has it:
+
+1. **Deployed copy**: `~/.aitools/reference/tool-ops-<toolname>.md`
+   (macOS/Linux), `%USERPROFILE%\.aitools\reference\tool-ops-<toolname>.md`
+   (Windows). `aitools` (deploy-harness) mirrors the repo `reference/`
+   tree there, same relative paths.
+2. **Repo copy**: `reference/tool-ops-<toolname>.md` in the aitools
+   repo (this checkout; from elsewhere, the `repoPath` key of
+   `~/.aitools/config.json`, default `~/repos/aitools/` /
+   `%USERPROFILE%\repos\aitools\`).
+
+If neither exists, the tool has no ops reference; say so. The
+deployed copy refreshes only on the next `aitools` run, so it can lag
+the repo. When you are changing a reference in this session, read and
+write the repo copy; never edit the deployed copy.
+
 ## Updating tool ops
 
 ### Governance mode changes
@@ -95,13 +115,15 @@ To add a new tool:
 4. Present for user review
 5. Write if approved
 6. Update `meta.lastUpdated`
-7. Create `reference/tool-ops-<toolname>.md` for the full ops reference
-   (separate from the JSON registry)
+7. Create `reference/tool-ops-<toolname>.md` in the aitools repo for
+   the full ops reference (separate from the JSON registry); the
+   deployed copy appears after the next `aitools` run
 
 ## Cross-references
 
 - Governance rule: `.claude/rules/tool-ops.md`
 - Framework documentation: `reference/framework-tool-ops.md`
-- Per-tool ops references: `reference/tool-ops-*.md`
+- Per-tool ops references: `reference/tool-ops-*.md` (read order:
+  deployed copy, then repo; see "Per-tool ops references" above)
 - Framework registry: `registries/framework-registry.json`
 - Governed data access pattern: `.claude/rules/governed-data-access.md`

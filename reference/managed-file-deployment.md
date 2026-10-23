@@ -102,29 +102,51 @@ JSON files: the same choices per differing field (no [m]erge); SOURCE owns every
 
 There is one review menu. It appears only when LOCAL differs from SOURCE in
 an interactive run. The options and their order are normative; the exact
-wording is set by the implementation (mission SOURCE-TRUTH), identical in
+wording is set by the implementation (mission SOURCE-TRUTH; diff display
+and menu text, mission DIFF-UX, 2026-10-21), identical in
 bash and PS1 (`check-post-push` step 29).
 
 ### Text files (`prompt_diff_review`)
 
-The diff (`source (would deploy)` against `local (on disk)`) is shown first
-(see "Diff Mechanism Detail"). With an adopt target (`ADOPT_OFFERED=1`):
+The diff is shown first, LOCAL -> SOURCE, under a one-line legend (see
+"Diff Mechanism Detail"): `-` lines are only on this machine, `+` lines
+only in the repo, so the diff reads as what `[o]verwrite` changes here. The
+menu says what each choice does to those lines. With an adopt target
+(`ADOPT_OFFERED=1`; `<adopt path>` is the adopt target's path). The
+`[REVIEW]` line is the only text above the legend; the diff headers name
+both files:
 
 ```
-  [o]verwrite      : source wins -> write source to local (backup kept)
-  [a]ccept & adopt : local wins -> copy local to the repo now
-  [m]erge & adopt  : AI merge of source + local -> local and the repo now
-  [s]kip           : keep local as-is; asked again next run
-  [x]abort         : stop this script (exit 2)
+[REVIEW] <LOCAL path> differs from source.
+
+  red - = only on this machine   green + = only in the repo
+
+--- this machine  <LOCAL path>
++++ repo          <adopt path>
+@@ -1,3 +1,3 @@
+ # Title
+-my local line
++repo line
+ end
+
+  [o]verwrite       : this machine gets the green + lines (backup kept)
+  [a]ccept & adopt  : the repo gets the red - lines (your version) -> <adopt path>
+  [m]erge & adopt   : AI combines both; written to this machine and <adopt path>
+  [s]kip            : nothing written; asked again next run
+  [x]abort          : stop this script (exit 2)
   choice [o/a/m/s/x]:
 ```
 
-Without an adopt target (`ADOPT_OFFERED=0`), adopt and merge are not offered:
+Without an adopt target (`ADOPT_OFFERED=0`), adopt and merge are not
+offered, and the `+++` header reads `source (embedded)`:
 
 ```
-  [o]verwrite : source wins -> write source to local (backup kept)
-  [s]kip      : keep local as-is; asked again next run
-  [x]abort    : stop this script (exit 2)
+--- this machine  <LOCAL path>
++++ repo          source (embedded)
+...
+  [o]verwrite       : this machine gets the green + lines (backup kept)
+  [s]kip            : nothing written; asked again next run
+  [x]abort          : stop this script (exit 2)
   choice [o/s/x]:
 ```
 
@@ -512,20 +534,50 @@ refuse to write a corrupt file, or a merge that would lose fields, without
 
 ## Diff Mechanism Detail
 
-**Bash** (text types): `diff -u` via process substitution:
-```bash
-diff -u <(printf '%s' "$new_content") <(printf '%s' "$cur_content") \
-    --label "source (would deploy)" --label "local (on disk)"
-```
-Unified format. Full diff written to deploy.log. Terminal shows first
-30–40 lines with truncation message.
+**Text types (review display)**: `_review_diff` in `@scripts/aitools-lib.sh`
+/ `Get-ReviewDiff` in `@scripts/aitools-lib.ps1`. Both write LOCAL and
+SOURCE (trailing newlines normalized to one LF, UTF-8) to temp files and run
+the same command, so bash and PS1 print identical hunks:
 
-**PowerShell** (text types): `Compare-Object` line-by-line:
-```powershell
-$diffs = Compare-Object ($NewContent -split "`n") ($CurrentContent -split "`n")
 ```
-Custom prefixes (`+ local`, `- source`). Full diff written to deploy.log.
-Terminal shows first 30–40 entries.
+git -c core.quotePath=false -c diff.suppressBlankEmpty=false \
+    -c diff.interHunkContext=0 diff --no-index --no-color --no-ext-diff \
+    --no-textconv --text --diff-algorithm=myers --indent-heuristic -U3 \
+    -- <local> <source>
+```
+
+`GIT_DIFF_OPTS` is removed from git's environment and the `-c` settings
+are pinned, so user git config cannot change the hunks.
+
+- **Direction**: LOCAL -> SOURCE. `-` = only on this machine, `+` = only in
+  the repo.
+- **Headers**: git's own header lines are dropped and replaced by
+  `--- this machine  <LOCAL path>` and `+++ repo          <SOURCE path>`
+  (labels padded to equal width). The SOURCE path is the adopt target;
+  without one it reads `source (embedded)`.
+- **Legend**: `  red - = only on this machine   green + = only in the repo`
+  above the diff.
+- **Colour**: `-` lines and the `---` header red, `+` lines and the `+++`
+  header green, unless `NO_COLOR` is set or `TERM=dumb`
+  (`_review_colour` / `Test-ReviewColour`). The diff is only shown on an
+  interactive terminal; the deploy log is always plain text.
+- **Truncation**: over 40 diff lines (headers included), the terminal shows
+  the first 30 and `  ... (N more lines -- full diff in deploy log)`. The
+  full diff goes to deploy.log at every size, one `[detail] diff <file>:`
+  line each.
+- **Failure**: if git cannot produce the diff (exit above 1, not found),
+  a warning is logged (`Review diff unavailable for <path>: <reason>`), the
+  terminal shows `  (diff unavailable -- see deploy log)`, and the menu is
+  shown as usual. No line difference from git shows
+  `  (whitespace-only differences)`.
+
+PS1 reads git's output as UTF-8 straight from the process stream, never
+through the PowerShell pipeline (see "Encoding (PS1)").
+
+**AI merge input** (`[m]erge & adopt`) is not the review display: bash
+passes the `diff -u` SOURCE -> LOCAL diff (labels `source (would deploy)` /
+`local (on disk)`), PS1 a `Compare-Object` listing, both unchanged by the
+display change (see "AI-Assisted Merge Detail").
 
 **JSON configs** (field-level): Per-field old → new display with source
 attribution. Full field list written to deploy.log via `Emit-MergeDetails`

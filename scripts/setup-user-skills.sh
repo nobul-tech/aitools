@@ -42,10 +42,23 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKILLS_SRC="$REPO_DIR/shared/skills"
 
-# User repo for dotprofile overrides and adopt target.
-# `|| true`: key is absent until 'aitools user init' runs; without the guard,
-# set -e silently aborts before falling back to shared-only skills.
-USER_REPO_PATH=$(read_config_key "$HOME/.aitools/config.json" "userRepoPath") || true
+# User repo for dotprofile overrides and adopt target: the one dotprofile
+# resolver (reference/user-repo.md "Resolution"; SD-7). The rc is captured, not
+# suppressed: 0 found, 1 no dotprofile (shared-only mode, expected), 3 resolver
+# error (the lib already logged it: log_error + ERROR row "dotprofile").
+# On 1 USER_REPO_PATH is empty: shared skills only, no adopt offer. On 3 the
+# deploy is skipped (S3-M3Lead decision): shared copies must never overwrite
+# deployed dotprofile versions while the dotprofile cannot be read.
+URP_RC=0
+resolve_user_repo_path || URP_RC=$?
+USER_REPO_PATH="$AITLIB_USER_REPO_PATH"
+SKILLS_BLOCKED=false
+if [ "$URP_RC" -ne 0 ] && [ "$URP_RC" -ne 1 ]; then
+    SKILLS_BLOCKED=true
+    log_error "Dotprofile unresolved (resolver error above) -- skills not deployed, so shared copies cannot replace dotprofile versions"
+    write_summary ERROR "claude skills" "not deployed: dotprofile error"
+    write_summary ERROR "cursor skills" "not deployed: dotprofile error"
+fi
 DOTPROFILE_SKILLS=""
 if [ -n "$USER_REPO_PATH" ] && [ -d "$USER_REPO_PATH/claude/skills" ]; then
     DOTPROFILE_SKILLS="$USER_REPO_PATH/claude/skills"
@@ -57,7 +70,9 @@ ALL_SKILL_DESTS="$SKILLS_DEST $SKILLS_DEST_CURSOR"
 
 # --- Discover skills from shared and dotprofile ---
 SKILL_NAMES=""
-if [ -d "$SKILLS_SRC" ]; then
+if [ "$SKILLS_BLOCKED" = "true" ]; then
+    :  # resolver error: nothing is discovered, deployed or offered for adoption
+elif [ -d "$SKILLS_SRC" ]; then
     for skill_dir in "$SKILLS_SRC"/*/; do
         [ -d "$skill_dir" ] || continue
         skill_name=$(basename "$skill_dir")
@@ -79,7 +94,7 @@ if [ -n "$DOTPROFILE_SKILLS" ]; then
 fi
 SKILL_NAMES="${SKILL_NAMES# }"
 
-if [ -z "$SKILL_NAMES" ]; then
+if [ -z "$SKILL_NAMES" ] && [ "$SKILLS_BLOCKED" != "true" ]; then
     log_warn "No skills found in shared/skills/ or dotprofile"
     write_summary WARN "claude skills" "no skills found"
 fi
@@ -215,7 +230,9 @@ reverse_discover_skills() {
     done
 }
 
-reverse_discover_skills "$SKILLS_DEST"
+if [ "$SKILLS_BLOCKED" != "true" ]; then
+    reverse_discover_skills "$SKILLS_DEST"
+fi
 
 # --- END skill discovery (replaced by build-deploy) ---
 

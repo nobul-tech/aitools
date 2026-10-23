@@ -3,7 +3,8 @@
 #
 # Provides: platform and environment detection ($AitoolsPlatform,
 # $AitoolsEnvironment, Test-ClaudeCodeWeb, Test-LocalEnvironment,
-# Write-EnvironmentSkip), ReadConfigKey, Initialize-Logging,
+# Write-EnvironmentSkip), ReadConfigKey, Resolve-UserRepoPath,
+# Resolve-MachineProfile, Get-ToolException, Set-ToolException, Initialize-Logging,
 # Log/LogOk/LogError/LogWarn/LogDetail, Invoke-AI, Write-Summary, Show-Summary,
 # Refresh-Path, Log-WingetOutput, Repair-UvToolEnv, Remove-OrphanedPythonDirs,
 # Normalize-JsonForComparison.
@@ -81,6 +82,452 @@ function ReadConfigKey {
         else { Write-Warning "Could not parse $File" }
     }
     return $null
+}
+
+# ---------------------------------------------------------------------------
+# Dotprofile, machine-profile and tool-exception resolution
+# (reference/user-repo.md "Resolution"; tool exceptions:
+# reference/tool-support-decision-tree.md section 8)
+# Intent: give every PowerShell consumer one answer to "where is the
+# dotprofile" and "which profile is this machine", with the reason ("via")
+# logged to deploy.log, and the tool-exception store's reader and writer. The
+# logic lives in the native resolver aitools-profile.ps1, called in-process.
+# NOT a writer of config.json (only setup-user-config writes it). NOT a writer
+# of profile.json beyond Set-ToolException (which delegates to the resolver).
+# Consumed by: setup-user-*.ps1, aitools.ps1, the tool setup scripts (tool
+# exceptions) and the generated deploy/ scripts (they set AITOOLS_PROFILE_PS1
+# to their embedded copy). Return codes follow the decision tree's helper rule:
+# none returns 2. Functions write nothing to the output stream except their
+# declared return value.
+#
+# Result-variable contract (PR #80 review3 B1/M1): this library is dot-sourced,
+# so its script scope IS the caller's script scope, and PowerShell names are
+# case-insensitive. Every result variable is therefore $script:AitLib* and every
+# private helper is named *-AitLib*, so nothing can collide with a caller's
+# parameter or variable ($UserRepoPath, $machineAlias, $profileFile, ...). They
+# are assigned only inside these functions -- this section has no top-level
+# assignment (a top-level assignment would run in the caller's scope at
+# dot-source time). Read them only after the call; callers copy what they need
+# right after it, e.g.:  $rc = Resolve-UserRepoPath; $userRepoPath = $script:AitLibUserRepoPath
+# ACTION rows: the wrapper emits the one ACTION for its failure (once per run:
+# Write-AitLibActionOnce skips a row the run summary already holds); callers do
+# not add their own ACTION for the same failure.
+#
+# Resolver exit codes -> wrapper return codes (re-key batch 3). The resolver
+# (aitools-profile.ps1 --help) exits 0 ok, 1 nothing found, 2 error, 3 refused,
+# 4 refused: alias used by another profile (register only). No wrapper returns
+# 2 (D-TS13: a bare 2 means user abort), and no resolver code other than 1 is
+# read as "nothing found":
+#   resolver exit          0          1               2      3            4
+#   Resolve-UserRepoPath   0 found    1 shared-only   3      3 (refused)  3 (unexpected)
+#   Resolve-MachineProfile 0 match    1 shared-only   3      3 (refused)  3 (unexpected)
+#   Get-ToolException      hashtable  $null           $null  $null        $null
+#   Set-ToolException      0          1 failed        1      3 refused    1 (unexpected)
+# Every 3 and 4 is logged with its code and meaning. An exit 0/1 without the
+# resolver's "via" line is rewritten to 2 first (Invoke-AitLibProfile).
+# ---------------------------------------------------------------------------
+
+# Invoke-AitLibProfile ARGS -- run the resolver in-process; sets
+# $script:AitLibProfileOut (tagged lines) and $script:AitLibProfileRc. Returns
+# $true when it ran, $false when no resolver is available. $PSScriptRoot inside
+# a function is the directory of the file that defines it (this library, or the
+# generated deploy script it is inlined into). The resolver's stderr (its own
+# log lines, written with [Console]::Error) is captured and copied to
+# deploy.log as detail lines, as in bash. The exit code is trusted only with the
+# result lines: exit 0 or 1 without a "via" line is rewritten to 2 with an
+# "error" line (parity with _aitlib_profile_run).
+function Invoke-AitLibProfile([string[]]$Arguments) {
+    $script:AitLibProfileOut = @(); $script:AitLibProfileRc = 0
+    $ps1 = if ($env:AITOOLS_PROFILE_PS1) { $env:AITOOLS_PROFILE_PS1 } else { Join-Path $PSScriptRoot "aitools-profile.ps1" }
+    if (-not (Test-Path -LiteralPath $ps1 -PathType Leaf)) { return $false }
+    $global:LASTEXITCODE = 0
+    $origErr = [Console]::Error
+    $errBuf = [IO.StringWriter]::new()
+    [Console]::SetError($errBuf)
+    try {
+        $script:AitLibProfileOut = @(& $ps1 @Arguments | ForEach-Object { [string]$_ })
+        $script:AitLibProfileRc = $LASTEXITCODE
+    } catch {
+        # The caller logs the failure (LogError / LogWarn with the "error" line below)
+        LogDetail "aitools-profile $($Arguments[0]) threw: $($_.Exception.Message)"
+        $script:AitLibProfileRc = 2
+    } finally {
+        [Console]::SetError($origErr)
+    }
+    foreach ($l in ($errBuf.ToString() -split "`r?`n")) {
+        if ($l) { LogDetail "aitools-profile $($Arguments[0]): $l" }
+    }
+    if ($script:AitLibProfileRc -eq 0 -or $script:AitLibProfileRc -eq 1) {
+        if (-not @($script:AitLibProfileOut | Where-Object { $_.StartsWith("via`t") }).Count) {
+            LogDetail "aitools-profile $($Arguments[0]): exit $($script:AitLibProfileRc) without result lines -- treated as a resolver error"
+            $script:AitLibProfileOut = @($script:AitLibProfileOut) + @("error`tresolver exited $($script:AitLibProfileRc) without result lines (see deploy.log)")
+            $script:AitLibProfileRc = 2
+        }
+    }
+    return $true
+}
+
+function Get-AitLibProfileTag([string]$Key) {
+    foreach ($l in $script:AitLibProfileOut) {
+        $kv = $l -split "`t", 2
+        if ($kv.Count -eq 2 -and $kv[0] -ceq $Key) { return $kv[1] }
+    }
+    return ""
+}
+function Get-AitLibProfileLines([string]$Kind) {
+    return @($script:AitLibProfileOut | ForEach-Object { $kv = $_ -split "`t", 2; if ($kv.Count -eq 2 -and $kv[0] -ceq $Kind) { $kv[1] } })
+}
+
+# Get-AitLibExitNote RC -- "" for resolver exit 1 (nothing found) and 2 (the
+# plain error); for any other exit, " (resolver exit N: meaning)", so a 3 or 4 is
+# never logged as a plain error or a "not found" (parity: _aitlib_exit_note)
+function Get-AitLibExitNote([int]$Rc) {
+    switch ($Rc) {
+        1 { return "" }
+        2 { return "" }
+        3 { return " (resolver exit 3: refused)" }
+        4 { return " (resolver exit 4: alias used by another profile -- not a result of this command)" }
+        default { return " (resolver exit $Rc)" }
+    }
+}
+
+# Write-AitLibActionOnce TEXT -- write ACTION row TEXT unless the run summary
+# already holds it (several setup scripts in one run hit the same failure;
+# Show-Summary does not dedupe)
+function Write-AitLibActionOnce([string]$Text) {
+    if ($env:AITOOLS_SUMMARY_FILE) {
+        $sf = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:AITOOLS_SUMMARY_FILE)
+        if (Test-Path -LiteralPath $sf -PathType Leaf) {
+            $have = $false
+            try {
+                $have = @([IO.File]::ReadAllLines($sf, [System.Text.UTF8Encoding]::new($false)) | Where-Object { $_ -ceq "ACTION||$Text" }).Count -gt 0
+            } catch {
+                LogDetail "run summary unreadable ($($_.Exception.Message)) -- ACTION written without the duplicate check"
+            }
+            if ($have) { LogDetail "ACTION already in the run summary: $Text"; return }
+        }
+    }
+    Write-Summary "ACTION" "" $Text
+}
+
+# Resolve-UserRepoPath -- sets $script:AitLibUserRepoPath and
+# $script:AitLibUserRepoVia (env|argument|config|convention|scan|none). Returns 0
+# found, 1 no dotprofile (shared-only mode; not an error), 3 resolver error or
+# refusal (LogError + ERROR row "dotprofile" + one ACTION per run, "see
+# deploy.log -- the dotprofile could not be resolved").
+function Resolve-UserRepoPath {
+    $script:AitLibUserRepoPath = ""; $script:AitLibUserRepoVia = "none"
+    if (-not (Invoke-AitLibProfile @("user-repo-path"))) {
+        LogError "dotprofile: resolver aitools-profile.ps1 not found next to aitools-lib.ps1"
+        Write-Summary "ERROR" "dotprofile" "resolver missing"
+        Write-AitLibActionOnce "see deploy.log -- the dotprofile could not be resolved"
+        return 3
+    }
+    $script:AitLibUserRepoVia = Get-AitLibProfileTag "via"
+    foreach ($w in (Get-AitLibProfileLines "warn")) { LogDetail "dotprofile: $w" }
+    if ($script:AitLibProfileRc -eq 0) {
+        $script:AitLibUserRepoPath = Get-AitLibProfileTag "path"
+        LogDetail "dotprofile=$($script:AitLibUserRepoPath) via=$($script:AitLibUserRepoVia)"
+        return 0
+    }
+    if ($script:AitLibProfileRc -eq 1) { LogDetail "dotprofile: none found (shared-only mode)"; return 1 }
+    $note = Get-AitLibExitNote $script:AitLibProfileRc
+    $errs = @(Get-AitLibProfileLines "error")
+    foreach ($e in $errs) { LogError "dotprofile: $e$note" }
+    if ($errs.Count -eq 0) {
+        $why = if ($note) { $note } else { " (exit $($script:AitLibProfileRc))" }
+        LogError "dotprofile: resolver failed$why"
+    }
+    Write-Summary "ERROR" "dotprofile" "resolver failed"
+    Write-AitLibActionOnce "see deploy.log -- the dotprofile could not be resolved"
+    return 3
+}
+
+# Resolve-MachineProfile -- sets $script:AitLibMachineAlias, AitLibMachineVia,
+# AitLibProfileFile, AitLibProfileName, AitLibProfileCompany,
+# AitLibIdentityGitName, AitLibIdentityGitEmail, AitLibIdentityGithub, and
+# (re-key batch 3, the resolver's id-key fields):
+#   $script:AitLibMachineKey      the profiles key that matched ("" when none)
+#   $script:AitLibMachineOwner    this|other|unregistered|unknown|absent ("absent" when none)
+#   $script:AitLibMachineLegacy   $true when the matched profile is still keyed by alias, else $false
+#   $script:AitLibMachineHostname this machine's live short hostname ("" when unavailable)
+# AitLibMachineAlias is the profile's alias field (its key for a legacy profile).
+# A resolver without the id-key fields (an older embedded copy) leaves the
+# defaults. Return 0 means a profile matched, not that it is this machine's: a
+# caller that writes per-machine data checks AitLibMachineOwner -ceq "this".
+# Logs one detail line. Resolver warnings are detail lines here: setup-user-config, the
+# first script of every run, reports them once (a successful step stays OK,
+# D-TS12). Returns 0 resolved, 1 no dotprofile (shared-only), 3 no match or
+# error (LogError + ERROR row "machine profile" + one ACTION per run; the
+# AitLibProfile*/AitLibIdentity* values then hold identity-level values only).
+function Resolve-MachineProfile {
+    $script:AitLibMachineAlias = ""; $script:AitLibMachineVia = "none"; $script:AitLibProfileFile = ""
+    $script:AitLibProfileName = ""; $script:AitLibProfileCompany = ""; $script:AitLibIdentityGitName = ""
+    $script:AitLibIdentityGitEmail = ""; $script:AitLibIdentityGithub = ""
+    $script:AitLibMachineKey = ""; $script:AitLibMachineOwner = "absent"; $script:AitLibMachineLegacy = $false
+    $script:AitLibMachineHostname = ""
+    if (-not (Invoke-AitLibProfile @("resolve", "--environment", $script:AitoolsEnvironment))) {
+        LogError "machine profile: resolver aitools-profile.ps1 not found next to aitools-lib.ps1"
+        Write-Summary "ERROR" "machine profile" "resolver missing"
+        return 3
+    }
+    $script:AitLibMachineAlias = Get-AitLibProfileTag "alias"
+    $script:AitLibMachineVia = Get-AitLibProfileTag "via"
+    $script:AitLibProfileFile = Get-AitLibProfileTag "profileFile"
+    $script:AitLibProfileName = Get-AitLibProfileTag "name"
+    $script:AitLibProfileCompany = Get-AitLibProfileTag "company"
+    $script:AitLibIdentityGitName = Get-AitLibProfileTag "gitName"
+    $script:AitLibIdentityGitEmail = Get-AitLibProfileTag "gitEmail"
+    $script:AitLibIdentityGithub = Get-AitLibProfileTag "github"
+    $script:AitLibMachineKey = Get-AitLibProfileTag "key"
+    $ownerTag = Get-AitLibProfileTag "owner"
+    if ($ownerTag) { $script:AitLibMachineOwner = $ownerTag }
+    $script:AitLibMachineLegacy = ((Get-AitLibProfileTag "legacy") -ceq "true")
+    $script:AitLibMachineHostname = Get-AitLibProfileTag "hostname"
+    foreach ($w in (Get-AitLibProfileLines "warn")) { LogDetail "machine profile: $w" }
+    $aliasShown = if ($script:AitLibMachineAlias) { $script:AitLibMachineAlias } else { "none" }
+    $keyShown = if ($script:AitLibMachineKey) { $script:AitLibMachineKey } else { "none" }
+    $legacyShown = if ($script:AitLibMachineLegacy) { "true" } else { "false" }
+    LogDetail "machine profile: alias=$aliasShown via=$($script:AitLibMachineVia) key=$keyShown owner=$($script:AitLibMachineOwner) legacy=$legacyShown company=$($script:AitLibProfileCompany) host=$($script:AitLibMachineHostname) id=$(Get-AitLibProfileTag 'machineId')"
+    if ($script:AitLibProfileRc -eq 0 -and $script:AitLibMachineAlias) { return 0 }
+    if ($script:AitLibProfileRc -eq 1) { LogDetail "machine profile: no dotprofile -- shared-only mode"; return 1 }
+    $note = Get-AitLibExitNote $script:AitLibProfileRc
+    $errs = @(Get-AitLibProfileLines "error")
+    foreach ($e in $errs) { LogError "machine profile: $e$note" }
+    if ($errs.Count -eq 0) {
+        $why = if ($note) { $note } else { " (exit $($script:AitLibProfileRc))" }
+        LogError "machine profile: resolver failed$why"
+    }
+    LogError "machine profile: unresolved -- no other machine's values are used"
+    Write-Summary "ERROR" "machine profile" "no machine match"
+    Write-AitLibActionOnce "Run: aitools user init (pick or register this machine's profile)"
+    return 3
+}
+
+# Get-ToolException SLUG -- this machine's recorded tool exception (tree section
+# 8 Reader; call only at T5). Returns @{ Found; Platform; Method; Path;
+# DecidedAt }, or $null when the store is unavailable (one LogWarn; treated as
+# no exception; no summary row -- the warning promotes the caller's OK row to
+# WARN). Sets no result variable. Resolver warnings are detail lines.
+function Get-ToolException([string]$Slug) {
+    if (-not (Invoke-AitLibProfile @("exception-get", "--slug", $Slug, "--environment", $script:AitoolsEnvironment))) {
+        LogWarn "tool exceptions unavailable (resolver missing)"
+        return $null
+    }
+    foreach ($w in (Get-AitLibProfileLines "warn")) { LogDetail "tool exceptions: $w" }
+    if ($script:AitLibProfileRc -ne 0) {
+        $reason = @(Get-AitLibProfileLines "error") | Select-Object -First 1
+        if ($script:AitLibProfileRc -eq 1) { $reason = "no dotprofile" }
+        if (-not $reason) { $reason = "resolver failed" }
+        LogWarn "tool exceptions unavailable ($reason)$(Get-AitLibExitNote $script:AitLibProfileRc)"
+        return $null
+    }
+    $r = @{ Found = $false; Platform = ""; Method = ""; Path = ""; DecidedAt = "" }
+    if ((Get-AitLibProfileTag "found") -ceq "true") {
+        $r.Found = $true
+        $r.Platform = Get-AitLibProfileTag "platform"
+        $r.Method = Get-AitLibProfileTag "method"
+        $r.Path = Get-AitLibProfileTag "path"
+        $r.DecidedAt = Get-AitLibProfileTag "decidedAt"
+    }
+    LogDetail "tool exceptions: $Slug found=$($r.Found) profile=$(Get-AitLibProfileTag 'alias') via=$(Get-AitLibProfileTag 'via')"
+    return $r
+}
+
+# Set-ToolException SLUG METHOD PATH VERSION [REASON] -- record a [k]eep decision
+# (tree section 8 Writer; only after [k]eep, never in dry run or non-interactive
+# runs). decidedBy = the calling script's name. The resolver writes profile.json
+# and commits and pushes it (N-Q2). Sets $script:AitLibToolExcResult
+# (created|updated|unchanged|dry-run|refused|failed; never empty after the
+# call) and $script:AitLibToolExcPushed. Returns 0 written or nothing to
+# write (created/updated: a failed commit or push is a LogWarn + ACTION "run git
+# push in <dotprofile>"; unchanged and dry-run write nothing, so they need no
+# push and get no warning), 1 failed, 3 refused (no dotprofile, or the machine
+# profile matched by hostname only or not at all). 3 is LogWarn + ACTION "run
+# aitools user init to remember tool choices"; 1 (resolver missing, usage
+# error, crash) is LogWarn + ACTION "see deploy.log -- a tool choice (tool
+# exception) was not saved". The tool itself is fine, so no ERROR row (D-TS12).
+function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [string]$Version, [string]$Reason = "") {
+    $script:AitLibToolExcPushed = $false; $script:AitLibToolExcResult = ""
+    $by = if ($script:scriptName) { $script:scriptName } else { "unknown" }
+    $a = @("exception-set", "--slug", $Slug, "--platform", $script:AitoolsPlatform, "--method", $Method,
+        "--path", $Path, "--version", $Version, "--by", $by, "--environment", $script:AitoolsEnvironment)
+    if ($Reason) { $a += @("--reason", $Reason) }
+    if (-not (Invoke-AitLibProfile $a)) {
+        $script:AitLibToolExcResult = "failed"
+        LogWarn "tool exception for $Slug not saved (resolver missing)"
+        Write-AitLibActionOnce "see deploy.log -- a tool choice (tool exception) was not saved"
+        return 1
+    }
+    $script:AitLibToolExcResult = Get-AitLibProfileTag "result"
+    foreach ($w in (Get-AitLibProfileLines "warn")) { LogDetail "tool exceptions: $w" }
+    if ($script:AitLibProfileRc -eq 0) {
+        if ((Get-AitLibProfileTag "pushed") -ceq "true") {
+            $script:AitLibToolExcPushed = $true
+            LogDetail "tool exceptions: $Slug recorded in $(Get-AitLibProfileTag 'profileFile') (committed and pushed)"
+        } elseif ($script:AitLibToolExcResult -ceq "unchanged" -or $script:AitLibToolExcResult -ceq "dry-run") {
+            LogDetail "tool exceptions: $Slug $($script:AitLibToolExcResult) -- nothing written, nothing to push"
+        } else {
+            $msg = @(Get-AitLibProfileLines "warn" | Where-Object { $_ -match 'commit|push|git repository' }) | Select-Object -First 1
+            if (-not $msg) { $msg = "see deploy.log" }
+            LogWarn "tool exception for $Slug saved but not pushed ($msg)"
+            $pf = Get-AitLibProfileTag "profileFile"
+            $dpDir = if ($pf) { Split-Path -Parent $pf } else { "your dotprofile" }
+            Write-AitLibActionOnce "run git push in $dpDir"
+        }
+        return 0
+    }
+    $msg = @(Get-AitLibProfileLines "error") | Select-Object -First 1
+    if ($script:AitLibProfileRc -eq 3) {
+        $script:AitLibToolExcResult = "refused"
+        if (-not $msg) { $msg = "refused" }
+        LogWarn "tool exception for $Slug not saved ($msg)$(Get-AitLibExitNote 3)"
+        Write-AitLibActionOnce "run aitools user init to remember tool choices"
+        return 3
+    }
+    # 2 (error), 4 (not a result of exception-set) and any other code: failed
+    $script:AitLibToolExcResult = "failed"
+    if (-not $msg) { $msg = "resolver failed" }
+    LogWarn "tool exception for $Slug not saved ($msg)$(Get-AitLibExitNote $script:AitLibProfileRc)"
+    Write-AitLibActionOnce "see deploy.log -- a tool choice (tool exception) was not saved"
+    return 1
+}
+
+# ---------------------------------------------------------------------------
+# Child-script log relay to deploy.jsonl (moved from the installers' "install
+# log helpers", PR #89, so installers and deploy-harness share one copy)
+# A parent that runs a child setup script (one that logs through aitools-lib)
+# shows the child's console lines, mirrors each structured line
+# ("[ts] [script] [level] msg") to deploy.jsonl -- the child already wrote it to
+# deploy.log, the lib's Log writes no JSONL -- and counts the child's warnings
+# and errors. Parity: the bash section of the same name.
+#   Write-JsonlRecord TS SCRIPT LEVEL MSG          append one deploy.jsonl record
+#   Send-ChildLog LINES                            relay captured child output
+#   Invoke-ChildRelayed LABEL SCRIPT [ARGS] [TOOL] run SCRIPT in-process, relay
+#                                                  each line as it comes
+# Results (set by Send-ChildLog and Invoke-ChildRelayed, read after the call):
+#   $script:AitLibChildWarnings  the child's warn lines (the exit footer
+#                                "COMPLETED with N warning(s)" is relayed, not counted)
+#   $script:AitLibChildErrors    the child's error lines ("FAILED with ..." not counted)
+#   $script:AitLibChildRc        Invoke-ChildRelayed only: the child's exit code
+# Every counted warning also increments $script:warnings (it promotes the
+# parent's OK rows, as the child's own rows are). Errors are not added to
+# $script:errors line by line: Invoke-ChildRelayed logs one LogError for a
+# failed child. Private caches: $script:AitLibRunId, AitLibJsonlHost, AitLibJsonlOs.
+# ---------------------------------------------------------------------------
+
+# Initialize-AitLibJsonl -- the host, os and run id fields, computed once
+function Initialize-AitLibJsonl {
+    if (-not $script:AitLibJsonlHost) {
+        $h = ""
+        try { $h = ([Environment]::MachineName -split '\.')[0] } catch { LogDetail "deploy.jsonl: host name unavailable ($($_.Exception.Message))" }
+        $script:AitLibJsonlHost = if ($h) { $h } else { "unknown" }
+    }
+    if (-not $script:AitLibJsonlOs) {
+        # The bash lib records uname -s; the installers recorded "Windows" on Windows
+        $script:AitLibJsonlOs = if ($IsMacOS) { "Darwin" } elseif ($IsLinux) { "Linux" } else { "Windows" }
+    }
+    if (-not $script:AitLibRunId) {
+        $script:AitLibRunId = if ($env:AITOOLS_RUN_ID) { $env:AITOOLS_RUN_ID } else { -join ((1..6) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) }) }
+    }
+}
+
+# ConvertTo-AitLibJsonlText S -- S with every control character except tab and
+# newline dropped (CR, ESC colour codes, ...), as the bash lib does; ConvertTo-Json
+# then escapes backslash, quote, tab and newline. Records match the bash lib byte
+# for byte for valid UTF-8 without U+0085, U+2028 and U+2029 (ConvertTo-Json
+# escapes those; .NET has already replaced invalid bytes with U+FFFD)
+function ConvertTo-AitLibJsonlText($Value) {
+    return ([string]$Value) -creplace '[\x00-\x08\x0B-\x1F\x7F]', ''
+}
+
+# Write-JsonlRecord TS SCRIPT LEVEL MSG -- append one record to deploy.jsonl in the
+# log directory ($script:logDir, set by Initialize-Logging). Key order: ts, host,
+# os, script, run_id, level, msg (the installers' order). run_id = AITOOLS_RUN_ID,
+# else one random id per process. A failed write is logged at detail and
+# otherwise ignored: logging must not break the run it records (logging.md section 5).
+function Write-JsonlRecord($Ts, $ScriptLabel, $Level, $Msg) {
+    Initialize-AitLibJsonl
+    $rec = [ordered]@{
+        ts = (ConvertTo-AitLibJsonlText $Ts); host = (ConvertTo-AitLibJsonlText $script:AitLibJsonlHost)
+        os = (ConvertTo-AitLibJsonlText $script:AitLibJsonlOs); script = (ConvertTo-AitLibJsonlText $ScriptLabel)
+        run_id = (ConvertTo-AitLibJsonlText $script:AitLibRunId); level = (ConvertTo-AitLibJsonlText $Level)
+        msg = (ConvertTo-AitLibJsonlText $Msg)
+    }
+    try {
+        $f = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $script:logDir "deploy.jsonl"))
+        [IO.File]::AppendAllText($f, (($rec | ConvertTo-Json -Compress) + "`n"), [System.Text.UTF8Encoding]::new($false))
+    } catch {
+        LogDetail "deploy.jsonl: write failed ($($_.Exception.Message))"
+    }
+}
+
+# Send-AitLibChildLine RECORD -- print one child console line (a Write-Host record
+# redirected with 6>&1, or an output line), mirror it to deploy.jsonl when it is a
+# structured log line, count its warn/error level
+function Send-AitLibChildLine($Record) {
+    $line = [string]$Record
+    if (-not $line) { return }
+    $clean = $line -creplace "`r", '' -creplace "$([char]27)\[(31|33|0)m", ''
+    $m = [regex]::Match($clean, '^\[([^\]]+)\] \[([^\]]+)\] \[([a-z]+)\] (.*)$')
+    if (-not $m.Success) { Write-Host $line; return }
+    $level = $m.Groups[3].Value
+    if ($level -ceq "error") { Write-Host $clean -ForegroundColor Red }
+    elseif ($level -ceq "warn") { Write-Host $clean -ForegroundColor Yellow }
+    else { Write-Host $clean }
+    Write-JsonlRecord $m.Groups[1].Value $m.Groups[2].Value $level $m.Groups[4].Value
+    $text = $m.Groups[4].Value
+    # The exit footer restates the counts: relayed, not counted
+    if ($text.StartsWith("COMPLETED with ") -or $text.StartsWith("FAILED with ")) { return }
+    if ($level -ceq "warn") { $script:AitLibChildWarnings++; $script:warnings++ }
+    elseif ($level -ceq "error") { $script:AitLibChildErrors++ }
+}
+
+# Send-ChildLog LINES -- relay the captured console output of a child script, line
+# by line (see the section comment). Sets $script:AitLibChildWarnings and
+# $script:AitLibChildErrors. Returns nothing.
+function Send-ChildLog([object[]]$Lines) {
+    $script:AitLibChildWarnings = 0; $script:AitLibChildErrors = 0
+    foreach ($l in @($Lines)) {
+        foreach ($part in (([string]$l) -split "`n")) { Send-AitLibChildLine $part }
+    }
+}
+
+# Invoke-ChildRelayed LABEL SCRIPT [ARGS] [SUMMARYTOOL] -- run a child .ps1
+# in-process (e.g. Invoke-ChildRelayed "Step 5: setup-user-config.ps1" $writer
+# $writerArgs "aitools config"), its Write-Host output redirected with 6>&1 and
+# relayed line by line as it arrives. The child writes its own summary rows; a
+# throw (the child could not write them) is LogError plus, when SUMMARYTOOL is
+# given, the row "ERROR|SUMMARYTOOL|script failed (exception)" (bash has no
+# in-process throw, so run_child_relayed has no such argument). Sets
+# $script:AitLibChildRc, AitLibChildWarnings, AitLibChildErrors. Returns 0 when
+# the child exited 0 with no error line; otherwise 1 after one LogError naming LABEL.
+# The child must end with an explicit `exit N` (the standard exit footer): a
+# .ps1 that just ends reports the exit code of the last native command it ran.
+# The parameters carry the lib prefix because the in-process child can read this
+# function's variables through dynamic scope (an unset $Label in the child would
+# otherwise see ours).
+function Invoke-ChildRelayed([string]$AitLibLabel, [string]$AitLibChildScript, [hashtable]$AitLibChildArgs = @{}, [string]$AitLibSummaryTool = "") {
+    $script:AitLibChildRc = 0; $script:AitLibChildWarnings = 0; $script:AitLibChildErrors = 0
+    $global:LASTEXITCODE = 0
+    try {
+        & $AitLibChildScript @AitLibChildArgs 6>&1 | ForEach-Object { Send-AitLibChildLine $_ }
+        $script:AitLibChildRc = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+    } catch {
+        $script:AitLibChildRc = 1
+        LogError "${AitLibLabel} failed: $($_.Exception.Message)"
+        if ($AitLibSummaryTool) { Write-Summary "ERROR" $AitLibSummaryTool "script failed (exception)" }
+        return 1
+    }
+    if ($script:AitLibChildRc -ne 0) {
+        LogError "$AitLibLabel failed (exit $($script:AitLibChildRc)) -- see $logFile"
+        return 1
+    }
+    if ($script:AitLibChildErrors -gt 0) {
+        LogError "$AitLibLabel logged $($script:AitLibChildErrors) error(s) but exited 0 -- see $logFile"
+        return 1
+    }
+    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -1026,6 +1473,102 @@ function Invoke-AiMerge {
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
+# Review diff shown by Prompt-DiffReview: LOCAL -> SOURCE, unified format.
+# "-" lines are only on this machine, "+" lines only in the repo, so the diff
+# reads as what [o]verwrite changes here. The hunks come from
+# `git diff --no-index` (the same engine and options as _review_diff in
+# aitools-lib.sh, so PS1 and bash print identical hunks); its own headers are
+# replaced by:
+#   --- this machine  <LOCAL path>
+#   +++ repo          <SOURCE path, or "source (embedded)" when there is none>
+# Spec: reference/managed-file-deployment.md "Diff Mechanism Detail".
+# git's output is read as UTF-8 straight from the process stream (never
+# through the PowerShell pipeline; see .claude/rules/interactive-menus.md
+# "Encoding").
+#
+# Params: -LocalContent, -SourceContent, -LocalLabel (header), -SourceLabel
+# (header; "" -> "source (embedded)").
+# Sets $script:ReviewDiffLines (plain text, no colour; empty when git reports
+# no line difference) and returns $true. Returns $false when the diff cannot
+# be produced, with the reason in $script:ReviewDiffError; the caller logs it.
+# ---------------------------------------------------------------------------
+$script:ReviewDiffLines = @()
+$script:ReviewDiffError = ""
+function Get-ReviewDiff {
+    param(
+        [string]$LocalContent,
+        [string]$SourceContent,
+        [string]$LocalLabel,
+        [string]$SourceLabel = ""
+    )
+    $script:ReviewDiffLines = @()
+    $script:ReviewDiffError = ""
+    if (-not $SourceLabel) { $SourceLabel = "source (embedded)" }
+
+    $utf8 = [Text.UTF8Encoding]::new($false)
+    $tmpDir = Join-Path ([IO.Path]::GetTempPath()) ("aitools-diff-" + [guid]::NewGuid().ToString("N"))
+    $raw = ""
+    try {
+        New-Item -ItemType Directory -Path $tmpDir -ErrorAction Stop | Out-Null
+        $localFile = Join-Path $tmpDir "local"
+        $sourceFile = Join-Path $tmpDir "source"
+        # Same bytes as the bash twin: trailing newlines normalized to one LF.
+        [IO.File]::WriteAllText($localFile, (($LocalContent -replace '[\r\n]+$', '') + "`n"), $utf8)
+        [IO.File]::WriteAllText($sourceFile, (($SourceContent -replace '[\r\n]+$', '') + "`n"), $utf8)
+
+        $psi = [Diagnostics.ProcessStartInfo]::new("git")
+        # Pinned so user git config cannot change the hunks (GIT_DIFF_OPTS would
+        # override -U3); --text keeps content with a NUL byte a text diff.
+        foreach ($a in @("-c", "core.quotePath=false", "-c", "diff.suppressBlankEmpty=false",
+                "-c", "diff.interHunkContext=0", "diff", "--no-index", "--no-color",
+                "--no-ext-diff", "--no-textconv", "--text", "--diff-algorithm=myers",
+                "--indent-heuristic", "-U3", "--", $localFile, $sourceFile)) {
+            $psi.ArgumentList.Add($a)
+        }
+        $null = $psi.Environment.Remove("GIT_DIFF_OPTS")
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.StandardOutputEncoding = $utf8
+        $psi.StandardErrorEncoding = $utf8
+        $proc = [Diagnostics.Process]::Start($psi)
+        $errTask = $proc.StandardError.ReadToEndAsync()
+        $raw = $proc.StandardOutput.ReadToEnd()
+        $proc.WaitForExit()
+        $err = $errTask.Result
+        # git diff exits 1 when the files differ (expected) and >1 on error.
+        if ($proc.ExitCode -gt 1) {
+            $detail = if ($err) { $err.Trim() } else { "no output" }
+            $script:ReviewDiffError = "git diff failed (exit $($proc.ExitCode)): $detail"
+            return $false
+        }
+    } catch {
+        $script:ReviewDiffError = "git diff failed: $_"
+        return $false
+    } finally {
+        Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+        # ErrorAction exempt: temp directory cleanup; nothing depends on it
+    }
+
+    # Drop git's own header lines (everything before the first hunk).
+    $lines = @($raw -split "`n")
+    if ($lines.Count -gt 0 -and $lines[-1] -eq "") { $lines = @($lines | Select-Object -SkipLast 1) }
+    $start = -1
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i].StartsWith("@@ ")) { $start = $i; break }
+    }
+    if ($start -lt 0) { return $true }
+    $script:ReviewDiffLines = @("--- this machine  $LocalLabel", "+++ repo          $SourceLabel") + @($lines[$start..($lines.Count - 1)])
+    return $true
+}
+
+# Colour for the review diff: on unless NO_COLOR is set or TERM is "dumb".
+# Only called on an interactive console; the deploy log never gets colour.
+function Test-ReviewColour {
+    return (-not $env:NO_COLOR -and $env:TERM -ne "dumb")
+}
+
+# ---------------------------------------------------------------------------
 # Show SOURCE against LOCAL and ask what to do ("Review choices" above).
 #
 # Params: -FilePath (LOCAL), -NewContent (SOURCE), -AdoptOffered ($true offers
@@ -1037,7 +1580,7 @@ function Invoke-AiMerge {
 # Non-interactive, EOF at the prompt, -Force / AITOOLS_FORCE: "overwrite".
 # ---------------------------------------------------------------------------
 $script:MergedContent = $null
-$script:PdrAdoptTarget = ""   # set by Deploy-ManagedFile; shown in the review header only
+$script:PdrAdoptTarget = ""   # set by Deploy-ManagedFile; display only (+++ header, menu)
 function Prompt-DiffReview {
     param(
         [string]$FilePath,
@@ -1072,63 +1615,74 @@ function Prompt-DiffReview {
 
     # Context header
     [Console]::WriteLine("")
+    # (the diff headers below name both paths)
     [Console]::WriteLine("[REVIEW] $FilePath differs from source.")
-    [Console]::WriteLine("  source = the repo version (would deploy)")
-    [Console]::WriteLine("  local  = current file on disk")
-    if ($AdoptOffered -and $script:PdrAdoptTarget) {
-        [Console]::WriteLine("  repo   = $($script:PdrAdoptTarget) (adopt target)")
-    }
     [Console]::WriteLine("")
 
-    # Generate line-level diff
+    # AI merge input ([m]erge & adopt): Compare-Object listing, unchanged from
+    # before the display change; the display below does not use it.
     $srcLines = @($NewContent -split "`n")
     $curLines = @($CurrentContent -split "`n")
     $diffs = Compare-Object $srcLines $curLines -CaseSensitive
-    $diffCount = 0
     $diffOutput = ""
     if ($diffs) {
-        $diffCount = @($diffs).Count
-        # Build diff text for AI merge prompt
         $diffLines = @()
         foreach ($d in $diffs) {
             $prefix = if ($d.SideIndicator -eq "=>") { "+ " } else { "- " }
             $diffLines += "${prefix}$($d.InputObject)"
         }
         $diffOutput = $diffLines -join "`n"
-        # Full diff as [detail] records at every size (the console truncates at 30).
-        $leafName = Split-Path -Leaf $FilePath
-        foreach ($dl in $diffLines) { LogDetail "diff ${leafName}: $dl" }
     }
 
-    if ($diffCount -eq 0) {
-        [Console]::WriteLine("  (whitespace-only differences)")
-    } elseif ($diffCount -le 40) {
-        foreach ($d in $diffs) {
-            $indicator = if ($d.SideIndicator -eq "=>") { "+ local  " } else { "- source " }
-            [Console]::WriteLine("  $indicator$($d.InputObject)")
-        }
+    # Show the review diff: LOCAL -> SOURCE (Get-ReviewDiff). Parity:
+    # prompt_diff_review in aitools-lib.sh prints the same lines.
+    $esc = [char]27
+    $useColour = Test-ReviewColour
+    $adoptLabel = if ($script:PdrAdoptTarget) { $script:PdrAdoptTarget } else { "the repo" }
+    $srcLabel = if ($script:PdrAdoptTarget) { $script:PdrAdoptTarget } else { "" }
+    if ($useColour) {
+        [Console]::WriteLine("  $esc[31mred -$esc[0m = only on this machine   $esc[32mgreen +$esc[0m = only in the repo")
     } else {
-        $shown = 0
-        foreach ($d in $diffs) {
-            if ($shown -ge 30) { break }
-            $indicator = if ($d.SideIndicator -eq "=>") { "+ local  " } else { "- source " }
-            [Console]::WriteLine("  $indicator$($d.InputObject)")
-            $shown++
+        [Console]::WriteLine("  red - = only on this machine   green + = only in the repo")
+    }
+    [Console]::WriteLine("")
+    $leafName = Split-Path -Leaf $FilePath
+    if (-not (Get-ReviewDiff -LocalContent $CurrentContent -SourceContent $NewContent -LocalLabel $FilePath -SourceLabel $srcLabel)) {
+        LogWarn "Review diff unavailable for ${FilePath}: $($script:ReviewDiffError)"
+        [Console]::WriteLine("  (diff unavailable -- see deploy log)")
+    } elseif ($script:ReviewDiffLines.Count -eq 0) {
+        [Console]::WriteLine("  (whitespace-only differences)")
+    } else {
+        $all = $script:ReviewDiffLines
+        $shown = if ($all.Count -gt 40) { $all[0..29] } else { $all }
+        foreach ($line in $shown) {
+            if ($useColour -and $line.StartsWith("-")) {
+                [Console]::WriteLine("$esc[31m$line$esc[0m")
+            } elseif ($useColour -and $line.StartsWith("+")) {
+                [Console]::WriteLine("$esc[32m$line$esc[0m")
+            } else {
+                [Console]::WriteLine($line)
+            }
         }
-        [Console]::WriteLine("  ... ($($diffCount - 30) more lines -- see deploy log)")
+        if ($all.Count -gt 40) {
+            [Console]::WriteLine("  ... ($($all.Count - 30) more lines -- full diff in deploy log)")
+        }
+        # Full diff as [detail] records at every size, plain text (the console truncates at 30).
+        foreach ($dl in $all) { LogDetail "diff ${leafName}: $dl" }
     }
 
-    # Menu (parity: prompt_diff_review in aitools-lib.sh). A rejected merge
-    # preview ("menu") shows the menu again.
+    # Menu (parity: prompt_diff_review in aitools-lib.sh). Each line says what
+    # the choice does to the lines shown. A rejected merge preview ("menu")
+    # shows the menu again.
     while ($true) {
         [Console]::WriteLine("")
-        [Console]::WriteLine("  [o]verwrite      : source wins -> written to local (backup kept)")
+        [Console]::WriteLine("  [o]verwrite       : this machine gets the green + lines (backup kept)")
         if ($AdoptOffered) {
-            [Console]::WriteLine("  [a]ccept & adopt : local wins -> copied to the repo now")
-            [Console]::WriteLine("  [m]erge & adopt  : AI merge of source + local -> local and the repo")
+            [Console]::WriteLine("  [a]ccept & adopt  : the repo gets the red - lines (your version) -> $adoptLabel")
+            [Console]::WriteLine("  [m]erge & adopt   : AI combines both; written to this machine and $adoptLabel")
         }
-        [Console]::WriteLine("  [s]kip           : nothing written; asked again next run")
-        [Console]::WriteLine("  [x]abort         : stop this script (exit 2)")
+        [Console]::WriteLine("  [s]kip            : nothing written; asked again next run")
+        [Console]::WriteLine("  [x]abort          : stop this script (exit 2)")
         if ($AdoptOffered) {
             [Console]::Write("  choice [o/a/m/s/x]: ")
         } else {

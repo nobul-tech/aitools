@@ -4,6 +4,8 @@
 # Provides: platform and environment detection (AITOOLS_PLATFORM, IS_MACOS,
 # IS_WINDOWS, IS_LINUX, AITOOLS_ENVIRONMENT, is_claude_code_web,
 # is_local_environment, write_environment_skip), display_path, read_config_key,
+# resolve_user_repo_path, resolve_machine_profile, tool_exception_get,
+# tool_exception_record,
 # logging_init, log/log_ok/log_error/log_warn/log_detail, invoke_ai,
 # write_summary, show_summary, SORT_KEYS_JS, normalize_json.
 #
@@ -102,6 +104,520 @@ read_config_key() {
     [ -n "$val" ] || return 1
     # Unescape JSON backslashes: \\ -> \
     printf '%b' "$val"
+}
+
+# ---------------------------------------------------------------------------
+# Dotprofile, machine-profile and tool-exception resolution
+# (reference/user-repo.md "Resolution"; tool exceptions:
+# reference/tool-support-decision-tree.md section 8)
+# Intent: give every bash consumer one answer to "where is the dotprofile" and
+# "which profile is this machine", with the reason ("via") logged to deploy.log,
+# and the tool-exception store's reader and writer. The logic lives in the
+# native resolver aitools-profile.sh (aitools-profile.ps1 under Git Bash on
+# Windows, where the .sh refuses to run). NOT a writer of config.json (only
+# setup-user-config writes it). NOT a writer of profile.json beyond
+# tool_exception_record (which delegates to the resolver). Consumed by:
+# setup-user-*.sh, aitools, the tool setup scripts (tool exceptions) and the
+# generated deploy/ scripts (they set AITOOLS_PROFILE_SH to their embedded copy).
+# Return codes follow the decision tree's helper rule: none returns 2.
+# Results are globals, never stdout (counters and globals must survive).
+#
+# Result-global contract (PR #80 review3 B1/M1): every result global carries the
+# AITLIB_ prefix and every private helper the _aitlib_ prefix, so they cannot
+# collide with a caller's own variables (USER_REPO_PATH, PROFILE_FILE, ...).
+# They are assigned only inside these functions -- this section has no top-level
+# assignment -- so read them only after the call (under set -u an unset one is an
+# error). Callers copy what they need into their own variables right after the
+# call, e.g.:  resolve_user_repo_path || rc=$?;  USER_REPO_PATH="$AITLIB_USER_REPO_PATH"
+# ACTION rows: the wrapper emits the one ACTION for its failure (once per run:
+# _aitlib_action_once skips a row the run summary already holds); callers do not
+# add their own ACTION for the same failure.
+#
+# Resolver exit codes -> wrapper return codes (re-key batch 3). The resolver
+# (aitools-profile.sh --help) exits 0 ok, 1 nothing found, 2 error, 3 refused,
+# 4 refused: alias used by another profile (register only). No wrapper returns
+# 2 (D-TS13: a bare 2 means user abort), and no resolver code other than 1 is
+# read as "nothing found":
+#   resolver exit         0          1               2      3            4
+#   resolve_user_repo_path 0 found   1 shared-only   3      3 (refused)  3 (unexpected)
+#   resolve_machine_profile 0 match  1 shared-only   3      3 (refused)  3 (unexpected)
+#   tool_exception_get     0         1 unavailable   1      1 (refused)  1 (unexpected)
+#   tool_exception_record  0         1 failed        1      3 refused    1 (unexpected)
+# Every 3 and 4 is logged with its code and meaning. An exit 0/1 without the
+# resolver's "via" line is rewritten to 2 first (_aitlib_profile_run).
+# ---------------------------------------------------------------------------
+
+# _aitlib_profile_run ARGS... -- run the resolver; sets AITLIB_PROFILE_OUT
+# (tagged lines, CR stripped) and AITLIB_PROFILE_RC. Returns 0 when it ran, 1
+# when no resolver is available (the caller logs it). The resolver's stderr
+# (its own log lines) is copied to deploy.log as detail lines.
+# The exit code is trusted only with the result lines: every resolver command
+# prints a "via" line on 0 (found) and 1 (none). Exit 0 or 1 without one (a
+# crash, a parse failure, a policy refusal -- pwsh exits 0 or 1 for those) is
+# rewritten to 2 with an "error" line, so no caller mistakes it for "found" or
+# "shared-only".
+# Windows (Git Bash) branch: aitools-profile.ps1 through pwsh
+# (-ExecutionPolicy Bypass, as the OS dispatch rule calls .ps1 files; a throw
+# exits 2). Path arguments (--path) are passed in Windows form (cygpath -w;
+# unchanged when cygpath fails), stdout is forced to UTF-8 and CRs are
+# stripped. AITLIB_PROFILE_VIA_PWSH=1 forces this branch on any OS (tests;
+# cygpath is then used only when present).
+# UNVERIFIED on Windows (tested on macOS only, through the forced branch):
+# cygpath conversion, MSYS argument and environment translation, and the
+# UTF-8 decoding of non-ASCII values.
+_aitlib_profile_run() {
+    AITLIB_PROFILE_OUT=""; AITLIB_PROFILE_RC=0
+    local d sh ps1 errf="" line
+    d="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    sh="${AITOOLS_PROFILE_SH:-$d/aitools-profile.sh}"
+    ps1="${AITOOLS_PROFILE_PS1:-$d/aitools-profile.ps1}"
+    if ! errf="$(mktemp)"; then
+        errf=""
+        log_warn "aitools-profile: mktemp failed -- the resolver's own log lines are not captured"
+    fi
+    if [ "$AITOOLS_PLATFORM" = "windows" ] || [ "${AITLIB_PROFILE_VIA_PWSH:-}" = "1" ]; then
+        if [ ! -f "$ps1" ] || ! command -v pwsh >/dev/null 2>&1; then
+            if [ -n "$errf" ]; then rm -f "$errf"; fi
+            return 1
+        fi
+        local a w prev="" ps1_arg="$ps1" arglist=""
+        if command -v cygpath >/dev/null 2>&1; then
+            if w="$(cygpath -w "$ps1")"; then ps1_arg="$w"; else log_detail "aitools-profile: cygpath -w failed for $ps1 -- passed unchanged"; fi
+        fi
+        for a in "$@"; do
+            if [ "$prev" = "--path" ] && command -v cygpath >/dev/null 2>&1; then
+                case "$a" in
+                    /*) if w="$(cygpath -w "$a")"; then a="$w"; else log_detail "aitools-profile: cygpath -w failed for $a -- passed unchanged"; fi ;;
+                esac
+            fi
+            arglist="$arglist$a"$'\n'
+            prev="$a"
+        done
+        # Arguments travel in an environment variable, one per line (resolver
+        # values are one line by contract), so pwsh -Command can set UTF-8 output
+        # before it runs the resolver.
+        AITLIB_PROFILE_OUT=$(AITLIB_PS1="$ps1_arg" AITLIB_PS_ARGS="$arglist" pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command 'try { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $a = @(); if ($env:AITLIB_PS_ARGS) { $a = @($env:AITLIB_PS_ARGS.Substring(0, $env:AITLIB_PS_ARGS.Length - 1) -split "`n") }; $global:LASTEXITCODE = 0; & $env:AITLIB_PS1 @a; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine("aitools-profile threw: $($_.Exception.Message)"); exit 2 }' 2>"${errf:-/dev/null}") || AITLIB_PROFILE_RC=$?
+        AITLIB_PROFILE_OUT="${AITLIB_PROFILE_OUT//$'\r'/}"
+    else
+        if [ ! -f "$sh" ]; then
+            if [ -n "$errf" ]; then rm -f "$errf"; fi
+            return 1
+        fi
+        # The resolver runs under the caller's bash (macOS /bin/bash 3.2 stays 3.2)
+        AITLIB_PROFILE_OUT=$("${BASH:-bash}" "$sh" "$@" 2>"${errf:-/dev/null}") || AITLIB_PROFILE_RC=$?
+    fi
+    if [ -n "$errf" ]; then
+        while IFS= read -r line; do
+            line="${line//$'\r'/}"
+            if [ -n "$line" ]; then log_detail "aitools-profile $1: $line"; fi
+        done < "$errf"
+        rm -f "$errf"
+    fi
+    case "$AITLIB_PROFILE_RC" in
+        0|1)
+            case $'\n'"$AITLIB_PROFILE_OUT" in
+                *$'\n'via$'\t'*) : ;;
+                *)
+                    log_detail "aitools-profile $1: exit $AITLIB_PROFILE_RC without result lines -- treated as a resolver error"
+                    AITLIB_PROFILE_OUT="${AITLIB_PROFILE_OUT}"$'\n'"error"$'\t'"resolver exited $AITLIB_PROFILE_RC without result lines (see deploy.log)"
+                    AITLIB_PROFILE_RC=2 ;;
+            esac ;;
+    esac
+    return 0
+}
+
+# _aitlib_profile_tag KEY -- value of the first KEY<TAB> line in AITLIB_PROFILE_OUT (pure)
+_aitlib_profile_tag() {
+    local k v
+    while IFS=$'\t' read -r k v; do
+        if [ "$k" = "$1" ]; then printf '%s' "$v"; return 0; fi
+    done <<< "$AITLIB_PROFILE_OUT"
+    return 0
+}
+
+# _aitlib_profile_lines KIND -- every warn or error value in AITLIB_PROFILE_OUT, one per line (pure)
+_aitlib_profile_lines() {
+    local k v
+    while IFS=$'\t' read -r k v; do
+        if [ "$k" = "$1" ]; then printf '%s\n' "$v"; fi
+    done <<< "$AITLIB_PROFILE_OUT"
+    return 0
+}
+
+# _aitlib_bash_path P -- the Git Bash form of a Windows path; unchanged elsewhere
+# or when cygpath fails (pure)
+_aitlib_bash_path() {
+    local p=""
+    if [ -n "$1" ] && command -v cygpath >/dev/null 2>&1; then
+        if p="$(cygpath -u "$1")"; then printf '%s' "$p"; return 0; fi
+    fi
+    printf '%s' "$1"
+}
+
+# _aitlib_exit_note RC -- "" for resolver exit 1 (nothing found) and 2 (the plain
+# error); for any other exit, " (resolver exit N: meaning)", so a 3 or 4 is never
+# logged as a plain error or a "not found" (pure)
+_aitlib_exit_note() {
+    case "$1" in
+        1|2) ;;
+        3) printf ' (resolver exit 3: refused)' ;;
+        4) printf ' (resolver exit 4: alias used by another profile -- not a result of this command)' ;;
+        *) printf ' (resolver exit %s)' "$1" ;;
+    esac
+}
+
+# _aitlib_action_once TEXT -- write ACTION row TEXT unless the run summary already
+# holds it (several setup scripts in one run hit the same failure; show_summary
+# does not dedupe)
+_aitlib_action_once() {
+    if [ -n "${AITOOLS_SUMMARY_FILE:-}" ] && [ -f "$AITOOLS_SUMMARY_FILE" ] \
+        && grep -qxF -- "ACTION||$1" "$AITOOLS_SUMMARY_FILE"; then
+        log_detail "ACTION already in the run summary: $1"
+        return 0
+    fi
+    write_summary ACTION "" "$1"
+}
+
+# resolve_user_repo_path -- sets AITLIB_USER_REPO_PATH (bash path form) and
+# AITLIB_USER_REPO_VIA (env|argument|config|convention|scan|none). Returns 0
+# found, 1 no dotprofile (shared-only mode; not an error), 3 resolver error or
+# refusal (logged: log_error + ERROR row "dotprofile" + one ACTION per run,
+# "see deploy.log -- the dotprofile could not be resolved").
+resolve_user_repo_path() {
+    AITLIB_USER_REPO_PATH=""; AITLIB_USER_REPO_VIA="none"
+    local w note
+    if ! _aitlib_profile_run user-repo-path; then
+        log_error "dotprofile: resolver aitools-profile not found next to aitools-lib.sh"
+        write_summary ERROR "dotprofile" "resolver missing"
+        _aitlib_action_once "see deploy.log -- the dotprofile could not be resolved"
+        return 3
+    fi
+    AITLIB_USER_REPO_VIA=$(_aitlib_profile_tag via)
+    while IFS= read -r w; do if [ -n "$w" ]; then log_detail "dotprofile: $w"; fi; done <<< "$(_aitlib_profile_lines warn)"
+    case "$AITLIB_PROFILE_RC" in
+        0)
+            AITLIB_USER_REPO_PATH=$(_aitlib_bash_path "$(_aitlib_profile_tag path)")
+            log_detail "dotprofile=$AITLIB_USER_REPO_PATH via=$AITLIB_USER_REPO_VIA"
+            return 0 ;;
+        1)
+            log_detail "dotprofile: none found (shared-only mode)"
+            return 1 ;;
+    esac
+    note=$(_aitlib_exit_note "$AITLIB_PROFILE_RC")
+    while IFS= read -r w; do if [ -n "$w" ]; then log_error "dotprofile: $w$note"; fi; done <<< "$(_aitlib_profile_lines error)"
+    if [ -z "$(_aitlib_profile_lines error)" ]; then log_error "dotprofile: resolver failed${note:- (exit $AITLIB_PROFILE_RC)}"; fi
+    write_summary ERROR "dotprofile" "resolver failed"
+    _aitlib_action_once "see deploy.log -- the dotprofile could not be resolved"
+    return 3
+}
+
+# resolve_machine_profile -- sets AITLIB_MACHINE_ALIAS, AITLIB_MACHINE_VIA,
+# AITLIB_PROFILE_FILE, AITLIB_PROFILE_NAME, AITLIB_PROFILE_COMPANY,
+# AITLIB_IDENTITY_GIT_NAME, AITLIB_IDENTITY_GIT_EMAIL, AITLIB_IDENTITY_GITHUB,
+# and (re-key batch 3, the resolver's id-key fields):
+#   AITLIB_MACHINE_KEY      the profiles key that matched ("" when none)
+#   AITLIB_MACHINE_OWNER    this|other|unregistered|unknown|absent ("absent" when none)
+#   AITLIB_MACHINE_LEGACY   true when the matched profile is still keyed by alias, else false
+#   AITLIB_MACHINE_HOSTNAME this machine's live short hostname ("" when unavailable)
+# AITLIB_MACHINE_ALIAS is the profile's alias field (its key for a legacy profile).
+# A resolver without the id-key fields (an older embedded copy) leaves the
+# defaults. Return 0 means a profile matched, not that it is this machine's:
+# a caller that writes per-machine data checks AITLIB_MACHINE_OWNER = this.
+# Logs one detail line ("machine profile: alias=.. via=.. key=.. owner=..").
+# Resolver warnings are detail lines here: setup-user-config, the first script
+# of every run, reports them once (a successful step stays OK, D-TS12).
+# Returns 0 resolved, 1 no dotprofile (shared-only), 3 no match or error
+# (log_error + ERROR row "machine profile" + one ACTION per run; callers must not
+# substitute another machine's values; the AITLIB_PROFILE_/AITLIB_IDENTITY_
+# values then hold the identity-level, machine-independent values only).
+resolve_machine_profile() {
+    AITLIB_MACHINE_ALIAS=""; AITLIB_MACHINE_VIA="none"; AITLIB_PROFILE_FILE=""
+    AITLIB_PROFILE_NAME=""; AITLIB_PROFILE_COMPANY=""
+    AITLIB_IDENTITY_GIT_NAME=""; AITLIB_IDENTITY_GIT_EMAIL=""; AITLIB_IDENTITY_GITHUB=""
+    AITLIB_MACHINE_KEY=""; AITLIB_MACHINE_OWNER="absent"; AITLIB_MACHINE_LEGACY=false; AITLIB_MACHINE_HOSTNAME=""
+    local w v note
+    if ! _aitlib_profile_run resolve --environment "$AITOOLS_ENVIRONMENT"; then
+        log_error "machine profile: resolver aitools-profile not found next to aitools-lib.sh"
+        write_summary ERROR "machine profile" "resolver missing"
+        return 3
+    fi
+    AITLIB_MACHINE_ALIAS=$(_aitlib_profile_tag alias)
+    AITLIB_MACHINE_VIA=$(_aitlib_profile_tag via)
+    AITLIB_PROFILE_FILE=$(_aitlib_bash_path "$(_aitlib_profile_tag profileFile)")
+    AITLIB_PROFILE_NAME=$(_aitlib_profile_tag name)
+    AITLIB_PROFILE_COMPANY=$(_aitlib_profile_tag company)
+    AITLIB_IDENTITY_GIT_NAME=$(_aitlib_profile_tag gitName)
+    AITLIB_IDENTITY_GIT_EMAIL=$(_aitlib_profile_tag gitEmail)
+    AITLIB_IDENTITY_GITHUB=$(_aitlib_profile_tag github)
+    AITLIB_MACHINE_KEY=$(_aitlib_profile_tag key)
+    v=$(_aitlib_profile_tag owner); AITLIB_MACHINE_OWNER="${v:-absent}"
+    v=$(_aitlib_profile_tag legacy); if [ "$v" = "true" ]; then AITLIB_MACHINE_LEGACY=true; fi
+    AITLIB_MACHINE_HOSTNAME=$(_aitlib_profile_tag hostname)
+    while IFS= read -r w; do if [ -n "$w" ]; then log_detail "machine profile: $w"; fi; done <<< "$(_aitlib_profile_lines warn)"
+    log_detail "machine profile: alias=${AITLIB_MACHINE_ALIAS:-none} via=${AITLIB_MACHINE_VIA:-none} key=${AITLIB_MACHINE_KEY:-none} owner=$AITLIB_MACHINE_OWNER legacy=$AITLIB_MACHINE_LEGACY company=$AITLIB_PROFILE_COMPANY host=$AITLIB_MACHINE_HOSTNAME id=$(_aitlib_profile_tag machineId)"
+    case "$AITLIB_PROFILE_RC" in
+        0) if [ -n "$AITLIB_MACHINE_ALIAS" ]; then return 0; fi ;;
+        1) log_detail "machine profile: no dotprofile -- shared-only mode"; return 1 ;;
+    esac
+    note=$(_aitlib_exit_note "$AITLIB_PROFILE_RC")
+    while IFS= read -r w; do if [ -n "$w" ]; then log_error "machine profile: $w$note"; fi; done <<< "$(_aitlib_profile_lines error)"
+    if [ -z "$(_aitlib_profile_lines error)" ]; then log_error "machine profile: resolver failed${note:- (exit $AITLIB_PROFILE_RC)}"; fi
+    log_error "machine profile: unresolved -- no other machine's values are used"
+    write_summary ERROR "machine profile" "no machine match"
+    _aitlib_action_once "Run: aitools user init (pick or register this machine's profile)"
+    return 3
+}
+
+# tool_exception_get SLUG -- this machine's recorded tool exception (tree section
+# 8 Reader; call only at T5). Sets AITLIB_TOOL_EXC_FOUND (true/false),
+# AITLIB_TOOL_EXC_PLATFORM, AITLIB_TOOL_EXC_METHOD, AITLIB_TOOL_EXC_PATH,
+# AITLIB_TOOL_EXC_DECIDED_AT. Returns 0 looked up (found or not), 1 store
+# unavailable (one log_warn; treated as no exception; no summary row -- the
+# warning promotes the caller's OK row to WARN). Resolver warnings are detail
+# lines, so a kept tool's OK row is not promoted.
+tool_exception_get() {
+    AITLIB_TOOL_EXC_FOUND=false; AITLIB_TOOL_EXC_PLATFORM=""; AITLIB_TOOL_EXC_METHOD=""
+    AITLIB_TOOL_EXC_PATH=""; AITLIB_TOOL_EXC_DECIDED_AT=""
+    local slug="$1" w reason
+    if ! _aitlib_profile_run exception-get --slug "$slug" --environment "$AITOOLS_ENVIRONMENT"; then
+        log_warn "tool exceptions unavailable (resolver missing)"
+        return 1
+    fi
+    while IFS= read -r w; do if [ -n "$w" ]; then log_detail "tool exceptions: $w"; fi; done <<< "$(_aitlib_profile_lines warn)"
+    if [ "$AITLIB_PROFILE_RC" -ne 0 ]; then
+        reason=$(_aitlib_profile_lines error | perl -ne 'print, exit if /\S/')
+        if [ "$AITLIB_PROFILE_RC" -eq 1 ]; then reason="no dotprofile"; fi
+        log_warn "tool exceptions unavailable (${reason:-resolver failed})$(_aitlib_exit_note "$AITLIB_PROFILE_RC")"
+        return 1
+    fi
+    if [ "$(_aitlib_profile_tag found)" = "true" ]; then
+        AITLIB_TOOL_EXC_FOUND=true
+        AITLIB_TOOL_EXC_PLATFORM=$(_aitlib_profile_tag platform)
+        AITLIB_TOOL_EXC_METHOD=$(_aitlib_profile_tag method)
+        AITLIB_TOOL_EXC_PATH=$(_aitlib_profile_tag path)
+        AITLIB_TOOL_EXC_DECIDED_AT=$(_aitlib_profile_tag decidedAt)
+    fi
+    log_detail "tool exceptions: $slug found=$AITLIB_TOOL_EXC_FOUND profile=$(_aitlib_profile_tag alias) via=$(_aitlib_profile_tag via)"
+    return 0
+}
+
+# tool_exception_record SLUG METHOD PATH VERSION [REASON] -- record a [k]eep
+# decision (tree section 8 Writer; only after [k]eep, never in dry run or
+# non-interactive runs). decidedBy = the calling script's name (SCRIPT_NAME).
+# The resolver writes profile.json and commits and pushes it (N-Q2).
+# Sets AITLIB_TOOL_EXC_RESULT (created|updated|unchanged|dry-run|refused|failed;
+# never empty after the call) and AITLIB_TOOL_EXC_PUSHED (true/false).
+# Returns 0 written or nothing to write (created/updated: a failed commit or
+# push is a log_warn + ACTION "run git push in <dotprofile>",
+# AITLIB_TOOL_EXC_PUSHED=false; unchanged and dry-run write nothing, so they
+# need no push and get no warning), 1 failed, 3 refused (no dotprofile, or the
+# machine profile matched by hostname only or not at all). 3 is log_warn +
+# ACTION "run aitools user init to remember tool choices"; 1 (resolver missing,
+# usage error, crash) is log_warn + ACTION "see deploy.log -- a tool choice
+# (tool exception) was not saved". The tool itself is fine, so no ERROR row
+# (D-TS12).
+tool_exception_record() {
+    AITLIB_TOOL_EXC_PUSHED=false; AITLIB_TOOL_EXC_RESULT=""
+    local slug="$1" method="$2" path="$3" version="$4" reason="${5:-}" w msg
+    local args=(exception-set --slug "$slug" --platform "$AITOOLS_PLATFORM" --method "$method" --path "$path"
+        --version "$version" --by "${SCRIPT_NAME:-unknown}" --environment "$AITOOLS_ENVIRONMENT")
+    if [ -n "$reason" ]; then args+=(--reason "$reason"); fi
+    if ! _aitlib_profile_run "${args[@]}"; then
+        AITLIB_TOOL_EXC_RESULT=failed
+        log_warn "tool exception for $slug not saved (resolver missing)"
+        _aitlib_action_once "see deploy.log -- a tool choice (tool exception) was not saved"
+        return 1
+    fi
+    AITLIB_TOOL_EXC_RESULT=$(_aitlib_profile_tag result)
+    while IFS= read -r w; do if [ -n "$w" ]; then log_detail "tool exceptions: $w"; fi; done <<< "$(_aitlib_profile_lines warn)"
+    case "$AITLIB_PROFILE_RC" in
+        0)
+            if [ "$(_aitlib_profile_tag pushed)" = "true" ]; then
+                AITLIB_TOOL_EXC_PUSHED=true
+                log_detail "tool exceptions: $slug recorded in $(_aitlib_profile_tag profileFile) (committed and pushed)"
+            else
+                case "$AITLIB_TOOL_EXC_RESULT" in
+                    unchanged|dry-run)
+                        log_detail "tool exceptions: $slug $AITLIB_TOOL_EXC_RESULT -- nothing written, nothing to push" ;;
+                    *)
+                        msg=$(_aitlib_profile_lines warn | perl -ne 'print, exit if /commit|push|git repository/')
+                        log_warn "tool exception for $slug saved but not pushed (${msg:-see deploy.log})"
+                        w=$(_aitlib_profile_tag profileFile)
+                        if [ -n "$w" ]; then w=$(dirname "$(_aitlib_bash_path "$w")"); else w="your dotprofile"; fi
+                        _aitlib_action_once "run git push in $w" ;;
+                esac
+            fi
+            return 0 ;;
+        3)
+            AITLIB_TOOL_EXC_RESULT=refused
+            msg=$(_aitlib_profile_lines error | perl -ne 'print, exit if /\S/')
+            log_warn "tool exception for $slug not saved (${msg:-refused})$(_aitlib_exit_note 3)"
+            _aitlib_action_once "run aitools user init to remember tool choices"
+            return 3 ;;
+    esac
+    # 2 (error), 4 (not a result of exception-set) and any other code: failed
+    AITLIB_TOOL_EXC_RESULT=failed
+    msg=$(_aitlib_profile_lines error | perl -ne 'print, exit if /\S/')
+    log_warn "tool exception for $slug not saved (${msg:-resolver failed})$(_aitlib_exit_note "$AITLIB_PROFILE_RC")"
+    _aitlib_action_once "see deploy.log -- a tool choice (tool exception) was not saved"
+    return 1
+}
+
+# ---------------------------------------------------------------------------
+# Child-script log relay to deploy.jsonl (moved from the installers' "install
+# log helpers", PR #89, so installers and deploy-harness share one copy)
+# A parent that runs a child setup script (one that logs through aitools-lib)
+# shows the child's console lines, mirrors each structured line
+# ("[ts] [script] [level] msg") to deploy.jsonl -- the child already wrote it to
+# deploy.log, the lib's log() writes no JSONL -- and counts the child's warnings
+# and errors.
+#   jsonl_record TS SCRIPT LEVEL MSG   append one deploy.jsonl record
+#   relay_child_log TEXT               relay captured child output (all lines)
+#   run_child_relayed LABEL CMD ARGS   run CMD ARGS, relay each line as it comes
+# Results (set by relay_child_log and run_child_relayed, read after the call):
+#   AITLIB_CHILD_WARNINGS  the child's warn lines (the exit footer
+#                          "COMPLETED with N warning(s)" is relayed, not counted)
+#   AITLIB_CHILD_ERRORS    the child's error lines ("FAILED with ..." not counted)
+#   AITLIB_CHILD_RC        run_child_relayed only: the child's exit code
+# Every counted warning also increments WARNINGS (it promotes the parent's OK
+# rows, as the child's own rows are). Errors are not added to ERRORS line by
+# line: run_child_relayed logs one log_error for a failed child.
+# Private caches (JSON-escaped): AITLIB_RUN_ID, AITLIB_JSONL_HOST, AITLIB_JSONL_OS.
+# ---------------------------------------------------------------------------
+
+# _aitlib_json_esc VAR S -- set VAR to S as a JSON string body: backslash, quote,
+# tab and newline escaped, every other control character (CR, ESC colour codes,
+# ...) dropped (no subshell). The record is one valid JSON line when S is valid
+# UTF-8; bytes that are not (e.g. a cp1252 path) are written as they are, as the
+# installers did. bash and PowerShell records are byte-identical for valid UTF-8
+# without U+0085, U+2028 and U+2029 (PowerShell escapes those; bash drops U+0085
+# or keeps it raw depending on the locale).
+_aitlib_json_esc() {
+    local m="$2"
+    m="${m//\\/\\\\}"
+    m="${m//\"/\\\"}"
+    m="${m//$'\t'/\\t}"
+    m="${m//$'\n'/\\n}"
+    m="${m//[[:cntrl:]]/}"
+    printf -v "$1" '%s' "$m"
+}
+
+# _aitlib_jsonl_init -- the host, os and run id fields, computed (and escaped)
+# once per process
+_aitlib_jsonl_init() {
+    local h=""
+    if [ -n "${AITLIB_RUN_ID:-}" ]; then return 0; fi
+    # hostname -s is missing on some Linux images: the -z test falls back
+    if h="$(hostname -s 2>/dev/null)"; then :; else h=""; fi
+    if [ -z "$h" ]; then
+        if h="$(hostname 2>/dev/null)"; then h="${h%%.*}"; else h=""; fi
+    fi
+    _aitlib_json_esc AITLIB_JSONL_HOST "${h:-unknown}"
+    _aitlib_json_esc AITLIB_JSONL_OS "$(uname -s)"
+    if [ -n "${AITOOLS_RUN_ID:-}" ]; then
+        h="$AITOOLS_RUN_ID"
+    else
+        # 6 random bytes as hex, as the installers did; the -z test covers a failure
+        h="$(od -An -N6 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')" || h=""
+    fi
+    _aitlib_json_esc AITLIB_RUN_ID "${h:-$$}"
+}
+
+# jsonl_record TS SCRIPT LEVEL MSG -- append one record to deploy.jsonl in the log
+# directory (logging_init's LOG_DIR). Key order: ts, host, os, script, run_id,
+# level, msg (the installers' order). run_id = AITOOLS_RUN_ID, else one random id
+# per process. A failed write is logged at detail and otherwise ignored: logging
+# must not break the run it records (logging.md section 5).
+jsonl_record() {
+    local f="${LOG_DIR:-$AITOOLS_LOG_DIR}/deploy.jsonl" ts sc lv msg
+    _aitlib_jsonl_init
+    _aitlib_json_esc ts "$1"; _aitlib_json_esc sc "$2"; _aitlib_json_esc lv "$3"; _aitlib_json_esc msg "$4"
+    if ! printf '{"ts":"%s","host":"%s","os":"%s","script":"%s","run_id":"%s","level":"%s","msg":"%s"}\n' \
+        "$ts" "$AITLIB_JSONL_HOST" "$AITLIB_JSONL_OS" "$sc" "$AITLIB_RUN_ID" "$lv" "$msg" >> "$f"; then
+        log_detail "deploy.jsonl: write failed ($f)"
+    fi
+    return 0
+}
+
+# _aitlib_relay_line LINE -- print one child console line, mirror it to
+# deploy.jsonl when it is a structured log line, count its warn/error level
+_aitlib_relay_line() {
+    local line="$1" clean esc=$'\033'
+    local re='^\[([^]]+)\] \[([^]]+)\] \[([a-z]+)\] (.*)$'
+    if [ -z "$line" ]; then return 0; fi
+    printf '%s\n' "$line"
+    clean="${line//$'\r'/}"
+    clean="${clean//"${esc}[31m"/}"
+    clean="${clean//"${esc}[33m"/}"
+    clean="${clean//"${esc}[0m"/}"
+    if [[ "$clean" =~ $re ]]; then
+        jsonl_record "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}" "${BASH_REMATCH[4]}"
+        case "${BASH_REMATCH[4]}" in
+            "COMPLETED with "*|"FAILED with "*) return 0 ;;   # the exit footer restates the counts
+        esac
+        case "${BASH_REMATCH[3]}" in
+            warn)  AITLIB_CHILD_WARNINGS=$((AITLIB_CHILD_WARNINGS + 1)); WARNINGS=$((WARNINGS + 1)) ;;
+            error) AITLIB_CHILD_ERRORS=$((AITLIB_CHILD_ERRORS + 1)) ;;
+        esac
+    fi
+    return 0
+}
+
+# relay_child_log TEXT -- relay the captured console output of a child script,
+# line by line (see the section comment). Sets AITLIB_CHILD_WARNINGS and
+# AITLIB_CHILD_ERRORS. Returns 0.
+relay_child_log() {
+    local line
+    AITLIB_CHILD_WARNINGS=0; AITLIB_CHILD_ERRORS=0
+    while IFS= read -r line || [ -n "$line" ]; do
+        _aitlib_relay_line "$line"
+    done <<< "$1"
+    return 0
+}
+
+# run_child_relayed LABEL CMD [ARGS...] -- run a child script (e.g.
+# run_child_relayed "Step 5: setup-user-config.sh" "${BASH:-bash}" "$writer" ...)
+# and relay its stdout line by line as it arrives, so its log lines show before
+# any prompt it reads from /dev/tty. stdin and stderr are the caller's. CMD runs
+# in a subshell: it must be a separate process (a script), not a function that
+# changes the caller's variables. The child writes its own summary rows. Sets
+# AITLIB_CHILD_RC, AITLIB_CHILD_WARNINGS, AITLIB_CHILD_ERRORS. Returns 0 when the
+# child exited 0 with no error line; otherwise 1 after one log_error naming LABEL
+# (call it as: run_child_relayed ... || rc=$?). No CMD (e.g. an empty array) is
+# a failure, not a no-op. It returns when every process holding the child's
+# stdout has closed it (a background grandchild keeps it waiting).
+run_child_relayed() {
+    local label="$1"; shift
+    local line rcf="" rc=""
+    AITLIB_CHILD_RC=0; AITLIB_CHILD_WARNINGS=0; AITLIB_CHILD_ERRORS=0
+    if [ "$#" -eq 0 ]; then
+        AITLIB_CHILD_RC=1
+        log_error "$label: not run (no command given)"
+        return 1
+    fi
+    if ! rcf="$(mktemp)"; then
+        AITLIB_CHILD_RC=1
+        log_error "$label: not run (mktemp failed)"
+        return 1
+    fi
+    while IFS= read -r line || [ -n "$line" ]; do
+        _aitlib_relay_line "$line"
+    done < <(_aitlib_rc=0; "$@" || _aitlib_rc=$?; printf '%s\n' "$_aitlib_rc" > "$rcf")
+    rc="$(cat "$rcf")" || rc=""
+    rm -f "$rcf"
+    case "$rc" in
+        ''|*[!0-9]*) log_detail "$label: exit code not recorded -- counted as a failure"; rc=1 ;;
+    esac
+    AITLIB_CHILD_RC="$rc"
+    if [ "$rc" -ne 0 ]; then
+        log_error "$label failed (exit $rc) -- see $(display_path "$LOG_FILE")"
+        return 1
+    fi
+    if [ "$AITLIB_CHILD_ERRORS" -gt 0 ]; then
+        log_error "$label logged $AITLIB_CHILD_ERRORS error(s) but exited 0 -- see $(display_path "$LOG_FILE")"
+        return 1
+    fi
+    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -1031,6 +1547,77 @@ _invoke_ai_merge() {
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
+# Review diff shown by prompt_diff_review: LOCAL -> SOURCE, unified format.
+# "-" lines are only on this machine, "+" lines only in the repo, so the diff
+# reads as what [o]verwrite changes here. The hunks come from
+# `git diff --no-index` (the same engine and options as Get-ReviewDiff in
+# aitools-lib.ps1, so bash and PS1 print identical hunks); its own headers are
+# replaced by:
+#   --- this machine  <LOCAL path>
+#   +++ repo          <SOURCE path, or "source (embedded)" when there is none>
+# Spec: reference/managed-file-deployment.md "Diff Mechanism Detail".
+#
+# Args: $1 = LOCAL content, $2 = SOURCE content, $3 = LOCAL path (header),
+#       $4 = SOURCE path (header; "" -> "source (embedded)")
+# Sets REVIEW_DIFF (plain text, no colour; "" when git reports no line
+# difference). Returns 1 when the diff cannot be produced, with the reason in
+# REVIEW_DIFF_ERROR; the caller logs it.
+# ---------------------------------------------------------------------------
+REVIEW_DIFF=""
+REVIEW_DIFF_ERROR=""
+_review_diff() {
+    local cur_content="$1"
+    local new_content="$2"
+    local local_label="$3"
+    local source_label="${4:-}"
+    REVIEW_DIFF=""
+    REVIEW_DIFF_ERROR=""
+    if [ -z "$source_label" ]; then source_label="source (embedded)"; fi
+
+    local tmp_dir
+    if ! tmp_dir=$(mktemp -d); then
+        REVIEW_DIFF_ERROR="could not create a temp directory"
+        return 1
+    fi
+    if ! printf '%s\n' "$cur_content" > "$tmp_dir/local" \
+        || ! printf '%s\n' "$new_content" > "$tmp_dir/source"; then
+        rm -rf "$tmp_dir"
+        REVIEW_DIFF_ERROR="could not write the temp files"
+        return 1
+    fi
+
+    # git diff exits 1 when the files differ (expected) and >1 on error.
+    local raw rc=0 err=""
+    # Pinned so user git config cannot change the hunks (GIT_DIFF_OPTS would
+    # override -U3); --text keeps content with a NUL byte a text diff.
+    raw=$(env -u GIT_DIFF_OPTS git -c core.quotePath=false \
+        -c diff.suppressBlankEmpty=false -c diff.interHunkContext=0 \
+        diff --no-index --no-color --no-ext-diff --no-textconv --text \
+        --diff-algorithm=myers --indent-heuristic -U3 \
+        -- "$tmp_dir/local" "$tmp_dir/source" 2> "$tmp_dir/err") || rc=$?
+    if [ -s "$tmp_dir/err" ]; then err=$(cat "$tmp_dir/err"); fi
+    rm -rf "$tmp_dir"
+    if [ "$rc" -gt 1 ]; then
+        REVIEW_DIFF_ERROR="git diff failed (exit $rc): ${err:-no output}"
+        return 1
+    fi
+
+    # Drop git's own header lines (everything before the first hunk).
+    local hunks
+    hunks=$(printf '%s\n' "$raw" | perl -ne 'print if $seen ||= /^@@ /')
+    if [ -z "$hunks" ]; then return 0; fi
+    REVIEW_DIFF=$(printf -- '--- this machine  %s\n+++ repo          %s\n%s' \
+        "$local_label" "$source_label" "$hunks")
+    return 0
+}
+
+# Colour for the review diff: on unless NO_COLOR is set or TERM is "dumb".
+# Only called on an interactive terminal; the deploy log never gets colour.
+_review_colour() {
+    [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != "dumb" ]
+}
+
+# ---------------------------------------------------------------------------
 # Show SOURCE against LOCAL and ask what to do ("Review choices" above).
 #
 # Args:
@@ -1046,7 +1633,7 @@ _invoke_ai_merge() {
 # Non-interactive, EOF at the prompt, --force / AITOOLS_FORCE: "overwrite".
 # ---------------------------------------------------------------------------
 DIFF_REVIEW_RESULT=""
-_PDR_ADOPT_TARGET=""   # set by deploy_managed_file; shown in the review header only
+_PDR_ADOPT_TARGET=""   # set by deploy_managed_file; display only (+++ header, menu)
 prompt_diff_review() {
     local file_path="$1"
     local new_content="$2"
@@ -1074,47 +1661,78 @@ prompt_diff_review() {
     fi
 
     # Context header
+    # (the diff headers below name both paths)
     printf '\n\033[33m[REVIEW]\033[0m %s differs from source.\n' \
         "$(display_path "$file_path")" > /dev/tty
-    printf '  source = the repo version (would deploy)\n' > /dev/tty
-    printf '  local  = current file on disk\n' > /dev/tty
-    if [ "$adopt_offered" = "1" ] && [ -n "$_PDR_ADOPT_TARGET" ]; then
-        printf '  repo   = %s (adopt target)\n' "$(display_path "$_PDR_ADOPT_TARGET")" > /dev/tty
-    fi
     printf '\n' > /dev/tty
 
-    # Show diff
+    # AI merge input ([m]erge & adopt): SOURCE -> LOCAL diff, unchanged from
+    # before the display change; the display below does not use it.
     local diff_output
     # diff exits 1 on differences (expected), suppress set -e abort
     diff_output=$(diff -u <(printf '%s' "$new_content") <(printf '%s' "$cur_content") \
         --label "source (would deploy)" --label "local (on disk)" 2>&1) || true
-    local diff_lines
-    diff_lines=$(printf '%s\n' "$diff_output" | wc -l | tr -d ' ')
-    if [ "$diff_lines" -le 40 ]; then
-        printf '%s\n' "$diff_output" > /dev/tty
-    else
-        printf '%s\n' "$diff_output" | head -30 > /dev/tty
-        printf '  ... (%d more lines -- full diff in deploy log)\n' \
-            "$((diff_lines - 30))" > /dev/tty
-    fi
-    # Full diff as structured [detail] records at every size (raw appends broke the log format).
-    local diff_line
-    while IFS= read -r diff_line; do
-        log_detail "diff $(basename "$file_path"): $diff_line"
-    done <<< "$diff_output"
 
-    # Menu (parity: Prompt-DiffReview in aitools-lib.ps1). A rejected merge
-    # preview ("menu") shows the menu again.
+    # Show the review diff: LOCAL -> SOURCE (_review_diff). Parity:
+    # Prompt-DiffReview in aitools-lib.ps1 prints the same lines.
+    local use_colour=0
+    if _review_colour; then use_colour=1; fi
+    local adopt_label="the repo"
+    if [ -n "$_PDR_ADOPT_TARGET" ]; then adopt_label=$(display_path "$_PDR_ADOPT_TARGET"); fi
+    local src_label=""
+    if [ -n "$_PDR_ADOPT_TARGET" ]; then src_label="$adopt_label"; fi
+    if [ "$use_colour" = "1" ]; then
+        printf '  \033[31mred -\033[0m = only on this machine   \033[32mgreen +\033[0m = only in the repo\n\n' > /dev/tty
+    else
+        printf '  red - = only on this machine   green + = only in the repo\n\n' > /dev/tty
+    fi
+    local leaf
+    leaf=$(basename "$file_path")
+    if ! _review_diff "$cur_content" "$new_content" "$(display_path "$file_path")" "$src_label"; then
+        log_warn "Review diff unavailable for $(display_path "$file_path"): $REVIEW_DIFF_ERROR"
+        printf '  (diff unavailable -- see deploy log)\n' > /dev/tty
+    elif [ -z "$REVIEW_DIFF" ]; then
+        printf '  (whitespace-only differences)\n' > /dev/tty
+    else
+        local diff_lines shown
+        diff_lines=$(printf '%s\n' "$REVIEW_DIFF" | wc -l | tr -d ' ')
+        shown="$REVIEW_DIFF"
+        if [ "$diff_lines" -gt 40 ]; then
+            # perl reads all of its input: `head` would exit early and make
+            # printf die of SIGPIPE under pipefail on a large diff (> pipe buffer).
+            shown=$(printf '%s\n' "$REVIEW_DIFF" | perl -ne 'print if $. <= 30')
+        fi
+        if [ "$use_colour" = "1" ]; then
+            printf '%s\n' "$shown" \
+                | perl -pe 's/^(-.*)$/\e[31m$1\e[0m/; s/^(\+.*)$/\e[32m$1\e[0m/' > /dev/tty
+        else
+            printf '%s\n' "$shown" > /dev/tty
+        fi
+        if [ "$diff_lines" -gt 40 ]; then
+            printf '  ... (%d more lines -- full diff in deploy log)\n' \
+                "$((diff_lines - 30))" > /dev/tty
+        fi
+        # Full diff as structured [detail] records at every size, plain text
+        # (raw appends broke the log format).
+        local diff_line
+        while IFS= read -r diff_line; do
+            log_detail "diff ${leaf}: $diff_line"
+        done <<< "$REVIEW_DIFF"
+    fi
+
+    # Menu (parity: Prompt-DiffReview in aitools-lib.ps1). Each line says what
+    # the choice does to the lines shown. A rejected merge preview ("menu")
+    # shows the menu again.
     local choice
     while true; do
         printf '\n' > /dev/tty
-        printf '  [o]verwrite      : source wins -> written to local (backup kept)\n' > /dev/tty
+        printf '  [o]verwrite       : this machine gets the green + lines (backup kept)\n' > /dev/tty
         if [ "$adopt_offered" = "1" ]; then
-            printf '  [a]ccept & adopt : local wins -> copied to the repo now\n' > /dev/tty
-            printf '  [m]erge & adopt  : AI merge of source + local -> local and the repo\n' > /dev/tty
+            printf '  [a]ccept & adopt  : the repo gets the red - lines (your version) -> %s\n' "$adopt_label" > /dev/tty
+            printf '  [m]erge & adopt   : AI combines both; written to this machine and %s\n' "$adopt_label" > /dev/tty
         fi
-        printf '  [s]kip           : nothing written; asked again next run\n' > /dev/tty
-        printf '  [x]abort         : stop this script (exit 2)\n' > /dev/tty
+        printf '  [s]kip            : nothing written; asked again next run\n' > /dev/tty
+        printf '  [x]abort          : stop this script (exit 2)\n' > /dev/tty
         if [ "$adopt_offered" = "1" ]; then
             printf '  choice [o/a/m/s/x]: ' > /dev/tty
         else
