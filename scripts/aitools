@@ -273,6 +273,178 @@ fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
     fi
 }
 
+# ---------------------------------------------------------------------------
+# Machine registration for `aitools user init` (reference/user-repo.md
+# "Registration"). The resolver (aitools-profile, through the lib runner) decides
+# which profile this machine is; when it is not registered, the user picks one
+# (numbered aliases, [n]ew, [s]kip; identical in aitools.ps1) or passes --alias.
+# register writes profile.json via temp -> validate -> backup -> move, then only
+# profile.json is committed and pushed (N-Q2).
+# ---------------------------------------------------------------------------
+
+# ui_resolve DIR -- this machine's profile in DIR/profile.json. Sets UI_ALIAS and
+# UI_VIA (none when nothing matched). --alias (user_alias) is passed as override.
+ui_resolve() {
+    local dir="$1"
+    UI_ALIAS=""; UI_VIA="none"
+    local args=(resolve --profile "$(display_path "$dir/profile.json")" --environment "$AITOOLS_ENVIRONMENT")
+    if [ -n "$user_alias" ]; then args+=(--alias "$user_alias"); fi
+    if ! _aitools_profile_run "${args[@]}"; then
+        log_error "machine profile: resolver aitools-profile not found in $(display_path "$repo_path/scripts")"
+        return 0
+    fi
+    UI_ALIAS=$(_profile_tag alias)
+    UI_VIA=$(_profile_tag via)
+    if [ -z "$UI_ALIAS" ]; then UI_VIA="none"; fi
+    local e
+    while IFS= read -r e; do if [ -n "$e" ]; then log_detail "machine profile: $e"; fi; done <<< "$(_profile_lines error)"
+    log "machine profile: alias=${UI_ALIAS:-none} via=$UI_VIA"
+}
+
+# ui_choose DIR SUGGESTED -- ask which profile this machine is. Sets machine_alias
+# (empty on skip). Returns 0 chosen, 1 skipped or not possible (logged).
+ui_choose() {
+    local dir="$1" suggested="$2" aliases=() a i choice keys
+    machine_alias=""
+    keys=$(perl "$repo_path/scripts/aitools-json.pl" keys "$dir/profile.json" profiles) || keys=""  # unreadable = no aliases (checked below)
+    while IFS= read -r a; do if [ -n "$a" ]; then aliases+=("$a"); fi; done <<< "$keys"
+    if [ "${AITOOLS_FORCE:-}" = "1" ] || ! tty_interactive; then
+        log_error "No registered machine profile for this machine and no terminal to ask -- run 'aitools user init' interactively, or 'aitools user init --alias <alias>'"
+        write_summary ERROR "machine profile" "not registered"
+        write_summary ACTION "" "Run: aitools user init --alias <alias>"
+        return 1
+    fi
+    printf 'Which profile is this machine?\n' > /dev/tty
+    i=1
+    for a in ${aliases[@]+"${aliases[@]}"}; do
+        if [ "$a" = "$suggested" ]; then printf '  [%d] %s (suggested)\n' "$i" "$a" > /dev/tty
+        else printf '  [%d] %s\n' "$i" "$a" > /dev/tty; fi
+        i=$((i + 1))
+    done
+    printf '  [n] new profile for this machine\n  [s] skip\nChoice: ' > /dev/tty
+    read_tty_choice choice "skip"
+    case "$choice" in
+        [sS]|"")
+            log_warn "machine profile: registration skipped -- deploys will report no machine match"
+            return 1 ;;
+        [nN])
+            printf 'New alias (e.g., laptop, workstation): ' > /dev/tty
+            read_tty_choice machine_alias "skip"
+            if [ -z "$machine_alias" ]; then log_warn "machine profile: no alias entered -- registration skipped"; return 1; fi ;;
+        *)
+            if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#aliases[@]}" ]; then
+                machine_alias="${aliases[$((choice - 1))]}"
+            else
+                log_warn "machine profile: invalid choice '$choice' -- registration skipped"; return 1
+            fi ;;
+    esac
+    return 0
+}
+
+# ui_commit DIR MESSAGE -- commit only profile.json and push (N-Q2); failures warn
+ui_commit() {
+    local dir="$1" msg="$2" out rc=0 who=() gname gmail cur_name cur_mail
+    # No git identity on this machine yet: commit as the profile's identity.git
+    cur_name=$(git -C "$dir" config user.name) || cur_name=""  # unset = exit 1; handled by the -z test
+    cur_mail=$(git -C "$dir" config user.email) || cur_mail=""  # unset = exit 1; handled by the -z test
+    if [ -z "$cur_name" ] || [ -z "$cur_mail" ]; then
+        gname=$(perl "$repo_path/scripts/aitools-json.pl" get "$dir/profile.json" identity git name) || gname=""  # absent = git's own error below
+        gmail=$(perl "$repo_path/scripts/aitools-json.pl" get "$dir/profile.json" identity git email) || gmail=""  # absent = git's own error below
+        if [ -n "$gname" ] && [ -n "$gmail" ]; then who=(-c "user.name=$gname" -c "user.email=$gmail"); fi
+    fi
+    out=$(git -C "$dir" add -- profile.json 2>&1) || rc=$?
+    if [ "$rc" -eq 0 ]; then out=$(git -C "$dir" ${who[@]+"${who[@]}"} commit -m "$msg" -- profile.json 2>&1) || rc=$?; fi
+    if [ "$rc" -ne 0 ]; then
+        log_detail "git: $out"
+        log_warn "machine profile: dotprofile commit failed (exit $rc) -- commit profile.json in $(display_path "$dir") by hand"
+        write_summary ACTION "" "commit and push profile.json in $(display_path "$dir")"
+        return 0
+    fi
+    rc=0
+    out=$(GIT_TERMINAL_PROMPT=0 git -C "$dir" push 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        log_detail "git push: $out"
+        log_warn "machine profile: push failed (exit $rc) -- run git push in $(display_path "$dir")"
+        write_summary ACTION "" "run git push in $(display_path "$dir")"
+        return 0
+    fi
+    log_ok "machine profile: profile.json committed and pushed"
+}
+
+# ui_register DIR ALIAS NAME COMPANY EMAIL COMMIT -- register this machine under
+# ALIAS (creating profile.json when missing). COMMIT=true commits and pushes.
+# Returns 0 registered or already registered, 1 failed (logged + ERROR row).
+ui_register() {
+    local dir="$1" alias="$2" name="$3" company="$4" email="$5" commit="$6" pf tmp result e
+    pf="$dir/profile.json"; tmp="$pf.tmp.$$"
+    local args=(register --profile "$(display_path "$pf")" --alias "$alias" --out "$(display_path "$tmp")"
+        --shell "$(basename "${SHELL:-/bin/bash}")" --environment "$AITOOLS_ENVIRONMENT")
+    if [ -n "$name" ]; then args+=(--name "$name"); fi
+    if [ -n "$company" ]; then args+=(--company "$company"); fi
+    if [ ! -f "$pf" ]; then args+=(--create --github-user "$gh_user" --email "$email"); fi
+    if ! _aitools_profile_run "${args[@]}"; then
+        log_error "machine profile: resolver aitools-profile not found in $(display_path "$repo_path/scripts")"
+        write_summary ERROR "machine profile" "resolver missing"
+        return 1
+    fi
+    if [ "$PROFILE_RC" -ne 0 ]; then
+        rm -f "$tmp"
+        e=$(_profile_lines error | perl -ne 'print, exit if /\S/')
+        log_error "machine profile: register '$alias' failed (exit $PROFILE_RC): ${e:-see deploy.log}"
+        write_summary ERROR "machine profile" "register failed"
+        return 1
+    fi
+    result=$(_profile_tag result)
+    if [ "$result" = "unchanged" ]; then
+        rm -f "$tmp"
+        log_ok "machine profile: '$alias' is already registered to this machine"
+        return 0
+    fi
+    if ! perl "$repo_path/scripts/aitools-json.pl" check "$tmp"; then
+        rm -f "$tmp"
+        log_error "machine profile: register '$alias' wrote an invalid file -- profile.json left untouched"
+        write_summary ERROR "machine profile" "register validation failed"
+        return 1
+    fi
+    backup_file "$pf"
+    if ! mv "$tmp" "$pf"; then
+        rm -f "$tmp"
+        log_error "machine profile: could not replace $(display_path "$pf")"
+        write_summary ERROR "machine profile" "write failed"
+        return 1
+    fi
+    log_ok "machine profile: registered this machine as '$alias' ($result, id $(_profile_tag machineId))"
+    if [ "$commit" = "true" ] && [ -d "$dir/.git" ]; then ui_commit "$dir" "Register machine profile: $alias"; fi
+    return 0
+}
+
+# ui_register_flow DIR COMMIT -- resolve, ask when not registered, register
+ui_register_flow() {
+    local dir="$1" commit="$2" name="" company=""
+    ui_resolve "$dir"
+    case "$UI_VIA" in
+        id|environment)
+            machine_alias="$UI_ALIAS"
+            log_ok "machine profile: this machine is '$machine_alias' (via $UI_VIA)"
+            # Refresh machine facts (shell, os, arch) without changing the match
+            ui_register "$dir" "$machine_alias" "" "" "" "$commit" || true  # failure logged + summarized inside
+            return 0 ;;
+        override)
+            machine_alias="$UI_ALIAS" ;;
+        *)
+            if ! ui_choose "$dir" "$UI_ALIAS"; then machine_alias=""; return 0; fi ;;
+    esac
+    if tty_interactive && [ "${AITOOLS_FORCE:-}" != "1" ] \
+        && [ -z "$(perl "$repo_path/scripts/aitools-json.pl" type "$dir/profile.json" profiles "$machine_alias" || true)" ]; then  # absent alias = a new profile (result checked: empty)
+        printf 'Display name for %s (Enter = identity name): ' "$machine_alias" > /dev/tty
+        read_tty_choice name "identity name"
+        printf 'Company for %s (Enter = identity company): ' "$machine_alias" > /dev/tty
+        read_tty_choice company "identity company"
+    fi
+    ui_register "$dir" "$machine_alias" "$name" "$company" "" "$commit" || machine_alias=""  # failure logged + summarized inside
+    return 0
+}
+
 # Version string from a git repo using tag-based scheme.
 # v0.14.0              → 0.14.0       (on tag exactly)
 # v0.14.0-5-gabcdef    → 0.14.0+5    (5 commits ahead of tag)
@@ -311,7 +483,7 @@ deploy_configs() {
                 log_error "pwsh (PowerShell 7) not found. Install: winget install --id Microsoft.PowerShell --source winget"
                 return 1
             fi
-            local deploy_scripts="setup-user-claude.ps1 setup-user-mcp.ps1 setup-user-skills.ps1 setup-cursor-ide-mcp.ps1 setup-user-cursor.ps1 setup-user-settings.ps1 setup-user-hooks.ps1"
+            local deploy_scripts="setup-user-config.ps1 setup-user-claude.ps1 setup-user-mcp.ps1 setup-user-skills.ps1 setup-cursor-ide-mcp.ps1 setup-user-cursor.ps1 setup-user-settings.ps1 setup-user-hooks.ps1"
             for script in $deploy_scripts; do
                 local script_path="$script_dir/$script"
                 if [ -f "$script_path" ]; then
@@ -354,7 +526,7 @@ deploy_configs() {
             done
             ;;
         *)
-            local deploy_scripts="setup-user-claude.sh setup-user-mcp.sh setup-user-skills.sh setup-cursor-ide-mcp.sh setup-user-cursor.sh setup-user-settings.sh setup-user-hooks.sh"
+            local deploy_scripts="setup-user-config.sh setup-user-claude.sh setup-user-mcp.sh setup-user-skills.sh setup-cursor-ide-mcp.sh setup-user-cursor.sh setup-user-settings.sh setup-user-hooks.sh"
             for script in $deploy_scripts; do
                 local script_path="$script_dir/$script"
                 if [ -f "$script_path" ]; then
@@ -504,7 +676,8 @@ Commands:
   install              Full setup: pull + rebuild + install tools + deploy configs
                        (install Step 22 / deploy: relay → Cursor AGENTS.md mirror)
   mcp                  Show MCP server status for current project
-  user init            Set up user repo and configure session archiving hook
+  user init            Set up user repo, register this machine's profile, configure session archiving hook
+  user init --alias A  Same, registering this machine as profile A without a prompt
   sessions list [proj] List archived sessions (optionally filter by project)
   sessions archive ID  Manually archive a session by ID (full or prefix)
   sessions move F proj Refile an archived session under a different project
@@ -544,6 +717,7 @@ addmcp_seen=false
 addmcp_servers=()
 dry_run=false
 force=false
+user_alias=""
 passthrough=()
 
 # Capture original args before the parse loop consumes them (shift). The
@@ -557,6 +731,13 @@ while [[ $# -gt 0 ]]; do
         --help|-h)    show_help=true; shift ;;
         --dry-run)    dry_run=true; shift ;;
         --force)      force=true; shift ;;
+        --alias)
+            # aitools user init --alias <alias>: register this machine without a prompt (P-Q12)
+            if [[ $# -lt 2 || "$2" =~ ^-- ]]; then
+                printf 'aitools: --alias needs a value\n' >&2
+                return 1
+            fi
+            user_alias="$2"; shift 2 ;;
         install)      do_install=true; shift ;;
         gitpull)
             do_gitpull=true; shift
@@ -980,25 +1161,6 @@ if $do_user; then
                 # --- Path 1: local repo already exists ---
                 echo "User repo already exists: $(display_path "$user_repo_dir")"
 
-                # Detect machineAlias from profile.json by hostname match
-                if command -v node &>/dev/null && [ -f "$user_repo_dir/profile.json" ]; then
-                    machine_alias=$(node -e "
-const fs = require('fs'), os = require('os');
-try {
-    const p = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
-    if (p.version === 2 && p.profiles) {
-        const host = os.hostname().split('.')[0];
-        for (const [alias, prof] of Object.entries(p.profiles)) {
-            if (prof.machine && prof.machine.hostname.split('.')[0] === host) {
-                console.log(alias);
-                break;
-            }
-        }
-    }
-} catch {}
-" "$user_repo_dir/profile.json" 2>/dev/null)
-                fi
-
                 # Detect v1 profile and offer migration
                 if command -v node &>/dev/null && [ -f "$user_repo_dir/profile.json" ]; then
                     local prof_version
@@ -1013,6 +1175,11 @@ try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));conso
                             migrate_profile_v1_to_v2 "$check_result"
                         fi
                     fi
+                fi
+
+                # Resolve this machine's profile; ask (or take --alias) when it is not registered
+                if [ -f "$user_repo_dir/profile.json" ]; then
+                    ui_register_flow "$user_repo_dir" true
                 fi
 
             elif command -v gh &>/dev/null && gh repo view "$gh_user/$repo_name" --json name &>/dev/null; then
@@ -1036,76 +1203,16 @@ try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));conso
                     fi
                 fi
 
-                # Check if machine profile needs adding (v2 schema)
-                if command -v node &>/dev/null && [ -f "$user_repo_dir/profile.json" ]; then
-                    # Read defaults from existing profile
-                    profile_defaults=$(node -e "
-const fs = require('fs');
-try {
-    const p = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
-    const ident = p.identity || {};
-    const firstProf = Object.values(p.profiles || {})[0] || {};
-    console.log((ident.git && ident.git.name) || firstProf.name || '');
-    console.log(firstProf.company || '');
-    console.log((ident.git && ident.git.email) || '');
-} catch (e) { if (e.code !== 'ENOENT') console.error('Warning: could not read profile: ' + e.message); }
-" "$user_repo_dir/profile.json" 2>/dev/null)
-                    default_name=$(echo "$profile_defaults" | sed -n '1p')
-                    default_company=$(echo "$profile_defaults" | sed -n '2p')
-                    default_email=$(echo "$profile_defaults" | sed -n '3p')
-
-                    printf "Machine alias (e.g., laptop, workstation): "
-                    read -r machine_alias < /dev/tty
-
-                    if [ -n "$machine_alias" ]; then
-                        printf "Display name [%s]: " "${default_name:-$(whoami)}"
-                        read -r prof_name < /dev/tty
-                        prof_name="${prof_name:-${default_name:-$(whoami)}}"
-
-                        printf "Company [%s]: " "${default_company:-}"
-                        read -r prof_company < /dev/tty
-                        prof_company="${prof_company:-$default_company}"
-
-                        shell_name=$(basename "${SHELL:-/bin/bash}")
-
-                        node -e "
-const fs = require('fs'), os = require('os');
-const pf = process.argv[1], alias = process.argv[2];
-try {
-    const p = JSON.parse(fs.readFileSync(pf, 'utf8'));
-    if (p.version === 2 && !p.profiles[alias]) {
-        p.profiles[alias] = {
-            name: process.argv[3],
-            company: process.argv[4],
-            machine: {
-                hostname: os.hostname(),
-                os: process.platform,
-                arch: process.arch,
-                shell: process.argv[5]
-            }
-        };
-        fs.writeFileSync(pf, JSON.stringify(p, null, 2) + '\n');
-        console.log('Added machine profile: ' + alias);
-    } else if (p.version === 2 && p.profiles[alias]) {
-        console.log('Machine profile already exists: ' + alias);
-    }
-} catch(e) { console.error('warning: could not update profile: ' + e.message); }
-" "$user_repo_dir/profile.json" "$machine_alias" "$prof_name" "$prof_company" "$shell_name"
-                    fi
-
-                    # Set git identity from profile
+                # Git identity for this clone from the profile (so the commits below work
+                # on a fresh machine), then resolve this machine and ask when unregistered
+                if [ -f "$user_repo_dir/profile.json" ]; then
+                    default_name=$(perl "$repo_path/scripts/aitools-json.pl" get "$user_repo_dir/profile.json" identity git name) || default_name=""  # absent = keep git's own identity
+                    default_email=$(perl "$repo_path/scripts/aitools-json.pl" get "$user_repo_dir/profile.json" identity git email) || default_email=""  # absent = keep git's own identity
                     if [ -n "$default_name" ] && [ -n "$default_email" ]; then
                         git -C "$user_repo_dir" config user.name "$default_name"
                         git -C "$user_repo_dir" config user.email "$default_email"
                     fi
-
-                    # Commit and push if profile was modified
-                    if [ -n "$(git -C "$user_repo_dir" status --porcelain)" ]; then
-                        git -C "$user_repo_dir" add -A
-                        git -C "$user_repo_dir" commit -m "Add machine profile: ${machine_alias}"
-                        git -C "$user_repo_dir" push
-                        echo "Profile updated and pushed."
-                    fi
+                    ui_register_flow "$user_repo_dir" true
                 fi
 
             else
@@ -1124,37 +1231,16 @@ try {
                 printf "Company: "
                 read -r prof_company < /dev/tty
 
-                printf "Machine alias (e.g., laptop, workstation): "
-                read -r machine_alias < /dev/tty
+                machine_alias="$user_alias"
+                if [ -z "$machine_alias" ]; then
+                    printf "Machine alias (e.g., laptop, workstation): "
+                    read -r machine_alias < /dev/tty
+                fi
+                machine_alias="${machine_alias:-default}"
 
-                shell_name=$(basename "${SHELL:-/bin/bash}")
-
-                # Create v2 profile.json
-                node -e "
-const fs = require('fs'), os = require('os');
-const profile = {
-    version: 2,
-    identity: {
-        github: process.argv[3],
-        email: process.argv[2],
-        git: { name: process.argv[1], email: process.argv[2] }
-    },
-    profiles: {}
-};
-const alias = process.argv[6] || 'default';
-profile.profiles[alias] = {
-    name: process.argv[1],
-    company: process.argv[4],
-    machine: {
-        hostname: os.hostname(),
-        os: process.platform,
-        arch: process.arch,
-        shell: process.argv[5]
-    }
-};
-fs.writeFileSync(process.argv[7], JSON.stringify(profile, null, 2) + '\n');
-" "$prof_name" "$prof_email" "$gh_user" "$prof_company" "$shell_name" \
-  "$machine_alias" "$user_repo_dir/profile.json"
+                # Create the v2 profile.json with this machine registered (identity
+                # name/company are the defaults for every machine; committed below)
+                ui_register "$user_repo_dir" "$machine_alias" "$prof_name" "$prof_company" "$prof_email" false || machine_alias=""  # failure logged + summarized inside
 
                 # Create .gitattributes
                 printf '* text=auto eol=lf\n*.jsonl text eol=lf\n' > "$user_repo_dir/.gitattributes"
@@ -1201,46 +1287,56 @@ fs.writeFileSync(process.argv[7], JSON.stringify(profile, null, 2) + '\n');
                 fi
             fi
 
-            # Write userRepoPath and machineAlias to config
-            if command -v node &>/dev/null; then
-                node -e "
-const fs = require('fs');
-const f = process.argv[1];
-let cfg = {};
-try { cfg = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + f + ' is invalid JSON, starting with empty config'); }
-cfg.userRepoPath = process.argv[2];
-if (process.argv[3]) cfg.machineAlias = process.argv[3];
-fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
-
-// Post-write validation
-const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
-const _missing = ['version','reposPath','userRepoPath'].filter(k => !(k in _v));
-if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
-" "$config" "$user_repo_dir" "${machine_alias:-}"
-                echo "Config updated: userRepoPath = $(display_path "$user_repo_dir")"
-                if [ -n "${machine_alias:-}" ]; then
-                    echo "Config updated: machineAlias = $machine_alias"
-                fi
+            # config.json has one writer (setup-user-config): GitHub user, dotprofile
+            # path and the chosen alias; the writer derives and validates the rest
+            writer_rc=0
+            case "$(uname -s)" in
+                MINGW*|MSYS*|CYGWIN*)
+                    writer_args=(-GithubUser "$gh_user" -UserRepoPath "$(cygpath -w "$user_repo_dir")")
+                    if [ -n "${machine_alias:-}" ]; then writer_args+=(-MachineAlias "$machine_alias"); fi
+                    pwsh -NoProfile -ExecutionPolicy Bypass \
+                        -File "$(cygpath -w "$repo_path/scripts/setup-user-config.ps1")" "${writer_args[@]}" || writer_rc=$?
+                    ;;
+                *)
+                    writer_args=(--github-user "$gh_user" --user-repo-path "$user_repo_dir")
+                    if [ -n "${machine_alias:-}" ]; then writer_args+=(--machine-alias "$machine_alias"); fi
+                    bash "$repo_path/scripts/setup-user-config.sh" "${writer_args[@]}" || writer_rc=$?
+                    ;;
+            esac
+            if [ "$writer_rc" -ne 0 ]; then
+                log_error "user init: setup-user-config failed (exit $writer_rc) -- see $LOG_DISPLAY"
             fi
 
-            # Deploy session archive hook
+            # Deploy session archive hook. Exit 2 = the user aborted in the review
+            # menu (D-TS13): stop with exit 2; any other failure is logged.
             echo ""
             echo "Deploying session archive hook..."
+            hook_rc=0
             case "$(uname -s)" in
                 MINGW*|MSYS*|CYGWIN*)
                     hook_setup="$repo_path/scripts/setup-user-hooks.ps1"
                     if [ -f "$hook_setup" ]; then
                         pwsh -NoProfile -ExecutionPolicy Bypass \
-                            -File "$(cygpath -w "$hook_setup")"
+                            -File "$(cygpath -w "$hook_setup")" || hook_rc=$?
                     fi
                     ;;
                 *)
                     hook_setup="$repo_path/scripts/setup-user-hooks.sh"
                     if [ -f "$hook_setup" ]; then
-                        bash "$hook_setup"
+                        bash "$hook_setup" || hook_rc=$?
                     fi
                     ;;
             esac
+            if [ "$hook_rc" -eq 2 ]; then
+                echo ""
+                echo "aborted by user"
+                return 2
+            fi
+            if [ "$hook_rc" -ne 0 ]; then
+                log_error "user init: $(basename "$hook_setup") failed (exit $hook_rc) -- see $LOG_DISPLAY"
+                return 1
+            fi
+            if [ "$writer_rc" -ne 0 ]; then return 1; fi
 
             echo ""
             echo "Done. Sessions will be archived to $(display_path "$user_repo_dir/sessions/")"

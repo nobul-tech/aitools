@@ -113,7 +113,9 @@ if (profile.version !== 2) {
 // --- v2 validation ---
 const issues = [];
 const machineAlias = config.machineAlias || '';
-const hostname = os.hostname().split('.')[0];
+// Machine matching is the native resolver's job (scripts/aitools-profile.sh /
+// .ps1; reported by setup-user-config on every run). os.hostname() is the
+// DNS/DHCP-derived kernel name and is never used (P-Q5).
 
 // Identity checks
 if (!profile.identity) {
@@ -136,47 +138,15 @@ if (!profile.identity) {
 // Profiles checks
 if (!profile.profiles || Object.keys(profile.profiles).length === 0) {
     issues.push({ code: 'NO_PROFILES', message: 'No machine profiles defined', fix: 'prompt' });
-} else {
-    // Check for hostname match
-    let matchedAlias = '';
-    for (const [alias, prof] of Object.entries(profile.profiles)) {
-        if (prof.machine && prof.machine.hostname && prof.machine.hostname.split('.')[0] === hostname) {
-            matchedAlias = alias;
-            break;
-        }
-    }
-    if (!matchedAlias) {
-        issues.push({ code: 'NO_MACHINE_MATCH', message: 'No profile matches this machine (hostname: ' + hostname + ')', fix: 'prompt' });
-    }
-
-    // Check config alias consistency
-    if (machineAlias && !profile.profiles[machineAlias]) {
-        issues.push({
-            code: 'ALIAS_MISMATCH',
-            message: 'machineAlias "' + machineAlias + '" in config.json not found in profiles (available: ' + Object.keys(profile.profiles).join(', ') + ')',
-            fix: 'prompt'
-        });
-    }
 }
 
 // Build result
-const matchedAlias = (() => {
-    if (!profile.profiles) return '';
-    for (const [alias, prof] of Object.entries(profile.profiles)) {
-        if (prof.machine && prof.machine.hostname && prof.machine.hostname.split('.')[0] === hostname) {
-            return alias;
-        }
-    }
-    return '';
-})();
-
 const status = issues.length === 0 ? 'ok' : 'warn';
 
 output({
     status: status,
     version: 2,
     profilePath: profilePath,
-    machineAlias: machineAlias || matchedAlias,
-    machineMatched: !!matchedAlias,
+    machineAlias: machineAlias,
     issues: issues
 });

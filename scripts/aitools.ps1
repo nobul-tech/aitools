@@ -15,6 +15,7 @@ param(
     [switch]$SkipGhAuth,
     [string]$ReposPath,
     [switch]$SkipDriveDetection,
+    [string]$Alias,
     [Parameter(ValueFromRemainingArguments)]
     [string[]]$Remaining
 )
@@ -295,7 +296,7 @@ function Get-RepoVersion {
 # Deploy all config scripts from the repo's scripts/ directory.
 function Deploy-Configs {
     param([string]$ScriptDir)
-    $deployScripts = @("setup-user-claude.ps1", "setup-user-mcp.ps1", "setup-user-skills.ps1", "setup-cursor-ide-mcp.ps1", "setup-user-cursor.ps1", "setup-user-settings.ps1", "setup-user-hooks.ps1")
+    $deployScripts = @("setup-user-config.ps1", "setup-user-claude.ps1", "setup-user-mcp.ps1", "setup-user-skills.ps1", "setup-cursor-ide-mcp.ps1", "setup-user-cursor.ps1", "setup-user-settings.ps1", "setup-user-hooks.ps1")
     $errors = 0
     $env:AITOOLS_DEPLOY = "1"
     if ($DryRun) { $env:AITOOLS_DRY_RUN = "1" }
@@ -489,7 +490,8 @@ Commands:
                        --patch: bump patch (v0.14.0 -> v0.14.1) instead of minor
   install              Full setup: pull + rebuild + install tools + deploy configs
   mcp                  Show MCP server status for current project
-  user init            Set up user repo and configure session archiving hook
+  user init            Set up user repo, register this machine's profile, configure session archiving hook
+  user init --alias A  Same, registering this machine as profile A without a prompt
   sessions list [proj] List archived sessions (optionally filter by project)
   sessions archive ID  Manually archive a session by ID (full or prefix)
   sessions move F proj Refile an archived session under a different project
@@ -533,6 +535,18 @@ if ($doGitpull) {
         $gitpullPatch = $true
         $Remaining = @($Remaining | Where-Object { $_ -ne "--patch" })
     }
+}
+
+# aitools user init --alias <alias> / -Alias <alias>: register this machine without a prompt (P-Q12)
+$script:UserAlias = $Alias
+if ($Remaining -and $Remaining -contains "--alias") {
+    $ix = [array]::IndexOf($Remaining, "--alias")
+    if ($ix + 1 -ge $Remaining.Count -or $Remaining[$ix + 1] -like "--*") {
+        [Console]::Error.WriteLine("aitools: --alias needs a value")
+        exit 1
+    }
+    $script:UserAlias = $Remaining[$ix + 1]
+    $Remaining = @($Remaining | Select-Object -First $ix) + @($Remaining | Select-Object -Skip ($ix + 2))
 }
 
 # Extract subcommand and remaining args for user/sessions
@@ -632,6 +646,8 @@ if (-not (Test-Path $aitoolsLib)) {
     exit 1
 }
 . $aitoolsLib
+$aitoolsJson = Join-Path $repoPath "scripts" "aitools-json.ps1"
+if (Test-Path $aitoolsJson) { . $aitoolsJson }
 Initialize-Logging "aitools"
 foreach ($note in $preLibNotes) { Log $note }
 foreach ($w in $preLibWarnings) { LogWarn $w }
@@ -868,6 +884,201 @@ fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
 }
 
 # ---------------------------------------------------------------------------
+# Machine registration for `aitools user init` (reference/user-repo.md
+# "Registration"). The resolver (aitools-profile.ps1, through the lib runner)
+# decides which profile this machine is; when it is not registered, the user
+# picks one (numbered aliases, [n]ew, [s]kip; identical in scripts/aitools) or
+# passes -Alias / --alias. register writes profile.json via temp -> validate ->
+# backup -> move, then only profile.json is committed and pushed (N-Q2).
+# Functions return only their declared value; console output uses [Console].
+# ---------------------------------------------------------------------------
+
+# Invoke-UiResolve DIR -- this machine's profile in DIR\profile.json. Sets
+# $script:UiAlias and $script:UiVia (none when nothing matched).
+function Invoke-UiResolve([string]$Dir) {
+    $script:UiAlias = ""; $script:UiVia = "none"
+    $a = @("resolve", "--profile", (Join-Path $Dir "profile.json"), "--environment", $script:AitoolsEnvironment)
+    if ($script:UserAlias) { $a += @("--alias", $script:UserAlias) }
+    if (-not (Invoke-AitoolsProfile $a)) {
+        LogError "machine profile: resolver aitools-profile.ps1 not found in $(Join-Path $repoPath 'scripts')"
+        return
+    }
+    $script:UiAlias = Get-ProfileTag "alias"
+    $script:UiVia = Get-ProfileTag "via"
+    if (-not $script:UiAlias) { $script:UiVia = "none" }
+    foreach ($e in (Get-ProfileLines "error")) { LogDetail "machine profile: $e" }
+    $shown = if ($script:UiAlias) { $script:UiAlias } else { "none" }
+    Log "machine profile: alias=$shown via=$($script:UiVia)"
+}
+
+# Read-UiChoice DIR SUGGESTED -- ask which profile this machine is. Returns the
+# chosen alias, or "" on skip / not possible (logged).
+function Read-UiChoice([string]$Dir, [string]$Suggested) {
+    $r = Read-JsonFile (Join-Path $Dir "profile.json")
+    $aliases = @()
+    if ($r.State -eq "valid") { $aliases = @(Get-JKeys $r.Value @("profiles")) }
+    if ($env:AITOOLS_FORCE -eq "1" -or -not (Test-InteractiveConsole)) {
+        LogError "No registered machine profile for this machine and no terminal to ask -- run 'aitools user init' interactively, or 'aitools user init --alias <alias>'"
+        Write-Summary "ERROR" "machine profile" "not registered"
+        Write-Summary "ACTION" "" "Run: aitools user init --alias <alias>"
+        return ""
+    }
+    [Console]::WriteLine("Which profile is this machine?")
+    for ($i = 0; $i -lt $aliases.Count; $i++) {
+        if ($aliases[$i] -ceq $Suggested) { [Console]::WriteLine("  [$($i + 1)] $($aliases[$i]) (suggested)") }
+        else { [Console]::WriteLine("  [$($i + 1)] $($aliases[$i])") }
+    }
+    [Console]::WriteLine("  [n] new profile for this machine")
+    [Console]::WriteLine("  [s] skip")
+    [Console]::Write("Choice: ")
+    $choice = Read-ConsoleChoice "skip"
+    if (-not $choice -or $choice -match '^[sS]$') {
+        LogWarn "machine profile: registration skipped -- deploys will report no machine match"
+        return ""
+    }
+    if ($choice -match '^[nN]$') {
+        [Console]::Write("New alias (e.g., laptop, workstation): ")
+        $new = Read-ConsoleChoice "skip"
+        if (-not $new) { LogWarn "machine profile: no alias entered -- registration skipped"; return "" }
+        return $new
+    }
+    if ($choice -match '^[0-9]+$' -and [int]$choice -ge 1 -and [int]$choice -le $aliases.Count) {
+        return $aliases[[int]$choice - 1]
+    }
+    LogWarn "machine profile: invalid choice '$choice' -- registration skipped"
+    return ""
+}
+
+# Invoke-UiCommit DIR MESSAGE -- commit only profile.json and push (N-Q2); failures warn
+function Invoke-UiCommit([string]$Dir, [string]$Message) {
+    $who = @()
+    $curName = (& git -C $Dir config user.name 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) { $curName = "" }   # unset = exit 1
+    $curMail = (& git -C $Dir config user.email 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) { $curMail = "" }   # unset = exit 1
+    if (-not $curName -or -not $curMail) {
+        $r = Read-JsonFile (Join-Path $Dir "profile.json")
+        if ($r.State -eq "valid") {
+            $gname = Get-JText $r.Value @("identity", "git", "name")
+            $gmail = Get-JText $r.Value @("identity", "git", "email")
+            if ($gname -and $gmail) { $who = @("-c", "user.name=$gname", "-c", "user.email=$gmail") }
+        }
+    }
+    $out = (& git -C $Dir add -- profile.json 2>&1 | Out-String).Trim()
+    $rc = $LASTEXITCODE
+    if ($rc -eq 0) {
+        $out = (& git -C $Dir @who commit -m $Message -- profile.json 2>&1 | Out-String).Trim()
+        $rc = $LASTEXITCODE
+    }
+    if ($rc -ne 0) {
+        LogDetail "git: $out"
+        LogWarn "machine profile: dotprofile commit failed (exit $rc) -- commit profile.json in $Dir by hand"
+        Write-Summary "ACTION" "" "commit and push profile.json in $Dir"
+        return
+    }
+    $prev = $env:GIT_TERMINAL_PROMPT
+    try {
+        $env:GIT_TERMINAL_PROMPT = "0"
+        $out = (& git -C $Dir push 2>&1 | Out-String).Trim()
+        $rc = $LASTEXITCODE
+    } finally {
+        $env:GIT_TERMINAL_PROMPT = $prev
+    }
+    if ($rc -ne 0) {
+        LogDetail "git push: $out"
+        LogWarn "machine profile: push failed (exit $rc) -- run git push in $Dir"
+        Write-Summary "ACTION" "" "run git push in $Dir"
+        return
+    }
+    LogOk "machine profile: profile.json committed and pushed"
+}
+
+# Invoke-UiRegister DIR ALIAS NAME COMPANY EMAIL COMMIT -- register this machine
+# under ALIAS (creating profile.json when missing). Returns $true registered or
+# already registered, $false failed (logged + ERROR row).
+function Invoke-UiRegister([string]$Dir, [string]$Alias, [string]$Name, [string]$Company, [string]$Email, [bool]$Commit) {
+    $pf = Join-Path $Dir "profile.json"
+    $tmp = "$pf.tmp.$PID"
+    $shell = if ($PSVersionTable.PSVersion.Major -ge 6) { "pwsh" } else { "powershell" }
+    $a = @("register", "--profile", $pf, "--alias", $Alias, "--out", $tmp, "--shell", $shell, "--environment", $script:AitoolsEnvironment)
+    if ($Name) { $a += @("--name", $Name) }
+    if ($Company) { $a += @("--company", $Company) }
+    if (-not (Test-Path -LiteralPath $pf)) { $a += @("--create", "--github-user", $ghUser, "--email", $Email) }
+    if (-not (Invoke-AitoolsProfile $a)) {
+        LogError "machine profile: resolver aitools-profile.ps1 not found in $(Join-Path $repoPath 'scripts')"
+        Write-Summary "ERROR" "machine profile" "resolver missing"
+        return $false
+    }
+    $removeTmp = {
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $tmp) { LogDetail "could not remove $tmp" }
+    }
+    if ($script:ProfileRc -ne 0) {
+        & $removeTmp
+        $e = @(Get-ProfileLines "error") | Select-Object -First 1
+        if (-not $e) { $e = "see deploy.log" }
+        LogError "machine profile: register '$Alias' failed (exit $($script:ProfileRc)): $e"
+        Write-Summary "ERROR" "machine profile" "register failed"
+        return $false
+    }
+    $result = Get-ProfileTag "result"
+    if ($result -eq "unchanged") {
+        & $removeTmp
+        LogOk "machine profile: '$Alias' is already registered to this machine"
+        return $true
+    }
+    if ((Read-JsonFile $tmp).State -ne "valid") {
+        & $removeTmp
+        LogError "machine profile: register '$Alias' wrote an invalid file -- profile.json left untouched"
+        Write-Summary "ERROR" "machine profile" "register validation failed"
+        return $false
+    }
+    Backup-File $pf
+    try {
+        Move-Item -LiteralPath $tmp -Destination $pf -Force -ErrorAction Stop
+    } catch {
+        & $removeTmp
+        LogError "machine profile: could not replace $pf"
+        Write-Summary "ERROR" "machine profile" "write failed"
+        return $false
+    }
+    LogOk "machine profile: registered this machine as '$Alias' ($result, id $(Get-ProfileTag 'machineId'))"
+    if ($Commit -and (Test-Path -LiteralPath (Join-Path $Dir ".git"))) { Invoke-UiCommit $Dir "Register machine profile: $Alias" }
+    return $true
+}
+
+# Invoke-UiRegisterFlow DIR COMMIT -- resolve, ask when not registered, register.
+# Returns the registered alias, or "" when none.
+function Invoke-UiRegisterFlow([string]$Dir, [bool]$Commit) {
+    Invoke-UiResolve $Dir
+    $alias = ""
+    if ($script:UiVia -eq "id" -or $script:UiVia -eq "environment") {
+        $alias = $script:UiAlias
+        LogOk "machine profile: this machine is '$alias' (via $($script:UiVia))"
+        # Refresh machine facts (shell, os, arch) without changing the match
+        $null = Invoke-UiRegister $Dir $alias "" "" "" $Commit
+        return $alias
+    }
+    if ($script:UiVia -eq "override") {
+        $alias = $script:UiAlias
+    } else {
+        $alias = Read-UiChoice $Dir $script:UiAlias
+        if (-not $alias) { return "" }
+    }
+    $name = ""; $company = ""
+    $r = Read-JsonFile (Join-Path $Dir "profile.json")
+    $isNew = ($r.State -eq "valid") -and -not (Get-JType $r.Value @("profiles", $alias))
+    if ($isNew -and $env:AITOOLS_FORCE -ne "1" -and (Test-InteractiveConsole)) {
+        [Console]::Write("Display name for $alias (Enter = identity name): ")
+        $name = Read-ConsoleChoice "identity name"
+        [Console]::Write("Company for $alias (Enter = identity company): ")
+        $company = Read-ConsoleChoice "identity company"
+    }
+    if (Invoke-UiRegister $Dir $alias $name $company "" $Commit) { return $alias }
+    return ""
+}
+
+# ---------------------------------------------------------------------------
 # user -- user repo management
 # ---------------------------------------------------------------------------
 
@@ -903,27 +1114,6 @@ if ($doUser) {
                 # --- Path 1: local repo already exists ---
                 Write-Host "User repo already exists: $userRepoDir"
 
-                # Detect machineAlias from profile.json by hostname match
-                $profilePath = Join-Path $userRepoDir "profile.json"
-                if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path $profilePath)) {
-                    $machineAlias = node -e @"
-const fs = require('fs'), os = require('os');
-try {
-    const p = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
-    if (p.version === 2 && p.profiles) {
-        const host = os.hostname().split('.')[0];
-        for (const [alias, prof] of Object.entries(p.profiles)) {
-            if (prof.machine && prof.machine.hostname.split('.')[0] === host) {
-                console.log(alias);
-                break;
-            }
-        }
-    }
-} catch {}
-"@ $profilePath 2>$null
-                    if ($machineAlias) { $machineAlias = $machineAlias.Trim() }
-                }
-
                 # Detect v1 profile and offer migration
                 $profilePath = Join-Path $userRepoDir "profile.json"
                 if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path $profilePath)) {
@@ -940,6 +1130,11 @@ try {
                             }
                         }
                     }
+                }
+
+                # Resolve this machine's profile; ask (or take -Alias) when it is not registered
+                if (Test-Path (Join-Path $userRepoDir "profile.json")) {
+                    $machineAlias = Invoke-UiRegisterFlow $userRepoDir $true
                 }
 
             } elseif ((Get-Command gh -ErrorAction SilentlyContinue) -and
@@ -966,78 +1161,20 @@ try {
                     }
                 }
 
-                # Check if machine profile needs adding (v2 schema)
+                # Git identity for this clone from the profile (so the commits below work
+                # on a fresh machine), then resolve this machine and ask when unregistered
                 $profilePath = Join-Path $userRepoDir "profile.json"
-                if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path $profilePath)) {
-                    # Read defaults from existing profile
-                    $profileDefaults = node -e @"
-const fs = require('fs');
-try {
-    const p = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
-    const ident = p.identity || {};
-    const firstProf = Object.values(p.profiles || {})[0] || {};
-    console.log((ident.git && ident.git.name) || firstProf.name || '');
-    console.log(firstProf.company || '');
-    console.log((ident.git && ident.git.email) || '');
-} catch (e) { if (e.code !== 'ENOENT') console.error('Warning: could not read profile: ' + e.message); }
-"@ $profilePath 2>$null
-                    $defaultLines = @($profileDefaults -split "`n")
-                    $defaultName = if ($defaultLines.Count -ge 1) { $defaultLines[0].Trim() } else { "" }
-                    $defaultCompany = if ($defaultLines.Count -ge 2) { $defaultLines[1].Trim() } else { "" }
-                    $defaultEmail = if ($defaultLines.Count -ge 3) { $defaultLines[2].Trim() } else { "" }
-
-                    $machineAlias = Read-Host "Machine alias (e.g., laptop, workstation)"
-
-                    if ($machineAlias) {
-                        $namePrompt = "Display name"
-                        if ($defaultName) { $namePrompt = "Display name [$defaultName]" }
-                        $profName = Read-Host $namePrompt
-                        if (-not $profName) { $profName = if ($defaultName) { $defaultName } else { $env:USERNAME } }
-
-                        $companyPrompt = "Company"
-                        if ($defaultCompany) { $companyPrompt = "Company [$defaultCompany]" }
-                        $profCompany = Read-Host $companyPrompt
-                        if (-not $profCompany) { $profCompany = $defaultCompany }
-
-                        node -e @"
-const fs = require('fs'), os = require('os');
-const pf = process.argv[1], alias = process.argv[2];
-try {
-    const p = JSON.parse(fs.readFileSync(pf, 'utf8'));
-    if (p.version === 2 && !p.profiles[alias]) {
-        p.profiles[alias] = {
-            name: process.argv[3],
-            company: process.argv[4],
-            machine: {
-                hostname: os.hostname(),
-                os: process.platform,
-                arch: process.arch,
-                shell: 'powershell'
-            }
-        };
-        fs.writeFileSync(pf, JSON.stringify(p, null, 2) + '\n');
-        console.log('Added machine profile: ' + alias);
-    } else if (p.version === 2 && p.profiles[alias]) {
-        console.log('Machine profile already exists: ' + alias);
-    }
-} catch(e) { console.error('warning: could not update profile: ' + e.message); }
-"@ $profilePath $machineAlias $profName $profCompany
+                if (Test-Path $profilePath) {
+                    $pr = Read-JsonFile $profilePath
+                    if ($pr.State -eq "valid") {
+                        $defaultName = Get-JText $pr.Value @("identity", "git", "name")
+                        $defaultEmail = Get-JText $pr.Value @("identity", "git", "email")
+                        if ($defaultName -and $defaultEmail) {
+                            $null = & git -C $userRepoDir config user.name $defaultName 2>&1
+                            $null = & git -C $userRepoDir config user.email $defaultEmail 2>&1
+                        }
                     }
-
-                    # Set git identity from profile
-                    if ($defaultName -and $defaultEmail) {
-                        git -C $userRepoDir config user.name $defaultName
-                        git -C $userRepoDir config user.email $defaultEmail
-                    }
-
-                    # Commit and push if profile was modified
-                    $status = git -C $userRepoDir status --porcelain 2>$null
-                    if ($status) {
-                        git -C $userRepoDir add -A
-                        git -C $userRepoDir commit -m "Add machine profile: $machineAlias"
-                        git -C $userRepoDir push
-                        Write-Host "Profile updated and pushed."
-                    }
+                    $machineAlias = Invoke-UiRegisterFlow $userRepoDir $true
                 }
 
             } else {
@@ -1050,33 +1187,13 @@ try {
                 if (-not $profName) { $profName = $env:USERNAME }
                 $profEmail = Read-Host "Email"
                 $profCompany = Read-Host "Company"
-                $machineAlias = Read-Host "Machine alias (e.g., laptop, workstation)"
+                $machineAlias = $script:UserAlias
+                if (-not $machineAlias) { $machineAlias = Read-Host "Machine alias (e.g., laptop, workstation)" }
+                if (-not $machineAlias) { $machineAlias = "default" }
 
-                # Create v2 profile.json
-                node -e @"
-const fs = require('fs'), os = require('os');
-const profile = {
-    version: 2,
-    identity: {
-        github: process.argv[3],
-        email: process.argv[2],
-        git: { name: process.argv[1], email: process.argv[2] }
-    },
-    profiles: {}
-};
-const alias = process.argv[6] || 'default';
-profile.profiles[alias] = {
-    name: process.argv[1],
-    company: process.argv[4],
-    machine: {
-        hostname: os.hostname(),
-        os: process.platform,
-        arch: process.arch,
-        shell: 'powershell'
-    }
-};
-fs.writeFileSync(process.argv[7], JSON.stringify(profile, null, 2) + '\n');
-"@ "$profName" "$profEmail" "$ghUser" "$profCompany" "powershell" $machineAlias (Join-Path $userRepoDir "profile.json")
+                # Create the v2 profile.json with this machine registered (identity
+                # name/company are the defaults for every machine; committed below)
+                if (-not (Invoke-UiRegister $userRepoDir $machineAlias $profName $profCompany $profEmail $false)) { $machineAlias = "" }
 
                 # Create .gitattributes
                 [System.IO.File]::WriteAllText(
@@ -1135,35 +1252,48 @@ fs.writeFileSync(process.argv[7], JSON.stringify(profile, null, 2) + '\n');
                 }
             }
 
-            # Write userRepoPath and machineAlias to config
-            if (Get-Command node -ErrorAction SilentlyContinue) {
-                node -e @"
-const fs = require('fs');
-const f = process.argv[1];
-let cfg = {};
-try { cfg = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + f + ' is invalid JSON, starting with empty config'); }
-cfg.userRepoPath = process.argv[2];
-if (process.argv[3]) cfg.machineAlias = process.argv[3];
-fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
-
-// Post-write validation
-const _v = JSON.parse(fs.readFileSync(f, 'utf8'));
-const _missing = ['version','reposPath','userRepoPath'].filter(k => !(k in _v));
-if (_missing.length) { console.error('Validation failed: missing ' + _missing.join(', ')); process.exit(1); }
-"@ "$configFile" "$userRepoDir" "$machineAlias"
-                Write-Host "Config updated: userRepoPath = $userRepoDir"
-                if ($machineAlias) {
-                    Write-Host "Config updated: machineAlias = $machineAlias"
-                }
+            # config.json has one writer (setup-user-config): GitHub user, dotprofile
+            # path and the chosen alias; the writer derives and validates the rest.
+            # In-process like Invoke-ValidatedScript: reset the exit code, catch a throw.
+            $writerOk = $true
+            $configWriter = Join-Path $repoPath "scripts\setup-user-config.ps1"
+            $writerArgs = @{ GithubUser = $ghUser; UserRepoPath = $userRepoDir }
+            if ($machineAlias) { $writerArgs["MachineAlias"] = $machineAlias }
+            $global:LASTEXITCODE = 0
+            try {
+                & $configWriter @writerArgs
+                if ($LASTEXITCODE -ne 0) { $writerOk = $false; LogError "user init: setup-user-config.ps1 failed (exit $LASTEXITCODE)" }
+            } catch {
+                $writerOk = $false
+                LogError "user init: setup-user-config.ps1 failed: $_"
             }
 
-            # Deploy session archive hook
+            # Deploy session archive hook. Exit 2 = the user aborted in the review
+            # menu (D-TS13): stop with exit 2; any other failure is logged.
             $hookSetup = Join-Path $repoPath "scripts\setup-user-hooks.ps1"
             if (Test-Path $hookSetup) {
                 Write-Host ""
                 Write-Host "Deploying session archive hook..."
-                & $hookSetup
+                $global:LASTEXITCODE = 0
+                $hookRc = 0
+                try {
+                    & $hookSetup
+                    $hookRc = $LASTEXITCODE
+                } catch {
+                    LogError "user init: setup-user-hooks.ps1 failed: $_"
+                    exit 1
+                }
+                if ($hookRc -eq 2) {
+                    Write-Host ""
+                    Write-Host "aborted by user"
+                    exit 2
+                }
+                if ($hookRc -and $hookRc -ne 0) {
+                    LogError "user init: setup-user-hooks.ps1 failed (exit $hookRc)"
+                    exit 1
+                }
             }
+            if (-not $writerOk) { exit 1 }
 
             Write-Host ""
             Write-Host "Done. Sessions will be archived to $userRepoDir\sessions\"
