@@ -801,36 +801,20 @@ function Remove-UiTmp([string]$Path) {
     }
 }
 
-# Invoke-UiProfile ARGS -- run the resolver (aitools-profile.ps1, in-process).
-# Sets $script:UiProfOut (key<TAB>value lines) and $script:UiProfRc (0 ok, 1
-# nothing found, 2 error, 3 refused, 4 alias in use). Its own log lines
-# ([Console]::Error) become detail lines. Returns $false when no resolver is
-# found (UiProfRc 2 with an error line), else $true. Not the lib runner
-# (Invoke-AitLibProfile): that one reads an exit 0/1 without a "via" line as a
-# resolver crash, and register and migrate print no "via" line.
+# Invoke-UiProfile ARGS -- run the resolver through the lib runner
+# (Invoke-AitLibProfile in aitools-lib.ps1: aitools-profile.ps1, in-process) and
+# copy its results right after the call (the lib's result-variable contract):
+# $script:UiProfOut (key<TAB>value lines; for hostname the bare value) and
+# $script:UiProfRc (0 ok, 1 nothing found, 2 error -- also no resolver, a throw,
+# or an exit 0/1 without result lines -- 3 refused, 4 alias in use). The
+# resolver's own log lines become detail lines. AITOOLS_PROFILE_PS1 overrides the
+# resolver, as for every lib caller (register and migrate then write through it).
+# Returns nothing.
 function Invoke-UiProfile([string[]]$Arguments) {
-    $script:UiProfOut = @(); $script:UiProfRc = 0
-    $ps1 = Join-Path $repoPath "scripts" "aitools-profile.ps1"
-    if (-not (Test-Path -LiteralPath $ps1 -PathType Leaf)) {
-        $script:UiProfRc = 2
-        $script:UiProfOut = @("error`tresolver aitools-profile.ps1 not found ($(Join-Path $repoPath 'scripts'))")
-        return $false
-    }
-    $global:LASTEXITCODE = 0
-    $origErr = [Console]::Error
-    $errBuf = [IO.StringWriter]::new()
-    [Console]::SetError($errBuf)
-    try {
-        $script:UiProfOut = @(& $ps1 @Arguments | ForEach-Object { [string]$_ })
-        $script:UiProfRc = $LASTEXITCODE
-    } catch {
-        $script:UiProfRc = 2
-        $script:UiProfOut = @($script:UiProfOut) + @("error`taitools-profile $($Arguments[0]) threw: $($_.Exception.Message)")
-    } finally {
-        [Console]::SetError($origErr)
-    }
-    Write-UiLogLines "aitools-profile $($Arguments[0]): " $errBuf.ToString()
-    return $true
+    # $false = no resolver: AitLibProfileRc is then 2 with an "error" line naming
+    # it, which every caller reads (UiProfRc, Get-UiLines): the result check
+    $null = Invoke-AitLibProfile $Arguments
+    $script:UiProfOut = @($script:AitLibProfileOut); $script:UiProfRc = $script:AitLibProfileRc
 }
 
 function Get-UiTag([string]$Key) {
@@ -1610,10 +1594,16 @@ function Invoke-UserInit {
     }
     # This machine without a profile at the end (skipped at a prompt, refused, failed)
     # is one outcome with one exit code, 1 (Review3 #82 minor 3)
+    $noMachine = $false
     if (-not $script:UiMachineKey) {
         # A skip at a prompt wrote a WARN row only: name the reason for the exit code (review n1)
         if ($rc -eq 0) { LogError "machine profile: this machine is not registered (skipped) -- run: aitools user init" }
         $rc = 1
+        # Reported here: setup-user-config gets -NoMachine, so it adds no second
+        # machine-profile ERROR / ACTION (M3-FINISH item 2). Decided here, not from an
+        # empty $machineKey at the writer call: the owner "config" branch below also
+        # empties it for a registered machine whose id cannot be detected.
+        $noMachine = $true
     }
 
     if (Test-Path -LiteralPath $userRepoDir) {
@@ -1623,7 +1613,8 @@ function Invoke-UserInit {
     # config.json has one writer (setup-user-config): GitHub user, dotprofile path and
     # this machine's profile key (-MachineId; ConfigKey contract). Another machine's
     # key is never passed (ConfigKey Q3); a key that only config.json vouches for (owner
-    # "config") is left to the writer to re-derive (review M2). In-process: reset the
+    # "config") is left to the writer to re-derive (review M2); an unregistered machine
+    # ($noMachine) gets -NoMachine instead of a key. In-process: reset the
     # exit code, catch a throw; its output goes to the host, never into this function's
     # return value (review m1: `exit (Invoke-UserInitCommand)` would otherwise exit 0).
     $machineKey = $script:UiMachineKey
@@ -1638,6 +1629,7 @@ function Invoke-UserInit {
     $configWriter = Join-Path $repoPath "scripts" "setup-user-config.ps1"
     $writerArgs = @{ GithubUser = $script:UiGhUser; UserRepoPath = $userRepoDir }
     if ($machineKey) { $writerArgs["MachineId"] = $machineKey }
+    elseif ($noMachine) { $writerArgs["NoMachine"] = $true }
     $global:LASTEXITCODE = 0
     try {
         & $configWriter @writerArgs | Out-Host
