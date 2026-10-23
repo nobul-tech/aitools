@@ -38,7 +38,21 @@ S3-MF-Fix4 needs no build-deploy port. PR #109's body says the cursor body is ex
 
 ## Reviewer
 
-S3-MF-Fix5-Review: see S3-MF-Fix5-Review-pr112.md in this folder and the PR comment.
+S3-MF-Fix5-Review's full review is in S3-MF-Fix5-Review-pr112.md (this folder).
+
+- **First pass: CHANGES-REQUESTED.** Comment: https://github.com/nobul-tech/aitools/pull/112#issuecomment-6356516066
+  - **B-1 (blocking):** the bash dry run aborted under `set -e` at `wc -l` on an unreadable CLAUDE.md, and its perl read check could never fire.
+  - **Fix, commit 18d6646:** a `-r` guard, and a perl explicit open that dies when it cannot read the file. A `chmod 000` test now runs in both languages.
+  - The same commit fixed N-1: the test's hostname probe used the real HOME.
+- **Re-verification at 18d6646: APPROVE-equivalent.** Comment: https://github.com/nobul-tech/aitools/pull/112#issuecomment-6356570763
+- **Open non-blocking findings:**
+  - N-3: the test's try-count check is weak.
+  - N-4: the footer says "unknown" when the resolver is missing (by design).
+  - N-5: a comment's wording.
+  - N-6: one redundant cleanup call in the generated claude .ps1.
+  - N-7: the bash unreadable-file warning does not include perl's reason.
+
+`INCIDENT:` (from the reviewer, not filed): `.claude/rules/deploy-paths.md` "Scripts with deploy templates" still lists setup-user-claude as duplicated logic. It has been a pure extract since M3 B5 (build-deploy.sh, section "1. deploy/setup-user-claude.sh"). The rule is protected, so it needs a draft and approval.
 
 ## Follow-ups
 

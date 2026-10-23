@@ -78,3 +78,33 @@ All runs used an isolated HOME and AITOOLS_LOG_DIR under `.scratch/session-mf5re
 ## INCIDENT markers (not filed)
 
 - `INCIDENT:` `.claude/rules/deploy-paths.md` "Scripts with deploy templates" still lists `setup-user-claude.sh/.ps1` as having duplicated "Template interpolation, footer generation" in build-deploy. `build-deploy.sh:650-651` says it is now a pure extract ("no duplicated logic, I6"), and the generated output confirms it. The rule is stale (protected file; this is spec drift and predates this PR). An agent following the rule would look for a template copy that no longer exists.
+
+## Re-verification (18d6646)
+
+**Updated verdict: APPROVE-equivalent.** B-1 is fixed, and so is N-1. I found no new blocking issue. The macOS and Linux CI jobs for 18d6646 were still pending when I checked; Windows and CodeQL passed. Merge after #103, as the PR body says.
+
+I checked out `18d6646` detached in my worktree. `git diff db9ddf8 18d6646` shows the only code change is in `scripts/setup-user-claude.sh` (plus the test and the two mission markdown files).
+
+| item | status | evidence |
+|---|---|---|
+| B-1 | **fixed** | `setup-user-claude.sh:208-209`: `wc -l` now runs only when `[ -r "$CLAUDE_MD" ]`, so there is no `set -e` abort. `:221-226`: the read uses `perl -0777 -e 'open ... or die ...'`, which exits non-zero on an unreadable file, so the `log_warn` branch fires. My chmod 000 probe, rerun: **sh** exit 0, `WARN\|claude.md\|dry-run: would update`, `[warn] Cannot read ... for the dry-run comparison`. **ps1** exit 0, same row, `[warn] Cannot read ...`. The two languages now give the same row and exit code. The new test case (`test-claude-mdm.sh:181-193`) asserts the row, the exit code and the warning in both languages, and the parity check now includes it. The fix reaches deploy/ (pure extract): the generated `setup-user-claude.sh` from an archive-copy build has the new read. |
+| N-1 | **fixed** | `test-claude-mdm.sh:110-111`: the `aitools-profile.sh hostname` call now gets `HOME="$W/home-host" AITOOLS_LOG_DIR="$W/logs-host"`. The `[aitools-profile]` line count in the caller's log dir stayed at 2 across two more full test runs (before this fix it went up by one per run). |
+
+Non-blocking, new:
+- **N-7.** On the unreadable path, bash prints perl's `cannot read <path>: Permission denied` to the console as a raw stderr line. The `log_warn` text has no reason, while the ps1 LogWarn includes it. Optional: capture the die message (`2>&1` into the variable, or a temp file) and add it to the `log_warn`.
+
+The other non-blocking findings (N-2..N-6) are unchanged; none of them blocks.
+
+### Commands (isolated HOME and AITOOLS_LOG_DIR under `.scratch/session-mf5rev/`)
+
+| command | result |
+|---|---|
+| `bash tests/claude-mdm/test-claude-mdm.sh` (bash 5.3.15, pwsh 7.6.3) | 34 passed, 0 failed, 0 skipped |
+| `AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/claude-mdm/test-claude-mdm.sh` (bash 3.2.57) | 34 passed, 0 failed, 0 skipped |
+| `bash tests/managed-files/test-managed-files.sh` | 57 passed, 0 failed |
+| `bash -n` (bash 5 and 3.2) on setup-user-claude.sh, build-deploy.sh and the test; pwsh parser on setup-user-claude.ps1 | clean |
+| chmod 000 probe (`probe-a26.sh`), sh and ps1 | both exit 0, both `WARN\|claude.md\|dry-run: would update` plus a warning |
+| `build-deploy.sh` against an archive copy of aitools-nobul-jose@525ee49 | exit 0, 0 ESC bytes; 3 .ps1 end with the finally line and parse clean; the generated .sh has the B-1 read |
+| `gh pr checks 112` | windows pass, CodeQL pass; macos and linux **pending** (result unknown) |
+
+Not run: Windows / Git Bash (the test skips the chmod case there by design), check-pre-commit.sh / check-pre-push.sh.
