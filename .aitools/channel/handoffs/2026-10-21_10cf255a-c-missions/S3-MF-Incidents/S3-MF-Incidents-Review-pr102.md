@@ -115,3 +115,83 @@ The batch is sound. All 16 entries have the 19 required fields in registry key o
 - Whether the dotprofile repair (m4) is on the remote. I read the local origin/main ref and did not fetch.
 
 Scratch scripts: `.scratch/session-mfirev/` (dryrun.sh, cites.sh, cites2.sh, cites3.sh, numprobe.ps1, titles.py, show.py, affected.py).
+
+## Re-check (0b6b00e)
+
+**Reviewer:** S3-MF-Incidents-Review · **Date:** 2026-10-22 · **PR head:** 0b6b00e · **Code baseline:** origin/main 8a9dcb5. Sources: S3-MF-Audit-findings.md section 8 (I-1..I-4), from `origin/docs/mf-audit`.
+
+**Verdict: changes needed (small).** 0 blockers, 1 major, 4 minor, 3 nits.
+- #162 is sound.
+- The I-2 merge into #147 and the I-3 merge into #148 are both sound.
+- #163 has the right content, but every code citation in its observation points to the wrong lines.
+- The dry run passes. Neither new entry is a duplicate.
+
+### Major
+
+**R-M1. All three line citations in #163's observation miss the code they describe.** Here is what origin/main has at those lines:
+
+| #163 cites | What is there | Where the described code is |
+|---|---|---|
+| setup-user-settings.sh:80-83 | `log_warn "profile.json not found ..."` + WARN "profile.json missing" | :72-75 ("Counted (S3-M3Lead decision)" comment, log_error, ERROR "claude settings") |
+| setup-user-skills.sh:110-114 | `log_error "Skill source not found: $skill_name"` | :56-60 (log_error + the two ERROR rows "claude skills" / "cursor skills") |
+| setup-user-cursor.sh:94-99 | ripgrep install failure / success | :353-358 ("Not counted again" comment, info line, ERROR "cursor cli" "skipped (dotprofile error)") |
+
+The entry's own discoveryContext gives the right ranges (settings.sh:66-80, skills.sh:50-62, cursor.sh:350-360). The observation was probably written from other line numbers.
+
+**Fix:** use :72-75, :56-60 and :353-358. The PS1 twins hold the same text, and I verified them: settings.ps1:58-61, skills.ps1:48-51 (one "skills" row, the A-22 parity gap), and cursor.ps1:273-278. Cite them too, rather than "not re-read".
+
+### Minor
+
+**R-m1. #162 and #163 do not use the batch's key order.**
+- Entries #146-#161 follow the registry order (id, title, status, severity, ...).
+- #162 and #163 start with `status, linked, referenceFile, discipline, ...`, and put `id` after them.
+- The validator does not check order, and the apply script appends them as written. The registry would then hold the only two entries whose first key is not `id`.
+- **Fix:** reorder both to the registry key order.
+
+**R-m2. #163 `expected` stretches two rules.**
+- .claude/rules/cross-platform.md and interactive-menus.md require bash and PS1 parity: identical menus and outcomes within one script pair. They do not require the same outcomes across different scripts in one run.
+- script-standards-detail.md 'Governed summary outcomes' (:294) exists and fits the "skipped" point.
+- **Fix:** keep 'Severity decision guide' and 'Governed summary outcomes'. Drop the cross-platform and interactive-menus claim, or reword it as "nearest: parity rules, which cover pairs only". The "No spec exists for:" line already carries the gap.
+
+**R-m3. #162 says the lib writers have "no caller outside the lib". That is true, but it hides the reason.**
+- `aitools-install.ps1` calls `Write-JsonlRecord` at :87 and :127. Those calls resolve to the installer's own definition at :65, which shadows aitools-lib.ps1:449 (the installer dot-sources the lib at :41 first).
+- In bash, the lib's `jsonl_record` is called only by the lib's relay (:554). The installer uses its own `jsonl_write`.
+- So the lib copies are dead because the installers shadow them. That is #149's second half and audit A-1.
+- **Fix:** say "shadowed by the installers' own copies (#149, audit A-1)", and add #149 to the related incidents in its discoveryContext.
+
+**R-m4. #147's `affected` lists only reference/script-standards-detail.md.** The rewritten resolution aligns code sites: the lib's 7 ACTION sites per language (A-5) and setup-user-config.sh:216-222 (A-10).
+- **Fix:** add scripts/aitools-lib.sh/.ps1 and scripts/setup-user-config.sh/.ps1, or say that the code alignment is tracked by the audit's FIX-3.
+
+### Nits
+
+- **R-n1.** #148's suggestedResolution says twice to add the resolver to the 'Exemptions table' ("add the resolver to the script-standards-detail.md exemptions table" and "Also add a 'library-style tool' row to ... 'Exemptions table'"). Its observation also says twice that the table lacks the row. Merge each pair.
+- **R-n2.** #163 could name #142 as related: one failure producing more than one ERROR row, in the installers.
+- **R-n3.** #163's `affected` has setup-user-settings.sh and setup-user-skills.sh without their .ps1 twins. Option B changes both languages, and skills.ps1 also needs the A-22 row fix.
+
+### Merges (question 3)
+
+- **I-2 into #147: sound.** I-2 itself says "Same root as the S3-M3-ConfigKey-Review INCIDENT on auto-promote". The rewritten entry covers I-2's added question (how an ACTION pairs with an ERROR) in `expected` and in option B. Raising the severity to medium fits the table, since the conflict is live in 7 sites per language. One entry is right.
+- **I-3 into #148: sound.** Both describe the one undefined contract for the resolver as a library-style tool: the logging contract and the missing script-standards exemption. The four stderr-only exits are a code instance (A-6), not a spec gap. They are fine here because `affected` now names aitools-profile.sh and the resolution names FIX-6.
+
+### What I verified (re-check)
+
+1. **Field quality, #147, #148, #162 and #163.** All 19 fields are present; the validator passed.
+   - Titles name the deficiency.
+   - Observations are concrete. #163's citations fail (R-M1).
+   - Each `expected` cites a section or says "No spec exists for:"; #163 overreaches (R-m2).
+   - Impacts are concrete.
+   - Each discoveryContext has its date, what was read, and "Audited #1-#161".
+   - suggestedResolutions list options A/B(/C) and name artifacts.
+2. **Citations, origin/main 8a9dcb5:**
+   - #147: holds. Tree :64 (D-TS12, verbatim), aitools-lib.sh:290-292, :327-328, setup-user-config.sh:216-222, and the earlier lines.
+   - #148: holds. aitools-profile.sh:39-43, :167, :181, :194, :207 (all `printf ... >&2; exit 2`, no log_detail), and script-standards-detail.md:1156 '## Exemptions table'.
+   - #162: holds. logging.md :66, :101 (checks.jsonl only); aitools-install.sh:124, :143; aitools-install.ps1:51, :65, :87, :127; lib jsonl_record :531, Write-JsonlRecord :449. Wording note in R-m3.
+   - #163: fails (R-M1). The described code is real, at other lines.
+3. **Duplicates.** I scanned keywords across #1-#145 and batch #146-#161 (deploy.jsonl, LOG_JSONL, jsonl_record; re-count, "Not counted again", "dotprofile error", "two ERROR rows", "S3-M3Lead decision"). Hits: #74 (mentions deploy.jsonl `host` only), #149, #157 and #142. I read #74 and #142 in full. Neither new entry duplicates any of them; #149 and #142 are related (R-m3, R-n2).
+4. **Dry run.** The fresh scratch copy came from `git show origin/main:registries/incidents.json`. Result: `dry run ok: would append ids 146-163 (18 entries); registry after: 156 incidents, 7 closed, max 163, unique True, lastUpdated 2026-10-22`, exit 0. The copy was unchanged afterwards, and the worktree registry has no diff against origin/main. `--write` was not run.
+
+### Not verified (re-check)
+
+- The S3-M3Lead plan section 2 decision 3 text ("deploy.jsonl coverage"). I took it from the audit and the entry; I did not read the plan on its branch.
+- Whether the S3-M3-Docs logging.md draft (row 16) answers #162's coverage question. The entry says the same.
+- Anything run on Windows.

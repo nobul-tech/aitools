@@ -30,7 +30,11 @@
     "status": "open",
     "severity": "medium",
     "affected": [
-      "reference/script-standards-detail.md"
+      "reference/script-standards-detail.md",
+      "scripts/aitools-lib.sh",
+      "scripts/aitools-lib.ps1",
+      "scripts/setup-user-config.sh",
+      "scripts/setup-user-config.ps1"
     ],
     "linked": null,
     "referenceFile": null,
@@ -65,7 +69,7 @@
     "discoveryContext": "Markers in S3-M3-Register-keydesign.md:411 (design j finding 1), S3-M3-Resolver-report.md:123 and :125, S3-M3-Resolver-Review-pr86-batch2.md:166. Merged into one entry: the advisory-vs-row-level marker is the same missing contract (its code instance was fixed in setup-user-config.sh:160-185). Filed by S3-MF-Incidents (mission M3-FINISH item 9, Session Commander 10cf255a-c), 2026-10-22. Verified on origin/main 8a9dcb5: read scripts/aitools-profile.sh:71-79 and :768-780, scripts/setup-user-config.sh:160-185, grep of reference/logging.md headings and reference/script-standards-detail.md. A draft logging.md section 7 'Library-style tools' exists (S3-M3-Docs approval page row 16). Extended 2026-10-22 with S3-MF-Audit-findings.md section 8 (PR #104, branch docs/mf-audit) marker I-3 (no exemption category), merged here; re-verified aitools-profile.sh:36-45 and :165-168 and the script-standards-detail.md 'Exemptions table' heading.",
     "discipline": null,
     "frameworks": null,
-    "suggestedResolution": "Approve the S3-M3-Docs draft of reference/logging.md section 7 (protected), extended with the advisory/row-level split that setup-user-config.sh derive_warn already implements; add the resolver to the script-standards-detail.md exemptions table. Optional: the resolver tags each warning with its class so callers stop pattern-matching message text. Also add a 'library-style tool' row to script-standards-detail.md 'Exemptions table' (no exit footer, no summary rows, diagnostics returned, raw stderr allowed), and log_detail before each of the four bash `printf ... >&2; exit 2` paths (audit FIX-6).",
+    "suggestedResolution": "Approve the S3-M3-Docs draft of reference/logging.md section 7 (protected), extended with the advisory/row-level split that setup-user-config.sh derive_warn already implements; add the resolver to the script-standards-detail.md exemptions table. Optional: the resolver tags each warning with its class so callers stop pattern-matching message text. The exemptions-table row should state: no exit footer, no summary rows, diagnostics returned, raw stderr allowed. Also add log_detail before each of the four bash `printf ... >&2; exit 2` paths (audit FIX-6).",
     "rootCause": null,
     "correctiveAction": "Code instance fixed: setup-user-config.sh derive_warn routes advisory warnings to info + one ACTION (PR #86 batch 4).",
     "preventionLayer": null,
@@ -386,18 +390,9 @@
     "updated": "2026-10-22"
   },
   {
-    "status": "open",
-    "linked": null,
-    "referenceFile": null,
-    "discipline": null,
-    "frameworks": null,
-    "rootCause": null,
-    "correctiveAction": null,
-    "preventionLayer": null,
-    "created": "2026-10-22",
-    "updated": "2026-10-22",
     "id": 162,
     "title": "reference/logging.md does not define deploy.jsonl (writers, schema, which runs must write it), yet the M3 lead decision requires 'deploy.jsonl coverage' and today only the installers write it",
+    "status": "open",
     "severity": "medium",
     "affected": [
       "reference/logging.md",
@@ -406,37 +401,48 @@
       "scripts/aitools-lib.sh",
       "scripts/aitools-lib.ps1"
     ],
-    "observation": "grep -i jsonl reference/logging.md (origin/main 8a9dcb5) finds only `checks.log` / `checks.jsonl` (:66, :101); deploy.jsonl is not in the per-component file table. Writers: only scripts/aitools-install.sh (LOG_JSONL, :124, :143) and scripts/aitools-install.ps1 (Write-JsonlRecord, :65, :87, :127). The lib's jsonl_record (aitools-lib.sh:531) and Write-JsonlRecord (aitools-lib.ps1:449) have no caller outside the lib (grep). `aitools` sync, user init and every setup script write no deploy.jsonl record. S3-M3Lead plan section 2 decision 3 requires 'deploy.jsonl coverage'.",
+    "linked": null,
+    "referenceFile": null,
+    "observation": "grep -i jsonl reference/logging.md (origin/main 8a9dcb5) finds only `checks.log` / `checks.jsonl` (:66, :101); deploy.jsonl is not in the per-component file table. Writers: only scripts/aitools-install.sh (LOG_JSONL, :124, :143) and scripts/aitools-install.ps1 (Write-JsonlRecord, :65, :87, :127). The lib's jsonl_record (aitools-lib.sh:531) and Write-JsonlRecord (aitools-lib.ps1:449) have no caller outside the lib (grep), because the installers define their own copies that shadow them (#149; S3-MF-Audit A-1). `aitools` sync, user init and every setup script write no deploy.jsonl record. S3-M3Lead plan section 2 decision 3 requires 'deploy.jsonl coverage'.",
     "expected": "No spec exists for: deploy.jsonl (its writers, record schema, rotation, and which runs must produce it). reference/logging.md is the single source of truth for log files (.claude/rules/script-standards.md 'Log line format'); S3-M3Lead decision 3.",
     "impact": "A fix mission cannot tell what 'coverage' must reach (S3-MF-Audit A-1, A-12, A-16 depend on it); KPI and dashboard readers get records from installer runs only, so sync runs and user init are invisible to them; the installer's unguarded append (A-16) can end a run on an unwritable file because no spec says logging must not crash for this file.",
     "discoveryContext": "Marker I-1 in S3-MF-Audit-findings.md section 8 (PR #104, branch docs/mf-audit) (independent audit of the M3 code at 8a9dcb5). Filed by S3-MF-Incidents (mission M3-FINISH item 9, Session Commander 10cf255a-c), 2026-10-22. Verified on origin/main 8a9dcb5: grep -i jsonl reference/logging.md, grep -rl 'deploy.jsonl|LOG_JSONL' scripts, grep for jsonl_record / Write-JsonlRecord callers. Audited #1-#161: #157 (JSONL override example unescaped) is a different defect; no entry defines deploy.jsonl. A draft deploy.jsonl row exists in the S3-M3-Docs logging.md draft (approval page row 16); whether it answers the coverage question was not checked.",
-    "suggestedResolution": "Commander decides the scope, then a protected logging.md section (deploy.jsonl: writer = the lib's jsonl_record / Write-JsonlRecord only; schema; rotation with deploy.log). Options for coverage: (A) installers only, as today, and drop 'deploy.jsonl coverage' from decision 3; (B) every entry-point run (install, sync, user init) writes one record per log line through the lib, with child output relayed by run_child_relayed / Invoke-ChildRelayed (audit FIX-2); (C) every setup script writes its own records via the lib. The audit's fixes A-1/A-12/A-16 assume B."
-  },
-  {
-    "status": "open",
-    "linked": null,
-    "referenceFile": null,
     "discipline": null,
     "frameworks": null,
+    "suggestedResolution": "Commander decides the scope, then a protected logging.md section (deploy.jsonl: writer = the lib's jsonl_record / Write-JsonlRecord only; schema; rotation with deploy.log). Options for coverage: (A) installers only, as today, and drop 'deploy.jsonl coverage' from decision 3; (B) every entry-point run (install, sync, user init) writes one record per log line through the lib, with child output relayed by run_child_relayed / Invoke-ChildRelayed (audit FIX-2); (C) every setup script writes its own records via the lib. The audit's fixes A-1/A-12/A-16 assume B.",
     "rootCause": null,
     "correctiveAction": null,
     "preventionLayer": null,
     "created": "2026-10-22",
-    "updated": "2026-10-22",
+    "updated": "2026-10-22"
+  },
+  {
     "id": 163,
     "title": "No spec says whether a consumer counts its own error again after a lib wrapper already logged the resolver failure (log_error + ERROR row), and the B8 consumers disagree",
+    "status": "open",
     "severity": "low",
     "affected": [
       "reference/script-standards-detail.md",
       "scripts/setup-user-cursor.sh",
       "scripts/setup-user-cursor.ps1",
       "scripts/setup-user-settings.sh",
-      "scripts/setup-user-skills.sh"
+      "scripts/setup-user-skills.sh",
+      "scripts/setup-user-settings.ps1",
+      "scripts/setup-user-skills.ps1"
     ],
-    "observation": "On a dotprofile resolver error (rc 3), after the lib's own log_error + ERROR row 'dotprofile': setup-user-settings.sh:80-83 (origin/main 8a9dcb5) logs again ('# Counted (S3-M3Lead decision): this step fails too, not only the resolver.' + log_error + ERROR 'claude settings'); setup-user-skills.sh:110-114 logs again and writes two ERROR rows; setup-user-cursor.sh:94-99 does not ('# Not counted again: the resolver error is already an error') and writes `ERROR \"cursor cli\" \"skipped (dotprofile error)\"` with an info line. The 'S3-M3Lead decision' exists only in these code comments.",
-    "expected": "No spec exists for: re-counting an error a lib wrapper already logged. script-standards-detail.md 'Severity decision guide' pairs an ERROR row with log_error; 'Governed summary outcomes' reserves 'skipped' for the user's deployment choice; .claude/rules/cross-platform.md and interactive-menus.md require the same outcomes across scripts of one run.",
+    "linked": null,
+    "referenceFile": null,
+    "observation": "On a dotprofile resolver error (rc 3), after the lib's own log_error + ERROR row 'dotprofile': setup-user-settings.sh:72-75 (settings.ps1:58-61) (origin/main 8a9dcb5) logs again ('# Counted (S3-M3Lead decision): this step fails too, not only the resolver.' + log_error + ERROR 'claude settings'); setup-user-skills.sh:56-60 (skills.ps1:48-51) logs again and writes two ERROR rows; setup-user-cursor.sh:353-358 (cursor.ps1:273-278) does not ('# Not counted again: the resolver error is already an error') and writes `ERROR \"cursor cli\" \"skipped (dotprofile error)\"` with an info line. The 'S3-M3Lead decision' exists only in these code comments.",
+    "expected": "No spec exists for: re-counting an error a lib wrapper already logged. script-standards-detail.md 'Severity decision guide' pairs an ERROR row with log_error; 'Governed summary outcomes' reserves 'skipped' for the user's deployment choice (reference/script-standards-detail.md:294).",
     "impact": "One resolver failure yields a different error count and different row wording per consumer, so the run's error total and exit status depend on which consumers ran; the cursor row uses the governed word 'skipped' for a failure.",
-    "discoveryContext": "Marker I-4 in S3-MF-Audit-findings.md section 8 (PR #104, branch docs/mf-audit) (related finding A-23). Filed by S3-MF-Incidents (mission M3-FINISH item 9, Session Commander 10cf255a-c), 2026-10-22. Verified on origin/main 8a9dcb5: read scripts/setup-user-settings.sh:66-80, scripts/setup-user-skills.sh:50-62, scripts/setup-user-cursor.sh:350-360. The PS1 twins were not re-read (the audit cites settings.ps1:58-61, cursor.ps1:273-278). Audited #1-#161: no match.",
-    "suggestedResolution": "Write the rule in script-standards-detail.md (protected), then align the consumers (audit FIX-4). Options: (A) count it: each consumer whose own step fails logs log_error and writes its ERROR row 'not <done>: dotprofile error' (the lead decision and the audit's suggested answer; cursor changes); (B) do not count it: the lib's ERROR is the one error and consumers write their row with an info line (settings and skills change). A keeps one ERROR row per affected tool and matches the majority today."
+    "discoveryContext": "Marker I-4 in S3-MF-Audit-findings.md section 8 (PR #104, branch docs/mf-audit) (related finding A-23). Filed by S3-MF-Incidents (mission M3-FINISH item 9, Session Commander 10cf255a-c), 2026-10-22. Verified on origin/main 8a9dcb5: read scripts/setup-user-settings.sh:66-80, scripts/setup-user-skills.sh:50-62, scripts/setup-user-cursor.sh:350-360 (line numbers corrected after the PR #102 re-check; PS1 twins verified by the reviewer). Audited #1-#161: no match. Related #142 (duplicate ERROR rows for one failure).",
+    "discipline": null,
+    "frameworks": null,
+    "suggestedResolution": "Write the rule in script-standards-detail.md (protected), then align the consumers (audit FIX-4). Options: (A) count it: each consumer whose own step fails logs log_error and writes its ERROR row 'not <done>: dotprofile error' (the lead decision and the audit's suggested answer; cursor changes); (B) do not count it: the lib's ERROR is the one error and consumers write their row with an info line (settings and skills change). A keeps one ERROR row per affected tool and matches the majority today.",
+    "rootCause": null,
+    "correctiveAction": null,
+    "preventionLayer": null,
+    "created": "2026-10-22",
+    "updated": "2026-10-22"
   }
 ]
