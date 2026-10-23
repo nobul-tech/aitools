@@ -440,7 +440,9 @@ function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [strin
 # that wrote no ERROR row of its own gets one: "ERROR|TOOL|script failed
 # (exit N)", "aborted (exit 2)" (D-TS13), "script failed (exception)", "logged
 # errors (exit 0)", or "not run (no command)". A child that wrote an ERROR row
-# (any tool) gets no second one. Parity: run_child_relayed --summary-tool.
+# (any tool) gets no second one -- also when it crashed after writing it: the
+# panel then shows the child's row, and the crash is the relay's LogError in
+# deploy.log. Parity: run_child_relayed --summary-tool.
 # Private caches: $script:AitLibRunId, AitLibJsonlHost, AitLibJsonlOs.
 # ---------------------------------------------------------------------------
 
@@ -589,8 +591,8 @@ function Invoke-ChildRelayed([string]$AitLibLabel, [string]$AitLibChildScript, [
         return 1
     }
     if ($script:AitLibChildRc -ne 0) {
-        LogError "$AitLibLabel failed (exit $($script:AitLibChildRc)) -- see $logFile"
         $AitLibDetail = if ($script:AitLibChildRc -eq 2) { "aborted (exit 2)" } else { "script failed (exit $($script:AitLibChildRc))" }
+        LogError "$AitLibLabel $($AitLibDetail -replace '^script ', '') -- see $logFile"
         Write-AitLibChildRow $AitLibSummaryTool $AitLibErrRows $AitLibDetail
         return 1
     }

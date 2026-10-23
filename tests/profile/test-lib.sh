@@ -731,6 +731,8 @@ set -euo pipefail
 if [ -n "${FAKEBIN:-}" ]; then PATH="$FAKEBIN:$PATH"; fi
 source "$REPO/scripts/aitools-lib.sh"
 logging_init "test-relay"
+# PRE_ROW=1: an earlier step's ERROR row is in the summary before the child runs
+if [ "${PRE_ROW:-}" = "1" ]; then write_summary ERROR "earlier step" "failed before"; fi
 rc=0
 case "$RMODE" in
     record) jsonl_record 2026-01-01T00:00:00Z test-relay warn "q \" b \\ t"$'\t'"n"$'\n'"l"$'\r'" e"$'\033'"[0m x José ✓" ;;
@@ -754,6 +756,8 @@ RELAY
 cat > "$WORK/relay.ps1" <<'RELAY'
 . (Join-Path $env:REPO "scripts/aitools-lib.ps1")
 Initialize-Logging "test-relay"
+# PRE_ROW=1: an earlier step's ERROR row is in the summary before the child runs
+if ($env:PRE_ROW -eq "1") { Write-Summary "ERROR" "earlier step" "failed before" }
 $rc = 0
 $child = Join-Path $env:REPO_WORK "child.ps1"
 switch ($env:RMODE) {
@@ -879,6 +883,12 @@ msg-ok" "ERROR|child tool|script failed (exit 127)"
 relay_case relay-run-abort run 5 "rc=1 child_rc=2
 cw=2 ce=1 warnings=2 errors=1" "records=4 invalid=0
 msg-ok" "ERROR|child tool|aborted (exit 2)"
+# Review A m1: the dedupe compares with the rows before the child, not with zero:
+# an earlier step's ERROR row does not hide the crashed child's row
+relay_case relay-run-crash-prior-row run 3 "rc=1 child_rc=1
+cw=2 ce=0 warnings=2 errors=1" "records=3 invalid=0
+msg-ok" "ERROR|earlier step|failed before
+ERROR|child tool|script failed (exit 1)" "bash ps" "PRE_ROW=1"
 # Without a summary tool: no row (the caller writes its own)
 relay_case relay-run-crash-notool run-notool 3 "rc=1 child_rc=1
 cw=2 ce=0 warnings=2 errors=1" "records=3 invalid=0
@@ -901,12 +911,17 @@ printf '#!/usr/bin/env bash\n: > "%s/tmpro/rc.tmp"\nprintf "%%s\\n" "%s/tmpro/rc
 chmod +x "$WORK/mkfail/mktemp" "$WORK/mkro/mktemp"
 relay_case relay-run-mktemp-fail run 0 "rc=1 child_rc=1
 cw=0 ce=0 warnings=0 errors=1" "-" "ERROR|child tool|not run (mktemp failed)" bash "FAKEBIN=$WORK/mkfail"
-relay_case relay-run-rm-fail run 7 "rc=0 child_rc=0
+# Review A n3: root ignores the read-only directory (Claude Code web runs as root)
+if [ "$(id -u)" -eq 0 ]; then
+    printf '  skip relay-run-rm-fail (running as root: a read-only directory does not stop rm)\n'
+else
+    relay_case relay-run-rm-fail run 7 "rc=0 child_rc=0
 cw=2 ce=0 warnings=2 errors=0" "records=4 invalid=0
 msg-ok" "" bash "FAKEBIN=$WORK/mkro RO_DIR=$WORK/tmpro"
-chmod 755 "$WORK/tmpro"
-if grep -qF "[detail] child step: could not remove temp file $WORK/tmpro/rc.tmp" "$H/.aitools/logs/deploy.log"; then ok "relay-run-rm-fail (bash): detail line in deploy.log"
-else bad "relay-run-rm-fail (bash): no 'could not remove temp file' detail line"; fi
+    chmod 755 "$WORK/tmpro"
+    if grep -qF "[detail] child step: could not remove temp file $WORK/tmpro/rc.tmp" "$H/.aitools/logs/deploy.log"; then ok "relay-run-rm-fail (bash): detail line in deploy.log"
+    else bad "relay-run-rm-fail (bash): no 'could not remove temp file' detail line"; fi
+fi
 relay_case relay-captured captured 0 "rc=0 child_rc=0
 cw=2 ce=0 warnings=2 errors=0" "records=4 invalid=0
 msg-ok"
