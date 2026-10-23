@@ -43,12 +43,16 @@ function Read-JsonFile([string]$Path) {
     return @{ State = "valid"; Value = $v; Message = "" }
 }
 
-# Get-JNode ROOT SEG... -> @{ Found; Value } (Found=$false when a segment is absent)
+# Get-JNode ROOT SEG... -> @{ Found; Value } (Found=$false when a segment is absent).
+# Segments match case-sensitively, as in the perl engine (nav): PowerShell's own
+# property lookup ignores case, so the names are compared one by one. Callers that
+# need a case-insensitive key lookup (profile keys) do it explicitly.
 function Get-JNode($Root, [string[]]$Segs) {
     $o = $Root
     foreach ($s in $Segs) {
         if ($o -isnot [System.Management.Automation.PSCustomObject]) { return @{ Found = $false; Value = $null } }
-        $p = $o.PSObject.Properties[$s]
+        $p = $null
+        foreach ($q in $o.PSObject.Properties) { if ($q.Name -ceq $s) { $p = $q; break } }
         if (-not $p) { return @{ Found = $false; Value = $null } }
         $o = $p.Value
     }
@@ -113,6 +117,54 @@ function Set-JValue($Root, $Value, [string[]]$Segs) {
     $last = $Segs[$Segs.Count - 1]
     $p = $o.PSObject.Properties[$last]
     if ($p) { $p.Value = $Value } else { $o | Add-Member -NotePropertyName $last -NotePropertyValue $Value }
+}
+
+# Rename-JKey ROOT NEWNAME SEG... -- rename the key named by the last SEG to
+# NEWNAME in place, keeping its position and value: the counterpart of the
+# aitools-json.pl edit op "rename", with the same rules and the same messages
+# (thrown): "rename: no key given", "rename: new key is empty",
+# "rename: '<seg>' not found",
+# "rename: '<seg>' is not an object", "rename: '<NEWNAME>' already exists"
+# (another key equals NEWNAME ignoring case). NEWNAME equal to the key is a
+# no-op; a case-only rename (ABC -> abc) is allowed. Segments match exactly
+# (case-sensitive), as in the perl engine. Order is kept by removing the key and
+# every key after it, then adding them back with the key renamed.
+function Rename-JKey($Root, [string]$NewName, [string[]]$Segs) {
+    if ($null -eq $Segs -or $Segs.Count -eq 0) { throw "rename: no key given" }
+    if ($NewName -eq "") { throw "rename: new key is empty" }
+    $o = $Root
+    for ($i = 0; $i -lt $Segs.Count - 1; $i++) {
+        $s = $Segs[$i]
+        $p = $null
+        foreach ($q in $o.PSObject.Properties) { if ($q.Name -ceq $s) { $p = $q; break } }
+        if (-not $p) { throw "rename: '$s' not found" }
+        if ($p.Value -isnot [System.Management.Automation.PSCustomObject]) { throw "rename: '$s' is not an object" }
+        $o = $p.Value
+    }
+    $old = $Segs[$Segs.Count - 1]
+    $props = @($o.PSObject.Properties)
+    $idx = -1
+    for ($j = 0; $j -lt $props.Count; $j++) { if ($props[$j].Name -ceq $old) { $idx = $j; break } }
+    if ($idx -lt 0) { throw "rename: '$old' not found" }
+    if ($NewName -ceq $old) { return }
+    for ($j = 0; $j -lt $props.Count; $j++) {
+        if ($j -ne $idx -and $props[$j].Name -ieq $NewName) { throw "rename: '$NewName' already exists" }
+    }
+    $names = [System.Collections.Generic.List[string]]::new()
+    $values = [System.Collections.Generic.List[object]]::new()
+    for ($j = $idx; $j -lt $props.Count; $j++) { $names.Add($props[$j].Name); $values.Add($props[$j].Value) }
+    $newNames = [System.Collections.Generic.List[string]]::new($names)
+    $newNames[0] = $NewName
+    try {
+        foreach ($n in $names) { $o.PSObject.Properties.Remove($n) }
+        for ($j = 0; $j -lt $newNames.Count; $j++) { $o | Add-Member -NotePropertyName $newNames[$j] -NotePropertyValue $values[$j] }
+    } catch {
+        # Restore the original keys and order, then report: a failed rename changes nothing
+        $why = $_.Exception.Message
+        foreach ($n in $newNames) { $o.PSObject.Properties.Remove($n) }
+        for ($j = 0; $j -lt $names.Count; $j++) { $o | Add-Member -NotePropertyName $names[$j] -NotePropertyValue $values[$j] -Force }
+        throw "rename: failed, '$old' unchanged: $why"
+    }
 }
 
 # ConvertTo-NodeJson VALUE [-Compress] -- node JSON.stringify layout (LF, no BOM)
