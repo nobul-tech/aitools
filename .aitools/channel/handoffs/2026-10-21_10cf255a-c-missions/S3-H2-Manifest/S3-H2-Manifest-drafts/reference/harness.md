@@ -63,6 +63,13 @@ read it to learn each rule's source and which rules to retire.
   `*.bak.*` name, a `/` or `\` in the name, an unknown source) are
   ignored with a warning.
 - **Dry run** logs what would be retired and written; nothing changes.
+- **Known limits.** A rule renamed only by case (`Foo.md` to `foo.md`) is
+  the same rule, so the old name is not retired; on a case-sensitive file
+  system (Linux) the old `Foo.md` stays in `~/.aitools/rules` as a
+  preserved file. A rule that moves to a source that is not listed on
+  that run is retired on that run and deployed again on the next run that
+  lists its new source. Only a file (or a symlink) is removed, never a
+  directory with a rule's name.
 - **Consumers** take every non-retired name they are entitled to, and
   back up and remove their own deployed copy of every `retired` name.
   Cursor takes user-level rules only, so it also removes its copies of

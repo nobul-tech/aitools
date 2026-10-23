@@ -192,7 +192,7 @@ function Add-Source {
         return
     }
     $listed[$Label] = $true
-    $files =@((@($raw) -join "") -split "`0" | Where-Object { $_ })
+    $files = @((@($raw) -join "") -split "`0" | Where-Object { $_ })
     $lastUnit = ""
     $keepUnit = $true
     $n = 0
@@ -403,12 +403,22 @@ function Remove-RetiredRule([string]$Name) {
         Log "[DRY RUN] Would back up and remove $f (retired rule)"
         return
     }
-    Backup-File $f
-    if (-not $script:BackupFileOk) {
+    # Not Backup-File: it resolves wildcards ([ ] in a rule name), finds nothing
+    # and reports success. Same name as backup_file: <file>.bak.<UTC timestamp>.
+    $bak = "$f.bak." + (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
+    $backupOk = $true
+    try {
+        Copy-Item -LiteralPath $f -Destination $bak -Force -ErrorAction Stop
+    } catch {
+        $backupOk = $false
+        LogDetail "Retired rule ${Name}: backup copy failed: $_"
+    }
+    if (-not $backupOk -or -not (Test-Path -LiteralPath $bak -PathType Leaf)) {
         LogError "Retired rule ${Name}: backup failed -- $f not removed"
         Write-Summary "ERROR" $tool (Get-ShortDetail "retire failed: $Name")
         return
     }
+    Log "Backed up $f"
     try {
         Remove-Item -LiteralPath $f -Force -ErrorAction Stop
     } catch {
@@ -439,7 +449,8 @@ function Write-RulesManifest {
             { $_ -in @("retire", "stale") } {
                 if ($a.Kind -eq "retire") { Log "Retired rule: $($a.Name) (was $($a.Extra); no source has it now)" }
                 $f = Join-Path (Join-Path $harnessDir "rules") $a.Name
-                if (Test-Path -LiteralPath $f) { Remove-RetiredRule $a.Name }
+                # A file (or a symlink to one), as the .sh's -f / -L; never a directory
+                if (Test-Path -LiteralPath $f -PathType Leaf) { Remove-RetiredRule $a.Name }
             }
         }
     }
