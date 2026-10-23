@@ -7,9 +7,11 @@ description: Read and write per-tool operational metadata — governance modes, 
 
 **Purpose**: Governed access to tool-ops.json — read operational
 metadata, update governance modes, manage per-tool entries.
-**Scope**: CRUD operations on tool-ops.json only. NOT the governance
-principle (`.claude/rules/tool-ops.md`). NOT the framework documentation
-(`reference/framework-tool-ops.md`). NOT per-tool ops references.
+**Scope**: CRUD operations on tool-ops.json, and where to read per-tool
+ops references (deployed copy first, then the aitools repo). NOT the
+governance principle (`.claude/rules/tool-ops.md`). NOT the framework
+documentation (`reference/framework-tool-ops.md`). NOT the content of
+per-tool ops references.
 **Audience**: Agents checking tool behavior, `/audit` skill validating
 ops coverage, setup scripts reading governance modes.
 
