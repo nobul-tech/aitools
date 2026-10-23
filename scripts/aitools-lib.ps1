@@ -288,6 +288,8 @@ function Resolve-MachineProfile {
     if (-not (Invoke-AitLibProfile @("resolve", "--environment", $script:AitoolsEnvironment))) {
         LogError "machine profile: resolver aitools-profile.ps1 not found next to aitools-lib.ps1"
         Write-Summary "ERROR" "machine profile" "resolver missing"
+        # Same text as Resolve-UserRepoPath's: one ACTION per run for a missing resolver
+        Write-AitLibActionOnce "see deploy.log -- the dotprofile could not be resolved"
         return 3
     }
     $script:AitLibMachineAlias = Get-AitLibProfileTag "alias"
@@ -432,7 +434,14 @@ function Set-ToolException([string]$Slug, [string]$Method, [string]$Path, [strin
 # Every counted warning also increments $script:warnings (it promotes the
 # parent's OK rows, as the child's own rows are). Errors are not added to
 # $script:errors line by line: Invoke-ChildRelayed logs one LogError for a
-# failed child. Private caches: $script:AitLibRunId, AitLibJsonlHost, AitLibJsonlOs.
+# failed child.
+# Summary rows: the child writes its own. With TOOL, a failed child (non-zero
+# exit, a throw or parse error, error lines with exit 0, or not run at all)
+# that wrote no ERROR row of its own gets one: "ERROR|TOOL|script failed
+# (exit N)", "aborted (exit 2)" (D-TS13), "script failed (exception)", "logged
+# errors (exit 0)", or "not run (no command)". A child that wrote an ERROR row
+# (any tool) gets no second one. Parity: run_child_relayed --summary-tool.
+# Private caches: $script:AitLibRunId, AitLibJsonlHost, AitLibJsonlOs.
 # ---------------------------------------------------------------------------
 
 # Initialize-AitLibJsonl -- the host, os and run id fields, computed once
@@ -512,22 +521,56 @@ function Send-ChildLog([object[]]$Lines) {
     }
 }
 
+# Get-AitLibSummaryErrorCount -- the number of ERROR rows in the run summary
+# ($env:AITOOLS_SUMMARY_FILE; 0 without one). An unreadable summary counts 0 and
+# is a detail line. Parity: _aitlib_summary_errors.
+function Get-AitLibSummaryErrorCount {
+    if (-not $env:AITOOLS_SUMMARY_FILE) { return 0 }
+    $sf = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:AITOOLS_SUMMARY_FILE)
+    if (-not (Test-Path -LiteralPath $sf -PathType Leaf)) { return 0 }
+    try {
+        return @([IO.File]::ReadAllLines($sf, [System.Text.UTF8Encoding]::new($false)) | Where-Object { $_.StartsWith("ERROR|", [StringComparison]::Ordinal) }).Count
+    } catch {
+        LogDetail "run summary unreadable ($($_.Exception.Message)) -- its ERROR rows are not counted"
+        return 0
+    }
+}
+
+# Write-AitLibChildRow TOOL BEFORE DETAIL -- for a failed child: write the row
+# "ERROR|TOOL|DETAIL" unless TOOL is "" or the child wrote an ERROR row of its own
+# (the run summary now holds more than BEFORE ERROR rows). Parity: _aitlib_child_row.
+function Write-AitLibChildRow([string]$Tool, [int]$Before, [string]$Detail) {
+    if (-not $Tool) { return }
+    if ((Get-AitLibSummaryErrorCount) -gt $Before) {
+        LogDetail "${Tool}: the child wrote its own ERROR row -- none added"
+        return
+    }
+    Write-Summary "ERROR" $Tool $Detail
+}
+
 # Invoke-ChildRelayed LABEL SCRIPT [ARGS] [SUMMARYTOOL] -- run a child .ps1
 # in-process (e.g. Invoke-ChildRelayed "Step 5: setup-user-config.ps1" $writer
 # $writerArgs "aitools config"), its Write-Host output redirected with 6>&1 and
-# relayed line by line as it arrives. The child writes its own summary rows; a
-# throw (the child could not write them) is LogError plus, when SUMMARYTOOL is
-# given, the row "ERROR|SUMMARYTOOL|script failed (exception)" (bash has no
-# in-process throw, so run_child_relayed has no such argument). Sets
+# relayed line by line as it arrives. The child writes its own summary rows;
+# SUMMARYTOOL names the row for a failed child that wrote none (see the section
+# comment). A throw (or a parse error) is one LogError. Sets
 # $script:AitLibChildRc, AitLibChildWarnings, AitLibChildErrors. Returns 0 when
 # the child exited 0 with no error line; otherwise 1 after one LogError naming LABEL.
+# No SCRIPT ("") is a failure, not a no-op (parity: run_child_relayed).
 # The child must end with an explicit `exit N` (the standard exit footer): a
 # .ps1 that just ends reports the exit code of the last native command it ran.
-# The parameters carry the lib prefix because the in-process child can read this
-# function's variables through dynamic scope (an unset $Label in the child would
-# otherwise see ours).
+# The parameters and locals carry the lib prefix because the in-process child
+# can read this function's variables through dynamic scope (an unset $Label in
+# the child would otherwise see ours).
 function Invoke-ChildRelayed([string]$AitLibLabel, [string]$AitLibChildScript, [hashtable]$AitLibChildArgs = @{}, [string]$AitLibSummaryTool = "") {
     $script:AitLibChildRc = 0; $script:AitLibChildWarnings = 0; $script:AitLibChildErrors = 0
+    if (-not $AitLibChildScript) {
+        $script:AitLibChildRc = 1
+        LogError "${AitLibLabel}: not run (no command given)"
+        if ($AitLibSummaryTool) { Write-Summary "ERROR" $AitLibSummaryTool "not run (no command)" }
+        return 1
+    }
+    $AitLibErrRows = Get-AitLibSummaryErrorCount
     $global:LASTEXITCODE = 0
     try {
         & $AitLibChildScript @AitLibChildArgs 6>&1 | ForEach-Object { Send-AitLibChildLine $_ }
@@ -535,15 +578,18 @@ function Invoke-ChildRelayed([string]$AitLibLabel, [string]$AitLibChildScript, [
     } catch {
         $script:AitLibChildRc = 1
         LogError "${AitLibLabel} failed: $($_.Exception.Message)"
-        if ($AitLibSummaryTool) { Write-Summary "ERROR" $AitLibSummaryTool "script failed (exception)" }
+        Write-AitLibChildRow $AitLibSummaryTool $AitLibErrRows "script failed (exception)"
         return 1
     }
     if ($script:AitLibChildRc -ne 0) {
         LogError "$AitLibLabel failed (exit $($script:AitLibChildRc)) -- see $logFile"
+        $AitLibDetail = if ($script:AitLibChildRc -eq 2) { "aborted (exit 2)" } else { "script failed (exit $($script:AitLibChildRc))" }
+        Write-AitLibChildRow $AitLibSummaryTool $AitLibErrRows $AitLibDetail
         return 1
     }
     if ($script:AitLibChildErrors -gt 0) {
         LogError "$AitLibLabel logged $($script:AitLibChildErrors) error(s) but exited 0 -- see $logFile"
+        Write-AitLibChildRow $AitLibSummaryTool $AitLibErrRows "logged errors (exit 0)"
         return 1
     }
     return 0
