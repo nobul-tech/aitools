@@ -21,6 +21,8 @@
 # Preserved: all other keys, in place (key order kept)
 # Write path: merge to temp -> validate -> Backup-File -> move.
 #   A read, merge or validation failure leaves the existing file untouched.
+#   -DryRun merges into a system temp file: nothing under ~/.aitools is created or
+#   changed (deploy.log still records the run).
 # Tests only: AITOOLS_PROFILE_TEST_ANY_OS=1 lets the parity tests run this file
 #   with pwsh on macOS/Linux.
 #
@@ -90,7 +92,10 @@ foreach ($v in @($ReposPath, $RepoPath, $UserRepoPath)) {
 
 $configDir = Join-Path $HOME ".aitools"
 $configFile = Join-Path $configDir "config.json"
+# The merge result goes next to config.json (same volume, so the move replaces it in
+# one step); a dry run merges into a system temp file and never touches ~/.aitools.
 $configTmp = "$configFile.tmp.$PID"
+if ($DryRun) { $configTmp = Join-Path ([IO.Path]::GetTempPath()) "aitools-config.$PID.json" }
 $profilePs1 = Join-Path $PSScriptRoot "aitools-profile.ps1"
 $jsonPs1 = Join-Path $PSScriptRoot "aitools-json.ps1"
 foreach ($f in @($profilePs1, $jsonPs1)) {
@@ -101,7 +106,14 @@ foreach ($f in @($profilePs1, $jsonPs1)) {
     }
 }
 . $jsonPs1
-if (-not (Test-Path -LiteralPath $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
+if (-not $DryRun -and -not (Test-Path -LiteralPath $configDir)) {
+    try { New-Item -ItemType Directory -Path $configDir -Force -ErrorAction Stop | Out-Null }
+    catch {
+        LogError "Failed: could not create ${configDir}: $($_.Exception.Message) -- config.json not written"
+        Write-Summary "ERROR" "aitools config" "write failed"
+        exit 1
+    }
+}
 
 function Remove-ConfigTmp {
     if (Test-Path -LiteralPath $configTmp) {
