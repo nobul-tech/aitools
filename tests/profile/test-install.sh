@@ -46,7 +46,8 @@ H="$WORK/home"
 
 # Stub config writers. WRITER_MODE: warn (one warning, its own OK row, exit 0),
 # crash (one warning, then exit 1 without a row or footer), ownrow (log_error, its
-# own ERROR row, exit 1), quiet (one info line, exit 0)
+# own ERROR row, exit 1), runid (logs the AITOOLS_RUN_ID it sees), quiet (one info
+# line, exit 0)
 cat > "$WORK/writer.sh" <<'WRITER'
 ts="2026-01-01T00:00:00Z"
 printf '[%s] [setup-user-config] [info] stub writer\n' "$ts"
@@ -59,6 +60,9 @@ case "${WRITER_MODE:-quiet}" in
     crash)
         printf '[%s] [setup-user-config] [warn] stub warning\n' "$ts"
         exit 1 ;;
+    runid)
+        printf '[%s] [setup-user-config] [info] run id %s\n' "$ts" "${AITOOLS_RUN_ID:-unset}"
+        exit 0 ;;
     ownrow)
         printf '[%s] [setup-user-config] [error] stub failed\n' "$ts"
         printf 'ERROR|aitools config|stub failed\n' >> "$AITOOLS_SUMMARY_FILE"
@@ -79,6 +83,11 @@ switch ($env:WRITER_MODE) {
         exit 0
     }
     "crash" { Write-Host "[$ts] [setup-user-config] [warn] stub warning"; exit 1 }
+    "runid" {
+        $rid = if ($env:AITOOLS_RUN_ID) { $env:AITOOLS_RUN_ID } else { "unset" }
+        Write-Host "[$ts] [setup-user-config] [info] run id $rid"
+        exit 0
+    }
     "ownrow" {
         Write-Host "[$ts] [setup-user-config] [error] stub failed"
         [IO.File]::AppendAllText($env:AITOOLS_SUMMARY_FILE, "ERROR|aitools config|stub failed`n")
@@ -193,6 +202,18 @@ for impl in $IMPLS; do
     # harness start + end (installer) and the writer's three lines (info, warn, footer)
     if [ "$got" = "records=5 invalid=0 runids=1 child=3 childwarn=1" ]; then ok "step5-warn ($impl): deploy.jsonl ($got)"
     else bad "step5-warn ($impl): deploy.jsonl '$got', want records=5 invalid=0 runids=1 child=3 childwarn=1"; fi
+
+    # Review B m-4: the installer exports one AITOOLS_RUN_ID; the child sees it and
+    # every record (the installer's and the relayed child's) carries it
+    fresh; WRITER_MODE=runid run_h "$impl" step5
+    got=$(perl -MJSON::PP -e '
+        my %ids; my $child = "";
+        open(my $fh, "<:raw", $ARGV[0]) or do { print "no file\n"; exit 0 };
+        while (my $l = <$fh>) { my $o = decode_json($l); $ids{$o->{run_id}} = 1; $child = $1 if $o->{msg} =~ /^run id (\S+)$/; }
+        my @k = keys %ids;
+        print((@k == 1 && $child ne "" && $child ne "unset" && $k[0] eq $child) ? "same\n" : "ids=@k child=$child\n");' "$H/.aitools/logs/deploy.jsonl")
+    if [ "$got" = "same" ]; then ok "step5-runid ($impl): the child's AITOOLS_RUN_ID is every record's run_id"
+    else bad "step5-runid ($impl): $got"; fi
 
     # A-18 / A-3: a writer that dies without a row gets the relay's ERROR row
     fresh; WRITER_MODE=crash run_h "$impl" step5

@@ -660,8 +660,12 @@ _aitlib_child_row() {
 # run_child_relayed [--summary-tool TOOL] LABEL CMD [ARGS...] -- run a child
 # script (e.g. run_child_relayed --summary-tool "aitools config"
 # "Step 5: setup-user-config.sh" "${BASH:-bash}" "$writer" ...) and relay its
-# stdout line by line as it arrives, so its log lines show before any prompt it
-# reads from /dev/tty. stdin and stderr are the caller's. CMD runs in a
+# stdout line by line as it arrives (not captured until the end). A prompt the
+# child writes to /dev/tty can still overtake its last few lines when it follows
+# them with no work in between (review B n-1). Only complete lines are relayed: a
+# child whose prompt goes to stdout without a newline (e.g. pwsh [Console]::Write
+# under Git Bash) must not be relayed while it prompts. stdin and stderr are the
+# caller's. CMD runs in a
 # subshell: it must be a separate process (a script), not a function that
 # changes the caller's variables. The child writes its own summary rows; TOOL
 # names the row for a failed child that wrote none (see the section comment).

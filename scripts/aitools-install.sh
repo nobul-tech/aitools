@@ -121,17 +121,6 @@ case "$(uname -s)" in
 esac
 
 OS_NAME="$(uname -s)"
-# One run id for this installer's deploy.jsonl records and every relayed child's
-# (the lib's jsonl_record reads AITOOLS_RUN_ID; a child that relays its own children
-# passes it on). 6 random bytes as hex, the lib's form; when that fails it stays
-# unset and the lib picks one id for this process.
-if [ -z "${AITOOLS_RUN_ID:-}" ]; then
-    if _run_id="$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')" && [ -n "$_run_id" ]; then
-        export AITOOLS_RUN_ID="$_run_id"
-    else
-        log_detail "deploy.jsonl: no random run id (od failed) -- the lib picks one for this process"
-    fi
-fi
 
 if $DRY_RUN; then export AITOOLS_DRY_RUN=1; fi
 
@@ -176,9 +165,10 @@ absolute_repos_path() {
 # row "aitools config" when PATH cannot be created or resolved; the caller then
 # skips Step 5, whose writer accepts absolute paths only (audit A-17).
 resolve_repos_dir() {
-    local p="$1" abs=""
+    local p="$1" abs="" mkerr=""
     REPOS_PATH="$p"
-    if ! mkdir -p "$p"; then
+    if ! mkerr=$(mkdir -p "$p" 2>&1); then
+        log_detail "Repos directory '$p': ${mkerr:-mkdir failed}"
         log_error "Repos directory '$p' could not be created -- config.json will not be written"
         write_summary ERROR "aitools config" "repos dir not created"
         return 1
@@ -200,6 +190,19 @@ resolve_repos_dir() {
 # --- END install log helpers ---
 
 # --- BEGIN install log override (tests/profile/test-install.sh extracts this block) ---
+# One run id for this installer's deploy.jsonl records and every relayed child's
+# (the lib's jsonl_record reads AITOOLS_RUN_ID; a child that relays its own children
+# passes it on). 6 random bytes as hex, the lib's form; when that fails it stays
+# unset and the lib picks one id for this process. Exported to children only (a
+# bash process cannot change its caller's environment).
+if [ -z "${AITOOLS_RUN_ID:-}" ]; then
+    if _run_id="$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')" && [ -n "$_run_id" ]; then
+        export AITOOLS_RUN_ID="$_run_id"
+    else
+        log_detail "deploy.jsonl: no random run id (od failed) -- the lib picks one for this process"
+    fi
+fi
+
 # Override: JSONL dual-format (human-readable + structured JSON). The record goes
 # through the lib's jsonl_record: escaped, one run_id for the installer's own
 # lines and its relayed children's, and an unwritable deploy.jsonl is one warning,

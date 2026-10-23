@@ -49,13 +49,6 @@ if ($PSVersionTable.PSVersion.Major -ge 6 -and -not $IsWindows) {
 
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 
-# One run id for this installer's deploy.jsonl records and every relayed child's
-# (the lib's Write-JsonlRecord reads AITOOLS_RUN_ID; a child that relays its own
-# children passes it on). 6 random bytes as hex, the lib's form.
-if (-not $env:AITOOLS_RUN_ID) {
-    $env:AITOOLS_RUN_ID = -join ((1..6) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) })
-}
-
 # Env passthrough from parent (aitools CLI)
 if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
 if ($DryRun) { $env:AITOOLS_DRY_RUN = "1" }
@@ -129,6 +122,17 @@ function Resolve-ReposDir([string]$Path) {
 # --- END install log helpers ---
 
 # --- BEGIN install log override (tests/profile/test-install.sh extracts this block) ---
+# One run id for this installer's deploy.jsonl records and every relayed child's
+# (the lib's Write-JsonlRecord reads AITOOLS_RUN_ID; a child that relays its own
+# children passes it on). 6 random bytes as hex, the lib's form. Set only when the
+# caller did not set it ($script:InstallSetRunId), and then removed again at the exit
+# footer, so an in-process run does not leave it in the session (review B m-2).
+$script:InstallSetRunId = $false
+if (-not $env:AITOOLS_RUN_ID) {
+    $env:AITOOLS_RUN_ID = -join ((1..6) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) })
+    $script:InstallSetRunId = $true
+}
+
 # Override: JSONL dual-format (human-readable + structured JSON). The record goes
 # through the lib's Write-JsonlRecord: escaped, one run_id for the installer's own
 # lines and its relayed children's, and an unwritable deploy.jsonl is one warning (A-16).
@@ -828,6 +832,12 @@ if (Test-Path $syncPy) {
 
 # --- Cleanup ---
 if ($DryRun) { Remove-Item Env:\AITOOLS_DRY_RUN -ErrorAction SilentlyContinue }
+# The run id this installer set (review B m-2); the footer below keeps it (the lib
+# cached it at the first record)
+if ($script:InstallSetRunId) {
+    Remove-Item Env:\AITOOLS_RUN_ID -ErrorAction SilentlyContinue
+    if (Test-Path Env:\AITOOLS_RUN_ID) { LogDetail "AITOOLS_RUN_ID could not be cleared" }
+}
 
 if (-not $env:AITOOLS_SUPPRESS_SUMMARY_DISPLAY) { Show-Summary }
 

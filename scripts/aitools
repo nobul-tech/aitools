@@ -872,7 +872,7 @@ ui_scaffold_claude_md() {
 # (D-TS13). The caller creates and shows the run summary (decision 3).
 user_init() {
     local rc=0 raw repos_dir user_repo_dir out crc=0 dn de hook_rc=0 hook_setup
-    local writer_args=() writer_cmd=() hook_cmd=() no_machine=false
+    local writer_args=() writer_cmd=() hook_cmd=() no_machine=false hook_direct=false hook_errs0=0 hook_detail=""
     gh_user=""; repo_name=""; machine_key=""; machine_alias=""; machine_owner=""
     # --force: no prompts here, and the review menus of setup-user-hooks take the source
     if $force; then export AITOOLS_FORCE=1; fi
@@ -1019,8 +1019,13 @@ user_init() {
     log "user init: deploying the session archive hook"
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
+            # Not relayed (review B M-1): the PowerShell review menus write their prompt
+            # with [Console]::Write and no newline; through the relay's line reader it
+            # would stay hidden until the user answered. Run directly, as before; the
+            # failure is counted and its ERROR row written by the relay's rule below.
             hook_setup="$repo_path/scripts/setup-user-hooks.ps1"
             hook_cmd=(pwsh -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$hook_setup")")
+            hook_direct=true
             ;;
         *)
             hook_setup="$repo_path/scripts/setup-user-hooks.sh"
@@ -1029,6 +1034,17 @@ user_init() {
     esac
     if [ ! -f "$hook_setup" ]; then
         hook_rc=127
+    elif $hook_direct; then
+        _aitlib_summary_errors hook_errs0
+        "${hook_cmd[@]}" || hook_rc=$?
+        if [ "$hook_rc" -ne 0 ]; then
+            # The relay's outcome for the same exit (run_child_relayed): one error and
+            # the row "aborted (exit 2)" / "script failed (exit N)" unless the child
+            # wrote an ERROR row of its own
+            if [ "$hook_rc" -eq 2 ]; then hook_detail="aborted (exit 2)"; else hook_detail="script failed (exit $hook_rc)"; fi
+            log_error "user init: $(basename "$hook_setup") ${hook_detail#script } -- see $LOG_DISPLAY"
+            _aitlib_child_row "claude hooks" "$hook_errs0" "$hook_detail"
+        fi
     elif ! run_child_relayed --summary-tool "claude hooks" "user init: $(basename "$hook_setup")" "${hook_cmd[@]}"; then
         hook_rc="$AITLIB_CHILD_RC"
         if [ "$hook_rc" -eq 0 ]; then hook_rc=1; fi   # error lines with exit 0: a failure

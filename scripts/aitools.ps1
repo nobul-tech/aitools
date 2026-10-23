@@ -502,9 +502,10 @@ if (Test-Path $aitoolsJson) { . $aitoolsJson }
 Initialize-Logging "aitools"
 foreach ($note in $preLibNotes) { Log $note }
 foreach ($w in $preLibWarnings) { LogWarn $w }
-# --alias / -Alias without a value (audit A-15; same text as bash). pwsh binds the
-# next word, so "--alias --force" arrives as the value "--force"; a missing last
-# value is a parameter-binding error that pwsh reports before this script runs.
+# --alias / -Alias with a value that is an option-like word (audit A-15; same text as
+# bash), e.g. "-x". A missing value -- "--alias" last, or followed by one of this
+# script's own switches such as --force -- is a parameter-binding error that pwsh
+# reports under -File before this script runs (review B m-1), so it never gets here.
 if ($script:UserAlias -and $script:UserAlias.StartsWith("-")) {
     LogError "--alias needs a value (aitools user init --alias <name>)"
     exit 1
