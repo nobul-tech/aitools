@@ -1001,12 +1001,117 @@ _managed_protected_note() {
     fi
 }
 
-# After adopt or merge: the library never commits or pushes. Say that the
-# adopt target's repo has an uncommitted change to review, and WARN when the
-# target is protected (_managed_protected_note).
+# ---------------------------------------------------------------------------
+# dotprofile_commit_push FILE MESSAGE -- commit FILE, and only FILE, in the
+# dotprofile and push it (N-Q2: dotprofile writes are committed and pushed
+# automatically). Parity: Invoke-DotprofileCommitPush in aitools-lib.ps1.
+#   FILE     absolute path of a file this run wrote
+#   MESSAGE  commit message
+# "In the dotprofile" is decided by git, not by the path string: FILE's git top
+# level equals the dotprofile's git top level. The dotprofile is
+# AITLIB_USER_REPO_PATH when the caller already ran resolve_user_repo_path
+# (set, even to ""); otherwise the resolver is asked here, quietly (no ERROR
+# row: a resolver failure means "not the dotprofile"; it overwrites
+# AITLIB_PROFILE_OUT / AITLIB_PROFILE_RC).
+# Pathspec commit (git add -- FILE, then git commit -m MESSAGE -- FILE), so other
+# staged or unstaged changes in the dotprofile are never included. The push
+# never prompts (GIT_TERMINAL_PROMPT=0; ssh BatchMode unless GIT_SSH_COMMAND is
+# set); credential helpers still work. git's output goes to deploy.log (detail).
+# Sets AITLIB_DOTPROFILE_PUSH (never empty after the call):
+#   committed-pushed  committed and pushed (log_ok)
+#   unchanged         FILE matches HEAD: nothing committed, no push, no warning
+#   commit-failed     log_warn + ACTION "commit and push <file> in <dotprofile>"
+#   push-failed       committed, not pushed: log_warn + ACTION "git pull --rebase,
+#                     then git push in <dotprofile>" (remote has newer commits)
+#                     or "run git push in <dotprofile>" (any other failure)
+#   not-dotprofile    FILE is not in the dotprofile, or there is none: nothing done
+# Always returns 0: a failed commit or push is a warning, the caller's own
+# outcome (e.g. "accept & adopt") is unchanged and the run continues.
+# ---------------------------------------------------------------------------
+dotprofile_commit_push() {
+    AITLIB_DOTPROFILE_PUSH="not-dotprofile"
+    local file="$1" msg="$2" dir base top dp="" dptop prefix rel d out rc=0 drc=0
+    dir=$(dirname "$file"); base=$(basename "$file")
+    if ! command -v git >/dev/null 2>&1; then
+        log_detail "dotprofile commit: git not found -- $(display_path "$file") not committed"
+        return 0
+    fi
+    if [ -n "${AITLIB_USER_REPO_PATH+set}" ]; then
+        dp="$AITLIB_USER_REPO_PATH"
+    elif _aitlib_profile_run user-repo-path && [ "$AITLIB_PROFILE_RC" -eq 0 ]; then
+        dp=$(_aitlib_bash_path "$(_aitlib_profile_tag path)")
+    fi
+    if [ -z "$dp" ] || [ ! -d "$dp" ] || [ ! -d "$dir" ]; then
+        log_detail "dotprofile commit: $(display_path "$file") -- no dotprofile resolved or no such directory; nothing committed"
+        return 0
+    fi
+    # 2>/dev/null: outside a git repo rev-parse fails; the empty result is checked below.
+    top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || top=""
+    dptop=$(git -C "$dp" rev-parse --show-toplevel 2>/dev/null) || dptop=""  # same: empty checked below
+    d=$(display_path "$dp")
+    if [ -z "$dptop" ]; then
+        case "$file" in
+            "$dp"/*)
+                AITLIB_DOTPROFILE_PUSH="commit-failed"
+                log_warn "dotprofile $d is not a git repository -- $base written but not committed"
+                _aitlib_action_once "commit and push $base in $d" ;;
+            *) log_detail "dotprofile commit: $d is not a git repository; $(display_path "$file") is outside it" ;;
+        esac
+        return 0
+    fi
+    if [ -z "$top" ] || [ "$top" != "$dptop" ]; then
+        log_detail "dotprofile commit: $(display_path "$file") is not in the dotprofile ($d) -- not committed"
+        return 0
+    fi
+    prefix=$(git -C "$dir" rev-parse --show-prefix 2>/dev/null) || prefix=""  # "" = file at the repo root (valid)
+    rel="${prefix}${base}"
+    out=$(git -C "$dir" add -- "$base" 2>&1) || rc=$?
+    if [ "$rc" -eq 0 ]; then
+        git -C "$dir" diff --cached --quiet -- "$base" || drc=$?
+        if [ "$drc" -eq 0 ]; then
+            AITLIB_DOTPROFILE_PUSH="unchanged"
+            log_detail "dotprofile commit: $rel unchanged in $d -- nothing to commit or push"
+            return 0
+        fi
+        # drc 1 = a staged change to commit; >1 = diff error: the commit reports a real problem
+        out=$(git -C "$dir" commit -m "$msg" -- "$base" 2>&1) || rc=$?
+    fi
+    if [ -n "$out" ]; then log_detail "git commit in $d: $out"; fi
+    if [ "$rc" -ne 0 ]; then
+        AITLIB_DOTPROFILE_PUSH="commit-failed"
+        log_warn "dotprofile commit failed (exit $rc) -- commit and push $rel in $d by hand"
+        _aitlib_action_once "commit and push $rel in $d"
+        return 0
+    fi
+    out=$(GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}" git -C "$dir" push 2>&1) || rc=$?
+    if [ -n "$out" ]; then log_detail "git push in $d: $out"; fi
+    if [ "$rc" -ne 0 ]; then
+        AITLIB_DOTPROFILE_PUSH="push-failed"
+        case "$out" in
+            *rejected*|*non-fast-forward*|*"fetch first"*)
+                log_warn "dotprofile push rejected (exit $rc): the remote has newer commits -- run git pull --rebase, then git push in $d"
+                _aitlib_action_once "git pull --rebase, then git push in $d" ;;
+            *)
+                log_warn "dotprofile push failed (exit $rc) -- run git push in $d"
+                _aitlib_action_once "run git push in $d" ;;
+        esac
+        return 0
+    fi
+    AITLIB_DOTPROFILE_PUSH="committed-pushed"
+    log_ok "dotprofile: $rel committed and pushed ($msg)"
+    return 0
+}
+
+# After adopt or merge: WARN when the target is protected
+# (_managed_protected_note). An adopt target in the dotprofile is committed and
+# pushed (dotprofile_commit_push, N-Q2). Any other adopt target (the aitools
+# repo) stays a working-tree change: say that its repo has an uncommitted
+# change to review.
 _managed_adopt_notice() {
     local target="$1" top
     _managed_protected_note "$target"
+    dotprofile_commit_push "$target" "Adopt $(basename "$target") from the deployed copy"
+    if [ "$AITLIB_DOTPROFILE_PUSH" != "not-dotprofile" ]; then return 0; fi
     # 2>/dev/null: outside a git repo there is nothing to commit (empty result checked).
     top=$(git -C "$(dirname "$target")" rev-parse --show-toplevel 2>/dev/null) || top=""
     if [ -n "$top" ]; then
@@ -1541,9 +1646,12 @@ _invoke_ai_merge() {
 # caller records it; deploy_tracker_summary writes an ERROR row) and the run
 # continues with the next file. An adopt target listed in its repo's
 # protected-files table (.claude/rules/sources-of-truth.md) gets a WARN that
-# names it: working tree only; the review gate applies at commit. The library
-# never commits or pushes: after adopt or merge it logs that the adopt
-# target's repo has an uncommitted change to review and ship.
+# names it: working tree only; the review gate applies at commit. After adopt
+# or merge, an adopt target in the dotprofile is committed (that file only) and
+# pushed (dotprofile_commit_push, N-Q2; a failed commit or push is a warning +
+# ACTION, the result stays "accept & adopt"). Any other adopt target (the
+# aitools repo) is not committed: the library logs that its repo has an
+# uncommitted change to review and ship.
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
