@@ -16,6 +16,14 @@
    - Batch now: 18 entries, #146-#163, with 9 medium and 9 low. The apply step was re-tested 7/7: 156 incidents, 7 closed, ids 1-163.
    - Following S3-M3Finish's answers: the dotprofile-template repair is not filed, #98/#76 closure stays a listed follow-up, and markers from the non-M3 missions are out of scope.
 
+7. **Final marker batch** (S3-M3Finish, 2026-10-22; 10 markers from PRs #98, #103, #108, #109, #112, #114 and #116). Each was verified on its PR head after `git fetch`.
+   - New: #164-#170, seven entries.
+   - Merged: one. The PR #112 deploy-paths.md marker went into #146.
+   - Fixed: one. The resolver messages are fixed on PR #114, which is not merged yet.
+   - Not filed: one. The macOS mktemp/TMPDIR behaviour is a note for test isolation, not a harness defect.
+   - My own probes, under an isolated HOME, reproduced #168 (version 2.0) and #170 (`--alias` through `& @args`).
+   - **Final batch: 25 entries, #146-#170, 14 medium and 11 low.** The apply step re-tested 7/7: 163 incidents, 7 closed, ids 1-170.
+
 ## Files
 
 All in `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MF-Incidents/`:
