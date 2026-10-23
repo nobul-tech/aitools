@@ -522,7 +522,9 @@ tool_exception_record() {
 # wrote no ERROR row of its own -- it died before its write_summary (a set -e
 # abort, exit 127, a crash) -- gets one: "ERROR|TOOL|script failed (exit N)",
 # "aborted (exit 2)" (D-TS13), "logged errors (exit 0)", or "not run (...)".
-# A child that wrote an ERROR row (any tool) gets no second one.
+# A child that wrote an ERROR row (any tool) gets no second one -- also when it
+# crashed after writing it: the panel then shows the child's row, and the crash
+# is the relay's log_error in deploy.log.
 # Private caches (JSON-escaped): AITLIB_RUN_ID, AITLIB_JSONL_HOST, AITLIB_JSONL_OS.
 # ---------------------------------------------------------------------------
 
@@ -618,7 +620,8 @@ relay_child_log() {
 
 # _aitlib_summary_errors VAR -- set VAR to the number of ERROR rows in the run
 # summary (AITOOLS_SUMMARY_FILE; 0 without one). An unreadable summary counts 0
-# and is a detail line.
+# and is a detail line. VAR must not be one of this function's locals
+# (_aitlib_se_*): printf -v would set the local, not the caller's variable.
 _aitlib_summary_errors() {
     local _aitlib_se_n=0 _aitlib_se_l _aitlib_se_f="${AITOOLS_SUMMARY_FILE:-}"
     if [ -n "$_aitlib_se_f" ] && [ -f "$_aitlib_se_f" ]; then
@@ -697,8 +700,8 @@ run_child_relayed() {
     esac
     AITLIB_CHILD_RC="$rc"
     if [ "$rc" -ne 0 ]; then
-        log_error "$label failed (exit $rc) -- see $(display_path "$LOG_FILE")"
         if [ "$rc" -eq 2 ]; then detail="aborted (exit 2)"; else detail="script failed (exit $rc)"; fi
+        log_error "$label ${detail#script } -- see $(display_path "$LOG_FILE")"
         _aitlib_child_row "$tool" "$errs0" "$detail"
         return 1
     fi
