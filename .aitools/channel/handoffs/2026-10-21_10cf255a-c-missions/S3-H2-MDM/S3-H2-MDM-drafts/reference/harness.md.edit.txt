@@ -1,0 +1,16 @@
+Draft edit for reference/harness.md "Deployed harness (~/.aitools)" (protected;
+awaiting commander approval). PR #100 also drafts this file (S3-H2-Manifest-drafts):
+apply this edit on top of whichever version is current.
+
+OLD:
+`config.json` is generated from `profile.json` by calling the only config
+writer, `scripts/setup-user-config.sh` / `.ps1`.
+
+NEW:
+`config.json` is generated from `profile.json` by calling the only config
+writer, `scripts/setup-user-config.sh` / `.ps1`, unless the caller passes
+`--skip-config` / `-SkipConfig` (it already ran the writer, as
+`aitools-install` Step 5 does): the summary row is then
+`OK config.json n/a (written by installer)`. The MDM variant
+(`<dotprofile>/deploy/`) takes the same path when `config.json` has no
+bootstrap keys (`reposPath`, `repoPath`): `n/a (no bootstrap)`.
