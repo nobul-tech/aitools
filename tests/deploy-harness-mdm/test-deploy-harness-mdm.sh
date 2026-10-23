@@ -82,7 +82,9 @@ build() {
     if [ -d "$DOT/deploy" ]; then cp -Rp "$DOT/deploy" "$TMP_ROOT/$1/deploy"; fi
 }
 
-# Failing git for the MDM runs: the MDM path must not need git.
+# Failing git for the MDM runs: the MDM path must not need git. One exception:
+# the terminal review menu displays its diff with `git diff --no-index` (#81);
+# without git it shows "(diff unavailable)" and the menu still works.
 mkdir -p "$TMP_ROOT/fakegit"
 printf '#!/bin/sh\necho "$*" >> "%s/fakegit.calls"\nexit 99\n' "$TMP_ROOT" > "$TMP_ROOT/fakegit/git"
 chmod +x "$TMP_ROOT/fakegit/git"
@@ -119,6 +121,10 @@ same_trees() {  # same_trees NAME -- six directories and exec bits identical
       "$(cd "$b" && find reference registries hooks rules skills bin -type f -perm -u+x | sort)" ]
 }
 no_fake_git() { [ ! -s "$TMP_ROOT/fakegit.calls" ]; }
+# Every recorded call is the review display's `git ... diff --no-index` (#81)
+only_review_diff_git() {
+    [ ! -s "$TMP_ROOT/fakegit.calls" ] || ! grep -qv -e ' diff --no-index ' "$TMP_ROOT/fakegit.calls"
+}
 
 # ---------------------------------------------------------------------------
 # Build
@@ -181,6 +187,8 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$PTY" ]; then
     echo $? > "$TMP_ROOT/pty-mdm.rc"
     check "terminal review (MDM): overwrite offered, adopt and merge not; skip keeps LOCAL" \
         "[ \"\$(rc_of pty-mdm)\" = 0 ] && grep -q '\[o\]verwrite' '$OUT' && ! grep -q 'accept & adopt :' '$OUT' && ! grep -q 'merge & adopt  :' '$OUT' && grep -qx 'local edit' '$TMP_ROOT/eq-mdm/.aitools/rules/user1.md' && grep -q '^WARN|harness files|1 skipped' '$TMP_ROOT/pty-mdm.summary'"
+    check "terminal review (MDM) without git: diff unavailable, menu still shown" \
+        "grep -q 'diff unavailable' '$OUT' && grep -q '\[o\]verwrite' '$OUT'"
 else
     printf 'SKIP terminal review case (python3 pty not available)\n'; SKIP=$((SKIP + 1))
 fi
@@ -192,7 +200,7 @@ check "dry run: same rows, nothing deployed" \
 run mdm help --help
 check "--help: exit 0, MDM header, nothing deployed" \
     "[ \"\$(rc_of help-mdm)\" = 0 ] && grep -q 'MDM path of scripts/deploy-harness.sh' '$TMP_ROOT/help-mdm.out' && [ ! -e '$TMP_ROOT/help-mdm/.aitools/rules' ]"
-check "runs: MDM never called git" "no_fake_git"
+check "runs: MDM called git only to display the review diff" "only_review_diff_git"
 
 # ---------------------------------------------------------------------------
 # Damaged payload: a corrupted block and a truncated script fail loudly
