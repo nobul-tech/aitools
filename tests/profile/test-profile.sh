@@ -550,6 +550,8 @@ case_fresh() {
     "$setup"
     run_impl bash "$OUT" "$@"
     local brc=$RC
+    # temp file names carry each run's PID (normalised with or without pwsh)
+    if [ "${NORM_TMP:-}" = "1" ]; then perl -pi -e 's/\.tmp\.[0-9]+/.tmp.<pid>/g' "$OUT"; fi
     cp "$EXC_PF" "$WORK/$name.bash.profile.json" 2>/dev/null || : > "$WORK/$name.bash.profile.json"  # absent profile = empty copy
     if [ "$brc" -eq "$want" ]; then ok "$name: bash exit $brc"
     else bad "$name: bash exit $brc, want $want"; sed 's/^/       /' "$OUT" "$OUT.err"; fi
@@ -559,9 +561,7 @@ case_fresh() {
         run_impl ps "$pout" "$@"
         cp "$EXC_PF" "$WORK/$name.ps.profile.json" 2>/dev/null || : > "$WORK/$name.ps.profile.json"  # absent profile = empty copy
         if [ "$RC" -ne "$brc" ]; then bad "$name: pwsh exit $RC, bash $brc"; sed 's/^/       /' "$pout" "$pout.err"; fi
-        if [ "${NORM_TMP:-}" = "1" ]; then  # temp file names carry each run's PID
-            perl -pi -e 's/\.tmp\.[0-9]+/.tmp.<pid>/g' "$OUT" "$pout"
-        fi
+        if [ "${NORM_TMP:-}" = "1" ]; then perl -pi -e 's/\.tmp\.[0-9]+/.tmp.<pid>/g' "$pout"; fi
         if diff "$OUT" "$pout" > "$WORK/$name.diff"; then ok "$name: bash and pwsh output identical"
         else bad "$name: bash and pwsh output differ"; sed 's/^/       /' "$WORK/$name.diff"; fi
         if [ "${NORM_AT:-}" = "1" ]; then  # a real clock: the two runs are seconds apart
