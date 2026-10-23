@@ -364,29 +364,9 @@ if [ -n "$RULES_SRC" ]; then
                     ;;
             esac
             deploy_tracker_record "$MANAGED_FILE_RESULT" "claude rules" "$rule_name"
-            # After a merge & adopt (the library already wrote the merge to the
-            # dotprofile), auto commit+push to keep the dotprofile in sync.
-            # Kept: commander confirmed 2026-10-21 (contract item #11).
-            if [ "$MANAGED_FILE_RESULT" = "accept & adopt" ] && [ -n "${MERGED_CONTENT:-}" ] && [ -n "${USER_REPO_PATH:-}" ]; then
-                # Suppress git stderr noise; failure handled by if/else branches
-                if (cd "$USER_REPO_PATH" && \
-                    git add "claude/rules/$rule_name" && \
-                    git diff --cached --quiet "claude/rules/$rule_name") 2>/dev/null; then
-                    # git diff --cached --quiet exits 0 = no staged changes
-                    log "No diff to commit in user repo for $rule_name"
-                else
-                    # Suppress git stderr noise; failure handled by if/else branches
-                    if (cd "$USER_REPO_PATH" && \
-                        git add "claude/rules/$rule_name" && \
-                        git commit -m "Sync merged $rule_name from deploy" && \
-                        git push) 2>/dev/null; then
-                        log_ok "Pushed merged $rule_name to user repo"
-                    else
-                        log_warn "Failed to push merged $rule_name to user repo"
-                        write_summary WARN "claude rules" "$rule_name not pushed"
-                    fi
-                fi
-            fi
+            # After accept & adopt or merge & adopt the library commits that one
+            # dotprofile rule and pushes it (dotprofile_commit_push, N-Q2;
+            # commander confirmed 2026-10-21, contract item #11). No commit here.
         done
 
         # Log preserved files (in target but not in source)

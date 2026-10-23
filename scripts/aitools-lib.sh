@@ -144,30 +144,46 @@ read_config_key() {
 #   tool_exception_get     0         1 unavailable   1      1 (refused)  1 (unexpected)
 #   tool_exception_record  0         1 failed        1      3 refused    1 (unexpected)
 # Every 3 and 4 is logged with its code and meaning. An exit 0/1 without the
-# resolver's "via" line is rewritten to 2 first (_aitlib_profile_run).
+# resolver's result lines ("via" or "result"; a value for hostname and
+# machine-id) is rewritten to 2 first (_aitlib_profile_run).
 # ---------------------------------------------------------------------------
+
+# _aitlib_rm_tmp FILE -- remove a temp file of the runner; a failure is a detail
+# line (never silent; not a warning, which would promote the caller's OK rows)
+_aitlib_rm_tmp() {
+    if [ -e "$1" ] && ! rm -f "$1"; then log_detail "aitools-profile: could not remove temp file $1"; fi
+    return 0
+}
 
 # _aitlib_profile_run ARGS... -- run the resolver; sets AITLIB_PROFILE_OUT
 # (tagged lines, CR stripped) and AITLIB_PROFILE_RC. Returns 0 when it ran, 1
-# when no resolver is available (the caller logs it). The resolver's stderr
-# (its own log lines) is copied to deploy.log as detail lines.
-# The exit code is trusted only with the result lines: every resolver command
-# prints a "via" line on 0 (found) and 1 (none). Exit 0 or 1 without one (a
-# crash, a parse failure, a policy refusal -- pwsh exits 0 or 1 for those) is
-# rewritten to 2 with an "error" line, so no caller mistakes it for "found" or
-# "shared-only".
+# when no resolver is available (AITLIB_PROFILE_RC is then 2 with an "error"
+# line naming it; the caller logs it). The resolver's stderr (its own log
+# lines) is copied to deploy.log as detail lines. Callers: the wrappers below
+# and `aitools user init` (scripts/aitools ui_profile_run copies the results).
+# The exit code is trusted only with the result lines. Accepted output:
+#   hostname, machine-id   exit 0 with a non-empty value (a bare value, no tags)
+#   every other command    exit 0 or 1 with a "via" or a "result" line
+#                          (user-repo-path, resolve, exception-get and
+#                          derive-config print "via"; register and migrate
+#                          print "result"; exception-set prints both)
+# Exit 0 or 1 without them (a crash, a parse failure, a policy refusal -- pwsh
+# exits 0 or 1 for those) is rewritten to 2 with an "error" line, so no caller
+# mistakes it for "found" or "shared-only". Exits 2, 3 and 4 are passed through
+# with the resolver's own lines.
 # Windows (Git Bash) branch: aitools-profile.ps1 through pwsh
 # (-ExecutionPolicy Bypass, as the OS dispatch rule calls .ps1 files; a throw
-# exits 2). Path arguments (--path) are passed in Windows form (cygpath -w;
-# unchanged when cygpath fails), stdout is forced to UTF-8 and CRs are
-# stripped. AITLIB_PROFILE_VIA_PWSH=1 forces this branch on any OS (tests;
-# cygpath is then used only when present).
+# exits 2 with an "error" line, "aitools-profile CMD threw: MESSAGE"). Absolute
+# path arguments (after --path, --profile, --out, --config) are passed in
+# Windows form (cygpath -w; unchanged when cygpath fails), stdout is forced to
+# UTF-8 and CRs are stripped. AITLIB_PROFILE_VIA_PWSH=1 forces this branch on
+# any OS (tests; cygpath is then used only when present).
 # UNVERIFIED on Windows (tested on macOS only, through the forced branch):
 # cygpath conversion, MSYS argument and environment translation, and the
 # UTF-8 decoding of non-ASCII values.
 _aitlib_profile_run() {
     AITLIB_PROFILE_OUT=""; AITLIB_PROFILE_RC=0
-    local d sh ps1 errf="" line
+    local d sh ps1 errf="" line ok=false
     d="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     sh="${AITOOLS_PROFILE_SH:-$d/aitools-profile.sh}"
     ps1="${AITOOLS_PROFILE_PS1:-$d/aitools-profile.ps1}"
@@ -177,7 +193,9 @@ _aitlib_profile_run() {
     fi
     if [ "$AITOOLS_PLATFORM" = "windows" ] || [ "${AITLIB_PROFILE_VIA_PWSH:-}" = "1" ]; then
         if [ ! -f "$ps1" ] || ! command -v pwsh >/dev/null 2>&1; then
-            if [ -n "$errf" ]; then rm -f "$errf"; fi
+            if [ -n "$errf" ]; then _aitlib_rm_tmp "$errf"; fi
+            AITLIB_PROFILE_RC=2
+            AITLIB_PROFILE_OUT="error"$'\t'"resolver $(basename "$ps1") or pwsh not found ($(display_path "$(dirname "$ps1")"))"
             return 1
         fi
         local a w prev="" ps1_arg="$ps1" arglist=""
@@ -185,22 +203,28 @@ _aitlib_profile_run() {
             if w="$(cygpath -w "$ps1")"; then ps1_arg="$w"; else log_detail "aitools-profile: cygpath -w failed for $ps1 -- passed unchanged"; fi
         fi
         for a in "$@"; do
-            if [ "$prev" = "--path" ] && command -v cygpath >/dev/null 2>&1; then
-                case "$a" in
-                    /*) if w="$(cygpath -w "$a")"; then a="$w"; else log_detail "aitools-profile: cygpath -w failed for $a -- passed unchanged"; fi ;;
-                esac
-            fi
+            case "$prev" in
+                --path|--profile|--out|--config)
+                    if command -v cygpath >/dev/null 2>&1; then
+                        case "$a" in
+                            /*) if w="$(cygpath -w "$a")"; then a="$w"; else log_detail "aitools-profile: cygpath -w failed for $a -- passed unchanged"; fi ;;
+                        esac
+                    fi ;;
+            esac
             arglist="$arglist$a"$'\n'
             prev="$a"
         done
         # Arguments travel in an environment variable, one per line (resolver
         # values are one line by contract), so pwsh -Command can set UTF-8 output
-        # before it runs the resolver.
-        AITLIB_PROFILE_OUT=$(AITLIB_PS1="$ps1_arg" AITLIB_PS_ARGS="$arglist" pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command 'try { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $a = @(); if ($env:AITLIB_PS_ARGS) { $a = @($env:AITLIB_PS_ARGS.Substring(0, $env:AITLIB_PS_ARGS.Length - 1) -split "`n") }; $global:LASTEXITCODE = 0; & $env:AITLIB_PS1 @a; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine("aitools-profile threw: $($_.Exception.Message)"); exit 2 }' 2>"${errf:-/dev/null}") || AITLIB_PROFILE_RC=$?
+        # before it runs the resolver. A throw prints an "error" line (stdout) as
+        # well as the stderr line, as Invoke-AitLibProfile does.
+        AITLIB_PROFILE_OUT=$(AITLIB_PS1="$ps1_arg" AITLIB_PS_ARGS="$arglist" AITLIB_PS_CMD="${1:-}" pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command 'try { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $a = @(); if ($env:AITLIB_PS_ARGS) { $a = @($env:AITLIB_PS_ARGS.Substring(0, $env:AITLIB_PS_ARGS.Length - 1) -split "`n") }; $global:LASTEXITCODE = 0; & $env:AITLIB_PS1 @a; exit $LASTEXITCODE } catch { $m = "aitools-profile $($env:AITLIB_PS_CMD) threw: $($_.Exception.Message -replace "\s*\r?\n\s*", " ")"; [Console]::Error.WriteLine($m); [Console]::Out.WriteLine("error`t$m"); exit 2 }' 2>"${errf:-/dev/null}") || AITLIB_PROFILE_RC=$?
         AITLIB_PROFILE_OUT="${AITLIB_PROFILE_OUT//$'\r'/}"
     else
         if [ ! -f "$sh" ]; then
-            if [ -n "$errf" ]; then rm -f "$errf"; fi
+            if [ -n "$errf" ]; then _aitlib_rm_tmp "$errf"; fi
+            AITLIB_PROFILE_RC=2
+            AITLIB_PROFILE_OUT="error"$'\t'"resolver $(basename "$sh") not found ($(display_path "$(dirname "$sh")"))"
             return 1
         fi
         # The resolver runs under the caller's bash (macOS /bin/bash 3.2 stays 3.2)
@@ -211,17 +235,23 @@ _aitlib_profile_run() {
             line="${line//$'\r'/}"
             if [ -n "$line" ]; then log_detail "aitools-profile $1: $line"; fi
         done < "$errf"
-        rm -f "$errf"
+        _aitlib_rm_tmp "$errf"
     fi
     case "$AITLIB_PROFILE_RC" in
         0|1)
-            case $'\n'"$AITLIB_PROFILE_OUT" in
-                *$'\n'via$'\t'*) : ;;
+            case "${1:-}" in
+                hostname|machine-id)
+                    if [ "$AITLIB_PROFILE_RC" -eq 0 ] && [ -n "$AITLIB_PROFILE_OUT" ]; then ok=true; fi ;;
                 *)
-                    log_detail "aitools-profile $1: exit $AITLIB_PROFILE_RC without result lines -- treated as a resolver error"
-                    AITLIB_PROFILE_OUT="${AITLIB_PROFILE_OUT}"$'\n'"error"$'\t'"resolver exited $AITLIB_PROFILE_RC without result lines (see deploy.log)"
-                    AITLIB_PROFILE_RC=2 ;;
-            esac ;;
+                    case $'\n'"$AITLIB_PROFILE_OUT" in
+                        *$'\n'via$'\t'*|*$'\n'result$'\t'*) ok=true ;;
+                    esac ;;
+            esac
+            if ! $ok; then
+                log_detail "aitools-profile ${1:-}: exit $AITLIB_PROFILE_RC without result lines -- treated as a resolver error"
+                AITLIB_PROFILE_OUT="${AITLIB_PROFILE_OUT}"$'\n'"error"$'\t'"resolver exited $AITLIB_PROFILE_RC without result lines (see deploy.log)"
+                AITLIB_PROFILE_RC=2
+            fi ;;
     esac
     return 0
 }
@@ -1001,12 +1031,117 @@ _managed_protected_note() {
     fi
 }
 
-# After adopt or merge: the library never commits or pushes. Say that the
-# adopt target's repo has an uncommitted change to review, and WARN when the
-# target is protected (_managed_protected_note).
+# ---------------------------------------------------------------------------
+# dotprofile_commit_push FILE MESSAGE -- commit FILE, and only FILE, in the
+# dotprofile and push it (N-Q2: dotprofile writes are committed and pushed
+# automatically). Parity: Invoke-DotprofileCommitPush in aitools-lib.ps1.
+#   FILE     absolute path of a file this run wrote
+#   MESSAGE  commit message
+# "In the dotprofile" is decided by git, not by the path string: FILE's git top
+# level equals the dotprofile's git top level. The dotprofile is
+# AITLIB_USER_REPO_PATH when the caller already ran resolve_user_repo_path
+# (set, even to ""); otherwise the resolver is asked here, quietly (no ERROR
+# row: a resolver failure means "not the dotprofile"; it overwrites
+# AITLIB_PROFILE_OUT / AITLIB_PROFILE_RC).
+# Pathspec commit (git add -- FILE, then git commit -m MESSAGE -- FILE), so other
+# staged or unstaged changes in the dotprofile are never included. The push
+# never prompts (GIT_TERMINAL_PROMPT=0; ssh BatchMode unless GIT_SSH_COMMAND is
+# set); credential helpers still work. git's output goes to deploy.log (detail).
+# Sets AITLIB_DOTPROFILE_PUSH (never empty after the call):
+#   committed-pushed  committed and pushed (log_ok)
+#   unchanged         FILE matches HEAD: nothing committed, no push, no warning
+#   commit-failed     log_warn + ACTION "commit and push <file> in <dotprofile>"
+#   push-failed       committed, not pushed: log_warn + ACTION "git pull --rebase,
+#                     then git push in <dotprofile>" (remote has newer commits)
+#                     or "run git push in <dotprofile>" (any other failure)
+#   not-dotprofile    FILE is not in the dotprofile, or there is none: nothing done
+# Always returns 0: a failed commit or push is a warning, the caller's own
+# outcome (e.g. "accept & adopt") is unchanged and the run continues.
+# ---------------------------------------------------------------------------
+dotprofile_commit_push() {
+    AITLIB_DOTPROFILE_PUSH="not-dotprofile"
+    local file="$1" msg="$2" dir base top dp="" dptop prefix rel d out rc=0 drc=0
+    dir=$(dirname "$file"); base=$(basename "$file")
+    if ! command -v git >/dev/null 2>&1; then
+        log_detail "dotprofile commit: git not found -- $(display_path "$file") not committed"
+        return 0
+    fi
+    if [ -n "${AITLIB_USER_REPO_PATH+set}" ]; then
+        dp="$AITLIB_USER_REPO_PATH"
+    elif _aitlib_profile_run user-repo-path && [ "$AITLIB_PROFILE_RC" -eq 0 ]; then
+        dp=$(_aitlib_bash_path "$(_aitlib_profile_tag path)")
+    fi
+    if [ -z "$dp" ] || [ ! -d "$dp" ] || [ ! -d "$dir" ]; then
+        log_detail "dotprofile commit: $(display_path "$file") -- no dotprofile resolved or no such directory; nothing committed"
+        return 0
+    fi
+    # 2>/dev/null: outside a git repo rev-parse fails; the empty result is checked below.
+    top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || top=""
+    dptop=$(git -C "$dp" rev-parse --show-toplevel 2>/dev/null) || dptop=""  # same: empty checked below
+    d=$(display_path "$dp")
+    if [ -z "$dptop" ]; then
+        case "$file" in
+            "$dp"/*)
+                AITLIB_DOTPROFILE_PUSH="commit-failed"
+                log_warn "dotprofile $d is not a git repository -- $base written but not committed"
+                _aitlib_action_once "commit and push $base in $d" ;;
+            *) log_detail "dotprofile commit: $d is not a git repository; $(display_path "$file") is outside it" ;;
+        esac
+        return 0
+    fi
+    if [ -z "$top" ] || [ "$top" != "$dptop" ]; then
+        log_detail "dotprofile commit: $(display_path "$file") is not in the dotprofile ($d) -- not committed"
+        return 0
+    fi
+    prefix=$(git -C "$dir" rev-parse --show-prefix 2>/dev/null) || prefix=""  # "" = file at the repo root (valid)
+    rel="${prefix}${base}"
+    out=$(git -C "$dir" add -- "$base" 2>&1) || rc=$?
+    if [ "$rc" -eq 0 ]; then
+        git -C "$dir" diff --cached --quiet -- "$base" || drc=$?
+        if [ "$drc" -eq 0 ]; then
+            AITLIB_DOTPROFILE_PUSH="unchanged"
+            log_detail "dotprofile commit: $rel unchanged in $d -- nothing to commit or push"
+            return 0
+        fi
+        # drc 1 = a staged change to commit; >1 = diff error: the commit reports a real problem
+        out=$(git -C "$dir" commit -m "$msg" -- "$base" 2>&1) || rc=$?
+    fi
+    if [ -n "$out" ]; then log_detail "git commit in $d: $out"; fi
+    if [ "$rc" -ne 0 ]; then
+        AITLIB_DOTPROFILE_PUSH="commit-failed"
+        log_warn "dotprofile commit failed (exit $rc) -- commit and push $rel in $d by hand"
+        _aitlib_action_once "commit and push $rel in $d"
+        return 0
+    fi
+    out=$(GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}" git -C "$dir" push 2>&1) || rc=$?
+    if [ -n "$out" ]; then log_detail "git push in $d: $out"; fi
+    if [ "$rc" -ne 0 ]; then
+        AITLIB_DOTPROFILE_PUSH="push-failed"
+        case "$out" in
+            *rejected*|*non-fast-forward*|*"fetch first"*)
+                log_warn "dotprofile push rejected (exit $rc): the remote has newer commits -- run git pull --rebase, then git push in $d"
+                _aitlib_action_once "git pull --rebase, then git push in $d" ;;
+            *)
+                log_warn "dotprofile push failed (exit $rc) -- run git push in $d"
+                _aitlib_action_once "run git push in $d" ;;
+        esac
+        return 0
+    fi
+    AITLIB_DOTPROFILE_PUSH="committed-pushed"
+    log_ok "dotprofile: $rel committed and pushed ($msg)"
+    return 0
+}
+
+# After adopt or merge: WARN when the target is protected
+# (_managed_protected_note). An adopt target in the dotprofile is committed and
+# pushed (dotprofile_commit_push, N-Q2). Any other adopt target (the aitools
+# repo) stays a working-tree change: say that its repo has an uncommitted
+# change to review.
 _managed_adopt_notice() {
     local target="$1" top
     _managed_protected_note "$target"
+    dotprofile_commit_push "$target" "Adopt $(basename "$target") from the deployed copy"
+    if [ "$AITLIB_DOTPROFILE_PUSH" != "not-dotprofile" ]; then return 0; fi
     # 2>/dev/null: outside a git repo there is nothing to commit (empty result checked).
     top=$(git -C "$(dirname "$target")" rev-parse --show-toplevel 2>/dev/null) || top=""
     if [ -n "$top" ]; then
@@ -1541,9 +1676,12 @@ _invoke_ai_merge() {
 # caller records it; deploy_tracker_summary writes an ERROR row) and the run
 # continues with the next file. An adopt target listed in its repo's
 # protected-files table (.claude/rules/sources-of-truth.md) gets a WARN that
-# names it: working tree only; the review gate applies at commit. The library
-# never commits or pushes: after adopt or merge it logs that the adopt
-# target's repo has an uncommitted change to review and ship.
+# names it: working tree only; the review gate applies at commit. After adopt
+# or merge, an adopt target in the dotprofile is committed (that file only) and
+# pushed (dotprofile_commit_push, N-Q2; a failed commit or push is a warning +
+# ACTION, the result stays "accept & adopt"). Any other adopt target (the
+# aitools repo) is not committed: the library logs that its repo has an
+# uncommitted change to review and ship.
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
