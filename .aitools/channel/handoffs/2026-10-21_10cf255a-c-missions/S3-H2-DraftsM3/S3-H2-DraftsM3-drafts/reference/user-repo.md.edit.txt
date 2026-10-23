@@ -85,16 +85,30 @@ Edit F -- Registration, menu sentence (deletion D6 removed "(numbered)")
 ================================================================
 Reason: only profiles that belong to no machine are numbered; another machine's are
 shown as `[-] <alias> (registered to another machine)` and cannot be picked; the
-suggested one is marked (scripts/aitools:399-449; aitools.ps1:1004-1019).
+suggested one is marked (scripts/aitools:399-449; aitools.ps1:1004-1022). A profile
+already this machine's gets no line (no `this` branch, scripts/aitools:413-424); the
+menu is reached only when nothing matched by id (review F6).
 OLD:
 The interactive menu lists every profile, `[n]ew`, `[s]kip`, identically in
 bash and PowerShell.
 NEW:
-The interactive menu lists every profile by its alias, then `[n]ew` and `[s]kip`,
+The interactive menu lists every profile not already this machine's, by its alias, then `[n]ew` and `[s]kip`,
 identically in bash and PowerShell: a profile that belongs to no machine is numbered
 (picking it claims it), one registered to another machine is shown as `[-] <alias>
 (registered to another machine)` and cannot be picked, and the resolver's suggestion
 (a cached alias or a hostname match) is marked `(suggested)`.
+
+================================================================
+Edit J -- Migration, "user init runs migrate" sentence (review F5)
+================================================================
+Reason: user init runs `migrate` on every run whose existing profile.json has no
+uncommitted changes (a no-op when every profile is id-keyed), and never when it has
+them (scripts/aitools:657-671).
+OLD:
+`aitools user init` runs `migrate` when 2.1 profiles exist.
+NEW:
+`aitools user init` runs `migrate` on every run whose profile.json has no uncommitted
+changes (a no-op when every profile is already keyed by machine id).
 
 ================================================================
 Edit G -- Migration, dirty-file paragraph (deletion D8 removed the user init exception)
