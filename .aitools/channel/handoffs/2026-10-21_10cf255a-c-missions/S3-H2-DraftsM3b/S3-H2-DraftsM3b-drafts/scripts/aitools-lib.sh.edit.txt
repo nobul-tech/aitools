@@ -1,0 +1,44 @@
+CORRECTED DRAFT (S3-H2-DraftsM3b, 2026-10-22) -- #96 approval-page row 8: new
+section intent for the child-log relay section of scripts/aitools-lib.sh and
+scripts/aitools-lib.ps1. Protected (an intent statement). NOT APPLIED: awaits
+re-approval.
+
+Where: aitools-lib.sh, immediately after the line
+`# log helpers", PR #89, so installers and deploy-harness share one copy)` (main 8a9dcb5,
+aitools-lib.sh:468); aitools-lib.ps1, immediately after the same line (aitools-lib.ps1:398).
+Unchanged from the approved draft.
+
+================================================================
+Why the approved text was not applied
+================================================================
+The approved text ends: "Consumed by: aitools-install.sh/.ps1 (after the follow-up that
+removes their own copies), deploy-harness.sh/.ps1."
+
+On origin/main 8a9dcb5 deploy-harness does not use the relay. It runs the config writer
+directly:
+  scripts/deploy-harness.sh:107  "${BASH:-bash}" "$CONFIG_WRITER" --dry-run || CW_RC=$?
+  scripts/deploy-harness.sh:109  "${BASH:-bash}" "$CONFIG_WRITER" || CW_RC=$?
+`grep -rl "run_child_relayed\|Invoke-ChildRelayed\|relay_child_log\|jsonl_record"` over
+scripts/, tests/ and shared/ finds only aitools-lib.sh/.ps1 and aitools-install.sh. aitools-install.sh uses
+its own copy (relay_child_log defined at aitools-install.sh:153), and aitools-install.ps1
+its own Write-JsonlRecord (aitools-install.ps1:65). The only caller of the lib's copy is
+tests/profile/test-lib.sh. origin/feature/harness-mdm has no relay call in
+deploy-harness either. So "Consumed by: ... deploy-harness.sh/.ps1" is false today. The
+rest of the text holds (relay logs one error for a failed child: aitools-lib.sh:613, 617;
+the throw row only with a summary tool name: aitools-lib.ps1:519).
+
+================================================================
+NEW (insert, both files) -- only the last sentence differs from the approved text
+================================================================
+# Intent: give every parent script (installers, deploy-harness) one way to run a
+# child setup script and keep its log in deploy.jsonl: show the child's console
+# lines, mirror each structured line to deploy.jsonl with JSON escaping, and count
+# the child's warnings and errors. NOT a copier of the child's lines to deploy.log
+# (the child writes its own; the relay logs one error for a failed child) and NOT a
+# writer of summary rows (the child writes its own; Invoke-ChildRelayed adds one
+# ERROR row only for a throw, when given a summary tool name). Consumed by: no
+# script yet; intended for aitools-install.sh/.ps1 (after the follow-up that removes
+# their own copies) and deploy-harness.sh/.ps1 (once it relays its children).
+
+Alternative: keep the approved text and apply it in the same PR that wires
+deploy-harness (owner: S3-H2-Manifest) and the installers onto the lib's relay.
