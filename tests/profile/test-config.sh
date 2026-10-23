@@ -110,6 +110,7 @@ map_args() {
             --user-repo-path) PS_ARGS+=(-UserRepoPath "$2"); shift 2 ;;
             --machine-id)     PS_ARGS+=(-MachineId "$2"); shift 2 ;;
             --machine-alias)  PS_ARGS+=(-MachineAlias "$2"); shift 2 ;;
+            --no-machine)     PS_ARGS+=(-NoMachine); shift ;;
             --dry-run)        PS_ARGS+=(-DryRun); shift ;;
             *)                PS_ARGS+=("$1"); shift ;;
         esac
@@ -382,6 +383,87 @@ CASE_ENV=""
 has_row "WARN|aitools config|rebuilt (was invalid)"
 has_json '"machineId": "'"$KEY_MAC"'"'
 out_has "Recovered machineId from the invalid config"
+
+# C22 --no-machine (user init left this machine unregistered): the caller owns machine
+# registration. No profile matches this machine: no ERROR, no ACTION, exit 0; every
+# other field is written; machineId / machineAlias are kept exactly as they were
+KEY_KEEP="bbbbbbbb-5555-6666-7777-888888888888"
+fix_nm_nomatch() {
+    fix_nomatch
+    perl -pi -e 's/"machineAlias": "new-mac"/"machineAlias": "new-mac",\n  "machineId": "'"$KEY_KEEP"'"/' "$CFG"
+}
+case_run c22-no-machine-unmatched 0 fix_nm_nomatch --no-machine --github-user nobul-jose
+has_row "OK|aitools config|updated"
+rows_n 0 "ERROR"
+rows_n 0 "ACTION"
+has_json '"machineAlias": "new-mac"'
+has_json '"machineId": "'"$KEY_KEEP"'"'
+has_json '"githubUser": "nobul-jose"'
+has_json '"version": 3'
+has_json '"userRepoPath": "[^"]+\/aitools-nobul-jose"'
+out_has "COMPLETED successfully"
+out_has "machine registration is left to the caller"
+log_has "no profile matches this machine"
+log_has ": left to the caller)"  # "(--no-machine: ..." (bash) / "(-NoMachine: ..." (PowerShell)
+# C22b the same fixture without the flag still reports it (C7 behaviour unchanged)
+case_run c22b-unmatched-without-flag 1 fix_nm_nomatch --github-user nobul-jose
+has_row "ERROR|machine profile|no machine match"
+rows_n 1 "ACTION"
+# C22c profile.json with no machine profiles: unregistered too, nothing reported
+fix_nm_empty() {
+    fix_v2
+    printf '{ "version": 2, "meta": { "schemaRevision": "2.2" }, "identity": { "github": "nobul-jose" }, "profiles": {} }\n' > "$DP/profile.json"
+}
+case_run c22c-no-machine-no-profiles 0 fix_nm_empty --no-machine
+rows_n 0 "ERROR"
+rows_n 0 "ACTION"
+has_json '"machineAlias": "new-mac"'
+# C22d unregistered 2.1 profile (C13 fixture): the registration ACTION is the caller's
+case_run c22d-no-machine-unregistered 0 fix_unreg --no-machine
+has_row "OK|aitools config|updated"
+rows_n 0 "ACTION"
+rows_n 0 "WARN"
+no_json '"machineId"'
+has_json '"machineAlias": "nobul-mac"'
+out_has "COMPLETED successfully"
+# C22e a cached machineId the match would remove (C20) is kept with --no-machine
+case_run c22e-no-machine-keeps-id 0 fix_stale_mid --no-machine
+rows_n 0 "ACTION"
+no_row_like "machineId updated"
+has_json '"machineId": "'"$KEY_OTHER"'"'
+has_json '"machineAlias": "nobul-mac"'
+# C22f a legacy alias-keyed profile (C17): no migrate ACTION, machineAlias not written
+case_run c22f-no-machine-legacy 0 fix_legacy "${BOOT[@]}" --no-machine
+has_row "OK|aitools config|created"
+rows_n 0 "ACTION"
+no_json '"machineAlias"'
+no_json '"machineId"'
+# C22g other derivation errors are still reported: an invalid profile.json
+fix_nm_badprofile() { fix_v2; printf '{ "version": 2, ' > "$DP/profile.json"; }
+case_run c22g-no-machine-bad-profile 1 fix_nm_badprofile --no-machine
+has_row "ERROR|profile.json|invalid (see log)"
+# C22h --no-machine with a machine choice: bad arguments, nothing written
+case_run c22h-no-machine-and-id 1 fix_v2 --no-machine --machine-id "$ID_MAC"
+has_row "ERROR|aitools config|bad arguments"
+rows_n 1 "ERROR"
+if grep -q '"version": 2' "$OUTJ"; then ok "c22h-no-machine-and-id: config untouched"; else bad "c22h-no-machine-and-id: config changed"; fi
+case_run c22i-no-machine-and-alias 1 fix_v2 --machine-alias laptop --no-machine
+has_row "ERROR|aitools config|bad arguments"
+# C22j the help text names the flag
+CASE="c22j-help"
+reset_home
+RC=0
+env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" "$BASH_BIN" "$SH" --help > "$WORK/help.bash.out" 2>&1 || RC=$?
+if [ "$RC" -eq 0 ] && grep -qF -- "--no-machine" "$WORK/help.bash.out"; then ok "c22j-help: bash --help names --no-machine"
+else bad "c22j-help: bash --help (exit $RC) lacks --no-machine"; fi
+if $USE_PS; then
+    RC=0
+    env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_PROFILE_TEST_ANY_OS=1 \
+        pwsh -NoProfile -File "$PS" -Help > "$WORK/help.ps.out" 2>&1 || RC=$?
+    if [ "$RC" -eq 0 ] && grep -qF -- "-NoMachine" "$WORK/help.ps.out"; then
+        ok "c22j-help: pwsh -Help names -NoMachine"
+    else bad "c22j-help: pwsh -Help lacks -NoMachine"; fi
+fi
 
 # C14 relative bootstrap path: bad arguments, nothing written
 case_run c14-relative 1 fix_nodp --repos-path repos --repo-path "$H/repos/aitools"
