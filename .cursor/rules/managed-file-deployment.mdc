@@ -27,8 +27,8 @@ All setup scripts that deploy files to user directories must follow the deployme
 | Dotprofile repo (`aitools-<username>`) | Primary (wins if present) | CLAUDE.md template, user rules, profile.json (preferences, identity, machine profiles) |
 | aitools repo (`shared/`) | Fallback | claude-shared.md template, hook scripts, skills, shell aliases |
 
-- **Template interpolation**: `{{PLACEHOLDER}}` tokens in CLAUDE.md replaced with `profile.json` values at deploy time
-- **Machine profile selection**: `config.json` `machineAlias` → `profile.json` `profiles[alias]`. Fallback: hostname match, then first profile
+- **Template interpolation**: `{{PLACEHOLDER}}` tokens in CLAUDE.md replaced with this machine's profile values when the setup script runs on that machine (dev path and generated deploy/ scripts alike)
+- **Machine profile selection**: one resolver (`aitools-profile.sh` / `.ps1`, through `resolve_machine_profile` / `Resolve-MachineProfile`): override → environment → `profiles[<machine id>]` → config.json `machineId` (only when the id cannot be detected) → config.json `machineAlias` (2.1 profiles only) → hostname (warns) → no match = ERROR, never another machine's profile. Order and failure behaviour: `@reference/user-repo.md` "Resolution"
 - **Rules**: additive deploy from `<userRepoPath>/claude/rules/` — managed files updated, unmanaged files in target preserved
 - **Skills**: vendored from upstream in `shared/skills/`, deployed to `~/.claude/skills/` and `~/.cursor/skills/`
 - **Hooks**: canonical source in `shared/hooks/`, deployed to `~/.claude/hooks/`
@@ -56,7 +56,7 @@ Scripts must NEVER write cross-platform values or another environment's values. 
 
 ### Updating this table
 
-Adding a row (new file type) or column requires updating: this rule, `@reference/managed-file-deployment.md`, `@.claude/rules/managed-file-deployment.md`, and the `/incident` skill if there are implementation gaps. See `@.claude/rules/tool-lifecycle.md` "Onboarding checklist" (deployment types table, protected).
+Adding a row (new file type) or column requires updating: this rule, `@reference/managed-file-deployment.md`, `@.claude/rules/managed-file-deployment.md`, and the `/incident` skill if there are implementation gaps. Tool onboarding checks this table through `/tool-adopt` step 5 ("deployment types table for a new file type").
 
 ### Cross-references
 
