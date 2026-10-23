@@ -17,8 +17,11 @@
 #
 # Managed fields: version, meta, reposPath, repoPath (from flags; kept when not passed),
 #   googleDrives (from --drives-json when it is a non-empty array; else kept, or []),
-#   githubUser, userRepoPath, machineAlias (derived; kept when
-#   derivation is unavailable or fails)
+#   githubUser, userRepoPath, machineId, machineAlias (derived; kept when
+#   derivation is unavailable or fails, or does not yield the value).
+#   machineId: the matched profiles key, only for this machine's id-keyed profile
+#   (profile.json revision 2.2). machineAlias: display only (the profile's alias),
+#   kept for one release for 2.1 readers; the legacy cache for an alias-keyed profile.
 # Preserved: all other keys, in place (key order kept)
 # Write path: merge to temp -> validate -> backup_file -> mv.
 #   A read, merge or validation failure leaves the existing file untouched.
@@ -26,7 +29,9 @@
 #   created or changed (deploy.log still records the run).
 #
 # Usage: setup-user-config.sh [--repos-path P] [--repo-path P] [--drives-json JSON]
-#          [--github-user U] [--user-repo-path P] [--machine-alias A] [--dry-run] [--help]
+#          [--github-user U] [--user-repo-path P] [--machine-id ID] [--dry-run] [--help]
+#   --machine-alias A is still accepted for one release (deprecated; logged at detail).
+# Exit: 0 done (warnings possible), 1 any error. Never prompts, never exits 2.
 
 set -euo pipefail
 
@@ -50,15 +55,18 @@ Options:
   --drives-json JSON   Detected Google Drives, JSON array (installer Step 4)
   --github-user U      GitHub user; names the dotprofile aitools-<U> (user init)
   --user-repo-path P   Dotprofile path chosen by user init
-  --machine-alias A    Profile alias chosen by user init (explicit choice)
+  --machine-id ID      This machine's profile key chosen by user init (explicit choice)
+  --machine-alias A    Deprecated (one release): a profile alias or key; use --machine-id
   --dry-run            Show what would change; write nothing
   --help               This text
 
-Without flags: re-derive userRepoPath / githubUser / machineAlias from profile.json.
+Without flags: re-derive userRepoPath / githubUser / machineId / machineAlias from profile.json.
+Exit: 0 done (warnings possible), 1 any error.
 EOF
 }
 
-REPOS_PATH_ARG=""; REPO_PATH_ARG=""; DRIVES_JSON="[]"; GH_USER_ARG=""; URP_ARG=""; ALIAS_ARG=""
+REPOS_PATH_ARG=""; REPO_PATH_ARG=""; DRIVES_JSON="[]"; GH_USER_ARG=""; URP_ARG=""; ALIAS_ARG=""; MID_ARG=""
+DEPRECATED_ALIAS=false
 DRY_RUN=false
 if [ "${AITOOLS_DRY_RUN:-}" = "1" ]; then DRY_RUN=true; fi
 bad_args() {
@@ -68,7 +76,7 @@ bad_args() {
 }
 while [ $# -gt 0 ]; do
     case "$1" in
-        --repos-path|--repo-path|--drives-json|--github-user|--user-repo-path|--machine-alias)
+        --repos-path|--repo-path|--drives-json|--github-user|--user-repo-path|--machine-id|--machine-alias)
             if [ $# -lt 2 ]; then bad_args "$1 needs a value"; fi
             case "$1" in
                 --repos-path)     REPOS_PATH_ARG="$2" ;;
@@ -76,7 +84,8 @@ while [ $# -gt 0 ]; do
                 --drives-json)    DRIVES_JSON="$2" ;;
                 --github-user)    GH_USER_ARG="$2" ;;
                 --user-repo-path) URP_ARG="$2" ;;
-                --machine-alias)  ALIAS_ARG="$2" ;;
+                --machine-id)     MID_ARG="$2" ;;
+                --machine-alias)  ALIAS_ARG="$2"; DEPRECATED_ALIAS=true ;;
             esac
             shift 2 ;;
         --dry-run)  DRY_RUN=true; shift ;;
@@ -85,9 +94,16 @@ while [ $# -gt 0 ]; do
         *)          bad_args "Unknown option: $1" ;;
     esac
 done
-for v in "$REPOS_PATH_ARG" "$REPO_PATH_ARG" "$DRIVES_JSON" "$GH_USER_ARG" "$URP_ARG" "$ALIAS_ARG"; do
+for v in "$REPOS_PATH_ARG" "$REPO_PATH_ARG" "$DRIVES_JSON" "$GH_USER_ARG" "$URP_ARG" "$ALIAS_ARG" "$MID_ARG"; do
     case "$v" in *$'\t'*|*$'\n'*|*$'\r'*) bad_args "option values must be one line (no tab or newline)" ;; esac
 done
+if [ -n "$MID_ARG" ] && $DEPRECATED_ALIAS; then bad_args "pass --machine-id or --machine-alias, not both"; fi
+# The profile choice goes to the resolver as an override (a key, ignoring case, else an alias)
+CHOICE_ARG="$MID_ARG"
+if $DEPRECATED_ALIAS; then
+    log_detail "deprecated flag: --machine-alias (use --machine-id; accepted for one release)"
+    CHOICE_ARG="$ALIAS_ARG"
+fi
 for v in "$REPOS_PATH_ARG" "$REPO_PATH_ARG" "$URP_ARG"; do
     if [ -n "$v" ] && [ "${v#/}" = "$v" ]; then bad_args "paths must be absolute: $v"; fi
 done
@@ -133,33 +149,49 @@ derive_args=(derive-config --config "$CONFIG_FILE")
 if [ -n "$REPOS_PATH_ARG" ]; then derive_args+=(--repos-path "$REPOS_PATH_ARG"); fi
 if [ -n "$GH_USER_ARG" ]; then derive_args+=(--github-user "$GH_USER_ARG"); fi
 if [ -n "$URP_ARG" ]; then derive_args+=(--user-repo-path "$URP_ARG"); fi
-if [ -n "$ALIAS_ARG" ]; then derive_args+=(--alias "$ALIAS_ARG"); fi
+if [ -n "$CHOICE_ARG" ]; then derive_args+=(--alias "$CHOICE_ARG"); fi
 DERIVE_RC=0
 # exit code is the result: 0 derived, 1 no dotprofile, 2 no match / error
 DERIVE_OUT=$("${BASH:-bash}" "$PROFILE_SH" "${derive_args[@]}" 2>"$WORK_DIR/derive.err") || DERIVE_RC=$?
 while IFS= read -r line; do
     if [ -n "$line" ]; then log_detail "derive-config stderr: $line"; fi
 done < "$WORK_DIR/derive.err"
-D_GH=""; D_URP=""; D_ALIAS=""; U_VIA="none"; M_VIA="none"; D_COMPANY=""; D_ID=""; D_HOST=""; ALIASES=""
+D_GH=""; D_URP=""; D_MID=""; D_ALIAS=""; U_VIA="none"; M_VIA="none"; D_COMPANY=""; D_ID=""; D_HOST=""; ALIASES=""
 SEEN=false
 NEED_INIT=false
+NEED_MIGRATE=false
+NEED_UPDATE=false
 PROFILE_BAD=false
-# derive_warn TEXT -- resolver warnings about the cached config.json (or the
-# expected shared-only state) are corrected or recorded by this write: info, so a
-# successful write stays OK (D-TS12). The rest are real warnings.
+# derive_warn TEXT -- route one resolver warning (the resolver returns its warnings;
+# this caller logs them at their level and owns the rows):
+#   handled  -- about the cached config.json or the expected shared-only state; this
+#               write corrects or records it: info, so a successful write stays OK (D-TS12)
+#   advisory -- this machine's values are right and the only follow-up is the command
+#               that the single ACTION row (section 3) names: info here; section 3 logs
+#               one warning with the ACTION
+#   real     -- something is off for this run (a clone, a duplicate alias, a hostname
+#               guess, an undetectable id): log_warn, counted; the config row becomes WARN
 derive_warn() {
     case "$1" in
         config.json\ *|*"not saved to config.json"*|"no dotprofile found"*|"githubUser unknown"*)
             log "config: $1 (handled by this write)" ;;
+        *"has no machine.id -- run: aitools user init"*)
+            log "config: $1 (see ACTION)"; NEED_INIT=true ;;
+        *"run: aitools-profile migrate"*)
+            log "config: $1 (see ACTION)"; NEED_MIGRATE=true ;;
         *)
             log_warn "config: $1"
-            case "$1" in *"run: aitools user init"*) NEED_INIT=true ;; esac ;;
+            case "$1" in
+                *"renamed (run: aitools user init"*) NEED_UPDATE=true ;;
+                *"run: aitools user init"*) NEED_INIT=true ;;
+            esac ;;
     esac
 }
 while IFS=$'\t' read -r k v; do
     case "$k" in
         derived.githubUser)   D_GH="$v"; SEEN=true ;;
         derived.userRepoPath) D_URP="$v" ;;
+        derived.machineId)    D_MID="$v" ;;
         derived.machineAlias) D_ALIAS="$v" ;;
         userRepoVia)          U_VIA="$v" ;;
         via)                  M_VIA="$v" ;;
@@ -175,9 +207,9 @@ done <<< "$DERIVE_OUT"
 if ! $SEEN || [ "$DERIVE_RC" -gt 2 ]; then
     log_error "Failed: profile derivation produced no result (exit $DERIVE_RC) -- see $(display_path "$LOG_FILE")"
     write_summary ERROR "aitools config" "derivation failed"
-    D_GH=""; D_URP=""; D_ALIAS=""; DERIVE_RC=2
+    D_GH=""; D_URP=""; D_MID=""; D_ALIAS=""; DERIVE_RC=2
 else
-    log "config: dotprofile=${D_URP:-none} via=$U_VIA machineAlias=${D_ALIAS:-none} via=$M_VIA company=$D_COMPANY id=${D_ID:-unavailable} host=${D_HOST:-unavailable}"
+    log "config: dotprofile=${D_URP:-none} via=$U_VIA machineId=${D_MID:-none} machineAlias=${D_ALIAS:-none} via=$M_VIA company=$D_COMPANY id=${D_ID:-unavailable} host=${D_HOST:-unavailable}"
     case "$DERIVE_RC" in
         0) : ;;
         1) log "config: no dotprofile yet -- writing bootstrap keys only (shared-only mode)" ;;
@@ -189,9 +221,6 @@ else
                write_summary ACTION "" "Run: aitools user init (profiles: ${ALIASES:-none})"
            fi ;;
     esac
-    if [ "$DERIVE_RC" -eq 0 ] && $NEED_INIT; then
-        write_summary ACTION "" "Run: aitools user init (registers this machine)"
-    fi
 fi
 
 # --- 2. Merge (read-then-merge; managed keys only) ---
@@ -211,7 +240,7 @@ cfg_get() {  # cfg_get VAR KEY -- top-level string of the existing config ("" wh
     printf -v "$1" '%s' "$__v"
 }
 
-CONFIG_STATE="updated"; CHECK_RC=0; IN="$CONFIG_FILE"; CORRUPT_REASON=""
+CONFIG_STATE="updated"; CHECK_RC=0; IN="$CONFIG_FILE"; CORRUPT_REASON=""; MID_HAD=""
 CHECK_MSG=$(pj check "$CONFIG_FILE" 2>&1) || CHECK_RC=$?
 case "$CHECK_RC" in
     0) CONFIG_STATE="updated" ;;
@@ -219,14 +248,17 @@ case "$CHECK_RC" in
     *)
         # Invalid JSON: rebuild from managed fields, salvaging known keys by pattern
         CONFIG_STATE="recovered"; IN="-"; CORRUPT_REASON="$CHECK_MSG"
-        for k in reposPath repoPath githubUser userRepoPath machineAlias; do
+        for k in reposPath repoPath githubUser userRepoPath machineId machineAlias; do
             sv=$(perl -0777 -ne 'BEGIN { $k = shift @ARGV } if (/"\Q$k\E"\s*:\s*"((?:[^"\\\n]|\\.)*)"/) { $v = $1; $v =~ s/\\(["\\\/])/$1/g; print $v }' "$k" "$CONFIG_FILE") || sv=""  # unreadable = nothing salvaged
-            if [ -n "$sv" ]; then op_set string "$sv" "$k"; log "Recovered $k from the invalid config"; fi
+            if [ -n "$sv" ]; then
+                op_set string "$sv" "$k"; log "Recovered $k from the invalid config"
+                if [ "$k" = "machineId" ]; then MID_HAD="$sv"; fi
+            fi
         done ;;
 esac
 
 EXISTING_URP=""
-if [ "$IN" != "-" ]; then cfg_get EXISTING_URP userRepoPath; fi
+if [ "$IN" != "-" ]; then cfg_get EXISTING_URP userRepoPath; cfg_get MID_HAD machineId; fi
 op_set number 3 version
 if [ -n "$REPOS_PATH_ARG" ]; then op_set string "$REPOS_PATH_ARG" reposPath; fi
 if [ -n "$REPO_PATH_ARG" ]; then op_set string "$REPO_PATH_ARG" repoPath; fi
@@ -239,6 +271,14 @@ else
 fi
 if [ -n "$D_GH" ]; then op_set string "$D_GH" githubUser; fi
 if [ -n "$D_URP" ]; then op_set string "$D_URP" userRepoPath; fi
+if [ -n "$D_MID" ]; then op_set string "$D_MID" machineId
+elif [ -n "$D_ALIAS" ] && [ -n "$MID_HAD" ]; then
+    # The derivation matched a profile that is not this machine's id-keyed one (a 2.1
+    # alias-keyed profile, or a choice of another profile): a cached machineId is stale.
+    # Removing it keeps resolver step 4L (the machineAlias cache) usable.
+    OPS="${OPS}del"$'\t'"machineId"$'\n'
+    log "config: cached machineId \"$MID_HAD\" removed (the matched profile \"$D_ALIAS\" is not keyed by this machine's id)"
+fi
 if [ -n "$D_ALIAS" ]; then op_set string "$D_ALIAS" machineAlias; fi
 DERIVED_FROM="bootstrap only"
 if [ -n "$D_URP" ] || [ -n "$EXISTING_URP" ]; then DERIVED_FROM="profile.json"; fi
@@ -262,7 +302,7 @@ else
     done
     # Changed keys (meta excluded: it describes the file, not the machine)
     CHANGES=""
-    for k in version reposPath repoPath googleDrives githubUser userRepoPath machineAlias; do
+    for k in version reposPath repoPath googleDrives githubUser userRepoPath machineId machineAlias; do
         a=""; b=""
         if [ "$IN" != "-" ]; then a=$(pj json "$CONFIG_FILE" "$k") || a=""; fi  # absent = (unset)
         b=$(pj json "$CONFIG_TMP" "$k") || b=""  # absent = (unset)
@@ -321,6 +361,22 @@ else
                 fi
             done <<< "$CHANGES"
         fi
+    fi
+fi
+
+# --- 3. One ACTION for the advice. It must stay after the config row: write_summary
+# promotes an OK row to WARN once a warning is counted, and the log_warn paired with
+# the ACTION (script-standards-detail "Severity decision guide") is counted. The row
+# reports the write; the footer still counts this warning. ---
+# The re-key advice assumes user init calls aitools-profile migrate (re-key batch 5).
+if [ "$DERIVE_RC" -eq 0 ]; then
+    ADVICE=""
+    if $NEED_INIT; then ADVICE="Run: aitools user init (registers this machine)"
+    elif $NEED_MIGRATE; then ADVICE="Run: aitools user init (re-keys machine profiles by machine id)"
+    elif $NEED_UPDATE; then ADVICE="Run: aitools user init (updates this machine's profile)"; fi
+    if [ -n "$ADVICE" ]; then
+        log_warn "config: $ADVICE"
+        write_summary ACTION "" "$ADVICE"
     fi
 fi
 

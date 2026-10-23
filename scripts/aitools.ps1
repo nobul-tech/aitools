@@ -116,155 +116,13 @@ function Invoke-ProfileCheck {
         }
         "migrate" {
             Write-Host "profile: profile.json is v1 (legacy). Migration to v2 recommended." -ForegroundColor Yellow
-            if ($Mode -eq "interactive" -and [Environment]::UserInteractive) {
-                $answer = Read-Host "Migrate profile.json to v2 now? [y/N]"
-                if ($answer -match '^[Yy]') {
-                    Invoke-ProfileMigration -CheckResult $result
+            if ($Mode -eq "interactive" -and (Test-UiCanAsk)) {
+                [Console]::Write("Migrate profile.json to v2 now? [y/N]: ")
+                $answer = Read-ConsoleChoice "no"
+                if ($answer -match '^[Yy]' -and $result.profilePath) {
+                    $null = Invoke-UiV1Migrate (Split-Path $result.profilePath -Parent)
                 }
             }
-        }
-    }
-}
-
-# Migrate a v1 profile.json to v2 format.
-# Prompts for machineAlias. Preserves non-v1 sections (e.g., cursor).
-# Commits + pushes user repo.
-function Invoke-ProfileMigration {
-    param($CheckResult)
-
-    $migData = $CheckResult.migrationData
-    if (-not $migData) {
-        Write-Host "profile: no migration data available" -ForegroundColor Yellow
-        return
-    }
-
-    $profilePath = $CheckResult.profilePath
-    if (-not $profilePath -or -not (Test-Path $profilePath)) {
-        Write-Host "profile: cannot locate profile.json for migration" -ForegroundColor Yellow
-        return
-    }
-
-    $userRepoDir = Split-Path $profilePath -Parent
-    $machAlias = Read-Host "Machine alias for this machine (e.g., laptop, workstation)"
-    if (-not $machAlias) {
-        LogWarn "profile migration cancelled (alias required)"
-        return
-    }
-
-    $migName = if ($migData.name) { $migData.name } else { "" }
-    $migEmail = if ($migData.email) { $migData.email } else { "" }
-    $migGithub = if ($migData.github) { $migData.github } else { "" }
-    $migCompany = if ($migData.company) { $migData.company } else { "" }
-
-    # Write v2 profile, preserving non-v1 sections
-    node -e @"
-const fs = require('fs'), os = require('os');
-const profilePath = process.argv[1];
-const alias = process.argv[2];
-const migName = process.argv[3];
-const migEmail = process.argv[4];
-const migGithub = process.argv[5];
-const migCompany = process.argv[6];
-
-let old = {};
-try { old = JSON.parse(fs.readFileSync(profilePath, 'utf8')); } catch {}
-
-const v2 = {
-    version: 2,
-    identity: {
-        github: migGithub,
-        email: migEmail,
-        git: { name: migName, email: migEmail }
-    },
-    profiles: {}
-};
-
-v2.profiles[alias] = {
-    name: migName,
-    company: migCompany,
-    machine: {
-        hostname: os.hostname(),
-        os: process.platform,
-        arch: process.arch,
-        shell: 'powershell'
-    }
-};
-
-// Preserve non-v1 sections (e.g., cursor)
-const v1Keys = ['name', 'email', 'github', 'company', 'git', 'machines', 'version'];
-for (const key of Object.keys(old)) {
-    if (!v1Keys.includes(key) && !(key in v2)) {
-        v2[key] = old[key];
-    }
-}
-
-// Handle multiple machines from v1
-if (Array.isArray(old.machines)) {
-    const currentHost = os.hostname().split('.')[0];
-    let counter = 1;
-    for (const m of old.machines) {
-        const mHost = (m.hostname || '').split('.')[0];
-        if (mHost === currentHost) continue;
-        const mAlias = 'machine' + counter;
-        counter++;
-        if (!v2.profiles[mAlias]) {
-            v2.profiles[mAlias] = {
-                name: migName,
-                company: migCompany,
-                machine: m
-            };
-        }
-    }
-}
-
-fs.writeFileSync(profilePath, JSON.stringify(v2, null, 2) + '\n');
-console.log('Migrated profile.json to v2 (alias: ' + alias + ')');
-"@ $profilePath $machAlias $migName $migEmail $migGithub $migCompany
-
-    # Update machineAlias in config.json
-    node -e @"
-const fs = require('fs');
-const f = process.argv[1];
-let cfg = {};
-try { cfg = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error('Warning: ' + f + ' is invalid JSON, starting with empty config'); }
-cfg.machineAlias = process.argv[2];
-fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
-"@ $configFile $machAlias
-
-    # Commit and push user repo
-    if (Test-Path (Join-Path $userRepoDir ".git")) {
-        $status = git -C $userRepoDir status --porcelain 2>$null
-        if ($status) {
-            $gitName = node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.identity.git.name||'')}catch{}" $profilePath 2>$null
-            $gitEmail = node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.identity.git.email||'')}catch{}" $profilePath 2>$null
-            if ($gitName) { $gitName = $gitName.Trim() }
-            if ($gitEmail) { $gitEmail = $gitEmail.Trim() }
-            if ($gitName -and $gitEmail) {
-                git -C $userRepoDir config user.name $gitName
-                git -C $userRepoDir config user.email $gitEmail
-            }
-            $gitOut = git -C $userRepoDir add -A 2>&1 | Out-String
-            $gitRc = $LASTEXITCODE
-            if ($gitRc -eq 0) {
-                $gitOut += git -C $userRepoDir commit -m "Migrate profile.json from v1 to v2" 2>&1 | Out-String
-                $gitRc = $LASTEXITCODE
-            }
-            foreach ($gitLine in $gitOut.Split("`n")) {
-                if ($gitLine.Trim()) { LogDetail "profile-migrate commit: $($gitLine.TrimEnd())" }
-            }
-            if ($gitRc -ne 0) {
-                LogWarn "profile migration commit failed (exit $gitRc) -- commit manually in $userRepoDir"
-                return
-            }
-            $pushOut = git -C $userRepoDir push 2>&1 | Out-String
-            $pushRc = $LASTEXITCODE
-            foreach ($gitLine in $pushOut.Split("`n")) {
-                if ($gitLine.Trim()) { LogDetail "profile-migrate push: $($gitLine.TrimEnd())" }
-            }
-            if ($pushRc -ne 0) {
-                LogWarn "profile migration push failed (exit $pushRc) -- run 'git push' manually in $userRepoDir"
-            }
-            LogOk "Profile migrated and committed."
         }
     }
 }
@@ -537,17 +395,10 @@ if ($doGitpull) {
     }
 }
 
-# aitools user init --alias <alias> / -Alias <alias>: register this machine without a prompt (P-Q12)
+# aitools user init --alias <alias> / -Alias <alias>: register this machine without a
+# prompt (P-Q12). PowerShell binds --alias to -Alias itself under pwsh -File
+# (Review3 #82 minor 7: the former scan of $Remaining for --alias never ran).
 $script:UserAlias = $Alias
-if ($Remaining -and $Remaining -contains "--alias") {
-    $ix = [array]::IndexOf($Remaining, "--alias")
-    if ($ix + 1 -ge $Remaining.Count -or $Remaining[$ix + 1] -like "--*") {
-        [Console]::Error.WriteLine("aitools: --alias needs a value")
-        exit 1
-    }
-    $script:UserAlias = $Remaining[$ix + 1]
-    $Remaining = @($Remaining | Select-Object -First $ix) + @($Remaining | Select-Object -Skip ($ix + 2))
-}
 
 # Extract subcommand and remaining args for user/sessions
 $subCmd = ""
@@ -883,80 +734,193 @@ fs.writeFileSync(f, JSON.stringify(cfg, null, 2) + '\n');
     exit 0
 }
 
+# --- BEGIN user init ---
 # ---------------------------------------------------------------------------
-# Machine registration for `aitools user init` (reference/user-repo.md
-# "Registration"). The resolver (aitools-profile.ps1, through the lib runner)
-# decides which profile this machine is; when it is not registered, the user
-# picks one (numbered aliases, [n]ew, [s]kip; identical in scripts/aitools) or
-# passes -Alias / --alias. register writes profile.json via temp -> validate ->
-# backup -> move, then only profile.json is committed and pushed (N-Q2).
-# Functions return only their declared value; console output uses [Console].
+# aitools user init: this machine's profile (reference/user-repo.md
+# "Registration"; re-key design S3-M3-Register-keydesign.md sections b, c, f, g;
+# PR #86 batch 5). Machine profiles are keyed by this machine's id
+# (profiles.<machine id, lower-cased>); the human-readable name is the profile's
+# alias field. The native resolver (aitools-profile.ps1) decides which profile
+# this machine is, writes only this machine's key (register, to a temp file that
+# is validated, backed up and moved here) and re-keys alias-keyed revision 2.1
+# profiles (migrate). Only profile.json is committed and pushed (N-Q2). Menus,
+# prompts, summary rows and exit codes are identical in scripts/aitools
+# (interactive-menus.md). Without a terminal, with -Force or AITOOLS_FORCE=1,
+# nothing prompts: the default applies, or the step reports ERROR + ACTION.
+# This block (BEGIN/END markers) holds every user-init function; the parity
+# tests (tests/profile/test-user-init.sh) run it on macOS/Linux. Functions
+# return only their declared value; console output uses [Console].
 # ---------------------------------------------------------------------------
 
-# Invoke-UiResolve DIR -- this machine's profile in DIR\profile.json. Sets
-# $script:UiAlias and $script:UiVia (none when nothing matched).
-function Invoke-UiResolve([string]$Dir) {
-    $script:UiAlias = ""; $script:UiVia = "none"
-    $a = @("resolve", "--profile", (Join-Path $Dir "profile.json"), "--environment", $script:AitoolsEnvironment)
-    if ($script:UserAlias) { $a += @("--alias", $script:UserAlias) }
-    if (-not (Invoke-AitoolsProfile $a)) {
-        LogError "machine profile: resolver aitools-profile.ps1 not found in $(Join-Path $repoPath 'scripts')"
-        return
-    }
-    $script:UiAlias = Get-ProfileTag "alias"
-    $script:UiVia = Get-ProfileTag "via"
-    if (-not $script:UiAlias) { $script:UiVia = "none" }
-    foreach ($e in (Get-ProfileLines "error")) { LogDetail "machine profile: $e" }
-    $shown = if ($script:UiAlias) { $script:UiAlias } else { "none" }
-    Log "machine profile: alias=$shown via=$($script:UiVia)"
+# Decision 2 (PENDING with the commander -- S3-M3Lead plan section 2 item 2; re-key
+# design (b) step 4L): config.json's cached machineAlias names an alias-keyed
+# profile without machine.id (resolver via=alias). $false = today's behaviour: ask
+# on a terminal (that profile suggested), ERROR + ACTION without one. $true =
+# claim that profile for this machine without asking. Flipping the decision is
+# this one line (and AITOOLS_REGISTER_CACHED_ALIAS_SILENTLY in scripts/aitools).
+$script:RegisterCachedAliasSilently = $false
+
+# Test-UiCanAsk -- $true when user init may prompt: a console, and neither -Force
+# nor AITOOLS_FORCE=1 (interactive-menus.md "Non-interactive fallback")
+function Test-UiCanAsk {
+    if ($Force -or $env:AITOOLS_FORCE -eq "1") { return $false }
+    return (Test-InteractiveConsole)
 }
 
-# Read-UiChoice DIR SUGGESTED -- ask which profile this machine is. Returns the
-# chosen alias, or "" on skip / not possible (logged).
-function Read-UiChoice([string]$Dir, [string]$Suggested) {
-    $r = Read-JsonFile (Join-Path $Dir "profile.json")
-    $aliases = @()
-    if ($r.State -eq "valid") { $aliases = @(Get-JKeys $r.Value @("profiles")) }
-    if ($env:AITOOLS_FORCE -eq "1" -or -not (Test-InteractiveConsole)) {
-        LogError "No registered machine profile for this machine and no terminal to ask -- run 'aitools user init' interactively, or 'aitools user init --alias <alias>'"
-        Write-Summary "ERROR" "machine profile" "not registered"
-        Write-Summary "ACTION" "" "Run: aitools user init --alias <alias>"
-        return ""
+# machine.shell (Review3 #82 minor 6): one stable value per platform, so the two
+# Windows entry points (Git Bash aitools and aitools.ps1) do not rewrite it on
+# alternate runs. Windows: pwsh, the managed shell there; scripts/aitools records
+# the login shell on macOS/Linux.
+$script:UiMachineShell = "pwsh"
+
+# Write-UiLogLines PREFIX TEXT -- each non-empty line of TEXT as a detail line
+function Write-UiLogLines([string]$Prefix, [string]$Text) {
+    foreach ($l in ($Text -split "`r?`n")) { if ($l) { LogDetail "$Prefix$l" } }
+}
+
+# Write-UiAction TEXT -- one ACTION row TEXT per run (Show-Summary does not dedupe
+# ACTIONs). The caller's LogWarn / LogError line carries the same instruction.
+function Write-UiAction([string]$Text) {
+    if ($env:AITOOLS_SUMMARY_FILE -and (Test-Path -LiteralPath $env:AITOOLS_SUMMARY_FILE -PathType Leaf)) {
+        $have = $false
+        try {
+            $have = @([IO.File]::ReadAllLines($env:AITOOLS_SUMMARY_FILE, [System.Text.UTF8Encoding]::new($false)) | Where-Object { $_ -ceq "ACTION||$Text" }).Count -gt 0
+        } catch {
+            LogDetail "run summary unreadable ($($_.Exception.Message)) -- ACTION written without the duplicate check"
+        }
+        if ($have) { LogDetail "ACTION already in the run summary: $Text"; return }
     }
-    [Console]::WriteLine("Which profile is this machine?")
-    for ($i = 0; $i -lt $aliases.Count; $i++) {
-        if ($aliases[$i] -ceq $Suggested) { [Console]::WriteLine("  [$($i + 1)] $($aliases[$i]) (suggested)") }
-        else { [Console]::WriteLine("  [$($i + 1)] $($aliases[$i])") }
+    Write-Summary "ACTION" "" $Text
+}
+
+# Remove-UiTmp FILE -- remove a temp file; a failure is a warning, never silent
+function Remove-UiTmp([string]$Path) {
+    if (Test-Path -LiteralPath $Path) {
+        try { Remove-Item -LiteralPath $Path -Force -ErrorAction Stop }
+        catch { LogWarn "could not remove $Path" }
     }
-    [Console]::WriteLine("  [n] new profile for this machine")
-    [Console]::WriteLine("  [s] skip")
-    [Console]::Write("Choice: ")
-    $choice = Read-ConsoleChoice "skip"
-    if (-not $choice -or $choice -match '^[sS]$') {
-        LogWarn "machine profile: registration skipped -- deploys will report no machine match"
-        return ""
+}
+
+# Invoke-UiProfile ARGS -- run the resolver (aitools-profile.ps1, in-process).
+# Sets $script:UiProfOut (key<TAB>value lines) and $script:UiProfRc (0 ok, 1
+# nothing found, 2 error, 3 refused, 4 alias in use). Its own log lines
+# ([Console]::Error) become detail lines. Returns $false when no resolver is
+# found (UiProfRc 2 with an error line), else $true. Not the lib runner
+# (Invoke-AitLibProfile): that one reads an exit 0/1 without a "via" line as a
+# resolver crash, and register and migrate print no "via" line.
+function Invoke-UiProfile([string[]]$Arguments) {
+    $script:UiProfOut = @(); $script:UiProfRc = 0
+    $ps1 = Join-Path $repoPath "scripts" "aitools-profile.ps1"
+    if (-not (Test-Path -LiteralPath $ps1 -PathType Leaf)) {
+        $script:UiProfRc = 2
+        $script:UiProfOut = @("error`tresolver aitools-profile.ps1 not found ($(Join-Path $repoPath 'scripts'))")
+        return $false
     }
-    if ($choice -match '^[nN]$') {
-        [Console]::Write("New alias (e.g., laptop, workstation): ")
-        $new = Read-ConsoleChoice "skip"
-        if (-not $new) { LogWarn "machine profile: no alias entered -- registration skipped"; return "" }
-        return $new
+    $global:LASTEXITCODE = 0
+    $origErr = [Console]::Error
+    $errBuf = [IO.StringWriter]::new()
+    [Console]::SetError($errBuf)
+    try {
+        $script:UiProfOut = @(& $ps1 @Arguments | ForEach-Object { [string]$_ })
+        $script:UiProfRc = $LASTEXITCODE
+    } catch {
+        $script:UiProfRc = 2
+        $script:UiProfOut = @($script:UiProfOut) + @("error`taitools-profile $($Arguments[0]) threw: $($_.Exception.Message)")
+    } finally {
+        [Console]::SetError($origErr)
     }
-    if ($choice -match '^[0-9]+$' -and [int]$choice -ge 1 -and [int]$choice -le $aliases.Count) {
-        return $aliases[[int]$choice - 1]
+    Write-UiLogLines "aitools-profile $($Arguments[0]): " $errBuf.ToString()
+    return $true
+}
+
+function Get-UiTag([string]$Key) {
+    foreach ($l in $script:UiProfOut) {
+        $kv = $l -split "`t", 2
+        if ($kv.Count -eq 2 -and $kv[0] -ceq $Key) { return $kv[1] }
     }
-    LogWarn "machine profile: invalid choice '$choice' -- registration skipped"
+    return ""
+}
+function Get-UiLines([string]$Kind) {
+    return @($script:UiProfOut | ForEach-Object { $kv = $_ -split "`t", 2; if ($kv.Count -eq 2 -and $kv[0] -ceq $Kind) { $kv[1] } })
+}
+function Get-UiFirstError {
+    $found = @(Get-UiLines "error" | Where-Object { $_ -match '\S' })
+    if ($found.Count -gt 0) { return $found[0] }
     return ""
 }
 
-# Invoke-UiCommit DIR MESSAGE -- commit only profile.json and push (N-Q2); failures warn
-function Invoke-UiCommit([string]$Dir, [string]$Message) {
+# Test-UiHandled MSG -- $true when MSG is a resolver warning or error that user
+# init resolves itself (it registers, claims, re-keys or refreshes the profile);
+# those are logged at info, every other one at its own level (the resolver's
+# library-style contract -- re-key design (j) finding 1, Review3 #82 M2)
+function Test-UiHandled([string]$Msg) {
+    foreach ($p in @("*keyed by alias -- run: aitools-profile migrate*", "*has no machine.id -- run: aitools user init*",
+            "*has no machine.id -- left as is*", "*matched by hostname only*", "*no profile matches this machine*",
+            "*profile.json has no machine profiles*", "*was registered with hostname*")) {
+        if ($Msg -clike $p) { return $true }
+    }
+    return $false
+}
+
+# Write-UiResolverWarnings -- log the last resolver call's warn lines (handled: info)
+function Write-UiResolverWarnings {
+    foreach ($w in (Get-UiLines "warn")) {
+        if (-not $w) { continue }
+        if (Test-UiHandled $w) { Log "machine profile: $w (user init handles this)" }
+        else { LogWarn "machine profile: $w" }
+    }
+}
+
+# Write-UiPushAction DIR -- the ACTION for a commit or push the resolver reported
+# as failed (its warning, logged by Write-UiResolverWarnings, says why)
+function Write-UiPushAction([string]$Dir) {
+    if ((Get-UiTag "committed") -cne "true") { Write-UiAction "commit and push profile.json in $Dir" }
+    elseif (@(Get-UiLines "warn" | Where-Object { $_ -like "*pull --rebase*" }).Count -gt 0) { Write-UiAction "git pull --rebase, then git push in $Dir" }
+    else { Write-UiAction "run git push in $Dir" }
+}
+
+# Invoke-UiPush DIR -- push DIR. Without a console git may not prompt
+# (GIT_TERMINAL_PROMPT=0; ssh BatchMode unless GIT_SSH_COMMAND is set). A push the
+# remote rejected (it has newer commits) is told to pull --rebase first (Review3
+# #82 minor 4). Returns $true pushed, $false not pushed (LogWarn + ACTION).
+function Invoke-UiPush([string]$Dir) {
+    $prevPrompt = $env:GIT_TERMINAL_PROMPT
+    $prevSsh = $env:GIT_SSH_COMMAND
+    $ask = Test-UiCanAsk
+    try {
+        if (-not $ask) {
+            $env:GIT_TERMINAL_PROMPT = "0"
+            if (-not $env:GIT_SSH_COMMAND) { $env:GIT_SSH_COMMAND = "ssh -o BatchMode=yes" }
+        }
+        $out = (& git -C $Dir push 2>&1 | Out-String)
+        $rc = $LASTEXITCODE
+    } finally {
+        $env:GIT_TERMINAL_PROMPT = $prevPrompt
+        $env:GIT_SSH_COMMAND = $prevSsh
+    }
+    Write-UiLogLines "git push: " $out
+    if ($rc -eq 0) { return $true }
+    if ($out -match 'rejected|non-fast-forward|fetch first') {
+        LogWarn "dotprofile push rejected (exit $rc): the remote has newer commits -- run git pull --rebase, then git push in $Dir"
+        Write-UiAction "git pull --rebase, then git push in $Dir"
+    } else {
+        LogWarn "dotprofile push failed (exit $rc) -- run git push in $Dir"
+        Write-UiAction "run git push in $Dir"
+    }
+    return $false
+}
+
+# Invoke-UiCommit DIR MESSAGE FILE... -- commit only FILE... in DIR, then push
+# (N-Q2). No git identity on this machine yet: commits as the profile's
+# identity.git. Returns 0 committed and pushed, 1 commit failed, 2 committed but
+# not pushed; each failure is a LogWarn + one ACTION.
+function Invoke-UiCommit([string]$Dir, [string]$Message, [string[]]$Files) {
     $who = @()
     $curName = (& git -C $Dir config user.name 2>&1 | Out-String).Trim()
     if ($LASTEXITCODE -ne 0) { $curName = "" }   # unset = exit 1
     $curMail = (& git -C $Dir config user.email 2>&1 | Out-String).Trim()
     if ($LASTEXITCODE -ne 0) { $curMail = "" }   # unset = exit 1
-    if (-not $curName -or -not $curMail) {
+    if ((-not $curName -or -not $curMail) -and (Test-Path -LiteralPath (Join-Path $Dir "profile.json"))) {
         $r = Read-JsonFile (Join-Path $Dir "profile.json")
         if ($r.State -eq "valid") {
             $gname = Get-JText $r.Value @("identity", "git", "name")
@@ -964,119 +928,789 @@ function Invoke-UiCommit([string]$Dir, [string]$Message) {
             if ($gname -and $gmail) { $who = @("-c", "user.name=$gname", "-c", "user.email=$gmail") }
         }
     }
-    $out = (& git -C $Dir add -- profile.json 2>&1 | Out-String).Trim()
+    $out = (& git -C $Dir add -- @Files 2>&1 | Out-String)
     $rc = $LASTEXITCODE
     if ($rc -eq 0) {
-        $out = (& git -C $Dir @who commit -m $Message -- profile.json 2>&1 | Out-String).Trim()
+        $out = (& git -C $Dir @who commit -m $Message -- @Files 2>&1 | Out-String)
         $rc = $LASTEXITCODE
     }
+    Write-UiLogLines "git commit: " $out
+    $fileList = $Files -join " "
     if ($rc -ne 0) {
-        LogDetail "git: $out"
-        LogWarn "machine profile: dotprofile commit failed (exit $rc) -- commit profile.json in $Dir by hand"
-        Write-Summary "ACTION" "" "commit and push profile.json in $Dir"
-        return
+        LogWarn "dotprofile commit failed (exit $rc) -- commit and push $fileList in $Dir by hand"
+        Write-UiAction "commit and push $fileList in $Dir"
+        return 1
     }
-    $prev = $env:GIT_TERMINAL_PROMPT
-    try {
-        $env:GIT_TERMINAL_PROMPT = "0"
-        $out = (& git -C $Dir push 2>&1 | Out-String).Trim()
-        $rc = $LASTEXITCODE
-    } finally {
-        $env:GIT_TERMINAL_PROMPT = $prev
-    }
-    if ($rc -ne 0) {
-        LogDetail "git push: $out"
-        LogWarn "machine profile: push failed (exit $rc) -- run git push in $Dir"
-        Write-Summary "ACTION" "" "run git push in $Dir"
-        return
-    }
-    LogOk "machine profile: profile.json committed and pushed"
+    if (-not (Invoke-UiPush $Dir)) { return 2 }
+    LogOk "machine profile: $fileList committed and pushed ($Message)"
+    return 0
 }
 
-# Invoke-UiRegister DIR ALIAS NAME COMPANY EMAIL COMMIT -- register this machine
-# under ALIAS (creating profile.json when missing). Returns $true registered or
-# already registered, $false failed (logged + ERROR row).
-function Invoke-UiRegister([string]$Dir, [string]$Alias, [string]$Name, [string]$Company, [string]$Email, [bool]$Commit) {
+# Test-UiProfileDirty DIR -- $true when DIR/profile.json is tracked and has
+# uncommitted changes (Review3 #82 minor 5); $false when clean, untracked, or DIR
+# is not a git repository
+function Test-UiProfileDirty([string]$Dir) {
+    $null = & git -C $Dir rev-parse --is-inside-work-tree 2>&1
+    if ($LASTEXITCODE -ne 0) { return $false }   # not a repository: nothing is committed there
+    $null = & git -C $Dir ls-files --error-unmatch -- profile.json 2>&1
+    if ($LASTEXITCODE -ne 0) { return $false }   # untracked: no committed version to protect
+    $null = & git -C $Dir diff --quiet -- profile.json 2>&1
+    if ($LASTEXITCODE -ne 0) { return $true }
+    $null = & git -C $Dir diff --cached --quiet -- profile.json 2>&1
+    return ($LASTEXITCODE -ne 0)
+}
+
+# Get-UiEntries PF THIS_ID -- the profiles in PF, in file order: @{ Key; Alias
+# (alias field, else the key); Owner (this | other | unregistered: whose profile it
+# is, by machine.id / machine.environment -- the resolver's owner rule) }
+function Get-UiEntries([string]$Pf, [string]$ThisId) {
+    $list = @()
+    $r = Read-JsonFile $Pf
+    if ($r.State -ne "valid") { return @() }
+    $tid = $ThisId.ToLowerInvariant()
+    foreach ($k in (Get-JKeys $r.Value @("profiles"))) {
+        if ((Get-JType $r.Value @("profiles", $k)) -cne "object") { continue }
+        $al = Get-JText $r.Value @("profiles", $k, "alias")
+        $mid = Get-JText $r.Value @("profiles", $k, "machine", "id")
+        $menv = Get-JText $r.Value @("profiles", $k, "machine", "environment")
+        $kl = $k.ToLowerInvariant()
+        if ($kl.StartsWith("environment:")) {
+            $owner = if ($kl -ceq "environment:$($script:AitoolsEnvironment)") { "this" } else { "other" }
+        } elseif ($menv) {
+            $owner = if ($menv -ceq $script:AitoolsEnvironment) { "this" } else { "other" }
+        } elseif (-not $mid) {
+            $owner = if ($tid -and $kl -ceq $tid) { "this" } else { "unregistered" }
+        } elseif (-not $tid) {
+            $owner = "unknown"   # this machine's id is unknown (review n4)
+        } elseif ($mid.ToLowerInvariant() -ceq $tid) {
+            $owner = "this"
+        } else {
+            $owner = "other"
+        }
+        $shown = if ($al) { $al } else { $k }
+        $list += @{ Key = $k; Alias = $shown; Owner = $owner }
+    }
+    return $list
+}
+
+# Read-UiChoose PF SUGGESTED_KEY THIS_ID -- ask which profile this machine is
+# (parity: ui_choose). Sets $script:UiChoiceKind (claim | new) and
+# $script:UiChoice. Returns 0 chosen; 1 no console to ask (LogError + ERROR row +
+# ACTION); 2 skipped at the prompt (LogWarn; the caller writes the row).
+function Read-UiChoose([string]$Pf, [string]$Suggested, [string]$ThisId) {
+    $script:UiChoiceKind = ""; $script:UiChoice = ""
+    if (-not (Test-UiCanAsk)) {
+        LogError "machine profile: this machine has no profile and there is no terminal to ask -- run: aitools user init --alias <name> (or aitools user init on a terminal)"
+        Write-Summary "ERROR" "machine profile" "not registered (no terminal)"
+        Write-UiAction "Run: aitools user init --alias <name> (or on a terminal)"
+        return 1
+    }
+    $entries = @(Get-UiEntries $Pf $ThisId)
+    $nums = @()
+    [Console]::WriteLine("Which profile is this machine?")
+    foreach ($en in $entries) {
+        $label = $en.Alias
+        if ($en.Owner -ceq "unregistered") {
+            $nums += $en.Key
+            if ($en.Key -ceq $Suggested) { $label = "$label (suggested)" }
+            [Console]::WriteLine("  [$($nums.Count)] $label")
+        } elseif ($en.Owner -ceq "other") {
+            if ($en.Key -ceq $Suggested) { $label = "$label (suggested, registered to another machine)" }
+            else { $label = "$label (registered to another machine)" }
+            [Console]::WriteLine("  [-] $label")
+        } elseif ($en.Owner -ceq "unknown") {
+            [Console]::WriteLine("  [-] $label (owner unknown: this machine's id cannot be detected)")
+        }
+    }
+    [Console]::WriteLine("  [n] new profile for this machine")
+    [Console]::WriteLine("  [s] skip")
+    [Console]::Write("Choice: ")
+    $choice = Read-ConsoleChoice "skip"
+    if (-not $choice -or $choice -match '^[sS]$') {
+        LogWarn "machine profile: registration skipped -- deploys will report no machine match"
+        return 2
+    }
+    if ($choice -match '^[nN]$') {
+        [Console]::Write("New alias (e.g., laptop, workstation): ")
+        $script:UiChoice = Read-ConsoleChoice "skip"
+        if (-not $script:UiChoice) {
+            LogWarn "machine profile: no alias entered -- registration skipped"
+            return 2
+        }
+        $script:UiChoiceKind = "new"
+        return 0
+    }
+    if ($choice -match '^[0-9]+$' -and [int]$choice -ge 1 -and [int]$choice -le $nums.Count) {
+        $script:UiChoice = $nums[[int]$choice - 1]; $script:UiChoiceKind = "claim"
+        return 0
+    }
+    LogWarn "machine profile: invalid choice '$choice' -- registration skipped"
+    return 2
+}
+
+# Read-UiNameCompany ALIAS -- on a console, a new profile's display name and
+# company (Enter = the identity's). Sets $script:UiName, $script:UiCompany.
+function Read-UiNameCompany([string]$AliasName) {
+    $script:UiName = ""; $script:UiCompany = ""
+    if (-not (Test-UiCanAsk)) { return }
+    [Console]::Write("Display name for $AliasName (Enter = identity name): ")
+    $script:UiName = Read-ConsoleChoice "identity name"
+    [Console]::Write("Company for $AliasName (Enter = identity company): ")
+    $script:UiCompany = Read-ConsoleChoice "identity company"
+}
+
+# Invoke-UiRegister DIR MODE VALUE COMMIT [NAME COMPANY EMAIL] -- register this
+# machine (parity: ui_register; see there for MODE and the exit-4 rules). Sets
+# $script:UiKey, UiAlias, UiOwner. Writes the "machine profile" row. Returns 0
+# registered or verified, 1 failed (LogError + ERROR row), 2 skipped at the
+# confirm (LogWarn + WARN row).
+function Invoke-UiRegister([string]$Dir, [string]$Mode, [string]$Value, [bool]$Commit, [string]$Name = "", [string]$Company = "", [string]$Email = "") {
     $pf = Join-Path $Dir "profile.json"
     $tmp = "$pf.tmp.$PID"
-    $shell = if ($PSVersionTable.PSVersion.Major -ge 6) { "pwsh" } else { "powershell" }
-    $a = @("register", "--profile", $pf, "--alias", $Alias, "--out", $tmp, "--shell", $shell, "--environment", $script:AitoolsEnvironment)
-    if ($Name) { $a += @("--name", $Name) }
-    if ($Company) { $a += @("--company", $Company) }
-    if (-not (Test-Path -LiteralPath $pf)) { $a += @("--create", "--github-user", $ghUser, "--email", $Email) }
-    if (-not (Invoke-AitoolsProfile $a)) {
-        LogError "machine profile: resolver aitools-profile.ps1 not found in $(Join-Path $repoPath 'scripts')"
-        Write-Summary "ERROR" "machine profile" "resolver missing"
-        return $false
+    $extra = @()
+    if ($Mode -ceq "claim") { $extra = @("--claim", $Value) }
+    elseif ($Value) { $extra = @("--alias", $Value) }
+    $tries = 0
+    while ($true) {
+        $tries++
+        $regArgs = @("register", "--profile", $pf, "--out", $tmp, "--shell", $script:UiMachineShell, "--environment", $script:AitoolsEnvironment)
+        if ($Name) { $regArgs += @("--name", $Name) }
+        if ($Company) { $regArgs += @("--company", $Company) }
+        if (-not (Test-Path -LiteralPath $pf)) { $regArgs += @("--create", "--github-user", $script:UiGhUser, "--email", $Email) }
+        $null = Invoke-UiProfile ($regArgs + $extra)
+        $rc = $script:UiProfRc
+        Write-UiResolverWarnings
+        if ($rc -ne 4 -or $Mode -ceq "claim" -or $tries -ge 3) { break }
+        Remove-UiTmp $tmp
+        $owner = Get-UiTag "owner"; $okey = Get-UiTag "ownerKey"
+        if ($owner -ceq "unregistered" -and $okey) {
+            Log "machine profile: alias `"$Value`" names profile $okey, which belongs to no machine -- claiming it for this machine"
+            $extra += @("--claim", $okey); $Mode = "claim"
+            continue
+        }
+        if (-not (Test-UiCanAsk)) {
+            LogError "machine profile: alias `"$Value`" is used by another machine's profile ($okey) -- not registered without a confirm on a terminal; run: aitools user init --alias <another name>"
+            Write-Summary "ERROR" "machine profile" "alias used by another machine"
+            Write-UiAction "Run: aitools user init --alias <another name> (or confirm on a terminal)"
+            return 1
+        }
+        [Console]::Write("Alias `"$Value`" is used by another machine's profile ($okey). Use it for this machine too? [y/N]: ")
+        $ans = Read-ConsoleChoice "no"
+        if ($ans -match '^[yY]') {
+            Log "machine profile: alias `"$Value`" shared with profile $okey (confirmed at the prompt)"
+            $extra += @("--allow-duplicate-alias")
+            continue
+        }
+        LogWarn "machine profile: alias `"$Value`" is used by another machine's profile ($okey) -- registration skipped"
+        Write-Summary "WARN" "machine profile" "skipped"
+        return 2
     }
-    $removeTmp = {
-        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
-        if (Test-Path -LiteralPath $tmp) { LogDetail "could not remove $tmp" }
+    if ($rc -ne 0) {
+        Remove-UiTmp $tmp
+        $errText = Get-UiFirstError
+        if (-not $errText) { $errText = "see deploy.log" }
+        if ($rc -eq 3 -or $rc -eq 4) {
+            LogError "machine profile: registration refused (resolver exit $rc): $errText"
+            Write-Summary "ERROR" "machine profile" "registration refused"
+        } else {
+            LogError "machine profile: register failed (resolver exit $rc): $errText"
+            Write-Summary "ERROR" "machine profile" "register failed"
+        }
+        Write-UiAction "see deploy.log -- fix profile.json, then run: aitools user init"
+        return 1
     }
-    if ($script:ProfileRc -ne 0) {
-        & $removeTmp
-        $e = @(Get-ProfileLines "error") | Select-Object -First 1
-        if (-not $e) { $e = "see deploy.log" }
-        LogError "machine profile: register '$Alias' failed (exit $($script:ProfileRc)): $e"
-        Write-Summary "ERROR" "machine profile" "register failed"
-        return $false
+    $result = Get-UiTag "result"
+    $script:UiKey = Get-UiTag "key"; $script:UiAlias = Get-UiTag "alias"; $script:UiOwner = Get-UiTag "owner"
+    $claimed = Get-UiTag "claimed"
+    if ($result -ceq "unchanged") {
+        Remove-UiTmp $tmp
+        LogOk "machine profile: this machine is '$($script:UiAlias)' (profile $($script:UiKey), verified)"
+        Write-Summary "OK" "machine profile" "verified ($($script:UiAlias))"
+        return 0
     }
-    $result = Get-ProfileTag "result"
-    if ($result -eq "unchanged") {
-        & $removeTmp
-        LogOk "machine profile: '$Alias' is already registered to this machine"
-        return $true
-    }
-    if ((Read-JsonFile $tmp).State -ne "valid") {
-        & $removeTmp
-        LogError "machine profile: register '$Alias' wrote an invalid file -- profile.json left untouched"
+    $check = Read-JsonFile $tmp
+    if ($check.State -ne "valid") {
+        Remove-UiTmp $tmp
+        LogError "machine profile: register wrote an invalid file ($($check.Message)) -- profile.json left untouched"
         Write-Summary "ERROR" "machine profile" "register validation failed"
-        return $false
+        return 1
     }
     Backup-File $pf
     try {
         Move-Item -LiteralPath $tmp -Destination $pf -Force -ErrorAction Stop
     } catch {
-        & $removeTmp
+        Remove-UiTmp $tmp
         LogError "machine profile: could not replace $pf"
         Write-Summary "ERROR" "machine profile" "write failed"
-        return $false
+        return 1
     }
-    LogOk "machine profile: registered this machine as '$Alias' ($result, id $(Get-ProfileTag 'machineId'))"
-    if ($Commit -and (Test-Path -LiteralPath (Join-Path $Dir ".git"))) { Invoke-UiCommit $Dir "Register machine profile: $Alias" }
-    return $true
+    $from = if ($claimed) { ", claimed from $claimed" } else { "" }
+    LogOk "machine profile: registered this machine as '$($script:UiAlias)' ($result, profile $($script:UiKey)$from)"
+    if ($Commit -and (Test-Path -LiteralPath (Join-Path $Dir ".git"))) {
+        $null = Invoke-UiCommit $Dir "Register machine profile: $($script:UiAlias)" @("profile.json")   # failures: LogWarn + ACTION inside
+    }
+    Write-Summary "OK" "machine profile" "$result ($($script:UiAlias))"
+    return 0
 }
 
-# Invoke-UiRegisterFlow DIR COMMIT -- resolve, ask when not registered, register.
-# Returns the registered alias, or "" when none.
-function Invoke-UiRegisterFlow([string]$Dir, [bool]$Commit) {
-    Invoke-UiResolve $Dir
-    $alias = ""
-    if ($script:UiVia -eq "id" -or $script:UiVia -eq "environment") {
-        $alias = $script:UiAlias
-        LogOk "machine profile: this machine is '$alias' (via $($script:UiVia))"
-        # Refresh machine facts (shell, os, arch) without changing the match
-        $null = Invoke-UiRegister $Dir $alias "" "" "" $Commit
-        return $alias
+# Invoke-UiMigrate DIR -- re-key alias-keyed (revision 2.1) profiles by machine id
+# (parity: ui_migrate). Row "profile keys". Returns 0, 1 failed.
+function Invoke-UiMigrate([string]$Dir) {
+    $null = Invoke-UiProfile @("migrate", "--profile", (Join-Path $Dir "profile.json"))
+    $rc = $script:UiProfRc
+    Write-UiResolverWarnings
+    if ($rc -ne 0) {
+        $errs = @(Get-UiLines "error" | Where-Object { $_ })
+        foreach ($e1 in $errs) { LogError "machine profile: re-key failed: $e1" }
+        if ($errs.Count -eq 0) { LogError "machine profile: re-key failed (resolver exit $rc)" }
+        Write-Summary "ERROR" "profile keys" "re-key failed"
+        Write-UiAction "see deploy.log -- fix profile.json, then run: aitools user init"
+        return 1
     }
-    if ($script:UiVia -eq "override") {
-        $alias = $script:UiAlias
+    if ((Get-UiTag "result") -ceq "migrated") {
+        LogOk "machine profile: profiles re-keyed by machine id: $(Get-UiTag 'renamed')"
+        if ((Get-UiTag "pushed") -cne "true") { Write-UiPushAction $Dir }
+        Write-Summary "OK" "profile keys" "re-keyed by machine id"
     } else {
-        $alias = Read-UiChoice $Dir $script:UiAlias
-        if (-not $alias) { return "" }
+        LogDetail "machine profile: re-key: $(Get-UiTag 'result') (every profile is keyed by machine id)"
     }
-    $name = ""; $company = ""
-    $r = Read-JsonFile (Join-Path $Dir "profile.json")
-    $isNew = ($r.State -eq "valid") -and -not (Get-JType $r.Value @("profiles", $alias))
-    if ($isNew -and $env:AITOOLS_FORCE -ne "1" -and (Test-InteractiveConsole)) {
-        [Console]::Write("Display name for $alias (Enter = identity name): ")
-        $name = Read-ConsoleChoice "identity name"
-        [Console]::Write("Company for $alias (Enter = identity company): ")
-        $company = Read-ConsoleChoice "identity company"
-    }
-    if (Invoke-UiRegister $Dir $alias $name $company "" $Commit) { return $alias }
-    return ""
+    return 0
 }
+
+# Invoke-UiResolve DIR -- which profile this machine is (parity: ui_resolve; no
+# override is passed: -Alias goes to register, Review3 #82 M1). Sets
+# $script:UiVia, UiKey, UiAlias, UiOwner, UiThisId. Returns 0, or 1 on a resolver
+# error user init cannot resolve (LogError + ERROR row + ACTION).
+function Invoke-UiResolve([string]$Dir) {
+    $null = Invoke-UiProfile @("resolve", "--profile", (Join-Path $Dir "profile.json"), "--environment", $script:AitoolsEnvironment)
+    $script:UiVia = Get-UiTag "via"; $script:UiKey = Get-UiTag "key"; $script:UiAlias = Get-UiTag "alias"
+    $script:UiOwner = Get-UiTag "owner"; $script:UiThisId = Get-UiTag "machineId"
+    if (-not $script:UiKey) { $script:UiVia = "none" }
+    Write-UiResolverWarnings
+    $aShown = if ($script:UiAlias) { $script:UiAlias } else { "none" }
+    $kShown = if ($script:UiKey) { $script:UiKey } else { "none" }
+    $oShown = if ($script:UiOwner) { $script:UiOwner } else { "absent" }
+    Log "machine profile: alias=$aShown via=$($script:UiVia) key=$kShown owner=$oShown"
+    if ($script:UiProfRc -eq 0) { return 0 }
+    $real = $false
+    foreach ($e1 in (Get-UiLines "error")) {
+        if (-not $e1) { continue }
+        if (Test-UiHandled $e1) { Log "machine profile: $e1 (user init handles this)" }
+        else { LogError "machine profile: $e1"; $real = $true }
+    }
+    if (-not (Get-UiFirstError)) { LogError "machine profile: resolver failed (exit $($script:UiProfRc))"; $real = $true }
+    if (-not $real) { return 0 }
+    Write-Summary "ERROR" "machine profile" "resolver error"
+    Write-UiAction "see deploy.log -- fix profile.json, then run: aitools user init"
+    return 1
+}
+
+# Read-UiIdentity DIR -- identity for a new profile.json (parity: ui_identity).
+# Sets $script:UiIdName, UiIdEmail, UiIdCompany.
+function Read-UiIdentity([string]$Dir) {
+    $script:UiIdName = ""; $script:UiIdEmail = ""; $script:UiIdCompany = ""
+    if (Test-Path -LiteralPath $Dir) {
+        $v = (& git -C $Dir config user.name 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -eq 0) { $script:UiIdName = $v }   # unset (exit 1): the fallback below
+        $v = (& git -C $Dir config user.email 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -eq 0) { $script:UiIdEmail = $v }   # unset: asked below, else empty
+    }
+    if (-not $script:UiIdName) { $script:UiIdName = [Environment]::UserName }
+    if (-not (Test-UiCanAsk)) { return }
+    [Console]::Write("Display name [$($script:UiIdName)]: ")
+    $v = Read-ConsoleChoice $script:UiIdName
+    if ($v) { $script:UiIdName = $v }
+    [Console]::Write("Email [$($script:UiIdEmail)]: ")
+    $dflt = if ($script:UiIdEmail) { $script:UiIdEmail } else { "none" }
+    $v = Read-ConsoleChoice $dflt
+    if ($v) { $script:UiIdEmail = $v }
+    [Console]::Write("Company: ")
+    $script:UiIdCompany = Read-ConsoleChoice "none"
+}
+
+# Invoke-UiScaffold DIR COMMIT -- decision 6: DIR has no profile.json (parity:
+# ui_scaffold). Returns Invoke-UiRegister's code.
+# TODO(PR #96): profile.json meta.intent is protected text pending approval -- the
+# scaffold writes no meta.intent until it is approved (S3-M3Lead, 2026-10-22).
+function Invoke-UiScaffold([string]$Dir, [bool]$Commit) {
+    Log "machine profile: no profile.json in $Dir -- creating it (identity + this machine's profile)"
+    Read-UiIdentity $Dir
+    $aliasName = $script:UserAlias
+    if (-not $aliasName -and (Test-UiCanAsk)) {
+        [Console]::Write("Alias for this machine (Enter = hostname): ")
+        $aliasName = Read-ConsoleChoice "the hostname"
+    }
+    return (Invoke-UiRegister $Dir "alias" $aliasName $Commit $script:UiIdName $script:UiIdCompany $script:UiIdEmail)
+}
+
+# Invoke-UiRegisterFlow DIR COMMIT -- register this machine in DIR (parity:
+# ui_register_flow). Sets $script:UiMachineKey, UiMachineAlias, UiMachineOwner
+# ("" when not registered). Returns 0 registered, verified or skipped by the user
+# (WARN row), 1 not registered (ERROR row).
+function Invoke-UiRegisterFlow([string]$Dir, [bool]$Commit) {
+    $script:UiMachineKey = ""; $script:UiMachineAlias = ""; $script:UiMachineOwner = ""
+    $want = $script:UserAlias
+    $rc = 0; $sug = ""
+    if (-not (Test-Path -LiteralPath (Join-Path $Dir "profile.json"))) {
+        $rc = Invoke-UiScaffold $Dir $Commit
+    } elseif (Test-UiProfileDirty $Dir) {
+        if ((Invoke-UiResolve $Dir) -ne 0) { return 1 }
+        if ($script:UiOwner -ceq "this" -and ($script:UiVia -ceq "id" -or $script:UiVia -ceq "environment")) {
+            $script:UiMachineKey = $script:UiKey; $script:UiMachineAlias = $script:UiAlias; $script:UiMachineOwner = "this"
+            LogWarn "machine profile: profile.json in $Dir has uncommitted changes -- this machine's profile ('$($script:UiAlias)') was not refreshed; commit or discard them, then run: aitools user init"
+            Write-Summary "WARN" "machine profile" "not refreshed (local edits)"
+            Write-UiAction "commit or discard the changes to profile.json in $Dir, then run: aitools user init"
+            return 0
+        }
+        LogError "machine profile: profile.json in $Dir has uncommitted changes -- not registered (they would be committed with it); commit or discard them, then run: aitools user init"
+        Write-Summary "ERROR" "machine profile" "not registered (local edits)"
+        Write-UiAction "commit or discard the changes to profile.json in $Dir, then run: aitools user init"
+        return 1
+    } else {
+        $null = Invoke-UiMigrate $Dir   # failure: logged + ERROR row; resolution still reads legacy profiles
+        if ((Invoke-UiResolve $Dir) -ne 0) { return 1 }
+        # AITOOLS_MACHINE_ALIAS naming an existing profile (resolver via=override) is used as
+        # -Alias would be; an unknown one is a resolver error (design (b) step 1). With
+        # -Alias it is ignored (Invoke-UserInit clears it).
+        if (-not $want -and $script:UiVia -ceq "override") { $want = $script:UiAlias }
+        if ($want) {
+            if ($script:UiOwner -cne "this") { Read-UiNameCompany $want } else { $script:UiName = ""; $script:UiCompany = "" }
+            $rc = Invoke-UiRegister $Dir "alias" $want $Commit $script:UiName $script:UiCompany ""
+        } else {
+            switch -CaseSensitive ($script:UiVia) {
+                { $_ -ceq "id" -or $_ -ceq "environment" } {
+                    # Refresh the machine facts (hostname, os, arch, shell) of this machine's profile
+                    $rc = Invoke-UiRegister $Dir "refresh" "" $Commit
+                    break
+                }
+                "config" {
+                    # This machine's id cannot be detected: config.json's cached key vouches for
+                    # the profile, but register needs the id (it would refuse with exit 3)
+                    LogWarn "machine profile: this machine's id cannot be detected -- profile '$($script:UiAlias)' (from config.json machineId) was not refreshed"
+                    Write-Summary "WARN" "machine profile" "not refreshed (no machine id)"
+                    # owner "config": the key is NOT passed to setup-user-config, which re-derives it
+                    # (via=config) and keeps the cached machineId (review M2)
+                    $script:UiMachineKey = $script:UiKey; $script:UiMachineAlias = $script:UiAlias; $script:UiMachineOwner = "config"
+                    return 0
+                }
+                "alias" {
+                    if ($script:RegisterCachedAliasSilently) {
+                        Log "machine profile: config.json names profile '$($script:UiKey)' (no machine.id) -- claiming it for this machine (decision 2)"
+                        $rc = Invoke-UiRegister $Dir "claim" $script:UiKey $Commit
+                    } else {
+                        $sug = $script:UiKey; $rc = 100
+                    }
+                    break
+                }
+                "hostname" { $sug = $script:UiKey; $rc = 100; break }
+                default { $rc = 100 }
+            }
+            if ($rc -eq 100) {
+                $rc = Read-UiChoose (Join-Path $Dir "profile.json") $sug $script:UiThisId
+                if ($rc -eq 0) {
+                    if ($script:UiChoiceKind -ceq "claim") {
+                        $rc = Invoke-UiRegister $Dir "claim" $script:UiChoice $Commit
+                    } else {
+                        Read-UiNameCompany $script:UiChoice
+                        $rc = Invoke-UiRegister $Dir "alias" $script:UiChoice $Commit $script:UiName $script:UiCompany ""
+                    }
+                } elseif ($rc -eq 2) {
+                    Write-Summary "WARN" "machine profile" "skipped"
+                }
+            }
+        }
+    }
+    if ($rc -eq 0) {
+        $script:UiMachineKey = $script:UiKey; $script:UiMachineAlias = $script:UiAlias; $script:UiMachineOwner = $script:UiOwner
+        return 0
+    }
+    if ($rc -eq 2) { return 0 }
+    return 1
+}
+
+# Invoke-UiV1Migrate DIR -- DIR/profile.json is v1: convert it to v2 revision 2.2
+# and register this machine under its id (parity: migrate_profile_v1_to_v2).
+# Returns 0 (also when nothing to do), 1 failed.
+function Invoke-UiV1Migrate([string]$Dir) {
+    $pf = Join-Path $Dir "profile.json"
+    if (-not (Test-Path -LiteralPath $pf)) { return 0 }
+    $r = Read-JsonFile $pf
+    if ($r.State -eq "valid" -and (Get-JText $r.Value @("version")) -ceq "2") { return 0 }
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+        LogWarn "profile.json in $Dir is v1 (legacy) -- node is needed to migrate it; install node, then run: aitools user init"
+        Write-Summary "WARN" "machine profile" "v1 profile not migrated"
+        return 0
+    }
+    if (Test-UiProfileDirty $Dir) {
+        LogWarn "profile.json in $Dir is v1 and has uncommitted changes -- not migrated; commit or discard them, then run: aitools user init"
+        Write-Summary "WARN" "machine profile" "v1 profile not migrated"
+        Write-UiAction "commit or discard the changes to profile.json in $Dir, then run: aitools user init"
+        return 0
+    }
+    Log "profile.json in $Dir is v1 (legacy) -- migrating to v2 (profiles keyed by machine id)"
+    $null = Invoke-UiProfile @("hostname")
+    $hostName = if ($script:UiProfRc -eq 0 -and $script:UiProfOut.Count -gt 0) { $script:UiProfOut[0] } else { "" }
+    $tmp = "$pf.tmp.$PID"
+    $js = @'
+const fs = require("fs");
+const [src, dst, host] = process.argv.slice(1);
+const old = JSON.parse(fs.readFileSync(src, "utf8").replace(/^﻿/, ""));
+const name = (old.git && old.git.name) || old.name || "";
+const email = (old.git && old.git.email) || old.email || "";
+const v2 = { version: 2, meta: { schemaRevision: "2.2" },
+    identity: { github: old.github || "", email: email, name: name, company: old.company || "", git: { name: name, email: email } },
+    profiles: {} };
+// The other v1 machines: profiles that belong to no machine yet (claimable)
+if (Array.isArray(old.machines)) {
+    let n = 1;
+    for (const m of old.machines) {
+        const h = String((m && m.hostname) || "").split(".")[0].toLowerCase();
+        if (host && h === host) continue;
+        while (v2.profiles["machine" + n]) n++;
+        v2.profiles["machine" + n] = { machine: m };
+    }
+}
+// Non-v1 sections (e.g. cursor) are kept
+const v1Keys = ["name", "email", "github", "company", "git", "machines", "version"];
+for (const k of Object.keys(old)) { if (!v1Keys.includes(k) && !(k in v2)) v2[k] = old[k]; }
+fs.writeFileSync(dst, JSON.stringify(v2, null, 2) + "\n");
+'@
+    $out = (& node -e $js $pf $tmp $hostName 2>&1 | Out-String)
+    $nodeRc = $LASTEXITCODE
+    if ($nodeRc -ne 0 -or (Read-JsonFile $tmp).State -ne "valid") {
+        Write-UiLogLines "v1 migration: " $out
+        Remove-UiTmp $tmp
+        LogError "profile.json in $Dir could not be migrated from v1 (see deploy.log) -- left untouched"
+        Write-Summary "ERROR" "machine profile" "v1 migration failed"
+        return 1
+    }
+    Backup-File $pf
+    try {
+        Move-Item -LiteralPath $tmp -Destination $pf -Force -ErrorAction Stop
+    } catch {
+        Remove-UiTmp $tmp
+        LogError "profile.json in $Dir could not be replaced -- v1 migration not written"
+        Write-Summary "ERROR" "machine profile" "v1 migration failed"
+        return 1
+    }
+    LogOk "profile.json in $Dir migrated to v2"
+    $aliasName = $script:UserAlias
+    if (-not $aliasName -and (Test-UiCanAsk)) {
+        [Console]::Write("Alias for this machine (Enter = hostname): ")
+        $aliasName = Read-ConsoleChoice "the hostname"
+    }
+    $reg = Invoke-UiRegister $Dir "alias" $aliasName $false   # failure or skip: logged + row inside; the migration is committed either way
+    if (Test-Path -LiteralPath (Join-Path $Dir ".git")) { $null = Invoke-UiCommit $Dir "Migrate profile.json from v1 to v2" @("profile.json") }
+    if ($reg -eq 1) { return 1 }
+    return 0
+}
+
+# Invoke-UiCreateDotprofile DIR -- Path 3: a new local dotprofile, committed, then
+# a private GitHub repo created and pushed (parity: ui_create_dotprofile). Writes
+# the "dotprofile" row. Returns 0, 1 failed (ERROR row).
+function Invoke-UiCreateDotprofile([string]$Dir) {
+    Log "user init: creating the dotprofile $Dir"
+    try {
+        $null = New-Item -ItemType Directory -Path (Join-Path $Dir "sessions") -Force -ErrorAction Stop
+    } catch {
+        LogError "user init: could not create $Dir"
+        Write-Summary "ERROR" "dotprofile" "create failed"
+        return 1
+    }
+    $reg = 0
+    if ((Invoke-UiRegisterFlow $Dir $false) -ne 0) { $reg = 1 }   # failure: logged + ERROR row inside; the repo is still created
+    $utf8 = [System.Text.UTF8Encoding]::new($false)
+    try {
+        [IO.File]::WriteAllText((Join-Path $Dir ".gitattributes"), "* text=auto eol=lf`n*.jsonl text eol=lf`n", $utf8)
+        [IO.File]::WriteAllText((Join-Path $Dir ".gitignore"), ".scratch/`n*.bak.*`n.DS_Store`n", $utf8)
+        [IO.File]::WriteAllText((Join-Path $Dir "README.md"), "# $($script:UiRepoName)`n`nPrivate user repo for session archives and profile data.`nSee [aitools](https://github.com/$($script:UiGhUser)/aitools) for details.`n", $utf8)
+    } catch {
+        LogError "user init: could not write the dotprofile files in $Dir"
+        Write-Summary "ERROR" "dotprofile" "create failed"
+        return 1
+    }
+    $out = (& git -C $Dir init -b main 2>&1 | Out-String); $grc = $LASTEXITCODE
+    if ($grc -eq 0 -and $script:UiIdName) { $out = (& git -C $Dir config user.name $script:UiIdName 2>&1 | Out-String); $grc = $LASTEXITCODE }
+    if ($grc -eq 0 -and $script:UiIdEmail) { $out = (& git -C $Dir config user.email $script:UiIdEmail 2>&1 | Out-String); $grc = $LASTEXITCODE }
+    if ($grc -eq 0) { $out = (& git -C $Dir add -A 2>&1 | Out-String); $grc = $LASTEXITCODE }
+    if ($grc -eq 0) { $out = (& git -C $Dir commit -m "Initial commit: profile and session archive structure" 2>&1 | Out-String); $grc = $LASTEXITCODE }
+    Write-UiLogLines "git: " $out
+    if ($grc -ne 0) {
+        LogError "user init: git init / first commit failed in $Dir (exit $grc, see deploy.log) -- commit it by hand, then run: aitools user init"
+        Write-Summary "ERROR" "dotprofile" "first commit failed"
+        Write-UiAction "commit the dotprofile in $Dir, then run: aitools user init"
+        return 1
+    }
+    LogOk "user init: dotprofile created and committed"
+    $create = "Run: gh repo create $($script:UiRepoName) --private --source $Dir --push"
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+        LogWarn "user init: gh not found -- the dotprofile was not pushed; create the private GitHub repo $($script:UiRepoName) and push it"
+        Write-Summary "WARN" "dotprofile" "created, not pushed"
+        Write-UiAction $create
+        return $reg
+    }
+    $ans = "y"
+    if (Test-UiCanAsk) {
+        [Console]::Write("Create the private GitHub repo '$($script:UiRepoName)' and push? [Y/n]: ")
+        $ans = Read-ConsoleChoice "yes"
+        if (-not $ans) { $ans = "y" }
+    }
+    if ($ans -notmatch '^[yY]') {
+        LogWarn "user init: GitHub repo not created -- the dotprofile stays local; create it and push: gh repo create $($script:UiRepoName) --private --source $Dir --push"
+        Write-Summary "WARN" "dotprofile" "created, not pushed"
+        Write-UiAction $create
+        return $reg
+    }
+    $prevPrompt = $env:GIT_TERMINAL_PROMPT; $prevSsh = $env:GIT_SSH_COMMAND
+    $ask = Test-UiCanAsk
+    try {
+        if (-not $ask) {
+            $env:GIT_TERMINAL_PROMPT = "0"
+            if (-not $env:GIT_SSH_COMMAND) { $env:GIT_SSH_COMMAND = "ssh -o BatchMode=yes" }
+        }
+        $out = (& gh repo create $script:UiRepoName --private --source $Dir --push 2>&1 | Out-String)
+        $grc = $LASTEXITCODE
+    } finally {
+        $env:GIT_TERMINAL_PROMPT = $prevPrompt; $env:GIT_SSH_COMMAND = $prevSsh
+    }
+    Write-UiLogLines "gh repo create: " $out
+    if ($grc -ne 0) {
+        LogWarn "user init: gh repo create failed (exit $grc, see deploy.log) -- the dotprofile stays local; run: gh repo create $($script:UiRepoName) --private --source $Dir --push"
+        Write-Summary "WARN" "dotprofile" "created, not pushed"
+        Write-UiAction $create
+        return $reg
+    }
+    LogOk "user init: private GitHub repo $($script:UiGhUser)/$($script:UiRepoName) created and pushed"
+    Write-Summary "OK" "dotprofile" "created"
+    return $reg
+}
+
+# Invoke-UiScaffoldClaudeMd DIR -- the dotprofile's claude/CLAUDE.md from the
+# shared template when it is missing, committed (only that file) and pushed
+# (parity: ui_scaffold_claude_md). Returns 0, 1 failed.
+function Invoke-UiScaffoldClaudeMd([string]$Dir) {
+    $dest = Join-Path $Dir "claude" "CLAUDE.md"
+    $src = Join-Path $repoPath "shared" "claude-shared.md"
+    if (Test-Path -LiteralPath $dest) { return 0 }
+    if (-not (Test-Path -LiteralPath $src)) {
+        LogWarn "user init: $src not found -- claude/CLAUDE.md not created in the dotprofile"
+        Write-Summary "WARN" "claude template" "template missing"
+        return 0
+    }
+    try {
+        $null = New-Item -ItemType Directory -Path (Join-Path $Dir "claude") -Force -ErrorAction Stop
+        Copy-Item -LiteralPath $src -Destination $dest -ErrorAction Stop
+    } catch {
+        LogError "user init: could not create $dest"
+        Write-Summary "ERROR" "claude template" "create failed"
+        return 1
+    }
+    LogOk "user init: created claude/CLAUDE.md in the dotprofile (template with placeholders)"
+    if (Test-Path -LiteralPath (Join-Path $Dir ".git")) { $null = Invoke-UiCommit $Dir "Add claude/CLAUDE.md template" @("claude/CLAUDE.md") }
+    Write-Summary "OK" "claude template" "created"
+    return 0
+}
+
+# Invoke-UserInit -- `aitools user init` (parity: user_init in scripts/aitools).
+# Returns 0 done (warnings possible), 1 any failure, 2 user abort in a review
+# menu (D-TS13).
+function Invoke-UserInit {
+    $rc = 0
+    $script:UiGhUser = ""; $script:UiRepoName = ""
+    $script:UiMachineKey = ""; $script:UiMachineAlias = ""; $script:UiMachineOwner = ""
+    # -Force: no prompts here, and the review menus of setup-user-hooks take the source
+    if ($Force) { $env:AITOOLS_FORCE = "1" }
+
+    # GitHub user: gh, else config.json githubUser, else asked on a console
+    if (Get-Command gh -ErrorAction SilentlyContinue) {
+        $v = (& gh api user --jq '.login' 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -eq 0) { $script:UiGhUser = $v }   # not signed in: the fallbacks below
+    }
+    if (-not $script:UiGhUser) {
+        $v = ReadConfigKey -File $configFile -Key "githubUser"
+        if ($v) { $script:UiGhUser = [string]$v }
+    }
+    if (-not $script:UiGhUser -and (Test-UiCanAsk)) {
+        [Console]::Write("GitHub username: ")
+        $script:UiGhUser = Read-ConsoleChoice "none"
+    }
+    if (-not $script:UiGhUser) {
+        LogError "user init: GitHub username unknown (gh not signed in, no githubUser in config.json, no terminal to ask) -- run: gh auth login, then aitools user init"
+        Write-Summary "ERROR" "dotprofile" "GitHub user unknown"
+        Write-UiAction "Run: gh auth login, then aitools user init"
+        return 1
+    }
+    Log "user init: GitHub user $($script:UiGhUser)"
+    $script:UiRepoName = "aitools-$($script:UiGhUser)"
+
+    # Repos directory from config.json (a leading ~ is the home directory)
+    $reposDir = [string](ReadConfigKey -File $configFile -Key "reposPath")
+    if ($reposDir -ceq "~") { $reposDir = $HOME }
+    elseif ($reposDir.StartsWith("~/") -or $reposDir.StartsWith("~\")) { $reposDir = Join-Path $HOME $reposDir.Substring(2) }
+    if (-not $reposDir) { $reposDir = Join-Path $HOME "repos" }
+    # A relative reposPath would put the dotprofile (and its GitHub repo) under the
+    # current directory, and setup-user-config refuses it anyway (review M1): refused
+    if (-not [IO.Path]::IsPathRooted($reposDir)) {
+        LogError "user init: reposPath in $configFile is not an absolute path ($reposDir) -- set an absolute reposPath (or run: aitools install --repos-path <absolute path>), then run: aitools user init"
+        Write-Summary "ERROR" "dotprofile" "reposPath not absolute"
+        Write-UiAction "Set an absolute reposPath in $configFile, then run: aitools user init"
+        return 1
+    }
+    $userRepoDir = Join-Path $reposDir $script:UiRepoName
+    # -Alias wins over a (possibly stale) AITOOLS_MACHINE_ALIAS, for the resolver and
+    # the writer alike (review m3)
+    if ($script:UserAlias -and $env:AITOOLS_MACHINE_ALIAS) {
+        Log "user init: AITOOLS_MACHINE_ALIAS=$($env:AITOOLS_MACHINE_ALIAS) ignored (--alias $($script:UserAlias) given)"
+        Remove-Item Env:\AITOOLS_MACHINE_ALIAS -ErrorAction SilentlyContinue
+        if ($env:AITOOLS_MACHINE_ALIAS) { LogWarn "user init: AITOOLS_MACHINE_ALIAS could not be cleared" }
+    }
+
+    if (Test-Path -LiteralPath (Join-Path $userRepoDir ".git")) {
+        # --- Path 1: local dotprofile present ---
+        Log "user init: dotprofile $userRepoDir (present)"
+        Write-Summary "OK" "dotprofile" "verified"
+        if ((Invoke-UiV1Migrate $userRepoDir) -ne 0) { $rc = 1 }
+        if ((Invoke-UiRegisterFlow $userRepoDir $true) -ne 0) { $rc = 1 }
+    } else {
+        $ghRepo = $false
+        if (Get-Command gh -ErrorAction SilentlyContinue) {
+            $null = & gh repo view "$($script:UiGhUser)/$($script:UiRepoName)" --json name 2>&1
+            $ghRepo = ($LASTEXITCODE -eq 0)   # non-zero: no such repo (or gh not signed in)
+        }
+        if ($ghRepo) {
+            # --- Path 2: GitHub repo present, no local clone ---
+            Log "user init: cloning $($script:UiGhUser)/$($script:UiRepoName) to $userRepoDir"
+            $out = (& gh repo clone "$($script:UiGhUser)/$($script:UiRepoName)" $userRepoDir 2>&1 | Out-String)
+            $crc = $LASTEXITCODE
+            Write-UiLogLines "gh repo clone: " $out
+            if ($crc -ne 0) {
+                LogError "user init: gh repo clone $($script:UiGhUser)/$($script:UiRepoName) failed (exit $crc, see deploy.log) -- clone it, then run: aitools user init"
+                Write-Summary "ERROR" "dotprofile" "clone failed"
+                Write-UiAction "Run: gh repo clone $($script:UiGhUser)/$($script:UiRepoName) $userRepoDir, then aitools user init"
+                return 1
+            }
+            Write-Summary "OK" "dotprofile" "cloned"
+            # Git identity for this clone from the profile (Review3 #82 minor 8: results checked)
+            $pr = Read-JsonFile (Join-Path $userRepoDir "profile.json")
+            if ($pr.State -eq "valid") {
+                $dn = Get-JText $pr.Value @("identity", "git", "name")
+                $de = Get-JText $pr.Value @("identity", "git", "email")
+                if ($dn -and $de) {
+                    $out = (& git -C $userRepoDir config user.name $dn 2>&1 | Out-String); $crc = $LASTEXITCODE
+                    if ($crc -eq 0) { $out = (& git -C $userRepoDir config user.email $de 2>&1 | Out-String); $crc = $LASTEXITCODE }
+                    if ($crc -ne 0) { LogWarn "user init: could not set the git identity of the clone (exit ${crc}: $($out.Trim())) -- commits use git's own identity" }
+                }
+            }
+            if ((Invoke-UiV1Migrate $userRepoDir) -ne 0) { $rc = 1 }
+            if ((Invoke-UiRegisterFlow $userRepoDir $true) -ne 0) { $rc = 1 }
+        } else {
+            # --- Path 3: fresh setup ---
+            if ((Invoke-UiCreateDotprofile $userRepoDir) -ne 0) { $rc = 1 }
+        }
+    }
+    # This machine without a profile at the end (skipped at a prompt, refused, failed)
+    # is one outcome with one exit code, 1 (Review3 #82 minor 3)
+    if (-not $script:UiMachineKey) {
+        # A skip at a prompt wrote a WARN row only: name the reason for the exit code (review n1)
+        if ($rc -eq 0) { LogError "machine profile: this machine is not registered (skipped) -- run: aitools user init" }
+        $rc = 1
+    }
+
+    if (Test-Path -LiteralPath $userRepoDir) {
+        if ((Invoke-UiScaffoldClaudeMd $userRepoDir) -ne 0) { $rc = 1 }
+    }
+
+    # config.json has one writer (setup-user-config): GitHub user, dotprofile path and
+    # this machine's profile key (-MachineId; ConfigKey contract). Another machine's
+    # key is never passed (ConfigKey Q3); a key that only config.json vouches for (owner
+    # "config") is left to the writer to re-derive (review M2). In-process: reset the
+    # exit code, catch a throw; its output goes to the host, never into this function's
+    # return value (review m1: `exit (Invoke-UserInitCommand)` would otherwise exit 0).
+    $machineKey = $script:UiMachineKey
+    if ($script:UiMachineOwner -ceq "config") {
+        LogDetail "user init: machine id undetectable -- -MachineId not passed (the writer keeps the cached machineId)"
+        $machineKey = ""
+    } elseif ($machineKey -and $script:UiMachineOwner -cne "this") {
+        LogError "user init: profile $machineKey is not this machine's (owner $($script:UiMachineOwner)) -- not passed to setup-user-config"
+        Write-Summary "ERROR" "machine profile" "not this machine's profile"
+        $machineKey = ""; $rc = 1
+    }
+    $configWriter = Join-Path $repoPath "scripts" "setup-user-config.ps1"
+    $writerArgs = @{ GithubUser = $script:UiGhUser; UserRepoPath = $userRepoDir }
+    if ($machineKey) { $writerArgs["MachineId"] = $machineKey }
+    $global:LASTEXITCODE = 0
+    try {
+        & $configWriter @writerArgs | Out-Host
+        $writerRc = $LASTEXITCODE
+        if ($writerRc -ne 0) {
+            LogError "user init: setup-user-config failed (exit $writerRc) -- see $logFile"
+            Write-Summary "ERROR" "aitools config" "setup-user-config failed"
+            $rc = 1
+        }
+    } catch {
+        LogError "user init: setup-user-config.ps1 failed: $_"
+        Write-Summary "ERROR" "aitools config" "setup-user-config failed"
+        $rc = 1
+    }
+
+    # Session archive hook. Exit 2 = the user aborted in the review menu (D-TS13):
+    # stop with exit 2; any other failure is logged.
+    Log "user init: deploying the session archive hook"
+    $hookSetup = Join-Path $repoPath "scripts" "setup-user-hooks.ps1"
+    $hookRc = 0
+    if (-not (Test-Path -LiteralPath $hookSetup)) {
+        $hookRc = 127
+    } else {
+        $global:LASTEXITCODE = 0
+        try {
+            & $hookSetup | Out-Host
+            $hookRc = $LASTEXITCODE
+        } catch {
+            LogError "user init: setup-user-hooks.ps1 failed: $_"
+            $hookRc = 1
+        }
+    }
+    if ($hookRc -eq 2) {
+        Log "user init: aborted by user"
+        return 2
+    }
+    if ($hookRc -eq 127) {
+        LogError "user init: $hookSetup not found -- the session archive hook was not deployed"
+        Write-Summary "ERROR" "claude hooks" "setup script missing"
+        $rc = 1
+    } elseif ($hookRc -and $hookRc -ne 0) {
+        LogError "user init: setup-user-hooks.ps1 failed (exit $hookRc) -- see $logFile"
+        $rc = 1
+    }
+    if ($rc -eq 0) {
+        LogOk "user init: done -- sessions will be archived to $(Join-Path $userRepoDir 'sessions')"
+    }
+    return $rc
+}
+
+# Invoke-UserInitCommand -- decision 3: user init has its own run summary, created
+# before the user block (its rows and those of its child scripts) and shown
+# before it returns. Returns Invoke-UserInit's exit code.
+function Invoke-UserInitCommand {
+    $env:AITOOLS_SUMMARY_FILE = Join-Path $HOME ".aitools" "run-summary.txt"
+    try {
+        $null = New-Item -ItemType Directory -Path (Join-Path $HOME ".aitools") -Force -ErrorAction Stop
+        $null = New-Item -ItemType File -Path $env:AITOOLS_SUMMARY_FILE -Force -ErrorAction Stop
+    } catch {
+        LogWarn "user init: could not create the run summary $($env:AITOOLS_SUMMARY_FILE) -- the summary panel is not shown"
+    }
+    $initOut = @(Invoke-UserInit)
+    # The exit code is the last value; anything before it leaked into the output stream
+    $initRc = 1
+    if ($initOut.Count -gt 0 -and $initOut[-1] -is [int]) { $initRc = $initOut[-1] }
+    else { LogError "user init: no exit code returned (internal error) -- exit 1" }
+    if ($initOut.Count -gt 1) { LogDetail "user init: $($initOut.Count - 1) stray output value(s) before the exit code" }
+    Show-Summary
+    Remove-Item Env:\AITOOLS_SUMMARY_FILE -ErrorAction SilentlyContinue
+    if (Test-Path Env:\AITOOLS_SUMMARY_FILE) { LogDetail "AITOOLS_SUMMARY_FILE could not be cleared" }
+    return $initRc
+}
+# --- END user init ---
 
 # ---------------------------------------------------------------------------
 # user -- user repo management
@@ -1085,218 +1719,7 @@ function Invoke-UiRegisterFlow([string]$Dir, [bool]$Commit) {
 if ($doUser) {
     switch ($subCmd) {
         "init" {
-            # Detect GitHub username
-            $ghUser = ""
-            if (Get-Command gh -ErrorAction SilentlyContinue) {
-                try { $ghUser = gh api user --jq '.login' 2>$null } catch {}
-            }
-            if (-not $ghUser) {
-                $ghUser = Read-Host "GitHub username"
-            } else {
-                Write-Host "Detected GitHub user: $ghUser"
-            }
-
-            if (-not $ghUser) {
-                LogError "GitHub username required"
-                exit 1
-            }
-
-            $repoName = "aitools-$ghUser"
-            $machineAlias = ""
-
-            # Determine repos directory from config
-            $reposDir = Read-ConfigKey -File $configFile -Key "reposPath"
-            if (-not $reposDir) { $reposDir = Join-Path $env:USERPROFILE "repos" }
-
-            $userRepoDir = Join-Path $reposDir $repoName
-
-            if (Test-Path (Join-Path $userRepoDir ".git")) {
-                # --- Path 1: local repo already exists ---
-                Write-Host "User repo already exists: $userRepoDir"
-
-                # Detect v1 profile and offer migration
-                $profilePath = Join-Path $userRepoDir "profile.json"
-                if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path $profilePath)) {
-                    $profVersion = node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.version||'')}catch{}" $profilePath 2>$null
-                    if ($profVersion) { $profVersion = $profVersion.Trim() }
-                    if ($profVersion -ne "2") {
-                        Write-Host "profile.json is v1 (legacy). Migrating to v2..."
-                        $checkScript = Join-Path $repoPath "scripts\profile-check.js"
-                        if (Test-Path $checkScript) {
-                            $checkResult = node $checkScript --config $configFile 2>$null
-                            if ($checkResult) {
-                                $parsed = $checkResult | ConvertFrom-Json
-                                Invoke-ProfileMigration -CheckResult $parsed
-                            }
-                        }
-                    }
-                }
-
-                # Resolve this machine's profile; ask (or take -Alias) when it is not registered
-                if (Test-Path (Join-Path $userRepoDir "profile.json")) {
-                    $machineAlias = Invoke-UiRegisterFlow $userRepoDir $true
-                }
-
-            } elseif ((Get-Command gh -ErrorAction SilentlyContinue) -and
-                      ((gh repo view "$ghUser/$repoName" --json name 2>$null) -ne $null)) {
-                # --- Path 2: GitHub repo exists, no local clone ---
-                Write-Host "GitHub repo exists. Cloning to $userRepoDir..."
-                gh repo clone "$ghUser/$repoName" $userRepoDir
-
-                # Detect v1 profile and offer migration
-                $profilePath = Join-Path $userRepoDir "profile.json"
-                if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path $profilePath)) {
-                    $profVersion = node -e "try{const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(p.version||'')}catch{}" $profilePath 2>$null
-                    if ($profVersion) { $profVersion = $profVersion.Trim() }
-                    if ($profVersion -ne "2") {
-                        Write-Host "profile.json is v1 (legacy). Migrating to v2..."
-                        $checkScript = Join-Path $repoPath "scripts\profile-check.js"
-                        if (Test-Path $checkScript) {
-                            $checkResult = node $checkScript --config $configFile 2>$null
-                            if ($checkResult) {
-                                $parsed = $checkResult | ConvertFrom-Json
-                                Invoke-ProfileMigration -CheckResult $parsed
-                            }
-                        }
-                    }
-                }
-
-                # Git identity for this clone from the profile (so the commits below work
-                # on a fresh machine), then resolve this machine and ask when unregistered
-                $profilePath = Join-Path $userRepoDir "profile.json"
-                if (Test-Path $profilePath) {
-                    $pr = Read-JsonFile $profilePath
-                    if ($pr.State -eq "valid") {
-                        $defaultName = Get-JText $pr.Value @("identity", "git", "name")
-                        $defaultEmail = Get-JText $pr.Value @("identity", "git", "email")
-                        if ($defaultName -and $defaultEmail) {
-                            $null = & git -C $userRepoDir config user.name $defaultName 2>&1
-                            $null = & git -C $userRepoDir config user.email $defaultEmail 2>&1
-                        }
-                    }
-                    $machineAlias = Invoke-UiRegisterFlow $userRepoDir $true
-                }
-
-            } else {
-                # --- Path 3: fresh setup ---
-                Write-Host "Creating user repo: $userRepoDir"
-                New-Item -ItemType Directory -Path (Join-Path $userRepoDir "sessions") -Force | Out-Null
-
-                # Prompt for profile info
-                $profName = Read-Host "Display name [$env:USERNAME]"
-                if (-not $profName) { $profName = $env:USERNAME }
-                $profEmail = Read-Host "Email"
-                $profCompany = Read-Host "Company"
-                $machineAlias = $script:UserAlias
-                if (-not $machineAlias) { $machineAlias = Read-Host "Machine alias (e.g., laptop, workstation)" }
-                if (-not $machineAlias) { $machineAlias = "default" }
-
-                # Create the v2 profile.json with this machine registered (identity
-                # name/company are the defaults for every machine; committed below)
-                if (-not (Invoke-UiRegister $userRepoDir $machineAlias $profName $profCompany $profEmail $false)) { $machineAlias = "" }
-
-                # Create .gitattributes
-                [System.IO.File]::WriteAllText(
-                    (Join-Path $userRepoDir ".gitattributes"),
-                    "* text=auto eol=lf`n*.jsonl text eol=lf`n",
-                    [System.Text.UTF8Encoding]::new($false))
-
-                # Create .gitignore
-                [System.IO.File]::WriteAllText(
-                    (Join-Path $userRepoDir ".gitignore"),
-                    ".scratch/`n*.bak.*`n.DS_Store`n",
-                    [System.Text.UTF8Encoding]::new($false))
-
-                # Create README
-                [System.IO.File]::WriteAllText(
-                    (Join-Path $userRepoDir "README.md"),
-                    "# $repoName`n`nPrivate user repo for session archives and profile data.`nSee [aitools](https://github.com/$ghUser/aitools) for details.`n",
-                    [System.Text.UTF8Encoding]::new($false))
-
-                # Git init
-                git -C $userRepoDir init -b main
-                git -C $userRepoDir config user.name $profName
-                git -C $userRepoDir config user.email $profEmail
-                git -C $userRepoDir add -A
-                git -C $userRepoDir commit -m "Initial commit: profile and session archive structure"
-
-                Write-Host "User repo created."
-
-                # Offer to create GitHub repo
-                if (Get-Command gh -ErrorAction SilentlyContinue) {
-                    $createGh = Read-Host "Create private GitHub repo '$repoName'? [y/N]"
-                    if ($createGh -match '^[Yy]') {
-                        gh repo create $repoName --private --source $userRepoDir --push
-                        Write-Host "GitHub repo created and pushed."
-                    }
-                }
-            }
-
-            # Scaffold claude/CLAUDE.md in user repo if missing
-            $claudeMdDest = Join-Path $userRepoDir "claude\CLAUDE.md"
-            $sharedTemplate = Join-Path $repoPath "shared\claude-shared.md"
-            if (-not (Test-Path $claudeMdDest) -and (Test-Path $sharedTemplate)) {
-                $claudeDestDir = Join-Path $userRepoDir "claude"
-                if (-not (Test-Path $claudeDestDir)) {
-                    New-Item -ItemType Directory -Path $claudeDestDir -Force | Out-Null
-                }
-                Copy-Item -Path $sharedTemplate -Destination $claudeMdDest
-                Write-Host "Created claude/CLAUDE.md in user repo (template with placeholders)"
-                if (Test-Path (Join-Path $userRepoDir ".git")) {
-                    git -C $userRepoDir add "claude/CLAUDE.md"
-                    $status = git -C $userRepoDir status --porcelain 2>$null
-                    if ($status) {
-                        git -C $userRepoDir commit -m "Add claude/CLAUDE.md template"
-                        git -C $userRepoDir push 2>$null
-                    }
-                }
-            }
-
-            # config.json has one writer (setup-user-config): GitHub user, dotprofile
-            # path and the chosen alias; the writer derives and validates the rest.
-            # In-process like Invoke-ValidatedScript: reset the exit code, catch a throw.
-            $writerOk = $true
-            $configWriter = Join-Path $repoPath "scripts\setup-user-config.ps1"
-            $writerArgs = @{ GithubUser = $ghUser; UserRepoPath = $userRepoDir }
-            if ($machineAlias) { $writerArgs["MachineAlias"] = $machineAlias }
-            $global:LASTEXITCODE = 0
-            try {
-                & $configWriter @writerArgs
-                if ($LASTEXITCODE -ne 0) { $writerOk = $false; LogError "user init: setup-user-config.ps1 failed (exit $LASTEXITCODE)" }
-            } catch {
-                $writerOk = $false
-                LogError "user init: setup-user-config.ps1 failed: $_"
-            }
-
-            # Deploy session archive hook. Exit 2 = the user aborted in the review
-            # menu (D-TS13): stop with exit 2; any other failure is logged.
-            $hookSetup = Join-Path $repoPath "scripts\setup-user-hooks.ps1"
-            if (Test-Path $hookSetup) {
-                Write-Host ""
-                Write-Host "Deploying session archive hook..."
-                $global:LASTEXITCODE = 0
-                $hookRc = 0
-                try {
-                    & $hookSetup
-                    $hookRc = $LASTEXITCODE
-                } catch {
-                    LogError "user init: setup-user-hooks.ps1 failed: $_"
-                    exit 1
-                }
-                if ($hookRc -eq 2) {
-                    Write-Host ""
-                    Write-Host "aborted by user"
-                    exit 2
-                }
-                if ($hookRc -and $hookRc -ne 0) {
-                    LogError "user init: setup-user-hooks.ps1 failed (exit $hookRc)"
-                    exit 1
-                }
-            }
-            if (-not $writerOk) { exit 1 }
-
-            Write-Host ""
-            Write-Host "Done. Sessions will be archived to $userRepoDir\sessions\"
+            exit (Invoke-UserInitCommand)
         }
         "" {
             LogError "missing subcommand"
@@ -1540,14 +1963,22 @@ try {
     Pop-Location
 }
 
-# Pull user repo (quiet, non-blocking -- stale local data is better than failing)
-$userRepoPath = Read-ConfigKey -File $configFile -Key "userRepoPath"
-if ($userRepoPath -and (Test-Path (Join-Path $userRepoPath ".git"))) {
-    $urPull = git -C $userRepoPath pull --ff-only --quiet 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 0) {
-        LogWarn "user repo pull failed -- using local copy."
-        LogDetail "user-repo-pull: $($urPull.Trim())"
+# The dotprofile, as the resolver finds it (env, config.json, convention, scan):
+# pulled here (quiet, non-blocking -- stale local data is better than failing) and
+# passed to build-deploy below. A resolver error is logged with its ERROR row and
+# ACTION by the lib; the build then resolves (and skips) on its own.
+$buildUserRepo = ""
+if ((Resolve-UserRepoPath) -eq 0) {
+    $userRepoPath = $script:AitLibUserRepoPath
+    if (Test-Path (Join-Path $userRepoPath ".git")) {
+        $urPull = git -C $userRepoPath pull --ff-only --quiet 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) {
+            LogWarn "user repo pull failed -- using local copy."
+            LogDetail "user-repo-pull: $($urPull.Trim())"
+        }
     }
+    # Forward slashes (C:/Users/...), the form Git Bash and pwsh both read
+    $buildUserRepo = $userRepoPath -replace '\\', '/'
 }
 
 # [2/N] Rebuild deploy scripts
@@ -1565,9 +1996,18 @@ $unixRepoPath = $repoPath -replace '^([A-Za-z]):\\', '/$1/' -replace '\\', '/'
 if ($unixRepoPath -match '^/([A-Za-z])/') {
     $unixRepoPath = '/' + $Matches[1].ToLower() + $unixRepoPath.Substring(2)
 }
-$buildResult = & $bashExe "$unixRepoPath/scripts/build-deploy.sh" 2>&1 | Out-String
+# The dotprofile resolved above reaches the build as AITOOLS_USER_REPO_PATH, scoped
+# to this one call (B5a Q1; PR #95 follow-up, review H5): restored right after it
+$prevUserRepoEnv = $env:AITOOLS_USER_REPO_PATH
+try {
+    if ($buildUserRepo) { $env:AITOOLS_USER_REPO_PATH = $buildUserRepo }
+    $buildResult = & $bashExe "$unixRepoPath/scripts/build-deploy.sh" 2>&1 | Out-String
+    $buildRc = $LASTEXITCODE
+} finally {
+    $env:AITOOLS_USER_REPO_PATH = $prevUserRepoEnv
+}
 Add-Content -Path $logFile -Value $buildResult
-if ($LASTEXITCODE -eq 0) {
+if ($buildRc -eq 0) {
     LogOk "Rebuilt"
 } else {
     LogError "build failed (see $logFile)"

@@ -27,17 +27,25 @@ FAIL=0
 ok()  { PASS=$((PASS + 1)); printf '  ok   %s\n' "$1"; }
 bad() { FAIL=$((FAIL + 1)); printf '  FAIL %s\n' "$1"; }
 
-ID_MAC="3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5"
+ID_MAC="3D4DF2A5-7D91-5AF9-9944-4FEEBAAE3CF5"        # as macOS reports it (upper case)
+KEY_MAC="3d4df2a5-7d91-5af9-9944-4feebaae3cf5"       # the profiles key (lower-cased id)
 H="$WORK/home"
 DP="$H/repos/aitools-nobul-jose"
 CFG="$H/.aitools/config.json"
 CASE_ENV=""
 
-profile_with_id() {
+# write_profile MAC_KEY MAC_ALIAS_LINE MAC_ID MAC_HOST -- profile.json, revision 2.2
+# shape: this machine's profile under MAC_KEY, plus "laptop", an unclaimed 2.1 entry
+# (alias-keyed, no machine.id). MAC_ALIAS_LINE is the entry's "alias" line ("" = none);
+# MAC_ID "" = no machine.id.
+write_profile() {
+    local key="$1" alias_line="$2" id="$3" host="$4" id_line=""
+    if [ -n "$id" ]; then id_line="\"id\": \"$id\","; fi
     mkdir -p "$DP"
     cat > "$DP/profile.json" <<JSON
 {
   "version": 2,
+  "meta": { "schemaRevision": "2.2" },
   "identity": {
     "github": "nobul-jose",
     "name": "Jose",
@@ -48,10 +56,11 @@ profile_with_id() {
     }
   },
   "profiles": {
-    "nobul-mac": {
+    "$key": {
+      $alias_line
       "machine": {
-        "id": "$ID_MAC",
-        "hostname": "nobul-mac"
+        $id_line
+        "hostname": "$host"
       }
     },
     "laptop": {
@@ -64,6 +73,11 @@ profile_with_id() {
 }
 JSON
 }
+# profile_with_id -- this machine registered under its id (revision 2.2)
+profile_with_id() { write_profile "$KEY_MAC" '"alias": "nobul-mac",' "$KEY_MAC" nobul-mac; }
+# profile_legacy -- the same machine, still keyed by alias (revision 2.1): the
+# resolver matches it by machine.id and advises migrate
+profile_legacy() { write_profile nobul-mac "" "$ID_MAC" nobul-mac; }
 
 reset_home() { rm -rf "$H"; mkdir -p "$H/repos" "$H/.aitools"; }
 
@@ -94,6 +108,7 @@ map_args() {
             --drives-json)    PS_ARGS+=(-DrivesJson "$2"); shift 2 ;;
             --github-user)    PS_ARGS+=(-GithubUser "$2"); shift 2 ;;
             --user-repo-path) PS_ARGS+=(-UserRepoPath "$2"); shift 2 ;;
+            --machine-id)     PS_ARGS+=(-MachineId "$2"); shift 2 ;;
             --machine-alias)  PS_ARGS+=(-MachineAlias "$2"); shift 2 ;;
             --dry-run)        PS_ARGS+=(-DryRun); shift ;;
             *)                PS_ARGS+=("$1"); shift ;;
@@ -119,6 +134,7 @@ case_run() {
         map_args "$@"
         run_writer ps ${PS_ARGS[@]+"${PS_ARGS[@]}"}
         cp "$CFG" "$WORK/$name.ps.json" 2>/dev/null || : > "$WORK/$name.ps.json"  # no config = empty copy
+        cp "$WORK/out.txt" "$WORK/$name.ps.out"
         if [ "$RC" -ne "$brc" ]; then bad "$name: pwsh exit $RC, bash $brc"; sed 's/^/       /' "$WORK/out.txt"; fi
         if cmp -s "$WORK/$name.bash.json" "$WORK/$name.ps.json"; then ok "$name: config.json bytes identical"
         else bad "$name: config.json differs"; diff "$WORK/$name.bash.json" "$WORK/$name.ps.json" | sed 's/^/       /' || true; fi
@@ -137,6 +153,27 @@ has_row() {  # has_row LINE -- the bash summary has this exact row
 no_row_like() {
     if grep -q "$1" "$SUMM"; then bad "$CASE: unexpected row /$1/"; sed 's/^/       /' "$SUMM"; else ok "$CASE: no row /$1/"; fi
 }
+no_json() {  # no_json PERL-REGEX -- the bash-written config does not match
+    if perl -0777 -ne 'BEGIN { $r = shift @ARGV } exit(/$r/s ? 1 : 0)' "$1" "$OUTJ"; then ok "$CASE: config has no /$1/"
+    else bad "$CASE: config has /$1/"; sed 's/^/       /' "$OUTJ"; fi
+}
+rows_n() {  # rows_n N PREFIX -- the bash summary has exactly N rows starting with PREFIX
+    local n
+    n=$(grep -c "^$2" "$SUMM") || n=0  # grep -c exits 1 on zero matches; the count is still printed
+    if [ "$n" -eq "$1" ]; then ok "$CASE: $1 row(s) $2"; else bad "$CASE: $n row(s) $2, want $1"; sed 's/^/       /' "$SUMM"; fi
+}
+out_has() {  # out_has TEXT -- each writer's console output (bash, and pwsh when run) contains TEXT
+    local impl
+    for impl in bash ps; do
+        if [ "$impl" = "ps" ] && ! $USE_PS; then continue; fi
+        if grep -qF "$1" "$WORK/$CASE.$impl.out"; then ok "$CASE: $impl output has '$1'"
+        else bad "$CASE: $impl output lacks '$1'"; sed 's/^/       /' "$WORK/$CASE.$impl.out"; fi
+    done
+}
+log_has() {  # log_has TEXT -- deploy.log (of the last writer run) contains TEXT
+    if grep -qF "$1" "$H/.aitools/logs/deploy.log"; then ok "$CASE: deploy.log has '$1'"
+    else bad "$CASE: deploy.log lacks '$1'"; fi
+}
 
 printf 'setup-user-config tests (pwsh parity: %s)\n' "$USE_PS"
 BOOT=(--repos-path "$H/repos" --repo-path "$H/repos/aitools")
@@ -145,8 +182,9 @@ BOOT=(--repos-path "$H/repos" --repo-path "$H/repos/aitools")
 fix_fresh() { reset_home; profile_with_id; }
 case_run c1-fresh 0 fix_fresh "${BOOT[@]}" --github-user nobul-jose
 has_row "OK|aitools config|created"
-has_json '\A\{\n  "version": 3,\n  "reposPath": "[^"]+\/repos",\n  "repoPath": "[^"]+\/repos\/aitools",\n  "googleDrives": \[\],\n  "githubUser": "nobul-jose",\n  "userRepoPath": "[^"]+\/aitools-nobul-jose",\n  "machineAlias": "nobul-mac",\n  "meta": \{\n    "intent": \{\n      "purpose": "Per-machine pointers'
+has_json '\A\{\n  "version": 3,\n  "reposPath": "[^"]+\/repos",\n  "repoPath": "[^"]+\/repos\/aitools",\n  "googleDrives": \[\],\n  "githubUser": "nobul-jose",\n  "userRepoPath": "[^"]+\/aitools-nobul-jose",\n  "machineId": "'"$KEY_MAC"'",\n  "machineAlias": "nobul-mac",\n  "meta": \{\n    "intent": \{\n      "purpose": "Per-machine pointers'
 has_json '"writer": "setup-user-config",\n    "derivedFrom": "profile.json"\n  \}\n\}\n\z'
+rows_n 0 "ACTION"
 
 # C2 re-run on the result: verified, no write
 fix_rerun() { fix_fresh; cp "$WORK/c1-fresh.bash.json" "$CFG"; }
@@ -174,8 +212,9 @@ case_run c3-upgrade 0 fix_v2
 has_row "OK|aitools config|updated"
 has_row "DETAIL|aitools config|version updated"
 has_row "DETAIL|aitools config|machineAlias updated"
+has_row "DETAIL|aitools config|machineId updated"
 has_json '"custom": \{\n    "keep": true\n  \},\n  "googleDrives": \[\n    \{\n      "path": "\/gd"'
-has_json '"machineAlias": "nobul-mac",\n  "githubUser": "nobul-jose",\n  "meta"'
+has_json '"machineAlias": "nobul-mac",\n  "githubUser": "nobul-jose",\n  "machineId": "'"$KEY_MAC"'",\n  "meta"'
 if ls "$H/.aitools/" | grep -q 'config.json.bak'; then ok "c3-upgrade: backup written"; else bad "c3-upgrade: no backup"; fi
 
 # C4 corrupt config: rebuilt with salvaged keys, WARN
@@ -186,6 +225,7 @@ fix_corrupt() {
 case_run c4-corrupt 0 fix_corrupt
 has_row "WARN|aitools config|rebuilt (was invalid)"
 has_json '\A\{\n  "reposPath": "[^"]+",\n  "repoPath": "[^"]+",\n  "machineAlias": "nobul-mac",\n  "version": 3'
+has_json '"machineId": "'"$KEY_MAC"'"'
 
 # C5 no dotprofile: bootstrap keys only, githubUser from the argument
 fix_nodp() { reset_home; }
@@ -200,14 +240,17 @@ has_row "ERROR|aitools config|missing bootstrap values"
 if [ ! -s "$OUTJ" ]; then ok "c6-no-bootstrap: no config written"; else bad "c6-no-bootstrap: config written"; fi
 
 # C7 no machine match: ERROR + ACTION, existing alias kept
+KEY_OTHER="aaaaaaaa-1111-2222-3333-444444444444"
 fix_nomatch() {
     fix_v2
-    perl -pi -e "s/\"id\": \"$ID_MAC\"/\"id\": \"other\"/; s/\"hostname\": \"nobul-mac\"/\"hostname\": \"elsewhere\"/" "$DP/profile.json"
+    write_profile "$KEY_OTHER" '"alias": "nobul-mac",' "$KEY_OTHER" elsewhere
 }
 case_run c7-no-match 1 fix_nomatch
 has_row "ERROR|machine profile|no machine match"
 has_row "ACTION||Run: aitools user init (profiles: nobul-mac, laptop)"
+rows_n 1 "ACTION"
 has_json '"machineAlias": "new-mac"'
+no_json '"machineId"'
 
 # C8 dry run: nothing written
 case_run c8-dry-run 0 fix_v2 --dry-run
@@ -233,9 +276,29 @@ has_json '"googleDrives": \[\n    \{\n      "path": "\/Volumes\/GD\/My Drive",\n
 case_run c9-drives-empty 0 fix_v2 --drives-json '[]'
 has_json '"path": "\/gd"'
 
-# C10 explicit alias (user init's choice) wins and is saved
-case_run c10-alias 0 fix_v2 --machine-alias laptop
+# C10 explicit choice (user init's): --machine-id selects this machine's profile by
+# its key (any case); machineId + display machineAlias are saved
+case_run c10-machine-id 0 fix_v2 --machine-id "$ID_MAC"
+has_row "OK|aitools config|updated"
+out_has "machineAlias=nobul-mac via=override"
+has_json '"machineAlias": "nobul-mac"'
+has_json '"machineId": "'"$KEY_MAC"'"'
+# C10b the deprecated --machine-alias is still accepted for one release (detail line);
+# the chosen 2.1 profile has no machine.id: advisory, one ACTION, the row stays OK
+case_run c10b-deprecated-alias 0 fix_v2 --machine-alias laptop
 has_json '"machineAlias": "laptop"'
+no_json '"machineId"'
+has_row "OK|aitools config|updated"
+has_row "ACTION||Run: aitools user init (registers this machine)"
+rows_n 1 "ACTION"
+log_has "[detail] deprecated flag:"
+# C10c both flags: bad arguments
+case_run c10c-both-flags 1 fix_v2 --machine-id "$ID_MAC" --machine-alias nobul-mac
+has_row "ERROR|aitools config|bad arguments"
+# C10d an unknown --machine-id: no machine match, nothing derived is saved
+case_run c10d-unknown-id 1 fix_v2 --machine-id "$KEY_OTHER"
+has_row "ERROR|machine profile|no machine match"
+has_json '"machineAlias": "new-mac"'
 
 # C11 AITOOLS_USER_REPO_PATH: used for the run, not saved
 fix_env() { reset_home; profile_with_id; cp -R "$DP" "$H/envdp"; fix_v2_cfg_only; }
@@ -246,15 +309,79 @@ CASE_ENV=""
 if grep -q '"userRepoPath"' "$OUTJ"; then bad "c11-env: userRepoPath saved from the env override"; else ok "c11-env: userRepoPath not saved"; fi
 has_json '"machineAlias": "nobul-mac"'
 
-# C13 profile not registered (no machine.id): written, WARN + ACTION (action required)
+# C13 cached alias names a 2.1 profile without machine.id (not registered): written;
+# the advice is one ACTION (with its counted warning), the config row stays OK
 fix_unreg() {
     fix_v2
-    perl -0pi -e "s/\"id\": \"$ID_MAC\",\n\s*//" "$DP/profile.json"
+    write_profile nobul-mac "" "" nobul-mac
     perl -pi -e 's/"new-mac"/"nobul-mac"/' "$CFG"
 }
 case_run c13-unregistered 0 fix_unreg
-has_row "WARN|aitools config|updated"
+has_row "OK|aitools config|updated"
 has_row "ACTION||Run: aitools user init (registers this machine)"
+rows_n 1 "ACTION"
+no_json '"machineId"'
+out_has "COMPLETED with 1 warning(s)"
+
+# C17 legacy 2.1 profile (alias-keyed, matched by machine.id): the resolver's
+# "run: aitools-profile migrate" advice is ONE ACTION naming the user-facing command
+# (aitools user init re-keys), not a WARN row; no machineId (not an id-keyed profile)
+fix_legacy() { reset_home; profile_legacy; }
+case_run c17-legacy-migrate 0 fix_legacy "${BOOT[@]}"
+has_row "OK|aitools config|created"
+has_row "ACTION||Run: aitools user init (re-keys machine profiles by machine id)"
+rows_n 1 "ACTION"
+rows_n 0 "WARN"
+has_json '"machineAlias": "nobul-mac"'
+no_json '"machineId"'
+log_has "run: aitools-profile migrate"
+
+# C18 a real problem (stored hostname differs: renamed, or a clone sharing the id):
+# a counted warning, the row becomes WARN; plus the one ACTION
+fix_clone() { reset_home; write_profile "$KEY_MAC" '"alias": "nobul-mac",' "$KEY_MAC" other-host; }
+case_run c18-real-warning 0 fix_clone "${BOOT[@]}"
+has_row "WARN|aitools config|created"
+has_row "ACTION||Run: aitools user init (updates this machine's profile)"
+rows_n 1 "ACTION"
+out_has "COMPLETED with 2 warning(s)"
+has_json '"machineId": "'"$KEY_MAC"'"'
+
+# C19 this machine's id cannot be detected: the cached machineId selects the profile
+# (via=config) and is kept; the undetectable id is a real warning
+fix_noid() { fix_fresh; cp "$WORK/c1-fresh.bash.json" "$CFG"; }
+CASE_ENV="AITOOLS_PROFILE_TEST_MACHINE_ID=none"
+case_run c19-id-unavailable 0 fix_noid
+CASE_ENV=""
+has_row "WARN|aitools config|verified"
+if cmp -s "$OUTJ" "$WORK/c1-fresh.bash.json"; then ok "c19-id-unavailable: machineId kept, file unchanged"; else bad "c19-id-unavailable: file changed"; fi
+log_has "machineAlias=nobul-mac via=config"
+
+# C20 a cached machineId that the match does not confirm (2.1 profile matched by
+# machine.id) is removed, so the machineAlias cache (resolver step 4L) stays usable
+fix_stale_mid() {
+    reset_home; profile_legacy
+    printf '{ "version": 3, "reposPath": "%s", "repoPath": "%s", "machineId": "%s", "machineAlias": "nobul-mac" }\n' \
+        "$H/repos" "$H/repos/aitools" "$KEY_OTHER" > "$CFG"
+}
+case_run c20-stale-machine-id 0 fix_stale_mid
+has_row "OK|aitools config|updated"
+has_row "DETAIL|aitools config|machineId updated"
+no_json '"machineId"'
+has_json '"machineAlias": "nobul-mac"'
+out_has "cached machineId \"$KEY_OTHER\" removed"
+
+# C21 machineId is salvaged from a corrupt config (the id is undetectable, so no
+# machineId is derived: the salvaged value is the one written)
+fix_corrupt_mid() {
+    reset_home; profile_with_id
+    printf '{ "reposPath": "%s", "repoPath": "%s", "machineId": "%s", oops\n' "$H/repos" "$H/repos/aitools" "$KEY_MAC" > "$CFG"
+}
+CASE_ENV="AITOOLS_PROFILE_TEST_MACHINE_ID=none"
+case_run c21-salvage-machine-id 0 fix_corrupt_mid
+CASE_ENV=""
+has_row "WARN|aitools config|rebuilt (was invalid)"
+has_json '"machineId": "'"$KEY_MAC"'"'
+out_has "Recovered machineId from the invalid config"
 
 # C14 relative bootstrap path: bad arguments, nothing written
 case_run c14-relative 1 fix_nodp --repos-path repos --repo-path "$H/repos/aitools"
