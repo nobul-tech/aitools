@@ -1,0 +1,140 @@
+DRAFT FOR RE-APPROVAL (S3-H2-DraftsM3, 2026-10-22) -- protected file reference/user-repo.md
+(#96 row 3, R18). Not applied.
+
+Context: PR docs/m3-approved-drafts landed the approved row-3 draft verbatim with
+deletions only (no added words): the banner, every `VERIFY after #86 batch 5` note
+and its "today ..." text (batch 5 shipped), and four clauses the code on main
+(8a9dcb5) contradicts. The edits below are NEW wording for the places where a
+deletion left the text incomplete, or where an approved sentence is still inexact.
+OLD = the file as landed by that PR. Code cited at origin/main 8a9dcb5.
+
+Each edit is independent; approve, change or reject each one.
+
+================================================================
+Edit A -- "Location convention", build-deploy sentence (deletion D1 left it incomplete)
+================================================================
+Reason: the entry points now pass the dotprofile to build-deploy, scoped to that
+call. Disproves the deleted "The `aitools` entry points do not export it yet":
+scripts/aitools:2049-2055 (`build_env=(AITOOLS_USER_REPO_PATH="$user_repo_path")`,
+`env ... bash build-deploy.sh`); scripts/aitools.ps1:1999-2007.
+OLD:
+`build-deploy.sh` takes the dotprofile from `AITOOLS_USER_REPO_PATH` when the caller
+sets it (check-pre-push step 7 does); otherwise it asks `resolve_user_repo_path` in a
+child bash.
+NEW:
+`build-deploy.sh` takes the dotprofile from `AITOOLS_USER_REPO_PATH` when the caller
+sets it (the `aitools` / `aitools.ps1` entry points do, for that one call, with the
+dotprofile they resolved; check-pre-push step 7 does); otherwise it asks
+`resolve_user_repo_path` in a child bash.
+
+================================================================
+Edit B -- "Which dotprofile" step 1 (true but incomplete)
+================================================================
+Reason: same code as edit A.
+OLD:
+1. `AITOOLS_USER_REPO_PATH` (explicit; set by tests and by check-pre-push step 7 for build-deploy). Missing directory = error.
+NEW:
+1. `AITOOLS_USER_REPO_PATH` (explicit; set for build-deploy by the `aitools` entry points and check-pre-push step 7, and by tests). Missing directory = error.
+
+================================================================
+Edit C -- Registration, "An alias already used by another profile" bullet (omission)
+================================================================
+Reason: user init claims an unregistered profile named by the alias instead of
+asking (scripts/aitools:492-496; aitools.ps1:1086-1088).
+OLD:
+  profile is not touched and every resolve of that alias then warns (when the two
+  aliases are identical; one that differs only in case does not warn).
+NEW:
+  profile is not touched and every resolve of that alias then warns (when the two
+  aliases are identical; one that differs only in case does not warn). When the
+  alias names a profile that belongs to no machine, user init claims that profile
+  (`--claim`) instead of asking.
+
+================================================================
+Edit D -- Registration, "Without a terminal and without `--alias`" bullet (inexact quote)
+================================================================
+Reason: the row and ACTION texts on main are `not registered (no terminal)` and
+`Run: aitools user init --alias <name> (or on a terminal)` (scripts/aitools:403-405;
+aitools.ps1:1004).
+OLD:
+- **Without a terminal and without `--alias`**: ERROR `machine profile` `not
+  registered` + ACTION `Run: aitools user init --alias <alias>`; nothing is guessed.
+NEW:
+- **Without a terminal and without `--alias`**: ERROR `machine profile` `not
+  registered (no terminal)` + ACTION `Run: aitools user init --alias <name> (or on a
+  terminal)`; nothing is guessed.
+
+================================================================
+Edit E -- Registration, "No profile.json" bullet (precision; optional)
+================================================================
+Reason: Path 1/2 scaffold and commit profile.json through ui_commit; Path 3 scaffolds
+without a commit and puts it in the dotprofile's initial commit, pushed by
+`gh repo create` after a prompt (scripts/aitools:655-656, 819, 828-875).
+OLD:
+- **No profile.json** (user init Path 1 without one, Path 3 new repo): `register
+NEW:
+- **No profile.json** (user init Path 1 or 2 without one, Path 3 new repo): `register
+and OLD:
+  machine's profile; user init commits and pushes it (commander decision 6).
+NEW:
+  machine's profile; user init commits and pushes it (commander decision 6; on Path 3
+  in the new repo's initial commit, pushed with `gh repo create`).
+
+================================================================
+Edit F -- Registration, menu sentence (deletion D6 removed "(numbered)")
+================================================================
+Reason: only profiles that belong to no machine are numbered; another machine's are
+shown as `[-] <alias> (registered to another machine)` and cannot be picked; the
+suggested one is marked (scripts/aitools:399-449; aitools.ps1:1004-1019).
+OLD:
+The interactive menu lists every profile, `[n]ew`, `[s]kip`, identically in
+bash and PowerShell.
+NEW:
+The interactive menu lists every profile by its alias, then `[n]ew` and `[s]kip`,
+identically in bash and PowerShell: a profile that belongs to no machine is numbered
+(picking it claims it), one registered to another machine is shown as `[-] <alias>
+(registered to another machine)` and cannot be picked, and the resolver's suggestion
+(a cached alias or a hostname match) is marked `(suggested)`.
+
+================================================================
+Edit G -- Migration, dirty-file paragraph (deletion D8 removed the user init exception)
+================================================================
+Reason: user init no longer writes over uncommitted edits: ERROR `not registered
+(local edits)`, or WARN `not refreshed (local edits)` for this machine's own profile,
++ ACTION (scripts/aitools:657-669); the v1 migration is skipped the same way
+(:746-750).
+OLD:
+A commit is skipped when `profile.json` already had uncommitted changes before the
+write: the file is written, a warning asks the
+user to review and commit it by hand.
+NEW:
+A resolver command (`migrate`, `exception-set`) skips its commit when `profile.json`
+already had uncommitted changes before the write: the file is written, a warning asks
+the user to review and commit it by hand. `aitools user init` does not write at all
+then: it reports ERROR `machine profile` `not registered (local edits)` (WARN `not
+refreshed (local edits)` when this machine's profile already matches by id) and an
+ACTION to commit or discard the changes.
+
+================================================================
+Edit H -- Config Schema, "only writer" sentence (deletion D9 removed a false exception)
+================================================================
+Reason: the deleted exception is gone (the v1 migration writes no config.json:
+scripts/aitools:732-733), but another one exists: the entry points rename the legacy
+key aiToolingRepoPath to repoPath in config.json themselves (scripts/aitools:1445-1469
+with node; scripts/aitools.ps1:444-457). INCIDENT (not filed).
+OLD:
+`setup-user-config.sh` / `setup-user-config.ps1`. Do not edit it by hand.
+NEW:
+`setup-user-config.sh` / `setup-user-config.ps1`. Do not edit it by hand. (Known
+exception, to be removed: the `aitools` entry points still rename the legacy key
+`aiToolingRepoPath` to `repoPath` in config.json themselves.)
+
+================================================================
+Edit I -- Config Schema, deploy-harness sentence (dated)
+================================================================
+Reason: PR #88 merged (c8bfb09); scripts/deploy-harness.sh calls the writer
+(`CONFIG_WRITER="$SCRIPT_DIR/setup-user-config.sh"`, lines 99-112).
+OLD:
+deploy-harness calls it too once PR #88 merges. Write path: read-then-merge (every other
+NEW:
+`deploy-harness` calls it too, to generate config.json from profile.json. Write path: read-then-merge (every other
