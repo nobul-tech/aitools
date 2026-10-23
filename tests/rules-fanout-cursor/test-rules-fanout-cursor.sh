@@ -408,7 +408,8 @@ R="$H/.cursor/rules"
 run_script
 check "users: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "users: shared and dotprofile rules fanned out with the marker" "grep -qF '${MARK}s.md;' '$R/s.mdc' && grep -qF '${MARK}d.md;' '$R/d.mdc'"
-check "users: OK row 2 added" "grep -qxF 'OK|cursor rules|2 added' '$C/summary'"
+check "users: row 2 added (WARN: kept files still load)" "grep -qxF 'WARN|cursor rules|2 added' '$C/summary'"
+check "users: ACTION row lists the kept files" "grep -qxF 'ACTION||Cursor still loads project/retired rules in ~/.cursor/rules: old.mdc, u.mdc -- delete them unless you wrote them' '$C/summary'"
 check "users: aitools rule from PR #87 (no marker) removed" "[ ! -e '$R/p.mdc' ] && grep -q 'Removed p.mdc (aitools rule' '$C/out'"
 check "users: its backup kept" "ls '$R' | grep -q '^p\.mdc\.bak\.'"
 check "users: retired rule with the marker removed" "[ ! -e '$R/gone.mdc' ] && ls '$R' | grep -q '^gone\.mdc\.bak\.'"
@@ -425,7 +426,7 @@ if [ "$HAVE_PWSH" = "true" ]; then
 fi
 BAKS=$(ls "$R" | grep -c '\.bak\.')
 run_script
-check "users rerun: OK row 2 verified" "grep -qxF 'OK|cursor rules|2 verified' '$C/summary'"
+check "users rerun: row 2 verified" "grep -qxF 'WARN|cursor rules|2 verified' '$C/summary'"
 check "users rerun: nothing removed, no new backups" "! grep -q '^Removed\|] Removed' '$C/out' && [ \"\$(ls '$R' | grep -c '\.bak\.')\" = '$BAKS' ]"
 
 # B: no manifest -> nothing fanned out, nothing removed, WARN + ACTION
@@ -500,6 +501,55 @@ run_script
 check "bracket: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "bracket: removed with a backup" "[ ! -e '$H/.cursor/rules/br[1].mdc' ] && ls '$H/.cursor/rules' | grep -qF 'br[1].mdc.bak.'"
 parity bracket seed_bracket
+
+# E3 (review finding 1): #87 files of rules edited or retired since that run
+# are recognised through the backups deploy-harness left beside the harness copy
+seed_edited() {
+    manifest "e.md|aitools" "r.md|retired"
+    mkdir -p "$H/.cursor/rules"
+    printf '## Edited rule, old text\n' > "$H/.aitools/rules/e.md.bak.2026-10-21T010203Z"
+    printf '## Edited rule, new text\n' > "$H/.aitools/rules/e.md"
+    printf '## Retired rule\n' > "$H/.aitools/rules/r.md.bak.2026-10-22T010203Z"
+    conv "$H/.aitools/rules/e.md.bak.2026-10-21T010203Z" > "$H/.cursor/rules/e.mdc"
+    conv "$H/.aitools/rules/r.md.bak.2026-10-22T010203Z" > "$H/.cursor/rules/r.mdc"
+}
+setup_case edited
+seed_edited
+run_script
+check "edited: exit 0" "[ \"\$(rc)\" = 0 ]"
+check "edited: old copy of an edited aitools rule removed" "[ ! -e '$H/.cursor/rules/e.mdc' ] && grep -q 'Removed e.mdc (aitools rule.*e.md.bak.2026-10-21T010203Z' '$C/out'"
+check "edited: old copy of a retired rule removed" "[ ! -e '$H/.cursor/rules/r.mdc' ]"
+check "edited: OK row 2 removed" "grep -qxF 'OK|cursor rules|2 removed' '$C/summary'"
+parity edited seed_edited
+
+# E4 (review finding 3): marker text after a body --- line is not the marker
+seed_bodymark() {
+    manifest "p.md|aitools"
+    printf '## Project rule\n' > "$H/.aitools/rules/p.md"
+    mkdir -p "$H/.cursor/rules"
+    printf -- '---\nalwaysApply: true\n---\nmine\n---\n%sp.md; edit that rule, not this file -->\n' "$MARK" > "$H/.cursor/rules/p.mdc"
+}
+setup_case bodymark
+seed_bodymark
+run_script
+check "bodymark: exit 0" "[ \"\$(rc)\" = 0 ]"
+check "bodymark: user file kept" "grep -q '^mine' '$H/.cursor/rules/p.mdc' && grep -q 'Kept p.mdc' '$C/out'"
+check "bodymark: WARN row and ACTION" "grep -qxF 'WARN|cursor rules|n/a (no user-level rules)' '$C/summary' && grep -q '^ACTION||Cursor still loads project/retired rules in ~/.cursor/rules: p.mdc' '$C/summary'"
+parity bodymark seed_bodymark
+
+# E5 (review finding 4): a manifest ending in a lone CR -- both scripts reject the line
+seed_lonecr() {
+    mkdir -p "$H/.aitools/rules"
+    printf '# aitools rules manifest v1\na.md\tshared\nb.md\tshared\r' > "$H/.aitools/rules/.aitools-rules-manifest"
+    printf '## a\n' > "$H/.aitools/rules/a.md"
+    printf '## b\n' > "$H/.aitools/rules/b.md"
+}
+setup_case lonecr
+seed_lonecr
+run_script
+check "lonecr: last line ignored with a warning" "grep -q 'line ignored: b.md<TAB>shared' '$C/out' && [ ! -e '$H/.cursor/rules/b.mdc' ]"
+check "lonecr: WARN row 1 added" "grep -qxF 'WARN|cursor rules|1 added' '$C/summary'"
+parity lonecr seed_lonecr
 
 # F: dry run -> removal only logged
 setup_case dryprune

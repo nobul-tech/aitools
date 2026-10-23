@@ -30,7 +30,8 @@ Claude Code `<name>.md` to `<name>.mdc`:
 For a manifest name whose source is `aitools` (project rules) or `retired`,
 the step backs up and removes `~/.cursor/rules/<stem>.mdc`, but only when the
 fan-out created it: the marker, or (a file from before the marker) the same
-content as the conversion of the harness copy. Any other file of that name is
-kept. With no manifest, or one whose first line is not
+content as the conversion of the harness copy or of one of its `*.bak.*`
+backups. Any other file of that name is kept, with a warning and an ACTION
+row listing it, because Cursor still loads it. With no manifest, or one whose first line is not
 `# aitools rules manifest v1`, nothing is fanned out or removed (WARN row and
 ACTION: run aitools).

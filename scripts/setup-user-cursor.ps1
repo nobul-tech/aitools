@@ -20,8 +20,10 @@
 #            backups, the manifest and non-.md files are not fanned out.
 #   Removed (backup kept): <name>.mdc for a manifest name whose source is
 #            aitools (project rules) or retired, only if the fan-out created it
-#            (the aitools-fanout marker line, or the same content as the
-#            conversion of the harness copy for files from before the marker)
+#            (the aitools-fanout marker line, or, for files from before the
+#            marker, the same content as the conversion of the harness copy or
+#            of one of its *.bak.* backups); any other file of such a name is
+#            kept with a warning and an ACTION row (Cursor still loads it)
 #   Preserved: every other .cursor\rules file
 #   No manifest, or one with another first line: nothing fanned out, nothing
 #   removed, WARN row + ACTION (run aitools)
@@ -486,8 +488,9 @@ function Test-CursorFanoutRule([string]$Text) {
     $t = $Text
     if ($t.Length -gt 0 -and $t[0] -eq [char]0xFEFF) { $t = $t.Substring(1) }
     $t = $t -replace "`r`n", "`n"
-    $pattern = '\A---[ \t]*\n(?:.*?\n)?---[ \t]*\n' + [regex]::Escape($cursorFanoutMarker)
-    return [regex]::IsMatch($t, $pattern, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+    # Frontmatter lines may not be "---": the marker must follow the FIRST closing ---
+    $pattern = '\A---[ \t]*\n(?:(?!---[ \t]*\n)[^\n]*\n)*---[ \t]*\n' + [regex]::Escape($cursorFanoutMarker)
+    return [regex]::IsMatch($t, $pattern)
 }
 
 # Read the rules manifest (deploy-harness section 5b, PR #100 contract).
@@ -502,11 +505,14 @@ function Read-RulesManifest([string]$Path) {
     $text = [System.IO.File]::ReadAllText($Path, [System.Text.UTF8Encoding]::new($false))
     if ($text.Length -gt 0 -and $text[0] -eq [char]0xFEFF) { $text = $text.Substring(1) }
     $lines = $text -split "`n"
-    $head = if ($lines.Count -gt 0) { $lines[0] -replace "`r$", "" } else { "" }
+    # A CR is a line ending only before an LF (as the .sh reads it): the last
+    # piece, which no LF follows, keeps a trailing CR (and fails validation)
+    $last = $lines.Count - 1
+    $head = if ($last -gt 0) { $lines[0] -replace "`r$", "" } else { $lines[0] }
     if ($head -cne $rulesManifestHeader) { $result.Status = "header-bad"; return $result }
     $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
     for ($i = 1; $i -lt $lines.Count; $i++) {
-        $l = $lines[$i] -replace "`r$", ""
+        $l = if ($i -lt $last) { $lines[$i] -replace "`r$", "" } else { $lines[$i] }
         if ($l -eq "") { continue }
         $tab = $l.IndexOf("`t")
         $name = if ($tab -ge 0) { $l.Substring(0, $tab) } else { $l }
@@ -705,6 +711,7 @@ if ($null -ne $entries) {
         # the marker existed (PR #87), the same content as the conversion of the
         # harness copy. Any other file of that name is the user's and is preserved.
         $removedCount = 0
+        $rmKept = New-Object System.Collections.Generic.List[string]   # project/retired names kept (not created by the fan-out)
         foreach ($r in $removeRules) {
             $rmDest = $r.Name.Substring(0, $r.Name.Length - 3) + ".mdc"
             # Deployed this run from a user-level rule whose name differs only in case
@@ -722,31 +729,50 @@ if ($null -ne $entries) {
             if (Test-CursorFanoutRule $rmText) {
                 $rmWhy = "aitools-fanout marker"
             } else {
-                $rmHarness = Join-Path $harnessRulesDir $r.Name
-                if (Test-Path -LiteralPath $rmHarness -PathType Leaf) {
+                # No marker (a PR #87 file): compare with the conversion of the
+                # harness copy and of each backup deploy-harness left beside it
+                # (it backs a rule up when it updates or retires it), so a rule
+                # edited or retired since the #87 run is still recognised
+                $rmCands = New-Object System.Collections.Generic.List[string]
+                $rmCands.Add((Join-Path $harnessRulesDir $r.Name))
+                try {
+                    $rmBaks = @([System.IO.Directory]::GetFiles($harnessRulesDir) |
+                        Where-Object { [System.IO.Path]::GetFileName($_).StartsWith("$($r.Name).bak.", [System.StringComparison]::Ordinal) } |
+                        Sort-Object -Property { [System.IO.Path]::GetFileName($_) } -CaseSensitive)
+                    foreach ($b in $rmBaks) { $rmCands.Add($b) }
+                } catch {
+                    LogDetail "cursor rules: cannot list backups of $($r.Name) in ${harnessRulesDir}: $_"
+                }
+                foreach ($rmCand in $rmCands) {
+                    if (-not (Test-Path -LiteralPath $rmCand -PathType Leaf)) { continue }
                     try {
-                        $rmLegacy = ConvertTo-CursorRule ([System.IO.File]::ReadAllText($rmHarness, [System.Text.UTF8Encoding]::new($false)))
-                        # Compared as bash compares them: trailing newlines dropped
-                        if ($rmLegacy -and ($rmLegacy -replace '\n+\z', '') -ceq ($rmText -replace '\n+\z', '')) {
-                            $rmWhy = "same content as the conversion of the harness copy"
-                        }
+                        $rmLegacy = ConvertTo-CursorRule ([System.IO.File]::ReadAllText($rmCand, [System.Text.UTF8Encoding]::new($false)))
                     } catch {
-                        LogDetail "cursor rules: cannot read $rmHarness for the content check: $_"
+                        LogDetail "cursor rules: cannot read $rmCand for the content check: $_"
+                        continue
+                    }
+                    # Compared as bash compares them: trailing newlines dropped
+                    if ($rmLegacy -and ($rmLegacy -replace '\n+\z', '') -ceq ($rmText -replace '\n+\z', '')) {
+                        $rmWhy = "same content as the conversion of $([System.IO.Path]::GetFileName($rmCand))"
+                        break
                     }
                 }
             }
             if (-not $rmWhy) {
-                Log "Kept ${rmDest}: the rules manifest lists $($r.Name) as $($r.Source), but the fan-out did not create this file (no aitools-fanout marker) -- remove it yourself if Cursor should not load it"
+                # Kept (it may be the user's own file), but Cursor still loads it
+                LogWarn "Kept ${rmDest}: the rules manifest lists $($r.Name) as $($r.Source) (Cursor gets user-level rules only), but this file was not created by the fan-out (no aitools-fanout marker, no matching harness copy) -- Cursor still loads it; remove it if it is an old fan-out copy"
+                $rmKept.Add($rmDest)
                 continue
             }
             if ($DryRun) {
                 Log "[DRY RUN] Would back up and remove $rmDest ($($r.Source) rule; $rmWhy)"
                 continue
             }
-            if ($rmDest -match '[\[\]\*\?]') {
-                # Backup-File (aitools-lib) uses wildcard paths: for a name with
+            if ($rmPath -match '[\[\]\*\?]') {
+                # Backup-File (aitools-lib) uses wildcard paths: for a path with
                 # [ ] * ? its Test-Path is false and it returns "ok" without a
-                # copy. Back up with -LiteralPath here instead (same name scheme).
+                # copy. Back up with -LiteralPath here instead (same name scheme;
+                # no pruning, as each removal backs a file up once).
                 $script:BackupFileOk = $true
                 $rmTs = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
                 try {
@@ -779,6 +805,9 @@ if ($null -ne $entries) {
             $removedCount++
             Log "Removed $rmDest ($($r.Source) rule: Cursor gets user-level rules only; $rmWhy; backup kept)"
             Write-Summary "DETAIL" "cursor rules" "removed: $rmDest"
+        }
+        if ($rmKept.Count -gt 0) {
+            Write-Summary "ACTION" "" "Cursor still loads project/retired rules in ~/.cursor/rules: $($rmKept -join ', ') -- delete them unless you wrote them"
         }
 
         if ($DryRun) {

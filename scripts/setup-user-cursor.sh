@@ -20,8 +20,10 @@
 #            backups, the manifest and non-.md files are not fanned out.
 #   Removed (backup kept): <name>.mdc for a manifest name whose source is
 #            aitools (project rules) or retired, only if the fan-out created it
-#            (the aitools-fanout marker line, or the same content as the
-#            conversion of the harness copy for files from before the marker)
+#            (the aitools-fanout marker line, or, for files from before the
+#            marker, the same content as the conversion of the harness copy or
+#            of one of its *.bak.* backups); any other file of such a name is
+#            kept with a warning and an ACTION row (Cursor still loads it)
 #   Preserved: every other ~/.cursor/rules/ file
 #   No manifest, or one with another first line: nothing fanned out, nothing
 #   removed, WARN row + ACTION (run aitools)
@@ -481,7 +483,8 @@ cursor_rule_is_fanout() {
         open my $fh, "<:raw", $f or die "cannot read $f: $!\n";
         local $/; my $t = <$fh>; close $fh; $t = "" unless defined $t;
         $t =~ s/\A\xEF\xBB\xBF//; $t =~ s/\r\n/\n/g;
-        exit(($t =~ /\A---[ \t]*\n(?:.*?\n)?---[ \t]*\n\Q$mark\E/s) ? 0 : 1);
+        # Frontmatter lines may not be "---": the marker must follow the FIRST closing ---
+        exit(($t =~ /\A---[ \t]*\n(?:(?!---[ \t]*\n)[^\n]*\n)*---[ \t]*\n\Q$mark\E/) ? 0 : 1);
     ' "$1" "$CURSOR_FANOUT_MARKER"
 }
 
@@ -740,6 +743,7 @@ $dest_lc
         # existed (PR #87), the same content as the conversion of the harness copy.
         # Any other file of that name is the user's and is preserved.
         N_REMOVED=0
+        RM_KEPT=""   # project/retired names kept because the fan-out did not create them
         while IFS= read -r rm_line; do
             [ -n "$rm_line" ] || continue
             rm_name="${rm_line%%"$TAB"*}"
@@ -759,18 +763,30 @@ $dest_lc
                     deploy_tracker_record "failed" "cursor rules" "$rm_dest"
                     continue
                 fi
-                if [ -f "$HARNESS_RULES_DIR/$rm_name" ]; then
-                    rm_legacy=""
-                    rm_current=""
-                    if rm_legacy=$(cursor_rule_from_md "$HARNESS_RULES_DIR/$rm_name") \
-                        && rm_current=$(cat "$rm_path") \
-                        && [ -n "$rm_legacy" ] && [ "$rm_legacy" = "$rm_current" ]; then
-                        rm_why="same content as the conversion of the harness copy"
-                    fi
+                # No marker (a PR #87 file): compare with the conversion of the
+                # harness copy and of each backup deploy-harness left beside it
+                # (it backs a rule up when it updates or retires it), so a rule
+                # edited or retired since the #87 run is still recognised
+                rm_current=""
+                if ! rm_current=$(cat "$rm_path"); then
+                    log_error "Cannot read $(display_path "$rm_path") -- not removed"
+                    deploy_tracker_record "failed" "cursor rules" "$rm_dest"
+                    continue
                 fi
+                for rm_cand in "$HARNESS_RULES_DIR/$rm_name" "$HARNESS_RULES_DIR/$rm_name".bak.*; do
+                    [ -f "$rm_cand" ] || continue
+                    rm_legacy=""
+                    if rm_legacy=$(cursor_rule_from_md "$rm_cand") \
+                        && [ -n "$rm_legacy" ] && [ "$rm_legacy" = "$rm_current" ]; then
+                        rm_why="same content as the conversion of $(basename "$rm_cand")"
+                        break
+                    fi
+                done
             fi
             if [ -z "$rm_why" ]; then
-                log "Kept $rm_dest: the rules manifest lists $rm_name as $rm_src, but the fan-out did not create this file (no aitools-fanout marker) -- remove it yourself if Cursor should not load it"
+                # Kept (it may be the user's own file), but Cursor still loads it
+                log_warn "Kept $rm_dest: the rules manifest lists $rm_name as $rm_src (Cursor gets user-level rules only), but this file was not created by the fan-out (no aitools-fanout marker, no matching harness copy) -- Cursor still loads it; remove it if it is an old fan-out copy"
+                RM_KEPT="${RM_KEPT:+$RM_KEPT, }$rm_dest"
                 continue
             fi
             if [ "$DRY_RUN" = "true" ]; then
@@ -792,6 +808,9 @@ $dest_lc
             log "Removed $rm_dest ($rm_src rule: Cursor gets user-level rules only; $rm_why; backup kept)"
             write_summary DETAIL "cursor rules" "removed: $rm_dest"
         done <<< "$REMOVE_RULES"
+        if [ -n "$RM_KEPT" ]; then
+            write_summary ACTION "" "Cursor still loads project/retired rules in ~/.cursor/rules: $RM_KEPT -- delete them unless you wrote them"
+        fi
 
         if [ "$DRY_RUN" = "true" ]; then
             if [ "$_DT_FAILED" -gt 0 ]; then
