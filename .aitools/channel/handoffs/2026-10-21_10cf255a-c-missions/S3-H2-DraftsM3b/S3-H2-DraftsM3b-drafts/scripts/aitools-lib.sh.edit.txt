@@ -19,7 +19,8 @@ directly:
   scripts/deploy-harness.sh:107  "${BASH:-bash}" "$CONFIG_WRITER" --dry-run || CW_RC=$?
   scripts/deploy-harness.sh:109  "${BASH:-bash}" "$CONFIG_WRITER" || CW_RC=$?
 `grep -rl "run_child_relayed\|Invoke-ChildRelayed\|relay_child_log\|jsonl_record"` over
-scripts/, tests/ and shared/ finds only aitools-lib.sh/.ps1 and aitools-install.sh. aitools-install.sh uses
+scripts/, tests/ and shared/ finds aitools-lib.sh/.ps1, aitools-install.sh and
+tests/profile/test-lib.sh. aitools-install.sh uses
 its own copy (relay_child_log defined at aitools-install.sh:153), and aitools-install.ps1
 its own Write-JsonlRecord (aitools-install.ps1:65). The only caller of the lib's copy is
 tests/profile/test-lib.sh. origin/feature/harness-mdm has no relay call in
@@ -42,3 +43,11 @@ NEW (insert, both files) -- only the last sentence differs from the approved tex
 
 Alternative: keep the approved text and apply it in the same PR that wires
 deploy-harness (owner: S3-H2-Manifest) and the installers onto the lib's relay.
+
+Timing (reviewer S3-H2-DraftsM3b-Review M1, M2; checked with gh pr list 2026-10-22):
+open PR #106 ("Run deploy-harness from the installer and every aitools run") changes
+aitools-install.sh/.ps1 and scripts/aitools / aitools.ps1, which would make the
+installers and entry points the consumers and deploy-harness the child rather than a
+consumer. Open PR #103 also touches aitools-lib.sh/.ps1. Suggested: re-draft row 8 against
+main after #103 and #106 merge, and present that text for approval instead of either
+version above.
