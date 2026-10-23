@@ -313,12 +313,36 @@ run mdm nopayload
 check "missing payload: exit 1, ERROR payload missing, nothing deployed" \
     "[ \"\$(rc_of nopayload-mdm)\" = 1 ] && row nopayload-mdm 'ERROR|harness files|payload missing' && [ ! -e '$TMP_ROOT/nopayload-mdm/.aitools/rules' ]"
 cp -p "$TMP_ROOT/b1/deploy/deploy-harness.payload" "$TMP_ROOT/bad/deploy/deploy-harness.payload"
-# Cut in sections 3-7, after the check (a cut inside the inlined library is a
-# bash parse error before any of this script's code runs).
-perl -e 'my ($f) = @ARGV; my $s = -s $f; truncate($f, int($s * 0.95)) or die "truncate: $!\n"' "$TMP_ROOT/bad/deploy/deploy-harness.sh"
-run mdm trunc
-check "truncated script: exit 1, ERROR row, nothing deployed" \
-    "[ \"\$(rc_of trunc-mdm)\" = 1 ] && row trunc-mdm 'ERROR|harness files|script truncated' && [ ! -e '$TMP_ROOT/trunc-mdm/.aitools/rules' ]"
+# Truncated copies (review B1): the guard is the first command, so every cut
+# after it -- inside the inlined library (a bash parse error otherwise, exit
+# 2), at a top-level line in section 1 (exit 0 with nothing done otherwise),
+# or in sections 3-7 -- exits 1 with the row and deploys nothing.
+# trunc_case NAME PERL_EXPR -- cut a copy of b1's script at byte PERL_EXPR($s = size, $t = text)
+trunc_case() {
+    cp -p "$TMP_ROOT/b1/deploy/deploy-harness.sh" "$TMP_ROOT/bad/deploy/deploy-harness.sh"
+    perl -e 'my ($f, $e) = @ARGV; my $s = -s $f; open my $h, "<", $f or die; my $t = do { local $/; <$h> }; close $h; my $n = eval $e; die "no cut point\n" unless $n && $n < $s; truncate($f, $n) or die "truncate: $!\n"' \
+        "$TMP_ROOT/bad/deploy/deploy-harness.sh" "$2"
+    run mdm "$1"
+}
+trunc_case trunc40 'int($s * 0.40)'
+check "truncated script at 40% (inside the library): exit 1, ERROR row, nothing deployed" \
+    "[ \"\$(rc_of trunc40-mdm)\" = 1 ] && row trunc40-mdm 'ERROR|harness files|script truncated' && [ ! -e '$TMP_ROOT/trunc40-mdm/.aitools/rules' ]"
+trunc_case truncs1 'index($t, "\n# 1. config.json") + 1'
+check "truncated script at the section 1 heading: exit 1, ERROR row, nothing deployed" \
+    "[ \"\$(rc_of truncs1-mdm)\" = 1 ] && row truncs1-mdm 'ERROR|harness files|script truncated' && [ ! -e '$TMP_ROOT/truncs1-mdm/.aitools/rules' ]"
+trunc_case trunc95 'int($s * 0.95)'
+check "truncated script at 95% (sections 3-7): exit 1, ERROR row, nothing deployed" \
+    "[ \"\$(rc_of trunc95-mdm)\" = 1 ] && row trunc95-mdm 'ERROR|harness files|script truncated' && [ ! -e '$TMP_ROOT/trunc95-mdm/.aitools/rules' ]"
+check "truncation guard: the first command of the generated script (before the library)" \
+    "[ \"\$(perl -ne 'if (/^if command -v perl .*END OF GENERATED SCRIPT/) { print \$.; exit }' '$G/deploy-harness.sh')\" -lt \"\$(perl -ne 'if (/^logging_init\\b/ || /^set -euo pipefail\$/) { print \$.; exit }' '$G/deploy-harness.sh')\" ]"
+# A record line with a non-numeric size (sha updated): malformed, payload damaged
+cp -p "$TMP_ROOT/b1/deploy/deploy-harness.sh" "$TMP_ROOT/bad/deploy/deploy-harness.sh"
+perl -i -pe 's/^(dotprofile\/claude\/rules\/user1\.md\t0\t)\d+/${1}x/' "$TMP_ROOT/bad/deploy/deploy-harness.payload"
+NEWSHA=$(perl -MDigest::SHA=sha256_hex -0777 -ne 's/\r//g; print sha256_hex($_)' "$TMP_ROOT/bad/deploy/deploy-harness.payload")
+perl -i -pe "s/^MDM_PAYLOAD_SHA256=.*/MDM_PAYLOAD_SHA256=$NEWSHA/" "$TMP_ROOT/bad/deploy/deploy-harness.sh"
+run mdm malformed
+check "malformed record (size not a number): exit 1, ERROR payload damaged, nothing deployed" \
+    "[ \"\$(rc_of malformed-mdm)\" = 1 ] && row malformed-mdm 'ERROR|harness files|payload damaged' && grep -q 'malformed record line' '$TMP_ROOT/malformed-mdm.out' && [ ! -e '$TMP_ROOT/malformed-mdm/.aitools/rules' ]"
 BUILD=b1
 
 # ---------------------------------------------------------------------------
@@ -424,8 +448,9 @@ exit 0'
         if [ "$setup" = config ]; then write_config "$h"; fi
         OUT="$TMP_ROOT/ps-$name.out"
         : > "$TMP_ROOT/ps-$name.summary"
+        # PS_TMPDIR: the temp root .NET uses for the stage directory (cleanup check)
         env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN HOME="$h" USERPROFILE="$h" AITOOLS_LOG_DIR="$TMP_ROOT/ps-$name-logs" \
-            AITOOLS_SUMMARY_FILE="$TMP_ROOT/ps-$name.summary" \
+            AITOOLS_SUMMARY_FILE="$TMP_ROOT/ps-$name.summary" TMPDIR="${PS_TMPDIR:-${TMPDIR:-/tmp}}" \
             pwsh -NoProfile -File "$f" "$@" < /dev/null > "$OUT" 2>&1
         echo $? > "$TMP_ROOT/ps-$name.rc"
     }
@@ -433,6 +458,11 @@ exit 0'
     ps_run fresh "$P/mdm/deploy/deploy-harness.ps1" fresh
     check "ps1 fresh HOME (MDM, no bootstrap): exit 0, OK config.json n/a row, writer not called, files deployed" \
         "[ \"\$(rc_of ps-fresh)\" = 0 ] && row ps-fresh 'OK|config.json|n/a (no bootstrap)' && ! grep -q '^ERROR|' '$TMP_ROOT/ps-fresh.summary' && [ \"\$(ps_calls)\" = 0 ] && grep -qx 'user rule one' '$TMP_ROOT/ps-fresh/.aitools/rules/user1.md'"
+    mkdir -p "$TMP_ROOT/ps-half/.aitools"
+    printf '{\n  "version": 3,\n  "reposPath": "%s"\n}\n' "$TMP_ROOT" > "$TMP_ROOT/ps-half/.aitools/config.json"
+    ps_run half "$P/mdm/deploy/deploy-harness.ps1" keep
+    check "ps1 MDM, config.json without repoPath: n/a (no bootstrap), writer not called" \
+        "[ \"\$(rc_of ps-half)\" = 0 ] && row ps-half 'OK|config.json|n/a (no bootstrap)' && [ \"\$(ps_calls)\" = 0 ]"
     ps_run skipd "$P/dev/scripts/deploy-harness.ps1" config -SkipConfig
     ps_run skipm "$P/mdm/deploy/deploy-harness.ps1" fresh -SkipConfig
     check "ps1 -SkipConfig (dev and MDM): exit 0, OK config.json n/a (written by installer), writer not called" \
@@ -453,13 +483,24 @@ exit 0'
         "[ \"\$(rc_of ps-bad)\" = 1 ] && row ps-bad 'ERROR|harness files|payload damaged' && [ ! -e '$TMP_ROOT/ps-bad/.aitools/rules' ]"
     NEWSHA=$(perl -MDigest::SHA=sha256_hex -0777 -ne 's/\r//g; print sha256_hex($_)' "$P/mdm/deploy/deploy-harness.payload")
     perl -i -pe "s/^\\\$mdmPayloadSha256 = \"[0-9a-f]+\"/\\\$mdmPayloadSha256 = \"$NEWSHA\"/" "$P/mdm/deploy/deploy-harness.ps1"
-    ps_run rec "$P/mdm/deploy/deploy-harness.ps1" config
+    mkdir -p "$TMP_ROOT/pstmp"
+    PS_TMPDIR="$TMP_ROOT/pstmp/" ps_run rec "$P/mdm/deploy/deploy-harness.ps1" config
     check "ps1 damaged record: exit 1, ERROR row, that file not deployed" \
         "[ \"\$(rc_of ps-rec)\" = 1 ] && grep -q '^ERROR|harness files|1 embedded file(s) damaged' '$TMP_ROOT/ps-rec.summary' && [ ! -e '$TMP_ROOT/ps-rec/.aitools/rules/user1.md' ] && [ -f '$TMP_ROOT/ps-rec/.aitools/rules/user2.md' ]"
+    check "ps1 exit 1 after unpacking: the stage directory was created there and removed (finally)" \
+        "grep -q 'unpacked in $TMP_ROOT/pstmp/aitools-harness-' '$TMP_ROOT/ps-rec.out' && [ -z \"\$(ls -A '$TMP_ROOT/pstmp')\" ]"
+    # A record line with a non-numeric size (sha updated): malformed, payload damaged
+    cp -p "$TMP_ROOT/b1/deploy/deploy-harness.payload" "$P/mdm/deploy/deploy-harness.payload"
+    perl -i -pe 's/^(dotprofile\/claude\/rules\/user1\.md\t0\t)\d+/${1}x/' "$P/mdm/deploy/deploy-harness.payload"
+    NEWSHA=$(perl -MDigest::SHA=sha256_hex -0777 -ne 's/\r//g; print sha256_hex($_)' "$P/mdm/deploy/deploy-harness.payload")
+    perl -i -pe "s/^\\\$mdmPayloadSha256 = \"[0-9a-f]+\"/\\\$mdmPayloadSha256 = \"$NEWSHA\"/" "$P/mdm/deploy/deploy-harness.ps1"
+    ps_run malf "$P/mdm/deploy/deploy-harness.ps1" config
+    check "ps1 malformed record (size not a number): exit 1, ERROR payload damaged, nothing deployed" \
+        "[ \"\$(rc_of ps-malf)\" = 1 ] && row ps-malf 'ERROR|harness files|payload damaged' && [ ! -e '$TMP_ROOT/ps-malf/.aitools/rules' ]"
     rm -f "$P/mdm/deploy/deploy-harness.payload"
     ps_run nop "$P/mdm/deploy/deploy-harness.ps1" config
-    check "ps1 missing payload: exit 1, ERROR payload missing, nothing deployed, temp dir removed" \
-        "[ \"\$(rc_of ps-nop)\" = 1 ] && row ps-nop 'ERROR|harness files|payload missing' && [ ! -e '$TMP_ROOT/ps-nop/.aitools/rules' ] && ! grep -q 'could not remove the temp directory' '$TMP_ROOT/ps-nop.out'"
+    check "ps1 missing payload: exit 1, ERROR payload missing, nothing deployed" \
+        "[ \"\$(rc_of ps-nop)\" = 1 ] && row ps-nop 'ERROR|harness files|payload missing' && [ ! -e '$TMP_ROOT/ps-nop/.aitools/rules' ]"
 else
     printf 'SKIP ps1 pair (pwsh not found)\n'; SKIP=$((SKIP + 1))
 fi
