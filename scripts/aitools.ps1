@@ -155,9 +155,10 @@ function Get-RepoVersion {
 # review menu (D-TS13; abort ends the whole run, T-Q3). The remaining deploy steps
 # are not run; the caller shows the summary and exits 2. Parity: deploy_abort in
 # scripts/aitools.
-function Invoke-DeployAbort([string]$ScriptName) {
+function Invoke-DeployAbort([string]$AbortedScript) {
+    # Not $ScriptName: it would hide the lib's $scriptName, the [script] field Log writes
     $script:deployAborted = $true
-    Log "${ScriptName}: aborted by user at a review menu -- remaining deploy steps not run"
+    Log "${AbortedScript}: aborted by user at a review menu -- remaining deploy steps not run"
     Write-Summary "WARN" "harness files" "aborted by user"
 }
 

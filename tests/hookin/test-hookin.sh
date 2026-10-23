@@ -305,6 +305,8 @@ if command -v pwsh >/dev/null 2>&1; then
         run_ps loop 'x\n'
         check "ps loop abort: aborted, no later script ran, WARN row" \
             "grep -q 'LOOP rc=0 aborted=True' '$C/out' && [ ! -s '$H/calls' ] && row 'WARN|harness files|aborted by user'"
+        check "ps loop abort: abort line logged as [aitools]" \
+            "grep -q '\[aitools\] \[info\] deploy-harness.ps1: aborted by user' '$LOG'"
 
         setup_case ps-step-abort
         run_ps step
