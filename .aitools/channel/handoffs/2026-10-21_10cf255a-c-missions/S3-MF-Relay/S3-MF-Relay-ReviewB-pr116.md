@@ -144,3 +144,57 @@ CI at review time: linux and windows pass, macos pending.
 - The full installer (incident #89).
 - The A-14 failure path.
 - check-pre-commit / check-pre-push: review only, nothing committed.
+
+## Re-check of 1605d6e
+
+**Verdict: approve with minors.** M-1 is resolved, nothing blocks, and the open items are minor or nits.
+
+Re-checked `git diff ccccbd8..1605d6e` (scripts/aitools, aitools-install.sh/.ps1, aitools-lib.sh, aitools.ps1, tests/profile/test-install.sh) against my findings and the author's dispositions (https://github.com/nobul-tech/aitools/pull/116#issuecomment-6357837757). Worktree detached at 1605d6e; isolated HOME and AITOOLS_LOG_DIR under my scratch.
+
+| Finding | Status | Evidence |
+|---|---|---|
+| **M-1** Git Bash hooks prompt hidden by the relay | **resolved** | See "M-1 detail" below. |
+| **m-1** A-15 PS premise | **resolved** (comment) | aitools.ps1:505-508 now says a missing value, or a value followed by one of the script's own switches such as `--force`, is a binding error under `-File`. That matches my probe (`Missing an argument for parameter 'Alias'`). The profile-function gap (`--alias` lands in `$Remaining`) stays an `INCIDENT:` marker; it predates this PR. |
+| **m-2** PS run-id leak | **resolved** | aitools-install.ps1 sets `$script:InstallSetRunId` only when it set the variable itself, and removes it in Cleanup (`:837-840`), before every footer `exit` (`:845-853`). The `-ErrorAction SilentlyContinue` there is followed by a `Test-Path` check. The only earlier exits (`:37` help, `:47` OS guard) come before the id is set. |
+| **m-3** jsonl warning parity | **accepted as not changed** | The path form is display-only, and the reason is the author's cost argument. One note: my suggestion did not need a subshell (`[ -d "$f" ]` / `[ -w ]` tests). Fine to leave. |
+| **m-4** test gaps | **partly resolved; rest accepted** | New step5-runid passes in bash and ps (test-install 41/0, 22/0). Moving the run-id block into the extracted override makes it testable. The Step 5 skip and the PS A-15 check are in the installers' main bodies, which incident #89 keeps out of tests; accepted. |
+| **n-1** ordering comment | **resolved** | aitools-lib.sh:660-668 now states that a /dev/tty prompt can overtake the last lines, and that a stdout prompt without a newline must not be relayed. |
+| **n-2** Step 3 reason | **resolved (mkdir)** | `mkerr=$(mkdir -p "$p" 2>&1)` plus a `log_detail` (install.sh:168-172). A `cd` failure in `absolute_repos_path` still goes to raw stderr; that is a nit and needs no action. |
+| **n-3** pipeline-subshell warning | **accepted as not changed** | Not reachable today, as I noted. |
+| **n-4** thin wrappers | **accepted** | A follow-up for the owner of test-config.sh. |
+
+### M-1 detail
+
+On MINGW, user init now runs `setup-user-hooks.ps1` directly (`hook_direct=true`, aitools:1021-1029). The direct branch (aitools:1037-1047):
+- counts ERROR rows before the run;
+- runs `"${hook_cmd[@]}" || hook_rc=$?`;
+- on a non-zero exit, writes the relay's own message (`<label> failed (exit N)` / `aborted (exit 2)` `-- see <log>`);
+- calls `_aitlib_child_row "claude hooks"`, so the outcome is one error plus the same row unless the child wrote one.
+
+D-TS13 holds: `hook_rc=2` still returns 2.
+
+Two probes:
+- **Author's probe** (`probe-hookdirect.sh`, copied to my scratch and run against my worktree; it forces `hook_direct=true` on macOS): test-user-init `--bash-only` gives 140 passed, 1 failed. The one failure is `relay-jsonl (bash): hooks warning records '0'`, which is expected because the direct branch mirrors nothing. hook-abort and hook-crash give the same rows as the relay.
+- **My pty probe** (re-run): `direct ps` shows the prompt before the answer (True); `relay ps` still hides it (False). The fix takes the direct path.
+
+### New, from the fix (nits, no action needed for merge)
+
+- **n-5:** scripts/aitools now calls the lib's private helpers `_aitlib_summary_errors` and `_aitlib_child_row` (aitools:1038, 1046). The behaviour is right. If the lib renames them, user init breaks silently, so either make them public or add a comment in the lib naming the caller.
+- **n-6:** on Git Bash the direct branch cannot see "error lines with exit 0" (the relay's `logged errors (exit 0)` row), and the hooks child's warnings are not counted. Both match the pre-PR behaviour, and the author lists the deploy.jsonl gap as a follow-up.
+- **Not tested here:** the direct branch has no in-tree test (it is reachable only on Git Bash). The forced-branch probe covers it on macOS.
+
+### Verification at 1605d6e
+
+Syntax checks are clean:
+- `bash -n` with bash 5 and /bin/bash 3.2: aitools-lib.sh, aitools-install.sh, aitools, test-install.sh, test-user-init.sh.
+- pwsh parser: aitools-lib.ps1, aitools-install.ps1, aitools.ps1.
+
+| suite | bash 5 + pwsh | /bin/bash 3.2 --bash-only |
+|---|---|---|
+| test-install | 41/0 | 22/0 |
+| test-user-init | 252/0 | 141/0 |
+| test-config | 269/0 | 174/0 |
+| test-lib | 361/0 | 160/0 |
+| test-profile | 689/0 | 498/0 |
+
+**Not run:** Windows / Git Bash, the full installer (#89), check-pre-commit / check-pre-push (review only).
