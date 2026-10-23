@@ -40,7 +40,9 @@
 #   for an unregistered machine (no profile matches; no machine profiles) and no
 #   registration ACTION; it logs one info line saying so. Other derivation errors
 #   (invalid profile.json, a missing dotprofile path, an ambiguous match) are still
-#   reported. With --machine-id or --machine-alias: bad arguments.
+#   reported. With --machine-id or --machine-alias: bad arguments. Pass it only for a
+#   machine the caller has concluded is unregistered: the writer does not check, and
+#   every warning naming aitools user init / aitools-profile migrate goes to detail.
 # Exit: 0 done (warnings possible), 1 any error. Never prompts, never exits 2.
 
 set -euo pipefail
@@ -69,7 +71,8 @@ Options:
   --machine-alias A    Deprecated (one release): a profile alias or key; use --machine-id
   --no-machine         Machine registration is left to the caller (user init): keep
                        machineId / machineAlias as they are; no ERROR or ACTION row for
-                       an unregistered machine. Not with --machine-id / --machine-alias
+                       an unregistered machine. Only for a machine the caller found
+                       unregistered. Not with --machine-id / --machine-alias
   --dry-run            Show what would change; write nothing
   --help               This text
 

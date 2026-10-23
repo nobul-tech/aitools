@@ -449,6 +449,20 @@ rows_n 1 "ERROR"
 if grep -q '"version": 2' "$OUTJ"; then ok "c22h-no-machine-and-id: config untouched"; else bad "c22h-no-machine-and-id: config changed"; fi
 case_run c22i-no-machine-and-alias 1 fix_v2 --machine-alias laptop --no-machine
 has_row "ERROR|aitools config|bad arguments"
+# C22k an ambiguous match (this machine.id on two profiles) is still an error
+fix_nm_dupid() {
+    fix_v2
+    printf '{ "version": 2, "meta": { "schemaRevision": "2.2" }, "identity": { "github": "nobul-jose" }, "profiles": { "a": { "machine": { "id": "%s", "hostname": "nobul-mac" } }, "b": { "machine": { "id": "%s", "hostname": "nobul-mac" } } } }\n' "$ID_MAC" "$ID_MAC" > "$DP/profile.json"
+}
+case_run c22k-no-machine-ambiguous 1 fix_nm_dupid --no-machine
+has_row "ERROR|machine profile|no machine match"
+# C22l --no-machine with --dry-run: nothing written, no machine rows
+case_run c22l-no-machine-dry-run 0 fix_nm_nomatch --no-machine --dry-run
+has_row "OK|aitools config|dry-run: would update"
+rows_n 0 "ERROR"
+rows_n 0 "ACTION"
+if grep -q '"version": 2' "$OUTJ"; then ok "c22l-no-machine-dry-run: config untouched"; else bad "c22l-no-machine-dry-run: config changed"; fi
+
 # C22j the help text names the flag
 CASE="c22j-help"
 reset_home

@@ -41,7 +41,9 @@
 #   for an unregistered machine (no profile matches; no machine profiles) and no
 #   registration ACTION; it logs one info line saying so. Other derivation errors
 #   (invalid profile.json, a missing dotprofile path, an ambiguous match) are still
-#   reported. With -MachineId or -MachineAlias: bad arguments.
+#   reported. With -MachineId or -MachineAlias: bad arguments. Pass it only for a
+#   machine the caller has concluded is unregistered: the writer does not check, and
+#   every warning naming aitools user init / aitools-profile migrate goes to detail.
 # Exit: 0 done (warnings possible), 1 any error. Never prompts, never exits 2.
 
 [CmdletBinding(PositionalBinding = $false)]
@@ -82,7 +84,8 @@ Parameters:
   -MachineAlias A    Deprecated (one release): a profile alias or key; use -MachineId
   -NoMachine         Machine registration is left to the caller (user init): keep
                      machineId / machineAlias as they are; no ERROR or ACTION row for
-                     an unregistered machine. Not with -MachineId / -MachineAlias
+                     an unregistered machine. Only for a machine the caller found
+                     unregistered. Not with -MachineId / -MachineAlias
   -DryRun            Show what would change; write nothing
   -Help              This text
 
