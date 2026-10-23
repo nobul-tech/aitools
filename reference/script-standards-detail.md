@@ -85,7 +85,10 @@ Check scripts source `check-lib.sh`/`.ps1` which in turn sources `aitools-lib.sh
 | Logging init | `logging_init "name"` | `Initialize-Logging "name"` | Sets SCRIPT_NAME, LOG_DIR, LOG_FILE; resets ERRORS, WARNINGS |
 | Standard logging | `log`/`log_ok`/`log_error`/`log_warn` | `Log`/`LogOk`/`LogError`/`LogWarn` | `[ts] [script] [level] msg` with console colors |
 | Detail logging | `log_detail()` | `LogDetail` | File-only diagnostic logging (no console output) |
-| Summary writer | `write_summary` | `Write-Summary` | 3-arg append to summary file |
+| Summary writer | `write_summary` | `Write-Summary` | 3-arg append to summary file; an OK row becomes WARN once the script has counted a warning ("Function definition") |
+| Dotprofile and machine profile | `resolve_user_repo_path`, `resolve_machine_profile` (results `AITLIB_*`) | `Resolve-UserRepoPath`, `Resolve-MachineProfile` (results `$script:AitLib*`) | Wrappers around the native resolver `aitools-profile.sh` / `.ps1` (`@reference/user-repo.md` "Resolution"); never return 2 |
+| Tool exceptions | `tool_exception_get`, `tool_exception_record` | `Get-ToolException`, `Set-ToolException` | Reader and writer of `toolExceptions` (`@reference/tool-support-decision-tree.md` section 8) |
+| JSONL record and child relay | `jsonl_record`, `relay_child_log`, `run_child_relayed` | `Write-JsonlRecord`, `Send-ChildLog`, `Invoke-ChildRelayed` | One escaped `deploy.jsonl` record; run a child setup script, show its lines, mirror them to `deploy.jsonl`, count its warnings and errors |
 | Summary renderer | `show_summary` | `Show-Summary` | Colored panel display |
 | File backup | `backup_file()` | `Backup-File` | Timestamped backup with pruning |
 | Dir backup | `backup_dir()` | `Backup-Dir` | Directory backup for managed files |
@@ -179,6 +182,14 @@ affect `_ai_log` -- it always writes directly to the log file.
 The canonical `write_summary` / `Write-Summary` definition lives in
 `scripts/aitools-lib.sh` / `.ps1`. All scripts source the lib -- no inline copies.
 
+`write_summary OK` writes `WARN` instead when the script has already counted a warning
+(`WARNINGS` > 0 / `$script:warnings` > 0): the row reports the script's state so far,
+not only its own step. Order rows so that this is true. A warning that concerns a step
+is logged before that step's row; an advisory ACTION that does not concern the step
+(and its paired `log_warn`) is written after the step's OK row. Example:
+`setup-user-config` writes its `aitools config` row first, then the one
+`Run: aitools user init (...)` ACTION with its `log_warn`.
+
 ### Summary file format
 
 Each line: `CATEGORY|tool_name|detail_text`
@@ -248,6 +259,11 @@ A tool where `brew upgrade` returned unexpected output but the existing version 
 Every code path through a setup script -- success, partial failure, and full failure --
 must produce at least one `write_summary` call. A tool that fails to install must appear
 in the end-of-run panel as ERROR or WARN, not be silently absent.
+
+Library-style tools (`scripts/aitools-profile.sh` / `.ps1`) are not setup scripts: they
+write no summary rows and no exit footer, and return their warnings and errors to the
+caller, which logs them at level and writes the rows (`@reference/logging.md`
+"Library-style tools").
 
 ### ACTION items
 
