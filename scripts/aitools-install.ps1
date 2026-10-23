@@ -100,11 +100,18 @@ function Resolve-ReposDir([string]$Path) {
         }
         Log "Repos path '$Path' is relative -- using $abs (relative to the current directory)"
     }
-    if (-not (Test-Path -LiteralPath $abs)) {
+    if (-not (Test-Path -LiteralPath $abs -PathType Container)) {
+        # [IO.Directory]::CreateDirectory throws on failure; New-Item -Force was seen
+        # to return $null without an error when a parent is a file (pwsh 7, macOS).
+        # The Test-Path after it is the result check either way.
+        $why = "not created"
         try {
-            $null = New-Item -ItemType Directory -Path $abs -Force -ErrorAction Stop
+            $null = [IO.Directory]::CreateDirectory($abs)
         } catch {
-            LogDetail "Repos directory '$abs': $($_.Exception.Message)"
+            $why = $_.Exception.Message -replace '\s*\r?\n\s*', ' '
+        }
+        if (-not (Test-Path -LiteralPath $abs -PathType Container)) {
+            LogDetail "Repos directory '$abs': $why"
             LogError "Repos directory '$abs' could not be created -- config.json will not be written"
             Write-Summary "ERROR" "aitools config" "repos dir not created"
             return ""

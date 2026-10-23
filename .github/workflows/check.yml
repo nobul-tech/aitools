@@ -155,6 +155,12 @@ jobs:
       - name: User init tests (macOS /bin/bash 3.2)
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/profile/test-user-init.sh --bash-only
 
+      - name: Installer Step 3/5 relay tests (bash 5 + pwsh)
+        run: bash tests/profile/test-install.sh
+
+      - name: Installer Step 3/5 relay tests (macOS /bin/bash 3.2)
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/profile/test-install.sh --bash-only
+
       - name: Build deploy scripts
         run: |
           echo "::group::Running build-deploy.sh"
@@ -319,6 +325,9 @@ jobs:
 
       - name: User init tests (bash + pwsh parity, pty menus)
         run: bash tests/profile/test-user-init.sh
+
+      - name: Installer Step 3/5 relay tests (bash + pwsh)
+        run: bash tests/profile/test-install.sh
 
       - name: Build deploy scripts
         run: bash scripts/build-deploy.sh
