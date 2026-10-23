@@ -22,6 +22,8 @@
 #   machineId: the matched profiles key, only for this machine's id-keyed profile
 #   (profile.json revision 2.2). machineAlias: display only (the profile's alias),
 #   kept for one release for 2.1 readers; the legacy cache for an alias-keyed profile.
+#   With --no-machine, machineId and machineAlias are preserved as they are (never
+#   set, never removed): machine registration and its advice belong to the caller.
 # Preserved: all other keys, in place (key order kept)
 # Write path: merge to temp -> validate -> backup_file -> mv.
 #   A read, merge or validation failure leaves the existing file untouched.
@@ -29,8 +31,18 @@
 #   created or changed (deploy.log still records the run).
 #
 # Usage: setup-user-config.sh [--repos-path P] [--repo-path P] [--drives-json JSON]
-#          [--github-user U] [--user-repo-path P] [--machine-id ID] [--dry-run] [--help]
+#          [--github-user U] [--user-repo-path P] [--machine-id ID | --no-machine]
+#          [--dry-run] [--help]
 #   --machine-alias A is still accepted for one release (deprecated; logged at detail).
+#   --no-machine (user init, when it leaves this machine unregistered): the caller owns
+#   machine registration and reports it. The writer writes every other field, leaves
+#   machineId / machineAlias untouched, and adds no machine-profile ERROR or ACTION row
+#   for an unregistered machine (no profile matches; no machine profiles) and no
+#   registration ACTION; it logs one info line saying so. Other derivation errors
+#   (invalid profile.json, a missing dotprofile path, an ambiguous match) are still
+#   reported. With --machine-id or --machine-alias: bad arguments. Pass it only for a
+#   machine the caller has concluded is unregistered: the writer does not check, and
+#   every warning naming aitools user init / aitools-profile migrate goes to detail.
 # Exit: 0 done (warnings possible), 1 any error. Never prompts, never exits 2.
 
 set -euo pipefail
@@ -57,6 +69,10 @@ Options:
   --user-repo-path P   Dotprofile path chosen by user init
   --machine-id ID      This machine's profile key chosen by user init (explicit choice)
   --machine-alias A    Deprecated (one release): a profile alias or key; use --machine-id
+  --no-machine         Machine registration is left to the caller (user init): keep
+                       machineId / machineAlias as they are; no ERROR or ACTION row for
+                       an unregistered machine. Only for a machine the caller found
+                       unregistered. Not with --machine-id / --machine-alias
   --dry-run            Show what would change; write nothing
   --help               This text
 
@@ -67,6 +83,7 @@ EOF
 
 REPOS_PATH_ARG=""; REPO_PATH_ARG=""; DRIVES_JSON="[]"; GH_USER_ARG=""; URP_ARG=""; ALIAS_ARG=""; MID_ARG=""
 DEPRECATED_ALIAS=false
+NO_MACHINE=false
 DRY_RUN=false
 if [ "${AITOOLS_DRY_RUN:-}" = "1" ]; then DRY_RUN=true; fi
 bad_args() {
@@ -88,6 +105,7 @@ while [ $# -gt 0 ]; do
                 --machine-alias)  ALIAS_ARG="$2"; DEPRECATED_ALIAS=true ;;
             esac
             shift 2 ;;
+        --no-machine) NO_MACHINE=true; shift ;;
         --dry-run)  DRY_RUN=true; shift ;;
         --force)    shift ;;  # accepted for deploy-list parity; this script has no review menu
         --help|-h)  usage; exit 0 ;;
@@ -98,6 +116,12 @@ for v in "$REPOS_PATH_ARG" "$REPO_PATH_ARG" "$DRIVES_JSON" "$GH_USER_ARG" "$URP_
     case "$v" in *$'\t'*|*$'\n'*|*$'\r'*) bad_args "option values must be one line (no tab or newline)" ;; esac
 done
 if [ -n "$MID_ARG" ] && $DEPRECATED_ALIAS; then bad_args "pass --machine-id or --machine-alias, not both"; fi
+if $NO_MACHINE && { [ -n "$MID_ARG" ] || $DEPRECATED_ALIAS; }; then
+    bad_args "--no-machine leaves the machine to the caller: not with --machine-id or --machine-alias"
+fi
+if $NO_MACHINE; then
+    log "config: --no-machine: machine registration is left to the caller -- machineId / machineAlias kept as they are; no machine-profile ERROR or ACTION from this writer"
+fi
 # The profile choice goes to the resolver as an override (a key, ignoring case, else an alias)
 CHOICE_ARG="$MID_ARG"
 if $DEPRECATED_ALIAS; then
@@ -122,7 +146,23 @@ fi
 # one step); a dry run merges into the temp directory and never touches ~/.aitools.
 CONFIG_TMP="${CONFIG_FILE}.tmp.$$"
 if $DRY_RUN; then CONFIG_TMP="$WORK_DIR/config.json"; fi
-cleanup() { rm -rf "$WORK_DIR"; rm -f "$CONFIG_TMP"; }
+# remove_config_tmp -- remove a merge result that was not moved into place; a failed
+# removal is a counted warning (PowerShell Remove-ConfigTmp says the same)
+remove_config_tmp() {
+    if [ -e "$CONFIG_TMP" ] && ! rm -f "$CONFIG_TMP"; then
+        log_warn "Could not remove temp file $CONFIG_TMP"
+    fi
+}
+# EXIT trap: the last safety net. A failure here is logged at detail: a warning this
+# late would not reach the exit footer (audit A-11)
+cleanup() {
+    if [ -e "$CONFIG_TMP" ] && ! rm -f "$CONFIG_TMP"; then
+        log_detail "cleanup: could not remove temp file $CONFIG_TMP"
+    fi
+    if [ -n "$WORK_DIR" ] && [ -e "$WORK_DIR" ] && ! rm -rf "$WORK_DIR"; then
+        log_detail "cleanup: could not remove temp directory $WORK_DIR"
+    fi
+}
 trap cleanup EXIT
 
 if ! command -v perl >/dev/null 2>&1; then
@@ -171,10 +211,27 @@ PROFILE_BAD=false
 #               one warning with the ACTION
 #   real     -- something is off for this run (a clone, a duplicate alias, a hostname
 #               guess, an undetectable id): log_warn, counted; the config row becomes WARN
+#   caller   -- --no-machine only: advice whose follow-up is machine registration (it
+#               names aitools user init or aitools-profile migrate) belongs to the
+#               caller: detail only, not counted, no ACTION
+NM_UNREG=false      # --no-machine: the resolver reported this machine as unregistered
+NM_OTHER_ERR=false  # --no-machine: the resolver reported another error (still an ERROR)
 derive_warn() {
     case "$1" in
         config.json\ *|*"not saved to config.json"*|"no dotprofile found"*|"githubUser unknown"*)
             log "config: $1 (handled by this write)" ;;
+        *"run: aitools user init"*|*"run: aitools-profile migrate"*)
+            if $NO_MACHINE; then
+                log_detail "config: $1 (--no-machine: left to the caller)"
+            else
+                derive_warn_machine "$1"
+            fi ;;
+        *)
+            log_warn "config: $1" ;;
+    esac
+}
+derive_warn_machine() {
+    case "$1" in
         *"has no machine.id -- run: aitools user init"*)
             log "config: $1 (see ACTION)"; NEED_INIT=true ;;
         *"run: aitools-profile migrate"*)
@@ -186,6 +243,23 @@ derive_warn() {
                 *"run: aitools user init"*) NEED_INIT=true ;;
             esac ;;
     esac
+}
+# derive_error TEXT -- one resolver error. With --no-machine, "this machine is not
+# registered" (no profile matches it; profile.json has no machine profiles) is the
+# caller's to report: detail only. Every other error stays an error.
+derive_error() {
+    if $NO_MACHINE; then
+        case "$1" in
+            "no profile matches this machine"*|"profile.json has no machine profiles"*)
+                log_detail "config: $1 (--no-machine: left to the caller)"
+                NM_UNREG=true
+                return 0 ;;
+        esac
+        NM_OTHER_ERR=true
+    fi
+    log_error "config: $1"
+    # profile.json itself is unusable: invalid JSON, not version 2, or no profiles object
+    case "$1" in *"is invalid JSON"*|*"is not v2"*|*"has no profiles object"*) PROFILE_BAD=true ;; esac
 }
 while IFS=$'\t' read -r k v; do
     case "$k" in
@@ -200,8 +274,7 @@ while IFS=$'\t' read -r k v; do
         hostname)             D_HOST="$v" ;;
         aliases)              ALIASES="$v" ;;
         warn)                 derive_warn "$v" ;;
-        error)                log_error "config: $v"
-                              case "$v" in *"is invalid JSON"*|*"is not v2"*) PROFILE_BAD=true ;; esac ;;
+        error)                derive_error "$v" ;;
     esac
 done <<< "$DERIVE_OUT"
 if ! $SEEN || [ "$DERIVE_RC" -gt 2 ]; then
@@ -213,12 +286,20 @@ else
     case "$DERIVE_RC" in
         0) : ;;
         1) log "config: no dotprofile yet -- writing bootstrap keys only (shared-only mode)" ;;
+        # Each ACTION has a log line that names its row and carries the instruction,
+        # at the row's level (error; audit A-10)
         *) if $PROFILE_BAD; then
+               ADVICE="Fix profile.json in the dotprofile (details in deploy.log)"
+               log_error "config: profile.json invalid -- $ADVICE"
                write_summary ERROR "profile.json" "invalid (see log)"
-               write_summary ACTION "" "Fix profile.json in the dotprofile (details in deploy.log)"
+               write_summary ACTION "" "$ADVICE"
+           elif $NO_MACHINE && $NM_UNREG && ! $NM_OTHER_ERR; then
+               log_detail "config: no machine match not reported (--no-machine: the caller reports registration)"
            else
+               ADVICE="Run: aitools user init (profiles: ${ALIASES:-none})"
+               log_error "config: machine profile: no machine match -- $ADVICE"
                write_summary ERROR "machine profile" "no machine match"
-               write_summary ACTION "" "Run: aitools user init (profiles: ${ALIASES:-none})"
+               write_summary ACTION "" "$ADVICE"
            fi ;;
     esac
 fi
@@ -271,6 +352,10 @@ else
 fi
 if [ -n "$D_GH" ]; then op_set string "$D_GH" githubUser; fi
 if [ -n "$D_URP" ]; then op_set string "$D_URP" userRepoPath; fi
+if $NO_MACHINE; then
+    # --no-machine: machineId / machineAlias are the caller's; kept exactly as they are
+    D_MID=""; D_ALIAS=""
+fi
 if [ -n "$D_MID" ]; then op_set string "$D_MID" machineId
 elif [ -n "$D_ALIAS" ] && [ -n "$MID_HAD" ]; then
     # The derivation matched a profile that is not this machine's id-keyed one (a 2.1
@@ -291,7 +376,11 @@ MERGE_RC=0
 MERGE_MSG=$(printf '%s' "$OPS" | pj edit "$IN" "$CONFIG_TMP" 2>&1) || MERGE_RC=$?
 if [ "$MERGE_RC" -ne 0 ]; then
     log_detail "merge: $MERGE_MSG"
-    log_error "Failed: $(display_path "$CONFIG_FILE"): config merge failed (exit $MERGE_RC) -- existing file left untouched"
+    # A key that differs only in case from a managed key (the JSON engines refuse to add
+    # its twin, aitools-json.pl): name both keys, so the user knows what to fix (PR #108 n-2)
+    MERGE_WHY=""
+    MERGE_WHY=$(printf '%s\n' "$MERGE_MSG" | perl -ne 'if (/set: \x27(.*?)\x27 differs only in case from existing key \x27(.*)\x27/) { print " -- key \"$2\" differs only in case from the managed key \"$1\": rename or remove it"; exit }') || MERGE_WHY=""  # perl failed: the generic message below
+    log_error "Failed: $(display_path "$CONFIG_FILE"): config merge failed (exit $MERGE_RC)$MERGE_WHY -- existing file left untouched"
     write_summary ERROR "aitools config" "merge failed"
 else
     # Validation: valid object (checked by the engine on write) + bootstrap keys present
@@ -363,12 +452,15 @@ else
         fi
     fi
 fi
+# The merge result is gone after a move; every other path removes it here (audit A-11)
+remove_config_tmp
 
 # --- 3. One ACTION for the advice. It must stay after the config row: write_summary
 # promotes an OK row to WARN once a warning is counted, and the log_warn paired with
 # the ACTION (script-standards-detail "Severity decision guide") is counted. The row
 # reports the write; the footer still counts this warning. ---
 # The re-key advice assumes user init calls aitools-profile migrate (re-key batch 5).
+# --no-machine: no NEED_* flag is set (the advice is the caller's), so no ACTION.
 if [ "$DERIVE_RC" -eq 0 ]; then
     ADVICE=""
     if $NEED_INIT; then ADVICE="Run: aitools user init (registers this machine)"

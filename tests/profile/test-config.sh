@@ -110,6 +110,7 @@ map_args() {
             --user-repo-path) PS_ARGS+=(-UserRepoPath "$2"); shift 2 ;;
             --machine-id)     PS_ARGS+=(-MachineId "$2"); shift 2 ;;
             --machine-alias)  PS_ARGS+=(-MachineAlias "$2"); shift 2 ;;
+            --no-machine)     PS_ARGS+=(-NoMachine); shift ;;
             --dry-run)        PS_ARGS+=(-DryRun); shift ;;
             *)                PS_ARGS+=("$1"); shift ;;
         esac
@@ -383,6 +384,101 @@ has_row "WARN|aitools config|rebuilt (was invalid)"
 has_json '"machineId": "'"$KEY_MAC"'"'
 out_has "Recovered machineId from the invalid config"
 
+# C22 --no-machine (user init left this machine unregistered): the caller owns machine
+# registration. No profile matches this machine: no ERROR, no ACTION, exit 0; every
+# other field is written; machineId / machineAlias are kept exactly as they were
+KEY_KEEP="bbbbbbbb-5555-6666-7777-888888888888"
+fix_nm_nomatch() {
+    fix_nomatch
+    perl -pi -e 's/"machineAlias": "new-mac"/"machineAlias": "new-mac",\n  "machineId": "'"$KEY_KEEP"'"/' "$CFG"
+}
+case_run c22-no-machine-unmatched 0 fix_nm_nomatch --no-machine --github-user nobul-jose
+has_row "OK|aitools config|updated"
+rows_n 0 "ERROR"
+rows_n 0 "ACTION"
+has_json '"machineAlias": "new-mac"'
+has_json '"machineId": "'"$KEY_KEEP"'"'
+has_json '"githubUser": "nobul-jose"'
+has_json '"version": 3'
+has_json '"userRepoPath": "[^"]+\/aitools-nobul-jose"'
+out_has "COMPLETED successfully"
+out_has "machine registration is left to the caller"
+log_has "no profile matches this machine"
+log_has ": left to the caller)"  # "(--no-machine: ..." (bash) / "(-NoMachine: ..." (PowerShell)
+# C22b the same fixture without the flag still reports it (C7 behaviour unchanged)
+case_run c22b-unmatched-without-flag 1 fix_nm_nomatch --github-user nobul-jose
+has_row "ERROR|machine profile|no machine match"
+rows_n 1 "ACTION"
+# C22c profile.json with no machine profiles: unregistered too, nothing reported
+fix_nm_empty() {
+    fix_v2
+    printf '{ "version": 2, "meta": { "schemaRevision": "2.2" }, "identity": { "github": "nobul-jose" }, "profiles": {} }\n' > "$DP/profile.json"
+}
+case_run c22c-no-machine-no-profiles 0 fix_nm_empty --no-machine
+rows_n 0 "ERROR"
+rows_n 0 "ACTION"
+has_json '"machineAlias": "new-mac"'
+# C22d unregistered 2.1 profile (C13 fixture): the registration ACTION is the caller's
+case_run c22d-no-machine-unregistered 0 fix_unreg --no-machine
+has_row "OK|aitools config|updated"
+rows_n 0 "ACTION"
+rows_n 0 "WARN"
+no_json '"machineId"'
+has_json '"machineAlias": "nobul-mac"'
+out_has "COMPLETED successfully"
+# C22e a cached machineId the match would remove (C20) is kept with --no-machine
+case_run c22e-no-machine-keeps-id 0 fix_stale_mid --no-machine
+rows_n 0 "ACTION"
+no_row_like "machineId updated"
+has_json '"machineId": "'"$KEY_OTHER"'"'
+has_json '"machineAlias": "nobul-mac"'
+# C22f a legacy alias-keyed profile (C17): no migrate ACTION, machineAlias not written
+case_run c22f-no-machine-legacy 0 fix_legacy "${BOOT[@]}" --no-machine
+has_row "OK|aitools config|created"
+rows_n 0 "ACTION"
+no_json '"machineAlias"'
+no_json '"machineId"'
+# C22g other derivation errors are still reported: an invalid profile.json
+fix_nm_badprofile() { fix_v2; printf '{ "version": 2, ' > "$DP/profile.json"; }
+case_run c22g-no-machine-bad-profile 1 fix_nm_badprofile --no-machine
+has_row "ERROR|profile.json|invalid (see log)"
+# C22h --no-machine with a machine choice: bad arguments, nothing written
+case_run c22h-no-machine-and-id 1 fix_v2 --no-machine --machine-id "$ID_MAC"
+has_row "ERROR|aitools config|bad arguments"
+rows_n 1 "ERROR"
+if grep -q '"version": 2' "$OUTJ"; then ok "c22h-no-machine-and-id: config untouched"; else bad "c22h-no-machine-and-id: config changed"; fi
+case_run c22i-no-machine-and-alias 1 fix_v2 --machine-alias laptop --no-machine
+has_row "ERROR|aitools config|bad arguments"
+# C22k an ambiguous match (this machine.id on two profiles) is still an error
+fix_nm_dupid() {
+    fix_v2
+    printf '{ "version": 2, "meta": { "schemaRevision": "2.2" }, "identity": { "github": "nobul-jose" }, "profiles": { "a": { "machine": { "id": "%s", "hostname": "nobul-mac" } }, "b": { "machine": { "id": "%s", "hostname": "nobul-mac" } } } }\n' "$ID_MAC" "$ID_MAC" > "$DP/profile.json"
+}
+case_run c22k-no-machine-ambiguous 1 fix_nm_dupid --no-machine
+has_row "ERROR|machine profile|no machine match"
+# C22l --no-machine with --dry-run: nothing written, no machine rows
+case_run c22l-no-machine-dry-run 0 fix_nm_nomatch --no-machine --dry-run
+has_row "OK|aitools config|dry-run: would update"
+rows_n 0 "ERROR"
+rows_n 0 "ACTION"
+if grep -q '"version": 2' "$OUTJ"; then ok "c22l-no-machine-dry-run: config untouched"; else bad "c22l-no-machine-dry-run: config changed"; fi
+
+# C22j the help text names the flag
+CASE="c22j-help"
+reset_home
+RC=0
+env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" "$BASH_BIN" "$SH" --help > "$WORK/help.bash.out" 2>&1 || RC=$?
+if [ "$RC" -eq 0 ] && grep -qF -- "--no-machine" "$WORK/help.bash.out"; then ok "c22j-help: bash --help names --no-machine"
+else bad "c22j-help: bash --help (exit $RC) lacks --no-machine"; fi
+if $USE_PS; then
+    RC=0
+    env HOME="$H" AITOOLS_LOG_DIR="$H/.aitools/logs" AITOOLS_PROFILE_TEST_ANY_OS=1 \
+        pwsh -NoProfile -File "$PS" -Help > "$WORK/help.ps.out" 2>&1 || RC=$?
+    if [ "$RC" -eq 0 ] && grep -qF -- "-NoMachine" "$WORK/help.ps.out"; then
+        ok "c22j-help: pwsh -Help names -NoMachine"
+    else bad "c22j-help: pwsh -Help lacks -NoMachine"; fi
+fi
+
 # C14 relative bootstrap path: bad arguments, nothing written
 case_run c14-relative 1 fix_nodp --repos-path repos --repo-path "$H/repos/aitools"
 has_row "ERROR|aitools config|bad arguments"
@@ -398,6 +494,77 @@ fix_badprofile() { fix_v2; printf '{ "version": 2, ' > "$DP/profile.json"; }
 case_run c16-bad-profile 1 fix_badprofile
 has_row "ERROR|profile.json|invalid (see log)"
 no_row_like "no machine match"
+# Audit A-10: the ACTION's instruction is in a log line that names its row (error level)
+out_has "config: profile.json invalid -- Fix profile.json in the dotprofile (details in deploy.log)"
+log_has "[error] config: profile.json invalid -- Fix profile.json"
+
+# C23 the resolver's two "unusable profile.json" states (PR #98 review m1): a v1 file
+# ("is not v2") and a v2 file without a profiles object each have their own message,
+# and both are an invalid profile.json, with or without --no-machine
+fix_v1profile() { fix_v2; printf '{ "name": "Jose", "machines": [] }\n' > "$DP/profile.json"; }
+case_run c23-v1-profile 1 fix_v1profile
+has_row "ERROR|profile.json|invalid (see log)"
+has_row "ACTION||Fix profile.json in the dotprofile (details in deploy.log)"
+rows_n 1 "ACTION"
+no_row_like "no machine match"
+log_has "config: profile.json is not v2"
+out_has "config: profile.json invalid -- Fix profile.json in the dotprofile (details in deploy.log)"
+has_json '"machineAlias": "new-mac"'
+fix_noprofiles() {
+    fix_v2
+    printf '{ "version": 2, "meta": { "schemaRevision": "2.2" }, "identity": { "github": "nobul-jose" } }\n' > "$DP/profile.json"
+}
+case_run c23b-no-profiles-object 1 fix_noprofiles
+has_row "ERROR|profile.json|invalid (see log)"
+rows_n 1 "ACTION"
+no_row_like "no machine match"
+log_has "config: profile.json has no profiles object"
+case_run c23c-no-profiles-object-no-machine 1 fix_noprofiles --no-machine
+has_row "ERROR|profile.json|invalid (see log)"
+rows_n 1 "ACTION"
+case_run c23d-v1-profile-no-machine 1 fix_v1profile --no-machine
+has_row "ERROR|profile.json|invalid (see log)"
+rows_n 1 "ACTION"
+# C23e audit A-10 for the other ACTION: no machine match (C7 fixture)
+case_run c23e-no-match-log-line 1 fix_nomatch
+has_row "ACTION||Run: aitools user init (profiles: nobul-mac, laptop)"
+out_has "config: machine profile: no machine match -- Run: aitools user init (profiles: nobul-mac, laptop)"
+
+# C24 a config.json key that differs only in case from a managed key (PR #108 n-2):
+# the merge fails, and the message names both keys; the file is untouched, no temp left
+fix_case_twin() { fix_v2; perl -pi -e 's/"machineAlias": "new-mac"/"machineAlias": "new-mac",\n  "MachineId": "hand-written"/' "$CFG"; }
+case_run c24-case-twin 1 fix_case_twin
+has_row "ERROR|aitools config|merge failed"
+out_has 'key "MachineId" differs only in case from the managed key "machineId": rename or remove it'
+has_json '"MachineId": "hand-written"'
+if grep -q '"version": 2' "$OUTJ"; then ok "c24-case-twin: config untouched"; else bad "c24-case-twin: config changed"; fi
+if ls "$H/.aitools/" | grep -q 'config.json.tmp'; then bad "c24-case-twin: temp file left"; else ok "c24-case-twin: no temp file left"; fi
+
+# C25 audit A-11 (bash only: PowerShell removes with Remove-Item): removals are checked.
+# A failing rm (stub on PATH) on the validation-failure path (C15 fixture): the temp
+# file is a counted warning before the footer, the EXIT trap's failures go to detail
+CASE="c25-rm-fails"
+STUB="$WORK/stub-bin"
+mkdir -p "$STUB"
+printf '#!/bin/sh\nexit 1\n' > "$STUB/rm"
+chmod +x "$STUB/rm"
+fix_v2
+# CASE_ENV is split on spaces: a short PATH (stub, then the dirs of bash and perl)
+BASH_DIR=$(dirname "$(command -v "$BASH_BIN")")
+PERL_DIR=$(dirname "$(command -v perl)")
+CASE_ENV="PATH=$STUB:$BASH_DIR:$PERL_DIR:/usr/bin:/bin:/usr/sbin:/sbin"
+run_writer bash --repos-path "$H/repos//x"
+CASE_ENV=""
+cp "$WORK/out.txt" "$WORK/$CASE.bash.out"
+if [ "$RC" -eq 1 ]; then ok "$CASE: bash exit 1"; else bad "$CASE: bash exit $RC, want 1"; sed 's/^/       /' "$WORK/out.txt"; fi
+if grep -qF "[warn] Could not remove temp file $CFG.tmp." "$WORK/out.txt"; then ok "$CASE: failed temp-file removal is a warning"
+else bad "$CASE: no temp-file warning"; sed 's/^/       /' "$WORK/out.txt"; fi
+log_has "[detail] cleanup: could not remove temp directory "
+log_has "[detail] cleanup: could not remove temp file $CFG.tmp."
+# the writer's temp directory (mktemp -d; macOS ignores TMPDIR) is left behind: remove it
+LEFT=$(perl -ne 'print "$1\n" if /cleanup: could not remove temp directory (\S+)/' "$H/.aitools/logs/deploy.log" | tail -n 1)
+if [ -n "$LEFT" ] && [ -d "$LEFT" ]; then rm -rf "$LEFT"; fi
+reset_home
 
 # C12 bad arguments
 case_run c12-bad-arg 1 fix_nodp --bogus
