@@ -34,6 +34,8 @@ Reading/referencing any source is always OK — the gate applies at "install" or
 - I work on both Windows 11 and macOS -- both are first-class, ensure a seamless experience on either
 - Use `~/` with forward slashes on macOS, `%USERPROFILE%\` with backslashes on Windows
 - Projects live in git repos under `~/repos/` (macOS) / `%USERPROFILE%\repos\` (Windows)
+- My dotprofile repo (profile.json, personal CLAUDE.md template, rules, session archives) is `{{USER_REPO_PATH}}` on this machine -- convention `<reposPath>/aitools-<github-user>`. Code finds it with `resolve_user_repo_path` / `Resolve-UserRepoPath` (aitools-lib); never hardcode it
+- `profile.json` in the dotprofile is the source of truth for my identity and every machine (machine profiles keyed by machine id); `~/.aitools/config.json` is derived from it by `setup-user-config` -- change `profile.json`, never edit config.json by hand
 - Google Drive paths are auto-discovered by `aitools install` and stored in `~/.aitools/config.json` (`googleDrives` array) -- do not hardcode them
 - **After creating `.sh` files on Windows**, always run `git update-index --chmod=+x <file>` before committing -- Windows doesn't set the Unix executable bit
 
