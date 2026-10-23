@@ -1,0 +1,41 @@
+DRAFT (S3-M3-Docs, 2026-10-22) -- protected file <dotprofile>/claude/CLAUDE.md
+(/Users/new-jose/repos/aitools-nobul-jose/claude/CLAUDE.md). Read-only here: the live
+dotprofile has another session's uncommitted changes (git status: deploy/*, profile.json,
+sessions/.DS_Store; claude/CLAUDE.md itself is clean). Not applied. The apply mission
+commits and pushes it to the dotprofile main (N-Q2).
+
+Two edits.
+
+================================================================
+Edit 1 -- R19 (template sync with shared/claude-shared.md), section ## Cross-Platform Awareness, lines 50-51
+================================================================
+OLD:
+- Projects live in git repos under `~/repos/` (macOS) / `%USERPROFILE%\repos\` (Windows)
+- Google Drive paths are auto-discovered by `aitools install` and stored in `~/.aitools/config.json` (`googleDrives` array) -- do not hardcode them
+
+NEW:
+- Projects live in git repos under `~/repos/` (macOS) / `%USERPROFILE%\repos\` (Windows)
+- My dotprofile repo (profile.json, personal CLAUDE.md template, rules, session archives) is `{{USER_REPO_PATH}}` on this machine -- convention `<reposPath>/aitools-<github-user>`. Code finds it with `resolve_user_repo_path` / `Resolve-UserRepoPath` (aitools-lib); never hardcode it
+- `profile.json` in the dotprofile is the source of truth for my identity and every machine (machine profiles keyed by machine id); `~/.aitools/config.json` is derived from it by `setup-user-config` -- change `profile.json`, never edit config.json by hand
+- Google Drive paths are auto-discovered by `aitools install` and stored in `~/.aitools/config.json` (`googleDrives` array) -- do not hardcode them
+
+================================================================
+Edit 2 -- repair of an adopt corruption (S3-M3-Claude INCIDENT; reviewer finding), lines 42-43
+================================================================
+Cause: the pre-#83 adopt filter reverse-tokenized "Jose" inside "nobul-Jose" (fixed
+going forward in a87ffce: one pass, longest value first -- but a value inside a longer
+literal is still tokenized; "Jose" in "nobul-Jose" would be tokenized again on the next
+adopt). The repair therefore uses the lower-case GitHub user `nobul-jose`, which is what
+shared/claude-shared.md:29-30 says and which the case-sensitive filter never matches
+(origin/feature/m3-b4-setup-user-claude:scripts/setup-user-claude.sh:196-212).
+Note: the aitools repo now lives at nobul-tech/aitools (every PR in this mission uses
+`gh ... -R nobul-tech/aitools`); github.com/nobul-jose/aitools is what both templates
+say today. Changing the org is a separate decision (open question in the approval page).
+
+OLD:
+- Tool governance lives in [`nobul-{{PROFILE_NAME}}/aitools`](https://github.com/nobul-{{PROFILE_NAME}}/aitools) -- pre-approved tools, evaluation framework, and lifecycle phases documented there
+- When working outside aitools: open an issue on `nobul-{{PROFILE_NAME}}/aitools` via `gh` (see [RFC 0001](https://github.com/nobul-{{PROFILE_NAME}}/aitools/blob/main/rfcs/RFC-0001-workspace-tool-requests.md))
+
+NEW:
+- Tool governance lives in [`nobul-jose/aitools`](https://github.com/nobul-jose/aitools) -- pre-approved tools, evaluation framework, and lifecycle phases documented there
+- When working outside aitools: open an issue on `nobul-jose/aitools` via `gh` (see [RFC 0001](https://github.com/nobul-jose/aitools/blob/main/rfcs/RFC-0001-workspace-tool-requests.md))

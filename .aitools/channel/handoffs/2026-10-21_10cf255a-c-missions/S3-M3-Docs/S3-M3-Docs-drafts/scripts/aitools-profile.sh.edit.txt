@@ -1,0 +1,62 @@
+DRAFT (S3-M3-Docs, 2026-10-22) -- intent statements in scripts/aitools-profile.sh and
+scripts/aitools-profile.ps1 (row R22: code intents). Source: S3-M3-Resolver-report.md
+"Drafts for approval" (migrate), plus the consumer list after PR #95. Exact against
+origin/feature/m3-rekey (1c89444). Not applied (owned by the re-key PR #86).
+
+After applying, delete the interim header lines that point at this approval
+(sh:22-24, ps1:20-22, "Writers: `migrate` also writes profile.json ... awaits
+commander approval.").
+
+================================================================
+Edit 1a -- migrate (S3-M3-Resolver draft), both files
+aitools-profile.sh:9-13 / aitools-profile.ps1:8-12
+================================================================
+OLD:
+# (setup-user-config.sh/.ps1 is the only writer). NOT a writer of profile.json
+# except the `register` subcommand, which writes to a temp file the caller
+# validates, backs up and moves, and the `exception-set` subcommand, the only
+# writer of toolExceptions, which writes in place (temp, validate, backup, move)
+# and commits and pushes profile.json. NOT the settings.json sync
+
+NEW:
+# (setup-user-config.sh/.ps1 is the only writer). NOT a writer of profile.json
+# except the `register` subcommand, which writes to a temp file the caller
+# validates, backs up and moves, the `exception-set` subcommand, the only writer
+# of toolExceptions, and the `migrate` subcommand, which re-keys profiles by
+# machine id; those two write in place (temp, validate, backup, move) and commit
+# and push profile.json. NOT the settings.json sync
+
+(Code: register writes only --out, sh:1418; exception-set and migrate write in place
+and call commit_profile, sh:1128-1132 and sh:1540-1545.)
+
+================================================================
+Edit 1b -- consumers after PR #95 (depends on #95 merged)
+aitools-profile.sh:16-19 (also drops the claim that the entry point exports
+AITOOLS_USER_REPO_PATH: no entry point does -- S3-M3-Docs-Check F16; build-deploy
+reads the variable when a caller sets it, else asks resolve_user_repo_path, which on
+Windows runs aitools-profile.ps1 through pwsh)
+================================================================
+OLD:
+# tool_exception_record, setup-user-config.sh, build-deploy.sh (on macOS/Linux;
+# under Git Bash on Windows it uses the AITOOLS_USER_REPO_PATH the entry point
+# exports), aitools `user init`, and the generated deploy/setup-user-claude.sh
+# (embedded copy).
+
+NEW:
+# tool_exception_record, setup-user-config.sh, build-deploy.sh (through
+# resolve_user_repo_path, unless its caller sets AITOOLS_USER_REPO_PATH), aitools
+# `user init`, and the generated deploy/setup-user-claude.sh,
+# setup-user-settings.sh and setup-user-cursor.sh (embedded copies).
+
+aitools-profile.ps1:15-16
+OLD:
+# Set-ToolException, setup-user-config.ps1, aitools.ps1 `user init`, and the
+# generated deploy/setup-user-claude.ps1 (embedded copy).
+
+NEW:
+# Set-ToolException, setup-user-config.ps1, aitools.ps1 `user init`, and the
+# generated deploy/setup-user-claude.ps1, setup-user-settings.ps1 and
+# setup-user-cursor.ps1 (embedded copies).
+
+(Code: origin/feature/m3-b5-build-deploy:scripts/build-deploy.sh embeds the resolver
+into the claude, settings and cursor deploy scripts; S3-M3-B5a-report.md item 3.)

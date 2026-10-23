@@ -1,0 +1,68 @@
+DRAFT (S3-M3-Docs, 2026-10-22) -- intent statements in scripts/setup-user-config.sh
+and scripts/setup-user-config.ps1 (rows R22 code intent + R23 config.json meta.intent).
+Source: S3-M3-ConfigKey-report.md "Drafts for approval" 1-3, made exact against
+origin/feature/m3-rekey (1c89444). Not applied; the apply mission pushes it to PR #86
+(or its successor) -- these files are owned by the re-key PR.
+
+Timing for edits 1-2: "callers ... pass --machine-id" is true only after batch 5;
+today user init passes --machine-alias (origin/feature/m3-rekey:scripts/aitools:1296,
+1302; aitools.ps1:1261). Apply edits 1-2 with batch 5 (VERIFY after #86 batch 5).
+
+Effect: edit 3 changes meta.intent.scope, so every machine's config.json is rewritten
+once (with a backup) on its next run: meta differs, so the outcome is "updated".
+
+================================================================
+Edit 1 -- setup-user-config.sh header, lines 4-9
+================================================================
+OLD:
+# Intent: Build this machine's ~/.aitools/config.json from two inputs -- the
+# bootstrap values its callers pass (repos path, aitools repo path, detected
+# Google Drives) and the values derived from the dotprofile's profile.json by
+# aitools-profile.sh (dotprofile path, GitHub user, machine alias and how it was
+# chosen). NOT a writer of profile.json (machine registration is `aitools user
+# init`). NOT an interactive prompt (callers prompt, then pass --machine-alias).
+
+NEW:
+# Intent: Build this machine's ~/.aitools/config.json from two inputs -- the
+# bootstrap values its callers pass (repos path, aitools repo path, detected
+# Google Drives) and the values derived from the dotprofile's profile.json by
+# aitools-profile.sh (dotprofile path, GitHub user, this machine's profile key --
+# machineId -- with its display alias, and how they were chosen). NOT a writer of
+# profile.json (machine registration is `aitools user init`). NOT an interactive
+# prompt (callers prompt, then pass --machine-id).
+
+================================================================
+Edit 2 -- setup-user-config.ps1 header, lines 3-8
+================================================================
+OLD:
+# Intent: Build this machine's ~/.aitools/config.json from two inputs -- the
+# bootstrap values its callers pass (repos path, aitools repo path, detected
+# Google Drives) and the values derived from the dotprofile's profile.json by
+# aitools-profile.ps1 (dotprofile path, GitHub user, machine alias and how it was
+# chosen). NOT a writer of profile.json (machine registration is `aitools user
+# init`). NOT an interactive prompt (callers prompt, then pass -MachineAlias).
+
+NEW:
+# Intent: Build this machine's ~/.aitools/config.json from two inputs -- the
+# bootstrap values its callers pass (repos path, aitools repo path, detected
+# Google Drives) and the values derived from the dotprofile's profile.json by
+# aitools-profile.ps1 (dotprofile path, GitHub user, this machine's profile key --
+# machineId -- with its display alias, and how they were chosen). NOT a writer of
+# profile.json (machine registration is `aitools user init`). NOT an interactive
+# prompt (callers prompt, then pass -MachineId).
+
+The "Consumed by" sentence (sh:10-11, ps1:9-10) is unchanged; deploy-harness is added
+by mission HARNESS when PR #88 merges (it calls the writer:
+origin/feature/harness-deploy-harness:scripts/deploy-harness.sh:99-112).
+
+================================================================
+Edit 3 -- config.json meta.intent (R23), identical text in both files:
+setup-user-config.sh:227 CONFIG_INTENT_JSON and setup-user-config.ps1:233 $configIntentJson
+================================================================
+OLD (the "scope" value only):
+"scope":"Bootstrap pointers (reposPath, repoPath), detected googleDrives, and values derived from profile.json (githubUser, userRepoPath, machineAlias). NOT identity or preferences (profile.json). NOT hand-edited: setup-user-config is the only writer"
+
+NEW:
+"scope":"Bootstrap pointers (reposPath, repoPath), detected googleDrives, and values derived from profile.json (githubUser, userRepoPath, machineId, and machineAlias as a display value). NOT identity or preferences (profile.json). NOT hand-edited: setup-user-config is the only writer"
+
+"purpose" and "audience" are unchanged.

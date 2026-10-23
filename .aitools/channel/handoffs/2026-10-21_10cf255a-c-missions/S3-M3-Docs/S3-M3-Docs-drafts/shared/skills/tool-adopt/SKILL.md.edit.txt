@@ -1,0 +1,18 @@
+DRAFT (S3-M3-Docs, 2026-10-22) -- shared/skills/tool-adopt/SKILL.md, section
+"Cross-References (aitools repo paths)". Not an intent statement; under T-Q8 ("none
+[of the project skills] should be protected") this edit may not need approval -- it is
+in the batch because the re-key design names it (batch 8). Not applied.
+
+Edit 1 (line 216, re-key design section d):
+OLD:
+- Profile exceptions contract (after M2/M3): `reference/user-repo.md` (`profiles.<alias>.toolExceptions`)
+NEW:
+- Profile exceptions contract: `reference/user-repo.md` (`profiles.<machineId>.toolExceptions`)
+
+Edit 2 (line 211, optional; the tree landed on main with PR #78):
+OLD:
+- Decision tree (after M2): `reference/tool-support-decision-tree.md`
+NEW:
+- Decision tree: `reference/tool-support-decision-tree.md`
+
+Depends on: R18 landed (user-repo.md must say profiles.<machineId> first).

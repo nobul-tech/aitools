@@ -1,0 +1,24 @@
+DRAFT (S3-M3-Docs, 2026-10-22) -- protected file .cursor/rules/managed-file-deployment.mdc
+Row R14 (mirror of R13). The same two edits as
+dot-claude/rules/managed-file-deployment.md.edit.txt, against the mirror's own lines
+on main 15cc56a. Not applied. Apply together with R13.
+
+================================================================
+Edit 1 -- "Content sources" bullets (mirror lines 30-31)
+================================================================
+OLD:
+- **Template interpolation**: `{{PLACEHOLDER}}` tokens in CLAUDE.md replaced with `profile.json` values at deploy time
+- **Machine profile selection**: `config.json` `machineAlias` → `profile.json` `profiles[alias]`. Fallback: hostname match, then first profile
+
+NEW:
+- **Template interpolation**: `{{PLACEHOLDER}}` tokens in CLAUDE.md replaced with this machine's profile values when the setup script runs on that machine (dev path and generated deploy/ scripts alike)
+- **Machine profile selection**: one resolver (`aitools-profile.sh` / `.ps1`, through `resolve_machine_profile` / `Resolve-MachineProfile`): override → environment → `profiles[<machine id>]` → config.json `machineId` (only when the id cannot be detected) → config.json `machineAlias` (2.1 profiles only) → hostname (warns) → no match = ERROR, never another machine's profile. Order and failure behaviour: `@reference/user-repo.md` "Resolution"
+
+================================================================
+Edit 2 -- "Updating this table" sentence (mirror line 59)
+================================================================
+OLD:
+the `/incident` skill if there are implementation gaps. See `@.claude/rules/tool-lifecycle.md` "Onboarding checklist" (deployment types table, protected).
+
+NEW:
+the `/incident` skill if there are implementation gaps. Tool onboarding checks this table through `/tool-adopt` step 5 ("deployment types table for a new file type").

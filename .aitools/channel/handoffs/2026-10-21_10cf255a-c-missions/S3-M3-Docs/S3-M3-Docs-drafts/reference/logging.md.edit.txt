@@ -1,0 +1,62 @@
+DRAFT (S3-M3-Docs, 2026-10-22) -- reference/logging.md (has an intent statement; the
+new section stays inside it: "the decided standard", not the helper API). Two edits,
+exact against main 15cc56a. Not applied.
+
+Source: S3-M3-Register-keydesign.md section j finding 1 (INCIDENT: no contract for
+library-style tools), repeated by S3-M3-Resolver-report.md INCIDENT; the resolver now
+states the contract in its header (origin/feature/m3-rekey:scripts/aitools-profile.sh:39-43,
+aitools-profile.ps1:37-41).
+
+Code cited (origin/feature/m3-rekey):
+- scripts/aitools-profile.sh:70-79 (console log lines to stderr, deploy.log unchanged),
+  :247-266 (add_warn / add_err / finish: warn and error output lines, each also logged at
+  detail), :81-85 (OS guard is the only log_error)
+- scripts/aitools-lib.sh:150-227 (_aitlib_profile_run copies the resolver's stderr to
+  deploy.log as detail lines), :296, :307, :356, :363 (the wrappers log warnings at
+  detail and errors at error), setup-user-config.sh (routes advisory vs real warnings,
+  S3-M3-ConfigKey-report.md "Warning routing")
+- deploy.jsonl writers: aitools-install.sh/.ps1 (PR #89 relay, until the follow-up) and
+  aitools-lib.sh:526-540 jsonl_record / aitools-lib.ps1:449 Write-JsonlRecord
+
+================================================================
+Edit 1 -- section 3 table: add the deploy.jsonl row (after the deploy.log row)
+================================================================
+OLD:
+| `deploy.log` | setup scripts (via `aitools-lib` `logging_init`/`Initialize-Logging`) |
+NEW:
+| `deploy.log` | setup scripts (via `aitools-lib` `logging_init`/`Initialize-Logging`) |
+| `deploy.jsonl` | the installers' `log` override and the child relay (`jsonl_record` / `Write-JsonlRecord`, `run_child_relayed` / `Invoke-ChildRelayed` in `aitools-lib`; the installers use their own copies until the call-site follow-up); one JSON record per line, fields `ts, host, os, script, run_id, level, msg` |
+
+================================================================
+Edit 2 -- new section 7, after "### 6. Setup-vs-check separation preserved" and its paragraph
+(anchor: insert before the line "## Migration status")
+================================================================
+OLD:
+## Migration status
+NEW:
+### 7. Library-style tools return diagnostics; callers log them at level
+
+A library-style tool is a script that other scripts call for data:
+`scripts/aitools-profile.sh` / `.ps1` today. Its contract:
+
+- **Data** goes to stdout only (`key<TAB>value` lines, or one JSON object with
+  `--json`).
+- **Diagnostics** are returned, not logged at level: every warning and error is an
+  output line (`warn<TAB>...`, `error<TAB>...`) and is also written to `deploy.log` at
+  `detail`. Its console log lines go to stderr, so they never mix with data.
+- **Summary rows, counters and the exit footer belong to the caller.** The tool writes
+  no `write_summary` row and touches none of its caller's counters (its own counters,
+  raised only by its OS guard and lib helpers such as `backup_file`, end with its
+  process).
+- **The caller** logs each returned line at its level -- `warn` with `log_warn`
+  (counted), `error` with `log_error` (counted) -- unless the caller documents why a
+  class of warnings is handled another way. Documented exceptions today: the
+  `aitools-lib` wrappers log resolver warnings at `detail`, because
+  `setup-user-config`, the first script of every run, reports them once; and
+  `setup-user-config` logs warnings that its own write corrects as `info`, and turns
+  advice the user must act on into one ACTION with one counted `log_warn`.
+- **Exit codes** are the tool's own (documented in its header and `--help`). A caller
+  never passes them through as its own exit code (exit 2 from a setup script means a
+  user abort, D-TS13).
+
+## Migration status

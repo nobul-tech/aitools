@@ -1,0 +1,161 @@
+DRAFT (S3-M3-Docs, 2026-10-22) -- reference/script-standards-detail.md (treated as
+protected: the severity guide named by D-TS11, and its exemptions table says
+"Protected"). Four edits, exact against main 15cc56a. Not applied.
+
+Coexistence with row R16 (approved, not yet applied; S3-Gate-drafts/reference/
+script-standards-detail.md.edit.txt): R16 edits the Contents table (adds rows after
+"Environment skip row"), "Severity categories", the last line of "Severity decision
+guide", "ACTION items", "Governed summary outcomes" and "Exit footer". The edits below
+anchor elsewhere (Contents table: after the "Summary writer" row; "Usage";
+"Function definition"; "Summary coverage rule"), so either batch can land first.
+
+Sources: S3-M3-Install-report.md INCIDENT + open question 1 and S3-M3-LibKey-report.md
+INCIDENT (JSONL escaping); S3-M3-ConfigKey-report.md INCIDENT (write_summary OK -> WARN);
+S3-M3-Register-keydesign.md section j finding 1 (library-style tools).
+
+================================================================
+Edit 1 -- "Shared library" > "Contents" table: add rows after the "Summary writer" row
+================================================================
+OLD:
+| Summary writer | `write_summary` | `Write-Summary` | 3-arg append to summary file |
+NEW:
+| Summary writer | `write_summary` | `Write-Summary` | 3-arg append to summary file; an OK row becomes WARN once the script has counted a warning ("Function definition") |
+| Dotprofile and machine profile | `resolve_user_repo_path`, `resolve_machine_profile` (results `AITLIB_*`) | `Resolve-UserRepoPath`, `Resolve-MachineProfile` (results `$script:AitLib*`) | Wrappers around the native resolver `aitools-profile.sh` / `.ps1` (`@reference/user-repo.md` "Resolution"); never return 2 |
+| Tool exceptions | `tool_exception_get`, `tool_exception_record` | `Get-ToolException`, `Set-ToolException` | Reader and writer of `toolExceptions` (`@reference/tool-support-decision-tree.md` section 8) |
+| JSONL record and child relay | `jsonl_record`, `relay_child_log`, `run_child_relayed` | `Write-JsonlRecord`, `Send-ChildLog`, `Invoke-ChildRelayed` | One escaped `deploy.jsonl` record; run a child setup script, show its lines, mirror them to `deploy.jsonl`, count its warnings and errors |
+
+(Code: origin/feature/m3-rekey:scripts/aitools-lib.sh:286, :333, :378, :419, :531, :569,
+:589; aitools-lib.ps1:218, :263, :312, :350, :449, :489, :510.)
+
+================================================================
+Edit 2 -- "Usage": the installer JSONL override examples
+================================================================
+Why: the documented bash override printf's the raw message into a JSON string, so a
+message with `"` or `\` writes an invalid deploy.jsonl line (S3-M3-Install INCIDENT:
+scripts/aitools-install.sh at 9462ed0:136-137 copied it). The lib now has an escaping
+writer, jsonl_record / Write-JsonlRecord (aitools-lib.sh:488-540: backslash, quote, tab
+and newline escaped, other control characters dropped; ps1:449).
+Depends on: #86 merged AND the installer call-site follow-up (S3-M3-LibKey-report.md
+"Call-site change": the installers delete their own jsonl_write / relay copies and call
+the lib's). Until then the installers' own escaped jsonl_write (PR #89) is what runs;
+apply this edit with that follow-up.
+
+OLD:
+Bash (`scripts/aitools-install.sh`):
+```bash
+source "$SCRIPT_DIR/aitools-lib.sh"
+logging_init "aitools-install"
+# Override: JSONL dual-format (human-readable + structured JSON)
+log() {
+    local level="${2:-info}"
+    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '[%s] [%s] [%s] %s\n' "$ts" "$SCRIPT_NAME" "$level" "$1" | tee -a "$LOG_FILE"
+    printf '{"ts":"%s","host":"%s","os":"%s","script":"%s","run_id":"%s","level":"%s","msg":"%s"}\n' \
+        "$ts" "$HOST_NAME" "$OS_NAME" "$SCRIPT_NAME" "$RUN_ID" "$level" "$1" >> "$LOG_JSONL"
+}
+log_ok()    { log "$1" "ok"; }
+log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
+log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
+```
+
+PowerShell (`scripts/aitools-install.ps1`):
+```powershell
+# Override: JSONL dual-format (human-readable + structured JSON)
+function Log($msg, $level = "info") {
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $line = "[$ts] [$scriptName] [$level] $msg"
+    Write-Host $line
+    Add-Content -Path $logFile -Value $line
+    $json = @{ ts=$ts; host=$hostName; os=$osName; script=$scriptName; run_id=$runId; level=$level; msg=$msg } | ConvertTo-Json -Compress
+    Add-Content -Path $logJsonl -Value $json
+}
+function LogOk($msg)    { Log $msg "ok" }
+function LogError($msg) { Log $msg "error"; $script:errors++ }
+function LogWarn($msg)  { Log $msg "warn"; $script:warnings++ }
+```
+
+NEW:
+Bash (`scripts/aitools-install.sh`):
+```bash
+source "$SCRIPT_DIR/aitools-lib.sh"
+logging_init "aitools-install"
+# Override: JSONL dual-format (human-readable + structured JSON).
+# jsonl_record (aitools-lib) JSON-escapes every field; never printf a raw
+# message into a JSON string.
+log() {
+    local level="${2:-info}"
+    local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '[%s] [%s] [%s] %s\n' "$ts" "$SCRIPT_NAME" "$level" "$1" | tee -a "$LOG_FILE"
+    jsonl_record "$ts" "$SCRIPT_NAME" "$level" "$1"
+}
+log_ok()    { log "$1" "ok"; }
+log_error() { log "$1" "error"; ERRORS=$((ERRORS + 1)); }
+log_warn()  { log "$1" "warn"; WARNINGS=$((WARNINGS + 1)); }
+```
+
+PowerShell (`scripts/aitools-install.ps1`):
+```powershell
+# Override: JSONL dual-format (human-readable + structured JSON).
+# Write-JsonlRecord (aitools-lib) escapes every field and appends with LF.
+function Log($msg, $level = "info") {
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $line = "[$ts] [$scriptName] [$level] $msg"
+    Write-Host $line
+    Add-Content -Path $logFile -Value $line
+    Write-JsonlRecord $ts $scriptName $level $msg
+}
+function LogOk($msg)    { Log $msg "ok" }
+function LogError($msg) { Log $msg "error"; $script:errors++ }
+function LogWarn($msg)  { Log $msg "warn"; $script:warnings++ }
+```
+
+A child setup script logs through the lib's `log`, which writes no JSONL. A parent that
+wants the child's lines in `deploy.jsonl` runs it with `run_child_relayed` /
+`Invoke-ChildRelayed`, which also counts the child's warnings into the parent's
+`WARNINGS` (the child's exit footer is relayed, not counted).
+
+================================================================
+Edit 3 -- "End-of-run summary" > "Function definition"
+================================================================
+Why: S3-M3-ConfigKey INCIDENT -- the guide pairs every ACTION with a log_warn but never
+says write_summary turns OK into WARN once a warning is counted, so a script must order
+its rows by hand (setup-user-config.sh:367-379 does, with a comment).
+Code: origin/feature/m3-rekey:scripts/aitools-lib.sh:860-869 (write_summary),
+aitools-lib.ps1:752-761 (Write-Summary).
+
+OLD:
+The canonical `write_summary` / `Write-Summary` definition lives in
+`scripts/aitools-lib.sh` / `.ps1`. All scripts source the lib -- no inline copies.
+NEW:
+The canonical `write_summary` / `Write-Summary` definition lives in
+`scripts/aitools-lib.sh` / `.ps1`. All scripts source the lib -- no inline copies.
+
+`write_summary OK` writes `WARN` instead when the script has already counted a warning
+(`WARNINGS` > 0 / `$script:warnings` > 0): the row reports the script's state so far,
+not only its own step. Order rows so that this is true. A warning that concerns a step
+is logged before that step's row; an advisory ACTION that does not concern the step
+(and its paired `log_warn`) is written after the step's OK row. Example:
+`setup-user-config` writes its `aitools config` row first, then the one
+`Run: aitools user init (...)` ACTION with its `log_warn`.
+
+================================================================
+Edit 4 -- "Summary coverage rule": library-style tools
+================================================================
+Why: S3-M3-Register-keydesign.md section j finding 1 -- aitools-profile.sh/.ps1 write no
+summary rows and no exit footer by design (their callers own both), which this rule does
+not allow for. Not added to the "Exemptions table": that table lists error-suppression
+exemptions, which this is not.
+
+OLD:
+Every code path through a setup script -- success, partial failure, and full failure --
+must produce at least one `write_summary` call. A tool that fails to install must appear
+in the end-of-run panel as ERROR or WARN, not be silently absent.
+NEW:
+Every code path through a setup script -- success, partial failure, and full failure --
+must produce at least one `write_summary` call. A tool that fails to install must appear
+in the end-of-run panel as ERROR or WARN, not be silently absent.
+
+Library-style tools (`scripts/aitools-profile.sh` / `.ps1`) are not setup scripts: they
+write no summary rows and no exit footer, and return their warnings and errors to the
+caller, which logs them at level and writes the rows (`@reference/logging.md`
+"Library-style tools").
