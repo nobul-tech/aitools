@@ -196,7 +196,8 @@ ui_rm_tmp() {
 # stripped; for hostname the bare value) and UI_PROF_RC (0 ok, 1 nothing found,
 # 2 error -- also no resolver, a crash, or an exit 0/1 without result lines --
 # 3 refused, 4 alias in use). The resolver's own log lines become detail lines.
-# Returns 0.
+# AITOOLS_PROFILE_SH / AITOOLS_PROFILE_PS1 override the resolver, as for every lib
+# caller (register and migrate then write through it). Returns 0.
 ui_profile_run() {
     # Return 1 = no resolver: AITLIB_PROFILE_RC is then 2 with an "error" line
     # naming it, which every caller reads (UI_PROF_RC, ui_lines): the result check

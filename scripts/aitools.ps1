@@ -807,7 +807,9 @@ function Remove-UiTmp([string]$Path) {
 # $script:UiProfOut (key<TAB>value lines; for hostname the bare value) and
 # $script:UiProfRc (0 ok, 1 nothing found, 2 error -- also no resolver, a throw,
 # or an exit 0/1 without result lines -- 3 refused, 4 alias in use). The
-# resolver's own log lines become detail lines. Returns nothing.
+# resolver's own log lines become detail lines. AITOOLS_PROFILE_PS1 overrides the
+# resolver, as for every lib caller (register and migrate then write through it).
+# Returns nothing.
 function Invoke-UiProfile([string[]]$Arguments) {
     # $false = no resolver: AitLibProfileRc is then 2 with an "error" line naming
     # it, which every caller reads (UiProfRc, Get-UiLines): the result check
