@@ -16,8 +16,10 @@ capabilities.
 
 ### Cross-machine carry-forward principle
 
-A user working on the same project across multiple machines (macOS,
-Windows) must be able to pick up where they left off. Project state
+A user working on the same project across multiple machines or
+environments (any supported platform or hosted environment:
+`@reference/cross-platform-detail.md` "Supported platforms and
+environments") must be able to pick up where they left off. Project state
 that carries forward between sessions — running estimates, consolidated
 findings, harvested artifacts — MUST be tracked in git so it survives
 machine switches via pull.

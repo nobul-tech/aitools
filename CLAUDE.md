@@ -12,11 +12,13 @@ aitools repo, every session.
 ## What aitools is
 
 aitools is the commander's hub for AI tooling — one place to install, configure, and
-keep aligned the tools he leverages across every repo and both machines (Windows 11,
-macOS): CLI tools, Claude Code, Cursor, MCP servers, hooks, skills, and the rules
-that govern them. `aitools install` deploys that configuration to a machine; the
-harness keeps it consistent so a session in any repo, on either machine, inherits the
-same capabilities.
+keep aligned the tools he leverages across every repo, machine and environment it
+supports (`reference/cross-platform-detail.md` "Supported platforms and environments"):
+CLI tools, Claude Code, Cursor, MCP servers, hooks, skills, and the rules that govern
+them. `aitools install` deploys that configuration to a machine; the harness keeps it
+consistent so a session in any repo, on any supported machine or environment, inherits
+the same capabilities. A parallel package path (`build-package`, in design:
+`plans/build-package/design.md`) will deliver it to a fleet as installable packages.
 
 Under the hood it is a self-learning, provenance-aware system: each session can feed
 operational learning back into the harness (via the relay) so the next session starts
