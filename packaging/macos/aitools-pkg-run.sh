@@ -2,7 +2,7 @@
 # aitools-pkg-run.sh -- aitools per-user setup runner for the macOS .pkg (package launcher)
 #
 # Installed to /Library/Application Support/aitools/bin/aitools-pkg-run.sh.
-# Intent (batch B8, plans/build-package/implementation-plan.md): run the user
+# Intent (batch B8b, plans/build-package/implementation-plan.md): run the user
 # phase of the existing installer from the read-only payload. Steps when
 # implemented:
 #   1. refuse when run as root (only postinstall switches user; BP-10)

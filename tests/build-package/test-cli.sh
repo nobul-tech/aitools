@@ -7,7 +7,9 @@
 # Cases: --help, unknown option, bad and missing --version, bad --ref,
 # all --dry-run (n/a rows for the kinds this host cannot build, a plan for the
 # kind it can, nothing written to --out), AITOOLS_DRY_RUN=1, an explicit kind
-# this host cannot build, stage without --dry-run (not-implemented ERROR).
+# this host cannot build, stage without --dry-run (not-implemented ERROR), and
+# a standalone run whose own panel shows every per-step row (tool names
+# "build <step>", one per step: show_summary keeps one row per tool name).
 # Exit codes asserted: 0 or 1, never 2 (2 means a user abort, D-TS13).
 # Bash: $TEST_BASH (default: bash on PATH; e.g. TEST_BASH=/bin/bash for 3.2).
 # Platform: macOS, Linux, Windows Git Bash. Exit 1 if any case fails.
@@ -17,7 +19,7 @@
 set -uo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 15' "$0"
+    perl -ne 'next if $. == 1; last unless /^#/; print' "$0"
     exit 0
 fi
 
@@ -79,6 +81,7 @@ check "unknown option exits 1" '[ "$(rc)" = 1 ]'
 check "unknown option is logged as an error" 'has_log "[error] Unknown option: --bogus"'
 check "unknown option prints the usage" 'has_out "Usage: build-package.sh"'
 check "unknown option: ERROR row" 'row "ERROR|build-package|bad arguments"'
+# (argument errors use "build-package"; every step row is "build <step>")
 
 # --- bad / missing --version ---
 run_bp badver pkg --version 1.2
@@ -104,15 +107,31 @@ run_bp alldry all --dry-run --version 1.2.3 --out "$TMP_ROOT/alldry/outdir"
 check "all --dry-run exits 0" '[ "$(rc)" = 0 ]'
 check "all --dry-run: no ERROR row" '! grep -q "^ERROR|" "$C/summary"'
 check "all --dry-run: stage plan logged" 'has_log "[DRY RUN] stage: 2. git archive"'
-check "all --dry-run: dry-run row" 'grep -q "^OK|build-package|dry-run: stage" "$C/summary"'
+check "all --dry-run: dry-run row" 'grep -q "^OK|build dry-run|stage" "$C/summary"'
 check "all --dry-run: --out not created" '[ ! -e "$TMP_ROOT/alldry/outdir" ]'
 for kind in pkg intune deb; do
     if [ "$kind" = "$NATIVE" ]; then
         # Native kind: a plan when the tool is present, else an n/a row.
         check "all --dry-run: $kind planned or n/a" \
-            'has_log "[DRY RUN] $kind: 1." || row "OK|build-package|$kind: n/a ($HOST)"'
+            'has_log "[DRY RUN] $kind: 1." || row "OK|build $kind|n/a ($HOST)"'
     else
-        check "all --dry-run: $kind n/a ($HOST)" 'row "OK|build-package|$kind: n/a ($HOST)"'
+        check "all --dry-run: $kind n/a ($HOST)" 'row "OK|build $kind|n/a ($HOST)"'
+    fi
+done
+
+# --- standalone panel: every per-step row is shown (show_summary keeps one row per tool name) ---
+# No AITOOLS_SUMMARY_FILE from the caller, so the script renders its own panel.
+C="$TMP_ROOT/panel"; mkdir -p "$C/home"
+env -u AITOOLS_DRY_RUN -u AITOOLS_FORCE -u AITOOLS_ENVIRONMENT -u AITOOLS_SUMMARY_FILE HOME="$C/home" \
+    AITOOLS_LOG_DIR="$C/logs" "$BASH_BIN" "$SCRIPT" all --dry-run --version 1.2.3 < /dev/null > "$C/out" 2>&1
+echo $? > "$C/rc"
+perl -pe 's/\e\[[0-9;]*m//g' "$C/out" > "$C/panel"
+in_panel() { grep -qE -- "^ +\[ok\] +$1 +$2\$" "$C/panel"; }   # TOOL DETAIL-REGEX
+check "standalone panel exits 0" '[ "$(rc)" = 0 ]'
+check "standalone panel: dry-run row" 'in_panel "build dry-run" "stage.*"'
+for kind in pkg intune deb; do
+    if [ "$kind" != "$NATIVE" ]; then
+        check "standalone panel: $kind n/a row" 'in_panel "build $kind" "n/a \\($HOST\\)"'
     fi
 done
 
@@ -128,13 +147,13 @@ case "$HOST" in
 esac
 run_bp foreign "$FOREIGN" --dry-run --version 1.2.3
 check "$FOREIGN on $HOST exits 1" '[ "$(rc)" = 1 ]'
-check "$FOREIGN on $HOST: ERROR row" 'row "ERROR|build-package|$FOREIGN: cannot build ($HOST)"'
+check "$FOREIGN on $HOST: ERROR row" 'row "ERROR|build $FOREIGN|cannot build ($HOST)"'
 
 # --- stage without --dry-run: not implemented ---
 run_bp stage stage --out "$TMP_ROOT/stage/outdir"
 check "stage exits 1" '[ "$(rc)" = 1 ]'
 check "stage: not-implemented error logged" 'has_log "[error] stage: not implemented in v1.0 scaffolding (batch B2"'
-check "stage: ERROR row" 'row "ERROR|build-package|stage: not implemented"'
+check "stage: ERROR row" 'row "ERROR|build stage|not implemented"'
 check "stage: --out not created" '[ ! -e "$TMP_ROOT/stage/outdir" ]'
 
 # --- never exit 2 ---

@@ -36,13 +36,24 @@ MDM paths stay as they are; the package path is added beside them
 
 ### Equivalence
 
-For the same platform, environment and profile, all three paths leave the same
-end state: the same files under `~/.aitools`, `~/.claude` and `~/.cursor`, and the
-same managed-tool states and summary rows. The package path holds this by
-construction (same scripts, same order). Where a package user has no dotprofile,
-only the profile-sourced content differs (the neutral fleet template, design.md
-"Personalisation per fleet user"),
-and the run says so in its summary; it never silently uses another profile.
+For the same git ref, platform, environment and profile, the package path runs
+the same setup scripts in the same order as `aitools install` (by construction),
+so it leaves the same files under `~/.aitools`, `~/.claude` and `~/.cursor` and
+the same managed-tool states, except for these differences. Each is reported as
+a summary row, never silent (`@plans/build-package/design.md` section 3(d)):
+
+1. `repoPath` in `~/.aitools/config.json` is the read-only payload, not a git
+   checkout.
+2. No git pull, clone or `build-deploy.sh`; updates come only from a new package
+   version.
+3. Adopt and merge are not offered (read-only payload, non-interactive run).
+4. `gh auth login` is not run.
+5. Without a dotprofile, profile-sourced content comes from the neutral fleet
+   template or is reported `n/a (no dotprofile)`; another user's profile is
+   never used.
+6. The relay mirror to `~/.cursor/AGENTS.md` is not written (`.aitools/` is not
+   in the payload): OK `relay sync` `n/a (package)`.
+7. The reported aitools version is the payload's `VERSION`, not `git describe`.
 
 ### MDM run order
 

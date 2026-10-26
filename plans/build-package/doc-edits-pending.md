@@ -1,6 +1,7 @@
 # build-package: pending doc edits for PR-owned files
 
-Author: S3-BuildPkg-DocsWriter for S3-BuildPkg, version 1.0, 2026-10-26
+Author: S3-BuildPkg-DocsWriter for S3-BuildPkg, version 1.0 (rev 1, 2026-10-26,
+review fixes by S3-BuildPkg-Fixer: F2, F9, F12, F13 of `S3-BuildPkg-Reviewer-verdict.md`)
 
 **Intent**: **Purpose**: Hold the exact old -> new text for every doc edit the
 2026-10-26 decisions need (supported platforms and environments, package path,
@@ -29,16 +30,20 @@ Decision references (BP-n, P-n): `.aitools/channel/handoffs/2026-10-21_10cf255a-
 
 | # | File | Owning PR | Apply after | Needs |
 |---|---|---|---|---|
-| 1 | `.claude/rules/cross-platform.md` (opening, pointer section, equal visibility) | #99 | #99 merges | -- (APPLIED 2026-10-26) |
-| 2 | `.claude/rules/cross-platform.md` (Environment branches, `cursor-cloud`) | #99 | #99 merges AND P-2 approved AND the B5 lib change ships | P-2 |
-| 3 | `.claude/rules/cross-platform.md` (two exemption rows + package launchers row) | #99 | #99 merges AND P-1 approved | P-1 |
-| 4 | `.claude/rules/deploy-paths.md` (third path) | #99 | #99 merges | -- (APPLIED 2026-10-26) |
-| 5 | `.cursor/rules/deploy-paths.mdc` (third path mirror) | #99 | #99 merges | -- (APPLIED 2026-10-26) |
+| 1 | `.claude/rules/cross-platform.md` (opening, pointer section, equal visibility) | #99 (merged) | -- | -- (APPLIED, committed in 32bf20c) |
+| 2 | `.claude/rules/cross-platform.md` (Environment branches, `cursor-cloud`) | none now (#99 merged) | P-2 approved AND the B5b lib change ships | P-2 |
+| 3 | `.claude/rules/cross-platform.md` (two exemption rows + package launchers row) | none now (#99 merged) | P-1 approved | P-1 |
+| 4 | `.claude/rules/deploy-paths.md` (third path) | #99 (merged) | -- | -- (APPLIED, committed in 32bf20c; "Equivalence" rewritten in rev 1, see entry 4) |
+| 5 | `.cursor/rules/deploy-paths.mdc` (third path mirror) | #99 (merged) | -- | -- (APPLIED, committed in 32bf20c) |
 | 6 | `shared/claude-shared.md` (Cross-Platform Awareness line) | #105 | #105 merges | -- |
 | 7 | `reference/tool-support-decision-tree.md` (Terms rows) | #101, #106 | both merge | P-2 for the `cursor-cloud` part |
 | 8 | `reference/logging.md` (system-phase log location, BP-16) | #101 | #101 merges | -- |
 | 9 | Glossary (`/glossary` skill; registry owned by #101) | #101 | #101 merges | commander review of terms |
 | 10 | Dotprofile template `claude/CLAUDE.md` | none (other repo) | any time | P-7 (Jose's choice) |
+| 11 | `reference/script-standards-detail.md` (exemption row for `detect-user.ps1`) | #101 | #101 merges AND B9b ships | P-1 |
+| 12 | `reference/script-standards-detail.md` (logging overrides: `blog_warn`, RM-108) | #101 | #101 merges | -- |
+| 13 | `.claude/rules/interactive-menus.md` + `.cursor/rules/interactive-menus.mdc` (package-mode line) | #106 | #106 merges AND B5a ships | -- |
+| 14 | "then first profile" in `.claude/rules/managed-file-deployment.md`, `.cursor/rules/managed-file-deployment.mdc`, `reference/user-repo.md`, `reference/managed-file-deployment.md` (RM-105) | #101, #106 | both merge | -- |
 
 ---
 
@@ -48,7 +53,7 @@ Owning PR: #99 (changes the "Repos live under" line only; this edit does not
 touch it). Apply after #99 merges.
 
 Status: APPLIED 2026-10-26 (S3-BuildPkg-DocsApply; #99 merged; 1a and 1b
-verbatim, OLD blocks matched the merged text once each; uncommitted).
+verbatim, OLD blocks matched the merged text once each; committed in 32bf20c).
 
 ### 1a. Opening
 
@@ -98,11 +103,12 @@ Windows (PowerShell). Never abbreviate one platform as "same but .ps1".
 
 ## 2. `.claude/rules/cross-platform.md`: Environment branches (`cursor-cloud`)
 
-Owning PR: #99. Apply only when ALL hold: #99 merged; P-2 approved (value
-`cursor-cloud`, BP-19 signals); the library change of batch B5 has shipped
+Owning PR: #99 (merged 3c4f8fe; no open PR owns the file now). Apply only
+when ALL hold: P-2 approved (value
+`cursor-cloud`, BP-19 signals); the library change of batch B5b has shipped
 (`aitools-lib.sh/.ps1` resolve `cursor-cloud` and provide the detector). Until
 then the rule must keep describing the code as it is. Function names
-`is_cursor_cloud` / `Test-CursorCloud` are proposed (RevLib); use whatever B5
+`is_cursor_cloud` / `Test-CursorCloud` are proposed (RevLib); use whatever B5b
 ships.
 
 OLD:
@@ -144,11 +150,11 @@ NEW:
   isolated `HOME`; never against the live user config.
 ```
 
-Same condition, two follow-ups in files no PR owns (apply in the B5 PR itself):
+Same condition, two follow-ups in files no PR owns (apply in the B5b PR itself):
 
 - `reference/cross-platform-detail.md` "Environment detection": replace the
   "Cursor cloud is a supported environment ... (item 4)." paragraph (added by
-  this mission) with resolution items describing what B5 ships: item 2 adds
+  this mission) with resolution items describing what B5b ships: item 2 adds
   "otherwise `${CURSOR_AGENT_SOCKET:-/run/cursor/api.sock}` exists gives
   `cursor-cloud`" (precedence when both signals are set: proposed
   `claude-code-web` wins, with a warning); item 3 becomes "`claude-code-web`
@@ -170,7 +176,7 @@ Same condition, two follow-ups in files no PR owns (apply in the B5 PR itself):
 
 ## 3. `.claude/rules/cross-platform.md`: exemption rows (P-1)
 
-Owning PR: #99. Apply after #99 merges and the commander approves P-1. Rows
+Owning PR: #99 (merged 3c4f8fe). Apply after the commander approves P-1. Rows
 1 and 2 are the Lang evaluation drafts
 (`S3-BuildPkg-Lang-evaluation.md` "Exception rows to draft"), verbatim except
 the approval date placeholder. Row 3 (package launchers, BP-5) is new here.
@@ -205,8 +211,8 @@ OLD:
 NEW:
 
 ```markdown
-| Build scripts | `build-deploy.sh`, `build-package.sh` | See cross-language exceptions |
-| Package launchers | `packaging/<os>/*` (pkg postinstall and runner, Intune install/detect/uninstall scripts, deb maintainer scripts, `aitools-setup`) | Platform-native files that MDM agents or dpkg run; exempt from `.sh`/`.ps1` pairing. Thin: resolve the run context, lay down state, call `scripts/aitools-install.*` from the payload (BP-5) |
+| Build scripts | `build-deploy.sh`, `build-package.sh` | See cross-language exceptions. `build-package.sh` picks each package kind by native platform and then tool (`detect_kind`): the native build host is part of each kind's contract (BP-4), so this platform test is not dead code below a guard |
+| Package launchers | `packaging/<os>/*` (pkg postinstall and runner, Intune install/detect/uninstall scripts, deb maintainer scripts, `aitools-setup`, cloud setup snippets) | Platform-native files that MDM agents, dpkg or a cloud environment run; exempt from `.sh`/`.ps1` pairing; `detect-user.ps1` targets Windows PowerShell 5.1 (Intune's detection host). Thin: resolve the run context, lay down state, call `scripts/aitools-install.*` from the payload (BP-5). Exit policy (departs from the script-standards exit footer): exit non-zero only for a broken payload or a failed user phase the launcher ran itself; otherwise exit 0 and report ERROR rows through the logs and the `pkg-version` marker, because a non-zero postinstall or cloud setup script fails the whole install or session. Each continue-on-failure is logged first (no silent failures) |
 ```
 
 Also in the same rule, "Platform targeting principle" ("Every script must have
@@ -228,7 +234,15 @@ Status: APPLIED 2026-10-26 (S3-BuildPkg-DocsApply; #99 merged; heading and
 list verbatim, "Equivalence" inserted before #99's "MDM run order"; the
 `stage` step added as step 4, `stage` confirmed in `scripts/build-package.sh`;
 also "When changing `shared/` content" step 4 "Both paths ..." reworded to
-name the package path; uncommitted).
+name the package path; committed in 32bf20c).
+
+Rev 1 (S3-BuildPkg-Fixer, F2, commander waived the review for this mission):
+the "Equivalence" NEW text below claimed "the same ... summary rows" and "only
+the profile-sourced content differs", which contradicts design.md 3(d). The
+rule now carries the design's numbered list of seven reported differences
+(repoPath, no pull/clone/build, no adopt or merge, no gh auth, no dotprofile,
+no relay mirror, version from `VERSION`); the NEW block below is kept as the
+historical draft.
 
 OLD:
 
@@ -300,7 +314,8 @@ heading or list). Apply after #99 merges.
 Status: APPLIED 2026-10-26 (S3-BuildPkg-DocsApply; verbatim; also, to keep
 the twin consistent with entry 4, the `stage` step 4 in "Changing
 scripts/setup-*.sh/.ps1" and the front-matter `description` naming the
-three paths; uncommitted).
+three paths; committed in 32bf20c). The twin carries no equivalence text (it
+points to the rule), so the rev 1 Equivalence rewrite needs no `.mdc` change.
 
 OLD:
 
@@ -357,7 +372,7 @@ list.
 ## 7. `reference/tool-support-decision-tree.md`: Terms rows
 
 Owning PRs: #101 and #106 (neither touches these two rows). Apply after both
-merge. The `cursor-cloud` part waits for P-2 and B5 (as entry 2); the
+merge. The `cursor-cloud` part waits for P-2 and B5b (as entry 2); the
 `dnf` part can go in at once.
 
 OLD:
@@ -374,7 +389,7 @@ NEW:
 | environment | Governed term (`/glossary`); here only its API value `$AITOOLS_ENVIRONMENT` / `$AitoolsEnvironment` = `local`, `claude-code-web` or `cursor-cloud` |
 ```
 
-If B5 has not shipped when this is applied, keep the environment row as OLD.
+If B5b has not shipped when this is applied, keep the environment row as OLD.
 
 ---
 
@@ -452,9 +467,140 @@ Later: the next line "if I switch from Mac to Windows on the same project" ->
 
 ---
 
+## 11. `reference/script-standards-detail.md`: exemption row for `detect-user.ps1`
+
+Owning PR: #101 (protected file; the exemptions table is protected on its own).
+Apply after #101 merges, the commander approves P-1, and B9b ships the script
+(fill in its real line numbers then). Added in rev 1 (F12: plan B9b promised
+this draft).
+
+OLD (main 99740cc):
+
+```markdown
+| `check-lib.ps1` | 177 | `2>$null` (InvokeGit) | Git stderr triggers PS ErrorActionPreference=Stop; caller checks result |
+```
+
+NEW:
+
+```markdown
+| `check-lib.ps1` | 177 | `2>$null` (InvokeGit) | Git stderr triggers PS ErrorActionPreference=Stop; caller checks result |
+| `packaging/windows/detect-user.ps1` | <catch block lines, B9b> | `catch` that writes nothing and exits 1 | Intune custom detection: any STDERR output means "not installed", and no lib or log is available in the detection host, so a read failure must be silent and report "not detected" (exit 1); package launcher, Windows PowerShell 5.1 (P-1) |
+```
+
+---
+
+## 12. `reference/script-standards-detail.md`: `blog_warn` in the logging overrides (RM-108)
+
+Owning PR: #101. Apply after #101 merges. Added in rev 1 (F12). Basis:
+`scripts/build-deploy.sh` defines `blog`, `blog_ok`, `blog_warn` and
+`blog_error` (grep `^blog`, 2026-10-26).
+
+OLD:
+
+```markdown
+| `scripts/build-deploy.sh` | `blog`, `blog_ok`, `blog_error` | n/a | Standalone build tool; doesn't source aitools-lib.sh; defines own logging functions |
+```
+
+NEW:
+
+```markdown
+| `scripts/build-deploy.sh` | `blog`, `blog_ok`, `blog_warn`, `blog_error` | n/a | Standalone build tool; doesn't source aitools-lib.sh; defines own logging functions |
+```
+
+The rule `.claude/rules/script-standards.md` "Standalone build logging" also
+names only `blog`/`blog_ok`/`blog_error`; same change there (protected, no PR
+owns it): OLD "defines its own `blog`/`blog_ok`/`blog_error`" -> NEW "defines
+its own `blog`/`blog_ok`/`blog_warn`/`blog_error`".
+
+---
+
+## 13. `.claude/rules/interactive-menus.md` (+ `.mdc` twin): package-mode line
+
+Owning PR: #106 (edits the file). Apply after #106 merges and B5a ships the
+adopt guard (`is_package_mode` in `deploy_managed_file`). Added in rev 1 (F12:
+plan B13 promised it). Re-check the OLD block against the merged text.
+
+OLD (main 99740cc, "Non-interactive fallback"):
+
+```markdown
+- `AITOOLS_FORCE` env var (`--force` / `-Force` on `aitools` and `aitools install`): auto-select `overwrite`
+- Non-terminal stdin: auto-select `overwrite`
+- EOF at the prompt (interactive, input ended): log a warning, auto-select `overwrite`
+```
+
+NEW:
+
+```markdown
+- `AITOOLS_FORCE` env var (`--force` / `-Force` on `aitools` and `aitools install`): auto-select `overwrite`
+- Non-terminal stdin: auto-select `overwrite`
+- EOF at the prompt (interactive, input ended): log a warning, auto-select `overwrite`
+- Package mode (`AITOOLS_PACKAGE_MODE=1`, set by `aitools-install --package-mode`; it also sets `AITOOLS_FORCE=1`): auto-select `overwrite`; adopt and merge are never offered, because the payload is read-only (`@plans/build-package/implementation-plan.md` 3.3)
+```
+
+`.cursor/rules/interactive-menus.mdc`: add the same bullet after its
+non-interactive list (re-read the twin's wording after #106 merges).
+
+---
+
+## 14. "then first profile" (RM-105)
+
+Owning PRs: #101 and #106 (they edit these files). Apply after both merge;
+re-check each OLD line on the merged text (#101's added text still says "then
+the first profile", remediation RM-105). Basis: the resolver ends in ERROR +
+ACTION when no hostname matches (`resolve_machine` in `scripts/aitools-profile.sh`;
+RM-44); there is no first-profile fallback. Added in rev 1 (F12).
+
+`.claude/rules/managed-file-deployment.md` and
+`.cursor/rules/managed-file-deployment.mdc` (same line in both):
+
+OLD:
+
+```markdown
+- **Machine profile selection**: `config.json` `machineAlias` → `profile.json` `profiles[alias]`. Fallback: hostname match, then first profile
+```
+
+NEW:
+
+```markdown
+- **Machine profile selection**: `config.json` `machineAlias` → `profile.json` `profiles[alias]`. Fallback: hostname match; no match is an ERROR with the ACTION `aitools user init` (no first-profile fallback)
+```
+
+`reference/user-repo.md`:
+
+OLD:
+
+```markdown
+- **Machine matching** -- `config.json` stores `"machineAlias"` on each machine. Fallback: hostname match, then first profile.
+```
+
+NEW:
+
+```markdown
+- **Machine matching** -- `config.json` stores `"machineAlias"` on each machine. Fallback: hostname match; no match is an ERROR with the ACTION `aitools user init` (no first-profile fallback).
+```
+
+`reference/managed-file-deployment.md`:
+
+OLD:
+
+```markdown
+| Machine profile | `<userRepoPath>/profile.json` `profiles[machineAlias]` section | hostname match, then first profile |
+```
+
+NEW:
+
+```markdown
+| Machine profile | `<userRepoPath>/profile.json` `profiles[machineAlias]` section | hostname match; no match is an ERROR (ACTION `aitools user init`) |
+```
+
+If B5d (fleet outcome in package mode) has shipped when this is applied, add
+"; in package mode a fleet outcome, no ERROR (B5d)" to each NEW line.
+
+---
+
 ## Applied in this mission (no PR owned these files on 2026-10-26)
 
-`reference/cross-platform-detail.md` (new authoritative section; `cursor-cloud`
+Committed in 5494d93. `reference/cross-platform-detail.md` (new authoritative section; `cursor-cloud`
 proposed in "API" and the closed-list paragraph), `README.md`, `CLAUDE.md`,
 `reference/harness.md`, `ROADMAP.md`, `.claude/rules/aitools-workspace.md`,
 `reference/tool-evaluation-criteria.md`, `.cursor/rules/cross-platform.mdc`,

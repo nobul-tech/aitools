@@ -1,4 +1,4 @@
-# build-package: implementation plan (version 1.0)
+# build-package: implementation plan (version 1.0, rev 1)
 
 **Intent**: **Purpose**: Give the mission that builds the package path an
 executable sequence: the pinned interfaces, batches B1-B14 of 2-3 files each
@@ -14,7 +14,9 @@ code as it stands when the batch starts, because open PRs move that code.
 every name they use against the "Interfaces" section; Jose, who approves the
 gates (P-1..P-7, Phase 2).
 
-Author: S3-BuildPkg-PlanWriter for S3-BuildPkg, version 1.0, 2026-10-26.
+Author: S3-BuildPkg-PlanWriter for S3-BuildPkg, version 1.0 (rev 1, 2026-10-26,
+review fixes by S3-BuildPkg-Fixer: findings F1-F13 and N1-N8 of
+`S3-BuildPkg-Reviewer-verdict.md` in the decisions file's folder).
 
 Sources: the decisions file
 `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-BuildPkg/S3-BuildPkg-decisions.md`
@@ -25,7 +27,13 @@ PkgWin, PkgMac, PkgLinux, Lang, DocsInv), `S3-MdmPkg/S3-MdmPkg-report.md`
 `S3-FanPlan/S3-FanPlan-drafts/plans/rules-fanout-claude.md` (FAN-PLAN).
 Line numbers are aitools `main` 5976553 unless a PR is named; this is a plan
 file, so line numbers are allowed (documentation-standards.md) but they drift:
-re-locate by function name before editing.
+re-locate by function name before editing. Rev 1 check at 99740cc: every cited
+line still holds, because between the two only `scripts/check-pre-push.*`,
+`scripts/check-path-refs-allow.txt`, `shared/cursor-rules/user-rules.md` and
+the new build-package files changed under scripts/, shared/ and tests/
+(`git diff --stat 5976553 99740cc -- scripts shared tests`); this plan cites no
+check-pre-push line. Once the "After" PRs of a batch merge, its line numbers
+are stale by definition: use the function names given with them.
 
 ## 1. How to execute this plan
 
@@ -71,7 +79,7 @@ re-locate by function name before editing.
 | BP-7 | Run context per OS (macOS postinstall + LaunchAgent; Windows App A System + App B User; Linux postinst files only + `aitools-setup`) | B8-B10 |
 | BP-8 | Prerequisites are separate MDM packages / Depends | B8-B10, B12 |
 | BP-9 | One `.deb`, `Architecture: all`, 22.04 + 24.04 | B10a |
-| BP-10 | Target-user / privileged-run API in the lib; only launchers switch user | B5a, B6 |
+| BP-10 | Target-user / privileged-run API in the lib; only launchers switch user | B5a, B5c, B4, B6, B7 |
 | BP-11 | Personalisation at run time; neutral fleet template; tiers proposed (P-3) | B6a, B6d |
 | BP-12 | One version string; per-channel update mechanism; no self-update | B2, B3b, B8-B10 |
 | BP-13 | Overwrite managed files with backups; runs per version; fix backup churn | B6b, B6c |
@@ -79,7 +87,7 @@ re-locate by function name before editing.
 | BP-15 | Detection rules per channel | B8-B10 |
 | BP-16 | Logging locations per phase | B2, B5b, B8-B10 |
 | BP-17 | Identifier `tech.nobul.aitools` | B8-B10 |
-| BP-18 | Supported list in `reference/cross-platform-detail.md` | B0/B13 (DocsWriter) |
+| BP-18 | Supported list in `reference/cross-platform-detail.md` | B0 (done, 5494d93), B13 (pointers) |
 | BP-19 | Environment `cursor-cloud` (proposed, P-2) | B5b |
 | BP-20 | Unsigned v1; signing later | B8a, B14 |
 
@@ -111,9 +119,9 @@ are listed in section 11.
 | Unknown option or command | `log_error "Unknown option: <x>"` / `"Unknown command: <x>"` + brief usage, ERROR row `bad arguments`, exit 1 (never 0, never 2) |
 | Exit | 0 = every requested kind built (warnings allowed); 1 = any ERROR |
 | Logging | `logging_init "build-package"` → `$AITOOLS_LOG_DIR/deploy.log` |
-| Summary rows | tool name `build-package` for every row; detail `<kind>: <result>` (30 chars max, `short`): `OK build-package pkg: n/a (linux)`, `ERROR build-package deb: cannot build (macos)`, and per built kind `OK build-package <kind>: <file name>` (B2/B8-B10 add these) |
+| Summary rows | one tool name per step, because `show_summary` (`scripts/aitools-lib.sh`) keeps one row per tool name (highest severity wins): `build stage`, `build pkg`, `build intune`, `build deb`, `build dry-run` (16 characters or fewer, so the panel's columns stay aligned); argument errors use `build-package`. Detail 30 chars max (`short`). Examples: `ERROR build-package bad arguments`, `OK build pkg n/a (linux)`, `ERROR build deb cannot build (macos)`, `OK build dry-run stage, pkg`, `ERROR build stage not implemented`, `ERROR build pkg not built (no stage)`, and per built kind `OK build <kind> <file name>` (B2/B8-B10 add these; B2 adds `OK build stage <N> files (<commit>)`). Contract change C-6 |
 | Functions | `stage_payload`, `build_pkg`, `build_intune`, `build_deb`, `detect_kind` (pinned for tests) |
-| Host detection | `detect_kind`: native platform (`$AITOOLS_PLATFORM`) and then the tool: pkg needs `pkgbuild` + `productbuild` on macOS; deb needs `dpkg-deb` on Linux; intune needs Windows and the exe. Note for B2: cross-platform.md "Dead code from platform guards" prefers capability over identity; the platform test here encodes BP-4 (native host) and is kept, but the B2 delegate confirms it with the P-1 exemption text |
+| Host detection | `detect_kind`: native platform (`$AITOOLS_PLATFORM`) and then the tool: pkg needs `pkgbuild` + `productbuild` on macOS; deb needs `dpkg-deb` on Linux; intune needs Windows and the exe. The platform test encodes BP-4 (the native host is part of each kind's contract) and is kept; design.md 3(a) says why, and the P-1 row for `build-package.sh` records it (section 10) |
 | Template token | `@VERSION@` in launcher templates (`control.in` today; `detect-user.ps1`, the stub Info.plist), replaced with Perl in the staged copy |
 
 Outputs in `--out`:
@@ -157,8 +165,8 @@ Outputs in `--out`:
 
 | bash (`aitools-install.sh`) | PowerShell (`aitools-install.ps1`) | Behaviour |
 |---|---|---|
-| `--phase system\|user\|all` | `-Phase system\|user\|all` (`ValidateSet`) | default `all` = today's behaviour. `system` = machine-scope steps only (v1: Windows long-paths check; macOS/Linux: one OK row `n/a (no system steps)`). `user` = every other step. An invalid value: `log_error`, exit 1 |
-| `--package-mode` | `-PackageMode` | requires the package-mode marker at the installer's repo root, else ERROR, exit 1. Exports `AITOOLS_PACKAGE_MODE=1` and `AITOOLS_FORCE=1` to children; skips gh auth (OK `gh auth` `n/a (package)`), Google Drive detection stays; never clones, pulls, or runs build-deploy; repos dir defaults to `$HOME/repos` without a prompt (the per-user marker is the launcher's job, section 3.2) |
+| `--phase system\|user\|all` | `-Phase system\|user\|all` (`ValidateSet`) | default `all` = today's behaviour. `system` = machine-scope steps only (v1: Windows long-paths check; macOS/Linux: one OK row `system phase` `n/a (no system steps)`). `user` = every other step. An invalid value: `log_error`, exit 1. **System-phase writes** (run as SYSTEM by App A): only under `AITOOLS_LOG_DIR` (its logs and its summary file, which the installer creates there instead of under `~/.aitools`) and HKLM; nothing under `$HOME` / `%USERPROFILE%`: no `~/.aitools` or config dir, no config.json, no `~/.local/bin`, no repos dir, no relay mirror. `--phase system` with `AITOOLS_LOG_DIR` unset: `log_error` to stderr, exit 1 (never fall back to SYSTEM's profile) |
+| `--package-mode` | `-PackageMode` | requires the package-mode marker at the installer's repo root, else ERROR, exit 1. Exports `AITOOLS_PACKAGE_MODE=1` and `AITOOLS_FORCE=1` to children; skips gh auth (OK `gh auth` `n/a (package)`) and the relay mirror (OK `relay sync` `n/a (package)`; `.aitools/` is not in the payload); Google Drive detection stays; never clones, pulls, or runs build-deploy; repos dir defaults to `$HOME/repos` without a prompt (the per-user marker is the launcher's job, section 3.2) |
 | unknown option | (pwsh binding error, already exit 1) | `log_error "unknown option: <x>"` + usage, exit 1 (fixes RevInstall R3; `--help` alone exits 0) |
 
 Environment variables: `AITOOLS_PACKAGE_MODE=1` (set by the installer, read by
@@ -191,16 +199,18 @@ built-in fallback list, so the two lists can never diverge again).
 deploy-harness keeps #106's semantics: its exit 2 stops the run; any other
 script's exit 2 is an ERROR row and the run continues (brief).
 
-### 3.5 Library API (B5a, B5b)
+### 3.5 Library API (B5a, B5b, B5c)
 
 | bash (`aitools-lib.sh`) | PowerShell (`aitools-lib.ps1`) | Result |
 |---|---|---|
 | `resolve_target_user` | `Resolve-TargetUser` | sets `AITLIB_TARGET_USER`, `AITLIB_TARGET_HOME`, `AITLIB_TARGET_UID`, `AITLIB_TARGET_VIA` (`env\|self\|console\|sudo\|root\|none`) / `$script:AitLibTargetUser`, `AitLibTargetHome`, `AitLibTargetSid`, `AitLibTargetVia`; returns 0 found, 1 none, 3 error |
 | `is_privileged_run` | `Test-PrivilegedRun` | exit 0 / `$true` when uid 0 or SYSTEM (`S-1-5-18`) |
-| `run_as_target_user CMD ARGS...` | `Invoke-AsTargetUser` (v1: refuses with ERROR; App B already runs as the user) | macOS `launchctl asuser <uid> sudo -u <user> -H`; Linux root→user `sudo -u <user> -H` when sudo exists, else `runuser -u <user> --`; returns CMD's exit |
+| `run_as_target_user CMD ARGS...` | `Invoke-AsTargetUser` (v1: refuses with ERROR; App B already runs as the user) | macOS `launchctl asuser <uid> sudo -u <user> -H`; Linux root→user `sudo -u <user> -H` when sudo exists, else `runuser -u <user> -- env HOME="$AITLIB_TARGET_HOME" ...` (HOME passed explicitly: whether `runuser` without `-l` sets it is unverified); returns CMD's exit |
 | `require_user_context` | `Assert-UserContext` | log_error + ERROR row + return 1 when privileged and HOME is not the run user's (bash: `[ "$(id -u)" = 0 ] && [ ! -O "$HOME" ]`; PS1: identity is SYSTEM) |
 | `is_cursor_cloud` | `Test-CursorCloud` | after P-2 |
 | `is_package_mode` | `Test-PackageMode` | `AITOOLS_PACKAGE_MODE=1` |
+| `as_root CMD ARGS...` (B5c) | -- (Windows: no root; BP-14) | uid 0: run CMD; else `sudo -n CMD`; neither possible: `log_error` + ERROR row (PREREQ), return 1 |
+| `install_via_apt PKG...`, `install_via_brew FORMULA...` (B5c) | -- | apt: `as_root apt-get update` once per run, then `as_root apt-get install -y`; brew: refuses when privileged (brew runs as the target user only), else `brew install`; output captured, rc checked (script-standards "External command error handling") |
 
 Return codes never 2 (D-TS13: bare exit 2 = user abort).
 
@@ -251,36 +261,43 @@ Batch table (from the decisions file; letter suffixes split a batch to keep
 
 | Batch | Files | After |
 |---|---|---|
-| B0 | this mission (docs, scaffold) | -- |
+| B0 | this mission (docs, scaffold) | -- (**done**: 568fb5b scaffold, 5494d93 plan set and docs, 32bf20c doc-edits items 1, 4, 5 after #99 merged) |
 | B1 | none (approvals, evaluations) | -- |
 | B2 | `scripts/build-package.sh`, `tests/build-package/test-stage.sh` | B0 |
 | B3a | `scripts/aitools-install.sh`, `scripts/aitools-install.ps1`, `scripts/aitools-order.txt` | #106, #116 |
-| B3b | `scripts/aitools`, `scripts/aitools.ps1` | B3a, #113, #115 |
-| B4 | `scripts/deploy-harness.sh`, `scripts/deploy-harness.ps1`, `tests/deploy-harness/test-deploy-harness.sh` | #100, #110, #111 |
+| B3b | `scripts/aitools`, `scripts/aitools.ps1`, `tests/hookin/test-hookin.sh` (from #106; its static greps assert the inline lists) | B3a, #106, #113, #115, #116 |
+| B4 | `scripts/deploy-harness.sh`, `scripts/deploy-harness.ps1`, `tests/deploy-harness/test-deploy-harness.sh` | #100, #110, #111, B5a (guard) |
 | B5a | `scripts/aitools-lib.sh`, `scripts/aitools-lib.ps1` (target-user API, package mode, adopt guard) | #103, #112, #113, #115, #116, FAN-PLAN Batch A |
-| B5b | `scripts/aitools-lib.sh`, `scripts/aitools-lib.ps1` (logging fail-safe, HOME guard, `cursor-cloud`, `sync_managed_json` package rule) | B5a; P-2 for `cursor-cloud` |
+| B5b | `scripts/aitools-lib.sh`, `scripts/aitools-lib.ps1` (logging fail-safe, HOME guard, `cursor-cloud`, `sync_managed_json` package rule, dotprofile push guard) | B5a; P-2 for `cursor-cloud` |
+| B5c | `scripts/aitools-lib.sh`, `scripts/aitools-lib.ps1` (privilege and install helpers: `as_root`, `install_via_apt`, `install_via_brew`) | B5b |
+| B5d | `scripts/aitools-profile.sh`, `scripts/aitools-profile.ps1` (fleet resolver outcome, dotprofile push guard) | #105, #108, #114, B5a |
 | B6a | `scripts/setup-user-claude.sh`, `.ps1` | FAN-PLAN B-D, #103, #112, B5a |
-| B6b | `scripts/setup-user-cursor.sh`, `.ps1` | #109, #110, B5a |
+| B6b | `scripts/setup-user-cursor.sh`, `.ps1` | #109, #110, B5a, B5c (ripgrep on Linux) |
 | B6c | `scripts/setup-user-shell.sh`, `.ps1` | B5a |
-| B6d | `scripts/setup-user-hooks.sh`, `.ps1`, `scripts/setup-user-settings.sh` (+ `.ps1` as B6d2 if needed) | B5a; P-3 for tiers |
+| B6d | `scripts/setup-user-hooks.sh`, `.ps1` | B5a; P-3 for tiers |
+| B6d2 | `scripts/setup-user-settings.sh`, `.ps1` | B5a, B5b (settings package rule); P-3, P-6 |
 | B6e | `shared/hooks/session-archive.sh`, `shared/hooks/session-catchup.sh` | -- (hook rollout rules apply) |
 | B6f | `scripts/setup-user-config.sh`, `.ps1` | #98, #114, B5a |
-| B7a..B7n | one tool pair per batch (section 4 B7) | B5a |
-| B8a | `scripts/build-package.sh` (`build_pkg`), `packaging/macos/postinstall`, `packaging/macos/tech.nobul.aitools.firstrun.plist` | B2, B3a, B5a |
+| B6g | `scripts/setup-user-mcp.sh`, `.ps1` | B5a; P-3 for MCP tiers |
+| B6h | `scripts/setup-user-skills.sh`, `.ps1` | #109, B5a; P-3 for skill tiers |
+| B7a..B7m | one tool pair per batch (section 4 B7) | B5a, B5c |
+| B8a | `scripts/build-package.sh` (`build_pkg`), `packaging/macos/postinstall`, `packaging/macos/tech.nobul.aitools.firstrun.plist` | B2, B3a, B5a, B5b |
 | B8b | `packaging/macos/aitools-pkg-run.sh`, `packaging/macos/aitools-uninstall.sh` | B8a |
-| B9a | `scripts/build-package.sh` (`build_intune`), `packaging/windows/install-system.ps1`, `packaging/windows/uninstall-system.ps1` | B1 Phase 2 approval, B2, B3a, B5a |
+| B9a | `scripts/build-package.sh` (`build_intune`), `packaging/windows/install-system.ps1`, `packaging/windows/uninstall-system.ps1` | B1 Phase 2 approval, B2, B3a, B5a, B5b |
 | B9b | `packaging/windows/install-user.ps1`, `packaging/windows/detect-user.ps1` | B9a |
 | B10a | `scripts/build-package.sh` (`build_deb`), `packaging/linux/control.in`, `packaging/linux/postinst` | B2, B3a |
-| B10b | `packaging/linux/aitools-setup`, `packaging/linux/prerm` | B10a, B5a |
+| B10b | `packaging/linux/aitools-setup`, `packaging/linux/prerm` | B10a, B5a, B5b |
 | B10c | `packaging/linux/cloud/claude-code-web-setup.sh`, `packaging/linux/cloud/cursor-install.sh` | B10b; P-2 |
 | B11a | `.github/workflows/package.yml` | B2, B8a, B9a, B10a; actions evaluation (B1) |
 | B11b | `scripts/check-pre-push.sh`, `scripts/check-pre-push.ps1` (step 11) | B2; P-1 (cross-language row) |
-| B12 | none (test runs; results file) | B8-B11 |
-| B13 | PR-owned docs, one PR per owning PR | each owning PR |
+| B12 | none (test runs; results file) | B4, B5b, B6 (all sub-batches; pass criteria "no `[error]`" need them), B8-B11 |
+| B13 | protected docs: drafts in `doc-edits-pending.md`, one PR per owning PR (or one PR for files no PR owns) | each owning PR; commander approval |
 | B14 | optional signing | B12 |
 
 Contract change C-1 (recorded in section 11): B8a, B9a and B10b also depend
-on B5a, because the launchers call the target-user and privileged-run API.
+on B5a, because the launchers call the target-user and privileged-run API, and
+on B5b, because they run as root or SYSTEM and relocate `AITOOLS_LOG_DIR`,
+which needs the logging fail-safe and the HOME guard (design.md 13).
 
 ---
 
@@ -288,7 +305,9 @@ on B5a, because the launchers call the target-user and privileged-run API.
 
 Docs (`design.md`, this file, `remediation.md`, `doc-edits-pending.md`) and the
 scaffold: `scripts/build-package.sh` stub and the `packaging/` skeleton
-(ScaffoldWriter). Done when the orchestrator commits them to main.
+(ScaffoldWriter). **Done**: 568fb5b (scaffold), 5494d93 (plan set, supported
+list), 32bf20c (doc-edits items 1, 4, 5 after #99 merged); review fixes in
+rev 1 (this revision).
 
 ### B1 -- approvals and evaluations (no code)
 
@@ -340,56 +359,74 @@ logging_init "build-package"
 INCLUDE_PATHS="scripts shared reference registries .claude/rules .claude/skills .claude/hooks"
 EXCLUDE_RE='(\.bak\.|(^|/)\.DS_Store$)'
 
-stage_payload() {   # globals: REF VERSION OUT; sets STAGE_DIR, COMMIT
-    COMMIT=""
-    if ! COMMIT="$(git -C "$REPO_ROOT" rev-parse --verify "${REF}^{commit}" 2>&1)"; then
-        log_error "ref not found: $REF ($COMMIT)"
-        write_summary ERROR "stage" "ref not found: $REF"
-        return 1
-    fi
+ST="build stage"    # summary tool name (section 3.1)
+
+stage_fail() {      # MESSAGE SHORT -- log_error + ERROR row, return 1
+    log_error "stage: $1"; write_summary ERROR "$ST" "$(short "$2")"; return 1
+}
+
+stage_payload() {   # globals: COMMIT (resolved in validation) VERSION OUT; sets STAGE_DIR
     STAGE_DIR="$OUT/stage"
     # rm only inside OUT, which carries the marker (checked in main)
     rm -rf "$STAGE_DIR"
-    if ! mkdir -p "$STAGE_DIR/repo"; then
-        log_error "cannot create $STAGE_DIR/repo"; write_summary ERROR "stage" "mkdir failed"; return 1
-    fi
-    # keep only include paths that exist at the commit (git archive fails on a missing pathspec)
+    mkdir -p "$STAGE_DIR/repo" || { stage_fail "cannot create $STAGE_DIR/repo" "mkdir failed"; return 1; }
+    # keep only include paths that exist at the commit (git archive fails on a
+    # missing pathspec). cat-file -e: exit 0 = present, 128 = absent at the ref;
+    # anything else, or a commit that no longer resolves, is a git failure, not
+    # "absent" (F10 d).
+    git -C "$REPO_ROOT" cat-file -e "$COMMIT^{commit}" || { stage_fail "commit $COMMIT unreadable" "git failed"; return 1; }
     present=""
     for p in $INCLUDE_PATHS; do
-        if [ -n "$(git -C "$REPO_ROOT" ls-tree --name-only "$COMMIT" -- "$p")" ]; then
-            present="$present $p"
-        else
-            log "include path absent at $COMMIT: $p"
-        fi
+        rc=0
+        # 2>/dev/null: an absent path prints "fatal: path ... does not exist" on
+        # stderr (exit 128, checked 2026-10-26); the case below checks the status.
+        git -C "$REPO_ROOT" cat-file -e "$COMMIT:$p" 2>/dev/null || rc=$?
+        case "$rc" in
+            0)   present="${present:+$present }$p" ;;
+            128) log "include path absent at ${COMMIT:0:12}: $p" ;;
+            *)   stage_fail "git cat-file failed for $p (exit $rc)" "git failed"; return 1 ;;
+        esac
     done
-    # MANIFEST from the commit, minus excludes (perl, not grep -P)
+    # an empty list would make git ls-tree / git archive take the whole tree,
+    # deploy/ and plans/ included (F10 c)
+    [ -n "$present" ] || { stage_fail "no include path exists at $COMMIT" "empty payload"; return 1; }
+    # MANIFEST from the commit, minus excludes (perl, not grep -P); pipefail
+    # makes a git failure fail the pipeline
     if ! git -C "$REPO_ROOT" ls-tree -r --name-only "$COMMIT" -- $present \
         | perl -ne "print unless m{$EXCLUDE_RE}" | LC_ALL=C sort > "$STAGE_DIR/repo/MANIFEST"; then
-        log_error "MANIFEST generation failed"; write_summary ERROR "stage" "manifest failed"; return 1
+        stage_fail "MANIFEST generation failed" "manifest failed"; return 1
     fi
+    [ -s "$STAGE_DIR/repo/MANIFEST" ] || { stage_fail "MANIFEST is empty" "manifest empty"; return 1; }
     if ! git -C "$REPO_ROOT" archive --format=tar "$COMMIT" -- $present | tar -x -C "$STAGE_DIR/repo"; then
-        log_error "git archive | tar failed"; write_summary ERROR "stage" "archive failed"; return 1
+        stage_fail "git archive | tar failed" "archive failed"; return 1
     fi
-    # remove the excluded files the archive extracted (paths matching EXCLUDE_RE),
-    # then list every regular file under repo/ except MANIFEST (find + perl to strip
+    # remove the excluded files the archive extracted (perl over the find list,
+    # matching EXCLUDE_RE; each unlink checked), then list every regular file
+    # under repo/ except MANIFEST, BUILD-INFO and VERSION (find + perl to strip
     # the "./" prefix), sort with LC_ALL=C and compare with MANIFEST:
-    # any difference -> log_error with the first differing path, ERROR row, return 1
-    printf '%s\n' "$VERSION" > "$STAGE_DIR/VERSION"
-    cp "$STAGE_DIR/VERSION" "$STAGE_DIR/repo/VERSION"   # check rc, ERROR on failure
-    write BUILD-INFO (version, commit, ref, built=$(date -u +%Y-%m-%dT%H:%M:%SZ), kind=stage, builder=build-package.sh)
+    # any difference -> stage_fail with the first differing path
+    # VERSION only with --version (section 3.2: a stage without it writes none, F10 a)
+    if [ -n "$VERSION" ]; then
+        printf '%s\n' "$VERSION" > "$STAGE_DIR/VERSION" || { stage_fail "cannot write VERSION" "VERSION failed"; return 1; }
+        cp "$STAGE_DIR/VERSION" "$STAGE_DIR/repo/VERSION" || { stage_fail "cannot copy VERSION" "VERSION failed"; return 1; }
+    fi
+    write BUILD-INFO (version=${VERSION:-none}, commit, ref, built=$(date -u +%Y-%m-%dT%H:%M:%SZ), kind=stage, builder=build-package.sh); check the write
     required files check: repo/scripts/aitools-install.sh .ps1, aitools-lib.sh .ps1,
         deploy-harness.sh .ps1, shared/claude-shared.md, shared/hooks/hooks-manifest.json
-        -> each missing: log_error + ERROR row, return 1
-    forbidden check: no repo/deploy/, no file named profile.json -> ERROR
-    write_summary OK "stage" "<N> files ($COMMIT short)"
+        -> each missing: stage_fail, return 1
+    forbidden check: no repo/deploy/, no file named profile.json -> stage_fail
+    write_summary OK "$ST" "$(short "<N> files (${COMMIT:0:7})")"
 }
 ```
 
-  The pseudocode marks one place ("delegate: use perl") where the delegate
-  writes the exact code; `sed` above is a placeholder, not the implementation
-  (USO: Perl for string manipulation). Main flow: parse args (unknown → exit 1),
-  validate version, resolve `--out` (marker rule, section 3.1), dry-run prints
-  and exits 0, dispatch subcommand, exit footer (ERRORS → exit 1).
+  The lines in plain words ("remove the excluded files ...", "write
+  BUILD-INFO", "required files check", "forbidden check") are where the
+  delegate writes the exact code, with Perl for any string manipulation (USO).
+  `COMMIT` comes from the scaffold's validation step (`rev-parse --verify
+  --quiet "<ref>^{commit}"`), so `stage_payload` does not resolve the ref again.
+  Main flow (the scaffold's, kept): parse args (unknown → exit 1), validate
+  version and ref, resolve `--out` (marker rule, section 3.1), dry-run prints
+  the plan and exits 0, dispatch subcommand, exit footer (ERRORS → exit 1).
 - **Error-handling audit focus:** every pipeline under `set -o pipefail`; `cp`,
   `mkdir`, `tar` checked; no `2>/dev/null` without comment + check; every
   `log_error` paired with `write_summary ERROR`.
@@ -400,7 +437,9 @@ stage_payload() {   # globals: REF VERSION OUT; sets STAGE_DIR, COMMIT
   BUILD-INFO has all six keys; VERSION matches `--version`; stage without
   `--version` writes `version=none` and no VERSION; a non-empty `--out`
   without marker refused; a second stage into the same out replaces `stage/`.
-  B2 also updates the `test-cli.sh` cases that expect "stage: not implemented".
+  Also: an include list with no path at the ref is refused (no whole-tree
+  archive); a git failure is not reported as "path absent". B2 also updates the
+  `test-cli.sh` cases that expect `ERROR|build stage|not implemented`.
   Every case under an isolated `HOME` and `AITOOLS_LOG_DIR`.
 - **Verification:**
   - `bash -n /Users/new-jose/repos/aitools/scripts/build-package.sh`
@@ -434,12 +473,24 @@ stage_payload() {   # globals: REF VERSION OUT; sets STAGE_DIR, COMMIT
     `--skip-config` if #111 has merged (RevInstall R2), else the double writer
     run stays (logged, not an error).
   - In package mode: Step 2 gh auth → `OK "gh auth" "n/a (package)"`; Step 3
-    repos dir → `--repos-path` or config or `$HOME/repos`, no prompt; Step 6
-    installs `~/.local/bin/aitools` pointing at the payload's `scripts/aitools`
-    (no copy of the repo). The installer does not write `pkg-version`.
+    repos dir → `--repos-path` or config or `$HOME/repos`, no prompt; Step 5
+    writes the bootstrap keys with `repoPath` = the payload's `repo/` before
+    deploy-harness runs (RM-3); Step 6 installs `~/.local/bin/aitools` pointing
+    at the payload's `scripts/aitools` (no copy of the repo); Step 22 (relay →
+    `~/.cursor/AGENTS.md`) → `OK "relay sync" "n/a (package)"`, without calling
+    `sync-relay-to-cursor-agents.py` (F3: `.aitools/` is not in the payload).
+    The installer does not write `pkg-version`.
+  - System phase (section 3.3): before any write, require `AITOOLS_LOG_DIR`
+    (unset: stderr line, exit 1); create the summary file under it, not under
+    `~/.aitools`; skip the config dir creation and every `$HOME` /
+    `%USERPROFILE%` / HKCU write (F11).
+  - Preamble fixes in the same files: check that `aitools-lib.sh` / `.ps1`
+    exists before sourcing it, else a stderr line and exit 1 (RM-25); create
+    `~/.aitools` before touching the summary file (RM-27, user phase only).
   - The 17/18 "skipping (MDM deploy)" branches become
-    `OK "<tool>" "n/a (not in payload)"` rows (RevInstall R10) only if the
-    delegate's diff stays within these files; otherwise leave them (remediation).
+    `OK "<tool>" "n/a (not in payload)"` rows (RM-24, RevInstall R10).
+  - Remediation items in this batch: RM-3, RM-4 (installer half), RM-6, RM-20,
+    RM-24, RM-25, RM-27; F3 (relay); F11 (system phase).
   - Reading the order file (bash): `while IFS= read -r line; do case "$line" in '#'*|'') continue;; esac; ...; done < "$ORDER_FILE"`,
     with a prior `[ -s "$ORDER_FILE" ]` check (missing/empty: ERROR, exit 1).
     PS1: `Get-Content -LiteralPath $orderFile -ErrorAction Stop` inside
@@ -451,22 +502,45 @@ stage_payload() {   # globals: REF VERSION OUT; sets STAGE_DIR, COMMIT
     `--phase bogus` → exit 1; `--bogus` → exit 1; `--package-mode` from a git
     checkout → exit 1; `--package-mode` from a B2 staged tree
     (`<out>/stage/repo/scripts/aitools-install.sh --dry-run --phase user --package-mode`)
-    → exit 0 with `n/a (package)` rows
-  - `tests/hookin/test-hookin.sh` (from #106) and `tests/profile/test-install.sh` still pass
+    → exit 0 with `n/a (package)` rows (`gh auth`, `relay sync`);
+    `--phase system` with `AITOOLS_LOG_DIR` set to a temp dir and HOME set to
+    an empty temp dir → exit 0 and HOME still empty afterwards
+  - `tests/hookin/test-hookin.sh` (from #106; its step mode loads
+    `run_harness_step` / `Invoke-HarnessStep` from these files) and
+    `tests/profile/test-config.sh` (it extracts the installer's
+    "install log helpers" block) still pass
 - **Done:** both installers accept the flags with identical rows; the order
   file is the only config-script list in the two installers.
 
 ### B3b -- `aitools` sync reads the order file; package-mode sync
 
-- **Files:** `scripts/aitools`, `scripts/aitools.ps1`.
-- **After:** B3a; #113, #115, #116 (they touch both files).
+- **Files:** `scripts/aitools`, `scripts/aitools.ps1`, `tests/hookin/test-hookin.sh`
+  (added by #106: its static greps assert that `deploy_scripts` /
+  `$deployScripts` are inline lists starting with deploy-harness, and its
+  fixture repo needs `scripts/aitools-order.txt` copied in; F4).
+  `tests/hookin/hookin-driver.ps1` loads only `Invoke-DeployAbort` and
+  `Deploy-Configs` from `aitools.ps1`: keep the order-file parsing inside
+  `Deploy-Configs` so the driver needs no change; if a separate helper function
+  is unavoidable, the driver change is a follow-up batch B3b2.
+- **After:** B3a; #106, #113, #115, #116 (they touch both files).
 - **Behaviour:** `deploy_configs` / `Deploy-Configs` read
-  `scripts/aitools-order.txt` (same parser and error rule as B3a). When
+  `scripts/aitools-order.txt` (same parser and error rule as B3a; RM-4). When
   `repoPath` holds the package-mode marker: no `git checkout HEAD -- deploy/`,
   no pull, no clone, no build-deploy (`OK "aitools repo" "n/a (package X.Y.Z)"`),
-  then run the config loop (RevInstall R8). Fix the PS1 version stamp anchor
-  (`(?m)^`, RevInstall R12) if not already fixed by remediation.
-- **Verification:** `bash -n`; pwsh parser; isolated-HOME run of
+  then run the config loop (RM-21, RevInstall R8); the relay mirror writes
+  `OK "relay sync" "n/a (package)"` instead of calling
+  `sync-relay-to-cursor-agents.py`, and the relay outbound prompt (`[RELAY]`,
+  a git check) is skipped (F3); `repo_version` / `Get-RepoVersion` read the
+  payload's `VERSION` instead of `git describe` (N4). Fix the PS1 version stamp
+  anchor (`(?m)^`, RM-22, RevInstall R12).
+  Also in these files: user init without a terminal does not create a GitHub
+  repo by default (WARN + ACTION, RM-23); the sync's git pulls set
+  `GIT_TERMINAL_PROMPT=0` and ssh BatchMode when non-interactive (RM-28); the
+  Git Bash path uses the known-path lookup of `setup-bash.ps1` (RM-29);
+  `AITOOLS_DEPLOY` is removed (RM-30; `AITOOLS_PACKAGE_MODE` is the package
+  signal).
+- **Verification:** `bash -n`; pwsh parser; `bash tests/hookin/test-hookin.sh`
+  passes with the updated assertions; isolated-HOME run of
   `scripts/aitools --dry-run` from a git checkout (unchanged rows) and from a
   staged tree's `repo/scripts/aitools` (no git calls: assert with
   `GIT_TRACE=1` output containing no `pull`/`clone`).
@@ -477,13 +551,15 @@ stage_payload() {   # globals: REF VERSION OUT; sets STAGE_DIR, COMMIT
 - **Files:** `scripts/deploy-harness.sh`, `scripts/deploy-harness.ps1`,
   `tests/deploy-harness/test-deploy-harness.sh`.
 - **After:** #100 (rules manifest), #110 (stacked on #100), #111 (MDM variant,
-  `--skip-config`).
-- **Behaviour:** in `add_source` / `Add-Source`: when the source is not in a
+  `--skip-config`), B5a (`require_user_context`; F7).
+- **Behaviour:** deploy-harness writes `~/.aitools` first in the order, so it
+  calls `require_user_context` / `Assert-UserContext` before its first write
+  (BP-10; F7). In `add_source` / `Add-Source`: when the source is not in a
   git work tree and the repo root holds the package-mode marker, list files
   from `$REPO_DIR/MANIFEST` filtered to the source's prefix (instead of
   `git ls-files -z`); otherwise keep today's ERROR "not a git checkout"
-  (RevBuild 5, remediation 2). Fix the PS1 stale-`$LASTEXITCODE` guard
-  (RevBuild remediation 14) in the same place: check `Get-Command git` once and
+  (RevBuild 5, RM-2). Fix the PS1 stale-`$LASTEXITCODE` guard
+  (RM-7, RevBuild R14) in the same place: check `Get-Command git` once and
   report "git not found" honestly. bin CLIs unchanged. Adopt target: `""` in
   package mode (the payload is read-only).
 - **Verification:** `bash -n`; pwsh parser; new test cases: deploy-harness run
@@ -508,9 +584,14 @@ stage_payload() {   # globals: REF VERSION OUT; sets STAGE_DIR, COMMIT
   rc 3 with `log_error`. `is_package_mode`: when true, `deploy_managed_file`
   treats any adopt target as `""` (no adopt or merge offered) and logs one
   detail line. `require_user_context` is not called from `logging_init`; the
-  setup-user-\* scripts call it explicitly in B6, so `logging_init` keeps no
-  side effect beyond logging. `Test-IsAdmin` (no caller, RevLib R12) is reused inside
-  `Test-PrivilegedRun` or removed.
+  user-scope writers call it explicitly (deploy-harness in B4, setup-user-\* in
+  B6, setup-cursor-ide-mcp and the tool scripts in B7), so `logging_init` keeps
+  no side effect beyond logging. `Test-IsAdmin` (no caller, RM-49) is reused
+  inside `Test-PrivilegedRun` or removed. The Windows User-PATH writers
+  (`Remove-OrphanedPythonDirs`, `Ensure-GopathBinOnPath`) refuse under SYSTEM
+  through `Test-PrivilegedRun` (RM-40). Remediation items in this batch: RM-39,
+  RM-40, RM-49, RM-59 (the adopt guard covers the hooks and skills adopt
+  targets).
 - **Verification:** `bash -n`; pwsh parser; `tests/profile/test-lib.sh` and
   `tests/managed-files/*` pass; new cases in `tests/profile/test-lib.sh` (or a
   new `tests/target-user/` if the delegate prefers; name it in the PR):
@@ -533,13 +614,58 @@ stage_payload() {   # globals: REF VERSION OUT; sets STAGE_DIR, COMMIT
   `local`; Linux only) plus `is_cursor_cloud` / `Test-CursorCloud`, and the
   hooks' copy of the environment block is updated per cross-platform.md
   "Hooks"; `sync_managed_json` / `Sync-ManagedJson` do not auto-adopt into
-  `profile.json` in package mode (RevLib R8).
-- **Verification:** `bash -n`; pwsh parser; `tests/logging/` suite; new cases:
+  `profile.json` in package mode or any non-interactive run (RM-45, RevLib R8),
+  and check every `mktemp` and the backup result before applying (RM-48);
+  `deploy.jsonl` is rotated like `deploy.log` (RM-50). Dotprofile push guard
+  (RM-47, commander decision 2026-10-26): `dotprofile_commit_push` /
+  `Invoke-DotprofileCommitPush` (added by #103) refuse to push when the
+  dotprofile's current branch is not `main`: `log_error` + ERROR row
+  `dotprofile` `push refused (branch <b>)`, commit kept, no push; a git
+  `safe.directory` refusal is reported as such, not as "not a repo". The
+  resolver's own `commit_profile` gets the same rule in B5d. Remediation items
+  in this batch: RM-26, RM-42, RM-45, RM-46, RM-47 (lib half), RM-48, RM-50.
+- **Verification:** `bash -n`; pwsh parser; `tests/logging/` suite;
+  `tests/managed-files/test-adopt-push.sh` (from #103) gains a non-main-branch
+  case (ERROR, no push to the bare remote); new cases:
   unwritable `AITOOLS_LOG_DIR` → script continues, one stderr line; environment
   matrix (`CLAUDE_CODE_REMOTE`, socket present via a temp
   `CURSOR_AGENT_SOCKET` path, override) on Linux CI and forced-`local` on
   macOS.
-- **Done:** logging.md section 5 holds; `cursor-cloud` resolves only on Linux.
+- **Done:** logging.md section 5 holds; `cursor-cloud` resolves only on Linux;
+  a dotprofile on a non-main branch is never pushed.
+
+### B5c -- library: privilege and install helpers
+
+- **Files:** `scripts/aitools-lib.sh`, `scripts/aitools-lib.ps1` (the `.ps1`
+  only if a Windows twin is needed; BP-14 keeps winget out of SYSTEM, so v1
+  likely needs none: say so in the PR).
+- **After:** B5b (same files). Before every B7 batch and B6b.
+- **Behaviour:** section 3.5 `as_root`, `install_via_apt`, `install_via_brew`
+  (the helpers D-ENV0 names; RM-41): brew only as the target user, never as
+  root; apt directly as uid 0, else `sudo -n`, else ERROR row (PREREQ) and
+  return 1, never a hanging password prompt; output captured and rc checked;
+  return codes never 2.
+- **Verification:** `bash -n`; new cases in `tests/profile/test-lib.sh` with
+  stub `sudo`, `apt-get` and `brew` on PATH: uid 0 runs directly; non-root
+  with a failing `sudo -n` gives the ERROR row and rc 1; brew refuses when
+  privileged.
+- **Done:** no tool script needs its own `sudo` logic (B7 replaces it).
+
+### B5d -- profile resolver: fleet outcome, dotprofile push guard
+
+- **Files:** `scripts/aitools-profile.sh`, `scripts/aitools-profile.ps1`.
+- **After:** #105, #108, #114 (they edit both files), B5a.
+- **Behaviour:** a machine not in `profile.json` gives an explicit fleet
+  outcome in package mode (`owner=fleet`, rc 0, no ERROR, no identity from
+  another person's profile) instead of `ERROR|machine profile|no machine match`
+  + ACTION on every run (RM-44, design.md 8); the dev path keeps today's ERROR.
+  `commit_profile` / `Invoke-ProfileCommit` refuse to push from a non-main
+  branch (ERROR row, as B5b; RM-47 resolver half).
+- **Verification:** `bash -n`; pwsh parser; `tests/profile/test-profile.sh`
+  passes; new cases: unregistered machine in package mode (rc 0, no ERROR row)
+  and on the dev path (ERROR unchanged); a temp dotprofile on a branch `topic`
+  with a bare remote: commit made, push refused, ERROR row.
+- **Done:** RM-44 and RM-47 closed in both languages.
 
 ### B6 -- setup-user-\* fleet and root fixes
 
@@ -549,14 +675,17 @@ files, and verifies with `bash -n`, the pwsh parser, and an isolated-HOME run
 in a root `ubuntu:24.04` container (B12 harness) plus macOS. Every script calls
 `require_user_context` / `Assert-UserContext` before its first write.
 
-| Batch | Files | Fixes (source) | After |
+| Batch | Files | Fixes (source; remediation IDs) | After |
 |---|---|---|---|
-| B6a | setup-user-claude.sh/.ps1 | `$SHELL` unbound under `set -u` (RevSetup R2, probe-confirmed); no-dotprofile neutral template / one WARN for unresolved tokens (BP-11) | FAN-PLAN B-D (owns the rules span), #103, #112, B5a |
-| B6b | setup-user-cursor.sh/.ps1 | backup only on change (R16); manage `model` only when the profile sets it (R17); summary row when node missing (R11); dry-run mkdir (R19) | #109, #110, B5a |
-| B6c | setup-user-shell.sh/.ps1 | compare before backup/write (R16); Linux `~/.profile` shadowing (R4); dry-run support (R18) | B5a |
-| B6d | setup-user-hooks.sh/.ps1 (+ setup-user-settings.sh/.ps1 as B6d2) | `backup_file` before the settings.json write (R10); settings `n/a (no dotprofile)` in package mode (R9); tier filter after P-3 (R6) | B5a; P-3 |
-| B6e | shared/hooks/session-archive.sh, session-catchup.sh | never run the cwd repo's `scripts/ait-harvest.py` (R5, critical for a fleet) | none; hook-rollout pre-deploy verification applies |
-| B6f | setup-user-config.sh/.ps1 | package `repoPath` = payload `repo/`; `$HOME` vs `$env:USERPROFILE` (R20) | #98, #114, B5a |
+| B6a | setup-user-claude.sh/.ps1 | `$SHELL` unbound under `set -u` (RevSetup R2, probe-confirmed; RM-54); no-dotprofile neutral template / one WARN for unresolved tokens (BP-11; RM-57 template half) | FAN-PLAN B-D (owns the rules span), #103, #112, B5a |
+| B6b | setup-user-cursor.sh/.ps1 | backup only on change (R16; RM-66 cursor half); manage `model` only when the profile sets it (R17; RM-67); summary row when node missing (R11; RM-62); dry-run mkdir (R19; RM-69); ripgrep on Linux through `install_via_apt` (RM-75) | #109, #110, B5a, B5c |
+| B6c | setup-user-shell.sh/.ps1 | compare before backup/write (R16; RM-66); Linux `~/.profile` shadowing (R4; RM-55); dry-run support (R18; RM-68) | B5a |
+| B6d | setup-user-hooks.sh/.ps1 | `backup_file` before the settings.json write (R10; RM-61); tier filter after P-3 (R6; RM-57 hooks half); `userRepoPath` through the single resolver (RM-71); exact-path match in the hooks merge (RM-80); hook commands as the run user (RM-74: no change beyond RM-39 unless Claude Code expands `$HOME`, unknown) | B5a; P-3 |
+| B6d2 | setup-user-settings.sh/.ps1 | settings `n/a (no dotprofile)` in package mode instead of a WARN every run (R9; RM-60) | B5a, B5b; P-3, P-6 |
+| B6e | shared/hooks/session-archive.sh, session-catchup.sh | never run the cwd repo's `scripts/ait-harvest.py` (R5, critical for a fleet; RM-56) | none; hook-rollout pre-deploy verification applies |
+| B6f | setup-user-config.sh/.ps1 | package `repoPath` = payload `repo/`; `$HOME` vs `$env:USERPROFILE` (R20; RM-70) | #98, #114, B5a |
+| B6g | setup-user-mcp.sh/.ps1 | `.ps1` ERROR rows when claude or node is missing, as the `.sh` (R13; RM-63); add-then-replace (or restore on failure) instead of remove-then-add, and a pinned chrome-devtools-mcp version for the fleet (R14; RM-64); `npx -y` in the local command (RM-65); MCP tier filter after P-3 (RM-57 MCP half) | B5a; P-3 for tiers |
+| B6h | setup-user-skills.sh/.ps1 | deploy the whole skill directory, not only SKILL.md (R30; RM-73); skill tier filter after P-3 (RM-57 skills half) | #109, B5a; P-3 for tiers |
 
 Done for B6: a root container run and a macOS user run of the package user
 phase show no ERROR row caused by these scripts; B6e must merge before any
@@ -568,22 +697,28 @@ One batch per tool pair (2 files), each through `/tool-adopt` (and
 `/tool-eval` where the method is new); M2 = the tool-adopt mission's batch
 naming in the decisions file.
 
-| Batch | Tool | Change (source RevTools 5) |
+| Batch | Tool | Change (source RevTools 5; remediation IDs) |
 |---|---|---|
-| B7a | gh-cli | `as_root`-style privilege helper instead of bare `sudo` (R4); apt update first (R13); winget `--scope user` (R2) |
-| B7b | pandoc | same privilege helper (R4); move off the distro package (RevTools 3 gap 4) |
-| B7c | uv | Linux method (R5) |
-| B7d | go | Linux method (R5); `--exact` (R17); machine MSI → own Intune app decision |
-| B7e | typst | Linux method (R5); `--exact` |
-| B7f | rust | winget scope; MSVC Build Tools and NASM per System/User split (R14) |
-| B7g | perl, bash (two pairs, two batches if needed) | Linux update or `system` kind (R15) |
-| B7h | node (installer Step 8 is inline: lives in `aitools-install.*`, so after B3a) | Linux method; macOS keg-only fix (RevInstall R6) |
-| B7i | pwsh on macOS/Linux | decide required or not (RevTools R9; suggested: optional) |
-| B7j.. | datadog, modal, vercelcli, cursor-ide-mcp | registry/script alignment (R6, R7, R10, R11) |
+| B7a | gh-cli | `as_root` / `install_via_apt` (B5c) instead of bare `sudo` (R4; RM-83); apt update first (R13; RM-89); winget `--scope user --exact --source winget` (R2; RM-81); gh auth check aware of Claude Code web's `GH_TOKEN=proxy-injected` (RM-92) |
+| B7b | pandoc | same helpers (R4; RM-83); move off the distro package (RevTools 3 gap 4; RM-84); winget scope (RM-81) |
+| B7c | uv | Linux method (R5; RM-84); winget scope (RM-81) |
+| B7d | go | Linux method (R5; RM-84); `--exact` (R17; RM-81); `sudo rm -rf` through `as_root` (RM-83); machine MSI → own Intune app decision |
+| B7e | typst | Linux method (R5; RM-84); `--exact` (RM-81) |
+| B7f | rust | winget scope (RM-81); MSVC Build Tools and NASM per System/User split (R14) |
+| B7g | perl | Linux update or `system` kind (R15; RM-90); winget scope (RM-81) |
+| B7g2 | bash | Linux update or `system` kind (R15; RM-90) |
+| B7h | node (installer Step 8 is inline: lives in `aitools-install.*`, so after B3a) | Linux method; macOS keg-only fix (RevInstall R6; RM-35); winget scope (RM-81) |
+| B7i | pwsh on macOS/Linux | decide required or not (RevTools R9; suggested: optional; RM-84) |
+| B7j | datadog | one registry method via `/tool-eval`, drop the cargo fallback (R6, R18; RM-85) |
+| B7k | modal | remove the `pip install --user` fallback (R7; RM-86) |
+| B7l | cursor-ide-mcp | `.ps1` matches the `.sh` (`agent mcp remove`, WARN) and the headers say so (R10; RM-87); ERROR row when node is missing (R11; RM-88) |
+| B7m | vercelcli | registry/script alignment (R10, R11) |
 
-- **After:** B5a (privilege helper lives in the lib: if the delegate needs a
-  new `as_root` helper, it is added to the lib in its own lib batch, not inside
-  a tool batch).
+Every B7 script, and `setup-cursor-ide-mcp` (B7l), calls `require_user_context`
+/ `Assert-UserContext` before its first user-scope write (BP-10; F7).
+
+- **After:** B5a and B5c (the privilege and install helpers live in the lib,
+  batch B5c; a tool batch never adds lib code).
 - **Verification per batch:** `bash -n`, pwsh parser, the tool script run under
   an isolated HOME on macOS and in the Ubuntu container; Windows run on the
   Windows VM when the change touches winget.
@@ -592,7 +727,10 @@ naming in the decisions file.
 
 - **Files:** `scripts/build-package.sh` (`build_pkg`),
   `packaging/macos/postinstall`, `packaging/macos/tech.nobul.aitools.firstrun.plist`.
-- **After:** B2, B3a, B5a (C-1).
+- **After:** B2, B3a, B5a, B5b (C-1).
+- **Remediation items:** RM-112 (`$3` is the target volume, stated in the
+  postinstall header), RM-115 (launcher exit policy, P-1 row; also B9a, B10b),
+  RM-116 (`._*` payload gate).
 - **`build_pkg` behaviour:**
   1. Capability: `command -v pkgbuild` and `command -v productbuild`, else
      ERROR + ACTION "build the pkg on macOS", return 1.
@@ -694,7 +832,11 @@ exit 0                         # deferred or started; only a broken payload exit
 - **Files:** `scripts/build-package.sh` (`build_intune`),
   `packaging/windows/install-system.ps1`, `packaging/windows/uninstall-system.ps1`.
 - **After:** **B1 Phase 2 approval for IntuneWinAppUtil (hard stop)**, B2,
-  B3a, B5a (C-1).
+  B3a, B5a, B5b (C-1).
+- **Remediation items:** RM-36 (LongPathsEnabled and MSVC Build Tools are
+  machine prerequisites owned by App A or their own Intune apps: v1 reports
+  them, section 10), RM-91 (pwsh 7.6 LTS MSI dependency app now, ZIP app
+  before 7.6 support ends).
 - **`build_intune` behaviour:** resolve the exe (`--intune-tool` or PATH,
   section 3.1), else ERROR + ACTION; App A content folder `$OUT/intune/system/`
   = `install-system.ps1`, `uninstall-system.ps1`, `payload/` (the staged tree,
@@ -743,7 +885,7 @@ exit 0                         # deferred or started; only a broken payload exit
   Because detection must stay silent on STDERR, its catch writes nothing and
   exits 1: this is a documented exemption from "no silent failures", listed in
   the script header and in `reference/script-standards-detail.md` exemptions
-  (protected; drafted in B13).
+  (protected; draft: `doc-edits-pending.md` entry 11, applied in B13).
 - **Verification:** pwsh parser; `powershell.exe -NoProfile -File detect-user.ps1`
   on the Windows VM with and without the marker (exit 0 + stdout / exit 1 +
   no stderr).
@@ -763,26 +905,38 @@ exit 0                         # deferred or started; only a broken payload exit
   `dpkg-deb --root-owner-group --build "$R" "$OUT/aitools_${VERSION}_all.deb"`;
   gates: `dpkg-deb --info` shows `Architecture: all` and the version;
   `dpkg-deb --contents` lists no `/usr/local` path (Debian Policy, PkgLinux 4).
-- **control.in:**
+- **control.in** (pinned to the B0 scaffold file, rev 1; N1): the template's
+  fields, in this order, are the ones `build_deb` renders:
 
 ```
 Package: aitools
 Version: @VERSION@
 Architecture: all
 Maintainer: nobul-tech <jose@nobul.tech>
+Section: devel
+Priority: optional
 Depends: bash, perl, python3, git, curl, ca-certificates
 Recommends: jq, sudo
-Section: admin
-Priority: optional
+Homepage: https://github.com/nobul-tech/aitools
 Description: aitools harness (Claude Code / Cursor configuration and tools)
- Installs the aitools payload under /opt/aitools. Run aitools-setup as the
- target user (or as root in a container) to configure that user.
+ Installs the aitools tree at a pinned release to /opt/aitools and the
+ aitools-setup command. Run aitools-setup as each user (or as root in a
+ container) to deploy the per-user configuration.
 ```
 
-  (Maintainer value from PkgLinux 7; the commander may change it.)
-- **postinst (root):** `set -e`; on `configure`: check `/opt/aitools/VERSION`
-  and `/opt/aitools/repo/scripts/aitools-install.sh` exist (missing: message
-  to stderr, exit 1); print one line "aitools <v> installed; run aitools-setup";
+  Render rules (Perl, on a copy in the build dir): drop every line that starts
+  with `#` (the template's header comment); replace every `@VERSION@` with
+  `--version`; then fail (ERROR row, return 1) if any `@...@` token is left, if
+  a required field (`Package`, `Version`, `Architecture`, `Maintainer`,
+  `Description`) is missing, or if the file does not end with a newline. The
+  `Section` is `devel` (development tools; the earlier plan text said `admin`).
+  The Maintainer value (from PkgLinux 7) puts a personal address into a public
+  fleet package: open question in section 10, suggested answer a team or
+  noreply address; B10a changes it once the commander picks one (N8).
+- **postinst (root):** `set -e`; on `configure`: check `/opt/aitools/VERSION`,
+  `/opt/aitools/repo/scripts/aitools-install.sh` and an executable
+  `/opt/aitools/bin/aitools-setup` (missing: message to stderr, exit 1); no log
+  file (stdout/stderr only; N2); print one line "aitools <v> installed; run aitools-setup";
   no per-user writes, no network, no prompts, no `systemctl` (PkgLinux 4).
   Idempotent.
 - **Verification:** `bash -n` postinst (or `sh -n`); on Ubuntu:
@@ -793,7 +947,7 @@ Description: aitools harness (Claude Code / Cursor configuration and tools)
 ### B10b -- `aitools-setup` and prerm
 
 - **Files:** `packaging/linux/aitools-setup`, `packaging/linux/prerm`.
-- **After:** B10a, B5a (C-1).
+- **After:** B10a, B5a, B5b (C-1).
 - **aitools-setup behaviour:** flags per section 3.6; source
   `/opt/aitools/repo/scripts/aitools-lib.sh` (missing → stderr, exit 1);
   `resolve_target_user` (with `--user` → `AITOOLS_TARGET_USER`); when running
@@ -871,16 +1025,25 @@ See section 5. Output: a results file in the mission folder,
 `<mission name>-B12-results.md` (D-DEL1 prefix), one row per cell with
 command, exit code, log excerpt and the unknown it settled.
 
-### B13 -- pending doc drafts into PR-owned files
+### B13 -- pending doc drafts into protected files
 
-One small PR per owning PR, after it merges, applying the approved drafts
-from `plans/build-package/doc-edits-pending.md` (DocsWriter): cross-platform.md
-rows and the supported-list pointer (#99), deploy-paths.md/.mdc third path and
-equivalence (#99), claude-shared.md (#105), decision tree, logging.md
-system-phase sentence, glossary terms (#101/#106), interactive-menus.md if
-package-mode behaviour needs a line (#106), the script-standards-detail.md
-exemption for `detect-user.ps1` (#101). Each is protected: only commander-
-approved text (sources-of-truth.md).
+One small PR per owning PR, after it merges, applying the approved drafts in
+`plans/build-package/doc-edits-pending.md` (index there). Already applied:
+entries 1, 4 and 5 (32bf20c, after #99 merged) and the deploy-paths.md
+"Equivalence" rewrite (rev 1). Still pending, each with a draft: the
+cross-platform.md `cursor-cloud` lines (entry 2; P-2 and B5b) and exemption
+rows (entry 3; P-1), claude-shared.md (entry 6; #105), decision tree (entry 7;
+#101/#106), logging.md system-phase sentence (entry 8; #101), glossary terms
+(entry 9; #101), the dotprofile template (entry 10; P-7), the
+script-standards-detail.md exemption for `detect-user.ps1` and the
+`blog_warn` override row (entries 11, 12; RM-108; #101), the
+interactive-menus.md package-mode line (entry 13; #106), and the "then first
+profile" fix in three docs and the `.mdc` twin (entry 14; RM-105; #101/#106).
+Without a draft yet (B13 writes one first, for commander review): the CLAUDE.md
+Intent (RM-94, `/intent-writing`), the playbook criteria row and the
+tool-lifecycle.mdc note (RM-101, RM-104 remainders), and the tool-ops-claude-code
+cloud facts (RM-107, `/tool-ops`). Each is protected: only commander-approved
+text (sources-of-truth.md).
 
 ### B14 -- optional signing
 
@@ -905,7 +1068,7 @@ are written as scratch scripts (`.scratch/session-<name>/`), never inline.
 | 7 | macOS VM, Intune unmanaged PKG | disposable Apple Silicon macOS VM enrolled in a test Intune tenant (VM tool not evaluated; choose via `/tool-eval`) | upload pkg, Included apps `tech.nobul.aitools` X.Y.Z; assign Required; with a user logged in, and once at the login window then log in | Intune reports success; `~/.aitools/pkg-version` = X.Y.Z; `/Library/Logs/aitools/deploy.log` present; no `._*` files on disk (`find "/Library/Application Support/aitools" -name '._*'`) | Gatekeeper on agent install (R-1); `._*` (R-2); detection outside /Applications (R-3); login-window user (R-5) |
 | 8 | macOS VM, Jamf Pro | test Jamf tenant; package + policy Once per computer; EA on VERSION | `sudo jamf policy -id <n>`; check policy log; EA value; force a postinstall failure once (corrupt VERSION) | policy Completed; EA = X.Y.Z; broken payload marks Failed (records the unknown either way) | non-zero postinstall effect (R-4); `$3` handling |
 | 9 | macOS, update | rows 7/8 with X.Y.Z+1 | upload new version | reinstall within the documented window; runner reruns once | BP-12 |
-| 10 | Windows 11 VM, Intune Win32 | test Intune tenant; dependency apps pwsh 7.6 MSI, Git, Node; App A, App B (depends on A) | assign App B Required to a test user; sign in | App A detection (HKLM) and App B detection (script) succeed; `%USERPROFILE%\.aitools\pkg-version` = X.Y.Z; no winget call logged under SYSTEM; IME `AppWorkload.log` captured | User-context detection identity (R-6); winget scope (R-8); 32-bit host + pwsh path |
+| 10 | Windows 11 VM, Intune Win32 | test Intune tenant; dependency apps pwsh 7.6 MSI, Git, Node; App A, App B (depends on A) | assign App B Required to a test user; sign in | App A detection (HKLM) and App B detection (script) succeed; `%USERPROFILE%\.aitools\pkg-version` = X.Y.Z; no winget call logged under SYSTEM; IME `AppWorkload.log` captured | User-context detection identity (R-6); winget scope and whether winget is registered for a brand-new user when App B first runs (R-8); 32-bit host + pwsh path |
 | 11 | Windows, update | supersede/in-place swap with X.Y.Z+1 | | reinstall once; backups not rotated by no-op runs | BP-12, BP-13 |
 | 12 | Dev-path regression | Jose's normal machine flow is NOT used; a fresh isolated HOME clone run of `aitools install --dry-run` on macOS and Windows | same rows as before B3a (diff of summary rows) | no change except the order-file source | BP-2 equivalence |
 
@@ -914,25 +1077,27 @@ answered (or the commander accepts the full harness set for the fleet).
 
 ## 6. Merge order against open PRs
 
-Open PRs read 2026-10-26 (`gh pr list -R nobul-tech/aitools --state open --json number,files`).
+Open PRs read 2026-10-26 (`gh pr list -R nobul-tech/aitools --state open --json number,files`;
+re-read for rev 1 at 99740cc: #99 has merged (3c4f8fe), every other PR below is
+still open).
 
 | PR | Touches (relevant files) | Blocks |
 |---|---|---|
-| #99 | cross-platform.md, deploy-paths.md/.mdc, reference/managed-file-deployment.md | B13 (rows, third path) |
 | #100 | deploy-harness.sh/.ps1, tests/deploy-harness | B4 |
 | #101 | logging.md, script-standards-detail.md, decision tree, glossary.json, user-repo.md | B13 |
-| #103 | aitools-lib.*, setup-user-claude.*, check.yml | B5a, B6a |
-| #105 | shared/claude-shared.md, aitools-profile.* | B13; B6a template work |
-| #106 | aitools-install.*, scripts/aitools*, interactive-menus.md, decision tree | B3a, B3b, B13 |
+| #103 | aitools-lib.*, setup-user-claude.*, check.yml, tests/managed-files/test-adopt-push.* | B5a, B5b (push guard), B6a |
+| #105 | shared/claude-shared.md, aitools-profile.* | B13; B5d; B6a template work |
+| #106 | aitools-install.*, scripts/aitools*, interactive-menus.md, decision tree, tests/hookin/* | B3a, B3b, B13 |
 | #110 | deploy-harness.*, setup-user-cursor.* (on #100) | B4, B6b |
 | #111 | build-deploy.sh, deploy-harness.*, tests/deploy-harness* | B4 |
 | #112 | aitools-lib.*, setup-user-claude.*, build-deploy.sh, check.yml (on #103) | B5a, B6a |
 | #113 | aitools-lib.*, scripts/aitools*, setup-user-claude/config.*, check.yml | B3b, B5a |
 | #115 | aitools-lib.*, scripts/aitools*, setup-user-claude/config.*, check.yml | B3b, B5a |
 | #116 | aitools-install.*, aitools-lib.*, scripts/aitools*, setup-user-*, check.yml | B3a, B3b, B5a |
-| #98, #114 | setup-user-config.* | B6f |
-| #108 | aitools-profile.*, aitools-json.* | B5a only if the fleet resolver outcome (RevLib R7) is done there |
-| #109 | setup-user-cursor.*, check-lib.*, setup-user-skills.ps1 | B6b, B11b (check-lib) |
+| #98 | setup-user-config.* | B6f |
+| #114 | setup-user-config.*, aitools-profile.* | B6f, B5d |
+| #108 | aitools-profile.*, aitools-json.* | B5d (fleet resolver outcome, RevLib R7) |
+| #109 | setup-user-cursor.*, check-lib.*, setup-user-skills.ps1 | B6b, B6h, B11b (check-lib) |
 
 Recommended sequence (consistent with FAN-PLAN section 5, "#103 -> #112 ->
 (#113/#115/#116) -> Batch A -> #100 -> #106 -> Batch B+C+D"):
@@ -942,11 +1107,15 @@ Recommended sequence (consistent with FAN-PLAN section 5, "#103 -> #112 ->
 2. #103 → #112 → #98, #114, #108 → #113 → #115 → #116.
 3. FAN-PLAN Batch A (lib).
 4. #100 → #110 → #111 → #106 → FAN-PLAN Batches B+C+D.
-5. B3a → B3b → B4 → B5a → B5b.
-6. B6a..B6f (B6e any time), B7 batches.
-7. B8a → B8b; B9a (after Phase 2) → B9b; B10a → B10b → B10c.
+5. B3a → B3b → B5a → B4 (needs B5a's guard) → B5b → B5c; B5d after #105,
+   #108, #114 and B5a.
+6. B6a..B6h (B6e any time; B6b after B5c), B7 batches (after B5c).
+7. B8a → B8b; B9a (after Phase 2) → B9b; B10a → B10b → B10c (each launcher
+   batch after B5b).
 8. B11a, B11b → B12 → B14.
-9. B13 after each owning PR (#99, #101, #105, #106) merges, in any order.
+9. B13 after each owning PR (#101, #105, #106) merges, in any order; entries
+   for files no open PR owns (P-1 rows in cross-platform.md now that #99 has
+   merged) after the commander's approval.
 
 If a PR is closed instead of merged, the dependent batch rebases on main and
 re-reads the affected code; the plan's behaviour stays.
@@ -962,7 +1131,7 @@ re-reads the affected code; the plan's behaviour stays.
 | R-5 | Console user at the login window or during Setup Assistant reported unexpectedly | unknown / medium | treat empty/root/loginwindow/_mbsetupuser as none → LaunchAgent | B12 row 7 |
 | R-6 | Intune detection script for a User-context app does not run as the user (not documented) | unknown / high (App B never detected → reinstall loop) | test on a device; fallback: App B writes an HKLM-readable marker under `C:\ProgramData\aitools\users\<sid>.version` (needs an ACL set by App A) | B12 row 10 |
 | R-7 | Cursor cloud has no documented env signal; default user unknown (root vs `ubuntu`) | high / medium | explicit `AITOOLS_ENVIRONMENT=cursor-cloud` in the install command; socket as secondary (preview API); `aitools-setup` supports both users | B12 row 6, P-2 |
-| R-8 | winget packages lack a user-scope installer (Go MSI, Strawberry Perl) | likely for some / medium | per-tool `/tool-eval` with `winget show`; machine tools become own Intune apps; user phase ERROR + ACTION, never a silent wrong-profile install | B7, B12 row 10 |
+| R-8 | winget packages lack a user-scope installer (Go MSI, Strawberry Perl); and winget itself, an MSIX "registered for the user" (Microsoft winget troubleshooting page, read by the reviewer 2026-10-26), may not be registered yet when App B runs right after a new user's first sign-in (unverified) | likely for some / medium | per-tool `/tool-eval` with `winget show`; machine tools become own Intune apps; user phase ERROR + ACTION, never a silent wrong-profile install; when `winget` is missing in the user phase: ERROR + ACTION and a non-zero exit, so Intune retries App B later | B7, B12 row 10 |
 | R-9 | Claude Code web cannot download a GitHub release asset of a repo not attached to the session ("same 403" for archive URLs of non-attached repos) | unknown / high for that environment | fallback: clone + local `build-package.sh deb`; or the user's repo commits a pinned `.deb` | B12 row 5 |
 | R-10 | pkg postinstall's detached child is killed at the 600 s installer timeout | unknown / medium | LaunchAgent also runs at next login (self-healing); alternative `launchctl kickstart` of the agent in the user's GUI domain | B12 row 7 |
 | R-11 | PowerShell 7.6 LTS end of support (no MSI from 7.7) | certain later / medium | plan a ZIP-based dependency app before 7.6 ends (date unknown) | B1 follow-up |
@@ -1012,7 +1181,7 @@ re-reads the affected code; the plan's behaviour stays.
 
 | ID | Question | Suggested answer | Blocks |
 |---|---|---|---|
-| P-1 | Approve the two cross-platform.md rows: `build-package.sh` as a bash-only build script (OS-guard exemption + cross-language row for check-pre-push.ps1 step 11), and a "package launchers" exemption category (`packaging/**`: OS-native, run by MDM/dpkg, no `.sh`/`.ps1` pairing; includes `detect-user.ps1` under Windows PowerShell 5.1)? | Approve. The launchers cannot be paired by nature (a pkg postinstall has no Windows twin) | B11b, B13; B9b (5.1 exemption) |
+| P-1 | Approve the two cross-platform.md rows: `build-package.sh` as a bash-only build script (OS-guard exemption + cross-language row for check-pre-push.ps1 step 11; its `detect_kind` tests the native platform before the tool, because BP-4 makes the native host part of each kind's contract: design.md 3(a)), and a "package launchers" exemption category (`packaging/**`: OS-native, run by MDM/dpkg, no `.sh`/`.ps1` pairing; includes `detect-user.ps1` under Windows PowerShell 5.1; and the **launcher exit policy**: a launcher exits non-zero only for a broken payload or a failed user phase it ran itself, and otherwise exits 0 with ERROR rows reported through its logs and the `pkg-version` marker, which deliberately departs from the script-standards exit footer, because a non-zero postinstall or cloud setup script fails the whole install or session; RM-113, RM-115)? Draft text: `doc-edits-pending.md` entry 3 | Approve. The launchers cannot be paired by nature (a pkg postinstall has no Windows twin) | B11b, B13; B8a, B10c (exit policy); B9b (5.1 exemption) |
 | P-2 | Environment value `cursor-cloud`: explicit `AITOOLS_ENVIRONMENT=cursor-cloud` from the install command, secondary signal = the metadata socket exists, Linux only? | Approve; verify on one Cursor cloud run (B12 row 6) before B5b's part ships | B5b part, B10c |
 | P-3 | Fleet content tiers (`tier: fleet \| harness` on hooks, skills, MCP servers) and a neutral fleet template? | Approve; standing-order-guard and the failure-mode hooks stay `harness`; also decide whether aitools project rules (`.claude/rules`) reach fleet users through the fan-out (FAN-PLAN D5) | B6d, fleet rollout |
 | P-4 | IntuneWinAppUtil as a build-host tool (registry entry, `/tool-eval`, Phase 2) and a new "build-host tool" lifecycle class? | Approve both | B9a, B11a |
@@ -1028,7 +1197,9 @@ Other items raised while planning (not in P-1..P-7), each with a suggestion:
 - Stub app location if R-3 fails: `/Applications/aitools.app`? Suggested:
   yes, only if B12 row 7 shows detection fails elsewhere.
 - Maintainer field of the `.deb` (`nobul-tech <jose@nobul.tech>`, from
-  PkgLinux 7)? Suggested: keep unless the commander wants a team address.
+  PkgLinux 7)? It puts a personal address into a public fleet package (N8).
+  Suggested: a team or noreply address the commander names; B10a changes
+  `control.in` to it.
 
 ## 11. Contract changes
 
@@ -1037,7 +1208,11 @@ Other items raised while planning (not in P-1..P-7), each with a suggestion:
   the launchers call `resolve_target_user` / `is_privileged_run` /
   `run_as_target_user` (BP-10 says only launchers switch user, and the API
   lives in the lib). Alternative: inline resolution in each launcher, rejected
-  as a third copy of the same logic.
+  as a third copy of the same logic. Rev 1 (F8): they also depend on B5b,
+  because they run as root or SYSTEM with a relocated `AITOOLS_LOG_DIR`, which
+  needs the logging fail-safe (RM-46) and the HOME guard (RM-26). Rev 1 (F7):
+  B4 depends on B5a for `require_user_context`; B12 depends on B4, B5b and B6
+  as well (N6).
 - **C-2 (log file name):** BP-7 names the macOS system log
   `/Library/Logs/aitools/install.log`, and the scaffold headers name
   `install.log` (`packaging/macos/postinstall`) and `system-install.log`
@@ -1046,12 +1221,18 @@ Other items raised while planning (not in P-1..P-7), each with a suggestion:
   helpers), and `logging_init` always writes `deploy.log` in `AITOOLS_LOG_DIR`,
   so the file is `<system log dir>/deploy.log`. The named files become
   possible only if the lib gains a log-file-name option (Lang 3 option (ii)).
-  Decision for B8a/B9a: use `deploy.log` and update the launcher headers,
-  unless the commander wants the lib option (suggested: `deploy.log` in v1).
+  Decision for B8a/B9a: use `deploy.log` (the launcher headers say so since
+  rev 1), unless the commander wants the lib option (suggested: `deploy.log` in
+  v1).
 - **C-3 (batch split):** B3, B5, B6, B7, B8, B9, B10, B11 are split with
   letter suffixes to stay at 2-3 files (decisions file section 2 allows it).
   B6e (hooks security) and B6f (setup-user-config) are new sub-batches carved
-  out of B6's scope.
+  out of B6's scope. Rev 1 (F6) adds B5c (privilege and install helpers, RM-41,
+  before B7), B5d (aitools-profile: RM-44, RM-47 resolver half), B6d2
+  (setup-user-settings, split out of B6d), B6g (setup-user-mcp), B6h
+  (setup-user-skills), B7g2 (bash, split out of B7g) and B7j-B7m (named tool
+  batches), so every remediation item has a batch that exists here; B3b gains
+  `tests/hookin/test-hookin.sh` (F4).
 - **C-4 (added names, beyond the ScaffoldWriter contract):**
   `scripts/aitools-order.txt` (BP-6 "proposed name", now pinned),
   `packaging/macos/aitools-uninstall.sh`, `packaging/windows/uninstall-system.ps1`,
@@ -1066,9 +1247,21 @@ Other items raised while planning (not in P-1..P-7), each with a suggestion:
   it. `--version` is required for every command except `stage` (scaffold),
   not defaulted from a tag. The staged tree is `<out>/stage/` (scaffold), not
   `<out>/stage/aitools-<v>/`. The template token is `@VERSION@` (scaffold
-  `control.in`). Summary rows use the tool name `build-package` with a
-  `<kind>:` detail (scaffold). `pkg-version` is written by the launchers
+  `control.in`). Summary rows: see C-6 (rev 1 replaced the scaffold's single
+  `build-package` tool name). `pkg-version` is written by the launchers
   (scaffold headers), not by the installer (an earlier draft of this plan).
   The scaffold's dry-run plan line "hygiene: ... (COPYFILE_DISABLE=1)" relies
   on a setting PkgMac found ineffective (PkgMac 1, INCIDENT 1): B8a replaces it
   with the `._*` payload gate.
+- **C-6 (summary tool names, rev 1, F1):** the scaffold wrote every row under
+  the tool name `build-package` with a `<kind>:` detail, but `show_summary`
+  (`scripts/aitools-lib.sh`) keeps one row per tool name, highest severity
+  wins, so an `all --dry-run` panel showed one row and dropped the others. Now
+  each step has its own tool name, `build stage|pkg|intune|deb|dry-run`
+  (16 characters or fewer, so the panel stays aligned; `build-package <kind>`
+  would be 20), and argument errors keep `build-package`. Applied in
+  `scripts/build-package.sh` and `tests/build-package/test-cli.sh`, which now
+  also checks that a standalone run's panel shows every row. Section 3.1.
+- **C-7 (pseudocode, rev 1, F10):** B2's `stage_payload` takes `COMMIT` from
+  the validation step, writes `VERSION` only with `--version`, refuses an empty
+  include list, and tells a git failure from an absent path (section 4 B2).

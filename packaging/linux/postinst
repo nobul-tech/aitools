@@ -1,13 +1,15 @@
 #!/bin/bash
 # postinst -- aitools .deb maintainer script (package launcher)
 #
-# Intent (batch B10, plans/build-package/implementation-plan.md): files only.
+# Intent (batch B10a, plans/build-package/implementation-plan.md): files only.
 # Steps when implemented, for "configure" ($1; other actions exit 0):
-#   1. validate the payload: /opt/aitools/{VERSION,repo/} (exit non-zero when
-#      broken, as Debian Policy requires on error)
-#   2. ensure /usr/bin/aitools-setup is present and executable
-#   3. log to /var/log/aitools (AITOOLS_LOG_DIR, BP-16)
-#   4. print one line: "run aitools-setup as each user to finish"
+#   1. validate the payload: /opt/aitools/VERSION,
+#      /opt/aitools/repo/scripts/aitools-install.sh and an executable
+#      /opt/aitools/bin/aitools-setup (the /usr/bin symlink is package data);
+#      missing: message to stderr, exit 1 (Debian Policy: non-zero on error)
+#   2. no log file: messages go to stdout/stderr only (dpkg shows them;
+#      /var/log/aitools is written by the cloud setup snippets, B10c)
+#   3. print one line: "aitools <v> installed; run aitools-setup"
 #   NO per-user writes, NO network, NO prompts, NO systemctl; idempotent
 #   (Debian Policy ch. 6; PkgLinux notes section 4).
 # Run context: root, by dpkg (apt-get install, dpkg -i). Arguments from dpkg:

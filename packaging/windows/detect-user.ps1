@@ -1,6 +1,6 @@
 # detect-user.ps1 -- aitools Intune Win32 app B custom detection script (package launcher)
 #
-# Intent (batch B9, plans/build-package/implementation-plan.md): tell Intune
+# Intent (batch B9b, plans/build-package/implementation-plan.md): tell Intune
 # whether the user phase of version X.Y.Z has completed. When implemented:
 #   - read %USERPROFILE%\.aitools\pkg-version (written by install-user.ps1)
 #   - equal to the expected version (stamped at build time): write the version
@@ -14,7 +14,7 @@
 #   signed-in user for a User-context app is undocumented: test on a device
 #   before relying on it (BP-15, open item). Parses under Windows PowerShell 5.1
 #   and pwsh 7.
-# Platform: Windows 10/11 only. Package launcher: exempt from the .sh/.ps1
+# Platform: Windows 11 only. Package launcher: exempt from the .sh/.ps1
 #   pairing (category "package launchers", BP-5, pending P-1).
 # Follows: BP-5, BP-12, BP-15.
 # Safe to re-run: yes (read-only).

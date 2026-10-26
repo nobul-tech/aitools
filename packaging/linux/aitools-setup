@@ -1,16 +1,18 @@
 #!/bin/bash
 # aitools-setup -- per-user setup command installed by the aitools .deb (package launcher)
 #
-# Installed to /usr/bin/aitools-setup. Intent (batch B10,
+# Installed to /opt/aitools/bin/aitools-setup, with a /usr/bin/aitools-setup
+# symlink shipped in the package data. Intent (batch B10b,
 # plans/build-package/implementation-plan.md): run the user phase of the
 # existing installer from the read-only payload in /opt/aitools. When
 # implemented:
-#   Usage: aitools-setup [--user <name>] [--force] [--environment <value>] [--help]
+#   Usage: aitools-setup [--user <name>] [--force] [--environment <value>] [--rerun] [--help]
+#   (--rerun ignores a matching pkg-version; an unknown option exits 1)
 #   1. target user (BP-10): non-root = self; root + SUDO_USER = SUDO_USER;
 #      root without SUDO_USER = root (containers, Claude Code web); --user
 #      overrides; never guess UID >= 1000
 #   2. exit 0 at once when ~/.aitools/pkg-version equals /opt/aitools/VERSION
-#      (runs once per version, BP-13)
+#      and --rerun is not given (runs once per version, BP-13)
 #   3. log to ~/.aitools/logs of the target user (BP-16)
 #   4. run /opt/aitools/repo/scripts/aitools-install.sh --phase user
 #      --package-mode (BP-6) as the target user; --force = AITOOLS_FORCE=1

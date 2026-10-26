@@ -1,4 +1,4 @@
-# build-package: design (version 1.0)
+# build-package: design (version 1.0, rev 1)
 
 **Intent**: **Purpose**: Answer the commander's build-package questions with
 rationale and sources: the build language, one Linux package or one per
@@ -14,7 +14,9 @@ the dev path or the MDM path, which stay as they are. **Audience**: Jose (the
 commander), deciding and approving; the mission that executes
 `implementation-plan.md`, which reads this file for the why.
 
-Author: S3-BuildPkg-PlanWriter for S3-BuildPkg, version 1.0, 2026-10-26.
+Author: S3-BuildPkg-PlanWriter for S3-BuildPkg, version 1.0 (rev 1, 2026-10-26,
+review fixes by S3-BuildPkg-Fixer: findings F1-F13 and N1-N8 of
+`S3-BuildPkg-Reviewer-verdict.md` in the same folder).
 
 Basis: the decisions file
 `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-BuildPkg/S3-BuildPkg-decisions.md`
@@ -23,7 +25,11 @@ by short name: RevBuild, RevInstall, RevLib, RevSetup, RevTools, PkgWin, PkgMac,
 PkgLinux, Lang, DocsInv, with their section number) and
 `.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-MdmPkg/S3-MdmPkg-report.md`
 (cited as "MDM-PKG"). Line numbers are aitools `main` at 5976553 (2026-10-26)
-unless a PR is named. "Unknown" means nobody has verified it yet; the
+unless a PR is named; they still hold at 99740cc (rev 1 check: between the two,
+only `scripts/check-pre-push.*`, `scripts/check-path-refs-allow.txt`,
+`shared/cursor-rules/user-rules.md` and the new build-package files changed
+under scripts/, shared/ and tests/:
+`git diff --stat 5976553 99740cc -- scripts shared tests`). "Unknown" means nobody has verified it yet; the
 implementation plan's test matrix (B12) is where each unknown is settled.
 
 ## 1. Context
@@ -88,12 +94,18 @@ order list, unknown flags exit 1: RevInstall R1, R3).
 
 **One bash script, `scripts/build-package.sh`** (BP-3; Lang 1).
 
-- One function per package kind (`intune`, `pkg`, `deb`) plus `stage`, chosen
-  by capability (`command -v pkgbuild`, `command -v dpkg-deb`, a resolved
-  `IntuneWinAppUtil.exe`), never by `$AITOOLS_PLATFORM`
-  (cross-platform.md "Dead code from platform guards"). A kind whose tool is
-  absent and that was not asked for reports OK `n/a (<host>)`; a requested kind
-  whose tool is absent is ERROR + ACTION, exit 1 (Lang 1).
+- One function per package kind (`intune`, `pkg`, `deb`) plus `stage`. A kind
+  builds when the host is its native platform (`$AITOOLS_PLATFORM`) **and** its
+  tool is present (`command -v pkgbuild` + `productbuild`, `command -v
+  dpkg-deb`, a resolved `IntuneWinAppUtil.exe`): `detect_kind` in the scaffold,
+  plan 3.1. The platform test is deliberate: BP-4 makes the native host part of
+  each kind's contract (a `pkgbuild` port on Linux, or IntuneWinAppUtil under
+  Wine, is not a supported build host), so it is not the "Dead code from
+  platform guards" case of cross-platform.md (there is no OS guard above it).
+  The P-1 row for `build-package.sh` states this. A kind that cannot build and
+  was not asked for reports OK `n/a (<host>)`; a requested kind that cannot
+  build is ERROR, exit 1 (Lang 1; the backends B8a-B10a add the ACTION row
+  naming the host to build on).
 - bash 3.2 compatible, `set -euo pipefail`, sources `aitools-lib.sh` and calls
   `logging_init "build-package"`, `--help`, exit footer (script-standards.md
   block order; Lang 3). Not the `blog` override: that is a recorded exception
@@ -107,8 +119,8 @@ order list, unknown flags exit 1: RevInstall R1, R3).
   second logging stack is forbidden for reusable scripts (Lang 1).
 - It is the second bash-only build-script exception after build-deploy.sh and
   needs two rows in protected `.claude/rules/cross-platform.md` (P-1; drafted
-  in Lang 1; that file is owned by PR #99, so the rows are applied after #99
-  merges, batch B13). Its reason differs from build-deploy's: the output is
+  in Lang 1 and in `doc-edits-pending.md` entry 3; PR #99 has merged, so B13
+  applies them once P-1 is approved). Its reason differs from build-deploy's: the output is
   per-OS, uncommitted binary artifacts built on build hosts, never run on
   endpoints (Lang 1).
 
@@ -176,8 +188,9 @@ depends on the proposed "build-host tool" lifecycle class (P-4).
   lists (installer Step 21 vs the sync loop: RevInstall 2.1, MDM-PKG F2)
   collapse into one data file both read, in the post-#106 sync order (BP-6).
 
-**Equivalence statement** (for `deploy-paths.md`, drafted by DocsWriter, P-1
-area): for the same git ref, platform, environment and profile, the package
+**Equivalence statement** (applied to `.claude/rules/deploy-paths.md`
+"Equivalence" in rev 1, replacing the shorter text of 32bf20c that claimed the
+same summary rows): for the same git ref, platform, environment and profile, the package
 path runs the same setup scripts in the same order as `aitools install`, so it
 leaves the same files under `~/.aitools`, `~/.claude` and `~/.cursor` and the
 same managed-tool states and summary rows, except for these differences, each
@@ -194,11 +207,21 @@ reported as a summary row and never silent:
    user rules, settings sync) comes from the neutral fleet template or is
    reported `n/a (no dotprofile)` (BP-11); another user's profile is never
    used.
+6. The relay mirror (`.aitools/channel/relay.md` -> `~/.cursor/AGENTS.md`,
+   installer Step 22 and the `aitools` sync) is not written: `.aitools/` is not
+   in the payload (section 4), and including it would hand fleet users the
+   harness's failure-mode relay. The run reports OK `relay sync`
+   `n/a (package)` instead of today's WARN "failed (non-fatal)"
+   (`sync-relay-to-cursor-agents.py` returns 1 when relay.md is missing). The
+   relay outbound prompt (`[RELAY]`, git) is skipped too. B3a, B3b.
+7. The reported aitools version comes from the payload's `VERSION` file, not
+   `git describe` (`repo_version` in `scripts/aitools` / `Get-RepoVersion` in
+   `aitools.ps1` would print "unknown" or a date in a payload). B3b.
 
 Equivalence holds by construction for the scripts themselves (same files, same
 order). It does not hold today for the two items RevSetup found per run
 context (root-owned files when HOME is overridden, `$SHELL` unset in
-containers): those are fixed in B5 and B6 before any package ships.
+containers): those are fixed in B5a/B5b and B6a before any package ships.
 
 ## 4. Payload layout per OS
 
@@ -229,7 +252,7 @@ CLAUDE.md template (RevSetup 3.1).
 |---|---|---|---|---|
 | macOS | `/Library/Application Support/aitools/` | `bin/aitools-pkg-run.sh` (user-context runner) | `aitools.app` (stub app, bundle id `tech.nobul.aitools`, generated by `build_pkg`); `/Library/LaunchAgents/tech.nobul.aitools.firstrun.plist` | `/Library/Logs/aitools/` |
 | Windows | `%ProgramFiles%\aitools\` (App A) | none in `<prefix>`: `install-system.ps1` runs from App A's content folder; `install-user.ps1` from App B's | HKLM `SOFTWARE\aitools` value `Version` | `C:\ProgramData\aitools\logs\` |
-| Linux | `/opt/aitools/` | `bin/aitools-setup`; `/usr/bin/aitools-setup` symlink to it (shipped in the package data, so dpkg tracks and removes it) | none | `/var/log/aitools/` (only when `aitools-setup` runs as root for root) |
+| Linux | `/opt/aitools/` | `bin/aitools-setup`; `/usr/bin/aitools-setup` symlink to it (shipped in the package data, so dpkg tracks and removes it) | none | `/var/log/aitools/` (the cloud setup snippets' `cloud-setup.log`, B10c; `aitools-setup` for root logs to `/root/.aitools/logs`, a user phase) |
 
 Sources: PkgMac 7 (macOS layout), PkgWin 7 (Windows two-app design), PkgLinux 7
 (`/opt/aitools`; `/usr/local` is forbidden by Debian Policy for packages,
@@ -352,7 +375,7 @@ flowchart TD
 
 ## 6. Console-user resolution
 
-One library API (BP-10; RevLib 4), added in batch B5. Results go to globals;
+One library API (BP-10; RevLib 4), added in batch B5a. Results go to globals;
 return codes 0 found, 1 none (defer), 3 error, never 2 (2 is a user abort,
 D-TS13).
 
@@ -403,14 +426,14 @@ Never in the package (BP-1, BP-11). At run time:
   links, all 18 harness hooks, Jose's three MCP servers and every harness skill
   (RevSetup 4.2). v1 fixes the template (a neutral fleet template, tokens
   resolved from OS identity or left with a single WARN) and reports settings
-  sync as `n/a (no dotprofile)` instead of a WARN every run (B6). Fleet content
+  sync as `n/a (no dotprofile)` instead of a WARN every run (B6a, B6d2). Fleet content
   tiers (`tier: fleet | harness` on hooks, skills and MCP servers) are proposed
   (P-3); until approved, fleet users get the full harness set, and that is a
   stated limitation.
 - **A machine not in a profile:** the resolver today ends in
   `ERROR|machine profile|no machine match` plus ACTION on every run, and uses
   the profile's identity (RevLib 6). The package path needs a fleet outcome
-  (rc 0, no ERROR, no identity from another person's profile): B5.
+  (rc 0, no ERROR, no identity from another person's profile): B5d.
 - **A user with a dotprofile:** runs `aitools user init` interactively once on
   the dev path (P-6); later package runs find it through the resolver. Never
   non-interactively: with no terminal, `user init` today creates and pushes a
@@ -448,7 +471,7 @@ but runs happen per version, not per schedule (BP-13): Win32 reruns only on
 failed detection or an update (PkgWin 3); Jamf "Once per computer" per
 version; the LaunchAgent and `aitools-setup` skip when `~/.aitools/pkg-version`
 equals the payload VERSION. Two existing defects make recurring runs worse and
-are fixed first (B6): shell and Cursor cli-config back up on every run, so 20
+are fixed first (B6b, B6c): shell and Cursor cli-config back up on every run, so 20
 no-op runs rotate useful backups away; the Cursor model is reset to Auto on
 every run (RevSetup 4.3). The overwrite is documented for users.
 
@@ -486,7 +509,7 @@ install into the wrong profile.
 | build-package | `~/.aitools/logs/deploy.log` on the build host (v1); CI and pre-push set `AITOOLS_LOG_DIR` to a temp dir | `logging_init "build-package"` (Lang 3); own `build-package.log` later |
 | macOS postinstall (root) | `/Library/Logs/aitools/` | launcher sets `AITOOLS_LOG_DIR` before sourcing the payload lib; Intune "Collect logs" accepts it (PkgMac 3) |
 | Windows App A (SYSTEM) | `C:\ProgramData\aitools\logs\` | same; Intune Collect diagnostics accepts `%PROGRAMDATA%` paths (PkgWin 5) |
-| Linux root-for-root | `/var/log/aitools/` | same |
+| Linux cloud setup snippets (root, B10c) | `/var/log/aitools/` (`cloud-setup.log`) | the snippet's own log; `aitools-setup` run for root is a user phase and logs to `/root/.aitools/logs` (plan B10b) |
 | user phase (all) | `~/.aitools/logs/` (unchanged standard) | `logging.md` |
 
 `reference/logging.md` gets one sentence for the system-phase location (BP-16;
@@ -494,7 +517,14 @@ PR #101 owns logging.md: pending draft, B13). Jamf truncates policy logs at
 25 KB, so launchers print a short summary to stdout and keep detail in files
 (PkgMac 4). The library's logging is not fail-safe today (an unwritable log
 dir aborts under `set -e`, RevLib 5 INCIDENT 4), which matters when a launcher
-relocates `AITOOLS_LOG_DIR`: fixed in B5.
+relocates `AITOOLS_LOG_DIR`: fixed in B5b, which every launcher batch waits
+for (B8a, B9a, B10b; contract change C-1).
+
+The installer's system phase (`--phase system`, run by App A as SYSTEM) writes
+only under `AITOOLS_LOG_DIR` (logs and its summary file) and HKLM (through the
+launcher); it creates nothing under `$HOME` / `%USERPROFILE%` (no
+`~/.aitools`, no config.json, no `~/.local/bin`), because SYSTEM's profile is
+not a user's (BP-10). Implementation plan 3.3.
 
 ## 14. Signing (later)
 
@@ -531,7 +561,9 @@ Gatekeeper on agent-installed unsigned pkgs; install-time effect of `._*`
 entries; Intune macOS detection of a stub app outside `/Applications`; whether
 a non-zero pkg postinstall fails the Intune or Jamf install; console user at
 the login window; User-context detection-script identity on Windows; winget
-machine-vs-user scope per tool; the Cursor cloud signal and default user;
+machine-vs-user scope per tool; whether winget (an MSIX registered per user) is
+registered yet when App B runs right after a new user's first sign-in; whether
+`runuser -u <user> --` sets HOME (the API passes it explicitly either way); the Cursor cloud signal and default user;
 whether Claude Code web can download a GitHub release asset of a repo that is
 not attached; perl core modules on minimal Ubuntu images; how HOME and SHELL
 are set under Jamf, Intune and `sudo -H`.

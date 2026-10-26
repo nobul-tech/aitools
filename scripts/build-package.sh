@@ -23,9 +23,10 @@
 # Tools: pkgbuild + productbuild (macOS, OS-provided), IntuneWinAppUtil.exe
 #   (Windows; /tool-eval and the Phase 2 gate pending, P-4), dpkg-deb (Ubuntu,
 #   OS-provided). Nothing is installed here; managed tools: /tool-registry skill.
-# Logging: ~/.aitools/logs/deploy.log via logging_init (BP-16). Summary rows
-#   under the tool name "build-package"; the panel is shown when the caller
-#   did not set AITOOLS_SUMMARY_FILE.
+# Logging: ~/.aitools/logs/deploy.log via logging_init (BP-16). Summary rows:
+#   one tool name per step, "build stage|pkg|intune|deb|dry-run" ("build-package"
+#   for argument errors), because show_summary keeps one row per tool name; the
+#   panel is shown when the caller did not set AITOOLS_SUMMARY_FILE.
 #
 # Usage: build-package.sh <command> [options]
 #   Commands:
@@ -56,7 +57,11 @@ logging_init "build-package"
 # (header). What this host can build is detected per kind (detect_kind).
 HOST="$AITOOLS_PLATFORM"   # macos | linux | windows | unknown
 
-TOOL="build-package"
+TOOL="build-package"   # summary tool name for argument errors (the whole run)
+# Per-step summary tool names are "$STEP_TOOL <step>" (build stage, build pkg,
+# build intune, build deb, build dry-run): show_summary keeps one row per tool
+# name, and names of 16 characters or fewer keep the panel's columns aligned.
+STEP_TOOL="build"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PKG_ID="tech.nobul.aitools"   # BP-17
 ALL_KINDS="pkg intune deb"
@@ -251,7 +256,7 @@ plan() { log "[DRY RUN] $1"; }
 
 not_implemented() {  # KIND BATCH
     log_error "$1: not implemented in v1.0 scaffolding (batch $2, plans/build-package/implementation-plan.md)"
-    write_summary ERROR "$TOOL" "$(short "$1: not implemented")"
+    write_summary ERROR "$STEP_TOOL $1" "not implemented"
     return 1
 }
 
@@ -352,10 +357,10 @@ if ! $BAD_ARGS; then
             log "$kind: buildable on $HOST ($(display_path "$KIND_TOOL"))"
         elif $EXPLICIT; then
             log_error "$kind: cannot build on this host ($HOST): $KIND_WHY"
-            write_summary ERROR "$TOOL" "$(short "$kind: cannot build ($HOST)")"
+            write_summary ERROR "$STEP_TOOL $kind" "$(short "cannot build ($HOST)")"
         else
             log "$kind: n/a on $HOST: $KIND_WHY"
-            write_summary OK "$TOOL" "$(short "$kind: n/a ($HOST)")"
+            write_summary OK "$STEP_TOOL $kind" "$(short "n/a ($HOST)")"
         fi
     done
 
@@ -370,12 +375,12 @@ if ! $BAD_ARGS; then
             fi
         done
         if $DRY_RUN; then
-            write_summary OK "$TOOL" "$(short "dry-run: $DONE")"
+            write_summary OK "$STEP_TOOL dry-run" "$(short "$DONE")"
         fi
     else
         for kind in $BUILDABLE; do
             log_error "$kind: not built -- staging failed"
-            write_summary ERROR "$TOOL" "$(short "$kind: not built (no stage)")"
+            write_summary ERROR "$STEP_TOOL $kind" "not built (no stage)"
         done
     fi
 fi

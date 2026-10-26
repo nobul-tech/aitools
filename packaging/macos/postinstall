@@ -1,10 +1,11 @@
 #!/bin/bash
 # postinstall -- aitools macOS .pkg postinstall script (package launcher)
 #
-# Intent (batch B8, plans/build-package/implementation-plan.md): lay down the
+# Intent (batch B8a, plans/build-package/implementation-plan.md): lay down the
 # machine state, then start the per-user setup. Steps when implemented:
-#   1. log every line (UTC ...Z) to /Library/Logs/aitools/install.log
-#      (AITOOLS_LOG_DIR=/Library/Logs/aitools, BP-16); short summary on stdout
+#   1. log every line (UTC ...Z) to /Library/Logs/aitools/deploy.log
+#      (AITOOLS_LOG_DIR=/Library/Logs/aitools, BP-16; the lib's file name,
+#      contract change C-2); short summary on stdout
 #   2. validate the payload: /Library/Application Support/aitools/{VERSION,repo/}
 #      (exit non-zero only for a broken payload, so the MDM retries)
 #   3. check prerequisites (Command Line Tools, Homebrew; separate MDM packages,

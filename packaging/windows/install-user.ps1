@@ -1,6 +1,6 @@
 # install-user.ps1 -- aitools Intune Win32 app B "aitools (user)" installer (package launcher)
 #
-# Intent (batch B9, plans/build-package/implementation-plan.md): run the user
+# Intent (batch B9b, plans/build-package/implementation-plan.md): run the user
 # phase of the existing installer from the read-only payload that app A laid
 # down. Steps when implemented:
 #   1. refuse when running as SYSTEM or elevated with another user's profile
@@ -17,8 +17,8 @@
 # Run context: the signed-in user (Intune install behaviour User), started as
 #   "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass
 #   -File install-user.ps1. App B depends on app A (and so on pwsh 7). No
-#   terminal: never prompt. Parses under Windows PowerShell 5.1 and pwsh 7.
-# Platform: Windows 10/11 only. Package launcher: exempt from the .sh/.ps1
+#   terminal: never prompt. pwsh 7 only: B9b adds #Requires -Version 7.
+# Platform: Windows 11 only. Package launcher: exempt from the .sh/.ps1
 #   pairing (category "package launchers", BP-5, pending P-1).
 # Follows: BP-2, BP-5, BP-6, BP-7, BP-10, BP-11, BP-13, BP-14, BP-15, BP-16.
 # Safe to re-run: yes once implemented (version marker; managed files backed up).
