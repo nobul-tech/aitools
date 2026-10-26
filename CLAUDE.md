@@ -74,6 +74,14 @@ your branch is ahead of `origin/main`. Scripts: `scripts/relay-outbound-prompt.s
 and `.ps1`. Skip with `AITOOLS_SKIP_RELAY_PROMPT=1`. See
 `.claude/rules/relay-outbound.md`.
 
+### Channel exception (direct to main)
+
+These paths are committed directly to main from the main checkout, with no worktree
+and no PR: handoffs (`.aitools/channel/handoffs/*`), `.aitools/channel/relay.md`, and
+this `CLAUDE.md`. Run `git pull --ff-only`, commit only those paths, push. If the pull
+is not a fast-forward, leave the files uncommitted and tell the commander. Everything
+else uses a worktree and a PR. (Commander, 2026-10-26.)
+
 ## Origins
 
 aitools grew out of "failure-mode" work — sessions spent learning how agents drift
