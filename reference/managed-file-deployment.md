@@ -172,9 +172,19 @@ script.
 
 `[x]abort` logs an error and exits 2. A bare exit 2 is a user abort
 (D-TS13 as decided 2026-10-21). Abort ends this setup
-script (exit 2); the installer continues with the next script. (Today the
-installer records any non-zero exit as an ERROR row, `aitools-install.sh`
-`validate_and_run`.)
+script (exit 2). What happens next depends on which script exited 2 and
+which runner launched it (kept by the commander 2026-10-26):
+
+| Script that exits 2 | Installer (`aitools install`, or run directly) | `aitools` sync (no arguments, `gitpull`) |
+|---|---|---|
+| `deploy-harness` | Step 8b (`run_harness_step` in `@scripts/aitools-install.sh` / `Invoke-HarnessStep` in `@scripts/aitools-install.ps1`) writes WARN `harness files` `aborted by user`, renders the summary and exits 2: Steps 9-22 do not run. `aitools install` reads the exit 2, logs "Installer aborted by user", renders the summary and exits 2 | `deploy_configs` in `@scripts/aitools` / `Deploy-Configs` in `@scripts/aitools.ps1` call `deploy_abort` / `Invoke-DeployAbort` (WARN `harness files` `aborted by user`) and stop: no further deploy script, no relay mirror to `~/.cursor/AGENTS.md`, no version tag (`gitpull`). The entry point renders the summary and exits 2 |
+| Any other setup script (`setup-user-*`, `setup-cursor-ide-mcp`, tool setup scripts) | `validate_and_run` / `Invoke-ValidatedScript` treat it as a failure: `log_error "<script> failed (exit 2)"`, ERROR `script failed (exit 2)`; the install continues | `deploy_configs` / `Deploy-Configs` treat it as a failure: ERROR `script failed (exit 2)`, counted as an error; the remaining deploy scripts run |
+
+`aitools user init` launches `setup-user-hooks` directly: exit 2 there logs
+"user init: aborted by user" and `user init` exits 2. `bootstrap.sh` does not
+distinguish exit 2 (any installer failure prints "Installer reported issues"
+and continues to `user init`); `bootstrap.ps1` does not check the
+installer's exit code.
 
 ## Non-Interactive Behavior
 

@@ -62,7 +62,7 @@ predate this file and are replaced by `tool_detect_method` / `Get-ToolInstallMet
 | D-TS10 | A recorded tool exception reports OK `<ver> (kept)`, not WARN: the user decided it, so it is not a caveat. This deliberately departs from F3 for recorded exceptions only | Commander, 2026-10-21 |
 | D-TS11 | SHADOWED is ERROR `shadowed (see log)` + ACTION although another copy runs: "supported" means the command resolves to the managed copy (`plans/tooling-resolution-and-artifact-registry.md` decision 10); needs a severity-guide line in `reference/script-standards-detail.md` | Commander, 2026-10-21 |
 | D-TS12 | A platform still `evaluating` reports WARN `under evaluation` + ACTION `run /tool-eval`, not ERROR. Summary semantics for every leaf (commander's note): a step that succeeds without errors reports OK, never downgraded to WARN by its own result; warnings and errors from the step are passed through; action required = WARN + ACTION; a failure = ERROR | Commander, 2026-10-21 |
-| D-TS13 | Exit 2 from a setup script is a user abort (`[x]abort` in the tool menu or a managed-file menu). There is no abort-marker file. Runners stop the run on exit 2 (section 7.5) | Commander, 2026-10-21 (reversed from the marker design: "exit 2 = abort is fine for a user abort; avoid this") |
+| D-TS13 | Exit 2 from a setup script is a user abort (`[x]abort` in the tool menu or a managed-file menu). There is no abort-marker file. What each runner does on exit 2 is in section 7.5: today only an exit 2 from `deploy-harness` stops the run; any other setup script's exit 2 is an ERROR row and the run continues (commander, 2026-10-26: keep PR #106's behaviour) | Commander, 2026-10-21 (reversed from the marker design: "exit 2 = abort is fine for a user abort; avoid this") |
 | T-Q4 | No automatic fallback to another install method (the modal pip and datadog cargo fallbacks are removed). A missing package manager = PREREQ: `log_error` + ERROR summary row + ACTION | Commander, 2026-10-21 |
 | T-Q5 | The harness manages bash and perl: below `minVersion` it updates them; when the update fails it logs a warning, writes a WARN summary row and the run continues | Commander, 2026-10-21 |
 | F1-F4 | Install first, clean up second / judge success by the binary / a working tool kept as-is is WARN / go.dev tarball at `/usr/local/go` is upstream | `plans/linux-install-hardening.md` "Foundational decisions" |
@@ -437,6 +437,10 @@ option is `[i]nstall : install <preferred> alongside; the existing copy is not
 removed`, and the prompt is `Choice [i/k/x]`. Letters are case-insensitive; a
 letter not offered, empty input, or EOF = HOLD.
 
+Under today's runners (section 7.5) the `[x]abort` exit 2 of a tool setup
+script does not stop the run: the installer writes ERROR `script failed
+(exit 2)` and continues with the next step.
+
 ### 7.5 Contract with the installers and entry points
 
 - **Exit 2 = user abort (D-TS13, reversed 2026-10-21).** A setup script exits 2
@@ -448,41 +452,55 @@ letter not offered, empty input, or EOF = HOLD.
   Accepted risk, stated so nobody rediscovers it: bash also exits 2 on a
   `set -e` death from a command that returns 2 (`grep` and `diff` on error, a
   function's `return 2`) and on a syntax error in a sourced file (observed with
-  `/bin/bash` 3.2.57, 2026-10-21); such a failure reads as an abort and stops the
-  run. The guards that keep it rare: no helper returns 2 (below), scripts run
+  `/bin/bash` 3.2.57, 2026-10-21); such a failure from `deploy-harness` reads
+  as an abort and stops the run (from any other setup script it is an ERROR
+  row either way). The guards that keep it rare: no helper returns 2 (below), scripts run
   `bash -n` before launch (`validate_and_run`), and probes that can return 2
   run in conditional context.
-- **Every launch site reads the exit code the same way:**
+- **Launch sites and what each does with exit 2 today** (PR #106; the
+  commander kept this behaviour 2026-10-26):
+  - Installer Step 8b, `run_harness_step` (`scripts/aitools-install.sh`) /
+    `Invoke-HarnessStep` (`scripts/aitools-install.ps1`), which runs
+    `deploy-harness`: exit 2 = user abort. It logs `Step 8b: aborted by user
+    at a review menu -- install stopped (exit 2)` (info), writes WARN
+    `harness files` `aborted by user`, renders the summary and exits 2;
+    Steps 9-22 do not run. The bash step runs `bash -n` first, so a syntax
+    error is an ERROR row, not an abort; in PowerShell a parse error throws
+    and is reported as a failure.
   - `validate_and_run` (`scripts/aitools-install.sh`: the tool setup-script
     steps and the Step 21 managed-file deploy loop) and
-    `Invoke-ValidatedScript` (`scripts/aitools-install.ps1`);
+    `Invoke-ValidatedScript` (`scripts/aitools-install.ps1`): exit 2 is not
+    distinguished. Every non-zero exit, 2 included, is `log_error "<script>
+    failed (exit N)"` and ERROR `script failed (exit N)`, and the install
+    continues.
   - `deploy_configs` (`scripts/aitools`, used by the no-args sync and the
     `gitpull` branch) and `Deploy-Configs` (`scripts/aitools.ps1`, same two
-    branches). These launch the `setup-user-*` and `setup-cursor-*` scripts,
-    where most managed-file `[x]abort` choices happen;
+    branches). `deploy-harness` runs first: its exit 2 calls `deploy_abort` /
+    `Invoke-DeployAbort` (info log, WARN `harness files` `aborted by user`),
+    sets `deploy_aborted` / `$script:deployAborted` and leaves the loop; the
+    relay mirror to `~/.cursor/AGENTS.md` is skipped. The entry point reads
+    the variable (not the return value, an error count that can itself be 2),
+    renders the summary and exits 2 (`gitpull` does not tag). The
+    `setup-user-*` and `setup-cursor-*` scripts that follow, where most
+    managed-file `[x]abort` choices happen, are not distinguished: their
+    exit 2 is ERROR `script failed (exit 2)`, counted as an error, and the
+    loop continues.
+  - The `aitools install` branch of both entry points reads the installer's
+    exit code: 2 = log `Installer aborted by user at a review menu -- run
+    stopped (exit 2)`, render the summary, exit 2. The installer's only
+    deliberate exit 2 is Step 8b.
   - `aitools user init` in both entry points, which launches
-    `setup-user-hooks` directly and today ignores its exit code (it prints
-    "Done" regardless). Exit 2 = print "aborted by user" instead of "Done" and
-    exit 2; any other non-zero = log_error and exit 1;
+    `setup-user-hooks` directly: exit 2 = log `user init: aborted by user` and
+    exit 2; any other non-zero = log_error and exit 1.
   - `scripts/bootstrap.sh` and `scripts/bootstrap.ps1`, which launch the
-    installer and then `aitools user init` and `aitools`. On installer exit 2
-    they skip the later steps and exit 2. `bootstrap.ps1` launches the
-    installer with `powershell` (5.1) and never checks `$LASTEXITCODE`; it must
-    use `pwsh` (PowerShell 7 baseline) and check the exit code.
-- **After each script:**
-  - exit 2 = user abort. The runner writes no failure row, logs `aborted by
-    user in <script>` (info), skips the remaining scripts in its loop, and
-    reports the abort to its caller: the installers skip their remaining
-    steps, render the summary and exit 2; `deploy_configs` / `Deploy-Configs`
-    return after the loop and tell the entry point through a variable
-    (`DEPLOY_ABORTED` / `$script:DeployAborted`), never through their return
-    value, which is an error count (`return $errors`) and can itself be 2. The
-    entry point then renders the summary, prints "aborted by user" instead of
-    "Completed with errors", and exits 2. This makes the managed-file
-    `[x]abort` ("stop the run") behave as documented in both the install and
-    the sync paths.
-  - Any other non-zero exit is an ordinary failure: ERROR row `script failed
-    (exit N)`, and the run continues.
+    installer and then `aitools user init` and `aitools`, do not distinguish
+    exit 2: `bootstrap.sh` prints "Installer reported issues" for any non-zero
+    exit and continues; `bootstrap.ps1` launches the installer with
+    `powershell` (5.1) and never checks `$LASTEXITCODE`.
+- The managed-file menus' `[x]abort` therefore stops the run only inside
+  `deploy-harness`; in every other setup script it ends that script and the
+  run continues with an ERROR row (the profile-mirror menu's "stop the run"
+  text included).
 - No helper uses return code 2 except `tool_support_run`, whose 2 means
   ABORT and which the script turns into `exit 2` as in
   section 7.6 (`tool_detect_method` internal error = 3, `tool_remove`
@@ -704,18 +722,20 @@ stubs on PATH, both `AITOOLS_ENVIRONMENT` values where relevant.
 | directory symlink or junction (PS1) | binary under a linked directory (nvm-windows style) | `Resolve-ToolRealPath` resolves it; same class as bash |
 | `resolveBy: knownPaths` (Windows bash) | WSL `bash.exe` first on PATH, Git Bash at its verified known path | OK for Git Bash; no SHADOWED |
 | pty, EOF | close stdin at prompt | HOLD with EOF warning |
-| pty, `x` | -- | ABORT, exit 2; installer stops; `aitools` prints "aborted by user" |
-| exit 2 from a failure (accepted risk) | a helper returns 2 outside conditional context (stub) | reads as an abort: the run stops (D-TS13 reversed); the guards in section 7.5 keep it rare |
-| sync path, managed-file `x` | `aitools` with no arguments (and `aitools gitpull`), pty, a `setup-user-*` review answered `x` | `deploy_configs` / `Deploy-Configs` write no ERROR row and skip the remaining deploy scripts; summary rendered; "aborted by user"; exit 2 |
+| pty, `x` | -- | ABORT, the setup script exits 2; the installer (`validate_and_run`) writes ERROR `script failed (exit 2)` and continues |
+| exit 2 from a failure (accepted risk) | a helper returns 2 outside conditional context (stub) | in `deploy-harness`: reads as an abort, the run stops (D-TS13 reversed); in any other setup script: ERROR `script failed (exit 2)`, the run continues; the guards in section 7.5 keep it rare |
+| sync path, `deploy-harness` `x` | `aitools` with no arguments (and `aitools gitpull`), pty, a `deploy-harness` review answered `x` | WARN `harness files` `aborted by user`; the remaining deploy scripts and the relay mirror skipped; summary rendered; exit 2 |
+| sync path, managed-file `x` | `aitools` with no arguments (and `aitools gitpull`), pty, a `setup-user-*` review answered `x` | `deploy_configs` / `Deploy-Configs` write ERROR `script failed (exit 2)` and run the remaining deploy scripts; "Completed with N error(s)", exit 1 |
 | sync path, two failures | two deploy-script stubs exit 1 (`deploy_configs` returns 2) | "Completed with 2 error(s)", exit 1; not reported as an abort |
-| install path, managed-file `x` | `aitools install`, Step 21 review answered `x` | installer exits 2; the entry point reads the exit code and prints "aborted by user"; exit 2 |
+| install path, `deploy-harness` `x` | `aitools install`, Step 8b review answered `x` | WARN `harness files` `aborted by user`; Steps 9-22 not run; installer exits 2; the entry point logs "Installer aborted by user", renders the summary, exit 2 |
+| install path, managed-file `x` | `aitools install`, Step 21 review answered `x` | ERROR `script failed (exit 2)`; the remaining Step 21 scripts and Step 22 run; the installer does not exit 2 |
 | script run by hand, `x` | pty | menu logs the abort, exits 2 |
 | `aitools user init`, hooks review `x` | pty, `setup-user-hooks` review answered `x` | "aborted by user", not "Done"; exit 2 |
-| bootstrap, installer `x` | `bootstrap.sh` / `.ps1`, a review answered `x` during the install | `user init` and the rebuild skipped; exit 2 |
+| bootstrap, installer `x` | `bootstrap.sh` / `.ps1`, a review answered `x` during the install | not distinguished today: `bootstrap.sh` prints "Installer reported issues" and continues to `user init`; `bootstrap.ps1` does not check the exit code |
 | entry point re-exec | deploy list changed, `aitools` re-executes itself | an abort in the re-executed run exits 2 through the outer process |
 | bash helper result in a global | failed update stub, bash 3.2 | `TOOL_UPDATE_STATE=failed` and `WARNINGS` incremented in the script's shell; OK row promoted to WARN |
 | RP, case spelling (macOS) | PATH spells the preferred dir in another case than the disk | RP uses `-ef`: same file, so the removal is not blocked by a spelling difference |
-| Windows bash runner, pwsh child, `x` | Git Bash `aitools` sync, `setup-user-*.ps1` answered `x` | the pwsh child exits 2; bash reads it; abort reported (UNVERIFIED until run on Windows) |
+| Windows bash runner, pwsh child, `x` | Git Bash `aitools` sync, `deploy-harness.ps1` answered `x` | the pwsh child exits 2; bash reads it; abort reported, run stops, exit 2 (UNVERIFIED until run on Windows). A `setup-user-*.ps1` answered `x`: ERROR `script failed (exit 2)`, loop continues |
 | malformed spec | spec file with an unterminated quote | `tool_spec_load` rc 1 → ERROR `tool spec missing`, exit 1 (not 2) |
 | bash 3.2, empty method list | no methods for the platform, `/bin/bash` 3.2, `set -u` | NO-METHOD; no unbound-variable crash |
 | no method | spec without a preferred method | NO-METHOD |
