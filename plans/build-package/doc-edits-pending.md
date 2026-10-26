@@ -29,11 +29,11 @@ Decision references (BP-n, P-n): `.aitools/channel/handoffs/2026-10-21_10cf255a-
 
 | # | File | Owning PR | Apply after | Needs |
 |---|---|---|---|---|
-| 1 | `.claude/rules/cross-platform.md` (opening, pointer section, equal visibility) | #99 | #99 merges | -- |
+| 1 | `.claude/rules/cross-platform.md` (opening, pointer section, equal visibility) | #99 | #99 merges | -- (APPLIED 2026-10-26) |
 | 2 | `.claude/rules/cross-platform.md` (Environment branches, `cursor-cloud`) | #99 | #99 merges AND P-2 approved AND the B5 lib change ships | P-2 |
 | 3 | `.claude/rules/cross-platform.md` (two exemption rows + package launchers row) | #99 | #99 merges AND P-1 approved | P-1 |
-| 4 | `.claude/rules/deploy-paths.md` (third path) | #99 | #99 merges | -- |
-| 5 | `.cursor/rules/deploy-paths.mdc` (third path mirror) | #99 | #99 merges | -- |
+| 4 | `.claude/rules/deploy-paths.md` (third path) | #99 | #99 merges | -- (APPLIED 2026-10-26) |
+| 5 | `.cursor/rules/deploy-paths.mdc` (third path mirror) | #99 | #99 merges | -- (APPLIED 2026-10-26) |
 | 6 | `shared/claude-shared.md` (Cross-Platform Awareness line) | #105 | #105 merges | -- |
 | 7 | `reference/tool-support-decision-tree.md` (Terms rows) | #101, #106 | both merge | P-2 for the `cursor-cloud` part |
 | 8 | `reference/logging.md` (system-phase log location, BP-16) | #101 | #101 merges | -- |
@@ -46,6 +46,9 @@ Decision references (BP-n, P-n): `.aitools/channel/handoffs/2026-10-21_10cf255a-
 
 Owning PR: #99 (changes the "Repos live under" line only; this edit does not
 touch it). Apply after #99 merges.
+
+Status: APPLIED 2026-10-26 (S3-BuildPkg-DocsApply; #99 merged; 1a and 1b
+verbatim, OLD blocks matched the merged text once each; uncommitted).
 
 ### 1a. Opening
 
@@ -221,6 +224,12 @@ as is. Apply after #99 merges. Based on DocsInv section 3a, adjusted to BP-1
 (payload = public aitools tree at a pinned ref, not the dotprofile `deploy/`),
 BP-2 (runs the dev-path scripts), BP-11 (no personal data in a package).
 
+Status: APPLIED 2026-10-26 (S3-BuildPkg-DocsApply; #99 merged; heading and
+list verbatim, "Equivalence" inserted before #99's "MDM run order"; the
+`stage` step added as step 4, `stage` confirmed in `scripts/build-package.sh`;
+also "When changing `shared/` content" step 4 "Both paths ..." reworded to
+name the package path; uncommitted).
+
 OLD:
 
 ```markdown
@@ -287,6 +296,11 @@ before applying.) The `paths:` front matter needs no change (`scripts/**`,
 
 Owning PR: #99 (adds "MDM run order" after the list; does not touch the
 heading or list). Apply after #99 merges.
+
+Status: APPLIED 2026-10-26 (S3-BuildPkg-DocsApply; verbatim; also, to keep
+the twin consistent with entry 4, the `stage` step 4 in "Changing
+scripts/setup-*.sh/.ps1" and the front-matter `description` naming the
+three paths; uncommitted).
 
 OLD:
 
