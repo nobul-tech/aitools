@@ -1,0 +1,22 @@
+# S3-H2-DraftsH draft: shared/cursor-rules/user-rules.md (protected; awaiting approval, NOT applied)
+
+Target: `shared/cursor-rules/user-rules.md`, section "## Cross-Platform Awareness", line 28.
+
+Why: HARNESS Q5 (approved 2026-10-22) set the Windows repos path to
+`%USERPROFILE%\repos\` in `.claude/rules/cross-platform.md` (PR #99). This
+template still says `C:\repos\`. The approval covered cross-platform.md only.
+Same evidence as Q5: `scripts/aitools-install.ps1:324,333`
+(`Join-Path $env:USERPROFILE "repos"`), and Cursor user rules load only under
+`%USERPROFILE%`.
+
+## Old
+
+```
+- Projects live in git repos under `~/repos/` (macOS) / `C:\repos\` (Windows)
+```
+
+## New
+
+```
+- Projects live in git repos under `~/repos/` (macOS) / `%USERPROFILE%\repos\` (Windows)
+```

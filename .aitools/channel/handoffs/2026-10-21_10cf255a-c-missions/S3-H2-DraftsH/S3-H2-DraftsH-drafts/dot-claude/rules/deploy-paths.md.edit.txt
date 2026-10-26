@@ -1,0 +1,49 @@
+# S3-H2-DraftsH corrected draft: deploy-paths.md staleness note (awaiting re-approval, NOT applied)
+
+Target: `.claude/rules/deploy-paths.md` (and the twin `.cursor/rules/deploy-paths.mdc`),
+directly after the "Every `scripts/deploy-harness.*` source ..." bullet of
+"What IS auto-embedded".
+
+Source: S3-H-MDM draft (`S3-H-MDM/S3-H-MDM-drafts/dot-claude/rules/deploy-paths.md`,
+lines 87-89), approved 2026-10-22. Everything else in that draft was applied
+verbatim; this paragraph was held.
+
+## Why it was held
+
+The approved text says pre-push step 7 "does not yet trigger on them" (all the
+deploy-harness source directories). On origin/main 8a9dcb5 that is false for
+three of them. `scripts/check-pre-push.sh` step 7 trigger:
+
+```
+deploy_sources=$(echo "$PUSH_FILES" | grep -E '^(scripts/(setup-.*|build-deploy|aitools-lib|aitools-profile)\.(sh|ps1)$|scripts/aitools-json\.(pl|ps1)$|shared/)' || true)
+```
+
+`shared/` matches `shared/hooks`, `shared/skills` and `shared/rules`, so a push
+that changes them does run the step 7 rebuild and diff.
+
+## Old (approved, not applied)
+
+```
+Because of that last bullet, a change to any of those directories makes the
+dotprofile `deploy/deploy-harness.*` stale until `build-deploy.sh` runs again
+(pre-push step 7 does not yet trigger on them).
+```
+
+## New (proposed)
+
+```
+Because of that last bullet, a change to any of those directories makes the
+dotprofile `deploy/deploy-harness.*` stale until `build-deploy.sh` runs again.
+Pre-push step 7 triggers only on the `shared/` ones; it does not yet trigger on
+`reference/`, `registries/`, `.claude/skills`, `.claude/rules`,
+`<userRepoPath>/claude/rules`, `scripts/deploy-harness.*` or the bin CLIs.
+```
+
+## Optional, same bullet (applied verbatim; for the commander's call)
+
+The applied bullet lists the deploy-harness sources but not `.claude/hooks`,
+which `scripts/deploy-harness.sh` also adds
+(`add_source hooks ".claude/hooks" "$REPO_DIR/.claude/hooks" ...`) and which
+`build-deploy.sh` parses like the others. The directory does not exist on
+origin/main, so nothing from it is embedded today. If wanted, add
+`.claude/hooks` after `shared/hooks` in the bullet.
