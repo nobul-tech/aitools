@@ -1,0 +1,34 @@
+#!/bin/bash
+# postinstall -- aitools macOS .pkg postinstall script (package launcher)
+#
+# Intent (batch B8, plans/build-package/implementation-plan.md): lay down the
+# machine state, then start the per-user setup. Steps when implemented:
+#   1. log every line (UTC ...Z) to /Library/Logs/aitools/install.log
+#      (AITOOLS_LOG_DIR=/Library/Logs/aitools, BP-16); short summary on stdout
+#   2. validate the payload: /Library/Application Support/aitools/{VERSION,repo/}
+#      (exit non-zero only for a broken payload, so the MDM retries)
+#   3. check prerequisites (Command Line Tools, Homebrew; separate MDM packages,
+#      BP-8): ERROR + ACTION in the log when one is missing
+#   4. resolve the console user: stat -f %Su /dev/console; empty, root,
+#      loginwindow, _mbsetupuser = none (BP-7, BP-10)
+#   5. user present: launchctl asuser <uid> sudo -u <user> -H
+#      "/Library/Application Support/aitools/bin/aitools-pkg-run.sh", detached
+#      (the installer timeout must not kill a long setup)
+#   6. no user: nothing more; the LaunchAgent tech.nobul.aitools.firstrun runs
+#      the runner at the next login (BP-7)
+#   7. exit 0 for "setup started" or "setup deferred"
+# Run context: root, by macOS Installer (Intune unmanaged PKG, Jamf policy, or
+#   `installer -pkg`). Arguments from Installer: $1 package path, $2 target
+#   location, $3 target volume. No terminal: never prompt.
+# Platform: macOS only (bash 3.2, /bin/bash). Package launcher: exempt from the
+#   .sh/.ps1 pairing (category "package launchers", BP-5, pending P-1).
+# Follows: BP-5, BP-7, BP-8, BP-10, BP-13, BP-16, BP-17.
+# Safe to re-run: will be idempotent (re-install of the same version).
+#
+# VERSION 1.0 SCAFFOLDING: refuses to run (exit 1).
+
+set -euo pipefail
+
+printf '[%s] [aitools-postinstall] [error] not implemented in v1.0 scaffolding (batch B8, plans/build-package/implementation-plan.md)\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+exit 1
