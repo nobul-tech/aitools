@@ -47,8 +47,8 @@ Deployed content originates from two repos:
 | aitools repo (`shared/`) | Fallback | claude-shared.md template, hook scripts, skills, shell aliases |
 | aitools repo + dotprofile -> `~/.aitools/` (`deploy-harness`) | First source wins on a name conflict: `shared/`, then `.claude/`, then dotprofile `claude/rules/` | reference, registries, hooks, skills, rules (one flat directory), bin; config.json generated from profile.json. Rules reach the tools through the `setup-user-claude` / `setup-user-cursor` fan-out. Detail: `@reference/harness.md` "Deployed harness (`~/.aitools`)" |
 
-- **Template interpolation**: `{{PLACEHOLDER}}` tokens in CLAUDE.md replaced with `profile.json` values at deploy time
-- **Machine profile selection**: `config.json` `machineAlias` → `profile.json` `profiles[alias]`. Fallback: hostname match, then first profile
+- **Template interpolation**: `{{PLACEHOLDER}}` tokens in CLAUDE.md replaced with this machine's profile values when the setup script runs on that machine (dev path and generated deploy/ scripts alike)
+- **Machine profile selection**: one resolver (`aitools-profile.sh` / `.ps1`, through `resolve_machine_profile` / `Resolve-MachineProfile`): override → environment → `profiles[<machine id>]` → config.json `machineId` (only when the id cannot be detected) → config.json `machineAlias` (2.1 profiles only) → hostname (warns) → no match = ERROR, never another machine's profile. Order and failure behaviour: `@reference/user-repo.md` "Resolution"
 - **Rules**: additive deploy from `<userRepoPath>/claude/rules/` — managed files updated, unmanaged files in target preserved
 - **Skills**: vendored from upstream in `shared/skills/`, deployed to `~/.claude/skills/` and `~/.cursor/skills/`
 - **Hooks**: canonical source in `shared/hooks/`, deployed to `~/.claude/hooks/`
@@ -100,9 +100,9 @@ dispatch pattern and the environment API prevent this — see
 Adding a row (new file type) or column (new attribute) requires updating:
 this rule, `@reference/managed-file-deployment.md`,
 `@.cursor/rules/managed-file-deployment.mdc`, and
-the `/incident` skill if there are implementation gaps. See
-`@.claude/rules/tool-lifecycle.md` "Onboarding checklist" (deployment types
-table, protected).
+the `/incident` skill if there are implementation gaps. Tool onboarding checks
+this table through `/tool-adopt` step 5 ("deployment types table for a new file
+type").
 
 ### Cross-references
 
