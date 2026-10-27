@@ -1,0 +1,23 @@
+@@@FILE scripts/build-deploy.sh L211 size check for every other generated script, WARN only (base: origin/feature/harness-mdm-followups)
+@@@OLD
+# Swap the staged build in
+@@@NEW
+# 4. Every other generated script, the same Intune limits, WARN only: the MDM
+#    path's per-script delivery is not decided (the package path ships a Win32
+#    app, deploy-paths.md), and on 2026-10-26 six .ps1 were over 200,000 B.
+for _sz_f in "$DEPLOY_DIR"/*.ps1 "$DEPLOY_DIR"/*.sh; do
+    [ -f "$_sz_f" ] || continue
+    case "${_sz_f##*/}" in deploy-harness.ps1|deploy-harness.sh) continue ;; esac
+    case "$_sz_f" in *.ps1) _sz_max=200000 ;; *) _sz_max=1000000 ;; esac
+    if ! _sz=$(wc -c < "$_sz_f"); then
+        blog_error "Cannot measure deploy/${_sz_f##*/}"
+        exit 1
+    fi
+    _sz=$((_sz + 0))
+    if [ "$_sz" -ge "$_sz_max" ]; then
+        blog_warn "deploy/${_sz_f##*/} is $_sz bytes, over the Intune script limit ($_sz_max)"
+    fi
+done
+
+# Swap the staged build in
+@@@END

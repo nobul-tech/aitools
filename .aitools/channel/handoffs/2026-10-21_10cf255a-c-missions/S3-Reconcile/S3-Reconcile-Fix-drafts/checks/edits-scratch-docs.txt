@@ -1,0 +1,81 @@
+Doc drafts for shared/skills/scratch/SKILL.md (not in the protected table; its
+Intent block is not changed). SD-1..SD-5 land WITH edits-harvest.txt (they
+describe its behaviour); SD-6 (B13, full-tree exports) is independent.
+R2/R3 also edit this file: re-anchor on their merged text.
+S3-Reconcile-Fix-Checks, 2026-10-26. Base: origin/main 60e7fd7.
+
+@@@FILE shared/skills/scratch/SKILL.md SD-1 long delegate names are harvested (#171)
+@@@OLD
+   Keep the part after `session-` to 10 characters or fewer
+   (`session-S3-Build`, not `session-S3-ScratchRule`). The catch-up
+   harvester truncates it to 10 characters; a longer name is never
+   harvested, and the miss makes it harvest the directory named in
+   `.current-session` (a live session's) instead.
+@@@NEW
+   Prefer a short name after `session-` (`session-S3-Build`). The
+   catch-up harvester takes the directory's whole name, so a longer one
+   is harvested too, once nothing in it has changed for 30 minutes.
+@@@END
+
+@@@FILE shared/skills/scratch/SKILL.md SD-2 naming table: PR bodies are staging files (#73)
+@@@OLD
+| PR or issue body | `pr-body.md` | harvested (no ephemeral pattern yet) |
+@@@NEW
+| PR or issue body | `pr-body.md`, `issue-body.md`, `pr-comment-<n>.md` | left in place, not harvested |
+| Short commit message | `msg-<topic>.txt` | left in place, not harvested |
+@@@END
+
+@@@FILE shared/skills/scratch/SKILL.md SD-3 classification paragraph (#73)
+@@@OLD
+Only names that start with `commit-msg`, end in `.log` or `.tmp`, or are
+`.md` files whose name contains `log`, `output` or `dump` count as
+ephemeral. A commit message named `msg-fix.txt` is harvested as an
+artifact. Avoid `log`, `output` and `dump` in the name of a `.md` you
+want kept (`S2-Catalog.md` is treated as ephemeral). Files in
+subdirectories of the session dir are never harvested.
+@@@NEW
+These count as ephemeral: names that start with `commit-msg`; `.txt` or
+`.md` names that start with `msg-`, `pr-body`, `issue-body` or
+`pr-comment`; names that end in `.log` or `.tmp`; `.md` files whose name
+contains `log`, `output` or `dump`; dot files (`.harvested`,
+`.intelligence-last-check`) and `events.jsonl` (harness bookkeeping).
+Avoid `log`, `output` and `dump` in the name of a `.md` you want kept
+(`S2-Catalog.md` is treated as ephemeral). Files in subdirectories of
+the session dir are never harvested.
+@@@END
+
+@@@FILE shared/skills/scratch/SKILL.md SD-4 SessionEnd deletes only its own pointer (#172)
+@@@OLD
+  the session dir, and deletes `.scratch/.current-session`. The session
+@@@NEW
+  the session dir, and deletes `.scratch/.current-session` if it names
+  that dir. The session
+@@@END
+
+@@@FILE shared/skills/scratch/SKILL.md SD-5 catch-up skips recently changed dirs (#171)
+@@@OLD
+  other `session-*` dir in this root that has no `.harvested` marker
+  (for example a delegate's dir, or a session whose SessionEnd never
+  ran). `scratch-init.sh` prints a count of dirs older than 24 hours
+@@@NEW
+  other `session-*` dir in this root that has no `.harvested` marker
+  and nothing changed in the last 30 minutes (for example a finished
+  delegate's dir, or a session whose SessionEnd never ran).
+  `scratch-init.sh` prints a count of dirs older than 24 hours
+@@@END
+
+@@@FILE shared/skills/scratch/SKILL.md SD-6 no full-tree exports under .scratch/ (B13)
+@@@OLD
+Do not delete scratch files when you are done. The harvester decides
+what to keep, and `rm` with globs is blocked.
+@@@NEW
+Do not delete scratch files when you are done. The harvester decides
+what to keep, and `rm` with globs is blocked.
+
+Never export a whole repo tree (`git archive`, `cp -R`, a worktree
+copy) into `.scratch/`: Claude Code can load the export's `CLAUDE.md`
+and `.claude/` as project context, and search tools see every file
+twice. Export only the files a test needs, into a `mktemp -d`
+directory outside the repo, and read code at a ref with
+`git show <ref>:<path>`.
+@@@END

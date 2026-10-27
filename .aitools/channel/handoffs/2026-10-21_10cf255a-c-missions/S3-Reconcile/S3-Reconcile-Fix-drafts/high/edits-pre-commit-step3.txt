@@ -1,0 +1,73 @@
+FX-2a (high): check-pre-commit step 3 with --fix / -Fix runs build-deploy.sh
+with no exit check (sh: `>/dev/null 2>&1` under set -e aborts the checklist on a
+failed build; ps1: `2>$null | Out-Null`, result discarded), which deletes and
+rebuilds the REAL dotprofile <userRepoPath>/deploy/ from the branch being
+committed, then `git add deploy/` stages the frozen aitools/deploy/ and reports
+PASS "(rebuilt + staged)". Fix (plan Q11, suggested answer): step 3 never
+rebuilds; it WARNs and names pre-push step 7 (temporary dotprofile copy, every
+push) and the post-merge rebuild. Base: origin/main (no open PR touches either
+file). Step 10 is left as is: it now checks only that the frozen
+aitools/deploy/ has no unstaged changes (the R12a D-15 text says exactly that).
+
+@@@FILE scripts/check-pre-commit.sh header: --fix no longer covers build freshness
+@@@OLD
+# --fix: auto-fix line endings, exec bits, and build freshness
+@@@NEW
+# --fix: auto-fix line endings and exec bits (build freshness is never rebuilt
+#        here: see step 3)
+@@@END
+
+@@@FILE scripts/check-pre-commit.sh step 3 never runs build-deploy
+@@@OLD
+if $build_needed; then
+    if $FIX_MODE; then
+        bash "$SCRIPT_DIR/build-deploy.sh" >/dev/null 2>&1
+        git add deploy/ 2>/dev/null
+        step_pass "3" "Build freshness" "(rebuilt + staged)"
+    else
+        step_warn "3" "Build freshness" "scripts/ or shared/ modified -- run with --fix"
+    fi
+else
+@@@NEW
+if $build_needed; then
+    # No rebuild, with or without --fix: build-deploy.sh deletes and rebuilds the
+    # dotprofile's <userRepoPath>/deploy/ (aitools/deploy/ is frozen), which must
+    # follow main, not the branch being committed. Pre-push step 7 compares the
+    # dotprofile deploy/ with a fresh build in a temporary copy on every push.
+    step_warn "3" "Build freshness" "scripts/ or shared/ changed -- pre-push step 7 checks the dotprofile deploy/; rebuild it (build-deploy.sh) after the merge"
+else
+@@@END
+
+@@@FILE scripts/check-pre-commit.ps1 header: -Fix no longer covers build freshness
+@@@OLD
+# -Fix: auto-fix line endings, exec bits, and build freshness
+@@@NEW
+# -Fix: auto-fix line endings and exec bits (build freshness is never rebuilt
+#       here: see step 3)
+@@@END
+
+@@@FILE scripts/check-pre-commit.ps1 step 3 never runs build-deploy
+@@@OLD
+if ($buildNeeded) {
+    if ($Fix) {
+        $bashExe = (Get-Command bash -ErrorAction SilentlyContinue).Source
+        if ($bashExe) {
+            & $bashExe "$script:RepoRoot/scripts/build-deploy.sh" 2>$null | Out-Null
+            InvokeGit add deploy/
+            StepPass "3" "Build freshness" "(rebuilt + staged)"
+        } else {
+            StepFail "3" "Build freshness" "bash not found for build-deploy.sh"
+        }
+    } else {
+        StepWarn "3" "Build freshness" "scripts/ or shared/ modified -- run with -Fix"
+    }
+} else {
+@@@NEW
+if ($buildNeeded) {
+    # No rebuild, with or without -Fix: build-deploy.sh deletes and rebuilds the
+    # dotprofile's <userRepoPath>/deploy/ (aitools/deploy/ is frozen), which must
+    # follow main, not the branch being committed. Pre-push step 7 compares the
+    # dotprofile deploy/ with a fresh build in a temporary copy on every push.
+    StepWarn "3" "Build freshness" "scripts/ or shared/ changed -- pre-push step 7 checks the dotprofile deploy/; rebuild it (build-deploy.sh) after the merge"
+} else {
+@@@END

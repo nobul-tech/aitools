@@ -1,0 +1,29 @@
+@@@FILE scripts/relay-outbound-prompt.sh L200a EOF-safe read of the [RELAY] choice
+@@@OLD
+    local choice
+    read -r choice < /dev/tty
+@@@NEW
+    local choice=""
+    # EOF (input ended) takes the default [c]ontinue; without the check, read's
+    # exit 1 would end a caller that runs this under set -e outside a condition.
+    if ! read -r choice < /dev/tty; then
+        choice=""
+        printf '\n  (no input -- continuing)\n' > /dev/tty
+    fi
+@@@END
+@@@FILE scripts/relay-outbound-prompt.ps1 L200b non-interactive check and console read (interactive-menus.md "Console I/O")
+@@@OLD
+    if (-not [Environment]::UserInteractive) {
+@@@NEW
+    # Not interactive: a service or MDM host, or stdin redirected (CI, a pipe) --
+    # the bash twin's "no /dev/tty" branch
+    if (-not [Environment]::UserInteractive -or [Console]::IsInputRedirected) {
+@@@END
+@@@FILE scripts/relay-outbound-prompt.ps1 L200c [Console]::ReadLine, not Read-Host (EOF -> $null -> default)
+@@@OLD
+    $choice = Read-Host "  choice [c/q/s] (default c)"
+@@@NEW
+    [Console]::Write("  choice [c/q/s] (default c): ")
+    # ReadLine returns $null at EOF: the default [c]ontinue (handled below)
+    $choice = [Console]::ReadLine()
+@@@END

@@ -144,30 +144,46 @@ read_config_key() {
 #   tool_exception_get     0         1 unavailable   1      1 (refused)  1 (unexpected)
 #   tool_exception_record  0         1 failed        1      3 refused    1 (unexpected)
 # Every 3 and 4 is logged with its code and meaning. An exit 0/1 without the
-# resolver's "via" line is rewritten to 2 first (_aitlib_profile_run).
+# resolver's result lines ("via" or "result"; a value for hostname and
+# machine-id) is rewritten to 2 first (_aitlib_profile_run).
 # ---------------------------------------------------------------------------
+
+# _aitlib_rm_tmp FILE -- remove a temp file of the runner; a failure is a detail
+# line (never silent; not a warning, which would promote the caller's OK rows)
+_aitlib_rm_tmp() {
+    if [ -e "$1" ] && ! rm -f "$1"; then log_detail "aitools-profile: could not remove temp file $1"; fi
+    return 0
+}
 
 # _aitlib_profile_run ARGS... -- run the resolver; sets AITLIB_PROFILE_OUT
 # (tagged lines, CR stripped) and AITLIB_PROFILE_RC. Returns 0 when it ran, 1
-# when no resolver is available (the caller logs it). The resolver's stderr
-# (its own log lines) is copied to deploy.log as detail lines.
-# The exit code is trusted only with the result lines: every resolver command
-# prints a "via" line on 0 (found) and 1 (none). Exit 0 or 1 without one (a
-# crash, a parse failure, a policy refusal -- pwsh exits 0 or 1 for those) is
-# rewritten to 2 with an "error" line, so no caller mistakes it for "found" or
-# "shared-only".
+# when no resolver is available (AITLIB_PROFILE_RC is then 2 with an "error"
+# line naming it; the caller logs it). The resolver's stderr (its own log
+# lines) is copied to deploy.log as detail lines. Callers: the wrappers below
+# and `aitools user init` (scripts/aitools ui_profile_run copies the results).
+# The exit code is trusted only with the result lines. Accepted output:
+#   hostname, machine-id   exit 0 with a non-empty value (a bare value, no tags)
+#   every other command    exit 0 or 1 with a "via" or a "result" line
+#                          (user-repo-path, resolve, exception-get and
+#                          derive-config print "via"; register and migrate
+#                          print "result"; exception-set prints both)
+# Exit 0 or 1 without them (a crash, a parse failure, a policy refusal -- pwsh
+# exits 0 or 1 for those) is rewritten to 2 with an "error" line, so no caller
+# mistakes it for "found" or "shared-only". Exits 2, 3 and 4 are passed through
+# with the resolver's own lines.
 # Windows (Git Bash) branch: aitools-profile.ps1 through pwsh
 # (-ExecutionPolicy Bypass, as the OS dispatch rule calls .ps1 files; a throw
-# exits 2). Path arguments (--path) are passed in Windows form (cygpath -w;
-# unchanged when cygpath fails), stdout is forced to UTF-8 and CRs are
-# stripped. AITLIB_PROFILE_VIA_PWSH=1 forces this branch on any OS (tests;
-# cygpath is then used only when present).
+# exits 2 with an "error" line, "aitools-profile CMD threw: MESSAGE"). Absolute
+# path arguments (after --path, --profile, --out, --config) are passed in
+# Windows form (cygpath -w; unchanged when cygpath fails), stdout is forced to
+# UTF-8 and CRs are stripped. AITLIB_PROFILE_VIA_PWSH=1 forces this branch on
+# any OS (tests; cygpath is then used only when present).
 # UNVERIFIED on Windows (tested on macOS only, through the forced branch):
 # cygpath conversion, MSYS argument and environment translation, and the
 # UTF-8 decoding of non-ASCII values.
 _aitlib_profile_run() {
     AITLIB_PROFILE_OUT=""; AITLIB_PROFILE_RC=0
-    local d sh ps1 errf="" line
+    local d sh ps1 errf="" line ok=false
     d="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     sh="${AITOOLS_PROFILE_SH:-$d/aitools-profile.sh}"
     ps1="${AITOOLS_PROFILE_PS1:-$d/aitools-profile.ps1}"
@@ -177,7 +193,9 @@ _aitlib_profile_run() {
     fi
     if [ "$AITOOLS_PLATFORM" = "windows" ] || [ "${AITLIB_PROFILE_VIA_PWSH:-}" = "1" ]; then
         if [ ! -f "$ps1" ] || ! command -v pwsh >/dev/null 2>&1; then
-            if [ -n "$errf" ]; then rm -f "$errf"; fi
+            if [ -n "$errf" ]; then _aitlib_rm_tmp "$errf"; fi
+            AITLIB_PROFILE_RC=2
+            AITLIB_PROFILE_OUT="error"$'\t'"resolver $(basename "$ps1") or pwsh not found ($(display_path "$(dirname "$ps1")"))"
             return 1
         fi
         local a w prev="" ps1_arg="$ps1" arglist=""
@@ -185,22 +203,28 @@ _aitlib_profile_run() {
             if w="$(cygpath -w "$ps1")"; then ps1_arg="$w"; else log_detail "aitools-profile: cygpath -w failed for $ps1 -- passed unchanged"; fi
         fi
         for a in "$@"; do
-            if [ "$prev" = "--path" ] && command -v cygpath >/dev/null 2>&1; then
-                case "$a" in
-                    /*) if w="$(cygpath -w "$a")"; then a="$w"; else log_detail "aitools-profile: cygpath -w failed for $a -- passed unchanged"; fi ;;
-                esac
-            fi
+            case "$prev" in
+                --path|--profile|--out|--config)
+                    if command -v cygpath >/dev/null 2>&1; then
+                        case "$a" in
+                            /*) if w="$(cygpath -w "$a")"; then a="$w"; else log_detail "aitools-profile: cygpath -w failed for $a -- passed unchanged"; fi ;;
+                        esac
+                    fi ;;
+            esac
             arglist="$arglist$a"$'\n'
             prev="$a"
         done
         # Arguments travel in an environment variable, one per line (resolver
         # values are one line by contract), so pwsh -Command can set UTF-8 output
-        # before it runs the resolver.
-        AITLIB_PROFILE_OUT=$(AITLIB_PS1="$ps1_arg" AITLIB_PS_ARGS="$arglist" pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command 'try { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $a = @(); if ($env:AITLIB_PS_ARGS) { $a = @($env:AITLIB_PS_ARGS.Substring(0, $env:AITLIB_PS_ARGS.Length - 1) -split "`n") }; $global:LASTEXITCODE = 0; & $env:AITLIB_PS1 @a; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine("aitools-profile threw: $($_.Exception.Message)"); exit 2 }' 2>"${errf:-/dev/null}") || AITLIB_PROFILE_RC=$?
+        # before it runs the resolver. A throw prints an "error" line (stdout) as
+        # well as the stderr line, as Invoke-AitLibProfile does.
+        AITLIB_PROFILE_OUT=$(AITLIB_PS1="$ps1_arg" AITLIB_PS_ARGS="$arglist" AITLIB_PS_CMD="${1:-}" pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command 'try { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $a = @(); if ($env:AITLIB_PS_ARGS) { $a = @($env:AITLIB_PS_ARGS.Substring(0, $env:AITLIB_PS_ARGS.Length - 1) -split "`n") }; $global:LASTEXITCODE = 0; & $env:AITLIB_PS1 @a; exit $LASTEXITCODE } catch { $m = "aitools-profile $($env:AITLIB_PS_CMD) threw: $($_.Exception.Message -replace "\s*\r?\n\s*", " ")"; [Console]::Error.WriteLine($m); [Console]::Out.WriteLine("error`t$m"); exit 2 }' 2>"${errf:-/dev/null}") || AITLIB_PROFILE_RC=$?
         AITLIB_PROFILE_OUT="${AITLIB_PROFILE_OUT//$'\r'/}"
     else
         if [ ! -f "$sh" ]; then
-            if [ -n "$errf" ]; then rm -f "$errf"; fi
+            if [ -n "$errf" ]; then _aitlib_rm_tmp "$errf"; fi
+            AITLIB_PROFILE_RC=2
+            AITLIB_PROFILE_OUT="error"$'\t'"resolver $(basename "$sh") not found ($(display_path "$(dirname "$sh")"))"
             return 1
         fi
         # The resolver runs under the caller's bash (macOS /bin/bash 3.2 stays 3.2)
@@ -211,17 +235,23 @@ _aitlib_profile_run() {
             line="${line//$'\r'/}"
             if [ -n "$line" ]; then log_detail "aitools-profile $1: $line"; fi
         done < "$errf"
-        rm -f "$errf"
+        _aitlib_rm_tmp "$errf"
     fi
     case "$AITLIB_PROFILE_RC" in
         0|1)
-            case $'\n'"$AITLIB_PROFILE_OUT" in
-                *$'\n'via$'\t'*) : ;;
+            case "${1:-}" in
+                hostname|machine-id)
+                    if [ "$AITLIB_PROFILE_RC" -eq 0 ] && [ -n "$AITLIB_PROFILE_OUT" ]; then ok=true; fi ;;
                 *)
-                    log_detail "aitools-profile $1: exit $AITLIB_PROFILE_RC without result lines -- treated as a resolver error"
-                    AITLIB_PROFILE_OUT="${AITLIB_PROFILE_OUT}"$'\n'"error"$'\t'"resolver exited $AITLIB_PROFILE_RC without result lines (see deploy.log)"
-                    AITLIB_PROFILE_RC=2 ;;
-            esac ;;
+                    case $'\n'"$AITLIB_PROFILE_OUT" in
+                        *$'\n'via$'\t'*|*$'\n'result$'\t'*) ok=true ;;
+                    esac ;;
+            esac
+            if ! $ok; then
+                log_detail "aitools-profile ${1:-}: exit $AITLIB_PROFILE_RC without result lines -- treated as a resolver error"
+                AITLIB_PROFILE_OUT="${AITLIB_PROFILE_OUT}"$'\n'"error"$'\t'"resolver exited $AITLIB_PROFILE_RC without result lines (see deploy.log)"
+                AITLIB_PROFILE_RC=2
+            fi ;;
     esac
     return 0
 }

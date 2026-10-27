@@ -37,7 +37,7 @@ If the push completes or starts a roadmap item, `ROADMAP.md` should be updated (
 
 ## 7. deploy/ matches source
 
-If pre-commit steps 3+10 (build freshness + deploy drift check) applied to any commit in this push, confirm `deploy/` is included and matches source. This is a verification, not a redo.
+Runs on every push (commander decision 2026-10-26; it used to run only when a deploy-relevant source changed). It rebuilds from this branch into a temporary copy of the dotprofile's committed tree, under a temporary HOME, and compares that copy's `deploy/` with the committed one; then it dry-runs the generated resolver consumers. The real dotprofile is never touched. A stale dotprofile `deploy/` is a FAIL: run `bash scripts/build-deploy.sh` and commit `deploy/` in the dotprofile repo. Skipped when `userRepoPath` is not configured; WARN when node (bash) or Git Bash (PowerShell) is missing.
 
 ## 8. Commit count check
 

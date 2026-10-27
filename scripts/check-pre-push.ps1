@@ -111,11 +111,10 @@ StepWarn "6" "Roadmap reflects reality" "check if push completes or starts a roa
 # 7. deploy/ matches source
 # ---------------------------------------------------------------------------
 # Generated deploy scripts live in the dotprofile repo (deploy-paths.md; aitools/deploy/
-# is frozen). When a deploy-relevant source changes (setup scripts, the build script,
-# aitools-lib -- inlined into every deploy script --, the profile resolver and its JSON
-# engine -- embedded in the resolver-consuming deploy scripts (M3 B5, review M7) -- or
-# shared/), rebuild from this branch into a temporary copy of the dotprofile's committed
-# tree and compare its deploy/. Then smoke-run the generated resolver consumers
+# is frozen). On every push (commander decision 2026-10-26: step 7 always runs; it used
+# to run only when a deploy-relevant source changed, which missed reference/,
+# registries/, .claude/* and deploy-harness inputs), rebuild from this branch into a
+# temporary copy of the dotprofile's committed tree and compare its deploy/. Then smoke-run the generated resolver consumers
 # (-DryRun, isolated USERPROFILE): a deploy script that cannot find its resolver fails
 # here, not on an endpoint (B8a INCIDENT). The smoke run lives here, not in
 # build-deploy, so build-deploy stays a pure generator.
@@ -123,7 +122,6 @@ StepWarn "6" "Roadmap reflects reality" "check if push completes or starts a roa
 # entry-point input) and no AITOOLS_PROFILE_FILE / AITOOLS_MACHINE_ALIAS from this
 # session (review H5): an inherited value would otherwise point the build, which
 # deletes and rebuilds <dotprofile>/deploy, at the real dotprofile.
-$deploySources = @($pushFiles | Where-Object { $_ -match '^(scripts/(setup-.*|build-deploy|aitools-lib|aitools-profile)\.(sh|ps1)$|scripts/aitools-json\.(pl|ps1)$|shared/)' })
 # build-deploy.sh runs under Git Bash (approved cross-language exception); same lookup
 # order as check-pre-commit step 3 after the known Git for Windows locations.
 $d7Bash = @(
@@ -135,9 +133,7 @@ if (-not $d7Bash) {
     $d7BashCmd = Get-Command bash -ErrorAction SilentlyContinue
     if ($d7BashCmd) { $d7Bash = $d7BashCmd.Source }
 }
-if ($deploySources.Count -eq 0) {
-    StepSkip "7" "deploy/ matches source" "no deploy-relevant source changes"
-} elseif (-not $script:UserRepoPath -or -not (Test-Path (Join-Path $script:UserRepoPath ".git"))) {
+if (-not $script:UserRepoPath -or -not (Test-Path (Join-Path $script:UserRepoPath ".git"))) {
     StepSkip "7" "deploy/ matches source" "userRepoPath not configured -- dotprofile deploy/ not verified"
 } elseif (-not $d7Bash) {
     StepWarn "7" "deploy/ matches source" "Git Bash not found -- dotprofile deploy/ not verified"

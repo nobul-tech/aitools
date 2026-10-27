@@ -119,12 +119,12 @@ Progression: `evaluating` → `approved` → `supported` (or `n/a` at any point)
 
 ## Cross-Platform Requirements (This Project)
 
-The aitools project supports both macOS and Windows as first-class platforms. When evaluating a tool for use in this project:
+The aitools project supports the platforms and environments listed in `reference/cross-platform-detail.md` "Supported platforms and environments", each first-class. When evaluating a tool for use in this project:
 
-- **Check availability on both platforms** — Homebrew/curl for macOS, winget/choco/npm for Windows
-- **Note platform gaps** — If a tool is macOS-only or Windows-only, disclose this upfront
-- **Prefer tools with native support on both** — over tools that require WSL or emulation layers
-- **Document install commands for both platforms** when adding to the tool registry
+- **Check availability on every supported platform** — Homebrew/curl for macOS, winget/choco/npm for Windows, apt or the vendor's official `.deb`/tarball for Ubuntu — and note whether the tool runs in Claude Code web and Cursor cloud (Ubuntu VMs: root or a sudo user, no display, rebuilt from a setup script)
+- **Note platform gaps** — If a tool is missing on a supported platform or environment, disclose this upfront
+- **Prefer tools with native support on every platform** — over tools that require WSL or emulation layers
+- **Document install commands for every supported platform** when adding to the tool registry
 
 ## Evaluation-to-Support Lifecycle
 

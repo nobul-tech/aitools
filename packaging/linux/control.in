@@ -1,0 +1,21 @@
+# control.in -- template for DEBIAN/control of the aitools .deb (package launcher data)
+#
+# Rendered by build-package.sh deb (batch B10, plans/build-package/implementation-plan.md):
+# lines starting with "#" are removed, @VERSION@ is replaced with --version
+# (X.Y.Z, digits first, no "v" prefix). One package for Ubuntu 22.04 and 24.04,
+# Architecture all, no version floors (BP-9). Prerequisites per BP-8: pwsh and
+# node are installed by the user phase (aitools-setup), not here.
+# Identifier: package name aitools (BP-17). Follows: BP-8, BP-9, BP-12, BP-17.
+Package: aitools
+Version: @VERSION@
+Architecture: all
+Maintainer: nobul-tech <jose@nobul.tech>
+Section: devel
+Priority: optional
+Depends: bash, perl, python3, git, curl, ca-certificates
+Recommends: jq, sudo
+Homepage: https://github.com/nobul-tech/aitools
+Description: aitools harness (Claude Code / Cursor configuration and tools)
+ Installs the aitools tree at a pinned release to /opt/aitools and the
+ aitools-setup command. Run aitools-setup as each user (or as root in a
+ container) to deploy the per-user configuration.

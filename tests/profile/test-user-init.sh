@@ -13,6 +13,9 @@
 # on a fresh copy of the same fixture. Asserts exit codes, summary rows,
 # profile.json, the remote's commits and the config.json machineId, and that
 # both shells give the same exit code, rows, profile.json bytes and commits.
+# M3-FINISH item 2: an unregistered machine runs the writer with --no-machine /
+# -NoMachine and gets one machine-profile ERROR (user init's), none of the
+# writer's; a registered machine (also one whose id cannot be detected) does not.
 # Interactive cases run on a pty (tests/managed-files/pty-run.py) and compare
 # the menus line by line.
 # Platform: macOS/Linux (CI: macOS and Linux runners). Safe to re-run.
@@ -238,6 +241,31 @@ remote_count() {  # remote_count BARE N
     n=$(git -C "$1" rev-list --count main 2>/dev/null) || n=0  # no branch = 0 commits
     if [ "$n" -eq "$2" ]; then ok "$CASE: remote has $2 commit(s)"; else bad "$CASE: remote has $n commit(s), want $2"; fi
 }
+row_count() {  # row_count PREFIX N -- exactly N summary rows start with PREFIX
+    local n
+    n=$(perl -ne 'BEGIN { $p = shift @ARGV } $n++ if index($_, $p) == 0; END { print $n + 0 }' "$1" "$SUM")
+    if [ "$n" -eq "$2" ]; then ok "$CASE: $2 row(s) '$1'"; else bad "$CASE: $n row(s) '$1', want $2"; perl -pe 's/^/       /' "$SUM"; fi
+}
+# no_machine_flag yes|no -- M3-FINISH item 2: whether setup-user-config ran with
+# --no-machine (bash) / -NoMachine (pwsh), read from its info line in each shell's output
+no_machine_flag() {
+    local f got impl
+    for impl in bash ps; do
+        f="$WORK/$CASE.$impl/out.txt"
+        if [ ! -f "$f" ]; then continue; fi
+        if grep -qF "machine registration is left to the caller" "$f"; then got=yes; else got=no; fi
+        if [ "$got" = "$1" ]; then ok "$CASE ($impl): writer flag --no-machine $1"
+        else bad "$CASE ($impl): writer flag --no-machine $got, want $1"; perl -pe 's/^/       /' "$f"; fi
+    done
+}
+# unregistered_once -- the machine-profile outcome is reported once, by user init:
+# one "machine profile" ERROR row, none of the writer's (no machine match, its ACTION)
+unregistered_once() {
+    row_count "ERROR|machine profile|" 1
+    no_row_like "no machine match"
+    no_row_like "ACTION||Run: aitools user init (profiles:"
+    no_machine_flag yes
+}
 cfg_id() {  # cfg_id ID -- config.json machineId ("" = absent)
     local v
     v=$(perl "$REPO/scripts/aitools-json.pl" get "$H/.aitools/config.json" machineId 2>/dev/null) || v=""  # absent = ""
@@ -257,6 +285,7 @@ has_row "OK|machine profile|created (spare)"
 remote_has "$BARE" "Register machine profile: spare"
 cfg_id "$THIS_KEY"
 out_has "────"
+no_machine_flag no
 # machine.shell (Review3 #82 minor 6): bash records the login shell ($SHELL, here
 # /test/bin/pwsh so both shells write the same bytes), aitools.ps1 records pwsh
 if [ "$(pj_get profiles "$THIS_KEY" machine shell)" = "pwsh" ]; then ok "$CASE: machine.shell from \$SHELL"
@@ -273,6 +302,7 @@ remote_count "$BARE" 2
 echo "== decision 1: --alias of another machine's profile, no terminal -> refused (exit 1)"
 case_run alias-other 1 fx_two --alias laptop
 has_row "ERROR|machine profile|alias used by another machine"
+unregistered_once
 pj_lacks "\"$THIS_KEY\""
 pj_other_intact
 remote_count "$BARE" 1
@@ -281,6 +311,7 @@ echo "== an unregistered machine without --alias and without a terminal -> ERROR
 case_run unregistered-notty 1 fx_two
 has_row "ERROR|machine profile|not registered (no terminal)"
 has_row "ACTION||Run: aitools user init --alias <name> (or on a terminal)"
+unregistered_once
 
 echo "== --alias naming a profile no machine owns: claimed (explicit choice)"
 case_run alias-claim 0 fx_two --alias nobul-mac
@@ -320,6 +351,7 @@ fx_cached() { fixture "$CASE" "$1" "$PJ_TWO" ',
   "machineAlias": "nobul-mac"'; }
 case_run cached-alias-0 1 fx_cached
 has_row "ERROR|machine profile|not registered (no terminal)"
+unregistered_once
 pj_lacks "\"$THIS_KEY\""
 
 echo "== decision 2 switch = 1: cached machineAlias -> claimed without asking"
@@ -341,6 +373,7 @@ echo "== Review3 #82 minor 5: uncommitted edits to profile.json are never commit
 fx_dirty() { fx_two "$1"; perl -pi -e 's/"old-host"/"edited-host"/' "$DP/profile.json"; }
 case_run dirty 1 fx_dirty --alias spare
 has_row "ERROR|machine profile|not registered (local edits)"
+unregistered_once
 pj_has '"edited-host"'
 pj_lacks "\"$THIS_KEY\""
 remote_count "$BARE" 1
@@ -352,6 +385,7 @@ fx_dirty_reg() {
 }
 case_run dirty-registered 0 fx_dirty_reg
 has_row "WARN|machine profile|not refreshed (local edits)"
+no_machine_flag no
 remote_count "$BARE" 2
 
 echo "== Review3 #82 minor 4: a rejected push (remote ahead) is told to pull --rebase"
@@ -388,6 +422,8 @@ CASE_ENV=(AITOOLS_PROFILE_TEST_MACHINE_ID=none)
 case_run via-config 0 fx_viaconfig
 has_row "WARN|machine profile|not refreshed (no machine id)"
 cfg_id "$THIS_KEY"
+# Registered, id undetectable: machine_key is emptied for the writer, but no flag
+no_machine_flag no
 CASE="via-config-rerun"
 run bash
 if [ "$RC" -eq 0 ]; then ok "$CASE: second run exit 0"; else bad "$CASE: second run exit $RC"; perl -pe 's/^/       /' "$OUT"; fi
@@ -481,6 +517,8 @@ if $USE_PTY; then
     PTY_INPUT=$'\n\nn\n'
     case_run pty-dup-decline 1 fx_two --alias laptop
     has_row "WARN|machine profile|skipped"
+    no_machine_flag yes
+    no_row_like "no machine match"
     pj_lacks "\"$THIS_KEY\""
 
     echo "== interactive (pty) with --force: no prompt; an unregistered machine is refused like no terminal"

@@ -1,0 +1,53 @@
+@@@FILE .claude/skills/tool-registry/SKILL.md D105 schema lists every section the registry uses; overrides is top-level
+@@@OLD
+`registries/tool-registry.json` uses `schemaVersion: "1.0"`. Top-level
+keys: `meta`, `tools`, `mcpServers`, `mcpManagement`, `overrides`.
+Key sections per CLI tool (`tools.<slug>`):
+
+| Section | Purpose |
+|---------|---------|
+| `install` | Per-platform preferred method + alternatives |
+| `delivery` | Provenance: who maintains the package, upstream source, endorsement |
+| `health` | Per-platform green/yellow/red flags with reasons |
+| `evaluation` | Status (current/stale/pending-migration), provenance link |
+| `lifecycle` | Platform status, concurrency, config, dependencies, invocation |
+| `versions` | Per-platform verified version + date |
+| `maintenance` | Harness, workarounds (with severity), upstream risks |
+| `authentication` | Auth method, commands, token storage, Auth0 migration phase |
+| `nonPreferredMethods` | Cleanup targets for setup scripts |
+| `buildPrereqs` | Per-platform build dependencies |
+| `knownPaths` | Verified install paths for PATH fallback detection |
+| `overrides` | Intentional deviations from upstream defaults |
+@@@NEW
+`registries/tool-registry.json` uses `schemaVersion: "1.0"`. Top-level
+keys: `meta`, `tools`, `mcpServers`, `mcpManagement`, `overrides`.
+`overrides` is a top-level list of intentional deviations from upstream
+defaults (`tool`, `override`, `upstreamDefault`, `ourValue`, `reason`,
+`added`, `lastVerified`), not a per-tool section.
+
+Sections per CLI tool (`tools.<slug>`); every tool has the first group:
+
+| Section | Purpose |
+|---------|---------|
+| `displayName`, `source`, `purpose`, `notes` | Identity and free-text notes |
+| `install` | Per-platform (`macos`, `windows`, `linux`, or `all`) list of methods (`method`, `command`, `preferred`, `autoUpdates`, `ccCompatible`, `notes`); optional `deprecated[]` (`method`, `command`, `autoUpdates`, `notes`) |
+| `update`, `versionCheck` | How the tool is updated and how its version is read |
+| `systemRequirements` | Platform requirements |
+| `lifecycle` | Platform status, concurrency, config, dependencies, invocation |
+| `versions` | Per platform `lastVerifiedVersion` + `lastVerified`; `minVersion`, `blocked`; optional `notes` (free text) and `maintenanceFile` (repo path of the tool's ops reference) |
+| `authentication` | Auth method, commands, token storage, Auth0 migration phase |
+| `nonPreferredMethods` | Cleanup targets for setup scripts |
+| `buildPrereqs` | Per-platform build dependencies |
+| `knownPaths` | Verified install paths for PATH fallback detection |
+| `pathIssues`, `platformGotchas` | Known PATH and platform problems |
+
+Optional sections (only some tools):
+
+| Section | Purpose |
+|---------|---------|
+| `delivery` | Provenance: who maintains the package, upstream source, endorsement |
+| `health` | Per-platform green/yellow/red flags with reasons |
+| `evaluation` | Status (current/stale/pending-migration), provenance link |
+| `maintenance` | `harness` (text), `lastRun` (object), `workarounds[]` (`item`, `summary`, `platforms`, `severity`, `lastVerified`), `upstreamRisks[]` (text) |
+| `configBehavior`, `perlioDeployment`, `setupScript` | Tool-specific notes (one tool each) |
+@@@END
