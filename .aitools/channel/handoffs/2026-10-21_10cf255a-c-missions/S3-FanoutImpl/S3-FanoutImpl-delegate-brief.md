@@ -5,6 +5,25 @@ Version 1.0, 2026-10-26, by S3-FanoutImpl (level 1, Session Commander
 prompt. A delegate that delegates passes this path, the packet path and the
 plan path on unchanged (the duty is recursive; invoke /delegate first).
 
+## 0. v1.1 changes (2026-10-27, read first)
+
+- Load `/delegate` (v2.0, `/Users/new-jose/repos/aitools/shared/skills/delegate/SKILL.md`
+  on main d3efa87; the mission packet is merged into it) BEFORE any Agent or
+  Workflow call (D-DEL7), and tell every delegate you launch to do the same.
+  Use its v2.0 prompt skeleton: eight elements (identity; rules AND CLAUDE.md
+  files; skills with /delegate first; operational learning; conflict priority
+  D-DEL6; WRITE_BLOCKED; access; name prefix).
+- Conflict priority (D-DEL6): 1) the commander's own words, newest first;
+  2) your delegation prompt; 3) skills. Record `CONFLICT: <A> vs <B> --
+  resolved by <tier>: <what you did>` in your report; never drop a mandated
+  skill or rule silently.
+- D-DEL5 (versions, not drafts; protected files reviewed after) is now in
+  `/Users/new-jose/.claude/rules/delegation.md`. Re-read that file in full.
+- DDG-HOOK mission is editing `shared/hooks/delegation-duty-guard.sh` and
+  `hooks-manifest.json`: never touch them.
+- Final response shape: as `/delegate` "Final response shape" (adds
+  `CONFLICT:` lines).
+
 ## 1. Read first (in full, before other work)
 
 - Mission packet: `/Users/new-jose/repos/aitools/.aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/SC-mission-packet.md`
