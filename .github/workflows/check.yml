@@ -155,6 +155,12 @@ jobs:
       - name: User init tests (macOS /bin/bash 3.2)
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/profile/test-user-init.sh --bash-only
 
+      - name: setup-user-claude dev + MDM tests (bash 5 + pwsh)
+        run: bash tests/claude-mdm/test-claude-mdm.sh
+
+      - name: setup-user-claude dev + MDM tests (macOS /bin/bash 3.2)
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/claude-mdm/test-claude-mdm.sh
+
       - name: Build deploy scripts
         run: |
           echo "::group::Running build-deploy.sh"
@@ -319,6 +325,9 @@ jobs:
 
       - name: User init tests (bash + pwsh parity, pty menus)
         run: bash tests/profile/test-user-init.sh
+
+      - name: setup-user-claude dev + MDM tests (bash + pwsh)
+        run: bash tests/claude-mdm/test-claude-mdm.sh
 
       - name: Build deploy scripts
         run: bash scripts/build-deploy.sh
