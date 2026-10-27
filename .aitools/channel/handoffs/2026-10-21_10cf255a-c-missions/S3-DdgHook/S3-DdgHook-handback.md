@@ -1,4 +1,15 @@
-# S3-DdgHook hand-back (v1.1, 2026-10-26)
+# S3-DdgHook hand-back (v1.2, 2026-10-26)
+
+## v1.2: review round 2 (verdict v1.1 "no blocking findings" at ad72004)
+
+Non-blocking N8 and N11 fixed after the verdict: JSON string values (prompt,
+script) are unescaped before matching, so a path or "rules" right after a
+`\n` is no longer missed (the Windows-path alternative now takes `C:\` or
+`C:/`); the suite's telemetry runs no longer print the hook's stdout. Suite:
+50 passed under bash 5.3.15 and /bin/bash 3.2.57; fixtures and tool-ops cases
+unchanged. N9 (window and 256 KB limits) and N10 (a nested "prompt" key
+before the real one, not possible with the Agent tool today) stay as
+documented. Commit of these fixes was not re-reviewed.
 
 ## v1.1: review round 1 (S3-DdgHook-Review, verdict "blocking findings")
 

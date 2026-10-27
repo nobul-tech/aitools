@@ -54,7 +54,9 @@
 #   7. access        Explicit paths: "explicit paths", "absolute path(s)",
 #                    "Glob/Grep", "cross-repo", "OL-O12", or an absolute
 #                    path (/Users/, /home/, /root/, /tmp/, ~/, or a drive
-#                    path C:/ or C:\, JSON-escaped as C:\\)
+#                    path C:/ or C:\). JSON string values (prompt, script)
+#                    are unescaped before matching; a scriptPath file is
+#                    matched as read.
 #   8. md-prefix     Markdown name prefix (D-DEL1, 2026-10-05): "D-DEL1",
 #                    or a name-prefix phrase within 160 characters of
 #                    ".md"/"markdown" (either order). Name-prefix phrase:
@@ -200,6 +202,14 @@ result=$(printf '%s' "$input" | \
             $text = $field->("prompt");
             $status = "none:no prompt in the input" unless defined $text;
         }
+        my $from_file = ($ENV{DDG_TOOL} eq "Workflow" && !defined $field->("script")) ? 1 : 0;
+
+        # A JSON string value is matched unescaped (review N8, PR #122): a
+        # literal "\n" before a path or a word must not hide it.
+        if (defined $text && !$from_file) {
+            my %esc = (n => "\n", t => "\t", r => "\r", b => "\b", f => "\f");
+            $text =~ s/\\(?:u([0-9a-fA-F]{4})|(.))/defined $1 ? chr(hex $1) : (exists $esc{$2} ? $esc{$2} : $2)/gse;
+        }
 
         if ($status ne "checked") {
             print "$status\n0\n\n\n";
@@ -233,7 +243,7 @@ result=$(printf '%s' "$input" | \
         $check->("WRITE_BLOCKED", /WRITE_BLOCKED/);
 
         # 7. Access: explicit / absolute paths
-        $check->("access", /explicit\s+(?:absolute\s+)?paths|absolute\s+paths?|Glob\/Grep|cross-repo|OL-O12|(?<![\w.])(?:\/Users\/|\/home\/|\/root\/|\/tmp\/|~\/)[\w.-]|\b[A-Za-z]:(?:\\\\|\/)[\w.-]/i);
+        $check->("access", /explicit\s+(?:absolute\s+)?paths|absolute\s+paths?|Glob\/Grep|cross-repo|OL-O12|(?<![\w.])(?:\/Users\/|\/home\/|\/root\/|\/tmp\/|~\/)[\w.-]|\b[A-Za-z]:[\\\/][\w.-]/i);
 
         # 8. Markdown name prefix (D-DEL1)
         my $md = qr/(?:\.md\b|markdown)/i;

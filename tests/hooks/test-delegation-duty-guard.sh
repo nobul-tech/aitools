@@ -149,6 +149,12 @@ case "$ERR" in *"Missing: identity."*) ok "lower-case 's3' does not count as ide
 agent_payload Agent "$(prompt_without conflict) Do the merge conflict resolution in git." > "$WORK/p.json"
 run_hook "$WORK/p.json"
 case "$ERR" in *"Missing: conflict."*) ok "'merge conflict resolution' does not count as conflict priority" ;; *) bad "conflict resolution: [$ERR]" ;; esac
+agent_payload Agent "$(prompt_without access)"'\n/Users/test/repo/file.txt' > "$WORK/p.json"
+run_hook "$WORK/p.json"
+[ "$ERR" = "$REMINDER" ] && ok "path right after a JSON \\n counts as access (JSON unescaped)" || bad "path after \\n: [$ERR]"
+agent_payload Agent "$(prompt_without rules | perl -pe 's/Read every CLAUDE.md and rule file in full.//') Read CLAUDE.md and the"'\n'"rules in full." > "$WORK/p.json"
+run_hook "$WORK/p.json"
+[ "$ERR" = "$REMINDER" ] && ok "'rules' right after a JSON \\n counts" || bad "rules after \\n: [$ERR]"
 agent_payload Agent "$(prompt_without conflict) Report each CONFLICT: line." > "$WORK/p.json"
 run_hook "$WORK/p.json"
 [ "$ERR" = "$REMINDER" ] && ok "'CONFLICT:' counts as conflict priority" || bad "CONFLICT: [$ERR]"
@@ -222,11 +228,11 @@ mkdir -p "$WORK/repo/.scratch/session-t"
 git -C "$WORK/repo" init -q
 printf '%s\n' "$WORK/repo/.scratch/session-t" > "$WORK/repo/.scratch/.current-session"
 agent_payload Agent "$(prompt_without conflict)" > "$WORK/p.json"
-(cd "$WORK/repo" && "$BASH_BIN" "$HOOK" < "$WORK/p.json" 2>/dev/null)
+(cd "$WORK/repo" && "$BASH_BIN" "$HOOK" < "$WORK/p.json" >/dev/null 2>&1)
 printf '{"tool_name":"Workflow","tool_input":{"script":"%s"}}' "$WF_FULL" > "$WORK/p.json"
-(cd "$WORK/repo" && "$BASH_BIN" "$HOOK" < "$WORK/p.json" 2>/dev/null)
+(cd "$WORK/repo" && "$BASH_BIN" "$HOOK" < "$WORK/p.json" >/dev/null 2>&1)
 printf '{"tool_name":"Bash","tool_input":{"command":"ls"}}' > "$WORK/p.json"
-(cd "$WORK/repo" && "$BASH_BIN" "$HOOK" < "$WORK/p.json" 2>/dev/null)
+(cd "$WORK/repo" && "$BASH_BIN" "$HOOK" < "$WORK/p.json" >/dev/null 2>&1)
 EV="$WORK/repo/.scratch/session-t/events.jsonl"
 n="$(sed -n '$=' "$EV" 2>/dev/null || echo 0)"
 [ "$n" = "2" ] && ok "one event per Agent/Workflow call, none for Bash" || bad "event count=$n"

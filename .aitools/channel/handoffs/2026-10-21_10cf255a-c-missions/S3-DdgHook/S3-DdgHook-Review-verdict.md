@@ -1,4 +1,60 @@
-VERDICT: blocking findings
+VERDICT: no blocking findings (v1.1, head `ad72004`)
+
+# S3-DdgHook-Review: re-verification of PR #122 (v1.1)
+
+Reviewer: S3-DdgHook-Review. Re-verified head `ad72004` ("Send delegation-guard output to Claude; check only the delegation text"), the same commit as the PR head (`gh pr view 122 --json headRefOid`). I worked independently again: I did not read the author's hand-back or scratch, and I did not take the fix message's claims on trust. v1.0 (head `98324ed`) is kept below.
+
+## v1.0 findings: status
+
+| v1.0 | Status at `ad72004` | Evidence |
+|---|---|---|
+| **B1** reminder never reaches Claude | **Fixed** | `finish()` (`delegation-duty-guard.sh:120-131`) prints `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"..."}}` on stdout when the exit code is 0, and the same text on stderr. Enforce exits 2 with stderr only (probe L2: rc=2, stdout 0 bytes). The hooks reference lists `additionalContext` as a PreToolUse `hookSpecificOutput` field: "String added to Claude's context alongside the tool result". The header states that limit (it corrects the next launch, not the current one). In every probe and both suites, stdout parses as JSON and `additionalContext` equals the stderr text exactly (python `json.loads`, bash 5 and 3.2) |
+| **B2** `access` always present | **Fixed** | Only `tool_input.prompt` (Agent/Task) or `tool_input.script` / the `scriptPath` file (Workflow) is checked (`:160-209`). Probes with the real payload shape: A 7/8 missing access, A3 (Windows fields) 7/8 missing access, B `"Do the thing."` 0/8, G Workflow 7/8 missing access, Q (tool_input before cwd) 0/8. The suite now uses real-shape fixtures (`COMMON`) |
+| **N1** identity / conflict false positives | **Fixed** | Probe C (`s3`, "merge conflict resolution") 0/8. The `toolu_01S3abcS9` id in the suite fixture no longer feeds identity |
+| **N2** adversarial timing | **Fixed** | 300 KB `"name prefix "`: 50-59 ms (v1.0: 762 ms; main: 699 ms). 300 KB `"name "`: 52-61 ms (main: 587 ms). The 2 MB scriptPath is now refused (cap 512 KB). Worst case under the cap, 500 KB of `"x.md n prefix "` (probe M): 112-113 ms. 6 MB prompt: 148 ms (v1.0: 1151 ms) |
+| N3 `\uXXXX` in scriptPath | Unchanged, safe | Probe F: "not checked", exit 0, reminder sent |
+| N4, N5 | Unchanged (documented limits) | Header lines 27-38 |
+
+## New non-blocking findings (v1.1)
+
+- **N8. JSON escapes hide matches at the start of a line.** The checked text is still JSON-escaped, so a newline arrives as the two characters `\n`. Any element regex with a word-boundary or look-behind guard then fails right after a newline:
+  - K1 `...\nRepo:\n/Users/new-jose/repos/aitools` with no other access phrase: 7/8, `access` missing. The look-behind `(?<![\w.])` sees the `n`.
+  - K2: the same, with a `C:\\repos\\aitools` path at the start of a line.
+  - K3 `...the\nrules too`: `rules` missing, because `\brules?\b` finds no boundary between `n` and `r`.
+  - This was already true for `rules` on main. The `access` path alternative is new in this PR.
+  - Effect: in observe mode these are reminders about elements that are actually present. They would count as false positives in the hook-rollout.md review before enforce.
+  - Suggested fix: JSON-unescape the extracted text before matching (`s/\\n/\n/g; s/\\t/\t/g; s/\\"/"/g; s/\\\\/\\/g`; decode `\uXXXX` too, which would also fix N3). Then make the Windows-path alternative accept one backslash.
+- **N9. Truncation and window limits produce false negatives by design.** Probe N: a real `Name every .md file with the prefix` phrase after 250 earlier `.md` mentions is reported as missing (the window limit is 200). Probe O: elements placed only after 264 KB of filler give 0/8 (the check limit is 256 KB). Both limits are in the code comments and the header. Real prompts are far below them. Acceptable for observe mode.
+- **N10. Nested `prompt` key.** `{"tool_input":{"meta":{"prompt":"x"},"prompt":"<full>"}}` checks `"x"` (probe P, 0/8). The Agent tool has no such nested field, so this is theoretical.
+- **N11. Suite output noise.** The telemetry block (`tests/hooks/test-delegation-duty-guard.sh`, the three `(cd "$WORK/repo" && ... 2>/dev/null)` calls) does not redirect stdout, so two hookSpecificOutput JSON lines are printed into the suite log. This is cosmetic. Add `>/dev/null`.
+
+## additionalContext JSON escaping
+
+`finish()` escapes `\` then `"`, turns newline into `\n` and tab into a space, in that order, which is correct. The message is built only from fixed text, the tool name (`Agent|Task|Workflow`), fixed status strings and the fixed element names, so no other control character can appear. Verified: valid JSON in every probe run (the 15 v1.0 probes, plus the 10 new probes under each bash) and 2 x 48 suite cases under bash 5.3.15 and /bin/bash 3.2.57. The replacement strings contain no `&`, so bash 5.2+ `patsub_replacement` does not apply. The longest message (0/8 guidance, about 1.5 KB) is far below the 10,000-character `additionalContext` cap in the hooks reference.
+
+## Rule compliance (re-checked)
+
+- hook-rollout.md: the row now says the output reaches Claude through stdout `additionalContext` and stderr, records that before 2026-10-26 it went to stderr only, and keeps observe. The `.mdc` row matches.
+- `registries/tool-ops.json`: the verification cases now expect `hookSpecificOutput.*additionalContext` on stdout.
+- Protected edits fall under D-DEL5 review-after. The PR body should list the new old -> new text of the hook-rollout.md / `.mdc` / tool-ops.json rows; I did not re-check the PR body for this commit.
+- Portability is unchanged: bash 3.2 OK, no `grep -P`, perl only, fails open.
+
+## What I ran (v1.1)
+
+| Command | Result |
+|---|---|
+| `bash tests/hooks/test-delegation-duty-guard.sh` | 48 passed, 0 failed (bash 5.3.15); large prompt 43 ms; adversarial 55 ms |
+| `env AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-delegation-duty-guard.sh` | 48 passed, 0 failed (bash 3.2.57); 33 ms; adversarial 44 ms |
+| `bash .scratch/session-ddgreview/adversarial.sh bash` (v1.0 probes A-J) | B2 and N1 fixed; every stdout is valid JSON |
+| `bash .scratch/session-ddgreview/adversarial2.sh bash` and `... /bin/bash` (new probes K-Q) | N8-N10 above; JSON valid, `ctx==stderr` in every run; enforce rc=2 with empty stdout |
+| `bash .scratch/session-ddgreview/timing.sh` (main vs PR) | main 699/587 ms vs PR 50/52 ms |
+| chrome-devtools, hooks reference "PreToolUse decision control" | `additionalContext` is a PreToolUse field, added alongside the tool result |
+
+CI at `ad72004` when I wrote this: windows and CodeQL passed; linux and macos pending. Not run: Linux and Windows locally, and a live Workflow call.
+
+---
+
+VERDICT (v1.0, head `98324ed`): blocking findings
 
 # S3-DdgHook-Review: independent review of PR #122 (v1.0)
 
