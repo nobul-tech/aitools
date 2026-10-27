@@ -32,11 +32,12 @@
 # Name conflicts: the first source wins; each skipped duplicate is log_error +
 #   an ERROR row. Unit: file name (rules, hooks), skill directory name (skills);
 #   compared case-insensitively. Files named *.bak.* are never deployed, nor
-#   skill directories whose name starts with "." or contains ".bak.".
+#   skill directories whose name starts with "." or contains ".bak." (".bak."
+#   matched case-insensitively).
 # Retired: a rule or skill in the previous manifest that no source has any more
 #   (only when its source was listed this run). A retired rule's file is backed
-#   up and removed from ~/.aitools/rules; a retired skill's directory is backed
-#   up with backup_dir (~/.aitools/skills/<name>.bak.<UTC>/, backup verified)
+#   up and removed from ~/.aitools/rules; a retired skill's directory is copied
+#   to ~/.aitools/skills/<name>.bak.<UTC>/ (copy verified; the newest 5 kept)
 #   and removed from ~/.aitools/skills. The manifest keeps the "retired" line
 #   until a source has the name again.
 # Preserved: every other file under ~/.aitools (logs, backups, files with no
@@ -237,7 +238,7 @@ add_source() {
     while IFS= read -r -d '' rel <&4; do
         base="${rel##*/}"
         case "$base" in
-            *.bak.*) log_detail "skip backup copy: $label/$rel"; continue ;;
+            *.[bB][aA][kK].*) log_detail "skip backup copy: $label/$rel"; continue ;;
         esac
         unit=""
         case "$layout" in
@@ -259,7 +260,7 @@ add_source() {
                 esac
                 # Not a skill name (the manifest's name rule): hidden or a backup directory
                 case "$unit" in
-                    .*|*.bak.*) log_detail "skip file in a hidden or backup directory: $label/$rel"; continue ;;
+                    .*|*.[bB][aA][kK].*) log_detail "skip file in a hidden or backup directory: $label/$rel"; continue ;;
                 esac ;;
         esac
         if [ -n "$unit" ] && [ "$unit" != "$last_unit" ]; then
@@ -406,8 +407,8 @@ done 3< "$PLAN"
 # compared case-insensitively). Only a source of the same kind listed this run
 # can retire its names; a name whose source was not listed (not found, not a git
 # checkout, ls-files failed, no dotprofile) keeps its line. A retired rule's file
-# is backed up and removed; a retired skill's directory is backed up with
-# backup_dir, the backup verified, then removed (on every run while it is
+# is backed up and removed; a retired skill's directory is copied to
+# <name>.bak.<UTC>, the copy verified, then removed (on every run while it is
 # there); the line stays until a source has the name again. No previous
 # manifest (first run): nothing is retired. A previous manifest with another
 # header: warning, nothing retired, rewritten.
@@ -429,8 +430,8 @@ harness_manifest_plan() {
             skills => { "shared/skills" => "shared", ".claude/skills" => "aitools", "dotprofile/skills" => "dotprofile" },
         );
         my %name_ok = (
-            rules  => sub { $_[0] =~ /\A[^\/\\]+\.md\z/ && $_[0] !~ /\.bak\./ },
-            skills => sub { $_[0] =~ /\A[^\/\\.][^\/\\]*\z/ && $_[0] !~ /\.bak\./ },
+            rules  => sub { $_[0] =~ /\A[^\/\\]+\.md\z/ && $_[0] !~ /\.bak\./i },
+            skills => sub { $_[0] =~ /\A[^\/\\.][^\/\\]*\z/ && $_[0] !~ /\.bak\./i },
         );
         die "unknown manifest kind: $kind\n" unless $labels{$kind};
         my %source_of = %{ $labels{$kind} };
@@ -455,7 +456,7 @@ harness_manifest_plan() {
         }
         close $ls;
         open my $a, ">:raw", $actions or die "cannot write $actions: $!\n";
-        if (-e $prev) {
+        if (-f $prev) {   # a regular file (a directory there is reported when writing)
             open my $p, "<:raw", $prev or die "cannot read $prev: $!\n";
             my $head = <$p>;
             $head = "" unless defined $head;
@@ -501,6 +502,7 @@ harness_manifest_plan() {
 retire_rule_file() {
     local name="$1" f="$HARNESS_DIR/rules/$1"
     if $DRY_RUN; then
+        N_WOULD_RETIRE=$((N_WOULD_RETIRE + 1))
         log "[DRY RUN] Would back up and remove $(display_path "$f") (retired rule)"
         return 0
     fi
@@ -520,53 +522,80 @@ retire_rule_file() {
     write_summary DETAIL "$TOOL" "$(short "retired: rules/$name")"
 }
 
-# skill_backups NAME -- the <NAME>.bak.* directories beside ~/.aitools/skills/NAME,
-# one per line (names compared literally, not as a glob). Exit non-zero on a
-# listing failure.
-skill_backups() {
-    perl -e '
-        my ($dir, $name) = @ARGV;
+# SKILL_BACKUPS_KEEP -- backups kept per retired skill name (as backup_dir keeps 5)
+SKILL_BACKUPS_KEEP=5
+N_WOULD_RETIRE=0
+
+# prune_skill_backups NAME -- keep the newest $SKILL_BACKUPS_KEEP <NAME>.bak.<UTC>
+# directories beside ~/.aitools/skills/NAME, remove the older ones. Names are
+# compared literally (a skill named with [ ] * ? never matches another's
+# backups). The retirement is done by then: a failure here is a warning.
+prune_skill_backups() {
+    local name="$1" old
+    if ! perl -e '
+        my ($dir, $name, $keep) = @ARGV;
         opendir my $d, $dir or die "cannot list $dir: $!\n";
         my $p = "$name.bak.";
-        print "$_\n" for sort grep { substr($_, 0, length $p) eq $p && -d "$dir/$_" && !-l "$dir/$_" } readdir $d;
+        my @b = sort grep {
+            substr($_, 0, length $p) eq $p && substr($_, length $p) =~ /\A\d{4}-\d\d-\d\dT\d{6}Z\z/
+                && -d "$dir/$_" && !-l "$dir/$_"
+        } readdir $d;
         closedir $d;
-    ' "$HARNESS_DIR/skills" "$1"
+        print "$_\n" for @b[0 .. $#b - $keep];
+    ' "$HARNESS_DIR/skills" "$name" "$SKILL_BACKUPS_KEEP" > "$WORK/skill-prune.txt" 2> "$WORK/skill-prune.err"; then
+        log_warn "Retired skill $name: cannot list old backups: $(cat "$WORK/skill-prune.err")"
+        return 0
+    fi
+    while IFS= read -r old <&6; do
+        [ -n "$old" ] || continue
+        if rm -rf "$HARNESS_DIR/skills/$old" && [ ! -e "$HARNESS_DIR/skills/$old" ]; then
+            log "Pruned old backup: $(display_path "$HARNESS_DIR/skills/$old")"
+        else
+            log_warn "Retired skill $name: cannot prune old backup $(display_path "$HARNESS_DIR/skills/$old")"
+        fi
+    done 6< "$WORK/skill-prune.txt"
 }
 
-# retire_skill_dir NAME -- back up ~/.aitools/skills/NAME with backup_dir, verify a
-# new <NAME>.bak.<UTC> directory holds the same files, then remove NAME
-# (a retired skill). backup_dir reports no result: the new backup directory is
-# the proof (it backs up only a directory with a top-level *.md, e.g. SKILL.md).
+# discard_skill_backup NAME BAK -- remove an incomplete or unproven backup BAK
+discard_skill_backup() {
+    local name="$1" bak="$2"
+    [ -e "$bak" ] || [ -L "$bak" ] || return 0
+    if rm -rf "$bak" && [ ! -e "$bak" ]; then
+        log "Retired skill $name: removed the incomplete backup $(display_path "$bak")"
+    else
+        log_error "Retired skill $name: cannot remove the incomplete backup $(display_path "$bak")"
+        write_summary ERROR "$TOOL" "$(short "bak cleanup failed: $name")"
+    fi
+}
+
+# retire_skill_dir NAME -- copy ~/.aitools/skills/NAME to NAME.bak.<UTC> (cp -R; any
+# skill directory, no *.md precondition), verify the copy holds the same files,
+# then remove NAME (a retired skill) and prune old backups. A failed or unproven
+# copy is removed again and NAME is kept (ERROR row; the next run retries).
 retire_skill_dir() {
-    local name="$1" d="$HARNESS_DIR/skills/$1" before after bak
+    local name="$1" d="$HARNESS_DIR/skills/$1" bak
     if $DRY_RUN; then
+        N_WOULD_RETIRE=$((N_WOULD_RETIRE + 1))
         log "[DRY RUN] Would back up and remove $(display_path "$d") (retired skill)"
         return 0
     fi
-    if ! before=$(skill_backups "$name" 2> "$WORK/skill-bak.err"); then
-        log_error "Retired skill $name: $(cat "$WORK/skill-bak.err") -- $(display_path "$d") not removed"
+    bak="$d.bak.$(date -u +%Y-%m-%dT%H%M%SZ)"
+    if [ -e "$bak" ] || [ -L "$bak" ]; then
+        log_error "Retired skill $name: backup failed ($(display_path "$bak") already exists) -- $(display_path "$d") not removed"
         write_summary ERROR "$TOOL" "$(short "retire failed: $name")"
         return 0
     fi
-    backup_dir "$d"
-    if ! after=$(skill_backups "$name" 2> "$WORK/skill-bak.err"); then
-        log_error "Retired skill $name: $(cat "$WORK/skill-bak.err") -- $(display_path "$d") not removed"
+    if ! cp -R "$d" "$bak" > "$WORK/skill-bak.err" 2>&1; then
+        log_error "Retired skill $name: backup failed ($(head -n 1 "$WORK/skill-bak.err")) -- $(display_path "$d") not removed"
         write_summary ERROR "$TOOL" "$(short "retire failed: $name")"
-        return 0
-    fi
-    # The newest backup not listed before the call (names end in a sortable UTC stamp)
-    if ! bak=$(perl -e 'my %b = map { $_ => 1 } split /\n/, $ARGV[0]; my @n = grep { !$b{$_} } split /\n/, $ARGV[1]; print $n[-1] if @n' "$before" "$after"); then
-        bak=""   # reported as "no new backup" just below
-    fi
-    if [ -z "$bak" ]; then
-        log_error "Retired skill $name: backup failed (no new $name.bak.* directory) -- $(display_path "$d") not removed"
-        write_summary ERROR "$TOOL" "$(short "retire failed: $name")"
+        discard_skill_backup "$name" "$bak"
         return 0
     fi
     # diff exits 1 on a difference, 2 on trouble: either way the backup is not proven.
-    if ! diff -r -q "$d" "$HARNESS_DIR/skills/$bak" > "$WORK/skill-bak.diff" 2>&1; then
-        log_error "Retired skill $name: backup $(display_path "$HARNESS_DIR/skills/$bak") differs from the directory ($(head -n 1 "$WORK/skill-bak.diff")) -- not removed"
+    if ! diff -r -q "$d" "$bak" > "$WORK/skill-bak.diff" 2>&1; then
+        log_error "Retired skill $name: backup $(display_path "$bak") differs from the directory ($(head -n 1 "$WORK/skill-bak.diff")) -- $(display_path "$d") not removed"
         write_summary ERROR "$TOOL" "$(short "retire failed: $name")"
+        discard_skill_backup "$name" "$bak"
         return 0
     fi
     if ! rm -rf "$d" || [ -e "$d" ]; then
@@ -575,8 +604,9 @@ retire_skill_dir() {
         return 0
     fi
     N_RETIRED=$((N_RETIRED + 1))
-    log "Removed $(display_path "$d") (retired skill; backup $(display_path "$HARNESS_DIR/skills/$bak"))"
+    log "Removed $(display_path "$d") (retired skill; backup $(display_path "$bak"))"
     write_summary DETAIL "$TOOL" "$(short "retired: skills/$name")"
+    prune_skill_backups "$name"
 }
 
 # write_harness_manifest KIND -- section 5b for one kind (rules | skills): retire,
@@ -603,7 +633,11 @@ write_harness_manifest() {
                 log "$title manifest: $name kept as $extra (source not listed this run -- not retired)" ;;
             retire|stale)
                 if [ "$act" = "retire" ]; then
-                    log "Retired $noun: $name (was $extra; no source has it now)"
+                    if $DRY_RUN; then
+                        log "[DRY RUN] Retired $noun: $name (was $extra; no source has it now)"
+                    else
+                        log "Retired $noun: $name (was $extra; no source has it now)"
+                    fi
                 fi
                 p="$HARNESS_DIR/$kind/$name"
                 if [ "$kind" = "rules" ]; then
@@ -612,12 +646,20 @@ write_harness_manifest() {
                     retire_skill_dir "$name"
                 elif [ -e "$p" ] || [ -L "$p" ]; then
                     log_warn "Retired skill $name: $(display_path "$p") is not a directory -- left alone"
+                    write_summary WARN "$TOOL" "$(short "not a dir: $name")"
                 fi ;;
         esac
     done 5< "$actions"
     n=$(perl -ne '$n++ if $. > 1; END { print $n + 0 }' "$new")
     if $DRY_RUN; then
         log "[DRY RUN] Would write $(display_path "$manifest") ($n $noun line(s))"
+        return 0
+    fi
+    # A directory at the manifest path: mv would move the file into it (the .ps1's
+    # File.Move fails); fail the same way here.
+    if [ -d "$manifest" ] && [ ! -L "$manifest" ]; then
+        log_error "$title manifest: $(display_path "$manifest") is a directory -- manifest not written"
+        write_summary ERROR "$TOOL" "$kind manifest not written"
         return 0
     fi
     if ! cp "$new" "$tmp"; then
@@ -680,8 +722,10 @@ done
 # =========================================================================
 # 7. Summary (one row under "harness files") + exit footer
 # =========================================================================
-log "harness files: $N_PLANNED planned, $N_ADDED added, $N_UPDATED updated, $N_ACCEPTED accepted, $N_VERIFIED verified, $N_SKIPPED skipped, $N_FAILED failed, $N_PRESERVED preserved, $N_RETIRED retired, $DUPLICATES duplicate(s)"
+log "harness files: $N_PLANNED planned, $N_ADDED added, $N_UPDATED updated, $N_ACCEPTED accepted, $N_VERIFIED verified, $N_SKIPPED skipped, $N_FAILED failed, $N_PRESERVED preserved, $N_RETIRED retired, $N_WOULD_RETIRE would retire (dry run), $DUPLICATES duplicate(s)"
 if $DRY_RUN; then
+    # Pending retirements ($N_WOULD_RETIRE) are logged, not in this row: the row is
+    # at least 27 characters, so ", N retire" never fits in 30.
     write_summary OK "$TOOL" "$(short "dry-run: $N_WOULD_CREATE create, $N_WOULD_UPDATE update")"
 elif [ "$N_FAILED" -gt 0 ]; then
     write_summary ERROR "$TOOL" "$(short "$N_FAILED failed")"

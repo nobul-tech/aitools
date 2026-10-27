@@ -33,11 +33,12 @@
 # Name conflicts: the first source wins; each skipped duplicate is LogError +
 #   an ERROR row. Unit: file name (rules, hooks), skill directory name (skills);
 #   compared case-insensitively. Files named *.bak.* are never deployed, nor
-#   skill directories whose name starts with "." or contains ".bak.".
+#   skill directories whose name starts with "." or contains ".bak." (".bak."
+#   matched case-insensitively).
 # Retired: a rule or skill in the previous manifest that no source has any more
 #   (only when its source was listed this run). A retired rule's file is backed
-#   up and removed from .aitools\rules; a retired skill's directory is backed
-#   up with Backup-Dir (.aitools\skills\<name>.bak.<UTC>\, backup verified)
+#   up and removed from .aitools\rules; a retired skill's directory is copied
+#   to .aitools\skills\<name>.bak.<UTC>\ (copy verified; the newest 5 kept)
 #   and removed from .aitools\skills. The manifest keeps the "retired" line
 #   until a source has the name again.
 # Preserved: every other file under .aitools (logs, backups, files with no
@@ -247,7 +248,7 @@ function Add-Source {
                 if (-not $rel.Contains('/')) { LogDetail "skip file outside a skill directory: $Label/$rel"; $unit = $null; break }
                 $unit = ($rel -split '/')[0]
                 # Not a skill name (the manifest's name rule): hidden or a backup directory
-                if ($unit.StartsWith('.') -or $unit -clike '*.bak.*') {
+                if ($unit.StartsWith('.') -or $unit -like '*.bak.*') {
                     LogDetail "skip file in a hidden or backup directory: $Label/$rel"; $unit = $null; break
                 }
             }
@@ -379,8 +380,8 @@ foreach ($p in $plan) {
 # compared case-insensitively). Only a source of the same kind listed this run
 # can retire its names; a name whose source was not listed (not found, not a git
 # checkout, ls-files failed, no dotprofile) keeps its line. A retired rule's file
-# is backed up and removed; a retired skill's directory is backed up with
-# Backup-Dir, the backup verified, then removed (on every run while it is
+# is backed up and removed; a retired skill's directory is copied to
+# <name>.bak.<UTC>, the copy verified, then removed (on every run while it is
 # there); the line stays until a source has the name again. No previous
 # manifest (first run): nothing is retired. A previous manifest with another
 # header: warning, nothing retired, rewritten. Same outcomes as deploy-harness.sh.
@@ -424,7 +425,7 @@ function Get-HarnessManifestPlan([string]$Kind, [string]$Header, [string]$Prev) 
                 $parts = $l -split "`t", 2
                 $name = $parts[0]
                 $src = if ($parts.Count -gt 1) { $parts[1] } else { "" }
-                if ($name -cnotmatch $namePattern -or $name -clike '*.bak.*' -or
+                if ($name -cnotmatch $namePattern -or $name -like '*.bak.*' -or
                         $src -cnotmatch '\A(?:shared|aitools|dotprofile|retired)\z') {
                     $actions.Add(@{ Kind = "warn"; Name = "line ignored: $($l -replace "`t", '<TAB>')"; Extra = "" })
                     continue
@@ -454,6 +455,7 @@ function Get-HarnessManifestPlan([string]$Kind, [string]$Header, [string]$Prev) 
 function Remove-RetiredRule([string]$Name) {
     $f = Join-Path (Join-Path $harnessDir "rules") $Name
     if ($DryRun) {
+        $script:nWouldRetire++
         Log "[DRY RUN] Would back up and remove $f (retired rule)"
         return
     }
@@ -485,97 +487,162 @@ function Remove-RetiredRule([string]$Name) {
     Write-Summary "DETAIL" $tool (Get-ShortDetail "retired: rules/$Name")
 }
 
-# Get-SkillBackups NAME -- the names of the <NAME>.bak.* directories (not links)
-# beside .aitools\skills\NAME, sorted ordinal (names compared literally, not as
-# a wildcard). Throws on a listing failure.
-function Get-SkillBackups([string]$Name) {
+# $skillBackupsKeep -- backups kept per retired skill name (as Backup-Dir keeps 5)
+$skillBackupsKeep = 5
+$nWouldRetire = 0
+
+# Remove-OldSkillBackups NAME -- keep the newest $skillBackupsKeep <NAME>.bak.<UTC>
+# directories beside .aitools\skills\NAME, remove the older ones. Names are
+# compared literally (a skill named with [ ] * ? never matches another's
+# backups). The retirement is done by then: a failure here is a warning.
+function Remove-OldSkillBackups([string]$Name) {
+    $skillsDir = Join-Path $harnessDir "skills"
     $prefix = "$Name.bak."
-    $found = @(Get-ChildItem -LiteralPath (Join-Path $harnessDir "skills") -Directory -Force -ErrorAction Stop |
-        Where-Object { $_.Name.StartsWith($prefix, [StringComparison]::Ordinal) -and -not $_.LinkType } |
-        ForEach-Object { $_.Name })
+    try {
+        $found = @(Get-ChildItem -LiteralPath $skillsDir -Directory -Force -ErrorAction Stop |
+            Where-Object {
+                $_.Name.StartsWith($prefix, [StringComparison]::Ordinal) -and -not $_.LinkType -and
+                $_.Name.Substring($prefix.Length) -cmatch '\A\d{4}-\d\d-\d\dT\d{6}Z\z'
+            } | ForEach-Object { $_.Name })
+    } catch {
+        LogWarn "Retired skill ${Name}: cannot list old backups: $_"
+        return
+    }
     $names = [string[]]$found
     [Array]::Sort($names, [StringComparer]::Ordinal)
-    return ,$names
+    for ($i = 0; $i -lt $names.Count - $skillBackupsKeep; $i++) {
+        $old = Join-Path $skillsDir $names[$i]
+        try {
+            Remove-SkillTree $old
+        } catch {
+            LogDetail "Retired skill ${Name}: prune of $old failed: $_"
+        }
+        if (Test-Path -LiteralPath $old) {
+            LogWarn "Retired skill ${Name}: cannot prune old backup $old"
+        } else {
+            Log "Pruned old backup: $old"
+        }
+    }
 }
 
-# Test-SameTree A B -- $true when directories A and B hold the same relative file
-# paths with the same bytes. Throws on a read failure.
-function Test-SameTree([string]$A, [string]$B) {
+# Copy-SkillTree SRC DEST -- copy directory SRC to the new directory DEST, every
+# file and subdirectory. .NET calls, not Copy-Item / Remove-Item -Recurse: the
+# cmdlets treat a name with [ ] * ? as a wildcard when recursing. Throws on the
+# first failure (DEST may then be incomplete; the caller removes it).
+function Copy-SkillTree([string]$Src, [string]$Dest) {
+    $s = [IO.Path]::GetFullPath($Src).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    [void][IO.Directory]::CreateDirectory($Dest)
+    foreach ($dir in [IO.Directory]::GetDirectories($s, "*", [IO.SearchOption]::AllDirectories)) {
+        [void][IO.Directory]::CreateDirectory((Join-Path $Dest $dir.Substring($s.Length + 1)))
+    }
+    foreach ($file in [IO.Directory]::GetFiles($s, "*", [IO.SearchOption]::AllDirectories)) {
+        [IO.File]::Copy($file, (Join-Path $Dest $file.Substring($s.Length + 1)), $false)
+    }
+}
+
+# Remove-SkillTree DIR -- delete directory DIR and everything in it (.NET, see
+# Copy-SkillTree). Throws on failure.
+function Remove-SkillTree([string]$Dir) {
+    [IO.Directory]::Delete([IO.Path]::GetFullPath($Dir), $true)
+}
+
+# Remove-SkillBackupCopy NAME BAK -- remove an incomplete or unproven backup BAK
+function Remove-SkillBackupCopy([string]$Name, [string]$Bak) {
+    if (-not (Test-Path -LiteralPath $Bak)) { return }
+    try {
+        Remove-SkillTree $Bak
+    } catch {
+        LogDetail "Retired skill ${Name}: removing the incomplete backup failed: $_"
+    }
+    if (Test-Path -LiteralPath $Bak) {
+        LogError "Retired skill ${Name}: cannot remove the incomplete backup $Bak"
+        Write-Summary "ERROR" $tool (Get-ShortDetail "bak cleanup failed: $Name")
+    } else {
+        Log "Retired skill ${Name}: removed the incomplete backup $Bak"
+    }
+}
+
+# Get-TreeDifference A B -- "" when directories A and B hold the same relative
+# file paths with the same bytes, else the first difference. Throws on a read
+# failure.
+function Get-TreeDifference([string]$A, [string]$B) {
+    # .NET enumeration, not Get-ChildItem -LiteralPath -Recurse: that treats a leaf
+    # name with [ ] * ? as a wildcard and lists sibling directories too.
     $list = {
         param($root)
         $full = [IO.Path]::GetFullPath($root).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-        $rels = @(Get-ChildItem -LiteralPath $root -Recurse -File -Force -ErrorAction Stop |
-            ForEach-Object { $_.FullName.Substring($full.Length) })
+        $rels = @([IO.Directory]::GetFiles($full, "*", [IO.SearchOption]::AllDirectories) |
+            ForEach-Object { $_.Substring($full.Length) })
         $arr = [string[]]$rels
         [Array]::Sort($arr, [StringComparer]::Ordinal)
         return ,$arr
     }
     $ra = & $list $A
     $rb = & $list $B
-    if ($ra.Count -ne $rb.Count) { return $false }
-    for ($i = 0; $i -lt $ra.Count; $i++) {
-        if ($ra[$i] -cne $rb[$i]) { return $false }
-        $ha = (Get-FileHash -LiteralPath (Join-Path $A $ra[$i]) -Algorithm SHA256 -ErrorAction Stop).Hash
-        $hb = (Get-FileHash -LiteralPath (Join-Path $B $rb[$i]) -Algorithm SHA256 -ErrorAction Stop).Hash
-        if ($ha -ne $hb) { return $false }
+    $sb = [System.Collections.Generic.HashSet[string]]::new([string[]]$rb, [StringComparer]::Ordinal)
+    foreach ($r in $ra) { if (-not $sb.Contains($r)) { return "Only in ${A}: $r" } }
+    $sa = [System.Collections.Generic.HashSet[string]]::new([string[]]$ra, [StringComparer]::Ordinal)
+    foreach ($r in $rb) { if (-not $sa.Contains($r)) { return "Only in ${B}: $r" } }
+    foreach ($r in $ra) {
+        $ha = (Get-FileHash -LiteralPath (Join-Path $A $r) -Algorithm SHA256 -ErrorAction Stop).Hash
+        $hb = (Get-FileHash -LiteralPath (Join-Path $B $r) -Algorithm SHA256 -ErrorAction Stop).Hash
+        if ($ha -ne $hb) { return "Files $(Join-Path $A $r) and $(Join-Path $B $r) differ" }
     }
-    return $true
+    return ""
 }
 
-# Remove-RetiredSkill NAME -- back up .aitools\skills\NAME with Backup-Dir, verify
-# a new <NAME>.bak.<UTC> directory holds the same files, then remove NAME (a
-# retired skill). Backup-Dir reports no result: the new backup directory is the
-# proof (it backs up only a directory with a top-level *.md, e.g. SKILL.md).
+# Remove-RetiredSkill NAME -- copy .aitools\skills\NAME to NAME.bak.<UTC>
+# (Copy-Item -Recurse; any skill directory, no *.md precondition), verify the copy
+# holds the same files, then remove NAME (a retired skill) and prune old
+# backups. A failed or unproven copy is removed again and NAME is kept (ERROR
+# row; the next run retries). Same outcomes as retire_skill_dir in the .sh.
 function Remove-RetiredSkill([string]$Name) {
     $skillsDir = Join-Path $harnessDir "skills"
     $d = Join-Path $skillsDir $Name
     if ($DryRun) {
+        $script:nWouldRetire++
         Log "[DRY RUN] Would back up and remove $d (retired skill)"
         return
     }
-    try {
-        $before = Get-SkillBackups $Name
-        Backup-Dir -DirPath $d
-        $after = Get-SkillBackups $Name
-    } catch {
-        LogError "Retired skill ${Name}: backup check failed: $_ -- $d not removed"
-        Write-Summary "ERROR" $tool (Get-ShortDetail "retire failed: $Name")
-        return
-    }
-    # The newest backup not listed before the call (names end in a sortable UTC stamp)
-    $new = @($after | Where-Object { $before -cnotcontains $_ })
-    if ($new.Count -eq 0) {
-        LogError "Retired skill ${Name}: backup failed (no new $Name.bak.* directory) -- $d not removed"
-        Write-Summary "ERROR" $tool (Get-ShortDetail "retire failed: $Name")
-        return
-    }
-    $bak = Join-Path $skillsDir $new[-1]
-    try {
-        $same = Test-SameTree $d $bak
-    } catch {
-        LogDetail "Retired skill ${Name}: backup comparison failed: $_"
-        $same = $false
-    }
-    if (-not $same) {
-        LogError "Retired skill ${Name}: backup $bak differs from the directory -- not removed"
+    $bak = "$d.bak." + (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
+    if (Test-Path -LiteralPath $bak) {
+        LogError "Retired skill ${Name}: backup failed ($bak already exists) -- $d not removed"
         Write-Summary "ERROR" $tool (Get-ShortDetail "retire failed: $Name")
         return
     }
     try {
-        Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction Stop
+        Copy-SkillTree $d $bak
     } catch {
-        LogError "Retired skill ${Name}: cannot remove ${d}: $_"
+        LogError "Retired skill ${Name}: backup failed ($_) -- $d not removed"
         Write-Summary "ERROR" $tool (Get-ShortDetail "retire failed: $Name")
+        Remove-SkillBackupCopy $Name $bak
         return
+    }
+    try {
+        $diff = Get-TreeDifference $d $bak
+    } catch {
+        $diff = "comparison failed: $_"
+    }
+    if ($diff) {
+        LogError "Retired skill ${Name}: backup $bak differs from the directory ($diff) -- $d not removed"
+        Write-Summary "ERROR" $tool (Get-ShortDetail "retire failed: $Name")
+        Remove-SkillBackupCopy $Name $bak
+        return
+    }
+    try {
+        Remove-SkillTree $d
+    } catch {
+        LogDetail "Retired skill ${Name}: removal failed: $_"
     }
     if (Test-Path -LiteralPath $d) {
-        LogError "Retired skill ${Name}: cannot remove $d (still there)"
+        LogError "Retired skill ${Name}: cannot remove $d"
         Write-Summary "ERROR" $tool (Get-ShortDetail "retire failed: $Name")
         return
     }
     $script:nRetired++
     Log "Removed $d (retired skill; backup $bak)"
     Write-Summary "DETAIL" $tool (Get-ShortDetail "retired: skills/$Name")
+    Remove-OldSkillBackups $Name
 }
 
 # Write-HarnessManifest KIND -- section 5b for one kind (rules | skills): retire,
@@ -601,20 +668,32 @@ function Write-HarnessManifest([string]$Kind) {
             "warn" { LogWarn "$title manifest ${manifest}: $($a.Name)" }
             "keep" { Log "$title manifest: $($a.Name) kept as $($a.Extra) (source not listed this run -- not retired)" }
             { $_ -in @("retire", "stale") } {
-                if ($a.Kind -eq "retire") { Log "Retired ${noun}: $($a.Name) (was $($a.Extra); no source has it now)" }
+                if ($a.Kind -eq "retire") {
+                    $dry = if ($DryRun) { "[DRY RUN] " } else { "" }
+                    Log "${dry}Retired ${noun}: $($a.Name) (was $($a.Extra); no source has it now)"
+                }
                 $p = Join-Path $kindDir $a.Name
                 if ($Kind -eq "rules") {
                     # A file (or a symlink to one), as the .sh's -f / -L; never a directory
                     if (Test-Path -LiteralPath $p -PathType Leaf) { Remove-RetiredRule $a.Name }
                 } else {
-                    $item = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
-                    # ErrorAction: absent is the common case; $null is checked next
+                    $item = $null
+                    try {
+                        $item = Get-Item -LiteralPath $p -Force -ErrorAction Stop
+                    } catch [System.Management.Automation.ItemNotFoundException] {
+                        $item = $null   # absent: nothing to remove (the common case)
+                    } catch {
+                        LogWarn "Retired skill $($a.Name): cannot read ${p}: $_ -- left alone"
+                        Write-Summary "WARN" $tool (Get-ShortDetail "cannot read: $($a.Name)")
+                        continue
+                    }
                     if ($null -eq $item) {
-                        # nothing to remove
+                        # absent: nothing to remove
                     } elseif ($item.PSIsContainer -and -not $item.LinkType) {
                         Remove-RetiredSkill $a.Name
                     } else {
                         LogWarn "Retired skill $($a.Name): $p is not a directory -- left alone"
+                        Write-Summary "WARN" $tool (Get-ShortDetail "not a dir: $($a.Name)")
                     }
                 }
             }
@@ -623,6 +702,13 @@ function Write-HarnessManifest([string]$Kind) {
     $n = $mp.Lines.Count
     if ($DryRun) {
         Log "[DRY RUN] Would write $manifest ($n $noun line(s))"
+        return
+    }
+    # A directory at the manifest path: same outcome as the .sh (File.Move would
+    # also fail, with a less clear message).
+    if (Test-Path -LiteralPath $manifest -PathType Container) {
+        LogError "$title manifest: $manifest is a directory -- manifest not written"
+        Write-Summary "ERROR" $tool "$Kind manifest not written"
         return
     }
     $text = "$header`n"
@@ -675,8 +761,10 @@ foreach ($kind in $kinds) {
 # =========================================================================
 # 7. Summary (one row under "harness files") + exit footer
 # =========================================================================
-Log "harness files: $($plan.Count) planned, $nAdded added, $nUpdated updated, $nAccepted accepted, $nVerified verified, $nSkipped skipped, $nFailed failed, $nPreserved preserved, $nRetired retired, $duplicates duplicate(s)"
+Log "harness files: $($plan.Count) planned, $nAdded added, $nUpdated updated, $nAccepted accepted, $nVerified verified, $nSkipped skipped, $nFailed failed, $nPreserved preserved, $nRetired retired, $nWouldRetire would retire (dry run), $duplicates duplicate(s)"
 if ($DryRun) {
+    # Pending retirements ($nWouldRetire) are logged, not in this row: the row is at
+    # least 27 characters, so ", N retire" never fits in 30.
     Write-Summary "OK" $tool (Get-ShortDetail "dry-run: $nWouldCreate create, $nWouldUpdate update")
 } elseif ($nFailed -gt 0) {
     Write-Summary "ERROR" $tool (Get-ShortDetail "$nFailed failed")

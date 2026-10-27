@@ -465,8 +465,11 @@ smf_is() {
     { printf '# aitools skills manifest v1\n'; printf '%s\n' "$@"; } > "$C/smf.expected"
     cmp -s "$C/smf.expected" "$(SM)"
 }
-# n_bak NAME -- number of NAME.bak.* directories in ~/.aitools/skills
-n_bak() { find "$(A)/skills" -maxdepth 1 -type d -name "$1.bak.*" | grep -c .; }
+# n_bak NAME -- number of NAME.bak.* directories in ~/.aitools/skills (literal name)
+n_bak() {
+    perl -e 'opendir my $d, $ARGV[0] or die "cannot list $ARGV[0]: $!\n"; my $p = "$ARGV[1].bak.";
+        print scalar(grep { substr($_, 0, length $p) eq $p && -d "$ARGV[0]/$_" } readdir $d), "\n"' "$(A)/skills" "$1"
+}
 # trace STEP -- append the observable state (timestamps normalized) to $C/trace
 trace() {
     {
@@ -557,12 +560,54 @@ skill_cases() {
     gitc -C "$D" add -A; gitc -C "$D" commit -q -m d2
     "$run" --dry-run; trace dryrun
     check "$side skills: dry run -- retirement reported, nothing removed or written" \
-        "[ \"\$(rc)\" = 0 ] && [ -f '$(A)/skills/d1/SKILL.md' ] && grep -qx 'd1${T}dotprofile' '$(SM)' && [ ! -e '$(A)/skills/d2' ] && grep -q 'DRY RUN\] Would back up and remove .*skills/d1' '$LOG' && [ \"\$(n_bak d1)\" = 0 ]"
+        "[ \"\$(rc)\" = 0 ] && [ -f '$(A)/skills/d1/SKILL.md' ] && grep -qx 'd1${T}dotprofile' '$(SM)' && [ ! -e '$(A)/skills/d2' ] && grep -q 'DRY RUN\] Would back up and remove .*skills/d1' '$LOG' && grep -q '\[DRY RUN\] Retired skill: d1 (was dotprofile' '$LOG' && [ \"\$(n_bak d1)\" = 0 ]"
     "$run"; trace d1gone
     check "$side skills: dotprofile skills listed again -- d1 retired, d2 deployed" \
         "[ \"\$(rc)\" = 0 ] && grep -qx 'd1${T}retired' '$(SM)' && grep -qx 'd2${T}dotprofile' '$(SM)' && [ ! -e '$(A)/skills/d1' ] && [ \"\$(n_bak d1)\" = 1 ]"
 
+    # A skill with no top-level *.md, one named with [ ] * ? (old backups pruned to
+    # 5 by literal name; a decoy that the glob would match is kept), and an
+    # upper-case .BAK. directory (not a skill name, never deployed)
+    local bn='b[1] *?'
+    mkdir -p "$R/shared/skills/nomd/a" "$R/shared/skills/$bn" "$R/shared/skills/x.BAK.y"
+    printf 'nested only\n' > "$R/shared/skills/nomd/a/x.md"
+    printf 'bracket skill\n' > "$R/shared/skills/$bn/SKILL.md"
+    printf 'upper bak\n' > "$R/shared/skills/x.BAK.y/SKILL.md"
+    gitc -C "$R" add -A; gitc -C "$R" commit -q -m copy-cases
+    "$run"; trace copydeploy
+    check "$side skills: nested-only and [ ] * ? skills deployed; .BAK. directory not (case-insensitive)" \
+        "[ \"\$(rc)\" = 0 ] && [ -f '$(A)/skills/nomd/a/x.md' ] && [ -f \"$(A)/skills/\$bn/SKILL.md\" ] && [ ! -e '$(A)/skills/x.BAK.y' ] && ! grep -qi 'x.bak.y' '$(SM)'"
+    local i
+    for i in 1 2 3 4 5 6; do
+        mkdir -p "$(A)/skills/$bn.bak.2026-01-0${i}T000000Z"
+        printf 'old %s\n' "$i" > "$(A)/skills/$bn.bak.2026-01-0${i}T000000Z/SKILL.md"
+    done
+    mkdir -p "$(A)/skills/b1.bak.2026-01-01T000000Z"
+    printf 'decoy\n' > "$(A)/skills/b1.bak.2026-01-01T000000Z/SKILL.md"
+    gitc -C "$R" rm -q -r shared/skills/nomd "shared/skills/$bn"; gitc -C "$R" commit -q -m copy-retire
+    "$run"; trace copyretire
+    check "$side skills: retired skill with no top-level *.md -- copied, verified, removed" \
+        "[ \"\$(rc)\" = 0 ] && [ ! -e '$(A)/skills/nomd' ] && [ \"\$(n_bak nomd)\" = 1 ] && grep -rqx 'nested only' '$(A)/skills/'nomd.bak.*/a/x.md && row 'DETAIL|harness files|retired: skills/nomd'"
+    check "$side skills: [ ] * ? name retired; its backups pruned to 5 (oldest two); decoy kept" \
+        "[ ! -e \"$(A)/skills/\$bn\" ] && [ \"\$(n_bak \"\$bn\")\" = 5 ] && [ ! -e \"$(A)/skills/\$bn.bak.2026-01-01T000000Z\" ] && [ ! -e \"$(A)/skills/\$bn.bak.2026-01-02T000000Z\" ] && [ -d \"$(A)/skills/\$bn.bak.2026-01-03T000000Z\" ] && [ -f '$(A)/skills/b1.bak.2026-01-01T000000Z/SKILL.md' ]"
+
     if [ "$(id -u)" != 0 ]; then
+        # Partial backup: an unreadable file in the retired skill's directory
+        mkdir -p "$R/shared/skills/pb"
+        printf 'partial\n' > "$R/shared/skills/pb/SKILL.md"
+        gitc -C "$R" add -A; gitc -C "$R" commit -q -m pb
+        "$run"; trace pbdeploy
+        printf 'secret\n' > "$(A)/skills/pb/secret.md"
+        chmod 000 "$(A)/skills/pb/secret.md"
+        gitc -C "$R" rm -q -r shared/skills/pb; gitc -C "$R" commit -q -m pb-gone
+        "$run"; trace pbfail
+        chmod 644 "$(A)/skills/pb/secret.md"
+        check "$side skills: partial backup removed again; directory kept (ERROR row, exit 1)" \
+            "[ \"\$(rc)\" = 1 ] && [ -f '$(A)/skills/pb/SKILL.md' ] && [ \"\$(n_bak pb)\" = 0 ] && row 'ERROR|harness files|retire failed: pb' && grep -q 'Retired skill pb: backup failed (' '$LOG' && grep -q 'Retired skill pb: removed the incomplete backup' '$LOG'"
+        "$run"; trace pbretry
+        check "$side skills: readable again -- backed up and removed" \
+            "[ \"\$(rc)\" = 0 ] && [ ! -e '$(A)/skills/pb' ] && [ \"\$(n_bak pb)\" = 1 ] && grep -rqx 'secret' '$(A)/skills/'pb.bak.*/secret.md"
+
         gitc -C "$R" rm -q -r shared/skills/s1; gitc -C "$R" commit -q -m s1-gone
         chmod 555 "$(A)/skills"
         "$run"; trace bakfail
@@ -578,11 +623,22 @@ skill_cases() {
     printf '# aitools skills manifest v1\nzz\tretired\n../evil\tshared\n.hidden\tshared\nx.bak.1\tshared\na/b\tshared\nok\tbogus\n' > "$(SM)"
     "$run"; trace invalid
     check "$side skills: invalid lines ignored (5 warnings); a file named like a retired skill left alone" \
-        "[ \"\$(rc)\" = 0 ] && [ \"\$(grep -c 'line ignored' '$LOG')\" = 5 ] && [ -f '$(A)/skills/zz' ] && grep -q 'Retired skill zz: .* is not a directory' '$LOG' && grep -qx 'zz${T}retired' '$(SM)' && ! grep -q 'evil\|hidden\|bogus' '$(SM)'"
+        "[ \"\$(rc)\" = 0 ] && [ \"\$(grep -c 'line ignored' '$LOG')\" = 5 ] && [ -f '$(A)/skills/zz' ] && grep -q 'Retired skill zz: .* is not a directory' '$LOG' && row 'WARN|harness files|not a dir: zz' && grep -qx 'zz${T}retired' '$(SM)' && ! grep -q 'evil\|hidden\|bogus' '$(SM)'"
     printf 'not a manifest\nd2\tdotprofile\n' > "$(SM)"
     "$run"; trace header
     check "$side skills: unknown header -- warning, nothing retired, rewritten" \
         "[ \"\$(rc)\" = 0 ] && grep -q '\[warn\] Skills manifest .*the first line is not' '$LOG' && head -n 1 '$(SM)' | grep -qx '# aitools skills manifest v1' && ! grep -q 'retired' '$(SM)'"
+
+    # A directory at the manifest paths (skills and rules): ERROR, exit 1, nothing moved into it
+    rm -f "$(SM)" "$(M)"
+    mkdir -p "$(SM)" "$(M)"
+    "$run"; trace mfdir
+    check "$side skills: manifest path is a directory -- ERROR rows (skills, rules), exit 1, not written into it" \
+        "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|skills manifest not written' && row 'ERROR|harness files|rules manifest not written' && [ -d '$(SM)' ] && [ -z \"\$(ls -A '$(SM)')\" ] && [ -z \"\$(ls -A '$(M)')\" ] && grep -q 'Skills manifest: .* is a directory' '$LOG'"
+    rmdir "$(SM)" "$(M)"
+    "$run"; trace mfdirgone
+    check "$side skills: directory removed -- both manifests written again" \
+        "[ \"\$(rc)\" = 0 ] && [ -f '$(SM)' ] && [ -f '$(M)' ]"
 }
 
 setup_case skillssh
