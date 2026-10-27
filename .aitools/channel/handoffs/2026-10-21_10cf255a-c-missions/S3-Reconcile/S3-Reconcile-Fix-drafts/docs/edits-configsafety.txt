@@ -1,0 +1,37 @@
+@@@FILE .claude/rules/config-file-safety.md D180a who backs up library-written files, JSON included (protected)
+@@@OLD
+- **Markdown files and shell scripts**: `deploy_managed_file` calls
+  `backup_file` internally — callers need not call it separately
+- **JSON config files**: caller MUST call `backup_file` / `Backup-File`
+  before the merge write
+@@@NEW
+- **Files the managed-file library writes** (`deploy_managed_file` /
+  `Deploy-ManagedFile`, text and JSON alike, the adopt target included;
+  `sync_managed_json` / `Sync-ManagedJson`): the library backs up every
+  file it writes — callers need not call `backup_file` separately
+- **JSON config files a script writes itself** (read-then-merge): the
+  caller MUST call `backup_file` / `Backup-File` before the merge write
+@@@END
+@@@FILE .claude/rules/config-file-safety.md D180b a failed backup stops a deploy_managed_file write (protected)
+@@@OLD
+Backup failures are non-fatal (warn and proceed) — a failed backup should not
+block deployment. A merge or copy without backup is a bug.
+@@@NEW
+A failed backup in a script's own write, and in `sync_managed_json` /
+`Sync-ManagedJson`, is non-fatal (warn and proceed). In `deploy_managed_file` /
+`Deploy-ManagedFile` it stops that file: nothing is written, the error is
+logged and the file is reported as ERROR (`@.claude/rules/agentic-standards.md`
+"Managed-file review choices and merge", failure handling). A merge or copy
+without backup is a bug.
+@@@END
+@@@FILE .claude/rules/config-file-safety.md D180c SOURCE vs LOCAL wording instead of "both sides differ" (protected)
+@@@OLD
+Managed files deployed via `Deploy-ManagedFile` / `deploy_managed_file` use
+the interactive diff review pattern when both sides differ. See
+@@@NEW
+Managed files deployed via `Deploy-ManagedFile` / `deploy_managed_file` are
+compared SOURCE against LOCAL: equal is verified (nothing written); different
+is the review menu on an interactive run and a SOURCE write on a
+non-interactive one (`@.claude/rules/agentic-standards.md` "Managed-file
+review choices and merge"). See
+@@@END

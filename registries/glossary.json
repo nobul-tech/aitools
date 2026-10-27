@@ -440,12 +440,12 @@
       "source": ".claude/rules/tool-lifecycle.md; reference/tool-support-decision-tree.md section 4 (after M2); decisions D-TS5, T-Q6 (plans/tool-support-and-machine-profile.md)"
     },
     "machine profile": {
-      "definition": "A field inside the profile (profile.json): one entry of its 'profiles' object, keyed by machine alias, holding one machine's (or one hosted environment's) per-machine overrides of identity name/company, machine id, and tool exceptions. Chosen on every run by the machine resolver (scripts/aitools-profile.sh/.ps1); never another machine's profile as a fallback. Not a separate file and not a shell profile (.zshrc, PowerShell $PROFILE).",
-      "source": "reference/user-repo.md (after M3); decisions G-profile, E-glossary-1, P-Q3 (plans/tool-support-and-machine-profile.md)"
+      "definition": "A field inside the profile (profile.json): one entry of its 'profiles' object, keyed by machine id (environment:<name> for a hosted environment without one), holding one machine's (or one hosted environment's) machine alias, per-machine overrides of identity name/company, machine id, and tool exceptions. Chosen on every run by the machine resolver (scripts/aitools-profile.sh/.ps1); never another machine's profile as a fallback. Not a separate file and not a shell profile (.zshrc, PowerShell $PROFILE).",
+      "source": "reference/user-repo.md (after M3); decisions G-profile, E-glossary-1, P-Q3 (plans/tool-support-and-machine-profile.md); commander decision 5 of 2026-10-22"
     },
     "machine alias": {
-      "definition": "The key of a machine profile (for example nobul-mac). Chosen or registered at aitools user init (non-interactively with --alias) and cached per machine in ~/.aitools/config.json machineAlias, which is re-derived on every run. Not the base artifact 'alias' (a shell alias file).",
-      "source": "reference/user-repo.md (after M3); decision P-Q12 (plans/tool-support-and-machine-profile.md)"
+      "definition": "The human-readable name of a machine profile (its 'alias' field, for example nobul-mac). Since profile.json revision 2.2 it is a label, not the key: machine profiles are keyed by machine id. Chosen at aitools user init (non-interactively with --alias), selectable with --alias or AITOOLS_MACHINE_ALIAS, and written to ~/.aitools/config.json machineAlias as a display value. In a revision 2.1 profile.json the alias was the key. Not the base artifact 'alias' (a shell alias file).",
+      "source": "reference/user-repo.md \"Profile Schema\"; decisions P-Q12 and commander decision 5 of 2026-10-22 (plans/tool-support-and-machine-profile.md)"
     }
   }
 }

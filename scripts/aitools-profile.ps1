@@ -7,19 +7,18 @@
 # the config.json values that come from them. NOT a writer of config.json
 # (setup-user-config.sh/.ps1 is the only writer). NOT a writer of profile.json
 # except the `register` subcommand, which writes to a temp file the caller
-# validates, backs up and moves, and the `exception-set` subcommand, the only
-# writer of toolExceptions, which writes in place (temp, validate, backup, move)
-# and commits and pushes profile.json. NOT the settings.json sync
+# validates, backs up and moves, the `exception-set` subcommand, the only writer
+# of toolExceptions, and the `migrate` subcommand, which re-keys profiles by
+# machine id; those two write in place (temp, validate, backup, move) and commit
+# and push profile.json. NOT the settings.json sync
 # (Sync-ManagedJson). Consumed by: the PowerShell shared-lib wrappers
 # Resolve-UserRepoPath / Resolve-MachineProfile / Get-ToolException /
 # Set-ToolException, setup-user-config.ps1, aitools.ps1 `user init`, and the
-# generated deploy/setup-user-claude.ps1 (embedded copy).
+# generated deploy/setup-user-claude.ps1, setup-user-settings.ps1 and
+# setup-user-cursor.ps1 (embedded copies).
 #
 # Usage: aitools-profile.ps1 <command> [options]   (--help for details)
 #   In-process: $out = & aitools-profile.ps1 resolve; $rc = $LASTEXITCODE
-# Writers: `migrate` also writes profile.json (re-keys profiles in place: temp,
-#   validate, backup, move, commit, push). The intent statement above predates
-#   it; its update awaits commander approval.
 # Machine profiles (profile.json revision 2.2, re-key design): keyed by this
 #   machine's raw id, lower-cased (`profiles.<machineId>`; `machine.id` repeats
 #   the key), or `environment:<name>` for an environment without a stable id

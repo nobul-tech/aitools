@@ -1,0 +1,29 @@
+FX-3 (high): the bash Cursor fan-out never prompts. Its deploy loop reads the rule
+list from a here-string on stdin, so inside the loop tty_interactive ([ -t 0 ])
+is false and prompt_diff_review auto-overwrites every locally edited
+~/.cursor/rules/<name>.mdc ("overwriting (non-interactive)"). Read the list on
+fd 3 instead (the deploy-harness.sh pattern: `<&3` ... `done 3< "$PLAN"`).
+bash only: setup-user-cursor.ps1 iterates an array (process stdin untouched).
+Base: origin/main. On #110 (feature/harness-cursor-user-rules) and #109
+(fix/mf-audit-consumers) the same two OLD lines occur once each: re-apply after
+they merge (apply.pl dies if an OLD is not found exactly once).
+
+@@@FILE scripts/setup-user-cursor.sh deploy loop reads on fd 3 (while)
+@@@OLD
+        RULE_DESTS_LC=""    # the same, lower-cased (duplicate and preserved checks)
+        while IFS= read -r rule_src; do
+@@@NEW
+        RULE_DESTS_LC=""    # the same, lower-cased (duplicate and preserved checks)
+        # The list is read on fd 3, not stdin: stdin must stay the caller's
+        # terminal, or tty_interactive (it tests [ -t 0 ]) is false inside the
+        # loop and the review menu of deploy_managed_file never prompts (a local
+        # edit would be overwritten as "non-interactive").
+        while IFS= read -r rule_src <&3; do
+@@@END
+
+@@@FILE scripts/setup-user-cursor.sh deploy loop reads on fd 3 (done)
+@@@OLD
+        done <<< "$RULE_SOURCES"
+@@@NEW
+        done 3<<< "$RULE_SOURCES"
+@@@END

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  tech.nobul.aitools.firstrun.plist - aitools per-user first-run LaunchAgent (package launcher)
+
+  Installed to /Library/LaunchAgents/ by the aitools macOS .pkg (batch B8,
+  plans/build-package/implementation-plan.md). Runs the per-user setup runner
+  at every user login; the runner exits at once when ~/.aitools/pkg-version
+  equals the payload VERSION, so it is cheap after the first run and covers
+  users who were not logged in at install time (BP-7, BP-13).
+  Run context: each logged-in user (administrator-provided per-user agent).
+  Platform: macOS only. Label prefix tech.nobul.aitools (BP-17).
+  Follows: BP-5, BP-7, BP-13, BP-17.
+
+  VERSION 1.0 SCAFFOLDING: the runner it starts refuses to run (exit 1).
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>tech.nobul.aitools.firstrun</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/bash</string>
+		<string>/Library/Application Support/aitools/bin/aitools-pkg-run.sh</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>ProcessType</key>
+	<string>Background</string>
+</dict>
+</plist>

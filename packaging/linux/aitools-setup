@@ -1,0 +1,36 @@
+#!/bin/bash
+# aitools-setup -- per-user setup command installed by the aitools .deb (package launcher)
+#
+# Installed to /opt/aitools/bin/aitools-setup, with a /usr/bin/aitools-setup
+# symlink shipped in the package data. Intent (batch B10b,
+# plans/build-package/implementation-plan.md): run the user phase of the
+# existing installer from the read-only payload in /opt/aitools. When
+# implemented:
+#   Usage: aitools-setup [--user <name>] [--force] [--environment <value>] [--rerun] [--help]
+#   (--rerun ignores a matching pkg-version; an unknown option exits 1)
+#   1. target user (BP-10): non-root = self; root + SUDO_USER = SUDO_USER;
+#      root without SUDO_USER = root (containers, Claude Code web); --user
+#      overrides; never guess UID >= 1000
+#   2. exit 0 at once when ~/.aitools/pkg-version equals /opt/aitools/VERSION
+#      and --rerun is not given (runs once per version, BP-13)
+#   3. log to ~/.aitools/logs of the target user (BP-16)
+#   4. run /opt/aitools/repo/scripts/aitools-install.sh --phase user
+#      --package-mode (BP-6) as the target user; --force = AITOOLS_FORCE=1
+#      (non-interactive); --environment sets AITOOLS_ENVIRONMENT
+#      (claude-code-web, local; cursor-cloud proposed, BP-19 / P-2)
+#   5. on success write ~/.aitools/pkg-version = VERSION
+# Run context: the target user, or root in a container. Run by the user, by a
+#   Claude Code web setup script, or by the Cursor cloud environment.json
+#   install command (BP-7).
+# Platform: Ubuntu 22.04 and 24.04 (bash). Package launcher: exempt from the
+#   .sh/.ps1 pairing (category "package launchers", BP-5, pending P-1).
+# Follows: BP-2, BP-5, BP-6, BP-7, BP-10, BP-11, BP-13, BP-16, BP-19.
+# Safe to re-run: yes once implemented (version marker; managed files backed up).
+#
+# VERSION 1.0 SCAFFOLDING: refuses to run (exit 1).
+
+set -euo pipefail
+
+printf '[%s] [aitools-setup] [error] not implemented in v1.0 scaffolding (batch B10, plans/build-package/implementation-plan.md)\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+exit 1

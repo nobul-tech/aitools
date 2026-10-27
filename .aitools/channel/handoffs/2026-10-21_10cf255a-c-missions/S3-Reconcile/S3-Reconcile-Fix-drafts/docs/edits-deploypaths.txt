@@ -1,0 +1,29 @@
+@@@FILE .claude/rules/deploy-paths.md D211-D214 MDM path limits: size, clean endpoint, run context (protected)
+@@@OLD
+`ERROR config.json not generated` and exits 1.
+
+### When changing `shared/` content
+@@@NEW
+`ERROR config.json not generated` and exits 1.
+
+### MDM path limits
+
+The generated `deploy/` is not a drop-in MDM script set; the package path
+exists because of these limits (`@plans/build-package/design.md` sections 1
+and 5):
+
+- **Size**: 7 of the 25 generated `.ps1` files are over Intune's 200 KB
+  script limit and `deploy-harness` is over 2.2 MB. No build step checks
+  generated sizes. Jamf's script limit is not recorded here.
+- **Clean endpoint**: the scripts install no prerequisites (PowerShell 7,
+  node, the Claude Code CLI, Homebrew) and need the installer's bootstrap
+  keys in `~/.aitools/config.json` (above). No doc defines how `deploy/`
+  reaches an endpoint. "Equivalent results" hold only where
+  `aitools-install` has run.
+- **Run context**: every script configures the running process's `$HOME` /
+  `$env:USERPROFILE`; none resolves a console user. Run each as the target
+  user, never as root or SYSTEM (the package path's launchers switch user:
+  design BP-10).
+
+### When changing `shared/` content
+@@@END

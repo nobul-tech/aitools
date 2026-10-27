@@ -17,7 +17,9 @@ adoption work, `/audit` skill.
 ## Components
 
 **Environment** — the agent runtime the harness runs in (Claude Code
-locally on a platform, or a hosted service such as Claude Code web)
+locally on a platform, or a hosted service such as Claude Code web or
+Cursor cloud; supported list: `@reference/cross-platform-detail.md`
+"Supported platforms and environments")
 provides the infrastructure: CLAUDE.md
 (5-level hierarchy), rules, skills, hooks, settings, commands, agents,
 session management. Full capability set documented upstream. Our
@@ -44,6 +46,11 @@ across machines and users. This includes:
   (`@reference/managed-file-deployment.md`)
 - Build pipeline generating self-contained deploy scripts
   (`@.claude/rules/git-safety.md`)
+- Package build generating installable packages for a fleet (the
+  package path, `build-package`: Windows `.intunewin`, macOS `.pkg`,
+  Linux `.deb`), a distribution parallel to the dev and MDM paths that
+  runs the same `scripts/` from a payload of the aitools tree
+  (`@plans/build-package/design.md`)
 - Setup scripts, shared libraries, entry points, verification
   checklists, AI-assisted operations, incident tracking (via
   `/incident` skill), plans, and reference files

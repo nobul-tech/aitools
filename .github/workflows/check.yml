@@ -125,6 +125,12 @@ jobs:
       - name: Managed-file tests (PowerShell)
         run: pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1
 
+      - name: Dotprofile adopt commit+push tests (bash)
+        run: bash tests/managed-files/test-adopt-push.sh
+
+      - name: Dotprofile adopt commit+push tests (PowerShell)
+        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
+
       - name: Profile resolver tests (bash 5 + pwsh parity)
         run: bash tests/profile/test-profile.sh
 
@@ -296,6 +302,12 @@ jobs:
       - name: Managed-file tests (PowerShell)
         run: pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1
 
+      - name: Dotprofile adopt commit+push tests (bash)
+        run: bash tests/managed-files/test-adopt-push.sh
+
+      - name: Dotprofile adopt commit+push tests (PowerShell)
+        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
+
       - name: Profile resolver tests (bash + pwsh parity, incl. claude-code-web)
         run: bash tests/profile/test-profile.sh
 
@@ -405,6 +417,14 @@ jobs:
       - name: Managed-file tests (PowerShell, native)
         shell: pwsh
         run: pwsh -NoProfile -File tests/managed-files/test-managed-files.ps1
+
+      - name: Dotprofile adopt commit+push tests (bash, via Git Bash)
+        shell: bash
+        run: bash tests/managed-files/test-adopt-push.sh
+
+      - name: Dotprofile adopt commit+push tests (PowerShell, native)
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/managed-files/test-adopt-push.ps1
 
       - name: Profile resolver (PowerShell, native machine id and hostname)
         shell: pwsh

@@ -1,0 +1,45 @@
+@@@FILE .claude/rules/aitools-workspace.md D174a project-scoped table names the real scratch and harvesting paths (protected)
+@@@OLD
+Project-scoped (`<repo>/.aitools/`):
+
+| Directory | Tracked | Purpose |
+|-----------|---------|---------|
+| `scratch/` | gitignored | Session-ephemeral working files |
+| `channel/session-*/` | gitignored | Session-ephemeral messages (SITREPs, FINDINGs) |
+| `channel/running-estimate.json` | tracked | Carry-forward state between sessions and machines |
+| `channel/handoffs/` | tracked | Handoff prompts from completed sessions (see `/handoff` skill) |
+| `harvesting/` | tracked | Artifact lifecycle — candidates for harness promotion |
+@@@NEW
+Project-scoped (paths from the repo root):
+
+| Path | Tracked | Purpose |
+|------|---------|---------|
+| `.scratch/session-<id>/` | gitignored | Session-ephemeral working files (see `/scratch` skill) |
+| `.aitools/channel/session-*/` | gitignored | Session-ephemeral messages (SITREPs, FINDINGs) |
+| `.aitools/channel/running-estimate.json` | tracked | Carry-forward state between sessions and machines |
+| `.aitools/channel/handoffs/` | tracked | Handoff prompts from completed sessions (see `/handoff` skill) |
+| `harvesting/` | tracked | Artifact lifecycle — candidates for harness promotion (see `/harvest` skill) |
+@@@END
+@@@FILE .claude/rules/aitools-workspace.md D174b scope boundary names the root-level directories (protected)
+@@@OLD
+- **Project-scoped** (`.aitools/` at repo root): data about THIS
+  project's sessions, artifacts, and operational state
+@@@NEW
+- **Project-scoped** (`.aitools/`, `.scratch/` and `harvesting/` at
+  the repo root): data about THIS project's sessions, artifacts, and
+  operational state
+@@@END
+@@@FILE .claude/rules/aitools-workspace.md D174c decision #34 consolidation was never implemented (protected)
+@@@OLD
+Planning brief decision #34 is superseded by this rule. The
+namespace consolidation (`.scratch/` → `.aitools/scratch/`,
+`harvesting/` → `.aitools/harvesting/`) and the cross-machine
+carry-forward principle are the governing decisions.
+@@@NEW
+Planning brief decision #34 is superseded by this rule. Its namespace
+consolidation (`.scratch/` → `.aitools/scratch/`, `harvesting/` →
+`.aitools/harvesting/`) was never implemented: the SessionStart hook
+creates `.scratch/session-<id>/` and the harvester writes `harvesting/`,
+both at the repo root. The cross-machine carry-forward principle is the
+governing decision.
+@@@END

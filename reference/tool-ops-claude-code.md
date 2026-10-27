@@ -309,6 +309,21 @@ unset at every level):
 |---|---|---|---|
 | Agent tool from the main session | yes at levels 1-2, no at level 3 | no | 3 |
 | A Workflow `agent()` call | no (not even deferred via ToolSearch) | no | 1 |
+| A Workflow `agent()` call with `agentType: 'general-purpose'` | no (not even deferred via ToolSearch) | no | 1 |
+
+Re-verified 2.1.307, macOS, local environment, 2026-10-26 (workflow
+`probe-workflow-nesting`, run wf_f1bf6cf0-be5): a default workflow agent and
+one launched with `agentType: 'general-purpose'` were each told explicitly to
+go outside the workflow's layout and launch their own general-purpose
+sub-agent. Neither had an Agent, Task or Workflow tool; ToolSearch
+`select:Agent` returned "No matching deferred tools found", and a keyword
+search ("agent subagent task workflow") surfaced only TaskCreate / TaskGet /
+TaskList / TaskUpdate / TaskStop (todo-list tools), SendMessage and
+ListAgents (message existing agents only), RemoteTrigger (cloud routines)
+and `mcp__firecrawl__firecrawl_agent` (web research). The agent type does
+not change the tool set. Not tested: spawning through the `claude` CLI
+(`claude -p`, present at `~/.local/bin/claude`) or RemoteTrigger, which are
+separate mechanisms with their own permissions.
 
 - At the default cap (3), the third delegate has no Agent tool at all, so a
   chain runs main → L1 → L2 → L3.

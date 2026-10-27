@@ -8,20 +8,18 @@
 # the config.json values that come from them. NOT a writer of config.json
 # (setup-user-config.sh/.ps1 is the only writer). NOT a writer of profile.json
 # except the `register` subcommand, which writes to a temp file the caller
-# validates, backs up and moves, and the `exception-set` subcommand, the only
-# writer of toolExceptions, which writes in place (temp, validate, backup, move)
-# and commits and pushes profile.json. NOT the settings.json sync
+# validates, backs up and moves, the `exception-set` subcommand, the only writer
+# of toolExceptions, and the `migrate` subcommand, which re-keys profiles by
+# machine id; those two write in place (temp, validate, backup, move) and commit
+# and push profile.json. NOT the settings.json sync
 # (sync_managed_json). Consumed by: the bash shared-lib wrappers
 # resolve_user_repo_path / resolve_machine_profile / tool_exception_get /
-# tool_exception_record, setup-user-config.sh, build-deploy.sh (on macOS/Linux;
-# under Git Bash on Windows it uses the AITOOLS_USER_REPO_PATH the entry point
-# exports), aitools `user init`, and the generated deploy/setup-user-claude.sh
-# (embedded copy).
+# tool_exception_record, setup-user-config.sh, build-deploy.sh (through
+# resolve_user_repo_path, unless its caller sets AITOOLS_USER_REPO_PATH), aitools
+# `user init`, and the generated deploy/setup-user-claude.sh,
+# setup-user-settings.sh and setup-user-cursor.sh (embedded copies).
 #
 # Usage: aitools-profile.sh <command> [options]   (--help for details)
-# Writers: `migrate` also writes profile.json (re-keys profiles in place: temp,
-#   validate, backup, move, commit, push). The intent statement above predates
-#   it; its update awaits commander approval.
 # Machine profiles (profile.json revision 2.2, re-key design): keyed by this
 #   machine's raw id, lower-cased (`profiles.<machineId>`; `machine.id` repeats
 #   the key), or `environment:<name>` for an environment without a stable id

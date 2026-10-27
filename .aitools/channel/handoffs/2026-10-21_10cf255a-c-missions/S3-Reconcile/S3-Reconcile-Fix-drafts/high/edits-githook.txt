@@ -1,0 +1,36 @@
+FX-2b (high, same deficiency as FX-2a): scripts/githooks/pre-commit runs
+build-deploy.sh (it deletes and rebuilds the REAL dotprofile deploy/ from the
+branch being committed) and then `git add deploy/` stages the frozen
+aitools/deploy/. Enabled per clone by scripts/init-hh-hooks.sh (not enabled on
+the commander's Mac checkout today: `git config --get core.hooksPath` exit 1,
+2026-10-26). Fix: the hook only reminds; no rebuild, no staging. bash only (git
+runs hooks with sh/bash on every platform; no .ps1 twin exists). Base:
+origin/main (no open PR touches either file).
+
+@@@FILE scripts/githooks/pre-commit reminder only
+@@@OLD
+# Pre-commit: regenerate deploy/ when shared/ or build-deploy.sh is staged.
+# Enable once per clone: git config core.hooksPath scripts/githooks
+@@@NEW
+# Pre-commit: when shared/ or build-deploy.sh is staged, remind that the
+# dotprofile deploy/ follows main. It does not rebuild: build-deploy.sh deletes
+# and rebuilds <userRepoPath>/deploy/ in the dotprofile repo (aitools/deploy/ is
+# frozen), and pre-push step 7 checks it against a fresh build on every push.
+# Enable once per clone: git config core.hooksPath scripts/githooks
+@@@END
+
+@@@FILE scripts/githooks/pre-commit reminder only (body)
+@@@OLD
+  echo "hh pre-commit: shared/ or build-deploy.sh changed — running build-deploy.sh"
+  bash scripts/build-deploy.sh
+  git add deploy/
+@@@NEW
+  echo "hh pre-commit: shared/ or build-deploy.sh changed -- pre-push step 7 checks the dotprofile deploy/; rebuild it (bash scripts/build-deploy.sh) after the merge to main"
+@@@END
+
+@@@FILE scripts/init-hh-hooks.sh message matches the hook
+@@@OLD
+echo "core.hooksPath = scripts/githooks (pre-commit regenerates deploy/ when shared/ changes)"
+@@@NEW
+echo "core.hooksPath = scripts/githooks (pre-commit reminds you to rebuild the dotprofile deploy/ after a merge when shared/ changes)"
+@@@END
