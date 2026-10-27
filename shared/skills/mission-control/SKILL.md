@@ -79,14 +79,17 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:<port>/
 
 **Pattern 2: Last activity extraction**
 
-```bash
-tail -1 <transcript>.jsonl | python3 -c "
+Write the snippet to `<scratch>/last-activity.py` (the standing-order
+guard blocks inline commands of 4+ lines):
+
+```python
 import json, sys
 d = json.load(sys.stdin)
 print(d.get('type','?'), d.get('message',{}).get('content','')[:100]
       if isinstance(d.get('message',{}), dict) else '')
-"
 ```
+
+then run `tail -1 <transcript>.jsonl | python3 <scratch>/last-activity.py`.
 
 Shows the last thing each mission agent did -- its most recent tool
 call, response, or assistant message. This is the real-time activity
@@ -97,7 +100,7 @@ Transcript locations: `~/.claude/projects/<project-hash>/<uuid>.jsonl`
 To find the most recent transcript for a project:
 
 ```bash
-ls -t ~/.claude/projects/*/session-*.jsonl | head -5
+ls -t ~/.claude/projects/*/*.jsonl | head -5
 ```
 
 **Pattern 3: Progress gauge**
@@ -145,10 +148,13 @@ A file that stopped growing may indicate stall or completion.
 
 **Pattern 6: Deliverable validation**
 
-```bash
-python3 -c "
-import json
-with open('<output-file>') as f:
+Write the snippet to `<scratch>/validate-output.py` and run
+`python3 <scratch>/validate-output.py <output-file>` (no multi-line inline
+commands):
+
+```python
+import json, sys
+with open(sys.argv[1]) as f:
     d = json.load(f)
 print(f'Size: {len(json.dumps(d))} chars')
 print(f'Top keys: {list(d.keys())}')
@@ -157,7 +163,6 @@ for k in d:
         print(f'  {k}: {list(d[k].keys())[:5]}')
     elif isinstance(d[k], list):
         print(f'  {k}: [{len(d[k])} items]')
-"
 ```
 
 Validates: (1) valid JSON, (2) expected top-level structure,
@@ -198,7 +203,7 @@ Before launching concurrent missions, verify ALL of these:
    bash scripts/aitools-dashboard.sh --status
    ```
 
-6. **Delegation duty**: Each mission prompt carries the seven
+6. **Delegation duty**: Each mission prompt carries the eight
    delegation-duty elements (`/delegate` skill), including a distinct
    name prefix per mission (D-DEL1). Distinct prefixes are what make
    Pattern 4 attribute files to missions.
@@ -351,7 +356,6 @@ To identify which transcript belongs to which mission:
 - Session planning: `/planning` skill
 - Writing mission prompts (delegation duty): `/delegate` skill
 - Governed vocabulary: `/glossary` skill (terms: Schwerpunkt,
-  Lagebeurteilung, Reibung, FRAGORD, running estimate)
+  Lagebeurteilung, Reibung; FRAGORD and running estimate are not yet
+  governed — file them via `/glossary` if needed)
 - UCI ineffectiveness: Decision #35 (running estimate v9)
-- Ad-hoc patterns source: `.scratch/session-RnTOD5XJFi/adhoc-monitoring-patterns.md`
-- Gap analysis source: `.scratch/session-RnTOD5XJFi/mission-control-gap-analysis.md`

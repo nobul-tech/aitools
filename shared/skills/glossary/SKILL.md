@@ -135,6 +135,7 @@ When a term is used with multiple meanings (like "scope" or "rule"):
 Optional:
 - `abbreviationOf` — for abbreviation entries (e.g., `DP` → `design principle`)
 - `sourceDiscipline` — when adopted from an external field
+- `deprecated` (true) and `replacedBy` (the governed term to use instead) — for retired terms
 
 ### Scope modifiers
 

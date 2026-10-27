@@ -79,9 +79,9 @@ provides the exact content to write.
    - **Setup scripts** — `scripts/setup-<tool>.sh` + `.ps1`
    - **Installer integration** — step in `aitools-install.sh/.ps1`
    - **Build pipeline** — copy block in `build-deploy.sh`
-   - **Tool skill** — `shared/skills/<tool>/SKILL.md`
+   - **Tool skill** — `shared/skills/<tool>/SKILL.md` only when the tool has one (optional)
    - **Check script entries** — `TOOL_CMDS` dictionary in check scripts
-   - **CLAUDE.md entries** — Managed CLI Tools table + deploy list
+   - **CLAUDE.md entries** — the Managed CLI Tools row in `shared/claude-shared.md` and the dotprofile `claude/CLAUDE.md` (there is no deploy list any more; incident #65)
    - **Evaluation provenance** — `reference/evaluations/<tool>-*.md`
 3. Draft the registry entry
 4. Present for review — protected per `@.claude/rules/sources-of-truth.md`
@@ -102,11 +102,16 @@ When a tool is verified on a platform:
 ## Schema
 
 `registries/tool-registry.json` uses `schemaVersion: "1.0"`. Top-level
-keys: `meta`, `tools`, `mcpServers`, `mcpManagement`, `overrides`.
+keys: `meta`, `tools`, `mcpServers`, `mcpManagement`, `overrides`
+(`overrides`, top-level: intentional deviations from upstream defaults).
 Key sections per CLI tool (`tools.<slug>`):
 
 | Section | Purpose |
 |---------|---------|
+| `displayName`, `source`, `purpose` | Identity |
+| `update`, `versionCheck` | Per-platform update and version commands |
+| `systemRequirements` | OS/arch prerequisites |
+| `notes`, `pathIssues`, `platformGotchas` | Operational notes |
 | `install` | Per-platform preferred method + alternatives |
 | `delivery` | Provenance: who maintains the package, upstream source, endorsement |
 | `health` | Per-platform green/yellow/red flags with reasons |
@@ -118,7 +123,7 @@ Key sections per CLI tool (`tools.<slug>`):
 | `nonPreferredMethods` | Cleanup targets for setup scripts |
 | `buildPrereqs` | Per-platform build dependencies |
 | `knownPaths` | Verified install paths for PATH fallback detection |
-| `overrides` | Intentional deviations from upstream defaults |
+| `setupScript`, `configBehavior`, `perlioDeployment` | Tool-specific (present on some tools only) |
 
 ## When to invoke /tool-registry
 

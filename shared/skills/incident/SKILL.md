@@ -12,7 +12,7 @@ Filing process, classification, and entry formatting only. NOT for
 reading/browsing incidents. NOT for deep governance review (`/audit`
 skill). NOT for investigating root causes (`/investigate` skill).
 **Audience**: Agents fulfilling surfacing duty, agents prompted by
-the incident-governance rule, subagents triaging `AMBIGUITY:` findings.
+the incident-governance rule, agents triaging subagents' `INCIDENT:` (or legacy `AMBIGUITY:`) findings.
 
 ## Where the files live
 
@@ -59,7 +59,7 @@ and incident #48.
 - No spec exists for a common decision → **incident** (governance gap)
 - A cross-reference points to missing content → **incident**
 - Something went wrong with real impact → **incident** (operational)
-- A subagent reported `AMBIGUITY:` findings → triage and file here
+- A subagent reported `INCIDENT:` (or legacy `AMBIGUITY:`) findings → triage and file here
 
 ## When NOT to use
 
@@ -148,7 +148,7 @@ When an incident is resolved:
 
 ## Quick filing from subagent output
 
-When a subagent reports `AMBIGUITY: <description>`:
+When a subagent reports `INCIDENT: <description>` (or the legacy `AMBIGUITY: <description>`):
 1. Read the finding
 2. Determine if it's real (spot-check against the referenced file)
 3. If real, follow the filing process above
