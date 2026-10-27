@@ -2517,25 +2517,47 @@ blog_ok "Set +x on all .sh files in deploy/"
 perl -pi -e 's/(?<!\r)\n/\r\n/' "$DEPLOY_DIR"/*.ps1
 blog_ok "Converted deploy/*.ps1 to CRLF"
 
-# 3. deploy-harness size limits (HARNESS Q4; final sizes, after CRLF). Intune:
+# 3. Generated script size limits (HARNESS Q4; final sizes, after CRLF). Intune:
 #    Windows PowerShell scripts "must be less than 200 KB (ASCII)", macOS shell
 #    scripts "must be less than 1 MB" (learn.microsoft.com, read 2026-10-22).
-#    The payload is a data file and does not count. Over: fail the build.
-for _lim in "deploy-harness.ps1 200000" "deploy-harness.sh 1000000"; do
-    _lim_f="${_lim% *}"
-    _lim_max="${_lim#* }"
-    if ! _lim_size=$(wc -c < "$DEPLOY_DIR/$_lim_f"); then
-        blog_error "Cannot measure deploy/$_lim_f"
+#    The payload is a data file and does not count. Every generated .ps1/.sh is
+#    measured; over the limit is a WARN, repeated at the end of the build, and
+#    does not fail it (RECONCILE FX-12, decision D3: the MDM per-script delivery
+#    is not decided; deduplicating the inlined lib is FX-35, deferred).
+for _sz_name in deploy-harness.ps1 deploy-harness.sh; do
+    if [ ! -f "$DEPLOY_DIR/$_sz_name" ]; then
+        blog_error "deploy/$_sz_name was not generated"
         exit 1
     fi
-    _lim_size=$((_lim_size + 0))
-    if [ "$_lim_size" -ge "$_lim_max" ]; then
-        blog_error "deploy/$_lim_f is $_lim_size bytes, over the Intune script limit ($_lim_max) -- move content to deploy-harness.payload"
+done
+SIZE_WARNINGS=""
+for _sz_f in "$DEPLOY_DIR"/*.ps1 "$DEPLOY_DIR"/*.sh; do
+    [ -f "$_sz_f" ] || continue
+    _sz_name="${_sz_f##*/}"
+    case "$_sz_name" in
+        *.ps1) _sz_max=200000 ;;
+        *)     _sz_max=1000000 ;;
+    esac
+    if ! _sz=$(wc -c < "$_sz_f"); then
+        blog_error "Cannot measure deploy/$_sz_name"
         exit 1
-    elif [ "$_lim_size" -ge $((_lim_max * 95 / 100)) ]; then
-        blog_warn "deploy/$_lim_f is $_lim_size bytes, within 5% of the Intune script limit ($_lim_max)"
+    fi
+    _sz=$((_sz + 0))
+    if [ "$_sz" -ge "$_sz_max" ]; then
+        _sz_msg="deploy/$_sz_name is $_sz bytes, over the Intune script limit ($_sz_max)"
+        blog_warn "$_sz_msg"
+        SIZE_WARNINGS="$SIZE_WARNINGS$_sz_msg
+"
     else
-        blog_ok "deploy/$_lim_f: $_lim_size bytes (Intune limit $_lim_max)"
+        case "$_sz_name" in
+            deploy-harness.*)
+                if [ "$_sz" -ge $((_sz_max * 95 / 100)) ]; then
+                    blog_warn "deploy/$_sz_name is $_sz bytes, within 5% of the Intune script limit ($_sz_max)"
+                else
+                    blog_ok "deploy/$_sz_name: $_sz bytes (Intune limit $_sz_max)"
+                fi
+                ;;
+        esac
     fi
 done
 
@@ -2553,3 +2575,11 @@ DEPLOY_DIR="$DEPLOY_DIR_FINAL"
 blog_ok "Build complete: $GENERATED scripts generated in deploy/"
 ls -la "$DEPLOY_DIR/"
 blog "Scripts are self-contained and ready for MDM deployment"
+if [ -n "$SIZE_WARNINGS" ]; then
+    blog_warn "Generated scripts over the Intune script limits (WARN only, the build does not fail):"
+    printf '%s' "$SIZE_WARNINGS" | while IFS= read -r _sz_msg; do
+        if [ -n "$_sz_msg" ]; then
+            blog_warn "  $_sz_msg"
+        fi
+    done
+fi

@@ -169,8 +169,28 @@ check "MDM: dotprofile rules embedded (payload record)" \
     "perl -ne '\$f = 1 if /^dotprofile\\/claude\\/rules\\/user1\\.md\\t0\\t\\d+\\t[0-9a-f]{64}\$/; END { exit(\$f ? 0 : 1) }' '$G/deploy-harness.payload'"
 check "payload: data file beside the scripts, none inline" \
     "[ -f '$G/deploy-harness.payload' ] && ! grep -q '^mdm_unpack ' '$G/deploy-harness.sh' && ! grep -q '^Expand-MdmPayload ' '$G/deploy-harness.ps1' && grep -q '^MDM_PAYLOAD_SHA256=[0-9a-f]\{64\}$' '$G/deploy-harness.sh'"
-check "payload: scripts under the Intune limits (.ps1 < 200 KB, .sh < 1 MB)" \
-    "[ \"\$(wc -c < '$G/deploy-harness.ps1')\" -lt 200000 ] && [ \"\$(wc -c < '$G/deploy-harness.sh')\" -lt 1000000 ]"
+# size_gate_warned DIR OUT -- every generated .ps1 (200000) / .sh (1000000) at or
+# over its Intune limit has its WARN in the build output, twice (inline and the
+# end-of-build list); one under it has none (FX-12: WARN, not a build FAIL)
+size_gate_warned() {
+    local f n max sz line
+    for f in "$1"/*.ps1 "$1"/*.sh; do
+        [ -f "$f" ] || continue
+        n="${f##*/}"
+        case "$n" in *.ps1) max=200000 ;; *) max=1000000 ;; esac
+        sz=$(wc -c < "$f"); sz=$((sz + 0))
+        line="deploy/$n is $sz bytes, over the Intune script limit ($max)"
+        if [ "$sz" -ge "$max" ]; then
+            [ "$(grep -F -- '[warn]' "$2" | grep -cF -- "$line")" = 2 ] || return 1
+        else
+            if grep -F -- "[warn] deploy/$n is " "$2" | grep -qF "over the Intune script limit"; then
+                return 1
+            fi
+        fi
+    done
+}
+check "size gate: a generated script over its Intune limit is a WARN, not a build failure (FX-12)" \
+    "[ \"\$(rc_of build-b1)\" = 0 ] && size_gate_warned '$G' '$TMP_ROOT/build-b1.out'"
 check "payload: the script's sha256 is the payload's (CRs removed)" \
     "[ \"\$(perl -MDigest::SHA=sha256_hex -0777 -ne 's/\\r//g; print sha256_hex(\$_)' '$G/deploy-harness.payload')\" = \"\$(perl -ne 'print \$1 if /^MDM_PAYLOAD_SHA256=(\\S+)/' '$G/deploy-harness.sh')\" ]"
 check "markers: no marker line copied into the MDM scripts" \
