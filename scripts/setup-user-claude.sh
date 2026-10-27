@@ -306,12 +306,14 @@ RULES_MANIFEST="$RULES_SRC/.aitools-rules-manifest"
 # aitools rules. Only a git checkout counts: the generated deploy/ copy runs
 # from the dotprofile's deploy/ directory, and a package payload (git archive,
 # read-only) has no .git; adopt is then offered for dotprofile rules only.
+# A linked git worktree (.git is a file there) counts too: run from a
+# worktree, accept & adopt writes that worktree's shared/rules or
+# .claude/rules, not the main checkout's. SCRIPT_DIR is already absolute
+# (cd + pwd above), so its parent is the checkout (Split-Path -Parent in the
+# .ps1; no cd that could fail in one language only).
 RULES_AITOOLS_REPO=""
 if [ -f "$SCRIPT_DIR/../scripts/aitools-lib.sh" ] && [ -f "$SCRIPT_DIR/../shared/claude-shared.md" ] && [ -e "$SCRIPT_DIR/../.git" ]; then
-    if ! RULES_AITOOLS_REPO=$(cd "$SCRIPT_DIR/.." && pwd); then
-        log_warn "Cannot resolve the aitools checkout from $(display_path "$SCRIPT_DIR") -- adopt not offered for shared and aitools rules"
-        RULES_AITOOLS_REPO=""
-    fi
+    RULES_AITOOLS_REPO=$(dirname "$SCRIPT_DIR")
 fi
 
 # --- BEGIN rules deploy logic (extracted by build-deploy) ---
@@ -347,13 +349,21 @@ rule_manifest_source() {
     return 0
 }
 
+# rules_dir_listable DIR: exit 0 when the directory DIR can be listed (read
+# and search permission). A glob over an unlistable directory silently matches
+# nothing, so each listing checks this first and warns, as the .ps1 does when
+# its directory enumeration throws.
+rules_dir_listable() {
+    [ -r "$1" ] && [ -x "$1" ]
+}
+
 TAB=$(printf '\t')
 RULES_GO=false
 if [ ! -d "$RULES_SRC" ]; then
     log "No harness rules at $(display_path "$RULES_SRC") (deploy-harness has not run) -- skipping"
     write_summary OK "claude rules" "n/a (no harness rules)"
-elif [ ! -r "$RULES_SRC" ] || [ ! -x "$RULES_SRC" ]; then
-    log_error "Cannot list $(display_path "$RULES_SRC") (permission denied)"
+elif ! rules_dir_listable "$RULES_SRC"; then
+    log_error "Cannot list $(display_path "$RULES_SRC"): permission denied"
     write_summary ERROR "claude rules" "cannot read harness rules"
 else
     RULES_GO=true
@@ -368,7 +378,9 @@ RULE_SOURCE_OF=""   # "<lower-case name><TAB><source>" lines
 RETIRED_NAMES=""    # names the manifest retires, one per line
 RETIRED_LC=""       # the same, lower-cased
 if [ "$RULES_GO" = "true" ]; then
-    if [ ! -f "$RULES_MANIFEST" ]; then
+    # Absent only when nothing is at the path: a directory or a dangling
+    # link there goes to the reader, which reports it as unreadable
+    if [ ! -e "$RULES_MANIFEST" ] && [ ! -L "$RULES_MANIFEST" ]; then
         log "No rules manifest at $(display_path "$RULES_MANIFEST") -- every rule fanned out, none retired, adopt not offered"
     else
         manifest_out=""
@@ -445,10 +457,20 @@ if [ "$RULES_GO" = "true" ]; then
             write_summary OK "claude rules" "n/a (no harness rules)"
         fi
         RULES_GO=false
-    elif [ "$DRY_RUN" != "true" ]; then
+    elif [ "$DRY_RUN" = "true" ]; then
+        # The dry run previews the error the real run reports: something that
+        # is not a directory where ~/.claude/rules goes
+        if { [ -e "$RULES_DEST" ] || [ -L "$RULES_DEST" ]; } && [ ! -d "$RULES_DEST" ]; then
+            log_error "Cannot create $(display_path "$RULES_DEST"): not a directory (dry run)"
+            write_summary ERROR "claude rules" "cannot create rules dir"
+            RULES_GO=false
+        fi
+    else
         backup_dir "$RULES_DEST"
-        if ! mkdir -p "$RULES_DEST"; then
-            log_error "Cannot create $(display_path "$RULES_DEST")"
+        # stderr captured into the log line (not printed raw to the console)
+        mkdir_out=""
+        if ! mkdir_out=$(mkdir -p "$RULES_DEST" 2>&1) || [ ! -d "$RULES_DEST" ]; then
+            log_error "Cannot create $(display_path "$RULES_DEST"): ${mkdir_out:-not a directory}"
             write_summary ERROR "claude rules" "cannot create rules dir"
             RULES_GO=false
         fi
@@ -498,8 +520,10 @@ if [ "$RULES_GO" = "true" ]; then
         fi
         log_detail "claude rules: $rule_name source=${rule_source:-unknown} adopt=${_rule_adopt_path:-none}"
         _rule_content=""
-        if ! _rule_content=$(cat "$rule_src"); then
-            log_error "Cannot read harness rule $(display_path "$rule_src")"
+        # stderr captured: on failure the reason goes into the log line (on
+        # success cat writes nothing to stderr, so the content is unchanged)
+        if ! _rule_content=$(cat "$rule_src" 2>&1); then
+            log_error "Cannot read harness rule $(display_path "$rule_src"): $_rule_content"
             deploy_tracker_record "failed" "claude rules" "$rule_name"
             continue
         fi
@@ -530,19 +554,28 @@ if [ "$RULES_GO" = "true" ]; then
         # The copy in ~/.claude/rules, found case-insensitively (a case-sensitive
         # file system may hold it as Gone.md for the manifest's gone.md)
         rm_path=""
-        for rm_existing in "$RULES_DEST"/*; do
-            [ -f "$rm_existing" ] || continue
-            if [ "$(lower_name "$(basename "$rm_existing")")" = "$rm_lc" ]; then
-                rm_path="$rm_existing"
-                break
+        if [ -d "$RULES_DEST" ]; then
+            if ! rules_dir_listable "$RULES_DEST"; then
+                log_warn "Cannot list $(display_path "$RULES_DEST") for retired rule ${rm_name}: permission denied"
+            else
+                for rm_existing in "$RULES_DEST"/*; do
+                    [ -f "$rm_existing" ] || continue
+                    if [ "$(lower_name "$(basename "$rm_existing")")" = "$rm_lc" ]; then
+                        rm_path="$rm_existing"
+                        break
+                    fi
+                done
             fi
-        done
+        fi
         [ -n "$rm_path" ] || continue
         rm_file=$(basename "$rm_path")
         if [ ! -r "$rm_path" ]; then
-            log_error "Cannot read $(display_path "$rm_path") -- retired rule not removed"
+            log_error "Cannot read $(display_path "$rm_path") (retired rule not removed): permission denied"
             deploy_tracker_record "failed" "claude rules" "$rm_file"
             continue
+        fi
+        if ! rules_dir_listable "$RULES_SRC"; then
+            log_warn "Cannot list the backups of $rm_name in $(display_path "$RULES_SRC"): permission denied"
         fi
         rm_why=""
         for rm_cand in "$RULES_SRC/$rm_name" "$RULES_SRC/$rm_name".bak.*; do
@@ -572,18 +605,29 @@ if [ "$RULES_GO" = "true" ]; then
         # lose the file)
         rm_backed=false
         if [ "$BACKUP_FILE_OK" = "true" ]; then
-            for rm_bak in "$rm_path".bak.*; do
-                [ -f "$rm_bak" ] || continue
-                if fanout_text_equal "$rm_path" "$rm_bak"; then rm_backed=true; break; fi
-            done
+            if ! rules_dir_listable "$RULES_DEST"; then
+                log_warn "Cannot list the backups of $rm_file in $(display_path "$RULES_DEST"): permission denied"
+            else
+                for rm_bak in "$rm_path".bak.*; do
+                    [ -f "$rm_bak" ] || continue
+                    if fanout_text_equal "$rm_path" "$rm_bak"; then rm_backed=true; break; fi
+                done
+            fi
         fi
         if [ "$rm_backed" != "true" ]; then
             log_error "Not removed: $rm_file (retired rule): backup failed"
             deploy_tracker_record "failed" "claude rules" "$rm_file"
             continue
         fi
-        if ! rm -f "$rm_path" || [ -e "$rm_path" ]; then
-            log_error "Cannot remove $(display_path "$rm_path") (retired rule)"
+        # stderr captured into the log line (not printed raw to the console)
+        rm_out=""
+        if ! rm_out=$(rm -f "$rm_path" 2>&1); then
+            log_error "Cannot remove $(display_path "$rm_path") (retired rule): $rm_out"
+            deploy_tracker_record "failed" "claude rules" "$rm_file"
+            continue
+        fi
+        if [ -e "$rm_path" ] || [ -L "$rm_path" ]; then
+            log_error "Cannot remove $(display_path "$rm_path") (retired rule): still present"
             deploy_tracker_record "failed" "claude rules" "$rm_file"
             continue
         fi
@@ -602,6 +646,9 @@ if [ "$RULES_GO" = "true" ]; then
         fi
     else
         # Preserved: rules in ~/.claude/rules not fanned out this run
+        if ! rules_dir_listable "$RULES_DEST"; then
+            log_warn "Cannot list $(display_path "$RULES_DEST") for the preserved report: permission denied"
+        fi
         for existing in "$RULES_DEST"/*; do
             [ -f "$existing" ] || continue
             exist_name=$(basename "$existing")

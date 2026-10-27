@@ -172,9 +172,11 @@ jobs:
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/claude-mdm/test-claude-mdm.sh
 
       - name: Claude rules fan-out tests (bash 5 + pwsh parity)
+        if: ${{ !cancelled() }}
         run: bash tests/rules-fanout/test-rules-fanout.sh
 
       - name: Claude rules fan-out tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/rules-fanout/test-rules-fanout.sh --bash-only
 
       - name: Dotprofile resolver consumer tests (bash 5 + pwsh)
@@ -427,6 +429,7 @@ jobs:
         run: bash tests/claude-mdm/test-claude-mdm.sh
 
       - name: Claude rules fan-out tests (bash + pwsh parity)
+        if: ${{ !cancelled() }}
         run: bash tests/rules-fanout/test-rules-fanout.sh
 
       - name: Dotprofile resolver consumer tests (bash + pwsh)

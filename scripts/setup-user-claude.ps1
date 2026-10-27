@@ -338,6 +338,9 @@ $rulesManifest = Join-Path $rulesSrc ".aitools-rules-manifest"
 # aitools rules. Only a git checkout counts: the generated deploy/ copy runs
 # from the dotprofile's deploy/ directory, and a package payload (git archive,
 # read-only) has no .git; adopt is then offered for dotprofile rules only.
+# A linked git worktree (.git is a file there) counts too: run from a
+# worktree, accept & adopt writes that worktree's shared/rules or
+# .claude/rules, not the main checkout's.
 $rulesAitoolsRepo = ""
 if ($claudeScriptDir) {
     $rulesRepoCand = Split-Path -Parent $claudeScriptDir
@@ -381,7 +384,7 @@ if (-not (Test-Path -LiteralPath $rulesSrc -PathType Container)) {
         $rulesEntries = @(Get-ChildItem -LiteralPath $rulesSrc -ErrorAction Stop | Sort-Object Name)
         $rulesGo = $true
     } catch {
-        LogError "Cannot list $rulesSrc -- $_"
+        LogError "Cannot list ${rulesSrc}: $_"
         Write-Summary "ERROR" "claude rules" "cannot read harness rules"
     }
 }
@@ -395,7 +398,10 @@ $ruleSourceOf = @{}   # name -> source; PowerShell hashtable keys are case-insen
 $retiredNames = New-Object System.Collections.Generic.List[string]
 $retiredSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
 if ($rulesGo) {
-    if (-not (Test-Path -LiteralPath $rulesManifest -PathType Leaf)) {
+    # Absent only when nothing is at the path: a directory or a dangling link
+    # there (Test-Path is true for one on pwsh 7) goes to the reader, which
+    # reports it as unreadable
+    if (-not (Test-Path -LiteralPath $rulesManifest)) {
         Log "No rules manifest at $rulesManifest -- every rule fanned out, none retired, adopt not offered"
     } else {
         $manifest = $null
@@ -459,7 +465,15 @@ if ($rulesGo) {
         # An unreadable manifest already wrote this tool's ERROR row
         if (-not $manifestFailed) { Write-Summary "OK" "claude rules" "n/a (no harness rules)" }
         $rulesGo = $false
-    } elseif (-not $DryRun) {
+    } elseif ($DryRun) {
+        # The dry run previews the error the real run reports: something that
+        # is not a directory where .claude\rules goes
+        if ((Test-Path -LiteralPath $rulesDest) -and -not (Test-Path -LiteralPath $rulesDest -PathType Container)) {
+            LogError "Cannot create ${rulesDest}: not a directory (dry run)"
+            Write-Summary "ERROR" "claude rules" "cannot create rules dir"
+            $rulesGo = $false
+        }
+    } else {
         Backup-Dir -DirPath $rulesDest
         if (-not (Test-Path -LiteralPath $rulesDest -PathType Container)) {
             $mkdirError = ""
@@ -472,7 +486,7 @@ if ($rulesGo) {
             # the way: check the result (parity with mkdir -p in the .sh)
             if (-not (Test-Path -LiteralPath $rulesDest -PathType Container)) {
                 if (-not $mkdirError) { $mkdirError = "not a directory" }
-                LogError "Cannot create $rulesDest ($mkdirError)"
+                LogError "Cannot create ${rulesDest}: $mkdirError"
                 Write-Summary "ERROR" "claude rules" "cannot create rules dir"
                 $rulesGo = $false
             }
@@ -554,7 +568,7 @@ if ($rulesGo) {
                     if ([string]::Equals([System.IO.Path]::GetFileName($f), $rmName, [System.StringComparison]::OrdinalIgnoreCase)) { $rmPath = $f; break }
                 }
             } catch {
-                LogWarn "Cannot list $rulesDest for retired rule $rmName -- $_"
+                LogWarn "Cannot list $rulesDest for retired rule ${rmName}: $_"
             }
         }
         if (-not $rmPath) { continue }
@@ -562,7 +576,7 @@ if ($rulesGo) {
         try {
             $null = [System.IO.File]::ReadAllBytes($rmPath)
         } catch {
-            LogError "Cannot read $rmPath -- retired rule not removed: $_"
+            LogError "Cannot read $rmPath (retired rule not removed): $_"
             Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $rmFile
             continue
         }
@@ -618,7 +632,7 @@ if ($rulesGo) {
         try {
             Remove-Item -LiteralPath $rmPath -Force -ErrorAction Stop
         } catch {
-            LogError "Cannot remove $rmPath (retired rule) -- $_"
+            LogError "Cannot remove $rmPath (retired rule): $_"
             Record-DeployOutcome -Outcome "failed" -ToolName "claude rules" -ItemName $rmFile
             continue
         }
@@ -646,7 +660,7 @@ if ($rulesGo) {
         try {
             $destEntries = @(Get-ChildItem -LiteralPath $rulesDest -File -ErrorAction Stop | Sort-Object Name)
         } catch {
-            LogWarn "Cannot list $rulesDest for the preserved report -- $_"
+            LogWarn "Cannot list $rulesDest for the preserved report: $_"
         }
         foreach ($existing in $destEntries) {
             if ((Get-RuleNameKind $existing.Name) -ne "rule") { continue }
