@@ -1,5 +1,7 @@
 # Path-Targeted Hook Analysis
 
+> Historical analysis (2026-03-13). `/error-handling` and `reference/dependency-map.json` were proposals and do not exist.
+
 Produced during governance design session 2026-03-13. Subagent audit of
 all files where PreToolUse hooks targeting specific paths would prevent
 mistakes, enforce conventions, or eliminate ambiguity.

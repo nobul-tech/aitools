@@ -13,12 +13,15 @@ NOT rewriting the source documents. **Audience**: Every agent writing or
 deploying a rule, in any repo.
 
 Version 1.0, 2026-10-26. Written by S3-RulesSpec for Session Commander
-10cf255a-c. A version, not a draft (D-DEL5, in progress). The intent above was
+10cf255a-c. A version, not a draft (D-DEL5, 2026-10-26: in the user rule
+`delegation.md` and the `/delegate` skill; the sources-of-truth review-after
+change is pending). The intent above was
 approved by the commander on 2026-10-26; like every intent statement it is
 protected (`@.claude/rules/sources-of-truth.md` "Intent statements").
 
 Every claim cites the file it comes from. "Today" means `origin/main` at
-`072c744` (2026-10-26); "planned" means a plan or an open PR, named. Where
+`072c744` (2026-10-26), with section 6.1 re-checked at `e03d490` (2026-10-27,
+v0.74.0 scrub: #100, #106, #110 merged); "planned" means a plan or an open PR, named. Where
 the repo does not say, this file says "unknown".
 
 ## 1. Decisions
@@ -29,7 +32,7 @@ the repo does not say, this file says "unknown".
 | R-2 | Cursor gets user-level rules only (shared + dotprofile; not the aitools `.claude/rules`) | 2026-10-22 | commander | HARNESS Q1 (`.aitools/channel/handoffs/2026-10-22_10cf255a-c.md` section G); PR #110 |
 | R-3 | "Put aitools rules in the user space of claude code": the Claude Code fan-out takes every rule in `~/.aitools/rules`, source `aitools` included, minus the ones the manifest retires | 2026-10-22 | commander | `@plans/rules-fanout-claude.md` section 2, D1 and D5 |
 | R-4 | All project-scope rules **and skills** are deployed to user-scope Claude Code. The commander removes the duplicate project-level Claude Code rules later | 2026-10-26 | commander | Mission RULES-SPEC launch prompt (Session Commander 10cf255a-c) |
-| R-5 | Produced documents are versions, not drafts (D-DEL5, in progress); this file is v1.0 | 2026-10-26 | commander | Mission RULES-SPEC launch prompt |
+| R-5 | Produced documents are versions, not drafts (D-DEL5: in the user rule `delegation.md` and the `/delegate` skill; the sources-of-truth review-after change is pending); this file is v1.0 | 2026-10-26 | commander | Mission RULES-SPEC launch prompt |
 
 R-4's known cost is in section 7.
 
@@ -103,8 +106,8 @@ rule `delegation.md` (dotprofile `claude/rules/delegation.md`, deployed to
 user rule.
 
 1. **Frontmatter `paths:`** (optional). A list of globs; the rule applies when
-   the agent works on matching files (section 5). 9 of the 26
-   `.claude/rules/*.md` have it today (`grep -L '^paths:'` lists the other
+   the agent works on matching files (section 5). 9 of the 24
+   `.claude/rules/*.md` have it (recounted at `e03d490`) (`grep -L '^paths:'` lists the other
    17), plus `shared/rules/hook-lifecycle.md`.
 2. **Title** `## <Name>`. Project rules in aitools end in "(this repo)"
    (every `.claude/rules/*.md`); shared and user rules do not
@@ -201,14 +204,14 @@ levels. R-4 changes the deployment of project skills (section 7).
 ```
 aitools shared/rules/      ─┐
 aitools .claude/rules/     ─┼─ deploy-harness ─▶ ~/.aitools/rules/ (flat, *.md) ─┬─ setup-user-claude ─▶ ~/.claude/rules/*.md
-<dotprofile>/claude/rules/ ─┘   first source wins   + rules manifest (planned)    └─ setup-user-cursor ─▶ ~/.cursor/rules/*.mdc
+<dotprofile>/claude/rules/ ─┘   first source wins   + rules manifest              └─ setup-user-cursor ─▶ ~/.cursor/rules/*.mdc
 ```
 
 | Step | Today (origin/main) | Planned |
 |------|---------------------|---------|
-| deploy-harness fills `~/.aitools/rules` | Implemented: `scripts/deploy-harness.sh/.ps1` (#88), `add_source rules` for `shared/rules`, `.claude/rules`, dotprofile `claude/rules` in that order; git-tracked files only, `*.bak.*` never, flat `*.md` only, case-insensitive conflicts, no deletion (`@reference/harness.md` "Deployed harness"). MDM: generated `deploy/deploy-harness.*` (#93) | Rules manifest `~/.aitools/rules/.aitools-rules-manifest` (`<name><TAB>shared\|aitools\|dotprofile\|retired`), retired rules removed from `~/.aitools/rules`: PR #100 (open) |
-| Something runs deploy-harness | **Nothing on the dev path.** No entry point (`scripts/aitools`, `aitools.ps1`, `aitools-install.*`, `hh.sh`) calls it (`git grep`, origin/main). `~/.aitools/rules` does not exist on this Mac (checked 2026-10-26) | Installer Step 8b and first in `deploy_configs`: PR #106 (open) |
-| Cursor fan-out | Implemented (#87): setup-user-cursor step 4 converts **every** `~/.aitools/rules/*.md` to `~/.cursor/rules/<name>.mdc` (`alwaysApply: true` without `paths:`, globs from `paths:` otherwise); adopt not offered. Inert while nothing fills `~/.aitools/rules` | User-level rules only (R-2) and pruning against the manifest: PR #110 (open) |
+| deploy-harness fills `~/.aitools/rules` | Implemented: `scripts/deploy-harness.sh/.ps1` (#88), `add_source rules` for `shared/rules`, `.claude/rules`, dotprofile `claude/rules` in that order; git-tracked files only, `*.bak.*` never, flat `*.md` only, case-insensitive conflicts (`@reference/harness.md` "Deployed harness"), implemented including the rules manifest `~/.aitools/rules/.aitools-rules-manifest` (`<name><TAB>shared\|aitools\|dotprofile\|retired`) and retired-rule removal (#100). MDM: generated `deploy/deploy-harness.*` (#93) | -- |
+| Something runs deploy-harness | Installer Step 8b (`run_harness_step`, with `--skip-config` when Step 5 ran the writer) and the first entry of `deploy_configs` / `Deploy-Configs` (#106) | -- |
+| Cursor fan-out | Implemented (#87, #110): converts the `shared` and `dotprofile` rules (not aitools `.claude/rules`, R-2) to `~/.cursor/rules/<name>.mdc` (`alwaysApply: true` without `paths:`, globs from `paths:` otherwise) and prunes retired ones against the manifest; adopt not offered | Every non-retired rule (reverses R-2's scope): open PR #123 |
 | Claude fan-out | **Not implemented.** setup-user-claude deploys `<userRepoPath>/claude/rules/*.md` straight to `~/.claude/rules/` (additive, `deploy_managed_file`, adopt into the dotprofile) and never reads `~/.aitools/rules` (`scripts/setup-user-claude.sh` "rules deployment" span). MDM: rules embedded at build time (`@.claude/rules/deploy-paths.md`) | Fan out every non-retired `~/.aitools/rules/*.md` into `~/.claude/rules/`, adopt target mapped from the manifest source, retired copies pruned after a byte match and a verified backup, summary tool `claude rules`: `@plans/rules-fanout-claude.md` v1.0 (Batches A-D; gates #103, #112, #100, #106) |
 
 ### 6.2 Rules for deploying rules
@@ -245,9 +248,11 @@ they stay in `.claude/rules/`.
 **Known cost** (S3-FanPlan, `@plans/rules-fanout-claude.md` section 8 R1,
 `S3-FanPlan/S3-FanPlan-report.md` summary line 5):
 
-- 17 of the 26 `.claude/rules/*.md` and `shared/rules/scratch.md` have no
-  `paths:`: about **79 KB (79,048 bytes, roughly 20k tokens) of "(this
-  repo)" rules loaded in every session in every repo**.
+- 17 of the 26 `.claude/rules/*.md` and `shared/rules/scratch.md` had no
+  `paths:` when S3-FanPlan measured: about **79 KB (79,048 bytes, roughly
+  20k tokens) of "(this repo)" rules loaded in every session in every
+  repo**. At `e03d490` there are 24 rule files, 15 without `paths:`; the
+  byte count has not been re-measured.
 - Inside aitools every project rule loads **twice** (project + user copy)
   until the duplicates are removed; in a worktree or branch that edits a
   rule, the user copy is stale until the next `aitools` run.

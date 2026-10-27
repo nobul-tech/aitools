@@ -1,8 +1,9 @@
 # Managed File Deployment
 
 Specification for the interactive file deployment system used by setup scripts
-(`setup-user-claude`, `setup-user-skills`, `setup-user-hooks`, and the skill
-blocks that `build-deploy.sh` generates).
+(`setup-user-claude`, `setup-user-skills`, `setup-user-hooks`,
+`setup-user-cursor` (Cursor user rules), `deploy-harness` (`~/.aitools`), and
+the skill and harness blocks that `build-deploy.sh` generates).
 
 ## Overview
 
@@ -36,6 +37,8 @@ merge". This file is the implementation detail.
 | `Adopt-ManagedFile` | `adopt_managed_file` | Back up and write an adopt target. Used inside `deploy_managed_file` for review adopts; called directly only by reverse discovery of user-created hooks and skills (no SOURCE; see "Shell Script Deployment Detail") |
 | `Sync-ManagedJson` | `sync_managed_json` | Profile-mirror regime for `settings.json` (see "JSON Config Review Detail"); unchanged |
 | `Prompt-JsonFieldReview` | `prompt_json_field_review` | Per-leaf prompt used by `sync_managed_json`; unchanged |
+| `Invoke-DotprofileCommitPush` | `dotprofile_commit_push` | Commit one dotprofile file (pathspec) and push it (N-Q2); sets `AITLIB_DOTPROFILE_PUSH` |
+| `Write-ManagedFiles` | `_managed_write` | Snapshot, back up, write and validate LOCAL and the adopt target as one step; restore on failure |
 
 Removed 2026-10-21: `Try-AutoMerge` / `try_auto_merge`, the deploy-state
 helpers (`Initialize-DeployState`, `Get-DeployState`, `Update-DeployState`,
@@ -46,8 +49,8 @@ helpers (`Initialize-DeployState`, `Get-DeployState`, `Update-DeployState`,
 bash:
 
 ```
-deploy_managed_file SRC_CONTENT DEST TOOL_NAME ITEM_NAME [ADOPT_PATH]
-    reads ADOPT_TRANSFORM when set; sets MANAGED_FILE_RESULT
+deploy_managed_file SRC_CONTENT DEST TOOL_NAME ITEM_NAME [ADOPT_PATH [ADOPT_FILTER]]
+    sets MANAGED_FILE_RESULT
 prompt_diff_review DEST NEW_CONTENT ADOPT_OFFERED(0|1) [CUR_CONTENT]
     sets DIFF_REVIEW_RESULT (and MERGED_CONTENT for merge)
 review_json_fields SRC_FILE DEST ADOPT_PATH
@@ -56,7 +59,7 @@ review_json_fields SRC_FILE DEST ADOPT_PATH
 PowerShell:
 
 ```
-Deploy-ManagedFile -Content -DestPath -ToolName -ItemName [-AdoptPath] [-AdoptTransform]
+Deploy-ManagedFile -Content -DestPath -ToolName -ItemName [-AdoptPath] [-AdoptFilter]
 Prompt-DiffReview -FilePath -NewContent -AdoptOffered [-CurrentContent]
 Review-JsonFields -SourceFile -DestPath -AdoptPath
 Record-DeployOutcome -Outcome failed -ToolName <tool> -ItemName <item>
@@ -66,10 +69,12 @@ Write-DeployTrackerSummary -ToolName <tool>
 - `ADOPT_PATH` / `-AdoptPath` is the absolute path of the repo file that is
   the source of truth for this LOCAL. Empty means adopt and merge are not
   offered.
-- `ADOPT_TRANSFORM` (bash, a function name, optional) / `-AdoptTransform`
-  (PS1, a scriptblock, optional) turns LOCAL content into adopt-target
-  content before the write (used for the CLAUDE.md template; see
-  "Markdown files").
+- `ADOPT_FILTER` (bash: optional 6th argument, the name of a function that
+  reads LOCAL content on stdin and prints the adopt-target content) /
+  `-AdoptFilter` (PS1: optional scriptblock) turns LOCAL into adopt-target
+  content before the write. Text files only. A filter that fails or prints
+  nothing makes the step `failed` with nothing written. Used for the
+  CLAUDE.md template; see "Markdown files".
 - A `DEST` ending in `.json` is reviewed field by field (`review_json_fields`);
   anything else is text (`prompt_diff_review`).
 
@@ -77,8 +82,8 @@ Write-DeployTrackerSummary -ToolName <tool>
 
 Target model, approved 2026-10-21 (`.claude/rules/agentic-standards.md`
 "Managed-file review choices and merge"). SOURCE is the source of truth;
-there is no ancestor and no deploy state. The code implements it in mission
-SOURCE-TRUTH (`scripts/aitools-lib.sh`, `.ps1`).
+there is no ancestor and no deploy state. Implemented in
+`@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1` (mission SOURCE-TRUTH).
 
 ```
 Source content
@@ -300,15 +305,19 @@ continues with the next file.
     deploy result: it stays `accept & adopt` and the run continues.
 - **Several LOCALs for one SOURCE** (skills: `~/.claude/skills` and
   `~/.cursor/skills`): each LOCAL goes through `deploy_managed_file`. After
-  an adopt into the first, the caller reads SOURCE again for the next, which
-  then verifies. Callers do not copy one LOCAL to another.
+  an accept & adopt into one LOCAL, `setup-user-skills` backs up and copies
+  that LOCAL to the other targets (`deploy_skill`), so they match the adopted
+  SOURCE without a second review; a failed copy is an ERROR row
+  `sync failed: <skill>`.
 - **Adopting into a protected file** (any path in the
   `.claude/rules/sources-of-truth.md` table) is allowed; the library writes
-  the working tree and logs a WARN naming the file. The library knows the
-  protected files from a path list it holds, kept in sync with the
-  sources-of-truth table by a pre-commit step (Q14, approved 2026-10-21;
-  the list and the step are implemented in mission SOURCE-TRUTH).
-- **CLAUDE.md** passes an adopt transform: see "Markdown files".
+  the working tree and logs a WARN naming the file. The library reads the
+  protected-files table (`.claude/rules/sources-of-truth.md`) of the git repo
+  that contains the adopt target at run time (`_managed_protected_note` /
+  `Write-ManagedProtectedNote`): a backticked path in the table's first column
+  matches, `*` matching within one path segment. No separate list is kept, so
+  the table cannot drift from the check.
+- **CLAUDE.md** passes an adopt filter: see "Markdown files".
 - **Exit 2** is not trapped by the caller: it ends the script.
 
 ## Deploy State
@@ -345,7 +354,9 @@ in review strategy, not in importance or priority. See
 
 ### Markdown files
 
-**Files**: CLAUDE.md, `~/.claude/rules/*.md`, skill `SKILL.md` files.
+**Files**: CLAUDE.md, `~/.claude/rules/*.md`, skill `SKILL.md` files,
+`~/.cursor/rules/*.mdc` (converted from `~/.aitools/rules`, no adopt
+target), and the text files under `~/.aitools/`.
 
 **Pattern**: `deploy_managed_file` / `Deploy-ManagedFile` in
 `@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1`.
@@ -357,24 +368,32 @@ dotprofile's `claude/skills/` when it has the skill. Template tokens
 (`{{PLACEHOLDER}}`) interpolated from `profile.json`. See
 `@reference/user-repo.md` "Template Resolution" and "User Rules Deployment".
 
-**Adopt target**: the file the content was read from (dotprofile or
-`shared/`). Adopting into `shared/claude-shared.md` (a protected file) is
-allowed: it writes the working tree only and logs a WARN naming the file;
-the review gate applies at commit and PR.
+**Adopt target**: CLAUDE.md and user rules: the dotprofile file
+(`<userRepoPath>/claude/CLAUDE.md`, `<userRepoPath>/claude/rules/<name>.md`),
+also when the CLAUDE.md template was read from the `shared/claude-shared.md`
+fallback; no dotprofile = no adopt target (adopt and merge not offered).
+Skills: the `SKILL.md` actually read (the dotprofile copy, else
+`shared/skills/<name>/SKILL.md` in the aitools repo; adopting into `shared/`
+writes the working tree only and logs a WARN when the file is protected; the
+review gate applies at commit and PR). Hooks: `shared/hooks/<file>` (see
+"Shell Script Deployment Detail").
 
 **CLAUDE.md is a template** (S3-SpecRewrite Q1, approved 2026-10-21):
 LOCAL is the template with `{{PLACEHOLDER}}` tokens interpolated plus a
 generated `## Machine-Specific` footer. Adopting it into the template must
 strip the footer and reverse the interpolation, not copy LOCAL verbatim.
-`setup-user-claude` therefore passes an adopt transform with the template as
-`ADOPT_PATH` (bash: the function name in `ADOPT_TRANSFORM`; PS1:
-`-AdoptTransform` scriptblock; today's logic is `adopt_claude_md`). The
-library applies the transform to the content before writing `ADOPT_PATH`,
-and compares the adopt target after the transform.
+`setup-user-claude` therefore passes an adopt filter with the dotprofile
+template as `ADOPT_PATH` (bash: `claude_md_adopt_filter` as the 6th argument
+of `deploy_managed_file`; PS1: `-AdoptFilter` scriptblock). The filter strips
+everything from `## Machine-Specific` on and turns profile values back into
+`{{TOKENS}}` in one pass, longest value first. The library applies it to the
+content before writing `ADOPT_PATH`.
 
 **Scripts**:
 - `setup-user-claude.sh/.ps1` — CLAUDE.md + rules
 - `setup-user-skills.sh/.ps1` — skill SKILL.md files
+- `setup-user-cursor.sh/.ps1` — Cursor user rules (fan-out of `~/.aitools/rules`)
+- `deploy-harness.sh/.ps1` — `~/.aitools/{reference,registries,hooks,rules,skills,bin}`
 
 ### JSON config files
 
@@ -427,16 +446,15 @@ priority when present; the aitools `shared/` directory is the fallback.
 |---------|---------------|----------|
 | CLAUDE.md template | `<userRepoPath>/claude/CLAUDE.md` | `shared/claude-shared.md` |
 | User rules | `<userRepoPath>/claude/rules/*.md` | (none — no rules deployed) |
-| Claude preferences | `<userRepoPath>/profile.json` `claude` section | defaults (autoMemory: true, alwaysThinking: true) |
+| Claude settings | `<userRepoPath>/profile.json` `claude.settings` (every settings.json key except `hooks`) | none: without a dotprofile or profile.json the sync is skipped (WARN `not synced: no dotprofile` / `profile.json missing`) |
 | Cursor preferences | `<userRepoPath>/profile.json` `cursor.cli` section | defaults (vimMode: false, model: auto) |
 | Identity (git name/email) | `<userRepoPath>/profile.json` `identity` section | (required — no fallback) |
-| Machine profile | `<userRepoPath>/profile.json` `profiles[machineAlias]` section | hostname match, then first profile |
+| Machine profile | `<userRepoPath>/profile.json` `profiles[<machine id>]`, chosen by the one resolver (`aitools-profile.sh` / `.ps1`: override, environment, id, config `machineId`, 2.1 alias cache, hostname) | none: no match is an ERROR row `machine profile` `no machine match`; another machine's profile is never used (`@reference/user-repo.md` "Which machine profile") |
 | Hook scripts | `shared/hooks/*.sh` | (required — no fallback) |
 | Skills | `<userRepoPath>/claude/skills/*/SKILL.md` when present | `shared/skills/*/SKILL.md` |
 | MCP server configs | hardcoded in setup scripts | (required — no fallback) |
 
-The adopt target for a file is the primary or fallback source it was
-actually read from.
+The adopt target per content type is listed under each deployment type above.
 
 ### Deployed harness (`~/.aitools`)
 
@@ -456,10 +474,22 @@ and each skipped duplicate is a `log_error` plus an ERROR row.
 | `~/.aitools/rules/` (flat, `*.md`) | `shared/rules/`, `.claude/rules/`, `<userRepoPath>/claude/rules/` |
 | `~/.aitools/bin/` | `scripts/harness-db.py`, `scripts/read-session.py`, `scripts/read-session-full.py` |
 | `~/.aitools/config.json` | generated from `profile.json` by `setup-user-config` (called by deploy-harness) |
+| `~/.aitools/rules/.aitools-rules-manifest` | written every run (sole owner): one `<file name><TAB><source>` line per rule, source `shared` \| `aitools` \| `dotprofile` \| `retired` |
 
-**`userRepoPath` resolution**: read from `~/.aitools/config.json`. Set by
-`aitools user init`. If not configured, dotprofile features are skipped
-and shared fallbacks are used.
+A rule in the previous manifest that no listed source has any more is
+backed up and removed from `~/.aitools/rules` (retired). `--skip-config`
+(installer Step 8b, after Step 5 ran the writer) skips `setup-user-config`
+and writes OK `config.json` `n/a (written by installer)`. The MDM variant
+passes no adopt target.
+
+**Dotprofile resolution**: the setup scripts ask the one resolver
+(`resolve_user_repo_path` / `Resolve-UserRepoPath`: `AITOOLS_USER_REPO_PATH`,
+`--user-repo-path`, config.json `userRepoPath`, the
+`<reposPath>/aitools-<githubUser>` convention, the only `aitools-*`
+dotprofile under reposPath; `@reference/user-repo.md` "Which dotprofile").
+No dotprofile = shared-only mode; a resolver error deploys nothing personal.
+`deploy-harness` reads `userRepoPath` from `~/.aitools/config.json`, which
+`setup-user-config` (its first step) has just re-derived.
 
 Full spec: `@reference/user-repo.md`
 
@@ -489,8 +519,8 @@ environment is `claude-code-web`. Detail and security note:
 
 **`--isolated` flag**: platform-independent, MUST be present on every
 platform and environment. Enables throwaway temp Chrome profiles for concurrent Claude
-Code + Cursor sessions. See `@reference/tool-registry.md` "Chrome DevTools
-MCP".
+Code + Cursor sessions. See the `/tool-registry` skill, entry
+`chrome-devtools-mcp`.
 
 **Path format in settings.json hooks**: PowerShell setup converts
 backslash paths to forward slashes (`-replace '\\', '/'`) for bash
@@ -687,8 +717,8 @@ the adopt target. Merge is adopt.
    written; the outcome is `failed` (log_error with the reject reason,
    ERROR row) and the run continues with the next file
 7. `[n]o`: no file is written and the review menu is shown again for the
-   same file (Q4, approved 2026-10-21; today the code falls back to
-   overwrite)
+   same file (Q4, approved 2026-10-21; implemented: `_invoke_ai_merge` /
+   `Invoke-AiMerge` return `menu`)
 
 **Telemetry**: every invocation logged to deploy.log per
 `@.claude/rules/script-standards.md` "Agentic invocation logging".
@@ -734,7 +764,7 @@ are NOT deployed to persistent shell profiles unless explicitly approved.
 
 | Variable | Set by | Scope | Purpose |
 |----------|--------|-------|---------|
-| `PERLIO=:perlio` | `build-deploy.sh` | Build-time | Disable Strawberry Perl CRLF text mode; prevents double-CR in `extract_between --crlf` output. No-op for Git's bundled perl. See `@reference/tool-registry.md` "Perl > PERLIO Deployment". |
+| `PERLIO=:perlio` | `build-deploy.sh` | Build-time | Disable Strawberry Perl CRLF text mode; prevents double-CR in `extract_between --crlf` output. No-op for Git's bundled perl. See `@reference/cross-platform-detail.md` "Strawberry Perl text mode" and the `/tool-registry` skill, entry `perl` (`platformGotchas.windows`). |
 | `DD_SITE` | `shared/shell/aliases.sh` | Shell profile (persistent) | Datadog region |
 | `AITOOLS_FORCE` | Caller | Script invocation | Force non-interactive mode (auto-select overwrite) |
 | `AITOOLS_DRY_RUN` | `aitools-install` | Script invocation | Preview changes without writing |

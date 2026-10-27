@@ -36,18 +36,20 @@ Extended with concepts from:
 - **Two-directory pattern** → `.scratch/` (ephemeral, gitignored) and
   `harvesting/` (tracked, evaluated). Clean separation of throwaway
   from potentially reusable.
-- **SessionEnd harvesting** → hook classifies `.scratch/` contents
-  and moves artifacts to `harvesting/` with manifest metadata.
-  Automation prevents "forgot to save that script."
-- **SessionStart evaluation** → hook audits `harvesting/` inventory,
-  auto-prunes stale artifacts, identifies promotion candidates.
-  Automation prevents "forgot to review what we harvested."
+- **SessionEnd harvesting** → `harvest-session.sh` → `ait-harvest.py
+  harvest` classifies `.scratch/` contents and copies reusable artifacts
+  to `harvesting/` with manifest metadata (never deletes). Automation
+  prevents "forgot to save that script."
+- **SessionStart evaluation** → `session-catchup.sh` → `ait-harvest.py
+  catchup` audits the manifest once per start: past `pruneAfter` with git
+  references = `candidate`, without = `pruned` (status only; the file
+  stays). Automation prevents "forgot to review what we harvested."
 - **Generalization review** → AI-powered analysis via `/harvest review`
   compares artifacts against harness inventory to find promotion
   opportunities. Bridges tactical → strategic.
-- **KPI-driven lifecycle** → Datadog metrics track harvesting flow:
+- **KPI-driven lifecycle** (planned, not implemented: no hook or script
+  emits these KPIs today) → Datadog metrics track harvesting flow:
   inventory, age distribution, promotion rate, generalization actions.
-  Data-driven decisions about what to keep, promote, or prune.
 
 ## How It's Maintained
 
@@ -55,7 +57,7 @@ Extended with concepts from:
 - `/harvest` skill implements the process
 - SessionEnd and SessionStart hooks automate the pipeline
 - `/harvest review` triggers generalization analysis
-- KPIs shipped to Datadog for trend visibility
+- KPIs to Datadog for trend visibility (planned)
 
 ## Implementing Artifacts
 
@@ -63,7 +65,7 @@ Extended with concepts from:
 - `shared/skills/harvest/SKILL.md` (process)
 - `harvesting/` (tracked artifact directory)
 - `/harvest` skill governs manifest data
-- `shared/hooks/harvest-session.sh` (SessionEnd/SessionStart automation)
+- `shared/hooks/harvest-session.sh` (SessionEnd) and `shared/hooks/session-catchup.sh` (SessionStart), thin shims over `scripts/ait-harvest.py`
 
 ## Cross-References
 
