@@ -2067,6 +2067,16 @@ deploy_managed_file() {
     # strips them, and every write adds exactly one back.
     src_content=$(printf '%s' "$src_content" | perl -0777 -pe 's/[\r\n]+$/\n/')
 
+    # A dangling symlink at DEST: never write through it (the write would create
+    # the link's target, wherever it points). A live symlink is read and written
+    # through, as before (dotfile managers link deployed files). Parity:
+    # Deploy-ManagedFile (same message, also in a dry run).
+    if [ -L "$dest" ] && [ ! -e "$dest" ]; then
+        log_error "Failed: $item_name: $(display_path "$dest") is a dangling symlink -- not written through it"
+        MANAGED_FILE_RESULT="failed"
+        return 0
+    fi
+
     # Dry run: report what would happen without writing
     if [ "${DRY_RUN:-}" = "true" ]; then
         if [ -f "$dest" ]; then

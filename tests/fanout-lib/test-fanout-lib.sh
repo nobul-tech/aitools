@@ -136,6 +136,19 @@ if $SYMLINKS; then
 fi
 skill "$D/linkdir/T"; skill "$D/linkdir/C"
 if $SYMLINKS; then ln -s "$D/linkdir/C/sub" "$D/linkdir/T/other"; fi
+# deploy_managed_file / Deploy-ManagedFile onto a symlink destination, one copy
+# per shell: dangling (failed, nothing written through it; also in a dry run)
+# and live (written through, the link kept)
+if $SYMLINKS; then
+    for tag in sh ps; do
+        L="$F/ml/$tag"
+        mkdir -p "$L"
+        ln -s "$L/nowhere.md" "$L/dangling.md"
+        ln -s "$L/nowhere2.md" "$L/dangling2.md"
+        printf 'old\n' > "$L/live-target.md"
+        ln -s "$L/live-target.md" "$L/live.md"
+    done
+fi
 
 # FIFO fixtures (a FIFO under TARGET, and one in CAND at a TARGET file's path):
 # both must give 1 without reading (reading a FIFO blocks)
@@ -288,6 +301,11 @@ if $SYMLINKS; then
     printf 'dm-linkinside\trc=1\tdmatch\td/linkinside/T\td/linkinside/C\n'
     printf 'dm-linkdir\trc=1\tdmatch\td/linkdir/T\td/linkdir/C\n'
 fi
+if $SYMLINKS; then
+    printf 'ml-dangling\tresult=failed target=absent\tdmf\tml/@/dangling.md\n'
+    printf 'ml-dangling-dry\tresult=failed target=absent\tdmfdry\tml/@/dangling2.md\n'
+    printf 'ml-live\tresult=updated target=new\tdmf\tml/@/live.md\n'
+fi
 if $UNREAD; then
     printf 'm-r-unread\tfail\tmanifest\tr-unread\trules\n'
     printf 'rr-r-unread\tsame\trr\tr-unread\n'
@@ -302,7 +320,7 @@ if $UNREAD; then
     printf 'bd-unread\tok=false reason=cannot list path=- copied=no siblings=d\tbdir\tbd/@/unread/d\n'
 fi
 } > "$CASES"
-if ! $SYMLINKS; then SKIP=$((SKIP + 3)); printf '  skip symlink cases (ln -s does not make symlinks here)\n'; fi
+if ! $SYMLINKS; then SKIP=$((SKIP + 6)); printf '  skip symlink cases (ln -s does not make symlinks here)\n'; fi
 if ! $FIFOS; then SKIP=$((SKIP + 2)); printf '  skip FIFO cases (no mkfifo)\n'; fi
 if ! $SPECIAL; then SKIP=$((SKIP + 1)); printf '  skip backup_dir special-name case (* ? not allowed in names here)\n'; fi
 if ! $UNREAD; then SKIP=$((SKIP + 11)); printf '  skip unreadable cases (chmod 000 leaves files readable: root or Windows)\n'; fi
@@ -379,6 +397,16 @@ while IFS="$TAB" read -r id want call a1 a2 <&3; do
         teq) rc=0; fanout_text_equal "$(fx "$a1")" "$(fx "$a2")" || rc=$?; emit "$id" "rc=$rc" ;;
         sh_teqperl) rc=0; PATH="$WORK/badperl:$PATH" fanout_text_equal "$(fx "$a1")" "$(fx "$a2")" || rc=$?; emit "$id" "rc=$rc" ;;
         dmatch) rc=0; fanout_dir_matches "$(fx "$a1")" "$(fx "$a2")" || rc=$?; emit "$id" "rc=$rc" ;;
+        dmf|dmfdry)
+            p=$(fx "$a1")
+            if [ "$call" = "dmfdry" ]; then DRY_RUN=true; else DRY_RUN=false; fi
+            deploy_managed_file "new" "$p" "t" "$(basename "$p")" "" < /dev/null > /dev/null 2>&1
+            DRY_RUN=false
+            tgt=$(perl -e 'my $l = readlink $ARGV[0]; if (!defined $l) { print "notlink"; exit 0 }
+                           if (!-e $l) { print "target=absent"; exit 0 }
+                           open my $fh, "<", $l or do { print "target=unreadable"; exit 0 };
+                           local $/; my $c = <$fh>; $c =~ s/\n\z//; print "target=$c"' "$p")
+            emit "$id" "result=$MANAGED_FILE_RESULT $tgt" ;;
         bdir)
             p=$(fx "$a1")
             backup_dir "$p"
@@ -450,6 +478,17 @@ foreach ($line in [IO.File]::ReadAllLines($env:CASES)) {
         }
         "teq" { $res = "rc=" + (Test-FanoutTextEqual (Resolve-Fx $a1) (Resolve-Fx $a2)) }
         "dmatch" { $res = "rc=" + (Test-FanoutDirMatches (Resolve-Fx $a1) (Resolve-Fx $a2)) }
+        { $_ -ceq "dmf" -or $_ -ceq "dmfdry" } {
+            $p = Resolve-Fx $a1
+            $DryRun = ($call -ceq "dmfdry")
+            $r = Deploy-ManagedFile -Content "new" -DestPath $p -ToolName "t" -ItemName ([IO.Path]::GetFileName($p)) 6>$null
+            $DryRun = $false
+            $lt = [IO.FileInfo]::new($p).LinkTarget
+            $tgt = if ($null -eq $lt) { "notlink" }
+                   elseif (-not (Test-Path -LiteralPath $lt)) { "target=absent" }
+                   else { "target=" + ([IO.File]::ReadAllText($lt) -replace '\n\z', '') }
+            $res = "result=$r $tgt"
+        }
         "bdir" {
             $p = Resolve-Fx $a1
             Backup-Dir -DirPath $p
@@ -483,11 +522,11 @@ run_shell() {  # run_shell sh|ps: run the driver under an isolated HOME
     if [ "$s" = "sh" ]; then
         env HOME="$h" AITOOLS_LOG_DIR="$WORK/logs-sh" AITOOLS_SUMMARY_FILE="$WORK/sum-sh" \
             REPO="$REPO" CASES="$CASES" F="$F" WORK="$WORK" OUT="$WORK/out-sh" CUR_SH="$CUR_SH" \
-            "$TB" "$WORK/drive.sh" > "$WORK/console-sh" 2>&1
+            "$TB" "$WORK/drive.sh" < /dev/null > "$WORK/console-sh" 2>&1
     else
         env HOME="$h" USERPROFILE="$h" AITOOLS_LOG_DIR="$WORK/logs-ps" AITOOLS_SUMMARY_FILE="$WORK/sum-ps" \
             REPO="$REPO" CASES="$CASES" F="$F" WORK="$WORK" OUT="$WORK/out-ps" CUR_PS="$CUR_PS" \
-            pwsh -NoProfile -File "$WORK/drive.ps1" > "$WORK/console-ps" 2>&1
+            pwsh -NoProfile -File "$WORK/drive.ps1" < /dev/null > "$WORK/console-ps" 2>&1
     fi
 }
 
@@ -566,6 +605,15 @@ if $USE_PS; then
     logged ps "Test-FanoutTextEqual: cannot read $F/t/dir: is a directory" "Test-FanoutTextEqual: a directory"
     logged ps "Backup-Dir: $F/bd/ps/nomd/d: not backed up (no top-level *.md file)" "Backup-Dir skip rule"
     logged ps "Backup-Dir: $F/bd/ps/missing/nope: not backed up (no directory)" "Backup-Dir: no directory"
+fi
+if $SYMLINKS; then
+    for s in $SHELLS; do
+        if grep -F "[error] Failed: dangling.md: " "$WORK/logs-$s/deploy.log" | grep -qF "is a dangling symlink -- not written through it"; then
+            ok "$s deploy_managed_file: dangling symlink logged as an error"
+        else
+            bad "$s deploy_managed_file: dangling symlink logged as an error"
+        fi
+    done
 fi
 if $UNREAD; then
     logged sh "fanout_dir_matches: cannot read $D/unread2/T/a.txt: " "fanout_dir_matches: first unreadable entry"
