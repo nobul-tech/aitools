@@ -549,17 +549,46 @@ function Remove-SkillTree([string]$Dir) {
 # Remove-SkillBackupCopy NAME BAK -- remove an incomplete or unproven backup BAK
 function Remove-SkillBackupCopy([string]$Name, [string]$Bak) {
     if (-not (Test-Path -LiteralPath $Bak)) { return }
+    # File.Copy keeps the ReadOnly attribute (Windows): Directory.Delete would then
+    # fail. Clear it first (the .sh runs chmod -R u+w).
+    try {
+        foreach ($f in [IO.Directory]::GetFiles([IO.Path]::GetFullPath($Bak), "*", [IO.SearchOption]::AllDirectories)) {
+            $attr = [IO.File]::GetAttributes($f)
+            if ($attr -band [IO.FileAttributes]::ReadOnly) {
+                [IO.File]::SetAttributes($f, $attr -band (-bnot [IO.FileAttributes]::ReadOnly))
+            }
+        }
+    } catch {
+        LogWarn "Retired skill ${Name}: cannot make the incomplete backup writable ($_)"
+    }
     try {
         Remove-SkillTree $Bak
     } catch {
         LogDetail "Retired skill ${Name}: removing the incomplete backup failed: $_"
     }
-    if (Test-Path -LiteralPath $Bak) {
-        LogError "Retired skill ${Name}: cannot remove the incomplete backup $Bak"
-        Write-Summary "ERROR" $tool (Get-ShortDetail "bak cleanup failed: $Name")
-    } else {
+    if (-not (Test-Path -LiteralPath $Bak)) {
         Log "Retired skill ${Name}: removed the incomplete backup $Bak"
+        return
     }
+    # Still there: rename it to <name>.bak.incomplete.<UTC>. The prune counts only
+    # <name>.bak.<UTC>, so it never counts this one; ".bak." keeps the fan-out
+    # and the deploy from treating it as a skill.
+    $inc = Join-Path (Join-Path $harnessDir "skills") ("$Name.bak.incomplete." + (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ"))
+    $renamed = $false
+    if (-not (Test-Path -LiteralPath $inc)) {
+        try {
+            [IO.Directory]::Move([IO.Path]::GetFullPath($Bak), $inc)
+            $renamed = $true
+        } catch {
+            LogDetail "Retired skill ${Name}: renaming the incomplete backup failed: $_"
+        }
+    }
+    if ($renamed) {
+        LogError "Retired skill ${Name}: cannot remove the incomplete backup -- renamed to $inc; delete it by hand"
+    } else {
+        LogError "Retired skill ${Name}: cannot remove or rename the incomplete backup $Bak; delete it by hand"
+    }
+    Write-Summary "ERROR" $tool (Get-ShortDetail "bak cleanup failed: $Name")
 }
 
 # Get-TreeDifference A B -- "" when directories A and B hold the same relative
@@ -751,7 +780,8 @@ foreach ($kind in $kinds) {
         # A backup (a *.bak.* file, or any file in a *.bak.* directory such as a
         # retired skill backup) is not reported.
         if (@($rel -split '[\\/]' | Where-Object { $_ -like '*.bak.*' }).Count -gt 0) { continue }
-        if ($rel -cmatch '\A\.aitools-(?:rules|skills)-manifest(?:\.tmp)?\z') { continue }   # section 5b writes them
+        # section 5b writes them (a directory at that path is its ERROR, not preserved files)
+        if ($rel -cmatch '\A\.aitools-(?:rules|skills)-manifest(?:\.tmp)?(?:[\\/]|\z)') { continue }
         if ($planned.ContainsKey([IO.Path]::GetFullPath($f.FullName))) { continue }
         $nPreserved++
         Log "Preserved: $($f.FullName) (no source -- kept)"

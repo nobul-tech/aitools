@@ -559,13 +559,29 @@ prune_skill_backups() {
 # discard_skill_backup NAME BAK -- remove an incomplete or unproven backup BAK
 discard_skill_backup() {
     local name="$1" bak="$2"
+    local inc
     [ -e "$bak" ] || [ -L "$bak" ] || return 0
-    if rm -rf "$bak" && [ ! -e "$bak" ]; then
-        log "Retired skill $name: removed the incomplete backup $(display_path "$bak")"
-    else
-        log_error "Retired skill $name: cannot remove the incomplete backup $(display_path "$bak")"
-        write_summary ERROR "$TOOL" "$(short "bak cleanup failed: $name")"
+    # cp -R copies directory modes: a read-only (555) subdirectory in the copy
+    # would block rm -rf. Make the copy writable first.
+    if ! chmod -R u+w "$bak" > "$WORK/skill-bak-chmod.err" 2>&1; then
+        log_warn "Retired skill $name: cannot make the incomplete backup writable ($(head -n 1 "$WORK/skill-bak-chmod.err"))"
     fi
+    # 2>&1 to /dev/null: rm's own messages are replaced by the logged outcome below
+    # (checked: the exit code and that the path is gone).
+    if rm -rf "$bak" > /dev/null 2>&1 && [ ! -e "$bak" ]; then
+        log "Retired skill $name: removed the incomplete backup $(display_path "$bak")"
+        return 0
+    fi
+    # Still there: rename it to <name>.bak.incomplete.<UTC>. The prune counts only
+    # <name>.bak.<UTC>, so it never counts this one; ".bak." keeps the fan-out
+    # and the deploy from treating it as a skill.
+    inc="$HARNESS_DIR/skills/$name.bak.incomplete.$(date -u +%Y-%m-%dT%H%M%SZ)"
+    if [ ! -e "$inc" ] && mv "$bak" "$inc"; then
+        log_error "Retired skill $name: cannot remove the incomplete backup -- renamed to $(display_path "$inc"); delete it by hand"
+    else
+        log_error "Retired skill $name: cannot remove or rename the incomplete backup $(display_path "$bak"); delete it by hand"
+    fi
+    write_summary ERROR "$TOOL" "$(short "bak cleanup failed: $name")"
 }
 
 # retire_skill_dir NAME -- copy ~/.aitools/skills/NAME to NAME.bak.<UTC> (cp -R; any
@@ -705,7 +721,8 @@ for kind in $KINDS; do
             # A backup (a *.bak.* file, or any file in a *.bak.* directory such
             # as a retired skill backup) is not reported.
             next if grep { /\.bak\./i } split m{/}, $rel;
-            next if $rel =~ /\A\.aitools-(?:rules|skills)-manifest(?:\.tmp)?\z/;   # section 5b writes them
+            # section 5b writes them (a directory at that path is its ERROR, not preserved files)
+            next if $rel =~ m{\A\.aitools-(?:rules|skills)-manifest(?:\.tmp)?(?:/|\z)};
             print "$_\n" unless $d{lc $_};
         }
     ' "$WORK/dests.txt" "$WORK/found.txt" "$d" > "$WORK/preserved.txt"; then

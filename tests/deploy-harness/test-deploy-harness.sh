@@ -608,6 +608,25 @@ skill_cases() {
         check "$side skills: readable again -- backed up and removed" \
             "[ \"\$(rc)\" = 0 ] && [ ! -e '$(A)/skills/pb' ] && [ \"\$(n_bak pb)\" = 1 ] && grep -rqx 'secret' '$(A)/skills/'pb.bak.*/secret.md"
 
+        # Partial backup holding a read-only (555) subdirectory: cleanup must still work
+        mkdir -p "$R/shared/skills/rs/ro"
+        printf 'ro skill\n' > "$R/shared/skills/rs/SKILL.md"
+        printf 'ro file\n' > "$R/shared/skills/rs/ro/a.md"
+        gitc -C "$R" add -A; gitc -C "$R" commit -q -m rs
+        "$run"; trace rsdeploy
+        printf 'secret\n' > "$(A)/skills/rs/ro/secret.md"
+        chmod 000 "$(A)/skills/rs/ro/secret.md"
+        chmod 555 "$(A)/skills/rs/ro"
+        gitc -C "$R" rm -q -r shared/skills/rs; gitc -C "$R" commit -q -m rs-gone
+        "$run"; trace rsfail
+        chmod 755 "$(A)/skills/rs/ro"
+        chmod 644 "$(A)/skills/rs/ro/secret.md"
+        check "$side skills: partial backup with a read-only subdirectory removed (no leftover, nothing renamed)" \
+            "[ \"\$(rc)\" = 1 ] && [ -f '$(A)/skills/rs/ro/a.md' ] && [ \"\$(n_bak rs)\" = 0 ] && row 'ERROR|harness files|retire failed: rs' && ! has_row 'bak cleanup failed' && grep -q 'Retired skill rs: removed the incomplete backup' '$LOG'"
+        "$run"; trace rsretry
+        check "$side skills: read-only case retried -- backed up and removed" \
+            "[ \"\$(rc)\" = 0 ] && [ ! -e '$(A)/skills/rs' ] && [ \"\$(n_bak rs)\" = 1 ]"
+
         gitc -C "$R" rm -q -r shared/skills/s1; gitc -C "$R" commit -q -m s1-gone
         chmod 555 "$(A)/skills"
         "$run"; trace bakfail
@@ -632,10 +651,11 @@ skill_cases() {
     # A directory at the manifest paths (skills and rules): ERROR, exit 1, nothing moved into it
     rm -f "$(SM)" "$(M)"
     mkdir -p "$(SM)" "$(M)"
+    printf 'inside\n' > "$(SM)/inside"
     "$run"; trace mfdir
-    check "$side skills: manifest path is a directory -- ERROR rows (skills, rules), exit 1, not written into it" \
-        "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|skills manifest not written' && row 'ERROR|harness files|rules manifest not written' && [ -d '$(SM)' ] && [ -z \"\$(ls -A '$(SM)')\" ] && [ -z \"\$(ls -A '$(M)')\" ] && grep -q 'Skills manifest: .* is a directory' '$LOG'"
-    rmdir "$(SM)" "$(M)"
+    check "$side skills: manifest path is a directory -- ERROR rows (skills, rules), exit 1, nothing written into it, contents not reported preserved" \
+        "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|skills manifest not written' && row 'ERROR|harness files|rules manifest not written' && [ \"\$(ls -A '$(SM)')\" = inside ] && [ -z \"\$(ls -A '$(M)')\" ] && grep -q 'Skills manifest: .* is a directory' '$LOG' && ! grep -q 'Preserved: .*aitools-skills-manifest' '$LOG'"
+    rm -rf "$(SM)" "$(M)"
     "$run"; trace mfdirgone
     check "$side skills: directory removed -- both manifests written again" \
         "[ \"\$(rc)\" = 0 ] && [ -f '$(SM)' ] && [ -f '$(M)' ]"
