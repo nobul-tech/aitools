@@ -1,6 +1,6 @@
 # S3-MA-Final report: mission MERGE-ALL
 
-**Version:** v1.0 · **Written:** 2026-10-27 (UTC) · **By:** S3-MA-Final (completeness critic and reporter, delegate of mission MERGE-ALL, Session Commander 10cf255a-c, commander Jose)
+**Version:** v1.1 (v1.0 + confirmed step 7 and 3f52c4e CI results) · **Written:** 2026-10-27 (UTC) · **By:** S3-MA-Final (completeness critic and reporter, delegate of mission MERGE-ALL, Session Commander 10cf255a-c, commander Jose)
 **Checked against:** origin/main 3f52c4e, GitHub API, dotprofile `aitools-nobul-jose` main a7745dd, at about 12:20Z.
 
 The task named this file `S3-MA-report.md`. D-DEL1 asks for the delegate's own prefix, so it is `S3-MA-Final-report.md`.
@@ -11,16 +11,16 @@ The task named this file `S3-MA-report.md`. D-DEL1 asks for the delegate's own p
 2. **NOT DONE: 10 PRs are still open** (#117-#126, the FAN-PLAN fan-out PRs). They were opened after the brief was written (03:07Z-06:43Z on 10-27), and no step in this mission merged them. The commander asked for "any and all open PRs" to be merged, so that goal is not met.
 3. v0.74.0 is tagged and pushed (tag object 4af15f1, commit 3ddf67b). The dotprofile `deploy/` was rebuilt with a backup and pushed (a7745dd). D-DEL5 is in the dotprofile delegation rule (20683a2).
 4. **NOT DONE: review-after.** The auto mode classifier blocked the sources-of-truth.md change ([Self-Modification]), so the project rule still says "Wait for approval". **NOT DONE: `plans/merge-friction-improvements.md` v1.1** exists only as an untracked file in the main checkout. It is not on main.
-5. Main CI is green up to 51d895b. The CI run on 3f52c4e was still running when this report was written (see section 2). Pre-push step 7 passed after the rebuild. It has probably gone stale again since #132 (see section 2).
+5. Main CI is green through 3f52c4e. Pre-push step 7 passed after the rebuild but FAILs again now: #132 changed content after it (see section 2).
 
 ## 2. End-state checks (this delegate, independently)
 
 | Check | Expected | Observed | Evidence |
 |---|---|---|---|
 | Open PRs | none | **10 open: #117-#126**, all base main, mergeable/mergeStateStatus UNKNOWN | `gh pr list -R nobul-tech/aitools --state open` |
-| Main CI | green | 3ddf67b (#132 merge): CI 40498115228 success. 51d895b: CI 40500206679 success (linux, macos, windows). 3f52c4e: CodeQL 40501192068 success, CI 40501193629 **in progress** when written | `gh run list --branch main`, `gh run view` |
+| Main CI | green | 3ddf67b (#132 merge): CI 40498115228 success. 51d895b: CI 40500206679 success (linux, macos, windows). 3f52c4e: CodeQL 40501192068 success, CI 40501193629 success (`gh run watch --exit-status` exit 0) | `gh run list --branch main`, `gh run view` |
 | Tag v0.74.0 | on origin | `4af15f181d517fa0e33e262d1eadd7f848dccb6d refs/tags/v0.74.0`. Annotated, points at 3ddf67b | `git ls-remote --tags origin v0.74.0`; S3-MA-DocsApply-log |
-| Pre-push step 7 | PASS | PASS at 23c0725 after the rebuild (S3-MA-Rebuild-log section 4). **Likely FAIL now.** #132 changed rules, reference and skills, which the dotprofile build embeds, after the a7745dd rebuild. DocsApply's pre-push on the #132 branch FAILed step 7 on deploy-harness.payload/.ps1/.sh and setup-user-claude/-skills. The step-7 result at the end of this run is in the `details` of the result | S3-MA-DocsApply-log "Checks" |
+| Pre-push step 7 | PASS | PASS at 23c0725 after the rebuild (S3-MA-Rebuild-log section 4). **FAIL now** (confirmed by this delegate before pushing 154bc39): "dotprofile deploy/ is stale (deploy-harness.payload deploy-harness.ps1 deploy-harness.sh setup-user-claude.ps1 setup-user-claude.sh setup-user-skills.ps1 setup-user-skills.sh)". #132 changed embedded content after the a7745dd rebuild. Step 3 also FAILed on 4 known `[\s]` false positives (doc text quoting the pattern) | `bash scripts/check-pre-push.sh` from the main checkout: 5 PASS, 1 SKIP, 2 WARN, 2 FAIL |
 | Dotprofile deploy/ committed | yes | a7745dd "Rebuild deploy/ from aitools d65623b", pushed. `git status -sb` gives `main...origin/main` with only `sessions/.DS_Store` modified (not the mission's) | `git -C aitools-nobul-jose log`, `status -sb` |
 | `plans/merge-friction-improvements.md` on main | yes | **No.** `git log --all -- plans/merge-friction-improvements.md` is empty. The file exists untracked in the main checkout (v1.1, 82,644 bytes, mtime 2026-10-26 16:35) | `git status --short -- plans` |
 | D-DEL5 in dotprofile delegation rule | yes | yes, line 25 of `aitools-nobul-jose/claude/rules/delegation.md` | `grep -n D-DEL5` |
