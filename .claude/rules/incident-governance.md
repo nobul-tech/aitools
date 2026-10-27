@@ -211,19 +211,23 @@ interrupted work — happens in the session, not the incident.
 
 ### Hook specifications
 
-Full hook architecture: `@plans/governance-and-compliance-framework.md`
-§Hook Specifications. Summary:
+Designed in `@plans/governance-and-compliance-framework.md` §Hook
+Specifications; of the hooks designed there, **only the PostToolUse fixup
+is implemented**. Registered hooks are listed in
+`shared/hooks/hooks-manifest.json`.
 
-- **SubagentStart** (command): pre-built cache serves all skill content
-  + governance duty + scratch namespace via single file read (~5ms).
-  Subagents are sensors, not filers — report `INCIDENT:` findings.
-- **PreToolUse on incidents.json** (agent): validates required fields,
-  enums, sequential IDs. Fail-open on timeout/error.
-- **PreToolUse on protected files** (command): cross-reference reminder.
-- **PreToolUse on Edit/Write** (command): error-suppression detection.
-- **PreToolUse on Bash git commands** (command): checklist reminder.
-- **PostToolUse on Write/Edit** (command): sh-file-fixup (CRLF, chmod, git index).
-- **Stop** (command): surfacing duty — periodic reminder + incident-acknowledgment
-  detection. Uses stderr for agent feedback. NOTE: Claude Code `type: "prompt"`
-  hooks require a static `prompt` string field (not a command/script path).
-  Dynamic Stop hooks must use `type: "command"` with stderr output.
+Implemented:
+- **PostToolUse on Write/Edit** (command): `sh-file-fixup.sh` (CRLF, chmod, git index).
+
+Designed, not implemented (no script, not in the manifest):
+- **SubagentStart** context injector (pre-built skill cache + governance
+  duty + scratch namespace). Until it exists, subagents get governance only
+  through the delegation prompt (`/delegate` skill); they are sensors, not
+  filers — they report `INCIDENT:` findings and the delegating agent files them.
+- **PreToolUse on incidents.json** (agent): field, enum and sequential-ID validation.
+- **PreToolUse on protected files**: cross-reference reminder.
+- **PreToolUse on Edit/Write**: error-suppression detection.
+- **PreToolUse on Bash git commands**: checklist reminder.
+- **Stop**: surfacing-duty reminder and incident-acknowledgment detection.
+  NOTE: Claude Code `type: "prompt"` hooks require a static `prompt` string;
+  a dynamic Stop hook must be `type: "command"` with stderr output.

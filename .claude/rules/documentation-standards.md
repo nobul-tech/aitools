@@ -21,7 +21,7 @@ paths:
 Each version entry follows this structure:
 
 ```
-## vX.Y -- Title (YYYY-MM-DD)
+## vX.Y.Z -- Title (YYYY-MM-DD)
 
 ### Bug fixes           (table: #, Severity, Fix)
 ### New features        (table: #, Change)
@@ -66,7 +66,10 @@ Create a `plans/*.md` file when work:
 
 ### Layered reference architecture
 
-- **Rules** (`.claude/rules/`) = concise behavioral directives, ~40-100 lines
+- **Rules** (`.claude/rules/`) = concise behavioral directives, target ~40-100
+  lines; a rule over 150 lines should move its detail to `reference/` (today:
+  script-standards, incident-governance, cross-platform, deploy-paths,
+  config-file-safety, agentic-standards)
   (what a rule is, its anatomy, scopes and deployment: `@reference/rules.md`)
 - **References** (`reference/`) = implementation detail, unlimited length
 - **No duplication** — one authoritative location per fact
@@ -110,7 +113,8 @@ Create a `plans/*.md` file when work:
 - In `CLAUDE.md`: `@path/file.md` IS resolved at load time and pulls the
   file into context. Only use `@` for files you want auto-loaded. Use
   plain paths for references you want to keep lazy (most references)
-- Standardize existing rules files to use `@` for all cross-refs
+- Standardize existing rules files to use `@` for all cross-refs (not yet
+  done: several rules still cite `reference/` paths without `@`)
 
 ### Function and library attribution
 

@@ -56,7 +56,9 @@ Promotion candidates MUST be presented to the user for review.
 Artifacts that solve a specific problem may generalize into harness
 tools. Generalization is evaluated via `/harvest review` (AI-powered
 analysis against harness inventory, git history, and KPIs). Triggers:
-- `aitools` sync when candidates exist
+- `aitools` sync when candidates exist — **not implemented** (no
+  candidate prompt in `scripts/aitools`); review candidates with
+  `/harvest review`
 - On-demand via `/harvest review`
 - Future: periodic Modal job for cross-session pattern analysis
 
@@ -64,15 +66,20 @@ analysis against harness inventory, git history, and KPIs). Triggers:
 
 - **SessionEnd hooks**: `harvest-session.sh` classifies `.scratch/`
   contents and harvests reusable artifacts (no longer deletes —
-  v0.64.1), ships KPIs; `session-archive.sh` archives the session
+  v0.64.1); `session-archive.sh` archives the session
   transcript **and its subagent transcripts** to the user repo.
-- **SessionStart hooks**: audit `harvesting/`, auto-prune stale,
-  log candidates, ship inventory KPIs; `session-catchup.sh` recovers
-  transcripts + scratch artifacts an abrupt SessionEnd missed.
+- **SessionStart hooks**: `session-catchup.sh` runs `ait-harvest.py
+  catchup`, which recovers transcripts and scratch artifacts an abrupt
+  SessionEnd missed and audits `harvesting/harvest-manifest.json`
+  (auto-prune marks stale entries `pruned`; files are never deleted).
+- **Not implemented yet**: KPI shipping, the "keep" flag and the
+  age > 7 promotion rule above (the audit only re-classifies entries past
+  `pruneAfter`: referenced in git = `candidate`, else `pruned`).
 - **Helper**: all archive/harvest/catch-up logic lives in
   `scripts/ait-harvest.py` (the hooks are thin shims); it logs to
   `~/.aitools/logs/ait-harvest.log`.
-- **`aitools` sync**: prompt for candidate review if any exist
+- **`aitools` sync**: candidate review prompt — **not implemented**;
+  use `/harvest review`
 
 ### Cross-references
 

@@ -16,6 +16,10 @@ This is the audit layer of the three-layer governance model.
 ## Scope
 
 ### Cross-reference validation
+- Run `python3 scripts/check-path-refs.py` (pre-commit step 20) for path
+  existence; then verify that referenced sections exist and that claims
+  match the target, and scan README.md, ROADMAP.md and
+  `shared/cursor-rules/user-rules.md`, which step 20 does not cover
 - Every `@path/file` reference in `.claude/rules/*.md` → verify file exists
 - Every `@path/file` reference → verify the referenced section/heading exists
 - References from rules to reference files → content matches claims
@@ -29,13 +33,13 @@ This is the audit layer of the three-layer governance model.
 
 ### Unfiled findings
 - Scan codebase for `TODO(incident):` markers → report unfiled incidents
-- Check if subagent output in current session contains `AMBIGUITY:` prefixes
-  that weren't filed
+- Check if subagent output in current session contains `INCIDENT:` (or
+  legacy `AMBIGUITY:`) prefixes that weren't filed
 
 ### Rule compliance
 - Do rules reference current artifacts? (not deleted files, renamed sections)
 - Are standing orders (USO/PSO) still accurate?
-- Do design principles in CLAUDE.md match the plan?
+- Does CLAUDE.md's intent and "How the harness is organized" match the repo layout?
 
 ### Skill health
 - Skill inventory count matches plan file claims
@@ -72,7 +76,7 @@ This is the audit layer of the three-layer governance model.
 
 ### Unfiled Findings
 - N TODO(incident): markers found (list locations)
-- N AMBIGUITY: items not filed
+- N INCIDENT: (or legacy AMBIGUITY:) items not filed
 
 ### Rule Compliance
 - N rules checked, N issues found

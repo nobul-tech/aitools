@@ -29,4 +29,4 @@ A check with no mode variable gets one when it is reset.
 
 **Current state (standing-order-guard.sh):** every check enforcing (`&&`, `||`, `;`, `$()`, backticks, scratch files, `rm` globs, `cat`/`head`/`tail`/`awk` outside a pipeline, echo/printf redirects; `||`, `;`, backticks promoted 2026-03-24), and `sed` outside a pipeline (`MODE_SED`, enforce; read-only `sed -n '<N[,M]>p' <file>` exempt since 2026-10-21, incident #82, single-line commands only, a narrowing change). **delegation-duty-guard.sh:** observe (`MODE_DUTY`, stderr reminder only).
 
-Hook lifecycle beyond rollout (source, deploy, adopt, retire): user-level rule `shared/rules/hook-lifecycle.md` (not yet deployed).
+Hook lifecycle beyond rollout (source, deploy, adopt, retire): user-level rule `shared/rules/hook-lifecycle.md` (deployed to `~/.aitools/rules` and Cursor; not yet to `~/.claude/rules`).

@@ -1,6 +1,6 @@
 ---
 name: tool-ops
-description: "Read and write per-tool operational metadata, in any repo — governance modes, deny rules, hooks, context injection, KPIs, verification specs, and Claude Code operational knowledge. Use when checking tool behavior, deny rules, hook behavior, Claude Code version dependencies, sub-agent limits (cross-repo access, SendMessage, Markdown file-name block, nesting depth), session management commands, hook portability, or how to read a tool's documentation."
+description: "Read and write per-tool operational metadata, in any repo — governance modes, hooks, context injection, KPIs, verification specs, and Claude Code operational knowledge. Use when checking tool behavior, where deny rules live, hook behavior, Claude Code version dependencies, sub-agent limits (cross-repo access, SendMessage, Markdown file-name block, nesting depth), session management commands, hook portability, or how to read a tool's documentation."
 ---
 
 ## Intent
@@ -48,18 +48,20 @@ To look up a tool's operational metadata:
 
 1. Read `registries/tool-ops.json`
 2. Find the tool key under `tools` (e.g., `tools.claude-code`)
-3. Return the requested section: `governanceModes`, `denyRules`,
+3. Return the requested section: `governanceModes`,
    `hooks`, `contextInjection`, `kpis`, `verifications`, `docAccess`,
    or `verificationMethod`
 
 If the tool has no entry, report that it has no ops metadata. Most
 managed tools do not need an ops entry — only those with deep harness
-integration (hooks, deny rules, context injection).
+integration (hooks, context injection).
 
 ### Common lookups
 
-- **Deny rules**: `tools.<name>.denyRules` — what permission patterns
-  are blocked and why
+- **Deny rules**: not in this registry (`denyRules` retired in 15eb5e3).
+  Permission rules (allow/ask/deny) are profile-sourced: dotprofile
+  `profile.json` `claude.settings.permissions`, synced to
+  `~/.claude/settings.json` by `setup-user-settings`
 - **Hooks**: `tools.<name>.hooks` — what hooks fire for this tool,
   their event/matcher/script/purpose
 - **Doc access**: `tools.<name>.docAccess` — how to read this tool's
@@ -67,7 +69,6 @@ integration (hooks, deny rules, context injection).
 - **Governance modes**: `tools.<name>.governanceModes` — per-category
   audit/active status
 - **Verifications**: `tools.<name>.verifications` — how to test hooks
-  and deny rules
 
 ### Per-tool ops references (where to read them)
 
@@ -96,7 +97,8 @@ these sources):
 
 | Question | Source of record |
 |----------|------------------|
-| Deny rules, harness hooks for Claude Code, governance modes, doc access, verification cases | `registries/tool-ops.json` `tools.claude-code` |
+| Harness hooks for Claude Code, governance modes, doc access, verification cases | `registries/tool-ops.json` `tools.claude-code` |
+| Permission (allow/ask/deny) rules | dotprofile `profile.json` `claude.settings.permissions` (synced by `setup-user-settings`) |
 | Version dependencies (CRITICAL to LOW) and release-notes watch | `reference/tool-ops-claude-code.md` "Version Dependencies" |
 | Sub-agent limits: cross-repo access (#24), SendMessage gap (#25), Markdown file-name block (#26), nesting depth (#27), `claude update` hook cancellation (#23) | `reference/tool-ops-claude-code.md` "Session Behavior" |
 | Session management commands, CLAUDE.md hierarchy, session storage | `reference/tool-ops-claude-code.md` "Session Behavior" |
@@ -126,7 +128,7 @@ a safety action. Log the reason in the commit message.
 
 ### Adding/updating entries within a tool
 
-For adding deny rules, hooks, KPIs, or verification cases:
+For adding hooks, KPIs, or verification cases:
 
 1. Read the current tool entry
 2. Draft the new/modified entry with all required fields
@@ -136,7 +138,6 @@ For adding deny rules, hooks, KPIs, or verification cases:
 
 Required fields per section:
 
-- **denyRules**: `id`, `permissionPattern`, `hook`, `reason`, `incidentRef`
 - **hooks**: `event`, `matcher`, `script`, `purpose`
 - **kpis**: `name`, `source`, `unit`
 - **verifications**: `type`, `target`, `cases[]` (each with `input`,
@@ -147,7 +148,6 @@ Required fields per section:
 Not every managed tool needs an ops entry. Create one only when:
 
 - The tool has hooks that fire during sessions
-- The tool has deny rules blocking specific permissions
 - The tool requires special documentation access methods
 - The tool has version-dependent behaviors that affect the harness
 
@@ -156,7 +156,7 @@ To add a new tool:
 1. Create the tool key under `tools` with all governance modes set to
    `"audit"`
 2. Populate at minimum: `governanceModes`, and whichever sections
-   triggered the entry (e.g., `denyRules` if a deny rule was the cause)
+   triggered the entry (e.g., `hooks` if a hook was the cause)
 3. Empty sections may be omitted — their absence means "no metadata
    for this category"
 4. Present for user review

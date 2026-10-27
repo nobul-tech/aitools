@@ -38,15 +38,17 @@ Its source is `shared/skills/harvest/` in the aitools repo.
 
 When a session produces reusable code, prompts, or patterns:
 
-1. Move file from `.scratch/session-xxx/` to `harvesting/`
-2. Rename with date prefix: `YYYY-MM-DD_descriptive-name.ext`
-3. Add entry to `@harvesting/harvest-manifest.json` via this skill:
-   - `harvested`: today's date
-   - `session`: project/date_sessionprefix
-   - `description`: what problem this solved
-   - `type`: code | prompt | research | pattern
-   - `language`: python | bash | powershell | markdown | null
-   - `status`: harvested
+1. Copy (do not move) the file from `.scratch/session-<id>/` to
+   `harvesting/`; the SessionEnd/SessionStart harvester does this
+   automatically for every non-ephemeral top-level file.
+2. Name: `<UTC date>_session-<id10>_<original name>` (the harvester adds
+   `_<n>_` on a name collision).
+3. The manifest entry in `@harvesting/harvest-manifest.json` is written by
+   the harvester (`type` defaults to `code`, `description` to
+   "Auto-harvested from session scratch", `pruneAfter` = harvested + 30
+   days); correct `description`, `type` (code | prompt | research |
+   pattern) and `language` (python | bash | powershell | markdown | null)
+   by hand when you promote.
 4. Commit the artifact + manifest update
 
 ## Manifest schema
@@ -74,21 +76,22 @@ When a session produces reusable code, prompts, or patterns:
 }
 ```
 
+The harvester itself creates only `{"schemaVersion": "1.0", "lastAudit":
+null}` in `meta`; `governance` and `skill` are optional, hand-maintained
+keys.
+
 Status lifecycle: `harvested` → `candidate` → `promoted` | `pruned`
 
 ## Evaluating artifacts (SessionStart)
 
-Lightweight check, < 1 second:
-
-1. Read `@harvesting/harvest-manifest.json`
-2. For each artifact:
-   - Calculate age (days since harvested)
-   - Check git log for references: `git log --all --oneline -- harvesting/<file>`
-   - If age > 30 AND zero refs AND not flagged → auto-prune
-   - If age > 7 AND has refs OR flagged → mark as `candidate`
-3. Update manifest with new statuses
-4. Log summary: "harvesting/: N artifacts, M candidates, K pruned"
-5. Ship KPIs to Datadog
+At SessionStart (`session-catchup.sh` → `ait-harvest.py catchup`), entries
+past `pruneAfter` (harvested + 30 days) whose status is not
+`promoted`/`pruned` are re-classified: referenced in git history under
+`harvesting/` → `candidate`; otherwise → `pruned`. Pruning only changes the
+manifest status; the file stays in `harvesting/` until removed by hand.
+There is no "keep" flag and no 7-day rule yet (the governance rule's
+criteria are ahead of the code). `meta.lastAudit` is updated when anything
+changes. No KPI is shipped.
 
 ## Promoting an artifact
 
@@ -106,11 +109,9 @@ When a candidate is approved for promotion:
 
 ## Pruning
 
-Auto-pruning at SessionStart per rule criteria:
-
-1. Delete the file from `harvesting/`
-2. Update manifest: `status: "pruned"`
-3. KPI: `artifacts_pruned_count`
+Auto-pruning at SessionStart (see above) only sets `status: "pruned"` in the
+manifest; it never deletes the file. Delete a pruned file by hand if it is
+no longer wanted.
 
 ## Generalization review (`/harvest review`)
 
@@ -131,6 +132,8 @@ AI-powered analysis, on-demand or triggered by `aitools` sync:
 5. KPI: `generalization_candidates`, `generalization_actions_taken`
 
 ## KPI definitions
+
+Planned, not implemented: no hook or script emits these KPIs today.
 
 | KPI | When shipped | What it measures |
 |-----|-------------|-----------------|

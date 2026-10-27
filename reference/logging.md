@@ -11,7 +11,7 @@ emits logs, and anyone changing the logging substrate (`aitools-lib.{sh,ps1}`,
 `harness-db.py`, `ait-harvest.py`, hooks, check-lib).
 
 > Ratified 2026-06-14 as part of the harvest/archive/logging plan
-> (`plans/imperative-gliding-newell.md` §14). This doc consolidates logging
+> (`plans/harvest-archive-resilience.md` §14). This doc consolidates logging
 > decisions previously scattered across `script-standards.md`,
 > `script-standards-detail.md`, `cross-platform.md`, and `hook-rollout.md`.
 
@@ -38,6 +38,12 @@ logs by writer. `~/.aitools/` is already the user-scoped namespace (config,
 deploy-state, proposed telemetry — see `@.claude/rules/aitools-workspace.md`),
 so `logs/` joins it naturally.
 
+**Override**: `AITOOLS_LOG_DIR` replaces the directory for every lib-based
+writer (bash and PowerShell). Tests and `check-pre-push` step 7 set it to a
+temp dir; the package path's macOS postinstall (a stub today) is designed to set `/Library/Logs/aitools`
+(BP-16, `@plans/build-package/design.md`) because it runs as root before any
+user HOME exists.
+
 ### 2. Path separators — native per language
 
 Form the path using each language's native idiom; never hardcode a separator:
@@ -58,13 +64,15 @@ reading one file:
 | File | Writer |
 |------|--------|
 | `deploy.log` | setup scripts (via `aitools-lib` `logging_init`/`Initialize-Logging`) |
-| `deploy.jsonl` | the installers' `log` override and the child relay (`jsonl_record` / `Write-JsonlRecord`, `run_child_relayed` / `Invoke-ChildRelayed` in `aitools-lib`; the installers use their own copies until the call-site follow-up); one JSON record per line, fields `ts, host, os, script, run_id, level, msg` |
+| `deploy.jsonl` | `jsonl_record` / `Write-JsonlRecord` in `aitools-lib`, called by the installers' `log` / `Log` override and by the child relay (`run_child_relayed` / `Invoke-ChildRelayed`); one JSON record per line, fields `ts, host, os, script, run_id, level, msg`; one `run_id` per installer run (`AITOOLS_RUN_ID`, inherited by relayed children); an unwritable file is one warning, then records are skipped |
 | `ait-harvest.log` | `scripts/ait-harvest.py` |
 | `session-archive.log` | `session-archive.sh` shim (bash-fallback branch only) |
 | `session-catchup.log` | `session-catchup.sh` shim (bash-fallback branch only) |
 | `harvest-session.log` | `harvest-session.sh` shim (bash-fallback branch only) |
 | `harness-db.log` | `scripts/harness-db.py` (was `deploy.log`) |
 | `checks.log` / `checks.jsonl` | check/audit scripts (via `check-lib`) |
+| `standing-order-guard.log` (and `<hook-name>.log`) | PreToolUse hooks, observe-mode checks only (`@.claude/rules/hook-rollout.md`); absent while every check enforces |
+| `clip2md.log` | `clip2md` in `shared/shell/aliases.sh` / `.ps1` |
 
 Note: the SessionEnd/SessionStart shims pass raw stdin to the Python helper,
 which logs to `ait-harvest.log`. The per-shim `*.log` files capture ONLY the
@@ -132,9 +140,12 @@ A library-style tool is a script that other scripts call for data:
 ## Migration status
 
 The location/rotation migration across `aitools-lib.{sh,ps1}`, `harness-db.py`,
-hooks, `check-lib`, and `clip2md` is tracked in plan §14.3. After migration, a
-repo-wide grep for the old literals (`.local/state`, `Library/Logs`,
-`LOCALAPPDATA`) must return none outside this doc and the plan (§20.3 M4).
+hooks, `check-lib`, and `clip2md` is tracked in plan §14.3. After migration,
+no log path uses the old literals (`.local/state`, `Library/Logs`,
+`%LOCALAPPDATA%\aitools`) (§20.3 M4). The literals still appear legitimately
+for install paths (`%LOCALAPPDATA%\bin\NASM`, `%LOCALAPPDATA%\Programs\...`)
+and for the package path's root log directory (the `AITOOLS_LOG_DIR`
+override above).
 
 ## Cross-references
 
@@ -142,4 +153,4 @@ repo-wide grep for the old literals (`.local/state`, `Library/Logs`,
 - Helper detail, check architecture, console colors: `@reference/script-standards-detail.md`
 - User-scoped namespace (`~/.aitools/`): `@.claude/rules/aitools-workspace.md`
 - Hook observe-mode logs: `@.claude/rules/hook-rollout.md`
-- Plan: `plans/imperative-gliding-newell.md` §14
+- Plan: `plans/harvest-archive-resilience.md` §14

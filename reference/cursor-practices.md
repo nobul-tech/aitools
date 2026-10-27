@@ -11,7 +11,8 @@ Cursor uses `.mdc` files (Markdown with YAML frontmatter) for AI rules. Three sc
 | Scope | Location | Synced? |
 |-------|----------|---------|
 | Project rules | `.cursor/rules/*.mdc` | Yes (via git) |
-| User rules | Cursor Settings > Rules | No (local to machine) |
+| User rule files | `~/.cursor/rules/*.mdc` (written by `setup-user-cursor` from `~/.aitools/rules`) | No (per machine) |
+| User Rules (UI) | Customize → Rules; stored on the Cursor account | Account |
 | Team rules | `.cursor/rules/*.mdc` (shared) | Yes (via git) |
 
 ### Rule Frontmatter
@@ -107,8 +108,9 @@ overwriting. Profile preferences live in `profile.json` under `cursor.cli`:
 }
 ```
 
-The `scripts/` version reads profile at runtime; `deploy/` scripts have
-preferences embedded at build time.
+The `scripts/` version reads the profile at run time; the generated
+`<userRepoPath>/deploy/` scripts do too, and fall back to the build-time
+`cursor.cli` values only on a machine without the dotprofile.
 
 ### Key Commands
 
@@ -124,8 +126,9 @@ The agent CLI reads rules and context from these locations:
 
 | Source | Location | Notes |
 |--------|----------|-------|
-| Cursor User Rules | Cursor Settings > Rules (SQLite) | Not file-accessible; set via IDE UI |
-| Project CLAUDE.md | `./CLAUDE.md` in project root | Same as Claude Code |
+| User rule files | `~/.cursor/rules/**/*.mdc`, found by the ancestor walk (workspaces under `~` only) | `@reference/tool-ops-cursor.md` |
+| `AGENTS.md` | `<workspace or ancestor>/AGENTS.md` | |
+| `CLAUDE.md`, `CLAUDE.local.md` | per ancestor, only with third-party extensibility on | |
 | Project rules | `.cursor/rules/*.mdc` | Cursor-specific rules |
 | User skills | `~/.cursor/skills/*/SKILL.md` | Our deployed skills land here |
 | Built-in skills | `~/.cursor/skills-cursor/*/SKILL.md` | 5 Cursor-provided skills |
@@ -134,7 +137,9 @@ The agent CLI reads rules and context from these locations:
 
 ### User Rules (deprecated workflow)
 
-Cursor User Rules live in **Cursor Settings > Rules** (UI only) — they're stored in a SQLite database (`state.vscdb`), not an accessible file.
+UI "User Rules" (Customize → Rules) are stored on the Cursor account
+(`@reference/tool-ops-cursor.md`). The harness does not write them; it writes
+file-based user rules to `~/.cursor/rules/*.mdc` instead (`setup-user-cursor`).
 
 The automated clipboard-copy workflow (via `setup-user-cursor`) has been removed as of v3.11. Cursor project rules (`.cursor/rules/*.mdc`) are auto-loaded and cover the same ground. If manual User Rules are still needed, copy from `shared/cursor-rules/user-rules.md` directly.
 
@@ -142,11 +147,11 @@ The automated clipboard-copy workflow (via `setup-user-cursor`) has been removed
 
 When **"Include third party skills, subagents and other configs"** is enabled in Cursor Settings, the **Cursor IDE** reads `~/.claude/CLAUDE.md` at the user level (same as Claude Code).
 
-**Important:** The **Cursor Agent CLI** (`agent`) does NOT read `~/.claude/CLAUDE.md`. It uses Cursor User Rules (SQLite) + project `CLAUDE.md` + `.cursor/rules/` only. See "Rule Sources" below.
+**Important:** The **Cursor Agent CLI** (`agent`) does NOT read `~/.claude/CLAUDE.md`. It uses the rules loader described in `@reference/tool-ops-cursor.md` "Loading behaviour" (`.cursor/rules/**/*.mdc`, `AGENTS.md`, and `CLAUDE.md` only with third-party extensibility, for the workspace and every ancestor). See "Rule Sources" above.
 
 Cursor does **not** resolve `@import` / `@"path"` directives — it reads the file as-is. Content must be inlined for Cursor to see it.
 
-The deploy scripts handle this automatically: `deploy/setup-user-claude.sh/.ps1` have the shared content embedded at build time. Re-run `scripts/build-deploy.sh` after editing the shared file, then re-deploy to propagate changes.
+The generated `<userRepoPath>/deploy/setup-user-claude.sh/.ps1` embed the build-time template as a fallback and use the live dotprofile when present. Re-run `scripts/build-deploy.sh` after editing the template (an agent: isolated HOME only).
 
 ## Rule Correspondence
 
@@ -154,21 +159,25 @@ Cursor project rules mirror Claude Code rules for consistency. When changing rul
 
 | Claude Code | Cursor | Notes |
 |------------|--------|-------|
-| `.claude/rules/cross-platform.md` | `.cursor/rules/cross-platform.mdc` | Condensed |
-| `.claude/rules/sources-of-truth.md` | `.cursor/rules/sources-of-truth.mdc` | Near-identical |
-| `.claude/rules/tool-lifecycle.md` | `.cursor/rules/tool-lifecycle.mdc` | Near-identical |
-| `.claude/rules/cursor-rule-parity.md` | `.cursor/rules/cursor-rule-parity.mdc` | Identical |
-| (CLAUDE.md Code Conventions) | `.cursor/rules/general.mdc` | Python style folded in |
-| `.claude/rules/script-standards.md` | `.cursor/rules/script-standards.mdc` | Condensed; absorbed error-handling + surface-silent-failures |
-| `.claude/rules/documentation-standards.md` | `.cursor/rules/documentation-standards.mdc` | Condensed |
-| `.claude/rules/web-sources.md` | `.cursor/rules/web-sources.mdc` | Identical |
+| `.claude/rules/agentic-standards.md` | `.cursor/rules/agentic-standards.mdc` | Identical |
 | `.claude/rules/config-file-safety.md` | `.cursor/rules/config-file-safety.mdc` | Condensed |
+| `.claude/rules/cross-platform.md` | `.cursor/rules/cross-platform.mdc` | Condensed |
 | `.claude/rules/deploy-paths.md` | `.cursor/rules/deploy-paths.mdc` | Near-identical |
+| `.claude/rules/documentation-standards.md` | `.cursor/rules/documentation-standards.mdc` | Condensed |
+| `.claude/rules/git-safety.md` | `.cursor/rules/git-safety.mdc` | Identical |
 | `.claude/rules/hook-rollout.md` | `.cursor/rules/hook-rollout.mdc` | Condensed |
-| `.claude/rules/plan-execution.md` | `.cursor/rules/plan-execution.mdc` | Condensed |
-| `.claude/rules/smoke-test-pattern.md` | — | Claude Code-specific (Bash tool pattern) |
 | `.claude/rules/interactive-menus.md` | `.cursor/rules/interactive-menus.mdc` | Condensed |
+| `.claude/rules/managed-file-deployment.md` | `.cursor/rules/managed-file-deployment.mdc` | Near-identical |
+| `.claude/rules/plan-execution.md` | `.cursor/rules/plan-execution.mdc` | Condensed |
 | `.claude/rules/relay-outbound.md` | `.cursor/rules/relay-outbound.mdc` | Near-identical |
+| `.claude/rules/script-standards.md` | `.cursor/rules/script-standards.mdc` | Condensed; absorbed the former error-handling rule |
+| `.claude/rules/smoke-test-pattern.md` | `.cursor/rules/smoke-test-pattern.mdc` | Identical |
+| `.claude/rules/sources-of-truth.md` | `.cursor/rules/sources-of-truth.mdc` | Condensed (keep the table complete) |
+| `.claude/rules/tool-lifecycle.md` | `.cursor/rules/tool-lifecycle.mdc` | Must match |
+| `.claude/rules/web-sources.md` | `.cursor/rules/web-sources.mdc` | Identical |
+| (CLAUDE.md Code Conventions) | `.cursor/rules/general.mdc` | Python style folded in |
+| (none) | `.cursor/rules/cursor-rule-parity.mdc` | Cursor-only: keeps the twins in step |
+| `aitools-workspace`, `artifact-harvesting`, `frameworks`, `glossary`, `governed-data-access`, `incident-governance`, `tool-evaluation`, `tool-ops` | — | No twin today: reason not recorded (commander's call: add twins, or record "Claude Code skill triggers only") |
 
 ### Changing rules
 
@@ -187,8 +196,9 @@ Cursor supports a Skills system for reusable AI capabilities:
 - Skills can include example code, patterns, and instructions
 - Useful for encoding project-specific workflows (e.g., "how to add a new API endpoint")
 
-We deploy Chrome DevTools skills (`chrome-devtools`, `a11y-debugging`) to both locations
-via `setup-user-mcp`. These are vendored from the upstream repo in `shared/skills/`.
+`setup-user-skills` deploys every skill in `shared/skills/` (two vendored from
+upstream: `chrome-devtools`, `a11y-debugging`; the rest aitools-authored) and the
+dotprofile `claude/skills/` to both locations.
 
 | Tool | Skills location |
 |------|----------------|
@@ -204,4 +214,4 @@ Cursor also has 5 built-in skills at `~/.cursor/skills-cursor/` (not managed by 
 | Windows workstation | `~/.cursor/mcp.json` |
 | Mac laptop | `~/.cursor/mcp.json` |
 
-Both machines need their own MCP setup (run `deploy/setup-cursor-ide-mcp.sh` or `.ps1` on each).
+Both machines need their own MCP setup (run `scripts/setup-cursor-ide-mcp.sh` / `.ps1` (dev path) or `<userRepoPath>/deploy/setup-cursor-ide-mcp.*` (MDM) on each).

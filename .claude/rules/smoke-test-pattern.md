@@ -6,6 +6,6 @@ When running setup scripts as functional smoke tests from Claude Code:
 2. **Check exit code** — the Bash tool result shows just the exit code
 3. **Read the log only if needed** — on failure, or to verify specific content
 
-Platform dispatch: `pwsh -File` for `.ps1` on Windows, `bash` for `.sh` on macOS.
+Platform dispatch: `pwsh -File` for `.ps1` on Windows, `bash` for `.sh` on macOS and Linux (and Claude Code web).
 
 Details and examples: `@reference/smoke-test-pattern-detail.md`

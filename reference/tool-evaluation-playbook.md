@@ -320,8 +320,9 @@ aitools manage perl on macOS as it does on Windows?
 - **Distro packages lag upstream**: apt/dnf packages are often months or years
   behind. Evaluate whether the distro version is sufficient or whether an
   upstream install method (pip, cargo, official repo) is needed.
-- **Distro detection**: `apt` vs `dnf` vs `pacman` vs `apk`. Scripts need distro
-  detection (`/etc/os-release` or `command -v apt`).
+- **Distro**: supported Linux is Ubuntu 24.04 and 22.04 (apt). Other families
+  (dnf, pacman, apk) are unsupported: record them in an evaluation only as
+  unsupported. Scripts detect the family with `/etc/os-release` or `command -v apt`.
 - **bash 5.x is usually present**: Unlike macOS, most Linux distros ship bash
   5.x. Ubuntu 20.04+ has bash 5.0+.
 - **No elevation by default**: Many CI runners and containers run as root, but

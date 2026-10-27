@@ -94,21 +94,74 @@ for registry writes.
 - Registry entry via `/tool-registry` skill
 - `@shared/claude-shared.md` — Managed CLI Tools table
 - `<userRepoPath>/claude/CLAUDE.md` — same row
-- `CLAUDE.md` — deploy list
 - Check script entries (`TOOL_CMDS` dictionaries)
 - Deployment types table if new file type
 
 #### Rebuild + propagate
-1. `bash scripts/build-deploy.sh` — verify count increments by 2
-2. `bash scripts/setup-user-claude.sh` — propagate CLAUDE.md
+1. Agents: `bash scripts/build-deploy.sh` under an isolated `HOME` with a
+   copy of the dotprofile (`@.claude/rules/deploy-paths.md`); verify the new
+   `setup-<tool>.sh/.ps1` pair is in the generated `deploy/`. The real
+   dotprofile rebuild is the commander's (or a mission ordered to do it).
+2. Propagate CLAUDE.md with `aitools` (commander), never `setup-user-claude`
+   against the real HOME from an agent.
 3. `bash scripts/check-post-push.sh` — all checks pass
-4. Commit + push both repos
+4. Commit + push both repos (aitools via a PR; dotprofile to its main)
+
+### Lifecycle field completeness
+
+Every tool in the registry (`/tool-registry` skill, including Under
+Evaluation entries) carries its lifecycle fields (platform status,
+concurrency, post-install config, dependencies, invocation) and a last
+verified version per platform (`pending` when unverified). Verify them
+before committing.
+
+### Install command verification gate
+
+Before writing or modifying a setup script for any managed tool (new
+onboarding, bug fixes, upgrades, platform additions, install-failure RCA),
+verify the current upstream install method with the chrome-devtools skill:
+the official README or docs install section, the GitHub releases page, and
+the package-manager presence (Homebrew, crates.io, npm, winget, apt).
+Record the findings, date and source URL through the `/tool-registry`
+skill first, then change the scripts to match. The same gate applies to
+`BuildPrereqs` entries and `BuildFailureSignatures` remedies.
+
+### Cross-platform vetting
+
+When recommending a tool, verify availability on macOS, Windows and Linux
+(and the supported environments: `@reference/cross-platform-detail.md`).
+Disclose single-platform or limited support.
+
+### MCP servers
+
+- **Isolation**: stdio MCP servers that keep local state run isolated
+  (chrome-devtools: `--isolated`, a throwaway profile, so concurrent Claude
+  Code and Cursor sessions never hit a profile lock).
+- **Disable scope**: `agent mcp disable` (Cursor CLI) is per project, not per
+  user. Always-available servers (chrome-devtools) belong in user config;
+  opt-in servers (vercel, webflow) in project config. Claude Code
+  `permissions.deny` in `~/.claude/settings.json` is user-scoped; record the
+  asymmetry in each MCP server's `/tool-registry` entry.
+
+### Deployment pattern updates
+
+When a new tool deploys a config file type not in the deployment types table
+of `@.claude/rules/managed-file-deployment.md`, add a row (rule, reference and
+Cursor `.mdc`); when deployment behaviour of an existing type changes, update
+its entries.
 
 ### Dotprofile priority
 
 `setup-user-claude.sh/.ps1` reads dotprofile first. Rows added to
 `@shared/claude-shared.md` MUST also be added to the dotprofile
 template.
+
+### When to invoke /tool-adopt
+
+Invoke the `/tool-adopt` skill after `/tool-eval` passes Phase 2, when a
+setup script reports no method for a platform, when a tool is requested
+from any repo, or when changing a tool setup script. It walks the
+onboarding checklist above.
 
 ### When to invoke /tool-registry
 
@@ -128,6 +181,7 @@ bypasses that process.
 - Evaluation principles: `@.claude/rules/tool-evaluation.md`
 - Evaluation process: `/tool-eval` skill
 - Registry access: `/tool-registry` skill
+- Onboarding and platform adoption: `/tool-adopt` skill
 - Discovery playbook: `@reference/tool-evaluation-playbook.md`
 - Evaluation criteria: `@reference/tool-evaluation-criteria.md`
 - Registry data: `/tool-registry` skill

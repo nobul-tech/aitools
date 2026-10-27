@@ -14,7 +14,7 @@ behavior, check scripts validating version deps.
 
 Registry of version-dependent workarounds, behaviors, and assumptions in this repo.
 
-- **Current version**: 2.1.81
+- **Current version**: 2.1.309 (observed `claude --version`, macOS, 2026-10-27). Items #1-#25 were last verified at or before 2.1.81 and are not re-verified at this version (open item 2 of `reference/evaluations/claude-code-macos-2026-10-21.md`).
 - **Baseline version**: 2.1.51 (2026-02-16) -- version when most workarounds were written
 
 ### How to use
@@ -35,14 +35,14 @@ Post-push checklist #20 triggers this review automatically.
 
 | # | Item | Baseline | Last verified | Files | Upstream |
 |---|------|----------|---------------|-------|----------|
-| 1 | Windows shell hardcoded to Git Bash (CLAUDE_CODE_SHELL broken) | 2.1.51 | 2.1.74 (2026-03-13) | "Windows Shell Limitations" section below, `.claude/rules/cross-platform.md`, `CLAUDE.md` (Windows dispatch) | [#7490](https://github.com/anthropics/claude-code/issues/7490), [#25558](https://github.com/anthropics/claude-code/issues/25558), [#5049](https://github.com/anthropics/claude-code/issues/5049), [#16225](https://github.com/anthropics/claude-code/issues/16225), [#20453](https://github.com/anthropics/claude-code/issues/20453) |
+| 1 | Windows shell hardcoded to Git Bash (CLAUDE_CODE_SHELL broken) | 2.1.51 | 2.1.74 (2026-03-13); **likely obsolete**: the changelog lists a PowerShell tool preview (2.1.84) and "Git for Windows no longer required" (2.1.120), per `reference/evaluations/claude-code-macos-2026-10-21.md`; re-verify on Windows before relying on it | "Windows Shell Limitations" section below, `.claude/rules/cross-platform.md`, `CLAUDE.md` (Windows dispatch) | [#7490](https://github.com/anthropics/claude-code/issues/7490), [#25558](https://github.com/anthropics/claude-code/issues/25558), [#5049](https://github.com/anthropics/claude-code/issues/5049), [#16225](https://github.com/anthropics/claude-code/issues/16225), [#20453](https://github.com/anthropics/claude-code/issues/20453) |
 | 2 | SessionEnd hook API contract (session_id, cwd, transcript_path on stdin) | 2.1.51 | 2.1.74 (2026-03-13) | `shared/hooks/session-archive.sh`, `reference/user-repo.md` | -- |
 
 ### NOTE -- Not a CC dependency
 
 | # | Item | Note | Files |
 |---|------|------|-------|
-| 3 | Chrome DevTools MCP `--isolated` flag | Personal preference for concurrent sessions, not tied to CC versions | `scripts/setup-user-mcp.sh/.ps1`, `.claude/rules/post-push.md` |
+| 3 | Chrome DevTools MCP `--isolated` flag | Personal preference for concurrent sessions, not tied to CC versions | `scripts/setup-user-mcp.sh/.ps1`, `reference/post-push-checklist.md` (steps 3 and 15) |
 
 ### HIGH -- Would break workflows or produce wrong results
 
@@ -56,8 +56,8 @@ Post-push checklist #20 triggers this review automatically.
 | 9 | Coaching items tied to CC capabilities (subagent gap, auto-memory locality) | 2.1.51 | 2.1.51 | `shared/claude-shared.md` | -- |
 | 23 | `claude update` triggers SessionEnd hooks then cancels them | 2.1.81 | 2.1.81 (2026-03-22) | `scripts/aitools-install.sh/.ps1` (runs `claude update`) | -- |
 | 24 | Subagent cross-repo file access restriction (Glob/Grep denied outside CWD repo, Read with explicit paths works) | 2.1.74 | 2.1.74 (2026-03-24) | `shared/claude-shared.md` (delegation duty), delegation prompts | -- |
-| 19 | `effortLevel` setting (`settings.json` key controlling reasoning effort) | 2.1.68 | 2.1.74 (2026-03-13) | `scripts/setup-user-hooks.sh/.ps1`, `reference/user-repo.md`, `shared/claude-shared.md` | -- |
-| 25 | SendMessage for agent continuation unavailable (gated behind Agent Teams flag; old `resume` param removed in 2.1.77) | 2.1.77 | 2.1.81 (2026-03-24) | Agent tool documentation, delegation prompts | [#35240](https://github.com/anthropics/claude-code/issues/35240), [#37051](https://github.com/anthropics/claude-code/issues/37051), [#38183](https://github.com/anthropics/claude-code/issues/38183) |
+| 19 | `effortLevel` setting (`settings.json` key controlling reasoning effort) | 2.1.68 | 2.1.74 (2026-03-13) | `scripts/setup-user-settings.sh/.ps1` (`profile.json` `claude.settings.effortLevel`), `shared/claude-shared.md` | -- |
+| 25 | SendMessage for agent continuation unavailable (gated behind Agent Teams flag; old `resume` param removed in 2.1.77) | 2.1.77 | 2.1.81 (2026-03-24); **superseded**: in 2.1.309 (macOS, 2026-10-27) `SendMessage` and `ListAgents` are offered to the main session for in-process subagents; not yet tested end to end | Agent tool documentation, delegation prompts | [#35240](https://github.com/anthropics/claude-code/issues/35240), [#37051](https://github.com/anthropics/claude-code/issues/37051), [#38183](https://github.com/anthropics/claude-code/issues/38183) |
 | 26 | Sub-agent Markdown file-name block: Write refuses a sub-agent write whose basename matches `^(REPORT\|SUMMARY\|FINDINGS\|ANALYSIS).*\.md$` (case-insensitive) | 2.1.289 | 2.1.289 (2026-10-05) | "Sub-agent Markdown File-Name Block" section below, dotprofile `claude/rules/delegation.md` (D-DEL1), `shared/skills/delegate/SKILL.md`, `shared/hooks/delegation-duty-guard.sh`, `shared/claude-shared.md` + dotprofile `claude/CLAUDE.md` (Delegation Duty) | -- (not in the official docs) |
 | 27 | `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` caps sub-agent nesting (documented default 3; the Claude Code web environment sets 1); the launch path decides whether a delegate gets the Agent tool (Workflow agents never do) | 2.1.219 | 2.1.307 (2026-10-21) | "Sub-agent Nesting Depth" section below, `shared/skills/delegate/SKILL.md`, `shared/skills/aitool-continue/SKILL.md` | -- |
 
@@ -65,7 +65,7 @@ Post-push checklist #20 triggers this review automatically.
 
 | # | Item | Baseline | Last verified | Files | Upstream |
 |---|------|----------|---------------|-------|----------|
-| 10 | Write tool produces CRLF on macOS | 2.1.51 | 2.1.51 | `.claude/rules/pre-commit.md`, auto-memory `MEMORY.md` | -- |
+| 10 | Write tool produces CRLF on macOS | 2.1.51 | 2.1.51 | `reference/pre-commit-checklist.md` (step 4), `scripts/check-pre-commit.sh` step 4 (CRLF check) | -- |
 | 11 | PATH limitations (npm global bin not always visible to CC) | 2.1.51 | 2.1.51 | `scripts/setup-user-mcp.sh` (node fallback for `claude mcp add`) | [#5202](https://github.com/anthropics/claude-code/issues/5202), [#3838](https://github.com/anthropics/claude-code/issues/3838) |
 | 12 | PowerShell-from-Bash quoting patterns (single-quote outer, double-quote inner) | 2.1.51 | 2.1.51 | "Windows Shell Limitations" section below | -- |
 | 13 | Cursor Agent CLI rule sources (does NOT read ~/.claude/CLAUDE.md) | 2.1.51 | 2.1.51 | `reference/cursor-practices.md` | -- |
@@ -77,7 +77,7 @@ Post-push checklist #20 triggers this review automatically.
 
 | # | Item | Baseline | Last verified | Files | Upstream |
 |---|------|----------|---------------|-------|----------|
-| 14 | Auto-memory locality (machine-specific, does not sync) | 2.1.51 | 2.1.51 | `shared/claude-shared.md`, auto-memory `MEMORY.md` | -- |
+| 14 | Auto-memory locality (machine-specific, does not sync) | 2.1.51 | 2.1.51 | `shared/claude-shared.md` | -- |
 | 15 | Session sync not possible (CLI sessions are local per machine + directory) | 2.1.51 | 2.1.51 | "Session Sync" section below | -- |
 | 16 | Session storage internals (JSONL under ~/.claude/projects/) | 2.1.51 | 2.1.51 | "Session Storage Internals" section below, `shared/hooks/session-archive.sh` | -- |
 | 17 | JSONL transcript fields (type, cwd, sessionId) | 2.1.51 | 2.1.51 | "Session Storage Internals" section below, `shared/hooks/session-archive.sh` | -- |
@@ -182,18 +182,18 @@ All levels merge together. More specific wins on conflict.
 
 - Applies to **every** Claude Code session on that machine, regardless of project.
 - Locations:
-  - Windows: `C:\Users\jdpal\.claude\CLAUDE.md`
+  - Windows: `%USERPROFILE%\.claude\CLAUDE.md`
   - Mac: `~/.claude/CLAUDE.md`
 - **Template source** (priority order):
   1. `<userRepoPath>/claude/CLAUDE.md` -- personal copy in the user's dotfile repo (syncs across machines via git). Contains `{{PLACEHOLDER}}` tokens.
   2. `shared/claude-shared.md` -- fallback template in the aitools repo.
 - **Deploy flow** (`scripts/setup-user-claude.sh/.ps1`):
-  1. Read template from user repo (fallback: shared template)
-  2. Read `profile.json` from user repo to get identity values for current machine
-  3. Interpolate `{{PLACEHOLDER}}` tokens (`PROFILE_NAME`, `PROFILE_COMPANY`, `IDENTITY_GIT_NAME`, `IDENTITY_GIT_EMAIL`)
-  4. Append `## Machine-Specific` footer (OS, hostname, shell)
-  5. Write to `~/.claude/CLAUDE.md`
-- **MDM deploy** (`deploy/setup-user-claude.sh/.ps1`): Self-contained with build-time embedded content. No repo or profile needed.
+  1. Read the template from the dotprofile (fallback: `shared/claude-shared.md`); a resolver error deploys nothing.
+  2. Get this machine's values from the one resolver (`resolve_machine_profile` / `Resolve-MachineProfile`).
+  3. Interpolate `{{PROFILE_NAME}}`, `{{PROFILE_COMPANY}}`, `{{IDENTITY_GIT_NAME}}`, `{{IDENTITY_GIT_EMAIL}}`, `{{USER_REPO_PATH}}` (one literal pass; empty values leave the token).
+  4. Append `## Machine-Specific` (`- Machine: <OS> <arch> (<hostname>; profile <alias>)`, `- Shell: <shell>`; PS1: no arch yet).
+  5. Deploy through `deploy_managed_file` with the dotprofile template as adopt target and `claude_md_adopt_filter`.
+- **MDM deploy** (`<userRepoPath>/deploy/setup-user-claude.sh/.ps1`): embeds the resolver, the build-time template, rules and a `profile.json` snapshot; uses the live dotprofile when the machine has it, the embedded copies otherwise.
 - **Scaffolding**: `aitools user init` copies `shared/claude-shared.md` to `<userRepoPath>/claude/CLAUDE.md` if missing.
 
 ### Session Management Commands
@@ -229,8 +229,11 @@ this goes away.
 
 ### Agent Continuation Gap (SendMessage)
 
-Since v2.1.77, there is no working mechanism to send messages to a
-previously spawned subagent:
+From v2.1.77 to at least 2.1.81 there was no working mechanism to send
+messages to a previously spawned subagent (history below). By 2.1.309 the main
+session is offered `SendMessage` / `ListAgents` for subagents it spawned;
+whether a delegate can continue after its final response is untested. Until
+tested, keep delegation prompts self-contained.
 
 - **Old mechanism** (`resume` parameter on Agent tool): Removed in v2.1.77.
   Had longstanding issues (#11712, #13619, #10856) and was effectively
@@ -248,9 +251,8 @@ previously spawned subagent:
 - Sequential delegation (launch new agent with prior agent's output) is the
   only working pattern for iterative subagent work.
 
-**Workaround:** Include all context in the initial Agent launch prompt. Use
-TaskOutput to read completed agent results. Launch new agents for follow-up
-work, passing prior output as context.
+**Workaround:** Include all context in the initial Agent launch prompt. Launch
+new agents for follow-up work, passing prior output as context.
 
 Upstream: [#35240](https://github.com/anthropics/claude-code/issues/35240),
 [#37051](https://github.com/anthropics/claude-code/issues/37051),
@@ -417,11 +419,16 @@ Each line is a JSON object. Fields available in most entries:
 - [x] Shared rules in repo (`shared/claude-shared.md`), embedded into deploy scripts by `build-deploy.sh`
 - [x] Shell alias (`cc`) for auto-CLAUDE.md check (see `shared/shell/`)
 - [x] "Home base" directory for general conversations: this repo (`aitools/`)
-- [x] Self-contained deploy scripts in `deploy/` — MDM-ready, no repo or Drive dependency
+- [x] Self-contained deploy scripts in the dotprofile `deploy/` (generated by `build-deploy.sh`; the shared `aitools/deploy/` is frozen) — MDM-ready, no repo or Drive dependency
 
 ---
 
 ## Windows Shell Limitations
+
+> **Likely obsolete** (item #1): the Claude Code changelog lists a PowerShell tool
+> preview (2.1.84) and "Git for Windows no longer required" (2.1.120), per
+> `reference/evaluations/claude-code-macos-2026-10-21.md`. Re-verify on Windows
+> before relying on this section.
 
 Claude Code's Bash tool is **hardcoded to Git Bash on Windows**. The `CLAUDE_CODE_SHELL` environment variable exists but is **broken on Windows** -- it is silently ignored regardless of how it's set.
 

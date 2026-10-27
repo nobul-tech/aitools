@@ -42,7 +42,7 @@ Base artifacts combine with scope modifiers:
 
 | Modifier | Meaning |
 |----------|---------|
-| project | In the aitools repo's `.claude/` or `.cursor/` — loaded only in sessions on the aitools repo; never deployed |
+| project | In a repo's `.claude/` or `.cursor/`; loaded by that repo's sessions. aitools project rules and skills are also copied into `~/.aitools` by `deploy-harness` and, by decision R-4, are being fanned out to user scope (`@reference/rules.md` section 7) |
 | shared | In `shared/` in the aitools repo — source of everything aitools deploys to user level (`~/.claude`, `~/.cursor`, `~/.aitools`) |
 | dotprofile | In the user's `aitools-<username>` repo, personal source |
 | user | Deployed to `~/`, active on the machine |
@@ -94,8 +94,7 @@ Base artifacts combine with scope modifiers:
 ## Implementing Artifacts
 
 - `@.claude/rules/glossary.md` (word list, always in context)
-- `/glossary` skill (gate to definitions, source of truth)
-- `/glossary` skill (read definitions, add new terms)
+- `/glossary` skill (definitions registry: read, add terms)
 
 ## Cross-References
 
