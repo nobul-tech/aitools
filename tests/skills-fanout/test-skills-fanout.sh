@@ -612,7 +612,9 @@ cparity cursor-rerun
 
 seed_cursor_none() { cskill mine SKILL.md 'mine'; }
 cursor_case cursor-none seed_cursor_none
-check "cursor, no harness skills: OK n/a, ~/.cursor/skills untouched" "[ \"\$(rc)\" = 0 ] && [ \"\$(cnondetail)\" = 'OK|cursor skills|n/a (no harness skills)' ] && [ \"\$(ls '$(CS)')\" = mine ]"
+# No ~/.aitools/skills: the fan-out logs only and writes no row (FO-6's
+# setup-user-skills owns the row then; contract change in #124 5267e9e)
+check "cursor, no harness skills: no cursor skills row, ~/.cursor/skills untouched" "[ \"\$(rc)\" = 0 ] && [ -z \"\$(cnondetail)\" ] && [ \"\$(ls '$(CS)')\" = mine ]"
 cparity cursor-none
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
