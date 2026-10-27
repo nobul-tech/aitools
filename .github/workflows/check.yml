@@ -113,45 +113,8 @@ jobs:
           fi
           echo "All .py files passed syntax validation"
 
-      - name: Every test suite is in CI
-        if: ${{ !cancelled() }}
-        run: |
-          # Fails when a tracked tests/<dir>/test-*.sh is not run by a step of
-          # this workflow (a "run:" line that runs "bash <path>"). Same step in
-          # the linux job. A suite that cannot run in CI goes in %exempt with
-          # the reason; an exempt suite that is also run, or no longer exists,
-          # fails the step too (stale exemption).
-          git ls-files 'tests/*/test-*.sh' | perl -e '
-            my %exempt = (
-              "tests/deploy-harness-mdm/test-deploy-harness-mdm.sh" =>
-                "fails on the integration base d7f6855: build-deploy.sh exits 1, deploy/deploy-harness.ps1 is 202519 bytes, over the Intune 200000-byte guard (PR #111); not FO-0 code",
-            );
-            open(my $fh, "<", ".github/workflows/check.yml") or die "cannot read .github/workflows/check.yml: $!\n";
-            my $yml = do { local $/; <$fh> };
-            close($fh);
-            my ($n, $bad) = (0, 0);
-            my %seen;
-            while (my $p = <STDIN>) {
-              chomp $p;
-              next if $p eq "";
-              $n++;
-              $seen{$p} = 1;
-              my $run = $yml =~ /^\s*run:\s[^#\n]*\bbash\s+\Q$p\E(?:\s|$)/m;
-              if (exists $exempt{$p}) {
-                if ($run) { print "::error::$p is run in CI and also exempt: remove the exemption\n"; $bad++; }
-                else { print "exempt: $p ($exempt{$p})\n"; }
-              } elsif (!$run) {
-                print "::error::$p is not run by any step in .github/workflows/check.yml\n"; $bad++;
-              }
-            }
-            for my $p (sort keys %exempt) {
-              next if $seen{$p};
-              print "::error::exempt suite $p is not tracked: remove the exemption\n"; $bad++;
-            }
-            die "::error::no tests/*/test-*.sh found (git ls-files)\n" if $n == 0;
-            exit 1 if $bad;
-            print "All $n test suites are in CI or exempt\n";
-          '
+      # "Every test suite is in CI" runs once, in the linux job: the check is
+      # static (reads git ls-files and this file), so one copy is enough.
 
       - name: Logging unit tests (bash)
         run: bash tests/logging/test-logging.sh
@@ -205,6 +168,7 @@ jobs:
         run: bash tests/claude-mdm/test-claude-mdm.sh
 
       - name: setup-user-claude dev + MDM tests (macOS /bin/bash 3.2)
+        if: ${{ !cancelled() }}
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/claude-mdm/test-claude-mdm.sh
 
       - name: Dotprofile resolver consumer tests (bash 5 + pwsh)
@@ -218,6 +182,10 @@ jobs:
       - name: deploy-harness tests (bash 5 + pwsh)
         if: ${{ !cancelled() }}
         run: bash tests/deploy-harness/test-deploy-harness.sh
+
+      - name: deploy-harness MDM build tests (bash 5 + pwsh)
+        if: ${{ !cancelled() }}
+        run: bash tests/deploy-harness-mdm/test-deploy-harness-mdm.sh
 
       - name: Installer harness hook-in tests (bash 5 + pwsh)
         if: ${{ !cancelled() }}
@@ -363,14 +331,20 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           # Fails when a tracked tests/<dir>/test-*.sh is not run by a step of
-          # this workflow (a "run:" line that runs "bash <path>"). Same step in
-          # the macos job. A suite that cannot run in CI goes in %exempt with
-          # the reason; an exempt suite that is also run, or no longer exists,
-          # fails the step too (stale exemption).
+          # this workflow (a "run:" line that runs "bash <path>"). The only
+          # copy of this step (the check is static; the macos job points here).
+          # A suite that cannot run in CI goes in %exempt with the reason; an
+          # exempt suite that is also run, or no longer exists, fails the step
+          # too (stale exemption).
+          # Blind spots (a cheap check, plan FO-0): it sees single-line run:
+          # only (a suite started inside a "run: |" block is reported missing);
+          # it counts a suite run in any job, not in macos and linux each; it
+          # ignores if: conditions (an if: false step still counts); it only
+          # needs "bash <path>" somewhere on the run: line before any "#"; it
+          # covers test-*.sh only, not test-*.ps1 run by pwsh -File.
           git ls-files 'tests/*/test-*.sh' | perl -e '
             my %exempt = (
-              "tests/deploy-harness-mdm/test-deploy-harness-mdm.sh" =>
-                "fails on the integration base d7f6855: build-deploy.sh exits 1, deploy/deploy-harness.ps1 is 202519 bytes, over the Intune 200000-byte guard (PR #111); not FO-0 code",
+              # "tests/<dir>/test-<name>.sh" => "reason it cannot run in CI",
             );
             open(my $fh, "<", ".github/workflows/check.yml") or die "cannot read .github/workflows/check.yml: $!\n";
             my $yml = do { local $/; <$fh> };
@@ -453,6 +427,10 @@ jobs:
       - name: deploy-harness tests (bash + pwsh)
         if: ${{ !cancelled() }}
         run: bash tests/deploy-harness/test-deploy-harness.sh
+
+      - name: deploy-harness MDM build tests (bash + pwsh)
+        if: ${{ !cancelled() }}
+        run: bash tests/deploy-harness-mdm/test-deploy-harness-mdm.sh
 
       - name: Installer harness hook-in tests (bash + pwsh)
         if: ${{ !cancelled() }}
