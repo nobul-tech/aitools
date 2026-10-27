@@ -151,6 +151,14 @@ fi
 
 pj() { perl "$AITOOLS_JSON_PL" "$@"; }
 
+# die_internal MSG -- an engine failure on an already-validated file: logged at
+# detail (deploy.log keeps it even when the caller drops stderr), then stderr, exit 2
+die_internal() {
+    log_detail "internal error: $1"
+    printf 'aitools-profile: internal error %s\n' "$1" >&2
+    exit 2
+}
+
 # jread VAR FILE SEG... -- VAR = the scalar at the path ("" when absent, null or
 # not a scalar); JREAD_FOUND=true|false. FILE must already be validated (jcheck);
 # any other engine failure is an internal error and exits 2 with a message.
@@ -162,7 +170,7 @@ jread() {
     case "$__rc" in
         0) JREAD_FOUND=true ;;
         1|3) JREAD_FOUND=false; __v="" ;;
-        *) printf 'aitools-profile: internal error reading %s (engine exit %s)\n' "$1" "$__rc" >&2; exit 2 ;;
+        *) die_internal "reading $1 (engine exit $__rc)" ;;
     esac
     printf -v "$__var" '%s' "$__v"
 }
@@ -176,7 +184,7 @@ jlist() {
     case "$__rc" in
         0) : ;;
         1|3) __v="" ;;
-        *) printf 'aitools-profile: internal error listing %s (engine exit %s)\n' "$1" "$__rc" >&2; exit 2 ;;
+        *) die_internal "listing $1 (engine exit $__rc)" ;;
     esac
     printf -v "$__var" '%s' "$__v"
 }
@@ -189,7 +197,7 @@ jtype() {
     case "$__rc" in
         0) : ;;
         1) __v="" ;;
-        *) printf 'aitools-profile: internal error typing %s (engine exit %s)\n' "$1" "$__rc" >&2; exit 2 ;;
+        *) die_internal "typing $1 (engine exit $__rc)" ;;
     esac
     printf -v "$__var" '%s' "$__v"
 }
@@ -202,7 +210,7 @@ jsub() {
     case "$__rc" in
         0) : ;;
         1) __v="" ;;
-        *) printf 'aitools-profile: internal error reading %s (engine exit %s)\n' "$1" "$__rc" >&2; exit 2 ;;
+        *) die_internal "reading $1 (engine exit $__rc)" ;;
     esac
     printf -v "$__var" '%s' "$__v"
 }
@@ -1192,12 +1200,15 @@ cmd_snapshot() {
     if [ -z "$OPT_PROFILE" ]; then usage_error "snapshot needs --profile"; fi
     jcheck "$OPT_PROFILE"
     case "$JCHECK_STATE" in
-        missing) printf 'aitools-profile: profile.json not found: %s\n' "$OPT_PROFILE" >&2; exit 1 ;;
-        invalid) printf 'aitools-profile: %s\n' "$JCHECK_MSG" >&2; exit 2 ;;
+        missing) log_detail "snapshot: profile.json not found: $OPT_PROFILE"
+                 printf 'aitools-profile: profile.json not found: %s\n' "$OPT_PROFILE" >&2; exit 1 ;;
+        invalid) log_detail "snapshot: $JCHECK_MSG"
+                 printf 'aitools-profile: %s\n' "$JCHECK_MSG" >&2; exit 2 ;;
     esac
     local out rc=0
     out=$(pj snapshot "$OPT_PROFILE") || rc=$?
     if [ "$rc" -ne 0 ] || [ -z "$out" ]; then
+        log_detail "snapshot failed (engine exit $rc)"
         printf 'aitools-profile: snapshot failed (engine exit %s)\n' "$rc" >&2; exit 2
     fi
     log_detail "snapshot of $OPT_PROFILE"
