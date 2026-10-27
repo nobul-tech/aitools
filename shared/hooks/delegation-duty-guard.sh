@@ -11,34 +11,45 @@
 # Consumed by: Claude Code PreToolUse(Agent|Workflow), registered via
 # hooks-manifest.json; rollout governed by .claude/rules/hook-rollout.md.
 #
-# OBSERVE mode: always allows (exit 0). Prints one reminder line to
-# stderr on every Agent/Task/Workflow call, plus per-element guidance
-# when elements are missing.
-# MODE_DUTY="enforce" blocks (exit 2) when any element is missing;
-# promote only per .claude/rules/hook-rollout.md (zero false positives).
+# OBSERVE mode: always allows (exit 0). On every Agent/Task/Workflow
+# call it emits one reminder line, plus per-element guidance when
+# elements are missing, two ways:
+#   - stdout: {"hookSpecificOutput":{"hookEventName":"PreToolUse",
+#     "additionalContext":"..."}} -- the channel Claude reads on exit 0
+#     (Claude Code ignores stderr of a hook that exits 0). For
+#     PreToolUse the context reaches Claude with the tool result, so it
+#     corrects the NEXT launch, not the one in flight.
+#   - stderr: the same text, for the user's transcript view and tests.
+# MODE_DUTY="enforce" blocks (exit 2, stderr only, which Claude reads)
+# when any element is missing; promote only per
+# .claude/rules/hook-rollout.md (zero false positives).
 #
-# What is checked:
-#   - Agent (and Task, its former name): the whole hook payload, which
-#     carries tool_input.prompt.
-#   - Workflow: the payload when tool_input.script is present; else the
-#     file named by tool_input.scriptPath (relative paths resolve
-#     against the payload's "cwd"; must be a readable regular file of at
-#     most 2 MB); else nothing is checked, but the reminder still prints.
+# What is checked (only the delegation text, never the whole payload:
+# the payload's cwd / transcript_path fields always hold absolute paths):
+#   - Agent (and Task, its former name): tool_input.prompt.
+#   - Workflow: tool_input.script; else the file named by
+#     tool_input.scriptPath (relative paths resolve against the payload's
+#     "cwd"; must be a readable regular file of at most 512 KB); else
+#     nothing is checked, but the reminder still prints.
 #     LIMIT: a workflow script holds many agent() prompts; the script is
 #     checked as ONE text, so an element present in any agent() prompt
 #     counts for all of them. The hook does not check each agent() prompt.
+#   - Only the first 256 KB of the text is checked (keeps the regexes
+#     inside the time budget; real prompts are far smaller).
 #   - Any other tool: silent, exit 0.
 #
 # Eight delegation duty elements (/delegate v2.0):
-#   1. identity      Name and role ("You are S3-Alpha", "Your identity")
+#   1. identity      Name and role: "you are", "your identity", "your
+#                    role", or a mission name S1-S9 (case-sensitive,
+#                    not inside a word)
 #   2. rules         Rules AND CLAUDE.md files: the text must mention
 #                    both "CLAUDE.md" and "rule(s)"
 #   3. skills        /delegate first: "/delegate", "delegate skill" or
 #                    "skills/delegate"
 #   4. OL            Operational learning ("operational learning",
 #                    "carry forward", "OL-")
-#   5. conflict      Conflict priority (D-DEL6): "D-DEL6", "CONFLICT:",
-#                    "conflict priority" or "conflict resolution"
+#   5. conflict      Conflict priority (D-DEL6): "D-DEL6", "CONFLICT:"
+#                    (upper case) or "conflict priority"
 #   6. WRITE_BLOCKED The WRITE_BLOCKED signal
 #   7. access        Explicit paths: "explicit paths", "absolute path(s)",
 #                    "Glob/Grep", "cross-repo", "OL-O12", or an absolute
@@ -56,9 +67,9 @@
 #
 # Hook contract:
 #   - PreToolUse hook, matcher: Agent|Workflow
-#   - Receives JSON on stdin (tool_name, tool_input, cwd)
+#   - Receives JSON on stdin (tool_name, tool_input, cwd, ...)
 #   - Exit 0 = allow (OBSERVE mode); exit 2 = block (ENFORCE mode only)
-#   - stderr -> feedback text
+#   - stdout -> hookSpecificOutput JSON (exit 0 only); stderr -> text
 #   - Must be fast (<50ms)
 #   - Must never crash or hang
 #   - Standalone: loads no shared library (deployed hooks cannot)
@@ -79,7 +90,8 @@ set -euo pipefail
 MODE_DUTY="observe"
 DUTY_TOTAL=8
 ALL_ELEMENTS="identity,rules,skills,OL,conflict,WRITE_BLOCKED,access,md-prefix"
-SCRIPT_MAX_BYTES=2097152
+SCRIPT_MAX_BYTES=524288
+CHECK_MAX_CHARS=262144
 
 REMINDER="[delegation-guard] Load /delegate before every Agent and Workflow call; the prompt must tell the delegate to read every user- and project-scope rule and CLAUDE.md, load /delegate, and pass both on."
 
@@ -103,6 +115,21 @@ emit_hook_event() {
         >> "$_SESSION_DIR/events.jsonl" 2>/dev/null || true
 }
 
+# --- Output: stderr text + stdout additionalContext JSON, then exit ---
+# finish <exit code> <message, newline-separated lines>
+finish() {
+    local rc="$1" msg="$2" esc
+    printf '%s\n' "$msg" >&2
+    if [ "$rc" -eq 0 ]; then
+        esc="${msg//\\/\\\\}"
+        esc="${esc//\"/\\\"}"
+        esc="${esc//$'\n'/\\n}"
+        esc="${esc//$'\t'/ }"
+        printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"%s"}}\n' "$esc"
+    fi
+    exit "$rc"
+}
+
 # --- Read JSON from stdin ---
 input=$(cat)
 
@@ -117,51 +144,61 @@ else
     exit 0
 fi
 
-# The reminder prints on every delegation call, whatever the score.
-printf '%s\n' "$REMINDER" >&2
-
 if ! command -v perl >/dev/null 2>&1; then
-    printf '%s\n' "[delegation-guard] perl not found: duty elements not checked." >&2
     emit_hook_event "delegation" "{\"score\":0,\"total\":$DUTY_TOTAL,\"missing\":\"\",\"mode\":\"$MODE_DUTY\",\"tool\":\"$tool\",\"checked\":0}"
-    exit 0
+    finish 0 "$REMINDER"$'\n'"[delegation-guard] perl not found: duty elements not checked."
 fi
 
 # --- Check duty elements using Perl (portable, no grep -P) ---
 # -0777 slurps the whole input so a pretty-printed (multi-line) JSON
-# payload is checked as one text.
+# payload is read as one text. Only the delegation text is checked:
+# tool_input.prompt (Agent/Task) or tool_input.script / the scriptPath
+# file (Workflow). A truncated payload is read to its end.
 # Output lines: status (checked | none:<reason>), score, missing, present.
 # perl failure falls back to "all missing" (|| printf ...), which the
 # score check below treats as 0/8 -- visible, never a silent pass.
 result=$(printf '%s' "$input" | \
-    DDG_TOOL="$tool" DDG_MAX="$SCRIPT_MAX_BYTES" perl -0777 -ne '
-        my $text = $_;
+    DDG_TOOL="$tool" DDG_MAX="$SCRIPT_MAX_BYTES" DDG_CHARS="$CHECK_MAX_CHARS" perl -0777 -ne '
+        my $in = $_;
+        # Search only inside tool_input when it is present.
+        my $ti = ($in =~ /"tool_input"\s*:\s*\{/g) ? substr($in, pos($in)) : $in;
+        my $field = sub {
+            my ($name) = @_;
+            return ($ti =~ /"\Q$name\E"\s*:\s*"((?:[^"\\]|\\.)*)/s) ? $1 : undef;
+        };
+        my $text;
         my $status = "checked";
 
-        if ($ENV{DDG_TOOL} eq "Workflow" && !/"script"\s*:\s*"/) {
-            # No inline script: read tool_input.scriptPath, if any.
-            if (/"scriptPath"\s*:\s*"((?:[^"\\]|\\.)*)"/) {
-                my $p = $1;
-                $p =~ s/\\(["\\\/])/$1/g;
-                if ($p !~ m{^(?:/|~|[A-Za-z]:[\\/])} && /"cwd"\s*:\s*"((?:[^"\\]|\\.)*)"/) {
-                    my $cwd = $1;
-                    $cwd =~ s/\\(["\\\/])/$1/g;
-                    $p = "$cwd/$p";
-                }
-                $p =~ s{^~(?=/)}{$ENV{HOME} // ""}e;
-                if (-f $p && -r _ && -s _ <= $ENV{DDG_MAX}) {
-                    if (open(my $fh, "<", $p)) {
-                        local $/;
-                        $text = <$fh> // "";
-                        close($fh);
+        if ($ENV{DDG_TOOL} eq "Workflow") {
+            $text = $field->("script");
+            if (!defined $text) {
+                my $p = $field->("scriptPath");
+                if (defined $p) {
+                    $p =~ s/\\(["\\\/])/$1/g;
+                    if ($p !~ m{^(?:/|~|[A-Za-z]:[\\/])} && $in =~ /"cwd"\s*:\s*"((?:[^"\\]|\\.)*)"/) {
+                        my $cwd = $1;
+                        $cwd =~ s/\\(["\\\/])/$1/g;
+                        $p = "$cwd/$p";
+                    }
+                    $p =~ s{^~(?=/)}{$ENV{HOME} // ""}e;
+                    if (-f $p && -r _ && -s _ <= $ENV{DDG_MAX}) {
+                        if (open(my $fh, "<", $p)) {
+                            local $/;
+                            $text = <$fh> // "";
+                            close($fh);
+                        } else {
+                            $status = "none:scriptPath unreadable";
+                        }
                     } else {
-                        $status = "none:scriptPath unreadable";
+                        $status = "none:scriptPath missing, unreadable or over 512 KB";
                     }
                 } else {
-                    $status = "none:scriptPath missing, unreadable or over 2 MB";
+                    $status = "none:no script or scriptPath in the input";
                 }
-            } else {
-                $status = "none:no script or scriptPath in the input";
             }
+        } else {
+            $text = $field->("prompt");
+            $status = "none:no prompt in the input" unless defined $text;
         }
 
         if ($status ne "checked") {
@@ -169,7 +206,7 @@ result=$(printf '%s' "$input" | \
             exit 0;
         }
 
-        $_ = $text;
+        $_ = substr($text, 0, $ENV{DDG_CHARS});
         my $score = 0;
         my (@missing, @present);
         my $check = sub {
@@ -178,7 +215,7 @@ result=$(printf '%s' "$input" | \
         };
 
         # 1. Identity (role name)
-        $check->("identity", /S[1-9]|you\s+are|your\s+identity|your\s+role/i);
+        $check->("identity", /you\s+are|your\s+identity|your\s+role/i || /(?<![A-Za-z0-9])S[1-9](?![A-Za-z0-9])/);
 
         # 2. Rules AND CLAUDE.md files (both must be mentioned)
         $check->("rules", /CLAUDE\.md/i && /\brules?\b/i);
@@ -190,7 +227,7 @@ result=$(printf '%s' "$input" | \
         $check->("OL", /operational\s+learning|carry[\s-]+forward|OL-/i);
 
         # 5. Conflict priority (D-DEL6)
-        $check->("conflict", /D-DEL6|CONFLICT:|conflict\s+(?:priority|resolution)/i);
+        $check->("conflict", /D-DEL6|CONFLICT:/ || /conflict\s+priority/i);
 
         # 6. WRITE_BLOCKED signal
         $check->("WRITE_BLOCKED", /WRITE_BLOCKED/);
@@ -202,8 +239,18 @@ result=$(printf '%s' "$input" | \
         my $md = qr/(?:\.md\b|markdown)/i;
         my $pfx = qr/(?:name.{0,60}?prefix|prefix.{0,60}?name|(?:start|begin)s?\s+with\s+(?:your|the)\s+(?:agent\s+)?name)/is;
         # The phrase may also wrap the extension: "Name every .md file with the prefix S2-".
-        $check->("md-prefix", /D-DEL1/ || /$pfx.{0,160}?$md/is || /$md.{0,160}?$pfx/is
-            || /name.{0,80}?$md.{0,80}?prefix/is || /prefix.{0,80}?$md.{0,80}?name/is);
+        # Only windows around the first 200 ".md"/"markdown" hits are searched,
+        # which bounds the backtracking on adversarial text (review N2, PR #122).
+        my $mdp = /D-DEL1/ ? 1 : 0;
+        my ($hits, $all) = (0, $_);
+        while (!$mdp && $hits < 200 && $all =~ /$md/g) {
+            $hits++;
+            my $s = $-[0] - 250; $s = 0 if $s < 0;
+            my $w = substr($all, $s, 500 + $+[0] - $-[0]);
+            $mdp = 1 if $w =~ /$pfx.{0,160}?$md/is || $w =~ /$md.{0,160}?$pfx/is
+                || $w =~ /name.{0,80}?$md.{0,80}?prefix/is || $w =~ /prefix.{0,80}?$md.{0,80}?name/is;
+        }
+        $check->("md-prefix", $mdp);
 
         print "checked\n$score\n";
         print join(",", @missing) . "\n";
@@ -217,9 +264,8 @@ missing=$(printf '%s\n' "$result" | sed -n '3p')
 
 case "$status" in
     none:*)
-        printf '%s\n' "[delegation-guard] ${tool}: ${status#none:}; duty elements not checked." >&2
         emit_hook_event "delegation" "{\"score\":0,\"total\":$DUTY_TOTAL,\"missing\":\"\",\"mode\":\"$MODE_DUTY\",\"tool\":\"$tool\",\"checked\":0}"
-        exit 0
+        finish 0 "$REMINDER"$'\n'"[delegation-guard] ${tool}: ${status#none:}; duty elements not checked."
         ;;
 esac
 
@@ -231,53 +277,56 @@ fi
 # --- Telemetry: one event per delegation call ---
 emit_hook_event "delegation" "{\"score\":$score,\"total\":$DUTY_TOTAL,\"missing\":\"$missing\",\"mode\":\"$MODE_DUTY\",\"tool\":\"$tool\",\"checked\":1}"
 
-# --- Per-element guidance if elements are missing ---
-if [ "$score" -lt "$DUTY_TOTAL" ] && [ -n "$missing" ]; then
-    reminder="[delegation-guard] ${tool}: ${score}/${DUTY_TOTAL} duty elements. Missing: ${missing}."
-
-    guidance=""
-    case ",$missing," in
-        *,identity,*)
-            guidance="${guidance} Identity: give the delegate a name and role (e.g. 'You are S3-Alpha')." ;;
-    esac
-    case ",$missing," in
-        *,rules,*)
-            guidance="${guidance} Rules and CLAUDE.md: tell the delegate to read in full every user- and project-scope CLAUDE.md and rule (~/.claude/CLAUDE.md, ~/.claude/rules/*.md, <repo>/CLAUDE.md, <repo>/.claude/rules/*.md), by absolute path." ;;
-    esac
-    case ",$missing," in
-        *,skills,*)
-            guidance="${guidance} Skills: tell the delegate to load /delegate first, before any delegate of its own, and to pass that on; then name the task skills." ;;
-    esac
-    case ",$missing," in
-        *,OL,*)
-            guidance="${guidance} OL: include the operational learning relevant to the task, with sources." ;;
-    esac
-    case ",$missing," in
-        *,conflict,*)
-            guidance="${guidance} Conflict priority (D-DEL6): commander's words newest first, then the prompt, then skills; report CONFLICT: lines." ;;
-    esac
-    case ",$missing," in
-        *,WRITE_BLOCKED,*)
-            guidance="${guidance} WRITE_BLOCKED: on a denied write or tool call, output 'WRITE_BLOCKED: <what> -- <denial text>' and do not route around it." ;;
-    esac
-    case ",$missing," in
-        *,access,*)
-            guidance="${guidance} Access: give absolute paths to every file and directory, including the delegate's scratch dir." ;;
-    esac
-    case ",$missing," in
-        *,md-prefix,*)
-            guidance="${guidance} Name prefix (D-DEL1): tell the delegate to start every .md file name with its name, e.g. 'S2-report.md'." ;;
-    esac
-    if [ "$tool" = "Workflow" ]; then
-        guidance="${guidance} (Workflow: the script is checked as one text; every agent() prompt needs all eight.)"
-    fi
-
-    printf '%s\n' "${reminder}${guidance} See the /delegate skill." >&2
-
-    if [ "$MODE_DUTY" = "enforce" ]; then
-        exit 2
-    fi
+# --- All elements present: the reminder alone ---
+if [ "$score" -ge "$DUTY_TOTAL" ] || [ -z "$missing" ]; then
+    finish 0 "$REMINDER"
 fi
 
-# OBSERVE mode (or all elements present): allow
-exit 0
+# --- Per-element guidance for the missing elements ---
+reminder="[delegation-guard] ${tool}: ${score}/${DUTY_TOTAL} duty elements. Missing: ${missing}."
+
+guidance=""
+case ",$missing," in
+    *,identity,*)
+        guidance="${guidance} Identity: give the delegate a name and role (e.g. 'You are S3-Alpha')." ;;
+esac
+case ",$missing," in
+    *,rules,*)
+        guidance="${guidance} Rules and CLAUDE.md: tell the delegate to read in full every user- and project-scope CLAUDE.md and rule (~/.claude/CLAUDE.md, ~/.claude/rules/*.md, <repo>/CLAUDE.md, <repo>/.claude/rules/*.md), by absolute path." ;;
+esac
+case ",$missing," in
+    *,skills,*)
+        guidance="${guidance} Skills: tell the delegate to load /delegate first, before any delegate of its own, and to pass that on; then name the task skills." ;;
+esac
+case ",$missing," in
+    *,OL,*)
+        guidance="${guidance} OL: include the operational learning relevant to the task, with sources." ;;
+esac
+case ",$missing," in
+    *,conflict,*)
+        guidance="${guidance} Conflict priority (D-DEL6): commander's words newest first, then the prompt, then skills; report CONFLICT: lines." ;;
+esac
+case ",$missing," in
+    *,WRITE_BLOCKED,*)
+        guidance="${guidance} WRITE_BLOCKED: on a denied write or tool call, output 'WRITE_BLOCKED: <what> -- <denial text>' and do not route around it." ;;
+esac
+case ",$missing," in
+    *,access,*)
+        guidance="${guidance} Access: give absolute paths to every file and directory, including the delegate's scratch dir." ;;
+esac
+case ",$missing," in
+    *,md-prefix,*)
+        guidance="${guidance} Name prefix (D-DEL1): tell the delegate to start every .md file name with its name, e.g. 'S2-report.md'." ;;
+esac
+if [ "$tool" = "Workflow" ]; then
+    guidance="${guidance} (Workflow: the script is checked as one text; every agent() prompt needs all eight.)"
+fi
+
+msg="$REMINDER"$'\n'"${reminder}${guidance} See the /delegate skill."
+
+if [ "$MODE_DUTY" = "enforce" ]; then
+    finish 2 "$msg"
+fi
+
+# OBSERVE mode: allow, with the reminder and guidance
+finish 0 "$msg"

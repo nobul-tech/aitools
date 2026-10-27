@@ -2,10 +2,12 @@
 # test-delegation-duty-guard.sh -- tests for shared/hooks/delegation-duty-guard.sh
 # (PreToolUse, matcher Agent|Workflow; the eight /delegate v2.0 elements).
 #
-# Covers: the reminder line on every Agent/Task/Workflow call (alone at 8/8);
-# each of the eight elements missing (named in the output, and only it);
-# Workflow with an inline script, with scriptPath (absolute, relative to the
-# payload cwd, missing, over the 2 MB cap) and with neither; another tool
+# Covers: the reminder line on every Agent/Task/Workflow call (alone at 8/8),
+# on stderr and as stdout hookSpecificOutput.additionalContext JSON;
+# real-shape payloads whose cwd/transcript_path absolute paths must not count
+# as access; each of the eight elements missing (named in the output, and only
+# it); Workflow with an inline script, with scriptPath (absolute, relative to
+# the payload cwd, missing, over the 512 KB cap) and with neither; another tool
 # (silent); malformed, truncated, empty and pretty-printed JSON (exit 0, no
 # crash); perl absent from PATH (reminder, elements not checked); the
 # delegation telemetry event (total 8, tool, checked); enforce mode (exit 2 on
@@ -62,22 +64,48 @@ run_hook() {  # run_hook <payload-file> [hook]  -> RC, ERR (stderr), OUT (stdout
     ERR="$(cat "$WORK/err.txt")"
 }
 
+# Real-shape payload: Claude Code always sends absolute paths in session
+# fields, which must not count as the access element (review B2, PR #122).
+COMMON='"session_id":"abc","transcript_path":"/Users/x/.claude/projects/p/abc.jsonl","cwd":"/Users/x/repos/r","permission_mode":"default","hook_event_name":"PreToolUse"'
 agent_payload() {  # agent_payload <tool> <prompt> > file
-    printf '{"tool_name":"%s","tool_input":{"description":"t","prompt":"%s"}}' "$1" "$2"
+    printf '{%s,"tool_name":"%s","tool_input":{"description":"t","prompt":"%s","subagent_type":"general-purpose"},"tool_use_id":"toolu_01S3abcS9"}' "$COMMON" "$1" "$2"
 }
 
-line_count() { printf '%s\n' "$1" | sed -n '$=' ; }
+# ctx_matches: stdout is one hookSpecificOutput JSON whose additionalContext
+# equals the stderr text (the channel Claude reads on exit 0, review B1).
+HAVE_JSONPP=false
+if perl -MJSON::PP -e 1 >/dev/null 2>&1; then HAVE_JSONPP=true; fi
+ctx_matches() {
+    $HAVE_JSONPP || return 0
+    printf '%s' "$OUT" | perl -MJSON::PP -0777 -e '
+        my $j = eval { decode_json(<STDIN>) } or exit 1;
+        my $h = $j->{hookSpecificOutput} or exit 1;
+        exit 1 unless ($h->{hookEventName} // "") eq "PreToolUse";
+        print $h->{additionalContext} // "";' > "$WORK/ctx.txt" || return 1
+    [ "$(cat "$WORK/ctx.txt")" = "$ERR" ]
+}
 
 echo "== Agent and Task: all eight elements =="
 for tool in Agent Task; do
     agent_payload "$tool" "$(prompt_without none)" > "$WORK/p.json"
     run_hook "$WORK/p.json"
-    if [ "$RC" -eq 0 ] && [ "$ERR" = "$REMINDER" ] && [ -z "$OUT" ]; then
+    if [ "$RC" -eq 0 ] && [ "$ERR" = "$REMINDER" ]; then
         ok "$tool 8/8: exit 0, reminder line only"
     else
         bad "$tool 8/8: rc=$RC stderr=[$ERR]"
     fi
+    ctx_matches && ok "$tool 8/8: stdout additionalContext JSON = reminder" || bad "$tool 8/8: stdout=[$OUT]"
 done
+agent_payload Agent "$(prompt_without access)" > "$WORK/p.json"
+run_hook "$WORK/p.json"
+ctx_matches && ok "gap: additionalContext carries reminder + guidance" || bad "gap ctx: stdout=[$OUT]"
+case "$ERR" in *"Missing: access."*) ok "absolute paths in cwd/transcript_path do not count as access" ;; *) bad "payload paths counted: [$ERR]" ;; esac
+agent_payload Agent "Do the thing." > "$WORK/p.json"
+run_hook "$WORK/p.json"
+case "$ERR" in *"Agent: 0/8 duty elements."*) ok "bare prompt in a real-shape payload: 0/8" ;; *) bad "bare prompt: [$ERR]" ;; esac
+printf '{"tool_name":"Agent","tool_input":{"description":"You are S3-X","subagent_type":"Explore"}}' > "$WORK/p.json"
+run_hook "$WORK/p.json"
+case "$ERR" in "$REMINDER"*"no prompt in the input; duty elements not checked."*) ok "Agent without prompt: reminder, not checked" ;; *) bad "no prompt: [$ERR]" ;; esac
 
 echo "== Agent: each element missing =="
 for e in $ELEMENTS; do
@@ -115,6 +143,12 @@ run_hook "$WORK/p.json"
 agent_payload Agent "$(prompt_without mdprefix) Use a date prefix for log.md files." > "$WORK/p.json"
 run_hook "$WORK/p.json"
 case "$ERR" in *"Missing: md-prefix."*) ok "bare 'date prefix' does not count" ;; *) bad "date prefix: [$ERR]" ;; esac
+agent_payload Agent "$(prompt_without identity) Fix the s3 bucket config." > "$WORK/p.json"
+run_hook "$WORK/p.json"
+case "$ERR" in *"Missing: identity."*) ok "lower-case 's3' does not count as identity" ;; *) bad "s3 identity: [$ERR]" ;; esac
+agent_payload Agent "$(prompt_without conflict) Do the merge conflict resolution in git." > "$WORK/p.json"
+run_hook "$WORK/p.json"
+case "$ERR" in *"Missing: conflict."*) ok "'merge conflict resolution' does not count as conflict priority" ;; *) bad "conflict resolution: [$ERR]" ;; esac
 agent_payload Agent "$(prompt_without conflict) Report each CONFLICT: line." > "$WORK/p.json"
 run_hook "$WORK/p.json"
 [ "$ERR" = "$REMINDER" ] && ok "'CONFLICT:' counts as conflict priority" || bad "CONFLICT: [$ERR]"
@@ -139,10 +173,10 @@ case "$ERR" in *"Workflow: 7/8 duty elements. Missing: access."*) ok "scriptPath
 printf '{"tool_name":"Workflow","tool_input":{"scriptPath":"%s/nope.js"}}' "$WORK" > "$WORK/p.json"
 run_hook "$WORK/p.json"
 case "$ERR" in "$REMINDER"*"not checked."*) [ "$RC" -eq 0 ] && ok "missing scriptPath file: reminder, not checked, exit 0" || bad "missing file rc=$RC" ;; *) bad "missing file: [$ERR]" ;; esac
-perl -e 'print "x" x 2097153' > "$WORK/wf-big.js"
+perl -e 'print "x" x 524289' > "$WORK/wf-big.js"
 printf '{"tool_name":"Workflow","tool_input":{"scriptPath":"%s"}}' "$WORK/wf-big.js" > "$WORK/p.json"
 run_hook "$WORK/p.json"
-case "$ERR" in *"over 2 MB; duty elements not checked."*) ok "scriptPath over 2 MB: not read" ;; *) bad "big file: [$ERR]" ;; esac
+case "$ERR" in *"over 512 KB; duty elements not checked."*) ok "scriptPath over 512 KB: not read" ;; *) bad "big file: [$ERR]" ;; esac
 printf '{"tool_name":"Workflow","tool_input":{}}' > "$WORK/p.json"
 run_hook "$WORK/p.json"
 case "$ERR" in "$REMINDER"*"no script or scriptPath"*) [ "$RC" -eq 0 ] && ok "no script and no scriptPath: reminder, not checked" || bad "no script rc=$RC" ;; *) bad "no script: [$ERR]" ;; esac
@@ -218,13 +252,22 @@ big="$(prompt_without none) $(perl -e 'print "lorem ipsum dolor sit amet " x 800
 agent_payload Agent "$big" > "$WORK/big.json"
 ms="$(perl -MTime::HiRes=time -e '
     my ($bash, $hook, $in) = @ARGV; my $best = 1e9;
-    for (1..5) { my $t = time; system("\"$bash\" \"$hook\" < \"$in\" 2>/dev/null"); my $d = (time - $t) * 1000; $best = $d if $d < $best; }
+    for (1..5) { my $t = time; system("\"$bash\" \"$hook\" < \"$in\" >/dev/null 2>&1"); my $d = (time - $t) * 1000; $best = $d if $d < $best; }
     printf "%d", $best;' "$BASH_ABS" "$HOOK" "$WORK/big.json")"
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
         if [ "$ms" -lt 50 ]; then ok "large prompt ($(wc -c < "$WORK/big.json") bytes): ${ms} ms"; else printf '  WARN large prompt: %s ms (>= 50; advisory on Windows Git Bash)\n' "$ms"; fi ;;
     *)
         if [ "$ms" -lt 50 ]; then ok "large prompt ($(wc -c < "$WORK/big.json" | tr -d ' ') bytes): best of 5 = ${ms} ms"; else bad "large prompt: ${ms} ms (>= 50)"; fi ;;
+esac
+
+perl -e 'print q({"tool_name":"Agent","tool_input":{"prompt":"), "name prefix " x 25000, q("}})' > "$WORK/adv.json"
+ms="$(perl -MTime::HiRes=time -e '
+    my ($bash, $hook, $in) = @ARGV; my $t = time;
+    system("\"$bash\" \"$hook\" < \"$in\" >/dev/null 2>&1"); printf "%d", (time - $t) * 1000;' "$BASH_ABS" "$HOOK" "$WORK/adv.json")"
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) printf '  info adversarial 300 KB "name prefix" text: %s ms (advisory on Windows)\n' "$ms" ;;
+    *) if [ "$ms" -lt 300 ]; then ok "adversarial 300 KB 'name prefix' text: ${ms} ms (< 300; was ~760 ms before the md-window bound)"; else bad "adversarial text: ${ms} ms (>= 300)"; fi ;;
 esac
 
 echo

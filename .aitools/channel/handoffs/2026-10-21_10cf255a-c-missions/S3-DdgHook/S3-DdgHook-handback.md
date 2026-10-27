@@ -1,4 +1,37 @@
-# S3-DdgHook hand-back (v1.0, 2026-10-26)
+# S3-DdgHook hand-back (v1.1, 2026-10-26)
+
+## v1.1: review round 1 (S3-DdgHook-Review, verdict "blocking findings")
+
+Verdict: `S3-DdgHook-Review-verdict.md` in this folder (PR #122 comment).
+Fixed on the branch:
+
+- **B1 (reminder never reached Claude)**: Claude Code ignores stderr of a hook
+  that exits 0, so since 2026-03-24 no observe-mode output of this hook ever
+  reached the delegating agent. The hook now also prints
+  `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":...}}`
+  on stdout (the `glossary-skill-guard.sh` pattern); stderr keeps the text for
+  the transcript; enforce (exit 2) stays stderr-only. Limit (header): the
+  context reaches Claude with the tool result, so it corrects the next launch.
+- **B2 (access always present)**: the check ran on the whole payload, whose
+  `cwd` / `transcript_path` are always absolute. Now only `tool_input.prompt`
+  (Agent/Task) or `tool_input.script` / the `scriptPath` file (Workflow) is
+  checked; an Agent payload with no prompt reports "not checked". Test
+  fixtures now carry the real common fields.
+- **N1**: identity `S[1-9]` is case-sensitive and not inside a word ("s3",
+  tool_use_id noise no longer count); "conflict resolution" dropped and
+  `CONFLICT:` case-sensitive. On the real fixtures this turned workflow-045
+  from 8/8 to 7/8: its "conflict resolution" was about git merge conflicts,
+  a false positive.
+- **N2**: md-prefix searches only windows around the first 200 ".md"/"markdown"
+  hits; 300 KB of "name prefix " now 41-51 ms (was ~760 ms); scriptPath cap
+  2 MB -> 512 KB; only the first 256 KB of text is checked.
+- Suite: 48 passed under bash 5.3.15 and /bin/bash 3.2.57; tool-ops.json
+  cases updated (`expectStdout` now the additionalContext JSON) and passing.
+- hook-rollout.md row and .mdc: now say the output goes to Claude as
+  additionalContext JSON (and that before 2026-10-26 it did not).
+
+N3 (`\uXXXX` in scriptPath not decoded: reported "not checked"), N4
+(scriptPath unverified), N5 (whole-script limit) stay as documented.
 
 Mission DDG-HOOK, delegated by Session Commander 10cf255a-c (level 1).
 Branch `feature/ddg-agent-workflow`, PR base `main` (URL in the final
@@ -110,6 +143,12 @@ expected no stderr but the origin/main hook reported md-prefix missing for
 its prompt; no runner executes these cases (tool-ops-session-audit.sh tests
 only block-claude-code-guide.sh), so the drift went unseen. Fixed here; the
 missing runner remains.
+
+INCIDENT (from the reviewer, verified against glossary-skill-guard.sh and the
+transcript evidence it cites): delegation-duty-guard.sh wrote its observe-mode
+reminder to stderr with exit 0 from 2026-03-24 to this PR, so it never reached
+the delegating agent; other observe-mode / stderr-on-exit-0 hooks need the same
+audit.
 
 INCIDENT (partial fix): the inline_lib_bash embed bug (hooks naming the
 shared lib get the whole lib inlined) had delegation-duty-guard.sh line 38 as

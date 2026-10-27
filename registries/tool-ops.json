@@ -67,19 +67,19 @@
             {
               "input": {"tool_name":"Agent","tool_input":{"prompt":"You are S2-Audit. Read CLAUDE.md and .claude/rules/ by explicit path. Load /delegate first, then the /glossary skill. Operational learning (carry forward): none. Conflict priority (D-DEL6): commander, then prompt, then skills. Name every .md file you write with the prefix S2-Audit-. If Write is denied, output WRITE_BLOCKED. Access: explicit paths only."}},
               "expectExit": 0,
-              "expectStdout": null,
+              "expectStdout": "hookSpecificOutput.*additionalContext",
               "expectStderr": "Load /delegate before every Agent and Workflow call"
             },
             {
               "input": {"tool_name":"Agent","tool_input":{"prompt":"You are S2-Audit. Read CLAUDE.md and .claude/rules/ by explicit path. Load /delegate first, then the /glossary skill. Operational learning (carry forward): none. Conflict priority (D-DEL6): commander, then prompt, then skills. Write notes to notes.md. If Write is denied, output WRITE_BLOCKED. Access: explicit paths only."}},
               "expectExit": 0,
-              "expectStdout": null,
+              "expectStdout": "hookSpecificOutput.*additionalContext",
               "expectStderr": "Agent: 7/8 duty elements. Missing: md-prefix"
             },
             {
               "input": {"tool_name":"Workflow","tool_input":{"script":"agent({prompt: 'You are S2-Audit. Write notes to notes.md.'})"}},
               "expectExit": 0,
-              "expectStdout": null,
+              "expectStdout": "hookSpecificOutput.*additionalContext",
               "expectStderr": "Workflow: 1/8 duty elements. Missing: rules,skills,OL,conflict,WRITE_BLOCKED,access,md-prefix"
             },
             {
