@@ -1,12 +1,13 @@
 ---
-description: Cross-platform rules for this dual-platform repo
+description: Cross-platform rules for this cross-platform repo
 globs:
 alwaysApply: true
 ---
 
 ## Cross-Platform Awareness (this repo)
 
-This repo targets macOS and Windows equally.
+This repo targets every supported platform and environment equally (list:
+`reference/cross-platform-detail.md` "Supported platforms and environments").
 
 ### Dual-script rule
 
@@ -19,7 +20,7 @@ This repo targets macOS and Windows equally.
 ### Environment branches
 
 Platform = operating system; environment = where and how the agent runs
-(`claude-code-web` or `local`). Branch on the environment only where a recorded
+(`claude-code-web` or `local`; `cursor-cloud` proposed, not yet a value). Branch on the environment only where a recorded
 decision names it. Detect only via the library API (`is_claude_code_web` /
 `Test-ClaudeCodeWeb`, `AITOOLS_ENVIRONMENT`, `AITOOLS_PLATFORM`), never by
 reading `CLAUDE_CODE_REMOTE`. `.ps1` scripts behind the Windows guard never
@@ -60,7 +61,7 @@ Every script gets a native variant for each platform. Crossing languages (e.g., 
 
 ### PowerShell 7 baseline
 
-PS 7 (`pwsh`) is the project baseline on both platforms. Existing PS 5.1 workarounds remain in scripts -- harmless on PS 7, cleanup deferred.
+PS 7 (`pwsh`) is the project baseline on every platform. Existing PS 5.1 workarounds remain in scripts -- harmless on PS 7, cleanup deferred.
 
 ### ASCII preference for PS1 executable code
 

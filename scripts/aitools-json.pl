@@ -24,6 +24,10 @@
 #   edit IN OUT             apply stdin ops to IN ("-" = {}), write OUT pretty,
 #                           re-read OUT to validate. Ops (tab-separated):
 #                           set<TAB>string|number|bool|null|json<TAB>VALUE<TAB>SEG...
+#                             (segments match exactly; a new segment that equals
+#                             an existing key ignoring case is an error, exit 2:
+#                             "set: '<seg>' differs only in case from existing
+#                             key '<key>'", as aitools-json.ps1 Set-JValue)
 #                           del<TAB>SEG...
 #                           rename<TAB>NEW<TAB>SEG...  (last SEG = the key to
 #                             rename; it keeps its position and value). Errors
@@ -169,19 +173,33 @@ sub nav {
     }
     return $v;
 }
+# kfold KEY -- a key folded for the case-insensitive comparison PowerShell property
+# names use (keys are UTF-8 bytes; Unicode lower case)
+sub kfold { my $s = $_[0]; utf8::decode($s); return lc $s }
+# setp ROOT VALUE SEG... -- segments match exactly; a missing segment is created,
+# unless another key equals it ignoring case: then "set: '<seg>' differs only in
+# case from existing key '<key>'" and nothing is written (a sibling key would make
+# the file unreadable by PowerShell's ConvertFrom-Json; aitools-json.ps1 Set-JValue
+# refuses with the same message)
 sub setp {
     my ($root, $val, @segs) = @_;
     die "set: no key given\n" unless @segs;
     my $last = pop @segs;
     my $v = $root;
+    my $nocase = sub {
+        my ($o, $s) = @_;
+        my $f = kfold($s);
+        for my $p (@{$o->[1]}) { die "set: '$s' differs only in case from existing key '$p->[0]'\n" if kfold($p->[0]) eq $f }
+    };
     for my $s (@segs) {
         my $n;
         for my $p (@{$v->[1]}) { if ($p->[0] eq $s) { $n = $p; last } }
-        if (!$n) { $n = [$s, ['O', []]]; push @{$v->[1]}, $n }
+        if (!$n) { $nocase->($v, $s); $n = [$s, ['O', []]]; push @{$v->[1]}, $n }
         die "set: '$s' is not an object\n" unless $n->[1][0] eq 'O';
         $v = $n->[1];
     }
     for my $p (@{$v->[1]}) { if ($p->[0] eq $last) { $p->[1] = $val; return } }
+    $nocase->($v, $last);
     push @{$v->[1]}, [$last, $val];
 }
 sub delp {
@@ -209,11 +227,10 @@ sub renp {
     for my $p (@{$v->[1]}) { if ($p->[0] eq $old) { $hit = $p; last } }
     die "rename: '$old' not found\n" unless $hit;
     return if $new eq $old;
-    my $fold = sub { my $s = $_[0]; utf8::decode($s); return lc $s };  # keys are UTF-8 bytes
-    my $want = $fold->($new);
+    my $want = kfold($new);
     for my $p (@{$v->[1]}) {
         next if $p == $hit;
-        die "rename: '$new' already exists\n" if $fold->($p->[0]) eq $want;
+        die "rename: '$new' already exists\n" if kfold($p->[0]) eq $want;
     }
     $hit->[0] = $new;
 }

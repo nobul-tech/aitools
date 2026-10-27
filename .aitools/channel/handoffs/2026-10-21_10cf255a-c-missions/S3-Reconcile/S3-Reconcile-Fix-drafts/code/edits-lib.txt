@@ -1,0 +1,172 @@
+@@@FILE scripts/aitools-lib.sh L181a backup_dir: any file counts, prune loop in this shell
+@@@OLD
+backup_dir() {
+    local dir="$1" max_backups=5
+    [ -d "$dir" ] || return 0
+    local file_count
+    file_count=$(find "$dir" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')
+    if [ "$file_count" -eq 0 ]; then
+        return 0
+    fi
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
+    if ! cp -R "$dir" "${dir}.bak.${ts}"; then
+        log_warn "Could not back up $(display_path "$dir") -- proceeding without backup"
+        return 0
+    fi
+    local old_backups
+    old_backups=$(find "$(dirname "$dir")" -maxdepth 1 -name "$(basename "$dir").bak.*" -type d \
+        | sort -r | tail -n +$((max_backups + 1)))
+    if [ -n "$old_backups" ]; then
+        printf '%s\n' "$old_backups" | while IFS= read -r old_dir; do
+            rm -rf "$old_dir"
+            log "Pruned old backup: $(display_path "$old_dir")"
+        done
+    fi
+    log "Backed up $(display_path "$dir") ($file_count managed files)"
+}
+@@@NEW
+backup_dir() {
+    local dir="$1" max_backups=5
+    [ -d "$dir" ] || return 0
+    # Any regular file counts, not only *.md: ~/.cursor/rules holds *.mdc only, and
+    # config-file-safety.md requires the directory backup before every deploy.
+    # Parity: Backup-Dir in aitools-lib.ps1.
+    local file_count
+    file_count=$(find "$dir" -maxdepth 1 -type f | wc -l | tr -d ' ')
+    if [ "$file_count" -eq 0 ]; then
+        return 0
+    fi
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H%M%SZ)
+    if ! cp -R "$dir" "${dir}.bak.${ts}"; then
+        log_warn "Could not back up $(display_path "$dir") -- proceeding without backup"
+        return 0
+    fi
+    local old_backups old_dir
+    old_backups=$(find "$(dirname "$dir")" -maxdepth 1 -name "$(basename "$dir").bak.*" -type d \
+        | sort -r | tail -n +$((max_backups + 1)))
+    if [ -n "$old_backups" ]; then
+        # A here-string, not a pipe: log_warn must count in this shell (WARNINGS)
+        while IFS= read -r old_dir; do
+            [ -n "$old_dir" ] || continue
+            if rm -rf "$old_dir"; then
+                log "Pruned old backup: $(display_path "$old_dir")"
+            else
+                log_warn "Could not prune old backup $(display_path "$old_dir")"
+            fi
+        done <<< "$old_backups"
+    fi
+    log "Backed up $(display_path "$dir") ($file_count files)"
+}
+@@@END
+@@@FILE scripts/aitools-lib.ps1 L181b Backup-Dir: any file counts, prune checked
+@@@OLD
+    if (-not (Test-Path -LiteralPath $DirPath)) { return }
+    $mdFiles = Get-ChildItem -LiteralPath $DirPath -Filter "*.md" -File -ErrorAction SilentlyContinue
+    if (-not $mdFiles -or $mdFiles.Count -eq 0) { return }
+@@@NEW
+    if (-not (Test-Path -LiteralPath $DirPath)) { return }
+    # Any file counts, not only *.md: .cursor\rules holds *.mdc only, and
+    # config-file-safety.md requires the directory backup before every deploy.
+    # -Force: hidden files count too, as in the bash twin (find). Parity: backup_dir.
+    $dirFiles = @(Get-ChildItem -LiteralPath $DirPath -File -Force -ErrorAction SilentlyContinue)
+    if ($dirFiles.Count -eq 0) { return }
+@@@END
+@@@FILE scripts/aitools-lib.ps1 L181c Backup-Dir: prune with a result check
+@@@OLD
+    if ($backups -and $backups.Count -gt $MaxBackups) {
+        $backups | Select-Object -Skip $MaxBackups | ForEach-Object {
+            Remove-Item $_.FullName -Recurse -Force
+            Log "Pruned old backup: $($_.FullName)"
+        }
+    }
+    Log "Backed up $DirPath ($($mdFiles.Count) managed files)"
+@@@NEW
+    if ($backups -and $backups.Count -gt $MaxBackups) {
+        foreach ($oldDir in ($backups | Select-Object -Skip $MaxBackups)) {
+            try {
+                Remove-Item -LiteralPath $oldDir.FullName -Recurse -Force -ErrorAction Stop
+                Log "Pruned old backup: $($oldDir.FullName)"
+            } catch {
+                LogWarn "Could not prune old backup $($oldDir.FullName): $_"
+            }
+        }
+    }
+    Log "Backed up $DirPath ($($dirFiles.Count) files)"
+@@@END
+@@@FILE scripts/aitools-lib.sh L182 AI merge: invoke_ai in this shell so AI_REJECT_REASON survives
+@@@OLD
+        local merged
+        _start_spinner "merging $display_name (attempt $iteration)..."
+        # invoke_ai returns 1 on failure with no stdout; || true suppresses set -e abort
+        # (the empty result is checked just below)
+        merged=$(printf '%s' "$prompt_text" | invoke_ai balanced none _merge_validate 1) || true
+        _stop_spinner
+@@@NEW
+        local merged="" merge_out
+        if ! merge_out=$(mktemp); then
+            MANAGED_MERGE_ERROR="AI merge failed (iteration $iteration): could not create a temp file"
+            printf '  >> %s -- nothing written\n' "$MANAGED_MERGE_ERROR" > /dev/tty
+            DIFF_REVIEW_RESULT="failed"
+            return 0
+        fi
+        _start_spinner "merging $display_name (attempt $iteration)..."
+        # invoke_ai runs in this shell (not in $(...) or a pipe), so the
+        # AI_REJECT_REASON it sets reaches the error message below. It returns 1 on
+        # failure with no output; || true keeps set -e from aborting (the empty
+        # result is checked just below).
+        invoke_ai balanced none _merge_validate 1 <<< "$prompt_text" > "$merge_out" || true
+        _stop_spinner
+        merged=$(cat "$merge_out")
+        rm -f "$merge_out"
+@@@END
+@@@FILE scripts/aitools-lib.sh L194a tool_exception_record: exit 3 conditions
+@@@OLD
+# need no push and get no warning), 1 failed, 3 refused (no dotprofile, or the
+# machine profile matched by hostname only or not at all). 3 is log_warn +
+@@@NEW
+# need no push and get no warning), 1 failed, 3 refused (no dotprofile, a
+# read-only AITOOLS_PROFILE_FILE snapshot, or no machine profile registered to
+# this machine: none, another machine's, or one matched only by hostname or by
+# the config.json cache; aitools-profile.sh cmd_exception_set). 3 is log_warn +
+@@@END
+@@@FILE scripts/aitools-lib.ps1 L194b Set-ToolException: exit 3 conditions
+@@@OLD
+# push and get no warning), 1 failed, 3 refused (no dotprofile, or the machine
+# profile matched by hostname only or not at all). 3 is LogWarn + ACTION "run
+@@@NEW
+# push and get no warning), 1 failed, 3 refused (no dotprofile, a read-only
+# AITOOLS_PROFILE_FILE snapshot, or no machine profile registered to this
+# machine: none, another machine's, or one matched only by hostname or by the
+# config.json cache; aitools-profile cmd_exception_set). 3 is LogWarn + ACTION "run
+@@@END
+@@@FILE scripts/aitools-lib.ps1 L196a Find-GitBash: one Git Bash lookup for every caller
+@@@OLD
+# ---------------------------------------------------------------------------
+# Managed-file helpers for Deploy-ManagedFile, Review-JsonFields and the
+@@@NEW
+# ---------------------------------------------------------------------------
+# Find-GitBash -- the harness-managed bash on Windows: Git for Windows' bash.exe
+# (.claude/rules/cross-platform.md "Windows: managed bash"). Never PATH or
+# Get-Command, which often resolve to the WSL shim. Returns the first path that
+# exists, or $null. One list for every caller (setup-bash.ps1, the aitools.ps1
+# build step; check-pre-push.ps1 can switch to it).
+# KnownPaths (script-standards.md "KnownPaths empirical verification"): each path
+# is UNVERIFIED until it is recorded on a Windows machine; then replace its
+# marker with "# Verified: YYYY-MM-DD (vX.Y.Z)".
+# ---------------------------------------------------------------------------
+function Find-GitBash {
+    $candidates = @()
+    if ($env:ProgramFiles) { $candidates += (Join-Path $env:ProgramFiles "Git\bin\bash.exe") }                # UNVERIFIED
+    if (${env:ProgramFiles(x86)}) { $candidates += (Join-Path ${env:ProgramFiles(x86)} "Git\bin\bash.exe") }  # UNVERIFIED
+    if ($env:LOCALAPPDATA) { $candidates += (Join-Path $env:LOCALAPPDATA "Programs\Git\bin\bash.exe") }       # UNVERIFIED
+    foreach ($p in $candidates) {
+        if (Test-Path -LiteralPath $p) { return $p }
+    }
+    return $null
+}
+
+# ---------------------------------------------------------------------------
+# Managed-file helpers for Deploy-ManagedFile, Review-JsonFields and the
+@@@END

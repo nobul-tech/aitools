@@ -1,11 +1,20 @@
 ## Cross-Platform Awareness (this repo)
 
-This repo is explicitly cross-platform — it provides tooling for both machines.
+This repo is explicitly cross-platform — it provides tooling for every supported
+platform and environment (below).
+
+### Supported platforms and environments
+
+Decided 2026-10-26 (commander): macOS, Windows 11, Linux (Ubuntu 24.04 and
+22.04); environments `local`, Claude Code web, Cursor cloud. Each is
+first-class; anything else is unsupported. The authoritative list, API values
+and per-item detail: `@reference/cross-platform-detail.md` "Supported platforms
+and environments". Do not restate the list elsewhere; point to that section.
 
 When writing scripts or paths **in this repo**:
 - Provide both `.ps1` and `.sh` variants for setup/utility scripts
 - Use forward slashes in paths when possible (works on both platforms)
-- Repos live under `~/repos/` (macOS) / `C:\repos\` (Windows)
+- Repos live under `~/repos/` (macOS) / `%USERPROFILE%\repos\` (Windows)
 - Use `$HOME` or `~` for user directory references, not hardcoded paths
 - After creating `.sh` files on Windows, always run `git update-index --chmod=+x <file>`
 
@@ -23,8 +32,8 @@ resolves to the WSL shim, which breaks version checks and confuses agents.
 
 ### Equal platform visibility
 
-When showing usage examples in docs, always show both macOS/bash and
-Windows/PowerShell. Never abbreviate one platform as "same but .ps1".
+When showing usage examples in docs, always show both macOS/Linux (bash) and
+Windows (PowerShell). Never abbreviate one platform as "same but .ps1".
 Enforced as a PSO in CLAUDE.md.
 
 ### Platform targeting principle

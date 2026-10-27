@@ -233,7 +233,8 @@ function Write-DeriveError([string]$e) {
         $script:NmOtherErr = $true
     }
     LogError "config: $e"
-    if ($e.Contains("is invalid JSON") -or $e.Contains("is not v2")) { $script:ProfileBad = $true }
+    # profile.json itself is unusable: invalid JSON, not version 2, or no profiles object
+    if ($e.Contains("is invalid JSON") -or $e.Contains("is not v2") -or $e.Contains("has no profiles object")) { $script:ProfileBad = $true }
 }
 foreach ($line in $deriveOut) {
     $kv = ([string]$line) -split "`t", 2
@@ -263,14 +264,20 @@ if (-not $seen -or $deriveRc -gt 2) {
     if ($deriveRc -eq 1) {
         Log "config: no dotprofile yet -- writing bootstrap keys only (shared-only mode)"
     } elseif ($deriveRc -ne 0) {
+        # Each ACTION has a log line that names its row and carries the instruction,
+        # at the row's level (error; audit A-10)
         if ($script:ProfileBad) {
+            $rowAdvice = "Fix profile.json in the dotprofile (details in deploy.log)"
+            LogError "config: profile.json invalid -- $rowAdvice"
             Write-Summary "ERROR" "profile.json" "invalid (see log)"
-            Write-Summary "ACTION" "" "Fix profile.json in the dotprofile (details in deploy.log)"
+            Write-Summary "ACTION" "" $rowAdvice
         } elseif ($NoMachine -and $script:NmUnreg -and -not $script:NmOtherErr) {
             LogDetail "config: no machine match not reported (-NoMachine: the caller reports registration)"
         } else {
+            $rowAdvice = "Run: aitools user init (profiles: $(& $show $d.aliases 'none'))"
+            LogError "config: machine profile: no machine match -- $rowAdvice"
             Write-Summary "ERROR" "machine profile" "no machine match"
-            Write-Summary "ACTION" "" "Run: aitools user init (profiles: $(& $show $d.aliases 'none'))"
+            Write-Summary "ACTION" "" $rowAdvice
         }
     }
 }
@@ -341,7 +348,14 @@ try {
     [IO.File]::WriteAllText($configTmp, (ConvertTo-NodeJson $cfg) + "`n", $script:Utf8NoBom)
 } catch {
     LogDetail "merge: $($_.Exception.Message)"
-    LogError "Failed: ${configFile}: config merge failed -- existing file left untouched"
+    # A key that differs only in case from a managed key (the JSON engines refuse to add
+    # its twin, aitools-json.ps1): name both keys, so the user knows what to fix (PR #108 n-2)
+    $mergeWhy = ""
+    $twin = [regex]::Match([string]$_.Exception.Message, "set: '(.*?)' differs only in case from existing key '(.*)'")
+    if ($twin.Success) {
+        $mergeWhy = " -- key `"$($twin.Groups[2].Value)`" differs only in case from the managed key `"$($twin.Groups[1].Value)`": rename or remove it"
+    }
+    LogError "Failed: ${configFile}: config merge failed$mergeWhy -- existing file left untouched"
     Write-Summary "ERROR" "aitools config" "merge failed"
     Remove-ConfigTmp
     $failed = $true

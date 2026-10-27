@@ -101,22 +101,45 @@ function Get-JItems($Root, [string[]]$Segs) {
     return @($n.Value | Where-Object { $null -ne $_ -and (Test-JScalar $_) } | ForEach-Object { ConvertTo-JText $_ })
 }
 
-# Set-JValue ROOT VALUE SEG... -- creates missing objects; new keys are appended
+# Find-JProperty OBJ NAME -- the property named exactly NAME (case-sensitive), or $null
+function Find-JProperty($Obj, [string]$Name) {
+    foreach ($q in $Obj.PSObject.Properties) { if ($q.Name -ceq $Name) { return $q } }
+    return $null
+}
+
+# Set-JValue ROOT VALUE SEG... -- creates missing objects; new keys are appended.
+# Segments match exactly (case-sensitive), as in the perl engine (setp). A new
+# segment that equals an existing key ignoring case is refused with the perl
+# engine's message, "set: '<seg>' differs only in case from existing key '<key>'"
+# (PowerShell property names ignore case: it would otherwise overwrite that key,
+# where perl would add a sibling that ConvertFrom-Json cannot read back).
 function Set-JValue($Root, $Value, [string[]]$Segs) {
     $o = $Root
     for ($i = 0; $i -lt $Segs.Count - 1; $i++) {
         $s = $Segs[$i]
-        $p = $o.PSObject.Properties[$s]
+        $p = Find-JProperty $o $s
         if (-not $p) {
+            Assert-JNoCaseTwin $o $s
             $o | Add-Member -NotePropertyName $s -NotePropertyValue ([PSCustomObject]@{})
-            $p = $o.PSObject.Properties[$s]
+            $p = Find-JProperty $o $s
         }
         if ($p.Value -isnot [System.Management.Automation.PSCustomObject]) { throw "set: '$s' is not an object" }
         $o = $p.Value
     }
     $last = $Segs[$Segs.Count - 1]
-    $p = $o.PSObject.Properties[$last]
-    if ($p) { $p.Value = $Value } else { $o | Add-Member -NotePropertyName $last -NotePropertyValue $Value }
+    $p = Find-JProperty $o $last
+    if ($p) { $p.Value = $Value }
+    else {
+        Assert-JNoCaseTwin $o $last
+        $o | Add-Member -NotePropertyName $last -NotePropertyValue $Value
+    }
+}
+
+# Assert-JNoCaseTwin OBJ NAME -- throw when another key of OBJ equals NAME ignoring case
+function Assert-JNoCaseTwin($Obj, [string]$Name) {
+    foreach ($q in $Obj.PSObject.Properties) {
+        if ($q.Name -ieq $Name) { throw "set: '$Name' differs only in case from existing key '$($q.Name)'" }
+    }
 }
 
 # Rename-JKey ROOT NEWNAME SEG... -- rename the key named by the last SEG to

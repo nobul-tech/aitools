@@ -1,0 +1,84 @@
+Drafts for #185: check-post-push steps 30 and 31 extract return values and
+tracker cases with `\w[\w-]*` / `[\w-]+`, so the value "accept & adopt" is never
+seen (bash and PS1 both miss it, so step 31's comparison passes vacuously).
+Both twins. S3-Reconcile-Fix-Checks, 2026-10-26. Base: origin/main 60e7fd7.
+Test: .scratch/session-rcfixk/test-postpush-regex.sh (runs every extraction,
+old and new, on origin/main's libs).
+
+@@@FILE scripts/check-post-push.sh PP-1 step 30: values with spaces, line-wise loop
+@@@OLD
+    sh_returns=$(perl -ne 'print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/' "$sh_lib" | sort -u | paste -s -d , -)
+@@@NEW
+    # [^"]+ so "accept & adopt" is seen (#185); one value per line for the loop.
+    sh_returns_lines=$(perl -ne 'print "$1\n" if /MANAGED_FILE_RESULT="([^"]+)"/' "$sh_lib" | sort -u)
+    sh_returns=$(printf '%s\n' "$sh_returns_lines" | paste -s -d , -)
+@@@END
+
+@@@FILE scripts/check-post-push.sh PP-2 step 30: no word splitting of values
+@@@OLD
+        for val in $(echo "$sh_returns" | tr ',' ' '); do
+            if ! grep -q "$val" "$caller"; then
+                missing="${missing}${missing:+; }$cname missing $val"
+            fi
+        done
+@@@NEW
+        while IFS= read -r val; do
+            [ -n "$val" ] || continue
+            if ! grep -qF -- "$val" "$caller"; then
+                missing="${missing}${missing:+; }$cname missing $val"
+            fi
+        done <<< "$sh_returns_lines"
+@@@END
+
+@@@FILE scripts/check-post-push.sh PP-3 step 31: return values with spaces
+@@@OLD
+    sh_results=$(perl -ne 'if (/^deploy_managed_file\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_managed_file/)) { print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/ }' "$sh_lib" | sort -u | paste -s -d , -)
+    ps1_results=$(perl -ne 'if (/^function Deploy-ManagedFile\b/ .. (/^function / && !/Deploy-ManagedFile/)) { print "$1\n" if /return\s+"([\w-]+)"/ }' "$ps1_lib" | sort -u | paste -s -d , -)
+@@@NEW
+    sh_results=$(perl -ne 'if (/^deploy_managed_file\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_managed_file/)) { print "$1\n" if /MANAGED_FILE_RESULT="([^"]+)"/ }' "$sh_lib" | sort -u | paste -s -d , -)
+    ps1_results=$(perl -ne 'if (/^function Deploy-ManagedFile\b/ .. (/^function / && !/Deploy-ManagedFile/)) { print "$1\n" if /return\s+"([^"]+)"/ }' "$ps1_lib" | sort -u | paste -s -d , -)
+@@@END
+
+@@@FILE scripts/check-post-push.sh PP-4 step 31: quoted tracker cases
+@@@OLD
+    sh_tracker=$(perl -ne 'if (/^deploy_tracker_record\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_tracker_record/)) { if (/^\s+([\w|.-]+)\)\s/) { for (split /\|/, $1) { print "$_\n" } } }' "$sh_lib" | sort -u | paste -s -d , -)
+    ps1_tracker=$(perl -ne 'if (/^function Record-DeployOutcome\b/ .. (/^function / && !/Record-DeployOutcome/)) { while (/-eq\s+"([\w-]+)"|"([\w-]+)"\s*\{/g) { print(($1 // $2) . "\n") } }' "$ps1_lib" | sort -u | paste -s -d , -)
+@@@NEW
+    sh_tracker=$(perl -ne 'if (/^deploy_tracker_record\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_tracker_record/)) { if (/^\s+((?:"[^"]+"|[\w.-]+)(?:\|(?:"[^"]+"|[\w.-]+))*)\)\s/) { for (split /\|/, $1) { s/"//g; print "$_\n" } } }' "$sh_lib" | sort -u | paste -s -d , -)
+    ps1_tracker=$(perl -ne 'if (/^function Record-DeployOutcome\b/ .. (/^function / && !/Record-DeployOutcome/)) { while (/-eq\s+"([^"]+)"|"([^"]+)"\s*\{/g) { print(($1 // $2) . "\n") } }' "$ps1_lib" | sort -u | paste -s -d , -)
+@@@END
+
+@@@FILE scripts/check-post-push.ps1 PP-5 step 30 (PS1): values with spaces
+@@@OLD
+    $shReturns = (perl -ne 'print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/' $shLib | Sort-Object -Unique) -join ','
+@@@NEW
+    # [^"]+ so "accept & adopt" is seen (#185)
+    $shReturns = (perl -ne 'print "$1\n" if /MANAGED_FILE_RESULT="([^"]+)"/' $shLib | Sort-Object -Unique) -join ','
+@@@END
+
+@@@FILE scripts/check-post-push.ps1 PP-6 step 30 (PS1): an unreadable caller is a finding, not a skip
+@@@OLD
+        $content = Get-Content $caller -Raw -ErrorAction SilentlyContinue
+        if (-not $content) { continue }
+@@@NEW
+        $content = Get-Content $caller -Raw -ErrorAction SilentlyContinue
+        if (-not $content) { $missing += "$cname unreadable"; continue }
+@@@END
+
+@@@FILE scripts/check-post-push.ps1 PP-7 step 31 (PS1): return values with spaces
+@@@OLD
+    $shResults = (perl -ne 'if (/^deploy_managed_file\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_managed_file/)) { print "$1\n" if /MANAGED_FILE_RESULT="(\w[\w-]*)"/ }' $shLib | Sort-Object -Unique) -join ','
+    $ps1Results = (perl -ne 'if (/^function Deploy-ManagedFile\b/ .. (/^function / && !/Deploy-ManagedFile/)) { print "$1\n" if /return\s+"([\w-]+)"/ }' $ps1Lib | Sort-Object -Unique) -join ','
+@@@NEW
+    $shResults = (perl -ne 'if (/^deploy_managed_file\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_managed_file/)) { print "$1\n" if /MANAGED_FILE_RESULT="([^"]+)"/ }' $shLib | Sort-Object -Unique) -join ','
+    $ps1Results = (perl -ne 'if (/^function Deploy-ManagedFile\b/ .. (/^function / && !/Deploy-ManagedFile/)) { print "$1\n" if /return\s+"([^"]+)"/ }' $ps1Lib | Sort-Object -Unique) -join ','
+@@@END
+
+@@@FILE scripts/check-post-push.ps1 PP-8 step 31 (PS1): quoted tracker cases
+@@@OLD
+    $shTracker = (perl -ne 'if (/^deploy_tracker_record\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_tracker_record/)) { if (/^\s+([\w|.-]+)\)\s/) { for (split /\|/, $1) { print "$_\n" } } }' $shLib | Sort-Object -Unique) -join ','
+    $ps1Tracker = (perl -ne 'if (/^function Record-DeployOutcome\b/ .. (/^function / && !/Record-DeployOutcome/)) { while (/-eq\s+"([\w-]+)"|"([\w-]+)"\s*\{/g) { print(($1 // $2) . "\n") } }' $ps1Lib | Sort-Object -Unique) -join ','
+@@@NEW
+    $shTracker = (perl -ne 'if (/^deploy_tracker_record\b/ .. (/^\w+.*\(\)\s*\{/ && !/deploy_tracker_record/)) { if (/^\s+((?:"[^"]+"|[\w.-]+)(?:\|(?:"[^"]+"|[\w.-]+))*)\)\s/) { for (split /\|/, $1) { s/"//g; print "$_\n" } } }' $shLib | Sort-Object -Unique) -join ','
+    $ps1Tracker = (perl -ne 'if (/^function Record-DeployOutcome\b/ .. (/^function / && !/Record-DeployOutcome/)) { while (/-eq\s+"([^"]+)"|"([^"]+)"\s*\{/g) { print(($1 // $2) . "\n") } }' $ps1Lib | Sort-Object -Unique) -join ','
+@@@END

@@ -58,6 +58,7 @@ reading one file:
 | File | Writer |
 |------|--------|
 | `deploy.log` | setup scripts (via `aitools-lib` `logging_init`/`Initialize-Logging`) |
+| `deploy.jsonl` | the installers' `log` override and the child relay (`jsonl_record` / `Write-JsonlRecord`, `run_child_relayed` / `Invoke-ChildRelayed` in `aitools-lib`; the installers use their own copies until the call-site follow-up); one JSON record per line, fields `ts, host, os, script, run_id, level, msg` |
 | `ait-harvest.log` | `scripts/ait-harvest.py` |
 | `session-archive.log` | `session-archive.sh` shim (bash-fallback branch only) |
 | `session-catchup.log` | `session-catchup.sh` shim (bash-fallback branch only) |
@@ -102,6 +103,31 @@ Setup scripts (OK/WARN/ERROR semantics, `deploy.log`) and check scripts
 files and distinct vocabularies — now in the **same** directory. See
 `@reference/script-standards-detail.md` "Logging architecture: setup vs check"
 for the bridge pattern (`check_log_init`/`CheckLogInit`).
+
+### 7. Library-style tools return diagnostics; callers log them at level
+
+A library-style tool is a script that other scripts call for data:
+`scripts/aitools-profile.sh` / `.ps1` today. Its contract:
+
+- **Data** goes to stdout only (`key<TAB>value` lines, or one JSON object with
+  `--json`).
+- **Diagnostics** are returned, not logged at level: every warning and error is an
+  output line (`warn<TAB>...`, `error<TAB>...`) and is also written to `deploy.log` at
+  `detail`. Its console log lines go to stderr, so they never mix with data.
+- **Summary rows, counters and the exit footer belong to the caller.** The tool writes
+  no `write_summary` row and touches none of its caller's counters (its own counters,
+  raised only by its OS guard and lib helpers such as `backup_file`, end with its
+  process).
+- **The caller** logs each returned line at its level -- `warn` with `log_warn`
+  (counted), `error` with `log_error` (counted) -- unless the caller documents why a
+  class of warnings is handled another way. Documented exceptions today: the
+  `aitools-lib` wrappers log resolver warnings at `detail`, because
+  `setup-user-config`, the first script of every run, reports them once; and
+  `setup-user-config` logs warnings that its own write corrects as `info`, and turns
+  advice the user must act on into one ACTION with one counted `log_warn`.
+- **Exit codes** are the tool's own (documented in its header and `--help`). A caller
+  never passes them through as its own exit code (exit 2 from a setup script means a
+  user abort, D-TS13).
 
 ## Migration status
 

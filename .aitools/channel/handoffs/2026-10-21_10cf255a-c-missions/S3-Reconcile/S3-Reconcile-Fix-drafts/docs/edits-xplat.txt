@@ -1,0 +1,11 @@
+@@@FILE reference/cross-platform-detail.md D197 shadowing fix is an explicit prepend; Refresh-Path only appends
+@@@OLD
+**Resolution in other contexts**: Use `Refresh-Path` (aitools-lib.ps1) or
+read the Windows system PATH from the registry directly.
+@@@NEW
+**Resolution in other contexts**: prepend the managed tool's install
+directory to `$env:Path`, as `check-lib.ps1` does. `Refresh-Path`
+(aitools-lib.ps1) does not fix shadowing: it only appends registry entries
+that are missing (see "Refresh-Path behavior"), so Git's `usr/bin/` keeps its
+earlier place.
+@@@END

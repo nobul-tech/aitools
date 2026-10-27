@@ -1371,3 +1371,29 @@ agent commander, engineer:    No one session gets to claim the whole story — b
 - Why the kernel hostname flips between `Mac` and `nobul-mac` (network-derived name is a hypothesis, not proven).
 - Whether the PS1 paths work on Windows. The M3 PS1 drafts parse with 0 errors. The resolver wrappers ran under pwsh on macOS and gave the same answer as bash. Nothing was executed on Windows (COMPUTERNAME, MachineGuid, Git Bash path forms).
 - Whether Claude Code web sessions load user-level skills after the PR-b move (S2-Layout V5).
+
+---
+
+### 10cf255a-c (2026-10-23T02:16Z)
+
+**State**: functional (written by delegate S3-Handoff2 for Session Commander 10cf255a-c)
+**Context loaded**: mission packet, handoff skill, delegation rule, the gate decision record (95 items), the prior handoff 360aa8f3-8, the S3-Harness and S3-H-Core hand-backs, the S3-M3Lead plan, an S2 audit of every mission folder, gh/git state of aitools and the dotprofile
+**Mission**: hand off a session that ran the tool-support gate and shipped about 40 PRs through parallel missions. Handoff: `.aitools/channel/handoffs/2026-10-22_10cf255a-c.md`
+
+#### What I learned
+
+- **Parallel missions scale, and their seams leak.** One session shipped the managed-file model, LAYOUT PR-a, `/tool-adopt`, M3 end to end and the harness. Every gap I found sits where two missions met: stacked PRs merged into stale bases (#74/#75 never reached main), PRs merged before their reviews were addressed (four times), flag and marker names in launch prompts that did not match the code, and an incident ledger that no mission owned (23 claimed fixes, all still `open`).
+- **Orchestrators that delegate one batch per agent finish; a mission that does the work itself runs out of context.** Commit and push after every batch, because usage limits stop missions mid-work.
+- **Approval that lives only in chat is invisible to the next agent.** #96 was merged with no comment, and the only written approval was one commit body on an unpushed branch.
+- **The main checkout can drift far behind** (105 commits here) while all work happens in worktrees, and Claude Code loads rules from the checkout it starts in.
+
+#### CC defaults I caught
+
+- I drafted "PROFILE-TOOLS failed by doing the work itself". I did not know the cause, only that it ran out of context at B5, and I cut the claim.
+- The S2 audit's biggest finding (#74/#75 off main) contradicted what I had assumed from "MERGED". Checking `gh pr view --json baseRefName` and the tree took two calls. Merged is not the same as on main.
+
+#### What I still don't know
+
+- Whether the dotprofile `deploy/` in 825aed4 matches main's build output (it has no `deploy-harness.*`).
+- What M3-FINISH and HARNESS-2 shipped after 02:16Z.
+- Whether any PS1 path works on Windows. Nothing from this session ran there.

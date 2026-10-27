@@ -146,7 +146,23 @@ fi
 # one step); a dry run merges into the temp directory and never touches ~/.aitools.
 CONFIG_TMP="${CONFIG_FILE}.tmp.$$"
 if $DRY_RUN; then CONFIG_TMP="$WORK_DIR/config.json"; fi
-cleanup() { rm -rf "$WORK_DIR"; rm -f "$CONFIG_TMP"; }
+# remove_config_tmp -- remove a merge result that was not moved into place; a failed
+# removal is a counted warning (PowerShell Remove-ConfigTmp says the same)
+remove_config_tmp() {
+    if [ -e "$CONFIG_TMP" ] && ! rm -f "$CONFIG_TMP"; then
+        log_warn "Could not remove temp file $CONFIG_TMP"
+    fi
+}
+# EXIT trap: the last safety net. A failure here is logged at detail: a warning this
+# late would not reach the exit footer (audit A-11)
+cleanup() {
+    if [ -e "$CONFIG_TMP" ] && ! rm -f "$CONFIG_TMP"; then
+        log_detail "cleanup: could not remove temp file $CONFIG_TMP"
+    fi
+    if [ -n "$WORK_DIR" ] && [ -e "$WORK_DIR" ] && ! rm -rf "$WORK_DIR"; then
+        log_detail "cleanup: could not remove temp directory $WORK_DIR"
+    fi
+}
 trap cleanup EXIT
 
 if ! command -v perl >/dev/null 2>&1; then
@@ -242,7 +258,8 @@ derive_error() {
         NM_OTHER_ERR=true
     fi
     log_error "config: $1"
-    case "$1" in *"is invalid JSON"*|*"is not v2"*) PROFILE_BAD=true ;; esac
+    # profile.json itself is unusable: invalid JSON, not version 2, or no profiles object
+    case "$1" in *"is invalid JSON"*|*"is not v2"*|*"has no profiles object"*) PROFILE_BAD=true ;; esac
 }
 while IFS=$'\t' read -r k v; do
     case "$k" in
@@ -269,14 +286,20 @@ else
     case "$DERIVE_RC" in
         0) : ;;
         1) log "config: no dotprofile yet -- writing bootstrap keys only (shared-only mode)" ;;
+        # Each ACTION has a log line that names its row and carries the instruction,
+        # at the row's level (error; audit A-10)
         *) if $PROFILE_BAD; then
+               ADVICE="Fix profile.json in the dotprofile (details in deploy.log)"
+               log_error "config: profile.json invalid -- $ADVICE"
                write_summary ERROR "profile.json" "invalid (see log)"
-               write_summary ACTION "" "Fix profile.json in the dotprofile (details in deploy.log)"
+               write_summary ACTION "" "$ADVICE"
            elif $NO_MACHINE && $NM_UNREG && ! $NM_OTHER_ERR; then
                log_detail "config: no machine match not reported (--no-machine: the caller reports registration)"
            else
+               ADVICE="Run: aitools user init (profiles: ${ALIASES:-none})"
+               log_error "config: machine profile: no machine match -- $ADVICE"
                write_summary ERROR "machine profile" "no machine match"
-               write_summary ACTION "" "Run: aitools user init (profiles: ${ALIASES:-none})"
+               write_summary ACTION "" "$ADVICE"
            fi ;;
     esac
 fi
@@ -353,7 +376,11 @@ MERGE_RC=0
 MERGE_MSG=$(printf '%s' "$OPS" | pj edit "$IN" "$CONFIG_TMP" 2>&1) || MERGE_RC=$?
 if [ "$MERGE_RC" -ne 0 ]; then
     log_detail "merge: $MERGE_MSG"
-    log_error "Failed: $(display_path "$CONFIG_FILE"): config merge failed (exit $MERGE_RC) -- existing file left untouched"
+    # A key that differs only in case from a managed key (the JSON engines refuse to add
+    # its twin, aitools-json.pl): name both keys, so the user knows what to fix (PR #108 n-2)
+    MERGE_WHY=""
+    MERGE_WHY=$(printf '%s\n' "$MERGE_MSG" | perl -ne 'if (/set: \x27(.*?)\x27 differs only in case from existing key \x27(.*)\x27/) { print " -- key \"$2\" differs only in case from the managed key \"$1\": rename or remove it"; exit }') || MERGE_WHY=""  # perl failed: the generic message below
+    log_error "Failed: $(display_path "$CONFIG_FILE"): config merge failed (exit $MERGE_RC)$MERGE_WHY -- existing file left untouched"
     write_summary ERROR "aitools config" "merge failed"
 else
     # Validation: valid object (checked by the engine on write) + bootstrap keys present
@@ -425,6 +452,8 @@ else
         fi
     fi
 fi
+# The merge result is gone after a move; every other path removes it here (audit A-11)
+remove_config_tmp
 
 # --- 3. One ACTION for the advice. It must stay after the config row: write_summary
 # promotes an OK row to WARN once a warning is counted, and the log_warn paired with

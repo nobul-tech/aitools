@@ -1,0 +1,253 @@
+@@@FILE scripts/aitools-dashboard.ps1 M1 -Stop: do not assign to the automatic $PID
+@@@OLD
+        $pid = Get-PortServerPid -PortNum $Port
+        if ($pid) {
+            try {
+                Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+            } catch {}
+            $pf = Get-PidFileForPort -PortNum $Port
+            Remove-Item -Path $pf -Force -ErrorAction SilentlyContinue
+            LogOk "Stopped dashboard on port $Port (PID $pid)"
+@@@NEW
+        # Not $pid: variable names ignore case, so that is the read-only automatic
+        # $PID (this process). The assignment fails (a non-terminating error) and
+        # Stop-Process then killed this shell instead of the dashboard.
+        $serverPid = Get-PortServerPid -PortNum $Port
+        if ($serverPid) {
+            $stopped = $true
+            try {
+                Stop-Process -Id $serverPid -Force -ErrorAction Stop
+            } catch {
+                $stopped = $false
+                LogWarn "Could not stop the dashboard on port $Port (PID $serverPid): $_"
+            }
+            $pf = Get-PidFileForPort -PortNum $Port
+            try {
+                Remove-Item -LiteralPath $pf -Force -ErrorAction Stop
+            } catch {
+                LogWarn "Could not remove the PID file ${pf}: $_"
+            }
+            if ($stopped) { LogOk "Stopped dashboard on port $Port (PID $serverPid)" }
+@@@END
+@@@FILE scripts/setup-user-shell.sh M-shell-a dry-run flag (installer --dry-run exports AITOOLS_DRY_RUN=1)
+@@@OLD
+set -euo pipefail
+
+# --- Shared library ---
+@@@NEW
+set -euo pipefail
+
+# --- Flag parsing (same convention as setup-user-hooks) ---
+DRY_RUN=false
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=true ;;
+    esac
+done
+[ "${AITOOLS_DRY_RUN:-}" = "1" ] && DRY_RUN=true
+
+# --- Shared library ---
+@@@END
+@@@FILE scripts/setup-user-shell.sh M-shell-b dry run: report, write nothing
+@@@OLD
+# --- Back up before writing (skips if profile does not exist yet) ---
+backup_file "$PROFILE"
+@@@NEW
+# --- Dry run: report what would change, write nothing ---
+if $DRY_RUN; then
+    if [ -f "$PROFILE" ] && grep -qF "$START_MARKER" "$PROFILE"; then
+        log "[DRY RUN] Would refresh the managed block in $(display_path "$PROFILE")"
+    else
+        log "[DRY RUN] Would add the managed block to $(display_path "$PROFILE")"
+    fi
+    write_summary OK "shell" "dry run (no files written)"
+    exit 0
+fi
+
+# --- Back up before writing (skips if profile does not exist yet) ---
+backup_file "$PROFILE"
+@@@END
+@@@FILE scripts/setup-user-shell.ps1 M-shell-c dry-run parameter
+@@@OLD
+# --- Shared library ---
+. (Join-Path $PSScriptRoot "aitools-lib.ps1")
+Initialize-Logging "setup-user-shell"
+@@@NEW
+param([switch]$DryRun)
+
+# Env passthrough from the installer (--dry-run exports AITOOLS_DRY_RUN=1)
+if ($env:AITOOLS_DRY_RUN -eq "1") { $DryRun = [switch]::Present }
+
+# --- Shared library ---
+. (Join-Path $PSScriptRoot "aitools-lib.ps1")
+Initialize-Logging "setup-user-shell"
+@@@END
+@@@FILE scripts/setup-user-shell.ps1 M-shell-d dry run: report, write nothing (before any directory is created)
+@@@OLD
+# --- Ensure profile directory exists ---
+@@@NEW
+# --- Dry run: report what would change, write nothing ---
+if ($DryRun) {
+    $dryVerb = "add the managed block to"
+    if (Test-Path -LiteralPath $profilePath) {
+        try {
+            $dryContent = Get-Content -LiteralPath $profilePath -Raw -ErrorAction Stop
+            if ($dryContent -and $dryContent.Contains($startMarker)) { $dryVerb = "refresh the managed block in" }
+        } catch {
+            LogWarn "[DRY RUN] Cannot read ${profilePath}: $_"
+        }
+    }
+    Log "[DRY RUN] Would $dryVerb $profilePath"
+    Write-Summary "OK" "shell" "dry run (no files written)"
+    exit 0
+}
+
+# --- Ensure profile directory exists ---
+@@@END
+@@@FILE scripts/setup-cursor-ide-mcp.sh M3a node missing: ERROR row before exit 1
+@@@OLD
+    log_error "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"
+    exit 1
+@@@NEW
+    log_error "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"
+    write_summary ERROR "cursor ide mcp" "node not found"
+    exit 1
+@@@END
+@@@FILE scripts/setup-cursor-ide-mcp.ps1 M3b node missing: ERROR row before exit 1
+@@@OLD
+    LogError "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"
+    exit 1
+@@@NEW
+    LogError "Node.js not found. Install via 'aitools install' or manually: https://nodejs.org"
+    Write-Summary "ERROR" "cursor ide mcp" "node not found"
+    exit 1
+@@@END
+@@@FILE scripts/setup-cursor-ide-mcp.ps1 M3c write checked (errors counted for the row below)
+@@@OLD
+        [System.IO.File]::WriteAllText($resolvedPath, $afterJson, [System.Text.UTF8Encoding]::new($false))
+
+        # Post-write validation
+@@@NEW
+        $errorsBeforeWrite = $errors
+        try {
+            [System.IO.File]::WriteAllText($resolvedPath, $afterJson, [System.Text.UTF8Encoding]::new($false))
+        } catch {
+            LogError "Could not write $mcpJson -- $_"
+        }
+
+        # Post-write validation
+@@@END
+@@@FILE scripts/setup-cursor-ide-mcp.ps1 M3d ERROR row when the write or validation failed (no OK after LogError)
+@@@OLD
+        Write-Summary "OK" "cursor ide mcp" "updated"
+    }
+}
+@@@NEW
+        if ($errors -gt $errorsBeforeWrite) {
+            Write-Summary "ERROR" "cursor ide mcp" "write or validation failed"
+        } else {
+            Write-Summary "OK" "cursor ide mcp" "updated"
+        }
+    }
+}
+@@@END
+@@@FILE scripts/setup-cursor-ide-mcp.ps1 M3e vercel/webflow: agent mcp remove, as the .sh (the CLI has no disable)
+@@@OLD
+# --- Disable vercel/webflow via Cursor CLI if available ---
+if ($DryRun) {
+    Log "[DRY RUN] Would disable vercel/webflow via Cursor CLI (if available)"
+} elseif (Get-Command agent -ErrorAction SilentlyContinue) {
+    foreach ($server in @("vercel", "webflow")) {
+        $result = agent mcp disable $server 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            LogOk "$server disabled in Cursor"
+        } else {
+            LogError "Failed to disable $server in Cursor: $result"
+            Write-Summary "ERROR" "cursor ide mcp" "failed to disable $server"
+        }
+    }
+} else {
+@@@NEW
+# --- Remove vercel/webflow via Cursor CLI if available (parity: setup-cursor-ide-mcp.sh) ---
+# Cursor's `agent mcp` CLI dropped the `disable`/`enable` subcommands; the current
+# verbs are list/add/remove/doctor. We `remove` the two default-off servers (removed
+# == not active, matching the prior "disabled" intent). Best-effort: a failure is a
+# warning (typically the server was not configured), never an ERROR row.
+if ($DryRun) {
+    Log "[DRY RUN] Would remove vercel/webflow from Cursor via Cursor CLI (if available)"
+} elseif (Get-Command agent -ErrorAction SilentlyContinue) {
+    foreach ($server in @("vercel", "webflow")) {
+        $result = agent mcp remove $server 2>&1 | Out-String
+        if ($LASTEXITCODE -eq 0) {
+            LogOk "$server removed from Cursor (default-off)"
+        } else {
+            LogWarn "Could not remove $server from Cursor (likely not configured): $($result.Trim())"
+        }
+    }
+} else {
+@@@END
+@@@FILE scripts/setup-cursor-ide-mcp.sh M3f header: the CLI removes, it does not disable
+@@@OLD
+# Vercel and Webflow are present but disabled via `agent mcp disable`.
+@@@NEW
+# Vercel and Webflow are written to mcp.json, then removed from the Cursor CLI
+# with `agent mcp remove` (the CLI has no disable).
+@@@END
+@@@FILE scripts/setup-cursor-ide-mcp.ps1 M3g header: the CLI removes, it does not disable
+@@@OLD
+# Vercel and Webflow are present but disabled via `agent mcp disable`.
+@@@NEW
+# Vercel and Webflow are written to mcp.json, then removed from the Cursor CLI
+# with `agent mcp remove` (the CLI has no disable).
+@@@END
+@@@FILE scripts/setup-user-skills.sh M-skills-a lower-cased name list
+@@@OLD
+SKILL_NAMES=""
+if [ "$SKILLS_BLOCKED" = "true" ]; then
+@@@NEW
+SKILL_NAMES=""
+SKILL_NAMES_LC=""   # the same names, lower-cased, for the duplicate check below
+if [ "$SKILLS_BLOCKED" = "true" ]; then
+@@@END
+@@@FILE scripts/setup-user-skills.sh M-skills-b shared names recorded lower-cased
+@@@OLD
+        [ -f "$skill_dir/SKILL.md" ] || continue
+        SKILL_NAMES="$SKILL_NAMES $skill_name"
+    done
+fi
+@@@NEW
+        [ -f "$skill_dir/SKILL.md" ] || continue
+        SKILL_NAMES="$SKILL_NAMES $skill_name"
+        SKILL_NAMES_LC="$SKILL_NAMES_LC $(printf '%s' "$skill_name" | tr '[:upper:]' '[:lower:]')"
+    done
+fi
+@@@END
+@@@FILE scripts/setup-user-skills.sh M-skills-c dotprofile duplicate check case-insensitive (PS1 -notin parity)
+@@@OLD
+        case " $SKILL_NAMES " in
+            *" $skill_name "*) ;; # already listed from shared
+            *) SKILL_NAMES="$SKILL_NAMES $skill_name" ;;
+        esac
+@@@NEW
+        # Compared case-insensitively, as the PS1 twin's -notin: on APFS and NTFS
+        # "Foo" and "foo" are one skill directory (ASCII names: tr is enough)
+        skill_lc=$(printf '%s' "$skill_name" | tr '[:upper:]' '[:lower:]')
+        case " $SKILL_NAMES_LC " in
+            *" $skill_lc "*) ;; # already listed from shared
+            *) SKILL_NAMES="$SKILL_NAMES $skill_name"
+               SKILL_NAMES_LC="$SKILL_NAMES_LC $skill_lc" ;;
+        esac
+@@@END
+@@@FILE scripts/setup-user-hooks.ps1 M-hooks-a settings.json backed up before the merge write
+@@@OLD
+            $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($settingsFile)
+            $errorsBeforeWrite = $errors
+            try {
+@@@NEW
+            $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($settingsFile)
+            $errorsBeforeWrite = $errors
+            # config-file-safety.md "Backup before overwrite": the JSON caller backs up
+            # (Backup-File skips a missing file and warns on failure)
+            Backup-File -FilePath $settingsFile
+            try {
+@@@END

@@ -34,6 +34,8 @@ Reading/referencing any source is always OK — the gate applies at "install" or
 - I work on both Windows 11 and macOS -- both are first-class, ensure a seamless experience on either
 - Use `~/` with forward slashes on macOS, `%USERPROFILE%\` with backslashes on Windows
 - Projects live in git repos under `~/repos/` (macOS) / `%USERPROFILE%\repos\` (Windows)
+- My dotprofile repo (profile.json, personal CLAUDE.md template, rules, session archives) is `{{USER_REPO_PATH}}` on this machine -- convention `<reposPath>/aitools-<github-user>`. Code finds it with `resolve_user_repo_path` / `Resolve-UserRepoPath` (aitools-lib); never hardcode it
+- `profile.json` in the dotprofile is the source of truth for my identity and every machine (machine profiles keyed by machine id); `~/.aitools/config.json` is derived from it by `setup-user-config` -- change `profile.json`, never edit config.json by hand
 - Google Drive paths are auto-discovered by `aitools install` and stored in `~/.aitools/config.json` (`googleDrives` array) -- do not hardcode them
 - **After creating `.sh` files on Windows**, always run `git update-index --chmod=+x <file>` before committing -- Windows doesn't set the Unix executable bit
 
@@ -130,7 +132,7 @@ Repeated violations will end the working relationship.
 
 ## Delegation Duty
 
-Applies on every platform and in every environment, to every delegate (sub-agent, parallel or background session, cloud agent). Before writing a delegation prompt, invoke the `/delegate` skill. Every delegation prompt carries seven elements: identity, rules, skills, operational learning, the `WRITE_BLOCKED` signal, access (explicit paths), and the name prefix -- **the delegate writes every `*.md` file with its name as a prefix**, e.g. `S2-report.md` (decision D-DEL1, 2026-10-05). The prefix avoids Claude Code's block on sub-agent writes named `REPORT*.md`, `SUMMARY*.md`, `FINDINGS*.md` or `ANALYSIS*.md`, and the file name records which delegate produced it. Verify a delegate's output before relying on it. Rule: `~/.claude/rules/delegation.md`.
+Applies on every platform and in every environment, to every delegate (Agent tool sub-agent of any type, workflow agent, parallel or background session, cloud agent). **Load the `/delegate` skill before every Agent tool call and every workflow**, at session start, and after a compaction. Every delegation prompt carries eight elements: identity; rules and CLAUDE.md files (an explicit instruction to read in full every user- and project-scope CLAUDE.md and rule, by absolute path); skills, with `/delegate` first and the instruction to load it before delegating further and to pass the same instructions down; operational learning; conflict priority (D-DEL6: the commander's own words, newest first, then the prompt, then skills); the `WRITE_BLOCKED` signal; access (explicit paths); and the name prefix -- **the delegate writes every `*.md` file with its name as a prefix**, e.g. `S2-report.md` (D-DEL1). Delegates write versions, not drafts (D-DEL5). Verify a delegate's output before relying on it. Rule: `~/.claude/rules/delegation.md`; everything else: the `/delegate` skill.
 
 ## Git Conventions
 
