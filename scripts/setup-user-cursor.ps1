@@ -890,6 +890,18 @@ if ($rulesGo) {
     }
 }
 
+# --- 5. User skills fan-out: .aitools\skills -> .cursor\skills ---
+# The lib's Invoke-HarnessSkillsFanout (plans/skills-and-rules-fanout.md
+# section 3.4): every skill directory deploy-harness collected, except the
+# ones the skills manifest retires, file by file through Deploy-ManagedFile.
+# No adopt target (-AitoolsRepo and -Dotprofile ""), as for Cursor rules. A
+# skill directory in .cursor\skills the fan-out did not create is never
+# overwritten or removed. Rows: "cursor skills". Parity: step 5 in
+# setup-user-cursor.sh.
+
+Log "Step 5: Cursor user skills"
+Invoke-HarnessSkillsFanout -ToolName "cursor skills" -DestDir (Join-Path $cursorDir "skills") -AitoolsRepo "" -Dotprofile ""
+
 # --- END cursor body (extracted by build-deploy) ---
 
 # --- BEGIN exit (extracted by build-deploy) ---
