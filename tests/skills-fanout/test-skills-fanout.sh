@@ -724,5 +724,16 @@ cursor_case cursor-none seed_cursor_none
 check "cursor, no harness skills: no cursor skills row, ~/.cursor/skills untouched" "[ \"\$(rc)\" = 0 ] && [ -z \"\$(cnondetail)\" ] && [ \"\$(ls '$(CS)')\" = mine ]"
 cparity cursor-none
 
+# Only retired names in both manifests, nothing in ~/.cursor: steps 4 and 5
+# write the same row text (review 1 / audit B6)
+seed_cursor_retired_only() {
+    manifest 'gone|retired'
+    mkdir -p "$H/.aitools/rules"
+    printf '# aitools rules manifest v1\nx.md\tretired\n' > "$H/.aitools/rules/.aitools-rules-manifest"
+}
+cursor_case cursor-retired-only seed_cursor_retired_only
+check "cursor, only retired names: both steps write n/a (nothing to deploy)" "[ \"\$(rc)\" = 0 ] && [ \"\$(cnondetail)\" = 'OK|cursor skills|n/a (nothing to deploy)' ] && [ \"\$(grep -F '|cursor rules|' '$C/sh.summary' | grep -v '^DETAIL' | tail -n 1)\" = 'OK|cursor rules|n/a (nothing to deploy)' ]"
+cparity cursor-retired-only
+
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]

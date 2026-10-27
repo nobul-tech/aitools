@@ -5,8 +5,8 @@
 # rule_name_kind / Get-RuleNameKind, skill_name_kind / Get-SkillNameKind,
 # read_harness_manifest / Read-HarnessManifest (rules and skills: ok, header-bad,
 # BOM, CRLF, invalid lines, duplicates, unreadable, unknown kind),
-# read_rules_manifest / Read-RulesManifest (same output as the general reader for
-# rules; setup-user-cursor defines no copy of its own), fanout_text_equal / Test-FanoutTextEqual and fanout_dir_matches /
+# a guard that setup-user-cursor has no copy of the reader or list helpers,
+# fanout_text_equal / Test-FanoutTextEqual and fanout_dir_matches /
 # Test-FanoutDirMatches (match, extra or missing file, *.bak.* ignored, empty dir,
 # symlinks, unreadable entries).
 #
@@ -252,10 +252,6 @@ printf 'mrc-headerbad\trc=0\tsh_mrc\tr-headerbad\trules\n'
 printf 'mrc-missing\trc=1\tsh_mrc\tr-missing\trules\n'
 printf 'mrc-dir\trc=1\tsh_mrc\tr-dir\trules\n'
 printf 'mrc-kind\trc=2\tsh_mrc\tr-ok\tRules\n'
-# read_rules_manifest = read_harness_manifest FILE rules (output, stderr and exit code)
-for m in r-ok r-headerbad r-skillshead r-headeronly r-invalid r-bom r-crlf r-nolf r-crnolf r-empty r-missing s-ok; do
-    printf 'rr-%s\tsame\trr\t%s\n' "$m" "$m"
-done
 # text equality
 printf 'te-trailing\trc=0\tteq\tt/a-lf\tt/a-crlf2\n'
 printf 'te-nonl\trc=0\tteq\tt/a-none\tt/a-lf\n'
@@ -311,7 +307,6 @@ if $SYMLINKS; then
 fi
 if $UNREAD; then
     printf 'm-r-unread\tfail\tmanifest\tr-unread\trules\n'
-    printf 'rr-r-unread\tsame\trr\tr-unread\n'
     printf 'te-unread\trc=2\tteq\tt/unread\tt/a-lf\n'
     printf 'dm-unreadfile\trc=2\tdmatch\td/unreadfile/T\td/unreadfile/C\n'
     printf 'dm-unreadsub\trc=2\tdmatch\td/unreadsub/T\td/unreadsub/C\n'
@@ -326,23 +321,20 @@ fi
 if ! $SYMLINKS; then SKIP=$((SKIP + 6)); printf '  skip symlink cases (ln -s does not make symlinks here)\n'; fi
 if ! $FIFOS; then SKIP=$((SKIP + 2)); printf '  skip FIFO cases (no mkfifo)\n'; fi
 if ! $SPECIAL; then SKIP=$((SKIP + 1)); printf '  skip backup_dir special-name case (* ? not allowed in names here)\n'; fi
-if ! $UNREAD; then SKIP=$((SKIP + 11)); printf '  skip unreadable cases (chmod 000 leaves files readable: root or Windows)\n'; fi
+if ! $UNREAD; then SKIP=$((SKIP + 10)); printf '  skip unreadable cases (chmod 000 leaves files readable: root or Windows)\n'; fi
 
 # A stub perl that fails, for te-perlfail
 mkdir -p "$WORK/badperl"
 printf '#!/bin/sh\necho "stub perl: boom" >&2\nexit 9\n' > "$WORK/badperl/perl"
 chmod +x "$WORK/badperl/perl"
 
-# The rr cases: setup-user-cursor's own manifest readers were deleted in FO-5
-# (it uses the lib's, FAN-PLAN F1), so read_rules_manifest / Read-RulesManifest
-# are compared with the lib's general reader for KIND rules (the m-r-* cases
-# pin that reader's output). The comparison functions keep their old names.
-CUR_SH="$WORK/cursor-copy.sh"
-CUR_PS="$WORK/cursor-copy.ps1"
-printf 'cursor_read_rules_manifest() { read_harness_manifest "$1" rules; }\n' > "$CUR_SH"
-printf 'function Read-CursorRulesManifest([string]$Path) { return Read-HarnessManifest -Path $Path -Kind "rules" }\n' > "$CUR_PS"
-if grep -q '^read_rules_manifest()' "$REPO/scripts/setup-user-cursor.sh" || grep -q '^function Read-RulesManifest\b' "$REPO/scripts/setup-user-cursor.ps1"; then
-    bad "setup-user-cursor defines its own read_rules_manifest / Read-RulesManifest again (use the lib's, FAN-PLAN F1)"
+# setup-user-cursor's own copies of the manifest reader and list helpers were
+# deleted in FO-5 (it uses the lib's, FAN-PLAN F1): fail if one comes back
+if grep -qE '^(read_rules_manifest|lower_name|in_list)\(\)' "$REPO/scripts/setup-user-cursor.sh" \
+    || grep -qE '^function Read-RulesManifest\b|^\$rulesManifestHeader =' "$REPO/scripts/setup-user-cursor.ps1"; then
+    bad "setup-user-cursor defines its own manifest reader or list helpers again (use the lib's, FAN-PLAN F1)"
+else
+    ok "setup-user-cursor uses the lib's manifest reader and list helpers (no copies)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -353,7 +345,6 @@ cat > "$WORK/drive.sh" <<'DRIVE'
 set -uo pipefail
 source "$REPO/scripts/aitools-lib.sh"
 logging_init "test-fanout-lib"
-source "$CUR_SH"
 TAB=$(printf '\t')
 : > "$OUT"
 emit() { printf '%s\t%s\n' "$1" "$2" >> "$OUT"; }
@@ -389,13 +380,6 @@ while IFS="$TAB" read -r id want call a1 a2 <&3; do
             else
                 emit "$id" "fail"
             fi ;;
-        rr)
-            # same output and message; exit: both 0 or both non-zero
-            o1=$(read_rules_manifest "$F/$a1" 2>&1); r1=$?
-            o2=$(cursor_read_rules_manifest "$F/$a1" 2>&1); r2=$?
-            z1=ok; [ "$r1" -eq 0 ] || z1=fail
-            z2=ok; [ "$r2" -eq 0 ] || z2=fail
-            if [ "$o1" = "$o2" ] && [ "$z1" = "$z2" ]; then emit "$id" "same"; else emit "$id" "differ (lib rc=$r1, cursor rc=$r2)"; fi ;;
         sh_mrc) rc=0; read_harness_manifest "$(fx "$a1")" "$a2" > /dev/null 2>&1 || rc=$?; emit "$id" "rc=$rc" ;;
         teq) rc=0; fanout_text_equal "$(fx "$a1")" "$(fx "$a2")" || rc=$?; emit "$id" "rc=$rc" ;;
         sh_teqperl) rc=0; PATH="$WORK/badperl:$PATH" fanout_text_equal "$(fx "$a1")" "$(fx "$a2")" || rc=$?; emit "$id" "rc=$rc" ;;
@@ -431,7 +415,6 @@ cat > "$WORK/drive.ps1" <<'DRIVE'
 $ErrorActionPreference = "Stop"
 . (Join-Path $env:REPO "scripts/aitools-lib.ps1")
 Initialize-Logging "test-fanout-lib"
-. $env:CUR_PS
 $F = $env:F
 $results = New-Object System.Collections.Generic.List[string]
 function Format-Manifest($r) {
@@ -473,12 +456,6 @@ foreach ($line in [IO.File]::ReadAllLines($env:CASES)) {
         "rkind" { $res = Get-RuleNameKind $a1 }
         "skind" { $res = Get-SkillNameKind $a1 }
         "manifest" { $p = Join-Path $F $a1; $k = $a2; $res = Invoke-Reader { Read-HarnessManifest -Path $p -Kind $k } }
-        "rr" {
-            $p = Join-Path $F $a1
-            $x = Invoke-Reader { Read-RulesManifest $p }
-            $y = Invoke-Reader { Read-CursorRulesManifest $p }
-            $res = if ($x -ceq $y) { "same" } else { "differ (lib $x, cursor $y)" }
-        }
         "teq" { $res = "rc=" + (Test-FanoutTextEqual (Resolve-Fx $a1) (Resolve-Fx $a2)) }
         "dmatch" { $res = "rc=" + (Test-FanoutDirMatches (Resolve-Fx $a1) (Resolve-Fx $a2)) }
         { $_ -ceq "dmf" -or $_ -ceq "dmfdry" } {
@@ -524,11 +501,11 @@ run_shell() {  # run_shell sh|ps: run the driver under an isolated HOME
     mkdir -p "$h"
     if [ "$s" = "sh" ]; then
         env HOME="$h" AITOOLS_LOG_DIR="$WORK/logs-sh" AITOOLS_SUMMARY_FILE="$WORK/sum-sh" \
-            REPO="$REPO" CASES="$CASES" F="$F" WORK="$WORK" OUT="$WORK/out-sh" CUR_SH="$CUR_SH" \
+            REPO="$REPO" CASES="$CASES" F="$F" WORK="$WORK" OUT="$WORK/out-sh" \
             "$TB" "$WORK/drive.sh" < /dev/null > "$WORK/console-sh" 2>&1
     else
         env HOME="$h" USERPROFILE="$h" AITOOLS_LOG_DIR="$WORK/logs-ps" AITOOLS_SUMMARY_FILE="$WORK/sum-ps" \
-            REPO="$REPO" CASES="$CASES" F="$F" WORK="$WORK" OUT="$WORK/out-ps" CUR_PS="$CUR_PS" \
+            REPO="$REPO" CASES="$CASES" F="$F" WORK="$WORK" OUT="$WORK/out-ps" \
             pwsh -NoProfile -File "$WORK/drive.ps1" < /dev/null > "$WORK/console-ps" 2>&1
     fi
 }

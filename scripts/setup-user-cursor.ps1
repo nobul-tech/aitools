@@ -547,6 +547,10 @@ $manifestFailed = $false   # unreadable: counted as a failed item, so the final 
 $listedNames = New-Object System.Collections.Generic.List[string]    # manifest names not retired
 $retiredNames = New-Object System.Collections.Generic.List[string]
 $retiredSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+# Invalid manifest lines or a listed rule with no file: one ACTION row (as the
+# skills fan-out writes for its manifest)
+$rulesNeedRebuild = $false
+$rulesRebuildHint = "Run aitools to rebuild ~/.aitools/rules and its manifest"
 if ($rulesGo) {
     # Absent only when nothing is at the path: a directory or a dangling link
     # there (Test-Path is true for one on pwsh 7) goes to the reader, which
@@ -563,10 +567,13 @@ if ($rulesGo) {
             $manifestFailed = $true
         }
         if ($manifest -and $manifest.Status -eq "header-bad") {
-            LogWarn "Rules manifest ${rulesManifest}: the first line is not `"$rulesManifestHeader`" -- every rule fanned out, none removed"
-            Write-Summary "ACTION" "" "Run aitools to rebuild ~/.aitools/rules and its manifest"
+            LogWarn "Rules manifest ${rulesManifest}: the first line is not `"$rulesManifestHeader`" -- every rule fanned out, none removed -- $rulesRebuildHint"
+            Write-Summary "ACTION" "" $rulesRebuildHint
         } elseif ($manifest) {
-            foreach ($bad in $manifest.Invalid) { LogWarn "Rules manifest ${rulesManifest}: line ignored: $bad" }
+            foreach ($bad in $manifest.Invalid) {
+                $rulesNeedRebuild = $true
+                LogWarn "Rules manifest ${rulesManifest}: line ignored: $bad -- $rulesRebuildHint"
+            }
             foreach ($r in $manifest.Rules) {
                 if ($r.Source -ceq "retired") {
                     $retiredNames.Add($r.Name); [void]$retiredSet.Add($r.Name)
@@ -617,9 +624,11 @@ if ($rulesGo) {
     # A rule the manifest lists (not retired) with no file: nothing to fan out
     foreach ($name in $listedNames) {
         if (-not $foundSet.Contains($name)) {
-            LogWarn "Not fanned out: $name is in the rules manifest but not in $harnessRulesDir (run aitools to rebuild it)"
+            $rulesNeedRebuild = $true
+            LogWarn "Not fanned out: $name is in the rules manifest but not in $harnessRulesDir -- $rulesRebuildHint"
         }
     }
+    if ($rulesNeedRebuild) { Write-Summary "ACTION" "" $rulesRebuildHint }
 
     if ($ruleSources.Count -eq 0 -and $ruleBroken.Count -eq 0 -and $retiredNames.Count -eq 0) {
         Log "No rules in $harnessRulesDir -- skipping"
@@ -730,8 +739,23 @@ if ($rulesGo) {
         $rmDest = $rmName.Substring(0, $rmName.Length - 3) + ".mdc"
         # Deployed this run from a rule whose name differs only in case
         if ($ruleDestsLc.Contains($rmDest)) { continue }
-        $rmPath = Join-Path $cursorRulesDir $rmDest
-        if (-not (Test-Path -LiteralPath $rmPath -PathType Leaf)) { continue }
+        # The .mdc in .cursor\rules, found case-insensitively (a case-sensitive
+        # file system may hold Gone.mdc for the manifest's gone.md), reported
+        # under its on-disk name; a regular file or a link to one, as the .sh's
+        # [ -f ] (a dangling link is skipped). As setup-user-claude's retired prune
+        $rmPath = ""
+        if (-not (Test-Path -LiteralPath $cursorRulesDir -PathType Container)) { continue }
+        try {
+            foreach ($f in @([System.IO.Directory]::GetFiles($cursorRulesDir) | Sort-Object -CaseSensitive)) {
+                if (-not [string]::Equals([System.IO.Path]::GetFileName($f), $rmDest, [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+                if ((Get-FanoutEntryType -Path $f -Follow) -eq "file") { $rmPath = $f; break }
+            }
+        } catch {
+            # The .sh glob matches nothing in a directory it cannot list: detail only
+            LogDetail "cursor rules: cannot list $cursorRulesDir for retired rule ${rmName}: $_"
+        }
+        if (-not $rmPath) { continue }
+        $rmDest = [System.IO.Path]::GetFileName($rmPath)
         try {
             $rmText = [System.IO.File]::ReadAllText($rmPath, [System.Text.UTF8Encoding]::new($false))
         } catch {
@@ -795,7 +819,9 @@ if ($rulesGo) {
                     if ((Test-FanoutTextEqual $rmPath $b) -eq 0) { $rmBacked = $true; break }
                 }
             } catch {
-                LogWarn "Cannot list the backups of $rmDest in ${cursorRulesDir}: $_"
+                # Detail only (the .sh glob cannot fail this way): the LogError
+                # below reports the outcome
+                LogDetail "cursor rules: cannot list the backups of $rmDest in ${cursorRulesDir}: $_"
             }
         }
         if (-not $rmBacked) {
@@ -825,6 +851,9 @@ if ($rulesGo) {
     if ($DryRun) {
         if ($script:dtFailed -gt 0) {
             Write-Summary "ERROR" "cursor rules" "$($script:dtFailed) failed (dry run)"
+        } elseif ($errors -ne $errorsBeforeCursorRules) {
+            # An error not recorded as a failed item still makes the row ERROR
+            Write-Summary "ERROR" "cursor rules" "dry run failed"
         } else {
             Write-Summary "OK" "cursor rules" "dry run (no files written)"
         }
@@ -834,7 +863,8 @@ if ($rulesGo) {
         try {
             $destEntries = @(Get-ChildItem -LiteralPath $cursorRulesDir -File -ErrorAction Stop | Sort-Object Name)
         } catch {
-            LogWarn "Cannot list $cursorRulesDir for the preserved report: $_"
+            # Detail only (the .sh glob matches nothing in an unlistable directory)
+            LogDetail "cursor rules: cannot list $cursorRulesDir for the preserved report: $_"
         }
         foreach ($existing in $destEntries) {
             if ($existing.Name -like "*.bak.*") { continue }
@@ -847,7 +877,16 @@ if ($rulesGo) {
         # Post-write validation: non-empty, and a .mdc starts with frontmatter
         foreach ($destName in $ruleDests) {
             $destPath = Join-Path $cursorRulesDir $destName
-            if (-not (Test-Path -LiteralPath $destPath -PathType Leaf)) { continue }
+            # Skipped unless a regular file or a link to one, as the .sh's [ -f ]:
+            # Test-Path -PathType Leaf and File.Exists are true for a dangling
+            # link on pwsh 7, whose failed deploy is already reported
+            $destType = "missing"
+            try {
+                $destType = Get-FanoutEntryType -Path $destPath -Follow
+            } catch {
+                LogDetail "cursor rules: cannot stat ${destPath}: $_"
+            }
+            if ($destType -ne "file") { continue }
             $item = Get-Item -LiteralPath $destPath
             if ($item.Length -eq 0) {
                 LogError "Validation failed: $destName is empty after deploy"
@@ -876,14 +915,11 @@ if ($rulesGo) {
             Write-DeployTrackerSummary -ToolName "cursor rules"
             Log "Cursor rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $cursorRulesDir"
         } elseif ($errors -eq $errorsBeforeCursorRules) {
-            if ($ruleDests.Count -eq 0 -and $script:dtRemoved -eq 0) {
-                # Only retired names, none of them deployed here: nothing to do
-                Write-Summary "OK" "cursor rules" "n/a (no harness rules)"
-                LogOk "Cursor rules: nothing fanned out, nothing removed, $($script:dtPreserved) preserved in $cursorRulesDir"
-            } else {
-                Write-DeployTrackerSummary -ToolName "cursor rules"
-                LogOk "Cursor rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $cursorRulesDir"
-            }
+            # Only retired names, none of them here: the tracker's own text,
+            # "n/a (nothing to deploy)", the same row text the skills fan-out
+            # (step 5) writes in that case
+            Write-DeployTrackerSummary -ToolName "cursor rules"
+            LogOk "Cursor rules: $($script:deployTrackerText), $($script:dtPreserved) preserved in $cursorRulesDir"
         } else {
             Write-Summary "ERROR" "cursor rules" "validation failed"
         }
@@ -896,8 +932,10 @@ if ($rulesGo) {
 # ones the skills manifest retires, file by file through Deploy-ManagedFile.
 # No adopt target (-AitoolsRepo and -Dotprofile ""), as for Cursor rules. A
 # skill directory in .cursor\skills the fan-out did not create is never
-# overwritten or removed. Rows: "cursor skills". Parity: step 5 in
-# setup-user-cursor.sh.
+# overwritten or removed. Rows: "cursor skills". With no .aitools\skills the
+# lib logs and writes no row: setup-user-skills (the fallback deployer, FO-6)
+# owns the row then. Until FO-6, setup-user-skills also writes "cursor skills"
+# rows (FD-9). Parity: step 5 in setup-user-cursor.sh.
 
 Log "Step 5: Cursor user skills"
 Invoke-HarnessSkillsFanout -ToolName "cursor skills" -DestDir (Join-Path $cursorDir "skills") -AitoolsRepo "" -Dotprofile ""

@@ -541,6 +541,10 @@ MANIFEST_FAILED=false   # unreadable: counted as a failed item, so the final row
 LISTED_NAMES=""     # manifest names not retired, one per line
 RETIRED_NAMES=""    # "<name><TAB>retired" for each retired name
 RETIRED_LC=""       # retired names, lower-cased
+# Invalid manifest lines or a listed rule with no file: one ACTION row (as the
+# skills fan-out writes for its manifest)
+RULES_NEED_REBUILD=false
+RULES_REBUILD_HINT="Run aitools to rebuild ~/.aitools/rules and its manifest"
 if [ "$RULES_GO" = "true" ]; then
     # Absent only when nothing is at the path: a directory or a dangling
     # link there goes to the reader, which reports it as unreadable
@@ -553,14 +557,15 @@ if [ "$RULES_GO" = "true" ]; then
             write_summary ERROR "cursor rules" "cannot read rules manifest"
             MANIFEST_FAILED=true
         elif [ "$manifest_out" = "header-bad" ]; then
-            log_warn "Rules manifest $(display_path "$RULES_MANIFEST"): the first line is not \"$RULES_MANIFEST_HEADER\" -- every rule fanned out, none removed"
-            write_summary ACTION "" "Run aitools to rebuild ~/.aitools/rules and its manifest"
+            log_warn "Rules manifest $(display_path "$RULES_MANIFEST"): the first line is not \"$RULES_MANIFEST_HEADER\" -- every rule fanned out, none removed -- $RULES_REBUILD_HINT"
+            write_summary ACTION "" "$RULES_REBUILD_HINT"
         else
             while IFS= read -r m_line; do
                 [ -n "$m_line" ] || continue
                 case "$m_line" in
                     "invalid$TAB"*)
-                        log_warn "Rules manifest $(display_path "$RULES_MANIFEST"): line ignored: ${m_line#invalid"$TAB"}" ;;
+                        RULES_NEED_REBUILD=true
+                        log_warn "Rules manifest $(display_path "$RULES_MANIFEST"): line ignored: ${m_line#invalid"$TAB"} -- $RULES_REBUILD_HINT" ;;
                     "rule$TAB"*)
                         m_rest="${m_line#rule"$TAB"}"
                         m_name="${m_rest%%"$TAB"*}"
@@ -624,9 +629,13 @@ if [ "$RULES_GO" = "true" ]; then
     while IFS= read -r m_name; do
         [ -n "$m_name" ] || continue
         if ! in_list "$(lower_name "$m_name")" "$FOUND_LC"; then
-            log_warn "Not fanned out: $m_name is in the rules manifest but not in $(display_path "$HARNESS_RULES_DIR") (run aitools to rebuild it)"
+            RULES_NEED_REBUILD=true
+            log_warn "Not fanned out: $m_name is in the rules manifest but not in $(display_path "$HARNESS_RULES_DIR") -- $RULES_REBUILD_HINT"
         fi
     done <<< "$LISTED_NAMES"
+    if [ "$RULES_NEED_REBUILD" = "true" ]; then
+        write_summary ACTION "" "$RULES_REBUILD_HINT"
+    fi
 
     if [ -z "$RULE_SOURCES" ] && [ -z "$RULE_BROKEN" ] && [ -z "$RETIRED_NAMES" ]; then
         log "No rules in $(display_path "$HARNESS_RULES_DIR") -- skipping"
@@ -694,6 +703,13 @@ if [ "$RULES_GO" = "true" ]; then
         RULE_DESTS_LC="${RULE_DESTS_LC}${dest_lc}
 "
 
+        # The converter reads the file through a shell redirect, whose failure
+        # reason would reach only the console: check readability first
+        if [ ! -r "$rule_src" ]; then
+            log_error "Failed: $rule_base: cannot read $(display_path "$rule_src") -- permission denied"
+            deploy_tracker_record "failed" "cursor rules" "$dest_name"
+            continue
+        fi
         rule_content=""
         if ! rule_content=$(cursor_rule_from_md "$rule_src" "$rule_base"); then
             log_error "Failed: $rule_base: conversion to .mdc failed"
@@ -735,8 +751,20 @@ if [ "$RULES_GO" = "true" ]; then
         rm_dest="${rm_name%.[mM][dD]}.mdc"
         # Deployed this run from a rule whose name differs only in case
         if in_list "$(lower_name "$rm_dest")" "$RULE_DESTS_LC"; then continue; fi
-        rm_path="$CURSOR_RULES_DIR/$rm_dest"
-        [ -f "$rm_path" ] || continue
+        # The .mdc in ~/.cursor/rules, found case-insensitively (a case-sensitive
+        # file system may hold Gone.mdc for the manifest's gone.md), reported
+        # under its on-disk name; as setup-user-claude's retired prune
+        rm_lc=$(lower_name "$rm_dest")
+        rm_path=""
+        for rm_existing in "$CURSOR_RULES_DIR"/*; do
+            [ -f "$rm_existing" ] || continue
+            if [ "$(lower_name "$(basename "$rm_existing")")" = "$rm_lc" ]; then
+                rm_path="$rm_existing"
+                break
+            fi
+        done
+        [ -n "$rm_path" ] || continue
+        rm_dest=$(basename "$rm_path")
         rm_why=""
         rm_rc=0
         cursor_rule_is_fanout "$rm_path" || rm_rc=$?
@@ -815,6 +843,9 @@ if [ "$RULES_GO" = "true" ]; then
     if [ "$DRY_RUN" = "true" ]; then
         if [ "$_DT_FAILED" -gt 0 ]; then
             write_summary ERROR "cursor rules" "$_DT_FAILED failed (dry run)"
+        elif [ "$ERRORS" -ne "$ERRORS_BEFORE_CURSOR_RULES" ]; then
+            # An error not recorded as a failed item still makes the row ERROR
+            write_summary ERROR "cursor rules" "dry run failed"
         else
             write_summary OK "cursor rules" "dry run (no files written)"
         fi
@@ -866,14 +897,11 @@ if [ "$RULES_GO" = "true" ]; then
             deploy_tracker_summary "cursor rules"
             log "Cursor rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$CURSOR_RULES_DIR")"
         elif [ "$ERRORS" -eq "$ERRORS_BEFORE_CURSOR_RULES" ]; then
-            if [ -z "$RULE_DESTS" ] && [ "$_DT_REMOVED" -eq 0 ]; then
-                # Only retired names, none of them deployed here: nothing to do
-                write_summary OK "cursor rules" "n/a (no harness rules)"
-                log_ok "Cursor rules: nothing fanned out, nothing removed, $_DT_PRESERVED preserved in $(display_path "$CURSOR_RULES_DIR")"
-            else
-                deploy_tracker_summary "cursor rules"
-                log_ok "Cursor rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$CURSOR_RULES_DIR")"
-            fi
+            # Only retired names, none of them here: the tracker's own text,
+            # "n/a (nothing to deploy)", the same row text the skills fan-out
+            # (step 5) writes in that case
+            deploy_tracker_summary "cursor rules"
+            log_ok "Cursor rules: $DEPLOY_TRACKER_TEXT, $_DT_PRESERVED preserved in $(display_path "$CURSOR_RULES_DIR")"
         else
             write_summary ERROR "cursor rules" "validation failed"
         fi
@@ -887,7 +915,10 @@ fi
 # review menu can prompt: the lib reads its list on fd 3). No adopt target
 # (AITOOLS_REPO and DOTPROFILE ""), as for Cursor rules. A skill directory in
 # ~/.cursor/skills the fan-out did not create is never overwritten or removed.
-# Rows: "cursor skills". Parity: step 5 in setup-user-cursor.ps1.
+# Rows: "cursor skills". With no ~/.aitools/skills the lib logs and writes no
+# row: setup-user-skills (the fallback deployer, FO-6) owns the row then.
+# Until FO-6, setup-user-skills also writes "cursor skills" rows (FD-9).
+# Parity: step 5 in setup-user-cursor.ps1.
 
 log "Step 5: Cursor user skills"
 fanout_harness_skills "cursor skills" "$CURSOR_DIR/skills" "" ""
