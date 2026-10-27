@@ -167,6 +167,12 @@ jobs:
       - name: setup-user-claude dev + MDM tests (macOS /bin/bash 3.2)
         run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/claude-mdm/test-claude-mdm.sh
 
+      - name: build-deploy backup + swap tests (incident #86)
+        run: bash tests/build-deploy/test-build-deploy-backup.sh
+
+      - name: build-deploy backup + swap tests (macOS /bin/bash 3.2)
+        run: AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/build-deploy/test-build-deploy-backup.sh
+
       - name: Build deploy scripts
         run: |
           echo "::group::Running build-deploy.sh"
@@ -337,6 +343,9 @@ jobs:
 
       - name: setup-user-claude dev + MDM tests (bash + pwsh)
         run: bash tests/claude-mdm/test-claude-mdm.sh
+
+      - name: build-deploy backup + swap tests (incident #86)
+        run: bash tests/build-deploy/test-build-deploy-backup.sh
 
       - name: Build deploy scripts
         run: bash scripts/build-deploy.sh

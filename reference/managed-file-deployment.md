@@ -707,6 +707,12 @@ or merge (JSON: LOCAL and `ADOPT_PATH`).
 - **Location**: `<file>.bak.<TIMESTAMP>` (same directory as target)
 - **Retention**: max 20 per file, auto-prune oldest
 - **Directory backups**: `<dir>.bak.<TIMESTAMP>/`, max 5, auto-prune
+- **Generated `deploy/`** (incident #86): `build-deploy.sh` copies `<dotprofile>/deploy/`
+  to `<dotprofile>/deploy.bak.<UTC>/` before it builds (max 5, oldest pruned;
+  the copy is verified identical), builds in a temp dir, and renames the new
+  tree in only when the whole build succeeded. A failed build leaves the old
+  `deploy/` and its backup; a backup that cannot be made stops the build with
+  `deploy/` untouched. Test: `tests/build-deploy/test-build-deploy-backup.sh`
 - **Skip**: Only when target does not yet exist (nothing to back up)
 - **Failure to back up**: inside `deploy_managed_file` / `Deploy-ManagedFile`,
   a failed backup of an existing file makes the step `failed` with nothing
