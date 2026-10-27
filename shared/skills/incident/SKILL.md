@@ -14,6 +14,33 @@ skill). NOT for investigating root causes (`/investigate` skill).
 **Audience**: Agents fulfilling surfacing duty, agents prompted by
 the incident-governance rule, subagents triaging `AMBIGUITY:` findings.
 
+## Where the files live
+
+This is a user-level skill: `aitools install` deploys it to
+`~/.claude/skills/` and `~/.cursor/skills/`, so it loads in every repo.
+Its source is `shared/skills/incident/` in the aitools repo. Every repo path
+below (`registries/`, `reference/`, `.claude/rules/`, `scripts/`) is relative
+to the aitools clone:
+
+- **Session on aitools** (the clone or one of its worktrees): the paths
+  resolve from the repo root. Reads and reviewed writes happen here.
+- **Session on any other repo**: use the clone named by `repoPath` in
+  `~/.aitools/config.json` (`%USERPROFILE%\.aitools\config.json` on
+  Windows). Read current data: `git -C <repoPath> fetch origin`, then read
+  `origin/main` (`git -C <repoPath> show origin/main:<path>`), not the
+  working tree, which may be stale or hold other agents' edits. Never edit
+  that checkout's working tree from another repo's session. A reviewed
+  write goes on a new branch in a worktree created from `origin/main`
+  (`git -C <repoPath> worktree add -b <branch> <path> origin/main`) and
+  ships as a PR; if that is not possible, open an issue on
+  `nobul-tech/aitools` with the drafted change.
+- **No clone on this machine**: read the read-only copies under
+  `~/.aitools/registries/` and `~/.aitools/reference/` once deploy-harness
+  installs them. Never edit those copies; propose the change as an issue on
+  `nobul-tech/aitools` instead.
+- **None of these exist**: say the data is unavailable and stop. Do not
+  answer from memory.
+
 ## Known Limitations
 
 This skill is outdated and ineffective in its current form. It does not
