@@ -120,12 +120,17 @@ cross-boundary
 delegating agent
 delegate
 delegation duty
+fan-out
 handoff
+harness files
 Lagebeurteilung
 lifecycle transition
 Mitdenken
 Reibung
+removed
+retired
 Schwerpunkt
+trigger directive
 
 ### When to invoke /glossary
 
