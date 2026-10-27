@@ -73,9 +73,9 @@ aitools sessions archive <id>    # Manually archive a session by ID
 Run these from the `deploy/` directory -- self-contained, MDM-ready.
 `deploy-harness` runs first: it fills `~/.aitools`, and the rules and skills
 fan-outs in `setup-user-claude` and `setup-user-cursor` read `~/.aitools/rules`
-and `~/.aitools/skills` (run before it, they report `n/a (no harness rules)` /
-`n/a (no harness skills)` and deploy no rules or skills; `setup-user-skills`
-then deploys skills as the fallback):
+and `~/.aitools/skills` (run before it, the rules fan-outs report
+`n/a (no harness rules)` and deploy no rules, and `setup-user-skills` deploys
+skills as the fallback):
 
 macOS/Linux:
 ```bash

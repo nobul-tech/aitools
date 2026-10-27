@@ -163,7 +163,7 @@ no overrides. `tests/logging/` checks that the entry points define no log functi
 | Script | Bash overrides | PS1 overrides | Reason |
 |--------|---------------|---------------|--------|
 | `scripts/aitools-install` | `log`, `log_ok`, `log_error`, `log_warn` | `Log`, `LogOk`, `LogError`, `LogWarn` | JSONL dual-format (human-readable + structured JSON) |
-| `scripts/build-deploy.sh` | `blog`, `blog_ok`, `blog_error` | n/a | Standalone build tool; doesn't source aitools-lib.sh; defines own logging functions |
+| `scripts/build-deploy.sh` | `blog`, `blog_ok`, `blog_warn`, `blog_error` | n/a | Standalone build tool; doesn't source aitools-lib.sh; defines own logging functions |
 
 **`log_detail` / `LogDetail`**: File-only logging for diagnostic content (rejected merge
 output, verbose debugging). Not included in override tables -- entry points that override
@@ -219,9 +219,10 @@ These are the canonical tool names for field 2. Always use these exact strings.
 | `claude rules` | setup-user-claude |
 | `claude hooks` | setup-user-hooks |
 | `claude mcp` | setup-user-mcp |
-| `claude skills` | setup-user-mcp |
+| `claude skills` | setup-user-claude (the skills fan-out, `fanout_harness_skills`); setup-user-skills writes it only as the fallback (no `~/.aitools/skills`) |
 | `cursor rules` | setup-user-cursor |
-| `cursor skills` | setup-user-mcp |
+| `cursor skills` | setup-user-cursor (the skills fan-out, `fanout_harness_skills`); setup-user-skills writes it only as the fallback (no `~/.aitools/skills`) |
+| `skills` | setup-user-skills (fanned-out mode: `n/a (fanned out from ~/.aitools/skills)`, reverse-discovery errors) |
 | `cursor ide mcp` | setup-cursor-ide-mcp |
 | `python` | setup-python |
 | `uv` | setup-uv |

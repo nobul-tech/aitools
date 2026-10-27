@@ -301,14 +301,30 @@ aitools .claude/skills/<name>/     ─┼─ deploy-harness ─▶ ~/.aitools/sk
   it (Claude Code and Cursor would load a backup inside DEST as a skill),
   and the backup is verified; then tracker `removed`. Otherwise it is kept
   with an ACTION row "<Tool> still loads retired skills in <DEST>: <names>
-  -- delete them unless you wrote them". (A Finder `.DS_Store` in the copy
-  makes it "not ours": PR #118 note N7.)
+  -- delete them unless you wrote them".
 - **No manifest**: every skill fanned out, none retired, adopt not offered.
   Bad header: WARN + ACTION "Run aitools to rebuild ~/.aitools/skills and
   its manifest". Unreadable: ERROR `cannot read skills manifest`, fan-out
   continues.
-- **No `~/.aitools/skills`**: `OK <tool> n/a (no harness skills)`, DEST
-  untouched; `setup-user-skills` then deploys (S-4).
+- **No `~/.aitools/skills`**: info log only, **no row**, DEST untouched;
+  `setup-user-skills` (the fallback, S-4) deploys and owns the `claude
+  skills` / `cursor skills` rows, and there the dotprofile copy wins a name
+  conflict, as before the fan-out. In fan-out mode `shared/` wins (S-3).
+  `~/.aitools/skills` with no skill in it: `OK <tool> n/a (no harness
+  skills)` (#124 contract change, review N2 of #125).
+- **Binary files**: a file with a NUL byte or invalid UTF-8 is copied byte
+  for byte with a backup and no review menu (`_fanout_copy_binary` /
+  `Copy-FanoutBinary`), so a user's edit to such a file is overwritten on
+  every run (the backup is kept). A binary file at a DEST path that is a
+  symlink replaces the link with a regular file; text files are written
+  through the link.
+- **Reserved names**: a harness skill named `synced` or `anthropic-skills*`
+  (case-insensitive) is never written and is a failed item ("Not fanned
+  out: ... a reserved skills directory name ... -- rename the harness
+  skill"); such a directory in DEST is never removed.
+- **OS junk files** (`.DS_Store`, `Thumbs.db`, `desktop.ini`) in a deployed
+  copy do not block the prune of a retired skill. The prune keeps the
+  newest 5 `<DEST>.bak.<UTC>` directories.
 - **Directory backup**: `backup_dir DEST` runs once per non-dry run, but it
   copies nothing for a skills directory (its skip rule: no top-level
   `*.md`); each written file is still backed up by `deploy_managed_file`

@@ -61,10 +61,11 @@ a summary row, never silent (`@plans/build-package/design.md` section 3(d)):
 reference, registries, hooks, skills, bin, config.json), and the fan-outs in
 `setup-user-claude` and `setup-user-cursor` read `~/.aitools/rules` and
 `~/.aitools/skills` (the only way the dotprofile's `claude/rules` reaches an
-endpoint). Run in the other order, the fan-out steps report
-`n/a (no harness rules)` / `n/a (no harness skills)` and deploy no rules or
-skills from the harness; `setup-user-skills` then deploys skills (SKILL.md
-only) as the fallback (FD-9 of `@plans/skills-and-rules-fanout.md`).
+endpoint). Run in the other order, the rules fan-outs report
+`n/a (no harness rules)` and deploy no rules; the skills fan-outs write no
+row, and `setup-user-skills` deploys skills (SKILL.md only) as the fallback
+and owns the `claude skills` / `cursor skills` rows (FD-9 of
+`@plans/skills-and-rules-fanout.md`).
 
 `deploy-harness` ships with its `deploy/` directory: its config.json writer
 (`setup-user-config`, `aitools-profile`, `aitools-json`) sits beside it. As on
