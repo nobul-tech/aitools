@@ -312,8 +312,8 @@ check "MDM sh dry run without ~/.aitools/rules: claude rules n/a, rules not embe
 mkdir -p "$TMP_ROOT/mdm-sh/.aitools/rules"
 printf 'rule one\n' > "$TMP_ROOT/mdm-sh/.aitools/rules/r1.md"
 printf '# aitools rules manifest v1\nr1.md\tdotprofile\n' > "$TMP_ROOT/mdm-sh/.aitools/rules/.aitools-rules-manifest"
-check "MDM sh dry run without ~/.aitools/skills: claude skills n/a" \
-    "row mdm-sh 'OK|claude skills|n/a (no harness skills)'"
+check "MDM sh dry run without ~/.aitools/skills: no claude skills row (setup-user-skills owns it)" \
+    "! grep -qF '|claude skills|' '$TMP_ROOT/mdm-sh.summary'"
 # The skills likewise reach ~/.claude/skills through ~/.aitools/skills (FO-4)
 seed_mdm_skills() {  # seed_mdm_skills HOME_DIR: one skill, a nested file, the skills manifest
     mkdir -p "$1/.aitools/skills/sk1/tests"
