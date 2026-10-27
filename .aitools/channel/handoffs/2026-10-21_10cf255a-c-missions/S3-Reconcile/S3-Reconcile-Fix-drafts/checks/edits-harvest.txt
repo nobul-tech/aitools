@@ -1,0 +1,149 @@
+Drafts for scripts/ait-harvest.py (#171 catch-up dir lookup + liveness, #172
+pointer delete, #73 bookkeeping/staging classification). S3-Reconcile-Fix-Checks,
+2026-10-26. Base: origin/main 60e7fd7. No .ps1 twin (one Python helper for all
+platforms; the hooks are thin shims). Test: .scratch/session-rcfixk/test-harvest.py
+(fake repo + temp HOME, original vs patched).
+
+@@@FILE scripts/ait-harvest.py HV-1 bookkeeping and staging names (#73)
+@@@OLD
+SCRATCH_PREFIX_LEN = 10
+
+@@@NEW
+SCRATCH_PREFIX_LEN = 10
+
+# Bookkeeping the harness writes into a session dir (#73): hook telemetry. Dot
+# files (.harvested, .intelligence-last-check) are bookkeeping too. Never
+# artifacts.
+BOOKKEEPING_NAMES = {"events.jsonl"}
+# Staging text for git/gh (#73): a commit message or PR/issue body is consumed
+# by one command and carries nothing forward. Matched with a .txt/.md suffix.
+STAGING_PREFIXES = ("msg-", "pr-body", "issue-body", "pr-comment")
+
+@@@END
+
+@@@FILE scripts/ait-harvest.py HV-2 classify bookkeeping and staging as ephemeral (#73)
+@@@OLD
+    lower = filename.lower()
+    if lower.startswith("commit-msg") or lower.endswith((".log", ".tmp")):
+        return True
+@@@NEW
+    lower = filename.lower()
+    if lower.startswith(".") or lower in BOOKKEEPING_NAMES:
+        return True
+    if lower.startswith("commit-msg") or lower.endswith((".log", ".tmp")):
+        return True
+    if lower.startswith(STAGING_PREFIXES) and lower.endswith((".txt", ".md")):
+        return True
+@@@END
+
+@@@FILE scripts/ait-harvest.py HV-3 harvest_scratch takes the exact dir name (#171)
+@@@OLD
+    project_root: Optional[Path] = None,
+) -> int:
+    """Classify + route + manifest a session's scratch dir. Returns the number
+    of artifacts harvested. Never deletes scratch dirs (30-file-loss guard).
+    Leaves DB session-end marking to harness-db-sessionend.sh."""
+@@@NEW
+    project_root: Optional[Path] = None,
+    dir_name: Optional[str] = None,
+) -> int:
+    """Classify + route + manifest a session's scratch dir. Returns the number
+    of artifacts harvested. Never deletes scratch dirs (30-file-loss guard).
+    Leaves DB session-end marking to harness-db-sessionend.sh.
+
+    dir_name (catch-up): harvest exactly .scratch/<dir_name>, whatever its
+    length, and never fall back to .current-session (#171)."""
+@@@END
+
+@@@FILE scripts/ait-harvest.py HV-4 exact-name lookup, no pointer fallback for catch-up (#171)
+@@@OLD
+    session_dir: Optional[Path] = None
+    if prefix and (scratch_dir / f"session-{prefix}").is_dir():
+        session_dir = scratch_dir / f"session-{prefix}"
+    else:
+@@@NEW
+    session_dir: Optional[Path] = None
+    if dir_name is not None:
+        prefix = dir_name[len("session-"):] if dir_name.startswith("session-") else dir_name
+        if (scratch_dir / dir_name).is_dir():
+            session_dir = scratch_dir / dir_name
+    elif prefix and (scratch_dir / f"session-{prefix}").is_dir():
+        session_dir = scratch_dir / f"session-{prefix}"
+    else:
+@@@END
+
+@@@FILE scripts/ait-harvest.py HV-5 delete .current-session only when it names this dir (#172)
+@@@OLD
+    # Clear the legacy session pointer (leave the session dir intact).
+    try:
+        (scratch_dir / ".current-session").unlink()
+    except OSError:
+        pass
+@@@NEW
+    # Clear the legacy session pointer only when it names the dir just
+    # harvested (#172): sweeping an orphaned dir must not delete the live
+    # session's pointer. Leave the session dir intact.
+    current = scratch_dir / ".current-session"
+    try:
+        pointed = current.read_text(encoding="utf-8").strip()
+    except OSError:
+        pointed = ""  # no pointer (or unreadable): nothing to clear
+    if pointed and Path(pointed).resolve() == session_dir.resolve():
+        try:
+            current.unlink()
+        except OSError as e:
+            log_detail(f"could not remove .current-session: {e}")
+@@@END
+
+@@@FILE scripts/ait-harvest.py HV-6 liveness helper for scratch dirs (#171)
+@@@OLD
+def _catchup_harvest(
+@@@NEW
+def _scratch_dir_recent(session_dir: Path, now: float) -> bool:
+    """True if the dir or a top-level file in it changed within
+    LIVE_MTIME_SECONDS (a session or delegate may still be writing it).
+    Conservative: True when it cannot be read."""
+    try:
+        newest = session_dir.stat().st_mtime
+        for p in session_dir.iterdir():
+            if p.is_file():
+                newest = max(newest, p.stat().st_mtime)
+    except OSError as e:
+        log_detail(f"cannot stat {session_dir.name}, treating as live: {e}")
+        return True
+    return (now - newest) < LIVE_MTIME_SECONDS
+
+
+def _catchup_harvest(
+@@@END
+
+@@@FILE scripts/ait-harvest.py HV-7 catch-up clock
+@@@OLD
+    own_prefix = session_id[:SCRATCH_PREFIX_LEN] if session_id else None
+    recovered = 0
+@@@NEW
+    own_prefix = session_id[:SCRATCH_PREFIX_LEN] if session_id else None
+    recovered = 0
+    now = time.time()
+@@@END
+
+@@@FILE scripts/ait-harvest.py HV-8 catch-up skips live dirs, passes the exact name (#171)
+@@@OLD
+        if (sd / ".harvested").exists():
+            continue  # already harvested in a prior session (idempotency)
+        recovered += harvest_scratch(
+            str(project_root), dir_prefix, project_root=project_root
+        )
+@@@NEW
+        if (sd / ".harvested").exists():
+            continue  # already harvested in a prior session (idempotency)
+        if _scratch_dir_recent(sd, now):
+            # Another session or a running delegate in this checkout (#171).
+            # Same 30-minute guard as transcripts; a later start retries.
+            log_detail(f"skipped harvest: possibly-live scratch dir {sd.name}")
+            continue
+        recovered += harvest_scratch(
+            str(project_root), dir_prefix, project_root=project_root,
+            dir_name=sd.name,
+        )
+@@@END

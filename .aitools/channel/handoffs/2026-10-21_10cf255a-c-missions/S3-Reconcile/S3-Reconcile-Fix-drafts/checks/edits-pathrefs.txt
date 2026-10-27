@@ -1,0 +1,89 @@
+Drafts for scripts/check-path-refs.py (pre-commit step 20; one implementation for
+check-pre-commit.sh and .ps1, so no .ps1 twin). S3-Reconcile-Fix-Checks, 2026-10-26.
+Base: origin/main 60e7fd7. Apply: perl apply.pl <this file> <export> <out>.
+PR-A (pair notation) is independent of PR-B (bare paths); PR-B needs the allowlist
+entries listed in the items file (CHK-P1) before it can merge.
+
+@@@FILE scripts/check-path-refs.py CHK-P2a pair shorthand: any .ext1/.ext2 (docstring)
+@@@OLD
+Pair shorthand: `scripts/x.sh/.ps1` checks both scripts/x.sh and scripts/x.ps1;
+an extensionless `scripts/x` passes when scripts/x.sh or scripts/x.ps1 exists.
+@@@NEW
+Pair shorthand: `scripts/x.sh/.ps1` checks both scripts/x.sh and scripts/x.ps1
+(any `<stem>.<ext1>/.<ext2>`, e.g. `scripts/aitools-json.pl/.ps1`); an
+extensionless `scripts/x` passes when scripts/x.sh or scripts/x.ps1 exists.
+@@@END
+
+@@@FILE scripts/check-path-refs.py CHK-P2b pair shorthand: any .ext1/.ext2 (code)
+@@@OLD
+def exists(root: Path, cand: str) -> bool:
+    if cand.endswith(".sh/.ps1"):
+        stem = cand[: -len(".sh/.ps1")]
+        return (root / f"{stem}.sh").is_file() and (root / f"{stem}.ps1").is_file()
+    target = root / cand
+@@@NEW
+PAIR = re.compile(r"^(.+)\.([A-Za-z0-9]+)/\.([A-Za-z0-9]+)$")
+
+
+def exists(root: Path, cand: str) -> bool:
+    pair = PAIR.match(cand)
+    if pair:
+        stem, ext1, ext2 = pair.groups()
+        return (root / f"{stem}.{ext1}").is_file() and (root / f"{stem}.{ext2}").is_file()
+    target = root / cand
+@@@END
+
+@@@FILE scripts/check-path-refs-allow.txt CHK-P2c drop the two pair-notation workarounds
+@@@OLD
+# Pair notation (one stem, two extensions; both files exist)
+.claude/rules/deploy-paths.md|scripts/aitools-json.pl/.ps1|pair notation: scripts/aitools-json.pl and scripts/aitools-json.ps1 both exist
+.cursor/rules/deploy-paths.mdc|scripts/aitools-json.pl/.ps1|pair notation: scripts/aitools-json.pl and scripts/aitools-json.ps1 both exist
+
+@@@NEW
+@@@END
+
+@@@FILE scripts/check-path-refs-allow.txt CHK-P1d placeholders the bare-path scan finds on main
+@@@OLD
+shared/skills/handoff/SKILL.md|plans/mission-command-briefing/handoff-2026-03-19_Z1IhGrcgGO.md|example file name in prose
+@@@NEW
+shared/skills/handoff/SKILL.md|plans/mission-command-briefing/handoff-2026-03-19_Z1IhGrcgGO.md|example file name in prose
+.claude/rules/incident-governance.md|reference/incident-NNN-short-name.md|placeholder name pattern in the field spec
+.claude/skills/frameworks/SKILL.md|reference/incident-NNN-short-name.md|placeholder name pattern
+reference/smoke-test-pattern-detail.md|scripts/setup-foo.sh|example script name
+reference/path-targeted-hooks-analysis.md|reference/dependency-map.json|follow-up: proposed file in an analysis; confirm it was never created
+@@@END
+
+@@@FILE scripts/check-path-refs.py CHK-P1a bare paths in Markdown (docstring)
+@@@OLD
+    - Markdown (.md, .mdc): every `backticked` span and every @path token
+      whose first segment is a repo top-level directory (see TOP_DIRS).
+@@@NEW
+    - Markdown (.md, .mdc): every `backticked` span and every @path token
+      whose first segment is a repo top-level directory (see TOP_DIRS), and
+      every bare (unquoted) token such as "(see plans/x.md)" that starts with
+      one of those directories and ends in a file extension (BARE_PATH).
+@@@END
+
+@@@FILE scripts/check-path-refs.py CHK-P1b bare paths in Markdown (regex)
+@@@OLD
+HOOK_PATH = re.compile(r"(?<![\w.-])((?:registries/[A-Za-z0-9._-]+\.json)|(?:reference/[A-Za-z0-9._-]+\.(?:md|json)))")
+@@@NEW
+HOOK_PATH = re.compile(r"(?<![\w.-])((?:registries/[A-Za-z0-9._-]+\.json)|(?:reference/[A-Za-z0-9._-]+\.(?:md|json)))")
+# A bare repo path in prose: not preceded by a path or word character (so
+# ~/.claude/..., URLs and <userRepoPath>/... are not matched), a top-level
+# directory, and a file extension (a bare directory mention is not a citation).
+BARE_PATH = re.compile(
+    r"(?<![\w/~.@`<>-])((?:registries|reference|scripts|shared|plans|tests|rfcs|harvesting|generated|\.claude|\.cursor|\.github)"
+    r"/[A-Za-z0-9._/-]*[A-Za-z0-9_-]\.(?:md|mdc|json|sh|ps1|py|pl|txt|yml|yaml)(?:/\.[A-Za-z0-9]+)?)(?![\w/]|\.\w)"
+)
+@@@END
+
+@@@FILE scripts/check-path-refs.py CHK-P1c bare paths in Markdown (scan)
+@@@OLD
+            tokens = HOOK_PATH.findall(line) if is_hook else BACKTICK.findall(line) + AT_PATH.findall(line)
+@@@NEW
+            if is_hook:
+                tokens = HOOK_PATH.findall(line)
+            else:
+                tokens = BACKTICK.findall(line) + AT_PATH.findall(line) + BARE_PATH.findall(line)
+@@@END

@@ -282,11 +282,11 @@ $lostKeys = @($beforeKeys | Where-Object { $_ -notin $config.Keys })
 $afterJson = Normalize-JsonForComparison $config -Depth 10
 
 if ($prefsUnresolved) {
-    # Not counted again: the resolver error is already an error and the ERROR
-    # row "dotprofile" (the lib wrote both).
-    Log "Skipped the $cliConfig merge: dotprofile unresolved (resolver error above), so the profile preferences are unknown"
-    $status.cliConfig = "SKIPPED (dotprofile error)"
-    Write-Summary "ERROR" "cursor cli" "skipped (dotprofile error)"
+    # Counted (S3-M3Lead decision, as setup-user-settings and -skills): this
+    # step fails too, not only the resolver (the lib logged that one).
+    LogError "Dotprofile unresolved (resolver error above) -- $cliConfig not merged, so defaults cannot replace the profile preferences"
+    $status.cliConfig = "ERROR (dotprofile error)"
+    Write-Summary "ERROR" "cursor cli" "not merged: dotprofile error"
 } elseif ($DryRun) {
     # --- Dry-run output ---
     Log "[DRY RUN] $cliConfig`: merge"
@@ -297,12 +297,15 @@ if ($prefsUnresolved) {
     if ($corrupt) {
         LogWarn "[DRY RUN] File is corrupt -- -Force required to overwrite"
     }
+    # Same rows as the .sh dry run: unchanged -> verified, else would update.
     if ($beforeJson -eq $afterJson -and -not $corrupt) {
         Log "[DRY RUN] No changes needed (already up to date)"
         $status.cliConfig = "already up to date (dry-run)"
+        Write-Summary "OK" "cursor cli" "verified"
     } else {
         Log "[DRY RUN] Would write merged config"
         $status.cliConfig = "would merge (dry-run)"
+        Write-Summary "OK" "cursor cli" "dry-run: would update"
     }
 } else {
     # --- Normal mode ---

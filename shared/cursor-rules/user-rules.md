@@ -23,7 +23,7 @@ The `setup-user-cursor` script copies this to your clipboard automatically.
 
 ## Cross-Platform Awareness
 
-- I work on both Windows 11 and macOS -- both are first-class
+- aitools supports macOS, Windows, Linux (Ubuntu), Claude Code web and Cursor cloud; each is first-class (list: `~/.aitools/reference/cross-platform-detail.md`, "Supported platforms and environments")
 - Use forward slashes and `$HOME`/`~` in path references when possible
 - Projects live in git repos under `~/repos/` (macOS) / `C:\repos\` (Windows)
 - Some legacy projects still on Google Drive (`G:\My Drive\` / `~/Google Drive/My Drive/`) -- migrate to git repos over time

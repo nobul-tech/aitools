@@ -1,0 +1,7 @@
+@@@FILE .claude/rules/sources-of-truth.md DSOT shared/rules joins the protected table (protected; re-anchor after MERGE-ALL's review-after edit)
+@@@OLD
+| `.claude/rules/*.md` | Claude Code behavioral rules (this file included) | Any |
+@@@NEW
+| `.claude/rules/*.md` | Claude Code behavioral rules (this file included) | Any |
+| `shared/rules/*.md` | User-level rules deployed to every machine through `~/.aitools/rules` (`deploy-harness`, then the rules fan-out) | Any |
+@@@END

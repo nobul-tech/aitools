@@ -1,0 +1,162 @@
+@@@FILE scripts/aitools-install.sh L198a claude update: match "is up to date"
+@@@OLD
+    elif printf '%s\n' "$UPDATE_OUTPUT" | grep -qi 'already.*up.to.date\|no update'; then
+        log_ok "Already up to date"
+@@@NEW
+    elif grep -qiE 'up[ -]to[ -]date|no update' <<< "$UPDATE_OUTPUT"; then
+        # The updater prints "Claude Code is up to date (<version>)" (deploy.log,
+        # 2.1.185 to 2.1.308); a here-string, not a pipe, so grep -q exiting early
+        # cannot SIGPIPE the writer under pipefail.
+        log_ok "Already up to date"
+@@@END
+@@@FILE scripts/aitools-install.ps1 L198b claude update: match "is up to date"
+@@@OLD
+    } elseif ($claudeOutput -match '(?i)already.*up.to.date|no update') {
+        LogOk "Already up to date"
+@@@NEW
+    } elseif ($claudeOutput -match '(?i)up[ -]to[ -]date|no update') {
+        # The updater prints "Claude Code is up to date (<version>)" (deploy.log,
+        # 2.1.185 to 2.1.308)
+        LogOk "Already up to date"
+@@@END
+@@@FILE scripts/aitools-install.sh L199a Step 9: Claude Code authentication check
+@@@OLD
+# ============================================================
+# 10. Vercel CLI
+# ============================================================
+log "Step 10: Vercel CLI"
+@@@NEW
+# Step 9 authentication check (script-standards.md "Post-install authentication
+# check"), every run. /tool-registry claude-code: `claude auth status --json`,
+# JSON field loggedIn. Its logged-out exit code is unverified, so the JSON
+# decides. Credentials from the environment (API key, auth token, OAuth token)
+# count as signed in. Parity: aitools-install.ps1 Step 9.
+if command -v claude >/dev/null 2>&1; then
+    cc_auth_rc=0
+    cc_auth_out=$(claude auth status --json 2>&1) || cc_auth_rc=$?
+    if grep -qE '"loggedIn"[[:space:]]*:[[:space:]]*true' <<< "$cc_auth_out"; then
+        log_detail "claude auth status: logged in"
+    elif [ -n "${ANTHROPIC_API_KEY:-}${ANTHROPIC_AUTH_TOKEN:-}${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+        log_detail "claude auth status: not logged in; credentials come from the environment"
+    elif grep -qE '"loggedIn"[[:space:]]*:[[:space:]]*false' <<< "$cc_auth_out"; then
+        log_warn "Claude Code is not logged in"
+        write_summary WARN "claude code" "not logged in"
+        write_summary ACTION "" "Run: claude auth login"
+    else
+        log_warn "Claude Code auth status unknown (exit $cc_auth_rc) -- see $(display_path "$LOG_FILE")"
+        log_detail "claude auth status: $cc_auth_out"
+        write_summary WARN "claude code" "auth status unknown"
+    fi
+fi
+
+# ============================================================
+# 10. Vercel CLI
+# ============================================================
+log "Step 10: Vercel CLI"
+@@@END
+@@@FILE scripts/aitools-install.ps1 L199b Step 9: Claude Code authentication check
+@@@OLD
+# ============================================================
+# 10. Vercel CLI
+# ============================================================
+Log "Step 10: Vercel CLI"
+@@@NEW
+# Step 9 authentication check (script-standards.md "Post-install authentication
+# check"), every run. /tool-registry claude-code: `claude auth status --json`,
+# JSON field loggedIn. Its logged-out exit code is unverified, so the JSON
+# decides. Credentials from the environment (API key, auth token, OAuth token)
+# count as signed in. Parity: aitools-install.sh Step 9.
+if (Get-Command claude -ErrorAction SilentlyContinue) {
+    $ccAuthOut = claude auth status --json 2>&1 | Out-String
+    $ccAuthRc = $LASTEXITCODE
+    if ($ccAuthOut -match '"loggedIn"\s*:\s*true') {
+        LogDetail "claude auth status: logged in"
+    } elseif ($env:ANTHROPIC_API_KEY -or $env:ANTHROPIC_AUTH_TOKEN -or $env:CLAUDE_CODE_OAUTH_TOKEN) {
+        LogDetail "claude auth status: not logged in; credentials come from the environment"
+    } elseif ($ccAuthOut -match '"loggedIn"\s*:\s*false') {
+        LogWarn "Claude Code is not logged in"
+        Write-Summary "WARN" "claude code" "not logged in"
+        Write-Summary "ACTION" "" "Run: claude auth login"
+    } else {
+        LogWarn "Claude Code auth status unknown (exit $ccAuthRc) -- see $logFile"
+        LogDetail "claude auth status: $($ccAuthOut.Trim())"
+        Write-Summary "WARN" "claude code" "auth status unknown"
+    }
+}
+
+# ============================================================
+# 10. Vercel CLI
+# ============================================================
+Log "Step 10: Vercel CLI"
+@@@END
+@@@FILE scripts/bootstrap.ps1 L195a PowerShell 7 before the installer
+@@@OLD
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    throw "git is still unavailable after install -- restart the terminal and re-run."
+}
+@@@NEW
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    throw "git is still unavailable after install -- restart the terminal and re-run."
+}
+
+# --- 1b. PowerShell 7 (the harness baseline, .claude/rules/cross-platform.md) ---
+# Windows ships only Windows PowerShell 5.1, so a fresh machine gets pwsh here,
+# before the installer (method: /tool-registry pwsh, winget, preferred).
+if (-not (Get-Command pwsh -ErrorAction SilentlyContinue)) {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        throw "winget not found. Install 'App Installer' from the Microsoft Store, then re-run."
+    }
+    Say "Installing PowerShell 7 via winget..."
+    winget install --id Microsoft.PowerShell --source winget --accept-package-agreements --accept-source-agreements
+    $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+                [System.Environment]::GetEnvironmentVariable('Path', 'User')
+}
+if (-not (Get-Command pwsh -ErrorAction SilentlyContinue)) {
+    throw "pwsh (PowerShell 7) is still unavailable after install -- restart the terminal and re-run."
+}
+@@@END
+@@@FILE scripts/bootstrap.ps1 L195b run the installer with pwsh and check its exit code
+@@@OLD
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $aitoolsDir 'scripts\aitools-install.ps1')
+@@@NEW
+# pwsh, not powershell: the installer and every setup script need PS 7. The exit
+# code is checked; as in bootstrap.sh, a non-zero install still goes on to step 4.
+& pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $aitoolsDir 'scripts\aitools-install.ps1')
+if ($LASTEXITCODE -eq 0) {
+    Say "Installer completed."
+} else {
+    Say "Installer reported issues (exit $LASTEXITCODE) -- see the log above before continuing."
+}
+@@@END
+@@@FILE scripts/aitools-install.sh L212a Step 21: the aitools sync loop's order
+@@@OLD
+DEPLOY_SCRIPTS="setup-user-claude.sh setup-user-cursor.sh setup-user-mcp.sh setup-user-skills.sh setup-cursor-ide-mcp.sh setup-user-settings.sh setup-user-hooks.sh"
+@@@NEW
+# Same order as the aitools sync loop (scripts/aitools deploy_configs, after its
+# config/harness step); keep the two lists in step.
+DEPLOY_SCRIPTS="setup-user-claude.sh setup-user-mcp.sh setup-user-skills.sh setup-cursor-ide-mcp.sh setup-user-cursor.sh setup-user-settings.sh setup-user-hooks.sh"
+@@@END
+@@@FILE scripts/aitools-install.ps1 L212b Step 21: the aitools sync loop's order
+@@@OLD
+$deployScripts = @(
+    "setup-user-claude.ps1",
+    "setup-user-cursor.ps1",
+    "setup-user-mcp.ps1",
+    "setup-user-skills.ps1",
+    "setup-cursor-ide-mcp.ps1",
+    "setup-user-settings.ps1",
+    "setup-user-hooks.ps1"
+)
+@@@NEW
+# Same order as the aitools sync loop (aitools.ps1 Deploy-Configs, after its
+# config/harness step); keep the two lists in step.
+$deployScripts = @(
+    "setup-user-claude.ps1",
+    "setup-user-mcp.ps1",
+    "setup-user-skills.ps1",
+    "setup-cursor-ide-mcp.ps1",
+    "setup-user-cursor.ps1",
+    "setup-user-settings.ps1",
+    "setup-user-hooks.ps1"
+)
+@@@END

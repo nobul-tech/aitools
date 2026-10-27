@@ -1,0 +1,25 @@
+@@@FILE reference/post-push-checklist.md D179a step 29 describes what the check compares (no auto-merge menu)
+@@@OLD
+Extract interactive menu choice patterns (`[letter]`) from both
+`scripts/aitools-lib.ps1` (Prompt-DiffReview) and `scripts/aitools-lib.sh`
+(prompt_diff_review). Verify identical choice letters and order in auto-merge
+menu and fallback menu. Flag mismatches.
+@@@NEW
+Extract every menu choice letter (`[letter]`) the two libraries print
+(`[Console]::WriteLine` lines in `scripts/aitools-lib.ps1`, `printf` lines in
+`scripts/aitools-lib.sh`: the review menu of `Prompt-DiffReview` /
+`prompt_diff_review`, the JSON field menus and the profile-mirror menu) and
+verify both sets are identical. Flag mismatches. The check compares the sets
+of letters, not their order per menu.
+@@@END
+@@@FILE reference/post-push-checklist.md D179b step 30 names the caller it audits
+@@@OLD
+Extract all return values from `Deploy-ManagedFile` / `deploy_managed_file`.
+For each caller file (`setup-user-claude`, `setup-user-mcp`,
+`setup-user-hooks`), verify a case/switch branch exists for every return value.
+@@@NEW
+Extract all return values from `Deploy-ManagedFile` / `deploy_managed_file`.
+For the inline-handling caller (`scripts/setup-user-claude.sh`), verify every
+return value appears in it. The other callers pass the result to
+`deploy_tracker_record` / `Record-DeployOutcome`, covered by step 31.
+@@@END

@@ -208,9 +208,9 @@ and `INCIDENT:` lines for deviations found.
 ## Cross-References (aitools repo paths)
 
 - Lifecycle rule: `.claude/rules/tool-lifecycle.md`
-- Decision tree (after M2): `reference/tool-support-decision-tree.md`
+- Decision tree: `reference/tool-support-decision-tree.md`
 - Framework: `reference/framework-tool-lifecycle.md`
 - Evaluation: `/tool-eval`, `.claude/rules/tool-evaluation.md`
 - Registry: `/tool-registry`
 - Workspace tool requests from other repos: `rfcs/RFC-0001-workspace-tool-requests.md`
-- Profile exceptions contract (after M2/M3): `reference/user-repo.md` (`profiles.<alias>.toolExceptions`)
+- Profile exceptions contract: `reference/user-repo.md` (`profiles.<machineId>.toolExceptions`)

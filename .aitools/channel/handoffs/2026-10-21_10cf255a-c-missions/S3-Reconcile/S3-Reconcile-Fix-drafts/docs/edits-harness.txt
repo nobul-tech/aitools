@@ -1,0 +1,8 @@
+@@@FILE reference/harness.md D208 intent scope covers the deployed harness contract (protected intent statement)
+@@@OLD
+they relate. **Scope**: Architecture and component definitions only.
+@@@NEW
+they relate. **Scope**: Architecture and component definitions, and
+the deployed harness contract (`~/.aitools` layout, conflict handling and
+its assumptions).
+@@@END

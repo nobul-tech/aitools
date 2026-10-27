@@ -168,10 +168,10 @@ try {
     $osInfo = ""
 }
 if (-not $osInfo) { $osInfo = "Windows" }
-# Footer hostname, same source and form as the resolver (COMPUTERNAME, short and
-# lower-case). The PR #80 contract has no hostname result, so it is read here
-# until the lib exposes one; "unknown" when it is not set.
-$machineHost = ([string]$env:COMPUTERNAME).Split('.')[0].Trim().ToLowerInvariant()
+# Footer hostname: the resolver's (P-Q5, one hostname source: COMPUTERNAME,
+# short, lower-case), read from Resolve-MachineProfile above. "unknown" when the
+# resolver gave none (the resolver says why in a warning, logged as a detail line).
+$machineHost = [string]$script:AitLibMachineHostname
 if (-not $machineHost) { $machineHost = "unknown" }
 $profileShown = if ($machineAlias) { $machineAlias } else { "unresolved" }
 
@@ -243,14 +243,24 @@ if ($DryRun) {
     Log "  Existing: $existingLines lines"
     Log "  New: $newLines lines"
     if (Test-Path $claudeMd) {
-        $existingContent = Get-Content $claudeMd -Raw
-        if ($existingContent -eq $content) {
+        try {
+            $existingContent = Get-Content -LiteralPath $claudeMd -Raw -ErrorAction Stop
+        } catch {
+            LogWarn "Cannot read $claudeMd for the dry-run comparison: $_"
+            $existingContent = ""
+        }
+        # Compared as Deploy-ManagedFile compares (trailing newlines removed,
+        # case-sensitive; parity with setup-user-claude.sh)
+        if (("$existingContent" -replace '[\r\n]+$', '') -ceq ($content -replace '[\r\n]+$', '')) {
             Log "[DRY RUN] Content unchanged"
+            Write-Summary "OK" "claude.md" "verified"
         } else {
             Log "[DRY RUN] Content differs -- would overwrite"
+            Write-Summary "OK" "claude.md" "dry-run: would update"
         }
     } else {
         Log "[DRY RUN] File does not exist -- would create"
+        Write-Summary "OK" "claude.md" "dry-run: would create"
     }
 } else {
     # --- Deploy CLAUDE.md via managed-file flow ---
@@ -394,32 +404,9 @@ if ($rulesSrc) {
                 # tracker records every outcome (failed -> ERROR row).
             }
             Record-DeployOutcome -Outcome $ruleResult -ToolName "claude rules" -ItemName $rf.Name
-            # After a merge & adopt (the library already wrote the merge to the
-            # dotprofile), auto commit+push to keep the dotprofile in sync.
-            # Kept: commander confirmed 2026-10-21 (contract item #11).
-            if ($ruleResult -eq "accept & adopt" -and $script:MergedContent -and $userRepoPath) {
-                try {
-                    Push-Location $userRepoPath
-                    & git add "claude/rules/$($rf.Name)"
-                    # Suppress git stderr noise; LASTEXITCODE checked on next line
-                    & git diff --cached --quiet "claude/rules/$($rf.Name)" 2>$null
-                    if ($LASTEXITCODE -ne 0) {
-                        # Has staged changes -- commit and push
-                        & git commit -m "Sync merged $($rf.Name) from deploy"
-                        if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
-                        & git push
-                        if ($LASTEXITCODE -ne 0) { throw "git push failed" }
-                        LogOk "Pushed merged $($rf.Name) to user repo"
-                    } else {
-                        Log "No diff to commit in user repo for $($rf.Name)"
-                    }
-                } catch {
-                    LogWarn "Failed to push merged $($rf.Name) to user repo: $_"
-                    Write-Summary "WARN" "claude rules" "$($rf.Name) not pushed"
-                } finally {
-                    Pop-Location
-                }
-            }
+            # After accept & adopt or merge & adopt the library commits that one
+            # dotprofile rule and pushes it (Invoke-DotprofileCommitPush, N-Q2;
+            # commander confirmed 2026-10-21, contract item #11). No commit here.
         }
 
         # Log preserved files (in target but not in source)

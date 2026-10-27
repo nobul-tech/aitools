@@ -1,0 +1,61 @@
+@@@FILE reference/tool-ops-claude-code.md D201a current version is what is installed; items not re-walked (protected)
+@@@OLD
+- **Current version**: 2.1.81
+@@@NEW
+- **Current version**: 2.1.309 (`claude --version`, macOS, 2026-10-26). The
+  items below were not re-walked for it: each row's "Last verified" is the
+  version that row was last checked against
+@@@END
+@@@FILE reference/tool-ops-claude-code.md D201b item 24 records that delegates lack Grep and Glob (protected)
+@@@OLD
+| 24 | Subagent cross-repo file access restriction (Glob/Grep denied outside CWD repo, Read with explicit paths works) | 2.1.74 | 2.1.74 (2026-03-24) | `shared/claude-shared.md` (delegation duty), delegation prompts | -- |
+@@@NEW
+| 24 | Subagent file access: 2.1.74 denied Glob/Grep outside the CWD repo (Read with explicit paths works); 2.1.307 and 2.1.309 Agent-tool delegates have no Grep or Glob tool at all (search with `git grep` / `grep -rn` / `find` in Bash) | 2.1.74 | 2.1.309 (2026-10-26, macOS) | `shared/claude-shared.md` (USO "Dedicated tools", delegation duty), `shared/skills/delegate/SKILL.md`, delegation prompts | -- |
+@@@END
+@@@FILE reference/tool-ops-claude-code.md D201c item 25: SendMessage works in 2.1.307 (protected)
+@@@OLD
+| 25 | SendMessage for agent continuation unavailable (gated behind Agent Teams flag; old `resume` param removed in 2.1.77) | 2.1.77 | 2.1.81 (2026-03-24) | Agent tool documentation, delegation prompts | [#35240](https://github.com/anthropics/claude-code/issues/35240), [#37051](https://github.com/anthropics/claude-code/issues/37051), [#38183](https://github.com/anthropics/claude-code/issues/38183) |
+@@@NEW
+| 25 | Agent continuation: `SendMessage` was unavailable in 2.1.77-2.1.81 (gated behind the Agent Teams flag; the old `resume` param removed in 2.1.77). In 2.1.307 it works without the flag: a message to a running delegate arrives at its next tool round, a message to a finished one resumes it | 2.1.77 | 2.1.307 (2026-10-21, macOS) | "Agent Continuation Gap (SendMessage)" section below, `shared/skills/delegate/SKILL.md` "Follow-up messages", `shared/skills/aitool-ops/SKILL.md` | [#35240](https://github.com/anthropics/claude-code/issues/35240), [#37051](https://github.com/anthropics/claude-code/issues/37051), [#38183](https://github.com/anthropics/claude-code/issues/38183) |
+@@@END
+@@@FILE reference/tool-ops-claude-code.md D28 user-level rule loading, verified with chrome-devtools (replaces FAN-PLAN's UNVERIFIED #28 draft; protected)
+@@@OLD
+| 21 | `agent_id`/`agent_type` in hook events (distinguishes main vs subagent) | 2.1.68 | 2.1.74 (2026-03-13) | -- (not yet used) | -- |
+@@@NEW
+| 21 | `agent_id`/`agent_type` in hook events (distinguishes main vs subagent) | 2.1.68 | 2.1.74 (2026-03-13) | -- (not yet used) | -- |
+| 28 | User-level rules (`~/.claude/rules/`) apply to every project and load before project rules; neither set overrides the other ("Claude may follow either one"). A rule without `paths` loads at launch; a `paths`-scoped rule loads when Claude reads, writes or edits a matching file; a user rule's patterns are relative to the session's primary working directory. `paths` is the only frontmatter field read; frontmatter that does not parse loads the rule as if it had no `paths`. Project `.claude/rules/` is read recursively; whether user-level subdirectories are, and whether an upper-case `.MD` loads, is not documented | 2.1.309 | 2.1.309 (2026-10-26, docs read with chrome-devtools) | `scripts/setup-user-claude.sh/.ps1` (rules fan-out), `scripts/deploy-harness.sh/.ps1`, `reference/rules.md`, `reference/harness.md` | -- (code.claude.com/docs/en/memory) |
+@@@END
+@@@FILE reference/tool-ops-claude-code.md D201d continuation section matches item 25 (protected)
+@@@OLD
+Since v2.1.77, there is no working mechanism to send messages to a
+previously spawned subagent:
+@@@NEW
+**Resolved in 2.1.307** (observed 2026-10-21, macOS, without
+`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`): `SendMessage` to a running
+delegate's agent id is delivered at its next tool round, and a message to a
+finished one resumes it. Still put all context in the launch prompt, and
+use messages for corrections only (`/delegate` skill "Follow-up messages").
+The history below is kept for versions 2.1.77-2.1.81.
+
+From v2.1.77 to at least v2.1.81 there was no working mechanism to send
+messages to a previously spawned subagent:
+@@@END
+@@@FILE shared/skills/aitool-ops/SKILL.md D201e reference card row 25
+@@@OLD
+| 25 | SendMessage for agent continuation unavailable (gated behind Agent Teams flag) | 2.1.77 | 2.1.81 |
+@@@NEW
+| 25 | Agent continuation: SendMessage unavailable 2.1.77-2.1.81 (Agent Teams flag); works in 2.1.307 without it | 2.1.77 | 2.1.307 |
+@@@END
+@@@FILE shared/skills/aitool-ops/SKILL.md D201f reference card section
+@@@OLD
+Since v2.1.77, there is no working mechanism to send messages to a
+previously spawned subagent:
+@@@NEW
+**Resolved in 2.1.307** (observed 2026-10-21, macOS): `SendMessage` to a
+running delegate's agent id is delivered at its next tool round; a message
+to a finished one resumes it. Keep all context in the launch prompt and use
+messages for corrections only. History for 2.1.77-2.1.81:
+
+From v2.1.77 to at least v2.1.81 there was no working mechanism to send
+messages to a previously spawned subagent:
+@@@END

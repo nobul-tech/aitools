@@ -1,0 +1,19 @@
+@@@FILE reference/cursor-practices.md D207a Rule Sources lists the account User Rules and the user rule files (fold into R7a; replaces R7a's D-25 row)
+@@@OLD
+| Cursor User Rules | Cursor Settings > Rules (SQLite) | Not file-accessible; set via IDE UI |
+@@@NEW
+| Cursor User Rules | Customize > Rules | Stored on the Cursor account, not in a file (`@reference/tool-ops-cursor.md` "User-level rules") |
+| User rule files | `~/.cursor/rules/**/*.mdc` | Loaded for workspaces under `~` (ancestor walk); deployed by `setup-user-cursor` from `~/.aitools/rules/` (converted from `.md`) |
+@@@END
+@@@FILE reference/cursor-practices.md D207b the agent CLI loads ~/.cursor/rules through the ancestor walk
+@@@OLD
+**Important:** The **Cursor Agent CLI** (`agent`) does NOT read `~/.claude/CLAUDE.md`. It uses Cursor User Rules (SQLite) + project `CLAUDE.md` + `.cursor/rules/` only. See "Rule Sources" below.
+@@@NEW
+**Important:** The **Cursor Agent CLI** (`agent`) does NOT read `~/.claude/CLAUDE.md`. It loads `.cursor/rules/**/*.mdc`, `AGENTS.md` and (with third-party extensibility on) `CLAUDE.md` from the workspace and every ancestor directory, so `~/.cursor/rules/` reaches workspaces under `~`, plus the account User Rules (`@reference/tool-ops-cursor.md` "Loading behaviour"). See "Rule Sources" below.
+@@@END
+@@@FILE reference/cursor-practices.md D207c User Rules section separates account rules from rule files
+@@@OLD
+Cursor User Rules live in **Cursor Settings > Rules** (UI only) — they're stored in a SQLite database (`state.vscdb`), not an accessible file.
+@@@NEW
+Cursor User Rules live in **Customize > Rules** (UI only) and are stored on the Cursor account, not in a file aitools can write (`@reference/tool-ops-cursor.md` "User-level rules"). User rule *files* in `~/.cursor/rules/` are a different thing: `setup-user-cursor` deploys them.
+@@@END

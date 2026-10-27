@@ -189,52 +189,20 @@ ui_rm_tmp() {
     return 0
 }
 
-# ui_profile_run ARGS... -- run the resolver: aitools-profile.sh, or under Git
-# Bash on Windows aitools-profile.ps1 through pwsh (the .sh refuses to run
-# there). Sets UI_PROF_OUT (key<TAB>value lines, CR stripped) and UI_PROF_RC (the
-# resolver's exit code: 0 ok, 1 nothing found, 2 error, 3 refused, 4 alias in
-# use). Its own log lines (stderr) become detail lines. Returns 1 when no
-# resolver is found (UI_PROF_RC=2 with an error line), else 0.
-# Not the lib runner (_aitlib_profile_run): that one reads an exit 0/1 without a
-# "via" line as a resolver crash, and register and migrate print no "via" line.
-# UNVERIFIED on Windows: the pwsh branch (cygpath path arguments, UTF-8 output).
+# ui_profile_run ARGS... -- run the resolver through the lib runner
+# (_aitlib_profile_run in aitools-lib.sh: aitools-profile.sh, or under Git Bash on
+# Windows aitools-profile.ps1 through pwsh) and copy its results right after the
+# call (the lib's result-global contract): UI_PROF_OUT (key<TAB>value lines, CR
+# stripped; for hostname the bare value) and UI_PROF_RC (0 ok, 1 nothing found,
+# 2 error -- also no resolver, a crash, or an exit 0/1 without result lines --
+# 3 refused, 4 alias in use). The resolver's own log lines become detail lines.
+# AITOOLS_PROFILE_SH / AITOOLS_PROFILE_PS1 override the resolver, as for every lib
+# caller (register and migrate then write through it). Returns 0.
 ui_profile_run() {
-    local sd="$repo_path/scripts" errf="" a w prev="" args=()
-    UI_PROF_OUT=""; UI_PROF_RC=0
-    if ! errf="$(mktemp)"; then
-        errf=""
-        log_warn "aitools-profile: mktemp failed -- the resolver's own log lines are not captured"
-    fi
-    case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*)
-            if [ ! -f "$sd/aitools-profile.ps1" ] || ! command -v pwsh >/dev/null 2>&1; then
-                if [ -n "$errf" ]; then ui_rm_tmp "$errf"; fi
-                UI_PROF_RC=2; UI_PROF_OUT="error"$'\t'"resolver aitools-profile.ps1 or pwsh not found ($(display_path "$sd"))"
-                return 1
-            fi
-            for a in "$@"; do
-                case "$prev" in
-                    --profile|--out|--config)
-                        if w="$(cygpath -w "$a")"; then a="$w"; else log_detail "aitools-profile: cygpath -w failed for $a -- passed unchanged"; fi ;;
-                esac
-                args+=("$a"); prev="$a"
-            done
-            UI_PROF_OUT=$(pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$(cygpath -w "$sd/aitools-profile.ps1")" \
-                ${args[@]+"${args[@]}"} 2>"${errf:-/dev/null}") || UI_PROF_RC=$?
-            UI_PROF_OUT="${UI_PROF_OUT//$'\r'/}" ;;
-        *)
-            if [ ! -f "$sd/aitools-profile.sh" ]; then
-                if [ -n "$errf" ]; then ui_rm_tmp "$errf"; fi
-                UI_PROF_RC=2; UI_PROF_OUT="error"$'\t'"resolver aitools-profile.sh not found ($(display_path "$sd"))"
-                return 1
-            fi
-            # The resolver runs under this bash (macOS /bin/bash 3.2 stays 3.2)
-            UI_PROF_OUT=$("${BASH:-bash}" "$sd/aitools-profile.sh" "$@" 2>"${errf:-/dev/null}") || UI_PROF_RC=$? ;;
-    esac
-    if [ -n "$errf" ]; then
-        ui_log_lines "aitools-profile $1: " "$(cat "$errf")"
-        ui_rm_tmp "$errf"
-    fi
+    # Return 1 = no resolver: AITLIB_PROFILE_RC is then 2 with an "error" line
+    # naming it, which every caller reads (UI_PROF_RC, ui_lines): the result check
+    _aitlib_profile_run "$@" || :
+    UI_PROF_OUT="$AITLIB_PROFILE_OUT"; UI_PROF_RC="$AITLIB_PROFILE_RC"
     return 0
 }
 
@@ -904,7 +872,7 @@ ui_scaffold_claude_md() {
 # (D-TS13). The caller creates and shows the run summary (decision 3).
 user_init() {
     local rc=0 raw repos_dir user_repo_dir out crc=0 dn de wrc=0 hook_rc=0 hook_setup
-    local writer_args=()
+    local writer_args=() no_machine=false
     gh_user=""; repo_name=""; machine_key=""; machine_alias=""; machine_owner=""
     # --force: no prompts here, and the review menus of setup-user-hooks take the source
     if $force; then export AITOOLS_FORCE=1; fi
@@ -999,6 +967,11 @@ user_init() {
         # A skip at a prompt wrote a WARN row only: name the reason for the exit code (review n1)
         if [ "$rc" -eq 0 ]; then log_error "machine profile: this machine is not registered (skipped) -- run: aitools user init"; fi
         rc=1
+        # Reported here: setup-user-config gets --no-machine, so it adds no second
+        # machine-profile ERROR / ACTION (M3-FINISH item 2). Decided here, not from an
+        # empty machine_key at the writer call: the owner "config" branch below also
+        # empties it for a registered machine whose id cannot be detected.
+        no_machine=true
     fi
 
     if [ -d "$user_repo_dir" ]; then ui_scaffold_claude_md "$user_repo_dir" || rc=1; fi
@@ -1007,6 +980,7 @@ user_init() {
     # this machine's profile key (--machine-id; ConfigKey contract). Another
     # machine's key is never passed (ConfigKey Q3); a key that only config.json
     # vouches for (owner "config") is left to the writer to re-derive (review M2).
+    # An unregistered machine (no_machine) gets --no-machine instead of a key.
     if [ "$machine_owner" = "config" ]; then
         log_detail "user init: machine id undetectable -- --machine-id not passed (the writer keeps the cached machineId)"
         machine_key=""
@@ -1018,13 +992,15 @@ user_init() {
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
             writer_args=(-GithubUser "$gh_user" -UserRepoPath "$(cygpath -w "$user_repo_dir")")
-            if [ -n "$machine_key" ]; then writer_args+=(-MachineId "$machine_key"); fi
+            if [ -n "$machine_key" ]; then writer_args+=(-MachineId "$machine_key")
+            elif $no_machine; then writer_args+=(-NoMachine); fi
             pwsh -NoProfile -ExecutionPolicy Bypass \
                 -File "$(cygpath -w "$repo_path/scripts/setup-user-config.ps1")" "${writer_args[@]}" || wrc=$?
             ;;
         *)
             writer_args=(--github-user "$gh_user" --user-repo-path "$user_repo_dir")
-            if [ -n "$machine_key" ]; then writer_args+=(--machine-id "$machine_key"); fi
+            if [ -n "$machine_key" ]; then writer_args+=(--machine-id "$machine_key")
+            elif $no_machine; then writer_args+=(--no-machine); fi
             "${BASH:-bash}" "$repo_path/scripts/setup-user-config.sh" "${writer_args[@]}" || wrc=$?
             ;;
     esac
