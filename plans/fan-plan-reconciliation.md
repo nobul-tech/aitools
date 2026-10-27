@@ -88,6 +88,21 @@ Not decisions (agent text only): "Cursor user-level only" (the SC's reading of "
 
 The executing commander sends these first (section 7 step 3). Batches gated by an unanswered question wait; others proceed.
 
+**Commander answers, 2026-10-26 (session 10cf255a-c; binding, supersede the suggested answers below where they differ):**
+
+| Q | Answer (commander's words in quotes) | Effect on this plan |
+|---|---|---|
+| Q1, Q2, Q9, Q12, Q13, Q14 | Covered by earlier decisions (review-after is D-DEL5 via MERGE-ALL; docs describe current state; no parity mandate; N-Q2 binding; one ledger PR; channel exception is in CLAUDE.md) | Take the suggested answers |
+| Q3 | "cursor should get project level rules too in user space" -- NOT user-level only | Reverse #110's filter: Cursor fans out every rule in `~/.aitools/rules` (shared, aitools project, dotprofile), minus `retired`; correct `reference/rules.md` R-2 and every doc saying "user-level only"; plan this as a code batch with tests (sh/ps1) |
+| Q5 | "yes" | R11 as suggested |
+| Q6 | "yes" | R8c: WARN `aborted by user` everywhere, run continues, only deploy-harness stops |
+| Q7 | "no need for confirmation" | Drop R9's confirm: keep today's `--alias` auto-claim of a profile no machine owns; instead document it (user-repo.md edit C text that describes the claim) and correct the resolver comments about `--claim` |
+| Q8 | "sure i guess" (after asking where it lives now: the `aitools` entry points, scripts/aitools ~L1445-1469 with node and scripts/aitools.ps1 ~L444-464, run on every `aitools` run) | R10 as suggested |
+| Q10 | "yes" | As suggested |
+| Q11 | "yes" | As suggested |
+| Q15 | "yes" | The executing mission merges its own PRs (merge commits) after green CI and an independent reviewer verdict |
+| Q16 | "accepted" | D1-D21 take their suggested answers |
+
 - **Q1. Protected-file gate (G-P).** MERGE-ALL A2 makes protected files "review after", but until MERGE-ALL commits it to `.claude/rules/sources-of-truth.md` the rule still says pre-write review. G-P is open when both hold: `git -C /Users/new-jose/repos/aitools grep -c -i -E "review[- ]after|reviewed after" origin/main -- .claude/rules/sources-of-truth.md` >= 1 and `git -C /Users/new-jose/repos/aitools grep -c "Wait for approval" origin/main -- .claude/rules/sources-of-truth.md` = 0. *Suggested:* wait for that; or answer "apply now under A2" to open G-P at once (then every protected batch ships as a version with a "Review after" PR section).
 - **Q2. Fan-out docs now, or wait for FAN-PLAN's code?** *Suggested:* now (R2/R3), describing today with "until it fans out" wording; your 22:17:19Z principle is "update docs on whatever current state is", and FAN-PLAN needs #106, #100 and its own review first.
 - **Q3. Cursor gets user-level rules only (#110)?** Your "3)" did not say it; the SC read it in. *Suggested:* yes.
