@@ -5,8 +5,8 @@
 # rule_name_kind / Get-RuleNameKind, skill_name_kind / Get-SkillNameKind,
 # read_harness_manifest / Read-HarnessManifest (rules and skills: ok, header-bad,
 # BOM, CRLF, invalid lines, duplicates, unreadable, unknown kind),
-# read_rules_manifest / Read-RulesManifest (same output as setup-user-cursor's own
-# copies), fanout_text_equal / Test-FanoutTextEqual and fanout_dir_matches /
+# read_rules_manifest / Read-RulesManifest (same output as the general reader for
+# rules; setup-user-cursor defines no copy of its own), fanout_text_equal / Test-FanoutTextEqual and fanout_dir_matches /
 # Test-FanoutDirMatches (match, extra or missing file, *.bak.* ignored, empty dir,
 # symlinks, unreadable entries).
 #
@@ -249,7 +249,7 @@ printf 'mrc-headerbad\trc=0\tsh_mrc\tr-headerbad\trules\n'
 printf 'mrc-missing\trc=1\tsh_mrc\tr-missing\trules\n'
 printf 'mrc-dir\trc=1\tsh_mrc\tr-dir\trules\n'
 printf 'mrc-kind\trc=2\tsh_mrc\tr-ok\tRules\n'
-# read_rules_manifest = setup-user-cursor's copy (output, stderr and exit code)
+# read_rules_manifest = read_harness_manifest FILE rules (output, stderr and exit code)
 for m in r-ok r-headerbad r-skillshead r-headeronly r-invalid r-bom r-crlf r-nolf r-crnolf r-empty r-missing s-ok; do
     printf 'rr-%s\tsame\trr\t%s\n' "$m" "$m"
 done
@@ -330,15 +330,16 @@ mkdir -p "$WORK/badperl"
 printf '#!/bin/sh\necho "stub perl: boom" >&2\nexit 9\n' > "$WORK/badperl/perl"
 chmod +x "$WORK/badperl/perl"
 
-# setup-user-cursor's own manifest readers, renamed, for the rr cases
+# The rr cases: setup-user-cursor's own manifest readers were deleted in FO-5
+# (it uses the lib's, FAN-PLAN F1), so read_rules_manifest / Read-RulesManifest
+# are compared with the lib's general reader for KIND rules (the m-r-* cases
+# pin that reader's output). The comparison functions keep their old names.
 CUR_SH="$WORK/cursor-copy.sh"
 CUR_PS="$WORK/cursor-copy.ps1"
-perl -ne 'if (/^RULES_MANIFEST_HEADER=/ || (/^read_rules_manifest\(\) \{/ .. /^\}/)) { s/^read_rules_manifest\(\)/cursor_read_rules_manifest()/; print }' \
-    "$REPO/scripts/setup-user-cursor.sh" > "$CUR_SH"
-perl -ne 'if (/^\$rulesManifestHeader =/ || (/^function Read-RulesManifest\b/ .. /^\}\r?$/)) { s/^function Read-RulesManifest\b/function Read-CursorRulesManifest/; print }' \
-    "$REPO/scripts/setup-user-cursor.ps1" > "$CUR_PS"
-if ! grep -q '^cursor_read_rules_manifest()' "$CUR_SH" || ! grep -q '^function Read-CursorRulesManifest' "$CUR_PS"; then
-    bad "extract setup-user-cursor's read_rules_manifest / Read-RulesManifest (the rr cases cannot run)"
+printf 'cursor_read_rules_manifest() { read_harness_manifest "$1" rules; }\n' > "$CUR_SH"
+printf 'function Read-CursorRulesManifest([string]$Path) { return Read-HarnessManifest -Path $Path -Kind "rules" }\n' > "$CUR_PS"
+if grep -q '^read_rules_manifest()' "$REPO/scripts/setup-user-cursor.sh" || grep -q '^function Read-RulesManifest\b' "$REPO/scripts/setup-user-cursor.ps1"; then
+    bad "setup-user-cursor defines its own read_rules_manifest / Read-RulesManifest again (use the lib's, FAN-PLAN F1)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -386,8 +387,7 @@ while IFS="$TAB" read -r id want call a1 a2 <&3; do
                 emit "$id" "fail"
             fi ;;
         rr)
-            # same output and message; exit: both 0 or both non-zero (the lib's
-            # read failure is exit 1, the cursor copy's perl die exits errno)
+            # same output and message; exit: both 0 or both non-zero
             o1=$(read_rules_manifest "$F/$a1" 2>&1); r1=$?
             o2=$(cursor_read_rules_manifest "$F/$a1" 2>&1); r2=$?
             z1=ok; [ "$r1" -eq 0 ] || z1=fail

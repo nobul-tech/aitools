@@ -163,8 +163,8 @@ else
 fi
 check "cursor (MDM): step 4 once in .sh and .ps1" \
     "[ \"\$(grep -c 'Step 4: Cursor user rules' '$G/setup-user-cursor.sh')\" = 1 ] && [ \"\$(grep -c 'Step 4: Cursor user rules' '$G/setup-user-cursor.ps1')\" = 1 ]"
-check "cursor (MDM): header ported from the source (four things, rules scope)" \
-    "grep -q '^# Does four things:' '$G/setup-user-cursor.sh' && grep -q '^# Does four things:' '$G/setup-user-cursor.ps1' && grep -q 'Managed: one <name>.mdc per' '$G/setup-user-cursor.sh' && grep -q 'Managed: one <name>.mdc per' '$G/setup-user-cursor.ps1' && ! grep -q 'Does three things' '$G/setup-user-cursor.sh'"
+check "cursor (MDM): header ported from the source (five things, rules scope)" \
+    "grep -q '^# Does five things:' '$G/setup-user-cursor.sh' && grep -q '^# Does five things:' '$G/setup-user-cursor.ps1' && grep -q 'Managed: one <name>.mdc per' '$G/setup-user-cursor.sh' && grep -q 'Managed: one <name>.mdc per' '$G/setup-user-cursor.ps1' && ! grep -q 'Does three things' '$G/setup-user-cursor.sh'"
 check "MDM: no adopt target (.sh and .ps1)" \
     "grep -qF '\"\$TOOL\" \"\$item\" \"\"  # MDM' '$G/deploy-harness.sh' && ! grep -qF '\"\$item\" \"\$src\"' '$G/deploy-harness.sh' && grep -qF -- '-AdoptPath \"\"  # MDM' '$G/deploy-harness.ps1' && ! grep -qF -- '-AdoptPath \$p.Src' '$G/deploy-harness.ps1'"
 check "MDM: dotprofile rules embedded (payload record)" \
@@ -215,14 +215,16 @@ check "size gate: a generated script over its Intune limit is a WARN, not a buil
     "[ \"\$(rc_of build-b1)\" = 0 ] && size_gate_warned '$G' '$TMP_ROOT/build-b1.out'"
 
 # Forced over-limit case, independent of the real script sizes: a copy of the
-# fixture dotprofile with a ~1.2 MB rule, which build-deploy embeds in the
-# generated setup-user-claude.sh (the fallback rules), so that .sh is over
-# 1 MB. If the gate were removed or stopped measuring .sh files, there would
-# be no WARN and this check fails.
+# fixture dotprofile whose CLAUDE.md template is padded by ~1.2 MB, which
+# build-deploy embeds in the generated setup-user-claude.sh (the fallback
+# template; dotprofile rules are no longer embedded since the rules fan-out),
+# so that .sh is over 1 MB. If the gate were removed or stopped measuring .sh
+# files, there would be no WARN and this check fails.
 DOT_BIG="$TMP_ROOT/dot-big"
 cp -Rp "$DOT" "$DOT_BIG"
 rm -rf "$DOT_BIG/deploy"
-perl -e 'print "# padding rule (size-gate test)\n"; print "x" x 99, "\n" for 1 .. 12000' > "$DOT_BIG/claude/rules/zz-big.md"
+mkdir -p "$DOT_BIG/claude"
+perl -e 'print "\n## Padding (size-gate test)\n\n"; print "x" x 99, "\n" for 1 .. 12000' >> "$DOT_BIG/claude/CLAUDE.md"
 gitc -C "$DOT_BIG" add -A
 gitc -C "$DOT_BIG" commit -q -m padding
 HB_BIG="$TMP_ROOT/home-build-big"
