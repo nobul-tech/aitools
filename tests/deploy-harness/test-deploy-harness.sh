@@ -9,7 +9,8 @@
 # accept & adopt into a protected file (pty), skip (pty), abort (pty, exit 2),
 # --force on a terminal, conflicts (first source wins, ERROR rows, exit 1),
 # dry run (no writes), config writer failure (stub and real writer),
-# missing / non-git dotprofile, preserved files, bad arguments, --help.
+# missing / non-git dotprofile, preserved files, bad arguments, --help, the
+# rules manifest and retired rules (.sh, and the .ps1 on pwsh when available).
 # Interactive cases use tests/managed-files/pty-run.py (python3); skipped
 # without it. The config writer is a stub except in the "real writer" case.
 # Platform: macOS, Linux. Exit 1 if any case fails.
@@ -19,7 +20,7 @@
 set -uo pipefail
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 17' "$0"
+    perl -ne 'print if $. >= 2 && $. <= 18' "$0"
     exit 0
 fi
 
@@ -266,6 +267,187 @@ rm -rf "$D/.git"
 run_dh "" --
 check "dotprofile not in git: ERROR row, exit 1" \
     "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|dotprofile: not a git checkout' && [ ! -e '$(A)/rules/user1.md' ]"
+
+# ---------------------------------------------------------------------------
+# Rules manifest (~/.aitools/rules/.aitools-rules-manifest) and retired rules
+# ---------------------------------------------------------------------------
+M() { printf '%s' "$H/.aitools/rules/.aitools-rules-manifest"; }
+# mf_is LINE... -- the manifest is exactly the header + these lines (LF, in order)
+mf_is() {
+    { printf '# aitools rules manifest v1\n'; printf '%s\n' "$@"; } > "$C/mf.expected"
+    cmp -s "$C/mf.expected" "$(M)"
+}
+T="$(printf '\t')"
+fresh_log() { : > "$C/logs/deploy.log"; }   # the log accumulates across the runs of a case
+FIRST_MF=("hook-lifecycle.md${T}shared" "p1.md${T}aitools" "scratch.md${T}shared" "sources-of-truth.md${T}aitools" "user1.md${T}dotprofile")
+
+setup_case manifest
+mkdir -p "$(A)/rules"
+printf 'left over\n' > "$(A)/rules/old.md"
+printf 'backup copy\n' > "$R/shared/rules/x.bak.1.md"
+gitc -C "$R" add -A; gitc -C "$R" commit -q -m bak
+run_dh "" --
+check "manifest: first run writes it (header, sorted, winning sources)" "[ \"\$(rc)\" = 0 ] && mf_is \"\${FIRST_MF[@]}\""
+check "manifest: first run (no previous manifest) retires nothing" \
+    "[ -f '$(A)/rules/old.md' ] && grep -q 'Preserved: .*rules/old.md' '$LOG' && ! grep -q 'Retired rule' '$LOG'"
+check "manifest: *.bak.* never listed, manifest itself not preserved" \
+    "! grep -q 'bak' '$(M)' && ! grep -q 'Preserved: .*aitools-rules-manifest' '$LOG' && [ ! -e '$(M).tmp' ]"
+check "manifest: no .md extension (consumers copying *.md skip it)" "[ -f '$(M)' ] && ! ls '$(A)/rules' | grep -q 'manifest.*\\.md'"
+
+gitc -C "$R" rm -q shared/rules/scratch.md; gitc -C "$R" commit -q -m retire
+fresh_log
+run_dh "" --
+check "retire: exit 0, line becomes retired" \
+    "[ \"\$(rc)\" = 0 ] && mf_is 'hook-lifecycle.md${T}shared' 'p1.md${T}aitools' 'scratch.md${T}retired' 'sources-of-truth.md${T}aitools' 'user1.md${T}dotprofile'"
+check "retire: file backed up and removed, logged, DETAIL row" \
+    "[ ! -e '$(A)/rules/scratch.md' ] && ls '$(A)/rules/'scratch.md.bak.* >/dev/null 2>&1 && grep -q 'Retired rule: scratch.md (was shared' '$LOG' && row 'DETAIL|harness files|retired: rules/scratch.md'"
+check "retire: a file never in a manifest is still preserved" "[ -f '$(A)/rules/old.md' ]"
+fresh_log
+run_dh "" --
+check "retired line persists; no new backup, no row" \
+    "[ \"\$(rc)\" = 0 ] && grep -qx 'scratch.md${T}retired' '$(M)' && [ \"\$(ls '$(A)/rules/' | grep -c '^scratch.md.bak')\" = 1 ] && ! has_row 'retired:'"
+printf 'scratch again\n' > "$(A)/rules/scratch.md"
+run_dh "" --
+check "retired name's file found again: backed up and removed" \
+    "[ ! -e '$(A)/rules/scratch.md' ] && grep -lq 'scratch again' '$(A)/rules/'scratch.md.bak.* && grep -qx 'scratch.md${T}retired' '$(M)'"
+printf 'dotprofile scratch\n' > "$D/claude/rules/scratch.md"
+gitc -C "$D" add -A; gitc -C "$D" commit -q -m back
+run_dh "" --
+check "reappearing name returns to its (new) source and is deployed" \
+    "[ \"\$(rc)\" = 0 ] && grep -qx 'scratch.md${T}dotprofile' '$(M)' && grep -qx 'dotprofile scratch' '$(A)/rules/scratch.md'"
+
+write_config "$C/no-such-dotprofile"
+fresh_log
+run_dh "" --
+check "source not listed (no dotprofile): its names keep their lines, files kept" \
+    "[ \"\$(rc)\" = 0 ] && grep -qx 'user1.md${T}dotprofile' '$(M)' && grep -qx 'scratch.md${T}dotprofile' '$(M)' && [ -f '$(A)/rules/user1.md' ] && grep -q 'user1.md kept as dotprofile' '$LOG'"
+write_config "$D"
+gitc -C "$D" rm -q claude/rules/user1.md; gitc -C "$D" commit -q -m retire-user
+fresh_log
+run_dh "" -- --dry-run
+check "dry run: retirement reported, nothing removed or written" \
+    "[ -f '$(A)/rules/user1.md' ] && grep -qx 'user1.md${T}dotprofile' '$(M)' && grep -q 'DRY RUN\] Would back up and remove .*user1.md' '$LOG'"
+run_dh "" --
+check "dotprofile listed again: its removed rule is retired" \
+    "[ ! -e '$(A)/rules/user1.md' ] && grep -qx 'user1.md${T}retired' '$(M)'"
+
+printf '# aitools rules manifest v1\nScratch.md\tdotprofile\nP1.MD\taitools\n' > "$(M)"
+fresh_log
+run_dh "" --
+check "names compared case-insensitively: a case variant is not retired" \
+    "[ \"\$(rc)\" = 0 ] && [ -f '$(A)/rules/scratch.md' ] && [ -f '$(A)/rules/p1.md' ] && ! grep -q 'Retired rule' '$LOG' && ! grep -q 'Scratch.md' '$(M)'"
+printf 'not a manifest\nold.md\tshared\n' > "$(M)"
+fresh_log
+run_dh "" --
+check "unknown header: warning, nothing retired, rewritten" \
+    "[ -f '$(A)/rules/old.md' ] && grep -q '\[warn\] Rules manifest .*the first line is not' '$LOG' && head -n 1 '$(M)' | grep -qx '# aitools rules manifest v1' && ! grep -q '^old.md' '$(M)'"
+printf '# aitools rules manifest v1\n../evil.md\tshared\nnotes.txt\tshared\nz.md\tbogus\n' > "$(M)"
+printf 'keep me\n' > "$(A)/evil.md"    # where rules/../evil.md resolves
+fresh_log
+run_dh "" --
+check "invalid lines ignored with a warning (no path outside rules/)" \
+    "[ -f '$(A)/evil.md' ] && [ \"\$(grep -c 'line ignored' '$LOG')\" = 3 ] && ! grep -q 'evil' '$(M)'"
+mkdir -p "$(A)/rules/d.md"
+printf 'inside\n' > "$(A)/rules/d.md/f"
+printf '# aitools rules manifest v1\nd.md\tretired\n' > "$(M)"
+fresh_log
+run_dh "" --
+check "a directory named like a retired rule is left alone" \
+    "[ \"\$(rc)\" = 0 ] && [ -f '$(A)/rules/d.md/f' ] && grep -qx 'd.md${T}retired' '$(M)'"
+
+# rule_retire_cases RUNNER -- bracket name, failed backup (shared by .sh and .ps1)
+rule_retire_cases() {
+    local runner="$1" side="$2"
+    printf 'bracket\n' > "$R/shared/rules/a[1].md"
+    gitc -C "$R" add -A; gitc -C "$R" commit -q -m bracket
+    : > "$C/summary"; "$runner"
+    gitc -C "$R" rm -q 'shared/rules/a[1].md'; gitc -C "$R" commit -q -m bracket-gone
+    fresh_log; : > "$C/summary"; "$runner"
+    check "$side: retired name with [ ] is backed up before removal" \
+        "[ ! -e '$(A)/rules/a[1].md' ] && ls '$(A)/rules' | grep -qF 'a[1].md.bak.' && grep -qxF 'a[1].md${T}retired' '$(M)'"
+    gitc -C "$R" rm -q .claude/rules/p1.md; gitc -C "$R" commit -q -m p1-gone
+    chmod 555 "$(A)/rules"
+    fresh_log; : > "$C/summary"; "$runner"
+    chmod 755 "$(A)/rules"
+    check "$side: failed backup keeps the file (ERROR row, exit 1)" \
+        "[ \"\$(rc)\" = 1 ] && [ -f '$(A)/rules/p1.md' ] && row 'ERROR|harness files|retire failed: p1.md' && grep -q 'backup failed' '$LOG'"
+    fresh_log; : > "$C/summary"; "$runner"
+    check "$side: next run retries and removes it" \
+        "[ \"\$(rc)\" = 0 ] && [ ! -e '$(A)/rules/p1.md' ] && grep -qx 'p1.md${T}retired' '$(M)'"
+}
+run_dh_plain() { run_dh "" --; }
+if [ "$(id -u)" != 0 ]; then
+    setup_case retiresh
+    rule_retire_cases run_dh_plain sh
+fi
+if [ "$(id -u)" != 0 ]; then
+    chmod 555 "$(A)/rules"
+    run_dh "" --
+    chmod 755 "$(A)/rules"
+    check "manifest write failure: ERROR row, exit 1, run completes" \
+        "[ \"\$(rc)\" = 1 ] && row 'ERROR|harness files|rules manifest not written' && grep -q 'harness files: .* retired' '$LOG'"
+else
+    printf 'SKIP manifest write failure (root ignores permissions)\n'; SKIP=$((SKIP + 1))
+fi
+
+# The .ps1 twin on pwsh (OS guard disabled in a temp copy): same manifest, same retirement
+if command -v pwsh >/dev/null 2>&1; then
+    setup_case psmanifest
+    perl -pe 's/-and -not \$IsWindows\)/-and \$false)/' "$ROOT/scripts/deploy-harness.ps1" > "$R/scripts/deploy-harness.ps1"
+    cp "$ROOT/scripts/aitools-lib.ps1" "$R/scripts/"
+    printf 'param([switch]$DryRun, [switch]$Force)\nexit 0\n' > "$R/scripts/setup-user-config.ps1"
+    run_ps() {
+        env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN HOME="$H" USERPROFILE="$H" AITOOLS_LOG_DIR="$C/logs" \
+            AITOOLS_SUMMARY_FILE="$C/summary" pwsh -NoProfile -File "$R/scripts/deploy-harness.ps1" "$@" < /dev/null > "$C/out" 2>&1
+        echo $? > "$C/rc"
+        LOG="$C/logs/deploy.log"
+    }
+    : > "$C/summary"
+    run_ps
+    check "ps1 manifest: first run, same content as the .sh" "[ \"\$(rc)\" = 0 ] && mf_is \"\${FIRST_MF[@]}\""
+    gitc -C "$R" rm -q shared/rules/scratch.md; gitc -C "$R" commit -q -m retire
+    : > "$C/summary"
+    run_ps
+    check "ps1 retire: retired line, file backed up and removed, DETAIL row" \
+        "[ \"\$(rc)\" = 0 ] && grep -qx 'scratch.md${T}retired' '$(M)' && [ ! -e '$(A)/rules/scratch.md' ] && ls '$(A)/rules/'scratch.md.bak.* >/dev/null 2>&1 && row 'DETAIL|harness files|retired: rules/scratch.md'"
+    write_config "$C/no-such-dotprofile"
+    gitc -C "$R" rm -q .claude/rules/p1.md; gitc -C "$R" commit -q -m retire2
+    : > "$C/summary"
+    run_ps
+    check "ps1: unlisted source keeps its lines; listed source retires" \
+        "grep -qx 'user1.md${T}dotprofile' '$(M)' && [ -f '$(A)/rules/user1.md' ] && grep -qx 'p1.md${T}retired' '$(M)' && [ ! -e '$(A)/rules/p1.md' ]"
+    check "ps1: manifest is LF, no BOM" "! grep -q \$'\\r' '$(M)' && head -c 3 '$(M)' | grep -q '^# a'"
+    write_config "$D"
+    # Another dotprofile rule keeps claude/rules in the checkout (git removes empty directories)
+    printf 'user rule two\n' > "$D/claude/rules/user2.md"
+    gitc -C "$D" add -A; gitc -C "$D" commit -q -m user2
+    gitc -C "$D" rm -q claude/rules/user1.md; gitc -C "$D" commit -q -m retire-user
+    fresh_log; : > "$C/summary"
+    run_ps -DryRun
+    check "ps1 dry run: retirement reported, nothing removed or written" \
+        "[ -f '$(A)/rules/user1.md' ] && grep -qx 'user1.md${T}dotprofile' '$(M)' && grep -q 'DRY RUN\] Would back up and remove .*user1.md' '$LOG'"
+    printf '# aitools rules manifest v1\n../evil.md\tshared\nnotes.txt\tshared\nz.md\tbogus\nHook-Lifecycle.md\tshared\n' > "$(M)"
+    printf 'keep me\n' > "$(A)/evil.md"
+    fresh_log; : > "$C/summary"
+    run_ps
+    check "ps1: invalid lines ignored (3 warnings), case variant not retired" \
+        "[ -f '$(A)/evil.md' ] && [ \"\$(grep -c 'line ignored' '$LOG')\" = 3 ] && ! grep -q 'evil' '$(M)' && ! grep -q 'Retired rule' '$LOG' && [ -f '$(A)/rules/hook-lifecycle.md' ]"
+    mkdir -p "$(A)/rules/d.md"; printf 'inside\n' > "$(A)/rules/d.md/f"
+    printf '# aitools rules manifest v1\nd.md\tretired\n' > "$(M)"
+    fresh_log; : > "$C/summary"
+    run_ps
+    check "ps1: a directory named like a retired rule is left alone" \
+        "[ \"\$(rc)\" = 0 ] && [ -f '$(A)/rules/d.md/f' ]"
+    if [ "$(id -u)" != 0 ]; then
+        setup_case retireps
+        perl -pe 's/-and -not \$IsWindows\)/-and \$false)/' "$ROOT/scripts/deploy-harness.ps1" > "$R/scripts/deploy-harness.ps1"
+        cp "$ROOT/scripts/aitools-lib.ps1" "$R/scripts/"
+        printf 'param([switch]$DryRun, [switch]$Force)\nexit 0\n' > "$R/scripts/setup-user-config.ps1"
+        rule_retire_cases run_ps ps1
+    fi
+else
+    printf 'SKIP ps1 manifest cases (pwsh not found)\n'; SKIP=$((SKIP + 1))
+fi
 
 # ---------------------------------------------------------------------------
 # Arguments
