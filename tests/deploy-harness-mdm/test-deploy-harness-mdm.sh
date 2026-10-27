@@ -163,8 +163,8 @@ else
 fi
 check "cursor (MDM): step 4 once in .sh and .ps1" \
     "[ \"\$(grep -c 'Step 4: Cursor user rules' '$G/setup-user-cursor.sh')\" = 1 ] && [ \"\$(grep -c 'Step 4: Cursor user rules' '$G/setup-user-cursor.ps1')\" = 1 ]"
-check "cursor (MDM): header ported from the source (four things, rules scope)" \
-    "grep -q '^# Does four things:' '$G/setup-user-cursor.sh' && grep -q '^# Does four things:' '$G/setup-user-cursor.ps1' && grep -q 'Managed: one <name>.mdc per' '$G/setup-user-cursor.sh' && grep -q 'Managed: one <name>.mdc per' '$G/setup-user-cursor.ps1' && ! grep -q 'Does three things' '$G/setup-user-cursor.sh'"
+check "cursor (MDM): header ported from the source (five things, rules scope)" \
+    "grep -q '^# Does five things:' '$G/setup-user-cursor.sh' && grep -q '^# Does five things:' '$G/setup-user-cursor.ps1' && grep -q 'Managed: one <name>.mdc per' '$G/setup-user-cursor.sh' && grep -q 'Managed: one <name>.mdc per' '$G/setup-user-cursor.ps1' && ! grep -q 'Does three things' '$G/setup-user-cursor.sh'"
 check "MDM: no adopt target (.sh and .ps1)" \
     "grep -qF '\"\$TOOL\" \"\$item\" \"\"  # MDM' '$G/deploy-harness.sh' && ! grep -qF '\"\$item\" \"\$src\"' '$G/deploy-harness.sh' && grep -qF -- '-AdoptPath \"\"  # MDM' '$G/deploy-harness.ps1' && ! grep -qF -- '-AdoptPath \$p.Src' '$G/deploy-harness.ps1'"
 check "MDM: dotprofile rules embedded (payload record)" \

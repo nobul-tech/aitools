@@ -2,8 +2,11 @@
 # test-rules-fanout-cursor.sh -- tests for step 4 of scripts/setup-user-cursor.sh:
 # the harness rules fan-out ~/.aitools/rules/*.md -> ~/.cursor/rules/*.mdc
 # (convert, skip *.bak.* and non-.md, preserve unmanaged files, review on diff),
-# driven by the rules manifest: only shared/dotprofile rules are fanned out, and
-# the .mdc of an aitools or retired rule is removed when the fan-out created it.
+# driven by the rules manifest: every rule except the retired ones is fanned out
+# (shared, aitools and dotprofile alike; commander decision 2026-10-26), and the
+# .mdc of a retired rule is removed when the fan-out created it. No manifest:
+# everything fanned out, nothing removed. The review menu prompts on a pty (the
+# deploy list is read on fd 3) and [x]abort exits 2.
 #
 # Safe to re-run: every case runs the real script in its own temp HOME (removed
 # on exit) with stub rg/agent on PATH, so no installer runs and the real
@@ -11,18 +14,27 @@
 # setup-user-cursor.ps1 is checked against the bash converter, and the manifest
 # cases run step 4 of the .ps1 (step4-driver.ps1, isolated USERPROFILE) and
 # compare its ~/.cursor/rules tree and summary rows with the .sh run (parity).
-# Platform: macOS, Linux, Git Bash. Exit 1 if any case fails.
+# The pty cases need python3 (tests/managed-files/pty-run.py).
+# Platform: macOS, Linux (not Git Bash: setup-user-cursor.sh's OS guard exits
+# there, so the Windows CI job does not run this suite). Exit 1 if any case fails.
 # Spec: .aitools/channel/handoffs/2026-10-21_10cf255a-c-missions/S3-H-Cursor/
 # S3-H-Cursor-research.md; .claude/rules/managed-file-deployment.md.
 #
-# Usage: bash tests/rules-fanout-cursor/test-rules-fanout-cursor.sh [--help]
+# Usage: bash tests/rules-fanout-cursor/test-rules-fanout-cursor.sh [--bash-only] [--help]
+#   --bash-only  skip the PowerShell runs (parity cases are reported SKIP)
+#   AITOOLS_TEST_BASH=/bin/bash runs the script under that bash (CI: macOS 3.2)
 
 set -uo pipefail
 
-if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    perl -ne 'print if $. >= 2 && $. <= 14' "$0"
-    exit 0
-fi
+BASH_ONLY=false
+for arg in "$@"; do
+    case "$arg" in
+        --help|-h) perl -ne 'print if $. >= 2 && $. <= 25' "$0"; exit 0 ;;
+        --bash-only) BASH_ONLY=true ;;
+        *) printf 'Unknown option: %s (see --help)\n' "$arg"; exit 1 ;;
+    esac
+done
+TB="${AITOOLS_TEST_BASH:-bash}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT="$ROOT/scripts/setup-user-cursor.sh"
@@ -85,7 +97,7 @@ seed_rules() {
 # run_script [args...]: run setup-user-cursor.sh non-interactively under the case HOME
 run_script() {
     env HOME="$C/home" AITOOLS_LOG_DIR="$C/logs" AITOOLS_SUMMARY_FILE="$C/summary" \
-        PATH="$C/bin:$PATH" bash "$SCRIPT" "$@" < /dev/null > "$C/out" 2>&1
+        PATH="$C/bin:$PATH" "$TB" "$SCRIPT" "$@" < /dev/null > "$C/out" 2>&1
     echo $? > "$C/rc"
 }
 
@@ -181,7 +193,7 @@ check "resolve: every repo paths: glob is anchored (**/ or absolute)" "[ -z \"\$
 check "resolve: config-file-safety scripts/** resolves in a repo under HOME" "grep -qxF '  - **/scripts/**' '$GOLD/repo-config-file-safety.md.mdc' && glob_match '**/scripts/**' 'repos/aitools/scripts/setup-x.sh'"
 
 # --- PS1 parity: ConvertTo-CursorRule gives the same bytes --------------------
-if command -v pwsh >/dev/null 2>&1; then
+if ! $BASH_ONLY && command -v pwsh >/dev/null 2>&1; then
     for g in $GOLDEN; do
         pwsh -NoProfile -File "$HELPER_PS1" "$SCRIPT_PS1" "$GOLD/$g.md" "$GOLD/$g.ps1.got" > "$GOLD/$g.ps1.log" 2>&1
         check "parity ps1: $g" "cmp -s '$GOLD/$g.ps1.got' '$GOLD/$g.got'"
@@ -191,7 +203,7 @@ if command -v pwsh >/dev/null 2>&1; then
         check "parity ps1: $g with marker" "cmp -s '$GOLD/$g.named.ps1.got' '$GOLD/$g.named.got'"
     done
 else
-    printf 'SKIP parity ps1 (pwsh not on PATH)\n'; SKIP=$((SKIP + 1))
+    printf 'SKIP parity ps1 (pwsh not on PATH or --bash-only)\n'; SKIP=$((SKIP + 1))
 fi
 
 # --- case: missing ~/.aitools/rules -> info + OK n/a, nothing created ----------
@@ -207,7 +219,7 @@ setup_case empty
 manifest
 run_script
 check "empty: exit 0" "[ \"\$(rc)\" = 0 ]"
-check "empty: OK n/a row" "grep -qxF 'OK|cursor rules|n/a (no user-level rules)' '$C/summary'"
+check "empty: OK n/a row" "grep -qxF 'OK|cursor rules|n/a (no harness rules)' '$C/summary'"
 check "empty: manifest not logged" "! grep -q 'aitools-rules-manifest' '$C/out'"
 
 # --- case: first run, rerun, edited target, --force ----------------------------
@@ -329,14 +341,14 @@ check "drydup: exit 1" "[ \"\$(rc)\" = 1 ]"
 check "drydup: ERROR row" "grep -qxF 'ERROR|cursor rules|1 failed (dry run)' '$C/summary'"
 
 # --- manifest cases: run by the .sh, then (pwsh on PATH) by the .ps1's step 4 --
-# Commander decision 2026-10-22: Cursor gets user-level rules only (manifest
-# source shared or dotprofile); the .mdc of an aitools or retired rule is
-# removed when the fan-out created it. Each case seeds $H twice: $C/home for
+# Commander decision 2026-10-26 (RECONCILE Q3, reverses PR #110's filter):
+# Cursor gets every rule the manifest does not retire; the .mdc of a retired
+# rule is removed when the fan-out created it. Each case seeds $H twice: $C/home for
 # the .sh, $C/home-ps for step4-driver.ps1; the parity check compares the
 # resulting ~/.cursor/rules trees and the "cursor rules" / ACTION summary rows.
 DRIVER_PS1="$ROOT/tests/rules-fanout-cursor/step4-driver.ps1"
 HAVE_PWSH=false
-if command -v pwsh >/dev/null 2>&1; then HAVE_PWSH=true; fi
+if ! $BASH_ONLY && command -v pwsh >/dev/null 2>&1; then HAVE_PWSH=true; fi
 
 # tree_sig DIR: one line per file under DIR, "<path> <md5>", backup time stamps
 # normalized (.bak.TS) so two runs compare
@@ -384,17 +396,20 @@ parity() {
     check "parity ps1: $case_name: summary rows" "cmp -s '$C/rows-sh' '$C/rows-ps' || { diff '$C/rows-sh' '$C/rows-ps'; false; }"
 }
 
-# A: user-level only, pruning, user files kept, manifest silent
+# A: every source fanned out (aitools too), retired pruned, user files kept
 seed_users() {
-    manifest "d.md|dotprofile" "gone.md|retired" "old.md|retired" "p.md|aitools" "s.md|shared" "u.md|aitools"
+    manifest "d.md|dotprofile" "gone.md|retired" "old.md|retired" "p.md|aitools" "q.md|aitools" "s.md|shared" "u.md|aitools"
     printf '## Shared rule\n' > "$H/.aitools/rules/s.md"
     printf '## Dotprofile rule\n' > "$H/.aitools/rules/d.md"
     printf -- '---\npaths:\n  - scripts/**\n---\n## Project rule\n' > "$H/.aitools/rules/p.md"
+    printf '## Project rule q\n' > "$H/.aitools/rules/q.md"
     printf '## Project rule u\n' > "$H/.aitools/rules/u.md"
     printf 'old shared\n' > "$H/.aitools/rules/s.md.bak.2026-10-22T010203Z"
     mkdir -p "$H/.cursor/rules"
-    # p.mdc as PR #87 deployed it: the conversion, no marker
-    conv "$H/.aitools/rules/p.md" > "$H/.cursor/rules/p.mdc"
+    # p.mdc as PR #110 left it: removed (an aitools rule), its backup kept
+    conv "$H/.aitools/rules/p.md" > "$H/.cursor/rules/p.mdc.bak.2026-10-23T010203Z"
+    # q.mdc as this fan-out deploys it (with the marker): verified
+    conv "$H/.aitools/rules/q.md" "q.md" > "$H/.cursor/rules/q.mdc"
     # gone.mdc as this fan-out deploys it: with the marker (its source is gone)
     printf '## Gone rule\n' > "$C/gone-src.md"
     conv "$C/gone-src.md" "gone.md" > "$H/.cursor/rules/gone.mdc"
@@ -407,17 +422,17 @@ seed_users
 R="$H/.cursor/rules"
 run_script
 check "users: exit 0" "[ \"\$(rc)\" = 0 ]"
-check "users: shared and dotprofile rules fanned out with the marker" "grep -qF '${MARK}s.md;' '$R/s.mdc' && grep -qF '${MARK}d.md;' '$R/d.mdc'"
-check "users: row 2 added (WARN: kept files still load)" "grep -qxF 'WARN|cursor rules|2 added' '$C/summary'"
-check "users: ACTION row lists the kept files" "grep -qxF 'ACTION||Cursor still loads project/retired rules in ~/.cursor/rules: old.mdc, u.mdc -- delete them unless you wrote them' '$C/summary'"
-check "users: aitools rule from PR #87 (no marker) removed" "[ ! -e '$R/p.mdc' ] && grep -q 'Removed p.mdc (aitools rule' '$C/out'"
-check "users: its backup kept" "ls '$R' | grep -q '^p\.mdc\.bak\.'"
-check "users: retired rule with the marker removed" "[ ! -e '$R/gone.mdc' ] && ls '$R' | grep -q '^gone\.mdc\.bak\.'"
-check "users: removals in DETAIL rows" "grep -qxF 'DETAIL|cursor rules|removed: p.mdc' '$C/summary' && grep -qxF 'DETAIL|cursor rules|removed: gone.mdc' '$C/summary'"
-check "users: user file with an aitools rule's name kept" "grep -q 'my own u' '$R/u.mdc' && grep -q 'Kept u.mdc' '$C/out'"
-check "users: user file with a retired rule's name kept" "grep -q 'my own old' '$R/old.mdc' && grep -q 'Kept old.mdc' '$C/out'"
-check "users: unrelated user rule kept" "grep -q 'mine' '$R/mine.mdc'"
-check "users: no project rule fanned out" "[ ! -e '$R/u.mdc.bak' ] && ! grep -q 'aitools-fanout' '$R/u.mdc' && ! grep -q 'added: p.mdc' '$C/summary'"
+check "users: shared, dotprofile and aitools rules fanned out with the marker" "grep -qF '${MARK}s.md;' '$R/s.mdc' && grep -qF '${MARK}d.md;' '$R/d.mdc' && grep -qF '${MARK}p.md;' '$R/p.mdc' && grep -qF '${MARK}u.md;' '$R/u.mdc'"
+check "users: aitools rule PR #110 pruned is re-added" "grep -qxF 'DETAIL|cursor rules|added: p.mdc' '$C/summary' && grep -qxF '  - **/scripts/**' '$R/p.mdc'"
+check "users: aitools rule already fanned out is verified" "! grep -q '|cursor rules|.*: q.mdc' '$C/summary' && grep -qF '${MARK}q.md;' '$R/q.mdc'"
+check "users: row 3 added, 1 updated, 1 removed, 1 verified (WARN: a kept file still loads)" "grep -qxF 'WARN|cursor rules|3 added, 1 updated, 1 removed, 1 verified' '$C/summary'"
+check "users: ACTION row lists the kept retired file" "grep -qxF 'ACTION||Cursor still loads retired rules in ~/.cursor/rules: old.mdc -- delete them unless you wrote them' '$C/summary'"
+check "users: retired rule with the marker removed, backup kept" "[ ! -e '$R/gone.mdc' ] && ls '$R' | grep -q '^gone\.mdc\.bak\.' && grep -q 'Removed gone.mdc (retired rule; aitools-fanout marker' '$C/out'"
+check "users: removal is a tracker DETAIL row" "grep -qxF 'DETAIL|cursor rules|removed: gone.mdc' '$C/summary'"
+check "users: user file at an aitools rule's name now the fan-out's (backup kept)" "grep -qF '${MARK}u.md;' '$R/u.mdc' && ls '$R' | grep -q '^u\.mdc\.bak\.' && grep -qxF 'DETAIL|cursor rules|updated: u.mdc' '$C/summary'"
+check "users: user file with a retired rule's name kept" "grep -q 'my own old' '$R/old.mdc' && grep -q 'Kept old.mdc: the rules manifest retires old.md' '$C/out'"
+check "users: unrelated user rule kept" "grep -q 'mine' '$R/mine.mdc' && grep -q 'Preserved unmanaged rule: mine.mdc' '$C/out'"
+check "users: retired names logged as not fanned out only when present" "! grep -q 'Not fanned out: gone.md' '$C/out'"
 check "users: *.bak.* source skipped silently" "! ls '$R' | grep -q '^s\.md\.bak' && ! grep -q 's.md.bak' '$C/out'"
 check "users: manifest ignored silently" "! grep -q 'aitools-rules-manifest' '$C/out' && [ ! -e '$R/.aitools-rules-manifest' ]"
 parity users seed_users
@@ -426,38 +441,56 @@ if [ "$HAVE_PWSH" = "true" ]; then
 fi
 BAKS=$(ls "$R" | grep -c '\.bak\.')
 run_script
-check "users rerun: row 2 verified" "grep -qxF 'WARN|cursor rules|2 verified' '$C/summary'"
+check "users rerun: row 5 verified" "grep -qxF 'WARN|cursor rules|5 verified' '$C/summary'"
 check "users rerun: nothing removed, no new backups" "! grep -q '^Removed\|] Removed' '$C/out' && [ \"\$(ls '$R' | grep -c '\.bak\.')\" = '$BAKS' ]"
 
-# B: no manifest -> nothing fanned out, nothing removed, WARN + ACTION
+# B: no manifest -> every rule fanned out, none removed, info log (Claude parity)
 seed_nomanifest() {
     mkdir -p "$H/.aitools/rules" "$H/.cursor/rules"
     printf '## Shared rule\n' > "$H/.aitools/rules/s.md"
     printf '## Project rule\n' > "$H/.aitools/rules/p.md"
+    # p.mdc as PR #87 deployed it (no marker): updated to the marker form
     conv "$H/.aitools/rules/p.md" > "$H/.cursor/rules/p.mdc"
 }
 setup_case nomanifest
 seed_nomanifest
 run_script
 check "nomanifest: exit 0" "[ \"\$(rc)\" = 0 ]"
-check "nomanifest: WARN row" "grep -qxF 'WARN|cursor rules|no rules manifest' '$C/summary'"
-check "nomanifest: ACTION row" "grep -q '^ACTION||Run aitools' '$C/summary'"
-check "nomanifest: nothing fanned out, nothing removed" "[ \"\$(ls '$H/.cursor/rules')\" = 'p.mdc' ]"
+check "nomanifest: info log" "grep -q '\[info\] No rules manifest at .* -- every rule fanned out, none removed' '$C/out'"
+# The row is WARN only because p.mdc was overwritten non-interactively (a warn)
+check "nomanifest: no manifest WARN, no ACTION; row 1 added, 1 updated" "! grep -q '\[warn\] No rules manifest' '$C/out' && ! grep -q '^ACTION' '$C/summary' && grep -qxF 'WARN|cursor rules|1 added, 1 updated' '$C/summary' && grep -q 'p.mdc -- overwriting (non-interactive)' '$C/out'"
+check "nomanifest: both rules fanned out with the marker" "grep -qF '${MARK}s.md;' '$H/.cursor/rules/s.mdc' && grep -qF '${MARK}p.md;' '$H/.cursor/rules/p.mdc'"
 parity nomanifest seed_nomanifest
 
-# C: another first line -> same safe behaviour
+# C: another first line -> every rule fanned out + WARN log + ACTION
 seed_badheader() {
     mkdir -p "$H/.aitools/rules"
-    printf '# aitools rules manifest v2\ns.md\tshared\n' > "$H/.aitools/rules/.aitools-rules-manifest"
+    printf '# aitools rules manifest v2\ns.md\tretired\n' > "$H/.aitools/rules/.aitools-rules-manifest"
     printf '## Shared rule\n' > "$H/.aitools/rules/s.md"
 }
 setup_case badheader
 seed_badheader
 run_script
 check "badheader: exit 0" "[ \"\$(rc)\" = 0 ]"
-check "badheader: WARN row" "grep -qxF 'WARN|cursor rules|rules manifest not v1' '$C/summary'"
-check "badheader: nothing fanned out" "[ ! -e '$H/.cursor/rules' ]"
+check "badheader: warned" "grep -q '\[warn\] Rules manifest .*the first line is not' '$C/out'"
+check "badheader: ACTION row" "grep -qxF 'ACTION||Run aitools to rebuild ~/.aitools/rules and its manifest' '$C/summary'"
+check "badheader: fanned out (its retired line not read), row WARN 1 added" "[ -f '$H/.cursor/rules/s.mdc' ] && grep -qxF 'WARN|cursor rules|1 added' '$C/summary'"
 parity badheader seed_badheader
+
+# C2: an unreadable manifest (a directory at its path) -> ERROR row, the
+# fan-out continues, the manifest counted as a failed item
+seed_badmanifest() {
+    mkdir -p "$H/.aitools/rules/.aitools-rules-manifest"
+    printf '## Shared rule\n' > "$H/.aitools/rules/s.md"
+}
+setup_case badmanifest
+seed_badmanifest
+run_script
+check "badmanifest: exit 1" "[ \"\$(rc)\" = 1 ]"
+check "badmanifest: ERROR row cannot read rules manifest" "grep -qxF 'ERROR|cursor rules|cannot read rules manifest' '$C/summary'"
+check "badmanifest: fan-out continued" "[ -f '$H/.cursor/rules/s.mdc' ] && grep -qxF 'DETAIL|cursor rules|added: s.mdc' '$C/summary'"
+check "badmanifest: manifest counted failed, final row ERROR 1 failed" "grep -qxF 'DETAIL|cursor rules|failed: .aitools-rules-manifest' '$C/summary' && [ \"\$(row)\" = 'ERROR|cursor rules|1 failed' ]"
+parity badmanifest seed_badmanifest
 
 # D: invalid lines ignored with a warning; case-insensitive names
 seed_invalid() {
@@ -469,46 +502,75 @@ seed_invalid
 run_script
 check "invalid: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "invalid: 6 lines ignored with a warning" "[ \"\$(grep -c 'line ignored' '$C/out')\" = 6 ] && grep -q 'line ignored: ../x.md<TAB>shared' '$C/out'"
-check "invalid: name matched case-insensitively" "[ -f '$H/.cursor/rules/lower.mdc' ]"
+check "invalid: name matched case-insensitively" "[ -f '$H/.cursor/rules/lower.mdc' ] && ! grep -q 'Not fanned out: Lower.md is in the rules manifest' '$C/out'"
 check "invalid: WARN row" "grep -qxF 'WARN|cursor rules|1 added' '$C/summary'"
 parity invalid seed_invalid
 
-# E: only a project rule -> row reports the removal
+# D2: an upper-case .MD extension is a rule (rule_name_kind is case-insensitive).
+# No manifest here: the lib's manifest reader takes *.md names case-sensitively
+# (a "Up.MD" line is ignored as invalid), so a listed Up.MD would add a warning.
+seed_upper() {
+    mkdir -p "$H/.aitools/rules"
+    printf '## Upper ext\n' > "$H/.aitools/rules/Up.MD"
+}
+setup_case upper
+seed_upper
+run_script
+check "upper: exit 0" "[ \"\$(rc)\" = 0 ]"
+check "upper: Up.MD -> Up.mdc" "[ -f '$H/.cursor/rules/Up.mdc' ] && grep -qF '${MARK}Up.MD;' '$H/.cursor/rules/Up.mdc' && grep -qxF 'OK|cursor rules|1 added' '$C/summary'"
+parity upper seed_upper
+
+# E: only a retired rule -> row reports the removal (#87 file, matched through
+# the backup deploy-harness left when it retired the rule)
 seed_onlyremove() {
-    manifest "p.md|aitools"
-    printf '## Project rule\n' > "$H/.aitools/rules/p.md"
+    manifest "p.md|retired"
+    printf '## Project rule\n' > "$H/.aitools/rules/p.md.bak.2026-10-22T010203Z"
     mkdir -p "$H/.cursor/rules"
-    conv "$H/.aitools/rules/p.md" > "$H/.cursor/rules/p.mdc"
+    conv "$H/.aitools/rules/p.md.bak.2026-10-22T010203Z" > "$H/.cursor/rules/p.mdc"
 }
 setup_case onlyremove
 seed_onlyremove
 run_script
 check "onlyremove: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "onlyremove: OK row 1 removed" "grep -qxF 'OK|cursor rules|1 removed' '$C/summary'"
-check "onlyremove: p.mdc removed, backup kept" "[ ! -e '$H/.cursor/rules/p.mdc' ] && ls '$H/.cursor/rules' | grep -q '^p\.mdc\.bak\.'"
+check "onlyremove: p.mdc removed, backup with the same text kept" "[ ! -e '$H/.cursor/rules/p.mdc' ] && ls '$H/.cursor/rules' | grep -q '^p\.mdc\.bak\.' && grep -q 'Removed p.mdc (retired rule; same content as the conversion of p.md.bak.2026-10-22T010203Z; backup kept)' '$C/out'"
 parity onlyremove seed_onlyremove
 
-# E2: a name with [ ] is backed up before removal (PS1 Backup-File is wildcard-based)
-seed_bracket() {
-    manifest "br[1].md|aitools"
-    printf '## Bracket rule\n' > "$H/.aitools/rules/br[1].md"
+# E1: an aitools rule is no longer pruned (PR #110 removed it; FD-2)
+seed_aitools() {
+    manifest "p.md|aitools"
+    printf '## Project rule\n' > "$H/.aitools/rules/p.md"
     mkdir -p "$H/.cursor/rules"
-    conv "$H/.aitools/rules/br[1].md" "br[1].md" > "$H/.cursor/rules/br[1].mdc"
+    conv "$H/.aitools/rules/p.md" "p.md" > "$H/.cursor/rules/p.mdc"
+}
+setup_case aitools
+seed_aitools
+run_script
+check "aitools: exit 0" "[ \"\$(rc)\" = 0 ]"
+check "aitools: p.mdc kept and verified, nothing removed" "[ -f '$H/.cursor/rules/p.mdc' ] && grep -qxF 'OK|cursor rules|1 verified' '$C/summary' && ! ls '$H/.cursor/rules' | grep -q '\.bak\.'"
+parity aitools seed_aitools
+
+# E2: a name with [ ] is backed up before removal (Backup-File -LiteralPath)
+seed_bracket() {
+    manifest "br[1].md|retired"
+    mkdir -p "$H/.cursor/rules"
+    printf '## Bracket rule\n' > "$C/br-src.md"
+    conv "$C/br-src.md" "br[1].md" > "$H/.cursor/rules/br[1].mdc"
 }
 setup_case bracket
 seed_bracket
 run_script
 check "bracket: exit 0" "[ \"\$(rc)\" = 0 ]"
-check "bracket: removed with a backup" "[ ! -e '$H/.cursor/rules/br[1].mdc' ] && ls '$H/.cursor/rules' | grep -qF 'br[1].mdc.bak.'"
+check "bracket: removed with a backup" "[ ! -e '$H/.cursor/rules/br[1].mdc' ] && ls '$H/.cursor/rules' | grep -qF 'br[1].mdc.bak.' && grep -qxF 'OK|cursor rules|1 removed' '$C/summary'"
 parity bracket seed_bracket
 
-# E3 (review finding 1): #87 files of rules edited or retired since that run
+# E3 (review finding 1): #87 files of rules edited before they were retired
 # are recognised through the backups deploy-harness left beside the harness copy
 seed_edited() {
-    manifest "e.md|aitools" "r.md|retired"
+    manifest "e.md|retired" "r.md|retired"
     mkdir -p "$H/.cursor/rules"
     printf '## Edited rule, old text\n' > "$H/.aitools/rules/e.md.bak.2026-10-21T010203Z"
-    printf '## Edited rule, new text\n' > "$H/.aitools/rules/e.md"
+    printf '## Edited rule, new text\n' > "$H/.aitools/rules/e.md.bak.2026-10-22T010203Z"
     printf '## Retired rule\n' > "$H/.aitools/rules/r.md.bak.2026-10-22T010203Z"
     conv "$H/.aitools/rules/e.md.bak.2026-10-21T010203Z" > "$H/.cursor/rules/e.mdc"
     conv "$H/.aitools/rules/r.md.bak.2026-10-22T010203Z" > "$H/.cursor/rules/r.mdc"
@@ -517,14 +579,14 @@ setup_case edited
 seed_edited
 run_script
 check "edited: exit 0" "[ \"\$(rc)\" = 0 ]"
-check "edited: old copy of an edited aitools rule removed" "[ ! -e '$H/.cursor/rules/e.mdc' ] && grep -q 'Removed e.mdc (aitools rule.*e.md.bak.2026-10-21T010203Z' '$C/out'"
+check "edited: old copy of an edited retired rule removed" "[ ! -e '$H/.cursor/rules/e.mdc' ] && grep -q 'Removed e.mdc (retired rule.*e.md.bak.2026-10-21T010203Z' '$C/out'"
 check "edited: old copy of a retired rule removed" "[ ! -e '$H/.cursor/rules/r.mdc' ]"
 check "edited: OK row 2 removed" "grep -qxF 'OK|cursor rules|2 removed' '$C/summary'"
 parity edited seed_edited
 
 # E4 (review finding 3): marker text after a body --- line is not the marker
 seed_bodymark() {
-    manifest "p.md|aitools"
+    manifest "p.md|retired"
     printf '## Project rule\n' > "$H/.aitools/rules/p.md"
     mkdir -p "$H/.cursor/rules"
     printf -- '---\nalwaysApply: true\n---\nmine\n---\n%sp.md; edit that rule, not this file -->\n' "$MARK" > "$H/.cursor/rules/p.mdc"
@@ -533,22 +595,24 @@ setup_case bodymark
 seed_bodymark
 run_script
 check "bodymark: exit 0" "[ \"\$(rc)\" = 0 ]"
+check "bodymark: retired harness copy not fanned out" "grep -q 'Not fanned out: p.md (retired in the rules manifest)' '$C/out'"
 check "bodymark: user file kept" "grep -q '^mine' '$H/.cursor/rules/p.mdc' && grep -q 'Kept p.mdc' '$C/out'"
-check "bodymark: WARN row and ACTION" "grep -qxF 'WARN|cursor rules|n/a (no user-level rules)' '$C/summary' && grep -q '^ACTION||Cursor still loads project/retired rules in ~/.cursor/rules: p.mdc' '$C/summary'"
+check "bodymark: WARN row and ACTION" "grep -qxF 'WARN|cursor rules|n/a (no harness rules)' '$C/summary' && grep -qxF 'ACTION||Cursor still loads retired rules in ~/.cursor/rules: p.mdc -- delete them unless you wrote them' '$C/summary'"
 parity bodymark seed_bodymark
 
-# E5 (review finding 4): a manifest ending in a lone CR -- both scripts reject the line
+# E5 (review finding 4): a manifest ending in a lone CR -- both scripts reject
+# the line; the rule is still fanned out (only retired names are withheld)
 seed_lonecr() {
     mkdir -p "$H/.aitools/rules"
-    printf '# aitools rules manifest v1\na.md\tshared\nb.md\tshared\r' > "$H/.aitools/rules/.aitools-rules-manifest"
+    printf '# aitools rules manifest v1\na.md\tshared\nb.md\tretired\r' > "$H/.aitools/rules/.aitools-rules-manifest"
     printf '## a\n' > "$H/.aitools/rules/a.md"
     printf '## b\n' > "$H/.aitools/rules/b.md"
 }
 setup_case lonecr
 seed_lonecr
 run_script
-check "lonecr: last line ignored with a warning" "grep -q 'line ignored: b.md<TAB>shared' '$C/out' && [ ! -e '$H/.cursor/rules/b.mdc' ]"
-check "lonecr: WARN row 1 added" "grep -qxF 'WARN|cursor rules|1 added' '$C/summary'"
+check "lonecr: last line ignored with a warning (b.md not retired)" "grep -q 'line ignored: b.md<TAB>retired' '$C/out' && [ -f '$H/.cursor/rules/b.mdc' ]"
+check "lonecr: WARN row 2 added" "grep -qxF 'WARN|cursor rules|2 added' '$C/summary'"
 parity lonecr seed_lonecr
 
 # F: dry run -> removal only logged
@@ -556,13 +620,13 @@ setup_case dryprune
 seed_onlyremove
 run_script --dry-run
 check "dryprune: exit 0" "[ \"\$(rc)\" = 0 ]"
-check "dryprune: would-remove logged" "grep -q 'Would back up and remove p.mdc (aitools rule' '$C/out'"
+check "dryprune: would-remove logged" "grep -q 'Would back up and remove p.mdc (retired rule' '$C/out'"
 check "dryprune: p.mdc still there, no backup" "[ \"\$(ls '$H/.cursor/rules')\" = 'p.mdc' ]"
 parity dryprune seed_onlyremove -DryRun
 
-# G: a user-level name in the manifest with no file -> warning
+# G: a listed rule with no file -> warning
 seed_missing() {
-    manifest "s.md|shared" "t.md|shared"
+    manifest "s.md|shared" "t.md|aitools"
     printf '## Shared rule\n' > "$H/.aitools/rules/s.md"
 }
 setup_case missingsrc
@@ -572,6 +636,84 @@ check "missingsrc: exit 0" "[ \"\$(rc)\" = 0 ]"
 check "missingsrc: warned" "grep -q 'Not fanned out: t.md is in the rules manifest but not in' '$C/out'"
 check "missingsrc: WARN row 1 added" "grep -qxF 'WARN|cursor rules|1 added' '$C/summary'"
 parity missingsrc seed_missing
+
+# G2: a rule the manifest does not list is fanned out too (Claude parity, FAN-PLAN D1)
+seed_unlisted() {
+    manifest "s.md|shared"
+    printf '## Shared rule\n' > "$H/.aitools/rules/s.md"
+    printf '## A rule the manifest does not list\n' > "$H/.aitools/rules/extra.md"
+}
+setup_case unlisted
+seed_unlisted
+run_script
+check "unlisted: exit 0, both fanned out" "[ \"\$(rc)\" = 0 ] && [ -f '$H/.cursor/rules/extra.mdc' ] && grep -qxF 'OK|cursor rules|2 added' '$C/summary'"
+parity unlisted seed_unlisted
+
+# H: something that is not a directory at ~/.cursor/rules -> ERROR row
+seed_nocreate() {
+    manifest "s.md|shared"
+    printf '## Shared rule\n' > "$H/.aitools/rules/s.md"
+    mkdir -p "$H/.cursor"
+    printf 'a file\n' > "$H/.cursor/rules"
+}
+setup_case nocreate
+seed_nocreate
+run_script
+check "nocreate: exit 1, ERROR row" "[ \"\$(rc)\" = 1 ] && [ \"\$(row)\" = 'ERROR|cursor rules|cannot create rules dir' ]"
+check "nocreate: the file in the way kept" "grep -qx 'a file' '$H/.cursor/rules'"
+parity nocreate seed_nocreate
+
+# --- pty: the review menu prompts (deploy list on fd 3) and [x]abort exits 2 --
+# Before the fd-3 fix the bash loop read its list from a here-string on stdin,
+# so tty_interactive ([ -t 0 ]) was false and a changed .mdc was overwritten
+# without a prompt even on a terminal.
+PTY="$ROOT/tests/managed-files/pty-run.py"
+HAVE_PTY=false
+if command -v python3 >/dev/null 2>&1 && [ -f "$PTY" ]; then HAVE_PTY=true; fi
+
+# run_pty LANG INPUT: LANG sh runs the script, ps runs step4-driver.ps1, on a
+# pty under $C/home (sh) or $C/home-ps (ps); keystrokes INPUT
+run_pty() {
+    local lang="$1" input="$2" h
+    if [ "$lang" = sh ]; then h="$C/home"; else h="$C/home-ps"; fi
+    : > "$C/summary-$lang"
+    if [ "$lang" = sh ]; then
+        env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN HOME="$h" USERPROFILE="$h" AITOOLS_LOG_DIR="$C/logs-$lang" \
+            AITOOLS_SUMMARY_FILE="$C/summary-$lang" PATH="$C/bin:$PATH" \
+            python3 "$PTY" --input "$input" --log "$C/pty-$lang.out" -- "$TB" "$SCRIPT" > /dev/null 2>&1
+    else
+        env -u AITOOLS_FORCE -u AITOOLS_DRY_RUN HOME="$h" USERPROFILE="$h" AITOOLS_LOG_DIR="$C/logs-$lang" \
+            AITOOLS_SUMMARY_FILE="$C/summary-$lang" \
+            python3 "$PTY" --input "$input" --log "$C/pty-$lang.out" -- pwsh -NoProfile -File "$DRIVER_PS1" "$SCRIPT_PS1" > /dev/null 2>&1
+    fi
+    echo $? > "$C/rc-$lang"
+}
+seed_pty() {
+    manifest "s.md|shared" "t.md|aitools"
+    printf '## Shared rule\n' > "$H/.aitools/rules/s.md"
+    printf '## Project rule\n' > "$H/.aitools/rules/t.md"
+    mkdir -p "$H/.cursor/rules"
+    conv "$H/.aitools/rules/s.md" "s.md" > "$H/.cursor/rules/s.mdc"
+    printf 'my edit\n' >> "$H/.cursor/rules/s.mdc"
+    conv "$H/.aitools/rules/t.md" "t.md" > "$H/.cursor/rules/t.mdc"
+}
+if $HAVE_PTY; then
+    setup_case pty
+    seed_pty
+    if [ "$HAVE_PWSH" = "true" ]; then saved_h="$H"; H="$C/home-ps"; mkdir -p "$H"; seed_pty; H="$saved_h"; fi
+    for lang in sh ps; do
+        if [ "$lang" = ps ] && [ "$HAVE_PWSH" != "true" ]; then continue; fi
+        if [ "$lang" = sh ]; then PR="$C/home/.cursor/rules"; else PR="$C/home-ps/.cursor/rules"; fi
+        run_pty "$lang" 's\n'
+        check "pty $lang: the review menu prompted" "grep -q '\[s\]kip' '$C/pty-$lang.out'"
+        check "pty $lang: [s]kip keeps the local edit, row WARN 1 skipped" "grep -qx 'my edit' '$PR/s.mdc' && [ \"\$(grep -F '|cursor rules|' '$C/summary-$lang' | grep -v '^DETAIL' | tail -n 1)\" = 'WARN|cursor rules|1 skipped (user review)' ]"
+        run_pty "$lang" 'x\n'
+        check "pty $lang: [x]abort exits 2, no cursor rules row, local file kept" "[ \"\$(cat '$C/rc-$lang')\" = 2 ] && ! grep -F '|cursor rules|' '$C/summary-$lang' | grep -qv '^DETAIL' && grep -qx 'my edit' '$PR/s.mdc'"
+    done
+    if [ "$HAVE_PWSH" != "true" ]; then printf 'SKIP pty ps (pwsh not on PATH)\n'; SKIP=$((SKIP + 1)); fi
+else
+    printf 'SKIP pty review menu and abort (python3 not found)\n'; SKIP=$((SKIP + 1))
+fi
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]
