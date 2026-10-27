@@ -981,10 +981,15 @@ function Backup-Dir {
     # Newest first by name (the UTC stamp sorts by time), ordinal as perl's cmp
     [Array]::Sort($names, [StringComparer]::Ordinal)
     [Array]::Reverse($names)
+    # .NET calls, not Join-Path / Remove-Item -LiteralPath -Recurse: on Linux
+    # pwsh, removing "r[1]*?.bak.<stamp>" deleted a different sibling (CI run
+    # 40445716292); Directory.Delete has no wildcard semantics and removes a
+    # symlink inside the tree without following it
     for ($i = $MaxBackups; $i -lt $names.Count; $i++) {
-        $old = Join-Path $parent $names[$i]
+        $old = [System.IO.Path]::Combine($parent, $names[$i])
         try {
-            Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction Stop
+            [System.IO.Directory]::Delete($old, $true)
+            if ([System.IO.Directory]::Exists($old)) { throw "still present after the delete" }
             Log "Pruned old backup: $old"
         } catch {
             LogWarn "Could not prune old backup ${old}: $_"
