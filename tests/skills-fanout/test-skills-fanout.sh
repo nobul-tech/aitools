@@ -524,6 +524,31 @@ rerun
 check "binary edited: overwritten byte for byte, backup kept" "[ \"\$(nondetail)\" = 'OK|claude skills|1 updated, 2 verified' ] && cmp -s '$C/sh/.aitools/skills/b/img.bin' '$(S)/b/img.bin' && ls '$(S)/b' | grep -q '^img\.bin\.bak\.' && ! ls '$(S)/b' | grep -q 'aitools-tmp'"
 parity binary-edited
 
+# Strict UTF-8 in both languages (review R1): each of these is binary in sh and
+# ps; a valid multi-byte file and a noncharacter stay text
+seed_utf8edge() {
+    manifest 'u|shared'
+    hskill u SKILL.md 'skill u'
+    printf 'a\355\240\200b\n' > "$H/.aitools/skills/u/surrogate.txt"       # ED A0 80: U+D800
+    printf 'a\364\220\200\200b\n' > "$H/.aitools/skills/u/above-max.txt"   # F4 90 80 80: > U+10FFFF
+    printf 'a\377b\n' > "$H/.aitools/skills/u/ff.txt"                      # FF
+    printf 'a\300\257b\n' > "$H/.aitools/skills/u/overlong.txt"            # C0 AF: overlong "/"
+    printf 'a\342\202\n' > "$H/.aitools/skills/u/truncated.txt"            # E2 82 then a newline
+    printf 'caf\303\251 \342\202\254\n' > "$H/.aitools/skills/u/valid.txt" # valid: e-acute, euro
+    printf 'a\357\277\276b\n' > "$H/.aitools/skills/u/nonchar.txt"         # EF BF BE: U+FFFE (valid UTF-8)
+}
+case_run utf8edge seed_utf8edge
+for lang in sh ps; do
+    if [ "$lang" = ps ] && [ "$HAVE_PWSH" != "true" ]; then continue; fi
+    for f in surrogate above-max ff overlong truncated; do
+        check "utf8 strict $lang: $f.txt copied as binary, bytes identical" "logged 'Created: u/$f.txt (binary)' $lang && cmp -s '$C/$lang/.aitools/skills/u/$f.txt' '$C/$lang/.claude/skills/u/$f.txt'"
+    done
+    for f in valid nonchar; do
+        check "utf8 strict $lang: $f.txt is text (review path)" "logged 'Created: u/$f.txt ->' $lang && ! logged 'Created: u/$f.txt (binary)' $lang"
+    done
+done
+parity utf8edge
+
 # Names Claude Code owns (synced, anthropic-skills*): never written, never removed
 seed_reserved() {
     manifest 'a|shared' 'anthropic-skills-old|retired'

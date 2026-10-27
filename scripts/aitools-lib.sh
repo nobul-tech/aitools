@@ -2851,12 +2851,17 @@ _fanout_list_dir() {
 # it), 1 when it is text, 2 (reason on stdout) when it cannot be read.
 # Parity: Test-FanoutBinary in aitools-lib.ps1.
 _fanout_is_binary() {
+    # Well-formed UTF-8 (RFC 3629), as .NET's throwing UTF8Encoding checks it:
+    # a surrogate, a code point above U+10FFFF, an overlong or truncated
+    # sequence and FE/FF bytes are not text; noncharacters (U+FFFE) are text.
+    # (utf8::decode is lax; Encode's strict UTF-8 also rejects noncharacters.)
     perl -e '
         open my $fh, "<:raw", $ARGV[0] or do { print "cannot read $ARGV[0]: $!\n"; exit 2 };
         local $/; my $c = <$fh>; close $fh;
         $c = "" unless defined $c;
         exit 0 if index($c, "\0") >= 0;
-        exit(utf8::decode($c) ? 1 : 0);
+        my $ok = $c =~ /\A(?:[\x00-\x7F]+|[\xC2-\xDF][\x80-\xBF]|\xE0[\xA0-\xBF][\x80-\xBF]|[\xE1-\xEC\xEE\xEF][\x80-\xBF]{2}|\xED[\x80-\x9F][\x80-\xBF]|\xF0[\x90-\xBF][\x80-\xBF]{2}|[\xF1-\xF3][\x80-\xBF]{3}|\xF4[\x80-\x8F][\x80-\xBF]{2})*\z/;
+        exit($ok ? 1 : 0);
     ' "$1"
 }
 
