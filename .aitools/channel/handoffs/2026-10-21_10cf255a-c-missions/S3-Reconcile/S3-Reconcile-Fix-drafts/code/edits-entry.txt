@@ -1,0 +1,120 @@
+@@@FILE scripts/aitools L193a Step 2: a skipped build is WARN, not OK "Rebuilt"
+@@@OLD
+if env ${build_env[@]+"${build_env[@]}"} bash "$repo_path/scripts/build-deploy.sh" >> "$LOG_FILE" 2>&1; then
+    log_ok "Rebuilt"
+else
+    log_error "build failed (see $LOG_DISPLAY)"
+    return 1
+fi
+@@@NEW
+# build-deploy exits 0 when it skips the build (no node, no dotprofile, resolver
+# error); its warning then says "skipping deploy build". Report that as a WARN row,
+# not OK "Rebuilt". Parity: aitools.ps1 Step 2.
+build_rc=0
+build_out=$(env ${build_env[@]+"${build_env[@]}"} bash "$repo_path/scripts/build-deploy.sh" 2>&1) || build_rc=$?
+printf '%s\n' "$build_out" >> "$LOG_FILE"
+if [ "$build_rc" -ne 0 ]; then
+    log_error "build failed (see $LOG_DISPLAY)"
+    return 1
+fi
+# grep exits 1 when no line matches (the normal case: the build ran); the empty
+# result is the check.
+build_skip=$(grep -F -m 1 "skipping deploy build" <<< "$build_out") || build_skip=""
+if [ -n "$build_skip" ]; then
+    build_why=$(perl -pe 's/\e\[[0-9;]*m//g; s/^.*?\[warn\] //' <<< "$build_skip") || build_why="$build_skip"
+    log_warn "Deploy build skipped: $build_why"
+    write_summary WARN "deploy build" "skipped (see deploy log)"
+else
+    log_ok "Rebuilt"
+fi
+@@@END
+@@@FILE scripts/aitools.ps1 L193b Step 2: a skipped build is WARN, not OK "Rebuilt"
+@@@OLD
+Add-Content -Path $logFile -Value $buildResult
+if ($buildRc -eq 0) {
+    LogOk "Rebuilt"
+} else {
+@@@NEW
+Add-Content -Path $logFile -Value $buildResult
+# build-deploy exits 0 when it skips the build (no node, no dotprofile, resolver
+# error); its warning then says "skipping deploy build". Report that as a WARN row,
+# not OK "Rebuilt". Parity: scripts/aitools Step 2.
+$buildSkip = @("$buildResult" -split "`r?`n" | Where-Object { $_.Contains("skipping deploy build") }) | Select-Object -First 1
+if ($buildRc -eq 0 -and $buildSkip) {
+    $buildWhy = ($buildSkip -replace "$([char]27)\[[0-9;]*m", '') -replace '^.*?\[warn\] ', ''
+    LogWarn "Deploy build skipped: $buildWhy"
+    Write-Summary "WARN" "deploy build" "skipped (see deploy log)"
+} elseif ($buildRc -eq 0) {
+    LogOk "Rebuilt"
+} else {
+@@@END
+@@@FILE scripts/aitools.ps1 L196b build step: Git Bash through Find-GitBash
+@@@OLD
+$bashExe = "$env:ProgramFiles\Git\bin\bash.exe"
+if (-not (Test-Path $bashExe)) {
+    LogError "Git Bash not found at $bashExe (required for build)"
+    exit 1
+}
+@@@NEW
+# Find-GitBash (aitools-lib.ps1): the same Git for Windows paths setup-bash.ps1 checks
+$bashExe = Find-GitBash
+if (-not $bashExe) {
+    LogError "Git Bash not found under Program Files or %LOCALAPPDATA%\Programs\Git (required for build)"
+    exit 1
+}
+@@@END
+@@@FILE scripts/setup-bash.ps1 L196c setup-bash: Git Bash through Find-GitBash
+@@@OLD
+$bashExe = $null
+$gitBashPaths = @(
+    "C:\Program Files\Git\bin\bash.exe",
+    "C:\Program Files (x86)\Git\bin\bash.exe",
+    (Join-Path $env:LOCALAPPDATA "Programs\Git\bin\bash.exe")
+)
+
+foreach ($p in $gitBashPaths) {
+    if (Test-Path -LiteralPath $p) {
+        $bashExe = $p
+        break
+    }
+}
+@@@NEW
+# Find-GitBash (aitools-lib.ps1) holds the one path list (Program Files, Program
+# Files (x86), %LOCALAPPDATA%\Programs\Git), shared with the aitools.ps1 build step.
+$bashExe = Find-GitBash
+@@@END
+@@@FILE scripts/aitools M2a deploy guard variable: the name ait-harvest.py reads
+@@@OLD
+    export AITOOLS_DEPLOY=1
+    if $dry_run; then export AITOOLS_DRY_RUN=1; fi
+@@@NEW
+    # Read by ait-harvest.py: a SessionStart catch-up that runs inside this deploy
+    # (an AI merge's `claude -p` child) skips its sweep (plan section 20.2 M2).
+    # AITOOLS_DEPLOY had no reader.
+    export AITOOLS_DEPLOY_IN_PROGRESS=1
+    if $dry_run; then export AITOOLS_DRY_RUN=1; fi
+@@@END
+@@@FILE scripts/aitools M2b deploy guard variable: unset
+@@@OLD
+    unset AITOOLS_DEPLOY
+    unset AITOOLS_DRY_RUN
+@@@NEW
+    unset AITOOLS_DEPLOY_IN_PROGRESS
+    unset AITOOLS_DRY_RUN
+@@@END
+@@@FILE scripts/aitools.ps1 M2c deploy guard variable: the name ait-harvest.py reads
+@@@OLD
+    $env:AITOOLS_DEPLOY = "1"
+@@@NEW
+    # Read by ait-harvest.py: a SessionStart catch-up that runs inside this deploy
+    # (an AI merge's `claude -p` child) skips its sweep (plan section 20.2 M2).
+    # AITOOLS_DEPLOY had no reader.
+    $env:AITOOLS_DEPLOY_IN_PROGRESS = "1"
+@@@END
+@@@FILE scripts/aitools.ps1 M2d deploy guard variable: remove
+@@@OLD
+    Remove-Item Env:\AITOOLS_DEPLOY -ErrorAction SilentlyContinue
+@@@NEW
+    Remove-Item Env:\AITOOLS_DEPLOY_IN_PROGRESS -ErrorAction SilentlyContinue
+    # ErrorAction exempt: removing an environment variable that may already be unset
+@@@END

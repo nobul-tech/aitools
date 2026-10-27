@@ -108,11 +108,10 @@ step_warn "6" "Roadmap reflects reality" "check if push completes or starts a ro
 # 7. deploy/ matches source
 # ---------------------------------------------------------------------------
 # Generated deploy scripts live in the dotprofile repo (deploy-paths.md; aitools/deploy/
-# is frozen). When a deploy-relevant source changes (setup scripts, the build script,
-# aitools-lib -- inlined into every deploy script --, the profile resolver and its JSON
-# engine -- embedded in the resolver-consuming deploy scripts (M3 B5, review M7) -- or
-# shared/), rebuild from this branch into a temporary copy of the dotprofile's committed
-# tree and compare its deploy/. Then smoke-run the generated resolver consumers
+# is frozen). On every push (commander decision 2026-10-26: step 7 always runs; it used
+# to run only when a deploy-relevant source changed, which missed reference/,
+# registries/, .claude/* and deploy-harness inputs), rebuild from this branch into a
+# temporary copy of the dotprofile's committed tree and compare its deploy/. Then smoke-run the generated resolver consumers
 # (--dry-run, isolated HOME): a deploy script that cannot find its resolver fails here,
 # not on an endpoint (B8a INCIDENT). The smoke run lives here, not in build-deploy, so
 # build-deploy stays a pure generator that never executes what it generates.
@@ -120,10 +119,7 @@ step_warn "6" "Roadmap reflects reality" "check if push completes or starts a ro
 # entry-point input) and no AITOOLS_PROFILE_FILE / AITOOLS_MACHINE_ALIAS from this
 # shell (review H5): an exported value would otherwise point the build, which deletes
 # and rebuilds <dotprofile>/deploy, at the real dotprofile.
-deploy_sources=$(echo "$PUSH_FILES" | grep -E '^(scripts/(setup-.*|build-deploy|aitools-lib|aitools-profile)\.(sh|ps1)$|scripts/aitools-json\.(pl|ps1)$|shared/)' || true)
-if [ -z "$deploy_sources" ]; then
-    step_skip "7" "deploy/ matches source" "no deploy-relevant source changes"
-elif [ -z "$USER_REPO_PATH" ] || [ ! -e "$USER_REPO_PATH/.git" ]; then
+if [ -z "$USER_REPO_PATH" ] || [ ! -e "$USER_REPO_PATH/.git" ]; then
     step_skip "7" "deploy/ matches source" "userRepoPath not configured -- dotprofile deploy/ not verified"
 elif ! command -v node &>/dev/null; then
     step_warn "7" "deploy/ matches source" "node not found -- dotprofile deploy/ not verified"

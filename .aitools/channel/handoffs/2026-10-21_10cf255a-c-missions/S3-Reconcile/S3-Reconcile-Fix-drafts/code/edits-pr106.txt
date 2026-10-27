@@ -1,0 +1,28 @@
+@@@FILE scripts/aitools L189a deploy_abort comment: T-Q3 holds for deploy-harness only (base: origin/feature/harness-hookin)
+@@@OLD
+# deploy_abort SCRIPT -- deploy-harness exited 2: the user chose [x]abort at a review
+# menu (D-TS13; abort ends the whole run, T-Q3). The remaining deploy steps are not
+# run; the caller shows the summary and returns 2. Parity: Invoke-DeployAbort in
+# aitools.ps1.
+@@@NEW
+# deploy_abort SCRIPT -- deploy-harness exited 2: the user chose [x]abort at a review
+# menu (D-TS13). A deploy-harness abort ends the run (commander 2026-10-26: keep
+# this PR's behaviour; T-Q3's "the whole run" now holds for deploy-harness only --
+# any other script's exit 2 does not stop the run). The remaining deploy steps are
+# not run; the caller shows the summary and returns 2. Parity: Invoke-DeployAbort
+# in aitools.ps1.
+@@@END
+@@@FILE scripts/aitools.ps1 L189b Invoke-DeployAbort comment: T-Q3 holds for deploy-harness only (base: origin/feature/harness-hookin)
+@@@OLD
+# Invoke-DeployAbort SCRIPT -- deploy-harness exited 2: the user chose [x]abort at a
+# review menu (D-TS13; abort ends the whole run, T-Q3). The remaining deploy steps
+# are not run; the caller shows the summary and exits 2. Parity: deploy_abort in
+# scripts/aitools.
+@@@NEW
+# Invoke-DeployAbort SCRIPT -- deploy-harness exited 2: the user chose [x]abort at a
+# review menu (D-TS13). A deploy-harness abort ends the run (commander 2026-10-26:
+# keep this PR's behaviour; T-Q3's "the whole run" now holds for deploy-harness
+# only -- any other script's exit 2 does not stop the run). The remaining deploy
+# steps are not run; the caller shows the summary and exits 2. Parity:
+# deploy_abort in scripts/aitools.
+@@@END

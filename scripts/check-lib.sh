@@ -127,6 +127,7 @@ step_skip() {
 # Summary
 # ---------------------------------------------------------------------------
 print_summary() {
+    _dotprofile_resolution_step
     echo ""
     printf "=== SUMMARY: ${GREEN}%d PASS${RESET}, ${DIM}%d SKIP${RESET}, ${YELLOW}%d WARN${RESET}, ${RED}%d FAIL${RESET} ===\n" \
         "$PASS_COUNT" "$SKIP_COUNT" "$WARN_COUNT" "$FAIL_COUNT"
@@ -161,17 +162,32 @@ print_summary() {
 # rc 1 (no dotprofile, shared-only mode) is not an error in a check: USER_REPO_PATH
 # stays empty and callers skip their dotprofile steps ([ -n ] before use).
 # rc 3 was already logged by the lib (log_error, ERROR row when a run summary
-# exists); USER_REPO_PATH stays empty, so those steps skip too.
+# exists); USER_REPO_PATH stays empty, so those steps skip too. check_log_init
+# then resets ERRORS, so the rc is kept in USER_REPO_RC and print_summary adds
+# one WARN step for it: a broken dotprofile is never a clean check run (audit
+# A-24; the exit code still follows FAIL steps only).
 resolve_config() {
     CONFIG_FILE="$HOME/.aitools/config.json"
     USER_REPO_PATH=""
     USER_REPO_VIA="none"
+    USER_REPO_RC=0
     local rc=0
     resolve_user_repo_path || rc=$?
     USER_REPO_PATH="$AITLIB_USER_REPO_PATH"
     USER_REPO_VIA="${AITLIB_USER_REPO_VIA:-none}"
+    USER_REPO_RC=$rc
     if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
-        log "dotprofile unresolved (resolver error above) -- dotprofile steps skip as 'not configured'"
+        log "dotprofile unresolved (resolver error above) -- dotprofile steps skip as 'not configured'; the run reports a WARN step"
+    fi
+}
+
+# _dotprofile_resolution_step -- the WARN step for a resolver error kept by
+# resolve_config (USER_REPO_RC other than 0 or 1). Called by print_summary,
+# so it is counted in the run summary. No-op when resolve_config did not run.
+_dotprofile_resolution_step() {
+    local rc="${USER_REPO_RC:-0}"
+    if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+        step_warn "0" "Dotprofile resolution" "resolver error (rc $rc, see deploy.log) -- dotprofile steps reported 'not configured'"
     fi
 }
 

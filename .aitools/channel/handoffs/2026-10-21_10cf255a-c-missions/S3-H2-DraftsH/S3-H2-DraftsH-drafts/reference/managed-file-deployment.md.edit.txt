@@ -1,0 +1,38 @@
+# S3-H2-DraftsH corrected draft: reference/managed-file-deployment.md (awaiting re-approval, NOT applied)
+
+Target: `reference/managed-file-deployment.md`, "## Content Sources",
+subsection "### Deployed harness (`~/.aitools`)", directly after its table
+(before the "**`userRepoPath` resolution**" paragraph).
+
+Source: S3-H-Core draft (`S3-H-Core/S3-H-Core-drafts/reference/managed-file-deployment.md`,
+lines 30-32), approved 2026-10-22. The subsection heading, its first
+paragraph and the table were applied verbatim; this closing paragraph was held.
+
+## Why it was held
+
+The approved text says rules reach the agent tools "through the
+`setup-user-claude` / `setup-user-cursor` fan-out". On origin/main 8a9dcb5 only
+`setup-user-cursor` fans out `~/.aitools/rules` (`scripts/setup-user-cursor.sh`
+line 389: `HARNESS_RULES_DIR="$HOME/.aitools/rules"`). `setup-user-claude`
+still deploys rules from the dotprofile (`scripts/setup-user-claude.sh` header,
+line 13: `# Managed: ~/.claude/rules/*.md matching <userRepoPath>/claude/rules/`);
+`grep -E "aitools[/\\]rules"` on `setup-user-claude.sh` / `.ps1` finds nothing.
+The approved deploy-paths.md text says the same ("`setup-user-claude` once it
+fans out").
+
+## Old (approved, not applied)
+
+```
+Rules reach the agent tools from `~/.aitools/rules/` through the
+`setup-user-claude` / `setup-user-cursor` fan-out. Conflict handling and
+its assumptions: `@reference/harness.md` "Deployed harness (`~/.aitools`)".
+```
+
+## New (proposed)
+
+```
+Rules reach Cursor from `~/.aitools/rules/` through the `setup-user-cursor`
+fan-out, and Claude Code through `setup-user-claude` once it fans out (today
+it deploys `<userRepoPath>/claude/rules/` directly). Conflict handling and
+its assumptions: `@reference/harness.md` "Deployed harness (`~/.aitools`)".
+```

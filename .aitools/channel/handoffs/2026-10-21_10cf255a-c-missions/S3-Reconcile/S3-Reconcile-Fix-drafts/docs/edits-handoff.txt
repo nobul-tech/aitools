@@ -1,0 +1,55 @@
+@@@FILE shared/skills/handoff/SKILL.md D175a Step 4 template: scratch is not deleted, it is local and gitignored
+@@@OLD
+to session scratch. Scratch directories are deleted by the SessionEnd
+hook (harvest-session.sh lines 164-166). A handoff in scratch will
+not survive the session it was created in.
+@@@NEW
+to session scratch. Nothing deletes scratch, but it is gitignored and
+stays on one machine: the SessionEnd hook (harvest-session.sh) only
+copies reusable files to `harvesting/` under new names. A handoff in
+scratch does not reach the accepting session.
+@@@END
+@@@FILE shared/skills/handoff/SKILL.md D175b Step 5 criterion 2: same correction
+@@@OLD
+   the session lifecycle. Files in `.scratch/` are deleted by the
+   SessionEnd hook (harvest-session.sh). The handoff itself must NOT
+@@@NEW
+   the session lifecycle. Files in `.scratch/` are gitignored and never
+   leave this machine; the SessionEnd hook (harvest-session.sh) deletes
+   nothing and copies reusable ones to `harvesting/`. The handoff itself must NOT
+@@@END
+@@@FILE shared/skills/handoff/SKILL.md D175c delegation item 9: same correction
+@@@OLD
+   transitions. Files in `.scratch/` are deleted by the SessionEnd
+   hook. Handoffs, carry-forward state, and any artifact that must
+@@@NEW
+   transitions. Files in `.scratch/` are gitignored and stay on one
+   machine (the SessionEnd hook deletes nothing; it copies reusable files
+   to `harvesting/`). Handoffs, carry-forward state, and any artifact that must
+@@@END
+@@@FILE shared/skills/handoff/SKILL.md D175d project without plans/: same correction
+@@@OLD
+  scratch is deleted by the SessionEnd hook.
+@@@NEW
+  scratch is gitignored and never reaches another session or machine.
+@@@END
+@@@FILE shared/skills/handoff/SKILL.md D176 Step 5 verifier reads an assessment written into the handoff
+@@@OLD
+Read the schwerpunkt assessment at: [SESSION_DIR]/S2-schwerpunkt-assessment.md
+@@@NEW
+Read the schwerpunkt assessment at: [SESSION_DIR]/S2-schwerpunkt-assessment.md
+(if the session wrote the assessment into the handoff instead of a separate
+file, read that handoff section, and name it in your report)
+@@@END
+@@@FILE shared/skills/handoff/SKILL.md DQ14 Step 8 follows a repo's direct-to-main channel exception
+@@@OLD
+   - Use a descriptive commit message naming the handoff and its
+     Schwerpunkt
+@@@NEW
+   - Use a descriptive commit message naming the handoff and its
+     Schwerpunkt
+   - Where the repo's CLAUDE.md names a direct-to-main exception for
+     handoffs (aitools: "Channel exception (direct to main)"), commit and
+     push the handoff to main as it says; otherwise use the repo's usual
+     branch and PR flow
+@@@END
