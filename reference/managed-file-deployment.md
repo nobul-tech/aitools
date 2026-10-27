@@ -236,6 +236,9 @@ JSON file reviewed field by field reports one value, by precedence `failed` >
 field skipped) > `updated` (any field overwritten) > `verified`. Each
 field's choice is logged to deploy.log.
 
+For an adopt target in the dotprofile, `accept & adopt` also means the
+library tried to commit and push it (see Caller Responsibilities, N-Q2).
+
 On `failed` the library has already restored every file it backed up and
 written a `log_error` with the reason. The caller records the outcome
 (`deploy_tracker_record failed ...` / `Record-DeployOutcome failed ...`) and
@@ -264,10 +267,37 @@ continues with the next file.
   equivalent `write_summary` row themselves; `failed` is an ERROR row.
 - **Dotprofile writes are committed and pushed** (N-Q2, approved
   2026-10-21). An adopt or merge whose adopt target is in the dotprofile
-  repo is committed and pushed to the dotprofile's main automatically, as
-  `setup-user-claude` does today for adopted and merged rules (kept). An
+  repo is committed and pushed by the library, right after the adopt write
+  and its validation succeed: `dotprofile_commit_push FILE MESSAGE` in
+  `@scripts/aitools-lib.sh` / `Invoke-DotprofileCommitPush -File -Message`
+  in `@scripts/aitools-lib.ps1` (also usable by any other dotprofile
+  writer). Callers do not commit or push adopt targets themselves. An
   adopt target in the aitools repo is a working-tree change only: no
   commit, no push; the user ships it through a PR.
+  - *In the dotprofile* is decided by git: the file's git top level equals
+    the dotprofile's. The dotprofile is the caller's resolved path
+    (`AITLIB_USER_REPO_PATH` / `$script:AitLibUserRepoPath`, set by
+    `resolve_user_repo_path` / `Resolve-UserRepoPath`), or, when the caller
+    never resolved it, the resolver is asked quietly (no ERROR row).
+  - *Pathspec commit*: `git add -- FILE`, then `git commit -m MESSAGE --
+    FILE`. Other staged or unstaged changes in the dotprofile are never
+    included. Message from the adopt path: `Adopt <file name> from the
+    deployed copy`.
+  - *Push* never prompts (`GIT_TERMINAL_PROMPT=0`; ssh BatchMode unless
+    `GIT_SSH_COMMAND` is set). git output goes to deploy.log (detail).
+  - *Result* (`AITLIB_DOTPROFILE_PUSH` / `$script:AitLibDotprofilePush`):
+
+    | Value | Meaning | Log / summary |
+    |-------|---------|---------------|
+    | `committed-pushed` | committed and pushed | `ok` line |
+    | `unchanged` | file matches HEAD: nothing committed, no push | detail line only |
+    | `commit-failed` | commit failed (or the dotprofile is not a git repository) | WARN + ACTION `commit and push <file> in <dotprofile>` |
+    | `push-failed` | committed, not pushed | WARN + ACTION `git pull --rebase, then git push in <dotprofile>` (remote has newer commits) or `run git push in <dotprofile>` |
+    | `not-dotprofile` | not in the dotprofile, or no dotprofile | detail line; the adopt path then logs "Uncommitted change in <repo>" as before |
+
+    ACTION rows are written once per run (`_aitlib_action_once` /
+    `Write-AitLibActionOnce`). A failed commit or push never changes the
+    deploy result: it stays `accept & adopt` and the run continues.
 - **Several LOCALs for one SOURCE** (skills: `~/.claude/skills` and
   `~/.cursor/skills`): each LOCAL goes through `deploy_managed_file`. After
   an adopt into the first, the caller reads SOURCE again for the next, which

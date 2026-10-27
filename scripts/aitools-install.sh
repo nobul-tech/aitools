@@ -251,7 +251,8 @@ validate_and_run() {
     fi
 }
 
-# run_harness_step SCRIPT -- Step 8b: run deploy-harness.sh (SCRIPT) relayed
+# run_harness_step SCRIPT [ARGS...] -- Step 8b: run deploy-harness.sh (SCRIPT) with
+# ARGS (the caller passes --skip-config when Step 5 ran the config writer) relayed
 # (aitools-lib run_child_relayed: its stdout goes to the console and deploy.jsonl;
 # stdin stays the terminal, the review menu reads /dev/tty). Checked with bash -n
 # first: bash exits 2 on a syntax error, which would read as an abort. Returns 2 when
@@ -260,6 +261,7 @@ validate_and_run() {
 # row and the install continues. Parity: Invoke-HarnessStep in aitools-install.ps1.
 run_harness_step() {
     local harness="$1"
+    shift
     local syntax_out syntax_rc=0 syntax_line
     if [ ! -f "$harness" ]; then
         log_warn "deploy-harness.sh not found -- skipping (MDM deploy)"
@@ -275,7 +277,7 @@ run_harness_step() {
         write_summary ERROR "harness files" "syntax errors -- skipped"
         return 0
     fi
-    if run_child_relayed "Step 8b: deploy-harness.sh" "${BASH:-bash}" "$harness"; then
+    if run_child_relayed "Step 8b: deploy-harness.sh" "${BASH:-bash}" "$harness" "$@"; then
         return 0
     fi
     if [ "$AITLIB_CHILD_RC" -eq 2 ]; then
@@ -544,6 +546,7 @@ fi
 # config.json has one writer: setup-user-config.sh (bootstrap keys from this
 # installer + values derived from profile.json; no node needed, P-Q3).
 CONFIG_WRITER="$SCRIPT_DIR/setup-user-config.sh"
+CONFIG_WRITER_RAN=false   # true: Step 8b passes --skip-config (the writer runs once)
 if ! $REPOS_OK; then
     log "Step 5: skipped -- the repos path is unusable (see the error above); config.json not written"
 elif [ ! -f "$CONFIG_WRITER" ]; then
@@ -553,6 +556,7 @@ else
     writer_args=(--repos-path "$REPOS_PATH_NATIVE" --repo-path "$AITOOLS_NATIVE" --drives-json "$DRIVES_JSON")
     if $DRY_RUN; then writer_args+=(--dry-run); fi
     run_config_writer "$CONFIG_WRITER" "${writer_args[@]}"
+    CONFIG_WRITER_RAN=true
 fi
 
 
@@ -664,12 +668,18 @@ fi
 # 8b. Deployed harness (~/.aitools) -- deploy-harness.sh
 # ============================================================
 # After Node (Step 8). deploy-harness fills ~/.aitools/{reference,registries,hooks,
-# rules,skills,bin} (bin was this installer's own step before) and re-derives
-# config.json through setup-user-config.sh (Step 5 wrote the bootstrap keys it needs).
+# rules,skills,bin} (bin was this installer's own step before). When Step 5 ran the
+# config writer, deploy-harness gets --skip-config, so the writer runs once per
+# install (OK "config.json" "n/a (written by installer)"). When Step 5 skipped it
+# (repos path unusable, writer missing), deploy-harness runs the writer itself.
 log "Step 8b: Deployed harness"
 
 harness_rc=0
-run_harness_step "$SCRIPT_DIR/deploy-harness.sh" || harness_rc=$?
+if $CONFIG_WRITER_RAN; then
+    run_harness_step "$SCRIPT_DIR/deploy-harness.sh" --skip-config || harness_rc=$?
+else
+    run_harness_step "$SCRIPT_DIR/deploy-harness.sh" || harness_rc=$?
+fi
 if [ "$harness_rc" -eq 2 ]; then
     if [ -z "${AITOOLS_SUPPRESS_SUMMARY_DISPLAY:-}" ]; then show_summary; fi
     exit 2
