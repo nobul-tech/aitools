@@ -1,4 +1,49 @@
-VERDICT: no blocking findings (v1.1, head `ad72004`)
+VERDICT: no blocking findings (v1.2, head `140ef3d`)
+
+# S3-DdgHook-Review: re-check of PR #122 (v1.2)
+
+Short re-check of head `140ef3d`, the same commit as the PR head (`gh pr view 122 --json headRefOid`). It holds the N8 and N11 fixes only (`git diff ad72004 140ef3d` touches only the hook and its test). I worked independently, as before. v1.1 and v1.0 are kept below.
+
+## Status of v1.1 findings
+
+| v1.1 | Status at `140ef3d` | Evidence |
+|---|---|---|
+| **N8** JSON escapes hid matches at the start of a line | **Fixed** for Agent prompts and inline Workflow scripts | `delegation-duty-guard.sh` now JSON-unescapes the extracted value (`\uXXXX`, `\n \t \r \b \f`, any other `\x` -> `x`) unless the text came from a `scriptPath` file. The drive-path alternative is now `\b[A-Za-z]:[\\\/][\w.-]`. Probes K1 (`\n/Users/...`), K2 (`\nC:\\repos\\...`) and K3 (`\nrules`) each give 8/8 (reminder only) under bash 5 and 3.2. New suite cases cover a path and `rules` right after `\n` |
+| **N11** suite printed hook JSON into the log | **Fixed** | The three telemetry calls now use `>/dev/null 2>&1`; the suite log is clean |
+
+## Unescaping: no new false positives, no slowdown
+
+| Probe (`.scratch/session-ddgreview/adversarial3.sh`) | Result |
+|---|---|
+| U1: `\u002fUsers\u002fx\u002frepo` | 8/8. The decoded path counts as access, which is correct |
+| U2: surrogate pair `\ud83d\ude00`, invalid `\uZZZZ`, payload cut off after a lone `\` | No crash, exit 0, 7/8 (access missing, as expected) |
+| U3: 8 KB of only `\\ \" \n \t` | 0/8: no element is invented from escapes |
+| U4: a literal backslash-n in the prose (JSON `\\n`) before `rules` and `/Users/` | Not treated as a newline (it decodes to `\` + `n`), so `rules` and access are still missed there. Correct decoding of an unusual input |
+| U5: `a:\b` and `x:/y` in prose | Counted as a drive path (access). Not new: the old `C:\\` / `C:/` alternative matched these too. Low risk |
+| T1: 6 MB of `\\` pairs | 119-143 ms (main: 743-757 ms) |
+| T2: 6 MB of `\u0041` | 121-122 ms |
+| K-Q (`adversarial2.sh`) | Unchanged apart from K1-K3: M 116 ms, M2 65 ms, N/O/P as in v1.1 |
+
+Every probe output in both bash versions parses as JSON, and `additionalContext` equals the stderr text.
+
+## Remaining non-blocking finding
+
+- **N8 residue (Workflow).** For Workflow, the JSON unescape restores the JavaScript source, but a prompt string inside `agent()` still holds JS escapes (`\n`). Probe W1, `agent({prompt: "...\nRepo:\n/Users/x/repo"})` inline, still reports access missing. A `scriptPath` file is read as raw JS and has the same issue. Options: a second, JS-level unescape for Workflow text, or accept it while the per-`agent()` check (N5) is still open. Observe mode only; not blocking.
+
+## What I ran (v1.2)
+
+| Command | Result |
+|---|---|
+| `bash tests/hooks/test-delegation-duty-guard.sh` | 50 passed, 0 failed (bash 5.3.15); 42 ms; adversarial 53 ms |
+| `env AITOOLS_TEST_BASH=/bin/bash /bin/bash tests/hooks/test-delegation-duty-guard.sh` | 50 passed, 0 failed (bash 3.2.57); 35 ms; adversarial 45 ms |
+| `bash .scratch/session-ddgreview/adversarial2.sh bash` | K1-K3 now 8/8; rest unchanged |
+| `bash .scratch/session-ddgreview/adversarial3.sh bash` and `... /bin/bash` | U1-U5, T1-T2, W1 as above |
+
+Not run: CI for `140ef3d`, Linux and Windows locally, a live Workflow call.
+
+---
+
+VERDICT (v1.1, head `ad72004`): no blocking findings
 
 # S3-DdgHook-Review: re-verification of PR #122 (v1.1)
 
