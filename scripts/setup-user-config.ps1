@@ -21,6 +21,8 @@
 #   machineId: the matched profiles key, only for this machine's id-keyed profile
 #   (profile.json revision 2.2). machineAlias: display only (the profile's alias),
 #   kept for one release for 2.1 readers; the legacy cache for an alias-keyed profile.
+#   With -NoMachine, machineId and machineAlias are preserved as they are (never
+#   set, never removed): machine registration and its advice belong to the caller.
 # Preserved: all other keys, in place (key order kept)
 # Write path: merge to temp -> validate -> Backup-File -> move.
 #   A read, merge or validation failure leaves the existing file untouched.
@@ -30,8 +32,18 @@
 #   with pwsh on macOS/Linux.
 #
 # Usage: setup-user-config.ps1 [-ReposPath P] [-RepoPath P] [-DrivesJson JSON]
-#          [-GithubUser U] [-UserRepoPath P] [-MachineId ID] [-DryRun] [-Help]
+#          [-GithubUser U] [-UserRepoPath P] [-MachineId ID | -NoMachine]
+#          [-DryRun] [-Help]
 #   -MachineAlias A is still accepted for one release (deprecated; logged at detail).
+#   -NoMachine (user init, when it leaves this machine unregistered): the caller owns
+#   machine registration and reports it. The writer writes every other field, leaves
+#   machineId / machineAlias untouched, and adds no machine-profile ERROR or ACTION row
+#   for an unregistered machine (no profile matches; no machine profiles) and no
+#   registration ACTION; it logs one info line saying so. Other derivation errors
+#   (invalid profile.json, a missing dotprofile path, an ambiguous match) are still
+#   reported. With -MachineId or -MachineAlias: bad arguments. Pass it only for a
+#   machine the caller has concluded is unregistered: the writer does not check, and
+#   every warning naming aitools user init / aitools-profile migrate goes to detail.
 # Exit: 0 done (warnings possible), 1 any error. Never prompts, never exits 2.
 
 [CmdletBinding(PositionalBinding = $false)]
@@ -43,6 +55,7 @@ param(
     [string]$UserRepoPath = "",
     [string]$MachineId = "",
     [string]$MachineAlias = "",   # deprecated (one release): use -MachineId
+    [switch]$NoMachine,           # machine registration left to the caller (user init)
     [switch]$DryRun,
     [switch]$Force,   # accepted for deploy-list parity; this script has no review menu
     [switch]$Help,
@@ -69,6 +82,10 @@ Parameters:
   -UserRepoPath P    Dotprofile path chosen by user init
   -MachineId ID      This machine's profile key chosen by user init (explicit choice)
   -MachineAlias A    Deprecated (one release): a profile alias or key; use -MachineId
+  -NoMachine         Machine registration is left to the caller (user init): keep
+                     machineId / machineAlias as they are; no ERROR or ACTION row for
+                     an unregistered machine. Only for a machine the caller found
+                     unregistered. Not with -MachineId / -MachineAlias
   -DryRun            Show what would change; write nothing
   -Help              This text
 
@@ -95,6 +112,14 @@ if ($MachineId -and $deprecatedAlias) {
     LogError "pass -MachineId or -MachineAlias, not both (see -Help)"
     Write-Summary "ERROR" "aitools config" "bad arguments"
     exit 1
+}
+if ($NoMachine -and ($MachineId -or $deprecatedAlias)) {
+    LogError "-NoMachine leaves the machine to the caller: not with -MachineId or -MachineAlias (see -Help)"
+    Write-Summary "ERROR" "aitools config" "bad arguments"
+    exit 1
+}
+if ($NoMachine) {
+    Log "config: -NoMachine: machine registration is left to the caller -- machineId / machineAlias kept as they are; no machine-profile ERROR or ACTION from this writer"
 }
 # The profile choice goes to the resolver as an override (a key, ignoring case, else an alias)
 $choiceArg = $MachineId
@@ -163,7 +188,7 @@ $seen = $false
 $script:NeedInit = $false
 $script:NeedMigrate = $false
 $script:NeedUpdate = $false
-$profileBad = $false
+$script:ProfileBad = $false
 # Route one resolver warning (the resolver returns its warnings; this caller logs
 # them at their level and owns the rows):
 #   handled  -- about the cached config.json or the expected shared-only state; this
@@ -173,9 +198,16 @@ $profileBad = $false
 #               one warning with the ACTION
 #   real     -- something is off for this run (a clone, a duplicate alias, a hostname
 #               guess, an undetectable id): LogWarn, counted; the config row becomes WARN
+#   caller   -- -NoMachine only: advice whose follow-up is machine registration (it
+#               names aitools user init or aitools-profile migrate) belongs to the
+#               caller: detail only, not counted, no ACTION
+$script:NmUnreg = $false      # -NoMachine: the resolver reported this machine as unregistered
+$script:NmOtherErr = $false   # -NoMachine: the resolver reported another error (still an ERROR)
 function Write-DeriveWarning([string]$w) {
     if ($w.StartsWith("config.json ") -or $w.Contains("not saved to config.json") -or $w.StartsWith("no dotprofile found") -or $w.StartsWith("githubUser unknown")) {
         Log "config: $w (handled by this write)"
+    } elseif ($NoMachine -and ($w.Contains("run: aitools user init") -or $w.Contains("run: aitools-profile migrate"))) {
+        LogDetail "config: $w (-NoMachine: left to the caller)"
     } elseif ($w.Contains("has no machine.id -- run: aitools user init")) {
         Log "config: $w (see ACTION)"
         $script:NeedInit = $true
@@ -187,6 +219,21 @@ function Write-DeriveWarning([string]$w) {
         if ($w.Contains("renamed (run: aitools user init")) { $script:NeedUpdate = $true }
         elseif ($w.Contains("run: aitools user init")) { $script:NeedInit = $true }
     }
+}
+# One resolver error. With -NoMachine, "this machine is not registered" (no profile
+# matches it; profile.json has no machine profiles) is the caller's to report: detail
+# only. Every other error stays an error.
+function Write-DeriveError([string]$e) {
+    if ($NoMachine) {
+        if ($e.StartsWith("no profile matches this machine") -or $e.StartsWith("profile.json has no machine profiles")) {
+            LogDetail "config: $e (-NoMachine: left to the caller)"
+            $script:NmUnreg = $true
+            return
+        }
+        $script:NmOtherErr = $true
+    }
+    LogError "config: $e"
+    if ($e.Contains("is invalid JSON") -or $e.Contains("is not v2")) { $script:ProfileBad = $true }
 }
 foreach ($line in $deriveOut) {
     $kv = ([string]$line) -split "`t", 2
@@ -203,10 +250,7 @@ foreach ($line in $deriveOut) {
         "hostname" { $d.host = $kv[1] }
         "aliases" { $d.aliases = $kv[1] }
         "warn" { Write-DeriveWarning $kv[1] }
-        "error" {
-            LogError "config: $($kv[1])"
-            if ($kv[1].Contains("is invalid JSON") -or $kv[1].Contains("is not v2")) { $profileBad = $true }
-        }
+        "error" { Write-DeriveError $kv[1] }
     }
 }
 if (-not $seen -or $deriveRc -gt 2) {
@@ -219,9 +263,11 @@ if (-not $seen -or $deriveRc -gt 2) {
     if ($deriveRc -eq 1) {
         Log "config: no dotprofile yet -- writing bootstrap keys only (shared-only mode)"
     } elseif ($deriveRc -ne 0) {
-        if ($profileBad) {
+        if ($script:ProfileBad) {
             Write-Summary "ERROR" "profile.json" "invalid (see log)"
             Write-Summary "ACTION" "" "Fix profile.json in the dotprofile (details in deploy.log)"
+        } elseif ($NoMachine -and $script:NmUnreg -and -not $script:NmOtherErr) {
+            LogDetail "config: no machine match not reported (-NoMachine: the caller reports registration)"
         } else {
             Write-Summary "ERROR" "machine profile" "no machine match"
             Write-Summary "ACTION" "" "Run: aitools user init (profiles: $(& $show $d.aliases 'none'))"
@@ -273,6 +319,10 @@ try {
     }
     if ($d.gh) { Set-JValue $cfg $d.gh @("githubUser") }
     if ($d.urp) { Set-JValue $cfg $d.urp @("userRepoPath") }
+    if ($NoMachine) {
+        # -NoMachine: machineId / machineAlias are the caller's; kept exactly as they are
+        $d.mid = ""; $d.alias = ""
+    }
     if ($d.mid) { Set-JValue $cfg $d.mid @("machineId") }
     elseif ($d.alias -and $midHad) {
         # The derivation matched a profile that is not this machine's id-keyed one (a 2.1
@@ -366,6 +416,7 @@ if (-not $failed) {
 # the ACTION (script-standards-detail "Severity decision guide") is counted. The row
 # reports the write; the footer still counts this warning. ---
 # The re-key advice assumes user init calls aitools-profile migrate (re-key batch 5).
+# -NoMachine: no Need* flag is set (the advice is the caller's), so no ACTION.
 if ($deriveRc -eq 0) {
     $advice = ""
     if ($script:NeedInit) { $advice = "Run: aitools user init (registers this machine)" }
