@@ -65,10 +65,13 @@ skip() { printf 'SKIP %s\n' "$1"; SKIP=$((SKIP + 1)); }
 
 for t in perl git; do
     if ! command -v "$t" >/dev/null 2>&1; then
+        # In CI a missing tool is a broken runner, not a reason to pass
+        if [ -n "${CI:-}" ]; then printf 'FAIL %s not found (CI=%s)\n' "$t" "$CI"; exit 1; fi
         printf 'SKIP all cases (%s not found)\n' "$t"
         exit 0
     fi
 done
+die() { printf 'FAIL fixture setup: %s\n' "$1"; exit 1; }
 HAVE_PWSH=false
 if ! $BASH_ONLY && command -v pwsh >/dev/null 2>&1; then HAVE_PWSH=true; fi
 HAVE_PTY=false
@@ -87,6 +90,14 @@ gitc() { git -c user.name=test -c user.email=test@example.invalid -c commit.gpgs
 # --- Temp aitools checkout: a copy of scripts/ (adopt targets of shared and
 # aitools skills land here, never in this repo) ---
 A="$TMP_ROOT/aitools"
+# A package payload (git archive) has the same files but no .git: adopt into it
+# is never offered. The fan-out counts only a git checkout.
+PAYLOAD="$TMP_ROOT/payload"
+REPO="$A"   # the checkout run_one / run_pty run setup-user-claude from
+# --- Fixture dotprofile (a git repo, no remote: an adopt commits, the push fails) ---
+DP="$TMP_ROOT/aitools-tess"
+# Every fixture step must succeed (a subshell with -e): a broken fixture fails the suite
+( set -e
 mkdir -p "$A/scripts" "$A/shared/skills/s1" "$A/shared/skills/dup" "$A/.claude/skills/p1" "$A/.claude/skills/dup"
 for f in setup-user-claude.sh aitools-lib.sh aitools-lib.ps1 aitools-profile.sh aitools-profile.ps1 aitools-json.pl aitools-json.ps1; do
     cp "$ROOT/scripts/$f" "$A/scripts/$f"
@@ -97,16 +108,9 @@ printf '## shared s1\n' > "$A/shared/skills/s1/SKILL.md"
 printf '## project p1\n' > "$A/.claude/skills/p1/SKILL.md"
 printf '## dup shared\n' > "$A/shared/skills/dup/SKILL.md"
 printf '## dup project\n' > "$A/.claude/skills/dup/SKILL.md"
-# A package payload (git archive) has the same files but no .git: adopt into it
-# is never offered. The fan-out counts only a git checkout.
-PAYLOAD="$TMP_ROOT/payload"
 mkdir -p "$PAYLOAD"
 cp -R "$A/scripts" "$A/shared" "$A/.claude" "$PAYLOAD/"
 git -C "$A" init -q
-REPO="$A"   # the checkout run_one / run_pty run setup-user-claude from
-
-# --- Fixture dotprofile (a git repo, no remote: an adopt commits, the push fails) ---
-DP="$TMP_ROOT/aitools-tess"
 mkdir -p "$DP/claude/skills/d1"
 printf '# Prefs for {{PROFILE_NAME}}\n\n## Code Style\n\n- keep it simple\n' > "$DP/claude/CLAUDE.md"
 printf '{"version":2,"identity":{"git":{"name":"Tess","email":"t@example.com"}},"profiles":{"m1":{"name":"Tess","company":""}}}\n' > "$DP/profile.json"
@@ -114,6 +118,7 @@ printf '## dot d1\n' > "$DP/claude/skills/d1/SKILL.md"
 git -C "$DP" init -q
 gitc -C "$DP" add -A
 gitc -C "$DP" commit -q -m fixture
+) || die "the temp aitools checkout or fixture dotprofile could not be created"
 
 # --- Case helpers ---
 # H: the HOME of the run being seeded (set by case_run for each language)
@@ -340,6 +345,9 @@ seed_retired() {
     hskill old SKILL.md 'old'                                   # retired, but still in ~/.aitools/skills
     hskill '[r].bak.2026-10-25T000000Z' SKILL.md 'r'
     dskill gone SKILL.md 'gone'; dskill gone tests/x.md 'gx'; dskill gone SKILL.md.bak.2026-01-01T000000Z 'an old backup'
+    dskill gone .DS_Store 'finder junk'; dskill gone tests/Thumbs.db 'explorer junk'   # never block the prune
+    local i
+    for i in 1 2 3 4 5 6; do dskill "../skills.bak.2026-01-0${i}T000000Z/old$i" SKILL.md "old backup $i"; done
     dskill old SKILL.md 'old'
     dskill mine2 SKILL.md 'my own'
     dskill '[r]' SKILL.md 'r'
@@ -347,13 +355,15 @@ seed_retired() {
 case_run retired seed_retired
 check "retired: exit 0, row 1 added, 3 removed (WARN: a kept dir still loads)" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude skills|1 added, 3 removed' ]"
 check "retired: copies removed from ~/.claude/skills" "[ ! -e '$(S)/gone' ] && [ ! -e '$(S)/old' ] && [ ! -e '$(S)/[r]' ]"
-check "retired: one backup dir beside ~/.claude/skills holds them" "[ \"\$(bakdirs)\" = 1 ] && b=\$(ls -d '$C/sh/.claude/'skills.bak.*) && grep -qx gone \"\$b/gone/SKILL.md\" && grep -qx gx \"\$b/gone/tests/x.md\" && grep -qx old \"\$b/old/SKILL.md\" && grep -qx r \"\$b/[r]/SKILL.md\""
+check "retired: OS junk files did not block the prune; the backup keeps them" "b=\$(ls -d '$C/sh/.claude/'skills.bak.* | LC_ALL=C sort | tail -n 1) && [ -f \"\$b/gone/.DS_Store\" ] && [ -f \"\$b/gone/tests/Thumbs.db\" ]"
+check "retired: the newest backup dir beside ~/.claude/skills holds them" "b=\$(ls -d '$C/sh/.claude/'skills.bak.* | LC_ALL=C sort | tail -n 1) && grep -qx gone \"\$b/gone/SKILL.md\" && grep -qx gx \"\$b/gone/tests/x.md\" && grep -qx old \"\$b/old/SKILL.md\" && grep -qx r \"\$b/[r]/SKILL.md\""
+check "retired: backups beside ~/.claude/skills pruned to the newest 5" "[ \"\$(bakdirs)\" = 5 ] && [ ! -e '$C/sh/.claude/skills.bak.2026-01-01T000000Z' ] && [ ! -e '$C/sh/.claude/skills.bak.2026-01-02T000000Z' ] && [ -d '$C/sh/.claude/skills.bak.2026-01-03T000000Z' ] && grep -q 'Pruned old backup' '$C/sh.out'"
 check "retired: removals in DETAIL rows" "row 'DETAIL|claude skills|removed: gone' && row 'DETAIL|claude skills|removed: old' && row 'DETAIL|claude skills|removed: [r]'"
 check "retired: a retired skill still in ~/.aitools/skills is not fanned out" "grep -q 'Not fanned out: old (retired in the skills manifest)' '$C/sh.out' && ! row 'DETAIL|claude skills|added: old/SKILL.md'"
 check "retired: user dir with a retired name kept, ACTION row" "grep -qx 'my own' '$(S)/mine2/SKILL.md' && row 'ACTION||Claude Code still loads retired skills in ~/.claude/skills: mine2 -- delete them unless you wrote them'"
 parity retired
 case_run retired-dry seed_retired --dry-run -DryRun
-check "retired dry run: nothing removed, row dry run, removal previewed" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude skills|dry run (no files written)' ] && [ -d '$(S)/gone' ] && [ -d '$(S)/old' ] && [ ! -e '$(S)/a' ] && [ \"\$(bakdirs)\" = 0 ] && grep -q 'DRY RUN\] Would back up and remove gone' '$C/sh.out'"
+check "retired dry run: nothing removed, row dry run, removal previewed" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude skills|dry run (no files written)' ] && [ -d '$(S)/gone' ] && [ -d '$(S)/old' ] && [ ! -e '$(S)/a' ] && [ \"\$(bakdirs)\" = 6 ] && grep -q 'DRY RUN\] Would back up and remove gone' '$C/sh.out'"
 parity retired-dry
 
 # A retired name whose copy differs only in case (Gone for gone)
@@ -376,7 +386,43 @@ seed_retired_mod() {
 }
 case_run retired-mod seed_retired_mod
 check "retired, user-modified: kept, ACTION row" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'WARN|claude skills|1 added' ] && grep -qx 'gone, edited by me' '$(S)/gone/SKILL.md' && row 'ACTION||Claude Code still loads retired skills in ~/.claude/skills: gone -- delete them unless you wrote them'"
+check "retired, user-modified: not counted again as preserved" "! grep -q 'Preserved unmanaged skill: gone' '$C/sh.out' && grep -q 'Skills (claude skills): 1 added, 0 preserved' '$C/sh.out'"
 parity retired-mod
+
+# A retired copy that cannot be fully removed (a read-only subdirectory): failed,
+# the error names the backup, not counted as preserved; backup modes as in sh
+if $CAN_CHMOD_READ; then
+    seed_rmfail() {
+        manifest 'a|shared' 'gone|retired'
+        hskill a SKILL.md 'skill a'
+        hskill gone.bak.2026-10-25T000000Z SKILL.md 'gone'; hskill gone.bak.2026-10-25T000000Z sub/x.md 'gx'
+        dskill gone SKILL.md 'gone'; dskill gone sub/x.md 'gx'
+        chmod 555 "$H/.claude/skills/gone/sub"
+    }
+    case_run rmfail seed_rmfail
+    check "retired, cannot remove: exit 1, row 1 failed, the error names the backup" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|1 failed' ] && grep -q 'Cannot remove .*gone (retired skill; it may be partly removed; backup in .*skills\.bak\..*/gone)' '$C/sh.out'"
+    check "retired, cannot remove: not counted again as preserved" "! grep -q 'Preserved unmanaged skill: gone' '$C/sh.out'"
+    if [ "$HAVE_PWSH" = "true" ]; then
+        check "retired, cannot remove: backup directory modes sh = ps" "[ \"\$(perl -e 'printf \"%o\", (stat shift)[2] & 07777' \"\$(ls -d '$C/sh/.claude/'skills.bak.*)/gone/sub\")\" = \"\$(perl -e 'printf \"%o\", (stat shift)[2] & 07777' \"\$(ls -d '$C/ps/.claude/'skills.bak.*)/gone/sub\")\" ]"
+    fi
+    parity rmfail
+
+    # ~/.claude/skills writable but not listable: ACTION row, preserved count unknown
+    seed_unlisted() {
+        manifest 'a|shared' 'gone|retired'
+        hskill a SKILL.md 'skill a'
+        hskill gone.bak.2026-10-25T000000Z SKILL.md 'gone'
+        dskill gone SKILL.md 'gone'; dskill mine SKILL.md 'mine'
+        chmod 300 "$H/.claude/skills"
+    }
+    case_run unlisted seed_unlisted
+    chmod 755 "$C/sh/.claude/skills"
+    if [ -d "$C/ps/.claude/skills" ]; then chmod 755 "$C/ps/.claude/skills"; fi
+    check "unlisted DEST: ACTION row, preserved count unknown, retired copy kept" "[ \"\$(rc)\" = 0 ] && row 'ACTION||Claude Code skills in ~/.claude/skills cannot be listed: retired skills not checked and other skills not counted -- check its permissions' && grep -q 'preserved count unknown (cannot list)' '$C/sh.out' && [ -d '$(S)/gone' ]"
+    parity unlisted
+else
+    skip "retired removal failure and unlisted DEST (root or Git Bash)"
+fi
 
 # ---------------------------------------------------------------------------
 # Manifest absent, bad header, invalid lines, unreadable
@@ -462,6 +508,64 @@ rerun
 check "bracket name: rerun verified" "[ \"\$(nondetail)\" = 'OK|claude skills|2 verified' ]"
 parity bracket
 
+# Non-text files (a NUL byte; invalid UTF-8): copied byte for byte, never corrupted
+seed_binary() {
+    manifest 'b|shared'
+    hskill b SKILL.md 'skill b'
+    printf 'PNG\000\001\002 bytes\n' > "$H/.aitools/skills/b/img.bin"
+    printf '\377\376latin1 \351\n' > "$H/.aitools/skills/b/latin.txt"
+}
+case_run binary seed_binary
+check "binary: exit 0, row 3 added, bytes identical" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude skills|3 added' ] && cmp -s '$C/sh/.aitools/skills/b/img.bin' '$(S)/b/img.bin' && cmp -s '$C/sh/.aitools/skills/b/latin.txt' '$(S)/b/latin.txt'"
+parity binary
+rerun
+check "binary rerun: row 3 verified" "[ \"\$(nondetail)\" = 'OK|claude skills|3 verified' ]"
+printf 'changed\000\n' > "$(S sh)/b/img.bin"
+if [ "$HAVE_PWSH" = "true" ]; then printf 'changed\000\n' > "$(S ps)/b/img.bin"; fi
+rerun
+check "binary edited: overwritten byte for byte, backup kept" "[ \"\$(nondetail)\" = 'OK|claude skills|1 updated, 2 verified' ] && cmp -s '$C/sh/.aitools/skills/b/img.bin' '$(S)/b/img.bin' && ls '$(S)/b' | grep -q '^img\.bin\.bak\.' && ! ls '$(S)/b' | grep -q 'aitools-tmp'"
+parity binary-edited
+
+# Strict UTF-8 in both languages (review R1): each of these is binary in sh and
+# ps; a valid multi-byte file and a noncharacter stay text
+seed_utf8edge() {
+    manifest 'u|shared'
+    hskill u SKILL.md 'skill u'
+    printf 'a\355\240\200b\n' > "$H/.aitools/skills/u/surrogate.txt"       # ED A0 80: U+D800
+    printf 'a\364\220\200\200b\n' > "$H/.aitools/skills/u/above-max.txt"   # F4 90 80 80: > U+10FFFF
+    printf 'a\377b\n' > "$H/.aitools/skills/u/ff.txt"                      # FF
+    printf 'a\300\257b\n' > "$H/.aitools/skills/u/overlong.txt"            # C0 AF: overlong "/"
+    printf 'a\342\202\n' > "$H/.aitools/skills/u/truncated.txt"            # E2 82 then a newline
+    printf 'caf\303\251 \342\202\254\n' > "$H/.aitools/skills/u/valid.txt" # valid: e-acute, euro
+    printf 'a\357\277\276b\n' > "$H/.aitools/skills/u/nonchar.txt"         # EF BF BE: U+FFFE (valid UTF-8)
+}
+case_run utf8edge seed_utf8edge
+for lang in sh ps; do
+    if [ "$lang" = ps ] && [ "$HAVE_PWSH" != "true" ]; then continue; fi
+    for f in surrogate above-max ff overlong truncated; do
+        check "utf8 strict $lang: $f.txt copied as binary, bytes identical" "logged 'Created: u/$f.txt (binary)' $lang && cmp -s '$C/$lang/.aitools/skills/u/$f.txt' '$C/$lang/.claude/skills/u/$f.txt'"
+    done
+    for f in valid nonchar; do
+        check "utf8 strict $lang: $f.txt is text (review path)" "logged 'Created: u/$f.txt ->' $lang && ! logged 'Created: u/$f.txt (binary)' $lang"
+    done
+done
+parity utf8edge
+
+# Names Claude Code owns (synced, anthropic-skills*): never written, never removed
+seed_reserved() {
+    manifest 'a|shared' 'anthropic-skills-old|retired'
+    hskill a SKILL.md 'skill a'
+    hskill synced SKILL.md 'not ours to write'
+    hskill Anthropic-Skills-pack SKILL.md 'not ours either'
+    hskill anthropic-skills-old.bak.2026-10-25T000000Z SKILL.md 'o'
+    dskill synced keep.txt 'theirs'
+    dskill anthropic-skills-old SKILL.md 'o'
+}
+case_run reserved seed_reserved
+check "reserved: exit 1, row 2 failed, failed DETAIL rows" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|2 failed' ] && row 'DETAIL|claude skills|failed: synced' && row 'DETAIL|claude skills|failed: Anthropic-Skills-pack'"
+check "reserved: nothing written into or removed from them" "[ ! -e '$(S)/synced/SKILL.md' ] && grep -qx theirs '$(S)/synced/keep.txt' && [ ! -e '$(S)/Anthropic-Skills-pack' ] && grep -qx o '$(S)/anthropic-skills-old/SKILL.md' && [ -f '$(S)/a/SKILL.md' ] && ! row 'DETAIL|claude skills|removed: anthropic-skills-old'"
+parity reserved
+
 if $CASE_SENSITIVE_FS; then
     seed_dupcase() { hskill a SKILL.md 'lower'; hskill A SKILL.md 'upper'; }
     case_run dupcase seed_dupcase
@@ -486,6 +590,9 @@ seed_nocreate() { hskill a SKILL.md 'skill a'; mkdir -p "$H/.claude"; printf 'no
 case_run nocreate seed_nocreate
 check "cannot create skills dir: ERROR row, exit 1, file untouched" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|cannot create skills dir' ] && grep -qx 'not a dir' '$C/sh/.claude/skills' && grep -q 'FAILED with' '$C/sh.out'"
 parity nocreate
+case_run nocreate-dry seed_nocreate --dry-run -DryRun
+check "cannot create skills dir, dry run: the same ERROR row as the real run" "[ \"\$(rc)\" = 1 ] && [ \"\$(nondetail)\" = 'ERROR|claude skills|cannot create skills dir' ] && grep -qx 'not a dir' '$C/sh/.claude/skills'"
+parity nocreate-dry
 
 # ---------------------------------------------------------------------------
 # The real deploy-harness (FO-2) fills ~/.aitools/skills from this checkout and
