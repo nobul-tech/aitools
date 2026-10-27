@@ -879,32 +879,118 @@ function Backup-File {
 }
 
 # ---------------------------------------------------------------------------
-# Backup a directory before modifying managed files. Keeps at most $MaxBackups copies.
+# Back up a directory before modifying managed files: copy DirPath to
+# DirPath.bak.<UTC> (DirPath.bak.<UTC>-<n> when that name is taken) and keep
+# the newest $MaxBackups copies. Result variables (reset on every call):
+#   $script:BackupDirOk      $true only when the copy exists after the copy
+#   $script:BackupDirPath    the copy's path when BackupDirOk, else ""
+#   $script:BackupDirReason  why not, when $false: "no directory", "no
+#                            top-level *.md", "cannot list", "copy failed"
+# Skip rule (kept: its callers, the setup-user-claude and setup-user-cursor
+# rules fan-outs, back up only a directory that holds a top-level *.md file):
+# no top-level regular *.md file (case-sensitive, as the .sh) -> no copy, a
+# detail log line, reason "no top-level *.md". A failed copy is non-fatal
+# (warn, return; config-file-safety.md "Backup before overwrite"): callers that
+# must not write without a backup check BackupDirOk. Old backups are matched by
+# literal name (the base name + ".bak." + the UTC stamp, optional "-<n>"),
+# never a wildcard, so names with [ ] * ? work and another directory's backups
+# are never pruned. Parity: backup_dir in aitools-lib.sh.
 # ---------------------------------------------------------------------------
-function Backup-Dir {
-    param([string]$DirPath, [int]$MaxBackups = 5)
-    if (-not (Test-Path -LiteralPath $DirPath)) { return }
-    $mdFiles = Get-ChildItem -LiteralPath $DirPath -Filter "*.md" -File -ErrorAction SilentlyContinue
-    if (-not $mdFiles -or $mdFiles.Count -eq 0) { return }
-    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
-    $backupPath = "${DirPath}.bak.${ts}"
-    try {
-        Copy-Item -LiteralPath $DirPath -Destination $backupPath -Recurse -ErrorAction Stop
-    } catch {
-        LogWarn "Could not back up $DirPath -- proceeding without backup: $_"
-        return
-    }
-    $parentDir = Split-Path $DirPath -Parent
-    $dirName = Split-Path $DirPath -Leaf
-    $backups = Get-ChildItem -Path $parentDir -Directory -Filter "${dirName}.bak.*" -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending
-    if ($backups -and $backups.Count -gt $MaxBackups) {
-        $backups | Select-Object -Skip $MaxBackups | ForEach-Object {
-            Remove-Item $_.FullName -Recurse -Force
-            Log "Pruned old backup: $($_.FullName)"
+$script:BackupDirOk = $false
+$script:BackupDirPath = ""
+$script:BackupDirReason = ""
+
+# Copy-DirectoryTree Source Dest: copy a directory tree with .NET calls, as
+# cp -R does (a symlink is copied as a symlink, never followed). Not
+# Copy-Item -Recurse: with a source name holding [ ] * ? and a sibling that
+# the name matches as a wildcard, it creates Dest but copies nothing into it
+# (pwsh 7.6, macOS). Throws on the first failure. Both paths absolute.
+function Copy-DirectoryTree([string]$Source, [string]$Dest) {
+    $reparse = [System.IO.FileAttributes]::ReparsePoint
+    [System.IO.Directory]::CreateDirectory($Dest) | Out-Null
+    foreach ($e in [System.IO.DirectoryInfo]::new($Source).GetFileSystemInfos()) {
+        $to = [System.IO.Path]::Combine($Dest, $e.Name)
+        if ($e.Attributes -band $reparse) {
+            if ($e -is [System.IO.DirectoryInfo]) {
+                [System.IO.Directory]::CreateSymbolicLink($to, $e.LinkTarget) | Out-Null
+            } else {
+                [System.IO.File]::CreateSymbolicLink($to, $e.LinkTarget) | Out-Null
+            }
+        } elseif ($e -is [System.IO.DirectoryInfo]) {
+            Copy-DirectoryTree -Source $e.FullName -Dest $to
+        } else {
+            [System.IO.File]::Copy($e.FullName, $to, $false)
         }
     }
-    Log "Backed up $DirPath ($($mdFiles.Count) managed files)"
+}
+
+function Backup-Dir {
+    param([string]$DirPath, [int]$MaxBackups = 5)
+    $script:BackupDirOk = $false; $script:BackupDirPath = ""; $script:BackupDirReason = ""
+    $reparse = [System.IO.FileAttributes]::ReparsePoint
+    $dir = if ($DirPath.Length -gt 1) { $DirPath.TrimEnd('/', '\') } else { $DirPath }
+    if (-not $dir -or -not (Test-Path -LiteralPath $dir -PathType Container)) {
+        $script:BackupDirReason = "no directory"
+        LogDetail "Backup-Dir: ${DirPath}: not backed up (no directory)"
+        return
+    }
+    # .NET resolves relative paths against the process directory: resolve first
+    $full = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($dir)
+    try {
+        $mdCount = @([System.IO.DirectoryInfo]::new($full).GetFiles() | Where-Object {
+            $_.Name.EndsWith(".md", [StringComparison]::Ordinal) -and -not ($_.Attributes -band $reparse)
+        }).Count
+    } catch {
+        $script:BackupDirReason = "cannot list"
+        LogWarn "Could not back up $dir -- cannot list ${full}: $_"
+        return
+    }
+    if ($mdCount -eq 0) {
+        $script:BackupDirReason = "no top-level *.md"
+        LogDetail "Backup-Dir: ${dir}: not backed up (no top-level *.md file)"
+        return
+    }
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHHmmssZ")
+    $dest = "${full}.bak.${ts}"
+    $n = 0
+    while (Test-Path -LiteralPath $dest) { $n++; $dest = "${full}.bak.${ts}-$n" }
+    try {
+        Copy-DirectoryTree -Source $full -Dest $dest
+    } catch {
+        $script:BackupDirReason = "copy failed"
+        LogWarn "Could not back up $dir -- proceeding without backup: $_"
+        return
+    }
+    if (-not (Test-Path -LiteralPath $dest -PathType Container)) {
+        $script:BackupDirReason = "copy failed"
+        LogWarn "Could not back up $dir -- proceeding without backup (no copy at $dest)"
+        return
+    }
+    $script:BackupDirOk = $true
+    $script:BackupDirPath = $dest
+    $parent = [IO.Path]::GetDirectoryName($full)
+    $pattern = '\A' + [regex]::Escape([IO.Path]::GetFileName($full)) + '\.bak\.[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z(?:-[0-9]+)?\z'
+    try {
+        [string[]]$names = @([System.IO.DirectoryInfo]::new($parent).GetDirectories() | Where-Object {
+            $_.Name -cmatch $pattern -and -not ($_.Attributes -band $reparse)
+        } | ForEach-Object { $_.Name })
+    } catch {
+        LogWarn "Could not prune old backups of $dir -- cannot list ${parent}: $_"
+        [string[]]$names = @()
+    }
+    # Newest first by name (the UTC stamp sorts by time), ordinal as perl's cmp
+    [Array]::Sort($names, [StringComparer]::Ordinal)
+    [Array]::Reverse($names)
+    for ($i = $MaxBackups; $i -lt $names.Count; $i++) {
+        $old = Join-Path $parent $names[$i]
+        try {
+            Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction Stop
+            Log "Pruned old backup: $old"
+        } catch {
+            LogWarn "Could not prune old backup ${old}: $_"
+        }
+    }
+    Log "Backed up $dir ($mdCount managed files)"
 }
 
 # ---------------------------------------------------------------------------
@@ -2469,11 +2555,15 @@ function Initialize-DeployTracker {
 # Record a single file outcome. Increments counter and writes DETAIL summary.
 # "removed": the caller backed up and deleted a deployed file (a fan-out
 # consumer pruning a retired rule). An outcome the tracker does not know is a
-# caller bug: it is logged and counted as failed, never dropped.
+# caller bug: it is logged and counted as failed, never dropped. Matched
+# case-sensitively, as deploy_tracker_record's case statement does ("Removed"
+# is unknown in both).
 function Record-DeployOutcome {
     param([string]$Outcome, [string]$ToolName, [string]$ItemName)
-    switch ($Outcome) {
-        { $_ -eq "added" -or $_ -eq "created" } { $script:dtAdded++;     Write-Summary "DETAIL" $ToolName "added: $ItemName" }
+    switch -CaseSensitive ($Outcome) {
+        # two string clauses, not a { -eq } script block: -eq ignores case
+        "added"     { $script:dtAdded++;     Write-Summary "DETAIL" $ToolName "added: $ItemName" }
+        "created"   { $script:dtAdded++;     Write-Summary "DETAIL" $ToolName "added: $ItemName" }
         "updated"   { $script:dtUpdated++;   Write-Summary "DETAIL" $ToolName "updated: $ItemName" }
         "accept & adopt" { $script:dtAccepted++;  Write-Summary "DETAIL" $ToolName "accept & adopt: $ItemName" }
         "skipped"   { $script:dtSkipped++;   Write-Summary "DETAIL" $ToolName "skipped: $ItemName" }
@@ -2557,9 +2647,10 @@ function Get-SkillNameKind([string]$Name) {
 # before the LF ignored) is not the kind's header. A valid line: a name with no
 # / or \ and no .bak. (rules: a *.md name; skills: not starting with a dot), a
 # source of shared, aitools, dotprofile or retired, and a name not already
-# listed (compared case-insensitively). Throws for an unknown Kind and when the
-# file cannot be read (a directory included); the caller wraps it in a
-# try/catch that logs. Parity: read_harness_manifest in aitools-lib.sh.
+# listed (compared case-insensitively). Throws for an unknown Kind (the .sh
+# exits 2) and when the file is missing, unreadable or a directory (the .sh
+# exits 1); the caller wraps it in a try/catch that logs.
+# Parity: read_harness_manifest in aitools-lib.sh.
 function Read-HarnessManifest {
     param([string]$Path, [string]$Kind)
     switch -CaseSensitive ($Kind) {
@@ -2600,41 +2691,85 @@ function Read-RulesManifest([string]$Path) {
     return Read-HarnessManifest -Path $Path -Kind "rules"
 }
 
+# Read-FanoutText Path: the file's bytes as text (Latin1 maps each byte to one
+# char: a byte comparison, as the .sh does) without trailing CR/LF. Throws
+# "is a directory" for a directory and the .NET reason when the file cannot be
+# read (missing, no permission). Shared by Test-FanoutTextEqual and
+# Test-FanoutDirMatches (the .sh does the same inside each perl block).
+function Read-FanoutText([string]$Path) {
+    if (Test-Path -LiteralPath $Path -PathType Container) { throw "is a directory" }
+    $t = [System.Text.Encoding]::Latin1.GetString([System.IO.File]::ReadAllBytes($Path))
+    return ($t -replace '[\r\n]+\z', '')
+}
+
+# Get-FanoutEntryType Path [-Follow]: "file" (a regular file), "dir", "missing"
+# (nothing there, or a dangling symlink) or "other" (a symlink without -Follow;
+# a FIFO, socket, block or character device). The Unix file type comes from
+# the provider's UnixStat (S_IFMT bits of Mode): .NET shows a FIFO as an
+# ordinary FileInfo, and reading one blocks. Windows has no UnixStat; there a
+# FileInfo that is not a reparse point is a file. Throws when the entry cannot
+# be stat'ed. Parity: the lstat / -f tests in fanout_dir_matches (aitools-lib.sh).
+function Get-FanoutEntryType([string]$Path, [switch]$Follow) {
+    $reparse = [System.IO.FileAttributes]::ReparsePoint
+    if (-not (Test-Path -LiteralPath $Path)) { return "missing" }
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    if ($item.Attributes -band $reparse) {
+        if (-not $Follow) { return "other" }
+        $final = $item.ResolveLinkTarget($true)
+        if ($null -eq $final -or -not $final.Exists) { return "missing" }
+        $item = Get-Item -LiteralPath $final.FullName -Force -ErrorAction Stop
+    }
+    if ($item -is [System.IO.DirectoryInfo]) { return "dir" }
+    $stat = $item.UnixStat
+    if ($null -ne $stat -and (($stat.Mode -band 0xF000) -ne 0x8000)) { return "other" }
+    return "file"
+}
+
 # 0 when files A and B hold the same bytes apart from trailing CR/LF
 # (Deploy-ManagedFile normalizes trailing newlines), 1 when they differ, 2 when
-# one cannot be read (missing, a directory, no permission; logged at detail
-# level). Parity: fanout_text_equal in aitools-lib.sh.
+# they cannot be compared: a file is missing, a directory or unreadable. Every
+# 2 writes a detail log line "Test-FanoutTextEqual: cannot read <file>:
+# <reason>". Parity: fanout_text_equal in aitools-lib.sh.
 function Test-FanoutTextEqual([string]$A, [string]$B) {
-    try {
-        # Latin1 maps each byte to one char: a byte comparison, as the .sh does
-        $ta = [System.Text.Encoding]::Latin1.GetString([System.IO.File]::ReadAllBytes($A))
-        $tb = [System.Text.Encoding]::Latin1.GetString([System.IO.File]::ReadAllBytes($B))
-    } catch {
-        LogDetail "Test-FanoutTextEqual: cannot read $A or ${B}: $_"
-        return 2
+    $texts = @()
+    foreach ($f in @($A, $B)) {
+        try {
+            $texts += , (Read-FanoutText $f)
+        } catch {
+            LogDetail "Test-FanoutTextEqual: cannot read ${f}: $($_.Exception.Message)"
+            return 2
+        }
     }
-    if (($ta -replace '[\r\n]+\z', '') -ceq ($tb -replace '[\r\n]+\z', '')) { return 0 }
+    if ($texts[0] -ceq $texts[1]) { return 0 }
     return 1
 }
 
 # 0 when Target is a real directory (not a symlink), every regular file under
 # it (recursive; a file whose base name is *.bak.*, compared case-insensitively,
-# is ignored) exists at the same relative path under Candidate and is equal to
-# it as Test-FanoutTextEqual compares, and it holds at least one such file. 1
-# otherwise: Target missing, a file or a symlink; no such file; a file missing
-# or different in Candidate; a symlink (reparse point) anywhere under Target
-# (never followed: what the fan-out did not write is the user's). 2 when an
-# entry cannot be read (2 wins over 1: the whole tree is checked; logged at
-# detail level). Used before pruning a retired skill directory.
+# is ignored) exists as a regular file (a symlink to one counts) at the same
+# relative path under Candidate and is equal to it as Test-FanoutTextEqual
+# compares, and it holds at least one such file. 1 otherwise: Target or
+# Candidate empty; Target missing, a file or a symlink; no such file; a file
+# missing, different or not a regular file in Candidate; any non-regular entry
+# anywhere under Target -- a symlink or other reparse point (never followed:
+# what the fan-out did not write is the user's), a FIFO, a socket, a block or
+# character device (rejected before any read: reading a FIFO blocks). 2 when an
+# entry cannot be read: a directory that cannot be listed (also one without
+# search permission, where the .sh fails on lstat of its entries), an entry
+# that cannot be stat'ed, a file that cannot be read. 2 wins over 1 (the whole
+# tree is checked). Every reason for 2 is its own detail log line
+# "Test-FanoutDirMatches: cannot list <dir>: <reason>" / "Test-FanoutDirMatches:
+# cannot read <path>: <reason>". Used before pruning a retired skill directory.
 # Parity: fanout_dir_matches in aitools-lib.sh.
 function Test-FanoutDirMatches([string]$Target, [string]$Candidate) {
+    if ([string]::IsNullOrEmpty($Target) -or [string]::IsNullOrEmpty($Candidate)) { return 1 }
     $reparse = [System.IO.FileAttributes]::ReparsePoint
     if (-not (Test-Path -LiteralPath $Target -PathType Container)) { return 1 }
     try {
-        $root = [System.IO.DirectoryInfo]::new($Target)
+        $root = [System.IO.DirectoryInfo]::new($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Target))
         if ($root.Attributes -band $reparse) { return 1 }
     } catch {
-        LogDetail "Test-FanoutDirMatches: cannot read ${Target}: $_"
+        LogDetail "Test-FanoutDirMatches: cannot read ${Target}: $($_.Exception.Message)"
         return 2
     }
     $n = 0; $bad = $false; $err = $false
@@ -2642,11 +2777,11 @@ function Test-FanoutDirMatches([string]$Target, [string]$Candidate) {
     $stack.Push("")
     while ($stack.Count -gt 0) {
         $rel = $stack.Pop()
-        $dir = if ($rel -eq "") { $Target } else { Join-Path $Target $rel }
+        $dir = if ($rel -eq "") { $root.FullName } else { Join-Path $root.FullName $rel }
         try {
             $entries = @([System.IO.DirectoryInfo]::new($dir).GetFileSystemInfos())
         } catch {
-            LogDetail "Test-FanoutDirMatches: cannot list ${dir}: $_"
+            LogDetail "Test-FanoutDirMatches: cannot list ${dir}: $($_.Exception.Message)"
             $err = $true
             continue
         }
@@ -2654,12 +2789,40 @@ function Test-FanoutDirMatches([string]$Target, [string]$Candidate) {
             $r = if ($rel -eq "") { $e.Name } else { "$rel/$($e.Name)" }
             if ($e.Attributes -band $reparse) { $bad = $true; continue }
             if ($e -is [System.IO.DirectoryInfo]) { $stack.Push($r); continue }
+            try {
+                $type = Get-FanoutEntryType -Path $e.FullName
+            } catch {
+                LogDetail "Test-FanoutDirMatches: cannot read $($e.FullName): $($_.Exception.Message)"
+                $err = $true
+                continue
+            }
+            if ($type -ne "file") { $bad = $true; continue }   # FIFO, socket, device
             if ($e.Name -like "*.bak.*") { continue }
             $n++
             $cp = Join-Path $Candidate $r
-            if (-not (Test-Path -LiteralPath $cp -PathType Leaf)) { $bad = $true; continue }
-            $eq = Test-FanoutTextEqual -A $e.FullName -B $cp
-            if ($eq -eq 2) { $err = $true } elseif ($eq -ne 0) { $bad = $true }
+            try {
+                $ctype = Get-FanoutEntryType -Path $cp -Follow
+            } catch {
+                LogDetail "Test-FanoutDirMatches: cannot read ${cp}: $($_.Exception.Message)"
+                $err = $true
+                continue
+            }
+            if ($ctype -ne "file") { $bad = $true; continue }   # missing, a directory, a FIFO ...
+            try {
+                $x = Read-FanoutText $e.FullName
+            } catch {
+                LogDetail "Test-FanoutDirMatches: cannot read $($e.FullName): $($_.Exception.Message)"
+                $err = $true
+                continue
+            }
+            try {
+                $y = Read-FanoutText $cp
+            } catch {
+                LogDetail "Test-FanoutDirMatches: cannot read ${cp}: $($_.Exception.Message)"
+                $err = $true
+                continue
+            }
+            if ($x -cne $y) { $bad = $true }
         }
     }
     if ($err) { return 2 }
