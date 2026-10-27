@@ -1,6 +1,6 @@
 # S3-MA-Rebuild log
 
-**Version:** v1.0 · **Written:** 2026-10-27 (UTC) · **By:** S3-MA-Rebuild (delegate of mission MERGE-ALL, Session Commander 10cf255a-c, commander Jose)
+**Version:** v1.1 (v1.0 + the step 7 result) · **Written:** 2026-10-27 (UTC) · **By:** S3-MA-Rebuild (delegate of mission MERGE-ALL, Session Commander 10cf255a-c, commander Jose)
 
 ## 1. Result
 
@@ -9,7 +9,7 @@
   - Merged with `--merge` as d65623b at 2026-10-27T09:57:16Z.
 - **Real rebuild (the one real-HOME run, decision A4):** dotprofile commit a7745dd, pushed to `nobul-jose/aitools-nobul-jose` main (20683a2..a7745dd).
   - Backup: `/Users/new-jose/repos/aitools-nobul-jose/deploy.bak.2026-10-27T101222Z/`. It was verified identical, and git ignores it through `.gitignore:2:*.bak.*`.
-- **Pre-push step 7:** see section 4.
+- **Pre-push step 7:** PASS from the main checkout (section 4).
 
 ## 2. What changed (PR #131)
 
@@ -67,7 +67,7 @@ The swap used to be `rm -rf deploy` then `mv` from `$TMPDIR`: a failed or cross-
 
 ## 4. Pre-push step 7 after the rebuild
 
-Pending: filled in v1.1 after `check-pre-push.sh` runs from the main checkout with this log's commit unpushed. With nothing unpushed the script skips every step, which is why this log is committed first.
+`bash /Users/new-jose/repos/aitools/scripts/check-pre-push.sh` ran from the main checkout with commit 23c0725 (this log v1.0) unpushed. With nothing unpushed the script skips every step, so the log was committed first. Result: 7 PASS, 1 SKIP, 2 WARN, 0 FAIL. Step 7 printed `[PASS] dotprofile deploy/ matches a fresh build; resolver consumers dry-run clean`. The WARNs were step 1 (confirm pre-commit) and step 6 (roadmap), both reminders. The known pre-push step 7 FAIL is gone.
 
 ## 5. Not run
 
