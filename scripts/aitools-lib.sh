@@ -1018,10 +1018,14 @@ backup_file() {
 #                      *.md", "cannot list", "copy failed"
 # Skip rule (kept: its callers, the setup-user-claude and setup-user-cursor
 # rules fan-outs, back up only a directory that holds a top-level *.md file):
-# no top-level regular *.md file -> no copy, a detail log line, reason
-# "no top-level *.md". A failed copy is non-fatal (warn, return 0;
-# config-file-safety.md "Backup before overwrite"): callers that must not write
-# without a backup check BACKUP_DIR_OK. Old backups are matched by literal name
+# no top-level regular *.md file (the extension compared case-insensitively:
+# X.MD counts) -> no copy, a detail log line, reason "no top-level *.md". A
+# failed copy is non-fatal (warn, return 0; config-file-safety.md "Backup
+# before overwrite"): callers that must not write without a backup check
+# BACKUP_DIR_OK. A half-made copy is removed (or, when that fails, renamed to
+# DIR.bak.incomplete.<UTC>, which the prune never matches). A symlink inside
+# DIR is copied as a symlink (cp -R; the .ps1 copies its content, as
+# Copy-Item did, needing no Windows symlink privilege). Old backups are matched by literal name
 # (DIR's base name + ".bak." + the UTC stamp, optional "-<n>"), never a glob, so
 # names with [ ] * ? work and another directory's backups are never pruned.
 # Parity: Backup-Dir in aitools-lib.ps1.
@@ -1029,6 +1033,32 @@ backup_file() {
 BACKUP_DIR_OK=false
 BACKUP_DIR_PATH=""
 BACKUP_DIR_REASON=""
+
+# _backup_dir_discard DEST DIR TS: remove a half-made backup copy DEST (made
+# writable and searchable first: chmod -R u+rwX); when it cannot be removed,
+# rename it to DIR.bak.incomplete.<TS>[-n], a name the prune never matches.
+# Logged either way. Parity: Remove-IncompleteBackup in aitools-lib.ps1.
+_backup_dir_discard() {
+    local dest="$1" dir="$2" ts="$3" alt n=0
+    if [ ! -e "$dest" ] && [ ! -L "$dest" ]; then
+        return 0
+    fi
+    if chmod -R u+rwX "$dest" && rm -rf "$dest" && [ ! -e "$dest" ]; then
+        log "Removed the incomplete backup copy $(display_path "$dest")"
+        return 0
+    fi
+    alt="${dir}.bak.incomplete.${ts}"
+    while [ -e "$alt" ] || [ -L "$alt" ]; do
+        n=$((n + 1))
+        alt="${dir}.bak.incomplete.${ts}-$n"
+    done
+    if mv "$dest" "$alt"; then
+        log_warn "Could not remove the incomplete backup copy -- renamed it to $(display_path "$alt")"
+    else
+        log_warn "Could not remove or rename the incomplete backup copy $(display_path "$dest")"
+    fi
+}
+
 backup_dir() {
     local dir="${1%/}" max_backups=5
     BACKUP_DIR_OK=false; BACKUP_DIR_PATH=""; BACKUP_DIR_REASON=""
@@ -1042,7 +1072,7 @@ backup_dir() {
     file_count=$(perl -e '
         my $d = shift;
         opendir my $dh, $d or do { print "cannot list $d: $!"; exit 1 };
-        my $n = grep { /\.md\z/ && ! -l "$d/$_" && -f "$d/$_" } readdir $dh;
+        my $n = grep { /\.md\z/i && ! -l "$d/$_" && -f "$d/$_" } readdir $dh;
         closedir $dh;
         print $n;
     ' "$dir" 2>&1) || rc=$?
@@ -1063,9 +1093,12 @@ backup_dir() {
         n=$((n + 1))
         dest="${dir}.bak.${ts}-$n"
     done
+    # cp -R as before: a symlink inside DIR is copied as a symlink (BSD and GNU
+    # cp -R do not follow links below the top level)
     if ! cp -R "$dir" "$dest" || [ ! -d "$dest" ]; then
         BACKUP_DIR_REASON="copy failed"
         log_warn "Could not back up $(display_path "$dir") -- proceeding without backup"
+        _backup_dir_discard "$dest" "$dir" "$ts"
         return 0
     fi
     BACKUP_DIR_OK=true

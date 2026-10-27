@@ -165,8 +165,20 @@ fi
 SPECIAL=true
 for tag in sh ps; do
     B="$F/bd/$tag"
-    mkdir -p "$B/plain/rules" "$B/nomd/d" "$B/missing" "$B/unread/d"
+    mkdir -p "$B/plain/rules" "$B/nomd/d" "$B/missing" "$B/unread/d" "$B/mdcase/upper" "$B/partial/part"
     printf 'a\n' > "$B/plain/rules/a.md"
+    printf 'u\n' > "$B/mdcase/upper/X.MD"                 # the *.md count ignores case
+    printf 'a\n' > "$B/partial/part/a.md"                 # + an unreadable file: the copy fails part-way
+    printf 's\n' > "$B/partial/part/secret.txt"
+    # a file symlink and a directory symlink inside the backed-up directory
+    mkdir -p "$B/link/lk" "$B/link/outdir"
+    printf 'a\n' > "$B/link/lk/a.md"
+    printf 'outside\n' > "$B/link/outside.txt"
+    printf 'x\n' > "$B/link/outdir/x.txt"
+    if $SYMLINKS; then
+        ln -s "$B/link/outside.txt" "$B/link/lk/l.md"
+        ln -s "$B/link/outdir" "$B/link/lk/sub"
+    fi
     printf 'x\n' > "$B/nomd/d/x.txt"
     printf 'a\n' > "$B/unread/d/a.md"
     if mkdir -p "$B/special/r[1]*?"; then
@@ -188,6 +200,7 @@ printf 'b\n' > "$D/unread2/T/b.txt"; printf 'b\n' > "$D/unread2/C/b.txt"
 chmod 000 "$D/unread2/T/a.txt" "$D/unread2/T/b.txt"
 skill "$D/noexec/T"; skill "$D/noexec/C"; chmod 644 "$D/noexec/T/sub"
 chmod 000 "$F/bd/sh/unread/d" "$F/bd/ps/unread/d"
+chmod 000 "$F/bd/sh/partial/part/secret.txt" "$F/bd/ps/partial/part/secret.txt"
 printf '%s\n' "$RH" > "$F/r-unread"; chmod 000 "$F/r-unread"
 printf 'a\n' > "$F/t/unread"; chmod 000 "$F/t/unread"
 skill "$D/unreadfile/T"; skill "$D/unreadfile/C"; chmod 000 "$D/unreadfile/T/sub/x.txt"
@@ -294,6 +307,12 @@ fi
 printf 'bd-plain\tok=true reason=- path=rules.bak.<TS> copied=yes siblings=rules,rules.bak.<TS>\tbdir\tbd/@/plain/rules\n'
 printf 'bd-nomd\tok=false reason=no top-level *.md path=- copied=no siblings=d\tbdir\tbd/@/nomd/d\n'
 printf 'bd-missing\tok=false reason=no directory path=- copied=no siblings=(none)\tbdir\tbd/@/missing/nope\n'
+printf 'bd-mdcase\tok=true reason=- path=upper.bak.<TS> copied=yes siblings=upper,upper.bak.<TS>\tbdir\tbd/@/mdcase/upper\n'
+if $SYMLINKS; then
+    # symlinks inside the directory: cp -R keeps them as links (sh); Copy-DirectoryTree copies their content (ps)
+    printf 'bd-link-sh\tok=true l.md=link sub=link sub/x.txt=yes\tsh_bdirlink\tbd/@/link/lk\n'
+    printf 'bd-link-ps\tok=true l.md=file:outside sub=dir sub/x.txt=yes\tps_bdirlink\tbd/@/link/lk\n'
+fi
 if $SPECIAL; then
     printf 'bd-special\t%s\tbdir\t%s\n' \
         'ok=true reason=- path=r[1]*?.bak.<TS> copied=yes siblings=r1zz.bak.2020-01-01T000000Z,r[1]*?,r[1]*?.bak.2020-01-01T000000Z.bak.2020-01-02T000000Z,r[1]*?.bak.2020-01-03T000000Z,r[1]*?.bak.2020-01-04T000000Z,r[1]*?.bak.2020-01-05T000000Z,r[1]*?.bak.2020-01-06T000000Z,r[1]*?.bak.<TS>,r[1]*?.bak.foo,r[1]*?x.bak.2020-01-07T000000Z' \
@@ -321,12 +340,14 @@ if $UNREAD; then
     printf 'dm-noexec\trc=2\tdmatch\td/noexec/T\td/noexec/C\n'
     printf 'mrc-unread\trc=1\tsh_mrc\tr-unread\trules\n'
     printf 'bd-unread\tok=false reason=cannot list path=- copied=no siblings=d\tbdir\tbd/@/unread/d\n'
+    # a copy that fails part-way leaves no stamped directory behind (removed, or renamed .bak.incomplete.)
+    printf 'bd-partial\tok=false reason=copy failed path=- copied=no siblings=part\tbdir\tbd/@/partial/part\n'
 fi
 } > "$CASES"
-if ! $SYMLINKS; then SKIP=$((SKIP + 6)); printf '  skip symlink cases (ln -s does not make symlinks here)\n'; fi
+if ! $SYMLINKS; then SKIP=$((SKIP + 8)); printf '  skip symlink cases (ln -s does not make symlinks here)\n'; fi
 if ! $FIFOS; then SKIP=$((SKIP + 2)); printf '  skip FIFO cases (no mkfifo)\n'; fi
 if ! $SPECIAL; then SKIP=$((SKIP + 1)); printf '  skip backup_dir special-name case (* ? not allowed in names here)\n'; fi
-if ! $UNREAD; then SKIP=$((SKIP + 11)); printf '  skip unreadable cases (chmod 000 leaves files readable: root or Windows)\n'; fi
+if ! $UNREAD; then SKIP=$((SKIP + 12)); printf '  skip unreadable cases (chmod 000 leaves files readable: root or Windows)\n'; fi
 
 # A stub perl that fails, for te-perlfail
 mkdir -p "$WORK/badperl"
@@ -360,6 +381,14 @@ fx() {  # fixture path: "-" is the empty string, "@" this shell's copy (sh)
     if [ "$1" = "-" ]; then return 0; fi
     local p="$F/$1"
     printf '%s' "${p//@/sh}"
+}
+names_of() {  # the sorted top-level names of directory $1, comma-joined
+    perl -e 'opendir my $dh, $ARGV[0] or exit 0; print join(",", sort grep { $_ ne "." && $_ ne ".." } readdir $dh)' "$1"
+}
+entry_type() {  # link | dir | file:<first line> | missing (a link is not followed)
+    perl -e 'my $p = shift; if (-l $p) { print "link" } elsif (-d $p) { print "dir" }
+             elsif (-f $p) { open my $fh, "<", $p or do { print "file:unreadable"; exit 0 }; my $c = <$fh>; $c = "" unless defined $c; chomp $c; print "file:$c" }
+             else { print "missing" }' "$1"
 }
 norm() {  # manifest reader stdout -> one line (rule lines first)
     perl -e 'my (@r, @i); while (<STDIN>) { s/\n\z//; s/\t/^/g; s/\r/<CR>/g; if (/\Arule\^/) { push @r, $_ } else { push @i, $_ } }
@@ -410,11 +439,21 @@ while IFS="$TAB" read -r id want call a1 a2 <&3; do
                            open my $fh, "<", $l or do { print "target=unreadable"; exit 0 };
                            local $/; my $c = <$fh>; $c =~ s/\n\z//; print "target=$c"' "$p")
             emit "$id" "result=$MANAGED_FILE_RESULT $tgt" ;;
+        ps_*) ;;   # PowerShell-only case
+        sh_bdirlink)
+            p=$(fx "$a1")
+            backup_dir "$p"
+            x=no
+            if [ -f "$BACKUP_DIR_PATH/sub/x.txt" ]; then x=yes; fi
+            emit "$id" "ok=$BACKUP_DIR_OK l.md=$(entry_type "$BACKUP_DIR_PATH/l.md") sub=$(entry_type "$BACKUP_DIR_PATH/sub") sub/x.txt=$x" ;;
         bdir)
             p=$(fx "$a1")
             backup_dir "$p"
-            copied=no
-            if [ "$BACKUP_DIR_OK" = true ] && [ -f "$BACKUP_DIR_PATH/a.md" ]; then copied=yes; fi
+            copied=no   # yes: the copy holds the same top-level names as the source
+            if [ "$BACKUP_DIR_OK" = true ]; then
+                src_names=$(names_of "$p"); bak_names=$(names_of "$BACKUP_DIR_PATH")
+                if [ -n "$src_names" ] && [ "$src_names" = "$bak_names" ]; then copied=yes; fi
+            fi
             bp="-"
             if [ -n "$BACKUP_DIR_PATH" ]; then bp=$(basename "$BACKUP_DIR_PATH"); fi
             sib=$(perl -e 'opendir my $dh, $ARGV[0] or do { print "cannot list"; exit 0 };
@@ -447,6 +486,19 @@ function Resolve-Fx([string]$Rel) {  # "-" is the empty string, "@" this shell's
     if ($Rel -eq "-") { return "" }
     return (Join-Path $F $Rel).Replace("@", "ps")
 }
+function Get-Names([string]$Dir) {  # sorted top-level names, comma-joined (as names_of in drive.sh)
+    if (-not [IO.Directory]::Exists($Dir)) { return "" }
+    [string[]]$n = @([IO.Directory]::GetFileSystemEntries($Dir) | ForEach-Object { [IO.Path]::GetFileName($_) })
+    [Array]::Sort($n, [StringComparer]::Ordinal)
+    return ($n -join ",")
+}
+function Get-EntryType([string]$Path) {  # link | dir | file:<first line> | missing (as entry_type in drive.sh)
+    $info = [IO.FileInfo]::new($Path)
+    if ($null -ne $info.LinkTarget) { return "link" }
+    if ([IO.Directory]::Exists($Path)) { return "dir" }
+    if ([IO.File]::Exists($Path)) { return "file:" + (([IO.File]::ReadAllText($Path) -split "`n")[0]) }
+    return "missing"
+}
 function Invoke-Reader([scriptblock]$Read) {
     try { return Format-Manifest (& $Read) } catch { LogDetail "reader threw: $_"; return "fail" }
 }
@@ -455,7 +507,7 @@ foreach ($line in [IO.File]::ReadAllLines($env:CASES)) {
     $id = $fields[0]; $call = $fields[2]
     $a1 = if ($fields.Count -gt 3) { $fields[3] } else { "" }
     $a2 = if ($fields.Count -gt 4) { $fields[4] } else { "" }
-    if ($call.StartsWith("sh_")) { continue }   # bash-only case
+    if ($call.StartsWith("sh_")) { continue }   # bash-only case (ps_ cases run only here)
     switch -CaseSensitive ($call) {
         "tracker" {
             $env:AITOOLS_SUMMARY_FILE = Join-Path $env:WORK "sum-ps-$id"
@@ -492,10 +544,22 @@ foreach ($line in [IO.File]::ReadAllLines($env:CASES)) {
                    else { "target=" + ([IO.File]::ReadAllText($lt) -replace '\n\z', '') }
             $res = "result=$r $tgt"
         }
+        "ps_bdirlink" {
+            $p = Resolve-Fx $a1
+            Backup-Dir -DirPath $p
+            $b = $script:BackupDirPath
+            $x = if ([IO.File]::Exists([IO.Path]::Combine($b, "sub", "x.txt"))) { "yes" } else { "no" }
+            $ok = if ($script:BackupDirOk) { "true" } else { "false" }
+            $res = "ok=$ok l.md=$(Get-EntryType ([IO.Path]::Combine($b, 'l.md'))) sub=$(Get-EntryType ([IO.Path]::Combine($b, 'sub'))) sub/x.txt=$x"
+        }
         "bdir" {
             $p = Resolve-Fx $a1
             Backup-Dir -DirPath $p
-            $copied = if ($script:BackupDirOk -and (Test-Path -LiteralPath (Join-Path $script:BackupDirPath "a.md") -PathType Leaf)) { "yes" } else { "no" }
+            $copied = "no"   # yes: the copy holds the same top-level names as the source
+            if ($script:BackupDirOk) {
+                $srcNames = Get-Names $p; $bakNames = Get-Names $script:BackupDirPath
+                if ($srcNames -and $srcNames -ceq $bakNames) { $copied = "yes" }
+            }
             $bp = if ($script:BackupDirPath) { [IO.Path]::GetFileName($script:BackupDirPath) } else { "-" }
             try {
                 [string[]]$sib = @([IO.Directory]::GetFileSystemEntries([IO.Path]::GetDirectoryName($p)) | ForEach-Object { [IO.Path]::GetFileName($_) })
@@ -552,7 +616,10 @@ result_of() {
 
 while IFS="$TAB" read -r id want call rest <&3; do
     case_shells="$SHELLS"
-    case "$call" in sh_*) case_shells="sh" ;; esac   # bash-only cases: no PowerShell run, no parity
+    case "$call" in
+        sh_*) case_shells="sh" ;;   # bash-only cases: no PowerShell run, no parity
+        ps_*) if $USE_PS; then case_shells="ps"; else continue; fi ;;   # PowerShell-only cases
+    esac
     for s in $case_shells; do
         got=$(result_of "$s" "$id") || got="(no result)"
         if [ "$got" = "$want" ]; then
@@ -562,7 +629,7 @@ while IFS="$TAB" read -r id want call rest <&3; do
             printf '      want: %s\n      got:  %s\n' "$want" "$got"
         fi
     done
-    if $USE_PS && [ "$case_shells" != "sh" ]; then
+    if $USE_PS && [ "$case_shells" = "sh ps" ]; then
         a=$(result_of sh "$id") || a="(none sh)"
         b=$(result_of ps "$id") || b="(none ps)"
         if [ "$a" = "$b" ]; then ok "parity $id"; else bad "parity $id (sh: $a | ps: $b)"; fi
@@ -622,6 +689,13 @@ if $UNREAD; then
     logged sh "fanout_dir_matches: cannot read $D/unread2/T/a.txt: " "fanout_dir_matches: first unreadable entry"
     logged sh "fanout_dir_matches: cannot read $D/unread2/T/b.txt: " "fanout_dir_matches: second unreadable entry (own line)"
     logged sh "fanout_dir_matches: cannot read $D/noexec/T/sub/" "fanout_dir_matches: lstat failure"
+    for s in $SHELLS; do
+        if grep -F "[info] Removed the incomplete backup copy $F/bd/$s/partial/part.bak." "$WORK/logs-$s/deploy.log" > /dev/null; then
+            ok "$s backup_dir: the half-made copy is removed and logged"
+        else
+            bad "$s backup_dir: the half-made copy is removed and logged"
+        fi
+    done
     if $USE_PS; then
         logged ps "Test-FanoutDirMatches: cannot read $D/unread2/T/a.txt: " "Test-FanoutDirMatches: first unreadable entry"
         logged ps "Test-FanoutDirMatches: cannot read $D/unread2/T/b.txt: " "Test-FanoutDirMatches: second unreadable entry (own line)"
