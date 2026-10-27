@@ -231,7 +231,8 @@ parity() {
 # ---------------------------------------------------------------------------
 seed_missing() { dskill mine SKILL.md 'mine'; }
 case_run missing seed_missing
-check "missing: exit 0, row n/a (no harness skills)" "[ \"\$(rc)\" = 0 ] && [ \"\$(nondetail)\" = 'OK|claude skills|n/a (no harness skills)' ]"
+# No row: setup-user-skills (the fallback) owns the claude skills rows then (PR #125 N2)
+check "missing: exit 0, no claude skills row, logged" "[ \"\$(rc)\" = 0 ] && ! grep -qF '|claude skills|' '$C/sh.summary' && grep -q 'No harness skills at .*setup-user-skills deploys skills' '$C/sh.out'"
 check "missing: ~/.claude/skills untouched, no backup" "grep -qx mine '$(S)/mine/SKILL.md' && [ \"\$(ls '$(S)')\" = mine ] && [ \"\$(bakdirs)\" = 0 ]"
 check "missing: the dotprofile's claude/skills is not deployed" "[ ! -e '$(S)/d1' ]"
 parity missing
