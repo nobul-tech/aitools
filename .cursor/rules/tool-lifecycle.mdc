@@ -25,7 +25,7 @@ When a tool is installed via a package manager (winget, brew, npm), the new bina
 
 Bundled tools (pip via Python, rg via Cursor) that become project requirements
 must graduate to full managed tools via the standard lifecycle. See
-tool-lifecycle.md Bundled dependencies section.
+tool-lifecycle.md Bundled dependency graduation section.
 
 ### Lifecycle field completeness
 
@@ -55,7 +55,6 @@ When a tool is approved (Phase 2 gate passed), complete ALL of these steps in or
 - Registry entry via the `/tool-registry` skill — full entry with all lifecycle fields
 - `shared/claude-shared.md` — add row to Managed CLI Tools table (shared template + MDM source)
 - `<userRepoPath>/claude/CLAUDE.md` (dotprofile repo) — same row addition; commit + push dotprofile repo separately
-- `CLAUDE.md` — add `setup-<tool>` to "Deploy using MDM" tool scripts list
 - `.claude/rules/tool-lifecycle.md` + `.cursor/rules/tool-lifecycle.mdc` — update this checklist if pattern changes
 - `scripts/check-post-push.ps1` — add entry to `$toolCmds` dictionary
   (command name + version flag, e.g., `'perl' = @('perl', '--version')`)
@@ -64,14 +63,18 @@ When a tool is approved (Phase 2 gate passed), complete ALL of these steps in or
 - Check deployment types table in `@.claude/rules/managed-file-deployment.md` — add row if new file type
 
 #### Rebuild + propagate
-1. `bash scripts/build-deploy.sh` — verify count increments by 2
-2. `bash scripts/setup-user-claude.sh` — propagate dotprofile CLAUDE.md → `~/.claude/CLAUDE.md`
+1. Agents: `bash scripts/build-deploy.sh` under an isolated `HOME` with a copy of the dotprofile (`.claude/rules/deploy-paths.md`); verify the new `setup-<tool>.sh/.ps1` pair is in the generated `deploy/`. The real dotprofile rebuild is the commander's (or a mission ordered to do it).
+2. Propagate CLAUDE.md with `aitools` (commander), never `setup-user-claude` against the real HOME from an agent.
 3. `bash scripts/check-post-push.sh` — all checks pass
-4. Commit + push both repos (aitools + dotprofile)
+4. Commit + push both repos (aitools via a PR; dotprofile to its main)
+
+### When to invoke /tool-adopt
+
+Invoke the `/tool-adopt` skill after `/tool-eval` passes Phase 2, when a setup script reports no method for a platform, when a tool is requested from any repo, or when changing a tool setup script. It walks the onboarding checklist above.
 
 ### Dotprofile priority
 
-`setup-user-claude.sh/.ps1` reads the user's dotprofile `<userRepoPath>/claude/CLAUDE.md` first. If `userRepoPath` is configured in `~/.aitools/config.json` and the file exists, it wins over `shared/claude-shared.md`. This means any Managed CLI Tools row added to `shared/claude-shared.md` must ALSO be added to the dotprofile — otherwise the live `~/.claude/CLAUDE.md` will not reflect the change. Future: `aitools user sync` will automate this (see ROADMAP.md).
+`setup-user-claude.sh/.ps1` reads the user's dotprofile `<userRepoPath>/claude/CLAUDE.md` first. If `userRepoPath` is configured in `~/.aitools/config.json` and the file exists, it wins over `shared/claude-shared.md`. This means any Managed CLI Tools row added to `shared/claude-shared.md` must ALSO be added to the dotprofile — otherwise the live `~/.claude/CLAUDE.md` will not reflect the change. No automation yet (`aitools user init` handles profiles, not template rows).
 
 ### Install command verification gate
 
@@ -113,7 +116,7 @@ Details and templates: `@reference/tool-evaluation-playbook.md`
 
 ### Cross-platform vetting
 
-When recommending tools in this project, verify availability on both macOS and Windows. Disclose if a tool is single-platform or has limited support on one OS.
+When recommending tools in this project, verify availability on macOS, Windows and Linux (and the supported environments: `reference/cross-platform-detail.md`). Disclose if a tool is single-platform or has limited support on one OS.
 
 ### MCP server isolation
 

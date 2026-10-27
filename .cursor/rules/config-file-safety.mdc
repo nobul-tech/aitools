@@ -59,8 +59,8 @@ Do not assume these are violation-free -- verify copied code against the rules.
 
 - Single config writer: `scripts/setup-user-config.sh` / `.ps1` (config.json; bootstrap + derived keys)
 - Node.js merge: `scripts/setup-user-cursor.sh` (cli-config.json)
-- PowerShell merge: `scripts/setup-user-mcp.ps1` (settings.json)
+- Settings sync (field-level review): `scripts/setup-user-settings.sh` / `.ps1` via `sync_managed_json` / `Sync-ManagedJson` (settings.json <-> profile.json)
 - Hook merge: `scripts/setup-user-hooks.sh` (settings.json hooks)
 - Bash `validate_json_config`: `scripts/aitools-install.sh`
 - PS1 `ValidateJsonConfig`: `scripts/aitools-install.ps1`
-- Inline Node.js validation: `scripts/setup-user-mcp.sh`
+- Inline Node.js validation: `scripts/setup-user-hooks.sh`
