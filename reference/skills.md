@@ -277,9 +277,9 @@ aitools .claude/skills/<name>/     ─┼─ deploy-harness ─▶ ~/.aitools/sk
 | lib helpers | `skill_name_kind`, `read_harness_manifest` (rules and skills), `fanout_text_equal`, `fanout_dir_matches`, `backup_dir` result flags, tracker `removed` (sh and ps1) | #118 (FO-1, open) |
 | lib fan-out | `fanout_harness_skills TOOL DEST AITOOLS_REPO DOTPROFILE` / `Invoke-HarnessSkillsFanout -ToolName -DestDir -AitoolsRepo -Dotprofile` in `@scripts/aitools-lib.sh` / `@scripts/aitools-lib.ps1` | #124 (FO-4, open) |
 | Claude Code skills | `setup-user-claude` calls the lib fan-out in its `skills fan-out` span (extracted by build-deploy, so MDM runs it too): summary tool `claude skills`; adopt target from the manifest source (`shared` → `<aitools>/shared/skills/...`, `aitools` → `<aitools>/.claude/skills/...`, `dotprofile` → `<dotprofile>/claude/skills/...`) when the file exists and the script runs from a git checkout | #124 (FO-4, open) |
-| Cursor skills | `setup-user-cursor` step 5: `fanout_harness_skills "cursor skills" "$CURSOR_DIR/skills" "" ""`, no adopt | #123 (FO-5, open; the step 5 commit was pending at f67fde4, its header comments already describe it) |
+| Cursor skills | `setup-user-cursor` step 5: `fanout_harness_skills "cursor skills" "$CURSOR_DIR/skills" "" ""`, no adopt | #123 (FO-5, open; step 5 is commit c5d1bd8) |
 | setup-user-skills | when `~/.aitools/skills` exists: `OK skills n/a (fanned out from ~/.aitools/skills)`, no `claude skills` / `cursor skills` rows; reverse discovery kept, every name in `~/.aitools/skills` or its manifest (and every `*.bak.*` or hidden name) not user-created; otherwise the old behaviour (fallback). MDM: the generated `deploy/setup-user-skills.*` carry the check | #125 (FO-6, open) |
-| CI | every `tests/<dir>/test-*.sh` in CI, checked by a CI step; `tests/fanout-lib`, `tests/skills-fanout`, `tests/skills-legacy` | #117 (FO-0), #118, #124, #125 (open) | <!-- path-ref: ignore (suites added by open FO PRs) -->
+| CI | every `tests/<dir>/test-*.sh` in CI, checked by a CI step; `tests/fanout-lib`, `tests/skills-fanout`, `tests/skills-legacy` | #117 (FO-0), #118, #124, #125 (open) |
 
 ### 6.3 Rules for deploying skills (`fanout_harness_skills`; contract `@plans/skills-and-rules-fanout.md` 3.4 as shipped in #124)
 

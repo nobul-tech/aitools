@@ -71,15 +71,17 @@ aitools sessions archive <id>    # Manually archive a session by ID
 ### Deploy to a machine (no repo needed)
 
 Run these from the `deploy/` directory -- self-contained, MDM-ready.
-`deploy-harness` runs first: it fills `~/.aitools`, and the rules fan-outs in
-`setup-user-claude` and `setup-user-cursor` read `~/.aitools/rules` (run
-before it, they report `n/a (no harness rules)` and deploy no rules):
+`deploy-harness` runs first: it fills `~/.aitools`, and the rules and skills
+fan-outs in `setup-user-claude` and `setup-user-cursor` read `~/.aitools/rules`
+and `~/.aitools/skills` (run before it, they report `n/a (no harness rules)` /
+`n/a (no harness skills)` and deploy no rules or skills; `setup-user-skills`
+then deploys skills as the fallback):
 
 macOS/Linux:
 ```bash
 bash deploy/deploy-harness.sh           # ~/.aitools: rules, reference, registries, hooks, skills (run first)
-bash deploy/setup-user-claude.sh        # Claude Code user preferences + rules
-bash deploy/setup-user-cursor.sh        # Cursor CLI + config
+bash deploy/setup-user-claude.sh        # Claude Code user preferences + rules + skills
+bash deploy/setup-user-cursor.sh        # Cursor CLI + config + rules + skills
 bash deploy/setup-user-mcp.sh           # Claude Code MCP servers
 bash deploy/setup-cursor-ide-mcp.sh         # Cursor MCP servers
 bash deploy/setup-vercelcli.sh          # Vercel CLI
@@ -90,8 +92,8 @@ bash deploy/setup-rust.sh               # Rust (cargo)
 Windows (PowerShell):
 ```powershell
 .\deploy\deploy-harness.ps1             # .aitools: rules, reference, registries, hooks, skills (run first)
-.\deploy\setup-user-claude.ps1          # Claude Code user preferences + rules
-.\deploy\setup-user-cursor.ps1          # Cursor CLI + config
+.\deploy\setup-user-claude.ps1          # Claude Code user preferences + rules + skills
+.\deploy\setup-user-cursor.ps1          # Cursor CLI + config + rules + skills
 .\deploy\setup-user-mcp.ps1             # Claude Code MCP servers
 .\deploy\setup-cursor-ide-mcp.ps1           # Cursor MCP servers
 .\deploy\setup-vercelcli.ps1            # Vercel CLI
