@@ -2051,6 +2051,30 @@ function Deploy-ManagedFile {
     # twin); every write adds exactly one back.
     $Content = $Content -replace '[\r\n]+$', ''
 
+    # A dangling symlink at DestPath: never write through it (the write would
+    # create the link's target, wherever it points). A live symlink is read and
+    # written through, as before (dotfile managers link deployed files). Parity:
+    # deploy_managed_file (same message, also in a dry run).
+    # (Test-Path and File.Exists are both true for a dangling link on Unix:
+    # resolve the final target instead; a link loop counts as dangling, as the
+    # .sh's [ -e ] is false for it)
+    $destFull = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestPath)
+    $destInfo = [System.IO.FileInfo]::new($destFull)
+    if ($null -ne $destInfo.LinkTarget) {
+        $dangling = $false
+        try {
+            $final = $destInfo.ResolveLinkTarget($true)
+            $dangling = ($null -eq $final -or -not $final.Exists)
+        } catch {
+            LogDetail "Deploy-ManagedFile: cannot resolve the symlink ${DestPath}: $_"
+            $dangling = $true
+        }
+        if ($dangling) {
+            LogError "Failed: ${ItemName}: $DestPath is a dangling symlink -- not written through it"
+            return "failed"
+        }
+    }
+
     # Dry run: report what would happen without writing
     if ($DryRun) {
         if (Test-Path -LiteralPath $DestPath) {
