@@ -86,10 +86,12 @@ as part of a framework, three artifacts are created together: the skill, the
 trigger directive in the governing rule, and a detection hook spec
 (`@reference/framework-adoption.md` step 7).
 
-**Reference-card pattern.** A user-level skill may carry a read-only,
-self-contained snapshot of project knowledge for use outside aitools
-(`/aitool-ops`, `/aitool-eval`); its rule says which skill to use in which
-repo (`@.claude/rules/aitool-ops.md`, `@.claude/rules/aitool-eval.md`).
+**Reference-card pattern (retired).** A user-level skill used to carry a
+read-only, self-contained snapshot of project knowledge for use outside
+aitools (`/aitool-ops`, `/aitool-eval`), each with a project trigger rule.
+The LAYOUT PR-c re-land retired both cards and their rules: `/tool-ops` and
+`/tool-eval` are user-level skills now, so they load in every repo and the
+snapshots only drifted from their sources.
 
 ## 4. Anatomy of a rule
 
