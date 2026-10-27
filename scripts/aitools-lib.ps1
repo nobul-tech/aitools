@@ -2925,8 +2925,9 @@ function Invoke-HarnessSkillsFanout {
     $shown = $shown -replace '\\', '/'
 
     if (-not (Test-Path -LiteralPath $fsSrc -PathType Container)) {
-        Log "No harness skills at $fsSrc (deploy-harness has not run) -- skipping"
-        Write-Summary "OK" $ToolName "n/a (no harness skills)"
+        # No row: setup-user-skills (the fallback deployer, FO-6) owns this
+        # tool's rows when .aitools\skills does not exist (PR #125 review N2)
+        Log "No harness skills at $fsSrc (deploy-harness has not run) -- skipping; setup-user-skills deploys skills"
         return
     }
     try {

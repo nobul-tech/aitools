@@ -2898,8 +2898,9 @@ fanout_harness_skills() {
     case "$_fs_dest" in "$HOME"/*) _fs_shown="~/${_fs_dest#"$HOME"/}" ;; esac
 
     if [ ! -d "$_fs_src" ]; then
-        log "No harness skills at $(display_path "$_fs_src") (deploy-harness has not run) -- skipping"
-        write_summary OK "$_fs_tool" "n/a (no harness skills)"
+        # No row: setup-user-skills (the fallback deployer, FO-6) owns this
+        # tool's rows when ~/.aitools/skills does not exist (PR #125 review N2)
+        log "No harness skills at $(display_path "$_fs_src") (deploy-harness has not run) -- skipping; setup-user-skills deploys skills"
         return 0
     fi
     local _fs_entries="" _fs_lrc=0
