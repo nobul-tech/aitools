@@ -211,6 +211,9 @@ printf 't-blank\tDETAIL|t|failed: x.md ;; ERROR|t|1 failed ;; text=1 failed ;; e
 printf 't-mix\tDETAIL|t|added: a.md ;; DETAIL|t|removed: b.md ;; DETAIL|t|failed: d.md ;; ERROR|t|1 failed ;; text=1 added, 1 removed, 1 verified, 1 failed ;; errors=1\ttracker\tadded:a.md,removed:b.md,verified:c.md,bogus:d.md,preserved:e.md\n'
 printf 't-order\tDETAIL|t|accept & adopt: a.md ;; DETAIL|t|removed: b.md ;; DETAIL|t|updated: d.md ;; DETAIL|t|added: e.md ;; OK|t|1 added, 1 updated, 1 accepted, 1 removed, 1 verified ;; text=1 added, 1 updated, 1 accepted, 1 removed, 1 verified ;; errors=0\ttracker\taccept & adopt:a.md,removed:b.md,verified:c.md,updated:d.md,created:e.md\n'
 printf 't-skip\tDETAIL|t|removed: a.md ;; DETAIL|t|skipped: b.md ;; WARN|t|1 skipped (user review) ;; text=1 removed ;; errors=0\ttracker\tremoved:a.md,skipped:b.md\n'
+# every count 0 (only preserved / skipped items): the text is "n/a (nothing to deploy)", never "verified"
+printf 't-preserved\tOK|t|n/a (nothing to deploy) ;; text=n/a (nothing to deploy) ;; errors=0\ttracker\tpreserved:a.md\n'
+printf 't-skiponly\tDETAIL|t|skipped: a.md ;; WARN|t|1 skipped (user review) ;; text=n/a (nothing to deploy) ;; errors=0\ttracker\tskipped:a.md\n'
 # outcomes are matched case-sensitively in both shells
 printf 't-case\tDETAIL|t|failed: x.md ;; DETAIL|t|failed: y.md ;; DETAIL|t|failed: z.md ;; ERROR|t|3 failed ;; text=3 failed ;; errors=3\ttracker\tRemoved:x.md,Added:y.md,CREATED:z.md\n'
 # name kinds

@@ -2590,7 +2590,9 @@ deploy_tracker_summary() {
     if [ "$_DT_REMOVED" -gt 0 ];  then parts="${parts:+$parts, }$_DT_REMOVED removed"; fi
     if [ "$_DT_VERIFIED" -gt 0 ]; then parts="${parts:+$parts, }$_DT_VERIFIED verified"; fi
     if [ "$_DT_FAILED" -gt 0 ];   then parts="${parts:+$parts, }$_DT_FAILED failed"; fi
-    if [ -z "$parts" ]; then parts="verified"; fi
+    # Every count 0 (nothing recorded, or only skipped/preserved items): not
+    # "verified", which would claim a check that never ran
+    if [ -z "$parts" ]; then parts="n/a (nothing to deploy)"; fi
     DEPLOY_TRACKER_TEXT="$parts"
 
     if [ "$_DT_FAILED" -gt 0 ]; then
